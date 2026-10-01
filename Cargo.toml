@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/centrevillage/onsalang"
+rust-version = "1.85"
+
+[workspace.dependencies]
+onsa_diag = { path = "crates/onsa_diag" }
+onsa_syntax = { path = "crates/onsa_syntax" }
+onsa_sema = { path = "crates/onsa_sema" }
+onsa_core = { path = "crates/onsa_core" }
+onsa_interp = { path = "crates/onsa_interp" }
+onsa_backend_c = { path = "crates/onsa_backend_c" }
+onsa_backend_wasm = { path = "crates/onsa_backend_wasm" }
+onsa_backend_js = { path = "crates/onsa_backend_js" }
+onsa_driver = { path = "crates/onsa_driver" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+
+[workspace.lints.clippy]
+all = "warn"
+
+[profile.release]
+opt-level = 3

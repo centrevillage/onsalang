@@ -1,0 +1,5 @@
+//! mode: none
+pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
+  let text = Fs.read(path).map_err(ConfigError.Io)?
+  ...
+}

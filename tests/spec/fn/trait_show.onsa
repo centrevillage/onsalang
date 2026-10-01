@@ -1,0 +1,13 @@
+//! mode: parse
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub trait Show {
+  fn show(self) -> Str uses {Alloc}
+}
+
+impl Show for Point {
+  fn show(self) -> Str uses {Alloc} { "({self.x}, {self.y})" }
+}

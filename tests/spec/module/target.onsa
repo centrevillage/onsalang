@@ -1,0 +1,5 @@
+//! mode: parse
+// audio/device.onsa
+target type Device
+target fn open(sample_rate: F32) -> Result[Device, DeviceError]
+target rt fn read_input(inout d: Device, inout buf: Span[F32])

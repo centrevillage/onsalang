@@ -1,0 +1,15 @@
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+use std.math.{sqrt}
+
+impl Point {
+  pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } }   // 関連関数: Point.new(...)
+  pub rt fn norm(self) -> F32 { sqrt((self.x * self.x) + (self.y * self.y)) }
+  pub rt fn scale(inout self, k: F32) {
+    self.x = self.x * k
+    self.y = self.y * k
+  }
+}

@@ -1,0 +1,4 @@
+pub flow one_pole(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {
+  let y = ((1.0 - p) * x) + (p * prev(y, 0.0))
+  y
+}

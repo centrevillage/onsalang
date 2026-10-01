@@ -1,0 +1,13 @@
+[package]
+name = "onsa_sema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+onsa_diag.workspace = true
+onsa_syntax.workspace = true
+
+[lints]
+workspace = true

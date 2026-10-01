@@ -1,0 +1,8 @@
+pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
+  if x < lo { lo } else if x > hi { hi } else { x }
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}

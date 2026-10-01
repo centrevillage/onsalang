@@ -1,0 +1,9 @@
+//! mode: parse
+pub blocking effect Fs {
+  fn read(path: Path) -> Result[Str, IoError]
+  fn write(path: Path, data: Str) -> Result[(), IoError]
+}
+
+pub fn load(path: Path) -> Result[Str, IoError] uses {Fs} {
+  Fs.read(path)
+}

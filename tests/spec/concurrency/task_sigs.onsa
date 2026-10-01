@@ -1,0 +1,4 @@
+//! mode: none
+// std.task の主な操作
+fn spawn[T: ?Dup, R, e](self, f: fn(move T) -> R uses {e}, move arg: T) -> Task[R]   // Scope のメソッド
+fn join[R](move self) -> R                                                      // Task[R] のメソッド

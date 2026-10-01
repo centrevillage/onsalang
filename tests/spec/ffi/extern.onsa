@@ -1,0 +1,27 @@
+//! mode: parse
+extern "C" lib "fastconv" {
+  type FcRaw                                                // 不透明型
+  fn fc_new(ir: Span[F32], block: U32) -> Ptr[FcRaw] uses {Alloc}
+  rt fn fc_process(h: Ptr[FcRaw], input: Span[F32], inout output: Span[F32])
+  fn fc_free(h: Ptr[FcRaw]) uses {Alloc}
+}
+
+pub struct Conv {
+  h: Ptr[FcRaw],
+}
+
+impl Drop for Conv {
+  fn drop(move self) uses {Alloc} {
+    unsafe { fc_free(self.h) }
+  }
+}
+
+impl Conv {
+  pub fn new(ir: Span[F32], block: U32) -> Conv uses {Alloc} {
+    Conv { h: unsafe { fc_new(ir, block) } }
+  }
+
+  pub rt fn process(inout self, input: Span[F32], inout output: Span[F32]) {
+    unsafe { fc_process(self.h, input, inout output) }
+  }
+}

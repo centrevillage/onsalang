@@ -8,7 +8,7 @@
   - `D-nn`: **実装の判断**。仕様が決めていない、実装の側の選択。提案と理由を書く
   - `S-nn`: **仕様の空白**。作業を切り出すときに見つかった小さな未定義。決定後に仕様 0.3 へ反映する
 
-`D` と `S` は提案である。決定したものから仕様・レビュー §7・変更点・この文書を揃えて更新する。
+`D` は 2026-10-01 に全て決定した（案の通り）。`S` は提案で、決定したものから仕様・レビュー §7・変更点・この文書を揃えて更新する。
 
 ---
 
@@ -34,6 +34,8 @@ M3 で `resonator` を動かすには `exp` / `cos` が要るので、`std.math`
 ---
 
 ## 1. 実装の判断（D）
+
+全て 2026-10-01 に案の通り決定。
 
 ### D-01 字句解析器と構文解析器は手書き（再帰下降）
 
@@ -75,6 +77,7 @@ M3 で `resonator` を動かすには `exp` / `cos` が要るので、`std.math`
 - 案: 期待する診断を、同じ行の末尾に `//~ E0010` と書く（rustc の UI テストと同じ形。`//~ E0010 @13` で列も指定できる）。マーカの無いファイルは診断 0 件を期待する。ファイルの先頭行で検査の深さを指定する:
 
 ```
+//! mode: none      // 収録のみで実行しない（`...` を含む断片、最上位の文、擬似コード）
 //! mode: parse     // 構文解析だけ（第 1 期で未対応の fn 世界の例）
 //! mode: check     // check --json の結果をマーカと比較（既定）
 //! mode: test      // check の後、test ブロックをインタプリタで実行する
@@ -85,7 +88,7 @@ M3 で `resonator` を動かすには `exp` / `cos` が要るので、`std.math`
 
 ### D-06 仕様の例と `tests/spec` の同期を機械的に検査する
 
-- 案: `tools/check_spec_examples.py` が、仕様の全ての ```` ```onsa ```` ブロックについて「`tests/spec/` のどれかのファイルに、行末の `//~ ...` を除いて逐語的に含まれる」ことを検査し、CI で回す。擬似コードのブロック（§11.6 の生成 API）は言語名を ```` ```onsa-pseudo ```` に変えて対象外にする（S-15）。
+- 案: `tools/check_spec_examples.py` が、仕様の全ての ```` ```onsa ```` ブロックについて「`tests/spec/` のどれかのファイルに、行末の `//~ ...` を除いて逐語的に含まれる」ことを検査し、CI で回す。擬似コードや `...` を含む断片は `mode: none` のファイルに収録する（S-15 は不要になった）。
 - 理由: P9（仕様の例は全て検査を通る）を仕様の編集のたびに保証する。
 - 代替: 仕様から自動で切り出す。断片（§3.1、§5.1、§7）は関数で包まないと検査できないので、手で用意した上で照合する方が確実。
 
@@ -177,8 +180,9 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-12 | 第 1 期で使える `Span` のメソッド | `len()`、`slice(from, to)`、`get(i) -> Option[T]`、`fill!(v)`、`add_from!(other)`、`copy_from!(other)`。`[T; N]` と `Buf[T]` にも同じものがある | M2 |
 | S-13 | `@derive` の第 1 期の範囲 | `PartialEq Eq PartialOrd Ord Default` は実装、`Hash Show` は E0200（`Str` が要る）。`Option` / `Result` / タプル / `[T; N]` の `PartialEq` は組込み（§17.6 の `self.notes[i] == Some(note)`） | M2 |
 | S-14 | `--backends all` で、どの出力を許容誤差で比べるか | flow 単位。Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差（2 ULP）で、到達しない flow はビット一致で比べる | M5 |
-| S-15 | §11.6 の生成 API のブロックは擬似コードで、解析できない | 言語名を ```` ```onsa-pseudo ```` に変える | M1 |
+| S-15 | §11.6 の生成 API のブロックは擬似コードで、解析できない | 取り下げ。`tests/spec/flow/generated_api.onsa` に `mode: none` で収録した（M0 で解決） | — |
 | S-16 | `test` の名前の重複と、`assert` の失敗の報告の形 | 同じモジュールで同名の `test` は E0306。失敗は `test "name" failed at file:line: assert <式のソース>` の形で、`--json` では診断と同じ形に `"kind": "test"` を足す | M3 |
+| S-17 | §17.3 と §17.4 は同じモジュールだが、`use std.math.{exp, cos}` と `use std.math.{floor, exp}` で `exp` を二度取り込む | 同じ名前の二度目の `use` は E0304（束縛の重複）とし、§17.4 の行を `use std.math.{floor}` に直す。`use` はモジュールのどの位置にも書ける（Rust と同じ） | M2 |
 
 ---
 
@@ -298,7 +302,7 @@ rt fn resonator.process(inout s, p, x: Span[F32], inout out: Span[F32]) {
 | T0-2 | `onsa_diag`: §3.1 の型、D-04 の登録簿（この文書 §5 の全コードを登録。`explain` 本文は空でよい）、JSON と人間向けの出力、`LineIndex` | `onsa_diag` | S |
 | T0-3 | `onsa_cli` の骨格: `onsa check [--json] <path...>`、`onsa explain <code>`。終了コード 0（診断なし）/ 1（診断あり）/ 2（使い方・I/O の誤り） | `onsa_cli` | S |
 | T0-4 | `tests/spec` のランナー（D-05）: ファイルを集め、`//! mode:` とマーカを読み、`check` の結果と `(code, line)` の集合を比較する。`cargo test -p onsa_tests` で走る | `crates/onsa_tests` | S |
-| T0-5 | D-06 の同期検査スクリプトと、S-15 の仕様の修正 | `tools/`, 仕様 | S |
+| T0-5 | D-06 の同期検査スクリプトと、仕様の 39 ブロックの収録（T1-11 の前倒し） | `tools/`, `tests/spec` | S |
 | T0-6 | D-14 の `check` / `wasm` / `spec` ジョブ | `.github/workflows/ci.yml` | S |
 
 受け入れ: `onsa check --json tests/spec/empty.onsa` が `[]` を出し、CI が緑。
@@ -548,27 +552,30 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | 428 | §6.3 | `Show` | `fn/trait_show.onsa` | parse | 第 2 期 |
 | 448 | §6.4 | `@derive`（`Hash` `Show` は E0200 のマーカ） | `fn/derive.onsa` | check | M2 |
 | 463 | §6.6 | `const`（`make_sine_table` を補う） | `fn/const.onsa` | check | M3 |
-| 476 | §7 | 制御（断片） | `control/forms.onsa` | check | M2 |
-| 509, 528 | §8.1 | 効果 | `effects/decl.onsa` | parse | 第 2 期 |
-| 557, 577, 602 | §8.3〜8.5 | handler、arena、main | `effects/handler.onsa` | parse | 第 2 期 |
-| 618 | §9.1 | `line_count` | `effects/result.onsa` | parse | 第 2 期 |
+| 476 | §7 | 制御（断片。`...` を含む） | `control/forms.onsa` | none | — |
+| 509 | §8.1 | 効果 | `effects/decl.onsa` | parse | 第 2 期 |
+| 528 | §8.1 | `map`（`...`） | `effects/map.onsa` | none | — |
+| 557, 577, 602 | §8.3〜8.5 | handler（最上位の `let`）、arena、main（`...`） | `effects/{handler,arena,main}.onsa` | none | — |
+| 618 | §9.1 | `line_count`（`...`） | `effects/result.onsa` | none | — |
 | 663 | §10 | `soft_clip` | `rt/soft_clip.onsa` | check | M2 |
 | 709 | §11.2 | `one_pole` | `flow/one_pole.onsa` | check | M3 |
 | 791 | §11.5 | `unison`（`saw` を補う） | `flow/unison.onsa` | check | M3 |
-| 815 | §11.6 | 生成 API（擬似。S-15） | — | — | — |
+| 815 | §11.6 | 生成 API（擬似） | `flow/generated_api.onsa` | none | — |
 | 856 | §11.7 | `gain` | `flow/gain.onsa` | check | M3 |
 | 887 | §11.8 | `check` | `test/check.onsa` | parse → test | M5 |
 | 1073, 1090 | §14.1 | `extern` と `Conv` | `ffi/extern.onsa` | parse | 第 2 期 |
 | 1118 | §14.2 | `onsa_version` | `ffi/export_fn.onsa` | check | M2 |
 | 1175 | §15.2 | `target` | `module/target.onsa` | parse | 第 2 期 |
-| 1281, 1294, 1320 | §16 | 並行性 | `concurrency/task.onsa` | parse | 第 2 期 |
+| 1281 | §16 | `std.task` のシグネチャ（本体なし） | `concurrency/task_sigs.onsa` | none | — |
+| 1294 | §16 | `run` | `concurrency/run.onsa` | parse | 第 2 期 |
+| 1320 | §16 | `on_audio`（最上位の文） | `concurrency/on_audio.onsa` | none | — |
 | 1340 | §17.1 | `gcd` | `examples/gcd.onsa` | test | M3 |
 | 1360 | §17.2 | `line_count` のテスト | `examples/line_count.onsa` | parse | 第 2 期 |
 | 1393, 1425, 1467 | §17.3〜17.4 | `resonator`、`saw` / `smooth` / `voice`、`echo`（同じモジュール） | `examples/voice.onsa` | test | M3 |
 | 1487 | §17.4 | `render_vowel` | `examples/render_vowel.onsa` | parse | 第 2 期 |
 | 1530 | §17.6 | `Poly`（`voice.onsa` と同じファイル） | `examples/voice.onsa` | check | M3 |
 
-M1 では全てのファイルが `parse` として通ることを確認する（`mode` の指定は M2 以降の検査の深さ）。
+M1 では `none` 以外の全てのファイルが `parse` として通ることを確認する（`mode` の指定は M2 以降の検査の深さ）。断片を包むためのコード（`fn groups(...) {`、`Point` の定義、`make_sine_table`、`saw`）はブロックの外に置いてある。M0 でこの収録を済ませた（T1-11 の前倒し）。否定例のマーカは、その診断を実装するマイルストーンで足す。
 
 ---
 

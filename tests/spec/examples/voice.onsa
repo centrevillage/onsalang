@@ -1,0 +1,126 @@
+use std.math.{exp, cos}
+use std.dsp.test.{impulse, energy}
+
+/// 二極レゾネータ。極は r·e^{±jw} にあり、bw > 0 なら |r| < 1 で安定。
+/// 入力に (1 - r) を掛けて、ピークのゲインをおおよそ正規化する。
+pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+  let r  = exp(-(F32.PI * bw) / sample_rate())        // Ctl
+  let w  = (2.0 * F32.PI * fc) / sample_rate()        // Ctl
+  let b1 = 2.0 * r * cos(w)                           // Ctl
+  let b2 = r * r                                      // Ctl
+  let y1 = prev(y, 0.0)                               // Sig: y は下で定義される（過去の値）
+  let y2 = prev(y1, 0.0)                              // Sig
+  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)    // Sig: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
+  y
+}
+
+test "resonator decays" {
+  let o = resonator.render(resonator.Config {},
+                           resonator.Params { fc: 500.0, bw: 100.0 },
+                           impulse(48000), 48000.0)
+  assert energy(o.out, 47000, 48000) < 1.0e-12
+}
+
+// §17.3 と同じモジュール（resonator を参照する）
+use std.math.{floor, exp}
+
+/// 素朴なのこぎり波（エイリアシングあり。例示用）
+pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
+  (2.0 * phase) - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+/// Ctl 値を、時定数 time 秒の一次遅れで Sig に滑らかにする
+pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
+  let a = exp(-1.0 / (time * sample_rate()))        // Init: init で 1 回
+  let y = x + (a * (prev(y, 0.0) - x))
+  y
+}
+
+pub flow voice(
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: Ctl[F32],
+  @param(min: 200.0, max: 1200.0, default: 700.0, unit: "Hz")
+  vowel_f1: Ctl[F32],
+  @param(min: 600.0, max: 3000.0, default: 1220.0, unit: "Hz")
+  vowel_f2: Ctl[F32],
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  gain: Ctl[F32],
+) -> Sig[F32] {
+  let src = saw~(f0)
+  let f1  = resonator~(src, vowel_f1, 80.0)         // 80.0: 定数から Ctl へ昇格
+  let f2  = resonator~(src, vowel_f2, 120.0)
+  (f1 + f2) * smooth~(gain, 0.01)
+}
+
+const MAX_ECHO: U32 = 96000                       // 48 kHz で 2 秒、96 kHz で 1 秒
+
+pub flow echo(
+  x: Sig[F32],
+  @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
+  time: Ctl[F32],
+  @param(min: 0.0, max: 0.95, default: 0.5)
+  feedback: Ctl[F32],
+) -> Sig[F32] {
+  let d = time * sample_rate()                      // Ctl（サンプル数）
+  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
+  y
+}
+
+use std.array
+use std.math.{exp2}
+
+const MAX_VOICES: U32 = 8
+
+pub struct Poly {
+  voices: [voice.State; MAX_VOICES],
+  params: [voice.Params; MAX_VOICES],
+  notes: [Option[U8]; MAX_VOICES],
+  next: U32,
+}
+
+pub rt fn midi_to_hz(note: U8) -> F32 {
+  440.0 * exp2(((note as F32) - 69.0) / 12.0)
+}
+
+impl Poly {
+  pub fn new(sample_rate: F32) -> Poly {
+    Poly {
+      voices: array.from_fn(fn(_) { voice.init(voice.Config {}, sample_rate) }),
+      params: [voice.params_default(); MAX_VOICES],
+      notes: [None; MAX_VOICES],
+      next: 0,
+    }
+  }
+
+  /// 空きを探さず、順番に割り当てる（最も古い発音を奪う）
+  pub rt fn note_on(inout self, note: U8, velocity: F32) {
+    let i = self.next
+    self.notes[i] = Some(note)
+    self.params[i].f0 = midi_to_hz(note)
+    self.params[i].gain = velocity
+    voice.reset(inout self.voices[i])
+    self.next = (i + 1) % MAX_VOICES
+  }
+
+  pub rt fn note_off(inout self, note: U8) {
+    for i in 0..MAX_VOICES {
+      if self.notes[i] == Some(note) {
+        self.notes[i] = None
+        self.params[i].gain = 0.0                   // smooth により 10 ms で減衰する
+      }
+    }
+  }
+
+  pub rt fn process(inout self, inout out: Span[F32], inout scratch: Span[F32]) {
+    out.fill!(0.0)
+    for i in 0..MAX_VOICES {
+      voice.process(inout self.voices[i], self.params[i], inout scratch)
+      out.add_from!(scratch)
+    }
+  }
+}

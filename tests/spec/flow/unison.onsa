@@ -1,0 +1,25 @@
+use std.dsp.{sum}
+
+const UNISON: U32 = 4
+
+pub flow unison(f0: Ctl[F32], detune: Ctl[F32]) -> Sig[F32] {
+  let saws = par i in 0..UNISON {
+    saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
+  }
+  sum(saws) * 0.25
+}
+
+/// 0..n を [-0.5, 0.5] に等間隔に並べる
+pub rt fn spread(i: U32, n: U32) -> F32 {
+  (i.round_f32() / (n - 1).round_f32()) - 0.5
+}
+
+/// 素朴なのこぎり波（§17.4 と同じ）
+pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
+  (2.0 * phase) - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}

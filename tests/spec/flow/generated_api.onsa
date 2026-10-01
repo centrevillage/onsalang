@@ -1,0 +1,21 @@
+//! mode: none
+// 型
+voice.State        // 状態。Affine、固定サイズ、ヒープを使わない。遅延線も含む
+voice.Config       // Init 入力をフィールドに持つ struct（Copy）
+voice.Params       // Ctl 入力をフィールドに持つ struct（Copy）
+voice.Out          // render の結果。出力チャンネルごとの Buf
+
+// 定数
+const voice.SIZE: U32        // 状態のうち fast 領域のバイト数（§12.4）
+const voice.BULK_SIZE: U32   // 状態のうち bulk 領域のバイト数
+
+// 関数
+fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
+rt fn voice.reset(inout s: voice.State)
+rt fn voice.process(inout s: voice.State, params: voice.Params, <Sig 入力>, <出力>)
+rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, <入出力>)
+                                            // Sig 入力と出力の数と型が順に一致する flow にだけ生成される
+fn voice.render(cfg: voice.Config, params: voice.Params, <Sig 入力>,
+                frames: U32, sample_rate: F32) -> voice.Out uses {Alloc}
+                                            // frames は Sig 入力の無い flow にだけある
+fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param の default がある場合

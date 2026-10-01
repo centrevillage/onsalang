@@ -1,0 +1,11 @@
+//! mode: parse
+use std.fs.{Fs, Path, IoError}
+use std.audio.wav
+
+pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
+  let sr: F32 = 48000.0
+  var st = voice.init(voice.Config {}, sr)
+  var out: Buf[F32] = Buf.zeroed(48000)
+  voice.process(inout st, voice.params_default(), inout out)
+  wav.write(path, out, sr)
+}

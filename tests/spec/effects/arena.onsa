@@ -1,0 +1,12 @@
+//! mode: none
+use std.mem.{arena}
+
+const N: U32 = 1024
+
+/// 一時的な Array を使って倍音テーブルを作る（ヒープを使う）
+fn harmonics() -> [F32; N] uses {Alloc} { ... }
+
+/// 呼び出し側が渡した作業領域の上で harmonics を実行する。ヒープの無いターゲットでも呼べる
+pub fn harmonics_in(inout scratch: Span[U8]) -> [F32; N] {
+  handle { harmonics() } with arena(inout scratch)
+}

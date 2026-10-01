@@ -1,0 +1,13 @@
+//! mode: parse
+use std.test.{check, gen}
+
+test "wrap01 stays in [0, 1)" {
+  check(1000, gen.f32(-1.0e6, 1.0e6), fn(x: F32) -> Bool {
+    let y = wrap01(x)
+    (0.0 <= y) && (y < 1.0)
+  })
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}

@@ -1,0 +1,27 @@
+//! mode: parse
+use std.fs.{Fs, Path, IoError}
+use std.text.{count_lines}
+
+@derive(PartialEq, Eq, Show)
+pub enum ConfigError {
+  Io(IoError),
+  Empty,
+}
+
+pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
+  let text = Fs.read(path).map_err(ConfigError.Io)?
+  if text.is_empty() {
+    return Err(ConfigError.Empty)
+  }
+  Ok(count_lines(text))
+}
+
+handler empty_fs: Fs {
+  fn read(_: Path) -> Result[Str, IoError] { Ok("") }
+  fn write(_: Path, _: Str) -> Result[(), IoError] { Ok(()) }
+}
+
+test "empty file is an error" {
+  let r = handle { line_count(Path.new("x.txt")) } with empty_fs
+  assert r == Err(ConfigError.Empty)
+}

@@ -1,0 +1,6 @@
+pub fn groups(x: F32, y: F32, z: F32, lo: F32, hi: F32) {
+let a = x + y - z             // OK: 加法群の連鎖
+let b = x + (y * z)           // OK
+let c = x + y * z             // E0010: 加法と乗法の混在
+let d = (lo <= x) && (x < hi) // OK
+}

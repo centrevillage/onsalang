@@ -1,0 +1,2 @@
+//! mode: none
+pub fn main() -> Result[(), AppError] uses {Fs, Stdout, Alloc} { ... }

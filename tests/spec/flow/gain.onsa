@@ -1,0 +1,9 @@
+use std.dsp.{db_to_amp}
+
+pub flow gain(
+  x: Sig[F32],
+  @param(min: -60.0, max: 12.0, default: 0.0, unit: "dB")
+  level: Ctl[F32],
+) -> Sig[F32] {
+  x * db_to_amp(level)
+}

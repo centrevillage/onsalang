@@ -1,0 +1,8 @@
+pub fn convert(i: I32, x: F64, xs: [F32; 4], y: F32) {
+let n = i as I64                 // OK
+let k = n.narrow_i32()           // I64 -> Option[I32]
+let s = x.round_f32()            // F64 -> F32、最近接偶数丸め
+let c = xs.len().round_f32()     // U32 -> F32、最近接偶数丸め
+let j = y.trunc_i32()            // F32 -> I32、範囲外は panic
+let m = y.trunc_i32_sat()        // F32 -> I32、範囲外は飽和、NaN は 0（Rust の `as`、WASM の trunc_sat と同じ）。rt ではこちらを使う
+}

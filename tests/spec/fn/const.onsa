@@ -1,0 +1,6 @@
+const TABLE_SIZE: U32 = 1024
+const SINE: [F32; 1024] = make_sine_table()
+
+fn make_sine_table() -> [F32; 1024] {
+  [0.0; 1024]
+}

@@ -1,0 +1,12 @@
+[package]
+name = "onsa_backend_js"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+onsa_core.workspace = true
+
+[lints]
+workspace = true
