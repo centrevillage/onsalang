@@ -106,16 +106,16 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 ### 2.3 型検査
 
 - 関数単位。シグネチャは完全注釈（P1）なので、呼び出し先はシグネチャだけを見る。
-- 本体は単一化変数を使う双方向推論。リテラルは `IntLit` / `FloatLit` の制約付きの型変数で、関数の終わりに未解決なら E0405。
-- `.` の左辺（フィールド、メソッド）はその時点で解決済みを要求（I-06）。
+- 本体は仕様 §4.7 の形: 文の順の一方向推論、単一化変数、期待型の下向き伝播。リテラルは `IntLit` / `FloatLit` の制約付きの型変数で、関数の終わりに未解決なら E0405。
+- `.` `[]` `as` `match` `?` 関数値の呼び出しの対象は、その時点で解決済みを要求（E0420、§4.7）。
 - 演算子は第 1 期では組込み数値型に直接型付けする（trait の脱糖は第 2 期で trait を入れたときに同じ結果になるよう、`Add.add` の形で Core に出しておく）。
 - 第 1 期のジェネリクス: `const N: U32` と、組込みの `Num` / `Float` / `Ord` / `Eq` 境界だけ（`std.dsp.sum[const N]` などに要る）。ユーザ定義 trait は第 2 期。
 
 ### 2.4 数値
 
 - F32 / F64 の演算は Core で型ごとに別の命令にし、バックエンドは混ぜない。
-- `sqrt` と `floor` / `ceil` / `trunc` / `round` / `abs` はプリミティブ（I-03）。`exp` / `cos` / `sin` / `log` / `exp2` / `pow` / `tanh` は `std/math` に Onsa で書く。精度目標は仕様で決める（I-03）。
-- C: `#pragma STDC FP_CONTRACT OFF`、`_Static_assert(FLT_EVAL_METHOD == 0)`、F32 の各演算を `(float)` で囲む。ターゲット定義にコンパイラフラグ（`-ffp-contract=off -fno-fast-math`、MSVC は `/fp:strict`）を含める（I-02）。
+- `sqrt`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、`fmod` はビット一致するプリミティブ。超越関数（`exp` / `cos` / `sin` / `log` / `exp2` / `pow` / `tanh`）も各環境のプリミティブ（C の libm、JS の `Math`、WASM は同梱の libm）に対応付け、精度目標 2 ULP を検査する（仕様 §13.4）。満たさない環境の関数だけ Onsa 実装に差し替える。
+- C: `#pragma STDC FP_CONTRACT OFF`、`_Static_assert(FLT_EVAL_METHOD == 0)`、F32 の各演算を `(float)` で囲む。ターゲット定義にコンパイラフラグ（`-ffp-contract=off -fno-fast-math`、MSVC は `/fp:strict`）を含める（仕様 §13.4）。
 - WASM: 命令がそのまま IEEE。追加の処置なし。
 - JS: F32 の各演算の後に `Math.fround`。F64 はそのまま。`I64` / `U64` は第 1 期では JS の対象外（E02xx）。
 
@@ -155,20 +155,20 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 - 成果物: flow の検査（順序と因果性 E0801、レート E0810、`delay` の規則 E0807 / E0808、呼び出しの形 E0811 / E0812 / E0805、本体の制限 E0806、`@param` E0809）、§2.2 の降下、状態の配置と `SIZE` / `BULK_SIZE` / `ALIGN` の計算、`onsa interface`（型の種と大きさ、flow の生成 API）、`onsa graph`（DOT）、Core のインタプリタ、`test` ブロックの実行（`onsa test`）、`render`。
 - 受け入れ: §17.3 の `resonator decays` と、§17.4 / §17.6 を使ったテストがインタプリタで通る。`echo` の `BULK_SIZE` が `bulk_threshold = 4096` で 384004 前後（`[F32; 96001]` の配置に従う値）になる。`graph` が §17.4 の `voice` に対して `saw` / `resonator` × 2 / `smooth` のノードを出す。
 - 決める仕様: なし。G-04（遅延の状態と演算順は仕様 §11.4、`process_inplace` と入出力の読み書きの順序は §11.6）と G-07（配置規則、§12.4）は 0.3 で決定済み。
-- 注意: `std/math` がまだ無いので、M3 では `exp` / `cos` などを一時的にインタプリタのプリミティブにし、M5 で Onsa の実装に置き換える。置き換え後に出力が変わるので、M3 のテストの期待値は許容誤差付きにしておき、M5 でビット固定する。
+- 注意: 超越関数はインタプリタでは Rust の `f32` / `f64` のメソッド（libm 相当）で計算する。C との比較は、超越関数を通る出力については許容誤差付きになる（仕様 §13.4）。
 
 ### M4 C バックエンドと export（L）
 
 - 成果物: Core → C11。関数、Copy の struct / enum / 配列、`const`、flow の生成物、`onsa.h`、生成ヘッダ（§14.2。`frames` は `uint32_t`、C-06）、`@param` のメタデータ表、`[export]` と `prefix`、`_Static_assert` による `SIZE` / `ALIGN` の検証、panic の実現（I-01。ホストは `setjmp`、組込みは `trap` / `reset` / `halt`）、`onsa build`（ターゲット `staticlib` / `exe` の C 出力と、ホストでのコンパイル）、整数の検査（`__builtin_*_overflow`）、§17.5 の C ホストの例のビルド。
 - 受け入れ: §17.5 がビルドでき、`voice` の 48000 サンプルがインタプリタとビット一致する（conformance の最初のテスト）。panic が `poisoned` を返し、`reset` で復帰する。golden テスト（生成 C の差分）がある。
-- 決める仕様（M4 の前に必須）: I-01（panic の実現。G-02 は 0.3 で決定済み）、I-02（コンパイル条件）、I-04（返り値の構築の ABI）。
-- 注意: 大きな返り値は常に出力ポインタで構築する（I-04）。`init` の生成はこの規則で書く。
+- 決める仕様: なし。I-01（panic。仕様 §9.2 の `panic` 設定）、I-02（コンパイル条件。§13.4）、I-04（返り値の構築。§12.7）は 0.3 で決定済み。
+- 注意: 集成体を返す関数は常に出力ポインタで構築する（仕様 §12.7）。`init` の生成はこの規則で書く。NRVO の条件と、`audit --memory` の移動の列挙もここで実装する。
 
-### M5 `std/math` と `std/dsp`、ビット一致の基盤（M）
+### M5 `std/math` と `std/dsp`、適合性テストの基盤（M）
 
-- 成果物: `std/math`（Onsa 実装。`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow`、プリミティブの `sqrt` `floor` `ceil` `trunc` `round` `abs` `min` `max`）、精度のテスト（参照は Rust の `f64` 計算を正しく丸めたもの、ULP で判定）、`std/dsp`（`sum`、`db_to_amp`、`test.{impulse, magnitude_at, energy, assert_near}`）、`std/test`（`check`、`gen`。テストランナーの決定的な `Random`）、`onsa test --flows`（`@param` の範囲での自動検査）、`onsa test --backends all` の仕組み（`render` の出力を interp と C で比較）、`onsa primer --std`。
+- 成果物: `std/math`（各環境のプリミティブへの対応付け。`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` と、ビット一致する `sqrt` `floor` `ceil` `trunc` `round` `abs` `min` `max` `fmod`。WASM 用の同梱 libm）、精度のテスト（参照は正しく丸めた値、2 ULP 以内で判定。環境ごとの結果を記録し、超える関数は Onsa 実装に差し替える）、`std/dsp`（`sum`、`db_to_amp`、`test.{impulse, magnitude_at, energy, assert_near}`）、`std/test`（`check`、`gen`。テストランナーの決定的な `Random`）、`onsa test --flows`（`@param` の範囲での自動検査）、`onsa test --backends all` の仕組み（`render` の出力を interp と C で比較）、`onsa primer --std`。
 - 受け入れ: §17 の全てのテストが interp と C でビット一致。`std/math` の各関数が精度目標を満たす。
-- 決める仕様: I-03（プリミティブの一覧と ULP の目標）。
+- 決める仕様: なし（I-03 は 0.3 で決定済み。精度目標 2 ULP は仮決めで、M5 の測定で見直す）。
 
 ### M6 WASM バックエンド（M）
 
@@ -215,7 +215,7 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 第 2 期（fn 世界）は仕様 §20 の 7〜9。順序の提案:
 
 1. 効果と handler（末尾再開、証拠渡し）。`Alloc` 無しで動く `Log` / `Clock` / `Random` から。C-01、C-02、C-03、G-01 は 0.3 で決定済み。
-2. `Alloc`、Shared 型（`Str` `Array` `Map` `Set`）、`Buf`、Perceus の参照カウント、`Drop`。ヘッダの形は仕様 §12.7（G-06 で決定済み）。
+2. `Alloc`、Shared 型（`Str` `Array` `Map` `Set`）、`Buf`、Perceus の参照カウント、`Drop`。ヘッダの形は仕様 §12.8（G-06 で決定済み）。
 3. ユーザ定義 trait と演算子の脱糖、`derive`、`Iter` と `for` の脱糖。
 4. 標準ライブラリ（`std.fs` `std.audio.wav` など）と `main`、ターゲットの `provides`、`onsa.policy`。
 5. LLVM バックエンド（ネイティブの `exe` / プラグイン）。C バックエンド経由で先に動かし、LLVM は性能が要るときに。
@@ -230,8 +230,8 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 | リスク | 影響 | 対策 |
 |---|---|---|
 | ビット一致が C コンパイラの条件で崩れる（I-02） | `strict` の約束が守れない | M4 で `_Static_assert` とフラグを生成物に含め、M5 の conformance を CI で複数コンパイラ（clang / gcc / MSVC）に対して回す |
-| `std/math` の精度と性能 | 組込みで遅い、または他の libm と差が出て不信を招く | 最初は精度優先（1 ULP 以内）。`relaxed` で libm への置き換えを許すかは §15.5 の決定事項として残す |
+| 環境の libm の精度のばらつき | 組込みの軽量 libm で 2 ULP を超え、試聴と機器の音がずれる | M5 で環境ごとに測定し、超える関数だけ Onsa 実装に差し替える。ビット一致が要る用途向けの `std.math.exact` は §19 |
 | panic の実現（I-01）が組込みで重い | `jmp_buf` の大きさ、`longjmp` の無い環境 | ターゲットの `panic` 設定で選べるようにし、`trap` を既定にする |
-| 型推論の規則（I-06）が仕様と実装でずれる | 診断の位置が LLM に分かりにくい | M2 の前に規則を仕様に書き、否定例をテストに入れる |
-| flow の名前空間（I-05）の衝突 | 名前解決の例外が増える | M2 で「flow は同名の名前空間を作り、同じモジュールの同名の宣言は E03xx」と決めて実装する |
+| 型推論の規則（仕様 §4.7）が実装でずれる | 診断の位置が LLM に分かりにくい | §4.7 の各規則に対応する否定例をテストに入れる |
+| flow の名前空間の名前解決 | モジュールと名前空間の扱いが実装で分かれる | 名前空間をモジュールと同じ項目の種類として実装する（仕様 §11.2、§11.6。E0305） |
 | 第 1 期の範囲が膨らむ（LSP、play、probe） | C の出力が遅れる | M7 は M4〜M6 の後に置き、M4 の完了を第 1 期の最初の区切りにする |
