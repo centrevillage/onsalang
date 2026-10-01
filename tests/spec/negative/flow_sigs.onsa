@@ -1,0 +1,42 @@
+// E0810 / E0809: flow signatures (§11.3, §11.6, §11.7).
+pub flow no_rate(x: F32) -> Sig[F32] {   //~ E0810
+  x
+}
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow struct_out(x: Sig[F32]) -> Sig[Pair] {
+  Pair { l: x, r: x }
+}
+
+pub flow nested(x: Sig[[[F32; 2]; 2]]) -> Sig[F32] {   //~ E0810
+  1.0
+}
+
+pub flow shared(x: Sig[Str]) -> Sig[F32] {   //~ E0810
+  1.0
+}
+
+pub flow param_on_sig(
+  @param(min: 0.0, max: 1.0)    //~ E0809
+  x: Sig[F32],
+) -> Sig[F32] {
+  x
+}
+
+pub flow bad_key(
+  @param(min: 0.0, max: 1.0, color: "red") //~ E0809
+  g: Ctl[F32],
+) -> Sig[F32] {
+  g
+}
+
+pub flow bad_scale(
+  @param(min: 0.0, max: 1.0, scale: "exp") //~ E0809
+  g: Ctl[F32],
+) -> Sig[F32] {
+  g
+}

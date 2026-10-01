@@ -1,0 +1,3 @@
+[package]
+name = "visibility"
+edition = "2026"

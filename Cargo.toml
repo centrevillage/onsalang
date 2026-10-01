@@ -22,6 +22,7 @@ onsa_driver = { path = "crates/onsa_driver" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 clap = { version = "4", features = ["derive"] }
+toml = "0.8"
 
 [workspace.lints.clippy]
 all = "warn"

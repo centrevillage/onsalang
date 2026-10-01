@@ -102,7 +102,11 @@ impl<'a> Lexer<'a> {
             self.pos += 1;
         }
         let span = self.span(start);
-        self.error(Code::E0020, span, "Onsa has no block comments; use `//` line comments");
+        let inner = self.text[start..self.pos].trim_start_matches("/*").trim_end_matches("*/").trim();
+        let d = Diagnostic::new(Code::E0020, span, "Onsa has no block comments; use `//` line comments")
+            .with_found(self.text[start..self.pos].to_string())
+            .with_fix(Fix::Replace { replace: format!("// {inner}") });
+        self.out.diagnostics.push(d);
         self.push(TokenKind::Comment, start);
     }
 

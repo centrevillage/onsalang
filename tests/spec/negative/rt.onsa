@@ -1,0 +1,38 @@
+// E09xx: rt rules (§10). One error per item (P-01).
+pub fn slow(x: F32) -> F32 { x }
+
+pub rt fn calls_non_rt(x: F32) -> F32 {
+  slow(x)                       //~ E0901
+}
+
+pub rt fn calls_non_rt_value(g: fn(F32) -> F32) -> F32 {
+  g(1.0)                        //~ E0901
+}
+
+pub rt fn allocates() -> U32 {
+  let b: Buf[F32] = Buf.zeroed(4)    //~ E0901
+  b.len()
+}
+
+pub rt fn owns_a_buf(move b: Buf[F32]) -> U32 {   //~ E0901
+  b.len()
+}
+
+pub rt fn has_alloc() uses {Alloc} {}   //~ E0902
+
+pub rt fn recursive(n: U32) -> U32 {
+  if n == 0 { 0 } else { recursive(n - 1) }   //~ E0903
+}
+
+pub rt fn ping(n: U32) -> U32 {
+  pong(n)                       //~ E0903
+}
+
+pub rt fn pong(n: U32) -> U32 {
+  if n == 0 { 0 } else { ping(n - 1) }
+}
+
+pub rt fn fine(b: Buf[F32], g: rt fn(F32) -> F32) -> U32 {
+  let y = g(1.0)
+  b.len() + y.trunc_u32()
+}

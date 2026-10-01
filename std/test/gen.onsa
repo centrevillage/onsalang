@@ -1,0 +1,7 @@
+/// Generators for `std.test.check` (spec §11.8).
+
+use std.test.{Gen}
+
+pub target fn f32(lo: F32, hi: F32) -> Gen[F32]
+pub target fn u32(lo: U32, hi: U32) -> Gen[U32]
+pub target fn pair[A, B](a: Gen[A], b: Gen[B]) -> Gen[(A, B)]

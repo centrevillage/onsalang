@@ -22,7 +22,7 @@ test "resonator decays" {
 }
 
 // §17.3 と同じモジュール（resonator を参照する）
-use std.math.{floor, exp}
+use std.math.{floor}
 
 /// 素朴なのこぎり波（エイリアシングあり。例示用）
 pub flow saw(f0: Ctl[F32]) -> Sig[F32] {

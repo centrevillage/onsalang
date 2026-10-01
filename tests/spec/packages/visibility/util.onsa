@@ -1,0 +1,6 @@
+pub fn shown() -> I32 { 1 }
+pub(pkg) fn in_package() -> I32 { 2 }
+fn hidden() -> I32 { 3 }
+pub struct Point {
+  x: F32,
+}

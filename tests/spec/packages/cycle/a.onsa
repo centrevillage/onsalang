@@ -1,0 +1,4 @@
+// E0310: `a` and `b` import each other (§15.1). Reported on the import that closes the cycle.
+use b.{g}
+
+pub fn f() -> I32 { g() }

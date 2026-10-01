@@ -1,0 +1,14 @@
+/// Test helpers for flows (spec §11.8). `impulse` allocates a `Buf`, so it
+/// needs `Alloc`; in phase 1 these are provided by the interpreter (D-08).
+
+/// A unit impulse of `n` samples: `1.0` followed by `n - 1` zeros.
+pub target fn impulse(n: U32) -> Buf[F32] uses {Alloc}
+
+/// Magnitude of `xs` at `freq` (Goertzel in F64, rounded to F32; S-10).
+pub target fn magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32
+
+/// Sum of squares over the half-open range `[from, to)`.
+pub target fn energy(xs: Span[F32], from: U32, to: U32) -> F64
+
+/// Panics unless `|a - b| <= tol`.
+pub target fn assert_near(a: F64, b: F64, tol: F64)

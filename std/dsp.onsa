@@ -1,0 +1,18 @@
+/// DSP helpers (spec §11.5, §11.7, S-10).
+
+use std.math.{pow}
+
+/// Sum of a fixed-length array, folded from `xs[0]` left to right so that the
+/// order of operations, and therefore the result, is the same on every target.
+pub rt fn sum[const N: U32](xs: [F32; N]) -> F32 {
+  var acc: F32 = 0.0
+  for i in 0..N {
+    acc = acc + xs[i]
+  }
+  acc
+}
+
+/// Decibels to linear amplitude: 10^(db / 20).
+pub rt fn db_to_amp(db: F32) -> F32 {
+  pow(10.0, db / 20.0)
+}

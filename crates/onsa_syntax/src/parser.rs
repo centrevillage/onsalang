@@ -1628,6 +1628,7 @@ impl<'a> Parser<'a> {
             let else_tok = self.peek_past_newlines();
             let span = Span::new(self.file, close_brace_end, else_tok.span.start);
             let d = Diagnostic::new(Code::E0003, span, "`else` must be on the same line as the closing `}`")
+                .with_found("else")
                 .with_fix(Fix::Replace { replace: " ".to_string() });
             self.report(d);
             self.skip_newlines();

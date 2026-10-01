@@ -1,0 +1,7 @@
+// E0303: private items are not visible from another module (§15.1).
+use util.{shown, in_package}
+use util.{hidden}               //~ E0303
+use util.{Point}
+use util.{missing}              //~ E0302
+
+pub fn run() -> I32 { shown() + in_package() }

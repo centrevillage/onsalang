@@ -20,7 +20,7 @@ enum Command {
         /// Print diagnostics as JSON (spec §18.1)
         #[arg(long)]
         json: bool,
-        /// `.onsa` files to check (a single package)
+        /// `.onsa` files (one package), or a package directory / `onsa.toml`
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
@@ -91,23 +91,18 @@ fn fmt(check: bool, paths: &[PathBuf]) -> ExitCode {
 }
 
 fn check(json: bool, paths: &[PathBuf]) -> ExitCode {
-    let mut sources = SourceMap::default();
-    for path in paths {
-        match std::fs::read_to_string(path) {
-            Ok(text) => {
-                sources.add(path.to_string_lossy(), text);
-            }
-            Err(e) => {
-                eprintln!("onsa: cannot read {}: {e}", path.display());
-                return ExitCode::from(2);
-            }
+    let mut loaded = match onsa_driver::load(paths) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("onsa: {e}");
+            return ExitCode::from(2);
         }
-    }
-    let result = onsa_driver::check(&sources);
+    };
+    let result = onsa_driver::check_loaded(&mut loaded);
     if json {
-        println!("{}", onsa_diag::to_json(&sources, &result.diagnostics));
+        println!("{}", onsa_diag::to_json(&loaded.sources, &result.diagnostics));
     } else {
-        print!("{}", onsa_diag::to_text(&sources, &result.diagnostics));
+        print!("{}", onsa_diag::to_text(&loaded.sources, &result.diagnostics));
     }
     if result.diagnostics.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }

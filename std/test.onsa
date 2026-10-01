@@ -1,0 +1,11 @@
+/// Property-based checks (spec §11.8). Phase 1: available inside `test`
+/// bodies only, with `Random` seeded from the test name by the runner (M5).
+
+/// A generator of values of `T` (`std.test.gen` builds them).
+pub struct Gen[T] {
+  seed: U64,
+}
+
+/// Generate `cases` values from `g` and check `p` on each; the first
+/// counterexample is shown with `Show` and the test panics.
+pub target fn check[T: Show](cases: U32, g: Gen[T], p: fn(T) -> Bool) uses {Random}

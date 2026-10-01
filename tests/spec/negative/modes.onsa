@@ -1,0 +1,98 @@
+// E07xx: argument modes, exclusivity, second-class values, moves (§5.2, §5.3, §5.4).
+// One error per item (P-01).
+pub struct P {
+  x: U32,
+  y: U32,
+}
+
+impl P {
+  pub fn norm(self) -> U32 { self.x }
+  pub fn scale(inout self, k: U32) { self.x = self.x * k }
+}
+
+pub fn bump(inout a: U32, b: U32) {}
+
+pub fn take(move b: Buf[F32]) {}
+
+pub fn assign_to_let() {
+  let a: U32 = 1
+  a = 2                         //~ E0701
+}
+
+pub fn inout_of_borrowed(a: U32) {
+  bump(inout a, 1)              //~ E0701
+}
+
+pub fn inout_of_temporary() {
+  bump(inout 1, 1)              //~ E0701
+}
+
+pub fn same_place_twice() {
+  var p = P { x: 1, y: 2 }
+  swap(inout p.x, inout p.x)    //~ E0702
+}
+
+pub fn swap(inout a: U32, inout b: U32) {}
+
+pub fn inout_and_borrow_overlap() {
+  var a: U32 = 1
+  bump(inout a, a)              //~ E0702
+}
+
+pub fn array_elements_may_overlap(inout xs: [U32; 4], i: U32, j: U32) {
+  swap(inout xs[i], inout xs[j])    //~ E0702
+}
+
+pub fn different_fields_are_fine() {
+  var p = P { x: 1, y: 2 }
+  swap(inout p.x, inout p.y)
+}
+
+pub fn missing_inout() {
+  var a: U32 = 1
+  bump(a, 1)                    //~ E0703
+}
+
+pub fn extra_move(b: U32) {
+  bump2(move b)                 //~ E0703
+}
+
+pub fn bump2(b: U32) {}
+
+pub fn used_after_move(move b: Buf[F32]) -> U32 {
+  take(move b)
+  b.len()                       //~ E0704
+}
+
+pub fn moved_in_loop(move b: Buf[F32], n: U32) {
+  for i in 0..n {
+    take(move b)                //~ E0704
+  }
+}
+
+pub fn span_stored(xs: Span[F32]) {
+  let s = xs                    //~ E0710
+}
+
+pub fn span_returned(xs: Span[F32]) -> Span[F32] {   //~ E0710
+  xs
+}
+
+pub fn move_of_borrowed(b: Buf[F32]) {
+  take(move b)                  //~ E0711
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }
+
+pub fn closure_captures_inout(inout k: U32) -> U32 {
+  apply(fn(x) { x + k })        //~ E0712
+}
+
+pub fn bang_missing() {
+  var p = P { x: 1, y: 2 }
+  p.scale(2)                    //~ E0713
+}
+
+pub fn bang_extra(p: P) -> U32 {
+  p.norm!()                     //~ E0714
+}

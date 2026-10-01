@@ -1,0 +1,5 @@
+/// Fixed-length array construction (spec §2.4). `from_fn` builds `[T; N]`
+/// by calling `f` with `0..N`; it is the only way to build an array of Affine
+/// values. The compiler expands the call inline (T3-3).
+
+pub target fn from_fn[T: ?Dup, const N: U32](f: fn(U32) -> T) -> [T; N]

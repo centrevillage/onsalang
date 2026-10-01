@@ -5,4 +5,5 @@ pub fn convert(i: I32, x: F64, xs: [F32; 4], y: F32) {
   let c = xs.len().round_f32() // U32 -> F32、最近接偶数丸め
   let j = y.trunc_i32()        // F32 -> I32、範囲外は panic
   let m = y.trunc_i32_sat()    // F32 -> I32、範囲外は飽和、NaN は 0（Rust の `as`、WASM の trunc_sat と同じ）。rt ではこちらを使う
+  let b = y.to_bits()          // F32 -> U32、ビット表現（F64 は U64）。逆は F32.from_bits(b)
 }

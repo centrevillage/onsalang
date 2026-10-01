@@ -14,6 +14,8 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
   (i.round_f32() / (n - 1).round_f32()) - 0.5
 }
 
+use std.math.{floor}
+
 /// 素朴なのこぎり波（§17.4 と同じ）
 pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
   let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))

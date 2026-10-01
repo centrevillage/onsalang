@@ -1,4 +1,4 @@
-@derive(PartialEq, Eq, Hash, Show)
+@derive(PartialEq, Eq, Hash, Show) //~ E0200
 pub struct Key {
   id: U32,
 }

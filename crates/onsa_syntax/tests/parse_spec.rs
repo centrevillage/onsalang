@@ -1,6 +1,6 @@
 //! Every file under `tests/spec` (except `mode: none`) must parse; the only
-//! diagnostics allowed are those marked on the same line with `//~ CODE`
-//! (D-05). M1, T1-11.
+//! parser diagnostics allowed are those marked on the same line with a
+//! syntax code `//~ E00xx` / `//~ E0320` (D-05). M1, T1-11.
 
 use std::path::Path;
 
@@ -42,7 +42,11 @@ fn spec_files_parse() {
         for (i, line) in text.lines().enumerate() {
             if let Some(idx) = line.find("//~") {
                 for m in line[idx + 3..].split("//~") {
-                    if let Some(code) = m.split_whitespace().next() {
+                    // Only syntax-level codes (E00xx, E0320) are the parser's; the
+                    // rest belong to later stages and are checked by `onsa_tests`.
+                    if let Some(code) = m.split_whitespace().next()
+                        && (code.starts_with("E00") || code == "E0320")
+                    {
                         expected.push((i as u32 + 1, code.to_string()));
                     }
                 }

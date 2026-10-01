@@ -1,0 +1,24 @@
+/// Mathematical primitives (spec §13.4, D-07, S-09). Every function is a
+/// `target` declaration: each backend (interpreter, C, WASM, JS) provides it.
+/// The IEEE-exact set (`sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`,
+/// `min`, `max`, `fmod`) is bit-exact on every target; the transcendental set
+/// matches within the precision target (2 ULP).
+
+pub target rt fn exp[T: Float](x: T) -> T
+pub target rt fn exp2[T: Float](x: T) -> T
+pub target rt fn log[T: Float](x: T) -> T
+pub target rt fn log2[T: Float](x: T) -> T
+pub target rt fn sin[T: Float](x: T) -> T
+pub target rt fn cos[T: Float](x: T) -> T
+pub target rt fn tan[T: Float](x: T) -> T
+pub target rt fn tanh[T: Float](x: T) -> T
+pub target rt fn pow[T: Float](x: T, y: T) -> T
+pub target rt fn sqrt[T: Float](x: T) -> T
+pub target rt fn floor[T: Float](x: T) -> T
+pub target rt fn ceil[T: Float](x: T) -> T
+pub target rt fn trunc[T: Float](x: T) -> T
+pub target rt fn round[T: Float](x: T) -> T
+pub target rt fn fmod[T: Float](x: T, y: T) -> T
+pub target rt fn abs[T: Num](x: T) -> T
+pub target rt fn min[T: Num](x: T, y: T) -> T
+pub target rt fn max[T: Num](x: T, y: T) -> T

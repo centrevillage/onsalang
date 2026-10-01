@@ -182,6 +182,7 @@ let s = x.round_f32()        // F64 -> F32、最近接偶数丸め
 let c = xs.len().round_f32() // U32 -> F32、最近接偶数丸め
 let j = y.trunc_i32()        // F32 -> I32、範囲外は panic
 let m = y.trunc_i32_sat()    // F32 -> I32、範囲外は飽和、NaN は 0（Rust の `as`、WASM の trunc_sat と同じ）。rt ではこちらを使う
+let b = y.to_bits()          // F32 -> U32、ビット表現（F64 は U64）。逆は F32.from_bits(b)
 ```
 
 Rust の `as` は情報を失う変換も許す。Onsa の `as` で書けるのはその部分集合で、検査を通るものは Rust と同じ意味を持つ（§0.3 の 4）。
@@ -355,7 +356,7 @@ acc = acc + (x as F64)
 | もの | 書き方 | 意味 |
 |---|---|---|
 | 借用 | `f(x)`, `f(inout x)` | §5.2 |
-| `Span[T]` | 引数の型として `xs: Span[T]` / `inout xs: Span[T]` | 連続した要素の非所有ビュー（C++20 の `std::span` と同じ意味）。`[T; N]`、`Buf[T]`、`Span[T]` を渡せる |
+| `Span[T]` | 引数の型として `xs: Span[T]` / `inout xs: Span[T]` | 連続した要素の非所有ビュー（C++20 の `std::span` と同じ意味）。`[T; N]`、`Buf[T]`、`Span[T]` を渡せる。メソッドは `len()`、`slice(from, to)`、`get(i) -> Option[T]`、`fill!(v)`、`add_from!(other)`、`copy_from!(other)` で、`[T; N]` と `Buf[T]` にも同じものがある |
 | 部分ビュー | `f(xs.slice(from, to))`, `f(inout xs.slice(from, to))` | 半開区間 `[from, to)` の `Span`。範囲外は panic |
 | `Span` の配列 | 引数の型として `xs: [Span[T]; N]` / `inout xs: [Span[T]; N]` | チャンネルごとのバッファ（planar）。`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる（要素ごとに `Span` へ変換）。別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け、排他性は要素の場所ごとに検査する。`xs[k]` は `Span[T]` で、引数の位置にだけ現れる |
 | 捕捉するクロージャ | `xs.map(fn(x) { x * k })` | 外側の値をコピーで捕捉する無名関数。`inout` 引数と Affine 値は捕捉できない |
@@ -782,6 +783,7 @@ flow 本体の中での呼び出しは、呼び出す相手によって意味が
 
 - `if c { a } else { b }` と `match` は点ごとの選択。**全ての分岐・腕の flow インスタンスは常に進む**（クロックによる停止は §19）。
 - flow 本体の中に再帰やループは無い。
+- flow の呼び出しの引数のレートは、入力の宣言のレート以下でなければならない（`Ctl` 入力に `Sig` の値、`Init` 入力に `Ctl` の値を渡すと E0815）。昇格の逆は無い（§11.3）。
 - `Alloc` を持つ関数を呼べないので、flow とその初期化はヒープを使わない。
 
 **複製** `par i in 0..N { e }` は、`e` を `N` 個並べる（FAUST の `par(i, N, e)` と同じ意味）。`N` はコンパイル時定数、`i` は各複製の中で `Init` レートの **値**（コンパイル時定数ではない。遅延線の長さなど定数が要る位置には使えない）、結果の値型は `[T; N]`。`e` の中の flow 呼び出しは、複製ごとに別のインスタンスになる。
@@ -847,7 +849,7 @@ fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param �
 - `render` はテストと一括処理用。全体を 1 回の `process` として処理するので、`Ctl` 入力は全区間で一定。ブロックごとにパラメータを変えるテストは `process` を自分で繰り返す。`Sig` 入力がある flow では `frames` を取らず、`Span` の長さを使う。
 - `Out` は、`process` の出力引数と同じ名前・同じ形で、`Span[T]` を `Buf[T]` に置き換えた struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`）。
 - 状態の所有者は呼び出し側。サンプルレートを変えるときは、`init` を呼び直す。
-- 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。
+- 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。式の中に直接書いた `prev` / `delay` / `vdelay` も同じく `prev_0`、`delay_0`、`vdelay_0`。`delay` / `vdelay` の内部の状態は `<名前>.buf` と `<名前>.w`、定数でない `init` の保存先は `<名前>.init`（C では `.` を `_` にする）。
 - flow は第一級の値ではない。flow の外からは、この名前空間の型と関数を通じてだけ扱う。
 - v0.2 では、flow の出力は `Sig` だけ（`Ctl` 出力は §19）。
 
@@ -878,6 +880,8 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 一括処理は生成された `render` で行う。`std.dsp.test` には次を置く。
 
 - `impulse(n: U32) -> Buf[F32] uses {Alloc}`
+- `std.dsp.sum[const N](xs: [F32; N]) -> F32` は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。`magnitude_at` は F64 の Goertzel で計算し、結果を F32 に丸める。
+- 同じモジュールに同名の `test` があれば E0306。失敗は `test "name" failed at file:line: assert <式のソース>` の形で報告し、`--json` では診断（§18.1）と同じ形に `"kind": "test"` を加える。
 - `magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32`
 - `energy(xs: Span[F32], from: U32, to: U32) -> F64`（半開区間 `[from, to)` の二乗和）
 - `assert_near(a: F64, b: F64, tol: F64)`
@@ -936,7 +940,7 @@ test "wrap01 stays in [0, 1)" {
   - **fast**: スカラと小さな配列。キャッシュや内部 SRAM に置く。
   - **bulk**: ターゲットの `bulk_threshold`（バイト）以上の配列。遅延線や大きなテーブル。外部 SDRAM などに置く。
 - 閾値を設定しなければ、全てが fast に入り、`BULK_SIZE` は 0 になる。
-- 配置の規則: フィールドは宣言順（flow の状態では `let` の順）、各型の自然アラインメント、並べ替えなし。`SIZE` / `ALIGN` はこの規則でコンパイラが計算し、生成コードに `_Static_assert` で検証を出す。ホットリロード（§18.3）とプローブは、この規則で名前とオフセットが安定することに依存する。
+- 配置の規則: フィールドは宣言順（flow の状態では `let` の順）、各型の自然アラインメント、並べ替えなし。`let` に由来しないフィールドは次の順に置く: 先頭に bulk 領域のポインタ（`BULK_SIZE > 0` のとき）、`sample_rate: F32`（`Ctl` / `Sig` から参照されるとき）、次に `let` 由来のフィールド（`Sig` から参照される `Ctl` レートの `let` も含む。`ctl` と `tick` の間で値を渡す場所が要るため）、末尾に `poisoned: Bool` と `jmp_buf`（`panic = "poison"` のとき）。`SIZE` / `ALIGN` はこの規則でコンパイラが計算し、生成コードに `_Static_assert` で検証を出す。ホットリロード（§18.3）とプローブは、この規則で名前とオフセットが安定することに依存する。
 - C API は二つの領域を別々のポインタで受け取る（§14.2）。Onsa の中から見ると、状態は一つの値である。
 
 ### 12.5 スタック
@@ -1030,7 +1034,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - **超越関数**（`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` など）は、各環境のプリミティブ（C の libm、JavaScript の `Math`、WASM では同梱の libm）を使う。実装が環境で違うので最後の桁は一致しない。精度目標は **F32 / F64 とも 2 ULP 以内**（仮決め）とし、`onsa test --backends all` は超越関数を含む出力を許容誤差付きで比較する。環境の libm がこれを満たさない場合（組込みの軽量 libm など）は、その関数だけ Onsa 実装に差し替えるなど個別に対策する。ビット一致が要る用途向けの Onsa 実装の `std.math.exact` は §19。
 - C では、生成コードに `#pragma STDC FP_CONTRACT OFF` と `_Static_assert(FLT_EVAL_METHOD == 0)` を出し、F32 の各演算を `(float)` で囲む。ターゲット定義はコンパイラフラグ（`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。
 
-`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。
+`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。
 
 ### 13.5 言語全体の変換（最終目標）
 
@@ -1164,9 +1168,9 @@ void        onsa_voice_free(onsa_voice* s);
 
 ### 15.1 モジュール
 
-- 1 ファイル = 1 モジュール。モジュールのパスはパッケージルートからのファイルパスで、`mod` 宣言は無い。
+- 1 ファイル = 1 モジュール。モジュールのパスはパッケージルートからのファイルパスで、`mod` 宣言は無い。パッケージルートは `onsa.toml` のあるディレクトリで、その下の `.onsa` ファイルを再帰的に集める（`tests/` と `target/` を除く）。マニフェストの無い単一のファイル（`onsa check foo.onsa`）は、そのファイルを 1 モジュールのパッケージとして扱う（モジュール名はファイル名）。
 - 可視性は `pub`（パッケージ外に公開）と `pub(pkg)`（パッケージ内に公開）。無指定はモジュール内のみ。
-- `use std.fs.{Fs, Path}`。グロブ import は無い。再公開は `pub use` のみ。
+- `use std.fs.{Fs, Path}`。グロブ import は無い。再公開は `pub use` のみ。`use` はモジュールのどの位置にも書ける。同じ名前を二度取り込むと E0304（束縛の重複）。
 - モジュール間の循環 import は禁止（E0310）。
 - 暗黙の prelude は `Option Result Some None Ok Err` と組込み型だけ。
 
@@ -1424,7 +1428,7 @@ test "resonator decays" {
 
 ```onsa
 // §17.3 と同じモジュール（resonator を参照する）
-use std.math.{floor, exp}
+use std.math.{floor}
 
 /// 素朴なのこぎり波（エイリアシングあり。例示用）
 pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
@@ -1608,6 +1612,7 @@ impl Poly {
 | 範囲 | 分類 |
 |---|---|
 | E00xx | 字句・構文・演算子の群 |
+| E02xx | この版のコンパイラでは未対応の機能（E0200。機能名を添える） |
 | E03xx | モジュール・名前解決・シャドーイング・循環 |
 | E04xx | 型・アリティ・フィールド・リテラルの型 |
 | E05xx | 網羅性 |
