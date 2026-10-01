@@ -1,0 +1,22 @@
+// E0001 / E0002: invalid characters and unexpected tokens (S-18).
+pub fn dollar() -> I32 {
+  1 $ 2                         //~ E0001
+}
+
+pub fn unterminated() -> I32 {
+  let s = "abc                  //~ E0001
+  1
+}
+
+pub fn missing_paren(x: I32 -> I32 {   //~ E0002
+  x
+}
+
+pub fn range_outside() -> I32 {
+  let r = 0..3                  //~ E0002
+  1
+}
+
+pub fn tilde_alone(x: F32) -> F32 {
+  x ~ 1.0                       //~ E0002
+}

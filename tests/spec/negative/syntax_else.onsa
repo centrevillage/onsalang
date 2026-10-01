@@ -1,0 +1,10 @@
+// E0003: `else` must follow `}` on the same line (§2.5). The span is the line break
+// after `}`, so the marker sits on the `if` line; the fix joins the two lines.
+pub fn choose(c: Bool) -> I32 {
+  if c { 1 }                    //~ E0003
+  else { 2 }
+}
+
+pub fn fine(c: Bool) -> I32 {
+  if c { 1 } else { 2 }
+}

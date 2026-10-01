@@ -1,0 +1,44 @@
+// E0020: forms from other languages, each with a suggested Onsa form (§18.1).
+pub fn semicolon(x: I32) -> I32 {
+  let y = x;                    //~ E0020
+  y
+}
+
+pub fn rust_borrow(v: &mut [I32; 4]) {   //~ E0020
+}
+
+pub fn rust_generic(xs: Array<F32>) -> U32 {   //~ E0020
+  xs.len()
+}
+
+pub fn rust_path() -> F32 {
+  F32::PI                       //~ E0020
+}
+
+pub fn rust_types(x: i32) -> f32 {   //~ E0020
+  1.0
+}
+
+pub fn rust_let_mut() -> I32 {
+  let mut n = 0                 //~ E0020
+  n
+}
+
+pub fn rust_loop() {
+  loop {                        //~ E0020
+    break
+  }
+}
+
+pub fn float_forms() -> F32 {
+  let a = 1.                    //~ E0020
+  a
+}
+
+pub fn float_suffix() -> F32 {
+  1.0f32                        //~ E0020
+}
+
+pub fn block_comment() -> I32 {
+  /* no block comments */ 1     //~ E0020
+}

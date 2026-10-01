@@ -1,0 +1,21 @@
+// E0320: naming rules (§2.3).
+pub fn BadFn() {}               //~ E0320
+
+pub struct bad_type {           //~ E0320
+  x: F32,
+}
+
+pub enum Shape {
+  circle(F32),                  //~ E0320
+}
+
+const max_voices: U32 = 8       //~ E0320
+
+pub fn bad_param(someValue: I32) -> I32 {   //~ E0320
+  someValue
+}
+
+pub fn bad_var() -> I32 {
+  var Count = 0                 //~ E0320
+  Count
+}

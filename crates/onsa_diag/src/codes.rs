@@ -92,6 +92,8 @@ macro_rules! codes {
 }
 
 codes! {
+    E0001 = 1,    Syntax,         "invalid character or literal";
+    E0002 = 2,    Syntax,         "unexpected token";
     E0003 = 3,    Syntax,         "`else` must be on the same line as the closing `}`";
     E0010 = 10,   Syntax,         "binary operators from different groups mixed without parentheses";
     E0011 = 11,   Syntax,         "`as` expression used as an operand without parentheses";
