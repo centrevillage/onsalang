@@ -339,6 +339,7 @@ acc = acc + (x as F64)
 | 借用 | `f(x)`, `f(inout x)` | §5.2 |
 | `Span[T]` | 引数の型として `xs: Span[T]` / `inout xs: Span[T]` | 連続した要素の非所有ビュー（C++20 の `std::span` と同じ意味）。`[T; N]`、`Buf[T]`、`Span[T]` を渡せる |
 | 部分ビュー | `f(xs.slice(from, to))`, `f(inout xs.slice(from, to))` | 半開区間 `[from, to)` の `Span`。範囲外は panic |
+| `Span` の配列 | 引数の型として `xs: [Span[T]; N]` / `inout xs: [Span[T]; N]` | チャンネルごとのバッファ（planar）。`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる（要素ごとに `Span` へ変換）。別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け、排他性は要素の場所ごとに検査する。`xs[k]` は `Span[T]` で、引数の位置にだけ現れる |
 | 捕捉するクロージャ | `xs.map(fn(x) { x * k })` | 外側の値をコピーで捕捉する無名関数。`inout` 引数と Affine 値は捕捉できない |
 
 捕捉の無い関数値（名前付きの関数、捕捉しない無名関数）は Copy の第一級の値で、保存も返却もできる。
@@ -684,10 +685,12 @@ pub flow one_pole(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {
 ```
 
 - 入力は `(名前: レート型, ...)`、出力は `-> レート型`。複数の出力は struct を値型にして表す（`-> Sig[Stereo]`）。
-- 本体は `let` 文の並びと、最後の式（出力）。`var`、代入、`for`、`while`、`return` は書けない（E0806）。
+- 本体は `let` 文の並びと、最後の式（出力）。`let` には値型とレートの注釈を書ける（`let ps: Sig[F32] = p`）。使える式は、`let`（タプル・struct の分解を含む）、演算子、効果行が空の `rt fn` の呼び出し、flow の呼び出し、フィールドアクセス、添字、struct / タプル / 配列リテラル、`if`、`match`、`par`。全て点ごとに評価され、`Sig[Stereo]` のフィールドアクセスや `Sig[Option[F32]]` の `match` も点ごとである。`var`、代入、`for`、`while`、`return`、`?`、`assert`、関数値、クロージャは書けない（E0806）。
 - **名前は上から順に定義する。** 定義より前で（自分自身の定義の中も含む）名前を参照できるのは、`prev` / `delay` / `vdelay` の第 1 引数だけである。過去の値は既に存在するので、前方参照ではない。それ以外の前方参照は E0801。
 - この規則により、遅延を通らない閉路（瞬時のループ）は書けない。因果性の検査は名前の順序の検査になる。
 - シャドーイングは無い（§5.1）ので、`prev(y, 0.0)` の `y` は常に、その本体の `let y` を指す。
+- flow インスタンスを通るフィードバックは、閉路を切る位置に `prev` を明示して書く: `let y = x + (g * lowpass~(prev(y, 0.0)))`。FAUST の `~` が暗黙に入れる 1 サンプルの遅延を、Onsa では書き手が置く。
+- flow の宣言は、同じモジュールに同名の名前空間（§11.6）を作る。同じモジュールに同名の宣言があれば E0305。名前空間は `use dsp.synth.{voice}` のようにモジュールと同じ形で取り込む。
 
 ### 11.3 レート
 
@@ -708,13 +711,34 @@ pub flow one_pole(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {
 
 | 名前 | 型（概略） | 意味 |
 |---|---|---|
-| `prev(e, init)` | `Sig[T] -> Sig[T]` | 1 サンプル遅延。最初のサンプルは `init` |
-| `delay(e, N, init)` | `N: const U32`、`N >= 2` | N サンプル遅延。1 サンプルは `prev` と書く（E0807） |
-| `vdelay(e, d, MAX, init)` | `d: Sig[F32]` 以下のレート、`MAX: const U32` | 可変遅延（線形補間）。`d` は `[1, MAX]` に飽和する |
+| `prev(e, init)` | `e: Sig[T]`、`init: Init[T]` 以下 | 1 サンプル遅延。最初のサンプルは `init` |
+| `delay(e, N, init)` | `e: Sig[T]`、`N: const U32`、`N >= 2`、`init: Init[T]` 以下 | N サンプル遅延。1 サンプルは `prev` と書く（E0807） |
+| `vdelay(e, d, MAX, init)` | `e: Sig[T]`、`T: Float`、`d: Sig[T]` 以下のレート、`MAX: const U32`、`MAX >= 1`、`init: Init[T]` 以下 | 可変遅延（線形補間）。`d` は `[1, MAX]` に飽和する |
 | `sample_rate()` | `Init[F32]` | サンプルレート |
 
 - 遅延線の長さ（`N`、`MAX`）は **コンパイル時定数** でなければならない（E0808）。サンプルレートに依存する長さは、想定する最大のサンプルレートで上限を決める（例: `const MAX_ECHO: U32 = 96000`）。これにより状態の大きさがコンパイル時に決まる（§12.4）。
+- 第 1 引数 `e` は `Sig` レートでなければならない（E0813）。`Ctl` の値を渡しても暗黙には昇格しない。昇格するとブロックの先頭のサンプルだけが前のブロックの値になる信号ができ、意図通りになることがほぼ無いからである。サンプル単位の遅延が要るなら `let ps: Sig[F32] = p` と注釈で昇格してから渡す。「前のブロックの値」は 0.3 では取れない（§19）。
+- `init` は `Init` 以下のレート（`Init` か定数）でなければならない（E0814）。定数でなければ状態に保存し、`reset` で使う。
 - `vdelay` の `d` の下限が 1 なのは、`d = 0` が遅延を通らない閉路になるからである。
+
+遅延の状態と演算の順序は次の通りに固定し、全ての変換先でビット一致させる（§13.4）。
+
+- `prev`: 状態は `T` 一つ。出力は保存値で、その後に `e` を保存する。
+- `delay`: 状態は `buf: [T; N]` と `w: U32`。各サンプルで、出力は `buf[w]`（= `e[n - N]`）、その後 `buf[w] = e`、`w = (w + 1) % N`。初期値は全要素 `init`、`w = 0`。
+- `vdelay`: 状態は `buf: [T; MAX + 1]` と `w: U32`。`L = MAX + 1` として、各サンプルで次の順に計算する。
+
+```
+dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }   // NaN は 1.0 になる
+k  = dc.trunc_u32()                                                  // 1 <= k <= MAX
+f  = dc - k.round_f32()                                              // 0 <= f < 1。k <= dc < 2k なので正確
+a  = buf[(w + L - k) % L]                                            // e[n - k]
+b  = buf[(w + L - k - 1) % L]                                        // e[n - k - 1]
+y  = ((1.0 - f) * a) + (f * b)
+buf[w] = e
+w = (w + 1) % L
+```
+
+補間は FAUST の `fdelay` と同じ 2 乗算の形である。`a + f * (b - a)` は `f` が 1 に近いとき `b` に一致せず、`b - a` が無限大のとき NaN になる。長さが `MAX + 1` なのは、`d = MAX` のとき `k + 1 = MAX + 1` を読むからである。
 
 ### 11.5 呼び出しと複製
 
@@ -727,7 +751,7 @@ flow 本体の中での呼び出しは、呼び出す相手によって意味が
 | 効果行が空の非 `rt` fn | `make_window(n)` | 引数のレートが `Init` 以下（`Init` か定数）のときだけ呼べる。`init` で評価される |
 | 効果を持つ fn（`Alloc` を含む） | | 呼べない（E0805） |
 
-- `if c { a } else { b }` は点ごとの選択。**両方の分岐の flow インスタンスは常に進む**（クロックによる停止は §19）。
+- `if c { a } else { b }` と `match` は点ごとの選択。**全ての分岐・腕の flow インスタンスは常に進む**（クロックによる停止は §19）。
 - flow 本体の中に再帰やループは無い。
 - `Alloc` を持つ関数を呼べないので、flow とその初期化はヒープを使わない。
 
@@ -772,16 +796,23 @@ const voice.BULK_SIZE: U32   // 状態のうち bulk 領域のバイト数
 fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
 rt fn voice.reset(inout s: voice.State)
 rt fn voice.process(inout s: voice.State, params: voice.Params, <Sig 入力>, <出力>)
+rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, <入出力>)
+                                            // Sig 入力と出力の数と型が順に一致する flow にだけ生成される
 fn voice.render(cfg: voice.Config, params: voice.Params, <Sig 入力>,
                 frames: U32, sample_rate: F32) -> voice.Out uses {Alloc}
+                                            // frames は Sig 入力の無い flow にだけある
 fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param の default がある場合
 ```
 
 - 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。
-- `process` の引数: `Sig` 入力ごとに `name: Span[T]`、出力ごとに `inout name: Span[T]`。出力が単一の値なら名前は `out`、struct ならフィールド名、`[T; N]` なら `[Span[T]; N]`。全ての `Span` の長さは等しくなければならず、違えば panic（poisoned）する。
-- `Sig` 入出力の値型は、スカラ、`[スカラ; N]`、または（出力のみ）それらをフィールドに持つ struct。
+- `process` の引数: `Sig` 入力ごとに `name: Span[T]`、出力ごとに `inout name: Span[T]`。出力が単一の値なら名前は `out`、struct ならフィールド名、`[T; N]` なら `[Span[T]; N]`（チャンネルごとのバッファ、§5.3）。全ての `Span` の長さは等しくなければならず、違えば panic（poisoned）する。
+- `Sig` 入出力の値型は、スカラ、`[スカラ; N]`、または（出力のみ）それらをフィールドに持つ struct。入れ子の配列は境界に出せない（E0810）。
+- `process` のサンプルループは、各サンプルで **全ての `Sig` 入力を読んでから、全ての出力を書く**。過去の値は状態から読み、入力バッファの他の位置は読まない。この不変条件により、入力と出力が完全に同じバッファでも結果は変わらない。
+- `process_inplace` は、`Sig` 入力と出力を位置で対にし、対ごとに一つの `inout` 引数（名前は出力の名前）にしたもの。`process` の排他性（§5.2）を保ったまま、一本のバッファにエフェクトを掛けられる。本体は `process` と同じで、C バックエンドでは同じポインタで内部の関数を呼ぶだけなのでコードは増えない。
+- `reset` は、`prev` / `delay` / `vdelay` の状態を `init` 値に戻し、書き込み位置を 0 にし、サブインスタンスを再帰的に `reset` し、poisoned を解く。`Init` レートの値は保つ（`init` の再実行は非 rt になりうる）。
 - `init` は効果を持たず、ヒープを使わない。大きな値の返り値は、呼び出し側の領域に直接構築される（コピーしないことを保証する）。
-- `render` はテストと一括処理用。
+- `render` はテストと一括処理用。全体を 1 回の `process` として処理するので、`Ctl` 入力は全区間で一定。ブロックごとにパラメータを変えるテストは `process` を自分で繰り返す。`Sig` 入力がある flow では `frames` を取らず、`Span` の長さを使う。
+- `Out` は、`process` の出力引数と同じ名前・同じ形で、`Span[T]` を `Buf[T]` に置き換えた struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`）。
 - 状態の所有者は呼び出し側。サンプルレートを変えるときは、`init` を呼び直す。
 - 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。
 - flow は第一級の値ではない。flow の外からは、この名前空間の型と関数を通じてだけ扱う。
@@ -1063,7 +1094,7 @@ void        onsa_voice_free(onsa_voice* s);
 ```
 
 - メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。
-- 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。部分的な重なりは検出して 2 を返す。
+- 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
 - export した flow を、既存の C/C++ ホスト（JUCE, CLAP, VST3, AU, 組込み HAL）へ組み込む第一の経路とする。組込みでの使い方は §17.5。
 
 ---
@@ -1318,7 +1349,7 @@ pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
 test "resonator decays" {
   let o = resonator.render(resonator.Config {},
                            resonator.Params { fc: 500.0, bw: 100.0 },
-                           impulse(48000), 48000, 48000.0)
+                           impulse(48000), 48000.0)
   assert energy(o.out, 47000, 48000) < 1.0e-12
 }
 ```

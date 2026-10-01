@@ -87,19 +87,20 @@ struct f.State {
 struct f.Config { Init 入力 }
 struct f.Params { Ctl 入力 }
 fn    f.init(cfg: f.Config, sample_rate: F32) -> f.State
-rt fn f.reset(inout s: f.State)                       // 遅延と prev を init 値に戻す。Init の値は保つ
+rt fn f.reset(inout s: f.State)                       // 遅延と prev を init 値に戻し、サブインスタンスも reset。Init の値は保つ
 rt fn f.process(inout s: f.State, p: f.Params, Sig 入力: Span[T]..., inout 出力: Span[T]...) {
   // 1. Ctl レートの let を順に評価（ブロックに 1 回）
   // 2. for i in 0..frames { Sig レートの let を順に評価、出力へ書く、遅延を進める }
 }
-fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ（G-04 の決定に従う）
+rt fn f.process_inplace(inout s: f.State, p: f.Params, inout 入出力: Span[T]...)  // 入出力の形が一致するときだけ
+fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ。Sig 入力があれば frames 無し
 ```
 
 - **レート解析**: 各 `let` のレートは式のレートの最大値。`prev` / `delay` / `vdelay` の結果と flow の呼び出しの結果は常に `Sig`。`par` の `i` は `Init`。
 - **因果性**: 名前の順序の検査（§11.2）。`prev` 系の第 1 引数だけが前方参照を許す。
 - **状態の配置**: フィールドは宣言順（`let` の順）、自然アラインメント、並べ替えなし（G-07）。`bulk_threshold` 以上の配列は bulk 領域へ。bulk 領域のアドレスは fast 領域の先頭にポインタとして持つ（C API の `init` が受け取る）。`SIZE` / `BULK_SIZE` / `ALIGN` をここで計算し、生成コードに `_Static_assert` を出す。
 - **`par`**: 配列 + ループに落とす（P-04）。
-- **遅延の実装**: リングバッファ。書き込み位置を 1 つの `U32` で持つ。`vdelay` の補間式と位置の計算は G-04 の決定に従い、全バックエンドで同じ演算順にする。
+- **遅延の実装**: 仕様 §11.4 のリングバッファと演算順をそのまま実装する。全バックエンドで同じ演算順にする。
 - **panic**: Core の `check_*` 命令。`process` の中では、バックエンドが「中断して poisoned」を実現する（I-01）。
 
 ### 2.3 型検査
@@ -153,7 +154,7 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 - 成果物: flow の検査（順序と因果性 E0801、レート E0810、`delay` の規則 E0807 / E0808、呼び出しの形 E0811 / E0812 / E0805、本体の制限 E0806、`@param` E0809）、§2.2 の降下、状態の配置と `SIZE` / `BULK_SIZE` / `ALIGN` の計算、`onsa interface`（型の種と大きさ、flow の生成 API）、`onsa graph`（DOT）、Core のインタプリタ、`test` ブロックの実行（`onsa test`）、`render`。
 - 受け入れ: §17.3 の `resonator decays` と、§17.4 / §17.6 を使ったテストがインタプリタで通る。`echo` の `BULK_SIZE` が `bulk_threshold = 4096` で 384004 前後（`[F32; 96001]` の配置に従う値）になる。`graph` が §17.4 の `voice` に対して `saw` / `resonator` × 2 / `smooth` のノードを出す。
-- 決める仕様（M3 の前に必須）: G-04（`vdelay` の補間、`reset`、`render` のブロック、`Out` の形、`prev` の `init` のレート、本体で使える式、名前空間）、G-07（配置規則）。
+- 決める仕様（M3 の前に必須）: G-07（配置規則）。G-04 は 0.3 で決定済み（遅延の状態と演算順は仕様 §11.4、`process_inplace` と入出力の読み書きの順序は §11.6）。
 - 注意: `std/math` がまだ無いので、M3 では `exp` / `cos` などを一時的にインタプリタのプリミティブにし、M5 で Onsa の実装に置き換える。置き換え後に出力が変わるので、M3 のテストの期待値は許容誤差付きにしておき、M5 でビット固定する。
 
 ### M4 C バックエンドと export（L）
