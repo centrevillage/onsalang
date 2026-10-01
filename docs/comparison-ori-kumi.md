@@ -3,6 +3,7 @@
 - Ori: [`ori-lang-spec.md`](../ori-lang-spec.md)（Grok 作）
 - Kumi: [`kumi-lang-spec.md`](../kumi-lang-spec.md)（Claude 作）
 - Ori のレビュー: [`review-draft-0.1.md`](review-draft-0.1.md)
+- Rust との比較: [`kumi-vs-rust.md`](kumi-vs-rust.md)
 
 二つは同じ目的を持つ。「LLM が書き、人間が監査し、コンパイラが局所的に否定する」言語で、汎用コードと DSP を一つの言語で扱う。違うのは、その目的にどう到達するかの判断である。
 
