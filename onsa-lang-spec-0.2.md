@@ -1,8 +1,8 @@
-# Kumi 言語仕様 Draft 0.2
+# Onsa 言語仕様 Draft 0.2
 
-> Kumi（組み / 組紐）: 小さな部品を、検査可能な継ぎ目で組み上げる言語。
+> Onsa（音叉）: 誰が鳴らしても同じ高さで鳴る、基準の音。どの変換先でも同じ結果を出し、コンパイラが正しさの基準になる言語。
 
-Draft 0.1 からの変更点と、その理由は [`docs/kumi-0.2-changes.md`](docs/kumi-0.2-changes.md) にまとめた。主な変更は次の 3 つ。
+本仕様は Kumi Draft 0.1（[`kumi-lang-spec.md`](kumi-lang-spec.md)）を改訂したもので、改訂に合わせて名前を Onsa に改めた。変更点と、その理由は [`docs/onsa-0.2-changes.md`](docs/onsa-0.2-changes.md) にまとめた。主な変更は次の 3 つ。
 
 1. **表面構文の原則を「既存コーパスに寄せる」から「同形同義・異義異形」に変えた。** `proc` → `flow`、`sink` → `move`、`virtual` → `target`、レート `Const` → `Init`、flow の呼び出しは後置の `~`（`saw~(f0)`）、flow 本体は `let` で書く。
 2. **目的を「FAUST に代わる DSP 開発環境の基盤言語」と明記した。** パラメータのメタデータ、全言語へ変換できる「移植可能な核」、バックエンド間のビット一致、IDE 向けのツールを加えた。
@@ -24,7 +24,7 @@ Draft 0.1 からの変更点と、その理由は [`docs/kumi-0.2-changes.md`](d
 | # | 原則 | 帰結 |
 |---|---|---|
 | P1 | **局所性** — 意味・型・エラーは関数の中で閉じる | 全関数のシグネチャは完全注釈。推論は関数本体の中だけ。 |
-| P2 | **一意性** — 一つの意図に書き方は一つ | 糖衣を増やさない。`kumi fmt` が唯一の表記に正規化する。 |
+| P2 | **一意性** — 一つの意図に書き方は一つ | 糖衣を増やさない。`onsa fmt` が唯一の表記に正規化する。 |
 | P3 | **同形同義・異義異形** — 同じものは同じ見た目、違うものは違う見た目 | 既存言語の見た目は、**意味が一致するときだけ** 借りる。詳細は §0.3。 |
 | P4 | **世界への接触はシグネチャに出る** | 効果（`uses {...}`）で表す。**ヒープ確保も効果**（`Alloc`）。 |
 | P5 | **リアルタイム性は型で検査する** | `rt` 修飾。関数単位。 |
@@ -54,9 +54,9 @@ Draft 0.1 からの変更点と、その理由は [`docs/kumi-0.2-changes.md`](d
 ## 1. 全体構成
 
 ```
-.kumi ── parse ── resolve ── check (types / effects / rt / exclusivity / flow / rates)
+.onsa ── parse ── resolve ── check (types / effects / rt / exclusivity / flow / rates)
                                    │
-                              Kumi Core（正準 IR）
+                              Onsa Core（正準 IR）
                                    │
             ┌──────────────────────┴───────────────────────┐
      ネイティブのバックエンド                        ソースへの変換（§13）
@@ -76,9 +76,9 @@ Draft 0.1 からの変更点と、その理由は [`docs/kumi-0.2-changes.md`](d
 
 ### 2.1 コメント
 
-```kumi
+```onsa
 // 行コメント
-/// ドキュメントコメント（直後の宣言に付く。`kumi doc` と `kumi interface` に出る）
+/// ドキュメントコメント（直後の宣言に付く。`onsa doc` と `onsa interface` に出る）
 ```
 
 ブロックコメントは無い。
@@ -133,7 +133,7 @@ const type as inout move self Self true false
 - `~` は名前の直後に空白を空けずに書き、直後に `(` が続く。モジュールで修飾した名前にも付けられる（`filters.resonator~(x, fc, q)`）。
 - `~` は flow の呼び出しにだけ使う。flow を `~` 無しで呼ぶと E0811、flow でないものに `~` を付けると E0812。どちらも修正候補を示す。
 - `~` は演算子ではなく、他の意味を持たない。ビット反転は `!` と書く（Rust と同じ）。
-- FAUST の `~` はフィードバック、つまり状態を作る演算子である。Kumi の `~` も「状態を持つものを作る」印で、意味の方向は同じである。FAUST の二項演算子としての書き方（`+ ~ _`）は Kumi では構文エラーになる。
+- FAUST の `~` はフィードバック、つまり状態を作る演算子である。Onsa の `~` も「状態を持つものを作る」印で、意味の方向は同じである。FAUST の二項演算子としての書き方（`+ ~ _`）は Onsa では構文エラーになる。
 
 ---
 
@@ -152,7 +152,7 @@ const type as inout move self Self true false
 | 論理和 | `\|\|` | 可 |
 | ビット | `&` `\|` `^` `<<` `>>` | 不可 |
 
-```kumi
+```onsa
 let a = x + y - z             // OK: 加法群の連鎖
 let b = x + (y * z)           // OK
 let c = x + y * z             // E0010: 加法と乗法の混在
@@ -169,7 +169,7 @@ let d = (lo <= x) && (x < hi) // OK
 
 `as` は **情報を失わない拡大変換** だけに使える（`I32 as I64`、`F32 as F64`、`I32 as F64`、`U8 as F32` など）。それ以外は、変換元の型のメソッドを使う。
 
-```kumi
+```onsa
 let n = i as I64                 // OK
 let k = n.narrow_i32()           // I64 -> Option[I32]
 let s = x.round_f32()            // F64 -> F32、最近接偶数丸め
@@ -177,7 +177,7 @@ let c = xs.len().round_f32()     // U32 -> F32、最近接偶数丸め
 let j = y.trunc_i32()            // F32 -> I32、範囲外は panic
 ```
 
-Rust の `as` は情報を失う変換も許す。Kumi の `as` で書けるのはその部分集合で、検査を通るものは Rust と同じ意味を持つ（§0.3 の 4）。
+Rust の `as` は情報を失う変換も許す。Onsa の `as` で書けるのはその部分集合で、検査を通るものは Rust と同じ意味を持つ（§0.3 の 4）。
 
 `as` 式を二項演算子のオペランドにするときは括弧が必要（E0011）: `acc + (x as F64)`。
 
@@ -237,7 +237,7 @@ Rust の `as` は情報を失う変換も許す。Kumi の `as` で書けるの�
 
 ### 4.4 ユーザ定義型
 
-```kumi
+```onsa
 pub struct Point {
   x: F32,
   y: F32,
@@ -250,7 +250,7 @@ pub enum Shape {
 
 pub struct Hz(F32)          // 単一フィールドのタプル構造体 = newtype（別名ではなく別の型）
 
-type Samples = Buf[F32]     // 型別名（新しい型を作らない。`kumi interface` は展開して表示する）
+type Samples = Buf[F32]     // 型別名（新しい型を作らない。`onsa interface` は展開して表示する）
 ```
 
 - `struct` は名前的。匿名レコード型は無い。
@@ -258,7 +258,7 @@ type Samples = Buf[F32]     // 型別名（新しい型を作らない。`kumi i
 
 ### 4.5 ジェネリクス
 
-```kumi
+```onsa
 pub fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
   if x < lo { lo } else if x > hi { hi } else { x }
 }
@@ -276,7 +276,7 @@ pub struct Ring[T, const N: U32] {
 
 ### 4.6 種（kind）: Copy / Shared / Affine
 
-全ての型は構造から次のどれかに分類される。注釈は不要で、`kumi interface` に表示される。
+全ての型は構造から次のどれかに分類される。注釈は不要で、`onsa interface` に表示される。
 
 | 種 | 該当 | 複製 | 破棄 |
 |---|---|---|---|
@@ -290,7 +290,7 @@ pub struct Ring[T, const N: U32] {
 
 ### 5.1 束縛
 
-```kumi
+```onsa
 let x: I32 = 1     // 不変
 var acc: F64 = 0.0 // 可変（ローカルのみ）
 acc = acc + (x as F64)
@@ -331,7 +331,7 @@ acc = acc + (x as F64)
 
 ### 6.1 関数
 
-```kumi
+```onsa
 pub fn mean(xs: Array[F64]) -> Option[F64] {
   if xs.is_empty() {
     return None
@@ -341,14 +341,14 @@ pub fn mean(xs: Array[F64]) -> Option[F64] {
 ```
 
 - 引数・返り値・効果は全て注釈する。返り値が `()` の場合だけ `->` を省略する（省略が唯一の書き方）。
-- ブロックの値は最後の式。`return` は途中脱出にだけ使う（末尾の `return` は `kumi fmt` が除去する）。
+- ブロックの値は最後の式。`return` は途中脱出にだけ使う（末尾の `return` は `onsa fmt` が除去する）。
 - 多重定義、既定引数、可変長引数、名前付き引数は無い。
 - 無名関数は `fn(x: F32) -> F32 { x * 2.0 }`。期待型が分かる位置では注釈を省略できる: `xs.map(fn(x) { x * 2.0 })`。
 - `mean` は `xs` を借用して読むだけなので、`Alloc` を要しない（§12.2）。
 
 ### 6.2 メソッド
 
-```kumi
+```onsa
 impl Point {
   pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } }   // 関連関数: Point.new(...)
   pub rt fn norm(self) -> F32 { sqrt((self.x * self.x) + (self.y * self.y)) }
@@ -363,7 +363,7 @@ impl Point {
 
 ### 6.3 trait
 
-```kumi
+```onsa
 pub trait Show {
   fn show(self) -> Str uses {Alloc}
 }
@@ -382,7 +382,7 @@ impl Show for Point {
 
 ### 6.4 derive
 
-```kumi
+```onsa
 @derive(Eq, Hash, Show)
 pub struct Key {
   id: U32,
@@ -397,7 +397,7 @@ pub struct Key {
 
 ### 6.6 コンパイル時定数
 
-```kumi
+```onsa
 const TABLE_SIZE: U32 = 1024
 const SINE: [F32; 1024] = make_sine_table()
 ```
@@ -409,7 +409,7 @@ const SINE: [F32; 1024] = make_sine_table()
 
 ## 7. 制御
 
-```kumi
+```onsa
 if c { a } else { b }
 match v {
   Some(x) => x,
@@ -432,7 +432,7 @@ break / continue / return
 
 ### 8.1 宣言と使用
 
-```kumi
+```onsa
 pub blocking effect Fs {
   fn read(path: Path) -> Result[Str, IoError]
   fn write(path: Path, data: Str) -> Result[(), IoError]
@@ -449,7 +449,7 @@ pub fn load(path: Path) -> Result[Str, IoError] uses {Fs} {
 - `load` は受け取った `Str` をそのまま返すので、破棄が起きず、`Alloc` を要しない。
 - 効果の多相:
 
-```kumi
+```onsa
 pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Alloc, e} { ... }
 ```
 
@@ -478,7 +478,7 @@ pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Allo
 
 ### 8.3 handler
 
-```kumi
+```onsa
 handler memory_fs: Fs {
   fn read(_: Path) -> Result[Str, IoError] { Ok("a\nb\n") }
   fn write(_: Path, _: Str) -> Result[(), IoError] { Ok(()) }
@@ -498,7 +498,7 @@ let r = handle { load(Path.new("x.txt")) } with memory_fs
 
 ### 8.4 `Alloc` の handler と、持ち出しの禁止
 
-```kumi
+```onsa
 use std.mem.{arena}
 
 const N: U32 = 1024
@@ -519,7 +519,7 @@ pub fn harmonics_in(inout scratch: Span[U8]) -> [F32; N] {
 
 ### 8.5 main と実行環境
 
-```kumi
+```onsa
 pub fn main() -> Result[(), AppError] uses {Fs, Stdout, Alloc} { ... }
 ```
 
@@ -535,7 +535,7 @@ pub fn main() -> Result[(), AppError] uses {Fs, Stdout, Alloc} { ... }
 
 `Result[T, E]` と後置 `?`。
 
-```kumi
+```onsa
 pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
   let text = Fs.read(path).map_err(ConfigError.Io)?
   ...
@@ -568,7 +568,7 @@ panic は効果行に現れない。
 
 ## 10. リアルタイム（`rt`）
 
-```kumi
+```onsa
 pub rt fn soft_clip(x: F32) -> F32 {
   x / (1.0 + abs(x))
 }
@@ -584,7 +584,7 @@ pub rt fn soft_clip(x: F32) -> F32 {
 
 - `rt` は関数型の一部（`rt fn(F32) -> F32`）で、高階関数でも保持される。
 - 1 と 2 は効果行だけで決まる。`rt` を付けた関数では、これらとともに 3 と 4 が検査される。
-- `extern` 宣言の `rt` は検証されない主張として扱い、`kumi audit` に列挙する（§14）。
+- `extern` 宣言の `rt` は検証されない主張として扱い、`onsa audit` に列挙する（§14）。
 
 参考: Clang の `[[clang::nonblocking]]` / `[[clang::nonallocating]]` と同種の検査を、言語の型に組み込んだもの。
 
@@ -611,7 +611,7 @@ flow の本体は、**1 サンプルごとに評価される関数の本体** �
 
 ### 11.2 宣言
 
-```kumi
+```onsa
 pub flow one_pole(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {
   let y = ((1.0 - p) * x) + (p * prev(y, 0.0))
   y
@@ -667,7 +667,7 @@ flow 本体の中での呼び出しは、呼び出す相手によって意味が
 
 **複製** `par i in 0..N { e }` は、`e` を `N` 個並べる（FAUST の `par(i, N, e)` と同じ意味）。`N` はコンパイル時定数、`i` は各複製の中で `Init` レートの定数、結果の値型は `[T; N]`。`e` の中の flow 呼び出しは、複製ごとに別のインスタンスになる。
 
-```kumi
+```onsa
 use std.dsp.{sum}
 
 const UNISON: U32 = 4
@@ -691,7 +691,7 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
 
 `flow voice(...)` を宣言すると、コンパイラは名前空間 `voice` に次を生成する。flow 自体は型ではない。状態を表す型は `voice.State` である。
 
-```kumi
+```onsa
 // 型
 voice.State        // 状態。Affine、固定サイズ、ヒープを使わない。遅延線も含む
 voice.Config       // Init 入力をフィールドに持つ struct（Copy）
@@ -717,13 +717,13 @@ fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param �
 - `init` は効果を持たず、ヒープを使わない。大きな値の返り値は、呼び出し側の領域に直接構築される（コピーしないことを保証する）。
 - `render` はテストと一括処理用。
 - 状態の所有者は呼び出し側。サンプルレートを変えるときは、`init` を呼び直す。
-- 状態のフィールドは `let` の名前を保つ（`kumi interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。
+- 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。
 - flow は第一級の値ではない。flow の外からは、この名前空間の型と関数を通じてだけ扱う。
 - v0.2 では、flow の出力は `Sig` だけ（`Ctl` 出力は §19）。
 
 ### 11.7 パラメータのメタデータ `@param`
 
-```kumi
+```onsa
 use std.dsp.{db_to_amp}
 
 pub flow gain(
@@ -738,8 +738,8 @@ pub flow gain(
 - `@param` は `Ctl` 入力にだけ付けられる。キーは `min max default step unit scale label id` の閉じた一覧で、値はコンパイル時定数。`scale` は `"linear"`（既定）か `"log"`。
 - 用途: IDE の自動 UI、プラグイン（CLAP / VST3 / AU）のパラメータ情報、`params_default()`、C API のメタデータ表。
 - export する flow（§15.3）の `Ctl` 入力には `@param` が必須（E0809）。
-- `id` を省略すると、名前から安定した ID を作る。`kumi.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
-- export された API は、パラメータを `[min, max]` に飽和させてから `process` に渡す。Kumi の中からの呼び出しでは飽和させない（メタデータは宣言であり、意味を変えない）。
+- `id` を省略すると、名前から安定した ID を作る。`onsa.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
+- export された API は、パラメータを `[min, max]` に飽和させてから `process` に渡す。Onsa の中からの呼び出しでは飽和させない（メタデータは宣言であり、意味を変えない）。
 
 UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、パラメータはシグネチャに出る。パラメータの一覧を知るのに本体を読む必要が無い（P1）。
 
@@ -764,7 +764,7 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 | 値 | Copy 値、固定長配列、struct、flow の状態 | 所有者の場所（スタック、他の値の中、静的領域） | コンパイル時に決まる |
 | ヒープ | Shared 値、`Buf` | `Alloc` を通じて実行時 | 実行時に決まる |
 
-`kumi interface` は、各型について種と大きさ（値の場合）を表示する。
+`onsa interface` は、各型について種と大きさ（値の場合）を表示する。
 
 ### 12.2 `Alloc` が要る操作
 
@@ -791,12 +791,12 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
   - **fast**: スカラと小さな配列。キャッシュや内部 SRAM に置く。
   - **bulk**: ターゲットの `bulk_threshold`（バイト）以上の配列。遅延線や大きなテーブル。外部 SDRAM などに置く。
 - 閾値を設定しなければ、全てが fast に入り、`BULK_SIZE` は 0 になる。
-- C API は二つの領域を別々のポインタで受け取る（§14.2）。Kumi の中から見ると、状態は一つの値である。
+- C API は二つの領域を別々のポインタで受け取る（§14.2）。Onsa の中から見ると、状態は一つの値である。
 
 ### 12.5 スタック
 
 - `rt` 関数は再帰しない（§10）。flow の `process` は関数値を経由しない。したがって、export された flow の `process` のスタック使用量の上限は計算できる。
-- `kumi audit --stack` は、各エントリ（export された関数・flow、`main`）の最悪スタック使用量を報告する。関数値を経由する呼び出しや、rt でない再帰を含むエントリは「不明」と報告する。
+- `onsa audit --stack` は、各エントリ（export された関数・flow、`main`）の最悪スタック使用量を報告する。関数値を経由する呼び出しや、rt でない再帰を含むエントリは「不明」と報告する。
 - `main` は再入しないので、コンパイラは `main` のローカル変数を静的領域に置いてよい（ターゲットの `main_frame = "static"`）。大きな flow の状態を `main` のローカルに置いても、スタックを消費しない。ソースの意味は変わらない。
 
 ### 12.6 参照カウント
@@ -833,7 +833,7 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 - 状態の大きさがコンパイル時に決まる
 - 再帰が無く、flow の中に関数値が無い
 
-例外として、核の中から `extern` 関数に到達する場合、その flow は C 系以外の変換先には出力できない。`kumi transpile` は到達経路を示すエラーを出す（E1010）。
+例外として、核の中から `extern` 関数に到達する場合、その flow は C 系以外の変換先には出力できない。`onsa transpile` は到達経路を示すエラーを出す（E1010）。
 
 ### 13.3 変換先
 
@@ -853,11 +853,11 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 
 数値プロファイル `strict`（§15.5）では、全ての変換先が同じ入力に対してビット単位で同じ出力を出す。
 
-- `std.math` は Kumi で書かれており、核と一緒に変換される。変換先の libm の差が入らない。
+- `std.math` は Onsa で書かれており、核と一緒に変換される。変換先の libm の差が入らない。
 - FMA への縮約と再結合を禁止する。JavaScript では各演算の後に `Math.fround` を挟む。
 - 整数のオーバーフローと範囲外アクセスの検査も、全ての変換先で同じに行う。
 
-`kumi test --backends all` は、全ての変換先で `render` の出力がビット一致することを検査する（適合性テスト）。
+`onsa test --backends all` は、全ての変換先で `render` の出力がビット一致することを検査する（適合性テスト）。
 
 ### 13.5 言語全体の変換（最終目標）
 
@@ -876,7 +876,7 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 | Shared 型（`Str`、`Array` など） | C / C++ / Rust: 参照カウント。GC のある言語: 変換先の GC に任せる | 値が不変なので、参照カウントでも GC でも観測できる意味は同じ。一意な値のその場での更新（Perceus）は最適化にすぎない |
 | Affine 型と `Drop` | 破棄の位置で明示的に `drop` を呼ぶコードを出す。GC のある言語でもファイナライザに頼らない | 破棄の位置がコンパイル時に全て決まる |
 | `inout` / `move` | `inout` はポインタ・参照・変換先の可変引数、または値を返して書き戻す。`move` は所有権の移動か、ただの受け渡し | 参照が第二級で、ライフタイムが無い |
-| `rt`、`Alloc` の検査 | 変換前に Kumi のコンパイラが検査済み。変換先では何もしない | 検査はシグネチャで閉じる |
+| `rt`、`Alloc` の検査 | 変換前に Onsa のコンパイラが検査済み。変換先では何もしない | 検査はシグネチャで閉じる |
 | ブロックする効果 | ブロックできない変換先（JavaScript）では、効果行に `blocking` の効果を含む関数を `async` 関数にし、呼び出しを `await` にする | ブロックするかどうかが効果行だけで決まる（§8.2） |
 | `Str` | UTF-8 の変換先ではそのまま。JavaScript では UTF-8 のバイト列（`Uint8Array`）で持ち、JS の API との境界で変換する。リテラルは変換時に符号化しておく | 長さと位置をバイト単位で定義した（§4.2） |
 | `Map` / `Set` | 挿入順を保つ表（JS の `Map`、C / Rust では挿入順の索引付き表） | 反復の順序を挿入順と定義した（§4.3） |
@@ -896,7 +896,7 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 
 ### 14.1 C 関数の呼び出し
 
-```kumi
+```onsa
 extern "C" lib "fastconv" {
   type FcRaw                                                // 不透明型
   fn fc_new(ir: Span[F32], block: U32) -> Ptr[FcRaw] uses {Alloc}
@@ -906,14 +906,14 @@ extern "C" lib "fastconv" {
 ```
 
 - extern ブロックの中の `type 名前`（`=` なし）は不透明型の宣言。
-- extern 宣言の **効果行と `rt` は検証されない主張**。C 側がヒープを使うなら `uses {Alloc}`、ブロックするなら `uses {Block}` と宣言する。`kumi audit` が一覧にし、ポリシー（§15.4）で許可されたパッケージにしか書けない。
+- extern 宣言の **効果行と `rt` は検証されない主張**。C 側がヒープを使うなら `uses {Alloc}`、ブロックするなら `uses {Block}` と宣言する。`onsa audit` が一覧にし、ポリシー（§15.4）で許可されたパッケージにしか書けない。
 - `unsafe` を必要としない引数型は、スカラ、`CSize`、`@repr(c)` 構造体、`Span[T]`（ポインタ + 長さとして渡し、呼び出し中だけ有効）、借用した `Str`（読み取り専用）。
-- `CSize` は C の `size_t` で、extern の宣言の中でだけ使える。Kumi 側では `U32` として見え、`U32` に収まらない値が返ると panic する。
+- `CSize` は C の `size_t` で、extern の宣言の中でだけ使える。Onsa 側では `U32` として見え、`U32` に収まらない値が返ると panic する。
 - `Ptr[T]` を引数や返り値に含む extern 関数は、`unsafe { }` の中でしか呼べない。
 
 安全なラッパの例:
 
-```kumi
+```onsa
 pub struct Conv {
   h: Ptr[FcRaw],
 }
@@ -941,36 +941,36 @@ impl Conv {
 
 関数は `export "C"` で C の ABI に出す。
 
-```kumi
-export "C" fn kumi_version() -> U32 { 2 }
+```onsa
+export "C" fn onsa_version() -> U32 { 2 }
 ```
 
 flow はソースではなくマニフェストの `[export]`（§15.3）で export する。export する場所を一つにするためである。生成されるヘッダは次の通り（`voice` は §17.4 の flow。数値は例）。
 
 ```c
-/* kumi_voice.h（kumi build が生成する） */
-#include "kumi.h"                 /* kumi_param_info などの共通定義 */
+/* onsa_voice.h（onsa build が生成する） */
+#include "onsa.h"                 /* onsa_param_info などの共通定義 */
 
-#define KUMI_VOICE_SIZE       48      /* fast 領域のバイト数 */
-#define KUMI_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
-#define KUMI_VOICE_ALIGN      8
+#define ONSA_VOICE_SIZE       48      /* fast 領域のバイト数 */
+#define ONSA_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
+#define ONSA_VOICE_ALIGN      8
 
-typedef struct kumi_voice kumi_voice;
-typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } kumi_voice_params;
+typedef struct onsa_voice onsa_voice;
+typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } onsa_voice_params;
 
 /* Config が空なので引数は sample_rate のみ。bulk は BULK_SIZE が 0 なら NULL でよい */
-void kumi_voice_init(kumi_voice* s, void* bulk, float sample_rate);
-void kumi_voice_reset(kumi_voice* s);
-void kumi_voice_params_default(kumi_voice_params* p);
-int  kumi_voice_process(kumi_voice* s, const kumi_voice_params* p,
+void onsa_voice_init(onsa_voice* s, void* bulk, float sample_rate);
+void onsa_voice_reset(onsa_voice* s);
+void onsa_voice_params_default(onsa_voice_params* p);
+int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* p,
                         float* out, size_t frames);
      /* 0: ok, 1: poisoned, 2: 入出力の部分的な重なり */
 
-extern const kumi_param_info kumi_voice_param_info[4];   /* @param のメタデータ */
+extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデータ */
 
 /* Alloc を提供するターゲットだけで生成される */
-kumi_voice* kumi_voice_new(float sample_rate);
-void        kumi_voice_free(kumi_voice* s);
+onsa_voice* onsa_voice_new(float sample_rate);
+void        onsa_voice_free(onsa_voice* s);
 ```
 
 - メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。
@@ -991,8 +991,8 @@ void        kumi_voice_free(kumi_voice* s);
 
 ### 15.2 target 宣言（条件コンパイルの代替）
 
-```kumi
-// audio/device.kumi
+```onsa
+// audio/device.onsa
 target type Device
 target fn open(sample_rate: F32) -> Result[Device, DeviceError]
 target rt fn read_input(inout d: Device, inout buf: Span[F32])
@@ -1002,7 +1002,7 @@ target rt fn read_input(inout d: Device, inout buf: Span[F32])
 
 実装モジュールは、同じ名前と同じシグネチャ（`rt` と効果行を含む）の宣言を持たなければならない。これは検査される。検証されない主張である `extern "C"` とは、この点で異なる。
 
-### 15.3 マニフェスト `kumi.toml`
+### 15.3 マニフェスト `onsa.toml`
 
 ```toml
 [package]
@@ -1010,10 +1010,10 @@ name = "voice"
 edition = "2026"
 
 [dependencies]
-std = "0.2.0"           # 完全一致。解決結果は kumi.lock に固定する
+std = "0.2.0"           # 完全一致。解決結果は onsa.lock に固定する
 
 [export]
-prefix = "kumi_"        # C のシンボルは prefix + flow 名
+prefix = "onsa_"        # C のシンボルは prefix + flow 名
 flows = ["voice", "echo"]
 
 [targets.cli]
@@ -1060,9 +1060,9 @@ bulk_threshold = 4096   # 4 KiB 以上の配列は bulk 領域へ（§12.4）
 
 - `main` または export される関数の効果行に、`provides` に無い効果が含まれていれば E0610。
 - `[export]` の flow は、`staticlib`・プラグイン・`source` のターゲットに出力される。
-- ビルドはハーメティック（ネットワークも環境変数も読まない）で、`kumi.lock` が同じなら成果物は同一。
+- ビルドはハーメティック（ネットワークも環境変数も読まない）で、`onsa.lock` が同じなら成果物は同一。
 
-### 15.4 ポリシー `kumi.policy`
+### 15.4 ポリシー `onsa.policy`
 
 人間の判断に残すもの（効果の付与、unsafe、公開インタフェース）は、ソースとは別のファイルに集める。
 
@@ -1077,17 +1077,17 @@ packages = ["daisy_hal"]           # unsafe / extern を書けるパッケージ
 frozen = ["voice"]                 # 公開シグネチャとパラメータ ID の変更は E0630
 ```
 
-`kumi check` はポリシーへの違反をエラーにする。`kumi audit` はポリシーと unsafe・extern の差分を表示する。運用では、エージェントにこのファイルの書き込み権限を与えない。
+`onsa check` はポリシーへの違反をエラーにする。`onsa audit` はポリシーと unsafe・extern の差分を表示する。運用では、エージェントにこのファイルの書き込み権限を与えない。
 
 ### 15.5 数値プロファイル
 
 | プロファイル | 内容 | 再現性 |
 |---|---|---|
-| `strict`（既定） | IEEE 754、最近接偶数丸め、FMA への縮約なし、再結合なし、非正規化数あり。`std.math` は Kumi 自身で実装され、libm を使わない。 | 同じ入力なら全ターゲット・全変換先でビット一致 |
+| `strict`（既定） | IEEE 754、最近接偶数丸め、FMA への縮約なし、再結合なし、非正規化数あり。`std.math` は Onsa 自身で実装され、libm を使わない。 | 同じ入力なら全ターゲット・全変換先でビット一致 |
 | `strict-ftz` | `strict` + 非正規化数をゼロに（FTZ / DAZ） | FTZ をサポートするターゲット間でビット一致 |
 | `relaxed` | FMA と再結合を許可（ベクトル化のため） | 保証しない |
 
-`relaxed` はターゲット全体には指定できない。flow や関数ごとに `@relaxed` で付け、`kumi audit` に列挙される。
+`relaxed` はターゲット全体には指定できない。flow や関数ごとに `@relaxed` で付け、`onsa audit` に列挙される。
 
 ---
 
@@ -1108,7 +1108,7 @@ frozen = ["voice"]                 # 公開シグネチャとパラメータ ID 
 
 オーディオスレッドと制御スレッドの典型的な接続:
 
-```kumi
+```onsa
 // 制御スレッド側（非 rt）
 params.publish(voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 })
 
@@ -1128,7 +1128,7 @@ async / await は v0.2 には無い（§19）。
 
 ### 17.1 純粋な計算
 
-```kumi
+```onsa
 pub fn gcd(a: U64, b: U64) -> U64 {
   var x = a
   var y = b
@@ -1148,7 +1148,7 @@ test "gcd" {
 
 ### 17.2 効果・エラー・handler によるテスト
 
-```kumi
+```onsa
 use std.fs.{Fs, Path, IoError}
 use std.text.{count_lines}
 
@@ -1181,7 +1181,7 @@ test "empty file is an error" {
 
 ### 17.3 二極レゾネータ
 
-```kumi
+```onsa
 use std.math.{exp, cos}
 use std.dsp.test.{impulse, energy}
 
@@ -1213,7 +1213,7 @@ test "resonator decays" {
 
 ### 17.4 声の flow
 
-```kumi
+```onsa
 // §17.3 と同じモジュール（resonator を参照する）
 use std.math.{floor, exp}
 
@@ -1255,7 +1255,7 @@ flow の中で、`~` の付いた `saw` `resonator` `smooth` は状態を持つ�
 
 遅延線を持つ例:
 
-```kumi
+```onsa
 const MAX_ECHO: U32 = 96000                       // 48 kHz で 2 秒、96 kHz で 1 秒
 
 pub flow echo(
@@ -1271,11 +1271,11 @@ pub flow echo(
 }
 ```
 
-`echo` の遅延線（約 384 KB）は `bulk_threshold` を超えるので bulk 領域に入る。`KUMI_ECHO_BULK_SIZE` はコンパイル時に決まり、組込みでは外部 SDRAM に置ける。
+`echo` の遅延線（約 384 KB）は `bulk_threshold` を超えるので bulk 領域に入る。`ONSA_ECHO_BULK_SIZE` はコンパイル時に決まり、組込みでは外部 SDRAM に置ける。
 
-ホスト側（Kumi で WAV に書き出す）:
+ホスト側（Onsa で WAV に書き出す）:
 
-```kumi
+```onsa
 use std.fs.{Fs, Path, IoError}
 use std.audio.wav
 
@@ -1295,20 +1295,20 @@ pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
 `daisy` ターゲット（ヒープ無し、§15.3）で `voice` を静的ライブラリにし、C のファームウェアから呼ぶ。
 
 ```c
-#include "kumi_voice.h"
+#include "onsa_voice.h"
 
-static uint8_t voice_mem[KUMI_VOICE_SIZE] __attribute__((aligned(KUMI_VOICE_ALIGN)));
-static kumi_voice* voice;
-static kumi_voice_params params;
+static uint8_t voice_mem[ONSA_VOICE_SIZE] __attribute__((aligned(ONSA_VOICE_ALIGN)));
+static onsa_voice* voice;
+static onsa_voice_params params;
 
 void setup(void) {
-  voice = (kumi_voice*)voice_mem;
-  kumi_voice_init(voice, NULL, 48000.0f);       /* BULK_SIZE が 0 なので NULL */
-  kumi_voice_params_default(&params);
+  voice = (onsa_voice*)voice_mem;
+  onsa_voice_init(voice, NULL, 48000.0f);       /* BULK_SIZE が 0 なので NULL */
+  onsa_voice_params_default(&params);
 }
 
 void audio_callback(const float* const* in, float* const* out, size_t frames) {
-  kumi_voice_process(voice, &params, out[0], frames);
+  onsa_voice_process(voice, &params, out[0], frames);
 }
 ```
 
@@ -1316,9 +1316,9 @@ void audio_callback(const float* const* in, float* const* out, size_t frames) {
 
 ### 17.6 DSP 以外のコード: ポリフォニー
 
-FAUST ではボイスの割り当てを言語の外（アーキテクチャファイル）で書く。Kumi では同じ言語で書け、rt とヒープ不使用が検査される。
+FAUST ではボイスの割り当てを言語の外（アーキテクチャファイル）で書く。Onsa では同じ言語で書け、rt とヒープ不使用が検査される。
 
-```kumi
+```onsa
 use std.array
 use std.math.{exp2}
 
@@ -1374,7 +1374,7 @@ impl Poly {
 }
 ```
 
-- `Poly.new` は効果を持たない。`Poly` は固定サイズの値で、その大きさは `kumi interface` に出る。
+- `Poly.new` は効果を持たない。`Poly` は固定サイズの値で、その大きさは `onsa interface` に出る。
 - `self.voices[i]`（`inout`）と `self.params[i]`（借用）は異なるフィールドなので重ならない（§5.2）。
 - `array.from_fn` に渡す無名関数は `sample_rate` をコピーで捕捉する。引数の位置だけで使うので、ヒープを使わない（§5.3）。
 
@@ -1388,7 +1388,7 @@ impl Poly {
 {
   "code": "E0811",
   "message": "`resonator` is a flow; calling it creates a stateful instance and needs `~`",
-  "span": { "file": "dsp/voice.kumi", "line": 12, "col": 13, "end_col": 22 },
+  "span": { "file": "dsp/voice.onsa", "line": 12, "col": 13, "end_col": 22 },
   "found": "resonator(src, vowel_f1, 80.0)",
   "fixes": [
     { "replace": "resonator~(src, vowel_f1, 80.0)" }
@@ -1410,29 +1410,29 @@ impl Poly {
 
 - **型付きホール**: 式の位置に `_` を書くと、期待される型、使える効果、スコープ内の候補が報告され、ビルドは失敗する。
 - エラーは **最初に検出された関数の中** で止まる（P1）。
-- 既存言語の書き方（`&mut x`、`<T>`、`::`、`;`、`i32`、`proc`、FAUST の `+ ~ _`）には、Kumi での書き方を修正候補として示す。
+- 既存言語の書き方（`&mut x`、`<T>`、`::`、`;`、`i32`、`proc`、FAUST の `+ ~ _`）には、Onsa での書き方を修正候補として示す。
 
 ### 18.2 コマンド
 
 | コマンド | 内容 |
 |---|---|
-| `kumi check [--json]` | 型・効果・rt・flow・ポリシーの検査 |
-| `kumi fmt [--check]` | 唯一の表記への正規化 |
-| `kumi test [--backends all]` | `test` と `prop` を実行。`--backends` で変換先間のビット一致も検査（§13.4） |
-| `kumi interface <mod>` | 公開シグネチャ、種、大きさ、効果、rt、@param だけを出力 |
-| `kumi audit [--stack] [--memory]` | extern、unsafe、`@relaxed`、ポリシーとの差分。スタックの上限と flow の状態の大きさ |
-| `kumi graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前 |
-| `kumi transpile <target>` | 各言語のソースへ変換。段階 1 では移植可能な核だけ（§13） |
-| `kumi play <flow>` | flow を音で鳴らす。@param から UI を作る |
-| `kumi probe <flow>.<name>` | 名前の付いた信号をタップし、波形とスペクトルを表示する |
-| `kumi diff --ast` | 構造的な差分 |
-| `kumi explain <code>` | 診断コードの説明と修正例 |
-| `kumi primer [--std]` | この版の言語要約と標準ライブラリのインタフェースを、LLM のコンテキスト向けに出力 |
-| `kumi lsp` | LSP。DSP 向けの拡張（グラフ、パラメータ、プローブ、ホットリロード）を含む |
+| `onsa check [--json]` | 型・効果・rt・flow・ポリシーの検査 |
+| `onsa fmt [--check]` | 唯一の表記への正規化 |
+| `onsa test [--backends all]` | `test` と `prop` を実行。`--backends` で変換先間のビット一致も検査（§13.4） |
+| `onsa interface <mod>` | 公開シグネチャ、種、大きさ、効果、rt、@param だけを出力 |
+| `onsa audit [--stack] [--memory]` | extern、unsafe、`@relaxed`、ポリシーとの差分。スタックの上限と flow の状態の大きさ |
+| `onsa graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前 |
+| `onsa transpile <target>` | 各言語のソースへ変換。段階 1 では移植可能な核だけ（§13） |
+| `onsa play <flow>` | flow を音で鳴らす。@param から UI を作る |
+| `onsa probe <flow>.<name>` | 名前の付いた信号をタップし、波形とスペクトルを表示する |
+| `onsa diff --ast` | 構造的な差分 |
+| `onsa explain <code>` | 診断コードの説明と修正例 |
+| `onsa primer [--std]` | この版の言語要約と標準ライブラリのインタフェースを、LLM のコンテキスト向けに出力 |
+| `onsa lsp` | LSP。DSP 向けの拡張（グラフ、パラメータ、プローブ、ホットリロード）を含む |
 
 ### 18.3 IDE
 
-FAUST の IDE に相当する環境は、`kumi lsp` の上に作る。言語の側で次を保証する。
+FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の側で次を保証する。
 
 - **局所的な検査**: シグネチャが全て注釈されているので、編集した関数だけを検査し直せばよい。
 - **パラメータの UI**: `@param` から自動で作る。パラメータの一覧はシグネチャだけで分かる。
@@ -1449,7 +1449,7 @@ FAUST の IDE に相当する環境は、`kumi lsp` の上に作る。言語の�
 - 分岐の中の flow インスタンスを停止させるか（クロック付きの `if`）
 - 単位の型（`Hz`, `Sec`, `Samples` を newtype ではなく単位代数で扱う）
 - 固定小数点型（`Q15`, `Q31`、飽和演算）を標準ライブラリに置くか、言語に入れるか
-- Kumi で書いたファームウェアのエントリ: 割り込みとメインループが状態を共有する方法（同期型を静的領域に置く方法を含む）
+- Onsa で書いたファームウェアのエントリ: 割り込みとメインループが状態を共有する方法（同期型を静的領域に置く方法を含む）
 - `Alloc` の確保失敗を、panic ではなく値として扱う API
 - ホットリロードで、型の変わったフィールドの扱い
 - 変換先の優先順位（C の次に何を作るか）
@@ -1466,11 +1466,11 @@ FAUST の IDE に相当する環境は、`kumi lsp` の上に作る。言語の�
 
 **第 1 期: 移植可能な核（§13.2）だけを実装する。** 効果、handler、Shared 型、参照カウントは作らない。核だけでも、C の export、組込み、IDE での試聴という「FAUST の代わり」に要るものが揃う。
 
-1. 核の構文解析器と検査器（`kumi check --json`、型付きホール）。本仕様の例のうち核に入るものが全て通ることを、最初の回帰テストにする。
-2. インタプリタ（`kumi test`、`render`）
+1. 核の構文解析器と検査器（`onsa check --json`、型付きホール）。本仕様の例のうち核に入るものが全て通ることを、最初の回帰テストにする。
+2. インタプリタ（`onsa test`、`render`）
 3. flow の降下（順序と因果性、レートの巻き上げ、状態の配置）
 4. C バックエンドと export。ヒープ無し、静的な大きさ、fast / bulk の二領域。組込みとプラグインの入口が一度に得られる。
-5. IDE の核: `kumi lsp`、`play`、`probe`、`graph`、`@param` からの UI
+5. IDE の核: `onsa lsp`、`play`、`probe`、`graph`、`@param` からの UI
 6. JavaScript への変換（ブラウザでの試聴に要る）と、ビット一致の適合性テスト
 
 **第 2 期: fn 世界。**
