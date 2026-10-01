@@ -156,6 +156,7 @@ dependencies = [
  "clap",
  "onsa_diag",
  "onsa_driver",
+ "onsa_syntax",
  "serde_json",
 ]
 

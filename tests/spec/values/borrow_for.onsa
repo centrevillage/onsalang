@@ -1,6 +1,6 @@
 //! mode: parse
 pub fn total_len(xs: Array[Str]) -> U32 {
   var n: U32 = 0
-  for s in xs { n = n + s.len() }    // s は借用。破棄が無いので Alloc は要らない
+  for s in xs { n = n + s.len() } // s は借用。破棄が無いので Alloc は要らない
   n
 }

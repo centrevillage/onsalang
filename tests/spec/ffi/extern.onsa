@@ -1,6 +1,6 @@
 //! mode: parse
 extern "C" lib "fastconv" {
-  type FcRaw                                                // 不透明型
+  type FcRaw // 不透明型
   fn fc_new(ir: Span[F32], block: U32) -> Ptr[FcRaw] uses {Alloc}
   rt fn fc_process(h: Ptr[FcRaw], input: Span[F32], inout output: Span[F32])
   fn fc_free(h: Ptr[FcRaw]) uses {Alloc}

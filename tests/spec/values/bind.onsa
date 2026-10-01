@@ -1,5 +1,5 @@
 pub fn bind() {
-let x: I32 = 1     // 不変
-var acc: F64 = 0.0 // 可変（ローカルのみ）
-acc = acc + (x as F64)
+  let x: I32 = 1     // 不変
+  var acc: F64 = 0.0 // 可変（ローカルのみ）
+  acc = acc + (x as F64)
 }

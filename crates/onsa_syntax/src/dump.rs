@@ -13,6 +13,34 @@ pub fn dump(ast: &Ast) -> String {
     d.out
 }
 
+/// One item, without a trailing newline (used by `diff --ast`).
+pub fn dump_item(ast: &Ast, id: ItemId) -> String {
+    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    d.item(id);
+    d.out
+}
+
+/// One statement (used by `diff --ast` to locate the first change in a body).
+pub fn dump_stmt(ast: &Ast, id: StmtId) -> String {
+    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    d.stmt(id);
+    d.out
+}
+
+/// One expression.
+pub fn dump_expr(ast: &Ast, id: ExprId) -> String {
+    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    d.expr(id);
+    d.out
+}
+
+/// One type.
+pub fn dump_type(ast: &Ast, id: TypeId) -> String {
+    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    d.ty(id);
+    d.out
+}
+
 struct Dumper<'a> {
     ast: &'a Ast,
     out: String,

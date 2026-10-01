@@ -36,7 +36,7 @@ def blocks(spec_text):
 
 def normalize(text):
     text = MARKER.sub("", text)
-    return "\n".join(line.rstrip() for line in text.split("\n")).strip("\n")
+    return "\n".join(line.strip() for line in text.split("\n")).strip("\n")
 
 
 def main():

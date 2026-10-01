@@ -1,7 +1,9 @@
 //! Lexer, parser, AST, and formatter for Onsa (M1).
 
 pub mod ast;
+pub mod diff;
 pub mod dump;
+pub mod fmt;
 mod groups;
 pub mod lexer;
 mod naming;
@@ -11,6 +13,7 @@ pub mod token;
 use onsa_diag::FileId;
 
 pub use dump::dump;
+pub use fmt::format;
 pub use lexer::{Lexed, lex};
 pub use parser::Parsed;
 pub use token::{Token, TokenKind};

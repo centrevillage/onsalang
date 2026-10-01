@@ -4,13 +4,13 @@ use std.dsp.test.{impulse, energy}
 /// 二極レゾネータ。極は r·e^{±jw} にあり、bw > 0 なら |r| < 1 で安定。
 /// 入力に (1 - r) を掛けて、ピークのゲインをおおよそ正規化する。
 pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
-  let r  = exp(-(F32.PI * bw) / sample_rate())        // Ctl
-  let w  = (2.0 * F32.PI * fc) / sample_rate()        // Ctl
-  let b1 = 2.0 * r * cos(w)                           // Ctl
-  let b2 = r * r                                      // Ctl
-  let y1 = prev(y, 0.0)                               // Sig: y は下で定義される（過去の値）
-  let y2 = prev(y1, 0.0)                              // Sig
-  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)    // Sig: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
+  let r  = exp(-(F32.PI * bw) / sample_rate())     // Ctl
+  let w  = (2.0 * F32.PI * fc) / sample_rate()     // Ctl
+  let b1 = 2.0 * r * cos(w)                        // Ctl
+  let b2 = r * r                                   // Ctl
+  let y1 = prev(y, 0.0)                            // Sig: y は下で定義される（過去の値）
+  let y2 = prev(y1, 0.0)                           // Sig
+  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2) // Sig: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
   y
 }
 
@@ -36,7 +36,7 @@ pub rt fn wrap01(x: F32) -> F32 {
 
 /// Ctl 値を、時定数 time 秒の一次遅れで Sig に滑らかにする
 pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
-  let a = exp(-1.0 / (time * sample_rate()))        // Init: init で 1 回
+  let a = exp(-1.0 / (time * sample_rate())) // Init: init で 1 回
   let y = x + (a * (prev(y, 0.0) - x))
   y
 }
@@ -52,12 +52,12 @@ pub flow voice(
   gain: Ctl[F32],
 ) -> Sig[F32] {
   let src = saw~(f0)
-  let f1  = resonator~(src, vowel_f1, 80.0)         // 80.0: 定数から Ctl へ昇格
+  let f1  = resonator~(src, vowel_f1, 80.0) // 80.0: 定数から Ctl へ昇格
   let f2  = resonator~(src, vowel_f2, 120.0)
   (f1 + f2) * smooth~(gain, 0.01)
 }
 
-const MAX_ECHO: U32 = 96000                       // 48 kHz で 2 秒、96 kHz で 1 秒
+const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒
 
 pub flow echo(
   x: Sig[F32],
@@ -66,7 +66,7 @@ pub flow echo(
   @param(min: 0.0, max: 0.95, default: 0.5)
   feedback: Ctl[F32],
 ) -> Sig[F32] {
-  let d = time * sample_rate()                      // Ctl（サンプル数）
+  let d = time * sample_rate() // Ctl（サンプル数）
   let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
   y
 }
@@ -111,7 +111,7 @@ impl Poly {
     for i in 0..MAX_VOICES {
       if self.notes[i] == Some(note) {
         self.notes[i] = None
-        self.params[i].gain = 0.0                   // smooth により 10 ms で減衰する
+        self.params[i].gain = 0.0 // smooth により 10 ms で減衰する
       }
     }
   }

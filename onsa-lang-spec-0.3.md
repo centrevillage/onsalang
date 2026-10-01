@@ -92,11 +92,11 @@ pub use extern unsafe target test assert
 const type as inout move self Self true false
 ```
 
-`prev` `delay` `vdelay` `sample_rate` は flow の中で予約された組込み名（§11.4）。
+`prev` `delay` `vdelay` `sample_rate` は flow の中で予約された組込み名（§11.4）。キーワードは、パスの `.` の直後ではモジュール名として使える（`std.test`、`std.dsp.test`）。
 
 `_` は、パターンと引数名では「値を使わない」（Rust と同じ）、式の位置では型付きホール（§18.1、Haskell と同じ）を表す。型の位置には書けない。
 
-### 2.3 命名規則（エラー、lint ではない）
+### 2.3 命名規則（エラー E0320、lint ではない）
 
 | 種類 | 規則 | 例 |
 |---|---|---|
@@ -118,7 +118,7 @@ const type as inout move self Self true false
 - 整数: `42`, `0xFF`, `0b1010`, `1_000_000`
 - 浮動小数: `1.0`, `2.5e-3`（小数点の両側に数字が必須。`1.` や `.5` は不可）
 - 文字: `'a'`（Unicode スカラ値）
-- 文字列: `"..."`（UTF-8）。補間は `{名前}` または `{名前.フィールド...}` のみ。補間される値は `Show` を実装していなければならない。`{{` と `}}` はエスケープ。補間を含む文字列は新しい `Str` を作るので `Alloc` を要する（§12）。補間を含まない文字列リテラルは静的領域に置かれ、`Alloc` を要しない。
+- 文字列: `"..."`（UTF-8）。補間は `{名前}` または `{名前.フィールド...}` のみ。補間される値は `Show` を実装していなければならない。`{{` と `}}` はエスケープ。バックスラッシュのエスケープは `\n \t \r \0 \\ \" \' \u{XXXX}` の閉じた一覧（文字リテラルも同じ）。補間を含む文字列は新しい `Str` を作るので `Alloc` を要する（§12）。補間を含まない文字列リテラルは静的領域に置かれ、`Alloc` を要しない。
 - **既定の型は無い。** リテラルの型は、期待型と関数本体の中の推論で決まる。決まらなければエラー（E0405）。`var acc = 0.0` は、`acc` の型が本体の中で決まらない限り書けない。
 
   浮動小数のリテラルが既定で `F64` になると、倍精度 FPU の無いマイコン（Cortex-M4F など）で気付かずにソフトウェア浮動小数を使うことになる。それを避けるための規則である。
@@ -176,12 +176,12 @@ let d = (lo <= x) && (x < hi) // OK
 `as` は **情報を失わない拡大変換** だけに使える（`I32 as I64`、`F32 as F64`、`I32 as F64`、`U8 as F32` など）。それ以外は、変換元の型のメソッドを使う。
 
 ```onsa
-let n = i as I64                 // OK
-let k = n.narrow_i32()           // I64 -> Option[I32]
-let s = x.round_f32()            // F64 -> F32、最近接偶数丸め
-let c = xs.len().round_f32()     // U32 -> F32、最近接偶数丸め
-let j = y.trunc_i32()            // F32 -> I32、範囲外は panic
-let m = y.trunc_i32_sat()        // F32 -> I32、範囲外は飽和、NaN は 0（Rust の `as`、WASM の trunc_sat と同じ）。rt ではこちらを使う
+let n = i as I64             // OK
+let k = n.narrow_i32()       // I64 -> Option[I32]
+let s = x.round_f32()        // F64 -> F32、最近接偶数丸め
+let c = xs.len().round_f32() // U32 -> F32、最近接偶数丸め
+let j = y.trunc_i32()        // F32 -> I32、範囲外は panic
+let m = y.trunc_i32_sat()    // F32 -> I32、範囲外は飽和、NaN は 0（Rust の `as`、WASM の trunc_sat と同じ）。rt ではこちらを使う
 ```
 
 Rust の `as` は情報を失う変換も許す。Onsa の `as` で書けるのはその部分集合で、検査を通るものは Rust と同じ意味を持つ（§0.3 の 4）。
@@ -268,12 +268,12 @@ pub enum Shape {
   Rect(F32, F32),
 }
 
-pub struct Hz(F32)          // 単一フィールドのタプル構造体 = newtype（別名ではなく別の型）
+pub struct Hz(F32) // 単一フィールドのタプル構造体 = newtype（別名ではなく別の型）
 
-type Samples = Buf[F32]     // 型別名（新しい型を作らない。`onsa interface` は展開して表示する）
+type Samples = Buf[F32] // 型別名（新しい型を作らない。`onsa interface` は展開して表示する）
 ```
 
-- `struct` は名前的。匿名レコード型は無い。struct リテラルは常に `Point { x: x, y: y }` と書き、フィールド名と変数名が同じときの省略形は無い。
+- `struct` は名前的。匿名レコード型は無い。struct リテラルは常に `Point { x: x, y: y }` と書き、フィールド名と変数名が同じときの省略形は無い。`if` / `while` / `match` / `for` / `par` の見出しの式には struct リテラルを書けない（`if s == Shape.Circle {` が曖昧になるため。括弧で囲めば書ける。Rust と同じ）。
 - 列挙子はタプル形（`Circle(F32)`）と単位形だけ。Rust の struct 形（`Rect { w: F32, h: F32 }`）は無く、名前付きのフィールドが要るときは struct を包む（`Rect(RectSize)`）。名前付きのフィールドを持つものは struct の一種類にするためである（§0.3 の規則 1）。
 - タプル形の列挙子は、捕捉の無い関数値（`Circle` は `fn(F32) -> Shape`）としても使える（Rust と同じ。例: `map_err(ConfigError.Io)`）。単位形の列挙子は値。
 - フィールドアクセス `p.x` は、`p` の型が注釈またはその場の推論で既知であることを要求する（E0420、§4.7）。
@@ -380,7 +380,7 @@ acc = acc + (x as F64)
 ```onsa
 pub fn total_len(xs: Array[Str]) -> U32 {
   var n: U32 = 0
-  for s in xs { n = n + s.len() }    // s は借用。破棄が無いので Alloc は要らない
+  for s in xs { n = n + s.len() } // s は借用。破棄が無いので Alloc は要らない
   n
 }
 ```
@@ -412,7 +412,7 @@ pub fn mean(xs: Array[F64]) -> Option[F64] {
 use std.math.{sqrt}
 
 impl Point {
-  pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } }   // 関連関数: Point.new(...)
+  pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } } // 関連関数: Point.new(...)
   pub rt fn norm(self) -> F32 { sqrt((self.x * self.x) + (self.y * self.y)) }
   pub rt fn scale(inout self, k: F32) {
     self.x = self.x * k
@@ -1072,7 +1072,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 
 ```onsa
 extern "C" lib "fastconv" {
-  type FcRaw                                                // 不透明型
+  type FcRaw // 不透明型
   fn fc_new(ir: Span[F32], block: U32) -> Ptr[FcRaw] uses {Alloc}
   rt fn fc_process(h: Ptr[FcRaw], input: Span[F32], inout output: Span[F32])
   fn fc_free(h: Ptr[FcRaw]) uses {Alloc}
@@ -1297,7 +1297,7 @@ use std.task
 pub fn run(sample_rate: F32) -> U64 uses {Spawn, Sync} {
   task.scope(fn(s) {
     let st = voice.init(voice.Config {}, sample_rate)
-    let t = s.spawn(fn(move v: voice.State) -> U64 uses {Sync} { audio_loop(move v) }, move st)
+    let t  = s.spawn(fn(move v: voice.State) -> U64 uses {Sync} { audio_loop(move v) }, move st)
     control_loop()
     t.join()
   })
@@ -1397,13 +1397,13 @@ use std.dsp.test.{impulse, energy}
 /// 二極レゾネータ。極は r·e^{±jw} にあり、bw > 0 なら |r| < 1 で安定。
 /// 入力に (1 - r) を掛けて、ピークのゲインをおおよそ正規化する。
 pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
-  let r  = exp(-(F32.PI * bw) / sample_rate())        // Ctl
-  let w  = (2.0 * F32.PI * fc) / sample_rate()        // Ctl
-  let b1 = 2.0 * r * cos(w)                           // Ctl
-  let b2 = r * r                                      // Ctl
-  let y1 = prev(y, 0.0)                               // Sig: y は下で定義される（過去の値）
-  let y2 = prev(y1, 0.0)                              // Sig
-  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)    // Sig: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
+  let r  = exp(-(F32.PI * bw) / sample_rate())     // Ctl
+  let w  = (2.0 * F32.PI * fc) / sample_rate()     // Ctl
+  let b1 = 2.0 * r * cos(w)                        // Ctl
+  let b2 = r * r                                   // Ctl
+  let y1 = prev(y, 0.0)                            // Sig: y は下で定義される（過去の値）
+  let y2 = prev(y1, 0.0)                           // Sig
+  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2) // Sig: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
   y
 }
 
@@ -1438,7 +1438,7 @@ pub rt fn wrap01(x: F32) -> F32 {
 
 /// Ctl 値を、時定数 time 秒の一次遅れで Sig に滑らかにする
 pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
-  let a = exp(-1.0 / (time * sample_rate()))        // Init: init で 1 回
+  let a = exp(-1.0 / (time * sample_rate())) // Init: init で 1 回
   let y = x + (a * (prev(y, 0.0) - x))
   y
 }
@@ -1454,7 +1454,7 @@ pub flow voice(
   gain: Ctl[F32],
 ) -> Sig[F32] {
   let src = saw~(f0)
-  let f1  = resonator~(src, vowel_f1, 80.0)         // 80.0: 定数から Ctl へ昇格
+  let f1  = resonator~(src, vowel_f1, 80.0) // 80.0: 定数から Ctl へ昇格
   let f2  = resonator~(src, vowel_f2, 120.0)
   (f1 + f2) * smooth~(gain, 0.01)
 }
@@ -1465,7 +1465,7 @@ flow の中で、`~` の付いた `saw` `resonator` `smooth` は状態を持つ�
 遅延線を持つ例:
 
 ```onsa
-const MAX_ECHO: U32 = 96000                       // 48 kHz で 2 秒、96 kHz で 1 秒
+const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒
 
 pub flow echo(
   x: Sig[F32],
@@ -1474,7 +1474,7 @@ pub flow echo(
   @param(min: 0.0, max: 0.95, default: 0.5)
   feedback: Ctl[F32],
 ) -> Sig[F32] {
-  let d = time * sample_rate()                      // Ctl（サンプル数）
+  let d = time * sample_rate() // Ctl（サンプル数）
   let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
   y
 }
@@ -1568,7 +1568,7 @@ impl Poly {
     for i in 0..MAX_VOICES {
       if self.notes[i] == Some(note) {
         self.notes[i] = None
-        self.params[i].gain = 0.0                   // smooth により 10 ms で減衰する
+        self.params[i].gain = 0.0 // smooth により 10 ms で減衰する
       }
     }
   }
@@ -1619,14 +1619,14 @@ impl Poly {
 
 - **型付きホール**: 式の位置に `_` を書くと、期待される型、使える効果、スコープ内の候補が報告され、ビルドは失敗する。
 - 一つの関数の中では、最初のエラーで検査を止める。関数どうしは独立に検査し（P1）、全ての関数のエラーを一度に報告する。修復ループ（P8）の回数を減らすためである。
-- 既存言語の書き方（`&mut x`、`<T>`、`::`、`;`、`i32`、`proc`、FAUST の `+ ~ _`）には、Onsa での書き方を修正候補として示す。
+- 既存言語の書き方（`&mut x`、`<T>`、`::`、`;`、`i32`、`proc`、FAUST の `+ ~ _`）には、Onsa での書き方を修正候補として示す（E0020）。字句・構文の一般のエラーは E0001（不正な文字・リテラル）と E0002（予期しないトークン）。
 
 ### 18.2 コマンド
 
 | コマンド | 内容 |
 |---|---|
 | `onsa check [--json]` | 型・効果・rt・flow・ポリシーの検査 |
-| `onsa fmt [--check]` | 唯一の表記への正規化 |
+| `onsa fmt [--check]` | 唯一の表記への正規化。連続する 1 行の `let` の `=` と、連続する行の行末コメントは揃える（gofmt と同じ）。行の自動折り返しはせず、書き手の改行を保つ |
 | `onsa test [--backends all] [--flows]` | `test` を実行。`--backends` で変換先間のビット一致も検査（§13.4）。`--flows` で export される flow を `@param` の範囲で自動検査する（角と無作為の内点でパラメータを取り、無音・インパルス・雑音を入れ、出力が有限で panic しないこと） |
 | `onsa interface <mod>` | 公開シグネチャ、種、大きさ、効果、rt、@param だけを出力 |
 | `onsa audit [--stack] [--memory] [--panics]` | extern、unsafe、`@relaxed`、ポリシーとの差分。スタックの上限と flow の状態の大きさ、閾値以上の移動（コピー）の箇所（§12.7）。`--panics` は export される rt の経路にある panic しうる箇所（検査付きの演算、添字、`unwrap`、非飽和の変換）を列挙する |
