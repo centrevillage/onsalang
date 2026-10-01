@@ -44,7 +44,7 @@ onsalang/
 ├── runtime/
 │   └── c/onsa.h               生成コードが include する共通定義（param_info, panic フック）
 ├── tests/
-│   ├── spec/                  仕様の例。`*.onsa` と期待する診断（`*.expect`）
+│   ├── spec/                  仕様の例。期待する診断は行末の `//~ E0010`（詳細 D-05）
 │   ├── golden/                生成 C / WASM の golden
 │   └── conformance/           render の出力のビット一致（interp vs C vs WASM）
 ├── examples/                  voice, echo, poly（仕様 §17）
@@ -89,9 +89,10 @@ struct f.Config { Init 入力 }
 struct f.Params { Ctl 入力 }
 fn    f.init(cfg: f.Config, sample_rate: F32) -> f.State
 rt fn f.reset(inout s: f.State)                       // 遅延と prev を init 値に戻し、サブインスタンスも reset。Init の値は保つ
+rt fn f.ctl(inout s: f.State, p: f.Params)            // Ctl レートの let を順に評価（ブロックに 1 回）。Sig から参照されるものは状態へ
+rt fn f.tick(inout s: f.State, Sig 入力の値...) -> 出力の値   // Sig レートの let を順に評価する 1 サンプル分。遅延を進める
 rt fn f.process(inout s: f.State, p: f.Params, Sig 入力: Span[T]..., inout 出力: Span[T]...) {
-  // 1. Ctl レートの let を順に評価（ブロックに 1 回）
-  // 2. for i in 0..frames { Sig レートの let を順に評価、出力へ書く、遅延を進める }
+  // ctl を 1 回、for i in 0..frames { 入力を全て読む、tick、出力を全て書く }（詳細 D-03）
 }
 rt fn f.process_inplace(inout s: f.State, p: f.Params, inout 入出力: Span[T]...)  // 入出力の形が一致するときだけ
 fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ。Sig 入力があれば frames 無し
@@ -201,7 +202,7 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 | 種類 | 置き場所 | 内容 |
 |---|---|---|
-| 仕様の例 | `tests/spec/` | 各節の肯定例と否定例。`.expect` に診断コードとスパン。P9 の検証 |
+| 仕様の例 | `tests/spec/` | 各節の肯定例と否定例。期待する診断は行末の `//~ E0010`、先頭行の `//! mode:` で検査の深さ（詳細 D-05、D-06）。P9 の検証 |
 | 単体 | 各クレート | 字句、文の区切り、演算子の群、レート解析、配置の計算、`fmt` の冪等性 |
 | golden | `tests/golden/` | 生成 C / WASM / JS のテキスト差分。意図した変更だけが差分になる |
 | conformance | `tests/conformance/` | `render` の出力を interp / C / WASM / JS で比較。`strict` ではバイト一致、`relaxed` は対象外 |
