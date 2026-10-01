@@ -3,6 +3,7 @@
 - 対象: [`onsa-lang-spec-0.3.md`](../onsa-lang-spec-0.3.md) §20 の第 1 期（移植可能な核）を中心に、第 2 期・第 3 期の輪郭まで（計画の節番号は 0.2 と 0.3 で同じ）
 - 日付: 2026-10-01
 - 前提のレビュー: [`review-draft-0.2.md`](review-draft-0.2.md)。`C-` / `G-` / `I-` / `P-` はそのレビューの ID
+- 作業の詳細: [`implementation-tasks.md`](implementation-tasks.md)。各マイルストーンを作業（`T`）に分け、実装の判断（`D`）と仕様の空白（`S`）を一覧にしたもの
 
 ---
 
