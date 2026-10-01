@@ -86,7 +86,7 @@ Draft 0.1 からの変更点と、その理由は [`docs/kumi-0.2-changes.md`](d
 ### 2.2 キーワード（全て）
 
 ```
-fn rt flow par struct enum trait impl effect handler handle with uses
+fn rt flow par struct enum trait impl effect blocking handler handle with uses
 let var if else match for in while break continue return
 pub use extern export unsafe target test prop assert
 const type as inout move self Self true false
@@ -173,7 +173,7 @@ let d = (lo <= x) && (x < hi) // OK
 let n = i as I64                 // OK
 let k = n.narrow_i32()           // I64 -> Option[I32]
 let s = x.round_f32()            // F64 -> F32、最近接偶数丸め
-let c = xs.len().round_f64()     // USize -> F64、最近接偶数丸め
+let c = xs.len().round_f32()     // U32 -> F32、最近接偶数丸め
 let j = y.trunc_i32()            // F32 -> I32、範囲外は panic
 ```
 
@@ -189,9 +189,9 @@ Rust の `as` は情報を失う変換も許す。Kumi の `as` で書けるの�
 
 ### 4.1 組込み型
 
-| 分類 | 型 | 種（§4.4） | 記憶域（§12.1） |
+| 分類 | 型 | 種（§4.6） | 記憶域（§12.1） |
 |---|---|---|---|
-| 整数 | `I8 I16 I32 I64 U8 U16 U32 U64 ISize USize` | Copy | 値 |
+| 整数 | `I8 I16 I32 I64 U8 U16 U32 U64` | Copy | 値 |
 | 浮動小数 | `F32 F64`（IEEE 754 binary32 / binary64） | Copy | 値 |
 | その他スカラ | `Bool Char ()` | Copy | 値 |
 | 固定長配列 | `[T; N]`（`N` はコンパイル時定数） | `T` に従う | 値 |
@@ -206,7 +206,36 @@ Rust の `as` は情報を失う変換も許す。Kumi の `as` で書けるの�
 
 `Option` と `Result` の列挙子だけは修飾なしで書ける。他の enum の列挙子は常に `Type.Variant` と書く。
 
-### 4.2 ユーザ定義型
+**添字・長さ・大きさの型は `U32` に固定する。** プラットフォームによって幅が変わる整数型（Rust の `usize` に当たるもの）は無い。
+
+- 理由: 幅がターゲットで変わると、オーバーフローで panic する点がターゲットごとに変わり、ソースの意味とバックエンド間のビット一致が崩れる。JavaScript にも対応する型が無い。
+- `len()`、添字、`const N`、`SIZE` などは全て `U32`。Java の配列添字（`int`）や JavaScript の配列長と同じ幅である。
+- 一つの配列・バッファ・文字列は 2³² − 1 要素（バイト）までに制限される。それを超えるデータは分割して扱う（ファイルのオフセットなど、大きさが要る値には `U64` を使う）。
+- C の `size_t` は FFI の宣言の中でだけ `CSize` として書ける（§14.1）。`U32` との変換は境界で検査する。
+
+### 4.2 文字列
+
+`Str` は **常に正しい UTF-8 のバイト列** である。長さと位置はバイト単位で数える（Rust、Go と同じ）。
+
+| 操作 | 意味 |
+|---|---|
+| `s.len() -> U32` | バイト数 |
+| `s.substr(from, to) -> Str` | バイト範囲 `[from, to)` の部分文字列（`Alloc`）。範囲外、または文字の途中で切れる場合は panic |
+| `s.get_substr(from, to) -> Option[Str]` | 同上。panic の代わりに `None` を返す |
+| `s.find(pat: Str) -> Option[U32]` | 最初に現れるバイト位置 |
+| `s.is_char_boundary(i) -> Bool` | `i` が文字の境界か |
+| `s.chars()` / `s.bytes()` | Unicode スカラ値（`Char`）/ バイト（`U8`）の反復 |
+| `Str.from_utf8(b: Bytes) -> Result[Str, Utf8Error]` | 検証付きの変換。生のバイト列は `Bytes` で扱う |
+
+- `s[i]` の添字は無い（何を返すかが一意でないため）。1 バイトは `s.bytes()` か `s.as_bytes()` から得る。
+- 等値と順序はバイト列の辞書順。UTF-8 のバイト順はコードポイントの順と一致する。正規化はしない。
+- 変換先の文字列の表現が UTF-8 でない場合（JavaScript など）も、この意味を保つ（§13.5）。
+
+### 4.3 `Map` と `Set` の反復順序
+
+`Map` と `Set` は **挿入した順** に反復する（JavaScript の `Map`、Python の `dict` と同じ）。要素を削除しても、残りの順序は変わらない。ハッシュ関数や実装によって反復の順序が変わらないので、全てのターゲット・変換先で結果が決定的になる。
+
+### 4.4 ユーザ定義型
 
 ```kumi
 pub struct Point {
@@ -227,16 +256,16 @@ type Samples = Buf[F32]     // 型別名（新しい型を作らない。`kumi i
 - `struct` は名前的。匿名レコード型は無い。
 - フィールドアクセス `p.x` は、`p` の型が注釈またはその場の推論で既知であることを要求する（E0420）。
 
-### 4.3 ジェネリクス
+### 4.5 ジェネリクス
 
 ```kumi
 pub fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
   if x < lo { lo } else if x > hi { hi } else { x }
 }
 
-pub struct Ring[T, const N: USize] {
+pub struct Ring[T, const N: U32] {
   data: [T; N],
-  head: USize,
+  head: U32,
 }
 ```
 
@@ -245,7 +274,7 @@ pub struct Ring[T, const N: USize] {
 - 型パラメータには、暗黙に `Dup`（複製できる = Copy か Shared）の制約が付く。Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す（Rust の `?Sized` と同じ形）。その場合、`T` の値は借用・`inout`・`move` でしか扱えない。
 - `Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る。
 
-### 4.4 種（kind）: Copy / Shared / Affine
+### 4.6 種（kind）: Copy / Shared / Affine
 
 全ての型は構造から次のどれかに分類される。注釈は不要で、`kumi interface` に表示される。
 
@@ -307,7 +336,7 @@ pub fn mean(xs: Array[F64]) -> Option[F64] {
   if xs.is_empty() {
     return None
   }
-  Some(xs.sum() / xs.len().round_f64())
+  Some(xs.sum() / (xs.len() as F64))
 }
 ```
 
@@ -348,7 +377,7 @@ impl Show for Point {
 - ジェネリック trait（`Iter[T]` など）は、一つの型について高々一つしか実装できない。
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
 - 演算子 trait: `Add Sub Mul Div Rem Neg Eq Ord BitAnd BitOr BitXor Shl Shr`。
-- 標準 trait: `Eq`, `Ord`（演算子用。浮動小数は IEEE 比較）、`TotalOrd`（ソート用。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`, `Drop`, `Num`, `Float`, `Dup`（自動。§4.3）。
+- 標準 trait: `Eq`, `Ord`（演算子用。浮動小数は IEEE 比較）、`TotalOrd`（ソート用。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。
 - `Drop` の `drop(move self)` は、`rt` を付けること、`uses {Alloc}` を持つことだけが許される。値が破棄される位置は、その型の破棄が必要とするもの（`Alloc`、非 rt）を要求する（E0611 / E0901）。
 
 ### 6.4 derive
@@ -369,7 +398,7 @@ pub struct Key {
 ### 6.6 コンパイル時定数
 
 ```kumi
-const TABLE_SIZE: USize = 1024
+const TABLE_SIZE: U32 = 1024
 const SINE: [F32; 1024] = make_sine_table()
 ```
 
@@ -404,7 +433,7 @@ break / continue / return
 ### 8.1 宣言と使用
 
 ```kumi
-pub effect Fs {
+pub blocking effect Fs {
   fn read(path: Path) -> Result[Str, IoError]
   fn write(path: Path, data: Str) -> Result[(), IoError]
 }
@@ -416,6 +445,7 @@ pub fn load(path: Path) -> Result[Str, IoError] uses {Fs} {
 
 - 効果行は **効果単位**（`Fs`）で書く。標準ライブラリは `FsRead` と `FsWrite` を分けている。本仕様の例では簡単のため `Fs` を使う。
 - 効果行が空なら `uses` を書かない。それが純粋関数。
+- `blocking` はブロックしうる効果の印である（§8.2）。
 - `load` は受け取った `Str` をそのまま返すので、破棄が起きず、`Alloc` を要しない。
 - 効果の多相:
 
@@ -423,13 +453,28 @@ pub fn load(path: Path) -> Result[Str, IoError] uses {Fs} {
 pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Alloc, e} { ... }
 ```
 
-### 8.2 `Alloc`（明示）と `Block`（暗黙）
+### 8.2 `Alloc` と、ブロックする効果
 
 - **`Alloc`** はヒープの確保と解放を表す **明示の効果** である。Shared 値と `Buf` の生成・解放、補間文字列の生成は `Alloc` を要する（§12.2）。
-- **`Block`**（ロック、システムコール、待機）は、`rt` でない全ての関数に暗黙に含まれる。書かない。`Block` は handler で処理できない。
-- `rt fn` は、`Alloc` を効果行に持てず、`Block` も含まない関数である（§10）。
+- **ブロックするかどうかは、効果の宣言で決まる。** ブロックしうる操作（ロック、システムコール、待機）を持つ効果は `blocking effect` と宣言する。**関数がブロックしうるのは、効果行に `blocking` の効果を含むときだけ** である。使う側は `uses {Fs}` と書くだけでよく、ブロックの印を二度書く必要は無い。
+- `blocking` でない効果の handler は、その操作の中で `blocking` の効果を使えない（E0612）。この検査は handler の定義の中で閉じる。例えば `Log` はブロックしない効果なので、リングバッファに書く handler は書けるが、標準出力に同期的に書く handler は書けない。
+- 組込みの `Block` は操作を持たない `blocking` の効果で、extern 関数がブロックすることを主張するのに使う（§14.1）。`Block` は handler で処理できない。
+- `rt fn` は、効果行に `Alloc` も `blocking` の効果も含まない関数である（§10）。
 
-`Alloc` を明示にしたのは、組込みではヒープが無いことがあり、またヒープの代わりに arena を使い分ける価値があるからである。`Block` は汎用のコードのほぼ全てに付き、handler で差し替える意味も無いので、明示しても情報が増えない。
+標準ライブラリの主な効果:
+
+| 効果 | `blocking` | 内容 |
+|---|---|---|
+| `Fs`, `Net`, `Stdout`, `Stdin` | ○ | 入出力 |
+| `Sleep` | ○ | 待機 |
+| `Sync` | ○ | `Chan`、`Mutex` などのブロックする同期操作（§16） |
+| `Spawn` | ○ | タスクの生成と合流（§16） |
+| `Clock` | × | 現在時刻の取得 |
+| `Random` | × | 乱数 |
+| `Log` | × | ログ（handler はブロックしない書き方に限られる） |
+| `Alloc` | × | ヒープ（§12） |
+
+`Alloc` を明示にしたのは、組込みではヒープが無いことがあり、またヒープの代わりに arena を使い分ける価値があるからである。ブロックを効果の宣言で表すのは、ブロックできない環境（ブラウザのメインスレッド、AudioWorklet、プラグインの GUI スレッド）へ、どの関数を持ち込めるかをシグネチャだけで判断するためである（§13.5）。
 
 ### 8.3 handler
 
@@ -446,6 +491,7 @@ let r = handle { load(Path.new("x.txt")) } with memory_fs
   - 実装は証拠渡し（evidence passing）で、静的に解決できればゼロコスト。
   - Affine 値が複製される経路が無いので、一意性と健全に共存する。
   - handler の操作が `rt` なら、handle 式も `rt` で使える。
+  - `blocking` でない効果の handler は、ブロックする効果を使えない（§8.2）。
 - handler 自身が使う効果は、`handle` 式の効果行に加わる。
 - handler は引数を取れる。引数は第二級（§5.3）で、`handle` 式の間だけ有効: `handler arena(inout mem: Span[U8]): Alloc { ... }`、`handle { ... } with arena(inout scratch)`。
 - インライン形式 `handle { ... } with Fs { fn read(...) ... }` も同じ意味。
@@ -455,7 +501,7 @@ let r = handle { load(Path.new("x.txt")) } with memory_fs
 ```kumi
 use std.mem.{arena}
 
-const N: USize = 1024
+const N: U32 = 1024
 
 /// 一時的な Array を使って倍音テーブルを作る（ヒープを使う）
 fn harmonics() -> [F32; N] uses {Alloc} { ... }
@@ -479,7 +525,7 @@ pub fn main() -> Result[(), AppError] uses {Fs, Stdout, Alloc} { ... }
 
 `main` の効果行の各効果について、ビルドターゲットが handler を提供しなければならない（E0610、§15）。ヒープの無いターゲットは `Alloc` を提供しないので、その `main` は `Alloc` を効果行に持てない。
 
-時刻と乱数も効果（`Clock`, `Random`）。テストでは handler を差し替えるだけで決定的になる。`test` と `prop` の本体では、テストランナーが `Alloc` を提供する。
+時刻と乱数も効果（`Clock`, `Random`）。待機は `Sleep` で、`Clock` とは分けてある（`Clock` はブロックしない）。テストでは handler を差し替えるだけで決定的になる。`test` と `prop` の本体では、テストランナーが `Alloc` を提供する。
 
 ---
 
@@ -531,11 +577,13 @@ pub rt fn soft_clip(x: F32) -> F32 {
 `rt fn` の検査規則は次の通り（違反は E09xx）。
 
 1. 効果行に `Alloc` を含まない（E0902）。したがって Shared 値と `Buf` の生成も、所有する Shared 値・`Buf` の破棄もできない（§12.2）。
-2. `rt` でない関数を呼ばない（E0901）。暗黙の破棄で呼ばれる `Drop` も含む。
-3. 再帰しない（直接・相互とも、E0903）。モジュール間の import は循環しない（§15.1）ので、この検査はモジュールの中で閉じる。これによりスタックの上限が計算できる（§12.5）。
-4. ループの上限は検査しない（停止性は対象外）。
+2. 効果行に `blocking` の効果を含まない（E0904）。したがってブロックしない。
+3. `rt` でない関数を呼ばない（E0901）。暗黙の破棄で呼ばれる `Drop` も含む。
+4. 再帰しない（直接・相互とも、E0903）。モジュール間の import は循環しない（§15.1）ので、この検査はモジュールの中で閉じる。これによりスタックの上限が計算できる（§12.5）。
+5. ループの上限は検査しない（停止性は対象外）。
 
 - `rt` は関数型の一部（`rt fn(F32) -> F32`）で、高階関数でも保持される。
+- 1 と 2 は効果行だけで決まる。`rt` を付けた関数では、これらとともに 3 と 4 が検査される。
 - `extern` 宣言の `rt` は検証されない主張として扱い、`kumi audit` に列挙する（§14）。
 
 参考: Clang の `[[clang::nonblocking]]` / `[[clang::nonallocating]]` と同種の検査を、言語の型に組み込んだもの。
@@ -595,11 +643,11 @@ pub flow one_pole(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {
 | 名前 | 型（概略） | 意味 |
 |---|---|---|
 | `prev(e, init)` | `Sig[T] -> Sig[T]` | 1 サンプル遅延。最初のサンプルは `init` |
-| `delay(e, N, init)` | `N: const USize`、`N >= 2` | N サンプル遅延。1 サンプルは `prev` と書く（E0807） |
-| `vdelay(e, d, MAX, init)` | `d: Sig[F32]` 以下のレート、`MAX: const USize` | 可変遅延（線形補間）。`d` は `[1, MAX]` に飽和する |
+| `delay(e, N, init)` | `N: const U32`、`N >= 2` | N サンプル遅延。1 サンプルは `prev` と書く（E0807） |
+| `vdelay(e, d, MAX, init)` | `d: Sig[F32]` 以下のレート、`MAX: const U32` | 可変遅延（線形補間）。`d` は `[1, MAX]` に飽和する |
 | `sample_rate()` | `Init[F32]` | サンプルレート |
 
-- 遅延線の長さ（`N`、`MAX`）は **コンパイル時定数** でなければならない（E0808）。サンプルレートに依存する長さは、想定する最大のサンプルレートで上限を決める（例: `const MAX_ECHO: USize = 96000`）。これにより状態の大きさがコンパイル時に決まる（§12.4）。
+- 遅延線の長さ（`N`、`MAX`）は **コンパイル時定数** でなければならない（E0808）。サンプルレートに依存する長さは、想定する最大のサンプルレートで上限を決める（例: `const MAX_ECHO: U32 = 96000`）。これにより状態の大きさがコンパイル時に決まる（§12.4）。
 - `vdelay` の `d` の下限が 1 なのは、`d = 0` が遅延を通らない閉路になるからである。
 
 ### 11.5 呼び出しと複製
@@ -622,7 +670,7 @@ flow 本体の中での呼び出しは、呼び出す相手によって意味が
 ```kumi
 use std.dsp.{sum}
 
-const UNISON: USize = 4
+const UNISON: U32 = 4
 
 pub flow unison(f0: Ctl[F32], detune: Ctl[F32]) -> Sig[F32] {
   let saws = par i in 0..UNISON {
@@ -632,7 +680,7 @@ pub flow unison(f0: Ctl[F32], detune: Ctl[F32]) -> Sig[F32] {
 }
 
 /// 0..n を [-0.5, 0.5] に等間隔に並べる
-pub rt fn spread(i: USize, n: USize) -> F32 {
+pub rt fn spread(i: U32, n: U32) -> F32 {
   (i.round_f32() / (n - 1).round_f32()) - 0.5
 }
 ```
@@ -651,15 +699,15 @@ voice.Params       // Ctl 入力をフィールドに持つ struct（Copy）
 voice.Out          // render の結果。出力チャンネルごとの Buf
 
 // 定数
-const voice.SIZE: USize        // 状態のうち fast 領域のバイト数（§12.4）
-const voice.BULK_SIZE: USize   // 状態のうち bulk 領域のバイト数
+const voice.SIZE: U32        // 状態のうち fast 領域のバイト数（§12.4）
+const voice.BULK_SIZE: U32   // 状態のうち bulk 領域のバイト数
 
 // 関数
 fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
 rt fn voice.reset(inout s: voice.State)
 rt fn voice.process(inout s: voice.State, params: voice.Params, <Sig 入力>, <出力>)
 fn voice.render(cfg: voice.Config, params: voice.Params, <Sig 入力>,
-                frames: USize, sample_rate: F32) -> voice.Out uses {Alloc}
+                frames: U32, sample_rate: F32) -> voice.Out uses {Alloc}
 fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param の default がある場合
 ```
 
@@ -699,9 +747,9 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 
 一括処理は生成された `render` で行う。`std.dsp.test` には次を置く。
 
-- `impulse(n: USize) -> Buf[F32] uses {Alloc}`
+- `impulse(n: U32) -> Buf[F32] uses {Alloc}`
 - `magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32`
-- `energy(xs: Span[F32], from: USize, to: USize) -> F64`（半開区間 `[from, to)` の二乗和）
+- `energy(xs: Span[F32], from: U32, to: U32) -> F64`（半開区間 `[from, to)` の二乗和）
 - `assert_near(a: F64, b: F64, tol: F64)`
 
 ---
@@ -829,15 +877,17 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 | Affine 型と `Drop` | 破棄の位置で明示的に `drop` を呼ぶコードを出す。GC のある言語でもファイナライザに頼らない | 破棄の位置がコンパイル時に全て決まる |
 | `inout` / `move` | `inout` はポインタ・参照・変換先の可変引数、または値を返して書き戻す。`move` は所有権の移動か、ただの受け渡し | 参照が第二級で、ライフタイムが無い |
 | `rt`、`Alloc` の検査 | 変換前に Kumi のコンパイラが検査済み。変換先では何もしない | 検査はシグネチャで閉じる |
+| ブロックする効果 | ブロックできない変換先（JavaScript）では、効果行に `blocking` の効果を含む関数を `async` 関数にし、呼び出しを `await` にする | ブロックするかどうかが効果行だけで決まる（§8.2） |
+| `Str` | UTF-8 の変換先ではそのまま。JavaScript では UTF-8 のバイト列（`Uint8Array`）で持ち、JS の API との境界で変換する。リテラルは変換時に符号化しておく | 長さと位置をバイト単位で定義した（§4.2） |
+| `Map` / `Set` | 挿入順を保つ表（JS の `Map`、C / Rust では挿入順の索引付き表） | 反復の順序を挿入順と定義した（§4.3） |
 | panic | C: ターゲットの panic 設定。C++ / Rust / JS: 回復しない例外や abort に対応させる | panic は回復可能なエラーと分かれている（`Result`） |
 | `target` 宣言 | 変換先ごとの実装モジュールを `bind` で割り当てる | ソースに `cfg` が無い |
 
 既知の差（未解決、§19）:
 
-- **ブロックできない変換先**: ブラウザのメインスレッドはブロックできない。`Block` が暗黙なので、ブロックする関数をシグネチャで判別できない。`Block` を明示の効果にするか、変換先ごとに提供しない操作として扱うかを決める必要がある。
 - **言語ごとの FFI**: `extern "C"` は C 系の変換先でしか使えない。`extern "js"` のように変換先ごとの extern を設けるかどうか。
 - **64 ビット整数**: JavaScript の `Number` では `I64` / `U64` を表せない。`BigInt` か 2 語での模倣が要り、遅い。
-- **文字列の内部表現**: `Str` は UTF-8 のバイト列として定義されている（長さや添字はバイト単位）。JavaScript の文字列は UTF-16 なので、意味を保つには変換が要る。
+- **JavaScript での文字列の性能**: `Str` を UTF-8 のバイト列で持つので、JS の API との受け渡しのたびに変換のコストがかかる（意味は揃う）。
 - **arena の枯渇**: 確保量は変換先のメモリ表現で変わるので、arena の枯渇（panic）が起こる点が変換先によってずれうる。
 
 ---
@@ -856,8 +906,9 @@ extern "C" lib "fastconv" {
 ```
 
 - extern ブロックの中の `type 名前`（`=` なし）は不透明型の宣言。
-- extern 宣言の **効果行と `rt` は検証されない主張**。C 側がヒープを使うなら `uses {Alloc}` と宣言する。`kumi audit` が一覧にし、ポリシー（§15.4）で許可されたパッケージにしか書けない。
-- `unsafe` を必要としない引数型は、スカラ、`@repr(c)` 構造体、`Span[T]`（ポインタ + 長さとして渡し、呼び出し中だけ有効）、借用した `Str`（読み取り専用）。
+- extern 宣言の **効果行と `rt` は検証されない主張**。C 側がヒープを使うなら `uses {Alloc}`、ブロックするなら `uses {Block}` と宣言する。`kumi audit` が一覧にし、ポリシー（§15.4）で許可されたパッケージにしか書けない。
+- `unsafe` を必要としない引数型は、スカラ、`CSize`、`@repr(c)` 構造体、`Span[T]`（ポインタ + 長さとして渡し、呼び出し中だけ有効）、借用した `Str`（読み取り専用）。
+- `CSize` は C の `size_t` で、extern の宣言の中でだけ使える。Kumi 側では `U32` として見え、`U32` に収まらない値が返ると panic する。
 - `Ptr[T]` を引数や返り値に含む extern 関数は、`unsafe { }` の中でしか呼べない。
 
 安全なラッパの例:
@@ -1042,14 +1093,14 @@ frozen = ["voice"]                 # 公開シグネチャとパラメータ ID 
 
 ## 16. 並行性
 
-- **構造化並行性**: `task.scope(fn(s) { ... })` の中で `s.spawn(...)` したタスクは、スコープを抜ける前に必ず合流する。`Spawn` 効果を要求する。
+- **構造化並行性**: `task.scope(fn(s) { ... })` の中で `s.spawn(...)` したタスクは、スコープを抜ける前に必ず合流する。`Spawn` 効果（`blocking`）を要求する。
 - データ競合は型で排除する。スレッド間で共有できるのは Copy 値と Shared 値（不変）、および同期型だけ。Affine 値は `move` で一つのタスクに移す。
 - 同期型（`std.sync`）:
 
 | 型 | 用途 | rt で使える操作 |
 |---|---|---|
-| `Chan[T]` | 一般のメッセージング | なし（`Block`） |
-| `Spsc[T, const N: USize]` | 単一生産者・単一消費者の lock-free キュー（容量固定） | `push`, `pop` |
+| `Chan[T]` | 一般のメッセージング。`send` / `recv` は `uses {Sync}` | なし |
+| `Spsc[T, const N: U32]` | 単一生産者・単一消費者の lock-free キュー（容量固定） | `push`, `pop` |
 | `Atomic[T]` | `T: Copy`。大きさはターゲットが lock-free で扱える幅まで（超えるとビルド時に E0650） | `load`, `store`, `swap` |
 | `Swap[T]` | `T: Copy`。トリプルバッファで最新値を受け渡す | `latest` |
 
@@ -1205,7 +1256,7 @@ flow の中で、`~` の付いた `saw` `resonator` `smooth` は状態を持つ�
 遅延線を持つ例:
 
 ```kumi
-const MAX_ECHO: USize = 96000                       // 48 kHz で 2 秒、96 kHz で 1 秒
+const MAX_ECHO: U32 = 96000                       // 48 kHz で 2 秒、96 kHz で 1 秒
 
 pub flow echo(
   x: Sig[F32],
@@ -1271,13 +1322,13 @@ FAUST ではボイスの割り当てを言語の外（アーキテクチャフ�
 use std.array
 use std.math.{exp2}
 
-const MAX_VOICES: USize = 8
+const MAX_VOICES: U32 = 8
 
 pub struct Poly {
   voices: [voice.State; MAX_VOICES],
   params: [voice.Params; MAX_VOICES],
   notes: [Option[U8]; MAX_VOICES],
-  next: USize,
+  next: U32,
 }
 
 pub rt fn midi_to_hz(note: U8) -> F32 {
@@ -1402,7 +1453,7 @@ FAUST の IDE に相当する環境は、`kumi lsp` の上に作る。言語の�
 - `Alloc` の確保失敗を、panic ではなく値として扱う API
 - ホットリロードで、型の変わったフィールドの扱い
 - 変換先の優先順位（C の次に何を作るか）
-- 言語全体の変換（段階 2）の既知の差: ブロックできない変換先と `Block` の扱い、言語ごとの FFI、JavaScript の 64 ビット整数、文字列の内部表現、arena の枯渇（§13.5）
+- 言語全体の変換（段階 2）の既知の差: 言語ごとの FFI、JavaScript の 64 ビット整数と文字列の性能、arena の枯渇（§13.5）
 - 逃げるクロージャ（保存できるコールバック）、トレイトオブジェクト
 - async / await
 - 実装しない機能の一覧を、拒否の理由とともに保守すること
@@ -1411,12 +1462,24 @@ FAUST の IDE に相当する環境は、`kumi lsp` の上に作る。言語の�
 
 ## 20. 実装の順序
 
-1. 構文解析器と Core の検査器（`kumi check --json`、型付きホール）。最初に、本仕様の例が全て通ることを回帰テストにする。
-2. インタプリタ（`kumi test`）
-3. flow の降下（順序と因果性、レートの巻き上げ、状態の配置）と `render`
+コンパイラは Rust で書く。ブラウザの IDE で動かすため、WASM にもビルドできるようにする。
+
+**第 1 期: 移植可能な核（§13.2）だけを実装する。** 効果、handler、Shared 型、参照カウントは作らない。核だけでも、C の export、組込み、IDE での試聴という「FAUST の代わり」に要るものが揃う。
+
+1. 核の構文解析器と検査器（`kumi check --json`、型付きホール）。本仕様の例のうち核に入るものが全て通ることを、最初の回帰テストにする。
+2. インタプリタ（`kumi test`、`render`）
+3. flow の降下（順序と因果性、レートの巻き上げ、状態の配置）
 4. C バックエンドと export。ヒープ無し、静的な大きさ、fast / bulk の二領域。組込みとプラグインの入口が一度に得られる。
 5. IDE の核: `kumi lsp`、`play`、`probe`、`graph`、`@param` からの UI
-6. `interface` / `audit`（スタック、メモリ）/ `primer`
-7. 他の変換先（C++、JS、Rust）への段階 1 の変換と、ビット一致の適合性テスト
+6. JavaScript への変換（ブラウザでの試聴に要る）と、ビット一致の適合性テスト
+
+**第 2 期: fn 世界。**
+
+7. 効果と handler、`Alloc`、Shared 型と参照カウント、標準ライブラリ
 8. LLVM と WASM のバックエンド
-9. 言語全体の変換（段階 2）。§13.5 の既知の差を解消した変換先から順に
+9. `interface` / `audit`（スタック、メモリ）/ `primer`
+
+**第 3 期: 変換先の拡大。**
+
+10. C++ と Rust への変換（段階 1）
+11. 言語全体の変換（段階 2）。§13.5 の既知の差を解消した変換先から順に
