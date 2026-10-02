@@ -93,7 +93,7 @@ pub priv use extern unsafe target test assert
 const type as inout move self Self true false
 ```
 
-`prev` `delay` `vdelay` `sample_rate` は flow の中で予約された組込み名（§11.4）。キーワードは、パスの `.` の直後ではモジュール名として使える（`std.test`、`std.dsp.test`）。
+`prev` `delay` `vdelay` `sample_rate` は flow の中で予約された組込み名（§11.4）。キーワードは、パスの `.` の直後と `use` の経路の頭では、モジュール名として使える（`std.test`、`std.dsp.test`、std の中の `use test.{Gen}`）。
 
 `_` は、パターンと引数名では「値を使わない」（Rust と同じ）、式の位置では型付きホール（§18.1、Haskell と同じ）を表す。型の位置には書けない。
 
@@ -878,7 +878,7 @@ fn voice.render(cfg: voice.Config, params: voice.Params, <入力>,
 fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param の default がある場合
 ```
 
-- 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。`pub flow` なら名前空間と中の全ての項目が `pub`、そうでなければモジュール内のみ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
+- 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。名前空間と中の全ての項目は、flow の可視性（`pub` / 無指定 / `priv`）を継ぐ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
 - 状態の大きさ（fast / bulk 領域のバイト数）は名前空間に無い。ターゲットの設定とポインタの幅で変わるので、C のヘッダ（§14.2）と `onsa interface --target <名前>` にだけ出す（§12.4）。Onsa のコードの意味はターゲットに依存しない。
 - 生成された型は flow を宣言したモジュールで定義されたものとして扱うので、同じモジュールに `impl voice.State { ... }` で補助メソッドを書ける（孤児規則 §6.3 の通り）。
 - Core IR と生成コードでも名前は `voice.State` の形を保つ（C では `voice__State`、export は `prefix` + `voice`）。プローブとホットリロードはこの名前の安定に依存する。
@@ -1225,10 +1225,12 @@ void        onsa_voice_free(onsa_voice* s);
 ### 15.1 モジュール
 
 - 1 ファイル = 1 モジュール。モジュールのパスはパッケージルートからのファイルパスで、`mod` 宣言は無い。パッケージルートは `onsa.toml` のあるディレクトリで、その下の `.onsa` ファイルを再帰的に集める（`tests/` と `target/` を除く）。マニフェストの無い単一のファイル（`onsa check foo.onsa`）は、そのファイルを 1 モジュールのパッケージとして扱う（モジュール名はファイル名）。
-- 可視性は `pub`（パッケージ外に公開）と `pub(pkg)`（パッケージ内に公開）。無指定はモジュール内のみ。
-- フィールドは、struct の可視性を継ぐ（`pub struct Point { x: F32, y: F32 }` の `x` と `y` は `pub`）。狭めたいフィールドにだけ `priv`（モジュール内のみ）か、`pub struct` の中で `pub(pkg)` を付ける（`pub struct Ring[T, const N: U32] { data: [T; N], priv head: U32 }`）。newtype でも同じく書ける（`pub struct Hz(priv F32)` は `.0` をモジュールの中に限る）。広げる向きの指定は無く、フィールドに `pub` を書くと継いでいるので冗長で E0020（修正候補は外すこと）。enum の列挙子の中身は、enum の可視性を継ぐ。
+- 可視性は `pub`（パッケージ外に公開）、無指定（パッケージ内に公開）、`priv`（モジュール内のみ）の 3 段階。他のモジュールの項目は `use` で取り込んだ名前でだけ参照するので、パッケージ内に公開しても名前は衝突しない。パッケージの外に出るのは `pub` を書いたものだけである。`pub(pkg)` の形は無い（E0020、修正候補は外すこと）。
+- フィールドは、struct の可視性を継ぐ（`pub struct Point { x: F32, y: F32 }` の `x` と `y` は `pub`）。狭めたいフィールドにだけ `priv`（モジュール内のみ）を付ける（`pub struct Ring[T, const N: U32] { data: [T; N], priv head: U32 }`）。newtype でも同じく書ける（`pub struct Hz(priv F32)` は `.0` をモジュールの中に限る）。広げる向きの指定は無く、フィールドに `pub` を書くと継いでいるので冗長で E0020（修正候補は外すこと）。`priv struct` のフィールドの `priv` も同じく E0020。`pub struct` のフィールドをパッケージ内に限る書き方は無い。必要なら `priv` にして、作る関数と読む関数を無指定（パッケージ内）で置く。enum の列挙子の中身は、enum の可視性を継ぐ。
 - 見えないフィールドを読み書きすると E0303。見えないフィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず（E0303）、作る関数を通す。可視性は必要以上に狭めない。隠すのは、不変条件を守るために外から書き換えられては困るフィールドだけにする。
-- `use std.fs.{Fs, Path}`。グロブ import は無い。再公開は `pub use` のみ。`use` はモジュールのどの位置にも書ける。同じ名前を二度取り込むと E0304（束縛の重複）。モジュールの項目と、同じ名前の子モジュール（`a.onsa` の項目 `b` と `a/b.onsa`）も E0304。
+- `use std.fs.{Fs, Path}`。グロブ import は無い。`use` で取り込んだ名前は、そのモジュールの中でだけ使える（項目と違い、無指定の `use` はパッケージ内に公開しない。`priv use` は冗長で E0020）。再公開は `pub use` のみで、取り込めるのは `pub` の項目だけ（`pub` でない項目の `pub use` は E0303）。`use` はモジュールのどの位置にも書ける。同じ名前を二度取り込むと E0304（束縛の重複）。モジュールの項目と、同じ名前の子モジュール（`a.onsa` の項目 `b` と `a/b.onsa`）も E0304。
+- `use` の経路は絶対経路で、頭に書けるのは、自分のパッケージのルート直下のモジュールか、依存のパッケージ名（`[dependencies]` のキー。`std` を含む、§15.3）だけである。モジュールの項目や、`use` で取り込んだ名前からは始められない（`use std.math` の後でも `use math.{sin}` は E0302 で、修正候補は `use std.math.{sin}`）。各 `use` は、書く位置にも他の `use` にもよらずに決まる。自分のパッケージは名前で参照しない。中からはルートからの経路（`use dsp.synth.{voice}`）、外からはパッケージ名を付けた経路（パッケージ `fx` なら `use fx.dsp.synth.{voice}`）で書く。自分のパッケージ名を頭に書くと E0302（修正候補はパッケージ名を外すこと。同じ名前のルート直下のモジュールがあれば、それを指す）。ルート直下のモジュールと依存のパッケージ名が重なると E0304（利用者の `std.onsa` など）。
+- `use` の経路がたどれるのは、パッケージ、モジュール、flow の名前空間（§11.6）だけで、取り込めるのは、モジュールの項目、子モジュール、flow の名前空間の項目である。enum の列挙子（`Type.Variant` と書く、§4.1）、型の関連関数と関連定数（`Point.new`、`F32.PI`、§2.3 / §6.6）、効果の操作（`Fs.read`、§8.1）は取り込めない（E0302。文面で理由と書き方を示す）。
 - 他のモジュールとパッケージは、`use` で取り込んだ名前でだけ参照できる（`use std.math` の後の `math.sqrt(x)`、`use std.math.{sqrt}` の後の `sqrt(x)`）。暗黙に見えるのは、自分のモジュールの項目、prelude、組込み型だけで、`use` の無い経路（`std.math.sqrt(x)`）は E0302（修正候補は `use` の追加）。モジュールが何に依存するかは、`use` の一覧を見れば全て分かる。
 - モジュール間の循環 import は禁止（E0310）。依存は `use` だけで決まるので、この検査は `use` の一覧で閉じる。
 - 暗黙の prelude は `Option Result Some None Ok Err` と組込み型だけ。
