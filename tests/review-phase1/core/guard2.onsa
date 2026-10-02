@@ -1,0 +1,23 @@
+fn classify(x: Option[I32]) -> I32 {
+  match x {
+    Some(v) if v > 0 => 1,
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+test "guard match yields a value" {
+  assert classify(Some(5)) == 1
+  assert classify(Some(-5)) == 2
+  assert classify(None) == 3
+}
+
+test "literal match yields a value" {
+  let n: I32 = 2
+  let r = match n {
+    1 => 10,
+    2 => 20,
+    _ => 30,
+  }
+  assert r == 20
+}

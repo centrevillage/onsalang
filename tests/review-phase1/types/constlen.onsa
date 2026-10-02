@@ -1,0 +1,12 @@
+const N: I64 = 4
+const M: F32 = 3
+const K: U32 = 2 * 4
+const L: U8 = 300
+
+pub struct Ring[T, const C: U32] {
+  data: [T; C],
+}
+
+pub fn a() -> [F32; N] { [0.0; N] }
+pub fn b(r: Ring[F32, N]) -> U32 { 0 }
+pub fn c() -> [F32; L] { [0.0; L] }

@@ -1,0 +1,10 @@
+pub struct Hz(F32)
+
+pub fn mk() -> Hz { Hz(440.0) }
+
+pub fn get(h: Hz) -> F32 { h.0 }
+
+pub fn ctor_value() -> Hz {
+  let f = Hz
+  f(1.0)
+}

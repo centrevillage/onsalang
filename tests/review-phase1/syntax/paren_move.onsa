@@ -1,0 +1,8 @@
+pub fn a(y: I32) -> I32 {
+  let z = 1 + (move y)
+  z
+}
+
+pub fn b(y: I32) -> Bool {
+  if (move y) == 1 { true } else { false }
+}

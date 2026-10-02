@@ -1,0 +1,68 @@
+struct Pair {
+  a: I32,
+  b: I32,
+}
+
+fn swap(p: Pair) -> Pair {
+  Pair { a: p.b, b: p.a }
+}
+
+fn swap2(p: Pair) -> Pair {
+  let q = Pair { a: p.b, b: 0 }
+  var r = q
+  r.b = p.a
+  r
+}
+
+pub fn alias1() -> I32 {
+  var x = Pair { a: 1, b: 2 }
+  x = swap(x)
+  (x.a * 10) + x.b
+}
+
+pub fn alias2() -> I32 {
+  var x = Pair { a: 1, b: 2 }
+  x = swap2(x)
+  (x.a * 10) + x.b
+}
+
+fn rot(xs: [I32; 3]) -> [I32; 3] {
+  var ys: [I32; 3] = [0, 0, 0]
+  ys[0] = xs[2]
+  ys[1] = xs[0]
+  ys[2] = xs[1]
+  ys
+}
+
+pub fn alias3() -> I32 {
+  var xs: [I32; 3] = [1, 2, 3]
+  xs = rot(xs)
+  (xs[0] * 100) + (xs[1] * 10) + xs[2]
+}
+
+pub fn floor_local(x: F64) -> F64 {
+  let floor = x.floor()
+  floor
+}
+
+fn mk() -> ((I32, I32), I32, I32) {
+  ((1, 2), 3, 4)
+}
+
+fn mk2() -> ((I32, I32, I32), I32) {
+  ((5, 6, 7), 8)
+}
+
+pub fn tup() -> I32 {
+  let a = mk()
+  let b = mk2()
+  a.1 + b.1
+}
+
+test "interp" {
+  assert alias1() == 21
+  assert alias2() == 21
+  assert alias3() == 312
+  assert floor_local(1.5) == 1.0
+  assert tup() == 11
+}

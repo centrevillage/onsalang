@@ -1,0 +1,21 @@
+[package]
+name = "p1"
+edition = "2026"
+
+[dependencies]
+std = "0.2.0"
+
+[export]
+prefix = "onsa_"
+flows = ["dsp.uni"]
+
+[targets.small]
+kind = "source"
+platform = "thumbv7em-none-eabihf"
+numeric = "strict"
+provides = []
+panic = "reset"
+panic_messages = false
+
+[targets.small.memory]
+bulk_threshold = 64

@@ -1,0 +1,31 @@
+use std.dsp.test.{impulse}
+
+// a[n] = y[n-1] + y[n-2] where y = x (impulse): expected a = [0, 1, 1, 0, ...]
+pub flow np(x: Sig[F32]) -> Sig[F32] {
+  let a = prev(prev(y, 0.0) + y, 0.0)
+  let y = x
+  a
+}
+
+test "nested prev in look-back" {
+  let o = np.render(np.Config {}, np.Params {}, impulse(5), 48000.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 0.0
+}
+
+// d[n] = x[n-3] expected: prev(delay(x,2)) = x[n-3]
+pub flow nd(x: Sig[F32]) -> Sig[F32] {
+  let a = prev(delay(x, 2, 0.0), 0.0)
+  a
+}
+
+test "delay inside prev" {
+  let o = nd.render(nd.Config {}, nd.Params {}, impulse(6), 48000.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 0.0
+}

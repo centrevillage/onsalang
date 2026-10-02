@@ -1,0 +1,11 @@
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k
+}
+
+test "assignment order in the interpreter" {
+  var k: U32 = 0
+  var ys: [U32; 3] = [0, 0, 0]
+  ys[next(inout k)] = next(inout k)
+  assert ((ys[1] * 10) + ys[2]) == 1
+}

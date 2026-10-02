@@ -1,0 +1,11 @@
+[package]
+name = "p2"
+edition = "2026"
+
+[export]
+prefix = "t_"
+fns = ["al.alias1", "al.alias2", "al.alias3"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

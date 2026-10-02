@@ -1,0 +1,32 @@
+use std.dsp.test.{impulse}
+pub flow np(x: Sig[F32]) -> Sig[F32] {
+  let a = prev(prev(y, 0.0) + y, 0.0)
+  let y = x
+  a
+}
+test "np actual" {
+  let o = np.render(np.Config {}, np.Params {}, impulse(5), 48000.0)
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+}
+pub flow nd(x: Sig[F32]) -> Sig[F32] {
+  prev(delay(x, 2, 0.0), 0.0)
+}
+test "nd actual" {
+  let o = nd.render(nd.Config {}, nd.Params {}, impulse(6), 48000.0)
+  assert o.out[2] == 1.0
+  assert o.out[3] == 0.0
+}
+pub flow counter(x: Sig[F32]) -> Sig[F32] {
+  let n = prev(n, 0.0) + 1.0
+  n
+}
+pub flow sel(x: Sig[F32]) -> Sig[F32] {
+  let c: F32 = prev(c, 0.0) + 1.0
+  if c > 2.0 { counter~(x) } else { 0.0 }
+}
+test "sel actual" {
+  let o = sel.render(sel.Config {}, sel.Params {}, impulse(5), 48000.0)
+  assert o.out[2] == 1.0
+  assert o.out[4] == 3.0
+}

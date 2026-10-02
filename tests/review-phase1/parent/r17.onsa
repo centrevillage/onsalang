@@ -1,0 +1,17 @@
+use std.dsp.test.{impulse}
+
+/// rt でない関数（効果は無い）。仕様では Init 以下の引数でだけ flow から呼べ、init で評価される
+fn make_gain(level: F32) -> F32 {
+  level * 2.0
+}
+
+/// 部分式に書いた場合
+pub flow g_inline(x: Sig[F32], level: Init[F32]) -> Sig[F32] {
+  x * make_gain(level)
+}
+
+/// let に分けた場合
+pub flow g_let(x: Sig[F32], level: Init[F32]) -> Sig[F32] {
+  let k = make_gain(level)
+  x * k
+}

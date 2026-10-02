@@ -1,0 +1,9 @@
+struct A { f: Option[fn(F32) -> F32] }
+struct B { g: Option[fn(I32) -> I32] }
+
+test "two option fn types" {
+  let a = A { f: None }
+  let b = B { g: None }
+  assert a.f.is_none()
+  assert b.g.is_none()
+}

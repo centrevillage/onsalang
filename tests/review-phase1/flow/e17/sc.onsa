@@ -1,0 +1,8 @@
+pub flow counter(x: Sig[F32]) -> Sig[F32] {
+  let n = prev(n, 0.0) + 1.0
+  n
+}
+pub flow sc(x: Sig[F32], c: Ctl[Bool]) -> Sig[F32] {
+  let b = c && (counter~(x) > 2.0)
+  if b { 1.0 } else { 0.0 }
+}

@@ -1,0 +1,14 @@
+pub fn n() -> U32 uses {Alloc} {
+  let b = Buf.zeroed(4)
+  b.len()
+}
+
+pub fn none_only() -> Bool {
+  let x = None
+  true
+}
+
+test "unresolved" {
+  assert n() == 4
+  assert none_only()
+}

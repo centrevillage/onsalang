@@ -1,0 +1,28 @@
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Direct[T: ?Dup] {
+  item: T,
+}
+
+pub fn take(move h: Holder[Buf[F32]]) -> U32 { 0 }
+pub fn take_d(move h: Direct[Buf[F32]]) -> U32 { 0 }
+
+pub fn dup(move h: Holder[Buf[F32]]) -> U32 uses {Alloc} {
+  let a = move h
+  let b = move h
+  take(move a) + take(move b)
+}
+
+pub fn dup_d(move h: Direct[Buf[F32]]) -> U32 uses {Alloc} {
+  let a = move h
+  let b = move h
+  take_d(move a) + take_d(move b)
+}
+
+pub fn need_dup[T](x: T) -> T { x }
+pub fn via_dup(move h: Holder[Buf[F32]]) -> U32 uses {Alloc} {
+  let c = need_dup(move h)
+  take(move c)
+}

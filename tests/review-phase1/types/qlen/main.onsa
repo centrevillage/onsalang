@@ -1,0 +1,5 @@
+use cfg.{Ring}
+
+pub fn a() -> [F32; cfg.N] { [0.0; cfg.N] }
+pub fn b(r: Ring[F32, cfg.N]) -> U32 { 0 }
+pub fn c() -> U32 { cfg.N }

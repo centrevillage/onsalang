@@ -1,0 +1,12 @@
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+pub struct Pair {
+  a: [F32; 3],
+  b: Option[(U8, F64)],
+}
+pub struct Hold[T: ?Dup] {
+  items: (T, U32),
+}
+pub fn f(r: Ring[F32, 4]) -> U32 { 0 }

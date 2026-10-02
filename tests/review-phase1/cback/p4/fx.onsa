@@ -1,0 +1,16 @@
+pub flow boom(
+  x: Sig[F32],
+  @param(min: 0.0, max: 10000000000.0, default: 1.0)
+  k: Ctl[F32],
+) -> Sig[F32] {
+  let n = k.trunc_u32()
+  x * n.round_f32()
+}
+
+pub flow gainq(
+  x: Sig[F32],
+  @param(min: 0, max: 4, default: 1)
+  q: Ctl[I32],
+) -> Sig[F32] {
+  x * (q.round_f32())
+}

@@ -1,0 +1,4 @@
+pub const N: U32 = 4
+pub struct Ring[T, const M: U32] {
+  data: [T; M],
+}

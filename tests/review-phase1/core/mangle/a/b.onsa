@@ -1,0 +1,1 @@
+pub struct P { y: F32, z: F32 }

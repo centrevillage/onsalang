@@ -1,0 +1,3 @@
+pub struct Hz(F32)
+
+pub fn a() -> Hz { Hz { 0: 1.0 } }

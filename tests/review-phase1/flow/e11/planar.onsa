@@ -1,0 +1,13 @@
+pub flow st(x: Sig[F32]) -> Sig[[F32; 2]] {
+  [x, x * 2.0]
+}
+
+test "planar lengths differ" {
+  var s = st.init(st.Config {}, 48000.0)
+  let input: Buf[F32] = Buf.zeroed(4)
+  var a: Buf[F32] = Buf.zeroed(4)
+  var b: Buf[F32] = Buf.zeroed(8)
+  var outs = [move a, move b]
+  st.process(inout s, st.Params {}, input, inout outs)
+  assert false
+}

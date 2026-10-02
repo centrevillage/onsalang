@@ -1,0 +1,8 @@
+@derive(Default, PartialOrd, PartialEq)
+pub struct P {
+  x: F32,
+}
+
+pub fn a() -> P { P.default() }
+pub fn b[T: Default]() -> T { T.default() }
+pub fn c(p: P, q: P) -> Bool { p < q }

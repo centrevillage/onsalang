@@ -1,0 +1,7 @@
+pub fn a[T](b: Span[T]) -> U32 { b.len() }
+pub fn c(b: Span[Str]) -> U32 { b.len() }
+pub fn d(b: Span[(F32, Str)]) -> U32 { b.len() }
+pub struct H {
+  b: Buf[Buf[F32]],
+}
+pub fn e(xs: [Str; 2]) -> U32 { c(xs) }

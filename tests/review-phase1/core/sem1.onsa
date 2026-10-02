@@ -1,0 +1,21 @@
+fn boom() -> I32 {
+  let xs: [I32; 2] = [1, 2]
+  var i: U32 = 5
+  xs[i]
+}
+
+test "unwrap_or is eager (Rust)" {
+  let o: Option[I32] = Some(1)
+  let v = o.unwrap_or(boom())
+  assert v == 1
+}
+
+test "for over var sees snapshot" {
+  var xs: [I32; 3] = [1, 2, 3]
+  var sum: I32 = 0
+  for x in xs {
+    xs[2] = 100
+    sum = sum + x
+  }
+  assert sum == 6
+}

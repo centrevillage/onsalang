@@ -1,0 +1,27 @@
+pub struct A {
+  x: F32,
+}
+
+impl A {
+  struct B {
+    y: F32,
+  }
+
+  test "inside impl" {
+    assert false
+  }
+
+  pub fn get(self) -> F32 {
+    self.x
+  }
+}
+
+effect Log {
+  struct C {
+    z: F32,
+  }
+}
+
+pub fn make() -> B {
+  B { y: 1.0 }
+}

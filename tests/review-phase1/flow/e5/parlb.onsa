@@ -1,0 +1,14 @@
+use std.dsp.test.{impulse}
+
+// a[k] = y[n-1] for each replica; y = x + 0 -> output a[0] = x[n-1]
+pub flow pl(x: Sig[F32]) -> Sig[F32] {
+  let a = par i in 0..2 { prev(y, 0.0) }
+  let y = x
+  a[0] + a[1]
+}
+
+test "par look-back" {
+  let o = pl.render(pl.Config {}, pl.Params {}, impulse(3), 48000.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+}

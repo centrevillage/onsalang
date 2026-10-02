@@ -1,0 +1,7 @@
+const BIG: U32 = 1073741824
+pub flow big(x: Sig[F32]) -> Sig[F32] {
+  delay(x, BIG, 0.0)
+}
+pub flow big2(x: Sig[F32]) -> Sig[F32] {
+  vdelay(x, 10.0, 4294967295, 0.0)
+}

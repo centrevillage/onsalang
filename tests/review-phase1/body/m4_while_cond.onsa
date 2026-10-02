@@ -1,0 +1,7 @@
+pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { false }
+
+pub fn cond_hole() uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  while eat(move b) {
+  }
+}

@@ -1,0 +1,8 @@
+fn one_tuple() -> I32 {
+  let t = (1)
+  t.0
+}
+
+fn ty(t: (I32)) -> I32 {
+  t.0
+}

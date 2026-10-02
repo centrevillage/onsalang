@@ -1,0 +1,7 @@
+pub fn a(xs: [I32; 2]) -> I32 {
+  xs [0]
+}
+
+pub fn b(x: I32) -> I32 {
+  a ([x, x])
+}

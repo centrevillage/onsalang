@@ -1,0 +1,9 @@
+pub struct W[T] {
+  v: T,
+}
+pub struct N[T: Num] {
+  v: T,
+}
+pub fn a(w: W[Buf[F32]]) -> U32 { 0 }
+pub fn b(n: N[Bool]) -> U32 { 0 }
+pub fn c(n: Option[Buf[F32]]) -> U32 { 0 }

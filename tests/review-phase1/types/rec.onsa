@@ -1,0 +1,26 @@
+pub struct Node {
+  v: I32,
+  next: Node,
+}
+
+pub enum List {
+  Cons(I32, List),
+  Nil,
+}
+
+pub struct A {
+  b: B,
+}
+
+pub struct B {
+  a: Option[A],
+}
+
+pub fn f(n: Node) -> I32 { n.v }
+pub fn g(l: List) -> I32 {
+  match l {
+    List.Cons(v, _) => v,
+    List.Nil => 0,
+  }
+}
+pub fn h(a: A) -> A { a }

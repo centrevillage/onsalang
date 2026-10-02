@@ -1,0 +1,3 @@
+[package]
+name = "cyc3"
+edition = "2026"

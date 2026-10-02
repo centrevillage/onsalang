@@ -1,0 +1,23 @@
+pub struct HasSpan {
+  s: Span[F32],
+}
+
+pub enum E {
+  A(Span[F32]),
+}
+
+pub fn ret(x: Span[F32]) -> Span[F32] { x }
+
+const C: Span[F32] = 0
+
+pub fn bufbuf(b: Buf[Buf[F32]]) -> U32 { 0 }
+pub fn spanstr(s: Span[Str]) -> U32 { 0 }
+pub fn sig(x: Sig[F32]) -> Ctl[F32] { x }
+pub struct R {
+  r: Init[F32],
+}
+pub fn tup(x: (Span[F32], F32)) -> U32 { 0 }
+pub fn opt(x: Option[Span[F32]]) -> U32 { 0 }
+pub fn arr(x: [Span[F32]; 2]) -> U32 { 0 }
+pub fn ptr(x: Ptr[F32]) -> U32 { 0 }
+pub fn fnty(f: fn(Span[F32]) -> Span[F32]) -> U32 { 0 }

@@ -1,0 +1,17 @@
+use std.dsp.test.{impulse}
+pub flow f1(s: Sig[F32]) -> Sig[F32] {
+  s * 2.0
+}
+pub flow f2(out: Sig[F32], x: Sig[F32]) -> Sig[F32] {
+  out + x
+}
+pub flow f3(sample_rate: Sig[F32]) -> Sig[F32] {
+  sample_rate
+}
+pub flow rec(x: Sig[F32]) -> Sig[F32] {
+  rec~(x)
+}
+test "f1" {
+  let o = f1.render(f1.Config {}, f1.Params {}, impulse(3), 48000.0)
+  assert o.out[0] == 2.0
+}

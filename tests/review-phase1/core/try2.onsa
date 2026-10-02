@@ -1,0 +1,18 @@
+use std.array.{from_fn}
+
+fn half(i: U32) -> Option[U32] {
+  if i == 1 { None } else { Some(i / 2) }
+}
+
+fn build() -> Option[I32] {
+  let xs: [Option[U32]; 3] = from_fn(fn(i: U32) -> Option[U32] {
+    let h = half(i)?
+    Some(h)
+  })
+  Some(7)
+}
+
+test "question mark inside from_fn closure returns from the closure" {
+  let r = build()
+  assert r.is_some()
+}

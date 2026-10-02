@@ -1,0 +1,12 @@
+pub fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub fn temp_drop(move b: Buf[F32]) -> U32 { pass(move b).len() }
+
+pub fn overwrite(move a: Buf[F32], move c: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  x = move c
+  x
+}
+
+pub fn arg_temp(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }
+pub fn len_of(b: Buf[F32]) -> U32 { b.len() }

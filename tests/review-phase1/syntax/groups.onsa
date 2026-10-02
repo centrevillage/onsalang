@@ -1,0 +1,15 @@
+fn a(a: F32, b: F32, c: F32, d: F32) -> F32 {
+  a * b + c * d
+}
+
+fn b(lo: F32, x: F32, hi: F32) -> Bool {
+  lo <= x && x < hi
+}
+
+fn c(a: I32, b: I32) -> Bool {
+  a + 1 == b
+}
+
+fn d(x: U32) -> U32 {
+  x & 1 << 2
+}

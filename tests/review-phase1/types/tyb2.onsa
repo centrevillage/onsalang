@@ -1,0 +1,8 @@
+pub struct W[T] {
+  v: T,
+}
+pub struct N[T: Num] {
+  v: T,
+}
+pub fn a(move b: Buf[F32]) -> W[Buf[F32]] { W { v: move b } }
+pub fn c() -> N[Bool] { N { v: true } }

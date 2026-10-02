@@ -1,0 +1,2 @@
+use a.{g}
+pub fn x() -> I32 { g() }

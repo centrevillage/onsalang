@@ -1,0 +1,11 @@
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn take_field(move s: Holder) -> Buf[F32] uses {Alloc} { s.buf }
+
+pub fn via_let(move s: Holder) -> Buf[F32] {
+  let Holder { buf: b, gain: _ } = move s
+  b
+}

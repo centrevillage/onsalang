@@ -1,0 +1,11 @@
+[package]
+name = "p4"
+edition = "2026"
+
+[export]
+prefix = "t_"
+flows = ["fx.boom", "fx.gainq"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

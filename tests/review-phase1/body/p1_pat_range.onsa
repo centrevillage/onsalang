@@ -1,0 +1,18 @@
+pub fn big(x: U8) -> I32 {
+  match x {
+    300 => 1,
+    _ => 0,
+  }
+}
+
+pub fn negu(x: U32) -> I32 {
+  match x {
+    -1 => 1,
+    _ => 0,
+  }
+}
+
+test "pat" {
+  assert big(44) == 0
+  assert negu(4294967295) == 0
+}

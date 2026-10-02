@@ -1,0 +1,4 @@
+use math.{sin}
+use std.math
+
+pub rt fn f(x: F32) -> F32 { sin(x) }

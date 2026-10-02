@@ -1,0 +1,27 @@
+use std.dsp.test.{impulse}
+
+pub flow n1(x: Sig[F32]) -> Sig[F32] {
+  let prev_0 = prev(x, 0.0)
+  let b = prev(x, 0.0) * 2.0
+  prev_0 + b
+}
+
+pub flow n2(x: Sig[F32]) -> Sig[F32] {
+  let poisoned = prev(x, 0.0)
+  poisoned
+}
+
+pub flow n3(x: Sig[F32]) -> Sig[F32] {
+  let d = delay(x, 3, 0.0)
+  let d_buf = prev(x, 0.0)
+  d + d_buf
+}
+
+test "n1" {
+  let o = n1.render(n1.Config {}, n1.Params {}, impulse(3), 48000.0)
+  assert o.out[1] == 3.0
+}
+test "n2" {
+  let o = n2.render(n2.Config {}, n2.Params {}, impulse(3), 48000.0)
+  assert o.out[1] == 1.0
+}

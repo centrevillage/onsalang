@@ -1,0 +1,18 @@
+use std.array.{from_fn}
+
+pub fn counter() -> I32 {
+  var n: I32 = 0
+  let xs: [I32; 3] = from_fn(fn(i: U32) -> I32 {
+    n = n + 1
+    n
+  })
+  n + xs[2]
+}
+
+test "capture assign" {
+  assert counter() == 0
+}
+
+test "capture assign 3" {
+  assert counter() == 6
+}

@@ -1,0 +1,2 @@
+pub fn a() -> Option[I32] { Option.None }
+pub fn b() -> Option[I32] { Option.Some(1) }

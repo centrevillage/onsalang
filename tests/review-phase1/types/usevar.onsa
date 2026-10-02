@@ -1,0 +1,27 @@
+pub enum Shape {
+  Circle(F32),
+  Square(F32),
+}
+
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub fn new(x: F32) -> Point { Point { x: x } }
+  pub fn get(self) -> F32 { self.x }
+}
+
+use Shape.{Circle}
+use Point.{new}
+use Point.{get}
+
+pub fn area(s: Shape) -> F32 {
+  match s {
+    Circle(r) => r * r,
+    Shape.Square(a) => a * a,
+  }
+}
+
+pub fn mk() -> Point { new(1.0) }
+pub fn c() -> Shape { Circle(2.0) }

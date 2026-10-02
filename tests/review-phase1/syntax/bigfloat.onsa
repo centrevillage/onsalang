@@ -1,0 +1,9 @@
+pub fn big() -> F32 {
+  let x: F32 = 1.0e39
+  x
+}
+
+test "inf" {
+  assert big() > 3.0e38
+  assert big() == (big() + 1.0)
+}

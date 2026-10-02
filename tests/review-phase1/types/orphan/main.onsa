@@ -1,0 +1,18 @@
+use util.{Point}
+
+impl Point {
+  pub fn twice(self) -> F32 { self.x * 2.0 }
+}
+
+impl F32 {
+  pub const HALF: F32 = 0.5
+  pub fn double(self) -> F32 { self * 2.0 }
+  pub fn make() -> F32 { 1.0 }
+}
+
+impl Option[F32] {
+  pub fn zero() -> F32 { 0.0 }
+}
+
+pub fn run(p: Point) -> F32 { p.twice() + F32.HALF + F32.make() }
+pub fn run2(x: F32) -> F32 { x.double() }

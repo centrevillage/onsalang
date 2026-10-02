@@ -1,0 +1,14 @@
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+/// 左右を入れ替える
+pub flow swap(l: Sig[F32], r: Sig[F32]) -> Sig[Stereo] {
+  Stereo { l: r, r: l }
+}
+
+/// 同じ処理を、入力名を変えて書いたもの
+pub flow swap_ok(a: Sig[F32], b: Sig[F32]) -> Sig[Stereo] {
+  Stereo { l: b, r: a }
+}

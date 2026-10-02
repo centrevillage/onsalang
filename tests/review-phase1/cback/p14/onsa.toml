@@ -1,0 +1,11 @@
+[package]
+name = "p14"
+edition = "2026"
+
+[export]
+prefix = "t_"
+fns = ["m.mul"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

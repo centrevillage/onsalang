@@ -1,0 +1,16 @@
+fn bump(inout x: I32) {
+  x = x + 1
+}
+
+fn g(inout x: I32, early: Bool) {
+  if early {
+    return bump(inout x)
+  }
+  x = x + 10
+}
+
+test "return of a unit call keeps the call" {
+  var a: I32 = 0
+  g(inout a, true)
+  assert a == 1
+}

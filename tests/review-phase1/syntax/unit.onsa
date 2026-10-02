@@ -1,0 +1,11 @@
+pub fn f() -> () {
+}
+
+pub fn g() {
+  f()
+  return
+}
+
+pub fn h() -> () {
+  ()
+}

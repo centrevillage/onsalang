@@ -1,0 +1,15 @@
+pub struct HasSpan {
+  s: Span[F32],
+}
+
+pub fn first(h: HasSpan) -> F32 { h.s.get(0).unwrap() }
+
+pub fn mk(xs: Span[F32]) -> F32 {
+  let h = HasSpan { s: xs }
+  first(h)
+}
+
+test "span in struct" {
+  let a = [1.0, 2.0]
+  assert mk(a) == 1.0
+}

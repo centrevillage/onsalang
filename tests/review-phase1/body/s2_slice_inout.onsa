@@ -1,0 +1,22 @@
+pub rt fn fill1(inout xs: Span[F32]) {
+  xs.fill!(1.0)
+}
+
+pub rt fn add(inout dst: Span[F32], src: Span[F32]) {
+  dst.add_from!(src)
+}
+
+pub fn sub_view() {
+  var a: [F32; 8] = [0.0; 8]
+  fill1(inout a.slice(0, 4))
+}
+
+pub fn sub_alias() {
+  var a: [F32; 8] = [0.0; 8]
+  add(inout a.slice(0, 4), a.slice(2, 6))
+}
+
+pub fn recv_alias() {
+  var a: [F32; 8] = [0.0; 8]
+  a.slice(0, 4).fill!(2.0)
+}

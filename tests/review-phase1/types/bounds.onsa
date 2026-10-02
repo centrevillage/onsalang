@@ -1,0 +1,12 @@
+pub fn a[T: ?Num](x: T, y: T) -> T { x + y }
+pub fn b[T: Hash](x: T) -> T { x }
+pub fn c[T: Show](x: T) -> T { x }
+pub fn d[T: Default](x: T) -> T { x }
+pub fn e[T: Copy + ?Dup](x: T) -> T { x }
+pub fn f[T: Float + Num](x: T) -> T { x }
+pub fn g[F32](x: F32) -> F32 { x }
+pub fn h[T, T](x: T) -> T { x }
+pub fn i[T: std.math.Num](x: T) -> T { x }
+
+pub fn use_a() -> I32 { a(1, 2) }
+pub fn use_b(x: F32) -> F32 { b(x) }

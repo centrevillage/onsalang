@@ -1,0 +1,29 @@
+fn empty() {} // todo
+
+fn args(a: I32,
+        b: I32) -> I32 {
+  // first
+
+  a
+}
+
+fn chain(x: F32) -> F32 {
+  let y = x
+    .abs()
+    .sqrt() // start
+  // magnitude
+
+  y
+}
+
+fn cond(c: Bool) -> I32 {
+  if c {
+    // yes
+    1
+  } else {
+    // no
+    2
+  }
+}
+
+fn one(c: Bool) -> I32 { if c { 1 } else { 2 } } // trailing

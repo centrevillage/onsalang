@@ -1,0 +1,6 @@
+pub fn m(s: Str, x: U32) -> U32 {
+  match s {
+    "a{x}b" => 1,
+    _ => 0,
+  }
+}

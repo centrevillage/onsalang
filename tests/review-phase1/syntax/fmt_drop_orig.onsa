@@ -1,0 +1,6 @@
+fn f() {
+  let badName = 1
+  let = 2
+}
+
+fn g() {}

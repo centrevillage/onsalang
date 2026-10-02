@@ -1,0 +1,16 @@
+fn f(c: Bool, o: Option[I32]) -> I32 {
+  let y = if c { 1 } else { return 5 }
+  let z = match o {
+    Some(v) => v,
+    None => {
+      return 7
+    },
+  }
+  y + z
+}
+
+test "diverging branches" {
+  assert f(true, Some(2)) == 3
+  assert f(false, Some(2)) == 5
+  assert f(true, None) == 7
+}

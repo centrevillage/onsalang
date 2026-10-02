@@ -1,0 +1,18 @@
+pub rt fn add(inout dst: Span[F32], src: Span[F32]) {
+  dst.add_from!(src)
+}
+
+pub fn self_slice() {
+  var a: [F32; 8] = [1.0; 8]
+  a.copy_from!(a.slice(0, 8))
+}
+
+pub fn fn_slice() {
+  var a: [F32; 8] = [1.0; 8]
+  add(inout a, a.slice(0, 8))
+}
+
+pub fn fn_plain() {
+  var a: [F32; 8] = [1.0; 8]
+  add(inout a, a)
+}

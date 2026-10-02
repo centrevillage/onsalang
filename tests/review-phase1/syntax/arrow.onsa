@@ -1,0 +1,13 @@
+fn f(x: I32) ->
+  I32 {
+  x
+}
+
+type Alias =
+  I32
+
+fn g() -> I32 {
+  let h: fn(I32) ->
+    I32 = f
+  h(1)
+}

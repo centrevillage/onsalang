@@ -1,0 +1,3 @@
+pub fn f[T](x: T) -> T { 1.0 }
+pub fn g[T](x: T, y: F32) -> T { y }
+pub fn h[T: Num](x: [T; 4]) -> T { x }

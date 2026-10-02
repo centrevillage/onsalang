@@ -1,0 +1,9 @@
+pub flow gain_s(s: Sig[F32]) -> Sig[F32] {
+  s * 0.5
+}
+pub flow gain_frames(frames: Sig[F32]) -> Sig[F32] {
+  frames * 0.5
+}
+pub flow gain_out(out: Sig[F32]) -> Sig[F32] {
+  out * 0.5
+}

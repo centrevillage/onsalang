@@ -1,0 +1,8 @@
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  fn private_method(self) -> F32 { self.x }
+  fn private_assoc() -> Point { Point { x: 0.0 } }
+}

@@ -1,0 +1,7 @@
+pub rt fn pick(move a: Buf[F32], move b: Buf[F32], c: Bool) -> Buf[F32] {
+  if c { a } else { b }
+}
+
+pub fn pick2(move a: Buf[F32], move b: Buf[F32], c: Bool) -> Buf[F32] {
+  if c { a } else { b }
+}

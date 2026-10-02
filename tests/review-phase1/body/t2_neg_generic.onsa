@@ -1,0 +1,7 @@
+pub fn neg[T: Num](x: T) -> T { -x }
+
+test "neg unsigned" {
+  let u: U32 = 5
+  let v = neg(u)
+  assert v == 0
+}

@@ -1,0 +1,9 @@
+use a_b
+use a.b
+
+test "two option types" {
+  let o1: Option[a_b.P] = Some(a_b.P { x: 1 })
+  let o2: Option[b.P] = Some(b.P { y: 2.0, z: 3.0 })
+  assert o1.is_some()
+  assert o2.is_some()
+}

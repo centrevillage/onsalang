@@ -1,0 +1,19 @@
+use std.math.{max, abs}
+
+pub fn id[T](x: T) -> T { x }
+
+pub fn lit_to_generic() -> I32 {
+  let a = id(3)
+  a
+}
+
+pub fn lit_to_max() -> I32 {
+  let m = max(1, 2)
+  m
+}
+
+pub fn later_decides() -> F32 {
+  var acc = 0.0
+  let y = abs(acc)
+  y + (1.0 as F32)
+}

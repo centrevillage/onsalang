@@ -1,0 +1,9 @@
+pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }
+
+pub fn allocs(x: U32) -> U32 uses {Alloc} { mk(x).len() }
+
+pub fn apply(f: fn(U32) -> U32, x: U32) -> U32 { f(x) }
+
+pub fn outer() -> U32 uses {Alloc} { apply(fn(x: U32) -> U32 { mk(4).len() + x }, 1) }
+
+pub fn outer2() -> U32 uses {Alloc} { apply(allocs, 1) }

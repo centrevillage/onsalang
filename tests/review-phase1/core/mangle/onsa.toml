@@ -1,0 +1,6 @@
+[package]
+name = "mangle"
+edition = "2026"
+
+[dependencies]
+std = "0.2.0"

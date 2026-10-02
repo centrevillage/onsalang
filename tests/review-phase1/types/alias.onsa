@@ -1,0 +1,15 @@
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub fn new(x: F32) -> Point { Point { x: x } }
+}
+
+type P = Point
+type A = B
+type B = A
+type V[T] = [T; 4]
+
+pub fn f() -> P { P.new(1.0) }
+pub fn g() -> P { P { x: 1.0 } }

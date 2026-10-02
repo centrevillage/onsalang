@@ -1,0 +1,26 @@
+fn clear(inout o: Option[I32]) -> Bool {
+  o = None
+  false
+}
+
+test "guard mutates the scrutinee" {
+  var x: Option[I32] = Some(5)
+  let r = match x {
+    Some(v) if clear(inout x) => 1,
+    Some(v) => v,
+    None => 99,
+  }
+  assert r == 5
+}
+
+test "arm mutates the scrutinee" {
+  var x: Option[I32] = Some(5)
+  let r = match x {
+    Some(v) => {
+      x = None
+      v
+    },
+    None => 99,
+  }
+  assert r == 5
+}

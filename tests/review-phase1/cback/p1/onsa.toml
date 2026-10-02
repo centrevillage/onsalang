@@ -1,0 +1,15 @@
+[package]
+name = "p1"
+edition = "2026"
+
+[dependencies]
+std = "0.2.0"
+
+[export]
+prefix = "t_"
+fns = ["ops.narrow_u32", "ops.shr_i8", "ops.shr_i16", "ops.wmul_u16", "ops.wmul_i16", "ops.cmul_u32", "ops.sat_i64", "ops.sat_u64", "ops.order", "ops.cast_order", "ops.trunc_order"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+provides = []

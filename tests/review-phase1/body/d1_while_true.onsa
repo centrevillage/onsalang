@@ -1,0 +1,20 @@
+pub fn first_pos(xs: [I32; 4]) -> U32 {
+  var i: U32 = 0
+  while true {
+    if xs[i] > 0 { return i }
+    i = i + 1
+  }
+}
+
+pub fn ends_in_panic(x: I32) -> I32 {
+  if x > 0 { return x }
+  panic("negative")
+}
+
+pub fn if_both_return(c: Bool) -> I32 {
+  if c {
+    return 1
+  } else {
+    return 2
+  }
+}

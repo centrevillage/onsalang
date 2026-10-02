@@ -1,0 +1,10 @@
+pub fn z[T: Num](x: T) -> T { x + T.ZERO }
+pub fn o[T: Float](x: T) -> T { x * T.ONE }
+pub fn pi() -> F32 { F32.PI + F32.EPSILON + F32.NAN }
+pub fn im() -> I32 { I32.MAX }
+pub fn bits() -> U32 { U8.BITS }
+pub fn bad() -> F32 { F32.ZERO }
+
+test "zero" {
+  assert z(1.5) == 1.5
+}

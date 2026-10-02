@@ -1,0 +1,16 @@
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl Wrap[F32] {
+  pub fn get(self) -> F32 { self.v }
+  pub fn mk() -> Wrap[F32] { Wrap { v: 1.0 } }
+}
+
+impl[T] Wrap[T] {
+  pub fn id(self) -> T { self.v }
+}
+
+pub fn a(w: Wrap[I32]) -> I32 { w.id() }
+pub fn b(w: Wrap[I32]) -> F32 { w.get() }
+pub fn c() -> Wrap[I32] { Wrap.mk() }

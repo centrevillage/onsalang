@@ -1,0 +1,11 @@
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn continue_hole(n: U32) uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(4)
+  var i: U32 = 0
+  while i < n {
+    i = i + 1
+    take(move b)
+    continue
+  }
+}

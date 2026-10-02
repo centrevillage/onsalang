@@ -1,0 +1,10 @@
+[package]
+name = "std"
+edition = "2026"
+
+[dependencies]
+foo = "1.0.0"
+std = "9.9.9"
+
+[bogus]
+x = 1

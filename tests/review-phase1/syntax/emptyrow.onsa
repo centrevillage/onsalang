@@ -1,0 +1,7 @@
+pub fn f() -> I32 uses {} {
+  1
+}
+
+pub fn g[T, U](x: T) -> T {
+  x
+}

@@ -1,0 +1,4 @@
+test "f32 literal overflow" {
+  let x: F32 = 1e39
+  assert x > 0.0
+}

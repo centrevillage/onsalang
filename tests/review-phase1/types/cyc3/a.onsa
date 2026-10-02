@@ -1,0 +1,2 @@
+use cyc3.b.{g}
+pub fn f() -> I32 { g() }

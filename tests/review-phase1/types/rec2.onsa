@@ -1,0 +1,9 @@
+pub enum List {
+  Cons(I32, List),
+  Nil,
+}
+
+test "rec" {
+  let l = List.Nil
+  assert true
+}

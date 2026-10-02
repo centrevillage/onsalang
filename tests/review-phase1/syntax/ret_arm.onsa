@@ -1,0 +1,17 @@
+pub fn f(v: Option[I32]) -> I32 {
+  let x = match v {
+    Some(x) => x,
+    None => return 0,
+  }
+  x
+}
+
+pub fn g(v: Option[I32]) -> I32 {
+  let x = match v {
+    Some(y) => y,
+    None => {
+      return 0
+    },
+  }
+  x
+}

@@ -1,0 +1,4 @@
+use std.math.{sin}
+pub rt fn f(x: F32) -> F32 { sin(x) }
+pub fn g() -> I32 { std.main.h() }
+pub fn h() -> I32 { 1 }

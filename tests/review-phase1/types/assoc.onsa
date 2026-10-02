@@ -1,0 +1,17 @@
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub const ORIGIN: P = P { x: 0.0 }
+  const SCALE: F32 = 2.0
+  pub fn s(self) -> F32 { self.x * P.SCALE }
+}
+
+pub fn a() -> P { P.ORIGIN }
+pub fn b() -> F32 { P.ORIGIN.x }
+pub fn c(p: P) -> F32 { p.ORIGIN.x }
+
+test "assoc" {
+  assert a().s() == 0.0
+}

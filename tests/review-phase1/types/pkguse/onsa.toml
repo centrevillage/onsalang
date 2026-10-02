@@ -1,0 +1,3 @@
+[package]
+name = "pkguse"
+edition = "2026"

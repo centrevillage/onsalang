@@ -1,0 +1,8 @@
+const A: U32 = B
+const B: U32 = A
+const C: U32 = D
+const D: U32 = 3
+
+test "c" {
+  assert C == 3
+}

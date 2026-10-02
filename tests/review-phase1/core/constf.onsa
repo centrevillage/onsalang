@@ -1,0 +1,6 @@
+const K: F32 = 1.0000000596046447753906250001
+
+test "f32 const literal is rounded once" {
+  let x: F32 = 1.0000000596046447753906250001
+  assert K == x
+}

@@ -1,0 +1,21 @@
+fn boom() -> I32 {
+  let xs: [I32; 2] = [0, 0]
+  let i: U32 = 5
+  xs[i]                       // 範囲外の添字で panic する
+}
+
+fn bump(inout n: I32) -> I32 {
+  n = n + 1
+  0
+}
+
+test "Rust なら panic する（引数は呼ぶ前に評価される）" {
+  let v = Some(1).unwrap_or(boom())
+  assert v == 1
+}
+
+test "引数の中の inout の副作用" {
+  var n: I32 = 0
+  let v = Some(1).unwrap_or(bump(inout n))
+  assert n == 1
+}

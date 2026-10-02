@@ -1,0 +1,11 @@
+use std.math.{sin}
+use std.math
+
+pub fn helper() -> F32 { 1.0 }
+
+pub fn a(x: F32) -> F32 {
+  let sin = 2.0
+  let helper = 3.0
+  let math = 4.0
+  sin + helper + math + x
+}

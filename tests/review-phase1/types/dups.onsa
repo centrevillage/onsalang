@@ -1,0 +1,16 @@
+pub struct P {
+  x: F32,
+  x: I32,
+}
+
+pub enum E {
+  A,
+  A(I32),
+}
+
+pub fn f(a: I32, a: I32) -> I32 { a }
+
+pub flow fl(x: Sig[F32], x: Ctl[F32]) -> Sig[F32] { x }
+
+pub fn g(p: P) -> F32 { p.x }
+pub fn h() -> E { E.A }

@@ -1,0 +1,42 @@
+use std.dsp.test.{impulse}
+
+pub flow two_lets(x: Sig[F32]) -> Sig[F32] {
+  let x1 = prev(x, 0.0)
+  let x2 = prev(x1, 0.0)
+  x2
+}
+
+pub flow two_inline(x: Sig[F32]) -> Sig[F32] {
+  prev(prev(x, 0.0), 0.0)
+}
+
+pub flow counter(x: Sig[F32]) -> Sig[F32] {
+  let n = prev(n, 0.0) + 1.0
+  n
+}
+
+pub flow inst_in_prev(x: Sig[F32]) -> Sig[F32] {
+  prev(counter~(x), 0.0)
+}
+
+test "two lets: x[n-2]" {
+  let o = two_lets.render(two_lets.Config {}, two_lets.Params {}, impulse(5), 48000.0)
+  assert o.out[2] == 1.0
+  assert o.out[1] == 0.0
+}
+
+test "two inline: x[n-2]" {
+  let o = two_inline.render(two_inline.Config {}, two_inline.Params {}, impulse(5), 48000.0)
+  assert o.out[2] == 1.0
+}
+
+test "two inline: actual x[n-1]" {
+  let o = two_inline.render(two_inline.Config {}, two_inline.Params {}, impulse(5), 48000.0)
+  assert o.out[1] == 1.0
+}
+
+test "instance inside prev: 0,1,2,3" {
+  let o = inst_in_prev.render(inst_in_prev.Config {}, inst_in_prev.Params {}, impulse(5), 48000.0)
+  assert o.out[1] == 1.0
+  assert o.out[3] == 3.0
+}

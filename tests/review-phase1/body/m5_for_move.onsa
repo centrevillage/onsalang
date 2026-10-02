@@ -1,0 +1,10 @@
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn for_move_twice(move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for b in move xs {
+    take(move b)
+  }
+  for c in move xs {
+    take(move c)
+  }
+}

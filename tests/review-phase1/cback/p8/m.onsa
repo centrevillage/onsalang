@@ -1,0 +1,58 @@
+fn total(xs: Span[F32]) -> F32 {
+  var acc: F32 = 0.0
+  for x in xs {
+    acc = acc + x
+  }
+  acc
+}
+
+fn arr_total(xs: [F32; 4]) -> F32 {
+  total(xs)
+}
+
+pub fn run() -> F32 {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  arr_total(a)
+}
+
+struct Inner {
+  a: I32,
+  b: I32,
+}
+
+struct Outer {
+  i: Inner,
+  j: Inner,
+}
+
+fn mix(o: Outer) -> Inner {
+  var r = Inner { a: 0, b: 0 }
+  r.a = o.i.b
+  r.b = o.i.a
+  r
+}
+
+pub fn alias_field() -> I32 {
+  var o = Outer { i: Inner { a: 1, b: 2 }, j: Inner { a: 0, b: 0 } }
+  o.i = mix(o)
+  (o.i.a * 10) + o.i.b
+}
+
+fn side(inout n: I32) -> Bool {
+  n = n + 1
+  true
+}
+
+pub fn logic() -> I32 {
+  var n: I32 = 0
+  let a = (n == 1) && side(inout n)
+  let b = (n == 0) || side(inout n)
+  let c = (n == 0) && side(inout n)
+  if a || b || c { n } else { -1 }
+}
+
+test "t" {
+  assert run() == 10.0
+  assert alias_field() == 21
+  assert logic() == 1
+}

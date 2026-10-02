@@ -1,0 +1,5 @@
+use dsp.synth.{voice}
+use dsp.synth.voice.{State, Params}
+
+pub fn mk() -> Params { Params { gain: 1.0 } }
+pub fn mk2() -> voice.Params { voice.Params { gain: 1.0 } }

@@ -1,0 +1,27 @@
+/// A point.
+pub struct P {
+  x: F32,
+  y: F32,
+} /// x coordinate
+/// y coordinate
+
+pub fn g(v: I32) -> I32 {
+  match v {
+    0 => 1,
+    1 => 2,
+    _ => 3,
+  } // zero case
+  // one case
+}
+
+pub fn coeffs() -> [F32; 3] {
+  let a = [
+    0.5,
+    0.25,
+    0.125,
+  ] // b0
+  // b1
+  // b2
+
+  a
+}

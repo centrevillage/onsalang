@@ -1,0 +1,10 @@
+const A: F32 = 1.5
+const B: F32 = -A
+
+pub fn get() -> F32 {
+  B
+}
+
+test "b" {
+  assert get() == -1.5
+}

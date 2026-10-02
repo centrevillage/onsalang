@@ -1,0 +1,22 @@
+fn one_tuple() -> I32 {
+  let t = (1,)
+  t.0
+}
+
+fn one_tuple_type(t: (I32,)) -> I32 {
+  t.0
+}
+
+fn paren_pat(v: I32) -> I32 {
+  let (a) = v
+  a
+}
+
+fn arm_block(v: I32) -> I32 {
+  match v {
+    0 => {
+      1
+    }
+    _ => 2,
+  }
+}

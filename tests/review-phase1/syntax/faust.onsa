@@ -1,0 +1,13 @@
+flow acc(x: Sig[F32]) -> Sig[F32] {
+  x + ~ _
+}
+
+flow eqn(x: Sig[F32]) -> Sig[F32] {
+  y = x * 0.5
+  y
+}
+
+fn usize_fix() -> I32 {
+  x += 1
+  x
+}

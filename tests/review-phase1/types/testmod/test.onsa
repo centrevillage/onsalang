@@ -1,0 +1,5 @@
+pub fn helper(x: I32) -> I32 { x + 1 }
+pub fn boom() -> I32 {
+  assert false
+  0
+}

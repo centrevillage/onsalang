@@ -1,0 +1,3 @@
+pub flow gain(x: Sig[F32]) -> Sig[F32] {
+  x * 2.0
+}

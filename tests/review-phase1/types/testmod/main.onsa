@@ -1,0 +1,3 @@
+test "real" {
+  assert true
+}

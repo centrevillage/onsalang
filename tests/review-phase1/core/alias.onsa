@@ -1,0 +1,23 @@
+struct P { x: I32, y: I32 }
+
+fn g(inout a: P, b: P) -> I32 {
+  a.x = 100
+  b.x
+}
+
+fn h(inout a: Span[I32], b: Span[I32]) -> I32 {
+  a[0] = 100
+  b[0]
+}
+
+test "borrow and inout of the same struct" {
+  var p = P { x: 1, y: 2 }
+  let r = g(inout p, p)
+  assert r == 1
+}
+
+test "borrow and inout of the same array as spans" {
+  var xs: [I32; 3] = [1, 2, 3]
+  let r = h(inout xs, xs)
+  assert r == 1
+}

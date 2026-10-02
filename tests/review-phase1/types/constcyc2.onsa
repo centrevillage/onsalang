@@ -1,0 +1,3 @@
+const A: U32 = B
+const B: U32 = A
+pub fn f() -> U32 { 1 }

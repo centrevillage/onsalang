@@ -1,0 +1,17 @@
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub struct Q {
+    y: F32,
+  }
+  pub flow inner(x: Sig[F32]) -> Sig[F32] { x }
+  type A = F32
+  test "in impl" {
+    assert true
+  }
+  use std.math.{sin}
+}
+
+pub fn f(q: Q) -> A { 1.0 }

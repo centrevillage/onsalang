@@ -1,0 +1,4 @@
+pub struct Stereo { l: F32, r: F32 }
+pub flow sw(x: Sig[Stereo]) -> Sig[Stereo] {
+  Stereo { l: x.r, r: x.l }
+}

@@ -1,0 +1,25 @@
+use std.dsp.test.{assert_near}
+
+struct Pair {
+  a: U32,
+  b: U32,
+}
+
+fn next(inout c: U32) -> U32 {
+  c = c + 1
+  c
+}
+
+fn f(x: U32, p: Pair) -> U32 {
+  (x * 100) + p.a
+}
+
+pub fn argorder() -> U32 {
+  var c: U32 = 0
+  let ps: [Pair; 4] = [Pair { a: 0, b: 0 }, Pair { a: 1, b: 0 }, Pair { a: 2, b: 0 }, Pair { a: 3, b: 0 }]
+  f(next(inout c), ps[next(inout c)])
+}
+
+test "v" {
+  assert_near(argorder() as F64, 0.0, 0.0)
+}

@@ -1,0 +1,22 @@
+test "tuple match yields a value" {
+  let a: I32 = 1
+  let b: I32 = 2
+  let r = match (a, b) {
+    (x, y) => x + y,
+  }
+  assert r == 3
+}
+
+test "statement match with guard works" {
+  let o: Option[I32] = Some(3)
+  var r: I32 = 0
+  match o {
+    Some(v) if v > 0 => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  assert r == 1
+}

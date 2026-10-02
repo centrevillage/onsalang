@@ -1,0 +1,45 @@
+@foo
+pub fn a() -> I32 { 1 }
+
+@derive(PartialEq)
+pub fn b() -> I32 { 1 }
+
+@deprecated
+pub struct S1 {
+  x: F32,
+}
+
+@relaxed
+@repr(rust)
+@param(min: 0.0)
+pub struct S2 {
+  x: F32,
+}
+
+@bogus
+const K: I32 = 1
+
+@derive(Eq)
+pub struct S3 {
+  x: F32,
+}
+
+@derive(Ord)
+pub struct S4 {
+  x: I32,
+}
+
+pub struct NoEq {
+  x: I32,
+}
+
+@derive(PartialEq)
+pub struct S5 {
+  n: NoEq,
+}
+
+@nope
+impl S1 {
+  @what
+  pub fn f(self) -> F32 { self.x }
+}

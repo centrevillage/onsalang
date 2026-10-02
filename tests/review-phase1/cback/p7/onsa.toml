@@ -1,0 +1,11 @@
+[package]
+name = "p7"
+edition = "2026"
+
+[export]
+prefix = "t_"
+fns = ["c.get"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

@@ -1,0 +1,16 @@
+[package]
+name = "p6"
+edition = "2026"
+
+[export]
+prefix = "t_"
+flows = ["fx.dl"]
+
+[targets.daisy]
+kind = "staticlib"
+platform = "thumbv7em-none-eabihf"
+provides = []
+panic = "trap"
+
+[targets.daisy.memory]
+bulk_threshold = 64

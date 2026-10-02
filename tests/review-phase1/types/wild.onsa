@@ -1,0 +1,2 @@
+pub fn f(_: I32, _: I32) -> I32 { 1 }
+pub flow g(_: Sig[F32], _: Ctl[F32]) -> Sig[F32] { 0.0 }

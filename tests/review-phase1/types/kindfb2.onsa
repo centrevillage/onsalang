@@ -1,0 +1,19 @@
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub struct Direct[T: ?Dup] {
+  item: T,
+}
+
+pub fn need_dup[T](x: T) -> (T, T) { (x, x) }
+
+pub fn via_dup(h: Holder[Buf[F32]]) -> U32 {
+  let c = need_dup(h)
+  0
+}
+
+pub fn via_dup_d(h: Direct[Buf[F32]]) -> U32 {
+  let c = need_dup(h)
+  0
+}

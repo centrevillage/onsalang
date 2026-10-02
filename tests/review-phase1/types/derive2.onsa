@@ -1,0 +1,25 @@
+@derive(Eq)
+pub struct S3 {
+  x: F32,
+}
+
+pub struct NoEq {
+  x: I32,
+}
+
+@derive(PartialEq)
+pub struct S5 {
+  n: NoEq,
+}
+
+pub fn need_eq[T: Eq](a: T, b: T) -> Bool { a == b }
+
+pub fn t1(a: S3, b: S3) -> Bool { need_eq(a, b) }
+pub fn t2(a: S5, b: S5) -> Bool { a == b }
+pub fn t3(a: S3, b: S3) -> Bool { a == b }
+
+test "eq" {
+  let a = S5 { n: NoEq { x: 1 } }
+  let b = S5 { n: NoEq { x: 2 } }
+  assert !(a == b)
+}

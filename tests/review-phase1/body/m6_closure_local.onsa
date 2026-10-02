@@ -1,0 +1,11 @@
+use std.array.{from_fn}
+
+pub fn take(move b: Buf[F32]) -> I32 uses {Alloc} { 0 }
+
+pub fn closure_double_move() -> [I32; 2] uses {Alloc} {
+  from_fn(fn(i: U32) -> I32 {
+    let b: Buf[F32] = Buf.zeroed(4)
+    let x = take(move b)
+    take(move b)
+  })
+}

@@ -1,0 +1,13 @@
+pub struct A {
+  x: F32,
+}
+
+impl A {
+  pub fn one(self) -> F32 {
+    self.y
+  }
+
+  pub fn two(self) -> I32 {
+    self.x
+  }
+}

@@ -1,0 +1,11 @@
+pub struct Hz(F32)
+
+pub fn b(h: Hz) -> F32 {
+  match h {
+    Hz(v) => v,
+  }
+}
+pub fn c(h: Hz) -> F32 {
+  let Hz(v) = h
+  v
+}

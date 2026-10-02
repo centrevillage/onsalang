@@ -1,0 +1,7 @@
+fn depth(n: U32) -> U32 {
+  if n == 0 { 0 } else { depth(n - 1) + 1 }
+}
+
+test "recursion 50 deep" {
+  assert depth(50) == 50
+}

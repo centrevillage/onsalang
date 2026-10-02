@@ -1,0 +1,3 @@
+pub flow mix(x: Sig[F32], params: Sig[F32], g: Init[F32]) -> Sig[F32] {
+  (x + params) * g
+}

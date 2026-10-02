@@ -1,0 +1,5 @@
+test "bitwise not on integers" {
+  let a: U8 = 0x0F
+  let b = !a
+  assert b == 0xF0
+}

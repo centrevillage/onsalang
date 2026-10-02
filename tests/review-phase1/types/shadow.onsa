@@ -1,0 +1,17 @@
+pub struct F32 {
+  x: I32,
+}
+
+pub enum Option {
+  Some(I32),
+  None,
+}
+
+pub fn f(x: F32) -> F32 { x }
+pub fn g() -> Option { Option.None }
+pub fn h(x: I32) -> I32 {
+  match Some(x) {
+    Some(v) => v,
+    None => 0,
+  }
+}

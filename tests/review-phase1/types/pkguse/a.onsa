@@ -1,0 +1,1 @@
+pub(pkg) use b.{g}

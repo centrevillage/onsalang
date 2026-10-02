@@ -1,0 +1,9 @@
+pub flow np(x: Sig[F32]) -> Sig[F32] {
+  let a = prev(prev(y, 0.0) + y, 0.0)
+  let y = x
+  a
+}
+
+pub flow nd(x: Sig[F32]) -> Sig[F32] {
+  prev(delay(x, 2, 0.0), 0.0)
+}

@@ -1,0 +1,8 @@
+fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn f(c: Bool) -> I32 {
+  id(if c { 1 }
+     else { 2 })
+}

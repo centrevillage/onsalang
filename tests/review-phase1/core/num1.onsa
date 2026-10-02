@@ -1,0 +1,16 @@
+test "sat mul u64" {
+  let a: U64 = U64.MAX
+  let b = a *| a
+  assert b == U64.MAX
+}
+
+test "trunc i64 at 2^63 panics" {
+  let x: F64 = 9223372036854775808.0
+  let y = x.trunc_i64()
+  assert y > 0
+}
+
+test "neg i32 min" {
+  let y = -(I32.MIN)
+  assert y < 0
+}

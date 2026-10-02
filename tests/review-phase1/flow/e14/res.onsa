@@ -1,0 +1,8 @@
+pub flow r1(x: Sig[F32]) -> Sig[F32] {
+  let delay = x * 2.0
+  delay
+}
+pub flow r2(x: Sig[F32], c: Ctl[F32]) -> Sig[F32] {
+  let sample_rate = c * 2.0
+  x * sample_rate
+}

@@ -1,0 +1,13 @@
+pub fn id[ItemKey](x: ItemKey) -> ItemKey {
+  x
+}
+
+pub fn ok[T](x: T) -> T {
+  x
+}
+
+pub struct HTTPServer {
+  x: F32,
+}
+
+const Pi: F32 = 3.0

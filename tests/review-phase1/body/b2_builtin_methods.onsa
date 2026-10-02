@@ -1,0 +1,11 @@
+use std.math.{sqrt}
+
+pub rt fn two_ways(x: F32) -> F32 { sqrt(x) + x.sqrt() }
+
+pub rt fn float_methods(x: F32) -> Bool { x.floor().is_nan() }
+
+pub fn str_methods(s: Str) -> Option[U32] { s.find(s) }
+
+pub fn str_substr(s: Str) -> U32 { s.substr(0, 1).len() }
+
+pub fn str_bytes(s: Str) -> U32 { s.as_bytes().len() }

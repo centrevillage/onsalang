@@ -1,0 +1,4 @@
+pub flow dl(x: Sig[F64]) -> Sig[F64] {
+  let d = delay(x, 1024, 0.0)
+  d
+}

@@ -1,0 +1,15 @@
+pub trait Area {
+  fn area(self) -> F32
+}
+
+pub struct Sq {
+  s: F32,
+}
+
+impl Area for Sq {
+  fn area(self) -> F32 { self.s * self.s }
+}
+
+pub fn total[T: Area](x: T) -> F32 { x.area() }
+
+pub fn direct(q: Sq) -> F32 { q.area() }

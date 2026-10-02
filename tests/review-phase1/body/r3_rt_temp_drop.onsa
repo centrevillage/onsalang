@@ -1,0 +1,16 @@
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn temp_drop(move b: Buf[F32]) -> U32 { pass(move b).len() }
+
+pub rt fn overwrite(move a: Buf[F32], move c: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  x = move c
+  x
+}
+
+pub fn eat(move b: Buf[F32]) -> U32 uses {Alloc} { 0 }
+
+pub rt fn one_branch(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  if c { return pass(move a) }
+  pass(move a)
+}

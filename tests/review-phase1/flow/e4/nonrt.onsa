@@ -1,0 +1,20 @@
+use std.dsp.test.{impulse}
+
+pub fn make_gain(db: F32) -> F32 {
+  db * 0.5
+}
+
+// §11.5: a non-rt fn with Init-or-constant arguments is evaluated in `init`.
+pub flow g(x: Sig[F32], level: Init[F32]) -> Sig[F32] {
+  x * make_gain(level)
+}
+
+pub flow g2(x: Sig[F32]) -> Sig[F32] {
+  let k = make_gain(sample_rate())
+  x * k
+}
+
+test "g" {
+  let o = g.render(g.Config { level: 2.0 }, g.Params {}, impulse(3), 48000.0)
+  assert o.out[0] == 1.0
+}

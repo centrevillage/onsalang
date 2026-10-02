@@ -1,0 +1,5 @@
+pub fn apply[e](f: fn(U32) -> U32 uses {e}, x: U32) -> U32 uses {e} { f(x) }
+
+pub fn pure_one(x: U32) -> U32 { x }
+
+pub fn use_it() -> U32 { apply(pure_one, 1) }

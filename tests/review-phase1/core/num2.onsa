@@ -1,0 +1,5 @@
+test "sat mul u64" {
+  let a: U64 = U64.MAX
+  let b = a *| a
+  assert b == U64.MAX
+}

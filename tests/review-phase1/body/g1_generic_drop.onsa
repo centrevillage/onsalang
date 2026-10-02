@@ -1,0 +1,7 @@
+pub rt fn drop_t[T](move x: T) {}
+
+pub fn drop_t2[T](move x: T) {}
+
+pub rt fn drop_copy[T: Copy](move x: T) {}
+
+pub rt fn keep_t[T](move x: T) -> T { x }

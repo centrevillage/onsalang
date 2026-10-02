@@ -1,0 +1,5 @@
+pub fn opt_lits() -> Bool { Some(1) == Some(2) }
+
+pub fn arr_lits() -> Bool { [1, 2] == [1, 2] }
+
+pub fn tup_lits() -> Bool { (1, 2.0) == (1, 2.0) }

@@ -1,0 +1,29 @@
+use std.dsp.test.{impulse}
+
+pub flow counter(x: Sig[F32]) -> Sig[F32] {
+  let n = prev(n, 0.0) + 1.0
+  n
+}
+
+// §11.5: every instance in every branch always advances.
+// c = 1,2,3,4,5 ; output = 0,0,counter(n)= 3,4,5
+pub flow sel(x: Sig[F32]) -> Sig[F32] {
+  let c: F32 = prev(c, 0.0) + 1.0
+  if c > 2.0 { counter~(x) } else { 0.0 }
+}
+
+test "instances in branches always advance" {
+  let o = sel.render(sel.Config {}, sel.Params {}, impulse(5), 48000.0)
+  assert o.out[2] == 3.0
+  assert o.out[4] == 5.0
+}
+
+pub flow sel2(x: Sig[F32]) -> Sig[F32] {
+  let c: F32 = prev(c, 0.0) + 1.0
+  match c > 2.0 { true => counter~(x), false => 0.0 }
+}
+
+test "instances in match arms always advance" {
+  let o = sel2.render(sel2.Config {}, sel2.Params {}, impulse(5), 48000.0)
+  assert o.out[2] == 3.0
+}

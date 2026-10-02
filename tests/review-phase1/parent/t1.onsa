@@ -1,0 +1,9 @@
+pub struct Holder[T: ?Dup] {
+  items: (T, U32),
+}
+
+pub fn dup(move h: Holder[Buf[F32]]) -> U32 uses {Alloc} {
+  let a = move h
+  let b = move h
+  1
+}

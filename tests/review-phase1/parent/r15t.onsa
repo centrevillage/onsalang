@@ -1,0 +1,33 @@
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+/// 左右を入れ替える
+pub flow swap(l: Sig[F32], r: Sig[F32]) -> Sig[Stereo] {
+  Stereo { l: r, r: l }
+}
+
+/// 同じ処理を、入力名を変えて書いたもの
+pub flow swap_ok(a: Sig[F32], b: Sig[F32]) -> Sig[Stereo] {
+  Stereo { l: b, r: a }
+}
+
+use std.dsp.test.{impulse}
+
+test "swap_ok: impulse moves from left to right" {
+  let o = swap_ok.render(swap_ok.Config {}, swap_ok.Params {}, impulse(4), Buf.zeroed(4), 48000.0)
+  assert o.l[0] == 0.0
+  assert o.r[0] == 1.0
+}
+
+test "swap: impulse moves from left to right" {
+  let o = swap.render(swap.Config {}, swap.Params {}, impulse(4), Buf.zeroed(4), 48000.0)
+  assert o.r[0] == 1.0
+}
+
+test "swap: actual output is silent" {
+  let o = swap.render(swap.Config {}, swap.Params {}, impulse(4), Buf.zeroed(4), 48000.0)
+  assert o.l[0] == 0.0
+  assert o.r[0] == 0.0
+}

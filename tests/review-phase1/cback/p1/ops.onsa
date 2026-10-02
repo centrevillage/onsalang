@@ -1,0 +1,82 @@
+pub fn narrow_u32(x: U32) -> I32 {
+  match x.narrow_i32() {
+    Some(v) => v,
+    None => -1,
+  }
+}
+
+pub fn shr_i8(x: I8, n: U32) -> I8 {
+  x >> n
+}
+
+pub fn shr_i16(x: I16, n: U32) -> I16 {
+  x >> n
+}
+
+pub fn wmul_u16(a: U16, b: U16) -> U16 {
+  a *% b
+}
+
+pub fn wmul_i16(a: I16, b: I16) -> I16 {
+  a *% b
+}
+
+pub fn cmul_u32(a: U32, b: U32) -> U32 {
+  match a.checked_mul(b) {
+    Some(v) => v,
+    None => 7,
+  }
+}
+
+pub fn sat_i64(x: F64) -> I64 {
+  x.trunc_i64_sat()
+}
+
+pub fn sat_u64(x: F64) -> U64 {
+  x.trunc_u64_sat()
+}
+
+fn next(inout c: U32) -> U32 {
+  c = c + 1
+  c
+}
+
+pub fn order() -> U32 {
+  var xs: [U32; 4] = [0, 0, 0, 0]
+  var c: U32 = 0
+  xs[next(inout c)] = next(inout c) * 10
+  (xs[1] * 100) + xs[2]
+}
+
+fn bump(inout c: I32) -> I64 {
+  c = c + 100
+  0
+}
+
+pub fn cast_order() -> I64 {
+  var c: I32 = 1
+  (c as I64) + bump(inout c)
+}
+
+fn bumpf(inout c: F32) -> I32 {
+  c = c + 100.0
+  0
+}
+
+pub fn trunc_order() -> I32 {
+  var c: F32 = 1.0
+  c.trunc_i32() + bumpf(inout c)
+}
+
+test "interp values" {
+  assert narrow_u32(5) == 5
+  assert shr_i8(-128, 1) == -64
+  assert shr_i16(-32768, 1) == -16384
+  assert wmul_u16(65535, 65535) == 1
+  assert cmul_u32(4294967295, 4294967295) == 7
+  assert sat_i64(1.0e30) == 9223372036854775807
+  assert sat_u64(1.0e30) == 18446744073709551615
+  assert order() == 10
+  assert cast_order() == 1
+  assert trunc_order() == 1
+}

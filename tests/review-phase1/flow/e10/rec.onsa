@@ -1,0 +1,9 @@
+pub flow rec(x: Sig[F32]) -> Sig[F32] {
+  rec~(x)
+}
+pub flow a(x: Sig[F32]) -> Sig[F32] {
+  b~(x)
+}
+pub flow b(x: Sig[F32]) -> Sig[F32] {
+  a~(x)
+}

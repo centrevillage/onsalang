@@ -1,0 +1,10 @@
+use std.dsp.test.{impulse}
+pub struct Stereo { l: F32, r: F32 }
+pub flow swap(l: Sig[F32], r: Sig[F32]) -> Sig[Stereo] {
+  Stereo { l: r, r: l }
+}
+test "swap" {
+  let o = swap.render(swap.Config {}, swap.Params {}, impulse(2), impulse(2), 48000.0)
+  assert o.r[0] == 0.0
+  assert o.l[0] == 0.0
+}

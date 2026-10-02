@@ -1,0 +1,9 @@
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub fn a(self) -> F32 { true }
+  pub fn b(self) -> I32 { 1.5 }
+  pub fn c(self) -> Bool { 3 }
+}

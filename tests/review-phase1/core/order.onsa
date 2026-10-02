@@ -1,0 +1,24 @@
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k
+}
+
+test "binary operands left to right" {
+  var k: U32 = 0
+  let v = (next(inout k) * 10) + next(inout k)
+  assert v == 12
+}
+
+test "nested index left to right" {
+  var k: U32 = 0
+  let xs: [[U32; 3]; 3] = [[0, 1, 2], [10, 11, 12], [20, 21, 22]]
+  let v = xs[next(inout k)][next(inout k)]
+  assert v == 12
+}
+
+test "assignment: value before place (Rust)" {
+  var k: U32 = 0
+  var ys: [U32; 3] = [0, 0, 0]
+  ys[next(inout k)] = next(inout k)
+  assert ys[2] == 1
+}

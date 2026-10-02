@@ -1,0 +1,6 @@
+use util.{Point}
+
+pub fn pm(p: Point) -> F32 { p.private_method() }
+pub fn pa() -> Point { Point.private_assoc() }
+pub fn lit() -> Point { Point { x: 1.0 } }
+pub fn rd(p: Point) -> F32 { p.x }

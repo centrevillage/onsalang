@@ -1,0 +1,5 @@
+use std.math
+
+pub rt fn f(x: F32) -> F32 { math.sin(x) }
+pub rt fn g(x: F32) -> F32 { std.math.cos(x) }
+pub rt fn h(x: F32) -> F32 { x.sqrt() + x.abs() + x.floor() }

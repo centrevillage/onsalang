@@ -1,0 +1,14 @@
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub fn len_of(h: Holder) -> U32 {
+  let b = h.buf
+  b.len()
+}
+
+pub fn whole(b: Buf[F32]) -> U32 {
+  let c = b
+  c.len()
+}

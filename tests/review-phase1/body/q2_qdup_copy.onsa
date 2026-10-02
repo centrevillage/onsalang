@@ -1,0 +1,7 @@
+pub fn first[T: ?Dup](xs: [T; 2]) -> T { xs[0] }
+
+pub fn tail_borrow(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let arr = [move b, Buf.zeroed(2)]
+  let c = first(arr)
+  c.len() + arr[0].len()
+}

@@ -1,0 +1,4 @@
+test "checked_mul u64" {
+  let a: U64 = U64.MAX
+  assert a.checked_mul(a).is_none()
+}

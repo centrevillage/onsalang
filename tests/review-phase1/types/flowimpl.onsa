@@ -1,0 +1,16 @@
+pub flow voice(gain: Ctl[F32], x: Sig[F32]) -> Sig[F32] {
+  x * gain
+}
+
+impl voice.State {
+  pub fn helper(self) -> U32 { 1 }
+}
+
+impl voice.Params {
+  pub fn loud() -> voice.Params { voice.Params { gain: 2.0 } }
+}
+
+pub fn f(s: voice.State) -> U32 { s.helper() }
+pub fn g() -> voice.Params { voice.Params.loud() }
+pub fn h() -> U32 { voice.SIZE }
+pub fn arr() -> [U8; voice.SIZE] { [0; voice.SIZE] }

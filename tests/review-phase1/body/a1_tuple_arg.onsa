@@ -1,0 +1,9 @@
+pub fn total(p: (Buf[F32], Buf[F32])) -> U32 { p.0.len() + p.1.len() }
+
+pub fn total_arr(p: [Buf[F32]; 2]) -> U32 { p[0].len() + p[1].len() }
+
+pub fn tuple_arg(move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  let n = total((a, b))
+  let m = total_arr([a, b])
+  n + m
+}

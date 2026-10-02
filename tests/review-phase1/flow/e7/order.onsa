@@ -1,0 +1,11 @@
+pub flow lp(x: Sig[F32]) -> Sig[F32] {
+  let y = x + (0.5 * prev(y, 0.0))
+  y
+}
+pub flow o(x: Sig[F32], g: Ctl[F32]) -> Sig[F32] {
+  let a = prev(lp~(x), 0.0) + prev(x, 1.0)
+  let b = lp~(prev(a, 0.0))
+  let c = g * 2.0
+  let e = b * c
+  e + a
+}

@@ -1,0 +1,15 @@
+pub fn heavy(x: F32) -> F32 { x }
+
+pub rt fn two_errors(x: F32) -> F32 {
+  let a: F32 = 1.0
+  a = 2.0
+  heavy(x)
+}
+
+pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }
+
+pub fn two_errors_nonrt(x: F32) -> U32 {
+  let a: F32 = 1.0
+  a = 2.0
+  mk(4).len()
+}

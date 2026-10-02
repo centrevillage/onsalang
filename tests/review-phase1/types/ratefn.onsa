@@ -1,0 +1,10 @@
+pub fn sig(x: Sig[F32]) -> Sig[F32] { x }
+pub struct R {
+  r: Init[F32],
+}
+pub fn call() -> F32 { 0.0 }
+
+test "rate in fn" {
+  let r = R { r: 1.0 }
+  assert true
+}

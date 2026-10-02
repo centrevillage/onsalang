@@ -1,0 +1,11 @@
+const MAX_VOICES: U32 = 8
+
+fn f(t: (I32, I32)) -> I32 {
+  let s = "{MAX_VOICES}"
+  1
+}
+
+fn g(t: (I32, I32)) -> I32 {
+  let s = "{t.0}"
+  1
+}

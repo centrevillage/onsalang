@@ -1,0 +1,2 @@
+pub flow fl(g: Ctl[Init[F32]], x: Sig[F32]) -> Sig[F32] { x }
+pub flow fl2(g: Ctl[[Sig[F32]; 2]], x: Sig[F32]) -> Sig[F32] { x }

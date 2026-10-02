@@ -1,0 +1,4 @@
+pub struct Node {
+  v: I32,
+  next: Node,
+}

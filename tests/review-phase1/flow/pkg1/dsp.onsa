@@ -1,0 +1,9 @@
+pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+  let phase = prev(phase, 0.0) + (f0 / sample_rate())
+  phase
+}
+
+pub flow uni(@param(min: 0.0, max: 1000.0, default: 1.0) f0: Ctl[F32]) -> Sig[F32] {
+  let saws = par i in 0..16 { saw~(f0) }
+  saws[0]
+}

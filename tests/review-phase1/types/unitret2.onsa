@@ -1,0 +1,6 @@
+pub fn a() -> () {}
+pub fn b(f: fn() -> ()) {}
+pub fn c(x: ()) -> I32 { 1 }
+pub struct U {
+  u: (),
+}

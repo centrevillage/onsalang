@@ -1,0 +1,16 @@
+[package]
+name = "ord"
+edition = "2026"
+
+[dependencies]
+std = "0.2.0"
+
+[export]
+prefix = "ord_"
+fns = ["ord.order_assign"]
+
+[targets.host]
+kind = "source"
+platform = "host"
+numeric = "strict"
+provides = []

@@ -1,0 +1,25 @@
+[package]
+name = "voice"
+edition = "2026"
+
+[dependencies]
+std = "0.2.0"
+
+[export]
+prefix = "onsa_"
+flows = ["dsp.voice"]
+
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+provides = []
+
+[targets.web]
+kind = "source"
+lang = "js"
+numeric = "strict"
+
+[targets.csrc]
+kind = "source"
+lang = "c"

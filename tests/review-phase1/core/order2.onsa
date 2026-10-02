@@ -1,0 +1,19 @@
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k
+}
+
+test "nested index: interpreter order" {
+  var k: U32 = 0
+  let xs: [[U32; 3]; 3] = [[0, 1, 2], [10, 11, 12], [20, 21, 22]]
+  let v = xs[next(inout k)][next(inout k)]
+  assert v == 21
+}
+
+test "index place panic order" {
+  let xs: [[U32; 3]; 3] = [[0, 1, 2], [10, 11, 12], [20, 21, 22]]
+  var i: U32 = 7
+  var j: U32 = 9
+  let v = xs[i][j]
+  assert v == 0
+}
