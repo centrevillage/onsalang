@@ -297,6 +297,7 @@ pub struct Ring[T, const N: U32] {
 - const ジェネリクスは等値比較のみ（`N + 1` のような型レベル算術は無い）。型の位置では const 引数を整数リテラルか定数名で書く（`Ring[F32, 4]`、`Ring[F32, TABLE_SIZE]`）。
 - 型パラメータには、暗黙に `Dup`（複製できる = Copy か Shared）の制約が付く。Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す（Rust の `?Sized` と同じ形）。その場合、`T` の値は複製できない。生成して返すこと、借用・`inout`・`move` で渡すことはできる。
 - `Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る。
+- 境界を複数付けるときは `+` で並べる（`[T: Num + Default]`）。
 
 ### 4.6 種（kind）: Copy / Shared / Affine
 
@@ -398,11 +399,13 @@ pub fn total_len(xs: Array[Str]) -> U32 {
 ### 6.1 関数
 
 ```onsa
-pub fn mean(xs: Array[F64]) -> Option[F64] {
-  if xs.is_empty() {
+use std.math.{sum}
+
+pub fn mean[const N: U32](xs: [F64; N]) -> Option[F64] {
+  if xs.len() == 0 {
     return None
   }
-  Some(xs.sum() / (xs.len() as F64))
+  Some(sum(xs) / (xs.len() as F64))
 }
 ```
 
@@ -410,7 +413,7 @@ pub fn mean(xs: Array[F64]) -> Option[F64] {
 - ブロックの値は最後の式。`return` は途中脱出にだけ使う（末尾の `return` は `onsa fmt` が除去する）。
 - 多重定義、既定引数、可変長引数、名前付き引数は無い。
 - 無名関数は `fn(x: F32) -> F32 { x * 2.0 }`。期待型が分かる位置では注釈を省略できる: `array.from_fn(fn(i) { i * 2 })`（`i` は `U32`、返り値の型は本体から決まる）。引数のモード（`inout`、`move`）も名前付き関数と同じ形で書く: `fn(inout x: F32) { x = x * 2.0 }`（型は `fn(inout F32)`）。`std` の最初の版で無名関数を受け取るのは `array.from_fn` と `std.test.check` だけである（`Array` の `map` / `filter` は延期、§19.1）。
-- `mean` は `xs` を借用して読むだけなので、`Alloc` を要しない（§12.2）。
+- `mean` は `xs` を借用して読むだけである。`xs` は値の配列なので、ヒープを使わず `Alloc` も要しない（§12.2）。
 
 ### 6.2 メソッド
 
@@ -817,7 +820,7 @@ flow 本体の中での呼び出しは、呼び出す相手によって意味が
 `par` は構造の複製であって、反復ではない。Verilog の手続きの `for` と構造を複製する `generate for` の関係に当たる。`for` と読むと「呼び出し位置が一つで、インスタンスを N 回進める」と誤読するので、`for` の見た目は使わない。値の世界で N 個の値を作る `[e; N]` / `array.from_fn` に対応する、flow の世界の構築子である。コンパイラは複製を状態の配列 `[sub.State; N]` とループに落とす（コードは N 倍にならず、複製方向にベクトル化できる）。複製ごとに違う遅延線の長さが要るときは `vdelay` に上限を与えるか、`let` を並べて書く。
 
 ```onsa
-use std.dsp.{sum}
+use std.math.{sum}
 
 const UNISON: U32 = 4
 
@@ -910,11 +913,11 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 一括処理は生成された `render` で行う。`std.dsp.test` には次を置く。
 
 - `impulse(n: U32) -> Buf[F32] uses {Alloc}`
-- `std.dsp.sum[const N](xs: [F32; N]) -> F32` は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。`magnitude_at` は F64 の Goertzel で計算し、結果を F32 に丸める。
-- 同じモジュールに同名の `test` があれば E0306。失敗は `test "name" failed at file:line: assert <式のソース>` の形で報告し、`--json` では診断（§18.1）と同じ形に `"kind": "test"` を加える。
-- `magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32`
+- `magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32`（F64 の Goertzel で計算し、結果を F32 に丸める）
 - `energy(xs: Span[F32], from: U32, to: U32) -> F64`（半開区間 `[from, to)` の二乗和）
 - `assert_near(a: F64, b: F64, tol: F64)`
+
+`test` の名前は、同じモジュールの中で重複できない（E0306）。失敗は `test "name" failed at file:line: assert <式のソース>` の形で報告し、`--json` では診断（§18.1）と同じ形に `"kind": "test"` を加える。
 
 性質の検査（property-based testing）は構文ではなくライブラリで行う。`std.test` の `check[T: Show](cases: U32, g: Gen[T], p: fn(T) -> Bool) uses {Random}` は、`g` から `cases` 個の値を生成して `p` を検査し、反例を `Show` で表示して panic する。生成器は `gen.f32(lo, hi)`、`gen.u32(lo, hi)`、`gen.pair(g1, g2)` など。種はテストランナーが与えるので決定的で、`onsa test --seed` で変えられる。
 
@@ -1070,7 +1073,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - **超越関数**（`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` など）は、各環境のプリミティブ（C の libm、JavaScript の `Math`、WASM では同梱の libm）を使う。実装が環境で違うので最後の桁は一致しない。精度目標は **F32 / F64 とも 2 ULP 以内**（仮決め）とし、`onsa test --backends all` は超越関数を含む出力を許容誤差付きで比較する。環境の libm がこれを満たさない場合（組込みの軽量 libm など）は、その関数だけ Onsa 実装に差し替えるなど個別に対策する。ビット一致が要る用途向けの Onsa 実装の `std.math.exact` は §19。
 - C では、生成コードに `#pragma STDC FP_CONTRACT OFF` と `_Static_assert(FLT_EVAL_METHOD == 0)` を出し、F32 の各演算を `(float)` で囲む。ターゲット定義はコンパイラフラグ（`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。
 
-`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。
+`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: Num + Default, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.default()`、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
 
 ### 13.5 言語全体の変換（最終目標）
 

@@ -475,7 +475,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 |---|---|---|---|
 | T5-1 | 精度の測定 | D-12 の表と ULP の測定。interp（Rust）、C（ホストの libm）の結果を記録。2 ULP を超える関数の一覧を作り、超える環境では D-11 の Onsa 実装に束縛を切り替える | M |
 | T5-2 | `std.math.soft` | D-11。musl からの移植と、精度表に対する検査 | M |
-| T5-3 | `std.dsp` の完成 | S-10。`magnitude_at`、`sum` の順序の固定を確認する conformance | S |
+| T5-3 | `std.dsp` と `std.math.sum` の完成 | S-10。`magnitude_at`。`sum` は `std.math` に移し、`[T: Num + Default]` に一般化する（レビュー R-23。`N = 0` は `T.default()`、それ以外は `xs[0]` から畳む）。順序の固定を確認する conformance。それまで §11.5 の `unison` の例は `tools/check_spec_examples.py` に落ちる | S |
 | T5-4 | `std.test` | `check` と `gen`（D-08 と同じく `test` の本体でだけ使える組込み。`Random` はテスト名から決めた種。`--seed`）。`Gen[T]` の型はインタプリタの内蔵 | M |
 | T5-5 | `onsa test --flows` | export される各 flow について、`@param` の角と無作為の内点（既定 8 点）× 入力（無音・インパルス・一様雑音）を interp で走らせ、出力が有限で panic しないことを検査。`--backends` と組み合わせ可 | S |
 | T5-6 | `onsa test --backends all` | T4-7 のハーネスを `tests/conformance` 全体と `--flows` の掃引に適用。S-14 の判定 | S |

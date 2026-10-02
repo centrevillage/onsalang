@@ -1,7 +1,9 @@
 //! mode: parse
-pub fn mean(xs: Array[F64]) -> Option[F64] {
-  if xs.is_empty() {
+use std.math.{sum}
+
+pub fn mean[const N: U32](xs: [F64; N]) -> Option[F64] {
+  if xs.len() == 0 {
     return None
   }
-  Some(xs.sum() / (xs.len() as F64))
+  Some(sum(xs) / (xs.len() as F64))
 }
