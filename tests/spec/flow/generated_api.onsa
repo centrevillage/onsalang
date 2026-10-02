@@ -7,10 +7,6 @@ voice.In           // Sig 入力が 2 つ以上のときだけ。Sig 入力ご�
 voice.Out          // 出力が struct のときだけ。出力のフィールドごとの Span を持つ
 voice.Rendered     // render の結果。出力チャンネルごとの Buf
 
-// 定数
-const voice.SIZE: U32        // 状態のうち fast 領域のバイト数（§12.4）
-const voice.BULK_SIZE: U32   // 状態のうち bulk 領域のバイト数
-
 // 関数
 fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
 rt fn voice.reset(inout s: voice.State)

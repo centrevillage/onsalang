@@ -654,7 +654,7 @@ poisoned の実現と、ターゲットの `panic` 設定:
 
 | `panic` | 挙動 | 既定 |
 |---|---|---|
-| `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は全ターゲットで同じ値になる（wrapper のスタックは `audit --stack` に数える） | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
+| `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は libc に依存しない（§12.4。wrapper のスタックは `audit --stack` に数える） | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
 | `"trap"` | 即座にトラップ命令。デバッガで止める用。poisoned にはならない | |
 | `"reset"` | 機器をリセットする。本番の組込み用 | OS の無いターゲットの既定 |
 | `"halt"` | 停止する | |
@@ -828,10 +828,6 @@ voice.In           // Sig 入力が 2 つ以上のときだけ。Sig 入力ご�
 voice.Out          // 出力が struct のときだけ。出力のフィールドごとの Span を持つ
 voice.Rendered     // render の結果。出力チャンネルごとの Buf
 
-// 定数
-const voice.SIZE: U32        // 状態のうち fast 領域のバイト数（§12.4）
-const voice.BULK_SIZE: U32   // 状態のうち bulk 領域のバイト数
-
 // 関数
 fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
 rt fn voice.reset(inout s: voice.State)
@@ -845,6 +841,7 @@ fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param �
 ```
 
 - 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。`pub flow` なら名前空間と中の全ての項目が `pub`、そうでなければモジュール内のみ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
+- 状態の大きさ（fast / bulk 領域のバイト数）は名前空間に無い。ターゲットの設定とポインタの幅で変わるので、C のヘッダ（§14.2）と `onsa interface --target <名前>` にだけ出す（§12.4）。Onsa のコードの意味はターゲットに依存しない。
 - 生成された型は flow を宣言したモジュールで定義されたものとして扱うので、同じモジュールに `impl voice.State { ... }` で補助メソッドを書ける（孤児規則 §6.3 の通り）。
 - Core IR と生成コードでも名前は `voice.State` の形を保つ（C では `voice__State`、export は `prefix` + `voice`）。プローブとホットリロードはこの名前の安定に依存する。
 - `process` の `<入力>` と `<出力>` は、数で形が決まる。
@@ -955,7 +952,8 @@ test "wrap01 stays in [0, 1)" {
 - 大きさによる自動の振り分けはしない。長い遅延線は SDRAM に、コムやオールパスの短い遅延線は SRAM に置く、という判断は書き手が行う。ライブラリの flow は、長い線にだけ `@bulk` を付けて配布できる。
 - 二領域の配置は、ターゲットの `memory.bulk = true` で有効になる（§15.3）。有効でないターゲット（既定。ホストやプラグイン）では `@bulk` を無視し、全てが fast に入り、`BULK_SIZE` は 0 になる。
 - bulk を持つ状態（`@bulk` のフィールドを、自分か入れ子の中に持つ状態）は、flow の中（サブインスタンス、`par`）か export の境界でだけ所有できる。`memory.bulk = true` のターゲットで、それを普通の値（struct のフィールド、配列の要素、関数のローカル）に置くと、ビルド時に E0819。Onsa の中から呼ぶ `init` には bulk 領域を渡す口が無いからである。有効でないターゲットでは `@bulk` が無視されるので、この制限は掛からない。
-- 容量の確認: ヘッダの `SIZE` / `ALIGN`（fast 領域）と `BULK_SIZE` / `BULK_ALIGN`（bulk 領域）で分かる（§14.2）。ターゲットに `fast_budget` / `bulk_budget`（バイト）を書くと、export する flow の各領域がそれを超えたときにビルドで E0820 にする。`onsa audit --memory` は、領域ごとにフィールドの木と大きさを表示し、fast に置かれた大きな配列を大きい順に並べる（`@bulk` の付け忘れの確認用）。
+- `SIZE` / `ALIGN`（fast 領域）と `BULK_SIZE` / `BULK_ALIGN`（bulk 領域）は、ターゲットの `memory.bulk` とポインタの幅だけで決まり、libc や C コンパイラに依存しない。同じターゲットでは、flow を単独で export しても他の flow に埋め込んでも同じ配置になる（ホットリロードとプローブが依存する）。ポインタの幅で変わるのは、bulk を持つ状態の先頭のポインタと、その後の詰め物だけである。これらの値は Onsa の名前空間には無く、C のヘッダ（§14.2）と `onsa interface --target <名前>` に出る。
+- 容量の確認: ヘッダの `SIZE` / `ALIGN` と `BULK_SIZE` / `BULK_ALIGN` で分かる（§14.2）。ターゲットに `fast_budget` / `bulk_budget`（バイト）を書くと、export する flow の各領域がそれを超えたときにビルドで E0820 にする。`onsa audit --memory` は、領域ごとにフィールドの木と大きさを表示し、fast に置かれた大きな配列を大きい順に並べる（`@bulk` の付け忘れの確認用）。
 - 配置の規則: フィールドは宣言順（flow の状態では `let` の順）、各型の自然アラインメント、並べ替えなし。`let` に由来しないフィールドは次の順に置く: 先頭に bulk 領域のポインタ（`BULK_SIZE > 0` のとき）、`sample_rate: F32`（`Ctl` / `Sig` から参照されるとき）、次に自分のレートより高いレートから読まれる入力（`Sig` で読まれる `Ctl` 入力など。宣言順）、次に `let` 由来のフィールド（`Sig` から参照される `Ctl` レートの `let` も含む。`ctl` と `tick` の間で値を渡す場所が要るため）、末尾に `poisoned: Bool` と `initialized: Bool`（どちらも export の境界が使う印。§14.2）。`SIZE` / `ALIGN` はこの規則でコンパイラが計算し、生成コードに `_Static_assert` で検証を出す。ホットリロード（§18.3）とプローブは、この規則で名前とオフセットが安定することに依存する。
 - C API は二つの領域を別々のポインタで受け取る（§14.2）。Onsa の中から見ると、状態は一つの値である。
 
@@ -1446,7 +1444,7 @@ test "resonator decays" {
 - 順序: `prev(y)` だけが前方の `y` を参照する。遅延を通るので合法（§11.2）。
 - レート: `r w b1 b2` は Ctl なので、ブロックごとに 1 回だけ計算される。
 - 演算子: どの式も、同じ群の連鎖か括弧付きの混在だけを使っている。`-(F32.PI * bw)` は前置の `-`。
-- 状態: `y1` と `y2` の 2 つの F32。`resonator.SIZE` はコンパイル時に決まる。
+- 状態: `y1` と `y2` の 2 つの F32。状態の大きさはコンパイル時に決まり、ヘッダの `ONSA_RESONATOR_SIZE` と `onsa interface` に出る。
 
 ### 17.4 声の flow
 
@@ -1700,6 +1698,7 @@ FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の�
 - ホットリロードで、型の変わったフィールドの扱い
 - 変換先の優先順位（C の次に何を作るか）
 - 超越関数をビット一致させる `std.math.exact`（Onsa 実装）を提供するか
+- flow の状態からポインタを無くし、bulk 領域の中のオフセット（`U32`）で持つ案。ベースのポインタは export の wrapper が持つ。状態がポインタを含まない普通のデータになり、複製・退避・ホットリロード（IDE での需要がある）で扱いやすくなるが、C API と入れ子の bulk の作りを変える。言語の部分を固めた後で検討する（§12.4）
 - `Init` レートの大きな配列（ウェーブテーブル）を bulk 領域に置く指定（今は `@bulk` を遅延線にだけ付けられる、§12.4）
 - 検査の水準: 整数のオーバーフローの検査をターゲットの設定で外すか（Rust の `overflow-checks = false` に当たる `overflow = "wrap"`。panic しない実行の結果は変わらず、`onsa audit` に表示する）。組込みのターゲットで検査の費用を実測してから決める。添字の検査は外さない（C で未定義動作になり、メモリ安全性が崩れるため）
 - 言語全体の変換（段階 2）の既知の差: 言語ごとの FFI、JavaScript の 64 ビット整数と文字列の性能、arena の枯渇（§13.5）
