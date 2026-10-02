@@ -1,14 +1,45 @@
-/// Test helpers for flows (spec §11.8). `impulse` allocates a `Buf`, so it
-/// needs `Alloc`; in phase 1 these are provided by the interpreter (D-08).
+/// Test helpers for flows (spec §11.8, S-10). `impulse` allocates a `Buf`, so
+/// it needs `Alloc`; in phase 1 the interpreter provides it (D-08).
+
+use std.math.{cos, sqrt}
 
 /// A unit impulse of `n` samples: `1.0` followed by `n - 1` zeros.
-pub target fn impulse(n: U32) -> Buf[F32] uses {Alloc}
+pub fn impulse(n: U32) -> Buf[F32] uses {Alloc} {
+  var b: Buf[F32] = Buf.zeroed(n)
+  if n > 0 {
+    b[0] = 1.0
+  }
+  b
+}
 
-/// Magnitude of `xs` at `freq` (Goertzel in F64, rounded to F32; S-10).
-pub target fn magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32
+/// Magnitude of the DFT of `xs` at `freq` (|X(f)|, unnormalized), computed
+/// with the Goertzel algorithm in F64 and rounded to F32.
+pub fn magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32 {
+  let w = (2.0 * F64.PI * (freq as F64)) / (sample_rate as F64)
+  let c = 2.0 * cos(w)
+  var s1: F64 = 0.0
+  var s2: F64 = 0.0
+  for x in xs {
+    let s0 = ((x as F64) + (c * s1)) - s2
+    s2 = s1
+    s1 = s0
+  }
+  let power = ((s1 * s1) + (s2 * s2)) - (c * s1 * s2)
+  sqrt(power).round_f32()
+}
 
-/// Sum of squares over the half-open range `[from, to)`.
-pub target fn energy(xs: Span[F32], from: U32, to: U32) -> F64
+/// Sum of squares over the half-open range `[from, to)`; panics when the
+/// range is empty in the wrong direction or runs past the end.
+pub fn energy(xs: Span[F32], from: U32, to: U32) -> F64 {
+  assert from <= to
+  assert to <= xs.len()
+  var acc: F64 = 0.0
+  for i in from..to {
+    let x = xs[i] as F64
+    acc = acc + (x * x)
+  }
+  acc
+}
 
-/// Panics unless `|a - b| <= tol`.
+/// Panics unless `|a - b| <= tol`; the message shows the three values.
 pub target fn assert_near(a: F64, b: F64, tol: F64)

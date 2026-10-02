@@ -347,6 +347,29 @@ rt fn voice.Poly.process(inout self: voice.Poly, inout out: Span[F32], inout scr
     add_from(inout out, scratch)
   }
 }
+fn test.voice renders a second of sound() -> () {
+  let o: voice.voice.Out = voice.voice.render(voice.voice.Config {}, voice.voice.params_default(), 48000:U32, 48000.0:F32)
+  if (!(std.dsp.test.energy(span(o.0), 0:U32, 48000:U32) > 0.0:F64)) {
+    panic("assertion failed: energy(o.out, 0, 48000) > 0.0")
+  }
+  if (!(std.dsp.test.energy(span(o.0), 0:U32, 48000:U32) < 48000.0:F64)) {
+    panic("assertion failed: energy(o.out, 0, 48000) < 48000.0")
+  }
+}
+fn std.dsp.test.energy(xs: Span[F32], from: U32, to: U32) -> F64 {
+  if (!(from <= to)) {
+    panic("assertion failed: from <= to")
+  }
+  if (!(to <= len(xs))) {
+    panic("assertion failed: to <= xs.len()")
+  }
+  let acc: F64 = 0.0:F64
+  for i in from..to {
+    let x: F64 = (xs[i] as F64)
+    acc = (acc + (x * x))
+  }
+  acc
+}
 rt fn __eq.Option__U8(a: Option__U8, b: Option__U8) -> Bool {
   if (tag(a) != tag(b)) {
     return false
@@ -359,4 +382,11 @@ rt fn __eq.Option__U8(a: Option__U8, b: Option__U8) -> Bool {
       (payload(a, Some, 0) == payload(b, Some, 0))
     }
   }
+}
+fn std.dsp.test.impulse(n: U32) -> Buf[F32] {
+  let b: Buf[F32] = buf.zeroed(n)
+  if (n > 0:U32) {
+    b[0:U32] = 1.0:F32
+  }
+  b
 }

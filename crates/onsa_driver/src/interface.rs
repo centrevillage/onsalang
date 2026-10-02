@@ -29,6 +29,7 @@
 //! Sizes are absent (`null`) for generic, heap, second-class and flow-state
 //! types (the state layout is computed by flow lowering, T3-6).
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use onsa_sema::def::{DefKind, Fields, FlowTy, GenericKind, ParamMeta};
@@ -106,6 +107,9 @@ pub struct TypeIface {
     pub value_kind: Option<String>,
     pub size: Option<u32>,
     pub align: Option<u32>,
+    /// Bytes of the bulk region of a flow `State` (§12.4); only for `State`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bulk_size: Option<u32>,
     pub derives: Vec<String>,
     pub fields: Vec<FieldIface>,
     pub variants: Vec<VariantIface>,
@@ -204,9 +208,24 @@ fn param_meta(p: &ParamMeta) -> ParamIfaceMeta {
 
 struct Builder<'a> {
     a: &'a Analysis,
+    /// Flow state layouts from Core lowering, keyed by the qualified flow name.
+    layouts: HashMap<String, onsa_core::FlowLayout>,
 }
 
 impl Builder<'_> {
+    /// Layout of a flow's `State`, if lowering produced one. Core names flows by
+    /// their qualified name (`voice.voice`); fall back to a unique suffix match.
+    fn flow_layout(&self, d: DefId) -> Option<&onsa_core::FlowLayout> {
+        let q = self.a.qualified_name(d);
+        if let Some(l) = self.layouts.get(&q) {
+            return Some(l);
+        }
+        let suffix = format!(".{}", self.a.def(d).name);
+        let mut hits = self.layouts.iter().filter(|(k, _)| k.ends_with(&suffix) || **k == self.a.def(d).name);
+        let first = hits.next();
+        if hits.next().is_some() { None } else { first.map(|(_, l)| l) }
+    }
+
     fn ty(&self, t: onsa_sema::TyId, generics: &[onsa_sema::def::GenericDef]) -> String {
         self.a.types.display(t, &|d| self.display_name(d), &|i| {
             generics.get(i as usize).map(|g| g.name.clone()).unwrap_or_else(|| format!("<{i}>"))
@@ -330,6 +349,7 @@ impl Builder<'_> {
             value_kind: kind.map(|k| k.name().to_string()),
             size: layout.as_ref().map(|l| l.size),
             align: layout.as_ref().map(|l| l.align),
+            bulk_size: None,
             derives: Vec::new(),
             fields: Vec::new(),
             variants: Vec::new(),
@@ -409,12 +429,46 @@ impl Builder<'_> {
                 param: i.param.as_ref().map(param_meta),
             })
             .collect();
+        let layout = self.flow_layout(d);
         let mut members = Vec::new();
         for (name, m) in &f.members {
             let display = format!("{}.{}", def.name, name);
             let item = match &self.a.def(*m).kind {
-                DefKind::Struct(_) | DefKind::Enum(_) => self.type_item(*m, &display),
-                DefKind::Const(_) => self.const_item(*m, &display),
+                DefKind::Struct(_) | DefKind::Enum(_) => {
+                    let mut item = self.type_item(*m, &display);
+                    if let (Item::Struct(t), Some(l)) = (&mut item, layout)
+                        && t.flow_ty.as_deref() == Some("State")
+                    {
+                        // Flow state layout from Core lowering (T3-6, §12.4).
+                        t.size = Some(l.size);
+                        t.align = Some(l.align);
+                        t.bulk_size = Some(l.bulk_size);
+                        t.fields = l
+                            .fast_fields
+                            .iter()
+                            .map(|f| (f, "fast"))
+                            .chain(l.bulk_fields.iter().map(|f| (f, "bulk")))
+                            .map(|(f, region)| FieldIface {
+                                name: f.name.clone(),
+                                ty: format!("{} bytes, align {}, {region}", f.size, f.align),
+                                offset: Some(f.offset),
+                            })
+                            .collect();
+                    }
+                    item
+                }
+                DefKind::Const(_) => {
+                    let mut item = self.const_item(*m, &display);
+                    if let (Item::Const { value, .. }, Some(l)) = (&mut item, layout) {
+                        match name.as_str() {
+                            "SIZE" => *value = Some(l.size.to_string()),
+                            "BULK_SIZE" => *value = Some(l.bulk_size.to_string()),
+                            "ALIGN" => *value = Some(l.align.to_string()),
+                            _ => {}
+                        }
+                    }
+                    item
+                }
                 DefKind::Fn(_) => Item::Fn(self.fn_item(*m, &display)),
                 _ => continue,
             };
@@ -471,10 +525,15 @@ impl Builder<'_> {
     }
 }
 
-/// Build the interface of the user package of an analyzed build.
+/// Build the interface of the user package of an analyzed build. Flow state
+/// layouts come from Core lowering (T3-6); when lowering fails (phase-2
+/// features), the flow sizes are simply absent.
 pub fn interface(analyzed: &Analyzed) -> Interface {
     let a = &analyzed.analysis;
-    let b = Builder { a };
+    let core = crate::lower_core(analyzed).ok();
+    let layouts: HashMap<String, onsa_core::FlowLayout> =
+        core.map(|m| m.flows.into_iter().map(|f| (f.name, f.layout)).collect()).unwrap_or_default();
+    let b = Builder { a, layouts };
     let mut modules: Vec<(String, ModId)> =
         analyzed.pkg.modules.iter().filter_map(|m| a.module_of_file(m.file).map(|id| (m.path.clone(), id))).collect();
     modules.sort();
@@ -503,8 +562,11 @@ fn type_header(t: &TypeIface, keyword: &str, out: &mut String, indent: &str) {
         props.push(k.clone());
     }
     match (t.size, t.align) {
-        (Some(s), Some(a)) => props.push(format!("size {s}, align {a}")),
-        _ if t.flow_ty.as_deref() == Some("State") => props.push("size: computed by flow lowering (T3-6)".into()),
+        (Some(s), Some(a)) => match t.bulk_size {
+            Some(b) => props.push(format!("size {s}, bulk {b}, align {a}")),
+            None => props.push(format!("size {s}, align {a}")),
+        },
+        _ if t.flow_ty.as_deref() == Some("State") => props.push("size: not available (lowering failed)".into()),
         _ => {}
     }
     if !t.derives.is_empty() {

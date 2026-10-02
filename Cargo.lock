@@ -255,6 +255,7 @@ dependencies = [
  "onsa_core",
  "onsa_diag",
  "onsa_driver",
+ "onsa_interp",
  "serde_json",
 ]
 

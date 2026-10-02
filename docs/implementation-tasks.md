@@ -190,6 +190,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-22 ✅ | `for i in 0..4` の未使用の `i` と `1 == 1` が E0405 になる | 整数リテラルだけ関数の終わりで `I32` に既定。浮動小数は E0405 のまま（2026-10-03 決定） | M3 |
 | S-23 ✅ | 非 rt 関数の効果行の整合が未検査 | E0601「効果行に無い効果を使った」を登録し、第 1 期は `Alloc` を M3 で検査（T3-13）。`test` の本体は例外（D-08）。E0610（M4）の前提 | M3 |
 | S-24 ✅ | 型の位置で const ジェネリックの引数（`Ring[F32, 4]`）を書く構文が無い | 整数リテラルか定数名を型引数の位置に書ける（2026-10-03 決定。構文解析器の対応は T3-14） | M3 |
+| S-25 ✅ | `round` と `min` / `max` の IEEE の細部（丸めの方向、NaN、符号付きゼロ）が未定義 | `round` は最近接偶数、`min` / `max` は NaN 伝播と `-0.0 < 0.0`（WASM / JS の意味。C は `fminf` を使わず自前で書く）（2026-10-03 決定） | M3 |
 
 ---
 
@@ -426,10 +427,10 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | T3-4 ✅ | 単相化 | T2-6 の要求から、到達する具体化だけを生成。名前は `clamp[F32]` → `clamp__F32` | S |
 | T3-5 ✅ | flow の降下 | §3.5 と D-03。状態の struct（S-05 の順序、S-06 の名前）、`Config` / `Params` / `Out`、`init` / `reset` / `ctl` / `tick` / `process` / `process_inplace` / `render` / `params_default`、`prev` の保存順、`delay` / `vdelay` の §11.4 の演算順の展開、サブインスタンス、`par` | L |
 | T3-6 ✅ | 配置と大きさ | `layout` で `SIZE` / `BULK_SIZE` / `ALIGN`。`bulk_threshold`（マニフェストのターゲットから。無指定なら全て fast）で bulk へ分ける。bulk のポインタを fast の先頭に置く | S |
-| T3-7 | インタプリタ | Core を直接実行する木歩き。値は `enum Value`（スカラ、集成体は `Vec<Value>`、`Span` は（バッファの参照、範囲）、`Buf` はヒープ）。検査付きの演算と添字は Rust の `checked_*` で、panic は `Err(Panic { msg, span })`。`Prim` は Rust の `f32` / `f64` のメソッドに対応付ける（`exp` `ln` `sin` ... は Rust が libm を呼ぶ。`fmod` は `%`）。F32 の演算は `f32` のまま（縮約されない） | M |
-| T3-8 | `onsa test` | `test` 項目を実行。`assert` の失敗と panic はそのテストの失敗（S-16 の形）。`render` / `impulse` / `energy` / `assert_near`（D-08、std の宣言は T3-10）。`--json` | S |
-| T3-9 | `const` の評価 | 関数呼び出しを含む初期化式をインタプリタで評価。E0407（第 1 期は Copy だけ） | S |
-| T3-10 | `std` の最初の版 | `std/math.onsa`（D-07、S-09。宣言だけ）、`std/dsp.onsa`（`sum`、`db_to_amp`）、`std/dsp/test.onsa`（`impulse` `energy` `assert_near` `magnitude_at`）、`std/array.onsa`（`from_fn`）。Onsa で書けるものは Onsa で書く | S |
+| T3-7 ✅ | インタプリタ | Core を直接実行する木歩き。値は `enum Value`（スカラ、集成体は `Vec<Value>`、`Span` は（バッファの参照、範囲）、`Buf` はヒープ）。検査付きの演算と添字は Rust の `checked_*` で、panic は `Err(Panic { msg, span })`。`Prim` は Rust の `f32` / `f64` のメソッドに対応付ける（`exp` `ln` `sin` ... は Rust が libm を呼ぶ。`fmod` は `%`）。F32 の演算は `f32` のまま（縮約されない） | M |
+| T3-8 ✅ | `onsa test` | `test` 項目を実行。`assert` の失敗と panic はそのテストの失敗（S-16 の形）。`render` / `impulse` / `energy` / `assert_near`（D-08、std の宣言は T3-10）。`--json` | S |
+| T3-9 ✅ | `const` の評価 | 関数呼び出しを含む初期化式をインタプリタで評価。E0407（第 1 期は Copy だけ） | S |
+| T3-10 ✅ | `std` の最初の版 | `std/math.onsa`（D-07、S-09。宣言だけ）、`std/dsp.onsa`（`sum`、`db_to_amp`）、`std/dsp/test.onsa`（`impulse` `energy` `assert_near` `magnitude_at`）、`std/array.onsa`（`from_fn`）。Onsa で書けるものは Onsa で書く | S |
 | T3-11 ✅ | `onsa interface <mod>` | 公開シグネチャ、種、大きさ、効果、`rt`、`@param`、flow の生成 API（§11.6 の形で表示）。`--json` | S |
 | T3-0 ✅ | S-21 / S-22 の反映 | 構文: `move` 式を消費位置に許す。型検査: 整数リテラルの `I32` 既定、`match move`。モード: Affine を `move` 無しで消費位置に置くと E0711 + 修正候補、`match x` は借用。既存の単体テストと否定例を規則に合わせる | S |
 | T3-12 ✅ | `onsa graph <flow>` | DOT。ノードは `let` とインスタンス（名前は S-06）、辺は参照、`prev` 系の辺は破線、レートで色分け。`--svg` は `dot` があれば呼ぶ | S |
@@ -438,6 +439,8 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | T3-13 ✅ | 効果行の整合（S-23） | E0601 を登録し、効果行に `Alloc` の無い関数（`test` の本体を除く）が `Alloc` を要する操作・関数を呼ぶと E0601。rt 関数は E0902 が先に出る | S |
 
 受け入れ: 計画 §3 M3 の通り。加えて `onsa dump --core` の出力が golden テストにあり、E0601 の否定例がある。
+
+✅ M3 は 2026-10-03 に完了。受け入れの実測: `resonator decays` と `gcd` が `onsa test` で通る、`echo` の `BULK_SIZE` は 384004（`bulk_threshold = 4096`）、`graph` が `voice` に `src` / `f1` / `f2` / `smooth_0` を出す。`voice.render` の 48000 サンプルはインタプリタで release 0.16 秒、debug 0.67 秒。
 
 ### M4 C バックエンドと export（L）
 

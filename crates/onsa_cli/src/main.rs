@@ -50,6 +50,18 @@ enum Command {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
+    /// Run `test` blocks in the interpreter (spec §18.2)
+    Test {
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+        /// Run only tests whose name contains this text
+        #[arg(long)]
+        filter: Option<String>,
+        /// `.onsa` files (one package), or a package directory / `onsa.toml`
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
     /// Public signatures, kinds, sizes, @param and flow APIs (spec §18.2)
     Interface {
         /// Emit JSON
@@ -83,6 +95,7 @@ fn main() -> ExitCode {
         Command::Fmt { check, paths } => fmt(check, &paths),
         Command::Diff { ast, old, new } => diff(ast, &old, &new),
         Command::Dump { core, paths } => dump(core, &paths),
+        Command::Test { json, filter, paths } => test(json, filter, &paths),
         Command::Interface { json, path } => interface(json, &path),
         Command::Graph { svg, path, flow } => graph(svg, &path, &flow),
         Command::Explain { code } => explain(&code),
@@ -279,4 +292,42 @@ fn graph(svg: bool, path: &PathBuf, flow: &str) -> ExitCode {
         print!("{dot}");
     }
     ExitCode::SUCCESS
+}
+
+/// `onsa test <paths> [--json] [--filter <text>]` (T3-8): check, lower, run every `test`.
+fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> ExitCode {
+    let mut loaded = match onsa_driver::load(paths) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("onsa: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    if !analyzed.diagnostics.is_empty() {
+        if json {
+            println!("{}", onsa_diag::to_json(&loaded.sources, &analyzed.diagnostics));
+        } else {
+            print!("{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+        }
+        return ExitCode::from(1);
+    }
+    let module = match onsa_driver::lower_core(&analyzed) {
+        Ok(m) => m,
+        Err(diags) => {
+            if json {
+                println!("{}", onsa_diag::to_json(&loaded.sources, &diags));
+            } else {
+                print!("{}", onsa_diag::to_text(&loaded.sources, &diags));
+            }
+            return ExitCode::from(1);
+        }
+    };
+    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions { filter });
+    if json {
+        println!("{}", report.render_json(&loaded.sources));
+    } else {
+        print!("{}", report.render_text(&loaded.sources));
+    }
+    if report.failed() == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
 }

@@ -7,15 +7,22 @@ pub flow resonator(
   fc: Ctl[F32],
   bw: Ctl[F32],
 ) -> Sig[F32]
-  pub struct resonator.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct resonator.State  // Affine; size 28, bulk 0, align 4
+    sample_rate: 4 bytes, align 4, fast  // offset 0
+    r: 4 bytes, align 4, fast  // offset 4
+    b1: 4 bytes, align 4, fast  // offset 8
+    b2: 4 bytes, align 4, fast  // offset 12
+    y1: 4 bytes, align 4, fast  // offset 16
+    y2: 4 bytes, align 4, fast  // offset 20
+    poisoned: 1 bytes, align 1, fast  // offset 24
   pub struct resonator.Config  // Copy; size 0, align 1
   pub struct resonator.Params  // Copy; size 8, align 4
     fc: F32  // offset 0
     bw: F32  // offset 4
   pub struct resonator.Out  // Affine
     out: Buf[F32]
-  pub const resonator.SIZE: U32
-  pub const resonator.BULK_SIZE: U32
+  pub const resonator.SIZE: U32 = 28
+  pub const resonator.BULK_SIZE: U32 = 0
   pub fn resonator.init(cfg: resonator.Config, sample_rate: F32) -> resonator.State
   pub rt fn resonator.reset(inout s: resonator.State)
   pub rt fn resonator.process(inout s: resonator.State, params: resonator.Params, x: Span[F32], inout out: Span[F32])
@@ -25,14 +32,18 @@ pub flow resonator(
 pub flow saw(
   f0: Ctl[F32],
 ) -> Sig[F32]
-  pub struct saw.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct saw.State  // Affine; size 16, bulk 0, align 4
+    sample_rate: 4 bytes, align 4, fast  // offset 0
+    f0: 4 bytes, align 4, fast  // offset 4
+    prev_0: 4 bytes, align 4, fast  // offset 8
+    poisoned: 1 bytes, align 1, fast  // offset 12
   pub struct saw.Config  // Copy; size 0, align 1
   pub struct saw.Params  // Copy; size 4, align 4
     f0: F32  // offset 0
   pub struct saw.Out  // Affine
     out: Buf[F32]
-  pub const saw.SIZE: U32
-  pub const saw.BULK_SIZE: U32
+  pub const saw.SIZE: U32 = 16
+  pub const saw.BULK_SIZE: U32 = 0
   pub fn saw.init(cfg: saw.Config, sample_rate: F32) -> saw.State
   pub rt fn saw.reset(inout s: saw.State)
   pub rt fn saw.process(inout s: saw.State, params: saw.Params, inout out: Span[F32])
@@ -44,15 +55,19 @@ pub flow smooth(
   x: Ctl[F32],
   time: Init[F32],
 ) -> Sig[F32]
-  pub struct smooth.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct smooth.State  // Affine; size 16, bulk 0, align 4
+    x: 4 bytes, align 4, fast  // offset 0
+    a: 4 bytes, align 4, fast  // offset 4
+    prev_0: 4 bytes, align 4, fast  // offset 8
+    poisoned: 1 bytes, align 1, fast  // offset 12
   pub struct smooth.Config  // Copy; size 4, align 4
     time: F32  // offset 0
   pub struct smooth.Params  // Copy; size 4, align 4
     x: F32  // offset 0
   pub struct smooth.Out  // Affine
     out: Buf[F32]
-  pub const smooth.SIZE: U32
-  pub const smooth.BULK_SIZE: U32
+  pub const smooth.SIZE: U32 = 16
+  pub const smooth.BULK_SIZE: U32 = 0
   pub fn smooth.init(cfg: smooth.Config, sample_rate: F32) -> smooth.State
   pub rt fn smooth.reset(inout s: smooth.State)
   pub rt fn smooth.process(inout s: smooth.State, params: smooth.Params, inout out: Span[F32])
@@ -68,7 +83,12 @@ pub flow voice(
   @param(min: 0.0, max: 1.0, default: 0.5)
   gain: Ctl[F32],
 ) -> Sig[F32]
-  pub struct voice.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct voice.State  // Affine; size 92, bulk 0, align 4
+    src: 16 bytes, align 4, fast  // offset 0
+    f1: 28 bytes, align 4, fast  // offset 16
+    f2: 28 bytes, align 4, fast  // offset 44
+    smooth_0: 16 bytes, align 4, fast  // offset 72
+    poisoned: 1 bytes, align 1, fast  // offset 88
   pub struct voice.Config  // Copy; size 0, align 1
   pub struct voice.Params  // Copy; size 16, align 4
     f0: F32  // offset 0
@@ -77,8 +97,8 @@ pub flow voice(
     gain: F32  // offset 12
   pub struct voice.Out  // Affine
     out: Buf[F32]
-  pub const voice.SIZE: U32
-  pub const voice.BULK_SIZE: U32
+  pub const voice.SIZE: U32 = 92
+  pub const voice.BULK_SIZE: U32 = 0
   pub fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
   pub rt fn voice.reset(inout s: voice.State)
   pub rt fn voice.process(inout s: voice.State, params: voice.Params, inout out: Span[F32])
@@ -92,15 +112,21 @@ pub flow echo(
   @param(min: 0.0, max: 0.95, default: 0.5)
   feedback: Ctl[F32],
 ) -> Sig[F32]
-  pub struct echo.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct echo.State  // Affine; size 384024, bulk 0, align 4
+    sample_rate: 4 bytes, align 4, fast  // offset 0
+    feedback: 4 bytes, align 4, fast  // offset 4
+    d: 4 bytes, align 4, fast  // offset 8
+    vdelay_0.buf: 384004 bytes, align 4, fast  // offset 12
+    vdelay_0.w: 4 bytes, align 4, fast  // offset 384016
+    poisoned: 1 bytes, align 1, fast  // offset 384020
   pub struct echo.Config  // Copy; size 0, align 1
   pub struct echo.Params  // Copy; size 8, align 4
     time: F32  // offset 0
     feedback: F32  // offset 4
   pub struct echo.Out  // Affine
     out: Buf[F32]
-  pub const echo.SIZE: U32
-  pub const echo.BULK_SIZE: U32
+  pub const echo.SIZE: U32 = 384024
+  pub const echo.BULK_SIZE: U32 = 0
   pub fn echo.init(cfg: echo.Config, sample_rate: F32) -> echo.State
   pub rt fn echo.reset(inout s: echo.State)
   pub rt fn echo.process(inout s: echo.State, params: echo.Params, x: Span[F32], inout out: Span[F32])

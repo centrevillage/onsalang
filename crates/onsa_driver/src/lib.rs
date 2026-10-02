@@ -303,3 +303,123 @@ mod tests {
         assert_eq!(module_path(Path::new("util.onsa")), "util");
     }
 }
+
+// ---------------------------------------------------------------- tests (T3-8)
+
+/// Options of `onsa test`.
+#[derive(Debug, Default, Clone)]
+pub struct TestOptions {
+    /// Run only tests whose name contains this substring.
+    pub filter: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TestStatus {
+    Ok,
+    Failed,
+}
+
+/// Outcome of one `test` block.
+#[derive(Debug, Clone)]
+pub struct TestOutcome {
+    pub name: String,
+    pub status: TestStatus,
+    /// For failures: the message in the S-16 form (`assert <src>` or the panic text).
+    pub message: Option<String>,
+    pub span: Option<Span>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TestReport {
+    pub tests: Vec<TestOutcome>,
+}
+
+impl TestReport {
+    pub fn failed(&self) -> usize {
+        self.tests.iter().filter(|t| t.status == TestStatus::Failed).count()
+    }
+
+    pub fn passed(&self) -> usize {
+        self.tests.len() - self.failed()
+    }
+
+    /// Text report: one line per test and a summary (spec §11.8, S-16).
+    pub fn render_text(&self, sources: &SourceMap) -> String {
+        let mut out = String::new();
+        for t in &self.tests {
+            match t.status {
+                TestStatus::Ok => out.push_str(&format!("test \"{}\" ok\n", t.name)),
+                TestStatus::Failed => {
+                    let at = t.span.map(|s| {
+                        format!("{}:{}", sources.file(s.file).name(), sources.file(s.file).line_col(s.start).line)
+                    });
+                    out.push_str(&format!(
+                        "test \"{}\" failed at {}: {}\n",
+                        t.name,
+                        at.unwrap_or_else(|| "?".into()),
+                        t.message.as_deref().unwrap_or("")
+                    ));
+                }
+            }
+        }
+        out.push_str(&format!("{} passed, {} failed\n", self.passed(), self.failed()));
+        out
+    }
+
+    /// `[{ "name", "status": "ok" | "failed", "message"?, "span"? }]`.
+    pub fn render_json(&self, sources: &SourceMap) -> String {
+        let items: Vec<serde_json::Value> = self
+            .tests
+            .iter()
+            .map(|t| {
+                let mut o = serde_json::Map::new();
+                o.insert("name".into(), t.name.clone().into());
+                o.insert("status".into(), (if t.status == TestStatus::Ok { "ok" } else { "failed" }).into());
+                if let Some(m) = &t.message {
+                    o.insert("message".into(), m.clone().into());
+                }
+                if let Some(s) = t.span {
+                    let file = sources.file(s.file);
+                    let lc = file.line_col(s.start);
+                    o.insert("span".into(), serde_json::json!({ "file": file.name(), "line": lc.line, "col": lc.col }));
+                }
+                o.insert("kind".into(), "test".into());
+                serde_json::Value::Object(o)
+            })
+            .collect();
+        serde_json::to_string_pretty(&items).expect("report serializes")
+    }
+}
+
+/// Run every `test` block of the lowered module (T3-8). `assert` failures
+/// and panics (spec §9.2) fail the test and name the position.
+pub fn run_tests(module: &onsa_core::Module, opts: &TestOptions) -> TestReport {
+    let interp = onsa_interp::Interp::new(module);
+    let mut report = TestReport::default();
+    for (i, f) in module.fns.iter().enumerate() {
+        let Some(name) = f.name.strip_prefix("test.") else { continue };
+        if f.body.is_none() {
+            continue;
+        }
+        if opts.filter.as_deref().is_some_and(|needle| !name.contains(needle)) {
+            continue;
+        }
+        let outcome = match interp.call(onsa_core::FnId(i as u32), Vec::new()) {
+            Ok(_) => TestOutcome { name: name.to_string(), status: TestStatus::Ok, message: None, span: None },
+            Err(p) => {
+                let message = match p.message.strip_prefix("assertion failed: ") {
+                    Some(src) => format!("assert {src}"),
+                    None => p.message.clone(),
+                };
+                TestOutcome {
+                    name: name.to_string(),
+                    status: TestStatus::Failed,
+                    message: Some(message),
+                    span: Some(p.span),
+                }
+            }
+        };
+        report.tests.push(outcome);
+    }
+    report
+}

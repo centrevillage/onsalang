@@ -17,17 +17,23 @@
 //! //! mode: test      check, then run `test` blocks in the interpreter
 //! ```
 //!
-//! A file without markers expects zero diagnostics.
+//! A file without markers expects zero diagnostics. In `mode: test` every
+//! `test` block must pass unless a marker names it as an expected failure:
+//!
+//! ```text
+//! test "overflow panics" {        //~ TESTFAIL "overflow panics"
+//! ```
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use onsa_diag::Code;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
     None,
     Parse,
+    #[default]
     Check,
     Test,
 }
@@ -39,10 +45,20 @@ pub struct Expected {
     pub col: Option<u32>,
 }
 
+/// Markers of one file (D-05).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Markers {
+    pub mode: Mode,
+    pub expected: Vec<Expected>,
+    /// Names of `test` blocks expected to fail (`//~ TESTFAIL "name"`).
+    pub testfails: Vec<String>,
+}
+
 /// Parse the `//! mode:` header and `//~` markers of one file.
-pub fn parse_markers(text: &str) -> Result<(Mode, Vec<Expected>), String> {
+pub fn parse_markers(text: &str) -> Result<Markers, String> {
     let mut mode = Mode::Check;
     let mut expected = Vec::new();
+    let mut testfails = Vec::new();
     for (i, line) in text.lines().enumerate() {
         let lineno = i as u32 + 1;
         if lineno == 1
@@ -63,6 +79,15 @@ pub fn parse_markers(text: &str) -> Result<(Mode, Vec<Expected>), String> {
             let Some(code_str) = parts.next() else {
                 return Err(format!("line {lineno}: empty `//~` marker"));
             };
+            if code_str == "TESTFAIL" {
+                let rest = marker.trim().strip_prefix("TESTFAIL").unwrap_or("").trim();
+                let name = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"'));
+                let Some(name) = name else {
+                    return Err(format!("line {lineno}: `TESTFAIL` needs a quoted test name"));
+                };
+                testfails.push(name.to_string());
+                continue;
+            }
             let Some(code) = Code::parse(code_str) else {
                 return Err(format!("line {lineno}: unknown code `{code_str}` in marker"));
             };
@@ -78,7 +103,7 @@ pub fn parse_markers(text: &str) -> Result<(Mode, Vec<Expected>), String> {
         }
     }
     expected.sort();
-    Ok((mode, expected))
+    Ok(Markers { mode, expected, testfails })
 }
 
 /// A test unit: one `.onsa` file, or a package directory (with `onsa.toml`)
@@ -112,14 +137,16 @@ pub fn run_unit(unit: &Unit) -> Option<String> {
     // Markers and mode from every file of the unit (line numbers are per file).
     let mut mode = Mode::Check;
     let mut expected: Vec<(u32, Expected)> = Vec::new();
+    let mut testfails: Vec<String> = Vec::new();
     for (file, _) in loaded.modules.clone() {
         let text = loaded.sources.file(file).text().to_string();
         match parse_markers(&text) {
-            Ok((m, exp)) => {
-                if m != Mode::Check {
-                    mode = m;
+            Ok(m) => {
+                if m.mode != Mode::Check {
+                    mode = m.mode;
                 }
-                expected.extend(exp.into_iter().map(|e| (file.0, e)));
+                expected.extend(m.expected.into_iter().map(|e| (file.0, e)));
+                testfails.extend(m.testfails);
             }
             Err(e) => return Some(format!("{}: bad markers: {e}", loaded.sources.file(file).name())),
         }
@@ -128,9 +155,16 @@ pub fn run_unit(unit: &Unit) -> Option<String> {
     if mode == Mode::None {
         return None;
     }
+    let mut analyzed = None;
     let result = match mode {
         Mode::Parse => onsa_driver::parse_only(&loaded.sources),
-        _ => onsa_driver::check_loaded(&mut loaded), // `test` runs the interpreter from M3
+        Mode::Check | Mode::None => onsa_driver::check_loaded(&mut loaded),
+        Mode::Test => {
+            let a = onsa_driver::analyze_loaded(&mut loaded);
+            let r = onsa_driver::CheckResult { diagnostics: a.diagnostics.clone() };
+            analyzed = Some(a);
+            r
+        }
     };
     let sources = &loaded.sources;
 
@@ -149,6 +183,39 @@ pub fn run_unit(unit: &Unit) -> Option<String> {
             ef == af && e.code == a.code && e.line == a.line && e.col.is_none_or(|c| Some(c) == a.col)
         });
     if matches {
+        if let Some(a) = analyzed.filter(|a| a.diagnostics.is_empty()) {
+            // `mode: test`: lower and run every `test` block (T3-8).
+            let module = match onsa_driver::lower_core(&a) {
+                Ok(m) => m,
+                Err(diags) => {
+                    return Some(format!(
+                        "{}: lowering failed:\n{}",
+                        path.display(),
+                        onsa_diag::to_text(sources, &diags).replace('\n', "\n  ")
+                    ));
+                }
+            };
+            let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default());
+            let mut problems = Vec::new();
+            for t in &report.tests {
+                let expected_fail = testfails.contains(&t.name);
+                match (t.status == onsa_driver::TestStatus::Failed, expected_fail) {
+                    (true, false) => {
+                        problems.push(format!("test \"{}\" failed: {}", t.name, t.message.as_deref().unwrap_or("")))
+                    }
+                    (false, true) => problems.push(format!("test \"{}\" passed but is marked TESTFAIL", t.name)),
+                    _ => {}
+                }
+            }
+            for name in &testfails {
+                if !report.tests.iter().any(|t| &t.name == name) {
+                    problems.push(format!("TESTFAIL names an unknown test \"{name}\""));
+                }
+            }
+            if !problems.is_empty() {
+                return Some(format!("{}:\n  {}", path.display(), problems.join("\n  ")));
+            }
+        }
         // T2-12: every diagnostic of a negative example carries the offending
         // source (`found`), and codes with a unique repair carry a fix (§18.1).
         if path.to_string_lossy().contains("negative") {
@@ -225,11 +292,11 @@ mod tests {
 
     #[test]
     fn markers_parse() {
-        let (mode, exp) =
+        let m =
             parse_markers("//! mode: parse\nlet c = x + y * z //~ E0010 @13\nlet d = 1 //~ E0405 //~ E0420\n").unwrap();
-        assert_eq!(mode, Mode::Parse);
+        assert_eq!(m.mode, Mode::Parse);
         assert_eq!(
-            exp,
+            m.expected,
             vec![
                 Expected { code: Code::E0010, line: 2, col: Some(13) },
                 Expected { code: Code::E0405, line: 3, col: None },
@@ -242,6 +309,9 @@ mod tests {
     fn bad_marker_is_error() {
         assert!(parse_markers("x //~ E9999\n").is_err());
         assert!(parse_markers("//! mode: run\n").is_err());
-        assert_eq!(parse_markers("//! mode: none\n").unwrap().0, Mode::None);
+        assert_eq!(parse_markers("//! mode: none\n").unwrap().mode, Mode::None);
+        let m = parse_markers("//! mode: test\ntest \"x\" { //~ TESTFAIL \"x\"\n").unwrap();
+        assert_eq!(m.testfails, vec!["x".to_string()]);
+        assert!(parse_markers("x //~ TESTFAIL x\n").is_err());
     }
 }

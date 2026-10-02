@@ -1,3 +1,4 @@
+//! mode: test
 use std.math.{exp, cos}
 use std.dsp.test.{impulse, energy}
 
@@ -123,4 +124,11 @@ impl Poly {
       out.add_from!(scratch)
     }
   }
+}
+
+// Not a spec example: renders the whole `voice` (M3 acceptance and timing).
+test "voice renders a second of sound" {
+  let o = voice.render(voice.Config {}, voice.params_default(), 48000, 48000.0)
+  assert energy(o.out, 0, 48000) > 0.0
+  assert energy(o.out, 0, 48000) < 48000.0
 }

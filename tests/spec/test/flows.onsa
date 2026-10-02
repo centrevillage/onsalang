@@ -1,0 +1,52 @@
+//! mode: test
+// Flow semantics through the generated API (spec §11.4, §11.6).
+
+use std.dsp.test.{impulse, energy}
+
+const MAX_ECHO: U32 = 96000
+
+pub flow echo(x: Sig[F32], time: Ctl[F32], feedback: Ctl[F32]) -> Sig[F32] {
+  let d = time * sample_rate()
+  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
+  y
+}
+
+test "echo repeats the impulse after the delay" {
+  let o = echo.render(echo.Config {}, echo.Params { time: 0.5, feedback: 0.5 }, impulse(48000), 48000.0)
+  let first: U32 = 0
+  let at: U32 = 24000
+  assert o.out[first] == 1.0
+  assert energy(o.out, 1, 24000) == 0.0
+  assert o.out[at] == 0.5
+  assert energy(o.out, 24001, 48000) == 0.0
+}
+
+pub flow counter(x: Sig[F32]) -> Sig[F32] {
+  let y = delay(x, 3, 0.0)
+  y
+}
+
+test "delay shifts by N samples" {
+  let o = counter.render(counter.Config {}, counter.Params {}, impulse(8), 48000.0)
+  let a: U32 = 2
+  let b: U32 = 3
+  assert o.out[a] == 0.0
+  assert o.out[b] == 1.0
+  assert energy(o.out, 0, 8) == 1.0
+}
+
+pub flow gain2(x: Sig[F32], g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+pub flow chain(x: Sig[F32]) -> Sig[F32] {
+  let a = gain2~(x, 0.5)
+  let b = gain2~(a, 0.5)
+  b
+}
+
+test "sub-instances are wired" {
+  let o = chain.render(chain.Config {}, chain.Params {}, impulse(4), 48000.0)
+  let z: U32 = 0
+  assert o.out[z] == 0.25
+}
