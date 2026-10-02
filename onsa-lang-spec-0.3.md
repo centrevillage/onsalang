@@ -445,6 +445,23 @@ impl Show for Point {
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
 - 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr`。
 - 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。
+- 組込み型が実装する標準 trait は、次の表で全てである（閉じた一覧）。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
+
+| 型 | 実装する trait |
+|---|---|
+| 整数 | `PartialEq` `Eq` `PartialOrd` `Ord` `Hash` `Show` `Default`（0） `Num` |
+| 浮動小数 | `PartialEq` `PartialOrd`（IEEE 比較） `Show` `Default`（`+0.0`） `Num` `Float` |
+| `Bool` | `PartialEq` `Eq` `Hash` `Show` `Default`（`false`） |
+| `Char` | `PartialEq` `Eq` `PartialOrd` `Ord`（コードポイントの順） `Hash` `Show` |
+| `Str` | `PartialEq` `Eq` `PartialOrd` `Ord`（バイト列の辞書順、§4.2） `Hash` `Show` `Default`（空） |
+| `Bytes` | `PartialEq` `Eq` `PartialOrd` `Ord`（辞書順） `Hash` `Default`（空） |
+| `()` | `PartialEq` `Eq` `Default` |
+| タプル、`[T; N]` | 要素が全て実装するとき `PartialEq` `Eq` `PartialOrd` `Ord`（先頭から辞書式） `Hash` `Default` |
+| `Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` `Hash` |
+| `Array[T]` | 要素が実装するとき `PartialEq` `Eq` |
+| `Map`、`Set`、`Buf`、`Span`、関数値 | なし |
+
+- `Show` の文字列: 整数は 10 進、`Bool` は `true` / `false`、`Char` はその文字、`Str` はそのまま。浮動小数は、その型（`F32` / `F64`）の値に読み戻せる最短の 10 進表記で、Onsa の浮動小数のリテラルとして読める形にする（小数点を必ず含む: `1.0`、`0.1`、`-0.0`）。絶対値が `1.0e21` 以上か `1.0e-7` 未満なら指数で書く（`1.0e21`、`1.5e-8`）。`NaN` は `NaN`、無限大は `inf` / `-inf`。全ての変換先で同じ文字列になる（§13.4）。
 - `Drop` の `drop(move self)` は、`rt` を付けること、`uses {Alloc}` を持つことだけが許される。値が破棄される位置は、その型の破棄が必要とするもの（`Alloc`、非 rt）を要求する（E0611 / E0901）。
 - ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する（`?Dup` の `T` も同じ）。したがって `rt fn` の中で `T` の値を破棄できるのは `T: Copy` のときだけである。捨てる操作を持たない関数（借用で受け取り、複製して返す、または移動する）はこの規則に触れない。標準ライブラリはこの様式で書き、捨てる操作（`clear` など）だけが `uses {Alloc}` を持つ。
 
@@ -626,6 +643,8 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 ```
 
 `?` は、関数の返り値の `E` と **同じ型** のエラーにしか使えない。暗黙の変換（`From` 相当）は無い。変換は `map_err` で明示する。`Option` を返す関数の中では `Option` にも使える（`None` で早期に返る）。`Result` と `Option` の混在は不可（Rust と同じ）。
+
+`Option` と `Result` のメソッドは、`unwrap`（`None` / `Err` なら panic する、§9.2）と `map_err` だけである。値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。
 
 ### 9.2 panic（バグ）
 
@@ -1700,6 +1719,7 @@ FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の�
 - 変換先の優先順位（C の次に何を作るか）
 - 超越関数をビット一致させる `std.math.exact`（Onsa 実装）を提供するか
 - flow の状態からポインタを無くし、bulk 領域の中のオフセット（`U32`）で持つ案。ベースのポインタは export の wrapper が持つ。状態がポインタを含まない普通のデータになり、複製・退避・ホットリロード（IDE での需要がある）で扱いやすくなるが、C API と入れ子の bulk の作りを変える。言語の部分を固めた後で検討する（§12.4）
+- `Map` / `Set` の鍵の要件。§6.3 は `Ord` を鍵に使うと書き、§4.3 は挿入順のハッシュ表としている。`Eq` + `Hash` にするか（第 2 期に `Map` を実装するときに決める）
 - `Init` レートの大きな配列（ウェーブテーブル）を bulk 領域に置く指定（今は `@bulk` を遅延線にだけ付けられる、§12.4）
 - 検査の水準: 整数のオーバーフローの検査をターゲットの設定で外すか（Rust の `overflow-checks = false` に当たる `overflow = "wrap"`。panic しない実行の結果は変わらず、`onsa audit` に表示する）。組込みのターゲットで検査の費用を実測してから決める。添字の検査は外さない（C で未定義動作になり、メモリ安全性が崩れるため）
 - 言語全体の変換（段階 2）の既知の差: 言語ごとの FFI、JavaScript の 64 ビット整数と文字列の性能、arena の枯渇（§13.5）
