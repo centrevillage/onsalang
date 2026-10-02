@@ -193,6 +193,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-25 ✅ | `round` と `min` / `max` の IEEE の細部（丸めの方向、NaN、符号付きゼロ）が未定義 | `round` は最近接偶数、`min` / `max` は NaN 伝播と `-0.0 < 0.0`（WASM / JS の意味。C は `fminf` を使わず自前で書く）（2026-10-03 決定） | M3 |
 | S-26 ✅ | `panic = "poison"` の `jmp_buf` を状態の fast 領域に置く（§9.2、I-01）と、`SIZE` がホストの libc に依存し（`sizeof(jmp_buf)` は macOS arm64 で 192、glibc x86_64 で 200、MSVC は 16 バイト境界）、export された flow を別の flow のサブインスタンスにしたときに入れ子の `jmp_buf` が親の `SIZE` から漏れる | `jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は全ターゲットで同じ値になり、ホットリロードとプローブが依存する配置の安定（§12.4）が保たれる。wrapper の約 200 バイトのスタックは `audit --stack` に数える。§9.2 の「`jmp_buf` は状態の fast 領域に置き `SIZE` に含まれる」を改める | M4 |
 | S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-04 決定、案 A） | M4 |
+| S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-04 決定。実装は T4-10） | M4 |
 
 ---
 
@@ -457,6 +458,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | T4-7 ✅ | 適合性の基盤 | `tests/conformance/<name>.onsa`（`render` を呼ぶ `test` だけを持つ）。ハーネスは interp で `Out` を得て、同じ入力で C（生成した小さなドライバ）を走らせ、サンプル列をバイト比較する。超越関数を通る flow は S-14 の判定で許容誤差（M5 で確定。M4 では同じ libm なので一致を期待する） | M |
 | T4-8 ✅ | §17.5 の例 | `examples/voice_host/`: `daisy` 相当のターゲット定義（ホスト向けに `platform` を変えたもの）で staticlib を作り、C のホストが WAV に書く | S |
 | T4-9 ✅ | NRVO と移動 | `sret` の構築先の決定（§12.7 の条件）。閾値以上のコピーの箇所を記録（`audit --memory` は M9） | S |
+| T4-10 | S-28 の実装 | `onsa_core::layout` と flow の降下で入れ子の状態まで bulk を分け、各状態の先頭に自分の bulk ポインタ、親の `init` で設定。C バックエンドは `s->bulk` の形のまま。`voice` の中に `echo` を置いた conformance と golden を追加。レビュー（`docs/impl-review-0.3.md`）の指摘反映と同じ回で行う | M |
 
 受け入れ: 計画 §3 M4 の通り。
 
