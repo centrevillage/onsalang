@@ -194,6 +194,8 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-26 ✅ | `panic = "poison"` の `jmp_buf` を状態の fast 領域に置く（§9.2、I-01）と、`SIZE` がホストの libc に依存し（`sizeof(jmp_buf)` は macOS arm64 で 192、glibc x86_64 で 200、MSVC は 16 バイト境界）、export された flow を別の flow のサブインスタンスにしたときに入れ子の `jmp_buf` が親の `SIZE` から漏れる | `jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は全ターゲットで同じ値になり、ホットリロードとプローブが依存する配置の安定（§12.4）が保たれる。wrapper の約 200 バイトのスタックは `audit --stack` に数える。§9.2 の「`jmp_buf` は状態の fast 領域に置き `SIZE` に含まれる」を改める | M4 |
 | S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-02 決定、案 A） | M4 |
 | S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-02 決定。実装は T4-10） | M4 |
+| S-29 ✅ | `prev` / `delay` / `vdelay` の初期値は、仕様の例も実装の例も全て `0.0` で、情報の無い引数になっている | `init` を省略できる。省略すると `T.default()`、`T: Default` でなければ E0816。`onsa fmt` は既定値と等しいリテラルの `init` を取り除く（2026-10-02 決定。実装はレビューの反映の第 3 段。それまで `tools/check_spec_examples.py` は §11.2 / §17.3 / §17.4 の例で失敗する） | M3 |
+| S-30 ✅ | 生成 API の引数名（Sig 入力の名前、出力のフィールド名、`s` / `params` / `frames` など）が衝突し、`flow swap(l, r) -> Sig[Stereo]` が無音を出す（レビュー R-15） | 入出力の引数は数で形が決まる（入力 0 / 1 / 2 以上で 無し / `input: Span[T]` / `input: voice.In`、出力は `inout output: Span[T]` か struct なら `voice.Out`）。`render` の結果は `voice.Rendered`。引数名は `s` / `params` / `input` / `output` に固定。`In` / `Out` は引数の位置だけ（§5.3）。C も同じ形（2026-10-02 決定。実装はレビューの反映の第 3 段。Core の降下は引数を位置で扱う） | M3 / M4 |
 
 ---
 
@@ -530,10 +532,12 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | E0305 | flow と同名の宣言 | 項目の収集 | M2 |
 | E0306 | 同名の `test`（S-16） | 項目の収集 | M2 |
 | E0310 | モジュールの循環 | モジュール | M2 |
+| E0311 | 型が値として自分自身を含む（レビュー R-02） | シグネチャ | M2 |
+| E0312 | `const` の初期化式の循環（レビュー R-02） | `const` の評価 | M3 |
 | E0320 | 命名規則（S-01） | 構文 | M1 |
 | E0401 | 型の不一致 | 型 | M2 |
 | E0405 | リテラルの型が決まらない | 型 | M2 |
-| E0406 | 型パラメータが決まらない | 型 | M2 |
+| E0406 | 型パラメータが決まらない。関数の終わりに残る型変数も含む（レビュー R-03） | 型 | M2 |
 | E0407 | `const` の結果の種 | `const` の評価 | M3 |
 | E0408 | リテラルが範囲外 | 型 | M2 |
 | E0410〜E0416 | struct リテラル / `as` の縮小 / 引数の数 / 未知のメンバ / `?` / 代入先 / 境界 | 型 | M2 |
@@ -558,6 +562,8 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | E0811 / E0812 | `~` の有無 | 名前解決 | M2 |
 | E0813 / E0814 | `prev` 系の引数のレート | flow | M3 |
 | E0815 | 引数のレートが入力より高い（S-04） | flow | M3 |
+| E0816 | `prev` 系の `init` を省いたが、値型が `Default` を満たさない（S-29） | flow | M3 |
+| E0817 | flow が自分自身をインスタンスにする（レビュー R-03） | flow | M3 |
 | E0901 | rt から非 rt | rt | M2 |
 | E0902 | rt の効果行に `Alloc` | rt | M2 |
 | E0903 | rt の再帰 | rt | M2 |
