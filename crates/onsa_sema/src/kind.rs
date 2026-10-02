@@ -59,6 +59,13 @@ fn kind_rec(a: &Analysis, ty: TyId, visiting: &mut HashSet<DefId>) -> Option<Kin
     }
 }
 
+/// Kind of a user type by its def (`onsa interface`), without interning its `TyId`.
+pub fn kind_of_named(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Kind> {
+    let mut visiting = HashSet::new();
+    visiting.insert(d);
+    kind_of_def(a, d, args, &mut visiting)
+}
+
 fn kind_of_def(a: &Analysis, d: DefId, args: &[TyId], visiting: &mut HashSet<DefId>) -> Option<Kind> {
     let def = a.def(d);
     let field_kind = |t: TyId, visiting: &mut HashSet<DefId>| {

@@ -371,6 +371,11 @@ pub enum TypeKind {
     Tuple(Vec<TypeId>),
     /// `rt fn(inout A, B) -> R uses {E}`
     Fn { rt: bool, params: Vec<(Mode, TypeId)>, ret: Option<TypeId>, effects: Option<EffectRow> },
+    /// A const generic argument written as an integer literal (`Ring[F32, 4]`,
+    /// S-24); only valid inside a `Path` type's `args`. A constant's name
+    /// (`Ring[F32, TABLE_SIZE]`) parses as a `Path` type and is resolved by
+    /// the expected parameter kind.
+    ConstArg(ExprId),
 }
 
 // ---------------------------------------------------------------- statements
@@ -648,6 +653,10 @@ pub enum ExprKind {
     },
     /// `e?`
     Try(ExprId),
+    /// `move x` in a consuming position (§5.2, S-21): let/var initializer,
+    /// assignment value, literal element, `match move x`. Call arguments keep
+    /// `Arg.mode` and `for ... in move xs` keeps `StmtKind::For.moved`.
+    Move(ExprId),
     /// `a..b` (only in `for` / `par` heads)
     Range {
         lo: ExprId,

@@ -1,0 +1,18 @@
+fn gcd.gcd(a: U64, b: U64) -> U64 {
+  let x: U64 = a
+  let y: U64 = b
+  while (y != 0:U64) {
+    let t: U64 = (x % y)
+    x = y
+    y = t
+  }
+  x
+}
+fn test.gcd() -> () {
+  if (!(gcd.gcd(12:U64, 18:U64) == 6:U64)) {
+    panic("assertion failed: gcd(12, 18) == 6")
+  }
+  if (!(gcd.gcd(7:U64, 0:U64) == 7:U64)) {
+    panic("assertion failed: gcd(7, 0) == 7")
+  }
+}

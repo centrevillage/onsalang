@@ -129,7 +129,8 @@ pub fn layout_of(a: &Analysis, ty: TyId) -> Option<Layout> {
     }
 }
 
-fn layout_of_def(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Layout> {
+/// Layout of a user type by its def (`onsa interface`), without interning its `TyId`.
+pub fn layout_of_def(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Layout> {
     match &a.def(d).kind {
         DefKind::Struct(s) => match &s.fields {
             Fields::Named(fs) => {

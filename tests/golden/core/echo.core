@@ -1,0 +1,76 @@
+type echo.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool }
+type echo.echo.Config = struct {}
+type echo.echo.Params = struct { time: F32, feedback: F32 }
+type echo.echo.Out = struct { out: Buf[F32] }
+const echo.MAX_ECHO: U32 = 96000:U32
+const echo.echo.SIZE: U32 = 384024:U32
+const echo.echo.BULK_SIZE: U32 = 0:U32
+rt fn echo.echo.ctl(inout s: echo.echo.State, p: echo.echo.Params) -> () {
+  s.1 = p.1
+  let d: F32 = (p.0 * s.0)
+  s.2 = d
+}
+rt fn echo.echo.tick(inout s: echo.echo.State, x: F32) -> F32 {
+  let y: F32 = (x + (s.1 * {
+    let vdelay_0.d: F32 = s.2
+    let vdelay_0.dc: F32 = if (vdelay_0.d >= 1.0:F32) {
+      if (vdelay_0.d <= 96000.0:F32) {
+        vdelay_0.d
+      } else {
+        96000.0:F32
+      }
+    } else {
+      1.0:F32
+    }
+    let vdelay_0.k: U32 = trunc.F32.U32(vdelay_0.dc)
+    let vdelay_0.f: F32 = (vdelay_0.dc - round.U32.F32(vdelay_0.k))
+    let vdelay_0.wlk: U32 = ((s.4 + 96001:U32) - vdelay_0.k)
+    let vdelay_0.a: F32 = s.3[(vdelay_0.wlk % 96001:U32)]
+    let vdelay_0.b: F32 = s.3[((vdelay_0.wlk - 1:U32) % 96001:U32)]
+    let vdelay_0: F32 = (((1.0:F32 - vdelay_0.f) * vdelay_0.a) + (vdelay_0.f * vdelay_0.b))
+    vdelay_0
+  }))
+  let __out: F32 = y
+  s.3[s.4] = y
+  s.4 = ((s.4 + 1:U32) % 96001:U32)
+  __out
+}
+fn echo.echo.init(cfg: echo.echo.Config, sample_rate: F32) -> echo.echo.State sret {
+  let s: echo.echo.State = zeroed:echo.echo.State
+  s.0 = sample_rate
+  let vdelay_0.init: F32 = 0.0:F32
+  s.3 = [vdelay_0.init; 96001]
+  s.4 = 0:U32
+  s.5 = false
+  s
+}
+rt fn echo.echo.reset(inout s: echo.echo.State) -> () {
+  s.3 = [0.0:F32; 96001]
+  s.4 = 0:U32
+  s.5 = false
+}
+rt fn echo.echo.process(inout s: echo.echo.State, params: echo.echo.Params, x@7: Span[F32], inout out: Span[F32]) -> () {
+  let len: U32 = len(x@7)
+  if (len(out) != len) {
+    panic("span lengths differ")
+  }
+  echo.echo.ctl(inout s, params)
+  for i in 0:U32..len {
+    let x@11: F32 = x@7[i]
+    let v: F32 = echo.echo.tick(inout s, x@11)
+    out[i] = v
+  }
+}
+rt fn echo.echo.process_inplace(inout s: echo.echo.State, params: echo.echo.Params, inout out: Span[F32]) -> () {
+  echo.echo.process(inout s, params, out, inout out)
+}
+fn echo.echo.render(cfg: echo.echo.Config, params: echo.echo.Params, x@7: Span[F32], sample_rate: F32) -> echo.echo.Out sret {
+  let s: echo.echo.State = echo.echo.init(cfg, sample_rate)
+  let n: U32 = len(x@7)
+  let out: Buf[F32] = buf.zeroed(n)
+  echo.echo.process(inout s, params, x@7, inout span(out))
+  echo.echo.Out { out: out }
+}
+fn echo.echo.params_default() -> echo.echo.Params sret {
+  echo.echo.Params { time: 0.3:F32, feedback: 0.5:F32 }
+}

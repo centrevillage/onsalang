@@ -41,6 +41,33 @@ enum Command {
         old: PathBuf,
         new: PathBuf,
     },
+    /// Print an internal representation (hidden; `--core` for Core IR)
+    #[command(hide = true)]
+    Dump {
+        /// Core IR after lowering and monomorphization
+        #[arg(long)]
+        core: bool,
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
+    /// Public signatures, kinds, sizes, @param and flow APIs (spec §18.2)
+    Interface {
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+        /// `.onsa` file, package directory, or `onsa.toml`
+        path: PathBuf,
+    },
+    /// Signal graph of a flow as DOT (spec §18.2)
+    Graph {
+        /// Render to SVG with Graphviz `dot`
+        #[arg(long)]
+        svg: bool,
+        /// `.onsa` file, package directory, or `onsa.toml`
+        path: PathBuf,
+        /// Flow name (`voice` or `dsp.voice`)
+        flow: String,
+    },
     /// Explain a diagnostic code
     Explain {
         /// The code, e.g. `E0811`
@@ -55,6 +82,9 @@ fn main() -> ExitCode {
         Command::Check { json, paths } => check(json, &paths),
         Command::Fmt { check, paths } => fmt(check, &paths),
         Command::Diff { ast, old, new } => diff(ast, &old, &new),
+        Command::Dump { core, paths } => dump(core, &paths),
+        Command::Interface { json, path } => interface(json, &path),
+        Command::Graph { svg, path, flow } => graph(svg, &path, &flow),
         Command::Explain { code } => explain(&code),
     }
 }
@@ -160,4 +190,93 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> ExitCode {
         }
     }
     if diffs.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// `onsa dump --core`: the Core IR of a package (after `check` passes).
+fn dump(core: bool, paths: &[PathBuf]) -> ExitCode {
+    if !core {
+        eprintln!("onsa: `dump` needs `--core`");
+        return ExitCode::from(2);
+    }
+    let mut loaded = match onsa_driver::load(paths) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("onsa: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    if !analyzed.diagnostics.is_empty() {
+        print!("{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+        return ExitCode::from(1);
+    }
+    match onsa_driver::lower_core(&analyzed) {
+        Ok(module) => {
+            print!("{}", onsa_core::dump(&module));
+            ExitCode::SUCCESS
+        }
+        Err(diags) => {
+            print!("{}", onsa_diag::to_text(&loaded.sources, &diags));
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// Load and analyze one package; print diagnostics and return `None` when it does not check.
+fn analyzed_or_exit(path: &PathBuf) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), ExitCode> {
+    let mut loaded = match onsa_driver::load(std::slice::from_ref(path)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("onsa: {e}");
+            return Err(ExitCode::from(2));
+        }
+    };
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    if !analyzed.diagnostics.is_empty() {
+        print!("{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+        return Err(ExitCode::from(1));
+    }
+    Ok((loaded, analyzed))
+}
+
+/// `onsa interface <path> [--json]` (T3-11).
+fn interface(json: bool, path: &PathBuf) -> ExitCode {
+    let (_loaded, analyzed) = match analyzed_or_exit(path) {
+        Ok(x) => x,
+        Err(code) => return code,
+    };
+    let iface = onsa_driver::interface(&analyzed);
+    if json {
+        println!("{}", onsa_driver::render_json(&iface));
+    } else {
+        print!("{}", onsa_driver::render_text(&iface));
+    }
+    ExitCode::SUCCESS
+}
+
+/// `onsa graph <path> <flow> [--svg]` (T3-12).
+fn graph(svg: bool, path: &PathBuf, flow: &str) -> ExitCode {
+    let (_loaded, analyzed) = match analyzed_or_exit(path) {
+        Ok(x) => x,
+        Err(code) => return code,
+    };
+    let dot = match onsa_driver::graph(&analyzed, flow) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("onsa: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    if svg {
+        match onsa_driver::graph::to_svg(&dot) {
+            Ok(s) => print!("{s}"),
+            Err(e) => {
+                eprintln!("onsa: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    } else {
+        print!("{dot}");
+    }
+    ExitCode::SUCCESS
 }

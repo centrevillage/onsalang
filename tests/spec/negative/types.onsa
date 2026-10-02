@@ -1,8 +1,21 @@
 // E04xx / E05xx: body type checking (§4.7, §3.3, §4.4, §7, §9.1). One error per item (P-01).
 use std.array
 
-pub fn literal_undecided() -> U32 {
-  let a = 1                     //~ E0405
+pub fn float_literal_undecided() -> U32 {
+  let a = 1.0                   //~ E0405
+  2
+}
+
+pub fn integer_literal_defaults_to_i32() -> U32 {
+  let a = 1
+  for i in 0..4 {
+  }
+  assert 1 == 1
+  2
+}
+
+pub fn integer_default_out_of_range() -> U32 {
+  let big = 3_000_000_000      //~ E0408
   2
 }
 

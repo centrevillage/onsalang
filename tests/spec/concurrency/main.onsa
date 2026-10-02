@@ -1,0 +1,17 @@
+//! mode: parse
+use std.audio.device
+use std.sync.{Swap}
+
+pub fn main() -> Result[(), device.Error] {
+  let st     = voice.init(voice.Config {}, 48000.0)
+  var params = Swap.new(voice.params_default()) // 固定サイズの値。main のフレームに置かれる
+  device.run(move st, inout params, on_audio, on_control)
+}
+
+rt fn on_audio(inout st: voice.State, params: Swap[voice.Params], inout out: Span[F32]) {
+  voice.process(inout st, params.latest(), inout out)
+}
+
+fn on_control(inout params: Swap[voice.Params], ev: device.Event) {
+  params.publish!(next_params(ev))
+}

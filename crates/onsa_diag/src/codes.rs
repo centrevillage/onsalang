@@ -123,6 +123,7 @@ codes! {
     E0421 = 421,  Types,          "typed hole";
     E0501 = 501,  Exhaustiveness, "`match` is not exhaustive";
     E0502 = 502,  Exhaustiveness, "refutable pattern in `let`";
+    E0601 = 601,  Effects,        "effect used but not in the function's effect row";
     E0610 = 610,  Effects,        "effect is not provided by the target";
     E0701 = 701,  Modes,          "cannot modify this place";
     E0702 = 702,  Modes,          "the same place is passed as `inout` twice in one call";

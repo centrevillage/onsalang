@@ -51,7 +51,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         };
         w.closures();
         w.repeats();
-        w.expr(root, Pos::Consume);
+        w.expr(root, Pos::Return);
         if let Some(d) = w.diag.take() {
             diags.push(d);
         }
@@ -74,10 +74,15 @@ enum Pos {
     PlanarElem,
     /// Receiver of a borrowed method, base of an index, source of a `for`.
     Base,
-    /// A position that takes the value: `let` / `var` init, return, struct
-    /// field, literal element, assignment value, constructor argument.
+    /// A position that takes the value without a `move` keyword: `let` / `var`
+    /// init, struct field, literal element, assignment value, constructor
+    /// argument. An Affine place here is E0711 ("write `move x`", S-21).
     Consume,
-    /// `match` scrutinee: moves an owned Affine value, borrows a borrowed one.
+    /// The operand of an explicit `move x` (§5.2, S-21): Affine places move.
+    Moved,
+    /// Return value / function tail: an owned local moves implicitly (S-21).
+    Return,
+    /// `match x` scrutinee: always a borrow (§7, S-21); `match move x` is `Moved`.
     Scrutinee,
     Other,
 }
@@ -353,7 +358,7 @@ impl<'a> Walker<'a> {
             StmtKind::Break | StmtKind::Continue => self.diverged = true,
             StmtKind::Return(v) => {
                 if let Some(v) = v {
-                    self.expr(*v, Pos::Consume);
+                    self.expr(*v, Pos::Return);
                 }
                 self.diverged = true;
             }
@@ -452,6 +457,7 @@ impl<'a> Walker<'a> {
                 }
             }
             ExprKind::Paren(inner) => self.expr(*inner, pos),
+            ExprKind::Move(inner) => self.expr(*inner, Pos::Moved),
             ExprKind::Tuple(elems) | ExprKind::Array(elems) => {
                 let inner = if pos == Pos::Arg || pos == Pos::InoutArg { Pos::PlanarElem } else { Pos::Consume };
                 for &el in elems {
@@ -529,7 +535,7 @@ impl<'a> Walker<'a> {
                 let saved = self.state.clone();
                 let saved_div = self.diverged;
                 self.closure_depth += 1;
-                self.expr(*body, Pos::Consume);
+                self.expr(*body, Pos::Return);
                 self.closure_depth -= 1;
                 self.state = saved;
                 self.diverged = saved_div;
@@ -602,7 +608,8 @@ impl<'a> Walker<'a> {
     /// A place (local or projection) in a position that takes its value:
     /// Affine values move (whole locals only), Dup values are copied.
     fn consume(&mut self, e: ExprId, pos: Pos) {
-        if !matches!(pos, Pos::Consume | Pos::MoveArg | Pos::Scrutinee) {
+        // `match x` always borrows (§7, S-21); `match move x` reaches here as `Moved`.
+        if !matches!(pos, Pos::Consume | Pos::Moved | Pos::MoveArg | Pos::Return) {
             return;
         }
         if self.kind_of_expr(e) != Some(Kind::Affine) {
@@ -612,9 +619,6 @@ impl<'a> Walker<'a> {
         let span = self.span(e);
         let name = self.local(place.local).name.clone();
         if self.is_borrowed(place.local) {
-            if pos == Pos::Scrutinee {
-                return; // matching a borrowed value binds borrows (§7)
-            }
             let what = if pos == Pos::MoveArg { "passed as `move`" } else { "moved out" };
             let d = Diagnostic::new(
                 Code::E0711,
@@ -635,6 +639,18 @@ impl<'a> Walker<'a> {
                 span,
                 format!("cannot move `{shown}` out of `{name}`: Affine values move as a whole (partial moves are not allowed)"),
             );
+            return;
+        }
+        if pos == Pos::Consume {
+            // S-21: consuming an owned Affine value is written with `move` (§5.2).
+            let d = Diagnostic::new(
+                Code::E0711,
+                span,
+                format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"),
+            )
+            .with_found(self.src(span))
+            .with_fix(Fix::InsertBefore { insert_before: "move ".to_string() });
+            self.report(d);
             return;
         }
         if self.closure_depth > 0 {
@@ -734,15 +750,19 @@ impl<'a> Walker<'a> {
                     _ => args.iter().map(|_| Mode::Borrow).collect(),
                 }
             }
-            // Constructors take their arguments by value (§4.4): no mode keyword, Affine values move.
+            // Constructors take their arguments by value (§4.4): Dup values are copied,
+            // an Affine value needs `move` like any call argument (S-21).
             Some(Target::Variant { .. }) | Some(Target::Prelude(_)) => {
                 for arg in args {
-                    if arg.mode == Mode::Inout {
-                        let s = arg.span;
-                        self.err(Code::E0703, s, "a constructor takes its argument by value; remove `inout`");
-                        return;
+                    match arg.mode {
+                        Mode::Inout => {
+                            let s = arg.span;
+                            self.err(Code::E0703, s, "a constructor takes its argument by value; remove `inout`");
+                            return;
+                        }
+                        Mode::Move => self.expr(arg.expr, Pos::MoveArg),
+                        Mode::Borrow => self.expr(arg.expr, Pos::Consume),
                     }
-                    self.expr(arg.expr, Pos::Consume);
                 }
                 return;
             }
@@ -855,7 +875,7 @@ impl<'a> Walker<'a> {
                 self.mutable_place(&p, "call an `inout self` method on");
                 inout.push(p);
             }
-            Mode::Move => self.expr(r, Pos::Consume),
+            Mode::Move => self.expr(r, Pos::Moved), // `move self` has no mark (§5.2)
         }
     }
 

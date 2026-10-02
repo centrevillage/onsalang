@@ -1,0 +1,123 @@
+package voice
+
+module voice
+
+pub flow resonator(
+  x: Sig[F32],
+  fc: Ctl[F32],
+  bw: Ctl[F32],
+) -> Sig[F32]
+  pub struct resonator.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct resonator.Config  // Copy; size 0, align 1
+  pub struct resonator.Params  // Copy; size 8, align 4
+    fc: F32  // offset 0
+    bw: F32  // offset 4
+  pub struct resonator.Out  // Affine
+    out: Buf[F32]
+  pub const resonator.SIZE: U32
+  pub const resonator.BULK_SIZE: U32
+  pub fn resonator.init(cfg: resonator.Config, sample_rate: F32) -> resonator.State
+  pub rt fn resonator.reset(inout s: resonator.State)
+  pub rt fn resonator.process(inout s: resonator.State, params: resonator.Params, x: Span[F32], inout out: Span[F32])
+  pub rt fn resonator.process_inplace(inout s: resonator.State, params: resonator.Params, inout out: Span[F32])
+  pub fn resonator.render(cfg: resonator.Config, params: resonator.Params, x: Span[F32], sample_rate: F32) -> resonator.Out uses {Alloc}
+
+pub flow saw(
+  f0: Ctl[F32],
+) -> Sig[F32]
+  pub struct saw.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct saw.Config  // Copy; size 0, align 1
+  pub struct saw.Params  // Copy; size 4, align 4
+    f0: F32  // offset 0
+  pub struct saw.Out  // Affine
+    out: Buf[F32]
+  pub const saw.SIZE: U32
+  pub const saw.BULK_SIZE: U32
+  pub fn saw.init(cfg: saw.Config, sample_rate: F32) -> saw.State
+  pub rt fn saw.reset(inout s: saw.State)
+  pub rt fn saw.process(inout s: saw.State, params: saw.Params, inout out: Span[F32])
+  pub fn saw.render(cfg: saw.Config, params: saw.Params, frames: U32, sample_rate: F32) -> saw.Out uses {Alloc}
+
+pub rt fn wrap01(x: F32) -> F32
+
+pub flow smooth(
+  x: Ctl[F32],
+  time: Init[F32],
+) -> Sig[F32]
+  pub struct smooth.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct smooth.Config  // Copy; size 4, align 4
+    time: F32  // offset 0
+  pub struct smooth.Params  // Copy; size 4, align 4
+    x: F32  // offset 0
+  pub struct smooth.Out  // Affine
+    out: Buf[F32]
+  pub const smooth.SIZE: U32
+  pub const smooth.BULK_SIZE: U32
+  pub fn smooth.init(cfg: smooth.Config, sample_rate: F32) -> smooth.State
+  pub rt fn smooth.reset(inout s: smooth.State)
+  pub rt fn smooth.process(inout s: smooth.State, params: smooth.Params, inout out: Span[F32])
+  pub fn smooth.render(cfg: smooth.Config, params: smooth.Params, frames: U32, sample_rate: F32) -> smooth.Out uses {Alloc}
+
+pub flow voice(
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: Ctl[F32],
+  @param(min: 200.0, max: 1200.0, default: 700.0, unit: "Hz")
+  vowel_f1: Ctl[F32],
+  @param(min: 600.0, max: 3000.0, default: 1220.0, unit: "Hz")
+  vowel_f2: Ctl[F32],
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  gain: Ctl[F32],
+) -> Sig[F32]
+  pub struct voice.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct voice.Config  // Copy; size 0, align 1
+  pub struct voice.Params  // Copy; size 16, align 4
+    f0: F32  // offset 0
+    vowel_f1: F32  // offset 4
+    vowel_f2: F32  // offset 8
+    gain: F32  // offset 12
+  pub struct voice.Out  // Affine
+    out: Buf[F32]
+  pub const voice.SIZE: U32
+  pub const voice.BULK_SIZE: U32
+  pub fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
+  pub rt fn voice.reset(inout s: voice.State)
+  pub rt fn voice.process(inout s: voice.State, params: voice.Params, inout out: Span[F32])
+  pub fn voice.render(cfg: voice.Config, params: voice.Params, frames: U32, sample_rate: F32) -> voice.Out uses {Alloc}
+  pub fn voice.params_default() -> voice.Params
+
+pub flow echo(
+  x: Sig[F32],
+  @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
+  time: Ctl[F32],
+  @param(min: 0.0, max: 0.95, default: 0.5)
+  feedback: Ctl[F32],
+) -> Sig[F32]
+  pub struct echo.State  // Affine; size: computed by flow lowering (T3-6)
+  pub struct echo.Config  // Copy; size 0, align 1
+  pub struct echo.Params  // Copy; size 8, align 4
+    time: F32  // offset 0
+    feedback: F32  // offset 4
+  pub struct echo.Out  // Affine
+    out: Buf[F32]
+  pub const echo.SIZE: U32
+  pub const echo.BULK_SIZE: U32
+  pub fn echo.init(cfg: echo.Config, sample_rate: F32) -> echo.State
+  pub rt fn echo.reset(inout s: echo.State)
+  pub rt fn echo.process(inout s: echo.State, params: echo.Params, x: Span[F32], inout out: Span[F32])
+  pub rt fn echo.process_inplace(inout s: echo.State, params: echo.Params, inout out: Span[F32])
+  pub fn echo.render(cfg: echo.Config, params: echo.Params, x: Span[F32], sample_rate: F32) -> echo.Out uses {Alloc}
+  pub fn echo.params_default() -> echo.Params
+
+pub struct Poly  // Affine
+  voices: [voice.State; 8]
+  params: [voice.Params; 8]
+  notes: [Option[U8]; 8]
+  next: U32
+
+pub rt fn midi_to_hz(note: U8) -> F32
+
+impl Poly
+  pub fn new(sample_rate: F32) -> Poly
+  pub rt fn note_on(inout self, note: U8, velocity: F32)
+  pub rt fn note_off(inout self, note: U8)
+  pub rt fn process(inout self, inout out: Span[F32], inout scratch: Span[F32])

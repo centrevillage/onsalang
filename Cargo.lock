@@ -176,6 +176,7 @@ name = "onsa_cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "onsa_core",
  "onsa_diag",
  "onsa_driver",
  "onsa_syntax",
@@ -187,6 +188,8 @@ name = "onsa_core"
 version = "0.1.0"
 dependencies = [
  "onsa_diag",
+ "onsa_sema",
+ "onsa_syntax",
 ]
 
 [[package]]
@@ -249,8 +252,10 @@ dependencies = [
 name = "onsa_tests"
 version = "0.1.0"
 dependencies = [
+ "onsa_core",
  "onsa_diag",
  "onsa_driver",
+ "serde_json",
 ]
 
 [[package]]

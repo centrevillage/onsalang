@@ -907,9 +907,139 @@ impl<'p> Sema<'p> {
                         return self.a.types.error();
                     }
                 };
-                let lowered_args: Vec<TyId> = args_ast.iter().map(|&x| self.lower_type(cx, x)).collect();
+                // S-24: a const generic parameter takes an integer literal or a
+                // constant's name; which arguments are const depends on the entity.
+                let expect_const: Vec<Option<bool>> = match entity {
+                    Entity::Def(d) | Entity::Member(d) => {
+                        let def = &self.a.defs[d.0 as usize];
+                        match &def.kind {
+                            DefKind::Struct(_) | DefKind::Enum(_) => {
+                                def.generics().iter().map(|g| Some(matches!(g.kind, GenericKind::Const(_)))).collect()
+                            }
+                            _ => Vec::new(),
+                        }
+                    }
+                    _ => Vec::new(),
+                };
+                let lowered_args: Vec<TyId> = args_ast
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &x)| self.lower_type_arg(cx, x, expect_const.get(i).copied().flatten()))
+                    .collect();
                 self.type_of_entity(cx, entity, lowered_args, te.span, path)
             }
+            TypeKind::ConstArg(_) => {
+                self.report(
+                    cx.def,
+                    Diagnostic::new(
+                        Code::E0401,
+                        te.span,
+                        "a constant is not a type; const arguments go to `const` parameters",
+                    )
+                    .with_found(src(cx, te.span)),
+                );
+                self.a.types.error()
+            }
+        }
+    }
+
+    /// One type argument (S-24). `expect_const`: `Some(true)` for a `const`
+    /// parameter, `Some(false)` for a type parameter, `None` when the entity
+    /// has no declared kinds (builtins, aliases: only types are accepted).
+    fn lower_type_arg(&mut self, cx: &Cx<'p>, t: TypeId, expect_const: Option<bool>) -> TyId {
+        let te = cx.ast.ty(t);
+        match (&te.kind, expect_const) {
+            (TypeKind::ConstArg(e), Some(false) | None) => {
+                let _ = e;
+                self.report(
+                    cx.def,
+                    Diagnostic::new(Code::E0401, te.span, "a type parameter expects a type, not a constant")
+                        .with_found(src(cx, te.span)),
+                );
+                self.a.types.error()
+            }
+            (TypeKind::ConstArg(e), Some(true)) => {
+                let expr = cx.ast.expr(*e);
+                let value: Option<i128> = match &expr.kind {
+                    ExprKind::Lit(Lit::Int { value, .. }) => Some(*value as i128),
+                    ExprKind::Unary { expr: inner, .. } => match &cx.ast.expr(*inner).kind {
+                        ExprKind::Lit(Lit::Int { value, .. }) => Some(-(*value as i128)),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                match value {
+                    Some(v) if (0..=u32::MAX as i128).contains(&v) => self.a.types.intern(Ty::ConstVal(v as u32)),
+                    _ => {
+                        self.report(
+                            cx.def,
+                            Diagnostic::new(Code::E0408, te.span, "a const argument must fit in `U32` (§4.1)")
+                                .with_found(src(cx, te.span)),
+                        );
+                        self.a.types.error()
+                    }
+                }
+            }
+            (TypeKind::Path { path, args }, Some(true)) if args.is_empty() => {
+                // `N` of the enclosing item, or a `const` item with a literal value.
+                if path.segments.len() == 1
+                    && let Some(i) = cx.generics.iter().position(|g| g.name == path.segments[0].name)
+                {
+                    if matches!(cx.generics[i].kind, GenericKind::Const(_)) {
+                        return self.a.types.intern(Ty::Param(i as u32));
+                    }
+                } else {
+                    match self.a.resolve_path(cx.m, path) {
+                        Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => {
+                            if let DefKind::Const(c) = &self.a.defs[d.0 as usize].kind {
+                                if let Some(v) = c.int_value
+                                    && v <= u32::MAX as u64
+                                {
+                                    return self.a.types.intern(Ty::ConstVal(v as u32));
+                                }
+                                self.report(
+                                    cx.def,
+                                    Diagnostic::new(
+                                        Code::E0408,
+                                        te.span,
+                                        "a const argument must be an integer literal or a `const` with a literal value",
+                                    )
+                                    .with_found(src(cx, te.span)),
+                                );
+                                return self.a.types.error();
+                            }
+                        }
+                        Err(e) => {
+                            self.report(cx.def, e.into_diagnostic());
+                            return self.a.types.error();
+                        }
+                        _ => {}
+                    }
+                }
+                self.report(
+                    cx.def,
+                    Diagnostic::new(
+                        Code::E0401,
+                        te.span,
+                        "a `const` parameter expects an integer literal or a constant, not a type",
+                    )
+                    .with_found(src(cx, te.span)),
+                );
+                self.a.types.error()
+            }
+            (_, Some(true)) => {
+                self.report(
+                    cx.def,
+                    Diagnostic::new(
+                        Code::E0401,
+                        te.span,
+                        "a `const` parameter expects an integer literal or a constant, not a type",
+                    )
+                    .with_found(src(cx, te.span)),
+                );
+                self.a.types.error()
+            }
+            _ => self.lower_type(cx, t),
         }
     }
 

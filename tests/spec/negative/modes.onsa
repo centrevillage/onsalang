@@ -12,7 +12,7 @@ impl P {
 
 pub fn bump(inout a: U32, b: U32) {}
 
-pub fn take(move b: Buf[F32]) {}
+pub fn take(move b: Buf[F32]) uses {Alloc} {}
 
 pub fn assign_to_let() {
   let a: U32 = 1
@@ -59,12 +59,12 @@ pub fn extra_move(b: U32) {
 
 pub fn bump2(b: U32) {}
 
-pub fn used_after_move(move b: Buf[F32]) -> U32 {
+pub fn used_after_move(move b: Buf[F32]) -> U32 uses {Alloc} {
   take(move b)
   b.len()                       //~ E0704
 }
 
-pub fn moved_in_loop(move b: Buf[F32], n: U32) {
+pub fn moved_in_loop(move b: Buf[F32], n: U32) uses {Alloc} {
   for i in 0..n {
     take(move b)                //~ E0704
   }
@@ -78,8 +78,36 @@ pub fn span_returned(xs: Span[F32]) -> Span[F32] {   //~ E0710
   xs
 }
 
-pub fn move_of_borrowed(b: Buf[F32]) {
+pub fn move_of_borrowed(b: Buf[F32]) uses {Alloc} {
   take(move b)                  //~ E0711
+}
+
+pub fn consume_without_move(move b: Buf[F32]) uses {Alloc} {
+  let y = b                     //~ E0711
+}
+
+pub fn consume_with_move(move b: Buf[F32]) uses {Alloc} {
+  let y = move b
+  take(move b)                  //~ E0704
+}
+
+pub fn match_borrows(move o: Option[Buf[F32]]) uses {Alloc} {
+  match o {
+    Some(b) => take(move b),    //~ E0711
+    None => {},
+  }
+}
+
+pub fn match_moves(move o: Option[Buf[F32]]) uses {Alloc} {
+  match move o {
+    Some(b) => take(move b),
+    None => {},
+  }
+}
+
+pub fn move_of_a_call() -> U32 {
+  let y = move bump2(1)         //~ E0711
+  y
 }
 
 pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }

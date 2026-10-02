@@ -1,0 +1,67 @@
+type resonator.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool }
+type resonator.resonator.Config = struct {}
+type resonator.resonator.Params = struct { fc: F32, bw: F32 }
+type resonator.resonator.Out = struct { out: Buf[F32] }
+const resonator.resonator.SIZE: U32 = 28:U32
+const resonator.resonator.BULK_SIZE: U32 = 0:U32
+rt fn resonator.resonator.ctl(inout s: resonator.resonator.State, p: resonator.resonator.Params) -> () {
+  let r: F32 = math.exp.F32(((-(3.1415927:F32 * p.1)) / s.0))
+  s.1 = r
+  let w: F32 = (((2.0:F32 * 3.1415927:F32) * p.0) / s.0)
+  let b1: F32 = ((2.0:F32 * r) * math.cos.F32(w))
+  s.2 = b1
+  let b2: F32 = (r * r)
+  s.3 = b2
+}
+rt fn resonator.resonator.tick(inout s: resonator.resonator.State, x: F32) -> F32 {
+  let y1@7: F32 = {
+    let y1@11: F32 = s.4
+    y1@11
+  }
+  let y2@8: F32 = {
+    let y2@12: F32 = s.5
+    y2@12
+  }
+  let y: F32 = ((((1.0:F32 - s.1) * x) + (s.2 * y1@7)) - (s.3 * y2@8))
+  let __out: F32 = y
+  s.4 = y
+  s.5 = y1@7
+  __out
+}
+fn resonator.resonator.init(cfg: resonator.resonator.Config, sample_rate: F32) -> resonator.resonator.State sret {
+  let s: resonator.resonator.State = zeroed:resonator.resonator.State
+  s.0 = sample_rate
+  let y1.init: F32 = 0.0:F32
+  s.4 = y1.init
+  let y2.init: F32 = 0.0:F32
+  s.5 = y2.init
+  s.6 = false
+  s
+}
+rt fn resonator.resonator.reset(inout s: resonator.resonator.State) -> () {
+  s.4 = 0.0:F32
+  s.5 = 0.0:F32
+  s.6 = false
+}
+rt fn resonator.resonator.process(inout s: resonator.resonator.State, params: resonator.resonator.Params, x@12: Span[F32], inout out: Span[F32]) -> () {
+  let len: U32 = len(x@12)
+  if (len(out) != len) {
+    panic("span lengths differ")
+  }
+  resonator.resonator.ctl(inout s, params)
+  for i in 0:U32..len {
+    let x@16: F32 = x@12[i]
+    let v: F32 = resonator.resonator.tick(inout s, x@16)
+    out[i] = v
+  }
+}
+rt fn resonator.resonator.process_inplace(inout s: resonator.resonator.State, params: resonator.resonator.Params, inout out: Span[F32]) -> () {
+  resonator.resonator.process(inout s, params, out, inout out)
+}
+fn resonator.resonator.render(cfg: resonator.resonator.Config, params: resonator.resonator.Params, x@12: Span[F32], sample_rate: F32) -> resonator.resonator.Out sret {
+  let s: resonator.resonator.State = resonator.resonator.init(cfg, sample_rate)
+  let n: U32 = len(x@12)
+  let out: Buf[F32] = buf.zeroed(n)
+  resonator.resonator.process(inout s, params, x@12, inout span(out))
+  resonator.resonator.Out { out: out }
+}

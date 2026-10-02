@@ -1,0 +1,11 @@
+type methods.Point = struct { x: F32, y: F32 }
+fn methods.Point.new(x: F32, y: F32) -> methods.Point sret {
+  methods.Point { x: x, y: y }
+}
+rt fn methods.Point.norm(self: methods.Point) -> F32 {
+  math.sqrt.F32(((self.0 * self.0) + (self.1 * self.1)))
+}
+rt fn methods.Point.scale(inout self: methods.Point, k: F32) -> () {
+  self.0 = (self.0 * k)
+  self.1 = (self.1 * k)
+}

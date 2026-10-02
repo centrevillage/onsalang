@@ -48,10 +48,29 @@ fn literal_resolved_by_later_statement() {
 }
 
 #[test]
-fn unresolved_literal_is_e0405() {
-    assert_eq!(codes("pub fn f() {\n  let a = 1\n}\n"), vec![Code::E0405]);
+fn unresolved_float_literal_is_e0405() {
+    // S-22: floats have no default (§2.4); integers default to I32 (below).
     assert_eq!(codes("pub fn f() {\n  var acc = 0.0\n}\n"), vec![Code::E0405]);
-    assert_eq!(codes("test \"t\" { assert 1 == 1 }\n"), vec![Code::E0405]);
+    assert_eq!(codes("pub fn f() {\n  let a = 1.0\n}\n"), vec![Code::E0405]);
+}
+
+#[test]
+fn unresolved_integer_literal_defaults_to_i32() {
+    // S-22 (§2.4, §4.7): applied at the end of the body only.
+    assert_eq!(codes("pub fn f() {\n  let a = 1\n}\n"), vec![]);
+    assert_eq!(codes("test \"t\" { assert 1 == 1 }\n"), vec![]);
+    assert_eq!(codes("pub fn f() {\n  for i in 0..4 {\n  }\n}\n"), vec![]);
+    let a = check("pub fn f() {\n  let a = 1\n}\n");
+    let body = a.bodies.values().next().unwrap();
+    let int = body.locals.iter().find(|l| l.name == "a").unwrap().ty;
+    assert!(matches!(a.types.get(int), Ty::Int(IntKind::I32)));
+    // Out of the I32 range: E0408 with the annotation hint.
+    let a = check("pub fn f() {\n  let x = 3_000_000_000\n}\n");
+    assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0408]);
+    assert!(a.diagnostics[0].message.contains("annotation"), "{}", a.diagnostics[0].message);
+    // Mid-body operations still need the type (E0420): the default is not eager.
+    assert_eq!(codes("pub fn f() -> F32 {\n  0.round_f32()\n}\n"), vec![Code::E0420]);
+    assert_eq!(codes("pub fn f() -> F32 {\n  var acc = 0.0\n  acc.round_f32()\n}\n"), vec![Code::E0420]);
 }
 
 #[test]

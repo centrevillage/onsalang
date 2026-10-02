@@ -1,0 +1,26 @@
+// E0601: a function uses `Alloc` without `uses {Alloc}` (S-23, §8.1). The
+// diagnostic sits on the signature so the fix can append the effect row.
+pub fn make_buf(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub fn calls_alloc_fn() -> U32 {   //~ E0601
+  make_buf(4).len()
+}
+
+pub fn allocates_directly() -> U32 {   //~ E0601
+  let b: Buf[F32] = Buf.zeroed(4)
+  b.len()
+}
+
+pub fn owns_a_buf(move b: Buf[F32]) -> U32 {   //~ E0601
+  b.len()
+}
+
+pub fn fine(n: U32) -> U32 uses {Alloc} {
+  make_buf(n).len()
+}
+
+test "the runner provides Alloc" {
+  assert make_buf(4).len() == 4
+}

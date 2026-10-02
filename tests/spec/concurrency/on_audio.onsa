@@ -1,8 +1,0 @@
-//! mode: none
-// 制御スレッド側（非 rt）
-params.publish(voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 })
-
-// オーディオコールバック（rt）
-pub rt fn on_audio(inout st: voice.State, params: Swap[voice.Params], inout out: Span[F32]) {
-  voice.process(inout st, params.latest(), inout out)
-}

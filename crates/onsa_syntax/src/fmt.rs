@@ -620,6 +620,7 @@ impl<'a> Fmt<'a> {
                 self.expr(*len);
                 self.push("]");
             }
+            TypeKind::ConstArg(e) => self.expr(*e),
             TypeKind::Unit => self.push("()"),
             TypeKind::Tuple(ts) => {
                 self.push("(");
@@ -902,6 +903,10 @@ impl<'a> Fmt<'a> {
                 self.push("(");
                 self.expr(*inner);
                 self.push(")");
+            }
+            ExprKind::Move(inner) => {
+                self.push("move ");
+                self.expr(*inner);
             }
             ExprKind::Tuple(items) => {
                 let items: Vec<Elem<'_, 'a>> = items
@@ -1257,6 +1262,19 @@ impl<'a> Fmt<'a> {
 #[cfg(test)]
 mod tests {
     use onsa_diag::FileId;
+
+    #[test]
+    fn move_expressions_round_trip() {
+        let src = "fn f(move b: Buf[F32]) {\n  let y = move b\n  let s = Box { b: move y }\n  match move b {\n    _ => 1,\n  }\n}\n";
+        assert_eq!(fmt(src), src);
+        assert_eq!(fmt("fn f(move b: U32) {\n  let y =   move   b\n}\n"), "fn f(move b: U32) {\n  let y = move b\n}\n");
+    }
+
+    #[test]
+    fn const_type_arguments_round_trip() {
+        let src = "pub fn f(r: Ring[F32, 4]) -> Ring[F32, TABLE_SIZE] {\n  r\n}\n";
+        assert_eq!(fmt(src), src);
+    }
 
     fn fmt(src: &str) -> String {
         let parsed = crate::parse(FileId(0), src);

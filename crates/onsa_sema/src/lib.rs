@@ -10,7 +10,13 @@ mod body_tests;
 mod builtin;
 pub mod consteval;
 pub mod def;
+mod effects;
+#[cfg(test)]
+mod effects_tests;
 mod exhaust;
+pub mod flow;
+#[cfg(test)]
+mod flow_tests;
 pub mod infer;
 pub mod kind;
 pub mod layout;
@@ -32,6 +38,7 @@ use onsa_syntax::Parsed;
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
 pub use consteval::ConstValue;
 pub use def::{Def, DefId, DefKind, ModId};
+pub use flow::{FlowInfo, FlowLet, FlowRate, InitArg, Node};
 pub use kind::Kind;
 pub use layout::Layout;
 pub use resolve::{Builtin, Entity, ModInfo, Modules, ResolveError};
@@ -86,6 +93,8 @@ pub struct Analysis {
     pub bodies: HashMap<DefId, BodyInfo>,
     /// Values of `const` items evaluated at check time (T2-11).
     pub const_values: HashMap<DefId, ConstValue>,
+    /// Typed and rated flow bodies (T3-1), the input of flow lowering (T3-5).
+    pub flows: HashMap<DefId, FlowInfo>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -165,6 +174,7 @@ pub fn check_bodies(pkg: &Package, analysis: &mut Analysis) {
     body::check_all(pkg, analysis);
     let moved = modes::check_all(pkg, analysis);
     rt::check_all(pkg, analysis, &moved);
+    effects::check_all(pkg, analysis, &moved);
 }
 
 /// The module (file) a def was declared in.

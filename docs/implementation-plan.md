@@ -216,10 +216,10 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 第 2 期（fn 世界）は仕様 §20 の 7〜9。順序の提案:
 
-1. 効果と handler（末尾再開、証拠渡し）。`Alloc` 無しで動く `Log` / `Clock` / `Random` から。C-01、C-02、C-03、G-01 は 0.3 で決定済み。
+1. 効果と handler（末尾再開、証拠渡し）。`Alloc` 無しで動く `Log` / `Clock` / `Random` から。C-01、C-02、G-01 は 0.3 で決定済み。並行性は 2026-10-03 に削除し、実行文脈の登録（仕様 §16）に置き換えた。`std.sync` の同期型は Copy 要素の固定サイズの値で、ヒープを使わない。
 2. `Alloc`、Shared 型（`Str` `Array` `Map` `Set`）、`Buf`、Perceus の参照カウント、`Drop`。ヘッダの形は仕様 §12.8（G-06 で決定済み）。
 3. ユーザ定義 trait と演算子の脱糖、`derive`、`Iter` と `for` の脱糖。
-4. 標準ライブラリ（`std.fs` `std.audio.wav` など）と `main`、ターゲットの `provides`、`onsa.policy`。
+4. 標準ライブラリ（`std.fs` `std.audio.wav` など）と `main`、ターゲットの `provides`、`std.audio.device` の文脈の登録（§16.1）。`onsa.policy` は延期。
 5. LLVM バックエンド（ネイティブの `exe` / プラグイン）。C バックエンド経由で先に動かし、LLVM は性能が要るときに。
 6. `interface` / `audit` / `primer` の完成。
 

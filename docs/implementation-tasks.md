@@ -186,6 +186,10 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-18 ✅ | 字句・構文の一般のエラー（不正な文字、予期しないトークン）のコードが無い | E0001（不正な文字・リテラル）、E0002（予期しないトークン。`message` に期待したものを書く） | M1 |
 | S-19 ✅ | 文字列・文字リテラルのエスケープが未定義（§8.3 の例は `"a\nb\n"` を使う） | Rust と同じ `\n \t \r \0 \\ \" \' \u{XXXX}` の閉じた一覧 | M1 |
 | S-20 ✅ | `test` はキーワードだが、標準ライブラリのモジュール名に `std.test`、`std.dsp.test` を使っている（§11.8、§17.3） | パスの `.` の直後ではキーワードを名前として許す（`std.testing` への改名は採らない） | M2 |
+| S-21 ✅ | 仕様 §5.4 の `let y = move x` が文法に無い | `move x` を消費位置の式にする（`let` / `var` の初期化、代入の右辺、リテラルの要素、`match move x`）。返り値だけ書かない。Affine を `move` 無しで置くと E0711 + 挿入の修正候補。`match x` は借用の束縛（2026-10-03 決定） | M3 |
+| S-22 ✅ | `for i in 0..4` の未使用の `i` と `1 == 1` が E0405 になる | 整数リテラルだけ関数の終わりで `I32` に既定。浮動小数は E0405 のまま（2026-10-03 決定） | M3 |
+| S-23 ✅ | 非 rt 関数の効果行の整合が未検査 | E0601「効果行に無い効果を使った」を登録し、第 1 期は `Alloc` を M3 で検査（T3-13）。`test` の本体は例外（D-08）。E0610（M4）の前提 | M3 |
+| S-24 ✅ | 型の位置で const ジェネリックの引数（`Ring[F32, 4]`）を書く構文が無い | 整数リテラルか定数名を型引数の位置に書ける（2026-10-03 決定。構文解析器の対応は T3-14） | M3 |
 
 ---
 
@@ -416,20 +420,24 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 
 | ID | 作業 | 内容 | 規模 |
 |---|---|---|---|
-| T3-1 | flow の検査 | 本体の制限 E0806、名前の順序と因果性 E0801（`prev` 系の第 1 引数だけが前方参照）、レートの推論（`定数 < Init < Ctl < Sig` の最大値。`let` の注釈による昇格）、E0810（値型は Copy。境界の入れ子の配列）、E0813 / E0814、`delay` の E0807（`N = 1`）/ E0808（長さが定数でない）と `N >= 2` / `MAX >= 1`、呼び出しの形 E0811 / E0812 と E0805（効果を持つ fn）と非 rt fn の `Init` 制限、S-04 の E0815、`par`（`N` は定数、`i` は `Init` の `U32`）、`sample_rate()`、`match` の点ごとの意味 | L |
-| T3-2 | Core IR | §3.4 の定義、`verify`、テキスト出力 `onsa dump --core` | M |
-| T3-3 | fn の降下 | AST → Core。演算子を型付きの命令に（`+` は `Checked`、`+%` は `Wrap`、`+\|` は `Sat`）、添字を検査付きに、`?` を `Switch` に、`for` の範囲を `ForRange` に、配列と `Span` の反復を添字のループに、無名 `fn` の引数（`array.from_fn`）は呼び出し先の組込みに展開（インライン）、集成体を返す関数は `sret` | M |
-| T3-4 | 単相化 | T2-6 の要求から、到達する具体化だけを生成。名前は `clamp[F32]` → `clamp__F32` | S |
-| T3-5 | flow の降下 | §3.5 と D-03。状態の struct（S-05 の順序、S-06 の名前）、`Config` / `Params` / `Out`、`init` / `reset` / `ctl` / `tick` / `process` / `process_inplace` / `render` / `params_default`、`prev` の保存順、`delay` / `vdelay` の §11.4 の演算順の展開、サブインスタンス、`par` | L |
-| T3-6 | 配置と大きさ | `layout` で `SIZE` / `BULK_SIZE` / `ALIGN`。`bulk_threshold`（マニフェストのターゲットから。無指定なら全て fast）で bulk へ分ける。bulk のポインタを fast の先頭に置く | S |
+| T3-1 ✅ | flow の検査 | 本体の制限 E0806、名前の順序と因果性 E0801（`prev` 系の第 1 引数だけが前方参照）、レートの推論（`定数 < Init < Ctl < Sig` の最大値。`let` の注釈による昇格）、E0810（値型は Copy。境界の入れ子の配列）、E0813 / E0814、`delay` の E0807（`N = 1`）/ E0808（長さが定数でない）と `N >= 2` / `MAX >= 1`、呼び出しの形 E0811 / E0812 と E0805（効果を持つ fn）と非 rt fn の `Init` 制限、S-04 の E0815、`par`（`N` は定数、`i` は `Init` の `U32`）、`sample_rate()`、`match` の点ごとの意味 | L |
+| T3-2 ✅ | Core IR | §3.4 の定義、`verify`、テキスト出力 `onsa dump --core` | M |
+| T3-3 ✅ | fn の降下 | AST → Core。演算子を型付きの命令に（`+` は `Checked`、`+%` は `Wrap`、`+\|` は `Sat`）、添字を検査付きに、`?` を `Switch` に、`for` の範囲を `ForRange` に、配列と `Span` の反復を添字のループに、無名 `fn` の引数（`array.from_fn`）は呼び出し先の組込みに展開（インライン）、集成体を返す関数は `sret` | M |
+| T3-4 ✅ | 単相化 | T2-6 の要求から、到達する具体化だけを生成。名前は `clamp[F32]` → `clamp__F32` | S |
+| T3-5 ✅ | flow の降下 | §3.5 と D-03。状態の struct（S-05 の順序、S-06 の名前）、`Config` / `Params` / `Out`、`init` / `reset` / `ctl` / `tick` / `process` / `process_inplace` / `render` / `params_default`、`prev` の保存順、`delay` / `vdelay` の §11.4 の演算順の展開、サブインスタンス、`par` | L |
+| T3-6 ✅ | 配置と大きさ | `layout` で `SIZE` / `BULK_SIZE` / `ALIGN`。`bulk_threshold`（マニフェストのターゲットから。無指定なら全て fast）で bulk へ分ける。bulk のポインタを fast の先頭に置く | S |
 | T3-7 | インタプリタ | Core を直接実行する木歩き。値は `enum Value`（スカラ、集成体は `Vec<Value>`、`Span` は（バッファの参照、範囲）、`Buf` はヒープ）。検査付きの演算と添字は Rust の `checked_*` で、panic は `Err(Panic { msg, span })`。`Prim` は Rust の `f32` / `f64` のメソッドに対応付ける（`exp` `ln` `sin` ... は Rust が libm を呼ぶ。`fmod` は `%`）。F32 の演算は `f32` のまま（縮約されない） | M |
 | T3-8 | `onsa test` | `test` 項目を実行。`assert` の失敗と panic はそのテストの失敗（S-16 の形）。`render` / `impulse` / `energy` / `assert_near`（D-08、std の宣言は T3-10）。`--json` | S |
 | T3-9 | `const` の評価 | 関数呼び出しを含む初期化式をインタプリタで評価。E0407（第 1 期は Copy だけ） | S |
 | T3-10 | `std` の最初の版 | `std/math.onsa`（D-07、S-09。宣言だけ）、`std/dsp.onsa`（`sum`、`db_to_amp`）、`std/dsp/test.onsa`（`impulse` `energy` `assert_near` `magnitude_at`）、`std/array.onsa`（`from_fn`）。Onsa で書けるものは Onsa で書く | S |
-| T3-11 | `onsa interface <mod>` | 公開シグネチャ、種、大きさ、効果、`rt`、`@param`、flow の生成 API（§11.6 の形で表示）。`--json` | S |
-| T3-12 | `onsa graph <flow>` | DOT。ノードは `let` とインスタンス（名前は S-06）、辺は参照、`prev` 系の辺は破線、レートで色分け。`--svg` は `dot` があれば呼ぶ | S |
+| T3-11 ✅ | `onsa interface <mod>` | 公開シグネチャ、種、大きさ、効果、`rt`、`@param`、flow の生成 API（§11.6 の形で表示）。`--json` | S |
+| T3-0 ✅ | S-21 / S-22 の反映 | 構文: `move` 式を消費位置に許す。型検査: 整数リテラルの `I32` 既定、`match move`。モード: Affine を `move` 無しで消費位置に置くと E0711 + 修正候補、`match x` は借用。既存の単体テストと否定例を規則に合わせる | S |
+| T3-12 ✅ | `onsa graph <flow>` | DOT。ノードは `let` とインスタンス（名前は S-06）、辺は参照、`prev` 系の辺は破線、レートで色分け。`--svg` は `dot` があれば呼ぶ | S |
 
-受け入れ: 計画 §3 M3 の通り。加えて `onsa dump --core` の出力が golden テストにある。
+| T3-14 ✅ | 型の位置の const 引数（S-24） | 構文解析器で型引数に整数リテラルと定数名を許し（`TypeKind::Path` の引数に const 引数の形を足す）、シグネチャの解決で `const N` に束縛する。`fmt` / `dump` も対応 | S |
+| T3-13 ✅ | 効果行の整合（S-23） | E0601 を登録し、効果行に `Alloc` の無い関数（`test` の本体を除く）が `Alloc` を要する操作・関数を呼ぶと E0601。rt 関数は E0902 が先に出る | S |
+
+受け入れ: 計画 §3 M3 の通り。加えて `onsa dump --core` の出力が golden テストにあり、E0601 の否定例がある。
 
 ### M4 C バックエンドと export（L）
 
@@ -523,6 +531,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | E0420 | 対象の型が未解決 | 型 | M2 |
 | E0421 | 型付きホール | 型 | M2 |
 | E0501 / E0502 | 網羅性 / 反駁可能な `let` | 型 | M2 |
+| E0601 | 効果行に無い効果を使った（S-23。第 1 期は `Alloc`） | 効果 | M3 |
 | E0610 | export の効果が `provides` に無い | `build` | M4 |
 | E0611〜E0615, E0620, E0630, E0640〜E0642, E0650 | 効果・handler・ポリシー・並行 | — | 第 2 期 |
 | E0701 / E0703 / E0704 | 変更できない場所 / 呼び出し位置のモードの不一致 / 移動後の使用 | モード | M2 |
@@ -582,9 +591,8 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | 1073, 1090 | §14.1 | `extern` と `Conv` | `ffi/extern.onsa` | parse | 第 2 期 |
 | 1118 | §14.2 | `onsa_version` | `ffi/export_fn.onsa` | check | M2 |
 | 1175 | §15.2 | `target` | `module/target.onsa` | parse | 第 2 期 |
-| 1281 | §16 | `std.task` のシグネチャ（本体なし） | `concurrency/task_sigs.onsa` | none | — |
-| 1294 | §16 | `run` | `concurrency/run.onsa` | parse | 第 2 期 |
-| 1320 | §16 | `on_audio`（最上位の文） | `concurrency/on_audio.onsa` | none | — |
+| — | §16 | `main` と文脈の登録（2026-10-03 の書き直し後） | `concurrency/main.onsa` | parse | 第 2 期 |
+| — | §16 | `device.run` の `target` 宣言 | `concurrency/device_run.onsa` | parse | 第 2 期 |
 | 1340 | §17.1 | `gcd` | `examples/gcd.onsa` | test | M3 |
 | 1360 | §17.2 | `line_count` のテスト | `examples/line_count.onsa` | parse | 第 2 期 |
 | 1393, 1425, 1467 | §17.3〜17.4 | `resonator`、`saw` / `smooth` / `voice`、`echo`（同じモジュール） | `examples/voice.onsa` | test | M3 |

@@ -127,34 +127,36 @@ pub struct BodyInfo {
 
 // ---------------------------------------------------------------- checker
 
-struct Stop;
-type R<T> = Result<T, Stop>;
+pub(crate) struct Stop;
+pub(crate) type R<T> = Result<T, Stop>;
 
 struct Scope {
     names: Vec<(String, LocalId)>,
 }
 
 /// A function or closure body being checked.
-struct Frame {
-    local_base: u32,
-    ret: TyId,
-    loop_depth: u32,
-    captures: Vec<LocalId>,
+pub(crate) struct Frame {
+    pub(crate) local_base: u32,
+    pub(crate) ret: TyId,
+    pub(crate) loop_depth: u32,
+    pub(crate) captures: Vec<LocalId>,
 }
 
 pub(crate) struct Checker<'a> {
     pub(crate) a: &'a mut Analysis,
-    ast: &'a Ast,
-    text: &'a str,
-    m: ModId,
-    def: DefId,
+    pub(crate) ast: &'a Ast,
+    pub(crate) text: &'a str,
+    pub(crate) m: ModId,
+    pub(crate) def: DefId,
     generics: Vec<GenericDef>,
     self_ty: Option<TyId>,
     pub(crate) infer: Infer,
     scopes: Vec<Scope>,
-    frames: Vec<Frame>,
-    info: BodyInfo,
-    failed: bool,
+    pub(crate) frames: Vec<Frame>,
+    pub(crate) info: BodyInfo,
+    pub(crate) failed: bool,
+    /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
+    pub(crate) flow: Option<crate::flow::FlowCx>,
     /// `(expr, value)` of integer literals, for the range check (E0408).
     int_lits: Vec<(ExprId, u64)>,
     /// Integer literals negated by a prefix `-` (`-128` fits `I8`).
@@ -205,6 +207,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
                 });
                 (generics, self_ty, v, c.ty)
             }
+            // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`).
+            DefKind::Flow(f) => (Vec::new(), None, f.body, f.out),
             _ => continue,
         };
         // Items that already have a signature diagnostic are not checked (P-01).
@@ -230,30 +234,40 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             float_lits: Vec::new(),
             or_bindings: None,
             holes: Vec::new(),
+            flow: None,
         };
         let is_const = matches!(ck.a.defs[i].kind, DefKind::Const(_));
+        let is_flow = matches!(ck.a.defs[i].kind, DefKind::Flow(_));
         if is_const {
             ck.check_const(body, ret);
+        } else if is_flow {
+            ck.check_flow_body(body, ret);
         } else {
             ck.check_fn_body(body, ret);
         }
+        let fcx = ck.flow.take();
         let info = ck.finish();
-        a.bodies.insert(id, info);
+        match fcx {
+            Some(fcx) => crate::flow::finish_flow(a, module, id, info, fcx),
+            None => {
+                a.bodies.insert(id, info);
+            }
+        }
     }
 }
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ helpers
 
-    fn src(&self, span: Span) -> String {
+    pub(crate) fn src(&self, span: Span) -> String {
         self.text[span.start as usize..span.end as usize].to_string()
     }
 
-    fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
+    pub(crate) fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
         self.diag(Diagnostic::new(code, span, msg).with_found(self.src(span)))
     }
 
-    fn diag(&mut self, d: Diagnostic) -> Stop {
+    pub(crate) fn diag(&mut self, d: Diagnostic) -> Stop {
         if !self.failed {
             self.failed = true;
             self.a.diagnostics.push(d);
@@ -261,15 +275,15 @@ impl<'a> Checker<'a> {
         Stop
     }
 
-    fn ty(&self, t: TyId) -> Ty {
+    pub(crate) fn ty(&self, t: TyId) -> Ty {
         self.a.types.get(t).clone()
     }
 
-    fn shallow(&self, t: TyId) -> TyId {
+    pub(crate) fn shallow(&self, t: TyId) -> TyId {
         self.infer.shallow(&self.a.types, t)
     }
 
-    fn display(&mut self, t: TyId) -> String {
+    pub(crate) fn display(&mut self, t: TyId) -> String {
         let r = self.infer.resolve(&mut self.a.types, t);
         let names: Vec<String> = self.generics.iter().map(|g| g.name.clone()).collect();
         self.a.types.display(r, &|d| self.a.def(d).name.clone(), &|i| {
@@ -277,33 +291,33 @@ impl<'a> Checker<'a> {
         })
     }
 
-    fn unit(&mut self) -> TyId {
+    pub(crate) fn unit(&mut self) -> TyId {
         self.a.types.unit()
     }
 
-    fn bool_(&mut self) -> TyId {
+    pub(crate) fn bool_(&mut self) -> TyId {
         self.a.types.bool()
     }
 
-    fn u32(&mut self) -> TyId {
+    pub(crate) fn u32(&mut self) -> TyId {
         self.a.types.int(IntKind::U32)
     }
 
-    fn fresh(&mut self) -> TyId {
+    pub(crate) fn fresh(&mut self) -> TyId {
         self.infer.fresh(&mut self.a.types, None)
     }
 
-    fn record(&mut self, e: ExprId, t: TyId) -> TyId {
+    pub(crate) fn record(&mut self, e: ExprId, t: TyId) -> TyId {
         self.info.expr_types.insert(e, t);
         t
     }
 
-    fn expr(&self, e: ExprId) -> &'a Expr {
+    pub(crate) fn expr(&self, e: ExprId) -> &'a Expr {
         self.ast.expr(e)
     }
 
     /// Unify, reporting E0401 at `span` on failure.
-    fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
+    pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
         match self.infer.unify(&mut self.a.types, actual, expected) {
             Ok(()) => Ok(()),
             Err(Mismatch::Literal) => {
@@ -333,7 +347,7 @@ impl<'a> Checker<'a> {
     }
 
     /// E0420: the operand's type must be known at this point (§4.7).
-    fn known(&mut self, t: TyId, span: Span, what: &str) -> R<TyId> {
+    pub(crate) fn known(&mut self, t: TyId, span: Span, what: &str) -> R<TyId> {
         let s = self.shallow(t);
         if matches!(self.ty(s), Ty::Var(_)) {
             return Err(self.diag(
@@ -350,15 +364,15 @@ impl<'a> Checker<'a> {
 
     // ------------------------------------------------------------ scopes
 
-    fn push_scope(&mut self) {
+    pub(crate) fn push_scope(&mut self) {
         self.scopes.push(Scope { names: Vec::new() });
     }
 
-    fn pop_scope(&mut self) {
+    pub(crate) fn pop_scope(&mut self) {
         self.scopes.pop();
     }
 
-    fn lookup_local(&mut self, name: &str) -> Option<LocalId> {
+    pub(crate) fn lookup_local(&mut self, name: &str) -> Option<LocalId> {
         for s in self.scopes.iter().rev() {
             if let Some((_, id)) = s.names.iter().rev().find(|(n, _)| n == name) {
                 let id = *id;
@@ -376,7 +390,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Declare a binding (E0304 when the name is already visible, §5.1).
-    fn declare(&mut self, name: &Ident, ty: TyId, kind: LocalKind, borrow: bool) -> R<LocalId> {
+    pub(crate) fn declare(&mut self, name: &Ident, ty: TyId, kind: LocalKind, borrow: bool) -> R<LocalId> {
         if name.name != "_" {
             let visible =
                 self.scopes.iter().flat_map(|s| s.names.iter()).find(|(n, _)| *n == name.name).map(|(_, id)| *id);
@@ -406,7 +420,7 @@ impl<'a> Checker<'a> {
         Ok(id)
     }
 
-    fn local_ty(&self, id: LocalId) -> TyId {
+    pub(crate) fn local_ty(&self, id: LocalId) -> TyId {
         self.info.locals[id.0 as usize].ty
     }
 
@@ -492,6 +506,17 @@ impl<'a> Checker<'a> {
     fn finish(mut self) -> BodyInfo {
         if !self.failed {
             let mut late: Vec<Diagnostic> = Vec::new();
+            // S-22 (§2.4, §4.7): an integer literal still unresolved at the end of the
+            // body defaults to `I32`; float literals have no default (E0405 below).
+            let i32_ = self.a.types.int(IntKind::I32);
+            let mut defaulted: Vec<ExprId> = Vec::new();
+            for (e, _) in self.int_lits.clone() {
+                let t = self.info.expr_types[&e];
+                if self.infer.lit_of(&self.a.types, t) == Some(LitKind::Int) {
+                    let _ = self.infer.unify(&mut self.a.types, t, i32_);
+                    defaulted.push(e);
+                }
+            }
             for (e, value) in self.int_lits.clone() {
                 let t = self.info.expr_types[&e];
                 let r = self.infer.resolve(&mut self.a.types, t);
@@ -502,12 +527,17 @@ impl<'a> Checker<'a> {
                         let (lo, hi) = k.range();
                         if v < lo || v > hi {
                             let span = self.expr(e).span;
+                            let hint = if defaulted.contains(&e) {
+                                " (the default for an unconstrained integer literal); add an annotation such as `: U32` or `: I64`"
+                            } else {
+                                ""
+                            };
                             late.push(
                                 Diagnostic::new(
                                     Code::E0408,
                                     span,
                                     format!(
-                                        "literal `{}{value}` is out of range for `{}`",
+                                        "literal `{}{value}` is out of range for `{}`{hint}",
                                         if neg { "-" } else { "" },
                                         k.name()
                                     ),
@@ -637,7 +667,7 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ bounds
 
     /// Whether a (resolved) type satisfies a builtin bound (§6.3).
-    fn satisfies(&self, t: TyId, b: Bound) -> bool {
+    pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
         let ty = self.ty(t);
         match (&ty, b) {
             (Ty::Error, _) => true,
@@ -771,7 +801,7 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ generics
 
     /// Fresh variables for a def's generic parameters (owner's first for methods).
-    fn fresh_args(&mut self, def: DefId) -> Vec<TyId> {
+    pub(crate) fn fresh_args(&mut self, def: DefId) -> Vec<TyId> {
         let generics = self.all_generics(def);
         generics
             .iter()
@@ -871,7 +901,7 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ names
 
     /// `a.b.c` as a chain of identifiers with the expression of each prefix.
-    fn name_chain(&self, e: ExprId) -> Option<Vec<(ExprId, Ident)>> {
+    pub(crate) fn name_chain(&self, e: ExprId) -> Option<Vec<(ExprId, Ident)>> {
         let mut out = Vec::new();
         let mut cur = e;
         loop {
@@ -891,7 +921,7 @@ impl<'a> Checker<'a> {
         Some(out)
     }
 
-    fn is_local_head(&mut self, name: &str) -> bool {
+    pub(crate) fn is_local_head(&mut self, name: &str) -> bool {
         name == "self" || self.lookup_local(name).is_some() || self.const_param(name).is_some()
     }
 
@@ -982,6 +1012,9 @@ impl<'a> Checker<'a> {
     /// A single identifier in expression position.
     fn check_single_path(&mut self, e: ExprId, name: &Ident, expected: Option<TyId>) -> R<TyId> {
         if let Some(id) = self.lookup_local(&name.name) {
+            if self.flow.is_some() {
+                self.flow_use_local(id, name.span)?;
+            }
             self.info.targets.insert(e, Target::Local(id));
             let t = self.local_ty(id);
             return Ok(self.record(e, t));
@@ -1107,14 +1140,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn fn_type(&mut self, f: &FnDef, args: &[TyId]) -> TyId {
+    pub(crate) fn fn_type(&mut self, f: &FnDef, args: &[TyId]) -> TyId {
         let params: Vec<(Mode, TyId)> = f.params.iter().map(|p| (p.mode, self.subst(p.ty, args))).collect();
         let ret = self.subst(f.ret, args);
         self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }))
     }
 
     /// Type of field `name` of a resolved base type.
-    fn field_type(&mut self, base: TyId, name: &Ident) -> R<TyId> {
+    pub(crate) fn field_type(&mut self, base: TyId, name: &Ident) -> R<TyId> {
         match self.ty(base) {
             Ty::Named(d, args) => {
                 let def = self.a.def(d).clone();
@@ -1137,7 +1170,7 @@ impl<'a> Checker<'a> {
 
     // ------------------------------------------------------------ expressions
 
-    fn check_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
+    pub(crate) fn check_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
         let t = self.check_expr_inner(e, expected)?;
         if let Some(exp) = expected {
@@ -1149,6 +1182,11 @@ impl<'a> Checker<'a> {
     fn check_expr_inner(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
         let expr = self.expr(e);
         let span = expr.span;
+        if self.flow.is_some()
+            && let Some(t) = self.check_flow_expr(e, expected)?
+        {
+            return Ok(t);
+        }
         match &expr.kind {
             ExprKind::Lit(lit) => self.check_lit(e, lit, expected),
             ExprKind::Path(p) => {
@@ -1180,6 +1218,19 @@ impl<'a> Checker<'a> {
                 Ok(self.record(e, t))
             }
             ExprKind::Paren(inner) => self.check_expr(*inner, expected),
+            ExprKind::Move(inner) => {
+                // `move x` (§5.2, S-21): same type as its operand, which must be a place.
+                let t = self.check_expr(*inner, expected)?;
+                if !self.is_place(*inner) {
+                    let ispan = self.expr(*inner).span;
+                    return Err(self.err(
+                        Code::E0711,
+                        ispan,
+                        "`move` needs a place (a variable or its field); other values are already owned by the expression",
+                    ));
+                }
+                Ok(t)
+            }
             ExprKind::Tuple(elems) => {
                 if elems.is_empty() {
                     return Ok(self.unit());
@@ -1229,7 +1280,7 @@ impl<'a> Checker<'a> {
                 self.info.repeats.push(e);
                 Ok(self.a.types.intern(Ty::Array(et, n)))
             }
-            ExprKind::Struct { path, fields } => self.check_struct_lit(path, fields),
+            ExprKind::Struct { path, fields } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
             ExprKind::Block(b) => self.check_block(b, expected),
             ExprKind::If { cond, then, else_ } => {
                 let bool_ = self.bool_();
@@ -1444,7 +1495,7 @@ impl<'a> Checker<'a> {
     }
 
     /// `[e; N]` / array length in an expression: literal, constant, or const parameter.
-    fn const_len(&mut self, len: ExprId) -> R<Len> {
+    pub(crate) fn const_len(&mut self, len: ExprId) -> R<Len> {
         let expr = self.expr(len);
         match &expr.kind {
             ExprKind::Lit(Lit::Int { value, .. }) => {
@@ -1512,7 +1563,13 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_struct_lit(&mut self, path: &Path, fields: &[(Ident, ExprId)]) -> R<TyId> {
+    fn check_struct_lit(
+        &mut self,
+        path: &Path,
+        fields: &[(Ident, ExprId)],
+        expected: Option<TyId>,
+        span: Span,
+    ) -> R<TyId> {
         let entity = match self.a.resolve_path(self.m, path) {
             Ok(en) => en,
             Err(err) => return Err(self.diag(err.into_diagnostic())),
@@ -1534,6 +1591,17 @@ impl<'a> Checker<'a> {
             ));
         };
         let args = self.fresh_args(d);
+        // The expected type decides the generic arguments first (§4.7: expected
+        // types flow downward; `Ring[F32, 4]` fixes `T` and `N` before the fields).
+        if let Some(exp) = expected
+            && let Ty::Named(d2, exp_args) = self.a.types.get(exp).clone()
+            && d2 == d
+            && exp_args.len() == args.len()
+        {
+            for (&a, &x) in args.iter().zip(&exp_args) {
+                self.unify_at(span, a, x)?;
+            }
+        }
         let mut seen: Vec<&str> = Vec::new();
         for (name, value) in fields {
             if seen.contains(&name.name.as_str()) {
@@ -1564,8 +1632,11 @@ impl<'a> Checker<'a> {
         Ok(t)
     }
 
-    fn check_block(&mut self, b: &Block, expected: Option<TyId>) -> R<TyId> {
+    pub(crate) fn check_block(&mut self, b: &Block, expected: Option<TyId>) -> R<TyId> {
         self.push_scope();
+        if let Some(f) = &mut self.flow {
+            f.depth += 1;
+        }
         let r = (|| -> R<TyId> {
             for &s in &b.stmts {
                 self.check_stmt(s)?;
@@ -1582,6 +1653,9 @@ impl<'a> Checker<'a> {
                 }
             }
         })();
+        if let Some(f) = &mut self.flow {
+            f.depth -= 1;
+        }
         self.pop_scope();
         r
     }
@@ -1589,7 +1663,8 @@ impl<'a> Checker<'a> {
     fn check_match(&mut self, scrutinee: ExprId, arms: &[MatchArm], expected: Option<TyId>, span: Span) -> R<TyId> {
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
-        let borrow = self.is_borrow_source(scrutinee);
+        // §7 (S-21): `match x` binds borrows; only `match move x` gives the arms ownership.
+        let borrow = !matches!(self.expr(scrutinee).kind, ExprKind::Move(_));
         let mut result: Option<TyId> = expected;
         let mut rows: Vec<Vec<P>> = Vec::new();
         for arm in arms {
@@ -1783,7 +1858,7 @@ impl<'a> Checker<'a> {
     }
 
     /// The operand type of an operator must support it (via its builtin trait, §3.2).
-    fn require_operand(&mut self, s: TyId, bound: Bound, op: BinOp, span: Span) -> R<()> {
+    pub(crate) fn require_operand(&mut self, s: TyId, bound: Bound, op: BinOp, span: Span) -> R<()> {
         match self.ty(s) {
             Ty::Var(_) => match (self.infer.lit_of(&self.a.types, s), bound) {
                 (Some(_), Bound::Num | Bound::PartialEq | Bound::PartialOrd) => Ok(()),
@@ -1841,6 +1916,11 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
+        if self.flow.is_some()
+            && let Some(t) = self.check_flow_call(e, callee, kind, args, expected)?
+        {
+            return Ok(t);
+        }
         if kind == CallKind::Flow {
             let fix = self.src(span).replacen("~(", "(", 1);
             return Err(self.diag(
@@ -2156,7 +2236,7 @@ impl<'a> Checker<'a> {
 
     /// Arity and argument types. `Span[T]` parameters accept `[T; N]`,
     /// `Buf[T]` and `Span[T]` (§5.3); `[Span[T]; N]` accepts the planar forms.
-    fn check_args(&mut self, args: &[Arg], params: &[(Mode, TyId)], span: Span) -> R<()> {
+    pub(crate) fn check_args(&mut self, args: &[Arg], params: &[(Mode, TyId)], span: Span) -> R<()> {
         if args.len() != params.len() {
             return Err(self.err(
                 Code::E0412,
@@ -2221,7 +2301,10 @@ impl<'a> Checker<'a> {
 
     // ------------------------------------------------------------ statements
 
-    fn check_stmt(&mut self, s: StmtId) -> R<()> {
+    pub(crate) fn check_stmt(&mut self, s: StmtId) -> R<()> {
+        if self.flow.is_some() {
+            return self.check_flow_stmt(s);
+        }
         let stmt = self.ast.stmt(s);
         match &stmt.kind {
             StmtKind::Let { pat, ty, init } => {
@@ -2643,7 +2726,7 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ types in bodies
 
     /// Lower a type written inside a body (annotations, casts, closure params).
-    fn lower_type_expr(&mut self, t: onsa_syntax::ast::TypeId) -> R<TyId> {
+    pub(crate) fn lower_type_expr(&mut self, t: onsa_syntax::ast::TypeId) -> R<TyId> {
         let generics = self.generics.clone();
         let (ty, diags) =
             crate::sig::lower_type_in_body(self.a, self.m, self.ast, self.text, &generics, self.self_ty, self.def, t);

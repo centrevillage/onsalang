@@ -1,0 +1,15 @@
+// Golden source: instantiations of generic items (`clamp` is the §4.5
+// example; `types/generics.onsa` alone has no instances).
+use std.dsp.{sum}
+
+pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
+  if x < lo { lo } else if x > hi { hi } else { x }
+}
+
+pub fn pick(a: I32, b: I32) -> I32 {
+  clamp(a, 0, b)
+}
+
+pub fn mix(xs: [F32; 4], g: F32) -> F32 {
+  clamp(sum(xs) * g, -1.0, 1.0)
+}

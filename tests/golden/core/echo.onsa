@@ -1,0 +1,14 @@
+// Golden source for the flow lowering (T3-5): spec §17.4 `echo` alone (vdelay).
+const MAX_ECHO: U32 = 96000
+
+pub flow echo(
+  x: Sig[F32],
+  @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
+  time: Ctl[F32],
+  @param(min: 0.0, max: 0.95, default: 0.5)
+  feedback: Ctl[F32],
+) -> Sig[F32] {
+  let d = time * sample_rate()
+  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
+  y
+}

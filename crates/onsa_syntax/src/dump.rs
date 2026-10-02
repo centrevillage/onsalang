@@ -366,6 +366,7 @@ impl Dumper<'_> {
                 self.expr(*len);
                 self.out.push(']');
             }
+            TypeKind::ConstArg(e) => self.expr(*e),
             TypeKind::Unit => self.out.push_str("()"),
             TypeKind::Tuple(elems) => {
                 self.out.push('(');
@@ -529,6 +530,11 @@ impl Dumper<'_> {
             ExprKind::Hole => self.out.push('_'),
             ExprKind::Paren(e) => {
                 self.out.push('(');
+                self.expr(*e);
+                self.out.push(')');
+            }
+            ExprKind::Move(e) => {
+                self.out.push_str("(move ");
                 self.expr(*e);
                 self.out.push(')');
             }

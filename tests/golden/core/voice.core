@@ -1,0 +1,362 @@
+type voice.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool }
+type voice.resonator.Config = struct {}
+type voice.resonator.Params = struct { fc: F32, bw: F32 }
+type voice.resonator.Out = struct { out: Buf[F32] }
+type voice.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool }
+type voice.saw.Config = struct {}
+type voice.saw.Params = struct { f0: F32 }
+type voice.saw.Out = struct { out: Buf[F32] }
+type voice.smooth.State = struct { x: F32, a: F32, prev_0: F32, poisoned: Bool }
+type voice.smooth.Config = struct { time: F32 }
+type voice.smooth.Params = struct { x: F32 }
+type voice.smooth.Out = struct { out: Buf[F32] }
+type voice.voice.State = struct { src: voice.saw.State, f1: voice.resonator.State, f2: voice.resonator.State, smooth_0: voice.smooth.State, poisoned: Bool }
+type voice.voice.Config = struct {}
+type voice.voice.Params = struct { f0: F32, vowel_f1: F32, vowel_f2: F32, gain: F32 }
+type voice.voice.Out = struct { out: Buf[F32] }
+type voice.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool }
+type voice.echo.Config = struct {}
+type voice.echo.Params = struct { time: F32, feedback: F32 }
+type voice.echo.Out = struct { out: Buf[F32] }
+type voice.Poly = struct { voices: [voice.voice.State; 8], params: [voice.voice.Params; 8], notes: [Option__U8; 8], next: U32 }
+type Option__U8 = enum { None, Some(U8) }
+const voice.resonator.SIZE: U32 = 28:U32
+const voice.resonator.BULK_SIZE: U32 = 0:U32
+const voice.saw.SIZE: U32 = 16:U32
+const voice.saw.BULK_SIZE: U32 = 0:U32
+const voice.smooth.SIZE: U32 = 16:U32
+const voice.smooth.BULK_SIZE: U32 = 0:U32
+const voice.voice.SIZE: U32 = 92:U32
+const voice.voice.BULK_SIZE: U32 = 0:U32
+const voice.MAX_ECHO: U32 = 96000:U32
+const voice.echo.SIZE: U32 = 384024:U32
+const voice.echo.BULK_SIZE: U32 = 0:U32
+const voice.MAX_VOICES: U32 = 8:U32
+rt fn voice.resonator.ctl(inout s: voice.resonator.State, p: voice.resonator.Params) -> () {
+  let r: F32 = math.exp.F32(((-(3.1415927:F32 * p.1)) / s.0))
+  s.1 = r
+  let w: F32 = (((2.0:F32 * 3.1415927:F32) * p.0) / s.0)
+  let b1: F32 = ((2.0:F32 * r) * math.cos.F32(w))
+  s.2 = b1
+  let b2: F32 = (r * r)
+  s.3 = b2
+}
+rt fn voice.resonator.tick(inout s: voice.resonator.State, x: F32) -> F32 {
+  let y1@7: F32 = {
+    let y1@11: F32 = s.4
+    y1@11
+  }
+  let y2@8: F32 = {
+    let y2@12: F32 = s.5
+    y2@12
+  }
+  let y: F32 = ((((1.0:F32 - s.1) * x) + (s.2 * y1@7)) - (s.3 * y2@8))
+  let __out: F32 = y
+  s.4 = y
+  s.5 = y1@7
+  __out
+}
+fn voice.resonator.init(cfg: voice.resonator.Config, sample_rate: F32) -> voice.resonator.State sret {
+  let s: voice.resonator.State = zeroed:voice.resonator.State
+  s.0 = sample_rate
+  let y1.init: F32 = 0.0:F32
+  s.4 = y1.init
+  let y2.init: F32 = 0.0:F32
+  s.5 = y2.init
+  s.6 = false
+  s
+}
+rt fn voice.resonator.reset(inout s: voice.resonator.State) -> () {
+  s.4 = 0.0:F32
+  s.5 = 0.0:F32
+  s.6 = false
+}
+rt fn voice.resonator.process(inout s: voice.resonator.State, params: voice.resonator.Params, x@12: Span[F32], inout out: Span[F32]) -> () {
+  let len: U32 = len(x@12)
+  if (len(out) != len) {
+    panic("span lengths differ")
+  }
+  voice.resonator.ctl(inout s, params)
+  for i in 0:U32..len {
+    let x@16: F32 = x@12[i]
+    let v: F32 = voice.resonator.tick(inout s, x@16)
+    out[i] = v
+  }
+}
+rt fn voice.resonator.process_inplace(inout s: voice.resonator.State, params: voice.resonator.Params, inout out: Span[F32]) -> () {
+  voice.resonator.process(inout s, params, out, inout out)
+}
+fn voice.resonator.render(cfg: voice.resonator.Config, params: voice.resonator.Params, x@12: Span[F32], sample_rate: F32) -> voice.resonator.Out sret {
+  let s: voice.resonator.State = voice.resonator.init(cfg, sample_rate)
+  let n: U32 = len(x@12)
+  let out: Buf[F32] = buf.zeroed(n)
+  voice.resonator.process(inout s, params, x@12, inout span(out))
+  voice.resonator.Out { out: out }
+}
+fn test.resonator decays() -> () {
+  let o: voice.resonator.Out = voice.resonator.render(voice.resonator.Config {}, voice.resonator.Params { fc: 500.0:F32, bw: 100.0:F32 }, {
+    let __arr: Buf[F32] = std.dsp.test.impulse(48000:U32)
+    span(__arr)
+  }, 48000.0:F32)
+  if (!(std.dsp.test.energy(span(o.0), 47000:U32, 48000:U32) < 1e-12:F64)) {
+    panic("assertion failed: energy(o.out, 47000, 48000) < 1.0e-12")
+  }
+}
+rt fn voice.saw.ctl(inout s: voice.saw.State, p: voice.saw.Params) -> () {
+  s.1 = p.0
+}
+rt fn voice.saw.tick(inout s: voice.saw.State) -> F32 {
+  let phase: F32 = voice.wrap01(({
+    let prev_0: F32 = s.2
+    prev_0
+  } + (s.1 / s.0)))
+  let __out: F32 = ((2.0:F32 * phase) - 1.0:F32)
+  s.2 = phase
+  __out
+}
+fn voice.saw.init(cfg: voice.saw.Config, sample_rate: F32) -> voice.saw.State sret {
+  let s: voice.saw.State = zeroed:voice.saw.State
+  s.0 = sample_rate
+  let prev_0.init: F32 = 0.0:F32
+  s.2 = prev_0.init
+  s.3 = false
+  s
+}
+rt fn voice.saw.reset(inout s: voice.saw.State) -> () {
+  s.2 = 0.0:F32
+  s.3 = false
+}
+rt fn voice.saw.process(inout s: voice.saw.State, params: voice.saw.Params, inout out: Span[F32]) -> () {
+  let len: U32 = len(out)
+  voice.saw.ctl(inout s, params)
+  for i in 0:U32..len {
+    let v: F32 = voice.saw.tick(inout s)
+    out[i] = v
+  }
+}
+fn voice.saw.render(cfg: voice.saw.Config, params: voice.saw.Params, frames: U32, sample_rate: F32) -> voice.saw.Out sret {
+  let s: voice.saw.State = voice.saw.init(cfg, sample_rate)
+  let n: U32 = frames
+  let out: Buf[F32] = buf.zeroed(n)
+  voice.saw.process(inout s, params, inout span(out))
+  voice.saw.Out { out: out }
+}
+rt fn voice.wrap01(x: F32) -> F32 {
+  (x - math.floor.F32(x))
+}
+rt fn voice.smooth.ctl(inout s: voice.smooth.State, p: voice.smooth.Params) -> () {
+  s.0 = p.0
+}
+rt fn voice.smooth.tick(inout s: voice.smooth.State) -> F32 {
+  let y: F32 = (s.0 + (s.1 * ({
+    let prev_0: F32 = s.2
+    prev_0
+  } - s.0)))
+  let __out: F32 = y
+  s.2 = y
+  __out
+}
+fn voice.smooth.init(cfg: voice.smooth.Config, sample_rate: F32) -> voice.smooth.State sret {
+  let s: voice.smooth.State = zeroed:voice.smooth.State
+  let a: F32 = math.exp.F32((-1.0:F32 / (cfg.0 * sample_rate)))
+  s.1 = a
+  let prev_0.init: F32 = 0.0:F32
+  s.2 = prev_0.init
+  s.3 = false
+  s
+}
+rt fn voice.smooth.reset(inout s: voice.smooth.State) -> () {
+  s.2 = 0.0:F32
+  s.3 = false
+}
+rt fn voice.smooth.process(inout s: voice.smooth.State, params: voice.smooth.Params, inout out: Span[F32]) -> () {
+  let len: U32 = len(out)
+  voice.smooth.ctl(inout s, params)
+  for i in 0:U32..len {
+    let v: F32 = voice.smooth.tick(inout s)
+    out[i] = v
+  }
+}
+fn voice.smooth.render(cfg: voice.smooth.Config, params: voice.smooth.Params, frames: U32, sample_rate: F32) -> voice.smooth.Out sret {
+  let s: voice.smooth.State = voice.smooth.init(cfg, sample_rate)
+  let n: U32 = frames
+  let out: Buf[F32] = buf.zeroed(n)
+  voice.smooth.process(inout s, params, inout span(out))
+  voice.smooth.Out { out: out }
+}
+rt fn voice.voice.ctl(inout s: voice.voice.State, p: voice.voice.Params) -> () {
+  voice.saw.ctl(inout s.0, voice.saw.Params { f0: p.0 })
+  voice.resonator.ctl(inout s.1, voice.resonator.Params { fc: p.1, bw: 80.0:F32 })
+  voice.resonator.ctl(inout s.2, voice.resonator.Params { fc: p.2, bw: 120.0:F32 })
+  voice.smooth.ctl(inout s.3, voice.smooth.Params { x: p.3 })
+}
+rt fn voice.voice.tick(inout s: voice.voice.State) -> F32 {
+  let src@4: F32 = {
+    let src@8: F32 = voice.saw.tick(inout s.0)
+    src@8
+  }
+  let f1@5: F32 = {
+    let f1@9: F32 = voice.resonator.tick(inout s.1, src@4)
+    f1@9
+  }
+  let f2@6: F32 = {
+    let f2@10: F32 = voice.resonator.tick(inout s.2, src@4)
+    f2@10
+  }
+  let __out: F32 = ((f1@5 + f2@6) * {
+    let smooth_0: F32 = voice.smooth.tick(inout s.3)
+    smooth_0
+  })
+  __out
+}
+fn voice.voice.init(cfg: voice.voice.Config, sample_rate: F32) -> voice.voice.State sret {
+  let s: voice.voice.State = zeroed:voice.voice.State
+  s.0 = voice.saw.init(voice.saw.Config {}, sample_rate)
+  s.1 = voice.resonator.init(voice.resonator.Config {}, sample_rate)
+  s.2 = voice.resonator.init(voice.resonator.Config {}, sample_rate)
+  s.3 = voice.smooth.init(voice.smooth.Config { time: 0.01:F32 }, sample_rate)
+  s.4 = false
+  s
+}
+rt fn voice.voice.reset(inout s: voice.voice.State) -> () {
+  voice.saw.reset(inout s.0)
+  voice.resonator.reset(inout s.1)
+  voice.resonator.reset(inout s.2)
+  voice.smooth.reset(inout s.3)
+  s.4 = false
+}
+rt fn voice.voice.process(inout s: voice.voice.State, params: voice.voice.Params, inout out: Span[F32]) -> () {
+  let len: U32 = len(out)
+  voice.voice.ctl(inout s, params)
+  for i in 0:U32..len {
+    let v: F32 = voice.voice.tick(inout s)
+    out[i] = v
+  }
+}
+fn voice.voice.render(cfg: voice.voice.Config, params: voice.voice.Params, frames: U32, sample_rate: F32) -> voice.voice.Out sret {
+  let s: voice.voice.State = voice.voice.init(cfg, sample_rate)
+  let n: U32 = frames
+  let out: Buf[F32] = buf.zeroed(n)
+  voice.voice.process(inout s, params, inout span(out))
+  voice.voice.Out { out: out }
+}
+fn voice.voice.params_default() -> voice.voice.Params sret {
+  voice.voice.Params { f0: 110.0:F32, vowel_f1: 700.0:F32, vowel_f2: 1220.0:F32, gain: 0.5:F32 }
+}
+rt fn voice.echo.ctl(inout s: voice.echo.State, p: voice.echo.Params) -> () {
+  s.1 = p.1
+  let d: F32 = (p.0 * s.0)
+  s.2 = d
+}
+rt fn voice.echo.tick(inout s: voice.echo.State, x: F32) -> F32 {
+  let y: F32 = (x + (s.1 * {
+    let vdelay_0.d: F32 = s.2
+    let vdelay_0.dc: F32 = if (vdelay_0.d >= 1.0:F32) {
+      if (vdelay_0.d <= 96000.0:F32) {
+        vdelay_0.d
+      } else {
+        96000.0:F32
+      }
+    } else {
+      1.0:F32
+    }
+    let vdelay_0.k: U32 = trunc.F32.U32(vdelay_0.dc)
+    let vdelay_0.f: F32 = (vdelay_0.dc - round.U32.F32(vdelay_0.k))
+    let vdelay_0.wlk: U32 = ((s.4 + 96001:U32) - vdelay_0.k)
+    let vdelay_0.a: F32 = s.3[(vdelay_0.wlk % 96001:U32)]
+    let vdelay_0.b: F32 = s.3[((vdelay_0.wlk - 1:U32) % 96001:U32)]
+    let vdelay_0: F32 = (((1.0:F32 - vdelay_0.f) * vdelay_0.a) + (vdelay_0.f * vdelay_0.b))
+    vdelay_0
+  }))
+  let __out: F32 = y
+  s.3[s.4] = y
+  s.4 = ((s.4 + 1:U32) % 96001:U32)
+  __out
+}
+fn voice.echo.init(cfg: voice.echo.Config, sample_rate: F32) -> voice.echo.State sret {
+  let s: voice.echo.State = zeroed:voice.echo.State
+  s.0 = sample_rate
+  let vdelay_0.init: F32 = 0.0:F32
+  s.3 = [vdelay_0.init; 96001]
+  s.4 = 0:U32
+  s.5 = false
+  s
+}
+rt fn voice.echo.reset(inout s: voice.echo.State) -> () {
+  s.3 = [0.0:F32; 96001]
+  s.4 = 0:U32
+  s.5 = false
+}
+rt fn voice.echo.process(inout s: voice.echo.State, params: voice.echo.Params, x@7: Span[F32], inout out: Span[F32]) -> () {
+  let len: U32 = len(x@7)
+  if (len(out) != len) {
+    panic("span lengths differ")
+  }
+  voice.echo.ctl(inout s, params)
+  for i in 0:U32..len {
+    let x@11: F32 = x@7[i]
+    let v: F32 = voice.echo.tick(inout s, x@11)
+    out[i] = v
+  }
+}
+rt fn voice.echo.process_inplace(inout s: voice.echo.State, params: voice.echo.Params, inout out: Span[F32]) -> () {
+  voice.echo.process(inout s, params, out, inout out)
+}
+fn voice.echo.render(cfg: voice.echo.Config, params: voice.echo.Params, x@7: Span[F32], sample_rate: F32) -> voice.echo.Out sret {
+  let s: voice.echo.State = voice.echo.init(cfg, sample_rate)
+  let n: U32 = len(x@7)
+  let out: Buf[F32] = buf.zeroed(n)
+  voice.echo.process(inout s, params, x@7, inout span(out))
+  voice.echo.Out { out: out }
+}
+fn voice.echo.params_default() -> voice.echo.Params sret {
+  voice.echo.Params { time: 0.3:F32, feedback: 0.5:F32 }
+}
+rt fn voice.midi_to_hz(note: U8) -> F32 {
+  (440.0:F32 * math.exp2.F32((((note as F32) - 69.0:F32) / 12.0:F32)))
+}
+fn voice.Poly.new(sample_rate: F32) -> voice.Poly sret {
+  voice.Poly { voices: {
+    let __arr: [voice.voice.State; 8] = zeroed:[voice.voice.State; 8]
+    for __i in 0:U32..8:U32 {
+      __arr[__i] = voice.voice.init(voice.voice.Config {}, sample_rate)
+    }
+    __arr
+  }, params: [voice.voice.params_default(); 8], notes: [Option__U8.None; 8], next: 0:U32 }
+}
+rt fn voice.Poly.note_on(inout self: voice.Poly, note: U8, velocity: F32) -> () {
+  let i: U32 = self.3
+  self.2[i] = Option__U8.Some(note)
+  self.1[i].0 = voice.midi_to_hz(note)
+  self.1[i].3 = velocity
+  voice.voice.reset(inout self.0[i])
+  self.3 = ((i + 1:U32) % const voice.MAX_VOICES)
+}
+rt fn voice.Poly.note_off(inout self: voice.Poly, note: U8) -> () {
+  for i in 0:U32..const voice.MAX_VOICES {
+    if __eq.Option__U8(self.2[i], Option__U8.Some(note)) {
+      self.2[i] = Option__U8.None
+      self.1[i].3 = 0.0:F32
+    }
+  }
+}
+rt fn voice.Poly.process(inout self: voice.Poly, inout out: Span[F32], inout scratch: Span[F32]) -> () {
+  fill(inout out, 0.0:F32)
+  for i in 0:U32..const voice.MAX_VOICES {
+    voice.voice.process(inout self.0[i], self.1[i], inout scratch)
+    add_from(inout out, scratch)
+  }
+}
+rt fn __eq.Option__U8(a: Option__U8, b: Option__U8) -> Bool {
+  if (tag(a) != tag(b)) {
+    return false
+  }
+  switch a {
+    None => {
+      true
+    }
+    Some => {
+      (payload(a, Some, 0) == payload(b, Some, 0))
+    }
+  }
+}

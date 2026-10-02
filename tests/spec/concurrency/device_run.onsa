@@ -1,0 +1,8 @@
+//! mode: parse
+// std.audio.device の登録関数の形（実装はターゲットの bind が与える）
+target fn run[S: ?Dup, P: Copy](
+  move st: S,
+  inout params: Swap[P],
+  audio: rt fn(inout S, Swap[P], inout Span[F32]),
+  control: fn(inout Swap[P], Event),
+) -> Result[(), Error]

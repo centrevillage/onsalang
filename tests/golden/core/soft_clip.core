@@ -1,0 +1,3 @@
+rt fn soft_clip.soft_clip(x: F32) -> F32 {
+  (x / (1.0:F32 + math.abs.F32(x)))
+}

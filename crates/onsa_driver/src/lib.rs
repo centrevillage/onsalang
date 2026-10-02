@@ -1,6 +1,9 @@
 //! Pipeline driver: loads a package (S-11), embeds `std` (D-07), and runs
 //! parse -> analyze. Each milestone adds a stage (`docs/implementation-tasks.md` §4).
 
+pub mod graph;
+pub mod interface;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -159,6 +162,49 @@ pub fn check_loaded(loaded: &mut Loaded) -> CheckResult {
     let modules = loaded.modules.clone();
     let name = loaded.name.clone();
     check_package(&mut loaded.sources, &name, &modules)
+}
+
+/// A checked package with its analysis, for the stages after `check`
+/// (Core lowering, interpretation, backends).
+pub struct Analyzed {
+    pub pkg: Package,
+    pub analysis: onsa_sema::Analysis,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Parse and analyze a loaded package, keeping the analysis (`std` is
+/// appended to `sources`).
+pub fn analyze_loaded(loaded: &mut Loaded) -> Analyzed {
+    let modules = loaded.modules.clone();
+    let name = loaded.name.clone();
+    analyze_package(&mut loaded.sources, &name, &modules)
+}
+
+pub fn analyze_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, String)]) -> Analyzed {
+    let user_modules: Vec<Module> = modules
+        .iter()
+        .map(|(file, path)| {
+            let text = sources.file(*file).text().to_string();
+            let parsed = onsa_syntax::parse(*file, &text);
+            Module { path: path.clone(), file: *file, text, parsed }
+        })
+        .collect();
+    let std = std_package(sources);
+    let pkg = Package { name: name.to_string(), modules: user_modules, deps: vec![std], is_std: false };
+    let analysis = onsa_sema::analyze(&pkg);
+    let mut diagnostics = merge(&pkg, analysis.diagnostics.clone());
+    fill_found(sources, &mut diagnostics);
+    Analyzed { pkg, analysis, diagnostics }
+}
+
+pub use graph::graph;
+pub use interface::{Interface, interface, render_json, render_text};
+
+/// Lower a checked package to Core (T3-3). Only meaningful when
+/// `Analyzed::diagnostics` is empty; lowering diagnostics (E0200 for
+/// features outside the core) come back as the error.
+pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, Vec<Diagnostic>> {
+    onsa_core::lower(&analyzed.pkg, &analyzed.analysis)
 }
 
 pub fn check_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, String)]) -> CheckResult {

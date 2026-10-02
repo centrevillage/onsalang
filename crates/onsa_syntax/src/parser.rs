@@ -1053,13 +1053,31 @@ impl<'a> Parser<'a> {
     fn parse_type_args(&mut self, close: TokenKind) -> PResult<Vec<TypeId>> {
         let mut args = Vec::new();
         while !self.at(close) {
-            args.push(self.parse_type()?);
+            args.push(self.parse_type_arg()?);
             if self.eat(TokenKind::Comma).is_none() {
                 break;
             }
         }
         self.expect(close)?;
         Ok(args)
+    }
+
+    /// A type argument: a type, or a const argument written as an integer
+    /// literal, optionally negated (`Ring[F32, 4]`, S-24 / spec §4.5).
+    fn parse_type_arg(&mut self) -> PResult<TypeId> {
+        if !matches!(self.peek_kind(), TokenKind::Int | TokenKind::Minus) {
+            return self.parse_type();
+        }
+        let start = self.peek().span.start;
+        let neg = self.eat(TokenKind::Minus);
+        let tok = self.expect(TokenKind::Int)?;
+        let lit = self.int_lit(tok);
+        let mut expr = self.ast.add_expr(Expr { span: tok.span, kind: ExprKind::Lit(lit) });
+        if neg.is_some() {
+            let span = self.span_from(start);
+            expr = self.ast.add_expr(Expr { span, kind: ExprKind::Unary { op: UnOp::Neg, expr } });
+        }
+        Ok(self.ast.add_type(TypeExpr { span: self.span_from(start), kind: TypeKind::ConstArg(expr) }))
     }
 
     // ------------------------------------------------------------ blocks and statements
@@ -1134,7 +1152,7 @@ impl<'a> Parser<'a> {
                 let ty = if self.eat(TokenKind::Colon).is_some() { Some(self.parse_type()?) } else { None };
                 self.expect(TokenKind::Eq)?;
                 self.skip_newlines();
-                let init = self.parse_expr()?;
+                let init = self.parse_consumed()?;
                 Ok(StmtKind::Let { pat, ty, init })
             }
             TokenKind::KwVar => {
@@ -1189,7 +1207,7 @@ impl<'a> Parser<'a> {
                 if self.at(TokenKind::Eq) {
                     self.bump();
                     self.skip_newlines();
-                    let value = self.parse_expr()?;
+                    let value = self.parse_consumed()?;
                     return Ok(StmtKind::Assign { target: expr, value });
                 }
                 Ok(StmtKind::Expr(expr))
@@ -1202,8 +1220,20 @@ impl<'a> Parser<'a> {
         let ty = if self.eat(TokenKind::Colon).is_some() { Some(self.parse_type()?) } else { None };
         self.expect(TokenKind::Eq)?;
         self.skip_newlines();
-        let init = self.parse_expr()?;
+        let init = self.parse_consumed()?;
         Ok(StmtKind::Var { name, ty, init })
+    }
+
+    /// An expression in a consuming position (§5.2, S-21): `move <place>` or a
+    /// plain expression. The `move` operand is a postfix expression (a place).
+    fn parse_consumed(&mut self) -> PResult<ExprId> {
+        if !self.at(TokenKind::KwMove) {
+            return self.parse_expr();
+        }
+        let start = self.bump().span.start;
+        let inner = self.parse_postfix()?;
+        let span = self.span_from(start);
+        Ok(self.ast.add_expr(Expr { span, kind: ExprKind::Move(inner) }))
     }
 
     /// Head expression of `if` / `while` / `match` / `for` / `par`: no struct
@@ -1396,7 +1426,7 @@ impl<'a> Parser<'a> {
                         while !p.at(TokenKind::RBrace) {
                             let name = p.parse_ident("field name")?;
                             p.expect(TokenKind::Colon)?;
-                            let value = p.parse_expr()?;
+                            let value = p.parse_consumed()?;
                             fields.push((name, value));
                             if p.eat(TokenKind::Comma).is_none() {
                                 break;
@@ -1438,6 +1468,13 @@ impl<'a> Parser<'a> {
         let t = self.peek();
         let start = t.span.start;
         let kind = match t.kind {
+            TokenKind::KwMove => {
+                return Err(self.error(
+                    Code::E0002,
+                    t.span,
+                    "`move` is written only where a value is consumed: let/var initializers, assignment, literal elements, `match move x`, and call arguments (§5.2)",
+                ));
+            }
             TokenKind::Int => {
                 self.bump();
                 ExprKind::Lit(self.int_lit(t))
@@ -1490,7 +1527,18 @@ impl<'a> Parser<'a> {
             TokenKind::KwIf => return self.parse_if(),
             TokenKind::KwMatch => {
                 self.bump();
-                let scrutinee = self.parse_head_expr(false)?;
+                let scrutinee = if self.at(TokenKind::KwMove) {
+                    // `match move x` consumes the value (§7, S-21).
+                    let mstart = self.bump().span.start;
+                    let saved = std::mem::replace(&mut self.no_struct_lit, true);
+                    let inner = self.parse_postfix();
+                    self.no_struct_lit = saved;
+                    let inner = inner?;
+                    let span = self.span_from(mstart);
+                    self.ast.add_expr(Expr { span, kind: ExprKind::Move(inner) })
+                } else {
+                    self.parse_head_expr(false)?
+                };
                 self.expect(TokenKind::LBrace)?;
                 let arms = self.with_nl(false, |p| {
                     let mut arms = Vec::new();
@@ -1580,14 +1628,14 @@ impl<'a> Parser<'a> {
         if self.eat(TokenKind::RParen).is_some() {
             return Ok(ExprKind::Tuple(Vec::new()));
         }
-        let first = self.parse_expr()?;
+        let first = self.parse_consumed()?;
         if self.eat(TokenKind::Comma).is_none() {
             self.expect(TokenKind::RParen)?;
             return Ok(ExprKind::Paren(first));
         }
         let mut elems = vec![first];
         while !self.at(TokenKind::RParen) {
-            elems.push(self.parse_expr()?);
+            elems.push(self.parse_consumed()?);
             if self.eat(TokenKind::Comma).is_none() {
                 break;
             }
@@ -1601,7 +1649,7 @@ impl<'a> Parser<'a> {
         if self.eat(TokenKind::RBracket).is_some() {
             return Ok(ExprKind::Array(Vec::new()));
         }
-        let first = self.parse_expr()?;
+        let first = self.parse_consumed()?;
         if self.eat(TokenKind::Semi).is_some() {
             let len = self.parse_expr()?;
             self.expect(TokenKind::RBracket)?;
@@ -1612,7 +1660,7 @@ impl<'a> Parser<'a> {
             if self.at(TokenKind::RBracket) {
                 break;
             }
-            elems.push(self.parse_expr()?);
+            elems.push(self.parse_consumed()?);
         }
         self.expect(TokenKind::RBracket)?;
         Ok(ExprKind::Array(elems))
@@ -1996,6 +2044,17 @@ fn first_per_item(items: &[Span], mut diagnostics: Vec<Diagnostic>) -> Vec<Diagn
 mod tests {
     use onsa_diag::{Code, FileId, Fix};
 
+    #[test]
+    fn const_type_arguments() {
+        // S-24: integer literals (optionally negated) are const arguments; names stay types.
+        let p = crate::parse(FileId(0), "fn f(r: Ring[F32, 4], s: Ring[F32, N], t: Ring[F32, -1]) {}\n");
+        assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+        let d = crate::dump(&p.ast);
+        assert!(d.contains("Ring[F32, 4]"), "{d}");
+        assert!(d.contains("Ring[F32, N]"), "{d}");
+        assert!(d.contains("Ring[F32, (neg 1)]"), "{d}");
+    }
+
     use crate::dump;
 
     fn parse(src: &str) -> crate::Parsed {
@@ -2230,5 +2289,20 @@ mod tests {
             body("fn(move v: S) -> U64 uses {Sync} { v }"),
             "(block tail (fn(move v: S) -> U64 uses {Sync} (block tail v)))"
         );
+    }
+
+    #[test]
+    fn move_in_consuming_positions() {
+        // S-21 (§5.2): `move x` as an expression form.
+        let src = "fn f(move b: Buf[F32]) {\n  let y = move b\n  var v = move y\n  v = move b\n  let t = (move v, 1)\n  let a = [move b, move v]\n  let s = Box { b: move b }\n  match move b {\n    _ => 1,\n  }\n  take(move b)\n}\n";
+        assert!(codes(src).is_empty(), "{:?}", crate::parse(FileId(0), src).diagnostics);
+        let d = crate::dump(&crate::parse(FileId(0), src).ast);
+        assert!(d.contains("(let y = (move b))"), "{d}");
+        assert!(d.contains("(match (move b)"), "{d}");
+        // Elsewhere it is E0002.
+        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  return move b\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  move b\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  let y = 1 + move b\n  y\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("fn f(move b: Bool) -> U32 {\n  if move b { 1 } else { 2 }\n}\n"), vec![Code::E0002]);
     }
 }

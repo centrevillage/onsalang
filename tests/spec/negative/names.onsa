@@ -23,7 +23,7 @@ pub fn flow_as_type(s: voice) -> F32 {   //~ E0302
 }
 
 test "same" {
-  assert true
+  assert 1 == 1
 }
 
 test "same" {                   //~ E0306
