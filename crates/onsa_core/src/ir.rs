@@ -148,6 +148,31 @@ pub struct Module {
     pub messages: Vec<String>,
     /// Flows of the user package: generated functions, layout, parameters.
     pub flows: Vec<crate::lower::flow::FlowMeta>,
+    /// Places where an aggregate value is copied (§12.7; `onsa audit --memory`, T4-9).
+    pub moves: Vec<MoveSite>,
+}
+
+/// Why an aggregate is copied (§12.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveKind {
+    /// `let y = x` / `p = x` from another place (an owned local, a field, an element).
+    Copy,
+    /// `if c { a } else { b }` / `match` arms that yield existing places (no NRVO).
+    Branch,
+    /// Extraction of a payload from `Option` / `Result` / an enum.
+    Payload,
+    /// An aggregate passed as a `move` argument (the callee owns a copy).
+    MoveArg,
+}
+
+/// One copy of an aggregate value, with its size on the reference host.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MoveSite {
+    pub fn_name: String,
+    pub span: onsa_diag::Span,
+    pub ty: Ty,
+    pub bytes: u32,
+    pub kind: MoveKind,
 }
 
 impl Module {

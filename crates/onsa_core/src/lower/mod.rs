@@ -15,6 +15,7 @@
 mod body;
 mod eq;
 pub mod flow;
+pub mod moves;
 
 use std::collections::{HashMap, HashSet};
 
@@ -61,13 +62,23 @@ pub(crate) struct Lowerer<'a> {
     pub(crate) flows_in_progress: HashSet<DefId>,
     /// `bulk_threshold` of the target (spec §12.4); `None`: everything fast.
     pub bulk_threshold: Option<u32>,
+    /// Pointer width of the target in bytes (the bulk slot, `Span`s), T4-5.
+    pub ptr_size: u32,
 }
 
 /// Options of a lowering.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct LowerOptions {
     /// Arrays of at least this many bytes in a flow state go to the bulk region (§12.4).
     pub bulk_threshold: Option<u32>,
+    /// Pointer width of the target in bytes (8 on the reference host).
+    pub ptr_size: u32,
+}
+
+impl Default for LowerOptions {
+    fn default() -> Self {
+        LowerOptions { bulk_threshold: None, ptr_size: crate::layout::PTR_SIZE }
+    }
 }
 
 /// Lower the user package (and what it reaches in `std`) to Core.
@@ -93,6 +104,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         flow_fns: HashMap::new(),
         flows_in_progress: HashSet::new(),
         bulk_threshold: opts.bulk_threshold,
+        ptr_size: opts.ptr_size,
     };
     let mut diags = Vec::new();
     // Roots: non-generic items of the user package, in definition order.
@@ -130,7 +142,8 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         diags.sort_by_key(|d| (d.span.file, d.span.start));
         return Err(diags);
     }
-    let module = lw.m;
+    let mut module = lw.m;
+    module.moves = moves::collect(&module);
     if cfg!(debug_assertions)
         && let Err(e) = crate::verify::verify(&module)
     {

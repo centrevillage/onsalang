@@ -3,7 +3,7 @@
 //!
 //! | function | contents |
 //! |---|---|
-//! | `init(cfg, sample_rate) -> State` | `Init`-rate `let`s in order (state ones stored), node initialisation, sub `init`s |
+//! | `init(cfg, sample_rate) -> State` | `Init`-rate `let`s in order (state ones stored), node initialisation, sub `init`s, `poisoned = false`, `initialized = true` last |
 //! | `reset(inout s)` | `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `poisoned = false` |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored), sub `ctl`s with the sub's `Params` |
 //! | `tick(inout s, <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, then the stores of §11.4 in node order |
@@ -18,7 +18,8 @@
 //! `Sig`), inputs read above their own rate (by input name), then for each
 //! top-level `let` in source order its own field (when read above its rate)
 //! followed by the stateful nodes inside its initializer in source order,
-//! then the nodes of the output expression, then `poisoned: Bool`. A node
+//! then the nodes of the output expression, then `poisoned: Bool` and
+//! `initialized: Bool` (both export-boundary marks, spec §14.2 / S-27). A node
 //! named `n` contributes `n: T` (`prev`), `n.buf: [T; N]` + `n.w: U32`
 //! (`delay`; `[T; MAX + 1]` for `vdelay`), plus `n.init: T` when its `init`
 //! argument is an `Init`-rate expression; an instance contributes
@@ -53,7 +54,7 @@ use onsa_syntax::ast::{self, ExprId, ExprKind as AK};
 use super::body::{FnCx, bind_irrefutable, coerce, field_by_name, index, lit, local_expr, lower_expr, stmt, u32_lit};
 use super::{Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;
-use crate::layout::{FlowLayout, flow_layout};
+use crate::layout::{FlowLayout, flow_layout_for};
 use crate::prim::Prim;
 
 /// The Core items generated for one flow.
@@ -274,6 +275,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         }
     }
     fields.push(("poisoned".into(), Ty::Bool));
+    fields.push(("initialized".into(), Ty::Bool));
     lw.m.types[state_ty.0 as usize].kind = TypeDefKind::Struct { fields };
 
     let shape = FlowShape {
@@ -327,7 +329,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     gen_params_default(lw, &shape, info, &fns)?;
 
     // Layout and the `SIZE` / `BULK_SIZE` consts (T3-6).
-    let layout = flow_layout(&lw.m, state_ty, lw.bulk_threshold);
+    let layout = flow_layout_for(&lw.m, state_ty, lw.bulk_threshold, lw.ptr_size);
     for (name, value) in [("SIZE", layout.size), ("BULK_SIZE", layout.bulk_size)] {
         let Some(d) = member(&fd, name) else { continue };
         let id = ConstId(lw.m.consts.len() as u32);
@@ -825,6 +827,9 @@ fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns
     init_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s, &sr)?;
     let poisoned = sfield(lw, &s, "poisoned", span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
+    // S-27: the last store of `init`; a panic before it leaves the instance uninitialized.
+    let initialized = sfield(lw, &s, "initialized", span)?;
+    assign(&mut g.stmts, &initialized, lit(Ty::Bool, span, Lit::Bool(true)))?;
     g.finish(lw, fns.init, state_ty, false, Some(s));
     Ok(())
 }

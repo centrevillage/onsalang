@@ -1,4 +1,4 @@
-type echo.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool }
+type echo.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool, initialized: Bool }
 type echo.echo.Config = struct {}
 type echo.echo.Params = struct { time: F32, feedback: F32 }
 type echo.echo.Out = struct { out: Buf[F32] }
@@ -42,6 +42,7 @@ fn echo.echo.init(cfg: echo.echo.Config, sample_rate: F32) -> echo.echo.State sr
   s.3 = [vdelay_0.init; 96001]
   s.4 = 0:U32
   s.5 = false
+  s.6 = true
   s
 }
 rt fn echo.echo.reset(inout s: echo.echo.State) -> () {

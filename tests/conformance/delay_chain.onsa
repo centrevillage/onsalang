@@ -1,0 +1,31 @@
+// Conformance (T4-7): `delay`, nested instances, `par`, a struct output and a
+// planar output. No transcendental function: bit-exact.
+use std.dsp.{sum}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow tap(x: Sig[F32]) -> Sig[F32] {
+  delay(x, 2, 0.0) + prev(x, 0.0)
+}
+
+pub flow chain(
+  x: Sig[F32],
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  mix: Ctl[F32],
+) -> Sig[Stereo] {
+  let a = delay(x, 3, 0.0)
+  let b = tap~(a)
+  let taps = par i in 0..4 {
+    tap~(x * (i.round_f32() + 1.0))
+  }
+  let s = sum(taps)
+  Stereo { l: (x * mix) + b, r: s * 0.25 }
+}
+
+pub flow planar(x: Sig[F32]) -> Sig[[F32; 2]] {
+  let d = delay(x, 5, 0.0)
+  [x, d]
+}

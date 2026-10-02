@@ -1,8 +1,8 @@
-type unison.unison.State = struct { saws: [unison.unison.saws.State; 4], poisoned: Bool }
+type unison.unison.State = struct { saws: [unison.unison.saws.State; 4], poisoned: Bool, initialized: Bool }
 type unison.unison.Config = struct {}
 type unison.unison.Params = struct { f0: F32, detune: F32 }
 type unison.unison.Out = struct { out: Buf[F32] }
-type unison.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool }
+type unison.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool, initialized: Bool }
 type unison.saw.Config = struct {}
 type unison.saw.Params = struct { f0: F32 }
 type unison.saw.Out = struct { out: Buf[F32] }
@@ -30,6 +30,7 @@ fn unison.saw.init(cfg: unison.saw.Config, sample_rate: F32) -> unison.saw.State
   let prev_0.init: F32 = 0.0:F32
   s.2 = prev_0.init
   s.3 = false
+  s.4 = true
   s
 }
 rt fn unison.saw.reset(inout s: unison.saw.State) -> () {
@@ -81,6 +82,7 @@ fn unison.unison.init(cfg: unison.unison.Config, sample_rate: F32) -> unison.uni
     s.0[i].0 = unison.saw.init(unison.saw.Config {}, sample_rate)
   }
   s.1 = false
+  s.2 = true
   s
 }
 rt fn unison.unison.reset(inout s: unison.unison.State) -> () {

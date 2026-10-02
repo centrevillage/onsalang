@@ -1,0 +1,20 @@
+// Conformance (T4-7): spec §17.3 resonator. `exp` / `cos` run at Ctl rate, so
+// the flow is compared within the precision target (S-14).
+use std.math.{exp, cos}
+
+pub flow resonator(
+  x: Sig[F32],
+  @param(min: 20.0, max: 20000.0, default: 500.0, unit: "Hz")
+  fc: Ctl[F32],
+  @param(min: 1.0, max: 2000.0, default: 100.0, unit: "Hz")
+  bw: Ctl[F32],
+) -> Sig[F32] {
+  let r  = exp(-(F32.PI * bw) / sample_rate())
+  let w  = (2.0 * F32.PI * fc) / sample_rate()
+  let b1 = 2.0 * r * cos(w)
+  let b2 = r * r
+  let y1 = prev(y, 0.0)
+  let y2 = prev(y1, 0.0)
+  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
+  y
+}

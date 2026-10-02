@@ -1,4 +1,4 @@
-type resonator.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool }
+type resonator.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool, initialized: Bool }
 type resonator.resonator.Config = struct {}
 type resonator.resonator.Params = struct { fc: F32, bw: F32 }
 type resonator.resonator.Out = struct { out: Buf[F32] }
@@ -36,6 +36,7 @@ fn resonator.resonator.init(cfg: resonator.resonator.Config, sample_rate: F32) -
   let y2.init: F32 = 0.0:F32
   s.5 = y2.init
   s.6 = false
+  s.7 = true
   s
 }
 rt fn resonator.resonator.reset(inout s: resonator.resonator.State) -> () {

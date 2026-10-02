@@ -10,13 +10,14 @@ pub mod layout;
 pub mod lower;
 pub mod prim;
 pub mod verify;
+pub mod walk;
 
 #[cfg(test)]
 mod tests;
 
 pub use dump::dump;
 pub use ir::*;
-pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, size_align};
+pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, flow_layout_for, size_align, size_align_for};
 pub use lower::flow::{FlowFns, FlowMeta};
 pub use lower::{GenericArg, LowerOptions, lower, lower_with};
 pub use verify::{VerifyError, verify};

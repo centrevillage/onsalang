@@ -1,0 +1,31 @@
+# Spec §17.5: the voice flow as a static library for a C host.
+[package]
+name = "voice"
+edition = "2026"
+
+[dependencies]
+std = "0.2.0"
+
+[export]
+prefix = "onsa_"
+flows = ["dsp.voice"]
+
+# The machine the compiler runs on: `onsa build --target host` compiles with cc.
+[targets.host]
+kind = "staticlib"
+platform = "host"
+numeric = "strict"
+provides = []
+
+# A Cortex-M7 board: sources and flags only (cross compile with the board's toolchain).
+[targets.daisy]
+kind = "staticlib"
+platform = "thumbv7em-none-eabihf"
+numeric = "strict-ftz"
+provides = []
+panic = "reset"
+panic_messages = false
+main_frame = "static"
+
+[targets.daisy.memory]
+bulk_threshold = 4096

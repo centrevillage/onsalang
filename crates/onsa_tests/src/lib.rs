@@ -24,6 +24,8 @@
 //! test "overflow panics" {        //~ TESTFAIL "overflow panics"
 //! ```
 
+pub mod c;
+
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 

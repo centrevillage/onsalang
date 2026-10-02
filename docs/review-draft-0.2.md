@@ -273,7 +273,7 @@ P1（検査は関数の中で閉じる）を守るなら、規則は「`T` の�
 | I-04 | 集成体は常に出力ポインタで構築（スカラと `Ptr` だけレジスタ）。名前付きローカルの返却は C++ の NRVO と同じ条件。`Result` / `Option` からの取り出しはコピーになる限界を受け入れ、`audit --memory` で列挙 |
 | I-05 | 名前空間の中の項目の `use` と、同じモジュールでの `impl voice.State` を許す |
 | I-06 | 文の順の一方向推論 + 単一化変数。その場で既知を要する操作の一覧を固定。返り値の推論は無名関数だけ |
-| I-01 | 提案通り。ターゲットの `panic` に `poison`（`setjmp` / `longjmp`、ホストの既定）を加え、`trap` / `reset` / `halt` では poisoned にならない。WASM はトラップを glue が捕まえる |
+| I-01 | 提案通り。ターゲットの `panic` に `poison`（`setjmp` / `longjmp`、ホストの既定）を加え、`trap` / `reset` / `halt` では poisoned にならない。WASM はトラップを glue が捕まえる。（2026-10-04 S-26: `jmp_buf` は状態ではなく wrapper のスタックに置く） |
 | I-02 | 提案通り。生成コードに `FP_CONTRACT OFF` と `_Static_assert(FLT_EVAL_METHOD == 0)`、ターゲット定義にコンパイラフラグ |
 | I-03 | 方針を変更。超越関数は各環境のプリミティブ（libm）を使う。`strict` のビット一致は IEEE の演算に限り、超越関数は精度目標 2 ULP（仮決め）の範囲で一致。環境ごとに差が大きければ個別に対策。Onsa 実装の `std.math.exact` は §19 |
 | P-04 | 提案通り。配列 + ループに落とす。`i` は `Init` レートの値でコンパイル時定数ではない。`par` は構造の複製で反復ではない（Verilog の `generate` に当たる） |

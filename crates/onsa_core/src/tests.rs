@@ -194,7 +194,7 @@ fn flow_members_are_lowered_when_referenced() {
     let d = text(
         "pub flow one(x: Sig[F32]) -> Sig[F32] {\n  x\n}\n\npub fn mk(sr: F32) -> one.State {\n  one.init(one.Config {}, sr)\n}\n",
     );
-    assert!(d.contains("type t.one.State = struct { poisoned: Bool }"), "{d}");
+    assert!(d.contains("type t.one.State = struct { poisoned: Bool, initialized: Bool }"), "{d}");
     assert!(d.contains("fn t.one.init(cfg: t.one.Config, sample_rate: F32) -> t.one.State sret {"), "{d}");
     assert!(d.contains("rt fn t.one.tick(inout s: t.one.State, x: F32) -> F32 {"), "{d}");
 }
@@ -239,7 +239,7 @@ fn core_with(src: &str, bulk_threshold: Option<u32>) -> Module {
     let (sources, pkg) = package(src);
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
-    let opts = crate::LowerOptions { bulk_threshold };
+    let opts = crate::LowerOptions { bulk_threshold, ..Default::default() };
     match crate::lower_with(&pkg, &a, &opts) {
         Ok(m) => {
             verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", dump(&m)));
@@ -274,7 +274,7 @@ fn resonator_lowers_to_the_five_functions() {
     let d = dump(&m);
     // State fields (S-05): sample_rate, the Ctl lets read at Sig, the prev nodes, poisoned.
     assert!(
-        d.contains("type t.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool }"),
+        d.contains("type t.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool, initialized: Bool }"),
         "{d}"
     );
     // ctl: Ctl lets in order, state ones stored; `w` is a plain local.
@@ -305,7 +305,7 @@ fn resonator_lowers_to_the_five_functions() {
     assert_eq!((f.layout.size, f.layout.bulk_size, f.layout.align), (28, 0, 4));
     assert_eq!(
         f.layout.fast_fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(),
-        ["sample_rate", "r", "b1", "b2", "y1", "y2", "poisoned"]
+        ["sample_rate", "r", "b1", "b2", "y1", "y2", "poisoned", "initialized"]
     );
     assert!(d.contains("const t.resonator.SIZE: U32 = 28:U32"), "{d}");
 }
@@ -327,7 +327,10 @@ fn process_reads_all_inputs_then_writes_all_outputs() {
 #[test]
 fn delay_ring_buffer_order() {
     let d = text("pub flow dl(x: Sig[F32]) -> Sig[F32] {\n  let y = delay(x, 4, 0.0)\n  y\n}\n");
-    assert!(d.contains("type t.dl.State = struct { y.buf: [F32; 4], y.w: U32, poisoned: Bool }"), "{d}");
+    assert!(
+        d.contains("type t.dl.State = struct { y.buf: [F32; 4], y.w: U32, poisoned: Bool, initialized: Bool }"),
+        "{d}"
+    );
     // init: buffer filled with init, w = 0.
     assert!(d.contains("s.0 = [0.0:F32; 4]\n  s.1 = 0:U32"), "{d}");
     // tick: output = buf[w], then (at the end) buf[w] = e, w = (w + 1) % N.
@@ -375,7 +378,15 @@ fn echo_bulk_layout() {
     assert_eq!(f.layout.bulk_fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["vdelay_0.buf"]);
     assert_eq!(
         f.layout.fast_fields.iter().map(|x| (x.name.as_str(), x.offset)).collect::<Vec<_>>(),
-        [("bulk", 0), ("sample_rate", 8), ("feedback", 12), ("d", 16), ("vdelay_0.w", 20), ("poisoned", 24)]
+        [
+            ("bulk", 0),
+            ("sample_rate", 8),
+            ("feedback", 12),
+            ("d", 16),
+            ("vdelay_0.w", 20),
+            ("poisoned", 24),
+            ("initialized", 25)
+        ]
     );
     assert_eq!((f.layout.size, f.layout.align), (32, 8));
     assert!(dump(&m).contains("const t.echo.BULK_SIZE: U32 = 384004:U32"));
@@ -389,7 +400,7 @@ fn sub_instances_are_wired_per_phase() {
     let src = "pub flow saw(f0: Ctl[F32]) -> Sig[F32] {\n  let phase = prev(phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {\n  let a = 1.0 / (time * sample_rate())\n  let y = x + (a * (prev(y, 0.0) - x))\n  y\n}\n\npub flow voice(f0: Ctl[F32], gain: Ctl[F32]) -> Sig[F32] {\n  let src = saw~(f0)\n  src * smooth~(gain, 0.01)\n}\n";
     let d = text(src);
     assert!(
-        d.contains("type t.voice.State = struct { src: t.saw.State, smooth_0: t.smooth.State, poisoned: Bool }"),
+        d.contains("type t.voice.State = struct { src: t.saw.State, smooth_0: t.smooth.State, poisoned: Bool, initialized: Bool }"),
         "{d}"
     );
     // init: sub inits with Config from the Init args; ctl: sub ctls with Params from the Ctl args; tick: sub ticks.
@@ -401,8 +412,16 @@ fn sub_instances_are_wired_per_phase() {
     assert!(d.contains("= t.smooth.tick(inout s.1)"), "{d}");
     assert!(d.contains("t.saw.reset(inout s.0)\n  t.smooth.reset(inout s.1)"), "{d}");
     // The sub states store the inputs they read at Sig and the Init let.
-    assert!(d.contains("type t.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool }"), "{d}");
-    assert!(d.contains("type t.smooth.State = struct { x: F32, a: F32, prev_0: F32, poisoned: Bool }"), "{d}");
+    assert!(
+        d.contains(
+            "type t.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool, initialized: Bool }"
+        ),
+        "{d}"
+    );
+    assert!(
+        d.contains("type t.smooth.State = struct { x: F32, a: F32, prev_0: F32, poisoned: Bool, initialized: Bool }"),
+        "{d}"
+    );
     // No Sig inputs: `process_inplace` is not generated, `render` takes `frames`.
     assert!(!d.contains("t.voice.process_inplace"), "{d}");
     assert!(d.contains("frames: U32, sample_rate: F32) -> t.voice.Out sret"), "{d}");
@@ -412,7 +431,10 @@ fn sub_instances_are_wired_per_phase() {
 fn par_replicates_state_and_loops() {
     let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: Ctl[F32]) -> Sig[F32] {\n  let phase = prev(phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: Ctl[F32]) -> Sig[F32] {\n  let saws = par i in 0..N {\n    saw~(f0 * (1.0 + (i.round_f32() * 0.01)))\n  }\n  sum(saws)\n}\n";
     let d = text(src);
-    assert!(d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool }"), "{d}");
+    assert!(
+        d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool, initialized: Bool }"),
+        "{d}"
+    );
     assert!(d.contains("type t.uni.saws.State = struct { saw_0: t.saw.State }"), "{d}");
     assert!(d.contains("for i in 0:U32..4:U32 {\n    s.0[i].0 = t.saw.init(t.saw.Config {}, sample_rate)"), "{d}");
     assert!(

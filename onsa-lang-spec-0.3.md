@@ -648,7 +648,7 @@ poisoned の実現と、ターゲットの `panic` 設定:
 
 | `panic` | 挙動 | 既定 |
 |---|---|---|
-| `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は状態の fast 領域に置き、`SIZE` に含まれる | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
+| `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は全ターゲットで同じ値になる（wrapper のスタックは `audit --stack` に数える） | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
 | `"trap"` | 即座にトラップ命令。デバッガで止める用。poisoned にはならない | |
 | `"reset"` | 機器をリセットする。本番の組込み用 | OS の無いターゲットの既定 |
 | `"halt"` | 停止する | |
@@ -842,7 +842,7 @@ fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param �
 - `Sig` 入出力の値型は、スカラ、`[スカラ; N]`、または（出力のみ）それらをフィールドに持つ struct。入れ子の配列は境界に出せない（E0810）。
 - `process` のサンプルループは、各サンプルで **全ての `Sig` 入力を読んでから、全ての出力を書く**。過去の値は状態から読み、入力バッファの他の位置は読まない。この不変条件により、入力と出力が完全に同じバッファでも結果は変わらない。
 - `process_inplace` は、`Sig` 入力と出力を位置で対にし、対ごとに一つの `inout` 引数（名前は出力の名前）にしたもの。`process` の排他性（§5.2）を保ったまま、一本のバッファにエフェクトを掛けられる。本体は `process` と同じで、C バックエンドでは同じポインタで内部の関数を呼ぶだけなのでコードは増えない。
-- `reset` は、`prev` / `delay` / `vdelay` の状態を `init` 値に戻し、書き込み位置を 0 にし、サブインスタンスを再帰的に `reset` し、poisoned を解く。`Init` レートの値は保つ（`init` の再実行は非 rt になりうる）。
+- `reset` は、`prev` / `delay` / `vdelay` の状態を `init` 値に戻し、書き込み位置を 0 にし、サブインスタンスを再帰的に `reset` し、poisoned を解く。`Init` レートの値は保つ（`init` の再実行は非 rt になりうる）。export の境界では、`init` が panic して完了しなかったインスタンス（`initialized` が偽）に対する `reset` は何もしない（§14.2）。
 - `init` は効果を持たず、ヒープを使わない。返り値は呼び出し側の領域に直接構築される（§12.7。コピーしないことを保証する）。
 - `render` はテストと一括処理用。全体を 1 回の `process` として処理するので、`Ctl` 入力は全区間で一定。ブロックごとにパラメータを変えるテストは `process` を自分で繰り返す。`Sig` 入力がある flow では `frames` を取らず、`Span` の長さを使う。
 - `Out` は、`process` の出力引数と同じ名前・同じ形で、`Span[T]` を `Buf[T]` に置き換えた struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`）。
@@ -938,7 +938,7 @@ test "wrap01 stays in [0, 1)" {
   - **fast**: スカラと小さな配列。キャッシュや内部 SRAM に置く。
   - **bulk**: ターゲットの `bulk_threshold`（バイト）以上の配列。遅延線や大きなテーブル。外部 SDRAM などに置く。
 - 閾値を設定しなければ、全てが fast に入り、`BULK_SIZE` は 0 になる。
-- 配置の規則: フィールドは宣言順（flow の状態では `let` の順）、各型の自然アラインメント、並べ替えなし。`let` に由来しないフィールドは次の順に置く: 先頭に bulk 領域のポインタ（`BULK_SIZE > 0` のとき）、`sample_rate: F32`（`Ctl` / `Sig` から参照されるとき）、次に自分のレートより高いレートから読まれる入力（`Sig` で読まれる `Ctl` 入力など。宣言順）、次に `let` 由来のフィールド（`Sig` から参照される `Ctl` レートの `let` も含む。`ctl` と `tick` の間で値を渡す場所が要るため）、末尾に `poisoned: Bool` と `jmp_buf`（`panic = "poison"` のとき）。`SIZE` / `ALIGN` はこの規則でコンパイラが計算し、生成コードに `_Static_assert` で検証を出す。ホットリロード（§18.3）とプローブは、この規則で名前とオフセットが安定することに依存する。
+- 配置の規則: フィールドは宣言順（flow の状態では `let` の順）、各型の自然アラインメント、並べ替えなし。`let` に由来しないフィールドは次の順に置く: 先頭に bulk 領域のポインタ（`BULK_SIZE > 0` のとき）、`sample_rate: F32`（`Ctl` / `Sig` から参照されるとき）、次に自分のレートより高いレートから読まれる入力（`Sig` で読まれる `Ctl` 入力など。宣言順）、次に `let` 由来のフィールド（`Sig` から参照される `Ctl` レートの `let` も含む。`ctl` と `tick` の間で値を渡す場所が要るため）、末尾に `poisoned: Bool` と `initialized: Bool`（どちらも export の境界が使う印。§14.2）。`SIZE` / `ALIGN` はこの規則でコンパイラが計算し、生成コードに `_Static_assert` で検証を出す。ホットリロード（§18.3）とプローブは、この規則で名前とオフセットが安定することに依存する。
 - C API は二つの領域を別々のポインタで受け取る（§14.2）。Onsa の中から見ると、状態は一つの値である。
 
 ### 12.5 スタック
@@ -1141,7 +1141,8 @@ typedef struct onsa_voice onsa_voice;
 typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } onsa_voice_params;
 
 /* Config が空なので引数は sample_rate のみ。bulk は BULK_SIZE が 0 なら NULL でよい */
-void onsa_voice_init(onsa_voice* s, void* bulk, float sample_rate);
+int  onsa_voice_init(onsa_voice* s, void* bulk, float sample_rate);
+     /* 0: ok, 1: init が panic した（状態は未初期化のまま。reset では復帰せず、init のやり直しが要る） */
 void onsa_voice_reset(onsa_voice* s);
 void onsa_voice_params_default(onsa_voice_params* p);
 int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* p,
@@ -1151,11 +1152,12 @@ int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* p,
 extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデータ */
 
 /* Alloc を提供するターゲットだけで生成される */
-onsa_voice* onsa_voice_new(float sample_rate);
+onsa_voice* onsa_voice_new(float sample_rate);   /* init が失敗したら NULL */
 void        onsa_voice_free(onsa_voice* s);
 ```
 
 - メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。
+- `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は 1 を返し、`reset` は何もしない。復帰は `init` のやり直しだけである。
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
 - export した flow を、既存の C/C++ ホスト（JUCE, CLAP, VST3, AU, 組込み HAL）へ組み込む第一の経路とする。組込みでの使い方は §17.5。
 
@@ -1516,7 +1518,9 @@ static onsa_voice_params params;
 
 void setup(void) {
   voice = (onsa_voice*)voice_mem;
-  onsa_voice_init(voice, NULL, 48000.0f);       /* BULK_SIZE が 0 なので NULL */
+  if (onsa_voice_init(voice, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0 なので NULL */
+    return;                                             /* init が panic した。使い始めない */
+  }
   onsa_voice_params_default(&params);
 }
 

@@ -10,6 +10,7 @@ onsa_driver.workspace = true
 onsa_diag.workspace = true
 onsa_interp.workspace = true
 onsa_core.workspace = true
+onsa_backend_c.workspace = true
 serde_json.workspace = true
 
 [lints]

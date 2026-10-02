@@ -80,6 +80,17 @@ enum Command {
         /// Flow name (`voice` or `dsp.voice`)
         flow: String,
     },
+    /// Build a target of the manifest: C sources, headers, and a static library on the host (spec §15.3)
+    Build {
+        /// Target name from `[targets.<name>]`
+        #[arg(long)]
+        target: String,
+        /// Output directory (default `target/<name>/` next to the manifest)
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Package directory or `onsa.toml` (default `.`)
+        path: Option<PathBuf>,
+    },
     /// Explain a diagnostic code
     Explain {
         /// The code, e.g. `E0811`
@@ -98,6 +109,7 @@ fn main() -> ExitCode {
         Command::Test { json, filter, paths } => test(json, filter, &paths),
         Command::Interface { json, path } => interface(json, &path),
         Command::Graph { svg, path, flow } => graph(svg, &path, &flow),
+        Command::Build { target, out, path } => build(&target, out, path),
         Command::Explain { code } => explain(&code),
     }
 }
@@ -330,4 +342,30 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> ExitCode {
         print!("{}", report.render_text(&loaded.sources));
     }
     if report.failed() == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
+/// `onsa build --target <name> [--out <dir>] [path]` (T4-5).
+fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> ExitCode {
+    let path = path.unwrap_or_else(|| PathBuf::from("."));
+    let opts = onsa_driver::BuildOptions { target: target.to_string(), out };
+    match onsa_driver::build(&path, &opts) {
+        Ok(r) => {
+            println!("built `{}` for {} ({}) in {}", r.target, r.platform, r.kind, r.out_dir.display());
+            for f in &r.files {
+                println!("  {f}");
+            }
+            if let Some(n) = &r.note {
+                println!("note: {n}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(onsa_driver::BuildError::Usage(m)) => {
+            eprintln!("onsa: {m}");
+            ExitCode::from(2)
+        }
+        Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
+            print!("{}", onsa_diag::to_text(&sources, &diagnostics));
+            ExitCode::from(1)
+        }
+    }
 }

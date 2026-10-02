@@ -70,3 +70,8 @@ Testing/
 
 # Rust
 target/
+
+# Example outputs
+examples/*/target/
+examples/*/out.wav
+examples/voice_host/voice_host

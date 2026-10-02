@@ -1,20 +1,20 @@
-type voice.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool }
+type voice.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool, initialized: Bool }
 type voice.resonator.Config = struct {}
 type voice.resonator.Params = struct { fc: F32, bw: F32 }
 type voice.resonator.Out = struct { out: Buf[F32] }
-type voice.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool }
+type voice.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool, initialized: Bool }
 type voice.saw.Config = struct {}
 type voice.saw.Params = struct { f0: F32 }
 type voice.saw.Out = struct { out: Buf[F32] }
-type voice.smooth.State = struct { x: F32, a: F32, prev_0: F32, poisoned: Bool }
+type voice.smooth.State = struct { x: F32, a: F32, prev_0: F32, poisoned: Bool, initialized: Bool }
 type voice.smooth.Config = struct { time: F32 }
 type voice.smooth.Params = struct { x: F32 }
 type voice.smooth.Out = struct { out: Buf[F32] }
-type voice.voice.State = struct { src: voice.saw.State, f1: voice.resonator.State, f2: voice.resonator.State, smooth_0: voice.smooth.State, poisoned: Bool }
+type voice.voice.State = struct { src: voice.saw.State, f1: voice.resonator.State, f2: voice.resonator.State, smooth_0: voice.smooth.State, poisoned: Bool, initialized: Bool }
 type voice.voice.Config = struct {}
 type voice.voice.Params = struct { f0: F32, vowel_f1: F32, vowel_f2: F32, gain: F32 }
 type voice.voice.Out = struct { out: Buf[F32] }
-type voice.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool }
+type voice.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool, initialized: Bool }
 type voice.echo.Config = struct {}
 type voice.echo.Params = struct { time: F32, feedback: F32 }
 type voice.echo.Out = struct { out: Buf[F32] }
@@ -64,6 +64,7 @@ fn voice.resonator.init(cfg: voice.resonator.Config, sample_rate: F32) -> voice.
   let y2.init: F32 = 0.0:F32
   s.5 = y2.init
   s.6 = false
+  s.7 = true
   s
 }
 rt fn voice.resonator.reset(inout s: voice.resonator.State) -> () {
@@ -120,6 +121,7 @@ fn voice.saw.init(cfg: voice.saw.Config, sample_rate: F32) -> voice.saw.State sr
   let prev_0.init: F32 = 0.0:F32
   s.2 = prev_0.init
   s.3 = false
+  s.4 = true
   s
 }
 rt fn voice.saw.reset(inout s: voice.saw.State) -> () {
@@ -163,6 +165,7 @@ fn voice.smooth.init(cfg: voice.smooth.Config, sample_rate: F32) -> voice.smooth
   let prev_0.init: F32 = 0.0:F32
   s.2 = prev_0.init
   s.3 = false
+  s.4 = true
   s
 }
 rt fn voice.smooth.reset(inout s: voice.smooth.State) -> () {
@@ -216,6 +219,7 @@ fn voice.voice.init(cfg: voice.voice.Config, sample_rate: F32) -> voice.voice.St
   s.2 = voice.resonator.init(voice.resonator.Config {}, sample_rate)
   s.3 = voice.smooth.init(voice.smooth.Config { time: 0.01:F32 }, sample_rate)
   s.4 = false
+  s.5 = true
   s
 }
 rt fn voice.voice.reset(inout s: voice.voice.State) -> () {
@@ -280,6 +284,7 @@ fn voice.echo.init(cfg: voice.echo.Config, sample_rate: F32) -> voice.echo.State
   s.3 = [vdelay_0.init; 96001]
   s.4 = 0:U32
   s.5 = false
+  s.6 = true
   s
 }
 rt fn voice.echo.reset(inout s: voice.echo.State) -> () {

@@ -191,6 +191,8 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-23 ✅ | 非 rt 関数の効果行の整合が未検査 | E0601「効果行に無い効果を使った」を登録し、第 1 期は `Alloc` を M3 で検査（T3-13）。`test` の本体は例外（D-08）。E0610（M4）の前提 | M3 |
 | S-24 ✅ | 型の位置で const ジェネリックの引数（`Ring[F32, 4]`）を書く構文が無い | 整数リテラルか定数名を型引数の位置に書ける（2026-10-03 決定。構文解析器の対応は T3-14） | M3 |
 | S-25 ✅ | `round` と `min` / `max` の IEEE の細部（丸めの方向、NaN、符号付きゼロ）が未定義 | `round` は最近接偶数、`min` / `max` は NaN 伝播と `-0.0 < 0.0`（WASM / JS の意味。C は `fminf` を使わず自前で書く）（2026-10-03 決定） | M3 |
+| S-26 ✅ | `panic = "poison"` の `jmp_buf` を状態の fast 領域に置く（§9.2、I-01）と、`SIZE` がホストの libc に依存し（`sizeof(jmp_buf)` は macOS arm64 で 192、glibc x86_64 で 200、MSVC は 16 バイト境界）、export された flow を別の flow のサブインスタンスにしたときに入れ子の `jmp_buf` が親の `SIZE` から漏れる | `jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は全ターゲットで同じ値になり、ホットリロードとプローブが依存する配置の安定（§12.4）が保たれる。wrapper の約 200 バイトのスタックは `audit --stack` に数える。§9.2 の「`jmp_buf` は状態の fast 領域に置き `SIZE` に含まれる」を改める | M4 |
+| S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-04 決定、案 A） | M4 |
 
 ---
 
@@ -446,17 +448,19 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 
 | ID | 作業 | 内容 | 規模 |
 |---|---|---|---|
-| T4-1 | `runtime/c/onsa.h` | `onsa_param_info`（`name` `id` `min` `max` `default_` `step` `unit` `scale` `label`）、panic の設定マクロ（`ONSA_PANIC_POISON` / `TRAP` / `RESET` / `HALT`）と差し替え可能な `onsa_panic(const char* msg, const char* file, uint32_t line)`、検査付きの整数演算（`__builtin_*_overflow`、MSVC は手書きの比較）、`onsa_span_f32 { float* ptr; uint32_t len; }`、`#pragma STDC FP_CONTRACT OFF`、`_Static_assert(FLT_EVAL_METHOD == 0, ...)` | S |
-| T4-2 | Core → C | 型（struct、enum は `struct { tag; union }`、配列は struct で包む、タプルは struct）、名前（D-10）、関数（`sret`、借用の集成体は `const T*`、`inout` は `T*`、スカラは値）、文、式（F32 の各演算を `(float)` で囲む）、`Checked` / `Wrap` / `Sat`、添字の検査、`Switch`、`Panic`、`Prim` の対応表（libm の `expf` など）、`const` は `static const` | L |
-| T4-3 | flow の API | 内部の 5 関数と、export の wrapper（§14.2 の形）: `_init(s, bulk, cfg の各フィールド, sample_rate)`、`_reset`、`_params_default`、`_process(s, p, 入力..., 出力..., frames)` の戻り値（`poisoned` → 1、部分的な重なりと出力どうしの一致 → 2）、`@param` の範囲への飽和、`param_info` の表、`_new` / `_free`（`provides` に `Alloc` があるとき）、ヘッダ（`SIZE` / `BULK_SIZE` / `ALIGN` と `_Static_assert(sizeof(...) == ...)`） | M |
-| T4-4 | panic の実現 | `poison`: wrapper で `setjmp`、`onsa_panic` が `longjmp`、出力をゼロで埋めて `poisoned = true`。`jmp_buf` は状態の末尾（S-05）。`trap` / `reset` / `halt`: `__builtin_trap()` / ターゲットのフック / `for(;;)`。`reset` で `poisoned` を解く | S |
-| T4-5 | `onsa build --target <name>` | マニフェストの `[targets.*]`（`kind` = `staticlib` / `source`（`lang = "c"`）、`platform`、`numeric`、`provides`、`panic`、`panic_messages`、`memory.bulk_threshold`）、`[export]`（`prefix`、`flows`、`fns`。E0809 と E0610 はここで検査）。`target/<name>/` に `.c` / `.h` を出し、`platform` がホストなら `cc` を呼ぶ（フラグ: `-std=c11 -O2 -ffp-contract=off -fno-fast-math`、x86-32 は `-msse2 -mfpmath=sse`、MSVC は `/fp:strict`）、`ar` で `.a`。クロスは C の出力だけ | M |
-| T4-6 | golden | `tests/golden/<name>.c` と生成物の差分。`UPDATE_GOLDEN=1` で更新 | S |
-| T4-7 | 適合性の基盤 | `tests/conformance/<name>.onsa`（`render` を呼ぶ `test` だけを持つ）。ハーネスは interp で `Out` を得て、同じ入力で C（生成した小さなドライバ）を走らせ、サンプル列をバイト比較する。超越関数を通る flow は S-14 の判定で許容誤差（M5 で確定。M4 では同じ libm なので一致を期待する） | M |
-| T4-8 | §17.5 の例 | `examples/voice_host/`: `daisy` 相当のターゲット定義（ホスト向けに `platform` を変えたもの）で staticlib を作り、C のホストが WAV に書く | S |
-| T4-9 | NRVO と移動 | `sret` の構築先の決定（§12.7 の条件）。閾値以上のコピーの箇所を記録（`audit --memory` は M9） | S |
+| T4-1 ✅ | `runtime/c/onsa.h` | `onsa_param_info`（`name` `id` `min` `max` `default_` `step` `unit` `scale` `label`）、panic の設定マクロ（`ONSA_PANIC_POISON` / `TRAP` / `RESET` / `HALT`）と差し替え可能な `onsa_panic(const char* msg, const char* file, uint32_t line)`、検査付きの整数演算（`__builtin_*_overflow`、MSVC は手書きの比較）、`onsa_span_f32 { float* ptr; uint32_t len; }`、`#pragma STDC FP_CONTRACT OFF`、`_Static_assert(FLT_EVAL_METHOD == 0, ...)` | S |
+| T4-2 ✅ | Core → C | 型（struct、enum は `struct { tag; union }`、配列は struct で包む、タプルは struct）、名前（D-10）、関数（`sret`、借用の集成体は `const T*`、`inout` は `T*`、スカラは値）、文、式（F32 の各演算を `(float)` で囲む）、`Checked` / `Wrap` / `Sat`、添字の検査、`Switch`、`Panic`、`Prim` の対応表（libm の `expf` など）、`const` は `static const` | L |
+| T4-3 ✅ | flow の API | 内部の 5 関数と、export の wrapper（§14.2 の形）: `_init(s, bulk, cfg の各フィールド, sample_rate)`、`_reset`、`_params_default`、`_process(s, p, 入力..., 出力..., frames)` の戻り値（`poisoned` → 1、部分的な重なりと出力どうしの一致 → 2）、`@param` の範囲への飽和、`param_info` の表、`_new` / `_free`（`provides` に `Alloc` があるとき）、ヘッダ（`SIZE` / `BULK_SIZE` / `ALIGN` と `_Static_assert(sizeof(...) == ...)`） | M |
+| T4-4 ✅ | panic の実現 | `poison`: wrapper で `setjmp`、`onsa_panic` が `longjmp`、出力をゼロで埋めて `poisoned = true`。`jmp_buf` は状態の末尾（S-05）。`trap` / `reset` / `halt`: `__builtin_trap()` / ターゲットのフック / `for(;;)`。`reset` で `poisoned` を解く | S |
+| T4-5 ✅ | `onsa build --target <name>` | マニフェストの `[targets.*]`（`kind` = `staticlib` / `source`（`lang = "c"`）、`platform`、`numeric`、`provides`、`panic`、`panic_messages`、`memory.bulk_threshold`）、`[export]`（`prefix`、`flows`、`fns`。E0809 と E0610 はここで検査）。`target/<name>/` に `.c` / `.h` を出し、`platform` がホストなら `cc` を呼ぶ（フラグ: `-std=c11 -O2 -ffp-contract=off -fno-fast-math`、x86-32 は `-msse2 -mfpmath=sse`、MSVC は `/fp:strict`）、`ar` で `.a`。クロスは C の出力だけ | M |
+| T4-6 ✅ | golden | `tests/golden/<name>.c` と生成物の差分。`UPDATE_GOLDEN=1` で更新 | S |
+| T4-7 ✅ | 適合性の基盤 | `tests/conformance/<name>.onsa`（`render` を呼ぶ `test` だけを持つ）。ハーネスは interp で `Out` を得て、同じ入力で C（生成した小さなドライバ）を走らせ、サンプル列をバイト比較する。超越関数を通る flow は S-14 の判定で許容誤差（M5 で確定。M4 では同じ libm なので一致を期待する） | M |
+| T4-8 ✅ | §17.5 の例 | `examples/voice_host/`: `daisy` 相当のターゲット定義（ホスト向けに `platform` を変えたもの）で staticlib を作り、C のホストが WAV に書く | S |
+| T4-9 ✅ | NRVO と移動 | `sret` の構築先の決定（§12.7 の条件）。閾値以上のコピーの箇所を記録（`audit --memory` は M9） | S |
 
 受け入れ: 計画 §3 M4 の通り。
+
+✅ M4 は 2026-10-03 に完了。`onsa build --target <name>` はマニフェストの `[targets.*]` / `[export]` を読み、`target/<name>/` に `onsa.h` と `onsa_<pkg>.c` と flow ごとのヘッダと `onsa_build.json` を出し、`platform` がホスト（`"host"` と書ける）で `kind = "staticlib"` なら `cc` + `ar` で `libonsa_<pkg>.a` を作る。`tests/conformance/*.onsa` の全 flow を interp と C で比較（インパルス・無音・決定的な雑音、2 ブロック）: `echo` / `delay_chain` はビット一致、超越関数に到達する flow は 2 ULP 以内。`examples/voice_host` が §17.5 の C ホストで WAV を書く。E0809 / E0610 は `build` の export の検査で出す。`Module.moves` に §12.7 のコピーの箇所を記録（`audit --memory` は M9）。
 
 ### M5 `std` と適合性テスト（M）
 

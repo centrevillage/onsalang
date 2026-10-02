@@ -155,6 +155,7 @@ name = "onsa_backend_c"
 version = "0.1.0"
 dependencies = [
  "onsa_core",
+ "onsa_diag",
 ]
 
 [[package]]
@@ -252,6 +253,7 @@ dependencies = [
 name = "onsa_tests"
 version = "0.1.0"
 dependencies = [
+ "onsa_backend_c",
  "onsa_core",
  "onsa_diag",
  "onsa_driver",

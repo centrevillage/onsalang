@@ -1,6 +1,7 @@
 //! Pipeline driver: loads a package (S-11), embeds `std` (D-07), and runs
 //! parse -> analyze. Each milestone adds a stage (`docs/implementation-tasks.md` §4).
 
+pub mod build;
 pub mod graph;
 pub mod interface;
 
@@ -35,12 +36,57 @@ pub struct Loaded {
     pub modules: Vec<(FileId, String)>,
 }
 
-/// Minimal manifest (spec §15.3); the rest is read in M4.
+/// The manifest `onsa.toml` (spec §15.3). `[export]` and `[targets.*]` are
+/// used by `onsa build` (T4-5); `bind` is read but not supported yet.
 #[derive(Debug, Default, serde::Deserialize)]
 pub struct Manifest {
     pub package: ManifestPackage,
     #[serde(default)]
     pub dependencies: HashMap<String, String>,
+    #[serde(default)]
+    pub export: Option<ManifestExport>,
+    #[serde(default)]
+    pub targets: HashMap<String, ManifestTarget>,
+}
+
+/// `[export]`: what the C ABI exposes (spec §14.2, §15.3).
+#[derive(Debug, Default, Clone, serde::Deserialize)]
+pub struct ManifestExport {
+    /// C symbol prefix (default `onsa_`).
+    pub prefix: Option<String>,
+    /// Flows by module path (`dsp.voice`).
+    #[serde(default)]
+    pub flows: Vec<String>,
+    /// Functions by module path (`util.onsa_version`).
+    #[serde(default)]
+    pub fns: Vec<String>,
+}
+
+/// `[targets.<name>]` (spec §15.3).
+#[derive(Debug, Default, Clone, serde::Deserialize)]
+pub struct ManifestTarget {
+    pub kind: String,
+    /// Target triple, or `host`.
+    pub platform: String,
+    /// `kind = "source"`: the language (`c` in this version).
+    pub lang: Option<String>,
+    /// `strict` (default) or `strict-ftz`.
+    pub numeric: Option<String>,
+    /// Effects the target provides (`Alloc` decides the heap).
+    #[serde(default)]
+    pub provides: Vec<String>,
+    /// `poison` / `trap` / `reset` / `halt` (spec §9.2).
+    pub panic: Option<String>,
+    pub panic_messages: Option<bool>,
+    pub main_frame: Option<String>,
+    pub memory: Option<ManifestMemory>,
+    #[serde(default)]
+    pub bind: HashMap<String, String>,
+}
+
+#[derive(Debug, Default, Clone, serde::Deserialize)]
+pub struct ManifestMemory {
+    pub bulk_threshold: Option<u32>,
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -206,6 +252,16 @@ pub use interface::{Interface, interface, render_json, render_text};
 pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, Vec<Diagnostic>> {
     onsa_core::lower(&analyzed.pkg, &analyzed.analysis)
 }
+
+/// [`lower_core`] with the target's memory settings (T4-5).
+pub fn lower_core_with(
+    analyzed: &Analyzed,
+    opts: &onsa_core::LowerOptions,
+) -> Result<onsa_core::Module, Vec<Diagnostic>> {
+    onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts)
+}
+
+pub use build::{BuildError, BuildOptions, BuildReport, Platform, build, host_triple, platform};
 
 pub fn check_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, String)]) -> CheckResult {
     let user_modules: Vec<Module> = modules
