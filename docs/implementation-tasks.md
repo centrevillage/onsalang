@@ -195,6 +195,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-02 決定、案 A） | M4 |
 | S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-02 決定。実装は T4-10） | M4 |
 | S-29 ✅ | `prev` / `delay` / `vdelay` の初期値は、仕様の例も実装の例も全て `0.0` で、情報の無い引数になっている | `init` を省略できる。省略すると `T.default()`、`T: Default` でなければ E0816。`onsa fmt` は既定値と等しいリテラルの `init` を取り除く（2026-10-02 決定。実装はレビューの反映の第 3 段。それまで `tools/check_spec_examples.py` は §11.2 / §17.3 / §17.4 の例で失敗する） | M3 |
+| S-31 ✅ | bulk の振り分けが大きさの閾値によるので、短いコムやオールパスまで SDRAM に行き、`par` の複製ではスカラの状態まで bulk に入る（レビュー R-16） | `@bulk` を値が `delay` / `vdelay` の `let` に付ける（E0818）。`memory.bulk = true` で有効（`bulk_threshold` は廃止）。bulk を持つ状態を普通の値に置くと E0819。`BULK_ALIGN`、`fast_budget` / `bulk_budget`（E0820）、`audit --memory` の内訳（2026-10-02 決定。実装は T4-10。それまで §17.4 の echo の例は `tools/check_spec_examples.py` に落ちる） | M4 |
 | S-30 ✅ | 生成 API の引数名（Sig 入力の名前、出力のフィールド名、`s` / `params` / `frames` など）が衝突し、`flow swap(l, r) -> Sig[Stereo]` が無音を出す（レビュー R-15） | 入出力の引数は数で形が決まる（入力 0 / 1 / 2 以上で 無し / `input: Span[T]` / `input: voice.In`、出力は `inout output: Span[T]` か struct なら `voice.Out`）。`render` の結果は `voice.Rendered`。引数名は `s` / `params` / `input` / `output` に固定。`In` / `Out` は引数の位置だけ（§5.3）。C も同じ形（2026-10-02 決定。実装はレビューの反映の第 3 段。Core の降下は引数を位置で扱う） | M3 / M4 |
 
 ---
@@ -460,7 +461,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | T4-7 ✅ | 適合性の基盤 | `tests/conformance/<name>.onsa`（`render` を呼ぶ `test` だけを持つ）。ハーネスは interp で `Out` を得て、同じ入力で C（生成した小さなドライバ）を走らせ、サンプル列をバイト比較する。超越関数を通る flow は S-14 の判定で許容誤差（M5 で確定。M4 では同じ libm なので一致を期待する） | M |
 | T4-8 ✅ | §17.5 の例 | `examples/voice_host/`: `daisy` 相当のターゲット定義（ホスト向けに `platform` を変えたもの）で staticlib を作り、C のホストが WAV に書く | S |
 | T4-9 ✅ | NRVO と移動 | `sret` の構築先の決定（§12.7 の条件）。閾値以上のコピーの箇所を記録（`audit --memory` は M9） | S |
-| T4-10 | S-28 の実装 | `onsa_core::layout` と flow の降下で入れ子の状態まで bulk を分け、各状態の先頭に自分の bulk ポインタ、親の `init` で設定。C バックエンドは `s->bulk` の形のまま。`voice` の中に `echo` を置いた conformance と golden を追加。レビュー（`docs/impl-review-0.3.md`）の指摘反映と同じ回で行う | M |
+| T4-10 | S-28 / S-31 の実装（`@bulk`、`memory.bulk`、E0818〜E0820、`BULK_ALIGN`。bulk のポインタと領域の分割は Core の型と `init` の文として明示する、レビュー R-90） | `onsa_core::layout` と flow の降下で入れ子の状態まで bulk を分け、各状態の先頭に自分の bulk ポインタ、親の `init` で設定。C バックエンドは `s->bulk` の形のまま。`voice` の中に `echo` を置いた conformance と golden を追加。レビュー（`docs/impl-review-0.3.md`）の指摘反映と同じ回で行う | M |
 
 受け入れ: 計画 §3 M4 の通り。
 
@@ -564,6 +565,9 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | E0815 | 引数のレートが入力より高い（S-04） | flow | M3 |
 | E0816 | `prev` 系の `init` を省いたが、値型が `Default` を満たさない（S-29） | flow | M3 |
 | E0817 | flow が自分自身をインスタンスにする（レビュー R-03） | flow | M3 |
+| E0818 | `@bulk` を、値が `delay` / `vdelay` でない `let` に付けた（S-31） | flow | M4 |
+| E0819 | `memory.bulk = true` のターゲットで、bulk を持つ状態を普通の値に置いた（S-31） | `build` | M4 |
+| E0820 | export する flow の領域が `fast_budget` / `bulk_budget` を超えた（S-31） | `build` | M4 |
 | E0901 | rt から非 rt | rt | M2 |
 | E0902 | rt の効果行に `Alloc` | rt | M2 |
 | E0903 | rt の再帰 | rt | M2 |

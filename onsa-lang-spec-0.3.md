@@ -461,7 +461,7 @@ pub struct Key {
 
 ### 6.5 属性（全て）
 
-`@derive(...)`, `@repr(c)`, `@relaxed`, `@param(...)`（§11.7）。これ以外の属性は無い（`@deprecated` は必要になったら定義する、§19.1）。
+`@derive(...)`, `@repr(c)`, `@relaxed`, `@param(...)`（§11.7）、`@bulk`（§12.4）。これ以外の属性は無い（`@deprecated` は必要になったら定義する、§19.1）。
 
 ### 6.6 コンパイル時定数
 
@@ -949,9 +949,13 @@ test "wrap01 stays in [0, 1)" {
 
 - flow の状態の大きさは、コンパイル時に決まる（遅延線の長さはコンパイル時定数、値型は Copy、ヒープを使わない）。
 - 状態は二つの領域に分かれる。
-  - **fast**: スカラと小さな配列。キャッシュや内部 SRAM に置く。
-  - **bulk**: ターゲットの `bulk_threshold`（バイト）以上の配列。遅延線や大きなテーブル。外部 SDRAM などに置く。入れ子の状態（サブインスタンス、`par` の複製）の中の配列も対象で、bulk 領域は最上位の flow に一つだけ作る。bulk のフィールドを持つ状態（入れ子のものも）は、それぞれ自分の分の先頭を指すポインタを先頭に持ち、親の `init` がそれを設定する。子の関数は自分のポインタだけを見るので、子を単独で export しても同じコードで動く。
-- 閾値を設定しなければ、全てが fast に入り、`BULK_SIZE` は 0 になる。
+  - **fast**: `@bulk` の付いていないもの全て（スカラ、短い遅延線、`Init` の配列を含む）。キャッシュや内部 SRAM に置く。
+  - **bulk**: flow の本体で `@bulk` を付けた `let` の遅延線（`delay` / `vdelay` のバッファ）。外部 SDRAM などに置く。入れ子の状態（サブインスタンス、`par` の複製）の中の `@bulk` も対象で、bulk 領域は最上位の flow に一つだけ作る。bulk のフィールドを持つ状態（入れ子のものも）は、それぞれ自分の分の先頭を指すポインタを先頭に持ち、親の `init` がそれを設定する。子の関数は自分のポインタだけを見るので、子を単独で export しても同じコードで動く。
+- `@bulk` を付けられるのは、値が `delay` / `vdelay` の呼び出しそのものである `let` だけである（それ以外は E0818）: `@bulk let line = vdelay(y, d, MAX_ECHO)`。式の中の遅延線を bulk に置くには、`let` に分けて名前を付ける。名前はそのまま状態のフィールド名になる（`line.buf`）。
+- 大きさによる自動の振り分けはしない。長い遅延線は SDRAM に、コムやオールパスの短い遅延線は SRAM に置く、という判断は書き手が行う。ライブラリの flow は、長い線にだけ `@bulk` を付けて配布できる。
+- 二領域の配置は、ターゲットの `memory.bulk = true` で有効になる（§15.3）。有効でないターゲット（既定。ホストやプラグイン）では `@bulk` を無視し、全てが fast に入り、`BULK_SIZE` は 0 になる。
+- bulk を持つ状態（`@bulk` のフィールドを、自分か入れ子の中に持つ状態）は、flow の中（サブインスタンス、`par`）か export の境界でだけ所有できる。`memory.bulk = true` のターゲットで、それを普通の値（struct のフィールド、配列の要素、関数のローカル）に置くと、ビルド時に E0819。Onsa の中から呼ぶ `init` には bulk 領域を渡す口が無いからである。有効でないターゲットでは `@bulk` が無視されるので、この制限は掛からない。
+- 容量の確認: ヘッダの `SIZE` / `ALIGN`（fast 領域）と `BULK_SIZE` / `BULK_ALIGN`（bulk 領域）で分かる（§14.2）。ターゲットに `fast_budget` / `bulk_budget`（バイト）を書くと、export する flow の各領域がそれを超えたときにビルドで E0820 にする。`onsa audit --memory` は、領域ごとにフィールドの木と大きさを表示し、fast に置かれた大きな配列を大きい順に並べる（`@bulk` の付け忘れの確認用）。
 - 配置の規則: フィールドは宣言順（flow の状態では `let` の順）、各型の自然アラインメント、並べ替えなし。`let` に由来しないフィールドは次の順に置く: 先頭に bulk 領域のポインタ（`BULK_SIZE > 0` のとき）、`sample_rate: F32`（`Ctl` / `Sig` から参照されるとき）、次に自分のレートより高いレートから読まれる入力（`Sig` で読まれる `Ctl` 入力など。宣言順）、次に `let` 由来のフィールド（`Sig` から参照される `Ctl` レートの `let` も含む。`ctl` と `tick` の間で値を渡す場所が要るため）、末尾に `poisoned: Bool` と `initialized: Bool`（どちらも export の境界が使う印。§14.2）。`SIZE` / `ALIGN` はこの規則でコンパイラが計算し、生成コードに `_Static_assert` で検証を出す。ホットリロード（§18.3）とプローブは、この規則で名前とオフセットが安定することに依存する。
 - C API は二つの領域を別々のポインタで受け取る（§14.2）。Onsa の中から見ると、状態は一つの値である。
 
@@ -1150,7 +1154,8 @@ export される関数は `pub` で、引数と返り値は FFI で `unsafe` を
 
 #define ONSA_VOICE_SIZE       48      /* fast 領域のバイト数 */
 #define ONSA_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
-#define ONSA_VOICE_ALIGN      8
+#define ONSA_VOICE_ALIGN      8       /* fast 領域の整列 */
+#define ONSA_VOICE_BULK_ALIGN 4       /* bulk 領域の整列 */
 
 typedef struct onsa_voice onsa_voice;
 typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } onsa_voice_params;
@@ -1244,7 +1249,8 @@ panic_messages = false
 main_frame = "static"
 
 [targets.daisy.memory]
-bulk_threshold = 4096   # 4 KiB 以上の配列は bulk 領域へ（§12.4）
+bulk = true             # @bulk の遅延線を bulk 領域へ（§12.4）
+fast_budget = 262144    # 任意。export する flow の fast 領域がこれを超えたらビルドで E0820
 
 [targets.daisy.bind]
 "audio.device" = "daisy_hal.audio"
@@ -1257,7 +1263,7 @@ bulk_threshold = 4096   # 4 KiB 以上の配列は bulk 領域へ（§12.4）
 3. 提供する handler の集合（`provides`）。`Alloc` を含むかどうかで、ヒープの有無が決まる
 4. `target` 宣言の割り当て（`bind`）
 5. エントリの種類（`exe`, `clap`, `vst3`, `au`, `wasm-worklet`, `staticlib`, `source`）
-6. メモリの設定（`bulk_threshold`、`main_frame`）と panic の設定（`poison` / `trap` / `reset` / `halt`、§9.2）、コンパイラフラグ（§13.4）
+6. メモリの設定（`bulk`、`fast_budget` / `bulk_budget`、`main_frame`）と panic の設定（`poison` / `trap` / `reset` / `halt`、§9.2）、コンパイラフラグ（§13.4）
 
 - `main` または export される関数の効果行に、`provides` に無い効果が含まれていれば E0610。
 - `[export]` の flow と関数は、`staticlib`・プラグイン・`source` のターゲットに出力される。
@@ -1497,12 +1503,13 @@ pub flow echo(
   feedback: Ctl[F32],
 ) -> Sig[F32] {
   let d = time * sample_rate() // Ctl（サンプル数）
-  let y = x + (feedback * vdelay(y, d, MAX_ECHO))
+  @bulk let line = vdelay(y, d, MAX_ECHO)
+  let y = x + (feedback * line)
   y
 }
 ```
 
-`echo` の遅延線（約 384 KB）は `bulk_threshold` を超えるので bulk 領域に入る。`ONSA_ECHO_BULK_SIZE` はコンパイル時に決まり、組込みでは外部 SDRAM に置ける。
+`echo` の遅延線（約 384 KB）は `@bulk` を付けたので、`memory.bulk = true` のターゲットでは bulk 領域に入る。`ONSA_ECHO_BULK_SIZE` はコンパイル時に決まり、組込みでは外部 SDRAM に置ける。
 
 ホスト側（Onsa で WAV に書き出す）:
 
@@ -1610,6 +1617,7 @@ impl Poly {
 - `Poly.new` は効果を持たない。`Poly` は固定サイズの値で、その大きさは `onsa interface` に出る。
 - `self.voices[i]`（`inout`）と `self.params[i]`（借用）は異なるフィールドなので重ならない（§5.2）。
 - `array.from_fn` に渡す無名関数は `sample_rate` をコピーで捕捉する。引数の位置だけで使うので、ヒープを使わない（§5.3）。
+- `voice` に `@bulk` の遅延線があるとき、`memory.bulk = true` のターゲットでは、この `Poly` の書き方はできない（E0819、§12.4）。ボイスの列を flow の `par` で書き、発音の割り当ては、その flow の `Params` を書き換える形にする。ボイスごとの頭出しは、`voice.reset` を外から呼ぶ代わりに、ゲートの入力として `voice` の中で受ける。
 
 ---
 
@@ -1692,6 +1700,7 @@ FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の�
 - ホットリロードで、型の変わったフィールドの扱い
 - 変換先の優先順位（C の次に何を作るか）
 - 超越関数をビット一致させる `std.math.exact`（Onsa 実装）を提供するか
+- `Init` レートの大きな配列（ウェーブテーブル）を bulk 領域に置く指定（今は `@bulk` を遅延線にだけ付けられる、§12.4）
 - 検査の水準: 整数のオーバーフローの検査をターゲットの設定で外すか（Rust の `overflow-checks = false` に当たる `overflow = "wrap"`。panic しない実行の結果は変わらず、`onsa audit` に表示する）。組込みのターゲットで検査の費用を実測してから決める。添字の検査は外さない（C で未定義動作になり、メモリ安全性が崩れるため）
 - 言語全体の変換（段階 2）の既知の差: 言語ごとの FFI、JavaScript の 64 ビット整数と文字列の性能、arena の枯渇（§13.5）
 - 逃げるクロージャ（保存できるコールバック）、トレイトオブジェクト
