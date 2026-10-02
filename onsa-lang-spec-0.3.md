@@ -89,7 +89,7 @@
 ```
 fn rt flow par struct enum trait impl effect blocking handler handle with uses
 let var if else match for in while break continue return
-pub use extern unsafe target test assert
+pub priv use extern unsafe target test assert
 const type as inout move self Self true false
 ```
 
@@ -107,7 +107,7 @@ const type as inout move self Self true false
 | 効果行変数 | `snake_case` 1 語 | `e` |
 | 定数 | `UPPER_SNAKE` | `MAX_VOICES` |
 
-名前の種別が字面で決まる。
+名前の種別が字面で決まる。モジュールの名前はファイル名（拡張子を除く）で、`snake_case` の規則に従う（`.` や `-` を含められない）。
 
 - `Fs.read(p)` は効果操作か型の関連関数、`fs.read(p)` はモジュール関数。
 - flow の本体の中で、`saw~(f0)` は **状態を持つインスタンス**、`wrap01(x)` は **状態を持たない関数** の呼び出し。違いは名前ではなく呼び出しの形（後置の `~`、§2.6）で表す。
@@ -278,6 +278,7 @@ type Samples = Buf[F32] // 型別名（新しい型を作らない。`onsa inter
 - 列挙子はタプル形（`Circle(F32)`）と単位形だけ。Rust の struct 形（`Rect { w: F32, h: F32 }`）は無く、名前付きのフィールドが要るときは struct を包む（`Rect(RectSize)`）。名前付きのフィールドを持つものは struct の一種類にするためである（§0.3 の規則 1）。
 - タプル形の列挙子は、捕捉の無い関数値（`Circle` は `fn(F32) -> Shape`）としても使える（Rust と同じ。例: `map_err(ConfigError.Io)`）。単位形の列挙子は値。
 - フィールドアクセス `p.x` は、`p` の型が注釈またはその場の推論で既知であることを要求する（E0420、§4.7）。
+- 同じ struct のフィールド名、同じ enum の列挙子名は重複できない（E0304）。
 - 型は自分自身を値として含めない。値として含む位置（フィールド、列挙子の中身、タプル、固定長配列）を辿って同じ型に戻る定義は E0311（`struct Node { v: I32, next: Node }`、`enum List { Cons(I32, List), Nil }`、相互の再帰も含む）。値型は固定サイズで、Rust の `Box` に当たる箱が無いので、大きさが決まらないからである。
 
 ### 4.5 ジェネリクス
@@ -895,7 +896,7 @@ fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param �
 - `render` はテストと一括処理用。全体を 1 回の `process` として処理するので、`Ctl` 入力は全区間で一定。ブロックごとにパラメータを変えるテストは `process` を自分で繰り返す。`Sig` 入力がある flow では `frames` を取らず、`Span` の長さを使う。
 - `Rendered` は、出力を `Buf` で持つ struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`）。`render` の `<入力>` は `process` と同じ形。
 - 状態の所有者は呼び出し側。サンプルレートを変えるときは、`init` を呼び直す。
-- 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。式の中に直接書いた `prev` / `delay` / `vdelay` も同じく `prev_0`、`delay_0`、`vdelay_0`。巻き上げた部分式の値を置く隠れたフィールド（§11.3）は `hoist_0`、`hoist_1` と呼ぶ（番号の付け方は名前の無いノードと同じ）。`delay` / `vdelay` の内部の状態は `<名前>.buf` と `<名前>.w`、定数でない `init` の保存先は `<名前>.init`（C では `.` を `_` にする）。
+- 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。名前の無いインスタンス（`smooth~(gain, 0.01)` を式の中に直接書いたもの）は `smooth_0` のように番号で呼ぶ。式の中に直接書いた `prev` / `delay` / `vdelay` も同じく `prev_0`、`delay_0`、`vdelay_0`。巻き上げた部分式の値を置く隠れたフィールド（§11.3）は `hoist_0`、`hoist_1` と呼ぶ（番号の付け方は名前の無いノードと同じ）。これらの生成する名前（種類と番号の形 `prev_0`、`hoist_0` など）と、状態の固定のフィールド名（`sample_rate`、`poisoned`、`initialized`、`bulk`）は予約されていて、flow の本体の `let` の名前に使えない（E0304）。組込みの名前（`prev` `delay` `vdelay` `sample_rate`、§2.2）も `let` で隠せない。`delay` / `vdelay` の内部の状態は `<名前>.buf` と `<名前>.w`、定数でない `init` の保存先は `<名前>.init`（C では `.` を `_` にする）。
 - flow は第一級の値ではない。flow の外からは、この名前空間の型と関数を通じてだけ扱う。
 - v0.2 では、flow の出力は `Sig` だけ（`Ctl` 出力は §19）。
 
@@ -1225,8 +1226,11 @@ void        onsa_voice_free(onsa_voice* s);
 
 - 1 ファイル = 1 モジュール。モジュールのパスはパッケージルートからのファイルパスで、`mod` 宣言は無い。パッケージルートは `onsa.toml` のあるディレクトリで、その下の `.onsa` ファイルを再帰的に集める（`tests/` と `target/` を除く）。マニフェストの無い単一のファイル（`onsa check foo.onsa`）は、そのファイルを 1 モジュールのパッケージとして扱う（モジュール名はファイル名）。
 - 可視性は `pub`（パッケージ外に公開）と `pub(pkg)`（パッケージ内に公開）。無指定はモジュール内のみ。
-- `use std.fs.{Fs, Path}`。グロブ import は無い。再公開は `pub use` のみ。`use` はモジュールのどの位置にも書ける。同じ名前を二度取り込むと E0304（束縛の重複）。
-- モジュール間の循環 import は禁止（E0310）。
+- フィールドは、struct の可視性を継ぐ（`pub struct Point { x: F32, y: F32 }` の `x` と `y` は `pub`）。狭めたいフィールドにだけ `priv`（モジュール内のみ）か、`pub struct` の中で `pub(pkg)` を付ける（`pub struct Ring[T, const N: U32] { data: [T; N], priv head: U32 }`）。newtype でも同じく書ける（`pub struct Hz(priv F32)` は `.0` をモジュールの中に限る）。広げる向きの指定は無く、フィールドに `pub` を書くと継いでいるので冗長で E0020（修正候補は外すこと）。enum の列挙子の中身は、enum の可視性を継ぐ。
+- 見えないフィールドを読み書きすると E0303。見えないフィールドを持つ struct は、そのフィールドが見えない場所では struct リテラルで作れず（E0303）、作る関数を通す。可視性は必要以上に狭めない。隠すのは、不変条件を守るために外から書き換えられては困るフィールドだけにする。
+- `use std.fs.{Fs, Path}`。グロブ import は無い。再公開は `pub use` のみ。`use` はモジュールのどの位置にも書ける。同じ名前を二度取り込むと E0304（束縛の重複）。モジュールの項目と、同じ名前の子モジュール（`a.onsa` の項目 `b` と `a/b.onsa`）も E0304。
+- 他のモジュールとパッケージは、`use` で取り込んだ名前でだけ参照できる（`use std.math` の後の `math.sqrt(x)`、`use std.math.{sqrt}` の後の `sqrt(x)`）。暗黙に見えるのは、自分のモジュールの項目、prelude、組込み型だけで、`use` の無い経路（`std.math.sqrt(x)`）は E0302（修正候補は `use` の追加）。モジュールが何に依存するかは、`use` の一覧を見れば全て分かる。
+- モジュール間の循環 import は禁止（E0310）。依存は `use` だけで決まるので、この検査は `use` の一覧で閉じる。
 - 暗黙の prelude は `Option Result Some None Ok Err` と組込み型だけ。
 
 ### 15.2 target 宣言（条件コンパイルの代替）
@@ -1723,7 +1727,7 @@ FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の�
 ### 19.1 未決定事項
 
 - マルチレート: オーバーサンプリング、FFT / STFT、リサンプリング（明示的なクロックの導入を検討中）
-- flow の `Ctl` 出力（エンベロープの終了通知など）と、`Sig` 入力に struct を使うこと
+- flow の `Ctl` 出力（エンベロープの終了通知など）と、`Sig` 入力に struct を使うこと。struct の入力は今は E0810（§11.6）。必要になりうる場面は、struct を出力する flow を別の flow へそのままつなぐとき（`width~(pan~(x, p), w)`）で、今は `let s = pan~(x, p)` と受けて `width~(s.l, s.r, w)` と分解して書く。認めるなら、export の境界の形（`In` の中に入れ子の `Span`）を、実例に合わせて決める
 - 分岐の中の flow インスタンスを停止させるか（クロック付きの `if`）
 - 単位の型（`Hz`, `Sec`, `Samples` を newtype ではなく単位代数で扱う）
 - 固定小数点型（`Q15`, `Q31`、飽和演算）を標準ライブラリに置くか、言語に入れるか
