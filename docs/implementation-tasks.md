@@ -186,14 +186,14 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-18 ✅ | 字句・構文の一般のエラー（不正な文字、予期しないトークン）のコードが無い | E0001（不正な文字・リテラル）、E0002（予期しないトークン。`message` に期待したものを書く） | M1 |
 | S-19 ✅ | 文字列・文字リテラルのエスケープが未定義（§8.3 の例は `"a\nb\n"` を使う） | Rust と同じ `\n \t \r \0 \\ \" \' \u{XXXX}` の閉じた一覧 | M1 |
 | S-20 ✅ | `test` はキーワードだが、標準ライブラリのモジュール名に `std.test`、`std.dsp.test` を使っている（§11.8、§17.3） | パスの `.` の直後ではキーワードを名前として許す（`std.testing` への改名は採らない） | M2 |
-| S-21 ✅ | 仕様 §5.4 の `let y = move x` が文法に無い | `move x` を消費位置の式にする（`let` / `var` の初期化、代入の右辺、リテラルの要素、`match move x`）。返り値だけ書かない。Affine を `move` 無しで置くと E0711 + 挿入の修正候補。`match x` は借用の束縛（2026-10-03 決定） | M3 |
-| S-22 ✅ | `for i in 0..4` の未使用の `i` と `1 == 1` が E0405 になる | 整数リテラルだけ関数の終わりで `I32` に既定。浮動小数は E0405 のまま（2026-10-03 決定） | M3 |
+| S-21 ✅ | 仕様 §5.4 の `let y = move x` が文法に無い | `move x` を消費位置の式にする（`let` / `var` の初期化、代入の右辺、リテラルの要素、`match move x`）。返り値だけ書かない。Affine を `move` 無しで置くと E0711 + 挿入の修正候補。`match x` は借用の束縛（2026-10-02 決定） | M3 |
+| S-22 ✅ | `for i in 0..4` の未使用の `i` と `1 == 1` が E0405 になる | 整数リテラルだけ関数の終わりで `I32` に既定。浮動小数は E0405 のまま（2026-10-02 決定） | M3 |
 | S-23 ✅ | 非 rt 関数の効果行の整合が未検査 | E0601「効果行に無い効果を使った」を登録し、第 1 期は `Alloc` を M3 で検査（T3-13）。`test` の本体は例外（D-08）。E0610（M4）の前提 | M3 |
-| S-24 ✅ | 型の位置で const ジェネリックの引数（`Ring[F32, 4]`）を書く構文が無い | 整数リテラルか定数名を型引数の位置に書ける（2026-10-03 決定。構文解析器の対応は T3-14） | M3 |
-| S-25 ✅ | `round` と `min` / `max` の IEEE の細部（丸めの方向、NaN、符号付きゼロ）が未定義 | `round` は最近接偶数、`min` / `max` は NaN 伝播と `-0.0 < 0.0`（WASM / JS の意味。C は `fminf` を使わず自前で書く）（2026-10-03 決定） | M3 |
+| S-24 ✅ | 型の位置で const ジェネリックの引数（`Ring[F32, 4]`）を書く構文が無い | 整数リテラルか定数名を型引数の位置に書ける（2026-10-02 決定。構文解析器の対応は T3-14） | M3 |
+| S-25 ✅ | `round` と `min` / `max` の IEEE の細部（丸めの方向、NaN、符号付きゼロ）が未定義 | `round` は最近接偶数、`min` / `max` は NaN 伝播と `-0.0 < 0.0`（WASM / JS の意味。C は `fminf` を使わず自前で書く）（2026-10-02 決定） | M3 |
 | S-26 ✅ | `panic = "poison"` の `jmp_buf` を状態の fast 領域に置く（§9.2、I-01）と、`SIZE` がホストの libc に依存し（`sizeof(jmp_buf)` は macOS arm64 で 192、glibc x86_64 で 200、MSVC は 16 バイト境界）、export された flow を別の flow のサブインスタンスにしたときに入れ子の `jmp_buf` が親の `SIZE` から漏れる | `jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は全ターゲットで同じ値になり、ホットリロードとプローブが依存する配置の安定（§12.4）が保たれる。wrapper の約 200 バイトのスタックは `audit --stack` に数える。§9.2 の「`jmp_buf` は状態の fast 領域に置き `SIZE` に含まれる」を改める | M4 |
-| S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-04 決定、案 A） | M4 |
-| S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-04 決定。実装は T4-10） | M4 |
+| S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-02 決定、案 A） | M4 |
+| S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-02 決定。実装は T4-10） | M4 |
 
 ---
 
@@ -443,7 +443,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 
 受け入れ: 計画 §3 M3 の通り。加えて `onsa dump --core` の出力が golden テストにあり、E0601 の否定例がある。
 
-✅ M3 は 2026-10-03 に完了。受け入れの実測: `resonator decays` と `gcd` が `onsa test` で通る、`echo` の `BULK_SIZE` は 384004（`bulk_threshold = 4096`）、`graph` が `voice` に `src` / `f1` / `f2` / `smooth_0` を出す。`voice.render` の 48000 サンプルはインタプリタで release 0.16 秒、debug 0.67 秒。
+✅ M3 は 2026-10-02 に完了。受け入れの実測: `resonator decays` と `gcd` が `onsa test` で通る、`echo` の `BULK_SIZE` は 384004（`bulk_threshold = 4096`）、`graph` が `voice` に `src` / `f1` / `f2` / `smooth_0` を出す。`voice.render` の 48000 サンプルはインタプリタで release 0.16 秒、debug 0.67 秒。
 
 ### M4 C バックエンドと export（L）
 
@@ -462,7 +462,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 
 受け入れ: 計画 §3 M4 の通り。
 
-✅ M4 は 2026-10-03 に完了。`onsa build --target <name>` はマニフェストの `[targets.*]` / `[export]` を読み、`target/<name>/` に `onsa.h` と `onsa_<pkg>.c` と flow ごとのヘッダと `onsa_build.json` を出し、`platform` がホスト（`"host"` と書ける）で `kind = "staticlib"` なら `cc` + `ar` で `libonsa_<pkg>.a` を作る。`tests/conformance/*.onsa` の全 flow を interp と C で比較（インパルス・無音・決定的な雑音、2 ブロック）: `echo` / `delay_chain` はビット一致、超越関数に到達する flow は 2 ULP 以内。`examples/voice_host` が §17.5 の C ホストで WAV を書く。E0809 / E0610 は `build` の export の検査で出す。`Module.moves` に §12.7 のコピーの箇所を記録（`audit --memory` は M9）。
+✅ M4 は 2026-10-02 に完了。`onsa build --target <name>` はマニフェストの `[targets.*]` / `[export]` を読み、`target/<name>/` に `onsa.h` と `onsa_<pkg>.c` と flow ごとのヘッダと `onsa_build.json` を出し、`platform` がホスト（`"host"` と書ける）で `kind = "staticlib"` なら `cc` + `ar` で `libonsa_<pkg>.a` を作る。`tests/conformance/*.onsa` の全 flow を interp と C で比較（インパルス・無音・決定的な雑音、2 ブロック）: `echo` / `delay_chain` はビット一致、超越関数に到達する flow は 2 ULP 以内。`examples/voice_host` が §17.5 の C ホストで WAV を書く。E0809 / E0610 は `build` の export の検査で出す。`Module.moves` に §12.7 のコピーの箇所を記録（`audit --memory` は M9）。
 
 ### M5 `std` と適合性テスト（M）
 
@@ -600,7 +600,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | 1073, 1090 | §14.1 | `extern` と `Conv` | `ffi/extern.onsa` | parse | 第 2 期 |
 | 1118 | §14.2 | `onsa_version` | `ffi/export_fn.onsa` | check | M2 |
 | 1175 | §15.2 | `target` | `module/target.onsa` | parse | 第 2 期 |
-| — | §16 | `main` と文脈の登録（2026-10-03 の書き直し後） | `concurrency/main.onsa` | parse | 第 2 期 |
+| — | §16 | `main` と文脈の登録（2026-10-02 の書き直し後） | `concurrency/main.onsa` | parse | 第 2 期 |
 | — | §16 | `device.run` の `target` 宣言 | `concurrency/device_run.onsa` | parse | 第 2 期 |
 | 1340 | §17.1 | `gcd` | `examples/gcd.onsa` | test | M3 |
 | 1360 | §17.2 | `line_count` のテスト | `examples/line_count.onsa` | parse | 第 2 期 |

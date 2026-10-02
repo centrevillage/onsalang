@@ -3,7 +3,7 @@
 - 対象: コミット `6a9e4c3`（M4 完了）までの `crates/`、`std/`、`tests/`、`runtime/`
 - 仕様: [`onsa-lang-spec-0.3.md`](../onsa-lang-spec-0.3.md)（S-01〜S-28 反映済み）、決定の経緯は [`onsa-0.3-changes.md`](onsa-0.3-changes.md) §4〜§5
 - 計画: [`implementation-tasks.md`](implementation-tasks.md)
-- 日付: 2026-10-04
+- 日付: 2026-10-02
 - 目的: 別セッションで行うレビューの入力。(1) ワーカーが実装中に自分で決めた細則を一覧にし、仕様へ入れるか直すかを判断する。(2) 仕様と実装の食い違い、未実装を一覧にする。(3) コードレビューの観点を示す
 
 実装の進め方は「大きな単位をワーカー 1 つに任せ、親はテスト・golden・適合性・CLI の実行で検証する」だった。親はコードを読んでいない。したがって細則は各ワーカーの報告から拾ったもので、設計の筋はこのレビューで初めて見ることになる。
@@ -206,6 +206,6 @@
 5. **`onsa_interp/lib.rs`**: 意味の基準として読める簡潔さか。`inout` の別名の設計（`Rc<RefCell>`）が将来の性能（`play` には使わない前提）と正しさの両面で妥当か
 6. **診断の品質**: `tests/spec/negative/*.onsa` を `onsa check` にかけ、LLM の修復ループの立場でメッセージと修正候補を読む
 7. **テストの穴**: 否定例は各コード 1〜3 件。§4.7 の各規則に否定例があるか（計画 §6 のリスク「型推論の規則が実装でずれる」）。適合性は `@param` の既定値だけで、`Init` 入力を持つ flow が無い
-8. **CI**: `dev` を push して GitHub Actions（fmt / clippy / test / wasm32 / spec）を一度回す。Linux の clang / gcc での C のコンパイルと適合性は M5 の T5-9
+8. **CI**: 利用者は CI を準備していない（`.github/workflows/ci.yml` は M0 で置いただけ）。レビューでは同じ内容（fmt / clippy / test）をローカルで実行した。Linux の clang / gcc での C のコンパイルと適合性は M5 の T5-9
 
-レビューの指摘は ID（`R-nn`）を振って `docs/review-impl-phase1.md` に書き、反映の作業を T4-10 と同じ回で行う。M5 はその後。
+レビューの指摘は ID（`R-nn`）を振って [`review-impl-phase1.md`](review-impl-phase1.md) に書いた（2026-10-02）。反映の進め方は同文書 §7。M5 はその後。
