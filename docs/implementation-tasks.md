@@ -562,6 +562,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | E0807 / E0808 | `delay` の長さ | flow | M3 |
 | E0809 | export の `Ctl` に `@param` が無い | `build` | M4 |
 | E0810 | 値型が Copy でない、境界の入れ子 | flow | M3 |
+| E0715 | 借用の `for` の本体で反復元を変更した（レビュー R-24） | 引数モード | M2 |
 | E0811 / E0812 | `~` の有無 | 名前解決 | M2 |
 | E0813 / E0814 | `prev` 系の引数のレート | flow | M3 |
 | E0815 | 引数のレートが入力より高い（S-04） | flow | M3 |
