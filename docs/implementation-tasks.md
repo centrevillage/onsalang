@@ -196,6 +196,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-02 決定、案 A） | M4 |
 | S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-02 決定。実装は T4-10） | M4 |
 | S-29 ✅ | `prev` / `delay` / `vdelay` の初期値は、仕様の例も実装の例も全て `0.0` で、情報の無い引数になっている | `init` を省略できる。省略すると `T.default()`、`T: Default` でなければ E0816。`onsa fmt` は既定値と等しいリテラルの `init` を取り除く（2026-10-02 決定。実装はレビューの反映の第 3 段。それまで `tools/check_spec_examples.py` は §11.2 / §17.3 / §17.4 の例で失敗する） | M3 |
+| S-43 ✅ | 記憶域の配置の選択肢が増える見込みがあるのに、属性が領域ごと（`@bulk`）だった | `@mem(bulk)` に改める。値は仕様の閉じた一覧（今は `bulk` だけ）、一覧に無い名前と位置の誤りは E0818、`@mem(fast)` は E0020。R-36 の属性の表には `@mem` の 1 行（2026-10-03 決定。実装は S-31 と同じ回） | M4 |
 | S-42 ✅ | 借用の `match x` のガードと腕の中で対象を変更でき、振り分けが変わり（R-110）、Copy でない束縛が破棄済みの記憶域を指す（R-118） | ガードの中の対象の変更は E0715。腕の本体での変更は、重なる Copy でない束縛を move と同じく無効にし、以後の使用を E0704 にする（moves の流れ解析に載せる。重なりは E0702 と同じ判定）。Copy の束縛は束縛の時点の複製のまま。`match` の腕の束縛も借用の起点にし、派生した束縛も対象の変更で一緒に無効にする（2026-10-03 決定。実装は第 3 段、R-85 の所有の状態の後） | M3 |
 | S-41 ✅ | 借用束縛の判定が検査器ごとに違い、借用引数からの `let c = b`（Affine）が E0711、`inout` 引数からの `let c = move b` が通る。分解する `let` と派生の起点が仕様に無い（レビュー R-54 / R-117 / R-85） | `LocalInfo` に所有の状態（借用 / `inout` / 所有）を一つ持たせ、全ての段がそれを参照する。借用の起点は借用引数（既定のモードと `self`）と借用の `for` の束縛、そこから派生した借用束縛。`inout` 引数は起点にならず、`move` で取り出せない（E0711）。分解する `let` は元が起点なら借用束縛（2026-10-03 決定。実装は第 2 段） | M3 |
 | S-40 ✅ | §9.2 の `panic(msg)` が prelude に無く、発散の規則も無い（レビュー R-52） | `panic` を prelude の関数にする。引数は文字列リテラルだけ（それ以外の `Str` の式は E0200）。`return` / `break` / `continue` / `panic(...)` は発散し、どの型の位置にも置ける。`break` を含まない `while true` も発散する。Core の `panic(msg_id)` へ下ろす。末尾の型の不一致は、シグネチャではなく末尾の式（または最後の文）の位置に出す（2026-10-03 決定。実装は第 3 段） | M3 |
@@ -207,7 +208,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-34 ✅ | `@` の属性の中で `@derive` だけが型検査に関わり、他は付与情報（違う概念が同じ見た目） | derive は型の宣言の頭に `: trait + trait` で書く。属性は受理されるプログラムと型を変えない付与情報。旧形 `@derive(...)` は E0020（2026-10-02 のレビューの議論から、2026-10-03 決定。実装は第 3 段。それまで §6.4 と §17.2 の例は `tools/check_spec_examples.py` に落ちる） | M2 |
 | S-33 ✅ | 巻き上げが `let` の単位で、式の途中の低いレートの部分式（rt でない関数の呼び出しを含む）が毎サンプル評価される（レビュー R-17 / R-97） | 部分式の単位で巻き上げる。高い段で使う値は隠れたフィールド `hoist_<番号>`（`let` 由来のフィールドの後）。取られない分岐の中の部分式も評価する（2026-10-02 決定。実装はレビューの反映の第 3 段で、評価の計画を sema の一つの表で渡す R-91 と同じ回） | M3 |
 | S-32 ✅ | bulk があると `SIZE` がポインタの幅に依存し、S-26 の「全ターゲットで同じ」と矛盾する。Core の `SIZE` の定数もターゲットごとに変わる（レビュー R-90 (iii)） | 保証は「`memory.bulk` とポインタの幅だけで決まり、libc・C コンパイラに依存しない。同じターゲットでは単独の export と埋め込みで同じ」。`voice.SIZE` / `BULK_SIZE` は Onsa の名前空間から外し、ヘッダと `onsa interface --target <名前>` だけ。Core は分割の構造だけを持ち、バイト数は配置の段で計算する（2026-10-02 決定。実装は T4-10） | M4 |
-| S-31 ✅ | bulk の振り分けが大きさの閾値によるので、短いコムやオールパスまで SDRAM に行き、`par` の複製ではスカラの状態まで bulk に入る（レビュー R-16） | `@bulk` を値が `delay` / `vdelay` の `let` に付ける（E0818）。`memory.bulk = true` で有効（`bulk_threshold` は廃止）。bulk を持つ状態を普通の値に置くと E0819。`BULK_ALIGN`、`fast_budget` / `bulk_budget`（E0820）、`audit --memory` の内訳（2026-10-02 決定。実装は T4-10。それまで §17.4 の echo の例は `tools/check_spec_examples.py` に落ちる） | M4 |
+| S-31 ✅ | bulk の振り分けが大きさの閾値によるので、短いコムやオールパスまで SDRAM に行き、`par` の複製ではスカラの状態まで bulk に入る（レビュー R-16） | `@bulk`（S-43 で `@mem(bulk)` に改めた）を値が `delay` / `vdelay` の `let` に付ける（E0818）。`memory.bulk = true` で有効（`bulk_threshold` は廃止）。bulk を持つ状態を普通の値に置くと E0819。`BULK_ALIGN`、`fast_budget` / `bulk_budget`（E0820）、`audit --memory` の内訳（2026-10-02 決定。実装は T4-10。それまで §17.4 の echo の例は `tools/check_spec_examples.py` に落ちる） | M4 |
 | S-30 ✅ | 生成 API の引数名（Sig 入力の名前、出力のフィールド名、`s` / `params` / `frames` など）が衝突し、`flow swap(l, r) -> Sig[Stereo]` が無音を出す（レビュー R-15） | 入出力の引数は数で形が決まる（入力 0 / 1 / 2 以上で 無し / `input: Span[T]` / `input: voice.In`、出力は `inout output: Span[T]` か struct なら `voice.Out`）。`render` の結果は `voice.Rendered`。引数名は `s` / `params` / `input` / `output` に固定。`In` / `Out` は引数の位置だけ（§5.3）。C も同じ形（2026-10-02 決定。実装はレビューの反映の第 3 段。Core の降下は引数を位置で扱う） | M3 / M4 |
 
 ---
@@ -578,7 +579,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | E0815 | 引数のレートが入力より高い（S-04） | flow | M3 |
 | E0816 | `prev` 系の `init` を省いたが、値型が `Default` を満たさない（S-29） | flow | M3 |
 | E0817 | flow が自分自身をインスタンスにする（レビュー R-03） | flow | M3 |
-| E0818 | `@bulk` を、値が `delay` / `vdelay` でない `let` に付けた（S-31） | flow | M4 |
+| E0818 | `@mem` の位置か値が不正（値が `delay` / `vdelay` でない `let` に付けた、一覧に無い記憶域の名前。S-31 / S-43） | flow | M4 |
 | E0819 | `memory.bulk = true` のターゲットで、bulk を持つ状態を普通の値に置いた（S-31） | `build` | M4 |
 | E0820 | export する flow の領域が `fast_budget` / `bulk_budget` を超えた（S-31） | `build` | M4 |
 | E0901 | rt から非 rt | rt | M2 |
