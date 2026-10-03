@@ -8,6 +8,4 @@ pub enum Shape {
   Rect(F32, F32),
 }
 
-pub struct Hz(F32) // 単一フィールドのタプル構造体 = newtype（別名ではなく別の型）
-
 type Samples = Buf[F32] // 型別名（新しい型を作らない。`onsa interface` は展開して表示する）
