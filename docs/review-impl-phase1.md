@@ -764,6 +764,8 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 警告: gcc-15 の `-Wall -Wextra -Werror` では、golden の C が `unknown-pragmas` と `type-limits` で失敗する。
 - 直し方: GCC では `#pragma GCC optimize("fp-contract=off")` を出す。`__FAST_MATH__` なら `#error` にする。
 - 仕様へ: §13.4 に「プラグマだけでは不十分。フラグが要る」と書く。
+- 確認（2026-10-04）: gcc-15 `-O2 -std=gnu11` は `a * b + c` を FMA にし、`-std=c11` ではしない（ISO モードでは `__STRICT_ANSI__` が定義される）。clang はプラグマに従う。gcc の `-Wall -Wextra` は STDC のプラグマに `-Wunknown-pragmas` を出す。
+- 決定（2026-10-04）: 直す。S-54: 守られていないと分かるフラグは `#error`（GCC の GNU モードは `ONSA_FP_CONTRACT_OFF` が無ければ止める）。`ONSA_ALLOW_INEXACT_FP` で精度を諦めて検査を外せる。`@relaxed` は C で関数ごとに緩める。`#pragma GCC optimize` には頼らない。生成した C は `-Wall -Wextra` で警告なし。
 
 #### R-68 `onsa test` が、モジュール `test` の関数をテストとして実行する
 - 中・直す・観点 2 / 3｜`crates/onsa_driver/src/lib.rs:456`、`crates/onsa_core/src/lower/mod.rs:204`｜§11.8、S-16
@@ -1240,6 +1242,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
   - export 関数の `Span` を `(const T* name, uint32_t name_len)` に、`inout` のスカラを `T*` にする形
   - 未初期化のインスタンスの `process` が 1 を返すこと（仕様は poisoned だけを書いている）
   - `panic_messages = false` でも、`onsa.h` のヘルパのメッセージ文字列が残ること
+  - S-54 で加えた `ONSA_FP_CONTRACT_OFF` と `ONSA_ALLOW_INEXACT_FP` も、同じ設定のマクロの一覧に載せる（2026-10-04 追記）
 - 推奨: §14.2 / §15.3 / §9.2 に書き足す。メッセージ文字列は、`panic_messages = false` なら消す。
 
 #### R-108 `const` の評価の超越関数が、ビルドするホストの libm に依存する
@@ -1523,6 +1526,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-120 | 直す（`Option` / `Result` の大小の比較は型検査で E0401。組込み型の trait を §6.3 の表で判定する） | 実装（第 2 段、R-79 と一緒に） |
 | R-56 | 直す（trait の関連定数を実装し、`T.ZERO` と `F32.ZERO` を引けるようにする）。S-46: `Num` は `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` と `ZERO`、`Float` は `Num` と `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`。`ONE` を `Num` に置かないのは Q15 / Q31 のため。組込み型の関連定数は閉じた表で、浮動小数の `MIN` は偽の友人なので設けない。`std.math.sum` は `[T: Num]` と `T.ZERO`（R-23 を改めた） | 仕様 §6.3 / §6.6 / §13.4 に反映済み（2026-10-03）。実装は第 2 段 |
 | R-57 | S-32 で `voice.SIZE` を Onsa の名前空間から外したので、論点ごと無くなる | — |
+| R-67 | 直す。S-54: プラグマだけでは不十分でフラグが要ると §13.4 に書く。守られていないと分かるフラグは `#error`（GCC の GNU モード、fast-math、finite-math-only、MSVC の `/fp:fast`、`FLT_EVAL_METHOD`）。`ONSA_ALLOW_INEXACT_FP` で精度を諦めて外せる。`@relaxed` は C で関数ごとに緩める。生成した C は `-Wall -Wextra` で警告なし。ターゲット全体の `relaxed` は今のまま許さない | 仕様 §13.4 / §15.5 に反映済み（2026-10-04）。実装は第 2 段、テストは R-113 |
 | R-65 | 直す。S-53: 公開ヘッダ（`onsa.h` と `<prefix><package>.h`）は C99 / C++11 から `-pedantic` でも警告なしに取り込め、`extern "C"` で囲む。内部のランタイムと `FLT_EVAL_METHOD` の検査は `onsa__runtime.h` に分け、生成した `.c` だけが取り込む。公開ヘッダを C と C++ でコンパイルするテストは R-113（第 1 段） | 仕様 §14.2 に反映済み（2026-10-04）。実装は第 2 段 |
 | R-64 | 直す。S-52: ヘッダは `<prefix><package>.h` の 1 つ。C の名前は `prefix` + 名前の最後の要素で、例の関数を `version` に改めた。重なりは E1011（flow の生成する名前を含む）。名前空間・版・panic の通知は R-121 へ | 仕様 §14.2 / §15.3、`tests/spec/ffi/export_fn.onsa` に反映済み（2026-10-04）。実装は第 2 段 |
 | R-63 | 直す。S-51: doc コメントを `onsa interface`、`onsa primer`、LSP に出し、`onsa doc` は外す。`///` は `use` と `test` 以外の項目、`impl` / `trait` のメンバ、フィールド、列挙子、flow の入力に付く。`//!` はファイルの先頭だけ。付ける宣言の無い `///` と先頭以外の `//!` は E0004 | 仕様 §2.1 / §18.2、std の先頭、`tests/spec/lex/comments.onsa` に反映済み（2026-10-04）。実装は第 2 段 |

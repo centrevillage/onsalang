@@ -1132,7 +1132,10 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - FMA への縮約と再結合を禁止する。JavaScript では各演算の後に `Math.fround` を挟む。
 - 整数のオーバーフローと範囲外アクセスの検査も、全ての変換先で同じに行う。
 - **超越関数**（`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` など）は、各環境のプリミティブ（C の libm、JavaScript の `Math`、WASM では同梱の libm）を使う。実装が環境で違うので最後の桁は一致しない。精度目標は **F32 / F64 とも 2 ULP 以内**（仮決め）とし、`onsa test --backends all` は超越関数を含む出力を許容誤差付きで比較する。環境の libm がこれを満たさない場合（組込みの軽量 libm など）は、その関数だけ Onsa 実装に差し替えるなど個別に対策する。ビット一致が要る用途向けの Onsa 実装の `std.math.exact` は §19。
-- C では、生成コードに `#pragma STDC FP_CONTRACT OFF` と `_Static_assert(FLT_EVAL_METHOD == 0)` を出し、F32 の各演算を `(float)` で囲む。ターゲット定義はコンパイラフラグ（`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。
+- C では、生成コードで F32 の各演算を `(float)` で囲み、FMA への縮約と再結合を止める。プラグマ（`#pragma STDC FP_CONTRACT OFF`、MSVC の `#pragma fp_contract(off)`）だけでは不十分で、コンパイラフラグも要る（GCC は STDC のプラグマを無視し、GNU モードの既定で縮約する。ISO モードの `-std=c11` では縮約しない）。ターゲット定義はコンパイラフラグ（`-std=c11`、`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。`onsa build` の外でコンパイルするとき（`kind = "source"` の出力、ホストのビルド、クロスビルド）も同じフラグが要り、生成した `.c` の先頭のコメントにも書く。
+- 生成した C は、守られていないことが分かるフラグをコンパイル時に止める（`#error`）: GCC で ISO モードでなく `ONSA_FP_CONTRACT_OFF` も定義されていない（GNU モードで `-ffp-contract=off` を渡すときに定義する）、`__FAST_MATH__`（`-ffast-math`、`-Ofast`）、`__FINITE_MATH_ONLY__`、MSVC の `/fp:fast`、`FLT_EVAL_METHOD` が 0 でない。メッセージは必要なフラグを示す。
+- 精度を諦めて速さを取るときは、利用者が `ONSA_ALLOW_INEXACT_FP` を定義すると、上の検査を外してコンパイルできる（組込みでプロジェクト全体を `-Ofast` でビルドする場合など）。そのビルドには、ビット一致の保証と `onsa test --backends all` の結果は当てはまらない。Onsa のソースで一部だけ緩めるときは `@relaxed`（§15.5）を使い、C では関数ごとの緩和として出す（効かなくても遅くなるだけで、結果は壊れない）。
+- 生成した C は、GCC / Clang の `-Wall -Wextra` で警告を出さない（ホストが `-Werror` でビルドしても通る）。`#pragma STDC FP_CONTRACT OFF` は、それを知るコンパイラにだけ出す。
 
 `onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: Num, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
 
@@ -1387,7 +1390,7 @@ frozen = ["voice"]                 # 公開シグネチャとパラメータ ID 
 | `strict-ftz` | `strict` + 非正規化数をゼロに（FTZ / DAZ） | FTZ をサポートするターゲット間で、`strict` と同じ条件で一致 |
 | `relaxed` | FMA と再結合を許可（ベクトル化のため） | 保証しない |
 
-`relaxed` はターゲット全体には指定できない。flow や関数ごとに `@relaxed` で付け、`onsa audit` に列挙される。
+`relaxed` はターゲット全体には指定できない。flow や関数ごとに `@relaxed` で付け、`onsa audit` に列挙される。C の側でファイル全体の精度を諦める方法は §13.4（`ONSA_ALLOW_INEXACT_FP`）。
 
 ---
 
