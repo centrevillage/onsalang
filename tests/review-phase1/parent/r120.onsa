@@ -1,0 +1,2 @@
+// R-120: Option の大小の比較。期待: E0401（§6.3 の表に PartialOrd が無い）。今の実装は `onsa check` を通り、`onsa test` / `build` の降下で E0200
+pub fn ol(a: Option[I32], b: Option[I32]) -> Bool { a < b }

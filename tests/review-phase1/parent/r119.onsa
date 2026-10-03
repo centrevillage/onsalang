@@ -1,0 +1,4 @@
+// R-119: 配列・タプルの大小の比較。期待: 通り、辞書式で比べる（NaN の組では < <= > >= が全て偽、§6.3）。今の実装は `onsa check` を通り、`onsa test` / `build` の降下で E0200
+pub fn al(a: [I32; 2], b: [I32; 2]) -> Bool { a < b }
+pub fn tl(a: (I32, F32), b: (I32, F32)) -> Bool { a < b }
+pub fn fge(a: [F32; 2], b: [F32; 2]) -> Bool { a >= b }
