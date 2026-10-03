@@ -978,7 +978,7 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 - `energy(xs: Span[F32], from: U32, to: U32) -> F64`（半開区間 `[from, to)` の二乗和）
 - `assert_near(a: F64, b: F64, tol: F64)`
 
-`test` の名前は、同じモジュールの中で重複できない（E0306）。失敗は `test "name" failed at file:line: assert <式のソース>` の形で報告し、`--json` では診断（§18.1）と同じ形に `"kind": "test"` を加える。
+`test` の名前は、同じモジュールの中で重複できない（E0306）。テストはモジュールの経路と名前で識別する（`dsp.voice "decays"`。単一ファイルのパッケージではモジュールの経路はファイル名）。結果は `test dsp.voice "decays" ok`、失敗は `test dsp.voice "decays" failed at dsp/voice.onsa:12: assert <式のソース>` の形で報告し、`--json` では診断（§18.1）と同じ形に `"kind": "test"` と `"module"` を加える。
 
 性質の検査（property-based testing）は構文ではなくライブラリで行う。`std.test` の `check[T: Show](cases: U32, g: Gen[T], p: fn(T) -> Bool) uses {Random}` は、`g` から `cases` 個の値を生成して `p` を検査し、反例を `Show` で表示して panic する。生成器は `gen.f32(lo, hi)`、`gen.u32(lo, hi)`、`gen.pair(g1, g2)` など。種はテストランナーが与えるので決定的で、`onsa test --seed` で変えられる。
 
@@ -1766,7 +1766,7 @@ impl Poly {
 |---|---|
 | `onsa check [--json]` | 型・効果・rt・flow・ポリシーの検査 |
 | `onsa fmt [--check]` | 唯一の表記への正規化。連続する 1 行の `let` の `=` と、連続する行の行末コメントは揃える（gofmt と同じ）。強い群の式を囲む冗長な括弧は外す（§3.1）。行の自動折り返しはせず、書き手の改行を保つ |
-| `onsa test [--backends all] [--flows]` | `test` を実行。`--backends` で変換先間のビット一致も検査（§13.4）。`--flows` で export される flow を `@param` の範囲で自動検査する（角と無作為の内点でパラメータを取り、無音・インパルス・雑音を入れ、出力が有限で panic しないこと） |
+| `onsa test [--json] [--filter <text>] [--backends all] [--flows]` | `test` を実行。`--filter` は、テストの完全な名前（`dsp.voice "decays"`）の部分一致で絞る。`--backends` で変換先間のビット一致も検査（§13.4）。`--flows` で export される flow を `@param` の範囲で自動検査する（角と無作為の内点でパラメータを取り、無音・インパルス・雑音を入れ、出力が有限で panic しないこと） |
 | `onsa interface <mod>` | 公開シグネチャ、doc コメント（宣言の前に `///` の形で。モジュールの `//!` は先頭に）、種、大きさ、効果、rt、@param だけを出力 |
 | `onsa audit [--stack] [--memory] [--panics]` | extern、unsafe、`@relaxed`、ポリシーとの差分。スタックの上限と flow の状態の大きさ、閾値以上の移動（コピー）の箇所（§12.7）。`--panics` は export される rt の経路にある panic しうる箇所（検査付きの演算、添字、`unwrap`、非飽和の変換）を列挙する |
 | `onsa graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前 |
