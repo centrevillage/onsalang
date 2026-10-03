@@ -179,7 +179,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-10 ✅ | `std.dsp.sum` の演算順と `magnitude_at` の定義 | `sum[const N](xs: [F32; N]) -> F32` は `xs[0]` から順に左へ畳む（ビット一致のため順序を固定）。`magnitude_at` は F64 の Goertzel で、結果を F32 に丸める | M5 |
 | S-11 ✅ | パッケージルートと単一ファイル | ルートは `onsa.toml` のあるディレクトリで、`.onsa` ファイルをその下から再帰的に集める（`tests/`、`target/` を除く）。マニフェスト無しの `onsa check foo.onsa` は、そのファイルを 1 モジュールのパッケージとして扱う（モジュール名はファイル名） | M2 |
 | S-12 ✅ | 第 1 期で使える `Span` のメソッド | `len()`、`slice(from, to)`、`get(i) -> Option[T]`、`fill!(v)`、`add_from!(other)`、`copy_from!(other)`。`[T; N]` と `Buf[T]` にも同じものがある | M2 |
-| S-13 ✅ | `@derive` の第 1 期の範囲 | `PartialEq Eq PartialOrd Ord Default` は実装、`Hash Show` は E0200（`Str` が要る）。`Option` / `Result` / タプル / `[T; N]` の `PartialEq` は組込み（§17.6 の `self.notes[i] == Some(note)`） | M2 |
+| S-13 ✅ | `@derive` の第 1 期の範囲（S-34 で宣言の `: trait` に移した。テストの書き換えは第 3 段） | `PartialEq Eq PartialOrd Ord Default` は実装（`Default` は境界の判定だけで、値を作る `default()` は S-49）、`Hash Show` は E0200（`Str` が要る）。`Option` / `Result` / タプル / `[T; N]` の `PartialEq` は組込み（§17.6 の `self.notes[i] == Some(note)`） | M2 |
 | S-14 ✅ | `--backends all` で、どの出力を許容誤差で比べるか | flow 単位。Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差（2 ULP）で、到達しない flow はビット一致で比べる | M5 |
 | S-15 | §11.6 の生成 API のブロックは擬似コードで、解析できない | 取り下げ。`tests/spec/flow/generated_api.onsa` に `mode: none` で収録した（M0 で解決） | — |
 | S-16 ✅ | `test` の名前の重複と、`assert` の失敗の報告の形 | 同じモジュールで同名の `test` は E0306。失敗は `test "name" failed at file:line: assert <式のソース>` の形で、`--json` では診断と同じ形に `"kind": "test"` を足す | M3 |
@@ -196,6 +196,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-02 決定、案 A） | M4 |
 | S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-02 決定。実装は T4-10） | M4 |
 | S-29 ✅ | `prev` / `delay` / `vdelay` の初期値は、仕様の例も実装の例も全て `0.0` で、情報の無い引数になっている | `init` を省略できる。省略すると `T.default()`、`T: Default` でなければ E0816。`onsa fmt` は既定値と等しいリテラルの `init` を取り除く（2026-10-02 決定。実装はレビューの反映の第 3 段。それまで `tools/check_spec_examples.py` は §11.2 / §17.3 / §17.4 の例で失敗する） | M3 |
+| S-49 ✅ | `Default` の値を作る手段が無く（`P.default()` が E0401、`T.default()` が E0302）、enum の `Default` の derive がどの列挙子かを決めずに通る（レビュー R-60） | `default()` を降下する。`P.default()` と、境界からの `T.default()`（S-46 の `T.NAME` の解決と同じ道）。struct は各フィールドの既定値、組込み型は §6.3 の表の値。enum の `Default` の derive は E0416。S-29 の `prev~` の初期値の省略も同じ仕組みを使う（2026-10-04 決定。実装は第 2 段、S-46 と同じ回） | M3 |
 | S-48 ✅ | FAUST の `+ ~ _` が修正候補の無い E0002 で、E0020 の範囲（候補を作れない形の扱い）が決まっていない（レビュー R-59） | §18.1 の表のとおり: `~ _` は `prev~(^y)`（`let` の名前が要る）、前置の `~x` は `!x`、`x'` は `prev~(x)`、`x@N` は `prev~` / `delay~`（定数でなければ E0002）、合成の演算子は E0002 と note。候補が一意でなければ全て並べる。E0806 は未定義なら `let` の候補、定義済みなら note。否定例のテスト（E0002 を期待値にしているもの）を書き換える（2026-10-04 決定。実装は第 2 段） | M1 |
 | S-47 ✅ | 行の継続の規則がブロックの中に限られ、トップレベルでは `const` の `=` の後だけ継続し、`type` の `=` と `->` の後は E0002（レビュー R-58） | 継続の規則をトップレベルにも適用する。次の行が `uses` で始まる場合も継続。ブロックの `{` が次の行にあれば E0003（修正候補は前の行へ移す）。エラー回復で行頭の項目キーワードまで読み飛ばすとき、前の行が継続のトークンで終わっていれば項目の始まりとみなさない（関数型 `fn(I32) -> I32` で始まる継続の行のため）（2026-10-03 決定。実装は第 2 段） | M1 |
 | S-46 ✅ | `Num` / `Float` の中身と組込み型の関連定数が仕様に無く、`T.ZERO` / `F32.ZERO` が E0302（レビュー R-56） | trait の関連定数を一般の仕組みとして実装し、`T.NAME` を境界から解決する。組込みの `impl Num` が `ZERO`、`impl Float` が `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN` を与える。整数は `MIN` `MAX` `BITS`。`F32.MIN` は E0302（修正候補は `-F32.MAX`）。組込みの文字列の表は R-79 の組込みの表へ移す。`std.math.sum` は `[T: Num]` と `T.ZERO`（2026-10-03 決定。実装は第 2 段） | M3 |
@@ -347,7 +348,7 @@ rt fn resonator.process(inout s, p, x: Span[F32], inout out: Span[F32]) {
 |---|---|---|---|
 | T1-1 ✅ | 字句解析器 | §2 の全トークン。キーワード（§2.2）。識別子の種別（`snake_case` / `UpperCamel` / `UPPER_SNAKE` / `_`）を字句の段で分類。整数（10 進・`0x`・`0b`・`_`）、浮動小数（小数点の両側に数字。`1.` / `.5` は E0020 の修正候補）、`'c'`、文字列（`{名前.フィールド}` の補間と `{{` `}}` を字句の段で分解）。`//` と `///`。`名前~(` と `名前!(`（識別子の直後、空白なし、直後が `(`）。`.` 直後の数字列はタプルの添字。改行は `Newline` トークンとして出す | M |
 | T1-2 ✅ | AST | §3.2。全ノードにスパン、trivia の保持 | S |
-| T1-3 ✅ | 宣言の構文解析 | 下の文法の `Item` 全部。属性（`@derive` `@repr` `@relaxed` `@deprecated` `@param`）、ドキュメントコメントの付属 | M |
+| T1-3 ✅ | 宣言の構文解析 | 下の文法の `Item` 全部。属性（`@derive` `@repr` `@relaxed` `@deprecated` `@param`）、ドキュメントコメントの付属。`@derive` は S-34 で宣言の `: trait` に移し、`@deprecated` は仕様に無い（§6.5、R-36 の属性の表で検査する） | M |
 | T1-4 ✅ | 文とブロック | 文の区切り（§2.5）: ブロックの中では `Newline` で文を終える。行末が二項演算子・`=`・`->`、または次の行が `.` で始まれば継続。括弧・角括弧・struct リテラル・`match` の腕の並びの中では `Newline` を読み飛ばす（文脈のスタック）。`else` の位置 E0003。ブロックの値（最後の式）。`let` のパターン、`var`、代入、`for ... in [move]`、`while`、`break` / `continue` / `return`、`assert` | M |
 | T1-5 ✅ | 式 | 後置 > 前置 > `as` > 二項の結合。二項は平らな列として保持し、独立した段で群の検査 E0010（修正候補: 括弧の挿入）、E0011、E0012。struct リテラル（S-08 の制限）、配列 `[a, b]` / `[e; N]`、タプル、`if` / `else if`、`match` と腕、無名 `fn`、`handle { } with ...`、`unsafe { }`、`par i in a..b { }`、引数のモード（`inout x`、`move x`、`inout [a, b]`）、`?`、`_` | M |
 | T1-6 ✅ | パターン | §7 の一覧。`\|` は パターンの文脈でだけ選択 | S |
@@ -613,7 +614,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | 394 | §6.1 | `mean`（`Array`） | `fn/mean.onsa` | parse | 第 2 期 |
 | 411 | §6.2 | `Point` のメソッド | `fn/methods.onsa` | check | M2 |
 | 428 | §6.3 | `Show` | `fn/trait_show.onsa` | parse | 第 2 期 |
-| 448 | §6.4 | `@derive`（`Hash` `Show` は E0200 のマーカ） | `fn/derive.onsa` | check | M2 |
+| 448 | §6.4 | derive（`Hash` `Show` は E0200 のマーカ。S-34 の宣言の `: trait` の形への書き換えは第 3 段） | `fn/derive.onsa` | check | M2 |
 | 463 | §6.6 | `const`（`make_sine_table` を補う） | `fn/const.onsa` | check | M3 |
 | 476 | §7 | 制御（断片。`...` を含む） | `control/forms.onsa` | none | — |
 | 509 | §8.1 | 効果 | `effects/decl.onsa` | parse | 第 2 期 |

@@ -470,6 +470,7 @@ impl Show for Point {
 - 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr`。
 - 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。ただし `Num` と `Float` は Rust の標準ライブラリに無いので、次の項で定める。
 - `Num` は数の型を表す。`Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元）を持つ。`Float` は浮動小数の型を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。`ONE` を `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。`Neg` を含めないのは、符号なし整数に無いからである。利用者の型も `impl Num for Q15 { const ZERO: Q15 = ... }` のように実装できる。
+- `Default` は関連関数 `default() -> Self` を持つ。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ（§6.6 の `T.ZERO` と同じ形）。
 - 組込み型が実装する標準 trait は、次の表で全てである（閉じた一覧）。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
 
 | 型 | 実装する trait |
@@ -502,7 +503,7 @@ pub struct Key: PartialEq + Eq + Hash + Show {
 型の宣言の頭に `: trait + trait` と書くと、その trait の実装を構造から自動で生成する（derive）。境界の `[T: Eq]`（§4.5）と同じく、「左の型が右の trait を満たす」と読む。
 
 - 書く位置は、名前（と型パラメータ）の後で本体の `{` の前（`pub enum Shape: PartialEq {`、`pub struct Ring[T, const N: U32]: PartialEq {`）。
-- 書けるのは `PartialEq Eq PartialOrd Ord Hash Show Default` の閉じた一覧だけ。`Eq` は `PartialEq` を、`Ord` は `PartialOrd` と `Eq` を要求する。各フィールド（列挙子の中身）の型がその trait を満たさなければ E0416。総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす。
+- 書けるのは `PartialEq Eq PartialOrd Ord Hash Show Default` の閉じた一覧だけ。`Eq` は `PartialEq` を、`Ord` は `PartialOrd` と `Eq` を要求する。各フィールド（列挙子の中身）の型がその trait を満たさなければ E0416。struct の `Default` は、各フィールドの既定値を並べたものである。enum には `Default` を並べられない（E0416）。どの列挙子を既定にするかを宣言の順に頼らず、`impl Default for Mode { fn default() -> Mode { Mode.Off } }` と手で書く。総称の型（`struct Pair[T]: PartialEq`）は、型引数が満たすときだけ満たす。
 - 並べた trait は全て自動で生成する。手で実装するときは `impl Tr for Ty` と書き、宣言には並べない（両方に書くと E0304）。
 - 属性（§6.5）にしないのは、trait の実装が受理されるプログラムと型を変える、型の定義の一部だからである。旧形の `@derive(...)` は E0020（修正候補は宣言に書く形）。
 
