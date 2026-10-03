@@ -1,8 +1,8 @@
-/// Mathematical primitives (spec §13.4, D-07, S-09). Every function is a
-/// `target` declaration: each backend (interpreter, C, WASM, JS) provides it.
-/// The IEEE-exact set (`sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`,
-/// `min`, `max`, `fmod`) is bit-exact on every target; the transcendental set
-/// matches within the precision target (2 ULP).
+//! Mathematical primitives (spec §13.4, D-07, S-09). Every function is a
+//! `target` declaration: each backend (interpreter, C, WASM, JS) provides it.
+//! The IEEE-exact set (`sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`,
+//! `min`, `max`, `fmod`) is bit-exact on every target; the transcendental set
+//! matches within the precision target (2 ULP).
 
 pub target rt fn exp[T: Float](x: T) -> T
 pub target rt fn exp2[T: Float](x: T) -> T

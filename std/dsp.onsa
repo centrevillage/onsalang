@@ -1,4 +1,4 @@
-/// DSP helpers (spec §11.5, §11.7, S-10).
+//! DSP helpers (spec §11.5, §11.7, S-10).
 
 use std.math.{pow}
 

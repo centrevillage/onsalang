@@ -1,5 +1,5 @@
-/// Test helpers for flows (spec §11.8, S-10). `impulse` allocates a `Buf`, so
-/// it needs `Alloc`; in phase 1 the interpreter provides it (D-08).
+//! Test helpers for flows (spec §11.8, S-10). `impulse` allocates a `Buf`, so
+//! it needs `Alloc`; in phase 1 the interpreter provides it (D-08).
 
 use std.math.{cos, sqrt}
 

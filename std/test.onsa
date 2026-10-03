@@ -1,5 +1,5 @@
-/// Property-based checks (spec §11.8). Phase 1: available inside `test`
-/// bodies only, with `Random` seeded from the test name by the runner (M5).
+//! Property-based checks (spec §11.8). Phase 1: available inside `test`
+//! bodies only, with `Random` seeded from the test name by the runner (M5).
 
 /// A generator of values of `T` (`std.test.gen` builds them).
 pub struct Gen[T] {

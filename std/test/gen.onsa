@@ -1,4 +1,4 @@
-/// Generators for `std.test.check` (spec §11.8).
+//! Generators for `std.test.check` (spec §11.8).
 
 use std.test.{Gen}
 

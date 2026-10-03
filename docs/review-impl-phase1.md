@@ -732,6 +732,8 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 #### R-63 `onsa interface` に doc コメントが出ない
 - 中・直す・観点 1｜`crates/onsa_syntax/src/ast.rs:143`、`crates/onsa_driver/src/interface.rs`｜§2.1「`onsa doc` と `onsa interface` に出る」
 - 内容: `Item.doc` は `dump` 以外で使われていない。`impl-review` §3 にも載っていない。
+- 範囲（2026-10-04 に追加で確かめた）: 仕様の中で、§2.1 は `onsa doc` と `onsa interface` に出るとし、§18.2 は `onsa interface` を doc コメント無しで定め、`onsa doc` はコマンドの一覧に無い。`collect_docs`（`parser.rs:314`）は間の空行を読み飛ばすので、std のファイル先頭の説明が `use` や最初の項目に付く。フィールド、列挙子、flow の入力、文の前の doc コメントは黙って捨てられる。
+- 決定（2026-10-04）: 直す。S-51: `///` は直後の宣言に付き（定数とフィールド、列挙子、flow の入力を含む）、`//!` はファイルの先頭のモジュールのドキュメント。付ける宣言の無い `///` と先頭以外の `//!` は E0004。`onsa interface`、`onsa primer`、LSP に出し、`onsa doc` は外す。
 
 #### R-64 仕様の例のマニフェスト（§14.2 / §15.3）でビルドできない
 - 高・直す + 仕様へ・観点 1｜`crates/onsa_backend_c/src/emit.rs:344`、`names.rs:15-29`、`export.rs:476`｜§15.3「prefix + 名前の最後の要素」、§14.2
@@ -1505,6 +1507,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-120 | 直す（`Option` / `Result` の大小の比較は型検査で E0401。組込み型の trait を §6.3 の表で判定する） | 実装（第 2 段、R-79 と一緒に） |
 | R-56 | 直す（trait の関連定数を実装し、`T.ZERO` と `F32.ZERO` を引けるようにする）。S-46: `Num` は `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` と `ZERO`、`Float` は `Num` と `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`。`ONE` を `Num` に置かないのは Q15 / Q31 のため。組込み型の関連定数は閉じた表で、浮動小数の `MIN` は偽の友人なので設けない。`std.math.sum` は `[T: Num]` と `T.ZERO`（R-23 を改めた） | 仕様 §6.3 / §6.6 / §13.4 に反映済み（2026-10-03）。実装は第 2 段 |
 | R-57 | S-32 で `voice.SIZE` を Onsa の名前空間から外したので、論点ごと無くなる | — |
+| R-63 | 直す。S-51: doc コメントを `onsa interface`、`onsa primer`、LSP に出し、`onsa doc` は外す。`///` は `use` と `test` 以外の項目、`impl` / `trait` のメンバ、フィールド、列挙子、flow の入力に付く。`//!` はファイルの先頭だけ。付ける宣言の無い `///` と先頭以外の `//!` は E0004 | 仕様 §2.1 / §18.2、std の先頭、`tests/spec/lex/comments.onsa` に反映済み（2026-10-04）。実装は第 2 段 |
 | R-62 | 直す。E0003（`else` と `{` の位置）は、括弧・角括弧・構造体リテラル・`match` の腕の中でも適用する。規則を一つにし、通ったコードでは常に同じ行にある（P2）。S-47 の `{` の規則の実装と同じ回 | 仕様 §2.5 に反映済み（2026-10-04）。実装は第 2 段 |
 | R-61 | 直す（重さを中に）。S-50: 配列の長さと const 引数は定数式（整数のリテラル、定数を指す名前、`+ - * / %`、括弧。型は `U32`）。計算で決まる定数も使える。修飾した名前はどちらの位置でも使える。const の型パラメータを含む式は E0417 | 仕様 §4.1 / §4.5 / §11.4 / §11.5 に反映済み（2026-10-04）。実装は第 2 段 |
 | R-60 | 直す。S-49: `default()` を降下し、`P.default()` と総称の `T.default()` で呼ぶ（S-46 の境界からの解決と同じ道）。struct は各フィールドの既定値。enum の `Default` の derive は E0416 | 仕様 §6.3 / §6.4 に反映済み（2026-10-04）。実装は第 2 段 |
