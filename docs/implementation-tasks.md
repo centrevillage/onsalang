@@ -196,6 +196,7 @@ pub target rt fn sqrt[T: Float](x: T) -> T
 | S-27 ✅ | `init` の途中で panic したインスタンスは作りかけだが、`reset` で `poisoned` が解けてしまう | `_init` が `int` を返す（0 / 1）、`_new` は失敗で `NULL`、状態の末尾に `initialized: Bool`、未初期化なら `process` は 1 を返し `reset` は何もしない（2026-10-02 決定、案 A） | M4 |
 | S-28 ✅ | bulk の分割が最上位の配列だけで、サブインスタンスの遅延線が fast に残る（複合 flow がマイコンに収まらない） | 入れ子の状態の配列も bulk へ。bulk 領域は最上位に一つ、bulk を持つ各状態が自分の分へのポインタを先頭に持ち、親の `init` が設定する。`par` の複製は bulk にも N 個並ぶ（2026-10-02 決定。実装は T4-10） | M4 |
 | S-29 ✅ | `prev` / `delay` / `vdelay` の初期値は、仕様の例も実装の例も全て `0.0` で、情報の無い引数になっている | `init` を省略できる。省略すると `T.default()`、`T: Default` でなければ E0816。`onsa fmt` は既定値と等しいリテラルの `init` を取り除く（2026-10-02 決定。実装はレビューの反映の第 3 段。それまで `tools/check_spec_examples.py` は §11.2 / §17.3 / §17.4 の例で失敗する） | M3 |
+| S-46 ✅ | `Num` / `Float` の中身と組込み型の関連定数が仕様に無く、`T.ZERO` / `F32.ZERO` が E0302（レビュー R-56） | trait の関連定数を一般の仕組みとして実装し、`T.NAME` を境界から解決する。組込みの `impl Num` が `ZERO`、`impl Float` が `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN` を与える。整数は `MIN` `MAX` `BITS`。`F32.MIN` は E0302（修正候補は `-F32.MAX`）。組込みの文字列の表は R-79 の組込みの表へ移す。`std.math.sum` は `[T: Num]` と `T.ZERO`（2026-10-03 決定。実装は第 2 段） | M3 |
 | S-45 ✅ | 加法と乗法の混在まで括弧を要し、積和の多い DSP の式が括弧で埋まる。`%` は乗法と同じ群で、`w + 1 % N` の誤りは防げても `a * b % n` を通していた | 群の部分順序: 乗法 > 加法 > 比較 > 論理積・論理和、剰余 > 比較。`%` は独立の群。それ以外の混在は E0010 のまま。fmt は強い群の式を囲む冗長な括弧を外す（同じ群の中と、強弱の無い組み合わせの括弧は変えない）。`tests/spec/ops/groups.onsa` と `negative/syntax_groups.onsa` を書き換える。§3.1、§6.2 の `Point.norm`、§11.8 の例は、実装まで `check_spec_examples.py` に落ちる（2026-10-03 決定。実装は第 3 段、構文の変更と同じ回） | M1 |
 | S-44 ✅ | `prev` / `delay` / `vdelay` は状態を作るのに点ごとの関数と同じ見た目で、閉路を切れることも字面に現れない | `prev~(x)` などと書き、`prev(` は E0811（修正候補は `~` の挿入）。帰還の参照 `^名前`: 字句は名前の直前の前置 `^`（二項の `^` とは位置で分ける）、遅延の組込みの第 1 引数の中だけ。印の無い前方参照は E0801（修正候補は `^` の挿入）、遅延の外の `^` も E0801、定義済みの名前の `^` は E0020。fmt と LSP も対応する。`tests/`（spec / conformance / golden）と `examples/` の 13 ファイルを書き換える（2026-10-03 決定。実装は第 3 段、S-34 などの構文の変更と同じ回） | M3 |
 | S-43 ✅ | 記憶域の配置の選択肢が増える見込みがあるのに、属性が領域ごと（`@bulk`）だった | `@mem(bulk)` に改める。値は仕様の閉じた一覧（今は `bulk` だけ）、一覧に無い名前と位置の誤りは E0818、`@mem(fast)` は E0020。R-36 の属性の表には `@mem` の 1 行（2026-10-03 決定。実装は S-31 と同じ回） | M4 |
@@ -488,7 +489,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 |---|---|---|---|
 | T5-1 | 精度の測定 | D-12 の表と ULP の測定。interp（Rust）、C（ホストの libm）の結果を記録。2 ULP を超える関数の一覧を作り、超える環境では D-11 の Onsa 実装に束縛を切り替える | M |
 | T5-2 | `std.math.soft` | D-11。musl からの移植と、精度表に対する検査 | M |
-| T5-3 | `std.dsp` と `std.math.sum` の完成 | S-10。`magnitude_at`。`sum` は `std.math` に移し、`[T: Num + Default]` に一般化する（レビュー R-23。`N = 0` は `T.default()`、それ以外は `xs[0]` から畳む）。順序の固定を確認する conformance。それまで §11.5 の `unison` の例は `tools/check_spec_examples.py` に落ちる | S |
+| T5-3 | `std.dsp` と `std.math.sum` の完成 | S-10。`magnitude_at`。`sum` は `std.math` に移し、`[T: Num]` に一般化する（レビュー R-23、S-46。`N = 0` は `T.ZERO`、それ以外は `xs[0]` から畳む）。順序の固定を確認する conformance。それまで §11.5 の `unison` の例は `tools/check_spec_examples.py` に落ちる | S |
 | T5-4 | `std.test` | `check` と `gen`（D-08 と同じく `test` の本体でだけ使える組込み。`Random` はテスト名から決めた種。`--seed`）。`Gen[T]` の型はインタプリタの内蔵 | M |
 | T5-5 | `onsa test --flows` | export される各 flow について、`@param` の角と無作為の内点（既定 8 点）× 入力（無音・インパルス・一様雑音）を interp で走らせ、出力が有限で panic しないことを検査。`--backends` と組み合わせ可 | S |
 | T5-6 | `onsa test --backends all` | T4-7 のハーネスを `tests/conformance` 全体と `--flows` の掃引に適用。S-14 の判定 | S |

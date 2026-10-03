@@ -468,7 +468,8 @@ impl Show for Point {
 - ジェネリック trait（`Iter[T]` など）は、一つの型について高々一つしか実装できない。
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
 - 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr`。
-- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。
+- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。ただし `Num` と `Float` は Rust の標準ライブラリに無いので、次の項で定める。
+- `Num` は数の型を表す。`Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元）を持つ。`Float` は浮動小数の型を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。`ONE` を `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。`Neg` を含めないのは、符号なし整数に無いからである。利用者の型も `impl Num for Q15 { const ZERO: Q15 = ... }` のように実装できる。
 - 組込み型が実装する標準 trait は、次の表で全てである（閉じた一覧）。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
 
 | 型 | 実装する trait |
@@ -522,6 +523,15 @@ const SINE: [F32; 1024] = make_sine_table()
 - 結果は、Copy か、**静的に配置できる Shared**（`Str`、`Bytes`、要素が静的に配置できる `Array`）でなければならない（E0407）。`Map` / `Set` は表の配置が実装に依存するので対象外。結果は読み取り専用の静的領域（組込みではフラッシュ）に置かれる。Shared の結果はヘッダ付きの静的オブジェクト（§12.8）として書き出され、`Alloc` 無しで使える。
 - 初期化式が、直接または他の定数を経由して自分自身を参照すると E0312（`const A: U32 = B` と `const B: U32 = A`）。
 - `impl` と `trait` の中にも同じ形で書ける（関連定数）: `impl F32 { const PI: F32 = 3.14159265 }`、`trait Num { const ZERO: Self }`。参照は `F32.PI`、型パラメータでは `T.ZERO`。字面は `UpperCamel.UPPER_SNAKE` で、関連関数や効果の操作（`Fs.read`）と区別できる。
+- 組込み型の関連定数は、次の表で全てである（閉じた一覧。足すときは、必要な実例を添えて議論する、[`docs/api-candidates.md`](docs/api-candidates.md)）。
+
+| 型 | 関連定数 |
+|---|---|
+| 整数 | `MIN` `MAX`（`Self`）、`BITS`（`U32`）、`ZERO`（`Num`） |
+| 浮動小数 | `ZERO`（`Num`）、`ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`（`Float`） |
+
+- 浮動小数に `MIN` は無い。Rust の `f32::MIN` は最も負の有限値、C の `FLT_MIN` は最小の正の正規化数で、どちらの読み方でも検査を通るのに意味が違う（§0.3 の規則 4）。最も負の有限値は `-F32.MAX` と書く。`MAX` と `EPSILON`（1 と、1 の次に大きい表現可能な数の差）は C と Rust で同じ意味である。
+- リテラルは型パラメータ `T` の値にならない（`[T: Float]` の関数の中で `x + 0.0` とは書けない）。総称の関数では、0 と 1 を `T.ZERO`、`T.ONE`（`T: Float`）で書く。具体的な型ではリテラルで足りる。
 
 ---
 
@@ -1114,7 +1124,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - **超越関数**（`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` など）は、各環境のプリミティブ（C の libm、JavaScript の `Math`、WASM では同梱の libm）を使う。実装が環境で違うので最後の桁は一致しない。精度目標は **F32 / F64 とも 2 ULP 以内**（仮決め）とし、`onsa test --backends all` は超越関数を含む出力を許容誤差付きで比較する。環境の libm がこれを満たさない場合（組込みの軽量 libm など）は、その関数だけ Onsa 実装に差し替えるなど個別に対策する。ビット一致が要る用途向けの Onsa 実装の `std.math.exact` は §19。
 - C では、生成コードに `#pragma STDC FP_CONTRACT OFF` と `_Static_assert(FLT_EVAL_METHOD == 0)` を出し、F32 の各演算を `(float)` で囲む。ターゲット定義はコンパイラフラグ（`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。
 
-`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: Num + Default, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.default()`、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
+`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: Num, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
 
 ### 13.5 言語全体の変換（最終目標）
 
