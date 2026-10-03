@@ -1,2 +1,2 @@
 // util.onsa
-pub fn onsa_version() -> U32 { 2 }
+pub fn version() -> U32 { 2 }

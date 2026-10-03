@@ -1220,16 +1220,16 @@ impl Conv {
 
 ```onsa
 // util.onsa
-pub fn onsa_version() -> U32 { 2 }
+pub fn version() -> U32 { 2 }
 ```
 
 ```toml
 [export]
 prefix = "onsa_"
-fns = ["util.onsa_version"]
+fns = ["util.version"]
 ```
 
-export される関数は `pub` で、引数と返り値は FFI で `unsafe` を要しない型（§14.1）に限る。効果行は、そのターゲットの `provides` にある効果しか持てない（E0610）。生成されるヘッダは次の通り（`voice` は §17.4 の flow。数値は例）。
+export される関数は `pub` で、引数と返り値は FFI で `unsafe` を要しない型（§14.1）に限る。効果行は、そのターゲットの `provides` にある効果しか持てない（E0610）。ヘッダはパッケージに 1 つで、名前は `<prefix><package>.h`。export する全ての flow と関数を宣言する。次はパッケージ `voice`（§15.3）の例で、`voice` は §17.4 の flow、数値は例である。
 
 ```c
 /* onsa_voice.h（onsa build が生成する） */
@@ -1257,12 +1257,16 @@ extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデ�
 /* Alloc を提供するターゲットだけで生成される */
 onsa_voice* onsa_voice_new(float sample_rate);   /* init が失敗したら NULL */
 void        onsa_voice_free(onsa_voice* s);
+
+/* export した関数（[export] の fns） */
+uint32_t onsa_version(void);
 ```
 
 - メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。
 - `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は 1 を返し、`reset` は何もしない。復帰は `init` のやり直しだけである。
 - `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `onsa_<name>_in` / `onsa_<name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `onsa_swap_process(s, &params, &(onsa_swap_in){ inl, inr }, &(onsa_swap_out){ outl, outr }, frames)`。
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
+- C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `onsa_voice`、`util.version` は `onsa_version`）。flow は、それを頭にした名前（`onsa_voice_init`、`onsa_voice_params` など）も生成する。パッケージの中で C の名前が重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数と、flow の生成する名前と関数の名前（flow `voice` の `onsa_voice_init` と関数 `voice_init`）の重なりも含む。名前は `_` で始まらない（§2.3）ので、ランタイムの内部の記号（`onsa__` で始まる）とは重ならない。
 - export した flow を、既存の C/C++ ホスト（JUCE, CLAP, VST3, AU, 組込み HAL）へ組み込む第一の経路とする。組込みでの使い方は §17.5。
 
 ---
@@ -1308,7 +1312,7 @@ std = "0.2.0"           # 完全一致。解決結果は onsa.lock に固定す�
 [export]
 prefix = "onsa_"        # C のシンボルは prefix + 名前の最後の要素
 flows = ["dsp.voice", "dsp.echo"]
-fns = ["util.onsa_version"]
+fns = ["util.version"]
 
 [targets.cli]
 kind = "exe"
