@@ -131,5 +131,6 @@
 | `parent/r119.onsa` | R-119 |
 | `parent/r120.onsa` | R-120 |
 | `parent/r61.onsa` | R-61（計算で決まる定数を長さに使う） |
+| `parent/r62.onsa` | R-62（括弧・腕の中の `else` と `{` の位置） |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。
