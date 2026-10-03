@@ -1,0 +1,11 @@
+// R-61 / S-50: 計算で決まる定数を長さに使う。期待: 全て通る。今の実装は E0200「evaluated in M3」
+const N: U32 = 4
+const N2: U32 = N * 2
+const LIT: U32 = 8
+
+pub fn a(x: [F32; N2]) -> F32 { x[0] }
+pub fn b(x: [F32; LIT]) -> F32 { x[0] }
+pub fn c() -> F32 {
+  let xs: [F32; N2] = [0.0; N2]
+  xs[0]
+}
