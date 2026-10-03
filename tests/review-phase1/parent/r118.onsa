@@ -1,0 +1,11 @@
+// R-118: match の腕の中で対象を書き換え、借用束縛 v が破棄済みの記憶域を読む。今の実装は通る（判断待ち）
+pub fn z(move b: Buf[F32]) -> U32 uses {Alloc} {
+  var x = Some(move b)
+  match x {
+    Some(v) => {
+      x = None
+      v.len()
+    },
+    None => 0,
+  }
+}

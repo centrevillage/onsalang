@@ -1,6 +1,6 @@
 # M0〜M4 のコードレビューの再現の入力
 
-[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-116）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
+[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-118）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
 
 - **自動では実行しない。** `onsa_tests` のランナーは `tests/spec`、`tests/conformance`、`tests/golden` だけを読む。パッケージの収集も `tests/` を除く（§15.1）。
 - 多くは「今の実装が誤る」入力で、期待値は各ファイルのコメントか `assert` に書いてある。修正の段階（レビュー §7）で、直した項目の入力を `tests/spec` などの回帰テストへ移す。
@@ -124,5 +124,8 @@
 | `parent/r17.onsa` | R-17 |
 | `parent/r18.onsa` | R-18 |
 | `parent/r19.onsa` | R-19 |
+| `parent/r54.onsa`、`parent/r54_for.onsa` | R-54（S-41） |
+| `parent/r117.onsa` | R-117 |
+| `parent/r118.onsa` | R-118 |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。

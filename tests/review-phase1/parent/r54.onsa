@@ -1,0 +1,18 @@
+// R-54: 借用引数からの let（Affine）は借用束縛（§5.4）。期待: 全て通る。今の実装は E0711
+pub fn f(b: Buf[F32]) -> U32 {
+  let c = b
+  c.len()
+}
+
+pub struct H5 {
+  buf: Buf[F32],
+}
+pub fn m(h: H5) -> U32 {
+  let b = h.buf
+  b.len()
+}
+
+pub fn h(p: (Buf[F32], U32)) -> U32 {
+  let (a, n) = p
+  a.len() + n
+}

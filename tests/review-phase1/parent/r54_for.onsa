@@ -1,0 +1,12 @@
+// R-54 / S-41: 借用の for の束縛は起点（xs は借用引数）。期待: 通る。今の実装は E0711
+pub struct H {
+  buf: Buf[F32],
+}
+pub fn k(xs: [H; 2]) -> U32 {
+  var n: U32 = 0
+  for s in xs {
+    let t = s.buf
+    n = n + t.len()
+  }
+  n
+}

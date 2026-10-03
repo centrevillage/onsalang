@@ -1,0 +1,5 @@
+// R-117: inout 引数から move で取り出せる。期待: E0711。今の実装は通る
+pub fn g2(inout b: Buf[F32]) -> U32 uses {Alloc} {
+  let c = move b
+  c.len()
+}
