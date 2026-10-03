@@ -1267,6 +1267,7 @@ uint32_t onsa_version(void);
 - `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `onsa_<name>_in` / `onsa_<name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `onsa_swap_process(s, &params, &(onsa_swap_in){ inl, inr }, &(onsa_swap_out){ outl, outr }, frames)`。
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
 - C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `onsa_voice`、`util.version` は `onsa_version`）。flow は、それを頭にした名前（`onsa_voice_init`、`onsa_voice_params` など）も生成する。パッケージの中で C の名前が重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数と、flow の生成する名前と関数の名前（flow `voice` の `onsa_voice_init` と関数 `voice_init`）の重なりも含む。名前は `_` で始まらない（§2.3）ので、ランタイムの内部の記号（`onsa__` で始まる）とは重ならない。
+- 公開ヘッダ（`onsa.h` と `<prefix><package>.h`）は、C99 以降と C++11 以降の両方から、`-pedantic` でも警告なしに取り込める。宣言は `extern "C"` で囲む。`onsa.h` に入るのは、ホストが使う型（`onsa_param_info` など）と、ホストやファームウェアが用意する関数の宣言だけである。生成したコードのための内部のランタイム（補助関数、`setjmp`、`FLT_EVAL_METHOD` の検査、C11 の構文）は `onsa__runtime.h` に分け、生成した `.c` だけが取り込む（`kind = "source"` では出力するが、ホストは取り込まない）。生成した `.c` は C11 を要求する。
 - export した flow を、既存の C/C++ ホスト（JUCE, CLAP, VST3, AU, 組込み HAL）へ組み込む第一の経路とする。組込みでの使い方は §17.5。
 
 ---

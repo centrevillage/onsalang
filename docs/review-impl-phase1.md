@@ -748,6 +748,8 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 原因: 公開ヘッダが `onsa.h` を丸ごと include する。`onsa.h` の中身（`_Static_assert`、`_Noreturn`、`_Thread_local`、数百の static inline ヘルパ）が、`extern "C"` の外で利用者の翻訳単位に入る。
 - 再現: g++-15 では多数のエラーになる。clang++ は、拡張として通す。
 - 直し方: `onsa.h` を、公開部分と内部のランタイムに分ける。
+- 確認（2026-10-04）: `onsa.h` だけを取り込む C++ のファイルが、g++-15（`-std=c++17`）で 131 件のエラーになった（根は `_Noreturn` で、`onsa_panic` の宣言の失敗が連鎖する）。clang++ は `-pedantic` で警告 2 件。
+- 決定（2026-10-04）: 直す。S-53: 公開ヘッダは C99 / C++11 から警告なしに取り込め、`extern "C"` で囲む。`onsa.h` は公開部分だけにし、内部のランタイムは `onsa__runtime.h` に分ける。`FLT_EVAL_METHOD` の検査は内部へ。公開ヘッダを C と C++ でコンパイルするテストを R-113 に入れる。
 
 #### R-66 32 ビットのターゲットで F64 の bulk を持つと、C をコンパイルできない
 - 中・直す + 仕様へ・観点 1｜`crates/onsa_core/src/layout.rs:172`｜§12.4、§14.2
@@ -1521,6 +1523,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-120 | 直す（`Option` / `Result` の大小の比較は型検査で E0401。組込み型の trait を §6.3 の表で判定する） | 実装（第 2 段、R-79 と一緒に） |
 | R-56 | 直す（trait の関連定数を実装し、`T.ZERO` と `F32.ZERO` を引けるようにする）。S-46: `Num` は `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` と `ZERO`、`Float` は `Num` と `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`。`ONE` を `Num` に置かないのは Q15 / Q31 のため。組込み型の関連定数は閉じた表で、浮動小数の `MIN` は偽の友人なので設けない。`std.math.sum` は `[T: Num]` と `T.ZERO`（R-23 を改めた） | 仕様 §6.3 / §6.6 / §13.4 に反映済み（2026-10-03）。実装は第 2 段 |
 | R-57 | S-32 で `voice.SIZE` を Onsa の名前空間から外したので、論点ごと無くなる | — |
+| R-65 | 直す。S-53: 公開ヘッダ（`onsa.h` と `<prefix><package>.h`）は C99 / C++11 から `-pedantic` でも警告なしに取り込め、`extern "C"` で囲む。内部のランタイムと `FLT_EVAL_METHOD` の検査は `onsa__runtime.h` に分け、生成した `.c` だけが取り込む。公開ヘッダを C と C++ でコンパイルするテストは R-113（第 1 段） | 仕様 §14.2 に反映済み（2026-10-04）。実装は第 2 段 |
 | R-64 | 直す。S-52: ヘッダは `<prefix><package>.h` の 1 つ。C の名前は `prefix` + 名前の最後の要素で、例の関数を `version` に改めた。重なりは E1011（flow の生成する名前を含む）。名前空間・版・panic の通知は R-121 へ | 仕様 §14.2 / §15.3、`tests/spec/ffi/export_fn.onsa` に反映済み（2026-10-04）。実装は第 2 段 |
 | R-63 | 直す。S-51: doc コメントを `onsa interface`、`onsa primer`、LSP に出し、`onsa doc` は外す。`///` は `use` と `test` 以外の項目、`impl` / `trait` のメンバ、フィールド、列挙子、flow の入力に付く。`//!` はファイルの先頭だけ。付ける宣言の無い `///` と先頭以外の `//!` は E0004 | 仕様 §2.1 / §18.2、std の先頭、`tests/spec/lex/comments.onsa` に反映済み（2026-10-04）。実装は第 2 段 |
 | R-62 | 直す。E0003（`else` と `{` の位置）は、括弧・角括弧・構造体リテラル・`match` の腕の中でも適用する。規則を一つにし、通ったコードでは常に同じ行にある（P2）。S-47 の `{` の規則の実装と同じ回 | 仕様 §2.5 に反映済み（2026-10-04）。実装は第 2 段 |
