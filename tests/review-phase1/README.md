@@ -1,6 +1,6 @@
 # M0〜M4 のコードレビューの再現の入力
 
-[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-129）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
+[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-130）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
 
 - **自動では実行しない。** `onsa_tests` のランナーは `tests/spec`、`tests/conformance`、`tests/golden` だけを読む。パッケージの収集も `tests/` を除く（§15.1）。
 - 多くは「今の実装が誤る」入力で、期待値は各ファイルのコメントか `assert` に書いてある。修正の段階（レビュー §7）で、直した項目の入力を `tests/spec` などの回帰テストへ移す。
@@ -143,7 +143,9 @@
 | `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68） |
 | `parent/r79/` | R-79（std の `target` 宣言を変換先が与えないとき。期待値は `m.onsa` の各項目の上のコメント。S-69） |
 | `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |
+| `parent/r80/` | R-80（NRVO の判定の食い違い。`onsa build --target host .` の生成コードで確かめる。期待値は `m.onsa` の先頭のコメント） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
+| `parent/r130/` | R-130（マニフェストの未知のキー。期待値は `onsa.toml` の先頭のコメント） |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。

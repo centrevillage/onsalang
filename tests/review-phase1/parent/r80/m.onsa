@@ -1,0 +1,27 @@
+// R-80（NRVO の判定の一本化。R-81 と同じ回）: `onsa build --target host .` の生成コードで確かめる。
+// 期待（§12.7）: `early` はどの経路でも同じローカル `b` を返すので、`b` を返り値の置き場所（`*out`）に
+//   直接作り、コピーしない。監査用の記録（`Module.moves`）も、コピーを数えない。
+// 今（2026-10-04）: C は `return` があると NRVO をやめ、`m__Big b = ...;` を作ってから `(*out) = b;` を
+//   2 か所に出す。監査用の記録は、末尾の `b` を NRVO とみなし、`return b` だけをコピーと数える。
+//   （`return` の無い `tail_only` でも、配列のリテラルが一時変数を経てコピーされる。これは R-81 の範囲。）
+
+pub struct Big {
+  pub xs: [F32; 64],
+}
+
+fn tail_only() -> Big {
+  let b = Big { xs: [1.0; 64] }
+  b
+}
+
+fn early(c: Bool) -> Big {
+  let b = Big { xs: [2.0; 64] }
+  if c {
+    return b
+  }
+  b
+}
+
+pub fn first(c: Bool) -> F32 {
+  tail_only().xs[0] + early(c).xs[0]
+}

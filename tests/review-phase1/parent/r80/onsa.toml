@@ -1,0 +1,12 @@
+# R-80: NRVO の判定が、仕様・C・監査用の記録で食い違う。期待値は `m.onsa` の先頭のコメント。
+[package]
+name = "r80"
+edition = "2026"
+
+[export]
+prefix = "t_"
+fns = ["m.first"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

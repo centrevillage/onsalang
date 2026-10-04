@@ -1,0 +1,16 @@
+# R-130: マニフェストの未知のキー。期待（推奨 (a)）: `colour`、`panik` はエラー。`fp` は S-57 の正しいキーなので読む。
+# 今（2026-10-04）: `onsa build --target host .` は 3 つとも黙って無視して成功する（panic は既定、fp は strict のまま）。
+[package]
+name = "r130"
+edition = "2026"
+colour = "blue"
+
+[export]
+prefix = "t_"
+fns = ["m.one"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+panik = "poison"
+fp = "strict-ftz"
