@@ -1,0 +1,94 @@
+// R-93（S-75）、R-81: 評価順。期待は S-75 の規則（Rust と同じ）で、全てのテストが通ること
+// （"two out-of-range indices" だけは、`index 5` の範囲外で失敗するのが期待）。
+// 今のインタプリタの結果は各テストの上のコメント（2026-10-04 に `onsa test` で確かめた）。
+// C の再現は `core/cpkg/`、`cback/p1/`、`cback/p12/`（R-93 の本文）。
+
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k
+}
+
+fn set100(inout c: U32) -> I64 {
+  c = 100
+  1
+}
+
+fn pair(a: U32, b: U32) -> U32 {
+  (a * 10) + b
+}
+
+fn touch(inout hit: Bool) -> Bool {
+  hit = true
+  true
+}
+
+pub struct P {
+  pub x: F32,
+  pub y: F32,
+}
+
+// 今: ok
+test "binary operands left to right" {
+  var k: U32 = 0
+  let v = (next(inout k) * 10) + next(inout k)
+  assert(v == 12)
+}
+
+// 今: 失敗（インタプリタは添字を内側から逆に評価し、21 になる）
+test "nested index left to right" {
+  var k: U32 = 0
+  let xs: [[U32; 3]; 3] = [[0, 1, 2], [10, 11, 12], [20, 21, 22]]
+  assert(xs[next(inout k)][next(inout k)] == 12)
+}
+
+// 今: ok
+test "assignment: value before place" {
+  var k: U32 = 0
+  var ys: [U32; 3] = [0, 0, 0]
+  ys[next(inout k)] = next(inout k)
+  assert(ys[2] == 1)
+}
+
+// 今: ok（C は借用の引数を値の引数より先に評価する。R-93）
+test "arguments left to right" {
+  var c: U32 = 0
+  let ps: [U32; 3] = [0, 100, 200]
+  assert(pair(next(inout c), ps[next(inout c)]) == 210)
+}
+
+// 今: ok（C は `c` を後で読み、101 になる。R-93）
+test "read before a later write" {
+  var c: U32 = 0
+  let v = (c as I64) + set100(inout c)
+  assert(v == 1)
+}
+
+// 期待: `index 5 out of range` で失敗する（左の添字が先）。今: インタプリタは期待どおり。C は `j` を先に検査しうる（R-93）
+test "two out-of-range indices" {
+  let xs: [[U32; 3]; 3] = [[0, 1, 2], [10, 11, 12], [20, 21, 22]]
+  let i: U32 = 5
+  let j: U32 = 7
+  assert(xs[i][j] == 0)
+}
+
+// 今: ok（`panic` の prelude は S-40 の実装待ちなので、書き込みで確かめる）
+test "short circuit" {
+  var hit = false
+  let v = false && touch(inout hit)
+  assert(!hit)
+}
+
+// 今: ok（R-81 で宛先に直接作るときも、重なるので一時変数を挟む。§12.7）
+test "literal reads its destination" {
+  var p = P { x: 1.0, y: 2.0 }
+  p = P { x: p.y, y: p.x }
+  assert(p.x == 2.0)
+  assert(p.y == 1.0)
+}
+
+// 今: ok（引数を評価してから呼び出すので、排他性に触れない）
+test "argument read before an inout receiver" {
+  var xs: [U32; 4] = [0, 0, 0, 0]
+  xs.fill!(xs.len())
+  assert(xs[3] == 4)
+}
