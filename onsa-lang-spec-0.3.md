@@ -518,9 +518,9 @@ pub struct Key: PartialEq + Eq + Hash + Show {
 
 ### 6.5 属性（全て）
 
-`@repr(c)`, `@relaxed`, `@param(...)`（§11.7）、`@mem(...)`（§12.4）。これ以外の属性は無い（`@deprecated` は必要になったら定義する、§19.1）。
+`@repr(c)`, `@fp(...)`（§15.5）、`@param(...)`（§11.7）、`@mem(...)`（§12.4）。これ以外の属性は無い（`@deprecated` は必要になったら定義する、§19.1）。
 
-属性は、受理されるプログラムと型を変えない付与情報である: C との間の配置（`@repr`）、浮動小数の最適化の許可（`@relaxed`）、UI とホストのための情報（`@param`）、記憶域の配置（`@mem`）。型の定義に関わる trait の自動生成は、属性ではなく型の宣言に書く（§6.4）。
+属性は、受理されるプログラムと型を変えない付与情報である: C との間の配置（`@repr`）、浮動小数の演算の緩和（`@fp`）、UI とホストのための情報（`@param`）、記憶域の配置（`@mem`）。型の定義に関わる trait の自動生成は、属性ではなく型の宣言に書く（§6.4）。
 
 ### 6.6 コンパイル時定数
 
@@ -1126,7 +1126,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 
 ### 13.4 バックエンド間のビット一致
 
-数値プロファイル `strict`（§15.5）では、全ての変換先が同じ入力に対して **IEEE の演算** についてビット単位で同じ出力を出す。
+浮動小数のプロファイル `strict`（§15.5）では、全ての変換先が同じ入力に対して **IEEE の演算** についてビット単位で同じ出力を出す。
 
 - 四則演算、`sqrt`、`fmod`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、比較、整数と浮動小数の間の変換は、全ての変換先で正しく丸められるか正確なので、ビット一致する。`round` は最近接偶数丸め（WASM の `nearest`、C の `rint`。JavaScript は模倣する）。`min` / `max` はどちらかが NaN なら NaN を返し（WASM と `Math.min` の意味。C の `fminf` は使わない）、`min(-0.0, 0.0)` は `-0.0`、`max(-0.0, 0.0)` は `0.0`。
 - FMA への縮約と再結合を禁止する。JavaScript では各演算の後に `Math.fround` を挟む。
@@ -1134,7 +1134,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - **超越関数**（`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` など）は、各環境のプリミティブ（C の libm、JavaScript の `Math`、WASM では同梱の libm）を使う。実装が環境で違うので最後の桁は一致しない。精度目標は **F32 / F64 とも 2 ULP 以内**（仮決め）とし、`onsa test --backends all` は超越関数を含む出力を許容誤差付きで比較する。環境の libm がこれを満たさない場合（組込みの軽量 libm など）は、その関数だけ Onsa 実装に差し替えるなど個別に対策する。ビット一致が要る用途向けの Onsa 実装の `std.math.exact` は §19。
 - C では、生成コードで F32 の各演算を `(float)` で囲み、FMA への縮約と再結合を止める。プラグマ（`#pragma STDC FP_CONTRACT OFF`、MSVC の `#pragma fp_contract(off)`）だけでは不十分で、コンパイラフラグも要る（GCC は STDC のプラグマを無視し、GNU モードの既定で縮約する。ISO モードの `-std=c11` では縮約しない）。ターゲット定義はコンパイラフラグ（`-std=c11`、`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。`onsa build` の外でコンパイルするとき（`kind = "source"` の出力、ホストのビルド、クロスビルド）も同じフラグが要り、生成した `.c` の先頭のコメントにも書く。
 - 生成した C は、守られていないことが分かるフラグをコンパイル時に止める（`#error`）: GCC で ISO モードでなく `ONSA_FP_CONTRACT_OFF` も定義されていない（GNU モードで `-ffp-contract=off` を渡すときに定義する）、`__FAST_MATH__`（`-ffast-math`、`-Ofast`）、`__FINITE_MATH_ONLY__`、MSVC の `/fp:fast`、`FLT_EVAL_METHOD` が 0 でない。メッセージは必要なフラグを示す。
-- 精度を諦めて速さを取るときは、利用者が `ONSA_ALLOW_INEXACT_FP` を定義すると、上の検査を外してコンパイルできる（組込みでプロジェクト全体を `-Ofast` でビルドする場合など）。そのビルドには、ビット一致の保証と `onsa test --backends all` の結果は当てはまらない。Onsa のソースで一部だけ緩めるときは `@relaxed`（§15.5）を使い、C では関数ごとの緩和として出す（効かなくても遅くなるだけで、結果は壊れない）。
+- 精度を諦めて速さを取るときは、利用者が `ONSA_ALLOW_INEXACT_FP` を定義すると、上の検査を外してコンパイルできる（組込みでプロジェクト全体を `-Ofast` でビルドする場合など）。そのビルドには、ビット一致の保証と `onsa test --backends all` の結果は当てはまらない。Onsa のソースで一部だけ緩めるときは `@fp(relaxed)`（§15.5）を使い、C では関数ごとの緩和として出す（効かなくても遅くなるだけで、結果は壊れない）。
 - 生成した C は、GCC / Clang の `-Wall -Wextra` で警告を出さない（ホストが `-Werror` でビルドしても通る）。`#pragma STDC FP_CONTRACT OFF` は、それを知るコンパイラにだけ出す。
 
 `onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: Num, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
@@ -1321,24 +1321,24 @@ fns = ["util.version"]
 [targets.cli]
 kind = "exe"
 platform = "macos-arm64"
-numeric = "strict"
+fp = "strict"
 provides = ["Fs", "Stdout", "Clock", "Alloc"]
 
 [targets.plugin]
 kind = "clap"
 platform = "macos-arm64"
-numeric = "strict"
+fp = "strict"
 provides = ["Alloc"]
 
 [targets.web]
 kind = "source"
 lang = "js"             # 移植可能な核だけを変換する（§13）
-numeric = "strict"
+fp = "strict"
 
 [targets.daisy]
 kind = "staticlib"
 platform = "thumbv7em-none-eabihf"
-numeric = "strict-ftz"
+fp = "strict-ftz"
 provides = []           # ヒープ無し
 panic = "reset"         # 本番用。デバッグ時は "trap"
 panic_messages = false
@@ -1355,7 +1355,7 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 **ターゲット** は次の組で定義する。
 
 1. プラットフォーム（トリプル）。`kind = "source"` では変換先の言語（`lang`）
-2. 数値プロファイル
+2. 浮動小数のプロファイル（`fp`、§15.5）
 3. 提供する handler の集合（`provides`）。`Alloc` を含むかどうかで、ヒープの有無が決まる
 4. `target` 宣言の割り当て（`bind`）
 5. エントリの種類（`exe`, `clap`, `vst3`, `au`, `wasm-worklet`, `staticlib`, `source`）
@@ -1382,7 +1382,7 @@ frozen = ["voice"]                 # 公開シグネチャとパラメータ ID 
 
 `onsa check` はポリシーへの違反をエラーにする。`onsa audit` はポリシーと unsafe・extern の差分を表示する。運用では、エージェントにこのファイルの書き込み権限を与えない。
 
-### 15.5 数値プロファイル
+### 15.5 浮動小数のプロファイル
 
 | プロファイル | 内容 | 再現性 |
 |---|---|---|
@@ -1390,7 +1390,7 @@ frozen = ["voice"]                 # 公開シグネチャとパラメータ ID 
 | `strict-ftz` | `strict` + 非正規化数をゼロに（FTZ / DAZ） | FTZ をサポートするターゲット間で、`strict` と同じ条件で一致 |
 | `relaxed` | FMA と再結合を許可（ベクトル化のため） | 保証しない |
 
-`relaxed` はターゲット全体には指定できない。flow や関数ごとに `@relaxed` で付け、`onsa audit` に列挙される。C の側でファイル全体の精度を諦める方法は §13.4（`ONSA_ALLOW_INEXACT_FP`）。
+ターゲットのプロファイルは、マニフェストの `fp` で選ぶ（既定は `strict`）。`relaxed` はターゲット全体には指定できない（`fp = "relaxed"` はエラー）。flow や関数ごとに `@fp(relaxed)` で付け、`onsa audit` に列挙される。`@fp(...)` の値は閉じた一覧から選び、今は `relaxed` だけである。C の側でファイル全体の精度を諦める方法は §13.4（`ONSA_ALLOW_INEXACT_FP`）。
 
 ---
 
@@ -1768,7 +1768,7 @@ impl Poly {
 | `onsa fmt [--check]` | 唯一の表記への正規化。連続する 1 行の `let` の `=` と、連続する行の行末コメントは揃える（gofmt と同じ）。強い群の式を囲む冗長な括弧は外す（§3.1）。行の自動折り返しはせず、書き手の改行を保つ |
 | `onsa test [--json] [--filter <text>] [--backends all] [--flows]` | `test` を実行。`--filter` は、テストの完全な名前（`dsp.voice "decays"`）の部分一致で絞る。`--backends` で変換先間のビット一致も検査（§13.4）。`--flows` で export される flow を `@param` の範囲で自動検査する（角と無作為の内点でパラメータを取り、無音・インパルス・雑音を入れ、出力が有限で panic しないこと） |
 | `onsa interface <mod>` | 公開シグネチャ、doc コメント（宣言の前に `///` の形で。モジュールの `//!` は先頭に）、種、大きさ、効果、rt、@param だけを出力 |
-| `onsa audit [--stack] [--memory] [--panics]` | extern、unsafe、`@relaxed`、ポリシーとの差分。スタックの上限と flow の状態の大きさ、閾値以上の移動（コピー）の箇所（§12.7）。`--panics` は export される rt の経路にある panic しうる箇所（検査付きの演算、添字、`unwrap`、非飽和の変換）を列挙する |
+| `onsa audit [--stack] [--memory] [--panics]` | extern、unsafe、`@fp(relaxed)`、ポリシーとの差分。スタックの上限と flow の状態の大きさ、閾値以上の移動（コピー）の箇所（§12.7）。`--panics` は export される rt の経路にある panic しうる箇所（検査付きの演算、添字、`unwrap`、非飽和の変換）を列挙する |
 | `onsa graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前 |
 | `onsa transpile <target>` | 各言語のソースへ変換。段階 1 では移植可能な核だけ（§13） |
 | `onsa play <flow>` | flow を音で鳴らす。@param から UI を作る |
