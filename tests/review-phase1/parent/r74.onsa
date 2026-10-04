@@ -1,0 +1,13 @@
+// R-74: modes の失敗の後に走る rt と効果の検査が、本当のエラーを隠す（S-64）。
+// 期待値と今の出力は各関数の上のコメントに書いた。
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+// 期待: E0711（部分移動）。今は E0601「`uses {Alloc}` を足せ」だけで、足すと次の周で E0711 が出る。
+pub fn take_field(move s: Holder) -> Buf[F32] { s.buf }
+
+// 期待: E0711。今は E0901（rt）だけ。
+pub rt fn take_field_rt(move s: Holder) -> Buf[F32] { s.buf }
