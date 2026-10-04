@@ -139,5 +139,6 @@
 | `parent/r74.onsa` | R-74（modes の失敗の後の rt と効果。期待値は各関数の上のコメント。S-64） |
 | `parent/r75/` | R-75（`onsa interface` の大きさと状態のフィールド。仕様の構文で書いたパッケージで、期待値は `dsp.onsa` の先頭のコメント。S-65） |
 | `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。期待値は先頭のコメント。S-66） |
+| `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67） |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。

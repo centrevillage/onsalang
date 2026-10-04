@@ -1,0 +1,20 @@
+// R-77: 同じ診断の繰り返し、降下の内部の失敗の E0200、入力名の予約名（S-67）。
+// 期待値と今の出力は各項目の上のコメントに書いた。`onsa check` と `onsa test` で確かめる。
+
+// 期待: `onsa check` で E0304（`sample_rate` は flow の中の予約名。入力名にも使えない）。
+// 今: `check` は通り、`onsa test` で「E0200: internal lowering error: length of a non-span」が同じ位置で 7 回出る。
+pub flow f3(sample_rate: Sig[F32]) -> Sig[F32] {
+  sample_rate
+}
+
+// 期待: `onsa check` で E0304（`poisoned` は状態の固定のフィールド名）。今は通る。
+pub flow f4(x: Sig[F32], poisoned: Ctl[F32]) -> Sig[F32] {
+  x * poisoned
+}
+
+// 期待: 降下の E0200 が 2 件（位置が違い、互いに連鎖しない本物の誤りなので、単位で絞らない）。
+// 今: 1 件だけ（18:6）。降下が関数の中の最初の失敗で止まり、2 件目（`p < q`）を報告しない。
+// E0200 は、この版の降下が配列とタプルの大小の比較を未対応としていること（R-119）による。
+pub fn two_features(a: [I32; 2], b: [I32; 2], p: (I32, I32), q: (I32, I32)) -> Bool {
+  (a < b) && (p < q) // 括弧は今の実装（S-45 が未実装）のため
+}
