@@ -1,0 +1,8 @@
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub fn a(self) -> F32 { self.x }
+  // more later
+}

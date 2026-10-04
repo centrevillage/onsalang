@@ -1,0 +1,8 @@
+fn f(a: Bool, b: Bool) -> I32 {
+  if a && // first
+    b {
+    1
+  } else {
+    0
+  }
+}

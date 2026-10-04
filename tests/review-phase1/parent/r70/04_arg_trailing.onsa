@@ -1,0 +1,6 @@
+fn f(
+  a: F32, // gain
+  b: F32, // offset
+) -> F32 {
+  a + b
+}

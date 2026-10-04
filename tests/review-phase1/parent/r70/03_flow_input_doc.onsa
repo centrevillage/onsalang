@@ -1,0 +1,7 @@
+pub flow gain(
+  /// input signal
+  x: Sig[F32],
+  level: Ctl[F32],
+) -> Sig[F32] {
+  x * level
+}

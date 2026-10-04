@@ -1,0 +1,7 @@
+pub struct P {
+  /// x coordinate
+  x: F32,
+  y: F32,
+}
+
+pub fn f() {}

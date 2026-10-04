@@ -1,0 +1,11 @@
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+fn f() -> P {
+  P {
+    x: 1.0, // left
+    y: 2.0, // up
+  }
+}

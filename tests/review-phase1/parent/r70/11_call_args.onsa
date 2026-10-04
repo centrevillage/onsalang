@@ -1,0 +1,8 @@
+fn k(a: F32, b: F32) -> F32 { a }
+
+fn f() -> F32 {
+  k(
+    1.0, // first
+    2.0, // second
+  )
+}

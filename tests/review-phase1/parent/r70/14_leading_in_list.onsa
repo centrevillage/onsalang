@@ -1,0 +1,8 @@
+const C: [F32; 4] = [
+  // numerator
+  0.1,
+  0.2,
+  // denominator
+  0.3,
+  0.4,
+]

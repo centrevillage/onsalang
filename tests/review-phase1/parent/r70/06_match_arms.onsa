@@ -1,0 +1,7 @@
+fn g(x: I32) -> I32 {
+  match x {
+    0 => 1, // zero
+    1 => 5, // one
+    _ => 2, // other
+  }
+}

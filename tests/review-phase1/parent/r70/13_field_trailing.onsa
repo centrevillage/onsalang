@@ -1,0 +1,4 @@
+pub struct P {
+  x: F32, // left
+  y: F32, // up
+}
