@@ -1,0 +1,29 @@
+// R-83（S-77）: 効果の使用の診断。期待値と今の出力は各関数の上のコメント（2026-10-05 に `onsa check` で確かめた）。
+// 1 つの関数につき最初の 1 件だけを報告する（S-59）。
+
+fn helper(x: I32) -> I32 { x }
+
+fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }
+
+// 期待: E0601 を署名に置き、修正候補は ` uses {Alloc}` の挿入。`Alloc` の使用（`a` と `b` の破棄、
+//   `mk` の呼び出し）を全て note に並べる。
+// 今: E0601 は同じだが、note は最初の使用（`a` の破棄）だけ。
+fn no_row(n: U32) -> U32 {
+  let a = mk(n)
+  let b = mk(n)
+  n
+}
+
+// 期待: E0601 を最初の使用（`b` の破棄、22:7）に置き、修正候補は出さず、note で §10 の規則 1
+//   （rt の関数の効果行は `Alloc` を持てない）を示す。
+// 今: r83.onsa:22:7: error[E0901]: `b` owns a `Buf[F32]`, whose destruction needs `Alloc`; an `rt` function
+//   can only borrow it or move it on (§10, §12.2)
+rt fn alloc_in_rt(n: U32) -> I32 {
+  let b = mk(n)
+  helper(1)
+}
+
+// 期待: E0901（rt でない関数の呼び出し。E0901 はこれと、rt でない関数値の呼び出しだけ）。今も同じ。
+rt fn calls_plain() -> I32 {
+  helper(1)
+}
