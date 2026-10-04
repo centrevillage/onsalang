@@ -1782,7 +1782,7 @@ impl Poly {
 | `onsa test [--json] [--filter <text>] [--backends all] [--flows]` | `test` を実行。`--filter` は、テストの完全な名前（`dsp.voice "decays"`）の部分一致で絞る。`--backends` で変換先間のビット一致も検査（§13.4）。`--flows` で export される flow を `@param` の範囲で自動検査する（角と無作為の内点でパラメータを取り、無音・インパルス・雑音を入れ、出力が有限で panic しないこと） |
 | `onsa interface [--target <名前>] <mod>` | 公開シグネチャ、doc コメント（宣言の前に `///` の形で。モジュールの `//!` は先頭に）、種、大きさ（`--target` が無ければ bulk 無効での値。§12.1）、状態のフィールド（§11.6）、効果、rt、@param だけを出力 |
 | `onsa audit [--stack] [--memory] [--panics]` | extern、unsafe、`@fp(relaxed)`、ポリシーとの差分。スタックの上限と flow の状態の大きさ、閾値以上の移動（コピー）の箇所（§12.7）。`--panics` は export される rt の経路にある panic しうる箇所（検査付きの演算、添字、`unwrap`、非飽和の変換）を列挙する |
-| `onsa graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前 |
+| `onsa graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前。描き方はツールの仕様（[`docs/onsa-tools.md`](docs/onsa-tools.md) §1） |
 | `onsa transpile <target>` | 各言語のソースへ変換。段階 1 では移植可能な核だけ（§13） |
 | `onsa play <flow>` | flow を音で鳴らす。@param から UI を作る |
 | `onsa probe <flow>.<name>` | 名前の付いた信号をタップし、波形とスペクトルを表示する |

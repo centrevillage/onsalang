@@ -1,0 +1,47 @@
+// R-76: `onsa graph` で、`par` の添字を読む箇所が実線の閉路になる（S-66、docs/onsa-tools.md §1）。
+// 今の実装の構文で書いた。どちらの flow も `onsa check` と `onsa test` を通る（描画だけの問題）。
+//
+// unison（基本仕様 §11.5 の例と同じ形）:
+//   今: "saws" -> "saw_0" と "saw_0" -> "saws" の実線の閉路（添字 i を `par` のノードに対応付けている）。
+//   期待: 枠 cluster_saws（見出し `par i in 0..4（×4）`）の中に "saws.i"（i: U32 @Init）と "saw_0"。
+//         辺は "f0" / "detune" / "saws.i" -> "saw_0"、"saw_0" -> "saws"、"saws" -> "out"。実線の閉路は無い。
+//
+// nest（入れ子の `par`。flow/e15/np.onsa と同じ）:
+//   今: "m" -> "acc_0" -> "par_0" -> "m" の実線の閉路と、"par_0" -> "acc_0"。
+//   期待: 枠 cluster_m の中に "m.i" と、入れ子の枠 cluster_par_0（"par_0.j" と "acc_0"）。
+//         辺は "x" / "m.i" / "par_0.j" -> "acc_0"、"acc_0" -> "par_0"、"par_0" -> "m"、"m" -> "out"。実線の閉路は無い。
+
+use std.dsp.{sum}
+use std.math.{floor}
+
+const UNISON: U32 = 4
+
+pub flow unison(f0: Ctl[F32], detune: Ctl[F32]) -> Sig[F32] {
+  let saws = par i in 0..UNISON {
+    saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
+  }
+  sum(saws) * 0.25
+}
+
+pub rt fn spread(i: U32, n: U32) -> F32 {
+  (i.round_f32() / (n - 1).round_f32()) - 0.5
+}
+
+pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
+  (2.0 * phase) - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+pub flow acc(x: Sig[F32], k: Init[F32]) -> Sig[F32] {
+  let y = prev(y, 0.0) + (x * k)
+  y
+}
+
+pub flow nest(x: Sig[F32]) -> Sig[F32] {
+  let m = par i in 1..3 { par j in 0..2 { acc~(x, ((i * 10) + j).round_f32()) } }
+  m[0][0] + m[0][1] + m[1][0] + m[1][1]
+}
