@@ -1,0 +1,15 @@
+// R-103（S-79）: 利用者の型が、組込み型や prelude と同じ名前を使う。
+// 期待: `struct F32` と `enum Option` の宣言がそれぞれ E0304 で、他の項目には連鎖しない。
+// 今（2026-10-05）: 宣言は通り、このモジュールの `F32` が全て利用者の struct を指すので、
+//   `half` が r84_type.onsa:15:30: error[E0401]: a float literal cannot have type `F32` になる。
+//   `Option` は利用者の enum を、`Some` は組込みを指す（R-103 の本文）。
+
+struct F32 {
+  v: I32,
+}
+
+enum Option {
+  Nothing,
+}
+
+fn half(x: F32) -> F32 { x * 0.5 }

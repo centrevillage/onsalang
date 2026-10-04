@@ -1,0 +1,31 @@
+// R-84（S-78）、R-103（S-79）: 名前の段と、名前の隠蔽。期待値と今の出力は各項目の上のコメント
+// （2026-10-05 に `onsa check` で確かめた）。1 つの単位につき最初の 1 件だけを報告する（S-59）。
+use std.math
+use std.math.{sin}
+
+fn gain(x: F32) -> F32 { x * 0.5 }
+
+// 期待（S-78）: 名前の段が先なので、E0302（`foo` が見つからない、12 行目）だけ。
+// 今: r84.onsa:11:16: error[E0401]: a float literal cannot have type `I32`（位置が先の型の誤り）
+fn order() -> F32 {
+  let y: I32 = 2.0
+  foo(y)
+}
+
+// 期待（S-79）: E0304（`use` で取り込んだ `sin` と同じ名前）。今: 通る。
+fn hide_import() -> F32 {
+  let sin = 2.0
+  sin
+}
+
+// 期待（S-79）: E0304（`use std.math` の `math` と同じ名前）。今: 通る。
+fn hide_module() -> F32 {
+  let math = 4.0
+  math
+}
+
+// 期待（S-79）: E0304（このモジュールの関数 `gain` と同じ名前）。今: 通る。
+fn hide_item() -> F32 {
+  let gain = 0.25
+  gain
+}
