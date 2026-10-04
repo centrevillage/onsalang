@@ -1,0 +1,12 @@
+# R-79: std の `target` 宣言を、変換先が与えないとき（S-69）。期待値は `m.onsa` の各項目の上のコメント。
+[package]
+name = "r79"
+edition = "2026"
+
+[export]
+prefix = "r79_"
+fns = ["m.near"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

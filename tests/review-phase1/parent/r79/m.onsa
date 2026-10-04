@@ -1,0 +1,29 @@
+// R-79: std の `target` 宣言を、変換先が与えないとき（S-69）。
+// どの項目も `onsa check` を通る（期待も同じ。`check` は変換先によらない）。
+
+use std.test.{Gen}
+use std.test.gen
+use std.dsp.test.{assert_near}
+
+// 期待: `onsa build --target host` が、生成を始める前に E0200（`std.dsp.test.assert_near`、C は与えない）。
+// 今も同じ: m.onsa:12:3: error[E0200]: the C backend does not support the `std` function
+// `std.dsp.test.assert_near` (no C implementation) in this version。
+pub fn near(x: F64) -> F64 {
+  assert_near(x, 1.0, 0.1)
+  x
+}
+
+// 期待: `onsa test` が、テストを走らせる前に E0200（`std.test.gen.u32`、インタプリタは M5 まで与えない）。
+// 今: 検査も降下も通り、実行時に `test "gen" failed at m.onsa:20: `std.test.gen.u32` is not
+// available in this version of the interpreter` になる。他のテスト（"near"）は走って ok になる。
+fn digits() -> Gen[U32] {
+  gen.u32(0, 9)
+}
+
+test "near" {
+  assert_near(near(1.0), 1.0, 0.1)
+}
+
+test "gen" {
+  let g = digits()
+}

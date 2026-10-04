@@ -1,0 +1,47 @@
+// R-79（S-71）、R-53: Option / Result を std の enum として宣言し、総称の enum の一般の経路に一本化する。
+// 期待: 全ての関数が `onsa check` を通る。型変数は関数の終わりまでに決まればよい（§4.7「未解決の報告」）。
+// 今（2026-10-04）: 組込みの `Some` / `None` は特別な経路で通り、同じ形の利用者の enum は E0406 になる。
+
+enum Maybe[T] {
+  Nothing,
+  Just(T),
+}
+
+fn take_maybe(m: Maybe[F32]) -> F32 {
+  match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0.0,
+  }
+}
+
+fn take_option(o: Option[F32]) -> F32 {
+  match o {
+    Some(x) => x,
+    None => 0.0,
+  }
+}
+
+// 今: 通る。
+fn builtin_later() -> F32 {
+  let o = Some(1.5)
+  take_option(o)
+}
+
+// 今: r79_enum.onsa:33:11: error[E0406]: the type parameter `T` of `Maybe` cannot be determined
+// from the arguments or the expected type; annotate the result (§4.5)
+fn user_later() -> F32 {
+  let m = Maybe.Just(1.5)
+  take_maybe(m)
+}
+
+// 今: 通る。
+fn builtin_none() -> F32 {
+  let o = None
+  take_option(o)
+}
+
+// 今: r79_enum.onsa:45:17: error[E0406]（同じ文面）
+fn user_none() -> F32 {
+  let m = Maybe.Nothing
+  take_maybe(m)
+}

@@ -249,12 +249,12 @@ Rust と同じ（例外は、`MIN` を `-1` で割った剰余を 0 とする点
 | 集合 | `Map[K, V]`, `Set[T]` | Shared | ヒープ |
 | バッファ | `Buf[T]`（可変、長さは生成時に固定） | Affine | ヒープ |
 | ビュー | `Span[T]`（引数専用、§5.3） | — | 借用元 |
-| 標準 enum | `Option[T]`, `Result[T, E]` | 中身に従う | 値 |
+| 標準 enum | `Option[T]`, `Result[T, E]`（std で宣言された enum。下記） | 中身に従う | 値 |
 | タプル | `(A, B)`（2 要素以上） | 要素に従う | 値 |
 | 関数 | `fn(A, B) -> R uses {E}`, `rt fn(A) -> R`, `fn(inout A)`, `fn(move A) -> R` | Copy（捕捉なし） | 値 |
 | FFI | `Ptr[T]`（§14） | Copy | 値 |
 
-`Option` と `Result` の列挙子だけは修飾なしで書ける。他の enum の列挙子は常に `Type.Variant` と書く。
+`Option` と `Result` は、std で `pub enum Option[T]: PartialEq + Eq + Hash { None, Some(T) }` と `pub enum Result[T, E]: PartialEq + Eq + Hash { Ok(T), Err(E) }` と宣言された enum で、prelude にある（§15.1）。他の enum と違うのは、`use` なしで見えること、列挙子を修飾なしで書けること、`?`（§9.1）に使えることだけである。他の enum の列挙子は常に `Type.Variant` と書く。
 
 タプルの要素は `t.0`、`t.1` で読む。`.` の直後の数字列は常に整数の添字として字句解析するので、`t.0.1` は入れ子の添字である（Rust と同じ）。関数型の引数のモード（`inout`、`move`）は型の一部で、無名関数も名前付き関数と同じ形で宣言する（§6.1）。
 
@@ -476,7 +476,7 @@ impl Show for Point {
 }
 ```
 
-- **一貫性**: `impl Tr for Ty` は `Tr` か `Ty` を定義したモジュールにしか書けない（孤児規則）。重複実装、特殊化は無い。
+- **一貫性**: `impl Tr for Ty` は `Tr` か `Ty` を定義したモジュールにしか書けず、固有の `impl Ty` は `Ty` を定義したモジュールにしか書けない（孤児規則、E0307）。組込み型（§4.1）は std で定義されたものとして扱う（§11.6 の生成された型と同じ扱い）。したがって、組込み型のメソッド・関連関数・関連定数と標準 trait の実装を書けるのは std だけで、利用者が組込み型に足せるのは、自分で定義した trait の実装だけである。型のメソッドは型の定義と同じ所で見つかり、全てのパッケージに効く追加は生まれない。重複実装、特殊化は無い。
 - ジェネリック trait（`Iter[T]` など）は、一つの型について高々一つしか実装できない。
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
 - 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr`。
@@ -495,7 +495,7 @@ impl Show for Point {
 | `Bytes` | `PartialEq` `Eq` `PartialOrd` `Ord`（辞書順） `Hash` `Default`（空） |
 | `()` | `PartialEq` `Eq` `Default` |
 | タプル、`[T; N]` | 要素が全て実装するとき `PartialEq` `Eq` `PartialOrd` `Ord`（先頭から辞書式） `Hash` `Default` |
-| `Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` `Hash` |
+| `Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` `Hash`（§4.1 の宣言の derive による） |
 | `Array[T]` | 要素が実装するとき `PartialEq` `Eq` |
 | `Map`、`Set`、`Buf`、`Span`、関数値 | なし |
 
@@ -535,7 +535,7 @@ const SINE: [F32; 1024] = make_sine_table()
 - 初期化式から呼べるのは、効果行が空か `{Alloc}` だけの関数。`Alloc` はコンパイラが提供する。
 - 結果は、Copy か、**静的に配置できる Shared**（`Str`、`Bytes`、要素が静的に配置できる `Array`）でなければならない（E0407）。`Map` / `Set` は表の配置が実装に依存するので対象外。結果は読み取り専用の静的領域（組込みではフラッシュ）に置かれる。Shared の結果はヘッダ付きの静的オブジェクト（§12.8）として書き出され、`Alloc` 無しで使える。
 - 初期化式が、直接または他の定数を経由して自分自身を参照すると E0312（`const A: U32 = B` と `const B: U32 = A`）。
-- `impl` と `trait` の中にも同じ形で書ける（関連定数）: `impl F32 { const PI: F32 = 3.14159265 }`、`trait Num { const ZERO: Self }`。参照は `F32.PI`、型パラメータでは `T.ZERO`。字面は `UpperCamel.UPPER_SNAKE` で、関連関数や効果の操作（`Fs.read`）と区別できる。
+- `impl` と `trait` の中にも同じ形で書ける（関連定数）: `impl Point { const ORIGIN: Point = Point { x: 0.0, y: 0.0 } }`、`trait Num { const ZERO: Self }`。参照は `Point.ORIGIN`、`F32.PI`、型パラメータでは `T.ZERO`。組込み型の関連定数は std が宣言する（§6.3 の孤児規則）。字面は `UpperCamel.UPPER_SNAKE` で、関連関数や効果の操作（`Fs.read`）と区別できる。
 - 組込み型の関連定数は、次の表で全てである（閉じた一覧。足すときは、必要な実例を添えて議論する、[`docs/api-candidates.md`](docs/api-candidates.md)）。
 
 | 型 | 関連定数 |
@@ -1310,6 +1310,10 @@ target rt fn read_input(inout d: Device, inout buf: Span[F32])
 `target` 宣言は、**実装をビルドターゲットが与える** 宣言である。実装モジュールはターゲットごとにマニフェストの `bind` で割り当てる（OCaml/dune の virtual library と同じ考え方）。ソースの中に `#if` や `cfg` は無いので、**ソースの意味はターゲットによって変わらない**。
 
 実装モジュールは、同じ名前と同じシグネチャ（`rt` と効果行を含む）の宣言を持たなければならない。これは検査される。検証されない主張である `extern "C"` とは、この点で異なる。
+
+std の `target` 宣言（`std.math` の関数、組込み型のプリミティブのメソッドなど）は、処理系が与える。`bind` は書かず、std のモジュールを `bind` の左辺に書くこともできない。差し替えを許すと変換先ごとに結果が変わり、§13.4 の精度の約束が崩れるからである。速い近似が要るときは、別の名前の関数として書く。
+
+std の `target` 宣言は、全ての変換先が与えるのを原則とする。この版で与えない変換先があれば、それを使うプログラムは、その変換先へのビルドやインタプリタでの実行を始める前に、使った位置で E0200（機能名と変換先を添える）になる。`onsa check` は変換先によらないので、これを報告しない。
 
 ### 15.3 マニフェスト `onsa.toml`
 

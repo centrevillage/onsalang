@@ -1,6 +1,6 @@
 # M0〜M4 のコードレビューの再現の入力
 
-[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-120）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
+[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-126）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
 
 - **自動では実行しない。** `onsa_tests` のランナーは `tests/spec`、`tests/conformance`、`tests/golden` だけを読む。パッケージの収集も `tests/` を除く（§15.1）。
 - 多くは「今の実装が誤る」入力で、期待値は各ファイルのコメントか `assert` に書いてある。修正の段階（レビュー §7）で、直した項目の入力を `tests/spec` などの回帰テストへ移す。
@@ -93,7 +93,7 @@
 | `types/qlen/`、`types/constlen.onsa` | R-57、R-61 |
 | `types/testmod/`（推定） | R-68 |
 | `types/localshadow.onsa`、`types/shadow.onsa` | R-103 |
-| `types/orphan/`、`types/implspec.onsa` | R-104 |
+| `types/orphan/`、`types/implspec.onsa` | R-104（`orphan/` の期待値は `main.onsa` の先頭のコメント。S-70） |
 | `types/alias.onsa` | R-105 |
 | `syntax/esc_utf8.onsa`、`syntax/interp_utf8.onsa` | R-01 |
 | `syntax/fmt_drop*.onsa` | R-69 |
@@ -141,5 +141,7 @@
 | `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。期待値は先頭のコメント。S-66） |
 | `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67） |
 | `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68） |
+| `parent/r79/` | R-79（std の `target` 宣言を変換先が与えないとき。期待値は `m.onsa` の各項目の上のコメント。S-69） |
+| `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。
