@@ -561,7 +561,7 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | T4-7 ✅ | 適合性の基盤 | `tests/conformance/<name>.onsa`（`render` を呼ぶ `test` だけを持つ）。ハーネスは interp で `Out` を得て、同じ入力で C（生成した小さなドライバ）を走らせ、サンプル列をバイト比較する。超越関数を通る flow は S-14 の判定で許容誤差（M5 で確定。M4 では同じ libm なので一致を期待する） | M |
 | T4-8 ✅ | §17.5 の例 | `examples/voice_host/`: `daisy` 相当のターゲット定義（ホスト向けに `platform` を変えたもの）で staticlib を作り、C のホストが WAV に書く | S |
 | T4-9 ✅ | NRVO と移動 | `sret` の構築先の決定（§12.7 の条件）。閾値以上のコピーの箇所を記録（`audit --memory` は M9） | S |
-| T4-10 | S-28 / S-31 の実装（`@bulk`、`memory.bulk`、E0818〜E0820、`BULK_ALIGN`。bulk のポインタと領域の分割は Core の型と `init` の文として明示する、レビュー R-90） | `onsa_core::layout` と flow の降下で入れ子の状態まで bulk を分け、各状態の先頭に自分の bulk ポインタ、親の `init` で設定。C バックエンドは `s->bulk` の形のまま。`voice` の中に `echo` を置いた conformance と golden を追加。レビュー（`docs/impl-review-0.3.md`）の指摘反映と同じ回で行う | M |
+| T4-10 | S-28 / S-31 の実装（`@bulk`、`memory.bulk`、E0818〜E0820、`BULK_ALIGN`。bulk のポインタと領域の分割は Core の型と `init` の文として明示する、レビュー R-90） | ターゲットの pass（D-03 の追記、レビュー R-80）で、`memory.bulk = true` のときに入れ子の状態まで bulk を分け、各状態の先頭に自分の bulk ポインタを置き、親の `init` に子のポインタを設定する文を足す（2026-10-05 のレビュー R-90 で、降下ではなくターゲットの pass で行うと改めた。`memory.bulk = false` では分けずに通す）。E0818 は sema（ターゲットによらない）、E0819 と E0820 はターゲットの pass で出す（ビルドと `onsa interface --target`。`check` では出ない。報告は S-67）。検証器の V-15 で配置の性質を検査し、インタプリタで分割した Core と分割しない Core を動かして出力を比べる差分テストを置く（インタプリタは bulk の領域とポインタを含む Core を実行できるようにする）。C バックエンドは `s->bulk` の形のまま。`voice` の中に `echo` を置いた conformance と golden を追加。R-81 と同じ回で、R-06 の進め方（設計メモ → 最も能力の高いモデル → 別のエージェントの検証）で行う | M〜L |
 
 受け入れ: 計画 §3 M4 の通り。
 
