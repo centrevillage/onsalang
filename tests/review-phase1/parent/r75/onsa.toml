@@ -1,0 +1,18 @@
+# R-75: `onsa interface` の大きさ（S-65）。仕様の形のマニフェスト（今の実装は `fp` と `memory.bulk` を読まない）。
+[package]
+name = "r75"
+edition = "2026"
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+provides = []
+
+[targets.daisy]
+kind = "staticlib"
+platform = "thumbv7em-none-eabihf"
+fp = "strict-ftz"
+provides = []
+
+[targets.daisy.memory]
+bulk = true

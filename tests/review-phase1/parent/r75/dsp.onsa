@@ -1,0 +1,81 @@
+//! R-75: `onsa interface` の大きさと状態のフィールド（S-65）。
+//! 第 4 段（T4-10 の配置の段）で直すので、仕様の構文で書いた（今の実装は `prev~` や `@mem(bulk)` を解析できない）。
+//! saw、resonator、smooth、voice、echo は仕様 §17.3 / §17.4 の例と同じ（@param を除く）。
+//! 今の出力は、旧い構文の同じ例 `tests/spec/examples/voice.onsa` で確かめた（レビュー R-75 の本文）。
+//!
+//! 期待（`onsa interface`、`--target` なし。大きさは bulk 無効での値）:
+//!   voice.State  // Affine; 大きさ 92、align 4（bulk なし。どのターゲットでも同じ）
+//!     src: saw.State, f1: resonator.State, f2: resonator.State, smooth_0: smooth.State,
+//!     poisoned: Bool（処理系）, initialized: Bool（処理系）
+//!   echo.State   // Affine; 大きさ 384024、align 4（bulk 無効での値。bulk が有効なターゲットでは変わる）
+//!     sample_rate: F32（処理系）, feedback: F32（処理系。Sig から読む Ctl 入力の写し）, d: F32,
+//!     line: vdelay[F32, 96000]（内訳 line.buf 384004 bytes、line.w）, poisoned, initialized（処理系）
+//!   Poly         // Affine; 大きさ 372、align 4
+//!   EchoRack     // Affine; 大きさ 768048（bulk が有効なターゲットでは E0819）
+//!   Holder       // Affine; ポインタの幅による
+//!   `voice.SIZE` などは `pub const` として出さない（S-32）。
+//!
+//! 期待（`onsa interface --target daisy`。32 ビット、bulk 有効）:
+//!   echo: SIZE 24、ALIGN 4、BULK_SIZE 384004、BULK_ALIGN 4。先頭に bulk（処理系、ポインタ 4 バイト）、line.buf は bulk、line.w は fast
+//!   voice: SIZE 92、BULK_SIZE 0（host と同じ）
+//!   EchoRack: E0819（bulk を持つ状態を普通の値に置いている）
+//!   Holder: ポインタ 4 バイトでの大きさ
+//! （数字は §12.4 の配置の規則で数えた値。実装で確かめる。bulk 有効の 64 ビットなら echo の SIZE は 32）
+
+use std.math.{floor, exp, cos}
+
+const MAX_ECHO: U32 = 96000
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+  let phase = wrap01(prev~(^phase) + f0 / sample_rate())
+  2.0 * phase - 1.0
+}
+
+pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+  let r  = exp(-(F32.PI * bw) / sample_rate())
+  let w  = (2.0 * F32.PI * fc) / sample_rate()
+  let b1 = 2.0 * r * cos(w)
+  let b2 = r * r
+  let y1 = prev~(^y)
+  let y2 = prev~(y1)
+  let y  = (1.0 - r) * x + b1 * y1 - b2 * y2
+  y
+}
+
+pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
+  let a = exp(-1.0 / (time * sample_rate()))
+  let y = x + a * (prev~(^y) - x)
+  y
+}
+
+pub flow voice(f0: Ctl[F32], vowel_f1: Ctl[F32], vowel_f2: Ctl[F32], gain: Ctl[F32]) -> Sig[F32] {
+  let src = saw~(f0)
+  let f1 = resonator~(src, vowel_f1, 80.0)
+  let f2 = resonator~(src, vowel_f2, 120.0)
+  (f1 + f2) * smooth~(gain, 0.01)
+}
+
+pub flow echo(x: Sig[F32], time: Ctl[F32], feedback: Ctl[F32]) -> Sig[F32] {
+  let d = time * sample_rate()
+  @mem(bulk) let line = vdelay~(^y, d, MAX_ECHO)
+  let y = x + feedback * line
+  y
+}
+
+pub struct Poly {
+  voices: [voice.State; 4],
+  next: U32,
+}
+
+pub struct EchoRack {
+  echoes: [echo.State; 2],
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
