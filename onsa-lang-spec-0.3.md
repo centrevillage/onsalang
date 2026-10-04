@@ -199,7 +199,7 @@ let f = (m & 1) == 0      // ビットは他の群と混在できない
 
 ### 3.2 演算子は trait に脱糖する
 
-`+` は `Add.add`、`+%` は `WrappingAdd.wrapping_add`、`+|` は `SaturatingAdd.saturating_add`、`<` は `PartialOrd.lt` など（§6.3）。オーバーロードはこの経路だけで、型ごとに実装は高々一つ。
+`+` は `Add.add`、`+%` は `WrappingAdd.wrapping_add`、`+|` は `SaturatingAdd.saturating_add`、単項の `-` は `Neg.neg`、`!` は `Not.not`、`<` は `PartialOrd.lt` など（§6.3）。オーバーロードはこの経路だけで、型ごとに実装は高々一つ。
 
 ### 3.3 変換
 
@@ -226,6 +226,8 @@ Rust の `as` は情報を失う変換も許す。Onsa の `as` で書けるの�
 Rust と同じ（例外は、`MIN` を `-1` で割った剰余を 0 とする点だけ）。全ての変換先で同じ結果になる（§13.4）。
 
 - 整数の `/` はゼロ方向に切り捨て、`%` は被除数の符号を持つ。`I32.MIN / -1` はオーバーフローで panic（§9.2）。シフト量がビット幅以上なら panic。
+- シフトの右辺（シフト量）は `U32`。`>>` は、符号付き整数では算術シフト（符号を保つ）、符号なし整数では論理シフト（0 を詰める）。
+- 符号なし整数に単項の `-` は無い（E0401）。0 を除く全ての値で結果が型に収まらず、型だけで誤りと決まるからである。0 を下回る引き算（`a - b`）は値によって決まるので、実行時に panic する。2 の補数の否定は `0 -% u` と書く。
 - panic するのは、数学的な結果が型に収まらないときだけである。`I32.MIN % -1` と `I32.MIN.rem_euclid(-1)` の結果は 0 で型に収まるので、panic せずに 0 を返す（`checked_rem` / `checked_rem_euclid` は `Some(0)`）。Rust はここで panic するが、それは x86 の除算命令が例外を起こすというハードウェアの事情による。WASM の `rem_s` と JavaScript の `%` も 0 を返す。`div_euclid` の `MIN / -1` は結果が収まらないので panic する。
 - ラップアラウンドは `+%` `-%` `*%`、飽和は `+|` `-|` `*|` の演算子で書く（Zig と同じ）。符号付きは二の補数でラップする。位相の累積は `phase +% inc`、リングバッファの添字は `(w +% 1) % N`。`wrapping_*` / `saturating_*` のメソッドは無い（演算子が唯一の書き方）。Swift の `&+` を採らなかったのは、C の読み方では `a & +b` になるからである（§0.3 の規則 4）。
 - 床除算は `div_euclid` / `rem_euclid`、`Option` を返す検査付きは `checked_*` のメソッドで明示する。
@@ -501,26 +503,34 @@ impl Show for Point {
 - **一貫性**: `impl Tr for Ty` は `Tr` か `Ty` を定義したモジュールにしか書けず、固有の `impl Ty` は `Ty` を定義したモジュールにしか書けない（孤児規則、E0307）。組込み型（§4.1）は std で定義されたものとして扱う（§11.6 の生成された型と同じ扱い）。したがって、組込み型のメソッド・関連関数・関連定数と標準 trait の実装を書けるのは std だけで、利用者が組込み型に足せるのは、自分で定義した trait の実装だけである。型のメソッドは型の定義と同じ所で見つかり、全てのパッケージに効く追加は生まれない。重複実装、特殊化は無い。
 - ジェネリック trait（`Iter[T]` など）は、一つの型について高々一つしか実装できない。
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
-- 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr`。
-- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。ただし `Num` と `Float` は Rust の標準ライブラリに無いので、次の項で定める。標準 trait は std で `trait` として宣言され、組込み型の実装（下の表）も std の `impl` である（孤児規則、上記）。
+- 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr Not WrappingAdd WrappingSub WrappingMul SaturatingAdd SaturatingSub SaturatingMul`。演算子との対応は §3.2、意味は §3.4。各演算子は、被演算子の型がその演算子の trait を満たすことを要する。ラップと飽和の trait は Rust の標準ライブラリに無い。
+- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `AnyNum`, `Num`, `Float`, `Int`, `Unsigned`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。ただし数の trait（`AnyNum` `Num` `Float` `Int` `Unsigned`）は Rust の標準ライブラリに無いので、次の項で定める。標準 trait は std で `trait` として宣言され、組込み型の実装（下の表）も std の `impl` である（孤児規則、上記）。
 - trait の宣言の頭に `: trait + trait` と書くと、その trait を実装する型が先に満たすべき trait（上位の trait）になる（`pub trait Ord: PartialOrd + Eq`）。境界（§4.5）と derive（§6.4）と同じく「左の型が右の trait を満たす」と読む。上位の trait を満たさない型への `impl` は E0416。`T: Ord` の境界からは、上位の trait（`PartialOrd`、`Eq`、`PartialEq`）も使える。
-- `Num` は数の型を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元）を持つ。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `T: Num + Copy` と重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。`Float` は浮動小数の型を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。`ONE` を `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。`Neg` を含めないのは、符号なし整数に無いからである。利用者の型も `impl Num for Q15 { const ZERO: Q15 = ... }` のように実装できる。
+- 数の trait は次の 5 つで、上位の trait の関係は `Num: AnyNum`、`Float: Num`、`Int: AnyNum`、`Unsigned: Int` である。
+  - `AnyNum` は、符号なしを含む全ての数を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元）を持つ。符号なし整数の引き算が 0 を下回ると、具体的な型と同じく実行時に panic する（§3.4）。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `Copy` を重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。
+  - `Num` は、負の数を持つ数（符号付き整数、浮動小数、固定小数点）を表す。`AnyNum` と `Neg` を満たす。符号なし整数は `Num` を満たさない。総称の数値のコードは負の値を前提にすることが多く（`a + (b - a) * t` は `b < a` でも成り立つと考えて書く）、符号なしを受け付けると、普通の入力で実行時に panic するからである。数の境界は `Num` を既定とし、符号なしも受けるときだけ `AnyNum` と書く（P10）。
+  - `Float` は、浮動小数を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。
+  - `Int` は、全ての整数を表す。`AnyNum` `Eq` `Ord` `Hash` `BitAnd` `BitOr` `BitXor` `Shl` `Shr` `Not` と、ラップ・飽和の 6 つの演算子 trait を満たし、関連定数 `ONE` `MIN` `MAX`（`Self`）と `BITS`（`U32`）を持つ。符号付き整数は `Num` と `Int` を満たす。符号付き整数だけを受けるときは `T: Num + Int` と書く。
+  - `Unsigned` は、符号なし整数を表す印で、`Int` を満たす。負の数を持たず、`>>` は論理シフトである（§3.4）。
+  - `ONE` を `AnyNum` と `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。利用者の型も `impl AnyNum for Q15 { const ZERO: Q15 = ... }` と `impl Num for Q15 {}` のように実装できる（演算子 trait も実装する）。
+- 演算子の被演算子の型がその演算子の trait を満たさないと E0401。総称の関数での修正候補は、演算子 trait ではなく、その演算子を含む数の trait に境界を絞る形で出す。否定は `Num`（`T: AnyNum` は `T: Num` に、`T: Int` は `T: Int + Num` に）、ビット演算・`!`・ラップ・飽和は `Int`（`T: AnyNum` は `T: Int` に、`T: Num` は `T: Num + Int` に）。絞れないとき（`T: Unsigned` の否定、`T: Float` のビット演算）は候補を出さない。符号なし整数の否定の E0401 には、2 の補数の否定の書き方（`0 -% u`、`T.ZERO -% x`）を note で示す。数の trait の境界を満たさない型を渡した E0416 は、その型が満たす数の trait を note で示す（`U32` なら `AnyNum` と `Int`）。
 - `Default` は関連関数 `default() -> Self` を持つ。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ（§6.6 の `T.ZERO` と同じ形）。
-- 組込み型が実装する標準 trait は、次の表で全てである（閉じた一覧）。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
+- 組込み型が実装する標準 trait と演算子 trait は、次の表で全てである（閉じた一覧）。`PartialEq` と `PartialOrd` は演算子 trait でもあり、左の欄に書いた。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
 
-| 型 | 実装する trait |
-|---|---|
-| 整数 | `PartialEq` `Eq` `PartialOrd` `Ord` `Hash` `Show` `Default`（0） `Num` |
-| 浮動小数 | `PartialEq` `PartialOrd`（IEEE 比較） `Show` `Default`（`+0.0`） `Num` `Float` |
-| `Bool` | `PartialEq` `Eq` `Hash` `Show` `Default`（`false`） |
-| `Char` | `PartialEq` `Eq` `PartialOrd` `Ord`（コードポイントの順） `Hash` `Show` |
-| `Str` | `PartialEq` `Eq` `PartialOrd` `Ord`（バイト列の辞書順、§4.2） `Hash` `Show` `Default`（空） |
-| `Bytes` | `PartialEq` `Eq` `PartialOrd` `Ord`（辞書順） `Hash` `Default`（空） |
-| `()` | `PartialEq` `Eq` `Default` |
-| タプル、`[T; N]` | 要素が全て実装するとき `PartialEq` `Eq` `PartialOrd` `Ord`（先頭から辞書式） `Hash` `Default` |
-| `Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` `Hash`（§4.1 の宣言の derive による） |
-| `Array[T]` | 要素が実装するとき `PartialEq` `Eq` |
-| `Map`、`Set`、`Buf`、`Span`、関数値 | なし |
+| 型 | 実装する trait | 演算子 trait（`PartialEq` `PartialOrd` を除く） |
+|---|---|---|
+| 符号付き整数（`I8`〜`I64`） | `PartialEq` `Eq` `PartialOrd` `Ord` `Hash` `Show` `Default`（0） `AnyNum` `Num` `Int` | `Add` `Sub` `Mul` `Div` `Rem` `Neg` `BitAnd` `BitOr` `BitXor` `Shl` `Shr` `Not` `WrappingAdd` `WrappingSub` `WrappingMul` `SaturatingAdd` `SaturatingSub` `SaturatingMul` |
+| 符号なし整数（`U8`〜`U64`） | `PartialEq` `Eq` `PartialOrd` `Ord` `Hash` `Show` `Default`（0） `AnyNum` `Int` `Unsigned` | `Add` `Sub` `Mul` `Div` `Rem` `BitAnd` `BitOr` `BitXor` `Shl` `Shr` `Not` `WrappingAdd` `WrappingSub` `WrappingMul` `SaturatingAdd` `SaturatingSub` `SaturatingMul` |
+| 浮動小数 | `PartialEq` `PartialOrd`（IEEE 比較） `Show` `Default`（`+0.0`） `AnyNum` `Num` `Float` | `Add` `Sub` `Mul` `Div` `Rem` `Neg` |
+| `Bool` | `PartialEq` `Eq` `Hash` `Show` `Default`（`false`） | `Not` |
+| `Char` | `PartialEq` `Eq` `PartialOrd` `Ord`（コードポイントの順） `Hash` `Show` | なし |
+| `Str` | `PartialEq` `Eq` `PartialOrd` `Ord`（バイト列の辞書順、§4.2） `Hash` `Show` `Default`（空） | なし |
+| `Bytes` | `PartialEq` `Eq` `PartialOrd` `Ord`（辞書順） `Hash` `Default`（空） | なし |
+| `()` | `PartialEq` `Eq` `Default` | なし |
+| タプル、`[T; N]` | 要素が全て実装するとき `PartialEq` `Eq` `PartialOrd` `Ord`（先頭から辞書式） `Hash` `Default` | なし |
+| `Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` `Hash`（§4.1 の宣言の derive による） | なし |
+| `Array[T]` | 要素が実装するとき `PartialEq` `Eq` | なし |
+| `Map`、`Set`、`Buf`、`Span`、関数値 | なし | なし |
 
 - タプルと `[T; N]` の比較: `==` は全ての要素が等しいとき真。大小は、先頭から見て最初の等しくない要素の組で決める（辞書式）。その組が比べられない（浮動小数の NaN）なら、`<` `<=` `>` `>=` は全て偽で、スカラの IEEE の比較と同じである（`[1.0, NaN] < [2.0, 0.0]` は先頭で決まるので真、`[NaN, 0.0] < [1.0, 0.0]` は偽）。
 - `Show` の文字列: 整数は 10 進、`Bool` は `true` / `false`、`Char` はその文字、`Str` はそのまま。浮動小数は、その型（`F32` / `F64`）の値に読み戻せる最短の 10 進表記で、Onsa の浮動小数のリテラルとして読める形にする（小数点を必ず含む: `1.0`、`0.1`、`-0.0`）。絶対値が `1.0e21` 以上か `1.0e-7` 未満なら指数で書く（`1.0e21`、`1.5e-8`）。`NaN` は `NaN`、無限大は `inf` / `-inf`。全ての変換先で同じ文字列になる（§13.4）。
@@ -558,16 +568,16 @@ const SINE: [F32; 1024] = make_sine_table()
 - 初期化式から呼べるのは、効果行が空か `{Alloc}` だけの関数。`Alloc` はコンパイラが提供する。
 - 結果は、Copy か、**静的に配置できる Shared**（`Str`、`Bytes`、要素が静的に配置できる `Array`）でなければならない（E0407）。`Map` / `Set` は表の配置が実装に依存するので対象外。結果は読み取り専用の静的領域（組込みではフラッシュ）に置かれる。Shared の結果はヘッダ付きの静的オブジェクト（§12.8）として書き出され、`Alloc` 無しで使える。
 - 初期化式が、直接または他の定数を経由して自分自身を参照すると E0312（`const A: U32 = B` と `const B: U32 = A`）。
-- `impl` と `trait` の中にも同じ形で書ける（関連定数）: `impl Point { const ORIGIN: Point = Point { x: 0.0, y: 0.0 } }`、`trait Num { const ZERO: Self }`。参照は `Point.ORIGIN`、`F32.PI`、型パラメータでは `T.ZERO`。組込み型の関連定数は std が宣言する（§6.3 の孤児規則）。字面は `UpperCamel.UPPER_SNAKE` で、関連関数や効果の操作（`Fs.read`）と区別できる。
+- `impl` と `trait` の中にも同じ形で書ける（関連定数）: `impl Point { const ORIGIN: Point = Point { x: 0.0, y: 0.0 } }`、`trait AnyNum { const ZERO: Self }`。参照は `Point.ORIGIN`、`F32.PI`、型パラメータでは `T.ZERO`。組込み型の関連定数は std が宣言する（§6.3 の孤児規則）。字面は `UpperCamel.UPPER_SNAKE` で、関連関数や効果の操作（`Fs.read`）と区別できる。
 - 組込み型の関連定数は、次の表で全てである（閉じた一覧。足すときは、必要な実例を添えて議論する、[`docs/api-candidates.md`](docs/api-candidates.md)）。
 
 | 型 | 関連定数 |
 |---|---|
-| 整数 | `MIN` `MAX`（`Self`）、`BITS`（`U32`）、`ZERO`（`Num`） |
-| 浮動小数 | `ZERO`（`Num`）、`ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`（`Float`） |
+| 整数 | `ZERO`（`AnyNum`）、`ONE` `MIN` `MAX` `BITS`（`Int`。`BITS` は `U32`、他は `Self`） |
+| 浮動小数 | `ZERO`（`AnyNum`）、`ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`（`Float`） |
 
 - 浮動小数に `MIN` は無い。Rust の `f32::MIN` は最も負の有限値、C の `FLT_MIN` は最小の正の正規化数で、どちらの読み方でも検査を通るのに意味が違う（§0.3 の規則 4）。最も負の有限値は `-F32.MAX` と書く。`MAX` と `EPSILON`（1 と、1 の次に大きい表現可能な数の差）は C と Rust で同じ意味である。
-- リテラルは型パラメータ `T` の値にならない（`[T: Float]` の関数の中で `x + 0.0` とは書けない）。総称の関数では、0 と 1 を `T.ZERO`、`T.ONE`（`T: Float`）で書く。具体的な型ではリテラルで足りる。
+- リテラルは型パラメータ `T` の値にならない（`[T: Float]` の関数の中で `x + 0.0` とは書けない）。総称の関数では、0 と 1 を `T.ZERO`、`T.ONE`（`T: Float` か `T: Int`）で書く。具体的な型ではリテラルで足りる。
 
 ---
 
@@ -1171,7 +1181,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - 精度を諦めて速さを取るときは、利用者が `ONSA_ALLOW_INEXACT_FP` を定義すると、上の検査を外してコンパイルできる（組込みでプロジェクト全体を `-Ofast` でビルドする場合など）。そのビルドには、ビット一致の保証と `onsa test --backends all` の結果は当てはまらない。Onsa のソースで一部だけ緩めるときは `@fp(relaxed)`（§15.5）を使い、C では関数ごとの緩和として出す（効かなくても遅くなるだけで、結果は壊れない）。
 - 生成した C は、GCC / Clang の `-Wall -Wextra` で警告を出さない（ホストが `-Werror` でビルドしても通る）。`#pragma STDC FP_CONTRACT OFF` は、それを知るコンパイラにだけ出す。
 
-`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` / `min` / `max` は `Num`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: Num, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
+`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` は `Num`、`min` / `max` は `AnyNum`）で、各変換先のプリミティブに対応付ける。`std.math.sum[T: AnyNum, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
 
 ### 13.5 言語全体の変換（最終目標）
 

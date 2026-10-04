@@ -1,0 +1,63 @@
+// R-94（S-84）: 数の trait の形。`AnyNum`（全ての数。`Sub` を含み、0 を下回る引き算は実行時に検出）、
+// `Num`（`AnyNum` と `Neg`。符号付き整数・浮動小数）、`Float`、`Int`（全ての整数。ビット演算・`!`・ラップ・飽和、
+// `ONE` `MIN` `MAX` `BITS`）、`Unsigned`（`Int` の印）。符号付き整数は `Num` と `Int` を満たす。
+// 足りない演算子の修正候補は、演算子 trait ではなく、それを含む数の trait（否定は `Num`、ビット演算などは `Int`）に絞る形で出す。
+// 各関数の上に期待値と今（2026-10-05）の出力を書いた。`onsa check` で確かめる。
+
+use std.math.{abs, min}
+
+// 期待: 通る（`Num` は `Neg` を含む）。
+// 今: 通る。
+fn neg_num[T: Num](x: T) -> T { -x }
+
+// 期待: E0416（`U32` は `Num` を満たさない）。修正候補なし。note「符号なし整数は `AnyNum` と `Int` を満たし、`Num` は満たさない」。
+// 今: 通る。`onsa test` で実体化すると Core の検証器が panic する（`-` on a non-signed type、R-03）。
+fn neg_u32(u: U32) -> U32 { neg_num(u) }
+
+// 期待: E0401。修正候補は `AnyNum` を `Num` に。
+// 今: check.onsa:19:15: error[E0200]: this version does not support user-defined traits as bounds（`AnyNum` / `Int` / `Unsigned` は無い。文面も、標準 trait なのに「利用者の trait」と言う）。
+fn neg_any[T: AnyNum](x: T) -> T { -x }
+
+// 期待: 通る。0 を下回れば実行時に panic（具体的な `U32` の引き算と同じ）。
+// 今: check.onsa:23:15: error[E0200]: this version does not support user-defined traits as bounds（`AnyNum` / `Int` / `Unsigned` は無い。文面も、標準 trait なのに「利用者の trait」と言う）。
+fn sub_any[T: AnyNum](a: T, b: T) -> T { a - b }
+
+// 期待: E0401。修正候補は `Int + Num` に。note「2 の補数の否定は `T.ZERO -% x`」。
+// 今: check.onsa:27:15: error[E0200]: this version does not support user-defined traits as bounds（`AnyNum` / `Int` / `Unsigned` は無い。文面も、標準 trait なのに「利用者の trait」と言う）。
+fn neg_int[T: Int](x: T) -> T { -x }
+
+// 期待: E0401。修正候補なし。note「符号なしの値は否定できない。2 の補数の否定は `T.ZERO -% x`」。
+// 今: check.onsa:31:20: error[E0200]: this version does not support user-defined traits as bounds（`AnyNum` / `Int` / `Unsigned` は無い。文面も、標準 trait なのに「利用者の trait」と言う）。
+fn neg_unsigned[T: Unsigned](x: T) -> T { -x }
+
+// 期待: E0401。修正候補は `AnyNum` を `Int` に。
+// 今: check.onsa:35:15: error[E0200]: this version does not support user-defined traits as bounds（`AnyNum` / `Int` / `Unsigned` は無い。文面も、標準 trait なのに「利用者の trait」と言う）。
+fn shr_any[T: AnyNum](x: T) -> T { x >> 1 }
+
+// 期待: E0401。修正候補は `Num + Int` に。
+// 今: check.onsa:39:41: error[E0401]: `&` is defined for integers only; found `T` (§3.4)。修正候補なし。
+fn and_num[T: Num](x: T, y: T) -> T { x & y }
+
+// 期待: E0401。修正候補なし（浮動小数はビット演算を持たない）。
+// 今: check.onsa:43:39: error[E0401]: `>>` is defined for integers only; found `T` (§3.4)。
+fn shr_float[T: Float](x: T) -> T { x >> 1 }
+
+// 期待: E0401（今と同じ）。修正候補なし。note「2 の補数の否定は `0 -% u`」。
+// 今: check.onsa:47:34: error[E0401]: `-` needs a signed integer or float; found `U32`。note なし。
+fn neg_concrete(u: U32) -> U32 { -u }
+
+// 期待: 通る。
+// 今: check.onsa:51:12: error[E0200]: this version does not support user-defined traits as bounds（`AnyNum` / `Int` / `Unsigned` は無い。文面も、標準 trait なのに「利用者の trait」と言う）。
+fn high[T: Unsigned](x: T) -> T { x }
+
+// 期待: E0416（`I32` は `Unsigned` を満たさない）。修正候補なし。note「符号付き整数は `Int` を満たし、`Unsigned` は満たさない」。
+// 今: `high` の境界が E0200 なので、ここには診断が出ない。
+fn high_i32(i: I32) -> I32 { high(i) }
+
+// 期待: E0416（`abs` の境界は `Num`）。修正候補なし。note は `neg_u32` と同じ。
+// 今: 通る。
+fn abs_u32(u: U32) -> U32 { abs(u) }
+
+// 期待: 通る（`min` の境界は `AnyNum`）。
+// 今: 通る。
+fn min_u32(i: U32, n: U32) -> U32 { min(i, n) }

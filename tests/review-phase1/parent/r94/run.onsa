@@ -1,0 +1,58 @@
+// R-94（S-84）: 数の trait の形の実行時の期待値。`onsa test` で、全てのテストが通るのが期待値。
+// 今（2026-10-05）: run.onsa:11:15 と run.onsa:13:19 の E0200（`AnyNum` / `Unsigned` を境界に書けない）で、テストを始められない。
+// `sub_any` と `highest_bit` を除き、`sub unsigned` を `a - b` に書き換えた写しでは、残りの 5 つのテストが通る（`>>` は、符号付きが算術シフト、符号なしが論理シフト）。
+// `highest_bit` を `T: AnyNum + Shr` で書くと `I32` の負の値で終わらない（算術シフト）。`Unsigned` はこれを検査で止める。
+// 0 を下回る `sub_any` の panic と、`Num` に `U32` を渡す誤りは `check.onsa` で扱う。
+
+use std.math.{min}
+
+fn neg_num[T: Num](x: T) -> T { -x }
+
+fn sub_any[T: AnyNum](a: T, b: T) -> T { a - b }
+
+fn highest_bit[T: Unsigned](x: T) -> U32 {
+  var v = x
+  var n: U32 = 0
+  while v != T.ZERO {
+    v = v >> 1
+    n = n + 1
+  }
+  n
+}
+
+test "neg signed and float" {
+  let a: I32 = 5
+  assert neg_num(a) == -5
+  let z: F32 = 0.0
+  assert neg_num(z).to_bits() == 2147483648
+}
+
+test "sub unsigned" {
+  let a: U32 = 7
+  let b: U32 = 3
+  assert sub_any(a, b) == 4
+}
+
+test "min unsigned" {
+  let i: U32 = 9
+  let n: U32 = 4
+  assert min(i, n) == 4
+}
+
+test "shift" {
+  let s: I32 = -8
+  assert (s >> 1) == -4
+  let u: U32 = 2147483648
+  assert (u >> 1) == 1073741824
+}
+
+test "wrapping negation" {
+  let u: U32 = 1
+  assert (0 -% u) == U32.MAX
+}
+
+// 期待: 通る。今: `T.ZERO` が E0302（R-56、S-46 の実装待ち）になるはずだが、上の E0200 で先に止まる。
+test "highest bit" {
+  let u: U32 = 5
+  assert highest_bit(u) == 3
+}
