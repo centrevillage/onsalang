@@ -480,8 +480,9 @@ impl Show for Point {
 - ジェネリック trait（`Iter[T]` など）は、一つの型について高々一つしか実装できない。
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
 - 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr`。
-- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。ただし `Num` と `Float` は Rust の標準ライブラリに無いので、次の項で定める。
-- `Num` は数の型を表す。`Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元）を持つ。`Float` は浮動小数の型を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。`ONE` を `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。`Neg` を含めないのは、符号なし整数に無いからである。利用者の型も `impl Num for Q15 { const ZERO: Q15 = ... }` のように実装できる。
+- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `Num`, `Float`, `Dup`（自動。§4.5）。名前と意味は Rust と同じ（§0.3 の規則 3）。ただし `Num` と `Float` は Rust の標準ライブラリに無いので、次の項で定める。標準 trait は std で `trait` として宣言され、組込み型の実装（下の表）も std の `impl` である（孤児規則、上記）。
+- trait の宣言の頭に `: trait + trait` と書くと、その trait を実装する型が先に満たすべき trait（上位の trait）になる（`pub trait Ord: PartialOrd + Eq`）。境界（§4.5）と derive（§6.4）と同じく「左の型が右の trait を満たす」と読む。上位の trait を満たさない型への `impl` は E0416。`T: Ord` の境界からは、上位の trait（`PartialOrd`、`Eq`、`PartialEq`）も使える。
+- `Num` は数の型を表す。`Copy` `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` を満たし、関連定数 `ZERO: Self`（加法の単位元）を持つ。`Copy` を含めるのは、数を値として扱い、総称の数値のコードで `T: Num + Copy` と重ねて書かずに済むようにするためである（`Copy` の無い `T` の破棄は `Alloc` を要する、下記）。`Float` は浮動小数の型を表す。`Num` を満たし、関連定数 `ONE`（乗法の単位元）、`PI`、`MAX`、`EPSILON`、`INFINITY`、`NAN`（全て `Self`）を持つ。`ONE` を `Num` に置かないのは、固定小数点（Q15 / Q31、範囲は `[-1, 1)`）が 1 を表せず、`Num` を実装できなくなるからである。`Neg` を含めないのは、符号なし整数に無いからである。利用者の型も `impl Num for Q15 { const ZERO: Q15 = ... }` のように実装できる。
 - `Default` は関連関数 `default() -> Self` を持つ。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ（§6.6 の `T.ZERO` と同じ形）。
 - 組込み型が実装する標準 trait は、次の表で全てである（閉じた一覧）。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
 
@@ -599,6 +600,7 @@ pub fn load(path: Path) -> Result[Str, IoError] uses {Fs} {
 ```
 
 - 効果行は **効果単位**（`Fs`）で書く。標準ライブラリは `FsRead` と `FsWrite` を分けている。本仕様の例では簡単のため `Fs` を使う。
+- 効果行の名前は、他の名前と同じく解決する（§15.1）。標準の効果（`Fs` `Stdout` `Stdin` `Clock` `Random` `Log`）は std の `effect` 宣言で、`use` で取り込む。`Alloc` だけは prelude にある（§8.2）。見つからない名前は E0302 で、`use` の無い標準の効果には `use` の追加を修正候補に示す。
 - 効果行が空なら `uses` を書かない。それが純粋関数（`uses {}` と書いても受理し、`onsa fmt` が外す）。
 - 効果の操作に `uses` は書けない。handler が使う効果は `handle` 式の効果行に加わる（§8.3）ので、操作の契約はシグネチャと `rt`（下記）と効果の `blocking` だけで決まる。
 - `blocking` はブロックしうる効果の印である（§8.2）。
@@ -618,7 +620,7 @@ pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Allo
 
 ### 8.2 `Alloc` と、ブロックする効果
 
-- **`Alloc`** はヒープの確保と解放を表す **明示の効果** である。Shared 値と `Buf` の生成・解放、補間文字列の生成は `Alloc` を要する（§12.2）。
+- **`Alloc`** はヒープの確保と解放を表す **明示の効果** である。std で操作の無い効果（`pub effect Alloc {}`）として宣言され、prelude にある（§15.1）。操作を呼ぶのではなく、Shared 値と `Buf` の生成・解放、補間文字列の生成が `Alloc` を要する（§12.2）。
 - **ブロックするかどうかは、効果の宣言で決まる。** ブロックしうる操作（ロック、システムコール、待機）を持つ効果は `blocking effect` と宣言する。**関数がブロックしうるのは、効果行に `blocking` の効果を含むときだけ** である。使う側は `uses {Fs}` と書くだけでよく、ブロックの印を二度書く必要は無い。
 - `blocking` でない効果の handler は、その操作の中で `blocking` の効果を使えない（E0612）。この検査は handler の定義の中で閉じる。例えば `Log` はブロックしない効果なので、リングバッファに書く handler は書けるが、標準出力に同期的に書く handler は書けない。
 - 組込みの `Block` は操作を持たない `blocking` の効果で、extern 関数がブロックすることを主張するのに使う（§14.1）。`Block` は handler で処理できない。
@@ -1296,7 +1298,7 @@ uint32_t onsa_version(void);
 - `use` の経路がたどれるのは、パッケージ、モジュール、flow の名前空間（§11.6）だけで、取り込めるのは、モジュールの項目、子モジュール、flow の名前空間の項目である。enum の列挙子（`Type.Variant` と書く、§4.1）、型の関連関数と関連定数（`Point.new`、`F32.PI`、§2.3 / §6.6）、効果の操作（`Fs.read`、§8.1）は取り込めない（E0302。文面で理由と書き方を示す）。
 - 他のモジュールとパッケージは、`use` で取り込んだ名前でだけ参照できる（`use std.math` の後の `math.sqrt(x)`、`use std.math.{sqrt}` の後の `sqrt(x)`）。暗黙に見えるのは、自分のモジュールの項目、prelude、組込み型だけで、`use` の無い経路（`std.math.sqrt(x)`）は E0302（修正候補は `use` の追加）。モジュールが何に依存するかは、`use` の一覧を見れば全て分かる。
 - モジュール間の循環 import は禁止（E0310）。依存は `use` だけで決まるので、この検査は `use` の一覧で閉じる。
-- 暗黙の prelude は `Option Result Some None Ok Err panic` と組込み型だけ。
+- 暗黙の prelude は、`Option Result Some None Ok Err panic Alloc`、組込み型、レート（`Init Ctl Sig`、§11.3）だけである。`panic`、組込み型、レートはコンパイラが与え、`Option` と `Result`（とその列挙子）、`Alloc` は std の宣言である。他の標準の効果と std の項目は `use` で取り込む。
 
 ### 15.2 target 宣言（条件コンパイルの代替）
 

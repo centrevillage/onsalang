@@ -1,0 +1,15 @@
+// R-129（S-74）: 効果の名前も他の名前と同じく解決する。`Alloc` は std の宣言で prelude にある。
+// 期待と今の出力は各関数の上のコメント（今は 2026-10-04 に確かめた）。
+
+// 期待: 通る（`Alloc` は prelude）。今も通る。
+fn a() uses {Alloc} {}
+
+// 期待: E0302（`use` が無い。修正候補は std の `Random` の `use`）。
+// 今: r129.onsa:9:14: error[E0200]: this version does not support effects other than `Alloc` (`Random`)
+fn r() uses {Random} {}
+
+// 期待: E0302（修正候補は `use std.fs.{Fs}`）。今: r129.onsa:12:14: error[E0200]（同じ文面で `Fs`）
+fn f() uses {Fs} {}
+
+// 期待: E0302（どこにも無い名前）。今: r129.onsa:15:14: error[E0200]（同じ文面で `Nope`）
+fn n() uses {Nope} {}

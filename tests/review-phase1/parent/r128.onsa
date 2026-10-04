@@ -1,0 +1,12 @@
+// R-128（S-73）: `Num` は `Copy` を要する（`Float` は `Num` を通じて含む）。
+// 期待: `via_num` と `via_float` は通る。`via_eq` は E0416（`PartialEq` は `Copy` を含まない）。
+// 今（2026-10-04）: 期待どおり。実装は前から `Num` / `Float` を `Copy` を満たすものとして扱っていた（仕様に無かった）。
+
+fn need_copy[U: Copy](x: U) -> U { x }
+
+fn via_num[T: Num](x: T) -> T { need_copy(x) }
+
+fn via_float[T: Float](x: T) -> T { need_copy(x) }
+
+// 今: r128.onsa:12:38: error[E0416]: `T` does not satisfy the bound `U: Copy`
+fn via_eq[T: PartialEq](x: T) -> T { need_copy(x) }
