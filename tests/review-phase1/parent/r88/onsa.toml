@@ -1,0 +1,9 @@
+# R-88（S-83）: std の版の固定。std はコンパイラに埋め込まれていて、この版は 0.2.0 ではない（存在しない版）。
+# 期待: `onsa check .` が、マニフェストの誤り（std の版が埋め込みの std と一致しない）で止まる。
+# 今（2026-10-05）: `[dependencies]` を読むだけで版を確かめず、`onsa check .` は通る。
+[package]
+name = "r88"
+edition = "2026"
+
+[dependencies]
+std = "9.9.9"

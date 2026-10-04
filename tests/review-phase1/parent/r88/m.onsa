@@ -1,0 +1,4 @@
+// R-88: 期待値は onsa.toml の先頭のコメント。
+use std.math.{sqrt}
+
+pub fn root(x: F32) -> F32 { sqrt(x) }
