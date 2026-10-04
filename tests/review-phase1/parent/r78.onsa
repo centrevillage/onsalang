@@ -1,0 +1,54 @@
+// R-78: 意味を変えない余分な情報（S-68）。どれも `onsa check` を通り、`onsa fmt` が取り除くのが期待値。
+// 期待する fmt の後の形と、今の fmt の動きは各関数の上のコメントに書いた。
+
+// 期待: `fn unit_ret() {}`。今は変えない。
+fn unit_ret() -> () {}
+
+// 期待: `fn empty_uses() -> I32 { 1 }`。今は変えない。
+fn empty_uses() -> I32 uses {} { 1 }
+
+// 期待: `fn apply(f: fn(F32), x: F32) { f(x) }`。今は変えない。
+fn apply(f: fn(F32) -> (), x: F32) { f(x) }
+
+// 期待: 末尾の値の無い `return` を外す。今は変えない。
+fn set_one(inout x: I32) {
+  x = 1
+  return
+}
+
+// 期待: `{ x * 2.0 }`（無名関数の末尾の `return`）。今は変えない。
+fn closure() -> F32 {
+  let f = fn(x: F32) -> F32 { return x * 2.0 }
+  f(1.0)
+}
+
+// 期待: `if x < 0 { -1 } else { 1 }` の形（末尾の位置の分岐の `return`。改行は保つ）。今は変えない。
+fn sign(x: I32) -> I32 {
+  if x < 0 {
+    return -1
+  } else {
+    return 1
+  }
+}
+
+// 期待: 各腕を `v`、`0` にする（末尾の位置の `match` の腕の `return`）。今は変えない。
+fn pick(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => { return v },
+    None => { return 0 },
+  }
+}
+
+// 期待: 変えない（末尾の位置でない `return` は早期の脱出）。
+fn early(x: I32) -> I32 {
+  if x < 0 {
+    return 0
+  }
+  x
+}
+
+// 期待: `return y` を外して `y` にする（名前付き関数の最後の文。今も外す）。
+fn last(x: I32) -> I32 {
+  let y = x + 1
+  return y
+}
