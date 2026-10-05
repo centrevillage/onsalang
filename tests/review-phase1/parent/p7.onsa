@@ -1,0 +1,61 @@
+// P-7（impl-review-0.3.md から持ち越し）: ブロックの末尾の式（`if` / `match` の腕、ブロック式）に `move` が要るか。S-100。
+// `onsa check tests/review-phase1/parent/p7.onsa` で確かめる。期待値（S-100）と今（2026-10-05）の出力は各関数の上のコメント。
+// 規則: ブロックの末尾の式は置かれた位置を継ぐ。消費する位置では各腕を `let y = <腕の値>` と同じに扱う。返り値の位置の `move` は fmt が取り除く。
+
+// 期待: E0711 を `a` と `b` の腕に（修正候補は各腕への `move` の挿入）。
+// 今: E0711「Affine value `a` is consumed here; write `move a`」（修正候補は `move` の挿入）。
+fn pick_let(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { a } else { b }
+  y
+}
+
+// 期待: 通る。
+// 今: E0002「`move` is written only where a value is consumed ...」。上の修正候補どおりに書くと、この誤りになる（行き止まり）。
+fn pick_let_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { move a } else { move b }
+  y
+}
+
+// 期待: 今のまま通る（関数の末尾は返り値の位置）。
+// 今: 通る。
+fn pick_tail(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  if c { a } else { b }
+}
+
+// 期待: 通る。
+// 今: `match` の腕も同じ。`move` 無しは E0711、`move` 付きは E0002。
+fn pick_match(k: I32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = match k {
+    0 => move a,
+    _ => move b,
+  }
+  y
+}
+
+fn take(move t: Buf[F32]) -> U32 uses {Alloc} { t.len() }
+
+// 期待: E0703 を各腕に（修正候補は `take(if c { move a } else { move b })`）。
+// 今: E0703 で、修正候補は `move if c { a } else { b }`（R-42 の決定で、`move` の被演算子は後置式に限るので、この候補は通らなくなる）。
+fn pick_arg(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(if c { a } else { b })
+}
+
+// 期待: 通る。
+// 今: E0002。
+fn pick_arg_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(if c { move a } else { move b })
+}
+
+// 期待: `onsa check` は通り、`onsa fmt` が `return a` に書き換える。
+// 今: 返り値の位置の `move` は E0002（文面は返り値に触れない）。
+fn ret_move(move a: Buf[F32]) -> Buf[F32] {
+  return move a
+}
+
+// 期待: 今のまま通る（`let y = if c { move a } else { move b }` と書けるので、回り道は要らなくなる）。
+// 今: 通る回り道。`var` に仮の値を確保してから代入する。
+fn workaround(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var y: Buf[F32] = Buf.zeroed(0)
+  if c { y = move a } else { y = move b }
+  y
+}

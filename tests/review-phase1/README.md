@@ -165,6 +165,7 @@
 | `parent/r122/` | R-122（パッケージの `tests/` の役割。`onsa check` と `onsa test` で確かめる。`tests/api.onsa` はルート直下の `tests/`、`dsp/tests/n.onsa` はルート直下でない `tests/`。期待値と今の出力は各ファイルの先頭のコメント。S-96） |
 | `parent/r125.onsa` | R-125（std のテスト用の補助を呼べる場所。`onsa check` と `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-97） |
 | `parent/r126.onsa` | R-126（組込みのメソッドの一覧。`onsa check` で確かめる。期待値と今の出力は各項目の上のコメント。S-98） |
+| `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
