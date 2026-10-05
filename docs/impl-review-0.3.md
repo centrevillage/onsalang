@@ -79,7 +79,7 @@
 | T-2 | 境界の含意: `Ord ⇒ PartialOrd, Eq`、`Eq ⇒ PartialEq`、`Float ⇒ Num`、`Num ⇒ PartialEq, PartialOrd, Copy`。ユーザ定義型の `PartialEq` 系は `@derive` でだけ成立 | 仕様へ（§6.3） |
 | T-3 | リテラルはジェネリックな `T` に束縛されない（`Num` のリテラル強制は無い） | 仕様へ（§4.5） |
 | T-4 | `return` / `break` / `continue` で終わるブロックは新しい型を持つ（`fmt` が除去する末尾の `return` のため） | 妥当 |
-| T-5 | fn の本体の `~(` は E0812、`handle` / `unsafe` は E0200、flow の外の `par` は E0401、ループ外の `break` は E0002 | 妥当（`par` のコードは E0806 の方が近い: 要判断） |
+| T-5 | fn の本体の `~(` は E0812、`handle` / `unsafe` は E0200、flow の外の `par` は E0401、ループ外の `break` は E0002 | 妥当（`par` のコードは E0806 の方が近い: 要判断）→ 決定（2026-10-05）: flow の外の flow だけの構文は E0821（新設、S-101）。レート型の位置は R-132（[`review-impl-phase1.md`](review-impl-phase1.md)） |
 | T-6 | シグネチャに診断のある項目は本体を検査しない | 妥当 |
 | T-7 | ジェネリックな struct リテラルの型引数は期待型から取る | 仕様へ（§4.7） |
 | T-8 | 一般の型不一致は E0401 ひとつ | 要判断（`explain` を書く段階で細分化の要否を見る） |

@@ -1,0 +1,54 @@
+// T-5（impl-review-0.3.md から持ち越し）: flow だけの構文を flow の外に書いたときの診断。
+// `onsa check tests/review-phase1/parent/t5.onsa` で確かめる。期待値（S-101）と今（2026-10-05）の出力は各関数の上のコメント。
+// 逆向き（fn だけの構文を flow の本体に書いた）は E0806（§11.2）。
+
+pub flow lp(x: Sig[F32]) -> Sig[F32] { x }
+
+// 期待: E0821（修正候補なし。note で `array.from_fn` / `[e; N]`）。
+// 今: E0401「`par` replicates flow instances and is only written inside a flow body」（型の不一致のコード）。
+fn with_par(x: F32) -> F32 {
+  let y = par i in 0..4 { 1.0 }
+  x
+}
+
+// 期待: E0821（修正候補なし。note で `lp.init` / `lp.process` を使うか、この関数を flow にする）。
+// 今: E0812「`~(` creates a flow instance and is only written inside a flow body」で、修正候補は `lp(x)`。
+//   E0812 の意味は「flow でないものに `~`」。候補どおりに書くと、下の `with_plain_call` の E0401 になる（行き止まり）。
+fn with_instance(x: F32) -> F32 {
+  let y = lp~(x)
+  x
+}
+
+// 期待: E0821（修正候補なし。note で、状態を `inout` 引数で持つ）。
+// 今: E0812 で、修正候補は `prev(x)`（そのような関数は無い）。
+fn with_prev(x: F32) -> F32 {
+  let y = prev~(x)
+  x
+}
+
+// 期待: E0821（`~` の有無によらない）。
+// 今: E0401「`lp` is not a function」。flow の中なら E0811（`~` の挿入）。
+fn with_plain_call(x: F32) -> F32 {
+  let y = lp(x)
+  x
+}
+
+// 期待（S-102）: レートは型ではなくなった。`Sig[F32]` / `Ctl[F32]` の形は E0020 で、flow の外なので修正候補はレートを外した `F32`。
+//   `at` を flow の外に書けば（`fn g(x: F32 at sample)`）E0821。
+// 今: レート型は flow の外の宣言にも書けてしまい、宣言では何も出ない。使う所で分かりにくい E0401 になる
+//   （`g` の本体の `1.0` は「a float literal cannot have type `Ctl[F32]`」、flow から `g(x)` を呼ぶと「expected `Sig[F32]`, found `F32`」）。
+struct WithRate { v: Sig[F32] }
+
+fn g(x: Sig[F32]) -> Ctl[F32] { 1.0 }
+
+pub flow use_g(x: Sig[F32]) -> Sig[F32] {
+  let a = g(x)
+  x
+}
+
+// 期待: E0821。
+// 今: E0002「expected an expression, found `^`」（一般の構文エラー）。flow の中なら、遅延の第 1 引数の外の `^名前` は E0801。
+fn with_feedback(x: F32) -> F32 {
+  let y = prev~(^z)
+  x
+}

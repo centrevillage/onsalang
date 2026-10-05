@@ -19,12 +19,12 @@ flow の信号グラフを DOT で出す（`--svg` で SVG。Graphviz の `dot` 
 
 | ノード | 形 | ラベル |
 |---|---|---|
-| 入力 | 楕円 | `名前: 型 @レート` |
-| `let` | 箱 | `名前 = 式の種類: 型 @レート`。ノード名は `let` の名前（基本仕様 §18.2） |
-| 名前の無い状態のノード（式の中に直接書いたインスタンス、`prev~` / `delay~` / `vdelay~`） | 角の丸い箱 | 名前は基本仕様 §11.6 の生成する名前（`a.prev_0`、`saws.saw_0`）。ラベルは修飾を除いた `saw_0 = saw~: 型 @レート` |
-| 出力 | 二重八角形 | `out: 型 @レート` |
+| 入力 | 楕円 | `名前: 型 at クロック`（ソースの宣言と同じ形、基本仕様 §11.3） |
+| `let` | 箱 | `名前 = 式の種類: 型 at クロック`。ノード名は `let` の名前（基本仕様 §18.2） |
+| 名前の無い状態のノード（式の中に直接書いたインスタンス、`prev~` / `delay~` / `vdelay~`） | 角の丸い箱 | 名前は基本仕様 §11.6 の生成する名前（`a.prev_0`、`saws.saw_0`）。ラベルは修飾を除いた `saw_0 = saw~: 型 at クロック` |
+| 出力 | 二重八角形 | `out: 型 at クロック` |
 
-レートで色を分ける: `Init` と定数は灰色、`Ctl` は青、`Sig` は黒。
+クロックで色を分ける: `init` と定数は灰色、`block` は青、`sample` は黒。
 
 ### 1.2 辺
 
@@ -35,15 +35,15 @@ flow の信号グラフを DOT で出す（`--svg` で SVG。Graphviz の `dot` 
 ### 1.3 `par`
 
 - 複製を枠（Graphviz のクラスタ）で囲む。見出しは `par i in 0..N（×N）`。
-- 複製の添字は、枠の中に `Init` の入力として描く（楕円、灰色）。ノード名は `par` の名前で修飾する（`saws.i`）。入れ子でも重ならない。
+- 複製の添字は、枠の中に `init` のクロックの入力として描く（楕円、灰色）。ノード名は `par` の名前で修飾する（`saws.i`）。入れ子でも重ならない。
 - 本体の結果から、`par` の結果のノードへ辺を引く。
 - 入れ子の `par` は、入れ子の枠にする。
 
 ```dot
 subgraph cluster_saws {
   label="par i in 0..4（×4）"
-  "saws.i" [label="i: U32 @Init" shape=ellipse color="gray40"]
-  "saws.saw_0" [label="saw_0 = saw~: F32 @Sig" style=rounded]
+  "saws.i" [label="i: U32 at init" shape=ellipse color="gray40"]
+  "saws.saw_0" [label="saw_0 = saw~: F32 at sample" style=rounded]
 }
 "f0" -> "saws.saw_0"; "detune" -> "saws.saw_0"; "saws.i" -> "saws.saw_0"
 "saws.saw_0" -> "saws"; "saws" -> "out"
