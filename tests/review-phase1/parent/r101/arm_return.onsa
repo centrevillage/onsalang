@@ -1,0 +1,9 @@
+// R-101（S-89）: `return` / `break` / `continue` は文で、`match` の腕に直接書けない。期待: E0020。修正候補は `None => { return 0 },`。
+// 今（2026-10-05）: arm_return.onsa:6:13: error[E0002]: expected an expression, found `return`。修正候補なし。
+fn g(o: Option[I32]) -> I32 {
+  let v = match o {
+    Some(x) => x,
+    None => return 0,
+  }
+  v
+}

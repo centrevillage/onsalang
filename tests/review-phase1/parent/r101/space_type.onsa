@@ -1,0 +1,3 @@
+// R-101（S-89）: 型引数の `[` も同じ規則。期待: E0020。修正候補は `Option[I32]`。
+// 今（2026-10-05）: space_type.onsa:3:16: error[E0002]: expected `)`, found `[`。修正候補なし。
+fn g(o: Option [I32]) -> I32 { 0 }

@@ -1,0 +1,8 @@
+// R-101（S-89）: パターンの `(` も同じ規則。期待: E0020。修正候補は `Some(x)`。
+// 今（2026-10-05）: space_pat.onsa:5:10: error[E0002]: expected `=>`, found `(`。修正候補なし。
+fn g(o: Option[I32]) -> I32 {
+  match o {
+    Some (x) => x,
+    None => 0,
+  }
+}

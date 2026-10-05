@@ -155,6 +155,7 @@
 | `parent/r98.onsa` | R-98（名前の無いノードの名前と配置。今の実装の構文で書いた。`onsa interface` と `onsa graph` で確かめる。期待値と今の出力は先頭のコメント。S-86） |
 | `parent/r99.onsa` | R-99（`@param` の値型と値。期待値と今の出力は各 flow の上のコメント。S-87） |
 | `parent/r100/` | R-100（`delay.onsa` は `vdelay` の `MAX` と `F32`、`check` と `test` で確かめる。`size.onsa` は大きさの上限、`interface` で確かめる。期待値と今の出力は各項目の上のコメント。S-88） |
+| `parent/r101/` | R-101（字句と fmt の細則。形ごとのファイルで、`align.onsa` は `onsa fmt`、他は `onsa check` で確かめる。期待値と今の出力は各ファイルの先頭のコメント。S-89） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値は `onsa.toml` の先頭のコメント） |
