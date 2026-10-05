@@ -1,0 +1,24 @@
+// R-108（S-93）: `const` の初期化式の超越関数は、`std.math` の Onsa の実装（musl の移植、D-11）で評価し、ビルドする機械に依らない。
+// インタプリタ全体（`const` の評価、`onsa test`）も同じ実装を使う。
+// 確かめ方: macOS と Linux で `onsa build --target src tests/review-phase1/parent/r108` を実行し、生成した C の `SINE` の表をバイトで比べる。
+// 期待: 一致する。
+// 今（2026-10-05）: インタプリタが Rust の `f32::sin`（ビルドする機械の libm）で計算するので、一致は保証されない
+//   （macOS の libm と glibc は全ての入力を正しく丸めるわけではない。一台の機械では違いを示せない）。
+
+use std.math.{sin}
+
+const N: U32 = 1024
+
+fn make_sine() -> [F32; N] {
+  var t: [F32; N] = [0.0; N]
+  for i in 0..N {
+    t[i] = sin((i.round_f32() / N.round_f32()) * 6.2831855)
+  }
+  t
+}
+
+const SINE: [F32; N] = make_sine()
+
+pub flow osc(@param(min: 0.0, max: 1.0, default: 0.0) idx: Ctl[F32]) -> Sig[F32] {
+  SINE[(idx * 1023.0).trunc_u32_sat()]
+}

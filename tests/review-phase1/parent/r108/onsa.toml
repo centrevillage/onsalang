@@ -1,0 +1,13 @@
+# R-108（S-93）: `const` の評価の超越関数がビルドする機械に依らないこと。期待値と今の状態は `m.onsa` の先頭のコメント。
+[package]
+name = "r108"
+edition = "2026"
+
+[export]
+prefix = "t_"
+flows = ["m.osc"]
+
+[targets.src]
+kind = "source"
+lang = "c"
+platform = "host"
