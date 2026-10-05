@@ -1,5 +1,11 @@
-# R-130: マニフェストの未知のキー。期待（推奨 (a)）: `colour`、`panik` はエラー。`fp` は S-57 の正しいキーなので読む。
+# R-130: マニフェストの未知のキー。期待（S-99）: `colour` と `panik` は E1102（`panik` の修正候補は `panic`）。`fp` は S-57 の正しいキーなので読む。
+#   `main_frame` は仕様のキーだが第 1 期に `main` が無いので E0200。どれも `onsa check` でも出て（マニフェスト全体をソースより先に検査）、
+#   `span` は `onsa.toml` の中の位置、`--json` にも出て、終了コード 2。
 # 今（2026-10-04）: `onsa build --target host .` は 3 つとも黙って無視して成功する（panic は既定、fp は strict のまま）。
+# 今（2026-10-05 に追加で確かめた）: `main_frame` も読むだけで使われない（第 1 期に `main` は無い）。
+#   マニフェストの誤りは、コードの無い文面を標準エラーに出し、終了コード 2。`--json` でも標準出力には何も出ない。
+#   TOML の構文の誤り、値の型の誤り（`edition = 2026`、`panic = 3`）、必須のキーの欠け（`name`）は、どれも「TOML parse error」の同じ文面。
+#   閉じた一覧に無い値（`panic = "poisen"`）は `onsa check` を通り、`onsa build` で初めて誤りになる。
 [package]
 name = "r130"
 edition = "2026"
@@ -14,3 +20,4 @@ kind = "staticlib"
 platform = "host"
 panik = "poison"
 fp = "strict-ftz"
+main_frame = "static"
