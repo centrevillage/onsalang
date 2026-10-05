@@ -1,0 +1,26 @@
+# R-121: export した関数の C の名前が、ランタイムの公開の名前と重なる（既定の prefix `onsa_`）。
+# `onsa build --target host tests/review-phase1/parent/r121/rt` と `--target bare` で確かめる（`bare` は `kind = "source"` なので、生成した C を cc -fsyntax-only でコンパイルする）。
+#
+# 期待（S-95）: `prefix` が無いのでマニフェストの誤り。`prefix = "onsa_"` と書いても、`onsa_` で始まるのでマニフェストの誤り（ランタイムの名前空間）。
+#   書ける prefix（`rt_` など）では、C の名前（`rt_param_info`、`rt_reset_hook`）がランタイムの名前と重なることは無い。
+#
+# 今（2026-10-05）:
+#   - `host`: `uint32_t onsa_param_info(void)` が `onsa.h` の型 `onsa_param_info` と重なり、cc が失敗する（"redefinition of 'onsa_param_info' as different kind of symbol"）。
+#     E1011 はパッケージの中の重なりだけを見る（§14.2）。
+#   - `bare`（`panic = "reset"`）: さらに `uint32_t onsa_reset_hook(void)` が、ファームウェアが定義するフックの宣言と重なる（"conflicting types for 'onsa_reset_hook'"）。
+[package]
+name = "rt"
+edition = "2026"
+
+[export]
+fns = ["util.reset_hook", "util.param_info"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+
+[targets.bare]
+kind = "source"
+lang = "c"
+platform = "thumbv7em-none-eabihf"
+panic = "reset"

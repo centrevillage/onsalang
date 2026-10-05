@@ -1289,51 +1289,59 @@ pub fn version() -> U32 { 2 }
 
 ```toml
 [export]
-prefix = "onsa_"
+prefix = "vc_"
 fns = ["util.version"]
 ```
 
-export される関数は `pub` で、引数と返り値は FFI で `unsafe` を要しない型（§14.1）に限る。効果行は、そのターゲットの `provides` にある効果しか持てない（E0610）。ヘッダはパッケージに 1 つで、名前は `<prefix><package>.h`。export する全ての flow と関数を宣言する。次はパッケージ `voice`（§15.3）の例で、`voice` は §17.4 の flow、数値は例である。
+export される関数は `pub` で、引数と返り値は FFI で `unsafe` を要しない型（§14.1）に限る。効果行は、そのターゲットの `provides` にある効果しか持てない（E0610）。ヘッダはパッケージに 1 つで、名前は `<prefix><package>.h`。export する全ての flow と関数を宣言する。次はパッケージ `voice`（§15.3、`prefix = "vc_"`）の例で、`voice` は §17.4 の flow、数値は例である。
 
 ```c
-/* onsa_voice.h（onsa build が生成する） */
+/* vc_voice.h（onsa build が生成する） */
 #include "onsa.h"                 /* onsa_param_info などの共通定義 */
+#if ONSA_ABI_VERSION != 1
+#error "vc_voice.h needs ONSA_ABI_VERSION 1"
+#endif
 
-#define ONSA_VOICE_SIZE       48      /* fast 領域のバイト数 */
-#define ONSA_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
-#define ONSA_VOICE_ALIGN      8       /* fast 領域の整列 */
-#define ONSA_VOICE_BULK_ALIGN 4       /* bulk 領域の整列 */
-#define ONSA_VOICE_PARAM_COUNT 4      /* @param の数（onsa_voice_param_info の長さ） */
+#define VC_VOICE_SIZE       48      /* fast 領域のバイト数 */
+#define VC_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
+#define VC_VOICE_ALIGN      8       /* fast 領域の整列 */
+#define VC_VOICE_BULK_ALIGN 4       /* bulk 領域の整列 */
+#define VC_VOICE_PARAM_COUNT 4      /* @param の数（vc_voice_param_info の長さ） */
 
-typedef struct onsa_voice onsa_voice;
-typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } onsa_voice_params;
+typedef struct vc_voice vc_voice;
+typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } vc_voice_params;
 
 /* Config が空なので引数は sample_rate のみ。bulk は BULK_SIZE が 0 なら NULL でよい */
-int  onsa_voice_init(onsa_voice* s, void* bulk, float sample_rate);
+int  vc_voice_init(vc_voice* s, void* bulk, float sample_rate);
      /* 0: ok, 1: init が panic した（状態は未初期化のまま。reset では復帰せず、init のやり直しが要る） */
-void onsa_voice_reset(onsa_voice* s);
-void onsa_voice_params_default(onsa_voice_params* params);
-int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* params,
-                        float* output, uint32_t frames);
+void vc_voice_reset(vc_voice* s);
+void vc_voice_params_default(vc_voice_params* params);
+int  vc_voice_process(vc_voice* s, const vc_voice_params* params,
+                      float* output, uint32_t frames);
      /* 0: ok, 1: poisoned か未初期化, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
 
-extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデータ。Params のフィールドの順 */
+extern const onsa_param_info vc_voice_param_info[4];   /* @param のメタデータ。Params のフィールドの順 */
 
 /* Alloc を提供するターゲットだけで生成される */
-onsa_voice* onsa_voice_new(float sample_rate);   /* init が失敗したら NULL */
-void        onsa_voice_free(onsa_voice* s);
+vc_voice* vc_voice_new(float sample_rate);   /* init が失敗したら NULL */
+void      vc_voice_free(vc_voice* s);
 
 /* export した関数（[export] の fns） */
-int onsa_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
+int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 ```
 
 - メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。`SIZE` と `ALIGN`（bulk 領域は `BULK_SIZE` と `BULK_ALIGN`）を満たす記憶域なら、何でも状態に使える（静的な `uint8_t` の配列、リンカの節、`malloc`）。生成したコードは状態を別名を許す型で読み書きするので（§13.4）、`uint8_t` の配列として宣言した記憶域を状態に使っても、C の実効型の規則に反しない。
-- export した関数は状態の `int`（0: ok、1: panic）を返し、返り値は最後の引数の出力ポインタに書く（`int onsa_version(uint32_t* out)`。返り値の無い関数は状態だけを返す）。形はターゲットの `panic` 設定に依らない（`"trap"` などでは panic した呼び出しは戻らないので、常に 0 を返す）。`init` / `process` の状態の値と同じ考え方で、結果を出力ポインタで受け取るのは §12.7 の集成体の返り値と同じ形である。引数は §14.1 と同じ対応で、スカラは値、`inout` のスカラは `T*`、`Span[T]` は `const T* name, uint32_t name_len`（`inout` なら `T*`）になる。この版で export の引数と返り値に使えるのは、スカラとスカラの `Span` だけである（`@repr(c)` の構造体、借用した `Str`、集成体の返り値は E0200）。
+- export した関数は状態の `int`（0: ok、1: panic）を返し、返り値は最後の引数の出力ポインタに書く（`int vc_version(uint32_t* out)`。返り値の無い関数は状態だけを返す）。形はターゲットの `panic` 設定に依らない（`"trap"` などでは panic した呼び出しは戻らないので、常に 0 を返す）。`init` / `process` の状態の値と同じ考え方で、結果を出力ポインタで受け取るのは §12.7 の集成体の返り値と同じ形である。引数は §14.1 と同じ対応で、スカラは値、`inout` のスカラは `T*`、`Span[T]` は `const T* name, uint32_t name_len`（`inout` なら `T*`）になる。この版で export の引数と返り値に使えるのは、スカラとスカラの `Span` だけである（`@repr(c)` の構造体、借用した `Str`、集成体の返り値は E0200）。
 - `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は 1 を返し、`reset` は何もしない。復帰は `init` のやり直しだけである。
-- `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `onsa_<name>_in` / `onsa_<name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `onsa_swap_process(s, &params, &(onsa_swap_in){ inl, inr }, &(onsa_swap_out){ outl, outr }, frames)`。
+- `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `<prefix><name>_in` / `<prefix><name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `vc_swap_process(s, &params, &(vc_swap_in){ inl, inr }, &(vc_swap_out){ outl, outr }, frames)`。
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
-- C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `onsa_voice`、`util.version` は `onsa_version`）。flow は、それを頭にした名前（`onsa_voice_init`、`onsa_voice_params` など）も生成する。パッケージの中で C の名前が重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数と、flow の生成する名前と関数の名前（flow `voice` の `onsa_voice_init` と関数 `voice_init`）の重なりも含む。名前は `_` で始まらない（§2.3）ので、ランタイムの内部の記号（`onsa__` で始まる）とは重ならない。
+- C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `vc_voice`、`util.version` は `vc_version`）。flow は、それを頭にした名前（`vc_voice_init`、`vc_voice_params` など）と、それを大文字にしたマクロ（`VC_VOICE_SIZE` など）も生成する。パッケージの中で C の名前が重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数と、flow の生成する名前と関数の名前（flow `voice` の `vc_voice_init` と関数 `voice_init`）の重なりも含む。
+- `prefix` は、`[export]` に flow か関数があれば必須で、既定は無い（書かなければマニフェストの誤りで、文面に `prefix = "<package>_"` の形を示す）。C の名前は、ホストが依存した後は変えられない公開の ABI なので、export を決める場所で選ぶ。別々にビルドしたパッケージを一つのバイナリにリンクするとき、名前の重なりは `prefix` を変えて避ける（パッケージ名を変える必要は無い）。
+- `prefix` の値は、小文字の英字・数字・`_` からなり、英字で始まって `_` で終わる（`vc_`、`my_synth_`）。空は書けない（C の名前が libc や他のライブラリの名前と重なり、ヘッダの名前が `onsa.h` や標準のヘッダを隠す）。`__` を含むもの（C++ では予約の名前）と、`onsa_` で始まるものも書けない。いずれもマニフェストの誤りである。
+- ランタイムは `onsa_` と `ONSA_` で始まる名前を全て持つ（公開の名前は `onsa.h` の型と列挙子と下の表、内部の記号は `onsa__` で始まる）。`prefix` は `onsa_` で始まれないので、生成する名前とランタイムの名前は重ならない。ランタイムに名前を足しても、既存のパッケージの名前とは重ならない。
+- 生成するファイルの名前は `<prefix><package>` を幹にする: ヘッダ `<prefix><package>.h`、C のソース `<prefix><package>.c`、静的ライブラリ `lib<prefix><package>.a`。ランタイムのヘッダは固定の名前 `onsa.h` と `onsa__runtime.h` で、`prefix` の規則からパッケージのファイルとは重ならない。
 - 公開ヘッダ（`onsa.h` と `<prefix><package>.h`）は、C99 以降と C++11 以降の両方から、`-pedantic` でも警告なしに取り込める。宣言は `extern "C"` で囲む。`onsa.h` に入るのは、ホストが使う型（`onsa_param_info` など）と、ホストやファームウェアが用意する関数の宣言だけである。生成したコードのための内部のランタイム（補助関数、`setjmp`、`FLT_EVAL_METHOD` の検査、C11 の構文）は `onsa__runtime.h` に分け、生成した `.c` だけが取り込む（`kind = "source"` では出力するが、ホストは取り込まない）。生成した `.c` は C11 を要求する。
+- `onsa.h` の中身は、パッケージやターゲットの設定に依らない。`onsa.h` は ABI の版 `ONSA_ABI_VERSION`（整数。この版では 1）を定義し、パッケージのヘッダは `onsa.h` を取り込んだ直後に版を確かめて、違えば `#error` で止める。インクルードガードが同じなので一つの C ファイルには一つの `onsa.h` しか読まれず、違う版を前提にしたパッケージのヘッダを一緒に取り込むと、型の配置が黙って食い違うからである。版は、`onsa.h` の共有の部分（型、列挙子、下の表のフックとマクロの名前と形）を互換でなく変えたときに上げ、コンパイラの版とは結び付けない。ホストは `ONSA_ABI_VERSION` を読んで版ごとに書き分けられる。パッケージのヘッダと、別のビルドで作ったライブラリの組み合わせは検査しない（ヘッダとライブラリは一緒に生成される）。
 - `onsa_param_info`（`onsa.h`）の値の欄は、入力の型（§11.7）で形が変わる。真偽を `1.0` / `0.0` のような数で表さない。
 
 ```c
@@ -1413,7 +1421,7 @@ edition = "2026"
 std = "0.2.0"           # 完全一致。解決結果は onsa.lock に固定する
 
 [export]
-prefix = "onsa_"        # C のシンボルは prefix + 名前の最後の要素
+prefix = "vc_"          # 必須。C の名前は prefix + 名前の最後の要素（§14.2）
 flows = ["dsp.voice", "dsp.echo"]
 fns = ["util.version"]
 
@@ -1641,7 +1649,7 @@ test "resonator decays" {
 - 順序: `prev~(^y)` だけが前方の `y` を参照し、`^` の印で帰還と分かる。遅延を通るので合法（§11.2）。`prev~(y1)` は上で定義済みの `y1` の遅延なので、印は無い。
 - レート: `r w b1 b2` は Ctl なので、ブロックごとに 1 回だけ計算される。
 - 演算子: 積和は括弧なしで書く（乗法は加法より強い、§3.1）。`-(F32.PI * bw)` は前置の `-` の被演算子なので括弧が要る。
-- 状態: `y1` と `y2` の 2 つの F32。状態の大きさはコンパイル時に決まり、ヘッダの `ONSA_RESONATOR_SIZE` と `onsa interface` に出る。
+- 状態: `y1` と `y2` の 2 つの F32。状態の大きさはコンパイル時に決まり、ヘッダの `VC_RESONATOR_SIZE` と `onsa interface` に出る。
 
 ### 17.4 声の flow
 
@@ -1704,7 +1712,7 @@ pub flow echo(
 }
 ```
 
-`echo` の遅延線（約 384 KB）は `@mem(bulk)` を付けたので、`memory.bulk = true` のターゲットでは bulk 領域に入る。`ONSA_ECHO_BULK_SIZE` はコンパイル時に決まり、組込みでは外部 SDRAM に置ける。
+`echo` の遅延線（約 384 KB）は `@mem(bulk)` を付けたので、`memory.bulk = true` のターゲットでは bulk 領域に入る。`VC_ECHO_BULK_SIZE` はコンパイル時に決まり、組込みでは外部 SDRAM に置ける。
 
 ホスト側（Onsa で WAV に書き出す）:
 
@@ -1728,22 +1736,22 @@ pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
 `daisy` ターゲット（ヒープ無し、§15.3）で `voice` を静的ライブラリにし、C のファームウェアから呼ぶ。
 
 ```c
-#include "onsa_voice.h"
+#include "vc_voice.h"
 
-static _Alignas(ONSA_VOICE_ALIGN) uint8_t voice_mem[ONSA_VOICE_SIZE];
-static onsa_voice* voice;
-static onsa_voice_params params;
+static _Alignas(VC_VOICE_ALIGN) uint8_t voice_mem[VC_VOICE_SIZE];
+static vc_voice* voice;
+static vc_voice_params params;
 
 void setup(void) {
-  voice = (onsa_voice*)voice_mem;
-  if (onsa_voice_init(voice, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0 なので NULL */
-    return;                                             /* init が panic した。使い始めない */
+  voice = (vc_voice*)voice_mem;
+  if (vc_voice_init(voice, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0 なので NULL */
+    return;                                          /* init が panic した。使い始めない */
   }
-  onsa_voice_params_default(&params);
+  vc_voice_params_default(&params);
 }
 
 void audio_callback(const float* const* in, float* const* out, size_t frames) {
-  onsa_voice_process(voice, &params, out[0], (uint32_t)frames);
+  vc_voice_process(voice, &params, out[0], (uint32_t)frames);
 }
 ```
 

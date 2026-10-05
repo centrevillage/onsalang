@@ -1,0 +1,20 @@
+# R-121: `prefix = ""` でパッケージ名が `onsa`。`onsa build --target host tests/review-phase1/parent/r121/onsa` で確かめる。
+#
+# 期待（S-95）: 空の `prefix` はマニフェストの誤り（ビルドを始める前に止まり、cc の誤りにしない）。`prefix` は英字で始まり `_` で終わるので、
+#   `<prefix><package>.h` がランタイムの `onsa.h` や `onsa__runtime.h` と同じ名前になることは無い。
+#
+# 今（2026-10-05）: パッケージのヘッダ `<prefix><package>.h` が `onsa.h` になり、ランタイムの `onsa.h` を上書きする（自分自身を取り込む）。
+#   cc が 20 個の誤りで失敗する（`ONSA_STATIC_ASSERT` などが未定義）。診断コードは無い。
+#   flow のヘッダは `gain.h`（S-52 の前の、flow ごとのヘッダ）。
+[package]
+name = "onsa"
+edition = "2026"
+
+[export]
+prefix = ""
+flows = ["dsp.gain"]
+fns = ["util.version"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

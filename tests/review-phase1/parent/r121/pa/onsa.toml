@@ -1,0 +1,15 @@
+# R-121: 既定の prefix で作った二つのパッケージ（`pa` と `pb`）を、一つのホストにリンクする。手順と今の出力は `../host.c` の先頭のコメント。
+# 期待（S-95）: `prefix` が無いのでマニフェストの誤り（文面に `prefix = "pa_"` の形を示す）。`prefix = "pa_"` と書けば、C の名前は `pa_gain_*` と `pa_version`、ファイルは `pa_pa.h` / `pa_pa.c` / `libpa_pa.a`。
+# 今（2026-10-05）: `prefix` を書かないと既定の `onsa_` になる。
+# `prefix` を書かない。flow `dsp.gain` と関数 `util.version`（pa は 1 を返す）は `pa` と `pb` で同じ名前。
+[package]
+name = "pa"
+edition = "2026"
+
+[export]
+flows = ["dsp.gain"]
+fns = ["util.version"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

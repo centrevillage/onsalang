@@ -1,0 +1,6 @@
+pub flow gain(
+  x: Sig[F32],
+  @param(min: 0.0, max: 1.0, default: 0.5) g: Ctl[F32],
+) -> Sig[F32] {
+  x * g
+}
