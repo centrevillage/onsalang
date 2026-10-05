@@ -1,0 +1,37 @@
+// R-107（S-92）: C の生成 API と設定。`onsa build --target host .` と `--target bare .` の生成物で確かめる（生成物はコミットしない）。
+//
+// 期待:
+//   - flow のヘッダに `T_GAIN_PARAM_COUNT`（今と同じ）。`process` の注釈は「1: poisoned か未初期化」。
+//   - export した関数は状態を返し、結果は最後の出力ポインタ（panic = "poison" でなくても同じ形）:
+//       int t_half(int32_t x, int32_t* out);
+//       int t_bump(uint32_t* n);
+//       int t_sum(const float* xs, uint32_t xs_len, float* out);
+//     `t_take_panic()` は無い。
+//   - `bare`（panic_messages = false、OS の無いプラットフォーム）: 生成した C も `onsa.h` の補助関数もメッセージとファイル名を持たず、
+//     `onsa_panic("", "", 行)`（行は残す）。`onsa build` が `ONSA_NO_TLS` を定義する。`panic = "reset"` は `onsa_reset_hook()` を呼ぶ（今と同じ）。
+//
+// 今（2026-10-05）:
+//   - `T_GAIN_PARAM_COUNT 1` がある（仕様に無い）。
+//   - `int32_t t_half(int32_t x);`、`void t_bump(uint32_t* n);`、`float t_sum(const float* xs, uint32_t xs_len);` と、
+//     `int t_take_panic(void);`（panic ではゼロを返し、`take_panic` で知らせる。flow のヘッダとパッケージのヘッダの両方に宣言される）。
+//   - `bare`: 生成した C は `onsa_panic("", "", 0)`（行も消える）。`onsa.h` には補助関数のメッセージが 10 個残る（"index out of range"、"division by zero" など）。
+//     `ONSA_NO_TLS` は定義されない。
+
+pub flow gain(
+  x: Sig[F32],
+  @param(min: 0.0, max: 1.0, default: 0.5) g: Ctl[F32],
+) -> Sig[F32] {
+  x * g
+}
+
+pub fn half(x: I32) -> I32 { x / 2 }
+
+pub fn bump(inout n: U32) { n = n + 1 }
+
+pub fn sum(xs: Span[F32]) -> F32 {
+  var s = 0.0
+  for i in 0..xs.len() {
+    s = s + xs[i]
+  }
+  s
+}

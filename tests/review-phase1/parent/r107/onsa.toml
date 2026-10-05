@@ -1,0 +1,21 @@
+# R-107（S-92）: C の生成 API と設定。期待値と今の出力は `m.onsa` の先頭のコメント。
+# `onsa build --target host tests/review-phase1/parent/r107` と `--target bare` で生成するヘッダと C を確かめる。
+[package]
+name = "r107"
+edition = "2026"
+
+[export]
+prefix = "t_"
+flows = ["m.gain"]
+fns = ["m.half", "m.bump", "m.sum"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+
+[targets.bare]
+kind = "source"
+lang = "c"
+platform = "thumbv7em-none-eabihf"
+panic = "reset"
+panic_messages = false

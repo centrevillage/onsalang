@@ -149,7 +149,7 @@
 | B-5 | 部分的な重なりと出力どうしの一致は 2。同一ポインタは in-place | 妥当（§14.2 の通り） |
 | B-6 | `_new` は `_init` と同じ引数（`Config` のフィールド）を取る | 仕様へ（§14.2） |
 | B-7 | `Switch` は C の `switch` ではなく `if` / `else if` の連鎖（Core の `break` / `continue` をループ制御のままにするため） | 妥当 |
-| B-8 | `poison` で export した関数が panic したらゼロ値を返し、`<prefix>take_panic()` で 1 回だけ読める | 仕様へ（§9.2 の「エラーコードに変換する」を具体化） |
+| B-8 | `poison` で export した関数が panic したらゼロ値を返し、`<prefix>take_panic()` で 1 回だけ読める | 仕様へ（§9.2 の「エラーコードに変換する」を具体化）。レビュー R-107（S-92、2026-10-05）で、状態の `int` を返して結果を出力ポインタに書く形に改めた |
 | B-9 | `init` の wrapper は自分のスタックの `jmp_buf`、`_new` は `_init` に委譲、export の名前はモジュールの完全なパス | 妥当 |
 | B-10 | `inline_consts`: 関数呼び出しの `const` はインタプリタで評価してリテラルに戻し、C の静的初期化子にする。評価が panic したら手を付けず E0200 | 妥当 |
 | B-11 | プラットフォーム表: アーキテクチャ → ポインタ幅、OS → hosted / bare、フラグ。`panic` の既定は hosted で `poison`、`*-none-*` で `reset`。`relaxed` はターゲットに指定不可、`bind` は E0200 | 仕様へ（§15.3 の表に既定値） |

@@ -779,8 +779,8 @@ panic は効果行に現れない。
 | テスト | そのテストを失敗にする |
 | Onsa の中から呼ばれた関数（`rt` を含む） | 最も近い境界（export された flow・関数、または `main`）まで伝わる。`main` に達すれば通常の実行の規則に従う。 |
 | export された flow の `process` | その呼び出しを中断し、出力をゼロで埋め、インスタンスを **poisoned** にする。以後の `process` は無音を出力し、`reset` まで復帰しない。C API は戻り値で通知する。 |
-| export された関数 | panic は FFI 境界を越えない。その呼び出しを中断し、エラーコードに変換する。 |
-| OS の無いターゲット | ターゲットの `panic` 設定に従う（下記）。`panic_messages = false` でメッセージ文字列をバイナリから除く（§15.3）。 |
+| export された関数 | panic は FFI 境界を越えない。その呼び出しを中断し、状態の値 1 を返す（§14.2。結果は出力ポインタで受け取るので、panic した呼び出しの結果は書かれない）。 |
+| OS の無いターゲット | ターゲットの `panic` 設定に従う（下記）。`panic_messages = false` で、メッセージとファイル名の文字列を、生成した C とランタイムの補助関数のどちらからも除く（行番号は残す。§15.3）。 |
 
 poisoned の実現と、ターゲットの `panic` 設定:
 
@@ -788,7 +788,7 @@ poisoned の実現と、ターゲットの `panic` 設定:
 |---|---|---|
 | `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は libc に依存しない（§12.4。wrapper のスタックは `audit --stack` に数える） | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
 | `"trap"` | 即座にトラップ命令。デバッガで止める用。poisoned にはならない | |
-| `"reset"` | 機器をリセットする。本番の組込み用 | OS の無いターゲットの既定 |
+| `"reset"` | ファームウェアが用意する `onsa_reset_hook()` を呼んで機器をリセットする（§14.2）。本番の組込み用 | OS の無いターゲットの既定 |
 | `"halt"` | 停止する | |
 
 WASM では panic はトラップになり、同梱の glue が捕まえて poisoned にする（`"poison"` と同じ意味）。`"trap"` / `"reset"` / `"halt"` では rt の中の panic も設定に従い、インスタンスは poisoned にならない。
@@ -1301,6 +1301,7 @@ export される関数は `pub` で、引数と返り値は FFI で `unsafe` を
 #define ONSA_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
 #define ONSA_VOICE_ALIGN      8       /* fast 領域の整列 */
 #define ONSA_VOICE_BULK_ALIGN 4       /* bulk 領域の整列 */
+#define ONSA_VOICE_PARAM_COUNT 4      /* @param の数（onsa_voice_param_info の長さ） */
 
 typedef struct onsa_voice onsa_voice;
 typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } onsa_voice_params;
@@ -1312,7 +1313,7 @@ void onsa_voice_reset(onsa_voice* s);
 void onsa_voice_params_default(onsa_voice_params* params);
 int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* params,
                         float* output, uint32_t frames);
-     /* 0: ok, 1: poisoned, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
+     /* 0: ok, 1: poisoned か未初期化, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
 
 extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデータ。Params のフィールドの順 */
 
@@ -1321,10 +1322,11 @@ onsa_voice* onsa_voice_new(float sample_rate);   /* init が失敗したら NULL
 void        onsa_voice_free(onsa_voice* s);
 
 /* export した関数（[export] の fns） */
-uint32_t onsa_version(void);
+int onsa_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 ```
 
 - メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。
+- export した関数は状態の `int`（0: ok、1: panic）を返し、返り値は最後の引数の出力ポインタに書く（`int onsa_version(uint32_t* out)`。返り値の無い関数は状態だけを返す）。形はターゲットの `panic` 設定に依らない（`"trap"` などでは panic した呼び出しは戻らないので、常に 0 を返す）。`init` / `process` の状態の値と同じ考え方で、結果を出力ポインタで受け取るのは §12.7 の集成体の返り値と同じ形である。引数は §14.1 と同じ対応で、スカラは値、`inout` のスカラは `T*`、`Span[T]` は `const T* name, uint32_t name_len`（`inout` なら `T*`）になる。この版で export の引数と返り値に使えるのは、スカラとスカラの `Span` だけである（`@repr(c)` の構造体、借用した `Str`、集成体の返り値は E0200）。
 - `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は 1 を返し、`reset` は何もしない。復帰は `init` のやり直しだけである。
 - `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `onsa_<name>_in` / `onsa_<name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `onsa_swap_process(s, &params, &(onsa_swap_in){ inl, inr }, &(onsa_swap_out){ outl, outr }, frames)`。
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
@@ -1353,6 +1355,15 @@ typedef struct onsa_param_info {
 ```
 
 - `double` と `int64_t` は、§11.7 の全ての型の値を正確に表す。書かれていない `min` / `max` / `step` は、制約が無いことを表す値で埋める（浮動小数は `-INFINITY` / `INFINITY` / `0`、整数は型の範囲の両端と `1`）。`@param` の値は有限で `step > 0` なので、書かれていないことも見分けられる。
+- ホストやファームウェアが定義するマクロと関数は、次の表で全てである。
+
+| 名前 | 定義する者 | 意味 |
+|---|---|---|
+| `void onsa_reset_hook(void)` | ファームウェア（`panic = "reset"` のとき） | 機器をリセットする。戻らない。名前は `prefix` に依らない |
+| `ONSA_PANIC_HANDLER` | ホスト（任意） | 関数の名前を定義すると、panic のときに `(const char* msg, const char* file, uint32_t line)` で呼ばれ、その後で `panic` 設定の動作をする。`panic_messages = false` では `msg` と `file` は空の文字列（NULL ではない） |
+| `ONSA_NO_TLS` | `onsa build`（OS の無いプラットフォーム）、利用者（`kind = "source"` を自分でコンパイルするとき） | panic の飛び先をスレッドごとの記憶域ではなく静的な変数に置く。一つのパッケージの export の wrapper が並行に動かないことが前提 |
+| `ONSA_FP_CONTRACT_OFF`、`ONSA_ALLOW_INEXACT_FP` | 利用者 | 浮動小数のビルドの検査（§13.4） |
+
 - export した flow を、既存の C/C++ ホスト（JUCE, CLAP, VST3, AU, 組込み HAL）へ組み込む第一の経路とする。組込みでの使い方は §17.5。
 
 ---
@@ -1440,7 +1451,7 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 
 **ターゲット** は次の組で定義する。
 
-1. プラットフォーム（トリプル）。`kind = "source"` では変換先の言語（`lang`）
+1. プラットフォーム（トリプル）。`platform = "host"` は、コンパイラが動く機械のトリプルを指す（開発とテスト用）。`kind = "source"` では変換先の言語（`lang`）
 2. 浮動小数のプロファイル（`fp`、§15.5）
 3. 提供する handler の集合（`provides`）。`Alloc` を含むかどうかで、ヒープの有無が決まる
 4. `target` 宣言の割り当て（`bind`）
@@ -1925,6 +1936,7 @@ FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の�
 - ターゲット提供の「後回しの仕事」（サンプルの読み込みなど）: `std.worker.run_later(f, move arg)` のような文脈で、マイコンではメインループで直列に、デスクトップではスレッドプールで実行する案。言語は並列性を約束しない
 - デスクトップのターゲットだけが `provides` する並列計算の効果（ライブラリとして。核には触れない）
 - `Alloc` の確保失敗を、panic ではなく値として扱う API
+- panic の地点の番号: `panic_messages = false` でも位置とメッセージを復元できるよう、`onsa_panic` には地点の番号だけを渡し、番号から「ファイル・行・メッセージ」を引く表を `onsa build` がバイナリの外に出す（組込みの Rust の `defmt`、Zephyr の辞書式のログと同じ考え方）。番号の安定、表の形式、`onsa audit --panics` との関係を決める。今は文字列を除いて行番号を残す（§9.2）
 - 補間の中の呼び出しと式。穴の評価順（§3.5）、効果、`!` / `inout` の呼び出し、panic の扱いを決める必要があるので、今は名前の経路だけ（§2.4）
 - `panic` のメッセージに、組み立てた文字列（`"index {i}"`）を渡すこと。`Str` の実装と一緒に決める。rt の中では、組み立てにヒープが要る（§9.2）
 - ホットリロードで、型の変わったフィールドの扱い

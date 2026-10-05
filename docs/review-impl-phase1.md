@@ -1475,6 +1475,17 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
   - `panic_messages = false` でも、`onsa.h` のヘルパのメッセージ文字列が残ること
   - S-54 で加えた `ONSA_FP_CONTRACT_OFF` と `ONSA_ALLOW_INEXACT_FP` も、同じ設定のマクロの一覧に載せる（2026-10-04 追記）
 - 推奨: §14.2 / §15.3 / §9.2 に書き足す。メッセージ文字列は、`panic_messages = false` なら消す。
+- 範囲（2026-10-05 に追加で確かめた）:
+  - 未初期化のインスタンスの `process` が 1 を返すことは、S-27 で §14.2 の本文に入っていた（ヘッダの例の注釈だけが「1: poisoned」）。`ONSA_FP_CONTRACT_OFF` と `ONSA_ALLOW_INEXACT_FP` は S-54 で §13.4 に入っていた。
+  - export した関数: 引数はスカラ・`inout` のスカラ（`T*`）・スカラの `Span`（`const T* name, uint32_t name_len`）だけで、それ以外と集成体の返り値は E0200。panic ではゼロを返し、`<prefix>take_panic()` で知らせる（§9.2 の「エラーコードに変換する」とも、§14.2 のヘッダの例 `uint32_t onsa_version(void)` とも違う）。この論点は R-121 にもある。
+  - `panic_messages = false`: 生成した呼び出しは `onsa_panic("", "", 0)`（行も消える）だが、`onsa.h` の補助関数のメッセージ（`"index out of range"`、`"division by zero"` など 10 個）は残る。OS の無いプラットフォームでも `ONSA_NO_TLS` は定義されない。
+  - 再現は `tests/review-phase1/parent/r107/`（パッケージ。`onsa build --target host` と `--target bare` の生成物で確かめる）。
+- 決定（2026-10-05）: S-92。
+  - (1) 今の実装のまま仕様に書く: `platform = "host"`、`<UP>_PARAM_COUNT`、`onsa_reset_hook()`、`ONSA_PANIC_HANDLER`、`ONSA_NO_TLS`（OS の無いプラットフォームでは `onsa build` が定義）。ホストやファームウェアが定義するマクロと関数を §14.2 の表に閉じる。
+  - (2) export した関数の引数の C の形（§14.1 と同じ対応）と、この版で使える型（スカラとスカラの `Span`）を書く。
+  - (3) export した関数の panic は、状態の `int` を返し結果を最後の出力ポインタに書く形（(b)）。`take_panic` を確かめ忘れて panic の結果を使う危険が無く、`init` / `process` と揃い、集成体の返り値も同じ形で足せ、ヘッダが `panic` 設定に依らない。R-121 の三つ目の論点はこれで決まった。
+  - (4) `panic_messages = false` は、メッセージとファイル名を生成した C とランタイムの両方から除き、行番号は残す（(a)）。`ONSA_PANIC_HANDLER` には空の文字列を渡す。panic の地点の番号と外部の表（(c)、`defmt` と同じ考え方）は §19.1 に挙げた（利用者の判断）。
+  - (5) 未初期化の `process` と浮動小数のマクロは確認だけ（ヘッダの例の注釈を直し、マクロは (1) の表に載せた）。
 
 #### R-108 `const` の評価の超越関数が、ビルドするホストの libm に依存する
 - 低・要判断・観点 3｜`crates/onsa_driver/src/build.rs:429`｜§15.3「onsa.lock が同じなら成果物は同一」、§6.6
@@ -1539,6 +1550,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
   - ABI の版の検査を入れるか。
   - 関数の panic の通知: (a) `take_panic` を仕様にする、(b) C の形を `int f(…, T* out)` にして戻り値で状態を返す（flow の `process` と同じ形）。
 - 経緯: R-64 の議論で見つけた（2026-10-04）。
+- 経過（2026-10-05）: 関数の panic の通知は、R-107 で (b) に決めた（S-92）。残りは `prefix` と ABI の版。ABI の版の検査は、S-87 で `onsa_param_info` の配置を変えたことにも関わる。
 
 #### R-122 パッケージの `tests/` の役割が仕様に無い
 - 低・要判断・観点 3｜`crates/onsa_driver/src/lib.rs`（モジュールの収集）｜§15.1「`tests/` と `target/` を除く」
@@ -1857,6 +1869,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-120 | 直す（`Option` / `Result` の大小の比較は型検査で E0401。組込み型の trait を §6.3 の表で判定する） | 実装（第 2 段、R-79 と一緒に） |
 | R-56 | 直す（trait の関連定数を実装し、`T.ZERO` と `F32.ZERO` を引けるようにする）。S-46: `Num` は `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` と `ZERO`、`Float` は `Num` と `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`。`ONE` を `Num` に置かないのは Q15 / Q31 のため。組込み型の関連定数は閉じた表で、浮動小数の `MIN` は偽の友人なので設けない。`std.math.sum` は `[T: Num]` と `T.ZERO`（R-23 を改めた） | 仕様 §6.3 / §6.6 / §13.4 に反映済み（2026-10-03）。実装は第 2 段 |
 | R-57 | S-32 で `voice.SIZE` を Onsa の名前空間から外したので、論点ごと無くなる | — |
+| R-107 | S-92: `platform = "host"`、`PARAM_COUNT`、`onsa_reset_hook()`、`ONSA_PANIC_HANDLER`、`ONSA_NO_TLS` を仕様に書き、定義するマクロと関数を §14.2 の表に閉じた。export した関数は状態の `int` を返し、結果は最後の出力ポインタ（R-121 の panic の通知もこれで決定）。引数の C の形とこの版で使える型を書いた。`panic_messages = false` はメッセージとファイル名を補助関数も含めて除き、行番号は残す。panic の地点の番号は §19.1。再現は `tests/review-phase1/parent/r107/` | 仕様 §9.2 / §14.2 / §15.3 / §19.1 に反映済み（2026-10-05）。実装は第 3 段 |
 | R-105 | S-91: 別名を残す（flow の精度の切り替えの唯一の手段。利点を確かめてから決めた）。型の名前を書ける全ての位置で元の型と同じに使える。`impl` の対象に別名は書けない（E0307。今は孤児規則をすり抜けていた）。型パラメータは持たない（総称の別名は §19.1）。循環は E0311。他の診断コードの流用は T-8 で。再現は `tests/review-phase1/parent/r105/` | 仕様 §4.4 / §6.3 / §19.1 に反映済み（2026-10-05）。実装は第 3 段 |
 | R-102 | S-90: 補間に書けるのは名前の経路（名前と、`.` に続くフィールド・タプルの添字・修飾。定数、`cfg.N`、`F32.PI` を含む）で、式と同じ規則で解決する。呼び出し・`[i]`・演算子・リテラル・書式は E0001（note で `let` に取る、書式は無い）。理由（呼び出しを隠さない）を §2.4 に書いた。補間の中の呼び出しは §19.1、数値の書式は A-11。再現は `tests/review-phase1/parent/r102.onsa` | 仕様 §2.4 / §19.1 に反映済み（2026-10-05）。実装は第 3 段 |
 | R-101 | S-89: 識別子は ASCII だけ（E0001）。`////` は普通のコメント（doc の付き方は S-51 のまま）。fmt は 1 行の `let` と `var` の `=` を全て揃える。並びを開く後置の `(` と `[` は前のトークンの直後に書き、空白は E0020（`f (x)` も誤り。利用者の判断）、括弧の中の改行の後は `,` の無い要素として E0002。腕の `return` は E0020（修正候補はブロック）。再現は `tests/review-phase1/parent/r101/` | 仕様 §2.1 / §2.3 / §2.5 / §7 / §18.1 / §18.2 に反映済み（2026-10-05）。実装は第 3 段 |
