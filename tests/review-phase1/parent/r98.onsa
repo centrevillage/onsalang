@@ -1,0 +1,27 @@
+// R-98（S-86）: 名前の無い状態のノードの名前と、状態のフィールドの位置。今の実装の構文（`prev(x, 0.0)`。S-44 の前）で書いた。
+// 名前は表示のためのもので、ホットリロードとプローブの付け替えは flow の計画の構造で照合する（§18.3）。
+// `onsa interface r98.onsa` の `top.State` と、`onsa graph r98.onsa top` のノード名で確かめる。
+//
+// 期待（含む `let` の名前で修飾し、`let` ごと・種類ごとに字面の順で番号を振る。出力の式の中は修飾なし。`par` の本体は `par` の名前で修飾）:
+//   top.State: a.prev_0, a.lp_0, a.prev_1, b, b.prev_0, c, c.prev_0, vs（各複製の要素に lp_0, prev_0, lp_1）, lp_0, lp_1, poisoned, initialized
+//   （`a.prev_0` は `prev(lp~(x), 0.0)`、`a.lp_0` はその中の `lp~(x)`。出力の `lp_0` は外側、`lp_1` は内側の `lp~`）
+//   graph のノード: a.prev_0, a.lp_0, a.prev_1, b.prev_0, c.prev_0, vs.lp_0, vs.prev_0, vs.lp_1, lp_0, lp_1
+// 今（2026-10-05）: flow 全体で種類ごとの通し番号を後順（内側が先）で振る。
+//   top.State: lp_0, prev_0, prev_1, prev_2, b, prev_3, c, vs, lp_3, lp_4, poisoned, initialized（`par` の本体が lp_1, prev_4, lp_2 を使う）
+//   graph のノード: prev_0, lp_0, prev_1, prev_2, prev_3, lp_1, prev_4, lp_2, lp_3（出力の内側）, lp_4（出力の外側）
+//   `let a` に `prev` を一つ足すと、後ろの全ての `prev_k` の番号がずれる（名前と型で照合すると、別のノードの状態を引き継ぐ）。
+
+flow lp(x: Sig[F32]) -> Sig[F32] {
+  let y = (x * 0.5) + (prev(y, 0.0) * 0.5)
+  y
+}
+
+pub flow top(x: Sig[F32]) -> Sig[F32] {
+  let a = prev(lp~(x), 0.0) + prev(x, 1.0)
+  let b = lp~(prev(a, 0.0))
+  let c = prev(prev(b, 0.0), 0.0)
+  let vs = par i in 0..2 {
+    lp~(prev(x, 0.0)) + lp~(x)
+  }
+  (lp~(lp~(x)) * c) + vs[0]
+}

@@ -3,13 +3,13 @@
 //
 // unison（基本仕様 §11.5 の例と同じ形）:
 //   今: "saws" -> "saw_0" と "saw_0" -> "saws" の実線の閉路（添字 i を `par` のノードに対応付けている）。
-//   期待: 枠 cluster_saws（見出し `par i in 0..4（×4）`）の中に "saws.i"（i: U32 @Init）と "saw_0"。
-//         辺は "f0" / "detune" / "saws.i" -> "saw_0"、"saw_0" -> "saws"、"saws" -> "out"。実線の閉路は無い。
+//   期待: 枠 cluster_saws（見出し `par i in 0..4（×4）`）の中に "saws.i"（i: U32 @Init）と "saws.saw_0"（ラベルは saw_0。名前は R-98、S-86）。
+//         辺は "f0" / "detune" / "saws.i" -> "saws.saw_0"、"saws.saw_0" -> "saws"、"saws" -> "out"。実線の閉路は無い。
 //
 // nest（入れ子の `par`。flow/e15/np.onsa と同じ）:
 //   今: "m" -> "acc_0" -> "par_0" -> "m" の実線の閉路と、"par_0" -> "acc_0"。
-//   期待: 枠 cluster_m の中に "m.i" と、入れ子の枠 cluster_par_0（"par_0.j" と "acc_0"）。
-//         辺は "x" / "m.i" / "par_0.j" -> "acc_0"、"acc_0" -> "par_0"、"par_0" -> "m"、"m" -> "out"。実線の閉路は無い。
+//   期待: 枠 cluster_m の中に "m.i" と、入れ子の枠 cluster_m.par_0（"m.par_0.j" と "m.par_0.acc_0"。名前は R-98、S-86）。
+//         辺は "x" / "m.i" / "m.par_0.j" -> "m.par_0.acc_0"、"m.par_0.acc_0" -> "m.par_0"、"m.par_0" -> "m"、"m" -> "out"。実線の閉路は無い。
 
 use std.dsp.{sum}
 use std.math.{floor}
