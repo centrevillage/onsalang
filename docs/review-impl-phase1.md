@@ -1507,6 +1507,14 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - strict aliasing（推測）: §17.5 の `static uint8_t mem[]` を状態の型として読むのは、厳密には strict aliasing の違反である。
 - `const` の外れ: 借用の配列を `Span` に渡すと、`const` が外れる。clang で警告になり、`-Werror` ではエラーになる。
 - 推奨: §17.5 を `_Alignas` 付きの union などに直す。C は `const T*` 版の span を使う。
+- 範囲（2026-10-05 に追加で確かめた）:
+  - `const` の外れは推測でなく起きる: `const TABLE: [F32; 4]` を `Span[F32]` の引数に渡すと、生成した C が `const float[4]` を `float*` に渡し、`clang -Wall -Wextra -Werror` で失敗する。§13.4 は警告を出さないと約束している。
+  - 別名: 生成したコードに手当てが無い（`__may_alias__` も、別名の最適化を切る設定も無い）。bulk 領域（ホストが渡す `void* bulk`）も同じ。誤った最適化を一台で示すのは難しい。
+  - 元の推奨の `_Alignas` 付きの union は、中身を別の構造体の型で読み書きすれば実効型の規則に反するので、それだけでは解決しない（状態の構造体を入れるには定義の公開が要る）。
+  - 再現は `tests/review-phase1/parent/r109/`（パッケージ。生成した C を clang でコンパイルする手順）。
+- 決定（2026-10-05）: S-94。
+  - (1) 生成したコードは、状態と bulk 領域を別名を許す型で読み書きする（GCC / Clang は `__may_alias__`、MSVC は手当て不要、それ以外は型による別名の最適化を切ってコンパイルする）。`SIZE` と `ALIGN` を満たす記憶域なら何でも状態に使える（§14.2）。組込みのホストの書き方を変えず、公開の API も変わらない。§17.5 の例と `examples/voice_host/host.c` を `_Alignas` に改めた。
+  - (2) 借用の `Span` は `const T*` を持つ型で渡す（実装を直す）。テストの基盤（R-113）で `-Wall -Wextra -Werror` のコンパイルを検査する。
 
 #### R-110 `match` のガードで対象を変更できる
 - 低・要判断・観点 3｜`crates/onsa_core/src/lower/body.rs:641`｜§7「match x の束縛は借用束縛で、x は変わらない」
@@ -1876,6 +1884,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-120 | 直す（`Option` / `Result` の大小の比較は型検査で E0401。組込み型の trait を §6.3 の表で判定する） | 実装（第 2 段、R-79 と一緒に） |
 | R-56 | 直す（trait の関連定数を実装し、`T.ZERO` と `F32.ZERO` を引けるようにする）。S-46: `Num` は `Add` `Sub` `Mul` `Div` `Rem` `PartialEq` `PartialOrd` と `ZERO`、`Float` は `Num` と `ONE` `PI` `MAX` `EPSILON` `INFINITY` `NAN`。`ONE` を `Num` に置かないのは Q15 / Q31 のため。組込み型の関連定数は閉じた表で、浮動小数の `MIN` は偽の友人なので設けない。`std.math.sum` は `[T: Num]` と `T.ZERO`（R-23 を改めた） | 仕様 §6.3 / §6.6 / §13.4 に反映済み（2026-10-03）。実装は第 2 段 |
 | R-57 | S-32 で `voice.SIZE` を Onsa の名前空間から外したので、論点ごと無くなる | — |
+| R-109 | S-94: 生成したコードは状態と bulk 領域を別名を許す型（`__may_alias__`）で読み書きし、`SIZE` と `ALIGN` を満たす任意の記憶域を状態に使える（§14.2）。§17.5 の例を `_Alignas` に。借用の `Span` は `const T*` の型で渡す（clang の `-Werror` で落ちていた）。再現は `tests/review-phase1/parent/r109/` | 仕様 §13.4 / §14.2 / §17.5 に反映済み（2026-10-05）。実装は第 3 段 |
 | R-108 | S-93: `const` の評価の超越関数は `std.math` の Onsa の実装（musl の移植、D-11）で計算し、ビルドする機械に依らない（§15.3 を保つ）。インタプリタ全体（`const` の評価、`onsa test`）も同じ実装に結び付ける（(a1)）。D-11 ができるまでは既知の制限。再現は `tests/review-phase1/parent/r108/` | 仕様 §6.6 / §13.4 に反映済み（2026-10-05）。実装は D-11 と同じ回 |
 | R-107 | S-92: `platform = "host"`、`PARAM_COUNT`、`onsa_reset_hook()`、`ONSA_PANIC_HANDLER`、`ONSA_NO_TLS` を仕様に書き、定義するマクロと関数を §14.2 の表に閉じた。export した関数は状態の `int` を返し、結果は最後の出力ポインタ（R-121 の panic の通知もこれで決定）。引数の C の形とこの版で使える型を書いた。`panic_messages = false` はメッセージとファイル名を補助関数も含めて除き、行番号は残す。panic の地点の番号は §19.1。再現は `tests/review-phase1/parent/r107/` | 仕様 §9.2 / §14.2 / §15.3 / §19.1 に反映済み（2026-10-05）。実装は第 3 段 |
 | R-105 | S-91: 別名を残す（flow の精度の切り替えの唯一の手段。利点を確かめてから決めた）。型の名前を書ける全ての位置で元の型と同じに使える。`impl` の対象に別名は書けない（E0307。今は孤児規則をすり抜けていた）。型パラメータは持たない（総称の別名は §19.1）。循環は E0311。他の診断コードの流用は T-8 で。再現は `tests/review-phase1/parent/r105/` | 仕様 §4.4 / §6.3 / §19.1 に反映済み（2026-10-05）。実装は第 3 段 |

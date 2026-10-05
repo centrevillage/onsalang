@@ -1,0 +1,13 @@
+# R-109（S-94）: 生成した C の `const` と、ホストが用意した記憶域の別名の規則。期待値と今の出力は `m.onsa` の先頭のコメント。
+[package]
+name = "r109"
+edition = "2026"
+
+[export]
+prefix = "t_"
+fns = ["m.total"]
+
+[targets.src]
+kind = "source"
+lang = "c"
+platform = "host"

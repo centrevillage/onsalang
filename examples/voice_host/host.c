@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static uint8_t voice_mem[ONSA_VOICE_SIZE] __attribute__((aligned(ONSA_VOICE_ALIGN)));
+static _Alignas(ONSA_VOICE_ALIGN) uint8_t voice_mem[ONSA_VOICE_SIZE];
 static onsa_voice* voice;
 static onsa_voice_params params;
 

@@ -1195,7 +1195,8 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - C では、生成コードで F32 の各演算を `(float)` で囲み、FMA への縮約と再結合を止める。プラグマ（`#pragma STDC FP_CONTRACT OFF`、MSVC の `#pragma fp_contract(off)`）だけでは不十分で、コンパイラフラグも要る（GCC は STDC のプラグマを無視し、GNU モードの既定で縮約する。ISO モードの `-std=c11` では縮約しない）。ターゲット定義はコンパイラフラグ（`-std=c11`、`-ffp-contract=off`、`-fno-fast-math`、x86-32 では SSE、MSVC では `/fp:strict`）を含み、`onsa build` がそれを渡す。`onsa build` の外でコンパイルするとき（`kind = "source"` の出力、ホストのビルド、クロスビルド）も同じフラグが要り、生成した `.c` の先頭のコメントにも書く。
 - 生成した C は、守られていないことが分かるフラグをコンパイル時に止める（`#error`）: GCC で ISO モードでなく `ONSA_FP_CONTRACT_OFF` も定義されていない（GNU モードで `-ffp-contract=off` を渡すときに定義する）、`__FAST_MATH__`（`-ffast-math`、`-Ofast`）、`__FINITE_MATH_ONLY__`、MSVC の `/fp:fast`、`FLT_EVAL_METHOD` が 0 でない。メッセージは必要なフラグを示す。
 - 精度を諦めて速さを取るときは、利用者が `ONSA_ALLOW_INEXACT_FP` を定義すると、上の検査を外してコンパイルできる（組込みでプロジェクト全体を `-Ofast` でビルドする場合など）。そのビルドには、ビット一致の保証と `onsa test --backends all` の結果は当てはまらない。Onsa のソースで一部だけ緩めるときは `@fp(relaxed)`（§15.5）を使い、C では関数ごとの緩和として出す（効かなくても遅くなるだけで、結果は壊れない）。
-- 生成した C は、GCC / Clang の `-Wall -Wextra` で警告を出さない（ホストが `-Werror` でビルドしても通る）。`#pragma STDC FP_CONTRACT OFF` は、それを知るコンパイラにだけ出す。
+- 生成した C は、GCC / Clang の `-Wall -Wextra` で警告を出さない（ホストが `-Werror` でビルドしても通る）。借用の `Span` は `const T*` を持つ型で渡し、`const` の表（§6.6）の `const` を外さない。
+- 生成した C は、状態と bulk 領域を、別名を許す型で読み書きする（GCC / Clang は `__may_alias__`。MSVC は型による別名の最適化をしない）。それ以外のコンパイラで型による別名の最適化をするものは、それを切る設定（GCC の `-fno-strict-aliasing` に当たるもの）で生成した C をコンパイルする。`#pragma STDC FP_CONTRACT OFF` は、それを知るコンパイラにだけ出す。
 
 `onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` は `Num`、`min` / `max` は `AnyNum`）で、各変換先のプリミティブに対応付ける。インタプリタ（`const` の評価と `onsa test` を含む）と WASM は、Onsa で書いた実装（musl の移植）に対応付けるので、結果はビルドや実行をする機械に依らない。`std.math.sum[T: AnyNum, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
 
@@ -1326,7 +1327,7 @@ void        onsa_voice_free(onsa_voice* s);
 int onsa_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 ```
 
-- メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。
+- メモリは呼び出し側が用意する。`_new` / `_free` は、ヒープのあるターゲットでの便宜にすぎない。`SIZE` と `ALIGN`（bulk 領域は `BULK_SIZE` と `BULK_ALIGN`）を満たす記憶域なら、何でも状態に使える（静的な `uint8_t` の配列、リンカの節、`malloc`）。生成したコードは状態を別名を許す型で読み書きするので（§13.4）、`uint8_t` の配列として宣言した記憶域を状態に使っても、C の実効型の規則に反しない。
 - export した関数は状態の `int`（0: ok、1: panic）を返し、返り値は最後の引数の出力ポインタに書く（`int onsa_version(uint32_t* out)`。返り値の無い関数は状態だけを返す）。形はターゲットの `panic` 設定に依らない（`"trap"` などでは panic した呼び出しは戻らないので、常に 0 を返す）。`init` / `process` の状態の値と同じ考え方で、結果を出力ポインタで受け取るのは §12.7 の集成体の返り値と同じ形である。引数は §14.1 と同じ対応で、スカラは値、`inout` のスカラは `T*`、`Span[T]` は `const T* name, uint32_t name_len`（`inout` なら `T*`）になる。この版で export の引数と返り値に使えるのは、スカラとスカラの `Span` だけである（`@repr(c)` の構造体、借用した `Str`、集成体の返り値は E0200）。
 - `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は 1 を返し、`reset` は何もしない。復帰は `init` のやり直しだけである。
 - `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `onsa_<name>_in` / `onsa_<name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `onsa_swap_process(s, &params, &(onsa_swap_in){ inl, inr }, &(onsa_swap_out){ outl, outr }, frames)`。
@@ -1729,7 +1730,7 @@ pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
 ```c
 #include "onsa_voice.h"
 
-static uint8_t voice_mem[ONSA_VOICE_SIZE] __attribute__((aligned(ONSA_VOICE_ALIGN)));
+static _Alignas(ONSA_VOICE_ALIGN) uint8_t voice_mem[ONSA_VOICE_SIZE];
 static onsa_voice* voice;
 static onsa_voice_params params;
 

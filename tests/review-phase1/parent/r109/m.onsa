@@ -1,0 +1,26 @@
+// R-109（S-94）:
+// (1) 借用の `Span` は、生成した C で `const T*` を持つ型になる。確かめ方:
+//     `onsa build --target src tests/review-phase1/parent/r109` の後、`target/src` で `clang -std=c11 -Wall -Wextra -Werror -c onsa_r109.c`（GCC も）。
+//   期待: 警告なしで通る（§13.4）。
+//   今（2026-10-05）: onsa_r109.c:29:43: error: passing 'const float[4]' to parameter of type 'float *' discards qualifiers
+//     [-Werror,-Wincompatible-pointer-types-discards-qualifiers]（`sum(TABLE)` の `const` の表）。
+// (2) 生成したコードは、状態と bulk 領域を別名を許す型（GCC / Clang の `__may_alias__`）で読み書きする。
+//   ホストが `static _Alignas(ALIGN) uint8_t mem[SIZE]` を状態に使っても、実効型の規則（C11 §6.5）に反しない。
+//   今: 手当てが無い（この例では状態を使わないので、§17.5 の例の形で確かめる。誤った最適化を一台で示すのは難しい）。
+
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+fn sum(xs: Span[F32]) -> F32 {
+  var s = 0.0
+  for i in 0..xs.len() {
+    s = s + xs[i]
+  }
+  s
+}
+
+fn twice(xs: [F32; 4]) -> F32 { sum(xs) + sum(TABLE) }
+
+pub fn total(k: F32) -> F32 {
+  let a: [F32; 4] = [k, k, k, k]
+  twice(a)
+}
