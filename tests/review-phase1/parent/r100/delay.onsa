@@ -1,0 +1,28 @@
+// R-100（S-88）: `vdelay` の遅延の長さ `d` が `F32` のとき、`MAX <= 2^24`（E0808）。`F64` の `d` には掛からない。
+// 今の実装の構文（`vdelay(x, d, MAX, init)`。S-44 の前）で書いた。`onsa check` と `onsa test` で確かめる。
+
+// 期待: 通る（2^24 ちょうど）。
+// 今: 通る。
+pub flow f32_ok(x: Sig[F32]) -> Sig[F32] {
+  vdelay(x, 1000000000.0, 16777216, 0.0)
+}
+
+// 期待: E0808（`d` が `F32` で `MAX > 2^24`）。
+// 今: 通る（`onsa test` で `render` すると実行時に panic する。下のテスト）。
+pub flow f32_over(x: Sig[F32]) -> Sig[F32] {
+  vdelay(x, 1000000000.0, 16777219, 0.0)
+}
+
+// 期待: 通る（`F64` の `d` は `U32` の `MAX` を全て正確に表す）。
+// 今: 通る。
+pub flow f64_ok(x: Sig[F64]) -> Sig[F64] {
+  vdelay(x, 1000000000.0, 16777219, 0.0)
+}
+
+// 期待: `f32_over` が E0808 なので、このテストは検査で止まる。
+// 今: test "f32 rounds up" failed at delay.onsa:13: integer overflow in `0 - 1` (U32)（`MAX` が `F32` で 2^24 + 4 に上へ丸まり、`k = MAX + 1` になる）。
+test "f32 rounds up" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = f32_over.render(f32_over.Config {}, f32_over.Params {}, xs, 48000.0)
+  assert o.out[0] == 0.0
+}
