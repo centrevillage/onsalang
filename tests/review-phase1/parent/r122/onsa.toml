@@ -1,0 +1,5 @@
+# R-122: パッケージの `tests/` の役割。`onsa check tests/review-phase1/parent/r122` と `onsa test tests/review-phase1/parent/r122` で確かめる。
+# 期待値と今の出力は各 `.onsa` ファイルの先頭のコメント。
+[package]
+name = "r122"
+edition = "2026"

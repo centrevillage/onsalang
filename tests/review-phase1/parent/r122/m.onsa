@@ -1,0 +1,7 @@
+// R-122: パッケージの普通のモジュール。`onsa test` はこのテストを実行する（今も期待も同じ）。
+
+pub fn twice(x: I32) -> I32 { x * 2 }
+
+test "inline" {
+  assert twice(2) == 4
+}

@@ -1,0 +1,17 @@
+// R-122: パッケージルート直下の `tests/` に置いた、Rust の結合テストの書き方のファイル。
+//
+// 期待（S-96）: `onsa check` と `onsa test` が、このファイルの先頭で E0200（パッケージの `tests/` はこの版では未対応、§19.1）を出して失敗する。
+//   役割は第 2 期に std 以外の依存と一緒に決める（R-88）。
+//
+// 今（2026-10-05）: モジュールの収集から黙って除かれる（§15.1）。下の失敗するテストも構文の誤りも報告されず、
+//   `onsa check` は何も出さずに成功する。`onsa test` はこのファイルのテストを実行せず、`m.onsa` と `dsp/tests/n.onsa` のテストだけを数える
+//   （`dsp/` を除けば "1 passed, 0 failed" で終了コード 0）。
+//   このファイルを直接 `onsa check tests/review-phase1/parent/r122/tests/api.onsa` で検査すると、構文の誤り（E0002）は出る。
+
+use r122.m.{twice}
+
+test "from tests dir fails" {
+  assert twice(2) == 5
+}
+
+fn broken( {
