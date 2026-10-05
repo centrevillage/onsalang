@@ -1,0 +1,42 @@
+// R-126: 組込みのメソッドの一覧を閉じる。`onsa check tests/review-phase1/parent/r126.onsa` で確かめる。
+// 期待値（S-98）と今（2026-10-05）の出力は各項目の上のコメント。
+
+use std.math.{min}
+
+// 1. 整数の `abs` / `min` / `max` のメソッド。今: 通る（仕様に無く、`std.math` の関数と二重）。
+//   期待: 三つとも E0413（修正候補は `abs(a)`、`min(a, b)`、`max(a, b)` と `use` の追加）。
+fn int_methods(a: I32, b: I32) -> I32 { a.abs() + a.min(b) + a.max(b) }
+fn uint_min_method(a: U32, b: U32) -> U32 { a.min(b) }
+// 今: 通る（S-84 で `min` / `max` は `AnyNum`。std の宣言はまだ `Num`）。期待: 通る。
+fn uint_min_fn(a: U32, b: U32) -> U32 { min(a, b) }
+
+// 2. `as` で書ける変換をメソッドでも書ける。今: 全て通る。期待: 全て E0413（修正候補は `x as F64` など。同じ型への変換は取り除く）。
+fn f32_to_f64(x: F32) -> F64 { x.round_f64() }           // `x as F64` と同じ
+fn f32_to_f32(x: F32) -> F32 { x.round_f32() }           // 何もしない
+fn i8_to_f64(x: I8) -> F64 { x.round_f64() }             // `x as F64` と同じ
+fn i32_narrow_i64(x: I32) -> Option[I64] { x.narrow_i64() } // 拡大なので常に `Some`
+fn i32_narrow_i32(x: I32) -> Option[I32] { x.narrow_i32() } // 同じ型
+
+// 2. `as` で書けない変換。今: E0411 で、修正候補は一つだけ。
+//   `I32 as F32` は `x.round_f32()`。`F32 as I32` は `x.trunc_i32()`（Rust の `as` の読みの `trunc_i32_sat()` は出ない）。
+//   `I64 as U8` は `x.narrow_u8()`（`Option[U8]` を返すので、`U8` を期待する位置では型が合わない）。
+// 期待: E0411。`I32 as F32` は `round_f32()`、`F32 as I32` は `trunc_i32_sat()` と `trunc_i32()` の二つ、`I64 as U8` は候補なしで note に `narrow_u8()`。
+fn i32_as_f32(x: I32) -> F32 { x as F32 }
+fn f32_as_i32(x: F32) -> I32 { x as I32 }
+fn i64_as_u8(x: I64) -> U8 { x as U8 }
+
+// 3. 列の `is_empty`。今: 通る（§5.3 の一覧に無い。`Str` には §4.2 にある）。期待: E0413（修正候補は `xs.len() == 0`。`Str` も同じ）。
+fn span_empty(xs: Span[F32]) -> Bool { xs.is_empty() }
+fn arr_empty(xs: [F32; 4]) -> Bool { xs.is_empty() }
+
+// 4. `checked_*`。今: `checked_add` / `sub` / `mul` / `div` だけ。`checked_rem`（§3.4 が触れている）と `checked_neg` は E0413。
+//   期待: 両方通る（§3.4 の一覧）。
+fn rem_checked(a: I32, b: I32) -> Option[I32] { a.checked_rem(b) }
+fn neg_checked(a: I32) -> Option[I32] { a.checked_neg() }
+
+// 5. ビット表現。今: 通る（§3.3 の例のとおり）。期待: 通る。
+fn from_bits(u: U32) -> F32 { F32.from_bits(u) }
+
+// 6. NaN の判定。今: 通る（A-04 で不採用にしたメソッドの形。実装はまだ消していない）。代わりの `std.math` の関数は無い。
+//   期待: E0413（修正候補は `is_nan(x)` と `use std.math.{is_nan}`）。
+fn nan(x: F32) -> Bool { x.is_nan() }

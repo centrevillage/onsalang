@@ -23,10 +23,10 @@ pub fn stacked_prefix(x: F32) -> F32 {
   --x                           //~ E0012
 }
 
-pub fn fine(x: F32, y: F32, z: F32, lo: F32, hi: F32) -> Bool {
+pub fn fine(x: F32, y: F32, z: F32, lo: F32, hi: F32, xs: [F32; 2]) -> Bool {
   let a = x + y - z
   let b = x + (y * z)
-  let c = -x.abs()
+  let c = -xs[0]
   let d = (-x) as F64
   let e = -(-x)
   ((lo <= a) && (b < hi)) || (c == e)

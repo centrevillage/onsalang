@@ -10,7 +10,7 @@ pub enum ConfigError {
 
 pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
   let text = Fs.read(path).map_err(ConfigError.Io)?
-  if text.is_empty() {
+  if text.len() == 0 {
     return Err(ConfigError.Empty)
   }
   Ok(count_lines(text))

@@ -199,7 +199,7 @@ let f = (m & 1) == 0      // ビットは他の群と混在できない
 - ビットの群では、同じ演算子の連鎖（`a | b | c`、`a & b & mask`、`x << a << b`）を左結合で書ける。`&` `|` `^` は結合的でどう読んでも値が同じで、シフトの連鎖も受理する言語は全て左結合で読むので、読みが分かれない（P10）。違うビット演算子の混在（`a & b | c`）は括弧を要する。
 - `onsa fmt` は、強い群の式を弱い群の被演算子として囲む冗長な括弧を外す（`(a * b) + c` は `a * b + c`、`(i + 1) < n` は `i + 1 < n`）。同じ群の中の括弧と、強弱の無い組み合わせの括弧は変えない（P2）。
 
-結合の強さは、後置（呼び出し `f(x)`、flow の呼び出し `f~(x)`、フィールド `.f`、添字 `[i]`、`?`）> 前置（`-`、`!`）> `as` > 二項演算子の順（Rust / C と同じ）。`-x.abs()` は `-(x.abs())`、`-x as F64` は `(-x) as F64`。前置演算子を重ねるには括弧が要る（`-(-x)`、E0012）。
+結合の強さは、後置（呼び出し `f(x)`、flow の呼び出し `f~(x)`、フィールド `.f`、添字 `[i]`、`?`）> 前置（`-`、`!`）> `as` > 二項演算子の順（Rust / C と同じ）。`-xs[i]` は `-(xs[i])`、`-x as F64` は `(-x) as F64`。前置演算子を重ねるには括弧が要る（`-(-x)`、E0012）。
 
 ### 3.2 演算子は trait に脱糖する
 
@@ -219,6 +219,19 @@ let m = y.trunc_i32_sat()    // F32 -> I32、範囲外は飽和、NaN は 0（Ru
 let b = y.to_bits()          // F32 -> U32、ビット表現（F64 は U64）。逆は F32.from_bits(b)
 ```
 
+数の型の間の変換は次の表で全てで、型の組ごとに書き方は一つである。メソッドは `as` で書けない組にだけある。
+
+| 変換 | 書き方 |
+|---|---|
+| 情報を失わない変換: 同じ符号の整数の拡大、符号なしからより広い符号付き、`F32` → `F64`、`I8` `I16` `U8` `U16` → `F32`、`I8`〜`I32` `U8`〜`U32` → `F64` | `as` |
+| 整数 → 整数（上以外。同じ幅で符号が違うものと縮小） | `narrow_<型>()`。`Option` を返し、範囲外は `None` |
+| 浮動小数 → 整数 | `trunc_<型>()`（ゼロ方向に切り捨て。範囲外と NaN は panic）、`trunc_<型>_sat()`（範囲外は飽和、NaN は 0） |
+| 整数・浮動小数 → 浮動小数（上以外: `F64` → `F32`、`I32` `U32` `I64` `U64` → `F32`、`I64` `U64` → `F64`） | `round_f32()` / `round_f64()`（最近接偶数丸め） |
+| ビット表現 | `to_bits()`（`F32` → `U32`、`F64` → `U64`）。逆は関連関数 `F32.from_bits(u)` / `F64.from_bits(u)` |
+
+- `as` で書ける組の変換メソッド（`F32` の `round_f64()`、`I32` の `narrow_i64()`、同じ型への `round_f32()` など）は無い（E0413。修正候補は `as` の形）。
+- `as` で書けない組の `as` は E0411。読みが一つの組は、その変換のメソッドを修正候補に示す（整数から浮動小数と `F64` → `F32` は `round_f32()` / `round_f64()`）。浮動小数から整数は既存の言語で読みが分かれるので、読みごとに並べる（Rust の `as` の意味の `trunc_<型>_sat()` と、範囲外を panic にする `trunc_<型>()`）。整数の縮小は、Rust や C の `as` が下位のビットを取るのに対して `narrow_<型>()` は `Option` を返し、意味が違うので修正候補を出さず、note で `narrow_<型>()` を示す。
+
 Rust の `as` は情報を失う変換も許す。Onsa の `as` で書けるのはその部分集合で、検査を通るものは Rust と同じ意味を持つ（§0.3 の 4）。
 
 `as` 式を二項演算子のオペランドにするときは括弧が必要（E0011）: `acc + (x as F64)`。
@@ -234,7 +247,9 @@ Rust と同じ（例外は、`MIN` を `-1` で割った剰余を 0 とする点
 - 符号なし整数に単項の `-` は無い（E0401）。0 を除く全ての値で結果が型に収まらず、型だけで誤りと決まるからである。0 を下回る引き算（`a - b`）は値によって決まるので、実行時に panic する。2 の補数の否定は `0 -% u` と書く。
 - panic するのは、数学的な結果が型に収まらないときだけである。`I32.MIN % -1` と `I32.MIN.rem_euclid(-1)` の結果は 0 で型に収まるので、panic せずに 0 を返す（`checked_rem` / `checked_rem_euclid` は `Some(0)`）。Rust はここで panic するが、それは x86 の除算命令が例外を起こすというハードウェアの事情による。WASM の `rem_s` と JavaScript の `%` も 0 を返す。`div_euclid` の `MIN / -1` は結果が収まらないので panic する。
 - ラップアラウンドは `+%` `-%` `*%`、飽和は `+|` `-|` `*|` の演算子で書く（Zig と同じ）。符号付きは二の補数でラップする。位相の累積は `phase +% inc`、リングバッファの添字は `(w +% 1) % N`。`wrapping_*` / `saturating_*` のメソッドは無い（演算子が唯一の書き方）。Swift の `&+` を採らなかったのは、C の読み方では `a & +b` になるからである（§0.3 の規則 4）。
-- 床除算は `div_euclid` / `rem_euclid`、`Option` を返す検査付きは `checked_*` のメソッドで明示する。
+- 床除算は `div_euclid` / `rem_euclid` のメソッドで書く。
+- panic しうる整数の演算子とメソッドには、全て検査付きのメソッドがあり、panic の代わりに `None` を返す（`Option` を返す）: `checked_add` `checked_sub` `checked_mul` `checked_div` `checked_rem` `checked_neg`（符号付きだけ） `checked_shl` `checked_shr` `checked_div_euclid` `checked_rem_euclid`。panic しうる演算を足すときは、検査付きも足す。
+- 整数と浮動小数のメソッドは、§3.3 の変換と、上の床除算と検査付きで全てである。それ以外の計算（`abs`、`min`、`max`、`sqrt`、`floor`、`is_nan` など）は `std.math` の関数で書き、メソッドの形は無い（E0413。修正候補は関数の形）。同じ計算に二つの呼び方を作らない（§6.2）。
 - 既定の `+ - *` を検査付きにするのは、非 DSP のコード（ボイス割り当て、MIDI の解析）の添字計算のバグを黙って通さないためで、Swift と Rust（デバッグ）と同じ意味である。DSP のラップの意図は演算子で書けるので panic にならず、panic は本当のバグだけになる。
 - 浮動小数の `%` は `fmod`（切り捨て除算の剰余、符号は被除数）。`fmod` は丸めを含まないので正確で、変換先によらずビット一致する。
 
@@ -291,10 +306,10 @@ Rust と同じ（例外は、`MIN` を `-1` で割った剰余を 0 とする点
 | 操作 | 意味 |
 |---|---|
 | `s.len() -> U32` | バイト数 |
-| `s.is_empty() -> Bool` | 空か |
 | `s.as_bytes() -> Bytes` | バイト列として見る（複製しない） |
 | `Str.from_utf8(b: Bytes) -> Result[Str, Utf8Error]` | 検証付きの変換。生のバイト列は `Bytes` で扱う |
 
+- 空かどうかは `s.len() == 0` で書く。長さを持つ型（`Str`、`Bytes`、`Span`、`Buf`、`[T; N]`、第 2 期の `Array` `Map` `Set`）は `len()` だけを持ち、`is_empty` は無い（E0413。修正候補は `len() == 0`）。
 - `s[i]` の添字は無い（何を返すかが一意でないため）。バイトは `s.as_bytes()` から得る。
 - API はこの最低限から始め、用途（プリセット名、パス、ログ、`@param` の `unit` / `label`）が要求したときに足す。部分文字列・検索・文字の反復は最初の版に無い（§19.2）。
 - 等値と順序はバイト列の辞書順。UTF-8 のバイト順はコードポイントの順と一致する。正規化はしない。
@@ -414,7 +429,7 @@ acc = acc + (x as F64)
 | もの | 書き方 | 意味 |
 |---|---|---|
 | 借用 | `f(x)`, `f(inout x)` | §5.2 |
-| `Span[T]` | 引数の型として `xs: Span[T]` / `inout xs: Span[T]` | 連続した要素の非所有ビュー（C++20 の `std::span` と同じ意味）。`[T; N]`、`Buf[T]`、`Span[T]` を渡せる。メソッドは `len()`、`slice(from, to)`、`get(i) -> Option[T]`、`fill!(v)`、`add_from!(other)`、`copy_from!(other)` で、`[T; N]` と `Buf[T]` にも同じものがある |
+| `Span[T]` | 引数の型として `xs: Span[T]` / `inout xs: Span[T]` | 連続した要素の非所有ビュー（C++20 の `std::span` と同じ意味）。`[T; N]`、`Buf[T]`、`Span[T]` を渡せる。メソッドは `len()`、`slice(from, to)`、`get(i) -> Option[T]`、`fill!(v)`、`add_from!(other)`、`copy_from!(other)` で全てで、`[T; N]` と `Buf[T]` にも同じものがある（空かどうかは `len() == 0`、§4.2） |
 | 部分ビュー | `f(xs.slice(from, to))`, `f(inout xs.slice(from, to))` | 半開区間 `[from, to)` の `Span`。範囲外は panic |
 | `Span` の配列 | 引数の型として `xs: [Span[T]; N]` / `inout xs: [Span[T]; N]` | チャンネルごとのバッファ（planar）。`[[T; M]; N]`、`[Buf[T]; N]`、`[Span[T]; N]` の値をそのまま渡せる（要素ごとに `Span` へ変換）。別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け、排他性は要素の場所ごとに検査する。`xs[k]` は `Span[T]` で、引数の位置にだけ現れる |
 | 捕捉するクロージャ | `array.from_fn(fn(i) { k * i.round_f32() })` | 外側の値をコピーで捕捉する無名関数。捕捉した値は読み取り専用で、代入すると E0701。`inout` 引数と Affine 値は捕捉できない |
@@ -1190,7 +1205,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 
 浮動小数のプロファイル `strict`（§15.5）では、全ての変換先が同じ入力に対して **IEEE の演算** についてビット単位で同じ出力を出す。
 
-- 四則演算、`sqrt`、`fmod`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、比較、整数と浮動小数の間の変換は、全ての変換先で正しく丸められるか正確なので、ビット一致する。`round` は最近接偶数丸め（WASM の `nearest`、C の `rint`。JavaScript は模倣する）。`min` / `max` はどちらかが NaN なら NaN を返し（WASM と `Math.min` の意味。C の `fminf` は使わない）、`min(-0.0, 0.0)` は `-0.0`、`max(-0.0, 0.0)` は `0.0`。
+- 四則演算、`sqrt`、`fmod`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、比較と `is_nan` / `is_finite`、整数と浮動小数の間の変換は、全ての変換先で正しく丸められるか正確なので、ビット一致する。`round` は最近接偶数丸め（WASM の `nearest`、C の `rint`。JavaScript は模倣する）。`min` / `max` はどちらかが NaN なら NaN を返し（WASM と `Math.min` の意味。C の `fminf` は使わない）、`min(-0.0, 0.0)` は `-0.0`、`max(-0.0, 0.0)` は `0.0`。
 - FMA への縮約と再結合を禁止する。JavaScript では各演算の後に `Math.fround` を挟む。
 - 整数のオーバーフローと範囲外アクセスの検査も、全ての変換先で同じに行う。
 - **超越関数**（`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` など）は、各環境のプリミティブ（C の libm、JavaScript の `Math`、WASM では同梱の libm）を使う。実装が環境で違うので最後の桁は一致しない。精度目標は **F32 / F64 とも 2 ULP 以内**（仮決め）とし、`onsa test --backends all` は超越関数を含む出力を許容誤差付きで比較する。環境の libm がこれを満たさない場合（組込みの軽量 libm など）は、その関数だけ Onsa 実装に差し替えるなど個別に対策する。ビット一致が要る用途向けの Onsa 実装の `std.math.exact` は §19。
@@ -1200,7 +1215,7 @@ Shared 型と `Buf` のオブジェクトは、データの前に 8 バイトの
 - 生成した C は、GCC / Clang の `-Wall -Wextra` で警告を出さない（ホストが `-Werror` でビルドしても通る）。借用の `Span` は `const T*` を持つ型で渡し、`const` の表（§6.6）の `const` を外さない。
 - 生成した C は、状態と bulk 領域を、別名を許す型で読み書きする（GCC / Clang は `__may_alias__`。MSVC は型による別名の最適化をしない）。それ以外のコンパイラで型による別名の最適化をするものは、それを切る設定（GCC の `-fno-strict-aliasing` に当たるもの）で生成した C をコンパイルする。`#pragma STDC FP_CONTRACT OFF` は、それを知るコンパイラにだけ出す。
 
-`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` は `Num`、`min` / `max` は `AnyNum`）で、各変換先のプリミティブに対応付ける。インタプリタ（`const` の評価と `onsa test` を含む）と WASM は、Onsa で書いた実装（musl の移植）に対応付けるので、結果はビルドや実行をする機械に依らない。`std.math.sum[T: AnyNum, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
+`onsa test --backends all` は、全ての変換先で `render` の出力を比較する（適合性テスト）。超越関数を通らない出力はビット一致、通る出力は許容誤差以内を要求する。判定は flow 単位で、Core の到達解析で超越関数のプリミティブに到達する flow は全ての出力を許容誤差で、到達しない flow はビット一致で比べる。`std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` は `Num`、`min` / `max` は `AnyNum`。`is_nan[T: Float](x: T) -> Bool` と `is_finite` は NaN と有限の判定）で、各変換先のプリミティブに対応付ける。インタプリタ（`const` の評価と `onsa test` を含む）と WASM は、Onsa で書いた実装（musl の移植）に対応付けるので、結果はビルドや実行をする機械に依らない。`std.math.sum[T: AnyNum, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
 
 ### 13.5 言語全体の変換（最終目標）
 
@@ -1602,7 +1617,7 @@ pub enum ConfigError: PartialEq + Eq + Show {
 
 pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
   let text = Fs.read(path).map_err(ConfigError.Io)?
-  if text.is_empty() {
+  if text.len() == 0 {
     return Err(ConfigError.Empty)
   }
   Ok(count_lines(text))
