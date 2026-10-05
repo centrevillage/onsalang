@@ -163,6 +163,7 @@
 | `parent/r109/` | R-109（生成した C の `const` と別名の規則。パッケージで、生成した C を clang の `-Wall -Wextra -Werror` でコンパイルする。手順と期待値は `m.onsa` の先頭のコメント。S-94） |
 | `parent/r121/` | R-121（C の API の名前空間と ABI の版。`pa` と `pb` は既定の prefix の二つのパッケージで、`host.c` から両方をリンクする。`onsa` は空の prefix とパッケージ名 `onsa`、`rt` はランタイムの名前と重なる関数。手順・期待値・今の出力は `host.c` と各 `onsa.toml` の先頭のコメント。S-95） |
 | `parent/r122/` | R-122（パッケージの `tests/` の役割。`onsa check` と `onsa test` で確かめる。`tests/api.onsa` はルート直下の `tests/`、`dsp/tests/n.onsa` はルート直下でない `tests/`。期待値と今の出力は各ファイルの先頭のコメント。S-96） |
+| `parent/r125.onsa` | R-125（std のテスト用の補助を呼べる場所。`onsa check` と `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-97） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値は `onsa.toml` の先頭のコメント） |

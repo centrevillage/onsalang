@@ -1,0 +1,39 @@
+// R-125: std のテスト用の補助（`std.test` の `check` と `gen.*`、`std.dsp.test` の `assert_near` など）を、どこから呼べるか。
+// `onsa check tests/review-phase1/parent/r125.onsa` と `onsa test tests/review-phase1/parent/r125.onsa` で確かめる。
+// 期待値（S-97）と今の出力は各項目の上のコメント。補助は普通の std の関数で、呼べる場所は効果行と変換先（§15.2）で決まる。
+
+use std.test.{check, gen, Gen}
+use std.dsp.test.{assert_near}
+
+// 効果行の無い関数から、`uses {Random}` の `check` を呼ぶ。
+// 期待（S-97）: E0601（効果行に無い `Random` の使用）。修正候補は出さず、note で「この版では `Random` はテストの本体でだけ与えられる」。
+// 今（2026-10-05）: `onsa check` は何も出さない（第 1 期の効果行の検査は `Alloc` だけ、S-23）。
+//   `uses {Random}` と書くと E0200「this version does not support effects other than `Alloc`」（S-74 のとおり）。
+fn helper_no_effect() {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+}
+
+// `Gen` を生成器を通さずに作る。
+// 期待（S-97）: E0303（`Gen` のフィールドは `priv`。生成器は `gen.*` で作る）。
+// 今（2026-10-05）: `onsa check` を通る。`Gen[T]` は `pub struct` でフィールド `seed` が可視性を継ぐ（S-35）ので、
+//   誰でも `Gen { seed: 7 }` と書ける。仕様 §11.8 は `Gen` の中身を定めていない。
+fn forged() -> Gen[F32] { Gen { seed: 7 } }
+
+// `test` の外で `assert_near` を使う。
+// 期待（S-97）: 今のまま `onsa check` を通る（テストの外からも呼べる）。C が与えない間は、C へのビルドで E0200（§15.2）。
+// 今（2026-10-05）: `onsa check` を通る。export して `onsa build` すると、C が与えないので E0200（R-125 の本文）。
+pub fn near(a: F64) { assert_near(a, 1.0, 0.1) }
+
+// 今（2026-10-05）: `onsa test` は、無名関数の値をまだ降下できないので、`check` を呼ぶ二つのテストが E0200 で止まる
+//   （"this version does not lower function values (closures outside `array.from_fn`) to Core"。M5 で降下する、R-08 の補足）。
+test "uses helper" {
+  helper_no_effect()
+}
+
+test "forged gen" {
+  check(3, forged(), fn(x: F32) -> Bool { x == x })
+}
+
+test "near" {
+  near(1.05)
+}
