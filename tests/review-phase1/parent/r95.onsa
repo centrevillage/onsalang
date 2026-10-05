@@ -1,0 +1,102 @@
+// R-95（S-85）: Affine のフィールドを消費する位置に置くと、元の値全体を消費する（残りのフィールドはその場で破棄）。
+// 意味は分解の `let` と同じで、フィールドごとの移動の状態は持たない。対象は struct とタプルのフィールドの静的な経路で、
+// 配列の要素は取り出せない。`Drop` を実装する型は分解も取り出しもできない。
+// 各関数の上に期待値と今（2026-10-05）の出力を書いた。`onsa check` で確かめる。
+
+struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+struct Outer {
+  inner: Holder,
+  rate: U32,
+}
+
+// 期待: 通る。残りの `gain` は Copy なので `Alloc` は要らない。
+// 今: r95.onsa:23:4: error[E0601]: `take_ret` uses `Alloc`, which is not in its effect row（`s` 全体を破棄すると見ている）。`uses {Alloc}` を足すと E0711（cannot move `s.buf` out of `s`: ... partial moves are not allowed）。
+fn take_ret(move s: Holder) -> Buf[F32] { s.buf }
+
+// 期待: 通る。
+// 今: r95.onsa:27:4: error[E0601]: `take_let` uses `Alloc`, which is not in its effect row（`s` 全体を破棄すると見ている）。`uses {Alloc}` を足すと E0711（cannot move `s.buf` out of `s`: ... partial moves are not allowed）。
+fn take_let(move s: Holder) -> Buf[F32] {
+  let b = move s.buf
+  b
+}
+
+// 期待: 通る。残りの `b` を破棄するので `Alloc` が要る。
+// 今: r95.onsa:34:55: error[E0711]: cannot move `p.a` out of `p`: Affine values move as a whole (partial moves are not allowed)。
+fn take_pair(move p: Pair) -> Buf[F32] uses {Alloc} { p.a }
+
+// 期待: 通る（タプルのフィールド）。
+// 今: r95.onsa:38:4: error[E0601]: `take_tuple` uses `Alloc`, which is not in its effect row（`t` 全体を破棄すると見ている）。`uses {Alloc}` を足すと E0711（cannot move `t.0` out of `t`: ... partial moves are not allowed）。
+fn take_tuple(move t: (Buf[F32], F32)) -> Buf[F32] { t.0 }
+
+// 期待: 通る（入れ子の経路）。
+// 今: r95.onsa:42:4: error[E0601]: `take_nested` uses `Alloc`, which is not in its effect row（`o` 全体を破棄すると見ている）。`uses {Alloc}` を足すと E0711（cannot move `o.inner.buf` out of `o`: ... partial moves are not allowed）。
+fn take_nested(move o: Outer) -> Buf[F32] { o.inner.buf }
+
+// 期待: 通る（他のフィールドは取り出しの前に読む）。
+// 今: r95.onsa:46:4: error[E0601]: `read_first` uses `Alloc`, which is not in its effect row（`s` 全体を破棄すると見ている）。`uses {Alloc}` を足すと E0711（cannot move `s.buf` out of `s`: ... partial moves are not allowed）。
+fn read_first(move s: Holder) -> (Buf[F32], F32) {
+  let g = s.gain
+  let b = move s.buf
+  (move b, g)
+}
+
+// 期待: E0704（`s` は `move s.buf` で全体を消費した）。note で、取り出した位置と、先に読むか分解する書き方を示す。修正候補なし。
+// 今: r95.onsa:55:16: error[E0711]: cannot move `s.buf` out of `s`: Affine values move as a whole (partial moves are not allowed)。E0704 ではなく取り出しの位置で落ちる。
+fn use_after(move s: Holder) -> F32 uses {Alloc} {
+  let b = move s.buf
+  s.gain
+}
+
+// 期待: 通る（分解は今と同じ）。
+// 今: 通る。
+fn destructure(move s: Holder) -> Buf[F32] {
+  let Holder { buf: b, gain: _ } = move s
+  b
+}
+
+// 期待: E0711（配列の要素は取り出せない）。note で `for x in move xs` を示す。
+// 今: r95.onsa:69:16: error[E0711]: cannot move `xs[0]` out of `xs`: Affine values move as a whole (partial moves are not allowed)。note なし。
+fn take_elem(move xs: [Buf[F32]; 2]) -> Buf[F32] uses {Alloc} {
+  let b = move xs[0]
+  b
+}
+
+// 期待: E0711（借用の引数からは取り出せない。今と同じ）。
+// 今: r95.onsa:75:43: error[E0711]: `s` is borrowed here and Affine, so it cannot be moved out; only owned values move (§5.2, §5.4)。期待どおり。
+fn take_borrowed(s: Holder) -> Buf[F32] { s.buf }
+
+impl Holder {
+  // 期待: 通る。
+  // 今: r95.onsa:80:6: error[E0601]: `into_buf` uses `Alloc`, which is not in its effect row（`self` 全体を破棄すると見ている）。`uses {Alloc}` を足すと E0711（cannot move `self.buf` out of `self`: ... partial moves are not allowed）。
+  fn into_buf(move self) -> Buf[F32] { self.buf }
+}
+
+struct Res {
+  buf: Buf[F32],
+}
+
+// 期待: 通る（第 2 期）。`drop` の本体の終わりで、`self` は `drop` を呼び直さずにフィールドごとに破棄される。
+// 今: r95.onsa:89:1: error[E0200]: this version does not support trait implementations (`impl Trait for Type`)（第 2 期）。
+impl Drop for Res {
+  fn drop(move self) uses {Alloc} { }
+}
+
+// 期待: E0711（`Res` は `Drop` を実装するので、取り出せない）。
+// 今: r95.onsa:95:53: error[E0711]: cannot move `r.buf` out of `r`: Affine values move as a whole (partial moves are not allowed)。`Drop` によるものではなく、部分移動の禁止による。
+fn take_res(move r: Res) -> Buf[F32] uses {Alloc} { r.buf }
+
+// 期待: E0711（`Drop` を実装する型は分解できない）。
+// 今: 通る（`impl Drop` が E0200 なので、`Res` は `Drop` を実装する型として扱われない）。
+fn destructure_res(move r: Res) -> Buf[F32] uses {Alloc} {
+  let Res { buf: b } = move r
+  b
+}

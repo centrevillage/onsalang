@@ -151,6 +151,7 @@
 | `parent/r88/` | R-88（std の版の固定。期待値は `onsa.toml` の先頭のコメント。S-83） |
 | `parent/r93.onsa` | R-93、R-81（評価順。S-75 の期待値で書いたテストで、今の結果は各テストの上のコメント） |
 | `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-84） |
+| `parent/r95.onsa` | R-95（Affine のフィールドの取り出し。期待値と今の出力は各項目の上のコメント。S-85） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値は `onsa.toml` の先頭のコメント） |
