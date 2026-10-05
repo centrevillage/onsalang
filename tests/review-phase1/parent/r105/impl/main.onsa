@@ -1,0 +1,13 @@
+use geo
+
+type Q = geo.Point
+
+impl Q {
+  fn norm(self) -> F32 { self.x }
+}
+
+type B = Buf[F32]
+
+impl B {
+  fn first(self) -> F32 { 0.0 }
+}

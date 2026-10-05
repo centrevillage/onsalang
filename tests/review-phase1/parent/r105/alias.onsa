@@ -1,0 +1,64 @@
+// R-105（S-91）: 型別名は新しい型を作らず、型の名前を書ける全ての位置で元の型と同じに使える。
+// `impl` の対象には書けない（E0307）。型パラメータは持たない（E0002）。循環は E0311。
+// 各項目の上に期待値と今（2026-10-05）の出力を書いた。`onsa check` で確かめる。
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } }
+  pub const ORIGIN: Point = Point { x: 0.0, y: 0.0 }
+}
+
+pub enum Shape {
+  Circle(F32),
+  Dot,
+}
+
+type P = Point
+type S = Shape
+type Sample = F32
+
+// 期待: 通る（型の位置）。
+// 今: 通る。
+fn type_pos(p: P) -> F32 { p.x }
+
+// 期待: 通る（関連関数）。
+// 今: alias.onsa:30:26: error[E0401]: `P` is not a value。
+fn assoc_fn() -> Point { P.new(1.0, 2.0) }
+
+// 期待: 通る（関連定数。精度の切り替えに使う形）。
+// 今: alias.onsa:34:37: error[E0302]: `Sample` has no members。
+fn assoc_const() -> Sample { Sample.PI }
+
+// 期待: 通る（struct リテラル）。
+// 今: alias.onsa:38:28: error[E0401]: `P` is not a struct。
+fn struct_lit() -> Point { P { x: 1.0, y: 2.0 } }
+
+// 期待: 通る（パターン）。
+// 今: alias.onsa:43:7: error[E0401]: a struct pattern needs a struct。
+fn pattern(p: Point) -> F32 {
+  let P { x: a, y: _ } = p
+  a
+}
+
+// 期待: 通る（列挙子）。
+// 今: alias.onsa:49:25: error[E0401]: `S` is not a value。
+fn variant() -> Shape { S.Circle(1.0) }
+
+// 期待: 通る（`match` の列挙子）。
+// 今: alias.onsa:55:7: error[E0302]: `S` has no members。
+fn match_variant(s: Shape) -> F32 {
+  match s {
+    S.Circle(r) => r,
+    S.Dot => 0.0,
+  }
+}
+
+// 期待: E0307（`impl` の対象は宣言の名前で書く）。修正候補は `impl Point`。
+// 今: 通る。
+impl P {
+  fn norm(self) -> F32 { self.x }
+}
