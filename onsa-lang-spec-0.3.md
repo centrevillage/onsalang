@@ -1045,7 +1045,8 @@ pub flow gain(
 - 値の制約（違反は E0809）: 数値は有限（NaN と無限大は不可）。両方あれば `min < max`。`default` は範囲の中。`step > 0`。`scale: "log"` は `min > 0` を要する。`Bool` の入力に書けるのは `default`（`true` / `false`）、`unit`、`label`、`id` だけである。制約が無ければ `min` / `max` / `step` を書かない（`step` が無ければ、浮動小数は連続、整数は全ての整数の値）。`onsa interface` も、書かれていないキーを出さない。
 - 用途: IDE の自動 UI、プラグイン（CLAP / VST3 / AU）のパラメータ情報、`params_default()`、C API のメタデータ表。
 - export する flow（§15.3）の `block` の入力には `@param` が必須（E0809）。
-- `id` を省略すると、名前から安定した ID を作る。`onsa.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
+- `id` はパラメータの文字列の ID で、ホストが保存する自動化とプリセットが参照する。省略すると入力の名前（`cutoff`）になる。空でなく、ASCII の英字・数字・`_`・`.` からなり、同じ flow の中で重複してはならない（E0809）。入力の名前を変えても保存した自動化とプリセットを保つには、元の名前を `id` に書く（`id: "cutoff"`）。`onsa.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
+- 数値の ID は、文字列の ID から決まる 32 ビットの整数である。CLAP / VST3 / AU のホストはパラメータを整数で識別するので、プラグインのラッパーと C の API（§14.2 の `number` と `_param_index`）はこれを使う。作り方は、`id` のバイト列に FNV-1a（32 ビット、オフセット基底 `0x811C9DC5`、素数 `0x01000193`）を適用し、下位 31 ビットを取る（`h & 0x7FFFFFFF`）。31 ビットに収めるのは、パラメータの ID を符号付きの整数として扱うホストがあり、無効値 `0xFFFFFFFF`（CLAP の `CLAP_INVALID_ID`、VST3 の `kNoParamId`）も避けられるからである。同じ flow の中で数値が衝突すると E0809（note で `id` を変えることを示す）。文字列から決まるので、文字列の ID を変えない限り、入力を足したり並べ替えたりしても数値は変わらない。
 - `@param` は宣言（メタデータ）であり、どの呼び出しでも挙動を変えない。export された API も、パラメータを `[min, max]` に飽和させない。`min` / `max` は UI とホストが使う範囲である。C などから直接呼ぶ場合、値の条件を守るのは呼び出し側の責任である。範囲を守る必要がある flow は、本体に書く（`let fb = min(max(feedback, 0.0), 0.95)`。§11.3 により `process` の呼び出しごとに 1 回だけ計算される）。こうすると、テストの `render` と実機で挙動が同じになり、UI の範囲と許容する範囲を別々に決められる。
 
 UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、パラメータはシグネチャに出る。パラメータの一覧を知るのに本体を読む必要が無い（P1）。
@@ -1349,6 +1350,7 @@ int  vc_voice_process(vc_voice* s, const vc_voice_params* params,
      /* 0: ok, 1: poisoned か未初期化, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
 
 extern const onsa_param_info vc_voice_param_info[4];   /* @param のメタデータ。Params のフィールドの順 */
+int vc_voice_param_index(uint32_t number);   /* 数値の ID（§11.7）から上の表の添字。無ければ -1 */
 
 /* Alloc を提供するターゲットだけで生成される */
 vc_voice* vc_voice_new(float sample_rate);   /* init が失敗したら NULL */
@@ -1381,6 +1383,7 @@ typedef enum onsa_param_scale { ONSA_PARAM_LINEAR, ONSA_PARAM_LOG } onsa_param_s
 typedef struct onsa_param_info {
   const char* name;
   const char* id;
+  uint32_t number;     /* 数値の ID（§11.7）。ホストとプラグインのラッパーが使う */
   const char* unit;    /* 無ければ "" */
   const char* label;   /* 無ければ "" */
   onsa_param_kind kind;

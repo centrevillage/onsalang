@@ -1,0 +1,13 @@
+# impl-review の §11.7 `id`: パラメータの ID の作り方。`onsa build --target host tests/review-phase1/parent/param_id` で、
+# 生成した C の `t_tone_param_info` を確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。
+[package]
+name = "param_id"
+edition = "2026"
+
+[export]
+prefix = "t_"
+flows = ["m.tone"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"

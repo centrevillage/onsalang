@@ -168,6 +168,7 @@
 | `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100） |
 | `parent/t5.onsa` | `impl-review-0.3.md` の T-5（flow だけの構文を flow の外に書いたときの診断。期待値と今の出力は各関数の上のコメント。S-101。レート型の部分は S-102） |
 | `parent/t8.onsa` | `impl-review-0.3.md` の T-8 と R-105 の残り（診断コードの流用。期待値と今の出力は各項目の上のコメント。S-103） |
+| `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |

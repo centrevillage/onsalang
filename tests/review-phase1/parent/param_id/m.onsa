@@ -1,0 +1,21 @@
+// impl-review の §11.7 `id`: パラメータの ID の作り方。S-104。
+//
+// 期待: `level` と `gain` の `id` が重複するので E0809（`onsa check` でも出る）。重複を直せば、表の各行に数値の ID が入る
+//   （`cutoff` は FNV-1a の下位 31 ビットで 1801646368）。ヘッダに `int t_tone_param_index(uint32_t number);` が生成される。
+//
+// 今（2026-10-06）: 文字列の ID は入力の名前そのもの（`{ "cutoff", "cutoff", ... }`）。`id` を書けばその文字列（`"gain_db"`）。
+//   数値の ID は無い（CLAP / VST3 / AU は 32 ビットの整数でパラメータを識別し、保存した自動化とプリセットはそれを参照する）。
+//   `id` に書ける文字列の規則は無く、同じ flow の中での重複も検査しない（下の `level` と `gain` は同じ `id`）。
+//   このファイルは S-102 より前の書き方（`Sig[F32]`）で書いてある。実装が `at` を読めるようになったら書き換える。
+
+pub flow tone(
+  x: Sig[F32],
+  @param(min: 20.0, max: 20000.0, default: 1000.0, unit: "Hz", scale: "log")
+  cutoff: Ctl[F32],
+  @param(min: -60.0, max: 12.0, default: 0.0, unit: "dB", id: "gain_db")
+  level: Ctl[F32],
+  @param(min: 0.0, max: 1.0, default: 1.0, id: "gain_db")
+  gain: Ctl[F32],
+) -> Sig[F32] {
+  x * level * gain * cutoff
+}
