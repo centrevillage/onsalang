@@ -16,4 +16,4 @@ rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, <入出�
 fn voice.render(cfg: voice.Config, params: voice.Params, <入力>,
                 frames: U32, sample_rate: F32) -> voice.Rendered uses {Alloc}
                                             // frames は Sig 入力の無い flow にだけある
-fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param の default がある場合
+fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param がある場合

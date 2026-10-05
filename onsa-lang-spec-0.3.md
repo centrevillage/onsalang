@@ -963,7 +963,7 @@ rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, <入出�
 fn voice.render(cfg: voice.Config, params: voice.Params, <入力>,
                 frames: U32, sample_rate: F32) -> voice.Rendered uses {Alloc}
                                             // frames は Sig 入力の無い flow にだけある
-fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param の default がある場合
+fn voice.params_default() -> voice.Params   // 全ての Ctl 入力に @param がある場合
 ```
 
 - 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。名前空間と中の全ての項目は、flow の可視性（`pub` / 無指定 / `priv`）を継ぐ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
@@ -1003,7 +1003,9 @@ pub flow gain(
 }
 ```
 
-- `@param` は `Ctl` 入力にだけ付けられる。キーは `min max default step unit scale label id` の閉じた一覧で、値はコンパイル時定数。`scale` は `"linear"`（既定）か `"log"`。
+- `@param` は `Ctl` 入力にだけ付けられ、入力の値型は `F32` `F64` `I8` `I16` `I32` `U8` `U16` `U32` `Bool` に限る（それ以外は E0809）。`I64` / `U64` を外すのは、ホストとの受け渡しとメタデータ表（§14.2）で全ての値を正確に表せないからである。
+- キーは `min max default step unit scale label id` の閉じた一覧で、同じキーは一度だけ書ける。`default` は必須（E0809）。数値のキー（`min max default step`）の値は入力の値型 `T` の値、文字列のキー（`unit label id`）の値は `Str` で、どちらも `const` の初期化式と同じ規則で書き、コンパイル時に評価する（§6.6。`const` の名前、関連定数、関数の呼び出し、補間を書ける）。範囲を本体でも守るとき（下記）は、同じ定数を使える。型の合わない値は E0401（`F32` の入力の `min: 0` は修正候補 `0.0`）。`scale` は `"linear"`（既定）か `"log"`。
+- 値の制約（違反は E0809）: 数値は有限（NaN と無限大は不可）。両方あれば `min < max`。`default` は範囲の中。`step > 0`。`scale: "log"` は `min > 0` を要する。`Bool` の入力に書けるのは `default`（`true` / `false`）、`unit`、`label`、`id` だけである。制約が無ければ `min` / `max` / `step` を書かない（`step` が無ければ、浮動小数は連続、整数は全ての整数の値）。`onsa interface` も、書かれていないキーを出さない。
 - 用途: IDE の自動 UI、プラグイン（CLAP / VST3 / AU）のパラメータ情報、`params_default()`、C API のメタデータ表。
 - export する flow（§15.3）の `Ctl` 入力には `@param` が必須（E0809）。
 - `id` を省略すると、名前から安定した ID を作る。`onsa.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
@@ -1302,7 +1304,7 @@ int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* params,
                         float* output, uint32_t frames);
      /* 0: ok, 1: poisoned, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
 
-extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデータ */
+extern const onsa_param_info onsa_voice_param_info[4];   /* @param のメタデータ。Params のフィールドの順 */
 
 /* Alloc を提供するターゲットだけで生成される */
 onsa_voice* onsa_voice_new(float sample_rate);   /* init が失敗したら NULL */
@@ -1318,6 +1320,29 @@ uint32_t onsa_version(void);
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
 - C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `onsa_voice`、`util.version` は `onsa_version`）。flow は、それを頭にした名前（`onsa_voice_init`、`onsa_voice_params` など）も生成する。パッケージの中で C の名前が重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数と、flow の生成する名前と関数の名前（flow `voice` の `onsa_voice_init` と関数 `voice_init`）の重なりも含む。名前は `_` で始まらない（§2.3）ので、ランタイムの内部の記号（`onsa__` で始まる）とは重ならない。
 - 公開ヘッダ（`onsa.h` と `<prefix><package>.h`）は、C99 以降と C++11 以降の両方から、`-pedantic` でも警告なしに取り込める。宣言は `extern "C"` で囲む。`onsa.h` に入るのは、ホストが使う型（`onsa_param_info` など）と、ホストやファームウェアが用意する関数の宣言だけである。生成したコードのための内部のランタイム（補助関数、`setjmp`、`FLT_EVAL_METHOD` の検査、C11 の構文）は `onsa__runtime.h` に分け、生成した `.c` だけが取り込む（`kind = "source"` では出力するが、ホストは取り込まない）。生成した `.c` は C11 を要求する。
+- `onsa_param_info`（`onsa.h`）の値の欄は、入力の型（§11.7）で形が変わる。真偽を `1.0` / `0.0` のような数で表さない。
+
+```c
+typedef enum onsa_param_kind {
+  ONSA_PARAM_F32, ONSA_PARAM_F64, ONSA_PARAM_I8, ONSA_PARAM_I16, ONSA_PARAM_I32,
+  ONSA_PARAM_U8, ONSA_PARAM_U16, ONSA_PARAM_U32, ONSA_PARAM_BOOL
+} onsa_param_kind;
+typedef enum onsa_param_scale { ONSA_PARAM_LINEAR, ONSA_PARAM_LOG } onsa_param_scale;
+typedef struct onsa_param_info {
+  const char* name;
+  const char* id;
+  const char* unit;    /* 無ければ "" */
+  const char* label;   /* 無ければ "" */
+  onsa_param_kind kind;
+  union {
+    struct { double  min, max, def, step; onsa_param_scale scale; } f;  /* F32, F64 */
+    struct { int64_t min, max, def, step; onsa_param_scale scale; } i;  /* 整数 */
+    struct { bool def; } b;                                             /* Bool */
+  } v;
+} onsa_param_info;
+```
+
+- `double` と `int64_t` は、§11.7 の全ての型の値を正確に表す。書かれていない `min` / `max` / `step` は、制約が無いことを表す値で埋める（浮動小数は `-INFINITY` / `INFINITY` / `0`、整数は型の範囲の両端と `1`）。`@param` の値は有限で `step > 0` なので、書かれていないことも見分けられる。
 - export した flow を、既存の C/C++ ホスト（JUCE, CLAP, VST3, AU, 組込み HAL）へ組み込む第一の経路とする。組込みでの使い方は §17.5。
 
 ---
@@ -1883,6 +1908,7 @@ FAUST の IDE に相当する環境は、`onsa lsp` の上に作る。言語の�
 - 分岐の中の flow インスタンスを停止させるか（クロック付きの `if`）
 - 単位の型と newtype。取り違えの検査が要る実例が出たら、newtype（`struct Hz(F32)`）と単位代数（F# の units of measure）を比べて決める。今は、名前付きのフィールドが 1 つの struct で書ける（§4.4）
 - 固定小数点型（`Q15`, `Q31`、飽和演算）を標準ライブラリに置くか、言語に入れるか
+- enum（列挙子に中身の無いもの）の `Ctl` 入力に `@param` を付けること。波形やモードの選択に使う。表示名（列挙子の名前か `label`）、値の番号、C の `Params` と `onsa_param_info` での表現を決める。今は E0809（§11.7）
 - ファームウェアのエントリ: 割り込みとメインループの二つの文脈を提供する `target` モジュールの標準形（§16.1）
 - ターゲット提供の「後回しの仕事」（サンプルの読み込みなど）: `std.worker.run_later(f, move arg)` のような文脈で、マイコンではメインループで直列に、デスクトップではスレッドプールで実行する案。言語は並列性を約束しない
 - デスクトップのターゲットだけが `provides` する並列計算の効果（ライブラリとして。核には触れない）

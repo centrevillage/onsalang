@@ -1,0 +1,101 @@
+// R-99（S-87）: `@param` の値型と値。入力の値型は F32 F64 I8〜I32 U8〜U32 Bool に限る。値は `const` の初期化式と同じ規則で、
+// 型は入力の値型（文字列のキーは Str）。`default` は必須。数値は有限、`min < max`、`default` は範囲の中、`step > 0`、
+// log は `min > 0`、`Bool` には `default` `unit` `label` `id` だけ、同じキーは一度だけ。
+// 各 flow の上に期待値と今（2026-10-05）の出力を書いた。`onsa check` で確かめる。
+
+const FB_MAX: F32 = 0.95
+
+// 期待: 通る（`const` の名前を値に使える。`Str` の `const` は第 2 期なので、文字列のキーはリテラルで書いた）。
+// 今: r99.onsa:10:51: error[E0809]: `@param` `max` must be a numeric literal（リテラルしか受け付けない）。
+pub flow named(x: Sig[F32], @param(min: 0.0, max: FB_MAX, default: 0.5, label: "Feedback") fb: Ctl[F32]) -> Sig[F32] {
+  x * fb
+}
+
+// 期待: E0401（`I32` の値に浮動小数のリテラル）。修正候補なし（値が変わる）。
+// 今: 通る。`default` は 2 に切り捨てられる（`params_default` の降下の `v as i128`）。
+pub flow int_default(x: Sig[F32], @param(min: 0, max: 8, default: 2.7) n: Ctl[I32]) -> Sig[F32] {
+  x
+}
+
+// 期待: E0401（`F32` の値に整数のリテラル）。修正候補は `0.0`。
+// 今: 通る（値の検査が無い）。
+pub flow float_min(x: Sig[F32], @param(min: 0, max: 1.0, default: 0.5) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: E0401（`U32` に `-`）。
+// 今: 通る（値の検査が無い）。
+pub flow neg_unsigned(x: Sig[F32], @param(min: -1, max: 10, default: 5) u: Ctl[U32]) -> Sig[F32] {
+  x
+}
+
+// 期待: E0809（`min < max` でない）。
+// 今: 通る（値の検査が無い）。
+pub flow inverted(x: Sig[F32], @param(min: 10.0, max: 1.0, default: 5.0) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: E0809（`default` が範囲の外）。
+// 今: 通る（値の検査が無い）。
+pub flow outside(x: Sig[F32], @param(min: 0.0, max: 1.0, default: 2.0) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: E0809（`step > 0` でない）。
+// 今: 通る（値の検査が無い）。
+pub flow zero_step(x: Sig[F32], @param(min: 0.0, max: 1.0, default: 0.5, step: 0.0) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: E0809（`scale: "log"` は `min > 0` を要する）。
+// 今: 通る（値の検査が無い）。
+pub flow log_zero(x: Sig[F32], @param(min: 0.0, max: 1.0, default: 0.5, scale: "log") f: Ctl[F64]) -> Sig[F32] {
+  x
+}
+
+// 期待: E0809（同じキーを二度書いた）。
+// 今: 通る（後の `min: 0.2` が勝つ）。
+pub flow dup_key(x: Sig[F32], @param(min: 0.0, max: 1.0, default: 0.5, min: 0.2) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: E0809（`default` が無い）。
+// 今: 通る（`params_default` が作られないだけ）。
+pub flow no_default(x: Sig[F32], @param(max: 1.0) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: E0809（数値は有限）。
+// 今: r99.onsa:70:51: error[E0809]: `@param` `default` must be a numeric literal（有限かどうかではなく、リテラルでないことによる）。
+pub flow nan_default(x: Sig[F32], @param(default: F32.NAN) g: Ctl[F32]) -> Sig[F32] {
+  x * g
+}
+
+// 期待: 通る。
+// 今: r99.onsa:76:46: error[E0809]: `@param` `default` must be a numeric literal（`true` を受け付けない）。`default: 1` と書くと `check` は通り、`onsa test` で内部エラー（numeric literal of a non-numeric type）になる。
+pub flow toggle(x: Sig[F32], @param(default: true, label: "Bypass") on: Ctl[Bool]) -> Sig[F32] {
+  if on { 0.0 } else { x }
+}
+
+// 期待: E0809（`Bool` に `min` / `max` は書けない）。
+// 今: r99.onsa:82:48: error[E0809]: `@param` `min` must be a numeric literal（期待とコードは同じだが、理由が違う）。
+pub flow toggle_range(x: Sig[F32], @param(min: false, max: true, default: true) on: Ctl[Bool]) -> Sig[F32] {
+  if on { 0.0 } else { x }
+}
+
+// 期待: E0809（`I64` は `@param` の値型に無い）。
+// 今: 通る。
+pub flow wide(x: Sig[F32], @param(min: 0, max: 10, default: 1) k: Ctl[I64]) -> Sig[F32] {
+  x
+}
+
+pub enum Wave {
+  Sine,
+  Saw,
+}
+
+// 期待: E0809（enum は今は `@param` の値型に無い。§19.1）。
+// 今: 通る。`onsa test` では、この flow の `params_default` の降下が内部エラー（numeric literal of a non-numeric type）になる。
+pub flow wave(x: Sig[F32], @param(default: 0) w: Ctl[Wave]) -> Sig[F32] {
+  x
+}
