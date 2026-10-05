@@ -1,0 +1,14 @@
+# impl-review の §13.4 `strict-ftz`。`onsa build --target host tests/review-phase1/parent/strict_ftz` で、生成した C を確かめる。
+# 期待値と今の出力は `m.onsa` の先頭のコメント。今の実装は `fp` を読まず古い名前の `numeric` を読む（R-130）ので、両方を書いてある。
+[package]
+name = "strict_ftz"
+edition = "2026"
+
+[export]
+prefix = "t_"
+flows = ["m.decay"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+numeric = "strict-ftz"

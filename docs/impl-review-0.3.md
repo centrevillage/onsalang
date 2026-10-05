@@ -175,7 +175,7 @@
 |---|---|---|---|
 | §12.4 bulk | 閾値以上の配列（S-28 で入れ子も） | 最上位の配列だけ | T4-10 で直す |
 | §11.7 `id` | 名前から安定した ID | 名前の文字列そのもの | 要判断（ID の作り方）→ 決定（2026-10-06）: 文字列の既定は名前、数値は FNV-1a の下位 31 ビット、`param_index` を生成（S-104、[`review-impl-phase1.md`](review-impl-phase1.md) §8） |
-| §13.4 `strict-ftz` | FTZ / DAZ | マニフェストに記録するだけ。生成コードは FTZ を設定しない | 要判断（ホストが設定するのか、生成コードの `init` で設定するのか） |
+| §13.4 `strict-ftz` | FTZ / DAZ | マニフェストに記録するだけ。生成コードは FTZ を設定しない | 要判断（ホストが設定するのか、生成コードの `init` で設定するのか）→ 決定（2026-10-06）: 生成コードが export の入口ごとに保存・設定・復元する（S-105、[`review-impl-phase1.md`](review-impl-phase1.md) §8） |
 | §18.1 修正候補 | 全ての診断に `found`、一意な修正には `fixes` | 否定例については検査済み。全コードの網羅は未確認 | M9 |
 | §18.2 コマンド | `check` `fmt` `test` `interface` `audit` `graph` `transpile` `play` `probe` `diff --ast` `explain` `primer` `lsp` | `check` `fmt` `test` `interface` `graph` `build` `diff --ast` `explain`（本文 2 件）、隠し `dump --core`。`transpile` は `build` の `kind = "source"` が担う | 計画どおり（M7〜M9） |
 | §11.8 `std.test.check` | `Random` 効果の性質検査 | 構文だけ | M5 |
