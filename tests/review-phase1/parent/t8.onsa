@@ -1,0 +1,48 @@
+// T-8（impl-review-0.3.md から持ち越し）と R-105 の残り: 診断コードの流用の整理。
+// `onsa check tests/review-phase1/parent/t8.onsa` で確かめる。期待値（S-103）と今（2026-10-05）の出力は各項目の上のコメント。
+
+pub struct P { x: F32 }
+
+pub fn helper(x: F32) -> F32 { x }
+
+// 名前が、その位置に要る種類でない。
+// 期待: E0308（名前の種類の誤り）。
+// 今: E0401「`P` is not a value」（型の不一致のコード）。
+fn type_as_value() -> F32 { let a = P
+  1.0 }
+
+// 期待: E0308。
+// 今: E0302「`helper` is not a type」（未解決の名前のコード）。
+fn value_as_type(x: helper) -> F32 { 1.0 }
+
+// 期待: 今のまま E0401。
+// 今: E0401「`F32` is not a function and cannot be called」（値の型の誤りなので、型の不一致のままでよい例）。
+fn call_non_function(x: F32) -> F32 { x(1.0) }
+
+// 期待: E0412（引数の数のコードを型引数にも使う）。
+// 今: E0302「`F32` takes 0 type argument(s), 1 given」（型引数の数。関数の引数の数は E0412）。
+fn type_arity(x: F32[I32]) -> F32 { 1.0 }
+
+// 期待: E0308。
+// 今: E0302「`N` is not a type」（実装には同じ場面に E0401 の文面もある）。
+const N: U32 = 4
+fn const_as_type(x: Option[N]) -> F32 { 1.0 }
+
+// 定数式の規則（§4.5）。仕様は「関数の呼び出しは書けない」とだけ書き、コードを定めていない。
+// 期待: E0417（定数式の規則の違反）。
+// 今: E0200「this version does not support expressions as array lengths」（S-50 の定数式は未実装。実装には E0302「array length must be a constant」もある）。
+fn len_from_call(x: [F32; len()]) -> F32 { 1.0 }
+fn len() -> U32 { 4 }
+
+// 未知の属性。仕様（§6.5）は属性の閉じた一覧を定めるが、コードを定めていない。
+// 期待: E0005。
+// 今: 何も出ずに通る（R-36 の属性の表の検査が未実装。実装には E0302「unknown attribute」の文面がある）。
+@inline
+fn attr() -> F32 { 1.0 }
+
+// `impl` の対象が型でない。
+// 期待: E0308。
+// 今: E0302「`helper` is not a type」（実装には E0302「`impl` needs a struct, enum, or builtin type」の文面もある）。
+impl helper {
+  fn m(self) -> F32 { 1.0 }
+}
