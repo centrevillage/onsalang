@@ -1,0 +1,15 @@
+// 点検 C-120（S-128）: 行末の `return` の後の到達しない文。
+// 今の実装が読む書き方で書いた。
+// 期待（S-128）: `return` の次の行の `n = 5` は E0503（修正候補は消す形）。
+// 今の出力: `onsa check` は通り、`return` で抜けるので `n` は変わらない（テストが通る）。
+// 値を返す関数（`return` の次の行に `x * 2`）は、今も E0401（`()` を返す `return`）になる。
+fn unit_early(inout n: I32) {
+  return
+    n = 5
+}
+
+test "the line after return is skipped" {
+  var n = 1
+  unit_early(inout n)
+  assert n == 1
+}
