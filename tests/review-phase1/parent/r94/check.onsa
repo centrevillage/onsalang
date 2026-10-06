@@ -10,7 +10,7 @@ use std.math.{abs, min}
 // 今: 通る。
 fn neg_num[T: Num](x: T) -> T { -x }
 
-// 期待: E0416（`U32` は `Num` を満たさない）。修正候補なし。note「符号なし整数は `AnyNum` と `Int` を満たし、`Num` は満たさない」。
+// 期待: E0416（`U32` は `Num` を満たさない）。修正候補なし。note「符号なし整数は `AnyNum`、`Int`、`Unsigned` を満たし、`Num` は満たさない」（2026-10-06、点検 C-85 で `Unsigned` を足した）。
 // 今: 通る。`onsa test` で実体化すると Core の検証器が panic する（`-` on a non-signed type、R-03）。
 fn neg_u32(u: U32) -> U32 { neg_num(u) }
 

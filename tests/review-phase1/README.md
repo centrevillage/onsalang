@@ -1,6 +1,6 @@
 # M0〜M4 のコードレビューの再現の入力
 
-[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-130）の指摘を再現した入力を、資料として残したもの。2026-10-02〜03。
+[`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-133）と `impl-review-0.3.md` の持ち越しの項目の指摘を再現した入力を、資料として残したもの。2026-10-02〜06。
 
 - **自動では実行しない。** `onsa_tests` のランナーは `tests/spec`、`tests/conformance`、`tests/golden` だけを読む。パッケージの収集も `tests/` を除く（§15.1）。
 - 多くは「今の実装が誤る」入力で、期待値は各ファイルのコメントか `assert` に書いてある。修正の段階（レビュー §7）で、直した項目の入力を `tests/spec` などの回帰テストへ移す。
@@ -174,5 +174,6 @@
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
+| （R-132） | 専用の入力は無い。レートを型の形で書いたときの診断は `parent/t5.onsa`（S-102） |
 
 対応が書かれていないファイル（`body/p01_multi.onsa`、`body/tr1_trait.onsa`、`core/` と `types/` の一部など）は、内容とレビュー文書の項目を見て対応を確かめる。

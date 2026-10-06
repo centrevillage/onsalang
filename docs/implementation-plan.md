@@ -4,6 +4,7 @@
 - 日付: 2026-10-01
 - 前提のレビュー: [`review-draft-0.2.md`](review-draft-0.2.md)。`C-` / `G-` / `I-` / `P-` はそのレビューの ID
 - 作業の詳細: [`implementation-tasks.md`](implementation-tasks.md)。各マイルストーンを作業（`T`）に分け、実装の判断（`D`）と仕様の空白（`S`）を一覧にしたもの
+- 2026-10-06（点検 C-67）: この文書は 2026-10-01 の全体計画である。細部は、その後の決定（`implementation-tasks.md` の D と S、[`review-impl-phase1.md`](review-impl-phase1.md) の R、[`process-improvement-phase1.md`](process-improvement-phase1.md) の Q）が優先する。古くなった行は今の決定に合わせて直した。完了した M3 / M4 の受け入れの記述は当時のまま残す
 
 ---
 
@@ -11,7 +12,7 @@
 
 1. **構文は最初から言語全体を解析する。** 第 1 期の意味検査は核だけだが、fn 世界の構文（効果、handler、`Str` など）も構文解析と名前解決は通し、核の外の機能は「この版では未対応」の診断（E02xx）で落とす。LLM が書いたコードに構文エラーでなく正しい位置の診断を返せる。
 2. **flow はコンパイラの前段で fn 世界に降下する。** flow から `State` 構造体・`init` / `reset` / `process` 関数を Onsa Core の普通の宣言として生成し、バックエンドは flow を知らない。バックエンドを増やすときに flow の意味を再実装しない。
-3. **インタプリタが意味の基準。** `onsa test` と `--backends all` の比較元はインタプリタ。Rust の `f32` 演算は IEEE で縮約されないので、`strict` の基準にできる。
+3. **意味の基準は、仕様から作った期待値。** 仕様から書くテスト、仕様から作るテストベクトル、flow の参照評価器を比較の元にし、インタプリタも各変換先と同じくそれと比べられる側にする（D-16）。当初は「インタプリタが意味の基準」としたが、同じ Core から出た二つを比べても意味の誤りを検出できず（R-113）、特定の言語の処理系を規範にもしない（R-133）ので改めた。
 4. **仕様の例を最初の回帰テストにする。** §17 の例と、各節の肯定・否定の例を `tests/spec/` に切り出し、期待する診断コードを付ける（P9 の検証）。
 5. **決めていないことは実装しない。** レビュー §6 の「実装の前に決めること」を各マイルストーンの着手条件にする。
 
@@ -79,36 +80,37 @@ Core の性質:
 
 ```
 struct f.State {
-  // Init レートの let のうち、Ctl / Sig から参照されるもの
-  // prev: T、delay(N): [T; N] + U32、vdelay(MAX): [T; MAX + 1] + U32
-  // サブインスタンス: g.State（名前は let の名前。無名は g_0, g_1, ...）
+  // sample_rate、速いクロックから読まれる遅いクロックの let と、巻き上げた部分式（S-33）
+  // prev~: T、delay~(N): [T; N] + U32、vdelay~(MAX): [T; MAX + 1] + U32
+  // サブインスタンス: g.State（名前は let の名前。名前の無いノードは let で修飾して g_0, g_1, ...、S-86）
   // par: [g.State; N]
   poisoned: Bool            // export の境界で使う
+  initialized: Bool         // export の境界で使う（S-27）
 }
-struct f.Config { Init 入力 }
-struct f.Params { Ctl 入力 }
+struct f.Config { init の入力 }
+struct f.Params { block の入力 }
 fn    f.init(cfg: f.Config, sample_rate: F32) -> f.State
-rt fn f.reset(inout s: f.State)                       // 遅延と prev を init 値に戻し、サブインスタンスも reset。Init の値は保つ
-rt fn f.ctl(inout s: f.State, p: f.Params)            // Ctl レートの let を順に評価（ブロックに 1 回）。Sig から参照されるものは状態へ
-rt fn f.tick(inout s: f.State, Sig 入力の値...) -> 出力の値   // Sig レートの let を順に評価する 1 サンプル分。遅延を進める
-rt fn f.process(inout s: f.State, p: f.Params, Sig 入力: Span[T]..., inout 出力: Span[T]...) {
+rt fn f.reset(inout s: f.State)                       // 遅延を init 値に戻し、サブインスタンスも reset。init のクロックの値は保つ
+rt fn f.ctl(inout s: f.State, params: f.Params)       // block のクロックのノードを順に評価（ブロックに 1 回）。sample から読まれるものは状態へ
+rt fn f.tick(inout s: f.State, sample の入力の値...) -> 出力の値   // sample のクロックのノードを順に評価する 1 サンプル分。遅延の保存は最後にまとめて（R-13）
+rt fn f.process(inout s: f.State, params: f.Params, input..., inout output...) {   // 引数の形と名前は S-30
   // ctl を 1 回、for i in 0..frames { 入力を全て読む、tick、出力を全て書く }（詳細 D-03）
 }
 rt fn f.process_inplace(inout s: f.State, p: f.Params, inout 入出力: Span[T]...)  // 入出力の形が一致するときだけ
-fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ。Sig 入力があれば frames 無し
+fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ。sample の入力があれば frames 無し
 ```
 
-- **レート解析**: 各 `let` のレートは式のレートの最大値。`prev` / `delay` / `vdelay` の結果と flow の呼び出しの結果は常に `Sig`。`par` の `i` は `Init`。
-- **因果性**: 名前の順序の検査（§11.2）。`prev` 系の第 1 引数だけが前方参照を許す。
-- **状態の配置**: フィールドは宣言順（`let` の順）、自然アラインメント、並べ替えなし（G-07）。`bulk_threshold` 以上の配列は bulk 領域へ。bulk 領域のアドレスは fast 領域の先頭にポインタとして持つ（C API の `init` が受け取る）。`SIZE` / `BULK_SIZE` / `ALIGN` をここで計算し、生成コードに `_Static_assert` を出す。
-- **`par`**: 配列 + ループに落とす（仕様 §11.5。`i` は `Init` レートの値）。
+- **クロックの解析**: 各 `let` のクロックは式のクロックの最大値（§11.3、S-102）。遅延の組込みと flow の呼び出しの結果は、出力の宣言のクロック（この版では `sample`）。`par` の `i` は `init`。
+- **因果性**: 名前の順序の検査（§11.2）。前方の参照は、遅延の組込みの第 1 引数の中の帰還の参照 `^名前` だけ（S-44）。
+- **状態の配置**: フィールドは宣言順（`let` の順）、自然アラインメント、並べ替えなし（G-07）。`@mem(bulk)` を付けた遅延を bulk 領域へ置く（S-31、S-43。大きさによる自動の振り分けはしない）。bulk 領域のアドレスは fast 領域の先頭にポインタとして持つ（C API の `init` が受け取る）。`SIZE` / `BULK_SIZE` / `ALIGN` は、降下の後のターゲットの pass が計算する（R-80）。
+- **`par`**: 配列 + ループに落とす（仕様 §11.5。`i` は `init` のクロックの値）。
 - **遅延の実装**: 仕様 §11.4 のリングバッファと演算順をそのまま実装する。全バックエンドで同じ演算順にする。
 - **panic**: Core の `check_*` 命令。`process` の中では、バックエンドが「中断して poisoned」を実現する（I-01）。
 
 ### 2.3 型検査
 
 - 関数単位。シグネチャは完全注釈（P1）なので、呼び出し先はシグネチャだけを見る。
-- 本体は仕様 §4.7 の形: 文の順の一方向推論、単一化変数、期待型の下向き伝播。リテラルは `IntLit` / `FloatLit` の制約付きの型変数で、関数の終わりに未解決なら E0405。
+- 本体は仕様 §4.7 の形: 文の順の一方向推論、単一化変数、期待型の下向き伝播。リテラルは `IntLit` / `FloatLit` の制約付きの型変数で、関数の終わりに未解決なら、整数は `I32` にし（S-22）、浮動小数は E0405。
 - `.` `[]` `as` `match` `?` 関数値の呼び出しの対象は、その時点で解決済みを要求（E0420、§4.7）。
 - 演算子は第 1 期では組込み数値型に直接型付けする（trait の脱糖は第 2 期で trait を入れたときに同じ結果になるよう、`Add.add` の形で Core に出しておく）。
 - 第 1 期のジェネリクス: `const N: U32` と、組込みの `Num` / `Float` / `Ord` / `Eq` 境界だけ（`std.dsp.sum[const N]` などに要る）。ユーザ定義 trait は第 2 期。
@@ -116,8 +118,8 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 ### 2.4 数値
 
 - F32 / F64 の演算は Core で型ごとに別の命令にし、バックエンドは混ぜない。
-- `sqrt`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、`fmod` はビット一致するプリミティブ。超越関数（`exp` / `cos` / `sin` / `log` / `exp2` / `pow` / `tanh`）も各環境のプリミティブ（C の libm、JS の `Math`、WASM は同梱の libm）に対応付け、精度目標 2 ULP を検査する（仕様 §13.4）。満たさない環境の関数だけ Onsa 実装に差し替える。
-- C: `#pragma STDC FP_CONTRACT OFF`、`_Static_assert(FLT_EVAL_METHOD == 0)`、F32 の各演算を `(float)` で囲む。ターゲット定義にコンパイラフラグ（`-ffp-contract=off -fno-fast-math`、MSVC は `/fp:strict`）を含める（仕様 §13.4）。
+- `sqrt`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、浮動小数の `%` はビット一致するプリミティブ。超越関数（`exp` / `cos` / `sin` / `log` / `exp2` / `pow` / `tanh`）も各環境のプリミティブ（C の libm、JS の `Math`、WASM は同梱の libm）に対応付け、精度目標 2 ULP を検査する（仕様 §13.4）。満たさない環境の関数だけ Onsa 実装に差し替える。
+- C: F32 の各演算を `(float)` で囲む。プラグマだけでは不十分（GCC は `#pragma STDC FP_CONTRACT OFF` を無視する）なのでフラグを要求し、守られていないと分かる設定は `#error` にする（S-54、仕様 §13.4）。
 - WASM: 命令がそのまま IEEE。追加の処置なし。
 - JS: F32 の各演算の後に `Math.fround`。F64 はそのまま。`I64` / `U64` は第 1 期では JS の対象外（E02xx）。
 
@@ -157,7 +159,7 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 - 成果物: flow の検査（順序と因果性 E0801、レート E0810、`delay` の規則 E0807 / E0808、呼び出しの形 E0811 / E0812 / E0805、本体の制限 E0806、`@param` E0809）、§2.2 の降下、状態の配置と `SIZE` / `BULK_SIZE` / `ALIGN` の計算、`onsa interface`（型の種と大きさ、flow の生成 API）、`onsa graph`（DOT）、Core のインタプリタ、`test` ブロックの実行（`onsa test`）、`render`。
 - 受け入れ: §17.3 の `resonator decays` と、§17.4 / §17.6 を使ったテストがインタプリタで通る。`echo` の `BULK_SIZE` が `bulk_threshold = 4096` で 384004 前後（`[F32; 96001]` の配置に従う値）になる。`graph` が §17.4 の `voice` に対して `saw` / `resonator` × 2 / `smooth` のノードを出す。
 - 決める仕様: なし。G-04（遅延の状態と演算順は仕様 §11.4、`process_inplace` と入出力の読み書きの順序は §11.6）と G-07（配置規則、§12.4）は 0.3 で決定済み。
-- 注意: 超越関数はインタプリタでは Rust の `f32` / `f64` のメソッド（libm 相当）で計算する。C との比較は、超越関数を通る出力については許容誤差付きになる（仕様 §13.4）。
+- 注意: 超越関数はインタプリタでは Rust の `f32` / `f64` のメソッド（libm 相当）で計算した。S-93 で、インタプリタと `const` の評価を D-11 の `std/math/soft.onsa` に結び付けると改めた。C との比較は、超越関数を通る出力については許容誤差付きになる（仕様 §13.4）。
 
 ### M4 C バックエンドと export（L）
 
@@ -169,18 +171,18 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 ### M5 `std/math` と `std/dsp`、適合性テストの基盤（M）
 
 - 成果物: `std/math`（各環境のプリミティブへの対応付け。`exp` `exp2` `log` `log2` `sin` `cos` `tan` `tanh` `pow` と、ビット一致する `sqrt` `floor` `ceil` `trunc` `round` `abs` `min` `max` `fmod`。WASM 用の同梱 libm）、精度のテスト（参照は正しく丸めた値、2 ULP 以内で判定。環境ごとの結果を記録し、超える関数は Onsa 実装に差し替える）、`std/dsp`（`sum`、`db_to_amp`、`test.{impulse, magnitude_at, energy, assert_near}`）、`std/test`（`check`、`gen`。テストランナーの決定的な `Random`）、`onsa test --flows`（`@param` の範囲での自動検査）、`onsa test --backends all` の仕組み（`render` の出力を interp と C で比較）、`onsa primer --std`。
-- 受け入れ: §17 の全てのテストが interp と C でビット一致。`std/math` の各関数が精度目標を満たす。
+- 受け入れ: §17 の全てのテストが interp と C で一致する（超越関数に到達しない flow はビット一致、到達する flow は許容誤差、仕様 §13.4）。`std/math` の各関数が精度目標を満たす。
 - 決める仕様: なし（I-03 は 0.3 で決定済み。精度目標 2 ULP は仮決めで、M5 の測定で見直す）。
 
 ### M6 WASM バックエンド（M）
 
 - 成果物: Core → WASM（核のみ。線形メモリに状態を置き、`init` / `reset` / `process` / `params_default` を export。`@param` の表は JSON の custom section）、`wasm-worklet` ターゲットの出力（AudioWorklet の glue JS を同梱）、トラップを glue で捕まえて poisoned にする。
-- 受け入れ: conformance が interp / C / WASM の 3 者でビット一致。ブラウザで `voice` が鳴る最小のページがある。
+- 受け入れ: conformance が interp / C / WASM の 3 者で一致する（判定は仕様 §13.4 の flow 単位）。ブラウザで `voice` が鳴る最小のページがある。
 - 理由: P-03。ブラウザの IDE に C のツールチェーンは無く、WASM は `strict` と相性が最も良い。
 
 ### M7 IDE の核（L）
 
-- 成果物: `onsa_lsp`（診断、ホバーでの型・レート・種・大きさ、定義へジャンプ、`fmt`）、`onsa_web`（wasm-bindgen で `check` / `build_wasm` / `interface` / `graph` を公開）、`onsa play`（デスクトップは C でビルドして `cpal` 等で出力、`@param` から UI）、`onsa probe`（降下の段で指定した `let` を出力に追加する「プローブ出力」を生成し、IDE はそれを描画する）、ホットリロード（名前と型が一致するフィールドの引き継ぎ。`interface` の情報を使う）。
+- 成果物: `onsa_lsp`（診断、ホバーでの型・クロック・種・大きさ、定義へジャンプ、`fmt`）、`onsa_web`（wasm-bindgen で `check` / `build_wasm` / `interface` / `graph` を公開）、`onsa play`（デスクトップは C でビルドして `cpal` 等で出力、`@param` から UI）、`onsa probe`（降下の段で指定した `let` を出力に追加する「プローブ出力」を生成し、IDE はそれを描画する）、ホットリロード（旧新の flow の計画を構造で照合し、型が同じノードの状態を引き継ぐ。名前では照合しない、S-86）。
 - 受け入れ: VS Code で仕様の例を開くと診断とホバーが出る。`play voice` でパラメータを動かしながら鳴る。`probe voice.f1` が波形を表示する。
 - 決める仕様: §19 の「ホットリロードで型の変わったフィールド」は未決定のまま「`init` で初期化」で進める。
 
@@ -202,7 +204,7 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 | 種類 | 置き場所 | 内容 |
 |---|---|---|
-| 仕様の例 | `tests/spec/` | 各節の肯定例と否定例。期待する診断は行末の `//~ E0010`、先頭行の `//! mode:` で検査の深さ（詳細 D-05、D-06）。P9 の検証 |
+| 仕様の例 | `tests/spec/` | 各節の肯定例と否定例。期待する診断は行末の `//~ E0010`。事例はビルドと同じ入口を通るファイル（`onsa.toml` の断片と `[test]`。D-05 の改定、R-80 (5)、D-16）。P9 の検証 |
 | 単体 | 各クレート | 字句、文の区切り、演算子の群、レート解析、配置の計算、`fmt` の冪等性 |
 | golden | `tests/golden/` | 生成 C / WASM / JS のテキスト差分。意図した変更だけが差分になる |
 | conformance | `tests/conformance/` | `render` の出力を interp / C / WASM / JS で比較。`strict` ではバイト一致、`relaxed` は対象外 |
@@ -233,6 +235,10 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 | std 以外の依存 | 依存として読み込むのは埋め込みの std だけ。パッケージのモデル（ID と依存の表）は std 以外も受けられる形にある（R-88）。パッケージルート直下の `tests/` の `.onsa` は E0200（S-96） | 取得元（パス、レジストリ、git など）、版の解決（菱形の依存で違う版を同居させるか）、`onsa.lock` の形を決め、依存を読み込む。パッケージの `tests/` の役割（R-122。問いは R-122 の本文に集めた）も一緒に決め、`tests/` の E0200 を決めた役割に置き換える | 4 | R-88、S-83、R-122、S-96 |
 | 無名関数の捕捉 | 無名関数が Shared 型の値を捕捉したとき、複製（参照カウントの増加）か借用かが決まっていない。§5.4 の表の行は「第 2 期に決める」で、実装は E0200 | 捕捉の意味を決めて §5.4 の表に書き、束縛の状態の判定に足す | 2 | R-85、S-80 |
 | 標準の効果 | std に宣言だけを置き、`Alloc` 以外を効果行に書くと E0200。効果の宣言は std の中だけで受け付ける | 操作と handler を実装し、利用者の `effect` 宣言を受け付ける。`Random` などのモジュールの名前を確定する | 1 | R-129、S-74 |
+| 効果行の変数 | `[e]` と `uses {e}` は宣言の時点で E0200 | 効果の多相を handler と一緒に入れる | 1 | R-27 (3)、D-08 |
+| `Buf` | インタプリタの内蔵型で、C / WASM / JS は `Buf` を含む関数を出力しない（E0200） | `Alloc` と一緒に、全ての変換先で `Buf` を実装する | 2 | D-08 |
+| `@param` の文字列のキー | `Str` の `const` が無いので、文字列のキーはリテラルだけ | `Str` の `const` を入れたら、`const` の名前も書けるようにする | 2 | S-87 |
+| 意味の次元の点検表 | 仕様に機能を足すたびに通す | 既存の節を第 2 期の前に一度通す | 第 2 期の前 | Q-15 |
 
 第 3 期（変換先の拡大）は §20 の 10〜11 のまま。C++ と Rust への核の変換は、C バックエンドの構造を流用できるので各 M。
 
@@ -242,9 +248,9 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 | リスク | 影響 | 対策 |
 |---|---|---|
-| ビット一致が C コンパイラの条件で崩れる（I-02） | `strict` の約束が守れない | M4 で `_Static_assert` とフラグを生成物に含め、M5 の conformance を CI で複数コンパイラ（clang / gcc / MSVC）に対して回す |
+| ビット一致が C コンパイラの条件で崩れる（I-02） | `strict` の約束が守れない | M4 で `_Static_assert` とフラグを生成物に含め、conformance を gate（Q-08）で複数コンパイラ（Q-07。MSVC は点検の C-49）に対して回す |
 | 環境の libm の精度のばらつき | 組込みの軽量 libm で 2 ULP を超え、試聴と機器の音がずれる | M5 で環境ごとに測定し、超える関数だけ Onsa 実装に差し替える。ビット一致が要る用途向けの `std.math.exact` は §19 |
-| panic の実現（I-01）が組込みで重い | `jmp_buf` の大きさ、`longjmp` の無い環境 | ターゲットの `panic` 設定で選べるようにし、`trap` を既定にする |
+| panic の実現（I-01）が組込みで重い | `jmp_buf` の大きさ、`longjmp` の無い環境 | ターゲットの `panic` 設定で選べるようにする。既定はホストで `poison`、OS の無いターゲットで `reset`（仕様 §9.2） |
 | 型推論の規則（仕様 §4.7）が実装でずれる | 診断の位置が LLM に分かりにくい | §4.7 の各規則に対応する否定例をテストに入れる |
 | flow の名前空間の名前解決 | モジュールと名前空間の扱いが実装で分かれる | 名前空間をモジュールと同じ項目の種類として実装する（仕様 §11.2、§11.6。E0305） |
 | 第 1 期の範囲が膨らむ（LSP、play、probe） | C の出力が遅れる | M7 は M4〜M6 の後に置き、M4 の完了を第 1 期の最初の区切りにする |

@@ -3,7 +3,6 @@
 
 Line-end `//~ ...` markers in the test files are ignored when matching, so
 negative examples from the spec can carry expected-diagnostic markers.
-Blocks fenced as ```onsa-pseudo are not checked (S-15).
 
 Usage: tools/check_spec_examples.py [spec.md] [tests/spec]
 Exit 0 if every block is covered, 1 otherwise.
