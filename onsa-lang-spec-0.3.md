@@ -1383,14 +1383,15 @@ extern "C" {
 #define VC_VOICE_SIZE       48      /* fast 領域のバイト数 */
 #define VC_VOICE_BULK_SIZE  0       /* bulk 領域のバイト数 */
 #define VC_VOICE_ALIGN      4       /* fast 領域の整列 */
-#define VC_VOICE_BULK_ALIGN 4       /* bulk 領域の整列 */
+#define VC_VOICE_BULK_ALIGN 1       /* bulk 領域の整列（BULK_SIZE が 0 なら 1） */
 #define VC_VOICE_PARAM_COUNT 4      /* @param の数（vc_voice_param_info の長さ） */
 
 typedef struct vc_voice vc_voice;
 typedef struct { float f0; float vowel_f1; float vowel_f2; float gain; } vc_voice_params;
+typedef struct { uint8_t _unused; } vc_voice_config;   /* Config が空なので予約のメンバだけ */
 
-/* Config が空なので引数は sample_rate のみ。bulk は BULK_SIZE が 0 なら NULL でよい */
-int  vc_voice_init(vc_voice* s, void* bulk, float sample_rate);
+/* bulk は BULK_SIZE が 0 なら NULL でよい。cfg は Config が空なら NULL でよい */
+int  vc_voice_init(vc_voice* s, void* bulk, const vc_voice_config* cfg, float sample_rate);
      /* 0: ok, 1: init が panic した（状態は未初期化のまま。reset では復帰せず、init のやり直しが要る） */
 void vc_voice_reset(vc_voice* s);
 void vc_voice_params_default(vc_voice_params* params);
@@ -1398,12 +1399,12 @@ int  vc_voice_process(vc_voice* s, const vc_voice_params* params,
                       float* output, uint32_t frames);
      /* 0: ok, 1: poisoned か未初期化, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
 
-extern const onsa_param_info vc_voice_param_info[4];   /* @param のメタデータ。Params のフィールドの順 */
+extern const onsa_param_info vc_voice_param_info[];    /* @param のメタデータ。Params のフィールドの順。長さは VC_VOICE_PARAM_COUNT */
 int vc_voice_param_index(uint32_t number);   /* 数値の ID（§11.7）から上の表の添字。無ければ -1 */
 
 /* Alloc を提供するターゲットだけで生成される */
-vc_voice* vc_voice_new(float sample_rate);   /* init が失敗したら NULL */
-void      vc_voice_free(vc_voice* s);
+vc_voice* vc_voice_new(const vc_voice_config* cfg, float sample_rate);   /* 状態と bulk の領域を確保して init を呼ぶ。失敗したら NULL */
+void      vc_voice_free(vc_voice* s);        /* 状態と bulk の領域を解放する */
 
 /* dsp.echo（§17.4）も同じ形で VC_ECHO_SIZE、vc_echo_init などを宣言する（ここでは省略） */
 
@@ -1421,7 +1422,22 @@ int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 - `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は、出力を全て 0 で埋めて 1 を返し（poisoned のときと同じ、§9.2）、`reset` は何もしない。復帰は `init` のやり直しだけである。
 - `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `<prefix><name>_in` / `<prefix><name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `vc_swap_process(s, &params, &(vc_swap_in){ inl, inr }, &(vc_swap_out){ outl, outr }, frames)`。
 - 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
-- C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `vc_voice`、`util.version` は `vc_version`）。flow は、それを頭にした名前（`vc_voice_init`、`vc_voice_params` など）と、それを大文字にしたマクロ（`VC_VOICE_SIZE` など）も生成する。パッケージの中で C の名前が重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数と、flow の生成する名前と関数の名前（flow `voice` の `vc_voice_init` と関数 `voice_init`）の重なりも含む。
+- C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `vc_voice`、`util.version` は `vc_version`）。export する flow は、その C の名前 `<p>`（大文字は `<P>`）を頭にした次の名前を生成する。これで全てである（閉じた一覧）。
+
+| 種類 | 名前 | 意味 |
+|---|---|---|
+| 型 | `<p>` | 状態。中身は公開しない |
+| | `<p>_params`、`<p>_config` | `block` の入力と `init` の入力。空なら予約のメンバ `uint8_t _unused` を一つだけ持つ（ISO C は空の構造体を書けないため。利用者のフィールドが無いときだけ置くので、名前は重ならない） |
+| | `<p>_in`、`<p>_out` | `sample` の入力・出力が 2 つ以上のとき（§11.6） |
+| 関数 | `<p>_init`、`<p>_reset`、`<p>_process`、`<p>_params_default`、`<p>_param_index` | 常に生成する |
+| | `<p>_new`、`<p>_free` | `Alloc` を `provides` するターゲットだけ |
+| データ | `<p>_param_info` | `@param` のメタデータ。長さを書かない配列として宣言し、長さは `<P>_PARAM_COUNT` |
+| マクロ | `<P>_SIZE`、`<P>_ALIGN`、`<P>_BULK_SIZE`、`<P>_BULK_ALIGN`、`<P>_PARAM_COUNT` | 配置と `@param` の数（§12.4、§11.7） |
+
+パッケージのヘッダは、インクルードガードに `<PREFIX><PACKAGE>_H` を使う。パッケージの中で、この表から作る全ての名前、export した関数の名前、インクルードガードのどれかが重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数、flow どうしの生成する名前（flow `voice` の `vc_voice_params` と flow `voice_params` の `vc_voice_params`）、flow の生成する名前と関数の名前（flow `voice` の `vc_voice_init` と関数 `voice_init`）の重なりも含む。
+- 関数と型の形は、flow の宣言にもターゲットにもよらず一定で、変わるのはフィールドと定数の値だけである（`process` の入出力の引数は §11.6 の数の規則に従う）。共通のラッパーを、どの flow にも同じ形で書ける。`block` の入力が無い flow でも `_params`、`_params_default`（何もしない）、`_param_index`（常に -1）、`_param_info`（長さ 0）を生成し、`_process` は `params` を取る。`init` の入力が無い flow でも `_config` を生成し、`_init` と `_new` は `cfg` を取る。`bulk` の引数は、ターゲットの設定によらず常に置く。
+- Config は `const <p>_config* cfg` で受け取る（`params` と同じ形。ホストはフィールドを名前で設定するので、引数の取り違えが起きない）。Config が空なら NULL を渡してよく、`BULK_SIZE` が 0 なら `bulk` に NULL を渡してよい。どちらも、要るのに NULL なら `_init` は失敗し、状態は未初期化のままになる（`_new` は NULL を返す）。Config にフィールドを足すと、構造体を組み立てるホストのコードはそのまま通り、新しいフィールドは 0 になるので、ホストのコードを見直す。
+- `_new` は状態と bulk の領域（`<P>_BULK_ALIGN` に揃える）を確保して `_init` を呼び、`_free` は両方を解放する。`BULK_SIZE` が 0 なら `BULK_ALIGN` は 1 である。
 - `prefix` は、`[export]` に flow か関数があれば必須で、既定は無い（書かなければ E1104 で、`<package>_` が下の規則を満たすときは、修正候補は `prefix = "<package>_"` の挿入）。C の名前は、ホストが依存した後は変えられない公開の ABI なので、export を決める場所で選ぶ。別々にビルドしたパッケージを一つのバイナリにリンクするとき、名前の重なりは `prefix` を変えて避ける（パッケージ名を変える必要は無い）。
 - `prefix` の値は、小文字の英字・数字・`_` からなり、英字で始まって `_` で終わる（`vc_`、`my_synth_`）。空は書けない（C の名前が libc や他のライブラリの名前と重なり、ヘッダの名前が `onsa.h` や標準のヘッダを隠す）。`__` を含むもの（C++ では予約の名前）と、`onsa_` で始まるものも書けない。いずれも E1103 である。
 - ランタイムは `onsa_` と `ONSA_` で始まる名前を全て持つ（公開の名前は `onsa.h` の型と列挙子、`ONSA_ABI_VERSION`、下の表。内部の記号は `onsa__` / `ONSA__` で始まる）。`prefix` は `onsa_` で始まれないので、生成する名前とランタイムの名前は重ならない。ランタイムに名前を足しても、既存のパッケージの名前とは重ならない。
@@ -1861,7 +1877,7 @@ static vc_voice_params params;
 
 void setup(void) {
   voice = (vc_voice*)voice_mem;
-  if (vc_voice_init(voice, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0 なので NULL */
+  if (vc_voice_init(voice, NULL, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0、Config が空なので NULL */
     return;                                          /* init が panic した。使い始めない */
   }
   vc_voice_params_default(&params);
