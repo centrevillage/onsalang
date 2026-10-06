@@ -152,7 +152,7 @@
 | B-8 | `poison` で export した関数が panic したらゼロ値を返し、`<prefix>take_panic()` で 1 回だけ読める | 仕様へ（§9.2 の「エラーコードに変換する」を具体化）。レビュー R-107（S-92、2026-10-05）で、状態の `int` を返して結果を出力ポインタに書く形に改めた |
 | B-9 | `init` の wrapper は自分のスタックの `jmp_buf`、`_new` は `_init` に委譲、export の名前はモジュールの完全なパス | 妥当 |
 | B-10 | `inline_consts`: 関数呼び出しの `const` はインタプリタで評価してリテラルに戻し、C の静的初期化子にする。評価が panic したら手を付けず E0200 | 妥当 |
-| B-11 | プラットフォーム表: アーキテクチャ → ポインタ幅、OS → hosted / bare、フラグ。`panic` の既定は hosted で `poison`、`*-none-*` で `reset`。`relaxed` はターゲットに指定不可、`bind` は E0200 | 仕様へ（§15.3 の表に既定値） |
+| B-11 | プラットフォーム表: アーキテクチャ → ポインタ幅、OS → hosted / bare、フラグ。`panic` の既定は hosted で `poison`、`*-none-*` で `reset`。`relaxed` はターゲットに指定不可、`bind` は E0200 | 仕様へ（§15.3 の表に既定値） → 点検 C-48（S-157）で、F64 がハードウェアかどうかの欄を足すことにした |
 | B-12 | `onsa_current_jmp` はスレッドローカル（無ければ `ONSA_NO_TLS` で静的）。wrapper は前の値を退避・復元 | 仕様へ（§9.2 の注意書き） |
 | B-13 | export で E0200 になるもの: 到達可能な `Buf`、C 実装の無い `std` プリミティブ、関数の値、不透明型、利用者の `target` 関数、スカラでない `Ctl` / `Init` 入力、集成体を引数や返り値に持つ export 関数、bulk を持つ flow を別の型のフィールドにすること | 妥当（最後の 1 件は S-28 で解消） |
 
@@ -177,7 +177,7 @@
 | §11.7 `id` | 名前から安定した ID | 名前の文字列そのもの | 要判断（ID の作り方）→ 決定（2026-10-06）: 文字列の既定は名前、数値は FNV-1a の下位 31 ビット、`param_index` を生成（S-104、[`review-impl-phase1.md`](review-impl-phase1.md) §8） |
 | §13.4 `strict-ftz` | FTZ / DAZ | マニフェストに記録するだけ。生成コードは FTZ を設定しない | 要判断（ホストが設定するのか、生成コードの `init` で設定するのか）→ 決定（2026-10-06）: 生成コードが export の入口ごとに保存・設定・復元する（S-105、[`review-impl-phase1.md`](review-impl-phase1.md) §8） |
 | §18.1 修正候補 | 全ての診断に `found`、一意な修正には `fixes` | 否定例については検査済み。全コードの網羅は未確認 | M9 |
-| §18.2 コマンド | `check` `fmt` `test` `interface` `audit` `graph` `transpile` `play` `probe` `diff --ast` `explain` `primer` `lsp` | `check` `fmt` `test` `interface` `graph` `build` `diff --ast` `explain`（本文 2 件）、隠し `dump --core`。`transpile` は `build` の `kind = "source"` が担う | 計画どおり（M7〜M9） |
+| §18.2 コマンド | `check` `fmt` `test` `interface` `audit` `graph` `transpile` `play` `probe` `diff --ast` `explain` `primer` `lsp` | `check` `fmt` `test` `interface` `graph` `build` `diff --ast` `explain`（本文 2 件）、隠し `dump --core`。`transpile` は `build` の `kind = "source"` が担う | 計画どおり（M7〜M9） → 点検 C-54（S-163）で仕様からも `transpile` を外した |
 | §11.8 `std.test.check` | `Random` 効果の性質検査 | 構文だけ | M5 |
 | §6.6 `const` | Shared の結果は静的に配置 | Copy だけ（E0407） | 第 2 期 |
 | §4.7 型付きホール | 期待型と候補 | 実装済み。候補はスコープ内の同じ型のローカル | 妥当 |
@@ -186,7 +186,7 @@
 ### 3.2 実装にあって仕様に無いもの
 
 - 診断コード: E0302（未解決の名前）、E0303（可視性）、E0401（型の不一致）、E0410（struct リテラルのフィールド）、E0411（`as` の縮小）、E0412（引数の数）、E0413（未知のメンバ）、E0414（`?` の型）、E0415（代入先が場所でない）、E0416（境界の不成立）、E0421（型付きホール）、E0502（反駁可能な `let`）、E0601（効果行の整合）、E0701（変更できない場所）、E0703（モードの不一致）、E0704（移動後の使用）、E0712（捕捉できない値）。仕様 §18.1 は範囲しか定めていないので矛盾ではないが、一覧を仕様か `explain` の索引に置くべき
-- 隠しコマンド `onsa dump --core`、`onsa build` の `onsa_build.json`、`<prefix>take_panic()`
+- 隠しコマンド `onsa dump --core`、`onsa build` の `onsa_build.json`（点検 C-59、S-168 で内部の出力とした）、`<prefix>take_panic()`
 - `tests/spec` のマーカ形式（`//~ E0010`、`//! mode:`、`//~ TESTFAIL`）と `tools/check_spec_examples.py`（P9 の検査の仕組み。仕様 §0.2 P9 に参照があってよい）
 
 ### 3.3 §19.2 以外で「実装しない」と暗黙に扱っているもの

@@ -207,7 +207,7 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 | 仕様の例 | `tests/spec/` | 各節の肯定例と否定例。期待する診断は行末の `//~ E0010`。事例はビルドと同じ入口を通るファイル（`onsa.toml` の断片と `[test]`。D-05 の改定、R-80 (5)、D-16）。P9 の検証 |
 | 単体 | 各クレート | 字句、文の区切り、演算子の群、レート解析、配置の計算、`fmt` の冪等性 |
 | golden | `tests/golden/` | 生成 C / WASM / JS のテキスト差分。意図した変更だけが差分になる |
-| conformance | `tests/conformance/` | `render` の出力を interp / C / WASM / JS で比較。`strict` ではバイト一致、`relaxed` は対象外 |
+| conformance | `tests/conformance/` | `render` の出力を interp / C / WASM / JS で比較。`strict` ではバイト一致。`@fp(relaxed)` の flow は判定から外し、有限で panic しないことを確かめ、strict との差を表示する（S-162） |
 | 精度 | `std/math` | ULP 目標の検証 |
 | 生成テスト | `tests/fuzz/` | 小さな flow を乱数で生成し、interp と C を比較（M5 以降）。演算の順序と丸めの差を機械的に見つける |
 | 例 | `examples/` | §17 の `voice` / `echo` / `poly` を実際にビルドして鳴らす |
@@ -242,6 +242,8 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 | `extern "C"` を呼ぶ間の浮動小数の状態 | `extern "C"` は第 2 期。export の入口でプロファイルの環境に設定する（S-111）ので、そのまま呼ぶと C の関数はその環境で動く | 呼ぶ前後でホストの状態に切り替えるかを決めて実装する（仕様 §19.1） | 4 | S-111 |
 | `Show` の derive と複合の値の `Show` | `Str` が無いので、`Show` の derive は E0200（S-13）。書式は仕様 §6.3 で決めた（S-135、S-136） | `Str` と一緒に、derive と、タプル・`[T; N]`・`Option` / `Result` の `Show` を実装する | 2 | S-135、S-136 |
 | `Hash` | derive は境界の判定だけで、ハッシュの計算は生成しない。手書きの `impl Hash` は E0200 | `Map` / `Set` と一緒に `Hash` のメソッドを決め、derive の生成と手書きの `impl` を受け付ける | 2 | S-138 |
+| MSVC | 確かめない。生成した C を確かめるのは GCC と Clang（仕様 §13.4 に未検証と書いた） | 対応するときに、仕様の MSVC の記述（`fp_contract`、`/fp:fast`、別名）を確かめる作業を立てる | 第 2 期以降 | S-158 |
+| クロスのツールチェーン | 外部のツールチェーンを要するクロスの `kind`（`staticlib` など）は E0200。`kind = "source"` の C を出す | ツールチェーンを指定する形を決め（仕様 §19.1）、クロスの `.a` を作る | 4 | S-161 |
 | 意味の次元の点検表 | 仕様に機能を足すたびに通す | 既存の節を第 2 期の前に一度通す | 第 2 期の前 | Q-15 |
 
 第 3 期（変換先の拡大）は §20 の 10〜11 のまま。C++ と Rust への核の変換は、C バックエンドの構造を流用できるので各 M。
