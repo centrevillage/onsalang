@@ -21,6 +21,7 @@ pub flow counter(x: Sig[F32]) -> Sig[F32] {
   let n = prev(n, 0.0) + 1.0
   n
 }
+// 2026-10-06、点検 C-33（S-110）の後は、`sel` の `if` は E0811（枝に状態を持つもの）。全ての枝を進めるには `if~` と書く（`flow/e2/branch.onsa` の先頭のコメント）。
 pub flow sel(x: Sig[F32]) -> Sig[F32] {
   let c: F32 = prev(c, 0.0) + 1.0
   if c > 2.0 { counter~(x) } else { 0.0 }

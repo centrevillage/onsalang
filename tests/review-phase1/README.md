@@ -44,7 +44,7 @@
 | `body/pm1_partial.onsa` | R-74、R-95 |
 | `body/b2_builtin_methods.onsa` | R-96 |
 | `flow/e1/` | R-13 |
-| `flow/e2/`、`flow/e17/` | R-14（`e2` は R-06 の `match` も） |
+| `flow/e2/`、`flow/e17/` | R-14（`e2` は R-06 の `match` も）。S-110 で規則を改めたので、期待は各ファイルの先頭のコメント |
 | `flow/e4/` | R-17 |
 | `flow/e5/` | R-03（`par` の中の look-back） |
 | `flow/e8/`、`flow/e9/`、`flow/e18/` | R-15 |
