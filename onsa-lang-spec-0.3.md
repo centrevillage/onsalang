@@ -1392,7 +1392,7 @@ typedef struct { uint8_t _unused; } vc_voice_config;   /* Config が空なので
 
 /* bulk は BULK_SIZE が 0 なら NULL でよい。cfg は Config が空なら NULL でよい */
 int  vc_voice_init(vc_voice* s, void* bulk, const vc_voice_config* cfg, float sample_rate);
-     /* 0: ok, 1: init が panic した（状態は未初期化のまま。reset では復帰せず、init のやり直しが要る） */
+     /* 0: ok, 1: init が panic した, 2: 要るのに bulk か cfg が NULL。1 と 2 では状態は未初期化のまま（reset では復帰せず、init のやり直しが要る） */
 void vc_voice_reset(vc_voice* s);
 void vc_voice_params_default(vc_voice_params* params);
 int  vc_voice_process(vc_voice* s, const vc_voice_params* params,
@@ -1436,7 +1436,7 @@ int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 
 パッケージのヘッダは、インクルードガードに `<PREFIX><PACKAGE>_H` を使う。パッケージの中で、この表から作る全ての名前、export した関数の名前、インクルードガードのどれかが重なると、ビルドで E1011（両方の出どころを示す）。別のモジュールの同名の flow や関数、flow どうしの生成する名前（flow `voice` の `vc_voice_params` と flow `voice_params` の `vc_voice_params`）、flow の生成する名前と関数の名前（flow `voice` の `vc_voice_init` と関数 `voice_init`）の重なりも含む。
 - 関数と型の形は、flow の宣言にもターゲットにもよらず一定で、変わるのはフィールドと定数の値だけである（`process` の入出力の引数は §11.6 の数の規則に従う）。共通のラッパーを、どの flow にも同じ形で書ける。`block` の入力が無い flow でも `_params`、`_params_default`（何もしない）、`_param_index`（常に -1）、`_param_info`（長さ 0）を生成し、`_process` は `params` を取る。`init` の入力が無い flow でも `_config` を生成し、`_init` と `_new` は `cfg` を取る。`bulk` の引数は、ターゲットの設定によらず常に置く。
-- Config は `const <p>_config* cfg` で受け取る（`params` と同じ形。ホストはフィールドを名前で設定するので、引数の取り違えが起きない）。Config が空なら NULL を渡してよく、`BULK_SIZE` が 0 なら `bulk` に NULL を渡してよい。どちらも、要るのに NULL なら `_init` は失敗し、状態は未初期化のままになる（`_new` は NULL を返す）。Config にフィールドを足すと、構造体を組み立てるホストのコードはそのまま通り、新しいフィールドは 0 になるので、ホストのコードを見直す。
+- Config は `const <p>_config* cfg` で受け取る（`params` と同じ形。ホストはフィールドを名前で設定するので、引数の取り違えが起きない）。Config が空なら NULL を渡してよく、`BULK_SIZE` が 0 なら `bulk` に NULL を渡してよい。どちらも、要るのに NULL なら `_init` は 2 を返し、状態をゼロで埋めて未初期化の印を付ける（`_new` は NULL を返す）。2 は `_process` の 2 と同じく呼び出し側の引数の誤りで、`init` の中の panic（1）と区別できる。Config にフィールドを足すと、構造体を組み立てるホストのコードはそのまま通り、新しいフィールドは 0 になるので、ホストのコードを見直す。
 - `_new` は状態と bulk の領域（`<P>_BULK_ALIGN` に揃える）を確保して `_init` を呼び、`_free` は両方を解放する。`BULK_SIZE` が 0 なら `BULK_ALIGN` は 1 である。
 - `prefix` は、`[export]` に flow か関数があれば必須で、既定は無い（書かなければ E1104 で、`<package>_` が下の規則を満たすときは、修正候補は `prefix = "<package>_"` の挿入）。C の名前は、ホストが依存した後は変えられない公開の ABI なので、export を決める場所で選ぶ。別々にビルドしたパッケージを一つのバイナリにリンクするとき、名前の重なりは `prefix` を変えて避ける（パッケージ名を変える必要は無い）。
 - `prefix` の値は、小文字の英字・数字・`_` からなり、英字で始まって `_` で終わる（`vc_`、`my_synth_`）。空は書けない（C の名前が libc や他のライブラリの名前と重なり、ヘッダの名前が `onsa.h` や標準のヘッダを隠す）。`__` を含むもの（C++ では予約の名前）と、`onsa_` で始まるものも書けない。いずれも E1103 である。
@@ -1878,7 +1878,7 @@ static vc_voice_params params;
 void setup(void) {
   voice = (vc_voice*)voice_mem;
   if (vc_voice_init(voice, NULL, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0、Config が空なので NULL */
-    return;                                          /* init が panic した。使い始めない */
+    return;                                          /* init が失敗した（1: panic、2: 引数の誤り）。使い始めない */
   }
   vc_voice_params_default(&params);
 }
