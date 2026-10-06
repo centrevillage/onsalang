@@ -4,10 +4,10 @@ pub struct Point {
   y: F32,
 }
 
-pub trait Show {
-  fn show(self) -> Str uses {Alloc}
+pub trait Describe {
+  fn describe(self) -> Str uses {Alloc}
 }
 
-impl Show for Point {
-  fn show(self) -> Str uses {Alloc} { "({self.x}, {self.y})" }
+impl Describe for Point {
+  fn describe(self) -> Str uses {Alloc} { "({self.x}, {self.y})" }
 }
