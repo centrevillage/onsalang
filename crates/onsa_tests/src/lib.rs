@@ -25,6 +25,7 @@
 //! ```
 
 pub mod c;
+pub mod pending;
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};

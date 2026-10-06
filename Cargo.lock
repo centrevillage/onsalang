@@ -258,7 +258,9 @@ dependencies = [
  "onsa_diag",
  "onsa_driver",
  "onsa_interp",
+ "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

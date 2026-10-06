@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+"""The list of things that are expected not to pass yet (plan D-16 7, Q-08, §8.6).
+
+The list is `tests/pending.toml`, one `[[pending]]` table per entry. The
+meaning is the same for every kind: a listed target is expected to fail; when
+it passes, the gate fails and asks for the entry to be removed. The kinds and
+the form of `target`:
+
+    spec-example  "§<section> <hash>: <first line>" of a ```onsa block of the
+                  spec (`spec_blocks.ID_FORM`)
+    diag-code     a diagnostic code, "E0812"                       (matched by W1-02)
+    gate          a pendable gate item of `tools/gate_steps.py` ("c-header"),
+                  or a case that the item itself reports, "<item>/<case>"
+    test-case     a test case: a path from the repository root (a file or a
+                  package directory), optionally "<path>::<test name>"   (W1-03)
+    fuzz-input    a saved fuzz input: a path from the repository root  (W1-04)
+
+Paths are in their canonical form: relative, `/`-separated, no `.` or `..`
+component, no empty component, no trailing `/`.
+
+Every entry has all of: kind, target, reasons (S / R numbers, one or more),
+until (the work that removes it: a W ID of `docs/rework-phase1.md` §3 or a T
+ID of `docs/implementation-tasks.md` §4, not marked done), note.
+
+This module is the only place that validates the list (the Rust reader in
+`onsa_tests::pending` only reads it). It runs on its own:
+
+    tools/pending.py [--pending FILE] [--root DIR] [--gate-steps a,b,...] [--stage-end W3]
+
+Exit 0 if the list is valid (and, with --stage-end, nothing of that stage is
+left), 1 otherwise, 2 on a usage error.
+"""
+import argparse
+import posixpath
+import re
+import sys
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gate_steps  # noqa: E402
+import spec_blocks  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+PENDING = Path("tests") / "pending.toml"
+
+KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input")
+FIELDS = ("kind", "target", "reasons", "until", "note")
+
+# The form of `target` per kind. Paths are checked further in `_check_target`.
+TARGET_FORMS = {
+    "spec-example": spec_blocks.ID_FORM,
+    "diag-code": re.compile(r"E\d{4}"),
+    "gate": re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*(?:/\S+)?"),
+    "test-case": re.compile(r"[^\s:][^:]*(?:::\S.*)?"),
+    "fuzz-input": re.compile(r"[^\s:][^:]*"),
+}
+REASON = re.compile(r"[SR]-\d+")
+WORK = re.compile(r"(W\d+)-\d+|T(\d+)-\d+")
+
+# Where the documents keep the IDs: table rows `| ID |`, `| ID ✅ |` (done).
+DOC_REWORK = Path("docs") / "rework-phase1.md"
+DOC_PLAN = Path("docs") / "implementation-tasks.md"
+DOC_REVIEW = Path("docs") / "review-impl-phase1.md"
+
+
+class DocsError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Entry:
+    index: int  # position in the file, for messages
+    kind: str
+    target: str
+    reasons: tuple
+    until: str
+    note: str
+
+    def label(self):
+        return f'pending[{self.index}] {self.kind} "{self.target}"'
+
+
+@dataclass
+class Docs:
+    works: set  # W and T IDs
+    done: set  # the works marked done (✅)
+    reasons: set  # S and R IDs
+
+
+def stage_of(work):
+    """`W3-07` -> `W3`, `T5-8` -> `M5` (the milestone of a T ID)."""
+    m = WORK.fullmatch(work)
+    if not m:
+        return None
+    return m.group(1) if m.group(1) else f"M{m.group(2)}"
+
+
+def _rows(text, id_pattern):
+    """{id: done} of the table rows whose first cell is an ID."""
+    rows = {}
+    for m in re.finditer(rf"^\| ({id_pattern})( ✅)?[ |]", text, re.M):
+        rows[m.group(1)] = bool(m.group(2))
+    return rows
+
+
+def _section(text, start, end, doc):
+    """The text from the heading line `start` up to the heading line `end`."""
+    out, inside = [], False
+    for line in text.split("\n"):
+        if line.startswith(start):
+            inside = True
+        elif inside and line.startswith(end):
+            break
+        if inside:
+            out.append(line)
+    if not out:
+        raise DocsError(f"{doc}: the section `{start}` is not found")
+    return "\n".join(out)
+
+
+def _table(doc, text, start, end, id_pattern, what):
+    rows = _rows(_section(text, start, end, doc) if start else text, id_pattern)
+    if not rows:
+        raise DocsError(f"{doc}: no table rows of {what} found" + (f" in `{start}`" if start else ""))
+    return rows
+
+
+def load_docs(root=ROOT):
+    """The IDs of the tables. Raises DocsError when a table is not found."""
+
+    def read(p):
+        try:
+            return (root / p).read_text(encoding="utf-8")
+        except OSError as e:
+            raise DocsError(f"{p}: {e}") from e
+
+    rework, plan, review = read(DOC_REWORK), read(DOC_PLAN), read(DOC_REVIEW)
+    w = _table(DOC_REWORK, rework, "## 3.", "## 4.", r"W\d+-\d+", "W works")
+    t = _table(DOC_PLAN, plan, "## 4.", "## 5.", r"T\d+-\d+", "T works")
+    s = _table(DOC_PLAN, plan, "## 2.", "## 3.", r"S-\d+", "S numbers")
+    r = _table(DOC_REVIEW, review, None, None, r"R-\d+", "R numbers")
+    works = {**w, **t}
+    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=set(s) | set(r))
+
+
+def load(path):
+    """Read the list. Returns (entries, errors); entries are the well-formed ones."""
+    try:
+        data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [], [f"{path}: not found"]
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        return [], [f"{path}: {e}"]
+    errors = [f"{path}: unknown top-level key `{k}` (only [[pending]])" for k in data if k != "pending"]
+    raw = data.get("pending", [])
+    if not isinstance(raw, list):
+        return [], errors + [f"{path}: `pending` must be an array of tables ([[pending]])"]
+    entries = []
+    for i, item in enumerate(raw):
+        where = f"pending[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{where}: not a table")
+            continue
+        bad = False
+        for k in item:
+            if k not in FIELDS:
+                errors.append(f"{where}: unknown field `{k}`")
+                bad = True
+        for k in FIELDS:
+            if k not in item:
+                errors.append(f"{where}: missing field `{k}`")
+                bad = True
+        if bad:
+            continue
+        for k in ("kind", "target", "until", "note"):
+            if not isinstance(item[k], str) or not item[k].strip():
+                errors.append(f"{where}: `{k}` must be a non-empty string")
+                bad = True
+        reasons = item["reasons"]
+        if not isinstance(reasons, list) or not all(isinstance(r, str) for r in reasons):
+            errors.append(f"{where}: `reasons` must be an array of strings")
+            bad = True
+        elif not reasons:
+            errors.append(f"{where}: `reasons` needs at least one S / R number")
+            bad = True
+        if bad:
+            continue
+        entries.append(Entry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"]))
+    return entries, errors
+
+
+def validate(entries, docs, root=ROOT, pendable_steps=None):
+    """Check the entries against their forms and the documents. Returns errors.
+
+    `pendable_steps` are the gate items that may be listed (default: the
+    pendable items of `gate_steps.STEPS`)."""
+    if pendable_steps is None:
+        pendable_steps = gate_steps.pendable()
+    errors = []
+    seen = {}
+    for e in entries:
+        where = e.label()
+        if e.kind not in KINDS:
+            errors.append(f"{where}: unknown kind `{e.kind}` (one of {', '.join(KINDS)})")
+            continue
+        errors += [f"{where}: {m}" for m in _check_target(e, root, pendable_steps)]
+        for r in e.reasons:
+            if not REASON.fullmatch(r):
+                errors.append(f"{where}: reason `{r}` is not an S / R number (`S-45`, `R-23`)")
+            elif r not in docs.reasons:
+                errors.append(f"{where}: reason `{r}` is not in the tables (plan §2 for S, review for R)")
+        if len(set(e.reasons)) != len(e.reasons):
+            errors.append(f"{where}: a reason is listed twice")
+        if not WORK.fullmatch(e.until):
+            errors.append(f"{where}: until `{e.until}` is not a work ID (`W3-07`, `T5-8`)")
+        elif e.until not in docs.works:
+            errors.append(f"{where}: until `{e.until}` is not in the tables (rework §3 for W, plan §4 for T)")
+        elif e.until in docs.done:
+            errors.append(f"{where}: until `{e.until}` is a work marked done; remove the entry or change `until`")
+        key = (e.kind, e.target)
+        if key in seen:
+            errors.append(f"{where}: the same target as pending[{seen[key]}]")
+        else:
+            seen[key] = e.index
+    return errors
+
+
+def _check_target(e, root, pendable_steps):
+    if not TARGET_FORMS[e.kind].fullmatch(e.target):
+        return [f"target is not of the {e.kind} form"]
+    if e.kind == "gate":
+        item = e.target.split("/", 1)[0]
+        if item not in pendable_steps:
+            listed = ", ".join(pendable_steps) or "none yet"
+            return [f"`{item}` is not a gate item that may be listed (pendable items: {listed})"]
+    if e.kind in ("test-case", "fuzz-input"):
+        path = e.target.split("::", 1)[0]
+        problem = path_problem(path)
+        if problem:
+            return [problem]
+        if not (root / path).exists():
+            return [f"`{path}` does not exist (remove the entry, or fix the path)"]
+    return []
+
+
+def path_problem(path):
+    """Why `path` is not a canonical repository path, or None."""
+    if "\\" in path:
+        return "the path must use `/`, not `\\`"
+    if path.startswith("/"):
+        return "the path must be relative to the repository root"
+    parts = path.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return f"the path must be canonical (`{posixpath.normpath(path)}`: no `./`, `..`, `//` or trailing `/`)"
+    return None
+
+
+def of_kind(entries, kind):
+    return [e for e in entries if e.kind == kind]
+
+
+def stage_counts(entries):
+    counts = {}
+    for e in entries:
+        s = stage_of(e.until) or "?"
+        counts[s] = counts.get(s, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: stage_key(kv[0])))
+
+
+def stage_key(stage):
+    m = re.fullmatch(r"([WM])(\d+)", stage)
+    return (0 if m and m.group(1) == "W" else 1, int(m.group(2)) if m else 99, stage)
+
+
+def stages_line(entries):
+    counts = stage_counts(entries)
+    if not counts:
+        return "pending: none"
+    body = ", ".join(f"{s} {n}" for s, n in counts.items())
+    return f"pending by stage: {body} (total {len(entries)})"
+
+
+def known_stages(docs):
+    return {stage_of(w) for w in docs.works}
+
+
+def stage_problem(stage, docs):
+    """Why `stage` is not a usable `--stage-end` value, or None."""
+    if not stage:
+        return "--stage-end needs a stage (W3, M5)"
+    if stage not in known_stages(docs):
+        known = ", ".join(sorted(known_stages(docs), key=stage_key))
+        return f"unknown stage `{stage}` (one of {known})"
+    return None
+
+
+def stage_end_errors(entries, stage):
+    return [
+        f"{e.label()}: still pending at the end of {stage} (until {e.until}): {e.note}"
+        for e in entries
+        if stage_of(e.until) == stage
+    ]
+
+
+def show_path(path, root):
+    try:
+        return str(Path(path).resolve().relative_to(Path(root).resolve()))
+    except ValueError:
+        return str(path)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Validate tests/pending.toml.")
+    ap.add_argument("--root", type=Path, default=ROOT)
+    ap.add_argument("--pending", type=Path, default=None)
+    ap.add_argument("--gate-steps", default=None, help="comma separated pendable gate items (default: tools/gate_steps.py)")
+    ap.add_argument("--stage-end", default=None, metavar="STAGE", help="fail if entries of STAGE (W3, M5) remain")
+    args = ap.parse_args(argv)
+    root = args.root
+    path = args.pending or root / PENDING
+    try:
+        docs = load_docs(root)
+    except DocsError as e:
+        print(f"the document tables are not found: {e}")
+        return 1
+    if args.stage_end is not None:
+        problem = stage_problem(args.stage_end, docs)
+        if problem:
+            print(problem, file=sys.stderr)
+            return 2
+    steps = None if args.gate_steps is None else [n for n in args.gate_steps.split(",") if n]
+    entries, errors = load(path)
+    errors += validate(entries, docs, root, steps)
+    if args.stage_end is not None:
+        errors += stage_end_errors(entries, args.stage_end)
+    for m in errors:
+        print(m)
+    print(stages_line(entries))
+    if errors:
+        print(f"{len(errors)} problem(s) in {show_path(path, root)}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

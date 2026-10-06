@@ -11,7 +11,9 @@ onsa_diag.workspace = true
 onsa_interp.workspace = true
 onsa_core.workspace = true
 onsa_backend_c.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 
 [lints]
 workspace = true

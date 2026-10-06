@@ -1,0 +1,122 @@
+# 実装待ちの一覧（計画 D-16 の 7、Q-08、§8.6 の「新しい構文のテスト」）
+#
+# 一覧にある対象は、まだ通らないことを期待する。通ったら gate（tools/gate.sh）が失敗し、
+# 一覧から外すよう促す。意味はどの種類も同じ。外す作業は、対象を通したときに項目を消す。
+#
+# 項目は [[pending]] の表で、欄は全て必須（他の欄は書けない）:
+#   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input"
+#   target   対象の識別子（形は種類ごと。下）
+#   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）
+#   until    外す予定の作業 ID（docs/rework-phase1.md §3 の W の ID か、計画 §4 の T の ID）
+#   note     短い説明
+#
+# target の形:
+#   spec-example  "§<節> <ハッシュ>: <先頭の行>"。仕様の ```onsa ブロックの名前。ハッシュは、
+#                 照合と同じ正規化（行末の //~ と各行の前後の空白と前後の空行を除く）をした
+#                 ブロックの SHA-256 の先頭 8 桁。節は直前の番号付きの見出し、先頭の行は空白を
+#                 一つに詰めたもの。ブロックの内容・節・先頭の行のどれかが変わると、項目は
+#                 どのブロックも指さなくなり、gate が今の名前を添えて失敗する。
+#                 tools/check_spec_examples.py が、一覧に無い食い違いに正しい名前を示す。
+#   diag-code     診断コード: "E0812"                                   （照合は W1-02）
+#   gate          載せてよい gate の項目の名前（tools/gate_steps.py の STEPS で pendable=True のもの）:
+#                 "c-header"。項目が自分で報告する事例は "<項目>/<事例>"（照合はその項目が行う）。
+#                 gate の完全性を保つ項目（fmt、clippy、test、仕様の例、この一覧、自己テスト）と
+#                 info の項目は載せられない
+#   test-case     リポジトリの根からのパス（ファイルかパッケージのディレクトリ）。
+#                 一つの test だけなら "<パス>::<test の名前>"          （照合は W1-03）
+#   fuzz-input    保存した入力のファイルの、リポジトリの根からのパス  （照合は W1-04）
+#                 パスは正規形だけ（/ で区切る。./、..、//、末尾の /、\ を含まない）
+# until が完了の印（✅）の付いた作業を指す項目は失敗にする（外すか until を改める）。
+
+# --- 仕様の例（tests/spec の写しが古い形のまま。C-63、C-72、計画 §6）
+
+[[pending]]
+kind = "spec-example"
+target = "§3.1 d235a27a: let a = x + y - z // 加法の連鎖"
+reasons = ["S-45"]
+until = "W3-13"
+note = "演算子の群。写し ops/groups.onsa は旧い群の規則の例"
+
+[[pending]]
+kind = "spec-example"
+target = "§5.1 837afdf0: let x: I32 = 1 // 不変"
+reasons = ["S-89"]
+until = "W3-13"
+note = "= の整列（型注釈で列を切らない）。写し values/bind.onsa は今の fmt の形"
+
+[[pending]]
+kind = "spec-example"
+target = "§6.2 b9d1a51c: use std.math.{sqrt}"
+reasons = ["S-45"]
+until = "W3-13"
+note = "Point.norm の積和の括弧。写し fn/methods.onsa は括弧付き"
+
+[[pending]]
+kind = "spec-example"
+target = "§6.4 e8bddb35: pub struct Key: PartialEq + Eq + Hash + Show {"
+reasons = ["S-34"]
+until = "W3-13"
+note = "宣言の : trait。写し fn/derive.onsa は @derive"
+
+[[pending]]
+kind = "spec-example"
+target = "§11.2 5325cac7: pub flow one_pole(x: F32 at sample, p: F32 at block) -> F32 at sample {"
+reasons = ["S-102", "S-44", "S-29", "S-45"]
+until = "W3-13"
+note = "at のクロック、prev~(^y)、init の省略、積和の括弧。写し flow/one_pole.onsa は Sig[F32] と prev(y, 0.0)"
+
+[[pending]]
+kind = "spec-example"
+target = "§11.5 68ae8945: use std.math.{sum}"
+reasons = ["R-23", "S-102", "S-45"]
+until = "W5-07"
+note = "std.math.sum、at のクロック、積和の括弧。写し flow/unison.onsa は std.dsp.sum と Ctl[F32]"
+
+[[pending]]
+kind = "spec-example"
+target = "§11.7 862d289c: use std.dsp.{db_to_amp}"
+reasons = ["S-102"]
+until = "W3-13"
+note = "at のクロック。写し flow/gain.onsa は Sig[F32] / Ctl[F32]"
+
+[[pending]]
+kind = "spec-example"
+target = "§11.8 4f9d65b0: use std.test.{check, gen}"
+reasons = ["S-45"]
+until = "W3-13"
+note = "比較と && の括弧。写し test/check.onsa は括弧付き"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.2 18ae837c: use std.fs.{Fs, Path, IoError}"
+reasons = ["S-34"]
+until = "W3-13"
+note = "ConfigError の : trait。写し examples/line_count.onsa は @derive"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.3 1cd1a342: use std.math.{exp, cos}"
+reasons = ["S-102", "S-44", "S-29", "S-45"]
+until = "W3-13"
+note = "resonator。at のクロック、prev~(^y)、init の省略、積和の括弧。写しは examples/voice.onsa"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.4 09ded4d5: // §17.3 と同じモジュール（resonator を参照する）"
+reasons = ["S-102", "S-44", "S-29", "S-45"]
+until = "W3-13"
+note = "saw / smooth / voice。at のクロック、prev~(^名前)、init の省略、積和の括弧。写しは examples/voice.onsa"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.4 6d30430b: const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒"
+reasons = ["S-102", "S-44", "S-29", "S-45", "S-43"]
+until = "W3-13"
+note = "echo。at のクロック、vdelay~(^y, ...)、init の省略、積和の括弧、@mem(bulk) の let。写しは examples/voice.onsa。W3-08 が @mem(bulk) を意味の実装まで E0200 にするなら、until を W9 の作業に改める（W3-08 の作業票で決める）"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.4 51ad3151: use std.fs.{Fs, Path, IoError}"
+reasons = ["S-89"]
+until = "W3-13"
+note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今の fmt の形"
