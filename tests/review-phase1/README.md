@@ -170,6 +170,7 @@
 | `parent/t8.onsa` | `impl-review-0.3.md` の T-8 と R-105 の残り（診断コードの流用。期待値と今の出力は各項目の上のコメント。S-103） |
 | `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |
 | `parent/strict_ftz/` | `impl-review-0.3.md` の §13.4 `strict-ftz`（FTZ / DAZ の設定。パッケージで、`onsa build --target host` の生成した C を確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-105） |
+| `parent/r133/` | R-133（NaN のビット表現。パッケージで、`onsa test` と、生成した C を arm64 / x86_64 / gcc-15 でコンパイルした `host.c` で確かめる。手順と期待値と今の出力は `m.onsa` の先頭のコメント。S-106） |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |

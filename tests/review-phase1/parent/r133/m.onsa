@@ -1,0 +1,41 @@
+// R-133: NaN のビット表現。S-106。
+//
+// 期待: `to_bits()` が NaN を正の quiet NaN にそろえるので、全ての環境で nan_bits = neg_nan_bits = 0x7FC00000（下の 0x7FC00000 の二つのテストが通る）。
+//
+// 手順（リポジトリのルートで。生成物はコミットしない）:
+//   onsa test tests/review-phase1/parent/r133                       （インタプリタ。下のテストのどれが通るかで値が分かる）
+//   onsa build --target host tests/review-phase1/parent/r133
+//   cc -arch arm64  -std=c11 -O2 -ffp-contract=off -Itests/review-phase1/parent/r133/target/host \
+//      tests/review-phase1/parent/r133/host.c tests/review-phase1/parent/r133/target/host/onsa_r133.c -o r133_arm64
+//   （-arch x86_64 で x86 の結果を Rosetta で取る。gcc-15 でも同じ）
+//
+// 今（2026-10-06）: 同じ式で、環境ごとにビットが違う。
+//   インタプリタ（arm64）        nan_bits = 0x7FC00000、neg_nan_bits = 0xFFC00000
+//   C、clang、arm64、-O2         nan_bits = 0x7FC00000、neg_nan_bits = 0x7FC00000（否定の符号が消える）
+//   C、clang、x86_64（Rosetta）  nan_bits = 0xFFC00000、neg_nan_bits = 0xFFC00000（x86 の既定の NaN は負）
+//   C、gcc-15、arm64             nan_bits = 0x7FC00000、neg_nan_bits = 0xFFC00000
+// 仕様 §13.4 は全ての変換先でのビット一致を約束するが、NaN の符号とペイロードは決まっていない。
+
+pub fn nan_bits(z: F32) -> U32 {
+  (z / z).to_bits()
+}
+
+pub fn neg_nan_bits(z: F32) -> U32 {
+  (-(z / z)).to_bits()
+}
+
+test "nan bits is 0x7FC00000" {
+  assert nan_bits(0.0) == 2143289344
+}
+
+test "nan bits is 0xFFC00000" {
+  assert nan_bits(0.0) == 4290772992
+}
+
+test "neg nan bits is 0x7FC00000" {
+  assert neg_nan_bits(0.0) == 2143289344
+}
+
+test "neg nan bits is 0xFFC00000" {
+  assert neg_nan_bits(0.0) == 4290772992
+}
