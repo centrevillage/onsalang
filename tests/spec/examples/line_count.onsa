@@ -1,4 +1,8 @@
-//! mode: parse
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§17.2"]
+
 use std.fs.{Fs, Path, IoError}
 use std.text.{count_lines}
 

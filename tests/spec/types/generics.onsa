@@ -1,3 +1,8 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5"]
+// golden = ["core"]
+
 pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
   if x < lo { lo } else if x > hi { hi } else { x }
 }

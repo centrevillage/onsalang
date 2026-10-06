@@ -1,3 +1,8 @@
+// onsa.toml
+// [test]
+// spec = ["§10"]
+// golden = ["core"]
+
 use std.math.{abs}
 
 pub rt fn soft_clip(x: F32) -> F32 {

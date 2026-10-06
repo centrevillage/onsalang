@@ -5,12 +5,23 @@
 use onsa_diag::SourceMap;
 use onsa_interp::{Interp, Value};
 
+/// A one-module package `t` (no manifest, spec §15.1), as the CLI loads one.
+fn load(src: &str) -> (onsa_driver::Loaded, onsa_driver::Analyzed) {
+    let input = onsa_driver::PackageInput {
+        manifest: None,
+        files: vec![onsa_driver::SourceFile { path: "t.onsa".into(), text: src.into() }],
+        root: None,
+    };
+    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    (loaded, analyzed)
+}
+
 /// Check, lower and run every `test` of a one-module package; returns the
 /// outcomes as `(name, failure message)`.
 fn run(src: &str) -> (Vec<(String, Option<String>)>, SourceMap) {
-    let mut sources = SourceMap::default();
-    let file = sources.add("t.onsa", src);
-    let analyzed = onsa_driver::analyze_package(&mut sources, "t", &[(file, "t".into())]);
+    let (loaded, analyzed) = load(src);
+    let sources = loaded.sources;
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analyzed.diagnostics));
     let module = onsa_driver::lower_core(&analyzed).unwrap_or_else(|d| panic!("{}", onsa_diag::to_text(&sources, &d)));
     let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default());
@@ -216,9 +227,7 @@ test "process runs block by block with reset" {
 
 #[test]
 fn interp_api_calls_functions_directly() {
-    let mut sources = SourceMap::default();
-    let file = sources.add("t.onsa", "pub fn twice(x: I32) -> I32 { x * 2 }\n");
-    let analyzed = onsa_driver::analyze_package(&mut sources, "t", &[(file, "t".into())]);
+    let (_, analyzed) = load("pub fn twice(x: I32) -> I32 { x * 2 }\n");
     let module = onsa_driver::lower_core(&analyzed).unwrap();
     let interp = Interp::new(&module);
     let f = interp.fn_by_name("t.twice").expect("fn");

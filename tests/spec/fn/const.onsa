@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6"]
+
 const TABLE_SIZE: U32 = 1024
 const SINE: [F32; 1024] = make_sine_table()
 

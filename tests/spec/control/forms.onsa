@@ -1,4 +1,8 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§7"]
+
 if c { a } else { b }
 match v {
   Some(x) => x,

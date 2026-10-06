@@ -1,3 +1,26 @@
+// onsa.toml
+// [package]
+// name = "unison"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["unison.unison", "unison.saw"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.host.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// spec = ["§11.5"]
+// conformance = true
+
 // Conformance (T4-7): spec §11.5 unison (`par`, `std.dsp.sum`).
 use std.dsp.{sum}
 use std.math.{floor}
@@ -20,7 +43,10 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
   (i.round_f32() / (n - 1).round_f32()) - 0.5
 }
 
-pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+pub flow saw(
+  @param(min: 0.0, max: 24000.0, default: 0.0)
+  f0: Ctl[F32],
+) -> Sig[F32] {
   let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
   (2.0 * phase) - 1.0
 }

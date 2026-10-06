@@ -333,9 +333,19 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
 
     // 5. Headers (T4-3) and the translation unit.
     let mut headers = Vec::new();
+    let mut flows = Vec::new();
     for e in cx.exports.clone() {
         match crate::export::header(&mut cx, &e) {
-            Ok(h) => headers.push((format!("{}.h", e.symbol), h)),
+            Ok(h) => {
+                let header = format!("{}.h", e.symbol);
+                flows.push(crate::FlowApi {
+                    flow: m.flows[e.meta_index].name.clone(),
+                    symbol: e.symbol.clone(),
+                    upper: e.upper.clone(),
+                    header: header.clone(),
+                });
+                headers.push((header, h));
+            }
             Err(d) => diags.push(d),
         }
     }
@@ -464,7 +474,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     if !diags.is_empty() {
         return Err(diags);
     }
-    Ok(CUnit { source: out, headers, runtime_header: crate::RUNTIME_HEADER.to_string() })
+    Ok(CUnit { source: out, headers, runtime_header: crate::RUNTIME_HEADER.to_string(), flows })
 }
 
 /// Index into `Module::flows` by qualified name, or by a unique suffix.

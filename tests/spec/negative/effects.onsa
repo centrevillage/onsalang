@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1"]
+
 // E0601: a function uses `Alloc` without `uses {Alloc}` (S-23, §8.1). The
 // diagnostic sits on the signature so the fix can append the effect row.
 pub fn make_buf(n: U32) -> Buf[F32] uses {Alloc} {

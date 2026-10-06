@@ -1,4 +1,8 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§9.1"]
+
 pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
   let text = Fs.read(path).map_err(ConfigError.Io)?
   ...

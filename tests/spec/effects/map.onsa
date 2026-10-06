@@ -1,2 +1,6 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§8.1"]
+
 pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Alloc, e} { ... }

@@ -1,56 +1,13 @@
-//! Shared helper for the C backend tests: source file → `CUnit`.
+//! Shared helpers for the C of a build: the golden form of the headers and
+//! the compile check with the host compiler (T4-2).
 
 use std::path::Path;
+use std::process::Command;
+use std::sync::OnceLock;
 
-use onsa_backend_c::{CUnit, EmitOptions, ExportFlow, PanicMode};
+use onsa_backend_c::CUnit;
 
-/// Lower `src` and emit C with every flow of the file exported.
-pub fn emit_c(root: &Path, src: &str, bulk_threshold: Option<u32>, provides_alloc: bool) -> CUnit {
-    emit_c_with(root, src, bulk_threshold, provides_alloc, PanicMode::Trap)
-}
-
-/// [`emit_c`] with a panic mode (T4-4).
-pub fn emit_c_with(
-    root: &Path,
-    src: &str,
-    bulk_threshold: Option<u32>,
-    provides_alloc: bool,
-    panic: PanicMode,
-) -> CUnit {
-    let path = root.join(src);
-    let mut loaded = onsa_driver::load(std::slice::from_ref(&path)).unwrap_or_else(|e| panic!("{src}: {e}"));
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
-    assert!(
-        analyzed.diagnostics.is_empty(),
-        "{src}: check diagnostics:\n{}",
-        onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics)
-    );
-    let lower_opts = onsa_core::LowerOptions { bulk_threshold, ..Default::default() };
-    let module = match onsa_driver::lower_core_with(&analyzed, &lower_opts) {
-        Ok(m) => m,
-        Err(d) => panic!("{src}: lowering diagnostics:\n{}", onsa_diag::to_text(&loaded.sources, &d)),
-    };
-    let package = Path::new(src).file_stem().unwrap().to_string_lossy().into_owned();
-    let sources = loaded.sources.clone();
-    let opts = EmitOptions {
-        package,
-        exports: module.flows.iter().map(|f| ExportFlow { flow: f.name.clone() }).collect(),
-        panic,
-        bulk_threshold,
-        provides_alloc,
-        locate: Some(Box::new(move |span: onsa_diag::Span| {
-            let f = sources.file(span.file);
-            (f.name().rsplit('/').next().unwrap_or(f.name()).to_string(), f.line_col(span.start).line)
-        })),
-        ..Default::default()
-    };
-    match onsa_backend_c::emit(&module, &opts) {
-        Ok(u) => u,
-        Err(d) => panic!("{src}: C backend diagnostics:\n{}", onsa_diag::to_text(&loaded.sources, &d)),
-    }
-}
-
-/// `onsa_voice.h` etc. joined into one golden file, and back.
+/// `onsa_voice.h` etc. joined into one golden file.
 pub fn join_headers(unit: &CUnit) -> String {
     let mut s = String::new();
     for (name, text) in &unit.headers {
@@ -58,4 +15,40 @@ pub fn join_headers(unit: &CUnit) -> String {
         s.push_str(text);
     }
     s
+}
+
+/// Whether `cc` is on the PATH (asked once).
+pub fn has_cc() -> bool {
+    static CC: OnceLock<bool> = OnceLock::new();
+    *CC.get_or_init(|| Command::new("cc").arg("--version").output().is_ok())
+}
+
+/// The flags every compile of generated C uses.
+pub const CFLAGS: &[&str] = &["-std=c11", "-Wall", "-Wextra", "-Werror", "-ffp-contract=off", "-fno-fast-math"];
+
+/// Write the files of a build into `dir`.
+pub fn write_files(dir: &Path, files: &[(String, String)]) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    for (name, text) in files {
+        std::fs::write(dir.join(name), text).map_err(|e| format!("cannot write {name}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Compile the C source of a build to an object in `dir` (the files must be written there).
+pub fn compile_object(dir: &Path, source_name: &str) -> Result<(), String> {
+    let out = Command::new("cc")
+        .args(CFLAGS)
+        .arg("-c")
+        .arg(dir.join(source_name))
+        .arg("-I")
+        .arg(dir)
+        .arg("-o")
+        .arg(dir.join("out.o"))
+        .output()
+        .map_err(|e| format!("cannot run cc: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("cc failed:\n{}", String::from_utf8_lossy(&out.stderr)));
+    }
+    Ok(())
 }

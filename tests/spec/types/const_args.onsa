@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5"]
+
 // S-24: const generic arguments in type position (§4.5).
 pub struct Ring[T, const N: U32] {
   data: [T; N],

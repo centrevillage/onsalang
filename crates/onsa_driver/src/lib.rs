@@ -34,11 +34,34 @@ pub struct Loaded {
     pub name: String,
     pub root: Option<PathBuf>,
     pub modules: Vec<(FileId, String)>,
+    /// The manifest; `None` for a single file without `onsa.toml` (spec §15.1).
+    pub manifest: Option<Manifest>,
+}
+
+/// One source file of a package input: its path (relative to the package
+/// root with a manifest; as given without one) and its text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFile {
+    pub path: String,
+    pub text: String,
+}
+
+/// What a build reads, without the file system (R-80 (5), plan D-05): the
+/// manifest value and the list of sources. `onsa_driver::read_input` makes
+/// one from files; the tests and `onsa_web` make one from their own data.
+#[derive(Debug, Clone, Default)]
+pub struct PackageInput {
+    /// `None`: no `onsa.toml`; every file is a module named after its stem
+    /// (one file is a one-module package, spec §15.1).
+    pub manifest: Option<Manifest>,
+    pub files: Vec<SourceFile>,
+    /// The package root on disk, when there is one (the default output directory of `build`).
+    pub root: Option<PathBuf>,
 }
 
 /// The manifest `onsa.toml` (spec §15.3). `[export]` and `[targets.*]` are
 /// used by `onsa build` (T4-5); `bind` is read but not supported yet.
-#[derive(Debug, Default, serde::Deserialize)]
+#[derive(Debug, Default, Clone, serde::Deserialize)]
 pub struct Manifest {
     pub package: ManifestPackage,
     #[serde(default)]
@@ -89,11 +112,37 @@ pub struct ManifestMemory {
     pub bulk_threshold: Option<u32>,
 }
 
-#[derive(Debug, Default, serde::Deserialize)]
+#[derive(Debug, Default, Clone, serde::Deserialize)]
 pub struct ManifestPackage {
     pub name: String,
     #[serde(default)]
     pub edition: String,
+}
+
+impl Manifest {
+    /// The top-level tables of the manifest: the fields of [`Manifest`], in
+    /// one place (W4-02 closes the table on the same list).
+    pub const TOP_LEVEL_KEYS: &'static [&'static str] = &["package", "dependencies", "export", "targets"];
+
+    /// Read a manifest from its text: the one reader of `onsa.toml` (S-99,
+    /// R-80 (5)). The errors keep the line, the column and the excerpt. The
+    /// top-level tables named in `extra_tables` are returned as they are
+    /// beside the manifest (the test fragments pass `["test"]`; `onsa.toml`
+    /// passes none, so a `[test]` there is read like any other key the
+    /// manifest does not know).
+    pub fn parse(text: &str, extra_tables: &[&str]) -> Result<(Manifest, toml::Table), String> {
+        let manifest: Manifest = toml::from_str(text).map_err(|e| e.to_string())?;
+        let mut extra = toml::Table::new();
+        if !extra_tables.is_empty() {
+            let mut table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
+            for name in extra_tables {
+                if let Some(v) = table.remove(*name) {
+                    extra.insert((*name).to_string(), v);
+                }
+            }
+        }
+        Ok((manifest, extra))
+    }
 }
 
 /// Module path of a file relative to the package root: `dsp/voice.onsa` -> `dsp.voice`.
@@ -106,6 +155,43 @@ pub fn module_path(rel: &Path) -> String {
 /// package; otherwise every `.onsa` file is a module named after its stem
 /// (one file is a one-module package).
 pub fn load(paths: &[PathBuf]) -> Result<Loaded, String> {
+    Ok(Loaded::from_input(read_input(paths)?))
+}
+
+impl Loaded {
+    /// The sources of `input` in a `SourceMap` with their module paths. Reads
+    /// no file: this is where the CLI, the tests and `onsa_web` meet.
+    pub fn from_input(input: PackageInput) -> Loaded {
+        let mut loaded = Loaded {
+            sources: SourceMap::default(),
+            name: String::new(),
+            root: input.root,
+            modules: Vec::new(),
+            manifest: None,
+        };
+        if let Some(m) = &input.manifest {
+            loaded.name = m.package.name.clone();
+        }
+        for f in input.files {
+            let module = if input.manifest.is_some() {
+                module_path(Path::new(&f.path))
+            } else {
+                Path::new(&f.path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+            };
+            if loaded.name.is_empty() {
+                loaded.name = module.clone();
+            }
+            let id = loaded.sources.add(f.path, f.text);
+            loaded.modules.push((id, module));
+        }
+        loaded.manifest = input.manifest;
+        loaded
+    }
+}
+
+/// Read the package input at `paths` from the file system (S-11): one
+/// `onsa.toml` or a directory is a package; otherwise the files themselves.
+pub fn read_input(paths: &[PathBuf]) -> Result<PackageInput, String> {
     if paths.len() == 1 {
         let p = &paths[0];
         let manifest = if p.is_dir() {
@@ -117,31 +203,34 @@ pub fn load(paths: &[PathBuf]) -> Result<Loaded, String> {
             None
         };
         if let Some(manifest) = manifest {
-            return load_package(&manifest);
+            let (m, root) = read_manifest(&manifest)?;
+            let files = read_sources(&root)?;
+            return Ok(PackageInput { manifest: Some(m), files, root: Some(root) });
         }
         if p.is_dir() {
             return Err(format!("{} has no onsa.toml", p.display()));
         }
     }
-    let mut loaded = Loaded { sources: SourceMap::default(), name: String::new(), root: None, modules: Vec::new() };
+    let mut input = PackageInput::default();
     for p in paths {
         let text = std::fs::read_to_string(p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
-        let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        if loaded.name.is_empty() {
-            loaded.name = stem.clone();
-        }
-        let id = loaded.sources.add(p.to_string_lossy(), text);
-        loaded.modules.push((id, stem));
+        input.files.push(SourceFile { path: p.to_string_lossy().into_owned(), text });
     }
-    Ok(loaded)
+    Ok(input)
 }
 
-fn load_package(manifest: &Path) -> Result<Loaded, String> {
+/// Read `onsa.toml`: the manifest and the package root (its directory).
+pub fn read_manifest(manifest: &Path) -> Result<(Manifest, PathBuf), String> {
     let text = std::fs::read_to_string(manifest).map_err(|e| format!("cannot read {}: {e}", manifest.display()))?;
-    let m: Manifest = toml::from_str(&text).map_err(|e| format!("{}: {e}", manifest.display()))?;
-    let root = manifest.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let (m, _) = Manifest::parse(&text, &[]).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    Ok((m, manifest.parent().unwrap_or(Path::new(".")).to_path_buf()))
+}
+
+/// The `.onsa` files of the package at `root` (spec §15.1: recursively,
+/// except the root's `tests/` and `target/`), sorted, with paths relative to it.
+pub fn read_sources(root: &Path) -> Result<Vec<SourceFile>, String> {
     let mut files = Vec::new();
-    let mut stack = vec![root.clone()];
+    let mut stack = vec![root.to_path_buf()];
     while let Some(d) = stack.pop() {
         let entries = std::fs::read_dir(&d).map_err(|e| format!("cannot read {}: {e}", d.display()))?;
         for e in entries.flatten() {
@@ -158,15 +247,13 @@ fn load_package(manifest: &Path) -> Result<Loaded, String> {
         }
     }
     files.sort();
-    let mut loaded =
-        Loaded { sources: SourceMap::default(), name: m.package.name, root: Some(root.clone()), modules: Vec::new() };
+    let mut out = Vec::new();
     for p in files {
         let text = std::fs::read_to_string(&p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
-        let rel = p.strip_prefix(&root).unwrap_or(&p).to_path_buf();
-        let id = loaded.sources.add(rel.to_string_lossy(), text);
-        loaded.modules.push((id, module_path(&rel)));
+        let rel = p.strip_prefix(root).unwrap_or(&p).to_path_buf();
+        out.push(SourceFile { path: rel.to_string_lossy().into_owned(), text });
     }
-    Ok(loaded)
+    Ok(out)
 }
 
 fn std_package(sources: &mut SourceMap) -> Package {
@@ -180,7 +267,7 @@ fn std_package(sources: &mut SourceMap) -> Package {
     Package { name: "std".into(), modules, deps: Vec::new(), is_std: true }
 }
 
-/// Parse only (the `mode: parse` depth of `tests/spec`, D-05).
+/// Parse only (the `mode = "parse"` depth of the test cases, D-05).
 pub fn parse_only(sources: &SourceMap) -> CheckResult {
     let mut result = CheckResult::default();
     for (id, file) in sources.files() {
@@ -261,23 +348,15 @@ pub fn lower_core_with(
     onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts)
 }
 
-pub use build::{BuildError, BuildOptions, BuildReport, Platform, build, host_triple, platform};
+pub use build::{
+    BuildError, BuildOptions, BuildOutput, BuildReport, ExportSettings, Platform, ResolvedTarget, TargetSettings,
+    build, build_analyzed, build_resolved, host_triple, platform, resolve_target,
+};
 
+/// `check` is the analysis without keeping it (one path for `check`,
+/// `test` and the builds, D-15).
 pub fn check_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, String)]) -> CheckResult {
-    let user_modules: Vec<Module> = modules
-        .iter()
-        .map(|(file, path)| {
-            let text = sources.file(*file).text().to_string();
-            let parsed = onsa_syntax::parse(*file, &text);
-            Module { path: path.clone(), file: *file, text, parsed }
-        })
-        .collect();
-    let std = std_package(sources);
-    let pkg = Package { name: name.to_string(), modules: user_modules, deps: vec![std], is_std: false };
-    let analysis = onsa_sema::analyze(&pkg);
-    let mut diagnostics = merge(&pkg, analysis.diagnostics);
-    fill_found(sources, &mut diagnostics);
-    CheckResult { diagnostics }
+    CheckResult { diagnostics: analyze_package(sources, name, modules).diagnostics }
 }
 
 /// Every diagnostic names the offending source (`found`, §18.1): when the
@@ -351,6 +430,42 @@ mod tests {
         let pkg = Package { name: "empty".into(), modules: Vec::new(), deps: vec![std], is_std: false };
         let analysis = onsa_sema::analyze(&pkg);
         assert!(analysis.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analysis.diagnostics));
+    }
+
+    /// A deserializer that only records the fields a struct asks for.
+    struct FieldsOf<'a>(&'a mut Vec<&'static str>);
+
+    impl<'de> serde::Deserializer<'de> for FieldsOf<'_> {
+        type Error = serde::de::value::Error;
+
+        fn deserialize_any<V: serde::de::Visitor<'de>>(self, _: V) -> Result<V::Value, Self::Error> {
+            Err(serde::de::Error::custom("not a struct"))
+        }
+
+        fn deserialize_struct<V: serde::de::Visitor<'de>>(
+            self,
+            _: &'static str,
+            fields: &'static [&'static str],
+            _: V,
+        ) -> Result<V::Value, Self::Error> {
+            self.0.extend_from_slice(fields);
+            Err(serde::de::Error::custom("fields recorded"))
+        }
+
+        serde::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf
+            option unit unit_struct newtype_struct seq tuple tuple_struct map enum identifier ignored_any
+        }
+    }
+
+    #[test]
+    fn top_level_keys_are_the_manifest_fields() {
+        let mut fields = Vec::new();
+        let _ = <Manifest as serde::Deserialize>::deserialize(FieldsOf(&mut fields));
+        fields.sort_unstable();
+        let mut keys = Manifest::TOP_LEVEL_KEYS.to_vec();
+        keys.sort_unstable();
+        assert_eq!(fields, keys);
     }
 
     #[test]

@@ -1,4 +1,8 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§8.3"]
+
 handler memory_fs: Fs {
   fn read(_: Path) -> Result[Str, IoError] { Ok("a\nb\n") }
   fn write(_: Path, _: Str) -> Result[(), IoError] { Ok(()) }

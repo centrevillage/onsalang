@@ -16,7 +16,7 @@ use onsa_sema::def::DefKind;
 use onsa_sema::ty::Rate;
 use onsa_syntax::ast::Vis;
 
-use crate::{Analyzed, Manifest, ManifestTarget, load};
+use crate::{Analyzed, Loaded, Manifest, ManifestExport, ManifestTarget, PackageInput, read_manifest, read_sources};
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
 /// compiler flags that keep the IEEE semantics.
@@ -137,24 +137,41 @@ pub struct BuildReport {
     pub note: Option<String>,
 }
 
-/// Build the package at `path` (a directory or its `onsa.toml`) for `target`.
-pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
-    let manifest_path = if path.is_dir() { path.join("onsa.toml") } else { path.to_path_buf() };
-    if !manifest_path.exists() {
-        return Err(BuildError::Usage(format!("{}: no onsa.toml", manifest_path.display())));
+/// A target of the manifest, resolved and validated: its name, its
+/// settings and the manifest's `[export]`.
+#[derive(Debug, Clone)]
+pub struct ResolvedTarget {
+    pub name: String,
+    pub settings: TargetSettings,
+    pub export: ExportSettings,
+}
+
+/// `[export]` with its defaults applied (spec §14.2, §15.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportSettings {
+    /// The C prefix of the exported names (default `onsa_`).
+    pub prefix: String,
+    /// Flows by module path.
+    pub flows: Vec<String>,
+    /// Functions by module path.
+    pub fns: Vec<String>,
+}
+
+impl ExportSettings {
+    pub fn from_manifest(e: Option<&ManifestExport>) -> ExportSettings {
+        let e = e.cloned().unwrap_or_default();
+        ExportSettings { prefix: e.prefix.unwrap_or_else(|| "onsa_".into()), flows: e.flows, fns: e.fns }
     }
-    let text = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| BuildError::Usage(format!("cannot read {}: {e}", manifest_path.display())))?;
-    let manifest: Manifest =
-        toml::from_str(&text).map_err(|e| BuildError::Usage(format!("{}: {e}", manifest_path.display())))?;
-    let root = manifest_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let Some(target) = manifest.targets.get(&opts.target) else {
+}
+
+/// Find `[targets.<target>]` in `manifest` and validate it. `manifest_name`
+/// names the manifest in the messages.
+pub fn resolve_target(manifest: &Manifest, manifest_name: &str, target: &str) -> Result<ResolvedTarget, BuildError> {
+    let Some(t) = manifest.targets.get(target) else {
         let mut names: Vec<&String> = manifest.targets.keys().collect();
         names.sort();
         return Err(BuildError::Usage(format!(
-            "no target `{}` in {} (targets: {})",
-            opts.target,
-            manifest_path.display(),
+            "no target `{target}` in {manifest_name} (targets: {})",
             if names.is_empty() {
                 "none".to_string()
             } else {
@@ -162,29 +179,65 @@ pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError
             }
         )));
     };
-    let settings = TargetSettings::from_manifest(&opts.target, target)?;
-    let export = manifest.export.clone().unwrap_or_default();
+    let settings = TargetSettings::from_manifest(target, t)?;
+    Ok(ResolvedTarget {
+        name: target.to_string(),
+        settings,
+        export: ExportSettings::from_manifest(manifest.export.as_ref()),
+    })
+}
 
-    // Check.
-    let mut loaded = load(std::slice::from_ref(&manifest_path)).map_err(BuildError::Usage)?;
-    let analyzed = crate::analyze_loaded(&mut loaded);
+/// What a build produces before anything is written: the Core module after
+/// every stage, the settings, the C unit and the files as `build` writes them.
+#[derive(Debug)]
+pub struct BuildOutput {
+    pub module: Module,
+    pub settings: TargetSettings,
+    /// What is exported, as the build read it.
+    pub export: ExportSettings,
+    pub unit: onsa_backend_c::CUnit,
+    /// `(file name, text)` in the order `build` writes them.
+    pub files: Vec<(String, String)>,
+}
+
+/// The build of an analyzed package for `target` of its manifest, without the
+/// file system (R-80 (5), R-89 (3)): the one entry the tests and `onsa_web`
+/// share with `onsa build`.
+pub fn build_analyzed(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Result<BuildOutput, BuildError> {
+    let Some(manifest) = &loaded.manifest else {
+        return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
+    };
+    let resolved = resolve_target(manifest, "onsa.toml", target)?;
+    build_resolved(loaded, analyzed, &resolved)
+}
+
+/// The stages of a build after the analysis: the export checks, lowering
+/// with the target's settings, the build-time `const` evaluation and C.
+pub fn build_resolved(
+    loaded: &Loaded,
+    analyzed: &Analyzed,
+    resolved: &ResolvedTarget,
+) -> Result<BuildOutput, BuildError> {
+    let diagnostics =
+        |diagnostics: Vec<Diagnostic>| BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics };
     if !analyzed.diagnostics.is_empty() {
-        return Err(BuildError::Diagnostics { sources: loaded.sources, diagnostics: analyzed.diagnostics });
+        return Err(diagnostics(analyzed.diagnostics.clone()));
     }
-    let export_diags = check_exports(&analyzed, &export, &settings);
+    let settings = &resolved.settings;
+    let export = &resolved.export;
+    let export_diags = check_exports(analyzed, export, settings);
     if !export_diags.is_empty() {
-        return Err(BuildError::Diagnostics { sources: loaded.sources, diagnostics: export_diags });
+        return Err(diagnostics(export_diags));
     }
 
     // Lower and emit.
     let lower_opts = LowerOptions { bulk_threshold: settings.bulk_threshold, ptr_size: settings.platform.ptr_size };
-    let mut module = crate::lower_core_with(&analyzed, &lower_opts)
-        .map_err(|diagnostics| BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics })?;
+    let mut module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
     inline_consts(&mut module);
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
         package: loaded.name.clone(),
-        prefix: export.prefix.clone().unwrap_or_else(|| "onsa_".into()),
+        prefix: export.prefix.clone(),
         exports: export.flows.iter().map(|f| ExportFlow { flow: f.clone() }).collect(),
         export_fns: export.fns.clone(),
         panic: settings.panic,
@@ -197,26 +250,40 @@ pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError
         })),
         ptr_size: settings.platform.ptr_size,
     };
-    let unit = onsa_backend_c::emit(&module, &emit_opts)
-        .map_err(|diagnostics| BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics })?;
+    let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(diagnostics)?;
+    let mut files = vec![("onsa.h".to_string(), unit.runtime_header.clone())];
+    files.extend(unit.headers.iter().cloned());
+    files.push((onsa_backend_c::CUnit::source_name(&loaded.name), unit.source.clone()));
+    Ok(BuildOutput { module, settings: settings.clone(), export: export.clone(), unit, files })
+}
+
+/// Build the package at `path` (a directory or its `onsa.toml`) for `target`.
+pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
+    let manifest_path = if path.is_dir() { path.join("onsa.toml") } else { path.to_path_buf() };
+    if !manifest_path.exists() {
+        return Err(BuildError::Usage(format!("{}: no onsa.toml", manifest_path.display())));
+    }
+    // The order of the errors: the manifest, the target, the sources.
+    let (manifest, root) = read_manifest(&manifest_path).map_err(BuildError::Usage)?;
+    let resolved = resolve_target(&manifest, &manifest_path.display().to_string(), &opts.target)?;
+    let files = read_sources(&root).map_err(BuildError::Usage)?;
+    let input = PackageInput { manifest: Some(manifest), files, root: Some(root.clone()) };
+    let mut loaded = Loaded::from_input(input);
+    let analyzed = crate::analyze_loaded(&mut loaded);
+    let output = build_resolved(&loaded, &analyzed, &resolved)?;
+    let settings = &output.settings;
 
     // Write.
     let out_dir = opts.out.clone().unwrap_or_else(|| root.join("target").join(&opts.target));
     std::fs::create_dir_all(&out_dir)
         .map_err(|e| BuildError::Usage(format!("cannot create {}: {e}", out_dir.display())))?;
     let mut files = Vec::new();
-    let write = |name: &str, text: &str, files: &mut Vec<String>| -> Result<(), BuildError> {
+    for (name, text) in &output.files {
         std::fs::write(out_dir.join(name), text)
             .map_err(|e| BuildError::Usage(format!("cannot write {}: {e}", out_dir.join(name).display())))?;
-        files.push(name.to_string());
-        Ok(())
-    };
-    write("onsa.h", &unit.runtime_header, &mut files)?;
-    for (name, text) in &unit.headers {
-        write(name, text, &mut files)?;
+        files.push(name.clone());
     }
     let source_name = onsa_backend_c::CUnit::source_name(&loaded.name);
-    write(&source_name, &unit.source, &mut files)?;
 
     let mut report = BuildReport {
         target: opts.target.clone(),
@@ -354,7 +421,7 @@ impl TargetSettings {
 
 /// E0809 (exported `Ctl` inputs need `@param`, §11.7) and E0610 (exported
 /// functions may use only provided effects, §14.2), plus unknown names.
-fn check_exports(analyzed: &Analyzed, export: &crate::ManifestExport, settings: &TargetSettings) -> Vec<Diagnostic> {
+fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &TargetSettings) -> Vec<Diagnostic> {
     let a = &analyzed.analysis;
     let mut out = Vec::new();
     let no_span = onsa_diag::Span::new(onsa_diag::FileId(0), 0, 0);

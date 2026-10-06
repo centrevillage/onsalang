@@ -3,10 +3,7 @@
 //! and an exported function that panics returns zero and reports it through
 //! `onsa_take_panic`. Skipped without a host `cc`.
 
-use std::path::Path;
 use std::process::Command;
-
-use onsa_backend_c::{EmitOptions, ExportFlow, PanicMode};
 
 const SRC: &str = r#"
 pub flow boom(
@@ -27,6 +24,24 @@ pub flow fragile(x: Sig[F32], n: Init[I32]) -> Sig[F32] {
   let m = n + 1
   x * m.round_f32()
 }
+"#;
+
+const MANIFEST: &str = r#"
+[package]
+name = "poison"
+edition = "2026"
+
+[export]
+prefix = "onsa_"
+flows = ["poison.boom", "poison.fragile"]
+fns = ["poison.checked"]
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = []
 "#;
 
 const DRIVER: &str = r#"
@@ -80,22 +95,22 @@ fn poison_wrappers_recover_from_panics() {
     }
     let dir = std::env::temp_dir().join(format!("onsa_poison_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let src = dir.join("poison.onsa");
-    std::fs::write(&src, SRC).unwrap();
-    let mut loaded = onsa_driver::load(std::slice::from_ref(&src)).unwrap();
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
-    assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
-    let module =
-        onsa_driver::lower_core(&analyzed).unwrap_or_else(|d| panic!("{}", onsa_diag::to_text(&loaded.sources, &d)));
-    let opts = EmitOptions {
-        package: "poison".into(),
-        exports: vec![ExportFlow { flow: "poison.boom".into() }, ExportFlow { flow: "poison.fragile".into() }],
-        export_fns: vec!["poison.checked".into()],
-        panic: PanicMode::Poison,
-        ..Default::default()
+    // The build's own entry (R-89 (3)), with the manifest as a value.
+    let (manifest, _) = onsa_driver::Manifest::parse(MANIFEST, &[]).unwrap();
+    let input = onsa_driver::PackageInput {
+        manifest: Some(manifest),
+        files: vec![onsa_driver::SourceFile { path: "poison.onsa".into(), text: SRC.into() }],
+        root: None,
     };
-    let unit =
-        onsa_backend_c::emit(&module, &opts).unwrap_or_else(|d| panic!("{}", onsa_diag::to_text(&loaded.sources, &d)));
+    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    let unit = match onsa_driver::build_analyzed(&loaded, &analyzed, "host") {
+        Ok(out) => out.unit,
+        Err(onsa_driver::BuildError::Usage(m)) => panic!("{m}"),
+        Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
+            panic!("{}", onsa_diag::to_text(&sources, &diagnostics))
+        }
+    };
     std::fs::write(dir.join("onsa.h"), &unit.runtime_header).unwrap();
     for (h, t) in &unit.headers {
         std::fs::write(dir.join(h), t).unwrap();
@@ -118,5 +133,4 @@ fn poison_wrappers_recover_from_panics() {
     assert!(run.status.success(), "driver failed with {}", run.status);
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "0 2 1 0 1 0 2 3 0 0 1 1 1 1 0 0 3");
-    let _ = Path::new("");
 }

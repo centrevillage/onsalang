@@ -1,4 +1,32 @@
-//! mode: test
+// onsa.toml
+// [package]
+// name = "voice"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["voice.voice", "voice.echo"]
+//
+// [targets.trap]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = ["Alloc"]
+//
+// [targets.poison]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§17.3", "§17.4", "§17.6"]
+// golden = ["core", "interface", "c"]
+// golden_graph = ["voice"]
+
 use std.math.{exp, cos}
 use std.dsp.test.{impulse, energy}
 

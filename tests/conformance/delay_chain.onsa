@@ -1,3 +1,25 @@
+// onsa.toml
+// [package]
+// name = "delay_chain"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["delay_chain.tap", "delay_chain.chain", "delay_chain.planar"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.host.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// conformance = true
+
 // Conformance (T4-7): `delay`, nested instances, `par`, a struct output and a
 // planar output. No transcendental function: bit-exact.
 use std.dsp.{sum}

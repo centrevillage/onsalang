@@ -1,2 +1,6 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§8.5"]
+
 pub fn main() -> Result[(), AppError] uses {Fs, Stdout, Alloc} { ... }

@@ -1,4 +1,8 @@
-//! mode: parse
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§16.1"]
+
 use std.audio.device
 use std.sync.{Swap}
 

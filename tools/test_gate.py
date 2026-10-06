@@ -24,6 +24,7 @@ import gate  # noqa: E402
 import gate_steps  # noqa: E402
 import pending  # noqa: E402
 import spec_blocks  # noqa: E402
+import spec_sections  # noqa: E402
 
 REWORK = """\
 # rework
@@ -582,15 +583,73 @@ class RealSteps(unittest.TestCase):
     def test_required_items(self):
         names = [s.name for s in gate_steps.STEPS]
         self.assertEqual(len(names), len(set(names)))
-        for required in ("fmt", "clippy", "test", "spec-examples", "pending", "gate-selftest", "golden"):
-            self.assertIn(required, names)
+        required = ("fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden")
+        for r in required + ("spec-coverage",):
+            self.assertIn(r, names)
         by_name = {s.name: s for s in gate_steps.STEPS}
         self.assertTrue(by_name["golden"].info)
+        self.assertTrue(by_name["spec-coverage"].info)
+        self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
         self.assertEqual(gate_steps.pendable(), [])  # none of today's items may be listed
         for n in names:
             self.assertRegex(n, pending.TARGET_FORMS["gate"])
             self.assertNotIn("/", n)
+
+
+class SpecSections(unittest.TestCase):
+    SPEC = "# 1. A\n## 1.1 B\n```onsa\n## 9.9 not a heading\n```\n### 1.1.2 C\n## 1.2 D\n# 2. E\n"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / spec_sections.SPEC).write_text(self.SPEC, encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def cases(self, *specs):
+        return [{"path": f"tests/{i}.onsa", "spec": list(s)} for i, s in enumerate(specs)]
+
+    def test_headings_skip_fences(self):
+        self.assertEqual(spec_blocks.headings(self.SPEC), ["1", "1.1", "1.1.2", "1.2", "2"])
+
+    def test_unknown_and_untested(self):
+        heads = spec_blocks.headings(self.SPEC)
+        cases = self.cases(["§1.1.2"], ["§9.9", "§2"])
+        self.assertEqual(spec_sections.unknown(cases, heads), [("tests/1.onsa", "§9.9")])
+        # a section is tested through a subsection
+        self.assertEqual(spec_sections.untested(cases, heads), ["1.2"])
+        # a case that does not run tests nothing, but its names are still checked
+        cases = [{"path": "tests/n.onsa", "mode": "none", "spec": ["§1.2", "§9.9"]}]
+        self.assertEqual(spec_sections.untested(cases, heads), heads)
+        self.assertEqual(spec_sections.unknown(cases, heads), [("tests/n.onsa", "§9.9")])
+
+    def run_main(self, flag, cases):
+        script = f"import json; print(json.dumps({cases!r}))"
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = spec_sections.main([flag], root=self.root, cmd=(sys.executable, "-B", "-c", script))
+        return code, out.getvalue()
+
+    def test_check_fails_on_unknown_sections_only(self):
+        code, out = self.run_main("--check", self.cases(["§1.2"]))
+        self.assertEqual(code, 0, out)
+        code, out = self.run_main("--check", self.cases(["§3"]))
+        self.assertEqual(code, 1)
+        self.assertIn("names §3", out)
+
+    def test_list_never_fails_on_untested(self):
+        code, out = self.run_main("--list", self.cases([]))
+        self.assertEqual(code, 0)
+        self.assertIn("0 of 5 sections have a case", out)
+
+    def test_a_failing_lister_fails(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = spec_sections.main(["--list"], root=self.root, cmd=(sys.executable, "-B", "-c", "raise SystemExit(1)"))
+        self.assertEqual(code, 1)
+        self.assertIn("cannot list the cases", out.getvalue())
 
 
 class Golden(unittest.TestCase):

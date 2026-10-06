@@ -125,6 +125,21 @@ pub struct CUnit {
     pub headers: Vec<(String, String)>,
     /// `onsa.h`
     pub runtime_header: String,
+    /// The C API of each exported flow, as the backend named it.
+    pub flows: Vec<FlowApi>,
+}
+
+/// The names of an exported flow's C API (spec §11.6, §14.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlowApi {
+    /// Qualified flow name (`voice.voice`).
+    pub flow: String,
+    /// The prefix of every name of the API (`onsa_voice`: `onsa_voice_init`, `onsa_voice_params`).
+    pub symbol: String,
+    /// The prefix of its macros (`ONSA_VOICE`: `ONSA_VOICE_SIZE`).
+    pub upper: String,
+    /// Its header (`onsa_voice.h`).
+    pub header: String,
 }
 
 impl CUnit {

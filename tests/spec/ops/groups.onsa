@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1"]
+
 pub fn groups(x: F32, y: F32, z: F32, lo: F32, hi: F32) {
   let a = x + y - z             // OK: 加法群の連鎖
   let b = x + (y * z)           // OK

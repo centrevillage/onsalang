@@ -1,4 +1,8 @@
-//! mode: parse
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§14.1"]
+
 extern "C" lib "fastconv" {
   type FcRaw // 不透明型
   fn fc_new(ir: Span[F32], block: U32) -> Ptr[FcRaw] uses {Alloc}

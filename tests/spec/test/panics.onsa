@@ -1,4 +1,8 @@
-//! mode: test
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.2"]
+
 // Panics (spec §9.2) fail the test that reaches them; `TESTFAIL` marks the
 // expected failures so the runner can check the interpreter's checks.
 

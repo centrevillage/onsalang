@@ -1,3 +1,36 @@
+// onsa.toml
+// [package]
+// name = "echo"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["echo.echo"]
+//
+// [targets.trap]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.trap.memory]
+// bulk_threshold = 4096
+//
+// [targets.poison]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [targets.poison.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// spec = ["§17.4"]
+// golden = ["core", "c"]
+
 // Golden source for the flow lowering (T3-5): spec §17.4 `echo` alone (vdelay).
 const MAX_ECHO: U32 = 96000
 

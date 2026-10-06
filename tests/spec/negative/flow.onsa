@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.5"]
+
 // E08xx: flow bodies (§11.2–§11.5). One error per flow (P-01).
 pub rt fn id(x: F32) -> F32 { x }
 pub fn slow(x: F32) -> F32 { x }

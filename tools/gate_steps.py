@@ -29,9 +29,11 @@ STEPS = [
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
     Step("test", ("cargo", "test", "--workspace")),
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
+    Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),
     Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py"))),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
+    Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
 ]
 
 

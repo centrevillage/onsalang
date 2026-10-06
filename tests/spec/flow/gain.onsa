@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7"]
+
 use std.dsp.{db_to_amp}
 
 pub flow gain(

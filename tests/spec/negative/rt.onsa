@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§10"]
+
 // E09xx: rt rules (§10). One error per item (P-01).
 pub fn slow(x: F32) -> F32 { x }
 

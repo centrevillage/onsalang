@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
 // E0303: private items are not visible from another module (§15.1).
 use util.{shown, in_package}
 use util.{hidden}               //~ E0303

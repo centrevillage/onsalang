@@ -1,3 +1,26 @@
+// onsa.toml
+// [package]
+// name = "resonator"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["resonator.resonator"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.host.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// spec = ["§17.3"]
+// conformance = true
+
 // Conformance (T4-7): spec §17.3 resonator. `exp` / `cos` run at Ctl rate, so
 // the flow is compared within the precision target (S-14).
 use std.math.{exp, cos}

@@ -1,4 +1,8 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§11.6"]
+
 // 型
 voice.State        // 状態。Affine、固定サイズ、ヒープを使わない。遅延線も含む
 voice.Config       // init の入力をフィールドに持つ struct（Copy）

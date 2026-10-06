@@ -1,4 +1,8 @@
-//! mode: parse
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§16.1"]
+
 // std.audio.device の登録関数の形（実装はターゲットの bind が与える）
 target fn run[S: ?Dup, P: Copy](
   move st: S,

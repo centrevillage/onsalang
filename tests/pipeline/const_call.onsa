@@ -1,0 +1,32 @@
+// onsa.toml
+// [package]
+// name = "const_call"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["const_call.scaled"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§6.6"]
+// golden = ["c"]
+
+// R-89 (3): a `const` whose initializer calls a function is evaluated when
+// the package is built, and the C holds the value. The test runs the build's
+// own entry, so its golden C shows that stage (`inline_consts`).
+const HALF: F32 = half_of(1.0)
+
+fn half_of(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub flow scaled(x: Sig[F32]) -> Sig[F32] {
+  x * HALF
+}

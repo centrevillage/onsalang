@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§4.4", "§4.7", "§7", "§9.1"]
+
 // E04xx / E05xx: body type checking (§4.7, §3.3, §4.4, §7, §9.1). One error per item (P-01).
 use std.array
 

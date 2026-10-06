@@ -258,6 +258,8 @@ dependencies = [
  "onsa_diag",
  "onsa_driver",
  "onsa_interp",
+ "onsa_sema",
+ "onsa_syntax",
  "serde",
  "serde_json",
  "toml",

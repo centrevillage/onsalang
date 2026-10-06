@@ -1,3 +1,8 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5"]
+// golden = ["core"]
+
 // Golden source: instantiations of generic items (`clamp` is the §4.5
 // example; `types/generics.onsa` alone has no instances).
 use std.dsp.{sum}

@@ -1,9 +1,10 @@
 """The ```onsa blocks of the spec, and their names in `tests/pending.toml` (D-06).
 
-The one place for: reading the fences of the spec, the normalization used by
-the verbatim check, and the form of a block's name ("§<section> <hash>: <first
-line>"). `check_spec_examples.py` makes and matches names, `pending.py`
-checks that a target has the form.
+The one place for: reading the fences and the numbered headings of the spec,
+the normalization used by the verbatim check, and the form of a block's name
+("§<section> <hash>: <first line>"). `check_spec_examples.py` makes and
+matches names, `pending.py` checks that a target has the form,
+`spec_sections.py` checks the sections the test cases name (Q-05).
 """
 import hashlib
 import re
@@ -30,8 +31,19 @@ def scan(spec_text):
     """Return (blocks, errors). Errors are fences the check cannot trust: a
     fence that is not closed, and one that looks like onsa but is not spelled
     exactly ```onsa (it would be skipped silently)."""
+    blocks, errors, _ = _walk(spec_text)
+    return blocks, errors
+
+
+def headings(spec_text):
+    """The numbered sections of the spec ("11.4"), in order. A heading inside
+    a fence is not one."""
+    return _walk(spec_text)[2]
+
+
+def _walk(spec_text):
     lines = spec_text.split("\n")
-    blocks, errors = [], []
+    blocks, errors, sections = [], [], []
     section = "0"
     i = 0
     while i < len(lines):
@@ -41,6 +53,7 @@ def scan(spec_text):
             h = HEADING.match(lines[i])
             if h:
                 section = h.group(1)
+                sections.append(section)
             i += 1
             continue
         fence, info = m.group(1), m.group(2)
@@ -65,7 +78,7 @@ def scan(spec_text):
         elif info.strip().lower().startswith("onsa"):
             errors.append((i + 1, f'the fence "{stripped}" looks like onsa but is not "{ONSA_FENCE}"'))
         i = j + 1
-    return blocks, errors
+    return blocks, errors, sections
 
 
 def normalize(text):

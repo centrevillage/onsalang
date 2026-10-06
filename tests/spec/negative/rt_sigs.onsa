@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§10"]
+
 // E0902: `rt fn` cannot have `Alloc` (§10 rule 1).
 pub rt fn allocating() -> I32 uses {Alloc} {   //~ E0902
   1

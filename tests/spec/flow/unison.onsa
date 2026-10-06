@@ -1,3 +1,8 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5"]
+// golden = ["core"]
+
 use std.dsp.{sum}
 
 const UNISON: U32 = 4

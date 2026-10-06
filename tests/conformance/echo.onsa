@@ -1,3 +1,26 @@
+// onsa.toml
+// [package]
+// name = "echo"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["echo.echo"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.host.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// spec = ["§17.4"]
+// conformance = true
+
 // Conformance (T4-7): spec §17.4 echo (vdelay, bulk region). Pure IEEE: bit-exact.
 const MAX_ECHO: U32 = 96000
 

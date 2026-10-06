@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4"]
+
 pub struct Point {
   x: F32,
   y: F32,

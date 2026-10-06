@@ -1,4 +1,8 @@
-//! mode: none
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§8.4"]
+
 use std.mem.{arena}
 
 const N: U32 = 1024

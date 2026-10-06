@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+
 // E07xx: argument modes, exclusivity, second-class values, moves (§5.2, §5.3, §5.4).
 // One error per item (P-01).
 pub struct P {

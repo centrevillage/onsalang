@@ -1,4 +1,8 @@
-//! mode: test
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.6"]
+
 // Flow semantics through the generated API (spec §11.4, §11.6).
 
 use std.dsp.test.{impulse, energy}

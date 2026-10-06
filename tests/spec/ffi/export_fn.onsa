@@ -1,2 +1,6 @@
+// onsa.toml
+// [test]
+// spec = ["§14.2"]
+
 // util.onsa
 pub fn version() -> U32 { 2 }

@@ -1,4 +1,8 @@
-//! mode: parse
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§15.2"]
+
 // audio/device.onsa
 target type Device
 target fn open(sample_rate: F32) -> Result[Device, DeviceError]

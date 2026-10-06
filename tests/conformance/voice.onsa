@@ -1,7 +1,36 @@
+// onsa.toml
+// [package]
+// name = "voice"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["voice.resonator", "voice.saw", "voice.smooth", "voice.voice"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.host.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// spec = ["§17.4"]
+// conformance = true
+
 // Conformance (T4-7): spec §17.4 voice (saw + two resonators + smooth).
 use std.math.{exp, cos, floor}
 
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+pub flow resonator(
+  x: Sig[F32],
+  @param(min: 0.0, max: 24000.0, default: 0.0)
+  fc: Ctl[F32],
+  @param(min: 0.0, max: 24000.0, default: 0.0)
+  bw: Ctl[F32],
+) -> Sig[F32] {
   let r  = exp(-(F32.PI * bw) / sample_rate())
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
@@ -12,7 +41,10 @@ pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
   y
 }
 
-pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
+pub flow saw(
+  @param(min: 0.0, max: 24000.0, default: 0.0)
+  f0: Ctl[F32],
+) -> Sig[F32] {
   let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
   (2.0 * phase) - 1.0
 }
@@ -21,7 +53,11 @@ pub rt fn wrap01(x: F32) -> F32 {
   x - floor(x)
 }
 
-pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
+pub flow smooth(
+  @param(min: 0.0, max: 1.0, default: 0.0)
+  x: Ctl[F32],
+  time: Init[F32],
+) -> Sig[F32] {
   let a = exp(-1.0 / (time * sample_rate()))
   let y = x + (a * (prev(y, 0.0) - x))
   y

@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§15.1"]
+
 // E0302 / E0304 / E0305 / E0306: names (§15.1, §5.1, §11.2, S-16, S-17).
 use std.math.{exp, cos}
 use std.math.{floor, exp}       //~ E0304

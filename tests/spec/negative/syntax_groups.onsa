@@ -1,3 +1,7 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3"]
+
 // E0010 / E0011 / E0012: operator groups (§3.1, §3.3). One error per function (P-01).
 pub fn mixed(x: F32, y: F32, z: F32) -> F32 {
   x + y * z                     //~ E0010
