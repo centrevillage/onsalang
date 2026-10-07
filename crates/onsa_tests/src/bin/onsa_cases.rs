@@ -5,6 +5,8 @@
 //! ```text
 //! onsa_cases [ROOT]          the cases under tests/ and their settings (tools/spec_sections.py)
 //! onsa_cases --run [ROOT]    run every case; the markers each compared (tools/diag_codes.py, K-13)
+//! onsa_cases --c ITEM [ROOT] a gate item of the C checks (Q-07, W1-06; `onsa_tests::ccheck`)
+//! onsa_cases --c-items       the names of those items (tools/test_gate.py matches them with the gate's)
 //! onsa_cases --codes         the registry of diagnostic codes (tools/diag_codes.py, S-109)
 //! onsa_cases --std-names     the names the embedded std declares (tools/builtin_names.py, Q-14)
 //! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
@@ -21,11 +23,16 @@
 //! `--run` prints the form of `onsa_tests::run::runs_json`. Exits 1 when a
 //! case or a std module cannot be read (`--run` reports those in its
 //! `errors` and in the runs instead, and exits 0), 2 on a usage error.
+//!
+//! `--c ITEM` prints a line per case of the item and exits 1 when the item
+//! fails after `tests/pending.toml` is applied, 2 when it cannot run (a
+//! compiler is missing; `onsa_tests::ccheck`).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str = "onsa_cases [--run] [ROOT] | --codes | --std-names | --builtin-members";
+const USAGE: &str =
+    "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --c-items | --codes | --std-names | --builtin-members";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -39,6 +46,7 @@ fn main() -> ExitCode {
     };
     let too_many = match mode {
         "" | "--run" => rest.len() > 1,
+        "--c" => rest.is_empty() || rest.len() > 2,
         _ => !rest.is_empty(),
     };
     if too_many {
@@ -52,6 +60,21 @@ fn main() -> ExitCode {
             let (cases, errors) = onsa_tests::case::collect(&root);
             let runs = onsa_tests::run::run_each(&root, &cases, |_| false);
             print(&onsa_tests::run::runs_json(&runs, &errors));
+            ExitCode::SUCCESS
+        }
+        "--c" => {
+            let Some(item) = onsa_tests::c::item(&rest[0]) else {
+                let names: Vec<&str> = onsa_tests::c::ITEMS.iter().map(|i| i.name).collect();
+                eprintln!("unknown item `{}` (one of {})", rest[0], names.join(", "));
+                return ExitCode::from(2);
+            };
+            let root = rest.get(1).map(PathBuf::from).unwrap_or_else(onsa_tests::case::repo_root);
+            let report = onsa_tests::ccheck::run_item(&root, item);
+            println!("{}", report.text());
+            ExitCode::from(report.exit_code())
+        }
+        "--c-items" => {
+            print(&serde_json::json!(onsa_tests::c::ITEMS.iter().map(|i| i.name).collect::<Vec<_>>()));
             ExitCode::SUCCESS
         }
         "--codes" => {

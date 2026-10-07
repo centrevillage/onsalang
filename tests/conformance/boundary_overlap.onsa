@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "boundary_overlap"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["boundary_overlap.split", "boundary_overlap.narrow"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2"]
+// conformance = true
+
+// Inputs and outputs of different element types (§11.6). The overlap check of the
+// exported `process` (§14.2: 2 only for partially overlapping buffers) must measure
+// each buffer by its own element type; distinct buffers never overlap (R-141).
+pub flow split(x: Sig[F32]) -> Sig[[Bool; 2]] {
+  [x > 0.0, x < 0.0]
+}
+
+pub flow narrow(x: Sig[[I64; 2]]) -> Sig[[U8; 3]] {
+  [1, 2, 3]
+}

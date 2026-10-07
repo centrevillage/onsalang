@@ -160,7 +160,7 @@
 | `parent/r105/` | R-105（型別名。`alias.onsa`・`generic.onsa`・`cycle.onsa` は `onsa check`、`impl/` は別名を通した孤児規則のパッケージ。期待値と今の出力は各項目の上か `onsa.toml` の先頭のコメント。S-91） |
 | `parent/r107/` | R-107（C の生成 API と設定。パッケージで、`onsa build --target host` と `--target bare` の生成物で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-92） |
 | `parent/r108/` | R-108（`const` の評価の超越関数。パッケージで、二台の機械で `onsa build --target src` の生成した C の表を比べる。手順と期待値は `m.onsa` の先頭のコメント。S-93） |
-| `parent/r109/` | R-109（生成した C の `const` と別名の規則。パッケージで、生成した C を clang の `-Wall -Wextra -Werror` でコンパイルする。手順と期待値は `m.onsa` の先頭のコメント。S-94） |
+| `parent/r109/` | R-109（生成した C の `const` と別名の規則。パッケージで、生成した C を clang の `-Wall -Wextra -Werror` でコンパイルする。手順と期待値は `m.onsa` の先頭のコメント。S-94）。W1-06 で期待値付きの事例 `tests/pipeline/span_const.onsa`（gate の C の項目の実装待ち、W10-04）にした。W10-04 で直したら、この再現の入力を消す |
 | `parent/r121/` | R-121（C の API の名前空間と ABI の版。`pa` と `pb` は既定の prefix の二つのパッケージで、`host.c` から両方をリンクする。`onsa` は空の prefix とパッケージ名 `onsa`、`rt` はランタイムの名前と重なる関数。手順・期待値・今の出力は `host.c` と各 `onsa.toml` の先頭のコメント。S-95） |
 | `parent/r122/` | R-122（パッケージの `tests/` の役割。`onsa check` と `onsa test` で確かめる。`tests/api.onsa` はルート直下の `tests/`、`dsp/tests/n.onsa` はルート直下でない `tests/`。期待値と今の出力は各ファイルの先頭のコメント。S-96） |
 | `parent/r125.onsa` | R-125（std のテスト用の補助を呼べる場所。`onsa check` と `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-97） |

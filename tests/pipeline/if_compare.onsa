@@ -1,0 +1,30 @@
+// onsa.toml
+// [package]
+// name = "if_compare"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["if_compare.pick"]
+// fns = ["if_compare.pick_fn"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§13.4"]
+
+// An `if` on a comparison, in a flow and in a function. The generated C must
+// compile without a warning under `-Wall -Wextra -pedantic` (§13.4); the C
+// checks of the gate (`c-clang` etc.) compile it.
+pub flow pick(c: Sig[Char], d: Init[Char]) -> Sig[Char] {
+  if c == d { 'z' } else { c }
+}
+
+pub fn pick_fn(a: I32, b: I32) -> I32 {
+  if a == b { 0 } else { a }
+}

@@ -1,0 +1,60 @@
+// onsa.toml
+// [package]
+// name = "boundary"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["boundary.ints", "boundary.mixed", "boundary.wrap", "boundary.side", "boundary.chars", "boundary.wide"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§13.4"]
+// conformance = true
+
+// Conformance of the scalar types at the boundary (§11.6; R-113 3, W1-06): `Init`
+// inputs (`I32`, `F64`, `Bool`, `Char`, `U64`), integer, `Char` and `Bool` signals, an
+// `F64` output and a planar input. `wrap` overflows on the noise stimulus only: the
+// interpreter and the C must both panic there, with the same check in the same block
+// (§13.4, the integer checks are the same everywhere). The outputs of mixed types
+// that the overlap check of `process` measures wrongly are in `boundary_overlap.onsa`.
+
+pub flow ints(
+  x: Sig[I32],
+  n: Init[I32],
+  @param(min: 0.0, max: 10.0, default: 2.0)
+  k: Ctl[I32],
+) -> Sig[I32] {
+  (x * n) + k + prev(x, 0)
+}
+
+pub flow mixed(x: Sig[F32], g: Init[F64], on: Init[Bool]) -> Sig[F64] {
+  let y = (x as F64) * g
+  if on { y } else { 0.0 }
+}
+
+pub flow wrap(x: Sig[I8]) -> Sig[I8] {
+  x * 2
+}
+
+pub flow side(x: Sig[[F32; 2]]) -> Sig[F32] {
+  x[0] - x[1]
+}
+
+// The comparisons are bound by `let` first: an `if` on a comparison is in
+// `tests/pipeline/if_compare.onsa`.
+pub flow chars(c: Sig[Char], d: Init[Char]) -> Sig[Char] {
+  let same = c == d
+  if same { 'z' } else { c }
+}
+
+pub flow wide(x: Sig[U16], a: Init[Char], b: Init[U64]) -> Sig[U64] {
+  let on = a == 'a'
+  if on { (x as U64) + b } else { 0 }
+}

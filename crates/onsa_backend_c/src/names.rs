@@ -87,6 +87,17 @@ pub fn float_tag(k: FloatKind) -> &'static str {
     }
 }
 
+/// The C spelling of a scalar type; `None` for the other types.
+pub fn scalar_c(ty: &Ty) -> Option<&'static str> {
+    match ty {
+        Ty::Int(k) => Some(int_c(*k)),
+        Ty::Float(k) => Some(float_c(*k)),
+        Ty::Bool => Some("bool"),
+        Ty::Char => Some("uint32_t"),
+        _ => None,
+    }
+}
+
 /// Registry of the C spellings of Core types, in dependency order.
 pub struct TypeNames<'m> {
     pub m: &'m Module,
@@ -124,10 +135,6 @@ impl<'m> TypeNames<'m> {
     /// The C type name of `ty`, registering synthetic types on first use.
     pub fn name(&mut self, ty: &Ty) -> String {
         match ty {
-            Ty::Int(k) => int_c(*k).into(),
-            Ty::Float(k) => float_c(*k).into(),
-            Ty::Bool => "bool".into(),
-            Ty::Char => "uint32_t".into(),
             Ty::Unit => "onsa_unit".into(),
             Ty::Struct(id) | Ty::Enum(id) => {
                 self.register_def(*id);
@@ -142,6 +149,8 @@ impl<'m> TypeNames<'m> {
                 self.order.push(Entry::Synth(ty.clone(), n.clone()));
                 n
             }
+            // The scalars, named in one place.
+            scalar => scalar_c(scalar).expect("every other type is a scalar").into(),
         }
     }
 

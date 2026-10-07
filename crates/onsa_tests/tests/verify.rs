@@ -223,9 +223,7 @@ fn the_runner_reports_the_failure_of_every_stage() {
         name: "m".into(),
         setup: Ok(Setup { input, test: frag.test }),
     };
-    let scratch = std::env::temp_dir().join(format!("onsa_verify_arms_{}", std::process::id()));
-    let run = run_case_with(&FAILING, Path::new("/nonexistent"), &case, &scratch, false);
-    let _ = std::fs::remove_dir_all(&scratch);
+    let run = run_case_with(&FAILING, Path::new("/nonexistent"), &case, false);
     assert!(run.ran, "{:?}", run.problems);
     let failed: Vec<&String> = run
         .problems

@@ -27,6 +27,7 @@
 
 pub mod c;
 pub mod case;
+pub mod ccheck;
 pub mod conformance;
 pub mod fragment;
 pub mod golden;

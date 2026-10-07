@@ -12,8 +12,10 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
 
 A pendable gate item listed in `tests/pending.toml` (kind `gate`, target =
 the item's name) is expected to fail: its failure is shown as pending, and its
-passing fails the gate (remove the entry). An `info` item shows something; it
-fails only when it cannot.
+passing fails the gate (remove the entry). An item that cannot run (exit
+`CANNOT_RUN`, 2: a usage error, a tool it needs is missing) fails even when
+listed: the list holds what fails, not what does not run (W1-06). An `info`
+item shows something; it fails only when it cannot.
 
 Golden files (Q-04): the expectations that `UPDATE_GOLDEN=1` rewrites, and
 their inputs, live under `tests/golden/`. The summary lists every file there
@@ -37,6 +39,8 @@ import pending  # noqa: E402
 
 ROOT = TOOLS.parent
 GOLDEN_DIR = "tests/golden"
+# The exit code of an item that cannot run; the list never makes it pending.
+CANNOT_RUN = 2
 
 
 @dataclass
@@ -52,7 +56,7 @@ class Result:
         if self.step.info:
             return "INFO" if self.code == 0 else "FAIL"
         if self.pending is not None:
-            return "PENDING" if self.code != 0 else "FAIL"
+            return "PENDING" if self.code not in (0, CANNOT_RUN) else "FAIL"
         return "PASS" if self.code == 0 else "FAIL"
 
     @property
@@ -62,6 +66,8 @@ class Result:
     def describe(self):
         if self.pending is not None and self.code == 0:
             return f"passes but is listed in tests/pending.toml (until {self.pending.until}); remove the entry"
+        if self.pending is not None and self.code == CANNOT_RUN:
+            return f"exit {self.code}: the item cannot run (the list does not hold that)"
         if self.pending is not None:
             return f"fails as expected (until {self.pending.until}: {self.pending.note})"
         return "" if self.code == 0 else f"exit {self.code}"

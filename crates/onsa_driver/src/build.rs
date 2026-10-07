@@ -275,7 +275,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
         ptr_size: settings.platform.ptr_size,
     };
     let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(|d| diagnostics(LowerError::reported(d)))?;
-    let mut files = vec![("onsa.h".to_string(), unit.runtime_header.clone())];
+    let mut files = vec![(onsa_backend_c::RUNTIME_HEADER_NAME.to_string(), unit.runtime_header.clone())];
     files.extend(unit.headers.iter().cloned());
     files.push((onsa_backend_c::CUnit::source_name(&loaded.name), unit.source.clone()));
     Ok(BuildOutput { module, settings: settings.clone(), export: export.clone(), unit, files })

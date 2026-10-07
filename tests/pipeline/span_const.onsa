@@ -1,0 +1,42 @@
+// onsa.toml
+// [package]
+// name = "span_const"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// fns = ["span_const.total"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§13.4", "§5.3"]
+
+// R-109 (S-94), the test part (W1-06): a borrowed `Span` is a `const T*` in the
+// generated C, so a `const` table passes to it without dropping `const`, and
+// the C compiles under `-Wall -Wextra -Werror -pedantic` (§13.4). The C checks
+// of the gate (`c-clang` etc.) compile it; the reproduction input is
+// `tests/review-phase1/parent/r109`.
+const TABLE: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+fn sum(xs: Span[F32]) -> F32 {
+  var s = 0.0
+  for i in 0..xs.len() {
+    s = s + xs[i]
+  }
+  s
+}
+
+fn twice(xs: [F32; 4]) -> F32 {
+  sum(xs) + sum(TABLE)
+}
+
+pub fn total(k: F32) -> F32 {
+  let a: [F32; 4] = [k, k, k, k]
+  twice(a)
+}

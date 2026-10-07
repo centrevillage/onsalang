@@ -380,12 +380,12 @@ class PendingList(TempRepo):
         text = (
             entry("spec-example", self.sid)
             + entry("diag-code", "E0812", ("R-23",), "W5-07")
-            + entry("gate", "c-header", ("S-34",), "T5-8")
+            + entry("gate", "c-x", ("S-34",), "T5-8")
             + entry("gate", "c-header/span_const", ("S-34",), "T5-8")
             + entry("test-case", "tests/spec/ops/groups.onsa::a test", ("S-45",), "W3-08")
             + entry("fuzz-input", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
         )
-        self.assertEqual(self.errors_of(text), [])
+        self.assertEqual(self.errors_of(text, pendable=("c-header", "c-x")), [])
 
     def test_empty_list_is_valid(self):
         self.assertEqual(self.errors_of(""), [])
@@ -442,14 +442,31 @@ class PendingList(TempRepo):
         self.assertOneError(entry("gate", "c-headers/x"), "`c-headers` is not a gate item that may be listed")
 
     def test_gate_items_that_cannot_be_listed(self):
-        # the real items keep the gate complete (or only show something): none may be listed
+        # the real items that keep the gate complete (or only show something) may not be listed
         for step in gate_steps.STEPS:
+            if step.pendable and not step.info:
+                continue
             with self.subTest(step=step.name):
                 self.repo.write("tests/pending.toml", entry("gate", step.name))
                 entries, errors = pending.load(self.repo.pending)
                 errors += pending.validate(entries, pending.load_docs(self.repo.root), self.repo.root)
                 self.assertEqual(len(errors), 1, errors)
                 self.assertIn("may be listed", errors[0])
+
+    def test_gate_items_that_may_be_listed(self):
+        # the C checks (W1-06): as a whole, or by the cases the item reports
+        for target in ("c-gcc", "c-gcc/tests/conformance/voice.onsa[host]", "c-header/tests/x.onsa[t]/c++11-g++-15"):
+            with self.subTest(target=target):
+                self.repo.write("tests/pending.toml", entry("gate", target))
+                entries, errors = pending.load(self.repo.pending)
+                errors += pending.validate(entries, pending.load_docs(self.repo.root), self.repo.root)
+                self.assertEqual(errors, [])
+
+    def test_gate_item_whole_and_by_case(self):
+        text = entry("gate", "c-header") + entry("gate", "c-header/a[t]/c99-clang") + entry("gate", "c-x/b")
+        errors = self.errors_of(text, pendable=("c-header", "c-x"))
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("`c-header` is also listed as a whole", errors[0])
 
     def test_missing_path(self):
         self.assertOneError(entry("test-case", "tests/spec/nope.onsa"), "does not exist")
@@ -607,6 +624,11 @@ class GateWiring(TempRepo):
         code, out = self.run_main([], [fake("c-x", 0, pendable=True)])
         self.assertEqual(code, 1)
         self.assertIn("remove the entry", out)
+        # an item that cannot run (exit 2) is not pending (W1-06)
+        code, out = self.run_main([], [fake("c-x", 2, pendable=True)])
+        self.assertEqual(code, 1)
+        self.assertIn("FAIL    c-x", out)
+        self.assertIn("the item cannot run", out)
 
     def test_update_golden_is_refused(self):
         code, _ = self.run_main([], [fake("a")], env={"UPDATE_GOLDEN": "1"})
@@ -659,6 +681,23 @@ class GateWiring(TempRepo):
 
 
 class RealSteps(unittest.TestCase):
+    _c_items = None
+
+    @classmethod
+    def c_items(cls):
+        """The items of the C checks, from their table (`onsa_cases --c-items`, onsa_tests::c::ITEMS)."""
+        if cls._c_items is None:
+            cls._c_items = repo.cases_json(repo.ROOT, repo.CASES_CMD, "--c-items")
+        return cls._c_items
+
+    def test_c_items_match_the_table(self):
+        # one step per row of onsa_tests::c::ITEMS, in its order, named as the row (W1-06)
+        prefix = gate_steps.C_CHECK
+        steps = [s for s in gate_steps.STEPS if s.argv[: len(prefix)] == prefix]
+        self.assertEqual([s.argv[len(prefix) :] for s in steps], [(n,) for n in self.c_items()])
+        self.assertEqual([s.name for s in steps], self.c_items())
+        self.assertTrue(all(s.pendable and not s.info for s in steps))
+
     def test_required_items(self):
         names = [s.name for s in gate_steps.STEPS]
         self.assertEqual(len(names), len(set(names)))
@@ -673,7 +712,8 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["spec-coverage"].info)
         self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
-        self.assertEqual(gate_steps.pendable(), [])  # none of today's items may be listed
+        # only the C checks (W1-06) may be listed
+        self.assertEqual(gate_steps.pendable(), self.c_items())
         for n in names:
             self.assertRegex(n, pending.TARGET_FORMS["gate"])
             self.assertNotIn("/", n)

@@ -5,6 +5,10 @@ To add an item, add one `Step`. An item may be listed in `tests/pending.toml`
 complete (formatting, lints, tests, the fuzzing, the spec examples, the list
 itself, the static checks of W1-02, the self-tests) are never pending. Later works add
 checks that wait for a later decision as pendable items.
+
+A pendable item may also apply the list case by case: the entries
+`<item>/<case>` are the item's own to apply (the C checks, `onsa_tests::ccheck`);
+the gate applies only the entry of the whole item.
 """
 import sys
 from dataclasses import dataclass
@@ -12,6 +16,8 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
 PY = (sys.executable, "-B")
+# The C checks (Q-07, W1-06): one item per row of `onsa_tests::c::ITEMS`.
+C_CHECK = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--c")
 
 
 @dataclass(frozen=True)
@@ -41,6 +47,17 @@ STEPS = [
     Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py"))),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
+    # The generated C (Q-07, W1-06): Clang and gcc-15 with -Wall -Wextra -Werror -pedantic and
+    # conformance, the sanitizers, x86_64 under Rosetta, the public headers in C11, C99 and C++11.
+    # A `-strict` item keeps the warnings its pair switches off for a known cause
+    # (`onsa_tests::c::GCC_KNOWN_OFF`): the list holds the strict one, the pair always runs.
+    Step("c-clang", (*C_CHECK, "c-clang"), pendable=True),
+    Step("c-gcc", (*C_CHECK, "c-gcc"), pendable=True),
+    Step("c-gcc-strict", (*C_CHECK, "c-gcc-strict"), pendable=True),
+    Step("c-sanitize", (*C_CHECK, "c-sanitize"), pendable=True),
+    Step("c-x86", (*C_CHECK, "c-x86"), pendable=True),
+    Step("c-header", (*C_CHECK, "c-header"), pendable=True),
+    Step("c-header-strict", (*C_CHECK, "c-header-strict"), pendable=True),
 ]
 
 

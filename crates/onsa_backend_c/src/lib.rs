@@ -27,6 +27,8 @@ use onsa_diag::{Code, Diagnostic, FileId, Span};
 
 /// The runtime header every generated file includes (T4-1).
 pub const RUNTIME_HEADER: &str = include_str!("../../../runtime/c/onsa.h");
+/// Its file name, as every generated file includes it.
+pub const RUNTIME_HEADER_NAME: &str = "onsa.h";
 
 /// Target `panic` setting (spec §9.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -146,6 +148,28 @@ impl CUnit {
     pub fn source_name(package: &str) -> String {
         format!("onsa_{}.c", names::ident(package))
     }
+
+    /// The headers a host includes (spec §14.2), as `(file name, text)`: the
+    /// runtime header and one per export. An internal header (S-53) is not
+    /// one of them.
+    pub fn public_headers(&self) -> Vec<(&str, &str)> {
+        let mut v = vec![(RUNTIME_HEADER_NAME, self.runtime_header.as_str())];
+        v.extend(self.headers.iter().map(|(n, t)| (n.as_str(), t.as_str())));
+        v
+    }
+}
+
+/// The C spelling of a scalar type at the API boundary (`float`, `int32_t`,
+/// `bool`), as the headers write it; `None` for a type that is not a scalar.
+/// For the tools that drive the API (the conformance harness).
+pub fn scalar_c(ty: &onsa_core::Ty) -> Option<&'static str> {
+    names::scalar_c(ty)
+}
+
+/// The C identifier of an Onsa name (a field of `<flow>_params`), as the
+/// headers write it.
+pub fn c_ident(name: &str) -> String {
+    names::ident(name)
 }
 
 pub(crate) fn unsupported(span: Span, what: &str) -> Diagnostic {

@@ -11,7 +11,13 @@ the form of `target`:
     diag-code     a diagnostic code with fewer negative examples than the
                   gate requires, "E0812"        (matched by tools/diag_codes.py, W1-02)
     gate          a pendable gate item of `tools/gate_steps.py` ("c-header"),
-                  or a case that the item itself reports, "<item>/<case>"
+                  or a case that the item itself reports, "<item>/<case>": the
+                  item applies those entries (a listed case that fails is
+                  pending; one that passes, and an entry that names no case of
+                  the item, fail). An item is listed as a whole or by case,
+                  not both. The C checks name a case `<path>[<target>]`
+                  (`c-gcc/tests/conformance/voice.onsa[host]`), and the header
+                  checks `<path>[<target>]/<compiler>`  (onsa_tests::ccheck, W1-06)
     test-case     a test case: a path from the repository root (a file or a
                   package directory), optionally "<path>::<test name>"   (W1-03)
     fuzz-input    a saved fuzz input: a path from the repository root  (W1-04)
@@ -239,7 +245,20 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
             errors.append(f"{where}: the same target as pending[{seen[key]}]")
         else:
             seen[key] = e.index
+    errors += _whole_and_cases(entries)
     return errors
+
+
+def _whole_and_cases(entries):
+    """A gate item listed both as a whole and by case (`<item>/<case>`)."""
+    gate = [e for e in entries if e.kind == "gate"]
+    whole = {e.target: e for e in gate if "/" not in e.target}
+    out = []
+    for e in gate:
+        item = e.target.split("/", 1)[0]
+        if "/" in e.target and item in whole:
+            out.append(f"{e.label()}: `{item}` is also listed as a whole (pending[{whole[item].index}]); keep one")
+    return out
 
 
 def _check_target(e, root, pendable_steps):

@@ -1,7 +1,8 @@
 //! `panic = "poison"` end to end (T4-4, spec §9.2): a panic inside `process`
 //! returns 1 with zeroed outputs, the instance stays poisoned until `reset`,
 //! and an exported function that panics returns zero and reports it through
-//! `onsa_take_panic`. Skipped without a host `cc`.
+//! `onsa_take_panic`. Fails without a host `cc` (Q-07: nothing is skipped
+//! silently). The panics here go through `longjmp`: no run ends by a trap.
 
 use std::process::Command;
 
@@ -89,10 +90,7 @@ int main(void) {
 
 #[test]
 fn poison_wrappers_recover_from_panics() {
-    if Command::new("cc").arg("--version").output().is_err() {
-        eprintln!("no `cc` on the PATH; skipping");
-        return;
-    }
+    onsa_tests::c::require("cc").unwrap();
     let dir = std::env::temp_dir().join(format!("onsa_poison_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     // The build's own entry (R-89 (3)), with the manifest as a value.
@@ -120,7 +118,8 @@ fn poison_wrappers_recover_from_panics() {
     std::fs::write(dir.join("driver.c"), DRIVER).unwrap();
     let exe = dir.join("run");
     let out = Command::new("cc")
-        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-ffp-contract=off", "-fno-fast-math"])
+        .args(onsa_tests::c::CFLAGS)
+        .arg("-O2")
         .arg("-I")
         .arg(&dir)
         .arg(dir.join("unit.c"))

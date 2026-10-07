@@ -20,7 +20,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<String> {
     let _ = writeln!(h, "#ifndef {up}_H");
     let _ = writeln!(h, "#define {up}_H");
     let _ = writeln!(h, "#ifndef {}\n#define {}\n#endif", cx.opts.panic.define(), cx.opts.panic.define());
-    let _ = writeln!(h, "#include \"onsa.h\"");
+    let _ = writeln!(h, "#include \"{}\"", crate::RUNTIME_HEADER_NAME);
     let _ = writeln!(h, "#ifdef __cplusplus\nextern \"C\" {{\n#endif\n");
     let _ = writeln!(h, "#define {up}_SIZE      {}   /* bytes of the fast region (spec §12.4) */", e.layout.size);
     let _ = writeln!(h, "#define {up}_BULK_SIZE {}   /* bytes of the bulk region */", e.layout.bulk_size);
@@ -448,7 +448,8 @@ pub(crate) fn fn_header(cx: &mut Cx, fns: &[FnId]) -> R<String> {
     );
     let _ = writeln!(
         h,
-        "#ifndef {up}_FNS_H\n#define {up}_FNS_H\n#include \"onsa.h\"\n#ifdef __cplusplus\nextern \"C\" {{\n#endif\n"
+        "#ifndef {up}_FNS_H\n#define {up}_FNS_H\n#include \"{}\"\n#ifdef __cplusplus\nextern \"C\" {{\n#endif\n",
+        crate::RUNTIME_HEADER_NAME
     );
     for f in fns {
         let (proto, _) = fn_signature(cx, *f)?;

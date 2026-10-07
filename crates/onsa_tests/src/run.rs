@@ -9,10 +9,12 @@
 //!   diagnostic, or the case has no target, the markers are compared with it
 //!   and no build runs. Otherwise every target is built and its diagnostics
 //!   are compared with the markers that apply to it (no `[targets]`, or
-//!   naming it). A target that builds is compared with its golden C, compiled
-//!   with `cc` and, with `conformance`, run in both the interpreter and C.
-//!   Then the goldens of `onsa dump --core`, `interface` and `graph`, and in
-//!   `"test"` every `test` block (`onsa test`).
+//!   naming it). A target that builds is compared with its golden C and kept
+//!   in [`CaseRun::builds`]: the gate items of the C checks compile it with
+//!   each compiler and, with `conformance`, run it in both the interpreter
+//!   and C ([`crate::ccheck`], Q-07, W1-06). Then the goldens of `onsa dump
+//!   --core`, `interface` and `graph`, and in `"test"` every `test` block
+//!   (`onsa test`).
 //! - Every mode but `"none"`: a file without markers is canonical under `fmt`,
 //!   and the parser alone reports exactly the markers of the syntax codes.
 //!
@@ -30,8 +32,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use onsa_diag::{Code, Diagnostic, FileId, SourceMap};
 use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, InternalError, Loaded, LowerError};
@@ -117,8 +119,24 @@ pub struct CaseRun {
     pub checked: Vec<CheckedMarker>,
     pub tests: Vec<TestResult>,
     pub problems: Vec<Problem>,
-    /// Information (conformance lines, a skipped compile).
-    pub notes: Vec<String>,
+    /// The targets that built as the case expects (no build marker applies),
+    /// for the C checks (Q-07).
+    pub builds: Vec<Built>,
+}
+
+/// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
+#[derive(Clone)]
+pub struct Built {
+    pub target: String,
+    pub output: Arc<BuildOutput>,
+    /// `[test] conformance`: run it in both the interpreter and C.
+    pub conformance: bool,
+}
+
+impl std::fmt::Debug for Built {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Built").field("target", &self.target).field("conformance", &self.conformance).finish()
+    }
 }
 
 /// The driver's stages that make Core, as the runner calls them. Each runs
@@ -181,14 +199,13 @@ pub fn internal_problem(sources: &SourceMap, e: &InternalError, target: Option<&
     Problem::Internal(format!("{at}{}", e.render(sources).trim_end().replace('\n', "\n  ")))
 }
 
-/// Run one case. `scratch` is a directory of its own for the C files;
-/// `write_golden` lets `UPDATE_GOLDEN` rewrite its golden files.
-pub fn run_case(root: &Path, case: &Case, scratch: &Path, write_golden: bool) -> CaseRun {
-    run_case_with(&Stages::DRIVER, root, case, scratch, write_golden)
+/// Run one case. `write_golden` lets `UPDATE_GOLDEN` rewrite its golden files.
+pub fn run_case(root: &Path, case: &Case, write_golden: bool) -> CaseRun {
+    run_case_with(&Stages::DRIVER, root, case, write_golden)
 }
 
 /// [`run_case`] through `stages`.
-pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, scratch: &Path, write_golden: bool) -> CaseRun {
+pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bool) -> CaseRun {
     let mut run = CaseRun { path: case.path.clone(), ..Default::default() };
     let setup = match &case.setup {
         Ok(s) => s,
@@ -314,7 +331,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, scratch: &Path, 
         }
         for target in &targets {
             let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
-            build_target(&ctx, target, scratch, write_golden, &mut run);
+            build_target(&ctx, target, write_golden, &mut run);
         }
     }
 
@@ -388,7 +405,7 @@ struct BuildCtx<'a> {
 
 /// Build one target, compare its diagnostics with the markers that apply to
 /// it, and check what it produced.
-fn build_target(ctx: &BuildCtx<'_>, target: &str, scratch: &Path, write_golden: bool, run: &mut CaseRun) {
+fn build_target(ctx: &BuildCtx<'_>, target: &str, write_golden: bool, run: &mut CaseRun) {
     let BuildCtx { stages, root, case, setup, loaded, analyzed, markers } = *ctx;
     let t = &setup.test;
     let expected: Vec<(FileId, Expected)> = markers
@@ -426,26 +443,7 @@ fn build_target(ctx: &BuildCtx<'_>, target: &str, scratch: &Path, write_golden: 
             }
         }
     }
-    if !crate::c::has_cc() {
-        run.notes.push(format!("{target}: no `cc` on the PATH; the C is not compiled"));
-        return;
-    }
-    let dir = scratch.join(target);
-    let source = out.files.last().map(|(n, _)| n.clone()).unwrap_or_default();
-    if let Err(e) = crate::c::write_files(&dir, &out.files).and_then(|()| crate::c::compile_object(&dir, &source)) {
-        run.problems.push(Problem::Failed(format!("{target}: {e}")));
-        return;
-    }
-    if t.conformance {
-        let outcome = crate::conformance::run(&out, &dir.join("conformance"));
-        run.notes.extend(outcome.report.into_iter().map(|l| format!("{target}: {l}")));
-        run.problems.extend(outcome.problems.into_iter().map(|p| Problem::Failed(format!("{target}: {p}"))));
-        if outcome.compared == 0 {
-            run.problems.push(Problem::Case(format!(
-                "{target}: conformance compared no flow (every exported flow was skipped)"
-            )));
-        }
-    }
+    run.builds.push(Built { target: target.to_string(), output: Arc::new(out), conformance: t.conformance });
 }
 
 /// `conformance = true` covers every `pub flow` of the case: each is in
@@ -708,11 +706,6 @@ impl Report {
         for c in self.cases.iter().filter(|c| !c.pending_tests.is_empty()) {
             let _ = write!(s, "\npending tests of {}: {}", c.run.path, c.pending_tests.join(", "));
         }
-        for c in &self.cases {
-            for note in &c.run.notes {
-                let _ = write!(s, "\n{}: {note}", c.run.path);
-            }
-        }
         s
     }
 }
@@ -850,17 +843,7 @@ pub fn run_all(root: &Path) -> Report {
 /// pending list. `write_golden` tells whether `UPDATE_GOLDEN` may rewrite the
 /// golden files of a case.
 pub fn run_each(root: &Path, cases: &[Case], write_golden: impl Fn(&Case) -> bool + Sync) -> Vec<CaseRun> {
-    // A scratch directory of this run (several runs may share the process).
-    static RUNS: AtomicUsize = AtomicUsize::new(0);
-    let n = RUNS.fetch_add(1, Ordering::SeqCst);
-    let scratch = std::env::temp_dir().join(format!("onsa_cases_{}_{n}", std::process::id()));
-    // One scratch directory per case, named by its index (paths could collide once flattened).
-    let runs = run_parallel(cases, |i, c| {
-        let dir = scratch.join(i.to_string());
-        run_case(root, c, &dir, write_golden(c))
-    });
-    let _ = std::fs::remove_dir_all(&scratch);
-    runs
+    run_parallel(cases, |c| run_case(root, c, write_golden(c)))
 }
 
 /// The runs as JSON, for the gate's count of negative examples (K-13): what
@@ -911,7 +894,7 @@ pub fn runs_json(runs: &[CaseRun], errors: &[String]) -> serde_json::Value {
     serde_json::json!({ "cases": cases, "errors": errors })
 }
 
-fn run_parallel(cases: &[Case], f: impl Fn(usize, &Case) -> CaseRun + Sync) -> Vec<CaseRun> {
+fn run_parallel(cases: &[Case], f: impl Fn(&Case) -> CaseRun + Sync) -> Vec<CaseRun> {
     let next = AtomicUsize::new(0);
     let results: Mutex<Vec<Option<CaseRun>>> = Mutex::new(vec![None; cases.len()]);
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(cases.len().max(1));
@@ -925,7 +908,7 @@ fn run_parallel(cases: &[Case], f: impl Fn(usize, &Case) -> CaseRun + Sync) -> V
                         let i = next.fetch_add(1, Ordering::SeqCst);
                         let Some(c) = cases.get(i) else { break };
                         // A panic outside the driver's stages: an internal error (S-67).
-                        let r = onsa_driver::guard(|| f(i, c)).unwrap_or_else(|e| CaseRun {
+                        let r = onsa_driver::guard(|| f(c)).unwrap_or_else(|e| CaseRun {
                             path: c.path.clone(),
                             problems: vec![internal_problem(&SourceMap::default(), &e, None)],
                             ..Default::default()
@@ -1081,7 +1064,7 @@ mod tests {
             &[
                 ("tests/partial/m.onsa", &(head("\"m.f\"") + two)),
                 ("tests/empty/m.onsa", &(head("") + two)),
-                ("tests/skipped/m.onsa", &(head("\"m.f\"") + init_only)),
+                ("tests/init/m.onsa", &(head("\"m.f\"") + init_only)),
                 ("tests/full/m.onsa", &(head("\"m.f\", \"m.g\"") + two)),
             ],
         );
@@ -1092,10 +1075,12 @@ mod tests {
         };
         has("tests/partial/m.onsa", "`m.g` is not in `[export] flows`");
         has("tests/empty/m.onsa", "needs `[export] flows`");
-        if crate::c::has_cc() {
-            has("tests/skipped/m.onsa", "compared no flow");
-            let c = case(&r, "tests/full/m.onsa");
-            assert!(c.failures.is_empty(), "{:?}", c.failures);
+        // The C checks run the builds (`crate::ccheck`); the runner keeps them.
+        for p in ["tests/init/m.onsa", "tests/full/m.onsa"] {
+            let c = case(&r, p);
+            assert!(c.failures.is_empty(), "{p}: {:?}", c.failures);
+            let builds: Vec<(&str, bool)> = c.run.builds.iter().map(|b| (b.target.as_str(), b.conformance)).collect();
+            assert_eq!(builds, [("t", true)], "{p}");
         }
     }
 

@@ -364,7 +364,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         opts.package
     );
     let _ = writeln!(out, "#define {}", opts.panic.define());
-    let _ = writeln!(out, "#include \"onsa.h\"");
+    let _ = writeln!(out, "#include \"{}\"", crate::RUNTIME_HEADER_NAME);
     if opts.provides_alloc {
         let _ = writeln!(out, "#include <stdlib.h>");
     }

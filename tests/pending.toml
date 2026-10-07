@@ -36,8 +36,19 @@
 #                 外す予定の作業は K-13 の規則: 1. コードの規則を作るか変える W の作業（複数なら
 #                 最後に仕上げる作業。そのテストの票が否定例を書く）、2. どの作業も触れない
 #                 実装済みのコードは W1-10、3. 第 2 期のコードは "P2"
-#   gate          載せてよい gate の項目の名前（tools/gate_steps.py の STEPS で pendable=True のもの）:
-#                 "c-header"。項目が自分で報告する事例は "<項目>/<事例>"（照合はその項目が行う）。
+#   gate          載せてよい gate の項目の名前（tools/gate_steps.py の STEPS で pendable=True のもの。
+#                 今は C の検査の c-clang、c-gcc、c-gcc-strict、c-sanitize、c-x86、c-header、
+#                 c-header-strict。W1-06）。後の作業を待つ検査は、既知の原因の警告だけを外して常に回す項目
+#                 （c-gcc、c-header。外す警告は onsa_tests::c::GCC_KNOWN_OFF の一か所）と、外さない項目
+#                 （名前に -strict）に分け、全体を載せるのは -strict の項目だけにする（新しい誤りを隠さない）。
+#                 項目の全体を載せる "c-gcc-strict" の照合は gate（tools/gate.py）が行う。項目が自分で報告する事例は
+#                 "<項目>/<事例>" で、照合はその項目が行う: 載っていて落ちる事例は実装待ち、載って
+#                 いて通る事例と、項目の事例を指さない項目は失敗。一つの項目を全体と事例の両方で
+#                 載せると失敗。事例に当たらない誤り（コンパイラが PATH に無い、ビルドが一つも無い）は
+#                 一覧で黙らせられない。C の検査の事例は "<パス>[<ターゲット>]"
+#                 （"c-gcc/tests/conformance/voice.onsa[host]"）、c-header と c-header-strict は
+#                 "<パス>[<ターゲット>]/<コンパイラ>"（"c-header-strict/tests/conformance/voice.onsa[host]/c++11-g++-15"。
+#                 照合は onsa_tests::ccheck）。
 #                 gate の完全性を保つ項目（fmt、clippy、test、仕様の例、この一覧、W1-02 の静的な
 #                 検査、自己テスト）と info の項目は載せられない
 #   test-case     リポジトリの根からのパス（ファイルかパッケージのディレクトリ）。
@@ -996,3 +1007,75 @@ target = "tests/spec/flow_semantics/pkg_modules"
 reasons = ["S-102", "S-44"]
 until = "W3-10"
 note = "モジュールをまたぐ flow（use dsp.synth.{…}、filters.avg~(x)）、総称の rt fn（clamp[T: PartialOrd]）の F32 と I32 での使用。at の構文（W3-09）"
+
+# --- W1-06: 生成した C の検査（gate の C の項目）の実装待ち（2026-10-07）
+
+[[pending]]
+kind = "gate"
+target = "c-gcc-strict"
+reasons = ["R-67", "S-54"]
+until = "W2-09"
+note = "GCC は #pragma STDC FP_CONTRACT を知らず（-Wunknown-pragmas）、onsa.h の整数の補助が -Wtype-limits に当たり、-Werror で全てのビルドが落ちる（c-gcc はこの二つだけを外して常に回す）"
+
+[[pending]]
+kind = "gate"
+target = "c-header-strict"
+reasons = ["S-53", "R-65"]
+until = "W10-04"
+note = "公開ヘッダ（onsa.h を含む）が C99 / C++11 の -pedantic で通らない（_Static_assert、_Noreturn、_Thread_local は C11。GCC は STDC のプラグマも）。C11 の取り込みは c-header が常に回す"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/pipeline/span_const.onsa[host]"
+reasons = ["R-109", "S-94"]
+until = "W10-04"
+note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/pipeline/span_const.onsa[host]"
+reasons = ["R-109", "S-94"]
+until = "W10-04"
+note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/pipeline/span_const.onsa[host]"
+reasons = ["R-109", "S-94"]
+until = "W10-04"
+note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/pipeline/span_const.onsa[host]"
+reasons = ["R-109", "S-94"]
+until = "W10-04"
+note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/conformance/boundary_overlap.onsa[host]"
+reasons = ["R-141"]
+until = "W2-08"
+note = "process の重なりの検査が、型の違う入出力の組で一方の要素の大きさを両方に使う（Bool / U8 の出力を F32 / I64 の大きさで測る）。gcc の配置では偽の重なりになり、process が 2 を返す"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/pipeline/if_compare.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/pipeline/if_compare.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/pipeline/if_compare.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"

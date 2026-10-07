@@ -1,16 +1,14 @@
 //! The §17.5 example end to end (T4-8): `onsa build --target host` on
 //! `examples/voice_host`, then the C host is compiled against the library,
-//! run, and its WAV checked. Skipped without a host `cc`.
+//! run, and its WAV checked. Fails without a host `cc` (Q-07: nothing is
+//! skipped silently).
 
 use std::path::Path;
 use std::process::Command;
 
 #[test]
 fn voice_host_writes_a_wav() {
-    if Command::new("cc").arg("--version").output().is_err() {
-        eprintln!("no `cc` on the PATH; skipping");
-        return;
-    }
+    onsa_tests::c::require("cc").unwrap();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let example = root.join("examples/voice_host");
     let dir = std::env::temp_dir().join(format!("onsa_example_host_{}", std::process::id()));
@@ -28,7 +26,8 @@ fn voice_host_writes_a_wav() {
     assert!(report.files.iter().any(|f| f == "onsa_voice.h"));
     let exe = dir.join("voice_host");
     let out = Command::new("cc")
-        .args(["-std=c11", "-O2", "-ffp-contract=off", "-fno-fast-math", "-Wall", "-Wextra", "-Werror"])
+        .args(onsa_tests::c::CFLAGS)
+        .arg("-O2")
         .arg(example.join("host.c"))
         .arg("-I")
         .arg(dir.join("lib"))
