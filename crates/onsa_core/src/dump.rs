@@ -11,15 +11,22 @@ pub fn dump(m: &Module) -> String {
         d.type_def(t);
     }
     for c in &m.consts {
-        d.out.push_str("const ");
-        d.out.push_str(&c.name);
-        d.out.push_str(": ");
-        d.ty(&c.ty);
-        d.out.push_str(" = ");
-        d.expr(&c.init);
-        d.out.push('\n');
+        d.const_def(c);
     }
     for f in &m.fns {
+        d.fn_def(f);
+    }
+    d.out
+}
+
+/// The `const`s and functions named `name`, as in the dump (the part of a
+/// module a verifier error names, R-82).
+pub fn dump_item(m: &Module, name: &str) -> String {
+    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[] };
+    for c in m.consts.iter().filter(|c| c.name == name) {
+        d.const_def(c);
+    }
+    for f in m.fns.iter().filter(|f| f.name == name) {
         d.fn_def(f);
     }
     d.out
@@ -69,7 +76,10 @@ impl<'a> Dumper<'a> {
                 }
                 self.out.push(')');
             }
-            Ty::Struct(id) | Ty::Enum(id) => self.out.push_str(&self.m.ty(*id).name),
+            Ty::Struct(id) | Ty::Enum(id) => {
+                let name = self.type_ref_name(*id);
+                self.out.push_str(&name);
+            }
             Ty::Span(e) => {
                 self.out.push_str("Span[");
                 self.ty(e);
@@ -138,14 +148,52 @@ impl<'a> Dumper<'a> {
         self.out.push('\n');
     }
 
+    /// A type of the module, or `None` for an id out of range (a broken
+    /// Core the verifier reports must still dump, R-82).
+    fn type_def_of(&self, id: TypeId) -> Option<&'a TypeDef> {
+        self.m.types.get(id.0 as usize)
+    }
+
+    fn type_ref_name(&self, id: TypeId) -> String {
+        match self.type_def_of(id) {
+            Some(d) => d.name.clone(),
+            None => format!("<bad type {}>", id.0),
+        }
+    }
+
+    /// The name of variant `tag` of an enum (the tag itself when it is not one).
+    fn variant_name(def: Option<&TypeDef>, tag: u32) -> String {
+        match def.map(|d| &d.kind) {
+            Some(TypeDefKind::Enum { variants }) => match variants.get(tag as usize) {
+                Some((n, _)) => n.clone(),
+                None => format!("<bad variant {tag}>"),
+            },
+            _ => tag.to_string(),
+        }
+    }
+
     fn local(&mut self, l: LocalId) {
-        let name = &self.locals[l.0 as usize].name;
+        let Some(local) = self.locals.get(l.0 as usize) else {
+            let _ = write!(self.out, "<bad local {}>", l.0);
+            return;
+        };
+        let name = &local.name;
         let dup = self.locals.iter().filter(|x| x.name == *name).count() > 1;
         if dup || name.is_empty() {
             let _ = write!(self.out, "{name}@{}", l.0);
         } else {
             self.out.push_str(name);
         }
+    }
+
+    fn const_def(&mut self, c: &ConstDef) {
+        self.out.push_str("const ");
+        self.out.push_str(&c.name);
+        self.out.push_str(": ");
+        self.ty(&c.ty);
+        self.out.push_str(" = ");
+        self.expr(&c.init);
+        self.out.push('\n');
     }
 
     fn fn_def(&mut self, f: &'a FnDef) {
@@ -206,8 +254,15 @@ impl<'a> Dumper<'a> {
                 self.out.push_str("let ");
                 self.local(*l);
                 self.out.push_str(": ");
-                let t = self.locals[l.0 as usize].ty.clone();
-                self.ty(&t);
+                match self.locals.get(l.0 as usize) {
+                    Some(local) => {
+                        let t = local.ty.clone();
+                        self.ty(&t);
+                    }
+                    None => {
+                        let _ = write!(self.out, "<bad local {}>", l.0);
+                    }
+                }
                 self.out.push_str(" = ");
                 self.expr(e);
             }
@@ -315,9 +370,14 @@ impl<'a> Dumper<'a> {
                 Lit::Unit => self.out.push_str("()"),
             },
             ExprKind::Local(l) => self.local(*l),
-            ExprKind::Const(c) => {
-                let _ = write!(self.out, "const {}", self.m.const_(*c).name);
-            }
+            ExprKind::Const(c) => match self.m.consts.get(c.0 as usize) {
+                Some(def) => {
+                    let _ = write!(self.out, "const {}", def.name);
+                }
+                None => {
+                    let _ = write!(self.out, "<bad const {}>", c.0);
+                }
+            },
             ExprKind::Zeroed => {
                 self.out.push_str("zeroed:");
                 let t = e.ty.clone();
@@ -390,7 +450,12 @@ impl<'a> Dumper<'a> {
                 self.out.push(')');
             }
             ExprKind::Call { fn_, args } => {
-                self.out.push_str(&self.m.fn_(*fn_).name.clone());
+                match self.m.fns.get(fn_.0 as usize) {
+                    Some(def) => self.out.push_str(&def.name),
+                    None => {
+                        let _ = write!(self.out, "<bad fn {}>", fn_.0);
+                    }
+                }
                 self.args(args);
             }
             ExprKind::Prim { prim, args } => {
@@ -413,12 +478,11 @@ impl<'a> Dumper<'a> {
                 self.out.push(')');
             }
             ExprKind::Struct { ty, fields } => {
-                let def = self.m.ty(*ty);
-                let names: Vec<String> = match &def.kind {
-                    TypeDefKind::Struct { fields } => fields.iter().map(|(n, _)| n.clone()).collect(),
+                let names: Vec<String> = match self.type_def_of(*ty).map(|d| &d.kind) {
+                    Some(TypeDefKind::Struct { fields }) => fields.iter().map(|(n, _)| n.clone()).collect(),
                     _ => Vec::new(),
                 };
-                let _ = write!(self.out, "{} {{", def.name);
+                let _ = write!(self.out, "{} {{", self.type_ref_name(*ty));
                 for (i, f) in fields.iter().enumerate() {
                     self.out.push_str(if i > 0 { ", " } else { " " });
                     if let Some(n) = names.get(i) {
@@ -429,12 +493,8 @@ impl<'a> Dumper<'a> {
                 self.out.push_str(if fields.is_empty() { "}" } else { " }" });
             }
             ExprKind::Variant { ty, tag, fields } => {
-                let def = self.m.ty(*ty);
-                let vname = match &def.kind {
-                    TypeDefKind::Enum { variants } => variants[*tag as usize].0.clone(),
-                    _ => tag.to_string(),
-                };
-                let _ = write!(self.out, "{}.{vname}", def.name);
+                let vname = Self::variant_name(self.type_def_of(*ty), *tag);
+                let _ = write!(self.out, "{}.{vname}", self.type_ref_name(*ty));
                 if !fields.is_empty() {
                     self.out.push('(');
                     self.exprs(fields);
@@ -463,10 +523,7 @@ impl<'a> Dumper<'a> {
             }
             ExprKind::Payload { base, tag, index } => {
                 let vname = match &base.ty {
-                    Ty::Enum(id) => match &self.m.ty(*id).kind {
-                        TypeDefKind::Enum { variants } => variants[*tag as usize].0.clone(),
-                        _ => tag.to_string(),
-                    },
+                    Ty::Enum(id) => Self::variant_name(self.type_def_of(*id), *tag),
                     _ => tag.to_string(),
                 };
                 self.out.push_str("payload(");
@@ -483,8 +540,8 @@ impl<'a> Dumper<'a> {
             }
             ExprKind::Switch { scrutinee, arms, default } => {
                 let names: Vec<String> = match &scrutinee.ty {
-                    Ty::Enum(id) => match &self.m.ty(*id).kind {
-                        TypeDefKind::Enum { variants } => variants.iter().map(|(n, _)| n.clone()).collect(),
+                    Ty::Enum(id) => match self.type_def_of(*id).map(|d| &d.kind) {
+                        Some(TypeDefKind::Enum { variants }) => variants.iter().map(|(n, _)| n.clone()).collect(),
                         _ => Vec::new(),
                     },
                     _ => Vec::new(),
@@ -514,9 +571,14 @@ impl<'a> Dumper<'a> {
                 self.out.push('}');
             }
             ExprKind::Block(b) => self.block(b),
-            ExprKind::Panic(id) => {
-                let _ = write!(self.out, "panic({:?})", self.m.messages[id.0 as usize]);
-            }
+            ExprKind::Panic(id) => match self.m.messages.get(id.0 as usize) {
+                Some(text) => {
+                    let _ = write!(self.out, "panic({text:?})");
+                }
+                None => {
+                    let _ = write!(self.out, "panic(<bad message {}>)", id.0);
+                }
+            },
         }
     }
 }

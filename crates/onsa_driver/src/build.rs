@@ -16,7 +16,10 @@ use onsa_sema::def::DefKind;
 use onsa_sema::ty::Rate;
 use onsa_syntax::ast::Vis;
 
-use crate::{Analyzed, Loaded, Manifest, ManifestExport, ManifestTarget, PackageInput, read_manifest, read_sources};
+use crate::{
+    Analyzed, CoreStage, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, PackageInput, VerifyFailure,
+    read_manifest, read_sources,
+};
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
 /// compiler flags that keep the IEEE semantics.
@@ -120,6 +123,8 @@ pub enum BuildError {
     Usage(String),
     /// The package or its exports do not check (exit 1).
     Diagnostics { sources: SourceMap, diagnostics: Vec<Diagnostic> },
+    /// The compiler produced a broken Core (R-82): an error of the compiler.
+    Verify(VerifyFailure),
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -232,8 +237,11 @@ pub fn build_resolved(
 
     // Lower and emit.
     let lower_opts = LowerOptions { bulk_threshold: settings.bulk_threshold, ptr_size: settings.platform.ptr_size };
-    let mut module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
-    inline_consts(&mut module);
+    let module = crate::lower_core_with(analyzed, &lower_opts).map_err(|e| match e {
+        LowerError::Diagnostics(d) => diagnostics(d),
+        LowerError::Verify(v) => BuildError::Verify(v),
+    })?;
+    let module = consts_stage(module).map_err(BuildError::Verify)?;
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
         package: loaded.name.clone(),
@@ -490,10 +498,18 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
     out
 }
 
+/// The build-time `const` evaluation as a stage: [`inline_consts`], then the
+/// verifier at its boundary (R-82).
+fn consts_stage(mut module: Module) -> Result<Module, VerifyFailure> {
+    inline_consts(&mut module);
+    crate::verify_core(&module, CoreStage::Consts)?;
+    Ok(module)
+}
+
 /// `const` initializers that call functions are evaluated with the
 /// interpreter at build time (spec §6.6, T3-9) and replaced by literals so
-/// the C backend can emit a static initializer.
-pub fn inline_consts(module: &mut Module) {
+/// the C backend can emit a static initializer. Only through [`consts_stage`].
+fn inline_consts(module: &mut Module) {
     let mut replacements: Vec<(usize, Expr)> = Vec::new();
     {
         let interp = Interp::new(module);

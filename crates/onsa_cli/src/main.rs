@@ -100,6 +100,8 @@ enum Command {
 
 /// Exit codes: 0 no diagnostics, 1 diagnostics reported, 2 usage or I/O error.
 fn main() -> ExitCode {
+    // The Core verifier runs in debug builds of the CLI only, until W8-02 (R-82).
+    onsa_driver::verify_core_in_debug_only();
     let cli = Cli::parse();
     match cli.command {
         Command::Check { json, paths } => check(json, &paths),
@@ -240,11 +242,19 @@ fn dump(core: bool, paths: &[PathBuf]) -> ExitCode {
             print!("{}", onsa_core::dump(&module));
             ExitCode::SUCCESS
         }
-        Err(diags) => {
+        Err(onsa_driver::LowerError::Diagnostics(diags)) => {
             print!("{}", onsa_diag::to_text(&loaded.sources, &diags));
             ExitCode::from(1)
         }
+        Err(onsa_driver::LowerError::Verify(v)) => verify_failed(&v),
     }
+}
+
+/// The Core verifier rejected what the compiler produced (R-82): the exit
+/// code a panic had (W1-04 makes this the internal error of S-67).
+fn verify_failed(v: &onsa_driver::VerifyFailure) -> ExitCode {
+    eprintln!("onsa: {}", v.report());
+    ExitCode::from(101)
 }
 
 /// Load and analyze one package; print diagnostics and return `None` when it does not check.
@@ -270,7 +280,10 @@ fn interface(json: bool, path: &PathBuf) -> ExitCode {
         Ok(x) => x,
         Err(code) => return code,
     };
-    let iface = onsa_driver::interface(&analyzed);
+    let iface = match onsa_driver::interface(&analyzed) {
+        Ok(i) => i,
+        Err(v) => return verify_failed(&v),
+    };
     if json {
         println!("{}", onsa_driver::render_json(&iface));
     } else {
@@ -326,7 +339,8 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> ExitCode {
     }
     let module = match onsa_driver::lower_core(&analyzed) {
         Ok(m) => m,
-        Err(diags) => {
+        Err(onsa_driver::LowerError::Verify(v)) => return verify_failed(&v),
+        Err(onsa_driver::LowerError::Diagnostics(diags)) => {
             if json {
                 println!("{}", onsa_diag::to_json(&loaded.sources, &diags));
             } else {
@@ -367,5 +381,6 @@ fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> ExitCode 
             print!("{}", onsa_diag::to_text(&sources, &diagnostics));
             ExitCode::from(1)
         }
+        Err(onsa_driver::BuildError::Verify(v)) => verify_failed(&v),
     }
 }

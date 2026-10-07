@@ -75,3 +75,6 @@ target/
 examples/*/target/
 examples/*/out.wav
 examples/voice_host/voice_host
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/

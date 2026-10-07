@@ -4,6 +4,7 @@
 pub mod build;
 pub mod graph;
 pub mod interface;
+pub mod verify;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -341,19 +342,22 @@ pub fn analyze_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, 
 pub use graph::graph;
 pub use interface::{Interface, interface, render_json, render_text};
 
+pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
+
 /// Lower a checked package to Core (T3-3). Only meaningful when
 /// `Analyzed::diagnostics` is empty; lowering diagnostics (E0200 for
-/// features outside the core) come back as the error.
-pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, Vec<Diagnostic>> {
-    onsa_core::lower(&analyzed.pkg, &analyzed.analysis)
+/// features outside the core) come back as the error, and so does a Core
+/// the verifier rejects (R-82).
+pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, LowerError> {
+    lower_core_with(analyzed, &onsa_core::LowerOptions::default())
 }
 
-/// [`lower_core`] with the target's memory settings (T4-5).
-pub fn lower_core_with(
-    analyzed: &Analyzed,
-    opts: &onsa_core::LowerOptions,
-) -> Result<onsa_core::Module, Vec<Diagnostic>> {
-    onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts)
+/// [`lower_core`] with the target's memory settings (T4-5): the lowering
+/// stage, verified at its boundary.
+pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> Result<onsa_core::Module, LowerError> {
+    let module = onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts).map_err(LowerError::Diagnostics)?;
+    verify_core(&module, CoreStage::Lower)?;
+    Ok(module)
 }
 
 pub use build::{

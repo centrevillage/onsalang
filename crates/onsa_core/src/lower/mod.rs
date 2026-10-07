@@ -144,11 +144,8 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
     }
     let mut module = lw.m;
     module.moves = moves::collect(&module);
-    if cfg!(debug_assertions)
-        && let Err(e) = crate::verify::verify(&module)
-    {
-        panic!("{e}\n{}", crate::dump::dump(&module));
-    }
+    // The verifier runs at the stage boundary in the driver (R-82,
+    // `onsa_driver::verify_core`), not here.
     Ok(module)
 }
 

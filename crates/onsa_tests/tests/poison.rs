@@ -110,6 +110,7 @@ fn poison_wrappers_recover_from_panics() {
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
             panic!("{}", onsa_diag::to_text(&sources, &diagnostics))
         }
+        Err(onsa_driver::BuildError::Verify(v)) => panic!("{}", v.report()),
     };
     std::fs::write(dir.join("onsa.h"), &unit.runtime_header).unwrap();
     for (h, t) in &unit.headers {

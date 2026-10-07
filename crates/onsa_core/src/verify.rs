@@ -1,5 +1,5 @@
-//! Verifier (T3-2): type and structure invariants of a Core module. Runs
-//! after lowering in debug builds (`lower` calls it) and in tests.
+//! Verifier (T3-2): type and structure invariants of a Core module. The
+//! driver runs it at every stage boundary (`onsa_driver::verify_core`, R-82).
 
 use std::fmt;
 

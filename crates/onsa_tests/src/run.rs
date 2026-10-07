@@ -16,6 +16,9 @@
 //! - Every mode but `"none"`: a file without markers is canonical under `fmt`,
 //!   and the parser alone reports exactly the markers of the syntax codes.
 //!
+//! Every Core a case makes comes from the driver's stage functions, which run
+//! the Core verifier at their boundaries (R-82); a failure fails the case.
+//!
 //! The results are kept as structures ([`CaseRun`], [`CaseReport`]): which
 //! markers were compared at which stage, and whether the case is pending.
 
@@ -26,7 +29,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use onsa_diag::{Code, Diagnostic, FileId, SourceMap};
-use onsa_driver::{Analyzed, BuildError, Loaded};
+use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, Loaded, LowerError, VerifyFailure};
 
 use crate::case::{self, Case, Setup};
 use crate::fragment::{GoldenKind, Mode};
@@ -99,9 +102,70 @@ pub struct CaseRun {
     pub notes: Vec<String>,
 }
 
+/// The driver's stages that make Core, as the runner calls them. Each runs
+/// the Core verifier at its boundary (R-82). The runner uses
+/// [`Stages::DRIVER`]; a test gives stages that fail, to check that every
+/// failure reaches the problems of the case ([`stage_problem`]).
+#[derive(Clone, Copy)]
+pub struct Stages {
+    pub lower_core: fn(&Analyzed) -> Result<onsa_core::Module, LowerError>,
+    pub build: fn(&Loaded, &Analyzed, &str) -> Result<BuildOutput, BuildError>,
+    pub interface: fn(&Analyzed) -> Result<Interface, VerifyFailure>,
+}
+
+impl Stages {
+    pub const DRIVER: Stages = Stages {
+        lower_core: onsa_driver::lower_core,
+        build: onsa_driver::build_analyzed,
+        interface: onsa_driver::interface,
+    };
+}
+
+/// A stage that gave no output, other than build diagnostics (those are
+/// compared with the markers).
+#[derive(Debug, Clone, Copy)]
+pub enum StageFailure<'a> {
+    /// `lower_core`, for the Core golden and the `test` blocks.
+    Lower(&'a LowerError),
+    /// The build of a target.
+    Build { target: &'a str, error: &'a BuildError },
+    /// `interface`, for its golden.
+    Interface(&'a VerifyFailure),
+}
+
+/// The problem of the case for a failed stage: the one place every arm of
+/// the runner turns a stage's failure into a problem (R-82). A verifier
+/// failure fails the case with its report (the stage, the item, the rule and
+/// the item's Core).
+pub fn stage_problem(sources: &SourceMap, failure: StageFailure<'_>) -> Problem {
+    let verify = |v: &VerifyFailure, target: Option<&str>| {
+        let at = target.map(|t| format!("build of `{t}`: ")).unwrap_or_default();
+        Problem::Failed(format!("{at}{}", v.report().replace('\n', "\n  ")))
+    };
+    match failure {
+        StageFailure::Lower(LowerError::Diagnostics(diags)) => {
+            Problem::Failed(format!("lowering failed:\n{}", onsa_diag::to_text(sources, diags).replace('\n', "\n  ")))
+        }
+        StageFailure::Lower(LowerError::Verify(v)) | StageFailure::Interface(v) => verify(v, None),
+        StageFailure::Build { target, error: BuildError::Verify(v) } => verify(v, Some(target)),
+        // The settings of the case itself are wrong.
+        StageFailure::Build { target, error: BuildError::Usage(m) } => {
+            Problem::Case(format!("build of `{target}`: {m}"))
+        }
+        StageFailure::Build { target, error: BuildError::Diagnostics { sources, diagnostics } } => Problem::Failed(
+            format!("build of `{target}`:\n{}", onsa_diag::to_text(sources, diagnostics).replace('\n', "\n  ")),
+        ),
+    }
+}
+
 /// Run one case. `scratch` is a directory of its own for the C files;
 /// `write_golden` lets `UPDATE_GOLDEN` rewrite its golden files.
 pub fn run_case(root: &Path, case: &Case, scratch: &Path, write_golden: bool) -> CaseRun {
+    run_case_with(&Stages::DRIVER, root, case, scratch, write_golden)
+}
+
+/// [`run_case`] through `stages`.
+pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, scratch: &Path, write_golden: bool) -> CaseRun {
     let mut run = CaseRun { path: case.path.clone(), ..Default::default() };
     let setup = match &case.setup {
         Ok(s) => s,
@@ -207,20 +271,18 @@ pub fn run_case(root: &Path, case: &Case, scratch: &Path, write_golden: bool) ->
             conformance_scope(&mut run, &loaded, &analyzed);
         }
         for target in &targets {
-            build_target(root, case, setup, &loaded, &analyzed, &markers, target, scratch, write_golden, &mut run);
+            let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
+            build_target(&ctx, target, scratch, write_golden, &mut run);
         }
     }
 
     // The check reports nothing: the outputs of the analysis, and the tests.
     let needs_core = t.golden.contains(&GoldenKind::Core) || t.mode == Mode::Test;
     let module = if needs_core {
-        match onsa_driver::lower_core(&analyzed) {
+        match (stages.lower_core)(&analyzed) {
             Ok(m) => Some(m),
-            Err(diags) => {
-                run.problems.push(Problem::Failed(format!(
-                    "lowering failed:\n{}",
-                    onsa_diag::to_text(&loaded.sources, &diags).replace('\n', "\n  ")
-                )));
+            Err(e) => {
+                run.problems.push(stage_problem(&loaded.sources, StageFailure::Lower(&e)));
                 None
             }
         }
@@ -235,19 +297,23 @@ pub fn run_case(root: &Path, case: &Case, scratch: &Path, write_golden: bool) ->
     if t.golden.contains(&GoldenKind::Core)
         && let Some(m) = &module
     {
-        match onsa_core::verify(m) {
-            Ok(()) => gold(&mut run, golden::core_path(&case.name), &onsa_core::dump(m)),
-            Err(e) => run.problems.push(Problem::Failed(format!("Core verifier: {e}"))),
-        }
+        // `lower_core` verified it (R-82).
+        gold(&mut run, golden::core_path(&case.name), &onsa_core::dump(m));
     }
     if t.golden.contains(&GoldenKind::Interface) {
-        let iface = onsa_driver::interface(&analyzed);
-        gold(&mut run, golden::interface_path(&case.name), &onsa_driver::render_text(&iface));
-        // The JSON form must parse and name the package.
-        match serde_json::from_str::<serde_json::Value>(&onsa_driver::render_json(&iface)) {
-            Ok(json) if json["package"] == loaded.name.as_str() => {}
-            Ok(json) => run.problems.push(Problem::Failed(format!("interface JSON names package {}", json["package"]))),
-            Err(e) => run.problems.push(Problem::Failed(format!("interface JSON does not parse: {e}"))),
+        match (stages.interface)(&analyzed) {
+            Ok(iface) => {
+                gold(&mut run, golden::interface_path(&case.name), &onsa_driver::render_text(&iface));
+                // The JSON form must parse and name the package.
+                match serde_json::from_str::<serde_json::Value>(&onsa_driver::render_json(&iface)) {
+                    Ok(json) if json["package"] == loaded.name.as_str() => {}
+                    Ok(json) => {
+                        run.problems.push(Problem::Failed(format!("interface JSON names package {}", json["package"])))
+                    }
+                    Err(e) => run.problems.push(Problem::Failed(format!("interface JSON does not parse: {e}"))),
+                }
+            }
+            Err(v) => run.problems.push(stage_problem(&loaded.sources, StageFailure::Interface(&v))),
         }
     }
     for flow in &t.golden_graph {
@@ -264,21 +330,21 @@ pub fn run_case(root: &Path, case: &Case, scratch: &Path, write_golden: bool) ->
     run
 }
 
+/// What the builds of a case share.
+struct BuildCtx<'a> {
+    stages: &'a Stages,
+    root: &'a Path,
+    case: &'a Case,
+    setup: &'a Setup,
+    loaded: &'a Loaded,
+    analyzed: &'a Analyzed,
+    markers: &'a [(FileId, Expected)],
+}
+
 /// Build one target, compare its diagnostics with the markers that apply to
 /// it, and check what it produced.
-#[allow(clippy::too_many_arguments)]
-fn build_target(
-    root: &Path,
-    case: &Case,
-    setup: &Setup,
-    loaded: &Loaded,
-    analyzed: &Analyzed,
-    markers: &[(FileId, Expected)],
-    target: &str,
-    scratch: &Path,
-    write_golden: bool,
-    run: &mut CaseRun,
-) {
+fn build_target(ctx: &BuildCtx<'_>, target: &str, scratch: &Path, write_golden: bool, run: &mut CaseRun) {
+    let BuildCtx { stages, root, case, setup, loaded, analyzed, markers } = *ctx;
     let t = &setup.test;
     let expected: Vec<(FileId, Expected)> = markers
         .iter()
@@ -290,7 +356,7 @@ fn build_target(
             "target `{target}` expects build diagnostics, but the case declares its golden C or conformance"
         )));
     }
-    let out = match onsa_driver::build_analyzed(loaded, analyzed, target) {
+    let out = match (stages.build)(loaded, analyzed, target) {
         Ok(out) => {
             compare(run, &loaded.sources, &expected, &[], Stage::Build, Some(target));
             out
@@ -299,9 +365,8 @@ fn build_target(
             compare(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target));
             return;
         }
-        Err(BuildError::Usage(m)) => {
-            // The settings of the case itself are wrong.
-            run.problems.push(Problem::Case(format!("build of `{target}`: {m}")));
+        Err(error) => {
+            run.problems.push(stage_problem(&loaded.sources, StageFailure::Build { target, error: &error }));
             return;
         }
     };

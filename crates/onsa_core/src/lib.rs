@@ -15,7 +15,7 @@ pub mod walk;
 #[cfg(test)]
 mod tests;
 
-pub use dump::dump;
+pub use dump::{dump, dump_item};
 pub use ir::*;
 pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, flow_layout_for, size_align, size_align_for};
 pub use lower::flow::{FlowFns, FlowMeta};
