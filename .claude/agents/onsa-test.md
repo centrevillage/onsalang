@@ -21,6 +21,7 @@ effort: high
 - Bash の `cd` は持続しないことがあるので、絶対パスを使う。macOS なので `timeout` は無い。
 - `tools/check_spec_examples.py` を実行した後は `tools/__pycache__` を消す。
 - この機械（macOS）では、SIGABRT・SIGSEGV・SIGILL・SIGTRAP などで終わるプロセスが、利用者の画面にクラッシュの報告のダイアログを出す（2026-10-07 に大量に出た）。テスト・自己テスト・ファズで意図的に落とす形をまねるときは、SIGKILL か終了コードを使う。コンパイラのスタックを溢れさせる入力（深い入れ子）は回さない。sanitizer は abort や trap でなく終了コードで止まる設定にする。作ってしまったら報告に書く。
+- 既知の落ちる入力（2026-10-08）: `tests/review-phase1/types/` の `constcyc.onsa`・`constcyc2.onsa`・`constcyc3.onsa`・`rec.onsa`・`rec2.onsa` は、`onsa interface`（と、それを通る経路）でコンパイラのスタックが溢れ、SIGABRT で終わる（W4-05 で直す）。`tests/review-phase1/` や `tests/fuzz/` を一括で道具にかけるときは、`interface` や `build` を使わないか、これらを除く。新しい道具を一括で回す前に、少数のファイルで終わり方（終了コードが 0・1・2・101 のどれか）を確かめる。
 - git の別の作業ツリー（worktree）で動くときは、始めに `git log --oneline -1` で親が指定したコミットかを確かめ、違えば作業ツリーの中で `git reset --hard dev` をする。主のリポジトリには書かない。
 - 並行の作業があるときは、`tests/pending.toml` の項目（`[[pending]]` の表）を編集しない。載せる項目は報告に並べ、親が足す。
 
