@@ -1,0 +1,84 @@
+// onsa.toml
+// [package]
+// name = "poison"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["poison.boom", "poison.fragile"]
+// fns = ["poison.checked"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§9.2", "§14.2"]
+//
+// # A panic inside process returns 1 with zeroed outputs; the instance stays poisoned until
+// # reset. The fourth step keeps the zeros of the panicked call in its buffer, as the old
+// # driver of tests/poison.rs did (an untouched buffer is checked in poison_boundary.onsa).
+// [[test.host]]
+// name = "boom poisons until reset"
+// target = "host"
+// flow = "poison.boom"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { k = 2.0 }, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], status = 0, output = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0] },
+//   { call = "process", params = { k = 1e10 }, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], status = 1, output = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+//   { call = "process", params = { k = 2.0 }, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], fill = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], status = 1, output = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = { k = 2.0 }, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], status = 0, output = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0] },
+// ]
+//
+// # A panic inside an exported function does not cross the boundary: status 1, and the
+// # result is not compared (spec §9.2, §14.2).
+// [[test.host]]
+// name = "checked reports a panic by its status"
+// target = "host"
+// fn = "poison.checked"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 2 }, status = 0, result = 3 },
+//   { call = "fn", args = { a = 2147483647, b = 1 }, status = 1 },
+// ]
+//
+// # S-27: init panics (n + 1 overflows), so the instance is uninitialized: process returns 1,
+// # reset does nothing, and only init recovers it. The buffers hold zeros before the call (the
+// # old driver did not check these outputs; an untouched buffer is checked in poison_boundary.onsa).
+// [[test.host]]
+// name = "fragile stays uninitialized until init"
+// target = "host"
+// flow = "poison.fragile"
+// steps = [
+//   { call = "init", config = { n = 2147483647 }, sample_rate = 48000.0, status = 1 },
+//   { call = "process", params = {}, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], fill = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], status = 1, output = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], fill = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], status = 1, output = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] },
+//   { call = "init", config = { n = 2 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 8, input = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], status = 0, output = [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0] },
+// ]
+
+// The poison wrappers of `panic = "poison"` end to end (T4-4, spec §9.2, §14.2), moved from
+// crates/onsa_tests/tests/poison.rs (K-14). Old syntax: W3 rewrites it with the other cases.
+
+pub flow boom(
+  x: Sig[F32],
+  @param(min: 0.0, max: 10000000000.0, default: 1.0)
+  k: Ctl[F32],
+) -> Sig[F32] {
+  let n = k.trunc_u32()
+  x * n.round_f32()
+}
+
+pub fn checked(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+/// `init` panics when `n` overflows (S-27): the instance stays uninitialized.
+pub flow fragile(x: Sig[F32], n: Init[I32]) -> Sig[F32] {
+  let m = n + 1
+  x * m.round_f32()
+}

@@ -8,7 +8,7 @@ use std::path::Path;
 use onsa_core::{Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, Stmt, StmtKind, Ty, TypeId, VerifyError};
 use onsa_driver::{BuildError, CoreStage, LowerError, VerifyFailure};
 use onsa_tests::case::{Case, CaseKind, Setup};
-use onsa_tests::run::{Problem, StageFailure, Stages, run_case_with, stage_problem};
+use onsa_tests::run::{HostSteps, Problem, RunOptions, StageFailure, Stages, run_case_with, stage_problem};
 
 const SRC: &str = "const K: I32 = 3\n\npub fn f(x: I32) -> I32 {\n  x + K\n}\n";
 
@@ -223,7 +223,12 @@ fn the_runner_reports_the_failure_of_every_stage() {
         name: "m".into(),
         setup: Ok(Setup { input, test: frag.test }),
     };
-    let run = run_case_with(&FAILING, Path::new("/nonexistent"), &case, false);
+    let run = run_case_with(
+        &FAILING,
+        Path::new("/nonexistent"),
+        &case,
+        RunOptions { write_golden: false, host_steps: HostSteps::Run },
+    );
     assert!(run.ran, "{:?}", run.problems);
     let failed: Vec<&String> = run
         .problems

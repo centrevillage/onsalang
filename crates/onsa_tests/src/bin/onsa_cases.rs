@@ -63,7 +63,7 @@ fn main() -> ExitCode {
         "--run" => {
             let root = root();
             let (cases, errors) = onsa_tests::case::collect(&root);
-            let runs = onsa_tests::run::run_each(&root, &cases, |_| false);
+            let runs = onsa_tests::run::run_each(&root, &cases, |_| false, onsa_tests::run::HostSteps::Skip);
             print(&onsa_tests::run::runs_json(&runs, &errors));
             ExitCode::SUCCESS
         }

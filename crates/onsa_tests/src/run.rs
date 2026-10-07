@@ -14,7 +14,8 @@
 //!   each compiler and, with `conformance`, run it in both the interpreter
 //!   and C ([`crate::ccheck`], Q-07, W1-06). Then the goldens of `onsa dump
 //!   --core`, `interface` and `graph`, and in `"test"` every `test` block
-//!   (`onsa test`).
+//!   (`onsa test`). The host sequences of `[[test.host]]` run on the builds
+//!   of their targets ([`crate::host`], K-14).
 //! - Every mode but `"none"`: a file without markers is canonical under `fmt`,
 //!   and the parser alone reports exactly the markers of the syntax codes.
 //!
@@ -86,6 +87,12 @@ pub enum Problem {
     /// An internal error of the compiler (S-67): pending only by a `test-case`
     /// entry with `expect = "internal"`.
     Internal(String),
+    /// A host sequence (K-14, [`crate::host`]) did not give what it must
+    /// (`<path>::<name>` may list it). The message names it.
+    Host { name: String, message: String },
+    /// The harness of the host steps cannot run (no compiler, a file it cannot
+    /// write, records it cannot read): never pending.
+    Harness(String),
 }
 
 impl Problem {
@@ -96,6 +103,8 @@ impl Problem {
             Problem::Failed(_) => "failed",
             Problem::Case(_) => "case",
             Problem::Internal(_) => "internal",
+            Problem::Host { .. } => "host-failed",
+            Problem::Harness(_) => "harness",
         }
     }
 
@@ -105,6 +114,8 @@ impl Problem {
             Problem::Failed(m) => m.clone(),
             Problem::Case(m) => format!("error in the case: {m}"),
             Problem::Internal(m) => m.clone(),
+            Problem::Host { message, .. } => message.clone(),
+            Problem::Harness(m) => format!("the host steps cannot run: {m}"),
         }
     }
 }
@@ -122,6 +133,12 @@ pub struct CaseRun {
     /// The targets that built as the case expects (no build marker applies),
     /// for the C checks (Q-07).
     pub builds: Vec<Built>,
+    /// The names of the case's host sequences (`[[test.host]]`), run or not.
+    pub host_names: Vec<String>,
+    /// The host sequences that the run reached (K-14).
+    pub hosts: Vec<crate::host::SeqResult>,
+    /// Information for the reader (where `ONSA_C_KEEP` kept files).
+    pub notes: Vec<String>,
 }
 
 /// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
@@ -199,13 +216,31 @@ pub fn internal_problem(sources: &SourceMap, e: &InternalError, target: Option<&
     Problem::Internal(format!("{at}{}", e.render(sources).trim_end().replace('\n', "\n  ")))
 }
 
-/// Run one case. `write_golden` lets `UPDATE_GOLDEN` rewrite its golden files.
-pub fn run_case(root: &Path, case: &Case, write_golden: bool) -> CaseRun {
-    run_case_with(&Stages::DRIVER, root, case, write_golden)
+/// Whether a run makes the host sequences of its cases (K-14, [`crate::host`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostSteps {
+    Run,
+    /// The C checks and the marker counts only want the builds and the markers.
+    Skip,
+}
+
+/// How a case runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunOptions {
+    /// `UPDATE_GOLDEN` may rewrite the case's golden files.
+    pub write_golden: bool,
+    pub host_steps: HostSteps,
+}
+
+/// Run one case.
+pub fn run_case(root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
+    run_case_with(&Stages::DRIVER, root, case, opts)
 }
 
 /// [`run_case`] through `stages`.
-pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bool) -> CaseRun {
+pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
+    let RunOptions { write_golden, host_steps } = opts;
+    let hosts = host_steps == HostSteps::Run;
     let mut run = CaseRun { path: case.path.clone(), ..Default::default() };
     let setup = match &case.setup {
         Ok(s) => s,
@@ -215,6 +250,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bo
         }
     };
     run.mode = setup.test.mode;
+    run.host_names = setup.test.host.iter().map(|h| h.name.clone()).collect();
     let targets = setup.targets();
     let t = &setup.test;
     if !targets.is_empty() && matches!(t.mode, Mode::None | Mode::Parse) {
@@ -225,6 +261,14 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bo
     }
     if t.conformance && targets.is_empty() {
         run.problems.push(Problem::Case("`conformance` needs a target".into()));
+    }
+    for h in &t.host {
+        if !targets.contains(&h.target) {
+            run.problems.push(Problem::Case(format!(
+                "line {}: host \"{}\": `target = \"{}\"` is not a target of the case",
+                h.line, h.name, h.target
+            )));
+        }
     }
     let mut loaded = Loaded::from_input(setup.input.clone());
 
@@ -323,6 +367,12 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bo
                 run.problems
                     .push(Problem::Case("golden files and conformance need a check without diagnostics".into()));
             }
+            if hosts {
+                let why = format!("the check reports {} diagnostics", check.len());
+                for h in &t.host {
+                    host_not_run(&mut run, h, &why);
+                }
+            }
             return run;
         }
     } else {
@@ -332,6 +382,9 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bo
         for target in &targets {
             let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
             build_target(&ctx, target, write_golden, &mut run);
+        }
+        if hosts {
+            run_hosts(&mut run, &t.host);
         }
     }
 
@@ -389,7 +442,71 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, write_golden: bo
     {
         run_tests(&mut run, &loaded.sources, m, &testfails);
     }
+    // One name space: an entry `<path>::<name>` names a test or a host sequence.
+    for h in &t.host {
+        if run.tests.iter().any(|x| x.name == h.name) {
+            run.problems.push(Problem::Case(format!(
+                "line {}: host \"{}\": a `test` block has the same name (an entry `<path>::<name>` of \
+                 tests/pending.toml names one of them)",
+                h.line, h.name
+            )));
+        }
+    }
     run
+}
+
+/// A host sequence that did not run, for a reason of the whole case.
+fn host_not_run(run: &mut CaseRun, h: &crate::host::Seq, why: &str) {
+    run.problems.push(Problem::Failed(format!("host \"{}\" did not run: {why}", h.name)));
+    run.hosts.push(crate::host::SeqResult {
+        name: h.name.clone(),
+        target: h.target.clone(),
+        outcome: crate::host::Outcome::NotRun(why.into()),
+    });
+}
+
+/// Run the host sequences on the builds of their targets (K-14).
+fn run_hosts(run: &mut CaseRun, seqs: &[crate::host::Seq]) {
+    let mut targets: Vec<&str> = Vec::new();
+    for s in seqs {
+        if !targets.contains(&s.target.as_str()) {
+            targets.push(&s.target);
+        }
+    }
+    for target in targets {
+        let mine: Vec<&crate::host::Seq> = seqs.iter().filter(|s| s.target == target).collect();
+        let Some(built) = run.builds.iter().find(|b| b.target == target).cloned() else {
+            for h in mine {
+                host_not_run(run, h, &format!("target `{target}` did not build"));
+            }
+            continue;
+        };
+        let r = crate::host::run_target(target, &mine, &built.output);
+        run.problems.extend(r.case_errors.into_iter().map(Problem::Case));
+        run.problems.extend(r.failures.into_iter().map(Problem::Failed));
+        run.problems.extend(r.harness.into_iter().map(Problem::Harness));
+        run.notes.extend(r.notes);
+        for res in r.results {
+            let seq = mine.iter().find(|s| s.name == res.name);
+            match &res.outcome {
+                crate::host::Outcome::Passed { .. } => {}
+                crate::host::Outcome::Failed(m) => run.problems.push(Problem::Host {
+                    name: res.name.clone(),
+                    message: format!(
+                        "host \"{}\" (line {}, target {target}, {}):\n  {}",
+                        res.name,
+                        seq.map_or(0, |s| s.line),
+                        seq.map_or_else(String::new, |s| s.callee()),
+                        m.replace('\n', "\n  ")
+                    ),
+                }),
+                crate::host::Outcome::NotRun(why) => {
+                    run.problems.push(Problem::Failed(format!("host \"{}\" did not run: {why}", res.name)))
+                }
+            }
+            run.hosts.push(res);
+        }
+    }
 }
 
 /// What the builds of a case share.
@@ -416,6 +533,11 @@ fn build_target(ctx: &BuildCtx<'_>, target: &str, write_golden: bool, run: &mut 
     if !expected.is_empty() && (t.golden.contains(&GoldenKind::C) || t.conformance) {
         run.problems.push(Problem::Case(format!(
             "target `{target}` expects build diagnostics, but the case declares its golden C or conformance"
+        )));
+    }
+    if !expected.is_empty() && t.host.iter().any(|h| h.target == target) {
+        run.problems.push(Problem::Case(format!(
+            "target `{target}` expects build diagnostics, but host sequences run on it ([[test.host]])"
         )));
     }
     let out = match (stages.build)(loaded, analyzed, target) {
@@ -662,6 +784,8 @@ pub struct CaseReport {
     pub pending: Option<pending::Entry>,
     /// Tests listed one by one (`<path>::<name>`) that failed as expected.
     pub pending_tests: Vec<String>,
+    /// Host sequences listed one by one (`<path>::<name>`) that failed as expected.
+    pub pending_hosts: Vec<String>,
     /// What fails the case after the list is applied.
     pub failures: Vec<String>,
 }
@@ -703,6 +827,22 @@ impl Report {
             "{n} cases: {ran} ran, {none} with mode none, {} pending, {tests} pending tests, {failed} failed",
             pending.len()
         );
+        let hosts: Vec<&crate::host::SeqResult> = self.cases.iter().flat_map(|c| &c.run.hosts).collect();
+        let passed: Vec<usize> = hosts
+            .iter()
+            .filter_map(|h| match h.outcome {
+                crate::host::Outcome::Passed { compared } => Some(compared),
+                _ => None,
+            })
+            .collect();
+        let pending_hosts: usize = self.cases.iter().map(|c| c.pending_hosts.len()).sum();
+        let declared: usize = self.cases.iter().map(|c| c.run.host_names.len()).sum();
+        let _ = write!(
+            s,
+            "\nhost sequences: {declared} declared, {} passed ({} values compared), {pending_hosts} pending",
+            passed.len(),
+            passed.iter().sum::<usize>()
+        );
         let stages: Vec<String> = by_stage.iter().map(|(k, v)| format!("{v} at {k:?}").to_lowercase()).collect();
         let _ = write!(s, "\nmarkers compared: {}", if stages.is_empty() { "none".into() } else { stages.join(", ") });
         for c in &pending {
@@ -711,6 +851,14 @@ impl Report {
         }
         for c in self.cases.iter().filter(|c| !c.pending_tests.is_empty()) {
             let _ = write!(s, "\npending tests of {}: {}", c.run.path, c.pending_tests.join(", "));
+        }
+        for c in self.cases.iter().filter(|c| !c.pending_hosts.is_empty()) {
+            let _ = write!(s, "\npending host sequences of {}: {}", c.run.path, c.pending_hosts.join(", "));
+        }
+        for c in &self.cases {
+            for n in &c.run.notes {
+                let _ = write!(s, "\n{}: {n}", c.run.path);
+            }
         }
         s
     }
@@ -745,6 +893,7 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
         let named: Vec<(&pending::Entry, &str)> = mine.iter().filter_map(|(e, _, n)| n.map(|n| (*e, n))).collect();
         let mut pending_entry = None;
         let mut pending_tests = Vec::new();
+        let mut pending_hosts = Vec::new();
         if !mine.is_empty() && run.mode == Mode::None && run.problems.is_empty() {
             failures.push("listed in tests/pending.toml, but `mode = \"none\"` never runs".to_string());
         } else if whole.len() > 1 || (!whole.is_empty() && !named.is_empty()) {
@@ -752,10 +901,10 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
         } else if let Some(e) = whole.first() {
             let expects_internal = e.expect == Some(pending::Expect::Internal);
             let internal = run.problems.iter().any(|p| matches!(p, Problem::Internal(_)));
-            // Never silenced: the errors of the case, and an internal error
-            // the entry does not expect.
+            // Never silenced: the errors of the case and of the harness, and
+            // an internal error the entry does not expect.
             let kept = |p: &Problem| match p {
-                Problem::Case(_) => true,
+                Problem::Case(_) | Problem::Harness(_) => true,
                 Problem::Internal(_) => !expects_internal,
                 _ => false,
             };
@@ -775,6 +924,29 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
             run.problems.retain(kept);
         } else {
             for (e, name) in &named {
+                if run.host_names.iter().any(|h| h == name) {
+                    let before = run.problems.len();
+                    run.problems.retain(|p| !matches!(p, Problem::Host { name: n, .. } if n == name));
+                    let passed = run
+                        .hosts
+                        .iter()
+                        .any(|h| h.name == *name && matches!(h.outcome, crate::host::Outcome::Passed { .. }));
+                    if run.problems.len() < before {
+                        pending_hosts.push(name.to_string());
+                    } else if passed {
+                        failures.push(format!(
+                            "the host sequence \"{name}\" passes but is listed in tests/pending.toml (until {}); \
+                             remove the entry",
+                            e.until
+                        ));
+                    } else {
+                        failures.push(format!(
+                            "tests/pending.toml lists the host sequence \"{name}\", but it did not run; the entry \
+                             holds only the failures of its own steps"
+                        ));
+                    }
+                    continue;
+                }
                 if run.mode != Mode::Test {
                     failures.push(format!(
                         "tests/pending.toml lists the test \"{name}\", but the case is not `mode = \"test\"`"
@@ -805,7 +977,7 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
             }
             failures.extend(run.problems.iter().map(Problem::text));
         }
-        report.cases.push(CaseReport { run, pending: pending_entry, pending_tests, failures });
+        report.cases.push(CaseReport { run, pending: pending_entry, pending_tests, pending_hosts, failures });
     }
     report
 }
@@ -831,7 +1003,7 @@ pub fn run_all(root: &Path) -> Report {
             }
         }
     }
-    let runs = run_each(root, &cases, |c| !listed_whole.contains(c.path.as_str()));
+    let runs = run_each(root, &cases, |c| !listed_whole.contains(c.path.as_str()), HostSteps::Run);
     let mut report = reconcile(runs, &list);
     if let Some(e) = list_error {
         report.failures.push(e);
@@ -847,9 +1019,14 @@ pub fn run_all(root: &Path) -> Report {
 
 /// Run every case (in parallel), in the order of `cases`, without applying the
 /// pending list. `write_golden` tells whether `UPDATE_GOLDEN` may rewrite the
-/// golden files of a case.
-pub fn run_each(root: &Path, cases: &[Case], write_golden: impl Fn(&Case) -> bool + Sync) -> Vec<CaseRun> {
-    run_parallel(cases, |c| run_case(root, c, write_golden(c)))
+/// golden files of a case; `host_steps`, whether the host sequences run.
+pub fn run_each(
+    root: &Path,
+    cases: &[Case],
+    write_golden: impl Fn(&Case) -> bool + Sync,
+    host_steps: HostSteps,
+) -> Vec<CaseRun> {
+    run_parallel(cases, |c| run_case(root, c, RunOptions { write_golden: write_golden(c), host_steps }))
 }
 
 /// The runs as JSON, for the gate's count of negative examples (K-13): what
@@ -1234,7 +1411,7 @@ mod tests {
             ],
         );
         let (cases, errors) = case::collect(&repo.0);
-        let runs = run_each(&repo.0, &cases, |_| false);
+        let runs = run_each(&repo.0, &cases, |_| false, HostSteps::Skip);
         let json = runs_json(&runs, &errors);
         let case = |p: &str| json["cases"].as_array().unwrap().iter().find(|c| c["path"] == p).unwrap().clone();
         // a marker without targets is compared once per target

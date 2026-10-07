@@ -129,6 +129,11 @@ pub struct CUnit {
     pub runtime_header: String,
     /// The C API of each exported flow, as the backend named it.
     pub flows: Vec<FlowApi>,
+    /// The C API of each exported function (`[export] fns`), as the backend named it.
+    pub fns: Vec<FnApi>,
+    /// `<prefix>take_panic`: how an exported function reports a panic in this
+    /// version (`panic = "poison"` only; spec §14.2 replaces it by the status, W10-03).
+    pub take_panic: Option<String>,
 }
 
 /// The names of an exported flow's C API (spec §11.6, §14.2).
@@ -142,6 +147,72 @@ pub struct FlowApi {
     pub upper: String,
     /// Its header (`onsa_voice.h`).
     pub header: String,
+    /// The `Init` inputs `<symbol>_init` takes after `s` and `bulk`, by value
+    /// and in order (this version; spec §14.2 passes a `const <p>_config*`, W10-02).
+    pub init_args: Vec<ApiField>,
+    /// The fields of `<symbol>_params`, in order.
+    pub params_fields: Vec<ApiField>,
+    /// The `sample` inputs and outputs `<symbol>_process` takes after `s` and
+    /// `params`, in order (this version: one argument each; spec §11.6 groups
+    /// two or more in `In` / `Out`, W10-03).
+    pub process_args: Vec<IoArg>,
+}
+
+/// A scalar value of the API: a field of a struct or an argument.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiField {
+    /// The Onsa name (an input of the flow, a parameter of the function).
+    pub name: String,
+    /// Its C identifier.
+    pub c_name: String,
+    /// Its C type (`float`, `int32_t`).
+    pub c_type: String,
+}
+
+/// A `Span` argument of `<p>_process`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IoArg {
+    /// The Onsa name: the `sample` input, or the output (`out`, or a field of a struct output).
+    pub name: String,
+    /// The C parameter name.
+    pub c_name: String,
+    /// The C type of an element.
+    pub c_type: String,
+    /// `Some(n)`: `[Span[T]; n]`, an array of `n` channel pointers (`T* const*`).
+    pub planar: Option<u32>,
+    pub output: bool,
+}
+
+/// The C API of an exported function (spec §14.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FnApi {
+    /// Qualified name (`util.version`).
+    pub fn_: String,
+    /// Its C name (`vc_version`).
+    pub symbol: String,
+    /// The header that declares it (`vc_util.h`).
+    pub header: String,
+    /// The parameters, in order.
+    pub params: Vec<FnParam>,
+    /// The C type of the returned value; `None` for a function without one.
+    pub ret: Option<String>,
+}
+
+/// A parameter of an exported function.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FnParam {
+    pub field: ApiField,
+    pub kind: FnParamKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FnParamKind {
+    /// A scalar by value.
+    Scalar,
+    /// An `inout` scalar: `T*`.
+    InoutScalar,
+    /// A `Span` of scalars: `const T* name, uint32_t name_len` (`T*` when `inout`).
+    Span { inout: bool },
 }
 
 impl CUnit {

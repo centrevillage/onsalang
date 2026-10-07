@@ -53,6 +53,13 @@
 #                 検査、自己テスト）と info の項目は載せられない
 #   test-case     リポジトリの根からのパス（ファイルかパッケージのディレクトリ）。
 #                 一つの test だけなら "<パス>::<test の名前>"          （照合は W1-03）
+#                 一つの手順の組（断片の [[test.host]]、K-14）だけなら "<パス>::<組の名前>"（W1-11）。
+#                 組の名前と test の名前は事例の中で一つの名前空間（重なりは事例の誤り）。組の項目が
+#                 黙らせるのはその組の手順の失敗（値の違い、手順の中でプロセスが終わった、今の C API で
+#                 書けない手順）だけで、事例の誤り、器の誤り、組が走らなかったことは黙らせない
+#                 組の項目は組の全ての手順の失敗を黙らせるので、項目が黙らせる範囲は組の分け方で絞る（計画 D-05 の
+#                 W1-11 の実装）。落ちる原因の手順（R の誤り、今の C API で書けない手順）は、その手順と、状態を作るのに
+#                 要る前の手順だけの組に置き、前の手順は実装待ちでない別の組でも照らす
 #   fuzz-input    保存した入力のファイルの、リポジトリの根からのパス "tests/fuzz/<名前>.onsa"
 #                 （照合は tools/fuzz.py、gate の項目 fuzz。W1-04）。保存した入力は毎回 onsa check と
 #                 onsa fmt --check にかける。一覧にある入力は、まだ落ちる（内部エラー、シグナル、時間切れ）
@@ -1006,7 +1013,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/poison_boundary.onsa"
 reasons = ["S-102", "S-44", "R-12"]
 until = "W3-10"
-note = "Onsa の中の panic は test を失敗にする（process と init）。export 境界の poison の期待値（出力のゼロ埋め、以後の無音、reset での復帰）は、ホストの手順を宣言する形が無く、ファイル内のコメントにだけある（報告の「実行器に足りない形」）"
+note = "新しい構文（at）で check が落ちる。W3-10 で外すとき、W2-08 が済んでいなければ、手順の組 boom poisoned outputs silence と init_boom uninitialized outputs silence を R-12・until W2-08 で載せる（W1-11 で、古い構文に写して落ちることを確かめた）"
 
 [[pending]]
 kind = "test-case"

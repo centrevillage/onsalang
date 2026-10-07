@@ -336,22 +336,30 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     let mut flows = Vec::new();
     for e in cx.exports.clone() {
         match crate::export::header(&mut cx, &e) {
-            Ok(h) => {
+            Ok((h, parts)) => {
                 let header = format!("{}.h", e.symbol);
                 flows.push(crate::FlowApi {
                     flow: m.flows[e.meta_index].name.clone(),
                     symbol: e.symbol.clone(),
                     upper: e.upper.clone(),
                     header: header.clone(),
+                    init_args: parts.init_args,
+                    params_fields: parts.params_fields,
+                    process_args: parts.process_args,
                 });
                 headers.push((header, h));
             }
             Err(d) => diags.push(d),
         }
     }
+    let mut fns = Vec::new();
     if !export_fns.is_empty() {
-        match crate::export::fn_header(&mut cx, &export_fns) {
-            Ok(h) => headers.push((format!("{}{}.h", opts.prefix, ident(&opts.package)), h)),
+        let header = format!("{}{}.h", opts.prefix, ident(&opts.package));
+        match crate::export::fn_header(&mut cx, &export_fns, &header) {
+            Ok((h, apis)) => {
+                headers.push((header, h));
+                fns = apis;
+            }
             Err(d) => diags.push(d),
         }
     }
@@ -476,7 +484,8 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     if !diags.is_empty() {
         return Err(diags);
     }
-    Ok(CUnit { source: out, headers, runtime_header: crate::RUNTIME_HEADER.to_string(), flows })
+    let take_panic = (opts.panic == PanicMode::Poison).then(|| crate::export::take_panic_name(opts));
+    Ok(CUnit { source: out, headers, runtime_header: crate::RUNTIME_HEADER.to_string(), flows, fns, take_panic })
 }
 
 /// Index into `Module::flows` by qualified name, or by a unique suffix.

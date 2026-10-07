@@ -24,16 +24,22 @@
 //!
 //! Tests the implementation cannot pass yet are listed in `tests/pending.toml`
 //! instead (kind `test-case`, [`run::reconcile`]); the two marks are not mixed.
+//!
+//! The calls at the C boundary of a target, with the values each must give,
+//! are sequences in the fragment's `[[test.host]]` ([`host`], K-14).
 
 pub mod c;
+pub mod capi;
 pub mod case;
 pub mod ccheck;
 pub mod conformance;
 pub mod fragment;
 pub mod golden;
+pub mod host;
 pub mod inventory;
 pub mod pending;
 pub mod run;
+pub mod scalar;
 
 pub use fragment::{GoldenKind, Mode, TestSettings};
 

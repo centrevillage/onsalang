@@ -371,3 +371,24 @@
 [same_spelling."crates/onsa_syntax/src/parser.rs"]
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 "u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
+
+[same_spelling."crates/onsa_tests/src/conformance.rs"]
+"mem" = { count = 1, note = "生成する driver の C の変数名（状態の記憶域）" }
+
+[same_spelling."crates/onsa_tests/src/host/mod.rs"]
+"cfg" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）: null の値" }
+"fill" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"frames" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"init" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）: call の値" }
+"input" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"output" = { count = 3, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"params" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"process" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）: call の値" }
+"reset" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）: call の値" }
+"sample_rate" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+
+[same_spelling."crates/onsa_tests/src/host/plan.rs"]
+"fill" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"input" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+"output" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）と、出力を指すメッセージの語" }
+"params" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）" }

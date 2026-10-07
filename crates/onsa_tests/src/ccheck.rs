@@ -193,7 +193,7 @@ pub fn collect_builds(root: &Path) -> Result<(Vec<(String, Built)>, String), Str
     let cases: Vec<case::Case> =
         cases.into_iter().filter(|c| c.setup.as_ref().is_ok_and(|s| !s.targets().is_empty())).collect();
     let targets: usize = cases.iter().filter_map(|c| c.setup.as_ref().ok()).map(|s| s.targets().len()).sum();
-    let runs = run::run_each(root, &cases, |_| false);
+    let runs = run::run_each(root, &cases, |_| false, run::HostSteps::Skip);
     let builds: Vec<(String, Built)> =
         runs.into_iter().flat_map(|r| r.builds.into_iter().map(move |b| (r.path.clone(), b))).collect();
     if builds.is_empty() {

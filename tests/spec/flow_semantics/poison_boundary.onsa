@@ -5,7 +5,7 @@
 //
 // [export]
 // prefix = "pb_"
-// flows = ["poison_boundary.boom", "poison_boundary.boom_init"]
+// flows = ["poison_boundary.boom", "poison_boundary.init_boom"]
 //
 // [targets.poison]
 // kind = "source"
@@ -17,6 +17,65 @@
 // [test]
 // mode = "test"
 // spec = ["§9.2", "§14.2", "§11.6", "§15.3"]
+//
+// # Host script 1 (target `poison`), steps 1-3 and 7-9: the panic at sample 1 aborts the call, the
+// # whole output of the call is zero-filled (also sample 0, computed before the panic), and the
+// # instance is poisoned; reset recovers it, and the counter starts again from 1.
+// [[test.host]]
+// name = "boom panics, is zero-filled and recovers by reset"
+// target = "poison"
+// flow = "poison_boundary.boom"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, nan, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, nan, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+// ]
+//
+// # Host script 1, steps 1-6: a poisoned instance outputs silence whatever the input and whatever
+// # the buffer holds: a buffer the step does not fill, the in-place buffer holding the input, old
+// # contents (R-12: the input used to pass through, old contents used to remain).
+// [[test.host]]
+// name = "boom poisoned outputs silence"
+// target = "poison"
+// flow = "poison_boundary.boom"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, nan, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 3, input = [5.0, 6.0, 7.0], inplace = true, status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], fill = [9.0, 9.0, 9.0], status = 1, output = [0.0, 0.0, 0.0] },
+// ]
+//
+// # Host script 2, steps 1, 5 and 6: the panic in init aborts it, and only init recovers the
+// # instance (100 / 4 = 25 is added to x).
+// [[test.host]]
+// name = "init_boom recovers by init"
+// target = "poison"
+// flow = "poison_boundary.init_boom"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 8.0, status = 1 },
+//   { call = "init", config = { n = 4 }, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [26.0, 27.0, 28.0] },
+// ]
+//
+// # Host script 2, steps 1-4: an uninitialized instance zero-fills its output and returns 1, and
+// # reset does nothing for it (R-12).
+// [[test.host]]
+// name = "init_boom uninitialized outputs silence"
+// target = "poison"
+// flow = "poison_boundary.init_boom"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 8.0, status = 1 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+// ]
 
 // A flow that panics at an export boundary (spec §9.2, §14.2). Two things are tested here.
 //
@@ -24,13 +83,12 @@
 //    propagates to the nearest boundary, which for a `test` is the test itself, so the test fails
 //    (`TESTFAIL`, §9.2 "Onsa の中から呼ばれた関数" and "テスト").
 //
-// 2. At the exported C boundary of the target `poison` (`panic = "poison"`): the host script in
-//    the comment blocks below. The test runner has no form to declare it yet, so it is a comment
-//    for now (the form that is needed is in the W1-09 report). The expectations come from §9.2
-//    ("その呼び出しを中断し、出力をゼロで埋め、インスタンスを poisoned にする。以後の process は
-//    無音を出力し、reset まで復帰しない。C API は戻り値で通知する") and §14.2 (the status `int`:
-//    0 ok, 1 panic; an uninitialized instance zero-fills and returns 1, `reset` does nothing for it,
-//    and only `init` recovers it).
+// 2. At the exported C boundary of the target `poison` (`panic = "poison"`): the host sequences of
+//    the fragment ([[test.host]]). The expectations come from §9.2 ("その呼び出しを中断し、その呼び出し
+//    の出力を全て…ゼロで埋め、インスタンスを poisoned にする。以後の process は無音を出力し、reset まで
+//    復帰しない。C API は戻り値で通知する") and §14.2 (the status `int`: 0 ok, 1 panic; an
+//    uninitialized instance zero-fills and returns 1, `reset` does nothing for it, and only `init`
+//    recovers it).
 
 /// A counter plus the truncated input. `trunc_i32` panics for NaN and for values outside I32.
 pub flow boom(x: F32 at sample) -> F32 at sample {
@@ -45,50 +103,11 @@ pub flow acc(x: F32 at sample) -> F32 at sample {
 }
 
 /// `100 / n` is computed once at init: n = 0 panics inside `init`.
-pub flow boom_init(x: F32 at sample, n: I32 at init) -> F32 at sample {
+/// (Not `boom_init`: `pb_boom_init` is a name the flow `boom` generates, spec §14.2, E1011.)
+pub flow init_boom(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let k = 100 / n
   x + k.round_f32()
 }
-
-// ---- host script 1: `boom` at the exported boundary, target `poison` ------------------------
-//
-//   step  call                                   status   output
-//   1     boom_init(cfg {}), then process        0        -
-//   2     process  x = [1.5, 2.5, 3.5]           0        [2.0, 4.0, 6.0]
-//         counter 1 2 3 plus trunc 1 2 3
-//   3     process  x = [1.0, NaN, 3.0]           1        [0.0, 0.0, 0.0]
-//         the panic at sample 1 aborts the call; the whole output of the call is zero-filled,
-//         including sample 0 that was computed before the panic. The instance is now poisoned.
-//   4     process  x = [1.0, 2.0, 3.0]           1        [0.0, 0.0, 0.0]
-//         poisoned: silence, whatever the input
-//   5     process  in-place (the same pointer for input and output), x = [5.0, 6.0, 7.0]
-//                                                1        [0.0, 0.0, 0.0]
-//         the buffer must not keep its input (R-12: the input used to pass through)
-//   6     process  into a buffer that holds [9.0, 9.0, 9.0], x = [1.0, 2.0, 3.0]
-//                                                1        [0.0, 0.0, 0.0]
-//         the old contents must not remain (R-12)
-//   7     reset                                  -        -
-//   8     process  x = [1.5, 2.5, 3.5]           0        [2.0, 4.0, 6.0]
-//         recovered, and the counter starts again from 1 (the state was reset)
-//   9     process  x = [1.0, NaN, 3.0], then reset, then process x = [1.5, 2.5, 3.5]
-//                                                1, 0     [0.0, 0.0, 0.0], then [2.0, 4.0, 6.0]
-//
-// ---- host script 2: `boom_init`, an instance whose `init` panicked -----------------------------
-//
-//   step  call                                   status   output
-//   1     init  cfg { n = 0 }                    1        -
-//         the panic in init aborts it; the state is zero-filled and marked uninitialized
-//   2     process  x = [1.0, 2.0, 3.0]           1        [0.0, 0.0, 0.0]
-//         an uninitialized instance zero-fills its output and returns 1 (R-12)
-//   3     reset                                  -        -
-//         reset does nothing for an uninitialized instance
-//   4     process  x = [1.0, 2.0, 3.0]           1        [0.0, 0.0, 0.0]
-//         still not recovered by reset
-//   5     init  cfg { n = 4 }                    0        -
-//   6     process  x = [1.0, 2.0, 3.0]           0        [26.0, 27.0, 28.0]
-//         100 / 4 = 25 is added to x: recovered only by init
-//
-// ----------------------------------------------------------------------------------------------
 
 test "boom adds a counter to the truncated input" {
   // counter 1 2 3; trunc_i32 of 1.5 2.5 3.5 is 1 2 3.
@@ -111,18 +130,18 @@ test "an input outside I32 panics in process and fails the test" {   //~ TESTFAI
   assert o.out[0] == 2.0
 }
 
-test "boom_init adds 100 / n to the input" {
+test "init_boom adds 100 / n to the input" {
   // 100 / 4 = 25.
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = boom_init.render(boom_init.Config { n: 4 }, boom_init.Params {}, xs, 8.0)
+  let o = init_boom.render(init_boom.Config { n: 4 }, init_boom.Params {}, xs, 8.0)
   assert o.out[0] == 26.0
   assert o.out[1] == 27.0
   assert o.out[2] == 28.0
 }
 
 test "a panic in init fails the test" {   //~ TESTFAIL "a panic in init fails the test"
-  var st = boom_init.init(boom_init.Config { n: 0 }, 8.0)
-  boom_init.reset(inout st)
+  var st = init_boom.init(init_boom.Config { n: 0 }, 8.0)
+  init_boom.reset(inout st)
 }
 
 test "a panic in process through an explicit state fails the test" {   //~ TESTFAIL "a panic in process through an explicit state fails the test"

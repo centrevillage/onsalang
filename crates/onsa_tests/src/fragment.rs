@@ -58,7 +58,7 @@ pub enum GoldenKind {
 }
 
 /// The `[test]` table: closed (an unknown key or a wrong type is an error of the case).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TestSettings {
     #[serde(default)]
@@ -74,6 +74,9 @@ pub struct TestSettings {
     /// Run every exported flow of every target in the interpreter and in C (§13.4).
     #[serde(default)]
     pub conformance: bool,
+    /// `[[test.host]]`: sequences of calls at the C boundary of a target (K-14, [`crate::host`]).
+    #[serde(default, deserialize_with = "crate::host::de_seqs")]
+    pub host: Vec<crate::host::Seq>,
 }
 
 /// A parsed fragment.
@@ -154,8 +157,10 @@ pub fn parse(text: &str) -> Result<Option<Fragment>, String> {
         #[serde(default)]
         test: TestSettings,
     }
-    let test = toml::from_str::<TestTable>(&toml_text).map_err(|e| format!("fragment: [test]: {e}"))?.test;
+    let mut test = toml::from_str::<TestTable>(&toml_text).map_err(|e| format!("fragment: [test]: {e}"))?.test;
+    crate::host::locate(&mut test.host, &toml_text);
     check_settings(&test, &lines[..end])?;
+    crate::host::check(&test.host, test.mode).map_err(|e| format!("fragment: {e}"))?;
     Ok(Some(Fragment { manifest, test }))
 }
 

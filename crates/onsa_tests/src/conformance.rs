@@ -19,74 +19,27 @@
 //! (`crate::c`): a panic exits with [`crate::c::PANIC_EXIT`].
 
 use std::fmt::Write as _;
-use std::io::{Read as _, Write as _};
 use std::path::Path;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 use onsa_backend_c::{FlowApi, PanicMode};
 use onsa_core::prim::Prim;
 use onsa_core::walk::walk_block;
-use onsa_core::{ExprKind, FloatKind, FlowMeta, FnId, IntKind, Module, Ty, TypeDefKind, TypeId};
+use onsa_core::{ExprKind, FlowMeta, FnId, Module, Ty, TypeDefKind, TypeId};
 use onsa_driver::BuildOutput;
 use onsa_interp::value::{int_value, zero_array};
 use onsa_interp::{ArrayData, Interp, Proj, SpanRef, Value, slot};
 
 use crate::c::{self, Runner, Toolchain};
+use crate::capi;
+use crate::scalar::{Scalar, distance};
 
 const FRAMES: u32 = 4096;
 const BLOCK: u32 = 2048;
 const STIMULI: u32 = 3;
 const SAMPLE_RATE: f32 = 48000.0;
-/// How long one run of the C program may take.
-const TIMEOUT: Duration = Duration::from_secs(60);
 
-/// A scalar type of the boundary.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Scalar {
-    F32,
-    F64,
-    Int(IntKind),
-    Bool,
-    Char,
-}
-
+/// The stimuli and the fixed values the harness feeds (the codec is [`crate::scalar`]).
 impl Scalar {
-    fn of(ty: &Ty) -> Option<Scalar> {
-        Some(match ty {
-            Ty::Float(FloatKind::F32) => Scalar::F32,
-            Ty::Float(FloatKind::F64) => Scalar::F64,
-            Ty::Int(k) => Scalar::Int(*k),
-            Ty::Bool => Scalar::Bool,
-            Ty::Char => Scalar::Char,
-            _ => return None,
-        })
-    }
-
-    fn ty(self) -> Ty {
-        match self {
-            Scalar::F32 => Ty::Float(FloatKind::F32),
-            Scalar::F64 => Ty::Float(FloatKind::F64),
-            Scalar::Int(k) => Ty::Int(k),
-            Scalar::Bool => Ty::Bool,
-            Scalar::Char => Ty::Char,
-        }
-    }
-
-    /// The C spelling, as the backend writes it.
-    fn c(self) -> &'static str {
-        onsa_backend_c::scalar_c(&self.ty()).expect("a scalar has a C name")
-    }
-
-    fn size(self) -> usize {
-        match self {
-            Scalar::F32 | Scalar::Char => 4,
-            Scalar::F64 => 8,
-            Scalar::Int(k) => k.bits() as usize / 8,
-            Scalar::Bool => 1,
-        }
-    }
-
     /// One: the value of an impulse.
     fn one(self) -> Value {
         match self {
@@ -95,16 +48,6 @@ impl Scalar {
             Scalar::Int(k) => int_value(k, 1),
             Scalar::Bool => Value::Bool(true),
             Scalar::Char => Value::Char('\u{1}'),
-        }
-    }
-
-    fn zero(self) -> Value {
-        match self {
-            Scalar::F32 => Value::F32(0.0),
-            Scalar::F64 => Value::F64(0.0),
-            Scalar::Int(k) => int_value(k, 0),
-            Scalar::Bool => Value::Bool(false),
-            Scalar::Char => Value::Char('\0'),
         }
     }
 
@@ -145,68 +88,6 @@ impl Scalar {
                 int_value(k, d as i128)
             }
             (s, _) => s.zero(),
-        }
-    }
-
-    /// The little-endian bytes of `v` (of this type), as C holds it.
-    fn bytes(self, v: &Value, out: &mut Vec<u8>) {
-        match (self, v) {
-            (Scalar::F32, Value::F32(x)) => out.extend(x.to_le_bytes()),
-            (Scalar::F64, Value::F64(x)) => out.extend(x.to_le_bytes()),
-            (Scalar::Bool, Value::Bool(b)) => out.push(*b as u8),
-            (Scalar::Char, Value::Char(c)) => out.extend((*c as u32).to_le_bytes()),
-            (Scalar::Int(k), v) => {
-                let n = v.to_i128().expect("an integer value");
-                out.extend(&n.to_le_bytes()[..k.bits() as usize / 8]);
-            }
-            (s, v) => panic!("a {s:?} value expected, got {v:?}"),
-        }
-    }
-
-    /// The value of `b` (`self.size()` bytes, little-endian).
-    fn read(self, b: &[u8]) -> Result<Value, String> {
-        let mut w = [0u8; 16];
-        w[..b.len()].copy_from_slice(b);
-        Ok(match self {
-            Scalar::F32 => Value::F32(f32::from_le_bytes([b[0], b[1], b[2], b[3]])),
-            Scalar::F64 => Value::F64(f64::from_le_bytes(w[..8].try_into().expect("8 bytes"))),
-            Scalar::Bool => match b[0] {
-                0 => Value::Bool(false),
-                1 => Value::Bool(true),
-                x => return Err(format!("a `bool` byte {x} (neither 0 nor 1)")),
-            },
-            Scalar::Char => {
-                let u = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
-                Value::Char(char::from_u32(u).ok_or_else(|| format!("a `Char` {u:#x} that is not a scalar value"))?)
-            }
-            Scalar::Int(k) => {
-                let raw = u128::from_le_bytes(w) as i128;
-                let bits = k.bits();
-                // Sign-extend from the width of the kind.
-                let n = if k.signed() && raw >> (bits - 1) & 1 == 1 { raw - (1i128 << bits) } else { raw };
-                int_value(k, n)
-            }
-        })
-    }
-}
-
-/// Whether two outputs are the same sample: bit for bit, NaNs equal
-/// (§13.4); the ULP distance of two floats otherwise.
-fn distance(a: &Value, b: &Value) -> Option<u64> {
-    match (a, b) {
-        (Value::F32(x), Value::F32(y)) if x.is_nan() && y.is_nan() => Some(0),
-        (Value::F64(x), Value::F64(y)) if x.is_nan() && y.is_nan() => Some(0),
-        (Value::F32(x), Value::F32(y)) => Some((x.to_bits() as i64 - y.to_bits() as i64).unsigned_abs()),
-        (Value::F64(x), Value::F64(y)) => {
-            Some(u64::try_from((x.to_bits() as i128 - y.to_bits() as i128).unsigned_abs()).unwrap_or(u64::MAX))
-        }
-        (a, b) => {
-            let same = match (a, b) {
-                (Value::Bool(x), Value::Bool(y)) => x == y,
-                (Value::Char(x), Value::Char(y)) => x == y,
-                _ => a.to_i128().is_some() && a.to_i128() == b.to_i128() && a.int_kind() == b.int_kind(),
-            };
-            if same { Some(0) } else { None }
         }
     }
 }
@@ -494,17 +375,10 @@ fn c_panic(stderr: &str) -> Result<Panic, String> {
 
 /// The C program: reads the `Init` values, the `Ctl` values and the inputs
 /// from stdin, runs two blocks, writes the outputs to stdout. The names come
-/// from the C backend (`FlowApi`, `scalar_c`, `c_ident`); the suffixes are
-/// the API of spec §11.6.
+/// from the C backend (`FlowApi`); the form of the calls from
+/// [`crate::capi`]; the start of the program is [`c::driver_preamble`].
 fn c_driver(api: &FlowApi, shape: &Shape, bulk_size: u32, panic: PanicMode) -> String {
-    let (sym, upper) = (&api.symbol, &api.upper);
-    let mut d = String::new();
-    // sigaction and sigaltstack are POSIX (XSI), outside ISO C.
-    let _ = writeln!(
-        d,
-        "#define _XOPEN_SOURCE 700\n#include \"{}\"\n#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n",
-        api.header
-    );
+    let mut d = c::driver_preamble(&[&api.header]);
     // A panic exits with a code (the trap is never reached), and says which check and where.
     let _ = writeln!(d, "static volatile int onsa_conformance_at = -1;   /* -1: init; else the block */");
     let _ = writeln!(
@@ -517,84 +391,82 @@ fn c_driver(api: &FlowApi, shape: &Shape, bulk_size: u32, panic: PanicMode) -> S
     if panic == PanicMode::Reset {
         let _ = writeln!(d, "ONSA_NORETURN void onsa_reset_hook(void) {{ _Exit({}); }}", c::PANIC_EXIT);
     }
-    // A fatal signal exits with a code, on its own stack (a stack overflow too).
-    let _ = writeln!(
-        d,
-        "#ifndef ONSA_CONFORMANCE_SANITIZED\n\
-         static void onsa_conformance_signal(int sig) {{ (void)sig; _Exit({}); }}\n\
-         static char onsa_conformance_altstack[65536];\n\
-         static int onsa_conformance_signals(void) {{\n  \
-         stack_t ss;\n  memset(&ss, 0, sizeof ss);\n  ss.ss_sp = onsa_conformance_altstack;\n  \
-         ss.ss_size = sizeof onsa_conformance_altstack;\n  if (sigaltstack(&ss, NULL) != 0) return 0;\n  \
-         struct sigaction sa;\n  memset(&sa, 0, sizeof sa);\n  sa.sa_handler = onsa_conformance_signal;\n  \
-         sigemptyset(&sa.sa_mask);\n  sa.sa_flags = SA_ONSTACK;\n  \
-         const int sigs[] = {{ SIGSEGV, SIGILL, SIGFPE, SIGABRT, SIGBUS, SIGTRAP }};\n  \
-         for (size_t i = 0; i < sizeof sigs / sizeof sigs[0]; i++)\n    \
-         if (sigaction(sigs[i], &sa, NULL) != 0) return 0;\n  return 1;\n}}\n#endif",
-        c::SIGNAL_EXIT
-    );
-    let _ = writeln!(d, "static int onsa_conformance_read(void* p, size_t n) {{ return fread(p, 1, n, stdin) == n; }}");
+    // The C types are the backend's records (D-15); an undeclared name where
+    // a record is missing: the program does not compile (never a silent type).
+    let io_type = |name: &str, output: bool| {
+        api.process_args.iter().find(|a| a.name == name && a.output == output).map_or_else(
+            || format!("onsa_conformance_no_signal_{}", onsa_backend_c::c_ident(name)),
+            |a| a.c_type.clone(),
+        )
+    };
     for (i, s) in shape.inputs.iter().enumerate() {
-        let _ = writeln!(d, "static {} in{i}[{}][{FRAMES}];", s.scalar.c(), s.channels());
+        let _ = writeln!(d, "static {} in{i}[{}][{FRAMES}];", io_type(&s.name, false), s.channels());
     }
     for (o, s) in shape.outputs.iter().enumerate() {
-        let _ = writeln!(d, "static {} out{o}[{}][{FRAMES}];", s.scalar.c(), s.channels());
+        let _ = writeln!(d, "static {} out{o}[{}][{FRAMES}];", io_type(&s.name, true), s.channels());
     }
-    let _ = writeln!(d, "static _Alignas({upper}_ALIGN) unsigned char mem[{upper}_SIZE];");
-    if bulk_size > 0 {
-        let _ = writeln!(d, "static _Alignas(16) unsigned char bulk[{upper}_BULK_SIZE];");
-    }
+    d.push_str(&capi::storage(api, "mem", "bulk"));
     let _ = writeln!(d, "int main(void) {{");
-    let _ = writeln!(
-        d,
-        "#ifndef ONSA_CONFORMANCE_SANITIZED\n  if (!onsa_conformance_signals()) return {};\n#endif",
-        c::SETUP_EXIT
-    );
-    let _ = writeln!(d, "  {sym}_params p;\n  memset(&p, 0, sizeof p);");
-    let mut cfg_args = String::new();
-    for (i, (_, s)) in shape.config.iter().enumerate() {
-        let _ = writeln!(
-            d,
-            "  {} c{i};\n  if (!onsa_conformance_read(&c{i}, sizeof c{i})) return {};",
-            s.c(),
-            c::INPUT_EXIT
+    let _ = writeln!(d, "  if (!onsa_driver_signals()) return {};", c::SETUP_EXIT);
+    let _ = writeln!(d, "  {} p;\n  memset(&p, 0, sizeof p);", capi::params_type(api));
+    for (i, (name, _)) in shape.config.iter().enumerate() {
+        let t = api.init_args.iter().find(|f| &f.name == name).map_or_else(
+            || format!("onsa_conformance_no_init_input_{}", onsa_backend_c::c_ident(name)),
+            |f| f.c_type.clone(),
         );
-        let _ = write!(cfg_args, "c{i}, ");
+        let _ = writeln!(d, "  {t} c{i};\n  if (!onsa_driver_read(&c{i}, sizeof c{i})) return {};", c::INPUT_EXIT);
     }
     for (name, _, _) in &shape.params {
-        let f = onsa_backend_c::c_ident(name);
-        let _ = writeln!(d, "  if (!onsa_conformance_read(&p.{f}, sizeof p.{f})) return {};", c::INPUT_EXIT);
+        // An undeclared field where the record is missing: the program does not compile.
+        let f = api.params_fields.iter().find(|f| &f.name == name).map_or_else(
+            || format!("onsa_conformance_no_param_{}", onsa_backend_c::c_ident(name)),
+            |f| f.c_name.clone(),
+        );
+        let _ = writeln!(d, "  if (!onsa_driver_read(&p.{f}, sizeof p.{f})) return {};", c::INPUT_EXIT);
     }
     for i in 0..shape.inputs.len() {
-        let _ = writeln!(d, "  if (!onsa_conformance_read(in{i}, sizeof in{i})) return {};", c::INPUT_EXIT);
+        let _ = writeln!(d, "  if (!onsa_driver_read(in{i}, sizeof in{i})) return {};", c::INPUT_EXIT);
     }
-    let _ = writeln!(d, "  {sym}* s = ({sym}*)mem;");
+    let state = capi::state_type(api);
+    let _ = writeln!(d, "  {state}* s = ({state}*)mem;");
+    // Without a bulk region the harness passes NULL (spec §14.2).
     let bulk = if bulk_size > 0 { "bulk" } else { "NULL" };
-    let _ = writeln!(d, "  if ({sym}_init(s, {bulk}, {cfg_args}{SAMPLE_RATE:.1}f) != 0) return {};", c::API_ERROR_EXIT);
+    if bulk_size == 0 {
+        let _ = writeln!(d, "  (void)bulk;");
+    }
+    let cfg = |f: &onsa_backend_c::ApiField| match shape.config.iter().position(|(n, _)| *n == f.name) {
+        Some(i) => format!("c{i}"),
+        // An undeclared name: the program does not compile (never a silent value).
+        None => format!("onsa_conformance_no_value_for_{}", f.c_name),
+    };
+    let init = capi::init(api, "s", bulk, capi::Cfg::Values(&cfg), &format!("{SAMPLE_RATE:.1}f"))
+        .unwrap_or_else(|e| format!("/* {} */ -1", e.0));
+    let _ = writeln!(d, "  if ({init} != 0) return {};", c::API_ERROR_EXIT);
     let _ = writeln!(d, "  for (uint32_t b = 0; b < {}; b++) {{", FRAMES / BLOCK);
     let _ = writeln!(d, "    onsa_conformance_at = (int)b;");
-    let mut args = vec!["s".to_string(), "&p".to_string()];
     for (i, s) in shape.inputs.iter().enumerate() {
-        match s.planar {
-            None => args.push(format!("in{i}[0] + b * {BLOCK}")),
-            Some(n) => {
-                let chans: Vec<String> = (0..n).map(|c| format!("in{i}[{c}] + b * {BLOCK}")).collect();
-                let _ = writeln!(d, "    const {}* in{i}_ch[{n}] = {{ {} }};", s.scalar.c(), chans.join(", "));
-                args.push(format!("in{i}_ch"));
-            }
+        if let Some(n) = s.planar {
+            let chans: Vec<String> = (0..n).map(|c| format!("in{i}[{c}] + b * {BLOCK}")).collect();
+            let _ = writeln!(d, "    const {}* in{i}_ch[{n}] = {{ {} }};", io_type(&s.name, false), chans.join(", "));
         }
     }
     for (o, s) in shape.outputs.iter().enumerate() {
-        match s.planar {
-            None => args.push(format!("out{o}[0] + b * {BLOCK}")),
-            Some(n) => {
-                let chans: Vec<String> = (0..n).map(|c| format!("out{o}[{c}] + b * {BLOCK}")).collect();
-                let _ = writeln!(d, "    {}* out{o}_ch[{n}] = {{ {} }};", s.scalar.c(), chans.join(", "));
-                args.push(format!("out{o}_ch"));
-            }
+        if let Some(n) = s.planar {
+            let chans: Vec<String> = (0..n).map(|c| format!("out{o}[{c}] + b * {BLOCK}")).collect();
+            let _ = writeln!(d, "    {}* out{o}_ch[{n}] = {{ {} }};", io_type(&s.name, true), chans.join(", "));
         }
     }
-    let _ = writeln!(d, "    if ({sym}_process({}, {BLOCK}) != 0) return {};", args.join(", "), c::API_ERROR_EXIT);
+    let io = |a: &onsa_backend_c::IoArg| {
+        let (list, prefix) = if a.output { (&shape.outputs, "out") } else { (&shape.inputs, "in") };
+        match list.iter().position(|s| s.name == a.name) {
+            Some(i) if list[i].planar.is_some() => format!("{prefix}{i}_ch"),
+            Some(i) => format!("{prefix}{i}[0] + b * {BLOCK}"),
+            // An undeclared name: the program does not compile (never a silent NULL).
+            None => format!("onsa_conformance_no_signal_{}", a.c_name),
+        }
+    };
+    let process = capi::process(api, "s", "&p", &io, &BLOCK.to_string());
+    let _ = writeln!(d, "    if ({process} != 0) return {};", c::API_ERROR_EXIT);
     let _ = writeln!(d, "  }}");
     for (o, s) in shape.outputs.iter().enumerate() {
         let _ = writeln!(
@@ -625,72 +497,26 @@ fn c_build(
     let mut cmd = c::command(t, &out.settings.platform.cflags, &dir);
     cmd.arg("-DONSA_PANIC_HANDLER=onsa_conformance_panic");
     if t.runner == Runner::Sanitized {
-        cmd.arg("-DONSA_CONFORMANCE_SANITIZED");
+        cmd.arg(format!("-D{}", c::SANITIZED_DEFINE));
     }
     cmd.arg(dir.join(source)).arg(&d).arg("-o").arg(&exe).arg("-lm");
     c::compile(&mut cmd, &format!("{} (the conformance program)", t.cc))?;
     Ok(exe)
 }
 
-/// Run the program with `input` on stdin, within [`TIMEOUT`].
+/// Run the program with `input` on stdin, within [`c::RUN_TIMEOUT`].
 fn c_exec(exe: &Path, t: &Toolchain, input: Vec<u8>, shape: &Shape) -> Result<Run, String> {
-    let mut cmd = match t.runner {
-        Runner::Rosetta => {
-            let mut c = Command::new("arch");
-            c.arg("-x86_64").arg(exe);
-            c
-        }
-        _ => Command::new(exe),
+    let done = c::run_program(exe, &[], t.runner, input, c::RUN_TIMEOUT)?;
+    let Some(status) = done.status else {
+        return Err(format!("the program ran longer than {}s", c::RUN_TIMEOUT.as_secs()));
     };
-    if t.runner == Runner::Sanitized {
-        cmd.envs(c::sanitizer_env());
-    }
-    let mut child = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("cannot run {}: {e}", exe.display()))?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let writer = std::thread::spawn(move || stdin.write_all(&input));
-    let mut stdout = child.stdout.take().expect("piped stdout");
-    let reader = std::thread::spawn(move || {
-        let mut b = Vec::new();
-        stdout.read_to_end(&mut b).map(|_| b)
-    });
-    let mut stderr = child.stderr.take().expect("piped stderr");
-    let err_reader = std::thread::spawn(move || {
-        let mut b = Vec::new();
-        let _ = stderr.read_to_end(&mut b);
-        b
-    });
-    let start = Instant::now();
-    let status = loop {
-        if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
-            break s;
-        }
-        if start.elapsed() > TIMEOUT {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!("the program ran longer than {}s", TIMEOUT.as_secs()));
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    let _ = writer.join();
-    let bytes = reader.join().map_err(|_| "the reader of stdout failed")?.map_err(|e| e.to_string())?;
-    let err = String::from_utf8_lossy(&err_reader.join().unwrap_or_default()).trim_end().to_string();
+    let (bytes, err) = (done.stdout, done.stderr);
     match status.code() {
         Some(0) => {}
         Some(c::PANIC_EXIT) => return Ok(Run::Panicked(c_panic(&err)?)),
         Some(code) => {
-            let what = match code {
-                c::API_ERROR_EXIT => "`init` or `process` returned an error".to_string(),
-                c::INPUT_EXIT => "the program could not read its input".to_string(),
-                c::SETUP_EXIT => "the program could not install its signal handlers".to_string(),
-                c::SIGNAL_EXIT => "a fatal signal (caught)".to_string(),
-                c::SANITIZER_EXIT => "a sanitizer (ASan or UBSan) reported an error".to_string(),
-                _ => format!("exit {code}"),
-            };
+            let what = c::exit_meaning(c::DriverKind::Conformance, code)
+                .map_or_else(|| format!("exit {code}"), str::to_string);
             return Err(format!("the program failed: {what}\n{err}"));
         }
         None => return Err(format!("the program ended by a signal ({status})\n{err}")),
@@ -847,6 +673,7 @@ fn compare_flow(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use onsa_core::{FloatKind, IntKind};
 
     /// The build of `src` (package `m`, every flow exported) for a host target.
     fn build(src: &str, flows: &[&str]) -> BuildOutput {

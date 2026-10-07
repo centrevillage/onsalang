@@ -214,3 +214,37 @@ fn array_wrappers_are_shared_and_enums_switch() {
     assert!(c.contains("} else if ((*x).tag == 1) {"), "{c}");
     assert!(c.contains(".u = { .v_B = { .f0 = (*x).u.v_B.f0 } }"), "{c}");
 }
+
+/// The API of an exported function is recorded as the header declares it
+/// (`CUnit::fns`, plan D-15): the tools that call it read the names here.
+#[test]
+fn exported_functions_are_recorded() {
+    let m = one_fn(Ty::Int(IntKind::I32), local(0, Ty::Int(IntKind::I32)), Vec::new());
+    let opts = EmitOptions {
+        package: "pk".into(),
+        prefix: "vc_".into(),
+        export_fns: vec!["m.f".into()],
+        panic: crate::PanicMode::Poison,
+        ..Default::default()
+    };
+    let unit = emit(&m, &opts).unwrap_or_else(|d| panic!("{d:?}"));
+    assert_eq!(unit.fns.len(), 1);
+    let f = &unit.fns[0];
+    assert_eq!((f.fn_.as_str(), f.symbol.as_str(), f.header.as_str()), ("m.f", "vc_f", "vc_pk.h"));
+    assert_eq!(f.ret.as_deref(), Some("int32_t"));
+    let params: Vec<(&str, &str, &str, crate::FnParamKind)> = f
+        .params
+        .iter()
+        .map(|p| (p.field.name.as_str(), p.field.c_name.as_str(), p.field.c_type.as_str(), p.kind))
+        .collect();
+    assert_eq!(
+        params,
+        [("x", "x", "int32_t", crate::FnParamKind::Scalar), ("y", "y", "int32_t", crate::FnParamKind::Scalar)]
+    );
+    let header = &unit.headers.iter().find(|(n, _)| n == "vc_pk.h").expect("the header").1;
+    assert!(header.contains("int32_t vc_f(int32_t x, int32_t y);"), "{header}");
+    assert_eq!(unit.take_panic.as_deref(), Some("vc_take_panic"));
+    assert!(header.contains("int vc_take_panic(void);"), "{header}");
+    let trap = emit(&m, &EmitOptions { panic: crate::PanicMode::Trap, ..opts }).unwrap_or_else(|d| panic!("{d:?}"));
+    assert_eq!(trap.take_panic, None);
+}

@@ -30,8 +30,10 @@
 //! catches the fatal signals into [`SIGNAL_EXIT`] on an alternate stack, and
 //! the sanitizers stop with an exit code ([`sanitizer_env`]), never by `abort`.
 
+use std::io::{Read as _, Write as _};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 use onsa_backend_c::CUnit;
 
@@ -67,6 +69,150 @@ pub const PANIC_EXIT: i32 = 75;
 pub const SIGNAL_EXIT: i32 = 76;
 /// The exit code of the sanitizers (ASan and UBSan share the runtime, so one code).
 pub const SANITIZER_EXIT: i32 = 86;
+/// The exit code of a driver that cannot write its standard output (the host steps).
+pub const OUTPUT_EXIT: i32 = 8;
+/// The exit code of a driver called with the wrong arguments (the host steps, [`crate::host`]).
+pub const ARGS_EXIT: i32 = 6;
+/// The exit code of the host-steps driver when `panic = "reset"` calls the firmware's hook.
+pub const RESET_HOOK_EXIT: i32 = 77;
+/// How long one run of a driver program may take.
+pub const RUN_TIMEOUT: Duration = Duration::from_secs(60);
+/// Defined when a driver runs under the sanitizers ([`Runner::Sanitized`]): it
+/// leaves the signals to them.
+pub const SANITIZED_DEFINE: &str = "ONSA_DRIVER_SANITIZED";
+
+/// The start of a driver program of the generated C, shared by the
+/// conformance harness and the host steps: the headers, a fatal signal turned
+/// into [`SIGNAL_EXIT`] on its own stack (a stack overflow too; never a crash
+/// report), and `onsa_driver_read`, which reads `n` bytes of the standard input.
+pub fn driver_preamble(headers: &[&str]) -> String {
+    let mut d = String::from("#define _XOPEN_SOURCE 700\n");
+    // sigaction and sigaltstack are POSIX (XSI), outside ISO C.
+    for h in headers {
+        d.push_str(&format!("#include \"{h}\"\n"));
+    }
+    d.push_str("#include <signal.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
+    d.push_str(&format!(
+        "#ifndef {SANITIZED_DEFINE}\n\
+         static void onsa_driver_signal(int sig) {{ (void)sig; _Exit({SIGNAL_EXIT}); }}\n\
+         static char onsa_driver_altstack[65536];\n\
+         static int onsa_driver_signals(void) {{\n  \
+         stack_t ss;\n  memset(&ss, 0, sizeof ss);\n  ss.ss_sp = onsa_driver_altstack;\n  \
+         ss.ss_size = sizeof onsa_driver_altstack;\n  if (sigaltstack(&ss, NULL) != 0) return 0;\n  \
+         struct sigaction sa;\n  memset(&sa, 0, sizeof sa);\n  sa.sa_handler = onsa_driver_signal;\n  \
+         sigemptyset(&sa.sa_mask);\n  sa.sa_flags = SA_ONSTACK;\n  \
+         const int sigs[] = {{ SIGSEGV, SIGILL, SIGFPE, SIGABRT, SIGBUS, SIGTRAP }};\n  \
+         for (size_t i = 0; i < sizeof sigs / sizeof sigs[0]; i++)\n    \
+         if (sigaction(sigs[i], &sa, NULL) != 0) return 0;\n  return 1;\n}}\n\
+         #else\n\
+         static int onsa_driver_signals(void) {{ return 1; }}\n\
+         #endif\n"
+    ));
+    d.push_str("static int onsa_driver_read(void* p, size_t n) { return n == 0 || fread(p, 1, n, stdin) == n; }\n");
+    d
+}
+
+/// A driver program that ended (or was stopped).
+#[derive(Debug)]
+pub struct Finished {
+    /// `None`: it ran longer than the timeout and was killed (SIGKILL: no crash report).
+    pub status: Option<ExitStatus>,
+    pub stdout: Vec<u8>,
+    pub stderr: String,
+}
+
+/// Run a driver program with `args` and `input` on its standard input, within
+/// `timeout`, the way `runner` says.
+pub fn run_program(
+    exe: &Path,
+    args: &[String],
+    runner: Runner,
+    input: Vec<u8>,
+    timeout: Duration,
+) -> Result<Finished, String> {
+    let mut cmd = match runner {
+        Runner::Rosetta => {
+            let mut c = Command::new("arch");
+            c.arg("-x86_64").arg(exe);
+            c
+        }
+        _ => Command::new(exe),
+    };
+    cmd.args(args);
+    if runner == Runner::Sanitized {
+        cmd.envs(sanitizer_env());
+    }
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("cannot run {}: {e}", exe.display()))?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let writer = std::thread::spawn(move || stdin.write_all(&input));
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let reader = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        stdout.read_to_end(&mut b).map(|_| b)
+    });
+    let mut stderr = child.stderr.take().expect("piped stderr");
+    let err_reader = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        stderr.read_to_end(&mut b).map(|_| b)
+    });
+    let start = Instant::now();
+    let status = loop {
+        if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
+            break Some(s);
+        }
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    // A program that stops reading early closes the pipe: not an error of the run.
+    let _ = writer.join();
+    let stdout = reader
+        .join()
+        .map_err(|_| "the reader of the program's stdout failed".to_string())?
+        .map_err(|e| format!("cannot read the program's stdout: {e}"))?;
+    let stderr = err_reader
+        .join()
+        .map_err(|_| "the reader of the program's stderr failed".to_string())?
+        .map_err(|e| format!("cannot read the program's stderr: {e}"))?;
+    let stderr = String::from_utf8_lossy(&stderr).trim_end().to_string();
+    Ok(Finished { status, stdout, stderr })
+}
+
+/// The driver programs, each with the exit codes it returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriverKind {
+    /// The conformance harness ([`crate::conformance`]).
+    Conformance,
+    /// The host steps ([`crate::host`]).
+    Host,
+}
+
+/// What an exit code of a driver program of `kind` means (the codes of
+/// [`driver_preamble`], the driver's own, the sanitizers'); `None` for a
+/// code that driver does not return.
+pub fn exit_meaning(kind: DriverKind, code: i32) -> Option<&'static str> {
+    use DriverKind::{Conformance, Host};
+    Some(match (kind, code) {
+        (_, INPUT_EXIT) => "the program could not read its input",
+        (_, SETUP_EXIT) => "the program could not install its signal handlers",
+        (_, SIGNAL_EXIT) => "a fatal signal (caught)",
+        (_, SANITIZER_EXIT) => "a sanitizer (ASan or UBSan) reported an error",
+        (Conformance, API_ERROR_EXIT) => "`init` or `process` returned an error",
+        (Conformance, PANIC_EXIT) => "the generated code panicked",
+        (Host, OUTPUT_EXIT) => "the program could not write its output",
+        (Host, ARGS_EXIT) => "the program was called with wrong arguments",
+        (Host, RESET_HOOK_EXIT) => "the reset hook was called (`panic = \"reset\"`)",
+        _ => return None,
+    })
+}
 
 /// The environment of a sanitized run: the sanitizers report and exit with
 /// [`SANITIZER_EXIT`]; they never `abort` (macOS writes a crash report for a

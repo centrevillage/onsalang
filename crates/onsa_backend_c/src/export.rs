@@ -9,8 +9,15 @@ use crate::emit::{Cx, Export, R, f32_lit};
 use crate::names::{ident, qualified};
 use crate::{PanicMode, no_span, unsupported};
 
-/// The public header `onsa_<flow>.h`.
-pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<String> {
+/// What the header of a flow records of its API, for [`crate::FlowApi`].
+pub(crate) struct FlowParts {
+    pub init_args: Vec<crate::ApiField>,
+    pub params_fields: Vec<crate::ApiField>,
+    pub process_args: Vec<crate::IoArg>,
+}
+
+/// The public header `onsa_<flow>.h`, and what it declares of the API.
+pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     let meta = &cx.m.flows[e.meta_index];
     let fns = meta.fns.clone();
     let sym = e.symbol.clone();
@@ -33,9 +40,11 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<String> {
     if pfields.is_empty() {
         let _ = write!(h, " uint8_t onsa_empty;");
     }
+    let mut params_fields = Vec::new();
     for (name, ty) in &pfields {
         let tn = scalar_c(cx, ty, &format!("the `Ctl` input `{name}`"))?;
         let _ = write!(h, " {tn} {};", ident(name));
+        params_fields.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
     }
     let _ = writeln!(h, " }} {sym}_params;\n");
     let cfg = config_args(cx, fns.config)?;
@@ -74,14 +83,25 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<String> {
     if cx.opts.panic == PanicMode::Poison {
         let _ = writeln!(
             h,
-            "\n/* panic = \"poison\" (spec §9.2): a panic inside `process` zeroes the outputs, poisons the instance\n * (`process` returns 1 until `reset`); a panic inside an exported function returns a zero value and\n * {}take_panic() reports it once. */",
-            cx.opts.prefix
+            "\n/* panic = \"poison\" (spec §9.2): a panic inside `process` zeroes the outputs, poisons the instance\n * (`process` returns 1 until `reset`); a panic inside an exported function returns a zero value and\n * {}() reports it once. */",
+            take_panic_name(cx.opts)
         );
-        let _ = writeln!(h, "int {}take_panic(void);", cx.opts.prefix);
+        let _ = writeln!(h, "int {}(void);", take_panic_name(cx.opts));
     }
     let _ = writeln!(h, "\n#ifdef __cplusplus\n}}\n#endif");
     let _ = writeln!(h, "#endif /* {up}_H */");
-    Ok(h)
+    let process_args = io
+        .params
+        .into_iter()
+        .map(|p| crate::IoArg {
+            c_type: cx.names.name(&p.elem),
+            name: p.onsa,
+            c_name: p.name,
+            planar: p.planar,
+            output: p.output,
+        })
+        .collect();
+    Ok((h, FlowParts { init_args: cfg.api, params_fields, process_args }))
 }
 
 struct ConfigArgs {
@@ -89,18 +109,22 @@ struct ConfigArgs {
     decls: String,
     /// `(name, field)` pairs
     fields: Vec<(String, String)>,
+    /// The arguments, for [`crate::FlowApi::init_args`].
+    api: Vec<crate::ApiField>,
 }
 
 fn config_args(cx: &mut Cx, config: onsa_core::TypeId) -> R<ConfigArgs> {
     let fields = cx.fields(config).to_vec();
     let mut decls = String::new();
     let mut out = Vec::new();
+    let mut api = Vec::new();
     for (name, ty) in &fields {
         let tn = scalar_c(cx, ty, &format!("the `Init` input `{name}`"))?;
         let _ = write!(decls, "{tn} {}, ", ident(name));
         out.push((ident(name), ident(name)));
+        api.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
     }
-    Ok(ConfigArgs { decls, fields: out })
+    Ok(ConfigArgs { decls, fields: out, api })
 }
 
 fn scalar_c(cx: &mut Cx, ty: &Ty, what: &str) -> R<String> {
@@ -114,6 +138,8 @@ fn scalar_c(cx: &mut Cx, ty: &Ty, what: &str) -> R<String> {
 /// One `Span` / planar parameter of `process`.
 struct IoParam {
     name: String,
+    /// The Onsa name (the parameter's local in Core).
+    onsa: String,
     elem: Ty,
     /// `Some(n)`: `[Span[T]; n]` (planar channels)
     planar: Option<u32>,
@@ -130,7 +156,8 @@ fn process_io(cx: &mut Cx, process: FnId) -> R<ProcessIo> {
     let mut params = Vec::new();
     let mut decls = String::new();
     for p in def.params.iter().skip(2) {
-        let name = ident(&def.locals[p.local.0 as usize].name);
+        let onsa = def.locals[p.local.0 as usize].name.clone();
+        let name = ident(&onsa);
         let output = matches!(p.mode, Mode::Inout);
         let (elem, planar) = match &p.ty {
             Ty::Span(e) => ((**e).clone(), None),
@@ -150,7 +177,7 @@ fn process_io(cx: &mut Cx, process: FnId) -> R<ProcessIo> {
                 let _ = write!(decls, "{c}{et}* const* {name}, ");
             }
         }
-        params.push(IoParam { name, elem, planar, output });
+        params.push(IoParam { name, onsa, elem, planar, output });
     }
     Ok(ProcessIo { decls, params })
 }
@@ -437,8 +464,9 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     Ok(s)
 }
 
-/// Header of the exported plain functions (`[export] fns`).
-pub(crate) fn fn_header(cx: &mut Cx, fns: &[FnId]) -> R<String> {
+/// Header of the exported plain functions (`[export] fns`), and their API
+/// (the header name is the caller's).
+pub(crate) fn fn_header(cx: &mut Cx, fns: &[FnId], header: &str) -> R<(String, Vec<crate::FnApi>)> {
     let up: String = format!("{}{}", cx.opts.prefix, ident(&cx.opts.package)).to_ascii_uppercase();
     let mut h = String::new();
     let _ = writeln!(
@@ -451,24 +479,42 @@ pub(crate) fn fn_header(cx: &mut Cx, fns: &[FnId]) -> R<String> {
         "#ifndef {up}_FNS_H\n#define {up}_FNS_H\n#include \"{}\"\n#ifdef __cplusplus\nextern \"C\" {{\n#endif\n",
         crate::RUNTIME_HEADER_NAME
     );
+    let mut apis = Vec::new();
     for f in fns {
-        let (proto, _) = fn_signature(cx, *f)?;
-        let _ = writeln!(h, "{proto};");
+        let sig = fn_signature(cx, *f)?;
+        let _ = writeln!(h, "{};", sig.proto);
+        apis.push(crate::FnApi {
+            fn_: cx.m.fn_(*f).name.clone(),
+            symbol: sig.symbol,
+            header: header.to_string(),
+            params: sig.params,
+            ret: sig.ret,
+        });
     }
     if cx.opts.panic == PanicMode::Poison {
         let _ = writeln!(
             h,
-            "\n/* panic = \"poison\" (spec §9.2): a panic inside an exported function makes it return a zero value;\n * {}take_panic() tells whether the last call panicked (and clears the flag). */",
-            cx.opts.prefix
+            "\n/* panic = \"poison\" (spec §9.2): a panic inside an exported function makes it return a zero value;\n * {}() tells whether the last call panicked (and clears the flag). */",
+            take_panic_name(cx.opts)
         );
-        let _ = writeln!(h, "int {}take_panic(void);", cx.opts.prefix);
+        let _ = writeln!(h, "int {}(void);", take_panic_name(cx.opts));
     }
     let _ = writeln!(h, "\n#ifdef __cplusplus\n}}\n#endif\n#endif");
-    Ok(h)
+    Ok((h, apis))
 }
 
-/// `(prototype, argument forwarding)` of an exported function.
-fn fn_signature(cx: &mut Cx, f: FnId) -> R<(String, Vec<String>)> {
+/// The signature of an exported function.
+struct FnSignature {
+    proto: String,
+    /// The arguments the wrapper forwards to the inner function.
+    fwd: Vec<String>,
+    symbol: String,
+    params: Vec<crate::FnParam>,
+    ret: Option<String>,
+}
+
+/// The prototype, the argument forwarding and the API of an exported function.
+fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
     let def = cx.m.fn_(f);
     if def.sret || !(def.ret.is_scalar() || def.ret == Ty::Unit) {
         return Err(unsupported(def.span, "exporting a function that returns an aggregate"));
@@ -478,22 +524,29 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<(String, Vec<String>)> {
     let ret = if def.ret == Ty::Unit { "void".to_string() } else { cx.names.name(&def.ret) };
     let mut decls = Vec::new();
     let mut fwd = Vec::new();
+    let mut params = Vec::new();
     for p in &def.params {
-        let name = ident(&def.locals[p.local.0 as usize].name);
+        let onsa = def.locals[p.local.0 as usize].name.clone();
+        let name = ident(&onsa);
+        let field = |c_type: String| crate::ApiField { name: onsa.clone(), c_name: name.clone(), c_type };
         match (&p.ty, p.mode) {
             (t, Mode::Inout) if t.is_scalar() => {
                 decls.push(format!("{}* {name}", cx.names.name(t)));
+                params.push(crate::FnParam { field: field(cx.names.name(t)), kind: crate::FnParamKind::InoutScalar });
                 fwd.push(name);
             }
             (t, _) if t.is_scalar() => {
                 decls.push(format!("{} {name}", cx.names.name(t)));
+                params.push(crate::FnParam { field: field(cx.names.name(t)), kind: crate::FnParamKind::Scalar });
                 fwd.push(name);
             }
             (Ty::Span(e), mode) if e.is_scalar() => {
                 let et = cx.names.name(e);
                 let tag = cx.names.tag(e);
-                let c = if matches!(mode, Mode::Inout) { "" } else { "const " };
+                let inout = matches!(mode, Mode::Inout);
+                let c = if inout { "" } else { "const " };
                 decls.push(format!("{c}{et}* {name}, uint32_t {name}_len"));
+                params.push(crate::FnParam { field: field(et.clone()), kind: crate::FnParamKind::Span { inout } });
                 fwd.push(format!("onsa_span_{tag}_of(({et}*){name}, {name}_len)"));
             }
             _ => {
@@ -507,11 +560,13 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<(String, Vec<String>)> {
         }
     }
     let plist = if decls.is_empty() { "void".into() } else { decls.join(", ") };
-    Ok((format!("{ret} {sym}({plist})"), fwd))
+    let proto = format!("{ret} {sym}({plist})");
+    let ret = if def.ret == Ty::Unit { None } else { Some(ret) };
+    Ok(FnSignature { proto, fwd, symbol: sym, params, ret })
 }
 
 pub(crate) fn fn_wrapper(cx: &mut Cx, f: FnId) -> R<String> {
-    let (proto, fwd) = fn_signature(cx, f)?;
+    let FnSignature { proto, fwd, .. } = fn_signature(cx, f)?;
     let def = cx.m.fn_(f);
     let inner = qualified(&def.name);
     let mut s = String::new();
@@ -561,6 +616,13 @@ pub(crate) fn fn_wrapper(cx: &mut Cx, f: FnId) -> R<String> {
     Ok(s)
 }
 
+/// The name of `<prefix>take_panic`, how an exported function reports a
+/// panic in this version (W10-03 removes it): the one place that makes it,
+/// for the headers, the definition and [`crate::CUnit::take_panic`].
+pub(crate) fn take_panic_name(opts: &crate::EmitOptions) -> String {
+    format!("{}take_panic", opts.prefix)
+}
+
 /// `<prefix>take_panic` and its flag (one per translation unit, T4-4).
 pub(crate) fn take_panic(cx: &Cx) -> String {
     let mut s = String::new();
@@ -568,8 +630,8 @@ pub(crate) fn take_panic(cx: &Cx) -> String {
     let _ = writeln!(s, "static ONSA_THREAD_LOCAL int onsa_last_panic = 0;");
     let _ = writeln!(
         s,
-        "int {}take_panic(void) {{ int p = onsa_last_panic; onsa_last_panic = 0; return p; }}\n",
-        cx.opts.prefix
+        "int {}(void) {{ int p = onsa_last_panic; onsa_last_panic = 0; return p; }}\n",
+        take_panic_name(cx.opts)
     );
     s
 }
