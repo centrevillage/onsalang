@@ -1116,3 +1116,59 @@ target = "fmt-cst"
 reasons = ["R-86"]
 until = "W3-01"
 note = "CST が無い（onsa dump --cst が無い）。CST の往復（ソースと 1 バイトも違わない）は W3-01 で通す。W3-01 で dump --cst を作るか、この項目の引数を改める"
+
+[[pending]]
+kind = "test-case"
+target = "tests/vectors/fixture/mixed"
+reasons = ["S-45"]
+until = "W3-07"
+note = "a * b + c を括弧なしで書けない（E0010。§3.1 は加法と乗法の混在を許す）。テストベクトルの式の群の 6 関数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/vectors/fixture/checked"
+reasons = ["R-79", "S-69"]
+until = "W5-02"
+note = "checked_rem / checked_div_euclid / checked_rem_euclid / checked_shl / checked_shr / checked_neg が無い（E0413、§3.4）。テストベクトルの 44 演算"
+
+[[pending]]
+kind = "test-case"
+target = "tests/vectors/fixture/predicates"
+reasons = ["S-98", "R-126"]
+until = "W5-02"
+note = "std.math の is_nan / is_finite が無い（E0302）。テストベクトルの 4 演算"
+
+[[pending]]
+kind = "test-case"
+target = "tests/vectors/fixture/zero_one"
+reasons = ["S-84"]
+until = "W5-05"
+note = "組込み型の関連定数 ZERO / ONE が無い（E0302、§6.6）。テストベクトルの 20 演算"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/vectors/fixture/scalar[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/vectors/fixture/scalar[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/vectors/fixture/scalar[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/vectors/fixture/scalar[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"

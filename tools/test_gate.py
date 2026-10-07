@@ -35,6 +35,9 @@ import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 import spec_sections  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "vectors"))
+from test_vectors import VectorsTools  # noqa: E402,F401  (the tests of the `vectors` item run here)
+
 REWORK = """\
 # rework
 ## 3. 段ごとの作業
@@ -708,7 +711,7 @@ class RealSteps(unittest.TestCase):
         required = (
             "fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden",
             "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files", "fuzz",
-            "fmt-props",
+            "fmt-props", "vectors",
         )  # fmt: skip
         for r in required + ("spec-coverage",):
             self.assertIn(r, names)

@@ -1,0 +1,35 @@
+[package]
+name = "vector_zero_one"
+edition = "2026"
+
+[export]
+prefix = "vec_"
+fns = [
+  "ops.const_i8_zero",
+  "ops.const_i8_one",
+  "ops.const_i16_zero",
+  "ops.const_i16_one",
+  "ops.const_i32_zero",
+  "ops.const_i32_one",
+  "ops.const_i64_zero",
+  "ops.const_i64_one",
+  "ops.const_u8_zero",
+  "ops.const_u8_one",
+  "ops.const_u16_zero",
+  "ops.const_u16_one",
+  "ops.const_u32_zero",
+  "ops.const_u32_one",
+  "ops.const_u64_zero",
+  "ops.const_u64_one",
+  "ops.const_f32_zero",
+  "ops.const_f32_one",
+  "ops.const_f64_zero",
+  "ops.const_f64_one",
+]
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = []
