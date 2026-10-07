@@ -23,6 +23,7 @@ tools: Read, Bash, WebFetch, WebSearch
 - この機械（macOS）では、SIGABRT・SIGSEGV・SIGILL・SIGTRAP などで終わるプロセスが、利用者の画面にクラッシュの報告のダイアログを出す（2026-10-07 に大量に出た）。テスト・自己テスト・ファズで意図的に落とす形をまねるときは、SIGKILL か終了コードを使う。コンパイラのスタックを溢れさせる入力（深い入れ子）は回さない。sanitizer は abort や trap でなく終了コードで止まる設定にする。作ってしまったら報告に書く。
 - 既知の落ちる入力（2026-10-08）: `tests/review-phase1/types/` の `constcyc.onsa`・`constcyc2.onsa`・`constcyc3.onsa`・`rec.onsa`・`rec2.onsa` は、`onsa interface`（と、それを通る経路）でコンパイラのスタックが溢れ、SIGABRT で終わる（W4-05 で直す）。`tests/review-phase1/` や `tests/fuzz/` を一括で道具にかけるときは、`interface` や `build` を使わないか、これらを除く。新しい道具を一括で回す前に、少数のファイルで終わり方（終了コードが 0・1・2・101 のどれか）を確かめる。
 - インタプリタの深い再帰（2026-10-08）: 自分を呼ぶ関数など、呼び出しが深くなるプログラムをインタプリタ（`onsa test`、`vectors-interp`、`const` の評価）で走らせない。debug ビルドでは呼び出しの深さの上限（4096）の前にスタックが溢れ、SIGABRT で終わる（W2-04 で直す）。
+- 深い入れ子の事例（2026-10-08）: `cargo test` のスレッドは既定のスタックが小さい。100 段を超える入れ子の事例を足すときは、リポジトリの全てのファイルを構文解析するテスト（`onsa_syntax` の `cst_tests` など）が大きなスタックのスレッドで走ることを確かめる（W3-14/t が既定のスタックで SIGABRT を起こした。W3-14 で上限が入るまで）。
 
 ## 報告
 
