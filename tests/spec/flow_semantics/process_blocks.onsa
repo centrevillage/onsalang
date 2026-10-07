@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// `process` keeps the state between calls, so a run split into two calls over `slice`s equals
+// one call (spec §11.6, §5.3: `inout xs.slice(a, b)` is a view of the buffer).
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// prev~ with an init-clock init, delay~ with a literal init, a sub-instance, an init-clock value.
+pub flow rs(x: F32 at sample, g: F32 at block, start: F32 at init) -> F32 at sample {
+  let a = prev~(x, start)
+  let d = delay~(x, 3, 7.0)
+  let c = acc~(x * g)
+  let off = start * 2.0
+  a + d + c + off
+}
+
+test "a run split into two process calls equals one call" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs.slice(0, 2), inout out.slice(0, 2))
+  rs.process(inout st, rs.Params { g: 2.0 }, xs.slice(2, 4), inout out.slice(2, 4))
+  assert out[0] == 18.0
+  assert out[1] == 20.0
+  assert out[2] == 27.0
+  assert out[3] == 30.0
+}

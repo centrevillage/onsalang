@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.4", "§11.6", "§17.4"]
+
+// `par i in a..b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
+// a, a+1, ..., b-1 of the init clock; the result has type [T; N]; every flow call and every delay
+// in `e` is a separate instance in each replica. `par` is a replication of structure, not a loop:
+// a delay's `^name` inside the body still means the later `let` of the same sample.
+
+use std.math.{floor}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// Two replicas, each with its own accumulator instance: sum(x), and sum(x + 1).
+pub flow two_accs(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..2 { acc~(x + i.round_f32()) }
+}
+
+// Stateless replicas make no state; the index starts at the lower bound.
+pub flow scaled_by_index(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 2..5 { x * i.round_f32() }
+}
+
+pub flow one_replica(x: F32 at sample) -> [F32; 1] at sample {
+  par i in 5..6 { prev~(x) + i.round_f32() }
+}
+
+// A different delay length in each replica: the length comes from the init-clock index.
+pub flow own_delay_each(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..2 { vdelay~(x, ((i + 1) * 2).round_f32(), 8) }
+}
+
+// A detuned pair of saws: a sub-instance with its own phase in each replica (§17.4).
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + f0 / sample_rate())
+  2.0 * phase - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+/// 0..n spread over [-0.5, 0.5].
+pub rt fn spread(i: U32, n: U32) -> F32 {
+  i.round_f32() / (n - 1).round_f32() - 0.5
+}
+
+pub flow detuned_pair(f0: F32 at block, detune: F32 at block) -> [F32; 2] at sample {
+  par i in 0..2 { saw~(f0 * (1.0 + detune * spread(i, 2))) }
+}
+
+test "each replica has its own instance" {
+  // replica 0: 1 2 3.  replica 1: x + 1 = 2 2 2 summed: 2 4 6.
+  let xs: [F32; 3] = [1.0, 1.0, 1.0]
+  let o = two_accs.render(two_accs.Config {}, two_accs.Params {}, xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[0][2] == 3.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 4.0
+  assert o.out[1][2] == 6.0
+}
+
+test "the index of a par starts at its lower bound" {
+  // i = 2 3 4.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = scaled_by_index.render(scaled_by_index.Config {}, scaled_by_index.Params {}, xs, 8.0)
+  assert o.out[0][0] == 2.0
+  assert o.out[0][1] == 4.0
+  assert o.out[1][0] == 3.0
+  assert o.out[1][1] == 6.0
+  assert o.out[2][0] == 4.0
+  assert o.out[2][1] == 8.0
+}
+
+test "a par of one replica has one element" {
+  // prev~(x) + 5: 5, 6, 7.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = one_replica.render(one_replica.Config {}, one_replica.Params {}, xs, 8.0)
+  assert o.out[0][0] == 5.0
+  assert o.out[0][1] == 6.0
+  assert o.out[0][2] == 7.0
+}
+
+test "a delay length computed from the index" {
+  // replica 0: d = 2.0.  replica 1: d = 4.0.
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let o = own_delay_each.render(own_delay_each.Config {}, own_delay_each.Params {}, xs, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 0.0
+  assert o.out[0][2] == 1.0
+  assert o.out[0][3] == 2.0
+  assert o.out[0][7] == 6.0
+  assert o.out[1][0] == 0.0
+  assert o.out[1][3] == 0.0
+  assert o.out[1][4] == 1.0
+  assert o.out[1][5] == 2.0
+  assert o.out[1][7] == 4.0
+}
+
+test "a detuned pair keeps a separate phase in each replica" {
+  // sample rate 8, f0 = 4, detune = 1: spread(i, 2) = -0.5, 0.5 -> 2 Hz and 6 Hz,
+  // phase steps of 0.25 and 0.75.
+  //   replica 0: phase 0.25 0.5 0.75 0.0 0.25 -> saw -0.5  0.0  0.5 -1.0 -0.5
+  //   replica 1: phase 0.75 0.5 0.25 0.0 0.75 -> saw  0.5  0.0 -0.5 -1.0  0.5
+  let o = detuned_pair.render(detuned_pair.Config {}, detuned_pair.Params { f0: 4.0, detune: 1.0 }, 5, 8.0)
+  assert o.out[0][0] == -0.5
+  assert o.out[0][1] == 0.0
+  assert o.out[0][2] == 0.5
+  assert o.out[0][3] == -1.0
+  assert o.out[0][4] == -0.5
+  assert o.out[1][0] == 0.5
+  assert o.out[1][1] == 0.0
+  assert o.out[1][2] == -0.5
+  assert o.out[1][3] == -1.0
+  assert o.out[1][4] == 0.5
+}

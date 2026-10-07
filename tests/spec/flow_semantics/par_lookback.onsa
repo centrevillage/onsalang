@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.2", "§11.4"]
+
+// `par i in a..b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
+// a, a+1, ..., b-1 of the init clock; the result has type [T; N]; every flow call and every delay
+// in `e` is a separate instance in each replica. `par` is a replication of structure, not a loop:
+// a delay's `^name` inside the body still means the later `let` of the same sample.
+//
+// `^y` inside a replica (R-03): the feedback goes through the replicas. Needs `std.math.sum`.
+
+use std.math.{sum}
+
+// `^y` inside a replica refers to the later `let y`.  Replica i is prev~(^y) + i.
+pub flow lookback_in_par(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0..2 { prev~(^y) + i.round_f32() }
+  let y = x
+  sum(a)
+}
+
+// The feedback goes through every replica: each replica is (i + 1) * x + 0.5 * y[n-1], and the sum
+// is 3 * x + y[n-1].
+pub flow feedback_in_par(x: F32 at sample) -> F32 at sample {
+  let y = sum(par i in 0..2 { x * (i + 1).round_f32() + prev~(^y) * 0.5 })
+  y
+}
+
+test "a feedback reference inside a replica reads the later let" {
+  // y = x.  replica 0: y[n-1].  replica 1: y[n-1] + 1.  sum: 2 * x[n-1] + 1 = 1, 3, 5.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = lookback_in_par.render(lookback_in_par.Config {}, lookback_in_par.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 5.0
+}
+
+test "feedback through the replicas" {
+  // y[n] = 3 * x[n] + y[n-1] with x = 1: 3 6 9 12.
+  let xs: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let o = feedback_in_par.render(feedback_in_par.Config {}, feedback_in_par.Params {}, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 12.0
+}

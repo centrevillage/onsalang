@@ -821,3 +821,178 @@ target = "tests/spec/semantics/trunc_range.onsa"
 reasons = ["R-19"]
 until = "W2-03"
 note = "2^63 の trunc_i64 と 2^64 の trunc_u64 が panic しない（§3.3、§3.4）。TESTFAIL の印のある test は一覧に個別に載せられないのでファイルごと"
+
+# --- W1-09 の意味のテスト（flow の世界）。最終の構文で書いたので、ほとんどが実装待ち（2026-10-07）
+
+# --- W1-09: 意味のテスト（flow の世界、tests/spec/flow_semantics/）の実装待ち（2026-10-07）
+# 各ファイルは、待つ作業が一つになるように分けてある。until は「そのファイルが通る最後の作業」。
+# W3-10 のファイルは、実装が flow の新しい構文を今の sema へ写した時点（K-02）で通る見込み
+# （演算子の群 S-45 は W3-07、struct の `: Default` は W3-08、`at` と `prev~` の構文は W3-09）。
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/prev_delay.onsa"
+reasons = ["S-102", "S-44", "S-29", "S-45"]
+until = "W3-10"
+note = "prev~ / delay~ の基本と init の形（数値）。at、prev~(…)、init の省略の構文（W3-09）。start * 2.0 + 1.0 に演算子の群（S-45、W3-07）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/prev_default_types.onsa"
+reasons = ["S-29", "S-34"]
+until = "W7-07"
+note = "数でない値型（Bool、配列、タプル、struct）の init の省略は T.default()。W3-10 の写しでは E0200（K-02）。struct の : Default の構文は W3-08"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/lookback_nesting.onsa"
+reasons = ["R-13", "S-44"]
+until = "W7-07"
+note = "遅延の入れ子（prev~(prev~(x)) は x[n-2]）。保存の二相化は W7-07、それまで W3-10 で E0200（K-08）。今の実装は x[n-1] を返す（R-13）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/feedback.onsa"
+reasons = ["S-102", "S-44", "S-45"]
+until = "W3-10"
+note = "遅延の入れ子の無い帰還（^y）と同時読み出し。at と ^ の構文（W3-09）。0.5 * x + 0.5 * … に演算子の群（S-45）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/instances.onsa"
+reasons = ["S-102", "S-44"]
+until = "W3-10"
+note = "呼び出し位置ごとの状態、インスタンスの入れ子、init と block の入力の受け渡し。at と ~ の構文（W3-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/vdelay_edges.onsa"
+reasons = ["S-102", "S-44", "S-45"]
+until = "W3-10"
+note = "vdelay~ の端点（d = 1、MAX、範囲外、NaN の d、init、補間）。at と vdelay~ の構文（W3-09）。比較と && の混在に演算子の群（S-45）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/vdelay_varying_d.onsa"
+reasons = ["S-30", "S-102"]
+until = "W7-03"
+note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }）。生成項目 In の Onsa の側は W7-03（S-30）。今の実装の render は 5 引数の旧い形（E0412）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/nan_and_inf.onsa"
+reasons = ["S-98", "R-126", "S-44"]
+until = "W5-02"
+note = "std.math.is_nan が std に無い（E0302）。S-98 / R-126 は W5-02。構文は W3-09"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/branches_plain.onsa"
+reasons = ["S-102", "S-44", "S-45"]
+until = "W3-10"
+note = "普通の if / match / && / || は取る枝だけを評価する。条件・対象・左辺は状態を持てる。at と ~ の構文（W3-09）。比較と && の混在に演算子の群（S-45）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/branches_tilde.onsa"
+reasons = ["S-110", "R-14"]
+until = "W7-06"
+note = "if~ / match~ は全ての枝を評価して状態を進める。取られない枝の panic、match~ の取られない腕の束縛は T.default()。W3-10 の写しでは E0200（K-08）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/hoisting.onsa"
+reasons = ["S-33", "R-17", "S-45"]
+until = "W7-05"
+note = "遅いクロックの panic しうる部分式は、取られない枝と使われない && の右辺へ巻き上げない（§11.3）。演算子の群は W3-07"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/par_replication.onsa"
+reasons = ["S-102", "S-44", "S-45"]
+until = "W3-10"
+note = "par の複製ごとの状態（遅延、インスタンス、vdelay の長さ、サブインスタンスの位相）。at と ~ の構文（W3-09）。0.5 * x + … に演算子の群（S-45）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/par_sum.onsa"
+reasons = ["R-23", "S-102"]
+until = "W5-07"
+note = "std.math.sum が std に無い（今は std.dsp.sum。E0302）。W5-07。構文は W3-09"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/par_lookback.onsa"
+reasons = ["R-03", "R-23"]
+until = "W7-04"
+note = "par の中の ^y（look-back）。今の実装は local y read before definition の内部エラー（R-03）。sum は W5-07"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/par_branch.onsa"
+reasons = ["S-110", "R-14"]
+until = "W7-06"
+note = "par の中の if~。W3-10 の写しでは E0200（K-08）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/reset_replay.onsa"
+reasons = ["S-102", "S-44", "S-45"]
+until = "W3-10"
+note = "reset の後は最初からと同じ出力（prev~ / delay~ / vdelay~ / par / サブインスタンス / init の値を保つ）。process の続き。構文は W3-09"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/process_blocks.onsa"
+reasons = ["R-31"]
+until = "W4-08"
+note = "process を slice で二回に分けても一回と同じ。inout xs.slice(a, b) は今 E0701（W4-08）。構文は W3-09"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/planar_io.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "[F32; 2] の入出力（チャンネルごとの Span）、process_inplace。at の構文（W3-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/planar_views.onsa"
+reasons = ["R-31", "S-102"]
+until = "W4-08"
+note = "別々の変数の [a, b] / inout [a, b]、inout の slice、process_inplace の全入力を読んでから出力を書く。今は E0701（W4-08）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/planar_structs.onsa"
+reasons = ["S-30", "R-22"]
+until = "W7-03"
+note = "名前付きの入力 In と struct 出力 Out（render の o.l / o.r、process の inout Out）。生成項目の Onsa の側は W7-03（S-30）。長さの違う In は panic（R-22、W2-08）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/planar_length_panics.onsa"
+reasons = ["R-22", "R-31"]
+until = "W4-08"
+note = "入力のチャンネル間・出力のチャンネル間・入出力間で Span の長さが違うと process は panic（全チャンネルを比べる。R-22、W2-08）。[a, b] / inout [a, b] は W4-08"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/poison_boundary.onsa"
+reasons = ["S-102", "S-44", "R-12"]
+until = "W3-10"
+note = "Onsa の中の panic は test を失敗にする（process と init）。export 境界の poison の期待値（出力のゼロ埋め、以後の無音、reset での復帰）は、ホストの手順を宣言する形が無く、ファイル内のコメントにだけある（報告の「実行器に足りない形」）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/rules_negative.onsa"
+reasons = ["S-110", "S-101", "S-116", "S-29", "S-44"]
+until = "W7-07"
+note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/pkg_modules"
+reasons = ["S-102", "S-44"]
+until = "W3-10"
+note = "モジュールをまたぐ flow（use dsp.synth.{…}、filters.avg~(x)）、総称の rt fn（clamp[T: PartialOrd]）の F32 と I32 での使用。at の構文（W3-09）"

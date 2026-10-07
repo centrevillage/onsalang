@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§9.2"]
+
+// A slower-clock expression that can panic is not hoisted out of a branch (spec §11.3, §11.5).
+//
+// "panic しうる部分式は巻き上げず、その位置で評価する": `100 / p` with a `block` input `p` is
+// evaluated where it is written. In an untaken `if` branch or on the right of an `&&` that is
+// not needed it is not evaluated, so p = 0 does not panic there.
+
+pub flow slow_in_branch(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  if x > 0.0 { x * (100 / p).round_f32() } else { 0.0 }
+}
+
+pub flow slow_in_and(x: F32 at sample, p: I32 at block) -> F32 at sample {
+  let hit = x > 0.0 && 100 / p > 5
+  if hit { 1.0 } else { 0.0 }
+}
+
+test "a block expression that can panic is not hoisted out of an untaken branch" {
+  // p = 0 would divide by zero, but x <= 0 never takes the branch.
+  let xs: [F32; 3] = [-1.0, 0.0, -2.0]
+  let o = slow_in_branch.render(slow_in_branch.Config {}, slow_in_branch.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+}
+
+test "the same block expression is evaluated when the branch is taken" {
+  // 100 / 4 = 25.
+  let xs: [F32; 3] = [-1.0, 2.0, 3.0]
+  let o = slow_in_branch.render(slow_in_branch.Config {}, slow_in_branch.Params { p: 4 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 50.0
+  assert o.out[2] == 75.0
+}
+
+test "a division by zero in a taken branch panics" {   //~ TESTFAIL "a division by zero in a taken branch panics"
+  let xs: [F32; 2] = [-1.0, 2.0]
+  let o = slow_in_branch.render(slow_in_branch.Config {}, slow_in_branch.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+}
+
+test "a block expression that can panic is not hoisted out of the right side of &&" {
+  let xs: [F32; 3] = [-1.0, 0.0, -2.0]
+  let o = slow_in_and.render(slow_in_and.Config {}, slow_in_and.Params { p: 0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+}

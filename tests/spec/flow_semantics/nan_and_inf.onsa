@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§3.4", "§13.4"]
+
+// NaN and infinity through the delays (spec §11.4, §3.4). Needs `std.math.is_nan`.
+//
+// A NaN or infinite *signal value* travels through the delay like any other value, one sample
+// later; and the vdelay formula multiplies both neighbours, so an infinite neighbour with the
+// weight 0 gives NaN. (A NaN *d* is 1; that test is in vdelay_edges.onsa.)
+
+use std.math.{is_nan}
+
+pub flow vd(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, 4)
+}
+
+// The formula multiplies both neighbours: y = (1 - f) * a + f * b. When f = 0 and b is infinite,
+// f * b is 0 * inf = NaN, so y is NaN even though the weight of b is zero.
+// (A reading of the formula to the letter; see the report.)
+test "the formula is two multiplications: 0 * inf is NaN" {
+  // d = 1 (k = 1, f = 0): a = x[n-1], b = x[n-2].  x = inf 1 2 3.
+  //   n0: a = 0, b = 0                  -> 0
+  //   n1: a = inf, b = 0                -> 1 * inf + 0 * 0   = inf
+  //   n2: a = 1, b = inf                -> 1 * 1 + 0 * inf   = NaN
+  //   n3: a = 2, b = 1                  -> 2
+  let inf: F32 = F32.INFINITY
+  let xs: [F32; 4] = [inf, 1.0, 2.0, 3.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 1.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == inf
+  assert is_nan(o.out[2])
+  assert o.out[3] == 2.0
+}
+
+pub flow one(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+test "a NaN passes through prev~ one sample later" {
+  let nan: F32 = F32.NAN
+  let xs: [F32; 3] = [1.0, nan, 3.0]
+  let o = one.render(one.Config {}, one.Params {}, xs, 8.0)
+  assert o.out[1] == 1.0
+  assert is_nan(o.out[2])
+}

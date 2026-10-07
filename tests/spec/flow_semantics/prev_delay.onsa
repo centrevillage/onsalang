@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.3", "§11.6", "§3.3"]
+
+// `prev~` and `delay~` (spec §11.4). The expected sequences are worked out by hand from the
+// spec, not from the implementation.
+//
+//   prev~(e, init): the output is the stored value, then `e` is stored. out[0] = init,
+//                   out[n] = e[n - 1].
+//   delay~(e, N, init): out[n] = e[n - N]; the first N outputs are init. N >= 2.
+//   init is optional and defaults to T.default() (0, +0.0, ...). Only an explicit -0.0 starts
+//   at -0.0.
+//
+// Subject: the first sample, `init` in each of its forms for numbers, and the shape of `delay~`
+// (the write position wraps). The defaults of the other value types are in prev_default_types.onsa,
+// the nesting of delays in lookback_nesting.onsa.
+
+pub flow one(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub flow one_init(x: F32 at sample) -> F32 at sample {
+  prev~(x, 5.0)
+}
+
+// `init` can come from the `init` clock: the Config value is the first output.
+pub flow one_cfg(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  prev~(x, start)
+}
+
+// An `init` expression of the init clock (not a plain name) is fine too.
+pub flow one_cfg_expr(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  prev~(x, start * 2.0 + 1.0)
+}
+
+pub flow one_neg_zero(x: F32 at sample) -> F32 at sample {
+  prev~(x, -0.0)
+}
+
+pub flow one_i32(x: I32 at sample) -> I32 at sample {
+  prev~(x)
+}
+
+pub flow two(x: F32 at sample) -> F32 at sample {
+  delay~(x, 2)
+}
+
+pub flow three_init(x: F32 at sample) -> F32 at sample {
+  delay~(x, 3, 9.0)
+}
+
+pub flow two_cfg(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  delay~(x, 2, start)
+}
+
+test "prev~ outputs the previous sample and starts from +0.0" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = one.render(one.Config {}, one.Params {}, xs, 8.0)
+  assert o.out.len() == 4
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "an omitted init is +0.0 in its bits" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = one.render(one.Config {}, one.Params {}, xs, 8.0)
+  assert o.out[0].to_bits() == 0
+}
+
+test "prev~ with a literal init" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = one_init.render(one_init.Config {}, one_init.Params {}, xs, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "prev~ with an init from the init clock" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = one_cfg.render(one_cfg.Config { start: 7.0 }, one_cfg.Params {}, xs, 8.0)
+  assert o.out[0] == 7.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "prev~ with an init expression of the init clock" {
+  // start * 2.0 + 1.0 = 4.0 * 2.0 + 1.0 = 9.0
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = one_cfg_expr.render(one_cfg_expr.Config { start: 4.0 }, one_cfg_expr.Params {}, xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+}
+
+test "only an explicit -0.0 init starts at -0.0" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = one_neg_zero.render(one_neg_zero.Config {}, one_neg_zero.Params {}, xs, 8.0)
+  assert o.out[0].to_bits() == 0x80000000
+  assert o.out[1] == 1.0
+}
+
+test "the default of an integer signal is 0" {
+  let xs: [I32; 3] = [5, 6, 7]
+  let o = one_i32.render(one_i32.Config {}, one_i32.Params {}, xs, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 5
+  assert o.out[2] == 6
+}
+
+test "delay~ by two samples" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = two.render(two.Config {}, two.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 4.0
+}
+
+test "delay~ with init fills the first N outputs and keeps wrapping" {
+  // N = 3: the write position wraps after every third sample. 8 samples go round it twice.
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let o = three_init.render(three_init.Config {}, three_init.Params {}, xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 3.0
+  assert o.out[6] == 4.0
+  assert o.out[7] == 5.0
+}
+
+test "delay~ with an init from the init clock" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = two_cfg.render(two_cfg.Config { start: 4.0 }, two_cfg.Params {}, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 1.0
+}

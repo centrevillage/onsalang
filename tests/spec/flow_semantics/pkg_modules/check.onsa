@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§11.5", "§11.6", "§4.5", "§2.6"]
+
+// Flows from other modules, used through `use` (spec §15.1): the namespace of a flow
+// (`smoothed_sum.render`) and the items of that namespace (`Params`) are taken in with `use`.
+
+use dsp.synth.{smoothed_sum, limited, quantized, doubled}
+use dsp.synth.limited.{Params}
+
+test "a flow from another module with instances from a third" {
+  // acc: 1 2 3 4.  avg of that: 0.5, 1.5, 2.5, 3.5.
+  let xs: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let o = smoothed_sum.render(smoothed_sum.Config {}, smoothed_sum.Params {}, xs, 8.0)
+  assert o.out[0] == 0.5
+  assert o.out[1] == 1.5
+  assert o.out[2] == 2.5
+  assert o.out[3] == 3.5
+}
+
+test "a generic function at F32 in a flow, with a block input" {
+  // acc: 1 2 3 4 5 6, clamped to [-3, 3]: 1 2 3 3 3 3.
+  let xs: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = limited.render(limited.Config {}, Params { hi: 3.0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 3.0
+}
+
+test "the same generic function at I32" {
+  // prev~(x) = 0 5 -7 1, clamped to [-2, 2]: 0 2 -2 1.
+  let xs: [I32; 4] = [5, -7, 1, 2]
+  let o = quantized.render(quantized.Config {}, quantized.Params {}, xs, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 2
+  assert o.out[2] == -2
+  assert o.out[3] == 1
+}
+
+test "two instances of one imported flow have separate states" {
+  // avg(8, 0, 0, 0) = 4 4 0 0, twice: 8 8 0 0.
+  let xs: [F32; 4] = [8.0, 0.0, 0.0, 0.0]
+  let o = doubled.render(doubled.Config {}, doubled.Params {}, xs, 8.0)
+  assert o.out[0] == 8.0
+  assert o.out[1] == 8.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+}

@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.6"]
+
+// A `d` that changes every sample (spec §11.4): `d` is a second `sample` input, so the generated
+// API takes the two inputs as a `vd_var.In` struct (§11.6).
+//
+// n0: d 1   -> x[-1]                                       = 0
+// n1: d 2   -> x[-1]                                       = 0
+// n2: d 3   -> x[-1]                                       = 0
+// n3: d 1.5 -> 0.5 * x[2] + 0.5 * x[1] = 0.5 * 3 + 0.5 * 2 = 2.5
+// n4: d 4   -> x[0]                                        = 1
+// n5: d 2.5 -> 0.5 * x[3] + 0.5 * x[2] = 0.5 * 4 + 0.5 * 3 = 3.5
+
+pub flow vd_var(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 4)
+}
+
+test "d may change every sample" {
+  // d = 1 2 3 1.5 4 2.5.  x = 1 2 3 4 5 6.
+  //   n0: d 1   -> x[-1]                                       = 0
+  //   n1: d 2   -> x[-1]                                       = 0
+  //   n2: d 3   -> x[-1]                                       = 0
+  //   n3: d 1.5 -> 0.5 * x[2] + 0.5 * x[1] = 0.5 * 3 + 0.5 * 2 = 2.5
+  //   n4: d 4   -> x[0]                                        = 1
+  //   n5: d 2.5 -> 0.5 * x[3] + 0.5 * x[2] = 0.5 * 4 + 0.5 * 3 = 3.5
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let ds: [F32; 6] = [1.0, 2.0, 3.0, 1.5, 4.0, 2.5]
+  let o = vd_var.render(vd_var.Config {}, vd_var.Params {}, vd_var.In { x: xs, d: ds }, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 2.5
+  assert o.out[4] == 1.0
+  assert o.out[5] == 3.5
+}

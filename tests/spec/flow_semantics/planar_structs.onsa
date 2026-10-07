@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3", "§9.2"]
+
+// Two or more `sample` inputs are the fields of `<flow>.In`; a struct output is `<flow>.Out`
+// (`render` gives `o.l`, `o.r`) (spec §11.6).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+// Two named inputs, a struct output.
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: prev~(r), r: l }
+}
+
+test "named inputs go in a struct and a struct output comes out by field" {
+  // l_out = prev~(r) = 0 10 20.  r_out = l = 1 2 3.
+  let l: [F32; 3] = [1.0, 2.0, 3.0]
+  let r: [F32; 3] = [10.0, 20.0, 30.0]
+  let o = swap.render(swap.Config {}, swap.Params {}, swap.In { l: l, r: r }, 8.0)
+  assert o.l[0] == 0.0
+  assert o.l[1] == 10.0
+  assert o.l[2] == 20.0
+  assert o.r[0] == 1.0
+  assert o.r[1] == 2.0
+  assert o.r[2] == 3.0
+}
+
+test "process takes In and Out structs" {
+  let l: [F32; 3] = [1.0, 2.0, 3.0]
+  let r: [F32; 3] = [10.0, 20.0, 30.0]
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  var st = swap.init(swap.Config {}, 8.0)
+  swap.process(inout st, swap.Params {}, swap.In { l: l, r: r }, inout swap.Out { l: x, r: y })
+  assert x[0] == 0.0
+  assert x[1] == 10.0
+  assert x[2] == 20.0
+  assert y[0] == 1.0
+  assert y[1] == 2.0
+  assert y[2] == 3.0
+}
+
+test "the inputs named in an In struct must have equal lengths" {   //~ TESTFAIL "the inputs named in an In struct must have equal lengths"
+  let l: [F32; 3] = [1.0, 2.0, 3.0]
+  let r: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  var st = swap.init(swap.Config {}, 8.0)
+  swap.process(inout st, swap.Params {}, swap.In { l: l, r: r }, inout swap.Out { l: x, r: y })
+  assert x[0] == 0.0
+}

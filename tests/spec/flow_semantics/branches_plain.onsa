@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§3.5", "§9.2"]
+
+// Branches in a flow body (spec §11.5, §3.5): the point-wise `if` / `match` / `&&` / `||`.
+//
+//   Only the branch that is taken (and the right-hand side that is needed) is evaluated. They
+//   cannot hold anything with state in a branch or on the right (E0811 / E0806), but the
+//   condition, the scrutinee and the left operand are always evaluated and may.
+//
+// acc(x) is a running sum: acc~(1.0) is the count of samples since the start, 1, 2, 3, ...
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow plain_if(d: I32 at sample) -> F32 at sample {
+  if d != 0 { (100 / d).round_f32() } else { 0.0 }
+}
+
+pub flow and_guard(d: I32 at sample) -> F32 at sample {
+  let hit = d != 0 && 100 / d > 5
+  if hit { 1.0 } else { 0.0 }
+}
+
+pub flow or_guard(d: I32 at sample) -> F32 at sample {
+  let hit = d == 0 || 100 / d > 5
+  if hit { 1.0 } else { 0.0 }
+}
+
+// The left operand of && is always evaluated, so it may hold state.
+pub flow left_with_state(x: F32 at sample) -> F32 at sample {
+  let hit = acc~(1.0) > 2.0 && x > 0.0
+  if hit { 1.0 } else { 0.0 }
+}
+
+// The condition of an `if` and the scrutinee of a `match` are always evaluated and may hold state.
+pub flow condition_with_state() -> F32 at sample {
+  if acc~(1.0) > 2.0 { 1.0 } else { 0.0 }
+}
+
+pub flow scrutinee_with_state(k: U32 at sample) -> F32 at sample {
+  match prev~(k) {
+    0 => 10.0,
+    _ => 20.0,
+  }
+}
+
+test "a plain if evaluates only the branch it takes" {
+  let ds: [I32; 4] = [0, 5, 0, 20]
+  let o = plain_if.render(plain_if.Config {}, plain_if.Params {}, ds, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 5.0
+}
+
+test "the right side of && is evaluated only when needed" {
+  // d = 0 10 50: false (no division); 100 / 10 = 10 > 5; 100 / 50 = 2 > 5 is false.
+  let ds: [I32; 3] = [0, 10, 50]
+  let o = and_guard.render(and_guard.Config {}, and_guard.Params {}, ds, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 0.0
+}
+
+test "the right side of || is evaluated only when needed" {
+  // d = 0 10 50: true without a division; 10 > 5; 2 > 5 is false.
+  let ds: [I32; 3] = [0, 10, 50]
+  let o = or_guard.render(or_guard.Config {}, or_guard.Params {}, ds, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 0.0
+}
+
+test "the left side of && may hold state" {
+  // counter 1 2 3 4 5 > 2 is F F T T T; x > 0 is T T T F T.
+  let xs: [F32; 5] = [1.0, 1.0, 1.0, -1.0, 1.0]
+  let o = left_with_state.render(left_with_state.Config {}, left_with_state.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+}
+
+test "the condition of an if may hold state" {
+  // counter 1 2 3 4 5 > 2: F F T T T.
+  let o = condition_with_state.render(condition_with_state.Config {}, condition_with_state.Params {}, 5, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 1.0
+}
+
+test "the scrutinee of a match may hold state" {
+  // k = 0 1 0 0.  prev~(k) = 0 0 1 0.
+  let ks: [U32; 4] = [0, 1, 0, 0]
+  let o = scrutinee_with_state.render(scrutinee_with_state.Config {}, scrutinee_with_state.Params {}, ks, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 10.0
+  assert o.out[2] == 20.0
+  assert o.out[3] == 10.0
+}

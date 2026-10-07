@@ -1,0 +1,248 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.4", "§11.5", "§2.6", "§6.4"]
+
+// Rejections that belong to the semantic rules of the flow tests in this directory (spec §11.2,
+// §11.4, §11.5, §2.6): state in a branch, `~` without state, no Default for a delay's value type,
+// `^` outside a delay's first argument, and the limits of the delay lengths and of `par`.
+// One error per flow; the marker is on the line of the offending construct.
+
+use std.math.{sum}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub struct Plain {
+  a: F32,
+}
+
+const K: F32 = 1.0
+
+// ---- E0811: something with state in a branch of a plain if / match, or a flow without ~ ----
+
+pub flow if_with_instance(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { acc~(x) } else { 0.0 }                             //~ E0811
+}
+
+pub flow if_with_prev(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { prev~(x) } else { 0.0 }                            //~ E0811
+}
+
+pub flow match_with_instance(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  match k { 0 => acc~(x), _ => 0.0 }                              //~ E0811
+}
+
+pub flow if_with_par(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { sum(par i in 0..2 { prev~(x) * i.round_f32() }) } else { 0.0 }   //~ E0811
+}
+
+pub flow flow_without_tilde(x: F32 at sample) -> F32 at sample {
+  acc(x)                                                          //~ E0811
+}
+
+// ---- E0812: ~ on something without state ----
+
+pub flow if_tilde_without_state(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 { 1.0 } else { 0.0 }                                //~ E0812
+}
+
+pub flow match_tilde_without_state(k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => 1.0, _ => 2.0 }                                 //~ E0812
+}
+
+pub flow else_if_tilde_without_state(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { 2.0 } else { 3.0 }       //~ E0812
+}
+
+pub flow tilde_on_rt_fn(x: F32 at sample) -> F32 at sample {
+  wrap~(x)                                                        //~ E0812
+}
+
+// ---- E0816: the value type of a delay has no Default and no init is given ----
+
+pub flow prev_without_default(x: F32 at sample) -> F32 at sample {
+  let p = prev~(Plain { a: x })                                   //~ E0816
+  p.a
+}
+
+pub flow delay_without_default(x: F32 at sample) -> F32 at sample {
+  let p = delay~(Plain { a: x }, 2)                               //~ E0816
+  p.a
+}
+
+pub flow prev_option(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = Some(x)
+  let p = prev~(o)                                                //~ E0816
+  match p { Some(v) => v, None => 0.0 }
+}
+
+pub flow match_tilde_arm_without_default(x: F32 at sample) -> F32 at sample {
+  let o: Option[Plain] = if x > 0.0 { Some(Plain { a: x }) } else { None }
+  match~ o { Some(p) => acc~(p.a), None => 0.0 }                  //~ E0816
+}
+
+// ---- E0801: ^name outside a delay's first argument, or into a user flow, or a forward use ----
+
+pub flow caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = ^y + x                                                  //~ E0801
+  let y = x
+  a
+}
+
+pub flow caret_into_an_instance(x: F32 at sample) -> F32 at sample {
+  let y = x + lp~(^y)                                             //~ E0801
+  y
+}
+
+pub flow instance_inside_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(lp~(^y))                                      //~ E0801
+  y
+}
+
+pub flow forward_use_without_caret(x: F32 at sample) -> F32 at sample {
+  let a = b + x                                                   //~ E0801
+  let b = x
+  a
+}
+
+// ---- E0020: ^ on a name that is already visible ----
+
+pub flow caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  prev~(^x)                                                       //~ E0020
+}
+
+pub flow caret_on_an_earlier_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  prev~(^a)                                                       //~ E0020
+}
+
+pub flow caret_on_a_constant(x: F32 at sample) -> F32 at sample {
+  prev~(^K) + x                                                   //~ E0020
+}
+
+// ---- E0813: the first argument of a delay must be a sample value ----
+
+pub flow block_into_prev(p: F32 at block) -> F32 at sample {
+  prev~(p)                                                        //~ E0813
+}
+
+pub flow block_into_delay(p: F32 at block) -> F32 at sample {
+  delay~(p, 2)                                                    //~ E0813
+}
+
+pub flow block_into_vdelay(p: F32 at block) -> F32 at sample {
+  vdelay~(p, 2.0, 4)                                              //~ E0813
+}
+
+// ---- E0808: ranges of the lengths and of par ----
+
+pub flow par_range_empty(x: F32 at sample) -> F32 at sample {
+  sum(par i in 3..3 { x * i.round_f32() })                        //~ E0808
+}
+
+pub flow par_range_reversed(x: F32 at sample) -> F32 at sample {
+  sum(par i in 4..2 { x * i.round_f32() })                        //~ E0808
+}
+
+pub flow vdelay_max_zero(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 2.0, 0)                                              //~ E0808
+}
+
+pub flow delay_zero(x: F32 at sample) -> F32 at sample {
+  delay~(x, 0)                                                    //~ E0808
+}
+
+pub flow vdelay_max_over_2_24_for_f32(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 2.0, 16777217)                                       //~ E0808
+}
+
+// 2^24 is the largest MAX for an F32 d; an F64 d has no such bound.
+pub flow vdelay_max_2_24_for_f32(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 2.0, 16777216)
+}
+
+pub flow vdelay_max_over_2_24_for_f64(x: F64 at sample) -> F64 at sample {
+  vdelay~(x, 2.0, 16777217)
+}
+
+// ---- E0416: vdelay~ needs a Float value type ----
+
+pub flow vdelay_on_i32(x: I32 at sample) -> I32 at sample {
+  vdelay~(x, 2, 4)                                                //~ E0416
+}
+
+pub flow vdelay_on_u32(x: U32 at sample) -> U32 at sample {
+  vdelay~(x, 2, 4)                                                //~ E0416
+}
+
+pub flow vdelay_on_u8(x: U8 at sample) -> U8 at sample {
+  vdelay~(x, 2, 4)                                                //~ E0416
+}
+
+// ---- E0417: lengths and counts must be constant expressions ----
+
+pub flow delay_length_from_an_input(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  delay~(x, n)                                                    //~ E0417
+}
+
+pub flow vdelay_max_from_an_input(x: F32 at sample, m: U32 at init) -> F32 at sample {
+  vdelay~(x, 2.0, m)                                              //~ E0417
+}
+
+pub flow par_count_from_an_input(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  sum(par i in 0..n { x * i.round_f32() })                        //~ E0417
+}
+
+// ---- E0806: state on the right of && / ||, a let in a nested block ----
+
+pub flow and_with_state_on_the_right(x: F32 at sample) -> F32 at sample {
+  let hit = x > 0.0 && prev~(x) > 0.0                             //~ E0806
+  if hit { 1.0 } else { 0.0 }
+}
+
+pub flow or_with_state_on_the_right(x: F32 at sample) -> F32 at sample {
+  let hit = x > 0.0 || acc~(x) > 1.0                              //~ E0806
+  if hit { 1.0 } else { 0.0 }
+}
+
+pub flow let_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  sum(par i in 0..2 {
+    let t = x * i.round_f32()                                     //~ E0806
+    t
+  })
+}
+
+pub flow let_in_an_if_tilde_arm(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 {
+    let t = acc~(x)                                               //~ E0806
+    t
+  } else {
+    0.0
+  }
+}
+
+// ---- E0817: a flow that makes an instance of itself ----
+
+pub flow instance_of_itself(x: F32 at sample) -> F32 at sample {
+  instance_of_itself~(x)                                          //~ E0817
+}
+
+pub flow instance_of_itself_in_a_par(x: F32 at sample) -> F32 at sample {
+  sum(par i in 0..2 { instance_of_itself_in_a_par~(x) * i.round_f32() })   //~ E0817
+}
+
+pub flow instance_of_itself_in_a_branch(x: F32 at sample) -> F32 at sample {
+  let big = x > 1.0
+  if~ big { instance_of_itself_in_a_branch~(x) } else { acc~(x) }    //~ E0817
+}

@@ -1,0 +1,236 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§13.4"]
+
+// `vdelay~(e, d, MAX, init)` (spec §11.4). The state is a ring buffer of L = MAX + 1 values.
+// Each sample, with the write position w:
+//
+//   dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }    // NaN becomes 1.0
+//   k  = trunc(dc)        1 <= k <= MAX
+//   f  = dc - k           0 <= f < 1
+//   a  = e[n - k]         (read before the store)
+//   b  = e[n - k - 1]
+//   y  = (1.0 - f) * a + f * b          two multiplications, not a + f * (b - a)
+//   store e, advance w
+//
+// So the smallest delay is 1 sample (d = 1.0 is prev~), d is clamped to [1, MAX], and the values
+// before the start are init. The expected sequences below follow from that formula by hand.
+
+use std.dsp.test.{impulse}
+
+pub flow vd(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, 4)
+}
+
+// MAX = 3: the ring has 4 slots and the write position wraps every 4 samples.
+pub flow vd3(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, 3)
+}
+
+pub flow vd_one(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, 1)
+}
+
+pub flow vd_init(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, 4, 9.0)
+}
+
+pub flow vd64(x: F64 at sample, d: F64 at block) -> F64 at sample {
+  vdelay~(x, d, 4)
+}
+
+// The echo of spec §17.4 with MAX = 4: y[n] = x[n] + 0.5 * y[n - d].
+pub flow echo(x: F32 at sample, time: F32 at block) -> F32 at sample {
+  let d = time * sample_rate()
+  let line = vdelay~(^y, d, 4)
+  let y = x + 0.5 * line
+  y
+}
+
+/// True when `vd` with this d behaves as prev~: the input 1 2 3 4 comes back as 0 1 2 3.
+fn is_prev(d: F32) -> Bool uses {Alloc} {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: d }, xs, 8.0)
+  o.out[0] == 0.0 && o.out[1] == 1.0 && o.out[2] == 2.0 && o.out[3] == 3.0
+}
+
+/// True when `vd` (MAX = 4) with this d behaves as a delay of exactly 4 samples.
+fn is_four(d: F32) -> Bool uses {Alloc} {
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: d }, xs, 8.0)
+  o.out[0] == 0.0 && o.out[3] == 0.0 && o.out[4] == 1.0 && o.out[5] == 2.0 && o.out[6] == 3.0 && o.out[7] == 4.0
+}
+
+test "an integer d is a plain delay" {
+  // d = 2: out[n] = x[n-2].
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 2.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 4.0
+}
+
+test "d = 1 is prev~" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 1.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 4.0
+  assert o.out[5] == 5.0
+}
+
+test "d = MAX is the longest delay and the ring wraps" {
+  // MAX = 3, 12 samples: the ring of 4 slots is used three times round.
+  let xs: [F32; 12] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+  let o = vd3.render(vd3.Config {}, vd3.Params { d: 3.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 3.0
+  assert o.out[6] == 4.0
+  assert o.out[7] == 5.0
+  assert o.out[8] == 6.0
+  assert o.out[9] == 7.0
+  assert o.out[10] == 8.0
+  assert o.out[11] == 9.0
+}
+
+test "a fractional d interpolates linearly: 1.5" {
+  // k = 1, f = 0.5: out[n] = 0.5 * x[n-1] + 0.5 * x[n-2].
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 1.5 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.5
+  assert o.out[2] == 1.5
+  assert o.out[3] == 2.5
+  assert o.out[4] == 3.5
+}
+
+test "a fractional d interpolates linearly: 2.25" {
+  // k = 2, f = 0.25: out[n] = 0.75 * x[n-2] + 0.25 * x[n-3].
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 2.25 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.75
+  assert o.out[3] == 1.75
+  assert o.out[4] == 2.75
+  assert o.out[5] == 3.75
+}
+
+test "a fractional d interpolates linearly: 3.5" {
+  // k = 3, f = 0.5: out[n] = 0.5 * x[n-3] + 0.5 * x[n-4].
+  let xs: [F32; 6] = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 3.5 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 5.0
+}
+
+test "a d just under MAX weights the older sample almost fully" {
+  // d = 3.9375 = 4 - 1/16: k = 3, f = 0.9375: out[n] = 0.0625 * x[n-3] + 0.9375 * x[n-4].
+  let xs: [F32; 7] = [16.0, 32.0, 48.0, 64.0, 80.0, 96.0, 112.0]
+  let o = vd.render(vd.Config {}, vd.Params { d: 3.9375 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 17.0
+  assert o.out[5] == 33.0
+  assert o.out[6] == 49.0
+}
+
+test "init fills the values before the start" {
+  // d = 2: 9 9 1 2 3.  d = 1.5: the first output mixes two inits, the second one init and x[0].
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = vd_init.render(vd_init.Config {}, vd_init.Params { d: 2.0 }, xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  let ys: [F32; 3] = [1.0, 2.0, 3.0]
+  let p = vd_init.render(vd_init.Config {}, vd_init.Params { d: 1.5 }, ys, 8.0)
+  assert p.out[0] == 9.0
+  assert p.out[1] == 5.0
+  assert p.out[2] == 1.5
+}
+
+test "init at d = MAX fills the first MAX outputs" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = vd_init.render(vd_init.Config {}, vd_init.Params { d: 4.0 }, xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 9.0
+  assert o.out[3] == 9.0
+  assert o.out[4] == 1.0
+  assert o.out[5] == 2.0
+}
+
+test "d below 1 is clamped to 1" {
+  assert is_prev(1.0)
+  assert is_prev(0.5)
+  assert is_prev(0.0)
+  assert is_prev(-0.0)
+  assert is_prev(-3.0)
+  assert is_prev(-F32.INFINITY)
+}
+
+test "a NaN d is 1" {
+  assert is_prev(F32.NAN)
+}
+
+test "d above MAX is clamped to MAX" {
+  assert is_four(4.0)
+  assert is_four(4.5)
+  assert is_four(100.0)
+  assert is_four(F32.INFINITY)
+}
+
+test "MAX = 1 is always a delay of one sample" {
+  // d = 0.5 and d = 5.0 both clamp to 1.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let a = vd_one.render(vd_one.Config {}, vd_one.Params { d: 0.5 }, xs, 8.0)
+  let b = vd_one.render(vd_one.Config {}, vd_one.Params { d: 5.0 }, xs, 8.0)
+  assert a.out[0] == 0.0
+  assert a.out[1] == 1.0
+  assert a.out[4] == 4.0
+  assert b.out[0] == 0.0
+  assert b.out[1] == 1.0
+  assert b.out[4] == 4.0
+}
+
+test "F64 signals interpolate the same way" {
+  let xs: [F64; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = vd64.render(vd64.Config {}, vd64.Params { d: 1.5 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.5
+  assert o.out[2] == 1.5
+  assert o.out[3] == 2.5
+}
+
+test "an echo with a delay of three samples" {
+  // time * sample_rate() = 0.375 * 8 = 3.  y[n] = x[n] + 0.5 * y[n-3]; the input is an impulse.
+  let o = echo.render(echo.Config {}, echo.Params { time: 0.375 }, impulse(10), 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.5
+  assert o.out[4] == 0.0
+  assert o.out[5] == 0.0
+  assert o.out[6] == 0.25
+  assert o.out[7] == 0.0
+  assert o.out[8] == 0.0
+  assert o.out[9] == 0.125
+}

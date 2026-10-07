@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§3.5", "§9.2", "§6.4"]
+
+// `if~` / `match~` (spec §11.5).
+//
+//   They evaluate *every* branch, advance the state of every instance in them, and then choose
+//   one. The stateless parts of the untaken branches are evaluated too, so an untaken branch can
+//   panic. An unmatched `match~` arm binds the type's default value (T.default()). The `~` of an
+//   else-if chain covers the whole chain.
+//
+// acc(x) is a running sum: acc~(1.0) is the count of samples since the start, 1, 2, 3, ...
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// Count 1, 2, 3, 4, 5; chosen when x > 2.0, otherwise 0.
+pub flow count_if_big(x: F32 at sample) -> F32 at sample {
+  let big = x > 2.0
+  if~ big { acc~(1.0) } else { 0.0 }
+}
+
+// Counters of 1s and of 10s both run; the condition chooses.
+pub flow two_counters(x: F32 at sample) -> F32 at sample {
+  let big = x > 2.0
+  if~ big { acc~(1.0) } else { acc~(10.0) }
+}
+
+// `~` covers the whole else-if chain: all three counters run.
+pub flow chain_of_three(x: F32 at sample) -> F32 at sample {
+  if~ x >= 3.0 { acc~(1.0) } else if x >= 2.0 { acc~(100.0) } else { acc~(1000.0) }
+}
+
+// A delay in an untaken branch still moves.
+pub flow select_delayed(x: F32 at sample) -> F32 at sample {
+  let late = x > 2.0
+  if~ late { prev~(x) } else { x }
+}
+
+pub flow nested_if_tilde(x: I32 at sample) -> F32 at sample {
+  let a = x >= 2
+  let b = x >= 3
+  if~ a { if~ b { acc~(1.0) } else { acc~(10.0) } } else { acc~(100.0) }
+}
+
+pub flow pick_counter(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => acc~(1.0),
+    1 => acc~(10.0),
+    _ => acc~(100.0),
+  }
+}
+
+pub flow pick_with_guard(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    n if n >= 2 => acc~(1.0),
+    0 => acc~(10.0),
+    _ => acc~(100.0),
+  }
+}
+
+// An unmatched arm binds v = 0.0, so the counter in the Some arm also runs on those samples
+// (it adds v + 1.0 = 1.0).
+pub flow some_or_none(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match~ o {
+    Some(v) => acc~(v + 1.0),
+    None => 0.0,
+  }
+}
+
+// The then-branch divides by d and is not taken when d <= 0.
+pub flow untaken_divides(d: I32 at sample) -> F32 at sample {
+  let positive = d > 0
+  if~ positive { (100 / d).round_f32() } else { acc~(1.0) }
+}
+
+// A plain `if` inside the branch keeps the division from running.
+pub flow guarded_divides(d: I32 at sample) -> F32 at sample {
+  let positive = d > 0
+  if~ positive { acc~(1.0) } else { if d != 0 { (100 / d).round_f32() } else { 0.0 } }
+}
+
+test "if~ advances the counter on the samples it is not chosen" {
+  // x > 2 is F T F T T; the counter runs 1 2 3 4 5.
+  let xs: [F32; 5] = [1.0, 3.0, 1.0, 3.0, 3.0]
+  let o = count_if_big.render(count_if_big.Config {}, count_if_big.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 5.0
+}
+
+test "if~ with an instance in each branch runs both" {
+  // 1s: 1 2 3 4 5.  10s: 10 20 30 40 50.  chosen: else, then, else, then, then.
+  let xs: [F32; 5] = [1.0, 3.0, 1.0, 3.0, 3.0]
+  let o = two_counters.render(two_counters.Config {}, two_counters.Params {}, xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 30.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 5.0
+}
+
+test "the tilde of an else-if chain covers every branch" {
+  // 1s: 1 2 3 4.  100s: 100 200 300 400.  1000s: 1000 2000 3000 4000.
+  // x = 1 2 3 2 picks the 1000s, the 100s, the 1s, the 100s.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 2.0]
+  let o = chain_of_three.render(chain_of_three.Config {}, chain_of_three.Params {}, xs, 8.0)
+  assert o.out[0] == 1000.0
+  assert o.out[1] == 200.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 400.0
+}
+
+test "a delay inside an untaken if~ branch still moves" {
+  // late = F F T T.  The delay stores x every sample: its outputs are 0 1 2 3.
+  // out = x, x, prev(x), prev(x) = 1, 2, 2, 3.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = select_delayed.render(select_delayed.Config {}, select_delayed.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+}
+
+test "if~ inside if~ runs all three counters" {
+  // a = F F T T, b = F F F T.  1s: 1 2 3 4.  10s: 10 20 30 40.  100s: 100 200 300 400.
+  let xs: [I32; 4] = [0, 1, 2, 3]
+  let o = nested_if_tilde.render(nested_if_tilde.Config {}, nested_if_tilde.Params {}, xs, 8.0)
+  assert o.out[0] == 100.0
+  assert o.out[1] == 200.0
+  assert o.out[2] == 30.0
+  assert o.out[3] == 4.0
+}
+
+test "match~ runs every arm" {
+  // 1s: 1 2 3 4 5.  10s: 10 20 30 40 50.  100s: 100 200 300 400 500.  k = 0 1 2 1 0.
+  let ks: [U32; 5] = [0, 1, 2, 1, 0]
+  let o = pick_counter.render(pick_counter.Config {}, pick_counter.Params {}, ks, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 300.0
+  assert o.out[3] == 40.0
+  assert o.out[4] == 5.0
+}
+
+test "match~ chooses by pattern and guard" {
+  // k = 0 1 2 3 1.  arm 1 (guard n >= 2): 1s.  arm 2 (0): 10s.  arm 3 (_): 100s.
+  // n0: k 0 -> arm 2: 10.  n1: k 1 -> arm 3: 200.  n2: k 2 -> arm 1: 3.  n3: k 3 -> arm 1: 4.
+  // n4: k 1 -> arm 3: 500.
+  let ks: [U32; 5] = [0, 1, 2, 3, 1]
+  let o = pick_with_guard.render(pick_with_guard.Config {}, pick_with_guard.Params {}, ks, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 200.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 500.0
+}
+
+test "an unmatched match~ arm binds the default value" {
+  // x = 1 -1 2 -1 4.  The counter adds v + 1.0 every sample, with v = 1, 0, 2, 0, 4:
+  // 2, 3, 6, 7, 12.  The Some arm is chosen on samples 0, 2, 4; None gives 0.0.
+  let xs: [F32; 5] = [1.0, -1.0, 2.0, -1.0, 4.0]
+  let o = some_or_none.render(some_or_none.Config {}, some_or_none.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 12.0
+}
+
+test "if~ evaluates the stateless part of the branch it does not take" {
+  // d = 5 20 -4.  positive = T T F.  Then-branch: 100 / d = 20, 5, -25 (evaluated on every
+  // sample, -25 is thrown away).  Else-branch: the counter 1 2 3.  Chosen: 20, 5, 3.
+  let ds: [I32; 3] = [5, 20, -4]
+  let o = untaken_divides.render(untaken_divides.Config {}, untaken_divides.Params {}, ds, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 5.0
+  assert o.out[2] == 3.0
+}
+
+test "a division by zero in an untaken if~ branch panics" {   //~ TESTFAIL "a division by zero in an untaken if~ branch panics"
+  // d = 0 makes `positive` false, so the then-branch is not taken, but it is evaluated: 100 / 0.
+  let ds: [I32; 2] = [5, 0]
+  let o = untaken_divides.render(untaken_divides.Config {}, untaken_divides.Params {}, ds, 8.0)
+  assert o.out[0] == 20.0
+}
+
+test "a plain if inside an if~ branch keeps the division from running" {
+  // d = 0 5 0 20.  positive = F T F T.  Counter: 1 2 3 4.  The else side divides only if d != 0.
+  let ds: [I32; 4] = [0, 5, 0, 20]
+  let o = guarded_divides.render(guarded_divides.Config {}, guarded_divides.Params {}, ds, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 4.0
+}

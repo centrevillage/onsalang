@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.4", "§11.3", "§11.6"]
+
+// Flow instances (spec §11.5): every call site `f~(...)` is its own instance with its own state.
+// A name that refers to an instance's result does not make a new instance, and an instance's
+// `init` and `block` arguments are wired from the caller's clocks (§11.3).
+//
+// avg(x)[n] = 0.5 * (x[n] + x[n-1]).
+
+pub flow avg(x: F32 at sample) -> F32 at sample {
+  0.5 * (x + prev~(x))
+}
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// Two call sites of the same flow with different arguments keep separate states.
+pub flow two_sites(x: F32 at sample) -> F32 at sample {
+  let a = avg~(x)
+  let b = avg~(x * 2.0)
+  a + b
+}
+
+// An instance of an instance: avg(avg(x)).
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  avg~(avg~(x))
+}
+
+pub flow chain3(x: F32 at sample) -> F32 at sample {
+  avg~(avg~(avg~(x)))
+}
+
+// Using the name twice does not advance the instance twice.
+pub flow use_twice(x: F32 at sample) -> F32 at sample {
+  let a = avg~(x)
+  a + a
+}
+
+// The init and block inputs of the caller reach the instance.
+pub flow held(x: F32 at sample, s: F32 at init) -> F32 at sample {
+  prev~(x, s)
+}
+
+pub flow scaled(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+pub flow wired(x: F32 at sample, start: F32 at init, g: F32 at block) -> F32 at sample {
+  scaled~(held~(x, start), g * 2.0)
+}
+
+test "two call sites keep separate states" {
+  // a = avg(x) = 4, 4, 0, 0.   b = avg(2x) = 8, 8, 0, 0.
+  let xs: [F32; 4] = [8.0, 0.0, 0.0, 0.0]
+  let o = two_sites.render(two_sites.Config {}, two_sites.Params {}, xs, 8.0)
+  assert o.out[0] == 12.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+}
+
+test "an instance of an instance" {
+  // avg(x) = 4, 4, 0, 0, 0.   avg(avg(x)) = 2, 4, 2, 0, 0.
+  let xs: [F32; 5] = [8.0, 0.0, 0.0, 0.0, 0.0]
+  let o = chain.render(chain.Config {}, chain.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 0.0
+}
+
+test "three instances in a row" {
+  // avg^3 = 1, 3, 3, 1, 0
+  let xs: [F32; 5] = [8.0, 0.0, 0.0, 0.0, 0.0]
+  let o = chain3.render(chain3.Config {}, chain3.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 0.0
+}
+
+test "using the name of an instance twice advances it once" {
+  let xs: [F32; 4] = [8.0, 0.0, 0.0, 0.0]
+  let o = use_twice.render(use_twice.Config {}, use_twice.Params {}, xs, 8.0)
+  assert o.out[0] == 8.0
+  assert o.out[1] == 8.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+}
+
+test "init and block inputs reach an instance" {
+  // held: 5, 1, 2.   scaled by g * 2.0 = 3.0: 15, 3, 6.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = wired.render(wired.Config { start: 5.0 }, wired.Params { g: 1.5 }, xs, 8.0)
+  assert o.out[0] == 15.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+}
+
+test "an accumulator instance sums its input" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = acc.render(acc.Config {}, acc.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 10.0
+}

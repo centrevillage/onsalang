@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// Planar buffers passed as views (spec §11.6, §5.3): `[a, b]` / `inout [a, b]` for channels in
+// separate variables, `inout xs.slice(a, b)` for a part of a buffer, and `process_inplace`.
+// The `process` loop reads all the sample inputs of a sample before it writes any output, so an
+// in-place pass over two channels is a true swap.
+
+// Swaps the channels.
+pub flow flip(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [x[1], x[0]]
+}
+
+// The output depends on the previous input: in-place must not read what it has already written.
+pub flow pair_sum(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+
+test "channels given as separate buffers" {
+  let l: [F32; 3] = [1.0, 2.0, 3.0]
+  let r: [F32; 3] = [4.0, 5.0, 6.0]
+  var a: [F32; 3] = [0.0; 3]
+  var b: [F32; 3] = [0.0; 3]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process(inout st, flip.Params {}, [l, r], inout [a, b])
+  assert a[0] == 4.0
+  assert a[2] == 6.0
+  assert b[0] == 1.0
+  assert b[2] == 3.0
+}
+
+test "process_inplace reads all the inputs of a sample before writing any output" {
+  // A swap in place: if channel 0 were written before channel 1 was read, both would be equal.
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process_inplace(inout st, flip.Params {}, inout [a, b])
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+}
+
+test "process_inplace carries the state across calls" {
+  var buf: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var st = pair_sum.init(pair_sum.Config {}, 8.0)
+  pair_sum.process_inplace(inout st, pair_sum.Params {}, inout buf.slice(0, 2))
+  pair_sum.process_inplace(inout st, pair_sum.Params {}, inout buf.slice(2, 4))
+  assert buf[0] == 1.0
+  assert buf[1] == 3.0
+  assert buf[2] == 5.0
+  assert buf[3] == 7.0
+}

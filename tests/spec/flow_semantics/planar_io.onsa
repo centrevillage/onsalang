@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// Planar (per-channel) input and output of the generated API (spec §11.6, §5.3).
+//
+//   A `[T; N]` signal is N channels of `Span[T]`; two or more `sample` inputs are the fields of
+//   `<flow>.In`; a struct output is `<flow>.Out` (render gives `o.l`, `o.r`).
+//   The `process` loop reads *all* the sample inputs of a sample before it writes *any* output,
+//   so `process_inplace` (one buffer for input and output) gives the same result as separate
+//   buffers. All the Spans must have the same length; otherwise `process` panics (the poisoned
+//   instance at the export boundary, §9.2; in a `test` the panic fails the test).
+
+// Channel 0 is delayed by a sample, channel 1 passes through.
+pub flow chan(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [prev~(x[0]), x[1]]
+}
+
+// Stereo to mono.
+pub flow mono(x: [F32; 2] at sample) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+// Mono to stereo, the second channel one sample late.
+pub flow widen(x: F32 at sample) -> [F32; 2] at sample {
+  [x, prev~(x)]
+}
+
+// The output depends on the previous input: in-place must not read what it has already written.
+pub flow pair_sum(x: F32 at sample) -> F32 at sample {
+  x + prev~(x)
+}
+
+test "a planar input and output with one delayed channel" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  let o = chan.render(chan.Config {}, chan.Params {}, ins, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 1.0
+  assert o.out[0][2] == 2.0
+  assert o.out[0][3] == 3.0
+  assert o.out[1][0] == 10.0
+  assert o.out[1][1] == 20.0
+  assert o.out[1][2] == 30.0
+  assert o.out[1][3] == 40.0
+}
+
+test "process writes planar output buffers" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  var outs: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var st = chan.init(chan.Config {}, 8.0)
+  chan.process(inout st, chan.Params {}, ins, inout outs)
+  assert outs[0][0] == 0.0
+  assert outs[0][3] == 3.0
+  assert outs[1][0] == 10.0
+  assert outs[1][3] == 40.0
+}
+
+test "two channels in, one out" {
+  let ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
+  let o = mono.render(mono.Config {}, mono.Params {}, ins, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 3.0
+}
+
+test "one channel in, two out" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = widen.render(widen.Config {}, widen.Params {}, xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[0][2] == 3.0
+  assert o.out[1][0] == 0.0
+  assert o.out[1][1] == 1.0
+  assert o.out[1][2] == 2.0
+}
+
+test "process_inplace reads the old input of a delayed flow" {
+  // x + prev~(x) with x = 1 2 3 4 is 1 3 5 7 (the delay holds the input, not the output).
+  var buf: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var st = pair_sum.init(pair_sum.Config {}, 8.0)
+  pair_sum.process_inplace(inout st, pair_sum.Params {}, inout buf)
+  assert buf[0] == 1.0
+  assert buf[1] == 3.0
+  assert buf[2] == 5.0
+  assert buf[3] == 7.0
+}

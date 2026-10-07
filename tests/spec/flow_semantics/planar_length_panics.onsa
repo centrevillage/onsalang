@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§9.2"]
+
+// All the Spans of a `process` call must have the same length, in the channels of a planar input,
+// in the channels of a planar output, and between the input and the output; otherwise `process`
+// panics (spec §11.6; at the export boundary the instance is poisoned, §9.2; in a `test` the panic
+// fails the test). R-22: every channel is compared, not only channel 0.
+
+// Swaps the channels.
+pub flow flip(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [x[1], x[0]]
+}
+
+test "channels of different lengths in the input panic" {   //~ TESTFAIL "channels of different lengths in the input panic"
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process(inout st, flip.Params {}, [a, b], inout [x, y])
+  assert x[0] == 0.0
+}
+
+test "channels of different lengths in the output panic" {   //~ TESTFAIL "channels of different lengths in the output panic"
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 8] = [0.0; 8]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process(inout st, flip.Params {}, [a, b], inout [x, y])
+  assert x[0] == 0.0
+}
+
+test "an input and an output of different lengths panic" {   //~ TESTFAIL "an input and an output of different lengths panic"
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var x: [F32; 8] = [0.0; 8]
+  var y: [F32; 8] = [0.0; 8]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process(inout st, flip.Params {}, [a, b], inout [x, y])
+  assert x[0] == 0.0
+}

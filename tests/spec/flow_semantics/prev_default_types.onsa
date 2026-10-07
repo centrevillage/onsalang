@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§6.3", "§6.4"]
+
+// The default of an omitted `init` for the value types that are not plain numbers (spec §11.4):
+// "省略すると値型の既定値 T.default() で始まる（数値は 0、浮動小数は +0.0、Bool は false、配列と
+// タプルは要素ごと、struct は宣言に Default を並べたもの）".
+
+pub flow one_bool(x: F32 at sample) -> F32 at sample {
+  let was_big = prev~(x > 2.0)
+  if was_big { 1.0 } else { 0.0 }
+}
+
+pub flow one_array(x: F32 at sample) -> F32 at sample {
+  let p = prev~([x, x + 1.0])
+  p[0] + p[1]
+}
+
+pub flow one_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = prev~((x, x * 2.0))
+  a * 10.0 + b
+}
+
+pub struct Pair: Default {
+  a: F32,
+  b: I32,
+}
+
+pub flow one_struct(x: F32 at sample) -> F32 at sample {
+  let q = prev~(Pair { a: x, b: 2 })
+  q.a + q.b.round_f32()
+}
+
+test "the default of a Bool signal is false" {
+  // was_big[n] = (x[n - 1] > 2): false, false, true, false, true
+  let xs: [F32; 5] = [1.0, 3.0, 1.0, 3.0, 3.0]
+  let o = one_bool.render(one_bool.Config {}, one_bool.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+}
+
+test "the default of an array signal is element-wise" {
+  // n0: [0, 0] -> 0.  n1: [1, 2] -> 3.  n2: [2, 3] -> 5.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = one_array.render(one_array.Config {}, one_array.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 5.0
+}
+
+test "the default of a tuple signal is element-wise" {
+  // a * 10 + b.  n0: (0, 0) -> 0.  n1: (1, 2) -> 12.  n2: (2, 4) -> 24.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = one_tuple.render(one_tuple.Config {}, one_tuple.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 24.0
+}
+
+test "the default of a struct signal is its Default" {
+  // q.a + q.b as F32.  n0: Pair { 0.0, 0 } -> 0.  n1: { 10, 2 } -> 12.  n2: { 20, 2 } -> 22.
+  let xs: [F32; 3] = [10.0, 20.0, 30.0]
+  let o = one_struct.render(one_struct.Config {}, one_struct.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 22.0
+}

@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§11.4", "§11.5", "§11.3", "§12.4"]
+
+// `reset` and the state API (spec §11.6).
+//
+//   `reset` puts every `prev~` / `delay~` / `vdelay~` back to its init value, writes the position
+//   back to 0, resets the sub-instances recursively, and clears poisoned. Values of the `init`
+//   clock are kept (`init` is not run again). So after `reset` a flow gives the same sequence as
+//   a fresh state for the same input, wherever the previous run stopped.
+//   `process` keeps the state between calls, so a run split into two calls equals one call.
+//   `render` is one `process` over the whole input.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// prev~ with an init-clock init, delay~ with a literal init, a sub-instance, an init-clock value.
+pub flow rs(x: F32 at sample, g: F32 at block, start: F32 at init) -> F32 at sample {
+  let a = prev~(x, start)
+  let d = delay~(x, 3, 7.0)
+  let c = acc~(x * g)
+  let off = start * 2.0
+  a + d + c + off
+}
+
+// vdelay~ (fractional), par with delays, and a sub-instance.
+pub flow rs2(x: F32 at sample) -> F32 at sample {
+  let v = vdelay~(x, 1.5, 4, 5.0)
+  let p = par i in 0..2 { prev~(x * (i + 1).round_f32(), 1.0) }
+  let s = acc~(x)
+  v + p[0] + p[1] + s
+}
+
+// Expected for rs with x = 1 2 3 4, g = 2, start = 3:
+//   a = prev~(x, 3)        = 3 1 2 3
+//   d = delay~(x, 3, 7)    = 7 7 7 1
+//   c = acc~(2 x)          = 2 6 12 20
+//   off = 2 * start        = 6
+//   out                    = 18 20 27 30
+//
+// Expected for rs2 with x = 1 2 3 4:
+//   v = vdelay~(x, 1.5, 4, 5)           = 5 3 1.5 2.5
+//   p[0] = prev~(x, 1)                  = 1 1 2 3
+//   p[1] = prev~(2 x, 1)                = 1 2 4 6
+//   s = acc~(x)                         = 1 3 6 10
+//   out                                 = 8 9 13.5 21.5
+
+test "render gives the first-run values" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = rs.render(rs.Config { start: 3.0 }, rs.Params { g: 2.0 }, xs, 8.0)
+  assert o.out[0] == 18.0
+  assert o.out[1] == 20.0
+  assert o.out[2] == 27.0
+  assert o.out[3] == 30.0
+}
+
+test "process on a fresh state equals render" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout out)
+  assert out[0] == 18.0
+  assert out[1] == 20.0
+  assert out[2] == 27.0
+  assert out[3] == 30.0
+}
+
+test "reset replays the first run exactly" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var first: [F32; 4] = [0.0; 4]
+  var again: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout first)
+  rs.reset(inout st)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout again)
+  assert first[0] == 18.0
+  assert first[3] == 30.0
+  assert again[0] == 18.0
+  assert again[1] == 20.0
+  assert again[2] == 27.0
+  assert again[3] == 30.0
+}
+
+test "reset after a run that stopped in the middle" {
+  // Two samples of other input leave the delay line with its write position at 2, the counter
+  // at 600, and prev~ holding 200.  After reset none of that is visible.
+  let junk: [F32; 2] = [100.0, 200.0]
+  var junk_out: [F32; 2] = [0.0; 2]
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.process(inout st, rs.Params { g: 2.0 }, junk, inout junk_out)
+  rs.reset(inout st)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout out)
+  assert out[0] == 18.0
+  assert out[1] == 20.0
+  assert out[2] == 27.0
+  assert out[3] == 30.0
+}
+
+test "reset on a fresh state changes nothing" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.reset(inout st)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout out)
+  assert out[0] == 18.0
+  assert out[3] == 30.0
+}
+
+test "reset twice is the same as once" {
+  let junk: [F32; 3] = [9.0, 9.0, 9.0]
+  var junk_out: [F32; 3] = [0.0; 3]
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.process(inout st, rs.Params { g: 2.0 }, junk, inout junk_out)
+  rs.reset(inout st)
+  rs.reset(inout st)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout out)
+  assert out[0] == 18.0
+  assert out[3] == 30.0
+}
+
+test "reset uses the init values, not the defaults" {
+  // The first prev~ output is `start` = 3 and the first three delay outputs are 7, after reset too.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = rs.init(rs.Config { start: 3.0 }, 8.0)
+  rs.process(inout st, rs.Params { g: 2.0 }, xs, inout out)
+  rs.reset(inout st)
+  rs.process(inout st, rs.Params { g: 0.0 }, xs, inout out)
+  // g = 0: c = 0.  a + d + off = 3 + 7 + 6, 1 + 7 + 6, 2 + 7 + 6, 3 + 1 + 6.
+  assert out[0] == 16.0
+  assert out[1] == 14.0
+  assert out[2] == 15.0
+  assert out[3] == 10.0
+}
+
+test "the vdelay, par and instance state also come back after reset" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let junk: [F32; 3] = [8.0, 8.0, 8.0]
+  var junk_out: [F32; 3] = [0.0; 3]
+  var first: [F32; 4] = [0.0; 4]
+  var again: [F32; 4] = [0.0; 4]
+  var st = rs2.init(rs2.Config {}, 8.0)
+  rs2.process(inout st, rs2.Params {}, xs, inout first)
+  rs2.process(inout st, rs2.Params {}, junk, inout junk_out)
+  rs2.reset(inout st)
+  rs2.process(inout st, rs2.Params {}, xs, inout again)
+  assert first[0] == 8.0
+  assert first[1] == 9.0
+  assert first[2] == 13.5
+  assert first[3] == 21.5
+  assert again[0] == 8.0
+  assert again[1] == 9.0
+  assert again[2] == 13.5
+  assert again[3] == 21.5
+}
+
+test "two states of the same flow are independent" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let ys: [F32; 4] = [10.0, 20.0, 30.0, 40.0]
+  var a_out: [F32; 4] = [0.0; 4]
+  var b_out: [F32; 4] = [0.0; 4]
+  var a = acc.init(acc.Config {}, 8.0)
+  var b = acc.init(acc.Config {}, 8.0)
+  acc.process(inout a, acc.Params {}, xs, inout a_out)
+  acc.process(inout b, acc.Params {}, ys, inout b_out)
+  assert a_out[3] == 10.0
+  assert b_out[3] == 100.0
+}

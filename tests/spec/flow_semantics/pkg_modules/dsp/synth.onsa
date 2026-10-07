@@ -1,0 +1,25 @@
+// Flows built from another module's flows (spec §15.1: `use` paths from the package root;
+// §2.6: a module-qualified instance `filters.avg~(x)`).
+
+use dsp.filters
+use dsp.filters.{acc, clamp}
+
+/// acc, then avg: two instances from another module, one imported and one qualified.
+pub flow smoothed_sum(x: F32 at sample) -> F32 at sample {
+  filters.avg~(acc~(x))
+}
+
+/// The running sum, clamped to [-hi, hi] by the generic function (instantiated at F32).
+pub flow limited(x: F32 at sample, hi: F32 at block) -> F32 at sample {
+  clamp(acc~(x), -hi, hi)
+}
+
+/// The same generic function instantiated at I32 on a delayed signal.
+pub flow quantized(x: I32 at sample) -> I32 at sample {
+  clamp(prev~(x), -2, 2)
+}
+
+/// Two instances of the same imported flow: their states are separate.
+pub flow doubled(x: F32 at sample) -> F32 at sample {
+  filters.avg~(x) + filters.avg~(x)
+}

@@ -1,0 +1,17 @@
+// Flows and a generic rt function that other modules use (spec §15.1, §11.5, §4.5).
+
+/// 0.5 * (x[n] + x[n-1]).
+pub flow avg(x: F32 at sample) -> F32 at sample {
+  0.5 * (x + prev~(x))
+}
+
+/// A running sum.
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+/// A generic point-wise function with an empty effect row: callable from a flow body.
+pub rt fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
+  if x < lo { lo } else if x > hi { hi } else { x }
+}
