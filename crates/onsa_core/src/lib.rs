@@ -19,5 +19,5 @@ pub use dump::{dump, dump_item};
 pub use ir::*;
 pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, flow_layout_for, size_align, size_align_for};
 pub use lower::flow::{FlowFns, FlowMeta};
-pub use lower::{GenericArg, LowerOptions, lower, lower_with};
+pub use lower::{GenericArg, LowerFailure, LowerOptions, lower, lower_with};
 pub use verify::{VerifyError, verify};

@@ -1,0 +1,40 @@
+// onsa.toml
+// [package]
+// name = "lower_unsupported"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§18.1"]
+
+// E0200 from lowering (S-67, the review R-77): lowering and the build run
+// only on units that passed the checks, so their diagnostics do not
+// cascade: every one is reported, and those with the same position, code
+// and message are one (§18.1).
+//
+// The unsupported feature here is the ordering of arrays and tuples, which
+// this version does not lower (R-119). W8-10 lowers it: that work replaces
+// it here with another feature lowering does not support.
+
+// Two features in one function: both are reported (lowering does not stop
+// at the first one of a function). The parentheses are for the operator
+// groups of today's parser (S-45).
+pub fn two_features(a: [I32; 2], b: [I32; 2], p: (I32, I32), q: (I32, I32)) -> Bool {
+  (a < b) && (p < q) //~ E0200 //~ E0200
+}
+
+// One generic function lowered for two types: the same position, code and
+// message, so one diagnostic.
+pub fn lt[T: PartialOrd](a: T, b: T) -> Bool {
+  a < b //~ E0200
+}
+
+pub fn uses_lt(a: [I32; 2], p: (I32, I32)) -> Bool {
+  lt(a, a) && lt(p, p)
+}

@@ -3,7 +3,7 @@
 # 一覧にある対象は、まだ通らないことを期待する。通ったら gate（tools/gate.sh）が失敗し、
 # 一覧から外すよう促す。意味はどの種類も同じ。外す作業は、対象を通したときに項目を消す。
 #
-# 項目は [[pending]] の表で、欄は全て必須（他の欄は書けない）:
+# 項目は [[pending]] の表で、次の欄は全て必須（expect のほかの欄は書けない）:
 #   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input"
 #   target   対象の識別子（形は種類ごと。下）
 #   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）。until = "P2" の項目に
@@ -16,6 +16,11 @@
 #            要約では段 P2 として W・M の段の後に数える。--stage-end P2 は使い方の誤りで、
 #            第 1 期の終わりの --stage-end M9 は、P2 でない項目が残っていれば失敗する
 #   note     短い説明
+# 任意の欄:
+#   expect   "internal" だけ。test-case の事例全体の項目（"::<test の名前>" の無いもの）にだけ書ける。
+#            コンパイラの内部エラー（S-67）は、この一覧で黙らせられない（W1-04）。expect = "internal" の
+#            項目の事例は、内部エラーで終わることを期待する。内部エラー以外で失敗したら失敗、通ったら
+#            一覧から外すよう失敗にする（照合はテストの実行器）
 #
 # target の形:
 #   spec-example  "§<節> <ハッシュ>: <先頭の行>"。仕様の ```onsa ブロックの名前。ハッシュは、
@@ -37,7 +42,13 @@
 #                 検査、自己テスト）と info の項目は載せられない
 #   test-case     リポジトリの根からのパス（ファイルかパッケージのディレクトリ）。
 #                 一つの test だけなら "<パス>::<test の名前>"          （照合は W1-03）
-#   fuzz-input    保存した入力のファイルの、リポジトリの根からのパス  （照合は W1-04）
+#   fuzz-input    保存した入力のファイルの、リポジトリの根からのパス "tests/fuzz/<名前>.onsa"
+#                 （照合は tools/fuzz.py、gate の項目 fuzz。W1-04）。保存した入力は毎回 onsa check と
+#                 onsa fmt --check にかける。一覧にある入力は、まだ落ちる（内部エラー、シグナル、時間切れ）
+#                 ことを期待し、落ちなければ失敗にする（項目を外し、ファイルは回帰の入力として残す）。
+#                 一覧に無い保存した入力が落ちても失敗。ファズが見つけた落ち方の型が一覧の入力と同じなら
+#                 既知として通し、新しい型なら最小化した入力を target/fuzz/new/ に書いて失敗にする
+#                 （tools/fuzz.py --save で tests/fuzz/ に写す）
 #                 パスは正規形だけ（/ で区切る。./、..、//、末尾の /、\ を含まない）
 # until が完了の印（✅）の付いた作業を指す項目は失敗にする（外すか until を改める）。
 
@@ -648,3 +659,26 @@ target = "tests/spec/negative/try_type_map_err.onsa"
 reasons = ["S-71", "R-96"]
 until = "W5-03"
 note = "Result の map_err が無い（今は E0413）。std の Result の map_err（S-71）"
+
+# --- W1-04（2026-10-07）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/names_reserved_inputs.onsa"
+reasons = ["R-77", "S-67"]
+until = "W7-03"
+note = "入力名の予約名（sample_rate、poisoned、initialized、bulk）の E0304。今は at を読めず E0002（W3-10）、読めても E0304 を出さない（W7-03）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/b60c431d.onsa"
+reasons = ["R-01"]
+until = "W3-04"
+note = "check / fmt --check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（補間の中の多バイト文字）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/73f70bf0.onsa"
+reasons = ["R-01"]
+until = "W3-04"
+note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: byte index # is not a char boundary（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く）"

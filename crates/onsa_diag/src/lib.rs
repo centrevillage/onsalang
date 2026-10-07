@@ -4,6 +4,7 @@
 //! lines and columns are computed from a [`LineIndex`] when rendering.
 
 mod codes;
+pub mod internal;
 mod source;
 
 pub use codes::{Category, Code};

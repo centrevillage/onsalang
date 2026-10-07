@@ -527,25 +527,29 @@ impl Builder<'_> {
 
 /// Build the interface of the user package of an analyzed build. Flow state
 /// layouts come from Core lowering (T3-6); when lowering reports diagnostics
-/// (phase-2 features), the flow sizes are simply absent. A Core the verifier
-/// rejects is the error (R-82).
-pub fn interface(analyzed: &Analyzed) -> Result<Interface, crate::VerifyFailure> {
-    let a = &analyzed.analysis;
+/// (phase-2 features), the flow sizes are simply absent. An internal error
+/// (a Core the verifier rejects, R-82) is the error (S-67).
+pub fn interface(analyzed: &Analyzed) -> Result<Interface, crate::InternalError> {
     let core = match crate::lower_core(analyzed) {
         Ok(m) => Some(m),
         Err(crate::LowerError::Diagnostics(_)) => None,
-        Err(crate::LowerError::Verify(v)) => return Err(v),
+        Err(crate::LowerError::Internal(e)) => return Err(e),
     };
+    crate::guard(|| interface_of(analyzed, core))
+}
+
+fn interface_of(analyzed: &Analyzed, core: Option<onsa_core::Module>) -> Interface {
+    let a = &analyzed.analysis;
     let layouts: HashMap<String, onsa_core::FlowLayout> =
         core.map(|m| m.flows.into_iter().map(|f| (f.name, f.layout)).collect()).unwrap_or_default();
     let b = Builder { a, layouts };
     let mut modules: Vec<(String, ModId)> =
         analyzed.pkg.modules.iter().filter_map(|m| a.module_of_file(m.file).map(|id| (m.path.clone(), id))).collect();
     modules.sort();
-    Ok(Interface {
+    Interface {
         package: analyzed.pkg.name.clone(),
         modules: modules.into_iter().map(|(path, id)| ModuleIface { path, items: b.module_items(id) }).collect(),
-    })
+    }
 }
 
 pub fn render_json(iface: &Interface) -> String {

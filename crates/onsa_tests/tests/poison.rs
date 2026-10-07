@@ -103,14 +103,14 @@ fn poison_wrappers_recover_from_panics() {
         root: None,
     };
     let mut loaded = onsa_driver::Loaded::from_input(input);
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     let unit = match onsa_driver::build_analyzed(&loaded, &analyzed, "host") {
         Ok(out) => out.unit,
         Err(onsa_driver::BuildError::Usage(m)) => panic!("{m}"),
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
             panic!("{}", onsa_diag::to_text(&sources, &diagnostics))
         }
-        Err(onsa_driver::BuildError::Verify(v)) => panic!("{}", v.report()),
+        Err(onsa_driver::BuildError::Internal { sources, error }) => panic!("{}", error.render(&sources)),
     };
     std::fs::write(dir.join("onsa.h"), &unit.runtime_header).unwrap();
     for (h, t) in &unit.headers {

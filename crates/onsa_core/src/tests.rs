@@ -41,7 +41,7 @@ fn core(src: &str) -> Module {
             verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", dump(&m)));
             m
         }
-        Err(d) => panic!("lowering diagnostics:\n{}", onsa_diag::to_text(&sources, &d)),
+        Err(f) => panic!("lowering failed:\n{}", failure_text(&sources, &f)),
     }
 }
 
@@ -50,7 +50,18 @@ fn core_err(src: &str) -> Vec<onsa_diag::Diagnostic> {
     let (sources, pkg) = package(src);
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
-    lower(&pkg, &a).expect_err("expected a lowering error")
+    match lower(&pkg, &a) {
+        Err(crate::LowerFailure::Unsupported(d)) => d,
+        Err(f) => panic!("expected E0200:\n{}", failure_text(&sources, &f)),
+        Ok(_) => panic!("expected a lowering error"),
+    }
+}
+
+fn failure_text(sources: &onsa_diag::SourceMap, f: &crate::LowerFailure) -> String {
+    match f {
+        crate::LowerFailure::Unsupported(d) => onsa_diag::to_text(sources, d),
+        crate::LowerFailure::Internal { message, .. } => format!("internal: {message}"),
+    }
 }
 
 fn text(src: &str) -> String {
@@ -199,6 +210,71 @@ fn flow_members_are_lowered_when_referenced() {
     assert!(d.contains("rt fn t.one.tick(inout s: t.one.State, x: F32) -> F32 {"), "{d}");
 }
 
+/// S-67: lowering does not stop at the first unsupported feature of a
+/// function; the driver removes the duplicates (`onsa_driver::reduce`).
+#[test]
+fn every_unsupported_feature_of_a_function_is_reported() {
+    let src = "pub fn two(a: [I32; 2], b: [I32; 2], p: (I32, I32), q: (I32, I32)) -> Bool {\n  (a < b) && (p < q)\n}\n\n\
+               pub fn lt[T: PartialOrd](a: T, b: T) -> Bool {\n  a < b\n}\n\n\
+               pub fn use_lt(a: [I32; 2], p: (I32, I32)) -> Bool {\n  lt(a, a) && lt(p, p)\n}\n";
+    let diags = core_err(src);
+    let mut at: Vec<u32> = diags.iter().map(|d| d.span.start).collect();
+    at.sort();
+    assert!(diags.iter().all(|d| d.code == onsa_diag::Code::E0200), "{diags:?}");
+    // `a < b` and `p < q` of `two`, and `a < b` of `lt` once: the second
+    // instance finds the expression already a placeholder
+    let first = src.find("a < b").unwrap() as u32 + 2;
+    let second = src.find("p < q").unwrap() as u32 + 2;
+    let generic = src.rfind("a < b").unwrap() as u32 + 2;
+    assert_eq!(at, [first, second, generic], "{diags:?}");
+}
+
+/// S-67: a value of an unsupported type and an arm pattern that uses an
+/// unsupported feature are placeholders too: lowering goes on (W1-04/b M-1).
+#[test]
+fn unsupported_types_and_patterns_do_not_stop_the_item() {
+    let lines = |src: &str| {
+        let mut l: Vec<(u32, String)> = core_err(src)
+            .iter()
+            .map(|d| (src[..d.span.start as usize].matches('\n').count() as u32 + 1, d.message.clone()))
+            .collect();
+        l.sort();
+        l
+    };
+    let locals = "pub fn f() -> I32 uses {Alloc} {\n  let a = \"abc\"\n  let b = \"def\"\n  \
+                  let c = fn(v: I32) -> I32 { v }\n  1\n}\n";
+    let got = lines(locals);
+    assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [2, 3, 4], "{got:?}");
+    assert!(got[2].1.contains("function values"), "{got:?}");
+    // the `==` of two `Str` placeholders is not reported for their stand-in type
+    let eq = "pub fn g() -> I32 uses {Alloc} {\n  if \"a\" == \"b\" { 1 } else { 2 }\n}\n";
+    assert!(lines(eq).iter().all(|(_, m)| m.contains("Shared type `Str`")), "{:?}", lines(eq));
+    let arms = "pub enum E {\n  A(I32),\n  B(I32),\n  C,\n}\n\n\
+                pub fn m(e: E, x: [I32; 2], y: [I32; 2]) -> I32 {\n  match e {\n    \
+                E.A(n) | E.B(n) => n,\n    E.C => if x < y { 1 } else { 2 },\n  }\n}\n";
+    let got = lines(arms);
+    assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [9, 10], "{got:?}");
+    assert!(got[0].1.contains("or-patterns") && got[1].1.contains("ordering"), "{got:?}");
+}
+
+/// S-67 (W1-04/b M-2): an internal failure is a consequence of a placeholder
+/// only when one holds the other and it is not the whole item.
+#[test]
+fn internal_failures_near_placeholders() {
+    use crate::lower::from_placeholder;
+    let s = |a: u32, b: u32| onsa_diag::Span::new(FileId(0), a, b);
+    let item = s(0, 100);
+    let holes = [s(10, 20)];
+    assert!(from_placeholder(&holes, s(12, 15), item)); // inside the placeholder
+    assert!(from_placeholder(&holes, s(5, 30), item)); // an expression that uses it
+    assert!(!from_placeholder(&holes, s(40, 50), item)); // elsewhere: an internal error
+    assert!(!from_placeholder(&holes, s(15, 25), item)); // overlapping only
+    assert!(!from_placeholder(&holes, item, item)); // the whole item
+    assert!(!from_placeholder(&[], s(12, 15), item)); // no placeholder
+    let other_file = onsa_diag::Span::new(FileId(1), 12, 15);
+    assert!(!from_placeholder(&holes, other_file, item));
+}
+
 #[test]
 fn unsupported_features_are_e0200() {
     let diags = core_err("pub fn f() -> Str {\n  \"abc\"\n}\n");
@@ -245,7 +321,7 @@ fn core_with(src: &str, bulk_threshold: Option<u32>) -> Module {
             verify(&m).unwrap_or_else(|e| panic!("{e}\n{}", dump(&m)));
             m
         }
-        Err(d) => panic!("lowering diagnostics:\n{}", onsa_diag::to_text(&sources, &d)),
+        Err(f) => panic!("lowering failed:\n{}", failure_text(&sources, &f)),
     }
 }
 

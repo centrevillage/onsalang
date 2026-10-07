@@ -17,8 +17,8 @@ use onsa_sema::ty::Rate;
 use onsa_syntax::ast::Vis;
 
 use crate::{
-    Analyzed, CoreStage, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, PackageInput, VerifyFailure,
-    read_manifest, read_sources,
+    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, PackageInput,
+    VerifyFailure, guard, read_manifest, read_sources,
 };
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
@@ -123,8 +123,9 @@ pub enum BuildError {
     Usage(String),
     /// The package or its exports do not check (exit 1).
     Diagnostics { sources: SourceMap, diagnostics: Vec<Diagnostic> },
-    /// The compiler produced a broken Core (R-82): an error of the compiler.
-    Verify(VerifyFailure),
+    /// An internal error (S-67, exit 101): a panic, a broken Core (R-82), or
+    /// generated C the C compiler rejects. `sources` renders its position.
+    Internal { sources: SourceMap, error: Box<InternalError> },
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -223,25 +224,40 @@ pub fn build_resolved(
     analyzed: &Analyzed,
     resolved: &ResolvedTarget,
 ) -> Result<BuildOutput, BuildError> {
-    let diagnostics =
-        |diagnostics: Vec<Diagnostic>| BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics };
+    let internal =
+        |error: InternalError| BuildError::Internal { sources: loaded.sources.clone(), error: Box::new(error) };
+    guard(|| build_stages(loaded, analyzed, resolved)).map_err(internal)?
+}
+
+fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget) -> Result<BuildOutput, BuildError> {
+    // Lowering and the build report every diagnostic, each once (S-67): the
+    // build's own go through `LowerError::reported`, as lowering's do.
+    let diagnostics = |e: LowerError| match e {
+        LowerError::Diagnostics(diagnostics) => {
+            BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics }
+        }
+        LowerError::Internal(e) => BuildError::Internal { sources: loaded.sources.clone(), error: Box::new(e) },
+    };
+    let internal =
+        |error: InternalError| BuildError::Internal { sources: loaded.sources.clone(), error: Box::new(error) };
     if !analyzed.diagnostics.is_empty() {
-        return Err(diagnostics(analyzed.diagnostics.clone()));
+        // The check's diagnostics, already reduced per unit.
+        return Err(BuildError::Diagnostics {
+            sources: loaded.sources.clone(),
+            diagnostics: analyzed.diagnostics.clone(),
+        });
     }
     let settings = &resolved.settings;
     let export = &resolved.export;
     let export_diags = check_exports(analyzed, export, settings);
     if !export_diags.is_empty() {
-        return Err(diagnostics(export_diags));
+        return Err(diagnostics(LowerError::reported(export_diags)));
     }
 
     // Lower and emit.
     let lower_opts = LowerOptions { bulk_threshold: settings.bulk_threshold, ptr_size: settings.platform.ptr_size };
-    let module = crate::lower_core_with(analyzed, &lower_opts).map_err(|e| match e {
-        LowerError::Diagnostics(d) => diagnostics(d),
-        LowerError::Verify(v) => BuildError::Verify(v),
-    })?;
-    let module = consts_stage(module).map_err(BuildError::Verify)?;
+    let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
+    let module = consts_stage(module).map_err(|v| internal(v.into()))?;
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
         package: loaded.name.clone(),
@@ -258,7 +274,7 @@ pub fn build_resolved(
         })),
         ptr_size: settings.platform.ptr_size,
     };
-    let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(diagnostics)?;
+    let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(|d| diagnostics(LowerError::reported(d)))?;
     let mut files = vec![("onsa.h".to_string(), unit.runtime_header.clone())];
     files.extend(unit.headers.iter().cloned());
     files.push((onsa_backend_c::CUnit::source_name(&loaded.name), unit.source.clone()));
@@ -277,7 +293,10 @@ pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError
     let files = read_sources(&root).map_err(BuildError::Usage)?;
     let input = PackageInput { manifest: Some(manifest), files, root: Some(root.clone()) };
     let mut loaded = Loaded::from_input(input);
-    let analyzed = crate::analyze_loaded(&mut loaded);
+    let analyzed = match crate::analyze_loaded(&mut loaded) {
+        Ok(a) => a,
+        Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
+    };
     let output = build_resolved(&loaded, &analyzed, &resolved)?;
     let settings = &output.settings;
 
@@ -320,7 +339,15 @@ pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError
                 .output()
                 .map_err(|e| BuildError::Usage(format!("cannot run cc: {e}")))?;
             if !cc.status.success() {
-                return Err(BuildError::Usage(format!("cc failed:\n{}", String::from_utf8_lossy(&cc.stderr))));
+                // The C is the compiler's output: rejecting it is a bug of the compiler.
+                return Err(BuildError::Internal {
+                    sources: loaded.sources,
+                    error: Box::new(InternalError::generated_c(format!(
+                        "the C compiler rejected the generated C (`cc` exited with {}):\n{}",
+                        cc.status,
+                        String::from_utf8_lossy(&cc.stderr).trim_end()
+                    ))),
+                });
             }
             let ar = Command::new("ar")
                 .arg("rcs")
@@ -517,6 +544,8 @@ fn inline_consts(module: &mut Module) {
             if is_static_init(&c.init) {
                 continue;
             }
+            // A panic names this `const` (S-67).
+            let _scope = onsa_diag::internal::item_scope(c.init.span);
             if let Ok(v) = interp.const_value(ConstId(i as u32))
                 && let Some(e) = value_to_expr(module, &v, &c.ty, c.init.span)
             {

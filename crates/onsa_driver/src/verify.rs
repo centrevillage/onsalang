@@ -6,13 +6,15 @@
 //! [`crate::build_resolved`]), so no caller can skip it. A failure is an
 //! error of the compiler, not of the program: it comes back as a value
 //! ([`VerifyFailure`]) with the stage, the rule the verifier reports, the
-//! item and its Core, and the caller reports it (a test fails; W1-04 makes
-//! it the internal error of S-67).
+//! item and its Core, and the stage function returns it as the internal
+//! error of S-67 ([`crate::InternalError`], W1-04).
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use onsa_diag::{Diagnostic, SourceMap};
+
+use crate::InternalError;
 
 /// A stage boundary of the Core (plan §3.4). The target passes (W9-04) add theirs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,25 +71,39 @@ impl VerifyFailure {
 /// Why lowering produced no Core.
 #[derive(Debug, Clone)]
 pub enum LowerError {
-    /// The program uses something lowering does not support (E0200, ...).
+    /// The program uses features lowering does not support (E0200): all of
+    /// them, each once (S-67).
     Diagnostics(Vec<Diagnostic>),
-    /// The compiler produced a broken Core.
-    Verify(VerifyFailure),
+    /// An internal error (S-67): a panic, a lowering failure that is not an
+    /// unsupported feature, or a Core the verifier rejects.
+    Internal(InternalError),
 }
 
 impl LowerError {
-    /// The diagnostics in text form, or the verifier's report.
+    /// The diagnostics of lowering or the build as they are reported: every
+    /// one, each once (S-67). The one place that reduces them.
+    pub fn reported(diagnostics: Vec<Diagnostic>) -> LowerError {
+        LowerError::Diagnostics(crate::reduce::exact(diagnostics))
+    }
+
+    /// The diagnostics in text form, or the internal error.
     pub fn render(&self, sources: &SourceMap) -> String {
         match self {
             LowerError::Diagnostics(d) => onsa_diag::to_text(sources, d),
-            LowerError::Verify(v) => v.report(),
+            LowerError::Internal(e) => e.render(sources),
         }
     }
 }
 
 impl From<VerifyFailure> for LowerError {
     fn from(v: VerifyFailure) -> Self {
-        LowerError::Verify(v)
+        LowerError::Internal(v.into())
+    }
+}
+
+impl From<InternalError> for LowerError {
+    fn from(e: InternalError) -> Self {
+        LowerError::Internal(e)
     }
 }
 

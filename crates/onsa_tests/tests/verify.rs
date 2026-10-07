@@ -20,7 +20,7 @@ fn core() -> (onsa_driver::Loaded, onsa_core::Module) {
         root: None,
     };
     let mut loaded = onsa_driver::Loaded::from_input(input);
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
     let module = onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     (loaded, module)
@@ -65,8 +65,10 @@ fn a_broken_function_is_reported_with_its_stage_rule_and_core() {
     for part in ["internal error", "lowering", "`t.f`", "type mismatch", "fn t.f("] {
         assert!(report.contains(part), "`{part}` missing from:\n{report}");
     }
-    // The same report through the lowering error.
-    assert_eq!(LowerError::Verify(v.clone()).render(&loaded.sources), report);
+    // The same report through the lowering error: the internal error of S-67.
+    let rendered = LowerError::Internal(v.clone().into()).render(&loaded.sources);
+    assert!(rendered.starts_with(&report), "{rendered}");
+    assert!(rendered.contains("a bug in the compiler"), "{rendered}");
 }
 
 #[test]
@@ -132,17 +134,20 @@ fn the_dump_marks_ids_out_of_range() {
 }
 
 #[test]
-fn every_kind_of_stage_failure_is_a_failed_case() {
+fn every_kind_of_stage_failure_is_an_internal_error() {
     let (loaded, v) = broken();
     let sources = &loaded.sources;
-    let lower = LowerError::Verify(v.clone());
-    let build = BuildError::Verify(v.clone());
+    let internal: onsa_driver::InternalError = v.clone().into();
+    let lower = LowerError::Internal(internal.clone());
+    let build = BuildError::Internal { sources: sources.clone(), error: Box::new(internal.clone()) };
     for (failure, at) in [
         (StageFailure::Lower(&lower), None),
         (StageFailure::Build { target: "host", error: &build }, Some("build of `host`")),
-        (StageFailure::Interface(&v), None),
+        (StageFailure::Interface(&internal), None),
     ] {
-        let Problem::Failed(text) = stage_problem(sources, failure) else { panic!("not a failed case: {failure:?}") };
+        let Problem::Internal(text) = stage_problem(sources, failure) else {
+            panic!("not an internal error: {failure:?}")
+        };
         for part in ["internal error", "`t.f`", "type mismatch", "fn t.f("] {
             assert!(text.contains(part), "`{part}` missing from:\n{text}");
         }
@@ -165,9 +170,14 @@ fn injected(what: &str) -> VerifyFailure {
 
 /// Stages that fail with the verifier, each with its own message.
 const FAILING: Stages = Stages {
-    lower_core: |_| Err(LowerError::Verify(injected("lower_core"))),
-    build: |_, _, _| Err(BuildError::Verify(injected("build"))),
-    interface: |_| Err(injected("interface")),
+    lower_core: |_| Err(LowerError::Internal(injected("lower_core").into())),
+    build: |_, _, _| {
+        Err(BuildError::Internal {
+            sources: onsa_diag::SourceMap::default(),
+            error: Box::new(injected("build").into()),
+        })
+    },
+    interface: |_| Err(injected("interface").into()),
 };
 
 /// A case that reaches every stage: a target (the build), `mode = "test"`
@@ -221,7 +231,7 @@ fn the_runner_reports_the_failure_of_every_stage() {
         .problems
         .iter()
         .filter_map(|p| match p {
-            Problem::Failed(t) => Some(t),
+            Problem::Internal(t) => Some(t),
             _ => None,
         })
         .collect();

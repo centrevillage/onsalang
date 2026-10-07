@@ -23,6 +23,12 @@ Every entry has all of: kind, target, reasons (S / R numbers, one or more),
 until (the work that removes it: a W ID of `docs/rework-phase1.md` §3 or a T
 ID of `docs/implementation-tasks.md` §4, not marked done), note.
 
+One field is optional: `expect = "internal"`, only on a `test-case` entry of a
+whole case (no `::<test name>`). An internal error of the compiler (S-67) is
+never silenced by the list (W1-04); with this field, the case is expected to
+end in an internal error: another failure is an error of the entry, and a
+pass asks for the entry to be removed (the runner checks it).
+
 `until = "P2"` names the second phase instead of a work (K-13 rule 3): a code
 of the second phase waits for no work of the first. Only the kinds of
 `PHASE2_KINDS` may use it. Its reasons may also name a section of the spec
@@ -59,6 +65,9 @@ PENDING = repo.PENDING
 
 KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input")
 FIELDS = ("kind", "target", "reasons", "until", "note")
+# Optional fields: `expect` (only "internal", only on a whole test case).
+OPTIONAL_FIELDS = ("expect",)
+EXPECTS = ("internal",)
 
 # The form of `target` per kind. Paths are checked further in `_check_target`.
 TARGET_FORMS = {
@@ -91,6 +100,7 @@ class Entry:
     reasons: tuple
     until: str
     note: str
+    expect: str = None
 
     def label(self):
         return f'pending[{self.index}] {self.kind} "{self.target}"'
@@ -156,7 +166,7 @@ def load(path):
             continue
         bad = False
         for k in item:
-            if k not in FIELDS:
+            if k not in FIELDS and k not in OPTIONAL_FIELDS:
                 errors.append(f"{where}: unknown field `{k}`")
                 bad = True
         for k in FIELDS:
@@ -176,9 +186,13 @@ def load(path):
         elif not reasons:
             errors.append(f"{where}: `reasons` needs at least one S / R number")
             bad = True
+        expect = item.get("expect")
+        if expect is not None and expect not in EXPECTS:
+            errors.append(f"{where}: `expect` must be one of {', '.join(repr(x) for x in EXPECTS)}")
+            bad = True
         if bad:
             continue
-        entries.append(Entry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"]))
+        entries.append(Entry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"], expect))
     return entries, errors
 
 
@@ -197,6 +211,8 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
             errors.append(f"{where}: unknown kind `{e.kind}` (one of {', '.join(KINDS)})")
             continue
         errors += [f"{where}: {m}" for m in _check_target(e, root, pendable_steps)]
+        if e.expect is not None and (e.kind != "test-case" or "::" in e.target):
+            errors.append(f"{where}: `expect` is only for a `test-case` entry of a whole case (no `::<test name>`)")
         for r in e.reasons:
             if SECTION.fullmatch(r):
                 if e.until != PHASE2:

@@ -24,6 +24,15 @@ pub enum Kind {
     FuzzInput,
 }
 
+/// What a `test-case` entry expects of its case, other than a failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Expect {
+    /// The case ends in an internal error (S-67). Without it, an internal
+    /// error is never silenced by the list (W1-04).
+    Internal,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
@@ -32,6 +41,8 @@ pub struct Entry {
     pub reasons: Vec<String>,
     pub until: String,
     pub note: String,
+    #[serde(default)]
+    pub expect: Option<Expect>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -111,10 +122,23 @@ target = "tests/fuzz/x.onsa"
 reasons = ["R-03"]
 until = "W2-06"
 note = "n"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow/y.onsa"
+reasons = ["R-77"]
+until = "W7-03"
+note = "n"
+expect = "internal"
 "#;
         let list = Pending::parse(text).unwrap();
         let kinds: Vec<Kind> = list.pending.iter().map(|e| e.kind).collect();
-        assert_eq!(kinds, [Kind::SpecExample, Kind::DiagCode, Kind::Gate, Kind::TestCase, Kind::FuzzInput]);
+        assert_eq!(
+            kinds,
+            [Kind::SpecExample, Kind::DiagCode, Kind::Gate, Kind::TestCase, Kind::FuzzInput, Kind::TestCase]
+        );
+        assert_eq!(list.pending[3].expect, None);
+        assert_eq!(list.pending[5].expect, Some(Expect::Internal));
         assert_eq!(list.get(Kind::DiagCode, "E0812").unwrap().until, "W7-06");
         assert!(list.get(Kind::Gate, "E0812").is_none());
         assert!(Pending::parse("").unwrap().pending.is_empty());

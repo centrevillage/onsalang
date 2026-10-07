@@ -12,11 +12,18 @@ pub const TESTS: &str = "tests";
 
 /// Directories under `tests/` that hold no cases, with the reason. Every other
 /// directory is scanned, so a new one is never skipped silently.
-pub const EXCLUDED: &[(&str, &str)] = &[(
-    "tests/review-phase1",
-    "reproduction inputs of the phase-1 review, with the expected and current output in comments; \
-     a work that fixes one moves it into a case (plan §8.3 10)",
-)];
+pub const EXCLUDED: &[(&str, &str)] = &[
+    (
+        "tests/review-phase1",
+        "reproduction inputs of the phase-1 review, with the expected and current output in comments; \
+         a work that fixes one moves it into a case (plan §8.3 10)",
+    ),
+    (
+        "tests/fuzz",
+        "inputs the fuzzing of `check` and `fmt` saved (Q-06, W1-04): mutated sources that crashed the compiler, \
+         replayed by `tools/fuzz.py` (the gate item `fuzz`), not cases",
+    ),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]

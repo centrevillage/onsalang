@@ -22,7 +22,7 @@ fn voice_host_writes_a_wav() {
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
             panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics))
         }
-        Err(onsa_driver::BuildError::Verify(v)) => panic!("build: {}", v.report()),
+        Err(onsa_driver::BuildError::Internal { sources, error }) => panic!("build: {}", error.render(&sources)),
     };
     assert_eq!(report.archive.as_deref(), Some("libonsa_voice.a"), "{report:?}");
     assert!(report.files.iter().any(|f| f == "onsa_voice.h"));

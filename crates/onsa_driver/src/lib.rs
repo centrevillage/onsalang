@@ -1,10 +1,19 @@
 //! Pipeline driver: loads a package (S-11), embeds `std` (D-07), and runs
 //! parse -> analyze. Each milestone adds a stage (`docs/implementation-tasks.md` §4).
+//!
+//! Every public stage function runs in [`guard`]: a panic or another failure
+//! of the compiler comes back as an [`InternalError`] (S-67), never as a
+//! diagnostic, whatever the command. The diagnostics a command reports are
+//! reduced in one place, [`reduce`] (S-59).
 
 pub mod build;
 pub mod graph;
 pub mod interface;
+pub mod internal;
+pub mod reduce;
 pub mod verify;
+
+pub use internal::{InternalError, Origin, STACK_SIZE, guard};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -270,24 +279,77 @@ fn std_package(sources: &mut SourceMap) -> Package {
         .iter()
         .map(|(path, text)| {
             let file = sources.add(format!("std/{}.onsa", path.replace('.', "/")), *text);
-            Module { path: path.to_string(), file, text: text.to_string(), parsed: onsa_syntax::parse(file, text) }
+            Module { path: path.to_string(), file, text: text.to_string(), parsed: parse_file(file, text) }
         })
         .collect();
     Package { name: STD_PACKAGE.into(), modules, deps: Vec::new(), is_std: true }
 }
 
+/// Parse one file; a panic names the file (S-67).
+fn parse_file(file: FileId, text: &str) -> onsa_syntax::Parsed {
+    let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
+    onsa_syntax::parse(file, text)
+}
+
 /// Parse only (the `mode = "parse"` depth of the test cases, D-05).
-pub fn parse_only(sources: &SourceMap) -> CheckResult {
-    let mut result = CheckResult::default();
-    for (id, file) in sources.files() {
-        result.diagnostics.extend(onsa_syntax::parse(id, file.text()).diagnostics);
-    }
-    result
+pub fn parse_only(sources: &SourceMap) -> Result<CheckResult, InternalError> {
+    guard(|| {
+        let mut result = CheckResult::default();
+        for (id, file) in sources.files() {
+            result.diagnostics.extend(parse_file(id, file.text()).diagnostics);
+        }
+        result
+    })
+}
+
+/// The canonical text of a file (`onsa fmt`), or its syntax diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Formatted {
+    Text(String),
+    /// The file has syntax diagnostics: it is not formatted (spec §18.2).
+    Syntax(Vec<Diagnostic>),
+}
+
+/// Format the file `file` of `sources` (`onsa fmt`).
+pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, InternalError> {
+    guard(|| {
+        let text = sources.file(file).text();
+        let parsed = parse_file(file, text);
+        // A panic names the file (S-67).
+        let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
+        match onsa_syntax::format(&parsed, text) {
+            Some(out) => Formatted::Text(out),
+            None => Formatted::Syntax(parsed.diagnostics),
+        }
+    })
+}
+
+/// The structural difference of two files (`onsa diff --ast`).
+#[derive(Debug, Clone)]
+pub enum AstDiff {
+    Items(Vec<onsa_syntax::diff::ItemDiff>),
+    /// A file has syntax diagnostics: the files are not compared (spec §18.2).
+    Syntax(Vec<Diagnostic>),
+}
+
+/// Compare the files `old` and `new` of `sources` (`onsa diff --ast`).
+pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff, InternalError> {
+    guard(|| {
+        let mut parsed = Vec::new();
+        for file in [old, new] {
+            let p = parse_file(file, sources.file(file).text());
+            if p.diagnostics.iter().any(|d| d.code.number() <= 20) {
+                return AstDiff::Syntax(p.diagnostics);
+            }
+            parsed.push(p);
+        }
+        AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], &parsed[1]))
+    })
 }
 
 /// Check the files already in `sources` as one package whose modules are
 /// named after the file stems. `std` is appended to `sources`.
-pub fn check(sources: &mut SourceMap) -> CheckResult {
+pub fn check(sources: &mut SourceMap) -> Result<CheckResult, InternalError> {
     let modules: Vec<(FileId, String)> = sources
         .files()
         .map(|(id, f)| {
@@ -300,7 +362,7 @@ pub fn check(sources: &mut SourceMap) -> CheckResult {
 }
 
 /// Check a loaded package. `std` is appended to `sources`.
-pub fn check_loaded(loaded: &mut Loaded) -> CheckResult {
+pub fn check_loaded(loaded: &mut Loaded) -> Result<CheckResult, InternalError> {
     let modules = loaded.modules.clone();
     let name = loaded.name.clone();
     check_package(&mut loaded.sources, &name, &modules)
@@ -316,38 +378,44 @@ pub struct Analyzed {
 
 /// Parse and analyze a loaded package, keeping the analysis (`std` is
 /// appended to `sources`).
-pub fn analyze_loaded(loaded: &mut Loaded) -> Analyzed {
+pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
     let modules = loaded.modules.clone();
     let name = loaded.name.clone();
     analyze_package(&mut loaded.sources, &name, &modules)
 }
 
-pub fn analyze_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, String)]) -> Analyzed {
-    let user_modules: Vec<Module> = modules
-        .iter()
-        .map(|(file, path)| {
-            let text = sources.file(*file).text().to_string();
-            let parsed = onsa_syntax::parse(*file, &text);
-            Module { path: path.clone(), file: *file, text, parsed }
-        })
-        .collect();
-    let std = std_package(sources);
-    let pkg = Package { name: name.to_string(), modules: user_modules, deps: vec![std], is_std: false };
-    let analysis = onsa_sema::analyze(&pkg);
-    let mut diagnostics = merge(&pkg, analysis.diagnostics.clone());
-    fill_found(sources, &mut diagnostics);
-    Analyzed { pkg, analysis, diagnostics }
+pub fn analyze_package(
+    sources: &mut SourceMap,
+    name: &str,
+    modules: &[(FileId, String)],
+) -> Result<Analyzed, InternalError> {
+    guard(|| {
+        let user_modules: Vec<Module> = modules
+            .iter()
+            .map(|(file, path)| {
+                let text = sources.file(*file).text().to_string();
+                let parsed = parse_file(*file, &text);
+                Module { path: path.clone(), file: *file, text, parsed }
+            })
+            .collect();
+        let std = std_package(sources);
+        let pkg = Package { name: name.to_string(), modules: user_modules, deps: vec![std], is_std: false };
+        let analysis = onsa_sema::analyze(&pkg);
+        let mut diagnostics = reduce::per_unit(&pkg, analysis.diagnostics.clone());
+        fill_found(sources, &mut diagnostics);
+        Analyzed { pkg, analysis, diagnostics }
+    })
 }
 
-pub use graph::graph;
+pub use graph::{GraphError, graph};
 pub use interface::{Interface, interface, render_json, render_text};
 
 pub use verify::{CoreStage, LowerError, VerifyFailure, verify_core, verify_core_in_debug_only};
 
 /// Lower a checked package to Core (T3-3). Only meaningful when
 /// `Analyzed::diagnostics` is empty; lowering diagnostics (E0200 for
-/// features outside the core) come back as the error, and so does a Core
-/// the verifier rejects (R-82).
+/// features outside the core, every one once, S-67) come back as the
+/// error, and so does an internal error (a Core the verifier rejects, R-82).
 pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, LowerError> {
     lower_core_with(analyzed, &onsa_core::LowerOptions::default())
 }
@@ -355,7 +423,13 @@ pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, LowerError> 
 /// [`lower_core`] with the target's memory settings (T4-5): the lowering
 /// stage, verified at its boundary.
 pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> Result<onsa_core::Module, LowerError> {
-    let module = onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts).map_err(LowerError::Diagnostics)?;
+    let module = match guard(|| onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts))? {
+        Ok(m) => m,
+        Err(onsa_core::LowerFailure::Unsupported(d)) => return Err(LowerError::reported(d)),
+        Err(onsa_core::LowerFailure::Internal { span, message }) => {
+            return Err(LowerError::Internal(InternalError::lowering(span, message)));
+        }
+    };
     verify_core(&module, CoreStage::Lower)?;
     Ok(module)
 }
@@ -367,14 +441,20 @@ pub use build::{
 
 /// `check` is the analysis without keeping it (one path for `check`,
 /// `test` and the builds, D-15).
-pub fn check_package(sources: &mut SourceMap, name: &str, modules: &[(FileId, String)]) -> CheckResult {
-    CheckResult { diagnostics: analyze_package(sources, name, modules).diagnostics }
+pub fn check_package(
+    sources: &mut SourceMap,
+    name: &str,
+    modules: &[(FileId, String)],
+) -> Result<CheckResult, InternalError> {
+    Ok(CheckResult { diagnostics: analyze_package(sources, name, modules)?.diagnostics })
 }
 
 /// Every diagnostic names the offending source (`found`, §18.1): when the
 /// emitter left it out, take the text of the span.
 fn fill_found(sources: &SourceMap, diagnostics: &mut [Diagnostic]) {
     for d in diagnostics {
+        // A panic names the file of the diagnostic (S-67).
+        let _scope = onsa_diag::internal::item_scope(Span::new(d.span.file, 0, 0));
         if d.found.as_deref().is_none_or(str::is_empty) {
             let file = sources.file(d.span.file);
             let text = &file.text()[d.span.start as usize..d.span.end as usize];
@@ -383,49 +463,6 @@ fn fill_found(sources: &SourceMap, diagnostics: &mut [Diagnostic]) {
             }
         }
     }
-}
-
-/// P-01: one diagnostic per item. Parser diagnostics win over analysis
-/// diagnostics for the same item; otherwise the earliest wins.
-fn merge(pkg: &Package, sema: Vec<Diagnostic>) -> Vec<Diagnostic> {
-    // Item spans of every user module, keyed by file.
-    let mut items: HashMap<FileId, Vec<Span>> = HashMap::new();
-    let mut out: Vec<Diagnostic> = Vec::new();
-    let mut parser_items: std::collections::HashSet<(FileId, usize)> = Default::default();
-    for m in &pkg.modules {
-        let spans: Vec<Span> = m.parsed.ast.root.iter().map(|&i| m.parsed.ast.item(i).span).collect();
-        for d in &m.parsed.diagnostics {
-            if let Some(i) = spans.iter().position(|s| s.contains(d.span.start) || (s.start == d.span.start)) {
-                parser_items.insert((m.file, i));
-            }
-            out.push(d.clone());
-        }
-        items.insert(m.file, spans);
-    }
-    let mut best: HashMap<(FileId, usize), Diagnostic> = HashMap::new();
-    for d in sema {
-        let Some(spans) = items.get(&d.span.file) else {
-            // Diagnostics inside `std` (none expected) are kept as is.
-            out.push(d);
-            continue;
-        };
-        match spans.iter().position(|s| s.contains(d.span.start) || s.start == d.span.start) {
-            Some(i) => {
-                if parser_items.contains(&(d.span.file, i)) {
-                    continue;
-                }
-                let key = (d.span.file, i);
-                let replace = best.get(&key).is_none_or(|b| d.span.start < b.span.start);
-                if replace {
-                    best.insert(key, d);
-                }
-            }
-            None => out.push(d),
-        }
-    }
-    out.extend(best.into_values());
-    out.sort_by_key(|d| (d.span.file, d.span.start));
-    out
 }
 
 #[cfg(test)]
@@ -575,8 +612,13 @@ impl TestReport {
 }
 
 /// Run every `test` block of the lowered module (T3-8). `assert` failures
-/// and panics (spec §9.2) fail the test and name the position.
-pub fn run_tests(module: &onsa_core::Module, opts: &TestOptions) -> TestReport {
+/// and panics (spec §9.2) fail the test and name the position; a panic of
+/// the interpreter itself is an internal error (S-67).
+pub fn run_tests(module: &onsa_core::Module, opts: &TestOptions) -> Result<TestReport, InternalError> {
+    guard(|| run_tests_unguarded(module, opts))
+}
+
+fn run_tests_unguarded(module: &onsa_core::Module, opts: &TestOptions) -> TestReport {
     let interp = onsa_interp::Interp::new(module);
     let mut report = TestReport::default();
     for (i, f) in module.fns.iter().enumerate() {

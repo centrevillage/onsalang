@@ -29,6 +29,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         if !body.complete {
             continue;
         }
+        let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let Some(module) = module_of_def(pkg, a, id) else { continue };
         let root = match &a.def(id).kind {
             DefKind::Fn(f) => f.body,

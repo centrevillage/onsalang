@@ -112,7 +112,7 @@
 | `syntax/unit*.onsa`、`syntax/emptyrow.onsa` | R-78 |
 | `syntax/ret_arm.onsa`、`syntax/space_idx.onsa` | R-101 |
 | `syntax/interp.onsa` | R-102 |
-| `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考） |
+| `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考）。`fuzz.py` は W1-04 の `tools/fuzz.py`（gate の項目 `fuzz`）に置き換えた。記録として残す。`fuzz2.py`（fmt の AST の保存）は W1-07 の範囲 |
 | `parent/r1.onsa` | R-01 |
 | `parent/t2.onsa` | R-02 |
 | `parent/r2.onsa` | R-69 |
@@ -139,7 +139,7 @@
 | `parent/r74.onsa` | R-74（modes の失敗の後の rt と効果。期待値は各関数の上のコメント。S-64） |
 | `parent/r75/` | R-75（`onsa interface` の大きさと状態のフィールド。仕様の構文で書いたパッケージで、期待値は `dsp.onsa` の先頭のコメント。S-65） |
 | `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。期待値は先頭のコメント。S-66） |
-| `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67） |
+| `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67）。W1-04 で期待値付きの事例へ移した: `tests/spec/negative/lower_unsupported.onsa`、`names_reserved_inputs.onsa`（W7-03 の実装待ち） |
 | `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68） |
 | `parent/r79/` | R-79（std の `target` 宣言を変換先が与えないとき。期待値は `m.onsa` の各項目の上のコメント。S-69） |
 | `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |

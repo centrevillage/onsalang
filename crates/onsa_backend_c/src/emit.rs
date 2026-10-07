@@ -439,6 +439,8 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     let mut bodies = String::new();
     for f in &reach.fns {
         let def = m.fn_(*f);
+        // A panic names this function (S-67).
+        let _scope = onsa_diag::internal::item_scope(def.span);
         match FnEmitter::new(&mut cx, *f).emit() {
             Ok((proto, body)) => {
                 let _ = writeln!(protos, "{proto};");
@@ -1878,6 +1880,8 @@ pub(crate) fn int_range(k: IntKind) -> (String, String) {
     }
 }
 
+/// A state the C backend cannot be in: an internal error (S-67), not E0200.
+/// The driver's guard reports it with the function being emitted.
 pub(crate) fn internal(msg: &str) -> Diagnostic {
-    Diagnostic::new(Code::E0200, no_span(), format!("internal C backend error: {msg}"))
+    onsa_diag::internal::bug(None, format!("internal C backend error: {msg}"))
 }

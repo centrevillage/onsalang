@@ -200,6 +200,8 @@ impl<'p> Sema<'p> {
             let Some(module) = self.module(m) else { continue };
             let ast = &module.parsed.ast;
             for &item in &ast.root {
+                // A panic names this item (S-67).
+                let _scope = onsa_diag::internal::item_scope(ast.item(item).span);
                 self.collect_item(m, ast, item, None);
             }
         }
@@ -480,6 +482,7 @@ impl<'p> Sema<'p> {
             if self.a.defs[i].owner.is_some() {
                 continue; // lowered with their owner (impl / flow)
             }
+            let _scope = onsa_diag::internal::item_scope(self.a.defs[i].span);
             self.lower_def(id);
         }
     }

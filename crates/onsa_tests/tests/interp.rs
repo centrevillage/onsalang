@@ -13,7 +13,7 @@ fn load(src: &str) -> (onsa_driver::Loaded, onsa_driver::Analyzed) {
         root: None,
     };
     let mut loaded = onsa_driver::Loaded::from_input(input);
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     (loaded, analyzed)
 }
 
@@ -24,7 +24,8 @@ fn run(src: &str) -> (Vec<(String, Option<String>)>, SourceMap) {
     let sources = loaded.sources;
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analyzed.diagnostics));
     let module = onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&sources)));
-    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default());
+    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default())
+        .unwrap_or_else(|e| panic!("{}", e.render(&sources)));
     (report.tests.into_iter().map(|t| (t.name, t.message)).collect(), sources)
 }
 

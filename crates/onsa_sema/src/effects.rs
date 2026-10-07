@@ -24,6 +24,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
         if f.rt || f.effects.alloc || f.body.is_none() || !a.bodies.get(&id).is_some_and(|b| b.complete) {
             continue;
         }
+        let _scope = onsa_diag::internal::item_scope(def.span);
         if let Some(d) = first_use(pkg, a, id, moved.get(&id)) {
             diags.push(d);
         }

@@ -212,8 +212,20 @@ fn find_flow(analyzed: &Analyzed, name: &str) -> Result<DefId, String> {
     }
 }
 
+/// Why `onsa graph` drew nothing.
+#[derive(Debug, Clone)]
+pub enum GraphError {
+    /// No such flow, or it does not check (the command could not work).
+    Usage(String),
+    Internal(crate::InternalError),
+}
+
 /// DOT source of the signal graph of `flow` (a short or module-qualified name).
-pub fn graph(analyzed: &Analyzed, flow: &str) -> Result<String, String> {
+pub fn graph(analyzed: &Analyzed, flow: &str) -> Result<String, GraphError> {
+    crate::guard(|| graph_of(analyzed, flow)).map_err(GraphError::Internal)?.map_err(GraphError::Usage)
+}
+
+fn graph_of(analyzed: &Analyzed, flow: &str) -> Result<String, String> {
     let a = &analyzed.analysis;
     let def_id = find_flow(analyzed, flow)?;
     let def = a.def(def_id);
@@ -352,7 +364,8 @@ pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {\n\
     fn resonator_graph() {
         let mut sources = SourceMap::default();
         let file = sources.add("res.onsa", RESONATOR);
-        let analyzed = crate::analyze_package(&mut sources, "res", &[(file, "res".to_string())]);
+        let analyzed =
+            crate::analyze_package(&mut sources, "res", &[(file, "res".to_string())]).expect("no internal error");
         assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analyzed.diagnostics));
         let dot = super::graph(&analyzed, "resonator").unwrap();
         let node_lines = dot.lines().filter(|l| l.contains("[label=")).count();

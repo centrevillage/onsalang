@@ -2,8 +2,8 @@
 
 To add an item, add one `Step`. An item may be listed in `tests/pending.toml`
 (kind `gate`) only if it says `pendable=True`: the items that keep the gate
-complete (formatting, lints, tests, the spec examples, the list itself, the
-static checks of W1-02, the self-tests) are never pending. Later works add
+complete (formatting, lints, tests, the fuzzing, the spec examples, the list
+itself, the static checks of W1-02, the self-tests) are never pending. Later works add
 checks that wait for a later decision as pendable items.
 """
 import sys
@@ -28,6 +28,8 @@ STEPS = [
     Step("fmt", ("cargo", "fmt", "--all", "--", "--check")),
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
     Step("test", ("cargo", "test", "--workspace")),
+    # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
+    Step("fuzz", (*PY, str(TOOLS / "fuzz.py"))),
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),

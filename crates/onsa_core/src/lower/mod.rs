@@ -11,6 +11,23 @@
 //! Flows are lowered by [`flow`] (T3-5): every flow of the user package is a
 //! root, and a flow is also lowered on demand when a body refers to one of
 //! its members (`voice.init`, `voice.State`).
+//!
+//! Unsupported features (E0200, S-67): lowering reports every one, not only
+//! the first of an item. The innermost expression (or `match` arm pattern)
+//! that uses one becomes a placeholder, and the item is lowered again
+//! ([`Lowerer::lower_item`]). A value of a type lowering does not support
+//! is a placeholder too, so its uses are reported where they are. The
+//! limits (W8-01 takes them over):
+//! - A feature outside an expression and an arm pattern (a parameter or
+//!   return type, a `let` pattern, a flow that instantiates itself, a
+//!   `const` initializer with bindings) stops its item: the rest of that
+//!   item is not reported.
+//! - A generic function lowered for several types reports an expression
+//!   once: the later instances find it a placeholder already, so another
+//!   unsupported feature at the same expression of a later instance is not
+//!   reported.
+//! - An internal failure inside or around a placeholder is taken as a
+//!   consequence of it and not reported (see `lower_item`).
 
 mod body;
 mod eq;
@@ -22,7 +39,8 @@ use std::collections::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span};
 use onsa_sema::def::{DefKind, Fields, GenericKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy, TyId};
-use onsa_sema::{Analysis, DefId, Package};
+use onsa_sema::{Analysis, DefId, ModId, Package};
+use onsa_syntax::ast::{ExprId, PatId};
 
 use crate::ir::*;
 
@@ -33,16 +51,69 @@ pub enum GenericArg {
     Const(u32),
 }
 
+/// Why lowering of an item stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FailKind {
+    /// The program uses a feature this version does not lower (E0200, Q-09).
+    Unsupported,
+    /// Lowering reached a state it cannot be in: an internal error (S-67),
+    /// never a diagnostic.
+    Internal,
+}
+
+/// Where an unsupported feature was found: an expression, or the pattern
+/// of a `match` arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Hole {
+    Expr(ModId, ExprId),
+    Pat(ModId, PatId),
+}
+
 pub(crate) struct Fail {
-    pub code: Code,
+    pub kind: FailKind,
     pub span: Span,
     pub msg: String,
+    /// The innermost expression whose lowering failed (unsupported features
+    /// only): the next attempt lowers it as a placeholder and goes on.
+    pub hole: Option<Hole>,
 }
 
 pub(crate) type R<T> = Result<T, Fail>;
 
 pub(crate) fn unsupported(span: Span, what: &str) -> Fail {
-    Fail { code: Code::E0200, span, msg: format!("this version does not lower {what} to Core") }
+    Fail { kind: FailKind::Unsupported, span, msg: format!("this version does not lower {what} to Core"), hole: None }
+}
+
+/// Why [`lower`] produced no Core.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LowerFailure {
+    /// Every unsupported feature the program uses (E0200), in the order
+    /// found. The driver removes the duplicates and orders them (S-67).
+    Unsupported(Vec<Diagnostic>),
+    /// An internal error (S-67): the command stops. `span` is the source
+    /// lowering was at.
+    Internal { span: Span, message: String },
+}
+
+/// Whether an internal failure at `at`, in the item at `item`, comes from
+/// one of the placeholders at `holes` (see [`Lowerer::lower_item`]): one
+/// holds the other, and the failure is not at the whole item.
+pub(crate) fn from_placeholder(holes: &[Span], at: Span, item: Span) -> bool {
+    at != item && holes.iter().any(|&h| contains(h, at) || contains(at, h))
+}
+
+/// Whether `outer` holds `inner` (the same file).
+fn contains(outer: Span, inner: Span) -> bool {
+    outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end
+}
+
+/// Attach the hole `h` to an unsupported feature that has none yet (the
+/// innermost expression or pattern whose lowering failed).
+pub(crate) fn at_hole(mut f: Fail, h: Hole) -> Fail {
+    if f.kind == FailKind::Unsupported && f.hole.is_none() {
+        f.hole = Some(h);
+    }
+    f
 }
 
 pub(crate) struct Lowerer<'a> {
@@ -64,6 +135,20 @@ pub(crate) struct Lowerer<'a> {
     pub bulk_threshold: Option<u32>,
     /// Pointer width of the target in bytes (the bulk slot, `Span`s), T4-5.
     pub ptr_size: u32,
+    /// Expressions and arm patterns that use an unsupported feature:
+    /// lowered as placeholders, so that lowering goes on to the next one (S-67).
+    pub(crate) holes: HashSet<Hole>,
+    /// The source of every placeholder the current attempt lowered.
+    pub(crate) hole_spans: Vec<Span>,
+    /// The placeholders of the current attempt whose type is `()` in place of
+    /// a type lowering does not support.
+    pub(crate) stand_in_spans: Vec<Span>,
+    /// The attempts of one item: one more than the holes there can be (every
+    /// expression and pattern of every module), so it is never reached while
+    /// each attempt finds a new hole.
+    max_attempts: usize,
+    /// E0200 for every unsupported feature found (S-67).
+    unsupported: Vec<Diagnostic>,
 }
 
 /// Options of a lowering.
@@ -82,13 +167,22 @@ impl Default for LowerOptions {
 }
 
 /// Lower the user package (and what it reaches in `std`) to Core.
-pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, Vec<Diagnostic>> {
+pub fn lower(pkg: &Package, a: &Analysis) -> Result<Module, LowerFailure> {
     lower_with(pkg, a, &LowerOptions::default())
 }
 
 /// [`lower`] with options (the target's `bulk_threshold`).
-pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, Vec<Diagnostic>> {
-    let user_pkg = onsa_sema::flatten(pkg).len() - 1;
+///
+/// Lowering does not stop at the first unsupported feature of an item
+/// (S-67): the innermost expression that uses it becomes a placeholder and
+/// the item is lowered again (see the module's documentation). The Core is
+/// then dropped, so no placeholder leaves this function. The first internal
+/// failure stops lowering, unless it is a consequence of a placeholder.
+pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Module, LowerFailure> {
+    let flat = onsa_sema::flatten(pkg);
+    let user_pkg = flat.len() - 1;
+    let places: usize =
+        flat.iter().flat_map(|p| p.modules.iter()).map(|m| m.parsed.ast.exprs.len() + m.parsed.ast.pats.len()).sum();
     let mut lw = Lowerer {
         pkg,
         a,
@@ -105,8 +199,12 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         flows_in_progress: HashSet::new(),
         bulk_threshold: opts.bulk_threshold,
         ptr_size: opts.ptr_size,
+        holes: HashSet::new(),
+        hole_spans: Vec::new(),
+        stand_in_spans: Vec::new(),
+        max_attempts: places + 1,
+        unsupported: Vec::new(),
     };
-    let mut diags = Vec::new();
     // Roots: non-generic items of the user package, in definition order.
     for (i, def) in a.defs.iter().enumerate() {
         let id = DefId(i as u32);
@@ -120,27 +218,19 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
             DefKind::Test { .. } => {
                 lw.fn_id(id, Vec::new());
             }
-            DefKind::Flow(_) => {
-                if let Err(e) = lw.ensure_flow(id) {
-                    diags.push(lw.diagnostic(e));
-                }
-            }
+            DefKind::Flow(_) => lw.lower_item(def.span, |lw| lw.ensure_flow(id).map(drop))?,
             DefKind::Const(c) if c.value.is_some() && def.owner.is_none_or(|o| a.def(o).generics().is_empty()) => {
-                if let Err(e) = lw.const_id(id) {
-                    diags.push(lw.diagnostic(e));
-                }
+                lw.lower_item(def.span, |lw| lw.const_id(id).map(drop))?
             }
             _ => {}
         }
     }
     while let Some((def, args, fid)) = lw.worklist.pop() {
-        if let Err(e) = lw.lower_fn(def, &args, fid) {
-            diags.push(lw.diagnostic(e));
-        }
+        let span = a.def(def).span;
+        lw.lower_item(span, |lw| lw.lower_fn(def, &args, fid))?;
     }
-    if !diags.is_empty() {
-        diags.sort_by_key(|d| (d.span.file, d.span.start));
-        return Err(diags);
+    if !lw.unsupported.is_empty() {
+        return Err(LowerFailure::Unsupported(lw.unsupported));
     }
     let mut module = lw.m;
     module.moves = moves::collect(&module);
@@ -150,8 +240,55 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
 }
 
 impl<'a> Lowerer<'a> {
-    pub(crate) fn diagnostic(&self, f: Fail) -> Diagnostic {
-        Diagnostic::new(f.code, f.span, f.msg)
+    /// Lower one item (a function, a flow, a `const`) by `attempt`, again
+    /// after each unsupported feature found in an expression or an arm
+    /// pattern (S-67). `Err` is an internal error, which stops lowering.
+    ///
+    /// An internal failure is a consequence of a placeholder, and not
+    /// reported, when its source and a placeholder's source of the same
+    /// attempt are inside one another (the placeholder, or an expression
+    /// that uses its value) and it is not the whole item. Any other is an
+    /// internal error, whatever E0200 the item has.
+    fn lower_item(&mut self, span: Span, mut attempt: impl FnMut(&mut Self) -> R<()>) -> Result<(), LowerFailure> {
+        // A panic names this item (S-67).
+        let _scope = onsa_diag::internal::item_scope(span);
+        for _ in 0..self.max_attempts {
+            self.hole_spans.clear();
+            self.stand_in_spans.clear();
+            let Err(fail) = attempt(self) else { return Ok(()) };
+            match fail.kind {
+                FailKind::Internal if from_placeholder(&self.hole_spans, fail.span, span) => return Ok(()),
+                FailKind::Internal => return Err(LowerFailure::Internal { span: fail.span, message: fail.msg }),
+                FailKind::Unsupported => {
+                    // An operation on a stand-in `()` (`==` of two `Str`
+                    // placeholders) fails for the stand-in's type, not the
+                    // program's: its hole is used, and nothing reported.
+                    let region = fail.hole.and_then(|h| self.hole_span(h)).unwrap_or(fail.span);
+                    let around_stand_in = self.stand_in_spans.iter().any(|&h| contains(region, h));
+                    if !around_stand_in {
+                        self.unsupported.push(Diagnostic::new(Code::E0200, fail.span, fail.msg));
+                    }
+                    match fail.hole {
+                        Some(h) if self.holes.insert(h) => {}
+                        _ => return Ok(()),
+                    }
+                }
+            }
+        }
+        // A safety bound, not reached while every attempt finds a new hole.
+        if let Some(last) = self.unsupported.last_mut() {
+            let at = last.span;
+            last.notes.push((at, "this item may use more unsupported features that were not reported".into()));
+        }
+        Ok(())
+    }
+
+    /// The source of a hole.
+    fn hole_span(&self, h: Hole) -> Option<Span> {
+        Some(match h {
+            Hole::Expr(m, e) => self.a.ast(self.pkg, m)?.parsed.ast.expr(e).span,
+            Hole::Pat(m, p) => self.a.ast(self.pkg, m)?.parsed.ast.pat(p).span,
+        })
     }
 
     pub(crate) fn msg(&mut self, text: &str) -> MsgId {
@@ -438,12 +575,13 @@ impl<'a> Lowerer<'a> {
             None => {
                 // Evaluated by the interpreter at build time (T3-9): lower the initializer.
                 let Some(body) = self.a.bodies.get(&d) else {
-                    return Err(unsupported(def.span, "a `const` whose initializer was not checked"));
+                    return Err(internal(def.span, "a `const` whose initializer was not checked"));
                 };
                 let Some(v) = c.value else { return Err(internal(def.span, "const without initializer")) };
                 let mut cx = body::FnCx::new(self, d, Vec::new(), body, ty.clone())?;
                 let e = body::lower_expr(self, &mut cx, v)?;
-                if !cx.locals.is_empty() {
+                // A placeholder is a local of its own (S-67): not one of the initializer.
+                if !cx.locals.is_empty() && self.hole_spans.is_empty() {
                     return Err(unsupported(def.span, "a `const` initializer with local bindings"));
                 }
                 e
@@ -569,6 +707,7 @@ pub(crate) fn core_mode(m: onsa_syntax::ast::Mode) -> Mode {
     }
 }
 
+/// A state lowering cannot be in: an internal error (S-67), not E0200.
 pub(crate) fn internal(span: Span, msg: impl Into<String>) -> Fail {
-    Fail { code: Code::E0200, span, msg: format!("internal lowering error: {}", msg.into()) }
+    Fail { kind: FailKind::Internal, span, msg: format!("internal lowering error: {}", msg.into()), hole: None }
 }

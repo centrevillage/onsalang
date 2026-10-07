@@ -19,6 +19,11 @@
 //! Every Core a case makes comes from the driver's stage functions, which run
 //! the Core verifier at their boundaries (R-82); a failure fails the case.
 //!
+//! An internal error of the compiler (S-67: a panic, a lowering failure that
+//! is not an unsupported feature, a Core the verifier rejects) is a problem
+//! of its own, [`Problem::Internal`]: the pending list does not silence it,
+//! unless a `test-case` entry says `expect = "internal"` (W1-04).
+//!
 //! The results are kept as structures ([`CaseRun`], [`CaseReport`]): which
 //! markers were compared at which stage, and whether the case is pending.
 
@@ -29,7 +34,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use onsa_diag::{Code, Diagnostic, FileId, SourceMap};
-use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, Loaded, LowerError, VerifyFailure};
+use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, InternalError, Loaded, LowerError};
 
 use crate::case::{self, Case, Setup};
 use crate::fragment::{GoldenKind, Mode};
@@ -76,14 +81,28 @@ pub enum Problem {
     Failed(String),
     /// The case itself is wrong (its fragment, markers or settings): never pending.
     Case(String),
+    /// An internal error of the compiler (S-67): pending only by a `test-case`
+    /// entry with `expect = "internal"`.
+    Internal(String),
 }
 
 impl Problem {
+    /// The kind, as the JSON report names it.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Problem::TestFailed { .. } => "test-failed",
+            Problem::Failed(_) => "failed",
+            Problem::Case(_) => "case",
+            Problem::Internal(_) => "internal",
+        }
+    }
+
     pub fn text(&self) -> String {
         match self {
             Problem::TestFailed { name, message } => format!("test \"{name}\" failed: {message}"),
             Problem::Failed(m) => m.clone(),
             Problem::Case(m) => format!("error in the case: {m}"),
+            Problem::Internal(m) => m.clone(),
         }
     }
 }
@@ -110,7 +129,7 @@ pub struct CaseRun {
 pub struct Stages {
     pub lower_core: fn(&Analyzed) -> Result<onsa_core::Module, LowerError>,
     pub build: fn(&Loaded, &Analyzed, &str) -> Result<BuildOutput, BuildError>,
-    pub interface: fn(&Analyzed) -> Result<Interface, VerifyFailure>,
+    pub interface: fn(&Analyzed) -> Result<Interface, InternalError>,
 }
 
 impl Stages {
@@ -130,24 +149,22 @@ pub enum StageFailure<'a> {
     /// The build of a target.
     Build { target: &'a str, error: &'a BuildError },
     /// `interface`, for its golden.
-    Interface(&'a VerifyFailure),
+    Interface(&'a InternalError),
 }
 
 /// The problem of the case for a failed stage: the one place every arm of
-/// the runner turns a stage's failure into a problem (R-82). A verifier
-/// failure fails the case with its report (the stage, the item, the rule and
-/// the item's Core).
+/// the runner turns a stage's failure into a problem (R-82). An internal
+/// error (S-67) is [`Problem::Internal`] with its report (for a verifier
+/// failure: the stage, the item, the rule and the item's Core).
 pub fn stage_problem(sources: &SourceMap, failure: StageFailure<'_>) -> Problem {
-    let verify = |v: &VerifyFailure, target: Option<&str>| {
-        let at = target.map(|t| format!("build of `{t}`: ")).unwrap_or_default();
-        Problem::Failed(format!("{at}{}", v.report().replace('\n', "\n  ")))
-    };
     match failure {
         StageFailure::Lower(LowerError::Diagnostics(diags)) => {
             Problem::Failed(format!("lowering failed:\n{}", onsa_diag::to_text(sources, diags).replace('\n', "\n  ")))
         }
-        StageFailure::Lower(LowerError::Verify(v)) | StageFailure::Interface(v) => verify(v, None),
-        StageFailure::Build { target, error: BuildError::Verify(v) } => verify(v, Some(target)),
+        StageFailure::Lower(LowerError::Internal(e)) | StageFailure::Interface(e) => internal_problem(sources, e, None),
+        StageFailure::Build { target, error: BuildError::Internal { sources, error } } => {
+            internal_problem(sources, error, Some(target))
+        }
         // The settings of the case itself are wrong.
         StageFailure::Build { target, error: BuildError::Usage(m) } => {
             Problem::Case(format!("build of `{target}`: {m}"))
@@ -156,6 +173,12 @@ pub fn stage_problem(sources: &SourceMap, failure: StageFailure<'_>) -> Problem 
             format!("build of `{target}`:\n{}", onsa_diag::to_text(sources, diagnostics).replace('\n', "\n  ")),
         ),
     }
+}
+
+/// The problem of an internal error (S-67), with its report.
+pub fn internal_problem(sources: &SourceMap, e: &InternalError, target: Option<&str>) -> Problem {
+    let at = target.map(|t| format!("build of `{t}`: ")).unwrap_or_default();
+    Problem::Internal(format!("{at}{}", e.render(sources).trim_end().replace('\n', "\n  ")))
 }
 
 /// Run one case. `scratch` is a directory of its own for the C files;
@@ -230,19 +253,38 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, scratch: &Path, 
     let targeted = markers.iter().filter(|(_, m)| m.targets.is_some()).count();
     for (file, _) in &loaded.modules {
         let f = loaded.sources.file(*file);
-        if !f.text().contains("//~") {
-            canonical(&mut run, f.name(), f.text());
+        // The parser and fmt run here outside the driver's stages: guard them.
+        let r = onsa_driver::guard(|| {
+            let mut problems = CaseRun::default();
+            if !f.text().contains("//~") {
+                canonical(&mut problems, f.name(), f.text());
+            }
+            parser_markers(&mut problems, &loaded.sources, *file, &markers);
+            problems.problems
+        });
+        match r {
+            Ok(p) => run.problems.extend(p),
+            Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
         }
-        parser_markers(&mut run, &loaded.sources, *file, &markers);
     }
 
     if t.mode == Mode::Parse {
-        let result = onsa_driver::parse_only(&loaded.sources);
-        compare(&mut run, &loaded.sources, &markers, &result.diagnostics, Stage::Parse, None);
+        match onsa_driver::parse_only(&loaded.sources) {
+            Ok(result) => {
+                compare(&mut run, &loaded.sources, &markers, &result.diagnostics, Stage::Parse, None);
+            }
+            Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
+        }
         return run;
     }
 
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
+        Ok(a) => a,
+        Err(e) => {
+            run.problems.push(internal_problem(&loaded.sources, &e, None));
+            return run;
+        }
+    };
     let check = &analyzed.diagnostics;
     if !check.is_empty() || targets.is_empty() {
         if targeted > 0 {
@@ -319,13 +361,16 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, scratch: &Path, 
     for flow in &t.golden_graph {
         match onsa_driver::graph(&analyzed, flow) {
             Ok(dot) => gold(&mut run, golden::graph_path(&case.name, flow), &dot),
-            Err(e) => run.problems.push(Problem::Failed(format!("graph `{flow}`: {e}"))),
+            Err(onsa_driver::GraphError::Usage(e)) => {
+                run.problems.push(Problem::Failed(format!("graph `{flow}`: {e}")))
+            }
+            Err(onsa_driver::GraphError::Internal(e)) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
         }
     }
     if t.mode == Mode::Test
         && let Some(m) = &module
     {
-        run_tests(&mut run, m, &testfails);
+        run_tests(&mut run, &loaded.sources, m, &testfails);
     }
     run
 }
@@ -571,8 +616,14 @@ fn negative_rules(run: &mut CaseRun, path: &str, diags: &[Diagnostic]) {
 }
 
 /// `mode = "test"`: every `test` block, as `onsa test` runs them (T3-8).
-fn run_tests(run: &mut CaseRun, module: &onsa_core::Module, testfails: &[String]) {
-    let report = onsa_driver::run_tests(module, &onsa_driver::TestOptions::default());
+fn run_tests(run: &mut CaseRun, sources: &SourceMap, module: &onsa_core::Module, testfails: &[String]) {
+    let report = match onsa_driver::run_tests(module, &onsa_driver::TestOptions::default()) {
+        Ok(r) => r,
+        Err(e) => {
+            run.problems.push(internal_problem(sources, &e, None));
+            return;
+        }
+    };
     for t in &report.tests {
         let failed = t.status == onsa_driver::TestStatus::Failed;
         let testfail = testfails.contains(&t.name);
@@ -700,16 +751,29 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
         } else if whole.len() > 1 || (!whole.is_empty() && !named.is_empty()) {
             failures.push("listed in tests/pending.toml more than once (as a whole and by test)".to_string());
         } else if let Some(e) = whole.first() {
-            let (case_errors, others): (Vec<&Problem>, Vec<&Problem>) =
-                run.problems.iter().partition(|p| matches!(p, Problem::Case(_)));
+            let expects_internal = e.expect == Some(pending::Expect::Internal);
+            let internal = run.problems.iter().any(|p| matches!(p, Problem::Internal(_)));
+            // Never silenced: the errors of the case, and an internal error
+            // the entry does not expect.
+            let kept = |p: &Problem| match p {
+                Problem::Case(_) => true,
+                Problem::Internal(_) => !expects_internal,
+                _ => false,
+            };
+            let (case_errors, others): (Vec<&Problem>, Vec<&Problem>) = run.problems.iter().partition(|p| kept(p));
             failures.extend(case_errors.iter().map(|p| p.text()));
             if others.is_empty() && case_errors.is_empty() {
                 failures
                     .push(format!("passes but is listed in tests/pending.toml (until {}); remove the entry", e.until));
+            } else if case_errors.is_empty() && expects_internal && !internal {
+                failures.push(format!(
+                    "is listed in tests/pending.toml with `expect = \"internal\"`, but fails without an internal error: {}",
+                    others.iter().map(|p| p.text()).collect::<Vec<_>>().join("; ")
+                ));
             } else if case_errors.is_empty() {
                 pending_entry = Some((*e).clone());
             }
-            run.problems.retain(|p| matches!(p, Problem::Case(_)));
+            run.problems.retain(kept);
         } else {
             for (e, name) in &named {
                 if run.mode != Mode::Test {
@@ -808,9 +872,12 @@ pub fn run_each(root: &Path, cases: &[Case], write_golden: impl Fn(&Case) -> boo
 /// {"cases": [{"path": "tests/spec/negative/flow.onsa", "mode": "check", "ran": true,
 ///             "markers": [{"code": "E0815", "file": "tests/spec/negative/flow.onsa",
 ///                          "line": 75, "stage": "check", "target": null, "matched": true}],
-///             "problems": []}],
+///             "problems": [{"kind": "failed", "text": "..."}]}],
 ///  "errors": []}
 /// ```
+///
+/// The kinds of a problem: `failed`, `test-failed`, `case` and `internal`
+/// ([`Problem::kind`]).
 ///
 /// `file` is the file's name in the case's source map: its repository path
 /// for a file without a manifest, its path inside the package otherwise.
@@ -837,7 +904,7 @@ pub fn runs_json(runs: &[CaseRun], errors: &[String]) -> serde_json::Value {
                 "mode": r.mode,
                 "ran": r.ran,
                 "markers": markers,
-                "problems": r.problems.iter().map(Problem::text).collect::<Vec<_>>(),
+                "problems": r.problems.iter().map(|p| serde_json::json!({ "kind": p.kind(), "text": p.text() })).collect::<Vec<_>>(),
             })
         })
         .collect();
@@ -851,21 +918,18 @@ fn run_parallel(cases: &[Case], f: impl Fn(usize, &Case) -> CaseRun + Sync) -> V
     std::thread::scope(|s| {
         for _ in 0..workers {
             std::thread::Builder::new()
-                .stack_size(64 << 20)
+                // SPEC-GAP(S-183): the nesting depth is bounded only by this stack.
+                .stack_size(onsa_driver::STACK_SIZE)
                 .spawn_scoped(s, || {
                     loop {
                         let i = next.fetch_add(1, Ordering::SeqCst);
                         let Some(c) = cases.get(i) else { break };
-                        let r =
-                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(i, c))).unwrap_or_else(|_| {
-                                CaseRun {
-                                    path: c.path.clone(),
-                                    problems: vec![Problem::Failed(
-                                        "the compiler panicked (see the output above)".into(),
-                                    )],
-                                    ..Default::default()
-                                }
-                            });
+                        // A panic outside the driver's stages: an internal error (S-67).
+                        let r = onsa_driver::guard(|| f(i, c)).unwrap_or_else(|e| CaseRun {
+                            path: c.path.clone(),
+                            problems: vec![internal_problem(&SourceMap::default(), &e, None)],
+                            ..Default::default()
+                        });
                         results.lock().expect("results")[i] = Some(r);
                     }
                 })
@@ -1117,6 +1181,55 @@ mod tests {
         assert!(c.failures[1].contains("does not have"), "{:?}", c.failures);
     }
 
+    /// W1-04: an internal error is not silenced by the list, unless the entry
+    /// expects it (`expect = "internal"`).
+    #[test]
+    fn internal_errors_and_the_list() {
+        let run = |path: &str, problems: Vec<Problem>| CaseRun {
+            path: path.into(),
+            mode: Mode::Check,
+            ran: true,
+            problems,
+            ..Default::default()
+        };
+        let internal = || Problem::Internal("internal error: boom".into());
+        let failed = || Problem::Failed("the check diagnostics differ".into());
+        let expect = |e: String| e.replace("note = \"n\"\n", "note = \"n\"\nexpect = \"internal\"\n");
+        let list = Pending::parse(
+            &[
+                entry("tests/plain.onsa"),
+                entry("tests/plain_failed.onsa"),
+                expect(entry("tests/expected.onsa")),
+                expect(entry("tests/expected_other.onsa")),
+                expect(entry("tests/expected_passes.onsa")),
+            ]
+            .concat(),
+        )
+        .unwrap();
+        let runs = vec![
+            run("tests/plain.onsa", vec![failed(), internal()]),
+            run("tests/plain_failed.onsa", vec![failed()]),
+            run("tests/expected.onsa", vec![failed(), internal()]),
+            run("tests/expected_other.onsa", vec![failed()]),
+            run("tests/expected_passes.onsa", vec![]),
+            run("tests/unlisted.onsa", vec![internal()]),
+        ];
+        let r = reconcile(runs, &list);
+        let c = |p: &str| r.cases.iter().find(|c| c.run.path == p).unwrap();
+        // without `expect`: the internal error is never pending
+        assert_eq!(c("tests/plain.onsa").failures, ["internal error: boom"]);
+        assert!(c("tests/plain.onsa").pending.is_none());
+        assert!(c("tests/plain_failed.onsa").failures.is_empty() && c("tests/plain_failed.onsa").pending.is_some());
+        // with it: pending only while the case ends in an internal error
+        assert!(c("tests/expected.onsa").failures.is_empty(), "{:?}", c("tests/expected.onsa").failures);
+        assert!(c("tests/expected.onsa").pending.is_some());
+        let other = &c("tests/expected_other.onsa").failures;
+        assert!(other.len() == 1 && other[0].contains("fails without an internal error"), "{other:?}");
+        let passes = &c("tests/expected_passes.onsa").failures;
+        assert!(passes.len() == 1 && passes[0].contains("passes but is listed"), "{passes:?}");
+        assert_eq!(c("tests/unlisted.onsa").failures, ["internal error: boom"]);
+    }
+
     #[test]
     fn runs_as_json() {
         let src = format!("{MANIFEST}\npub flow f(x: Sig[F32], k: Ctl[F32]) -> Sig[F32] {{ //~ E0809\n  x * k\n}}\n");
@@ -1155,6 +1268,8 @@ mod tests {
         let w = case("tests/wrong.onsa");
         assert_eq!(w["markers"][0]["matched"], false);
         assert_eq!(w["problems"].as_array().unwrap().len(), 1);
+        assert_eq!(w["problems"][0]["kind"], "failed");
+        assert!(w["problems"][0]["text"].as_str().unwrap().contains("differ from the markers"), "{w}");
         // `mode = "none"` compares nothing
         let n = case("tests/none.onsa");
         assert_eq!(n["mode"], "none");

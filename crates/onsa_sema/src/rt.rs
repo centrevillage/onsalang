@@ -29,6 +29,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
     // Calls of each rt body, in source order: (span, callee) for rt callees.
     let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::new();
     for &id in &rt_fns {
+        let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         if let Some(d) = body_rules(pkg, a, id, moved.get(&id)) {
             diags.push(d);
             continue;

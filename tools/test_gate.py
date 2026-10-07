@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import builtin_names  # noqa: E402
 import check_spec_examples as cse  # noqa: E402
 import diag_codes  # noqa: E402
+import fuzz  # noqa: E402
 import gap_marks  # noqa: E402
 import gate  # noqa: E402
 import gate_steps  # noqa: E402
@@ -397,6 +398,18 @@ class PendingList(TempRepo):
         text = entry("spec-example", self.sid).replace('note = "n"\n', 'note = "n"\nline = 3\n')
         self.assertOneError(text, "unknown field `line`")
 
+    def test_expect_internal(self):
+        # only on a whole test case (W1-04), and only "internal"
+        whole = entry("test-case", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
+        self.assertEqual(self.errors_of(whole.replace('note = "n"\n', 'note = "n"\nexpect = "internal"\n')), [])
+        self.assertOneError(whole.replace('note = "n"\n', 'note = "n"\nexpect = "panic"\n'), "`expect` must be one of")
+        one_test = entry("test-case", "tests/spec/ops/groups.onsa::a test", ("S-45",), "W3-08")
+        self.assertOneError(
+            one_test.replace('note = "n"\n', 'note = "n"\nexpect = "internal"\n'), "only for a `test-case` entry"
+        )
+        fuzz = entry("fuzz-input", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
+        self.assertOneError(fuzz.replace('note = "n"\n', 'note = "n"\nexpect = "internal"\n'), "only for a `test-case`")
+
     def test_no_reason(self):
         self.assertOneError(entry("spec-example", self.sid, reasons=()), "at least one S / R number")
 
@@ -651,7 +664,7 @@ class RealSteps(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
         required = (
             "fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden",
-            "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files",
+            "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files", "fuzz",
         )  # fmt: skip
         for r in required + ("spec-coverage",):
             self.assertIn(r, names)
@@ -1435,6 +1448,146 @@ class IgnoredFiles(unittest.TestCase):
             ("tests/targets/x", False),
         ):
             self.assertEqual(repo.is_build_output(self.root, rel), out, rel)
+
+
+# A stand-in for the compiler: an input with `X` is an internal error, one with
+# `Y` a raw panic in the `check` command only, one with `Z` a signal. The
+# signal is SIGKILL: an abort would make the system write a crash report.
+FAKE_ONSA = r"""
+import os, sys
+text = open(sys.argv[-1], encoding="utf-8").read()
+check = sys.argv[1] == "check"
+if "X" in text:
+    sys.stderr.write("onsa: internal error: index out of bounds: the len is 3 but the index is 7\n"
+                     "  = at crates/onsa_sema/src/body.rs:12:5\n")
+    sys.exit(101)
+if "Y" in text and check:
+    sys.stderr.write("thread 'main' panicked at crates/a.rs:1:1:\nboom\n")
+    sys.exit(0)
+if "Z" in text:
+    os.kill(os.getpid(), 9)
+sys.exit(1 if "e" in text else 0)
+"""
+
+
+class Fuzz(TempRepo):
+    def setUp(self):
+        super().setUp()
+        self.fake = self.repo.write("fake_onsa.py", FAKE_ONSA)
+        self.argv = [sys.executable, "-B", str(self.fake)]
+
+    def go(self, per_seed=0, save=False):
+        lines = []
+        code = fuzz.run(self.repo.root, self.argv, per_seed, "t", 2, save, out=lines.append)
+        return code, "\n".join(lines)
+
+    def test_classify(self):
+        self.assertIsNone(fuzz.classify(("check",), 1, "x.onsa:1:1: error[E0002]: ..."))
+        c = fuzz.classify(
+            ("check",), 101,
+            "onsa: internal error: byte index 29 is not a char boundary; it is inside '辞' (bytes 28..31) of `\"{辞\n"
+            "fn f() {`\n  --> m.onsa:1:1\n  = at crates/onsa_syntax/src/lexer.rs:283:34\n",
+        )
+        self.assertEqual(
+            c.signature,
+            "internal|crates/onsa_syntax/src/lexer.rs|byte index # is not a char boundary; it is inside '?' (bytes #..#) of `…`",
+        )
+        # a quoted name stays: two different panics are two classes
+        a = fuzz.classify(("check",), 101, "onsa: internal error: called `Option::unwrap()` on a `None` value\n"
+                          "  = at crates/a.rs:1:1\n")
+        b = fuzz.classify(("check",), 101, "onsa: internal error: called `Result::unwrap()` on an `Err` value\n"
+                          "  = at crates/a.rs:1:1\n")
+        self.assertIn("`Option::unwrap()`", a.signature)
+        self.assertNotEqual(a.signature, b.signature)
+        lowering = fuzz.classify(("check",), 101, "onsa: internal error: internal lowering error: no field\n  --> m.onsa:1:1\n")
+        self.assertEqual(lowering.signature, "internal|-|internal lowering error: no field")
+        raw = fuzz.classify(("fmt", "--check"), 0, "thread 'main' panicked at a.rs:1:1:\n")
+        self.assertEqual(raw.command, "fmt --check")
+        overflow = fuzz.classify(("check",), -6, "thread 'main' has overflowed its stack\nfatal runtime error: stack overflow\n")
+        self.assertTrue(overflow.signature.startswith("signal 6|check|"), overflow)
+        self.assertEqual(fuzz.classify(("check",), None, "", timed_out=True).signature, "timeout")
+
+    def test_mutants_are_the_same_for_the_same_seeds(self):
+        files = [("tests/a.onsa", "pub fn f() -> I32 {\n  1\n}\n"), ("tests/b.onsa", "let x = 2\n")]
+        a = fuzz.mutants(files, 5, "1")
+        self.assertEqual(a, fuzz.mutants(files, 5, "1"))
+        self.assertEqual(len(a), 10)
+        self.assertNotEqual(a, fuzz.mutants(files, 5, "2"))
+        # a new seed file does not change the mutants of the others
+        more = fuzz.mutants(files + [("tests/c.onsa", "x\n")], 5, "1")
+        self.assertEqual([m for m in more if m[0] != "tests/c.onsa"], a)
+
+    def test_minimize_keeps_the_class(self):
+        runner = fuzz.Runner(self.argv, self.repo.root / "work")
+        text = "fn a() {}\nfn b() { X }\nfn c() {}\n"
+        sig = runner.crashes(text)[0].signature
+        small = fuzz.minimize(runner, text, sig)
+        self.assertEqual(small, "X")
+
+    def test_replay_follows_the_list(self):
+        self.repo.write("tests/fuzz/listed.onsa", "X")
+        self.repo.write("tests/fuzz/fixed.onsa", "ok")
+        self.repo.write("tests/fuzz/regression.onsa", "ok")
+        self.repo.write("tests/fuzz/unlisted.onsa", "a Z")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/listed.onsa")
+                        + entry("fuzz-input", "tests/fuzz/fixed.onsa"))
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        fails = [l for l in text.split("\n") if l.startswith("FAIL")]
+        self.assertEqual(len(fails), 2, text)
+        self.assertIn("tests/fuzz/fixed.onsa: no longer crashes", fails[0])
+        self.assertIn("tests/fuzz/unlisted.onsa: crashes but is not listed", fails[1])
+
+    def test_new_and_known_classes(self):
+        # the seed's mutants crash (it holds an X); the class is new until a listed input shows it
+        self.repo.write("tests/spec/x.onsa", "XXXXXXXXXXXXXXXXXXXX\n")
+        code, text = self.go(per_seed=3)
+        self.assertEqual(code, 1, text)
+        self.assertIn("a new crash class: check: internal|crates/onsa_sema/src/body.rs|index out of bounds", text)
+        self.assertIn('kind = "fuzz-input"', text)
+        new = list((self.repo.root / "target" / "fuzz" / "new").glob("*.onsa"))
+        self.assertTrue(new and new[0].read_text() == "X", new)
+        self.assertFalse((self.repo.root / "tests" / "fuzz").exists())  # the gate writes nothing under tests/
+        # listed: known
+        self.repo.write("tests/fuzz/x.onsa", "X")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/x.onsa"))
+        code, text = self.go(per_seed=3)
+        self.assertEqual(code, 0, text)
+        # --save writes the input under tests/fuzz
+        self.repo.write("tests/spec/y.onsa", "YYYYYYYYYYYYYYYYYYYY\n")
+        code, text = self.go(per_seed=3, save=True)
+        self.assertEqual(code, 0, text)
+        self.assertTrue((self.repo.root / "tests" / "fuzz" / f"{fuzz.short_name('Y')}.onsa").exists(), text)
+
+    def test_inputs_are_bytes(self):
+        # a `\r` and invalid UTF-8 reach the compiler as they are
+        raw = b"fn f() {\r\n  1\xff\r\n}\r\n"
+        self.repo.write("tests/spec/ops/groups.onsa", "")
+        (self.repo.root / "tests/spec/ops/groups.onsa").write_bytes(raw)
+        files = fuzz.seeds(self.repo.root)
+        self.assertEqual(fuzz.encode(files[0][1]), raw)
+        echo = self.repo.write("echo.py", "import sys\nsys.stdout.buffer.write(open(sys.argv[-1], 'rb').read())\n")
+        runner = fuzz.Runner([sys.executable, "-B", str(echo)], self.repo.root / "work")
+        self.assertEqual(runner.crashes(files[0][1]), [])
+
+    def test_deep_mutants_only_on_request(self):
+        # only the mutants are made here; none of them runs (an overflow aborts)
+        files = [("tests/a.onsa", "pub fn f() -> I32 {\n  1\n}\n")]
+        depth = lambda m: max(m[2].count("("), m[2].count("{"), m[2].count("["))  # noqa: E731
+        self.assertTrue([m for m in fuzz.mutants(files, 200, "1", deep=True) if depth(m) >= 2000])
+        self.assertFalse([m for m in fuzz.mutants(files, 200, "1") if depth(m) >= 2000])
+
+    def test_time_budget(self):
+        self.repo.write("tests/spec/x.onsa", "a\n")
+        lines = []
+        code = fuzz.run(self.repo.root, self.argv, 50, "t", 1, False, out=lines.append, time_budget=0.001)
+        self.assertEqual(code, 1, lines)
+        self.assertTrue(any("time budget" in l for l in lines), lines)
+
+    def test_seeds_skip_the_saved_inputs(self):
+        self.repo.write("tests/fuzz/a.onsa", "X")
+        paths = [p for p, _ in fuzz.seeds(self.repo.root)]
+        self.assertEqual(paths, ["tests/spec/ops/groups.onsa"])
 
 
 if __name__ == "__main__":

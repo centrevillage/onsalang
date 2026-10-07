@@ -98,12 +98,89 @@ enum Command {
     },
 }
 
-/// Exit codes: 0 no diagnostics, 1 diagnostics reported, 2 usage or I/O error.
+/// What a command found: the exit code (spec §18.2, S-56). One table for
+/// every command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    /// 0: success.
+    Ok,
+    /// 1: the command worked and found problems (diagnostics, unformatted
+    /// files, differences, failed tests).
+    Problems,
+    /// 2: the command could not work (usage, input and output, `onsa.toml`,
+    /// the syntax diagnostics of `fmt` and `diff --ast`).
+    CannotWork,
+    /// 101: an internal error (S-67): a bug of the compiler.
+    Internal,
+}
+
+impl Outcome {
+    fn code(self) -> u8 {
+        match self {
+            Outcome::Ok => 0,
+            Outcome::Problems => 1,
+            Outcome::CannotWork => 2,
+            Outcome::Internal => 101,
+        }
+    }
+}
+
+/// Standard output is written through [`write_out`]: a failure to write
+/// (a closed pipe) is an input and output error of the command (exit 2), not
+/// a panic of the compiler.
+macro_rules! out {
+    ($($t:tt)*) => { write_out(&format!($($t)*)) };
+}
+
+macro_rules! outln {
+    ($($t:tt)*) => { write_out(&format!("{}\n", format!($($t)*))) };
+}
+
+static STDOUT_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn write_out(text: &str) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout().lock();
+    if let Err(e) = stdout.write_all(text.as_bytes()).and_then(|()| stdout.flush()) {
+        let mut first = STDOUT_ERROR.lock().unwrap_or_else(|p| p.into_inner());
+        first.get_or_insert_with(|| e.to_string());
+    }
+}
+
 fn main() -> ExitCode {
     // The Core verifier runs in debug builds of the CLI only, until W8-02 (R-82).
     onsa_driver::verify_core_in_debug_only();
     let cli = Cli::parse();
-    match cli.command {
+    // The command runs on a thread with the stack of the test runner, so both
+    // reach the same depth. A panic outside the driver's stages (printing,
+    // the file system) is still an internal error (S-67).
+    let run = std::thread::Builder::new()
+        // SPEC-GAP(S-183): the nesting depth is bounded only by this stack.
+        .stack_size(onsa_driver::STACK_SIZE)
+        .spawn(move || onsa_driver::guard(|| run(cli.command)))
+        .map_err(|e| format!("cannot start the command: {e}"));
+    let outcome = match run.map(|t| t.join()) {
+        Ok(Ok(Ok(outcome))) => outcome,
+        Ok(Ok(Err(e))) => internal(&SourceMap::default(), &e),
+        Ok(Err(_)) => {
+            eprintln!("onsa: internal error: the command's thread ended abnormally");
+            Outcome::Internal
+        }
+        Err(e) => {
+            eprintln!("onsa: {e}");
+            Outcome::CannotWork
+        }
+    };
+    let failed_write = STDOUT_ERROR.lock().unwrap_or_else(|p| p.into_inner()).take();
+    let outcome = match failed_write {
+        Some(e) if outcome != Outcome::Internal => cannot_work(format!("cannot write to standard output: {e}")),
+        _ => outcome,
+    };
+    ExitCode::from(outcome.code())
+}
+
+fn run(command: Command) -> Outcome {
+    match command {
         Command::Check { json, paths } => check(json, &paths),
         Command::Fmt { check, paths } => fmt(check, &paths),
         Command::Diff { ast, old, new } => diff(ast, &old, &new),
@@ -116,271 +193,263 @@ fn main() -> ExitCode {
     }
 }
 
-fn fmt(check: bool, paths: &[PathBuf]) -> ExitCode {
+/// Report an internal error (S-67): standard error only, exit 101.
+// SPEC-GAP(S-182): with `--json` too, nothing goes to standard output; the text goes to standard error.
+fn internal(sources: &SourceMap, e: &onsa_driver::InternalError) -> Outcome {
+    eprint!("onsa: {}", e.render(sources));
+    Outcome::Internal
+}
+
+fn cannot_work(message: impl std::fmt::Display) -> Outcome {
+    eprintln!("onsa: {message}");
+    Outcome::CannotWork
+}
+
+fn print_diagnostics(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]) {
+    if json {
+        outln!("{}", onsa_diag::to_json(sources, diagnostics));
+    } else {
+        out!("{}", onsa_diag::to_text(sources, diagnostics));
+    }
+}
+
+fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
     let mut changed = false;
     for path in paths {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
-            Err(e) => {
-                eprintln!("onsa: cannot read {}: {e}", path.display());
-                return ExitCode::from(2);
-            }
+            Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
         };
         let mut sources = SourceMap::default();
         let file = sources.add(path.to_string_lossy(), text.clone());
-        let parsed = onsa_syntax::parse(file, &text);
-        let Some(out) = onsa_syntax::format(&parsed, &text) else {
-            eprint!("{}", onsa_diag::to_text(&sources, &parsed.diagnostics));
-            return ExitCode::from(2);
+        let out = match onsa_driver::format_file(&sources, file) {
+            Ok(onsa_driver::Formatted::Text(out)) => out,
+            Ok(onsa_driver::Formatted::Syntax(diagnostics)) => {
+                eprint!("{}", onsa_diag::to_text(&sources, &diagnostics));
+                return Outcome::CannotWork;
+            }
+            Err(e) => return internal(&sources, &e),
         };
         if out == text {
             continue;
         }
         changed = true;
         if check {
-            println!("would reformat {}", path.display());
+            outln!("would reformat {}", path.display());
         } else if let Err(e) = std::fs::write(path, out) {
-            eprintln!("onsa: cannot write {}: {e}", path.display());
-            return ExitCode::from(2);
+            return cannot_work(format!("cannot write {}: {e}", path.display()));
         }
     }
-    if check && changed { ExitCode::from(1) } else { ExitCode::SUCCESS }
+    if check && changed { Outcome::Problems } else { Outcome::Ok }
 }
 
-fn check(json: bool, paths: &[PathBuf]) -> ExitCode {
-    let mut loaded = match onsa_driver::load(paths) {
+fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
+    onsa_driver::load(paths).map_err(cannot_work)
+}
+
+fn check(json: bool, paths: &[PathBuf]) -> Outcome {
+    let mut loaded = match load(paths) {
         Ok(l) => l,
-        Err(e) => {
-            eprintln!("onsa: {e}");
-            return ExitCode::from(2);
-        }
+        Err(o) => return o,
     };
-    let result = onsa_driver::check_loaded(&mut loaded);
-    if json {
-        println!("{}", onsa_diag::to_json(&loaded.sources, &result.diagnostics));
-    } else {
-        print!("{}", onsa_diag::to_text(&loaded.sources, &result.diagnostics));
-    }
-    if result.diagnostics.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }
+    let result = match onsa_driver::check_loaded(&mut loaded) {
+        Ok(r) => r,
+        Err(e) => return internal(&loaded.sources, &e),
+    };
+    print_diagnostics(json, &loaded.sources, &result.diagnostics);
+    if result.diagnostics.is_empty() { Outcome::Ok } else { Outcome::Problems }
 }
 
-fn explain(code: &str) -> ExitCode {
+fn explain(code: &str) -> Outcome {
     let Some(code) = Code::parse(code) else {
-        eprintln!("onsa: unknown diagnostic code `{code}`");
-        return ExitCode::from(2);
+        return cannot_work(format!("unknown diagnostic code `{code}`"));
     };
     match code.explain() {
-        Some(text) => print!("{text}"),
-        None => println!("# {}: {}\n\n(No long explanation written yet.)", code.as_str(), code.title()),
+        Some(text) => out!("{text}"),
+        None => outln!("# {}: {}\n\n(No long explanation written yet.)", code.as_str(), code.title()),
     }
-    ExitCode::SUCCESS
+    Outcome::Ok
 }
 
 /// `onsa diff --ast old new`: items added / removed / changed, ignoring trivia (spec §18.2).
-fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> ExitCode {
+fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
     if !ast {
-        eprintln!("onsa: `diff` needs `--ast` (textual diff is what `git diff` is for)");
-        return ExitCode::from(2);
+        return cannot_work("`diff` needs `--ast` (textual diff is what `git diff` is for)");
     }
     let mut sources = SourceMap::default();
-    let mut parsed = Vec::new();
+    let mut files = Vec::new();
     for path in [old_path, new_path] {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
-            Err(e) => {
-                eprintln!("onsa: cannot read {}: {e}", path.display());
-                return ExitCode::from(2);
-            }
+            Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
         };
-        let file = sources.add(path.to_string_lossy(), text.clone());
-        let p = onsa_syntax::parse(file, &text);
-        if p.diagnostics.iter().any(|d| d.code.number() <= 20) {
-            print!("{}", onsa_diag::to_text(&sources, &p.diagnostics));
-            return ExitCode::from(2);
-        }
-        parsed.push(p);
+        files.push(sources.add(path.to_string_lossy(), text));
     }
-    let diffs = onsa_syntax::diff::diff(&parsed[0], &parsed[1]);
+    let diffs = match onsa_driver::diff_ast(&sources, files[0], files[1]) {
+        Ok(onsa_driver::AstDiff::Items(d)) => d,
+        Ok(onsa_driver::AstDiff::Syntax(diagnostics)) => {
+            out!("{}", onsa_diag::to_text(&sources, &diagnostics));
+            return Outcome::CannotWork;
+        }
+        Err(e) => return internal(&sources, &e),
+    };
     let line = |span: Option<onsa_diag::Span>| span.map(|s| sources.file(s.file).line_col(s.start).line).unwrap_or(0);
     for d in &diffs {
         use onsa_syntax::diff::Change;
         match d.change {
-            Change::Added => println!("+ {}  (new:{})", d.key, line(d.new)),
-            Change::Removed => println!("- {}  (old:{})", d.key, line(d.old)),
-            Change::Changed => println!(
-                "~ {}  (old:{} new:{}; first change at new:{})",
-                d.key,
-                line(d.old),
-                line(d.new),
-                line(d.first)
-            ),
+            Change::Added => outln!("+ {}  (new:{})", d.key, line(d.new)),
+            Change::Removed => outln!("- {}  (old:{})", d.key, line(d.old)),
+            Change::Changed => {
+                outln!("~ {}  (old:{} new:{}; first change at new:{})", d.key, line(d.old), line(d.new), line(d.first))
+            }
         }
     }
-    if diffs.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }
+    if diffs.is_empty() { Outcome::Ok } else { Outcome::Problems }
 }
 
-/// `onsa dump --core`: the Core IR of a package (after `check` passes).
-fn dump(core: bool, paths: &[PathBuf]) -> ExitCode {
-    if !core {
-        eprintln!("onsa: `dump` needs `--core`");
-        return ExitCode::from(2);
-    }
-    let mut loaded = match onsa_driver::load(paths) {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("onsa: {e}");
-            return ExitCode::from(2);
-        }
+/// Load and analyze one package; print the diagnostics and return the
+/// outcome when it does not check.
+fn analyzed(json: bool, paths: &[PathBuf]) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), Outcome> {
+    let mut loaded = load(paths)?;
+    let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
+        Ok(a) => a,
+        Err(e) => return Err(internal(&loaded.sources, &e)),
     };
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
     if !analyzed.diagnostics.is_empty() {
-        print!("{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
-        return ExitCode::from(1);
-    }
-    match onsa_driver::lower_core(&analyzed) {
-        Ok(module) => {
-            print!("{}", onsa_core::dump(&module));
-            ExitCode::SUCCESS
-        }
-        Err(onsa_driver::LowerError::Diagnostics(diags)) => {
-            print!("{}", onsa_diag::to_text(&loaded.sources, &diags));
-            ExitCode::from(1)
-        }
-        Err(onsa_driver::LowerError::Verify(v)) => verify_failed(&v),
-    }
-}
-
-/// The Core verifier rejected what the compiler produced (R-82): the exit
-/// code a panic had (W1-04 makes this the internal error of S-67).
-fn verify_failed(v: &onsa_driver::VerifyFailure) -> ExitCode {
-    eprintln!("onsa: {}", v.report());
-    ExitCode::from(101)
-}
-
-/// Load and analyze one package; print diagnostics and return `None` when it does not check.
-fn analyzed_or_exit(path: &PathBuf) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), ExitCode> {
-    let mut loaded = match onsa_driver::load(std::slice::from_ref(path)) {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("onsa: {e}");
-            return Err(ExitCode::from(2));
-        }
-    };
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
-    if !analyzed.diagnostics.is_empty() {
-        print!("{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
-        return Err(ExitCode::from(1));
+        print_diagnostics(json, &loaded.sources, &analyzed.diagnostics);
+        return Err(Outcome::Problems);
     }
     Ok((loaded, analyzed))
 }
 
-/// `onsa interface <path> [--json]` (T3-11).
-fn interface(json: bool, path: &PathBuf) -> ExitCode {
-    let (_loaded, analyzed) = match analyzed_or_exit(path) {
+/// Lower to Core; print the E0200 and return the outcome when it does not lower.
+fn lowered(
+    json: bool,
+    loaded: &onsa_driver::Loaded,
+    analyzed: &onsa_driver::Analyzed,
+) -> Result<onsa_core::Module, Outcome> {
+    match onsa_driver::lower_core(analyzed) {
+        Ok(m) => Ok(m),
+        Err(onsa_driver::LowerError::Diagnostics(diags)) => {
+            print_diagnostics(json, &loaded.sources, &diags);
+            Err(Outcome::Problems)
+        }
+        Err(onsa_driver::LowerError::Internal(e)) => Err(internal(&loaded.sources, &e)),
+    }
+}
+
+/// `onsa dump --core`: the Core IR of a package (after `check` passes).
+fn dump(core: bool, paths: &[PathBuf]) -> Outcome {
+    if !core {
+        return cannot_work("`dump` needs `--core`");
+    }
+    let (loaded, analyzed) = match analyzed(false, paths) {
         Ok(x) => x,
-        Err(code) => return code,
+        Err(o) => return o,
+    };
+    match lowered(false, &loaded, &analyzed) {
+        Ok(module) => {
+            out!("{}", onsa_core::dump(&module));
+            Outcome::Ok
+        }
+        Err(o) => o,
+    }
+}
+
+/// `onsa interface <path> [--json]` (T3-11).
+fn interface(json: bool, path: &PathBuf) -> Outcome {
+    let (loaded, analyzed) = match analyzed(false, std::slice::from_ref(path)) {
+        Ok(x) => x,
+        Err(o) => return o,
     };
     let iface = match onsa_driver::interface(&analyzed) {
         Ok(i) => i,
-        Err(v) => return verify_failed(&v),
+        Err(e) => return internal(&loaded.sources, &e),
     };
     if json {
-        println!("{}", onsa_driver::render_json(&iface));
+        outln!("{}", onsa_driver::render_json(&iface));
     } else {
-        print!("{}", onsa_driver::render_text(&iface));
+        out!("{}", onsa_driver::render_text(&iface));
     }
-    ExitCode::SUCCESS
+    Outcome::Ok
 }
 
 /// `onsa graph <path> <flow> [--svg]` (T3-12).
-fn graph(svg: bool, path: &PathBuf, flow: &str) -> ExitCode {
-    let (_loaded, analyzed) = match analyzed_or_exit(path) {
+fn graph(svg: bool, path: &PathBuf, flow: &str) -> Outcome {
+    let (loaded, analyzed) = match analyzed(false, std::slice::from_ref(path)) {
         Ok(x) => x,
-        Err(code) => return code,
+        Err(o) => return o,
     };
     let dot = match onsa_driver::graph(&analyzed, flow) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!("onsa: {e}");
-            return ExitCode::from(2);
-        }
+        Err(onsa_driver::GraphError::Usage(e)) => return cannot_work(e),
+        Err(onsa_driver::GraphError::Internal(e)) => return internal(&loaded.sources, &e),
     };
     if svg {
         match onsa_driver::graph::to_svg(&dot) {
-            Ok(s) => print!("{s}"),
-            Err(e) => {
-                eprintln!("onsa: {e}");
-                return ExitCode::from(2);
-            }
+            Ok(s) => out!("{s}"),
+            Err(e) => return cannot_work(e),
         }
     } else {
-        print!("{dot}");
+        out!("{dot}");
     }
-    ExitCode::SUCCESS
+    Outcome::Ok
 }
 
 /// `onsa test <paths> [--json] [--filter <text>]` (T3-8): check, lower, run every `test`.
-fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> ExitCode {
-    let mut loaded = match onsa_driver::load(paths) {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("onsa: {e}");
-            return ExitCode::from(2);
-        }
+fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
+    let (loaded, analyzed) = match analyzed(json, paths) {
+        Ok(x) => x,
+        Err(o) => return o,
     };
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
-    if !analyzed.diagnostics.is_empty() {
-        if json {
-            println!("{}", onsa_diag::to_json(&loaded.sources, &analyzed.diagnostics));
-        } else {
-            print!("{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
-        }
-        return ExitCode::from(1);
-    }
-    let module = match onsa_driver::lower_core(&analyzed) {
+    let module = match lowered(json, &loaded, &analyzed) {
         Ok(m) => m,
-        Err(onsa_driver::LowerError::Verify(v)) => return verify_failed(&v),
-        Err(onsa_driver::LowerError::Diagnostics(diags)) => {
-            if json {
-                println!("{}", onsa_diag::to_json(&loaded.sources, &diags));
-            } else {
-                print!("{}", onsa_diag::to_text(&loaded.sources, &diags));
-            }
-            return ExitCode::from(1);
-        }
+        Err(o) => return o,
     };
-    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions { filter });
+    let report = match onsa_driver::run_tests(&module, &onsa_driver::TestOptions { filter }) {
+        Ok(r) => r,
+        Err(e) => return internal(&loaded.sources, &e),
+    };
     if json {
-        println!("{}", report.render_json(&loaded.sources));
+        outln!("{}", report.render_json(&loaded.sources));
     } else {
-        print!("{}", report.render_text(&loaded.sources));
+        out!("{}", report.render_text(&loaded.sources));
     }
-    if report.failed() == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
+    if report.failed() == 0 { Outcome::Ok } else { Outcome::Problems }
 }
 
 /// `onsa build --target <name> [--out <dir>] [path]` (T4-5).
-fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> ExitCode {
+fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> Outcome {
     let path = path.unwrap_or_else(|| PathBuf::from("."));
     let opts = onsa_driver::BuildOptions { target: target.to_string(), out };
     match onsa_driver::build(&path, &opts) {
         Ok(r) => {
-            println!("built `{}` for {} ({}) in {}", r.target, r.platform, r.kind, r.out_dir.display());
+            outln!("built `{}` for {} ({}) in {}", r.target, r.platform, r.kind, r.out_dir.display());
             for f in &r.files {
-                println!("  {f}");
+                outln!("  {f}");
             }
             if let Some(n) = &r.note {
-                println!("note: {n}");
+                outln!("note: {n}");
             }
-            ExitCode::SUCCESS
+            Outcome::Ok
         }
-        Err(onsa_driver::BuildError::Usage(m)) => {
-            eprintln!("onsa: {m}");
-            ExitCode::from(2)
-        }
+        Err(onsa_driver::BuildError::Usage(m)) => cannot_work(m),
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            print!("{}", onsa_diag::to_text(&sources, &diagnostics));
-            ExitCode::from(1)
+            out!("{}", onsa_diag::to_text(&sources, &diagnostics));
+            Outcome::Problems
         }
-        Err(onsa_driver::BuildError::Verify(v)) => verify_failed(&v),
+        Err(onsa_driver::BuildError::Internal { sources, error }) => internal(&sources, &error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_codes_of_spec_18_2() {
+        let codes: Vec<u8> =
+            [Outcome::Ok, Outcome::Problems, Outcome::CannotWork, Outcome::Internal].iter().map(|o| o.code()).collect();
+        assert_eq!(codes, [0, 1, 2, 101]);
     }
 }

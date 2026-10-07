@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§2.2"]
+
+// E0304: the fixed field names of a flow state (`sample_rate`, `poisoned`,
+// `initialized`, `bulk`) are reserved, and a flow input may not use them
+// either (§11.6; `sample_rate` is also a builtin name inside a flow, §2.2).
+// One flow per name (each flow is its own unit, §18.1). From the review
+// R-77 (S-67): today `check` passes them, and lowering `f3` fails inside.
+pub flow f3(sample_rate: F32 at sample) -> F32 at sample { //~ E0304
+  sample_rate
+}
+
+pub flow f4(x: F32 at sample, poisoned: F32 at block) -> F32 at sample { //~ E0304
+  x * poisoned
+}
+
+pub flow f5(initialized: F32 at sample) -> F32 at sample { //~ E0304
+  initialized
+}
+
+pub flow f6(x: F32 at sample, bulk: F32 at block) -> F32 at sample { //~ E0304
+  x * bulk
+}

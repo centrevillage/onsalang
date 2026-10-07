@@ -11,7 +11,7 @@ use onsa_syntax::ast::{
     UnOp as AUnOp,
 };
 
-use super::{Fail, GenericArg, Lowerer, R, core_mode, internal, unsupported};
+use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
 use crate::ir::*;
 use crate::prim::{CheckedOp, MathFn, Prim};
 
@@ -43,7 +43,9 @@ impl<'b> FnCx<'b> {
         let Some(m) = lw.a.ast(lw.pkg, module) else { return Err(internal(d.span, "module source not found")) };
         let mut locals = Vec::new();
         for l in &info.locals {
-            let ty = lw.core_ty(l.ty, &args, l.span)?;
+            // A local of a type lowering does not support: the expressions
+            // that give it a value report the type (S-67), as placeholders.
+            let (ty, _) = placeholder_ty(lw, l.ty, &args, l.span)?;
             locals.push(Local { name: l.name.clone(), ty });
         }
         Ok(FnCx { args, info, ast: &m.parsed.ast, text: &m.text, module, locals, ret, inline_depth: 0, flow: None })
@@ -462,9 +464,10 @@ pub(super) fn bind_irrefutable(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, valu
 
 /// Constructor tag (and arity) of a ctor pattern path against an enum type.
 fn ctor_of(lw: &mut Lowerer, cx: &FnCx, path: &ast::Path, ty: &Ty) -> R<(u32, usize)> {
+    // Sema resolved the path already: a failure here is lowering's own.
     let entity = lw.a.resolve_path(cx.module, path).map_err(|e| {
         let d = e.into_diagnostic();
-        Fail { code: d.code, span: d.span, msg: d.message }
+        internal(d.span, format!("pattern path does not resolve ({}: {})", d.code.as_str(), d.message))
     })?;
     let tag = match entity {
         Entity::Builtin(Builtin::None) | Entity::Builtin(Builtin::Ok) => 0,
@@ -693,7 +696,17 @@ fn lower_match(
     let result = if want { Some(cx.temp("__result", ty.clone())) } else { None };
     for arm in arms {
         let not_done = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(local_expr(cx, done, span))));
-        let test = pat_test(lw, cx, arm.pat, &place)?;
+        // A pattern that uses an unsupported feature (S-67): the arm never
+        // matches and binds nothing, so lowering reaches its guard and body.
+        let pat_hole = Hole::Pat(cx.module, arm.pat);
+        let placeholder = lw.holes.contains(&pat_hole);
+        let test = if placeholder {
+            let pat_span = cx.ast.pat(arm.pat).span;
+            lw.hole_spans.push(pat_span);
+            Some(bool_lit(pat_span, false))
+        } else {
+            pat_test(lw, cx, arm.pat, &place).map_err(|f| at_hole(f, pat_hole))?
+        };
         let cond = match test {
             None => not_done,
             Some(t) => Expr::new(
@@ -703,7 +716,9 @@ fn lower_match(
             ),
         };
         let mut inner = Vec::new();
-        pat_bind(lw, cx, arm.pat, &place, &mut inner)?;
+        if !placeholder {
+            pat_bind(lw, cx, arm.pat, &place, &mut inner)?;
+        }
         let mut body_stmts = vec![stmt(span, StmtKind::Assign(Place::Local(done), bool_lit(span, true)))];
         let body = lower_block_expr(lw, cx, arm.body)?;
         let diverges = body.diverges();
@@ -731,6 +746,34 @@ fn lower_match(
 // ---------------------------------------------------------------- expressions
 
 pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
+    let hole = Hole::Expr(cx.module, e);
+    if lw.holes.contains(&hole) {
+        // An expression that uses an unsupported feature (S-67): a fresh
+        // local of its type stands for it, so lowering reaches the next one.
+        // A type lowering does not support has `()` in its place (its uses
+        // are placeholders too). The Core is dropped (`lower_with`).
+        let span = cx.expr(e).span;
+        let (ty, stand_in) = placeholder_ty(lw, cx.sema_ty(e)?, &cx.args, span)?;
+        lw.hole_spans.push(span);
+        if stand_in {
+            lw.stand_in_spans.push(span);
+        }
+        let l = cx.temp("__unsupported", ty);
+        return Ok(local_expr(cx, l, span));
+    }
+    lower_expr_at(lw, cx, e).map_err(|f| at_hole(f, hole))
+}
+
+/// The Core type of a placeholder, and whether it stands in for a type
+/// lowering does not support (then it is `()`).
+fn placeholder_ty(lw: &mut Lowerer, t: TyId, args: &[GenericArg], span: Span) -> R<(Ty, bool)> {
+    match lw.core_ty(t, args, span) {
+        Err(f) if f.kind == FailKind::Unsupported => Ok((Ty::Unit, true)),
+        r => r.map(|t| (t, false)),
+    }
+}
+
+fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     let span = cx.expr(e).span;
     // Flow bodies (T3-5): stateful nodes, `sample_rate()` and `par` are
     // lowered by the flow lowering, not by the rules below.
@@ -826,7 +869,8 @@ pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> 
         AK::Closure { .. } => return Err(unsupported(span, "function values (closures outside `array.from_fn`)")),
         AK::Handle { .. } => return Err(unsupported(span, "effect handlers")),
         AK::Unsafe(_) => return Err(unsupported(span, "`unsafe` blocks")),
-        AK::Par { .. } => return Err(unsupported(span, "`par` outside a flow")),
+        // Sema rejects `par` outside a flow body: lowering never sees one.
+        AK::Par { .. } => return Err(internal(span, "`par` outside a flow")),
         AK::Binary { operands, ops } => return lower_binary(lw, cx, e, operands, ops, ty),
         AK::Cast { expr: inner, .. } => {
             let x = lower_expr(lw, cx, *inner)?;

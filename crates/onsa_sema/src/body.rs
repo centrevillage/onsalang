@@ -179,6 +179,8 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         let id = DefId(i as u32);
         let def = &a.defs[i];
         let Some(item) = def.item else { continue };
+        // A panic names this declaration (S-67).
+        let _scope = onsa_diag::internal::item_scope(def.span);
         let m = def.module;
         let info = a.modules.get(m);
         let Some(module) = flat.get(info.pkg).and_then(|p| info.module.and_then(|mi| p.modules.get(mi))) else {

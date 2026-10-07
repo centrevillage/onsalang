@@ -7,7 +7,7 @@ use std::path::Path;
 use onsa_core::MoveKind;
 
 fn lower(mut loaded: onsa_driver::Loaded) -> onsa_core::Module {
-    let analyzed = onsa_driver::analyze_loaded(&mut loaded);
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
     onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)))
 }

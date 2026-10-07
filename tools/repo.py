@@ -18,6 +18,8 @@ DOC_PLAN = Path("docs") / "implementation-tasks.md"
 DOC_REVIEW = Path("docs") / "review-impl-phase1.md"
 DOC_API = Path("docs") / "api-candidates.md"
 PENDING = Path("tests") / "pending.toml"
+# The saved fuzz inputs (tools/fuzz.py, W1-04); `onsa_tests::case::EXCLUDED` keeps them out of the cases.
+FUZZ_DIR = Path("tests") / "fuzz"
 CASES_CMD = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--")
 
 CODE = re.compile(r"(?<![A-Za-z0-9_])E\d{4}(?![0-9])")
