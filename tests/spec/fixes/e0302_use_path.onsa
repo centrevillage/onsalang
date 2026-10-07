@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0302 with a fixed candidate: a path that starts from an imported name (`use std.math` and then
+// `use math.{sin}`) gets the full path (§15.1). The names of the failed `use` are not used below,
+// so that no other diagnostic is expected.
+
+use std.math
+
+use math.{sin}                                      //~ E0302
+
+pub fn root(x: F32) -> F32 {
+  math.sqrt(x)
+}

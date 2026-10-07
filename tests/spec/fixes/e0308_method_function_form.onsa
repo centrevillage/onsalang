@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1"]
+// fixes = 1
+
+// E0308: a method called in the function form. The candidate is `value.m(...)` (§6.2).
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+impl Pt {
+  pub fn norm(self) -> U32 { self.x + self.y }
+  pub fn mul(self, k: U32) -> U32 { self.x * k }
+}
+
+pub fn method_in_function_form(p: Pt) -> U32 {
+  Pt.norm(p)                                        //~ E0308
+}
+
+pub fn method_in_function_form_with_arguments(p: Pt) -> U32 {
+  Pt.mul(p, 2)                                      //~ E0308
+}
+
+pub fn fine(p: Pt) -> U32 {
+  p.mul(2) + p.norm()
+}

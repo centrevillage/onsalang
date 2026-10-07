@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+
+// E0307: an `impl` on a type alias. When the original type is declared in the module the candidate
+// is the original name (§4.4).
+
+pub struct P {
+  x: F32,
+}
+
+pub struct S {
+  y: F32,
+}
+
+type Q = P
+
+type R = P
+
+type Alias = S
+
+impl P {                                            //~ E0307
+  pub fn get(self) -> F32 { self.x }
+}
+
+impl P {                                            //~ E0307
+  pub fn get_again(self) -> F32 { self.x }
+}
+
+impl S {                                            //~ E0307
+  pub fn read(self) -> F32 { self.y }
+}
+
+impl P {
+  pub fn double(self) -> F32 { self.x * 2.0 }
+}

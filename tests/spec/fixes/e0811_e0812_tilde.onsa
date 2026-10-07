@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.1", "§11.5", "§18.1"]
+// fixes = 1
+
+// E0811: a flow called without `~` (one candidate: insert `~`, the example of §18.1); E0812: `~`
+// on something with no state (one candidate: remove it). A plain `if` with state in a branch
+// also has the second candidate of lifting the state out into a `let`; it is not written here
+// (S-NEW: the name and the place of that `let` are not in the spec).
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+pub flow instance_without_tilde(x: F32 at sample) -> F32 at sample {
+  acc(x)                                            //~ E0811
+}
+
+pub flow instance_without_tilde_in_a_let(src: F32 at sample, k: F32 at init) -> F32 at sample {
+  let a = acc(src * k)                              //~ E0811
+  a
+}
+
+pub flow if_tilde_without_state(x: F32 at sample) -> F32 at sample {
+  if~ x > 0.0 { 1.0 } else { 0.0 }                  //~ E0812
+}
+
+pub flow match_tilde_without_state(k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => 1.0, _ => 2.0 }                   //~ E0812
+}
+
+pub flow else_if_tilde_without_state(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 { 1.0 } else if x > 0.0 { 2.0 } else { 3.0 }   //~ E0812
+}
+
+pub flow tilde_on_a_function(x: F32 at sample) -> F32 at sample {
+  wrap~(x)                                          //~ E0812
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = acc~(x)
+  let b = if~ x > 0.0 { acc~(x) } else { 0.0 }
+  a + b + wrap(x)
+}

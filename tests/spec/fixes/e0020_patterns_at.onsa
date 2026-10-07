@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for `@` in a pattern when the right side is a literal, a range or a choice of them (§7):
+// the candidate is the guard form, `n @ 1..5` is `n if 1 <= n && n < 5`. Other `@` patterns are
+// E0002 with no candidate.
+
+pub fn at_a_range(n: I32) -> I32 {
+  match n {
+    k @ 1..5 => k,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    s @ Some(_) => 1,                               //~ E0002
+    None => 0,
+  }
+}
+
+pub fn fine(n: I32) -> I32 {
+  match n {
+    k if 1 <= k && k < 5 => k,
+    _ => 0,
+  }
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§18.1"]
+// fixes = 1
+
+// E0020 for `s.f(x)` where `s` has no method `f` but a field `f` of a function type (§6.2): the
+// types decide. The one candidate is `s.f.(x)`.
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn call_a_field_like_a_method(s: Shaper, x: F32) -> F32 {
+  s.curve(x)                                        //~ E0020
+}
+
+pub fn fine(s: Shaper, x: F32) -> F32 {
+  s.curve.(x) * s.gain
+}

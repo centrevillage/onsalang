@@ -60,6 +60,8 @@ impl LineIndex {
 /// One source file with its line index.
 #[derive(Debug, Clone)]
 pub struct SourceFile {
+    /// Its index in the [`SourceMap`] (for the position of an internal error).
+    id: FileId,
     name: String,
     text: String,
     index: LineIndex,
@@ -74,10 +76,24 @@ impl SourceFile {
         &self.text
     }
 
+    /// The 1-based line and column of a byte offset, the column counted in
+    /// characters (Unicode scalar values, spec §18.1). The one place that
+    /// turns offsets into lines and columns; the LSP server (M7) adds its
+    /// units (UTF-16) here as an argument, from the offset and not from the
+    /// column in characters. An offset inside a character is a bug of the
+    /// stage that made the span (an internal error).
     pub fn line_col(&self, offset: u32) -> LineCol {
         let line = self.index.line(offset);
         let start = self.index.line_start(line) as usize;
         let offset = (offset as usize).min(self.text.len());
+        if !self.text.is_char_boundary(offset) {
+            // The position is the start of the line (a boundary), so that the
+            // error itself can be shown with its file and line.
+            crate::internal::bug(
+                Some(crate::Span::empty(self.id, start as u32)),
+                format!("a span from a stage has the offset {offset} on line {line}, inside a character"),
+            );
+        }
         let col = self.text[start..offset].chars().count() as u32 + 1;
         LineCol { line, col }
     }
@@ -107,7 +123,8 @@ impl SourceMap {
     pub fn add(&mut self, name: impl Into<String>, text: impl Into<String>) -> FileId {
         let text = text.into();
         let index = LineIndex::new(&text);
-        self.files.push(SourceFile { name: name.into(), text, index });
+        let id = FileId(self.files.len() as u32);
+        self.files.push(SourceFile { id, name: name.into(), text, index });
         FileId(self.files.len() as u32 - 1)
     }
 

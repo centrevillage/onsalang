@@ -1,0 +1,3 @@
+[package]
+name = "rename"
+edition = "2026"

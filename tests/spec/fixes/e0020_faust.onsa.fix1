@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the FAUST forms of the table in §18.1, each with the Onsa form as the one candidate:
+// `~ _` after a `let` name, a prefix `~`, `x'`, `x@N`. `x@N` is `prev~(x)` for 1, `delay~(x, 2)`
+// for a literal 2 or more, and `delay~(x, N)` for an UPPER_SNAKE name. A name that is not a
+// constant, and a `~ _` with no `let` name, are E0002 with no candidate; so are the FAUST
+// composition operators.
+
+const N: U32 = 4
+
+pub flow feedback(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)                                   //~ E0020
+  y
+}
+
+pub fn bit_not(m: U32) -> U32 {
+  let n = !m                                        //~ E0020
+  n
+}
+
+pub flow apostrophe(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)                                        //~ E0020
+  a
+}
+
+pub flow delay_one(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)                                       //~ E0020
+  a
+}
+
+pub flow delay_two(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 2)                                       //~ E0020
+  a
+}
+
+pub flow delay_literal(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 480)                                     //~ E0020
+  a
+}
+
+pub flow delay_constant(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, N)                                       //~ E0020
+  a
+}
+
+pub flow delay_variable(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let a = x@k                                       //~ E0002
+  a
+}
+
+pub flow feedback_without_a_name(x: F32 at sample) -> F32 at sample {
+  x + ~ _                                           //~ E0002
+}
+
+pub flow serial(x: F32 at sample) -> F32 at sample {
+  let a = x : x                                     //~ E0002
+  a
+}
+
+pub flow split(x: F32 at sample) -> F32 at sample {
+  let a = x <: x                                    //~ E0002
+  a
+}
+
+pub flow merge(x: F32 at sample) -> F32 at sample {
+  let a = x :> x                                    //~ E0002
+  a
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(^a)
+  let b = prev~(x)
+  let c = delay~(x, 2)
+  a + b + c
+}

@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Span};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprKind, Lit, Mode, StmtKind, StrSeg};
 
 use crate::body::{LocalKind, Target};
@@ -82,6 +82,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
                     path.push(a.def(from).name.clone());
                     let what = if cycle.len() == 1 { "calls itself" } else { "is mutually recursive" };
                     let d = Diagnostic::new(
+                        Stage::Effects,
                         Code::E0903,
                         at,
                         format!(
@@ -159,6 +160,7 @@ fn body_rules(
                     let why = if f.effects.alloc { " (it needs `Alloc`)" } else { "" };
                     found.push(
                         Diagnostic::new(
+                            Stage::Effects,
                             Code::E0901,
                             span,
                             format!("`rt` function calls `{}`, which is not `rt`{why} (§10 rule 4)", callee_def.name),
@@ -175,6 +177,7 @@ fn body_rules(
                 {
                     found.push(
                         Diagnostic::new(
+                            Stage::Effects,
                             Code::E0901,
                             span,
                             "`rt` function calls a function value whose type is not `rt fn` (§10 rule 4)",
@@ -187,6 +190,7 @@ fn body_rules(
                 if name == "zeroed" && matches!(a.types.get(*recv), Ty::Builtin(BuiltinTy::Buf, _)) {
                     found.push(
                         Diagnostic::new(
+                            Stage::Effects,
                             Code::E0901,
                             span,
                             "`Buf.zeroed` allocates and needs `Alloc`; `rt` functions cannot allocate (§10 rule 1)",
@@ -205,7 +209,7 @@ fn body_rules(
             && s.segments.iter().any(|seg| matches!(seg, StrSeg::Interp(_)))
         {
             found.push(
-                Diagnostic::new(Code::E0901, expr.span, "string interpolation creates a `Str` and needs `Alloc`; `rt` functions cannot allocate (§10 rule 1)")
+                Diagnostic::new(Stage::Effects, Code::E0901, expr.span, "string interpolation creates a `Str` and needs `Alloc`; `rt` functions cannot allocate (§10 rule 1)")
                     .with_found(src(expr.span)),
             );
         }
@@ -230,7 +234,7 @@ fn body_rules(
             let shown = a.display_type(l.ty);
             found.push(
                 Diagnostic::new(
-                    Code::E0901,
+                    Stage::Effects, Code::E0901,
                     l.span,
                     format!(
                         "`{}` owns a `{shown}`, whose destruction needs `Alloc`; an `rt` function can only borrow it or move it on (§10, §12.2)",
@@ -253,7 +257,7 @@ fn body_rules(
             let shown = a.display_type(*t);
             found.push(
                 Diagnostic::new(
-                    Code::E0901,
+                    Stage::Effects, Code::E0901,
                     stmt.span,
                     format!("this `{shown}` is dropped here, which needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)"),
                 )

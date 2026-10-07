@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// E0711: an Affine value put in a consuming position without `move`. The candidate inserts
+// `move` (§5.2).
+
+pub struct Holder {
+  b: Buf[F32],
+}
+
+pub fn take(move b: Buf[F32]) uses {Alloc} {
+}
+
+pub fn in_a_let(move b: Buf[F32]) uses {Alloc} {
+  let y = b                                         //~ E0711
+  take(move y)
+}
+
+pub fn in_a_struct_literal(move b: Buf[F32]) -> Holder uses {Alloc} {
+  Holder { b: b }                                   //~ E0711
+}
+
+pub fn in_a_tuple(move b: Buf[F32]) -> (Buf[F32], I32) uses {Alloc} {
+  (b, 1)                                            //~ E0711
+}
+
+pub fn fine(move b: Buf[F32]) uses {Alloc} {
+  let y = move b
+  take(move y)
+}

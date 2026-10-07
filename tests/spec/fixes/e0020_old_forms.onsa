@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// E0020 for the old spelling of a mode (§18.1): `&mut T` is `inout name: T` in a signature and
+// `&mut x` is `inout x` at a call (§5.2).
+
+pub fn bump(v: &mut [I32; 4]) {                     //~ E0020
+}
+
+pub fn caller() {
+  var a = [0, 0, 0, 0]
+  bump(&mut a)                                      //~ E0020
+}
+
+pub fn takes_mut_slice(xs: &mut Span[F32]) {        //~ E0020
+}
+
+pub fn fine(inout v: [I32; 4]) -> I32 {
+  v[0]
+}

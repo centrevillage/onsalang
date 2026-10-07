@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -30,6 +31,7 @@ import gap_marks  # noqa: E402
 import gate  # noqa: E402
 import gate_steps  # noqa: E402
 import ignored_files  # noqa: E402
+import keywords  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
 import spec_blocks  # noqa: E402
@@ -484,7 +486,7 @@ class PendingList(TempRepo):
                 errors = self.errors_of(entry("gate", item), pendable=gate_steps.pendable())
                 self.assertEqual(len(errors), 1, errors)
                 self.assertIn("may be listed only by case", errors[0])
-        self.assertEqual(gate_steps.by_case_only(), ["vectors-interp", "vectors-c"])
+        self.assertEqual(gate_steps.by_case_only(), ["vectors-interp", "keywords", "vectors-c"])
 
     def test_rows_of_the_vectors(self):
         # W2-02/b: a case entry of an item that counts rows says how many (`rows`) and which (`digest`);
@@ -794,7 +796,9 @@ class RealSteps(unittest.TestCase):
         self.assertFalse(by_name["fmt-props"].pendable)
         # the only items that may be listed: the test vectors against the interpreter and the C
         # (W2-02, by case only), the C checks (W1-06), and the fmt property that waits for W3-11 (R-70)
-        self.assertEqual(gate_steps.pendable(), ["vectors-interp"] + self.c_items() + ["vectors-c", "fmt-comments"])
+        self.assertEqual(
+            gate_steps.pendable(), ["vectors-interp", "keywords"] + self.c_items() + ["vectors-c", "fmt-comments"]
+        )
         vectors = [s for s in gate_steps.STEPS if s.argv[: len(gate_steps.VECTORS)] == gate_steps.VECTORS]
         self.assertEqual([(s.name, s.argv[len(gate_steps.VECTORS) :]) for s in vectors],
                          [("vectors-interp", ("interp",)), ("vectors-c", ("c",))])  # fmt: skip
@@ -831,6 +835,30 @@ class SpecSections(unittest.TestCase):
         cases = [{"path": "tests/n.onsa", "mode": "none", "spec": ["§1.2", "§9.9"]}]
         self.assertEqual(spec_sections.untested(cases, heads), heads)
         self.assertEqual(spec_sections.unknown(cases, heads), [("tests/n.onsa", "§9.9")])
+
+    def test_sections_in_the_strings_of_the_compiler(self):
+        heads = spec_blocks.headings(self.SPEC)
+        src = 'let m = "a rule (§1.1, §9.9)";\n// §8.8 is a comment, not a message\nlet n = "§2";\n'
+        self.assertEqual(spec_sections.unknown_refs([("a.rs", src)], heads), [("a.rs:1", "9.9")])
+        (self.root / "crates" / "c" / "src").mkdir(parents=True)
+        (self.root / "crates" / "c" / "src" / "lib.rs").write_text(
+            'fn f() { g("§7.7") }\n#[cfg(test)]\nmod tests { const X: &str = "§6.6"; }\n', encoding="utf-8")
+        (self.root / "crates" / "c" / "src" / "x_tests.rs").write_text('const Y: &str = "§5.5";\n', encoding="utf-8")
+        found = spec_sections.unknown_refs(spec_sections.compiler_sources(self.root), heads)
+        self.assertEqual(found, [("crates/c/src/lib.rs:1", "7.7")], "unit tests are not messages")
+        # A `#[cfg(test)] mod x;` declaration early in the file cuts nothing; a
+        # string that goes on over lines is read whole; a char `'"'` and a `}`
+        # in a string of a test module do not throw the reading off.
+        (self.root / "crates" / "c" / "src" / "lib.rs").write_text(
+            "#[cfg(test)]\nmod x_tests;\n"
+            "fn f() -> char { '\"' }\n"
+            'fn g() { h("a long message \\\n    that names §4.4.4 here") }\n'
+            '#[cfg(test)]\nmod tests {\n    const Z: &str = "} §3.3.3";\n}\n'
+            'fn k() { h(r#"raw §2.2.2"#) }\n',
+            encoding="utf-8",
+        )
+        found = spec_sections.unknown_refs(spec_sections.compiler_sources(self.root), heads)
+        self.assertEqual(found, [("crates/c/src/lib.rs:5", "4.4.4"), ("crates/c/src/lib.rs:10", "2.2.2")])
 
     def run_main(self, flag, cases):
         script = f"import json; print(json.dumps({cases!r}))"
@@ -1778,9 +1806,9 @@ class FmtProps(TempRepo):
         self.argv = [sys.executable, "-B", str(self.fake)]
 
     def go(self, prop="core", per_kind=3, cases=None, minimize=False):
-        """Run the item over `tests/spec/a.onsa` (or `cases`: [(path, mode, parser_markers)])."""
+        """Run the item over `tests/spec/a.onsa` (or `cases`: [(path, mode, syntax_errors)])."""
         cases = cases or [("tests/spec/a.onsa", "check", False)]
-        listed = [{"path": p, "kind": "file", "mode": m, "files": [{"path": p, "parser_markers": s}]}
+        listed = [{"path": p, "kind": "file", "mode": m, "files": [{"path": p, "syntax_errors": s}]}
                   for p, m, s in cases]
         cmd = (sys.executable, "-B", "-c", f"import json; print(json.dumps({listed!r}))")
         lines = []
@@ -1919,7 +1947,7 @@ class FmtProps(TempRepo):
         refused = "fn f() {\n  REJECT x \n}\n"
         self.repo.write("tests/spec/a.onsa", "fn f() {\n  x\n}\n")
         self.repo.write("tests/spec/b.onsa", refused)
-        # a negative example of a syntax code, a fragment of mode none, a pending case: skipped
+        # a file with a syntax diagnostic, a fragment of mode none, a pending case: skipped
         for mode, syntax, listed in (("check", True, False), ("none", False, False), ("check", False, True)):
             with self.subTest(mode=mode, syntax=syntax, listed=listed):
                 self.repo.write("tests/pending.toml", entry("test-case", "tests/spec/b.onsa") if listed else "")
@@ -1945,6 +1973,28 @@ class FmtProps(TempRepo):
         cmd = (sys.executable, "-B", "-c", "print('[]')")
         paths = [s.path for s in fmt_props.sources(self.repo.root, cmd)]
         self.assertEqual(paths, ["std/core/m.onsa", "examples/e/x.onsa"])
+
+
+
+class Keywords(unittest.TestCase):
+    """tools/keywords.py: the lexer's keywords against §2.2 (W3-02/b 12)."""
+
+    SPEC = "# s\n## 2. 字句\n### 2.2 キーワード\n\n```\nfn let\nat clock\n```\n\n### 2.3 次\n"
+
+    def test_the_block_of_2_2(self):
+        self.assertEqual(keywords.spec_keywords(self.SPEC), ["fn", "let", "at", "clock"])
+        with self.assertRaises(repo.RepoError):
+            keywords.spec_keywords("# s\n### 2.2 キーワード\n\nno block\n")
+
+    def test_differences_and_the_list(self):
+        diffs = keywords.differences(["fn", "let", "at", "clock"], ["fn", "let", "loop"])
+        self.assertEqual(sorted(diffs), ["at", "clock", "loop"])
+        e = types.SimpleNamespace(until="W3-04")
+        pend, problems = keywords.apply_list(diffs, {"at": e, "clock": e, "fn": e})
+        self.assertEqual(len(pend), 2)
+        self.assertTrue(any(p.startswith("keywords/loop:") for p in problems), problems)
+        self.assertTrue(any(p.startswith("keywords/fn:") and "remove the entry" in p for p in problems), problems)
+        self.assertEqual(len(problems), 2)
 
 
 if __name__ == "__main__":

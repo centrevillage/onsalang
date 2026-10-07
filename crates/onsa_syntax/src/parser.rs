@@ -19,7 +19,7 @@
 //! as incomplete, puts the tokens up to the next item start in an `Error`
 //! node, and continues.
 
-use onsa_diag::{Code, Diagnostic, FileId, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Span, Stage};
 
 use crate::ast::Ast;
 use crate::cst::{Cst, Event, NodeKind};
@@ -35,6 +35,34 @@ pub struct Parsed {
     /// From each AST node to the CST node it was made from.
     pub map: AstMap,
     pub diagnostics: Vec<Diagnostic>,
+    /// Every diagnostic of the lexer and the parser (stage `Syntax`), taken
+    /// before the diagnostics were reduced to one per item (S-56): what
+    /// [`Parsed::syntax_errors`] reads, and what `fmt` and `diff --ast` report.
+    pub syntax: Vec<Diagnostic>,
+}
+
+impl Parsed {
+    /// The lexer or the parser reported a diagnostic: `onsa fmt` does not
+    /// rewrite the file and `onsa diff --ast` does not compare it, since the
+    /// parser may have left an item out of the AST, whatever the code (R-146).
+    /// The one place of that decision (`fmt`, `diff --ast`, the test tools).
+    // SPEC-GAP(S-214): §18.2 and S-120 say "the E00xx of the lexer and the
+    // parser"; the parser also fails items with E0408. Until S-214 is decided,
+    // every diagnostic of the syntax stage stops them (the conservative reading).
+    pub fn syntax_errors(&self) -> bool {
+        !self.syntax.is_empty()
+    }
+
+    /// What `fmt` and `diff --ast` report for a file they do not take: every
+    /// diagnostic of the syntax stage (the reduction per item would hide some
+    /// behind a diagnostic of a later stage, §18.2 "report them all"), then
+    /// the reduced diagnostics of the later stages (E0320), by position.
+    pub fn syntax_report(&self) -> Vec<Diagnostic> {
+        let mut out = self.syntax.clone();
+        out.extend(self.diagnostics.iter().filter(|d| d.stage != onsa_diag::Stage::Syntax).cloned());
+        out.sort_by_key(|d| (d.span.file, d.span.start, d.code));
+        out
+    }
 }
 
 /// What the parser gives the later stages of [`crate::parse`].
@@ -382,7 +410,7 @@ impl<'a> Parser<'a> {
 
     fn error(&mut self, code: Code, span: Span, message: impl Into<String>) -> ParseError {
         let found = self.src(span).to_string();
-        let mut d = Diagnostic::new(code, span, message);
+        let mut d = Diagnostic::new(Stage::Syntax, code, span, message);
         if !found.is_empty() && !found.contains('\n') {
             d = d.with_found(found);
         }
@@ -400,12 +428,15 @@ impl<'a> Parser<'a> {
         if self.at(kind) { Ok(self.bump()) } else { Err(self.unexpected(kind.describe())) }
     }
 
-    /// E0020 with a replacement, non-fatal (§18.1).
-    fn foreign(&mut self, span: Span, message: &str, replace: &str) {
+    /// E0020 with one candidate that replaces `span`, and the note with the
+    /// correct rule (S-114), non-fatal (§18.1). W3-15 moves these into the
+    /// table of `onsa_syntax::foreign`.
+    fn foreign(&mut self, span: Span, message: &str, title: &str, replace: &str, rule: &str) {
         let found = self.src(span).to_string();
-        let d = Diagnostic::new(Code::E0020, span, message)
+        let d = Diagnostic::new(Stage::Syntax, Code::E0020, span, message)
             .with_found(found)
-            .with_fix(Fix::Replace { replace: replace.to_string() });
+            .with_fix(Fix::replace(title, span, replace))
+            .with_rule(rule);
         self.report(d);
     }
 
@@ -413,7 +444,12 @@ impl<'a> Parser<'a> {
     /// value is read by the same function when the AST is made).
     fn check_int(&mut self, t: Token) {
         if crate::lower::int_value(self.token_text(t)).is_none() {
-            self.report(Diagnostic::new(Code::E0408, t.span, "integer literal is larger than any integer type holds"));
+            self.report(Diagnostic::new(
+                Stage::Syntax,
+                Code::E0408,
+                t.span,
+                "integer literal is larger than any integer type holds",
+            ));
         }
     }
 
@@ -428,7 +464,13 @@ impl<'a> Parser<'a> {
             }
             if self.at(TokenKind::Semi) {
                 let t = self.bump();
-                self.foreign(t.span, "`;` is not used in Onsa; statements end at the newline", "");
+                self.foreign(
+                    t.span,
+                    "`;` is not used in Onsa; statements end at the newline",
+                    "remove the `;`",
+                    "",
+                    "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
+                );
                 continue;
             }
             let start = self.peek().span.start;
@@ -442,7 +484,13 @@ impl<'a> Parser<'a> {
                         TokenKind::Newline | TokenKind::Eof => {}
                         TokenKind::Semi => {
                             let t = self.bump();
-                            self.foreign(t.span, "`;` is not used in Onsa; statements end at the newline", "");
+                            self.foreign(
+                                t.span,
+                                "`;` is not used in Onsa; statements end at the newline",
+                                "remove the `;`",
+                                "",
+                                "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
+                            );
                         }
                         _ => {
                             let _ = self.unexpected("newline after the declaration");
@@ -563,7 +611,13 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::RBracket)?;
                 let span = self.span_from(hash.span.start);
                 let fix = format!("@{}", &self.text[inner_start as usize..inner_end as usize]);
-                self.foreign(span, "attributes are written `@name(...)`", &fix);
+                self.foreign(
+                    span,
+                    "attributes are written `@name(...)`",
+                    "write the attribute with `@`",
+                    &fix,
+                    "an attribute is written `@name(...)` (§6.5)",
+                );
                 self.complete(m, NodeKind::HashAttr);
                 n += 1;
             } else {
@@ -622,19 +676,38 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         let m = self.start(NodeKind::Vis);
-        self.bump();
+        let public = self.bump();
         if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
             self.bump();
             let t = self.peek();
-            if self.is_ident(t, "pkg") {
+            let is_crate = self.is_ident(t, "crate");
+            if self.is_ident(t, "pkg") || is_crate {
                 self.bump();
-            } else if self.is_ident(t, "crate") {
-                self.bump();
-                self.foreign(t.span, "package-wide visibility is written `pub(pkg)`", "pkg");
             } else {
                 return Err(self.unexpected("`pkg`"));
             }
-            self.expect(TokenKind::RParen)?;
+            let close = self.expect(TokenKind::RParen)?;
+            if is_crate {
+                // `pub(crate)` is visibility within the package, the default
+                // (§15.1): the candidate removes it with the spaces after it.
+                // (`pub(pkg)` is E0020 too, S-36: W3-08.)
+                let span = Span::new(self.file, public.span.start, close.span.end);
+                let at = self.all.partition_point(|x| x.span.start < close.span.end);
+                let end = match self.all.get(at) {
+                    Some(w) if w.kind == TokenKind::Whitespace => w.span.end,
+                    _ => close.span.end,
+                };
+                let d = Diagnostic::new(
+                    Stage::Syntax,
+                    Code::E0020,
+                    span,
+                    "`pub(crate)` is visibility within the package, which is the default; remove it",
+                )
+                .with_found(self.src(span).to_string())
+                .with_fix(Fix::delete("remove the visibility", Span::new(self.file, span.start, end)))
+                .with_rule("visibility is `pub` (outside the package), nothing (the package), or `priv` (§15.1)");
+                self.report(d);
+            }
         }
         self.complete(m, NodeKind::Vis);
         Ok(())
@@ -652,7 +725,13 @@ impl<'a> Parser<'a> {
         } else if t.kind == TokenKind::Ident && self.token_text(t) == "proc" && self.peek2().kind == TokenKind::Ident {
             let d = self.start(NodeKind::Flow);
             self.bump();
-            self.foreign(t.span, "a signal-processing node is declared with `flow`", "flow");
+            self.foreign(
+                t.span,
+                "a signal-processing node is declared with `flow`",
+                "write `flow`",
+                "flow",
+                "a stateful signal-processing node is declared with `flow` (§11)",
+            );
             self.parse_flow_after_keyword(d)?;
         } else {
             return Err(self.unexpected("a declaration"));
@@ -886,7 +965,13 @@ impl<'a> Parser<'a> {
         loop {
             if self.at(TokenKind::ColonColon) {
                 let t = self.bump();
-                self.foreign(t.span, "paths are separated with `.`", ".");
+                self.foreign(
+                    t.span,
+                    "paths are separated with `.`",
+                    "write `.`",
+                    ".",
+                    "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
+                );
             } else if self.eat(TokenKind::Dot).is_none() {
                 break;
             }
@@ -981,7 +1066,13 @@ impl<'a> Parser<'a> {
                     TokenKind::Newline | TokenKind::RBrace => {}
                     TokenKind::Semi => {
                         let t = p.bump();
-                        p.foreign(t.span, "`;` is not used in Onsa; declarations end at the newline", "");
+                        p.foreign(
+                            t.span,
+                            "`;` is not used in Onsa; declarations end at the newline",
+                            "remove the `;`",
+                            "",
+                            "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
+                        );
                     }
                     _ => return Err(p.unexpected("newline or `}`")),
                 }
@@ -1022,7 +1113,13 @@ impl<'a> Parser<'a> {
         loop {
             if self.at(TokenKind::ColonColon) {
                 let t = self.bump();
-                self.foreign(t.span, "paths are separated with `.`", ".");
+                self.foreign(
+                    t.span,
+                    "paths are separated with `.`",
+                    "write `.`",
+                    ".",
+                    "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
+                );
             } else if self.at(TokenKind::Dot)
                 && (self.peek2().kind == TokenKind::Ident || self.peek2().kind.is_keyword())
             {
@@ -1068,7 +1165,13 @@ impl<'a> Parser<'a> {
             let span = self.span_from(lt.span.start);
             let inner = &self.text[lt.span.end as usize..self.last_end as usize - 1];
             let fix = format!("[{inner}]");
-            self.foreign(span, "generic parameters are written in `[ ]`", &fix);
+            self.foreign(
+                span,
+                "generic parameters are written in `[ ]`",
+                "write the type parameters in `[ ]`",
+                &fix,
+                "type parameters and type arguments are written in `[ ]` (§4.5)",
+            );
             self.complete(m, NodeKind::GenericParams);
             return Ok(());
         }
@@ -1131,7 +1234,13 @@ impl<'a> Parser<'a> {
                 if p.is_ident(t, "mut") && p.peek2().kind == TokenKind::KwSelf {
                     p.bump();
                     let span = p.span_from(t.span.start).to(p.peek().span);
-                    p.foreign(span, "a receiver that changes is written `inout self`", "inout self");
+                    p.foreign(
+                        span,
+                        "a receiver that changes is written `inout self`",
+                        "write `inout self`",
+                        "inout self",
+                        "the mode comes before the name; a receiver that changes is `inout self` (§5.2)",
+                    );
                 }
                 let t = p.peek();
                 let is_self = match t.kind {
@@ -1181,8 +1290,10 @@ impl<'a> Parser<'a> {
             (t.span, "`&T` is the default borrow; write `name: T` (§5.2)")
         };
         let found = self.text[span.start as usize..span.end as usize].to_string();
-        let d =
-            Diagnostic::new(Code::E0020, span, msg).with_found(found).with_fix(Fix::Replace { replace: String::new() });
+        let d = Diagnostic::new(Stage::Syntax, Code::E0020, span, msg)
+            .with_found(found)
+            .with_fix(Fix::delete("remove the reference mark", span))
+            .with_rule("there are no references; an argument is borrowed by default and changed with `inout` before the name (§5.2)");
         self.diagnostics.push(d);
         ParseError
     }
@@ -1295,7 +1406,9 @@ impl<'a> Parser<'a> {
                         self.foreign(
                             path.first.span,
                             "built-in types are written in UpperCamel (`I32`, `F32`, `Bool`)",
+                            "write the built-in type name",
                             fix,
+                            "type names are UpperCamel, the built-in ones too (`I32`, `F32`, `Bool`, §2.3)",
                         );
                     }
                 }
@@ -1311,7 +1424,13 @@ impl<'a> Parser<'a> {
                     let span = self.span_from(lt.span.start);
                     let inner = &self.text[lt.span.end as usize..self.last_end as usize - 1];
                     let fix = format!("[{inner}]");
-                    self.foreign(span, "type arguments are written in `[ ]`", &fix);
+                    self.foreign(
+                        span,
+                        "type arguments are written in `[ ]`",
+                        "write the type arguments in `[ ]`",
+                        &fix,
+                        "type parameters and type arguments are written in `[ ]` (§4.5)",
+                    );
                     self.complete(a, NodeKind::TypeArgs);
                 }
                 self.complete(m, NodeKind::PathType)
@@ -1377,7 +1496,13 @@ impl<'a> Parser<'a> {
                 TokenKind::Newline | TokenKind::RBrace => {}
                 TokenKind::Semi => {
                     let t = self.bump();
-                    self.foreign(t.span, "`;` is not used in Onsa; statements end at the newline", "");
+                    self.foreign(
+                        t.span,
+                        "`;` is not used in Onsa; statements end at the newline",
+                        "remove the `;`",
+                        "",
+                        "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
+                    );
                 }
                 TokenKind::DotDot | TokenKind::DotDotEq => {
                     let t = self.peek();
@@ -1404,7 +1529,13 @@ impl<'a> Parser<'a> {
                 if self.is_ident(mt, "mut") {
                     self.bump();
                     let span = t.span.to(mt.span);
-                    self.foreign(span, "a mutable local is declared with `var`", "var");
+                    self.foreign(
+                        span,
+                        "a mutable local is declared with `var`",
+                        "write `var`",
+                        "var",
+                        "`let` binds a value that does not change; a local that changes is declared with `var` (§5.1)",
+                    );
                     return self.parse_var_rest(m);
                 }
                 self.parse_pattern()?;
@@ -1441,7 +1572,13 @@ impl<'a> Parser<'a> {
             TokenKind::Ident if self.token_text(t) == "loop" && self.peek2().kind == TokenKind::LBrace => {
                 let m = self.start(NodeKind::LoopStmt);
                 self.bump();
-                self.foreign(t.span, "there is no `loop`; write `while true`", "while true");
+                self.foreign(
+                    t.span,
+                    "there is no `loop`; write `while true`",
+                    "write `while true`",
+                    "while true",
+                    "the loops are `while` and `for`; an endless loop is `while true` (§7)",
+                );
                 self.parse_block_expr()?;
                 Ok(self.complete(m, NodeKind::LoopStmt))
             }
@@ -1546,9 +1683,17 @@ impl<'a> Parser<'a> {
             let m = self.precede(expr, NodeKind::RangeExpr);
             self.bump();
             if t.kind == TokenKind::DotDotEq {
-                let d =
-                    Diagnostic::new(Code::E0020, t.span, "there is no inclusive range; use `..` with an adjusted end")
-                        .with_found("..=");
+                // No candidate keeps the value (`a..b + 1` panics at the top of
+                // the type), so E0002 with the note (§18.1, S-48; it was an E0020
+                // without a candidate). W3-15 moves it into the table (D10).
+                let d = Diagnostic::new(
+                    Stage::Syntax,
+                    Code::E0002,
+                    t.span,
+                    "there is no inclusive range; use `..` with an adjusted end",
+                )
+                .with_found("..=")
+                .with_rule("a range `a..b` excludes `b`; there is no inclusive range (§7)");
                 self.report(d);
             }
             self.parse_expr_inner(false)?;
@@ -1594,7 +1739,9 @@ impl<'a> Parser<'a> {
             self.foreign(
                 span,
                 "there are no references; arguments are borrowed by default and changed with `inout`",
+                "write the argument without `&`",
                 &fix,
+                "there are no references; an argument is borrowed by default and changed with `inout` (§5.2)",
             );
             let c = self.complete(m, NodeKind::RefExpr);
             return Ok(Completed { span: inner.span, ..c });
@@ -1642,7 +1789,13 @@ impl<'a> Parser<'a> {
                 TokenKind::ColonColon => {
                     let m = self.precede(expr, NodeKind::FieldExpr);
                     self.bump();
-                    self.foreign(t.span, "paths are separated with `.`", ".");
+                    self.foreign(
+                        t.span,
+                        "paths are separated with `.`",
+                        "write `.`",
+                        ".",
+                        "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
+                    );
                     let name = self.parse_ident("a name after `::`")?;
                     expr = self.complete(m, NodeKind::FieldExpr);
                     chain = chain.map(|_| name);
@@ -1878,7 +2031,13 @@ impl<'a> Parser<'a> {
                 let n = self.bump();
                 let span = self.span_from(start);
                 let fix = format!("0.{}", self.token_text(n));
-                self.foreign(span, "a float literal needs digits on both sides of the point", &fix);
+                self.foreign(
+                    span,
+                    "a float literal needs digits on both sides of the point",
+                    "add the `0` before the point",
+                    &fix,
+                    "a float literal with a point has digits on both sides of it (`1.0`, `0.5`, §2.4)",
+                );
                 return Ok(self.complete(m, NodeKind::LeadingDotFloat));
             }
             _ => return Err(self.unexpected("an expression")),
@@ -1929,6 +2088,49 @@ impl<'a> Parser<'a> {
         Ok(NodeKind::ArrayExpr)
     }
 
+    /// The candidate of E0003 (§2.5): `next` (`else`, and later `with` and a
+    /// block's `{`) goes up to the line that ends at `end`. With only spaces
+    /// and newlines between, they become one space. Comments between are kept
+    /// and keep their order: the code of `next`'s line (up to a comment or the
+    /// end of the line) moves to `end`, and that line is removed when nothing
+    /// else is left on it (W3-02/b 4).
+    fn join_line_fix(&self, title: &str, end: u32, next: Token) -> Fix {
+        let at = self.all.partition_point(|t| t.span.start < next.span.start);
+        let between = self.all[..at].iter().rev().take_while(|t| t.span.start >= end);
+        if !between.clone().any(|t| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment)) {
+            return Fix::replace(title, Span::new(self.file, end, next.span.start), " ");
+        }
+        // The code of `next`'s line: up to a comment, a newline or the end.
+        let rest = &self.all[at..];
+        let code_len = rest
+            .iter()
+            .position(|t| {
+                matches!(t.kind, TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment | TokenKind::Eof)
+            })
+            .unwrap_or(rest.len());
+        let code_end = rest[..code_len]
+            .iter()
+            .rev()
+            .find(|t| t.kind != TokenKind::Whitespace)
+            .map_or(next.span.end, |t| t.span.end);
+        let moved = &self.text[next.span.start as usize..code_end as usize];
+        let after = rest[code_len..].first().copied();
+        let removed = match after.map(|t| t.kind) {
+            // Nothing else on the line: remove the line, its indentation and its newline.
+            Some(TokenKind::Newline) | Some(TokenKind::Eof) | None => {
+                let line_start = match self.all[at.saturating_sub(1)] {
+                    t if at > 0 && t.kind == TokenKind::Whitespace => t.span.start,
+                    _ => next.span.start,
+                };
+                let line_end = after.map_or(code_end, |t| t.span.end);
+                Span::new(self.file, line_start, line_end)
+            }
+            // A comment stays on the line, after the indentation.
+            Some(_) => Span::new(self.file, next.span.start, after.map_or(code_end, |t| t.span.start)),
+        };
+        Fix::new(title, vec![Edit::insert(self.file, end, format!(" {moved}")), Edit::delete(removed)])
+    }
+
     fn parse_if(&mut self) -> PResult<Completed> {
         let m = self.start(NodeKind::IfExpr);
         self.expect(TokenKind::KwIf)?;
@@ -1939,9 +2141,11 @@ impl<'a> Parser<'a> {
         if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::KwElse {
             let else_tok = self.peek_past_newlines();
             let span = Span::new(self.file, close_brace_end, else_tok.span.start);
-            let d = Diagnostic::new(Code::E0003, span, "`else` must be on the same line as the closing `}`")
-                .with_found("else")
-                .with_fix(Fix::Replace { replace: " ".to_string() });
+            let fix = self.join_line_fix("move `else` to the line of the `}`", close_brace_end, else_tok);
+            let d =
+                Diagnostic::new(Stage::Syntax, Code::E0003, span, "`else` must be on the same line as the closing `}`")
+                    .with_found("else")
+                    .with_fix(fix);
             self.report(d);
             self.skip_newlines();
         }
@@ -2122,7 +2326,7 @@ pub(crate) fn first_per_item(items: &[Span], mut diagnostics: Vec<Diagnostic>) -
 
 #[cfg(test)]
 mod tests {
-    use onsa_diag::{Code, FileId, Fix};
+    use onsa_diag::{Code, FileId};
 
     #[test]
     fn const_type_arguments() {
@@ -2145,15 +2349,35 @@ mod tests {
         parse(src).diagnostics.iter().map(|d| d.code).collect()
     }
 
+    /// `src` after the first candidate of its first diagnostic.
+    fn fixed(src: &str) -> String {
+        let p = parse(src);
+        let fix = &p.diagnostics[0].fixes[0];
+        onsa_diag::apply_text(src, &fix.edits().iter().collect::<Vec<_>>()).unwrap()
+    }
+
+    #[test]
+    fn the_e0003_candidate_keeps_the_comments_in_their_order() {
+        let plain = "fn f(c: Bool) -> I32 {\n  if c {\n    1\n  }\n  else {\n    2\n  }\n}\n";
+        assert_eq!(fixed(plain), "fn f(c: Bool) -> I32 {\n  if c {\n    1\n  } else {\n    2\n  }\n}\n");
+        let own_line = "fn f(c: Bool) -> I32 {\n  if c {\n    1\n  }\n  // other\n  else {\n    2\n  }\n}\n";
+        assert_eq!(fixed(own_line), "fn f(c: Bool) -> I32 {\n  if c {\n    1\n  } else {\n  // other\n    2\n  }\n}\n");
+        let after_brace = "fn f(c: Bool) -> I32 {\n  if c {\n    1\n  } // a\n  else { // b\n    2\n  }\n}\n";
+        assert_eq!(
+            fixed(after_brace),
+            "fn f(c: Bool) -> I32 {\n  if c {\n    1\n  } else { // a\n  // b\n    2\n  }\n}\n"
+        );
+        let after = fixed(after_brace);
+        assert!(parse(&after).diagnostics.is_empty(), "{:?}", parse(&after).diagnostics);
+        assert!(parse(&fixed(own_line)).diagnostics.is_empty());
+    }
+
     fn fixes(src: &str) -> Vec<String> {
         parse(src)
             .diagnostics
             .iter()
             .flat_map(|d| d.fixes.iter())
-            .map(|f| match f {
-                Fix::Replace { replace } => replace.clone(),
-                _ => unreachable!(),
-            })
+            .map(|f| f.edits().iter().map(|e| e.replace.as_str()).collect::<Vec<_>>().join("|"))
             .collect()
     }
 
@@ -2242,7 +2466,7 @@ mod tests {
             "(block (let s = (par i in 0..N (block tail (call~ f (i))))))"
         );
         assert_eq!(codes("fn f() {\n  let r = 0..n\n}"), vec![Code::E0002]);
-        assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0020]);
+        assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0002]);
     }
 
     #[test]
@@ -2332,7 +2556,7 @@ mod tests {
         assert_eq!(fixes("impl A {\n  fn f(mut self) { }\n}"), vec!["inout self".to_string()]);
         assert_eq!(fixes("fn f<T>(x: T) { }"), vec!["[T]".to_string()]);
         assert_eq!(fixes("fn f() {\n  let y = .5\n}"), vec!["0.5".to_string()]);
-        assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0020]);
+        assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0002]);
     }
 
     #[test]

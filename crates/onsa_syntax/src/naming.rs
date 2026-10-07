@@ -1,7 +1,7 @@
 //! Naming rules (spec §2.3), E0320 (S-01). Runs after parsing over the arenas:
 //! every declared name is checked against the shape its kind requires.
 
-use onsa_diag::{Code, Diagnostic, Fix};
+use onsa_diag::{Code, Diagnostic, Fix, Stage};
 
 use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind, StructKind};
 
@@ -98,9 +98,16 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         if ident.name == "_" || shape.matches(&ident.name) {
             return;
         }
-        let d = Diagnostic::new(Code::E0320, ident.span, format!("{what} names are {} (§2.3)", shape.describe()))
-            .with_found(ident.name.clone())
-            .with_fix(Fix::Replace { replace: shape.convert(&ident.name) });
+        let to = shape.convert(&ident.name);
+        // S-82 (W4-04): the candidate also renames every use in the package.
+        let d = Diagnostic::new(
+            Stage::Names,
+            Code::E0320,
+            ident.span,
+            format!("{what} names are {} (§2.3)", shape.describe()),
+        )
+        .with_found(ident.name.clone())
+        .with_fix(Fix::replace("rename by the naming rule", ident.span, to));
         out.push(d);
     };
     let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Shape, &str)| {
@@ -230,14 +237,7 @@ mod tests {
                 (Code::E0320, "badParam".to_string()),
             ]
         );
-        let fixes: Vec<_> = parsed
-            .diagnostics
-            .iter()
-            .map(|d| match &d.fixes[0] {
-                Fix::Replace { replace } => replace.clone(),
-                _ => unreachable!(),
-            })
-            .collect();
+        let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
         assert_eq!(fixes, vec!["foo", "Point", "MAX", "bad_param"]);
     }
 }

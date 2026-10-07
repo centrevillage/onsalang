@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, FileId, Span};
+use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
 
 use crate::def::{DefId, DefKind, ModId};
@@ -96,15 +96,18 @@ impl ResolveError {
     pub fn into_diagnostic(self) -> Diagnostic {
         match self {
             ResolveError::NotFound { name, span } => {
-                Diagnostic::new(Code::E0302, span, format!("cannot find `{name}`")).with_found(name)
+                Diagnostic::new(Stage::Names, Code::E0302, span, format!("cannot find `{name}`")).with_found(name)
             }
-            ResolveError::NotVisible { name, span, defined } => {
-                Diagnostic::new(Code::E0303, span, format!("`{name}` is not visible here (it is not `pub`)"))
-                    .with_found(name)
-                    .with_note(defined, "defined here")
-            }
+            ResolveError::NotVisible { name, span, defined } => Diagnostic::new(
+                Stage::Names,
+                Code::E0303,
+                span,
+                format!("`{name}` is not visible here (it is not `pub`)"),
+            )
+            .with_found(name)
+            .with_note(defined, "defined here"),
             ResolveError::NotANamespace { name, span } => {
-                Diagnostic::new(Code::E0302, span, format!("`{name}` has no members")).with_found(name)
+                Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` has no members")).with_found(name)
             }
         }
     }
@@ -333,6 +336,7 @@ impl Modules {
                     1 => {
                         if reported.insert((i, j)) {
                             diags.push(Diagnostic::new(
+                                Stage::Names,
                                 Code::E0310,
                                 span,
                                 format!(

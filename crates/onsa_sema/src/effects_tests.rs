@@ -1,6 +1,6 @@
 //! Unit tests for T3-13 (E0601).
 
-use onsa_diag::{Code, FileId, Fix};
+use onsa_diag::{Code, FileId};
 
 use crate::{Analysis, Module, Package, analyze};
 
@@ -18,13 +18,14 @@ fn codes(a: &Analysis) -> Vec<Code> {
 
 #[test]
 fn calling_an_alloc_fn_needs_alloc_in_the_row() {
-    let a =
-        check("pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }\npub fn bad() -> U32 { mk(4).len() }\n");
+    let src = "pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }\npub fn bad() -> U32 { mk(4).len() }\n";
+    let a = check(src);
     assert_eq!(codes(&a), vec![Code::E0601]);
     let d = &a.diagnostics[0];
     assert_eq!(d.found.as_deref(), Some("bad() -> U32"));
-    assert_eq!(d.fixes, vec![Fix::InsertAfter { insert_after: " uses {Alloc}".into() }]);
-    assert!(d.notes[0].1.contains("calls `mk`"));
+    assert_eq!(d.fixes.len(), 1);
+    assert_eq!(crate::fixed_region(src, d, 0), "bad() -> U32 uses {Alloc}");
+    assert!(d.notes[0].message.contains("calls `mk`"));
 }
 
 #[test]

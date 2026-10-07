@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for the rate written as a type, `Sig[F32]` (§11.3). `Sig` is not reserved, so this is
+// E0020 only when the name does not resolve, and it comes from the name stage. In a flow's input
+// or output the candidate is `F32 at sample`; outside a flow the clock is dropped.
+
+pub flow rate_as_a_type_in(x: Sig[F32]) -> F32 at sample {   //~ E0020
+  x
+}
+
+pub flow rate_as_a_type_out(x: F32 at sample) -> Sig[F32] {   //~ E0020
+  x
+}
+
+pub fn rate_as_a_type_in_a_fn(x: Sig[F32]) -> F32 {   //~ E0020
+  x
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  x
+}

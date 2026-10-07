@@ -36,7 +36,7 @@ pub mod moves;
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Span};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_sema::def::{DefKind, Fields, GenericKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy, TyId};
 use onsa_sema::{Analysis, DefId, ModId, Package};
@@ -266,7 +266,7 @@ impl<'a> Lowerer<'a> {
                     let region = fail.hole.and_then(|h| self.hole_span(h)).unwrap_or(fail.span);
                     let around_stand_in = self.stand_in_spans.iter().any(|&h| contains(region, h));
                     if !around_stand_in {
-                        self.unsupported.push(Diagnostic::new(Code::E0200, fail.span, fail.msg));
+                        self.unsupported.push(Diagnostic::new(Stage::Build, Code::E0200, fail.span, fail.msg));
                     }
                     match fail.hole {
                         Some(h) if self.holes.insert(h) => {}
@@ -278,7 +278,8 @@ impl<'a> Lowerer<'a> {
         // A safety bound, not reached while every attempt finds a new hole.
         if let Some(last) = self.unsupported.last_mut() {
             let at = last.span;
-            last.notes.push((at, "this item may use more unsupported features that were not reported".into()));
+            last.notes
+                .push(onsa_diag::Note::at(at, "this item may use more unsupported features that were not reported"));
         }
         Ok(())
     }

@@ -74,6 +74,12 @@ pub struct TestSettings {
     /// Run every exported flow of every target in the interpreter and in C (§13.4).
     #[serde(default)]
     pub conformance: bool,
+    /// The fix candidates the check's diagnostics give, as files next to each
+    /// source file: `<file>.fix1` .. `<file>.fix<N>` hold the file after the
+    /// K-th candidate of every diagnostic is applied (W3-02, [`crate::fixes`]).
+    /// 0: not declared.
+    #[serde(default)]
+    pub fixes: u32,
     /// `[[test.host]]`: sequences of calls at the C boundary of a target (K-14, [`crate::host`]).
     #[serde(default, deserialize_with = "crate::host::de_seqs")]
     pub host: Vec<crate::host::Seq>,
@@ -209,6 +215,13 @@ fn check_settings(t: &TestSettings, lines: &[&str]) -> Result<(), String> {
     dups("spec", &t.spec).map_err(|e| format!("line {}: {e}", at("spec")))?;
     dups("golden", &t.golden).map_err(|e| format!("line {}: {e}", at("golden")))?;
     dups("golden_graph", &t.golden_graph).map_err(|e| format!("line {}: {e}", at("golden_graph")))?;
+    if matches!(t.mode, Mode::Parse | Mode::None) && t.fixes > 0 {
+        return Err(format!(
+            "line {}: fragment: [test] fixes needs `mode = \"check\"` or `\"test\"` (not {:?})",
+            at("fixes"),
+            t.mode
+        ));
+    }
     if matches!(t.mode, Mode::Parse | Mode::None)
         && (!t.golden.is_empty() || !t.golden_graph.is_empty() || t.conformance)
     {

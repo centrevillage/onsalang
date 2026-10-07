@@ -6,7 +6,9 @@
 use onsa_diag::{Code, FileId};
 use onsa_syntax::ast::{ItemKind, StructKind};
 
-/// Every registered code: `[{"code": "E0001", "category": "syntax", "title": "..."}, ...]`.
+/// Every registered code with what the registry holds (R-87 (3)):
+/// `[{"code": "E0001", "category": "syntax", "stages": ["syntax"], "fix": "optional",
+/// "note": "optional", "title": "..."}, ...]`.
 pub fn codes() -> serde_json::Value {
     Code::ALL
         .iter()
@@ -14,6 +16,9 @@ pub fn codes() -> serde_json::Value {
             serde_json::json!({
                 "code": c.as_str(),
                 "category": format!("{:?}", c.category()).to_lowercase(),
+                "stages": c.stages().iter().map(|s| s.name()).collect::<Vec<_>>(),
+                "fix": match c.fix_rule() { onsa_diag::FixRule::Required => "required", onsa_diag::FixRule::Optional => "optional" },
+                "note": match c.note_rule() { onsa_diag::NoteRule::Rule => "rule", onsa_diag::NoteRule::Optional => "optional" },
                 "title": c.title(),
             })
         })
@@ -86,6 +91,7 @@ mod tests {
         assert_eq!(list[0]["code"], "E0001");
         assert_eq!(list[0]["category"], "syntax");
         assert!(list.iter().any(|c| c["code"] == "E1104" && c["category"] == "manifest"));
+        assert!(list.iter().any(|c| c["code"] == "E0020" && c["fix"] == "required" && c["note"] == "rule"));
         assert!(!list.iter().any(|c| c["code"] == "E0814"), "E0814 is retired (S-147)");
     }
 

@@ -71,10 +71,10 @@ pub fn per_unit(pkg: &Package, sema: Vec<Diagnostic>) -> Vec<Diagnostic> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onsa_diag::Code;
+    use onsa_diag::{Code, Stage};
 
     fn d(start: u32, code: Code, message: &str) -> Diagnostic {
-        Diagnostic::new(code, Span::new(FileId(0), start, start + 1), message.to_string())
+        Diagnostic::new(Stage::Types, code, Span::new(FileId(0), start, start + 1), message.to_string())
     }
 
     #[test]

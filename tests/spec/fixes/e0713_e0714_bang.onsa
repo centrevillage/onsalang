@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§2.6"]
+// fixes = 1
+
+// E0713: calling an `inout self` method needs `!` right after the name; E0714: `!` on a method
+// that is not `inout self`. Both have one candidate (§5.2): insert or remove the `!`.
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+impl Pt {
+  pub fn norm(self) -> U32 { self.x + self.y }
+  pub fn scale(inout self, k: U32) { self.x = self.x * k }
+  pub fn consume(move self) -> U32 { self.x }
+}
+
+pub struct Rig {
+  pt: Pt,
+}
+
+impl Rig {
+  pub fn grow(inout self) {
+    self.pt.scale(2)                                //~ E0713
+  }
+}
+
+pub fn missing_on_an_inout_argument(inout p: Pt) {
+  p.scale(2)                                        //~ E0713
+}
+
+pub fn missing_on_an_array_element(inout ps: [Pt; 2]) {
+  ps[0].scale(2)                                    //~ E0713
+}
+
+pub fn missing_in_a_loop(n: U32) -> U32 {
+  var p = Pt { x: 1, y: 1 }
+  for i in 0..n {
+    p.scale(i)                                      //~ E0713
+  }
+  p.norm()
+}
+
+pub fn missing_on_span_fill(inout xs: Span[F32]) {
+  xs.fill(0.0)                                      //~ E0713
+}
+
+pub fn extra_on_a_var() -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  p.norm!()                                         //~ E0714
+}
+
+pub fn extra_on_move_self() -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  p.consume!()                                      //~ E0714
+}
+
+pub fn extra_on_span_len(xs: Span[F32]) -> U32 {
+  xs.len!()                                         //~ E0714
+}
+
+pub fn right_forms(inout p: Pt, inout xs: Span[F32]) -> U32 {
+  p.scale!(2)
+  xs.fill!(0.0)
+  p.norm() + xs.len()
+}

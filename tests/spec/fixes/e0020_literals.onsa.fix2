@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 2
+
+// E0020 for the literal forms of other languages (§2.4, §18.1). The fix keeps the value and
+// whether the literal is an integer or a float. `017` reads as 15 in C / Go / Java and as 17 in
+// Rust, so it has two candidates, `17` first. A suffix outside the closed list and a prefix
+// without digits are E0001 and have no candidate.
+
+pub fn float_trailing_dot() -> F32 {
+  let a = 1.                                        //~ E0020
+  a
+}
+
+pub fn float_leading_dot() -> F32 {
+  let a = .5                                        //~ E0020
+  a
+}
+
+pub fn float_dot_exponent() -> F32 {
+  let a = 1.e3                                      //~ E0020
+  a
+}
+
+pub fn octal_prefix() -> I32 {
+  let n: I32 = 0o17                                 //~ E0020
+  n
+}
+
+pub fn octal_leading_zero() -> I32 {
+  let n: I32 = 15                                  //~ E0020
+  n
+}
+
+pub fn zero_zero() -> I32 {
+  let n: I32 = 00                                   //~ E0020
+  n
+}
+
+pub fn suffix_int() -> U8 {
+  let n: U8 = 1u8                                   //~ E0020
+  n
+}
+
+pub fn suffix_hex() -> U8 {
+  let n: U8 = 0x1F_u8                               //~ E0020
+  n
+}
+
+pub fn suffix_c_unsigned_long() -> U64 {
+  let n: U64 = 100ul                                //~ E0020
+  n
+}
+
+pub fn suffix_digits_separator() -> U32 {
+  let n: U32 = 1_000u32                             //~ E0020
+  n
+}
+
+pub fn suffix_float_on_integer_form() -> F32 {
+  let a: F32 = 1f32                                 //~ E0020
+  a
+}
+
+pub fn suffix_c_float() -> F32 {
+  let a: F32 = 2.5f                                 //~ E0020
+  a
+}
+
+pub fn suffix_float() -> F32 {
+  let a: F32 = 1.0f32                               //~ E0020
+  a
+}
+
+pub fn suffix_not_in_the_list() -> I32 {
+  let n: I32 = 123abc                               //~ E0001
+  n
+}
+
+pub fn prefix_without_digits() -> I32 {
+  let n: I32 = 0x_                                  //~ E0001
+  n
+}
+
+pub fn fine() -> F32 {
+  let a: F32 = 1.0
+  let b: F32 = 0.5
+  let c: F32 = 1.0e3
+  let n: I32 = 17
+  a + b
+}

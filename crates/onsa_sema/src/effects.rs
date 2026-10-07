@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use onsa_diag::{Code, Diagnostic, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprKind, ItemKind, Lit, Mode, StmtKind, StrSeg};
 
 use crate::body::{LocalKind, Target};
@@ -138,12 +138,13 @@ fn first_use(
     let sig = Span::new(def.name_span.file, def.name_span.start, sig_end as u32);
     Some(
         Diagnostic::new(
+            Stage::Effects,
             Code::E0601,
             sig,
             format!("`{}` uses `Alloc`, which is not in its effect row; add `uses {{Alloc}}` (§8.1)", def.name),
         )
         .with_found(src(sig))
-        .with_fix(Fix::InsertAfter { insert_after: " uses {Alloc}".into() })
+        .with_fix(Fix::insert("add `uses {Alloc}`", sig.file, sig.end, " uses {Alloc}"))
         .with_note(at, why),
     )
 }

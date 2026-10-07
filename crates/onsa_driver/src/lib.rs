@@ -319,7 +319,7 @@ pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, Inter
         let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
         match onsa_syntax::format(&parsed, text) {
             Some(out) => Formatted::Text(out),
-            None => Formatted::Syntax(parsed.diagnostics),
+            None => Formatted::Syntax(parsed.syntax_report()),
         }
     })
 }
@@ -342,19 +342,20 @@ pub fn cst_dump(sources: &SourceMap, file: FileId, tree: bool) -> Result<String,
 pub enum AstDiff {
     Items(Vec<onsa_syntax::diff::ItemDiff>),
     /// A file has syntax diagnostics: the files are not compared (spec §18.2).
+    /// The diagnostics of both files (`Parsed::syntax_report`).
     Syntax(Vec<Diagnostic>),
 }
 
 /// Compare the files `old` and `new` of `sources` (`onsa diff --ast`).
 pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff, InternalError> {
     guard(|| {
-        let mut parsed = Vec::new();
-        for file in [old, new] {
-            let p = parse_file(file, sources.file(file).text());
-            if p.diagnostics.iter().any(|d| d.code.number() <= 20) {
-                return AstDiff::Syntax(p.diagnostics);
-            }
-            parsed.push(p);
+        let parsed: Vec<onsa_syntax::Parsed> =
+            [old, new].iter().map(|&file| parse_file(file, sources.file(file).text())).collect();
+        if parsed.iter().any(|p| p.syntax_errors()) {
+            // Both files are reported, not only the first with an error (§18.2).
+            return AstDiff::Syntax(
+                parsed.iter().filter(|p| p.syntax_errors()).flat_map(|p| p.syntax_report()).collect(),
+            );
         }
         AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], &parsed[1]))
     })
@@ -416,6 +417,7 @@ pub fn analyze_package(
         let analysis = onsa_sema::analyze(&pkg);
         let mut diagnostics = reduce::per_unit(&pkg, analysis.diagnostics.clone());
         fill_found(sources, &mut diagnostics);
+        debug_contract(sources, &diagnostics);
         Analyzed { pkg, analysis, diagnostics }
     })
 }
@@ -460,6 +462,22 @@ pub fn check_package(
     modules: &[(FileId, String)],
 ) -> Result<CheckResult, InternalError> {
     Ok(CheckResult { diagnostics: analyze_package(sources, name, modules)?.diagnostics })
+}
+
+/// In debug builds (the tests, the fuzzing), a diagnostic that breaks its
+/// rules (a required fix or note missing, edits that overlap or cut a token,
+/// plan D-04) is an internal error: the stage that made it is wrong (W3-02 D11).
+/// Release builds report the diagnostic as it is.
+pub(crate) fn debug_contract(sources: &SourceMap, diagnostics: &[Diagnostic]) {
+    if cfg!(debug_assertions) {
+        let problems = onsa_syntax::diagnostic_contract(sources, diagnostics);
+        if !problems.is_empty() {
+            onsa_diag::internal::bug(
+                diagnostics.first().map(|d| d.span),
+                format!("a diagnostic breaks the rules of diagnostics: {}", problems.join("; ")),
+            );
+        }
+    }
 }
 
 /// Every diagnostic names the offending source (`found`, §18.1): when the

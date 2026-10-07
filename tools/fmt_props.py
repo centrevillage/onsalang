@@ -811,9 +811,10 @@ class Source:
 def sources(root, cmd):
     """[Source] of the case files (`onsa_cases`, in its order), then of `std/`
     and `examples/`. fmt may refuse a case file only when the case is listed in
-    `tests/pending.toml` as a whole `test-case`, when the markers of the file
-    hold a syntax code (`onsa_cases`, the runner's `parser_code`), or when its
-    mode is `none`."""
+    `tests/pending.toml` as a whole `test-case`, when the lexer or the parser
+    reports a diagnostic on the file (`onsa_cases`, from the compiler's own
+    `Parsed::syntax_errors`, the decision of `fmt` itself), or when its mode is
+    `none`."""
     root = Path(root)
     entries, _ = pending.load(root / repo.PENDING)  # the item `pending` reports the errors
     whole = {e.target for e in pending.of_kind(entries, "test-case") if "::" not in e.target}
@@ -824,8 +825,8 @@ def sources(root, cmd):
                 why = 'a fragment of `mode = "none"`'
             elif c["path"] in whole:
                 why = "a pending test case"
-            elif f["parser_markers"]:
-                why = "a negative example of a syntax code"
+            elif f["syntax_errors"]:
+                why = "a file with a syntax diagnostic"
             else:
                 why = None
             try:

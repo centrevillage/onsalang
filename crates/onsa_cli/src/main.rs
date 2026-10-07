@@ -217,28 +217,57 @@ fn cannot_work(message: impl std::fmt::Display) -> Outcome {
     Outcome::CannotWork
 }
 
-fn print_diagnostics(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]) {
-    if json {
-        outln!("{}", onsa_diag::to_json(sources, diagnostics));
-    } else {
-        out!("{}", onsa_diag::to_text(sources, diagnostics));
+/// The text or the JSON of diagnostics, made inside a guard with the sources,
+/// so that a span a stage broke is an internal error naming its file.
+fn render(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]) -> Result<String, Outcome> {
+    onsa_driver::guard(|| {
+        if json {
+            format!("{}\n", onsa_diag::to_json(sources, diagnostics))
+        } else {
+            onsa_diag::to_text(sources, diagnostics)
+        }
+    })
+    .map_err(|e| internal(sources, &e))
+}
+
+/// Print diagnostics on standard output; `then` is the outcome when they print.
+fn print_diagnostics(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic], then: Outcome) -> Outcome {
+    match render(json, sources, diagnostics) {
+        Ok(text) => {
+            out!("{text}");
+            then
+        }
+        Err(o) => o,
     }
 }
 
+/// `onsa fmt [--check] <path...>`: every file is processed, also after one
+/// that cannot be read or has a syntax diagnostic; only the files without one
+/// are written (spec §18.2). Then exit 2 if a file could not be taken, else 1
+/// for `--check` with a file to rewrite, else 0. An internal error stops at once.
 fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
     let mut changed = false;
+    let mut failed = false;
     for path in paths {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
-            Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
+            Err(e) => {
+                eprintln!("onsa: cannot read {}: {e}", path.display());
+                failed = true;
+                continue;
+            }
         };
         let mut sources = SourceMap::default();
         let file = sources.add(path.to_string_lossy(), text.clone());
         let out = match onsa_driver::format_file(&sources, file) {
             Ok(onsa_driver::Formatted::Text(out)) => out,
             Ok(onsa_driver::Formatted::Syntax(diagnostics)) => {
-                eprint!("{}", onsa_diag::to_text(&sources, &diagnostics));
-                return Outcome::CannotWork;
+                match render(false, &sources, &diagnostics) {
+                    Ok(text) => eprint!("{text}"),
+                    Err(o) => return o,
+                }
+                failed = true;
+                continue;
             }
             Err(e) => return internal(&sources, &e),
         };
@@ -249,10 +278,17 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
         if check {
             outln!("would reformat {}", path.display());
         } else if let Err(e) = std::fs::write(path, out) {
-            return cannot_work(format!("cannot write {}: {e}", path.display()));
+            eprintln!("onsa: cannot write {}: {e}", path.display());
+            failed = true;
         }
     }
-    if check && changed { Outcome::Problems } else { Outcome::Ok }
+    if failed {
+        Outcome::CannotWork
+    } else if check && changed {
+        Outcome::Problems
+    } else {
+        Outcome::Ok
+    }
 }
 
 fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
@@ -268,8 +304,8 @@ fn check(json: bool, paths: &[PathBuf]) -> Outcome {
         Ok(r) => r,
         Err(e) => return internal(&loaded.sources, &e),
     };
-    print_diagnostics(json, &loaded.sources, &result.diagnostics);
-    if result.diagnostics.is_empty() { Outcome::Ok } else { Outcome::Problems }
+    let then = if result.diagnostics.is_empty() { Outcome::Ok } else { Outcome::Problems };
+    print_diagnostics(json, &loaded.sources, &result.diagnostics, then)
 }
 
 fn explain(code: &str) -> Outcome {
@@ -300,8 +336,7 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
     let diffs = match onsa_driver::diff_ast(&sources, files[0], files[1]) {
         Ok(onsa_driver::AstDiff::Items(d)) => d,
         Ok(onsa_driver::AstDiff::Syntax(diagnostics)) => {
-            out!("{}", onsa_diag::to_text(&sources, &diagnostics));
-            return Outcome::CannotWork;
+            return print_diagnostics(false, &sources, &diagnostics, Outcome::CannotWork);
         }
         Err(e) => return internal(&sources, &e),
     };
@@ -328,8 +363,7 @@ fn analyzed(json: bool, paths: &[PathBuf]) -> Result<(onsa_driver::Loaded, onsa_
         Err(e) => return Err(internal(&loaded.sources, &e)),
     };
     if !analyzed.diagnostics.is_empty() {
-        print_diagnostics(json, &loaded.sources, &analyzed.diagnostics);
-        return Err(Outcome::Problems);
+        return Err(print_diagnostics(json, &loaded.sources, &analyzed.diagnostics, Outcome::Problems));
     }
     Ok((loaded, analyzed))
 }
@@ -343,8 +377,7 @@ fn lowered(
     match onsa_driver::lower_core(analyzed) {
         Ok(m) => Ok(m),
         Err(onsa_driver::LowerError::Diagnostics(diags)) => {
-            print_diagnostics(json, &loaded.sources, &diags);
-            Err(Outcome::Problems)
+            Err(print_diagnostics(json, &loaded.sources, &diags, Outcome::Problems))
         }
         Err(onsa_driver::LowerError::Internal(e)) => Err(internal(&loaded.sources, &e)),
     }
@@ -469,8 +502,7 @@ fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> Outcome {
         }
         Err(onsa_driver::BuildError::Usage(m)) => cannot_work(m),
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            out!("{}", onsa_diag::to_text(&sources, &diagnostics));
-            Outcome::Problems
+            print_diagnostics(false, &sources, &diagnostics, Outcome::Problems)
         }
         Err(onsa_driver::BuildError::Internal { sources, error }) => internal(&sources, &error),
     }

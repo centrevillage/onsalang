@@ -192,13 +192,10 @@ fn conversions() {
     assert_eq!(codes("pub fn f(x: I64) -> I32 { x as I32 }\n"), vec![Code::E0411]);
     assert_eq!(codes("pub fn f(x: I64) -> F64 { x as F64 }\n"), vec![Code::E0411]);
     assert_eq!(codes("pub fn f(x: F32) -> I32 { x as I32 }\n"), vec![Code::E0411]);
-    let a = check("pub fn f(x: F32) -> I32 { x as I32 }\n");
-    assert!(
-        a.diagnostics[0]
-            .fixes
-            .iter()
-            .any(|f| matches!(f, onsa_diag::Fix::Replace { replace } if replace == "x.trunc_i32()"))
-    );
+    let src = "pub fn f(x: F32) -> I32 { x as I32 }\n";
+    let a = check(src);
+    let d = &a.diagnostics[0];
+    assert!((0..d.fixes.len()).any(|k| crate::fixed_region(src, d, k) == "x.trunc_i32()"));
 }
 
 #[test]

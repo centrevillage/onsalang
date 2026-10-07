@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+// fixes = 1
+
+// E0320: a name against the naming rules. The one candidate changes the declaration and every use
+// of the name in the package (§2.3, S-82), so the fixed file has no E0302 left over.
+
+pub fn bad_fn() -> I32 {                             //~ E0320
+  1
+}
+
+pub fn calls_bad_fn() -> I32 {
+  bad_fn() + bad_fn()
+}
+
+pub struct BadType {                               //~ E0320
+  x: F32,
+}
+
+pub fn pass_bad_type(b: BadType) -> BadType {
+  b
+}
+
+pub fn read_bad_type(b: BadType) -> F32 {
+  b.x
+}
+
+pub enum Shape {
+  Circle(F32),                                      //~ E0320
+  Square(F32),
+}
+
+pub fn unit_circle() -> Shape {
+  Shape.Circle(1.0)
+}
+
+pub fn area(s: Shape) -> F32 {
+  match s {
+    Shape.Circle(r) => r * r,
+    Shape.Square(a) => a * a,
+  }
+}
+
+const MAX_VOICES: U32 = 8                           //~ E0320
+
+pub fn voices() -> U32 {
+  MAX_VOICES * 2
+}
+
+pub fn camel_parameter(some_value: I32) -> I32 {     //~ E0320
+  some_value * 2
+}
+
+pub fn capitalized_var() -> I32 {
+  var count = 0                                     //~ E0320
+  count = count + 1
+  count
+}
+
+pub fn double_underscore() -> I32 {                //~ E0320
+  1
+}
+
+pub fn calls_double_underscore() -> I32 {
+  double_underscore()
+}

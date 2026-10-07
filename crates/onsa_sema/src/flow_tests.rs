@@ -256,14 +256,10 @@ fn e0806_forms() {
 
 #[test]
 fn e0807_e0808_delay_lengths() {
-    let a = check("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, 1, 0.0)\n}\n");
+    let src = "pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, 1, 0.0)\n}\n";
+    let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0807);
-    assert!(
-        a.diagnostics[0]
-            .fixes
-            .iter()
-            .any(|f| matches!(f, onsa_diag::Fix::Replace { replace } if replace == "prev(x, 0.0)"))
-    );
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev(x, 0.0)");
     assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, 0, 0.0)\n}\n"), vec![Code::E0808]);
     assert_eq!(
         codes("pub flow f(x: Sig[F32], n: Init[U32]) -> Sig[F32] {\n  delay(x, n, 0.0)\n}\n"),
@@ -281,16 +277,14 @@ fn e0810_non_copy_let() {
 
 #[test]
 fn e0811_e0812_marks() {
-    let a = check("pub flow g(x: Sig[F32]) -> Sig[F32] { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  g(x)\n}\n");
+    let src = "pub flow g(x: Sig[F32]) -> Sig[F32] { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  g(x)\n}\n";
+    let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0811);
-    assert!(
-        a.diagnostics[0].fixes.iter().any(|f| matches!(f, onsa_diag::Fix::Replace { replace } if replace == "g~(x)"))
-    );
-    let a = check("pub rt fn h(x: F32) -> F32 { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  h~(x)\n}\n");
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "g~(x)");
+    let src = "pub rt fn h(x: F32) -> F32 { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  h~(x)\n}\n";
+    let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0812);
-    assert!(
-        a.diagnostics[0].fixes.iter().any(|f| matches!(f, onsa_diag::Fix::Replace { replace } if replace == "h(x)"))
-    );
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "h(x)");
     assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev~(x, 0.0)\n}\n"), vec![Code::E0812]);
 }
 
@@ -298,7 +292,7 @@ fn e0811_e0812_marks() {
 fn e0813_e0815_delay_argument_rates() {
     let a = check("pub flow f(p: Ctl[F32]) -> Sig[F32] {\n  prev(p, 0.0)\n}\n");
     assert_eq!(a.diagnostics[0].code, Code::E0813);
-    assert!(a.diagnostics[0].notes.iter().any(|(_, n)| n.contains("let ps: Sig[F32] = p")));
+    assert!(a.diagnostics[0].notes.iter().any(|n| n.message.contains("let ps: Sig[F32] = p")));
     // The `init` of a delay is faster than `init`: E0815 (S-147; E0814 is retired).
     assert_eq!(codes("pub flow f(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {\n  prev(x, p)\n}\n"), vec![Code::E0815]);
     assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev(x, x)\n}\n"), vec![Code::E0815]);

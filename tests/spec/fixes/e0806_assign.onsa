@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§18.1"]
+// fixes = 1
+
+// E0806: an assignment in a flow body. A target not defined yet gets `let` as the candidate; a
+// defined target is an accumulation, so there is no candidate (a note shows
+// `let y = prev~(^y) + x`) (§18.1).
+
+pub flow assign_new(x: F32 at sample) -> F32 at sample {
+  y = x * 2.0                                       //~ E0806
+  y
+}
+
+pub flow assign_defined(x: F32 at sample) -> F32 at sample {
+  let y = 0.0
+  y = y + x                                         //~ E0806
+  y
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = prev~(^y) + x
+  y
+}

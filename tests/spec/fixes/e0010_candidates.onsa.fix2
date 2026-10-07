@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 2
+
+// E0010: groups without a strength between them (§3.1). One candidate per placement of a
+// temporary strength on the clashing groups, the group that appears first in the expression
+// taken as the stronger one first (§18.1). No parentheses are added where the strength is fixed
+// (multiplicative and additive over comparison). A comparison chain has the single candidate
+// `a < b && b < c`, only when the middle operand is a name, a literal or a field path. More than
+// three different candidates mean no candidate.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+pub fn ring_next(w: U32, n: U32) -> U32 {
+  w + (1 % n)                                         //~ E0010
+}
+
+pub fn product_remainder(a: U32, b: U32, c: U32) -> U32 {
+  a * (b % c)                                         //~ E0010
+}
+
+pub fn two_groups_longer(a: U32, b: U32, c: U32, d: U32) -> U32 {
+  a + (b % c) + d                                     //~ E0010
+}
+
+pub fn remainder_under_comparison(i: U32, n: U32, m: U32) -> Bool {
+  i + (1 % n) < m                                     //~ E0010
+}
+
+pub fn and_or(a: Bool, b: Bool, c: Bool, d: Bool) -> Bool {
+  a && (b || c) && d                                  //~ E0010
+}
+
+pub fn bit_with_comparison(x: U32) -> Bool {
+  x & (1 == 0)                                        //~ E0010
+}
+
+pub fn bit_operators(a: U32, b: U32, c: U32) -> U32 {
+  a & (b | c)                                         //~ E0010
+}
+
+pub fn chain(a: I32, b: I32, c: I32) -> Bool {
+  a < b < c                                         //~ E0010
+}
+
+pub fn chain_equal(a: I32, b: I32, c: I32) -> Bool {
+  a == b == c                                       //~ E0010
+}
+
+pub fn chain_field_middle(a: I32, p: Pt, c: I32) -> Bool {
+  a < p.x < c                                       //~ E0010
+}
+
+pub fn chain_call_middle(a: I32, b: I32, c: I32) -> Bool {
+  a < id(b) < c                                     //~ E0010
+}
+
+pub fn too_many_candidates(a: U32, b: U32, c: U32, d: U32) -> U32 {
+  a & b | c ^ d                                     //~ E0010
+}
+
+pub fn fine(x: U32, y: U32, z: U32) -> U32 {
+  x + y * z
+}

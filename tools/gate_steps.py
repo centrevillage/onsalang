@@ -64,6 +64,8 @@ STEPS = [
         "vectors-interp", (*VECTORS, "interp"), pendable=True, by_case_only=True, expect_internal=True, counts_rows=True
     ),
     Step("ignored-files", (*PY, str(TOOLS / "ignored_files.py"))),
+    # The keywords of the lexer against the list of §2.2 (W3-02): one case per word, `keywords/<word>`.
+    Step("keywords", (*PY, str(TOOLS / "keywords.py")), pendable=True, by_case_only=True),
     Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py"))),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),

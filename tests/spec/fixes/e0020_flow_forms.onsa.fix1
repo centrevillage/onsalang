@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for the clock written on a binding instead of on the value, and for `proc` (§11.3,
+// §18.1): `let y: F32 at sample = x` is `let y: F32 = x at sample`; `proc` is `flow`.
+
+pub flow clock_on_a_binding(x: F32 at sample) -> F32 at sample {
+  let y: F32 = x at sample                          //~ E0020
+  y
+}
+
+pub flow gain(x: F32 at sample) -> F32 at sample {  //~ E0020
+  x * 0.5
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y: F32 = x at sample
+  y
+}

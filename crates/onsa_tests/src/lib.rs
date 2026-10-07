@@ -33,6 +33,7 @@ pub mod capi;
 pub mod case;
 pub mod ccheck;
 pub mod conformance;
+pub mod fixes;
 pub mod fragment;
 pub mod golden;
 pub mod host;

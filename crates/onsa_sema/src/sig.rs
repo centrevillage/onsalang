@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Ast, Attr, AttrArg, EffectRow, ExprKind, GenericParam, Ident, ItemId, ItemKind, Lit, Mode, Param, ParamName,
     StructKind, TypeId, TypeKind, UnOp, Vis,
@@ -155,7 +155,10 @@ impl<'p> Sema<'p> {
     }
 
     fn unsupported(&mut self, def: DefId, span: Span, what: &str) {
-        self.report(def, Diagnostic::new(Code::E0200, span, format!("this version does not support {what}")));
+        self.report(
+            def,
+            Diagnostic::new(Stage::Names, Code::E0200, span, format!("this version does not support {what}")),
+        );
     }
 
     // ------------------------------------------------------------ collection
@@ -178,7 +181,7 @@ impl<'p> Sema<'p> {
             } else {
                 (Code::E0304, format!("`{}` is already declared in this module", name.name))
             };
-            let d = Diagnostic::new(code, name.span, msg)
+            let d = Diagnostic::new(Stage::Names, code, name.span, msg)
                 .with_found(name.name.clone())
                 .with_note(prev.span, "first declared here");
             match entity {
@@ -411,6 +414,7 @@ impl<'p> Sema<'p> {
                     self.report(
                         id,
                         Diagnostic::new(
+                            Stage::Names,
                             Code::E0306,
                             name.span,
                             format!("test \"{text}\" is defined twice in this module"),
@@ -457,6 +461,7 @@ impl<'p> Sema<'p> {
     fn bind_import(&mut self, m: ModId, name: &Ident, entity: Entity, vis: Vis) {
         if let Some(prev) = self.a.modules.get(m).scope.get(&name.name) {
             let d = Diagnostic::new(
+                Stage::Names,
                 Code::E0304,
                 name.span,
                 format!("`{}` is already in scope; a name is bound once per module (§15.1)", name.name),
@@ -592,7 +597,15 @@ impl<'p> Sema<'p> {
                 };
                 if key_def.is_none() && key_builtin.is_none() && !matches!(self.a.types.get(self_ty), Ty::Error) {
                     let span = cx.ast.ty(i.self_ty).span;
-                    self.report(id, Diagnostic::new(Code::E0302, span, "`impl` needs a struct, enum, or builtin type"));
+                    self.report(
+                        id,
+                        Diagnostic::new(
+                            Stage::Names,
+                            Code::E0302,
+                            span,
+                            "`impl` needs a struct, enum, or builtin type",
+                        ),
+                    );
                 }
                 for &sub in fns.iter().chain(&consts) {
                     let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
@@ -619,8 +632,13 @@ impl<'p> Sema<'p> {
                         let prev_span = self.a.defs[prev.0 as usize].name_span;
                         self.report(
                             sub,
-                            Diagnostic::new(Code::E0304, name_span, format!("`{name}` is defined twice for this type"))
-                                .with_note(prev_span, "first defined here"),
+                            Diagnostic::new(
+                                Stage::Names,
+                                Code::E0304,
+                                name_span,
+                                format!("`{name}` is defined twice for this type"),
+                            )
+                            .with_note(prev_span, "first defined here"),
                         );
                     } else {
                         table.insert(name, sub);
@@ -642,7 +660,7 @@ impl<'p> Sema<'p> {
         }
         if !self.expanding.insert(id) {
             let span = self.a.defs[id.0 as usize].name_span;
-            self.report(id, Diagnostic::new(Code::E0310, span, "type alias refers to itself"));
+            self.report(id, Diagnostic::new(Stage::Names, Code::E0310, span, "type alias refers to itself"));
             return self.a.types.error();
         }
         let ty = match (self.cx_for(id, Vec::new(), None), self.a.defs[id.0 as usize].item) {
@@ -682,11 +700,16 @@ impl<'p> Sema<'p> {
                         self.report(
                             cx.def,
                             Diagnostic::new(
+                                Stage::Names,
                                 Code::E0200,
                                 cx.ast.ty(*ty).span,
                                 "const generics other than `U32` are not supported",
                             )
-                            .with_fix(Fix::Replace { replace: "U32".into() }),
+                            .with_fix(Fix::replace(
+                                "write `U32`",
+                                cx.ast.ty(*ty).span,
+                                "U32",
+                            )),
                         );
                     }
                     GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Const(t) }
@@ -707,7 +730,10 @@ impl<'p> Sema<'p> {
                 "derive" => {
                     for arg in &attr.args {
                         let AttrArg::Path(p) = arg else {
-                            self.report(cx.def, Diagnostic::new(Code::E0302, attr.span, "`@derive` takes trait names"));
+                            self.report(
+                                cx.def,
+                                Diagnostic::new(Stage::Names, Code::E0302, attr.span, "`@derive` takes trait names"),
+                            );
                             continue;
                         };
                         let n = p.segments.last().unwrap();
@@ -725,7 +751,7 @@ impl<'p> Sema<'p> {
                                 self.report(
                                     cx.def,
                                     Diagnostic::new(
-                                        Code::E0302,
+                                        Stage::Names, Code::E0302,
                                         n.span,
                                         format!("`{}` cannot be derived; the list is PartialEq Eq PartialOrd Ord Hash Show Default (§6.4)", n.name),
                                     )
@@ -741,8 +767,13 @@ impl<'p> Sema<'p> {
                 other => {
                     self.report(
                         cx.def,
-                        Diagnostic::new(Code::E0302, attr.name.span, format!("unknown attribute `@{other}` (§6.5)"))
-                            .with_found(other.to_string()),
+                        Diagnostic::new(
+                            Stage::Names,
+                            Code::E0302,
+                            attr.name.span,
+                            format!("unknown attribute `@{other}` (§6.5)"),
+                        )
+                        .with_found(other.to_string()),
                     );
                 }
             }
@@ -781,7 +812,12 @@ impl<'p> Sema<'p> {
                     if i != 0 || !in_impl {
                         self.report(
                             cx.def,
-                            Diagnostic::new(Code::E0002, *span, "`self` must be the first parameter of a method"),
+                            Diagnostic::new(
+                                Stage::Names,
+                                Code::E0002,
+                                *span,
+                                "`self` must be the first parameter of a method",
+                            ),
                         );
                     }
                     self_mode = Some(p.mode);
@@ -797,6 +833,7 @@ impl<'p> Sema<'p> {
                             self.report(
                                 cx.def,
                                 Diagnostic::new(
+                                    Stage::Names,
                                     Code::E0002,
                                     p.span,
                                     "parameter needs a type (only closures may omit it)",
@@ -825,11 +862,19 @@ impl<'p> Sema<'p> {
         // §10 rule 1: an `rt` function cannot have `Alloc` in its effect row (E0902).
         if f.rt && effects.alloc {
             let span = f.effects.as_ref().map(|e| e.span).unwrap_or(f.name.span);
-            self.report(id, Diagnostic::new(Code::E0902, span, "`rt fn` cannot have `Alloc` in its effect row (§10)"));
+            self.report(
+                id,
+                Diagnostic::new(
+                    Stage::Effects,
+                    Code::E0902,
+                    span,
+                    "`rt fn` cannot have `Alloc` in its effect row (§10)",
+                ),
+            );
         }
         let target = self.a.defs[id.0 as usize].as_fn().is_some_and(|d| d.target);
         if f.body.is_none() && !target {
-            self.report(id, Diagnostic::new(Code::E0002, f.name.span, "function needs a body"));
+            self.report(id, Diagnostic::new(Stage::Names, Code::E0002, f.name.span, "function needs a body"));
         }
         if let DefKind::Fn(fd) = &mut self.a.defs[id.0 as usize].kind {
             fd.generics = cx.generics;
@@ -876,7 +921,12 @@ impl<'p> Sema<'p> {
                             None => {
                                 self.report(
                                     cx.def,
-                                    Diagnostic::new(Code::E0302, seg.span, "`Self` is only valid inside `impl`"),
+                                    Diagnostic::new(
+                                        Stage::Names,
+                                        Code::E0302,
+                                        seg.span,
+                                        "`Self` is only valid inside `impl`",
+                                    ),
                                 );
                                 self.a.types.error()
                             }
@@ -886,7 +936,12 @@ impl<'p> Sema<'p> {
                         if !args_ast.is_empty() {
                             self.report(
                                 cx.def,
-                                Diagnostic::new(Code::E0302, te.span, "a type parameter takes no arguments"),
+                                Diagnostic::new(
+                                    Stage::Names,
+                                    Code::E0302,
+                                    te.span,
+                                    "a type parameter takes no arguments",
+                                ),
                             );
                         }
                         return match cx.generics[i].kind {
@@ -896,7 +951,12 @@ impl<'p> Sema<'p> {
                             GenericKind::Effect => {
                                 self.report(
                                     cx.def,
-                                    Diagnostic::new(Code::E0302, seg.span, "an effect-row variable is not a type"),
+                                    Diagnostic::new(
+                                        Stage::Names,
+                                        Code::E0302,
+                                        seg.span,
+                                        "an effect-row variable is not a type",
+                                    ),
                                 );
                                 self.a.types.error()
                             }
@@ -935,6 +995,7 @@ impl<'p> Sema<'p> {
                 self.report(
                     cx.def,
                     Diagnostic::new(
+                        Stage::Types,
                         Code::E0401,
                         te.span,
                         "a constant is not a type; const arguments go to `const` parameters",
@@ -956,8 +1017,13 @@ impl<'p> Sema<'p> {
                 let _ = e;
                 self.report(
                     cx.def,
-                    Diagnostic::new(Code::E0401, te.span, "a type parameter expects a type, not a constant")
-                        .with_found(src(cx, te.span)),
+                    Diagnostic::new(
+                        Stage::Types,
+                        Code::E0401,
+                        te.span,
+                        "a type parameter expects a type, not a constant",
+                    )
+                    .with_found(src(cx, te.span)),
                 );
                 self.a.types.error()
             }
@@ -976,8 +1042,13 @@ impl<'p> Sema<'p> {
                     _ => {
                         self.report(
                             cx.def,
-                            Diagnostic::new(Code::E0408, te.span, "a const argument must fit in `U32` (§4.1)")
-                                .with_found(src(cx, te.span)),
+                            Diagnostic::new(
+                                Stage::Types,
+                                Code::E0408,
+                                te.span,
+                                "a const argument must fit in `U32` (§4.1)",
+                            )
+                            .with_found(src(cx, te.span)),
                         );
                         self.a.types.error()
                     }
@@ -1003,6 +1074,7 @@ impl<'p> Sema<'p> {
                                 self.report(
                                     cx.def,
                                     Diagnostic::new(
+                                        Stage::Types,
                                         Code::E0408,
                                         te.span,
                                         "a const argument must be an integer literal or a `const` with a literal value",
@@ -1022,6 +1094,7 @@ impl<'p> Sema<'p> {
                 self.report(
                     cx.def,
                     Diagnostic::new(
+                        Stage::Types,
                         Code::E0401,
                         te.span,
                         "a `const` parameter expects an integer literal or a constant, not a type",
@@ -1034,6 +1107,7 @@ impl<'p> Sema<'p> {
                 self.report(
                     cx.def,
                     Diagnostic::new(
+                        Stage::Types,
                         Code::E0401,
                         te.span,
                         "a `const` parameter expects an integer literal or a constant, not a type",
@@ -1059,6 +1133,7 @@ impl<'p> Sema<'p> {
             s.report(
                 cx.def,
                 Diagnostic::new(
+                    Stage::Names,
                     Code::E0302,
                     span,
                     format!("`{name}` takes {want} type argument(s), {} given", args.len()),
@@ -1105,11 +1180,16 @@ impl<'p> Sema<'p> {
                         self.report(
                             cx.def,
                             Diagnostic::new(
+                                Stage::Names,
                                 Code::E0302,
                                 span,
                                 format!("`{name}` is a flow, not a type; its state type is `{name}.State` (§11.6)"),
                             )
-                            .with_fix(Fix::Replace { replace: format!("{name}.State") }),
+                            .with_fix(Fix::replace(
+                                format!("write `{name}.State`"),
+                                span,
+                                format!("{name}.State"),
+                            )),
                         );
                         self.a.types.error()
                     }
@@ -1117,7 +1197,7 @@ impl<'p> Sema<'p> {
                     _ => {
                         self.report(
                             cx.def,
-                            Diagnostic::new(Code::E0302, span, format!("`{name}` is not a type"))
+                            Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is not a type"))
                                 .with_found(name.clone()),
                         );
                         self.a.types.error()
@@ -1125,11 +1205,17 @@ impl<'p> Sema<'p> {
                 }
             }
             Entity::Module(_) => {
-                self.report(cx.def, Diagnostic::new(Code::E0302, span, format!("`{name}` is a module, not a type")));
+                self.report(
+                    cx.def,
+                    Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is a module, not a type")),
+                );
                 self.a.types.error()
             }
             Entity::Builtin(_) | Entity::Variant(..) => {
-                self.report(cx.def, Diagnostic::new(Code::E0302, span, format!("`{name}` is a value, not a type")));
+                self.report(
+                    cx.def,
+                    Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` is a value, not a type")),
+                );
                 self.a.types.error()
             }
         }
@@ -1142,7 +1228,10 @@ impl<'p> Sema<'p> {
         match &expr.kind {
             ExprKind::Lit(Lit::Int { value, .. }) => {
                 if *value > u32::MAX as u64 {
-                    self.report(cx.def, Diagnostic::new(Code::E0408, expr.span, "array length does not fit in `U32`"));
+                    self.report(
+                        cx.def,
+                        Diagnostic::new(Stage::Types, Code::E0408, expr.span, "array length does not fit in `U32`"),
+                    );
                     return None;
                 }
                 Some(Len::Const(*value as u32))
@@ -1156,7 +1245,12 @@ impl<'p> Sema<'p> {
                     }
                     self.report(
                         cx.def,
-                        Diagnostic::new(Code::E0302, expr.span, "array length must be a `const` parameter or constant"),
+                        Diagnostic::new(
+                            Stage::Names,
+                            Code::E0302,
+                            expr.span,
+                            "array length must be a `const` parameter or constant",
+                        ),
                     );
                     return None;
                 }
@@ -1167,7 +1261,12 @@ impl<'p> Sema<'p> {
                             Some(_) => {
                                 self.report(
                                     cx.def,
-                                    Diagnostic::new(Code::E0408, expr.span, "array length does not fit in `U32`"),
+                                    Diagnostic::new(
+                                        Stage::Types,
+                                        Code::E0408,
+                                        expr.span,
+                                        "array length does not fit in `U32`",
+                                    ),
                                 );
                                 None
                             }
@@ -1183,14 +1282,22 @@ impl<'p> Sema<'p> {
                         _ => {
                             self.report(
                                 cx.def,
-                                Diagnostic::new(Code::E0302, expr.span, "array length must be a constant")
-                                    .with_found(src(cx, expr.span)),
+                                Diagnostic::new(
+                                    Stage::Names,
+                                    Code::E0302,
+                                    expr.span,
+                                    "array length must be a constant",
+                                )
+                                .with_found(src(cx, expr.span)),
                             );
                             None
                         }
                     },
                     Ok(_) => {
-                        self.report(cx.def, Diagnostic::new(Code::E0302, expr.span, "array length must be a constant"));
+                        self.report(
+                            cx.def,
+                            Diagnostic::new(Stage::Names, Code::E0302, expr.span, "array length must be a constant"),
+                        );
                         None
                     }
                     Err(err) => {
@@ -1215,7 +1322,7 @@ impl<'p> Sema<'p> {
                 ParamName::Ident(i) => i.name.clone(),
                 ParamName::Wild(_) => "_".into(),
                 ParamName::SelfParam(s) => {
-                    self.report(id, Diagnostic::new(Code::E0002, *s, "a flow has no `self`"));
+                    self.report(id, Diagnostic::new(Stage::Names, Code::E0002, *s, "a flow has no `self`"));
                     continue;
                 }
             };
@@ -1223,6 +1330,7 @@ impl<'p> Sema<'p> {
                 self.report(
                     id,
                     Diagnostic::new(
+                        Stage::Flow,
                         Code::E0806,
                         p.span,
                         "flow inputs have no `inout` / `move`; they are read-only signals",
@@ -1238,12 +1346,17 @@ impl<'p> Sema<'p> {
                     self.report(
                         id,
                         Diagnostic::new(
+                            Stage::Flow,
                             Code::E0810,
                             cx.ast.ty(t).span,
                             "a flow input needs a rate: `Init[T]`, `Ctl[T]` or `Sig[T]` (§11.3)",
                         )
                         .with_found(src(&cx, cx.ast.ty(t).span))
-                        .with_fix(Fix::Replace { replace: format!("Sig[{}]", src(&cx, cx.ast.ty(t).span)) }),
+                        .with_fix(Fix::replace(
+                            "write `Sig[...]`",
+                            cx.ast.ty(t).span,
+                            format!("Sig[{}]", src(&cx, cx.ast.ty(t).span)),
+                        )),
                     );
                     continue;
                 }
@@ -1266,8 +1379,13 @@ impl<'p> Sema<'p> {
             _ => {
                 self.report(
                     id,
-                    Diagnostic::new(Code::E0810, cx.ast.ty(f.ret).span, "a flow output is `Sig[T]` (§11.6)")
-                        .with_found(src(&cx, cx.ast.ty(f.ret).span)),
+                    Diagnostic::new(
+                        Stage::Flow,
+                        Code::E0810,
+                        cx.ast.ty(f.ret).span,
+                        "a flow output is `Sig[T]` (§11.6)",
+                    )
+                    .with_found(src(&cx, cx.ast.ty(f.ret).span)),
                 );
                 self.a.types.error()
             }
@@ -1290,6 +1408,7 @@ impl<'p> Sema<'p> {
             self.report(
                 id,
                 Diagnostic::new(
+                    Stage::Flow,
                     Code::E0810,
                     span,
                     format!("the value type of a signal must be Copy; `{}` is {}", self.a.display_type(ty), k.name()),
@@ -1301,7 +1420,7 @@ impl<'p> Sema<'p> {
             self.report(
                 id,
                 Diagnostic::new(
-                    Code::E0810,
+                    Stage::Flow, Code::E0810,
                     span,
                     "`Sig` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)",
                 ),
@@ -1334,13 +1453,19 @@ impl<'p> Sema<'p> {
     fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attrs: &[Attr], rate: Rate) -> Option<ParamMeta> {
         let attr = attrs.iter().find(|a| a.name.name == "param")?;
         if rate != Rate::Ctl {
-            self.report(id, Diagnostic::new(Code::E0809, attr.span, "`@param` goes on `Ctl` inputs only (§11.7)"));
+            self.report(
+                id,
+                Diagnostic::new(Stage::Flow, Code::E0809, attr.span, "`@param` goes on `Ctl` inputs only (§11.7)"),
+            );
             return None;
         }
         let mut meta = ParamMeta::empty(attr.span);
         for arg in &attr.args {
             let AttrArg::Named { key, value } = arg else {
-                self.report(id, Diagnostic::new(Code::E0809, attr.span, "`@param` takes `key: value` pairs"));
+                self.report(
+                    id,
+                    Diagnostic::new(Stage::Flow, Code::E0809, attr.span, "`@param` takes `key: value` pairs"),
+                );
                 continue;
             };
             let num = |s: &Self, e: onsa_syntax::ast::ExprId| -> Option<f64> {
@@ -1374,7 +1499,10 @@ impl<'p> Sema<'p> {
             };
             let vspan = cx.ast.expr(*value).span;
             let bad = |s: &mut Self, what: &str| {
-                s.report(id, Diagnostic::new(Code::E0809, vspan, format!("`@param` `{}` must be {what}", key.name)));
+                s.report(
+                    id,
+                    Diagnostic::new(Stage::Flow, Code::E0809, vspan, format!("`@param` `{}` must be {what}", key.name)),
+                );
             };
             match key.name.as_str() {
                 "min" | "max" | "default" | "step" => match num(self, *value) {
@@ -1402,7 +1530,7 @@ impl<'p> Sema<'p> {
                     self.report(
                         id,
                         Diagnostic::new(
-                            Code::E0809,
+                            Stage::Flow, Code::E0809,
                             key.span,
                             format!("unknown `@param` key `{other}`; keys are min max default step unit scale label id (§11.7)"),
                         )

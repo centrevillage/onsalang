@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.2", "§18.1"]
+// fixes = 1
+
+// E0020 for a space between a name and `~` and a space after `^` (§2.5): `saw ~(f0)` reads as the
+// FAUST binary `~`, `^ y` as the binary exclusive or. The fix removes the space.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow tilde_gap(x: F32 at sample) -> F32 at sample {
+  let y = lp ~(x)                                   //~ E0020
+  y
+}
+
+pub flow caret_gap(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^ y)                            //~ E0020
+  y
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = lp~(x) + prev~(^y)
+  y
+}

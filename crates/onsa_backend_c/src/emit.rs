@@ -17,7 +17,7 @@ use onsa_core::{
     BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
     Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, TypeId, UnOp,
 };
-use onsa_diag::{Code, Diagnostic, Span};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::names::{Entry, TypeNames, float_tag, ident, int_tag, qualified};
 use crate::reach::{Reach, has_return, reach, walk_block};
@@ -218,7 +218,12 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     let mut roots: Vec<FnId> = Vec::new();
     for e in &opts.exports {
         let Some(i) = find_flow(m, &e.flow) else {
-            diags.push(Diagnostic::new(Code::E0302, no_span(), format!("cannot find the flow `{}` to export", e.flow)));
+            diags.push(Diagnostic::new(
+                Stage::Build,
+                Code::E0302,
+                no_span(),
+                format!("cannot find the flow `{}` to export", e.flow),
+            ));
             continue;
         };
         let meta = &m.flows[i];
@@ -242,6 +247,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
                 export_fns.push(FnId(i as u32));
             }
             None => diags.push(Diagnostic::new(
+                Stage::Build,
                 Code::E0302,
                 no_span(),
                 format!("cannot find the function `{name}` to export"),
@@ -455,9 +461,12 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
                 bodies.push_str(&body);
                 bodies.push('\n');
             }
-            Err(d) => {
-                diags.push(Diagnostic::new(d.code, if d.span == no_span() { def.span } else { d.span }, d.message))
-            }
+            Err(d) => diags.push(Diagnostic::new(
+                d.stage,
+                d.code,
+                if d.span == no_span() { def.span } else { d.span },
+                d.message,
+            )),
         }
     }
     out.push_str(&protos);

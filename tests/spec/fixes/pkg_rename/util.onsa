@@ -1,0 +1,7 @@
+pub fn BadName() -> I32 {                           //~ E0320
+  1
+}
+
+pub fn ok_name() -> I32 {
+  2
+}

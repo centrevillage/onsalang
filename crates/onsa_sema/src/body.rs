@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use onsa_diag::{Code, Diagnostic, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
     PatId, PatKind, Path, StmtId, StmtKind, StrSeg, UnOp,
@@ -265,8 +265,14 @@ impl<'a> Checker<'a> {
         self.text[span.start as usize..span.end as usize].to_string()
     }
 
+    /// A diagnostic of the typing pass (stage `Types`).
     pub(crate) fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
-        self.diag(Diagnostic::new(code, span, msg).with_found(self.src(span)))
+        self.diag(Diagnostic::new(Stage::Types, code, span, msg).with_found(self.src(span)))
+    }
+
+    /// A diagnostic of the flow checks (`flow.rs`, stage `Flow`).
+    pub(crate) fn flow_err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
+        self.diag(Diagnostic::new(Stage::Flow, code, span, msg).with_found(self.src(span)))
     }
 
     pub(crate) fn diag(&mut self, d: Diagnostic) -> Stop {
@@ -354,6 +360,7 @@ impl<'a> Checker<'a> {
         if matches!(self.ty(s), Ty::Var(_)) {
             return Err(self.diag(
                 Diagnostic::new(
+                    Stage::Types,
                     Code::E0420,
                     span,
                     format!("the type of this {what} must be known here; add an annotation (§4.7)"),
@@ -400,6 +407,7 @@ impl<'a> Checker<'a> {
                 let prev_span = self.info.locals[prev.0 as usize].span;
                 return Err(self.diag(
                     Diagnostic::new(
+                        Stage::Types,
                         Code::E0304,
                         name.span,
                         format!("`{}` is already bound and visible here; Onsa has no shadowing (§5.1)", name.name),
@@ -536,6 +544,7 @@ impl<'a> Checker<'a> {
                             };
                             late.push(
                                 Diagnostic::new(
+                                    Stage::Types,
                                     Code::E0408,
                                     span,
                                     format!(
@@ -552,6 +561,7 @@ impl<'a> Checker<'a> {
                         let span = self.expr(e).span;
                         late.push(
                             Diagnostic::new(
+                                Stage::Types,
                                 Code::E0405,
                                 span,
                                 "the type of this integer literal cannot be determined; annotate it (§2.4)",
@@ -569,6 +579,7 @@ impl<'a> Checker<'a> {
                     let span = self.expr(e).span;
                     late.push(
                         Diagnostic::new(
+                            Stage::Types,
                             Code::E0405,
                             span,
                             "the type of this float literal cannot be determined; annotate it (§2.4)",
@@ -584,8 +595,13 @@ impl<'a> Checker<'a> {
                 {
                     let span = self.expr(e).span;
                     late.push(
-                        Diagnostic::new(Code::E0401, span, format!("`-` on the unsigned type `{}`", k.name()))
-                            .with_found(self.src(span)),
+                        Diagnostic::new(
+                            Stage::Types,
+                            Code::E0401,
+                            span,
+                            format!("`-` on the unsigned type `{}`", k.name()),
+                        )
+                        .with_found(self.src(span)),
                     );
                 }
             }
@@ -609,6 +625,7 @@ impl<'a> Checker<'a> {
                         let shown = self.display(r);
                         late.push(
                             Diagnostic::new(
+                                Stage::Types,
                                 Code::E0416,
                                 inst.span,
                                 format!("`{shown}` does not satisfy the bound `{}: {}`", g.name, bound_name(b)),
@@ -638,7 +655,7 @@ impl<'a> Checker<'a> {
                         }
                     }
                 };
-                late.push(Diagnostic::new(Code::E0421, self.expr(e).span, msg).with_found("_"));
+                late.push(Diagnostic::new(Stage::Types, Code::E0421, self.expr(e).span, msg).with_found("_"));
             }
             late.sort_by_key(|d| d.span.start);
             if let Some(d) = late.into_iter().next() {
@@ -884,7 +901,7 @@ impl<'a> Checker<'a> {
                 let name = self.a.def(def).name.clone();
                 return Err(self.diag(
                     Diagnostic::new(
-                        Code::E0406,
+                        Stage::Types, Code::E0406,
                         span,
                         format!(
                             "the type parameter `{}` of `{name}` cannot be determined from the arguments or the expected type; annotate the result (§4.5)",
@@ -1257,6 +1274,7 @@ impl<'a> Checker<'a> {
                     let Some(el) = exp_elem else {
                         return Err(self.diag(
                             Diagnostic::new(
+                                Stage::Types,
                                 Code::E0420,
                                 span,
                                 "the type of an empty array must be known here; annotate it (§2.4)",
@@ -1325,6 +1343,7 @@ impl<'a> Checker<'a> {
                 }
                 let (fs, ts) = (self.display(from), self.display(to));
                 let mut d = Diagnostic::new(
+                    Stage::Types,
                     Code::E0411,
                     span,
                     format!(
@@ -1334,7 +1353,7 @@ impl<'a> Checker<'a> {
                 .with_found(self.src(span));
                 if let Some(m) = builtin::cast_suggestion(&self.a.types, from, to) {
                     let inner_src = self.src(self.expr(*inner).span);
-                    d = d.with_fix(Fix::Replace { replace: format!("{inner_src}{m}") });
+                    d = d.with_fix(Fix::replace(format!("call `{m}`"), span, format!("{inner_src}{m}")));
                 }
                 Err(self.diag(d))
             }
@@ -1691,6 +1710,7 @@ impl<'a> Checker<'a> {
         if let Some(missing) = self.missing_pattern(&rows, st) {
             return Err(self.diag(
                 Diagnostic::new(
+                    Stage::Types,
                     Code::E0501,
                     span,
                     format!("`match` is not exhaustive; `{missing}` is not covered (§7)"),
@@ -1739,6 +1759,7 @@ impl<'a> Checker<'a> {
                     None => {
                         return Err(self.diag(
                             Diagnostic::new(
+                                Stage::Types,
                                 Code::E0420,
                                 p.span,
                                 "the parameter type of an anonymous function must be known here; annotate it (§6.1)",
@@ -1924,15 +1945,17 @@ impl<'a> Checker<'a> {
             return Ok(t);
         }
         if kind == CallKind::Flow {
-            let fix = self.src(span).replacen("~(", "(", 1);
+            // The `~` comes right after the callee (`f~(`, §2.6).
+            let at = self.expr(callee).span.end;
             return Err(self.diag(
                 Diagnostic::new(
+                    Stage::Types,
                     Code::E0812,
                     span,
                     "`~(` creates a flow instance and is only written inside a flow body (§11.5)",
                 )
                 .with_found(self.src(span))
-                .with_fix(Fix::Replace { replace: fix }),
+                .with_fix(Fix::delete("remove `~`", Span::new(span.file, at, at + 1))),
             ));
         }
         // 1. Method call `recv.name(...)` when the base is a value.
@@ -2026,11 +2049,12 @@ impl<'a> Checker<'a> {
             ));
         };
         if kind == CallKind::Bang {
-            let fix = self.src(span).replacen("!(", "(", 1);
+            // The `!` comes right after the callee (`f!(`, §2.6).
+            let at = self.expr(callee).span.end;
             return Err(self.diag(
-                Diagnostic::new(Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
+                Diagnostic::new(Stage::Types, Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
                     .with_found(self.src(span))
-                    .with_fix(Fix::Replace { replace: fix }),
+                    .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
             ));
         }
         self.info.targets.insert(e, Target::Value);
@@ -2067,11 +2091,16 @@ impl<'a> Checker<'a> {
                     ));
                 }
                 if kind == CallKind::Bang {
-                    let fix = self.src(span).replacen("!(", "(", 1);
+                    let at = self.expr(callee).span.end;
                     return Err(self.diag(
-                        Diagnostic::new(Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
-                            .with_found(self.src(span))
-                            .with_fix(Fix::Replace { replace: fix }),
+                        Diagnostic::new(
+                            Stage::Types,
+                            Code::E0714,
+                            span,
+                            "`!` marks `inout self` method calls only (§5.2)",
+                        )
+                        .with_found(self.src(span))
+                        .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
                     ));
                 }
                 let targs = self.fresh_args(d);

@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§3.3", "§18.1"]
+// fixes = 1
+
+// E0401 for a value of the wrong type in `@param` (§11.7, no implicit conversion §3.3): a float
+// input with `min: 0` has the candidate `0.0`; an integer input with `min: 2.0` has `2`; `2.5` has
+// no candidate.
+
+pub flow float_with_an_integer_min(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)              //~ E0401
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow integer_with_a_float_min(
+  x: F32 at sample,
+  @param(min: 2, max: 8, default: 4)                //~ E0401
+  steps: I32 at block,
+) -> F32 at sample {
+  x * steps.round_f32()
+}
+
+pub flow integer_with_a_fraction(
+  x: F32 at sample,
+  @param(min: 2.5, max: 8, default: 4)                //~ E0401
+  steps: I32 at block,
+) -> F32 at sample {
+  x * steps.round_f32()
+}
+
+pub flow fine(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}

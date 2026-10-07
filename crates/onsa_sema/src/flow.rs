@@ -39,7 +39,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, Path, StmtId, StmtKind};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, LocalKind, R, Target};
@@ -244,7 +244,7 @@ impl<'a> Checker<'a> {
     fn prescan_lets(&mut self, body: ExprId) -> R<()> {
         let span = self.expr(body).span;
         let ExprKind::Block(b) = &self.expr(body).kind else {
-            return Err(self.err(
+            return Err(self.flow_err(
                 Code::E0806,
                 span,
                 "a flow body is a block of `let`s and an output expression (§11.2)",
@@ -284,7 +284,7 @@ impl<'a> Checker<'a> {
             }
             None => {
                 let end = Span::new(span.file, span.end.saturating_sub(1), span.end);
-                Err(self.err(Code::E0806, end, "a flow body ends with its output expression (§11.2)"))
+                Err(self.flow_err(Code::E0806, end, "a flow body ends with its output expression (§11.2)"))
             }
         }
     }
@@ -328,7 +328,7 @@ impl<'a> Checker<'a> {
             let def_span = self.fcx().pending[k].span;
             return Err(self.diag(
                 Diagnostic::new(
-                    Code::E0801,
+                    Stage::Flow, Code::E0801,
                     span,
                     format!(
                         "`{name}` is defined below; only the first argument of `prev`/`delay`/`vdelay` may refer to a later or current `let` (§11.2)"
@@ -357,20 +357,20 @@ impl<'a> Checker<'a> {
             StmtKind::Assert(_) => "`assert`; checks are written as tests on `render` (§11.8)",
             StmtKind::Expr(_) => "an expression statement; a flow body is `let`s followed by one output expression",
         };
-        Err(self.err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
+        Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
     }
 
     fn check_flow_let(&mut self, s: StmtId, pat: PatId, ty: Option<onsa_syntax::ast::TypeId>, init: ExprId) -> R<()> {
         let span = self.ast.stmt(s).span;
         if self.fcx().depth != 1 {
-            return Err(self.err(
+            return Err(self.flow_err(
                 Code::E0806,
                 span,
                 "`let` is written at the top level of a flow body only; nested blocks hold one expression (§11.2)",
             ));
         }
         let Some(k) = self.fcx().pending.iter().position(|p| p.stmt == s) else {
-            return Err(self.err(Code::E0806, span, "unexpected `let` in a flow body"));
+            return Err(self.flow_err(Code::E0806, span, "unexpected `let` in a flow body"));
         };
         // Annotation: `Sig[F32]` promotes (§11.3); a plain type only constrains the value.
         let (annotated, expected) = match ty {
@@ -409,14 +409,14 @@ impl<'a> Checker<'a> {
                 let s = self.known(ty, span, "matched value")?;
                 let Ty::Tuple(ts) = self.ty(s) else {
                     let shown = self.display(ty);
-                    return Err(self.err(
+                    return Err(self.flow_err(
                         Code::E0401,
                         span,
                         format!("expected a tuple pattern target, found `{shown}`"),
                     ));
                 };
                 if ts.len() != elems.len() {
-                    return Err(self.err(
+                    return Err(self.flow_err(
                         Code::E0401,
                         span,
                         format!("a tuple of {} element(s) cannot match this pattern of {}", ts.len(), elems.len()),
@@ -435,11 +435,11 @@ impl<'a> Checker<'a> {
                 };
                 let d = match entity {
                     Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-                    _ => return Err(self.err(Code::E0401, path.span, "a struct pattern needs a struct")),
+                    _ => return Err(self.flow_err(Code::E0401, path.span, "a struct pattern needs a struct")),
                 };
                 let sd = self.a.def(d).as_struct().unwrap().clone();
                 let Fields::Named(defs) = &sd.fields else {
-                    return Err(self.err(Code::E0410, path.span, "this struct has no named fields"));
+                    return Err(self.flow_err(Code::E0410, path.span, "this struct has no named fields"));
                 };
                 let args = self.fresh_args(d);
                 let named = self.a.types.intern(Ty::Named(d, args.clone()));
@@ -447,14 +447,18 @@ impl<'a> Checker<'a> {
                 let mut seen: Vec<String> = Vec::new();
                 for (name, fp) in &fields {
                     let Some(fd) = defs.iter().find(|f| f.name == name.name) else {
-                        return Err(self.err(
+                        return Err(self.flow_err(
                             Code::E0410,
                             name.span,
                             format!("`{}` has no field `{}`", self.a.def(d).name, name.name),
                         ));
                     };
                     if seen.contains(&name.name) {
-                        return Err(self.err(Code::E0410, name.span, format!("field `{}` is given twice", name.name)));
+                        return Err(self.flow_err(
+                            Code::E0410,
+                            name.span,
+                            format!("field `{}` is given twice", name.name),
+                        ));
                     }
                     seen.push(name.name.clone());
                     let ft = self.subst_pub(fd.ty, &args);
@@ -463,7 +467,7 @@ impl<'a> Checker<'a> {
                 let missing: Vec<&str> =
                     defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.iter().any(|s| s == n)).collect();
                 if !missing.is_empty() {
-                    return Err(self.err(
+                    return Err(self.flow_err(
                         Code::E0410,
                         span,
                         format!(
@@ -475,7 +479,7 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
             PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) | PatKind::TupleStruct { .. } | PatKind::Or(_) => {
-                Err(self.err(
+                Err(self.flow_err(
                     Code::E0502,
                     span,
                     "this pattern can fail to match; `let` takes only tuple and struct patterns (§7)",
@@ -501,7 +505,7 @@ impl<'a> Checker<'a> {
             }
             _ => return Ok(None),
         };
-        Err(self.err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
+        Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
     }
 
     /// `par i in a..b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
@@ -518,7 +522,7 @@ impl<'a> Checker<'a> {
         let lo = self.flow_const_u32(from, "a `par` bound")?;
         let hi = self.flow_const_u32(to, "a `par` bound")?;
         if hi <= lo {
-            return Err(self.err(
+            return Err(self.flow_err(
                 Code::E0808,
                 span,
                 format!("`par` replicates `b - a` instances; the bounds `{lo}..{hi}` give none (§11.5)"),
@@ -548,7 +552,7 @@ impl<'a> Checker<'a> {
             ExprKind::Lit(Lit::Int { value, .. }) => {
                 let value = *value;
                 if value > u32::MAX as u64 {
-                    return Err(self.err(Code::E0408, span, format!("{what} does not fit in `U32`")));
+                    return Err(self.flow_err(Code::E0408, span, format!("{what} does not fit in `U32`")));
                 }
                 self.record(e, u32);
                 Ok(value as u32)
@@ -573,7 +577,9 @@ impl<'a> Checker<'a> {
                             self.info.targets.insert(e, Target::Const(d));
                             return match int_value {
                                 Some(v) if v <= u32::MAX as u64 => Ok(v as u32),
-                                Some(_) => Err(self.err(Code::E0408, span, format!("{what} does not fit in `U32`"))),
+                                Some(_) => {
+                                    Err(self.flow_err(Code::E0408, span, format!("{what} does not fit in `U32`")))
+                                }
                                 None => Err(self.flow_not_const(span, what)),
                             };
                         }
@@ -588,7 +594,7 @@ impl<'a> Checker<'a> {
     }
 
     fn flow_not_const(&mut self, span: Span, what: &str) -> crate::body::Stop {
-        self.err(
+        self.flow_err(
             Code::E0808,
             span,
             format!(
@@ -643,15 +649,17 @@ impl<'a> Checker<'a> {
             (Some(d), CallKind::Flow) => self.check_instance(e, d, args, expected).map(Some),
             (Some(d), CallKind::Plain) => {
                 let name = self.a.def(d).name.clone();
-                let fix = self.src(span).replacen("(", "~(", 1);
+                // `~` goes right after the callee (`f~(`, §2.6).
+                let at = self.expr(callee).span.end;
                 Err(self.diag(
                     Diagnostic::new(
+                        Stage::Flow,
                         Code::E0811,
                         span,
                         format!("`{name}` is a flow; calling it creates a stateful instance and needs `~` (§2.6)"),
                     )
                     .with_found(self.src(span))
-                    .with_fix(Fix::Replace { replace: fix }),
+                    .with_fix(Fix::insert("add `~`", span.file, at, "~")),
                 ))
             }
             (Some(d), CallKind::Bang) => {
@@ -659,10 +667,11 @@ impl<'a> Checker<'a> {
                 Err(self.flow_bad_mark(span, kind, &name))
             }
             (None, CallKind::Flow) => {
-                let fix = self.src(span).replacen("~(", "(", 1);
+                let at = self.expr(callee).span.end;
                 let shown = self.src(self.expr(callee).span);
                 Err(self.diag(
                     Diagnostic::new(
+                        Stage::Flow,
                         Code::E0812,
                         span,
                         format!(
@@ -670,7 +679,7 @@ impl<'a> Checker<'a> {
                         ),
                     )
                     .with_found(self.src(span))
-                    .with_fix(Fix::Replace { replace: fix }),
+                    .with_fix(Fix::delete("remove `~`", Span::new(span.file, at, at + 1))),
                 ))
             }
             (None, _) => Ok(None),
@@ -683,6 +692,7 @@ impl<'a> Checker<'a> {
                 let fix = self.src(span).replacen("~(", "(", 1);
                 self.diag(
                     Diagnostic::new(
+                        Stage::Flow,
                         Code::E0812,
                         span,
                         format!(
@@ -690,15 +700,15 @@ impl<'a> Checker<'a> {
                         ),
                     )
                     .with_found(self.src(span))
-                    .with_fix(Fix::Replace { replace: fix }),
+                    .with_fix(Fix::replace("remove `~`", span, fix)),
                 )
             }
             _ => {
                 let fix = self.src(span).replacen("!(", "(", 1);
                 self.diag(
-                    Diagnostic::new(Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
+                    Diagnostic::new(Stage::Flow, Code::E0714, span, "`!` marks `inout self` method calls only (§5.2)")
                         .with_found(self.src(span))
-                        .with_fix(Fix::Replace { replace: fix }),
+                        .with_fix(Fix::replace("remove `!`", span, fix)),
                 )
             }
         }
@@ -707,7 +717,7 @@ impl<'a> Checker<'a> {
     fn plain_args(&mut self, args: &[Arg]) -> R<()> {
         for a in args {
             if a.mode != Mode::Borrow {
-                return Err(self.err(
+                return Err(self.flow_err(
                     Code::E0806,
                     a.span,
                     "a flow body cannot contain `inout` / `move` arguments; signals are read-only values (§11.2)",
@@ -723,7 +733,7 @@ impl<'a> Checker<'a> {
         let f = self.a.def(d).as_flow().unwrap().clone();
         let name = self.a.def(d).name.clone();
         if args.len() != f.inputs.len() {
-            return Err(self.err(
+            return Err(self.flow_err(
                 Code::E0412,
                 span,
                 format!("flow `{name}` takes {} input(s) but {} were given", f.inputs.len(), args.len()),
@@ -758,7 +768,7 @@ impl<'a> Checker<'a> {
             _ => 0,
         };
         if args.len() != arity {
-            return Err(self.err(
+            return Err(self.flow_err(
                 Code::E0412,
                 span,
                 format!("`{name}` takes {arity} argument(s) but {} were given", args.len()),
@@ -787,13 +797,13 @@ impl<'a> Checker<'a> {
                         self.src(self.expr(args[2].expr).span)
                     );
                     return Err(self.diag(
-                        Diagnostic::new(Code::E0807, span, "a 1-sample delay is written `prev` (§11.4)")
+                        Diagnostic::new(Stage::Flow, Code::E0807, span, "a 1-sample delay is written `prev` (§11.4)")
                             .with_found(self.src(span))
-                            .with_fix(Fix::Replace { replace: fix }),
+                            .with_fix(Fix::replace("write `prev`", span, fix)),
                     ));
                 }
                 if n < 2 {
-                    return Err(self.err(
+                    return Err(self.flow_err(
                         Code::E0808,
                         self.expr(n_expr).span,
                         "`delay` needs a length of at least 2 (§11.4)",
@@ -806,7 +816,7 @@ impl<'a> Checker<'a> {
                 let max_expr = args[2].expr;
                 let max = self.flow_const_u32(max_expr, "the maximum of `vdelay`")?;
                 if max < 1 {
-                    return Err(self.err(
+                    return Err(self.flow_err(
                         Code::E0808,
                         self.expr(max_expr).span,
                         "`vdelay` needs a maximum of at least 1 (§11.4)",
@@ -944,7 +954,7 @@ impl<'a> Rater<'a> {
 
     fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> RStop {
         let found = self.src(span);
-        self.fail(Diagnostic::new(code, span, msg).with_found(found))
+        self.fail(Diagnostic::new(Stage::Flow, code, span, msg).with_found(found))
     }
 
     fn expr(&self, e: ExprId) -> &'a onsa_syntax::ast::Expr {
@@ -1285,6 +1295,7 @@ impl<'a> Rater<'a> {
                     let aspan = self.expr(arg).span;
                     let ty = self.body.expr_types.get(&arg).map(|&t| self.display(t)).unwrap_or_default();
                     let mut d = Diagnostic::new(
+                        Stage::Flow,
                         Code::E0813,
                         aspan,
                         format!(

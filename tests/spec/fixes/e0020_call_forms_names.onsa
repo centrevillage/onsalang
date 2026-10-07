@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a call whose callee is a path of names (§6.1): name resolution decides. `f(x)` where
+// `f` is a local binding is `f.(x)`; `inc.(x)` where `inc` is an item is `inc(x)`.
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn call_a_binding(x: F32) -> F32 {
+  let f = fn(y: F32) -> F32 { y * 2.0 }
+  f(x)                                              //~ E0020
+}
+
+pub fn call_an_argument(f: fn(F32) -> F32, x: F32) -> F32 {
+  f(x)                                              //~ E0020
+}
+
+pub fn call_an_item_as_a_value(x: I32) -> I32 {
+  inc.(x)                                           //~ E0020
+}
+
+pub fn fine(f: fn(F32) -> F32, x: F32) -> F32 {
+  f.(x) + inc(1).round_f32()
+}

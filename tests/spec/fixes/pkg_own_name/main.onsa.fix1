@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0302 in a package: a `use` that starts with the package's own name. The candidate takes the
+// package name off (§15.1).
+
+use util.{helper}                                //~ E0302
+
+pub fn run() -> I32 {
+  1
+}

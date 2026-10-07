@@ -17,7 +17,14 @@
 //!   (`onsa test`). The host sequences of `[[test.host]]` run on the builds
 //!   of their targets ([`crate::host`], K-14).
 //! - Every mode but `"none"`: a file without markers is canonical under `fmt`,
-//!   and the parser alone reports exactly the markers of the syntax codes.
+//!   and the parser's diagnostics match markers ([`parser_markers`]).
+//! - `[test] fixes = N`: the candidates of the check's diagnostics give the
+//!   files `<file>.fixK` ([`crate::fixes`]: compared token by token, ignoring
+//!   the whitespace tokens).
+//! - Every diagnostic compared with markers follows the rules of diagnostics
+//!   (`onsa_syntax::diagnostic_contract`: a required fix and note, edits on
+//!   token boundaries that do not overlap). A break is an internal error of
+//!   the compiler, which the pending list does not silence (plan D-04).
 //!
 //! Every Core a case makes comes from the driver's stage functions, which run
 //! the Core verifier at their boundaries (R-82); a failure fails the case.
@@ -347,6 +354,10 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         }
     };
     let check = &analyzed.diagnostics;
+    if t.fixes > 0 {
+        let files = disk_files(root, case, setup, &loaded);
+        run.problems.extend(crate::fixes::compare(&loaded.sources, &files, check, t.fixes));
+    }
     if !check.is_empty() || targets.is_empty() {
         if targeted > 0 {
             run.problems.push(Problem::Case(if targets.is_empty() {
@@ -594,8 +605,25 @@ fn conformance_scope(run: &mut CaseRun, loaded: &Loaded, analyzed: &Analyzed) {
     }
 }
 
+/// Where each source file of the case is on disk (in the order of `loaded.modules`).
+fn disk_files(root: &Path, case: &Case, setup: &Setup, loaded: &Loaded) -> Vec<(FileId, std::path::PathBuf)> {
+    loaded
+        .modules
+        .iter()
+        .zip(&setup.input.files)
+        .map(|((file, _), f)| {
+            let p = match case.kind {
+                case::CaseKind::File => root.join(&case.path),
+                case::CaseKind::Package => root.join(&case.path).join(&f.path),
+            };
+            (*file, p)
+        })
+        .collect()
+}
+
 /// Compare the markers with the diagnostics, record every marker compared,
-/// and report a difference. Whether they match.
+/// and report a difference. Whether they match. Every diagnostic is also
+/// checked against the rules of diagnostics (a break is an internal error).
 fn compare(
     run: &mut CaseRun,
     sources: &SourceMap,
@@ -611,6 +639,9 @@ fn compare(
             (d.span.file, d.code, lc.line, lc.col)
         })
         .collect();
+    for p in onsa_syntax::diagnostic_contract(sources, actual) {
+        run.problems.push(Problem::Internal(format!("a diagnostic breaks the rules of diagnostics (plan D-04): {p}")));
+    }
     let mut used = vec![false; actual_pos.len()];
     // Markers with a column first, so a marker without one cannot take their diagnostic.
     let mut order: Vec<usize> = (0..expected.len()).collect();
@@ -662,32 +693,50 @@ fn compare(
     ok
 }
 
-/// The syntax codes: the codes the parser alone reports (`E00xx`, `E0320`); the
-/// rest belong to later stages (M1, T1-11). `onsa_cases` lists, per file, whether
-/// its markers hold one (`tools/fmt_props.py` reads it, W1-07).
-pub fn parser_code(c: Code) -> bool {
-    c.as_str().starts_with("E00") || c == Code::E0320
+/// A code only the syntax stage reports: its markers come from the parser alone.
+fn syntax_only(c: Code) -> bool {
+    c.stages() == [onsa_diag::Stage::Syntax]
 }
 
-/// The parser alone reports exactly the markers of the syntax codes
-/// ([`parser_code`]) of the file.
+/// The diagnostics of the parser alone (before the later stages and the
+/// reduction per unit, S-56) against the markers of the file: each one
+/// matches a marker of its line and code, and every marker of a code only
+/// the syntax stage reports is one of them. Markers of a code that later
+/// stages report too (E0020, E0408, ...) are compared by the check only.
 fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers: &[(FileId, Expected)]) {
     let f = sources.file(file);
-    let mut expected: Vec<(u32, Code)> =
-        markers.iter().filter(|(mf, m)| *mf == file && parser_code(m.code)).map(|(_, m)| (m.line, m.code)).collect();
     let parsed = onsa_syntax::parse(file, f.text());
     let mut actual: Vec<(u32, Code)> =
         parsed.diagnostics.iter().map(|d| (f.line_col(d.span.start).line, d.code)).collect();
+    let mut expected: Vec<(u32, Code)> =
+        markers.iter().filter(|(mf, _)| *mf == file).map(|(_, m)| (m.line, m.code)).collect();
     expected.sort();
     actual.sort();
-    if expected != actual {
-        let show =
-            |v: &[(u32, Code)]| v.iter().map(|(l, c)| format!("{}@{l}", c.as_str())).collect::<Vec<_>>().join(" ");
+    // Each parser diagnostic takes a marker of its line and code.
+    let mut free = expected.clone();
+    let mut unmatched = Vec::new();
+    for a in &actual {
+        match free.iter().position(|e| e == a) {
+            Some(i) => {
+                free.remove(i);
+            }
+            None => unmatched.push(*a),
+        }
+    }
+    let missing: Vec<(u32, Code)> = free.into_iter().filter(|(_, c)| syntax_only(*c)).collect();
+    if !unmatched.is_empty() || !missing.is_empty() {
+        let show = |v: &[(u32, Code)]| {
+            if v.is_empty() {
+                "(none)".to_string()
+            } else {
+                v.iter().map(|(l, c)| format!("{}@{l}", c.as_str())).collect::<Vec<_>>().join(" ")
+            }
+        };
         run.problems.push(Problem::Failed(format!(
-            "{}: the parser's diagnostics differ from the markers of the syntax codes\n  expected: {}\n  actual:   {}\n  {}",
+            "{}: the parser's diagnostics differ from the markers\n  without a marker: {}\n  markers of syntax-only codes the parser does not report: {}\n  {}",
             f.name(),
-            show(&expected),
-            show(&actual),
+            show(&unmatched),
+            show(&missing),
             onsa_diag::to_text(sources, &parsed.diagnostics).replace('\n', "\n  ")
         )));
     }
@@ -724,7 +773,8 @@ fn first_diff(a: &str, b: &str) -> String {
 }
 
 /// T2-12: every diagnostic of a negative example carries the offending source
-/// (`found`), and codes with a unique repair carry a fix (§18.1).
+/// (`found`, §18.1). Whether a code needs a fix candidate is the registry's
+/// (`Code::fix_rule`), checked on every diagnostic by [`compare`].
 fn negative_rules(run: &mut CaseRun, path: &str, diags: &[Diagnostic]) {
     if !path.contains("negative") {
         return;
@@ -732,11 +782,6 @@ fn negative_rules(run: &mut CaseRun, path: &str, diags: &[Diagnostic]) {
     for d in diags {
         if d.found.as_deref().is_none_or(str::is_empty) {
             run.problems.push(Problem::Failed(format!("{} at {} has no `found` text", d.code.as_str(), d.span.start)));
-        }
-        if matches!(d.code.as_str(), "E0713" | "E0714" | "E0703" | "E0811" | "E0812" | "E0411" | "E0020")
-            && d.fixes.is_empty()
-        {
-            run.problems.push(Problem::Failed(format!("{} at {} has no fix", d.code.as_str(), d.span.start)));
         }
     }
 }
@@ -1014,7 +1059,24 @@ pub fn run_all(root: &Path) -> Report {
     for o in golden::orphans(root, &declared) {
         report.failures.push(format!("{o}: no case declares this golden file; remove it or declare it"));
     }
+    report.failures.extend(crate::fixes::orphans(root, &fix_sources(&cases)));
     report
+}
+
+/// Every source file of a case on disk (from the root) with the case's `fixes = N`.
+fn fix_sources(cases: &[Case]) -> Vec<(std::path::PathBuf, u32)> {
+    let mut out = Vec::new();
+    for c in cases {
+        let Ok(s) = &c.setup else { continue };
+        for f in &s.input.files {
+            let p = match c.kind {
+                case::CaseKind::File => std::path::PathBuf::from(&c.path),
+                case::CaseKind::Package => Path::new(&c.path).join(&f.path),
+            };
+            out.push((p, s.test.fixes));
+        }
+    }
+    out
 }
 
 /// Run every case (in parallel), in the order of `cases`, without applying the
@@ -1216,7 +1278,8 @@ mod tests {
                 ("tests/none.onsa", "// onsa.toml\n// [test]\n// mode = \"none\"\n\nif c { a }\n"),
                 (
                     "tests/syntax.onsa",
-                    "// onsa.toml\n// [test]\n// mode = \"parse\"\n\npub fn f() -> I32 { 1 } //~ E0002\n",
+                    // E0003 only the syntax stage reports: its marker must come from the parser.
+                    "// onsa.toml\n// [test]\n// mode = \"parse\"\n\npub fn f() -> I32 { 1 } //~ E0003\n",
                 ),
             ],
         );
@@ -1228,6 +1291,40 @@ mod tests {
             "{:?}",
             case(&r, "tests/syntax.onsa").failures
         );
+    }
+
+    #[test]
+    fn fix_files() {
+        // `fixes = 1`: the candidate of `let mut` gives the `.fix1` file, compared
+        // without the whitespace tokens; a wrong one, a missing count and an orphan fail.
+        let src = "// onsa.toml\n// [test]\n// fixes = 1\n\npub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
+        let good = src.replace("let mut n = 0 ", "var  n = 0 ");
+        let bad = src.replace("let mut n = 0 ", "var n = 1 ");
+        let two = src.replace("fixes = 1", "fixes = 2");
+        let repo = Repo::new(
+            "fixes",
+            &[
+                ("tests/good.onsa", src),
+                ("tests/good.onsa.fix1", &good),
+                ("tests/bad.onsa", src),
+                ("tests/bad.onsa.fix1", &bad),
+                ("tests/two.onsa", &two),
+                ("tests/two.onsa.fix1", &good),
+                ("tests/stray.onsa.fix1", "x"),
+                ("tests/good.onsa.fix2", "x"),
+            ],
+        );
+        let r = repo.run();
+        assert!(case(&r, "tests/good.onsa").failures.is_empty(), "{:?}", case(&r, "tests/good.onsa").failures);
+        let bad = &case(&r, "tests/bad.onsa").failures;
+        assert!(
+            bad.iter().any(|f| f.contains("differs from bad.onsa.fix1: expected `1` (line 6), got `0`")),
+            "{bad:?}"
+        );
+        let two = &case(&r, "tests/two.onsa").failures;
+        assert!(two.iter().any(|f| f.contains("no diagnostic has a candidate 2")), "{two:?}");
+        assert!(r.failures.iter().any(|f| f.contains("tests/stray.onsa.fix1: no case declares")), "{:?}", r.failures);
+        assert!(r.failures.iter().any(|f| f.contains("tests/good.onsa.fix2: its case declares `fixes = 1`")));
     }
 
     #[test]

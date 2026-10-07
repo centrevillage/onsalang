@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 2
+
+// E0020 for the spaces that give a reader another reading (§2.5): before a postfix `(` or `[`,
+// around the member `.`, before `?`, between a name and `!`, after a prefix `-` / `!`. The fix removes the space. `xs [0]` also has the call `xs([0])` as a second candidate,
+// and a line that starts with `- b` also has the line joined to the previous one.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+impl Pt {
+  pub fn scale(inout self, k: I32) {
+    self.x = self.x * k
+    self.y = self.y * k
+  }
+}
+
+pub fn square(x: I32) -> I32 {
+  x * x
+}
+
+pub fn call_gap(x: I32) -> I32 {
+  let y = square (x)                                //~ E0020
+  y
+}
+
+pub fn index_gap(xs: [I32; 4]) -> I32 {
+  let a = xs([0])                                    //~ E0020
+  a
+}
+
+pub fn declaration_gap (x: I32) -> I32 {            //~ E0020
+  x
+}
+
+pub fn dot_both_sides(p: Pt) -> I32 {
+  p . x                                             //~ E0020
+}
+
+pub fn dot_before(p: Pt) -> I32 {
+  p .y                                              //~ E0020
+}
+
+pub fn question_gap(o: Option[I32]) -> Option[I32] {
+  let v = o ?                                       //~ E0020
+  Some(v)
+}
+
+pub fn bang_gap(inout p: Pt) {
+  p.scale !(2)                                      //~ E0020
+}
+
+pub fn minus_gap(x: I32) -> I32 {
+  let y = - x                                       //~ E0020
+  y
+}
+
+pub fn not_gap(done: Bool) -> Bool {
+  let y = ! done                                    //~ E0020
+  y
+}
+
+pub fn line_starts_with_minus(a: I32, b: I32) -> I32 {
+  let c = a - b                                               //~ E0020
+  c
+}
+
+pub fn fine(p: Pt, xs: [I32; 4], x: I32) -> I32 {
+  let a = xs[0]
+  let b = p.x - x
+  let c = -x
+  a + b + c
+}

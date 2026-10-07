@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+// fixes = 1
+
+// E0813: the first argument of a delay must be a sample value. The candidate promotes it:
+// `prev~(p at sample)` (§11.4).
+
+pub flow block_input(p: F32 at block) -> F32 at sample {
+  prev~(p at sample)                                          //~ E0813
+}
+
+pub flow init_input(start: F32 at init) -> F32 at sample {
+  prev~(start at sample)                                      //~ E0813
+}
+
+pub flow block_value(q: F32 at block) -> F32 at sample {
+  let r = q * 2.0
+  prev~(r at sample)                                          //~ E0813
+}
+
+pub flow fine(p: F32 at block) -> F32 at sample {
+  prev~(p at sample)
+}

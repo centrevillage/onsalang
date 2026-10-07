@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0320 in a package: the one candidate changes the declaration and every use in the package, in
+// every module, `use` lists included (§2.3, S-82). The declaration is in util.onsa.
+
+use util.{BadName, ok_name}
+
+pub fn run() -> I32 {
+  BadName() + ok_name()
+}

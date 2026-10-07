@@ -10,7 +10,7 @@ use std::process::Command;
 
 use onsa_backend_c::{EmitOptions, ExportFlow, PanicMode};
 use onsa_core::{ConstId, Expr, ExprKind, Lit, LowerOptions, Module, Ty, TypeDefKind};
-use onsa_diag::{Code, Diagnostic, SourceMap};
+use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::def::DefKind;
 use onsa_sema::ty::Rate;
@@ -234,6 +234,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     // build's own go through `LowerError::reported`, as lowering's do.
     let diagnostics = |e: LowerError| match e {
         LowerError::Diagnostics(diagnostics) => {
+            crate::debug_contract(&loaded.sources, &diagnostics);
             BuildError::Diagnostics { sources: loaded.sources.clone(), diagnostics }
         }
         LowerError::Internal(e) => BuildError::Internal { sources: loaded.sources.clone(), error: Box::new(e) },
@@ -465,17 +466,28 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
             matches!(d.kind, DefKind::Flow(_)) && a.qualified_name(onsa_sema::DefId(*i as u32)) == *name
         });
         let Some((_, def)) = found else {
-            out.push(Diagnostic::new(Code::E0302, no_span, format!("[export] flows: cannot find the flow `{name}`")));
+            out.push(Diagnostic::new(
+                Stage::Build,
+                Code::E0302,
+                no_span,
+                format!("[export] flows: cannot find the flow `{name}`"),
+            ));
             continue;
         };
         if def.vis != Vis::Pub {
-            out.push(Diagnostic::new(Code::E0303, def.name_span, format!("the exported flow `{name}` must be `pub`")));
+            out.push(Diagnostic::new(
+                Stage::Build,
+                Code::E0303,
+                def.name_span,
+                format!("the exported flow `{name}` must be `pub`"),
+            ));
         }
         let Some(f) = def.as_flow() else { continue };
         for input in &f.inputs {
             if input.rate == Rate::Ctl && input.param.is_none() {
                 out.push(
                     Diagnostic::new(
+                        Stage::Build,
                         Code::E0809,
                         input.span,
                         format!(
@@ -483,9 +495,12 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
                             input.name
                         ),
                     )
-                    .with_fix(onsa_diag::Fix::InsertBefore {
-                        insert_before: "@param(min: 0.0, max: 1.0, default: 0.0) ".into(),
-                    }),
+                    .with_fix(onsa_diag::Fix::insert(
+                        "add `@param`",
+                        input.span.file,
+                        input.span.start,
+                        "@param(min: 0.0, max: 1.0, default: 0.0) ",
+                    )),
                 );
             }
         }
@@ -496,11 +511,17 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
                 matches!(d.kind, DefKind::Fn(_)) && a.qualified_name(onsa_sema::DefId(*i as u32)) == *name
             });
         let Some((_, def)) = found else {
-            out.push(Diagnostic::new(Code::E0302, no_span, format!("[export] fns: cannot find the function `{name}`")));
+            out.push(Diagnostic::new(
+                Stage::Build,
+                Code::E0302,
+                no_span,
+                format!("[export] fns: cannot find the function `{name}`"),
+            ));
             continue;
         };
         if def.vis != Vis::Pub {
             out.push(Diagnostic::new(
+                Stage::Build,
                 Code::E0303,
                 def.name_span,
                 format!("the exported function `{name}` must be `pub`"),
@@ -509,6 +530,7 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
         let Some(f) = def.as_fn() else { continue };
         if f.effects.alloc && !settings.provides_alloc {
             out.push(Diagnostic::new(
+                Stage::Build,
                 Code::E0610,
                 def.name_span,
                 format!("the exported function `{name}` uses `Alloc`, which the target does not provide (§14.2)"),
@@ -516,6 +538,7 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
         }
         for e in &f.effects.other {
             out.push(Diagnostic::new(
+                Stage::Build,
                 Code::E0610,
                 def.name_span,
                 format!("the exported function `{name}` uses `{e}`, which the target does not provide (§14.2)"),

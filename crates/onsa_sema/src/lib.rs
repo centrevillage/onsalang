@@ -28,6 +28,17 @@ mod rt;
 mod sig;
 #[cfg(test)]
 mod tests;
+
+/// For the unit tests: the text of the diagnostic's range in `text` after
+/// applying its candidate `k` (the candidates edit inside that range).
+#[cfg(test)]
+pub(crate) fn fixed_region(text: &str, d: &onsa_diag::Diagnostic, k: usize) -> String {
+    let fix = &d.fixes[k];
+    let edits: Vec<&onsa_diag::Edit> = fix.edits().iter().collect();
+    let after = onsa_diag::apply_text(text, &edits).expect("the candidate applies");
+    let end = d.span.end as usize + after.len() - text.len();
+    after[d.span.start as usize..end].to_string()
+}
 pub mod ty;
 
 use std::collections::HashMap;

@@ -140,8 +140,9 @@ impl TokenKind {
         matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
     }
 
+    /// A keyword (§2.2): one of [`KEYWORDS`], not an order of the declarations (R-87).
     pub fn is_keyword(self) -> bool {
-        (self as u8) >= (TokenKind::KwFn as u8) && (self as u8) <= (TokenKind::KwFalse as u8)
+        KEYWORDS.iter().any(|&(_, k)| k == self)
     }
 
     /// Binary operators (§3.1), excluding `as`.
@@ -175,53 +176,9 @@ impl TokenKind {
         )
     }
 
-    /// Keyword for an identifier text, if it is one.
+    /// Keyword for an identifier text, if it is one ([`KEYWORDS`]).
     pub fn keyword(text: &str) -> Option<TokenKind> {
-        use TokenKind::*;
-        Some(match text {
-            "fn" => KwFn,
-            "rt" => KwRt,
-            "flow" => KwFlow,
-            "par" => KwPar,
-            "struct" => KwStruct,
-            "enum" => KwEnum,
-            "trait" => KwTrait,
-            "impl" => KwImpl,
-            "effect" => KwEffect,
-            "blocking" => KwBlocking,
-            "handler" => KwHandler,
-            "handle" => KwHandle,
-            "with" => KwWith,
-            "uses" => KwUses,
-            "let" => KwLet,
-            "var" => KwVar,
-            "if" => KwIf,
-            "else" => KwElse,
-            "match" => KwMatch,
-            "for" => KwFor,
-            "in" => KwIn,
-            "while" => KwWhile,
-            "break" => KwBreak,
-            "continue" => KwContinue,
-            "return" => KwReturn,
-            "pub" => KwPub,
-            "use" => KwUse,
-            "extern" => KwExtern,
-            "unsafe" => KwUnsafe,
-            "target" => KwTarget,
-            "test" => KwTest,
-            "assert" => KwAssert,
-            "const" => KwConst,
-            "type" => KwType,
-            "as" => KwAs,
-            "inout" => KwInout,
-            "move" => KwMove,
-            "self" => KwSelf,
-            "Self" => KwSelfType,
-            "true" => KwTrue,
-            "false" => KwFalse,
-            _ => return None,
-        })
+        KEYWORDS.iter().find(|&&(t, _)| t == text).map(|&(_, k)| k)
     }
 
     /// How the token is written, for messages (`expected `)``).
@@ -329,6 +286,52 @@ impl TokenKind {
     }
 }
 
+/// The keywords of the language (§2.2) and their tokens: the one list that
+/// [`TokenKind::keyword`] and [`TokenKind::is_keyword`] read (R-87).
+pub const KEYWORDS: &[(&str, TokenKind)] = &[
+    ("fn", TokenKind::KwFn),
+    ("rt", TokenKind::KwRt),
+    ("flow", TokenKind::KwFlow),
+    ("par", TokenKind::KwPar),
+    ("struct", TokenKind::KwStruct),
+    ("enum", TokenKind::KwEnum),
+    ("trait", TokenKind::KwTrait),
+    ("impl", TokenKind::KwImpl),
+    ("effect", TokenKind::KwEffect),
+    ("blocking", TokenKind::KwBlocking),
+    ("handler", TokenKind::KwHandler),
+    ("handle", TokenKind::KwHandle),
+    ("with", TokenKind::KwWith),
+    ("uses", TokenKind::KwUses),
+    ("let", TokenKind::KwLet),
+    ("var", TokenKind::KwVar),
+    ("if", TokenKind::KwIf),
+    ("else", TokenKind::KwElse),
+    ("match", TokenKind::KwMatch),
+    ("for", TokenKind::KwFor),
+    ("in", TokenKind::KwIn),
+    ("while", TokenKind::KwWhile),
+    ("break", TokenKind::KwBreak),
+    ("continue", TokenKind::KwContinue),
+    ("return", TokenKind::KwReturn),
+    ("pub", TokenKind::KwPub),
+    ("use", TokenKind::KwUse),
+    ("extern", TokenKind::KwExtern),
+    ("unsafe", TokenKind::KwUnsafe),
+    ("target", TokenKind::KwTarget),
+    ("test", TokenKind::KwTest),
+    ("assert", TokenKind::KwAssert),
+    ("const", TokenKind::KwConst),
+    ("type", TokenKind::KwType),
+    ("as", TokenKind::KwAs),
+    ("inout", TokenKind::KwInout),
+    ("move", TokenKind::KwMove),
+    ("self", TokenKind::KwSelf),
+    ("Self", TokenKind::KwSelfType),
+    ("true", TokenKind::KwTrue),
+    ("false", TokenKind::KwFalse),
+];
+
 /// A token. What precedes it (a space, a newline or nothing) is read from the
 /// token list with [`gap_before`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -372,4 +375,23 @@ pub fn gap_before(tokens: &[Token], i: usize) -> Gap {
         }
     }
     if space { Gap::Space } else { Gap::None }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_keyword_list_is_one_to_one() {
+        for (i, &(text, kind)) in KEYWORDS.iter().enumerate() {
+            assert_eq!(TokenKind::keyword(text), Some(kind), "{text}");
+            assert!(kind.is_keyword(), "{text}");
+            assert_eq!(kind.describe(), format!("`{text}`"));
+            assert!(KEYWORDS[..i].iter().all(|&(t, k)| t != text && k != kind), "{text} twice");
+        }
+        for not in [TokenKind::Ident, TokenKind::Underscore, TokenKind::Plus, TokenKind::Eof, TokenKind::Semi] {
+            assert!(!not.is_keyword(), "{not:?}");
+        }
+        assert_eq!(TokenKind::keyword("loop"), None);
+    }
 }

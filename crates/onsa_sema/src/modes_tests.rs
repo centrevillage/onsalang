@@ -1,6 +1,6 @@
 //! Unit tests for argument modes / exclusivity / moves (T2-8) and `rt` (T2-9).
 
-use onsa_diag::{Code, FileId, Fix};
+use onsa_diag::{Code, FileId};
 
 use crate::{Analysis, Module, Package, analyze};
 
@@ -26,11 +26,12 @@ fn ok(src: &str) {
     assert!(a.diagnostics.is_empty(), "unexpected diagnostics: {:?}", a.diagnostics);
 }
 
+/// The diagnostic's range after its first candidate.
 fn first_fix(src: &str) -> String {
     let a = check(src);
-    match a.diagnostics.first().and_then(|d| d.fixes.first()) {
-        Some(Fix::Replace { replace }) => replace.clone(),
-        other => panic!("no replace fix: {other:?} / {:?}", a.diagnostics),
+    match a.diagnostics.first() {
+        Some(d) if !d.fixes.is_empty() => crate::fixed_region(src, d, 0),
+        _ => panic!("no fix: {:?}", a.diagnostics),
     }
 }
 
@@ -267,9 +268,10 @@ const TAKE: &str = "pub fn take(move b: Buf[F32]) uses {Alloc} {}\npub struct Bo
 #[test]
 fn consuming_an_affine_value_needs_move() {
     // `let y = x` on an owned Affine value: E0711 with the `move ` insertion (§5.2).
-    let a = check(&format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let y = b\n}}\n"));
+    let src = format!("{TAKE}pub fn f(move b: Buf[F32]) uses {{Alloc}} {{\n  let y = b\n}}\n");
+    let a = check(&src);
     assert_eq!(a.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0711]);
-    assert_eq!(a.diagnostics[0].fixes, vec![Fix::InsertBefore { insert_before: "move ".into() }]);
+    assert_eq!(crate::fixed_region(&src, &a.diagnostics[0], 0), "move b");
     assert_eq!(a.diagnostics[0].found.as_deref(), Some("b"));
     // The same in every consuming position: assignment, literal element, struct field, constructor.
     assert_eq!(

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§12.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the old attribute spelling `@bulk` on a `let` (§12.4): `@mem(bulk)`, on the line of
+// the `let`.
+
+pub flow echo(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)                     //~ E0020
+  d
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)
+  d
+}

@@ -1,7 +1,7 @@
 //! Lexer (spec §2). Never stops: invalid input yields `Error` tokens and
 //! E0001 / E0020 diagnostics, and lexing continues.
 
-use onsa_diag::{Code, Diagnostic, FileId, Fix, Span};
+use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 
 use crate::token::{Token, TokenKind};
 
@@ -45,7 +45,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn error(&mut self, code: Code, span: Span, message: impl Into<String>) -> usize {
-        self.out.diagnostics.push(Diagnostic::new(code, span, message));
+        self.out.diagnostics.push(Diagnostic::new(Stage::Syntax, code, span, message));
         self.out.diagnostics.len() - 1
     }
 
@@ -102,9 +102,10 @@ impl<'a> Lexer<'a> {
         }
         let span = self.span(start);
         let inner = self.text[start..self.pos].trim_start_matches("/*").trim_end_matches("*/").trim();
-        let d = Diagnostic::new(Code::E0020, span, "Onsa has no block comments; use `//` line comments")
+        let d = Diagnostic::new(Stage::Syntax, Code::E0020, span, "Onsa has no block comments; use `//` line comments")
             .with_found(self.text[start..self.pos].to_string())
-            .with_fix(Fix::Replace { replace: format!("// {inner}") });
+            .with_fix(Fix::replace("write a line comment", span, format!("// {inner}")))
+            .with_rule("comments are line comments `//`, to the end of the line (§2.1)");
         self.out.diagnostics.push(d);
         self.push(TokenKind::Comment, start);
     }
@@ -165,10 +166,15 @@ impl<'a> Lexer<'a> {
                     self.pos += 1;
                     let span = self.span(start);
                     let fix = format!("{}0", &self.text[start..self.pos]);
-                    let d =
-                        Diagnostic::new(Code::E0020, span, "a float literal needs digits on both sides of the point")
-                            .with_found(self.text[start..self.pos].to_string())
-                            .with_fix(Fix::Replace { replace: fix });
+                    let d = Diagnostic::new(
+                        Stage::Syntax,
+                        Code::E0020,
+                        span,
+                        "a float literal needs digits on both sides of the point",
+                    )
+                    .with_found(self.text[start..self.pos].to_string())
+                    .with_fix(Fix::replace("add the `0` after the point", span, fix))
+                    .with_rule("a float literal with a point has digits on both sides of it (`1.0`, `0.5`, §2.4)");
                     self.out.diagnostics.push(d);
                     self.push(TokenKind::Float, start);
                     return;
@@ -200,9 +206,15 @@ impl<'a> Lexer<'a> {
             }
             let span = self.span(start);
             let number = self.text[start..suffix_start].to_string();
-            let d = Diagnostic::new(Code::E0020, span, "literals have no type suffix; the type comes from the context")
-                .with_found(self.text[start..self.pos].to_string())
-                .with_fix(Fix::Replace { replace: number });
+            let d = Diagnostic::new(
+                Stage::Syntax,
+                Code::E0020,
+                span,
+                "literals have no type suffix; the type comes from the context",
+            )
+            .with_found(self.text[start..self.pos].to_string())
+            .with_fix(Fix::replace("remove the type suffix", span, number))
+            .with_rule("a literal has no type suffix; its type comes from the context or an annotation (§2.4)");
             self.out.diagnostics.push(d);
         }
     }

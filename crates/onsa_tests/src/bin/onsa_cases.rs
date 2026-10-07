@@ -10,6 +10,7 @@
 //! onsa_cases --vectors IMPL [ROOT]  the test vectors against `interp` or `c` (gate items vectors-interp,
 //!                            vectors-c; W2-02, `onsa_tests::vectors`)
 //! onsa_cases --codes         the registry of diagnostic codes (tools/diag_codes.py, S-109)
+//! onsa_cases --keywords      the keywords of the lexer, `onsa_syntax::token::KEYWORDS` (tools/keywords.py)
 //! onsa_cases --std-names     the names the embedded std declares (tools/builtin_names.py, Q-14)
 //! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
 //! ```
@@ -20,12 +21,13 @@
 //! [{"path": "tests/spec/fn/mean.onsa", "kind": "file", "name": "mean",
 //!   "mode": "check", "spec": ["§6.1"], "golden": [], "golden_graph": [],
 //!   "conformance": false, "targets": [],
-//!   "files": [{"path": "tests/spec/fn/mean.onsa", "parser_markers": false}]}, ...]
+//!   "files": [{"path": "tests/spec/fn/mean.onsa", "syntax_errors": false}]}, ...]
 //! ```
 //!
 //! `files` are the source files of the case (from the repository root), and
-//! whether the markers of each hold a syntax code (`onsa_tests::run::parser_code`;
-//! a file whose markers cannot be read says false; the runner reports it).
+//! whether the lexer or the parser reports a diagnostic on each
+//! (`onsa_syntax::Parsed::syntax_errors`, the one place `fmt` decides to
+//! refuse a file; `tools/fmt_props.py` reads it, W3-02/b 5).
 //!
 //! `--run` prints the form of `onsa_tests::run::runs_json`. Exits 1 when a
 //! case or a std module cannot be read (`--run` reports those in its
@@ -39,8 +41,8 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --std-names | \
-     --builtin-members";
+const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | \
+     --std-names | --builtin-members";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -99,6 +101,10 @@ fn main() -> ExitCode {
             print(&onsa_tests::inventory::codes());
             ExitCode::SUCCESS
         }
+        "--keywords" => {
+            print(&serde_json::json!(onsa_syntax::token::KEYWORDS.iter().map(|(text, _)| *text).collect::<Vec<_>>()));
+            ExitCode::SUCCESS
+        }
         "--builtin-members" => {
             print(&serde_json::json!(onsa_tests::inventory::builtin_member_names()));
             ExitCode::SUCCESS
@@ -120,8 +126,8 @@ fn main() -> ExitCode {
     }
 }
 
-/// The source files of a case, from the repository root, with whether their
-/// markers hold a syntax code.
+/// The source files of a case, from the repository root, with whether the
+/// lexer or the parser reports a diagnostic on each.
 fn files(c: &onsa_tests::case::Case, s: &onsa_tests::case::Setup) -> serde_json::Value {
     let files: Vec<serde_json::Value> = s
         .input
@@ -132,9 +138,11 @@ fn files(c: &onsa_tests::case::Case, s: &onsa_tests::case::Setup) -> serde_json:
                 onsa_tests::case::CaseKind::File => c.path.clone(),
                 onsa_tests::case::CaseKind::Package => format!("{}/{}", c.path, f.path),
             };
-            let parser_markers = onsa_tests::parse_markers(&f.text)
-                .is_ok_and(|m| m.expected.iter().any(|e| onsa_tests::run::parser_code(e.code)));
-            serde_json::json!({"path": path, "parser_markers": parser_markers})
+            // The parser may panic on a broken input; that is the runner's to report.
+            let syntax_errors =
+                onsa_driver::guard(|| onsa_syntax::parse(onsa_diag::FileId(0), &f.text).syntax_errors())
+                    .unwrap_or(true);
+            serde_json::json!({"path": path, "syntax_errors": syntax_errors})
         })
         .collect();
     serde_json::json!(files)

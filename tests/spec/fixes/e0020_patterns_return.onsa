@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for a `return` as the whole arm of a `match` (§7): `return`, `break` and `continue` are
+// statements. The candidate puts the block around it.
+
+pub fn arm_return(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => return 0,                               //~ E0020
+  }
+}
+
+pub fn arm_break(n: U32) -> U32 {
+  var total = 0
+  for i in 0..n {
+    match i {
+      0 => continue,                                //~ E0020
+      _ => { total = total + i },
+    }
+  }
+  total
+}
+
+pub fn fine(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => { return 0 },
+  }
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§18.1"]
+// fixes = 1
+
+// E0302 for `MIN` of a float type, which does not exist: Rust reads it as the most negative finite
+// value and C as the smallest positive normal one, so the candidate is `-F32.MAX` (§4.7).
+
+pub fn lowest() -> F32 {
+  F32.MIN                                           //~ E0302
+}
+
+pub fn lowest_wide() -> F64 {
+  let m = F64.MIN                                   //~ E0302
+  m
+}
+
+pub fn fine() -> F32 {
+  -F32.MAX
+}

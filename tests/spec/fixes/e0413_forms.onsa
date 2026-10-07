@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§3.4", "§4.7", "§18.1"]
+// fixes = 1
+
+// E0413: a method that does not exist because the spec gives another form. A conversion method
+// for a pair that `as` can write has the `as` form (§3.3); a computation that is a function of
+// `std.math` has the function form (§3.4); an empty test is `len() == 0` (§4.7).
+
+use std.math.{abs, max, sqrt}
+
+pub fn widen(x: F32) -> F64 {
+  x.round_f64()                                     //~ E0413
+}
+
+pub fn widen_int(n: I32) -> I64 {
+  n.narrow_i64()                                    //~ E0413
+}
+
+pub fn same_type(x: F32) -> F32 {
+  x.round_f32()                                     //~ E0413
+}
+
+pub fn magnitude(x: F32) -> F32 {
+  x.abs()                                           //~ E0413
+}
+
+pub fn root(x: F32) -> F32 {
+  x.sqrt()                                          //~ E0413
+}
+
+pub fn bigger(a: F32, b: F32) -> F32 {
+  a.max(b)                                          //~ E0413
+}
+
+pub fn blank(s: Str) -> Bool {
+  s.is_empty()                                      //~ E0413
+}
+
+pub fn fine(a: F32, b: F32, s: Str) -> F32 {
+  let w = a as F64
+  max(abs(a), sqrt(b)) + w.round_f32() + s.len().round_f32()
+}

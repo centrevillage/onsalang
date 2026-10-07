@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§18.1"]
+// fixes = 1
+
+// E0401 for an operator on a generic value: the candidate narrows the bound to the number trait
+// that has the operator, in the signature (§6.3). Negation: `Num`; bit operators: `Int`;
+// `+ - * / %`: `Num`; `<` `<=` `>` `>=`: `PartialOrd`; `==` `!=`: `PartialEq`. A bound that
+// the candidate trait contains is replaced; a bound that is not contained is joined with `+`.
+// No candidate when the bound cannot be narrowed (`T: Unsigned` and negation).
+
+pub fn negate_any[T: AnyNum](x: T) -> T {
+  -x                                                //~ E0401
+}
+
+pub fn negate_int[T: Int](x: T) -> T {
+  -x                                                //~ E0401
+}
+
+pub fn mask_any[T: AnyNum](a: T, b: T) -> T {
+  a & b                                             //~ E0401
+}
+
+pub fn mask_num[T: Num](a: T, b: T) -> T {
+  a & b                                             //~ E0401
+}
+
+pub fn add_ordered[T: PartialOrd](a: T, b: T) -> T {
+  a + b                                             //~ E0401
+}
+
+pub fn less_unbounded[T](a: T, b: T) -> Bool {
+  a < b                                             //~ E0401
+}
+
+pub fn equal_unbounded[T](a: T, b: T) -> Bool {
+  a == b                                            //~ E0401
+}
+
+pub fn negate_unsigned[T: Unsigned](x: T) -> T {
+  -x                                                //~ E0401
+}
+
+pub fn fine[T: Num](a: T, b: T) -> T {
+  -a + b
+}

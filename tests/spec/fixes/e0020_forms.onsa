@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.2", "§2.5"]
+// fixes = 1
+
+// E0020: forms from other languages, each with one Onsa form as the fix (§18.1). One diagnostic
+// per function; the fix replaces the form with the Onsa one.
+
+pub fn lower_int(x: i32) -> I32 {                   //~ E0020
+  x
+}
+
+pub fn lower_float(x: F32) -> f32 {                 //~ E0020
+  x
+}
+
+pub fn lower_byte(x: U8) -> U8 {
+  let y: u8 = x                                     //~ E0020
+  y
+}
+
+pub fn angle_args(o: Option<I32>) -> I32 {          //~ E0020
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn angle_declaration<T>(x: T) -> T {            //~ E0020
+  x
+}
+
+pub fn path_constant() -> F32 {
+  F32::PI                                           //~ E0020
+}
+
+pub fn path_function() -> F32 {
+  F32::from_bits(1065353216)                        //~ E0020
+}
+
+pub fn semicolon(x: I32) -> I32 {
+  let y = x;                                        //~ E0020
+  y
+}
+
+pub fn rust_let_mut() -> I32 {
+  let mut n = 0                                     //~ E0020
+  n
+}
+
+pub fn rust_loop() {
+  loop {                                            //~ E0020
+    break
+  }
+}
+
+pub fn fine(x: I32) -> I32 {
+  let y: I32 = x
+  y
+}

@@ -79,6 +79,12 @@
 #                 組の項目は組の全ての手順の失敗を黙らせるので、項目が黙らせる範囲は組の分け方で絞る（計画 D-05 の
 #                 W1-11 の実装）。落ちる原因の手順（R の誤り、今の C API で書けない手順）は、その手順と、状態を作るのに
 #                 要る前の手順だけの組に置き、前の手順は実装待ちでない別の組でも照らす
+#                 断片の fixes = N の事例（W3-02）は、候補を当てた結果と事例の隣の <ファイル>.fixK を、空白の
+#                 幅を無視し、空白以外の各トークン（改行とコメントを含む）の種類と字面と、その直前の隙間の種類
+#                 （無し・空白・改行。token::gap_before）の並びで比べる（onsa_tests::fixes。f (x) と f(x) は違い、
+#                 空白 1 つと 2 つは同じ。改行の前の隙間（行末の空白、CR LF の CR）とファイルの先頭の字下げは
+#                 比べない）。事例の項目はその食い違いも黙らせる。診断の決まり（必須の候補と note、
+#                 トークンの境界の編集、計画 D-04）を破る診断は内部エラーで、この一覧で黙らせられない
 #   fuzz-input    保存した入力のファイルの、リポジトリの根からのパス "tests/fuzz/<名前>.onsa"
 #                 （照合は tools/fuzz.py、gate の項目 fuzz。W1-04）。保存した入力は毎回 onsa check と
 #                 onsa fmt --check にかける。一覧にある入力は、まだ落ちる（内部エラー、シグナル、時間切れ）
@@ -725,7 +731,7 @@ kind = "fuzz-input"
 target = "tests/fuzz/73f70bf0.onsa"
 reasons = ["R-01"]
 until = "W3-04"
-note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: byte index # is not a char boundary（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く）"
+note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: 文字の途中のオフセット（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く。W3-02 から fmt --check では line_col が文字の途中のオフセットを内部エラーとして報告する）"
 
 # --- W1-08 の意味のテスト（fn の世界）のうち、まだ通らないもの（2026-10-07）
 
@@ -2551,3 +2557,304 @@ target = "tests/spec/semantics/try_families.onsa::the None becomes Missing.Key a
 reasons = ["R-06"]
 until = "W8-06"
 note = "入れ子の列挙子のパターンの match が内部エラー"
+
+# --- W3-02/t: 修正候補の期待値（tests/spec/fixes/、断片の fixes = N と事例の隣の .fixK。2026-10-08）。
+# 候補を当てた結果と .fixK は、空白の幅を無視し、空白以外の各トークン（改行とコメントを含む）の種類と字面と、
+# その直前の隙間の種類（無し・空白・改行。改行の前とファイルの先頭は比べない）の並びで比べる（onsa_tests::fixes）。理由と until は W3-02/i が実際の結果で確かめた（R-87 は
+# その部分を担う作業（(4) W3-15、(5) W4-04、(6) W6-03）の項目にだけ書く）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_old_forms.onsa"
+reasons = ["R-87"]
+until = "W3-15"
+note = "&mut の候補がモードを失う（W3-15 で直す）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_literals.onsa"
+reasons = ["S-62", "R-73"]
+until = "W3-05"
+note = "数値リテラルの E0020 と候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_spacing.onsa"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白の E0020（f (x)、a . b、x ? など）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_patterns_return.onsa"
+reasons = ["S-89"]
+until = "W3-06"
+note = "腕の return / continue の E0020"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_old_attributes.onsa"
+reasons = ["S-57"]
+until = "W3-08"
+note = "@relaxed の E0020（候補は @fp(relaxed)）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_call_forms_syntax.onsa"
+reasons = ["S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でない呼び出しの E0020（構文の段）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_patterns_at.onsa"
+reasons = ["S-186"]
+until = "W3-07"
+note = "@ 束縛の E0020"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_patterns_rest.onsa"
+reasons = ["S-109"]
+until = "W3-07"
+note = "構造体のパターンの .. の E0020"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0010_candidates.onsa"
+reasons = ["S-45", "S-60"]
+until = "W3-07"
+note = "E0010 の候補（群の部分順序）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0004_doc_comments.onsa"
+reasons = ["S-51", "R-63"]
+until = "W3-04"
+note = "付ける宣言の無い /// と先頭以外の //! の E0004"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_spacing_flow.onsa"
+reasons = ["S-102", "S-123"]
+until = "W3-10"
+note = "flow の構文（~、^）を今の実装が読めない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_faust.onsa"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "FAUST の書き方の E0020（flow の構文）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_flow_forms.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "flow の旧い書き方の E0020"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_old_attributes_flow.onsa"
+reasons = ["S-43", "S-102"]
+until = "W3-10"
+note = "@bulk の E0020（flow の構文）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_sig_rate.onsa"
+reasons = ["S-120"]
+until = "W4-04"
+note = "Sig[F32] の E0020（名前の段）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_call_forms_names.onsa"
+reasons = ["S-191"]
+until = "W4-12"
+note = "名前の経路の呼び出しの E0020（名前の段）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_call_forms_type.onsa"
+reasons = ["S-191"]
+until = "W5-02"
+note = "s.f(x) の E0020（型の段）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0309_unused.onsa"
+reasons = ["S-129"]
+until = "W4-04"
+note = "使われない束縛の E0309 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0320_rename.onsa"
+reasons = ["S-82", "R-87"]
+until = "W4-04"
+note = "E0320 の候補が宣言と全ての使用箇所を直す（R-87 (5)）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/pkg_rename"
+reasons = ["S-82", "R-87"]
+until = "W4-04"
+note = "E0320 の候補がモジュールをまたぐ"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/pkg_own_name"
+reasons = ["S-37"]
+until = "W4-03"
+note = "use の頭の自分のパッケージ名の E0302（候補はパッケージ名を外す形）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0302_use_path.onsa"
+reasons = ["S-37"]
+until = "W4-03"
+note = "use の頭が取り込んだ名前の E0302（候補は絶対経路）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0307_alias_impl.onsa"
+reasons = ["S-91"]
+until = "W4-04"
+note = "別名への impl の E0307 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0308_method_function_form.onsa"
+reasons = ["S-103"]
+until = "W4-04"
+note = "E0308 の候補（メソッドの形）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0308_flow_as_a_type.onsa"
+reasons = ["S-103"]
+until = "W4-04"
+note = "E0308 の候補（flow を型に）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0413_forms.onsa"
+reasons = ["S-98", "R-126"]
+until = "W5-02"
+note = "E0413 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0411_as.onsa"
+reasons = ["S-98", "R-126"]
+until = "W5-02"
+note = "E0411 の候補（読みごと）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0302_float_min.onsa"
+reasons = ["S-109", "S-46"]
+until = "W5-05"
+note = "F32.MIN の E0302 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0401_bounds.onsa"
+reasons = ["S-84"]
+until = "W5-05"
+note = "総称の演算子の境界を絞る E0401 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0418_discard.onsa"
+reasons = ["S-127"]
+until = "W5-08"
+note = "E0418 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0601_alloc_row.onsa"
+reasons = ["S-82", "R-87"]
+until = "W6-03"
+note = "E0601 を最初の使用の位置に置き、候補は署名への挿入（R-87 (6)、S-82）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0813_promote.onsa"
+reasons = ["S-102"]
+until = "W7-02"
+note = "E0813 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0801_forward.onsa"
+reasons = ["S-116"]
+until = "W7-04"
+note = "E0801 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0806_assign.onsa"
+reasons = ["S-125"]
+until = "W7-04"
+note = "E0806 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0401_param_values.onsa"
+reasons = ["S-116"]
+until = "W7-04"
+note = "@param の値の E0401 の候補"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_caret_visible.onsa"
+reasons = ["S-116"]
+until = "W7-04"
+note = "見えている名前への ^ の E0020"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0811_e0812_tilde.onsa"
+reasons = ["S-101", "S-110"]
+until = "W7-06"
+note = "~ の挿入と除去の候補"
+
+# --- 字句解析器のキーワードと仕様 §2.2 の一覧の差（gate の項目 keywords、tools/keywords.py。W3-02/b 12）
+
+[[pending]]
+kind = "gate"
+target = "keywords/at"
+reasons = ["S-102"]
+until = "W3-04"
+note = "字句解析器のキーワードに at が無い（クロックの構文。§2.2、§11.3）"
+
+[[pending]]
+kind = "gate"
+target = "keywords/clock"
+reasons = ["S-169"]
+until = "W3-04"
+note = "予約語 clock が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
+
+[[pending]]
+kind = "gate"
+target = "keywords/when"
+reasons = ["S-169"]
+until = "W3-04"
+note = "予約語 when が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
+
+[[pending]]
+kind = "gate"
+target = "keywords/reset_if"
+reasons = ["S-169"]
+until = "W3-04"
+note = "予約語 reset_if が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
+
+[[pending]]
+kind = "gate"
+target = "keywords/priv"
+reasons = ["S-36"]
+until = "W3-08"
+note = "可視性の priv が字句解析器のキーワードに無い"

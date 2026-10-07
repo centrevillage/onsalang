@@ -10,10 +10,11 @@ use crate::ast::*;
 use crate::parser::Parsed;
 use crate::token::{Token, TokenKind};
 
-/// Format a parsed file. Returns `None` if the file has lexing or parsing
-/// diagnostics (E0001..E0020); naming errors (E0320) do not block formatting.
+/// Format a parsed file. Returns `None` if the lexer or the parser reported a
+/// diagnostic (`Parsed::syntax_errors()`, R-146, S-214); the diagnostics of later
+/// stages (E0320 of the names stage) do not block formatting (§18.2, S-120).
 pub fn format(parsed: &Parsed, text: &str) -> Option<String> {
-    if parsed.diagnostics.iter().any(|d| (1..=20).contains(&d.code.number())) {
+    if parsed.syntax_errors() {
         return None;
     }
     let comments: Vec<Token> = parsed

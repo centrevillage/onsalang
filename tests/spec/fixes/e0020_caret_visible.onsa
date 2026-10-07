@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 2
+
+// E0020 for a `^` on a name that is already visible (§11.2): a mark that shows a misreading
+// (P2). Inside a delay's first argument the candidate drops the `^`. Outside it the intent is not
+// unique, so `x` and `prev~(x)` are both candidates, in that order.
+
+const K: F32 = 1.0
+
+pub flow caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  prev~(^x)                                         //~ E0020
+}
+
+pub flow caret_on_an_earlier_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  prev~(^a)                                         //~ E0020
+}
+
+pub flow caret_on_a_constant(x: F32 at sample) -> F32 at sample {
+  prev~(^K) + x                                     //~ E0020
+}
+
+pub flow caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = ^x * 2.0                                  //~ E0020
+  a
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let z = x + prev~(^z)
+  z
+}

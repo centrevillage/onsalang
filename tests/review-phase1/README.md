@@ -147,7 +147,7 @@
 | `parent/r83.onsa` | R-83（効果の使用の診断。期待値と今の出力は各関数の上のコメント。S-77） |
 | `parent/r84.onsa`、`parent/r84_type.onsa` | R-84、R-103（名前の段と名前の隠蔽。期待値と今の出力は各項目の上のコメント。S-78、S-79） |
 | `parent/r85.onsa` | R-85（束縛の状態。期待値と今の出力は各関数の上のコメント。S-80） |
-| `parent/r87.onsa` | R-87（修正候補の形と診断を置く位置。`onsa check --json` で確かめる。期待値と今の出力は各関数の上のコメント。S-81、S-82） |
+| `parent/r87.onsa` | R-87（修正候補の形と診断を置く位置。`onsa check --json` で確かめる。期待値と今の出力は各関数の上のコメント。S-81、S-82）。候補の形（S-81、R-87 (1)(2)）は W3-02 で直した。残りの E0320 の全ての使用箇所は W4-04、E0601 の位置は W6-03 で、期待値は `tests/spec/fixes/e0320_rename.onsa`・`pkg_rename/`・`e0601_alloc_row.onsa`（実装待ち） |
 | `parent/r88/` | R-88（std の版の固定。期待値は `onsa.toml` の先頭のコメント。S-83） |
 | `parent/r93.onsa` | R-93、R-81（評価順。S-75 の期待値で書いたテストで、今の結果は各テストの上のコメント） |
 | `parent/r94/` | R-94、R-131（数の trait の形。`check.onsa` は `onsa check`、`run.onsa` は `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-84） |

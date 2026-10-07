@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1"]
+// fixes = 1
+
+// E0308: a flow in a type position. A flow is not a type; its state is `lp.State`, which is the
+// candidate (§11.6).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub fn flow_as_a_type(s: lp.State) -> F32 {               //~ E0308
+  0.0
+}
+
+pub fn fine(s: lp.State) -> F32 {
+  0.0
+}

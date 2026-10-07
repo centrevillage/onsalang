@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for the rest `..` in a struct pattern (§7): every field is written, the unwanted ones as
+// `_`. The candidate lists the remaining fields with `_`, in the order of the declaration.
+
+pub struct P3 {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn rest_pattern(p: P3) -> I32 {
+  match p {
+    P3 { x: px, .. } => px,                         //~ E0020
+  }
+}
+
+pub fn rest_after_two(p: P3) -> I32 {
+  match p {
+    P3 { x: px, y: py, .. } => px + py,             //~ E0020
+  }
+}
+
+pub fn fine(p: P3) -> I32 {
+  match p {
+    P3 { x: px, y: _, z: _ } => px,
+  }
+}

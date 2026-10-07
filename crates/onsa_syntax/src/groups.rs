@@ -3,7 +3,7 @@
 //! prefix operators). Binary chains are kept flat by the parser, so each check
 //! looks at one node.
 
-use onsa_diag::{Code, Diagnostic, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 
 use crate::ast::{Ast, ExprKind, UnOp};
 
@@ -17,12 +17,17 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
                     let e = ast.expr(operand);
                     if matches!(e.kind, ExprKind::Cast { .. }) {
                         let d = Diagnostic::new(
+                            Stage::Syntax,
                             Code::E0011,
                             e.span,
                             "`as` is written in parentheses when it is an operand (§3.3)",
                         )
                         .with_found(src(e.span))
-                        .with_fix(Fix::Replace { replace: format!("({})", src(e.span)) });
+                        .with_fix(Fix::replace(
+                            "parenthesize the cast",
+                            e.span,
+                            format!("({})", src(e.span)),
+                        ));
                         diagnostics.push(d);
                     }
                 }
@@ -47,9 +52,9 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
                         ops[i - 1].0.symbol(),
                         ops[i].0.symbol()
                     );
-                    let d = Diagnostic::new(Code::E0010, expr.span, msg)
+                    let d = Diagnostic::new(Stage::Syntax, Code::E0010, expr.span, msg)
                         .with_found(src(expr.span))
-                        .with_fix(Fix::Replace { replace })
+                        .with_fix(Fix::replace(format!("parenthesize the `{}`", ops[i].0.symbol()), expr.span, replace))
                         .with_note(ops[i].1, "second group starts here".to_string());
                     diagnostics.push(d);
                 } else if ops.len() >= 2 && !ops[0].0.chains() {
@@ -60,7 +65,7 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
                         "parenthesize each step"
                     };
                     let msg = format!("`{}` cannot be chained; {hint} (§3.1)", op.symbol());
-                    let d = Diagnostic::new(Code::E0010, expr.span, msg).with_found(src(expr.span));
+                    let d = Diagnostic::new(Stage::Syntax, Code::E0010, expr.span, msg).with_found(src(expr.span));
                     diagnostics.push(d);
                 }
             }
@@ -71,12 +76,17 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
                     UnOp::Not => "!",
                 };
                 let d = Diagnostic::new(
+                    Stage::Syntax,
                     Code::E0012,
                     expr.span,
                     "prefix operators are not stacked; parenthesize the inner one (§3.1)",
                 )
                 .with_found(src(expr.span))
-                .with_fix(Fix::Replace { replace: format!("{sym}({})", src(inner_span)) });
+                .with_fix(Fix::replace(
+                    "parenthesize the inner operator",
+                    expr.span,
+                    format!("{sym}({})", src(inner_span)),
+                ));
                 diagnostics.push(d);
             }
             _ => {}
@@ -86,17 +96,14 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
 
 #[cfg(test)]
 mod tests {
-    use onsa_diag::{Code, FileId, Fix};
+    use onsa_diag::{Code, FileId};
 
     fn check(src: &str) -> Vec<(Code, Option<String>)> {
         let p = crate::parse(FileId(0), &format!("fn f() {{\n  let v = {src}\n}}"));
         p.diagnostics
             .iter()
             .map(|d| {
-                let fix = d.fixes.first().map(|f| match f {
-                    Fix::Replace { replace } => replace.clone(),
-                    _ => unreachable!(),
-                });
+                let fix = d.fixes.first().map(|f| f.edits()[0].replace.clone());
                 (d.code, fix)
             })
             .collect()

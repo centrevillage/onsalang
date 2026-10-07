@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 1
+
+// E0801: a use before the definition. Inside a delay's first argument the candidate inserts `^`;
+// a `^name` outside the first argument of a delay has the candidate `prev~(^name)` (the note
+// says `^` is not a delay); a forward use outside a delay has no candidate (§11.2).
+
+pub flow forward_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x                              //~ E0801
+  let b = x * 0.5
+  a
+}
+
+pub flow caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x                                    //~ E0801
+  let b = x * 0.5
+  a
+}
+
+pub flow forward_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = b + x                                     //~ E0801
+  let b = x * 0.5
+  a
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x
+  let b = x * 0.5
+  a
+}

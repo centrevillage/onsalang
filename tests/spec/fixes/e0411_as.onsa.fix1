@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§3.3", "§18.1"]
+// fixes = 2
+
+// E0411: `as` for a pair it cannot write. A reading with one meaning has the conversion method as
+// the candidate (integer to float and `F64` to `F32`: `round_f32()`). Float to integer reads
+// differently in other languages, so both are listed, `trunc_<type>_sat()` first and
+// `trunc_<type>()` second. An integer narrowing has no candidate (§3.3).
+
+pub fn to_float(i: I32) -> F32 {
+  i.round_f32()                                          //~ E0411
+}
+
+pub fn double_to_single(d: F64) -> F32 {
+  d.round_f32()                                          //~ E0411
+}
+
+pub fn long_to_double(n: I64) -> F64 {
+  n.round_f64()                                          //~ E0411
+}
+
+pub fn float_to_int(f: F32) -> I32 {
+  f.trunc_i32_sat()                                          //~ E0411
+}
+
+pub fn narrowing(n: I64) -> I32 {
+  n as I32                                          //~ E0411
+}
+
+pub fn fine(i: I16, f: F32) -> F64 {
+  (i as F32) as F64
+}

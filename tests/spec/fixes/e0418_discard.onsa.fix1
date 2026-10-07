@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 1
+
+// E0418: a statement in the middle of a block whose type is not `()`. The candidate is
+// `let _ = e` (§6.1).
+
+pub fn one() -> I32 {
+  1
+}
+
+pub fn call_result() -> I32 {
+  let _ = one()                                             //~ E0418
+  2
+}
+
+pub fn expression_value(x: I32) -> I32 {
+  let _ = x + 1                                             //~ E0418
+  x
+}
+
+pub fn twice(x: I32) -> I32 {
+  x * 2
+}
+
+pub fn call_with_an_argument(x: I32) -> I32 {
+  let _ = twice(x)                                          //~ E0418
+  x
+}
+
+pub fn fine(x: I32) -> I32 {
+  let _ = one()
+  x
+}

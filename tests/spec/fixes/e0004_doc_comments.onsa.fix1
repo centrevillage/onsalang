@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+// fixes = 1
+
+// E0004: a `///` with no declaration to attach to has the candidate `//`; a `//!` that is not at
+// the start of the file has the candidate `///` (§2.1).
+
+//! Module documentation, at the start of the file.
+
+// A stray doc comment before a `use`.              //~ E0004
+use std.math.{sqrt}
+
+/// This one is attached to `root`.
+pub fn root(x: F32) -> F32 {
+  // A doc comment before a statement.             //~ E0004
+  sqrt(x)
+}
+
+pub fn first() -> I32 {
+  1
+}
+
+/// A module comment after the first item.          //~ E0004
+pub fn second() -> I32 {
+  2
+}
+
+pub fn last() -> I32 {
+  3
+}
+
+// Nothing follows this one.                        //~ E0004

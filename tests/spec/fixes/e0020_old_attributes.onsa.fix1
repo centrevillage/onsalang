@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// E0020 for the old attribute spelling with a fixed replacement (§6.5): `@relaxed` is
+// `@fp(relaxed)`.
+
+@fp(relaxed)                                            //~ E0020
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(relaxed)                                            //~ E0020
+pub fn faster(x: F32) -> F32 {
+  x * 4.0
+}
+
+@fp(relaxed)
+pub fn fine(x: F32) -> F32 {
+  x * 8.0
+}

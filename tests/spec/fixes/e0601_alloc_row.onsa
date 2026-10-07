@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§18.1"]
+// fixes = 1
+
+// E0601: a use of an effect the function does not declare. The diagnostic is at the first use;
+// for a function that is not `rt` the candidate inserts ` uses {Alloc}` into the signature
+// (§8.1).
+
+pub fn mk(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub fn calls_an_alloc_fn(n: U32) -> U32 {
+  let a = mk(n)                                     //~ E0601
+  a.len()
+}
+
+pub fn allocates_directly(n: U32) -> U32 {
+  let b = Buf.zeroed(n)                             //~ E0601
+  b.len()
+}
+
+pub fn interpolates(n: U32) -> U32 {
+  let s = "n = {n}"                                 //~ E0601
+  s.len()
+}
+
+pub fn fine(n: U32) -> U32 uses {Alloc} {
+  let a = mk(n)
+  a.len()
+}

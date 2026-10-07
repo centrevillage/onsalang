@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Fix, Span};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, Block, CallKind, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
 use crate::body::{BodyInfo, LocalId, LocalKind, Target};
@@ -156,7 +156,7 @@ impl<'a> Walker<'a> {
 
     fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) {
         let found = self.src(span);
-        self.report(Diagnostic::new(code, span, msg).with_found(found));
+        self.report(Diagnostic::new(Stage::Modes, code, span, msg).with_found(found));
     }
 
     fn failed(&self) -> bool {
@@ -279,6 +279,7 @@ impl<'a> Walker<'a> {
                     let span = self.span(*e);
                     let decl = l.span;
                     let d = Diagnostic::new(
+                        Stage::Modes,
                         Code::E0712,
                         span,
                         format!("a closure captures outer values by copy; {reason} (§5.3)"),
@@ -398,6 +399,7 @@ impl<'a> Walker<'a> {
         if !diverged && let Some(&(id, span)) = self.state.pending.first() {
             let name = self.local(id).name.clone();
             let d = Diagnostic::new(
+                Stage::Modes,
                 Code::E0704,
                 span,
                 format!(
@@ -594,9 +596,14 @@ impl<'a> Walker<'a> {
     fn check_moved(&mut self, id: LocalId, span: Span) {
         if let Some(&mv) = self.state.moved.get(&id) {
             let name = self.local(id).name.clone();
-            let d = Diagnostic::new(Code::E0704, span, format!("`{name}` was moved and cannot be used again (§5.2)"))
-                .with_found(self.src(span))
-                .with_note(mv, "moved here");
+            let d = Diagnostic::new(
+                Stage::Modes,
+                Code::E0704,
+                span,
+                format!("`{name}` was moved and cannot be used again (§5.2)"),
+            )
+            .with_found(self.src(span))
+            .with_note(mv, "moved here");
             self.report(d);
         }
     }
@@ -622,6 +629,7 @@ impl<'a> Walker<'a> {
         if self.is_borrowed(place.local) {
             let what = if pos == Pos::MoveArg { "passed as `move`" } else { "moved out" };
             let d = Diagnostic::new(
+                Stage::Modes,
                 Code::E0711,
                 span,
                 format!(
@@ -645,12 +653,13 @@ impl<'a> Walker<'a> {
         if pos == Pos::Consume {
             // S-21: consuming an owned Affine value is written with `move` (§5.2).
             let d = Diagnostic::new(
+                Stage::Modes,
                 Code::E0711,
                 span,
                 format!("Affine value `{name}` is consumed here; write `move {name}` (§5.2)"),
             )
             .with_found(self.src(span))
-            .with_fix(Fix::InsertBefore { insert_before: "move ".to_string() });
+            .with_fix(Fix::insert("add `move`", span.file, span.start, "move "));
             self.report(d);
             return;
         }
@@ -686,9 +695,10 @@ impl<'a> Walker<'a> {
             LocalKind::Var => unreachable!(),
         };
         let span = place.span;
-        let mut d = Diagnostic::new(Code::E0701, span, format!("cannot {what} this place: {reason} (§5.2)"))
-            .with_found(self.src(span))
-            .with_note(l.span, "declared here");
+        let mut d =
+            Diagnostic::new(Stage::Modes, Code::E0701, span, format!("cannot {what} this place: {reason} (§5.2)"))
+                .with_found(self.src(span))
+                .with_note(l.span, "declared here");
         if fix_var {
             d = d.with_note(l.span, "change `let` to `var`");
         }
@@ -779,9 +789,9 @@ impl<'a> Walker<'a> {
                     Mode::Move => "this parameter is `move`; write `move` before the argument (§5.2)",
                     Mode::Borrow => "this parameter is borrowed; the argument takes no mode keyword (§5.2)",
                 };
-                let d = Diagnostic::new(Code::E0703, arg.span, msg)
+                let d = Diagnostic::new(Stage::Modes, Code::E0703, arg.span, msg)
                     .with_found(found)
-                    .with_fix(Fix::Replace { replace: fix });
+                    .with_fix(Fix::replace("write the mode of the parameter", arg.span, fix));
                 self.report(d);
                 return;
             }
@@ -821,6 +831,7 @@ impl<'a> Walker<'a> {
                 if p.overlaps(q) {
                     let name = self.local(p.local).name.clone();
                     let d = Diagnostic::new(
+                        Stage::Modes,
                         Code::E0702,
                         q.span,
                         format!("`{name}` is passed as `inout` twice in one call; the two places may overlap (§5.2)"),
@@ -835,6 +846,7 @@ impl<'a> Walker<'a> {
                 if p.overlaps(q) {
                     let name = self.local(p.local).name.clone();
                     let d = Diagnostic::new(
+                        Stage::Modes,
                         Code::E0702,
                         q.span,
                         format!(
@@ -891,25 +903,27 @@ impl<'a> Walker<'a> {
         let src = self.src(span);
         let at = (ident.span.end - span.start) as usize;
         if needs_bang {
-            let fix = format!("{}!{}", &src[..at], &src[at..]);
             let d = Diagnostic::new(
+                Stage::Modes,
                 Code::E0713,
                 span,
                 format!("`{name}` takes `inout self`; the call is written `{name}!(...)` (§5.2)"),
             )
             .with_found(src)
-            .with_fix(Fix::Replace { replace: fix });
+            .with_fix(Fix::insert("add `!`", span.file, ident.span.end, "!"));
             self.report(d);
         } else {
-            let rest = src[at..].strip_prefix('!').unwrap_or(&src[at..]).to_string();
-            let fix = format!("{}{}", &src[..at], rest);
+            // The `!` comes right after the name (`f!(`, §2.6).
+            let bang = Span::new(span.file, ident.span.end, ident.span.end + 1);
+            debug_assert!(src[at..].starts_with('!'));
             let d = Diagnostic::new(
+                Stage::Modes,
                 Code::E0714,
                 span,
                 format!("`{name}` does not take `inout self`; the call is written without `!` (§5.2)"),
             )
             .with_found(src)
-            .with_fix(Fix::Replace { replace: fix });
+            .with_fix(Fix::delete("remove `!`", bang));
             self.report(d);
         }
     }
