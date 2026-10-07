@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Bidirectional controls U+202A-202E and U+2066-2069 (E0001 everywhere, §2.5), three lines each:
+// code, comment, string, then a trojan-source style line that hides code in a comment.
+
+let a‪b = 1 ‪ + 2
+// before ‪ after
+let s = "before ‪ after"
+let a‫b = 1 ‫ + 2
+// before ‫ after
+let s = "before ‫ after"
+let a‬b = 1 ‬ + 2
+// before ‬ after
+let s = "before ‬ after"
+let a‭b = 1 ‭ + 2
+// before ‭ after
+let s = "before ‭ after"
+let a‮b = 1 ‮ + 2
+// before ‮ after
+let s = "before ‮ after"
+let a⁦b = 1 ⁦ + 2
+// before ⁦ after
+let s = "before ⁦ after"
+let a⁧b = 1 ⁧ + 2
+// before ⁧ after
+let s = "before ⁧ after"
+let a⁨b = 1 ⁨ + 2
+// before ⁨ after
+let s = "before ⁨ after"
+let a⁩b = 1 ⁩ + 2
+// before ⁩ after
+let s = "before ⁩ after"
+‮let a = 1
+let b = 2‮
+fn‮f() {}
+let‮c = 3
+let d = 4 ‮
+‮
+let e = 5‮
+‮‮‮
+// ‮
+"‮"
+'‮'
+let access = "user‮ ⁦// Check if admin⁩ ⁦"
+// ‮ } if (isAdmin) ⁦ begin admins only ‬

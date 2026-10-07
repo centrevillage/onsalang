@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// A lone CR (E0001 everywhere, §2.5) in code, in a comment, in a string, at a line end, after a
+// CR LF, before an LF, doubled (`\r\r\n`) and at the end of the file.
+
+let a = 1
+let b= 2
+let c = 3let d = 4
+// commentwith a CR in the middle
+// comment ends in CRlet e = 5
+let s = "ab"
+let t = "endlet f = 6
+let g = 7
+let h = 8
+let i = 9
+
+
+xy
+let j = 10

@@ -1,0 +1,8 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.4", "§18.2"]
+
+// The file ends inside or right after the construct below (with no newline unless one is shown).
+
+let s = "日本語

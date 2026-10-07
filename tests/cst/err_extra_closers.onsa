@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§18.2"]
+
+// Closing brackets with nothing open: at the start, after an item, mismatched pairs, in the
+// middle of a list, after a complete function, and runs of them.
+
+)
+]
+}
+)))
+}}}
+const A: U32 = 1)
+const B: U32 = 2]
+const C: U32 = 3}
+fn f() {}}
+fn g() {})
+fn h(x: I32)) {}
+fn i(x: I32] {}
+fn j(x: I32} {}
+let a = (1, 2))
+let b = [1, 2]]
+let c = f(1))(2)
+let d = {1, 2}}
+([)]
+{(})
+}{
+}} {{
+fn k() { ] }
+fn l() { ) }
+struct S { x: I32 ) }
+match x { A => 1 ] }
+use a.{b, c)
+use a.b}
+fn m() uses {Alloc)
+@repr(c]
+}

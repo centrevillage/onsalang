@@ -723,7 +723,7 @@ class RealSteps(unittest.TestCase):
         self.assertFalse(by_name["fmt-props"].pendable)
         # the only items that may be listed: the C checks (W1-06), and the fmt properties
         # that wait for W3-11 (R-70) and W3-01 (R-86)
-        self.assertEqual(gate_steps.pendable(), self.c_items() + ["fmt-comments", "fmt-cst"])
+        self.assertEqual(gate_steps.pendable(), self.c_items() + ["fmt-comments"])
         for n in names:
             self.assertRegex(n, pending.TARGET_FORMS["gate"])
             self.assertNotIn("/", n)

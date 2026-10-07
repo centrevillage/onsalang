@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// LF and CR LF mixed line by line, a CR LF directly after a comment, after an opening
+// bracket, inside a string line, between a CR LF and a LF, and a run of blank CR LF lines.
+
+const A: U32 = 1
+const B: U32 = 2
+// comment
+// comment
+fn f(
+  a: I32,
+  b: I32
+) {
+
+
+
+
+  a
+}
+let s = "a"
+let t = "b
+let u = "c
+x +
+  y
+/// doc
+//!
+//
+//
+last // no newline

@@ -41,12 +41,18 @@ enum Command {
         old: PathBuf,
         new: PathBuf,
     },
-    /// Print an internal representation (hidden; `--core` for Core IR)
+    /// Print an internal representation (hidden; `--core` for Core IR, `--cst` for the CST)
     #[command(hide = true)]
     Dump {
         /// Core IR after lowering and monomorphization
         #[arg(long)]
         core: bool,
+        /// The CST of one file: the text of its leaves (the source, byte for byte)
+        #[arg(long, conflicts_with = "core")]
+        cst: bool,
+        /// With `--cst`: the tree as indented lines instead of the text
+        #[arg(long, requires = "cst")]
+        tree: bool,
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
@@ -184,7 +190,13 @@ fn run(command: Command) -> Outcome {
         Command::Check { json, paths } => check(json, &paths),
         Command::Fmt { check, paths } => fmt(check, &paths),
         Command::Diff { ast, old, new } => diff(ast, &old, &new),
-        Command::Dump { core, paths } => dump(core, &paths),
+        Command::Dump { core, cst, tree, paths } => {
+            if cst {
+                dump_cst(tree, &paths)
+            } else {
+                dump(core, &paths)
+            }
+        }
         Command::Test { json, filter, paths } => test(json, filter, &paths),
         Command::Interface { json, path } => interface(json, &path),
         Command::Graph { svg, path, flow } => graph(svg, &path, &flow),
@@ -335,6 +347,28 @@ fn lowered(
             Err(Outcome::Problems)
         }
         Err(onsa_driver::LowerError::Internal(e)) => Err(internal(&loaded.sources, &e)),
+    }
+}
+
+/// `onsa dump --cst [--tree] <file>`: the CST of one file (R-86). Exit 0
+/// also when the file has syntax errors (the CST is complete); the syntax
+/// diagnostics are not printed.
+fn dump_cst(tree: bool, paths: &[PathBuf]) -> Outcome {
+    let [path] = paths else {
+        return cannot_work("`dump --cst` takes one file");
+    };
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
+    };
+    let mut sources = SourceMap::default();
+    let file = sources.add(path.to_string_lossy(), text);
+    match onsa_driver::cst_dump(&sources, file, tree) {
+        Ok(out) => {
+            out!("{out}");
+            Outcome::Ok
+        }
+        Err(e) => internal(&sources, &e),
     }
 }
 

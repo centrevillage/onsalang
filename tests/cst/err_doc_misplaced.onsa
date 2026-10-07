@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1"]
+
+// `///` with no declaration to attach to and `//!` after the first item (E0004), `///` before
+// statements, arguments, `use`, `test` and at the end of a block, mixed with `////`.
+
+//! module doc (fine)
+const A: U32 = 1
+//! module doc after an item
+/// doc before use
+use a.b
+/// doc before test
+test "x" {
+  /// doc before a statement
+  let a = 1
+  /// doc before an assert
+  assert a == 1
+  /// doc at the end of a block
+}
+fn f(x: I32) {
+  //! inner doc in a block
+}
+//// four slashes (a plain comment)
+////// six slashes
+/// doc before a blank line
+
+// then a plain comment
+const B: U32 = 2
+/// doc at the end of the file

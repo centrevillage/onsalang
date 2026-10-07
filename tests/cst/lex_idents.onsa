@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.3"]
+
+// Identifiers: the valid forms of every case rule, double underscore (E0320), underscore
+// edges, digits inside and at the start, and word-like prefixes of keywords.
+
+snake_case UpperCamel UPPER_SNAKE T Item e x1 x_1 x1_ _x _1 _
+a__b A__B __a a__ __ ___ ____ a___b
+1x 12ab 1_x x 1 x2y3
+fnx xfn letter forever matcher matches iffy elsewhere
+Self Selfie selfie self_ _self
+a.b a.b.c a.b.c.d a. .a a..b
+Fs.read(p) fs.read(p) F32.PI std.math.exp
+saw~(f0) buf.push!(x) ^y ^y.l -x !done
+TRUE False true1 true_

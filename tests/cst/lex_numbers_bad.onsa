@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4"]
+
+// Numeric literals that §2.4 rejects (E0020: leading zero, 0o, suffixes, a decimal point
+// without digits on a side), plus the near misses that fail otherwise. Written as-is.
+
+017 00 007 0_7 00.5 01.5 000 0123456789
+0o17 0o 0O17 0o8 0u 0i
+1u8 1.0f32 1i32 1f 1.0f 1u 1usize 0xFFu8 1e3f32 1_u8
+1. .5 1.e3 1.E3 .5e3 .e3 . 1.. 1.) 1.]
+1__000 1_ _1 1_ 0x_1F 0x1_ 0b_1 0b1_ 1_.0 1._0 1.0_ 1.0_0 1e_3 1e3_ 1_e3
+0x 0b 0x_ 0b_ 0xG 0b2 0b12 0xZ 0x1G 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+1e 1e+ 1e- 1E 1e+x 1e-x 1ee3 1e3e3 1e3.5 1e3.e 1.0e 1.0e+
+1.2.3 1.2.3.4 1.0.0 1.0.max(2.0) 1.max(2)
+0x1.8p3 0x1p3 0x.8 0b1.1 0xe.e
+99999999999999999999999999999999999999999999999999999999999999999999
+0.000000000000000000000000000000000000000000000000000000000000000000001
+1e99999999999999999999 1e-99999999999999999999
+١٢٣ １２３ 1２3 ０ 0x１ ½ ² ³ 1²
+t.00 t.01 t.0x1 t.1e3 t.1.5 t.0_1 t.-1
+NaN nan inf Inf infinity -inf 0x1p 1#INF

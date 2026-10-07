@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4"]
+
+// Every written form of a numeric literal that §2.4 accepts (and the spellings that onsa fmt
+// changes: prefix case, exponent case and sign, underscores, 16-digit case).
+
+0 42 0xFF 0xff 0xAb 0b1010 1_000_000 0x1F_FF 0b1_0_1 1_0 9
+1.0 2.5e-3 1e-6 48e3 1e+3 1E3 1E-3 1E+3 1.5E10 0.5 0.0 10.25
+1_000.000_1 1_000e1_0 1.0e0 0e0 0e-0 0.0e+0
+0XFF 0B101 0xDEADBEEF 0xdeadbeef 0x0 0b0 0xAAAAAAAAAAAAAAAA
+340282366920938463463374607431768211455 1e308 1e-308 1e999 1e-999
+[1, 2.0, 0x3, 0b1, 4e1]
+-1 -1.0 -0xFF - 1 a-1 a -1 1-1 1 - 1
+1+1 1e3+1 1e+3+1 1e-3-1 0xe+1 0xe-1 0x1e-1 0b1e-1
+t.0 t.1 t.0.1 t.0.1.2 t.10 x.0.y.1
+1..2 0..4 0..=4 1.. ..4 ..

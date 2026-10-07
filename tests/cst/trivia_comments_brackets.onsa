@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5", "§18.2"]
+
+// End-of-line comments and comment-only lines inside every kind of bracket and between
+// tokens: parameter and argument lists, arrays, struct literals, `match` arms, `use` and `uses` lists.
+
+use std.math.{ // c1
+  exp, // c2
+  // c3 alone
+  cos,
+} // c4
+
+pub fn f( // c5
+  a: I32, // c6
+  // c7
+  b: I32 // c8
+) // c9
+  -> I32 // c10
+  uses {Alloc} // c11
+{ // c12
+  let x = // c13
+    a + // c14
+    b // c15
+  // c16
+    .abs() // c17
+  if x > 0 { // c18
+    x // c19
+  } // c20
+  else { // c21
+    -x
+  }
+  match x { // c22
+    // c23
+    0 => 1, // c24
+    _ => 2 // c25
+  } // c26
+  Point { // c27
+    x: 1.0, // c28
+    // c29
+    y: 2.0 // c30
+  } // c31
+  [ // c32
+    1, // c33
+    // c34
+    2 // c35
+  ] // c36
+  g( // c37
+    1 // c38
+    , // c39
+    2
+  )
+  h( // c40
+  ) // c41
+  [ // c42
+  ] // c43
+  ( // c44
+    // c45
+  ) // c46
+  fn(i) { // c47
+    i // c48
+  } // c49
+  let t = ( // c50
+    a, // c51
+    b // c52
+  )
+  xs[ // c53
+    0 // c54
+  ] // c55
+  f //c56
+  (x) //c57
+  a. // c58
+  b
+  a // c59
+  .b
+} // c60
+//c61 no space
+//
+// c62 at the end

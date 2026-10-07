@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.4", "§2.5", "§11.1"]
+
+// A realistic program (nesting, branches, par, closures, generics, modules) with trivia of every
+// kind in it: tabs, trailing spaces, CR LF on some lines, blank runs, comments, a lone CR.
+
+use std.math.{exp, cos}
+use std.dsp.test.{impulse, energy}
+
+
+
+pub struct Pair[T] {
+	first: T, 	
+  second: T,   // c
+}
+
+impl[T: Ord] Pair[T] {
+  pub fn max(self) -> T {
+    if self.first > self.second {   
+      self.first
+    } else {
+	  self.second
+    }
+  }
+}
+
+/// A voice with nested branches
+pub flow voice(
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: Ctl[F32],
+  gate: Sig[F32],
+) -> Sig[F32] {
+  let env = if~ gate > 0.5 {
+    saw~(f0) * 0.5 // c
+  } else {
+    match~ gate {
+      0.0 => 0.0,
+      _ => prev~(^env),
+    }
+  }
+  par {
+    let l = filters.resonator~(env, 500.0, 100.0)
+    let r = filters.resonator~(env, 1500.0, 100.0)
+  }
+  let xs = array.from_fn(fn(i: U32) -> F32 { l * i.round_f32() })
+  let s = "voice {f0} {{x}}"   // string with interpolation
+  (l + r)}
+
+test "voice is silent for a closed gate" {
+  assert energy(voice.render(impulse(48000), 48000.0).out, 0, 1) < 1.0e-12
+}

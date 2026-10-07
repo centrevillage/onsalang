@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5", "§11.1"]
+
+// Comments at every point of a declaration: before and after attributes, between `///` lines,
+// in struct and enum bodies, `impl` and `trait` bodies, flow inputs, `par`, `handle` and `test`.
+
+//! module doc
+// before the doc
+/// doc one
+// between docs
+/// doc two
+@repr(c) // c1
+// c2
+pub struct S { // c3
+  /// field doc
+  x: I32, // c4
+  // c5
+  y: I32 // c6
+} // c7
+
+enum E { // c8
+  A, // c9
+  /// variant doc
+  B(I32), // c10
+  // c11
+  C { x: I32 } // c12
+}
+
+impl S { // c13
+  // c14
+  /// member doc
+  pub fn new() -> S { S { x: 0, y: 0 } } // c15
+} // c16
+
+trait T { // c17
+  const N: U32 // c18
+  fn t(self) -> I32 // c19
+}
+
+pub flow f( // c20
+  /// input doc
+  @param(min: 0.0, max: 1.0, default: 0.5) // c21
+  x: Ctl[F32], // c22
+  y: Sig[F32] // c23
+) -> Sig[F32] { // c24
+  let z = y + prev~(^z) // c25
+  par { // c26
+    a~(x) // c27
+    // c28
+    b~(y) // c29
+  } // c30
+  handle { // c31
+    op() // c32
+  } // c33
+  with h // c34
+  z
+}
+
+test "name" { // c35
+  assert 1 == 1 // c36
+} // c37
+
+/// doc before nothing at the end of the file
+//! inner doc in the middle
+////
+/// last doc

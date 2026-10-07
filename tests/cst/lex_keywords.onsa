@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.2"]
+
+// Every keyword of §2.2, the reserved built-in names, `lib`, and keywords glued to
+// punctuation or inside longer words (the longer word is one identifier).
+
+fn rt flow par struct enum trait impl effect blocking handler handle with uses
+let var if else match for in while break continue return
+pub priv use extern unsafe target test assert
+const type as at inout move self Self true false
+clock when reset_if
+prev delay vdelay sample_rate lib
+_ __ ___ _a a_ a__b
+fn(x) if{ else{ self.x Self.new() std.test use test.{Gen} std.dsp.test
+return-1 return(1) true&&false true.not() x as I64 at sample
+extern "C" lib "fastconv" {
+lib = 1
+blocking fn rt fn pub rt fn unsafe fn pub priv
+fnfn fn_ _fn fn1 fn2x Fn FN fN iff elsee letx forin in_ i n
+if~(x) if~ x {} match~ x {} if ~(x) if~(
+reset_if when clock
+prev~(x) delay~(x, 1) vdelay~(x, d) sample_rate()
+r#fn r#let 'fn 'static fn' fn'a

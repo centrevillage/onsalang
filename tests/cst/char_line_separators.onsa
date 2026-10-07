@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// U+2028 and U+2029 (E0001 everywhere, §2.5): in code, in a comment, in a string, at the start
+// and the end of a line, next to LF and CR LF.
+
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+ let a = 1
+let b = 2 
+fn f() {}
+let c = 3
+let d = 4  
+ 
+let e = 5 
+   
+//  
+" "
+' '
+ let a = 1
+let b = 2 
+fn f() {}
+let c = 3
+let d = 4  
+ 
+let e = 5 
+   
+//  
+" "
+' '

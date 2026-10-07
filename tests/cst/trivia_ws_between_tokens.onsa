@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6"]
+
+// Gaps of spaces and tabs between every pair of token kinds, including where §2.5 forbids
+// any gap (E0020): before `(` `[` `.` `?` `~` `!` `^`, and after a prefix operator.
+
+fn   f   (   x   :   I32   )   ->   I32   {   x   }
+f (x)
+f  (x)
+f	(x)
+xs [0]
+xs  [0]
+Option [I32]
+fn f (x: I32) {}
+a . b
+a .b
+a. b
+a	.	b
+s . f . (x)
+s.f . (x)
+x ?
+x	?
+x?  .y
+saw ~(f0)
+saw~ (f0)
+buf.push ! (x)
+buf.push !(x)
+^ y
+^	y
+- x
+! x
+-  x
+a - b
+a -b
+a- b
+- b
+^ b
+if ~(x) {}
+if ~ (x) {}
+match ~ x {}
+x as I64
+x  as  I64
+x	at	sample
+let y = x + ~ _
+f(	1	,	2	)
+f( 1 , 2 )
+[ 1 , 2 ]
+{ x : 1 }
+Point{x:1.0,y:2.0}
+Point  {  x  :  1.0  ,  y  :  2.0  }

@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Spaces and tabs at the end of lines: after every kind of token, after a comment, after an
+// opening and a closing bracket, after a comma, and after an operator that continues a line.
+
+const A: U32 = 1 
+const B: U32 = 2	
+const C: U32 = 3 	 	
+fn f( 
+  a: I32, 
+  b: I32	
+) -> I32 { 
+  let x = a + 	
+    b 	
+  let s = "str" 
+  let c = 'c' 
+  // comment with trailing spaces   
+  // comment with trailing spaces too  
+  let y = x // end comment 	 
+  x		
+} 
+struct S { 
+  x: I32, 
+} 	
+use a.{b, 	
+  c} 
+fn g() uses 	
+  {Alloc} {} 
+@repr(c) 
+struct T {} 

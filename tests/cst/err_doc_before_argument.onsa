@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1"]
+
+// `///` before a function argument (E0004). The last line is a stray `)` so that onsa fmt refuses
+// the file (a syntax diagnostic); the same lines without it are in the report.
+
+fn f(
+  /// doc before an argument
+  x: I32,
+) {
+}
+fn g(
+  /// d1
+  /// d2
+  x: I32, // c
+  /// d3
+  y: I32
+) {}
+const B: U32 = 2
+)

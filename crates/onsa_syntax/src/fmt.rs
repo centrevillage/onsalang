@@ -17,7 +17,8 @@ pub fn format(parsed: &Parsed, text: &str) -> Option<String> {
         return None;
     }
     let comments: Vec<Token> = parsed
-        .tokens
+        .cst
+        .tokens()
         .iter()
         .copied()
         .filter(|t| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment))

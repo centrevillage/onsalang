@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5"]
+
+// Comments that end in a tab, in spaces, or in both, of every comment form. The last line is a stray `)`
+// so that onsa fmt refuses the file (fmt-props compares comment text up to trailing spaces only).
+
+// c	
+// c 	
+// c	 
+//	
+///	
+//!	
+////	
+const A: U32 = 1 // end	
+const B: U32 = 2 // end 	 	
+fn f(
+  a: I32, // arg	
+  // alone	
+) {}
+)
+// last, ends in a tab	

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Direction marks and format characters that are not in §2.5's closed list (U+200E, U+200F,
+// U+061C, U+2061-2064, U+206A-206F): allowed in comments and strings, E0001 in code?
+
+let a‎b = 1 ‎ + 2
+// before ‎ after
+let s = "before ‎ after"
+let a‏b = 1 ‏ + 2
+// before ‏ after
+let s = "before ‏ after"
+let a؜b = 1 ؜ + 2
+// before ؜ after
+let s = "before ؜ after"
+let a⁡b = 1 ⁡ + 2
+// before ⁡ after
+let s = "before ⁡ after"
+let a⁢b = 1 ⁢ + 2
+// before ⁢ after
+let s = "before ⁢ after"
+let a⁣b = 1 ⁣ + 2
+// before ⁣ after
+let s = "before ⁣ after"
+let a⁤b = 1 ⁤ + 2
+// before ⁤ after
+let s = "before ⁤ after"
+let a⁪b = 1 ⁪ + 2
+// before ⁪ after
+let s = "before ⁪ after"
+let a⁯b = 1 ⁯ + 2
+// before ⁯ after
+let s = "before ⁯ after"

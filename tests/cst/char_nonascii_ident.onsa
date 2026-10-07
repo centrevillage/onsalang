@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.3"]
+
+// Non-ASCII identifiers (E0001, §2.3): accented, CJK, Greek, Cyrillic look-alikes, full-width, a
+// combining mark, an emoji, a digit of another script, a ZWJ inside a name, in many positions.
+
+let é = 1
+let 日本語 = 2
+let αβγ = 3
+let а = 4
+let ｆｕｎ = 5
+let é = 6
+let 😀 = 7
+let a١ = 8
+let a‍b = 9
+let _é = 10
+let é_ = 11
+let x² = 12
+let x·y = 13
+let Ünï = 14
+fn 名前() {}
+struct 型 { 欄: I32 }
+enum 列 { 一, 二 }
+x.é x.日 é.x é.日.y
+é(x) f(é) é~(x) é!(x) ^é -é !é
+use é.{日本, 語}
+const É: U32 = 1
+const 定数: U32 = 1
+let абв = 15
+fа() fnа() аа
+let ß = 16 let ǆ = 17 let İ = 18 let ı = 19
+let 𐀀 = 20 let 􏿿 = 21
+let  = 22

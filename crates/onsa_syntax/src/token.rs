@@ -2,11 +2,15 @@
 
 use onsa_diag::Span;
 
-/// Kind of a token. Comments and newlines are tokens too (trivia); the parser
-/// skips comments and treats newlines by context (§2.5), `fmt` reads them.
+/// Kind of a token. Whitespace, comments and newlines are tokens too
+/// (trivia), so the tokens cover every byte of the source and the CST holds
+/// all of them (R-86). The parser skips whitespace and comments and treats
+/// newlines by context (§2.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     // Trivia
+    /// A run of spaces, tabs and carriage returns.
+    Whitespace,
     /// A line break (one token per physical newline).
     Newline,
     /// `// ...`
@@ -133,7 +137,7 @@ pub enum TokenKind {
 
 impl TokenKind {
     pub fn is_trivia(self) -> bool {
-        matches!(self, TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
+        matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
     }
 
     pub fn is_keyword(self) -> bool {
@@ -224,6 +228,7 @@ impl TokenKind {
     pub fn describe(self) -> &'static str {
         use TokenKind::*;
         match self {
+            Whitespace => "whitespace",
             Newline => "newline",
             Comment | DocComment => "comment",
             Ident => "identifier",
@@ -324,11 +329,47 @@ impl TokenKind {
     }
 }
 
-/// A token. `space_before` is true when whitespace or a newline precedes it
-/// (used for `f~(` / `f!(` and for `fmt`).
+/// A token. What precedes it (a space, a newline or nothing) is read from the
+/// token list with [`gap_before`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
-    pub space_before: bool,
+}
+
+/// What separates a token from the token before it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Gap {
+    /// Nothing: the token touches the one before (or starts the file).
+    None,
+    /// Spaces or tabs, without a newline.
+    Space,
+    /// A newline (with or without spaces around it).
+    Newline,
+}
+
+impl Gap {
+    /// Whitespace or a newline separates the tokens.
+    pub fn is_some(self) -> bool {
+        self != Gap::None
+    }
+}
+
+/// What precedes `tokens[i]` in the full token list of the lexer: a newline
+/// when the last token before it that is not whitespace is a newline, a space
+/// when whitespace comes right before it, nothing otherwise. A comment right
+/// before a token is not a gap (`/* */a`); a line comment is always followed
+/// by a newline.
+pub fn gap_before(tokens: &[Token], i: usize) -> Gap {
+    let mut j = i;
+    let mut space = false;
+    while j > 0 {
+        j -= 1;
+        match tokens[j].kind {
+            TokenKind::Whitespace => space = true,
+            TokenKind::Newline => return Gap::Newline,
+            _ => break,
+        }
+    }
+    if space { Gap::Space } else { Gap::None }
 }

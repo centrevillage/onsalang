@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5", "§2.6"]
+
+// Characters that no token or comment starts with, in the middle of otherwise valid lines:
+// `$` `#` `` ` `` `\` `§`, a lone `'`, `@` and `?` in odd places, and a stray `"`.
+
+let x = 1 $ 2
+let y = 1 # 2
+let z = 1 ` 2
+let w = 1 \ 2
+let v = 1 § 2
+let u = 1 ¥ 2
+let t = @ 2
+let s = ? 2
+let r = 1 ? 2 : 3
+let q = a ?? b
+let p = 'x
+let o = "abc
+let n = 1 @repr(c)
+let m = ~ 1
+let l = f~ (1)
+let k = \n
+let j = $x + $y
+let i = x # comment-like
+let h = x ; let g = y
+let f = x;
+;
+; ;
+let e = ` ` `
+fn f(x: I32) { x \ }
+fn g(x: I32) $ { x }
+struct S { x: I32 # y: I32 }
+let d = 1 ¬ 2
+let c = 1 × 2

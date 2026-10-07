@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6", "§3.1"]
+
+// Every operator of §3 and §2.6, then runs of operator characters that can split into
+// different tokens (`<<=`, `-->`, `a-|b|-c`, `x.f!=y`), with and without spaces.
+
+a + b - c * d / e % f
+a +% b -% c *% d
+a +| b -| c *| d
+a == b != c < d <= e > f >= g
+a && b || c
+a & b | c ^ d << e >> f
+-x !x -(-x) !!x -!x !-x -xs[i] -x as F64
+a.b a.(x) f(x) f~(x) f!(x) xs[i] x? ^y x as T x at s
+a = b
+a -> b => c
+a .. b ..= c ... d
+a::b a: b a, b
+@attr @param(min: 1.0) @repr(c)
+a+b-c*d/e%f
+a+%b-%c*%d/%e
+a+|b-|c*|d
+a*|b|c a|*b a||b|c a|||d a-|b|-c a*|b|*c -|x |-x
+a<<b>>c a<b>c a<=b>=c a==b!=c a=!b a!=b a!= b x.f!=y x.f!(y) x.f !=y
+a&&b||c a&b|c^d a&&&b a|||b a^^b a^ ^b a&|b
+a->b a-->b a>-b a=>b a==>b a<-b a<--b a<=>b a<->b a|>b a<|b
+a- -b a--b a-+b a+-b a*-b a/-b a+-+-b
+a/*b*/c a/ *b a/ /b a*/b
+a<<=b a>>=b a+=b a-=b a*=b a/=b a%=b a&=b a|=b a^=b a:=b a=:b a~=b
++++ --- *** %%% &&& ||| ^^^ <<< >>> === !!! ~~~ ??? ... ::: ;;; ,,,
+<<= >>= += -= *= %= &= |= ^= := =: !~ ~! ~~ ~~> ~> <~ ?? ?: ?. ?( ~( !( ^( ^[ ^{
+a ? b : c
+a?.b a??b a?[0] a?(x)
+(a)(b) a (b) a[b][c] a [b] a. b a .b a . b a ?
+a ~(b) a~ (b) a~(b) a! (b) a !(b) a ^b ^ a ^a a^b
+a..b a..=b a...b a....b a.b..c
+a.0 a.0.1 a.(0) a.{0} a.[0]
+# ## $ $$ \ \\ ` `` ; @@ @ § ¥ ¬ ± × ÷ ∑ → ←
+@
+#
+$
+\
+`

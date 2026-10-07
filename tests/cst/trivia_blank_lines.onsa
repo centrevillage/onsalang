@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§18.2"]
+
+// Runs of blank lines: at the top of the body, between items, inside blocks and lists,
+// after continuation lines, before a closing bracket, and a long run in the middle.
+
+
+
+
+const A: U32 = 1
+
+
+const B: U32 = 2
+
+fn f(
+
+  a: I32,
+
+
+  b: I32,
+
+) -> I32 {
+
+
+  let x =
+
+    a +
+
+
+    b
+
+    .abs()
+
+  x
+
+
+}
+
+struct S {
+
+  x: I32,
+
+}
+
+fn g() uses
+
+  {Alloc} {}
+
+
+
+
+
+
+
+
+
+
+
+
+const C: U32 = 3
+
+
+

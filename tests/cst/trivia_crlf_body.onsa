@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// The fragment ends in LF; the body ends every line in CR LF, including blank lines,
+// comment lines, continuation lines, lines inside lists, and the last line.
+
+const A: U32 = 1
+
+
+// comment
+/// doc
+fn f(
+  a: I32,
+
+  b: I32,
+) -> I32 {
+  let x = a + // c
+    b
+
+    .abs()
+  x
+}
+let s = "str"
+let t = "unterminated
+use a.{b,
+  c}
+fn g() uses
+  {Alloc} {}
+x // last

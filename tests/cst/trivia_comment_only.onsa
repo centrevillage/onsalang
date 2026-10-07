@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5"]
+
+// A file with no code: only comments of every kind and blank lines, ending with a comment and
+// a newline. (The file is the fragment, this description and the lines below.)
+
+//! module doc
+// plain
+/// doc for nothing
+//// four
+//
+///
+//!
+
+
+// after blank lines

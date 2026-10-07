@@ -175,13 +175,6 @@ note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今�
 
 [[pending]]
 kind = "diag-code"
-target = "E0001"
-reasons = ["S-62", "R-73", "R-01", "S-90"]
-until = "W3-05"
-note = "数値リテラルの E0001（一覧に無い接尾辞、0x_。S-62）。字句の E0001（使えない文字、補間の穴。R-01、S-90）は W3-04 が並行で直す"
-
-[[pending]]
-kind = "diag-code"
 target = "E0003"
 reasons = ["S-47", "R-62"]
 until = "W3-06"
@@ -1109,13 +1102,6 @@ target = "fmt-comments"
 reasons = ["R-70"]
 until = "W3-11"
 note = "fmt がコメントを同じ要素の行に残さない（行末から単独の行へ、並びの中から閉じ括弧の後や本体へ）。移動に伴い、ブロックの先頭の空行が残り、無かった空行が入る"
-
-[[pending]]
-kind = "gate"
-target = "fmt-cst"
-reasons = ["R-86"]
-until = "W3-01"
-note = "CST が無い（onsa dump --cst が無い）。CST の往復（ソースと 1 バイトも違わない）は W3-01 で通す。W3-01 で dump --cst を作るか、この項目の引数を改める"
 
 [[pending]]
 kind = "test-case"

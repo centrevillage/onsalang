@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// The whole file, the fragment included, uses CR LF (§2.5: one newline).
+// Every line, blank lines and comment lines too, ends in CR LF.
+
+const A: U32 = 1
+
+// comment
+/// doc
+fn f(
+  a: I32,
+  b: I32,
+) -> I32 {
+  let x = a +
+    b
+  x
+}
+
+
+let s = "str"
+let t = "unterminated
+x // end comment

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4"]
+
+// Character literals: the escape list, a quote character, multi-character and empty forms,
+// an unterminated one, and `'` next to lifetimes-like names and ranges.
+
+let a = 'a'
+let b = '\n' '\t' '\r' '\0' '\\' '\'' '\"'
+let c = '\u{41}' '\u{1F600}' '\u{10FFFF}'
+let d = '"' '{' '}' '/' '`'
+let e = '日' '😀' 'é'
+let f = 'a'..'z' 'a'..='z'
+let g = 'ab' 'abc' '' ''' '''' '\q' '\u{}' '\u{110000}' '\u41'
+let h = 'a
+let i = '
+let j = '\
+let k = '\'
+let l = '\u{41
+let m = 'a'b'c'
+let n = x'a' 'a'x 'a''b'
+let o = 'static 'a 'ab fn 'a 'a: 
+let p = 'é́'
+let q = ' '
+let r = '	'

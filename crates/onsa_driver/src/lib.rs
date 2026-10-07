@@ -324,6 +324,19 @@ pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, Inter
     })
 }
 
+/// The CST of a file (`onsa dump --cst`, R-86): the text of its leaves
+/// (the source, byte for byte) or, with `tree`, the tree as indented lines.
+/// A file with syntax diagnostics has a CST too; they are not reported here.
+/// The tree is checked (`Cst::validate`) by the parse itself: a broken tree is
+/// an internal error.
+pub fn cst_dump(sources: &SourceMap, file: FileId, tree: bool) -> Result<String, InternalError> {
+    guard(|| {
+        let text = sources.file(file).text();
+        let parsed = parse_file(file, text);
+        if tree { parsed.cst.tree(text) } else { parsed.cst.text(text) }
+    })
+}
+
 /// The structural difference of two files (`onsa diff --ast`).
 #[derive(Debug, Clone)]
 pub enum AstDiff {

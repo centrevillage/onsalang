@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§18.2"]
+
+// Declarations cut off in the middle, one per line, each followed by the next: after the keyword,
+// after the name, in the parameter list, before `->`, before the body.
+
+fn
+fn f
+fn f(
+fn f(x
+fn f(x:
+fn f(x: I32
+fn f(x: I32,
+fn f(x: I32)
+fn f(x: I32) ->
+fn f(x: I32) -> I32
+fn f(x: I32) -> I32 uses
+fn f(x: I32) -> I32 uses {
+fn f(x: I32) -> I32 uses {Alloc
+fn f(x: I32) -> I32 uses {Alloc}
+struct
+struct S
+struct S {
+struct S { x
+struct S { x:
+struct S { x: I32
+enum E {
+enum E { A(
+enum E { A(I32
+impl
+impl S
+impl S {
+impl T for
+trait T
+flow f(
+flow f(x:
+flow f(x: Sig[F32]
+flow f(x: Sig[F32]) ->
+use a.{
+use a.{b,
+use a.{b as
+let
+let x
+let x:
+let x =
+let (a,
+let Point {
+if
+if x
+if x {
+if x { } else
+match x
+match x {
+match x { A
+match x { A =>
+for
+for i
+for i in
+while
+par
+par {
+handle
+handle {
+handle { } with
+test
+test "x"
+effect E {
+extern "C"
+extern "C" lib
+@
+@repr
+@repr(
+const
+const A
+const A:
+const A: U32
+const A: U32 =
+type
+type T =
+pub
+pub priv
+assert
+return
+x as
+x at
+x +
+x ==
+f(
+xs[
+Point {

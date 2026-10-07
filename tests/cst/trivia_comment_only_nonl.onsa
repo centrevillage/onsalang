@@ -1,0 +1,8 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5"]
+
+// A file with no code that ends in a comment with no newline: the fragment, this line and the next.
+
+// the last line, no newline at the end of the file

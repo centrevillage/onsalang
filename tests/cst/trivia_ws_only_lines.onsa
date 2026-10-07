@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Lines made only of spaces, only of tabs, or of mixed spaces and tabs: between items,
+// inside blocks and lists, and as the very last line without a newline.
+
+const A: U32 = 1
+ 
+  
+	
+		
+ 	 
+	 	
+                                        
+const B: U32 = 2
+fn f(
+    
+  a: I32,
+	
+) {
+  
+  a
+	 	
+}
+ 
+  	

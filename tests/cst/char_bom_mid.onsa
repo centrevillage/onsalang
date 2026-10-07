@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// A BOM (U+FEFF) after the first byte: in code, glued to identifiers and keywords, at the start
+// of a line, in a comment, in a string, after CR LF and doubled. The leading BOM is in first_bom_*.
+
+﻿let a = 1
+let b﻿= 2
+let c = 3﻿
+fn﻿f() {}
+﻿
+﻿﻿﻿
+// comment ﻿ with a BOM
+//﻿
+"string ﻿ with a BOM"
+'﻿'
+// ﻿
+let d = 4
+﻿let e = 5
+﻿// last line starts with a BOM, then ends the file﻿

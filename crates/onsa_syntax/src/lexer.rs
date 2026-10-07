@@ -13,7 +13,7 @@ pub struct Lexed {
 }
 
 pub fn lex(file: FileId, text: &str) -> Lexed {
-    let mut lx = Lexer { file, text, bytes: text.as_bytes(), pos: 0, out: Lexed::default(), space_before: false };
+    let mut lx = Lexer { file, text, bytes: text.as_bytes(), pos: 0, out: Lexed::default() };
     lx.run();
     lx.out
 }
@@ -24,7 +24,6 @@ struct Lexer<'a> {
     bytes: &'a [u8],
     pos: usize,
     out: Lexed,
-    space_before: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -42,8 +41,7 @@ impl<'a> Lexer<'a> {
 
     fn push(&mut self, kind: TokenKind, start: usize) {
         let span = self.span(start);
-        self.out.tokens.push(Token { kind, span, space_before: self.space_before });
-        self.space_before = false;
+        self.out.tokens.push(Token { kind, span });
     }
 
     fn error(&mut self, code: Code, span: Span, message: impl Into<String>) -> usize {
@@ -58,11 +56,12 @@ impl<'a> Lexer<'a> {
                 b'\n' => {
                     self.pos += 1;
                     self.push(TokenKind::Newline, start);
-                    self.space_before = true;
                 }
                 b' ' | b'\t' | b'\r' => {
-                    self.pos += 1;
-                    self.space_before = true;
+                    while matches!(self.peek(), Some(b' ' | b'\t' | b'\r')) {
+                        self.pos += 1;
+                    }
+                    self.push(TokenKind::Whitespace, start);
                 }
                 b'/' if self.peek_at(1) == Some(b'/') => self.comment(start),
                 b'/' if self.peek_at(1) == Some(b'*') => self.block_comment(start),
@@ -439,9 +438,14 @@ mod tests {
     use super::*;
     use TokenKind::*;
 
+    /// The kinds of the tokens without the whitespace tokens (R-86 added them;
+    /// the tests below compare the other tokens).
     fn kinds(src: &str) -> (Vec<TokenKind>, Vec<Code>) {
         let l = lex(FileId(0), src);
-        (l.tokens.iter().map(|t| t.kind).collect(), l.diagnostics.iter().map(|d| d.code).collect())
+        (
+            l.tokens.iter().map(|t| t.kind).filter(|&k| k != Whitespace).collect(),
+            l.diagnostics.iter().map(|d| d.code).collect(),
+        )
     }
 
     #[test]
@@ -489,7 +493,10 @@ mod tests {
     #[test]
     fn space_before_flags() {
         let l = lex(FileId(0), "saw~(f0) saw ~(f0)");
-        let flags: Vec<bool> = l.tokens.iter().map(|t| t.space_before).collect();
+        let flags: Vec<bool> = (0..l.tokens.len())
+            .filter(|&i| l.tokens[i].kind != Whitespace)
+            .map(|i| crate::token::gap_before(&l.tokens, i).is_some())
+            .collect();
         assert_eq!(flags, vec![false, false, false, false, false, true, true, false, false, false, false]);
     }
 

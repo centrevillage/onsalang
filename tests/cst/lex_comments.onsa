@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§2.5"]
+
+// Comment forms: `//`, `///`, `////`, `//!`, near misses (`///!`, `//!!`), comments with
+// strings, braces, `/*`, backslashes and multi-byte text, and comments glued to tokens.
+
+//
+// plain
+///
+/// doc
+////
+//// four
+//////////// divider
+//!
+//! inner doc
+//!!
+///!
+//!/
+//// onsa.toml
+// onsa.toml
+//onsa.toml
+//  	  spaces and tab after the slashes
+// /* block comments do not exist */
+/* not a comment */
+/* a
+b */
+// "a string in a comment
+// { [ ( unclosed in a comment
+// ) ] } closers in a comment
+// ' a quote and " another
+// a backslash at the end of the line \
+// \u{41} \n \\ escapes in a comment
+// 日本語のコメント émoji 😀 שלום
+// //! // /// ////
+a//b
+a///b
+a////b
+a //b
+a // b // c // d
+a /// b
+1//2
+1.5//2
+x=//c
+  1
+x = // c
+  1
+"s"//c
+'c'//c
+a/ /b
+a / b
+a /b/ c
+/ / / /
+// last line comment with trailing spaces   
+//  
+//    

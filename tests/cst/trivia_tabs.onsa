@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Tabs: as indentation, mixed with spaces, between tokens, before a comment, inside a
+// comment and inside a string, and a line of only tabs between items.
+
+fn	f	(	a	:	I32	)	->	I32	{
+	let	x	=	a	+	1	// tab	comment	with	tabs
+		let y = x		// two tabs before a comment
+  	let z = y
+	  let w = z
+	 	 let s = "a	b"
+	x	.	abs()
+	x.abs	()
+	if	x	>	0	{
+		1
+	}	else	{
+		2
+	}
+}
+								const DEEP: U32 = 1
+	
+///	doc	with	tabs
+const	A	:	U32	=	1

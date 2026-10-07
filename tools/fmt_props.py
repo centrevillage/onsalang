@@ -75,9 +75,9 @@ The properties (`--property`):
               spelling of numbers). And the normal form with the comments:
               `fmt(p) == fmt(x)` for space and blank; `fmt(p)` without the
               markers, formatted again, equals `fmt(x)` for comment and mixed.
-    cst       (`fmt-cst`, pending until W3-01, R-86) for `x` and every `p`:
-              `onsa dump --cst <file>` prints the file byte for byte (the CST
-              round trip; W3-01 provides the command or changes this item).
+    cst       (`fmt-cst`, R-86, W3-01) for `x` and every `p`, with or without
+              syntax errors: `onsa dump --cst <file>` prints the file byte for
+              byte (the CST round trip: the text of the leaves of the tree).
 
 The perturbations come from a generator seeded with the version, the path,
 the source, the kind and the index (`fuzz.seeded_random`): the same tree

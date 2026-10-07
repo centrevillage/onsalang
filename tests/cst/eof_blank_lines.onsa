@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§18.2"]
+
+// The file ends inside or right after the construct below (with no newline unless one is shown).
+
+const A: U32 = 1
+
+
+

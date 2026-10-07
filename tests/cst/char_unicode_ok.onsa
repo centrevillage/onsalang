@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.3", "§2.4"]
+
+// Unusual characters that §2.5 allows in comments and strings: right-to-left text without
+// controls, combining marks, astral characters, noncharacters, private use, variation selectors.
+
+// שלום مرحبا right-to-left text
+// é ́́́ combining marks
+// 😀 👨‍👩‍👧 🇯🇵 astral and ZWJ sequences
+// ￾ ￿ ﷐ 🿾 􏿿 noncharacters
+//  󰀀 private use
+// ️ ︎ variation selectors ❤️
+//   NBSP inside a comment is allowed
+let a = "שלום"
+let b = "😀👨‍👩"
+let c = "￾￿﷐􏿿"
+let c2 = "  NBSP inside a string is allowed"
+let d = "󰀀"
+let e = "é́"
+let f = "️"
+// あいうえお アイウエオ 漢字 ＡＢＣ
+///  日本語のドキュメント
+//! モジュール
+let g = "{x}日本{y}語"

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.3", "§2.4"]
+
+// Interpolations next to multi-byte characters that do not start with one: a multi-byte
+// character before or after the braces, around `{{`.
+
+let e = "{ }"
+let f = "{{é}}"
+let g = "é{x}é"
+let i = "é{"
+let m = "{a}日本{b}語{c}"
+let q = "日本{"
+let r = "日本{{日本}}日本"
+let w = "{x}é"
+let x = "é{{x}}é{y}é"

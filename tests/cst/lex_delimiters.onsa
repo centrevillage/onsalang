@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6"]
+
+// Brackets and separators alone, nested, mismatched and unbalanced, empty and with stray
+// commas, `.{ }` lists, effect rows and attribute argument lists.
+
+() [] {} ()() [][] {}{} ([{}]) ( ) [ ] { }
+)]} ([)] {(}) ]}) }{ )( ][ ){ ]( }[
+((((((()))))))) [[[[[[[]]]]]]] {{{{{{{}}}}}}} ({[({[({[]})]})]})
+(((( [[[[ {{{{ ))))))) ]]]] }}}}
+use a.{x, y}
+use a.{x, y,}
+use a.{}
+use a.{,}
+use a.b.{c as d, e}
+fn f() uses {Alloc, Fs} {}
+fn f() uses {} {}
+fn f() uses {,} {}
+fn g[T: Ord, U](x: T, y: U) -> (T, U) uses {e} { (x, y) }
+f(,) f(a,) f(,a) f(a,,b) (,) (a,) [,] [a,] {,} (a,b,) [a,b,]
+a,b;c ; ;; ; ;
+: :: : : :
+x.(1) x.(,) x.() s.f.(x) (f).(x)
+@repr(c) @param(min: 0.0, max: 1.0, default: 0.5, unit: "Hz") @mem(bulk) @a() @a(,) @(
+Point { x: 1.0, y: 2.0 } Point {} Point { x: 1.0, } Point { , }
+match x { A => 1, B(y) => y, _ => 0, }
+[e; N] [e;N] [e ; N] [;] [e;] [;N]
+()
+(
+)

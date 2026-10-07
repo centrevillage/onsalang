@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Moderately deep nesting (24 levels, far below the limit of 256), balanced, unbalanced both ways,
+// and mixed with strings and interpolation.
+
+let a = ((((((((((((((((((((((((1))))))))))))))))))))))))
+let b = ((((((((((((((((((((((((1)))))))))))))))))))))))
+let c = (((((((((((((((((((((((1))))))))))))))))))))))))
+let d = [[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]
+let e = [f([f([f([f([f([f([f([f([f([f([f([f(1)])])])])])])])])])])])]
+let f = -!-x
+let g = {{{{{{{{{{{{{{{{{{{{{{{{1}}}}}}}}}}}}}}}}}}}}}}}}
+let h = f("{f("{f("{f("{f("{f("{x}")}")}")}")}")}")
+let i = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + b
+let j = if a { if a { if a { if a { if a { if a { if a { if a { if a { if a { if a { if a { 1 } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 } } else { 2 }
+let k = x.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y
+let l = x(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)(1)
+let m = x[0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0]
+let n = a && a && a && a && a && a && a && a && a && a && a && a && b

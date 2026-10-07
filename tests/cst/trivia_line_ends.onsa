@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Lines that end in each kind of token (binary operator, `=`, `->`, `=>`, `,`, an opening
+// bracket, `.`, `uses`, an attribute, `else`, a literal) and lines that start with `.`, `uses`,
+// a binary operator or a closing bracket, with blank and comment-only lines between.
+
+let a = 1 +
+  2
+let b = 1 +
+
+  // comment
+
+  2
+let c =
+  3
+fn f(x: I32) ->
+  I32 {
+  match x {
+    A =>
+      1,
+    B => 2,
+  }
+}
+let d = foo
+  .bar()
+  .baz()
+let e = foo
+
+  // c
+
+  .bar()
+fn g()
+  uses {Alloc} {}
+fn h()
+  // c
+  uses {Alloc}
+  {}
+@repr(c)
+struct S {}
+@repr(c)
+
+struct T {}
+let f = a
+  + b
+let g = a
+  * b
+let h = a ==
+  b
+let i = a &&
+  b
+let j = a -
+  b
+let k = a
+  - b
+let l = f(
+  1,
+  2
+)
+let m = [
+  1,
+  2
+]
+let n = f(1)
+  (2)
+let o = xs
+  [0]
+let p = x
+  ?
+if a &&
+  b {
+}
+if a
+{
+}
+if a {
+}
+else {
+}
+let q = "s"
+  .len()
+let r = 1
+  .max(2)
+let s = a ->
+  b

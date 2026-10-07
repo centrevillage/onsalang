@@ -1,0 +1,2 @@
+﻿//! module doc   //~ E0001
+const LIMIT: U32 = 16

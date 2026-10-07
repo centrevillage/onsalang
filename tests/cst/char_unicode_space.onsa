@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5"]
+
+// Unicode spaces and invisible characters outside §2.5's closed list (NBSP, U+2000-200A, U+202F,
+// U+205F, U+3000, ZWSP, ZWNJ, ZWJ, WJ, soft hyphen), three lines each: code, comment, string.
+
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a b = 1   + 2
+// before   after
+let s = "before   after"
+let a　b = 1 　 + 2
+// before 　 after
+let s = "before 　 after"
+let a​b = 1 ​ + 2
+// before ​ after
+let s = "before ​ after"
+let a‌b = 1 ‌ + 2
+// before ‌ after
+let s = "before ‌ after"
+let a‍b = 1 ‍ + 2
+// before ‍ after
+let s = "before ‍ after"
+let a⁠b = 1 ⁠ + 2
+// before ⁠ after
+let s = "before ⁠ after"
+let a­b = 1 ­ + 2
+// before ­ after
+let s = "before ­ after"
+let a᠎b = 1 ᠎ + 2
+// before ᠎ after
+let s = "before ᠎ after"
+ let a = 1
+let b = 2 
+fn f() {}
+let c = 3
+let d = 4  
+ 
+let e = 5 
+   
+//  
+" "
+' '

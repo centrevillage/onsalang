@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6"]
+
+// Violations of the spacing and line rules of §2.5-2.6: an operator that starts a line, a gap
+// before `(` `[` `.` `?` `~` `!` `^`, `else` and `{` on a new line, `;`, a tuple with a trailing comma.
+
+let a = x
+  + y
+let b = x
+  && y
+let c = f (x)
+let d = xs [0]
+let e = a . b
+let f = x ?
+let g = saw ~(f0)
+let h = buf.push ! (x)
+let i = ^ y
+let j = - x
+let k = a
+  - b
+if x {
+}
+else {
+}
+fn f()
+{
+}
+handle { }
+with h
+let l = (1,)
+let m: (I32,) = (1,)
+let n = (
+  f
+  (x)
+)
+let o = 1;
+let p = x + ~ _
+let q = 1 + (
+  2
+) ;
+xs
+  .map(f)
+  . filter(g)
+clock when reset_if
+let clock = 1
+fn when() {}
+struct reset_if {}
