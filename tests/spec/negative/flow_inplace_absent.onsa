@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+
+// `process_inplace` exists only for a flow whose `sample` inputs and outputs agree "in number and
+// types, in order" (S-197, §11.6), the output struct being expanded into its fields. For any other
+// flow the name is not in the namespace, so using it is an unresolved name, E0302 (§15.1: "名前が
+// 見つからなければ E0302"; the names of a flow's namespace are a closed list, §11.6). One error per
+// function (P-01); the marker is on the line of the call. The flows that do have it
+// (flow_semantics/inplace_struct_output.onsa) are used here as controls.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Mixed {
+  l: F32,
+  r: F64,
+}
+
+pub struct Swapped {
+  x: F64,
+  y: F32,
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+  c: F32,
+}
+
+// Matches: (F32, F32) in, the fields (F32, F32) out.
+pub flow same(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+// Two inputs, three fields: the numbers differ.
+pub flow more_fields(l: F32 at sample, r: F32 at sample) -> Wide at sample {
+  Wide { a: l, b: r, c: l + r }
+}
+
+// Three inputs, two fields.
+pub flow more_inputs(a: F32 at sample, b: F32 at sample, c: F32 at sample) -> Stereo at sample {
+  Stereo { l: a + c, r: b }
+}
+
+// The numbers agree, the second type differs (F32 against F64).
+pub flow second_type(l: F32 at sample, r: F32 at sample) -> Mixed at sample {
+  Mixed { l: l, r: r as F64 }
+}
+
+// The types agree as a set but not in order.
+pub flow other_order(a: F32 at sample, b: F64 at sample) -> Swapped at sample {
+  Swapped { x: b, y: a }
+}
+
+// One input, a two-channel output: the array is one output of another type.
+pub flow widen(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x]
+}
+
+pub fn control_same(inout st: same.State, inout a: Span[F32], inout b: Span[F32]) {
+  same.process_inplace(inout st, same.Params {}, inout same.Out { l: a, r: b })
+}
+
+pub fn absent_more_fields(inout st: more_fields.State, inout x: Span[F32], inout y: Span[F32], inout z: Span[F32]) {
+  more_fields.process_inplace(inout st, more_fields.Params {}, inout more_fields.Out { a: x, b: y, c: z })   //~ E0302
+}
+
+pub fn absent_more_inputs(inout st: more_inputs.State, inout x: Span[F32], inout y: Span[F32]) {
+  more_inputs.process_inplace(inout st, more_inputs.Params {}, inout more_inputs.Out { l: x, r: y })   //~ E0302
+}
+
+pub fn absent_second_type(inout st: second_type.State, inout x: Span[F32], inout y: Span[F64]) {
+  second_type.process_inplace(inout st, second_type.Params {}, inout second_type.Out { l: x, r: y })   //~ E0302
+}
+
+pub fn absent_other_order(inout st: other_order.State, inout x: Span[F64], inout y: Span[F32]) {
+  other_order.process_inplace(inout st, other_order.Params {}, inout other_order.Out { x: x, y: y })   //~ E0302
+}
+
+pub fn absent_widen(inout st: widen.State, inout xs: [Span[F32]; 2]) {
+  widen.process_inplace(inout st, widen.Params {}, inout xs)   //~ E0302
+}

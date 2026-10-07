@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3", "§5.2"]
+
+// `process_inplace` of a flow whose output is a struct (S-197, §11.6): "`process_inplace` は、
+// `sample` の入力と出力を位置で対にし、`inout output` 一つ（出力と同じ形）にまとめたもの。入力と出力の
+// 数と型を比べるとき、struct の出力はフィールドを順に展開して数える（`swap(l: F32 at sample, r: F32 at
+// sample) -> Stereo at sample` にも生成する）". The pairing is by position, not by name: input 0 is
+// paired with the first field of the struct, input 1 with the second. The one `inout output` has
+// the shape of the output, here `<flow>.Out` (§11.6). A flow whose count or types do not match
+// (after the struct is expanded into its fields) has no `process_inplace`: that is in
+// negative/flow_inplace_absent.onsa. Each sample reads all the inputs before it writes any output
+// (§11.6), so the in-place pass is the same as `process` with separate buffers.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Mono {
+  v: F32,
+}
+
+// Exchanges the channels: output field l is input 1, output field r is input 0.
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+// The input names (a, b) differ from the field names (l, r): pairing is by position.
+pub flow rename(a: F32 at sample, b: F32 at sample) -> Stereo at sample {
+  Stereo { l: a + 1.0, r: b + 2.0 }
+}
+
+// State in a struct output: the left channel is one sample late.
+pub flow delay_left(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: prev~(l), r: r }
+}
+
+// One input, a struct with one field: still an `Out`.
+pub flow gain_one(x: F32 at sample) -> Mono at sample {
+  Mono { v: x * 2.0 }
+}
+
+// A block input beside the sample inputs does not change the pairing.
+pub flow scaled(l: F32 at sample, r: F32 at sample, k: F32 at block) -> Stereo at sample {
+  Stereo { l: l * k, r: r * k }
+}
+
+test "the channels are exchanged in place, each sample reading both inputs first" {
+  var a: [F32; 3] = [1.0, 2.0, 3.0]
+  var b: [F32; 3] = [10.0, 20.0, 30.0]
+  var st = swap.init(swap.Config {}, 8.0)
+  swap.process_inplace(inout st, swap.Params {}, inout swap.Out { l: a, r: b })
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert a[2] == 30.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+  assert b[2] == 3.0
+}
+
+test "process_inplace gives what process gives with separate buffers" {
+  let l: [F32; 3] = [1.0, 2.0, 3.0]
+  let r: [F32; 3] = [10.0, 20.0, 30.0]
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  var st1 = swap.init(swap.Config {}, 8.0)
+  swap.process(inout st1, swap.Params {}, swap.In { l: l, r: r }, inout swap.Out { l: x, r: y })
+  var a: [F32; 3] = [1.0, 2.0, 3.0]
+  var b: [F32; 3] = [10.0, 20.0, 30.0]
+  var st2 = swap.init(swap.Config {}, 8.0)
+  swap.process_inplace(inout st2, swap.Params {}, inout swap.Out { l: a, r: b })
+  assert a[0] == x[0]
+  assert a[2] == x[2]
+  assert b[0] == y[0]
+  assert b[2] == y[2]
+}
+
+test "input 0 is paired with the first field and input 1 with the second, whatever the names" {
+  // p holds input a and receives field l (a + 1); q holds input b and receives field r (b + 2).
+  var p: [F32; 2] = [5.0, 6.0]
+  var q: [F32; 2] = [50.0, 60.0]
+  var st = rename.init(rename.Config {}, 8.0)
+  rename.process_inplace(inout st, rename.Params {}, inout rename.Out { l: p, r: q })
+  assert p[0] == 6.0
+  assert p[1] == 7.0
+  assert q[0] == 52.0
+  assert q[1] == 62.0
+}
+
+test "the state of a struct-output flow is carried across process_inplace calls" {
+  var a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var b: [F32; 4] = [10.0, 20.0, 30.0, 40.0]
+  var st = delay_left.init(delay_left.Config {}, 8.0)
+  delay_left.process_inplace(inout st, delay_left.Params {}, inout delay_left.Out { l: a.slice(0, 2), r: b.slice(0, 2) })
+  delay_left.process_inplace(inout st, delay_left.Params {}, inout delay_left.Out { l: a.slice(2, 4), r: b.slice(2, 4) })
+  // the left channel is the input one sample late: 0 1 2 3. The right channel is unchanged.
+  assert a[0] == 0.0
+  assert a[1] == 1.0
+  assert a[2] == 2.0
+  assert a[3] == 3.0
+  assert b[0] == 10.0
+  assert b[3] == 40.0
+}
+
+test "reset returns the delayed channel to its initial value" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [0.0; 2]
+  var st = delay_left.init(delay_left.Config {}, 8.0)
+  delay_left.process_inplace(inout st, delay_left.Params {}, inout delay_left.Out { l: a, r: b })
+  delay_left.reset(inout st)
+  var c: [F32; 2] = [7.0, 8.0]
+  var d: [F32; 2] = [0.0; 2]
+  delay_left.process_inplace(inout st, delay_left.Params {}, inout delay_left.Out { l: c, r: d })
+  assert c[0] == 0.0
+  assert c[1] == 7.0
+}
+
+test "a struct with one field is paired with the one input" {
+  var buf: [F32; 3] = [1.0, 2.0, 3.0]
+  var st = gain_one.init(gain_one.Config {}, 8.0)
+  gain_one.process_inplace(inout st, gain_one.Params {}, inout gain_one.Out { v: buf })
+  assert buf[0] == 2.0
+  assert buf[1] == 4.0
+  assert buf[2] == 6.0
+}
+
+test "a block input does not take part in the pairing" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [3.0, 4.0]
+  var st = scaled.init(scaled.Config {}, 8.0)
+  scaled.process_inplace(inout st, scaled.Params { k: 0.5 }, inout scaled.Out { l: a, r: b })
+  assert a[0] == 0.5
+  assert a[1] == 1.0
+  assert b[0] == 1.5
+  assert b[1] == 2.0
+}
+
+test "the in-place buffers of a struct output must have equal lengths" {   //~ TESTFAIL "the in-place buffers of a struct output must have equal lengths"
+  var a: [F32; 3] = [1.0, 2.0, 3.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = swap.init(swap.Config {}, 8.0)
+  swap.process_inplace(inout st, swap.Params {}, inout swap.Out { l: a, r: b })
+  assert a[0] == 10.0
+}

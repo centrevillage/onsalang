@@ -1,0 +1,30 @@
+// Functions over a planar buffer (an array of `Span`s), used from another module of the package
+// (spec §15.1). The elements `xs[k]` are receivers and index bases inside these functions (S-181,
+// §5.3).
+
+pub const CHANNELS: U32 = 2
+
+// The length of channel `k`.
+pub fn len_of(xs: [Span[F32]; 2], k: U32) -> U32 {
+  xs[k].len()
+}
+
+// The value at index `i` of channel `k`.
+pub fn at(xs: [Span[F32]; 2], k: U32, i: U32) -> F32 {
+  xs[k][i]
+}
+
+pub fn fill_channel(inout xs: [Span[F32]; 2], k: U32, v: F32) {
+  xs[k].fill!(v)
+}
+
+pub fn set(inout xs: [Span[F32]; 2], k: U32, i: U32, v: F32) {
+  xs[k][i] = v
+}
+
+// Writes the channel number into every element of the channel.
+pub fn number_channels(inout xs: [Span[F32]; 2]) {
+  for k in 0..CHANNELS {
+    xs[k].fill!(k.round_f32())
+  }
+}

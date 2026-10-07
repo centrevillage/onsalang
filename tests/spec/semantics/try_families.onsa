@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§7", "§4.5"]
+
+// `?` keeps `Result` and `Option` apart (S-175, spec §9.1): a function that returns
+// `Result[_, E]` uses `?` on a `Result` with the same `E`, a function that returns `Option[_]`
+// uses it on an `Option`, and one family is turned into the other by hand with `match`
+// (there is no implicit conversion). The rejected mixes are in negative/try_mixed.onsa.
+
+pub enum Missing {
+  Key,
+  Limit(U32),
+}
+
+fn find(k: U32) -> Option[U32] {
+  if k < 4 {
+    Some(k * 10)
+  } else {
+    None
+  }
+}
+
+fn checked(k: U32) -> Result[U32, Missing] {
+  if k < 100 {
+    Ok(k)
+  } else {
+    Err(Missing.Limit(k))
+  }
+}
+
+// Option to Result by hand, then `?` on the Result.
+fn lookup(k: U32) -> Result[U32, Missing] {
+  let r = match find(k) {
+    Some(v) => Ok(v),
+    None => Err(Missing.Key),
+  }
+  let v = r?
+  let c = checked(v + 5)?
+  Ok(c)
+}
+
+// Result to Option by hand, then `?` on the Option.
+fn lookup_opt(k: U32) -> Option[U32] {
+  let r = checked(k)
+  let o = match r {
+    Ok(v) => Some(v),
+    Err(_) => None,
+  }
+  let v = o?
+  let w = find(v)?
+  Some(w + 1)
+}
+
+// Several `?` of one family in one function, the first failure leaves.
+fn two_lookups(a: U32, b: U32) -> Option[U32] {
+  let x = find(a)?
+  let y = find(b)?
+  Some(x + y)
+}
+
+fn err_code(r: Result[U32, Missing]) -> U32 {
+  match r {
+    Ok(v) => v,
+    Err(Missing.Key) => 1000,
+    Err(Missing.Limit(n)) => 2000 + n,
+  }
+}
+
+fn val(o: Option[U32]) -> U32 {
+  match o {
+    Some(v) => v,
+    None => 9999,
+  }
+}
+
+fn generic_first[T: Copy](a: Option[T], b: Option[T]) -> Option[T] {
+  let x = a?
+  let _ = b?
+  Some(x)
+}
+
+test "an Option turned into a Result by hand: the value passes through ? and checked" {
+  assert err_code(lookup(2)) == 25
+  assert err_code(lookup(3)) == 35
+}
+
+test "the None becomes Missing.Key and the check can fail with the payload" {
+  assert err_code(lookup(7)) == 1000
+}
+
+test "a Result turned into an Option by hand" {
+  assert val(lookup_opt(1)) == 11
+  assert val(lookup_opt(2)) == 21
+  assert val(lookup_opt(50)) == 9999
+  assert val(lookup_opt(200)) == 9999
+}
+
+test "the first failing Option leaves the function" {
+  assert val(two_lookups(1, 2)) == 30
+  assert val(two_lookups(9, 1)) == 9999
+  assert val(two_lookups(1, 9)) == 9999
+}
+
+test "a generic function uses ? on its Option parameters" {
+  let none: Option[U32] = None
+  assert val(generic_first(Some(3), Some(4))) == 3
+  assert val(generic_first(Some(3), none)) == 9999
+  assert val(generic_first(none, Some(4))) == 9999
+}

@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§4.4", "§6.1"]
+
+// E0806: a variant used as a function value in a flow body (S-195, §11.2): the list of the
+// expressions of a flow body has "列挙子の構築（`Some(x)`、`None`、`Mode.Gain(g)`。列挙子を関数値として使う
+// 形は、関数値なので書けない）", and function values are not in the list ("関数値、クロージャ … は書け
+// ない（E0806）"). A tuple-form variant is a function value when it is written without its call
+// (§4.4: `Circle` is `fn(F32) -> Shape`); a unit variant is a value and `Mode.Off` is fine. One error
+// per flow (P-01); the marker is on the line of the variant.
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+  Pair(F32, F32),
+}
+
+pub struct Config {
+  mode: Mode,
+}
+
+pub struct Maker {
+  make: fn(F32) -> Mode,
+}
+
+pub rt fn apply(f: fn(F32) -> Mode, x: F32) -> Mode {
+  Mode.Gain(x)
+}
+
+pub rt fn amount(m: Mode, x: F32) -> F32 {
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => x * k,
+    Mode.Pair(a, b) => (a * x) + b,
+  }
+}
+
+pub flow let_binds_a_variant(x: F32 at sample) -> F32 at sample {
+  let _ = Mode.Gain               //~ E0806
+  amount(Mode.Off, x)
+}
+
+pub flow some_as_a_value(x: F32 at sample) -> F32 at sample {
+  let _ = Some                  //~ E0806
+  x
+}
+
+pub flow variant_as_an_argument(x: F32 at sample) -> F32 at sample {
+  let m = apply(Mode.Gain, x)      //~ E0806
+  amount(m, x)
+}
+
+pub flow variant_with_two_payloads_as_a_value(x: F32 at sample) -> F32 at sample {
+  let _ = Mode.Pair               //~ E0806
+  x
+}
+
+pub flow variant_yielded_by_a_branch(x: F32 at sample) -> F32 at sample {
+  let _ = if x > 0.0 { Mode.Gain } else { Mode.Gain }   //~ E0806
+  x
+}
+
+pub flow variant_in_a_struct_field(x: F32 at sample) -> F32 at sample {
+  let _ = Maker { make: Mode.Gain }   //~ E0806
+  x
+}
+
+// The calls and the unit variant are fine, and so are a variant inside a struct and in a `match`.
+pub flow constructs_by_calls(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let a = Mode.Gain(g)
+  let b = Mode.Pair(x, g)
+  let c = Mode.Off
+  let o = Some(c)
+  let cfg = Config { mode: a }
+  let n = match o {
+    Some(_) => 1.0,
+    None => 0.0,
+  }
+  amount(cfg.mode, x) + amount(b, x) + n
+}

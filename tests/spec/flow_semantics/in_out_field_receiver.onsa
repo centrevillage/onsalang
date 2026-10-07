@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§11.6"]
+
+// The fields of the generated `In` / `Out` hold `Span`s (§11.6), so the rule of `xs[k]` applies to
+// them too (S-181, §5.3): "フィールドを受け手や添字の左辺に使うのも同じ". `inp.l.len()`, `inp.l[i]`,
+// `out.l[i] = v` and `out.l.fill!(v)` are fine in a function that takes the `In` or the `Out`, and a
+// field can be passed on as an argument. A field of an `[Span[T]; N]` kind (an array input) is
+// the same with one more index: `inp.x[k].len()`. The rejected uses are in
+// negative/modes_flow_span_fields.onsa and negative/modes_span_element.onsa.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+// A named input of two channels beside a mono one: the field `x` is an `[Span[F32]; 2]`.
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+fn sum_span(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0..s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+// Receivers and index bases on the fields of `In` and `Out`.
+fn lens(inp: pair.In, out: pair.Out) -> U32 {
+  (inp.l.len() * 1000) + (inp.r.len() * 100) + (out.l.len() * 10) + out.r.len()
+}
+
+fn first_l(inp: pair.In) -> F32 {
+  match inp.l.get(0) {
+    Some(v) => v,
+    None => -1.0,
+  }
+}
+
+fn read_r(inp: pair.In, i: U32) -> F32 {
+  inp.r[i]
+}
+
+fn sum_both(inp: pair.In) -> F32 {
+  sum_span(inp.l) + sum_span(inp.r)
+}
+
+fn copy_swapped(inp: pair.In, inout out: pair.Out) {
+  for i in 0..inp.l.len() {
+    out.l[i] = inp.r[i]
+    out.r[i] = inp.l[i]
+  }
+}
+
+fn clear_out(inout out: pair.Out) {
+  out.l.fill!(0.0)
+  out.r.fill!(0.0)
+}
+
+fn fill_left_with(inout out: pair.Out, v: F32) {
+  out.l.fill!(v)
+}
+
+fn wide_lens(inp: spread.In) -> U32 {
+  (inp.x[0].len() * 100) + (inp.x[1].len() * 10) + inp.m.len()
+}
+
+fn wide_read(inp: spread.In, k: U32, i: U32) -> F32 {
+  inp.x[k][i]
+}
+
+test "the length of the fields of In and Out" {
+  let l: [F32; 3] = [1.0, 2.0, 3.0]
+  let r: [F32; 3] = [4.0, 5.0, 6.0]
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  assert lens(pair.In { l: l, r: r }, pair.Out { l: x, r: y }) == 3333
+}
+
+test "get and an index on an In field" {
+  let l: [F32; 2] = [1.5, 2.5]
+  let r: [F32; 2] = [7.0, 8.0]
+  assert first_l(pair.In { l: l, r: r }) == 1.5
+  assert read_r(pair.In { l: l, r: r }, 1) == 8.0
+}
+
+test "an In field is passed on as an argument" {
+  let l: [F32; 2] = [1.0, 2.0]
+  let r: [F32; 2] = [10.0, 20.0]
+  assert sum_both(pair.In { l: l, r: r }) == 33.0
+}
+
+test "a field of Out is the left side of an index assignment" {
+  let l: [F32; 2] = [1.0, 2.0]
+  let r: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  copy_swapped(pair.In { l: l, r: r }, inout pair.Out { l: x, r: y })
+  assert x[0] == 10.0
+  assert x[1] == 20.0
+  assert y[0] == 1.0
+  assert y[1] == 2.0
+}
+
+test "a field of Out is the receiver of an inout method" {
+  var x: [F32; 2] = [1.0, 2.0]
+  var y: [F32; 2] = [3.0, 4.0]
+  clear_out(inout pair.Out { l: x, r: y })
+  assert x[0] == 0.0
+  assert x[1] == 0.0
+  assert y[0] == 0.0
+  assert y[1] == 0.0
+  fill_left_with(inout pair.Out { l: x, r: y }, 9.0)
+  assert x[1] == 9.0
+  assert y[1] == 0.0
+}
+
+test "a field that is an array of channels: the receiver and the index base take one more index" {
+  let c0: [F32; 3] = [1.0, 2.0, 3.0]
+  let c1: [F32; 3] = [4.0, 5.0, 6.0]
+  let m: [F32; 3] = [0.0; 3]
+  let ins: [[F32; 3]; 2] = [c0, c1]
+  assert wide_lens(spread.In { x: ins, m: m }) == 333
+  assert wide_read(spread.In { x: ins, m: m }, 1, 2) == 6.0
+  assert wide_read(spread.In { x: ins, m: m }, 0, 0) == 1.0
+}

@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§18.1"]
+
+// E0414 in several members of one `impl` (S-175, S-59). The unit of diagnosis
+// is each member of an `impl` (§18.1), so each member reports its own wrong `?`.
+// `?` in a method follows the same rule as in a function: the method's return
+// type decides (§9.1).
+pub enum ErrA {
+  Bad,
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn mixed(self, o: Option[U32]) -> Result[U32, ErrA] {
+    let n = o?                         //~ E0414
+    Ok(n + self.n)
+  }
+
+  pub fn plain(self, o: Option[U32]) -> U32 {
+    o? + self.n                        //~ E0414
+  }
+
+  pub fn not_a_family(self, k: U32) -> Option[U32] {
+    let n = k?                         //~ E0414
+    Some(n + self.n)
+  }
+
+  pub fn fine(self, o: Option[U32]) -> Option[U32] {
+    let n = o?
+    Some(n + self.n)
+  }
+}

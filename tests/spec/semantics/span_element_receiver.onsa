@@ -1,0 +1,213 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.2", "§3.5", "§4.5"]
+
+// A `Span` taken out of an array of `Span`s by `xs[k]` (S-181, §5.3): `xs[k]` is a `Span[T]` that
+// appears only in an argument position, and "メソッドの受け手 `xs[k].len()` と添字の左辺 `xs[k][i]` も
+// 引数の位置に含む。受け手は `self` の引数である". So `xs[k]` can be the receiver of a method (with `!`
+// when it is `inout self`), the base of an index (read, and the left side of an assignment), and an
+// argument (`f(xs[k])`, `f(inout xs[k])`). The generated `In` / `Out` fields are the same
+// (flow_semantics/in_out_field_receiver.onsa). The rejected uses are in negative/modes_span_element.onsa.
+
+// ------------------------------------------------------------ functions over a planar buffer
+
+// The lengths of the two channels as `len0 * 100 + len1`.
+fn lens(xs: [Span[F32]; 2]) -> U32 {
+  (xs[0].len() * 100) + xs[1].len()
+}
+
+// `get` on an element returns `Option`; -1.0 when the index is out of range.
+fn get_or(xs: [Span[F32]; 2], k: U32, i: U32) -> F32 {
+  match xs[k].get(i) {
+    Some(v) => v,
+    None => -1.0,
+  }
+}
+
+fn read_at(xs: [Span[F32]; 2], k: U32, i: U32) -> F32 {
+  xs[k][i]
+}
+
+fn sum_span(s: Span[F32]) -> F32 {
+  var total: F32 = 0.0
+  for i in 0..s.len() {
+    total = total + s[i]
+  }
+  total
+}
+
+// An element as an argument, as the receiver of `slice` (whose result is an argument) and in an end.
+fn sum_of(xs: [Span[F32]; 2], k: U32) -> F32 {
+  sum_span(xs[k])
+}
+
+fn tail_sum(xs: [Span[F32]; 2], k: U32) -> F32 {
+  sum_span(xs[k].slice(1, xs[k].len()))
+}
+
+fn write_at(inout xs: [Span[F32]; 2], k: U32, i: U32, v: F32) {
+  xs[k][i] = v
+}
+
+fn fill_channel(inout xs: [Span[F32]; 2], k: U32, v: F32) {
+  xs[k].fill!(v)
+}
+
+fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+// `inout xs[k]` as an argument.
+fn clear_channel(inout xs: [Span[F32]; 2], k: U32) {
+  clear(inout xs[k])
+}
+
+// A runtime `k` as the loop variable, for the receiver and for the index.
+fn fill_all(inout xs: [Span[F32]; 2], v: F32) {
+  for k in 0..2 {
+    xs[k].fill!(v)
+  }
+}
+
+fn ramp_all(inout xs: [Span[F32]; 2]) {
+  for k in 0..2 {
+    for i in 0..xs[k].len() {
+      xs[k][i] = ((k * 10) + i).round_f32()
+    }
+  }
+}
+
+// Two elements of the same array, one only read: the index of the receiver is a different channel
+// from the argument's, but indices of one array are taken to overlap (§5.2), so the copy goes
+// through a read loop instead of `copy_from!`.
+fn copy_channel(inout xs: [Span[F32]; 2], from: U32, to: U32) {
+  for i in 0..xs[to].len() {
+    xs[to][i] = xs[from][i]
+  }
+}
+
+// The generic version: the element type is a parameter.
+fn total_len[T: Copy](xs: [Span[T]; 2]) -> U32 {
+  xs[0].len() + xs[1].len()
+}
+
+fn first_of[T: Copy](xs: [Span[T]; 2], k: U32) -> Option[T] {
+  xs[k].get(0)
+}
+
+// ----------------------------------------------------------------- the receiver, read side
+
+test "xs[k].len() on a nested array passed as it is" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert lens(ins) == 404
+}
+
+test "xs[k].get(i) returns the element or None" {
+  let ins: [[F32; 2]; 2] = [[1.0, 2.0], [10.0, 20.0]]
+  assert get_or(ins, 0, 1) == 2.0
+  assert get_or(ins, 1, 0) == 10.0
+  assert get_or(ins, 1, 2) == -1.0
+  assert get_or(ins, 0, 9) == -1.0
+}
+
+test "xs[k][i] reads the element of the channel picked at run time" {
+  let ins: [[F32; 3]; 2] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+  assert read_at(ins, 0, 0) == 1.0
+  assert read_at(ins, 0, 2) == 3.0
+  assert read_at(ins, 1, 1) == 5.0
+  assert read_at(ins, 1, 2) == 6.0
+}
+
+test "xs[k] passed on as an argument, and xs[k].slice(a, b) as an argument" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  assert sum_of(ins, 0) == 10.0
+  assert sum_of(ins, 1) == 100.0
+  assert tail_sum(ins, 0) == 9.0
+  assert tail_sum(ins, 1) == 90.0
+}
+
+// -------------------------------------------------------------- the receiver, write side
+
+test "xs[k][i] = v writes into the channel" {
+  var ins: [[F32; 3]; 2] = [[0.0; 3]; 2]
+  write_at(inout ins, 1, 2, 7.5)
+  write_at(inout ins, 0, 0, 1.5)
+  assert ins[0][0] == 1.5
+  assert ins[0][2] == 0.0
+  assert ins[1][2] == 7.5
+  assert ins[1][0] == 0.0
+}
+
+test "xs[k].fill!(v) fills one channel and leaves the other" {
+  var ins: [[F32; 3]; 2] = [[1.0; 3], [2.0; 3]]
+  fill_channel(inout ins, 1, 9.0)
+  assert ins[0][0] == 1.0
+  assert ins[0][2] == 1.0
+  assert ins[1][0] == 9.0
+  assert ins[1][2] == 9.0
+}
+
+test "inout xs[k] as an argument of another function" {
+  var ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
+  clear_channel(inout ins, 0)
+  assert ins[0][0] == 0.0
+  assert ins[0][1] == 0.0
+  assert ins[1][0] == 3.0
+  assert ins[1][1] == 4.0
+}
+
+test "a loop over the channels fills each one through xs[k].fill!" {
+  var ins: [[F32; 3]; 2] = [[0.0; 3]; 2]
+  fill_all(inout ins, 5.0)
+  assert ins[0][0] == 5.0
+  assert ins[0][2] == 5.0
+  assert ins[1][0] == 5.0
+  assert ins[1][2] == 5.0
+}
+
+test "nested loops write xs[k][i] with k and i from the loops" {
+  var ins: [[F32; 3]; 2] = [[0.0; 3]; 2]
+  ramp_all(inout ins)
+  assert ins[0][0] == 0.0
+  assert ins[0][1] == 1.0
+  assert ins[0][2] == 2.0
+  assert ins[1][0] == 10.0
+  assert ins[1][1] == 11.0
+  assert ins[1][2] == 12.0
+}
+
+test "one channel is copied into the other element by element" {
+  var ins: [[F32; 3]; 2] = [[1.0, 2.0, 3.0], [0.0; 3]]
+  copy_channel(inout ins, 0, 1)
+  assert ins[1][0] == 1.0
+  assert ins[1][1] == 2.0
+  assert ins[1][2] == 3.0
+  assert ins[0][2] == 3.0
+}
+
+// ------------------------------------------------------------------------ generic, branches
+
+test "the same receiver on a generic element type" {
+  let f: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
+  let u: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  assert total_len(f) == 4
+  assert total_len(u) == 6
+}
+
+test "a generic get on an element returns the first one" {
+  let u: [[U32; 2]; 2] = [[7, 8], [9, 10]]
+  assert first_of(u, 1).unwrap() == 9
+  assert first_of(u, 0).unwrap() == 7
+}
+
+test "the receiver in both branches of an if" {
+  let ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
+  let k: U32 = 1
+  let n = if k == 0 {
+    lens(ins)
+  } else {
+    total_len(ins) + 1000
+  }
+  assert n == 1004
+}

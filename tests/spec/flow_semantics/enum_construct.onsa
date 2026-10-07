@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.2", "§11.5", "§4.4", "§7"]
+
+// Building an enum in a flow body (S-195, §11.2): the closed list of the expressions of a flow
+// body has "列挙子の構築（`Some(x)`、`None`、`Mode.Gain(g)`）", and "`sample` のクロックの `Stereo` のフィールド
+// アクセスや `Option[F32]` の `match` も点ごとである" (the match on a built value is pointwise like
+// any other `match`, §11.5). The enum values live inside the body; only scalars, arrays of scalars
+// and structs of them cross the boundary (§11.6). Using a variant as a function value is the
+// rejected form (negative/flow_enum_values.onsa).
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+  Mix(F32, F32),
+}
+
+pub rt fn amount(m: Mode, x: F32) -> F32 {
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => x * k,
+    Mode.Mix(a, b) => (a * x) + b,
+  }
+}
+
+// A running sum, for a built value that holds a stateful instance.
+pub flow total(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+// The variant is chosen by a branch on the signal and built from a block input.
+pub flow pick(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let m = if x > 0.0 { Mode.Gain(g) } else { Mode.Off }
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => x * k,
+    Mode.Mix(a, b) => (a * x) + b,
+  }
+}
+
+// `Some(x)` and `None` on a block input, then a `match`.
+pub flow gate(x: F32 at sample, open: Bool at block) -> F32 at sample {
+  let o: Option[F32] = if open { Some(x) } else { None }
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+// A variant with two payloads, built from a signal and a constant.
+pub flow mixed(x: F32 at sample) -> F32 at sample {
+  let m = Mode.Mix(x, 1.0)
+  match m {
+    Mode.Mix(a, b) => (a * 2.0) + b,
+    Mode.Gain(k) => k,
+    Mode.Off => 0.0,
+  }
+}
+
+// Variants built in each copy of a `par`, then read by an `rt fn`.
+pub flow par_modes(x: F32 at sample) -> F32 at sample {
+  let ms = par i in 0..3 {
+    if i == 1 { Mode.Off } else { Mode.Gain((i + 1).round_f32()) }
+  }
+  amount(ms[0], x) + amount(ms[1], x) + amount(ms[2], x)
+}
+
+// A built value around a stateful instance: the instance advances every sample.
+pub flow wrapped_state(x: F32 at sample) -> F32 at sample {
+  let o = Some(total~(x))
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+// The unit variant is a value, written without a call.
+pub flow unit_variant(x: F32 at sample) -> F32 at sample {
+  let m = if x > 1.5 { Mode.Off } else { Mode.Gain(10.0) }
+  amount(m, x)
+}
+
+test "a variant chosen by a branch on the signal and built from a block input" {
+  let xs: [F32; 3] = [1.0, -1.0, 2.0]
+  let o = pick.render(pick.Config {}, pick.Params { g: 3.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 6.0
+}
+
+test "Some(x) and None built from a block input" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let open = gate.render(gate.Config {}, gate.Params { open: true }, xs, 8.0)
+  assert open.out[0] == 1.0
+  assert open.out[2] == 3.0
+  let shut = gate.render(gate.Config {}, gate.Params { open: false }, xs, 8.0)
+  assert shut.out[0] == 0.0
+  assert shut.out[2] == 0.0
+}
+
+test "a variant with two payloads" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = mixed.render(mixed.Config {}, mixed.Params {}, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 5.0
+  assert o.out[2] == 7.0
+}
+
+test "variants built in the copies of a par" {
+  // ms = [Gain(1), Off, Gain(3)]: the output is 1 * x + 0 + 3 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = par_modes.render(par_modes.Config {}, par_modes.Params {}, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 8.0
+}
+
+test "a stateful instance inside a built value advances every sample" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = wrapped_state.render(wrapped_state.Config {}, wrapped_state.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 10.0
+}
+
+test "the unit variant is a value" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = unit_variant.render(unit_variant.Config {}, unit_variant.Params {}, xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 0.0
+}

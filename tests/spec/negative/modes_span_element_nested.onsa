@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.3"]
+
+// E0702 for a change in an argument of a call whose receiver is an element `xs[k]` (S-181, §3.5):
+// "他の引数の中で変更すると E0702（`f(inout x, g(inout x))`、`xs.fill!(g(inout xs))`）. 変更は、`inout` への
+// 受け渡しと `!` の呼び出しである". The receiver `xs[0]` of `fill!` is `inout`, and the argument changes
+// the same array through `xs[1]` (the indices of one array are taken to overlap, §5.2). One error
+// per function (P-01).
+
+fn bump(inout s: Span[F32]) -> F32 {
+  s.fill!(1.0)
+  1.0
+}
+
+fn bump_bang(inout s: Span[F32]) -> F32 {
+  s.fill!(2.0)
+  2.0
+}
+
+fn take(inout a: Span[F32], v: F32) {
+  a.fill!(v)
+}
+
+pub fn inout_receiver_and_inout_in_an_argument(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(bump(inout xs[1]))            //~ E0702
+}
+
+pub fn inout_argument_and_inout_in_another_argument(inout xs: [Span[F32]; 2]) {
+  take(inout xs[0], bump(inout xs[1]))      //~ E0702
+}
+
+pub fn receiver_and_a_bang_call_in_an_argument(inout xs: [Span[F32]; 2]) {
+  xs[1].fill!(bump_bang(inout xs[0]))       //~ E0702
+}
+
+pub fn inout_receiver_and_the_same_element_in_an_argument(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(bump(inout xs[0]))            //~ E0702
+}
+
+// A read in the argument is no change, and a change in a separate statement is not in the call.
+pub fn read_in_an_argument(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(xs[1].len().round_f32())
+}
+
+pub fn change_then_use_in_two_calls(inout xs: [Span[F32]; 2]) {
+  let v = bump(inout xs[1])
+  xs[0].fill!(v)
+}

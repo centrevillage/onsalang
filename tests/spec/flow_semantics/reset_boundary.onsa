@@ -1,0 +1,180 @@
+// onsa.toml
+// [package]
+// name = "reset_boundary"
+// edition = "2026"
+//
+// [export]
+// prefix = "rb_"
+// flows = ["reset_boundary.counter", "reset_boundary.fragile", "reset_boundary.tap", "reset_boundary.guarded"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§14.2", "§9.2"]
+//
+// # S-198 (§14.2): `reset` returns `void` and never panics, so a `reset` step has no `status`. What
+// # `reset` does (§11.6): it puts the state of `prev` / `delay` / `vdelay` back to the `init`
+// # value, the write position to 0, resets the sub-instances recursively and clears poisoned;
+// # the values of the `init` clock are kept. On an instance whose `init` panicked (not
+// # initialized) it does nothing, and the next `process` returns 1 (§14.2).
+//
+// # A running sum from an `init` input. After `reset` the sum starts again from `start` (the
+// # value of the init input is kept: it is not 0 and it is not recomputed).
+// [[test.host]]
+// name = "reset puts a state back to its init value and keeps the init inputs"
+// target = "host"
+// flow = "reset_boundary.counter"
+// steps = [
+//   { call = "init", config = { start = 10.0 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [11.0, 12.0, 13.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [14.0, 15.0, 16.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [11.0, 12.0, 13.0] },
+//   { call = "reset" },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 2, input = [2.0, 2.0], status = 0, output = [12.0, 14.0] },
+// ]
+//
+// # A delay line: the contents go back to the init value and the write position to 0. Without
+// # `reset` the second call would output 2 3 4 5 (the line holds 2 3 4 after the first call).
+// [[test.host]]
+// name = "reset clears a delay line and its write position"
+// target = "host"
+// flow = "reset_boundary.tap"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1.0, 2.0, 3.0, 4.0], status = 0, output = [0.0, 0.0, 0.0, 1.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 4, input = [5.0, 6.0, 7.0, 8.0], status = 0, output = [0.0, 0.0, 0.0, 5.0] },
+//   { call = "process", params = {}, frames = 2, input = [9.0, 10.0], status = 0, output = [6.0, 7.0] },
+// ]
+//
+// # A sub-instance (the counter inside `fragile`) is reset with the flow, and the instance that
+// # the panic poisoned is recovered by `reset`, also by a second `reset` in a row. `reset` on a
+// # healthy instance in the middle of a stream restarts the counter.
+// [[test.host]]
+// name = "reset recovers a poisoned instance and restarts its sub-instance"
+// target = "host"
+// flow = "reset_boundary.fragile"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, nan, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [5.0, 7.0, 9.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [2.0, 4.0, 6.0] },
+// ]
+//
+// # An instance whose `init` panicked is not initialized: `reset` does nothing for it, however
+// # often it is called, and only a new `init` recovers it, with a fresh state. After the good
+// # `init` the value that `reset` restores is the one of that `init` (k = 100 / 4 stays 25).
+// [[test.host]]
+// name = "reset does nothing for an uninitialized instance"
+// target = "host"
+// flow = "reset_boundary.guarded"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 48000.0, status = 1 },
+//   { call = "reset" },
+//   { call = "reset" },
+//   { call = "init", config = { n = 4 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 1.0], status = 0, output = [26.0, 27.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 1.0], status = 0, output = [26.0, 27.0] },
+// ]
+//
+// # A failed `init` after a good one: the instance goes back to uninitialized, `reset` does
+// # nothing, and the next good `init` starts from a fresh state (the sum is 0 again).
+// [[test.host]]
+// name = "a failed init after a good one leaves the instance uninitialized"
+// target = "host"
+// flow = "reset_boundary.guarded"
+// steps = [
+//   { call = "init", config = { n = 4 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 1.0], status = 0, output = [26.0, 27.0] },
+//   { call = "init", config = { n = 0 }, sample_rate = 48000.0, status = 1 },
+//   { call = "reset" },
+//   { call = "init", config = { n = 5 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 1.0], status = 0, output = [21.0, 22.0] },
+// ]
+
+// A running sum from `start`: the state is the previous sum.
+pub flow counter(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  let y = x + prev~(^y, start)
+  y
+}
+
+// Panics for a NaN input or one outside I32 (`trunc_i32`): the instance is poisoned. The counter
+// 1 2 3 ... is a sub-instance, so `reset` has to reach it.
+pub flow fragile(x: F32 at sample) -> F32 at sample {
+  let n = x.trunc_i32()
+  let c = counter~(1.0, 0.0)
+  c + n.round_f32()
+}
+
+// The input three samples late.
+pub flow tap(x: F32 at sample) -> F32 at sample {
+  delay~(x, 3)
+}
+
+// `100 / n` is computed once at init: n = 0 panics inside `init`. The sum is the state.
+pub flow guarded(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let k = 100 / n
+  let y = x + prev~(^y)
+  y + k.round_f32()
+}
+
+test "reset puts the running sum back to the init input" {
+  let xs: [F32; 3] = [1.0, 1.0, 1.0]
+  var out: [F32; 3] = [0.0; 3]
+  var st = counter.init(counter.Config { start: 10.0 }, 8.0)
+  counter.process(inout st, counter.Params {}, xs, inout out)
+  assert out[2] == 13.0
+  counter.reset(inout st)
+  counter.process(inout st, counter.Params {}, xs, inout out)
+  assert out[0] == 11.0
+  assert out[2] == 13.0
+}
+
+test "reset clears the delay line and its write position" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let ys: [F32; 4] = [5.0, 6.0, 7.0, 8.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = tap.init(tap.Config {}, 8.0)
+  tap.process(inout st, tap.Params {}, xs, inout out)
+  assert out[3] == 1.0
+  tap.reset(inout st)
+  tap.process(inout st, tap.Params {}, ys, inout out)
+  assert out[0] == 0.0
+  assert out[2] == 0.0
+  assert out[3] == 5.0
+}
+
+test "reset reaches the sub-instance and keeps the value computed at init" {
+  let xs: [F32; 3] = [1.5, 2.5, 3.5]
+  var out: [F32; 3] = [0.0; 3]
+  var st = fragile.init(fragile.Config {}, 8.0)
+  fragile.process(inout st, fragile.Params {}, xs, inout out)
+  fragile.process(inout st, fragile.Params {}, xs, inout out)
+  assert out[0] == 5.0
+  fragile.reset(inout st)
+  fragile.process(inout st, fragile.Params {}, xs, inout out)
+  assert out[0] == 2.0
+  assert out[2] == 6.0
+  var g = guarded.init(guarded.Config { n: 4 }, 8.0)
+  let ones: [F32; 2] = [1.0, 1.0]
+  var gout: [F32; 2] = [0.0; 2]
+  guarded.process(inout g, guarded.Params {}, ones, inout gout)
+  guarded.reset(inout g)
+  guarded.process(inout g, guarded.Params {}, ones, inout gout)
+  assert gout[0] == 26.0
+  assert gout[1] == 27.0
+}

@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§6.1", "§5.2", "§9.1"]
+
+// A tuple-form variant is a function value in an ordinary function (§4.4: "タプル形の列挙子は、捕捉の
+// 無い関数値（`Circle` は `fn(F32) -> Shape`）としても使える"; §6.1: a function value is called with
+// `.(`), a unit variant is a value. This is the contrast to a flow body, where the variant as a
+// function value is E0806 (S-195, negative/flow_enum_values.onsa). The calls `Mode.Gain(x)` and
+// `Some(x)` are the construction in both worlds.
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+  Pair(F32, F32),
+}
+
+pub enum Failure {
+  Io(U32),
+  Parse(U32),
+}
+
+fn amount(m: Mode, x: F32) -> F32 {
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => x * k,
+    Mode.Pair(a, b) => (a * x) + b,
+  }
+}
+
+fn code(f: Failure) -> U32 {
+  match f {
+    Failure.Io(n) => n,
+    Failure.Parse(n) => 100 + n,
+  }
+}
+
+fn build(make: fn(F32) -> Mode, x: F32) -> Mode {
+  make.(x)
+}
+
+fn read(n: U32) -> Result[U32, U32] {
+  if n < 10 {
+    Ok(n)
+  } else {
+    Err(n)
+  }
+}
+
+fn read_io(n: U32) -> Result[U32, Failure] {
+  let v = read(n).map_err(Failure.Io)?
+  Ok(v + 1)
+}
+
+test "a tuple-form variant is a function value and is called with .(" {
+  let mk = Mode.Gain
+  assert amount(mk.(3.0), 2.0) == 6.0
+}
+
+test "a variant passed as an argument to a function that takes a function" {
+  assert amount(build(Mode.Gain, 4.0), 2.0) == 8.0
+}
+
+test "a variant with two payloads as a function value is a function of two arguments" {
+  let mk = Mode.Pair
+  assert amount(mk.(2.0, 1.0), 3.0) == 7.0
+}
+
+test "Some as a function value" {
+  let wrap: fn(U32) -> Option[U32] = Some
+  assert wrap.(5).unwrap() == 5
+}
+
+test "a unit variant is a value" {
+  let off = Mode.Off
+  assert amount(off, 9.0) == 0.0
+}
+
+fn failure_code(n: U32) -> U32 {
+  match read_io(n) {
+    Ok(_) => 0,
+    Err(e) => code(e),
+  }
+}
+
+test "a variant as the converter of map_err, then ?" {
+  assert read_io(3).unwrap() == 4
+  assert failure_code(3) == 0
+  assert failure_code(30) == 30
+}

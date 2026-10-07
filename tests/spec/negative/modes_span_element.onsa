@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.2", "§3.5"]
+
+// The rules of the argument modes still hold when `xs[k]` of an array of `Span`s is the receiver of
+// a method or the base of an index (S-181, §5.3: "メソッドの受け手 `xs[k].len()` と添字の左辺 `xs[k][i]`
+// も引数の位置に含む。受け手は `self` の引数である"). E0701: a receiver or an index base that the
+// function may not change (a borrowed parameter), as for any `inout`. E0702: the indices of one array
+// are taken to overlap (§5.2), so two elements of one array cannot be in one call when one is
+// `inout`. E0713 / E0714: the `!` of a receiver. One error per function (P-01).
+
+fn clear(inout s: Span[F32]) {
+  s.fill!(0.0)
+}
+
+fn add_into(inout a: Span[F32], b: Span[F32]) {
+  a.add_from!(b)
+}
+
+fn two_inouts(inout a: Span[F32], inout b: Span[F32]) {
+  a.fill!(1.0)
+  b.fill!(2.0)
+}
+
+fn first(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+// ---- E0701: the planar parameter is a borrow ----
+
+pub fn fill_through_a_borrow(xs: [Span[F32]; 2]) {
+  xs[0].fill!(1.0)                          //~ E0701
+}
+
+pub fn assign_through_a_borrow(xs: [Span[F32]; 2], i: U32) {
+  xs[1][i] = 2.0                            //~ E0701
+}
+
+pub fn pass_inout_through_a_borrow(xs: [Span[F32]; 2]) {
+  clear(inout xs[0])                        //~ E0701
+}
+
+pub fn copy_from_through_a_borrow(xs: [Span[F32]; 2], other: Span[F32]) {
+  xs[0].copy_from!(other)                   //~ E0701
+}
+
+// ---- E0702: two elements of one array, one of them inout ----
+
+pub fn copy_between_channels(inout xs: [Span[F32]; 2]) {
+  xs[0].copy_from!(xs[1])                   //~ E0702
+}
+
+pub fn add_between_channels(inout xs: [Span[F32]; 2]) {
+  xs[1].add_from!(xs[0])                    //~ E0702
+}
+
+pub fn inout_and_borrow_of_elements(inout xs: [Span[F32]; 2]) {
+  add_into(inout xs[0], xs[1])              //~ E0702
+}
+
+pub fn two_inout_elements(inout xs: [Span[F32]; 2]) {
+  two_inouts(inout xs[0], inout xs[1])      //~ E0702
+}
+
+pub fn same_element_twice(inout xs: [Span[F32]; 2]) {
+  add_into(inout xs[0], xs[0])              //~ E0702
+}
+
+// ---- E0713 / E0714: the mark of an `inout self` receiver ----
+
+pub fn fill_without_the_mark(inout xs: [Span[F32]; 2]) {
+  xs[0].fill(1.0)                           //~ E0713
+}
+
+pub fn len_with_the_mark(xs: [Span[F32]; 2]) -> U32 {
+  xs[0].len!()                              //~ E0714
+}
+
+// ---- what works: reads in the same call, the other family of the argument ----
+
+// A read inside an argument is no overlap: `first(xs[1])` is finished before `fill!` runs.
+pub fn fill_with_a_read_of_another_element(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(first(xs[1]))
+}
+
+pub fn fill_with_the_own_length(inout xs: [Span[F32]; 2]) {
+  xs[0].fill!(xs[0].len().round_f32())
+}
+
+pub fn separate_calls_for_each_element(inout xs: [Span[F32]; 2]) {
+  xs[0].copy_from!(xs[1].slice(0, 1))
+}
+
+pub fn clear_each_in_a_loop(inout xs: [Span[F32]; 2]) {
+  for k in 0..2 {
+    clear(inout xs[k])
+  }
+}
+
+pub fn separate_parameters_do_not_overlap(inout a: Span[F32], b: Span[F32]) {
+  a.copy_from!(b)
+}

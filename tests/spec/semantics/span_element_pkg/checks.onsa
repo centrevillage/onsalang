@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§15.1", "§4.5"]
+
+// The receiver and index rules for `xs[k]` (S-181, §5.3) with the functions in another module of
+// the package. The same cases in one file are in span_element_receiver.onsa.
+
+use planar.{CHANNELS, at, fill_channel, len_of, number_channels, set}
+
+fn sum_lens(xs: [Span[F32]; 2]) -> U32 {
+  var total: U32 = 0
+  for k in 0..CHANNELS {
+    total = total + len_of(xs, k)
+  }
+  total
+}
+
+test "the length of an element through an imported function" {
+  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]
+  assert len_of(ins, 0) == 4
+  assert len_of(ins, 1) == 4
+  assert sum_lens(ins) == 8
+}
+
+test "an index read through an imported function" {
+  let ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
+  assert at(ins, 0, 1) == 2.0
+  assert at(ins, 1, 0) == 3.0
+}
+
+test "an imported function fills one channel through the receiver" {
+  var ins: [[F32; 3]; 2] = [[0.0; 3]; 2]
+  fill_channel(inout ins, 1, 6.0)
+  assert ins[0][0] == 0.0
+  assert ins[1][0] == 6.0
+  assert ins[1][2] == 6.0
+}
+
+test "an imported function writes through the index" {
+  var ins: [[F32; 2]; 2] = [[0.0; 2]; 2]
+  set(inout ins, 0, 1, 3.5)
+  assert ins[0][1] == 3.5
+  assert ins[0][0] == 0.0
+  assert ins[1][1] == 0.0
+}
+
+test "a loop over the imported channel count numbers the channels" {
+  var ins: [[F32; 2]; 2] = [[9.0; 2]; 2]
+  number_channels(inout ins)
+  assert ins[0][0] == 0.0
+  assert ins[0][1] == 0.0
+  assert ins[1][0] == 1.0
+  assert ins[1][1] == 1.0
+}

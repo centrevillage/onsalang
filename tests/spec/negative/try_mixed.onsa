@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§6.1", "§18.1"]
+
+// E0414 (S-175): every mistake of `?` is E0414 (§9.1). The shapes besides a
+// different error type (try_type.onsa, try_type_map_err.onsa): `Result` and
+// `Option` mixed in both directions, an operand that is neither, a function
+// whose return type is neither (the unit return included), and the innermost
+// function being an anonymous function or a method. One error per function
+// (P-01); each function has one `?` that is wrong, and the marker is on its line.
+pub enum ErrA {
+  Bad,
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+pub fn read_a() -> Result[U32, ErrA] { Ok(1) }
+
+pub fn first(k: U32) -> Option[U32] { Some(k) }
+
+// ---- Result and Option are not mixed ----
+
+pub fn option_in_result_function() -> Result[U32, ErrA] {
+  let n = first(1)?                    //~ E0414
+  Ok(n)
+}
+
+pub fn result_in_option_function() -> Option[U32] {
+  let n = read_a()?                    //~ E0414
+  Some(n)
+}
+
+pub fn option_param_in_result_function(o: Option[U32]) -> Result[U32, ErrA] {
+  let n = o?                           //~ E0414
+  Ok(n + 1)
+}
+
+pub fn result_param_in_option_function(r: Result[U32, ErrA]) -> Option[U32] {
+  Some(r? + 1)                         //~ E0414
+}
+
+pub fn option_in_a_branch_of_result_function(k: U32) -> Result[U32, ErrA] {
+  if k == 0 {
+    Ok(0)
+  } else {
+    let n = first(k)?                  //~ E0414
+    Ok(n)
+  }
+}
+
+// ---- the operand is neither a Result nor an Option ----
+
+pub fn scalar_operand(k: U32) -> Result[U32, ErrA] {
+  let n = k?                           //~ E0414
+  Ok(n)
+}
+
+pub fn struct_operand(h: Holder) -> Option[U32] {
+  let n = h?                           //~ E0414
+  Some(n.n)
+}
+
+pub fn scalar_operand_in_plain_function(k: U32) -> U32 {
+  k?                                   //~ E0414
+}
+
+pub fn operand_of_a_call_result() -> Result[U32, ErrA] {
+  let n = first(2).unwrap()?           //~ E0414
+  Ok(n)
+}
+
+// ---- the function returns neither a Result nor an Option ----
+
+pub fn option_operand_in_plain_function(o: Option[U32]) -> U32 {
+  let n = o?                           //~ E0414
+  n
+}
+
+pub fn question_mark_in_unit_function(r: Result[U32, ErrA]) {
+  let _ = r?                           //~ E0414
+}
+
+pub fn returns_bool(r: Result[U32, ErrA]) -> Bool {
+  let n = r?                           //~ E0414
+  n == 0
+}
+
+// ---- the innermost function decides: an anonymous function, a method ----
+
+pub fn closure_returns_plain_value(k: U32) -> Result[U32, ErrA] {
+  let _ = fn(o: Option[U32]) -> U32 { o? + 1 }   //~ E0414
+  Ok(k)
+}
+
+pub fn closure_with_result_in_option_closure(k: U32) -> Result[U32, ErrA] {
+  let _ = fn(r: Result[U32, ErrA]) -> Option[U32] { Some(r?) }   //~ E0414
+  Ok(k)
+}
+
+impl Holder {
+  pub fn mixed(self, o: Option[U32]) -> Result[U32, ErrA] {
+    let n = o?                         //~ E0414
+    Ok(n + self.n)
+  }
+}
+
+// ---- generic functions ----
+
+pub fn generic_option_in_result_function[T: Copy](o: Option[T]) -> Result[T, ErrA] {
+  let v = o?                           //~ E0414
+  Ok(v)
+}
+
+// ---- what works: the pair of the same family, converted by hand otherwise ----
+
+pub fn result_in_result_function() -> Result[U32, ErrA] {
+  let n = read_a()?
+  Ok(n + 1)
+}
+
+pub fn option_in_option_function(o: Option[U32]) -> Option[U32] {
+  let n = o?
+  Some(n + 1)
+}
+
+pub fn option_converted_to_result(o: Option[U32]) -> Result[U32, ErrA] {
+  let r = match o {
+    Some(v) => Ok(v),
+    None => Err(ErrA.Bad),
+  }
+  let n = r?
+  Ok(n)
+}
+
+pub fn result_converted_to_option(r: Result[U32, ErrA]) -> Option[U32] {
+  let o = match r {
+    Ok(v) => Some(v),
+    Err(_) => None,
+  }
+  let n = o?
+  Some(n)
+}
+
+pub fn closure_that_matches_its_own_family(k: U32) -> Result[U32, ErrA] {
+  let _ = fn(o: Option[U32]) -> Option[U32] { Some(o? + 1) }
+  Ok(k)
+}

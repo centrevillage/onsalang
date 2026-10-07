@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.6", "§18.1"]
+
+// E0305, which declaration carries it (S-176, §11.2): "同じモジュールに同名の宣言があれば E0305 で、
+// ソースの順で後の宣言に付け、前の宣言を note で示す". The diagnostic is on the later declaration
+// in source order, whichever of the two is the flow. (names_flow_decl.onsa has the flow first;
+// here the function comes first, two flows share a name, and a name is declared three times.)
+// The marker is on the line of the later declaration. That the note points at the earlier one
+// is not a part of the marker: `onsa check --json` on this file shows it (checked by hand, not by
+// the runner).
+
+// The function is first, so the flow is the later declaration and carries E0305.
+pub fn gain(x: F32) -> F32 { x }
+
+pub flow gain(x: F32 at sample, level: F32 at block) -> F32 at sample {   //~ E0305
+  x * level
+}
+
+// `rt fn` first, a private flow after it.
+pub rt fn tone(x: F32) -> F32 { x }
+
+flow tone(x: F32 at sample) -> F32 at sample {   //~ E0305
+  x
+}
+
+// Two flows of the same name: the second one carries E0305.
+pub flow wide(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow wide(x: F32 at sample, y: F32 at sample) -> F32 at sample {   //~ E0305
+  x + y
+}
+
+// A generic function before a flow.
+pub fn pick[T: Copy](x: T) -> T { x }
+
+pub flow pick(x: F32 at sample) -> F32 at sample {   //~ E0305
+  x
+}
+
+// Three declarations of one name: each later one carries E0305 and the first carries none.
+pub flow trio(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn trio(x: F32) -> F32 { x }   //~ E0305
+
+pub flow trio(x: F32 at sample, y: F32 at sample) -> F32 at sample {   //~ E0305
+  x - y
+}
+
+// A function between two flows of different names is no clash, and a name that only
+// contains a flow's name is no clash.
+pub flow clean(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn clean_up(x: F32) -> F32 { x }
+
+pub flow cleaner(x: F32 at sample) -> F32 at sample {
+  x
+}

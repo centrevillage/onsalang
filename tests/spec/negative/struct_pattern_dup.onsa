@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.4", "§18.1"]
+
+// E0410 for a repeated field in a struct pattern (S-179, §7): "全てのフィールドを書く（過不足と
+// 重複は E0410。struct リテラルと同じ、§4.4）". The literal's repeated field is in struct_fields.onsa;
+// these are the pattern's. A repeated field is E0410 even when the other fields are all there, and
+// also when another field is missing. One error per function (P-01); the marker is on the line of
+// the pattern.
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub struct Line {
+  a: P,
+  b: P,
+}
+
+pub struct Wrap[T] {
+  v: T,
+  n: U32,
+}
+
+pub enum Shape {
+  Dot(P),
+  Seg(Line),
+  Empty,
+}
+
+pub struct Three {
+  a: U32,
+  b: U32,
+  c: U32,
+}
+
+pub fn let_repeats_a_field(p: P) -> F32 {
+  let P { x: a, x: b, y: c } = p      //~ E0410
+  a + b + c
+}
+
+pub fn let_repeats_a_field_and_drops_another(p: P) -> F32 {
+  let P { x: a, x: b } = p            //~ E0410
+  a + b
+}
+
+pub fn let_repeats_with_the_wildcard(p: P) -> F32 {
+  let P { x: a, x: _, y: b } = p      //~ E0410
+  a + b
+}
+
+pub fn match_arm_repeats_a_field(p: P) -> F32 {
+  match p {
+    P { x: a, y: b, y: c } => a + b + c,   //~ E0410
+  }
+}
+
+pub fn nested_pattern_repeats_a_field(l: Line) -> F32 {
+  match l {
+    Line { a: P { x: ax, x: bx, y: ay }, b: _ } => ax + bx + ay,   //~ E0410
+  }
+}
+
+pub fn enum_payload_pattern_repeats_a_field(s: Shape) -> F32 {
+  match s {
+    Shape.Dot(P { x: a, y: b, x: c }) => a + b + c,   //~ E0410
+    Shape.Seg(_) => 0.0,
+    Shape.Empty => 0.0,
+  }
+}
+
+pub fn generic_struct_pattern_repeats_a_field(w: Wrap[F32]) -> F32 {
+  let Wrap { v: a, v: b, n: _ } = w   //~ E0410
+  a + b
+}
+
+pub fn three_fields_the_last_repeats_the_first(t: Three) -> U32 {
+  let Three { a: p, b: q, c: r, a: s } = t   //~ E0410
+  p + q + r + s
+}
+
+pub fn alternative_repeats_a_field(p: P) -> F32 {
+  match p {
+    P { x: a, y: _ } | P { x: a, x: _, y: _ } => a,   //~ E0410
+  }
+}
+
+// Each field once is fine, in any order, and a pattern in one arm does not see another arm's.
+pub fn complete_in_any_order(p: P, l: Line, w: Wrap[F32], t: Three) -> F32 {
+  let P { y: py, x: px } = p
+  let Wrap { n: _, v: wv } = w
+  let Three { c: tc, a: ta, b: _ } = t
+  match l {
+    Line { b: P { y: _, x: bx }, a: P { x: ax, y: _ } } => px + py + wv + bx + ax + (tc + ta).round_f32(),
+  }
+}
+
+pub fn complete_in_two_arms(s: Shape) -> F32 {
+  match s {
+    Shape.Dot(P { x: a, y: _ }) => a,
+    Shape.Seg(Line { a: P { x: a, y: _ }, b: _ }) => a,
+    Shape.Empty => 0.0,
+  }
+}
