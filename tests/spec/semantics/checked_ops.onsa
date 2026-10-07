@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§9.2"]
+
+// The rest of the checked methods of §3.4 (`checked_neg`, `checked_rem`,
+// `checked_div_euclid`, `checked_rem_euclid`, `checked_shl`, `checked_shr`) at
+// the 64-bit edges. `checked_add`, `checked_sub`, `checked_mul` and
+// `checked_div` are in bounds64.onsa. Every method returns `Some` of the
+// operation's result, or `None` where the operation would panic.
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+test "checked_neg is None only for the minimum" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  assert is_none(imin.checked_neg())
+  assert val(imax.checked_neg(), 7) == -9223372036854775807
+  let zero: I64 = 0
+  assert val(zero.checked_neg(), 7) == 0
+}
+
+test "checked_rem is None for a zero divisor and Some(0) for MIN % -1" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  assert val(imin.checked_rem(minus_one), 7) == 0
+  assert is_none(imax.checked_rem(0))
+  assert val(imax.checked_rem(10), 99) == 7
+  let umax: U64 = U64.MAX
+  assert is_none(umax.checked_rem(0))
+  assert val(umax.checked_rem(10), 99) == 5
+}
+
+test "checked_div_euclid and checked_rem_euclid" {
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  assert is_none(imin.checked_div_euclid(minus_one))
+  assert val(imin.checked_rem_euclid(minus_one), 7) == 0
+  assert is_none(imin.checked_div_euclid(0))
+  assert is_none(imin.checked_rem_euclid(0))
+  let a: I64 = -7
+  assert val(a.checked_div_euclid(2), 99) == -4
+  assert val(a.checked_rem_euclid(2), 99) == 1
+}
+
+test "checked_shl and checked_shr return None for an amount of 64 or more" {
+  let one: U64 = 1
+  let umax: U64 = U64.MAX
+  let imin: I64 = I64.MIN
+  assert is_none(one.checked_shl(64))
+  assert is_none(one.checked_shl(65))
+  assert val(one.checked_shl(63), 0) == 9223372036854775808
+  assert val(one.checked_shl(0), 0) == 1
+  assert is_none(umax.checked_shr(64))
+  assert val(umax.checked_shr(63), 0) == 1
+  assert is_none(imin.checked_shr(64))
+  assert val(imin.checked_shr(63), 0) == -1
+}
+
+test "checked_shl is relative to the bit width of the type" {
+  let small: U8 = 1
+  assert is_none(small.checked_shl(8))
+  assert val(small.checked_shl(7), 0) == 128
+  let word: I32 = 1
+  assert is_none(word.checked_shl(32))
+  assert val(word.checked_shl(31), 0) == I32.MIN
+}

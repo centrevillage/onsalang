@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§6.1", "§5.3", "§4.1"]
+
+// `?` inside an anonymous function (spec §9.1, §6.1): `?` returns from the
+// function it is written in, so inside an anonymous function it leaves that
+// function and not the enclosing one. The spec says `?` returns "the function's"
+// `E`, and §6.1 treats an anonymous function's body like a named function's for
+// `return`; the closure reading is the direct one.
+
+use std.array
+
+pub enum ParseError {
+  Negative,
+  TooBig(I32),
+}
+
+fn parse(n: I32) -> Result[I32, ParseError] {
+  if n < 0 {
+    return Err(ParseError.Negative)
+  }
+  if n > 100 {
+    return Err(ParseError.TooBig(n))
+  }
+  Ok(n)
+}
+
+fn parse_count(inout calls: U32, n: I32) -> Result[I32, ParseError] {
+  calls = calls + 1
+  parse(n)
+}
+
+fn sum2(a: I32, b: I32) -> Result[I32, ParseError] {
+  let x = parse(a)?
+  let y = parse(b)?
+  Ok(x + y)
+}
+
+fn sum2_counted(inout calls: U32, a: I32, b: I32) -> Result[I32, ParseError] {
+  let x = parse_count(inout calls, a)?
+  let y = parse_count(inout calls, b)?
+  Ok(x + y)
+}
+
+fn sum_inline(a: I32, b: I32) -> Result[I32, ParseError] {
+  Ok(parse(a)? + parse(b)?)
+}
+
+fn sum_all(xs: [I32; 4]) -> Result[I32, ParseError] {
+  var total: I32 = 0
+  for x in xs {
+    total = total + parse(x)?
+  }
+  Ok(total)
+}
+
+fn sum_all_counted(inout calls: U32, xs: [I32; 4]) -> Result[I32, ParseError] {
+  var total: I32 = 0
+  for x in xs {
+    total = total + parse_count(inout calls, x)?
+  }
+  Ok(total)
+}
+
+// `ParseError` has no derived `==` here (declaration-level derive is the
+// subject of W5-06), so results are read back through `match`.
+fn code(r: Result[I32, ParseError]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(e) => error_code(e),
+  }
+}
+
+fn error_code(e: ParseError) -> I32 {
+  match e {
+    ParseError.Negative => -1,
+    ParseError.TooBig(n) => -1000 - n,
+  }
+}
+
+// ------------------------------------------------- `?` inside an anonymous function
+
+test "? inside an anonymous function leaves that function" {
+  let add_one = fn(n: I32) -> Result[I32, ParseError] {
+    let v = parse(n)?
+    Ok(v + 1)
+  }
+  assert code(add_one(5)) == 6
+  assert code(add_one(-1)) == -1
+}
+
+test "? inside a closure that is called by from_fn" {
+  let ints: [I32; 3] = [1, -2, 200]
+  let rs: [Result[I32, ParseError]; 3] = array.from_fn(fn(i: U32) -> Result[I32, ParseError] {
+    let v = parse(ints[i])?
+    Ok(v + 1)
+  })
+  assert code(rs[0]) == 2
+  assert code(rs[1]) == -1
+  assert code(rs[2]) == -1200
+}

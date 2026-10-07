@@ -1,0 +1,683 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.6", "§9.2", "§4.1"]
+
+// The edges of the 64-bit integer types and the integer / floating-point
+// conversions (spec §3.3, §3.4, §6.6). Every expected value is worked out by
+// hand from the rules in §3.4 and the tables in §3.3 and §6.6:
+//
+//   I64.MAX = 9223372036854775807       (2^63 - 1)
+//   I64.MIN = -9223372036854775808      (-2^63)
+//   U64.MAX = 18446744073709551615      (2^64 - 1)
+//
+// Checked arithmetic panics when the mathematical result does not fit. A panic
+// fails the test it happens in, so the tests that expect one carry a TESTFAIL
+// marker. `+%` wraps modulo 2^64 and `+|` clamps.
+
+use std.array
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+// ---------------------------------------------------------------- constants
+
+test "MIN and MAX of the 64-bit types" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let umax: U64 = U64.MAX
+  assert imax == 9223372036854775807
+  assert imax == 0x7FFF_FFFF_FFFF_FFFF
+  let expect_min = -I64.MAX - 1
+  assert imin == expect_min
+  assert imin < imax
+  assert umax == 18446744073709551615
+  assert umax == 0xFFFF_FFFF_FFFF_FFFF
+  assert U64.MIN == 0
+}
+
+test "BITS of the 64-bit types" {
+  assert I64.BITS == 64
+  assert U64.BITS == 64
+  assert I32.BITS == 32
+  assert U8.BITS == 8
+}
+
+test "the 32-bit and 8-bit edges that the 64-bit types widen from" {
+  assert I32.MAX == 2147483647
+  let expect_i32_min = -I32.MAX - 1
+  assert I32.MIN == expect_i32_min
+  assert U32.MAX == 4294967295
+  assert U8.MAX == 255
+  let expect_i8_min = -I8.MAX - 1
+  assert I8.MIN == expect_i8_min
+  assert I8.MAX == 127
+}
+
+test "a closure builds the powers of two up to the top bit of U64" {
+  let one: U64 = 1
+  let ps: [U64; 4] = array.from_fn(fn(i) { one << i })
+  assert ps[0] == 1
+  assert ps[3] == 8
+  let hi: [U64; 2] = array.from_fn(fn(i) { one << (62 + i) })
+  assert hi[0] == 4611686018427387904
+  assert hi[1] == 9223372036854775808
+}
+
+// ------------------------------------------------------------ wrapping (+% -% *%)
+
+test "wrapping add and subtract at the 64-bit edges" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let umax: U64 = U64.MAX
+  let zero: U64 = 0
+  let a = imax +% 1
+  assert a == imin
+  let b = imin -% 1
+  assert b == imax
+  let c = umax +% 1
+  assert c == 0
+  let d = zero -% 1
+  assert d == umax
+  let e = imin +% imin
+  assert e == 0
+}
+
+test "wrapping multiply at the 64-bit edges" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  let a = imax *% 2
+  assert a == -2
+  let b = imin *% minus_one
+  assert b == imin
+  let d = imax *% imax
+  assert d == 1
+  let e = imin *% 2
+  assert e == 0
+}
+
+// ------------------------------------------------------------ saturating (+| -| *|)
+
+test "saturating operations clamp to the 64-bit range" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let umax: U64 = U64.MAX
+  let zero: U64 = 0
+  let minus_one: I64 = -1
+  let a = imax +| 1
+  assert a == imax
+  let b = imin -| 1
+  assert b == imin
+  let c = imin +| minus_one
+  assert c == imin
+  let d = imax *| 2
+  assert d == imax
+  let e = imin *| 2
+  assert e == imin
+  let f = imin *| minus_one
+  assert f == imax
+  let g = umax +| 1
+  assert g == umax
+  let h = zero -| 1
+  assert h == 0
+  let i = umax *| 2
+  assert i == umax
+  let j = imax -| imin
+  assert j == imax
+}
+
+test "saturating operations leave results that fit alone" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let a = imax +| imin
+  assert a == -1
+  let b = imax -| 1
+  assert b == 9223372036854775806
+  let c = imin +| 1
+  assert c == -9223372036854775807
+}
+
+// ---------------------------------------------------------- non-panicking edges
+
+test "MIN % -1 is 0 and does not panic" {
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  let r = imin % minus_one
+  assert r == 0
+  let e = imin.rem_euclid(minus_one)
+  assert e == 0
+  let i32_min: I32 = I32.MIN
+  let m1: I32 = -1
+  let r32 = i32_min % m1
+  assert r32 == 0
+}
+
+test "division and remainder at the 64-bit edges" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  let a = imax / minus_one
+  assert a == -9223372036854775807
+  let b = imin / 1
+  assert b == imin
+  let c = imax % 2
+  assert c == 1
+  let umax: U64 = U64.MAX
+  let d = umax / 2
+  assert d == 9223372036854775807
+  let e = umax % 10
+  assert e == 5
+}
+
+test "division truncates toward zero and the remainder follows the dividend" {
+  let a: I64 = -7
+  let b: I64 = 2
+  let c: I64 = -2
+  let d: I64 = 7
+  let q1 = a / b
+  let r1 = a % b
+  let q2 = d / c
+  let r2 = d % c
+  let q3 = a / c
+  let r3 = a % c
+  assert q1 == -3
+  assert r1 == -1
+  assert q2 == -3
+  assert r2 == 1
+  assert q3 == 3
+  assert r3 == -1
+}
+
+test "div_euclid and rem_euclid" {
+  let a: I64 = -7
+  let b: I64 = 2
+  let c: I64 = -2
+  let d: I64 = 7
+  assert a.div_euclid(b) == -4
+  assert a.rem_euclid(b) == 1
+  assert d.div_euclid(c) == -3
+  assert d.rem_euclid(c) == 1
+  assert a.div_euclid(c) == 4
+  assert a.rem_euclid(c) == 1
+  let imin: I64 = I64.MIN
+  assert imin.div_euclid(1) == imin
+  assert imin.rem_euclid(1) == 0
+}
+
+// ----------------------------------------------------------- checked methods
+
+test "checked_add and checked_sub at the 64-bit edges" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let umax: U64 = U64.MAX
+  let zero: U64 = 0
+  assert is_none(imax.checked_add(1))
+  assert val(imax.checked_add(0), 7) == imax
+  assert val(imax.checked_add(imin), 7) == -1
+  assert is_none(imin.checked_sub(1))
+  assert val(imin.checked_sub(0), 7) == imin
+  assert val(imax.checked_sub(imax), 7) == 0
+  assert is_none(umax.checked_add(1))
+  assert val(umax.checked_add(0), 7) == umax
+  assert is_none(zero.checked_sub(1))
+  assert val(zero.checked_sub(0), 7) == 0
+}
+
+test "checked_mul at the 64-bit edges" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let umax: U64 = U64.MAX
+  let minus_one: I64 = -1
+  assert is_none(imax.checked_mul(2))
+  assert is_none(imax.checked_mul(imax))
+  assert val(imax.checked_mul(1), 7) == imax
+  assert val(imax.checked_mul(minus_one), 7) == -9223372036854775807
+  assert is_none(imin.checked_mul(minus_one))
+  assert val(imin.checked_mul(1), 7) == imin
+  assert is_none(umax.checked_mul(2))
+  assert val(umax.checked_mul(1), 7) == umax
+  let a: U64 = 4294967296
+  let b: U64 = 4294967295
+  assert val(a.checked_mul(b), 7) == 18446744069414584320
+  assert is_none(a.checked_mul(a))
+}
+
+test "checked_div at the 64-bit edges" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  assert is_none(imin.checked_div(minus_one))
+  assert val(imin.checked_div(1), 7) == imin
+  assert is_none(imax.checked_div(0))
+}
+
+// -------------------------------------------------------------------- shifts
+
+test "left shift drops the bits that leave the type" {
+  let one: U64 = 1
+  let imax: I64 = I64.MAX
+  let uone: I64 = 1
+  let umax: U64 = U64.MAX
+  let a = one << 63
+  assert a == 9223372036854775808
+  let b = uone << 63
+  assert b == I64.MIN
+  let c = imax << 1
+  assert c == -2
+  let d = umax << 63
+  assert d == 9223372036854775808
+  let e = umax << 0
+  assert e == umax
+  let byte: U8 = 255
+  let f = byte << 4
+  assert f == 240
+}
+
+test "right shift is arithmetic for signed and logical for unsigned" {
+  let umax: U64 = U64.MAX
+  let imin: I64 = I64.MIN
+  let minus_one: I64 = -1
+  let a = umax >> 63
+  assert a == 1
+  let b = umax >> 1
+  assert b == 9223372036854775807
+  let c = imin >> 63
+  assert c == -1
+  let d = imin >> 1
+  assert d == -4611686018427387904
+  let e = minus_one >> 63
+  assert e == -1
+  let f = imin >> 0
+  assert f == imin
+  let neg: I8 = I8.MIN
+  let g = neg >> 7
+  assert g == -1
+  let h = neg >> 1
+  assert h == -64
+}
+
+test "the shift amount is a U32 variable" {
+  var n: U32 = 0
+  var x: U64 = 1
+  while n < 63 {
+    x = x << 1
+    n = n + 1
+  }
+  assert x == 9223372036854775808
+  assert n == 63
+}
+
+// --------------------------------------------------------- widening with `as`
+
+test "as widens integers without changing the value" {
+  let a: I32 = I32.MIN
+  let b = a as I64
+  assert b == -2147483648
+  let c: U32 = U32.MAX
+  let d = c as U64
+  assert d == 4294967295
+  let e = c as I64
+  assert e == 4294967295
+  let f: I32 = I32.MAX
+  let g = f as I64
+  assert g == 2147483647
+}
+
+test "as widens integers to floating point exactly where the spec allows it" {
+  let a: U8 = 255
+  let b = a as F32
+  assert b == 255.0
+  let c: U32 = U32.MAX
+  let d = c as F64
+  assert d == 4294967295.0
+  let e: I32 = I32.MIN
+  let f = e as F64
+  assert f == -2147483648.0
+  let g: I16 = I16.MIN
+  let h = g as F32
+  assert h == -32768.0
+}
+
+test "a prefix minus binds tighter than as" {
+  let x: I32 = 5
+  let y = -x as I64
+  assert y == -5
+  let z = -x as F64
+  assert z == -5.0
+}
+
+test "as widens F32 to F64 keeping the exact value" {
+  let a: F32 = 0.1
+  let b = a as F64
+  assert b == 0.10000000149011612
+  assert b > 0.1
+  let inf: F32 = F32.INFINITY
+  assert (inf as F64) == F64.INFINITY
+}
+
+// ------------------------------------------------------------------- narrowing
+
+test "narrow returns Some only when the value fits" {
+  let big: I64 = 2147483648
+  let top: I64 = 2147483647
+  let low: I64 = -2147483648
+  let below: I64 = -2147483649
+  assert is_none(big.narrow_i32())
+  assert val(top.narrow_i32(), 0) == 2147483647
+  assert val(low.narrow_i32(), 0) == -2147483648
+  assert is_none(below.narrow_i32())
+  assert !is_none(big.narrow_u32())
+  let neg: I64 = -1
+  assert is_none(neg.narrow_u32())
+  assert is_none(neg.narrow_u64())
+  let imax: I64 = I64.MAX
+  assert val(imax.narrow_u64(), 0) == 9223372036854775807
+  let umax: U64 = U64.MAX
+  assert is_none(umax.narrow_i64())
+  assert is_none(umax.narrow_u32())
+  let half: U64 = 9223372036854775807
+  assert val(half.narrow_i64(), 0) == 9223372036854775807
+  let over: U64 = 9223372036854775808
+  assert is_none(over.narrow_i64())
+  let b: U32 = 256
+  assert is_none(b.narrow_u8())
+  let c: U32 = 255
+  assert val(c.narrow_u8(), 0) == 255
+  let d: I32 = -129
+  assert is_none(d.narrow_i8())
+}
+
+// -------------------------------------------------- floating point to integer
+
+test "trunc rounds toward zero" {
+  let a: F64 = 3.99
+  let b: F64 = -3.99
+  assert a.trunc_i64() == 3
+  assert b.trunc_i64() == -3
+  let c: F32 = 2147483520.0
+  assert c.trunc_i32() == 2147483520
+  let d: F32 = -2147483648.0
+  assert d.trunc_i32() == -2147483648
+  let e: F64 = 0.9
+  assert e.trunc_u64() == 0
+}
+
+test "trunc at the largest and smallest F64 that fit a 64-bit integer" {
+  let below_max: F64 = 9223372036854774784.0
+  assert below_max.trunc_i64() == 9223372036854774784
+  let min: F64 = -9223372036854775808.0
+  assert min.trunc_i64() == I64.MIN
+  let u_top: F64 = 18446744073709549568.0
+  assert u_top.trunc_u64() == 18446744073709549568
+}
+
+test "trunc_sat clamps to the integer range and maps NaN to 0" {
+  let zero: F64 = 0.0
+  let nan  = zero / zero
+  let inf  = 1.0 / zero
+  let ninf = -1.0 / zero
+  assert nan.trunc_i64_sat() == 0
+  assert nan.trunc_u64_sat() == 0
+  assert inf.trunc_i64_sat() == I64.MAX
+  assert ninf.trunc_i64_sat() == I64.MIN
+  assert inf.trunc_u64_sat() == U64.MAX
+  assert ninf.trunc_u64_sat() == 0
+  let past_i64: F64 = 9223372036854775808.0
+  assert past_i64.trunc_i64_sat() == I64.MAX
+  let before_i64: F64 = -9223372036854777856.0
+  assert before_i64.trunc_i64_sat() == I64.MIN
+  let past_u64: F64 = 18446744073709551616.0
+  assert past_u64.trunc_u64_sat() == U64.MAX
+  let negative: F64 = -5.5
+  assert negative.trunc_u64_sat() == 0
+  let big32: F32 = 1.0e10
+  assert big32.trunc_i32_sat() == I32.MAX
+  let neg32: F32 = -1.0e10
+  assert neg32.trunc_i32_sat() == I32.MIN
+  let wide: F64 = 300.7
+  assert wide.trunc_u8_sat() == 255
+  let part: F64 = 200.9
+  assert part.trunc_u8_sat() == 200
+}
+
+// -------------------------------------------------- integer to floating point
+
+test "round_f64 rounds a 64-bit integer to the nearest even F64" {
+  let imax: I64 = I64.MAX
+  let imin: I64 = I64.MIN
+  let umax: U64 = U64.MAX
+  assert imax.round_f64() == 9223372036854775808.0
+  assert imin.round_f64() == -9223372036854775808.0
+  assert umax.round_f64() == 18446744073709551616.0
+  let exact: I64 = 9007199254740992
+  assert exact.round_f64() == 9007199254740992.0
+  let tie_down: I64 = 9007199254740993
+  assert tie_down.round_f64() == 9007199254740992.0
+  let tie_up: I64 = 9007199254740995
+  assert tie_up.round_f64() == 9007199254740996.0
+  let above: I64 = 9007199254740994
+  assert above.round_f64() == 9007199254740994.0
+}
+
+test "round_f32 rounds to the nearest even F32" {
+  let a: I32 = 16777216
+  assert a.round_f32() == 16777216.0
+  let tie_down: I32 = 16777217
+  assert tie_down.round_f32() == 16777216.0
+  let tie_up: I32 = 16777219
+  assert tie_up.round_f32() == 16777220.0
+  let umax32: U32 = U32.MAX
+  assert umax32.round_f32() == 4294967296.0
+  let imax: I64 = I64.MAX
+  assert imax.round_f32() == 9223372036854775808.0
+}
+
+test "round_f32 of an F64 overflows to infinity" {
+  let a: F64 = 3.5e38
+  assert a.round_f32() == F32.INFINITY
+  let b: F64 = -3.5e38
+  assert b.round_f32() == -F32.INFINITY
+  let c: F64 = 1.0e300
+  assert c.round_f32() == F32.INFINITY
+  let d: F64 = 3.4028234663852886e38
+  assert d.round_f32() == F32.MAX
+}
+
+// ------------------------------------------------------------------ to_bits
+
+test "to_bits and from_bits move the bits unchanged" {
+  let one: F32 = 1.0
+  assert one.to_bits() == 0x3F80_0000
+  let two: F64 = 2.0
+  assert two.to_bits() == 0x4000_0000_0000_0000
+  let neg_zero: F64 = -0.0
+  assert neg_zero.to_bits() == 0x8000_0000_0000_0000
+  let inf = F64.from_bits(0x7FF0_0000_0000_0000)
+  assert inf == F64.INFINITY
+  let back = F64.from_bits(two.to_bits())
+  assert back == 2.0
+}
+
+test "a NaN reads back as the canonical quiet NaN" {
+  let zero: F64 = 0.0
+  let nan = zero / zero
+  assert nan.to_bits() == 0x7FF8_0000_0000_0000
+  let nan32: F32 = F32.NAN
+  assert nan32.to_bits() == 0x7FC0_0000
+  let odd = F64.from_bits(0xFFFF_FFFF_FFFF_FFFF)
+  assert odd != odd
+  assert odd.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+// ================================================================== panics
+//
+// Each test below reaches exactly one operation that §3.4 / §3.3 say panics.
+
+test "I64.MAX + 1 panics" {   //~ TESTFAIL "I64.MAX + 1 panics"
+  let a: I64 = I64.MAX
+  let _ = a + 1
+}
+
+test "I64.MIN - 1 panics" {   //~ TESTFAIL "I64.MIN - 1 panics"
+  let a: I64 = I64.MIN
+  let _ = a - 1
+}
+
+test "U64.MAX + 1 panics" {   //~ TESTFAIL "U64.MAX + 1 panics"
+  let a: U64 = U64.MAX
+  let _ = a + 1
+}
+
+test "0 - 1 on U64 panics" {   //~ TESTFAIL "0 - 1 on U64 panics"
+  let a: U64 = 0
+  let _ = a - 1
+}
+
+test "I64.MAX * 2 panics" {   //~ TESTFAIL "I64.MAX * 2 panics"
+  let a: I64 = I64.MAX
+  let _ = a * 2
+}
+
+test "I64.MIN * -1 panics" {   //~ TESTFAIL "I64.MIN * -1 panics"
+  let a: I64 = I64.MIN
+  let m: I64 = -1
+  let _ = a * m
+}
+
+test "U64.MAX * 2 panics" {   //~ TESTFAIL "U64.MAX * 2 panics"
+  let a: U64 = U64.MAX
+  let _ = a * 2
+}
+
+test "3037000500 squared overflows I64" {   //~ TESTFAIL "3037000500 squared overflows I64"
+  let a: I64 = 3037000500
+  let _ = a * a
+}
+
+test "3037000499 squared fits in I64" {
+  let a: I64 = 3037000499
+  let b = a * a
+  assert b == 9223372030926249001
+}
+
+test "negating I64.MIN panics" {   //~ TESTFAIL "negating I64.MIN panics"
+  let a: I64 = I64.MIN
+  let _ = -a
+}
+
+test "negating I64.MAX does not panic" {
+  let a: I64 = I64.MAX
+  let b = -a
+  assert b == -9223372036854775807
+}
+
+test "I64.MIN / -1 panics" {   //~ TESTFAIL "I64.MIN / -1 panics"
+  let a: I64 = I64.MIN
+  let m: I64 = -1
+  let _ = a / m
+}
+
+test "division by zero panics on U64" {   //~ TESTFAIL "division by zero panics on U64"
+  let a: U64 = 1
+  let z: U64 = 0
+  let _ = a / z
+}
+
+test "remainder by zero panics on I64" {   //~ TESTFAIL "remainder by zero panics on I64"
+  let a: I64 = 1
+  let z: I64 = 0
+  let _ = a % z
+}
+
+test "div_euclid of I64.MIN by -1 panics" {   //~ TESTFAIL "div_euclid of I64.MIN by -1 panics"
+  let a: I64 = I64.MIN
+  let m: I64 = -1
+  let _ = a.div_euclid(m)
+}
+
+test "div_euclid by zero panics" {   //~ TESTFAIL "div_euclid by zero panics"
+  let a: I64 = 5
+  let z: I64 = 0
+  let _ = a.div_euclid(z)
+}
+
+test "rem_euclid by zero panics" {   //~ TESTFAIL "rem_euclid by zero panics"
+  let a: U64 = 5
+  let z: U64 = 0
+  let _ = a.rem_euclid(z)
+}
+
+test "shifting a U64 left by 64 panics" {   //~ TESTFAIL "shifting a U64 left by 64 panics"
+  let a: U64 = 1
+  let n: U32 = 64
+  let _ = a << n
+}
+
+test "shifting an I64 right by 64 panics" {   //~ TESTFAIL "shifting an I64 right by 64 panics"
+  let a: I64 = 1
+  let n: U32 = 64
+  let _ = a >> n
+}
+
+test "shifting an I32 left by 32 panics" {   //~ TESTFAIL "shifting an I32 left by 32 panics"
+  let a: I32 = 1
+  let n: U32 = 32
+  let _ = a << n
+}
+
+test "shifting a U8 left by 8 panics" {   //~ TESTFAIL "shifting a U8 left by 8 panics"
+  let a: U8 = 1
+  let n: U32 = 8
+  let _ = a << n
+}
+
+test "shifting a U8 left by 7 does not panic" {
+  let a: U8 = 1
+  let n: U32 = 7
+  let b = a << n
+  assert b == 128
+}
+
+test "trunc_i64 just below -2^63 panics" {   //~ TESTFAIL "trunc_i64 just below -2^63 panics"
+  let a: F64 = -9223372036854777856.0
+  let _ = a.trunc_i64()
+}
+
+test "trunc_i32 of 2^31 panics" {   //~ TESTFAIL "trunc_i32 of 2^31 panics"
+  let a: F32 = 2147483648.0
+  let _ = a.trunc_i32()
+}
+
+test "trunc_i32 just below -2^31 panics" {   //~ TESTFAIL "trunc_i32 just below -2^31 panics"
+  let a: F32 = -2147483904.0
+  let _ = a.trunc_i32()
+}
+
+test "trunc_i64 of NaN panics" {   //~ TESTFAIL "trunc_i64 of NaN panics"
+  let z: F64 = 0.0
+  let nan = z / z
+  let _   = nan.trunc_i64()
+}
+
+test "trunc_i64 of infinity panics" {   //~ TESTFAIL "trunc_i64 of infinity panics"
+  let z: F64 = 0.0
+  let inf = 1.0 / z
+  let _   = inf.trunc_i64()
+}
+
+test "trunc_u64 of a value of at least 1 below zero panics" {   //~ TESTFAIL "trunc_u64 of a value of at least 1 below zero panics"
+  let a: F64 = -1.0
+  let _ = a.trunc_u64()
+}

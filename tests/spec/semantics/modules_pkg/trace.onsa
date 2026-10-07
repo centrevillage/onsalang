@@ -1,0 +1,9 @@
+// A log that records the order of calls: each call appends one decimal digit.
+
+pub const SCALE: U32 = 3
+
+pub fn tick(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  d
+}

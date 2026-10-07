@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§5.4", "§4.4", "§4.1", "§9.2"]
+
+// Semantics of `match` on enums, `Option`, owned values and generics (spec §7):
+// binding variant payloads, `return` from an arm, arm bodies that write to the
+// matched place, `match move`, and `match` in a generic function.
+//
+// The forms that need the general lowering (literal, tuple, struct, nested and
+// guarded patterns, scalar scrutinees) are in match_general.onsa. `panic(...)`
+// arms are in match_panic.onsa. `Str` patterns are left out: `Str` is a
+// second-phase type (§20). Range patterns and `@` bindings do not exist (§7
+// "無いもの").
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+  Dot,
+}
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Done,
+}
+
+pub struct Env {
+  stage: Stage,
+  level: I32,
+}
+
+impl Env {
+  // The arm bodies write to the matched place (§7).
+  pub fn step(inout self) {
+    match self.stage {
+      Stage.Attack => {
+        self.stage = Stage.Decay
+        self.level = self.level + 10
+      },
+      Stage.Decay => {
+        self.stage = Stage.Done
+        self.level = self.level - 3
+      },
+      Stage.Done => {
+        self.level = 0
+      },
+    }
+  }
+}
+
+fn area(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(r) => 3 * r * r,
+    Shape.Rect(w, h) => w * h,
+    Shape.Dot => 0,
+  }
+}
+
+test "enum variants bind their payloads" {
+  assert area(Shape.Circle(2)) == 12
+  assert area(Shape.Rect(3, 5)) == 15
+  assert area(Shape.Dot) == 0
+}
+
+fn early(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v + 1,
+    None => {
+      return 500
+    },
+  }
+}
+
+test "return from an arm leaves the function" {
+  assert early(Some(1)) == 2
+  assert early(None) == 500
+}
+
+test "an arm body may change the matched place" {
+  var e = Env { stage: Stage.Attack, level: 0 }
+  e.step!()
+  assert e.level == 10
+  e.step!()
+  assert e.level == 7
+  e.step!()
+  assert e.level == 0
+  let done = match e.stage {
+    Stage.Done => true,
+    _ => false,
+  }
+  assert done
+}
+
+fn buf_len(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match move o {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+fn or_default[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+test "match move binds the payload of an owned value" {
+  let some: Option[Buf[F32]] = Some(Buf.zeroed(4))
+  assert buf_len(move some) == 4
+  let none: Option[Buf[F32]] = None
+  assert buf_len(move none) == 0
+}
+
+test "a generic function matching on its type parameter" {
+  let three: I32 = 3
+  let nine: I32 = 9
+  assert or_default(Some(three), nine) == 3
+  assert or_default(None, nine) == 9
+  let p = or_default(Some(Point { x: 1, y: 2 }), Point { x: 8, y: 8 })
+  assert p.x == 1
+  assert p.y == 2
+  let q = or_default(None, Point { x: 8, y: 9 })
+  assert q.x == 8
+  assert q.y == 9
+}

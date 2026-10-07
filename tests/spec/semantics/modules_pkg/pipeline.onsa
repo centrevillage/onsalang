@@ -1,0 +1,14 @@
+use errors.{AppError, checked_double}
+
+// Two doublings; `?` returns the first error of `AppError` unchanged.
+pub fn quad(n: I64) -> Result[I64, AppError] {
+  let a = checked_double(n)?
+  checked_double(a)
+}
+
+pub fn quad_counted(inout calls: U32, n: I64) -> Result[I64, AppError] {
+  calls = calls + 1
+  let a = checked_double(n)?
+  calls = calls + 1
+  checked_double(a)
+}

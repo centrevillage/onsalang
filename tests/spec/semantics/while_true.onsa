@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§6.1"]
+
+// `while true { ... }` with no `break` that leaves it diverges (spec §7), so it
+// can end a function that returns a value: the function is left through a
+// `return` (or a panic) inside the loop. A `break` in an inner loop leaves only
+// the inner loop and does not count.
+
+fn first_index(xs: [U32; 4], want: U32) -> U32 {
+  var i: U32 = 0
+  while true {
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}
+
+fn find_or_stop(xs: [U32; 4], want: U32) -> U32 {
+  var i: U32 = 0
+  while true {
+    if i == 4 {
+      return 99
+    }
+    if xs[i] == want {
+      return i
+    }
+    i = i + 1
+  }
+}
+
+fn inner_break_does_not_count(n: U32) -> U32 {
+  var k: U32 = 0
+  while true {
+    var j: U32 = 0
+    while true {
+      j = j + 1
+      if j == n {
+        break
+      }
+    }
+    k = k + j
+    if k > 5 {
+      return k
+    }
+  }
+}
+
+test "while true ends a function that returns from inside the loop" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  assert first_index(xs, 7) == 0
+  assert first_index(xs, 10) == 3
+}
+
+test "a search loop can give up through a return" {
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  assert find_or_stop(xs, 9) == 2
+  assert find_or_stop(xs, 1) == 99
+}
+
+test "a break in an inner loop does not stop the outer while true" {
+  assert inner_break_does_not_count(3) == 6
+}
+
+test "falling off the end of the search panics on the index" {   //~ TESTFAIL "falling off the end of the search panics on the index"
+  let xs: [U32; 4] = [7, 8, 9, 10]
+  let r = first_index(xs, 1)
+  assert r == 0
+}

@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§3.5"]
+
+// `panic(msg)` as the value of an arm or a branch (spec §7, §9.2). `panic` is a
+// prelude function whose message is a string literal without interpolation. It
+// does not return, so it can stand where a value of any type is needed, and it
+// is evaluated only when its arm or branch is taken. A panic fails the test it
+// happens in (the test carries a TESTFAIL marker).
+
+fn must(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => panic("unreachable"),
+  }
+}
+
+fn pick(c: Bool) -> I32 {
+  if c {
+    10
+  } else {
+    panic("no")
+  }
+}
+
+test "a panic arm that is not taken is not evaluated" {
+  assert must(Some(5)) == 5
+}
+
+test "reaching the panic arm fails the test" {   //~ TESTFAIL "reaching the panic arm fails the test"
+  let r = must(None)
+  assert r == 0
+}
+
+test "a panic branch that is not taken is not evaluated" {
+  assert pick(true) == 10
+}
+
+test "reaching the panic branch fails the test" {   //~ TESTFAIL "reaching the panic branch fails the test"
+  let r = pick(false)
+  assert r == 0
+}
+
+test "panic stands where a value of any type is needed" {   //~ TESTFAIL "panic stands where a value of any type is needed"
+  let x: I32 = panic("boom")
+  assert x == 0
+}
+
+test "panic stands where a Bool is needed" {   //~ TESTFAIL "panic stands where a Bool is needed"
+  let b: Bool = panic("boom")
+  assert !b
+}
+
+test "a panic in an argument is raised before the call" {   //~ TESTFAIL "a panic in an argument is raised before the call"
+  let r = must(panic("boom"))
+  assert r == 0
+}

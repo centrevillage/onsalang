@@ -1,0 +1,212 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§5.3", "§6.1", "§3.5", "§4.1"]
+
+// `?` and capturing closures (spec §9.1, §5.3, §6.1).
+//
+// Covered: `?` on `Result` and `Option` (the Ok / Some value, early exit with
+// the first Err / None, the payload carried unchanged, evaluation order inside
+// one expression, exit from inside a loop), and anonymous functions passed to
+// `array.from_fn` (capture by copy, several captures, a parameter of the
+// enclosing function, a loop variable, a closure nested in a closure).
+//
+// `?` inside an anonymous function is in try_in_closure.onsa; function values
+// as first-class values are in fn_values.onsa.
+
+use std.array
+
+pub enum ParseError {
+  Negative,
+  TooBig(I32),
+}
+
+fn parse(n: I32) -> Result[I32, ParseError] {
+  if n < 0 {
+    return Err(ParseError.Negative)
+  }
+  if n > 100 {
+    return Err(ParseError.TooBig(n))
+  }
+  Ok(n)
+}
+
+fn parse_count(inout calls: U32, n: I32) -> Result[I32, ParseError] {
+  calls = calls + 1
+  parse(n)
+}
+
+fn sum2(a: I32, b: I32) -> Result[I32, ParseError] {
+  let x = parse(a)?
+  let y = parse(b)?
+  Ok(x + y)
+}
+
+fn sum2_counted(inout calls: U32, a: I32, b: I32) -> Result[I32, ParseError] {
+  let x = parse_count(inout calls, a)?
+  let y = parse_count(inout calls, b)?
+  Ok(x + y)
+}
+
+fn sum_inline(a: I32, b: I32) -> Result[I32, ParseError] {
+  Ok(parse(a)? + parse(b)?)
+}
+
+fn sum_all(xs: [I32; 4]) -> Result[I32, ParseError] {
+  var total: I32 = 0
+  for x in xs {
+    total = total + parse(x)?
+  }
+  Ok(total)
+}
+
+fn sum_all_counted(inout calls: U32, xs: [I32; 4]) -> Result[I32, ParseError] {
+  var total: I32 = 0
+  for x in xs {
+    total = total + parse_count(inout calls, x)?
+  }
+  Ok(total)
+}
+
+// `ParseError` has no derived `==` here (declaration-level derive is the
+// subject of W5-06), so results are read back through `match`.
+fn code(r: Result[I32, ParseError]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(e) => error_code(e),
+  }
+}
+
+fn error_code(e: ParseError) -> I32 {
+  match e {
+    ParseError.Negative => -1,
+    ParseError.TooBig(n) => -1000 - n,
+  }
+}
+
+fn half(n: I32) -> Option[I32] {
+  let r = n % 2
+  if r == 0 {
+    Some(n / 2)
+  } else {
+    None
+  }
+}
+
+fn half_counted(inout calls: U32, n: I32) -> Option[I32] {
+  calls = calls + 1
+  half(n)
+}
+
+fn quarter(n: I32) -> Option[I32] {
+  let h = half(n)?
+  half(h)
+}
+
+fn quarter_counted(inout calls: U32, n: I32) -> Option[I32] {
+  let h = half_counted(inout calls, n)?
+  half_counted(inout calls, h)
+}
+
+pub struct Pos {
+  row: U32,
+  col: U32,
+}
+
+// ------------------------------------------------------------------------ `?`
+
+test "? yields the Ok value" {
+  assert code(sum2(1, 2)) == 3
+}
+
+test "? returns the first Err and skips the rest" {
+  var calls: U32 = 0
+  assert code(sum2_counted(inout calls, -1, 500)) == -1
+  assert calls == 1
+  assert code(sum2_counted(inout calls, 1, 500)) == -1500
+  assert calls == 3
+  assert code(sum2_counted(inout calls, 40, 2)) == 42
+  assert calls == 5
+}
+
+test "? carries the Err payload unchanged" {
+  assert code(sum2(500, -1)) == -1500
+  assert code(sum2(-1, 500)) == -1
+}
+
+test "? inside a larger expression is evaluated left to right" {
+  assert code(sum_inline(1, 2)) == 3
+  assert code(sum_inline(-1, 500)) == -1
+  assert code(sum_inline(1, 500)) == -1500
+}
+
+test "? leaves the loop and the function at the first Err" {
+  var calls: U32 = 0
+  assert code(sum_all_counted(inout calls, [10, 20, -5, 30])) == -1
+  assert calls == 3
+  assert code(sum_all([10, 20, 30, 40])) == 100
+}
+
+test "? on Option returns None early" {
+  var calls: U32 = 0
+  let a = quarter_counted(inout calls, 12)
+  let want_a: Option[I32] = Some(3)
+  assert a == want_a
+  assert calls == 2
+  let b = quarter_counted(inout calls, 7)
+  let want_b: Option[I32] = None
+  assert b == want_b
+  assert calls == 3
+  let c = quarter(6)
+  let want_c: Option[I32] = None
+  assert c == want_c
+}
+
+// -------------------------------------------------------------------- capture
+
+fn tabulate(base: U32) -> [U32; 4] {
+  array.from_fn(fn(i) { base + i })
+}
+
+test "a closure captures an outer value by copy" {
+  let k: F32 = 2.0
+  let xs: [F32; 4] = array.from_fn(fn(i) { k * i.round_f32() })
+  assert xs[0] == 0.0
+  assert xs[1] == 2.0
+  assert xs[2] == 4.0
+  assert xs[3] == 6.0
+}
+
+test "a closure may capture several values and fields" {
+  let p = Pos { row: 3, col: 5 }
+  let off: U32 = 10
+  let xs: [U32; 3] = array.from_fn(fn(i) { p.row + p.col + off + i })
+  assert xs[0] == 18
+  assert xs[1] == 19
+  assert xs[2] == 20
+}
+
+test "a closure inside a function captures that function's parameter" {
+  let xs = tabulate(100)
+  assert xs[0] == 100
+  assert xs[3] == 103
+}
+
+test "a closure built in a loop captures the loop variable" {
+  var total: U32 = 0
+  for n in 1..4 {
+    let xs: [U32; 3] = array.from_fn(fn(i) { n + i })
+    total = total + xs[2]
+  }
+  assert total == 12
+}
+
+test "a closure inside a closure captures the outer closure's parameter" {
+  let grid: [[U32; 3]; 2] = array.from_fn(fn(i: U32) -> [U32; 3] {
+    array.from_fn(fn(j: U32) -> U32 { i + j })
+  })
+  assert grid[0][0] == 0
+  assert grid[0][2] == 2
+  assert grid[1][0] == 1
+  assert grid[1][2] == 3
+}

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§9.2"]
+
+// `std.math.abs` on a signed integer is `-a` with the same panic: it panics for
+// the minimum value, whose negation does not fit (spec §3.4).
+
+use std.math.{abs}
+
+test "abs of ordinary signed integers" {
+  let a: I64 = -5
+  let b: I64 = 5
+  assert abs(a) == 5
+  assert abs(b) == 5
+  let c: I32 = -7
+  assert abs(c) == 7
+}
+
+test "abs of the largest magnitude that fits" {
+  let a: I64 = I64.MAX
+  assert abs(a) == 9223372036854775807
+  let m: I64 = -I64.MAX
+  assert abs(m) == 9223372036854775807
+}
+
+test "abs of I64.MIN panics" {   //~ TESTFAIL "abs of I64.MIN panics"
+  let a: I64 = I64.MIN
+  let _ = abs(a)
+}
+
+test "abs of I32.MIN panics" {   //~ TESTFAIL "abs of I32.MIN panics"
+  let a: I32 = I32.MIN
+  let _ = abs(a)
+}

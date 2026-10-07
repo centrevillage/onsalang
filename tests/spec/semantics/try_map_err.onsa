@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§9.1", "§4.4", "§6.1"]
+
+// `Result.map_err` with a variant constructor as the conversion, used before
+// `?` (spec §9.1, §4.4). `?` needs the error type of the function's return
+// type, so the conversion is explicit: `parse(n).map_err(Wrapped.Parse)?`.
+
+pub enum ParseError {
+  Negative,
+  TooBig(I32),
+}
+
+pub enum Wrapped {
+  Parse(ParseError),
+  Other,
+}
+
+fn parse(n: I32) -> Result[I32, ParseError] {
+  if n < 0 {
+    return Err(ParseError.Negative)
+  }
+  if n > 100 {
+    return Err(ParseError.TooBig(n))
+  }
+  Ok(n)
+}
+
+fn parse_error_code(e: ParseError) -> I32 {
+  match e {
+    ParseError.Negative => -1,
+    ParseError.TooBig(n) => -1000 - n,
+  }
+}
+
+fn wrapped_code(e: Wrapped) -> I32 {
+  match e {
+    Wrapped.Parse(inner) => parse_error_code(inner),
+    Wrapped.Other => -7,
+  }
+}
+
+fn code(r: Result[I32, Wrapped]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(e) => wrapped_code(e),
+  }
+}
+
+fn wrapped(n: I32) -> Result[I32, Wrapped] {
+  let v = parse(n).map_err(Wrapped.Parse)?
+  Ok(v + 1)
+}
+
+fn keep_going(n: I32) -> Result[I32, Wrapped] {
+  let a = wrapped(n)?
+  let b = wrapped(a)?
+  Ok(b)
+}
+
+test "map_err leaves an Ok value alone" {
+  assert code(wrapped(4)) == 5
+}
+
+test "map_err wraps the error and ? returns it" {
+  assert code(wrapped(-4)) == -1
+  assert code(wrapped(900)) == -1900
+}
+
+test "a chain of ? over map_err results" {
+  assert code(keep_going(3)) == 5
+  assert code(keep_going(-3)) == -1
+  assert code(keep_going(99)) == 101
+  assert code(keep_going(100)) == -1101
+}

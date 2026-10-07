@@ -1,0 +1,474 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§5.4", "§4.4", "§4.1", "§3.5", "§9.2"]
+
+// Semantics of `match` beyond the flat enum case (spec §7): literal patterns
+// (integer, Char, Bool, the 8- and 64-bit extremes), `_`, name bindings, tuples,
+// structs, nested patterns, alternatives `p | q`, guards, the first matching
+// arm, evaluating the scrutinee once and only the taken arm, a Copy binding that
+// outlives a write to the matched place, and `match` in a closure.
+//
+// Every value is worked out by hand from the spec text. Enum, Option and
+// generic matches are in match_flat.onsa; `panic(...)` arms are in
+// match_panic.onsa. `Str` patterns are left out: `Str` is a second-phase type
+// (§20). Range patterns and `@` bindings do not exist (§7 "無いもの").
+
+use std.array
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+  Dot,
+}
+
+pub enum Cmd {
+  Move(Point),
+  Draw(Shape),
+  Stop,
+}
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Done,
+}
+
+pub struct Env {
+  stage: Stage,
+  level: I32,
+}
+
+impl Env {
+  // A Copy binding keeps the value it had when it was bound (§5.4, §7).
+  pub fn bump(inout self) -> I32 {
+    match self.level {
+      old => {
+        self.level = old + 10
+        old
+      },
+    }
+  }
+}
+
+// ---------------------------------------------------------------- literals
+
+fn digit(n: I32) -> I32 {
+  match n {
+    0 => 100,
+    1 | 2 | 3 => 200,
+    7 => 300,
+    _ => 0,
+  }
+}
+
+fn vowel(c: Char) -> Bool {
+  match c {
+    'a' | 'e' | 'i' | 'o' | 'u' => true,
+    _ => false,
+  }
+}
+
+fn flag(b: Bool) -> I32 {
+  match b {
+    true => 1,
+    _ => 0,
+  }
+}
+
+fn byte_edge(b: U8) -> I32 {
+  match b {
+    0 => 1,
+    255 => 2,
+    _ => 0,
+  }
+}
+
+fn u64_edge(n: U64) -> I32 {
+  match n {
+    18446744073709551615 => 1,
+    9223372036854775808 => 2,
+    0 => 3,
+    _ => 0,
+  }
+}
+
+fn i64_edge(n: I64) -> I32 {
+  match n {
+    9223372036854775807 => 1,
+    0 => 2,
+    _ => 0,
+  }
+}
+
+test "integer literal patterns and alternatives" {
+  assert digit(0) == 100
+  assert digit(1) == 200
+  assert digit(2) == 200
+  assert digit(3) == 200
+  assert digit(4) == 0
+  assert digit(7) == 300
+  assert digit(-1) == 0
+}
+
+test "Char and Bool literal patterns" {
+  assert vowel('e')
+  assert vowel('u')
+  assert !vowel('b')
+  assert flag(true) == 1
+  assert flag(false) == 0
+}
+
+test "literal patterns at the edges of the 8 and 64 bit types" {
+  assert byte_edge(0) == 1
+  assert byte_edge(255) == 2
+  assert byte_edge(254) == 0
+  assert u64_edge(18446744073709551615) == 1
+  assert u64_edge(9223372036854775808) == 2
+  assert u64_edge(9223372036854775807) == 0
+  assert u64_edge(0) == 3
+  assert i64_edge(9223372036854775807) == 1
+  assert i64_edge(9223372036854775806) == 0
+  assert i64_edge(0) == 2
+}
+
+// ----------------------------------------------------------- order and guards
+
+fn overlap(n: I32) -> I32 {
+  match n {
+    1 | 2 | 3 => 1,
+    3 | 4 => 2,
+    _ => 0,
+  }
+}
+
+fn sign(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    _ if n > 0 => 1,
+    _ => -1,
+  }
+}
+
+fn bucket(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) if v > 100 => 3,
+    Some(v) if v > 10 => 2,
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+test "the first matching arm wins" {
+  assert overlap(1) == 1
+  assert overlap(3) == 1
+  assert overlap(4) == 2
+  assert overlap(5) == 0
+}
+
+test "a false guard falls through to the next arm" {
+  assert sign(0) == 0
+  assert sign(9) == 1
+  assert sign(-9) == -1
+  assert bucket(Some(500)) == 3
+  assert bucket(Some(101)) == 3
+  assert bucket(Some(100)) == 2
+  assert bucket(Some(11)) == 2
+  assert bucket(Some(10)) == 10
+  assert bucket(Some(-4)) == -4
+  assert bucket(None) == 0
+}
+
+// Appends the decimal digit `d` to `log`, so the order of calls can be read back.
+fn probe(inout log: U32, d: U32, r: Bool) -> Bool {
+  let shifted = log * 10
+  log = shifted + d
+  r
+}
+
+fn tick(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  d
+}
+
+test "guards run in arm order and only for arms whose pattern matched" {
+  var log: U32 = 0
+  let n: I32 = 5
+  let r = match n {
+    0 if probe(inout log, 1, true) => 10,
+    5 if probe(inout log, 2, false) => 20,
+    5 if probe(inout log, 3, true) => 30,
+    _ if probe(inout log, 4, true) => 40,
+    _ => 50,
+  }
+  assert r == 30
+  assert log == 23
+}
+
+test "only the taken arm body is evaluated" {
+  var log: U32 = 0
+  let n: U32 = 5
+  let r = match n {
+    1 => tick(inout log, 1),
+    5 => tick(inout log, 2),
+    _ => tick(inout log, 3),
+  }
+  assert r == 2
+  assert log == 2
+}
+
+test "the scrutinee is evaluated once however many arms are tried" {
+  var log: U32 = 0
+  let r = match tick(inout log, 4) {
+    1 => 10,
+    2 => 20,
+    3 => 30,
+    4 => 40,
+    _ => 50,
+  }
+  assert r == 40
+  assert log == 4
+}
+
+// ------------------------------------------------------------------- tuples
+
+fn quad(a: I32, b: I32) -> I32 {
+  match (a, b) {
+    (0, 0) => 1,
+    (0, _) => 2,
+    (_, 0) => 3,
+    (x, y) if x == y => 4,
+    (x, y) => x - y,
+  }
+}
+
+fn nested_tuple(t: ((I32, I32), I32)) -> I32 {
+  match t {
+    ((0, _), _) => -1,
+    ((a, b), c) => a - b - c,
+  }
+}
+
+fn mixed(t: (Bool, Char, U8)) -> I32 {
+  match t {
+    (true, 'x', _) => 1,
+    (true, _, 0) => 2,
+    (false, _, _) => 3,
+    _ => 4,
+  }
+}
+
+test "tuple patterns" {
+  assert quad(0, 0) == 1
+  assert quad(0, 7) == 2
+  assert quad(7, 0) == 3
+  assert quad(6, 6) == 4
+  assert quad(9, 2) == 7
+  assert quad(2, 9) == -7
+}
+
+test "nested tuple patterns" {
+  assert nested_tuple(((0, 5), 5)) == -1
+  assert nested_tuple(((1, 2), 3)) == -4
+  assert nested_tuple(((4, 0), 9)) == -5
+}
+
+test "tuples of mixed literal types" {
+  assert mixed((true, 'x', 9)) == 1
+  assert mixed((true, 'y', 0)) == 2
+  assert mixed((true, 'y', 1)) == 4
+  assert mixed((false, 'x', 0)) == 3
+}
+
+test "a tuple stored in a binding is matched in place" {
+  let t = (3, 4)
+  let r = match t {
+    (a, b) => a * b,
+  }
+  assert r == 12
+  assert t.0 == 3
+  assert t.1 == 4
+}
+
+// ------------------------------------------------------------------ structs
+
+fn on_axis(p: Point) -> I32 {
+  match p {
+    Point { x: 0, y: 0 } => 0,
+    Point { x: 0, y: _ } => 1,
+    Point { x: _, y: 0 } => 2,
+    Point { x: px, y: py } if px == py => 3,
+    Point { x: px, y: py } => px + py,
+  }
+}
+
+fn swapped_fields(p: Point) -> I32 {
+  match p {
+    Point { y: py, x: px } => px - py,
+  }
+}
+
+test "struct patterns with literals, wildcards and bindings" {
+  assert on_axis(Point { x: 0, y: 0 }) == 0
+  assert on_axis(Point { x: 0, y: 5 }) == 1
+  assert on_axis(Point { x: 5, y: 0 }) == 2
+  assert on_axis(Point { x: 4, y: 4 }) == 3
+  assert on_axis(Point { x: 4, y: 5 }) == 9
+}
+
+test "the fields of a struct pattern may be written in any order" {
+  assert swapped_fields(Point { x: 1, y: 2 }) == -1
+}
+
+// ------------------------------------------------------------------ enums
+
+fn describe(c: Cmd) -> I32 {
+  match c {
+    Cmd.Move(Point { x: 0, y: 0 }) => 1,
+    Cmd.Move(Point { x: px, y: _ }) if px < 0 => 2,
+    Cmd.Move(Point { x: px, y: py }) => 1000 + px + py,
+    Cmd.Draw(Shape.Circle(r)) => r,
+    Cmd.Draw(Shape.Rect(_, h)) => h,
+    Cmd.Draw(Shape.Dot) => -1,
+    Cmd.Stop => 99,
+  }
+}
+
+fn pair_area(a: Shape, b: Shape) -> I32 {
+  match (a, b) {
+    (Shape.Circle(r), Shape.Circle(s)) => r + s,
+    (Shape.Rect(w, h), _) => w * h,
+    (Shape.Dot, Shape.Dot) => 0,
+    _ => -1,
+  }
+}
+
+fn small_circle(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(1 | 2) => 1,
+    Shape.Circle(_) => 2,
+    _ => 3,
+  }
+}
+
+test "enum variants nested in enum variants and structs" {
+  assert describe(Cmd.Move(Point { x: 0, y: 0 })) == 1
+  assert describe(Cmd.Move(Point { x: -3, y: 8 })) == 2
+  assert describe(Cmd.Move(Point { x: 3, y: 8 })) == 1011
+  assert describe(Cmd.Draw(Shape.Circle(6))) == 6
+  assert describe(Cmd.Draw(Shape.Rect(2, 7))) == 7
+  assert describe(Cmd.Draw(Shape.Dot)) == -1
+  assert describe(Cmd.Stop) == 99
+}
+
+test "tuples of enums" {
+  assert pair_area(Shape.Circle(1), Shape.Circle(2)) == 3
+  assert pair_area(Shape.Rect(2, 3), Shape.Dot) == 6
+  assert pair_area(Shape.Dot, Shape.Dot) == 0
+  assert pair_area(Shape.Dot, Shape.Circle(1)) == -1
+  assert pair_area(Shape.Circle(1), Shape.Dot) == -1
+}
+
+test "an alternative inside a variant payload" {
+  assert small_circle(Shape.Circle(1)) == 1
+  assert small_circle(Shape.Circle(2)) == 1
+  assert small_circle(Shape.Circle(3)) == 2
+  assert small_circle(Shape.Dot) == 3
+}
+
+// ------------------------------------------------------ Option and Result
+
+fn deep(o: Option[Option[I32]]) -> I32 {
+  match o {
+    Some(Some(v)) => v,
+    Some(None) => -1,
+    None => -2,
+  }
+}
+
+fn res(r: Result[I32, I32]) -> I32 {
+  match r {
+    Ok(v) if v > 0 => v,
+    Ok(_) => 0,
+    Err(e) => -e,
+  }
+}
+
+fn one_or_two(o: Option[I32]) -> I32 {
+  match o {
+    Some(1 | 2) => 1,
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+fn nested_match(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) => match x {
+      0 => 10,
+      1 => 20,
+      _ => 30,
+    },
+    None => 0,
+  }
+}
+
+test "Option nested in Option" {
+  assert deep(Some(Some(7))) == 7
+  assert deep(Some(None)) == -1
+  assert deep(None) == -2
+}
+
+test "Result with a guard" {
+  assert res(Ok(5)) == 5
+  assert res(Ok(0)) == 0
+  assert res(Ok(-5)) == 0
+  assert res(Err(4)) == -4
+}
+
+test "alternatives under Some" {
+  assert one_or_two(Some(1)) == 1
+  assert one_or_two(Some(2)) == 1
+  assert one_or_two(Some(3)) == 2
+  assert one_or_two(None) == 3
+}
+
+test "a match in an arm body" {
+  assert nested_match(Some(0)) == 10
+  assert nested_match(Some(1)) == 20
+  assert nested_match(Some(8)) == 30
+  assert nested_match(None) == 0
+}
+
+// ------------------------------------------------- writes to the matched place
+
+test "a Copy binding keeps its value after the matched place is written" {
+  var e   = Env { stage: Stage.Attack, level: 5 }
+  let old = e.bump!()
+  assert old == 5
+  assert e.level == 15
+  let again = e.bump!()
+  assert again == 15
+  assert e.level == 25
+}
+
+test "match inside a closure that captures" {
+  let base: U32 = 100
+  let xs: [U32; 4] = array.from_fn(fn(i) {
+    match i {
+      0 => base,
+      1 | 2 => base + 10,
+      _ => base + 20,
+    }
+  })
+  assert xs[0] == 100
+  assert xs[1] == 110
+  assert xs[2] == 110
+  assert xs[3] == 120
+}

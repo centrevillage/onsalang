@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4"]
+
+// `U64` wrapping and saturating multiplication of values near 2^64 (spec
+// §3.4): `a *% b` is the mathematical product modulo 2^64, `a *| b` clamps to
+// U64.MAX. This is in a file of its own because the product does not fit in a
+// 64-bit host word, which is where an interpreter is easiest to get wrong.
+
+test "U64.MAX squared wraps to 1" {
+  let umax: U64 = U64.MAX
+  let c = umax *% umax
+  assert c == 1
+}
+
+test "U64 wrapping multiply of two large values" {
+  // (2^63 + 1) * 3 = 3 * 2^63 + 3, and 3 * 2^63 = 2^64 + 2^63, so the result is 2^63 + 3.
+  let a: U64 = 9223372036854775809
+  let c = a *% 3
+  assert c == 9223372036854775811
+}
+
+test "U64 multiplication by a power of two shifts out the top bits" {
+  let a: U64 = 18446744073709551615
+  let b: U64 = 4294967296
+  let c = a *% b
+  assert c == 18446744069414584320
+}
+
+test "U64 saturating multiply" {
+  let umax: U64 = U64.MAX
+  let a = umax *| umax
+  assert a == umax
+  let b: U64 = 4294967296
+  let c = b *| b
+  assert c == umax
+  let d: U64 = 4294967295
+  let e = b *| d
+  assert e == 18446744069414584320
+}

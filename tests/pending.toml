@@ -682,3 +682,142 @@ target = "tests/fuzz/73f70bf0.onsa"
 reasons = ["R-01"]
 until = "W3-04"
 note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: byte index # is not a char boundary（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く）"
+
+# --- W1-08 の意味のテスト（fn の世界）のうち、まだ通らないもの（2026-10-07）
+
+# --- W1-08 の意味のテストのうち、まだ通らないもの
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/assoc_consts.onsa"
+reasons = ["S-84"]
+until = "W5-05"
+note = "整数と浮動小数の ZERO / ONE（§6.6）が無い（E0302）。ZERO を足すと BITS が I32 以外で誤る（W2-03 の数値の端）ことも出る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/generic_zero.onsa"
+reasons = ["S-84"]
+until = "W5-05"
+note = "T: AnyNum の境界が E0200（user-defined traits as bounds）。T.ZERO（§6.6）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/checked_ops.onsa"
+reasons = ["R-79", "S-69"]
+until = "W5-02"
+note = "checked_neg / checked_rem / checked_div_euclid / checked_rem_euclid / checked_shl / checked_shr が無い（E0413、§3.4）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/match_general.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "値の match の一般経路（リテラル・ガード・タプル・入れ子・スカラの対象）が internal: local read before initialization（§7）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/fn_values.onsa"
+reasons = ["R-08"]
+until = "W8-09"
+note = "関数値と関数値の呼び出しが E0200（§4.1、§5.3、§6.1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/try_in_closure.onsa"
+reasons = ["R-08"]
+until = "W2-07"
+note = "無名関数の中の ? で降下が内部の失敗（`?` in a function without Option / Result）。W2-07 で E0200 にしたら expect を外し、until を W8-09（Core の関数値）に改める"
+expect = "internal"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/precedence.onsa"
+reasons = ["S-45"]
+until = "W3-07"
+note = "演算子の群（乗法 > 加法 > 比較 > && ||、% > 比較、§3.1）。今は E0010"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/match_panic.onsa"
+reasons = ["S-40"]
+until = "W5-08"
+note = "panic が prelude に無い（E0302、§9.2）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/while_true.onsa"
+reasons = ["R-52", "S-40"]
+until = "W5-08"
+note = "while true の発散を末尾に置けない（E0401、§7）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/try_map_err.onsa"
+reasons = ["S-71"]
+until = "W5-03"
+note = "Result の map_err が無い（E0413、§9.1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/wrapping_mul_u64.onsa"
+reasons = ["R-04"]
+until = "W2-03"
+note = "U64 の *% と *| でインタプリタ自体が Rust の乗算の溢れで落ちる（内部エラー）。W2-03 で直す"
+expect = "internal"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/bounds64.onsa::BITS of the 64-bit types"
+reasons = ["R-136"]
+until = "W5-05"
+note = "I64.BITS などが I32 以外で 32 のまま（§6.6）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/bounds64.onsa::MIN % -1 is 0 and does not panic"
+reasons = ["R-19"]
+until = "W2-03"
+note = "MIN % -1 が溢れで panic する。仕様は 0（§3.4、§9.2）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/bounds64.onsa::a NaN reads back as the canonical quiet NaN"
+reasons = ["S-106"]
+until = "W2-03"
+note = "to_bits() が NaN を正の quiet NaN にそろえない（§3.4）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/eval_order.onsa::struct literal fields are evaluated in the order written"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "struct リテラルを書いた順でなく宣言の順に評価する（§3.5）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/eval_order.onsa::assignment to a nested element: the right-hand side, then the indices left to right"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "代入先の添字を右から左に評価する（§3.5）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/eval_order.onsa::nested indices are evaluated from the outside in"
+reasons = ["R-93", "S-75"]
+until = "W8-03"
+note = "xs[i][j] の添字を内側から評価する（§3.5）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/eval_order.onsa::a match arm that would panic is not evaluated when it is not taken"
+reasons = ["R-06"]
+until = "W8-06"
+note = "スカラの対象の match が internal: local read before initialization（§7、§3.5）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/trunc_range.onsa"
+reasons = ["R-19"]
+until = "W2-03"
+note = "2^63 の trunc_i64 と 2^64 の trunc_u64 が panic しない（§3.3、§3.4）。TESTFAIL の印のある test は一覧に個別に載せられないのでファイルごと"

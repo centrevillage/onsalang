@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§6.1"]
+
+// Diverging blocks (spec §7): a block that ends in `return` can stand where a
+// value of any type is needed (`let k = if c { 1 } else { return 0 }`). `while
+// true` loops are in while_true.onsa and `panic(...)` in match_panic.onsa.
+
+fn positive_or_zero(c: Bool, n: I32) -> I32 {
+  let k = if c {
+    n
+  } else {
+    return 0
+  }
+  k + 1
+}
+
+test "a block that returns can stand in a value position" {
+  assert positive_or_zero(true, 4) == 5
+  assert positive_or_zero(false, 4) == 0
+}

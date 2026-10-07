@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§7", "§9.1", "§3.5", "§4.5", "§5.3", "§3.4"]
+
+// The semantics checks of match_flat, eval_order, try_operator and bounds64 once
+// more, with the types and functions in other modules of the package: matching
+// on an imported enum, `?` with an imported error type, the order of calls to an
+// imported function, an imported generic function and constants, and a closure
+// that uses an imported constant.
+
+use std.array
+use errors.{AppError, LIMIT}
+use pipeline.{quad, quad_counted}
+use shapes.{Point, Shape, area, or_default, origin}
+use trace.{SCALE, tick}
+
+fn describe(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(r) => r,
+    Shape.Rect(w, _) => w,
+    Shape.Dot => -1,
+  }
+}
+
+fn error_code(e: AppError) -> I64 {
+  match e {
+    AppError.Negative => -1,
+    AppError.Overflow => -2,
+  }
+}
+
+fn code(r: Result[I64, AppError]) -> I64 {
+  match r {
+    Ok(v) => v,
+    Err(e) => error_code(e),
+  }
+}
+
+test "matching on an enum declared in another module" {
+  assert area(Shape.Rect(3, 4)) == 12
+  assert area(Shape.Circle(2)) == 12
+  assert area(Shape.Dot) == 0
+  assert describe(Shape.Circle(9)) == 9
+  assert describe(Shape.Rect(5, 6)) == 5
+  assert describe(Shape.Dot) == -1
+}
+
+test "a struct from another module is built and read" {
+  let p = origin()
+  assert p.x == 0
+  assert p.y == 0
+  let q = Point { x: 3, y: 4 }
+  assert q.y == 4
+}
+
+test "? returns the imported error type unchanged" {
+  assert code(quad(5)) == 20
+  assert code(quad(-5)) == -1
+  assert code(quad(2305843009213693952)) == -2
+  assert code(quad(1152921504606846975)) == 4611686018427387900
+}
+
+test "? skips the rest of the function at the first error" {
+  var calls: U32 = 0
+  assert code(quad_counted(inout calls, -3)) == -1
+  assert calls == 1
+  assert code(quad_counted(inout calls, 4)) == 16
+  assert calls == 3
+}
+
+test "the order of calls to an imported function is left to right" {
+  var log: U32 = 0
+  let v = tick(inout log, 1) + tick(inout log, 2) + tick(inout log, 3)
+  assert v == 6
+  assert log == 123
+}
+
+test "an imported 64-bit constant sits at the edge of I64" {
+  let a: I64 = LIMIT
+  assert a == I64.MAX
+  let w = a +% 1
+  assert w == I64.MIN
+  let c = a.checked_add(1)
+  let none = match c {
+    None => true,
+    Some(_) => false,
+  }
+  assert none
+}
+
+test "an imported generic function is used with an imported type" {
+  let some: Option[Shape] = Some(Shape.Rect(2, 5))
+  let none: Option[Shape] = None
+  assert area(or_default(some, Shape.Dot)) == 10
+  assert area(or_default(none, Shape.Circle(1))) == 3
+}
+
+test "a closure uses an imported constant and an imported function" {
+  let xs: [U32; 3] = array.from_fn(fn(i) { SCALE + i })
+  assert xs[0] == 3
+  assert xs[2] == 5
+}

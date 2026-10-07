@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.3", "§4.5", "§3.4"]
+
+// Associated constants of the numeric types (spec §6.6 table, §6.3): `ZERO`,
+// `ONE`, `MIN`, `MAX` and `BITS` of the integers, and `ZERO`, `ONE`, `PI`, `MAX`,
+// `EPSILON`, `INFINITY` and `NAN` of the floating-point types. The generic form
+// `T.ZERO` is in generic_zero.onsa.
+
+test "ZERO and ONE of the integers" {
+  assert I64.ZERO == 0
+  assert U64.ZERO == 0
+  assert I8.ZERO == 0
+  assert I64.ONE == 1
+  assert U64.ONE == 1
+  assert U8.ONE == 1
+}
+
+test "BITS is a U32 equal to the bit width" {
+  let a: U32 = I8.BITS
+  let b: U32 = I16.BITS
+  let c: U32 = I32.BITS
+  let d: U32 = I64.BITS
+  let e: U32 = U8.BITS
+  let f: U32 = U16.BITS
+  let g: U32 = U32.BITS
+  let h: U32 = U64.BITS
+  assert a == 8
+  assert b == 16
+  assert c == 32
+  assert d == 64
+  assert e == 8
+  assert f == 16
+  assert g == 32
+  assert h == 64
+}
+
+test "MIN and MAX of every integer type" {
+  assert U8.MIN == 0
+  assert U16.MIN == 0
+  assert U32.MIN == 0
+  assert U64.MIN == 0
+  assert U8.MAX == 255
+  assert U16.MAX == 65535
+  assert U32.MAX == 4294967295
+  assert U64.MAX == 18446744073709551615
+  assert I8.MAX == 127
+  assert I16.MAX == 32767
+  assert I32.MAX == 2147483647
+  assert I64.MAX == 9223372036854775807
+  let i8_min  = -I8.MAX - 1
+  let i16_min = -I16.MAX - 1
+  let i32_min = -I32.MAX - 1
+  let i64_min = -I64.MAX - 1
+  assert I8.MIN == i8_min
+  assert I16.MIN == i16_min
+  assert I32.MIN == i32_min
+  assert I64.MIN == i64_min
+}
+
+test "constants of the floating-point types" {
+  assert F32.ZERO == 0.0
+  assert F64.ONE == 1.0
+  assert F32.MAX == 3.4028235e38
+  assert F64.MAX == 1.7976931348623157e308
+  let eps32 = 1.0 / 8388608.0
+  let eps64 = 1.0 / 4503599627370496.0
+  assert F32.EPSILON == eps32
+  assert F64.EPSILON == eps64
+  assert F32.INFINITY > F32.MAX
+  assert -F64.INFINITY < -F64.MAX
+  let nan = F32.NAN
+  assert nan != nan
+  assert F64.PI == 3.141592653589793
+  assert F32.PI == 3.1415927
+}
+
+test "the least finite float is -MAX" {
+  let m = -F32.MAX
+  assert m < 0.0
+  let sum = m + F32.MAX
+  assert sum == 0.0
+}

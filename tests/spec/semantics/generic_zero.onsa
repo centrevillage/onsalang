@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.3", "§4.5"]
+
+// `T.ZERO` under an `AnyNum` bound (spec §6.3, §6.6): the same generic function
+// is used at I64, U64 and F32.
+
+fn plus_zero[T: AnyNum](x: T) -> T {
+  x + T.ZERO
+}
+
+test "T.ZERO in a generic function" {
+  let a: I64 = I64.MAX
+  let b: U64 = U64.MAX
+  let c: F32 = 2.5
+  assert plus_zero(a) == I64.MAX
+  assert plus_zero(b) == U64.MAX
+  assert plus_zero(c) == 2.5
+}
