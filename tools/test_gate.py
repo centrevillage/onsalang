@@ -8,7 +8,9 @@ items that stand in for cargo.
     python3 -B tools/test_gate.py
 """
 import io
+import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -19,10 +21,15 @@ from unittest import mock
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import builtin_names  # noqa: E402
 import check_spec_examples as cse  # noqa: E402
+import diag_codes  # noqa: E402
+import gap_marks  # noqa: E402
 import gate  # noqa: E402
 import gate_steps  # noqa: E402
+import ignored_files  # noqa: E402
 import pending  # noqa: E402
+import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 import spec_sections  # noqa: E402
 
@@ -52,7 +59,23 @@ PLAN = """\
 ## 4. 作業
 | T1-1 ✅ | 字句解析器 |
 | T5-8 | 生成 |
+| T9-2 | 締め |
 ## 5. 診断コード
+| コード | 内容 | 段 | M |
+|---|---|---|---|
+| E0601 | 効果 | 効果 | M3 |
+| E0612〜E0614, E0620 | handler・ポリシー | — | 第 2 期 |
+| E0904 / E0905 | rt と blocking | — | 第 2 期 |
+
+欠番: E0611（S-77 で E0601 にまとめた）、E0814（S-147 で E0815 にまとめた）。照合は E0999 を除かない。
+## 6. 仕様の例
+"""
+
+API = """\
+# api
+| ID | 候補 |
+|---|---|
+| A-01 | is_some |
 """
 
 REVIEW = """\
@@ -128,7 +151,9 @@ class Repo:
             "docs/rework-phase1.md": REWORK,
             "docs/implementation-tasks.md": PLAN,
             "docs/review-impl-phase1.md": REVIEW,
+            "docs/api-candidates.md": API,
             "spec.md": SPEC,
+            str(repo.SPEC): SPEC,
             "tests/spec/ops/groups.onsa": COPY_FIRST,
             "tests/pending.toml": "",
         }.items():
@@ -472,6 +497,47 @@ class PendingList(TempRepo):
         self.assertEqual(quiet(pending.main, base + ["--gate-steps", "c-header"]), 0)
         self.assertEqual(quiet(pending.main, base + ["--gate-steps", ""]), 1)
 
+    def test_phase2(self):
+        # K-13 rule 3: a code of the second phase waits for no work
+        self.assertEqual(self.errors_of(entry("diag-code", "E0612", until="P2")), [])
+        self.assertOneError(entry("spec-example", self.sid, until="P2"), "only for diag-code")
+        self.assertOneError(entry("test-case", "tests/spec/ops/groups.onsa", until="P2"), "only for diag-code")
+        self.assertOneError(entry("diag-code", "E0612", until="P3"), "is not a work ID")
+        self.assertOneError(entry("diag-code", "E0612", until="p2"), "is not a work ID")
+
+    def test_phase2_spec_sections(self):
+        # a P2 entry may give a numbered heading of the spec as a reason
+        self.assertEqual(self.errors_of(entry("diag-code", "E0612", reasons=("§17.4", "S-45"), until="P2")), [])
+        self.assertEqual(self.errors_of(entry("diag-code", "E0612", reasons=("§3",), until="P2")), [])
+        self.assertOneError(entry("diag-code", "E0612", reasons=("§9.9",), until="P2"), "not a numbered heading")
+        self.assertOneError(entry("diag-code", "E0612", reasons=("§3.",), until="P2"), "not an S / R number")
+        self.assertOneError(entry("diag-code", "E0612", reasons=("§3.1",)), 'only of `until = "P2"`')
+        self.assertOneError(entry("spec-example", self.sid, reasons=("§3.1",)), 'only of `until = "P2"`')
+        (self.repo.root / repo.SPEC).unlink()
+        with self.assertRaisesRegex(pending.DocsError, "onsa-lang-spec"):
+            pending.load_docs(self.repo.root)
+
+    def test_phase2_stages(self):
+        text = entry("diag-code", "E0612", until="P2") + entry("diag-code", "E0001", until="T9-2") + entry("spec-example", self.sid)
+        self.repo.write("tests/pending.toml", text)
+        entries, errors = pending.load(self.repo.pending)
+        self.assertEqual(errors, [])
+        self.assertEqual(pending.stage_of("P2"), "P2")
+        # the second phase comes after every stage of the first
+        self.assertEqual(pending.stages_line(entries), "pending by stage: W3 1, M9 1, P2 1 (total 3)")
+        # the end of the first phase leaves only P2
+        left = pending.stage_end_errors(entries, "M9")
+        self.assertEqual(len(left), 2, left)
+        self.assertFalse(any("E0612" in m for m in left), left)
+        self.assertEqual(len(pending.stage_end_errors(entries, "W3")), 1)
+        base = ["--root", str(self.repo.root), "--gate-steps", ""]
+        self.assertEqual(quiet(pending.main, base), 0)
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "P2"]), 2)
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 1)
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0612", until="P2"))
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 0)
+        self.assertIn("P2", gate.summary([], pending.load(self.repo.pending)[0], [])[2])
+
 
 def fake(name, code=0, **kw):
     """A gate item that records its argv in `<cwd>/argv-<name>` and exits with `code`."""
@@ -583,7 +649,10 @@ class RealSteps(unittest.TestCase):
     def test_required_items(self):
         names = [s.name for s in gate_steps.STEPS]
         self.assertEqual(len(names), len(set(names)))
-        required = ("fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden")
+        required = (
+            "fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden",
+            "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files",
+        )  # fmt: skip
         for r in required + ("spec-coverage",):
             self.assertIn(r, names)
         by_name = {s.name: s for s in gate_steps.STEPS}
@@ -701,6 +770,671 @@ class Golden(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             gate.golden_changes(self.root)
         self.assertEqual(quiet(gate.golden_main, self.root), 1)
+
+
+def json_cmd(outputs):
+    """A stand-in for `onsa_cases`: prints `outputs[<first argument>]` as JSON."""
+    script = "import json, sys; o = json.loads(sys.argv[1]); print(json.dumps(o[sys.argv[2]]))"
+    return (sys.executable, "-B", "-c", script, json.dumps(outputs))
+
+
+def run(path, mode="check", markers=()):
+    """A case of `onsa_cases --run`; markers are (file, line, code, matched, target)."""
+    return {
+        "path": path,
+        "mode": mode,
+        "ran": mode != "none",
+        "markers": [
+            {"code": c, "file": f, "line": ln, "stage": "build" if t else "check", "target": t, "matched": ok}
+            for f, ln, c, ok, t in markers
+        ],
+        "problems": [],
+    }
+
+
+class DiagRegistry(TempRepo):
+    def test_spec_codes(self):
+        text = "E0001 は（E0002）、コードはE0003。E00xx、E00123、XE0004、`E0005`"
+        self.assertEqual(diag_codes.spec_codes(text), {"E0001", "E0002", "E0003", "E0005"})
+        for r in (
+            "E0410〜E0416", "E0410 ~ E0416", "E0410-E0416", "E0410〜0416", "E0410..E0416", "E0410...E0416",
+            "E0410 … E0416", "E0410--E0416", "E0410 to E0416", "E0410 から E0416",
+        ):  # fmt: skip
+            with self.subTest(r=r):
+                with self.assertRaisesRegex(diag_codes.CheckError, "range"):
+                    diag_codes.spec_codes(f"型の誤りは {r}。")
+        # a list is not a range
+        for ok in ("E0410 / E0416", "E0410、E0416", "E0410 total E0416", "E0410, E0416"):
+            self.assertEqual(diag_codes.spec_codes(ok), {"E0410", "E0416"}, ok)
+
+    def test_phase2_codes(self):
+        # the rows whose last cell is 第 2 期, with the ranges expanded; not the M3 row
+        self.assertEqual(repo.phase2_codes(PLAN), {"E0612", "E0613", "E0614", "E0620", "E0904", "E0905"})
+        with self.assertRaisesRegex(repo.RepoError, "no row"):
+            repo.phase2_codes(PLAN.replace("| 第 2 期 |", "| M4 |"))
+        with self.assertRaisesRegex(repo.RepoError, "goes down"):
+            repo.phase2_codes(PLAN.replace("E0612〜E0614", "E0614〜E0612"))
+
+    def test_retired_codes(self):
+        # codes in parentheses and after the first sentence are not retired
+        self.assertEqual(repo.retired_codes(PLAN), {"E0611", "E0814"})
+        for bad, needle in (
+            (PLAN.replace("欠番: ", "欠番は "), "found 0"),
+            (PLAN.replace("## 6.", "欠番: E0313。\n## 6."), "found 2"),
+            (PLAN.replace("欠番: E0611（S-77 で E0601 にまとめた）、E0814（S-147 で E0815 にまとめた）", "欠番: なし"), "names no code"),
+            (PLAN.replace("## 5.", "## 5x"), "## 5."),
+        ):
+            with self.subTest(needle=needle):
+                with self.assertRaisesRegex(diag_codes.CheckError, re.escape(needle)):
+                    repo.retired_codes(bad)
+
+    def test_check_registry(self):
+        spec, retired = {"E0001", "E0002", "E0814"}, {"E0814", "E0611"}
+        self.assertEqual(diag_codes.check_registry({"E0001", "E0002"}, spec, retired), [])
+        problems = diag_codes.check_registry({"E0001", "E0814", "E0999"}, spec, retired)
+        self.assertEqual(len(problems), 3, problems)
+        self.assertIn("E0002: the spec names it", problems[0])
+        self.assertIn("E0814: a retired code", problems[1])
+        self.assertIn("E0999: in the registry, but the spec does not name it", problems[2])
+
+    def run_main(self, flag, outputs):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = diag_codes.main([flag], root=self.repo.root, cmd=json_cmd(outputs))
+        return code, out.getvalue()
+
+    def test_main(self):
+        self.repo.write(str(repo.SPEC), "E0001 と E0002。E0611 は欠番。")
+        codes = [{"code": "E0001"}, {"code": "E0002"}]
+        code, out = self.run_main("--registry", {"--codes": codes})
+        self.assertEqual(code, 0, out)
+        self.assertIn("2 codes in the registry", out)
+        code, out = self.run_main("--registry", {"--codes": codes[:1]})
+        self.assertEqual(code, 1, out)
+        self.assertIn("E0002: the spec names it", out)
+        # a failing lister fails the check
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = diag_codes.main(["--registry"], root=self.repo.root, cmd=(sys.executable, "-B", "-c", "raise SystemExit(3)"))
+        self.assertEqual(code, 1)
+        self.assertIn("cannot check", out.getvalue())
+
+
+class DiagNegatives(TempRepo):
+    def test_count(self):
+        runs = {
+            "cases": [
+                # a marker compared once per target counts once; one not matched does not count
+                run("tests/a/m.onsa", markers=[("m.onsa", 3, "E0809", True, "a"), ("m.onsa", 3, "E0809", True, "b"),
+                                               ("m.onsa", 4, "E0809", False, "a")]),
+                # the same file name in another case is another example
+                run("tests/b/m.onsa", markers=[("m.onsa", 3, "E0809", True, None)]),
+                run("tests/c.onsa", markers=[("tests/c.onsa", 1, "E0302", True, None), ("tests/c.onsa", 2, "E0302", True, None)]),
+                # not counted: mode none, a case pending as a whole
+                run("tests/none.onsa", mode="none", markers=[("tests/none.onsa", 1, "E0302", True, None)]),
+                run("tests/whole.onsa", markers=[("tests/whole.onsa", 1, "E0302", True, None)]),
+                # counted: a case with one test pending
+                run("tests/one.onsa", mode="test", markers=[("tests/one.onsa", 1, "E0401", True, None)]),
+            ],
+            "errors": [],
+        }
+        listed = entry("test-case", "tests/whole.onsa", until="W3-07") + entry("test-case", "tests/one.onsa::t", until="W3-07")
+        self.repo.write("tests/whole.onsa", "")
+        self.repo.write("tests/one.onsa", "")
+        self.repo.write("tests/pending.toml", listed)
+        entries, errors = pending.load(self.repo.pending)
+        self.assertEqual(errors, [])
+        counts = diag_codes.count_negatives(runs, entries)
+        self.assertEqual(counts, {"E0809": 2, "E0302": 2, "E0401": 1})
+
+    def test_check(self):
+        registry = {"E0001", "E0002", "E0003"}
+        counts = {"E0001": 3, "E0002": 2, "E0003": 0}
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0002") + entry("diag-code", "E0003"))
+        entries, _ = pending.load(self.repo.pending)
+        self.assertEqual(diag_codes.check_negatives(counts, registry, entries, set()), [])
+        # fewer than 3 and not listed
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0002"))
+        entries, _ = pending.load(self.repo.pending)
+        problems = diag_codes.check_negatives(counts, registry, entries, set())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("E0003: 0 negative example(s), fewer than 3, and not listed", problems[0])
+        # listed but reached 3; listed but not a code
+        text = entry("diag-code", "E0001") + entry("diag-code", "E0002") + entry("diag-code", "E0003") + entry("diag-code", "E0998")
+        self.repo.write("tests/pending.toml", text)
+        entries, _ = pending.load(self.repo.pending)
+        problems = diag_codes.check_negatives({**counts, "E0997": 1}, registry, entries, set())
+        self.assertEqual(len(problems), 3, problems)
+        self.assertIn("E0001: 3 negative examples, but pending[0]", problems[0])
+        self.assertIn("remove the entry", problems[0])
+        self.assertIn('"E0998": not a code of the registry', problems[1])
+        self.assertIn("E0997: markers name it", problems[2])
+
+    def test_phase2(self):
+        # M1: P2 only for the codes of the second phase (plan §5), and those listed have P2
+        registry, counts, phase2 = {"E0001", "E0612"}, {}, {"E0612"}
+        ok = entry("diag-code", "E0001", until="W3-07") + entry("diag-code", "E0612", until="P2")
+        self.repo.write("tests/pending.toml", ok)
+        entries, _ = pending.load(self.repo.pending)
+        self.assertEqual(diag_codes.check_negatives(counts, registry, entries, phase2), [])
+        # a code of the first phase put off to P2
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0001", until="P2") + entry("diag-code", "E0612", until="P2"))
+        entries, _ = pending.load(self.repo.pending)
+        problems = diag_codes.check_negatives(counts, registry, entries, phase2)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn('"E0001": until "P2", but the plan §5 does not put it in the second phase', problems[0])
+        # a code of the second phase given a work of the first
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0001", until="W3-07") + entry("diag-code", "E0612", until="W3-07"))
+        entries, _ = pending.load(self.repo.pending)
+        problems = diag_codes.check_negatives(counts, registry, entries, phase2)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn('"E0612": a code of the second phase (plan §5), so its until is "P2", not W3-07', problems[0])
+
+    def test_threshold_is_three(self):
+        self.assertEqual(diag_codes.NEGATIVE_MIN, 3)
+
+    def test_main(self):
+        runs = {"cases": [run("tests/c.onsa", markers=[("tests/c.onsa", i, "E0001", True, None) for i in (1, 2, 3)])], "errors": []}
+        outputs = {"--codes": [{"code": "E0001"}, {"code": "E0002"}], "--run": runs}  # plan §5: E0612... are P2
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0002"))
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = diag_codes.main(["--negatives"], root=self.repo.root, cmd=json_cmd(outputs))
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("(6 of the second phase)", out.getvalue())
+        self.assertIn("1 fewer: E0002 0", out.getvalue())
+        # an error of the scan fails
+        outputs["--run"] = {**runs, "errors": ["tests/locked: cannot read the directory"]}
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            code = diag_codes.main(["--negatives"], root=self.repo.root, cmd=json_cmd(outputs))
+        self.assertEqual(code, 1)
+        self.assertIn("cannot scan the cases", out.getvalue())
+
+
+class SpecGap(TempRepo):
+    def marks(self, files):
+        for rel, text in files.items():
+            self.repo.write(rel, text)
+        marks = gap_marks.find_marks(self.repo.root)
+        known = pending.load_docs(self.repo.root).reasons | gap_marks.api_ids(self.repo.root)
+        return marks, gap_marks.check(marks, known)
+
+    def test_registered_marks_pass(self):
+        marks, problems = self.marks(
+            {
+                "crates/a/src/lib.rs": "fn f() {} // SPEC-GAP(S-45): the order is not given\n    // SPEC-GAP(R-23): x\n",
+                "std/x.onsa": "// SPEC-GAP(A-01): y\n",
+                "runtime/c/onsa.h": "/* c */ // SPEC-GAP(S-34): z\n",
+                "tools/t.py": "x = 1  # SPEC-GAP(R-23): w\n",
+            }
+        )
+        self.assertEqual(len(marks), 5)
+        self.assertEqual(problems, [])
+
+    def test_bad_marks_fail(self):
+        cases = {
+            "// SPEC-GAP: no id": "malformed",
+            "// SPEC-GAP(): empty": "malformed",
+            "// SPEC-GAP(S-45) missing colon": "malformed",
+            "// spec-gap(S-45): lower case": "malformed",
+            "// SPECGAP(S-45): no hyphen": "malformed",
+            "// SPEC GAP(S-45): a space": "malformed",
+            "// Spec_Gap(S-45): mixed": "malformed",
+            "// a spec gap, mentioned in prose": "malformed",
+            "// SPEC-GAP(S-45): a note on a specgap": "malformed",
+            "// SPEC-GAP(S-45):": "malformed",
+            "//SPEC-GAP(S-45): no space": "malformed",
+            "/// SPEC-GAP(S-45): a doc comment": "malformed",
+            "// SPEC-GAP(S-45): one // SPEC-GAP(R-23): two": "malformed",
+            "let s = \"SPEC-GAP\";": "malformed",
+            "// SPEC-GAP(NEW): to register": "the parent registers",
+            "// SPEC-GAP(Q-10): not S / R / A": "not an S / R / A number",
+            "// SPEC-GAP(S-99): outside §2": "not in the tables",
+            "// SPEC-GAP(A-02): no such row": "not in the tables",
+        }
+        for line, needle in cases.items():
+            with self.subTest(line=line):
+                _, problems = self.marks({"crates/a/src/lib.rs": f"fn f() {{}}\n{line}\n"})
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(needle, problems[0])
+                self.assertIn("crates/a/src/lib.rs:2", problems[0])
+
+    def test_spelling_hint(self):
+        # N3: a line that only mentions a spelling of the token is told how to avoid it
+        _, problems = self.marks({"crates/a/src/lib.rs": "// see spec_gap below\n"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("if this is not a mark, avoid spellings like `spec_gap`", problems[0])
+
+    def test_comment_leader_follows_the_file(self):
+        _, problems = self.marks({"tools/t.py": "# SPEC-GAP(S-45): ok\n// SPEC-GAP(S-45): not a Python comment\n"})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("tools/t.py:2", problems[0])
+
+    def test_skipped(self):
+        marks, _ = self.marks(
+            {
+                # build outputs: `target/` next to a Cargo.toml or an onsa.toml
+                "crates/a/Cargo.toml": "[package]\n",
+                "crates/a/target/x.rs": "// SPEC-GAP(NEW): build output\n",
+                "std/pkg/onsa.toml": "[package]\n",
+                "std/pkg/target/host/x.c": "// SPEC-GAP(NEW): build output\n",
+                "docs/x.md": "// SPEC-GAP(NEW): not scanned\n",
+                "tools/gap_marks.py": "TOKEN = 'SPEC-GAP'\n",
+            }
+        )
+        self.assertEqual(marks, [])
+        (self.repo.root / "crates/a/b.bin").write_bytes(b"\xff\xfe SPEC-GAP")  # not text
+        self.assertEqual(gap_marks.find_marks(self.repo.root), [])
+        # M3: a `target` elsewhere is an ordinary directory and is scanned
+        marks, problems = self.marks(
+            {
+                "crates/a/src/target/x.rs": "// SPEC-GAP(NEW): a module named target\n",
+                "tools/target/y.py": "# SPEC-GAP(S-45): ok\n",
+            }
+        )
+        self.assertEqual([m[0] for m in marks], ["crates/a/src/target/x.rs", "tools/target/y.py"])
+        self.assertEqual(len(problems), 1, problems)
+
+    def test_main(self):
+        self.repo.write("crates/a/src/lib.rs", "// SPEC-GAP(S-45): x\n")
+        self.assertEqual(quiet(gap_marks.main, ["--root", str(self.repo.root)]), 0)
+        self.repo.write("crates/a/src/lib.rs", "// SPEC-GAP(NEW): x\n")
+        self.assertEqual(quiet(gap_marks.main, ["--root", str(self.repo.root)]), 1)
+        (self.repo.root / "docs/api-candidates.md").unlink()
+        self.assertEqual(quiet(gap_marks.main, ["--root", str(self.repo.root)]), 1)
+
+
+BUILTIN_BASELINES = dict(builtin_names.BASELINES)
+
+NAMES_SPEC = """\
+# Spec
+## 2. 字句
+### 2.2 キーワード（全て）
+
+```
+fn let match
+use trait impl
+```
+
+`prev` `delay`（組込みの遅延の flow）と `sample_rate` は、flow の中で予約された組込み名（§11.4）。キーワードは `std.test` で使える。
+
+## 4. 型
+### 4.1 組込み型
+
+| 分類 | 型 | 種 |
+|---|---|---|
+| 整数 | `I8 U32` | Copy |
+| 標準 enum | `Option[T]`, `Result[T, E]` | 中身 |
+| 関数 | `fn(A) -> R uses {E}` | Copy |
+
+### 4.2 文字列
+`Str` is not in the table.
+
+## 6. 関数
+### 6.3 trait
+- 演算子 trait: `Add Neg`。
+- 標準 trait: `PartialEq`, `Iter[T]`。
+
+### 6.5 属性（全て）
+
+`@repr(c)`、`@param(...)`（§11.7）。これ以外の属性は無い（`@deprecated` は必要になったら定義する）。
+
+## 11. flow
+### 11.3 レート
+
+| クロック | 意味 |
+|---|---|
+| （定数） | `const` |
+| `init` | 初期化時 |
+| `sample` | サンプルごと |
+
+- レートを型の形で書く（`x: Sig[F32]`、0.3 の草案の形）と E0020。`Sig` / `Ctl` は普通の名前で、`struct Sig[T]` を宣言してよい。
+
+### 11.6 生成される API
+
+`flow voice(...)` を宣言すると、コンパイラは名前空間 `voice` に次を生成する。
+
+```onsa
+voice.State        // 状態。voice.Hidden は書いていない
+fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
+```
+
+- 引数の名前は `s`、`params` に固定する。利用者の `x` とは衝突しない。
+
+## 12. メモリ
+### 12.4 配置
+- 容量の確認: ヘッダの `SIZE` / `BULK_SIZE` で分かる。`fast_budget` を書くと E0820。
+
+## 8. 効果
+### 8.1 宣言と使用
+- 標準の効果（`Fs` `Random`）は std の `effect` 宣言で、`use` で取り込む。`Alloc` だけは prelude にある。
+
+## 15. モジュール
+### 15.1 モジュール
+- 暗黙の prelude は、`Option Some None panic Alloc`、種の制約 `Copy` と `Dup`、組込み型だけである。
+"""
+
+
+class BuiltinNames(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        # NAMES_SPEC is a small spec: the baselines are for the real one (test_baselines)
+        patcher = mock.patch.object(builtin_names, "BASELINES", {})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_baselines(self):
+        # N2: a place that stops giving a name of its baseline fails
+        real = repo.read(repo.ROOT, repo.SPEC)
+        baselines = {
+            "attributes (§6.5)": {"repr", "fp", "param", "mem"},
+            "clocks (§11.3)": {"init", "block", "sample"},
+            "generated API (§11.6, §12.4)": {"State", "process", "SIZE"},
+        }
+        self.assertTrue(builtin_names.builtin_names(real, [], baselines=baselines))
+        for old, new, needle in (
+            ("、`@mem(...)`（§12.4）。これ以外", "。これ以外", "attributes (§6.5) no longer gives mem"),
+            ("| `sample` | サンプルごとの値 |", "| `samples` | サンプルごとの値 |", "clocks (§11.3) no longer gives sample"),
+            ("rt fn voice.process(inout", "rt fn voice.run(inout", "no longer gives process"),
+            ("ヘッダの `SIZE` / `ALIGN`", "ヘッダの `ALIGN`", "no longer gives SIZE"),
+        ):
+            with self.subTest(old=old):
+                self.assertIn(old, real)
+                with self.assertRaisesRegex(builtin_names.CheckError, re.escape(needle)):
+                    builtin_names.builtin_names(real.replace(old, new, 1), [], baselines=baselines)
+
+    def test_real_baselines_hold(self):
+        # the baselines of the module hold for the spec of the repository
+        with mock.patch.object(builtin_names, "BASELINES", BUILTIN_BASELINES):
+            builtin_names.builtin_names(repo.read(repo.ROOT, repo.SPEC), [])
+
+    def test_build_outputs_only_are_skipped(self):
+        # N1: a `target` directory that is not a build output is scanned
+        self.write("crates/x/Cargo.toml", "")
+        self.write("crates/x/src/target/mod.rs", 'fn f(n: &str) -> bool { n == "zeroed" }\n')
+        self.write("crates/x/target/debug/build.rs", 'fn f(n: &str) -> bool { n == "zeroed" }\n')
+        found = builtin_names.scan(self.root, {"zeroed"})
+        self.assertEqual(found, {"crates/x/src/target/mod.rs": {"zeroed": 1}})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def test_names_from_the_spec(self):
+        names = builtin_names.builtin_names(NAMES_SPEC, ["sqrt", "std", "T"])
+        expected = {
+            "prev", "delay", "sample_rate",  # §2.2, first sentence only (not `std`, `test`)
+            "I8", "U32", "Option", "Result",  # §4.1 type column (not `T`, `R`, `fn`)
+            "Add", "Neg", "PartialEq", "Iter",  # §6.3
+            "Fs", "Random",  # §8.1, inside the parentheses only (not `Alloc` of the next sentence)
+            "Some", "None", "panic", "Alloc", "Copy", "Dup",  # §15.1
+            "sqrt", "std",  # std
+            "repr", "param",  # §6.5, the first sentence (not `deprecated`)
+            "init", "sample",  # §11.3, the clocks of the table (not `const`)
+            "Sig", "Ctl",  # §11.3, the old rate types (not `F32`, `x`)
+            "State", "Config", "cfg", "sample_rate", "params",  # §11.6 (not the comment's `Hidden`, nor `s`, `x`)
+            "SIZE", "BULK_SIZE",  # §12.4, the first sentence (not `fast_budget`)
+        }  # fmt: skip
+        self.assertEqual(names, expected)
+        self.assertEqual(builtin_names.keywords(NAMES_SPEC), {"fn", "let", "match", "use", "trait", "impl"})
+
+    def test_a_missing_place_fails(self):
+        for old, needle in (
+            ("- 暗黙の prelude は", "the prelude"),
+            ("- 標準 trait:", "標準 trait"),
+            ("標準の効果（", "standard effects"),
+            ("予約された組込み名", "reserved builtin names"),
+            ("### 4.1 組込み型", "§4.1"),
+            ("0.3 の草案の形", "old rate types"),
+            ("引数の名前は", "fixed argument names"),
+            ("`flow voice(...)`", "example `flow"),
+            ("- 容量の確認:", "sizes of the state"),
+            ("`@repr(c)`、`@param(...)`", "no attribute"),
+            ("| `init` | 初期化時 |\n| `sample` | サンプルごと |", "no clock"),
+        ):
+            with self.subTest(old=old):
+                with self.assertRaisesRegex(builtin_names.CheckError, re.escape(needle)):
+                    builtin_names.builtin_names(NAMES_SPEC.replace(old, "x"), [])
+
+    def test_scan_rust(self):
+        src = (
+            'let a = "zeroed"; // "in a comment"\n'
+            '/* "block /* nested */ comment" */ let b = r#"raw "x""#;\n'
+            "let c = '\"'; let d = 'x'; fn f<'a>(x: &'a str) {}\n"
+            'let e = "esc \\" quote"; let g = b"bytes";\n'
+            'let h = "multi\nline"; let i = "after";\n'
+        )
+        literals, masked = builtin_names.scan_rust(src)
+        self.assertEqual([(ln, t) for _, ln, t in literals], [
+            (1, "zeroed"), (2, 'raw "x"'), (4, 'esc \\" quote'), (4, "bytes"), (5, "multi\nline"), (6, "after"),
+        ])  # fmt: skip
+        self.assertEqual(len(masked), len(src))
+        self.assertEqual(masked.count("\n"), src.count("\n"))
+        self.assertNotIn("comment", masked)
+
+    def test_uses(self):
+        names = {"zeroed", "narrow_u8", "trunc_u8_sat", "Option"}
+        src = """\
+fn f(n: &str) -> bool {
+    if n == "zeroed" { return true }
+    match n { "Option" | "other" => true, _ => false };
+    n.starts_with("narrow_") || n.ends_with("_sat") || n == format!("narrow_{}", k).as_str()
+        || n.starts_with("zz") || n == format!("{}f", 1) || n == "Option is a type"
+}
+
+#[cfg(test)]
+mod tests {
+    fn g() { let x = "zeroed"; let y = { "Option" }; }
+}
+
+fn after() { "Option"; }
+"""
+        found = builtin_names.uses_in(src, names)
+        self.assertEqual(found, {"zeroed": 1, "Option": 2, "narrow_": 1, "_sat": 1, "narrow_{}": 1})
+
+    def test_parts_of_names(self):
+        # M2: the calls that take a part of a name, also inside an array
+        names = {"narrow_u8", "trunc_u8_sat", "is_none"}
+        src = """\
+fn f(n: &str) -> bool {
+    n.contains("none") || n.contains("narrow") || n.trim_start_matches("trunc_").is_empty()
+        || n.trim_end_matches("_sat").is_empty() || n.starts_with(["narrow_", "zz"]) || n.ends_with(&["_u8_sat"])
+        || n.contains("is_none") || n.contains("x") || n.contains("other") || f("narrow_")
+}
+"""
+        found = builtin_names.uses_in(src, names)
+        self.assertEqual(
+            found,
+            {"none": 1, "narrow": 1, "trunc_": 1, "_sat": 1, "narrow_": 1, "_u8_sat": 1, "is_none": 1},
+        )
+
+    def test_test_files(self):
+        for rel, is_test in (
+            ("crates/a/tests/x.rs", True),
+            ("crates/a/src/tests.rs", True),
+            ("crates/a/src/flow_tests.rs", True),
+            ("crates/a/src/contests.rs", False),
+            ("crates/a/src/lib.rs", False),
+        ):
+            self.assertEqual(builtin_names.is_test_file(rel), is_test, rel)
+
+    def run_main(self, args=(), members=()):
+        self.write(builtin_names.SPEC, NAMES_SPEC)
+        out = io.StringIO()
+        cmd = json_cmd({"--std-names": ["zeroed"], "--builtin-members": list(members)})
+        with mock.patch("sys.stdout", out):
+            code = builtin_names.main(["--root", str(self.root), *args], cmd=cmd)
+        return code, out.getvalue()
+
+    def test_members_of_sema_are_names(self):
+        # the builtin methods of sema's table (`--builtin-members`) are builtin names
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "checked_add" || n.starts_with("narrow_") }\n')
+        self.write(builtin_names.ALLOW, "")
+        code, out = self.run_main(members=["checked_add", "narrow_u8"])
+        self.assertEqual(code, 1)
+        self.assertIn('"checked_add" is written 1 time(s), the list allows 0', out)
+        self.assertIn('"narrow_" is written 1 time(s)', out)
+        self.assertEqual(self.run_main()[0], 0)  # without them, nothing is found
+
+    def test_same_spelling(self):
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "min" }\n')
+        listed = '[allow."crates/a/src/lib.rs"]\n"zeroed" = 1\n\n[same_spelling."crates/a/src/lib.rs"]\n"min" = { count = 1, note = "@param のキー" }\n'
+        self.write(builtin_names.ALLOW, listed)
+        self.assertEqual(self.run_main(members=["min"])[0], 0)
+        # --print keeps the same_spelling entries and their notes
+        self.assertEqual(self.run_main(["--print"], members=["min"]), (0, listed))
+        # both tables count: one more fails, asking for the place or a note
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "min" || n == "min" }\n')
+        code, out = self.run_main(members=["min"])
+        self.assertEqual(code, 1)
+        self.assertIn('"min" is written 2 time(s), the list allows 1', out)
+        self.assertIn("[same_spelling]", out)
+        # one fewer asks to lower the count
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" }\n')
+        code, out = self.run_main(members=["min"])
+        self.assertEqual(code, 1)
+        self.assertIn('"min" is written 0 time(s), the list allows 1; lower the count', out)
+        # an entry needs a count and a note
+        for bad in ('"min" = 1', '"min" = { count = 1 }', '"min" = { count = 1, note = " " }', '"min" = { count = 0, note = "x" }'):
+            with self.subTest(bad=bad):
+                self.write(builtin_names.ALLOW, f'[same_spelling."crates/a/src/lib.rs"]\n{bad}\n')
+                code, out = self.run_main(members=["min"])
+                self.assertEqual(code, 1)
+                self.assertIn("cannot check", out)
+
+    def test_main(self):
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "Option" || n == "Option" }\n')
+        self.write("crates/a/tests/t.rs", 'fn t() { "zeroed"; }\n')
+        self.write("crates/onsa_diag/src/codes.rs", 'fn t() { "zeroed"; }\n')  # the registry
+        allow = '[allow."crates/a/src/lib.rs"]\n"Option" = 2\n"zeroed" = 1\n'
+        self.write(builtin_names.ALLOW, allow)
+        code, out = self.run_main()
+        self.assertEqual(code, 0, out)
+        # the list prints itself
+        code, out = self.run_main(["--print"])
+        self.assertEqual((code, out), (0, allow))
+        # one more literal fails
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "Option" || n == "Option" || n == "None" }\n')
+        code, out = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn('"None" is written 1 time(s), the list allows 0', out)
+        # one fewer fails too, asking to lower the list
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "Option" }\n')
+        code, out = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn('"Option" is written 1 time(s), the list allows 2; lower the count', out)
+        # a file of the list that is gone
+        self.write(builtin_names.ALLOW, allow + '[allow."crates/gone.rs"]\n"zeroed" = 1\n')
+        self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "Option" || n == "Option" }\n')
+        code, out = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("`crates/gone.rs` is not a file", out)
+        # a malformed list
+        for bad in ('[other]\nx = 1\n', '[allow."crates/a/src/lib.rs"]\n"zeroed" = 0\n', "[allow\n"):
+            with self.subTest(bad=bad):
+                self.write(builtin_names.ALLOW, bad)
+                code, out = self.run_main()
+                self.assertEqual(code, 1)
+                self.assertIn("cannot check", out)
+
+    def test_repository_list_is_sorted_and_positive(self):
+        lists, notes = builtin_names.load_allow(builtin_names.ROOT / builtin_names.ALLOW)
+        for table in builtin_names.TABLES:
+            files = lists[table]
+            self.assertEqual(list(files), sorted(files), table)
+            for names in files.values():
+                self.assertEqual(list(names), sorted(names), table)
+        # every same_spelling entry says its meaning
+        self.assertEqual(len(notes), sum(len(n) for n in lists["same_spelling"].values()))
+
+
+class IgnoredFiles(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "repo"
+        self.root.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        self.write(".gitignore", "*.out\nbuild/\ntarget/\n")
+        self.write("tests/spec/a.onsa")
+        # a user's global excludes file that ignores everything Onsa
+        self.home = Path(self.tmp.name) / "home"
+        (self.home).mkdir()
+        (self.home / "ignore").write_text("*.onsa\n*.rs\n")
+        (self.home / "gitconfig").write_text(f"[core]\n\texcludesFile = {self.home / 'ignore'}\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, rel, text="x\n"):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+
+    def check(self):
+        out = io.StringIO()
+        env = {"GIT_CONFIG_GLOBAL": str(self.home / "gitconfig")}
+        with mock.patch("sys.stdout", out), mock.patch.dict(os.environ, env):
+            code = ignored_files.main(["--root", str(self.root)])
+        return code, out.getvalue()
+
+    def test_clean(self):
+        self.write("tests/pkg/onsa.toml")
+        self.write("tests/pkg/target/host/x.c")  # the build output of a package
+        self.write("crates/a/Cargo.toml")
+        self.write("crates/a/target/debug/x")  # the build output of a crate
+        self.write("target/debug/y")  # the build output at the root
+        self.write("build/x")  # outside the scanned directories
+        self.write("crates/a/src/lib.rs")  # the global excludes file ignores it; the check does not read it
+        self.write(".git/info/exclude", "*.toml\n")
+        self.write("std/math.onsa")
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+
+    def test_ignored_files_fail(self):
+        self.write("tests/build/case.onsa")
+        self.write("tests/golden/c/x.out")
+        self.write("tests/target/y.onsa")  # `target/` with no manifest beside it
+        self.write("crates/a/src/target/m.rs")
+        self.write("std/build/z.onsa")
+        self.write("runtime/c/a.out")
+        self.write("tools/build/t.py")
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        for p in ("tests/build/", "tests/golden/c/x.out", "tests/target/", "crates/a/src/target/", "std/build/",
+                  "runtime/c/a.out", "tools/build/"):  # fmt: skip
+            self.assertIn(f"{p}: the .gitignore ignores it", out)
+
+    def test_tracked_but_matched_fails(self):
+        self.write("tests/golden/c/kept.out")
+        subprocess.run(["git", "add", "-f", "tests/golden/c/kept.out"], cwd=self.root, check=True)
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("tests/golden/c/kept.out: committed, but a .gitignore pattern matches it", out)
+
+    def test_not_a_repository(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out):
+                self.assertEqual(ignored_files.main(["--root", d]), 1)
+            self.assertIn("cannot ask git", out.getvalue())
+
+    def test_build_outputs(self):
+        (self.root / "crates/a").mkdir(parents=True)
+        (self.root / "crates/a/Cargo.toml").write_text("")
+        for rel, out in (
+            ("target/x", True),
+            ("crates/a/target/x", True),
+            ("crates/a/src/target/x", False),
+            ("crates/target/x", False),
+            ("tests/targets/x", False),
+        ):
+            self.assertEqual(repo.is_build_output(self.root, rel), out, rel)
 
 
 if __name__ == "__main__":

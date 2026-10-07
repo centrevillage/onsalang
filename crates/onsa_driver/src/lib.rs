@@ -21,6 +21,14 @@ const STD: &[(&str, &str)] = &[
     ("test.gen", include_str!("../../../std/test/gen.onsa")),
 ];
 
+/// The name of the embedded standard library's package.
+pub const STD_PACKAGE: &str = "std";
+
+/// The embedded std modules: (module path under `std`, source text).
+pub fn std_modules() -> &'static [(&'static str, &'static str)] {
+    STD
+}
+
 /// Result of `onsa check`: diagnostics only (no artifacts).
 #[derive(Debug, Default)]
 pub struct CheckResult {
@@ -264,7 +272,7 @@ fn std_package(sources: &mut SourceMap) -> Package {
             Module { path: path.to_string(), file, text: text.to_string(), parsed: onsa_syntax::parse(file, text) }
         })
         .collect();
-    Package { name: "std".into(), modules, deps: Vec::new(), is_std: true }
+    Package { name: STD_PACKAGE.into(), modules, deps: Vec::new(), is_std: true }
 }
 
 /// Parse only (the `mode = "parse"` depth of the test cases, D-05).

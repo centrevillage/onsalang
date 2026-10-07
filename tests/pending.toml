@@ -6,8 +6,15 @@
 # 項目は [[pending]] の表で、欄は全て必須（他の欄は書けない）:
 #   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input"
 #   target   対象の識別子（形は種類ごと。下）
-#   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）
-#   until    外す予定の作業 ID（docs/rework-phase1.md §3 の W の ID か、計画 §4 の T の ID）
+#   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）。until = "P2" の項目に
+#            限り、仕様の節（"§20" の形。仕様の番号付きの見出しにあるもの）も書ける。第 1 期の範囲は
+#            仕様 §20 が定めるため
+#   until    外す予定の作業 ID（docs/rework-phase1.md §3 の W の ID か、計画 §4 の T の ID）。
+#            第 2 期のコードは "P2"（K-13 の規則 3。使えるのは diag-code だけ）。第 2 期のコードは計画 §5 の
+#            表の M の欄が「第 2 期」の行で、それ以外のコードを P2 にすると失敗し、第 2 期のコードを
+#            別の until で載せても失敗する（照合は tools/diag_codes.py）。
+#            要約では段 P2 として W・M の段の後に数える。--stage-end P2 は使い方の誤りで、
+#            第 1 期の終わりの --stage-end M9 は、P2 でない項目が残っていれば失敗する
 #   note     短い説明
 #
 # target の形:
@@ -17,11 +24,17 @@
 #                 一つに詰めたもの。ブロックの内容・節・先頭の行のどれかが変わると、項目は
 #                 どのブロックも指さなくなり、gate が今の名前を添えて失敗する。
 #                 tools/check_spec_examples.py が、一覧に無い食い違いに正しい名前を示す。
-#   diag-code     診断コード: "E0812"                                   （照合は W1-02）
+#   diag-code     否定例がまだ 3 件に届かない診断コード: "E0812"（照合は tools/diag_codes.py、W1-02）。
+#                 数えるのは、実際に走って照らし、一致した //~ のマーカだけ（mode = "none" の事例、
+#                 事例ごと実装待ちの test-case "<パス>" の事例、走査の除外先は数えない）。
+#                 3 件に届かないのに一覧に無いコードと、一覧にあるのに 3 件に届いたコードは失敗。
+#                 外す予定の作業は K-13 の規則: 1. コードの規則を作るか変える W の作業（複数なら
+#                 最後に仕上げる作業。そのテストの票が否定例を書く）、2. どの作業も触れない
+#                 実装済みのコードは W1-10、3. 第 2 期のコードは "P2"
 #   gate          載せてよい gate の項目の名前（tools/gate_steps.py の STEPS で pendable=True のもの）:
 #                 "c-header"。項目が自分で報告する事例は "<項目>/<事例>"（照合はその項目が行う）。
-#                 gate の完全性を保つ項目（fmt、clippy、test、仕様の例、この一覧、自己テスト）と
-#                 info の項目は載せられない
+#                 gate の完全性を保つ項目（fmt、clippy、test、仕様の例、この一覧、W1-02 の静的な
+#                 検査、自己テスト）と info の項目は載せられない
 #   test-case     リポジトリの根からのパス（ファイルかパッケージのディレクトリ）。
 #                 一つの test だけなら "<パス>::<test の名前>"          （照合は W1-03）
 #   fuzz-input    保存した入力のファイルの、リポジトリの根からのパス  （照合は W1-04）
@@ -120,3 +133,551 @@ target = "§17.4 51ad3151: use std.fs.{Fs, Path, IoError}"
 reasons = ["S-89"]
 until = "W3-13"
 note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今の fmt の形"
+
+# --- 否定例が 3 件に届かない診断コード（K-13。照合は tools/diag_codes.py、W1-02）
+# 規則 1: コードの規則を作るか変える W の作業（複数なら最後に仕上げる作業）
+
+[[pending]]
+kind = "diag-code"
+target = "E0001"
+reasons = ["S-62", "R-73", "R-01", "S-90"]
+until = "W3-05"
+note = "数値リテラルの E0001（一覧に無い接尾辞、0x_。S-62）。字句の E0001（使えない文字、補間の穴。R-01、S-90）は W3-04 が並行で直す"
+
+[[pending]]
+kind = "diag-code"
+target = "E0003"
+reasons = ["S-47", "R-62"]
+until = "W3-06"
+note = "else と { の位置。括弧や腕の中も（S-47、R-62）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0004"
+reasons = ["S-51", "R-63"]
+until = "W3-04"
+note = "付ける宣言の無い ///、先頭以外の //!（S-51）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0005"
+reasons = ["S-103", "S-133"]
+until = "W3-08"
+note = "属性の表（一覧に無い属性、付けられない場所、@repr / @fp の値）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0011"
+reasons = ["S-118", "R-132"]
+until = "W3-09"
+note = "as / at の連鎖と二項の中の as / at（S-118）。式の e at k の構文（R-132）が W3-09 で入るまで at の否定例を書けない"
+
+[[pending]]
+kind = "diag-code"
+target = "E0303"
+reasons = ["S-35", "S-36", "S-144", "S-165"]
+until = "W10-01"
+note = "可視性は W4-03（S-35、S-36、S-144）、pub でない項目の export は W10-01（S-165）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0307"
+reasons = ["S-70", "S-139", "R-104", "S-145", "S-91", "S-137"]
+until = "W5-04"
+note = "impl を書ける場所と対象の規則。別名は W4-04、型引数は W4-05、孤児規則・Float・Ordinal は W5-04"
+
+[[pending]]
+kind = "diag-code"
+target = "E0308"
+reasons = ["S-103", "S-165"]
+until = "W10-01"
+note = "名前の種類の誤りは W4-04（S-103）、flows / fns の種類の誤りは W10-01（S-165）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0309"
+reasons = ["S-129"]
+until = "W7-04"
+note = "使われない束縛。fn の世界は W4-04、flow の世界は W7-04"
+
+[[pending]]
+kind = "diag-code"
+target = "E0310"
+reasons = ["R-39"]
+until = "W4-03"
+note = "モジュールの循環。依存は use だけで決まる（R-39）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0311"
+reasons = ["R-02", "S-91"]
+until = "W4-05"
+note = "型定義の閉路と型別名の循環"
+
+[[pending]]
+kind = "diag-code"
+target = "E0312"
+reasons = ["R-02"]
+until = "W4-05"
+note = "定数の初期化式の名前による閉路（R-02、K-10）。関数を経由する閉路が E0312 になるかは W9-03 で決める（S-173）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0405"
+reasons = ["R-55"]
+until = "W5-01"
+note = "浮動小数のリテラルだけの比較（R-55）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0406"
+reasons = ["R-03"]
+until = "W2-06"
+note = "関数の終わりまで決まらない型パラメータ（R-03）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0409"
+reasons = ["S-142", "R-100"]
+until = "W9-04"
+note = "型の大きさと状態の領域が U32 を超える（ターゲットの pass）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0411"
+reasons = ["S-98", "R-126"]
+until = "W5-02"
+note = "as で書けない組。修正候補を読みごとに"
+
+[[pending]]
+kind = "diag-code"
+target = "E0412"
+reasons = ["S-103"]
+until = "W4-04"
+note = "型引数と const 引数の数（S-103 のコードの割り当て）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0413"
+reasons = ["S-98", "R-126", "S-71", "R-96"]
+until = "W5-03"
+note = "組込みのメソッドの閉じた一覧（W5-02、S-98）、Option / Result のメソッドは unwrap と map_err だけ（W5-03、S-71）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0416"
+reasons = ["S-49", "R-60", "S-84", "R-94", "S-145", "S-103", "R-127"]
+until = "W5-06"
+note = "境界。数の trait（W5-05）、derive の前提と Default / Ordinal の derive（W5-06）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0417"
+reasons = ["S-103", "S-50", "S-132", "S-109"]
+until = "W7-02"
+note = "定数式でないもの。型の段は W5-08、flow の遅延の長さと par の回数は W7-02（S-132）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0418"
+reasons = ["S-127"]
+until = "W5-08"
+note = "ブロックの途中の文の値"
+
+[[pending]]
+kind = "diag-code"
+target = "E0419"
+reasons = ["S-131", "S-146"]
+until = "W9-03"
+note = "コンパイル時の評価の panic（定数の評価の段）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0503"
+reasons = ["S-128"]
+until = "W5-08"
+note = "発散の後の到達しない文"
+
+[[pending]]
+kind = "diag-code"
+target = "E0703"
+reasons = ["S-100", "S-103"]
+until = "W4-09"
+note = "呼び出し位置のモード。末尾の式の move（S-100）、for … in move の範囲（S-103）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0715"
+reasons = ["R-24", "R-110", "R-118", "S-42"]
+until = "W4-10"
+note = "借用の for の反復元の変更は W4-09（R-24）、match の対象の変更は W4-10（R-110、R-118、S-42）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0801"
+reasons = ["S-44", "S-116", "S-117"]
+until = "W7-04"
+note = "前方参照と ^名前 の範囲（W7-04）。遅延の意味は W7-07"
+
+[[pending]]
+kind = "diag-code"
+target = "E0805"
+reasons = ["R-17", "S-33"]
+until = "W7-05"
+note = "効果を持つ fn の呼び出し。rt でない fn は巻き上げる（R-17、S-33）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0806"
+reasons = ["S-125", "S-151", "S-110", "S-48"]
+until = "W7-06"
+note = "本体で使える式の閉じた一覧（W7-04）、短絡の右辺の状態を持つもの（W7-06）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0808"
+reasons = ["S-88", "R-100", "S-151", "S-132"]
+until = "W7-04"
+note = "遅延の長さの範囲、vdelay の MAX、空の par の範囲"
+
+[[pending]]
+kind = "diag-code"
+target = "E0811"
+reasons = ["S-44", "S-101", "S-110"]
+until = "W7-06"
+note = "~ の無い flow と遅延の呼び出し（W3-09、W7-04）、枝とガードの状態を持つもの（W7-06）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0812"
+reasons = ["S-101", "S-110"]
+until = "W7-06"
+note = "flow でないものへの ~（W7-04）、状態の無い if~ / match~（W7-06）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0813"
+reasons = ["S-102", "R-132"]
+until = "W7-02"
+note = "prev 系の第 1 引数のクロック（クロックの解析）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0815"
+reasons = ["S-102", "S-147", "S-04"]
+until = "W7-02"
+note = "値のクロックが置く位置より速い（入力、遅延の init、非 rt の fn の引数、e at k）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0816"
+reasons = ["S-29", "S-110"]
+until = "W7-07"
+note = "init の省略（W7-07）と match~ の取られない腕（W7-06）で T: Default でない"
+
+[[pending]]
+kind = "diag-code"
+target = "E0817"
+reasons = ["R-03"]
+until = "W4-05"
+note = "自分をインスタンスにする flow（宣言どうしの閉路）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0818"
+reasons = ["S-43", "S-31"]
+until = "W9-06"
+note = "@mem の位置と記憶域の名前"
+
+[[pending]]
+kind = "diag-code"
+target = "E0819"
+reasons = ["S-31", "R-90", "S-65"]
+until = "W9-07"
+note = "bulk を持つ状態を普通の値に置く。build は W9-06、interface --target の表示は W9-07（S-65）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0820"
+reasons = ["S-31"]
+until = "W9-06"
+note = "fast_budget / bulk_budget を超える"
+
+[[pending]]
+kind = "diag-code"
+target = "E0821"
+reasons = ["S-101", "S-102"]
+until = "W7-04"
+note = "flow の外の flow だけの構文"
+
+[[pending]]
+kind = "diag-code"
+target = "E1011"
+reasons = ["S-112", "S-52", "R-64"]
+until = "W10-02"
+note = "C の名前の重なり。名前の集合は W10-01（S-112）、C の名前の形は W10-02（S-52、R-64）"
+
+[[pending]]
+kind = "diag-code"
+target = "E1101"
+reasons = ["S-99", "R-130"]
+until = "W4-02"
+note = "マニフェストを TOML として読めない"
+
+[[pending]]
+kind = "diag-code"
+target = "E1102"
+reasons = ["S-99", "R-130", "S-166"]
+until = "W4-02"
+note = "マニフェストの未知の表・キー"
+
+[[pending]]
+kind = "diag-code"
+target = "E1103"
+reasons = ["S-99", "R-130", "S-165"]
+until = "W10-01"
+note = "マニフェストの値の形（W4-02）、flows / fns の重複（W10-01、S-165）"
+
+[[pending]]
+kind = "diag-code"
+target = "E1104"
+reasons = ["S-99", "R-130"]
+until = "W4-02"
+note = "マニフェストの必須のキー"
+
+[[pending]]
+kind = "diag-code"
+target = "E0902"
+reasons = ["R-83"]
+until = "W6-03"
+note = "rt の効果行の Alloc。判定を効果の使用の記録の上に作り直す（R-83）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0903"
+reasons = ["R-83"]
+until = "W6-03"
+note = "rt の再帰。判定を効果の使用の記録の上に作り直す（R-83）"
+
+# 規則 2: どの W の作業も規則を作らず変えない実装済みのコード。W1-10 が否定例を足す
+
+[[pending]]
+kind = "diag-code"
+target = "E0012"
+reasons = ["R-113"]
+until = "W1-10"
+note = "前置の重ね。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0305"
+reasons = ["R-113"]
+until = "W1-10"
+note = "flow と同名の宣言。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0306"
+reasons = ["R-113"]
+until = "W1-10"
+note = "同名の test。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0407"
+reasons = ["R-113"]
+until = "W1-10"
+note = "const の結果の種。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0410"
+reasons = ["R-113"]
+until = "W1-10"
+note = "struct リテラルとパターンのフィールドの過不足。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0414"
+reasons = ["R-113"]
+until = "W1-10"
+note = "? の型。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0415"
+reasons = ["R-113"]
+until = "W1-10"
+note = "代入先が場所でない。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0420"
+reasons = ["R-113"]
+until = "W1-10"
+note = "対象の型が未解決。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0421"
+reasons = ["R-113"]
+until = "W1-10"
+note = "型付きホール。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0501"
+reasons = ["R-113"]
+until = "W1-10"
+note = "match の網羅性。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0502"
+reasons = ["R-113"]
+until = "W1-10"
+note = "反駁可能な let。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0610"
+reasons = ["R-113"]
+until = "W1-10"
+note = "ターゲットの provides に無い効果（ビルドの段）。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0710"
+reasons = ["R-113"]
+until = "W1-10"
+note = "第二級の値の位置。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0712"
+reasons = ["R-113"]
+until = "W1-10"
+note = "クロージャが捕捉できない値（inout 引数、Affine）。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0713"
+reasons = ["R-113"]
+until = "W1-10"
+note = "inout self のメソッドの ! の欠落。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0714"
+reasons = ["R-113"]
+until = "W1-10"
+note = "inout self でないメソッドの !。否定例の補充（W1-10）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0807"
+reasons = ["R-113"]
+until = "W1-10"
+note = "delay の長さ 1。否定例の補充（W1-10）"
+
+# 規則 3: 第 2 期のコード
+
+[[pending]]
+kind = "diag-code"
+target = "E0612"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "blocking でない効果の handler の blocking の効果。handler は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0613"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "rt の操作の handler。効果の操作と handler は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0614"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "blocking の効果の操作の rt。効果の操作は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0620"
+reasons = ["§15.4"]
+until = "P2"
+note = "ポリシーの main の効果行（onsa.policy は仕様 §15.4 で第 2 期の末尾以降に延期）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0630"
+reasons = ["§15.4"]
+until = "P2"
+note = "ポリシーの凍結（onsa.policy は仕様 §15.4 で第 2 期の末尾以降に延期）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0640"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "Alloc の handle の結果の種。handler は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0641"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "Alloc の handle の本体の外側のヒープの値。handler は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0642"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "Alloc の handle の本体の効果行。handler は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0650"
+reasons = ["§20"]
+until = "P2"
+note = "Atomic の幅（std.sync、仕様 §16.2）。§20 は第 1 期を核（§13.2）に限り、標準ライブラリを第 2 期の 8 に置く"
+
+[[pending]]
+kind = "diag-code"
+target = "E0904"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "rt の効果行の blocking の効果。Alloc 以外の効果は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E0905"
+reasons = ["§20", "S-74", "R-129"]
+until = "P2"
+note = "rt の効果行の rt 効果でない効果。効果の操作は第 2 期"
+
+[[pending]]
+kind = "diag-code"
+target = "E1010"
+reasons = ["§20"]
+until = "P2"
+note = "核から extern への到達。§20 は第 1 期を核（§13.2）に限り、extern（§14.1）は第 1 期では E0200 で止めるので、このコードは第 1 期に出る場面が無い"
+
+# --- テストの事例（仕様のコードの期待値に直した否定例。W1-02 で tests/spec/negative/flow.onsa から分けた）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_fn_clock.onsa"
+reasons = ["S-147"]
+until = "W7-02"
+note = "非 rt の fn に sample の値を渡すのは E0815（§11.5）。元の期待値は E0805 で、今の実装も E0805 を出す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_delay_const.onsa"
+reasons = ["S-132"]
+until = "W7-02"
+note = "遅延の長さの定数式でないものは E0417（§11.4）。元の期待値は E0808 で、今の実装も E0808 を出す"

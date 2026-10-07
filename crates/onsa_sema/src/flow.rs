@@ -1313,8 +1313,9 @@ impl<'a> Rater<'a> {
                 let ri = self.rate(init_e)?;
                 if self.final_pass && ri > FlowRate::Init {
                     let ispan = self.expr(init_e).span;
+                    // The clock of a value is faster than its position (S-147).
                     return Err(self.err(
-                        Code::E0814,
+                        Code::E0815,
                         ispan,
                         format!(
                             "the `init` of `{what}` must be `Init` rate or a constant; this one is `{}` (§11.4)",

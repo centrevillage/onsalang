@@ -1,0 +1,373 @@
+# 組込みの名前の直書きの許可リスト（Q-14、計画 §8.2 の 5、§8.3 の 7）。検査は tools/builtin_names.py。
+#
+# Rust のコード（crates/ の、テストと計画 §3.6 の登録簿を除く所）に書かれた、組込みの名前と同じ
+# 綴りの文字列リテラルの数を、ファイルと文字列ごとに許す。行番号には依存しない。表は二つ:
+#   [allow."<リポジトリの根からのパス>"]           組込みの名前の直書き（W5-02 などが減らす）
+#   "<リテラル>" = <数>
+#   [same_spelling."<リポジトリの根からのパス>"]   綴りが同じで意味の違うもの（C のマクロ名、
+#   "<リテラル>" = { count = <数>, note = "<意味>" }  @param のキー、Rust の型名など）
+# 二つの表の数の和より多ければ失敗する（新しい直書き。判断は計画 §3.6 の置き場所に置く。
+# 意味の違うものなら same_spelling に意味を添えて足す）。少なければ失敗する（数を減らす）。
+# 初期値は W1-02 の時点の全て（C-118）。W5-02 が組込みの表を std へ移し、allow を減らす。
+# 組込みの名前の集合と、何を直書きと数えるかは tools/builtin_names.py の先頭に書いた。
+# 今の中身は `tools/builtin_names.py --print` で出せる（same_spelling の項目は残し、残りを allow に
+# 置く。一覧を書き換える前に差分を読むこと）。
+
+[allow."crates/onsa_backend_c/src/emit.rs"]
+"add_from" = 1
+"copy_from" = 1
+
+[allow."crates/onsa_core/src/dump.rs"]
+"Bool" = 1
+"Char" = 1
+
+[allow."crates/onsa_core/src/lower/body.rs"]
+"BITS" = 1
+"EPSILON" = 2
+"INFINITY" = 2
+"MAX" = 3
+"MIN" = 3
+"NAN" = 2
+"None" = 2
+"PI" = 2
+"_sat" = 2
+"abs" = 1
+"add_from" = 2
+"array" = 1
+"checked_add" = 1
+"checked_div" = 1
+"checked_mul" = 1
+"checked_sub" = 1
+"copy_from" = 1
+"div_euclid" = 1
+"fill" = 3
+"from_bits" = 1
+"from_fn" = 1
+"get" = 1
+"is_empty" = 1
+"is_err" = 1
+"is_finite" = 1
+"is_nan" = 1
+"is_none" = 1
+"is_ok" = 2
+"is_some" = 2
+"len" = 1
+"math" = 1
+"max" = 1
+"min" = 1
+"narrow_" = 1
+"rem_euclid" = 1
+"round_f32" = 2
+"round_f64" = 2
+"slice" = 1
+"to_bits" = 1
+"trunc_" = 2
+"unwrap" = 1
+"unwrap_or" = 1
+"zeroed" = 2
+
+[allow."crates/onsa_core/src/lower/flow.rs"]
+"BULK_SIZE" = 1
+"Config" = 1
+"Out" = 1
+"Params" = 1
+"SIZE" = 1
+"State" = 1
+"cfg" = 2
+"delay" = 1
+"frames" = 1
+"init" = 1
+"len" = 1
+"params" = 3
+"params_default" = 1
+"prev" = 1
+"process" = 3
+"process_inplace" = 2
+"render" = 2
+"reset" = 1
+"sample_rate" = 5
+"vdelay" = 1
+
+[allow."crates/onsa_core/src/lower/mod.rs"]
+"Bool" = 1
+"Char" = 1
+"Err" = 1
+"None" = 1
+"Ok" = 1
+"Some" = 1
+
+[allow."crates/onsa_core/src/prim.rs"]
+"abs" = 2
+"add_from" = 1
+"ceil" = 2
+"copy_from" = 1
+"cos" = 2
+"exp" = 2
+"exp2" = 2
+"fill" = 1
+"floor" = 2
+"fmod" = 2
+"get" = 1
+"len" = 1
+"log" = 2
+"log2" = 2
+"max" = 2
+"min" = 2
+"pow" = 2
+"round" = 2
+"sin" = 2
+"slice" = 1
+"sqrt" = 2
+"tan" = 2
+"tanh" = 2
+"trunc" = 2
+
+[allow."crates/onsa_driver/src/build.rs"]
+"Alloc" = 2
+
+[allow."crates/onsa_driver/src/graph.rs"]
+"Ctl" = 1
+"Init" = 1
+"Sig" = 1
+"prev" = 1
+
+[allow."crates/onsa_driver/src/interface.rs"]
+"ALIGN" = 1
+"Alloc" = 1
+"BULK_SIZE" = 1
+"Config" = 1
+"Ctl" = 1
+"Init" = 1
+"Out" = 1
+"Params" = 1
+"SIZE" = 1
+"Sig" = 1
+"State" = 3
+
+[allow."crates/onsa_driver/src/lib.rs"]
+"array" = 1
+"dsp" = 1
+"math" = 1
+"std" = 1
+
+[allow."crates/onsa_sema/src/body.rs"]
+"Alloc" = 1
+"Copy" = 1
+"Default" = 1
+"Dup" = 1
+"Eq" = 1
+"Float" = 1
+"Hash" = 1
+"Num" = 1
+"Ord" = 1
+"PartialEq" = 1
+"PartialOrd" = 1
+"Show" = 1
+
+[allow."crates/onsa_sema/src/builtin.rs"]
+"BITS" = 1
+"EPSILON" = 1
+"INFINITY" = 1
+"MAX" = 2
+"MIN" = 2
+"NAN" = 1
+"PI" = 1
+"abs" = 2
+"add_from" = 1
+"ceil" = 1
+"checked_add" = 1
+"checked_div" = 1
+"checked_mul" = 1
+"checked_sub" = 1
+"copy_from" = 1
+"div_euclid" = 1
+"fill" = 1
+"find" = 1
+"floor" = 1
+"from_bits" = 1
+"get" = 1
+"get_substr" = 1
+"is_char_boundary" = 1
+"is_empty" = 2
+"is_err" = 1
+"is_finite" = 1
+"is_nan" = 1
+"is_none" = 1
+"is_ok" = 1
+"is_some" = 1
+"len" = 2
+"max" = 2
+"min" = 2
+"narrow_{}" = 1
+"rem_euclid" = 1
+"round" = 1
+"round_f32" = 2
+"round_f64" = 2
+"slice" = 1
+"sqrt" = 1
+"substr" = 1
+"to_bits" = 1
+"trunc" = 1
+"trunc_{}" = 1
+"trunc_{}_sat" = 1
+"unwrap" = 2
+"unwrap_or" = 1
+"zeroed" = 1
+
+[allow."crates/onsa_sema/src/def.rs"]
+"Copy" = 1
+"Default" = 1
+"Dup" = 1
+"Eq" = 1
+"Float" = 1
+"Hash" = 1
+"Num" = 1
+"Ord" = 1
+"PartialEq" = 1
+"PartialOrd" = 1
+"Show" = 1
+
+[allow."crates/onsa_sema/src/effects.rs"]
+"zeroed" = 1
+
+[allow."crates/onsa_sema/src/exhaust.rs"]
+"Err" = 1
+"None" = 1
+"Ok" = 1
+"Some" = 1
+
+[allow."crates/onsa_sema/src/flow.rs"]
+"Ctl" = 1
+"Init" = 1
+"Sig" = 1
+"delay" = 5
+"prev" = 5
+"sample_rate" = 2
+"vdelay" = 4
+
+[allow."crates/onsa_sema/src/kind.rs"]
+"Copy" = 1
+
+[allow."crates/onsa_sema/src/rt.rs"]
+"zeroed" = 1
+
+[allow."crates/onsa_sema/src/sig.rs"]
+"Alloc" = 1
+"BULK_SIZE" = 2
+"Bool" = 1
+"Char" = 1
+"Config" = 2
+"Default" = 1
+"Eq" = 1
+"Err" = 1
+"F32" = 1
+"F64" = 1
+"Hash" = 1
+"I16" = 1
+"I32" = 1
+"I64" = 1
+"I8" = 1
+"None" = 1
+"Ok" = 1
+"Ord" = 1
+"Out" = 2
+"Params" = 2
+"PartialEq" = 1
+"PartialOrd" = 1
+"SIZE" = 2
+"Show" = 1
+"Some" = 1
+"State" = 2
+"U16" = 1
+"U32" = 2
+"U64" = 1
+"U8" = 1
+"cfg" = 2
+"frames" = 1
+"init" = 2
+"param" = 2
+"params" = 3
+"params_default" = 2
+"process" = 2
+"process_inplace" = 2
+"render" = 2
+"repr" = 1
+"reset" = 2
+"sample_rate" = 2
+"std" = 1
+
+[allow."crates/onsa_sema/src/ty.rs"]
+"Alloc" = 1
+"Array" = 2
+"Bool" = 2
+"Buf" = 2
+"Bytes" = 2
+"Char" = 2
+"Ctl" = 2
+"F32" = 2
+"F64" = 2
+"I16" = 2
+"I32" = 2
+"I64" = 2
+"I8" = 2
+"Init" = 2
+"Map" = 2
+"Option" = 2
+"Ptr" = 2
+"Result" = 2
+"Set" = 2
+"Sig" = 2
+"Span" = 2
+"Str" = 2
+"U16" = 2
+"U32" = 2
+"U64" = 2
+"U8" = 2
+
+[allow."crates/onsa_syntax/src/parser.rs"]
+"Bool" = 1
+"F32" = 1
+"F64" = 1
+"I16" = 1
+"I32" = 2
+"I64" = 1
+"I8" = 1
+"U16" = 1
+"U32" = 2
+"U64" = 1
+"U8" = 1
+
+[same_spelling."crates/onsa_backend_c/src/emit.rs"]
+"INFINITY" = { count = 3, note = "C の <math.h> のマクロ名（生成する C の字面）" }
+"NAN" = { count = 3, note = "C の <math.h> のマクロ名（生成する C の字面）" }
+
+[same_spelling."crates/onsa_backend_c/src/export.rs"]
+"NAN" = { count = 5, note = "C の <math.h> のマクロ名（生成する C の字面）" }
+
+[same_spelling."crates/onsa_backend_c/src/lib.rs"]
+"panic" = { count = 1, note = "Debug の表示のフィールド名（マニフェストの panic の設定）" }
+
+[same_spelling."crates/onsa_backend_c/src/names.rs"]
+"INFINITY" = { count = 1, note = "C の予約された名前の表" }
+"NAN" = { count = 1, note = "C の予約された名前の表" }
+"f32" = { count = 1, note = "C の名前の部品にする型の接尾辞（std.test.gen の f32 と同じ綴り）" }
+"u32" = { count = 1, note = "C の名前の部品にする型の接尾辞（std.test.gen の u32 と同じ綴り）" }
+
+[same_spelling."crates/onsa_core/src/verify.rs"]
+"block" = { count = 1, note = "検証器のメッセージの文脈の名前（クロックの block と同じ綴り）" }
+
+[same_spelling."crates/onsa_driver/src/build.rs"]
+"none" = { count = 1, note = "ターゲットの三つ組の OS の部分（contains で is_none の一部と同じ綴り）" }
+"reset" = { count = 1, note = "マニフェストの panic の値（生成される API の reset と同じ綴り）" }
+
+[same_spelling."crates/onsa_sema/src/builtin.rs"]
+"u32" = { count = 1, note = "narrow_ / trunc_ の名前を作る型の接尾辞（std.test.gen の u32 と同じ綴り）" }
+
+[same_spelling."crates/onsa_sema/src/sig.rs"]
+"log" = { count = 1, note = "@param の scale の値（std.math.log と同じ綴り）" }
+"max" = { count = 2, note = "@param のキー（std.math.max と同じ綴り）" }
+"min" = { count = 2, note = "@param のキー（std.math.min と同じ綴り）" }
+
+[same_spelling."crates/onsa_syntax/src/parser.rs"]
+"f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
+"u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }

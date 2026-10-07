@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4"]
+
+// The length of a delay line is a constant expression; anything else is
+// E0417 wherever it is written, and E0808 is only for values out of range
+// (§11.4, S-132). Pending until W7-02 (tests/pending.toml).
+pub flow not_const(x: Sig[F32], n: Init[U32]) -> Sig[F32] {
+  delay(x, n, 0.0)              //~ E0417
+}

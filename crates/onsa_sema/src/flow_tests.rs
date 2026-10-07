@@ -295,12 +295,13 @@ fn e0811_e0812_marks() {
 }
 
 #[test]
-fn e0813_e0814_delay_argument_rates() {
+fn e0813_e0815_delay_argument_rates() {
     let a = check("pub flow f(p: Ctl[F32]) -> Sig[F32] {\n  prev(p, 0.0)\n}\n");
     assert_eq!(a.diagnostics[0].code, Code::E0813);
     assert!(a.diagnostics[0].notes.iter().any(|(_, n)| n.contains("let ps: Sig[F32] = p")));
-    assert_eq!(codes("pub flow f(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {\n  prev(x, p)\n}\n"), vec![Code::E0814]);
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev(x, x)\n}\n"), vec![Code::E0814]);
+    // The `init` of a delay is faster than `init`: E0815 (S-147; E0814 is retired).
+    assert_eq!(codes("pub flow f(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {\n  prev(x, p)\n}\n"), vec![Code::E0815]);
+    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev(x, x)\n}\n"), vec![Code::E0815]);
     ok("pub flow f(x: Sig[F32], t: Init[F32]) -> Sig[F32] {\n  prev(x, t)\n}\n");
     let a = ok("pub flow f(x: Sig[F32], t: Init[F32]) -> Sig[F32] {\n  let y = prev(x, t * 2.0)\n  y\n}\n");
     assert!(matches!(&flow(&a, "f").nodes[0], Node::Prev { init: InitArg::Init(_), .. }));

@@ -29,9 +29,10 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pending  # noqa: E402
+import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = repo.ROOT
 
 
 def contains_lines(body, block):
@@ -111,9 +112,9 @@ def _hints(sid, all_ids):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Check the spec's ```onsa blocks against tests/spec.")
-    ap.add_argument("spec", nargs="?", type=Path, default=ROOT / "onsa-lang-spec-0.3.md")
+    ap.add_argument("spec", nargs="?", type=Path, default=ROOT / repo.SPEC)
     ap.add_argument("tests", nargs="?", type=Path, default=ROOT / "tests" / "spec")
-    ap.add_argument("--pending", type=Path, default=ROOT / pending.PENDING)
+    ap.add_argument("--pending", type=Path, default=ROOT / repo.PENDING)
     args = ap.parse_args(argv)
     problems, notes = check(args.spec, args.tests, args.pending)
     for n in notes:

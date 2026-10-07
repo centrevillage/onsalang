@@ -30,6 +30,7 @@ pub mod case;
 pub mod conformance;
 pub mod fragment;
 pub mod golden;
+pub mod inventory;
 pub mod pending;
 pub mod run;
 

@@ -36,6 +36,8 @@ use onsa_diag::{Diagnostic, FileId};
 use onsa_syntax::Parsed;
 
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
+/// The names of the builtin methods and associated items (for the gate, Q-14).
+pub use builtin::names as builtin_member_names;
 pub use consteval::ConstValue;
 pub use def::{Def, DefId, DefKind, ModId};
 pub use flow::{FlowInfo, FlowLet, FlowRate, InitArg, Node};

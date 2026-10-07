@@ -703,16 +703,7 @@ pub fn run_all(root: &Path) -> Report {
             }
         }
     }
-    // A scratch directory of this run (several runs may share the process).
-    static RUNS: AtomicUsize = AtomicUsize::new(0);
-    let n = RUNS.fetch_add(1, Ordering::SeqCst);
-    let scratch = std::env::temp_dir().join(format!("onsa_cases_{}_{n}", std::process::id()));
-    // One scratch directory per case, named by its index (paths could collide once flattened).
-    let runs = run_parallel(&cases, |i, c| {
-        let dir = scratch.join(i.to_string());
-        run_case(root, c, &dir, !listed_whole.contains(c.path.as_str()))
-    });
-    let _ = std::fs::remove_dir_all(&scratch);
+    let runs = run_each(root, &cases, |c| !listed_whole.contains(c.path.as_str()));
     let mut report = reconcile(runs, &list);
     if let Some(e) = list_error {
         report.failures.push(e);
@@ -724,6 +715,68 @@ pub fn run_all(root: &Path) -> Report {
         report.failures.push(format!("{o}: no case declares this golden file; remove it or declare it"));
     }
     report
+}
+
+/// Run every case (in parallel), in the order of `cases`, without applying the
+/// pending list. `write_golden` tells whether `UPDATE_GOLDEN` may rewrite the
+/// golden files of a case.
+pub fn run_each(root: &Path, cases: &[Case], write_golden: impl Fn(&Case) -> bool + Sync) -> Vec<CaseRun> {
+    // A scratch directory of this run (several runs may share the process).
+    static RUNS: AtomicUsize = AtomicUsize::new(0);
+    let n = RUNS.fetch_add(1, Ordering::SeqCst);
+    let scratch = std::env::temp_dir().join(format!("onsa_cases_{}_{n}", std::process::id()));
+    // One scratch directory per case, named by its index (paths could collide once flattened).
+    let runs = run_parallel(cases, |i, c| {
+        let dir = scratch.join(i.to_string());
+        run_case(root, c, &dir, write_golden(c))
+    });
+    let _ = std::fs::remove_dir_all(&scratch);
+    runs
+}
+
+/// The runs as JSON, for the gate's count of negative examples (K-13): what
+/// each case is, and every marker it compared, at which stage and target, and
+/// whether a diagnostic matched it. The pending list is not applied; the gate
+/// applies it (`tools/diag_codes.py`).
+///
+/// ```text
+/// {"cases": [{"path": "tests/spec/negative/flow.onsa", "mode": "check", "ran": true,
+///             "markers": [{"code": "E0815", "file": "tests/spec/negative/flow.onsa",
+///                          "line": 75, "stage": "check", "target": null, "matched": true}],
+///             "problems": []}],
+///  "errors": []}
+/// ```
+///
+/// `file` is the file's name in the case's source map: its repository path
+/// for a file without a manifest, its path inside the package otherwise.
+pub fn runs_json(runs: &[CaseRun], errors: &[String]) -> serde_json::Value {
+    let cases: Vec<serde_json::Value> = runs
+        .iter()
+        .map(|r| {
+            let markers: Vec<serde_json::Value> = r
+                .checked
+                .iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "code": m.code.as_str(),
+                        "file": m.file,
+                        "line": m.line,
+                        "stage": m.stage,
+                        "target": m.target,
+                        "matched": m.matched,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "path": r.path,
+                "mode": r.mode,
+                "ran": r.ran,
+                "markers": markers,
+                "problems": r.problems.iter().map(Problem::text).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    serde_json::json!({ "cases": cases, "errors": errors })
 }
 
 fn run_parallel(cases: &[Case], f: impl Fn(usize, &Case) -> CaseRun + Sync) -> Vec<CaseRun> {
@@ -997,6 +1050,52 @@ mod tests {
         assert_eq!(c.failures.len(), 2, "{:?}", c.failures);
         assert!(c.failures[0].contains("\"good\" passes but is listed"), "{:?}", c.failures);
         assert!(c.failures[1].contains("does not have"), "{:?}", c.failures);
+    }
+
+    #[test]
+    fn runs_as_json() {
+        let src = format!("{MANIFEST}\npub flow f(x: Sig[F32], k: Ctl[F32]) -> Sig[F32] {{ //~ E0809\n  x * k\n}}\n");
+        let repo = Repo::new(
+            "json",
+            &[
+                ("tests/build/m.onsa", &src),
+                ("tests/check.onsa", "pub fn f() -> I32 { y } //~ E0302\n"),
+                ("tests/wrong.onsa", "pub fn f() -> I32 { 1 } //~ E0302\n"),
+                ("tests/none.onsa", "// onsa.toml\n// [test]\n// mode = \"none\"\n\nx //~ E0302\n"),
+            ],
+        );
+        let (cases, errors) = case::collect(&repo.0);
+        let runs = run_each(&repo.0, &cases, |_| false);
+        let json = runs_json(&runs, &errors);
+        let case = |p: &str| json["cases"].as_array().unwrap().iter().find(|c| c["path"] == p).unwrap().clone();
+        // a marker without targets is compared once per target
+        let b = case("tests/build/m.onsa");
+        assert_eq!(b["mode"], "check");
+        assert_eq!(b["ran"], true);
+        let m = b["markers"].as_array().unwrap();
+        assert_eq!(m.len(), 2, "{b}");
+        assert_eq!(m[0]["code"], "E0809");
+        assert_eq!(m[0]["file"], "m.onsa");
+        assert_eq!(m[0]["stage"], "build");
+        assert_eq!(m[0]["target"], "a");
+        assert_eq!(m[1]["target"], "b");
+        assert_eq!(m[0]["matched"], true);
+        let c = case("tests/check.onsa");
+        assert_eq!(c["markers"][0]["file"], "tests/check.onsa");
+        assert_eq!(c["markers"][0]["stage"], "check");
+        assert_eq!(c["markers"][0]["target"], serde_json::Value::Null);
+        assert_eq!(c["markers"][0]["matched"], true);
+        assert_eq!(c["problems"].as_array().unwrap().len(), 0);
+        // a marker that no diagnostic matched is listed as not matched, with the problem
+        let w = case("tests/wrong.onsa");
+        assert_eq!(w["markers"][0]["matched"], false);
+        assert_eq!(w["problems"].as_array().unwrap().len(), 1);
+        // `mode = "none"` compares nothing
+        let n = case("tests/none.onsa");
+        assert_eq!(n["mode"], "none");
+        assert_eq!(n["ran"], false);
+        assert_eq!(n["markers"].as_array().unwrap().len(), 0);
+        assert_eq!(json["errors"].as_array().unwrap().len(), 0);
     }
 
     #[test]

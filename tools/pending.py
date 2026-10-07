@@ -8,7 +8,8 @@ the form of `target`:
 
     spec-example  "§<section> <hash>: <first line>" of a ```onsa block of the
                   spec (`spec_blocks.ID_FORM`)
-    diag-code     a diagnostic code, "E0812"                       (matched by W1-02)
+    diag-code     a diagnostic code with fewer negative examples than the
+                  gate requires, "E0812"        (matched by tools/diag_codes.py, W1-02)
     gate          a pendable gate item of `tools/gate_steps.py` ("c-header"),
                   or a case that the item itself reports, "<item>/<case>"
     test-case     a test case: a path from the repository root (a file or a
@@ -21,6 +22,15 @@ component, no empty component, no trailing `/`.
 Every entry has all of: kind, target, reasons (S / R numbers, one or more),
 until (the work that removes it: a W ID of `docs/rework-phase1.md` §3 or a T
 ID of `docs/implementation-tasks.md` §4, not marked done), note.
+
+`until = "P2"` names the second phase instead of a work (K-13 rule 3): a code
+of the second phase waits for no work of the first. Only the kinds of
+`PHASE2_KINDS` may use it. Its reasons may also name a section of the spec
+("§20", a numbered heading of `onsa-lang-spec-0.3.md`): the spec itself sets
+the scope of the first phase; other entries name S / R numbers only. The summary counts it as the stage `P2`, after the
+W and M stages. `--stage-end P2` is a usage error (the first phase never ends
+the second); `--stage-end M9`, the end of the first phase, fails on every
+entry left whose until is not P2 (K-13: what is left after M9 is only P2).
 
 This module is the only place that validates the list (the Rust reader in
 `onsa_tests::pending` only reads it). It runs on its own:
@@ -41,10 +51,11 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gate_steps  # noqa: E402
+import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-PENDING = Path("tests") / "pending.toml"
+ROOT = repo.ROOT
+PENDING = repo.PENDING
 
 KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input")
 FIELDS = ("kind", "target", "reasons", "until", "note")
@@ -58,16 +69,18 @@ TARGET_FORMS = {
     "fuzz-input": re.compile(r"[^\s:][^:]*"),
 }
 REASON = re.compile(r"[SR]-\d+")
+# A spec section as a reason, only of `until = "P2"` (the spec §20 sets what the first phase is).
+SECTION = re.compile(r"§\d+(?:\.\d+)*")
 WORK = re.compile(r"(W\d+)-\d+|T(\d+)-\d+")
 
-# Where the documents keep the IDs: table rows `| ID |`, `| ID ✅ |` (done).
-DOC_REWORK = Path("docs") / "rework-phase1.md"
-DOC_PLAN = Path("docs") / "implementation-tasks.md"
-DOC_REVIEW = Path("docs") / "review-impl-phase1.md"
+# The second phase as an `until` (K-13 rule 3), the kinds that may use it, and
+# the stage that ends the first phase (plan §4 M9).
+PHASE2 = "P2"
+PHASE2_KINDS = ("diag-code",)
+PHASE1_END = "M9"
 
-
-class DocsError(Exception):
-    pass
+# The documents keep the IDs in table rows `| ID |`, `| ID ✅ |` (done).
+DocsError = repo.RepoError
 
 
 @dataclass(frozen=True)
@@ -88,41 +101,21 @@ class Docs:
     works: set  # W and T IDs
     done: set  # the works marked done (✅)
     reasons: set  # S and R IDs
+    sections: set = frozenset()  # the numbered headings of the spec ("20", "11.4")
 
 
 def stage_of(work):
-    """`W3-07` -> `W3`, `T5-8` -> `M5` (the milestone of a T ID)."""
+    """`W3-07` -> `W3`, `T5-8` -> `M5` (the milestone of a T ID), `P2` -> `P2`."""
+    if work == PHASE2:
+        return PHASE2
     m = WORK.fullmatch(work)
     if not m:
         return None
     return m.group(1) if m.group(1) else f"M{m.group(2)}"
 
 
-def _rows(text, id_pattern):
-    """{id: done} of the table rows whose first cell is an ID."""
-    rows = {}
-    for m in re.finditer(rf"^\| ({id_pattern})( ✅)?[ |]", text, re.M):
-        rows[m.group(1)] = bool(m.group(2))
-    return rows
-
-
-def _section(text, start, end, doc):
-    """The text from the heading line `start` up to the heading line `end`."""
-    out, inside = [], False
-    for line in text.split("\n"):
-        if line.startswith(start):
-            inside = True
-        elif inside and line.startswith(end):
-            break
-        if inside:
-            out.append(line)
-    if not out:
-        raise DocsError(f"{doc}: the section `{start}` is not found")
-    return "\n".join(out)
-
-
 def _table(doc, text, start, end, id_pattern, what):
-    rows = _rows(_section(text, start, end, doc) if start else text, id_pattern)
+    rows = repo.rows(repo.section(text, start, end, doc) if start else text, id_pattern)
     if not rows:
         raise DocsError(f"{doc}: no table rows of {what} found" + (f" in `{start}`" if start else ""))
     return rows
@@ -131,19 +124,16 @@ def _table(doc, text, start, end, id_pattern, what):
 def load_docs(root=ROOT):
     """The IDs of the tables. Raises DocsError when a table is not found."""
 
-    def read(p):
-        try:
-            return (root / p).read_text(encoding="utf-8")
-        except OSError as e:
-            raise DocsError(f"{p}: {e}") from e
-
-    rework, plan, review = read(DOC_REWORK), read(DOC_PLAN), read(DOC_REVIEW)
-    w = _table(DOC_REWORK, rework, "## 3.", "## 4.", r"W\d+-\d+", "W works")
-    t = _table(DOC_PLAN, plan, "## 4.", "## 5.", r"T\d+-\d+", "T works")
-    s = _table(DOC_PLAN, plan, "## 2.", "## 3.", r"S-\d+", "S numbers")
-    r = _table(DOC_REVIEW, review, None, None, r"R-\d+", "R numbers")
+    rework, plan, review = (repo.read(root, d) for d in (repo.DOC_REWORK, repo.DOC_PLAN, repo.DOC_REVIEW))
+    w = _table(repo.DOC_REWORK, rework, "## 3.", "## 4.", r"W\d+-\d+", "W works")
+    t = _table(repo.DOC_PLAN, plan, "## 4.", "## 5.", r"T\d+-\d+", "T works")
+    s = _table(repo.DOC_PLAN, plan, "## 2.", "## 3.", r"S-\d+", "S numbers")
+    r = _table(repo.DOC_REVIEW, review, None, None, r"R-\d+", "R numbers")
     works = {**w, **t}
-    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=set(s) | set(r))
+    sections = set(spec_blocks.headings(repo.read(root, repo.SPEC)))
+    if not sections:
+        raise DocsError(f"{repo.SPEC}: no numbered heading found")
+    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=set(s) | set(r), sections=sections)
 
 
 def load(path):
@@ -208,14 +198,22 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
             continue
         errors += [f"{where}: {m}" for m in _check_target(e, root, pendable_steps)]
         for r in e.reasons:
-            if not REASON.fullmatch(r):
+            if SECTION.fullmatch(r):
+                if e.until != PHASE2:
+                    errors.append(f"{where}: reason `{r}`: a spec section is a reason only of `until = \"{PHASE2}\"`")
+                elif r[1:] not in docs.sections:
+                    errors.append(f"{where}: reason `{r}` is not a numbered heading of {repo.SPEC}")
+            elif not REASON.fullmatch(r):
                 errors.append(f"{where}: reason `{r}` is not an S / R number (`S-45`, `R-23`)")
             elif r not in docs.reasons:
                 errors.append(f"{where}: reason `{r}` is not in the tables (plan §2 for S, review for R)")
         if len(set(e.reasons)) != len(e.reasons):
             errors.append(f"{where}: a reason is listed twice")
-        if not WORK.fullmatch(e.until):
-            errors.append(f"{where}: until `{e.until}` is not a work ID (`W3-07`, `T5-8`)")
+        if e.until == PHASE2:
+            if e.kind not in PHASE2_KINDS:
+                errors.append(f"{where}: until `{PHASE2}` (the second phase) is only for {', '.join(PHASE2_KINDS)} entries")
+        elif not WORK.fullmatch(e.until):
+            errors.append(f"{where}: until `{e.until}` is not a work ID (`W3-07`, `T5-8`) or `{PHASE2}`")
         elif e.until not in docs.works:
             errors.append(f"{where}: until `{e.until}` is not in the tables (rework §3 for W, plan §4 for T)")
         elif e.until in docs.done:
@@ -271,8 +269,11 @@ def stage_counts(entries):
 
 
 def stage_key(stage):
-    m = re.fullmatch(r"([WM])(\d+)", stage)
-    return (0 if m and m.group(1) == "W" else 1, int(m.group(2)) if m else 99, stage)
+    """W stages, then M stages, then the second phase, then anything else."""
+    m = re.fullmatch(r"([WMP])(\d+)", stage)
+    if not m:
+        return (3, 99, stage)
+    return ("WMP".index(m.group(1)), int(m.group(2)), stage)
 
 
 def stages_line(entries):
@@ -291,6 +292,8 @@ def stage_problem(stage, docs):
     """Why `stage` is not a usable `--stage-end` value, or None."""
     if not stage:
         return "--stage-end needs a stage (W3, M5)"
+    if stage == PHASE2:
+        return f"`{PHASE2}` is the second phase, which the first phase does not end; the last stage is {PHASE1_END}"
     if stage not in known_stages(docs):
         known = ", ".join(sorted(known_stages(docs), key=stage_key))
         return f"unknown stage `{stage}` (one of {known})"
@@ -298,11 +301,13 @@ def stage_problem(stage, docs):
 
 
 def stage_end_errors(entries, stage):
-    return [
-        f"{e.label()}: still pending at the end of {stage} (until {e.until}): {e.note}"
-        for e in entries
-        if stage_of(e.until) == stage
-    ]
+    """The entries left at the end of `stage`. At the end of the first phase
+    (`PHASE1_END`), every entry but those of the second phase."""
+    if stage == PHASE1_END:
+        left = [e for e in entries if e.until != PHASE2]
+    else:
+        left = [e for e in entries if stage_of(e.until) == stage]
+    return [f"{e.label()}: still pending at the end of {stage} (until {e.until}): {e.note}" for e in left]
 
 
 def show_path(path, root):

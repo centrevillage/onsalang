@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5"]
+
+// A non-rt fn with an empty effect row takes arguments of clock `init` or
+// lower; a faster argument is E0815 (§11.5, S-147). The fn is not E0805,
+// which is for fns with effects. Pending until W7-02 (tests/pending.toml).
+pub fn slow(x: F32) -> F32 { x }
+
+pub flow non_rt_at_sig(x: Sig[F32]) -> Sig[F32] {
+  slow(x)                       //~ E0815
+}

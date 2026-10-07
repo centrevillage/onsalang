@@ -31,7 +31,7 @@ def scan(spec_text):
     """Return (blocks, errors). Errors are fences the check cannot trust: a
     fence that is not closed, and one that looks like onsa but is not spelled
     exactly ```onsa (it would be skipped silently)."""
-    blocks, errors, _ = _walk(spec_text)
+    blocks, errors, _, _ = _walk(spec_text)
     return blocks, errors
 
 
@@ -41,10 +41,24 @@ def headings(spec_text):
     return _walk(spec_text)[2]
 
 
+def section_lines(spec_text, section):
+    """The lines of the section ("4.1") outside fences, without its heading and
+    its subsections, or None when the spec has no such heading."""
+    content = _walk(spec_text)[3]
+    return content[section]["lines"] if section in content else None
+
+
+def section_fences(spec_text, section):
+    """The fences of the section as (info string, code), in order, or None."""
+    content = _walk(spec_text)[3]
+    return content[section]["fences"] if section in content else None
+
+
 def _walk(spec_text):
     lines = spec_text.split("\n")
     blocks, errors, sections = [], [], []
     section = "0"
+    content = {section: {"lines": [], "fences": []}}
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
@@ -54,6 +68,9 @@ def _walk(spec_text):
             if h:
                 section = h.group(1)
                 sections.append(section)
+                content.setdefault(section, {"lines": [], "fences": []})
+            else:
+                content[section]["lines"].append(lines[i])
             i += 1
             continue
         fence, info = m.group(1), m.group(2)
@@ -73,12 +90,13 @@ def _walk(spec_text):
             errors.append((i + 1, f'the fence "{stripped}" is not closed before line {j + 1}'))
             i = j  # go on from the fence that follows
             continue
+        content[section]["fences"].append((info.strip(), "\n".join(lines[i + 1 : j])))
         if stripped == ONSA_FENCE:
             blocks.append(Block(i + 2, section, "\n".join(lines[i + 1 : j]).rstrip("\n")))
         elif info.strip().lower().startswith("onsa"):
             errors.append((i + 1, f'the fence "{stripped}" looks like onsa but is not "{ONSA_FENCE}"'))
         i = j + 1
-    return blocks, errors, sections
+    return blocks, errors, sections, content
 
 
 def normalize(text):

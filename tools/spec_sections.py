@@ -12,26 +12,22 @@ of its subsections; a case with `mode = "none"` never runs and tests nothing
 """
 import argparse
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
+import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
-ROOT = TOOLS.parent
-SPEC = "onsa-lang-spec-0.3.md"
-CASES_CMD = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--")
+ROOT = repo.ROOT
+SPEC = repo.SPEC
 
 
-def load_cases(root=ROOT, cmd=CASES_CMD):
-    """The cases as `onsa_cases` lists them. Raises RuntimeError when it fails."""
-    out = subprocess.run([*cmd, str(root)], cwd=root, capture_output=True, text=True)
-    if out.returncode != 0:
-        raise RuntimeError(f"`{' '.join(cmd)}` failed (exit {out.returncode}):\n{out.stderr.rstrip()}")
-    return json.loads(out.stdout)
+def load_cases(root=ROOT, cmd=repo.CASES_CMD):
+    """The cases as `onsa_cases` lists them. Raises repo.RepoError when it fails."""
+    return repo.cases_json(root, cmd, str(root))
 
 
 def unknown(cases, headings):
@@ -46,7 +42,7 @@ def untested(cases, headings):
     return [h for h in headings if not any(n == h or n.startswith(h + ".") for n in named)]
 
 
-def main(argv=None, root=ROOT, cmd=CASES_CMD):
+def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", action="store_true")
@@ -54,7 +50,7 @@ def main(argv=None, root=ROOT, cmd=CASES_CMD):
     args = ap.parse_args(argv)
     try:
         cases = load_cases(root, cmd)
-    except (RuntimeError, OSError, json.JSONDecodeError) as e:
+    except (repo.RepoError, OSError, json.JSONDecodeError) as e:
         print(f"cannot list the cases: {e}")
         return 1
     headings = spec_blocks.headings((root / SPEC).read_text(encoding="utf-8"))
