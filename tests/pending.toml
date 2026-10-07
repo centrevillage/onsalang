@@ -74,6 +74,13 @@ note = "演算子の群。写し ops/groups.onsa は旧い群の規則の例"
 
 [[pending]]
 kind = "spec-example"
+target = "§6.1 8795a32e: pub struct Shaper {"
+reasons = ["S-191"]
+until = "W3-13"
+note = "関数値の呼び出し .( の例。構文は W3-07、写しは W3-13 で tests/spec に置く"
+
+[[pending]]
+kind = "spec-example"
 target = "§5.1 837afdf0: let x: I32 = 1 // 不変"
 reasons = ["S-89"]
 until = "W3-13"
@@ -186,6 +193,13 @@ target = "E0005"
 reasons = ["S-103", "S-133"]
 until = "W3-08"
 note = "属性の表（一覧に無い属性、付けられない場所、@repr / @fp の値）"
+
+[[pending]]
+kind = "diag-code"
+target = "E0006"
+reasons = ["S-183"]
+until = "W3-14"
+note = "構文の入れ子の深さの上限 256（S-183）。どの段もまだ出さない"
 
 [[pending]]
 kind = "diag-code"
@@ -316,9 +330,9 @@ note = "コンパイル時の評価の panic（定数の評価の段）"
 [[pending]]
 kind = "diag-code"
 target = "E0503"
-reasons = ["S-128"]
-until = "W5-08"
-note = "発散の後の到達しない文"
+reasons = ["S-128", "S-187"]
+until = "W5-09"
+note = "発散の後の到達しない文（W5-08）と、前の腕で覆われる match の腕（W5-09）"
 
 [[pending]]
 kind = "diag-code"

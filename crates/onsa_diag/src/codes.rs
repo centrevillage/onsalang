@@ -102,6 +102,7 @@ codes! {
     E0003 = 3,    Syntax,         "`else` / `with` must follow the `}` on its line, and a block's `{` the line of its header";
     E0004 = 4,    Syntax,         "doc comment in a place it cannot document";
     E0005 = 5,    Syntax,         "unknown attribute, or an attribute in a place it cannot be attached to";
+    E0006 = 6,    Syntax,         "syntax nested deeper than the limit";
     E0010 = 10,   Syntax,         "binary operators from different groups mixed without parentheses";
     E0011 = 11,   Syntax,         "`as` / `at` expression used as an operand, or chained, without parentheses";
     E0012 = 12,   Syntax,         "prefix operators stacked without parentheses";

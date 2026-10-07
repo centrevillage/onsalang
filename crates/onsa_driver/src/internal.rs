@@ -61,10 +61,9 @@ impl InternalError {
         InternalError { origin: Origin::GeneratedC, span: None, message }
     }
 
-    /// The text form, on standard error (S-67). The JSON form of an internal
-    /// error is not decided: with `--json` the commands print nothing on
-    /// standard output and this text on standard error.
-    // SPEC-GAP(S-182): the `--json` form of an internal error; nothing on stdout, the text on stderr, exit 101.
+    /// The text form, on standard error (S-67). An internal error has no JSON
+    /// form (spec §18.2, S-182): with `--json` the commands print nothing on
+    /// standard output and this text on standard error, exit 101.
     pub fn render(&self, sources: &SourceMap) -> String {
         let mut out = String::new();
         match &self.origin {

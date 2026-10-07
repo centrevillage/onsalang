@@ -9,7 +9,7 @@ use std.sync.{Swap}
 pub fn main() -> Result[(), device.Error] {
   let st     = voice.init(voice.Config {}, 48000.0)
   var params = Swap.new(voice.params_default()) // 固定サイズの値。main のフレームに置かれる
-  device.run(move st, inout params, on_audio, on_control)
+  device.run(move st, inout params, move on_audio, move on_control)
 }
 
 rt fn on_audio(inout st: voice.State, params: Swap[voice.Params], inout out: Span[F32]) {

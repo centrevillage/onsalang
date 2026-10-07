@@ -7,6 +7,6 @@
 target fn run[S: ?Dup, P: Copy](
   move st: S,
   inout params: Swap[P],
-  audio: rt fn(inout S, Swap[P], inout Span[F32]),
-  control: fn(inout Swap[P], Event),
+  move audio: rt fn(inout S, Swap[P], inout Span[F32]),
+  move control: fn(inout Swap[P], Event),
 ) -> Result[(), Error]

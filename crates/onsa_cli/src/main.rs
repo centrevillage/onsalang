@@ -194,7 +194,7 @@ fn run(command: Command) -> Outcome {
 }
 
 /// Report an internal error (S-67): standard error only, exit 101.
-// SPEC-GAP(S-182): with `--json` too, nothing goes to standard output; the text goes to standard error.
+// Spec §18.2 (S-182): with `--json` too, nothing goes to standard output; the text goes to standard error.
 fn internal(sources: &SourceMap, e: &onsa_driver::InternalError) -> Outcome {
     eprint!("onsa: {}", e.render(sources));
     Outcome::Internal
