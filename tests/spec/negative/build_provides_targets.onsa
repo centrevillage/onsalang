@@ -1,0 +1,32 @@
+// onsa.toml
+// [package]
+// name = "build_provides_targets"
+// edition = "2026"
+//
+// [export]
+// prefix = "bt_"
+// fns = ["build_provides_targets.version_on_heap", "build_provides_targets.pure"]
+//
+// [targets.heapless]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.hosted]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§12.3", "§14.2", "§15.3"]
+
+// E0610 is judged per target (§15.3): the same exported function is rejected
+// by the target that does not provide `Alloc` and accepted by the one that
+// does. The marker names the target that rejects it.
+pub fn version_on_heap() -> U32 uses {Alloc} { 4 }   //~ E0610 [heapless]
+
+pub fn pure() -> U32 { 5 }

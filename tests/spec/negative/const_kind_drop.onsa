@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.6", "§6.3"]
+
+// E0407: a type that implements `Drop` is Affine (§4.6), so a `const` of that
+// type is rejected like a `Buf` (§6.6). The struct holds only Copy fields; the
+// kind comes from the `Drop` implementation (§6.3: `drop(move self)` may only
+// be `rt` or `uses {Alloc}`).
+pub struct Handle {
+  id: U32,
+}
+
+impl Drop for Handle {
+  rt fn drop(move self) {}
+}
+
+pub struct Pair {
+  first: Handle,
+  second: U32,
+}
+
+const RESOURCE: Handle = Handle { id: 1 }       //~ E0407
+
+const WRAPPED: Pair = Pair { first: Handle { id: 2 }, second: 3 }   //~ E0407
+
+impl Handle {
+  const SPARE: Handle = Handle { id: 0 }        //~ E0407
+}

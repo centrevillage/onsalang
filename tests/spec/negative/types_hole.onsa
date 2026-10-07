@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+
+// E0421: `_` in expression position is a typed hole: it reports the expected
+// type and the candidates, and the build fails (§2.2, §18.1). In a pattern or
+// as an argument name `_` means "unused" and is fine. One error per function
+// (P-01); the hole sits in an argument, an initializer, an operand, a struct
+// field, an array element, a match arm, and the two branches of an `if`.
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub fn twice(x: F32) -> F32 { x * 2.0 }
+
+pub fn hole_as_argument() -> F32 {
+  twice(_)                      //~ E0421
+}
+
+pub fn hole_in_initializer(x: F32) -> F32 {
+  let y: F32 = _                //~ E0421
+  x + y
+}
+
+pub fn hole_as_operand(x: F32) -> F32 {
+  x + _                         //~ E0421
+}
+
+pub fn hole_in_struct_field() -> P {
+  P { x: 1.0, y: _ }            //~ E0421
+}
+
+pub fn hole_in_array() -> [F32; 2] {
+  [1.0, _]                      //~ E0421
+}
+
+pub fn hole_in_match_arm(o: Option[F32]) -> F32 {
+  match o {
+    Some(v) => v,
+    None => _,                  //~ E0421
+  }
+}
+
+pub fn hole_in_else_branch(c: Bool) -> F32 {
+  if c {
+    1.0
+  } else {
+    _                           //~ E0421
+  }
+}
+
+pub fn hole_in_closure_body() -> U32 {
+  let f = fn(x: U32) -> U32 { x + _ }   //~ E0421
+  f(1)
+}
+
+// `_` that is not a hole.
+pub fn not_holes(_: F32, pair: (F32, F32), o: Option[F32]) -> F32 {
+  let _ = twice(1.0)
+  let (a, _) = pair
+  match o {
+    Some(_) => a,
+    _ => 0.0,
+  }
+}

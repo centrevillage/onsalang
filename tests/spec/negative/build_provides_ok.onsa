@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "build_provides_ok"
+// edition = "2026"
+//
+// [export]
+// prefix = "bo_"
+// fns = ["build_provides_ok.version_on_heap"]
+//
+// [targets.hosted]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§12.3", "§14.2", "§15.3"]
+
+// The positive side of E0610: the target provides `Alloc`, so an exported
+// function and `main` may have it in their rows (§12.3, §15.3).
+pub fn version_on_heap() -> U32 uses {Alloc} { 6 }
+
+pub fn main() uses {Alloc} {}

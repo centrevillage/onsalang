@@ -1,0 +1,21 @@
+[package]
+name = "build_provides_pkg"
+edition = "2026"
+
+[export]
+prefix = "bk_"
+fns = ["util.version", "util.version_on_heap", "app.count"]
+
+[targets.bare]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "trap"
+provides = []
+
+[targets.hosted]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = ["Alloc"]

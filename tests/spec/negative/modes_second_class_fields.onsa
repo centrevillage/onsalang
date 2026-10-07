@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3"]
+
+// E0710: a second-class value cannot be a struct field (§5.3: "returns and
+// struct fields cannot hold it"). The same goes for an array of `Span`, and
+// for a field of a generic struct. One error per declaration (P-01).
+pub struct Viewer {
+  window: Span[F32],            //~ E0710
+}
+
+pub struct Planar {
+  channels: [Span[F32]; 2],     //~ E0710
+}
+
+pub struct Wrapped[T: Copy] {
+  view: Span[T],                //~ E0710
+  n: U32,
+}
+
+pub struct Fine {
+  samples: [F32; 4],
+  n: U32,
+}

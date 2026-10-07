@@ -463,122 +463,17 @@ note = "rt の再帰。判定を効果の使用の記録の上に作り直す（
 
 [[pending]]
 kind = "diag-code"
-target = "E0012"
-reasons = ["R-113"]
-until = "W1-10"
-note = "前置の重ね。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0305"
-reasons = ["R-113"]
-until = "W1-10"
-note = "flow と同名の宣言。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0306"
-reasons = ["R-113"]
-until = "W1-10"
-note = "同名の test。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0407"
-reasons = ["R-113"]
-until = "W1-10"
-note = "const の結果の種。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0410"
-reasons = ["R-113"]
-until = "W1-10"
-note = "struct リテラルとパターンのフィールドの過不足。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0414"
-reasons = ["R-113"]
-until = "W1-10"
-note = "? の型。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0415"
-reasons = ["R-113"]
-until = "W1-10"
-note = "代入先が場所でない。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0420"
-reasons = ["R-113"]
-until = "W1-10"
-note = "対象の型が未解決。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0421"
-reasons = ["R-113"]
-until = "W1-10"
-note = "型付きホール。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0501"
-reasons = ["R-113"]
-until = "W1-10"
-note = "match の網羅性。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0502"
-reasons = ["R-113"]
-until = "W1-10"
-note = "反駁可能な let。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0610"
-reasons = ["R-113"]
-until = "W1-10"
-note = "ターゲットの provides に無い効果（ビルドの段）。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0710"
-reasons = ["R-113"]
-until = "W1-10"
-note = "第二級の値の位置。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0712"
-reasons = ["R-113"]
-until = "W1-10"
-note = "クロージャが捕捉できない値（inout 引数、Affine）。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0713"
-reasons = ["R-113"]
-until = "W1-10"
-note = "inout self のメソッドの ! の欠落。否定例の補充（W1-10）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0714"
-reasons = ["R-113"]
-until = "W1-10"
-note = "inout self でないメソッドの !。否定例の補充（W1-10）"
+reasons = ["S-102"]
+until = "W3-10"
+note = "flow と同名の宣言。W1-10 の否定例 tests/spec/negative/names_flow_decl.onsa（5 件）は flow の最終の構文（at）が要り、W3-10 まで実装待ち"
 
 [[pending]]
 kind = "diag-code"
 target = "E0807"
-reasons = ["R-113"]
-until = "W1-10"
-note = "delay の長さ 1。否定例の補充（W1-10）"
+reasons = ["S-44", "S-110", "S-102"]
+until = "W3-10"
+note = "delay の長さ 1。W1-10 の否定例 tests/spec/negative/flow_delay_one.onsa（7 件）は delay~ / par / if~ / at の最終の構文が要り、W3-10 まで実装待ち"
 
 # 規則 3: 第 2 期のコード
 
@@ -681,3 +576,75 @@ target = "tests/spec/negative/flow_delay_const.onsa"
 reasons = ["S-132"]
 until = "W7-02"
 note = "遅延の長さの定数式でないものは E0417（§11.4）。元の期待値は E0808 で、今の実装も E0808 を出す"
+
+# --- W1-10 の否定例のうち、まだ通らないもの（2026-10-07）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/names_flow_decl.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "E0305 の否定例 5 件。flow の at（S-102）を今の実装が読めない（E0002）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_delay_one.onsa"
+reasons = ["S-44", "S-110", "S-102"]
+until = "W3-10"
+note = "E0807 の否定例 7 件。delay~ / par / if~ / at を今の実装が読めない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/modes_flow_spans.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "E0710 の否定例 2 件（flow の入出力の Span）。at を今の実装が読めない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/modes_flow_span_fields.onsa"
+reasons = ["S-102", "R-135"]
+until = "W4-05"
+note = "E0710 の否定例 2 件。at（W3-10）と、構造体のフィールドの第二級の型の E0710（R-135、W4-05）の両方が要る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_kind_drop.onsa"
+reasons = ["S-70", "S-138"]
+until = "W5-04"
+note = "E0407 の否定例 3 件（Drop 型の const）。手書きの impl Drop が今は E0200「does not support trait implementations」。S-138 が第 1 期に E0200 とするのは手書きの impl Hash だけ"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/build_provides_main.onsa"
+reasons = ["R-134"]
+until = "W6-03"
+note = "main の効果行を provides と照合しない（仕様 §15.3、E0610）。今は診断なし"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/modes_bang_impl_members.onsa"
+reasons = ["S-59", "R-71"]
+until = "W3-03"
+note = "同じ impl の 2 つ目以降のメンバの E0713 / E0714 が出ない（診断の単位は impl の各メンバ、S-59）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/modes_second_class_fields.onsa"
+reasons = ["R-135"]
+until = "W4-05"
+note = "構造体のフィールドの Span、[Span; N]、総称の Span[T] が E0710 にならない（仕様 §5.3）。今は診断なし"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/struct_fields_alias.onsa"
+reasons = ["S-91", "R-105"]
+until = "W4-04"
+note = "型別名を struct のリテラルとパターンで使えない（今は E0401「`Q` is not a struct」）。型別名を全ての位置で（S-91）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/try_type_map_err.onsa"
+reasons = ["S-71", "R-96"]
+until = "W5-03"
+note = "Result の map_err が無い（今は E0413）。std の Result の map_err（S-71）"

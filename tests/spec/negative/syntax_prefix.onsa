@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1"]
+
+// E0012: prefix operators cannot be stacked without parentheses (§3.1).
+// One error per function (P-01). Each function puts the stack in a different
+// position: an argument, a condition, an operand, a literal element, a closure
+// body, and a longer stack.
+pub fn half(x: F32) -> F32 { x * 0.5 }
+
+pub fn apply(f: fn(I32) -> I32) -> I32 { f(3) }
+
+pub fn stacked_in_argument(x: F32) -> F32 {
+  half(--x)                     //~ E0012
+}
+
+pub fn stacked_not_in_condition(flag: Bool) -> U32 {
+  if !!flag {                   //~ E0012
+    1
+  } else {
+    0
+  }
+}
+
+pub fn stacked_as_operand(x: F32, y: F32) -> F32 {
+  x * --y                       //~ E0012
+}
+
+pub fn stacked_in_array(x: F32) -> [F32; 2] {
+  [--x, 1.0]                    //~ E0012
+}
+
+pub fn stacked_in_closure() -> I32 {
+  apply(fn(x: I32) -> I32 { --x })   //~ E0012
+}
+
+pub fn mixed_prefix_stack(x: I32) -> I32 {
+  -!x                           //~ E0012
+}
+
+pub fn three_in_a_row(x: F32) -> F32 {
+  ---x                          //~ E0012
+}
+
+// Parentheses make each stack legal, and a binary operator followed by a
+// prefix operator is not a stack.
+pub fn parenthesized(x: F32, flag: Bool, i: I32, xs: [F32; 2], k: U32) -> F32 {
+  let a = -(-x)
+  let b = !(!flag)
+  let c = i - -i
+  let d = -xs[k]
+  let e = (-x) as F64
+  let f = half(-(-x))
+  if b { a + d + e.round_f32() + f + c.round_f32() } else { 0.0 }
+}

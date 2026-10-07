@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.5"]
+
+// E0807: `delay~(e, N)` needs `N >= 2`; one sample of delay is `prev~` (§11.4).
+// The length is a constant expression, so a named constant and an
+// arithmetic expression whose value is 1 are the same error as the literal
+// (§11.4, §18.1: "if the value is 1, E0807"). One error per flow (P-01). The
+// shapes: the literal with and without `init`, a constant, a constant
+// expression, a delay bound to a `let`, one inside `par`, and one inside an
+// `if~`.
+const ONE: U32 = 1
+const TWO: U32 = 2
+
+pub flow literal_one(x: F32 at sample) -> F32 at sample {
+  delay~(x, 1)                  //~ E0807
+}
+
+pub flow literal_one_with_init(x: F32 at sample) -> F32 at sample {
+  delay~(x, 1, 0.5)             //~ E0807
+}
+
+pub flow named_constant(x: F32 at sample) -> F32 at sample {
+  delay~(x, ONE)                //~ E0807
+}
+
+pub flow constant_expression(x: F32 at sample) -> F32 at sample {
+  delay~(x, TWO - 1)            //~ E0807
+}
+
+pub flow bound_to_a_let(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 1)          //~ E0807
+  x + d
+}
+
+pub flow inside_par(x: F32 at sample) -> F32 at sample {
+  let ds = par i in 0..2 {
+    delay~(x * i.round_f32(), 1)   //~ E0807
+  }
+  ds[0] + ds[1]
+}
+
+pub flow inside_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    delay~(x, 1)                //~ E0807
+  } else {
+    x
+  }
+}
+
+// Two samples or more is a delay line, and one sample of delay is `prev~`.
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 2)
+  let b = delay~(x, TWO + 1, 0.5)
+  let c = prev~(x)
+  a + b + c
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§5.2"]
+
+// The unit of a diagnostic is a declaration, and each member of an `impl` is
+// its own unit: the members are checked independently and every error is
+// reported (§18.1). Here one `impl` has four members, each with an E0713 or an
+// E0714.
+pub struct Pt {
+  x: U32,
+}
+
+impl Pt {
+  pub fn norm(self) -> U32 { self.x }
+  pub fn scale(inout self, k: U32) { self.x = self.x * k }
+}
+
+pub struct Rig {
+  pt: Pt,
+}
+
+impl Rig {
+  pub fn grow(inout self) {
+    self.pt.scale(2)            //~ E0713
+  }
+
+  pub fn read(self) -> U32 {
+    self.pt.norm!()             //~ E0714
+  }
+
+  pub fn grow_again(inout self) {
+    self.pt.scale(3)            //~ E0713
+  }
+
+  pub fn read_again(self) -> U32 {
+    self.pt.norm!()             //~ E0714
+  }
+}

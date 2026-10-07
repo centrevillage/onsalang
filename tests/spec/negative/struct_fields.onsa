@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§7"]
+
+// E0410: a struct literal and a struct pattern name every field exactly once
+// (§4.4, §7). A missing, an extra and a repeated field are the same error. One
+// error per function (P-01); the shapes below cover the literal and the
+// pattern, nesting and a generic struct. (A type alias is in
+// struct_fields_alias.onsa.)
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub struct Line {
+  a: P,
+  b: P,
+}
+
+pub struct Wrap[T] {
+  v: T,
+  n: U32,
+}
+
+pub fn literal_extra_field() -> P {
+  P { x: 1.0, y: 2.0, z: 3.0 }  //~ E0410
+}
+
+pub fn literal_repeated_field() -> P {
+  P { x: 1.0, x: 2.0, y: 3.0 }  //~ E0410
+}
+
+pub fn literal_without_fields() -> P {
+  P {}                          //~ E0410
+}
+
+pub fn literal_nested_missing() -> Line {
+  Line { a: P { x: 1.0, y: 2.0 }, b: P { y: 2.0 } }   //~ E0410
+}
+
+pub fn literal_generic_missing() -> Wrap[U32] {
+  Wrap { v: 1 }                 //~ E0410
+}
+
+pub fn pattern_missing_field(p: P) -> F32 {
+  let P { x: a } = p            //~ E0410
+  a
+}
+
+pub fn pattern_extra_field(p: P) -> F32 {
+  let P { x: a, y: b, z: c } = p   //~ E0410
+  a + b + c
+}
+
+pub fn pattern_missing_in_nested_arm(l: Line) -> F32 {
+  match l {
+    Line { a: P { x: ax }, b: _ } => ax,   //~ E0410
+  }
+}
+
+pub fn complete(p: P, w: Wrap[F32]) -> F32 {
+  let line = Line { a: p, b: P { x: 0.0, y: 1.0 } }
+  let P { x: px, y: _ } = line.a
+  let Wrap { v: wv, n: _ } = w
+  match line {
+    Line { a: P { x: ax, y: ay }, b: _ } => px + wv + ax + ay,
+  }
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [package]
+// name = "build_provides_main"
+// edition = "2026"
+//
+// [export]
+// prefix = "bm_"
+// fns = ["build_provides_main.version"]
+//
+// [targets.bare]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§8.5", "§12.3", "§15.3"]
+
+// E0610: `main` is held to the same rule as an exported function (§8.5,
+// §15.3): each effect in its row must be provided by the build target, and
+// a target with no heap does not provide `Alloc` (§12.3).
+pub fn version() -> U32 { 1 }
+
+pub fn main() uses {Alloc} {}   //~ E0610 [bare]

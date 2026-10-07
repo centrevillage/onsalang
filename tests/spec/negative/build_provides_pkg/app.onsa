@@ -1,0 +1,5 @@
+use util.{version}
+
+// An exported function that only calls a pure one has an empty row, which
+// every target provides.
+pub fn count() -> U32 { version() + 1 }

@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3"]
+
+// E0710: borrows, `Span`, arrays of `Span` and capturing closures appear only
+// in argument positions; a return type or a struct field cannot hold one
+// (§5.3). (Struct fields are in modes_second_class_fields.onsa.) E0712: a capturing closure cannot capture an `inout` argument or an
+// Affine value (§5.3). One error per item (P-01).
+pub fn planar_returned(xs: [Span[F32]; 2]) -> [Span[F32]; 2] {   //~ E0710
+  xs
+}
+
+pub fn tail_returned(xs: Span[F32]) -> Span[F32] {   //~ E0710
+  xs.slice(1, xs.len())
+}
+
+pub fn generic_returned[T: Copy](xs: Span[T]) -> Span[T] {   //~ E0710
+  xs
+}
+
+pub fn capturing_closure_returned(k: U32) -> fn(U32) -> U32 {
+  fn(x: U32) -> U32 { x + k }   //~ E0710
+}
+
+pub fn capturing_closure_stored(k: U32) -> U32 {
+  let add = fn(x: U32) -> U32 { x + k }   //~ E0710
+  add(1)
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }
+
+pub struct Counter {
+  n: U32,
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl Counter {
+  pub fn run(inout self) -> U32 {
+    apply(fn(x: U32) -> U32 { x + self.n })   //~ E0712
+  }
+}
+
+pub fn captures_inout_argument(inout k: U32) -> U32 {
+  apply(fn(x: U32) -> U32 { x + k })   //~ E0712
+}
+
+pub fn captures_inout_inside_a_loop(inout total: U32, n: U32) -> U32 {
+  var out: U32 = 0
+  for i in 0..n {
+    out = out + apply(fn(x: U32) -> U32 { x + total + i })   //~ E0712
+  }
+  out
+}
+
+pub fn captures_inout_in_a_nested_closure(inout k: U32) -> U32 {
+  apply(fn(x: U32) -> U32 { apply(fn(y: U32) -> U32 { x + y + k }) })   //~ E0712
+}
+
+pub fn captures_borrowed_buf(b: Buf[F32]) -> U32 {
+  apply(fn(x: U32) -> U32 { x + b.len() })   //~ E0712
+}
+
+pub fn captures_owned_buf(move b: Buf[F32]) -> U32 uses {Alloc} {
+  apply(fn(x: U32) -> U32 { x + b.len() })   //~ E0712
+}
+
+pub fn captures_struct_holding_buf(h: Holder) -> U32 {
+  apply(fn(x: U32) -> U32 { x + h.n })   //~ E0712
+}
+
+// A closure that captures only Copy values is fine as an argument, and so is
+// a function that captures nothing in any position.
+pub fn captures_copies(k: U32, n: U32) -> U32 {
+  apply(fn(x: U32) -> U32 { x + k + n })
+}
+
+pub fn plain_function_returned() -> fn(U32) -> U32 {
+  fn(x: U32) -> U32 { x + 1 }
+}
+
+pub fn span_as_argument(xs: Span[F32], planar: [Span[F32]; 2]) -> U32 {
+  xs.len() + planar.len()
+}

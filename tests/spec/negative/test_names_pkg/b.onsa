@@ -1,0 +1,11 @@
+test "shared name" {
+  assert 1 == 1
+}
+
+test "only in b" {
+  assert 2 == 2
+}
+
+test "only in b" {              //~ E0306
+  assert 3 == 3
+}

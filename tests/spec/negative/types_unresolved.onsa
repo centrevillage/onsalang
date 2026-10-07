@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§4.4"]
+
+// E0420: an operation that needs its subject's type needs it known at that
+// point (§4.7): field access, a method call, an index, the left of `as`, a
+// `match` subject, the subject of `?`, and calling a function value. The type
+// is still open when it comes from a literal that nothing has fixed yet. (A
+// generic result nothing has pinned is in types_unresolved_generic.onsa.) One
+// error per function (P-01).
+pub struct P {
+  x: F32,
+}
+
+pub fn make[T]() -> T {
+  make()
+}
+
+pub fn literal_method() -> F32 {
+  0.round_f32()                 //~ E0420
+}
+
+pub fn as_of_open_literal(n: U32) -> I64 {
+  var acc = 0
+  let w = acc as I64            //~ E0420
+  acc = n
+  w
+}
+
+pub fn match_on_open_literal(n: U32) -> U32 {
+  var k = 0
+  let r = match k {             //~ E0420
+    0 => 1,
+    _ => 2,
+  }
+  k = n
+  r
+}
+
+pub fn method_in_branch(flag: Bool, x: F32) -> F32 {
+  var acc = 0.0
+  let r = if flag { acc.round_f32() } else { x }   //~ E0420
+  acc = x
+  r
+}
+
+// Once the type is known, by a later statement that came first or by an
+// annotation, the same operations are fine.
+pub fn known_types(n: U32, xs: [F32; 2], flag: Bool) -> F32 {
+  let v: P = make()
+  var acc: F32 = 0.0
+  let w = acc as F64
+  var k = 0
+  k = n
+  let r = match k {
+    0 => 1.0,
+    _ => xs[0],
+  }
+  acc = v.x + r
+  if flag { acc } else { w.round_f32() }
+}

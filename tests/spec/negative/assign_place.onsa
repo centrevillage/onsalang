@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1"]
+
+// E0415: the left side of an assignment is a place: a variable, an argument,
+// or their fields and elements (§5.1). Anything else, such as a literal, an
+// operator expression or the result of a call, is not. One error per function
+// (P-01). The shapes are a literal, an operator, a prefix operator, a method
+// result, a field and an element of a call result, and a loop and a branch
+// around the assignment.
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  pub fn norm(self) -> F32 { self.x }
+}
+
+pub fn origin() -> P { P { x: 0.0 } }
+
+pub fn table() -> [U32; 2] { [1, 2] }
+
+pub fn literal_target() {
+  1 = 2                         //~ E0415
+}
+
+pub fn operator_target(a: U32, b: U32) {
+  a + b = 3                     //~ E0415
+}
+
+pub fn prefix_target(x: F32) {
+  -x = 1.0                      //~ E0415
+}
+
+pub fn method_result_target(p: P) {
+  p.norm() = 1.0                //~ E0415
+}
+
+pub fn field_of_call_target() {
+  origin().x = 1.0              //~ E0415
+}
+
+pub fn element_of_call_target() {
+  table()[0] = 5                //~ E0415
+}
+
+pub fn inside_loop_and_branch(n: U32, flag: Bool) {
+  for i in 0..n {
+    if flag {
+      table()[i] = i            //~ E0415
+    }
+  }
+}
+
+impl P {
+  pub fn shift(inout self) {
+    self.x + 1.0 = 2.0          //~ E0415
+  }
+}
+
+pub fn closure_body() -> U32 {
+  let f = fn(x: U32) -> U32 {
+    x + 1 = 3                   //~ E0415
+    x
+  }
+  f(1)
+}
+
+// Variables, arguments, and their fields and elements are places.
+pub fn places(inout p: P, inout xs: [U32; 2], n: U32) -> U32 {
+  var local: U32 = 0
+  local = n
+  var q = origin()
+  q.x = 2.0
+  p.x = q.x
+  xs[0] = local
+  var t = table()
+  t[1] = n
+  local + t[1] + xs[0]
+}

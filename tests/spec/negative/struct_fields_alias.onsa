@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§7"]
+
+// E0410 through a type alias: an alias works in every position a type name
+// does, including a struct literal and a struct pattern (§4.4), so the field
+// rule applies to it unchanged. One error per function (P-01).
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+type Q = P
+
+pub fn literal_missing_through_alias() -> Q {
+  Q { x: 1.0 }                  //~ E0410
+}
+
+pub fn literal_extra_through_alias() -> Q {
+  Q { x: 1.0, y: 2.0, w: 3.0 }  //~ E0410
+}
+
+pub fn pattern_missing_through_alias(q: Q) -> F32 {
+  let Q { x: a } = q            //~ E0410
+  a
+}
+
+pub fn alias_complete(q: Q) -> F32 {
+  let Q { x: a, y: b } = q
+  let again = Q { x: b, y: a }
+  again.x
+}

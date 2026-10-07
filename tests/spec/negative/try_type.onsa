@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1"]
+
+// E0414: `?` works only when the operand's error type is the same type as
+// the error type of the function's return (§9.1). There is no implicit
+// conversion. One error per function (P-01). The shapes: different enums,
+// different scalars, a function that returns no `Result`, a branch, and a
+// generic error parameter. (Conversions with `map_err` are in
+// try_type_map_err.onsa.)
+pub enum ErrA {
+  Bad,
+  Worse(U32),
+}
+
+pub enum ErrB {
+  Other,
+}
+
+pub fn read_a() -> Result[U32, ErrA] { Ok(1) }
+
+pub fn read_str() -> Result[U32, Str] { Ok(2) }
+
+pub fn different_error_enum() -> Result[U32, ErrB] {
+  let n = read_a()?             //~ E0414
+  Ok(n)
+}
+
+pub fn different_error_scalar() -> Result[U32, I32] {
+  let n = read_str()?           //~ E0414
+  Ok(n)
+}
+
+pub fn returns_plain_value(r: Result[U32, ErrA]) -> U32 {
+  let n = r?                    //~ E0414
+  n
+}
+
+pub fn inside_arithmetic() -> Result[U32, ErrB] {
+  Ok(read_a()? + 1)             //~ E0414
+}
+
+pub fn inside_a_branch(k: U32) -> Result[U32, ErrB] {
+  match k {
+    0 => Ok(0),
+    _ => {
+      let n = read_a()?         //~ E0414
+      Ok(n)
+    },
+  }
+}
+
+pub fn generic_error_parameters[E, F](r: Result[U32, E]) -> Result[U32, F] {
+  let n = r?                    //~ E0414
+  Ok(n)
+}
+
+// The same error type, a generic one that matches, and an `Option` inside a
+// function that returns `Option` all work.
+pub fn same_error() -> Result[U32, ErrA] {
+  let n = read_a()?
+  Ok(n + 1)
+}
+
+pub fn same_generic_error[E](r: Result[U32, E]) -> Result[U32, E] {
+  let n = r?
+  Ok(n)
+}
+
+pub fn option_in_option(o: Option[U32]) -> Option[U32] {
+  let n = o?
+  Some(n)
+}

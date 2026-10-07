@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§9.1", "§6.1"]
+
+// E0414 after a `map_err` (§9.1): the conversion is explicit, and `?` then
+// requires the converted error type to be the function's error type. `Result`
+// has the method `map_err(move self, f: fn(move E) -> F) -> Result[T, F]`
+// (§9.1, §6.1). One error per function (P-01).
+pub enum ErrA {
+  Bad,
+  Worse(U32),
+}
+
+pub enum ErrB {
+  Other,
+}
+
+pub fn read_a() -> Result[U32, ErrA] { Ok(1) }
+
+pub fn to_code(move e: ErrA) -> U32 {
+  match move e {
+    ErrA.Bad => 0,
+    ErrA.Worse(n) => n,
+  }
+}
+
+pub fn to_other(move e: ErrA) -> ErrB {
+  match move e {
+    ErrA.Bad => ErrB.Other,
+    ErrA.Worse(_) => ErrB.Other,
+  }
+}
+
+pub fn conversion_to_wrong_type() -> Result[U32, ErrB] {
+  let n = read_a().map_err(to_code)?   //~ E0414
+  Ok(n)
+}
+
+pub fn conversion_to_scalar_in_a_branch(k: U32) -> Result[U32, ErrB] {
+  if k == 0 {
+    Ok(0)
+  } else {
+    let n = read_a().map_err(to_code)?   //~ E0414
+    Ok(n)
+  }
+}
+
+pub fn conversion_by_a_closure() -> Result[U32, ErrB] {
+  let n = read_a().map_err(fn(move e: ErrA) -> U32 { 1 })?   //~ E0414
+  Ok(n)
+}
+
+pub fn conversion_to_the_right_type() -> Result[U32, ErrB] {
+  let n = read_a().map_err(to_other)?
+  Ok(n)
+}

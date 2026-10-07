@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§11.6"]
+
+// E0710: the types a flow generates, `swap.In` and `pan.Out`, hold `Span`s, so
+// they are second-class like `Span` (§5.3, §11.6): they appear only in
+// argument positions, not in a return type or a struct field. One error per
+// item (P-01). (Struct fields are in modes_flow_span_fields.onsa.)
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+pub flow pan(x: F32 at sample, p: F32 at block) -> Stereo at sample {
+  Stereo { l: x * (1.0 - p), r: x * p }
+}
+
+pub fn in_returned(i: swap.In) -> swap.In {   //~ E0710
+  i
+}
+
+pub fn out_returned(inout o: pan.Out) -> pan.Out {   //~ E0710
+  o
+}
+
+// As arguments they are fine, and the state type is an ordinary value.
+pub fn in_as_argument(i: swap.In) -> U32 {
+  i.l.len()
+}
+
+pub struct Holder {
+  state: swap.State,
+}

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§4.6"]
+
+// E0407: the result of a `const` is Copy or a statically placed Shared value
+// (§6.6). An Affine result (`Buf`, a type holding one) is neither, whatever
+// the shape around it. The kind is judged from the declared type, so an
+// empty `Option` is rejected too. (A `Drop` type is in const_kind_drop.onsa.)
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+type Samples = Buf[F32]
+
+const BUF: Buf[F32] = Buf.zeroed(4)             //~ E0407
+
+const HELD: Holder = Holder { buf: Buf.zeroed(4), gain: 1.0 }   //~ E0407
+
+const PAIR: (Buf[F32], U32) = (Buf.zeroed(2), 1)   //~ E0407
+
+const NO_BUF: Option[Buf[F32]] = None           //~ E0407
+
+const ALIASED: Samples = Buf.zeroed(8)          //~ E0407
+
+impl Holder {
+  const EMPTY: Holder = Holder { buf: Buf.zeroed(0), gain: 0.0 }   //~ E0407
+}
+
+// Copy results are fine, however they are built.
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+const COUNT: U32 = 4
+const ORIGIN: Pt = Pt { x: 0.0, y: 0.0 }
+const TABLE: [F32; 3] = [1.0, 2.0, 3.0]
+const MIXED: (U32, Pt) = (COUNT, ORIGIN)

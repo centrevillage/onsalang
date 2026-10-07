@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.6"]
+
+// E0305: a flow declaration makes a namespace of the same name in its module
+// (§11.2, §11.6), so another declaration of that name in the same module is
+// an error, whatever kind of function it is. The flow is declared first and
+// the later declaration is the error.
+pub flow gain(x: F32 at sample, level: F32 at block) -> F32 at sample {
+  x * level
+}
+
+pub fn gain(x: F32) -> F32 { x }   //~ E0305
+
+pub flow tone(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub rt fn tone(x: F32) -> F32 { x }   //~ E0305
+
+flow hidden(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+priv fn hidden() -> U32 { 1 }   //~ E0305
+
+pub flow wide(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn wide[T: Copy](x: T) -> T { x }   //~ E0305
+
+pub flow stereo(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+pub fn stereo(l: F32, r: F32) -> F32 {   //~ E0305
+  l + r
+}
+
+// Distinct names are fine, and so is a function whose name only contains a
+// flow's name.
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn fine_tuned(x: F32) -> F32 { x }

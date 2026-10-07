@@ -1,0 +1,33 @@
+// onsa.toml
+// [package]
+// name = "build_provides_fn"
+// edition = "2026"
+//
+// [export]
+// prefix = "bp_"
+// fns = ["build_provides_fn.version", "build_provides_fn.version_on_heap", "build_provides_fn.table_on_heap"]
+//
+// [targets.bare]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§12.3", "§14.2", "§15.3"]
+
+// E0610: an exported function's effect row may only hold effects the target
+// provides (§14.2, §15.3). The target `bare` provides none, so no exported
+// function there may have `Alloc` in its row (§12.3). The check reads only
+// the signature: the bodies below allocate nothing and are still rejected.
+// A function that is not exported is not checked at this stage.
+pub fn version() -> U32 { 2 }
+
+pub fn version_on_heap() -> U32 uses {Alloc} { 2 }   //~ E0610 [bare]
+
+pub fn table_on_heap(n: U32) -> U32 uses {Alloc} {   //~ E0610 [bare]
+  if n == 0 { 0 } else { n - 1 }
+}
+
+pub fn not_exported() -> U32 uses {Alloc} { 3 }

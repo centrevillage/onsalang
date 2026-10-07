@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§11.6"]
+
+// E0710: the generated types `swap.In` and `pan.Out` hold `Span`s, so they
+// cannot be struct fields (§5.3, §11.6). One error per declaration (P-01).
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+pub flow pan(x: F32 at sample, p: F32 at block) -> Stereo at sample {
+  Stereo { l: x * (1.0 - p), r: x * p }
+}
+
+pub struct Stash {
+  slot: swap.In,                //~ E0710
+}
+
+pub struct OutSlot {
+  slot: pan.Out,                //~ E0710
+}
+
+pub struct Holder {
+  state: swap.State,
+}

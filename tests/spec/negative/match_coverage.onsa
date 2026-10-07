@@ -1,0 +1,197 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// E0501: `match` is exhaustive (§7). E0502: there is no refutable `let`; a
+// destructuring `let` takes only patterns that cannot fail (tuples and
+// structs) (§7). One error per function (P-01). Each shape leaves out a
+// different part of the subject: a variant, a boolean combination, a value
+// of an integer or string, the inside of a nested pattern, a case behind a
+// guard.
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+pub enum Mode {
+  Off,
+  On,
+  Auto,
+}
+
+pub struct Flags {
+  a: Bool,
+  b: Bool,
+}
+
+pub fn option_without_none(o: Option[U8]) -> U8 {
+  match o {                     //~ E0501
+    Some(n) => n,
+  }
+}
+
+pub fn result_without_err(r: Result[U32, Str]) -> U32 {
+  match r {                     //~ E0501
+    Ok(v) => v,
+  }
+}
+
+pub fn enum_with_a_variant_missing(m: Mode) -> U32 {
+  match m {                     //~ E0501
+    Mode.Off => 0,
+    Mode.On => 1,
+  }
+}
+
+pub fn tuple_with_a_combination_missing(a: Bool, b: Bool) -> U8 {
+  match (a, b) {                //~ E0501
+    (true, true) => 1,
+    (false, _) => 2,
+  }
+}
+
+pub fn nested_pattern_missing(o: Option[Shape]) -> F32 {
+  match o {                     //~ E0501
+    Some(Shape.Circle(r)) => r,
+    None => 0.0,
+  }
+}
+
+pub fn struct_fields_missing(f: Flags) -> U32 {
+  match f {                     //~ E0501
+    Flags { a: true, b: _ } => 1,
+    Flags { a: false, b: true } => 2,
+  }
+}
+
+pub fn integers_without_default(n: U32) -> U32 {
+  match n {                     //~ E0501
+    0 => 1,
+    1 => 2,
+  }
+}
+
+pub fn strings_without_default(s: Str) -> U32 {
+  match s {                     //~ E0501
+    "a" => 1,
+    "b" => 2,
+  }
+}
+
+pub fn guard_does_not_cover(o: Option[U32]) -> U32 {
+  match o {                     //~ E0501
+    Some(x) if x > 0 => x,
+    None => 0,
+  }
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 { f(2) }
+
+pub fn missing_inside_closure() -> U32 {
+  apply(fn(x: U32) -> U32 {
+    match x {                   //~ E0501
+      0 => 1,
+      1 => 2,
+    }
+  })
+}
+
+pub fn missing_in_generic_function[T: Copy](o: Option[T]) -> T {
+  match o {                     //~ E0501
+    Some(v) => v,
+  }
+}
+
+pub fn missing_inside_loop(os: [Option[U32]; 2]) -> U32 {
+  var total: U32 = 0
+  for i in 0..2 {
+    match os[i] {               //~ E0501
+      Some(n) => { total = total + n },
+    }
+  }
+  total
+}
+
+impl Flags {
+  pub fn describe(self) -> U32 {
+    match self.a {              //~ E0501
+      true => 1,
+    }
+  }
+}
+
+pub fn exhaustive_forms(s: Shape, o: Option[Shape], f: Flags, n: U32) -> F32 {
+  let a = match o {
+    Some(Shape.Circle(r)) => r,
+    Some(Shape.Rect(w, h)) => w + h,
+    None => 0.0,
+  }
+  let b = match f {
+    Flags { a: true, b: _ } => 1.0,
+    Flags { a: false, b: _ } => 2.0,
+  }
+  let c = match n {
+    0 => 1.0,
+    x if x > 5 => 2.0,
+    _ => 3.0,
+  }
+  let d = match s {
+    Shape.Circle(r) => r,
+    Shape.Rect(w, _) => w,
+  }
+  a + b + c + d
+}
+
+pub fn variant_in_let(s: Shape) -> F32 {
+  let Shape.Circle(r) = s       //~ E0502
+  r
+}
+
+pub fn result_in_let(r: Result[U32, Str]) -> U32 {
+  let Ok(v) = r                 //~ E0502
+  v
+}
+
+pub fn literal_inside_tuple(pair: (U32, U32)) -> U32 {
+  let (0, b) = pair             //~ E0502
+  b
+}
+
+pub fn variant_inside_tuple(t: (Option[U32], U32)) -> U32 {
+  let (Some(a), b) = t          //~ E0502
+  a + b
+}
+
+pub fn literal_inside_struct(f: Flags) -> Bool {
+  let Flags { a: true, b: second } = f   //~ E0502
+  second
+}
+
+pub fn variant_in_let_inside_loop(os: [Option[U32]; 2]) -> U32 {
+  var total: U32 = 0
+  for i in 0..2 {
+    let Some(n) = os[i]         //~ E0502
+    total = total + n
+  }
+  total
+}
+
+pub fn variant_in_let_inside_closure() -> U32 {
+  apply(fn(x: U32) -> U32 {
+    let Some(n) = Some(x)       //~ E0502
+    n
+  })
+}
+
+impl Mode {
+  pub fn first(self, pair: (Mode, Mode)) -> Mode {
+    let (Mode.Off, second) = pair   //~ E0502
+    second
+  }
+}
+
+pub fn irrefutable_forms(pair: (U32, (U32, U32)), f: Flags) -> U32 {
+  let (a, (b, _)) = pair
+  let Flags { a: x, b: y } = f
+  if x && y { a + b } else { a }
+}

@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+
+// E0713: calling an `inout self` method needs `!` right after the name.
+// E0714: `!` on a method that is not `inout self` (§5.2). One error per
+// function (P-01). The receivers are an argument, a field reached through
+// `self`, an array element, a loop body, and the built-in `Span` methods
+// (`fill!`, `len`, §5.3).
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+impl Pt {
+  pub fn norm(self) -> U32 { self.x + self.y }
+  pub fn scale(inout self, k: U32) { self.x = self.x * k }
+  pub fn consume(move self) -> U32 { self.x }
+}
+
+// Each `impl` below holds one member with an error, so the checks do not
+// depend on how errors in sibling members are reported (see
+// modes_bang_impl_members.onsa for that).
+pub struct Rig {
+  pt: Pt,
+}
+
+impl Rig {
+  pub fn grow(inout self) {
+    self.pt.scale(2)            //~ E0713
+  }
+}
+
+pub struct Meter {
+  pt: Pt,
+}
+
+impl Meter {
+  pub fn read(self) -> U32 {
+    self.pt.norm!()             //~ E0714
+  }
+}
+
+pub struct Rack {
+  pt: Pt,
+  n: U32,
+}
+
+impl Rack {
+  pub fn grow_right(inout self) {
+    self.pt.scale!(self.n)
+  }
+
+  pub fn read(self) -> U32 {
+    self.pt.norm()
+  }
+}
+
+pub fn missing_on_inout_argument(inout p: Pt) {
+  p.scale(2)                    //~ E0713
+}
+
+pub fn missing_on_array_element(inout ps: [Pt; 2]) {
+  ps[0].scale(2)                //~ E0713
+}
+
+pub fn missing_in_a_loop(n: U32) -> U32 {
+  var p = Pt { x: 1, y: 1 }
+  for i in 0..n {
+    p.scale(i)                  //~ E0713
+  }
+  p.norm()
+}
+
+pub fn missing_on_span_fill(inout xs: Span[F32]) {
+  xs.fill(0.0)                  //~ E0713
+}
+
+pub fn extra_on_a_var() -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  p.norm!()                     //~ E0714
+}
+
+pub fn extra_on_move_self() -> U32 {
+  var p = Pt { x: 1, y: 2 }
+  p.consume!()                  //~ E0714
+}
+
+pub fn extra_on_span_len(xs: Span[F32]) -> U32 {
+  xs.len!()                     //~ E0714
+}
+
+pub fn extra_in_a_branch(p: Pt, flag: Bool) -> U32 {
+  if flag {
+    p.norm!()                   //~ E0714
+  } else {
+    0
+  }
+}
+
+pub fn right_forms(inout p: Pt, inout xs: Span[F32], inout ps: [Pt; 2]) -> U32 {
+  p.scale!(2)
+  ps[0].scale!(3)
+  xs.fill!(0.0)
+  var q = Pt { x: 1, y: 2 }
+  let n = q.consume()
+  p.norm() + n + xs.len()
+}

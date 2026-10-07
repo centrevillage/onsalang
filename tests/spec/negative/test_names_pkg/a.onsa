@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8"]
+
+// E0306: the name is unique within one module, not within the package
+// (§11.8). `b` has a test of the same name as one here and is fine; the
+// repeat inside this module is the error.
+test "shared name" {
+  assert 1 == 1
+}
+
+test "only in a" {
+  assert 2 == 2
+}
+
+test "shared name" {            //~ E0306
+  assert 3 == 3
+}

@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8"]
+
+// E0306: a test name is unique within its module (§11.8). The first test of a
+// name is fine; each later one with the same name is the error. Names differ
+// when the strings differ, and a test never clashes with another kind of item.
+pub fn decays() -> U32 { 1 }
+
+test "decays" {
+  assert decays() == 1
+}
+
+test "rings" {
+  assert 2 == 2
+}
+
+test "decays" {                 //~ E0306
+  assert 3 == 3
+}
+
+test "Decays" {
+  assert 4 == 4
+}
+
+test "rings" {                  //~ E0306
+  assert 5 == 5
+}
+
+test "decays" {                 //~ E0306
+  assert false
+}
+
+test "with a block" {
+  var n: U32 = 0
+  for i in 0..3 {
+    n = n + i
+  }
+  assert n == 3
+}
+
+test "with a block" {           //~ E0306
+  if decays() == 1 {
+    assert true
+  } else {
+    assert false
+  }
+}
