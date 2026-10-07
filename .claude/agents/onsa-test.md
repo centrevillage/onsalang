@@ -20,6 +20,9 @@ effort: high
 - リポジトリ `/Users/centrevillage/projects/onsalang`、ブランチ `dev`。コミットと push はしない。
 - Bash の `cd` は持続しないことがあるので、絶対パスを使う。macOS なので `timeout` は無い。
 - `tools/check_spec_examples.py` を実行した後は `tools/__pycache__` を消す。
+- この機械（macOS）では、SIGABRT・SIGSEGV・SIGILL・SIGTRAP などで終わるプロセスが、利用者の画面にクラッシュの報告のダイアログを出す（2026-10-07 に大量に出た）。テスト・自己テスト・ファズで意図的に落とす形をまねるときは、SIGKILL か終了コードを使う。コンパイラのスタックを溢れさせる入力（深い入れ子）は回さない。sanitizer は abort や trap でなく終了コードで止まる設定にする。作ってしまったら報告に書く。
+- git の別の作業ツリー（worktree）で動くときは、始めに `git log --oneline -1` で親が指定したコミットかを確かめ、違えば作業ツリーの中で `git reset --hard dev` をする。主のリポジトリには書かない。
+- 並行の作業があるときは、`tests/pending.toml` の項目（`[[pending]]` の表）を編集しない。載せる項目は報告に並べ、親が足す。
 
 ## 報告
 

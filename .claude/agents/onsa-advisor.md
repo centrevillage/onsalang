@@ -20,6 +20,7 @@ tools: Read, Bash, WebFetch, WebSearch
 
 - リポジトリ `/Users/centrevillage/projects/onsalang`、ブランチ `dev`。
 - Bash の `cd` は持続しないことがあるので、絶対パスを使う。macOS なので `timeout` は無い。
+- この機械（macOS）では、SIGABRT・SIGSEGV・SIGILL・SIGTRAP などで終わるプロセスが、利用者の画面にクラッシュの報告のダイアログを出す（2026-10-07 に大量に出た）。テスト・自己テスト・ファズで意図的に落とす形をまねるときは、SIGKILL か終了コードを使う。コンパイラのスタックを溢れさせる入力（深い入れ子）は回さない。sanitizer は abort や trap でなく終了コードで止まる設定にする。作ってしまったら報告に書く。
 
 ## 報告
 
