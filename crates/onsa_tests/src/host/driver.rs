@@ -70,14 +70,7 @@ pub fn program(out: &BuildOutput, plans: &[SeqPlan]) -> Program {
     if out.settings.panic == PanicMode::Reset {
         let _ = writeln!(d, "ONSA_NORETURN void onsa_reset_hook(void) {{ _Exit({}); }}", c::RESET_HOOK_EXIT);
     }
-    let _ = writeln!(
-        d,
-        "void onsa_host_read(void* p, size_t n) {{ if (!onsa_driver_read(p, n)) _Exit({}); }}\n\
-         void onsa_host_write(const void* p, size_t n) {{ if (n > 0 && fwrite(p, 1, n, stdout) != n) _Exit({}); }}\n\
-         void onsa_host_step(uint32_t k) {{ onsa_host_write(&k, sizeof k); }}\n",
-        c::INPUT_EXIT,
-        c::OUTPUT_EXIT
-    );
+    let _ = writeln!(d, "void onsa_host_step(uint32_t k) {{ onsa_driver_write(&k, sizeof k); }}\n");
     let mut seqs = Vec::new();
     let mut cases = String::new();
     for (i, p) in plans.iter().enumerate() {
@@ -93,7 +86,7 @@ pub fn program(out: &BuildOutput, plans: &[SeqPlan]) -> Program {
          if (!onsa_driver_signals()) return {setup};\n  \
          if (argc != 2) return {args};\n  \
          switch (atoi(argv[1])) {{\n{cases}    default: return {args};\n  }}\n  \
-         {{ uint32_t end = {END:#x}u; onsa_host_write(&end, sizeof end); }}\n  \
+         {{ uint32_t end = {END:#x}u; onsa_driver_write(&end, sizeof end); }}\n  \
          return 0;\n}}",
         setup = c::SETUP_EXIT,
         args = c::ARGS_EXIT,
@@ -141,9 +134,9 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
     match (op, callee) {
         (Op::Init { config, null_bulk, .. }, Callee::Flow(api)) => {
             for (j, x) in config.iter().flatten().enumerate() {
-                let _ = writeln!(b, "    {} {}; onsa_host_read(&{}, sizeof {});", x.field.c_type, v(j), v(j), v(j));
+                let _ = writeln!(b, "    {} {}; onsa_driver_need(&{}, sizeof {});", x.field.c_type, v(j), v(j), v(j));
             }
-            let _ = writeln!(b, "    {} sr; onsa_host_read(&sr, sizeof sr);", capi::SAMPLE_RATE_C);
+            let _ = writeln!(b, "    {} sr; onsa_driver_need(&sr, sizeof sr);", capi::SAMPLE_RATE_C);
             let names: Vec<(String, String)> =
                 config.iter().flatten().enumerate().map(|(j, x)| (x.field.name.clone(), v(j))).collect();
             let lookup = |f: &onsa_backend_c::ApiField| {
@@ -160,13 +153,13 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
             let bulk = if *null_bulk { "NULL" } else { bulk };
             let call = capi::init(api, "s", bulk, cfg, "sr").map_err(|e| e.0)?;
             let _ =
-                writeln!(b, "    onsa_host_step({k}u);\n    int st = {call};\n    onsa_host_write(&st, sizeof st);");
+                writeln!(b, "    onsa_host_step({k}u);\n    int st = {call};\n    onsa_driver_write(&st, sizeof st);");
         }
         (Op::Process { params, frames, inputs, outputs, .. }, Callee::Flow(api)) => {
             let _ = writeln!(b, "    {} p; memset(&p, 0, sizeof p);", capi::params_type(api));
             for x in params {
                 let f = &x.field.c_name;
-                let _ = writeln!(b, "    onsa_host_read(&p.{f}, sizeof p.{f});");
+                let _ = writeln!(b, "    onsa_driver_need(&p.{f}, sizeof p.{f});");
             }
             let n = (*frames).max(1);
             let buf = |kind: &str, j: usize, ch: u32| format!("{kind}{k}_{j}_{ch}");
@@ -175,7 +168,7 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                 let t = &s.c_type;
                 for ch in 0..s.planar.unwrap_or(1) {
                     let x = buf("in", j, ch);
-                    let _ = writeln!(b, "    static {t} {x}[{n}]; onsa_host_read({x}, sizeof({t}) * {frames}u);");
+                    let _ = writeln!(b, "    static {t} {x}[{n}]; onsa_driver_need({x}, sizeof({t}) * {frames}u);");
                 }
                 let e = match s.planar {
                     None => buf("in", j, 0),
@@ -199,7 +192,7 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                         .map(|ch| {
                             let x = buf("out", j, ch);
                             let _ =
-                                writeln!(b, "    static {t} {x}[{n}]; onsa_host_read({x}, sizeof({t}) * {frames}u);");
+                                writeln!(b, "    static {t} {x}[{n}]; onsa_driver_need({x}, sizeof({t}) * {frames}u);");
                             x
                         })
                         .collect(),
@@ -226,15 +219,15 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
             };
             let call = capi::process(api, "s", "&p", &io, &format!("{frames}u"));
             let _ =
-                writeln!(b, "    onsa_host_step({k}u);\n    int st = {call};\n    onsa_host_write(&st, sizeof st);");
+                writeln!(b, "    onsa_host_step({k}u);\n    int st = {call};\n    onsa_driver_write(&st, sizeof st);");
             for (x, t) in &out_bufs {
-                let _ = writeln!(b, "    onsa_host_write({x}, sizeof({t}) * {frames}u);");
+                let _ = writeln!(b, "    onsa_driver_write({x}, sizeof({t}) * {frames}u);");
             }
         }
         (Op::Reset, Callee::Flow(api)) => {
             let _ = writeln!(
                 b,
-                "    onsa_host_step({k}u);\n    {}\n    {{ uint32_t done = {RESET_DONE:#x}u; onsa_host_write(&done, sizeof done); }}",
+                "    onsa_host_step({k}u);\n    {}\n    {{ uint32_t done = {RESET_DONE:#x}u; onsa_driver_write(&done, sizeof done); }}",
                 capi::reset(api, "s")
             );
         }
@@ -247,7 +240,7 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                         let len = a.values.len();
                         let _ = writeln!(
                             b,
-                            "    static {t} {}[{}]; onsa_host_read({}, sizeof({t}) * {len}u);",
+                            "    static {t} {}[{}]; onsa_driver_need({}, sizeof({t}) * {len}u);",
                             v(j),
                             len.max(1),
                             v(j)
@@ -255,7 +248,7 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                         fargs.push(capi::FnArg::Span(v(j), format!("{len}u")));
                     }
                     _ => {
-                        let _ = writeln!(b, "    {t} {}; onsa_host_read(&{}, sizeof {});", v(j), v(j), v(j));
+                        let _ = writeln!(b, "    {t} {}; onsa_driver_need(&{}, sizeof {});", v(j), v(j), v(j));
                         fargs.push(capi::FnArg::Scalar(v(j)));
                     }
                 }
@@ -266,9 +259,9 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
             }
             let call =
                 capi::call_fn(api, take_panic.as_deref(), &fargs, "st", ret.as_ref().map(|_| "r")).map_err(|e| e.0)?;
-            let _ = writeln!(b, "    onsa_host_step({k}u);\n    {call}\n    onsa_host_write(&st, sizeof st);");
+            let _ = writeln!(b, "    onsa_host_step({k}u);\n    {call}\n    onsa_driver_write(&st, sizeof st);");
             if ret.is_some() {
-                let _ = writeln!(b, "    onsa_host_write(&r, sizeof r);");
+                let _ = writeln!(b, "    onsa_driver_write(&r, sizeof r);");
             }
         }
         _ => return Err("the call does not fit the sequence".into()),

@@ -454,6 +454,10 @@ class PendingList(TempRepo):
                 self.repo.write("tests/pending.toml", entry("gate", step.name))
                 entries, errors = pending.load(self.repo.pending)
                 errors += pending.validate(entries, pending.load_docs(self.repo.root), self.repo.root)
+                if step.pendable and not step.info and step.by_case_only:
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn("may be listed only by case", errors[0])
+                    continue
                 if step.pendable and not step.info:
                     self.assertEqual(errors, [])
                     continue
@@ -468,6 +472,73 @@ class PendingList(TempRepo):
                 entries, errors = pending.load(self.repo.pending)
                 errors += pending.validate(entries, pending.load_docs(self.repo.root), self.repo.root)
                 self.assertEqual(errors, [])
+
+    def test_vectors_are_listed_by_case_only(self):
+        # W2-02: a whole entry of the vectors' items would hide every new failure
+        for target in ("vectors-interp/u64.mul", "vectors-c/u32.mul[c-gcc]"):
+            with self.subTest(target=target):
+                text = entry("gate", target).replace('note = "n"\n', 'note = "n"\nrows = 1\ndigest = "0123456789abcdef"\n')
+                self.assertEqual(self.errors_of(text, pendable=gate_steps.pendable()), [])
+        for item in ("vectors-interp", "vectors-c"):
+            with self.subTest(item=item):
+                errors = self.errors_of(entry("gate", item), pendable=gate_steps.pendable())
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn("may be listed only by case", errors[0])
+        self.assertEqual(gate_steps.by_case_only(), ["vectors-interp", "vectors-c"])
+
+    def test_rows_of_the_vectors(self):
+        # W2-02/b: a case entry of an item that counts rows says how many (`rows`) and which (`digest`);
+        # no other entry has them
+        pend = gate_steps.pendable()
+
+        def held(t, rows="1", digest='"0123456789abcdef"'):
+            fields = (f"rows = {rows}\n" if rows is not None else "") + (f"digest = {digest}\n" if digest is not None else "")
+            return entry("gate", t).replace('note = "n"\n', 'note = "n"\n' + fields)
+
+        self.assertEqual(self.errors_of(held("vectors-c/u32.mul[c-gcc]", "10"), pendable=pend), [])
+        self.assertEqual(self.errors_of(held("vectors-interp/u64.mul"), pendable=pend), [])
+        for field, text in (("rows", held("vectors-c/u32.mul[c-gcc]", rows=None)),
+                            ("digest", held("vectors-c/u32.mul[c-gcc]", digest=None))):  # fmt: skip
+            with self.subTest(missing=field):
+                errors = self.errors_of(text, pendable=pend)
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn(f"`{field}` is required", errors[0])
+        for bad in ("0", "-1", "true", '"3"', "1.5"):
+            with self.subTest(rows=bad):
+                errors = self.errors_of(held("vectors-c/u32.mul[c-gcc]", bad), pendable=pend)
+                self.assertTrue(any("`rows` must be a positive integer" in e for e in errors), errors)
+        for bad in ('"0123456789ABCDEF"', '"0123456789abcde"', '"0123456789abcdef0"', "12", '"zz23456789abcdef"'):
+            with self.subTest(digest=bad):
+                errors = self.errors_of(held("vectors-c/u32.mul[c-gcc]", digest=bad), pendable=pend)
+                self.assertTrue(any("`digest` must be 16 lowercase hex digits" in e for e in errors), errors)
+        for target in ("c-gcc/tests/x.onsa[t]", "c-gcc"):
+            with self.subTest(target=target):
+                errors = self.errors_of(held(target), pendable=pend)
+                self.assertEqual(len(errors), 2, errors)
+                self.assertTrue(all("is only for a case entry" in e for e in errors), errors)
+        errors = self.errors_of(
+            entry("test-case", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08").replace('note = "n"\n', 'note = "n"\nrows = 1\n')
+        )
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("`rows` is only for a case entry", errors[0])
+        self.assertEqual(gate_steps.counts_rows(), ["vectors-interp", "vectors-c"])
+
+    def test_expect_internal_on_the_vectors_of_the_interpreter(self):
+        # only the case entries of an item with expect_internal (vectors-interp, W2-02)
+        internal = 'note = "n"\nexpect = "internal"\n'
+        ok = entry("gate", "vectors-interp/u64.mul").replace('note = "n"\n', internal + 'rows = 10\ndigest = "0123456789abcdef"\n')
+        self.assertEqual(self.errors_of(ok, pendable=gate_steps.pendable()), [])
+        for target in ("vectors-c/u64.mul[c-clang]", "c-gcc/tests/x.onsa[t]"):
+            with self.subTest(target=target):
+                rows = 'rows = 1\ndigest = "0123456789abcdef"\n' if target.startswith("vectors") else ""
+                bad = entry("gate", target).replace('note = "n"\n', internal + rows)
+                errors = self.errors_of(bad, pendable=gate_steps.pendable())
+                self.assertEqual(len(errors), 1, errors)
+                self.assertIn("only for a `test-case` entry", errors[0])
+        whole = entry("gate", "vectors-interp").replace('note = "n"\n', internal)
+        errors = self.errors_of(whole, pendable=gate_steps.pendable())
+        self.assertTrue(any("only for a `test-case` entry" in e for e in errors), errors)
+        self.assertEqual(gate_steps.expect_internal(), ["vectors-interp"])
 
     def test_gate_item_whole_and_by_case(self):
         text = entry("gate", "c-header") + entry("gate", "c-header/a[t]/c99-clang") + entry("gate", "c-x/b")
@@ -721,9 +792,13 @@ class RealSteps(unittest.TestCase):
         self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
         self.assertFalse(by_name["fmt-props"].pendable)
-        # the only items that may be listed: the C checks (W1-06), and the fmt properties
-        # that wait for W3-11 (R-70) and W3-01 (R-86)
-        self.assertEqual(gate_steps.pendable(), self.c_items() + ["fmt-comments"])
+        # the only items that may be listed: the test vectors against the interpreter and the C
+        # (W2-02, by case only), the C checks (W1-06), and the fmt property that waits for W3-11 (R-70)
+        self.assertEqual(gate_steps.pendable(), ["vectors-interp"] + self.c_items() + ["vectors-c", "fmt-comments"])
+        vectors = [s for s in gate_steps.STEPS if s.argv[: len(gate_steps.VECTORS)] == gate_steps.VECTORS]
+        self.assertEqual([(s.name, s.argv[len(gate_steps.VECTORS) :]) for s in vectors],
+                         [("vectors-interp", ("interp",)), ("vectors-c", ("c",))])  # fmt: skip
+        self.assertTrue(all(s.by_case_only for s in vectors))
         for n in names:
             self.assertRegex(n, pending.TARGET_FORMS["gate"])
             self.assertNotIn("/", n)

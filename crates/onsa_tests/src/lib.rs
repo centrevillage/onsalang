@@ -40,6 +40,7 @@ pub mod inventory;
 pub mod pending;
 pub mod run;
 pub mod scalar;
+pub mod vectors;
 
 pub use fragment::{GoldenKind, Mode, TestSettings};
 

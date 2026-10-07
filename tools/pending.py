@@ -17,7 +17,10 @@ the form of `target`:
                   the item, fail). An item is listed as a whole or by case,
                   not both. The C checks name a case `<path>[<target>]`
                   (`c-gcc/tests/conformance/voice.onsa[host]`), and the header
-                  checks `<path>[<target>]/<compiler>`  (onsa_tests::ccheck, W1-06)
+                  checks `<path>[<target>]/<compiler>`  (onsa_tests::ccheck, W1-06).
+                  The test vectors name a case `<operation>` (`vectors-interp/u64.mul`)
+                  and `<operation>[<toolchain>]` (`vectors-c/u32.mul[c-gcc]`), and
+                  are listed only by case (`by_case_only`; onsa_tests::vectors, W2-02)
     test-case     a test case: a path from the repository root (a file or a
                   package directory), optionally "<path>::<test name>"   (W1-03)
     fuzz-input    a saved fuzz input: a path from the repository root  (W1-04)
@@ -29,11 +32,19 @@ Every entry has all of: kind, target, reasons (S / R numbers, one or more),
 until (the work that removes it: a W ID of `docs/rework-phase1.md` §3 or a T
 ID of `docs/implementation-tasks.md` §4, not marked done), note.
 
+A case entry `<item>/<case>` of a gate item with `counts_rows` (the test
+vectors) also has `rows = N`, how many rows fail, and `digest = "<16 hex>"`,
+which (the item prints both): the item fails when either differs, so a new
+failure does not hide behind the entry, nor one row failing instead of
+another (W2-02/b). No other entry has `rows` or `digest`.
+
 One field is optional: `expect = "internal"`, only on a `test-case` entry of a
-whole case (no `::<test name>`). An internal error of the compiler (S-67) is
-never silenced by the list (W1-04); with this field, the case is expected to
-end in an internal error: another failure is an error of the entry, and a
-pass asks for the entry to be removed (the runner checks it).
+whole case (no `::<test name>`), or on a case entry `<item>/<case>` of a gate
+item with `expect_internal` (`vectors-interp`, W2-02). An internal error of the
+compiler (S-67) is never silenced by the list (W1-04); with this field, the
+case is expected to end in an internal error: another failure is an error of
+the entry, and a pass asks for the entry to be removed (the runner or the item
+checks it).
 
 `until = "P2"` names the second phase instead of a work (K-13 rule 3): a code
 of the second phase waits for no work of the first. Only the kinds of
@@ -71,8 +82,11 @@ PENDING = repo.PENDING
 
 KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input")
 FIELDS = ("kind", "target", "reasons", "until", "note")
-# Optional fields: `expect` (only "internal", only on a whole test case).
-OPTIONAL_FIELDS = ("expect",)
+# Optional fields: `expect` (only "internal": a whole test case, a case of an item with
+# `expect_internal`), `rows` and `digest` (both required on, and only on, a case of an item with
+# `counts_rows`).
+OPTIONAL_FIELDS = ("expect", "rows", "digest")
+DIGEST = re.compile(r"[0-9a-f]{16}")
 EXPECTS = ("internal",)
 
 # The form of `target` per kind. Paths are checked further in `_check_target`.
@@ -107,6 +121,8 @@ class Entry:
     until: str
     note: str
     expect: str = None
+    rows: int = None
+    digest: str = None
 
     def label(self):
         return f'pending[{self.index}] {self.kind} "{self.target}"'
@@ -196,9 +212,19 @@ def load(path):
         if expect is not None and expect not in EXPECTS:
             errors.append(f"{where}: `expect` must be one of {', '.join(repr(x) for x in EXPECTS)}")
             bad = True
+        rows = item.get("rows")
+        if rows is not None and (not isinstance(rows, int) or isinstance(rows, bool) or rows < 1):
+            errors.append(f"{where}: `rows` must be a positive integer (the failing rows the entry holds)")
+            bad = True
+        digest = item.get("digest")
+        if digest is not None and (not isinstance(digest, str) or not DIGEST.fullmatch(digest)):
+            errors.append(f"{where}: `digest` must be 16 lowercase hex digits (which rows fail, as the item prints it)")
+            bad = True
         if bad:
             continue
-        entries.append(Entry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"], expect))
+        entries.append(
+            Entry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"], expect, rows, digest)
+        )
     return entries, errors
 
 
@@ -217,8 +243,23 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
             errors.append(f"{where}: unknown kind `{e.kind}` (one of {', '.join(KINDS)})")
             continue
         errors += [f"{where}: {m}" for m in _check_target(e, root, pendable_steps)]
-        if e.expect is not None and (e.kind != "test-case" or "::" in e.target):
-            errors.append(f"{where}: `expect` is only for a `test-case` entry of a whole case (no `::<test name>`)")
+        counted = e.kind == "gate" and "/" in e.target and e.target.split("/", 1)[0] in gate_steps.counts_rows()
+        for field, value in (("rows", e.rows), ("digest", e.digest)):
+            if counted and value is None:
+                errors.append(
+                    f"{where}: `{field}` is required: the item counts the failing rows of a case, and the entry holds "
+                    "exactly those rows (`rows`, how many; `digest`, which)"
+                )
+            if not counted and value is not None:
+                errors.append(
+                    f"{where}: `{field}` is only for a case entry of the gate items "
+                    f"{', '.join(f'`{n}`' for n in gate_steps.counts_rows())}"
+                )
+        if e.expect is not None and not _may_expect(e):
+            errors.append(
+                f"{where}: `expect` is only for a `test-case` entry of a whole case (no `::<test name>`), or a case "
+                f"entry of the gate items {', '.join(f'`{n}`' for n in gate_steps.expect_internal())}"
+            )
         for r in e.reasons:
             if SECTION.fullmatch(r):
                 if e.until != PHASE2:
@@ -249,11 +290,26 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
     return errors
 
 
+def _may_expect(e):
+    """Whether the entry may say `expect = "internal"`."""
+    if e.kind == "test-case":
+        return "::" not in e.target
+    if e.kind == "gate" and "/" in e.target:
+        return e.target.split("/", 1)[0] in gate_steps.expect_internal()
+    return False
+
+
 def _whole_and_cases(entries):
-    """A gate item listed both as a whole and by case (`<item>/<case>`)."""
+    """A gate item listed both as a whole and by case (`<item>/<case>`), and a
+    whole entry of an item listed only by case."""
     gate = [e for e in entries if e.kind == "gate"]
     whole = {e.target: e for e in gate if "/" not in e.target}
-    out = []
+    out = [
+        f"{e.label()}: `{e.target}` may be listed only by case (`{e.target}/<case>`): a whole entry hides every new "
+        "failure of the item"
+        for e in whole.values()
+        if e.target in gate_steps.by_case_only()
+    ]
     for e in gate:
         item = e.target.split("/", 1)[0]
         if "/" in e.target and item in whole:

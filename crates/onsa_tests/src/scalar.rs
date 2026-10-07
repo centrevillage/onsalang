@@ -19,6 +19,28 @@ pub enum Scalar {
 }
 
 impl Scalar {
+    /// Every scalar type of the boundary.
+    pub const ALL: [Scalar; 12] = [
+        Scalar::F32,
+        Scalar::F64,
+        Scalar::Int(IntKind::I8),
+        Scalar::Int(IntKind::I16),
+        Scalar::Int(IntKind::I32),
+        Scalar::Int(IntKind::I64),
+        Scalar::Int(IntKind::U8),
+        Scalar::Int(IntKind::U16),
+        Scalar::Int(IntKind::U32),
+        Scalar::Int(IntKind::U64),
+        Scalar::Bool,
+        Scalar::Char,
+    ];
+
+    /// The type Core prints as `name` ([`Scalar::name`]): the one way from a
+    /// type written in data (the test vectors' `OPS.tsv`) to its scalar.
+    pub fn from_name(name: &str) -> Option<Scalar> {
+        Scalar::ALL.into_iter().find(|s| s.name() == name)
+    }
+
     pub fn of(ty: &Ty) -> Option<Scalar> {
         Some(match ty {
             Ty::Float(FloatKind::F32) => Scalar::F32,
@@ -38,6 +60,12 @@ impl Scalar {
             Scalar::Bool => Ty::Bool,
             Scalar::Char => Ty::Char,
         }
+    }
+
+    /// The C type the C backend spells this type with (`float`, `int32_t`):
+    /// the check of a type the backend recorded for a value of this type.
+    pub fn c_type(self) -> Option<&'static str> {
+        onsa_backend_c::scalar_c(&self.ty())
     }
 
     /// The Onsa name (`F32`, `U8`), for messages: as Core prints the type.
@@ -61,6 +89,18 @@ impl Scalar {
             Scalar::Int(k) => int_value(k, 0),
             Scalar::Bool => Value::Bool(false),
             Scalar::Char => Value::Char('\0'),
+        }
+    }
+
+    /// Whether `v` is a value of this type.
+    pub fn holds(self, v: &Value) -> bool {
+        match (self, v) {
+            (Scalar::F32, Value::F32(_))
+            | (Scalar::F64, Value::F64(_))
+            | (Scalar::Bool, Value::Bool(_))
+            | (Scalar::Char, Value::Char(_)) => true,
+            (Scalar::Int(k), v) => v.int_kind() == Some(k),
+            _ => false,
         }
     }
 
@@ -107,11 +147,14 @@ impl Scalar {
 }
 
 /// Whether two outputs are the same sample: bit for bit, NaNs equal
-/// (§13.4); the ULP distance of two floats otherwise.
+/// (§13.4, S-106: the sign and payload of a NaN are not compared); the ULP
+/// distance of two floats otherwise. A NaN and a value that is not a NaN
+/// are never close, whatever their bits (`None`): a NaN next to an infinity
+/// in the bits is not within a tolerance of it.
 pub fn distance(a: &Value, b: &Value) -> Option<u64> {
     match (a, b) {
-        (Value::F32(x), Value::F32(y)) if x.is_nan() && y.is_nan() => Some(0),
-        (Value::F64(x), Value::F64(y)) if x.is_nan() && y.is_nan() => Some(0),
+        (Value::F32(x), Value::F32(y)) if x.is_nan() || y.is_nan() => (x.is_nan() && y.is_nan()).then_some(0),
+        (Value::F64(x), Value::F64(y)) if x.is_nan() || y.is_nan() => (x.is_nan() && y.is_nan()).then_some(0),
         (Value::F32(x), Value::F32(y)) => Some((x.to_bits() as i64 - y.to_bits() as i64).unsigned_abs()),
         (Value::F64(x), Value::F64(y)) => {
             Some(u64::try_from((x.to_bits() as i128 - y.to_bits() as i128).unsigned_abs()).unwrap_or(u64::MAX))
@@ -125,6 +168,14 @@ pub fn distance(a: &Value, b: &Value) -> Option<u64> {
             if same { Some(0) } else { None }
         }
     }
+}
+
+/// Whether `a` is `b` by the comparison of spec §13.4 ([`distance`] 0):
+/// bit for bit, `0.0` and `-0.0` differ, any NaN equals any NaN, and an
+/// integer equals only an integer of the same kind. The one comparison of
+/// the conformance harness, the host steps and the test vectors.
+pub fn same(a: &Value, b: &Value) -> bool {
+    distance(a, b) == Some(0)
 }
 
 /// A value with its bits, for messages: `2.0 (0x40000000)`.

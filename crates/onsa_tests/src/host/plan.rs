@@ -55,7 +55,7 @@ impl PlanError {
 /// The C type the backend recorded for a value of `s`, checked against the
 /// backend's spelling of `s` (the codec of the bytes is `s`).
 fn recorded(c_type: &str, s: Scalar, what: &str) -> Result<String, PlanError> {
-    if onsa_backend_c::scalar_c(&s.ty()) == Some(c_type) {
+    if s.c_type() == Some(c_type) {
         Ok(c_type.to_string())
     } else {
         Err(PlanError::Harness(format!("the C backend records `{c_type}` for {what}, but its type is {}", s.name())))

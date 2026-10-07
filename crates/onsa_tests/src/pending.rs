@@ -43,6 +43,12 @@ pub struct Entry {
     pub note: String,
     #[serde(default)]
     pub expect: Option<Expect>,
+    /// The failing rows the entry holds (the test vectors' items, W2-02).
+    #[serde(default)]
+    pub rows: Option<usize>,
+    /// Which rows fail (the test vectors' items, with `rows`).
+    #[serde(default)]
+    pub digest: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]

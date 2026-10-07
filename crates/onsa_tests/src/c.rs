@@ -59,7 +59,7 @@ pub const CFLAGS: &[&str] =
 /// The exit code of the conformance driver when `init` or `process` returns
 /// an error (other than a panic, which never returns).
 pub const API_ERROR_EXIT: i32 = 3;
-/// The exit code of the conformance driver when it cannot read its input.
+/// The exit code of a driver when it cannot read its input (`onsa_driver_need`).
 pub const INPUT_EXIT: i32 = 4;
 /// The exit code of the conformance driver when it cannot install its signal handlers.
 pub const SETUP_EXIT: i32 = 5;
@@ -69,9 +69,10 @@ pub const PANIC_EXIT: i32 = 75;
 pub const SIGNAL_EXIT: i32 = 76;
 /// The exit code of the sanitizers (ASan and UBSan share the runtime, so one code).
 pub const SANITIZER_EXIT: i32 = 86;
-/// The exit code of a driver that cannot write its standard output (the host steps).
+/// The exit code of a driver that cannot write its standard output (`onsa_driver_write`).
 pub const OUTPUT_EXIT: i32 = 8;
-/// The exit code of a driver called with the wrong arguments (the host steps, [`crate::host`]).
+/// The exit code of a driver called with the wrong arguments (the host steps, [`crate::host`]; the
+/// vectors, [`crate::vectors`]: a function number it does not have).
 pub const ARGS_EXIT: i32 = 6;
 /// The exit code of the host-steps driver when `panic = "reset"` calls the firmware's hook.
 pub const RESET_HOOK_EXIT: i32 = 77;
@@ -82,9 +83,12 @@ pub const RUN_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SANITIZED_DEFINE: &str = "ONSA_DRIVER_SANITIZED";
 
 /// The start of a driver program of the generated C, shared by the
-/// conformance harness and the host steps: the headers, a fatal signal turned
-/// into [`SIGNAL_EXIT`] on its own stack (a stack overflow too; never a crash
-/// report), and `onsa_driver_read`, which reads `n` bytes of the standard input.
+/// conformance harness, the host steps and the vectors: the headers, a fatal
+/// signal turned into [`SIGNAL_EXIT`] on its own stack (a stack overflow too;
+/// never a crash report), and the input and output of every driver:
+/// `onsa_driver_need(p, n)` reads `n` bytes of the standard input or exits
+/// with [`INPUT_EXIT`], `onsa_driver_write(p, n)` writes `n` bytes to the
+/// standard output or exits with [`OUTPUT_EXIT`].
 pub fn driver_preamble(headers: &[&str]) -> String {
     let mut d = String::from("#define _XOPEN_SOURCE 700\n");
     // sigaction and sigaltstack are POSIX (XSI), outside ISO C.
@@ -108,8 +112,130 @@ pub fn driver_preamble(headers: &[&str]) -> String {
          static int onsa_driver_signals(void) {{ return 1; }}\n\
          #endif\n"
     ));
-    d.push_str("static int onsa_driver_read(void* p, size_t n) { return n == 0 || fread(p, 1, n, stdin) == n; }\n");
+    d.push_str(&format!(
+        "void onsa_driver_need(void* p, size_t n);\n\
+         void onsa_driver_need(void* p, size_t n) {{ if (n > 0 && fread(p, 1, n, stdin) != n) _Exit({INPUT_EXIT}); }}\n\
+         void onsa_driver_write(const void* p, size_t n);\n\
+         void onsa_driver_write(const void* p, size_t n) {{ if (n > 0 && fwrite(p, 1, n, stdout) != n) _Exit({OUTPUT_EXIT}); }}\n"
+    ));
     d
+}
+
+/// Compile the C of the build `out` (written into `dir`) with a driver program
+/// `driver` (written as `dir/<driver_file>`) into `dir/run`: the toolchain's
+/// compiler and flags over the target's ([`command`]), `extra`, the driver's
+/// panic handler as `ONSA_PANIC_HANDLER`, and [`SANITIZED_DEFINE`] when the
+/// toolchain runs under the sanitizers (they take the signals). The one
+/// compile of the conformance harness, the host steps and the vectors.
+pub fn compile_driver(
+    t: &Toolchain,
+    out: &onsa_driver::BuildOutput,
+    dir: &Path,
+    driver_file: &str,
+    driver: &str,
+    panic_handler: &str,
+    extra: &[&str],
+) -> Result<std::path::PathBuf, String> {
+    write_files(dir, &out.files)?;
+    let source = &out.files.last().ok_or("the build wrote no file")?.0;
+    let d = dir.join(driver_file);
+    std::fs::write(&d, driver).map_err(|e| format!("cannot write {}: {e}", d.display()))?;
+    let exe = dir.join("run");
+    let mut cmd = command(t, &out.settings.platform.cflags, dir);
+    cmd.args(extra).arg(format!("-DONSA_PANIC_HANDLER={panic_handler}"));
+    if t.runner == Runner::Sanitized {
+        cmd.arg(format!("-D{SANITIZED_DEFINE}"));
+    }
+    cmd.arg(dir.join(source)).arg(&d).arg("-o").arg(&exe).arg("-lm");
+    compile(&mut cmd, &format!("{} ({driver_file})", t.cc))?;
+    Ok(exe)
+}
+
+/// The kinds of scratch directories of this crate (the drivers' runs, and
+/// its tests: `onsa_test`), by the prefix of their names:
+/// `<kind>_<pid>_<n>[_<tag>]` ([`scratch_dir`]). The one table the makers and
+/// [`remove_stale_scratch`] read. The tests of other crates (`onsa_cli`'s)
+/// make their own directories, outside it.
+pub const SCRATCH_KINDS: &[&str] = &["onsa_ccheck", "onsa_host", "onsa_vectors_c", "onsa_test"];
+
+/// A new scratch directory of `kind` (one of [`SCRATCH_KINDS`]) for this
+/// process, `tag` naming it for a reader. The first call of a process first
+/// removes the directories a process that no longer runs left behind (a run
+/// killed before it cleaned up), unless [`crate::ccheck::KEEP`] is set.
+pub fn scratch_dir(kind: &str, tag: &str) -> std::path::PathBuf {
+    assert!(SCRATCH_KINDS.contains(&kind), "`{kind}` is not a kind of scratch directory (SCRATCH_KINDS)");
+    static CLEAN: std::sync::Once = std::sync::Once::new();
+    static RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let temp = std::env::temp_dir();
+    if std::env::var_os(crate::ccheck::KEEP).is_none() {
+        CLEAN.call_once(|| {
+            remove_stale_scratch(&temp, pid_alive);
+        });
+    }
+    let n = RUNS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let tag = if tag.is_empty() { String::new() } else { format!("_{tag}") };
+    temp.join(format!("{kind}_{}_{n}{tag}", std::process::id()))
+}
+
+/// The file that marks a scratch directory kept for a person to read
+/// ([`keep_or_remove`]): [`remove_stale_scratch`] never removes it.
+pub const KEEP_MARK: &str = ".keep";
+
+/// At the end of a run: remove the scratch directory `dir`, or, when
+/// [`crate::ccheck::KEEP`] is set, keep it with [`KEEP_MARK`] in it and give
+/// the note that says where (`what` the files are). The one end of the
+/// drivers' scratch directories.
+pub fn keep_or_remove(dir: &Path, what: &str) -> Option<String> {
+    let keep = crate::ccheck::KEEP;
+    if std::env::var_os(keep).is_some() {
+        let marked = std::fs::create_dir_all(dir).and_then(|()| std::fs::write(dir.join(KEEP_MARK), ""));
+        Some(match marked {
+            Ok(()) => format!("{keep} is set: {what} are kept in {}", dir.display()),
+            Err(e) => format!("{keep} is set: {what} are in {}, but it cannot be marked kept ({e})", dir.display()),
+        })
+    } else {
+        let _ = std::fs::remove_dir_all(dir);
+        None
+    }
+}
+
+/// Remove the scratch directories in `temp` of a kind of [`SCRATCH_KINDS`]
+/// whose process is not `alive`; the removed ones. Only those: a name of
+/// another form, of a process that may run, or a directory kept for a
+/// person ([`KEEP_MARK`]) stays.
+pub fn remove_stale_scratch(temp: &Path, alive: impl Fn(u32) -> bool) -> Vec<std::path::PathBuf> {
+    let mut removed = Vec::new();
+    let Ok(entries) = std::fs::read_dir(temp) else { return removed };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let pid = SCRATCH_KINDS.iter().find_map(|k| {
+            let rest = name.strip_prefix(k)?.strip_prefix('_')?;
+            let mut parts = rest.split('_');
+            let pid: u32 = parts.next()?.parse().ok()?;
+            parts.next()?.parse::<u64>().ok()?;
+            Some(pid)
+        });
+        let Some(pid) = pid else { continue };
+        let kept = e.path().join(KEEP_MARK).exists();
+        if pid != std::process::id()
+            && e.path().is_dir()
+            && !kept
+            && !alive(pid)
+            && std::fs::remove_dir_all(e.path()).is_ok()
+        {
+            removed.push(e.path());
+        }
+    }
+    removed
+}
+
+/// Whether the process `pid` may run (`kill -0`): only "no such process" says it does not.
+pub fn pid_alive(pid: u32) -> bool {
+    match Command::new("kill").args(["-0", &pid.to_string()]).output() {
+        Ok(o) if o.status.success() => true,
+        Ok(o) => !String::from_utf8_lossy(&o.stderr).contains("No such process"),
+        Err(_) => true,
+    }
 }
 
 /// A driver program that ended (or was stopped).
@@ -193,13 +319,15 @@ pub enum DriverKind {
     Conformance,
     /// The host steps ([`crate::host`]).
     Host,
+    /// The test vectors ([`crate::vectors`]).
+    Vectors,
 }
 
 /// What an exit code of a driver program of `kind` means (the codes of
 /// [`driver_preamble`], the driver's own, the sanitizers'); `None` for a
 /// code that driver does not return.
 pub fn exit_meaning(kind: DriverKind, code: i32) -> Option<&'static str> {
-    use DriverKind::{Conformance, Host};
+    use DriverKind::{Conformance, Host, Vectors};
     Some(match (kind, code) {
         (_, INPUT_EXIT) => "the program could not read its input",
         (_, SETUP_EXIT) => "the program could not install its signal handlers",
@@ -207,8 +335,8 @@ pub fn exit_meaning(kind: DriverKind, code: i32) -> Option<&'static str> {
         (_, SANITIZER_EXIT) => "a sanitizer (ASan or UBSan) reported an error",
         (Conformance, API_ERROR_EXIT) => "`init` or `process` returned an error",
         (Conformance, PANIC_EXIT) => "the generated code panicked",
-        (Host, OUTPUT_EXIT) => "the program could not write its output",
-        (Host, ARGS_EXIT) => "the program was called with wrong arguments",
+        (_, OUTPUT_EXIT) => "the program could not write its output",
+        (Host | Vectors, ARGS_EXIT) => "the program was called with wrong arguments",
         (Host, RESET_HOOK_EXIT) => "the reset hook was called (`panic = \"reset\"`)",
         _ => return None,
     })
@@ -468,7 +596,7 @@ mod tests {
     #[test]
     fn sanitizers_stop_with_their_exit_code() {
         require("clang").unwrap();
-        let dir = std::env::temp_dir().join(format!("onsa_sanitize_test_{}", std::process::id()));
+        let dir = scratch_dir("onsa_test", "sanitize");
         std::fs::create_dir_all(&dir).unwrap();
         let cases = [
             (
@@ -492,6 +620,43 @@ mod tests {
             assert_eq!(out.status.code(), Some(SANITIZER_EXIT), "{name}: {}", String::from_utf8_lossy(&out.stderr));
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The scratch directories a killed run left go; others stay: another
+    /// form of name, a live process, this process (W2-02/b).
+    #[test]
+    fn stale_scratch_directories_go() {
+        let temp = std::env::temp_dir().join(format!("onsa_stale_scratch_test_{}", std::process::id()));
+        let me = std::process::id();
+        let names = [
+            ("onsa_host_999991_0", true),
+            ("onsa_vectors_c_999992_3", true),
+            ("onsa_ccheck_999993_0_c-gcc", true),
+            (&*format!("onsa_host_{me}_0"), false),
+            ("onsa_host_test_999994_x", false),
+            ("onsa_vectors_c_123_0", false),
+            ("onsa_hostx_999995_0", false),
+            ("onsa_host_999996", false),
+            ("other_999997_0", false),
+            ("onsa_vectors_c_999998_0", false),
+            ("onsa_test_999999_0_vectors", true),
+        ]
+        .map(|(n, gone)| (n.to_string(), gone));
+        for (n, _) in &names {
+            std::fs::create_dir_all(temp.join(n)).unwrap();
+        }
+        // kept for a person by ONSA_C_KEEP: it stays (N2)
+        std::fs::write(temp.join("onsa_vectors_c_999998_0").join(KEEP_MARK), "").unwrap();
+        let mut removed = remove_stale_scratch(&temp, |pid| pid == 123);
+        removed.sort();
+        let mut want: Vec<std::path::PathBuf> = names.iter().filter(|(_, g)| *g).map(|(n, _)| temp.join(n)).collect();
+        want.sort();
+        assert_eq!(removed, want);
+        for (n, gone) in &names {
+            assert_eq!(temp.join(n).exists(), !gone, "{n}");
+        }
+        assert!(pid_alive(me));
+        let _ = std::fs::remove_dir_all(&temp);
     }
 
     /// An item that switches warnings off has a `-strict` pair that runs the

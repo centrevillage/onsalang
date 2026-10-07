@@ -13,7 +13,7 @@ use super::Outcome;
 use super::driver::{END, PANIC_LINE, RESET_DONE, Unsupported};
 use super::plan::{Before, Op, SeqPlan, SigOut, record_len};
 use crate::c::{self, DriverKind, Finished};
-use crate::scalar::{distance, show};
+use crate::scalar::{same, show};
 
 /// The record of one step.
 struct Record<'a> {
@@ -178,7 +178,7 @@ fn step(p: &SeqPlan, k: usize, rec: &Record<'_>, lines: &mut Vec<String>) -> usi
             if let (Some((s, _)), Some(want)) = (ret, result) {
                 n += 1;
                 match s.read(&rec.payload[..s.size()]) {
-                    Ok(got) if distance(&got, want) == Some(0) => {}
+                    Ok(got) if same(&got, want) => {}
                     Ok(got) => lines.push(format!("{label}: result: expected {}, got {}", show(want), show(&got))),
                     Err(e) => lines.push(format!("{label}: result: expected {}, got {e}", show(want))),
                 }
@@ -207,8 +207,7 @@ fn output(label: &str, o: &SigOut, frames: u32, payload: &[u8], at: &mut usize, 
             } else {
                 o.scalar.read(b).map_err(|e| format!("the bytes {b:02x?} ({e})"))
             };
-            let same = matches!(&got, Ok(g) if distance(g, w) == Some(0));
-            if !same {
+            if !matches!(&got, Ok(g) if same(g, w)) {
                 differ += 1;
                 if first.is_none() {
                     first = Some((f, show(w), got.map_or_else(|e| e, |g: Value| show(&g))));

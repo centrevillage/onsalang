@@ -1115,7 +1115,7 @@ mod tests {
 
     impl Repo {
         fn new(tag: &str, files: &[(&str, &str)]) -> Repo {
-            let root = std::env::temp_dir().join(format!("onsa_run_test_{}_{tag}", std::process::id()));
+            let root = crate::c::scratch_dir("onsa_test", &format!("run_{tag}"));
             let _ = std::fs::remove_dir_all(&root);
             for (p, text) in files {
                 let p = root.join(p);

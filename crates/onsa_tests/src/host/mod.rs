@@ -41,7 +41,6 @@ pub mod plan;
 mod tests;
 
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Deserializer};
 
@@ -442,11 +441,9 @@ pub fn run_target(target: &str, seqs: &[&Seq], out: &BuildOutput) -> TargetRun {
         r.harness.push(e);
         return r;
     }
-    static RUNS: AtomicUsize = AtomicUsize::new(0);
-    let dir =
-        std::env::temp_dir().join(format!("onsa_host_{}_{}", std::process::id(), RUNS.fetch_add(1, Ordering::SeqCst)));
+    let dir = c::scratch_dir("onsa_host", "");
     let program = driver::program(out, &plans);
-    let built = build(out, &tool, &dir, &program.source);
+    let built = c::compile_driver(&tool, out, &dir, "host_driver.c", &program.source, driver::PANIC_HANDLER, &[]);
     if let Ok(exe) = &built {
         for (i, p) in plans.iter().enumerate() {
             let outcome = match run_seq(exe, i, p, tool.runner, program.seqs[i].as_ref()) {
@@ -459,7 +456,7 @@ pub fn run_target(target: &str, seqs: &[&Seq], out: &BuildOutput) -> TargetRun {
             r.results.push(SeqResult { name: p.name.clone(), target: target.into(), outcome });
         }
     }
-    let kept = keep_or_remove(&dir);
+    let kept = c::keep_or_remove(&dir, "the host-steps files");
     if let Err(e) = built {
         let kept = kept.as_ref().map_or_else(String::new, |n| format!("\n({n})"));
         r.failures.push(format!("the host steps of target `{target}` do not compile: {e}{kept}"));
@@ -467,31 +464,6 @@ pub fn run_target(target: &str, seqs: &[&Seq], out: &BuildOutput) -> TargetRun {
     }
     r.notes.extend(kept);
     r
-}
-
-/// Remove the scratch directory, or keep it when `ONSA_C_KEEP` is set
-/// ([`crate::ccheck::KEEP`]): then the note that says where.
-fn keep_or_remove(dir: &Path) -> Option<String> {
-    if std::env::var_os(crate::ccheck::KEEP).is_some() {
-        Some(format!("{} is set: the host-steps files are kept in {}", crate::ccheck::KEEP, dir.display()))
-    } else {
-        let _ = std::fs::remove_dir_all(dir);
-        None
-    }
-}
-
-/// Compile the build's C and the driver into `dir/run`.
-fn build(out: &BuildOutput, tool: &c::Toolchain, dir: &Path, driver: &str) -> Result<std::path::PathBuf, String> {
-    c::write_files(dir, &out.files)?;
-    let source = &out.files.last().ok_or("the build wrote no file")?.0;
-    let d = dir.join("host_driver.c");
-    std::fs::write(&d, driver).map_err(|e| format!("cannot write {}: {e}", d.display()))?;
-    let exe = dir.join("run");
-    let mut cmd = c::command(tool, &out.settings.platform.cflags, dir);
-    cmd.arg(format!("-DONSA_PANIC_HANDLER={}", driver::PANIC_HANDLER));
-    cmd.arg(dir.join(source)).arg(&d).arg("-o").arg(&exe).arg("-lm");
-    c::compile(&mut cmd, &format!("{} (the host-steps program)", tool.cc))?;
-    Ok(exe)
 }
 
 /// Run sequence `i` of the program and compare it. `Err` is an error of the harness.

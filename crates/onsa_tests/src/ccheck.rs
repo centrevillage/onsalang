@@ -47,11 +47,37 @@ use crate::case;
 use crate::pending::{self, Pending};
 use crate::run::{self, Built};
 
+/// What the failures of a case are, for the entries that may hold them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FailureKind {
+    /// None is an internal error of the compiler: an entry holds them.
+    #[default]
+    Ordinary,
+    /// Every failure is an internal error (S-67): only an entry with
+    /// `expect = "internal"` holds them (W1-04).
+    Internal,
+    /// Internal errors and other failures: no entry holds them.
+    Mixed,
+}
+
 /// The result of one case of an item.
 #[derive(Debug, Clone, Default)]
 pub struct CaseResult {
     pub id: String,
     pub problems: Vec<String>,
+    /// What the problems are (the C checks: always ordinary).
+    pub failure: FailureKind,
+    /// The failing rows the case counts (the test vectors: the rows that
+    /// fail, and those a run that ended did not make). `Some`: an entry holds
+    /// the case only with `rows` equal to it (more or fewer fail: a new
+    /// failure, or one that went away). `None`: the item counts nothing.
+    pub rows: Option<usize>,
+    /// Which rows fail ([`crate::vectors::judge::digest`]), with `rows`: an
+    /// entry holds the case only with the same `digest` (another row failing
+    /// instead of one that passes now is a change too).
+    pub digest: Option<String>,
+    /// The failing rows (their ids, sorted), for the message of an entry to fix.
+    pub failing: Vec<String>,
     /// Information (the conformance line of each flow).
     pub notes: Vec<String>,
     /// Flows conformance did not compare: `(flow, reason)`.
@@ -215,13 +241,7 @@ pub fn check(item: &Item, builds: &[(String, Built)]) -> ItemRun {
     if !out.errors.is_empty() {
         return out;
     }
-    static RUNS: AtomicUsize = AtomicUsize::new(0);
-    let scratch = std::env::temp_dir().join(format!(
-        "onsa_{}_{}_{}",
-        item.name,
-        std::process::id(),
-        RUNS.fetch_add(1, Ordering::SeqCst)
-    ));
+    let scratch = c::scratch_dir("onsa_ccheck", item.name);
     let results = parallel(builds.len(), |i| {
         let (path, b) = &builds[i];
         let id = format!("{path}[{}]", b.target);
@@ -231,11 +251,7 @@ pub fn check(item: &Item, builds: &[(String, Built)]) -> ItemRun {
             Check::Headers(cs) => headers(&id, b, cs, &dir),
         }
     });
-    if std::env::var_os(KEEP).is_some() {
-        out.notes.push(format!("{KEEP} is set: the files are kept in {}", scratch.display()));
-    } else {
-        let _ = std::fs::remove_dir_all(&scratch);
-    }
+    out.notes.extend(c::keep_or_remove(&scratch, "the files"));
     out.results = results.into_iter().flatten().collect();
     out
 }
@@ -289,6 +305,18 @@ fn headers(id: &str, b: &Built, cs: &[HeaderCompiler], dir: &Path) -> Vec<CaseRe
 
 /// Apply the `gate` entries of `item` (module docs).
 pub fn reconcile(item: &str, run: ItemRun, list: &Pending) -> ItemReport {
+    let form = if matches!(c::item(item).map(|i| i.check), Some(Check::Headers(_))) {
+        "`<path>[<target>]/<compiler>`"
+    } else {
+        "`<path>[<target>]`"
+    };
+    reconcile_cases(item, run, list, form)
+}
+
+/// [`reconcile`] for an item whose cases have the form `form` (for the
+/// message of an entry that names no case). An entry holds a failing case
+/// only when the kind of its failures fits the entry ([`FailureKind`]).
+pub fn reconcile_cases(item: &str, run: ItemRun, list: &Pending, form: &str) -> ItemReport {
     let mut report = ItemReport { item: item.to_string(), ..Default::default() };
     let prefix = format!("{item}/");
     let entries: Vec<&pending::Entry> = list.of_kind(pending::Kind::Gate).collect();
@@ -303,10 +331,8 @@ pub fn reconcile(item: &str, run: ItemRun, list: &Pending) -> ItemReport {
     for (c, e) in &cases {
         if !ids.contains(c) && run.errors.is_empty() {
             report.failures.push(format!(
-                "tests/pending.toml: `{}` names no case of `{item}` (the cases are `<path>[<target>]`{}; until {})",
-                e.target,
-                if matches!(c::item(item).map(|i| i.check), Some(Check::Headers(_))) { "/<compiler>" } else { "" },
-                e.until
+                "tests/pending.toml: `{}` names no case of `{item}` (the cases are {form}; until {})",
+                e.target, e.until
             ));
         }
     }
@@ -317,7 +343,30 @@ pub fn reconcile(item: &str, run: ItemRun, list: &Pending) -> ItemReport {
                 "{item}/{}: passes but is listed in tests/pending.toml (until {}); remove the entry",
                 r.id, e.until
             )),
-            (false, Some(e)) => report.pending.push((r.id.clone(), e.until.clone(), e.note.clone())),
+            (false, Some(e)) if e.rows != r.rows || e.digest != r.digest => {
+                report.failures.push(rows_mismatch(item, r, e))
+            }
+            (false, Some(e)) => {
+                let internal = e.expect == Some(pending::Expect::Internal);
+                match (r.failure, internal) {
+                    (FailureKind::Ordinary, false) | (FailureKind::Internal, true) => {
+                        report.pending.push((r.id.clone(), e.until.clone(), e.note.clone()))
+                    }
+                    (FailureKind::Ordinary, true) => report.failures.push(format!(
+                        "{item}/{}: is listed with `expect = \"internal\"` (until {}), but fails otherwise",
+                        r.id, e.until
+                    )),
+                    (FailureKind::Internal, false) => report.failures.push(format!(
+                        "{item}/{}: an internal error of the compiler (S-67); the list holds it only with \
+                         `expect = \"internal\"` (W1-04)",
+                        r.id
+                    )),
+                    (FailureKind::Mixed, _) => report.failures.push(format!(
+                        "{item}/{}: fails both with internal errors and otherwise; no entry holds both",
+                        r.id
+                    )),
+                }
+            }
             (false, None) if !whole => report.failures.push(format!("{item}/{}: fails", r.id)),
             _ => {}
         }
@@ -328,6 +377,33 @@ pub fn reconcile(item: &str, run: ItemRun, list: &Pending) -> ItemReport {
     }
     report.run = run;
     report
+}
+
+/// The failure of an entry whose `rows` / `digest` are not the case's.
+fn rows_mismatch(item: &str, r: &CaseResult, e: &pending::Entry) -> String {
+    let (Some(n), Some(d)) = (r.rows, r.digest.as_deref()) else {
+        return format!("{item}/{}: `rows` and `digest` are not fields of this item's entries", r.id);
+    };
+    const SHOWN: usize = 5;
+    let mut rows: Vec<&str> = r.failing.iter().take(SHOWN).map(String::as_str).collect();
+    let more = r.failing.len().saturating_sub(SHOWN);
+    let more = if more > 0 { format!("\n  ... {more} more ({} in all)", r.failing.len()) } else { String::new() };
+    rows.insert(0, "");
+    let entry = match (e.rows, e.digest.as_deref()) {
+        (None, None) => "has neither".to_string(),
+        (rows, digest) => format!(
+            "holds `rows = {}`, `digest = \"{}\"`",
+            rows.map_or_else(|| "?".into(), |x| x.to_string()),
+            digest.unwrap_or("?")
+        ),
+    };
+    format!(
+        "{item}/{}: the failing rows are not the entry's (until {}): the entry {entry}; now `rows = {n}`, \
+         `digest = \"{d}\"` (a failure came, went or moved: read the report, then fix the entry). The failing rows:{}{more}",
+        r.id,
+        e.until,
+        rows.join("\n  ")
+    )
 }
 
 /// `f(0..n)` on worker threads, in order.
@@ -392,6 +468,70 @@ mod tests {
         let ok = reconcile("c-gcc", run_of(vec![result("a[t]", false)]), &list(&["c-gcc/a[t]"]));
         assert!(!ok.failed(), "{:?}", ok.failures);
         assert!(ok.text().contains("PENDING a[t]"), "{}", ok.text());
+    }
+
+    #[test]
+    fn internal_errors_need_their_entry() {
+        let kind = |id: &str, failure| CaseResult { failure, ..result(id, false) };
+        let internal = |t: &str| {
+            let mut l = list(&[t]);
+            l.pending[0].expect = Some(pending::Expect::Internal);
+            l
+        };
+        let form = "`<op>`";
+        // an internal error is held only by an entry with `expect = "internal"` (W1-04)
+        let r = reconcile_cases("v", run_of(vec![kind("a", FailureKind::Internal)]), &list(&["v/a"]), form);
+        assert!(r.failures.iter().any(|f| f.contains("only with `expect = \"internal\"`")), "{:?}", r.failures);
+        let r = reconcile_cases("v", run_of(vec![kind("a", FailureKind::Internal)]), &internal("v/a"), form);
+        assert!(!r.failed(), "{:?}", r.failures);
+        // such an entry does not hold another failure, nor both
+        let r = reconcile_cases("v", run_of(vec![kind("a", FailureKind::Ordinary)]), &internal("v/a"), form);
+        assert!(r.failures.iter().any(|f| f.contains("fails otherwise")), "{:?}", r.failures);
+        for l in [list(&["v/a"]), internal("v/a")] {
+            let r = reconcile_cases("v", run_of(vec![kind("a", FailureKind::Mixed)]), &l, form);
+            assert!(r.failures.iter().any(|f| f.contains("no entry holds both")), "{:?}", r.failures);
+        }
+        // an internal error is never held by the absence of an entry
+        let r = reconcile_cases("v", run_of(vec![kind("a", FailureKind::Internal)]), &list(&[]), form);
+        assert!(r.failures.iter().any(|f| f.contains("v/a: fails")), "{:?}", r.failures);
+    }
+
+    #[test]
+    fn an_entry_holds_exactly_its_rows() {
+        let counted = |id: &str, rows: &[&str]| CaseResult {
+            rows: Some(rows.len()),
+            digest: Some(format!("{:016x}", rows.len())),
+            failing: rows.iter().map(|s| s.to_string()).collect(),
+            ..result(id, false)
+        };
+        let with = |t: &str, rows: Option<usize>, digest: Option<&str>| {
+            let mut l = list(&[t]);
+            l.pending[0].rows = rows;
+            l.pending[0].digest = digest.map(str::to_string);
+            l
+        };
+        let form = "`<op>`";
+        let three = ["r1", "r2", "r3"];
+        let d3 = format!("{:016x}", 3);
+        let r = reconcile_cases("v", run_of(vec![counted("a", &three)]), &with("v/a", Some(3), Some(&d3)), form);
+        assert!(!r.failed(), "{:?}", r.failures);
+        for (rows, digest) in
+            [(Some(2), Some(d3.as_str())), (Some(3), Some("0000000000000009")), (None, None), (Some(3), None)]
+        {
+            let r = reconcile_cases("v", run_of(vec![counted("a", &three)]), &with("v/a", rows, digest), form);
+            let f = r.failures.join("\n");
+            assert!(f.contains("the failing rows are not the entry's"), "{f}");
+            assert!(f.contains(&format!("now `rows = 3`, `digest = \"{d3}\"`")), "{f}");
+            assert!(f.contains("\n  r1\n  r2\n  r3"), "{f}");
+        }
+        // many rows: the first ones and the count
+        let many: Vec<String> = (0..9).map(|i| format!("r{i}")).collect();
+        let many: Vec<&str> = many.iter().map(String::as_str).collect();
+        let r = reconcile_cases("v", run_of(vec![counted("a", &many)]), &with("v/a", None, None), form);
+        assert!(r.failures.join("\n").contains("... 4 more (9 in all)"), "{:?}", r.failures);
+        // an item that counts nothing: `rows` is not its field
+        let r = reconcile_cases("v", run_of(vec![result("a", false)]), &with("v/a", Some(1), None), form);
+        assert!(r.failures.iter().any(|f| f.contains("are not fields")), "{:?}", r.failures);
     }
 
     #[test]

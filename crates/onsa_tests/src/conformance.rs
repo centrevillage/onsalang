@@ -29,9 +29,9 @@ use onsa_driver::BuildOutput;
 use onsa_interp::value::{int_value, zero_array};
 use onsa_interp::{ArrayData, Interp, Proj, SpanRef, Value, slot};
 
-use crate::c::{self, Runner, Toolchain};
+use crate::c::{self, Toolchain};
 use crate::capi;
-use crate::scalar::{Scalar, distance};
+use crate::scalar::{Scalar, distance, same};
 
 const FRAMES: u32 = 4096;
 const BLOCK: u32 = 2048;
@@ -414,7 +414,7 @@ fn c_driver(api: &FlowApi, shape: &Shape, bulk_size: u32, panic: PanicMode) -> S
             || format!("onsa_conformance_no_init_input_{}", onsa_backend_c::c_ident(name)),
             |f| f.c_type.clone(),
         );
-        let _ = writeln!(d, "  {t} c{i};\n  if (!onsa_driver_read(&c{i}, sizeof c{i})) return {};", c::INPUT_EXIT);
+        let _ = writeln!(d, "  {t} c{i};\n  onsa_driver_need(&c{i}, sizeof c{i});");
     }
     for (name, _, _) in &shape.params {
         // An undeclared field where the record is missing: the program does not compile.
@@ -422,10 +422,10 @@ fn c_driver(api: &FlowApi, shape: &Shape, bulk_size: u32, panic: PanicMode) -> S
             || format!("onsa_conformance_no_param_{}", onsa_backend_c::c_ident(name)),
             |f| f.c_name.clone(),
         );
-        let _ = writeln!(d, "  if (!onsa_driver_read(&p.{f}, sizeof p.{f})) return {};", c::INPUT_EXIT);
+        let _ = writeln!(d, "  onsa_driver_need(&p.{f}, sizeof p.{f});");
     }
     for i in 0..shape.inputs.len() {
-        let _ = writeln!(d, "  if (!onsa_driver_read(in{i}, sizeof in{i})) return {};", c::INPUT_EXIT);
+        let _ = writeln!(d, "  onsa_driver_need(in{i}, sizeof in{i});");
     }
     let state = capi::state_type(api);
     let _ = writeln!(d, "  {state}* s = ({state}*)mem;");
@@ -489,19 +489,8 @@ fn c_build(
     dir: &Path,
 ) -> Result<std::path::PathBuf, String> {
     let dir = dir.join(&api.symbol);
-    c::write_files(&dir, &out.files)?;
-    let source = &out.files.last().ok_or("the build wrote no file")?.0;
-    let d = dir.join("driver.c");
-    std::fs::write(&d, c_driver(api, shape, meta.layout.bulk_size, out.settings.panic)).map_err(|e| e.to_string())?;
-    let exe = dir.join("run");
-    let mut cmd = c::command(t, &out.settings.platform.cflags, &dir);
-    cmd.arg("-DONSA_PANIC_HANDLER=onsa_conformance_panic");
-    if t.runner == Runner::Sanitized {
-        cmd.arg(format!("-D{}", c::SANITIZED_DEFINE));
-    }
-    cmd.arg(dir.join(source)).arg(&d).arg("-o").arg(&exe).arg("-lm");
-    c::compile(&mut cmd, &format!("{} (the conformance program)", t.cc))?;
-    Ok(exe)
+    let driver = c_driver(api, shape, meta.layout.bulk_size, out.settings.panic);
+    c::compile_driver(t, out, &dir, "driver.c", &driver, "onsa_conformance_panic", &[])
 }
 
 /// Run the program with `input` on stdin, within [`c::RUN_TIMEOUT`].
@@ -638,8 +627,11 @@ fn compare_flow(
         for (ch, (a, b)) in c.iter().zip(&i).enumerate() {
             for (n, (x, y)) in a.iter().zip(b).enumerate() {
                 samples += 1;
+                // The same sample by §13.4 ([`same`]); the ULP distance only within the tolerance.
+                if same(x, y) {
+                    continue;
+                }
                 match distance(x, y) {
-                    Some(0) => {}
                     Some(d) if !exact => {
                         differ += 1;
                         worst = worst.max(d);
@@ -673,6 +665,7 @@ fn compare_flow(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c::Runner;
     use onsa_core::{FloatKind, IntKind};
 
     /// The build of `src` (package `m`, every flow exported) for a host target.
@@ -802,6 +795,16 @@ mod tests {
         assert_eq!(distance(&Value::F64(f64::NAN), &Value::F64(f64::NAN)), Some(0));
         assert_eq!(distance(&Value::F32(1.0), &Value::F32(f32::from_bits(1.0f32.to_bits() + 2))), Some(2));
         assert_ne!(distance(&Value::F32(0.0), &Value::F32(-0.0)), Some(0));
+        // A NaN is never within a tolerance of a value that is not a NaN, even
+        // when the bits are next to each other (S-106).
+        assert_eq!(distance(&Value::F32(f32::from_bits(0x7f80_0001)), &Value::F32(f32::INFINITY)), None);
+        assert_eq!(distance(&Value::F32(f32::MAX), &Value::F32(f32::from_bits(0x7f80_0001))), None);
+        assert_eq!(distance(&Value::F64(f64::from_bits(0x7ff0_0000_0000_0001)), &Value::F64(f64::INFINITY)), None);
+        assert_eq!(distance(&Value::F64(f64::from_bits(0xfff8_0000_0000_0000)), &Value::F64(1.0)), None);
+        assert_eq!(
+            distance(&Value::F32(f32::from_bits(0x7fc0_0001)), &Value::F32(f32::from_bits(0xff80_0001))),
+            Some(0)
+        );
         assert_eq!(distance(&Value::I32(3), &Value::I32(3)), Some(0));
         assert_eq!(distance(&Value::I32(3), &Value::I32(4)), None);
         assert_eq!(distance(&Value::I32(3), &Value::U32(3)), None);

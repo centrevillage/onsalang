@@ -11,7 +11,7 @@ fn voice_host_writes_a_wav() {
     onsa_tests::c::require("cc").unwrap();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let example = root.join("examples/voice_host");
-    let dir = std::env::temp_dir().join(format!("onsa_example_host_{}", std::process::id()));
+    let dir = onsa_tests::c::scratch_dir("onsa_test", "example_host");
     std::fs::create_dir_all(&dir).unwrap();
     let opts = onsa_driver::BuildOptions { target: "host".into(), out: Some(dir.join("lib")) };
     let report = match onsa_driver::build(&example, &opts) {

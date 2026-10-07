@@ -3,7 +3,7 @@
 # 一覧にある対象は、まだ通らないことを期待する。通ったら gate（tools/gate.sh）が失敗し、
 # 一覧から外すよう促す。意味はどの種類も同じ。外す作業は、対象を通したときに項目を消す。
 #
-# 項目は [[pending]] の表で、次の欄は全て必須（expect のほかの欄は書けない）:
+# 項目は [[pending]] の表で、次の欄は全て必須（expect、rows、digest のほかの欄は書けない）:
 #   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input"
 #   target   対象の識別子（形は種類ごと。下）
 #   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）。until = "P2" の項目に
@@ -17,10 +17,20 @@
 #            第 1 期の終わりの --stage-end M9 は、P2 でない項目が残っていれば失敗する
 #   note     短い説明
 # 任意の欄:
-#   expect   "internal" だけ。test-case の事例全体の項目（"::<test の名前>" の無いもの）にだけ書ける。
+#   expect   "internal" だけ。test-case の事例全体の項目（"::<test の名前>" の無いもの）と、gate の項目の
+#            うち tools/gate_steps.py で expect_internal=True のもの（今は vectors-interp）の事例の項目
+#            （"<項目>/<事例>"）にだけ書ける。
 #            コンパイラの内部エラー（S-67）は、この一覧で黙らせられない（W1-04）。expect = "internal" の
 #            項目の事例は、内部エラーで終わることを期待する。内部エラー以外で失敗したら失敗、通ったら
-#            一覧から外すよう失敗にする（照合はテストの実行器）
+#            一覧から外すよう失敗にする（照合はテストの実行器か、gate の項目）
+#   rows     正の整数。gate の項目のうち tools/gate_steps.py で counts_rows=True のもの（今は vectors-interp と
+#            vectors-c）の事例の項目では必須で、それ以外には書けない。項目が黙らせる失敗の大きさで、その
+#            演算・その実装で失敗する行の数（プロセスが途中で終わって走らなかった後の行も数える）。実際の
+#            数と違えば、増えても減っても失敗にする（同じ演算の新しい失敗を隠さない。W2-02/b）
+#   digest   16 桁の小文字の 16 進。rows と同じ項目で必須で、それ以外には書けない。失敗する行の集合の識別で、
+#            各行の「ファイル・節（演算と段）・引数の字面」（行番号は使わない。作られなかった行も含む）を
+#            並べ替えて連ねたものの FNV-1a（64 ビット。onsa_tests::vectors::judge::digest）。違えば失敗にする
+#            （失敗する行が入れ替わっても隠さない）。値は項目が失敗の文に出す rows と digest を写す
 #
 # target の形:
 #   spec-example  "§<節> <ハッシュ>: <先頭の行>"。仕様の ```onsa ブロックの名前。ハッシュは、
@@ -49,6 +59,15 @@
 #                 （"c-gcc/tests/conformance/voice.onsa[host]"）、c-header と c-header-strict は
 #                 "<パス>[<ターゲット>]/<コンパイラ>"（"c-header-strict/tests/conformance/voice.onsa[host]/c++11-g++-15"。
 #                 照合は onsa_tests::ccheck）。
+#                 テストベクトルの項目（W2-02、照合は onsa_tests::vectors）は事例ごとにだけ載せられる
+#                 （gate_steps の by_case_only。全体の項目は失敗）: "vectors-interp/<演算>"（"vectors-interp/u64.mul"）、
+#                 "vectors-c/<演算>[<ツールチェーン>]"（"vectors-c/u32.mul[c-gcc]"。ツールチェーンは C の検査の
+#                 コンパイルと実行の項目の名前）。黙らせるのはその演算・その実装の行の失敗（値の違い、panic の
+#                 有無の違い、境界の状態と panic の食い違い、C の演算の途中でプロセスが終わった）で、その
+#                 行の数と集合が欄 rows と digest と同じときだけ。
+#                 インタプリタの内部エラーは expect = "internal" の項目だけが黙らせる。データ・fixture・器の誤りと
+#                 時間の予算の超過は黙らせない。fixture のパッケージが test-case の項目で全体で載っているときは、
+#                 その演算は走らず、そこを指す vectors-* の項目は失敗
 #                 gate の完全性を保つ項目（fmt、clippy、test、仕様の例、この一覧、W1-02 の静的な
 #                 検査、自己テスト）と info の項目は載せられない
 #   test-case     リポジトリの根からのパス（ファイルかパッケージのディレクトリ）。
@@ -1158,3 +1177,1270 @@ target = "c-x86/tests/vectors/fixture/scalar[host]"
 reasons = ["R-145"]
 until = "W2-09"
 note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
+
+# --- テストベクトル（W2-02）: 演算ごとの失敗（vectors-interp/<演算>）と、ツールチェーンごとの失敗
+# （vectors-c/<演算>[<ツールチェーン>]）。照合は onsa_tests::vectors
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i8.rem"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "749bec49503d4173"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i16.rem"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "d7e365698ff1a1bc"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i32.rem"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "148bf25eb0fa9337"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i64.rem"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "be4471f1353d74bb"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u64.mul"
+reasons = ["R-04"]
+until = "W2-03"
+rows = 10
+digest = "61fa4158e56bed8b"
+note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップし、結果は正しい値になる）"
+expect = "internal"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u64.wmul"
+reasons = ["R-04"]
+until = "W2-03"
+rows = 10
+digest = "af539f21b979349b"
+note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップし、結果は正しい値になる）"
+expect = "internal"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u64.smul"
+reasons = ["R-04"]
+until = "W2-03"
+rows = 12
+digest = "8acb4d83954a9bce"
+note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップして誤った値を返す）"
+expect = "internal"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u64.checked_mul"
+reasons = ["R-04"]
+until = "W2-03"
+rows = 9
+digest = "a46dcdc48771d3a9"
+note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップし、結果は正しい値になる）"
+expect = "internal"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/f32.trunc_i64"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "9ef7d3c5a46a6bdd"
+note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/f32.trunc_u64"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "5580741e30bd4891"
+note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/f64.trunc_i64"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "6a8ff38e194bee72"
+note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/f64.trunc_u64"
+reasons = ["R-19"]
+until = "W2-03"
+rows = 1
+digest = "a185973be7d63b05"
+note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/f32.to_bits"
+reasons = ["S-106"]
+until = "W2-03"
+rows = 9
+digest = "5347a2e37e0f56bb"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/f64.to_bits"
+reasons = ["S-106"]
+until = "W2-03"
+rows = 9
+digest = "c8140f3d576349e8"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i8.BITS"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "0145f2dfdfe5d4d4"
+note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i16.BITS"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "931654ae474ef419"
+note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/i64.BITS"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "fca8a22e738be66e"
+note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u8.BITS"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "f8fe7f4dc9cc6fc8"
+note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u16.BITS"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "66264e5fbb1ec14d"
+note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-interp/u64.BITS"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "ff3f757762f5fdba"
+note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "749bec49503d4173"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem_euclid[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "9ea489c8ec127294"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.shr[c-clang]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 50
+digest = "99ba768397101714"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "d7e365698ff1a1bc"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem_euclid[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "88bbc2b117710b6f"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.shr[c-clang]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 57
+digest = "95466bd5d09ec7df"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "148bf25eb0fa9337"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem_euclid[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "0cb74e87a5ef19d2"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "be4471f1353d74bb"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem_euclid[c-clang]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "2266732da5e0608c"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i8[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "75d9546a0863e15f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i16[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "1189f1d013e06db3"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i32[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 38
+digest = "b0c459217f60c412"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i8[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "13c8517bfc06bd77"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i16[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "7ba37ecf7ff87b4f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i32[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 22
+digest = "30f067321501ea29"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i64[c-clang]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 30
+digest = "cece32abed014980"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.trunc_i64_sat[c-clang]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 9
+digest = "4a5335f44301deac"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.trunc_u64_sat[c-clang]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 11
+digest = "d89bf043307925c6"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.trunc_i64_sat[c-clang]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 13
+digest = "fe7250bf2b7b6f37"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.trunc_u64_sat[c-clang]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 9
+digest = "ecc00e5c473da0ee"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.to_bits[c-clang]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "5347a2e37e0f56bb"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.to_bits[c-clang]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "c8140f3d576349e8"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.BITS[c-clang]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "0145f2dfdfe5d4d4"
+note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.BITS[c-clang]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "931654ae474ef419"
+note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.BITS[c-clang]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "fca8a22e738be66e"
+note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u8.BITS[c-clang]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "f8fe7f4dc9cc6fc8"
+note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u16.BITS[c-clang]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "66264e5fbb1ec14d"
+note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.BITS[c-clang]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "ff3f757762f5fdba"
+note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "749bec49503d4173"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem_euclid[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "9ea489c8ec127294"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.shr[c-gcc]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 50
+digest = "99ba768397101714"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "d7e365698ff1a1bc"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem_euclid[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "88bbc2b117710b6f"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.shr[c-gcc]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 57
+digest = "95466bd5d09ec7df"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "148bf25eb0fa9337"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem_euclid[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "0cb74e87a5ef19d2"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "be4471f1353d74bb"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem_euclid[c-gcc]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "2266732da5e0608c"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.mul[c-gcc]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 10
+digest = "5aa11b854d5d2229"
+note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: gcc は検査を消し、溢れを見逃す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.smul[c-gcc]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 11
+digest = "a6932f3a1c7b2f16"
+note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: gcc は検査を消し、溢れを見逃す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.checked_mul[c-gcc]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 13
+digest = "6531cd600de2ab20"
+note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: gcc は検査を消し、溢れを見逃す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i8[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "75d9546a0863e15f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i16[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "1189f1d013e06db3"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i32[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 38
+digest = "b0c459217f60c412"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i8[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "13c8517bfc06bd77"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i16[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "7ba37ecf7ff87b4f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i32[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 22
+digest = "30f067321501ea29"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i64[c-gcc]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 30
+digest = "cece32abed014980"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.to_bits[c-gcc]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "5347a2e37e0f56bb"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.to_bits[c-gcc]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "c8140f3d576349e8"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.BITS[c-gcc]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "0145f2dfdfe5d4d4"
+note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.BITS[c-gcc]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "931654ae474ef419"
+note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.BITS[c-gcc]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "fca8a22e738be66e"
+note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u8.BITS[c-gcc]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "f8fe7f4dc9cc6fc8"
+note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u16.BITS[c-gcc]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "66264e5fbb1ec14d"
+note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.BITS[c-gcc]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "ff3f757762f5fdba"
+note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "749bec49503d4173"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem_euclid[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "9ea489c8ec127294"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.shr[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 50
+digest = "99ba768397101714"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "d7e365698ff1a1bc"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.wmul[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 729
+digest = "e3bf14a13d7718e4"
+note = "16 ビットの *% が int への昇格で符号付きの溢れになる（UBSan が報告）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem_euclid[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "88bbc2b117710b6f"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.shr[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 57
+digest = "95466bd5d09ec7df"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "148bf25eb0fa9337"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem_euclid[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "0cb74e87a5ef19d2"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "be4471f1353d74bb"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem_euclid[c-sanitize]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "2266732da5e0608c"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u16.wmul[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 120
+digest = "8b3dea5e94948f5d"
+note = "16 ビットの *% が int への昇格で符号付きの溢れになる（UBSan が報告）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.mul[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 118
+digest = "4108e2a6c4b99394"
+note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: UBSan が符号付きの溢れを報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.smul[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 117
+digest = "702b79494eac9f91"
+note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: UBSan が符号付きの溢れを報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.checked_mul[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 120
+digest = "d38961e498206068"
+note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: UBSan が符号付きの溢れを報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i8[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "75d9546a0863e15f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i16[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "1189f1d013e06db3"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i32[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 38
+digest = "b0c459217f60c412"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i8[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "13c8517bfc06bd77"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i16[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "7ba37ecf7ff87b4f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i32[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 22
+digest = "30f067321501ea29"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i64[c-sanitize]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 30
+digest = "cece32abed014980"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.trunc_i64_sat[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 120
+digest = "0899f1931a4b4ffb"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.trunc_u64_sat[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 131
+digest = "99fcd789bf8d91a0"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.trunc_i64_sat[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 132
+digest = "b6ee451612e5faac"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.trunc_u64_sat[c-sanitize]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 135
+digest = "bcbe26714ffbc9a5"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.to_bits[c-sanitize]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "5347a2e37e0f56bb"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.to_bits[c-sanitize]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "c8140f3d576349e8"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.BITS[c-sanitize]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "0145f2dfdfe5d4d4"
+note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.BITS[c-sanitize]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "931654ae474ef419"
+note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.BITS[c-sanitize]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "fca8a22e738be66e"
+note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u8.BITS[c-sanitize]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "f8fe7f4dc9cc6fc8"
+note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u16.BITS[c-sanitize]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "66264e5fbb1ec14d"
+note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.BITS[c-sanitize]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "ff3f757762f5fdba"
+note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "749bec49503d4173"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.rem_euclid[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "9ea489c8ec127294"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.shr[c-x86]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 50
+digest = "99ba768397101714"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "d7e365698ff1a1bc"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.rem_euclid[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "88bbc2b117710b6f"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.shr[c-x86]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 57
+digest = "95466bd5d09ec7df"
+note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "148bf25eb0fa9337"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i32.rem_euclid[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "0cb74e87a5ef19d2"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "be4471f1353d74bb"
+note = "MIN % -1 が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.rem_euclid[c-x86]"
+reasons = ["R-19"]
+until = "W2-05"
+rows = 1
+digest = "2266732da5e0608c"
+note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i8[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "75d9546a0863e15f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i16[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "1189f1d013e06db3"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u32.narrow_i32[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 38
+digest = "b0c459217f60c412"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i8[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 16
+digest = "13c8517bfc06bd77"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i16[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 20
+digest = "7ba37ecf7ff87b4f"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i32[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 22
+digest = "30f067321501ea29"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.narrow_i64[c-x86]"
+reasons = ["R-11"]
+until = "W2-05"
+rows = 30
+digest = "cece32abed014980"
+note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.trunc_i64_sat[c-x86]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 9
+digest = "4a5335f44301deac"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.trunc_u64_sat[c-x86]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 11
+digest = "d89bf043307925c6"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.trunc_i64_sat[c-x86]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 13
+digest = "fe7250bf2b7b6f37"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.trunc_u64_sat[c-x86]"
+reasons = ["R-10"]
+until = "W2-05"
+rows = 9
+digest = "ecc00e5c473da0ee"
+note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f32.to_bits[c-x86]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "5347a2e37e0f56bb"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/f64.to_bits[c-x86]"
+reasons = ["S-106"]
+until = "W2-05"
+rows = 9
+digest = "c8140f3d576349e8"
+note = "to_bits() が NaN を正の quiet NaN にそろえない"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i8.BITS[c-x86]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "0145f2dfdfe5d4d4"
+note = "i8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i16.BITS[c-x86]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "931654ae474ef419"
+note = "i16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/i64.BITS[c-x86]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "fca8a22e738be66e"
+note = "i64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u8.BITS[c-x86]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "f8fe7f4dc9cc6fc8"
+note = "u8.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u16.BITS[c-x86]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "66264e5fbb1ec14d"
+note = "u16.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
+
+[[pending]]
+kind = "gate"
+target = "vectors-c/u64.BITS[c-x86]"
+reasons = ["R-136"]
+until = "W5-05"
+rows = 1
+digest = "ff3f757762f5fdba"
+note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"

@@ -343,7 +343,7 @@ struct Repo(PathBuf);
 
 impl Repo {
     fn new(tag: &str, files: &[(&str, &str)]) -> Repo {
-        let root = std::env::temp_dir().join(format!("onsa_host_test_{}_{tag}", std::process::id()));
+        let root = crate::c::scratch_dir("onsa_test", &format!("host_{tag}"));
         let _ = std::fs::remove_dir_all(&root);
         for (p, text) in files {
             let p = root.join(p);
@@ -623,7 +623,7 @@ fn the_program_and_its_input() {
     has("float* out2_0[2] = { in2_0_0, in2_0_1 };");
     has("onsa_mirror_process(s, &p, in2_0, out2_0, 1u)");
     // fill: read into the output buffers before the call
-    has("static float out3_0_0[1]; onsa_host_read(out3_0_0, sizeof(float) * 1u);");
+    has("static float out3_0_0[1]; onsa_driver_need(out3_0_0, sizeof(float) * 1u);");
     // reset is called, and its end is marked
     has("onsa_host_step(2u);\n    onsa_acc_reset(s);\n    { uint32_t done = 0x52455354u;");
     // the storage holds the pattern before init
