@@ -112,7 +112,7 @@
 | `syntax/unit*.onsa`、`syntax/emptyrow.onsa` | R-78 |
 | `syntax/ret_arm.onsa`、`syntax/space_idx.onsa` | R-101 |
 | `syntax/interp.onsa` | R-102 |
-| `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考）。`fuzz.py` は W1-04 の `tools/fuzz.py`（gate の項目 `fuzz`）に置き換えた。記録として残す。`fuzz2.py`（fmt の AST の保存）は W1-07 の範囲 |
+| `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考）。`fuzz.py` は W1-04 の `tools/fuzz.py`（gate の項目 `fuzz`）に置き換えた。記録として残す。`fuzz2.py`（fmt の AST の保存）は W1-07 の `tools/fmt_props.py`（gate の項目 `fmt-props`）に置き換えた。どちらも記録として残す |
 | `parent/r1.onsa` | R-01 |
 | `parent/t2.onsa` | R-02 |
 | `parent/r2.onsa` | R-69 |

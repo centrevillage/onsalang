@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import builtin_names  # noqa: E402
 import check_spec_examples as cse  # noqa: E402
 import diag_codes  # noqa: E402
+import fmt_props  # noqa: E402
 import fuzz  # noqa: E402
 import gap_marks  # noqa: E402
 import gate  # noqa: E402
@@ -442,7 +443,7 @@ class PendingList(TempRepo):
         self.assertOneError(entry("gate", "c-headers/x"), "`c-headers` is not a gate item that may be listed")
 
     def test_gate_items_that_cannot_be_listed(self):
-        # the real items that keep the gate complete (or only show something) may not be listed
+        # the real items keep the gate complete (or only show something): only the pendable ones may be listed
         for step in gate_steps.STEPS:
             if step.pendable and not step.info:
                 continue
@@ -450,6 +451,9 @@ class PendingList(TempRepo):
                 self.repo.write("tests/pending.toml", entry("gate", step.name))
                 entries, errors = pending.load(self.repo.pending)
                 errors += pending.validate(entries, pending.load_docs(self.repo.root), self.repo.root)
+                if step.pendable and not step.info:
+                    self.assertEqual(errors, [])
+                    continue
                 self.assertEqual(len(errors), 1, errors)
                 self.assertIn("may be listed", errors[0])
 
@@ -704,6 +708,7 @@ class RealSteps(unittest.TestCase):
         required = (
             "fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden",
             "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files", "fuzz",
+            "fmt-props",
         )  # fmt: skip
         for r in required + ("spec-coverage",):
             self.assertIn(r, names)
@@ -712,8 +717,10 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["spec-coverage"].info)
         self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
-        # only the C checks (W1-06) may be listed
-        self.assertEqual(gate_steps.pendable(), self.c_items())
+        self.assertFalse(by_name["fmt-props"].pendable)
+        # the only items that may be listed: the C checks (W1-06), and the fmt properties
+        # that wait for W3-11 (R-70) and W3-01 (R-86)
+        self.assertEqual(gate_steps.pendable(), self.c_items() + ["fmt-comments", "fmt-cst"])
         for n in names:
             self.assertRegex(n, pending.TARGET_FORMS["gate"])
             self.assertNotIn("/", n)
@@ -1628,6 +1635,238 @@ class Fuzz(TempRepo):
         self.repo.write("tests/fuzz/a.onsa", "X")
         paths = [p for p, _ in fuzz.seeds(self.repo.root)]
         self.assertEqual(paths, ["tests/spec/ops/groups.onsa"])
+
+
+FAKE_FMT = r"""
+import re, sys
+args = sys.argv[1:]
+def norm(t):
+    lines = [re.sub(r" +([)\],:])", r"\1", re.sub(r"([(\[]) +", r"\1", re.sub(r" +", " ", l.strip())))
+             for l in t.split("\n")]
+    if "KEEP_INDENT" in t:
+        lines = [l.rstrip() for l in t.split("\n")]
+    if "DROP" in t:
+        lines = [l for l in lines if "drop" not in l]
+    if "LOSE_COMMENT" in t:
+        lines = [re.sub(r" *// lose.*", "", l) for l in lines]
+    if "LOSE_DOC" in t:
+        lines = [l for l in lines if not l.startswith("///")]
+    return "\n".join(l for l in lines if l).strip("\n") + "\n"
+def code(t):
+    return re.findall(r"\w+|[^\s\w]", re.sub(r"//[^\n]*", "", t))
+def read(p):
+    return open(p, encoding="utf-8").read()
+if args[0] == "fmt":
+    path = args[-1]
+    t = read(path)
+    if "PANIC" in t:
+        sys.stderr.write("onsa: internal error: boom\n  = at crates/onsa_syntax/src/fmt.rs:1:1\n")
+        sys.exit(101)
+    if "REJECT" in t and re.search(r"[ ]$", t, re.M):
+        sys.stderr.write(path + ":1:1: error[E0002]: no\n")
+        sys.exit(2)
+    if args[1] == "--check":
+        sys.exit(0 if norm(t) == t else 1)
+    open(path, "w", encoding="utf-8").write(norm(t) + (" " if "NOT_IDEMPOTENT" in t else ""))
+elif args[0] == "diff":
+    a, b = (read(p) for p in args[-2:])
+    sys.exit(0 if code(a) == code(b) else 1)
+elif args[0] == "dump":
+    t = read(args[-1])
+    sys.stdout.write(t.strip() if "CST_BAD" in t else t)
+"""
+
+
+class FmtProps(TempRepo):
+    SOURCE = (
+        "pub fn f(x: I32, ys: [I32; 2]) -> I32 { // head\n"
+        "  let a = g(x, ys[0]) + -x // tail\n"
+        "  let s = saw~(a, 1)\n"
+        "  buf.push!(x)\n"
+        "  let y = x + prev~(^y)\n"
+        "  if !done {\n"
+        "    \"a // not a comment, (x) [y]\"\n"
+        "  } else {\n"
+        "    'c'\n"
+        "  }\n"
+        "\n"
+        "  return x *% 2\n"
+        "}\n"
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.fake = self.repo.write("fake_onsa.py", FAKE_FMT)
+        self.argv = [sys.executable, "-B", str(self.fake)]
+
+    def go(self, prop="core", per_kind=3, cases=None, minimize=False):
+        """Run the item over `tests/spec/a.onsa` (or `cases`: [(path, mode, parser_markers)])."""
+        cases = cases or [("tests/spec/a.onsa", "check", False)]
+        listed = [{"path": p, "kind": "file", "mode": m, "files": [{"path": p, "parser_markers": s}]}
+                  for p, m, s in cases]
+        cmd = (sys.executable, "-B", "-c", f"import json; print(json.dumps({listed!r}))")
+        lines = []
+        code = fmt_props.run(self.repo.root, self.argv, prop, per_kind, "t", 2, cmd, out=lines.append,
+                             minimize=minimize)
+        return code, "\n".join(lines)
+
+    def gaps(self, text):
+        """[(token, gap before the next token: none / space / newline, next token)] of the code tokens."""
+        toks = [t for t in fmt_props.tokenize(text) if t.kind == "code"]
+        out = []
+        for a, b in zip(toks, toks[1:]):
+            gap = text[a.end:b.start]
+            gap = re.sub(r"//[^\n]*", "", gap)
+            out.append((a.text, "newline" if "\n" in gap else "space" if gap else "none", b.text))
+        return out
+
+    def test_tokenize(self):
+        toks = fmt_props.tokenize('let s = "a // b" // c\nx->y..=z \'"\' +%')
+        self.assertEqual(
+            [(t.kind, t.text) for t in toks],
+            [("code", "let"), ("code", "s"), ("code", "="), ("code", '"a // b"'), ("comment", "// c"), ("nl", "\n"),
+             ("code", "x"), ("code", "->"), ("code", "y"), ("code", "..="), ("code", "z"), ("code", "'\"'"),
+             ("code", "+%")],
+        )
+
+    def test_perturbations_keep_the_places_where_whitespace_means_something(self):
+        # C-118: no space before a postfix `(` / `[`, around `~` `!` `^` and the prefix `-`; no newline
+        # removed, none added before `{` / `else`, nor before an attached `(` / `[`
+        before = self.gaps(self.SOURCE)
+        comments = [t.text for t in fmt_props.tokenize(self.SOURCE) if t.kind == "comment"]
+        for label, kind, p in fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 20, "t")[1:]:
+            with self.subTest(label=label):
+                after = self.gaps(p)
+                self.assertEqual([(a, b) for a, _, b in after], [(a, b) for a, _, b in before])
+                for (a, g0, b), (_, g1, _) in zip(before, after):
+                    if g0 == "newline":
+                        self.assertEqual(g1, "newline", (a, b))
+                    if g1 == "newline" and g0 != "newline":
+                        self.assertIn(kind, ("break", "continue", "mixed"))
+                        self.assertNotIn(b, ("{", "else", "with"))
+                        if b in ("(", "["):
+                            self.assertIn(a, ("(", "[", ","))
+                        self.assertTrue(a in ("(", "[", ",", "=") or a in fmt_props.CONTINUING or b == ".", (a, b))
+                    if g0 == "none" and g1 == "space":
+                        self.assertTrue(a in ("(", "[", ",") or b in (")", "]", ",", ":"), (a, b))
+                self.assertNotIn("\t", p)
+                # the string, the character and the comments are untouched (no space after a comment)
+                self.assertIn('"a // not a comment, (x) [y]"', p)
+                kept = [t.text for t in fmt_props.tokenize(p) if t.kind == "comment" and "fmtprop" not in t.text]
+                self.assertEqual(kept, comments)
+
+    def test_inputs_are_the_same_for_the_same_tree(self):
+        a = fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 2, "1")
+        self.assertEqual(a, fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 2, "1"))
+        self.assertNotEqual(a, fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 2, "2"))
+        self.assertEqual({k for _, k, _ in a[1:]}, set(fmt_props.KINDS))
+
+    def test_strip(self):
+        text = "a  // fmtprop-1\n  // fmtprop-2\nb // keep\n"
+        self.assertEqual(fmt_props.strip_markers(text), "a\nb // keep\n")
+        self.assertEqual(fmt_props.strip_comments("a // x\n// y\n\nb\n"), "a\n\nb\n")
+        self.assertEqual(fmt_props.comment_texts("/// d\n//! m\n//// p\na // c\n"), (["//// p", "// c"], ["/// d", "//! m"]))
+        self.assertEqual(fmt_props.unperturb("f(a,\n   b)  // c\n\n.g()\nx =\n 1\n"), "f(a, b).g()\nx = 1\n")
+
+    def test_item_heads(self):
+        text = "@repr(c)\npub struct P {\n  x: I32,\n}\n@inline pub fn f() {\n  let x = 1\n}\nconst K: Bool =\n  true\n"
+        self.assertEqual(fmt_props.item_heads(text), [("struct", "P"), ("fn", "f"), ("const", "K")])
+
+    def test_comment_problems(self):
+        before = "fn f() -> I32 { // a\n  // b\n  return 1_0 // c\n}\n"
+        # fmt's rewrites (return, the spelling of a number, the alignment) move no comment
+        self.assertEqual(fmt_props.comment_problems(before, "fn f() -> I32 { // a\n  // b\n  10 // c\n}\n"), [])
+        moved = fmt_props.comment_problems(before, "fn f() -> I32 {\n  // a\n  // b\n  10\n} // c\n")
+        self.assertEqual(len(moved), 2, moved)
+        self.assertIn("`// a`: was at a line end, now on its own line", moved[0])
+        self.assertIn("`// c`: should be at the end of line 4 `10`, is at the end of line 5 `}`", moved[1])
+        # the same last tokens on another line: moved (the place counts, not the tokens)
+        self.assertTrue(fmt_props.comment_problems("fn f() {\n  g(x) // c\n  h(y)\n}\n", "fn f() {\n  g(x)\n  h(y) // c\n}\n"))
+        self.assertTrue(fmt_props.comment_problems("fn f() {\n  a\n  // c\n}\n", "fn f() {\n  // c\n  a\n}\n"))
+        # a return in an arm (S-68) and a redundant parenthesis are rewrites: not moves
+        arm = "fn f(x: I32) -> I32 {\n  match x {\n    1 => return 2, // c\n    _ => 3,\n  }\n}\n"
+        self.assertEqual(fmt_props.comment_problems(arm, arm.replace("return ", "")), [])
+        paren = "fn f() {\n  if (a) { // c\n    b\n  }\n}\n"
+        self.assertEqual(fmt_props.comment_problems(paren, paren.replace("(a)", "a")), [])
+        # an empty body that fmt joins keeps its comment at the end of the joined line
+        joined = fmt_props.comment_problems("fn f() {\n  for i in r {\n  } // c\n}\n", "fn f() {\n  for i in r {} // c\n}\n")
+        self.assertEqual(joined, [])
+
+    def test_run(self):
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  let x = g(a, b) // c\n  x\n}\n")
+        code, text = self.go()
+        self.assertEqual(code, 0, text)
+        self.assertIn("no failure", text)
+        code, text = self.go("cst")
+        self.assertEqual(code, 0, text)
+        for marker, failure in (
+            ("let x = g(a, b) // DROP\n  drop(x)", "FAIL ast: tests/spec/a.onsa [source]"),  # not the same program
+            ("let KEEP_INDENT = g(a, b)", "FAIL convergence: tests/spec/a.onsa [space#"),  # no normal form
+            ("let x = g(a, b) // REJECT", "FAIL rejected: tests/spec/a.onsa ["),  # a perturbed input refused
+            ("let x = g(a, b) // NOT_IDEMPOTENT", "FAIL idempotence: tests/spec/a.onsa [source]"),
+            ("let x = g(a, b) // lose LOSE_COMMENT", "FAIL comment-text: tests/spec/a.onsa [source]: comment: 1 lost"),
+            ("/// d LOSE_DOC\n  let x = 1", "FAIL docs: tests/spec/a.onsa [source]: doc comment: 1 lost"),
+        ):
+            with self.subTest(marker=marker):
+                self.repo.write("tests/spec/a.onsa", f"fn f() {{\n  {marker}\n  x\n}}\n")
+                code, text = self.go()
+                self.assertEqual(code, 1, text)
+                self.assertIn(failure, text)
+        self.assertFalse((self.repo.root / "tests" / "spec" / "a.onsa").read_text().count("fmtprop"))
+
+    def test_internal_and_cst_failures(self):
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  PANIC\n}\n")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL internal: tests/spec/a.onsa [source]: fmt: internal|crates/onsa_syntax/src/fmt.rs|boom", text)
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  CST_BAD\n}\n")
+        code, text = self.go("cst")
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL cst: tests/spec/a.onsa [source]: the output is not the source", text)
+
+    def test_minimize(self):
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  let a = 1\n  PANIC\n  let b = 2\n}\n")
+        code, text = self.go(per_kind=0, minimize=True)
+        self.assertEqual(code, 1, text)
+        saved = next((self.repo.root / "target" / "fmt_props" / "fail" / "core").glob("*.onsa"))
+        self.assertEqual(saved.read_text(), "PANIC")
+        # a refused input shrinks while the input without the perturbation is still read
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  let a = 1\n  REJECT\n  let b = 2\n}\n")
+        code, text = self.go(per_kind=1, minimize=True)
+        self.assertEqual(code, 1, text)
+        small = [p.read_text() for p in (self.repo.root / "target" / "fmt_props" / "fail" / "core").glob("*.onsa")]
+        self.assertTrue(small and all("REJECT" in s and len(s) < 20 for s in small), small)
+
+    def test_which_sources_may_be_unread(self):
+        refused = "fn f() {\n  REJECT x \n}\n"
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  x\n}\n")
+        self.repo.write("tests/spec/b.onsa", refused)
+        # a negative example of a syntax code, a fragment of mode none, a pending case: skipped
+        for mode, syntax, listed in (("check", True, False), ("none", False, False), ("check", False, True)):
+            with self.subTest(mode=mode, syntax=syntax, listed=listed):
+                self.repo.write("tests/pending.toml", entry("test-case", "tests/spec/b.onsa") if listed else "")
+                code, text = self.go(cases=[("tests/spec/a.onsa", "check", False), ("tests/spec/b.onsa", mode, syntax)])
+                self.assertEqual(code, 0, text)
+                self.assertIn("1 that fmt may not read, skipped", text)
+        # any other refusal fails
+        self.repo.write("tests/pending.toml", entry("test-case", "tests/spec/b.onsa::t"))
+        code, text = self.go(cases=[("tests/spec/a.onsa", "check", False), ("tests/spec/b.onsa", "check", False)])
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL unread: tests/spec/b.onsa [source]", text)
+        # nothing ran: a failure
+        self.repo.write("tests/pending.toml", "")
+        code, text = self.go(cases=[("tests/spec/b.onsa", "none", False)])
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL no source ran", text)
+
+    def test_std_and_examples_are_sources(self):
+        self.repo.write("std/core/m.onsa", "fn f() {}\n")
+        self.repo.write("examples/e/x.onsa", "fn g() {}\n")
+        self.repo.write("examples/e/onsa.toml", "")
+        self.repo.write("examples/e/target/out.onsa", "built")
+        cmd = (sys.executable, "-B", "-c", "print('[]')")
+        paths = [s.path for s in fmt_props.sources(self.repo.root, cmd)]
+        self.assertEqual(paths, ["std/core/m.onsa", "examples/e/x.onsa"])
 
 
 if __name__ == "__main__":

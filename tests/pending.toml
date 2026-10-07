@@ -1079,3 +1079,19 @@ target = "c-x86/tests/pipeline/if_compare.onsa[host]"
 reasons = ["R-142"]
 until = "W2-09"
 note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"
+
+# --- W1-07: fmt の性質テスト（gate の fmt の項目）の実装待ち（2026-10-07）
+
+[[pending]]
+kind = "gate"
+target = "fmt-comments"
+reasons = ["R-70"]
+until = "W3-11"
+note = "fmt がコメントを同じ要素の行に残さない（行末から単独の行へ、並びの中から閉じ括弧の後や本体へ）。移動に伴い、ブロックの先頭の空行が残り、無かった空行が入る"
+
+[[pending]]
+kind = "gate"
+target = "fmt-cst"
+reasons = ["R-86"]
+until = "W3-01"
+note = "CST が無い（onsa dump --cst が無い）。CST の往復（ソースと 1 バイトも違わない）は W3-01 で通す。W3-01 で dump --cst を作るか、この項目の引数を改める"

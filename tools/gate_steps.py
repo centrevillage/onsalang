@@ -3,8 +3,10 @@
 To add an item, add one `Step`. An item may be listed in `tests/pending.toml`
 (kind `gate`) only if it says `pendable=True`: the items that keep the gate
 complete (formatting, lints, tests, the fuzzing, the spec examples, the list
-itself, the static checks of W1-02, the self-tests) are never pending. Later works add
-checks that wait for a later decision as pendable items.
+itself, the static checks of W1-02, the self-tests, the fmt properties of W1-07)
+are never pending. Later works add checks that wait for a later decision as
+pendable items (the C checks of W1-06; the comment places and the CST round
+trip of fmt, W1-07).
 
 A pendable item may also apply the list case by case: the entries
 `<item>/<case>` are the item's own to apply (the C checks, `onsa_tests::ccheck`);
@@ -58,6 +60,13 @@ STEPS = [
     Step("c-x86", (*C_CHECK, "c-x86"), pendable=True),
     Step("c-header", (*C_CHECK, "c-header"), pendable=True),
     Step("c-header-strict", (*C_CHECK, "c-header-strict"), pendable=True),
+    # The properties of `onsa fmt` on perturbed case sources (Q-03, W1-07): the
+    # same program, idempotence, the normal form of the code.
+    Step("fmt-props", (*PY, str(TOOLS / "fmt_props.py"))),
+    # Comments stay on the line of their element (R-70); listed until W3-11.
+    Step("fmt-comments", (*PY, str(TOOLS / "fmt_props.py"), "--property", "comments"), pendable=True),
+    # The CST gives the source back byte for byte (R-86); listed until W3-01.
+    Step("fmt-cst", (*PY, str(TOOLS / "fmt_props.py"), "--property", "cst"), pendable=True),
 ]
 
 

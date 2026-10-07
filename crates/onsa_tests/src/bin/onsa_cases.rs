@@ -17,8 +17,13 @@
 //! ```text
 //! [{"path": "tests/spec/fn/mean.onsa", "kind": "file", "name": "mean",
 //!   "mode": "check", "spec": ["§6.1"], "golden": [], "golden_graph": [],
-//!   "conformance": false, "targets": []}, ...]
+//!   "conformance": false, "targets": [],
+//!   "files": [{"path": "tests/spec/fn/mean.onsa", "parser_markers": false}]}, ...]
 //! ```
+//!
+//! `files` are the source files of the case (from the repository root), and
+//! whether the markers of each hold a syntax code (`onsa_tests::run::parser_code`;
+//! a file whose markers cannot be read says false; the runner reports it).
 //!
 //! `--run` prints the form of `onsa_tests::run::runs_json`. Exits 1 when a
 //! case or a std module cannot be read (`--run` reports those in its
@@ -102,6 +107,26 @@ fn main() -> ExitCode {
     }
 }
 
+/// The source files of a case, from the repository root, with whether their
+/// markers hold a syntax code.
+fn files(c: &onsa_tests::case::Case, s: &onsa_tests::case::Setup) -> serde_json::Value {
+    let files: Vec<serde_json::Value> = s
+        .input
+        .files
+        .iter()
+        .map(|f| {
+            let path = match c.kind {
+                onsa_tests::case::CaseKind::File => c.path.clone(),
+                onsa_tests::case::CaseKind::Package => format!("{}/{}", c.path, f.path),
+            };
+            let parser_markers = onsa_tests::parse_markers(&f.text)
+                .is_ok_and(|m| m.expected.iter().any(|e| onsa_tests::run::parser_code(e.code)));
+            serde_json::json!({"path": path, "parser_markers": parser_markers})
+        })
+        .collect();
+    serde_json::json!(files)
+}
+
 fn print(v: &serde_json::Value) {
     println!("{}", serde_json::to_string_pretty(v).expect("serializes"));
 }
@@ -126,6 +151,7 @@ fn cases(root: &std::path::Path) -> ExitCode {
                 "golden_graph": s.test.golden_graph,
                 "conformance": s.test.conformance,
                 "targets": s.targets(),
+                "files": files(&c, s),
             })),
             Err(e) => {
                 eprintln!("{}: {e}", c.path);

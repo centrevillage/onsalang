@@ -540,13 +540,19 @@ fn compare(
     ok
 }
 
-/// The parser alone reports exactly the markers of the syntax codes (`E00xx`,
-/// `E0320`) of the file; the rest belong to later stages (M1, T1-11).
+/// The syntax codes: the codes the parser alone reports (`E00xx`, `E0320`); the
+/// rest belong to later stages (M1, T1-11). `onsa_cases` lists, per file, whether
+/// its markers hold one (`tools/fmt_props.py` reads it, W1-07).
+pub fn parser_code(c: Code) -> bool {
+    c.as_str().starts_with("E00") || c == Code::E0320
+}
+
+/// The parser alone reports exactly the markers of the syntax codes
+/// ([`parser_code`]) of the file.
 fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers: &[(FileId, Expected)]) {
     let f = sources.file(file);
-    let syntax = |c: Code| c.as_str().starts_with("E00") || c == Code::E0320;
     let mut expected: Vec<(u32, Code)> =
-        markers.iter().filter(|(mf, m)| *mf == file && syntax(m.code)).map(|(_, m)| (m.line, m.code)).collect();
+        markers.iter().filter(|(mf, m)| *mf == file && parser_code(m.code)).map(|(_, m)| (m.line, m.code)).collect();
     let parsed = onsa_syntax::parse(file, f.text());
     let mut actual: Vec<(u32, Code)> =
         parsed.diagnostics.iter().map(|d| (f.line_col(d.span.start).line, d.code)).collect();

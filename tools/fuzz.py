@@ -248,14 +248,21 @@ def mutate(rng, text, corpus, tokens, deep=False):
     return s
 
 
+def seeded_random(*parts):
+    """A generator seeded with `parts` (str): the same parts give the same
+    numbers on every machine (the mutants here, the perturbations of
+    `tools/fmt_props.py`)."""
+    digest = hashlib.sha256(encode("|".join(parts))).digest()
+    return random.Random(int.from_bytes(digest[:8], "big"))
+
+
 def mutants(seed_files, per_seed, version=VERSION, deep=False):
     """[(seed path, index, text)], the same for the same seeds."""
     corpus = [t for _, t in seed_files]
     tokens = sorted({t for text in corpus for t in TOKEN.findall(text)}) or ["x"]
     out = []
     for path, text in seed_files:
-        digest = hashlib.sha256(encode(f"{version}|{path}|{text}")).digest()
-        rng = random.Random(int.from_bytes(digest[:8], "big"))
+        rng = seeded_random(version, path, text)
         for k in range(per_seed):
             out.append((path, k, mutate(rng, text, corpus, tokens, deep)))
     return out
@@ -264,6 +271,15 @@ def mutants(seed_files, per_seed, version=VERSION, deep=False):
 def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS):
     """A smaller input with the same crash class: lines, then characters
     (ddmin), within `budget` runs and `seconds` (a hang takes `TIMEOUT` a run)."""
+    return ddmin(
+        text, lambda candidate: any(c.signature == signature for c in runner.crashes(candidate, commands)),
+        budget, seconds,
+    )
+
+
+def ddmin(text, still_fails, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS):
+    """A smaller input for which `still_fails(candidate)` holds: lines, then
+    characters, within `budget` calls and `seconds` (also `tools/fmt_props.py`)."""
     runs = [0]
     deadline = time.monotonic() + seconds
 
@@ -271,7 +287,7 @@ def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, s
         if runs[0] >= budget or time.monotonic() > deadline:
             return False
         runs[0] += 1
-        return any(c.signature == signature for c in runner.crashes(candidate, commands))
+        return still_fails(candidate)
 
     def reduce(parts, join):
         n = 2
@@ -314,7 +330,7 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
     """The gate item. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fuzz"
-    runner = Runner(argv, work / "work")
+    runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
     failures = []
     start = time.time()
     deadline = time.monotonic() + time_budget
@@ -378,7 +394,7 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
         written.append((dest_dir / name, target, c, seed, k))
         if dest_dir != root / FUZZ_DIR:
             failures.append(f"a new crash class: {c.command}: {signature} (seed {seed}, mutant {k})")
-    shutil.rmtree(work / "work", ignore_errors=True)
+    shutil.rmtree(runner.work, ignore_errors=True)
 
     out(
         f"fuzz: {len(inputs)} inputs from {len(seed_files)} seeds ({per_seed} each), {crashing} crashing, "
