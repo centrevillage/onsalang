@@ -202,6 +202,10 @@ impl Infer {
         }
         let (ta, tb) = (types.get(a).clone(), types.get(b).clone());
         match (&ta, &tb) {
+            // A variable unified with the error type takes it, so that nothing
+            // waits for it to be decided (a literal's type, S-59, R-71).
+            (Ty::Var(i), Ty::Error) => self.bind(types, *i, b, cause),
+            (Ty::Error, Ty::Var(j)) => self.bind(types, *j, a, cause),
             (Ty::Error, _) | (_, Ty::Error) => Ok(()),
             (Ty::Var(i), _) => self.bind(types, *i, b, cause),
             (_, Ty::Var(j)) => self.bind(types, *j, a, cause),

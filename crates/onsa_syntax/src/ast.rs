@@ -162,6 +162,34 @@ pub struct Item {
     pub attrs: Vec<Attr>,
     pub vis: Vis,
     pub kind: ItemKind,
+    /// The unit of the item has a diagnostic of the syntax stage (spec §18.1,
+    /// S-59, R-71): the later stages do not check its body, and its uses get
+    /// no diagnostic for what could not be read. `None` for the items whose
+    /// unit has none. Set by [`crate::parse`] (an item the parser stopped in,
+    /// and an item whose unit has a syntax diagnostic of another kind).
+    pub failed: Option<Failed>,
+}
+
+/// How far a failed item was read ([`Item::failed`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Failed {
+    /// The item was read whole, and its unit has a diagnostic of the syntax
+    /// stage elsewhere (an E0010 in its body, a `;` after it, S-254): its body
+    /// is not checked, and its uses are checked against it whole (S-260 does
+    /// not apply: nothing of it is unknown).
+    Unit,
+    /// The heading was read whole, and the rest was cut (the name, the generics, the parameters,
+    /// the return type and the effects of a function or flow; the type of a
+    /// `const`; the name and generics of a struct, enum or trait; the heading
+    /// of an `impl`): its uses are checked against it. The body, the value,
+    /// the fields, the variants or the members were cut; what was not read is
+    /// [`ExprKind::Error`], and the fields and variants that were not read are
+    /// absent (their uses get no diagnostic, S-260).
+    Body,
+    /// The heading was cut: only the name is known. A function or flow is
+    /// an error to its users (a call of it is not checked against it); a
+    /// type that was not read is [`TypeKind::Error`].
+    Heading,
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +422,9 @@ pub enum TypeKind {
     /// (`Ring[F32, TABLE_SIZE]`) parses as a `Path` type and is resolved by
     /// the expected parameter kind.
     ConstArg(ExprId),
+    /// A type a syntax error left unread, in a failed item ([`Item::failed`]).
+    /// The later stages read it as the error type and report nothing for it.
+    Error,
 }
 
 // ---------------------------------------------------------------- statements
@@ -605,6 +636,11 @@ pub enum ExprKind {
     Path(Path),
     /// `_` (typed hole, §18.1)
     Hole,
+    /// A body, a value or (from M7, T7-1) a statement a syntax error left
+    /// unread, in a failed item ([`Item::failed`]). The later stages do not
+    /// check the body of a failed item, so they never meet it; a statement the
+    /// recovery of M7 skips will be an expression statement of it.
+    Error,
     /// `(e)`
     Paren(ExprId),
     /// `(a, b)`

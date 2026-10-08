@@ -602,6 +602,7 @@ impl<'a> Fmt<'a> {
     fn ty(&mut self, id: TypeId) {
         let t = self.ast.ty(id);
         match &t.kind {
+            TypeKind::Error => onsa_diag::internal::bug(Some(t.span), "fmt met a type a syntax error left unread"),
             TypeKind::Path { path, args } => {
                 self.path(path);
                 if !args.is_empty() {
@@ -901,6 +902,7 @@ impl<'a> Fmt<'a> {
             },
             ExprKind::Path(p) => self.path(p),
             ExprKind::Hole => self.push("_"),
+            ExprKind::Error => onsa_diag::internal::bug(Some(e.span), "fmt met a body a syntax error left unread"),
             ExprKind::Paren(inner) => {
                 self.push("(");
                 self.expr(*inner);

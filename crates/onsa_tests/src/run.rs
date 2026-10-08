@@ -705,16 +705,17 @@ fn syntax_only(c: Code) -> bool {
     c.stages() == [onsa_diag::Stage::Syntax]
 }
 
-/// The diagnostics of the parser alone (before the later stages and the
-/// reduction per unit, S-56) against the markers of the file: each one
+/// The diagnostics of the parser alone (before the later stages; one per
+/// unit, as `check` chooses, `onsa_driver::reduce`) against the markers of the
+/// file: each one
 /// matches a marker of its line and code, and every marker of a code only
 /// the syntax stage reports is one of them. Markers of a code that later
 /// stages report too (E0020, E0408, ...) are compared by the check only.
 fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers: &[(FileId, Expected)]) {
     let f = sources.file(file);
     let parsed = onsa_syntax::parse(file, f.text());
-    let mut actual: Vec<(u32, Code)> =
-        parsed.diagnostics.iter().map(|d| (f.line_col(d.span.start).line, d.code)).collect();
+    let reduced = onsa_driver::reduce::per_unit([(file, &parsed.units)], parsed.diagnostics.clone()).diagnostics;
+    let mut actual: Vec<(u32, Code)> = reduced.iter().map(|d| (f.line_col(d.span.start).line, d.code)).collect();
     let mut expected: Vec<(u32, Code)> =
         markers.iter().filter(|(mf, _)| *mf == file).map(|(_, m)| (m.line, m.code)).collect();
     expected.sort();
@@ -744,7 +745,7 @@ fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers:
             f.name(),
             show(&unmatched),
             show(&missing),
-            onsa_diag::to_text(sources, &parsed.diagnostics).replace('\n', "\n  ")
+            onsa_diag::to_text(sources, &reduced).replace('\n', "\n  ")
         )));
     }
 }

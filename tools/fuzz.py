@@ -30,9 +30,11 @@ they are (a `\r` stays, invalid UTF-8 too).
 
 `--deep` adds mutants that nest brackets or blocks thousands deep: the
 nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
-the stack runs out. They are off in the gate (W3-14 ran them once: no
-signal; `fmt --check` timed out on thousands of lexer diagnostics, which
-W3-03 reduces, S-214). A signal is not saved under `tests/` (with `--save`
+the stack runs out. The gate runs them only at a stage end (the item
+`fuzz-deep`, W3-03): they are heavy on the machine. (W3-14 ran them once: no
+signal; `fmt --check` timed out on the 20002 lexer diagnostics of a string
+nesting `{ ` 20000 deep, one per unit since W3-03, S-214;
+`tests/fuzz/8858ce8c.onsa`.) A signal is not saved under `tests/` (with `--save`
 it goes to `target/fuzz/new/`): a stack overflow aborts the process, and
 the system writes a crash report for each one.
 

@@ -740,6 +740,17 @@ class GateWiring(TempRepo):
         self.assertEqual(code, 2)
         self.assertFalse((self.repo.root / "argv-a").exists())
 
+    def test_stage_end_only(self):
+        steps = [fake("a"), fake("deep", 0, stage_end_only=True)]
+        code, out = self.run_main([], steps)
+        self.assertEqual(code, 0)
+        self.assertFalse((self.repo.root / "argv-deep").exists())
+        self.assertIn("runs only with --stage-end", out)
+        self.run_main(["--work", "W3-07"], steps)
+        self.assertFalse((self.repo.root / "argv-deep").exists())
+        self.run_main(["--stage-end", "W3"], steps)
+        self.assertTrue((self.repo.root / "argv-deep").exists())
+
     def test_quick(self):
         steps = [fake("a"), fake("slow", 1, slow=True)]
         code, out = self.run_main(["--quick"], steps)
@@ -889,8 +900,10 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
         self.assertFalse(by_name["fmt-props"].pendable)
         # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
-        slow = ["fuzz", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
+        slow = ["fuzz", "fuzz-deep", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
+        # the deep fuzzing runs only at a stage end (W3-03)
+        self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])
         # the only items that may be listed: the test vectors against the interpreter and the C
         # (W2-02, by case only), the C checks (W1-06), and the fmt property that waits for W3-11 (R-70)
         self.assertEqual(

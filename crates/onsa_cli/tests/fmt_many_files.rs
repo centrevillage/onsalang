@@ -5,7 +5,13 @@
 //! file is processed, only those without a syntax diagnostic are written, and
 //! every diagnostic is reported. A file `fmt` refuses for a syntax diagnostic
 //! reports it, even when a diagnostic of a later stage (E0320) comes first in
-//! the same item.
+//! the same item (S-214).
+//!
+//! W3-03/t: the diagnostics of `fmt` go to the standard output (`docs/onsa-tools.md` §4, S-232),
+//! not to the standard error as they did. Two tests that checked the standard error now check
+//! the standard output; `the_syntax_diagnostic_that_stops_fmt_is_reported` waits for W3-03 as a
+//! whole (`#[ignore]`), and the stream check of the first test is a test of its own. More cases of
+//! the report are in `syntax_units.rs`.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -62,7 +68,24 @@ fn a_syntax_error_in_the_middle_does_not_stop_the_other_files() {
     assert_eq!(read(&a), "fn a() -> I32 {\n  1\n}\n", "the file before the error is formatted");
     assert_eq!(read(&c), "fn c() -> I32 {\n  3\n}\n", "the file after the error is formatted");
     assert_eq!(read(&b), BAD, "the file with the error is not written");
-    assert!(String::from_utf8_lossy(&out.stderr).contains("E0020"), "its diagnostic is reported: {out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("E0020")
+            || String::from_utf8_lossy(&out.stderr).contains("E0020"),
+        "its diagnostic is reported: {out:?}"
+    );
+}
+
+#[test]
+fn the_diagnostic_of_the_file_with_the_error_is_on_the_standard_output() {
+    // S-232: a diagnostic goes to the standard output, in `fmt` too (it went to the standard error).
+    let d = Dir::new("middle_stream");
+    let a = d.file("a.onsa", UGLY_A);
+    let b = d.file("b.onsa", BAD);
+    let out = onsa(&["fmt", &a, &b]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("b.onsa") && stdout.contains("error[E0020]"), "on the standard output: {out:?}");
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("E0020"), "not on the standard error: {out:?}");
 }
 
 #[test]
@@ -92,14 +115,17 @@ fn an_unreadable_file_does_not_stop_the_others() {
 
 #[test]
 fn the_syntax_diagnostic_that_stops_fmt_is_reported() {
-    // E0010 stops `fmt`; the reduction per item keeps the earlier E0320 for `check`.
+    // E0010 stops `fmt`, and is the diagnostic of the unit even though the E0320 comes earlier in
+    // the text (S-214: the earlier stage wins). The report is on the standard output (S-232).
     let d = Dir::new("hidden");
     let src = "fn f(badName: I32) -> I32 {\n  1 + 2 * 3\n}\n";
     let p = d.file("hide.onsa", src);
     let out = onsa(&["fmt", &p]);
     assert_eq!(read(&p), src);
-    let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("E0010"), "the diagnostic that stops fmt: {err}");
+    let report = String::from_utf8_lossy(&out.stdout);
+    assert!(report.contains("E0010"), "the diagnostic that stops fmt, on the standard output: {out:?}");
+    assert!(!report.contains("E0320"), "the heading's naming error is not reported for a unit with a syntax error");
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("E0010"), "not on the standard error: {out:?}");
     let other = d.file("other.onsa", src);
     let diff = onsa(&["diff", "--ast", &p, &other]);
     assert_eq!(code(&diff), 2, "{diff:?}");

@@ -369,3 +369,58 @@ fn notes_of_a_late_requirement_name_only_their_own_reason() {
     );
     assert!(receiver[0].ends_with("here"), "{receiver:?}");
 }
+
+/// What a syntax error left unread gets no diagnostic where it is used (§18.1, S-59, R-71,
+/// S-260): the uses of a failed item are checked against what was read only.
+#[test]
+fn the_uses_of_failed_items_get_no_diagnostic() {
+    // The error type: no literal waits for it, `as` does not check it (F-3).
+    assert_eq!(
+        codes(
+            "struct P { x: F32, y: , z: F32 }\nfn f1(p: P) -> F32 { p.y * 2.0 }\nfn f2(p: P) -> I32 { p.y as I32 }\n\
+             const K: F32 = )\nfn f3() -> Bool { K > 0.5 }\nfn bad(x: F32) -> { x }\nfn f4(x: F32) -> F32 { bad(x) + 1.0 }\n"
+        ),
+        []
+    );
+    // A variant that was not read, called (F-2), and a type whose generics were cut (F-6).
+    assert_eq!(codes("enum E { A, B(I32), C(, D(I32) }\nfn f(e: E) -> I32 {\n  let x = E.D(1)\n  1\n}\n"), []);
+    assert_eq!(
+        codes(
+            "struct S[T: ] { a: T }\nenum F[T: ] { A(T), B }\nfn f1(s: S[F32]) -> F32 { s.a }\nfn f2() -> F[F32] { F.A(1.0) }\n"
+        ),
+        []
+    );
+    // The namespace of a flow whose heading was cut (F-4).
+    assert_eq!(
+        codes(
+            "pub flow g(x: ) -> Sig[F32] {\n  x\n}\ntest \"t\" {\n  let z = g.init\n  let c = g.Config {}\n}\nfn h(s: g.State) -> I32 { 1 }\n"
+        ),
+        []
+    );
+}
+
+/// An item read whole whose unit has another syntax error (a `;` after it, S-254) is known
+/// whole: its uses are checked (S-260 does not apply, F-7).
+#[test]
+fn an_item_read_whole_is_checked_where_it_is_used() {
+    assert_eq!(
+        codes(
+            "struct S { a: I32 };\nenum E { A, B };\nfn f1(s: S) -> I32 { s.zzz }\nfn f2() -> S { S { } }\n\
+             fn f3(e: E) -> I32 {\n  match e {\n    E.A => 1,\n  }\n}\n"
+        ),
+        [Code::E0410, Code::E0413, Code::E0501]
+    );
+}
+
+/// The error type matches any type in any position, and the rest of a type around it is
+/// still checked (W3-03/b N-1): a length, a tuple against `Bool`, an array against `I32`.
+#[test]
+fn the_type_around_the_error_type_is_checked() {
+    let src = "struct P { x: F32, y: , z: F32 }\nfn u(p: P) -> I32 {\n  let a: [I32; 3] = [p.y, p.y]\n  1\n}\n\
+               fn v(p: P) -> I32 {\n  let a: Bool = (p.y, 1)\n  1\n}\nfn w(p: P) -> I32 {\n  let a: I32 = [p.y]\n  1\n}\n";
+    let a = check(src);
+    let got: Vec<(Code, &str)> = a.diagnostics.iter().map(|d| (d.code, d.message.as_str())).collect();
+    assert_eq!(got.len(), 3, "{got:?}");
+    assert!(got.iter().all(|(c, _)| *c == Code::E0401), "{got:?}");
+    assert_eq!(got[0].1, "expected `[I32; 3]`, found `[_; 2]`");
+}

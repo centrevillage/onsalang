@@ -110,6 +110,10 @@ pub struct Analysis {
     pub const_values: HashMap<DefId, ConstValue>,
     /// Typed and rated flow bodies (T3-1), the input of flow lowering (T3-5).
     pub flows: HashMap<DefId, FlowInfo>,
+    /// The defs of failed items (`onsa_syntax::ast::Item::failed`, S-59):
+    /// their bodies are not checked, and a use of what was not read gets no
+    /// diagnostic (R-71, S-260).
+    pub failed: HashMap<DefId, onsa_syntax::ast::Failed>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -157,6 +161,35 @@ impl Analysis {
     /// Render a type with user types by their short names.
     pub fn display_type(&self, ty: TyId) -> String {
         self.types.display(ty, &|d| self.def(d).name.clone(), &|i| format!("<{i}>"))
+    }
+
+    /// The def is of an item whose heading a syntax error cut
+    /// ([`onsa_syntax::ast::Failed::Heading`]): a function of it is an error
+    /// to its users (a call of it is not checked against it).
+    pub fn heading_failed(&self, id: DefId) -> bool {
+        self.failed.get(&id) == Some(&onsa_syntax::ast::Failed::Heading)
+    }
+
+    /// The def is of an item a syntax error cut before its end
+    /// ([`onsa_syntax::ast::Failed::Body`] or `Heading`): some of its fields,
+    /// variants or value were not read, and their uses get no diagnostic
+    /// (S-260). An item read whole whose unit has another syntax error
+    /// (`Failed::Unit`) is not one.
+    pub fn partly_read(&self, id: DefId) -> bool {
+        matches!(self.failed.get(&id), Some(onsa_syntax::ast::Failed::Body | onsa_syntax::ast::Failed::Heading))
+    }
+
+    /// The longest prefix of `path` that names a def names a def a syntax
+    /// error cut (S-260): the rest of the path is not known, and a path that
+    /// does not resolve gets no diagnostic (R-71).
+    pub fn through_partly_read(&self, from: ModId, path: &onsa_syntax::ast::Path) -> bool {
+        for k in (1..path.segments.len()).rev() {
+            let prefix = onsa_syntax::ast::Path { segments: path.segments[..k].to_vec(), span: path.span };
+            if let Ok(Entity::Def(d)) = self.resolve_path(from, &prefix) {
+                return self.partly_read(d);
+            }
+        }
+        false
     }
 
     pub fn kind_of(&self, ty: TyId) -> Option<Kind> {

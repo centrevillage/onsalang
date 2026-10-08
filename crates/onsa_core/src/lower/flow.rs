@@ -534,6 +534,8 @@ impl ReadWalk<'_> {
 
 fn children(expr: &ast::Expr) -> Vec<ExprId> {
     match &expr.kind {
+        // Lowering runs only on a package without diagnostics (S-59).
+        AK::Error => onsa_diag::internal::bug(Some(expr.span), "lowering met a body a syntax error left unread"),
         AK::Paren(x) | AK::Move(x) | AK::Try(x) | AK::Unsafe(x) => vec![*x],
         AK::Cast { expr, .. } | AK::Unary { expr, .. } => vec![*expr],
         AK::Tuple(xs) | AK::Array(xs) => xs.clone(),

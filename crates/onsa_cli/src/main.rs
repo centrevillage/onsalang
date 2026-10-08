@@ -262,12 +262,25 @@ fn print_diagnostics(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::
 
 /// `onsa fmt [--check] <path...>`: every file is processed, also after one
 /// that cannot be read or has a syntax diagnostic; only the files without one
-/// are written (`docs/onsa-tools.md` §3.1). Then exit 2 if a file could not be taken, else 1
-/// for `--check` with a file to rewrite, else 0. An internal error stops at once.
+/// are written (`docs/onsa-tools.md` §3.1). On the standard output: `would
+/// reformat <path>` for each file `--check` would change, in the order of the
+/// files, then the syntax diagnostics of every file at once, in the order of
+/// the diagnostics (§4, S-232). The exit code is 2 if a file could not be
+/// taken (a syntax diagnostic, a read or a write), else 1 for `--check` with
+/// a file to rewrite, else 0. An internal error stops at once.
+// SPEC-GAP(S-261): with several files, 2 wins over 1, and the list of the
+// files to reformat is a result of the command, on the standard output.
 fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
     let mut changed = false;
     let mut failed = false;
+    let mut sources = SourceMap::default();
+    let mut report = Vec::new();
+    // A file named twice is processed once (its diagnostics are not repeated).
+    let mut seen = std::collections::HashSet::new();
     for path in paths {
+        if !seen.insert(std::fs::canonicalize(path).unwrap_or_else(|_| path.clone())) {
+            continue;
+        }
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
             Err(e) => {
@@ -276,15 +289,11 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
                 continue;
             }
         };
-        let mut sources = SourceMap::default();
         let file = sources.add(onsa_driver::slash_path(path), text.clone());
         let out = match onsa_driver::format_file(&sources, file) {
             Ok(onsa_driver::Formatted::Text(out)) => out,
             Ok(onsa_driver::Formatted::Syntax(diagnostics)) => {
-                match render(Form::Text, &sources, &diagnostics) {
-                    Ok(text) => eprint!("{text}"),
-                    Err(o) => return o,
-                }
+                report.extend(diagnostics);
                 failed = true;
                 continue;
             }
@@ -301,13 +310,14 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
             failed = true;
         }
     }
-    if failed {
+    let then = if failed {
         Outcome::CannotWork
     } else if check && changed {
         Outcome::Problems
     } else {
         Outcome::Ok
-    }
+    };
+    if report.is_empty() { then } else { print_diagnostics(Form::Text, &sources, &report, then) }
 }
 
 fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
@@ -350,6 +360,12 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
             Ok(t) => t,
             Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
         };
+        // The same file on both sides is one file (its diagnostics once).
+        let canonical = |p: &PathBuf| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone());
+        if files.len() == 1 && canonical(old_path) == canonical(new_path) {
+            files.push(files[0]);
+            continue;
+        }
         files.push(sources.add(onsa_driver::slash_path(path), text));
     }
     let diffs = match onsa_driver::diff_ast(&sources, files[0], files[1]) {

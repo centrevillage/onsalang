@@ -232,10 +232,12 @@ fn an_error_leaves_incomplete_nodes_and_an_error_node() {
     let err = find(&p.cst, NodeKind::Error)[0];
     let s = p.cst.span(err);
     assert_eq!(&src[s.start as usize..s.end as usize], "= 1\n  x\n}");
-    // Only `b` is in the AST (W3-01 D10: no AST for an item that failed).
-    assert_eq!(p.ast.root.len(), 1);
-    assert_eq!(p.ast.items.len(), 1);
-    assert_eq!(p.ast.exprs.len(), 1);
+    // `a` stays in the AST by its name, its body unread (S-59, R-71), and `b`.
+    assert_eq!(p.ast.root.len(), 2);
+    assert_eq!(p.ast.items.len(), 2);
+    assert_eq!(p.ast.item(p.ast.root[0]).failed, Some(crate::ast::Failed::Body));
+    assert!(matches!(p.ast.exprs[0].kind, crate::ast::ExprKind::Error));
+    assert_eq!(p.ast.exprs.len(), 2);
 }
 
 #[test]
@@ -368,17 +370,20 @@ const DOCS_AFTER_ERRORS: &[(&str, &[&[&str]])] = &[
         &[&["/// doc for next"], &["/// stray doc"]],
     ),
     ("struct A { x:\n}\n/// a\n\n// c\n/// b\nconst X: U32 = 1\n", &[&["/// a", "/// b"]]),
-    ("impl A {\n  fn f(\n}\n/// d\n@x\nfn g() {}\n", &[&["/// d"]]),
+    // The member `f` is a unit of its own (S-59): `impl A` parses, without doc comments.
+    ("impl A {\n  fn f(\n}\n/// d\n@x\nfn g() {}\n", &[&[], &["/// d"]]),
 ];
 
 #[test]
 fn doc_comments_after_a_failed_item_belong_to_the_next_item() {
     for (src, want) in DOCS_AFTER_ERRORS {
         let p = parse(src);
+        // The items that parsed (a failed item stays in the AST too, S-59).
         let got: Vec<Vec<&str>> = p
             .ast
             .root
             .iter()
+            .filter(|&&i| p.ast.item(i).failed.is_none())
             .map(|&i| p.ast.item(i).doc.iter().map(|d| &src[d.start as usize..d.end as usize]).collect())
             .collect();
         let want: Vec<Vec<&str>> = want.iter().map(|d| d.to_vec()).collect();

@@ -19,8 +19,9 @@
 /// The stage of the compiler that reports a diagnostic (S-78, plan D-04).
 ///
 /// `onsa fmt` and `onsa diff --ast` stop on the diagnostics of [`Stage::Syntax`]
-/// (spec §18.2, S-120, S-214). The order of the check stages and where the flow
-/// checks sit in it are W4-06's.
+/// (spec §18.2, S-120, S-214). The order of the check stages within a unit is
+/// [`Stage::CHECK_ORDER`] (spec §18.1); the declaration order of this enum
+/// decides nothing. Not running the stages that depend on a failed one is W4-06's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Stage {
     /// The lexer, the parser, and the operator groups checked on its tree.
@@ -53,6 +54,23 @@ impl Stage {
         Stage::Build,
         Stage::Manifest,
     ];
+
+    /// The dependency order of the check stages (spec §18.1: syntax, names,
+    /// types, argument modes and moves, rt and effects): in a unit, the
+    /// diagnostic of the earliest stage is the one reported, wherever it is
+    /// (S-214). The one list of that order (`onsa_driver::reduce`). Lowering,
+    /// the build and the manifest are not check stages: their diagnostics are
+    /// not chosen per unit (§18.1).
+    // SPEC-GAP(S-267): §18.1 does not place the flow checks in the order; they
+    // sit after the types and before the modes, as in this enum, until S-267.
+    pub const CHECK_ORDER: &'static [Stage] =
+        &[Stage::Syntax, Stage::Names, Stage::Types, Stage::Flow, Stage::Modes, Stage::Effects];
+
+    /// The place of a check stage in [`Stage::CHECK_ORDER`]; `None` for the
+    /// stages that are not checks.
+    pub fn check_rank(self) -> Option<usize> {
+        Stage::CHECK_ORDER.iter().position(|&s| s == self)
+    }
 
     /// Lower-case name (`syntax`), for the lists of `onsa_cases --codes`.
     pub fn name(self) -> &'static str {

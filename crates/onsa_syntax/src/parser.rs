@@ -14,10 +14,12 @@
 //! event `Token`; the tokens it skips (comments, insignificant newlines,
 //! whitespace) are placed in the tree by [`crate::cst::build`].
 //!
-//! Errors: at most one diagnostic per top-level item is kept (P-01, §18.1).
-//! Parse errors are fatal for the item; the parser closes the nodes it was in
-//! as incomplete, puts the tokens up to the next item start in an `Error`
-//! node, and continues.
+//! Errors: the parser reports every diagnostic; the choice of one per unit is
+//! the driver's (`onsa_driver::reduce`, spec §18.1). A parse error is fatal for
+//! its unit (a top-level item, or a member of an `impl`, `trait`, `effect`,
+//! `handler` or `extern`, S-59): the parser closes the nodes it was in as
+//! incomplete, puts the tokens up to the end of the unit in an `Error` node
+//! ([`Parser::skip_unit`]), and continues with the next unit.
 
 use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Span, Stage};
 
@@ -34,11 +36,12 @@ pub struct Parsed {
     pub cst: Cst,
     /// From each AST node to the CST node it was made from.
     pub map: AstMap,
+    /// Every diagnostic of the lexer, the parser and the checks on its tree
+    /// (operator groups, naming), not reduced: the choice of one per unit is
+    /// `onsa_driver::reduce`'s (spec §18.1, S-59).
     pub diagnostics: Vec<Diagnostic>,
-    /// Every diagnostic of the lexer and the parser (stage `Syntax`), taken
-    /// before the diagnostics were reduced to one per item (S-56): what
-    /// [`Parsed::syntax_errors`] reads, and what `fmt` and `diff --ast` report.
-    pub syntax: Vec<Diagnostic>,
+    /// The units of the diagnostics of the file (spec §18.1, [`crate::units`]).
+    pub units: crate::units::Units,
     /// The levels (spec §2.5) of each top-level item the parser finished, in
     /// the order of the file (`onsa dump --levels`; the fmt properties check
     /// that `fmt` makes no item deeper, `tools/fmt_props.py`).
@@ -46,26 +49,13 @@ pub struct Parsed {
 }
 
 impl Parsed {
-    /// The lexer or the parser reported a diagnostic: `onsa fmt` does not
-    /// rewrite the file and `onsa diff --ast` does not compare it, since the
-    /// parser may have left an item out of the AST, whatever the code (R-146).
-    /// The one place of that decision (`fmt`, `diff --ast`, the test tools).
-    // SPEC-GAP(S-214): §18.2 and S-120 say "the E00xx of the lexer and the
-    // parser"; the parser also fails items with E0408. Until S-214 is decided,
-    // every diagnostic of the syntax stage stops them (the conservative reading).
+    /// The file has a diagnostic of the syntax stage, whatever its code
+    /// (spec §18.2, S-214: E00xx, the reserved word's E0200, E0408, E0006):
+    /// `onsa fmt` does not rewrite it and `onsa diff --ast` does not compare
+    /// it. The one place of that decision (`fmt`, `diff --ast`, the test
+    /// tools); what they report is `onsa_driver::reduce::syntax_report`.
     pub fn syntax_errors(&self) -> bool {
-        !self.syntax.is_empty()
-    }
-
-    /// What `fmt` and `diff --ast` report for a file they do not take: every
-    /// diagnostic of the syntax stage (the reduction per item would hide some
-    /// behind a diagnostic of a later stage, §18.2 "report them all"), then
-    /// the reduced diagnostics of the later stages (E0320), by position.
-    pub fn syntax_report(&self) -> Vec<Diagnostic> {
-        let mut out = self.syntax.clone();
-        out.extend(self.diagnostics.iter().filter(|d| d.stage != onsa_diag::Stage::Syntax).cloned());
-        out.sort_by_key(|d| (d.span.file, d.span.start, d.code));
-        out
+        self.diagnostics.iter().any(|d| d.stage == Stage::Syntax)
     }
 }
 
@@ -74,8 +64,6 @@ pub(crate) struct ParseOutput {
     pub tokens: Vec<Token>,
     pub events: Vec<Event>,
     pub diagnostics: Vec<Diagnostic>,
-    /// Spans of every top-level item attempt (successful or not), for P-01.
-    pub item_ranges: Vec<Span>,
     /// The levels of each top-level item that parsed ([`Parsed::levels`]).
     pub levels: Vec<u32>,
     /// The height of the tree in levels (spec §2.5), as the parser counted
@@ -187,16 +175,24 @@ pub(crate) struct Parser<'a> {
     nl: Vec<bool>,
     /// S-08: no struct literal in the head expression of `if` / `while` / ...
     no_struct_lit: bool,
-    /// Brace depth of the cursor (for recovery).
-    depth: i32,
+    /// The `(`, `[` and `{` the cursor is inside, innermost last: their
+    /// indices in `tokens` (the recovery, [`Parser::skip_unit`]).
+    braces: Vec<usize>,
+    /// For each `{` of `tokens`, whether a `}` closes it when the brackets of
+    /// the file are paired in order (the recovery of a list of members whose
+    /// `{` is never closed, [`Parser::parse_item_body`]).
+    brace_closed: Vec<bool>,
+    /// The token where the recovery reported an unclosed bracket: the units
+    /// around that end there too and do not report it again.
+    reported_stop: Option<usize>,
     events: Vec<Event>,
     /// The open nodes, innermost last.
     open: Vec<Open>,
     /// The height of the tree, once the root closed.
     height: u32,
     diagnostics: Vec<Diagnostic>,
-    /// Spans of every top-level item attempt (successful or not), for P-01.
-    item_ranges: Vec<Span>,
+    /// How many of `diagnostics` are the lexer's (the parser's follow).
+    lexed: usize,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
 }
@@ -204,7 +200,20 @@ pub(crate) struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub(crate) fn new(file: FileId, text: &'a str, all: Vec<Token>, diagnostics: Vec<Diagnostic>) -> Parser<'a> {
         let full: Vec<u32> = (0..all.len() as u32).filter(|&i| all[i as usize].kind != TokenKind::Whitespace).collect();
-        let tokens = full.iter().map(|&i| all[i as usize]).collect();
+        let tokens: Vec<Token> = full.iter().map(|&i| all[i as usize]).collect();
+        let mut brace_closed = vec![false; tokens.len()];
+        let mut open = Vec::new();
+        for (k, t) in tokens.iter().enumerate() {
+            match t.kind {
+                TokenKind::LBrace => open.push(k),
+                TokenKind::RBrace => {
+                    if let Some(o) = open.pop() {
+                        brace_closed[o] = true;
+                    }
+                }
+                _ => {}
+            }
+        }
         Parser {
             file,
             text,
@@ -215,12 +224,14 @@ impl<'a> Parser<'a> {
             last_end: 0,
             nl: vec![true],
             no_struct_lit: false,
-            depth: 0,
+            braces: Vec::new(),
+            brace_closed,
+            reported_stop: None,
             events: Vec::new(),
             open: Vec::new(),
             height: 0,
+            lexed: diagnostics.len(),
             diagnostics,
-            item_ranges: Vec::new(),
             levels: Vec::new(),
         }
     }
@@ -499,10 +510,10 @@ impl<'a> Parser<'a> {
             self.pos = i + 1;
             self.last_end = t.span.end;
             self.events.push(Event::Token(self.full[i]));
-            match t.kind {
-                TokenKind::LBrace => self.depth += 1,
-                TokenKind::RBrace => self.depth -= 1,
-                _ => {}
+            if is_opening(t.kind) {
+                self.braces.push(i);
+            } else if is_closing(t.kind) {
+                close_bracket(&mut self.braces, &self.tokens, t.kind, 0);
             }
         } else {
             self.pos = i;
@@ -616,7 +627,6 @@ impl<'a> Parser<'a> {
             let m = self.start_item(doc);
             match self.parse_item(ItemCtx::Top, m) {
                 Ok(item) => {
-                    self.item_ranges.push(item.span);
                     self.levels.push(item.height);
                     // Terminator: newline, `;` (E0020), or end of file.
                     match self.peek_kind() {
@@ -632,15 +642,17 @@ impl<'a> Parser<'a> {
                             );
                         }
                         _ => {
+                            // The tokens after the item on its line are of its
+                            // unit (`crate::units`, S-274).
                             let _ = self.unexpected("newline after the declaration");
-                            self.recover(start);
+                            self.skip_unit(start, 0, false, true);
                         }
                     }
                 }
                 Err(ParseError) => {
                     // The item node stays open: the skipped tokens go inside it.
                     self.close_open(depth + 1);
-                    self.recover(start);
+                    self.skip_unit(start, 0, false, false);
                     self.close_open(depth);
                 }
             }
@@ -650,31 +662,102 @@ impl<'a> Parser<'a> {
             tokens: self.all,
             events: self.events,
             diagnostics: self.diagnostics,
-            item_ranges: self.item_ranges,
             levels: self.levels,
             height: self.height,
         }
     }
 
-    /// Skip to the next item start at the beginning of a line, outside braces
-    /// (T1-7). The skipped tokens form an `Error` node. Records the skipped
-    /// range for P-01 grouping.
-    fn recover(&mut self, item_start: u32) {
-        let mut depth = self.depth;
+    /// Skip to the end of the unit that starts at `unit_start` after a syntax
+    /// error in it (spec §18.1, S-59): the skipped tokens form an `Error` node
+    /// in the open node. `base` is the number of brackets open around the
+    /// unit (0 for a top-level item, the list's for a `member`). The unit ends:
+    ///
+    /// - at a token that may start an item at the beginning of a line, once
+    ///   the brackets of the unit are closed;
+    /// - for a member, before the `}` that closes the list;
+    /// - at a keyword that starts an item at the beginning of a line indented
+    ///   as much as or less than every line that opened a bracket of the unit
+    ///   still open: that bracket is never closed, and the innermost of them
+    ///   gets the E0002 (§18.1 for `{`; `(` and `[` alike, S-280). The
+    ///   indentation is read only here, in a file with an error. At the end
+    ///   of the file, likewise when the reading stopped there (`expected `}`,
+    ///   found end of file`); when another error stopped it earlier (E0006,
+    ///   ...), the open brackets follow from that error and get no diagnostic
+    ///   (2026-10-08, the parent's decision).
+    ///
+    /// With `line`, the unit is a finished item and the tokens after it on
+    /// its line (S-274): the skip also ends at the end of that line, outside
+    /// the brackets it opens.
+    // SPEC-GAP(S-280): an unclosed `(` or `[` ends at an item keyword indented
+    // as its line, as a `{` does (§18.1 names the `{` only).
+    fn skip_unit(&mut self, unit_start: u32, base: usize, member: bool, line: bool) {
+        let mut braces = self.braces.clone();
         let from = self.peek_index();
         let mut i = from;
-        while self.tokens[i].kind != TokenKind::Eof {
+        let mut unclosed = None;
+        loop {
             let t = self.tokens[i];
-            let line_start = i == 0 || self.tokens[i - 1].kind == TokenKind::Newline;
-            if i > self.pos && depth <= 0 && line_start && is_item_start(t.kind) {
+            if t.kind == TokenKind::Eof {
+                // A `{` of the unit still open at the end of the file: it is the
+                // error when the reading stopped at the end (below).
+                if braces.len() > base {
+                    unclosed = braces.last().copied();
+                }
                 break;
             }
-            match t.kind {
-                TokenKind::LBrace => depth += 1,
-                TokenKind::RBrace => depth -= 1,
-                _ => {}
+            if line && t.kind == TokenKind::Newline && braces.len() <= base {
+                break;
+            }
+            let line_start = i == 0 || self.tokens[i - 1].kind == TokenKind::Newline;
+            if t.span.start > unit_start && line_start && is_item_start(t.kind) {
+                if braces.len() <= base {
+                    break;
+                }
+                let indent = self.indent(t.span.start);
+                if braces[base..].iter().all(|&b| self.indent(self.tokens[b].span.start) >= indent) {
+                    unclosed = braces.last().copied();
+                    break;
+                }
+            }
+            if is_opening(t.kind) {
+                braces.push(i);
+            } else if is_closing(t.kind) && !close_bracket(&mut braces, &self.tokens, t.kind, base) {
+                // A `}` that closes no `{` of the member closes the list.
+                if t.kind == TokenKind::RBrace && member {
+                    break;
+                }
             }
             i += 1;
+        }
+        // An error found at the token where the unit ends (the next item, the
+        // end of the file) is this unit's, though that token is not.
+        let stop = self.tokens[i].span.start;
+        let mut first_at_stop = self.diagnostics.len();
+        while first_at_stop > self.lexed && self.diagnostics[first_at_stop - 1].span.start >= stop {
+            first_at_stop -= 1;
+        }
+        let at_end = self.tokens[i].kind == TokenKind::Eof;
+        if at_end && first_at_stop == self.diagnostics.len() {
+            unclosed = None;
+        }
+        if let Some(b) = unclosed {
+            // It is the unclosed bracket: reported at the bracket, not at that
+            // token; once for all the units that end there.
+            self.diagnostics.truncate(first_at_stop);
+            if self.reported_stop != Some(i) {
+                self.reported_stop = Some(i);
+                self.unclosed_brace(b, unit_start);
+            }
+        } else if !at_end {
+            // It is reported where the unit stops (`fn f(` before the next
+            // `fn`), so that it is of the unit (`crate::units`).
+            // SPEC-GAP(S-276): the position of an error found at the token that
+            // starts the next item: the end of the unit, as an empty span.
+            let end = Span::new(self.file, self.last_end, self.last_end);
+            for d in &mut self.diagnostics[first_at_stop..] {
+                d.span = end;
+                d.found = None;
+            }
         }
         let first = (from..i).find(|&k| !self.tokens[k].kind.is_trivia());
         let last = (from..i).rev().find(|&k| !self.tokens[k].kind.is_trivia());
@@ -684,14 +767,66 @@ impl<'a> Parser<'a> {
                 self.events.push(Event::Token(self.full[k]));
             }
             self.complete(m, NodeKind::Error);
+            self.last_end = self.tokens[last].span.end.max(self.last_end);
         }
-        let end = if i > 0 { self.tokens[i - 1].span.end } else { item_start };
         self.pos = i;
-        self.last_end = end.max(self.last_end);
-        self.depth = 0;
-        self.nl.truncate(1);
+        self.braces.truncate(base);
+        if !member {
+            self.nl.truncate(1);
+        }
         self.no_struct_lit = false;
-        self.item_ranges.push(Span::new(self.file, item_start, end.max(item_start)));
+    }
+
+    /// The next token starts an item at the beginning of a line indented as
+    /// much as or less than the line of the `{` of the list of members open
+    /// around it (`base` brackets), and that `{` is never closed.
+    fn list_ends_unclosed(&self, base: usize) -> bool {
+        let i = self.peek_index();
+        let t = self.tokens[i];
+        let Some(&brace) = self.braces[..base].last() else { return false };
+        let line_start = i == 0 || self.tokens[i - 1].kind == TokenKind::Newline;
+        line_start
+            && is_item_start(t.kind)
+            && !self.brace_closed[brace]
+            && self.indent(t.span.start) <= self.indent(self.tokens[brace].span.start)
+    }
+
+    /// The number of blanks before the first token of the line of `at`.
+    fn indent(&self, at: u32) -> usize {
+        let line = self.text[..at as usize].rfind('\n').map_or(0, |i| i + 1);
+        self.text[line..].chars().take_while(|c| *c == ' ' || *c == '\t').count()
+    }
+
+    /// E0002 at the bracket (token `b`) that the unit starting at `unit_start`
+    /// never closes, with a note on the declaration it is in (§18.1).
+    fn unclosed_brace(&mut self, b: usize, unit_start: u32) {
+        let brace = self.tokens[b];
+        let first = self.tokens.partition_point(|t| t.span.start < unit_start);
+        let keyword = (first..b).find(|&k| DECLARATIONS.iter().any(|(kind, _, _)| *kind == self.tokens[k].kind));
+        // An `impl` and an `extern` block have no name of their own.
+        let named = keyword.filter(|&k| !matches!(self.tokens[k].kind, TokenKind::KwImpl | TokenKind::KwExtern));
+        let name = named.and_then(|k| (k + 1..b).find(|&n| self.tokens[n].kind == TokenKind::Ident));
+        let open = self.token_text(brace).to_string();
+        let close = match brace.kind {
+            TokenKind::LParen => ")",
+            TokenKind::LBracket => "]",
+            _ => "}",
+        };
+        let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, brace.span, format!("this `{open}` is never closed"))
+            .with_rule(format!("every `{open}` is closed by a `{close}`; one that is not ends at the next item on a line indented as much as or less than the line of the `{open}`, or at the end of the file (§18.1)"));
+        let place = if brace.kind == TokenKind::LBrace { "in the body of" } else { "in" };
+        match (keyword, name) {
+            (_, Some(n)) => {
+                let t = self.tokens[n];
+                d = d.with_note(t.span, format!("it is {place} `{}`", self.token_text(t)));
+            }
+            (Some(k), None) => {
+                let t = self.tokens[k];
+                d = d.with_note(t.span, format!("it is {place} this `{}`", self.token_text(t)));
+            }
+            (None, None) => {}
+        }
+        self.report(d);
     }
 
     // ------------------------------------------------------------ items
@@ -1229,6 +1364,7 @@ impl<'a> Parser<'a> {
     fn parse_item_body(&mut self, ctx: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::ItemList)?;
         self.expect(TokenKind::LBrace)?;
+        let base = self.braces.len();
         self.with_nl(true, |p| {
             loop {
                 let doc = p.collect_docs();
@@ -1238,8 +1374,29 @@ impl<'a> Parser<'a> {
                 if p.at(TokenKind::Eof) {
                     return Err(p.unexpected("`}`"));
                 }
+                // The `{` of the list is never closed, and an item starts on a
+                // line indented as much as or less than the line of the `{`:
+                // the list ends there, and the item is the next of the file
+                // (§18.1). The top-level recovery reports the `{`. A correct
+                // program closes every `{`, so its reading does not change.
+                if ctx != ItemCtx::InlineHandler && p.list_ends_unclosed(base) {
+                    return Err(ParseError);
+                }
+                let start = p.peek().span.start;
+                let depth = p.open.len();
                 let item = p.start_item(doc);
-                p.parse_item(ctx, item)?;
+                if let Err(e) = p.parse_item(ctx, item) {
+                    // A member is a unit of its own (spec §18.1, S-59): the
+                    // list goes on after it. The handler written inside an
+                    // expression is part of the unit around it.
+                    if ctx == ItemCtx::InlineHandler {
+                        return Err(e);
+                    }
+                    p.close_open(depth + 1);
+                    p.skip_unit(start, base, true, false);
+                    p.close_open(depth);
+                    continue;
+                }
                 match p.peek_kind() {
                     TokenKind::Newline | TokenKind::RBrace => {}
                     TokenKind::Semi => {
@@ -1252,7 +1409,13 @@ impl<'a> Parser<'a> {
                             "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
                         );
                     }
-                    _ => return Err(p.unexpected("newline or `}`")),
+                    _ if ctx == ItemCtx::InlineHandler => return Err(p.unexpected("newline or `}`")),
+                    _ => {
+                        // The tokens after the member on its line are of its
+                        // unit (`crate::units`, S-274).
+                        let _ = p.unexpected("newline or `}`");
+                        p.skip_unit(start, base, true, true);
+                    }
                 }
             }
             p.expect(TokenKind::RBrace)?;
@@ -2193,6 +2356,12 @@ impl<'a> Parser<'a> {
                 self.complete(arms, NodeKind::MatchArms);
                 return Ok(self.complete(m, NodeKind::MatchExpr));
             }
+            // `fn name` declares a function, which is written at the top level
+            // or in a list of members: the error is at the `fn`, so that the
+            // recovery may start the next unit there (an unclosed `{`, §18.1).
+            TokenKind::KwFn if self.peek2().kind == TokenKind::Ident => {
+                return Err(self.unexpected("an expression (a function is declared at the top level)"));
+            }
             TokenKind::KwFn => {
                 let m = self.start(NodeKind::ClosureExpr)?;
                 self.bump();
@@ -2636,29 +2805,38 @@ const DECLARATIONS: &[(TokenKind, DeclParser, &[ItemCtx])] = &[
     (TokenKind::KwTest, |p, c| p.parse_test(c), TOP),
 ];
 
+/// A bracket that opens: `(`, `[`, `{`.
+fn is_opening(kind: TokenKind) -> bool {
+    matches!(kind, TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace)
+}
+
+/// A bracket that closes: `)`, `]`, `}`.
+fn is_closing(kind: TokenKind) -> bool {
+    matches!(kind, TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace)
+}
+
+/// Close the innermost bracket of `open` (above `base`) that a closing
+/// bracket of `kind` matches, with the brackets opened inside it and left
+/// open (`f(a }` closes the `{` and the `(`). `false` when none matches.
+fn close_bracket(open: &mut Vec<usize>, tokens: &[Token], kind: TokenKind, base: usize) -> bool {
+    let opening = match kind {
+        TokenKind::RParen => TokenKind::LParen,
+        TokenKind::RBracket => TokenKind::LBracket,
+        _ => TokenKind::LBrace,
+    };
+    match open[base.min(open.len())..].iter().rposition(|&b| tokens[b].kind == opening) {
+        Some(k) => {
+            open.truncate(base + k);
+            true
+        }
+        None => false,
+    }
+}
+
 /// A token that starts an item: a declaration keyword, `pub`, an attribute, a doc comment.
 fn is_item_start(kind: TokenKind) -> bool {
     DECLARATIONS.iter().any(|(k, _, _)| *k == kind)
         || matches!(kind, TokenKind::KwPub | TokenKind::At | TokenKind::DocComment)
-}
-
-/// Keep only the earliest diagnostic of each top-level item (P-01). Diagnostics
-/// outside every item are grouped together as one "item".
-pub(crate) fn first_per_item(items: &[Span], mut diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
-    diagnostics.sort_by_key(|d| (d.span.start, d.span.end));
-    let mut seen: Vec<bool> = vec![false; items.len() + 1];
-    let mut out = Vec::new();
-    for d in diagnostics {
-        let slot = items
-            .iter()
-            .position(|s| s.start <= d.span.start && d.span.start < s.end.max(s.start + 1))
-            .unwrap_or(items.len());
-        if !seen[slot] {
-            seen[slot] = true;
-            out.push(d);
-        }
-    }
-    out
 }
 
 #[cfg(test)]
@@ -2944,14 +3122,14 @@ mod tests {
             (codes("fn f() {\n  let x = 1;\n}"), fixes("fn f() {\n  let x = 1;\n}")),
             (vec![Code::E0020], vec!["".to_string()])
         );
-        assert_eq!(fixes("fn f() {\n  std::math::exp(x)\n}"), vec![".".to_string()]);
+        assert_eq!(fixes("fn f() {\n  std::math::exp(x)\n}"), vec![".".to_string(), ".".to_string()]);
         assert_eq!(fixes("fn f(x: Vec<T>) { }"), vec!["[T]".to_string()]);
         assert_eq!(fixes("fn f() {\n  g(&mut x)\n}"), vec!["inout x".to_string()]);
         assert_eq!(fixes("fn f() {\n  g(&x)\n}"), vec!["x".to_string()]);
         assert_eq!(fixes("fn f() {\n  let mut x = 1\n}"), vec!["var".to_string()]);
         assert!(dump(&parse("fn f() {\n  let mut x = 1\n}").ast).contains("(var x = 1)"));
         assert_eq!(fixes("fn f() {\n  loop { }\n}"), vec!["while true".to_string()]);
-        assert_eq!(fixes("fn f(x: i32) -> usize { x }"), vec!["I32".to_string()]);
+        assert_eq!(fixes("fn f(x: i32) -> usize { x }"), vec!["I32".to_string(), "U32".to_string()]);
         assert_eq!(fixes("#[derive(PartialEq)]\nstruct A { }"), vec!["@derive(PartialEq)".to_string()]);
         assert_eq!(fixes("proc f(x: Sig[F32]) -> Sig[F32] { x }"), vec!["flow".to_string()]);
         assert_eq!(fixes("impl A {\n  fn f(mut self) { }\n}"), vec!["inout self".to_string()]);
@@ -2965,13 +3143,107 @@ mod tests {
         let src = "fn a() {\n  let = 1\n  let = 2\n}\nfn b() { 1 }\nfn c() {\n  )\n}\n";
         let p = parse(src);
         let lines: Vec<(Code, u32)> = p.diagnostics.iter().map(|d| (d.code, d.span.start)).collect();
+        // One parse error per unit: the parser stops at the first one of `a` (S-59).
         assert_eq!(p.diagnostics.len(), 2, "{lines:?}");
-        assert_eq!(p.ast.root.len(), 1); // only `b` survived
-        assert!(dump(&p.ast).starts_with("(fn b()"));
-        // An item with a lexer error and a parse error reports the earliest only.
+        // The failed items stay, by their name, with their body unread (R-71).
+        assert_eq!(
+            dump(&p.ast),
+            "(failed:body fn a()\n  <error>)\n(fn b()\n  (block\n    tail 1))\n(failed:body fn c()\n  <error>)\n"
+        );
+        // The diagnostics are not reduced here (the driver chooses one per unit).
         let p = parse("fn a() {\n  let s = \"abc\n  let = 1\n}");
-        assert_eq!(p.diagnostics.len(), 1);
         assert_eq!(p.diagnostics[0].code, Code::E0001);
+    }
+
+    #[test]
+    fn an_unclosed_brace_ends_at_an_item_keyword_indented_as_its_line() {
+        // §18.1: the E0002 is at the `{` that is never closed, with a note on the declaration;
+        // the error at the next item is that brace, and `g` is read.
+        let src = "fn f() -> I32 {\n  if c {\n    1\n  }\nfn g() {}\n";
+        let p = parse(src);
+        let ds: Vec<(Code, &str)> =
+            p.diagnostics.iter().map(|d| (d.code, &src[d.span.start as usize..d.span.end as usize])).collect();
+        assert_eq!(ds, [(Code::E0002, "{")]);
+        assert_eq!(p.diagnostics[0].span.start, 14);
+        let note = p.diagnostics[0].notes.iter().find(|n| n.span.is_some()).unwrap();
+        assert_eq!(note.message, "it is in the body of `f`");
+        assert!(dump(&p.ast).contains("(fn g()"));
+        // A line indented deeper than the `{` is not a place to end it.
+        let p = parse("fn f() -> I32 {\n  1 +\n    fn g() {}\n");
+        assert!(p.diagnostics.iter().all(|d| d.message != "this `{` is never closed"));
+        // In an `impl`, by the member.
+        let src = "impl P {\n  fn a(self) {\n    1\n\n  fn b(self) {}\n}\nfn c() {}\n";
+        let p = parse(src);
+        assert_eq!(p.diagnostics.len(), 1);
+        assert_eq!(&src[p.diagnostics[0].span.start as usize..][..1], "{");
+        assert_eq!(p.diagnostics[0].span.start, 22);
+        let d = dump(&p.ast);
+        assert!(d.contains("fn b(self)") && d.contains("(fn c()"), "{d}");
+    }
+
+    #[test]
+    fn an_unclosed_list_of_members_ends_at_an_item_keyword_indented_as_its_line() {
+        // The `{` of the `impl` is never closed: `after` is an item of the file (§18.1).
+        let src = "impl S {\n  fn m(self) -> I32 {\n    1\n  }\n\nfn after() -> I32 { 5 }\n";
+        let p = parse(src);
+        let ds: Vec<(Code, u32)> = p.diagnostics.iter().map(|d| (d.code, d.span.start)).collect();
+        assert_eq!(ds, [(Code::E0002, 7)]);
+        assert!(dump(&p.ast).contains("\n(fn after()"), "{}", dump(&p.ast));
+        // The member's `{` is not closed either: the innermost is reported, once.
+        let src = "impl S {\n  fn m(self) -> I32 {\n    1\n\nfn after() -> I32 { 5 }\n";
+        let p = parse(src);
+        let ds: Vec<(Code, u32)> = p.diagnostics.iter().map(|d| (d.code, d.span.start)).collect();
+        assert_eq!(ds, [(Code::E0002, 29)]);
+        assert!(dump(&p.ast).contains("\n(fn after()"), "{}", dump(&p.ast));
+        // A correct program whose members are not indented reads as before.
+        assert!(codes("impl S {\nfn m(self) -> I32 { 1 }\n}\n").is_empty());
+    }
+
+    #[test]
+    fn an_unclosed_parenthesis_ends_at_an_item_keyword_indented_as_its_line() {
+        // S-280: an item keyword indented deeper than the line of an open `(` is not the end.
+        let src = "pub flow v(\n  g: Sig[F32] oops,\n  @param(min: 1.0)\n  f0: Ctl[F32],\n) -> Sig[F32] {\n  g\n}\nfn after() -> I32 { 1 }\n";
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002]);
+        assert!(dump(&p.ast).contains("(fn after()"));
+        // One at the indentation of its line ends it, and the `(` is reported.
+        let src = "fn f(a: I32,\nfn g() {}\n";
+        let p = parse(src);
+        assert_eq!(p.diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["this `(` is never closed"]);
+        assert!(dump(&p.ast).contains("(fn g()"));
+    }
+
+    #[test]
+    fn an_unclosed_brace_at_the_end_of_the_file() {
+        // The reading stopped at the end of the file: the `{` of `f` is the error.
+        let src = "fn f() -> I32 {\n  if c {\n    1\n  }\n";
+        let p = parse(src);
+        assert_eq!(codes_of(&p), [Code::E0002]);
+        assert_eq!(p.diagnostics[0].span.start, 14);
+        // Another error stopped it earlier: the open `{` follow from it, no diagnostic.
+        let p = parse("fn f() -> I32 {\n  let = 1\n");
+        assert_eq!(
+            p.diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(),
+            ["expected a pattern, found `=`"]
+        );
+    }
+
+    #[test]
+    fn a_member_is_a_unit_of_the_recovery() {
+        // S-59: an error in a member does not stop the list.
+        let p = parse("impl P {\n  fn a(self) {\n    let = 1\n  }\n  fn b(self) {\n    let = 2\n  }\n}\n");
+        assert_eq!(codes_of(&p), [Code::E0002, Code::E0002]);
+        // `fn name` is not a closure: the error is at the `fn`, where the next unit starts.
+        let p = parse("fn f() {\n  let x = 1\nfn g() {}\n");
+        assert!(dump(&p.ast).contains("(fn g()"), "{}", dump(&p.ast));
+        // The tokens after an item on its line are its unit's (S-274); the next line is not.
+        let p = parse("fn a() {} ) ]\nfn b() {}\n");
+        assert!(dump(&p.ast).contains("(fn b()"));
+        assert_eq!(codes_of(&p), [Code::E0002]);
+    }
+
+    fn codes_of(p: &crate::Parsed) -> Vec<Code> {
+        p.diagnostics.iter().map(|d| d.code).collect()
     }
 
     #[test]

@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.3"]
+
+// The choice inside a unit follows the order of the stages, not the position (§18.1, S-214):
+// where the stages depend on each other, the error of the earlier stage is the one reported,
+// wherever it sits in the text. A unit with a syntax error does not report the naming error
+// (E0320) of its heading either.
+
+// The naming error of the heading (E0320) is not reported for a unit with a syntax error
+// (S-214), even though it comes first in the text.
+pub fn BadHeading(a: I32) -> I32 {
+  a + a % 2                     //~ E0010
+}
+
+// The same for a parameter name and for a name that the body binds before the error.
+pub fn bad_param(someValue: I32, otherValue: I32) -> I32 {
+  let heading_ok = someValue + otherValue
+  heading_ok + heading_ok % 2   //~ E0010
+}
+
+// E0010 is a syntax-stage error: the E0320 of the heading (earlier in the text) and the E0302
+// of the body (later) are not reported, only the one syntax error (S-214).
+pub fn BadAndMissing(a: I32) -> I32 {
+  let x = missing_name
+  a + a % 2                     //~ E0010
+}
+
+// A name error hides a type error of the same unit (names come before types), even when the
+// type error comes first in the text.
+pub fn names_before_types() -> I32 {
+  let x: Bool = 1
+  missing_name                  //~ E0302
+}
+
+// The names of the heading (a parameter's type) belong to the unit too: with a syntax error in the
+// body, the E0302 of the heading is not reported, and without one, a name error of the heading
+// hides a type error of the body.
+pub fn missing_type_with_syntax_error(a: MissingType) -> I32 {
+  let = 1                       //~ E0002
+  1
+}
+
+pub fn missing_type_with_type_error(a: MissingType) -> I32 {   //~ E0302
+  let x: Bool = 1
+  1
+}

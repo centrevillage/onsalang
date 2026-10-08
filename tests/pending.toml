@@ -651,13 +651,6 @@ note = "main の効果行を provides と照合しない（仕様 §15.3、E0610
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/modes_bang_impl_members.onsa"
-reasons = ["S-59", "R-71"]
-until = "W3-03"
-note = "同じ impl の 2 つ目以降のメンバの E0713 / E0714 が出ない（診断の単位は impl の各メンバ、S-59）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/modes_second_class_fields.onsa"
 reasons = ["R-135"]
 until = "W4-05"
@@ -695,10 +688,10 @@ note = "check / fmt --check で内部エラー: onsa_syntax/src/lexer.rs: byte i
 
 [[pending]]
 kind = "fuzz-input"
-target = "tests/fuzz/73f70bf0.onsa"
+target = "tests/fuzz/0d975ef7.onsa"
 reasons = ["R-01"]
 until = "W3-04"
-note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: 文字の途中のオフセット（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く。W3-02 から fmt --check では line_col が文字の途中のオフセットを内部エラーとして報告する）"
+note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: 文字の途中のオフセット（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く。W3-02 から fmt --check では line_col が文字の途中のオフセットを内部エラーとして報告する）。W3-03 で、元の入力 73f70bf0.onsa（`{` が閉じていない）は閉じていない `{` の E0002 が単位の診断に選ばれて落ちなくなったので、`{` を閉じた入力に替えた（73f70bf0.onsa は回帰の入力として残す）"
 
 # --- W1-08 の意味のテスト（fn の世界）のうち、まだ通らないもの（2026-10-07）
 
@@ -1458,13 +1451,6 @@ target = "tests/spec/negative/names_flow_decl_order.onsa"
 reasons = ["S-102"]
 until = "W3-10"
 note = "E0305 の否定例 6 件（S-176）。at を今の実装が読めない"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/try_mixed_impl.onsa"
-reasons = ["S-59", "R-71"]
-until = "W3-03"
-note = "impl の 2 つ目以降のメンバの E0414 が出ない（診断の単位はメンバ）"
 
 [[pending]]
 kind = "test-case"
@@ -2328,27 +2314,6 @@ note = "negative/nesting_stmt.onsa の助けの宣言 apply（関数値の呼び
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/nesting_units.onsa"
-reasons = ["S-59", "R-71"]
-until = "W3-03"
-note = "impl のメソッドの E0006 が impl 全体を止め、次のメソッドの E0006 と E0302 が出ない。impl の中はメンバの単位で回復する（S-59、W3-03）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/nesting_boundary_units.onsa"
-reasons = ["S-59", "R-71"]
-until = "W3-03"
-note = "impl の二つ目のメソッドの E0006 が出ない。一つ目の E0006 が impl 全体を止める。メンバの単位の回復は W3-03（S-59）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/nesting_pkg"
-reasons = ["S-59", "R-71"]
-until = "W3-03"
-note = "E0006 の関数が AST から消え、他のモジュールの use と呼び出しに E0302 が出る。失敗した項目のシグネチャを残すのは W3-03（S-59）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/nesting_flow.onsa"
 reasons = ["S-102"]
 until = "W3-10"
@@ -2416,6 +2381,22 @@ target = "tests/spec/nesting/boundary_patterns_group.onsa"
 reasons = ["R-43"]
 until = "W3-07"
 note = "パターンの丸括弧 254 個の match（256 段）。`(e)` はグループ化（§2.4）だが、今は 1 要素のタプルのパターンとして読み E0401"
+
+# --- W3-03/t: 診断の単位と回復（2026-10-08）。W3-03/i が通したもの以外
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/unit_failed_visible_flow.onsa"
+reasons = ["R-71", "S-102"]
+until = "W3-10"
+note = "失敗した flow をインスタンスにする flow に偽の診断が出ない（R-71）。flow の at を今の実装が読めない（W3-09 / W3-10）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/unit_stage_order.onsa"
+reasons = ["S-214", "S-59"]
+until = "W4-06"
+note = "本体の名前の誤り E0302 が、前の行の型の誤り E0401 を隠す（names_before_types）。単位の中の選び方は段の順になった（W3-03）が、本体の検査は名前と型を一度に行い、最初の誤り（E0401）で止まるので E0302 が出ない。名前の段を型の前に置くのは W4-06"
 
 # --- S-257: 範囲の書き方 a..<b / a..=b（決定の反映、2026-10-08）
 

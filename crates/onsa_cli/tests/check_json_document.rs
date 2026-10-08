@@ -631,25 +631,9 @@ fn inside_a_file_the_order_is_by_position_and_not_by_stage_or_code() {
     assert_sorted(ds);
 }
 
-#[test]
-fn two_diagnostics_of_units_on_the_same_line_come_in_column_order() {
-    // Two units cannot both be one-line declarations, but the extra tokens after a declaration
-    // are a unit of their own (§18.1): the unresolved name in the first unit is at column 21 of
-    // line 1, and a second diagnostic of line 1 (the second `pub fn` has no newline before it) is
-    // to its right. The code of the first one (E0302) is greater than the code a syntax error
-    // would have (E0002), so an order by code would put the other first.
-    let d = Dir::bare("same_line");
-    d.write("one.onsa", "pub fn f() -> I32 { zzz } pub fn g() -> I32 { yyy }\n");
-    let (code, doc) = check_json(d.root(), &["one.onsa"]);
-    assert_eq!(code, 1);
-    let ds = diagnostics(&doc);
-    let line1: Vec<&Value> = ds.iter().filter(|x| int(&x["span"], "line") == 1).collect();
-    assert!(line1.len() >= 2, "two diagnostics on line 1: {doc}");
-    assert_eq!((code_of(line1[0]), int(&line1[0]["span"], "col")), ("E0302", 21), "{doc}");
-    let cols: Vec<u64> = line1.iter().map(|x| int(&x["span"], "col")).collect();
-    assert!(cols.windows(2).all(|w| w[0] <= w[1]) && cols[1] > 21, "{cols:?}");
-    assert_sorted(ds);
-}
+// No two units share a line: a declaration ends at its newline (§2.5), and the tokens after it on
+// its line are of its unit (S-274). The order by column is checked by the unit test
+// `the_order_is_the_file_string_then_the_position_then_code_and_message` of `onsa_diag`.
 
 #[test]
 fn the_diagnostics_are_in_the_documented_order_for_a_mixed_package() {

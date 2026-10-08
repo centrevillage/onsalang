@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// Extra tokens that belong to no item are a unit by themselves, one unit for each run (§18.1).
+// Each run reports one error; the items between them are checked on their own.
+
+pub fn before() -> I32 {
+  let x: Bool = 1               //~ E0401
+  1
+}
+
+) ] }                           //~ E0002
+
+pub fn between() -> I32 {
+  missing_between               //~ E0302
+}
+
+stray words on a line           //~ E0002
+
+pub fn after() -> I32 {
+  let y: Bool = 2               //~ E0401
+  2
+}
+
+) )                             //~ E0002
+
+pub fn last() -> I32 {
+  3
+}

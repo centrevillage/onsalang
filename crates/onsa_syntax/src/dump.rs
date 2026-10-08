@@ -78,6 +78,12 @@ impl Dumper<'_> {
     fn item(&mut self, id: ItemId) {
         let item = self.ast.item(id);
         self.out.push('(');
+        match item.failed {
+            Some(Failed::Unit) => self.out.push_str("failed:unit "),
+            Some(Failed::Body) => self.out.push_str("failed:body "),
+            Some(Failed::Heading) => self.out.push_str("failed:heading "),
+            None => {}
+        }
         if !item.doc.is_empty() {
             let _ = write!(self.out, "doc:{} ", item.doc.len());
         }
@@ -351,6 +357,7 @@ impl Dumper<'_> {
 
     fn ty(&mut self, id: TypeId) {
         match &self.ast.ty(id).kind {
+            TypeKind::Error => self.out.push_str("<error>"),
             TypeKind::Path { path, args } => {
                 self.path(path);
                 if !args.is_empty() {
@@ -528,6 +535,7 @@ impl Dumper<'_> {
             ExprKind::Lit(l) => self.lit(l),
             ExprKind::Path(p) => self.path(p),
             ExprKind::Hole => self.out.push('_'),
+            ExprKind::Error => self.out.push_str("<error>"),
             ExprKind::Paren(e) => {
                 self.out.push('(');
                 self.expr(*e);

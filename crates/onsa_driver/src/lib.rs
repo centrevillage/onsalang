@@ -309,7 +309,9 @@ pub fn parse_only(sources: &SourceMap) -> Result<CheckResult, InternalError> {
     guard(|| {
         let mut result = CheckResult::default();
         for (id, file) in sources.files() {
-            result.diagnostics.extend(parse_file(id, file.text()).diagnostics);
+            let parsed = parse_file(id, file.text());
+            let diagnostics = parsed.diagnostics.clone();
+            result.diagnostics.extend(reduce::per_unit([(id, &parsed.units)], diagnostics).diagnostics);
         }
         result
     })
@@ -332,7 +334,7 @@ pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, Inter
         let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
         match onsa_syntax::format(&parsed, text) {
             Some(out) => Formatted::Text(out),
-            None => Formatted::Syntax(parsed.syntax_report()),
+            None => Formatted::Syntax(reduce::syntax_report(&parsed, file)),
         }
     })
 }
@@ -365,19 +367,22 @@ pub fn levels_dump(sources: &SourceMap, file: FileId) -> Result<String, Internal
 pub enum AstDiff {
     Items(Vec<onsa_syntax::diff::ItemDiff>),
     /// A file has syntax diagnostics: the files are not compared (spec §18.2).
-    /// The diagnostics of both files (`Parsed::syntax_report`).
+    /// The diagnostics of both files (`reduce::syntax_report`).
     Syntax(Vec<Diagnostic>),
 }
 
 /// Compare the files `old` and `new` of `sources` (`onsa diff --ast`).
 pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff, InternalError> {
     guard(|| {
+        let files = [old, new];
         let parsed: Vec<onsa_syntax::Parsed> =
-            [old, new].iter().map(|&file| parse_file(file, sources.file(file).text())).collect();
+            files.iter().map(|&file| parse_file(file, sources.file(file).text())).collect();
         if parsed.iter().any(|p| p.syntax_errors()) {
             // Both files are reported, not only the first with an error (`docs/onsa-tools.md` §3.1).
+            // A file on both sides is reported once.
+            let n = if old == new { 1 } else { 2 };
             return AstDiff::Syntax(
-                parsed.iter().filter(|p| p.syntax_errors()).flat_map(|p| p.syntax_report()).collect(),
+                parsed.iter().zip(files).take(n).flat_map(|(p, file)| reduce::syntax_report(p, file)).collect(),
             );
         }
         AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], &parsed[1]))
@@ -410,7 +415,12 @@ pub fn check_loaded(loaded: &mut Loaded) -> Result<CheckResult, InternalError> {
 pub struct Analyzed {
     pub pkg: Package,
     pub analysis: onsa_sema::Analysis,
+    /// One diagnostic for each unit (spec §18.1, [`reduce::per_unit`]).
     pub diagnostics: Vec<Diagnostic>,
+    /// For each of `diagnostics`, its unit in `units`.
+    pub diagnostic_units: Vec<Option<usize>>,
+    /// The units of the package's files (`onsa_syntax::units`), in one table.
+    pub units: Vec<reduce::Unit>,
 }
 
 /// Parse and analyze a loaded package, keeping the analysis (`std` is
@@ -438,10 +448,13 @@ pub fn analyze_package(
         let std = std_package(sources);
         let pkg = Package { name: name.to_string(), modules: user_modules, deps: vec![std], is_std: false };
         let analysis = onsa_sema::analyze(&pkg);
-        let mut diagnostics = reduce::per_unit(&pkg, analysis.diagnostics.clone());
+        let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
+        all.extend(analysis.diagnostics.iter().cloned());
+        let files = pkg.modules.iter().map(|m| (m.file, &m.parsed.units));
+        let reduce::Reduced { mut diagnostics, diagnostic_units, units } = reduce::per_unit(files, all);
         fill_found(sources, &mut diagnostics);
         debug_contract(sources, &diagnostics);
-        Analyzed { pkg, analysis, diagnostics }
+        Analyzed { pkg, analysis, diagnostics, diagnostic_units, units }
     })
 }
 

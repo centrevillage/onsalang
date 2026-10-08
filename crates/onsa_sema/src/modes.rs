@@ -434,7 +434,7 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Range { .. } => {}
+            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::Range { .. } => {}
             ExprKind::Path(_) => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
                     let id = *id;

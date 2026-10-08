@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// A `{` that is never closed: the unit is recovered at the next item keyword on a line with the
+// same or a shallower indentation than the line that opened the `{` (§18.1). The E0002 points
+// at the unclosed `{`, and the items after it are neither lost nor reported (R-71).
+
+pub fn unclosed() -> I32 {      //~ E0002
+  if true {
+    1
+  } else {
+    2
+}
+
+pub fn calls_next() -> I32 {
+  next() + 1
+}
+
+pub fn next() -> I32 { 3 }
+
+pub fn after_recovery() -> I32 {
+  let x: Bool = 1               //~ E0401
+  1
+}
+
+// Inside an `impl`, the recovery is by the member.
+pub struct Slot {
+  v: I32,
+}
+
+impl Slot {
+  pub fn open_member(self) -> I32 {   //~ E0002
+    self.v
+
+  pub fn next_member(self) -> I32 {
+    let x: Bool = 1             //~ E0401
+    self.v
+  }
+}

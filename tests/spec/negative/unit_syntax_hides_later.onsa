@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.3", "§2.4", "§2.5"]
+
+// The unit of a diagnostic is the declaration, and a unit reports one error (§18.1, S-59, R-71).
+// The stages have a dependency order (syntax, names, types, ...). Where a stage finds an
+// error in a unit, the stages that depend on it do not run for that unit, wherever the error
+// sits in the text. Other units are checked on their own. (The cases where a later stage's
+// error comes first in the text are in unit_stage_order.onsa.)
+
+// A syntax error after a naming error (E0320) and a name error (E0302) of the same unit: only
+// the syntax error is reported.
+pub fn syntax_after_names(a: I32) -> I32 {
+  let badLocal = missing_name(a)
+  let = 2                       //~ E0002
+  badLocal
+}
+
+// A syntax error before them gives the same one diagnostic.
+pub fn syntax_before_names(a: I32) -> I32 {
+  let = 2                       //~ E0002
+  let badLocal = missing_name(a)
+  badLocal
+}
+
+// A type error on both sides of the syntax error is not reported either.
+pub fn syntax_between_types() -> I32 {
+  let a: Bool = 1
+  let b: = 2                    //~ E0002
+  let c: Bool = 3
+  b
+}
+
+// A foreign spelling that the parser rejects (E0020 in the syntax stage) behaves the same.
+pub fn foreign_prefix(a: I32) -> I32 {
+  let missing = unknown_fn(a)
+  let x = 0o17                  //~ E0020
+  x
+}
+
+// E0001 (an invalid character) too.
+pub fn invalid_char(a: I32) -> I32 {
+  let badName = missing_fn(a)
+  a $ 1                         //~ E0001
+}
+
+// A value that cannot exist is a syntax-stage error: an integer literal that fits no integer
+// type and a tuple index that does not fit `U32` (E0408, §2.4).
+pub fn big_literal() -> U64 {
+  let hidden = missing_name
+  99999999999999999999999       //~ E0408
+}
+
+pub fn big_tuple_index(t: (I32, I32)) -> I32 {
+  let hidden: Bool = 1
+  t.99999999999                 //~ E0408
+}
+
+// A naming error (E0320, the names stage) hides a later type error of the unit.
+pub fn BadName() -> I32 {       //~ E0320
+  let x: Bool = 1
+  1
+}
+
+// Within the same stage the first one in the text is reported.
+pub fn first_name_error() -> I32 {
+  let a = missing_one           //~ E0302
+  let b = missing_two
+  a + b
+}
+
+// The units around the failed ones are checked and report their own errors.
+pub fn type_error_alone() -> I32 {
+  let x: Bool = 1               //~ E0401
+  1
+}
+
+pub fn name_error_alone() -> I32 {
+  missing_alone                 //~ E0302
+}
+
+// The syntax error may be deep inside the body: in a branch, a loop, a `match` arm, a closure
+// or a generic function. Whatever comes before or after it in the unit is not reported.
+pub fn in_loops() -> I32 {
+  let hidden: Bool = 1
+  for i in 0..3 {
+    if i > 1 {
+      let = i                   //~ E0002
+    }
+  }
+  missing_after
+}
+
+pub fn in_match_arm(o: Option[I32]) -> I32 {
+  let hidden = missing_name
+  match o {
+    Some(v) => v,
+    None => ),                  //~ E0002
+  }
+}
+
+pub fn in_closure() -> I32 {
+  let hidden = missing_name
+  let f = fn(x: I32) -> I32 {
+    x + )                       //~ E0002
+  }
+  let after: Bool = 1
+  2
+}
+
+pub fn in_generic[T: Num](x: T) -> T {
+  let hidden = missing_name
+  let = x                       //~ E0002
+  x
+}
+
+// Items other than functions: the naming error of the heading or of an earlier field is not
+// reported when the item has a syntax error (S-214).
+pub struct bad_fields {
+  badField: I32,
+  y: ,                          //~ E0002
+}
+
+pub enum bad_shape {
+  circle(F32),
+  Rect(,),                      //~ E0002
+}
+
+const lower_const: I32 = )      //~ E0002
+
+// A struct without a syntax error reports its naming errors, one per unit (the first).
+pub struct bad_points {         //~ E0320
+  badField: I32,
+  OtherField: I32,
+}

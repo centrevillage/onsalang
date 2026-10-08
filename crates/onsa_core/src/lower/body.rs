@@ -827,6 +827,9 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         },
         AK::Path(_) => return Err(internal(span, "unresolved path")),
         AK::Hole => return Err(internal(span, "typed hole")),
+        // Lowering runs only on a package without diagnostics, and a failed
+        // item has a syntax diagnostic (S-59).
+        AK::Error => onsa_diag::internal::bug(Some(span), "lowering met a body a syntax error left unread"),
         AK::Paren(inner) | AK::Move(inner) => return lower_expr(lw, cx, *inner),
         AK::Tuple(elems) => {
             if elems.is_empty() {

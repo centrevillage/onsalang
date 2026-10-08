@@ -1,0 +1,19 @@
+use util.{broken_fn, broken_body, BrokenType, BROKEN_VALUE, fine}
+
+pub fn uses_functions() -> I32 {
+  broken_fn(1) + broken_body() + fine()
+}
+
+pub fn uses_type(p: BrokenType) -> I32 {
+  p.x
+}
+
+pub fn uses_const() -> I32 {
+  BROKEN_VALUE + 1
+}
+
+// A real error of this module is still reported.
+pub fn own_error() -> I32 {
+  let x: Bool = 1               //~ E0401
+  broken_body()
+}

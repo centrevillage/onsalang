@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// Each member of an `impl` is a unit of its own (§18.1, S-59, R-71): an error in one member does
+// not hide the error of another, and a member with a syntax error does not hide the members after
+// it. (The members of a `trait` follow the same rule; this version reports a trait definition as
+// E0200, so they are not here.)
+
+pub struct Cell {
+  v: I32,
+}
+
+impl Cell {
+  pub fn first(self) -> I32 {
+    let = 1                     //~ E0002
+    self.v
+  }
+
+  pub fn second(self) -> I32 {
+    let = 2                     //~ E0002
+    self.v
+  }
+
+  pub fn third(self) -> I32 {
+    let x: Bool = 1             //~ E0401
+    self.v
+  }
+
+  pub fn fourth(self) -> I32 {
+    missing_name                //~ E0302
+  }
+
+  pub fn fine(self) -> I32 {
+    self.v
+  }
+
+  pub fn BadName(self) -> I32 { //~ E0320
+    self.v
+  }
+
+  const BAD_CONST: I32 = )      //~ E0002
+
+  pub fn after_const(self) -> I32 {
+    let x: Bool = 1             //~ E0401
+    self.v
+  }
+}
+
+// A heading error makes the whole `impl` one unit and its members are not checked (§18.1).
+pub struct Other {
+  w: I32,
+}
+
+impl for Other {                //~ E0002
+  pub fn m(self) -> I32 {
+    let x: Bool = 1
+    missing_name
+  }
+}
+
+impl MissingType {              //~ E0302
+  pub fn m(self) -> I32 {
+    let x: Bool = 1
+    1
+  }
+}
+
+// A syntax error inside a closure in a member stays in that member's unit.
+impl Other {
+  pub fn with_closure(self) -> I32 {
+    let f = fn(x: I32) -> I32 {
+      let = x                   //~ E0002
+      x
+    }
+    missing_name
+  }
+
+  pub fn after_closure(self) -> I32 {
+    missing_name                //~ E0302
+  }
+}

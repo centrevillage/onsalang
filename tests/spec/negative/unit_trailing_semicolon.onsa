@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+
+// A `;` after an item, on the line where the item ends, belongs to that item's unit (S-254:
+// the user has not confirmed this yet). The unit has the syntax error, so the item's own body
+// is not type-checked, and the other items are not affected.
+
+pub fn semicolon_after_item() -> I32 {
+  let x: Bool = 1
+  1
+};                              //~ E0020
+
+pub struct WithSemicolon {
+  v: I32,
+};                              //~ E0020
+
+pub fn one_line() -> I32 { 1 };   //~ E0020
+
+// An item that has a semicolon is still a name for the other items.
+pub fn uses_them(s: WithSemicolon) -> I32 {
+  semicolon_after_item() + one_line() + s.v
+}
+
+// A `;` on a line of its own belongs to no item: it is a unit of its own, and the item before
+// it keeps its own errors.
+pub fn before_lone_semicolon() -> I32 {
+  let x: Bool = 1               //~ E0401
+  1
+}
+
+;                               //~ E0020
+
+pub fn after_lone_semicolon() -> I32 {
+  let y: Bool = 2               //~ E0401
+  2
+}

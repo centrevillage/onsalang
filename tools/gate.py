@@ -18,6 +18,9 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
                 of a work. Its last line is `gate (quick): ...`: it is not the
                 gate's verdict (plan §8.3 8).
 
+An item marked `stage_end_only` (the deep fuzzing, `fuzz.py --deep`) runs only
+with `--stage-end` and is SKIPPED otherwise: it is heavy on the machine (W3-03).
+
 A pendable gate item listed in `tests/pending.toml` (kind `gate`, target =
 the item's name) is expected to fail: its failure is shown as pending, and its
 passing fails the gate (remove the entry). Listed whole, it is known to fail,
@@ -128,6 +131,8 @@ def _skipped(step, entry, stage_end, works, quick):
     """Why `step` does not run in this gate, or None."""
     if quick and step.slow:
         return "left out by --quick"
+    if step.stage_end_only and stage_end is None:
+        return "runs only with --stage-end"
     if entry is not None and stage_end is None and entry.until not in works:
         return f"listed until {entry.until}: runs with --work {entry.until} or --stage-end"
     return None

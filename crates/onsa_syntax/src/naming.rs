@@ -226,18 +226,19 @@ mod tests {
             "fn Foo() {}\nstruct point { X: F32 }\nconst max: U32 = 1\nfn ok(badParam: I32) { var BadName = 1\n}\n";
         let parsed = crate::parse(onsa_diag::FileId(0), src);
         let codes: Vec<_> = parsed.diagnostics.iter().map(|d| (d.code, d.found.clone().unwrap())).collect();
-        // P-01: first per item; `struct point { X }` reports `point` only, `ok` reports the parameter only.
-        // (`let BadName = 1` is a path pattern, not a binding; sema reports it.)
+        // Every one: the choice of one per unit is the driver's (S-59).
         assert_eq!(
             codes,
             vec![
                 (Code::E0320, "Foo".to_string()),
                 (Code::E0320, "point".to_string()),
+                (Code::E0320, "X".to_string()),
                 (Code::E0320, "max".to_string()),
                 (Code::E0320, "badParam".to_string()),
+                (Code::E0320, "BadName".to_string()),
             ]
         );
         let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
-        assert_eq!(fixes, vec!["foo", "Point", "MAX", "bad_param"]);
+        assert_eq!(fixes, vec!["foo", "Point", "x", "MAX", "bad_param", "bad_name"]);
     }
 }

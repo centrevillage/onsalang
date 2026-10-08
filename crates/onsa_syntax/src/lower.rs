@@ -4,8 +4,11 @@
 //! the node kinds record them. This stage reads the tree: it takes the nodes
 //! and tokens in their slots, reads the values of the literals (one function
 //! each), and makes the AST nodes, children before parents. It reports no
-//! diagnostic. Only the items the parser finished are made, from the root
-//! down: an item a syntax error stopped has no AST (W3-01, decision D10).
+//! diagnostic. An item a syntax error stopped is made from what was read
+//! ([`Lower::failed_item`], S-59, R-71): its name and the parts of its heading
+//! that were read whole, with [`Failed`] saying whether the heading was read;
+//! a part that was not read is [`ExprKind::Error`] or [`TypeKind::Error`]. An
+//! item whose name was not read has no AST (a unit of `crate::units` only).
 //!
 //! The span of an AST node is the span of the CST node it is made from
 //! ([`Cst::span`]), except three spans kept from the parser before the CST
@@ -44,8 +47,9 @@ pub(crate) fn lower(cst: &Cst, text: &str) -> (Ast, AstMap) {
     let mut l = Lower { cst, text, ast: Ast::default(), map: AstMap::default() };
     let root = cst.root();
     for n in cst.child_nodes(root) {
-        if cst.kind(n) == NodeKind::Item && cst.is_complete(n) {
-            let id = l.item(n);
+        if cst.kind(n) == NodeKind::Item
+            && let Some(id) = l.any_item(n)
+        {
             l.ast.root.push(id);
         }
     }
@@ -207,6 +211,12 @@ impl<'a> Lower<'a> {
 
     // ------------------------------------------------------------ items
 
+    /// An `Item` node: the item, or the failed item when a syntax error
+    /// stopped it (`None` when not even its name was read).
+    fn any_item(&mut self, n: NodeId) -> Option<ItemId> {
+        if self.cst.is_complete(n) { Some(self.item(n)) } else { self.failed_item(n) }
+    }
+
     fn item(&mut self, n: NodeId) -> ItemId {
         let mut doc = Vec::new();
         let mut attrs = Vec::new();
@@ -232,7 +242,305 @@ impl<'a> Lower<'a> {
         let decl = decl.unwrap_or_else(|| self.bug(n, "a declaration"));
         let kind = self.item_kind(decl);
         let span = self.span(n);
-        self.add_item(n, Item { span, doc, attrs, vis, kind })
+        self.add_item(n, Item { span, doc, attrs, vis, kind, failed: None })
+    }
+
+    /// An item a syntax error stopped (spec §18.1, S-59): its name and the
+    /// parts of its heading that were read whole stay, so that the other
+    /// units see it (R-71). The attributes and the visibility are kept when
+    /// they were read whole. `None` when its name was not read, and for a
+    /// failed `impl` heading and `use` (R-180: W5-04 and W4-03).
+    fn failed_item(&mut self, n: NodeId) -> Option<ItemId> {
+        let mut doc = Vec::new();
+        let mut attrs = Vec::new();
+        let mut vis = Vis::Private;
+        let mut decl = None;
+        for c in self.nodes(n) {
+            let complete = self.cst.is_complete(c);
+            match self.cst.kind(c) {
+                NodeKind::Docs => {
+                    for e in self.cst.children(c) {
+                        if let Elem::Token(t) = *e
+                            && self.kind_of(t) == TokenKind::DocComment
+                        {
+                            doc.push(self.cst.token(t).span);
+                        }
+                    }
+                }
+                NodeKind::Attr | NodeKind::HashAttr if complete => attrs.push(self.attr(c)),
+                NodeKind::Vis if complete => vis = self.vis(c),
+                NodeKind::Attr | NodeKind::HashAttr | NodeKind::Vis | NodeKind::Error => {}
+                _ => decl = Some(c),
+            }
+        }
+        let (kind, failed) = self.failed_kind(decl?)?;
+        let span = self.span(n);
+        Some(self.add_item(n, Item { span, doc, attrs, vis, kind, failed: Some(failed) }))
+    }
+
+    /// The name of a declaration when it was read whole.
+    fn read_name(&self, n: NodeId) -> Option<Ident> {
+        let name = self.child(n, NodeKind::Name)?;
+        if !self.cst.is_complete(name) {
+            return None;
+        }
+        self.toks(name).first().map(|&t| self.ident(t))
+    }
+
+    /// The generic parameters of a failed declaration; `heading` turns false
+    /// when they were cut.
+    fn failed_generics(&mut self, n: NodeId, heading: &mut bool) -> Vec<GenericParam> {
+        match self.child(n, NodeKind::GenericParams) {
+            Some(g) if !self.cst.is_complete(g) => {
+                *heading = false;
+                Vec::new()
+            }
+            _ => self.generics(n),
+        }
+    }
+
+    /// The first type of a failed node (a return type, a `const`'s type);
+    /// `heading` turns false when a type there was cut.
+    fn failed_type(&mut self, n: NodeId, heading: &mut bool) -> Option<TypeId> {
+        let types = self.of_class(n, Class::Type);
+        if types.iter().any(|&t| !self.cst.is_complete(t)) {
+            *heading = false;
+            return None;
+        }
+        types.first().map(|&t| self.ty(t))
+    }
+
+    /// The type a syntax error left unread in the failed node `n`.
+    fn error_type(&mut self, n: NodeId) -> TypeId {
+        self.add_type(n, TypeKind::Error)
+    }
+
+    /// A body, a value: lowered when the node was finished, else an error.
+    fn failed_expr(&mut self, n: NodeId) -> ExprId {
+        if self.cst.is_complete(n) {
+            if self.cst.kind(n) == NodeKind::Block { self.block(n) } else { self.expr(n) }
+        } else {
+            let span = self.span(n);
+            self.add_expr(n, span, ExprKind::Error)
+        }
+    }
+
+    /// The members of a failed declaration with a list of them: the members
+    /// read whole and the failed ones whose name was read.
+    fn failed_members(&mut self, n: NodeId, heading: &mut bool) -> Vec<ItemId> {
+        match self.child(n, NodeKind::ItemList) {
+            Some(_) => self.item_list(n),
+            None => {
+                *heading = false;
+                Vec::new()
+            }
+        }
+    }
+
+    /// The parameters of a failed declaration; `heading` turns false when the
+    /// list was cut or not reached.
+    fn failed_params(&mut self, n: NodeId, heading: &mut bool) -> Vec<Param> {
+        match self.child(n, NodeKind::ParamList) {
+            Some(p) if self.cst.is_complete(p) => self.params(p),
+            _ => {
+                *heading = false;
+                Vec::new()
+            }
+        }
+    }
+
+    /// The kind of a failed declaration node and how far it was read.
+    fn failed_kind(&mut self, d: NodeId) -> Option<(ItemKind, Failed)> {
+        if self.cst.is_complete(d) {
+            return Some((self.item_kind(d), Failed::Unit));
+        }
+        let mut heading = true;
+        let kind = match self.cst.kind(d) {
+            NodeKind::Fn => {
+                let rt = self.has(d, TokenKind::KwRt);
+                let name = self.read_name(d)?;
+                let generics = self.failed_generics(d, &mut heading);
+                let params = self.failed_params(d, &mut heading);
+                let ret = self.failed_type(d, &mut heading);
+                let effects = match self.child(d, NodeKind::EffectRow) {
+                    Some(e) if self.cst.is_complete(e) => Some(self.effect_row(e)),
+                    Some(_) => {
+                        heading = false;
+                        None
+                    }
+                    None => None,
+                };
+                // A body that was not reached: the heading may go on (`uses`).
+                let body = match self.child(d, NodeKind::Block) {
+                    Some(b) => Some(self.failed_expr(b)),
+                    None => {
+                        heading = false;
+                        None
+                    }
+                };
+                ItemKind::Fn(FnDecl { rt, name, generics, params, ret, effects, body })
+            }
+            NodeKind::Flow => {
+                let name = self.read_name(d)?;
+                let params = self.failed_params(d, &mut heading);
+                let ret = match self.failed_type(d, &mut heading) {
+                    Some(t) => t,
+                    None => {
+                        heading = false;
+                        self.error_type(d)
+                    }
+                };
+                let body = match self.child(d, NodeKind::Block) {
+                    Some(b) => self.failed_expr(b),
+                    None => {
+                        heading = false;
+                        let span = self.span(d);
+                        self.add_expr(d, span, ExprKind::Error)
+                    }
+                };
+                ItemKind::Flow(FlowDecl { name, params, ret, body })
+            }
+            NodeKind::Struct => {
+                let name = self.read_name(d)?;
+                let generics = self.failed_generics(d, &mut heading);
+                let kind = if let Some(b) = self.child(d, NodeKind::TupleStructBody) {
+                    let ty = match self.of_class(b, Class::Type).first() {
+                        Some(&t) if self.cst.is_complete(t) => self.ty(t),
+                        _ => self.error_type(b),
+                    };
+                    StructKind::Tuple(ty)
+                } else if let Some(list) = self.child(d, NodeKind::FieldList) {
+                    let fields = self.nodes(list);
+                    let fields =
+                        fields.into_iter().filter(|&f| self.cst.is_complete(f)).map(|f| self.field(f)).collect();
+                    StructKind::Named(fields)
+                } else {
+                    heading = false;
+                    StructKind::Named(Vec::new())
+                };
+                ItemKind::Struct(StructDecl { name, generics, kind })
+            }
+            NodeKind::Enum => {
+                let name = self.read_name(d)?;
+                let generics = self.failed_generics(d, &mut heading);
+                let variants = match self.child(d, NodeKind::VariantList) {
+                    Some(list) => {
+                        let vs = self.nodes(list);
+                        vs.into_iter().filter(|&v| self.cst.is_complete(v)).map(|v| self.variant(v)).collect()
+                    }
+                    None => {
+                        heading = false;
+                        Vec::new()
+                    }
+                };
+                ItemKind::Enum(EnumDecl { name, generics, variants })
+            }
+            NodeKind::TypeAlias | NodeKind::OpaqueType => {
+                let name = self.read_name(d)?;
+                let ty = match self.failed_type(d, &mut heading) {
+                    Some(t) => t,
+                    None => {
+                        heading = false;
+                        self.error_type(d)
+                    }
+                };
+                ItemKind::TypeAlias { name, ty }
+            }
+            NodeKind::Trait => {
+                let name = self.read_name(d)?;
+                let generics = self.failed_generics(d, &mut heading);
+                let items = self.failed_members(d, &mut heading);
+                ItemKind::Trait(TraitDecl { name, generics, items })
+            }
+            NodeKind::Impl => {
+                // R-180: the members of an `impl` whose heading was cut are not
+                // seen (the type they belong to is not known; W5-04).
+                let g = self.child(d, NodeKind::GenericParams);
+                if g.is_some_and(|g| !self.cst.is_complete(g)) || self.child(d, NodeKind::ItemList).is_none() {
+                    return None;
+                }
+                let types = self.of_class(d, Class::Type);
+                let want = if self.has(d, TokenKind::KwFor) { 2 } else { 1 };
+                if types.len() != want || types.iter().any(|&t| !self.cst.is_complete(t)) {
+                    return None;
+                }
+                let generics = self.generics(d);
+                let (trait_, self_ty) = if want == 2 {
+                    let path = self.child(types[0], NodeKind::Path)?;
+                    (Some(self.path(path)), self.ty(types[1]))
+                } else {
+                    (None, self.ty(types[0]))
+                };
+                let items = self.item_list(d);
+                ItemKind::Impl(ImplDecl { generics, trait_, self_ty, items })
+            }
+            NodeKind::Effect => {
+                let blocking = self.has(d, TokenKind::KwBlocking);
+                let name = self.read_name(d)?;
+                let ops = self.failed_members(d, &mut heading);
+                ItemKind::Effect(EffectDecl { blocking, name, ops })
+            }
+            NodeKind::Handler => {
+                let name = self.read_name(d)?;
+                let params = match self.child(d, NodeKind::ParamList) {
+                    Some(p) if self.cst.is_complete(p) => self.params(p),
+                    Some(_) => return None,
+                    None => Vec::new(),
+                };
+                let effect = self.child(d, NodeKind::Path).filter(|&p| self.cst.is_complete(p))?;
+                let effect = self.path(effect);
+                let items = self.failed_members(d, &mut heading);
+                ItemKind::Handler(HandlerDecl { name, params, effect, items })
+            }
+            NodeKind::Const => {
+                let name = self.read_name(d)?;
+                let ty = match self.failed_type(d, &mut heading) {
+                    Some(t) => t,
+                    None => {
+                        heading = false;
+                        self.error_type(d)
+                    }
+                };
+                // The parser finishes a `const` right after its value: a
+                // failed one never has a finished value.
+                let at = self.first_expr(d).unwrap_or(d);
+                let span = self.span(at);
+                let value = Some(self.add_expr(at, span, ExprKind::Error));
+                ItemKind::Const(ConstDecl { name, ty, value })
+            }
+            NodeKind::Extern => {
+                let strs: Vec<TokenIdx> =
+                    self.toks(d).into_iter().filter(|&t| self.kind_of(t) == TokenKind::Str).collect();
+                if strs.len() != 2 {
+                    return None;
+                }
+                let abi = self.str_lit(strs[0]);
+                let lib = self.str_lit(strs[1]);
+                let items = self.failed_members(d, &mut heading);
+                ItemKind::Extern(ExternDecl { abi, lib, items })
+            }
+            NodeKind::Target => {
+                let inner = self.nodes(d).into_iter().next()?;
+                let (kind, failed) = self.failed_kind(inner)?;
+                return Some((ItemKind::Target(Box::new(kind)), failed));
+            }
+            NodeKind::Test => {
+                let name = self.tok(d, TokenKind::Str)?;
+                let name = self.str_lit(name);
+                let body = match self.child(d, NodeKind::Block) {
+                    Some(b) => self.failed_expr(b),
+                    None => {
+                        heading = false;
+                        let span = self.span(d);
+                        self.add_expr(d, span, ExprKind::Error)
+                    }
+                };
+                ItemKind::Test { name, body }
+            }
+            // `use` (R-180: W4-03) and what is not a declaration.
+            _ => return None,
+        };
+        Some((kind, if heading { Failed::Body } else { Failed::Heading }))
     }
 
     fn vis(&self, n: NodeId) -> Vis {
@@ -292,16 +600,7 @@ impl<'a> Lower<'a> {
                     StructKind::Tuple(self.first_type(b).unwrap_or_else(|| self.bug(b, "a type")))
                 } else {
                     let list = self.need(n, NodeKind::FieldList);
-                    let fields = self
-                        .nodes(list)
-                        .into_iter()
-                        .map(|f| {
-                            let vis = self.child(f, NodeKind::Vis).map_or(Vis::Private, |v| self.vis(v));
-                            let name = self.name(f);
-                            let ty = self.first_type(f).unwrap_or_else(|| self.bug(f, "a type"));
-                            Field { vis, name, ty, span: self.span(f) }
-                        })
-                        .collect();
+                    let fields = self.nodes(list).into_iter().map(|f| self.field(f)).collect();
                     StructKind::Named(fields)
                 };
                 ItemKind::Struct(StructDecl { name, generics, kind })
@@ -310,18 +609,7 @@ impl<'a> Lower<'a> {
                 let name = self.name(n);
                 let generics = self.generics(n);
                 let list = self.need(n, NodeKind::VariantList);
-                let variants = self
-                    .nodes(list)
-                    .into_iter()
-                    .map(|v| {
-                        let name = self.name(v);
-                        let fields = match self.child(v, NodeKind::VariantFields) {
-                            Some(f) => self.of_class(f, Class::Type).into_iter().map(|t| self.ty(t)).collect(),
-                            None => Vec::new(),
-                        };
-                        Variant { name, fields, span: self.span(v) }
-                    })
-                    .collect();
+                let variants = self.nodes(list).into_iter().map(|v| self.variant(v)).collect();
                 ItemKind::Enum(EnumDecl { name, generics, variants })
             }
             NodeKind::TypeAlias => {
@@ -413,6 +701,22 @@ impl<'a> Lower<'a> {
         }
     }
 
+    fn field(&mut self, f: NodeId) -> Field {
+        let vis = self.child(f, NodeKind::Vis).map_or(Vis::Private, |v| self.vis(v));
+        let name = self.name(f);
+        let ty = self.first_type(f).unwrap_or_else(|| self.bug(f, "a type"));
+        Field { vis, name, ty, span: self.span(f) }
+    }
+
+    fn variant(&mut self, v: NodeId) -> Variant {
+        let name = self.name(v);
+        let fields = match self.child(v, NodeKind::VariantFields) {
+            Some(f) => self.of_class(f, Class::Type).into_iter().map(|t| self.ty(t)).collect(),
+            None => Vec::new(),
+        };
+        Variant { name, fields, span: self.span(v) }
+    }
+
     fn fn_decl(&mut self, n: NodeId) -> FnDecl {
         let rt = self.has(n, TokenKind::KwRt);
         let name = self.name(n);
@@ -424,9 +728,13 @@ impl<'a> Lower<'a> {
         FnDecl { rt, name, generics, params, ret, effects, body }
     }
 
+    /// The members of a declaration's list: the members read whole and the
+    /// failed ones whose name was read (each member is a unit, S-59).
     fn item_list(&mut self, n: NodeId) -> Vec<ItemId> {
         let list = self.need(n, NodeKind::ItemList);
-        self.nodes(list).into_iter().filter(|&i| self.cst.kind(i) == NodeKind::Item).map(|i| self.item(i)).collect()
+        let members: Vec<NodeId> =
+            self.nodes(list).into_iter().filter(|&i| self.cst.kind(i) == NodeKind::Item).collect();
+        members.into_iter().filter_map(|i| self.any_item(i)).collect()
     }
 
     fn generics(&mut self, n: NodeId) -> Vec<GenericParam> {

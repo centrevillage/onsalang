@@ -163,8 +163,13 @@ impl<'p> Sema<'p> {
     // ------------------------------------------------------------ collection
 
     fn add_def(&mut self, def: Def) -> DefId {
+        let failed = def.item.and_then(|i| self.module(def.module).and_then(|m| m.parsed.ast.item(i).failed));
         self.a.defs.push(def);
-        DefId(self.a.defs.len() as u32 - 1)
+        let id = DefId(self.a.defs.len() as u32 - 1);
+        if let Some(f) = failed {
+            self.a.failed.insert(id, f);
+        }
+        id
     }
 
     /// Register `name` in the module scope (E0304 / E0305).
@@ -833,6 +838,15 @@ impl<'p> Sema<'p> {
     }
 
     fn lower_fn(&mut self, cx: Cx<'p>, id: DefId, f: &onsa_syntax::ast::FnDecl) {
+        // A heading a syntax error cut (S-59): nothing of it is checked, and
+        // its users see an error ([`Analysis::heading_failed`]).
+        if self.a.heading_failed(id) {
+            let error = self.a.types.error();
+            if let DefKind::Fn(fd) = &mut self.a.defs[id.0 as usize].kind {
+                fd.ret = error;
+            }
+            return;
+        }
         let mut cx = cx;
         cx.generics = self.lower_generics(&cx, &f.generics);
         let in_impl = cx.self_ty.is_some();
@@ -873,6 +887,8 @@ impl<'p> Sema<'p> {
     fn lower_type(&mut self, cx: &Cx<'p>, t: TypeId) -> TyId {
         let te = cx.ast.ty(t);
         match &te.kind {
+            // What a syntax error left unread (S-59): no diagnostic.
+            TypeKind::Error => self.a.types.error(),
             TypeKind::Unit => self.a.types.unit(),
             TypeKind::Tuple(ts) => {
                 let v: Vec<TyId> = ts.iter().map(|&x| self.lower_type(cx, x)).collect();
@@ -948,6 +964,8 @@ impl<'p> Sema<'p> {
                 }
                 let entity = match self.a.resolve_path(cx.m, path) {
                     Ok(e) => e,
+                    // A member of a def a syntax error cut (S-260): no diagnostic.
+                    Err(_) if self.a.through_partly_read(cx.m, path) => return self.a.types.error(),
                     Err(e) => {
                         self.report(cx.def, e.into_diagnostic());
                         return self.a.types.error();
@@ -1014,7 +1032,8 @@ impl<'p> Sema<'p> {
                 match crate::constarg::expr(&mut self.a, cx.m, cx.ast, cx.text, &cx.generics, *e) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
-                    Err(mut d) => {
+                    Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
+                    Err(crate::constarg::ConstErr::Report(mut d)) => {
                         // The whole argument (`-1`), as written in the type.
                         d.span = te.span;
                         d.found = Some(src(cx, te.span));
@@ -1035,7 +1054,8 @@ impl<'p> Sema<'p> {
                     match crate::constarg::named(&mut self.a, cx.m, cx.ast, cx.text, path, te.span) {
                         Ok(Some(v)) => return self.a.types.intern(Ty::ConstVal(v)),
                         Ok(None) => {}
-                        Err(d) => {
+                        Err(crate::constarg::ConstErr::Unknown) => return self.a.types.error(),
+                        Err(crate::constarg::ConstErr::Report(d)) => {
                             self.report(cx.def, d);
                             return self.a.types.error();
                         }
@@ -1113,6 +1133,9 @@ impl<'p> Sema<'p> {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = &self.a.defs[d.0 as usize];
                 match &def.kind {
+                    // A heading a syntax error cut (S-59): its generic parameters
+                    // are not known, and its uses are the error type (R-71).
+                    DefKind::Struct(_) | DefKind::Enum(_) if self.a.heading_failed(d) => self.a.types.error(),
                     DefKind::Struct(_) | DefKind::Enum(_) => {
                         let want = def.generics().len();
                         if args.len() != want {
@@ -1177,7 +1200,8 @@ impl<'p> Sema<'p> {
         match crate::constarg::expr(&mut self.a, cx.m, cx.ast, cx.text, &cx.generics, e) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
-            Err(d) => {
+            Err(crate::constarg::ConstErr::Unknown) => None,
+            Err(crate::constarg::ConstErr::Report(d)) => {
                 self.report(cx.def, d);
                 None
             }
@@ -1187,6 +1211,14 @@ impl<'p> Sema<'p> {
     // ------------------------------------------------------------ flows
 
     fn lower_flow(&mut self, cx: Cx<'p>, id: DefId, f: &onsa_syntax::ast::FlowDecl) {
+        // A heading a syntax error cut (S-59): its users see an error.
+        if self.a.heading_failed(id) {
+            let error = self.a.types.error();
+            if let DefKind::Flow(fd) = &mut self.a.defs[id.0 as usize].kind {
+                fd.out = error;
+            }
+            return;
+        }
         let mut inputs = Vec::new();
         for p in &f.params {
             let name = match &p.name {
@@ -1210,9 +1242,22 @@ impl<'p> Sema<'p> {
             }
             let Some(t) = p.ty else { continue };
             let lowered = self.lower_type(&cx, t);
+            // An input whose type is in error stays, as the error type, so that
+            // the body sees its name (no cascade in the unit, R-71).
+            let error_input = |s: &mut Self| FlowInput {
+                name: name.clone(),
+                rate: Rate::Sig,
+                ty: s.a.types.error(),
+                param: None,
+                span: p.span,
+            };
             let (rate, ty) = match self.a.types.get(lowered).clone() {
                 Ty::Rate(r, inner) => (r, inner),
-                Ty::Error => continue,
+                Ty::Error => {
+                    let input = error_input(self);
+                    inputs.push(input);
+                    continue;
+                }
                 _ => {
                     self.report(
                         id,
@@ -1229,6 +1274,8 @@ impl<'p> Sema<'p> {
                             format!("Sig[{}]", src(&cx, cx.ast.ty(t).span)),
                         )),
                     );
+                    let input = error_input(self);
+                    inputs.push(input);
                     continue;
                 }
             };

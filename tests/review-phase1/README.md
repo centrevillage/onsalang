@@ -98,9 +98,9 @@
 | `types/orphan/`、`types/implspec.onsa` | R-104（`orphan/` の期待値は `main.onsa` の先頭のコメント。S-70） |
 | `types/alias.onsa` | R-105 |
 | `syntax/esc_utf8.onsa`、`syntax/interp_utf8.onsa` | R-01 |
-| `syntax/fmt_drop*.onsa` | R-69 |
+| `syntax/fmt_drop*.onsa` | R-69。`fmt_drop_orig.onsa` は W3-03 で期待値付きのテストへ移して消した（`crates/onsa_cli/tests/syntax_units.rs` の `FMT_DROP`） |
 | `syntax/fmt_comments.onsa`、`syntax/fmt2.onsa`（fmt の前の原本は `.orig`） | R-70 |
-| `syntax/cascade.onsa`、`syntax/impl_errs.onsa`、`syntax/impl_sema.onsa` | R-71 |
+| `syntax/cascade.onsa`、`syntax/impl_sema.onsa` | R-71。`impl_errs.onsa` は W3-03 で期待値付きのテストへ移して消した（`tests/spec/negative/unit_members.onsa`） |
 | `syntax/groups.onsa` | R-72 |
 | `syntax/lit.onsa` | R-73 |
 | `syntax/tup1.onsa`、`syntax/tuples.onsa` | R-43 |
@@ -135,7 +135,7 @@
 | `parent/r61.onsa` | R-61（計算で決まる定数を長さに使う） |
 | `parent/r62.onsa` | R-62（括弧・腕の中の `else` と `{` の位置） |
 | `parent/r70/` | R-70（コメントの位置の 17 の形。どれも正規形で書いてあり、fmt で変わらないのが期待値。S-58） |
-| `parent/r71/` | R-71（回復と診断の単位の 6 つの形。期待値は各ファイルの先頭のコメント。S-59） |
+| `parent/r71/` | R-71（回復と診断の単位の 6 つの形。S-59）。W3-03 で期待値付きのテストへ移して消した: `tests/spec/negative/unit_members.onsa`（`a_impl`）、`unit_failed_visible.onsa`（`b_body`、`d_sig`、`f_struct`）、`unit_unclosed_brace.onsa`（`c_brace`）、`unit_syntax_hides_later.onsa` と `unit_stage_order.onsa`（`g_naming_then_syntax`） |
 | `parent/r72.onsa` | R-72、R-123（E0010 の修正候補とビットの群の連鎖。期待値は各関数の上のコメント。S-60、S-61） |
 | `parent/r73.onsa` | R-73、R-124（数値リテラル。期待値は各関数の上のコメント。S-62、S-63） |
 | `parent/r74.onsa` | R-74（modes の失敗の後の rt と効果。期待値は各関数の上のコメント。S-64） |

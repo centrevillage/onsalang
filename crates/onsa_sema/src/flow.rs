@@ -431,7 +431,7 @@ impl<'a> Checker<'a> {
                 let (path, fields) = (path.clone(), fields.clone());
                 let entity = match self.a.resolve_path(self.m, &path) {
                     Ok(en) => en,
-                    Err(err) => return Err(self.diag(err.into_diagnostic())),
+                    Err(err) => return Err(self.resolve_error(&path, err)),
                 };
                 let d = match entity {
                     Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
@@ -586,7 +586,7 @@ impl<'a> Checker<'a> {
                         Err(self.flow_not_const(span, what))
                     }
                     Ok(_) => Err(self.flow_not_const(span, what)),
-                    Err(err) => Err(self.diag(err.into_diagnostic())),
+                    Err(err) => Err(self.resolve_error(&path, err)),
                 }
             }
             _ => Err(self.flow_not_const(span, what)),
@@ -730,6 +730,12 @@ impl<'a> Checker<'a> {
     /// `f~(args)` (§11.5): one argument per input, typed by the input's value type.
     fn check_instance(&mut self, e: ExprId, d: DefId, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
+        if self.a.heading_failed(d) {
+            // A flow whose heading a syntax error cut (S-59): its inputs are
+            // not known, and the instance is not checked against them.
+            self.plain_args(args)?;
+            return self.args_of_unknown_callee(args);
+        }
         let f = self.a.def(d).as_flow().unwrap().clone();
         let name = self.a.def(d).name.clone();
         if args.len() != f.inputs.len() {
@@ -1083,7 +1089,7 @@ impl<'a> Rater<'a> {
         let expr = self.expr(e);
         let span = expr.span;
         let r = match &expr.kind {
-            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Range { .. } => FlowRate::Const,
+            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::Range { .. } => FlowRate::Const,
             ExprKind::Path(_) => match self.body.targets.get(&e).cloned() {
                 Some(t) => self.rate_target(e, &t)?.unwrap_or(FlowRate::Const),
                 None => FlowRate::Const,
@@ -1480,6 +1486,7 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
         ExprKind::Lit(_)
         | ExprKind::Path(_)
         | ExprKind::Hole
+        | ExprKind::Error
         | ExprKind::Field { .. }
         | ExprKind::Closure { .. }
         | ExprKind::Handle { .. } => Vec::new(),

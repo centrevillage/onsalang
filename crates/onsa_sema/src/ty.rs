@@ -381,7 +381,9 @@ impl Types {
             Ty::Rate(r, t) => format!("{}[{}]", r.name(), self.display(*t, name_of, generic_name)),
             Ty::ConstVal(n) => n.to_string(),
             Ty::Var(i) => format!("?{i}"),
-            Ty::Error => "<error>".into(),
+            // What a syntax error left unread (S-59): shown as a hole, so that a
+            // diagnostic about the type around it does not name an inner error.
+            Ty::Error => "_".into(),
         }
     }
 }

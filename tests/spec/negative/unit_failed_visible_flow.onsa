@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.2", "§11.5"]
+
+// A flow with a syntax error is still seen by the name resolution (R-71, §18.1): the flows that
+// instantiate it get no diagnostic (neither E0302 nor E0812 "not a flow"). Written in the
+// final flow syntax (the clock after `at`, §11.3).
+
+// A flow with a syntax error in its body, instantiated by another flow.
+pub flow broken_flow(x: F32 at sample) -> F32 at sample {
+  let = x                       //~ E0002
+  x
+}
+
+pub flow calls_broken_flow(x: F32 at sample) -> F32 at sample {
+  broken_flow~(x) + x
+}
+
+// A flow with a syntax error in its signature.
+pub flow broken_sig(x: F32 at ) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow calls_broken_sig(x: F32 at sample) -> F32 at sample {
+  broken_sig~(x)
+}
+
+// The syntax error may sit in a `par` body; the flow keeps its name, and the diagnostics of the
+// later stages inside its unit are not reported.
+pub flow par_broken(x: F32 at sample) -> F32 at sample {
+  let hidden = missing_name
+  let bank = par i in 0..4 {
+    x + )                       //~ E0002
+  }
+  x
+}
+
+pub flow calls_par_broken(x: F32 at sample) -> F32 at sample {
+  par_broken~(x)
+}
+
+// Another flow of the module is checked on its own and reports its own error.
+pub flow own_error(x: F32 at sample) -> F32 at sample {
+  broken_flow~(missing_input)   //~ E0302
+}

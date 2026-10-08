@@ -3,9 +3,10 @@
 //! §18.2: `fmt` does not rewrite a file with a diagnostic of the lexer or the parser, and
 //! `diff --ast` does not compare it. R-146: the parser also fails an item with a diagnostic that is
 //! not E00xx (the overflowing tuple index `t.99999999999` is E0408), and then `fmt` must not write
-//! the file without that item. The exit code for such a file is open (S-214), so these tests check
-//! only that the file is unchanged and that no comparison is reported as equal. For an E00xx
-//! diagnostic §18.2 says the exit code is 2, and it is checked.
+//! the file without that item. S-214 (decided 2026-10-08): `fmt` and `diff --ast` stop at a
+//! diagnostic of the syntax stage whatever its code, with the exit code 2, so the tests for the E0408
+//! file check the exit code 2 as well as the unchanged file (W3-03/t tightened the `assert_ne!`
+//! checks that said "open"). More codes are in `syntax_units.rs`.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -83,8 +84,9 @@ fn the_fixture_fails_in_the_parser_with_a_code_that_is_not_e00xx() {
 fn fmt_leaves_a_file_with_a_failed_item_as_it_is() {
     let d = Dir::new("fmt_failed_item");
     let path = d.file("overflow.onsa", TUPLE_INDEX_OVERFLOW);
-    let _ = onsa(&["fmt", &path]);
+    let out = onsa(&["fmt", &path]);
     assert_eq!(read(&path), TUPLE_INDEX_OVERFLOW, "`fmt` rewrote a file the parser failed an item of");
+    assert_eq!(code(&out), 2, "{out:?}");
 }
 
 #[test]
@@ -93,7 +95,7 @@ fn fmt_check_does_not_write_and_does_not_call_the_file_formatted() {
     let path = d.file("overflow.onsa", TUPLE_INDEX_OVERFLOW);
     let out = onsa(&["fmt", "--check", &path]);
     assert_eq!(read(&path), TUPLE_INDEX_OVERFLOW);
-    assert_ne!(code(&out), 0, "`fmt --check` calls a file with a failed item formatted: {out:?}");
+    assert_eq!(code(&out), 2, "`fmt --check` on a file the syntax stage fails: {out:?}");
 }
 
 #[test]
@@ -127,8 +129,7 @@ fn diff_ast_does_not_report_two_files_with_failed_items_as_equal() {
     let a = d.file("a.onsa", TUPLE_INDEX_OVERFLOW);
     let b = d.file("b.onsa", &TUPLE_INDEX_OVERFLOW.replace("99999999999", "88888888888"));
     let out = onsa(&["diff", "--ast", &a, &b]);
-    assert_ne!(code(&out), 0, "`diff --ast` called two different files with a failed item the same: {out:?}");
-    assert_ne!(code(&out), 101, "an internal error: {out:?}");
+    assert_eq!(code(&out), 2, "`diff --ast` on files the syntax stage fails: {out:?}");
 }
 
 #[test]

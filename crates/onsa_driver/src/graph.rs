@@ -139,6 +139,10 @@ fn rate_color(r: FlowRate) -> &'static str {
 fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
     let mut out = Vec::new();
     match &ast.expr(e).kind {
+        // The graph is drawn only for a package without diagnostics (S-59).
+        ExprKind::Error => {
+            onsa_diag::internal::bug(Some(ast.expr(e).span), "the graph met a body a syntax error left unread")
+        }
         ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Hole => {}
         ExprKind::Paren(x)
         | ExprKind::Unary { expr: x, .. }

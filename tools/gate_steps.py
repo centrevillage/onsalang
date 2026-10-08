@@ -22,7 +22,9 @@ An item listed whole (not by case) is known to fail, so the gate skips it
 unless the run names its `until` (`--work`) or ends a stage (`--stage-end`).
 An item with `slow=True` (the fuzzing, the self-test, the C, the fmt
 properties) is left out by `--quick`, a check for the middle of a work that
-is not the gate's verdict (2026-10-08).
+is not the gate's verdict (2026-10-08). An item with `stage_end_only=True`
+(the deep fuzzing) runs only with `--stage-end`, for the load on the machine
+(W3-03).
 """
 import sys
 from dataclasses import dataclass
@@ -48,6 +50,7 @@ class Step:
     expect_internal: bool = False  # its case entries may say `expect = "internal"`
     counts_rows: bool = False  # its case entries must say `rows = N`, the failing rows they hold
     slow: bool = False  # left out by `--quick`
+    stage_end_only: bool = False  # runs only at a stage end (`--stage-end`)
 
 
 STEPS = [
@@ -56,6 +59,9 @@ STEPS = [
     Step("test", ("cargo", "test", "--workspace")),
     # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
     Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True),
+    # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine
+    # (1 to 2.5 minutes on 10 cores), so only at a stage end (W3-03, 2026-10-08).
+    Step("fuzz-deep", (*PY, str(TOOLS / "fuzz.py"), "--deep"), slow=True, stage_end_only=True),
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),

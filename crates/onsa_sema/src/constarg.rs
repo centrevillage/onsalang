@@ -22,6 +22,22 @@ pub(crate) enum ConstU32 {
     Param(u32),
 }
 
+/// Why a constant expression has no value.
+#[derive(Debug)]
+pub(crate) enum ConstErr {
+    /// A diagnostic for the caller to report.
+    Report(Diagnostic),
+    /// A constant whose unit failed in the syntax stage (S-59): its value was
+    /// not read, and its users get no diagnostic for it (R-71).
+    Unknown,
+}
+
+impl From<Diagnostic> for ConstErr {
+    fn from(d: Diagnostic) -> ConstErr {
+        ConstErr::Report(d)
+    }
+}
+
 /// An array length or a const argument written as an expression (`4`, `-1`, `N`,
 /// `SIZE`, `cfg.N`, `I32.BITS`): the one reader of the forms, for the signatures and
 /// the bodies. `Ok((value, constant))`: `constant` is the `const` item a name denotes.
@@ -32,9 +48,9 @@ pub(crate) fn expr(
     text: &str,
     generics: &[GenericDef],
     e: ExprId,
-) -> Result<(ConstU32, Option<crate::DefId>), Diagnostic> {
+) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
     if let Some(r) = literal(ast, text, e) {
-        return r.map(|v| (ConstU32::Value(v), None));
+        return r.map(|v| (ConstU32::Value(v), None)).map_err(ConstErr::Report);
     }
     let expr = ast.expr(e);
     let span = expr.span;
@@ -42,7 +58,8 @@ pub(crate) fn expr(
     let Some(path) = path_of(ast, e) else {
         return Err(onsa_diag::unsupported::Feature::ArrayLengthExprs
             .diagnostic(Stage::Types, span, &[])
-            .with_found(found));
+            .with_found(found)
+            .into());
     };
     if path.segments.len() == 1
         && let Some(i) = generics.iter().position(|g| g.name == path.segments[0].name)
@@ -56,7 +73,8 @@ pub(crate) fn expr(
             span,
             "a constant expression names a `const` parameter or a constant, not a type parameter (§4.5)",
         )
-        .with_found(found));
+        .with_found(found)
+        .into());
     }
     match named(a, m, ast, text, &path, span)? {
         Some(v) => {
@@ -66,9 +84,9 @@ pub(crate) fn expr(
             };
             Ok((ConstU32::Value(v), constant))
         }
-        None => {
-            Err(Diagnostic::new(Stage::Names, Code::E0302, span, "array length must be a constant").with_found(found))
-        }
+        None => Err(Diagnostic::new(Stage::Names, Code::E0302, span, "array length must be a constant")
+            .with_found(found)
+            .into()),
     }
 }
 
@@ -124,13 +142,16 @@ pub(crate) fn named(
     text: &str,
     path: &Path,
     span: Span,
-) -> Result<Option<u32>, Diagnostic> {
+) -> Result<Option<u32>, ConstErr> {
     let found = text[span.start as usize..span.end as usize].to_string();
     let u32_ = a.types.int(IntKind::U32);
     match a.resolve_path(m, path) {
         Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => {
             let def = a.def(d).clone();
             let DefKind::Const(c) = &def.kind else { return Ok(None) };
+            if c.int_value.is_none() && a.partly_read(d) {
+                return Err(ConstErr::Unknown);
+            }
             if c.ty != u32_ && !matches!(a.types.get(c.ty), Ty::Error) {
                 let shown = a.types.display(c.ty, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
                 let mut d = Diagnostic::new(
@@ -152,7 +173,7 @@ pub(crate) fn named(
                     let want = a.types.display(u32_, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
                     d = d.with_fix(Fix::replace(format!("make `{}` a `{want}`", def.name), tspan, want));
                 }
-                return Err(d);
+                return Err(d.into());
             }
             match c.int_value {
                 Some(v) => match u32::try_from(v) {
@@ -163,11 +184,13 @@ pub(crate) fn named(
                         span,
                         format!("the value of `{}` does not fit in `U32` (§4.5)", def.name),
                     )
-                    .with_found(found)),
+                    .with_found(found)
+                    .into()),
                 },
                 None => Err(onsa_diag::unsupported::Feature::ComputedArrayLengths
                     .diagnostic(Stage::Types, span, &[])
-                    .with_found(found)),
+                    .with_found(found)
+                    .into()),
             }
         }
         Ok(_) => Ok(None),
@@ -186,17 +209,19 @@ pub(crate) fn named(
                                 span,
                                 format!("a constant expression has the type `U32`; `{found}` is `{shown}` (§4.5)"),
                             )
-                            .with_found(found));
+                            .with_found(found)
+                            .into());
                         }
                         // A `U32` associated constant (`I32.BITS`): its value is the
                         // constant evaluator's (W5-08 types the whole grammar).
                         return Err(onsa_diag::unsupported::Feature::ComputedArrayLengths
                             .diagnostic(Stage::Types, span, &[])
-                            .with_found(found));
+                            .with_found(found)
+                            .into());
                     }
                 }
             }
-            Err(err.into_diagnostic())
+            Err(err.into_diagnostic().into())
         }
     }
 }

@@ -222,8 +222,9 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             DefKind::Flow(f) => (Vec::new(), None, f.body, f.out),
             _ => continue,
         };
-        // Items that already have a signature diagnostic are not checked (P-01).
-        if a.diagnostics.iter().any(|d| d.span.file == module.file && def.span.contains(d.span.start)) {
+        // The body of an item whose unit has a syntax error is not checked
+        // (spec §18.1, S-59).
+        if a.failed.contains_key(&id) {
             continue;
         }
         let mut ck = Checker {
@@ -278,6 +279,36 @@ impl<'a> Checker<'a> {
     /// A diagnostic of the typing pass (stage `Types`).
     pub(crate) fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
         self.diag(Diagnostic::new(Stage::Types, code, span, msg).with_found(self.src(span)))
+    }
+
+    /// A type that holds a struct or enum whose unit failed in the syntax
+    /// stage (S-260): its fields and variants are not all known.
+    fn mentions_failed(&self, t: TyId) -> bool {
+        match self.ty(self.shallow(t)) {
+            Ty::Named(d, args) => self.a.partly_read(d) || args.iter().any(|&a| self.mentions_failed(a)),
+            Ty::Tuple(ts) | Ty::Builtin(_, ts) => ts.iter().any(|&a| self.mentions_failed(a)),
+            Ty::Array(e, _) | Ty::Rate(_, e) => self.mentions_failed(e),
+            _ => false,
+        }
+    }
+
+    /// A path that does not resolve: its diagnostic, or none when the path
+    /// goes through a struct or enum whose unit failed in the syntax stage
+    /// (its fields and variants are not all known; the check of this body
+    /// stops there without a diagnostic).
+    // SPEC-GAP(S-260): the members of a failed struct or enum get no diagnostic.
+    pub(crate) fn resolve_error(&mut self, path: &onsa_syntax::ast::Path, err: ResolveError) -> Stop {
+        if self.a.through_partly_read(self.m, path) {
+            self.failed = true;
+            return Stop;
+        }
+        self.diag(err.into_diagnostic())
+    }
+
+    /// A name that does not resolve in a body: a diagnostic of the names
+    /// stage (spec §18.1), so that it hides a type error of its unit (S-214).
+    pub(crate) fn name_err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
+        self.diag(Diagnostic::new(Stage::Names, code, span, msg).with_found(self.src(span)))
     }
 
     /// E0200 for `feature` (S-224), with the details its phrase takes.
@@ -959,10 +990,20 @@ impl<'a> Checker<'a> {
                             break;
                         }
                     }
-                    return Err(self.diag(err.into_diagnostic()));
+                    return Err(self.resolve_error(&path, err));
                 }
             };
             let last = k == n;
+            // A def whose heading a syntax error cut (a flow's namespace, S-59):
+            // its members are not known; the next segment does not resolve,
+            // and `resolve_error` gives no diagnostic (R-71).
+            if !last
+                && let Entity::Def(d) = entity
+                && self.a.heading_failed(d)
+            {
+                k += 1;
+                continue;
+            }
             match self.value_of_entity(entity, chain[k - 1].0, &chain[k - 1].1, if last { expected } else { None })? {
                 Some(t) => {
                     value_ty = Some(t);
@@ -1013,15 +1054,19 @@ impl<'a> Checker<'a> {
             return Ok(self.record(e, t));
         }
         if name.name == "self" {
-            return Err(self.err(Code::E0302, name.span, "`self` is only available inside a method"));
+            return Err(self.name_err(Code::E0302, name.span, "`self` is only available inside a method"));
         }
         let path = Path { segments: vec![name.clone()], span: name.span };
         let entity = match self.a.resolve_path(self.m, &path) {
             Ok(en) => en,
             Err(ResolveError::NotFound { .. }) => {
-                return Err(self.err(Code::E0302, name.span, format!("cannot find `{}` in this scope", name.name)));
+                return Err(self.name_err(
+                    Code::E0302,
+                    name.span,
+                    format!("cannot find `{}` in this scope", name.name),
+                ));
             }
-            Err(err) => return Err(self.diag(err.into_diagnostic())),
+            Err(err) => return Err(self.resolve_error(&path, err)),
         };
         match self.value_of_entity(entity, e, name, expected)? {
             Some(t) => Ok(self.record(e, t)),
@@ -1036,6 +1081,7 @@ impl<'a> Checker<'a> {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
                 match &def.kind {
+                    DefKind::Fn(_) if self.a.heading_failed(d) => Ok(Some(self.a.types.error())),
                     DefKind::Fn(f) => {
                         if f.self_mode.is_some() {
                             return Err(self.err(
@@ -1163,6 +1209,12 @@ impl<'a> Checker<'a> {
                 {
                     return Ok(self.subst(f.ty, &args));
                 }
+                // SPEC-GAP(S-260): a field of a struct whose unit failed in the
+                // syntax stage gets no diagnostic, whatever its name (the
+                // fields that were not read are not known, R-71).
+                if self.a.partly_read(d) {
+                    return Ok(self.a.types.error());
+                }
                 let shown = self.display(base);
                 Err(self.err(Code::E0413, name.span, format!("`{shown}` has no field `{}`", name.name)))
             }
@@ -1194,6 +1246,9 @@ impl<'a> Checker<'a> {
             return Ok(t);
         }
         match &expr.kind {
+            // What a syntax error left unread (S-59): the error type, and no
+            // diagnostic. The body of a failed item is not checked at all.
+            ExprKind::Error => Ok(self.a.types.error()),
             ExprKind::Lit(lit) => self.check_lit(e, lit, expected),
             ExprKind::Path(p) => {
                 if p.segments.len() == 1 {
@@ -1322,7 +1377,10 @@ impl<'a> Checker<'a> {
                 let it = self.check_expr(*inner, None)?;
                 let from = self.known(it, self.expr(*inner).span, "operand of `as`")?;
                 let to = self.lower_type_expr(*ty)?;
-                if builtin::cast_allowed(&self.a.types, from, to) {
+                // The error type (what a syntax error left unread, S-59) is not
+                // checked: no diagnostic for it (R-71).
+                let error = |t: TyId| matches!(self.a.types.get(t), Ty::Error);
+                if builtin::cast_allowed(&self.a.types, from, to) || error(from) || error(to) {
                     return Ok(to);
                 }
                 let (fs, ts) = (self.display(from), self.display(to));
@@ -1500,7 +1558,7 @@ impl<'a> Checker<'a> {
                     if let StrSeg::Interp(path) = seg {
                         let head = &path.segments[0];
                         let Some(id) = self.lookup_local(&head.name) else {
-                            return Err(self.err(
+                            return Err(self.name_err(
                                 Code::E0302,
                                 head.span,
                                 format!("cannot find `{}` for the interpolation", head.name),
@@ -1535,7 +1593,13 @@ impl<'a> Checker<'a> {
                     crate::constarg::ConstU32::Param(i) => Ok(Len::Param(i)),
                 }
             }
-            Err(d) => Err(self.diag(d)),
+            Err(crate::constarg::ConstErr::Report(d)) => Err(self.diag(d)),
+            // A constant whose value was not read (S-59): the check of this
+            // body stops there without a diagnostic.
+            Err(crate::constarg::ConstErr::Unknown) => {
+                self.failed = true;
+                Err(Stop)
+            }
         }
     }
 
@@ -1548,7 +1612,7 @@ impl<'a> Checker<'a> {
     ) -> R<TyId> {
         let entity = match self.a.resolve_path(self.m, path) {
             Ok(en) => en,
-            Err(err) => return Err(self.diag(err.into_diagnostic())),
+            Err(err) => return Err(self.resolve_error(path, err)),
         };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
@@ -1579,6 +1643,10 @@ impl<'a> Checker<'a> {
                 self.unify_at(span, a, x)?;
             }
         }
+        // SPEC-GAP(S-260): the fields of a struct whose unit failed in the
+        // syntax stage are not all known: no diagnostic for an unknown or a
+        // missing field.
+        let failed = self.a.partly_read(d);
         let mut seen: Vec<&str> = Vec::new();
         for (name, value) in fields {
             if seen.contains(&name.name.as_str()) {
@@ -1586,6 +1654,11 @@ impl<'a> Checker<'a> {
             }
             seen.push(&name.name);
             let Some(f) = defs.iter().find(|f| f.name == name.name) else {
+                if failed {
+                    let error = self.a.types.error();
+                    self.check_expr(*value, Some(error))?;
+                    continue;
+                }
                 let shown = self.a.def(d).name.clone();
                 return Err(self.err(Code::E0410, name.span, format!("`{shown}` has no field `{}`", name.name)));
             };
@@ -1593,7 +1666,7 @@ impl<'a> Checker<'a> {
             self.with_why(format!("the field `{}`", name.name), ft, |ck| ck.check_expr(*value, Some(ft)))?;
         }
         let missing: Vec<&str> = defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.contains(n)).collect();
-        if !missing.is_empty() {
+        if !missing.is_empty() && !failed {
             let shown = self.a.def(d).name.clone();
             return Err(self.err(
                 Code::E0410,
@@ -1668,7 +1741,11 @@ impl<'a> Checker<'a> {
             self.pop_scope();
             r?;
         }
-        if let Some(missing) = self.missing_pattern(&rows, st) {
+        // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
+        // syntax stage are not all known; its `match` is not counted.
+        if !self.mentions_failed(st)
+            && let Some(missing) = self.missing_pattern(&rows, st)
+        {
             return Err(self.diag(
                 Diagnostic::new(
                     Stage::Types,
@@ -1927,6 +2004,12 @@ impl<'a> Checker<'a> {
                 let path = Path { segments: c.iter().map(|(_, i)| i.clone()).collect(), span: self.expr(callee).span };
                 match self.a.resolve_path(self.m, &path) {
                     Ok(en) => Some(en),
+                    // A variant or an associated function of a struct or enum a
+                    // syntax error cut (S-260): not known, no diagnostic.
+                    Err(_) if self.a.through_partly_read(self.m, &path) => {
+                        self.failed = true;
+                        return Err(Stop);
+                    }
                     Err(_) => {
                         // `Buf.zeroed`, `F32.from_bits`: builtin associated functions.
                         let prefix = Path {
@@ -1984,13 +2067,13 @@ impl<'a> Checker<'a> {
                         return Err(self.err(Code::E0401, name.span, format!("`{}` is not a function", name.name)));
                     }
                     Err(ResolveError::NotFound { .. }) => {
-                        return Err(self.err(
+                        return Err(self.name_err(
                             Code::E0302,
                             name.span,
                             format!("cannot find `{}` in this scope", name.name),
                         ));
                     }
-                    Err(err) => return Err(self.diag(err.into_diagnostic())),
+                    Err(err) => return Err(self.resolve_error(&path, err)),
                 }
             }
         }
@@ -2034,6 +2117,9 @@ impl<'a> Checker<'a> {
         match entity {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
+                if self.a.heading_failed(d) {
+                    return self.args_of_unknown_callee(args);
+                }
                 let DefKind::Fn(f) = &def.kind else {
                     if matches!(def.kind, DefKind::Unsupported) {
                         return Ok(self.a.types.error());
@@ -2128,6 +2214,9 @@ impl<'a> Checker<'a> {
         if let Ty::Named(d, targs_recv) = self.ty(recv) {
             let assoc = self.a.modules.assoc.get(&d).and_then(|m| m.get(&name.name)).copied();
             if let Some(md) = assoc {
+                if self.a.heading_failed(md) {
+                    return self.args_of_unknown_callee(args);
+                }
                 let mdef = self.a.def(md).clone();
                 let DefKind::Fn(f) = &mdef.kind else {
                     return Err(self.err(Code::E0413, name.span, format!("`{}` is not a method", name.name)));
@@ -2227,6 +2316,17 @@ impl<'a> Checker<'a> {
 
     /// Arity and argument types. `Span[T]` parameters accept `[T; N]`,
     /// `Buf[T]` and `Span[T]` (§5.3); `[Span[T]; N]` accepts the planar forms.
+    /// The arguments of a call of a function whose heading a syntax error
+    /// cut (S-59): each is checked on its own (its errors are the caller's),
+    /// and the call is an error, with no diagnostic of its own (R-71).
+    pub(crate) fn args_of_unknown_callee(&mut self, args: &[Arg]) -> R<TyId> {
+        let error = self.a.types.error();
+        for arg in args {
+            self.check_expr(arg.expr, Some(error))?;
+        }
+        Ok(error)
+    }
+
     pub(crate) fn check_args(&mut self, args: &[Arg], params: &[(Mode, TyId)], span: Span) -> R<()> {
         if args.len() != params.len() {
             return Err(self.err(
@@ -2589,7 +2689,7 @@ impl<'a> Checker<'a> {
             PatKind::Struct { path, fields } => {
                 let entity = match self.a.resolve_path(self.m, path) {
                     Ok(en) => en,
-                    Err(err) => return Err(self.diag(err.into_diagnostic())),
+                    Err(err) => return Err(self.resolve_error(path, err)),
                 };
                 let d = match entity {
                     Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
@@ -2604,8 +2704,15 @@ impl<'a> Checker<'a> {
                 self.unify_at(span, named, ty)?;
                 let mut subs = vec![P::Wild; defs.len()];
                 let mut seen: Vec<&str> = Vec::new();
+                // SPEC-GAP(S-260): as for the fields of a struct literal.
+                let failed = self.a.partly_read(d);
                 for (name, fp) in fields {
                     let Some(i) = defs.iter().position(|f| f.name == name.name) else {
+                        if failed {
+                            let error = self.a.types.error();
+                            self.bind_pat(*fp, error, irrefutable, borrow, kind)?;
+                            continue;
+                        }
                         return Err(self.err(
                             Code::E0410,
                             name.span,
@@ -2620,7 +2727,7 @@ impl<'a> Checker<'a> {
                     subs[i] = self.bind_pat(*fp, ft, irrefutable, borrow, kind)?;
                 }
                 let missing: Vec<&str> = defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.contains(n)).collect();
-                if !missing.is_empty() {
+                if !missing.is_empty() && !failed {
                     return Err(self.err(
                         Code::E0410,
                         span,
@@ -2671,7 +2778,7 @@ impl<'a> Checker<'a> {
         let span = self.ast.pat(pat).span;
         let entity = match self.a.resolve_path(self.m, path) {
             Ok(en) => en,
-            Err(err) => return Err(self.diag(err.into_diagnostic())),
+            Err(err) => return Err(self.resolve_error(path, err)),
         };
         // (constructor index, field types, number of constructors of the type)
         let (ctor, fields, nctors): (u32, Vec<TyId>, usize) = match entity {
@@ -2703,7 +2810,7 @@ impl<'a> Checker<'a> {
             }
             _ => {
                 let shown = self.src(path.span);
-                return Err(self.err(
+                return Err(self.name_err(
                     Code::E0302,
                     path.span,
                     format!(

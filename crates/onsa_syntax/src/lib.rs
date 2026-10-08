@@ -16,8 +16,9 @@ mod lower;
 mod naming;
 pub mod parser;
 pub mod token;
+pub mod units;
 
-use onsa_diag::{FileId, Stage};
+use onsa_diag::FileId;
 
 pub use cst::Cst;
 pub use dump::dump;
@@ -56,9 +57,11 @@ pub fn diagnostic_contract(sources: &onsa_diag::SourceMap, diagnostics: &[onsa_d
 }
 
 /// Lex and parse one file. Never fails: diagnostics are in `Parsed.diagnostics`
-/// (at most one per top-level item, P-01). The CST holds the whole source;
-/// the AST holds the items that parsed. A broken CST (a bug) is an internal
-/// error (`onsa_diag::internal::bug`), checked on every parse (R-82).
+/// (every one; the choice of one per unit is the driver's, spec §18.1), and
+/// the units they are of in `Parsed.units`. The CST holds the whole source;
+/// the AST holds the items that parsed and the failed items whose name was
+/// read (S-59). A broken CST (a bug) is an internal error
+/// (`onsa_diag::internal::bug`), checked on every parse (R-82).
 pub fn parse(file: FileId, text: &str) -> Parsed {
     let lexed = lex(file, text);
     let out = parser::Parser::new(file, text, lexed.tokens, lexed.diagnostics).parse_file();
@@ -66,13 +69,15 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     if let Err(e) = cst.validate(text) {
         onsa_diag::internal::bug(Some(e.span), format!("the CST is broken: {}", e.message));
     }
-    let (ast, map) = lower::lower(&cst, text);
+    let (mut ast, map) = lower::lower(&cst, text);
     let mut diagnostics = out.diagnostics;
+    // The operator groups (E0010) are checked on the AST, so an E0010 in the
+    // part of a failed body that has no AST is not found, and the parse error
+    // after it is the unit's syntax error: §18.1 ("the first in the text")
+    // may not hold there until the recovery by statement (M7, T7-1) lowers
+    // the statements before the error (accepted, 2026-10-08).
     groups::check(&ast, text, &mut diagnostics);
     naming::check(&ast, &mut diagnostics);
-    // Read before the diagnostics are reduced to one per item (S-56): an
-    // earlier diagnostic of a later stage must not hide a syntax one.
-    let syntax: Vec<onsa_diag::Diagnostic> = diagnostics.iter().filter(|d| d.stage == Stage::Syntax).cloned().collect();
-    let diagnostics = parser::first_per_item(&out.item_ranges, diagnostics);
-    Parsed { ast, cst, map, diagnostics, syntax, levels: out.levels }
+    let units = units::build(&cst, &map, text, &diagnostics, &mut ast);
+    Parsed { ast, cst, map, diagnostics, units, levels: out.levels }
 }

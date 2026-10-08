@@ -1,0 +1,3 @@
+[package]
+name = "unit_failed_visible_pkg"
+edition = "2026"
