@@ -66,6 +66,7 @@ tools: Read, Bash, Write, WebFetch, WebSearch
 - Bash の `cd` は持続しないことがあるので、絶対パスを使う。macOS なので `timeout` は無い。止まらない恐れのある実験は、Python の `subprocess.run(..., timeout=…)` で包む。
 - 検査の回し方（2026-10-08、利用者の指定）: gate（`tools/gate.sh`）、`cargo test --workspace`、fuzz、fmt の性質、C の検査は回さない（機械の負荷が大きい）。確かめは、個々の入力へのコマンドで行う。
 - この機械（macOS）では、SIGABRT・SIGSEGV・SIGILL・SIGTRAP などで終わるプロセスが、利用者の画面にクラッシュの報告のダイアログを出す。落ちうる入力を試さない。C の実験で sanitizer を使うなら、abort や trap でなく終了コードで止まる設定にする。作ってしまったら報告に書く。
+- `swift test` を回さない（2026-10-08）: この機械の Command Line Tools には XCTest も Swift Testing も無く、`swift test` の補助（swiftpm-testing-helper）が SIGTRAP で落ちてクラッシュのダイアログを出した。Swift のテストの道具の挙動は文書を出典付きで引き、「未確認」と書く。
 - 既知の落ちる入力（2026-10-08）: `tests/review-phase1/types/` の `constcyc*.onsa`・`rec*.onsa` を `onsa interface` や `build` にかけない（W4-05 で直す）。インタプリタの再帰は上限 128 で panic する（W2-04 で直した）が、`const` が `const` を読む鎖は数えないので、長い鎖を試さない。構文解析器に深い入れ子（20 段を超えるもの）を渡さない（debug のフロントエンドは 1 段に約 64 KB を使う。W3-14 で直す）。それぞれ直った後は、親が渡す注意に従う。
 
 ## 報告
