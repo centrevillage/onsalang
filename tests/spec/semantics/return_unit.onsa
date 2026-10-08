@@ -1,0 +1,300 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.1", "§7", "§5.2", "§3.5", "§9.2"]
+
+// `return e` where `e` has type `()` (spec §6.1, §7, R-07). The value of such an
+// `e` is nothing, but the evaluation of `e` is not: the call `bump(inout x)` has to
+// run before the function is left, in every place a `return` can be written (an
+// `if` branch, the end of a block, an arm of a `match`, a loop body, a method, a
+// generic function). `return e` is `e` followed by `return` (§6.1: the block's
+// value is the last expression and `return` leaves early), so every side effect
+// of `e` (writes through `inout`, panics) takes place, in the order of §3.5,
+// and the statements after the `return` do not.
+//
+// The same `return` written in the tail position is removed by `onsa fmt` (§6.1);
+// the cases here use it as an early exit, which is kept.
+
+pub struct Counter {
+  n: U32,
+}
+
+impl Counter {
+  pub fn bump(inout self) {
+    self.n = self.n + 1
+  }
+
+  pub fn bump_or_jump(inout self, c: Bool) {
+    if c {
+      return self.bump!()
+    }
+    self.n = self.n + 100
+  }
+}
+
+pub enum Kind {
+  Small,
+  Big(U32),
+}
+
+fn bump(inout x: U32) {
+  x = x + 1
+}
+
+// Appends the decimal digit `d` to `log`, so the order of calls can be read back.
+fn mark(inout log: U32, d: U32) {
+  let shifted = log * 10
+  log = shifted + d
+}
+
+fn put[T: Copy](inout dst: T, v: T) {
+  dst = v
+}
+
+// Divides by `z`: panics when `z` is 0 (§3.4), so a call that is dropped is seen.
+fn trap(z: U32) {
+  let _ = 10 / z
+}
+
+// ------------------------------------------------------------ an `if` branch
+
+fn early(inout x: U32, flag: Bool) {
+  if flag {
+    return bump(inout x)
+  }
+  x = x + 100
+}
+
+fn early_else(inout x: U32, flag: Bool) {
+  if flag {
+    return bump(inout x)
+  } else {
+    x = x + 100
+  }
+  x = x + 1000
+}
+
+test "a return of a call in an if branch runs the call" {
+  var a: U32 = 0
+  early(inout a, true)
+  assert a == 1
+}
+
+test "the statements after the if are skipped when the branch returns" {
+  var a: U32 = 5
+  early(inout a, true)
+  assert a == 6
+  var b: U32 = 5
+  early(inout b, false)
+  assert b == 105
+}
+
+test "an else branch and the code after the if" {
+  var a: U32 = 0
+  early_else(inout a, true)
+  assert a == 1
+  var b: U32 = 0
+  early_else(inout b, false)
+  assert b == 1100
+}
+
+// -------------------------------------------------- the end of a nested block
+
+fn nested(inout x: U32, a: Bool, b: Bool) {
+  if a {
+    if b {
+      return bump(inout x)
+    }
+    x = x + 10
+  }
+  x = x + 100
+}
+
+test "a return in a nested if leaves the whole function" {
+  var x1: U32 = 0
+  nested(inout x1, true, true)
+  assert x1 == 1
+  var x2: U32 = 0
+  nested(inout x2, true, false)
+  assert x2 == 110
+  var x3: U32 = 0
+  nested(inout x3, false, true)
+  assert x3 == 100
+}
+
+// ------------------------------------------------------------ a match arm
+
+fn by_option(inout x: U32, o: Option[U32]) {
+  match o {
+    Some(v) => {
+      return put(inout x, v)
+    },
+    None => {
+      x = x + 7
+    },
+  }
+  x = x + 1000
+}
+
+fn by_kind(inout x: U32, k: Kind) {
+  match k {
+    Kind.Small => {
+      return bump(inout x)
+    },
+    Kind.Big(n) => {
+      x = x + n
+    },
+  }
+  x = x + 50
+}
+
+test "a return of a call in an arm of a match on an Option" {
+  var a: U32 = 1
+  by_option(inout a, Some(42))
+  assert a == 42
+  var b: U32 = 1
+  by_option(inout b, None)
+  assert b == 1008
+}
+
+test "a return of a call in an arm of a match on an enum" {
+  var a: U32 = 3
+  by_kind(inout a, Kind.Small)
+  assert a == 4
+  var b: U32 = 3
+  by_kind(inout b, Kind.Big(10))
+  assert b == 63
+}
+
+// ------------------------------------------------------------------- loops
+
+fn first_hit(inout log: U32, limit: U32) {
+  for i in 0..5 {
+    if i == limit {
+      return mark(inout log, i)
+    }
+    mark(inout log, 0)
+  }
+  mark(inout log, 9)
+}
+
+fn while_hit(inout log: U32, limit: U32) {
+  var i: U32 = 0
+  while i < 10 {
+    if i == limit {
+      return mark(inout log, 5)
+    }
+    i = i + 1
+  }
+  mark(inout log, 9)
+}
+
+test "a return of a call in a for loop leaves the loop and the function" {
+  var log: U32 = 1
+  first_hit(inout log, 3)
+  assert log == 10003
+}
+
+test "a for loop that does not return reaches the code after it" {
+  var log: U32 = 1
+  first_hit(inout log, 20)
+  assert log == 1000009
+}
+
+test "a return of a call in a while loop" {
+  var hit: U32 = 1
+  while_hit(inout hit, 4)
+  assert hit == 15
+  var miss: U32 = 1
+  while_hit(inout miss, 40)
+  assert miss == 19
+}
+
+// ----------------------------------------------- methods and generic functions
+
+test "a return of a method call with ! in a method" {
+  var c = Counter { n: 0 }
+  c.bump_or_jump!(true)
+  assert c.n == 1
+  c.bump_or_jump!(false)
+  assert c.n == 101
+}
+
+fn put_early[T: Copy](inout dst: T, v: T, c: Bool, w: T) {
+  if c {
+    return put(inout dst, v)
+  }
+  put(inout dst, w)
+}
+
+test "a return of a call in a generic function" {
+  var a: U32 = 0
+  put_early(inout a, 7, true, 9)
+  assert a == 7
+  put_early(inout a, 7, false, 9)
+  assert a == 9
+  var b: Bool = false
+  put_early(inout b, true, true, false)
+  assert b
+}
+
+// ----------------------------------------------------- order and other effects
+
+fn tick_value(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  log
+}
+
+// The value of the argument is made before the call (a second `inout log` inside
+// the argument list of `put` would be E0702, §5.2, so it is taken first).
+fn both(inout log: U32, d: U32) {
+  let v = tick_value(inout log, d)
+  if d > 0 {
+    return put(inout log, v + 1)
+  }
+  put(inout log, 0)
+}
+
+test "the returned call runs after the statements before it" {
+  // `tick_value` appends the digit 4 to `log` (12 becomes 124) and returns the new
+  // value; `put` then stores that value plus one in `log`.
+  var log: U32 = 12
+  both(inout log, 4)
+  assert log == 125
+}
+
+fn guard(n: U32) {
+  if n > 3 {
+    return trap(0)
+  }
+}
+
+test "a returned call that is not reached does not run" {
+  guard(2)
+  guard(3)
+}
+
+test "a returned call that panics fails the test" {   //~ TESTFAIL "a returned call that panics fails the test"
+  guard(4)
+  assert true
+}
+
+// `return e` with an `e` that has a side effect and a diverging value position.
+fn else_returns(inout x: U32, c: Bool) {
+  let k: U32 = if c {
+    1
+  } else {
+    return bump(inout x)
+  }
+  x = x + (k * 100)
+}
+
+test "a return of a call in the else of a let initializer" {
+  var a: U32 = 0
+  else_returns(inout a, true)
+  assert a == 100
+  var b: U32 = 0
+  else_returns(inout b, false)
+  assert b == 1
+}

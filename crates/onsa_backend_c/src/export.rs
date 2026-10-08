@@ -7,6 +7,8 @@ use onsa_core::{FnId, Mode, Ty};
 
 use crate::emit::{Cx, Export, R, f32_lit};
 use crate::names::{ident, qualified};
+use onsa_diag::unsupported::Feature;
+
 use crate::{PanicMode, no_span, unsupported};
 
 /// What the header of a flow records of its API, for [`crate::FlowApi`].
@@ -128,11 +130,7 @@ fn config_args(cx: &mut Cx, config: onsa_core::TypeId) -> R<ConfigArgs> {
 }
 
 fn scalar_c(cx: &mut Cx, ty: &Ty, what: &str) -> R<String> {
-    if ty.is_scalar() {
-        Ok(cx.names.name(ty))
-    } else {
-        Err(unsupported(no_span(), &format!("{what} of a non-scalar type in an export")))
-    }
+    if ty.is_scalar() { Ok(cx.names.name(ty)) } else { Err(unsupported(no_span(), Feature::ExportNonScalar, &[what])) }
 }
 
 /// One `Span` / planar parameter of `process`.
@@ -163,9 +161,9 @@ fn process_io(cx: &mut Cx, process: FnId) -> R<ProcessIo> {
             Ty::Span(e) => ((**e).clone(), None),
             Ty::Array(inner, n) => match &**inner {
                 Ty::Span(e) => ((**e).clone(), Some(*n)),
-                _ => return Err(unsupported(def.span, "this `process` parameter shape")),
+                _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
             },
-            _ => return Err(unsupported(def.span, "this `process` parameter shape")),
+            _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
         };
         let et = scalar_c(cx, &elem, &format!("the signal `{name}`"))?;
         let c = if output { "" } else { "const " };
@@ -517,7 +515,7 @@ struct FnSignature {
 fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
     let def = cx.m.fn_(f);
     if def.sret || !(def.ret.is_scalar() || def.ret == Ty::Unit) {
-        return Err(unsupported(def.span, "exporting a function that returns an aggregate"));
+        return Err(unsupported(def.span, Feature::ExportAggregateReturn, &[]));
     }
     let short = def.name.rsplit('.').next().unwrap_or(&def.name).to_string();
     let sym = format!("{}{}", cx.opts.prefix, ident(&short));
@@ -550,12 +548,7 @@ fn fn_signature(cx: &mut Cx, f: FnId) -> R<FnSignature> {
                 fwd.push(format!("onsa_span_{tag}_of(({et}*){name}, {name}_len)"));
             }
             _ => {
-                return Err(unsupported(
-                    def.span,
-                    &format!(
-                        "the parameter `{name}` of an exported function (only scalars and spans of scalars in this version)"
-                    ),
-                ));
+                return Err(unsupported(def.span, Feature::ExportParam, &[&name]));
             }
         }
     }

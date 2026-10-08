@@ -17,6 +17,7 @@ use onsa_core::{
     BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
     Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, TypeId, UnOp,
 };
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::names::{Entry, TypeNames, float_tag, ident, int_tag, qualified};
@@ -279,14 +280,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         if let TypeDefKind::Struct { fields } = &t.kind {
             for (_, fty) in fields {
                 if let Some(id) = contains_bulk(&cx, fty) {
-                    diags.push(unsupported(
-                        no_span(),
-                        &format!(
-                            "a flow with a bulk region (`{}`) used inside another type (`{}`); export it on its own or lower `bulk_threshold`",
-                            m.ty(id).name,
-                            m.types[i].name
-                        ),
-                    ));
+                    diags.push(unsupported(no_span(), Feature::BulkInType, &[&m.ty(id).name, &m.types[i].name]));
                 }
             }
         }
@@ -556,8 +550,8 @@ fn type_def(cx: &mut Cx, entry: &Entry) -> R<String> {
                     _ => {}
                 }
             }
-            Ty::FnPtr(_) => return Err(unsupported(no_span(), "function values")),
-            Ty::Buf(_) => return Err(unsupported(no_span(), "`Buf` (heap buffers)")),
+            Ty::FnPtr(_) => return Err(unsupported(no_span(), Feature::FnValues, &[])),
+            Ty::Buf(_) => return Err(unsupported(no_span(), Feature::Buf, &[])),
             _ => {}
         },
         Entry::Def(id) => {
@@ -622,7 +616,7 @@ fn type_def(cx: &mut Cx, entry: &Entry) -> R<String> {
                     let _ = writeln!(s, " }} {name};");
                 }
                 TypeDefKind::Opaque => {
-                    return Err(unsupported(no_span(), &format!("the opaque type `{}`", cx.m.ty(*id).name)));
+                    return Err(unsupported(no_span(), Feature::OpaqueType, &[&cx.m.ty(*id).name]));
                 }
             }
         }
@@ -644,7 +638,7 @@ fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
             (ExprKind::Lit(Lit::Int(v)), Ty::Int(k)) => Ok(int_lit(*k, -*v)),
             (ExprKind::Lit(Lit::F32(v)), _) => Ok(f32_lit(-*v)),
             (ExprKind::Lit(Lit::F64(v)), _) => Ok(f64_lit(-*v)),
-            _ => Err(unsupported(e.span, "this `const` initializer (evaluated at build time)")),
+            _ => Err(unsupported(e.span, Feature::ConstInitializer, &[])),
         },
         ExprKind::Cast(x) => {
             let inner = const_init(cx, x)?;
@@ -688,10 +682,8 @@ fn const_init(cx: &mut Cx, e: &Expr) -> R<String> {
                 .collect::<R<_>>()?;
             Ok(format!("{{ .tag = {tag}, .u = {{ .v_{vname} = {{ {} }} }} }}", parts.join(", ")))
         }
-        _ => Err(unsupported(
-            e.span,
-            "this `const` initializer (evaluated at build time); the driver must inline its value (T4-5)",
-        )),
+        // The driver inlines the value of a `const` evaluated at build time (T4-5).
+        _ => Err(unsupported(e.span, Feature::ConstInitializer, &[])),
     }
 }
 
@@ -737,10 +729,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     pub fn emit(mut self) -> R<(String, String)> {
         let def = self.def;
         let Some(body) = &def.body else {
-            return Err(unsupported(
-                def.span,
-                &format!("the `target` function `{}` (no implementation for C)", def.name),
-            ));
+            return Err(unsupported(def.span, Feature::TargetFn, &[&def.name]));
         };
         // Signature.
         let name = self.cx.fn_name(self.f).to_string();
@@ -761,7 +750,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             let cname = self.fresh_local(p.local);
             let tn = self.cx.names.name(&p.ty);
             if matches!(p.ty, Ty::Buf(_)) {
-                return Err(unsupported(def.span, "`Buf` parameters"));
+                return Err(unsupported(def.span, Feature::Buf, &[]));
             }
             let (decl, lvalue) = match (p.mode, p.ty.is_aggregate(), matches!(p.ty, Ty::Span(_))) {
                 (Mode::Inout, _, false) => (format!("{tn}* {cname}"), format!("(*{cname})")),
@@ -911,7 +900,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         match base_ty {
             Ty::Array(_, n) => Ok(format!("{base}.a[onsa_idx({idx}, UINT32_C({n}), {loc})]")),
             Ty::Span(_) => Ok(format!("{base}.ptr[onsa_idx({idx}, {base}.len, {loc})]")),
-            Ty::Buf(_) => Err(unsupported(span, "`Buf` (heap buffers)")),
+            Ty::Buf(_) => Err(unsupported(span, Feature::Buf, &[])),
             _ => Err(internal("index of a non-sequence")),
         }
     }
@@ -1077,7 +1066,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
     fn declare(&mut self, name: &str, ty: &Ty, e: &Expr) -> R<()> {
         let tn = self.cx.names.name(ty);
         if matches!(ty, Ty::Buf(_)) {
-            return Err(unsupported(e.span, "`Buf` (heap buffers)"));
+            return Err(unsupported(e.span, Feature::Buf, &[]));
         }
         if needs_construction(e) {
             self.line(&format!("{tn} {name};"));
@@ -1108,10 +1097,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                         self.close("}");
                     }
                     Some(_) => {
-                        return Err(unsupported(
-                            e.span,
-                            "building a flow state with a bulk region anywhere but in its `init`",
-                        ));
+                        return Err(unsupported(e.span, Feature::BulkBuild, &[]));
                     }
                     None => self.line(&format!("memset(&{target}, 0, sizeof {target});")),
                 }
@@ -1156,7 +1142,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             _ => {
                 if let (Ty::Struct(id), true) = (ty, self.cx.bulk.contains_key(&struct_id(ty))) {
                     let _ = id;
-                    return Err(unsupported(e.span, "copying a flow state with a bulk region"));
+                    return Err(unsupported(e.span, Feature::BulkCopy, &[]));
                 }
                 let v = self.expr(e)?;
                 self.line(&format!("{target} = {v};"));
@@ -1464,7 +1450,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                         Ok(format!("onsa_span_{tag}_of({xs}.a, UINT32_C({n}))"))
                     }
                     Ty::Span(_) => Ok(xs),
-                    Ty::Buf(_) => Err(unsupported(e.span, "`Buf` (heap buffers)")),
+                    Ty::Buf(_) => Err(unsupported(e.span, Feature::Buf, &[])),
                     _ => Err(internal("span of a non-sequence")),
                 }
             }
@@ -1694,7 +1680,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 match &args[0].expr.ty {
                     Ty::Span(_) => Ok(format!("{s}.len")),
                     Ty::Array(_, n) => Ok(format!("UINT32_C({n})")),
-                    _ => Err(unsupported(e.span, "`Buf` (heap buffers)")),
+                    _ => Err(unsupported(e.span, Feature::Buf, &[])),
                 }
             }
             Prim::Slice => {
@@ -1735,8 +1721,8 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 self.line(&format!("onsa_{f}_{tag}({d}, {s}, {loc});"));
                 Ok("((onsa_unit){0})".into())
             }
-            Prim::BufZeroed => Err(unsupported(e.span, "`Buf.zeroed` (heap buffers)")),
-            Prim::Std(name) => Err(unsupported(e.span, &format!("the `std` function `{name}` (no C implementation)"))),
+            Prim::BufZeroed => Err(unsupported(e.span, Feature::Buf, &[])),
+            Prim::Std(name) => Err(unsupported(e.span, Feature::StdFn, &[name])),
         }
     }
 
@@ -1759,14 +1745,14 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let _ = self.cx.names.name(&Ty::Span(el.clone()));
                 Ok(format!("onsa_span_{tag}_of({p}.a, UINT32_C({n}))"))
             }
-            _ => Err(unsupported(e.span, "`Buf` (heap buffers)")),
+            _ => Err(unsupported(e.span, Feature::Buf, &[])),
         }
     }
 
     fn span_tag(&mut self, ty: &Ty) -> R<String> {
         match ty {
             Ty::Span(el) | Ty::Array(el, _) => Ok(self.cx.names.tag(el)),
-            _ => Err(unsupported(no_span(), "`Buf` (heap buffers)")),
+            _ => Err(unsupported(no_span(), Feature::Buf, &[])),
         }
     }
 }

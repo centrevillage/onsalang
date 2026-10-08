@@ -1,0 +1,152 @@
+// onsa.toml
+// [package]
+// name = "lower_match_general"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0200 for a value `match` that is not a plain switch on the variants of one enum
+// (R-06, the plan's W2-07). The spec defines every one of these patterns (§7), but
+// this version does not lower them to Core, so a program that needs one is stopped
+// with E0200 instead of running (the interpreter fails with an internal error and
+// the C backend cannot build today). The positive version of every form is in
+// semantics/match_value_forms.onsa and semantics/match_general.onsa: W8-06 removes
+// this file.
+//
+// The `match` of each case is on one line, so that the line of the marker is the
+// line of the `match` however the diagnostic picks its position inside it.
+//
+// The functions at the end have no marker: a `match` whose value is not used and a
+// plain switch on the variants of one enum stay accepted (semantics/match_kept_forms.onsa).
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+  Dot,
+}
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Done,
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+// -------------------------------------------------------------------- guards
+
+pub fn n_guard_same(s: Shape) -> I32 {
+  match s { Shape.Circle(r) if r > 5 => 1, Shape.Circle(_) => 2, _ => 3 }   //~ E0200
+}
+
+pub fn n_guard_wild(n: I32) -> I32 {
+  match n { _ if n > 0 => 1, _ => 0 }   //~ E0200
+}
+
+pub fn n_guard_option(o: Option[I32]) -> I32 {
+  match o { Some(v) if v > 3 => 1, Some(_) => 2, None => 3 }   //~ E0200
+}
+
+// ------------------------------------------------------------------ literals
+
+pub fn n_int(n: I32) -> I32 {
+  match n { 1 => 10, 2 => 20, _ => 30 }   //~ E0200
+}
+
+pub fn n_char(c: Char) -> I32 {
+  match c { 'a' => 1, _ => 2 }   //~ E0200
+}
+
+pub fn n_bool(b: Bool) -> I32 {
+  match b { true => 1, false => 2 }   //~ E0200
+}
+
+pub fn n_scalar_name(n: I32) -> I32 {
+  match n { k => k + 1 }   //~ E0200
+}
+
+// ----------------------------------------------- tuples, structs, alternatives
+
+pub fn n_tuple(a: Stage, b: Stage) -> I32 {
+  match (a, b) { (Stage.Attack, _) => 1, _ => 2 }   //~ E0200
+}
+
+pub fn n_struct(p: Pt) -> I32 {
+  match p { Pt { x: 0, y: _ } => 1, Pt { x: a, y: b } => a + b }   //~ E0200
+}
+
+pub fn n_alt(s: Stage) -> I32 {
+  match s { Stage.Attack | Stage.Decay => 1, Stage.Done => 2 }   //~ E0200
+}
+
+// -------------------------------------------------------- a variant in a variant
+
+pub fn n_nested(o: Option[Shape]) -> I32 {
+  match o { Some(Shape.Circle(r)) => r, Some(_) => 50, None => 60 }   //~ E0200
+}
+
+pub fn n_result_nested(r: Result[I32, Stage]) -> I32 {
+  match r { Ok(v) => v, Err(Stage.Done) => 1, Err(_) => 2 }   //~ E0200
+}
+
+// ------------------------------------------------- where the value of it is used
+
+pub fn n_let(n: I32) -> I32 {
+  let r = match n { 1 => 10, _ => 30 }   //~ E0200
+  r + 1
+}
+
+pub fn n_assign(inout y: I32, n: I32) {
+  y = match n { 1 => y + 5, _ => y }   //~ E0200
+}
+
+pub fn n_arm_of_switch(o: Option[I32]) -> I32 {
+  match o { Some(v) => match v { 0 => 10, _ => 20 }, None => 30 }   //~ E0200
+}
+
+// A generic function is lowered for the types it is used with: two types, one
+// position, one diagnostic (as in lower_unsupported.onsa).
+pub fn n_generic[T: Copy](o: Option[Option[T]], d: T) -> T {
+  match o { Some(Some(v)) => v, _ => d }   //~ E0200
+}
+
+pub fn uses_generic(o: Option[Option[U32]], p: Option[Option[Bool]]) -> U32 {
+  let a = n_generic(o, 1)
+  let b = n_generic(p, true)
+  a
+}
+
+// --------------------------------------------- two forms in one function: both are reported
+
+pub fn n_two(n: I32, c: Char) -> I32 {
+  let a = match n { 1 => 10, _ => 30 }   //~ E0200
+  let b = match c { 'a' => 1, _ => 2 }   //~ E0200
+  a + b
+}
+
+// --------------------------------------------------------- what stays accepted
+
+// A `match` written as a statement, with any pattern: its value is not used.
+pub fn kept_statement(inout x: I32, n: I32, c: Char) {
+  match n { 1 => { x = x + 1 }, 2 | 3 => { x = x + 2 }, _ => { x = x + 3 } }
+  match c { 'a' => { x = x + 10 }, _ => { x = x + 20 } }
+}
+
+// A plain switch on the variants of one enum, `Option` and `Result`, whose value is used.
+pub fn kept_switch(s: Shape, o: Option[I32], r: Result[I32, I32]) -> I32 {
+  let a = match s { Shape.Circle(q) => q, Shape.Rect(w, h) => w * h, Shape.Dot => 0 }
+  let b = match o { Some(v) => v, None => 0 }
+  let c = match r { Ok(v) => v, Err(e) => e }
+  a + b + c
+}

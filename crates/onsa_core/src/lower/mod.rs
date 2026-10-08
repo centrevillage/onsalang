@@ -36,7 +36,8 @@ pub mod moves;
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::{Code, Diagnostic, Span, Stage};
+use onsa_diag::unsupported::Feature;
+use onsa_diag::{Diagnostic, Span, Stage};
 use onsa_sema::def::{DefKind, Fields, GenericKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy, TyId};
 use onsa_sema::{Analysis, DefId, ModId, Package};
@@ -76,12 +77,18 @@ pub(crate) struct Fail {
     /// The innermost expression whose lowering failed (unsupported features
     /// only): the next attempt lowers it as a placeholder and goes on.
     pub hole: Option<Hole>,
+    /// The E0200 of an unsupported feature, made by the list of what this
+    /// version does not support (`onsa_diag::unsupported`, S-224).
+    pub report: Option<Box<Diagnostic>>,
 }
 
 pub(crate) type R<T> = Result<T, Fail>;
 
-pub(crate) fn unsupported(span: Span, what: &str) -> Fail {
-    Fail { kind: FailKind::Unsupported, span, msg: format!("this version does not lower {what} to Core"), hole: None }
+/// An unsupported feature at `span` (E0200), with the details its phrase
+/// takes (`onsa_diag::unsupported`).
+pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Fail {
+    let d = feature.diagnostic(Stage::Build, span, details);
+    Fail { kind: FailKind::Unsupported, span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
 }
 
 /// Why [`lower`] produced no Core.
@@ -266,7 +273,13 @@ impl<'a> Lowerer<'a> {
                     let region = fail.hole.and_then(|h| self.hole_span(h)).unwrap_or(fail.span);
                     let around_stand_in = self.stand_in_spans.iter().any(|&h| contains(region, h));
                     if !around_stand_in {
-                        self.unsupported.push(Diagnostic::new(Stage::Build, Code::E0200, fail.span, fail.msg));
+                        let Some(d) = fail.report else {
+                            return Err(LowerFailure::Internal {
+                                span: fail.span,
+                                message: format!("an unsupported feature without its diagnostic: {}", fail.msg),
+                            });
+                        };
+                        self.unsupported.push(*d);
                     }
                     match fail.hole {
                         Some(h) if self.holes.insert(h) => {}
@@ -426,9 +439,9 @@ impl<'a> Lowerer<'a> {
                 }
                 BuiltinTy::Span => Ty::Span(Box::new(self.core_ty(targs[0], args, span)?)),
                 BuiltinTy::Buf => Ty::Buf(Box::new(self.core_ty(targs[0], args, span)?)),
-                BuiltinTy::Ptr => return Err(unsupported(span, "`Ptr` (FFI)")),
+                BuiltinTy::Ptr => return Err(unsupported(span, Feature::Ptr, &[])),
                 BuiltinTy::Str | BuiltinTy::Bytes | BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set => {
-                    return Err(unsupported(span, &format!("the Shared type `{}`", b.name())));
+                    return Err(unsupported(span, Feature::SharedTypes, &[b.name()]));
                 }
             },
             STy::Fn(f) => {
@@ -583,7 +596,7 @@ impl<'a> Lowerer<'a> {
                 let e = body::lower_expr(self, &mut cx, v)?;
                 // A placeholder is a local of its own (S-67): not one of the initializer.
                 if !cx.locals.is_empty() && self.hole_spans.is_empty() {
-                    return Err(unsupported(def.span, "a `const` initializer with local bindings"));
+                    return Err(unsupported(def.span, Feature::ConstBindings, &[]));
                 }
                 e
             }
@@ -710,5 +723,11 @@ pub(crate) fn core_mode(m: onsa_syntax::ast::Mode) -> Mode {
 
 /// A state lowering cannot be in: an internal error (S-67), not E0200.
 pub(crate) fn internal(span: Span, msg: impl Into<String>) -> Fail {
-    Fail { kind: FailKind::Internal, span, msg: format!("internal lowering error: {}", msg.into()), hole: None }
+    Fail {
+        kind: FailKind::Internal,
+        span,
+        msg: format!("internal lowering error: {}", msg.into()),
+        hole: None,
+        report: None,
+    }
 }

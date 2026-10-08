@@ -1,0 +1,173 @@
+// onsa.toml
+// [package]
+// name = "lower_closure_exit"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§9.1", "§6.1", "§5.3", "§18.1"]
+
+// E0200 for `?` and `return` inside an anonymous function passed to `array.from_fn`
+// (S-192, R-08; the plan's W2-07). The spec reads both as leaving the anonymous
+// function (§9.1, §6.1), and this version does not lower that exit for the anonymous
+// functions that `from_fn` expands in place, so it stops the program with E0200 rather
+// than leaving the enclosing function (a `?` or a `return` that returns from the
+// function the anonymous function is written in is a wrong value, not an error).
+// The positive version of every case is in semantics/closure_exit_from_fn.onsa:
+// W8-09 (function values) removes this file.
+//
+// The functions without a marker are the same shapes without an exit in the anonymous
+// function, and the `?` and `return` of the enclosing function: they stay accepted.
+
+use std.array
+
+fn half(n: U32) -> Option[U32] {
+  if n < 100 {
+    Some(n / 2)
+  } else {
+    None
+  }
+}
+
+fn parse(n: I32) -> Result[I32, U32] {
+  if n < 0 {
+    Err(1)
+  } else {
+    Ok(n)
+  }
+}
+
+// ---------------------------------------------------------------- `?`
+
+// The enclosing function returns an Option too: it must not leave with None.
+pub fn q_option() -> Option[U32] {
+  let xs: [Option[U32]; 3] = array.from_fn(fn(i: U32) -> Option[U32] {
+    let h = half(i + 99)?   //~ E0200
+    Some(h)
+  })
+  Some(7)
+}
+
+// The enclosing function returns a Result of the same error type.
+pub fn q_result(n: I32) -> Result[I32, U32] {
+  let xs: [Result[I32, U32]; 2] = array.from_fn(fn(i: U32) -> Result[I32, U32] {
+    let v = parse(n)?   //~ E0200
+    Ok(v)
+  })
+  Ok(n)
+}
+
+// The enclosing function returns neither.
+pub fn q_plain() -> U32 {
+  let xs: [Option[U32]; 2] = array.from_fn(fn(i: U32) -> Option[U32] {
+    let h = half(i)?   //~ E0200
+    Some(h)
+  })
+  3
+}
+
+// In a closure inside a closure.
+pub fn q_nested() -> U32 {
+  let outer: [U32; 2] = array.from_fn(fn(i: U32) -> U32 {
+    let inner: [Option[U32]; 2] = array.from_fn(fn(j: U32) -> Option[U32] {
+      let h = half(j)?   //~ E0200
+      Some(h)
+    })
+    i
+  })
+  outer[0]
+}
+
+// In a generic function.
+pub fn q_generic[T: Copy](v: T) -> [Option[T]; 2] {
+  array.from_fn(fn(i: U32) -> Option[T] {
+    let h = half(i)?   //~ E0200
+    Some(v)
+  })
+}
+
+// An unannotated anonymous function: the `?` would give it its return type.
+pub fn q_unannotated() -> [Option[U32]; 2] {
+  array.from_fn(fn(i) {
+    let h = half(i)?   //~ E0200
+    Some(h)
+  })
+}
+
+// --------------------------------------------------------------- `return`
+
+pub fn r_value() -> [U32; 3] {
+  array.from_fn(fn(i: U32) -> U32 {
+    if i == 1 {
+      return 50   //~ E0200
+    }
+    i * 2
+  })
+}
+
+pub fn r_in_loop() -> [U32; 3] {
+  array.from_fn(fn(i: U32) -> U32 {
+    for j in 0..4 {
+      if j == i {
+        return j   //~ E0200
+      }
+    }
+    7
+  })
+}
+
+pub fn r_generic[T: Copy](v: T) -> [Option[T]; 2] {
+  array.from_fn(fn(i: U32) -> Option[T] {
+    if i == 0 {
+      return None   //~ E0200
+    }
+    Some(v)
+  })
+}
+
+// A generic function is lowered for the types it is used with (two types here, one
+// position, so one diagnostic each, as in lower_unsupported.onsa).
+pub fn uses_generic() -> U32 {
+  let a: [Option[U32]; 2] = q_generic(1)
+  let b: [Option[Bool]; 2] = q_generic(true)
+  let c: [Option[U32]; 2] = r_generic(1)
+  let d: [Option[Bool]; 2] = r_generic(true)
+  0
+}
+
+// ---------------------------------------- both in one function: both are reported
+
+pub fn both() -> [Option[U32]; 2] {
+  let xs: [Option[U32]; 2] = array.from_fn(fn(i: U32) -> Option[U32] {
+    let h = half(i)?   //~ E0200
+    if h > 5 {
+      return None   //~ E0200
+    }
+    Some(h)
+  })
+  xs
+}
+
+// ------------------------------------------------------------ what stays accepted
+
+// An anonymous function without an exit, next to the `?` and `return` of the enclosing function.
+pub fn kept(n: U32) -> Option[U32] {
+  let a = half(n)?
+  let xs: [U32; 2] = array.from_fn(fn(i: U32) -> U32 {
+    if i == 0 {
+      a
+    } else {
+      a + 1
+    }
+  })
+  if xs[1] > 50 {
+    return None
+  }
+  Some(xs[0] + xs[1])
+}

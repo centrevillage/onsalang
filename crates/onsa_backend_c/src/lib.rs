@@ -23,7 +23,8 @@ mod names;
 mod reach;
 
 use onsa_core::Module;
-use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
+use onsa_diag::unsupported::Feature;
+use onsa_diag::{Diagnostic, FileId, Span, Stage};
 
 /// The runtime header every generated file includes (T4-1).
 pub const RUNTIME_HEADER: &str = include_str!("../../../runtime/c/onsa.h");
@@ -243,8 +244,9 @@ pub fn c_ident(name: &str) -> String {
     names::ident(name)
 }
 
-pub(crate) fn unsupported(span: Span, what: &str) -> Diagnostic {
-    Diagnostic::new(Stage::Build, Code::E0200, span, format!("the C backend does not support {what} in this version"))
+/// E0200 for `feature` (S-224), with the details its phrase takes.
+pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Diagnostic {
+    feature.diagnostic(Stage::Build, span, details)
 }
 
 pub(crate) fn no_span() -> Span {

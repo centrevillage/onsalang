@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
@@ -268,6 +269,11 @@ impl<'a> Checker<'a> {
     /// A diagnostic of the typing pass (stage `Types`).
     pub(crate) fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
         self.diag(Diagnostic::new(Stage::Types, code, span, msg).with_found(self.src(span)))
+    }
+
+    /// E0200 for `feature` (S-224), with the details its phrase takes.
+    pub(crate) fn unsupported(&mut self, span: Span, feature: Feature, details: &[&str]) -> Stop {
+        self.diag(feature.diagnostic(Stage::Types, span, details).with_found(self.src(span)))
     }
 
     /// A diagnostic of the flow checks (`flow.rs`, stage `Flow`).
@@ -1322,12 +1328,8 @@ impl<'a> Checker<'a> {
             ExprKind::Closure { params, ret, effects, body } => {
                 self.check_closure(e, params, *ret, effects.as_ref(), *body, expected)
             }
-            ExprKind::Handle { .. } => {
-                Err(self.err(Code::E0200, span, "this version does not support effect handlers (`handle ... with`)"))
-            }
-            ExprKind::Unsafe(_) => {
-                Err(self.err(Code::E0200, span, "this version does not support `unsafe` blocks (FFI)"))
-            }
+            ExprKind::Handle { .. } => Err(self.unsupported(span, Feature::EffectHandlers, &[])),
+            ExprKind::Unsafe(_) => Err(self.unsupported(span, Feature::Unsafe, &[])),
             ExprKind::Par { .. } => Err(self.err(
                 Code::E0401,
                 span,
@@ -1542,18 +1544,10 @@ impl<'a> Checker<'a> {
                         let p = Path { segments: c.iter().map(|(_, i)| i.clone()).collect(), span: expr.span };
                         self.const_len_path(len, &p)
                     }
-                    None => Err(self.err(
-                        Code::E0200,
-                        expr.span,
-                        "this version only accepts a literal or a constant as an array length",
-                    )),
+                    None => Err(self.unsupported(expr.span, Feature::ArrayLengthExprs, &[])),
                 }
             }
-            _ => Err(self.err(
-                Code::E0200,
-                expr.span,
-                "this version only accepts a literal or a constant as an array length",
-            )),
+            _ => Err(self.unsupported(expr.span, Feature::ArrayLengthExprs, &[])),
         }
     }
 
@@ -1570,11 +1564,7 @@ impl<'a> Checker<'a> {
                     return match int_value {
                         Some(v) if v <= u32::MAX as u64 => Ok(Len::Const(v as u32)),
                         Some(_) => Err(self.err(Code::E0408, span, "array length does not fit in `U32`")),
-                        None => Err(self.err(
-                            Code::E0200,
-                            span,
-                            "constants computed by expressions as array lengths are evaluated in M3",
-                        )),
+                        None => Err(self.unsupported(span, Feature::ComputedArrayLengths, &[])),
                     };
                 }
                 Err(self.err(Code::E0302, span, "array length must be a constant"))
@@ -1786,11 +1776,7 @@ impl<'a> Checker<'a> {
                     if n.name == "Alloc" {
                         set.alloc = true;
                     } else {
-                        return Err(self.err(
-                            Code::E0200,
-                            n.span,
-                            format!("effects other than `Alloc` (`{}`)", n.name),
-                        ));
+                        return Err(self.unsupported(n.span, Feature::Effects, &[&n.name]));
                     }
                 }
                 set
@@ -2454,7 +2440,7 @@ impl<'a> Checker<'a> {
             Ty::Array(el, _) => Ok((el, !moved)),
             Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf | BuiltinTy::Array, a) => Ok((a[0], !moved)),
             Ty::Builtin(BuiltinTy::Map | BuiltinTy::Set | BuiltinTy::Str, _) => {
-                Err(self.err(Code::E0200, span, "this version iterates arrays, `Span`, `Buf` and `Array` only"))
+                Err(self.unsupported(span, Feature::Iteration, &[]))
             }
             Ty::Error => Ok((it, true)),
             _ => {

@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Ast, Attr, AttrArg, EffectRow, ExprKind, GenericParam, Ident, ItemId, ItemKind, Lit, Mode, Param, ParamName,
@@ -154,11 +155,9 @@ impl<'p> Sema<'p> {
         self.a.diagnostics.push(d);
     }
 
-    fn unsupported(&mut self, def: DefId, span: Span, what: &str) {
-        self.report(
-            def,
-            Diagnostic::new(Stage::Names, Code::E0200, span, format!("this version does not support {what}")),
-        );
+    /// E0200 for `feature` (S-224), with the details its phrase takes.
+    fn unsupported(&mut self, def: DefId, span: Span, feature: Feature, details: &[&str]) {
+        self.report(def, feature.diagnostic(Stage::Names, span, details));
     }
 
     // ------------------------------------------------------------ collection
@@ -252,11 +251,7 @@ impl<'p> Sema<'p> {
                     self.declare(m, &f.name, Entity::Def(id), item.vis, false);
                 }
                 if target && !is_std {
-                    self.unsupported(
-                        id,
-                        item.span,
-                        "`target` declarations outside `std` (they need a build target, M4)",
-                    );
+                    self.unsupported(id, item.span, Feature::UserTargets, &[]);
                 }
             }
             ItemKind::Flow(f) => {
@@ -312,11 +307,7 @@ impl<'p> Sema<'p> {
                     self.declare(m, name, Entity::Def(id), item.vis, false);
                 }
                 if target && !is_std {
-                    self.unsupported(
-                        id,
-                        item.span,
-                        "`target` declarations outside `std` (they need a build target, M4)",
-                    );
+                    self.unsupported(id, item.span, Feature::UserTargets, &[]);
                 }
             }
             ItemKind::Const(c) => {
@@ -343,7 +334,7 @@ impl<'p> Sema<'p> {
                 );
                 let id = self.add_def(def);
                 if i.trait_.is_some() {
-                    self.unsupported(id, item.span, "trait implementations (`impl Trait for Type`)");
+                    self.unsupported(id, item.span, Feature::TraitImpls, &[]);
                     return;
                 }
                 let mut fns = Vec::new();
@@ -368,22 +359,22 @@ impl<'p> Sema<'p> {
             ItemKind::Trait(t) => {
                 let id = self.add_def(mk(&t.name, DefKind::Unsupported));
                 self.declare(m, &t.name, Entity::Def(id), item.vis, false);
-                self.unsupported(id, item.span, "trait definitions");
+                self.unsupported(id, item.span, Feature::TraitDefinitions, &[]);
             }
             ItemKind::Effect(e) => {
                 let id = self.add_def(mk(&e.name, DefKind::Unsupported));
                 self.declare(m, &e.name, Entity::Def(id), item.vis, false);
-                self.unsupported(id, item.span, "effect definitions");
+                self.unsupported(id, item.span, Feature::EffectDefinitions, &[]);
             }
             ItemKind::Handler(h) => {
                 let id = self.add_def(mk(&h.name, DefKind::Unsupported));
                 self.declare(m, &h.name, Entity::Def(id), item.vis, false);
-                self.unsupported(id, item.span, "handlers");
+                self.unsupported(id, item.span, Feature::HandlerDefinitions, &[]);
             }
             ItemKind::Extern(_) => {
                 let name = Ident { name: "<extern>".into(), span: item.span };
                 let id = self.add_def(mk(&name, DefKind::Unsupported));
-                self.unsupported(id, item.span, "`extern` blocks");
+                self.unsupported(id, item.span, Feature::Extern, &[]);
             }
             ItemKind::Use(u) => {
                 self.a.modules.get_mut(m).imports.push(Import {
@@ -689,7 +680,7 @@ impl<'p> Sema<'p> {
                         match Bound::parse(&n.name) {
                             Some(Bound::Dup) if b.relaxed => dup = false,
                             Some(bound) => bs.push(bound),
-                            None => self.unsupported(cx.def, n.span, "user-defined traits as bounds"),
+                            None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                         }
                     }
                     GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Type { bounds: bs, dup } }
@@ -699,17 +690,9 @@ impl<'p> Sema<'p> {
                     if !matches!(self.a.types.get(t), Ty::Int(IntKind::U32) | Ty::Error) {
                         self.report(
                             cx.def,
-                            Diagnostic::new(
-                                Stage::Names,
-                                Code::E0200,
-                                cx.ast.ty(*ty).span,
-                                "const generics other than `U32` are not supported",
-                            )
-                            .with_fix(Fix::replace(
-                                "write `U32`",
-                                cx.ast.ty(*ty).span,
-                                "U32",
-                            )),
+                            Feature::ConstGenericKinds
+                                .diagnostic(Stage::Names, cx.ast.ty(*ty).span, &[])
+                                .with_fix(Fix::replace("write `U32`", cx.ast.ty(*ty).span, "U32")),
                         );
                     }
                     GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Const(t) }
@@ -744,7 +727,7 @@ impl<'p> Sema<'p> {
                             "Ord" => Derive::Ord,
                             "Default" => Derive::Default,
                             "Hash" | "Show" => {
-                                self.unsupported(cx.def, n.span, &format!("`@derive({})` (needs `Str`)", n.name));
+                                self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]);
                                 continue;
                             }
                             _ => {
@@ -795,7 +778,7 @@ impl<'p> Sema<'p> {
                 set.vars.push(i as u32);
             } else {
                 if !cx.is_std {
-                    self.unsupported(cx.def, n.span, &format!("effects other than `Alloc` (`{}`)", n.name));
+                    self.unsupported(cx.def, n.span, Feature::Effects, &[&n.name]);
                 }
                 set.other.push(n.name.clone());
             }
@@ -1271,11 +1254,7 @@ impl<'p> Sema<'p> {
                                 None
                             }
                             None => {
-                                self.unsupported(
-                                    cx.def,
-                                    expr.span,
-                                    "constants computed by expressions as array lengths (evaluated in M3)",
-                                );
+                                self.unsupported(cx.def, expr.span, Feature::ComputedArrayLengths, &[]);
                                 None
                             }
                         },
@@ -1307,7 +1286,7 @@ impl<'p> Sema<'p> {
                 }
             }
             _ => {
-                self.unsupported(cx.def, expr.span, "expressions as array lengths (only literals and constants)");
+                self.unsupported(cx.def, expr.span, Feature::ArrayLengthExprs, &[]);
                 None
             }
         }
@@ -1372,7 +1351,7 @@ impl<'p> Sema<'p> {
                 inner
             }
             Ty::Rate(Rate::Ctl, _) => {
-                self.unsupported(id, cx.ast.ty(f.ret).span, "`Ctl` outputs of flows (§19)");
+                self.unsupported(id, cx.ast.ty(f.ret).span, Feature::CtlOutputs, &[]);
                 self.a.types.error()
             }
             Ty::Error => out_lowered,

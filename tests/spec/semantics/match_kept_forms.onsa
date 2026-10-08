@@ -1,0 +1,296 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.5", "§6.1", "§4.4"]
+
+// `match` forms that work today and have to keep working when the value `match`
+// that does not work yet is stopped with E0200 (W2-07, R-06) and later lowered
+// (W8-06): a `match` written as a statement, whose value is not used, with any
+// pattern (literals, guards, nested variants, tuples, structs, alternatives, a
+// name), and a `match` on the variants of one enum, `Option` or `Result` with
+// plain payload patterns and no guard whose value is used. Stopping a value
+// `match` must not stop these (the forms that are stopped are in
+// match_value_forms.onsa). The arms write to a variable through `inout` so that
+// the effect of the chosen arm can be read back; `continue` and `return` leave
+// the loop and the function from an arm.
+//
+// Every value is worked out by hand from the spec text.
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+  Dot,
+}
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Done,
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+// --------------------------------------------- a match written as a statement
+
+fn on_option(inout x: I32, o: Option[Shape]) {
+  match o {
+    Some(Shape.Circle(r)) => {
+      x = x + r
+    },
+    Some(_) => {
+      x = x + 50
+    },
+    None => {
+      x = x + 60
+    },
+  }
+}
+
+fn on_pair(inout x: I32, a: Stage, b: Stage) {
+  match (a, b) {
+    (Stage.Attack, Stage.Attack) => {
+      x = x + 1
+    },
+    (Stage.Attack, _) => {
+      x = x + 2
+    },
+    (_, Stage.Done) => {
+      x = x + 3
+    },
+    _ => {
+      x = x + 4
+    },
+  }
+}
+
+fn on_alt(inout x: I32, s: Stage) {
+  match s {
+    Stage.Attack | Stage.Decay => {
+      x = x + 1
+    },
+    Stage.Done => {
+      x = x + 2
+    },
+  }
+}
+
+fn on_struct(inout x: I32, p: Pt) {
+  match p {
+    Pt { x: 0, y: _ } => {
+      x = x + 1
+    },
+    Pt { x: a, y: b } => {
+      x = x + a + b
+    },
+  }
+}
+
+fn on_bool(inout x: I32, b: Bool) {
+  match b {
+    true => {
+      x = x + 1
+    },
+    false => {
+      x = x + 2
+    },
+  }
+}
+
+fn on_guard(inout x: I32, s: Shape) {
+  match s {
+    Shape.Circle(r) if r > 5 => {
+      x = x + 1
+    },
+    Shape.Circle(_) => {
+      x = x + 2
+    },
+    _ => {
+      x = x + 3
+    },
+  }
+}
+
+fn on_int(inout x: I32, n: I32) {
+  match n {
+    1 => {
+      x = x + 1
+    },
+    2 | 3 => {
+      x = x + 2
+    },
+    _ => {
+      x = x + 3
+    },
+  }
+}
+
+fn on_char(inout x: I32, c: Char) {
+  match c {
+    'a' => {
+      x = x + 1
+    },
+    _ => {
+      x = x + 2
+    },
+  }
+}
+
+fn in_loop(inout x: I32, n: I32) -> I32 {
+  for i in 0..n {
+    match i {
+      1 => {
+        continue
+      },
+      3 => {
+        return x
+      },
+      k => {
+        x = x + (k * 10)
+      },
+    }
+  }
+  x
+}
+
+test "a statement match on an Option holding an enum" {
+  var x: I32 = 0
+  on_option(inout x, Some(Shape.Circle(8)))
+  assert x == 8
+  on_option(inout x, Some(Shape.Dot))
+  assert x == 58
+  on_option(inout x, None)
+  assert x == 118
+}
+
+test "a statement match on a tuple of enums" {
+  var x: I32 = 0
+  on_pair(inout x, Stage.Attack, Stage.Attack)
+  on_pair(inout x, Stage.Attack, Stage.Done)
+  on_pair(inout x, Stage.Decay, Stage.Done)
+  on_pair(inout x, Stage.Decay, Stage.Decay)
+  assert x == 10
+}
+
+test "a statement match with alternatives" {
+  var x: I32 = 0
+  on_alt(inout x, Stage.Decay)
+  on_alt(inout x, Stage.Done)
+  assert x == 3
+}
+
+test "a statement match on a struct" {
+  var x: I32 = 0
+  on_struct(inout x, Pt { x: 0, y: 9 })
+  on_struct(inout x, Pt { x: 2, y: 9 })
+  assert x == 12
+}
+
+test "a statement match on both values of a Bool" {
+  var x: I32 = 0
+  on_bool(inout x, true)
+  on_bool(inout x, false)
+  assert x == 3
+}
+
+test "a statement match with a guard that fails" {
+  var x: I32 = 0
+  on_guard(inout x, Shape.Circle(9))
+  assert x == 1
+  on_guard(inout x, Shape.Circle(1))
+  assert x == 3
+  on_guard(inout x, Shape.Dot)
+  assert x == 6
+}
+
+test "a statement match on integer and Char literals" {
+  var x: I32 = 0
+  on_int(inout x, 1)
+  on_int(inout x, 3)
+  on_int(inout x, 9)
+  assert x == 6
+  on_char(inout x, 'a')
+  on_char(inout x, 'z')
+  assert x == 9
+}
+
+test "arms of a statement match that continue and return" {
+  var x: I32 = 0
+  let r = in_loop(inout x, 4)
+  assert r == 20
+  assert x == 20
+}
+
+// ------------------------------------------------- plain switches with a value
+
+fn area(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(r) => 3 * r * r,
+    Shape.Rect(w, h) => w * h,
+    Shape.Dot => 0,
+  }
+}
+
+fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+fn r_or_neg(r: Result[I32, I32]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(e) => 0 - e,
+  }
+}
+
+fn early(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => {
+      return 77
+    },
+  }
+}
+
+// A plain switch whose arm holds a statement `match` with literals and a guard.
+fn stage_bonus(s: Stage, n: I32) -> I32 {
+  match s {
+    Stage.Attack => {
+      var b: I32 = 0
+      on_int(inout b, n)
+      b
+    },
+    Stage.Decay => 100,
+    Stage.Done => 200,
+  }
+}
+
+test "a plain switch on an enum with payloads" {
+  assert area(Shape.Circle(2)) == 12
+  assert area(Shape.Rect(2, 7)) == 14
+  assert area(Shape.Dot) == 0
+}
+
+test "plain switches on Option and Result" {
+  assert or_zero(Some(5)) == 5
+  assert or_zero(None) == 0
+  assert r_or_neg(Ok(3)) == 3
+  assert r_or_neg(Err(4)) == -4
+}
+
+test "a plain switch with an arm that returns" {
+  assert early(Some(4)) == 4
+  assert early(None) == 77
+}
+
+test "a plain switch whose arm contains a statement match" {
+  assert stage_bonus(Stage.Attack, 1) == 1
+  assert stage_bonus(Stage.Attack, 3) == 2
+  assert stage_bonus(Stage.Attack, 9) == 3
+  assert stage_bonus(Stage.Decay, 1) == 100
+  assert stage_bonus(Stage.Done, 1) == 200
+}

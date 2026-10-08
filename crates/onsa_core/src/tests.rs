@@ -108,14 +108,39 @@ fn match_on_enum_is_a_switch() {
     assert!(d.contains("Rect => {"), "{d}");
 }
 
+/// `return e` with `e: ()` keeps `e` as a statement before the `return`
+/// (R-07): the call runs, then the function is left.
+#[test]
+fn return_of_a_unit_call_keeps_the_call() {
+    let d = text(
+        "fn bump(inout x: I32) {\n  x = x + 1\n}\n\npub fn f(inout x: I32, c: Bool) {\n  if c {\n    return bump(inout x)\n  }\n  x = x + 100\n}\n",
+    );
+    let f = d.find("fn t.f").unwrap_or_else(|| panic!("{d}"));
+    let body = &d[f..];
+    let call = body.find("t.bump(").unwrap_or_else(|| panic!("the call is dropped: {d}"));
+    let ret = body.find("return").unwrap_or_else(|| panic!("{d}"));
+    assert!(call < ret, "the call comes after the return: {d}");
+}
+
+/// A `match` whose value is not used, with a guard: the `if` chain with a
+/// `done` flag. The same `match` whose value is used is E0200 until W8-06
+/// (R-06): its result is never declared.
 #[test]
 fn match_with_guard_uses_if_chain() {
     let d = text(
-        "pub fn f(x: Option[I32]) -> I32 {\n  match x {\n    Some(v) if v > 0 => v,\n    Some(v) => -v,\n    None => 0,\n  }\n}\n",
+        "pub fn f(inout y: I32, x: Option[I32]) {\n  match x {\n    Some(v) if v > 0 => {\n      y = v\n    },\n    \
+         Some(v) => {\n      y = -v\n    },\n    None => {\n      y = 0\n    },\n  }\n}\n",
     );
     assert!(d.contains("__done"), "{d}");
     assert!(d.contains("(tag(x) == 1:U8)"), "{d}");
-    assert!(d.contains("__result"), "{d}");
+    assert!(!d.contains("__result"), "{d}");
+    let diags = core_err(
+        "pub fn f(x: Option[I32]) -> I32 {\n  match x {\n    Some(v) if v > 0 => v,\n    Some(v) => -v,\n    None => 0,\n  }\n}\n",
+    );
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert_eq!(diags[0].code, onsa_diag::Code::E0200, "{diags:?}");
+    assert!(diags[0].message.contains("the value of a `match`"), "{diags:?}");
+    assert_eq!(diags[0].notes.len(), 1, "{diags:?}");
 }
 
 #[test]
@@ -245,16 +270,19 @@ fn unsupported_types_and_patterns_do_not_stop_the_item() {
                   let c = fn(v: I32) -> I32 { v }\n  1\n}\n";
     let got = lines(locals);
     assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [2, 3, 4], "{got:?}");
-    assert!(got[2].1.contains("function values"), "{got:?}");
+    assert!(got[2].1.contains("anonymous functions"), "{got:?}");
     // the `==` of two `Str` placeholders is not reported for their stand-in type
     let eq = "pub fn g() -> I32 uses {Alloc} {\n  if \"a\" == \"b\" { 1 } else { 2 }\n}\n";
     assert!(lines(eq).iter().all(|(_, m)| m.contains("Shared type `Str`")), "{:?}", lines(eq));
     let arms = "pub enum E {\n  A(I32),\n  B(I32),\n  C,\n}\n\n\
                 pub fn m(e: E, x: [I32; 2], y: [I32; 2]) -> I32 {\n  match e {\n    \
                 E.A(n) | E.B(n) => n,\n    E.C => if x < y { 1 } else { 2 },\n  }\n}\n";
+    // the arms are lowered before the value of the `match` is found
+    // unsupported (R-06): all three are reported
     let got = lines(arms);
-    assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [9, 10], "{got:?}");
-    assert!(got[0].1.contains("or-patterns") && got[1].1.contains("ordering"), "{got:?}");
+    assert_eq!(got.iter().map(|(l, _)| *l).collect::<Vec<_>>(), [8, 9, 10], "{got:?}");
+    assert!(got[0].1.contains("the value of a `match`"), "{got:?}");
+    assert!(got[1].1.contains("or-patterns") && got[2].1.contains("ordering"), "{got:?}");
 }
 
 /// S-67 (W1-04/b M-2): an internal failure is a consequence of a placeholder

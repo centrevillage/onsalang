@@ -185,7 +185,9 @@ macro_rules! codes {
             }
 
             /// Long-form explanation (markdown), if written yet (M9 fills all of them).
-            pub fn explain(self) -> Option<&'static str> {
+            /// E0200's ends with the list of what this version does not support
+            /// ([`crate::unsupported::explain`]).
+            pub fn explain(self) -> Option<String> {
                 match self { $( Code::$name => explain_text(stringify!($name)), )* }
             }
         }
@@ -381,11 +383,12 @@ codes! {
         "a required manifest key is missing";
 }
 
-fn explain_text(code: &str) -> Option<&'static str> {
+fn explain_text(code: &str) -> Option<String> {
     // Explanations live in `explain/<code>.md`; add an arm when one is written.
     match code {
-        "E0010" => Some(include_str!("../explain/E0010.md")),
-        "E0811" => Some(include_str!("../explain/E0811.md")),
+        "E0010" => Some(include_str!("../explain/E0010.md").to_string()),
+        "E0200" => Some(crate::unsupported::explain()),
+        "E0811" => Some(include_str!("../explain/E0811.md").to_string()),
         _ => None,
     }
 }

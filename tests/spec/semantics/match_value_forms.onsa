@@ -1,0 +1,483 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.5", "§4.4", "§4.5", "§9.1"]
+
+// The value of a `match` that is not a plain switch on the variants of one enum
+// (spec §7, R-06). Each case is a form the general lowering of a value `match`
+// has to get right: the result of the `match` has to be one value however the arm
+// was chosen, and a guard that fails falls to the next arm with the scrutinee
+// unchanged and evaluated once. The forms are
+//
+//   - a guard that fails and a later arm of the same variant, of another variant,
+//     or `_`,
+//   - alternatives `p | q` of unit variants, tuples of unit enums, both arms of a
+//     `Bool`, a name that binds a scalar,
+//   - a variant inside a variant (`Some(Shape.Circle(r))`, `Err(Missing.Key)`),
+//     also in a generic function,
+//   - a result that is a struct, an enum, a tuple or an `Option`, a `match` inside
+//     an arm, a result assigned to the place the arms read, an arm that leaves the
+//     loop or the function, a `match` in a closure.
+//
+// Every value is worked out by hand from the spec text. The literal, tuple, struct
+// and `Option` patterns in the same family are in match_general.onsa, the plain
+// switches in match_flat.onsa, and the forms that already work (a `match` whose
+// value is not used, a plain switch) in match_kept_forms.onsa. Until the general
+// lowering exists (W8-06) these forms are E0200 (negative/lower_match_general.onsa);
+// W8-06 removes that file and this one has to pass.
+
+use std.array
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+  Dot,
+}
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Done,
+}
+
+pub enum Missing {
+  Key,
+  Limit(U32),
+}
+
+// ------------------------------------------------------------------ guards
+
+fn guard_same(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(r) if r > 5 => 1,
+    Shape.Circle(_) => 2,
+    _ => 3,
+  }
+}
+
+fn guard_then_other(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(r) if r > 5 => 1,
+    Shape.Rect(w, h) => w + h,
+    Shape.Circle(r) => 100 + r,
+    Shape.Dot => 0,
+  }
+}
+
+fn guard_on_wild(s: Shape, limit: I32) -> I32 {
+  match s {
+    _ if limit == 0 => -1,
+    Shape.Dot => 0,
+    Shape.Circle(r) if r > limit => r,
+    _ => limit,
+  }
+}
+
+fn make(inout log: U32, r: I32) -> Shape {
+  log = log + 1
+  Shape.Circle(r)
+}
+
+fn classify_once(inout log: U32, r: I32) -> I32 {
+  match make(inout log, r) {
+    Shape.Circle(v) if v > 3 => 1,
+    Shape.Circle(v) if v > 1 => 2,
+    Shape.Circle(_) => 3,
+    _ => 4,
+  }
+}
+
+test "a guard that fails falls to a later arm of the same variant" {
+  assert guard_same(Shape.Circle(9)) == 1
+  assert guard_same(Shape.Circle(6)) == 1
+  assert guard_same(Shape.Circle(5)) == 2
+  assert guard_same(Shape.Circle(2)) == 2
+  assert guard_same(Shape.Dot) == 3
+  assert guard_same(Shape.Rect(1, 1)) == 3
+}
+
+test "a guard that fails falls past arms of other variants to the same variant" {
+  assert guard_then_other(Shape.Circle(9)) == 1
+  assert guard_then_other(Shape.Circle(2)) == 102
+  assert guard_then_other(Shape.Rect(1, 2)) == 3
+  assert guard_then_other(Shape.Dot) == 0
+}
+
+test "a guard on a wildcard arm that comes first" {
+  assert guard_on_wild(Shape.Dot, 0) == -1
+  assert guard_on_wild(Shape.Circle(8), 0) == -1
+  assert guard_on_wild(Shape.Dot, 3) == 0
+  assert guard_on_wild(Shape.Circle(5), 3) == 5
+  assert guard_on_wild(Shape.Circle(2), 3) == 3
+  assert guard_on_wild(Shape.Rect(1, 1), 3) == 3
+}
+
+test "the scrutinee is evaluated once when two guards fail" {
+  var log: U32 = 0
+  let a = classify_once(inout log, 5)
+  assert a == 1
+  assert log == 1
+  let b = classify_once(inout log, 2)
+  assert b == 2
+  assert log == 2
+  let c = classify_once(inout log, 0)
+  assert c == 3
+  assert log == 3
+}
+
+// ------------------------------------------- alternatives, tuples, Bool, names
+
+fn unit_alt(s: Stage) -> I32 {
+  match s {
+    Stage.Attack | Stage.Decay => 1,
+    Stage.Done => 2,
+  }
+}
+
+fn stage_pair(a: Stage, b: Stage) -> I32 {
+  match (a, b) {
+    (Stage.Attack, Stage.Attack) => 1,
+    (Stage.Attack, _) => 2,
+    (_, Stage.Done) => 3,
+    _ => 4,
+  }
+}
+
+fn flag(b: Bool) -> I32 {
+  match b {
+    true => 1,
+    false => 2,
+  }
+}
+
+fn double_nonzero(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    k => k * 2,
+  }
+}
+
+fn bind_scalar(n: I32) -> I32 {
+  match n {
+    k => k + 1,
+  }
+}
+
+test "alternatives of unit variants" {
+  assert unit_alt(Stage.Attack) == 1
+  assert unit_alt(Stage.Decay) == 1
+  assert unit_alt(Stage.Done) == 2
+}
+
+test "tuples of unit enums" {
+  assert stage_pair(Stage.Attack, Stage.Attack) == 1
+  assert stage_pair(Stage.Attack, Stage.Done) == 2
+  assert stage_pair(Stage.Decay, Stage.Done) == 3
+  assert stage_pair(Stage.Decay, Stage.Decay) == 4
+  assert stage_pair(Stage.Done, Stage.Attack) == 4
+}
+
+test "both arms of a Bool" {
+  assert flag(true) == 1
+  assert flag(false) == 2
+}
+
+test "a name that binds a scalar, with and without a literal arm before it" {
+  assert double_nonzero(0) == 0
+  assert double_nonzero(3) == 6
+  assert double_nonzero(-4) == -8
+  assert bind_scalar(4) == 5
+}
+
+// ----------------------------------------------------- a variant in a variant
+
+fn stage_opt(o: Option[Stage]) -> I32 {
+  match o {
+    Some(Stage.Attack) => 1,
+    Some(Stage.Decay) => 2,
+    Some(Stage.Done) => 3,
+    None => 4,
+  }
+}
+
+fn circle_in_opt(o: Option[Shape]) -> I32 {
+  match o {
+    Some(Shape.Circle(r)) => r,
+    Some(_) => 50,
+    None => 60,
+  }
+}
+
+fn res_shape(res: Result[Shape, I32]) -> I32 {
+  match res {
+    Ok(Shape.Circle(r)) => r,
+    Ok(_) => 5,
+    Err(e) => e,
+  }
+}
+
+fn missing_code(r: Result[U32, Missing]) -> U32 {
+  match r {
+    Ok(v) => v,
+    Err(Missing.Key) => 1000,
+    Err(Missing.Limit(n)) => 2000 + n,
+  }
+}
+
+fn inner[T: Copy](o: Option[Option[T]], d: T) -> T {
+  match o {
+    Some(Some(v)) => v,
+    _ => d,
+  }
+}
+
+test "every unit variant inside an Option" {
+  assert stage_opt(Some(Stage.Attack)) == 1
+  assert stage_opt(Some(Stage.Decay)) == 2
+  assert stage_opt(Some(Stage.Done)) == 3
+  assert stage_opt(None) == 4
+}
+
+test "a variant with a payload inside Some" {
+  assert circle_in_opt(Some(Shape.Circle(8))) == 8
+  assert circle_in_opt(Some(Shape.Dot)) == 50
+  assert circle_in_opt(Some(Shape.Rect(1, 2))) == 50
+  assert circle_in_opt(None) == 60
+}
+
+test "a variant with a payload inside Ok" {
+  assert res_shape(Ok(Shape.Circle(6))) == 6
+  assert res_shape(Ok(Shape.Dot)) == 5
+  assert res_shape(Err(9)) == 9
+}
+
+test "a unit variant and a variant with a payload inside Err" {
+  assert missing_code(Ok(5)) == 5
+  assert missing_code(Err(Missing.Key)) == 1000
+  assert missing_code(Err(Missing.Limit(7))) == 2007
+}
+
+test "a nested pattern in a generic function, for two types" {
+  let a: Option[Option[U32]] = Some(Some(4))
+  let b: Option[Option[U32]] = Some(None)
+  let c: Option[Option[U32]] = None
+  assert inner(a, 9) == 4
+  assert inner(b, 9) == 9
+  assert inner(c, 9) == 9
+  let d: Option[Option[Bool]] = Some(Some(false))
+  assert !inner(d, true)
+}
+
+// ------------------------------------------------------ the type of the result
+
+fn to_pt(s: Shape) -> Pt {
+  match s {
+    Shape.Circle(r) if r > 5 => Pt { x: r, y: 0 },
+    Shape.Circle(r) => Pt { x: 0, y: r },
+    _ => Pt { x: -1, y: -1 },
+  }
+}
+
+fn stage_no(s: Stage) -> I32 {
+  match s {
+    Stage.Attack => 1,
+    Stage.Decay => 2,
+    Stage.Done => 3,
+  }
+}
+
+fn next(s: Stage, hold: Bool) -> Stage {
+  match s {
+    Stage.Attack if hold => Stage.Attack,
+    Stage.Attack => Stage.Decay,
+    Stage.Decay => Stage.Done,
+    Stage.Done => Stage.Done,
+  }
+}
+
+fn split(n: I32) -> (I32, I32) {
+  match n {
+    0 => (0, 0),
+    k if k < 0 => (0, -k),
+    k => (k, 0),
+  }
+}
+
+fn halve(n: I32) -> Option[I32] {
+  match n {
+    0 => None,
+    k if (k % 2) == 1 => None,
+    k => Some(k / 2),
+  }
+}
+
+fn grade(a: I32, b: I32) -> I32 {
+  match a {
+    0 => match b {
+      0 => 1,
+      k if k > 5 => 2,
+      _ => 3,
+    },
+    k if k > 5 => 4,
+    _ => 5,
+  }
+}
+
+fn is_small(s: Shape) -> Bool {
+  match s {
+    Shape.Circle(r) if r < 3 => true,
+    Shape.Dot => true,
+    _ => false,
+  }
+}
+
+test "the result is a struct" {
+  let a = to_pt(Shape.Circle(9))
+  assert a.x == 9
+  assert a.y == 0
+  let b = to_pt(Shape.Circle(4))
+  assert b.x == 0
+  assert b.y == 4
+  let c = to_pt(Shape.Dot)
+  assert c.x == -1
+  assert c.y == -1
+}
+
+test "the result is an enum" {
+  assert stage_no(next(Stage.Attack, true)) == 1
+  assert stage_no(next(Stage.Attack, false)) == 2
+  assert stage_no(next(Stage.Decay, true)) == 3
+  assert stage_no(next(Stage.Done, false)) == 3
+}
+
+test "the result is a tuple" {
+  let (a, b) = split(0)
+  assert a == 0
+  assert b == 0
+  let (c, d) = split(-3)
+  assert c == 0
+  assert d == 3
+  let (e, f) = split(4)
+  assert e == 4
+  assert f == 0
+}
+
+test "the result is an Option" {
+  assert halve(0) == None
+  assert halve(3) == None
+  assert halve(8) == Some(4)
+}
+
+test "the result is a Bool" {
+  assert is_small(Shape.Circle(2))
+  assert is_small(Shape.Dot)
+  assert !is_small(Shape.Circle(3))
+  assert !is_small(Shape.Rect(1, 1))
+}
+
+test "a match inside an arm of a match" {
+  assert grade(0, 0) == 1
+  assert grade(0, 9) == 2
+  assert grade(0, 3) == 3
+  assert grade(9, 0) == 4
+  assert grade(2, 0) == 5
+}
+
+// ------------------------------------------- the place the result is written to
+
+fn assign(inout y: I32, n: I32) {
+  y = match n {
+    1 => y + 5,
+    k if k > y => y * 2,
+    _ => y,
+  }
+}
+
+test "a match assigned to a place that its arms read" {
+  var y: I32 = 3
+  assign(inout y, 1)
+  assert y == 8
+  assign(inout y, 20)
+  assert y == 16
+  assign(inout y, 2)
+  assert y == 16
+}
+
+// (Moved from eval_order.onsa, where it was the one test that needed the general path.)
+test "a match arm that would panic is not evaluated when it is not taken" {
+  let z: I32 = 0
+  let k: I32 = 2
+  let d = match k {
+    1 => 1 / z,
+    _ => 9,
+  }
+  assert d == 9
+}
+
+// ----------------------------------------------- arms that leave the loop or function
+
+fn sum_from_one(n: I32) -> I32 {
+  var total: I32 = 0
+  for i in 0..n {
+    let add = match i {
+      0 => {
+        continue
+      },
+      k if k > 6 => {
+        return -total
+      },
+      k => k,
+    }
+    total = total + add
+  }
+  total
+}
+
+fn last_below(n: I32) -> I32 {
+  var last: I32 = -1
+  for i in 0..n {
+    let v = match i {
+      k if (k * k) > 20 => {
+        break
+      },
+      k => k,
+    }
+    last = v
+  }
+  last
+}
+
+test "an arm that continues skips the rest of the iteration" {
+  assert sum_from_one(5) == 10
+}
+
+test "an arm that returns leaves the function with its own value" {
+  assert sum_from_one(8) == -21
+}
+
+test "an arm that breaks leaves the loop" {
+  assert last_below(10) == 4
+  assert last_below(3) == 2
+}
+
+// ----------------------------------------------------------------- a closure
+
+test "a guard and a literal in a closure that captures" {
+  let base: U32 = 100
+  let xs: [U32; 4] = array.from_fn(fn(i) {
+    match i {
+      0 => base,
+      k if k > 2 => base + 200 + k,
+      k => base + 100 + k,
+    }
+  })
+  assert xs[0] == 100
+  assert xs[1] == 201
+  assert xs[2] == 202
+  assert xs[3] == 303
+}

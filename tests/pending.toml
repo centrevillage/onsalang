@@ -765,7 +765,7 @@ kind = "test-case"
 target = "tests/spec/semantics/match_general.onsa"
 reasons = ["R-06"]
 until = "W8-06"
-note = "値の match の一般経路（リテラル・ガード・タプル・入れ子・スカラの対象）が internal: local read before initialization（§7）"
+note = "値の match の一般経路（リテラル・ガード・タプル・入れ子・スカラの対象）（§7）。W2-07 で E0200、正式な実装は W8-06"
 
 [[pending]]
 kind = "test-case"
@@ -777,10 +777,9 @@ note = "関数値と関数値の呼び出しが E0200（§4.1、§5.3、§6.1）
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/try_in_closure.onsa"
-reasons = ["R-08"]
-until = "W2-07"
-note = "無名関数の中の ? で降下が内部の失敗（`?` in a function without Option / Result）。W2-07 で E0200 にしたら expect を外し、until を W8-09（Core の関数値）に改める"
-expect = "internal"
+reasons = ["R-08", "S-192", "S-191"]
+until = "W8-09"
+note = "無名関数の中の ? と return の脱出（§6.1、§9.1、S-192）。W2-07 で E0200 にし、正式な実装は W8-09（Core の関数値）。関数値の呼び出し .( は W3-07"
 
 [[pending]]
 kind = "test-case"
@@ -859,13 +858,6 @@ target = "tests/spec/semantics/eval_order.onsa::nested indices are evaluated fro
 reasons = ["R-93", "S-75"]
 until = "W8-03"
 note = "xs[i][j] の添字を内側から評価する（§3.5）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/eval_order.onsa::a match arm that would panic is not evaluated when it is not taken"
-reasons = ["R-06"]
-until = "W8-06"
-note = "スカラの対象の match が internal: local read before initialization（§7、§3.5）"
 
 [[pending]]
 kind = "test-case"
@@ -2467,7 +2459,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/enum_construct_match.onsa"
 reasons = ["S-102", "R-06"]
 until = "W8-06"
-note = "at の後も、入れ子の列挙子のパターンとガードの match が内部エラー（local read before initialization）"
+note = "at の後も、入れ子の列挙子のパターンとガードの値の match が W2-07 の E0200 で止まる（正式な実装は W8-06）"
 
 [[pending]]
 kind = "test-case"
@@ -2545,20 +2537,6 @@ target = "tests/spec/semantics/span_element_literal.onsa"
 reasons = ["S-196", "S-181"]
 until = "W4-08"
 note = "[a, b]（長さの違う Span）が [Span[F32]; 2] の引数で E0401、inout [a, b] が E0701"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/try_families.onsa::an Option turned into a Result by hand: the value passes through ? and checked"
-reasons = ["R-06"]
-until = "W8-06"
-note = "入れ子の列挙子のパターンの match が内部エラー"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/try_families.onsa::the None becomes Missing.Key and the check can fail with the payload"
-reasons = ["R-06"]
-until = "W8-06"
-note = "入れ子の列挙子のパターンの match が内部エラー"
 
 # --- W3-02/t: 修正候補の期待値（tests/spec/fixes/、断片の fixes = N と事例の隣の .fixK。2026-10-08）。
 # 候補を当てた結果と .fixK は、空白の幅を無視し、空白以外の各トークン（改行とコメントを含む）の種類と字面と、
@@ -2924,3 +2902,19 @@ target = "tests/spec/negative/const_depth_flow.onsa"
 reasons = ["S-102", "S-222"]
 until = "W9-03"
 note = "定数のクロックの式と @param の値が上限 128 を超えたときの E0419。flow の at は W3-10 まで読めない（E0002）"
+
+# --- W2-07/t: 黙って誤る降下を止める（2026-10-08）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/match_value_forms.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "値の match の一般の経路（§7）。W2-07 で E0200、正式な実装は W8-06"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/closure_exit_from_fn.onsa"
+reasons = ["R-08", "S-192"]
+until = "W8-09"
+note = "from_fn の無名関数の中の ? と return の脱出（§6.1、§9.1）。W2-07 で E0200、正式な実装は W8-09"

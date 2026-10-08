@@ -58,9 +58,9 @@
 | `core/u64b.onsa`、`core/u64c.onsa` | R-04 |
 | `core/deep_*.onsa` | R-05。W2-04 で期待値付きのテストへ移した: `crates/onsa_tests/tests/interp_stack.rs` の `r05_recursion_below_the_limit_passes_in_onsa_test`（同じ `depth(n)` を `onsa test` の経路で走らせる）、`crates/onsa_cli/tests/deep_recursion.rs`（シグナルでなく終了コード 1）、`tests/spec/semantics/recursion_deep.onsa`・`recursion_limit.onsa`・`recursion_shallow.onsa`。上限は 128（S-222）で、`test` の本体から `depth(n)` は n + 1 段の呼び出しなので、`deep_50.onsa`・`deep_100.onsa` は通り、`deep_200.onsa` から `deep_5000.onsa` と `deep.onsa` の深い `test` は、その `test` の失敗（panic）が期待値 |
 | `core/const_chain_cold.onsa` | R-153（`const` の鎖が長く、各初期化式が深く再帰すると、安全網の内部エラーで止まり、合否が読む順で変わる。W9-03） |
-| `core/guard*.onsa`、`core/match3.onsa`（推定） | R-06 |
-| `core/ret.onsa` | R-07 |
-| `core/try1.onsa`、`core/try2.onsa` | R-08 |
+| `core/guard*.onsa`、`core/match3.onsa`（推定） | R-06。W2-07 で期待値付きのテストへ移した: `tests/spec/semantics/match_value_forms.onsa`（値の `match` の各形の値。W8-06 まで実装待ち）、`tests/spec/negative/lower_match_general.onsa`（それまでの E0200）、`tests/spec/semantics/match_kept_forms.onsa`（止めない形）。今はどれも E0200 で止まる（`flow/e2/` の `match` も） |
+| `core/ret.onsa` | R-07。W2-07 で直し、`tests/spec/semantics/return_unit.onsa` へ移した |
+| `core/try1.onsa`、`core/try2.onsa` | R-08。W2-07 で期待値付きのテストへ移した: `tests/spec/semantics/closure_exit_from_fn.onsa`（脱出の値。W8-09 まで実装待ち）、`tests/spec/negative/lower_closure_exit.onsa`（それまでの `?` と `return` の E0200） |
 | `core/euclid.onsa` | R-19 |
 | `core/constf.onsa` | R-20 |
 | `core/order*.onsa`、`core/cpkg/` | R-93 |

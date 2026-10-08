@@ -438,7 +438,15 @@ pub fn lower_core(analyzed: &Analyzed) -> Result<onsa_core::Module, LowerError> 
 /// [`lower_core`] with the target's memory settings (T4-5): the lowering
 /// stage, verified at its boundary.
 pub fn lower_core_with(analyzed: &Analyzed, opts: &onsa_core::LowerOptions) -> Result<onsa_core::Module, LowerError> {
-    let module = match guard(|| onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts))? {
+    let lowered = guard(|| {
+        let mut r = onsa_core::lower_with(&analyzed.pkg, &analyzed.analysis, opts);
+        // Every diagnostic names the offending source (§18.1).
+        if let Err(onsa_core::LowerFailure::Unsupported(d)) = &mut r {
+            fill_found_with(d, |file| package_text(&analyzed.pkg, file));
+        }
+        r
+    })?;
+    let module = match lowered {
         Ok(m) => m,
         Err(onsa_core::LowerFailure::Unsupported(d)) => return Err(LowerError::reported(d)),
         Err(onsa_core::LowerFailure::Internal { span, message }) => {
@@ -483,17 +491,35 @@ pub(crate) fn debug_contract(sources: &SourceMap, diagnostics: &[Diagnostic]) {
 /// Every diagnostic names the offending source (`found`, §18.1): when the
 /// emitter left it out, take the text of the span.
 fn fill_found(sources: &SourceMap, diagnostics: &mut [Diagnostic]) {
+    fill_found_with(diagnostics, |file| Some(sources.file(file).text()));
+}
+
+/// [`fill_found`] with the text of each file from `text_of` (lowering has
+/// the package, not the source map). A file `text_of` does not know is an
+/// internal error: every span lowering reports is in the package.
+fn fill_found_with<'t>(diagnostics: &mut [Diagnostic], text_of: impl Fn(FileId) -> Option<&'t str>) {
     for d in diagnostics {
         // A panic names the file of the diagnostic (S-67).
         let _scope = onsa_diag::internal::item_scope(Span::new(d.span.file, 0, 0));
         if d.found.as_deref().is_none_or(str::is_empty) {
-            let file = sources.file(d.span.file);
-            let text = &file.text()[d.span.start as usize..d.span.end as usize];
+            let Some(file) = text_of(d.span.file) else {
+                onsa_diag::internal::bug(Some(d.span), "a diagnostic in a file the package does not hold");
+            };
+            let text = &file[d.span.start as usize..d.span.end as usize];
             if !text.trim().is_empty() {
                 d.found = Some(text.trim().to_string());
             }
         }
     }
+}
+
+/// The text of `file` among the modules of `pkg` and its dependencies.
+fn package_text(pkg: &Package, file: FileId) -> Option<&str> {
+    pkg.modules
+        .iter()
+        .find(|m| m.file == file)
+        .map(|m| m.text.as_str())
+        .or_else(|| pkg.deps.iter().find_map(|d| package_text(d, file)))
 }
 
 #[cfg(test)]

@@ -1,15 +1,21 @@
 // onsa.toml
 // [test]
 // mode = "test"
-// spec = ["§9.1", "§6.1", "§5.3", "§4.1"]
+// spec = ["§9.1", "§6.1", "§5.3", "§4.7"]
 
-// `?` inside an anonymous function (spec §9.1, §6.1): `?` returns from the
-// function it is written in, so inside an anonymous function it leaves that
-// function and not the enclosing one. The spec says `?` returns "the function's"
-// `E`, and §6.1 treats an anonymous function's body like a named function's for
-// `return`; the closure reading is the direct one.
-
-use std.array
+// `?` and `return` inside an anonymous function (spec §9.1, §6.1; S-192, R-08): both
+// leave the innermost function, and an anonymous function is a function. `?` returns
+// "the function's" `E` (§9.1: the innermost function, an anonymous function included,
+// with the same exit as `return`, §6.1), so inside an anonymous function it leaves
+// that function and not the enclosing one, and the error type it needs is that of the
+// anonymous function's return type. An anonymous function without a return type
+// annotation gets `Result[_, E]` or `Option[_]` from its `?` (§9.1).
+//
+// The anonymous functions here are called with `.(` (§6.1), as a local binding, as an
+// argument of a function-typed parameter and as an argument that is written in place.
+// The anonymous functions passed to `array.from_fn` are in closure_exit_from_fn.onsa.
+// The call `f.(x)` is read from W3-07 and function values are lowered from W8-09, so
+// this file waits for both.
 
 pub enum ParseError {
   Negative,
@@ -24,43 +30,6 @@ fn parse(n: I32) -> Result[I32, ParseError] {
     return Err(ParseError.TooBig(n))
   }
   Ok(n)
-}
-
-fn parse_count(inout calls: U32, n: I32) -> Result[I32, ParseError] {
-  calls = calls + 1
-  parse(n)
-}
-
-fn sum2(a: I32, b: I32) -> Result[I32, ParseError] {
-  let x = parse(a)?
-  let y = parse(b)?
-  Ok(x + y)
-}
-
-fn sum2_counted(inout calls: U32, a: I32, b: I32) -> Result[I32, ParseError] {
-  let x = parse_count(inout calls, a)?
-  let y = parse_count(inout calls, b)?
-  Ok(x + y)
-}
-
-fn sum_inline(a: I32, b: I32) -> Result[I32, ParseError] {
-  Ok(parse(a)? + parse(b)?)
-}
-
-fn sum_all(xs: [I32; 4]) -> Result[I32, ParseError] {
-  var total: I32 = 0
-  for x in xs {
-    total = total + parse(x)?
-  }
-  Ok(total)
-}
-
-fn sum_all_counted(inout calls: U32, xs: [I32; 4]) -> Result[I32, ParseError] {
-  var total: I32 = 0
-  for x in xs {
-    total = total + parse_count(inout calls, x)?
-  }
-  Ok(total)
 }
 
 // `ParseError` has no derived `==` here (declaration-level derive is the
@@ -79,6 +48,25 @@ fn error_code(e: ParseError) -> I32 {
   }
 }
 
+fn val(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => -9999,
+  }
+}
+
+fn apply(f: fn(I32) -> Result[I32, ParseError], n: I32) -> Result[I32, ParseError] {
+  f.(n)
+}
+
+fn apply_gen[T](f: fn(I32) -> T, n: I32) -> T {
+  f.(n)
+}
+
+fn apply_opt(f: fn(I32) -> Option[I32], n: I32) -> Option[I32] {
+  f.(n)
+}
+
 // ------------------------------------------------- `?` inside an anonymous function
 
 test "? inside an anonymous function leaves that function" {
@@ -86,17 +74,147 @@ test "? inside an anonymous function leaves that function" {
     let v = parse(n)?
     Ok(v + 1)
   }
-  assert code(add_one(5)) == 6
-  assert code(add_one(-1)) == -1
+  assert code(add_one.(5)) == 6
+  assert code(add_one.(-1)) == -1
+  assert code(add_one.(200)) == -1200
 }
 
-test "? inside a closure that is called by from_fn" {
-  let ints: [I32; 3] = [1, -2, 200]
-  let rs: [Result[I32, ParseError]; 3] = array.from_fn(fn(i: U32) -> Result[I32, ParseError] {
-    let v = parse(ints[i])?
+test "the anonymous function is passed to a function-typed parameter" {
+  let add_one = fn(n: I32) -> Result[I32, ParseError] {
+    let v = parse(n)?
     Ok(v + 1)
-  })
-  assert code(rs[0]) == 2
-  assert code(rs[1]) == -1
-  assert code(rs[2]) == -1200
+  }
+  assert code(apply(add_one, 5)) == 6
+  assert code(apply(add_one, -3)) == -1
+}
+
+test "an anonymous function written in the argument, without a return type, gets it from ?" {
+  let r = apply_gen(fn(n) {
+    let v = parse(n)?
+    Ok(v + 1)
+  }, 5)
+  assert code(r) == 6
+  let e = apply_gen(fn(n) {
+    let v = parse(n)?
+    Ok(v + 1)
+  }, 500)
+  assert code(e) == -1500
+}
+
+// The enclosing function returns an Option and the anonymous function a Result: the
+// `?` of the anonymous function does not return from the enclosing function.
+fn outer_option(n: I32) -> Option[I32] {
+  let add_one = fn(m: I32) -> Result[I32, ParseError] {
+    let v = parse(m)?
+    Ok(v + 1)
+  }
+  let r = add_one.(n)
+  let c = code(r)
+  Some(c * 10)
+}
+
+// The enclosing function returns a Result with another error type.
+pub enum OuterError {
+  Bad,
+}
+
+fn outer_result(n: I32) -> Result[I32, OuterError] {
+  let first = fn(m: I32) -> Option[I32] {
+    if m < 0 {
+      return None
+    }
+    Some(m)
+  }
+  let a = first.(n)
+  Ok(val(a))
+}
+
+test "the enclosing function goes on after an anonymous function failed with ?" {
+  assert val(outer_option(4)) == 50
+  assert val(outer_option(-4)) == -10
+}
+
+test "the enclosing function of another error type goes on after a return" {
+  match outer_result(-2) {
+    Ok(v) => {
+      assert v == -9999
+    },
+    Err(_) => {
+      assert false
+    },
+  }
+  match outer_result(8) {
+    Ok(v) => {
+      assert v == 8
+    },
+    Err(_) => {
+      assert false
+    },
+  }
+}
+
+// ------------------------------------------- `return` inside an anonymous function
+
+test "return inside an anonymous function leaves that function" {
+  let clamp = fn(n: I32) -> I32 {
+    if n < 0 {
+      return 0
+    }
+    n + 1
+  }
+  assert clamp.(-5) == 0
+  assert clamp.(3) == 4
+  let total = clamp.(-1) + clamp.(1) + clamp.(2)
+  assert total == 5
+}
+
+// The statements after the call in the enclosing function run after a `return` in the anonymous one.
+fn after_return(n: I32) -> I32 {
+  let clamp = fn(m: I32) -> I32 {
+    if m < 0 {
+      return 100
+    }
+    m
+  }
+  let a = clamp.(n)
+  a + 1000
+}
+
+test "the code after the call runs after a return inside the anonymous function" {
+  assert after_return(-1) == 1100
+  assert after_return(7) == 1007
+}
+
+// ----------------------------------------------------------------- nested
+
+fn nested(n: I32) -> Option[I32] {
+  let inner = fn(m: I32) -> Option[I32] {
+    if m < 0 {
+      return None
+    }
+    Some(m)
+  }
+  let outer = fn(k: I32) -> Option[I32] {
+    let a = inner.(k)?
+    Some(a + 1)
+  }
+  outer.(n)
+}
+
+test "return in an inner anonymous function and ? in the outer one" {
+  assert val(nested(5)) == 6
+  assert val(nested(-1)) == -9999
+}
+
+test "? in an anonymous function that is passed an Option-returning function" {
+  let step = fn(m: I32) -> Option[I32] {
+    if m > 10 {
+      return None
+    }
+    let doubled = Some(m * 2)
+    let d = doubled?
+    Some(d + 1)
+  }
+  assert val(apply_opt(step, 4)) == 9
+  assert val(apply_opt(step, 11)) == -9999
 }

@@ -10,6 +10,7 @@ use std::process::Command;
 
 use onsa_backend_c::{EmitOptions, ExportFlow, PanicMode};
 use onsa_core::{ConstId, Expr, ExprKind, Lit, LowerOptions, Module, Ty, TypeDefKind};
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::def::DefKind;
@@ -398,16 +399,11 @@ impl TargetSettings {
             "staticlib" => {}
             "source" => {
                 if t.lang.as_deref().unwrap_or("c") != "c" {
-                    return Err(usage(format!(
-                        "lang = \"{}\": only `c` in this version (E0200)",
-                        t.lang.clone().unwrap_or_default()
-                    )));
+                    return Err(usage(Feature::ManifestLang.usage(&[t.lang.as_deref().unwrap_or_default()])));
                 }
             }
             other => {
-                return Err(usage(format!(
-                    "kind = \"{other}\": only `staticlib` and `source` in this version (E0200)"
-                )));
+                return Err(usage(Feature::ManifestKind.usage(&[other])));
             }
         }
         let platform = platform(&t.platform).map_err(&usage)?;
@@ -438,11 +434,11 @@ impl TargetSettings {
         };
         for e in &t.provides {
             if e != "Alloc" {
-                return Err(usage(format!("provides `{e}`: only `Alloc` exists in this version (E0200)")));
+                return Err(usage(Feature::ManifestProvides.usage(&[e])));
             }
         }
         if !t.bind.is_empty() {
-            return Err(usage("`bind` is not supported in this version (E0200)".into()));
+            return Err(usage(Feature::ManifestBind.usage(&[])));
         }
         Ok(TargetSettings {
             kind: t.kind.clone(),

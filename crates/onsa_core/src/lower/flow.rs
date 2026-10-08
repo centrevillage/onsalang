@@ -45,6 +45,7 @@
 use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
+use onsa_diag::unsupported::Feature;
 use onsa_sema::def::{DefKind, Fields, FlowDef};
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
@@ -162,7 +163,7 @@ impl<'a> Lowerer<'a> {
         let def = self.a.def(flow).clone();
         let DefKind::Flow(fd) = &def.kind else { return Err(internal(def.span, "not a flow")) };
         if !self.flows_in_progress.insert(flow) {
-            return Err(unsupported(def.span, "a flow that instantiates itself"));
+            return Err(unsupported(def.span, Feature::FlowSelfInstance, &[]));
         }
         let r = lower_flow(self, flow, fd.clone(), def.span);
         self.flows_in_progress.remove(&flow);

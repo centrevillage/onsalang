@@ -59,11 +59,19 @@ fn two_lookups(a: U32, b: U32) -> Option[U32] {
   Some(x + y)
 }
 
+// Read back with two plain switches (a variant of `Missing` inside `Err` is a nested
+// pattern, which is in match_value_forms.onsa: this file is about `?`).
 fn err_code(r: Result[U32, Missing]) -> U32 {
   match r {
     Ok(v) => v,
-    Err(Missing.Key) => 1000,
-    Err(Missing.Limit(n)) => 2000 + n,
+    Err(e) => missing_code(e),
+  }
+}
+
+fn missing_code(e: Missing) -> U32 {
+  match e {
+    Missing.Key => 1000,
+    Missing.Limit(n) => 2000 + n,
   }
 }
 

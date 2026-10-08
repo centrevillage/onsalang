@@ -2,6 +2,7 @@
 //! function per type, so backends only compare scalars.
 
 use onsa_diag::Span;
+use onsa_diag::unsupported::Feature;
 
 use super::{Lowerer, R, unsupported};
 use crate::ir::*;
@@ -145,6 +146,6 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: &Ty, a: Expr, b: Expr,
                 value: Some(Box::new(sw)),
             })
         }
-        _ => Err(unsupported(span, "equality on this type")),
+        _ => Err(unsupported(span, Feature::Equality, &[])),
     }
 }

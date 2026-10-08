@@ -1,6 +1,7 @@
 //! Lowering of function bodies: expressions, statements, patterns (T3-3).
 
 use onsa_diag::Span;
+use onsa_diag::unsupported::Feature;
 use onsa_sema::body::{BodyInfo, Target};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
 use onsa_sema::resolve::{Builtin, Entity};
@@ -23,7 +24,8 @@ pub(crate) struct FnCx<'b> {
     pub module: ModId,
     pub locals: Vec<Local>,
     pub ret: Ty,
-    /// Depth of inlined closure bodies (`return` inside them is unsupported).
+    /// Depth of inlined closure bodies (`return` and `?` inside them are
+    /// unsupported until W8-09: they leave the closure, S-192).
     pub inline_depth: u32,
     /// Set while lowering a flow body (T3-5): overrides for state-resident
     /// locals and for the stateful node expressions.
@@ -306,15 +308,25 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             Ok(())
         }
         AS::Return(v) => {
-            if cx.inline_depth > 0 {
-                return Err(unsupported(span, "`return` inside an anonymous function passed to `array.from_fn`"));
-            }
             let e = match v {
                 Some(v) => Some(lower_expr(lw, cx, *v)?),
                 None => None,
             };
-            let e = e.filter(|e| e.ty != Ty::Unit);
-            out.push(stmt(span, StmtKind::Return(e)));
+            // `return` leaves the innermost function (S-192): in an anonymous
+            // function that `from_fn` expands in place, that is not the
+            // function being lowered (R-08, W8-09).
+            if cx.inline_depth > 0 {
+                return Err(unsupported(span, Feature::ReturnInFromFn, &[]));
+            }
+            match e {
+                // `return e` with `e: ()` evaluates `e`, then leaves (R-07):
+                // the value is nothing, the effects are not.
+                Some(e) if e.ty == Ty::Unit => {
+                    push_expr_stmt(e, out);
+                    out.push(stmt(span, StmtKind::Return(None)));
+                }
+                e => out.push(stmt(span, StmtKind::Return(e))),
+            }
             Ok(())
         }
         AS::Assert(e) => {
@@ -398,7 +410,7 @@ fn lower_for(
             span,
             ExprKind::Prim { prim: Prim::Len, args: vec![Arg { mode: Mode::Borrow, expr: seq.clone() }] },
         ),
-        _ => return Err(unsupported(span, "iteration over this type")),
+        _ => return Err(unsupported(span, Feature::Iteration, &[])),
     };
     let i = cx.temp("__i", Ty::u32());
     let mut stmts = Vec::new();
@@ -518,7 +530,7 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
                 (ALit::Int { value, .. }, Ty::Int(_)) => Lit::Int(if neg { -(*value as i128) } else { *value as i128 }),
                 (ALit::Char(c), Ty::Char) => Lit::Char(*c),
                 (ALit::Bool(b), Ty::Bool) => Lit::Bool(*b),
-                (ALit::Str(_), _) => return Err(unsupported(span, "`Str` patterns")),
+                (ALit::Str(_), _) => return Err(unsupported(span, Feature::StrPatterns, &[])),
                 _ => return Err(internal(span, "literal pattern type")),
             };
             let rhs = lit(place.ty.clone(), span, v);
@@ -562,7 +574,7 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
         }
         PatKind::Or(alts) => {
             if alts.iter().any(|&a| pat_binds(cx, a)) {
-                return Err(unsupported(span, "or-patterns with bindings"));
+                return Err(unsupported(span, Feature::OrPatternBindings, &[]));
             }
             let mut t: Option<Expr> = None;
             for &alt in alts {
@@ -739,8 +751,13 @@ fn lower_match(
         }
         stmts.push(stmt(span, StmtKind::If(cond, Block { stmts: inner, value: None }, Block::default())));
     }
-    let value = result.map(|r| Box::new(local_expr(cx, r, span)));
-    Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value })))
+    // The general path gives no value yet (R-06): its result is assigned in
+    // the arms but never declared. A `match` whose value is not used (a
+    // statement, a `()` match) keeps this path; W8-06 lowers the value.
+    if result.is_some() {
+        return Err(unsupported(span, Feature::ValueMatch, &[]));
+    }
+    Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: None })))
 }
 
 // ---------------------------------------------------------------- expressions
@@ -806,7 +823,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             }
             ALit::Char(c) => ExprKind::Lit(Lit::Char(*c)),
             ALit::Bool(b) => ExprKind::Lit(Lit::Bool(*b)),
-            ALit::Str(_) => return Err(unsupported(span, "`Str` values")),
+            ALit::Str(_) => return Err(unsupported(span, Feature::StrValues, &[])),
         },
         AK::Path(_) => return Err(internal(span, "unresolved path")),
         AK::Hole => return Err(internal(span, "typed hole")),
@@ -866,9 +883,9 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             }
         }
         AK::Match { scrutinee, arms } => return lower_match(lw, cx, e, *scrutinee, arms, ty),
-        AK::Closure { .. } => return Err(unsupported(span, "function values (closures outside `array.from_fn`)")),
-        AK::Handle { .. } => return Err(unsupported(span, "effect handlers")),
-        AK::Unsafe(_) => return Err(unsupported(span, "`unsafe` blocks")),
+        AK::Closure { .. } => return Err(unsupported(span, Feature::Closures, &[])),
+        AK::Handle { .. } => return Err(unsupported(span, Feature::EffectHandlers, &[])),
+        AK::Unsafe(_) => return Err(unsupported(span, Feature::Unsafe, &[])),
         // Sema rejects `par` outside a flow body: lowering never sees one.
         AK::Par { .. } => return Err(internal(span, "`par` outside a flow")),
         AK::Binary { operands, ops } => return lower_binary(lw, cx, e, operands, ops, ty),
@@ -928,7 +945,7 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
         },
         Target::Const(d) => ExprKind::Const(lw.const_id(d)?),
         Target::Variant { index, .. } => {
-            let Ty::Enum(id) = &ty else { return Err(unsupported(span, "variant constructors as function values")) };
+            let Ty::Enum(id) = &ty else { return Err(unsupported(span, Feature::VariantCtorValues, &[])) };
             ExprKind::Variant { ty: *id, tag: index, fields: Vec::new() }
         }
         Target::Prelude(Builtin::None) => {
@@ -936,7 +953,7 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
             ExprKind::Variant { ty: *id, tag: 0, fields: Vec::new() }
         }
         Target::BuiltinConst { name, .. } => builtin_const(&ty, &name, span)?,
-        Target::Fn { .. } | Target::Prelude(_) => return Err(unsupported(span, "function values")),
+        Target::Fn { .. } | Target::Prelude(_) => return Err(unsupported(span, Feature::FnValues, &[])),
         Target::Method { .. } | Target::BuiltinMethod { .. } | Target::Value => {
             return Err(internal(span, "call target on a non-call"));
         }
@@ -1022,7 +1039,7 @@ fn lower_binary(
                         Expr::new(Ty::Bool, sp, ExprKind::Unary(UnOp::Not, Box::new(call)))
                     }
                 } else {
-                    return Err(unsupported(*op_span, "ordering comparisons of aggregate values"));
+                    return Err(unsupported(*op_span, Feature::OrderingAggregates, &[]));
                 }
             }
             OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Bitwise => {
@@ -1070,6 +1087,10 @@ fn lower_binary(
 
 fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, inner: ExprId, ty: Ty, span: Span) -> R<Expr> {
     let v = lower_expr(lw, cx, inner)?;
+    // `?` leaves the innermost function (S-192), as `return` does.
+    if cx.inline_depth > 0 {
+        return Err(unsupported(span, Feature::TryInFromFn, &[]));
+    }
     let Ty::Enum(id) = v.ty.clone() else { return Err(internal(span, "`?` on a non-enum")) };
     let variants = lw.enum_variants(id);
     let is_option = variants.first().is_some_and(|(n, _)| n == "None");
@@ -1131,7 +1152,7 @@ pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
             }
             let _ = from;
             let base =
-                if e.as_place().is_some() { e } else { return Err(unsupported(span, "planar spans of a temporary")) };
+                if e.as_place().is_some() { e } else { return Err(unsupported(span, Feature::PlanarTemporary, &[])) };
             let mut out = Vec::new();
             for i in 0..n {
                 let el = index(base.clone(), u32_lit(span, i))?;
@@ -1248,7 +1269,7 @@ fn lower_call(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, callee: ExprId, args: 
                 ExprKind::Variant { ty: id, tag, fields: cargs.into_iter().map(|a| a.expr).collect() },
             ))
         }
-        Target::Value => Err(unsupported(span, "calls through function values")),
+        Target::Value => Err(unsupported(span, Feature::CallsThroughFnValues, &[])),
         _ => Err(internal(span, "call target")),
     }
 }
@@ -1278,7 +1299,9 @@ fn lower_target_call(
     let span = cx.expr(e).span;
     let d = lw.a.def(def);
     if !lw.is_std_def(def) {
-        return Err(unsupported(span, "user `target` declarations without a `bind`"));
+        // Sema stops a `target` declaration outside `std` (`UserTargets` of
+        // the list of S-224): lowering never sees a call to one.
+        return Err(internal(span, "a call to a `target` declaration outside `std`"));
     }
     let module = lw.a.modules.get(d.module).path.clone();
     let name = d.name.clone();
@@ -1335,7 +1358,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
         }
         _ => {
             let Some(Target::Fn { def, inst }) = cx.info.targets.get(&farg.expr).cloned() else {
-                return Err(unsupported(span, "`array.from_fn` with a non-literal function value"));
+                return Err(unsupported(span, Feature::FromFnValue, &[]));
             };
             let gargs = match inst {
                 Some(ix) => lw.generic_args(&cx.info.instances[ix.0 as usize].args.clone(), &cx.args, span)?,
@@ -1427,14 +1450,16 @@ fn lower_builtin_method(
         (Ty::Float(k), "is_nan") => prim_call(Prim::IsNan(*k), recv, lowered_args),
         (Ty::Float(k), "is_finite") => prim_call(Prim::IsFinite(*k), recv, lowered_args),
         (Ty::Float(k), n) => {
-            let Some(mf) = MathFn::parse(n) else { return Err(unsupported(span, &format!("the method `{n}`"))) };
+            let Some(mf) = MathFn::parse(n) else {
+                return Err(unsupported(span, Feature::Methods, &[n, &crate::dump::type_name(&lw.m, &rty)]));
+            };
             prim_call(Prim::Math(mf, *k), recv, lowered_args)
         }
         (Ty::Array(..) | Ty::Span(_) | Ty::Buf(_), n) => {
             return lower_seq_method(lw, cx, recv, n, lowered_args, ty, span);
         }
         (Ty::Enum(id), n) => return lower_enum_method(lw, cx, *id, recv, n, lowered_args, ty, span),
-        _ => return Err(unsupported(span, &format!("the method `{name}` on this type"))),
+        _ => return Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, &rty)])),
     };
     Ok(Expr::new(ty, span, kind))
 }
@@ -1448,7 +1473,7 @@ fn lower_seq_method(
     ty: Ty,
     span: Span,
 ) -> R<Expr> {
-    let _ = lw;
+    let seq_ty = crate::dump::type_name(&lw.m, &recv.ty);
     let borrow = |e: Expr| Arg { mode: Mode::Borrow, expr: e };
     let len_of = |cx: &mut FnCx, recv: Expr| -> R<Expr> {
         match &recv.ty {
@@ -1494,7 +1519,7 @@ fn lower_seq_method(
             };
             ExprKind::Prim { prim, args: a }
         }
-        _ => return Err(unsupported(span, &format!("the sequence method `{name}`"))),
+        _ => return Err(unsupported(span, Feature::Methods, &[name, &seq_ty])),
     };
     Ok(Expr::new(ty, span, kind))
 }
@@ -1544,7 +1569,7 @@ fn lower_enum_method(
             arms.sort_by_key(|(t, _)| *t);
             ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None }
         }
-        _ => return Err(unsupported(span, &format!("the method `{name}` on Option / Result"))),
+        _ => return Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, &Ty::Enum(id))])),
     };
     Ok(wrap(stmts, Expr::new(ty, span, kind)))
 }

@@ -323,15 +323,8 @@ test "a branch that would panic is not evaluated when it is not taken" {
   assert c == 7
 }
 
-test "a match arm that would panic is not evaluated when it is not taken" {
-  let z: I32 = 0
-  let k: I32 = 2
-  let d = match k {
-    1 => 1 / z,
-    _ => 9,
-  }
-  assert d == 9
-}
+// A match arm that would panic and is not taken (a `match` on a scalar) is in
+// match_value_forms.onsa: that form is a general-path value `match` (R-06).
 
 test "the right operand of && is evaluated when the left is true" {   //~ TESTFAIL "the right operand of && is evaluated when the left is true"
   let z: I32 = 0
