@@ -86,7 +86,7 @@ def check(ops, spec):
     # 11.4: the formulas the registry writes out
     f114 = section(spec, "### 11.4 組込み", "### 11.5 呼び出しと複製")
     for line in ("dc = if d >= 1.0 { if d <= MAX { d } else { MAX } } else { 1.0 }", "k  = dc.trunc_u32()",
-                 "f  = dc - k.round_f32()", "y  = (1.0 - f) * a + f * b"):
+                 "f  = dc - k  ", "y  = (1.0 - f) * a + f * b"):  # S-212: `k` is the value of `T`
         if line not in f114:
             problems.append(f"11.4 no longer has the line {line!r} that the vdelay vectors are built on")
     for o in ops:
