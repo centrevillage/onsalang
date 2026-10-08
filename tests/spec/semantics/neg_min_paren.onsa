@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§3.4", "§2.4"]
+
+// S-227 (§4.7): the parentheses between the `-` and the literal are not seen, and the literal
+// takes one `-`. In `-(-(2147483648))` the inner `-(2147483648)` is the literal -2147483648
+// (it fits `I32`, so there is no E0408), and the outer `-` is the negation of that value: it
+// overflows at run time (§3.4). This is in its own file because the checker today reads the
+// inner part as the literal 2147483648 and reports E0408 before anything runs; the other
+// cases of neg_min.onsa stop later, at lowering.
+//
+// Every value below is worked out by hand from the spec text.
+
+test "a literal whose own parentheses are not seen is still negated once more" {   //~ TESTFAIL "a literal whose own parentheses are not seen is still negated once more"
+  let a = -(-(2147483648))
+  assert a == 0
+}
+
+test "the same with an annotation" {   //~ TESTFAIL "the same with an annotation"
+  let a: I32 = -(-(2147483648))
+  assert a == 0
+}
+
+test "the same for I8 with doubled parentheses" {   //~ TESTFAIL "the same for I8 with doubled parentheses"
+  let a: I8 = -(-((128)))
+  assert a == 0
+}
+
+test "one above the minimum does not overflow" {
+  let a = -(-(2147483647))
+  assert a == 2147483647
+  let b: I8 = -(-(127))
+  assert b == 127
+}
+
+test "the literal in the parentheses alone is the minimum" {
+  let a = -(2147483648)
+  assert a == I32.MIN
+  let b: I8 = -((128))
+  assert b == I8.MIN
+}

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.6", "§3.4"]
+
+// E0419: the `-` before a parenthesised negative literal is a negation of the value
+// (S-227), so `-(-2147483648)` is the negation of `I32.MIN` and overflows. In a function body that
+// is a panic at run time (semantics/neg_min.onsa); in the initializer of a `const` it is the
+// compile-time evaluation panic, E0419, at the expression (§6.6), and `onsa check` reports it
+// without a build (R-155). The literal `-2147483648` itself is in range and is fine, and so is
+// the negation of the value one above the minimum. The evaluation is W9-03.
+
+const LOW: I32 = -2147483648
+
+// ---------------------------------------------------------------- E0419
+
+const NEG_PAREN: I32 = -(-2147483648)   //~ E0419
+
+const NEG_PAREN_I8: I8 = -(-128)   //~ E0419
+
+const NEG_PAREN_I16: I16 = -(-32768)   //~ E0419
+
+const NEG_PAREN_I64: I64 = -(-9223372036854775808)   //~ E0419
+
+const NEG_NESTED_PAREN: I32 = -(-(2147483648))   //~ E0419
+
+const NEG_OF_A_CONSTANT: I32 = -LOW   //~ E0419
+
+const NEG_OF_THE_ASSOCIATED_MINIMUM: I32 = -(I32.MIN)   //~ E0419
+
+const NEG_OF_THE_ASSOCIATED_MINIMUM_I8: I8 = -I8.MIN   //~ E0419
+
+const SUBTRACTION_BELOW_ZERO: U32 = 0 - 1   //~ E0419
+
+const ADDITION_ABOVE_THE_MAXIMUM: I32 = I32.MAX + 1   //~ E0419
+
+// ---------------------------------------------------------------- fine
+
+const MIN_LITERAL: I32 = -2147483648
+
+const MIN_PARENTHESISED: I32 = -(2147483648)
+
+const NEG_ABOVE_THE_MINIMUM: I32 = -(-2147483647)
+
+const NEG_ABOVE_THE_MINIMUM_I8: I8 = -(-127)
+
+const NEG_SMALL: I32 = -(-5)
+
+const NEG_OF_A_CONSTANT_ABOVE: I32 = -(LOW + 1)
+
+const WRAPPING: I32 = 0 -% LOW

@@ -1,0 +1,22 @@
+// Generic functions used from another module of the package (spec §4.5, §15.1).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub enum Slot[T] {
+  Empty,
+  Full(T),
+}
+
+pub fn none[T]() -> Option[T] {
+  None
+}
+
+pub fn make[T]() -> T {
+  make()
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}

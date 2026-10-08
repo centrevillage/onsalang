@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§2.4", "§3.4"]
+
+// E0408 / E0401: the range of an integer literal is checked on the value with the prefix `-`
+// that is written directly on it, and parentheses between the `-` and the literal are not seen
+// (spec §4.7; S-184). An unsigned type has no unary minus: a negative literal for it, and `-` on
+// an unsigned value, are E0401 (§3.4). One error per function (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Cell {
+  lo: I8,
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn takes_i8(x: I8) -> I8 {
+  x
+}
+
+fn takes_u8(x: U8) -> U8 {
+  x
+}
+
+// ---------------------------------------------------------------- E0408
+
+pub fn i8_below() -> I8 {
+  let x: I8 = -129              //~ E0408
+  x
+}
+
+pub fn i8_above() -> I8 {
+  let x: I8 = 128               //~ E0408
+  x
+}
+
+pub fn i16_below() -> I16 {
+  let x: I16 = -32769           //~ E0408
+  x
+}
+
+pub fn i64_below() -> I64 {
+  let x: I64 = -9223372036854775809   //~ E0408
+  x
+}
+
+pub fn u8_above() -> U8 {
+  let x: U8 = 256               //~ E0408
+  x
+}
+
+pub fn paren_below() -> I8 {
+  let x: I8 = -(129)            //~ E0408
+  x
+}
+
+pub fn paren_above() -> I8 {
+  let x: I8 = (128)             //~ E0408
+  x
+}
+
+pub fn argument_below() -> I8 {
+  takes_i8(-129)                //~ E0408
+}
+
+pub fn argument_above() -> U8 {
+  takes_u8(256)                 //~ E0408
+}
+
+pub fn field_below() -> Cell {
+  Cell { lo: -129 }             //~ E0408
+}
+
+pub fn array_below() -> [I8; 2] {
+  [-128, -129]                  //~ E0408
+}
+
+pub fn tuple_above() -> (I8, U8) {
+  (127, 256)                    //~ E0408
+}
+
+pub fn default_i32_below() -> I32 {
+  let x = -2147483649           //~ E0408
+  0
+}
+
+pub fn branch_above(flag: Bool) -> I8 {
+  if flag { 1 } else { 200 }    //~ E0408
+}
+
+// ---------------------------------------------------------------- E0401
+
+pub fn unsigned_literal() -> U32 {
+  let x: U32 = -1               //~ E0401
+  x
+}
+
+pub fn unsigned_paren() -> U8 {
+  let x: U8 = -(1)              //~ E0401
+  x
+}
+
+pub fn unsigned_argument() -> U8 {
+  takes_u8(-1)                  //~ E0401
+}
+
+pub fn unsigned_value(u: U32) -> U32 {
+  -u                            //~ E0401
+}
+
+pub fn unsigned_const_max() -> U8 {
+  -U8.MAX                       //~ E0401
+}
+
+pub fn unsigned_array() -> [U8; 2] {
+  [1, -2]                       //~ E0401
+}
+
+pub fn signed_value_negation(x: I32) -> I32 {
+  -x
+}

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.1"]
+
+// E0420: calling a value whose type is still open (`v.(1)`) needs the type of the subject at
+// that point (spec §4.7 "関数値の呼び出し"; §6.1 for the form `.(`; S-174, S-191). One error
+// per function (P-01). The other operations are in infer_open_subject.onsa.
+
+pub fn make[T]() -> T {
+  make()
+}
+
+pub fn value_call() -> U32 {
+  let v = make()
+  let r = v.(1)                 //~ E0420
+  r
+}
+
+pub fn value_call_two_arguments() -> F32 {
+  let v = make()
+  v.(1, 2.0)                    //~ E0420
+}
+
+pub fn value_call_of_a_field_chain() -> U32 {
+  let v = make()
+  v.f.(3)                       //~ E0420
+}
+
+pub fn decided_value_call() -> U32 {
+  let v: fn(U32) -> U32 = make()
+  v.(1)
+}

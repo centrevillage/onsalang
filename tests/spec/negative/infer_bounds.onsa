@@ -1,0 +1,266 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§4.6", "§6.2", "§2.4"]
+
+// E0416 / E0406 / E0405: the requirements on a type parameter that a later statement decides
+// (S-235, with S-174 and S-226). A requirement is a bound (`T: Float`), the implicit `Dup`
+// of every type parameter, or the kind of the element of `[e; N]`. When the call is made the
+// parameter may still be a type variable; the requirement is checked in the statement in which
+// the type has no type variable left, or at the end of the function after the literal defaults
+// are applied. If it is not met, the error is E0416 at the expression that made the
+// requirement (the call, the method call, the `[e; N]`) and not at the statement that decided
+// the type; a note with a position points at the expression that decided it, and a note
+// without a position at a literal default. If a type variable is still left at the end of the
+// function, the requirement is not checked: only E0406 at the expression that made the
+// variable (E0405 for a float literal). A bound does not change the default of a literal:
+// `need_fl(3)` is `I32`, which is not a `Float`. One error per function (P-01).
+//
+// The positions of the notes are not a part of the marker. The note points at the expression
+// that was checked against the expected type that decided it, and its text says where that
+// type came from. For the cases below: bound_by_argument: at the argument `o` of
+// `take_oi(o)` (the text names an argument of `take_oi`); bound_by_method: at the argument `b`
+// of `take_bi(b)`; bound_by_the_return_type: at the tail `o` (the result of the function);
+// dup_by_a_later_type: at `o` in `take_owner(move o)`; repeat_decided_to_affine: at the
+// initializer `xs` of `ys` (the text names the annotation of `ys`); the literal defaults
+// (`need_fl(3)`, the integer assignment) have a note without a position. They are checked by
+// hand with `onsa check --json`, as in names_flow_decl_order.onsa.
+
+use std.array
+
+pub struct Bx[T] {
+  o: Option[T],
+}
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+impl[T: Float] Bx[T] {
+  pub fn has(self) -> Bool {
+    match self.o {
+      Some(_) => true,
+      None => false,
+    }
+  }
+}
+
+fn need_f[T: Float](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+fn need_fl[T: Float](x: T) -> Bool {
+  true
+}
+
+fn hold[T](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+fn take_oi(o: Option[I32]) -> Bool {
+  true
+}
+
+fn take_bi(b: Bx[I32]) -> Bool {
+  true
+}
+
+fn take_owner(move o: Option[Owner]) -> Bool uses {Alloc} {
+  match move o {
+    Some(w) => w.b.len() == 0,
+    None => false,
+  }
+}
+
+// ---------------------------------------------------------------- E0416 at the requirement
+
+pub fn bound_by_argument() -> Bool {
+  let o = None
+  let _ = need_f(o)             //~ E0416
+  take_oi(o)
+}
+
+pub fn bound_by_method() -> Bool {
+  let b = Bx { o: None }
+  let _ = b.has()               //~ E0416
+  take_bi(b)
+}
+
+pub fn bound_by_the_return_type() -> Option[I32] {
+  let o = None
+  let _ = need_f(o)             //~ E0416
+  o
+}
+
+pub fn bound_by_an_annotation() -> Bool {
+  let o = None
+  let a = need_f(o)             //~ E0416
+  let p: Option[U8] = o
+  a
+}
+
+pub fn literal_default_fails_the_bound() -> Bool {
+  need_fl(3)                    //~ E0416
+}
+
+pub fn literal_variable_default_fails_the_bound() -> Bool {
+  let v = 3
+  need_fl(v)                    //~ E0416
+}
+
+pub fn integer_assignment_defaults_and_fails_the_bound() -> Bool {
+  var o = None
+  let a = need_f(o)             //~ E0416
+  o = Some(1)
+  a
+}
+
+pub fn bound_of_a_generic_parameter[U](x: U) -> Bool {
+  let o = None
+  let a = need_f(o)             //~ E0416
+  let p: Option[U] = o
+  a
+}
+
+pub fn dup_by_a_later_type() -> Bool uses {Alloc} {
+  let o = None
+  let _ = hold(o)               //~ E0416
+  take_owner(move o)
+}
+
+pub fn repeat_decided_to_affine() -> U32 uses {Alloc} {
+  let xs = [None; 2]            //~ E0416
+  let ys: [Option[Owner]; 2] = xs
+  0
+}
+
+pub fn in_a_branch(flag: Bool) -> Bool {
+  let o = None
+  if flag {
+    let _ = need_f(o)           //~ E0416
+  }
+  take_oi(o)
+}
+
+pub fn in_a_loop() -> Bool {
+  let o = None
+  for i in 0..2 {
+    let _ = need_f(o)           //~ E0416
+  }
+  take_oi(o)
+}
+
+pub fn in_a_closure() -> [Bool; 2] {
+  array.from_fn(fn(i) {
+    let o = None
+    let b = need_f(o)           //~ E0416
+    let _ = take_oi(o)
+    b
+  })
+}
+
+impl Owner {
+  pub fn in_a_method(self) -> Bool {
+    let o = None
+    let a = need_f(o)           //~ E0416
+    let _ = take_oi(o)
+    a
+  }
+}
+
+test "in a test" {
+  let o = None
+  let _ = need_f(o)             //~ E0416
+  assert take_oi(o)
+}
+
+// ---------------------------------------------------------------- a variable is left: E0406 / E0405 only
+
+pub fn open_option() -> Bool {
+  let o = None                  //~ E0406
+  need_f(o)
+}
+
+pub fn open_struct() -> Bool {
+  let b = Bx { o: None }        //~ E0406
+  b.has()
+}
+
+pub fn open_repeat() -> U32 {
+  let xs = [None; 2]            //~ E0406
+  0
+}
+
+pub fn float_literal_open() -> Bool {
+  need_fl(3.0)                  //~ E0405
+}
+
+pub fn float_literal_variable_open() -> Bool {
+  let v = 3.0                   //~ E0405
+  need_fl(v)
+}
+
+pub fn float_literal_in_an_assignment() -> Bool {
+  var o = None
+  let a = need_f(o)
+  o = Some(1.5)                 //~ E0405
+  a
+}
+
+pub fn open_dup() -> Bool {
+  let o = None                  //~ E0406
+  hold(o)
+}
+
+// ---------------------------------------------------------------- the requirement is met: no error
+
+pub fn met_by_an_annotation() -> Bool {
+  let o = None
+  let a = need_f(o)
+  let p: Option[F32] = o
+  a
+}
+
+pub fn met_by_the_method_receiver() -> Bool {
+  let b = Bx { o: None }
+  let a = b.has()
+  let c: Bx[F32] = b
+  a
+}
+
+pub fn met_by_a_float_variable() -> Bool {
+  let v = 3.0
+  let a = need_fl(v)
+  let w: F64 = v
+  a
+}
+
+pub fn met_by_the_expected_type() -> Bool {
+  let w: F32 = 3.0
+  need_fl(w)
+}
+
+pub fn met_by_a_generic_parameter[U: Float](x: U) -> Bool {
+  let o = None
+  let a = need_f(o)
+  let p: Option[U] = o
+  a
+}
+
+pub fn met_dup() -> Bool {
+  let o = None
+  let a = hold(o)
+  let p: Option[U8] = o
+  a
+}
+
+pub fn met_repeat() -> U32 {
+  let xs = [None; 2]
+  let ys: [Option[U8]; 2] = xs
+  0
+}

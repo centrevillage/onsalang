@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§3.4"]
+
+// E0401 at the literal: an unsigned type has no unary `-` (§3.4), and `-0` is no exception
+// (§4.7). In `-(-1)` the inner `-1` is the literal (a `-` written directly on an integer
+// literal, parentheses between them not seen) and the outer `-` is a negation of that value
+// (S-227); for an unsigned type the inner `-1` is the error, so the diagnostic is on the inner
+// literal and not on the whole expression (R-163). The marker has the column of the inner `-`.
+// One error per function (P-01). (A type that a later statement decides, `let a = -(-1)` and
+// then `let b: U8 = a`, is not here: the text does not say which of the two `-` is reported.)
+
+pub struct Cell {
+  v: U8,
+}
+
+fn takes_u8(x: U8) -> U8 {
+  x
+}
+
+pub fn let_u32() -> U32 {
+  let x: U32 = -(-1)   //~ E0401 @18
+  x
+}
+
+pub fn let_u8_zero() -> U8 {
+  let x: U8 = -(-0)   //~ E0401 @17
+  x
+}
+
+pub fn parenthesised_inner() -> U32 {
+  let x: U32 = -(-(1))   //~ E0401 @18
+  x
+}
+
+pub fn doubled_parentheses() -> U32 {
+  let x: U32 = -((-1))   //~ E0401 @19
+  x
+}
+
+pub fn triple() -> U32 {
+  let x: U32 = -(-(-1))   //~ E0401 @20
+  x
+}
+
+pub fn argument() -> U8 {
+  takes_u8(-(-1))   //~ E0401 @14
+}
+
+pub fn return_position() -> U32 {
+  -(-1)   //~ E0401 @5
+}
+
+pub fn struct_field() -> Cell {
+  Cell { v: -(-1) }   //~ E0401 @15
+}
+
+pub fn array_element() -> [U8; 2] {
+  [1, -(-2)]   //~ E0401 @9
+}
+
+pub fn tuple_element() -> (U8, I8) {
+  (-(-1), 0)   //~ E0401 @6
+}
+
+pub fn in_a_branch(flag: Bool) -> U32 {
+  if flag { -(-1) } else { 0 }   //~ E0401 @15
+}
+
+pub fn in_a_match_arm(n: U32) -> U32 {
+  match n {
+    0 => -(-1),   //~ E0401 @12
+    _ => 0,
+  }
+}
+
+// The signed types and the value negations are not errors: the inner literal fits and the
+// outer `-` is a value operation (a run-time panic only at the minimum, semantics/neg_min.onsa).
+pub fn signed_i8() -> I8 {
+  let x: I8 = -(-1)
+  x
+}
+
+pub fn signed_default() -> I32 {
+  -(-1)
+}
+
+pub fn signed_minimum_plus_one() -> I8 {
+  -(-127)
+}
+
+pub fn value_negation_of_a_signed_name(x: I32) -> I32 {
+  -(-x)
+}

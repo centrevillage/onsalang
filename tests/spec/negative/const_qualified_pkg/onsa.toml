@@ -1,0 +1,3 @@
+[package]
+name = "const_qualified_pkg"
+edition = "2026"

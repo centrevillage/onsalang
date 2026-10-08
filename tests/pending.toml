@@ -286,20 +286,6 @@ note = "定数の初期化式の名前による閉路（R-02、K-10）。関数�
 
 [[pending]]
 kind = "diag-code"
-target = "E0405"
-reasons = ["R-55"]
-until = "W5-01"
-note = "浮動小数のリテラルだけの比較（R-55）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0406"
-reasons = ["R-03"]
-until = "W2-06"
-note = "関数の終わりまで決まらない型パラメータ（R-03）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0409"
 reasons = ["S-142", "R-100"]
 until = "W9-04"
@@ -328,13 +314,6 @@ note = "組込みのメソッドの閉じた一覧（W5-02、S-98）、Option / 
 
 [[pending]]
 kind = "diag-code"
-target = "E0416"
-reasons = ["S-49", "R-60", "S-84", "R-94", "S-145", "S-103", "R-127"]
-until = "W5-06"
-note = "境界。数の trait（W5-05）、derive の前提と Default / Ordinal の derive（W5-06）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0417"
 reasons = ["S-103", "S-50", "S-132", "S-109"]
 until = "W7-02"
@@ -346,13 +325,6 @@ target = "E0418"
 reasons = ["S-127"]
 until = "W5-08"
 note = "ブロックの途中の文の値"
-
-[[pending]]
-kind = "diag-code"
-target = "E0419"
-reasons = ["S-131", "S-146"]
-until = "W9-03"
-note = "コンパイル時の評価の panic（定数の評価の段）"
 
 [[pending]]
 kind = "diag-code"
@@ -1854,13 +1826,6 @@ note = "T: Int の境界が E0200（user-defined traits as bounds）。再帰す
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/recursion_generic_const.onsa"
-reasons = ["R-150"]
-until = "W2-06"
-note = "const パラメータ N の配列 [U32; N] を、const パラメータを持つ関数（自分自身を含む）へ渡すと E0401（expected [U32; ?1], found [U32; N]）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_recursion_panic.onsa"
 reasons = ["S-131", "S-146", "S-222"]
 until = "W9-03"
@@ -2228,3 +2193,126 @@ target = "c-gcc/tests/spec/c_runtime/c_shift.onsa[host]"
 reasons = ["R-167"]
 until = "W2-09"
 note = "poison の export の wrapper に本体が inline され、gcc-15 が -Wclobbered（variable 'x' / argument 'a' might be clobbered by longjmp）を出し -Werror で落ちる。I8 / I16 の >> の古い誤った式が隠していた"
+
+# --- W2-06: 実装の後も通らない事例（W2-06/t・t2 の案から。2026-10-08）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/infer_generic_later.onsa"
+reasons = ["R-06", "S-226", "R-157"]
+until = "W8-06"
+note = "値の match の一般経路（リテラルのパターンの match の値）が降下で E0200。推論（S-174、S-226、R-157）は W2-06 で通り、その 6 つの test を除くと 20 件が通る（§7、§4.7）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/pattern_negative_value.onsa"
+reasons = ["R-06", "S-185"]
+until = "W8-06"
+note = "値の match の一般経路が internal: local read before initialization（§7）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/infer_pkg"
+reasons = ["R-06", "S-174", "R-157"]
+until = "W8-06"
+note = "main.onsa の値の match（リテラルのパターン、列挙子の中のリテラル）が降下で E0200。推論は W2-06 で通る（§4.5、§15.1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/imported_generic_pkg"
+reasons = ["R-152"]
+until = "W4-05"
+note = "main より後ろに並ぶモジュールの総称の struct を、シグネチャで型引数付きで使うと E0302（takes 0 type argument(s)）。R-152"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/infer_generic.onsa"
+reasons = ["S-174", "R-148"]
+until = "W3-09"
+note = "at のクロックの構文は W3-09。構文の後も let a = first(0.5, 0.25) が E0406（W2-06）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/infer_open_subject_call.onsa"
+reasons = ["S-174", "S-191"]
+until = "W3-07"
+note = "関数値の呼び出し .( は W3-07。E0420（W2-06）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/infer_operator.onsa"
+reasons = ["S-235", "R-55"]
+until = "W5-01"
+note = "演算子の trait は型が決まった文で検査する。後で trait を満たさない型に決まれば演算子の位置に E0401、決まらなければ E0406。今は未解決のまま E0401（== の Option[?0]）か、E0406 を先に出す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/infer_operator_later.onsa"
+reasons = ["S-235", "R-55"]
+until = "W5-01"
+note = "let o = None の後の o == None、総称の結果への演算子は、後の文で型が決まるまで trait を判定しない（R-55）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_expr_neg.onsa"
+reasons = ["S-228"]
+until = "W5-08"
+note = "配列の長さ・const 引数の前置の - は E0401（-(1)、-ONE、-(N + 1)、[0.0; -1]）。U32 でない定数 I32 は E0401。定数式の文法は W5-08（今は E0002 / E0200）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_expr_eval.onsa"
+reasons = ["S-228"]
+until = "W9-03"
+note = "定数式の溢れとゼロ除算は E0419（0 - 1、4 / 0、65536 * 65536）。計算で決まる長さの評価は W9-03（今は E0200 / E0002）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_const_neg.onsa"
+reasons = ["S-228", "S-132"]
+until = "W7-02"
+note = "遅延線の長さと par の端の前置の - は E0401、0 - 1 は E0419、E0808 は値の範囲（N = 0、空の範囲）だけ。at の構文は W3-09、コードは W7-02"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_neg_min.onsa"
+reasons = ["S-227", "R-155"]
+until = "W9-03"
+note = "const K: I32 = -(-2147483648) は E0419（check でも出す）。0 - 1 の U32、-LOW、-(I32.MIN) も同じ"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/pattern_str.onsa"
+reasons = ["S-225"]
+until = "W3-07"
+note = "補間を含む文字列のパターンは E0020（構文の段）。{{ }} だけの文字列は通る。構文の段の行は W3-15、検出は W3-07"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/pattern_str_paths.onsa"
+reasons = ["S-225"]
+until = "W3-07"
+note = "補間の穴が大文字の定数・修飾した名前・タプルの添字（{K}、{F32.PI}、{t.0}）でも E0020。今は字句解析が E0001（補間の穴を名前の経路として読むのは W3-04）。W3-04 が W3-07 より後になるなら until を W3-04 の後にそろえる"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/3f72dc47.onsa"
+reasons = ["R-01"]
+until = "W3-04"
+note = "check / fmt --check で内部エラー: 字句解析器の補間の中の多バイト文字（W2-06/t の gate の fuzz が見つけた新しい類）"
+
+# --- W2-06/b: 実装の担当が足した事例のうち、後の作業を待つもの（2026-10-08）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_neg_intermediate.onsa"
+reasons = ["R-155", "S-227"]
+until = "W9-03"
+note = "定数の評価の途中の溢れ（-(-(-128))、-(-128) - 1）は、最終の値が範囲に入っても E0419（§6.6、§3.4）。W2-06 のつなぎは最終の値だけを見て、Option と列挙子の中も見ない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/dup_maybe_dup_param.onsa"
+reasons = ["R-176"]
+until = "W5-08"
+note = "?Dup の型パラメータを含む利用者の型（Wrap[U]、U: ?Dup）が Dup の要求（暗黙の Dup、[e; N]）を通る。種が計算できないと通す（§4.5、§4.6）"

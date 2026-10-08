@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§4.5", "§3.2", "§6.3"]
+
+// The trait of an operator is needed when the types of the operands are known: an operand
+// whose type is still open (`Option[?T]` of `let o = None`, the result of a generic call) is
+// not judged before a later statement decides it, and the trait is checked then (spec §4.7:
+// "演算子、比較、関数の引数への受け渡しは、オペランドが未解決でも進められる"; S-235 for the
+// time, R-55). The errors, when the type that comes later does not have the trait, are in
+// negative/infer_operator.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+// A result that nothing can build: it exists only to be type checked and is never called.
+fn make[T]() -> T {
+  make()
+}
+
+test "== on an Option whose parameter is decided later" {
+  let o = None
+  let e = o == None
+  let p: Option[F32] = o
+  assert e
+  assert p == None
+}
+
+test "!= and a comparison with a value that comes later" {
+  var o      = None
+  let before = o != None
+  o = Some(2.5)
+  let p: Option[F32] = o
+  assert !before
+  assert p != None
+}
+
+// These are type checked only (`make` is never called).
+fn arithmetic_waits() -> F32 {
+  let z = make()
+  let s = z + z
+  let w: F32 = z
+  s
+}
+
+fn negation_waits() -> I32 {
+  let z = make()
+  let n = -z
+  let w: I32 = z
+  n
+}
+
+fn comparison_waits() -> Bool {
+  let z = make()
+  let c = z < z
+  let w: U8 = z
+  c
+}
+
+fn bit_operator_waits() -> U32 {
+  let z = make()
+  let b = z & z
+  let w: U32 = z
+  b
+}
+
+test "the functions above are only checked" {
+  assert true
+}
+
+test "the integer default is applied to the operands of an operator" {
+  let o = Some(3)
+  let q = o == Some(3)
+  assert q
+}

@@ -2173,15 +2173,52 @@ impl<'a> Parser<'a> {
         Ok(self.complete(m, NodeKind::OrPat))
     }
 
+    /// After a `-` in a pattern: `(`s, an integer and as many `)`s (the negative
+    /// literal `-(128)`, S-185). Comments and newlines inside are skipped.
+    fn parenthesised_int_after_minus(&self) -> bool {
+        let mut i = self.peek2_index();
+        let next = |i: &mut usize| loop {
+            let t = self.tokens[*i];
+            if t.kind != TokenKind::Eof {
+                *i += 1;
+            }
+            match t.kind {
+                TokenKind::Comment | TokenKind::DocComment | TokenKind::Newline => {}
+                k => return k,
+            }
+        };
+        let mut opens = 0;
+        let mut k = next(&mut i);
+        while k == TokenKind::LParen {
+            opens += 1;
+            k = next(&mut i);
+        }
+        if opens == 0 || k != TokenKind::Int {
+            return false;
+        }
+        (0..opens).all(|_| next(&mut i) == TokenKind::RParen)
+    }
+
     fn parse_pattern_alt(&mut self) -> PResult<Completed> {
         let t = self.peek();
         let kind = match t.kind {
             TokenKind::Underscore => NodeKind::WildPat,
-            TokenKind::Minus if self.peek2().kind == TokenKind::Int => {
+            // `-1`, and `-(1)` / `-((1))`: the parentheses between `-` and the integer are not
+            // seen (§7, §4.7; S-184, S-185). `-(-1)` is no literal (S-227) and stays E0002.
+            TokenKind::Minus if self.peek2().kind == TokenKind::Int || self.parenthesised_int_after_minus() => {
                 let m = self.start(NodeKind::NegLitPat);
                 self.bump();
-                let n = self.bump();
-                self.check_int(n);
+                self.with_nl(false, |p| {
+                    let mut opens = 0;
+                    while p.eat(TokenKind::LParen).is_some() {
+                        opens += 1;
+                    }
+                    let n = p.bump();
+                    p.check_int(n);
+                    for _ in 0..opens {
+                        p.bump();
+                    }
+                });
                 return Ok(self.complete(m, NodeKind::NegLitPat));
             }
             TokenKind::Int => {

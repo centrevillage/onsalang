@@ -1,0 +1,386 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§2.4", "§7", "§6.1", "§6.2"]
+
+// The type parameters of a generic call may be decided by a later statement, and an
+// integer literal that they meet takes the default `I32` only at the end of the
+// function (spec §4.5, §4.7; S-174). The checker goes through a body in the order of the
+// statements, but a type variable that is still open is not an error until the function
+// ends; an operation that needs the type at once (field, method, index, `as`, `match`,
+// `?`, a call of a value) is E0420 and is in negative/infer_open_subject.onsa. A parameter
+// that nothing decides is E0406 (negative/infer_unresolved.onsa).
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+fn none[T]() -> Option[T] {
+  None
+}
+
+fn or_default[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(x) => x,
+    None => d,
+  }
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn is_none_u8(o: Option[U8]) -> Bool {
+  match o {
+    Some(_) => false,
+    None => true,
+  }
+}
+
+// A result nothing can build: it exists only to be type checked and is never called.
+fn make[T]() -> T {
+  make()
+}
+
+fn takes_u8(x: U8) -> U8 {
+  x
+}
+
+pub enum Slot[T] {
+  Empty,
+  Full(T),
+}
+
+fn take_buf(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+fn take_f32s(xs: [F32; 0]) -> U32 {
+  xs.len()
+}
+
+// ------------------------------------------------- the literal decides T (§4.5)
+
+test "or_default with a literal: T is I32 (the example of §4.5)" {
+  assert or_default(Some(3), 9) == 3
+  assert or_default(None, 9) == 9
+  let n = or_default(Some(3), 9) + 1
+  assert n == 4
+}
+
+test "the default I32 is applied at the end of the function, not at the call" {
+  // The literal 200 is still open when `a` is passed on, so `b: U8` decides it.
+  let a = id(200)
+  let b: U8 = a
+  assert b == 200
+}
+
+test "a literal that meets another literal stays open until the end" {
+  let a = id(2)
+  let b = id(3)
+  let p = a * b
+  assert p == 6
+}
+
+test "a float literal is decided by the annotation that follows" {
+  let z = id(1.5)
+  let s: F32 = 0.5 + z
+  assert s == 2.0
+}
+
+// ------------------------------------------------- a later statement decides T (§4.5)
+
+test "a later annotation decides the parameter of a call" {
+  let v = none()
+  let w: Option[U8] = v
+  assert is_none_u8(w)
+}
+
+test "a later argument decides the parameter of a call" {
+  let v = none()
+  assert is_none_u8(v)
+}
+
+test "a later assignment decides the parameter, and the literal in it defaults" {
+  var acc = none()
+  acc = Some(7)
+  // acc is Option of an integer literal variable; the default makes it Option[I32].
+  assert or_default(acc, 5) == 7
+}
+
+fn later_return() -> Option[F32] {
+  let v = none()
+  v
+}
+
+test "a later return decides the parameter" {
+  let r = later_return()
+  let d: F32 = 1.5
+  assert or_default(r, d) == 1.5
+}
+
+// ------------------------------------------------- branches, loops, closures, generics
+
+fn pick(flag: Bool) -> I32 {
+  // The two branches decide each other: Option of a variable, Option of a literal.
+  let v = if flag { none() } else { Some(3) }
+  or_default(v, 0)
+}
+
+test "the branches of an if decide each other" {
+  assert pick(true) == 0
+  assert pick(false) == 3
+}
+
+fn arms_none_first(o: Option[I32]) -> I32 {
+  let v = match o {
+    None => none(),
+    Some(k) => Some(k),
+  }
+  or_default(v, -1)
+}
+
+fn arms_some_first(o: Option[I32]) -> I32 {
+  let v = match o {
+    Some(k) => Some(k),
+    None => none(),
+  }
+  or_default(v, -1)
+}
+
+test "the arms of a match decide each other" {
+  assert arms_none_first(None) == -1
+  assert arms_none_first(Some(5)) == 5
+  assert arms_some_first(None) == -1
+  assert arms_some_first(Some(6)) == 6
+}
+
+fn in_loop() -> I32 {
+  var total = 0
+  for i in 0..3 {
+    // `o` is open here; the literal 10 given to `or_default` is the only thing that
+    // touches it, so it is an integer literal variable until the function ends.
+    let o = none()
+    total = total + or_default(o, 10)
+  }
+  total
+}
+
+test "a generic call in a loop body" {
+  assert in_loop() == 30
+}
+
+fn from_closure() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    let o = none()
+    let p: Option[U32] = o
+    or_default(p, i + 10)
+  })
+}
+
+test "a generic call decided by a later statement inside a closure" {
+  let a = from_closure()
+  assert a[0] == 10
+  assert a[1] == 11
+  assert a[2] == 12
+}
+
+fn gen_later[T](x: T) -> T {
+  // T of the outer function is a fixed type here; the open parameter of `none` meets it.
+  let o = none()
+  let p: Option[T] = o
+  or_default(p, x)
+}
+
+test "a later statement decides the parameter inside a generic function" {
+  let f: F32 = 2.5
+  assert gen_later(f) == 2.5
+  assert gen_later(5) == 5
+  let u: U8 = 200
+  assert gen_later(u) == 200
+}
+
+// ------------------------------------------------- a result nothing can build
+
+// These are type checked only: a result type that only the return value, an argument or
+// an annotation can decide.
+fn pinned_by_argument() -> U8 {
+  let v = make()
+  takes_u8(v)
+}
+
+fn pinned_by_annotation() -> U8 {
+  let v = make()
+  let w: U8 = v
+  w
+}
+
+fn pinned_by_return() -> U8 {
+  let v = make()
+  v
+}
+
+fn pinned_by_operator(n: U8) -> U8 {
+  let v = make()
+  n + v
+}
+
+fn pinned_by_expected() -> U8 {
+  let v: U8 = make()
+  v
+}
+
+fn pinned_in_a_branch(flag: Bool, n: F32) -> F32 {
+  let v = make()
+  if flag { v } else { n }
+}
+
+test "the functions above are only checked" {
+  assert true
+}
+
+// ------------------------------------------------- the head of the type is enough (S-226, §4.7)
+
+// "解決済み" is a known head of the type: `Buf[?T]`, `Option[?T]` and `[?T; 0]` are subjects of
+// a method call, a `match` and the like; the type argument stays open until a later statement
+// decides it. (When nothing decides it, it is E0406 at the expression that made it: see
+// negative/infer_unresolved.onsa.)
+
+test "a method call on a buffer whose element type is decided later" {
+  let b = Buf.zeroed(4)
+  let n = b.len()
+  let m = take_buf(move b)
+  assert n == 4
+  assert m == 4
+}
+
+test "a match on a call whose parameter is decided later" {
+  let v = none()
+  let r = match v {
+    Some(_) => 1,
+    None => 0,
+  }
+  let w: Option[U8] = v
+  assert r == 0
+  assert is_none_u8(w)
+}
+
+test "a match on a None that is decided later" {
+  let o = None
+  let r = match o {
+    Some(_) => 1,
+    None => 2,
+  }
+  let w: Option[U8] = o
+  assert r == 2
+  assert is_none_u8(w)
+}
+
+test "an empty array literal is a subject before its element type is known" {
+  let e = []
+  let n = e.len()
+  let f: [F32; 0] = e
+  assert n == 0
+  assert take_f32s(f) == 0
+}
+
+test "an empty array literal that a later argument decides" {
+  let e = []
+  assert take_f32s(e) == 0
+}
+
+// ------------------------------------------------- literals and enumerators in a pattern (R-157)
+
+// The literal in a pattern and the enumerator unify with the type arguments of the subject, like
+// the operands of `==` (§4.7): `Some(3)` makes `T` an integer literal variable, which becomes
+// `I32` at the end of the function, or whatever a later statement decides.
+
+test "a literal pattern leaves the parameter an integer literal that defaults to I32" {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  assert r == 0
+}
+
+test "a literal pattern and a later annotation" {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  let p: Option[U8] = o
+  assert r == 0
+  assert is_none_u8(p)
+}
+
+test "a literal pattern on a value that is assigned later" {
+  var o = None
+  let before = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  o = Some(3)
+  let after = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  assert before == 0
+  assert after == 1
+}
+
+test "the binding of an arm is the integer literal type" {
+  let o = None
+  let r = match o {
+    Some(v) => v,
+    None => 7,
+  }
+  assert r == 7
+}
+
+test "an alternative pattern and a guard on an open subject" {
+  let o = None
+  let r = match o {
+    Some(1) | Some(2) => 1,
+    Some(x) if x > 5 => 2,
+    _ => 0,
+  }
+  assert r == 0
+}
+
+test "the enumerators of a user enum unify with the subject" {
+  let s = Slot.Empty
+  let r = match s {
+    Slot.Full(2) => 1,
+    Slot.Full(_) => 2,
+    Slot.Empty => 0,
+  }
+  let t: Slot[U8] = s
+  let k = match t {
+    Slot.Full(_) => 1,
+    Slot.Empty => 0,
+  }
+  assert r == 0
+  assert k == 0
+}
+
+test "a literal pattern in a loop and a closure" {
+  let o     = None
+  var total = 0
+  for i in 0..2 {
+    total = total + match o {
+      Some(3) => 10,
+      _ => 1,
+    }
+  }
+  assert total == 2
+  let xs: [U32; 2] = array.from_fn(fn(i) {
+    let q = None
+    match q {
+      Some(0) => 5,
+      _ => i,
+    }
+  })
+  assert xs[1] == 1
+}

@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.6", "§3.4"]
+
+// E0419: an operation of the compile-time evaluation that leaves the type panics there (§6.6,
+// §3.4), even when the final value is back in range: `-(-(-128))` negates `-128` (the inner
+// literal, S-227) to 128, which is not an `I8`. Every operation is checked by the evaluator of
+// W9-03 (R-155); the stopgap of W2-06 looks at the final value only. Written by the implementer
+// of W2-06 from the cases W2-06/b found.
+
+const NEG_THREE_TIMES: I8 = -(-(-128))   //~ E0419
+
+const NEG_THEN_SUBTRACT: I8 = -(-128) - 1   //~ E0419
+
+const IN_AN_ARRAY: [I8; 1] = [-(-(-128))]   //~ E0419
+
+// The stopgap does not look into `Option` and enums either (W2-06/b): the overflow is E0419 too.
+pub enum Wrapped { X(I8) }
+
+const IN_AN_OPTION: Option[I8] = Some(-(-128))   //~ E0419
+
+const IN_A_VARIANT: Wrapped = Wrapped.X(-(-128))   //~ E0419
+
+const FINE: I8 = -(-(-127))

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1"]
+
+// E0401: an array length or a const argument is a constant expression of type `U32`, and a
+// qualified name of a constant (`lib.SIZE`, §4.5: "`cfg.N` のような修飾した名前") is read the same
+// in a signature, an annotation in a body and `[e; N]` (W2-06/b found the signature reading it
+// as an unsupported expression). A constant of another type is E0401 (R-154). Written by the
+// implementer of W2-06. One error per function (P-01).
+
+use lib
+
+pub fn length_in_a_signature(r: [F32; lib.SIZE]) -> U32 {
+  r.len()
+}
+
+pub fn length_in_a_body() -> U32 {
+  let a: [F32; lib.SIZE] = [0.0; lib.SIZE]
+  a.len()
+}
+
+pub fn wide_length(r: [F32; lib.WIDE]) -> U32 {   //~ E0401
+  0
+}
+
+pub fn signed_argument(r: lib.Ring[F32, lib.SIGNED]) -> U32 {   //~ E0401
+  0
+}
+
+pub fn wide_repeat() -> U32 {
+  let a = [0.0; lib.WIDE]   //~ E0401
+  0
+}
+
+pub fn signed_annotation() -> U32 {
+  let a: [U8; lib.SIGNED] = [0; 4]   //~ E0401
+  0
+}

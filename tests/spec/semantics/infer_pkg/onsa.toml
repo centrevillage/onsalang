@@ -1,0 +1,3 @@
+[package]
+name = "infer_pkg"
+edition = "2026"

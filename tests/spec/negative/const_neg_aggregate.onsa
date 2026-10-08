@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§6.6", "§3.4"]
+
+// E0419: the `-` before a parenthesised negative literal negates the value (S-227), so
+// `-(-128)` of `I8` overflows also inside an array, a tuple or a struct of a `const`
+// initializer: the compile-time evaluation panics, E0419 at the initializer (§6.6). The values
+// that stay in range are fine. Written by the implementer of W2-06 (W2-06/b found the
+// aggregates passing the check and failing inside the compiler).
+
+pub struct P {
+  a: I8,
+  b: I32,
+}
+
+const IN_AN_ARRAY: [I8; 2] = [1, -(-128)]   //~ E0419
+
+const IN_A_TUPLE: (I8, I8) = (1, -(-128))   //~ E0419
+
+const IN_A_STRUCT: P = P { a: -(-128), b: 0 }   //~ E0419
+
+const IN_A_NESTED_ARRAY: [[I32; 1]; 2] = [[0], [-(-2147483648)]]   //~ E0419
+
+const IN_A_TUPLE_OF_A_STRUCT: (U8, P) = (0, P { a: 0, b: -(-2147483648) })   //~ E0419
+
+// ---------------------------------------------------------------- fine
+
+const FINE_ARRAY: [I8; 2] = [-128, -(-127)]
+
+const FINE_STRUCT: P = P { a: -(128), b: -(-2147483647) }

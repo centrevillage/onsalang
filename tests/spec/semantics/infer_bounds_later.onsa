@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§4.6", "§6.2", "§2.4"]
+
+// A requirement on a type parameter that a later statement decides (a bound, the implicit `Dup`,
+// the kind of the element of `[e; N]`) waits until the type has no type variable left and is
+// then checked, so a bound that is met by the type that comes later is no error (spec §4.5,
+// §4.7; S-235, S-174, S-226). The method of an `impl[T: Float]` is chosen by the head of the
+// type (§6.2) and its bound is checked in the same way. A bound does not change the default of
+// a literal: a float literal is decided by an annotation, never by the bound.
+// The errors are in negative/infer_bounds.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+pub struct Bx[T] {
+  o: Option[T],
+}
+
+impl[T: Float] Bx[T] {
+  pub fn has(self) -> Bool {
+    match self.o {
+      Some(_) => true,
+      None => false,
+    }
+  }
+}
+
+fn need_f[T: Float](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+fn need_fl[T: Float](x: T) -> Bool {
+  true
+}
+
+fn hold[T](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+fn take_of(o: Option[F32]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+fn take_bf(b: Bx[F32]) -> Bool {
+  b.has()
+}
+
+fn bound_in_a_generic[U: Float](x: U) -> Bool {
+  let o = None
+  let a = need_f(o)
+  let p: Option[U] = o
+  a
+}
+
+test "a bound met by a later annotation" {
+  let o = None
+  let a = need_f(o)
+  let p: Option[F32] = o
+  assert !a
+  assert !need_f(p)
+}
+
+test "a bound met by a later argument" {
+  let o = None
+  let a = need_f(o)
+  let r = take_of(o)
+  assert !a
+  assert !r
+}
+
+test "a bound met by a later assignment of a float literal" {
+  var o      = None
+  let before = need_f(o)
+  o = Some(1.5)
+  let p: Option[F32] = o
+  assert !before
+  assert need_f(p)
+}
+
+test "a bound met by the return type" {
+  let r = decided_by_the_return()
+  assert !take_of(r)
+}
+
+fn decided_by_the_return() -> Option[F32] {
+  let o = None
+  let a = need_f(o)
+  o
+}
+
+test "a bound of a method met by a later statement" {
+  let b = Bx { o: None }
+  let h = b.has()
+  let c: Bx[F32] = b
+  assert !h
+  assert !c.has()
+}
+
+test "a bound of a method met by a later argument" {
+  let b = Bx { o: Some(2.5) }
+  let h = b.has()
+  assert take_bf(b)
+  assert h
+}
+
+test "a float literal decided by an annotation satisfies the bound" {
+  let v = 3.0
+  let a = need_fl(v)
+  let w: F64 = v
+  assert a
+  assert w == 3.0
+}
+
+test "a float literal with an expected type satisfies the bound at once" {
+  let w: F32 = 2.5
+  assert need_fl(w)
+  assert need_fl(w + 1.5)
+}
+
+test "a bound of a generic parameter is met by the bound of the function" {
+  let f: F32 = 1.0
+  assert !bound_in_a_generic(f)
+  let d: F64 = 1.0
+  assert !bound_in_a_generic(d)
+}
+
+test "the implicit Dup is met by a Copy type that comes later" {
+  let o = None
+  let a = hold(o)
+  let p: Option[U8] = o
+  assert !a
+}
+
+test "the element of a repetition is Dup when a later statement decides it" {
+  let xs = [None; 2]
+  let ys: [Option[U8]; 2] = xs
+  assert !hold(ys[0])
+}
+
+// ------------------------------------------------- branches, loops and closures
+
+test "a waiting bound in a branch and a loop" {
+  let flag = true
+  let o    = None
+  var n    = 0
+  if flag {
+    if !need_f(o) {
+      n = n + 1
+    }
+  }
+  for i in 0..2 {
+    if !need_f(o) {
+      n = n + 10
+    }
+  }
+  let p: Option[F32] = o
+  assert n == 21
+  assert !take_of(p)
+}
+
+test "a waiting bound inside a closure" {
+  let xs: [U32; 2] = array.from_fn(fn(i) {
+    let o = None
+    let a = need_f(o)
+    let p: Option[F64] = o
+    if a { 100 } else { i + 1 }
+  })
+  assert xs[0] == 1
+  assert xs[1] == 2
+}

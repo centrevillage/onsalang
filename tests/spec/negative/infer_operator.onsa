@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§4.5", "§3.2", "§6.3", "§3.4"]
+
+// E0401 / E0406: the trait of an operator is checked when the types of the operands are known
+// (spec §4.7, §6.3; S-235, R-55). If a later statement decides a type that does not have the
+// trait, the error is E0401 at the operator and not at the statement that decided it (the same
+// position rule as E0416 for a bound, negative/infer_bounds.onsa); if the type is never decided,
+// the operator is not checked and the error is E0406 at the expression that made the variable.
+// One error per function (P-01).
+
+pub struct Plain {
+  x: F32,
+}
+
+fn make[T]() -> T {
+  make()
+}
+
+// ---------------------------------------------------------------- E0401 at the operator
+
+pub fn arithmetic_on_a_bool() -> Bool {
+  let v = make()
+  let s = v + v                 //~ E0401
+  let b: Bool = v
+  b
+}
+
+pub fn negation_on_an_unsigned_type() -> U32 {
+  let v = make()
+  let n = -v                    //~ E0401
+  let u: U32 = v
+  u
+}
+
+pub fn comparison_on_a_struct() -> Plain {
+  let v = make()
+  let c = v < v                 //~ E0401
+  let p: Plain = v
+  p
+}
+
+pub fn equality_on_an_option_of_a_struct() -> Option[Plain] {
+  let o = None
+  let e = o == None             //~ E0401
+  let p: Option[Plain] = o
+  p
+}
+
+pub fn equality_decided_by_the_return_type() -> Option[Plain] {
+  let o = None
+  let e = o != None             //~ E0401
+  o
+}
+
+// ---------------------------------------------------------------- E0406: never decided
+
+pub fn operator_on_an_open_result() -> Bool {
+  let v = make()                //~ E0406
+  let s = v + v
+  true
+}
+
+pub fn equality_on_an_open_option() -> Bool {
+  let o = None                  //~ E0406
+  o == None
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn arithmetic_on_a_float() -> F32 {
+  let v = make()
+  let s = v + v
+  let f: F32 = v
+  s
+}
+
+pub fn equality_on_an_option_of_a_float() -> Bool {
+  let o = None
+  let e = o == None
+  let p: Option[F32] = o
+  e
+}

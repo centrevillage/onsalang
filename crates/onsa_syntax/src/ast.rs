@@ -70,6 +70,24 @@ impl Ast {
         self.pats.push(pat);
         PatId(self.pats.len() as u32 - 1)
     }
+
+    /// The literal of a negative literal (spec §4.7, S-184, S-227): `e` is a prefix
+    /// `-` whose operand, without its parentheses, is a numeric literal itself
+    /// (`-1`, `-(128)`, `-((1.5))`). The `-` is then a part of the literal's
+    /// value; any other `-` (`-(-1)` outside, `-x`, `-(I32.MIN)`) negates a value.
+    /// The one definition of the rule for expressions; the patterns have the same
+    /// form in their grammar (`NegLitPat`).
+    pub fn negated_literal(&self, e: ExprId) -> Option<ExprId> {
+        let ExprKind::Unary { op: UnOp::Neg, expr } = &self.expr(e).kind else { return None };
+        let mut cur = *expr;
+        while let ExprKind::Paren(inner) = &self.expr(cur).kind {
+            cur = *inner;
+        }
+        match &self.expr(cur).kind {
+            ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. }) => Some(cur),
+            _ => None,
+        }
+    }
 }
 
 /// An identifier with its span. Names are not interned in M1.

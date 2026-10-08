@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§4.5", "§2.4"]
+
+// E0408: a literal whose type a later statement or an expected type decides is checked when
+// the type is known, on the value with the prefix `-` written directly on it (spec §4.7, §4.5;
+// S-174, S-184, R-148). The literal is where the error is. One error per function (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn takes_i8(x: I8) -> I8 {
+  x
+}
+
+pub fn decided_later_by_annotation() -> U8 {
+  let a = id(300)               //~ E0408
+  let b: U8 = a
+  b
+}
+
+pub fn decided_later_by_argument() -> I8 {
+  let a = id(-129)              //~ E0408
+  takes_i8(a)
+}
+
+pub fn nested_expected() -> Wrap[Wrap[U8]] {
+  Wrap { v: Wrap { v: 300 } }   //~ E0408
+}
+
+pub fn decided_later_in_a_branch(flag: Bool) -> U8 {
+  let a = if flag { id(1) } else { id(256) }   //~ E0408
+  let b: U8 = a
+  b
+}
+
+pub fn parens_before_a_later_decision() -> I8 {
+  let a = id(-(129))            //~ E0408
+  takes_i8(a)
+}
+
+// The same literals in range are fine.
+
+pub fn in_range() -> I8 {
+  let a: I8 = -128
+  let b: I8 = -(128)
+  let d = id(-128)
+  let e: I8 = d
+  if a == b { e } else { takes_i8(-128) }
+}

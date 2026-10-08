@@ -51,7 +51,7 @@ test "a function with a const parameter calls itself" {
 test "a recursion that runs along an array of 40 elements" {
   var ys: [U32; 40] = [2; 40]
   ys[39] = 3
-  assert sum_from(ys, 0) == 79
+  assert sum_from(ys, 0) == 81
 }
 
 test "a const parameter used as a value in a recursion" {

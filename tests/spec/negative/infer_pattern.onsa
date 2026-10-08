@@ -1,0 +1,210 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7", "§2.4"]
+
+// The literals and the enumerators of a pattern are unified with the type arguments of the
+// subject, like the operands of `==` (spec §4.7; S-226, R-157). `let o = None` followed by
+// `match o { Some(3) => … }` makes the parameter of `o` an integer literal variable, and a later
+// statement that decides another type is an error: E0401 for a type that has no integer literals
+// (`F32`, `Char`, `Bool`), E0408 for an integer type whose range does not hold the literal, at
+// the literal. The binding of an arm has the type of the (still open) parameter, so a method call
+// on it is E0420. One error per function (P-01).
+
+pub enum Slot[T] {
+  Empty,
+  Full(T),
+}
+
+// ---------------------------------------------------------------- E0401
+
+pub fn integer_pattern_then_float() -> U32 {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  let p: Option[F32] = o        //~ E0401
+  r
+}
+
+pub fn integer_pattern_then_bool() -> U32 {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  let p: Option[Bool] = o       //~ E0401
+  r
+}
+
+pub fn char_pattern_then_integer() -> U32 {
+  let o = None
+  let r = match o {
+    Some('a') => 1,
+    _ => 0,
+  }
+  let p: Option[U8] = o         //~ E0401
+  r
+}
+
+pub fn bool_pattern_then_integer() -> U32 {
+  let o = None
+  let r = match o {
+    Some(true) => 1,
+    _ => 0,
+  }
+  let p: Option[I32] = o        //~ E0401
+  r
+}
+
+pub fn string_pattern_then_integer() -> U32 {
+  let o = None
+  let r = match o {
+    Some("a") => 1,
+    _ => 0,
+  }
+  let p: Option[I32] = o        //~ E0401
+  r
+}
+
+pub fn two_patterns_that_disagree() -> U32 {
+  let o = None
+  match o {
+    Some(3) => 1,
+    Some('a') => 2,             //~ E0401
+    _ => 0,
+  }
+}
+
+pub fn enumerator_pattern_then_another_argument() -> U32 {
+  let s = Slot.Empty
+  let r = match s {
+    Slot.Full(2) => 1,
+    _ => 0,
+  }
+  let t: Slot[Bool] = s         //~ E0401
+  r
+}
+
+pub fn pattern_then_a_call_argument() -> U32 {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  r + takes_f32s(o)             //~ E0401
+}
+
+fn takes_f32s(o: Option[F32]) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- E0408
+
+pub fn pattern_literal_out_of_range_for_the_later_type() -> U32 {
+  let o = None
+  let r = match o {
+    Some(300) => 1,             //~ E0408
+    _ => 0,
+  }
+  let p: Option[U8] = o
+  r
+}
+
+pub fn negative_pattern_out_of_range() -> U32 {
+  let o = None
+  let r = match o {
+    Some(-129) => 1,            //~ E0408
+    _ => 0,
+  }
+  let p: Option[I8] = o
+  r
+}
+
+pub fn negative_pattern_for_an_unsigned_type() -> U32 {
+  let o = None
+  let r = match o {
+    Some(-1) => 1,              //~ E0401
+    _ => 0,
+  }
+  let p: Option[U8] = o
+  r
+}
+
+pub fn enumerator_pattern_out_of_range() -> U32 {
+  let s = Slot.Empty
+  let r = match s {
+    Slot.Full(256) => 1,        //~ E0408
+    _ => 0,
+  }
+  let t: Slot[U8] = s
+  r
+}
+
+// ---------------------------------------------------------------- E0420
+
+pub fn method_on_the_binding() -> F32 {
+  let p = None
+  match p {
+    Some(v) => v.round_f32(),   //~ E0420
+    None => 0.0,
+  }
+}
+
+pub fn field_of_the_binding() -> F32 {
+  let p = None
+  match p {
+    Some(v) => v.x,             //~ E0420
+    None => 0.0,
+  }
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn integer_pattern_then_each_integer_type() -> U32 {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  let p: Option[U8] = o
+  r
+}
+
+pub fn integer_pattern_defaults_to_i32() -> U32 {
+  let o = None
+  match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+}
+
+pub fn the_minimum_is_in_range_for_the_later_type() -> U32 {
+  let o = None
+  let r = match o {
+    Some(-128) => 1,
+    Some(-(127)) => 2,
+    _ => 0,
+  }
+  let p: Option[I8] = o
+  r
+}
+
+pub fn two_patterns_that_agree() -> U32 {
+  let o = None
+  match o {
+    Some(1) | Some(2) => 1,
+    Some(3) => 2,
+    _ => 0,
+  }
+}
+
+pub fn char_pattern() -> U32 {
+  let o = None
+  let r = match o {
+    Some('a') => 1,
+    _ => 0,
+  }
+  let p: Option[Char] = o
+  r
+}

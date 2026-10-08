@@ -1,0 +1,37 @@
+// Generic functions and types used from other modules of the package (spec §4.5, §15.1).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub enum Slot[T] {
+  Empty,
+  Full(T),
+}
+
+pub fn none[T]() -> Option[T] {
+  None
+}
+
+pub fn or_default[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(x) => x,
+    None => d,
+  }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn total[const N: U32](xs: [U32; N]) -> U32 {
+  var s: U32 = 0
+  for x in xs {
+    s = s + x
+  }
+  s
+}
+
+pub fn total_twice[const N: U32](xs: [U32; N]) -> U32 {
+  total(xs) + total(xs)
+}

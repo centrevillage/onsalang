@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// A generic struct or enum declared in another module of the package is used with type and
+// const arguments in signatures (arguments, results, fields) and in bodies. This module's name
+// sorts before the module that declares the types: the order of the file names does not matter
+// (spec §15.1 "モジュール" and §4.5).
+//
+// Every value below is worked out by hand from the spec text.
+
+use zz_types.{Wrap, Pair, Ring, Maybe}
+
+pub struct Holder {
+  w: Wrap[U8],
+}
+
+fn unwrap(w: Wrap[U8]) -> U8 {
+  w.v
+}
+
+fn wrap(x: U8) -> Wrap[U8] {
+  Wrap { v: x }
+}
+
+fn swap(p: Pair[U8, F32]) -> Pair[F32, U8] {
+  Pair { a: p.b, b: p.a }
+}
+
+fn capacity[const N: U32](r: Ring[F32, N]) -> U32 {
+  N
+}
+
+fn orelse(m: Maybe[U8], d: U8) -> U8 {
+  match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => d,
+  }
+}
+
+test "a generic struct of another module in signatures" {
+  assert unwrap(wrap(7)) == 7
+  let h = Holder { w: wrap(9) }
+  assert unwrap(h.w) == 9
+  let s = swap(Pair { a: 3, b: 0.5 })
+  assert s.a == 0.5
+  assert s.b == 3
+}
+
+test "a generic struct with a const argument of another module" {
+  let r: Ring[F32, 4] = Ring { data: [0.0; 4], head: 0 }
+  assert capacity(r) == 4
+}
+
+test "a generic enum of another module" {
+  assert orelse(Maybe.Just(5), 1) == 5
+  assert orelse(Maybe.Nothing, 1) == 1
+}

@@ -44,8 +44,12 @@ fn repo_files() -> Vec<(String, String)> {
 
 /// The files on which the lexer panics today (R-01, W3-04): a multibyte
 /// character right after `{` in an interpolation.
-const LEXER_PANICS: &[&str] =
-    &["tests/review-phase1/parent/r1.onsa", "tests/review-phase1/syntax/interp_utf8.onsa", "tests/fuzz/b60c431d.onsa"];
+const LEXER_PANICS: &[&str] = &[
+    "tests/review-phase1/parent/r1.onsa",
+    "tests/review-phase1/syntax/interp_utf8.onsa",
+    "tests/fuzz/b60c431d.onsa",
+    "tests/fuzz/3f72dc47.onsa",
+];
 
 fn try_parse(src: &str) -> Option<crate::Parsed> {
     std::panic::catch_unwind(|| parse(src)).ok()

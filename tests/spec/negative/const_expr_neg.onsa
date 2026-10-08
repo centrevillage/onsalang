@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§3.4"]
+
+// E0401 / E0419: a constant expression (an array length or a const argument) is checked like an
+// ordinary expression with the expected type `U32` (§4.5; S-228). `U32` has no unary `-`, so a
+// prefix `-` before a literal, a parenthesised literal, a constant name or a parenthesised
+// expression is E0401 wherever it is written, whatever the value (nothing is evaluated: this
+// is a check of the type). A prefix `-` is never E0408 here (nothing is a literal that is out
+// of range), and E0808 is only for the value of a delay or a `par` (negative/flow_const_neg.onsa).
+// The subtraction `0 - 1` is not a `-` before an operand but an operation whose result does not
+// fit: E0419 (negative/const_expr_eval.onsa). The constant expression grammar is W5-08; the forms
+// with only a literal after the `-` in a const argument are in const_args.onsa. One error per
+// function (P-01).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const ONE: U32 = 1
+const FOUR: U32 = 4
+const LIMIT: I32 = 5
+
+// ---------------------------------------------------------------- E0401: the prefix `-`
+
+pub fn const_arg_parenthesised() -> Ring[F32, -(1)] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn const_arg_named() -> Ring[F32, -ONE] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn const_arg_expression() -> Ring[F32, -(FOUR + 1)] {   //~ E0401
+  Ring { data: [0.0; 5], head: 0 }
+}
+
+pub fn const_arg_nested() -> Ring[F32, FOUR + -1] {   //~ E0401
+  Ring { data: [0.0; 3], head: 0 }
+}
+
+pub fn array_length_literal() -> [F32; -1] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn array_length_zero(xs: [F32; -0]) -> U32 {   //~ E0401
+  0
+}
+
+pub fn array_length_named() -> [F32; -ONE] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn array_length_expression() -> [F32; -(2 * 3)] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn array_repeat_length() -> [F32; 2] {
+  [0.0; -1]                     //~ E0401
+}
+
+pub fn array_in_a_let() -> U32 {
+  let xs: [F32; -2] = [0.0; 2]  //~ E0401
+  0
+}
+
+pub fn array_in_a_struct_field() -> U32 {
+  let r: Ring[F32, 2] = Ring { data: [0.0; -2], head: 0 }   //~ E0401
+  r.head
+}
+
+pub fn array_nested_in_a_type() -> [[F32; -1]; 2] {   //~ E0401
+  [[0.0; 4]; 2]
+}
+
+// ---------------------------------------------------------------- E0401: the type of the constant
+
+pub fn array_length_of_i32() -> [F32; LIMIT] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn const_arg_of_i32() -> Ring[F32, LIMIT] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}

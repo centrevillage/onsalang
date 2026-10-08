@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.4", "§18.1"]
+
+// E0020: a string pattern with an interpolation is not a pattern, also when the interpolated
+// name is a constant, a qualified name or a tuple index (spec §7, §2.4, §18.1; S-225). The
+// interpolation holds a name path (`{MAX_VOICES}`, `{F32.PI}`, `{t.0}`, §2.4), so the lexer has
+// to read these before the syntax stage can refuse the pattern; the other forms are in
+// pattern_str.onsa. One error per function (P-01).
+
+const K: U32 = 3
+
+pub fn constant_name(s: Str) -> U32 {
+  match s {
+    "a{K}b" => 1,               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn qualified_constant(s: Str) -> U32 {
+  match s {
+    "a{F32.PI}b" => 1,          //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn tuple_index(s: Str, t: (U32, U32)) -> U32 {
+  match s {
+    "a{t.0}b" => 1,             //~ E0020
+    _ => 0,
+  }
+}

@@ -246,7 +246,7 @@ codes! {
     E0405 = 405, Types, [Types], Optional, Optional,
         "the type of this literal cannot be determined";
     E0406 = 406, Types, [Types], Optional, Optional,
-        "a type parameter cannot be determined from arguments or the expected type";
+        "a type that an expression makes (a type parameter of a call, the type in `None`, the element of `[]`) is not determined by the end of the function";
     E0407 = 407, Types, [Types], Optional, Optional,
         "the result of a `const` is not Copy or a statically placeable Shared value";
     E0408 = 408, Types, [Syntax, Types, Flow], Optional, Optional,

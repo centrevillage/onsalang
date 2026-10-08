@@ -1,0 +1,8 @@
+pub const SIZE: U32 = 4
+pub const WIDE: U64 = 4
+pub const SIGNED: I32 = 4
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}

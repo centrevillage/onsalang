@@ -1,0 +1,32 @@
+// Types, methods and bounds used from another module of the package (spec §4.5, §6.2, §15.1).
+
+pub struct Bx[T] {
+  o: Option[T],
+}
+
+impl[T: Float] Bx[T] {
+  pub fn has(self) -> Bool {
+    match self.o {
+      Some(_) => true,
+      None => false,
+    }
+  }
+}
+
+pub fn need_f[T: Float](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}
+
+pub fn need_fl[T: Float](x: T) -> Bool {
+  true
+}
+
+pub fn hold[T](o: Option[T]) -> Bool {
+  match o {
+    Some(_) => true,
+    None => false,
+  }
+}

@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§3.4"]
+
+// E0419: an overflow or a division by zero in a constant expression (an array length or a
+// const argument) is the compile-time evaluation panic, at the expression (spec §4.5, §6.6;
+// S-228: `0 - 1` is an evaluation, not a `-` before an operand, so it is E0419 and not E0401).
+// The value is computed at compile time and the type is compared by the value, so the
+// arithmetic that fits is fine. The evaluation of a computed length is W9-03 (until then it is
+// E0200, K-05). One error per function (P-01).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const ONE: U32 = 1
+const FOUR: U32 = 4
+
+// ---------------------------------------------------------------- E0419
+
+pub fn const_arg_subtraction() -> Ring[F32, 0 - 1] {   //~ E0419
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn const_arg_named_subtraction() -> Ring[F32, ONE - 2] {   //~ E0419
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn array_length_subtraction() -> [F32; 0 - 1] {   //~ E0419
+  [0.0; 4]
+}
+
+pub fn array_length_division_by_zero() -> [F32; 4 / 0] {   //~ E0419
+  [0.0; 4]
+}
+
+pub fn array_length_remainder_by_zero() -> [F32; 4 % 0] {   //~ E0419
+  [0.0; 4]
+}
+
+pub fn array_length_overflow() -> [F32; 4294967295 + 1] {   //~ E0419
+  [0.0; 4]
+}
+
+pub fn array_length_product_overflow() -> [F32; 65536 * 65536] {   //~ E0419
+  [0.0; 4]
+}
+
+pub fn array_repeat_length() -> [F32; 2] {
+  [0.0; ONE - 2]                //~ E0419
+}
+
+// ---------------------------------------------------------------- fine: the value fits
+
+pub fn expression_const_arg() -> Ring[F32, FOUR + 1] {
+  Ring { data: [0.0; 5], head: 0 }
+}
+
+pub fn parenthesised_const_arg() -> Ring[F32, (FOUR)] {
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn subtraction_that_fits() -> Ring[F32, FOUR - 1] {
+  Ring { data: [0.0; 3], head: 0 }
+}
+
+pub fn product_array_length() -> [F32; FOUR * 2] {
+  [0.0; 8]
+}
+
+pub fn same_type_by_value() -> [F32; 8] {
+  let xs: [F32; FOUR * 2] = [0.0; 8]
+  xs
+}
+
+pub fn zero_by_subtraction() -> [F32; ONE - 1] {
+  []
+}

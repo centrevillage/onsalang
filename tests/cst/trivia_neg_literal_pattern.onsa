@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.1", "§7", "§18.2"]
+
+// Comments and whitespace inside a negative literal pattern with parentheses (`-( // c` `5 )`,
+// §7: the parentheses between `-` and the literal are not seen). `onsa fmt` keeps each comment
+// once, is idempotent and gives a file that parses again (`docs/onsa-tools.md` §3; W2-06/b: the
+// comment was printed twice and broke the code). An input of the CST round trip and the fmt
+// properties.
+
+pub fn pick(x: I32) -> I32 {
+  match x {
+    -( // the minus five
+      5
+    ) => 5,
+    -(6 // six
+    ) | -7 => 6,
+    - ( ( 8 ) ) => 8,
+    -(
+      9
+    ) => 9,
+    _ => 0,
+  }
+}

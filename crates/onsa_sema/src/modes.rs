@@ -51,7 +51,6 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
             moved_any: HashSet::new(),
         };
         w.closures();
-        w.repeats();
         w.expr(root, Pos::Return);
         if let Some(d) = w.diag.take() {
             diags.push(d);
@@ -289,22 +288,6 @@ impl<'a> Walker<'a> {
                     self.report(d);
                     return;
                 }
-            }
-        }
-    }
-
-    /// `[e; N]`: the element is copied N times, so it must be Dup (§2.4).
-    fn repeats(&mut self) {
-        for &e in &self.body.repeats {
-            let ExprKind::Repeat { elem, .. } = &self.ast.expr(e).kind else { continue };
-            if self.kind_of_expr(*elem) == Some(Kind::Affine) {
-                let span = self.span(*elem);
-                self.err(
-                    Code::E0711,
-                    span,
-                    "`[e; N]` repeats a value; `e` must be Copy or Shared (Affine arrays use `array.from_fn`, §2.4)",
-                );
-                return;
             }
         }
     }

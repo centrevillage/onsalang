@@ -1011,28 +1011,14 @@ impl<'p> Sema<'p> {
                 self.a.types.error()
             }
             (TypeKind::ConstArg(e), Some(true)) => {
-                let expr = cx.ast.expr(*e);
-                let value: Option<i128> = match &expr.kind {
-                    ExprKind::Lit(Lit::Int { value, .. }) => Some(*value as i128),
-                    ExprKind::Unary { expr: inner, .. } => match &cx.ast.expr(*inner).kind {
-                        ExprKind::Lit(Lit::Int { value, .. }) => Some(-(*value as i128)),
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                match value {
-                    Some(v) if (0..=u32::MAX as i128).contains(&v) => self.a.types.intern(Ty::ConstVal(v as u32)),
-                    _ => {
-                        self.report(
-                            cx.def,
-                            Diagnostic::new(
-                                Stage::Types,
-                                Code::E0408,
-                                te.span,
-                                "a const argument must fit in `U32` (§4.1)",
-                            )
-                            .with_found(src(cx, te.span)),
-                        );
+                match crate::constarg::expr(&mut self.a, cx.m, cx.ast, cx.text, &cx.generics, *e) {
+                    Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
+                    Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
+                    Err(mut d) => {
+                        // The whole argument (`-1`), as written in the type.
+                        d.span = te.span;
+                        d.found = Some(src(cx, te.span));
+                        self.report(cx.def, d);
                         self.a.types.error()
                     }
                 }
@@ -1046,32 +1032,13 @@ impl<'p> Sema<'p> {
                         return self.a.types.intern(Ty::Param(i as u32));
                     }
                 } else {
-                    match self.a.resolve_path(cx.m, path) {
-                        Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => {
-                            if let DefKind::Const(c) = &self.a.defs[d.0 as usize].kind {
-                                if let Some(v) = c.int_value
-                                    && v <= u32::MAX as u64
-                                {
-                                    return self.a.types.intern(Ty::ConstVal(v as u32));
-                                }
-                                self.report(
-                                    cx.def,
-                                    Diagnostic::new(
-                                        Stage::Types,
-                                        Code::E0408,
-                                        te.span,
-                                        "a const argument must be an integer literal or a `const` with a literal value",
-                                    )
-                                    .with_found(src(cx, te.span)),
-                                );
-                                return self.a.types.error();
-                            }
-                        }
-                        Err(e) => {
-                            self.report(cx.def, e.into_diagnostic());
+                    match crate::constarg::named(&mut self.a, cx.m, cx.ast, cx.text, path, te.span) {
+                        Ok(Some(v)) => return self.a.types.intern(Ty::ConstVal(v)),
+                        Ok(None) => {}
+                        Err(d) => {
+                            self.report(cx.def, d);
                             return self.a.types.error();
                         }
-                        _ => {}
                     }
                 }
                 self.report(
@@ -1207,86 +1174,11 @@ impl<'p> Sema<'p> {
     /// Array length (§4.1): an integer literal, a `const` with a literal
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
-        let expr = cx.ast.expr(e);
-        match &expr.kind {
-            ExprKind::Lit(Lit::Int { value, .. }) => {
-                if *value > u32::MAX as u64 {
-                    self.report(
-                        cx.def,
-                        Diagnostic::new(Stage::Types, Code::E0408, expr.span, "array length does not fit in `U32`"),
-                    );
-                    return None;
-                }
-                Some(Len::Const(*value as u32))
-            }
-            ExprKind::Path(p) => {
-                if p.segments.len() == 1
-                    && let Some(i) = cx.generics.iter().position(|g| g.name == p.segments[0].name)
-                {
-                    if matches!(cx.generics[i].kind, GenericKind::Const(_)) {
-                        return Some(Len::Param(i as u32));
-                    }
-                    self.report(
-                        cx.def,
-                        Diagnostic::new(
-                            Stage::Names,
-                            Code::E0302,
-                            expr.span,
-                            "array length must be a `const` parameter or constant",
-                        ),
-                    );
-                    return None;
-                }
-                match self.a.resolve_path(cx.m, p) {
-                    Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => match &self.a.defs[d.0 as usize].kind {
-                        DefKind::Const(c) => match c.int_value {
-                            Some(v) if v <= u32::MAX as u64 => Some(Len::Const(v as u32)),
-                            Some(_) => {
-                                self.report(
-                                    cx.def,
-                                    Diagnostic::new(
-                                        Stage::Types,
-                                        Code::E0408,
-                                        expr.span,
-                                        "array length does not fit in `U32`",
-                                    ),
-                                );
-                                None
-                            }
-                            None => {
-                                self.unsupported(cx.def, expr.span, Feature::ComputedArrayLengths, &[]);
-                                None
-                            }
-                        },
-                        _ => {
-                            self.report(
-                                cx.def,
-                                Diagnostic::new(
-                                    Stage::Names,
-                                    Code::E0302,
-                                    expr.span,
-                                    "array length must be a constant",
-                                )
-                                .with_found(src(cx, expr.span)),
-                            );
-                            None
-                        }
-                    },
-                    Ok(_) => {
-                        self.report(
-                            cx.def,
-                            Diagnostic::new(Stage::Names, Code::E0302, expr.span, "array length must be a constant"),
-                        );
-                        None
-                    }
-                    Err(err) => {
-                        self.report(cx.def, err.into_diagnostic());
-                        None
-                    }
-                }
-            }
-            _ => {
-                self.unsupported(cx.def, expr.span, Feature::ArrayLengthExprs, &[]);
+        match crate::constarg::expr(&mut self.a, cx.m, cx.ast, cx.text, &cx.generics, e) {
+            Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
+            Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
+            Err(d) => {
+                self.report(cx.def, d);
                 None
             }
         }

@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7"]
+
+// E0420: the result of a generic call whose type parameter nothing has decided yet is an open
+// type; an operation that needs the type of its subject at that point is E0420, and the `let`
+// that holds the result is not an error by itself (spec §4.5 "途中で型が要る操作（`v.x`、`v?` など）は、
+// その時点で決まっていなければ E0420"; §4.7 "その場で既知を要する操作"; S-174). The operations
+// are the field access, the method call, the index, the left of `as`, the subject of `match`,
+// the subject of `?` (the call of a value is in infer_open_subject_call.onsa). One error per function (P-01).
+// (E0420 on a literal that nothing has fixed is in types_unresolved.onsa.)
+
+pub struct P {
+  x: F32,
+}
+
+pub fn make[T]() -> T {
+  make()
+}
+
+fn pass_f64(x: F64) -> F64 {
+  x
+}
+
+pub fn field_access() -> F32 {
+  let v = make()
+  let r = v.x                   //~ E0420
+  r
+}
+
+pub fn method_call() -> F32 {
+  let v = make()
+  let r = v.round_f32()         //~ E0420
+  r
+}
+
+pub fn index() -> F32 {
+  let v = make()
+  let r = v[0]                  //~ E0420
+  r
+}
+
+pub fn as_left() -> I64 {
+  let v = make()
+  let r = v as I64              //~ E0420
+  r
+}
+
+pub fn match_subject() -> U32 {
+  let v = make()
+  let r = match v {             //~ E0420
+    0 => 1,
+    _ => 2,
+  }
+  r
+}
+
+pub fn question_subject() -> Option[U32] {
+  let v = make()
+  let r = v?                    //~ E0420
+  Some(r)
+}
+
+pub fn in_a_branch(flag: Bool) -> F32 {
+  let v = make()
+  if flag { v.x } else { 1.0 }  //~ E0420
+}
+
+pub fn in_a_loop() -> F32 {
+  let v = make()
+  var acc: F32 = 0.0
+  for i in 0..3 {
+    acc = acc + v.x             //~ E0420
+  }
+  acc
+}
+
+pub fn in_a_closure() -> [F32; 2] {
+  let v = make()
+  array_of(fn(i) { v.x })       //~ E0420
+}
+
+fn array_of(f: fn(U32) -> F32) -> [F32; 2] {
+  [0.0; 2]
+}
+
+// The type is known by a statement before the operation: no error. The same `let` is fine
+// when something above it, or the annotation, has decided the type.
+pub fn decided_before_the_field() -> F32 {
+  let v = make()
+  let p: P = v
+  p.x
+}
+
+pub fn decided_by_the_annotation() -> F32 {
+  let v: P = make()
+  v.x
+}
+
+pub fn decided_by_an_argument(x: F32) -> F32 {
+  let v = make()
+  let w = pass_f64(v)
+  let r = v.round_f32()
+  r + x
+}
+
+pub fn decided_by_the_expected_type() -> I64 {
+  let v: U8 = make()
+  v as I64
+}

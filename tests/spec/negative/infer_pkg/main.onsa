@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§15.1", "§2.4"]
+
+// E0406 / E0420 / E0408 for generic functions and types of another module: the rules of the
+// body inference are those of the calling function, wherever the callee is declared (S-174,
+// R-148). One error per function (P-01).
+
+use lib.{Wrap, Slot, none, make, id}
+
+pub struct P {
+  x: F32,
+}
+
+fn count(o: Option[U8]) -> U32 {
+  0
+}
+
+pub fn unresolved() {
+  let v = none()                //~ E0406
+  let _ = v
+}
+
+pub fn unresolved_none() {
+  let x = None                  //~ E0406
+  let _ = x
+}
+
+pub fn open_subject() -> F32 {
+  let v = make()
+  let r = v.x                   //~ E0420
+  r
+}
+
+pub fn literal_out_of_range() -> U8 {
+  let a = id(300)               //~ E0408
+  let b: U8 = a
+  b
+}
+
+pub fn nested_out_of_range() -> Wrap[Wrap[U8]] {
+  Wrap { v: Wrap { v: 300 } }   //~ E0408
+}
+
+// S-226 and R-157 (§4.7): the head is known, the argument comes later or never.
+pub fn match_on_an_imported_call() -> U32 {
+  match none() {                //~ E0406
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn pattern_literal_out_of_range_for_the_later_type() -> U32 {
+  let s = Slot.Empty
+  let r = match s {
+    Slot.Full(256) => 1,        //~ E0408
+    _ => 0,
+  }
+  let t: Slot[U8] = s
+  r
+}
+
+pub fn pattern_then_another_type() -> U32 {
+  let s = Slot.Empty
+  let r = match s {
+    Slot.Full(2) => 1,
+    _ => 0,
+  }
+  let t: Slot[Bool] = s         //~ E0401
+  r
+}
+
+pub fn decided() -> U32 {
+  let v = none()
+  count(v)
+}

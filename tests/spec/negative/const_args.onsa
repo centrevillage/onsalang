@@ -1,6 +1,6 @@
 // onsa.toml
 // [test]
-// spec = ["§4.5"]
+// spec = ["§4.5", "§4.7", "§3.4"]
 
 // S-24: const generic arguments in type position (§4.5).
 pub struct Ring[T, const N: U32] {
@@ -16,6 +16,63 @@ pub fn type_for_const() -> Ring[F32, F64] {   //~ E0401
   Ring { data: [0.0; 4], head: 0 }
 }
 
-pub fn negative() -> Ring[F32, -1] {   //~ E0408
+// A const argument is a constant expression of type `U32`, checked like an ordinary expression
+// with the expected type `U32` (§4.5; S-228). `U32` has no unary `-` (§3.4), so `-1`, `-0`,
+// `-(1)` and `-N` are E0401 wherever they are written, not E0408 (the literal is not out of
+// range: the operator does not exist). A constant of another type is E0401 too (R-154: it was
+// E0408 "must fit in U32"). The forms that need the constant-expression grammar of W5-08
+// (`-(1)`, `-ONE`, `0 - 1`) are in const_expr_neg.onsa.
+pub fn negative() -> Ring[F32, -1] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn negative_zero() -> Ring[F32, -0] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+const NEG: I32 = 3
+const WIDE: U64 = 3
+const FOUR: U32 = 4
+
+pub fn i32_constant() -> Ring[F32, NEG] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn i32_associated_constant() -> Ring[F32, I32.MAX] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn u64_constant() -> Ring[F32, WIDE] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn negative_in_a_parameter(r: Ring[F32, -1]) -> U32 {   //~ E0401
+  r.head
+}
+
+pub fn negative_in_a_let() -> U32 {
+  let r: Ring[F32, -1] = Ring { data: [0.0; 4], head: 0 } //~ E0401
+  r.head
+}
+
+pub fn i32_constant_in_a_let() -> U32 {
+  let r: Ring[F32, NEG] = Ring { data: [0.0; 4], head: 0 } //~ E0401
+  r.head
+}
+
+pub struct Holder {
+  ring: Ring[F32, -1],   //~ E0401
+}
+
+pub fn negative_in_a_tuple() -> (U32, Ring[F32, -1]) {   //~ E0401
+  (0, Ring { data: [0.0; 4], head: 0 })
+}
+
+// A `U32` constant and a literal are fine (an expression of them is in const_expr_neg.onsa).
+pub fn fine_literal() -> Ring[F32, 4] {
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn fine_constant() -> Ring[F32, FOUR] {
   Ring { data: [0.0; 4], head: 0 }
 }

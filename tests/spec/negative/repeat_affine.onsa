@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.5", "§4.6"]
+
+// E0416: the element of `[e; N]` is evaluated once and copied N times, so it must be a `Dup`
+// type (Copy or Shared); an Affine one is a kind constraint that is not met, E0416 (spec §2.4:
+// "`e` は Dup 型（でなければ E0416）"). An Affine array is made with `array.from_fn`. A
+// `move` on the element does not help: the element is not consumed N times. (Today the checker
+// reports E0711, the code of the missing `move`, in the move stage.) One error per function
+// (P-01).
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub fn affine_struct(move o: Owner) -> U32 uses {Alloc} {
+  let xs = [o; 2]               //~ E0416
+  0
+}
+
+pub fn affine_struct_moved(move o: Owner) -> U32 uses {Alloc} {
+  let xs = [move o; 2]          //~ E0416
+  0
+}
+
+pub fn affine_buffer() -> U32 uses {Alloc} {
+  let xs: [Buf[F32]; 2] = [Buf.zeroed(4); 2]   //~ E0416
+  0
+}
+
+pub fn affine_in_an_option(move o: Option[Owner]) -> U32 uses {Alloc} {
+  let xs = [o; 3]               //~ E0416
+  0
+}
+
+pub fn affine_in_a_tuple() -> U32 uses {Alloc} {
+  let xs: [(I32, Buf[F32]); 2] = [(1, Buf.zeroed(4)); 2]   //~ E0416
+  0
+}
+
+// Copy and Shared elements are fine.
+pub fn copy_elements(n: U32) -> [U32; 3] {
+  [n; 3]
+}
+
+pub fn copy_struct_elements() -> [(U8, F32); 2] {
+  [(1, 2.0); 2]
+}
+
+pub fn shared_elements(s: Str) -> [Str; 2] {
+  [s; 2]
+}

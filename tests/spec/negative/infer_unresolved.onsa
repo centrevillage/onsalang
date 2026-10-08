@@ -1,0 +1,296 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§2.4"]
+
+// E0406 / E0405: a type variable that is still open at the end of the function is reported at
+// the expression that made it: a type parameter that nothing decided (a result that only the
+// return type could fix, `None`, `Buf.zeroed(4)`) is E0406; a float literal that nothing decided
+// is E0405 (spec §4.5, §4.7, §2.4; R-03, S-174). A statement that comes later may still decide
+// it, and an integer literal defaults to `I32` (positive cases in
+// semantics/infer_generic_later.onsa). One error per function (P-01).
+//
+// S-226 (§4.7): a type whose head is known (`Option[?T]`, `Buf[?T]`, `[?T; 0]`) is a resolved
+// subject, so a `match` on it and a method call on it are not E0420; the type argument is
+// decided by a later statement, and when none does, the error is E0406 at the expression that
+// made it (`None`, `none()`, `Buf.zeroed(4)`, `[]`). The position is that expression, not the
+// operation that used it.
+
+use std.array
+
+pub struct Holder {
+  n: U32,
+}
+
+fn none[T]() -> Option[T] {
+  None
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn widen[A, B](a: A) -> Option[B] {
+  None
+}
+
+fn count(o: Option[U8]) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- E0406
+
+pub fn none_literal() {
+  let x = None                  //~ E0406
+  let _ = x
+}
+
+pub fn generic_result() {
+  let v = none()                //~ E0406
+  let _ = v
+}
+
+pub fn generic_result_discarded() {
+  let _ = none()                //~ E0406
+}
+
+pub fn zeroed_buffer() uses {Alloc} {
+  let b = Buf.zeroed(4)         //~ E0406
+  let _ = move b
+}
+
+pub fn second_parameter(a: U8) {
+  let y = widen(a)              //~ E0406
+  let _ = y
+}
+
+pub fn second_parameter_literal() {
+  let y = widen(5)              //~ E0406
+  let _ = y
+}
+
+pub fn in_a_branch(flag: Bool) {
+  if flag {
+    let _ = None                //~ E0406
+  }
+}
+
+pub fn in_a_match_arm(n: U32) {
+  match n {
+    0 => {
+      let q = none()            //~ E0406
+      let _ = q
+    },
+    _ => {},
+  }
+}
+
+pub fn in_a_loop() {
+  for i in 0..3 {
+    let q = none()              //~ E0406
+    let _ = q
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(i) {
+    let q = none()              //~ E0406
+    let _ = q
+    i
+  })
+}
+
+impl Holder {
+  pub fn method(self) -> U32 {
+    let q = none()              //~ E0406
+    let _ = q
+    self.n
+  }
+}
+
+test "in a test" {
+  let q = none()                //~ E0406
+  let _ = q
+}
+
+pub fn nested_call_result() {
+  let v = id(none())            //~ E0406
+  let _ = v
+}
+
+// S-226: the subject of the operation has a known head.
+
+pub fn match_on_a_call() -> U32 {
+  match none() {                //~ E0406
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn match_on_none_literal() -> U32 {
+  let x = None                  //~ E0406
+  match x {
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn match_on_none_with_a_wildcard(n: U32) -> U32 {
+  let x = None                  //~ E0406
+  match x {
+    Some(_) => n,
+    _ => 0,
+  }
+}
+
+pub fn method_on_a_temporary_buffer() -> U32 uses {Alloc} {
+  Buf.zeroed(4).len()           //~ E0406
+}
+
+pub fn method_on_a_buffer_binding() -> U32 uses {Alloc} {
+  let b = Buf.zeroed(4)         //~ E0406
+  let n = b.len()
+  let _ = move b
+  n
+}
+
+pub fn method_on_a_buffer_in_a_loop() -> U32 uses {Alloc} {
+  var total = 0
+  for i in 0..3 {
+    let b = Buf.zeroed(4)       //~ E0406
+    total = total + b.len()
+    let _ = move b
+  }
+  total
+}
+
+pub fn empty_array_alone() -> U32 {
+  let e = []                    //~ E0406
+  0
+}
+
+pub fn empty_array_method() -> U32 {
+  [].len()                      //~ E0406
+}
+
+pub fn empty_array_binding_method() -> U32 {
+  let e = []                    //~ E0406
+  e.len()
+}
+
+pub fn empty_array_in_a_branch(flag: Bool) -> U32 {
+  if flag {
+    let e = []                  //~ E0406
+    e.len()
+  } else {
+    0
+  }
+}
+
+pub fn empty_array_in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(i) {
+    let e = []                  //~ E0406
+    e.len() + i
+  })
+}
+
+impl Holder {
+  pub fn method_on_none(self) -> U32 {
+    let x = None                //~ E0406
+    match x {
+      Some(_) => 1,
+      None => self.n,
+    }
+  }
+}
+
+// ---------------------------------------------------------------- E0405
+
+pub fn float_literal_through_a_call() {
+  let v = id(1.5)               //~ E0405
+  let _ = v
+}
+
+pub fn float_literal_in_option() {
+  let o = Some(2.5)             //~ E0405
+  let _ = o
+}
+
+// ---------------------------------------------------------------- decided: no error
+
+pub fn decided_by_annotation() -> U32 {
+  let v = none()
+  let w: Option[U8] = v
+  count(w)
+}
+
+pub fn decided_by_argument() -> U32 {
+  let v = none()
+  count(v)
+}
+
+pub fn decided_by_an_assignment() -> U32 {
+  var acc = none()
+  acc = Some(7)
+  let _ = acc
+  0
+}
+
+pub fn decided_by_the_expected_type() -> U32 {
+  let v: Option[U8] = none()
+  count(v)
+}
+
+pub fn decided_by_the_return_type() -> Option[F32] {
+  let v = none()
+  v
+}
+
+pub fn float_decided_later() -> F32 {
+  let v = id(1.5)
+  let w: F32 = v
+  w
+}
+
+pub fn integer_literal_defaults() -> I32 {
+  let o = Some(3)
+  let v = id(5)
+  let _ = o
+  let _ = v
+  7
+}
+
+// S-226: the head is known and a later statement decides the argument.
+pub fn match_on_a_decided_call() -> U32 {
+  let v = none()
+  let r = match v {
+    Some(_) => 1,
+    None => 0,
+  }
+  count(v) + r
+}
+
+pub fn method_on_a_decided_empty_array() -> U32 {
+  let e = []
+  let n = e.len()
+  let f: [F32; 0] = e
+  n
+}
+
+pub fn method_on_a_decided_buffer(move b: Buf[F32]) -> U32 uses {Alloc} {
+  b.len()
+}
+
+pub fn match_on_a_literal_pattern() -> U32 {
+  let o = None
+  match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+}
+
+pub fn question_on_a_known_head() -> Option[U32] {
+  let v = none()
+  let w = v?
+  let n: U32 = w
+  Some(n)
+}

@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1"]
+
+// E0401: const arguments are compared for equality only (spec §4.5 "const ジェネリクスは等値比較のみ").
+// A const parameter of the enclosing function is a fixed value that is equal to itself and to
+// no literal and to no other parameter; the positive cases, where it is passed on to another
+// const parameter, are in semantics/const_param_forward.onsa (R-150). One error per function (P-01).
+
+fn same[const N: U32](a: [U32; N], b: [U32; N]) -> U32 {
+  N
+}
+
+fn four(a: [U32; 4]) -> U32 {
+  4
+}
+
+fn pair[const N: U32](a: [U32; N]) -> [U32; N] {
+  a
+}
+
+pub fn different_literals() -> U32 {
+  same([1, 2, 3], [1, 2])       //~ E0401
+}
+
+pub fn parameter_is_not_four[const N: U32](xs: [U32; N]) -> U32 {
+  four(xs)                      //~ E0401
+}
+
+pub fn two_parameters_are_not_equal[const M: U32, const N: U32](a: [U32; M], b: [U32; N]) -> U32 {
+  same(a, b)                    //~ E0401
+}
+
+pub fn result_is_not_four[const N: U32](xs: [U32; N]) -> [U32; 4] {
+  pair(xs)                      //~ E0401
+}
+
+pub fn result_has_the_parameter(xs: [U32; 3]) -> [U32; 4] {
+  pair(xs)                      //~ E0401
+}
+
+// Equal const arguments are fine (the same parameter twice is in semantics/const_param_forward.onsa).
+pub fn equal_literals() -> U32 {
+  same([1, 2], [3, 4])
+}
+
+pub fn literal_four() -> U32 {
+  four([1, 2, 3, 4])
+}

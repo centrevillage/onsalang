@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§4.6"]
+
+// E0416: the element type of `Buf` is limited to `Copy` (spec §4.5: "`Buf[T]` と `Span[T]` の
+// 要素型は `T: Copy` に限る（E0416）"). The element type of `Buf.zeroed(n)` may be decided by the
+// expected type or by a later statement; the kind constraint is checked in the statement in
+// which the type has no type variable left, and E0416 is at the expression that made the
+// requirement, `Buf.zeroed(n)` (§4.7: "種の制約（…`Buf` と `Span` の要素の `Copy`、E0416）も、
+// 型パラメータの要求と同じく、型変数が無くなった文で検査し…"). A type variable left at the end
+// is E0406 only (negative/infer_unresolved.onsa). One error per function (P-01).
+//
+// Written by the implementer of W2-06 from §4.5 and §4.7 (no test ticket had these cases).
+
+pub struct Owner {
+  b: Buf[F32],
+}
+
+pub fn affine_element_by_annotation() -> U32 uses {Alloc} {
+  let b: Buf[Owner] = Buf.zeroed(4)       //~ E0416
+  0
+}
+
+pub fn shared_element_by_annotation() -> U32 uses {Alloc} {
+  let b: Buf[Str] = Buf.zeroed(4)         //~ E0416
+  0
+}
+
+pub fn affine_element_by_a_later_statement(o: Owner) -> U32 uses {Alloc} {
+  let b = Buf.zeroed(4)                   //~ E0416
+  let x: Owner = b[0]
+  0
+}
+
+pub fn element_decided_by_a_later_tuple() -> U32 uses {Alloc} {
+  let b = Buf.zeroed(2)                   //~ E0416
+  let x: (U8, Str) = b[1]
+  0
+}
+
+pub fn type_parameter_without_copy[T](n: U32) -> U32 uses {Alloc} {
+  let b: Buf[T] = Buf.zeroed(n)           //~ E0416
+  0
+}
+
+pub fn in_a_branch(flag: Bool) -> U32 uses {Alloc} {
+  if flag {
+    let b: Buf[Owner] = Buf.zeroed(1)     //~ E0416
+  }
+  0
+}
+
+test "in a test" {
+  let b = Buf.zeroed(4)                   //~ E0416
+  let s: Str = b[0]
+  assert true
+}

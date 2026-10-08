@@ -1,0 +1,35 @@
+// onsa.toml
+// [package]
+// name = "lower_str_pattern"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0200 from lowering (S-225, S-67): a string pattern without an interpolation is a valid
+// pattern, but this version does not lower `Str` patterns to Core (`Str` is second-phase,
+// §4.2), so it passes the checks and the build reports E0200 at the pattern. A string with only
+// the escapes `{{` and `}}` is such a pattern. (With an interpolation it is E0020 before the
+// build: negative/pattern_str.onsa.) Lowering reports every unit, and units with the same
+// position, code and message are one (§18.1).
+
+pub fn escaped(s: Str) -> U32 {
+  match s {                     //~ E0200
+    "a{{b" => 1,                //~ E0200
+    _ => 0,
+  }
+}
+
+pub fn plain(s: Str) -> U32 {
+  match s {                     //~ E0200
+    "abc" => 1,                 //~ E0200
+    _ => 0,
+  }
+}

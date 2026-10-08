@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§2.4"]
+
+// A type parameter that only literals reach is bound to the literal's type variable, and the
+// variable follows the rule of the literal: an integer literal that nothing decides becomes
+// `I32` at the end of the function; a later statement, an annotation or an expected type may
+// decide it first (spec §4.5, §4.7, §2.4; S-174, R-148). A float literal has no default.
+//
+// Every value below is worked out by hand from the spec text.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+// A function that takes literals only, with a `Copy` bound (a bound is a kind, not a trait).
+fn hold[T: Copy](a: T, b: T) -> T {
+  a
+}
+
+fn second[T: Copy](a: T, b: T) -> T {
+  b
+}
+
+fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
+  if x < lo { lo } else if x > hi { hi } else { x }
+}
+
+test "a bound does not stop the literals from defaulting" {
+  assert clamp(5, 0, 3) == 3
+  assert clamp(-2, 0, 3) == 0
+  assert clamp(2, 0, 3) == 2
+  let c: F32 = clamp(0.5, 0.0, 0.25)
+  assert c == 0.25
+}
+
+test "hold with two literals: T is I32" {
+  assert hold(7, 20) == 7
+  assert second(7, 20) == 20
+}
+
+test "hold with a typed argument: the literal takes its type" {
+  let a: U8 = 7
+  assert hold(a, 200) == 7
+  assert second(a, 200) == 200
+}
+
+test "the default reaches through an index of an array literal" {
+  let x = id([5][0])
+  assert x == 5
+}
+
+test "the default reaches through nested calls" {
+  let y = id(id(5))
+  assert y == 5
+  let z: U8 = id(id(255))
+  assert z == 255
+}
+
+test "an expected type decides the literal of a call" {
+  let a: U8 = id(255)
+  assert a == 255
+  let b: I64 = id(9223372036854775807)
+  assert b == I64.MAX
+}
+
+test "literals decided by an array's element type" {
+  let xs: [U8; 3] = [id(1), id(2), id(250)]
+  assert xs[0] == 1
+  assert xs[1] == 2
+  assert xs[2] == 250
+}
+
+test "without a decision the literals of an array are I32" {
+  let ys = [id(1), id(2), id(3)]
+  assert ys[2] == 3
+}
+
+test "operators between calls on literals" {
+  let m = id(3) * 4
+  let n = id(2) + m
+  assert n == 14
+}
+
+test "a float literal is decided by the expected type" {
+  let f: F32 = id(0.5) + id(0.25)
+  assert f == 0.75
+  let d: F64 = hold(1.5, 2.5)
+  assert d == 1.5
+}
+
+test "the fields of a struct give the expected type" {
+  let p = P { x: id(1.5), y: hold(2.5, 3.5) }
+  assert p.x == 1.5
+  assert p.y == 2.5
+}
+
+fn sum_to(n: U32) -> U32 {
+  var acc = id(0)
+  for i in 0..n {
+    acc = acc + i
+  }
+  acc
+}
+
+test "a literal decided by a later statement in the same function" {
+  // acc is a variable for an integer literal; `acc + i` makes it U32.
+  assert sum_to(4) == 6
+}
+
+fn pair() -> (U8, F32) {
+  (id(7), id(0.5))
+}
+
+test "the return type decides the literals of a tuple" {
+  let t = pair()
+  assert t.0 == 7
+  assert t.1 == 0.5
+}

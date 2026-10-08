@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.2", "§15.1"]
+
+// E0416 / E0406 for the requirements of another module's generic functions and methods: the
+// requirement is checked when the type is known, and the error is at the call in this module,
+// wherever the function or the `impl` is declared (S-235, S-174). One error per function (P-01).
+// The notes (not a part of the marker): the position of the deciding expression is in this
+// file, and a note about the declaration of the bound, if any, is in `lib.onsa`.
+
+use lib.{Bx, need_f, need_fl, hold}
+
+fn take_oi(o: Option[I32]) -> Bool {
+  true
+}
+
+fn take_bi(b: Bx[I32]) -> Bool {
+  true
+}
+
+pub fn function_bound() -> Bool {
+  let o = None
+  let _ = need_f(o)             //~ E0416
+  take_oi(o)
+}
+
+pub fn method_bound() -> Bool {
+  let b = Bx { o: None }
+  let _ = b.has()               //~ E0416
+  take_bi(b)
+}
+
+pub fn literal_default() -> Bool {
+  need_fl(3)                    //~ E0416
+}
+
+pub fn dup_bound_is_met_by_every_scalar() -> Bool {
+  let o = None
+  let a = hold(o)
+  take_oi(o)
+}
+
+pub fn open_variable() -> Bool {
+  let o = None                  //~ E0406
+  need_f(o)
+}
+
+pub fn float_literal_open() -> Bool {
+  need_fl(3.0)                  //~ E0405
+}
+
+pub fn met() -> Bool {
+  let o = None
+  let a = need_f(o)
+  let p: Option[F32] = o
+  let b = Bx { o: None }
+  let c = b.has()
+  let d: Bx[F64] = b
+  a
+}

@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§4.4", "§2.4"]
+
+// The expected type goes down into the literal of a generic struct, however deep the nesting
+// is, and fixes the type parameters and the literals inside (spec §4.5 "期待型の注釈で決める",
+// §4.7 "期待型は式の中へ下向きに伝わる"; R-148). The expected type comes from a `let`
+// annotation, the type of an argument, the return type, the type of a field and the element
+// type of an array.
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Holder {
+  w: Wrap[Wrap[U8]],
+}
+
+test "two levels of a generic struct literal" {
+  let w: Wrap[Wrap[I32]] = Wrap { v: Wrap { v: 7 } }
+  assert w.v.v == 7
+}
+
+test "three levels, and a literal that needs the narrow type" {
+  let w: Wrap[Wrap[Wrap[U8]]] = Wrap { v: Wrap { v: Wrap { v: 255 } } }
+  assert w.v.v.v == 255
+}
+
+test "float literals at the bottom" {
+  let w: Wrap[Wrap[F32]] = Wrap { v: Wrap { v: 0.5 } }
+  assert w.v.v == 0.5
+}
+
+fn make() -> Wrap[Wrap[I64]] {
+  Wrap { v: Wrap { v: 9223372036854775807 } }
+}
+
+test "the return type is the expected type" {
+  let m = make()
+  assert m.v.v == I64.MAX
+}
+
+fn takes(w: Wrap[Wrap[U16]]) -> U16 {
+  w.v.v
+}
+
+test "the type of an argument is the expected type" {
+  assert takes(Wrap { v: Wrap { v: 65535 } }) == 65535
+}
+
+test "the type of a field is the expected type" {
+  let h = Holder { w: Wrap { v: Wrap { v: 9 } } }
+  assert h.w.v.v == 9
+}
+
+test "two parameters, one of them nested" {
+  let p: Pair[Wrap[U8], Wrap[F32]] = Pair { a: Wrap { v: 255 }, b: Wrap { v: 1.5 } }
+  assert p.a.v == 255
+  assert p.b.v == 1.5
+}
+
+test "inside an Option" {
+  let o: Option[Wrap[Wrap[U8]]] = Some(Wrap { v: Wrap { v: 4 } })
+  let r = match o {
+    Some(w) => w.v.v,
+    None => 0,
+  }
+  assert r == 4
+}
+
+test "the element type of an array" {
+  let ws: [Wrap[U8]; 2] = [Wrap { v: 1 }, Wrap { v: 2 }]
+  assert ws[0].v == 1
+  assert ws[1].v == 2
+}
+
+test "an array of nested literals" {
+  let ws: [Wrap[Wrap[U8]]; 2] = [Wrap { v: Wrap { v: 10 } }, Wrap { v: Wrap { v: 20 } }]
+  assert ws[1].v.v == 20
+}
+
+test "the expected type reaches a closure's result" {
+  let ws: [Wrap[Wrap[U8]]; 3] = array.from_fn(fn(i) {
+    Wrap { v: Wrap { v: 200 } }
+  })
+  assert ws[0].v.v == 200
+  assert ws[2].v.v == 200
+}
+
+test "a tuple of nested literals" {
+  let t: (Wrap[U8], Wrap[Wrap[F32]]) = (Wrap { v: 5 }, Wrap { v: Wrap { v: 2.5 } })
+  assert t.0.v == 5
+  assert t.1.v.v == 2.5
+}
+
+fn choose(c: Bool) -> Wrap[Wrap[U8]] {
+  if c {
+    Wrap { v: Wrap { v: 1 } }
+  } else {
+    Wrap { v: Wrap { v: 2 } }
+  }
+}
+
+test "the expected type goes into both branches of an if" {
+  let a = choose(true)
+  let b = choose(false)
+  assert a.v.v == 1
+  assert b.v.v == 2
+}
+
+pub enum Flag {
+  On,
+  Off,
+}
+
+fn arm(f: Flag) -> Wrap[Wrap[U8]] {
+  match f {
+    Flag.On => Wrap { v: Wrap { v: 100 } },
+    Flag.Off => Wrap { v: Wrap { v: 250 } },
+  }
+}
+
+test "the expected type goes into the arms of a match" {
+  let a = arm(Flag.On)
+  let b = arm(Flag.Off)
+  assert a.v.v == 100
+  assert b.v.v == 250
+}

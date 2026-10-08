@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.7", "§2.4", "§3.4", "§4.5"]
+
+// The minimum of a signed type can be written as a literal: the range is checked on the value
+// with the prefix `-`, and parentheses between the `-` and the literal are not seen
+// (`I8` takes `-128` and `-(128)`; spec §4.7 "整数リテラルに直接付いた前置の `-` は値に含めて検査し、
+// 間の括弧は見ない"; S-184). Out-of-range literals are in negative/literal_range.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+pub struct Cell {
+  lo: I8,
+  hi: I8,
+}
+
+fn takes_i8(x: I8) -> I8 {
+  x
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+test "the minimum of each signed type" {
+  let a: I8 = -128
+  let b: I16 = -32768
+  let c: I32 = -2147483648
+  let d: I64 = -9223372036854775808
+  assert a == I8.MIN
+  assert b == I16.MIN
+  assert c == I32.MIN
+  assert d == I64.MIN
+}
+
+test "parentheses between the minus and the literal are not seen" {
+  let a: I8 = -(128)
+  let b: I64 = -(9223372036854775808)
+  let c: I32 = -((2147483648))
+  assert a == I8.MIN
+  assert b == I64.MIN
+  assert c == I32.MIN
+}
+
+test "the minimum next to the other extreme" {
+  let a: I8 = -128
+  let b: I8 = 127
+  assert a < b
+  assert b == I8.MAX
+  let c: I8 = a + 1
+  assert c == -127
+}
+
+test "a comparison with a literal minimum" {
+  let x: I8 = I8.MIN
+  assert x == -128
+  assert x != -127
+  assert -128 == x
+}
+
+test "the minimum as an argument, in an array, a tuple and a struct" {
+  assert takes_i8(-128) == I8.MIN
+  assert takes_i8(-(128)) == I8.MIN
+  let xs: [I8; 2] = [-128, 127]
+  assert xs[0] == I8.MIN
+  assert xs[1] == I8.MAX
+  let t: (I8, I16) = (-128, -32768)
+  assert t.0 == I8.MIN
+  assert t.1 == I16.MIN
+  let c = Cell { lo: -128, hi: 127 }
+  assert c.lo == I8.MIN
+  assert c.hi == I8.MAX
+}
+
+test "the default type I32 takes the minimum too" {
+  // No annotation: the literal is open until the end of the function and then becomes I32;
+  // the value -2147483648 fits I32 (the range is checked with the minus, not without it).
+  let a = -2147483648
+  assert a == I32.MIN
+}
+
+test "a minimum that a later statement decides" {
+  let a = id(-128)
+  let b: I8 = a
+  assert b == I8.MIN
+  let c = id(-(32768))
+  let d: I16 = c
+  assert d == I16.MIN
+}
+
+test "the minimum in a branch and in an arm" {
+  let flag = true
+  let x: I8 = if flag { -128 } else { 0 }
+  assert x == I8.MIN
+  let o: Option[I8] = Some(-128)
+  let y: I8 = match o {
+    Some(v) => v,
+    None => 127,
+  }
+  assert y == I8.MIN
+}
+
+test "zero and the negative zero literal of a signed type" {
+  let z: I8 = -0
+  assert z == 0
+}

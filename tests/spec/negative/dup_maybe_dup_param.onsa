@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§2.4"]
+
+// E0416: a type that holds a type parameter declared `?Dup` is not known to be Copy or Shared
+// (spec §4.5: "Affine 型も受け付けるには `[T: ?Dup]` と書いて、この制約を外す…その場合、`T` の値は
+// 複製できない"; §4.6: the kind is computed from the structure). So a `Wrap[U]` with `U: ?Dup`
+// meets neither the implicit `Dup` of another type parameter nor the `Dup` of the element of
+// `[e; N]` (§2.4). Today the kind of such a type is not computed and the requirement passes
+// (R-176, W5-08). Written by the implementer of W2-06 from the cases W2-06/b found. One error
+// per function (P-01).
+
+fn need_dup[T](x: T) -> T {
+  x
+}
+
+pub struct Wrap[T: ?Dup] {
+  x: T,
+}
+
+pub fn to_a_dup_parameter[U: ?Dup](move u: U) {
+  let w = Wrap { x: move u }
+  let z = need_dup(w)   //~ E0416
+}
+
+pub fn repeated[U: ?Dup](move u: U) {
+  let w = Wrap { x: move u }
+  let q = [w; 2]   //~ E0416
+}
+
+pub fn in_a_tuple[U: ?Dup](move u: U) {
+  let w = (1, Wrap { x: move u })
+  let z = need_dup(w)   //~ E0416
+}
+
+// A parameter with the implicit `Dup` is fine.
+pub fn dup_parameter[U](u: U) {
+  let w = Wrap { x: u }
+  let z = need_dup(w)
+  let q = [w; 2]
+}

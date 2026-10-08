@@ -3,6 +3,8 @@
 //! `FloatLit` constraint. Array lengths use `Len::Var(i)` bound to a
 //! `Ty::ConstVal(n)`.
 
+use onsa_diag::Span;
+
 use crate::ty::{Len, Ty, TyId, Types};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,9 +19,23 @@ enum VarState {
     Bound(TyId),
 }
 
+/// Why a variable was bound: the note of a requirement that a later statement
+/// decided points at the expression that decided the type (spec §4.5, S-235).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Cause {
+    /// The expression at `span` was checked against an expected type; `why`
+    /// says where the expected type came from (`the argument of `f``).
+    At { span: Span, why: Option<String> },
+    /// The default of an integer literal at the end of the body (§4.7).
+    Default,
+}
+
 #[derive(Debug, Default)]
 pub struct Infer {
     vars: Vec<VarState>,
+    /// For each bound variable, the order of the binding and its cause.
+    causes: Vec<Option<(u32, Cause)>>,
+    seq: u32,
 }
 
 /// Why two types did not unify (for messages).
@@ -35,12 +51,14 @@ impl Infer {
     pub fn fresh(&mut self, types: &mut Types, lit: Option<LitKind>) -> TyId {
         let i = self.vars.len() as u32;
         self.vars.push(VarState::Unbound(lit));
+        self.causes.push(None);
         types.intern(Ty::Var(i))
     }
 
     pub fn fresh_len(&mut self) -> Len {
         let i = self.vars.len() as u32;
         self.vars.push(VarState::Unbound(None));
+        self.causes.push(None);
         Len::Var(i)
     }
 
@@ -86,6 +104,8 @@ impl Infer {
                 Len::Var(i) => match &self.vars[i as usize] {
                     VarState::Bound(t) => match types.get(*t) {
                         Ty::ConstVal(n) => return Len::Const(*n),
+                        // A const parameter of the body being checked (R-150).
+                        Ty::Param(p) => return Len::Param(*p),
                         Ty::Var(j) => len = Len::Var(*j),
                         _ => return len,
                     },
@@ -107,7 +127,13 @@ impl Infer {
         }
     }
 
-    fn bind(&mut self, types: &Types, var: u32, ty: TyId) -> Result<(), Mismatch> {
+    fn set_bound(&mut self, var: u32, ty: TyId, cause: &Cause) {
+        self.vars[var as usize] = VarState::Bound(ty);
+        self.seq += 1;
+        self.causes[var as usize] = Some((self.seq, cause.clone()));
+    }
+
+    fn bind(&mut self, types: &Types, var: u32, ty: TyId, cause: &Cause) -> Result<(), Mismatch> {
         let lit = match &self.vars[var as usize] {
             VarState::Unbound(l) => *l,
             VarState::Bound(_) => unreachable!("bind of a bound variable"),
@@ -136,11 +162,11 @@ impl Infer {
         if self.occurs(types, var, ty_s) && !matches!(types.get(ty_s), Ty::Var(_)) {
             return Err(Mismatch::Types);
         }
-        self.vars[var as usize] = VarState::Bound(ty_s);
+        self.set_bound(var, ty_s, cause);
         Ok(())
     }
 
-    fn unify_len(&mut self, types: &mut Types, a: Len, b: Len) -> Result<(), Mismatch> {
+    fn unify_len(&mut self, types: &mut Types, a: Len, b: Len, cause: &Cause) -> Result<(), Mismatch> {
         let a = self.shallow_len(types, a);
         let b = self.shallow_len(types, b);
         if a == b {
@@ -149,12 +175,18 @@ impl Infer {
         match (a, b) {
             (Len::Var(i), Len::Const(n)) | (Len::Const(n), Len::Var(i)) => {
                 let t = types.intern(Ty::ConstVal(n));
-                self.vars[i as usize] = VarState::Bound(t);
+                self.set_bound(i, t, cause);
+                Ok(())
+            }
+            // A const parameter of the body passed on to another generic (R-150).
+            (Len::Var(i), Len::Param(p)) | (Len::Param(p), Len::Var(i)) => {
+                let t = types.intern(Ty::Param(p));
+                self.set_bound(i, t, cause);
                 Ok(())
             }
             (Len::Var(i), Len::Var(j)) => {
                 let t = types.intern(Ty::Var(j));
-                self.vars[i as usize] = VarState::Bound(t);
+                self.set_bound(i, t, cause);
                 Ok(())
             }
             _ => Err(Mismatch::Types),
@@ -162,7 +194,7 @@ impl Infer {
     }
 
     /// Unify two types. `Ty::Error` unifies with anything (no cascades).
-    pub fn unify(&mut self, types: &mut Types, a: TyId, b: TyId) -> Result<(), Mismatch> {
+    pub fn unify(&mut self, types: &mut Types, a: TyId, b: TyId, cause: &Cause) -> Result<(), Mismatch> {
         let a = self.shallow(types, a);
         let b = self.shallow(types, b);
         if a == b {
@@ -171,27 +203,27 @@ impl Infer {
         let (ta, tb) = (types.get(a).clone(), types.get(b).clone());
         match (&ta, &tb) {
             (Ty::Error, _) | (_, Ty::Error) => Ok(()),
-            (Ty::Var(i), _) => self.bind(types, *i, b),
-            (_, Ty::Var(j)) => self.bind(types, *j, a),
+            (Ty::Var(i), _) => self.bind(types, *i, b, cause),
+            (_, Ty::Var(j)) => self.bind(types, *j, a, cause),
             (Ty::Array(e1, l1), Ty::Array(e2, l2)) => {
-                self.unify(types, *e1, *e2)?;
-                self.unify_len(types, *l1, *l2)
+                self.unify(types, *e1, *e2, cause)?;
+                self.unify_len(types, *l1, *l2, cause)
             }
             (Ty::Tuple(xs), Ty::Tuple(ys)) if xs.len() == ys.len() => {
                 for (x, y) in xs.iter().zip(ys) {
-                    self.unify(types, *x, *y)?;
+                    self.unify(types, *x, *y, cause)?;
                 }
                 Ok(())
             }
             (Ty::Named(d1, xs), Ty::Named(d2, ys)) if d1 == d2 && xs.len() == ys.len() => {
                 for (x, y) in xs.iter().zip(ys) {
-                    self.unify(types, *x, *y)?;
+                    self.unify(types, *x, *y, cause)?;
                 }
                 Ok(())
             }
             (Ty::Builtin(b1, xs), Ty::Builtin(b2, ys)) if b1 == b2 && xs.len() == ys.len() => {
                 for (x, y) in xs.iter().zip(ys) {
-                    self.unify(types, *x, *y)?;
+                    self.unify(types, *x, *y, cause)?;
                 }
                 Ok(())
             }
@@ -201,9 +233,9 @@ impl Infer {
                     if m1 != m2 {
                         return Err(Mismatch::Types);
                     }
-                    self.unify(types, *x, *y)?;
+                    self.unify(types, *x, *y, cause)?;
                 }
-                self.unify(types, f1.ret, f2.ret)
+                self.unify(types, f1.ret, f2.ret, cause)
             }
             (Ty::ConstVal(n), Ty::ConstVal(m)) if n == m => Ok(()),
             _ => Err(Mismatch::Types),
@@ -254,6 +286,79 @@ impl Infer {
             Ty::Fn(f) => f.params.iter().any(|(_, t)| self.has_vars(types, *t)) || self.has_vars(types, f.ret),
             _ => false,
         }
+    }
+
+    /// Whether the type still contains a variable other than a literal one
+    /// (E0406 is for those; a literal variable is E0405 or the `I32` default, §4.7).
+    pub fn has_open_vars(&self, types: &Types, ty: TyId) -> bool {
+        let ty = self.shallow(types, ty);
+        match types.get(ty) {
+            Ty::Var(i) => matches!(self.vars[*i as usize], VarState::Unbound(None)),
+            Ty::Array(e, l) => self.has_open_vars(types, *e) || matches!(self.shallow_len(types, *l), Len::Var(_)),
+            Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => ts.iter().any(|&t| self.has_open_vars(types, t)),
+            Ty::Fn(f) => {
+                f.params.iter().any(|(_, t)| self.has_open_vars(types, *t)) || self.has_open_vars(types, f.ret)
+            }
+            _ => false,
+        }
+    }
+
+    /// The default of the integer literals (spec §2.4, §4.7): every integer literal
+    /// variable still unbound at the end of the body becomes `int` (`I32`).
+    pub fn default_int_literals(&mut self, int: TyId) {
+        for i in 0..self.vars.len() {
+            if matches!(self.vars[i], VarState::Unbound(Some(LitKind::Int))) {
+                self.set_bound(i as u32, int, &Cause::Default);
+            }
+        }
+    }
+
+    /// The cause of the last binding among the variables a type reaches: once the
+    /// type has no variable left, the binding that removed the last one.
+    pub fn decided_by(&self, types: &Types, ty: TyId) -> Option<Cause> {
+        let mut best: Option<(u32, Cause)> = None;
+        self.last_binding(types, ty, &mut best);
+        best.map(|(_, c)| c)
+    }
+
+    fn note_var(&self, types: &Types, i: u32, best: &mut Option<(u32, Cause)>) {
+        if let Some((seq, cause)) = &self.causes[i as usize]
+            && best.as_ref().is_none_or(|(b, _)| seq > b)
+        {
+            *best = Some((*seq, cause.clone()));
+        }
+        if let VarState::Bound(t) = self.vars[i as usize] {
+            self.last_binding(types, t, best);
+        }
+    }
+
+    fn last_binding(&self, types: &Types, ty: TyId, best: &mut Option<(u32, Cause)>) {
+        match types.get(ty) {
+            Ty::Var(i) => self.note_var(types, *i, best),
+            Ty::Array(e, l) => {
+                self.last_binding(types, *e, best);
+                if let Len::Var(i) = l {
+                    self.note_var(types, *i, best);
+                }
+            }
+            Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => {
+                for &t in ts {
+                    self.last_binding(types, t, best);
+                }
+            }
+            Ty::Fn(f) => {
+                for (_, t) in &f.params {
+                    self.last_binding(types, *t, best);
+                }
+                self.last_binding(types, f.ret, best);
+            }
+            _ => {}
+        }
+    }
+
+    /// The number of bindings made so far: unchanged means no type got more decided.
+    pub fn generation(&self) -> u32 {
+        self.seq
     }
 
     pub fn var_count(&self) -> usize {

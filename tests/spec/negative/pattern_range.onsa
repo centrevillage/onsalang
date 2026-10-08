@@ -1,0 +1,154 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7", "§2.4"]
+
+// E0408 / E0401: an integer literal in a pattern is checked against the type of the matched
+// value like a literal in an expression: the range is checked on the value with the prefix
+// `-` written directly on it, parentheses between the `-` and the literal are not seen, and an
+// unsigned type takes no negative literal (spec §7, §4.7; S-184, S-185, R-03). One error per
+// function (P-01).
+
+pub struct Point {
+  x: I8,
+  y: U8,
+}
+
+pub fn u8_above(x: U8) -> I32 {
+  var r = 0
+  match x {
+    300 => { r = 1 },           //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn i8_below(x: I8) -> I32 {
+  var r = 0
+  match x {
+    -129 => { r = 1 },          //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn i8_above(x: I8) -> I32 {
+  var r = 0
+  match x {
+    128 => { r = 1 },           //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn i8_paren_below(x: I8) -> I32 {
+  var r = 0
+  match x {
+    -(129) => { r = 1 },        //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn i64_below(x: I64) -> I32 {
+  var r = 0
+  match x {
+    -9223372036854775809 => { r = 1 },   //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn alternative_above(x: U8) -> I32 {
+  var r = 0
+  match x {
+    1 | 256 => { r = 1 },       //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn in_option(o: Option[U8]) -> I32 {
+  var r = 0
+  match o {
+    Some(300) => { r = 1 },     //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn in_tuple(a: I8, b: I8) -> I32 {
+  var r = 0
+  match (a, b) {
+    (0, -129) => { r = 1 },     //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn in_struct(p: Point) -> I32 {
+  var r = 0
+  match p {
+    Point { x: 128, y: _ } => { r = 1 },   //~ E0408
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn value_match_above(x: U8) -> I32 {
+  match x {
+    256 => 1,                   //~ E0408
+    _ => 0,
+  }
+}
+
+pub fn unsigned_negative(x: U32) -> I32 {
+  var r = 0
+  match x {
+    -1 => { r = 1 },            //~ E0401
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn unsigned_paren(x: U8) -> I32 {
+  var r = 0
+  match x {
+    -(1) => { r = 1 },          //~ E0401
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn unsigned_in_some(o: Option[U32]) -> I32 {
+  var r = 0
+  match o {
+    Some(-3) => { r = 1 },      //~ E0401
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn unsigned_in_struct(p: Point) -> I32 {
+  var r = 0
+  match p {
+    Point { x: _, y: -1 } => { r = 1 },   //~ E0401
+    _ => { r = 0 },
+  }
+  r
+}
+
+// The minimum and the maximum of each type are in range.
+pub fn in_range(x: I8, y: U8) -> I32 {
+  var r = 0
+  match x {
+    -128 => { r = 1 },
+    127 => { r = 2 },
+    _ => { r = 0 },
+  }
+  match y {
+    0 => { r = r + 10 },
+    255 => { r = r + 20 },
+    _ => { r = r + 0 },
+  }
+  r
+}

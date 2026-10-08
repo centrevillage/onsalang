@@ -1,0 +1,3 @@
+[package]
+name = "infer_bounds_pkg"
+edition = "2026"

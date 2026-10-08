@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§4.7"]
+
+// Parentheses between the `-` and the literal are not seen in a pattern either: the range
+// check and the treatment of the parentheses are those of the literal in an expression
+// (spec §7, §4.7; S-184, S-185). `I8` takes `-128` and `-(128)`.
+//
+// Every value below is worked out by hand from the spec text.
+
+fn paren8(x: I8) -> I32 {
+  var r = 0
+  match x {
+    -(128) => { r = 7 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn paren16(x: I16) -> I32 {
+  var r = 0
+  match x {
+    -((32768)) => { r = 8 },
+    -(1) => { r = 9 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn paren_in_tuple(a: I8, b: I8) -> I32 {
+  var r = 0
+  match (a, b) {
+    (-(128), -(128)) => { r = 1 },
+    (-(128), _) => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "parentheses between the minus and the literal in a pattern" {
+  assert paren8(I8.MIN) == 7
+  assert paren8(-127) == 0
+  assert paren16(I16.MIN) == 8
+  assert paren16(-1) == 9
+  assert paren16(1) == 0
+}
+
+test "the same, inside a tuple pattern" {
+  assert paren_in_tuple(-128, -128) == 1
+  assert paren_in_tuple(-128, 0) == 2
+  assert paren_in_tuple(0, -128) == 0
+}

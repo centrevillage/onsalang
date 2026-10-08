@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0401: a const argument that names a constant of a type other than `U32`. The candidate makes
+// the type of the constant `U32` (§4.5: "修正候補は定数の型を `U32` にすること"); the diagnostic
+// is at the const argument (R-154: it was E0408 and had no candidate).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const SIZE: I32 = 4
+
+pub fn sized() -> Ring[F32, SIZE] {   //~ E0401
+  Ring { data: [0.0; 4], head: 0 }
+}

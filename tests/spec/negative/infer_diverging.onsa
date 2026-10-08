@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7"]
+
+// E0406: a type that only expressions which do not return a value decide (`return`, `panic`,
+// a block or a branch that ends in one) is not determined (§7: no type of divergence can be
+// written; §4.7: a type variable left at the end of the function is E0406 at the expression).
+// S-262 (the parent's draft, "確認だけ"): E0406 at that expression, the block or the `if`.
+// Today the check passed and the lowering failed inside the compiler (W2-06/b). Written by
+// the implementer of W2-06. One error per function (P-01).
+
+pub fn a_block_that_returns() {
+  let x = {   //~ E0406
+    return
+  }
+}
+
+pub fn both_branches_return(c: Bool) {
+  let x = if c { return } else { return }   //~ E0406
+}
+
+pub fn both_branches_return_a_value(c: Bool) -> I32 {
+  let x = if c { return 1 } else { return 2 }   //~ E0406
+  let y = x
+  3
+}
+
+pub fn every_arm_returns(o: Option[I32]) -> I32 {
+  let x = match o {   //~ E0406
+    Some(v) => { return v },
+    None => { return 0 },
+  }
+  let y = x
+  0
+}
+
+test "in a test" {
+  let x = {   //~ E0406
+    return
+  }
+}
+
+// A branch that returns takes the type of the other branch, and an expected type decides it.
+pub fn one_branch_returns(c: Bool) -> I32 {
+  let x = if c { return 1 } else { 2 }
+  x
+}
+
+pub fn annotated(c: Bool) -> I32 {
+  let x: I32 = if c { return 1 } else { return 2 }
+  x
+}

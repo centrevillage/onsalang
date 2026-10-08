@@ -164,8 +164,8 @@ fn borrowed_affine_cannot_move() {
     ok("pub fn take(move b: Buf[F32]) uses {Alloc} {}\npub fn g(move b: Buf[F32]) uses {Alloc} { take(move b) }\n");
     // Dup values are copied when passed as `move`, even when borrowed.
     ok("pub fn take(move n: U32) {}\npub fn g(n: U32) { take(move n) }\n");
-    // `[e; N]` needs a Dup element.
-    assert_eq!(codes("pub fn g(move b: Buf[F32]) uses {Alloc} { let xs = [b; 2] }\n"), vec![Code::E0711]);
+    // `[e; N]` needs a Dup element: a kind constraint of sema (E0416, §2.4, S-235), not a move.
+    assert_eq!(codes("pub fn g(move b: Buf[F32]) uses {Alloc} { let xs = [b; 2] }\n"), vec![Code::E0416]);
 }
 
 #[test]

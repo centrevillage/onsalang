@@ -17,7 +17,7 @@ pub fn calls_an_alloc_fn(n: U32) -> U32 uses {Alloc} {
 }
 
 pub fn allocates_directly(n: U32) -> U32 uses {Alloc} {
-  let b = Buf.zeroed(n)                             //~ E0601
+  let b: Buf[F32] = Buf.zeroed(n)                   //~ E0601
   b.len()
 }
 

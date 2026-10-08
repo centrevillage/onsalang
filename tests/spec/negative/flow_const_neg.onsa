@@ -1,0 +1,159 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.5", "§4.5", "§3.4"]
+
+// E0401 / E0419 / E0808: the length of a delay line and the ends of a `par` range are constant
+// expressions of type `U32` (§11.4, §11.5, §4.5), so a prefix `-` there is E0401 wherever it is
+// written (S-228): the same rule as an array length and a const argument. `0 - 1` is an
+// evaluation that overflows (E0419), and E0808 is only for a value out of range (`N = 0`, an
+// empty `par` range, S-132). One error per flow (P-01). The syntax of the flows is the final
+// one (§11.2); the codes of the constant expressions of a flow are W7-02's.
+
+const ONE: U32 = 1
+const TWO: U32 = 2
+
+// ---------------------------------------------------------------- E0401: delay~
+
+pub flow delay_negative(x: F32 at sample) -> F32 at sample {
+  delay~(x, -1, 0.0)            //~ E0401
+}
+
+pub flow delay_negative_no_init(x: F32 at sample) -> F32 at sample {
+  delay~(x, -1)                 //~ E0401
+}
+
+pub flow delay_negative_zero(x: F32 at sample) -> F32 at sample {
+  delay~(x, -0)                 //~ E0401
+}
+
+pub flow delay_negative_parenthesised(x: F32 at sample) -> F32 at sample {
+  delay~(x, -(2))               //~ E0401
+}
+
+pub flow delay_negative_constant(x: F32 at sample) -> F32 at sample {
+  delay~(x, -TWO)               //~ E0401
+}
+
+pub flow delay_negative_expression(x: F32 at sample) -> F32 at sample {
+  delay~(x, -(TWO + 1), 0.5)    //~ E0401
+}
+
+pub flow delay_bound_to_a_let(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, -1)         //~ E0401
+  x + d
+}
+
+pub flow delay_inside_par(x: F32 at sample) -> F32 at sample {
+  let ds = par i in 0..2 {
+    delay~(x * i.round_f32(), -2)   //~ E0401
+  }
+  ds[0] + ds[1]
+}
+
+pub flow delay_inside_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    delay~(x, -2)               //~ E0401
+  } else {
+    x
+  }
+}
+
+// ---------------------------------------------------------------- E0401: vdelay~
+
+pub flow vdelay_negative(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, -1)             //~ E0401
+}
+
+pub flow vdelay_negative_constant(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, -ONE, 0.5)      //~ E0401
+}
+
+// ---------------------------------------------------------------- E0401: par
+
+pub flow par_negative_start(x: F32 at sample) -> F32 at sample {
+  let ys = par i in -1..2 {     //~ E0401
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+pub flow par_negative_end(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..-1 {     //~ E0401
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+pub flow par_negative_zero_start(x: F32 at sample) -> F32 at sample {
+  let ys = par i in -0..2 {     //~ E0401
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+pub flow par_negative_constant(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..-TWO {   //~ E0401
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+pub flow par_negative_parenthesised(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..-(2) {   //~ E0401
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+// ---------------------------------------------------------------- E0419: an evaluation that overflows
+
+pub flow delay_subtraction(x: F32 at sample) -> F32 at sample {
+  delay~(x, ONE - 2)            //~ E0419
+}
+
+pub flow par_subtraction(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..ONE - 2 {   //~ E0419
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+// ---------------------------------------------------------------- E0808: only the value out of range
+
+pub flow delay_zero(x: F32 at sample) -> F32 at sample {
+  delay~(x, 0)                  //~ E0808
+}
+
+pub flow delay_zero_by_subtraction(x: F32 at sample) -> F32 at sample {
+  delay~(x, ONE - 1)            //~ E0808
+}
+
+pub flow vdelay_zero(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 0)              //~ E0808
+}
+
+pub flow par_empty(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 2..2 {      //~ E0808
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+pub flow par_reversed(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 3..1 {      //~ E0808
+    x * i.round_f32()
+  }
+  ys[0]
+}
+
+// ---------------------------------------------------------------- fine
+
+pub flow fine(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 2)
+  let b = delay~(x, TWO + 1, 0.5)
+  let c = vdelay~(x, d, 8)
+  let ys = par i in 0..2 {
+    x * i.round_f32()
+  }
+  a + b + c + ys[0] + ys[1]
+}

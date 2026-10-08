@@ -1,0 +1,165 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.1", "§5.2"]
+
+// A value whose type has a const parameter of the enclosing function (`xs: [U32; N]`) can be
+// passed on to a function that has a const parameter of its own: the type `[U32; N]` is
+// equal to `[U32; K]` with K = N, and the equality of const arguments is the only operation
+// on them (spec §4.5 "const ジェネリクスは等値比較のみ", §6.1 `mean[const N: U32]`; R-150).
+// The same holds for a function that calls itself.
+//
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+fn total[const N: U32](xs: [U32; N]) -> U32 {
+  var s: U32 = 0
+  for x in xs {
+    s = s + x
+  }
+  s
+}
+
+fn total_twice[const N: U32](xs: [U32; N]) -> U32 {
+  total(xs) + total(xs)
+}
+
+fn total_thrice[const N: U32](xs: [U32; N]) -> U32 {
+  total_twice(xs) + total(xs)
+}
+
+test "a const array parameter is passed on" {
+  assert total([1, 2, 3]) == 6
+  assert total_twice([1, 2, 3]) == 12
+  assert total_thrice([1, 2, 3]) == 18
+  assert total_thrice([5]) == 15
+}
+
+fn both[const N: U32](a: [U32; N], b: [U32; N]) -> U32 {
+  total(a) + total(b)
+}
+
+fn both_via[const N: U32](a: [U32; N], b: [U32; N]) -> U32 {
+  both(a, b)
+}
+
+test "two arguments of the same const parameter are passed on" {
+  assert both([1, 2], [3, 4]) == 10
+  assert both_via([1, 2], [3, 4]) == 10
+}
+
+fn size_of[const N: U32](xs: [U32; N]) -> U32 {
+  N
+}
+
+fn size_via[const M: U32](ys: [U32; M]) -> U32 {
+  size_of(ys)
+}
+
+fn size_via2[const K: U32](zs: [U32; K]) -> U32 {
+  size_via(zs)
+}
+
+test "the const parameter is the same through a chain of calls" {
+  assert size_of([7, 8, 9, 10]) == 4
+  assert size_via([7, 8, 9, 10]) == 4
+  assert size_via2([7, 8]) == 2
+}
+
+fn pass_on[const N: U32](xs: [U32; N]) -> [U32; N] {
+  xs
+}
+
+fn through[const N: U32](xs: [U32; N]) -> [U32; N] {
+  pass_on(xs)
+}
+
+test "the result type [U32; N] equals the parameter's" {
+  let r = through([4, 5, 6])
+  assert r[0] == 4
+  assert r[2] == 6
+  assert size_of(through([1, 2])) == 2
+}
+
+fn rows[const M: U32, const N: U32](m: [[U32; N]; M]) -> U32 {
+  M
+}
+
+fn cols[const N: U32](row: [U32; N]) -> U32 {
+  N
+}
+
+fn dims[const M: U32, const N: U32](m: [[U32; N]; M]) -> U32 {
+  // two const parameters, passed to two different generic functions
+  let r = rows(m) * 10
+  r + cols(m[0])
+}
+
+test "two const parameters and a nested array" {
+  let m: [[U32; 3]; 2] = [[1, 2, 3], [4, 5, 6]]
+  assert rows(m) == 2
+  assert cols(m[1]) == 3
+  assert dims(m) == 23
+}
+
+fn bump[const N: U32](inout xs: [U32; N]) {
+  for i in 0..N {
+    xs[i] = xs[i] + 1
+  }
+}
+
+fn bump_twice[const N: U32](inout xs: [U32; N]) {
+  bump(inout xs)
+  bump(inout xs)
+}
+
+test "an inout const array parameter is passed on" {
+  var a: [U32; 3] = [10, 20, 30]
+  bump_twice(inout a)
+  assert a[0] == 12
+  assert a[1] == 22
+  assert a[2] == 32
+}
+
+fn depth_first[const N: U32](xs: [U32; N], depth: U32) -> U32 {
+  if depth == 0 {
+    N
+  } else {
+    depth_first(xs, depth - 1)
+  }
+}
+
+test "a function that calls itself with its const array parameter" {
+  assert depth_first([1, 2, 3, 4, 5], 3) == 5
+  assert depth_first([1], 0) == 1
+}
+
+fn capacity_of[T, const N: U32](r: Ring[T, N]) -> U32 {
+  N
+}
+
+fn capacity_via[T, const N: U32](r: Ring[T, N]) -> U32 {
+  capacity_of(r)
+}
+
+test "a struct with a const parameter is passed on" {
+  let r: Ring[F32, 4] = Ring { data: [0.0; 4], head: 0 }
+  assert capacity_of(r) == 4
+  assert capacity_via(r) == 4
+}
+
+fn sum_map[const N: U32](xs: [U32; N]) -> [U32; 2] {
+  array.from_fn(fn(i) { i + total(xs) })
+}
+
+test "a closure that captures a const array parameter" {
+  let r = sum_map([1, 2, 3])
+  assert r[0] == 6
+  assert r[1] == 7
+}

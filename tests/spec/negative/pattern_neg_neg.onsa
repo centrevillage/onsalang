@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.7"]
+
+// E0002: the integer literal of a pattern takes one `-` written directly on it, parentheses
+// between them not seen. `-(-1)` is not a literal (the outer `-` would be a negation of a
+// value, which a pattern does not compute), so it cannot be written (spec §7; S-227). The
+// message text is W3-07's (R-156); the code is E0002. One error per function (P-01).
+
+pub struct Point {
+  x: I8,
+  y: I8,
+}
+
+pub fn doubled_minus(x: I32) -> I32 {
+  match x {
+    -(-1) => 1,                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn doubled_minus_at_the_minimum(x: I8) -> I32 {
+  match x {
+    -(-128) => 1,               //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn doubled_minus_with_parentheses(x: I32) -> I32 {
+  match x {
+    -(-(1)) => 1,               //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(-(-1)) => 1,           //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(a: I8, b: I8) -> I32 {
+  match (a, b) {
+    (-(-2), _) => 1,            //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn inside_a_struct(p: Point) -> I32 {
+  match p {
+    Point { x: -(-1), y: _ } => 1,   //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn inside_an_alternative(x: I32) -> I32 {
+  match x {
+    1 | -(-2) => 1,             //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn as_a_statement(x: I32) -> I32 {
+  var r = 0
+  match x {
+    -(-3) => { r = 1 },         //~ E0002
+    _ => { r = 0 },
+  }
+  r
+}
+
+// One `-` is a literal (the parentheses around a literal are in semantics/pattern_negative_paren.onsa).
+pub fn single_minus(x: I8) -> I32 {
+  match x {
+    -1 => 1,
+    _ => 0,
+  }
+}

@@ -899,13 +899,16 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         AK::Unary { op, expr: inner } => {
             let x = lower_expr(lw, cx, *inner)?;
             match op {
-                AUnOp::Neg => match &x.kind {
-                    // Negative literals are literals (`-128` fits `I8`; no runtime negation).
+                // A negative literal is a literal (`-128` fits `I8`; no run-time negation).
+                // Sema decided which `-` belong to a literal (§4.7, S-227); every other
+                // `-` negates a value and panics at `MIN` (`-(I32.MIN)`, `-(-2147483648)`, R-03).
+                AUnOp::Neg if cx.info.neg_literals.contains(&e) => match &x.kind {
                     ExprKind::Lit(Lit::Int(v)) => ExprKind::Lit(Lit::Int(-v)),
                     ExprKind::Lit(Lit::F32(v)) => ExprKind::Lit(Lit::F32(-v)),
                     ExprKind::Lit(Lit::F64(v)) => ExprKind::Lit(Lit::F64(-v)),
-                    _ => ExprKind::Unary(UnOp::Neg, Box::new(x)),
+                    _ => return Err(internal(span, "a negative literal whose operand did not lower to a literal")),
                 },
+                AUnOp::Neg => ExprKind::Unary(UnOp::Neg, Box::new(x)),
                 AUnOp::Not => ExprKind::Unary(UnOp::Not, Box::new(x)),
             }
         }

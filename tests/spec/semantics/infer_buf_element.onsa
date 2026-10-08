@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§4.6"]
+
+// The element type of `Buf.zeroed(n)` is decided by the expected type or by a later statement
+// (spec §4.7), and a Copy element meets the kind constraint of `Buf` (§4.5: "`Buf[T]` と
+// `Span[T]` の要素型は `T: Copy` に限る"): scalars, tuples and arrays of them, a Copy struct, and a
+// type parameter with the bound `T: Copy`. The check waits for the type (§4.7).
+//
+// Written by the implementer of W2-06 from §4.5 and §4.7 (no test ticket had these cases).
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+fn sum(b: Buf[F32]) -> F32 {
+  var s = 0.0
+  for x in b {
+    s = s + x
+  }
+  s
+}
+
+fn count[T: Copy](b: Buf[T]) -> U32 {
+  b.len()
+}
+
+fn zeros[T: Copy](n: U32) -> Buf[T] uses {Alloc} {
+  let b: Buf[T] = Buf.zeroed(n)
+  b
+}
+
+test "an element by the annotation" {
+  let b: Buf[F32] = Buf.zeroed(4)
+  assert sum(b) == 0.0
+}
+
+test "an element by a later argument" {
+  let b = Buf.zeroed(3)
+  assert b.len() == 3
+  assert sum(b) == 0.0
+}
+
+test "an element by a later index" {
+  let b = Buf.zeroed(2)
+  let x: (U8, F32) = b[1]
+  assert x.0 == 0
+}
+
+test "a Copy struct and an array as the element" {
+  let p: Buf[Pair] = Buf.zeroed(2)
+  let q: Buf[[I32; 3]] = Buf.zeroed(2)
+  assert count(p) == 2
+  assert count(q) == 2
+}
+
+test "a type parameter with the bound Copy" {
+  let b: Buf[U16] = zeros(5)
+  assert count(b) == 5
+}

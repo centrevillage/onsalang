@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§15.1"]
+
+// The inference of the type parameters of generic functions and types that come from another
+// module (S-174, R-148, R-150): a later statement decides a parameter, the default of an integer
+// literal applies at the end of the function, the expected type reaches a generic struct of
+// another module, and a const array parameter is passed on to a generic function of another
+// module.
+//
+// Every value below is worked out by hand from the spec text.
+
+use lib.{Wrap, Slot, none, or_default, id, total, total_twice}
+
+fn is_none_u8(o: Option[U8]) -> Bool {
+  match o {
+    Some(_) => false,
+    None => true,
+  }
+}
+
+fn forward[const N: U32](xs: [U32; N]) -> U32 {
+  total_twice(xs) + total(xs)
+}
+
+test "a literal decides the parameter of a function in another module" {
+  assert or_default(Some(3), 9) == 3
+  assert or_default(None, 9) == 9
+  let a = id(200)
+  let b: U8 = a
+  assert b == 200
+}
+
+test "a later statement decides the parameter of a function in another module" {
+  let v = none()
+  let w: Option[U8] = v
+  assert is_none_u8(w)
+  let u = none()
+  assert is_none_u8(u)
+}
+
+test "the expected type reaches a generic struct in another module" {
+  let w: Wrap[Wrap[I32]] = Wrap { v: Wrap { v: 7 } }
+  assert w.v.v == 7
+  let x: Wrap[Wrap[U8]] = Wrap { v: Wrap { v: 255 } }
+  assert x.v.v == 255
+}
+
+test "a const array parameter is passed on to a function in another module" {
+  assert forward([1, 2, 3]) == 18
+  assert forward([4]) == 12
+}
+
+test "a match on the call of a function in another module whose parameter is decided later (S-226)" {
+  let v = none()
+  let r = match v {
+    Some(_) => 1,
+    None => 0,
+  }
+  let w: Option[U8] = v
+  assert r == 0
+  assert is_none_u8(w)
+}
+
+test "a literal pattern on a None decides the parameter of the imported enum (R-157)" {
+  let o = None
+  let r = match o {
+    Some(3) => 1,
+    _ => 0,
+  }
+  let s = Slot.Empty
+  let k = match s {
+    Slot.Full(2) => 1,
+    Slot.Empty => 2,
+    _ => 0,
+  }
+  let t: Slot[U8] = s
+  assert r == 0
+  assert k == 2
+}

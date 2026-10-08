@@ -33,7 +33,8 @@ pub fn loop_forever[T]() -> T {
 
 pub fn return_only_generic() -> I32 {
   let n = parse("3")            //~ E0406
-  n
+  let _ = n
+  2
 }
 
 pub fn return_only_annotated() -> I32 {

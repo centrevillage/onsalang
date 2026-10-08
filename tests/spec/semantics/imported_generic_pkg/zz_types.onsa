@@ -1,0 +1,21 @@
+// Generic types declared in a module that other modules of the package import (spec §4.5,
+// §15.1). The modules do not depend on the order of their file names.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub enum Maybe[T] {
+  Nothing,
+  Just(T),
+}

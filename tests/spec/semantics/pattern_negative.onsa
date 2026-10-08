@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§4.7", "§2.4"]
+
+// Negative integer literals as patterns (spec §7: "整数（`-1` のように `-` を付けた負の整数を
+// 含む。範囲の検査と間の括弧の扱いは式のリテラルと同じ、§4.7）"; S-185). The minimum of a signed
+// type is a valid pattern, and the pattern is a literal like the others: it does not count for
+// exhaustiveness, so the matches below end in `_` or a binding. The form with parentheses
+// between the `-` and the literal is in pattern_negative_paren.onsa, the out-of-range patterns
+// in negative/pattern_range.onsa.
+//
+// The matches here are statements that set a variable, so that they do not depend on the
+// lowering of a `match` that gives a value (R-06, W8-06); the same patterns as values are in
+// pattern_negative_value.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+fn sign(n: I32) -> I32 {
+  var r = 0
+  match n {
+    -1 => { r = 100 },
+    0 => { r = 200 },
+    1 => { r = 300 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "negative, zero and positive literal patterns" {
+  assert sign(-1) == 100
+  assert sign(0) == 200
+  assert sign(1) == 300
+  assert sign(-2) == 0
+  assert sign(2) == 0
+}
+
+fn ends8(x: I8) -> I32 {
+  var r = 0
+  match x {
+    -128 => { r = 1 },
+    127 => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn ends16(x: I16) -> I32 {
+  var r = 0
+  match x {
+    -32768 => { r = 1 },
+    32767 => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+fn ends64(x: I64) -> I32 {
+  var r = 0
+  match x {
+    -9223372036854775808 => { r = 1 },
+    9223372036854775807 => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "the minimum and the maximum of the signed types" {
+  assert ends8(I8.MIN) == 1
+  assert ends8(I8.MAX) == 2
+  assert ends8(-127) == 0
+  assert ends16(I16.MIN) == 1
+  assert ends16(I16.MAX) == 2
+  assert ends16(0) == 0
+  assert ends64(I64.MIN) == 1
+  assert ends64(I64.MAX) == 2
+  assert ends64(-9223372036854775807) == 0
+}
+
+fn alt(n: I32) -> I32 {
+  var r = 0
+  match n {
+    -1 | -2 | -3 => { r = 1 },
+    0 | 4 => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "alternatives with negative literals" {
+  assert alt(-1) == 1
+  assert alt(-3) == 1
+  assert alt(-4) == 0
+  assert alt(0) == 2
+  assert alt(4) == 2
+}
+
+fn tup(a: I32, b: I32) -> I32 {
+  var r = 0
+  match (a, b) {
+    (-1, -1) => { r = 1 },
+    (-1, _) => { r = 2 },
+    (_, -1) => { r = 3 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "negative literals in a tuple pattern" {
+  assert tup(-1, -1) == 1
+  assert tup(-1, 5) == 2
+  assert tup(5, -1) == 3
+  assert tup(5, 5) == 0
+  assert tup(-2, -2) == 0
+}
+
+fn in_some(o: Option[I32]) -> I32 {
+  var r = 0
+  match o {
+    Some(-5) => { r = 1 },
+    Some(_) => { r = 2 },
+    None => { r = 3 },
+  }
+  r
+}
+
+test "a negative literal inside Some" {
+  assert in_some(Some(-5)) == 1
+  assert in_some(Some(5)) == 2
+  assert in_some(Some(-6)) == 2
+  assert in_some(None) == 3
+}
+
+fn in_struct(p: Point) -> I32 {
+  var r = 0
+  match p {
+    Point { x: -1, y: -1 } => { r = 1 },
+    Point { x: -1, y: y } => { r = y },
+    Point { x: _, y: -1 } => { r = -100 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "negative literals in a struct pattern" {
+  assert in_struct(Point { x: -1, y: -1 }) == 1
+  assert in_struct(Point { x: -1, y: 42 }) == 42
+  assert in_struct(Point { x: 3, y: -1 }) == -100
+  assert in_struct(Point { x: 3, y: 4 }) == 0
+}
+
+fn guarded(n: I32, big: Bool) -> I32 {
+  var r = 0
+  match n {
+    -3 if big => { r = 1 },
+    -3 => { r = 2 },
+    _ => { r = 0 },
+  }
+  r
+}
+
+test "a negative literal with a guard" {
+  assert guarded(-3, true) == 1
+  assert guarded(-3, false) == 2
+  assert guarded(3, true) == 0
+}
+
+fn first_wins(n: I32) -> I32 {
+  var r = 0
+  match n {
+    -7 => { r = 1 },
+    m => { r = m },
+  }
+  r
+}
+
+test "a binding after a negative literal" {
+  assert first_wins(-7) == 1
+  assert first_wins(-8) == -8
+  assert first_wins(7) == 7
+}
+
+fn loop_classes() -> [I32; 3] {
+  let xs: [I32; 3] = [-1, 0, 1]
+  var out: [I32; 3] = [0; 3]
+  for k in 0..3 {
+    match xs[k] {
+      -1 => { out[k] = 10 },
+      0 => { out[k] = 20 },
+      _ => { out[k] = 30 },
+    }
+  }
+  out
+}
+
+test "negative literals in a match inside a loop" {
+  let r = loop_classes()
+  assert r[0] == 10
+  assert r[1] == 20
+  assert r[2] == 30
+}

@@ -1,0 +1,3 @@
+[package]
+name = "imported_generic_pkg"
+edition = "2026"

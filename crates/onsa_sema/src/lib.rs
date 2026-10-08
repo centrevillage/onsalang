@@ -8,8 +8,10 @@ pub mod body;
 #[cfg(test)]
 mod body_tests;
 mod builtin;
+mod constarg;
 pub mod consteval;
 pub mod def;
+mod deferred;
 mod effects;
 #[cfg(test)]
 mod effects_tests;

@@ -87,7 +87,8 @@ fn operations_need_known_types() {
         codes("pub fn f(x: F32) -> F32 {\n  var acc = 0.0\n  let r = acc.round_f32()\n  acc = x\n  r\n}\n"),
         vec![Code::E0420]
     );
-    assert_eq!(codes("pub fn f() -> U32 {\n  let xs = []\n  1\n}\n"), vec![Code::E0420]);
+    // The element type of `[]` may be decided later; left open, it is E0406 at `[]` (S-226).
+    assert_eq!(codes("pub fn f() -> U32 {\n  let xs = []\n  1\n}\n"), vec![Code::E0406]);
     assert_eq!(codes("pub fn f() -> I64 {\n  1 as I64\n}\n"), vec![Code::E0420]);
     ok("pub fn f() -> [F32; 0] {\n  let xs: [F32; 0] = []\n  xs\n}\n");
 }
@@ -100,7 +101,12 @@ fn generics_from_arguments_and_expected_type() {
     assert_eq!(body.instances.len(), 2);
     let i32 = a.types.find(&Ty::Int(IntKind::I32)).unwrap();
     assert!(body.instances.iter().all(|i| i.args == vec![i32]));
-    assert_eq!(codes(&format!("{src}pub fn g() -> I32 {{\n  let n = parse(\"3\")\n  n\n}}\n")), vec![Code::E0406]);
+    // A later statement may decide the type parameter (S-174); one left open is E0406 at the call.
+    ok(&format!("{src}pub fn g() -> I32 {{\n  let n = parse(\"3\")\n  n\n}}\n"));
+    assert_eq!(
+        codes(&format!("{src}pub fn g() -> I32 {{\n  let n = parse(\"3\")\n  let _ = n\n  2\n}}\n")),
+        vec![Code::E0406]
+    );
     assert_eq!(
         codes(
             "pub fn largest[T: Ord](a: T, b: T) -> T { if a < b { b } else { a } }\npub fn g() -> F32 { largest(1.0, 2.0) }\n"
@@ -122,10 +128,12 @@ fn const_generics_and_arrays() {
     let body = &a.bodies[&def(&a, "g")];
     assert_eq!(body.instances.len(), 1);
     assert!(matches!(a.types.get(body.instances[0].args[0]), Ty::ConstVal(4)));
-    let a = ok("const N: U32 = 8\npub fn g() -> [U32; 8] { [0; N] }\n");
-    let body = &a.bodies[&def(&a, "g")];
-    assert_eq!(body.repeats.len(), 1);
-    let _ = a;
+    ok("const N: U32 = 8\npub fn g() -> [U32; 8] { [0; N] }\n");
+    // The element of `[e; N]` must be Dup (§2.4), checked in sema once it is decided (S-235).
+    assert_eq!(
+        codes("pub struct O { b: Buf[F32] }\npub fn g(move o: O) -> U32 uses {Alloc} {\n  let xs = [o; 2]\n  0\n}\n"),
+        vec![Code::E0416]
+    );
 }
 
 #[test]
@@ -331,4 +339,33 @@ fn tables_are_resolved() {
     assert_eq!(xs.kind, LocalKind::Param(onsa_syntax::ast::Mode::Borrow));
     assert!(body.targets.values().filter(|t| matches!(t, Target::Local(_))).count() >= 5);
     let _ = BuiltinTy::Option;
+}
+
+/// The notes of E0416 (S-235): the reason of a binding is said only for the expected type it
+/// came from (an argument, an annotation, the result); a merge of branches, a statement inside
+/// a block or a receiver gets a note with its position alone (W2-06/b).
+#[test]
+fn notes_of_a_late_requirement_name_only_their_own_reason() {
+    let notes = |src: &str| -> Vec<String> {
+        let a = check(src);
+        let d = a.diagnostics.iter().find(|d| d.code == Code::E0416).expect("E0416");
+        d.notes.iter().map(|n| n.message.clone()).collect()
+    };
+    let need = "fn need_f[T: Float](o: Option[T]) -> Bool { true }\nfn take_oi(o: Option[I32]) -> Bool { true }\n";
+    let by_argument =
+        notes(&format!("{need}pub fn f() -> Bool {{\n  let o = None\n  let _ = need_f(o)\n  take_oi(o)\n}}\n"));
+    assert!(by_argument[0].ends_with("as an argument of `take_oi`"), "{by_argument:?}");
+    let by_annotation = notes(&format!(
+        "{need}pub fn f() -> Bool {{\n  let o = None\n  let a = need_f(o)\n  let p: Option[U8] = o\n  a\n}}\n"
+    ));
+    assert!(by_annotation[0].ends_with("as the annotation of `p`"), "{by_annotation:?}");
+    // The `else` branch is merged with the `then` branch: no reason, inside a block or not.
+    let merged = notes(
+        "pub fn f(c: Bool, bb: Option[Buf[F32]]) -> U32 {\n  let w: U32 = {\n    let o = None\n    let z = [o; 2]\n    let p = if c { o } else { bb }\n    3\n  }\n  w\n}\n",
+    );
+    assert!(merged[0].ends_with("here"), "{merged:?}");
+    let receiver = notes(
+        "pub struct W[T] { v: Option[T] }\nimpl[T: Float] W[T] {\n  fn only_float(self) -> U32 { 1 }\n}\npub fn c2(w: W[I32]) -> U32 {\n  let n = w.only_float()\n  n\n}\n",
+    );
+    assert!(receiver[0].ends_with("here"), "{receiver:?}");
 }

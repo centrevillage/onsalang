@@ -1146,7 +1146,14 @@ impl<'a> Fmt<'a> {
         match &p.kind {
             PatKind::Wild => self.push("_"),
             PatKind::Bind(id) => self.push(&id.name),
-            PatKind::Lit(_) | PatKind::Neg(_) => self.push(self.src(p.span)),
+            PatKind::Lit(_) => self.push(self.src(p.span)),
+            // `-1`, `-(1)`: the parentheses are kept and the spaces between the tokens dropped,
+            // as for the same expression (S-185). A comment inside is emitted once by the
+            // comment points, like a comment inside the expression `-( // c` `1)`.
+            PatKind::Neg(_) => {
+                let packed = code_only(self.src(p.span));
+                self.push(&packed);
+            }
             PatKind::Path(path) => self.path(path),
             PatKind::TupleStruct { path, elems } => {
                 self.path(path);
@@ -1261,6 +1268,26 @@ impl<'a> Fmt<'a> {
     }
 }
 
+/// The tokens of a short code text without its whitespace and comments
+/// (the text has no string or character literal: a negative literal pattern).
+fn code_only(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        if rest.starts_with("//") {
+            rest = rest.find('\n').map_or("", |i| &rest[i..]);
+        } else if rest.starts_with("/*") {
+            rest = rest.find("*/").map_or("", |i| &rest[i + 2..]);
+        } else {
+            if !c.is_whitespace() {
+                out.push(c);
+            }
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use onsa_diag::FileId;
@@ -1286,6 +1313,22 @@ mod tests {
         let out2 = crate::format(&again, &out).unwrap();
         assert_eq!(out, out2, "not idempotent");
         out
+    }
+
+    #[test]
+    fn negative_literal_patterns_keep_their_comments_once() {
+        // The parentheses stay, the spaces go (S-185); a comment inside is kept once, and
+        // the output parses again (W2-06/b: the comment was printed twice, `) = // c`).
+        for src in [
+            "fn p(x: I32) -> I32 {\n  match x {\n    -( // c\n      5\n    ) => 5,\n    _ => 0,\n  }\n}\n",
+            "fn p(x: I32) -> I32 {\n  match x {\n    -(6 // c\n    ) | -7 => 6,\n    _ => 0,\n  }\n}\n",
+            "fn p(x: I32) -> I32 {\n  match x {\n    - ( ( 2 ) ) => 2,\n    _ => 0,\n  }\n}\n",
+        ] {
+            let out = fmt(src);
+            assert_eq!(out.matches("// c").count(), src.matches("// c").count(), "{out}");
+            assert!(out.contains("-(5) =>") || out.contains("-(6) |") || out.contains("-((2)) =>"), "{out}");
+            assert!(crate::parse(FileId(0), &out).diagnostics.is_empty(), "{out}");
+        }
     }
 
     #[test]

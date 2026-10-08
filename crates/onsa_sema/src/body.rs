@@ -4,7 +4,7 @@
 //! scopes (E0304) and `const` evaluation. Argument modes / exclusivity (T2-8)
 //! and `rt` (T2-9) run after this pass over the tables in [`BodyInfo`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
@@ -15,8 +15,9 @@ use onsa_syntax::ast::{
 
 use crate::builtin;
 use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
+use crate::deferred::{Deferred, DeferredKind, Required};
 use crate::exhaust::P;
-use crate::infer::{Infer, LitKind, Mismatch};
+use crate::infer::{Cause, Infer, LitKind, Mismatch};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
@@ -120,8 +121,10 @@ pub struct BodyInfo {
     pub instances: Vec<Instance>,
     /// Closure expression → outer locals it captures (by copy, §5.3).
     pub captures: HashMap<ExprId, Vec<LocalId>>,
-    /// `[e; N]` expressions (the element must be Dup, §2.4; checked by T2-8).
-    pub repeats: Vec<ExprId>,
+    /// `-e` expressions whose operand, without parentheses, is a numeric literal:
+    /// the `-` is a part of the literal's value (§4.7, S-184, S-227). The lowering
+    /// folds exactly these (R-03); every other `-` negates a value.
+    pub neg_literals: HashSet<ExprId>,
     /// `false` when checking stopped at the first error (tables are partial).
     pub complete: bool,
 }
@@ -158,18 +161,23 @@ pub(crate) struct Checker<'a> {
     pub(crate) failed: bool,
     /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
     pub(crate) flow: Option<crate::flow::FlowCx>,
-    /// `(expr, value)` of integer literals, for the range check (E0408).
-    int_lits: Vec<(ExprId, u64)>,
-    /// Integer literals negated by a prefix `-` (`-128` fits `I8`).
-    negated: Vec<ExprId>,
-    /// `-e` expressions whose operand type was a literal variable (sign checked at the end).
-    neg_exprs: Vec<(ExprId, TyId)>,
-    /// Float literals (E0405 when still unresolved at the end).
-    float_lits: Vec<ExprId>,
+    /// Checks that wait for a type a later statement decides (`deferred.rs`).
+    pub(crate) deferred: Vec<Deferred>,
+    /// The items of `deferred` looked at by the last statement, and the binding
+    /// generation then (`check_deferred_now` skips them while nothing was bound).
+    pub(crate) deferred_seen: usize,
+    pub(crate) deferred_generation: u32,
+    /// The items only the end of the body decides (E0405, E0406, E0421), and the
+    /// number of items made so far (their order across both lists).
+    pub(crate) deferred_end: Vec<Deferred>,
+    pub(crate) deferred_count: u32,
+    /// Where an expected type comes from (`an argument of `f``), for the note of
+    /// E0416 (§4.5): it names a binding only when that very expected type is the
+    /// one unified (an argument, an annotation, the result, a field); every other
+    /// binding gets a note with its position alone.
+    why: Option<(String, TyId)>,
     /// Or-pattern alternative being checked: names bound by the first alternative.
     or_bindings: Option<HashMap<String, LocalId>>,
-    /// Typed holes (E0421): reported at the end of the body, once the type is known.
-    holes: Vec<(ExprId, TyId, Vec<LocalId>)>,
 }
 
 /// Check every body of the package and its dependencies.
@@ -231,12 +239,13 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             frames: Vec::new(),
             info: BodyInfo::default(),
             failed: false,
-            int_lits: Vec::new(),
-            negated: Vec::new(),
-            neg_exprs: Vec::new(),
-            float_lits: Vec::new(),
+            deferred: Vec::new(),
+            deferred_seen: 0,
+            deferred_generation: 0,
+            deferred_end: Vec::new(),
+            deferred_count: 0,
+            why: None,
             or_bindings: None,
-            holes: Vec::new(),
             flow: None,
         };
         let is_const = matches!(ck.a.defs[i].kind, DefKind::Const(_));
@@ -332,7 +341,8 @@ impl<'a> Checker<'a> {
 
     /// Unify, reporting E0401 at `span` on failure.
     pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
-        match self.infer.unify(&mut self.a.types, actual, expected) {
+        let cause = self.cause(span, Some(expected));
+        match self.infer.unify(&mut self.a.types, actual, expected, &cause) {
             Ok(()) => Ok(()),
             Err(Mismatch::Literal) => {
                 let e = self.display(expected);
@@ -358,6 +368,31 @@ impl<'a> Checker<'a> {
                 Err(self.err(Code::E0401, span, format!("expected `{e}`, found `{a}`")))
             }
         }
+    }
+
+    /// The cause of a binding made while unifying at `span` with `expected`.
+    pub(crate) fn cause(&self, span: Span, expected: Option<TyId>) -> Cause {
+        let why = match (&self.why, expected) {
+            (Some((w, t)), Some(e)) if *t == e => Some(w.clone()),
+            _ => None,
+        };
+        Cause::At { span, why }
+    }
+
+    /// Check with `why` naming where the expected type `expected` comes from.
+    pub(crate) fn with_why<T>(&mut self, why: String, expected: TyId, f: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
+        let outer = self.why.replace((why, expected));
+        let r = f(self);
+        self.why = outer;
+        r
+    }
+
+    /// Check without a reason: a statement, or a branch merged with another one.
+    pub(crate) fn without_why<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
+        let outer = self.why.take();
+        let r = f(self);
+        self.why = outer;
+        r
     }
 
     /// E0420: the operand's type must be known at this point (§4.7).
@@ -447,8 +482,7 @@ impl<'a> Checker<'a> {
         self.push_scope();
         let r = (|| -> R<()> {
             self.bind_params()?;
-            let t = self.check_expr(body, Some(ret))?;
-            let _ = t;
+            self.with_why("the result of the function".into(), ret, |ck| ck.check_expr(body, Some(ret)))?;
             Ok(())
         })();
         let _ = r;
@@ -511,162 +545,84 @@ impl<'a> Checker<'a> {
         let _ = r;
         self.pop_scope();
         self.frames.pop();
+        // The literals first (E0408, E0401 of `-` on an unsigned type): the evaluation
+        // below reads the values they denote.
+        if !self.failed {
+            self.check_deferred_end();
+        }
         if !self.failed
             && let Some(v) = crate::consteval::eval(self, value)
         {
+            // A negation of a value is evaluated, not folded into a literal (S-227), so it can
+            // leave the type (`-(-2147483648)`, `-LOW`): the evaluation panics, E0419 (§6.6).
+            // A stopgap for the value of the whole initializer until the evaluator of W9-03
+            // (R-155) checks every operation; an out-of-range value must not reach Core.
+            if let Some(k) = self.const_overflow(&v, ty) {
+                let span = self.expr(value).span;
+                self.err(
+                    Code::E0419,
+                    span,
+                    format!("the compile-time evaluation of this `const` overflows `{}` (§6.6, §3.4)", k.name()),
+                );
+                return;
+            }
             self.a.const_values.insert(self.def, v);
         }
     }
 
-    /// Final checks (E0405, E0408, E0406 bounds) and resolution of the tables.
+    /// E0406 at the first expression whose type still has a variable that is not a
+    /// literal's at the end of the body (§4.7). The origins of `deferred.rs` name the
+    /// expression that made a variable; this net catches every variable no origin covers,
+    /// so that no open type reaches the lowering.
+    // SPEC-GAP(S-262): a variable that only diverging expressions decide (`let x = { return }`,
+    // `let x = if c { return } else { return }`) has no type: E0406 at that expression.
+    fn open_variable_net(&mut self) {
+        let mut open: Vec<(Span, ExprId)> = Vec::new();
+        for (&e, &t) in &self.info.expr_types {
+            if self.infer.has_open_vars(&self.a.types, t) {
+                open.push((self.expr(e).span, e));
+            }
+        }
+        // The first in the source; of nested ones starting together, the outermost.
+        open.sort_by_key(|(s, e)| (s.start, std::cmp::Reverse(s.end), e.0));
+        if let Some(&(span, _)) = open.first() {
+            self.diag(
+                Diagnostic::new(
+                    Stage::Types,
+                    Code::E0406,
+                    span,
+                    "the type of this expression cannot be determined by the end of the function; annotate it (§4.7)",
+                )
+                .with_found(self.src(span)),
+            );
+        }
+    }
+
+    /// The integer type an evaluated `const` value leaves, looking into arrays, tuples and
+    /// structs (the stopgap of `check_const`).
+    fn const_overflow(&mut self, v: &crate::consteval::ConstValue, ty: TyId) -> Option<IntKind> {
+        use crate::consteval::ConstValue as V;
+        match (v, self.ty(ty)) {
+            (V::Int(n), Ty::Int(k)) => (!(k.range().0..=k.range().1).contains(n)).then_some(k),
+            (V::Array(xs), Ty::Array(e, _)) => xs.iter().find_map(|x| self.const_overflow(x, e)),
+            (V::Tuple(xs), Ty::Tuple(ts)) => xs.iter().zip(ts).find_map(|(x, t)| self.const_overflow(x, t)),
+            (V::Struct(xs), Ty::Named(d, args)) => {
+                let s = self.a.def(d).as_struct().cloned()?;
+                let Fields::Named(fs) = &s.fields else { return None };
+                let tys: Vec<TyId> = fs.iter().map(|f| self.subst(f.ty, &args)).collect();
+                xs.iter().zip(tys).find_map(|(x, t)| self.const_overflow(x, t))
+            }
+            _ => None,
+        }
+    }
+
+    /// The checks at the end of the body (`deferred.rs`) and the resolution of the tables.
     fn finish(mut self) -> BodyInfo {
         if !self.failed {
-            let mut late: Vec<Diagnostic> = Vec::new();
-            // S-22 (§2.4, §4.7): an integer literal still unresolved at the end of the
-            // body defaults to `I32`; float literals have no default (E0405 below).
-            let i32_ = self.a.types.int(IntKind::I32);
-            let mut defaulted: Vec<ExprId> = Vec::new();
-            for (e, _) in self.int_lits.clone() {
-                let t = self.info.expr_types[&e];
-                if self.infer.lit_of(&self.a.types, t) == Some(LitKind::Int) {
-                    let _ = self.infer.unify(&mut self.a.types, t, i32_);
-                    defaulted.push(e);
-                }
-            }
-            for (e, value) in self.int_lits.clone() {
-                let t = self.info.expr_types[&e];
-                let r = self.infer.resolve(&mut self.a.types, t);
-                match self.ty(r) {
-                    Ty::Int(k) => {
-                        let neg = self.negated.contains(&e);
-                        let v = if neg { -(value as i128) } else { value as i128 };
-                        let (lo, hi) = k.range();
-                        if v < lo || v > hi {
-                            let span = self.expr(e).span;
-                            let hint = if defaulted.contains(&e) {
-                                " (the default for an unconstrained integer literal); add an annotation such as `: U32` or `: I64`"
-                            } else {
-                                ""
-                            };
-                            late.push(
-                                Diagnostic::new(
-                                    Stage::Types,
-                                    Code::E0408,
-                                    span,
-                                    format!(
-                                        "literal `{}{value}` is out of range for `{}`{hint}",
-                                        if neg { "-" } else { "" },
-                                        k.name()
-                                    ),
-                                )
-                                .with_found(self.src(span)),
-                            );
-                        }
-                    }
-                    Ty::Var(_) => {
-                        let span = self.expr(e).span;
-                        late.push(
-                            Diagnostic::new(
-                                Stage::Types,
-                                Code::E0405,
-                                span,
-                                "the type of this integer literal cannot be determined; annotate it (§2.4)",
-                            )
-                            .with_found(self.src(span)),
-                        );
-                    }
-                    _ => {}
-                }
-            }
-            for e in self.float_lits.clone() {
-                let t = self.info.expr_types[&e];
-                let r = self.infer.resolve(&mut self.a.types, t);
-                if matches!(self.ty(r), Ty::Var(_)) {
-                    let span = self.expr(e).span;
-                    late.push(
-                        Diagnostic::new(
-                            Stage::Types,
-                            Code::E0405,
-                            span,
-                            "the type of this float literal cannot be determined; annotate it (§2.4)",
-                        )
-                        .with_found(self.src(span)),
-                    );
-                }
-            }
-            for (e, t) in self.neg_exprs.clone() {
-                let r = self.infer.resolve(&mut self.a.types, t);
-                if let Ty::Int(k) = self.ty(r)
-                    && !k.signed()
-                {
-                    let span = self.expr(e).span;
-                    late.push(
-                        Diagnostic::new(
-                            Stage::Types,
-                            Code::E0401,
-                            span,
-                            format!("`-` on the unsigned type `{}`", k.name()),
-                        )
-                        .with_found(self.src(span)),
-                    );
-                }
-            }
-            for i in 0..self.info.instances.len() {
-                let inst = self.info.instances[i].clone();
-                let generics = self.a.def(inst.def).generics().to_vec();
-                // Methods: generics are the impl's followed by the fn's.
-                let generics = match self.a.def(inst.def).owner {
-                    Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) => {
-                        let mut g = self.a.def(o).generics().to_vec();
-                        g.extend(generics.into_iter().skip(g.len()));
-                        g
-                    }
-                    _ => generics,
-                };
-                for (g, &arg) in generics.iter().zip(&inst.args) {
-                    let r = self.infer.resolve(&mut self.a.types, arg);
-                    if let GenericKind::Type { bounds, dup } = &g.kind
-                        && let Some(b) = self.unsatisfied_bound(r, bounds, *dup)
-                    {
-                        let shown = self.display(r);
-                        late.push(
-                            Diagnostic::new(
-                                Stage::Types,
-                                Code::E0416,
-                                inst.span,
-                                format!("`{shown}` does not satisfy the bound `{}: {}`", g.name, bound_name(b)),
-                            )
-                            .with_found(self.src(inst.span)),
-                        );
-                    }
-                }
-            }
-            for (e, t, visible) in self.holes.clone() {
-                let want = self.infer.resolve(&mut self.a.types, t);
-                let mut candidates = Vec::new();
-                for id in visible {
-                    let lt = self.info.locals[id.0 as usize].ty;
-                    if self.infer.resolve(&mut self.a.types, lt) == want {
-                        candidates.push(self.info.locals[id.0 as usize].name.clone());
-                    }
-                }
-                let msg = match self.ty(want) {
-                    Ty::Var(_) => "hole; the expected type is not known here".to_string(),
-                    _ => {
-                        let shown = self.display(want);
-                        if candidates.is_empty() {
-                            format!("hole of type `{shown}`")
-                        } else {
-                            format!("hole of type `{shown}`; candidates: {}", candidates.join(", "))
-                        }
-                    }
-                };
-                late.push(Diagnostic::new(Stage::Types, Code::E0421, self.expr(e).span, msg).with_found("_"));
-            }
-            late.sort_by_key(|d| d.span.start);
-            if let Some(d) = late.into_iter().next() {
-                self.diag(d);
-            }
+            self.check_deferred_end();
+        }
+        if !self.failed {
+            self.open_variable_net();
         }
         // Resolve the tables.
         let keys: Vec<ExprId> = self.info.expr_types.keys().copied().collect();
@@ -813,16 +769,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn unsatisfied_bound(&self, t: TyId, bounds: &[Bound], dup: bool) -> Option<Bound> {
-        if matches!(self.ty(t), Ty::Var(_)) {
-            return None;
-        }
-        if dup && !self.satisfies(t, Bound::Dup) && self.a.kind_of(t).is_some() {
-            return Some(Bound::Dup);
-        }
-        bounds.iter().copied().find(|&b| !self.satisfies(t, b))
-    }
-
     // ------------------------------------------------------------ generics
 
     /// Fresh variables for a def's generic parameters (owner's first for methods).
@@ -896,26 +842,43 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Record an instantiation and check that every argument got resolved (E0406).
+    /// Record an instantiation made by the expression at `span`. Its arguments
+    /// may be decided by a later statement (§4.5, §4.7; S-174): each one is an
+    /// origin (E0406 when still open at the end) and carries the requirements of
+    /// its parameter (the bounds and the implicit `Dup`, E0416, S-235).
     fn finish_instance(&mut self, def: DefId, args: Vec<TyId>, span: Span) -> R<Option<InstId>> {
         if args.is_empty() {
             return Ok(None);
         }
         let generics = self.all_generics(def);
-        for (g, &arg) in generics.iter().zip(&args) {
-            if self.infer.is_unresolved(&self.a.types, arg) {
-                let name = self.a.def(def).name.clone();
-                return Err(self.diag(
-                    Diagnostic::new(
-                        Stage::Types, Code::E0406,
-                        span,
-                        format!(
-                            "the type parameter `{}` of `{name}` cannot be determined from the arguments or the expected type; annotate the result (§4.5)",
-                            g.name
-                        ),
-                    )
-                    .with_found(self.src(span)),
-                ));
+        // A method's generics start with its `impl`'s (sig.rs): those belong to the `impl`.
+        let name = format!("`{}`", self.a.def(def).name);
+        let (impl_count, impl_name) = match self.a.def(def).owner {
+            Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) && def != o => {
+                let DefKind::Impl(i) = &self.a.def(o).kind else { unreachable!() };
+                let head = match self.ty(i.self_ty) {
+                    Ty::Named(d, _) => self.a.def(d).name.clone(),
+                    _ => self.display(i.self_ty),
+                };
+                (self.a.def(o).generics().len(), format!("the `impl` of `{head}`"))
+            }
+            _ => (0, String::new()),
+        };
+        for (k, (g, &arg)) in generics.iter().zip(&args).enumerate() {
+            let owner = if k < impl_count { impl_name.clone() } else { name.clone() };
+            let what = match g.kind {
+                GenericKind::Const(_) => format!("the const parameter `{}` of {owner}", g.name),
+                _ => format!("the type parameter `{}` of {owner}", g.name),
+            };
+            self.defer(span, arg, DeferredKind::Origin { what });
+            if let GenericKind::Type { bounds, dup } = &g.kind {
+                let required = |param: &str| Required::Param { param: param.to_string(), owner: owner.clone() };
+                if *dup {
+                    self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required(&g.name) });
+                }
+                for &b in bounds {
+                    self.defer(span, arg, DeferredKind::Require { bound: b, what: required(&g.name) });
+                }
             }
         }
         let id = InstId(self.info.instances.len() as u32);
@@ -1086,7 +1049,8 @@ impl<'a> Checker<'a> {
                         if let Some(exp) = expected {
                             self.unify_at(name.span, fty, exp)?;
                         }
-                        let inst = self.finish_instance(d, args, name.span)?;
+                        let espan = self.expr(e).span;
+                        let inst = self.finish_instance(d, args, espan)?;
                         self.info.targets.insert(e, Target::Fn { def: d, inst });
                         Ok(Some(fty))
                     }
@@ -1120,13 +1084,16 @@ impl<'a> Checker<'a> {
                 if let Some(exp) = expected {
                     self.unify_at(name.span, t, exp)?;
                 }
-                self.finish_instance(d, args, name.span)?;
+                // The whole path (`E.A`), where the variable is made.
+                let espan = self.expr(e).span;
+                self.finish_instance(d, args, espan)?;
                 self.info.targets.insert(e, Target::Variant { def: d, index: i });
                 Ok(Some(t))
             }
             Entity::Builtin(b) => match b {
                 Builtin::None => {
                     let t = self.fresh();
+                    self.defer(name.span, t, DeferredKind::Origin { what: "the type in `None`".into() });
                     let opt = self.a.types.builtin(BuiltinTy::Option, vec![t]);
                     if let Some(exp) = expected {
                         self.unify_at(name.span, opt, exp)?;
@@ -1135,17 +1102,11 @@ impl<'a> Checker<'a> {
                     Ok(Some(opt))
                 }
                 Builtin::Some | Builtin::Ok | Builtin::Err => {
-                    let t = self.fresh();
-                    let (param, ret) = match b {
-                        Builtin::Some => (t, self.a.types.builtin(BuiltinTy::Option, vec![t])),
-                        Builtin::Ok => {
-                            let e2 = self.fresh();
-                            (t, self.a.types.builtin(BuiltinTy::Result, vec![t, e2]))
-                        }
-                        _ => {
-                            let ok = self.fresh();
-                            (t, self.a.types.builtin(BuiltinTy::Result, vec![ok, t]))
-                        }
+                    let ret = self.prelude_ctor(b, name.span);
+                    let param = match self.ty(ret) {
+                        Ty::Builtin(BuiltinTy::Result, a) if b == Builtin::Err => a[1],
+                        Ty::Builtin(_, a) => a[0],
+                        _ => unreachable!("a prelude constructor makes an `Option` or a `Result`"),
                     };
                     let fty = self.a.types.intern(Ty::Fn(FnTy {
                         rt: true,
@@ -1162,6 +1123,26 @@ impl<'a> Checker<'a> {
                 _ => Ok(None),
             },
             Entity::Module(_) => Ok(None),
+        }
+    }
+
+    /// The type `Some(_)` / `Ok(_)` / `Err(_)` makes at `span`: the argument's
+    /// type, and an origin for the other type argument of `Result` (E0406, §4.7).
+    fn prelude_ctor(&mut self, b: Builtin, span: Span) -> TyId {
+        let t = self.fresh();
+        self.defer(span, t, DeferredKind::Origin { what: format!("the type in `{}`", self.src(span)) });
+        match b {
+            Builtin::Some => self.a.types.builtin(BuiltinTy::Option, vec![t]),
+            Builtin::Ok => {
+                let e2 = self.fresh();
+                self.defer(span, e2, DeferredKind::Origin { what: "the error type of `Ok`".into() });
+                self.a.types.builtin(BuiltinTy::Result, vec![t, e2])
+            }
+            _ => {
+                let ok = self.fresh();
+                self.defer(span, ok, DeferredKind::Origin { what: "the value type of `Err`".into() });
+                self.a.types.builtin(BuiltinTy::Result, vec![ok, t])
+            }
         }
     }
 
@@ -1239,7 +1220,7 @@ impl<'a> Checker<'a> {
                 let t = expected.unwrap_or_else(|| self.fresh());
                 let visible: Vec<LocalId> =
                     self.scopes.iter().flat_map(|s| s.names.iter().map(|(_, id)| *id)).collect();
-                self.holes.push((e, t, visible));
+                self.defer(span, t, DeferredKind::Hole { visible });
                 Ok(self.record(e, t))
             }
             ExprKind::Paren(inner) => self.check_expr(*inner, expected),
@@ -1277,16 +1258,14 @@ impl<'a> Checker<'a> {
                     _ => None,
                 });
                 if elems.is_empty() {
-                    let Some(el) = exp_elem else {
-                        return Err(self.diag(
-                            Diagnostic::new(
-                                Stage::Types,
-                                Code::E0420,
-                                span,
-                                "the type of an empty array must be known here; annotate it (§2.4)",
-                            )
-                            .with_found("[]"),
-                        ));
+                    // The element type is the expected one or a later statement's (§2.4, S-226).
+                    let el = match exp_elem {
+                        Some(el) => el,
+                        None => {
+                            let el = self.fresh();
+                            self.defer(span, el, DeferredKind::Origin { what: "the element type of `[]`".into() });
+                            el
+                        }
                     };
                     return Ok(self.a.types.intern(Ty::Array(el, Len::Const(0))));
                 }
@@ -1303,7 +1282,9 @@ impl<'a> Checker<'a> {
                 });
                 let n = self.const_len(*len)?;
                 let et = self.check_expr(*elem, exp_elem)?;
-                self.info.repeats.push(e);
+                // The element is copied N times: a kind constraint that a later
+                // statement may decide (§2.4, §4.7, S-235).
+                self.defer(span, et, DeferredKind::Require { bound: Bound::Dup, what: Required::RepeatElement });
                 Ok(self.a.types.intern(Ty::Array(et, n)))
             }
             ExprKind::Struct { path, fields } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
@@ -1314,7 +1295,8 @@ impl<'a> Checker<'a> {
                 match else_ {
                     Some(el) => {
                         let t = self.check_expr(*then, expected)?;
-                        self.check_expr(*el, Some(t))?;
+                        // Merged with the other branch: not the reason of the outer expectation.
+                        self.without_why(|ck| ck.check_expr(*el, Some(t)))?;
                         Ok(t)
                     }
                     None => {
@@ -1364,14 +1346,28 @@ impl<'a> Checker<'a> {
                 let s = self.shallow(t);
                 match op {
                     UnOp::Neg => {
-                        if let ExprKind::Lit(Lit::Int { .. }) = self.expr(*inner).kind {
-                            self.negated.push(*inner);
+                        // A `-` whose operand is a literal is a part of the literal's value
+                        // (§4.7, S-184, S-227): the literal's own check covers the sign.
+                        if let Some(lit) = self.ast.negated_literal(e) {
+                            self.info.neg_literals.insert(e);
+                            if let Some(item) = self
+                                .deferred
+                                .iter_mut()
+                                .rev()
+                                .find(|d| matches!(d.kind, DeferredKind::IntLit { lit: Some(l), .. } if l == lit))
+                            {
+                                item.span = span;
+                                if let DeferredKind::IntLit { neg, .. } = &mut item.kind {
+                                    *neg = true;
+                                }
+                            }
+                            return Ok(t);
                         }
                         match self.ty(s) {
                             Ty::Int(k) if k.signed() => Ok(t),
                             Ty::Float(_) | Ty::Error => Ok(t),
                             Ty::Var(_) if self.infer.lit_of(&self.a.types, s).is_some() => {
-                                self.neg_exprs.push((e, t));
+                                self.defer(span, t, DeferredKind::UnsignedNeg);
                                 Ok(t)
                             }
                             Ty::Param(_) if self.satisfies(s, Bound::Num) => Ok(t),
@@ -1448,7 +1444,8 @@ impl<'a> Checker<'a> {
                 match (self.ty(it), self.ty(ret_s)) {
                     (Ty::Builtin(BuiltinTy::Option, a), Ty::Builtin(BuiltinTy::Option, _)) => Ok(a[0]),
                     (Ty::Builtin(BuiltinTy::Result, a), Ty::Builtin(BuiltinTy::Result, r)) => {
-                        if self.infer.unify(&mut self.a.types, a[1], r[1]).is_err() {
+                        let cause = self.cause(span, None);
+                        if self.infer.unify(&mut self.a.types, a[1], r[1], &cause).is_err() {
                             let (ea, er) = (self.display(a[1]), self.display(r[1]));
                             return Err(self.err(
                                 Code::E0414,
@@ -1484,13 +1481,17 @@ impl<'a> Checker<'a> {
     fn check_lit(&mut self, e: ExprId, lit: &Lit, expected: Option<TyId>) -> R<TyId> {
         match lit {
             Lit::Int { value, .. } => {
-                self.int_lits.push((e, *value));
                 let _ = expected;
-                Ok(self.infer.fresh(&mut self.a.types, Some(LitKind::Int)))
+                let t = self.infer.fresh(&mut self.a.types, Some(LitKind::Int));
+                let span = self.expr(e).span;
+                self.defer(span, t, DeferredKind::IntLit { value: *value, neg: false, lit: Some(e) });
+                Ok(t)
             }
             Lit::Float { .. } => {
-                self.float_lits.push(e);
-                Ok(self.infer.fresh(&mut self.a.types, Some(LitKind::Float)))
+                let t = self.infer.fresh(&mut self.a.types, Some(LitKind::Float));
+                let span = self.expr(e).span;
+                self.defer(span, t, DeferredKind::FloatLit);
+                Ok(t)
             }
             Lit::Char(_) => Ok(self.a.types.intern(Ty::Char)),
             Lit::Bool(_) => Ok(self.bool_()),
@@ -1517,60 +1518,24 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `[e; N]` / array length in an expression: literal, constant, or const parameter.
+    /// `[e; N]` / array length in an expression (§4.5; the forms are read in `constarg.rs`).
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Len> {
-        let expr = self.expr(len);
-        match &expr.kind {
-            ExprKind::Lit(Lit::Int { value, .. }) => {
-                if *value > u32::MAX as u64 {
-                    return Err(self.err(Code::E0408, expr.span, "array length does not fit in `U32`"));
-                }
+        let generics = self.generics.clone();
+        match crate::constarg::expr(self.a, self.m, self.ast, self.text, &generics, len) {
+            Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);
-                Ok(Len::Const(*value as u32))
-            }
-            ExprKind::Path(p) if p.segments.len() == 1 => {
-                if let Some(i) = self.const_param(&p.segments[0].name) {
-                    let u32 = self.u32();
-                    self.record(len, u32);
-                    return Ok(Len::Param(i));
-                }
-                self.const_len_path(len, p)
-            }
-            ExprKind::Field { .. } => {
-                let chain = self.name_chain(len);
-                match chain {
-                    Some(c) => {
-                        let p = Path { segments: c.iter().map(|(_, i)| i.clone()).collect(), span: expr.span };
-                        self.const_len_path(len, &p)
+                match value {
+                    crate::constarg::ConstU32::Value(v) => {
+                        if let Some(d) = constant {
+                            self.info.targets.insert(len, Target::Const(d));
+                        }
+                        Ok(Len::Const(v))
                     }
-                    None => Err(self.unsupported(expr.span, Feature::ArrayLengthExprs, &[])),
+                    crate::constarg::ConstU32::Param(i) => Ok(Len::Param(i)),
                 }
             }
-            _ => Err(self.unsupported(expr.span, Feature::ArrayLengthExprs, &[])),
-        }
-    }
-
-    fn const_len_path(&mut self, len: ExprId, p: &Path) -> R<Len> {
-        let span = self.expr(len).span;
-        match self.a.resolve_path(self.m, p) {
-            Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => {
-                if let DefKind::Const(c) = &self.a.def(d).kind {
-                    let (ty, int_value) = (c.ty, c.int_value);
-                    let u32 = self.u32();
-                    self.unify_at(span, ty, u32)?;
-                    self.record(len, ty);
-                    self.info.targets.insert(len, Target::Const(d));
-                    return match int_value {
-                        Some(v) if v <= u32::MAX as u64 => Ok(Len::Const(v as u32)),
-                        Some(_) => Err(self.err(Code::E0408, span, "array length does not fit in `U32`")),
-                        None => Err(self.unsupported(span, Feature::ComputedArrayLengths, &[])),
-                    };
-                }
-                Err(self.err(Code::E0302, span, "array length must be a constant"))
-            }
-            Ok(_) => Err(self.err(Code::E0302, span, "array length must be a constant")),
-            Err(err) => Err(self.diag(err.into_diagnostic())),
+            Err(d) => Err(self.diag(d)),
         }
     }
 
@@ -1604,8 +1569,9 @@ impl<'a> Checker<'a> {
         let args = self.fresh_args(d);
         // The expected type decides the generic arguments first (§4.7: expected
         // types flow downward; `Ring[F32, 4]` fixes `T` and `N` before the fields).
+        // The expected type may be a variable a field of an outer literal bound (R-148).
         if let Some(exp) = expected
-            && let Ty::Named(d2, exp_args) = self.a.types.get(exp).clone()
+            && let Ty::Named(d2, exp_args) = self.ty(self.shallow(exp))
             && d2 == d
             && exp_args.len() == args.len()
         {
@@ -1624,7 +1590,7 @@ impl<'a> Checker<'a> {
                 return Err(self.err(Code::E0410, name.span, format!("`{shown}` has no field `{}`", name.name)));
             };
             let ft = self.subst(f.ty, &args);
-            self.check_expr(*value, Some(ft))?;
+            self.with_why(format!("the field `{}`", name.name), ft, |ck| ck.check_expr(*value, Some(ft)))?;
         }
         let missing: Vec<&str> = defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.contains(n)).collect();
         if !missing.is_empty() {
@@ -1639,7 +1605,7 @@ impl<'a> Checker<'a> {
             ));
         }
         let t = self.a.types.intern(Ty::Named(d, args.clone()));
-        self.finish_instance(d, args, path.span)?;
+        self.finish_instance(d, args, span)?;
         Ok(t)
     }
 
@@ -1688,7 +1654,12 @@ impl<'a> Checker<'a> {
                 } else {
                     rows.push(vec![p]);
                 }
-                let t = self.check_expr(arm.body, result)?;
+                // The arms after the first are merged with it (not the outer reason).
+                let t = if result == expected {
+                    self.check_expr(arm.body, result)?
+                } else {
+                    self.without_why(|ck| ck.check_expr(arm.body, result))?
+                };
                 if result.is_none() {
                     result = Some(t);
                 }
@@ -2124,17 +2095,11 @@ impl<'a> Checker<'a> {
                 Ok(ret)
             }
             Entity::Builtin(b) => {
-                let t = self.fresh();
-                let ret = match b {
-                    Builtin::Some => self.a.types.builtin(BuiltinTy::Option, vec![t]),
-                    Builtin::Ok => {
-                        let e2 = self.fresh();
-                        self.a.types.builtin(BuiltinTy::Result, vec![t, e2])
-                    }
-                    _ => {
-                        let ok = self.fresh();
-                        self.a.types.builtin(BuiltinTy::Result, vec![ok, t])
-                    }
+                let ret = self.prelude_ctor(b, span);
+                let t = match self.ty(ret) {
+                    Ty::Builtin(BuiltinTy::Result, a) if b == Builtin::Err => a[1],
+                    Ty::Builtin(_, a) => a[0],
+                    _ => unreachable!("a prelude constructor makes an `Option` or a `Result`"),
                 };
                 if let Some(exp) = expected {
                     self.unify_at(span, ret, exp)?;
@@ -2241,6 +2206,15 @@ impl<'a> Checker<'a> {
             let shown = self.src(self.expr(callee).span);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` does not exist")));
         };
+        if let Some(g) = generic {
+            // `Buf.zeroed(4)`: the element type may be decided later (§4.7, S-226), and
+            // it must be Copy (§4.5), a kind constraint checked when it is (S-235).
+            let what = format!("the element type of `{}`", self.src(self.expr(callee).span));
+            self.defer(span, targ, DeferredKind::Origin { what });
+            if matches!(g, BuiltinTy::Buf | BuiltinTy::Span) {
+                self.defer(span, targ, DeferredKind::Require { bound: Bound::Copy, what: Required::BufElement });
+            }
+        }
         if let Some(exp) = expected {
             self.unify_at(span, ret, exp)?;
         }
@@ -2274,25 +2248,28 @@ impl<'a> Checker<'a> {
             };
             match coerce {
                 None => {
-                    self.check_expr(arg.expr, Some(pt))?;
+                    let callee = self.src(span);
+                    let callee = callee.split('(').next().unwrap_or("").trim().to_string();
+                    self.with_why(format!("an argument of `{callee}`"), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
                 }
                 Some((elem, planar)) => {
                     let at = self.check_expr(arg.expr, None)?;
                     let at_s = self.known(at, self.expr(arg.expr).span, "argument")?;
                     let aspan = self.expr(arg.expr).span;
+                    let cause = self.cause(aspan, None);
                     let ok = match (planar, self.ty(at_s)) {
-                        (None, Ty::Array(el, _)) => self.infer.unify(&mut self.a.types, el, elem).is_ok(),
+                        (None, Ty::Array(el, _)) => self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok(),
                         (None, Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a)) => {
-                            self.infer.unify(&mut self.a.types, a[0], elem).is_ok()
+                            self.infer.unify(&mut self.a.types, a[0], elem, &cause).is_ok()
                         }
                         (Some(n), Ty::Array(ch, m)) => {
                             let lens_ok =
                                 self.infer.shallow_len(&self.a.types, n) == self.infer.shallow_len(&self.a.types, m);
                             lens_ok
                                 && match self.ty(self.shallow(ch)) {
-                                    Ty::Array(el, _) => self.infer.unify(&mut self.a.types, el, elem).is_ok(),
+                                    Ty::Array(el, _) => self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok(),
                                     Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a) => {
-                                        self.infer.unify(&mut self.a.types, a[0], elem).is_ok()
+                                        self.infer.unify(&mut self.a.types, a[0], elem, &cause).is_ok()
                                     }
                                     _ => false,
                                 }
@@ -2318,10 +2295,14 @@ impl<'a> Checker<'a> {
 
     // ------------------------------------------------------------ statements
 
+    /// One statement, then the deferred checks whose type it decided (§4.5, §4.7, S-235).
     pub(crate) fn check_stmt(&mut self, s: StmtId) -> R<()> {
-        if self.flow.is_some() {
-            return self.check_flow_stmt(s);
-        }
+        // A statement sets its own reasons (an annotation, an argument, `return`).
+        self.without_why(|ck| if ck.flow.is_some() { ck.check_flow_stmt(s) } else { ck.check_stmt_inner(s) })?;
+        self.check_deferred_now()
+    }
+
+    fn check_stmt_inner(&mut self, s: StmtId) -> R<()> {
         let stmt = self.ast.stmt(s);
         match &stmt.kind {
             StmtKind::Let { pat, ty, init } => {
@@ -2329,7 +2310,13 @@ impl<'a> Checker<'a> {
                     Some(t) => Some(self.lower_type_expr(*t)?),
                     None => None,
                 };
-                let it = self.check_expr(*init, ann)?;
+                let it = match ann {
+                    Some(t) => {
+                        let why = self.annotation_of(*pat);
+                        self.with_why(why, t, |ck| ck.check_expr(*init, ann))?
+                    }
+                    None => self.check_expr(*init, ann)?,
+                };
                 let borrow = self.is_borrow_source(*init);
                 self.bind_pat(*pat, it, true, borrow, LocalKind::Let)?;
                 Ok(())
@@ -2339,7 +2326,12 @@ impl<'a> Checker<'a> {
                     Some(t) => Some(self.lower_type_expr(*t)?),
                     None => None,
                 };
-                let it = self.check_expr(*init, ann)?;
+                let it = match ann {
+                    Some(t) => {
+                        self.with_why(format!("the annotation of `{}`", name.name), t, |ck| ck.check_expr(*init, ann))?
+                    }
+                    None => self.check_expr(*init, ann)?,
+                };
                 self.declare(name, it, LocalKind::Var, false)?;
                 Ok(())
             }
@@ -2353,7 +2345,8 @@ impl<'a> Checker<'a> {
                     ));
                 }
                 let tt = self.check_expr(*target, None)?;
-                self.check_expr(*value, Some(tt))?;
+                let why = format!("the assignment to `{}`", self.src(self.expr(*target).span));
+                self.with_why(why, tt, |ck| ck.check_expr(*value, Some(tt)))?;
                 Ok(())
             }
             StmtKind::For { pat, moved, iter, body } => {
@@ -2390,7 +2383,7 @@ impl<'a> Checker<'a> {
                 let ret = self.frames.last().unwrap().ret;
                 match value {
                     Some(v) => {
-                        self.check_expr(*v, Some(ret))?;
+                        self.with_why("the result of the function".into(), ret, |ck| ck.check_expr(*v, Some(ret)))?;
                     }
                     None => {
                         let unit = self.unit();
@@ -2408,6 +2401,14 @@ impl<'a> Checker<'a> {
                 self.check_expr(*e, None)?;
                 Ok(())
             }
+        }
+    }
+
+    /// How the note of E0416 names an annotated `let` (`the annotation of `ys``).
+    fn annotation_of(&self, pat: PatId) -> String {
+        match &self.ast.pat(pat).kind {
+            PatKind::Bind(id) => format!("the annotation of `{}`", id.name),
+            _ => "the annotation of the `let`".to_string(),
         }
     }
 
@@ -2519,8 +2520,11 @@ impl<'a> Checker<'a> {
                 }
                 match lit {
                     Lit::Int { value, .. } => {
+                        // Unified with the subject's type argument like an operand of `==`,
+                        // and range-checked when that is decided (§4.7, §7; S-185, S-226).
                         let v = self.infer.fresh(&mut self.a.types, Some(LitKind::Int));
                         let neg = matches!(p.kind, PatKind::Neg(_));
+                        self.defer(span, v, DeferredKind::IntLit { value: *value, neg, lit: None });
                         self.unify_at(span, v, ty)?;
                         Ok(P::Lit(if neg { -(*value as i128) } else { *value as i128 }))
                     }
