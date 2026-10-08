@@ -14,6 +14,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import tomllib
 import types
 import unittest
@@ -697,18 +699,104 @@ class GateWiring(TempRepo):
 
     def test_pending_items(self):
         self.repo.write("tests/pending.toml", entry("gate", "c-x", until="T5-8") + entry("gate", "fmt", until="T5-8"))
-        code, out = self.run_main([], [fake("c-x", 1, pendable=True), fake("fmt", 1)])
+        code, out = self.run_main(["--work", "T5-8"], [fake("c-x", 1, pendable=True), fake("fmt", 1)])
         self.assertEqual(code, 1)  # `fmt` is not pendable: listing it does not hide its failure
         self.assertIn("PENDING c-x", out)
         self.assertIn("FAIL    fmt", out)
-        code, out = self.run_main([], [fake("c-x", 0, pendable=True)])
+        code, out = self.run_main(["--work", "T5-8"], [fake("c-x", 0, pendable=True)])
         self.assertEqual(code, 1)
         self.assertIn("remove the entry", out)
         # an item that cannot run (exit 2) is not pending (W1-06)
-        code, out = self.run_main([], [fake("c-x", 2, pendable=True)])
+        code, out = self.run_main(["--work", "T5-8"], [fake("c-x", 2, pendable=True)])
         self.assertEqual(code, 1)
         self.assertIn("FAIL    c-x", out)
         self.assertIn("the item cannot run", out)
+
+    def test_items_listed_whole_run_for_their_work_or_a_stage_end(self):
+        self.repo.write("tests/pending.toml", entry("gate", "c-x", until="W3-07"))
+        steps = [fake("c-x", 0, pendable=True), fake("c-y", 1, pendable=True)]
+        ran = self.repo.root / "argv-c-x"
+        code, out = self.run_main([], steps)
+        self.assertEqual(code, 1)  # an item not listed runs and fails as it is
+        self.assertFalse(ran.exists())
+        self.assertIn("SKIPPED c-x", out)
+        self.assertIn("listed until W3-07: runs with --work W3-07 or --stage-end", out)
+        self.run_main(["--work", "W3-08"], steps)
+        self.assertFalse(ran.exists())
+        code, out = self.run_main(["--work", "W3-08", "--work", "W3-07"], steps)
+        self.assertTrue(ran.exists())
+        self.assertIn("remove the entry", out)  # it passes: the work fixed it
+        ran.unlink()
+        self.run_main(["--stage-end", "W3"], steps)
+        self.assertTrue(ran.exists())
+        # an entry of one case does not skip the item
+        self.repo.write("tests/pending.toml", entry("gate", "c-x/a", until="W3-07"))
+        ran.unlink()
+        self.run_main([], steps)
+        self.assertTrue(ran.exists())
+
+    def test_unknown_work_is_a_usage_error(self):
+        code, _ = self.run_main(["--work", "W9-99"], [fake("a")])
+        self.assertEqual(code, 2)
+        self.assertFalse((self.repo.root / "argv-a").exists())
+
+    def test_quick(self):
+        steps = [fake("a"), fake("slow", 1, slow=True)]
+        code, out = self.run_main(["--quick"], steps)
+        self.assertEqual(code, 0)
+        self.assertFalse((self.repo.root / "argv-slow").exists())
+        self.assertIn("SKIPPED slow", out)
+        self.assertIn("left out by --quick", out)
+        self.assertEqual(out.splitlines()[-1], "gate (quick): PASS")  # not the verdict `gate: PASS`
+        code, out = self.run_main([], steps)
+        self.assertEqual(code, 1)
+        self.assertEqual(out.splitlines()[-1], "gate: FAIL (slow)")
+        steps = [fake("bad", 1), fake("slow", 0, slow=True)]
+        self.assertEqual(self.run_main(["--quick"], steps)[1].splitlines()[-1], "gate (quick): FAIL (bad)")
+        # it leaves items out, so it does not decide a work or a stage
+        self.assertEqual(self.run_main(["--quick", "--stage-end", "W3"], steps)[0], 2)
+        self.assertEqual(self.run_main(["--quick", "--work", "W3-07"], steps)[0], 2)
+
+    def test_one_gate_at_a_time(self):
+        # a gate that finds the lock taken says so and waits for it
+        path = gate.lock_path(self.repo.root)
+        self.assertEqual(path, self.repo.root / ".onsa-gate.lock")  # not a git repository
+        out = io.StringIO()
+        result = {}
+        with open(path, "a+") as held:
+            gate.fcntl.flock(held, gate.fcntl.LOCK_EX)
+            held.write("pid 1 in elsewhere since 00:00:00\n")
+            held.flush()
+            other = threading.Thread(
+                target=lambda: result.setdefault("code", gate.main([], steps=[fake("a")], root=self.repo.root, out=out))
+            )
+            other.start()
+            deadline = time.monotonic() + 10
+            while "waiting" not in out.getvalue() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertIn("another gate runs (pid 1 in elsewhere since 00:00:00); waiting", out.getvalue())
+            self.assertFalse((self.repo.root / "argv-a").exists())
+        other.join(10)
+        self.assertFalse(other.is_alive())
+        self.assertEqual(result["code"], 0)
+        self.assertTrue((self.repo.root / "argv-a").exists())
+        self.assertIn(f"pid {os.getpid()} in ", path.read_text())
+
+    def test_the_lock_is_shared_with_the_worktrees(self):
+        root = self.repo.root
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        common = root / ".git"
+        self.assertEqual(gate.lock_path(root).resolve(), (common / gate.LOCK).resolve())
+        # a directory inside the tree is not its top: a made-up root there keeps its own lock
+        self.assertEqual(gate.lock_path(root / "tests"), root / "tests" / ".onsa-gate.lock")
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "a"], cwd=root, check=True)
+        tree = Path(self.tmp.name + "-wt")
+        subprocess.run(["git", "worktree", "add", "-q", str(tree)], cwd=root, check=True)
+        try:
+            self.assertEqual(gate.lock_path(tree).resolve(), (common / gate.LOCK).resolve())
+        finally:
+            subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=root, check=True)
 
     def test_update_golden_is_refused(self):
         code, _ = self.run_main([], [fake("a")], env={"UPDATE_GOLDEN": "1"})
@@ -738,7 +826,7 @@ class GateWiring(TempRepo):
             fake("show", 0, info=True),
             fake("show-broken", 1, info=True),
         ]
-        results = gate.run_steps(steps, listed, cwd=self.repo.root, out=io.StringIO())
+        results = gate.run_steps(steps, listed, cwd=self.repo.root, out=io.StringIO(), works=("W3-07",))
         self.assertEqual(
             {r.step.name: r.status for r in results},
             {
@@ -751,6 +839,12 @@ class GateWiring(TempRepo):
                 "show-broken": "FAIL",
             },
         )
+        # without their work, the items listed whole do not run
+        results = gate.run_steps(steps, listed, cwd=self.repo.root, out=io.StringIO())
+        statuses = {r.step.name: r.status for r in results}
+        self.assertEqual((statuses["pend-fail"], statuses["pend-pass"]), ("SKIPPED", "SKIPPED"))
+        self.assertEqual(statuses["not-pendable"], "FAIL")
+        self.assertFalse(any(r.failed for r in results if r.status == "SKIPPED"))
 
     def test_summary(self):
         results = gate.run_steps([fake("ok"), fake("bad", 2)], {}, cwd=self.repo.root, out=io.StringIO())
@@ -794,6 +888,9 @@ class RealSteps(unittest.TestCase):
         self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
         self.assertFalse(by_name["fmt-props"].pendable)
+        # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
+        slow = ["fuzz", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
+        self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the only items that may be listed: the test vectors against the interpreter and the C
         # (W2-02, by case only), the C checks (W1-06), and the fmt property that waits for W3-11 (R-70)
         self.assertEqual(

@@ -17,6 +17,12 @@ An item with `expect_internal=True` may hold an internal error of the compiler
 by a case entry with `expect = "internal"` (W1-04, W2-02). An item with
 `counts_rows=True` counts the failing rows of a case: its case entries must
 say how many (`rows = N`), and the item fails when the count differs.
+
+An item listed whole (not by case) is known to fail, so the gate skips it
+unless the run names its `until` (`--work`) or ends a stage (`--stage-end`).
+An item with `slow=True` (the fuzzing, the self-test, the C, the fmt
+properties) is left out by `--quick`, a check for the middle of a work that
+is not the gate's verdict (2026-10-08).
 """
 import sys
 from dataclasses import dataclass
@@ -41,6 +47,7 @@ class Step:
     by_case_only: bool = False  # a pendable item listed only by case (`<item>/<case>`)
     expect_internal: bool = False  # its case entries may say `expect = "internal"`
     counts_rows: bool = False  # its case entries must say `rows = N`, the failing rows they hold
+    slow: bool = False  # left out by `--quick`
 
 
 STEPS = [
@@ -48,7 +55,7 @@ STEPS = [
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
     Step("test", ("cargo", "test", "--workspace")),
     # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
-    Step("fuzz", (*PY, str(TOOLS / "fuzz.py"))),
+    Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True),
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),
@@ -66,30 +73,30 @@ STEPS = [
     Step("ignored-files", (*PY, str(TOOLS / "ignored_files.py"))),
     # The keywords of the lexer against the list of §2.2 (W3-02): one case per word, `keywords/<word>`.
     Step("keywords", (*PY, str(TOOLS / "keywords.py")), pendable=True, by_case_only=True),
-    Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py"))),
+    Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py")), slow=True),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
     # The generated C (Q-07, W1-06): Clang and gcc-15 with -Wall -Wextra -Werror -pedantic and
     # conformance, the sanitizers, x86_64 under Rosetta, the public headers in C11, C99 and C++11.
     # A `-strict` item keeps the warnings its pair switches off for a known cause
     # (`onsa_tests::c::GCC_KNOWN_OFF`): the list holds the strict one, the pair always runs.
-    Step("c-clang", (*C_CHECK, "c-clang"), pendable=True),
-    Step("c-gcc", (*C_CHECK, "c-gcc"), pendable=True),
-    Step("c-gcc-strict", (*C_CHECK, "c-gcc-strict"), pendable=True),
-    Step("c-sanitize", (*C_CHECK, "c-sanitize"), pendable=True),
-    Step("c-x86", (*C_CHECK, "c-x86"), pendable=True),
-    Step("c-header", (*C_CHECK, "c-header"), pendable=True),
-    Step("c-header-strict", (*C_CHECK, "c-header-strict"), pendable=True),
+    Step("c-clang", (*C_CHECK, "c-clang"), pendable=True, slow=True),
+    Step("c-gcc", (*C_CHECK, "c-gcc"), pendable=True, slow=True),
+    Step("c-gcc-strict", (*C_CHECK, "c-gcc-strict"), pendable=True, slow=True),
+    Step("c-sanitize", (*C_CHECK, "c-sanitize"), pendable=True, slow=True),
+    Step("c-x86", (*C_CHECK, "c-x86"), pendable=True, slow=True),
+    Step("c-header", (*C_CHECK, "c-header"), pendable=True, slow=True),
+    Step("c-header-strict", (*C_CHECK, "c-header-strict"), pendable=True, slow=True),
     # The generated C against the vectors (W2-02), with every toolchain of the C checks:
     # one case per operation and toolchain, `vectors-c/<op>[<toolchain>]`.
-    Step("vectors-c", (*VECTORS, "c"), pendable=True, by_case_only=True, counts_rows=True),
+    Step("vectors-c", (*VECTORS, "c"), pendable=True, by_case_only=True, counts_rows=True, slow=True),
     # The properties of `onsa fmt` on perturbed case sources (Q-03, W1-07): the
     # same program, idempotence, the normal form of the code.
-    Step("fmt-props", (*PY, str(TOOLS / "fmt_props.py"))),
+    Step("fmt-props", (*PY, str(TOOLS / "fmt_props.py")), slow=True),
     # Comments stay on the line of their element (R-70); listed until W3-11.
-    Step("fmt-comments", (*PY, str(TOOLS / "fmt_props.py"), "--property", "comments"), pendable=True),
+    Step("fmt-comments", (*PY, str(TOOLS / "fmt_props.py"), "--property", "comments"), pendable=True, slow=True),
     # The CST gives the source back byte for byte (R-86, W3-01).
-    Step("fmt-cst", (*PY, str(TOOLS / "fmt_props.py"), "--property", "cst")),
+    Step("fmt-cst", (*PY, str(TOOLS / "fmt_props.py"), "--property", "cst"), slow=True),
 ]
 
 

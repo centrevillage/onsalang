@@ -20,7 +20,8 @@ effort: high
 - リポジトリ `/Users/centrevillage/projects/onsalang`、ブランチ `dev`。コミットと push はしない（親が作業 ID ごとにコミットする）。
 - Bash の `cd` は持続しないことがあるので、絶対パスを使う。macOS なので `timeout` は無い。
 - `git stash` を使わない（stash は主のツリーと全ての作業ツリーで共有され、親や他の担当の未コミットの変更を巻き込む）。確かめのために差分を退けたいときは、スクラッチのディレクトリに写して試す。
-- `cargo fmt`、`cargo clippy`、`cargo test --workspace` を手元で回す（CI は無い）。gate があれば `tools/gate.sh` も回す。
+- CI は無く、検査は手元で回す。
+- 検査の回し方（2026-10-08、利用者の指定。計画 §8.5 の「検査の回し方」）: 作業の途中は、変えた所に関わるテストだけを絞って回す（`cargo test -p <crate> <テストの名前>`、変えたファイルへの `onsa check`）。広く確かめたいときは `tools/gate.sh --quick`。gate の全体は報告の直前に一度、`tools/gate.sh --work <作業 ID>` で回し、要約を報告に付ける（指摘の直しの往復でも、直すたびには回さない）。gate は機械で一度に一つだけ走り、他の gate の後ろで待つことがあるので、Bash の timeout は 600000 にし、待っている間に打ち切られたら回し直す。fuzz（`tools/fuzz.py`）、fmt の性質（`tools/fmt_props.py`）、C の検査とテストベクトル（`onsa_cases --c`、`--vectors`）を直接回すのは、作業がその道具か生成した C を扱うときだけにする。
 - `tools/check_spec_examples.py` を実行した後は `tools/__pycache__` を消す。
 - 文書（`docs/`、仕様）を編集するときは、先に `docs/` とリポジトリの直下に vim のスワップファイル（`.<name>.swp`）が無いことを確かめ、Python の一意一致置換で編集する。表を編集したら列の数を確かめる（セルの中の `||` は `\|\|`）。
 - この機械（macOS）では、SIGABRT・SIGSEGV・SIGILL・SIGTRAP などで終わるプロセスが、利用者の画面にクラッシュの報告のダイアログを出す（2026-10-07 に大量に出た）。テスト・自己テスト・ファズで意図的に落とす形をまねるときは、SIGKILL か終了コードを使う。コンパイラのスタックを溢れさせる入力（深い入れ子）は回さない。sanitizer は abort や trap でなく終了コードで止まる設定にする。作ってしまったら報告に書く。
