@@ -240,7 +240,7 @@ fn print_diagnostics(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::
 
 /// `onsa fmt [--check] <path...>`: every file is processed, also after one
 /// that cannot be read or has a syntax diagnostic; only the files without one
-/// are written (spec §18.2). Then exit 2 if a file could not be taken, else 1
+/// are written (`docs/onsa-tools.md` §3.1). Then exit 2 if a file could not be taken, else 1
 /// for `--check` with a file to rewrite, else 0. An internal error stops at once.
 fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
     let mut changed = false;
@@ -316,7 +316,7 @@ fn explain(code: &str) -> Outcome {
     Outcome::Ok
 }
 
-/// `onsa diff --ast old new`: items added / removed / changed, ignoring trivia (spec §18.2).
+/// `onsa diff --ast old new`: items added / removed / changed, ignoring trivia (`docs/onsa-tools.md` §3.5).
 fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
     if !ast {
         return cannot_work("`diff` needs `--ast` (textual diff is what `git diff` is for)");

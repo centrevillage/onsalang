@@ -1,4 +1,4 @@
-//! `onsa fmt` (spec §18.2, S-07, T1-9): prints the AST back in the single
+//! `onsa fmt` (`docs/onsa-tools.md` §3, S-07, T1-9): prints the AST back in the single
 //! canonical form. Line structure the author chose (one-line vs multi-line
 //! blocks, line breaks inside lists and chains, blank lines up to one) is
 //! kept; everything else (spacing, indentation, trailing commas, alignment
@@ -737,7 +737,7 @@ impl<'a> Fmt<'a> {
 
     // ------------------------------------------------------------ blocks and statements
 
-    /// `{ ... }`. One-line if the author wrote it on one line (§18.2).
+    /// `{ ... }`. One-line if the author wrote it on one line (`docs/onsa-tools.md` §3.2).
     /// `fn_top` enables trailing-`return` removal (§6.1).
     fn block(&mut self, id: ExprId, fn_top: bool) {
         let e = self.ast.expr(id);

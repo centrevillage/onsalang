@@ -352,7 +352,7 @@ pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff
         let parsed: Vec<onsa_syntax::Parsed> =
             [old, new].iter().map(|&file| parse_file(file, sources.file(file).text())).collect();
         if parsed.iter().any(|p| p.syntax_errors()) {
-            // Both files are reported, not only the first with an error (§18.2).
+            // Both files are reported, not only the first with an error (`docs/onsa-tools.md` §3.1).
             return AstDiff::Syntax(
                 parsed.iter().filter(|p| p.syntax_errors()).flat_map(|p| p.syntax_report()).collect(),
             );

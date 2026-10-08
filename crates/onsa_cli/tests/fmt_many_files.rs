@@ -1,7 +1,7 @@
 //! `onsa fmt` with several files and the diagnostics `fmt` and `diff --ast`
-//! report for a file they do not take (spec §18.2, W3-02/b 1 and 2).
+//! report for a file they do not take (`docs/onsa-tools.md` §3.1, W3-02/b 1 and 2).
 //!
-//! §18.2: with several files, one file's error does not stop `fmt`: every
+//! `docs/onsa-tools.md` §3.1: with several files, one file's error does not stop `fmt`: every
 //! file is processed, only those without a syntax diagnostic are written, and
 //! every diagnostic is reported. A file `fmt` refuses for a syntax diagnostic
 //! reports it, even when a diagnostic of a later stage (E0320) comes first in

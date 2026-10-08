@@ -9,7 +9,7 @@ a syntax code (the runner's judgement, which `onsa_cases` lists), and a
 fragment of `mode = "none"`; such a file is skipped when fmt refuses it.
 Any other refusal fails, and so does a run where no source ran. Each source
 `x` gives, besides itself, perturbed inputs `p`: the spec says the
-perturbation changes no program (§2.5, §18.2).
+perturbation changes no program (§2.5, `docs/onsa-tools.md` §3.2).
 
 Perturbations (C-118: only where whitespace means nothing). The kinds:
 
@@ -54,13 +54,13 @@ The properties (`--property`):
               4. the comments keep their texts in their order (none lost, none
                  changed, none swapped); the texts of the doc comments (`///`,
                  `//!`) and the heads of the items (`item_heads`) are the same
-                 in `p` and `fmt(p)` (§18.2: the AST and the doc comments
+                 in `p` and `fmt(p)` (`docs/onsa-tools.md` §3.5: the AST and the doc comments
                  agree; this makes up for `diff --ast` until W3-12 compares
                  the docs, S-56);
               5. the normal form of the code: for space and blank, `fmt(p)` and
                  `fmt(x)`, each without its comments and formatted again, are
                  the same. Where the comments go is the item `fmt-comments`;
-                 break and continue keep the author's line breaks (§18.2), and
+                 break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2), and
                  comment and mixed move comments, so they have no such property
                  here.
               Every run ends in 0, 1 or 2 (an internal error or a signal fails).
@@ -503,7 +503,7 @@ def unperturb(text):
 
 
 def line_key(line_toks):
-    """A code line as fmt may rewrite it (§18.2): without `-> ()`, `uses {}`,
+    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.3): without `-> ()`, `uses {}`,
     parentheses, `return`, `move` and `,`, numbers as `#`. Used to pair the
     lines of a text with the lines of its fmt output."""
     code = []
@@ -567,7 +567,7 @@ def comment_places(text):
 
 def comment_problems(before, after):
     """The comments of `before` that `fmt` (giving `after`) did not keep on the
-    line of the same element (R-70, §18.2): a comment at a line end stays at the
+    line of the same element (R-70, `docs/onsa-tools.md` §3.4): a comment at a line end stays at the
     end of the same line; a comment on a line of its own stays on its own line,
     before the same next line (or at the end). The lines are paired by
     `pair_lines`, so a rewrite of fmt (a `return`, a parenthesis) moves nothing.
@@ -770,7 +770,7 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
         fail("internal", crash)
     elif code != 0:
         fail("idempotence", f"fmt --check exit {code} on fmt(p)")
-    # §18.2: the comments keep their texts in their order, and the doc comments
+    # `docs/onsa-tools.md` §3.5: the comments keep their texts in their order, and the doc comments
     # and the items stay. Until W3-12 makes `diff --ast` the comparison of S-56
     # (the docs included), these sequences make up for it.
     (plain, docs), (f_plain, f_docs) = comment_texts(text), comment_texts(formatted)
