@@ -26,8 +26,25 @@ use onsa_core::Module;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Diagnostic, FileId, Span, Stage};
 
-/// The runtime header every generated file includes (T4-1).
-pub const RUNTIME_HEADER: &str = include_str!("../../../runtime/c/onsa.h");
+/// The source of the runtime header every generated file includes (T4-1):
+/// [`runtime_header`] writes the constants of `onsa_core` into it.
+const RUNTIME_HEADER_SOURCE: &str = include_str!("../../../runtime/c/onsa.h");
+/// The line of [`RUNTIME_HEADER_SOURCE`] that [`runtime_header`] replaces.
+const CONSTANTS_MARKER: &str = "/* @onsa-core-constants@ */";
+
+/// The runtime header, `onsa.h`, as the backend writes it: its source with
+/// the values the backends share written from `onsa_core` (plan D-15), so the
+/// C and the interpreter read one definition.
+pub fn runtime_header() -> String {
+    use onsa_core::prim::{NAN_BITS_F32, NAN_BITS_F64};
+    let constants = format!(
+        "/* to_bits() of a NaN (spec §3.4, S-106): onsa_core::prim::NAN_BITS_F32 / _F64 */\n\
+         #define ONSA_NAN_BITS_F32 UINT32_C({NAN_BITS_F32:#010X})\n\
+         #define ONSA_NAN_BITS_F64 UINT64_C({NAN_BITS_F64:#018X})"
+    );
+    RUNTIME_HEADER_SOURCE.replacen(CONSTANTS_MARKER, &constants, 1)
+}
+
 /// Its file name, as every generated file includes it.
 pub const RUNTIME_HEADER_NAME: &str = "onsa.h";
 

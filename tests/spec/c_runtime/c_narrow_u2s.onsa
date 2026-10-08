@@ -1,0 +1,310 @@
+// onsa.toml
+// [package]
+// name = "c_narrow_u2s"
+// edition = "2026"
+//
+// [export]
+// prefix = "cnu_"
+// fns = [
+//   "c_narrow_u2s.narrow_u16_to_i16",
+//   "c_narrow_u2s.narrow_u32_to_i32",
+//   "c_narrow_u2s.narrow_u64_to_i64",
+//   "c_narrow_u2s.count_fits_u32_i32",
+//   "c_narrow_u2s.count_fits_u64_i64",
+//   "c_narrow_u2s.flags_in_closure_u32_i32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "narrow_u16_to_i16"
+// target = "host"
+// fn = "c_narrow_u2s.narrow_u16_to_i16"
+// steps = [
+//   { call = "fn", args = { x = 32766 }, status = 0, result = 32766 },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = 32767 },
+//   { call = "fn", args = { x = 32768 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_u32_to_i32"
+// target = "host"
+// fn = "c_narrow_u2s.narrow_u32_to_i32"
+// steps = [
+//   { call = "fn", args = { x = 2147483646 }, status = 0, result = 2147483646 },
+//   { call = "fn", args = { x = 2147483647 }, status = 0, result = 2147483647 },
+//   { call = "fn", args = { x = 2147483648 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_u32_to_i32 on a reset target"
+// target = "fw"
+// fn = "c_narrow_u2s.narrow_u32_to_i32"
+// steps = [
+//   { call = "fn", args = { x = 2147483646 }, status = 0, result = 2147483646 },
+//   { call = "fn", args = { x = 2147483647 }, status = 0, result = 2147483647 },
+//   { call = "fn", args = { x = 2147483648 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_u64_to_i64"
+// target = "host"
+// fn = "c_narrow_u2s.narrow_u64_to_i64"
+// steps = [
+//   { call = "fn", args = { xh = 2147483647, xl = 4294967294 }, status = 0, result = 9223372036854775806 },
+//   { call = "fn", args = { xh = 2147483647, xl = 4294967295 }, status = 0, result = 9223372036854775807 },
+//   { call = "fn", args = { xh = 2147483648, xl = 0 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { xh = 0, xl = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { xh = 0, xl = 1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "count_fits_u32_i32"
+// target = "host"
+// fn = "c_narrow_u2s.count_fits_u32_i32"
+// steps = [
+//   { call = "fn", args = { base = 2147483646, n = 4 }, status = 0, result = 2 },
+//   { call = "fn", args = { base = 2147483648, n = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { base = 0, n = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { base = 4294967294, n = 4 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "count_fits_u64_i64"
+// target = "host"
+// fn = "c_narrow_u2s.count_fits_u64_i64"
+// steps = [
+//   { call = "fn", args = { bh = 2147483647, bl = 4294967294, n = 4 }, status = 0, result = 2 },
+//   { call = "fn", args = { bh = 2147483648, bl = 0, n = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { bh = 0, bl = 0, n = 3 }, status = 0, result = 3 },
+//   { call = "fn", args = { bh = 4294967295, bl = 4294967294, n = 4 }, status = 0, result = 2 },
+//   { call = "fn", args = { bh = 2147483647, bl = 4294967295, n = 1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "flags_in_closure_u32_i32"
+// target = "host"
+// fn = "c_narrow_u2s.flags_in_closure_u32_i32"
+// steps = [
+//   { call = "fn", args = { base = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { base = 2147483646 }, status = 0, result = 6 },
+//   { call = "fn", args = { base = 2147483647 }, status = 0, result = 4 },
+//   { call = "fn", args = { base = 2147483648 }, status = 0, result = 0 },
+//   { call = "fn", args = { base = 4294967294 }, status = 0, result = 1 },
+// ]
+
+// `narrow_<type>()` from unsigned to signed integers, on a target that is built to C (spec §3.3): `Some(v)` when the
+// value fits the destination type, `None` when it does not. The pairs that need the method are the ones `as`
+// cannot write: a narrower destination, the same width with the other sign, and a signed source to a
+// wider unsigned one.
+// The unsigned-to-signed pairs are the point of this file (R-11: a comparison of the unsigned source with
+// the signed lower bound converts the bound to the unsigned type and every value gets `None`):
+// `5u32.narrow_i32()` is `Some(5)`, `2147483648u32.narrow_i32()` and `4294967295u32.narrow_i32()` are `None`.
+// A value fits when it is at most the signed MAX of the destination; the lower bound cannot be missed.
+// The vectors call each pair once on literals; this file adds the exported boundary with host-chosen
+// values, loops and an anonymous function. The same functions and expectations run on the interpreter
+// (the test blocks) and on the C target (the host scripts).
+//
+// Each function returns the destination value widened to `I64` (`I64.MIN` for `None`, which no
+// destination value equals); the functions to `U64` return the high word (`part` 0), the low word
+// (`part` 1) or 1/0 for Some/None (`part` 2) as a `U32`, and the ones from `U64` take the source as
+// two `U32` words (a TOML integer stops at 2^63 - 1). The inputs are the destination's edges and the
+// source's edges: dlo - 1, dlo, dlo + 1, dhi - 1, dhi, dhi + 1, 0, 1, -1, slo, shi where they are in the
+// source range; the expected value is `Some(v)` exactly when dlo <= v <= dhi.
+
+use std.array
+
+fn join(h: U32, l: U32) -> U64 {
+  let hh = (h as U64) << 32
+  hh | (l as U64)
+}
+
+// The high word (part 0) or the low word (part 1) of a 64-bit value.
+fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn narrow_u16_to_i16(x: U16) -> I64 {
+  var r: I64 = I64.MIN
+  match x.narrow_i16() {
+    Some(v) => {
+      r = v as I64
+    },
+    None => {
+      r = I64.MIN
+    },
+  }
+  r
+}
+
+pub fn narrow_u32_to_i32(x: U32) -> I64 {
+  var r: I64 = I64.MIN
+  match x.narrow_i32() {
+    Some(v) => {
+      r = v as I64
+    },
+    None => {
+      r = I64.MIN
+    },
+  }
+  r
+}
+
+pub fn narrow_u64_to_i64(xh: U32, xl: U32) -> I64 {
+  let x = join(xh, xl)
+  var r: I64 = I64.MIN
+  match x.narrow_i64() {
+    Some(v) => {
+      r = v as I64
+    },
+    None => {
+      r = I64.MIN
+    },
+  }
+  r
+}
+
+pub fn count_fits_u32_i32(base: U32, n: U32) -> U32 {
+  var x: U32 = base
+  var c: U32 = 0
+  for _ in 0..n {
+    match x.narrow_i32() {
+      Some(_) => {
+        c = c + 1
+      },
+      None => {
+        c = c + 0
+      },
+    }
+    x = x +% 1
+  }
+  c
+}
+
+pub fn count_fits_u64_i64(bh: U32, bl: U32, n: U32) -> U32 {
+  var x: U64 = join(bh, bl)
+  var c: U32 = 0
+  var i: U32 = 0
+  while i < n {
+    match x.narrow_i64() {
+      Some(_) => {
+        c = c + 1
+      },
+      None => {
+        c = c + 0
+      },
+    }
+    x = x +% 1
+    i = i + 1
+  }
+  c
+}
+
+pub fn flags_in_closure_u32_i32(base: U32) -> U32 {
+  let ys: [U32; 3] = array.from_fn(fn(i) {
+    let x = base +% i
+    var r: U32 = 0
+    match x.narrow_i32() {
+      Some(_) => {
+        r = 1
+      },
+      None => {
+        r = 0
+      },
+    }
+    r
+  })
+  let a = ys[0] * 4
+  let b = ys[1] * 2
+  a + b + ys[2]
+}
+
+test "narrow_u16_to_i16: the values" {
+  assert narrow_u16_to_i16(32766) == 32766
+  assert narrow_u16_to_i16(32767) == 32767
+  assert narrow_u16_to_i16(32768) == I64.MIN
+  assert narrow_u16_to_i16(0) == 0
+  assert narrow_u16_to_i16(1) == 1
+}
+
+test "narrow_u32_to_i32: the values" {
+  assert narrow_u32_to_i32(2147483646) == 2147483646
+  assert narrow_u32_to_i32(2147483647) == 2147483647
+  assert narrow_u32_to_i32(2147483648) == I64.MIN
+  assert narrow_u32_to_i32(0) == 0
+  assert narrow_u32_to_i32(1) == 1
+}
+
+test "narrow_u64_to_i64: the values" {
+  assert narrow_u64_to_i64(2147483647, 4294967294) == 9223372036854775806
+  assert narrow_u64_to_i64(2147483647, 4294967295) == 9223372036854775807
+  assert narrow_u64_to_i64(2147483648, 0) == I64.MIN
+  assert narrow_u64_to_i64(0, 0) == 0
+  assert narrow_u64_to_i64(0, 1) == 1
+}
+
+test "count_fits_u32_i32: the values" {
+  assert count_fits_u32_i32(2147483646, 4) == 2
+  assert count_fits_u32_i32(2147483648, 3) == 0
+  assert count_fits_u32_i32(0, 5) == 5
+  assert count_fits_u32_i32(4294967294, 4) == 2
+}
+
+test "count_fits_u64_i64: the values" {
+  assert count_fits_u64_i64(2147483647, 4294967294, 4) == 2
+  assert count_fits_u64_i64(2147483648, 0, 2) == 0
+  assert count_fits_u64_i64(0, 0, 3) == 3
+  assert count_fits_u64_i64(4294967295, 4294967294, 4) == 2
+  assert count_fits_u64_i64(2147483647, 4294967295, 1) == 1
+}
+
+test "flags_in_closure_u32_i32: the values" {
+  assert flags_in_closure_u32_i32(0) == 7
+  assert flags_in_closure_u32_i32(2147483646) == 6
+  assert flags_in_closure_u32_i32(2147483647) == 4
+  assert flags_in_closure_u32_i32(2147483648) == 0
+  assert flags_in_closure_u32_i32(4294967294) == 1
+}

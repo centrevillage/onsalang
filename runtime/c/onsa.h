@@ -22,6 +22,14 @@
 #include <stdint.h>
 #include <string.h>
 
+/* ---- constants of the compiler (plan D-15) -------------------------------
+ * The values every backend shares live in onsa_core; the C backend writes
+ * them in place of the marker line below when it writes this file. */
+/* @onsa-core-constants@ */
+#if !defined(ONSA_NAN_BITS_F32) || !defined(ONSA_NAN_BITS_F64)
+#error "onsa.h is written by the Onsa compiler; include the file `onsa build` wrote"
+#endif
+
 /* ---- bit-exact floating point (spec §13.4) ------------------------------- */
 #if defined(_MSC_VER)
 #pragma fp_contract(off)
@@ -166,50 +174,64 @@ ONSA_INLINE uint32_t onsa_idx(uint32_t i, uint32_t n, const char* file, uint32_t
 
 /* ---- integer helpers (spec §3.4) ------------------------------------------
  * ONSA_INT_OPS instantiates, for an integer type T (name N, unsigned image UT,
- * bit width BITS, limits MIN / MAX, and a wider signed type WIDE that holds
- * every T product when BITS <= 32):
+ * bit width BITS, limits MIN / MAX):
  *   onsa_add_N / sub / mul / div / rem / neg / abs / shl / shr   checked (panic)
  *   onsa_wadd_N / wsub / wmul                                    wrapping
  *   onsa_sadd_N / ssub / smul                                    saturating
  *   onsa_min_N / max                                             plain
  *   onsa_cadd_N / csub / cmul / cdiv                             checked, bool + out
  *   onsa_div_euclid_N / rem_euclid                               checked
- */
+ *
+ * No helper has undefined behaviour for any operands (R-10). The checks of
+ * `+ - *` are the compiler's overflow builtins, which compute the exact result
+ * (R-10); a check is a comparison and a branch to `onsa_panic`, which under
+ * `panic = "trap"` / `"reset"` is the trap or the reset hook and nothing else.
+ * Without the builtins (ONSA_HAS_BUILTIN_OVERFLOW 0) the checks compute in a
+ * type that holds every result (types of 32 bits or fewer) or test the
+ * operands before the operation (64 bits). Wrapping arithmetic is done in
+ * unsigned types no narrower than `unsigned int`, so the promotion of a narrow
+ * type to `int` never overflows; a conversion back to a signed T keeps the low
+ * bits (two's complement, which every compiler Onsa supports does). */
+#ifndef ONSA_HAS_BUILTIN_OVERFLOW
 #if defined(__GNUC__) || defined(__clang__)
 #define ONSA_HAS_BUILTIN_OVERFLOW 1
 #else
 #define ONSA_HAS_BUILTIN_OVERFLOW 0
 #endif
+#endif
 
-#define ONSA_INT_OPS_NARROW(N, T, UT, BITS, MIN, MAX, WIDE, SIGNED)                                        \
+#if ONSA_HAS_BUILTIN_OVERFLOW
+#define ONSA_INT_CHECKED(N, T, UT, MIN, MAX, SIGNED, WIDE)                                                \
+  ONSA_INLINE bool onsa_cadd_##N(T a, T b, T* r) { return !__builtin_add_overflow(a, b, r); }             \
+  ONSA_INLINE bool onsa_csub_##N(T a, T b, T* r) { return !__builtin_sub_overflow(a, b, r); }             \
+  ONSA_INLINE bool onsa_cmul_##N(T a, T b, T* r) { return !__builtin_mul_overflow(a, b, r); }
+#define ONSA_INT_CHECKED_64 ONSA_INT_CHECKED
+#else
+/* 32 bits or fewer: the exact result in WIDE (int64_t for a signed T,
+ * uint64_t for an unsigned one, where a difference below 0 wraps above MAX). */
+#define ONSA_INT_CHECKED(N, T, UT, MIN, MAX, SIGNED, WIDE)                                                \
+  ONSA_INLINE bool onsa_in_range_##N(WIDE w) { return (SIGNED ? w >= (WIDE)(MIN) : 1) && w <= (WIDE)(MAX); } \
   ONSA_INLINE bool onsa_cadd_##N(T a, T b, T* r) {                                                        \
     WIDE w = (WIDE)a + (WIDE)b;                                                                           \
-    if (w < (WIDE)(MIN) || w > (WIDE)(MAX)) return false;                                                 \
+    if (!onsa_in_range_##N(w)) return false;                                                              \
     *r = (T)w;                                                                                            \
     return true;                                                                                          \
   }                                                                                                       \
   ONSA_INLINE bool onsa_csub_##N(T a, T b, T* r) {                                                        \
     WIDE w = (WIDE)a - (WIDE)b;                                                                           \
-    if (w < (WIDE)(MIN) || w > (WIDE)(MAX)) return false;                                                 \
+    if (!onsa_in_range_##N(w)) return false;                                                              \
     *r = (T)w;                                                                                            \
     return true;                                                                                          \
   }                                                                                                       \
   ONSA_INLINE bool onsa_cmul_##N(T a, T b, T* r) {                                                        \
     WIDE w = (WIDE)a * (WIDE)b;                                                                           \
-    if (w < (WIDE)(MIN) || w > (WIDE)(MAX)) return false;                                                 \
+    if (!onsa_in_range_##N(w)) return false;                                                              \
     *r = (T)w;                                                                                            \
     return true;                                                                                          \
-  }                                                                                                       \
-  ONSA_INT_OPS_COMMON(N, T, UT, BITS, MIN, MAX, SIGNED)
-
-#if ONSA_HAS_BUILTIN_OVERFLOW
-#define ONSA_INT_OPS_WIDE(N, T, UT, BITS, MIN, MAX, SIGNED)                                               \
-  ONSA_INLINE bool onsa_cadd_##N(T a, T b, T* r) { return !__builtin_add_overflow(a, b, r); }             \
-  ONSA_INLINE bool onsa_csub_##N(T a, T b, T* r) { return !__builtin_sub_overflow(a, b, r); }             \
-  ONSA_INLINE bool onsa_cmul_##N(T a, T b, T* r) { return !__builtin_mul_overflow(a, b, r); }             \
-  ONSA_INT_OPS_COMMON(N, T, UT, BITS, MIN, MAX, SIGNED)
-#else
-#define ONSA_INT_OPS_WIDE(N, T, UT, BITS, MIN, MAX, SIGNED)                                               \
+  }
+/* 64 bits: the operands are tested before the operation; the product is
+ * formed in UT, then checked by dividing back (exact unless it wrapped). */
+#define ONSA_INT_CHECKED_64(N, T, UT, MIN, MAX, SIGNED, WIDE)                                             \
   ONSA_INLINE bool onsa_cadd_##N(T a, T b, T* r) {                                                        \
     if (SIGNED) {                                                                                         \
       if ((b > 0 && a > (T)((MAX) - b)) || (b < 0 && a < (T)((MIN) - b))) return false;                   \
@@ -229,20 +251,20 @@ ONSA_INLINE uint32_t onsa_idx(uint32_t i, uint32_t n, const char* file, uint32_t
     return true;                                                                                          \
   }                                                                                                       \
   ONSA_INLINE bool onsa_cmul_##N(T a, T b, T* r) {                                                        \
+    T p;                                                                                                  \
     if (a == 0 || b == 0) {                                                                               \
       *r = 0;                                                                                             \
       return true;                                                                                        \
     }                                                                                                     \
-    T p = (T)((UT)a * (UT)b);                                                                             \
     if (SIGNED && ((a == (T)-1 && b == (MIN)) || (b == (T)-1 && a == (MIN)))) return false;               \
+    p = (T)((UT)a * (UT)b);                                                                               \
     if (p / b != a) return false;                                                                         \
     *r = p;                                                                                               \
     return true;                                                                                          \
-  }                                                                                                       \
-  ONSA_INT_OPS_COMMON(N, T, UT, BITS, MIN, MAX, SIGNED)
+  }
 #endif
 
-#define ONSA_INT_OPS_COMMON(N, T, UT, BITS, MIN, MAX, SIGNED)                                             \
+#define ONSA_INT_OPS(N, T, UT, BITS, MIN, MAX, SIGNED)                                                    \
   ONSA_INLINE T onsa_add_##N(T a, T b, const char* f, uint32_t l) {                                       \
     T r;                                                                                                  \
     if (!onsa_cadd_##N(a, b, &r)) onsa_panic("integer overflow in `+`", f, l);                            \
@@ -270,32 +292,37 @@ ONSA_INLINE uint32_t onsa_idx(uint32_t i, uint32_t n, const char* file, uint32_t
     if (!onsa_cdiv_##N(a, b, &r)) onsa_panic("integer overflow in `/`", f, l);                            \
     return r;                                                                                             \
   }                                                                                                       \
+  /* `MIN % -1` is 0 (spec §3.4, R-19): every remainder by -1 is, and C's     \
+   * `MIN % -1` is undefined, so -1 never reaches `%`. */                                                 \
   ONSA_INLINE T onsa_rem_##N(T a, T b, const char* f, uint32_t l) {                                       \
     if (b == 0) onsa_panic("division by zero", f, l);                                                     \
-    if (SIGNED && a == (MIN) && b == (T)-1) onsa_panic("integer overflow in `%`", f, l);                  \
+    if (SIGNED && b == (T)-1) return 0;                                                                   \
     return (T)(a % b);                                                                                    \
   }                                                                                                       \
   ONSA_INLINE T onsa_neg_##N(T a, const char* f, uint32_t l) {                                            \
     if (SIGNED && a == (MIN)) onsa_panic("integer overflow in negation", f, l);                           \
     if (!SIGNED && a != 0) onsa_panic("negation of an unsigned value", f, l);                             \
-    return (T)(0 - (UT)a);                                                                                \
+    return (T)(0u - (UT)a);                                                                               \
   }                                                                                                       \
   ONSA_INLINE T onsa_abs_##N(T a, const char* f, uint32_t l) {                                            \
     if (SIGNED && a == (MIN)) onsa_panic("integer overflow in `abs`", f, l);                              \
-    return a < 0 ? (T)(0 - (UT)a) : a;                                                                    \
+    return a < 0 ? (T)(0u - (UT)a) : a;                                                                   \
   }                                                                                                       \
   ONSA_INLINE T onsa_shl_##N(T a, uint32_t n, const char* f, uint32_t l) {                                \
     if (n >= (BITS)) onsa_panic("shift amount exceeds the bit width", f, l);                              \
-    return (T)((UT)a << n);                                                                               \
+    return (T)(UT)(1u * (UT)a << n);                                                                      \
   }                                                                                                       \
+  /* Arithmetic for a negative signed `a` (spec §3.4): -1 - ((-1 - a) >> n),  \
+   * where -1 - a is in [0, MAX], so nothing overflows or shifts a negative   \
+   * value, and a narrow T promoted to int stays arithmetic. */                                           \
   ONSA_INLINE T onsa_shr_##N(T a, uint32_t n, const char* f, uint32_t l) {                                \
     if (n >= (BITS)) onsa_panic("shift amount exceeds the bit width", f, l);                              \
-    if (SIGNED && a < 0) return (T)~((~(UT)a) >> n); /* arithmetic shift, portably */                     \
+    if (SIGNED && a < 0) return (T)((T)-1 - (T)((T)((T)-1 - a) >> n));                                    \
     return (T)((UT)a >> n);                                                                               \
   }                                                                                                       \
-  ONSA_INLINE T onsa_wadd_##N(T a, T b) { return (T)((UT)a + (UT)b); }                                    \
-  ONSA_INLINE T onsa_wsub_##N(T a, T b) { return (T)((UT)a - (UT)b); }                                    \
-  ONSA_INLINE T onsa_wmul_##N(T a, T b) { return (T)((UT)a * (UT)b); }                                    \
+  ONSA_INLINE T onsa_wadd_##N(T a, T b) { return (T)(UT)(1u * (UT)a + (UT)b); }                           \
+  ONSA_INLINE T onsa_wsub_##N(T a, T b) { return (T)(UT)(1u * (UT)a - (UT)b); }                           \
+  ONSA_INLINE T onsa_wmul_##N(T a, T b) { return (T)(UT)(1u * (UT)a * (UT)b); }                           \
   ONSA_INLINE T onsa_sadd_##N(T a, T b) {                                                                 \
     T r;                                                                                                  \
     if (onsa_cadd_##N(a, b, &r)) return r;                                                                \
@@ -325,14 +352,22 @@ ONSA_INLINE uint32_t onsa_idx(uint32_t i, uint32_t n, const char* file, uint32_t
     return r;                                                                                             \
   }
 
-ONSA_INT_OPS_NARROW(i8, int8_t, uint8_t, 8, INT8_MIN, INT8_MAX, int64_t, 1)
-ONSA_INT_OPS_NARROW(i16, int16_t, uint16_t, 16, INT16_MIN, INT16_MAX, int64_t, 1)
-ONSA_INT_OPS_NARROW(i32, int32_t, uint32_t, 32, INT32_MIN, INT32_MAX, int64_t, 1)
-ONSA_INT_OPS_WIDE(i64, int64_t, uint64_t, 64, INT64_MIN, INT64_MAX, 1)
-ONSA_INT_OPS_NARROW(u8, uint8_t, uint8_t, 8, 0, UINT8_MAX, int64_t, 0)
-ONSA_INT_OPS_NARROW(u16, uint16_t, uint16_t, 16, 0, UINT16_MAX, int64_t, 0)
-ONSA_INT_OPS_NARROW(u32, uint32_t, uint32_t, 32, 0, UINT32_MAX, int64_t, 0)
-ONSA_INT_OPS_WIDE(u64, uint64_t, uint64_t, 64, 0, UINT64_MAX, 0)
+ONSA_INT_CHECKED(i8, int8_t, uint8_t, INT8_MIN, INT8_MAX, 1, int64_t)
+ONSA_INT_CHECKED(i16, int16_t, uint16_t, INT16_MIN, INT16_MAX, 1, int64_t)
+ONSA_INT_CHECKED(i32, int32_t, uint32_t, INT32_MIN, INT32_MAX, 1, int64_t)
+ONSA_INT_CHECKED_64(i64, int64_t, uint64_t, INT64_MIN, INT64_MAX, 1, int64_t)
+ONSA_INT_CHECKED(u8, uint8_t, uint8_t, 0, UINT8_MAX, 0, uint64_t)
+ONSA_INT_CHECKED(u16, uint16_t, uint16_t, 0, UINT16_MAX, 0, uint64_t)
+ONSA_INT_CHECKED(u32, uint32_t, uint32_t, 0, UINT32_MAX, 0, uint64_t)
+ONSA_INT_CHECKED_64(u64, uint64_t, uint64_t, 0, UINT64_MAX, 0, uint64_t)
+ONSA_INT_OPS(i8, int8_t, uint8_t, 8, INT8_MIN, INT8_MAX, 1)
+ONSA_INT_OPS(i16, int16_t, uint16_t, 16, INT16_MIN, INT16_MAX, 1)
+ONSA_INT_OPS(i32, int32_t, uint32_t, 32, INT32_MIN, INT32_MAX, 1)
+ONSA_INT_OPS(i64, int64_t, uint64_t, 64, INT64_MIN, INT64_MAX, 1)
+ONSA_INT_OPS(u8, uint8_t, uint8_t, 8, 0, UINT8_MAX, 0)
+ONSA_INT_OPS(u16, uint16_t, uint16_t, 16, 0, UINT16_MAX, 0)
+ONSA_INT_OPS(u32, uint32_t, uint32_t, 32, 0, UINT32_MAX, 0)
+ONSA_INT_OPS(u64, uint64_t, uint64_t, 64, 0, UINT64_MAX, 0)
 
 /* ---- float helpers (spec §3.3, §13.4, S-25) ------------------------------ */
 ONSA_INLINE float onsa_fmin_f32(float a, float b) {
@@ -361,8 +396,11 @@ ONSA_INLINE float onsa_round_f32(float x) { return rintf(x); }
 ONSA_INLINE double onsa_round_f64(double x) { return rint(x); }
 ONSA_INLINE float onsa_fmod_f32(float a, float b) { return fmodf(a, b); }
 ONSA_INLINE double onsa_fmod_f64(double a, double b) { return fmod(a, b); }
+/* `to_bits()` of a NaN is the positive quiet NaN (spec §3.4, S-106); the
+ * values are onsa_core's, written above by the C backend. */
 ONSA_INLINE uint32_t onsa_bits_f32(float x) {
   uint32_t b;
+  if (isnan(x)) return ONSA_NAN_BITS_F32;
   memcpy(&b, &x, 4);
   return b;
 }
@@ -373,6 +411,7 @@ ONSA_INLINE float onsa_from_bits_f32(uint32_t b) {
 }
 ONSA_INLINE uint64_t onsa_bits_f64(double x) {
   uint64_t b;
+  if (isnan(x)) return ONSA_NAN_BITS_F64;
   memcpy(&b, &x, 8);
   return b;
 }
@@ -386,9 +425,13 @@ ONSA_INLINE float onsa_clamp_f32(float x, float lo, float hi) { return x < lo ? 
 ONSA_INLINE double onsa_clamp_f64(double x, double lo, double hi) { return x < lo ? lo : (x > hi ? hi : x); }
 
 /* `x.trunc_i32()` panics out of range or on NaN; `x.trunc_i32_sat()`
- * saturates and maps NaN to 0 (spec §3.3). Comparisons are done in double
- * against exactly representable limits: MIN, and MAX + 1 (a power of two). */
-#define ONSA_TRUNC(N, T, MIN, MAXP1, F, FT)                                                               \
+ * saturates and maps NaN to 0 (spec §3.3, §3.4). The value truncated toward
+ * zero is compared in double against exactly representable limits: MIN, and
+ * MAX + 1 (a power of two; MAX itself is not a double for 64 bits, R-19), so
+ * `-0.9.trunc_u64()` is 0 (S-189). Above the range `_sat` returns the
+ * constant MAX: converting MAXP1 - 1.0, which is MAXP1 again for 64 bits,
+ * would be out of range (R-10). */
+#define ONSA_TRUNC(N, T, MIN, MAX, MAXP1, F, FT)                                                          \
   ONSA_INLINE T onsa_trunc_##N##_##F(FT x, const char* f, uint32_t l) {                                   \
     double t;                                                                                             \
     if (isnan(x)) onsa_panic("conversion of NaN to an integer", f, l);                                    \
@@ -401,20 +444,20 @@ ONSA_INLINE double onsa_clamp_f64(double x, double lo, double hi) { return x < l
     if (isnan(x)) return 0;                                                                               \
     t = trunc((double)x);                                                                                 \
     if (t <= (double)(MIN)) return (MIN);                                                                 \
-    if (t >= (MAXP1)) return (T)((MAXP1) - 1.0);                                                          \
+    if (t >= (MAXP1)) return (MAX);                                                                       \
     return (T)t;                                                                                          \
   }
-#define ONSA_TRUNC_BOTH(N, T, MIN, MAXP1)                                                                 \
-  ONSA_TRUNC(N, T, MIN, MAXP1, f32, float)                                                                \
-  ONSA_TRUNC(N, T, MIN, MAXP1, f64, double)
-ONSA_TRUNC_BOTH(i8, int8_t, INT8_MIN, 128.0)
-ONSA_TRUNC_BOTH(i16, int16_t, INT16_MIN, 32768.0)
-ONSA_TRUNC_BOTH(i32, int32_t, INT32_MIN, 2147483648.0)
-ONSA_TRUNC_BOTH(i64, int64_t, INT64_MIN, 9223372036854775808.0)
-ONSA_TRUNC_BOTH(u8, uint8_t, 0, 256.0)
-ONSA_TRUNC_BOTH(u16, uint16_t, 0, 65536.0)
-ONSA_TRUNC_BOTH(u32, uint32_t, 0, 4294967296.0)
-ONSA_TRUNC_BOTH(u64, uint64_t, 0, 18446744073709551616.0)
+#define ONSA_TRUNC_BOTH(N, T, MIN, MAX, MAXP1)                                                            \
+  ONSA_TRUNC(N, T, MIN, MAX, MAXP1, f32, float)                                                           \
+  ONSA_TRUNC(N, T, MIN, MAX, MAXP1, f64, double)
+ONSA_TRUNC_BOTH(i8, int8_t, INT8_MIN, INT8_MAX, 128.0)
+ONSA_TRUNC_BOTH(i16, int16_t, INT16_MIN, INT16_MAX, 32768.0)
+ONSA_TRUNC_BOTH(i32, int32_t, INT32_MIN, INT32_MAX, 2147483648.0)
+ONSA_TRUNC_BOTH(i64, int64_t, INT64_MIN, INT64_MAX, 9223372036854775808.0)
+ONSA_TRUNC_BOTH(u8, uint8_t, 0, UINT8_MAX, 256.0)
+ONSA_TRUNC_BOTH(u16, uint16_t, 0, UINT16_MAX, 65536.0)
+ONSA_TRUNC_BOTH(u32, uint32_t, 0, UINT32_MAX, 4294967296.0)
+ONSA_TRUNC_BOTH(u64, uint64_t, 0, UINT64_MAX, 18446744073709551616.0)
 
 /* ---- spans (spec §5.3, S-12) ----------------------------------------------
  * ONSA_DEFINE_SPAN(N, T) defines onsa_span_N { T* ptr; uint32_t len; } and

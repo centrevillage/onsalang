@@ -1,0 +1,464 @@
+// onsa.toml
+// [package]
+// name = "c_div_rem"
+// edition = "2026"
+//
+// [export]
+// prefix = "cdr_"
+// fns = [
+//   "c_div_rem.rem_i8",
+//   "c_div_rem.div_i8",
+//   "c_div_rem.rem_i32",
+//   "c_div_rem.div_i64",
+//   "c_div_rem.rem_euclid_i64",
+//   "c_div_rem.rem_then_add_i8",
+//   "c_div_rem.div_then_div_i16",
+//   "c_div_rem.rem_sum_loop_i32",
+//   "c_div_rem.count_divisions_i64",
+//   "c_div_rem.divmod_r_i32",
+//   "c_div_rem.rem_in_arm_i16",
+//   "c_div_rem.rem_in_none_arm_i16",
+//   "c_div_rem.rem_in_closure_i64",
+//   "c_div_rem.rem_in_closure_index_i64",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§3.5", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "rem_i8"
+// target = "host"
+// fn = "c_div_rem.rem_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, b = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 127, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "rem_i8 on a reset target"
+// target = "fw"
+// fn = "c_div_rem.rem_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, b = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 127, b = -1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "div_i8"
+// target = "host"
+// fn = "c_div_rem.div_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = -128, b = 2 }, status = 0, result = -64 },
+//   { call = "fn", args = { a = 127, b = -1 }, status = 0, result = -127 },
+//   { call = "fn", args = { a = -7, b = 3 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "div_i8 on a reset target"
+// target = "fw"
+// fn = "c_div_rem.div_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = 2 }, status = 0, result = -64 },
+//   { call = "fn", args = { a = 127, b = -1 }, status = 0, result = -127 },
+//   { call = "fn", args = { a = -7, b = 3 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "rem_i32"
+// target = "host"
+// fn = "c_div_rem.rem_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483648, b = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 2147483647, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483648, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "div_i64"
+// target = "host"
+// fn = "c_div_rem.div_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775808, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = -9223372036854775808, b = 2 }, status = 0, result = -4611686018427387904 },
+//   { call = "fn", args = { a = 9223372036854775807, b = -1 }, status = 0, result = -9223372036854775807 },
+//   { call = "fn", args = { a = -7, b = 3 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "rem_euclid_i64"
+// target = "host"
+// fn = "c_div_rem.rem_euclid_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775808, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -9223372036854775808, b = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 9223372036854775807, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -9223372036854775808, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "rem_then_add_i8"
+// target = "host"
+// fn = "c_div_rem.rem_then_add_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = -128, b = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 127, b = -128 }, status = 1 },
+//   { call = "fn", args = { a = 7, b = 3 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "div_then_div_i16"
+// target = "host"
+// fn = "c_div_rem.div_then_div_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, b = -1, c = 1 }, status = 1 },
+//   { call = "fn", args = { a = -32768, b = 2, c = -2 }, status = 0, result = 8192 },
+// ]
+//
+// [[test.host]]
+// name = "rem_sum_loop_i32"
+// target = "host"
+// fn = "c_div_rem.rem_sum_loop_i32"
+// steps = [
+//   { call = "fn", args = { d = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { d = 7 }, status = 0, result = -6 },
+//   { call = "fn", args = { d = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "count_divisions_i64"
+// target = "host"
+// fn = "c_div_rem.count_divisions_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775808, b = 2 }, status = 0, result = 64 },
+//   { call = "fn", args = { a = 1000, b = 10 }, status = 0, result = 4 },
+//   { call = "fn", args = { a = -9223372036854775808, b = -1 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "divmod_r_i32"
+// target = "host"
+// fn = "c_div_rem.divmod_r_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = -2147483648, b = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -7, b = 2 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "rem_in_arm_i16"
+// target = "host"
+// fn = "c_div_rem.rem_in_arm_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -32768, b = 0 }, status = 1 },
+//   { call = "fn", args = { a = -5, b = 3 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "rem_in_none_arm_i16"
+// target = "host"
+// fn = "c_div_rem.rem_in_none_arm_i16"
+// steps = [
+//   { call = "fn", args = { b = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { b = -1 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "rem_in_closure_i64"
+// target = "host"
+// fn = "c_div_rem.rem_in_closure_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775808, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -9223372036854775808, b = 0 }, status = 1 },
+//   { call = "fn", args = { a = -9, b = 4 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "rem_in_closure_index_i64"
+// target = "host"
+// fn = "c_div_rem.rem_in_closure_index_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775808, d = -1 }, status = 0, result = -2 },
+//   { call = "fn", args = { a = -9223372036854775808, d = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -9223372036854775808, d = 2 }, status = 1 },
+// ]
+
+// `MIN % -1` and `MIN / -1` at every signed width, on a target that is built to C (spec §3.4, §9.2,
+// §14.2). The interpreter side of the same rules is in semantics/min_rem_neg1.onsa; the scalar calls
+// of the test vectors are in tests/vectors. This file reaches the operations the vectors do not:
+// inside other code (an expression, a loop, a struct literal, the arm of a `match`, an anonymous
+// function) and through an exported function whose arguments come from the host, so the C compiler
+// cannot see the values. Every exported function is run on a `panic = "poison"` target with its
+// panics (status 1, the result is not compared, §9.2 and §14.2); the ones that matter for the checks
+// are also run on a `panic = "reset"` target, with the inputs that do not panic (on that target a
+// panic would call the reset hook). A `panic = "trap"` target is built and never run here.
+//
+// The rules, with w the bit width, MIN = -2^(w-1), MAX = 2^(w-1) - 1:
+//   a / b         the mathematical quotient truncated toward zero; panics for b = 0 and for
+//                 MIN / -1 (the quotient 2^(w-1) does not fit)
+//   a % b         a - (a / b) * b, the sign of the dividend; panics for b = 0 only, and
+//                 MIN % -1 is 0 (it fits, so it does not panic)
+//   a.rem_euclid(b)  r with 0 <= r < |b| and a == q * b + r; MIN.rem_euclid(-1) is 0
+//   a.div_euclid(b)  that q; panics for b = 0 and MIN.div_euclid(-1)
+// Every expected value below is worked out by hand from those lines (the table rows are checked
+// again by the Python that wrote this file, not by the implementation).
+
+use std.array
+
+pub struct Pair {
+  q: I32,
+  r: I32,
+}
+
+fn rem_arm(o: Option[I16], d: I16) -> I16 {
+  var r: I16 = 7
+  match o {
+    Some(v) => {
+      r = v % d
+    },
+    None => {
+      r = 7
+    },
+  }
+  r
+}
+
+fn div_arm(o: Option[I16], d: I16) -> I16 {
+  var r: I16 = 7
+  match o {
+    Some(v) => {
+      r = v / d
+    },
+    None => {
+      r = 7
+    },
+  }
+  r
+}
+
+pub fn rem_i8(a: I8, b: I8) -> I8 {
+  a % b
+}
+
+pub fn div_i8(a: I8, b: I8) -> I8 {
+  a / b
+}
+
+pub fn rem_i32(a: I32, b: I32) -> I32 {
+  a % b
+}
+
+pub fn div_i64(a: I64, b: I64) -> I64 {
+  a / b
+}
+
+pub fn rem_euclid_i64(a: I64, b: I64) -> I64 {
+  a.rem_euclid(b)
+}
+
+pub fn rem_then_add_i8(a: I8, b: I8) -> I8 {
+  (a % b) + 1
+}
+
+pub fn div_then_div_i16(a: I16, b: I16, c: I16) -> I16 {
+  a / b / c
+}
+
+pub fn rem_sum_loop_i32(d: I32) -> I32 {
+  var acc: I32 = 0
+  for _ in 0..3 {
+    let m: I32 = I32.MIN
+    let r = m % d
+    acc = acc + r
+  }
+  acc
+}
+
+pub fn count_divisions_i64(a: I64, b: I64) -> U32 {
+  var x: I64 = a
+  var n: U32 = 0
+  while x != 0 {
+    x = x / b
+    n = n + 1
+  }
+  n
+}
+
+pub fn divmod_r_i32(a: I32, b: I32) -> I32 {
+  let p = Pair { q: a / b, r: a % b }
+  p.r
+}
+
+pub fn rem_in_arm_i16(a: I16, b: I16) -> I16 {
+  rem_arm(Some(a), b)
+}
+
+pub fn rem_in_none_arm_i16(b: I16) -> I16 {
+  let o: Option[I16] = None
+  rem_arm(o, b)
+}
+
+pub fn rem_in_closure_i64(a: I64, b: I64) -> I64 {
+  let ys: [I64; 3] = array.from_fn(fn(_) { a % b })
+  ys[2]
+}
+
+pub fn rem_in_closure_index_i64(a: I64, d: I64) -> I64 {
+  let ys: [I64; 3] = array.from_fn(fn(i) { a % (d - (i as I64)) })
+  ys[2]
+}
+
+test "rem_i8: the values" {
+  assert rem_i8(I8.MIN, -1) == 0
+  assert rem_i8(I8.MIN, 2) == 0
+  assert rem_i8(127, -1) == 0
+}
+
+test "rem_i8(I8.MIN, 0) panics" {   //~ TESTFAIL "rem_i8(I8.MIN, 0) panics"
+  let _ = rem_i8(I8.MIN, 0)
+}
+
+test "div_i8: the values" {
+  assert div_i8(I8.MIN, 2) == -64
+  assert div_i8(127, -1) == -127
+  assert div_i8(-7, 3) == -2
+}
+
+test "div_i8(I8.MIN, -1) panics" {   //~ TESTFAIL "div_i8(I8.MIN, -1) panics"
+  let _ = div_i8(I8.MIN, -1)
+}
+
+test "rem_i32: the values" {
+  assert rem_i32(I32.MIN, -1) == 0
+  assert rem_i32(I32.MIN, 2) == 0
+  assert rem_i32(2147483647, -1) == 0
+}
+
+test "rem_i32(I32.MIN, 0) panics" {   //~ TESTFAIL "rem_i32(I32.MIN, 0) panics"
+  let _ = rem_i32(I32.MIN, 0)
+}
+
+test "div_i64: the values" {
+  assert div_i64(I64.MIN, 2) == -4611686018427387904
+  assert div_i64(9223372036854775807, -1) == -9223372036854775807
+  assert div_i64(-7, 3) == -2
+}
+
+test "div_i64(I64.MIN, -1) panics" {   //~ TESTFAIL "div_i64(I64.MIN, -1) panics"
+  let _ = div_i64(I64.MIN, -1)
+}
+
+test "rem_euclid_i64: the values" {
+  assert rem_euclid_i64(I64.MIN, -1) == 0
+  assert rem_euclid_i64(I64.MIN, 2) == 0
+  assert rem_euclid_i64(9223372036854775807, -1) == 0
+}
+
+test "rem_euclid_i64(I64.MIN, 0) panics" {   //~ TESTFAIL "rem_euclid_i64(I64.MIN, 0) panics"
+  let _ = rem_euclid_i64(I64.MIN, 0)
+}
+
+test "rem_then_add_i8: the values" {
+  assert rem_then_add_i8(I8.MIN, -1) == 1
+  assert rem_then_add_i8(I8.MIN, 2) == 1
+  assert rem_then_add_i8(7, 3) == 2
+}
+
+test "rem_then_add_i8(127, I8.MIN) panics" {   //~ TESTFAIL "rem_then_add_i8(127, I8.MIN) panics"
+  let _ = rem_then_add_i8(127, I8.MIN)
+}
+
+test "div_then_div_i16: the values" {
+  assert div_then_div_i16(I16.MIN, 2, -2) == 8192
+}
+
+test "div_then_div_i16(I16.MIN, -1, 1) panics" {   //~ TESTFAIL "div_then_div_i16(I16.MIN, -1, 1) panics"
+  let _ = div_then_div_i16(I16.MIN, -1, 1)
+}
+
+test "rem_sum_loop_i32: the values" {
+  assert rem_sum_loop_i32(-1) == 0
+  assert rem_sum_loop_i32(7) == -6
+}
+
+test "rem_sum_loop_i32(0) panics" {   //~ TESTFAIL "rem_sum_loop_i32(0) panics"
+  let _ = rem_sum_loop_i32(0)
+}
+
+test "count_divisions_i64: the values" {
+  assert count_divisions_i64(I64.MIN, 2) == 64
+  assert count_divisions_i64(1000, 10) == 4
+}
+
+test "count_divisions_i64(I64.MIN, -1) panics" {   //~ TESTFAIL "count_divisions_i64(I64.MIN, -1) panics"
+  let _ = count_divisions_i64(I64.MIN, -1)
+}
+
+test "divmod_r_i32: the values" {
+  assert divmod_r_i32(I32.MIN, 2) == 0
+  assert divmod_r_i32(-7, 2) == -1
+}
+
+test "divmod_r_i32(I32.MIN, -1) panics" {   //~ TESTFAIL "divmod_r_i32(I32.MIN, -1) panics"
+  let _ = divmod_r_i32(I32.MIN, -1)
+}
+
+test "rem_in_arm_i16: the values" {
+  assert rem_in_arm_i16(I16.MIN, -1) == 0
+  assert rem_in_arm_i16(-5, 3) == -2
+}
+
+test "rem_in_arm_i16(I16.MIN, 0) panics" {   //~ TESTFAIL "rem_in_arm_i16(I16.MIN, 0) panics"
+  let _ = rem_in_arm_i16(I16.MIN, 0)
+}
+
+test "rem_in_none_arm_i16: the values" {
+  assert rem_in_none_arm_i16(0) == 7
+  assert rem_in_none_arm_i16(-1) == 7
+}
+
+test "rem_in_closure_i64: the values" {
+  assert rem_in_closure_i64(I64.MIN, -1) == 0
+  assert rem_in_closure_i64(-9, 4) == -1
+}
+
+test "rem_in_closure_i64(I64.MIN, 0) panics" {   //~ TESTFAIL "rem_in_closure_i64(I64.MIN, 0) panics"
+  let _ = rem_in_closure_i64(I64.MIN, 0)
+}
+
+test "rem_in_closure_index_i64: the values" {
+  assert rem_in_closure_index_i64(I64.MIN, -1) == -2
+  assert rem_in_closure_index_i64(I64.MIN, 3) == 0
+}
+
+test "rem_in_closure_index_i64(I64.MIN, 2) panics" {   //~ TESTFAIL "rem_in_closure_index_i64(I64.MIN, 2) panics"
+  let _ = rem_in_closure_index_i64(I64.MIN, 2)
+}

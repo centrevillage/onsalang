@@ -1,0 +1,42 @@
+[package]
+name = "c_int_modules"
+edition = "2026"
+
+[export]
+prefix = "cim_"
+fns = [
+  "edge.rem_i8",
+  "edge.mul_u32",
+  "edge.shr_i16",
+  "calc.rem_min_neg1_i32",
+  "calc.div_min_neg1_i32",
+  "calc.rem_chain_i8",
+  "calc.sat_u64_hi",
+  "calc.sat_u64_lo",
+  "calc.mul_scaled_u32",
+  "calc.wmul_scaled_u32",
+  "calc.bits_of_nan_f32",
+  "calc.rem_const_operands_i16",
+  "calc.div_const_operands_i16",
+]
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = []
+
+[targets.fw]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "reset"
+provides = []
+
+[targets.dbg]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "trap"
+provides = []

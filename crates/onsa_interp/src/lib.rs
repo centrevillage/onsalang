@@ -26,7 +26,7 @@ pub mod value;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use onsa_core::prim::{CheckedOp, MathFn, Prim};
+use onsa_core::prim::{CheckedOp, MathFn, NAN_BITS_F32, NAN_BITS_F64, Prim};
 use onsa_core::{
     Arg, BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
     MsgId, Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
@@ -1573,11 +1573,6 @@ impl<'m> Interp<'m> {
         }
     }
 }
-
-/// The bits `to_bits()` gives for every NaN: the positive quiet NaN (spec
-/// §3.4, S-106).
-pub const NAN_BITS_F32: u32 = 0x7FC0_0000;
-pub const NAN_BITS_F64: u64 = 0x7FF8_0000_0000_0000;
 
 /// The `N` operands of `prim` (an internal error for another number).
 #[track_caller]

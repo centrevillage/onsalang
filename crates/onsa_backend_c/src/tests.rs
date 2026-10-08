@@ -248,3 +248,159 @@ fn exported_functions_are_recorded() {
     let trap = emit(&m, &EmitOptions { panic: crate::PanicMode::Trap, ..opts }).unwrap_or_else(|d| panic!("{d:?}"));
     assert_eq!(trap.take_panic, None);
 }
+
+/// The `onsa_panic` of `mode` in the runtime header: the text of its branch
+/// of the `#if defined(ONSA_PANIC_POISON)` chain.
+fn panic_branch(header: &str, mode: crate::PanicMode) -> &str {
+    let start = |marker: &str| header.find(marker).unwrap_or_else(|| panic!("`{marker}` is not in onsa.h"));
+    let (from, to) = match mode {
+        crate::PanicMode::Poison => ("#if defined(ONSA_PANIC_POISON)", "#elif defined(ONSA_PANIC_RESET)"),
+        crate::PanicMode::Reset => ("#elif defined(ONSA_PANIC_RESET)", "#elif defined(ONSA_PANIC_HALT)"),
+        crate::PanicMode::Halt => ("#elif defined(ONSA_PANIC_HALT)", "#else /* ONSA_PANIC_TRAP (default) */"),
+        crate::PanicMode::Trap => ("#else /* ONSA_PANIC_TRAP (default) */", "/* ---- bounds checks"),
+    };
+    let (a, b) = (start(from), start(to));
+    assert!(a < b, "the branches of onsa_panic are out of order in onsa.h");
+    &header[a..b]
+}
+
+/// R-10 (plan decision; the spec does not word it, W2-05/t): under
+/// `panic = "trap"` / `"reset"` a checked operation is a comparison and a
+/// branch to the trap or the reset hook. The generated C has no `setjmp`
+/// machinery, the panic is the trap / the hook alone, and the checks of
+/// `+ - *` are the compiler's overflow builtins followed by that branch.
+#[test]
+fn checks_under_trap_and_reset_are_a_compare_and_a_branch() {
+    let i32t = Ty::Int(IntKind::I32);
+    let body = binary(
+        BinOp::Mul,
+        Overflow::Checked,
+        i32t.clone(),
+        binary(BinOp::Add, Overflow::Checked, i32t.clone(), local(0, i32t.clone()), local(1, i32t.clone())),
+        local(1, i32t.clone()),
+    );
+    let m = one_fn(i32t, body, vec![]);
+    let header = crate::runtime_header();
+    for (mode, define, panic_body) in [
+        (crate::PanicMode::Trap, "#define ONSA_PANIC_TRAP", "__builtin_trap();"),
+        (crate::PanicMode::Reset, "#define ONSA_PANIC_RESET", "onsa_reset_hook();"),
+    ] {
+        let opts = EmitOptions { export_fns: vec!["m.f".into()], panic: mode, ..Default::default() };
+        let unit = emit(&m, &opts).unwrap_or_else(|d| panic!("{d:?}"));
+        assert!(unit.source.contains(define), "{mode:?}: {}", unit.source);
+        assert!(unit.source.contains("onsa_mul_i32(onsa_add_i32(x, y, \"\", 0), y, \"\", 0)"), "{}", unit.source);
+        for (name, text) in std::iter::once(("the source", unit.source.as_str()))
+            .chain(unit.headers.iter().map(|(n, t)| (n.as_str(), t.as_str())))
+        {
+            for word in ["setjmp", "longjmp", "jmp_buf", "onsa_current_jmp"] {
+                assert!(!text.contains(word), "{mode:?}: `{word}` in {name}:\n{text}");
+            }
+        }
+        assert_eq!(unit.runtime_header, header);
+        let branch = panic_branch(&header, mode);
+        assert!(branch.contains(panic_body), "{mode:?}:\n{branch}");
+        for word in ["setjmp", "longjmp", "onsa_current_jmp"] {
+            assert!(!branch.contains(word), "{mode:?}: `{word}` in its onsa_panic:\n{branch}");
+        }
+    }
+    // The setjmp machinery is the poison branch's alone.
+    let poison = panic_branch(&header, crate::PanicMode::Poison);
+    assert_eq!(header.matches("#include <setjmp.h>").count(), 1);
+    assert!(poison.contains("#include <setjmp.h>"), "{poison}");
+    assert_eq!(header.matches("longjmp(").count(), 1);
+    assert!(poison.contains("longjmp("), "{poison}");
+    // The checks: the builtins, and a branch to onsa_panic on their result.
+    for (op, builtin) in [("cadd", "add"), ("csub", "sub"), ("cmul", "mul")] {
+        let check = format!(
+            "ONSA_INLINE bool onsa_{op}_##N(T a, T b, T* r) {{ return !__builtin_{builtin}_overflow(a, b, r); }}"
+        );
+        assert!(header.contains(&check), "no `{check}` in onsa.h");
+        assert!(header.contains(&format!("if (!onsa_{op}_##N(a, b, &r)) onsa_panic(")), "the panic of {op}");
+    }
+    // Every integer type takes the builtins when the compiler has them.
+    let builtins = &header[header.find("#if ONSA_HAS_BUILTIN_OVERFLOW").expect("the builtin branch")..];
+    let builtins = &builtins[..builtins.find("#else").expect("its end")];
+    assert!(builtins.contains("#define ONSA_INT_CHECKED_64 ONSA_INT_CHECKED"), "{builtins}");
+}
+
+/// Plan D-15, S-106: the bits `to_bits()` gives for a NaN are written into
+/// `onsa.h` from onsa_core's constants, the ones the interpreter reads.
+#[test]
+fn the_runtime_header_takes_the_nan_bits_from_core() {
+    use onsa_core::prim::{NAN_BITS_F32, NAN_BITS_F64};
+    assert_eq!(crate::RUNTIME_HEADER_SOURCE.matches(crate::CONSTANTS_MARKER).count(), 1);
+    let header = crate::runtime_header();
+    assert!(!header.contains(crate::CONSTANTS_MARKER), "the marker is left in onsa.h");
+    let value = |name: &str, wrap: &str| -> u64 {
+        let line = header
+            .lines()
+            .find(|l| l.starts_with(&format!("#define {name} ")))
+            .unwrap_or_else(|| panic!("no `#define {name}` in onsa.h"));
+        let v = line[format!("#define {name} ").len()..].trim();
+        let hex = v.strip_prefix(&format!("{wrap}(0x")).and_then(|h| h.strip_suffix(')')).unwrap_or(v);
+        u64::from_str_radix(hex, 16).unwrap_or_else(|e| panic!("`{line}`: {e}"))
+    };
+    assert_eq!(value("ONSA_NAN_BITS_F32", "UINT32_C"), u64::from(NAN_BITS_F32));
+    assert_eq!(value("ONSA_NAN_BITS_F64", "UINT64_C"), NAN_BITS_F64);
+    // The definitions come before onsa.h's check of them and its use of them.
+    let defined = header.find("#define ONSA_NAN_BITS_F32").expect("the definition");
+    assert!(defined < header.find("#if !defined(ONSA_NAN_BITS_F32)").expect("the check"));
+    assert!(defined < header.find("return ONSA_NAN_BITS_F32;").expect("the use"));
+}
+
+/// R-11: `narrow_*` from an unsigned type compares the upper bound alone, in
+/// the source's own type (a signed lower bound converted to unsigned made
+/// every value fall outside); from a signed type it compares both bounds.
+#[test]
+fn narrow_from_unsigned_compares_the_upper_bound_alone() {
+    let opt = TypeDef {
+        name: "m.Opt".into(),
+        kind: TypeDefKind::Enum {
+            variants: vec![("None".into(), vec![]), ("Some".into(), vec![Ty::Int(IntKind::I32)])],
+        },
+    };
+    for (from, fits) in [
+        (IntKind::U32, "if (onsa_t1 <= (uint32_t)INT32_MAX) {"),
+        (IntKind::U64, "if (onsa_t1 <= (uint64_t)INT32_MAX) {"),
+        (IntKind::I64, "if (onsa_t1 >= INT32_MIN && onsa_t1 <= INT32_MAX) {"),
+    ] {
+        let narrow = e(
+            Ty::Enum(TypeId(0)),
+            ExprKind::Prim {
+                prim: onsa_core::prim::Prim::Narrow { from, to: IntKind::I32 },
+                args: vec![Arg { mode: Mode::Borrow, expr: local(0, Ty::Int(from)) }],
+            },
+        );
+        let m = Module {
+            types: vec![opt.clone()],
+            consts: Vec::new(),
+            fns: vec![FnDef {
+                name: "m.f".into(),
+                params: vec![Param { local: LocalId(0), mode: Mode::Borrow, ty: Ty::Int(from) }],
+                ret: Ty::Int(IntKind::I32),
+                sret: false,
+                rt: true,
+                locals: vec![
+                    Local { name: "x".into(), ty: Ty::Int(from) },
+                    Local { name: "v".into(), ty: Ty::Enum(TypeId(0)) },
+                ],
+                body: Some(Block {
+                    stmts: vec![Stmt { span: sp(), kind: StmtKind::Let(LocalId(1), narrow) }],
+                    value: Some(Box::new(e(
+                        Ty::Int(IntKind::I32),
+                        ExprKind::Tag(Box::new(local(1, Ty::Enum(TypeId(0))))),
+                    ))),
+                }),
+                span: sp(),
+            }],
+            messages: Vec::new(),
+            flows: Vec::new(),
+            moves: Vec::new(),
+        };
+        let c = emit_fn(&m);
+        assert!(c.contains(fits), "{from:?}: {c}");
+        if !from.signed() {
+            assert!(!c.contains("INT32_MIN"), "{from:?}: {c}");
+        }
+    }
+}

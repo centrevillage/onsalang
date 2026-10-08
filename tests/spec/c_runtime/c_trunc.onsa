@@ -1,0 +1,593 @@
+// onsa.toml
+// [package]
+// name = "c_trunc"
+// edition = "2026"
+//
+// [export]
+// prefix = "ctr_"
+// fns = [
+//   "c_trunc.trunc_i64_f64",
+//   "c_trunc.trunc_sat_i64_f64",
+//   "c_trunc.trunc_u64_f64",
+//   "c_trunc.trunc_sat_u64_f64",
+//   "c_trunc.trunc_sat_u64_f32",
+//   "c_trunc.trunc_u8_f64",
+//   "c_trunc.trunc_sat_u32_f32",
+//   "c_trunc.trunc_neg09_u32_f64",
+//   "c_trunc.trunc_neg09_u64_f64",
+//   "c_trunc.trunc_neg09_u64_f32",
+//   "c_trunc.trunc_sum_loop_i64",
+//   "c_trunc.trunc_sat_sum_loop_u64",
+//   "c_trunc.parts_u_f64",
+//   "c_trunc.trunc_in_some_arm",
+//   "c_trunc.trunc_in_none_arm",
+//   "c_trunc.trunc_in_closure_i64",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§9.2", "§14.2", "§13.4"]
+//
+// [[test.host]]
+// name = "trunc_i64_f64"
+// target = "host"
+// fn = "c_trunc.trunc_i64_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0 }, status = 1 },
+//   { call = "fn", args = { n = -0.0, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 9223372036854774784.0, d = 1.0 }, status = 0, result = 9223372036854774784 },
+//   { call = "fn", args = { n = 9223372036854775808.0, d = 1.0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_i64_f64"
+// target = "host"
+// fn = "c_trunc.trunc_sat_i64_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 1.0, d = 0.0 }, status = 0, result = 9223372036854775807 },
+//   { call = "fn", args = { n = -1.0, d = 0.0 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { n = -0.0, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 9223372036854774784.0, d = 1.0 }, status = 0, result = 9223372036854774784 },
+//   { call = "fn", args = { n = 9223372036854775808.0, d = 1.0 }, status = 0, result = 9223372036854775807 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_i64_f64 on a reset target"
+// target = "fw"
+// fn = "c_trunc.trunc_sat_i64_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 1.0, d = 0.0 }, status = 0, result = 9223372036854775807 },
+//   { call = "fn", args = { n = -1.0, d = 0.0 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { n = -0.0, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 9223372036854774784.0, d = 1.0 }, status = 0, result = 9223372036854774784 },
+//   { call = "fn", args = { n = 9223372036854775808.0, d = 1.0 }, status = 0, result = 9223372036854775807 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_u64_f64"
+// target = "host"
+// fn = "c_trunc.trunc_u64_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 0 }, status = 1 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -9223372036854775808.0, d = 1.0, part = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_u64_f64"
+// target = "host"
+// fn = "c_trunc.trunc_sat_u64_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 1.0, d = 0.0, part = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = 1.0, d = 0.0, part = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = -1.0, d = 0.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -1.0, d = 0.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_u64_f64 on a reset target"
+// target = "fw"
+// fn = "c_trunc.trunc_sat_u64_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 1.0, d = 0.0, part = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = 1.0, d = 0.0, part = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = -1.0, d = 0.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -1.0, d = 0.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_u64_f32"
+// target = "host"
+// fn = "c_trunc.trunc_sat_u64_f32"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 0.0, d = 0.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 1.0, d = 0.0, part = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = 1.0, d = 0.0, part = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = -1.0, d = 0.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -1.0, d = 0.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.0, d = 1.0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -0.5, d = 1.0, part = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_u8_f64"
+// target = "host"
+// fn = "c_trunc.trunc_u8_f64"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -1.0, d = 1.0 }, status = 1 },
+//   { call = "fn", args = { n = 255.0, d = 1.0 }, status = 0, result = 255 },
+//   { call = "fn", args = { n = -0.5, d = 1.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_u32_f32"
+// target = "host"
+// fn = "c_trunc.trunc_sat_u32_f32"
+// steps = [
+//   { call = "fn", args = { n = 0.0, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = -1.0, d = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 4294967296.0, d = 1.0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = -0.5, d = 1.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_neg09_u32_f64"
+// target = "host"
+// fn = "c_trunc.trunc_neg09_u32_f64"
+// steps = [
+//   { call = "fn", args = { k = 1.0 }, status = 0, result = true },
+//   { call = "fn", args = { k = 0.0 }, status = 0, result = true },
+//   { call = "fn", args = { k = 1.125 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_neg09_u64_f64"
+// target = "host"
+// fn = "c_trunc.trunc_neg09_u64_f64"
+// steps = [
+//   { call = "fn", args = { k = 1.0 }, status = 0, result = true },
+//   { call = "fn", args = { k = 0.0 }, status = 0, result = true },
+//   { call = "fn", args = { k = 1.125 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_neg09_u64_f32"
+// target = "host"
+// fn = "c_trunc.trunc_neg09_u64_f32"
+// steps = [
+//   { call = "fn", args = { k = 1.0 }, status = 0, result = true },
+//   { call = "fn", args = { k = 0.0 }, status = 0, result = true },
+//   { call = "fn", args = { k = 1.125 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sum_loop_i64"
+// target = "host"
+// fn = "c_trunc.trunc_sum_loop_i64"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 3 }, status = 0, result = 6917529027641081856 },
+//   { call = "fn", args = { n = 4 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_sum_loop_u64"
+// target = "host"
+// fn = "c_trunc.trunc_sat_sum_loop_u64"
+// steps = [
+//   { call = "fn", args = { n = 0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 2, part = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = 2, part = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = 3, part = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { n = 3, part = 1 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "parts_u_f64"
+// target = "host"
+// fn = "c_trunc.parts_u_f64"
+// steps = [
+//   { call = "fn", args = { x = -0.5 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 4294967295.0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { x = 4294967296.0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_in_some_arm"
+// target = "host"
+// fn = "c_trunc.trunc_in_some_arm"
+// steps = [
+//   { call = "fn", args = { x = 9223372036854774784.0, y = 0.0 }, status = 0, result = 9223372036854774784 },
+//   { call = "fn", args = { x = 9223372036854775808.0, y = 7.0 }, status = 1 },
+//   { call = "fn", args = { x = -9223372036854775808.0, y = 7.0 }, status = 0, result = -9223372036854775808 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_in_none_arm"
+// target = "host"
+// fn = "c_trunc.trunc_in_none_arm"
+// steps = [
+//   { call = "fn", args = { x = 9223372036854775808.0, y = 9223372036854775808.0 }, status = 0, result = 9223372036854775807 },
+//   { call = "fn", args = { x = 0.0, y = -9223372036854775808.0 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { x = 9223372036854775808.0, y = -2.0 }, status = 0, result = -2 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_in_closure_i64"
+// target = "host"
+// fn = "c_trunc.trunc_in_closure_i64"
+// steps = [
+//   { call = "fn", args = { base = 9223372036854774784.0 }, status = 0, result = -9223372036854774784 },
+//   { call = "fn", args = { base = 9223372036854775808.0 }, status = 1 },
+//   { call = "fn", args = { base = 0.5 }, status = 0, result = 0 },
+// ]
+
+// Float to integer conversion on a target that is built to C (spec §3.3, §3.4, §9.2, §14.2):
+// `trunc_<type>()` truncates toward zero and panics when the truncated value is outside the type and
+// for a NaN or an infinity; `trunc_<type>_sat()` clamps to the type and maps NaN to 0. The 64-bit
+// types are the point: 2^63 and 2^64 are exact floats whose conversion a host cast gets wrong, and a
+// value in (-1, 0) truncates to 0 for the unsigned types too (S-189: `-0.9` is 0, `-1.0` panics).
+// The vectors (tests/vectors) call one conversion on one literal; this file adds the places around it.
+// The same functions and expectations run on the interpreter (the test blocks) and on the C target
+// (the host scripts). The interpreter side of the 64-bit edges is in semantics/trunc64_edges.onsa.
+//
+// Every function takes `n` and `d` and converts `n / d`, so a NaN (0 / 0) and the infinities (1 / 0,
+// -1 / 0) come from the host without a literal; with `d = 1.0` the quotient is `n` itself. The unsigned
+// 64-bit results come back as two halves (`part` 0 is the high word, 1 the low word) because a TOML
+// integer stops at 2^63 - 1.
+//
+// The ranges: I64 [-2^63, 2^63 - 1], U64 [0, 2^64 - 1]. The spacing of a float near 2^63 is 1024 for
+// F64 (2^10) and 2^39 for F32, so the largest F64 below 2^63 is 2^63 - 1024 = 9223372036854774784 and
+// the largest F32 below 2^63 is 2^63 - 2^39 = 9223371487098961920; near 2^64 the spacing is 2048 and
+// 2^40: 18446744073709549568 and 18446742974197923840. The next F64 below -2^63 is -(2^63 + 2048) and
+// the next F32 is -(2^63 + 2^40).
+
+use std.array
+
+pub struct Parts {
+  i: I64,
+  u: U32,
+}
+
+fn join(h: U32, l: U32) -> U64 {
+  let hh = (h as U64) << 32
+  hh | (l as U64)
+}
+
+// The high word (part 0) or the low word (part 1) of a 64-bit value.
+fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn trunc_arm(o: Option[F64], y: F64) -> I64 {
+  var r: I64 = 5
+  match o {
+    Some(v) => {
+      r = v.trunc_i64()
+    },
+    None => {
+      r = y.trunc_i64_sat()
+    },
+  }
+  r
+}
+
+pub fn trunc_i64_f64(n: F64, d: F64) -> I64 {
+  let x = n / d
+  x.trunc_i64()
+}
+
+pub fn trunc_sat_i64_f64(n: F64, d: F64) -> I64 {
+  let x = n / d
+  x.trunc_i64_sat()
+}
+
+pub fn trunc_u64_f64(n: F64, d: F64, part: U32) -> U32 {
+  let x = n / d
+  let r = x.trunc_u64()
+  part_of(r, part)
+}
+
+pub fn trunc_sat_u64_f64(n: F64, d: F64, part: U32) -> U32 {
+  let x = n / d
+  let r = x.trunc_u64_sat()
+  part_of(r, part)
+}
+
+pub fn trunc_sat_u64_f32(n: F32, d: F32, part: U32) -> U32 {
+  let x = n / d
+  let r = x.trunc_u64_sat()
+  part_of(r, part)
+}
+
+pub fn trunc_u8_f64(n: F64, d: F64) -> U8 {
+  let x = n / d
+  x.trunc_u8()
+}
+
+pub fn trunc_sat_u32_f32(n: F32, d: F32) -> U32 {
+  let x = n / d
+  x.trunc_u32_sat()
+}
+
+pub fn trunc_neg09_u32_f64(k: F64) -> Bool {
+  let x: F64 = -0.9 * k
+  let r = x.trunc_u32()
+  r == 0
+}
+
+pub fn trunc_neg09_u64_f64(k: F64) -> Bool {
+  let x: F64 = -0.9 * k
+  let r = x.trunc_u64()
+  r == 0
+}
+
+pub fn trunc_neg09_u64_f32(k: F32) -> Bool {
+  let x: F32 = -0.9 * k
+  let r = x.trunc_u64()
+  r == 0
+}
+
+pub fn trunc_sum_loop_i64(n: U32) -> I64 {
+  var acc: I64 = 0
+  for _ in 0..n {
+    let top: F64 = 2305843009213693952.0
+    acc = acc + top.trunc_i64()
+  }
+  acc
+}
+
+pub fn trunc_sat_sum_loop_u64(n: U32, part: U32) -> U32 {
+  var acc: U64 = 0
+  for _ in 0..n {
+    let top: F64 = 9223372036854775808.0
+    acc = acc +| top.trunc_u64_sat()
+  }
+  part_of(acc, part)
+}
+
+pub fn parts_u_f64(x: F64) -> U32 {
+  let p = Parts { i: x.trunc_i64(), u: x.trunc_u32() }
+  p.u
+}
+
+pub fn trunc_in_some_arm(x: F64, y: F64) -> I64 {
+  trunc_arm(Some(x), y)
+}
+
+pub fn trunc_in_none_arm(x: F64, y: F64) -> I64 {
+  let o: Option[F64] = None
+  trunc_arm(o, y)
+}
+
+pub fn trunc_in_closure_i64(base: F64) -> I64 {
+  let ys: [I64; 3] = array.from_fn(fn(i) {
+    let y = if i < 1 {
+      base
+    } else {
+      -base
+    }
+    y.trunc_i64()
+  })
+  ys[2]
+}
+
+test "trunc_i64_f64: the values" {
+  assert trunc_i64_f64(-0.0, 1.0) == 0
+  assert trunc_i64_f64(-0.5, 1.0) == 0
+  assert trunc_i64_f64(9223372036854774784.0, 1.0) == 9223372036854774784
+}
+
+test "trunc_i64_f64(0.0, 0.0) panics" {   //~ TESTFAIL "trunc_i64_f64(0.0, 0.0) panics"
+  let _ = trunc_i64_f64(0.0, 0.0)
+}
+
+test "trunc_i64_f64(9223372036854775808.0, 1.0) panics" {   //~ TESTFAIL "trunc_i64_f64(9223372036854775808.0, 1.0) panics"
+  let _ = trunc_i64_f64(9223372036854775808.0, 1.0)
+}
+
+test "trunc_sat_i64_f64: the values" {
+  assert trunc_sat_i64_f64(0.0, 0.0) == 0
+  assert trunc_sat_i64_f64(1.0, 0.0) == 9223372036854775807
+  assert trunc_sat_i64_f64(-1.0, 0.0) == I64.MIN
+  assert trunc_sat_i64_f64(-0.0, 1.0) == 0
+  assert trunc_sat_i64_f64(-0.5, 1.0) == 0
+  assert trunc_sat_i64_f64(9223372036854774784.0, 1.0) == 9223372036854774784
+  assert trunc_sat_i64_f64(9223372036854775808.0, 1.0) == 9223372036854775807
+}
+
+test "trunc_u64_f64: the values" {
+  assert trunc_u64_f64(-0.0, 1.0, 0) == 0
+  assert trunc_u64_f64(-0.0, 1.0, 1) == 0
+  assert trunc_u64_f64(-0.5, 1.0, 0) == 0
+  assert trunc_u64_f64(-0.5, 1.0, 1) == 0
+}
+
+test "trunc_u64_f64(0.0, 0.0, 0) panics" {   //~ TESTFAIL "trunc_u64_f64(0.0, 0.0, 0) panics"
+  let _ = trunc_u64_f64(0.0, 0.0, 0)
+}
+
+test "trunc_u64_f64(-9223372036854775808.0, 1.0, 0) panics" {   //~ TESTFAIL "trunc_u64_f64(-9223372036854775808.0, 1.0, 0) panics"
+  let _ = trunc_u64_f64(-9223372036854775808.0, 1.0, 0)
+}
+
+test "trunc_sat_u64_f64: the values" {
+  assert trunc_sat_u64_f64(0.0, 0.0, 0) == 0
+  assert trunc_sat_u64_f64(0.0, 0.0, 1) == 0
+  assert trunc_sat_u64_f64(1.0, 0.0, 0) == 4294967295
+  assert trunc_sat_u64_f64(1.0, 0.0, 1) == 4294967295
+  assert trunc_sat_u64_f64(-1.0, 0.0, 0) == 0
+  assert trunc_sat_u64_f64(-1.0, 0.0, 1) == 0
+  assert trunc_sat_u64_f64(-0.0, 1.0, 0) == 0
+  assert trunc_sat_u64_f64(-0.0, 1.0, 1) == 0
+  assert trunc_sat_u64_f64(-0.5, 1.0, 0) == 0
+  assert trunc_sat_u64_f64(-0.5, 1.0, 1) == 0
+}
+
+test "trunc_sat_u64_f32: the values" {
+  assert trunc_sat_u64_f32(0.0, 0.0, 0) == 0
+  assert trunc_sat_u64_f32(0.0, 0.0, 1) == 0
+  assert trunc_sat_u64_f32(1.0, 0.0, 0) == 4294967295
+  assert trunc_sat_u64_f32(1.0, 0.0, 1) == 4294967295
+  assert trunc_sat_u64_f32(-1.0, 0.0, 0) == 0
+  assert trunc_sat_u64_f32(-1.0, 0.0, 1) == 0
+  assert trunc_sat_u64_f32(-0.0, 1.0, 0) == 0
+  assert trunc_sat_u64_f32(-0.0, 1.0, 1) == 0
+  assert trunc_sat_u64_f32(-0.5, 1.0, 0) == 0
+  assert trunc_sat_u64_f32(-0.5, 1.0, 1) == 0
+}
+
+test "trunc_u8_f64: the values" {
+  assert trunc_u8_f64(0.0, 1.0) == 0
+  assert trunc_u8_f64(255.0, 1.0) == 255
+  assert trunc_u8_f64(-0.5, 1.0) == 0
+}
+
+test "trunc_u8_f64(-1.0, 1.0) panics" {   //~ TESTFAIL "trunc_u8_f64(-1.0, 1.0) panics"
+  let _ = trunc_u8_f64(-1.0, 1.0)
+}
+
+test "trunc_sat_u32_f32: the values" {
+  assert trunc_sat_u32_f32(0.0, 1.0) == 0
+  assert trunc_sat_u32_f32(-1.0, 1.0) == 0
+  assert trunc_sat_u32_f32(4294967296.0, 1.0) == 4294967295
+  assert trunc_sat_u32_f32(-0.5, 1.0) == 0
+}
+
+test "trunc_neg09_u32_f64: the values" {
+  assert trunc_neg09_u32_f64(1.0) == true
+  assert trunc_neg09_u32_f64(0.0) == true
+}
+
+test "trunc_neg09_u32_f64(1.125) panics" {   //~ TESTFAIL "trunc_neg09_u32_f64(1.125) panics"
+  let _ = trunc_neg09_u32_f64(1.125)
+}
+
+test "trunc_neg09_u64_f64: the values" {
+  assert trunc_neg09_u64_f64(1.0) == true
+  assert trunc_neg09_u64_f64(0.0) == true
+}
+
+test "trunc_neg09_u64_f64(1.125) panics" {   //~ TESTFAIL "trunc_neg09_u64_f64(1.125) panics"
+  let _ = trunc_neg09_u64_f64(1.125)
+}
+
+test "trunc_neg09_u64_f32: the values" {
+  assert trunc_neg09_u64_f32(1.0) == true
+  assert trunc_neg09_u64_f32(0.0) == true
+}
+
+test "trunc_neg09_u64_f32(1.125) panics" {   //~ TESTFAIL "trunc_neg09_u64_f32(1.125) panics"
+  let _ = trunc_neg09_u64_f32(1.125)
+}
+
+test "trunc_sum_loop_i64: the values" {
+  assert trunc_sum_loop_i64(0) == 0
+  assert trunc_sum_loop_i64(3) == 6917529027641081856
+}
+
+test "trunc_sum_loop_i64(4) panics" {   //~ TESTFAIL "trunc_sum_loop_i64(4) panics"
+  let _ = trunc_sum_loop_i64(4)
+}
+
+test "trunc_sat_sum_loop_u64: the values" {
+  assert trunc_sat_sum_loop_u64(0, 0) == 0
+  assert trunc_sat_sum_loop_u64(0, 1) == 0
+  assert trunc_sat_sum_loop_u64(2, 0) == 4294967295
+  assert trunc_sat_sum_loop_u64(2, 1) == 4294967295
+  assert trunc_sat_sum_loop_u64(3, 0) == 4294967295
+  assert trunc_sat_sum_loop_u64(3, 1) == 4294967295
+}
+
+test "parts_u_f64: the values" {
+  assert parts_u_f64(-0.5) == 0
+  assert parts_u_f64(4294967295.0) == 4294967295
+}
+
+test "parts_u_f64(4294967296.0) panics" {   //~ TESTFAIL "parts_u_f64(4294967296.0) panics"
+  let _ = parts_u_f64(4294967296.0)
+}
+
+test "trunc_in_some_arm: the values" {
+  assert trunc_in_some_arm(9223372036854774784.0, 0.0) == 9223372036854774784
+  assert trunc_in_some_arm(-9223372036854775808.0, 7.0) == I64.MIN
+}
+
+test "trunc_in_some_arm(9223372036854775808.0, 7.0) panics" {   //~ TESTFAIL "trunc_in_some_arm(9223372036854775808.0, 7.0) panics"
+  let _ = trunc_in_some_arm(9223372036854775808.0, 7.0)
+}
+
+test "trunc_in_none_arm: the values" {
+  assert trunc_in_none_arm(9223372036854775808.0, 9223372036854775808.0) == 9223372036854775807
+  assert trunc_in_none_arm(0.0, -9223372036854775808.0) == I64.MIN
+  assert trunc_in_none_arm(9223372036854775808.0, -2.0) == -2
+}
+
+test "trunc_in_closure_i64: the values" {
+  assert trunc_in_closure_i64(9223372036854774784.0) == -9223372036854774784
+  assert trunc_in_closure_i64(0.5) == 0
+}
+
+test "trunc_in_closure_i64(9223372036854775808.0) panics" {   //~ TESTFAIL "trunc_in_closure_i64(9223372036854775808.0) panics"
+  let _ = trunc_in_closure_i64(9223372036854775808.0)
+}

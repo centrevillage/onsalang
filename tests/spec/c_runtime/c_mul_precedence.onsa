@@ -1,0 +1,215 @@
+// onsa.toml
+// [package]
+// name = "c_mul_precedence"
+// edition = "2026"
+//
+// [export]
+// prefix = "cmp_"
+// fns = [
+//   "c_mul_precedence.mulw_addw_u32",
+//   "c_mul_precedence.muls_subs_u32",
+//   "c_mul_precedence.mul_add_u32",
+//   "c_mul_precedence.wmul_is_i16",
+//   "c_mul_precedence.rem_is_zero_i32",
+//   "c_mul_precedence.divides_i32",
+//   "c_mul_precedence.lo_bound_i8",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.1", "§3.4", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "mulw_addw_u32"
+// target = "host"
+// fn = "c_mul_precedence.mulw_addw_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536, c = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { a = 4294967295, b = 4294967295, c = 4294967295 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 65535, b = 65537, c = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "mulw_addw_u32 on a reset target"
+// target = "fw"
+// fn = "c_mul_precedence.mulw_addw_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536, c = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { a = 4294967295, b = 4294967295, c = 4294967295 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 65535, b = 65537, c = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "muls_subs_u32"
+// target = "host"
+// fn = "c_mul_precedence.muls_subs_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536, c = 5 }, status = 0, result = 4294967290 },
+//   { call = "fn", args = { a = 65535, b = 65537, c = 1 }, status = 0, result = 4294967294 },
+//   { call = "fn", args = { a = 65535, b = 65536, c = 65535 }, status = 0, result = 4294836225 },
+// ]
+//
+// [[test.host]]
+// name = "muls_subs_u32 on a reset target"
+// target = "fw"
+// fn = "c_mul_precedence.muls_subs_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536, c = 5 }, status = 0, result = 4294967290 },
+//   { call = "fn", args = { a = 65535, b = 65537, c = 1 }, status = 0, result = 4294967294 },
+//   { call = "fn", args = { a = 65535, b = 65536, c = 65535 }, status = 0, result = 4294836225 },
+// ]
+//
+// [[test.host]]
+// name = "mul_add_u32"
+// target = "host"
+// fn = "c_mul_precedence.mul_add_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536, c = 5 }, status = 1 },
+//   { call = "fn", args = { a = 65535, b = 65537, c = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 3, b = 4, c = 5 }, status = 0, result = 17 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_is_i16"
+// target = "host"
+// fn = "c_mul_precedence.wmul_is_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, b = -32768, c = 0 }, status = 0, result = true },
+//   { call = "fn", args = { a = 32767, b = 32767, c = 1 }, status = 0, result = true },
+//   { call = "fn", args = { a = 181, b = 181, c = 32761 }, status = 0, result = true },
+// ]
+//
+// [[test.host]]
+// name = "rem_is_zero_i32"
+// target = "host"
+// fn = "c_mul_precedence.rem_is_zero_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 0, result = true },
+//   { call = "fn", args = { a = -2147483648, b = 2 }, status = 0, result = true },
+//   { call = "fn", args = { a = 7, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "divides_i32"
+// target = "host"
+// fn = "c_mul_precedence.divides_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648, b = -1 }, status = 0, result = true },
+//   { call = "fn", args = { a = -2147483648, b = 2 }, status = 0, result = true },
+//   { call = "fn", args = { a = -2147483647, b = 2 }, status = 0, result = false },
+// ]
+//
+// [[test.host]]
+// name = "lo_bound_i8"
+// target = "host"
+// fn = "c_mul_precedence.lo_bound_i8"
+// steps = [
+//   { call = "fn", args = { lo = -128, x = -128, hi = 127 }, status = 0, result = true },
+//   { call = "fn", args = { lo = -128, x = 127, hi = 127 }, status = 0, result = false },
+//   { call = "fn", args = { lo = -1, x = 0, hi = 1 }, status = 0, result = true },
+// ]
+
+// Integer products and remainders as operands of other groups, written without the redundant parentheses
+// (spec §3.1: the multiplicative group `* / *% *|` binds tighter than the additive group, which binds
+// tighter than the comparison group; the remainder `%` binds tighter than a comparison; the comparison
+// binds tighter than `&&`; the form `onsa fmt` produces), on a target that is built to C. Today the
+// parser reports E0010 for each of these (S-45, W3-07), so the file waits for W3-07; the values are the
+// ones of the checked, wrapping and saturating products and of `MIN % -1` in c_mul.onsa and c_div_rem.onsa.
+// The product is evaluated first, and the checked product panics before the sum is looked at.
+
+pub fn mulw_addw_u32(a: U32, b: U32, c: U32) -> U32 {
+  a *% b +% c
+}
+
+pub fn muls_subs_u32(a: U32, b: U32, c: U32) -> U32 {
+  a *| b -| c
+}
+
+pub fn mul_add_u32(a: U32, b: U32, c: U32) -> U32 {
+  a * b + c
+}
+
+pub fn wmul_is_i16(a: I16, b: I16, c: I16) -> Bool {
+  a *% b == c
+}
+
+pub fn rem_is_zero_i32(a: I32, b: I32) -> Bool {
+  a % b == 0
+}
+
+pub fn divides_i32(a: I32, b: I32) -> Bool {
+  b != 0 && a % b == 0
+}
+
+pub fn lo_bound_i8(lo: I8, x: I8, hi: I8) -> Bool {
+  lo <= x && x < hi
+}
+
+test "mulw_addw_u32: the values" {
+  assert mulw_addw_u32(65536, 65536, 5) == 5
+  assert mulw_addw_u32(4294967295, 4294967295, 4294967295) == 0
+  assert mulw_addw_u32(65535, 65537, 1) == 0
+}
+
+test "muls_subs_u32: the values" {
+  assert muls_subs_u32(65536, 65536, 5) == 4294967290
+  assert muls_subs_u32(65535, 65537, 1) == 4294967294
+  assert muls_subs_u32(65535, 65536, 65535) == 4294836225
+}
+
+test "mul_add_u32: the values" {
+  assert mul_add_u32(65535, 65537, 0) == 4294967295
+  assert mul_add_u32(3, 4, 5) == 17
+}
+
+test "mul_add_u32(65536, 65536, 5) panics" {   //~ TESTFAIL "mul_add_u32(65536, 65536, 5) panics"
+  let _ = mul_add_u32(65536, 65536, 5)
+}
+
+test "wmul_is_i16: the values" {
+  assert wmul_is_i16(I16.MIN, I16.MIN, 0) == true
+  assert wmul_is_i16(32767, 32767, 1) == true
+  assert wmul_is_i16(181, 181, 32761) == true
+}
+
+test "rem_is_zero_i32: the values" {
+  assert rem_is_zero_i32(I32.MIN, -1) == true
+  assert rem_is_zero_i32(I32.MIN, 2) == true
+}
+
+test "rem_is_zero_i32(7, 0) panics" {   //~ TESTFAIL "rem_is_zero_i32(7, 0) panics"
+  let _ = rem_is_zero_i32(7, 0)
+}
+
+test "divides_i32: the values" {
+  assert divides_i32(I32.MIN, -1) == true
+  assert divides_i32(I32.MIN, 2) == true
+  assert divides_i32(-2147483647, 2) == false
+}
+
+test "lo_bound_i8: the values" {
+  assert lo_bound_i8(I8.MIN, I8.MIN, 127) == true
+  assert lo_bound_i8(I8.MIN, 127, 127) == false
+  assert lo_bound_i8(-1, 0, 1) == true
+}

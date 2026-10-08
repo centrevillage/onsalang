@@ -1208,213 +1208,6 @@ note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
 
 [[pending]]
 kind = "gate"
-target = "vectors-c/i8.rem[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "749bec49503d4173"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.rem_euclid[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "9ea489c8ec127294"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.shr[c-clang]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 50
-digest = "99ba768397101714"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "d7e365698ff1a1bc"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem_euclid[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "88bbc2b117710b6f"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.shr[c-clang]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 57
-digest = "95466bd5d09ec7df"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "148bf25eb0fa9337"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem_euclid[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "0cb74e87a5ef19d2"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "be4471f1353d74bb"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem_euclid[c-clang]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "2266732da5e0608c"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i8[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "75d9546a0863e15f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i16[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "1189f1d013e06db3"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i32[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 38
-digest = "b0c459217f60c412"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i8[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "13c8517bfc06bd77"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i16[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "7ba37ecf7ff87b4f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i32[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 22
-digest = "30f067321501ea29"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i64[c-clang]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 30
-digest = "cece32abed014980"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.trunc_i64_sat[c-clang]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 9
-digest = "4a5335f44301deac"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.trunc_u64_sat[c-clang]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 11
-digest = "d89bf043307925c6"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.trunc_i64_sat[c-clang]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 13
-digest = "fe7250bf2b7b6f37"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.trunc_u64_sat[c-clang]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 9
-digest = "ecc00e5c473da0ee"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: 誤った値（6671500168 など）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.to_bits[c-clang]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "5347a2e37e0f56bb"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.to_bits[c-clang]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "c8140f3d576349e8"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
 target = "vectors-c/i8.BITS[c-clang]"
 reasons = ["R-136"]
 until = "W5-05"
@@ -1466,204 +1259,6 @@ until = "W5-05"
 rows = 1
 digest = "ff3f757762f5fdba"
 note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.rem[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "749bec49503d4173"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.rem_euclid[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "9ea489c8ec127294"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.shr[c-gcc]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 50
-digest = "99ba768397101714"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "d7e365698ff1a1bc"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem_euclid[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "88bbc2b117710b6f"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.shr[c-gcc]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 57
-digest = "95466bd5d09ec7df"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "148bf25eb0fa9337"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem_euclid[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "0cb74e87a5ef19d2"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "be4471f1353d74bb"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem_euclid[c-gcc]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "2266732da5e0608c"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.mul[c-gcc]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 10
-digest = "5aa11b854d5d2229"
-note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: gcc は検査を消し、溢れを見逃す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.smul[c-gcc]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 11
-digest = "a6932f3a1c7b2f16"
-note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: gcc は検査を消し、溢れを見逃す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.checked_mul[c-gcc]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 13
-digest = "6531cd600de2ab20"
-note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: gcc は検査を消し、溢れを見逃す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i8[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "75d9546a0863e15f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i16[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "1189f1d013e06db3"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i32[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 38
-digest = "b0c459217f60c412"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i8[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "13c8517bfc06bd77"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i16[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "7ba37ecf7ff87b4f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i32[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 22
-digest = "30f067321501ea29"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i64[c-gcc]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 30
-digest = "cece32abed014980"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.to_bits[c-gcc]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "5347a2e37e0f56bb"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.to_bits[c-gcc]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "c8140f3d576349e8"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
 
 [[pending]]
 kind = "gate"
@@ -1721,258 +1316,6 @@ note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
 
 [[pending]]
 kind = "gate"
-target = "vectors-c/i8.rem[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "749bec49503d4173"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.rem_euclid[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "9ea489c8ec127294"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.shr[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 50
-digest = "99ba768397101714"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "d7e365698ff1a1bc"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.wmul[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 729
-digest = "e3bf14a13d7718e4"
-note = "16 ビットの *% が int への昇格で符号付きの溢れになる（UBSan が報告）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem_euclid[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "88bbc2b117710b6f"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.shr[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 57
-digest = "95466bd5d09ec7df"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "148bf25eb0fa9337"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem_euclid[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "0cb74e87a5ef19d2"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "be4471f1353d74bb"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem_euclid[c-sanitize]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "2266732da5e0608c"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u16.wmul[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 120
-digest = "8b3dea5e94948f5d"
-note = "16 ビットの *% が int への昇格で符号付きの溢れになる（UBSan が報告）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.mul[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 118
-digest = "4108e2a6c4b99394"
-note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: UBSan が符号付きの溢れを報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.smul[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 117
-digest = "702b79494eac9f91"
-note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: UBSan が符号付きの溢れを報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.checked_mul[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 120
-digest = "d38961e498206068"
-note = "U32 の検査付き乗算を int64_t で掛けて溢れる（未定義動作）: UBSan が符号付きの溢れを報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i8[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "75d9546a0863e15f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i16[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "1189f1d013e06db3"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i32[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 38
-digest = "b0c459217f60c412"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i8[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "13c8517bfc06bd77"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i16[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "7ba37ecf7ff87b4f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i32[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 22
-digest = "30f067321501ea29"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i64[c-sanitize]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 30
-digest = "cece32abed014980"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.trunc_i64_sat[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 120
-digest = "0899f1931a4b4ffb"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.trunc_u64_sat[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 131
-digest = "99fcd789bf8d91a0"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.trunc_i64_sat[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 132
-digest = "b6ee451612e5faac"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.trunc_u64_sat[c-sanitize]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 135
-digest = "bcbe26714ffbc9a5"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: UBSan が範囲外の変換を報告"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.to_bits[c-sanitize]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "5347a2e37e0f56bb"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.to_bits[c-sanitize]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "c8140f3d576349e8"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
 target = "vectors-c/i8.BITS[c-sanitize]"
 reasons = ["R-136"]
 until = "W5-05"
@@ -2024,213 +1367,6 @@ until = "W5-05"
 rows = 1
 digest = "ff3f757762f5fdba"
 note = "u64.BITS が 32（Core の降下が定数の型 U32 の幅を使う）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.rem[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "749bec49503d4173"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.rem_euclid[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "9ea489c8ec127294"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i8.shr[c-x86]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 50
-digest = "99ba768397101714"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "d7e365698ff1a1bc"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.rem_euclid[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "88bbc2b117710b6f"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i16.shr[c-x86]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 57
-digest = "95466bd5d09ec7df"
-note = "I8 / I16 の負の数の >> が int への昇格で論理シフトになる（-128 >> 1 が 64）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "148bf25eb0fa9337"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i32.rem_euclid[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "0cb74e87a5ef19d2"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "be4471f1353d74bb"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/i64.rem_euclid[c-x86]"
-reasons = ["R-19"]
-until = "W2-05"
-rows = 1
-digest = "2266732da5e0608c"
-note = "MIN.rem_euclid(-1) が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i8[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "75d9546a0863e15f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i16[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "1189f1d013e06db3"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u32.narrow_i32[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 38
-digest = "b0c459217f60c412"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i8[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 16
-digest = "13c8517bfc06bd77"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i16[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 20
-digest = "7ba37ecf7ff87b4f"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i32[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 22
-digest = "30f067321501ea29"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/u64.narrow_i64[c-x86]"
-reasons = ["R-11"]
-until = "W2-05"
-rows = 30
-digest = "cece32abed014980"
-note = "符号なしから符号付きへの narrow_* が範囲内の値でも None を返す"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.trunc_i64_sat[c-x86]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 9
-digest = "4a5335f44301deac"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.trunc_u64_sat[c-x86]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 11
-digest = "d89bf043307925c6"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.trunc_i64_sat[c-x86]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 13
-digest = "fe7250bf2b7b6f37"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.trunc_u64_sat[c-x86]"
-reasons = ["R-10"]
-until = "W2-05"
-rows = 9
-digest = "ecc00e5c473da0ee"
-note = "64 ビットの飽和変換の上端が範囲外の変換（未定義動作）: x86_64 では 0"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f32.to_bits[c-x86]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "5347a2e37e0f56bb"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-c/f64.to_bits[c-x86]"
-reasons = ["S-106"]
-until = "W2-05"
-rows = 9
-digest = "c8140f3d576349e8"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
 
 [[pending]]
 kind = "gate"
@@ -2810,3 +1946,285 @@ target = "tests/spec/negative/const_u64_mul_panic.onsa"
 reasons = ["S-131", "S-146"]
 until = "W9-03"
 note = "const の初期化式の整数の panic（U64 の積、MIN / -1、2^63 と 2^64 の trunc）が E0419 にならない（§6.6）。今は onsa check で 0 件"
+
+# --- W2-05/t: C のランタイムの整数の文脈（2026-10-08）
+
+
+# --- W2-05/t: C のターゲットで走る整数の事例（2026-10-08）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_if_equality.onsa"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる（§13.4）。gcc は exported な関数の -Wclobbered も出す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_match_value.onsa"
+reasons = ["R-145"]
+until = "W2-09"
+note = "値を返す match（Option / enum / Result の平らな switch）の C が clang の -Wsometimes-uninitialized で通らない（§13.4）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_narrow_s2u.onsa"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "符号付きから符号無しへの narrow_* の C が clang の -Wtautological-constant-out-of-range-compare / -Wsign-compare で通らない（§3.3）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_generic_int.onsa"
+reasons = ["S-84"]
+until = "W5-05"
+note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の整数の端の C 側"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_mul_precedence.onsa"
+reasons = ["S-45"]
+until = "W3-07"
+note = "乗法・加法・比較・&& の群の部分順序（§3.1）。今は E0010。積と剰余を括弧なしで他の群の被演算子にする形の C 側"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_shift_chain.onsa"
+reasons = ["S-45"]
+until = "W3-07"
+note = "同じシフト演算子の連鎖 a >> m >> n（§3.1）。今は E0010"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_flow_int.onsa"
+reasons = ["S-102", "S-44", "S-45"]
+until = "W3-10"
+note = "flow の新しい構文（at、prev~(^s, seed)、積と和の群）。整数のラップ積・飽和変換・trunc_u32 の panic の poison の C 側"
+
+# --- W2-05/t: 上の事例を C の検査（c-clang など）で -Werror にかけた結果（2026-10-08）
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_if_equality.onsa[dbg]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_if_equality.onsa[fw]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_if_equality.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_match_value.onsa[dbg]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_match_value.onsa[fw]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_match_value.onsa[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-clang/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/spec/c_runtime/c_if_equality.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_if_equality.onsa[dbg]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_if_equality.onsa[fw]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_if_equality.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_match_value.onsa[dbg]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_match_value.onsa[fw]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_match_value.onsa[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-sanitize/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_if_equality.onsa[dbg]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_if_equality.onsa[fw]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_if_equality.onsa[host]"
+reasons = ["R-142"]
+until = "W2-09"
+note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_match_value.onsa[dbg]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_match_value.onsa[fw]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_match_value.onsa[host]"
+reasons = ["R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+[[pending]]
+kind = "gate"
+target = "c-x86/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
+reasons = ["R-11", "R-145"]
+until = "W2-09"
+note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
+
+# --- W2-05: gcc の -Wclobbered（R-167、2026-10-08）
+
+[[pending]]
+kind = "gate"
+target = "c-gcc/tests/spec/c_runtime/c_shift.onsa[host]"
+reasons = ["R-167"]
+until = "W2-09"
+note = "poison の export の wrapper に本体が inline され、gcc-15 が -Wclobbered（variable 'x' / argument 'a' might be clobbered by longjmp）を出し -Werror で落ちる。I8 / I16 の >> の古い誤った式が隠していた"

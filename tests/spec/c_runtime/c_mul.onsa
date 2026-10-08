@@ -1,0 +1,584 @@
+// onsa.toml
+// [package]
+// name = "c_mul"
+// edition = "2026"
+//
+// [export]
+// prefix = "cmu_"
+// fns = [
+//   "c_mul.mul_u32",
+//   "c_mul.wmul_u32",
+//   "c_mul.smul_u32",
+//   "c_mul.checked_mul_u32",
+//   "c_mul.mul_i16",
+//   "c_mul.wmul_i16",
+//   "c_mul.u64_op",
+//   "c_mul.mul_then_div_u32",
+//   "c_mul.wmul_then_wsub_i16",
+//   "c_mul.wmul_loop_u32",
+//   "c_mul.wmul_loop_u64",
+//   "c_mul.mul_loop_u64",
+//   "c_mul.pair_hi_u32",
+//   "c_mul.mul_in_arm_u32",
+//   "c_mul.mul_in_closure_u32",
+//   "c_mul.wmul_in_closure_u64",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§3.5", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "mul_u32"
+// target = "host"
+// fn = "c_mul.mul_u32"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 1 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "mul_u32 on a reset target"
+// target = "fw"
+// fn = "c_mul.mul_u32"
+// steps = [
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_u32"
+// target = "host"
+// fn = "c_mul.wmul_u32"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 4294967295, b = 2 }, status = 0, result = 4294967294 },
+//   { call = "fn", args = { a = 65536, b = 65536 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_u32 on a reset target"
+// target = "fw"
+// fn = "c_mul.wmul_u32"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 4294967295, b = 2 }, status = 0, result = 4294967294 },
+//   { call = "fn", args = { a = 65536, b = 65536 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "smul_u32"
+// target = "host"
+// fn = "c_mul.smul_u32"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 4294967295, b = 2 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 65536, b = 65536 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "checked_mul_u32"
+// target = "host"
+// fn = "c_mul.checked_mul_u32"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { a = 4294967295, b = 2 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { a = 65536, b = 65536 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "mul_i16"
+// target = "host"
+// fn = "c_mul.mul_i16"
+// steps = [
+//   { call = "fn", args = { a = 32767, b = 32767 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_i16"
+// target = "host"
+// fn = "c_mul.wmul_i16"
+// steps = [
+//   { call = "fn", args = { a = 32767, b = 32767 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 32767, b = 2 }, status = 0, result = -2 },
+//   { call = "fn", args = { a = 182, b = 182 }, status = 0, result = -32412 },
+//   { call = "fn", args = { a = 255, b = 257 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "u64_op"
+// target = "host"
+// fn = "c_mul.u64_op"
+// steps = [
+//   { call = "fn", args = { op = 0, part = 0, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 1 },
+//   { call = "fn", args = { op = 0, part = 1, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 1 },
+//   { call = "fn", args = { op = 1, part = 0, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 1, part = 1, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { op = 2, part = 0, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 2, part = 1, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 3, part = 0, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 3, part = 1, ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 0, part = 0, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 0, part = 1, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 1, part = 0, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 1, part = 1, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 2, part = 0, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 2, part = 1, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 3, part = 0, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 3, part = 1, ah = 0, al = 4294967295, bh = 1, bl = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { op = 0, part = 0, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 1 },
+//   { call = "fn", args = { op = 0, part = 1, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 1 },
+//   { call = "fn", args = { op = 1, part = 0, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 1, part = 1, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 2, part = 0, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 2, part = 1, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { op = 3, part = 0, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { op = 3, part = 1, ah = 2147483648, al = 0, bh = 0, bl = 2 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "mul_then_div_u32"
+// target = "host"
+// fn = "c_mul.mul_then_div_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536, c = 65536 }, status = 1 },
+//   { call = "fn", args = { a = 65535, b = 65537, c = 65535 }, status = 0, result = 65537 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_then_wsub_i16"
+// target = "host"
+// fn = "c_mul.wmul_then_wsub_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, b = -32768, c = 1 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = 32767, b = 32767, c = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -32768, b = 2, c = -1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_loop_u32"
+// target = "host"
+// fn = "c_mul.wmul_loop_u32"
+// steps = [
+//   { call = "fn", args = { n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { n = 20 }, status = 0, result = 3486784401 },
+//   { call = "fn", args = { n = 21 }, status = 0, result = 1870418611 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_loop_u64"
+// target = "host"
+// fn = "c_mul.wmul_loop_u64"
+// steps = [
+//   { call = "fn", args = { n = 0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 0, part = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { n = 2, part = 0 }, status = 0, result = 1751095458 },
+//   { call = "fn", args = { n = 2, part = 1 }, status = 0, result = 26193385 },
+//   { call = "fn", args = { n = 64, part = 0 }, status = 0, result = 1143335871 },
+//   { call = "fn", args = { n = 64, part = 1 }, status = 0, result = 1867340033 },
+// ]
+//
+// [[test.host]]
+// name = "mul_loop_u64"
+// target = "host"
+// fn = "c_mul.mul_loop_u64"
+// steps = [
+//   { call = "fn", args = { n = 0, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 0, part = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { n = 19, part = 0 }, status = 0, result = 2328306436 },
+//   { call = "fn", args = { n = 19, part = 1 }, status = 0, result = 2313682944 },
+//   { call = "fn", args = { n = 20, part = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "pair_hi_u32"
+// target = "host"
+// fn = "c_mul.pair_hi_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536 }, status = 1 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+// ]
+//
+// [[test.host]]
+// name = "mul_in_arm_u32"
+// target = "host"
+// fn = "c_mul.mul_in_arm_u32"
+// steps = [
+//   { call = "fn", args = { a = 65536, b = 65536 }, status = 1 },
+//   { call = "fn", args = { a = 65535, b = 65537 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 3, b = 5 }, status = 0, result = 15 },
+// ]
+//
+// [[test.host]]
+// name = "mul_in_closure_u32"
+// target = "host"
+// fn = "c_mul.mul_in_closure_u32"
+// steps = [
+//   { call = "fn", args = { a = 65535, b = 65535 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 65535, b = 65536 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "wmul_in_closure_u64"
+// target = "host"
+// fn = "c_mul.wmul_in_closure_u64"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, part = 0 }, status = 0, result = 2 },
+//   { call = "fn", args = { a = 4294967295, part = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 4294967294, part = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 4294967294, part = 1 }, status = 0, result = 0 },
+// ]
+
+// Integer multiplication on a target that is built to C (spec §3.4, §9.2, §14.2): the checked `*`,
+// the wrapping `*%`, the saturating `*|` and `checked_mul`, at the edges of every width, for the
+// types and the places the test vectors do not reach (they call one operation on two literals).
+// The products that do not fit the host word are the point: `U32 * U32` does not fit a signed 64-bit
+// word (4294967295 * 4294967295 > 2^63), `U16 *% U16` and `I16 *% I16` do not fit a 32-bit `int`,
+// and `U64` products do not fit 64 bits. The interpreter side of the same rules is in
+// semantics/u64_mul_*.onsa and wrapping_mul_u64.onsa, and the same expectations run on the
+// interpreter here (the test blocks) and on the C target (the host scripts).
+//
+// The rules, for a type of w bits, range [MIN, MAX] (spec §3.4):
+//   a * b    the mathematical product; panics when it is outside [MIN, MAX]
+//   a *% b   the mathematical product modulo 2^w, written as a value of the type (two's complement)
+//   a *| b   the mathematical product clamped to [MIN, MAX]
+//   a.checked_mul(b)  Some of the product, or None where `a * b` would panic
+// Every expected value is worked out by hand: the factors are written as sums of powers of two.
+//
+// A `U64` does not fit a TOML integer above 2^63 - 1, so `u64_op` takes and gives the 64-bit values as
+// two `U32` halves (the high word `ah`/`bh`, the low word `al`/`bl`); `part` is 0 for the high word
+// of the result and 1 for the low word, `op` is 0 for `*`, 1 for `*%`, 2 for `*|`, 3 for
+// `checked_mul` is Some (1) or None (0), 4 for the checked value (0 for None).
+
+use std.array
+
+pub struct Pair {
+  lo: U32,
+  hi: U32,
+}
+
+fn join(h: U32, l: U32) -> U64 {
+  let hh = (h as U64) << 32
+  hh | (l as U64)
+}
+
+fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn mul_op(op: U32, a: U64, b: U64) -> U64 {
+  var r: U64 = 0
+  if op < 1 {
+    r = a * b
+  } else if op < 2 {
+    r = a *% b
+  } else if op < 3 {
+    r = a *| b
+  } else if op < 4 {
+    match a.checked_mul(b) {
+      Some(_) => {
+        r = 1
+      },
+      None => {
+        r = 0
+      },
+    }
+  } else {
+    match a.checked_mul(b) {
+      Some(v) => {
+        r = v
+      },
+      None => {
+        r = 0
+      },
+    }
+  }
+  r
+}
+
+fn mul_arm(o: Option[U32], k: U32) -> U32 {
+  var r: U32 = 7
+  match o {
+    Some(v) => {
+      r = v * k
+    },
+    None => {
+      r = 7
+    },
+  }
+  r
+}
+
+pub fn mul_u32(a: U32, b: U32) -> U32 {
+  a * b
+}
+
+pub fn wmul_u32(a: U32, b: U32) -> U32 {
+  a *% b
+}
+
+pub fn smul_u32(a: U32, b: U32) -> U32 {
+  a *| b
+}
+
+pub fn checked_mul_u32(a: U32, b: U32) -> I64 {
+  var r: I64 = I64.MIN
+  match a.checked_mul(b) {
+    Some(v) => {
+      r = v as I64
+    },
+    None => {
+      r = I64.MIN
+    },
+  }
+  r
+}
+
+pub fn mul_i16(a: I16, b: I16) -> I16 {
+  a * b
+}
+
+pub fn wmul_i16(a: I16, b: I16) -> I16 {
+  a *% b
+}
+
+pub fn u64_op(op: U32, part: U32, ah: U32, al: U32, bh: U32, bl: U32) -> U32 {
+  let a = join(ah, al)
+  let b = join(bh, bl)
+  let r = mul_op(op, a, b)
+  part_of(r, part)
+}
+
+pub fn mul_then_div_u32(a: U32, b: U32, c: U32) -> U32 {
+  a * b / c
+}
+
+pub fn wmul_then_wsub_i16(a: I16, b: I16, c: I16) -> I16 {
+  let p = a *% b
+  p -% c
+}
+
+pub fn wmul_loop_u32(n: U32) -> U32 {
+  var x: U32 = 1
+  for _ in 0..n {
+    x = x *% 3
+  }
+  x
+}
+
+pub fn wmul_loop_u64(n: U32, part: U32) -> U32 {
+  var x: U64 = 1
+  for _ in 0..n {
+    x = x *% 6364136223846793005
+  }
+  part_of(x, part)
+}
+
+pub fn mul_loop_u64(n: U32, part: U32) -> U32 {
+  var x: U64 = 1
+  for _ in 0..n {
+    x = x * 10
+  }
+  part_of(x, part)
+}
+
+pub fn pair_hi_u32(a: U32, b: U32) -> U32 {
+  let p = Pair { lo: a *% b, hi: a * b }
+  p.hi
+}
+
+pub fn mul_in_arm_u32(a: U32, b: U32) -> U32 {
+  mul_arm(Some(a), b)
+}
+
+pub fn mul_in_closure_u32(a: U32, b: U32) -> U32 {
+  let ys: [U32; 3] = array.from_fn(fn(i) { a * (b + i) })
+  ys[2]
+}
+
+pub fn wmul_in_closure_u64(a: U32, part: U32) -> U32 {
+  let k: U64 = 4294967297
+  let ys: [U64; 3] = array.from_fn(fn(i) { ((a as U64) + (i as U64)) *% k })
+  part_of(ys[2], part)
+}
+
+test "mul_u32: the values" {
+  assert mul_u32(65535, 65537) == 4294967295
+}
+
+test "mul_u32(4294967295, 4294967295) panics" {   //~ TESTFAIL "mul_u32(4294967295, 4294967295) panics"
+  let _ = mul_u32(4294967295, 4294967295)
+}
+
+test "wmul_u32: the values" {
+  assert wmul_u32(4294967295, 4294967295) == 1
+  assert wmul_u32(4294967295, 2) == 4294967294
+  assert wmul_u32(65536, 65536) == 0
+  assert wmul_u32(65535, 65537) == 4294967295
+}
+
+test "smul_u32: the values" {
+  assert smul_u32(4294967295, 4294967295) == 4294967295
+  assert smul_u32(4294967295, 2) == 4294967295
+  assert smul_u32(65536, 65536) == 4294967295
+  assert smul_u32(65535, 65537) == 4294967295
+}
+
+test "checked_mul_u32: the values" {
+  assert checked_mul_u32(4294967295, 4294967295) == I64.MIN
+  assert checked_mul_u32(4294967295, 2) == I64.MIN
+  assert checked_mul_u32(65536, 65536) == I64.MIN
+  assert checked_mul_u32(65535, 65537) == 4294967295
+}
+
+test "mul_i16(32767, 32767) panics" {   //~ TESTFAIL "mul_i16(32767, 32767) panics"
+  let _ = mul_i16(32767, 32767)
+}
+
+test "wmul_i16: the values" {
+  assert wmul_i16(32767, 32767) == 1
+  assert wmul_i16(32767, 2) == -2
+  assert wmul_i16(182, 182) == -32412
+  assert wmul_i16(255, 257) == -1
+}
+
+test "u64_op: the values" {
+  assert u64_op(1, 0, 4294967295, 4294967295, 4294967295, 4294967295) == 0
+  assert u64_op(1, 1, 4294967295, 4294967295, 4294967295, 4294967295) == 1
+  assert u64_op(2, 0, 4294967295, 4294967295, 4294967295, 4294967295) == 4294967295
+  assert u64_op(2, 1, 4294967295, 4294967295, 4294967295, 4294967295) == 4294967295
+  assert u64_op(3, 0, 4294967295, 4294967295, 4294967295, 4294967295) == 0
+  assert u64_op(3, 1, 4294967295, 4294967295, 4294967295, 4294967295) == 0
+  assert u64_op(0, 0, 0, 4294967295, 1, 1) == 4294967295
+  assert u64_op(0, 1, 0, 4294967295, 1, 1) == 4294967295
+  assert u64_op(1, 0, 0, 4294967295, 1, 1) == 4294967295
+  assert u64_op(1, 1, 0, 4294967295, 1, 1) == 4294967295
+  assert u64_op(2, 0, 0, 4294967295, 1, 1) == 4294967295
+  assert u64_op(2, 1, 0, 4294967295, 1, 1) == 4294967295
+  assert u64_op(3, 0, 0, 4294967295, 1, 1) == 0
+  assert u64_op(3, 1, 0, 4294967295, 1, 1) == 1
+  assert u64_op(1, 0, 2147483648, 0, 0, 2) == 0
+  assert u64_op(1, 1, 2147483648, 0, 0, 2) == 0
+  assert u64_op(2, 0, 2147483648, 0, 0, 2) == 4294967295
+  assert u64_op(2, 1, 2147483648, 0, 0, 2) == 4294967295
+  assert u64_op(3, 0, 2147483648, 0, 0, 2) == 0
+  assert u64_op(3, 1, 2147483648, 0, 0, 2) == 0
+}
+
+test "u64_op(0, 0, 4294967295, 4294967295, 4294967295, 4294967295) panics" {   //~ TESTFAIL "u64_op(0, 0, 4294967295, 4294967295, 4294967295, 4294967295) panics"
+  let _ = u64_op(0, 0, 4294967295, 4294967295, 4294967295, 4294967295)
+}
+
+test "u64_op(0, 1, 4294967295, 4294967295, 4294967295, 4294967295) panics" {   //~ TESTFAIL "u64_op(0, 1, 4294967295, 4294967295, 4294967295, 4294967295) panics"
+  let _ = u64_op(0, 1, 4294967295, 4294967295, 4294967295, 4294967295)
+}
+
+test "mul_then_div_u32: the values" {
+  assert mul_then_div_u32(65535, 65537, 65535) == 65537
+}
+
+test "mul_then_div_u32(65536, 65536, 65536) panics" {   //~ TESTFAIL "mul_then_div_u32(65536, 65536, 65536) panics"
+  let _ = mul_then_div_u32(65536, 65536, 65536)
+}
+
+test "wmul_then_wsub_i16: the values" {
+  assert wmul_then_wsub_i16(I16.MIN, I16.MIN, 1) == -1
+  assert wmul_then_wsub_i16(32767, 32767, 1) == 0
+  assert wmul_then_wsub_i16(I16.MIN, 2, -1) == 1
+}
+
+test "wmul_loop_u32: the values" {
+  assert wmul_loop_u32(0) == 1
+  assert wmul_loop_u32(20) == 3486784401
+  assert wmul_loop_u32(21) == 1870418611
+}
+
+test "wmul_loop_u64: the values" {
+  assert wmul_loop_u64(0, 0) == 0
+  assert wmul_loop_u64(0, 1) == 1
+  assert wmul_loop_u64(2, 0) == 1751095458
+  assert wmul_loop_u64(2, 1) == 26193385
+  assert wmul_loop_u64(64, 0) == 1143335871
+  assert wmul_loop_u64(64, 1) == 1867340033
+}
+
+test "mul_loop_u64: the values" {
+  assert mul_loop_u64(0, 0) == 0
+  assert mul_loop_u64(0, 1) == 1
+  assert mul_loop_u64(19, 0) == 2328306436
+  assert mul_loop_u64(19, 1) == 2313682944
+}
+
+test "mul_loop_u64(20, 0) panics" {   //~ TESTFAIL "mul_loop_u64(20, 0) panics"
+  let _ = mul_loop_u64(20, 0)
+}
+
+test "pair_hi_u32: the values" {
+  assert pair_hi_u32(65535, 65537) == 4294967295
+}
+
+test "pair_hi_u32(65536, 65536) panics" {   //~ TESTFAIL "pair_hi_u32(65536, 65536) panics"
+  let _ = pair_hi_u32(65536, 65536)
+}
+
+test "mul_in_arm_u32: the values" {
+  assert mul_in_arm_u32(65535, 65537) == 4294967295
+  assert mul_in_arm_u32(3, 5) == 15
+}
+
+test "mul_in_arm_u32(65536, 65536) panics" {   //~ TESTFAIL "mul_in_arm_u32(65536, 65536) panics"
+  let _ = mul_in_arm_u32(65536, 65536)
+}
+
+test "mul_in_closure_u32: the values" {
+  assert mul_in_closure_u32(65535, 65535) == 4294967295
+}
+
+test "mul_in_closure_u32(65535, 65536) panics" {   //~ TESTFAIL "mul_in_closure_u32(65535, 65536) panics"
+  let _ = mul_in_closure_u32(65535, 65536)
+}
+
+test "wmul_in_closure_u64: the values" {
+  assert wmul_in_closure_u64(4294967295, 0) == 2
+  assert wmul_in_closure_u64(4294967295, 1) == 1
+  assert wmul_in_closure_u64(4294967294, 0) == 1
+  assert wmul_in_closure_u64(4294967294, 1) == 0
+}

@@ -1,0 +1,285 @@
+// onsa.toml
+// [package]
+// name = "c_match_value"
+// edition = "2026"
+//
+// [export]
+// prefix = "cmv_"
+// fns = [
+//   "c_match_value.rem_value_match_i16",
+//   "c_match_value.div_value_match_i16",
+//   "c_match_value.rem_value_match_none_i16",
+//   "c_match_value.shr_value_match_i8",
+//   "c_match_value.trunc_value_match_f64",
+//   "c_match_value.mul_by_mode_u32",
+//   "c_match_value.mul_result_u32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.4", "§9.2", "§14.2", "§13.4"]
+//
+// [[test.host]]
+// name = "rem_value_match_i16"
+// target = "host"
+// fn = "c_match_value.rem_value_match_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -32768, b = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -32768, b = 0 }, status = 1 },
+//   { call = "fn", args = { a = 32767, b = -1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "div_value_match_i16"
+// target = "host"
+// fn = "c_match_value.div_value_match_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = -32768, b = 1 }, status = 0, result = -32768 },
+//   { call = "fn", args = { a = 32767, b = -1 }, status = 0, result = -32767 },
+//   { call = "fn", args = { a = -5, b = 3 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "rem_value_match_none_i16"
+// target = "host"
+// fn = "c_match_value.rem_value_match_none_i16"
+// steps = [
+//   { call = "fn", args = { b = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { b = -1 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "shr_value_match_i8"
+// target = "host"
+// fn = "c_match_value.shr_value_match_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, n = 1 }, status = 0, result = -64 },
+//   { call = "fn", args = { a = -128, n = 7 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, n = 8 }, status = 1 },
+//   { call = "fn", args = { a = 127, n = 7 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_value_match_f64"
+// target = "host"
+// fn = "c_match_value.trunc_value_match_f64"
+// steps = [
+//   { call = "fn", args = { x = 9223372036854774784.0 }, status = 0, result = 9223372036854774784 },
+//   { call = "fn", args = { x = 9223372036854775808.0 }, status = 1 },
+//   { call = "fn", args = { x = -9223372036854775808.0 }, status = 0, result = -9223372036854775808 },
+//   { call = "fn", args = { x = -0.5 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "mul_by_mode_u32"
+// target = "host"
+// fn = "c_match_value.mul_by_mode_u32"
+// steps = [
+//   { call = "fn", args = { sel = 0, a = 65536, b = 65536 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 1, a = 65536, b = 65536 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { sel = 2, a = 65536, b = 65536 }, status = 1 },
+//   { call = "fn", args = { sel = 0, a = 4294967295, b = 4294967295 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mul_result_u32"
+// target = "host"
+// fn = "c_match_value.mul_result_u32"
+// steps = [
+//   { call = "fn", args = { ok = 1, v = 65536, k = 65536 }, status = 1 },
+//   { call = "fn", args = { ok = 0, v = 65536, k = 65536 }, status = 0, result = 0 },
+//   { call = "fn", args = { ok = 1, v = 65535, k = 65537 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { ok = 0, v = 4294967295, k = 4294967295 }, status = 0, result = 1 },
+// ]
+
+// A `match` whose value is the value of a function (or of a `let`), on a target that is built to C
+// (spec §7; §13.4: the generated C compiles without a warning under -Wall -Wextra -pedantic). The
+// arms are the integer operations of the other c_*.onsa files, so the checks sit inside the arm of a
+// flat switch on the variants of one enum, `Option` or `Result` (the form that stays accepted until
+// W8-06, tests/spec/negative/lower_match_general.onsa `kept_switch`). The files c_div_rem, c_mul,
+// c_trunc, c_narrow_*, c_shift and c_nan_bits write their arms as statements that assign a variable,
+// because the generated C of a value `match` does not compile today: clang reports
+// -Wsometimes-uninitialized for the variable that holds the result of the arms (the C has an
+// `else if (tag == 0)` as the last branch and no `else`). This file is where the value form is
+// pinned; the expectations are the same rules as in the other files:
+//   a / b      truncated toward zero; panics for b = 0 and MIN / -1
+//   a % b      MIN % -1 is 0
+//   a * b      panics outside the type; a *% b wraps; a *| b clamps
+//   a >> n     arithmetic for the signed types; panics for n at or above the bit width
+//   x.trunc_i64()  toward zero, panics outside I64 and for NaN
+
+pub enum Mode {
+  Wrap,
+  Sat,
+  Check,
+}
+
+fn rem_opt(o: Option[I16], d: I16) -> I16 {
+  match o {
+    Some(v) => v % d,
+    None => 7,
+  }
+}
+
+fn div_opt(o: Option[I16], d: I16) -> I16 {
+  match o {
+    Some(v) => v / d,
+    None => 7,
+  }
+}
+
+fn shr_opt(o: Option[I8], n: U32) -> I8 {
+  match o {
+    Some(v) => v >> n,
+    None => 7,
+  }
+}
+
+fn trunc_opt(o: Option[F64]) -> I64 {
+  match o {
+    Some(v) => v.trunc_i64(),
+    None => 5,
+  }
+}
+
+fn mul_mode(m: Mode, a: U32, b: U32) -> U32 {
+  match m {
+    Mode.Wrap => a *% b,
+    Mode.Sat => a *| b,
+    Mode.Check => a * b,
+  }
+}
+
+fn mul_result(r: Result[U32, U32], k: U32) -> U32 {
+  match r {
+    Ok(v) => v * k,
+    Err(e) => e *% k,
+  }
+}
+
+pub fn rem_value_match_i16(a: I16, b: I16) -> I16 {
+  rem_opt(Some(a), b)
+}
+
+pub fn div_value_match_i16(a: I16, b: I16) -> I16 {
+  div_opt(Some(a), b)
+}
+
+pub fn rem_value_match_none_i16(b: I16) -> I16 {
+  let o: Option[I16] = None
+  rem_opt(o, b)
+}
+
+pub fn shr_value_match_i8(a: I8, n: U32) -> I8 {
+  shr_opt(Some(a), n)
+}
+
+pub fn trunc_value_match_f64(x: F64) -> I64 {
+  trunc_opt(Some(x))
+}
+
+pub fn mul_by_mode_u32(sel: U32, a: U32, b: U32) -> U32 {
+  var m = Mode.Check
+  if sel < 1 {
+    m = Mode.Wrap
+  } else if sel < 2 {
+    m = Mode.Sat
+  }
+  mul_mode(m, a, b)
+}
+
+pub fn mul_result_u32(ok: U32, v: U32, k: U32) -> U32 {
+  var r: Result[U32, U32] = Err(v)
+  if ok > 0 {
+    r = Ok(v)
+  }
+  mul_result(r, k)
+}
+
+test "rem_value_match_i16: the values" {
+  assert rem_value_match_i16(I16.MIN, -1) == 0
+  assert rem_value_match_i16(I16.MIN, 1) == 0
+  assert rem_value_match_i16(32767, -1) == 0
+}
+
+test "rem_value_match_i16(I16.MIN, 0) panics" {   //~ TESTFAIL "rem_value_match_i16(I16.MIN, 0) panics"
+  let _ = rem_value_match_i16(I16.MIN, 0)
+}
+
+test "div_value_match_i16: the values" {
+  assert div_value_match_i16(I16.MIN, 1) == I16.MIN
+  assert div_value_match_i16(32767, -1) == -32767
+  assert div_value_match_i16(-5, 3) == -1
+}
+
+test "div_value_match_i16(I16.MIN, -1) panics" {   //~ TESTFAIL "div_value_match_i16(I16.MIN, -1) panics"
+  let _ = div_value_match_i16(I16.MIN, -1)
+}
+
+test "rem_value_match_none_i16: the values" {
+  assert rem_value_match_none_i16(0) == 7
+  assert rem_value_match_none_i16(-1) == 7
+}
+
+test "shr_value_match_i8: the values" {
+  assert shr_value_match_i8(I8.MIN, 1) == -64
+  assert shr_value_match_i8(I8.MIN, 7) == -1
+  assert shr_value_match_i8(127, 7) == 0
+}
+
+test "shr_value_match_i8(I8.MIN, 8) panics" {   //~ TESTFAIL "shr_value_match_i8(I8.MIN, 8) panics"
+  let _ = shr_value_match_i8(I8.MIN, 8)
+}
+
+test "trunc_value_match_f64: the values" {
+  assert trunc_value_match_f64(9223372036854774784.0) == 9223372036854774784
+  assert trunc_value_match_f64(-9223372036854775808.0) == I64.MIN
+  assert trunc_value_match_f64(-0.5) == 0
+}
+
+test "trunc_value_match_f64(9223372036854775808.0) panics" {   //~ TESTFAIL "trunc_value_match_f64(9223372036854775808.0) panics"
+  let _ = trunc_value_match_f64(9223372036854775808.0)
+}
+
+test "mul_by_mode_u32: the values" {
+  assert mul_by_mode_u32(0, 65536, 65536) == 0
+  assert mul_by_mode_u32(1, 65536, 65536) == 4294967295
+  assert mul_by_mode_u32(0, 4294967295, 4294967295) == 1
+}
+
+test "mul_by_mode_u32(2, 65536, 65536) panics" {   //~ TESTFAIL "mul_by_mode_u32(2, 65536, 65536) panics"
+  let _ = mul_by_mode_u32(2, 65536, 65536)
+}
+
+test "mul_result_u32: the values" {
+  assert mul_result_u32(0, 65536, 65536) == 0
+  assert mul_result_u32(1, 65535, 65537) == 4294967295
+  assert mul_result_u32(0, 4294967295, 4294967295) == 1
+}
+
+test "mul_result_u32(1, 65536, 65536) panics" {   //~ TESTFAIL "mul_result_u32(1, 65536, 65536) panics"
+  let _ = mul_result_u32(1, 65536, 65536)
+}

@@ -1,0 +1,445 @@
+// onsa.toml
+// [package]
+// name = "c_nan_bits"
+// edition = "2026"
+//
+// [export]
+// prefix = "cnb_"
+// fns = [
+//   "c_nan_bits.nan_bits_f32",
+//   "c_nan_bits.nan_bits_f64",
+//   "c_nan_bits.bits_roundtrip_f32",
+//   "c_nan_bits.bits_roundtrip_f64",
+//   "c_nan_bits.nan_loop_f32",
+//   "c_nan_bits.bits_pair_a_f32",
+//   "c_nan_bits.bits_in_arm_f32",
+//   "c_nan_bits.bits_in_closure_f32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§13.4", "§14.2"]
+//
+// [[test.host]]
+// name = "nan_bits_f32"
+// target = "host"
+// fn = "c_nan_bits.nan_bits_f32"
+// steps = [
+//   { call = "fn", args = { sel = 0, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 1, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 3, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 5, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 9, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 10, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 11, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 12, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 0, z = -0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 5, z = -0.0 }, status = 0, result = 2143289344 },
+// ]
+//
+// [[test.host]]
+// name = "nan_bits_f32 on a reset target"
+// target = "fw"
+// fn = "c_nan_bits.nan_bits_f32"
+// steps = [
+//   { call = "fn", args = { sel = 0, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 1, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 3, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 5, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 9, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 10, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 11, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 12, z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 0, z = -0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { sel = 5, z = -0.0 }, status = 0, result = 2143289344 },
+// ]
+//
+// [[test.host]]
+// name = "nan_bits_f64"
+// target = "host"
+// fn = "c_nan_bits.nan_bits_f64"
+// steps = [
+//   { call = "fn", args = { sel = 0, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 1, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 3, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 5, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 9, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 10, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 11, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 12, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 0, z = -0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 5, z = -0.0 }, status = 0, result = 9221120237041090560 },
+// ]
+//
+// [[test.host]]
+// name = "nan_bits_f64 on a reset target"
+// target = "fw"
+// fn = "c_nan_bits.nan_bits_f64"
+// steps = [
+//   { call = "fn", args = { sel = 0, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 1, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 3, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 5, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 9, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 10, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 11, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 12, z = 0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 0, z = -0.0 }, status = 0, result = 9221120237041090560 },
+//   { call = "fn", args = { sel = 5, z = -0.0 }, status = 0, result = 9221120237041090560 },
+// ]
+//
+// [[test.host]]
+// name = "bits_roundtrip_f32"
+// target = "host"
+// fn = "c_nan_bits.bits_roundtrip_f32"
+// steps = [
+//   { call = "fn", args = { b = 2147483648 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { b = 2139095040 }, status = 0, result = 2139095040 },
+//   { call = "fn", args = { b = 2139095041 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { b = 2143289344 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { b = 4290772992 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { b = 4294967295 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { b = 1065353216 }, status = 0, result = 1065353216 },
+// ]
+//
+// [[test.host]]
+// name = "bits_roundtrip_f64"
+// target = "host"
+// fn = "c_nan_bits.bits_roundtrip_f64"
+// steps = [
+//   { call = "fn", args = { bh = 2147483648, bl = 0, part = 0 }, status = 0, result = 2147483648 },
+//   { call = "fn", args = { bh = 2147483648, bl = 0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { bh = 2146435072, bl = 0, part = 0 }, status = 0, result = 2146435072 },
+//   { call = "fn", args = { bh = 2146435072, bl = 0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { bh = 2146435072, bl = 1, part = 0 }, status = 0, result = 2146959360 },
+//   { call = "fn", args = { bh = 2146435072, bl = 1, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { bh = 2146959360, bl = 0, part = 0 }, status = 0, result = 2146959360 },
+//   { call = "fn", args = { bh = 2146959360, bl = 0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { bh = 4294443008, bl = 0, part = 0 }, status = 0, result = 2146959360 },
+//   { call = "fn", args = { bh = 4294443008, bl = 0, part = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { bh = 1072693248, bl = 0, part = 0 }, status = 0, result = 1072693248 },
+//   { call = "fn", args = { bh = 1072693248, bl = 0, part = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "nan_loop_f32"
+// target = "host"
+// fn = "c_nan_bits.nan_loop_f32"
+// steps = [
+//   { call = "fn", args = { z = 0.0, n = 0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = 0.0, n = 1 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = 0.0, n = 5 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = 1.0, n = 3 }, status = 0, result = 1082130432 },
+// ]
+//
+// [[test.host]]
+// name = "bits_pair_a_f32"
+// target = "host"
+// fn = "c_nan_bits.bits_pair_a_f32"
+// steps = [
+//   { call = "fn", args = { z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = 1.0 }, status = 0, result = 1065353216 },
+//   { call = "fn", args = { z = -1.0 }, status = 0, result = 1065353216 },
+// ]
+//
+// [[test.host]]
+// name = "bits_in_arm_f32"
+// target = "host"
+// fn = "c_nan_bits.bits_in_arm_f32"
+// steps = [
+//   { call = "fn", args = { z = 0.0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = 2.0 }, status = 0, result = 1065353216 },
+//   { call = "fn", args = { z = -0.0 }, status = 0, result = 2143289344 },
+// ]
+//
+// [[test.host]]
+// name = "bits_in_closure_f32"
+// target = "host"
+// fn = "c_nan_bits.bits_in_closure_f32"
+// steps = [
+//   { call = "fn", args = { z = 0.0, k = 0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = 0.0, k = 1 }, status = 0, result = 2139095040 },
+//   { call = "fn", args = { z = 0.0, k = 2 }, status = 0, result = 2139095040 },
+//   { call = "fn", args = { z = -0.0, k = 0 }, status = 0, result = 2143289344 },
+//   { call = "fn", args = { z = -0.0, k = 1 }, status = 0, result = 4286578688 },
+//   { call = "fn", args = { z = 0.0, k = 3 }, status = 1 },
+// ]
+
+// `to_bits()` of a NaN, on a target that is built to C (spec §3.4, §13.4; S-106). The sign and the payload
+// of a NaN that an operation produces are not specified, so the one way a program can see them, `to_bits()`,
+// normalizes: every NaN reads back as the positive quiet NaN, 0x7FC00000 (2143289344) for `F32` and
+// 0x7FF8000000000000 (9221120237041090560) for `F64`; a value that is not a NaN keeps its bits. A machine
+// disagrees on what its own 0 / 0 is (x86 SSE gives the NaN with the sign bit set, 0xFFC00000; Arm gives
+// 0x7FC00000), which is why the results below are the same only because `to_bits()` canonicalizes.
+// The vectors (tests/vectors) call `to_bits()` on literal patterns; this file makes the NaN in every way
+// the spec names and reads it in other places. The same functions and expectations run on the interpreter
+// (the test blocks) and on the C target (the host scripts).
+//
+// `z` is 0.0 (it comes from the host, so the C compiler cannot fold the operations); `sel` picks how the
+// NaN is made: 0 `z / z`; 1 `inf - inf`; 2 `inf * z`; 3 `sqrt(z - 1.0)`; 4 `z % z`; 5 `-(z / z)`;
+// 6 `min(z / z, 1.0)`; 7 `max(1.0, z / z)`; 8 `(z / z) + 1.0`; 9 the constant `NAN`; 10 `from_bits` of a
+// signaling pattern with a payload; 11 `from_bits` of a negative quiet NaN; 12 `from_bits` of all ones;
+// 13 `inf / inf`; 14 `(z / z) - (z / z)`; 15 `0.0 * inf` with the operands swapped.
+
+use std.array
+
+use std.math.{max, min, sqrt}
+
+pub struct Bits {
+  a: U32,
+  b: U32,
+}
+
+fn join(h: U32, l: U32) -> U64 {
+  let hh = (h as U64) << 32
+  hh | (l as U64)
+}
+
+// The high word (part 0) or the low word (part 1) of a 64-bit value.
+fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn bits_arm(o: Option[F32]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some(v) => {
+      r = v.to_bits()
+    },
+    None => {
+      r = 7
+    },
+  }
+  r
+}
+
+pub fn nan_bits_f32(sel: U32, z: F32) -> U32 {
+  let inf = F32.INFINITY
+  var x: F32 = 0.0
+  if sel < 1 {
+    x = z / z
+  } else if sel < 2 {
+    x = inf - inf
+  } else if sel < 3 {
+    x = inf * z
+  } else if sel < 4 {
+    x = sqrt(z - 1.0)
+  } else if sel < 5 {
+    x = z % z
+  } else if sel < 6 {
+    x = -(z / z)
+  } else if sel < 7 {
+    x = min(z / z, 1.0)
+  } else if sel < 8 {
+    x = max(1.0, z / z)
+  } else if sel < 9 {
+    x = (z / z) + 1.0
+  } else if sel < 10 {
+    x = F32.NAN
+  } else if sel < 11 {
+    x = F32.from_bits(0x7FA00001)
+  } else if sel < 12 {
+    x = F32.from_bits(0xFFC00000)
+  } else if sel < 13 {
+    x = F32.from_bits(0xFFFFFFFF)
+  } else if sel < 14 {
+    x = inf / inf
+  } else if sel < 15 {
+    x = (z / z) - (z / z)
+  } else {
+    x = z * inf
+  }
+  x.to_bits()
+}
+
+pub fn nan_bits_f64(sel: U32, z: F64) -> U64 {
+  let inf = F64.INFINITY
+  var x: F64 = 0.0
+  if sel < 1 {
+    x = z / z
+  } else if sel < 2 {
+    x = inf - inf
+  } else if sel < 3 {
+    x = inf * z
+  } else if sel < 4 {
+    x = sqrt(z - 1.0)
+  } else if sel < 5 {
+    x = z % z
+  } else if sel < 6 {
+    x = -(z / z)
+  } else if sel < 7 {
+    x = min(z / z, 1.0)
+  } else if sel < 8 {
+    x = max(1.0, z / z)
+  } else if sel < 9 {
+    x = (z / z) + 1.0
+  } else if sel < 10 {
+    x = F64.NAN
+  } else if sel < 11 {
+    x = F64.from_bits(0x7FF4000000000001)
+  } else if sel < 12 {
+    x = F64.from_bits(0xFFF8000000000000)
+  } else if sel < 13 {
+    x = F64.from_bits(0xFFFFFFFFFFFFFFFF)
+  } else if sel < 14 {
+    x = inf / inf
+  } else if sel < 15 {
+    x = (z / z) - (z / z)
+  } else {
+    x = z * inf
+  }
+  x.to_bits()
+}
+
+pub fn bits_roundtrip_f32(b: U32) -> U32 {
+  let x = F32.from_bits(b)
+  x.to_bits()
+}
+
+pub fn bits_roundtrip_f64(bh: U32, bl: U32, part: U32) -> U32 {
+  let x = F64.from_bits(join(bh, bl))
+  part_of(x.to_bits(), part)
+}
+
+pub fn nan_loop_f32(z: F32, n: U32) -> U32 {
+  var x = z / z
+  for _ in 0..n {
+    x = x + 1.0
+  }
+  x.to_bits()
+}
+
+pub fn bits_pair_a_f32(z: F32) -> U32 {
+  let n = z / z
+  let p = Bits { a: n.to_bits(), b: (-n).to_bits() }
+  p.a
+}
+
+pub fn bits_in_arm_f32(z: F32) -> U32 {
+  bits_arm(Some(z / z))
+}
+
+pub fn bits_in_closure_f32(z: F32, k: U32) -> U32 {
+  let ys: [U32; 3] = array.from_fn(fn(i) {
+    let x = i.round_f32() / z
+    x.to_bits()
+  })
+  ys[k]
+}
+
+test "nan_bits_f32: the values" {
+  assert nan_bits_f32(0, 0.0) == 2143289344
+  assert nan_bits_f32(1, 0.0) == 2143289344
+  assert nan_bits_f32(3, 0.0) == 2143289344
+  assert nan_bits_f32(5, 0.0) == 2143289344
+  assert nan_bits_f32(9, 0.0) == 2143289344
+  assert nan_bits_f32(10, 0.0) == 2143289344
+  assert nan_bits_f32(11, 0.0) == 2143289344
+  assert nan_bits_f32(12, 0.0) == 2143289344
+  assert nan_bits_f32(0, -0.0) == 2143289344
+  assert nan_bits_f32(5, -0.0) == 2143289344
+}
+
+test "nan_bits_f64: the values" {
+  assert nan_bits_f64(0, 0.0) == 9221120237041090560
+  assert nan_bits_f64(1, 0.0) == 9221120237041090560
+  assert nan_bits_f64(3, 0.0) == 9221120237041090560
+  assert nan_bits_f64(5, 0.0) == 9221120237041090560
+  assert nan_bits_f64(9, 0.0) == 9221120237041090560
+  assert nan_bits_f64(10, 0.0) == 9221120237041090560
+  assert nan_bits_f64(11, 0.0) == 9221120237041090560
+  assert nan_bits_f64(12, 0.0) == 9221120237041090560
+  assert nan_bits_f64(0, -0.0) == 9221120237041090560
+  assert nan_bits_f64(5, -0.0) == 9221120237041090560
+}
+
+test "bits_roundtrip_f32: the values" {
+  assert bits_roundtrip_f32(2147483648) == 2147483648
+  assert bits_roundtrip_f32(2139095040) == 2139095040
+  assert bits_roundtrip_f32(2139095041) == 2143289344
+  assert bits_roundtrip_f32(2143289344) == 2143289344
+  assert bits_roundtrip_f32(4290772992) == 2143289344
+  assert bits_roundtrip_f32(4294967295) == 2143289344
+  assert bits_roundtrip_f32(1065353216) == 1065353216
+}
+
+test "bits_roundtrip_f64: the values" {
+  assert bits_roundtrip_f64(2147483648, 0, 0) == 2147483648
+  assert bits_roundtrip_f64(2147483648, 0, 1) == 0
+  assert bits_roundtrip_f64(2146435072, 0, 0) == 2146435072
+  assert bits_roundtrip_f64(2146435072, 0, 1) == 0
+  assert bits_roundtrip_f64(2146435072, 1, 0) == 2146959360
+  assert bits_roundtrip_f64(2146435072, 1, 1) == 0
+  assert bits_roundtrip_f64(2146959360, 0, 0) == 2146959360
+  assert bits_roundtrip_f64(2146959360, 0, 1) == 0
+  assert bits_roundtrip_f64(4294443008, 0, 0) == 2146959360
+  assert bits_roundtrip_f64(4294443008, 0, 1) == 0
+  assert bits_roundtrip_f64(1072693248, 0, 0) == 1072693248
+  assert bits_roundtrip_f64(1072693248, 0, 1) == 0
+}
+
+test "nan_loop_f32: the values" {
+  assert nan_loop_f32(0.0, 0) == 2143289344
+  assert nan_loop_f32(0.0, 1) == 2143289344
+  assert nan_loop_f32(0.0, 5) == 2143289344
+  assert nan_loop_f32(1.0, 3) == 1082130432
+}
+
+test "bits_pair_a_f32: the values" {
+  assert bits_pair_a_f32(0.0) == 2143289344
+  assert bits_pair_a_f32(1.0) == 1065353216
+  assert bits_pair_a_f32(-1.0) == 1065353216
+}
+
+test "bits_in_arm_f32: the values" {
+  assert bits_in_arm_f32(0.0) == 2143289344
+  assert bits_in_arm_f32(2.0) == 1065353216
+  assert bits_in_arm_f32(-0.0) == 2143289344
+}
+
+test "bits_in_closure_f32: the values" {
+  assert bits_in_closure_f32(0.0, 0) == 2143289344
+  assert bits_in_closure_f32(0.0, 1) == 2139095040
+  assert bits_in_closure_f32(0.0, 2) == 2139095040
+  assert bits_in_closure_f32(-0.0, 0) == 2143289344
+  assert bits_in_closure_f32(-0.0, 1) == 4286578688
+}
+
+test "bits_in_closure_f32(0.0, 3) panics" {   //~ TESTFAIL "bits_in_closure_f32(0.0, 3) panics"
+  let _ = bits_in_closure_f32(0.0, 3)
+}

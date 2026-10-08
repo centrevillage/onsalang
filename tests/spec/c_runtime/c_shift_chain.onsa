@@ -1,0 +1,92 @@
+// onsa.toml
+// [package]
+// name = "c_shift_chain"
+// edition = "2026"
+//
+// [export]
+// prefix = "csc_"
+// fns = [
+//   "c_shift_chain.shr_chain_i8",
+//   "c_shift_chain.shl_chain_i16",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.1", "§3.4", "§9.2"]
+//
+// [[test.host]]
+// name = "shr_chain_i8"
+// target = "host"
+// fn = "c_shift_chain.shr_chain_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, m = 3, n = 4 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, m = 7, n = 0 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, m = 4, n = 4 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, m = 8, n = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "shl_chain_i16"
+// target = "host"
+// fn = "c_shift_chain.shl_chain_i16"
+// steps = [
+//   { call = "fn", args = { a = 1, m = 7, n = 8 }, status = 0, result = -32768 },
+//   { call = "fn", args = { a = 1, m = 15, n = 0 }, status = 0, result = -32768 },
+//   { call = "fn", args = { a = 1, m = 8, n = 8 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1, m = 16, n = 0 }, status = 1 },
+// ]
+
+// A chain of the same shift operator, written as the spec allows it (§3.1: in the bit group a chain of the
+// same operator is left associative, `x << a << b` is `(x << a) << b`), on a target that is built to C.
+// Today the parser reports E0010 for `a >> m >> n` (S-45), so the file waits for W3-07. The values:
+// `-128i8 >> 3` is -16 and `-16 >> 4` is -1; `1i16 << 7` is 128 and `128 << 8` is -32768 (the bit that
+// reaches the sign is kept, nothing panics); an amount of the bit width or more panics in either step.
+
+pub fn shr_chain_i8(a: I8, m: U32, n: U32) -> I8 {
+  a >> m >> n
+}
+
+pub fn shl_chain_i16(a: I16, m: U32, n: U32) -> I16 {
+  a << m << n
+}
+
+test "shr_chain_i8: the values" {
+  assert shr_chain_i8(I8.MIN, 3, 4) == -1
+  assert shr_chain_i8(I8.MIN, 7, 0) == -1
+  assert shr_chain_i8(I8.MIN, 4, 4) == -1
+}
+
+test "shr_chain_i8(I8.MIN, 8, 0) panics" {   //~ TESTFAIL "shr_chain_i8(I8.MIN, 8, 0) panics"
+  let _ = shr_chain_i8(I8.MIN, 8, 0)
+}
+
+test "shl_chain_i16: the values" {
+  assert shl_chain_i16(1, 7, 8) == I16.MIN
+  assert shl_chain_i16(1, 15, 0) == I16.MIN
+  assert shl_chain_i16(1, 8, 8) == 0
+}
+
+test "shl_chain_i16(1, 16, 0) panics" {   //~ TESTFAIL "shl_chain_i16(1, 16, 0) panics"
+  let _ = shl_chain_i16(1, 16, 0)
+}

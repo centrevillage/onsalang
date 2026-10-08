@@ -66,17 +66,17 @@
 | `core/order*.onsa`、`core/cpkg/` | R-93 |
 | `core/fnmangle.onsa`、`core/mangle/` | R-48 |
 | `core/derive*.onsa`（推定） | R-60 |
-| `cback/p1/` | R-10、R-11、R-48、R-93 |
+| `cback/p1/` | R-10、R-11、R-48、R-93。R-10 と R-11 の部分（`narrow_u32`、`shr_i8` / `shr_i16`、`wmul_u16` / `wmul_i16`、`cmul_u32`、`sat_i64` / `sat_u64`）は W2-05 で期待値付きのテストへ移した: テストベクトル（`tests/vectors/` の `u32.narrow_i32`、`i8.shr`、`i16.shr`、`u16.wmul`、`i16.wmul`、`u32.checked_mul`、`f64.trunc_i64_sat`、`f64.trunc_u64_sat` などを gate の `vectors-c` が全てのツールチェーンで）、`tests/spec/c_runtime/` の `c_narrow_u2s.onsa`・`c_shift.onsa`・`c_mul.onsa`・`c_trunc.onsa`・`c_int_modules/` |
 | `cback/p2/` | R-09、R-48 |
 | `cback/p3/` | R-47、R-64 |
 | `cback/p4/` | R-12、R-21 |
 | `cback/p5/`、`cback/p13/` | R-48 |
 | `cback/p6/` | R-66 |
 | `cback/p8/` | R-09、R-109 |
-| `cback/p10/` | R-11 |
+| `cback/p10/` | R-11。W2-05 で期待値付きのテストへ移した: テストベクトルの `u32.narrow_i8`〜`u64.narrow_i64`（`vectors-c`）、`tests/spec/c_runtime/c_narrow_u2s.onsa`、`crates/onsa_backend_c/src/tests.rs` の `narrow_from_unsigned_compares_the_upper_bound_alone`。符号付きから符号無しへは `c_narrow_s2u.onsa`（-Werror の警告は W2-09） |
 | `cback/p11/` | R-15、R-48 |
 | `cback/p12/` | R-93 |
-| `cback/p14/` | R-10 |
+| `cback/p14/` | R-10。W2-05 で期待値付きのテストへ移した: テストベクトルの `u32.mul`・`u32.smul`・`u32.checked_mul`（`vectors-c` の `c-gcc` が、gcc の -O2 で消えていた検査を確かめる）、`tests/spec/c_runtime/c_mul.onsa` |
 | `cback/fma.c` | R-67 |
 | `cback/voice_host/host.cpp` | R-65 |
 | `types/rec*.onsa`、`types/constcyc*.onsa` | R-02 |
@@ -171,7 +171,7 @@
 | `parent/t8.onsa` | `impl-review-0.3.md` の T-8 と R-105 の残り（診断コードの流用。期待値と今の出力は各項目の上のコメント。S-103） |
 | `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |
 | `parent/strict_ftz/` | `impl-review-0.3.md` の §13.4 `strict-ftz`（FTZ / DAZ の設定。パッケージで、`onsa build --target host` の生成した C を確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-105） |
-| `parent/r133/` | R-133（NaN のビット表現。パッケージで、`onsa test` と、生成した C を arm64 / x86_64 / gcc-15 でコンパイルした `host.c` で確かめる。手順と期待値と今の出力は `m.onsa` の先頭のコメント。S-106） |
+| `parent/r133/` | R-133（NaN のビット表現。パッケージで、`onsa test` と、生成した C を arm64 / x86_64 / gcc-15 でコンパイルした `host.c` で確かめる。手順と期待値と今の出力は `m.onsa` の先頭のコメント。S-106）。W2-03（インタプリタ）と W2-05（C）で期待値付きのテストへ移した: テストベクトルの `f32.to_bits`・`f64.to_bits`（`vectors-interp`、`vectors-c` の clang・gcc-15・x86_64）、`tests/spec/c_runtime/c_nan_bits.onsa`、`crates/onsa_interp/src/tests.rs` の `to_bits_of_a_nan_is_the_positive_quiet_nan` |
 | `parent/r128.onsa` | R-128（`Num` / `Float` は `Copy` を満たす。期待値は先頭のコメント。S-73） |
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |

@@ -1,0 +1,42 @@
+// Integer edges in a module of their own: the module is imported by calc.onsa, and the functions are
+// also exported straight from here (spec §15.1, §14.2, §3.3, §3.4). The edge values live here as
+// constants so that the other module combines them (a constant from another module is a plain
+// operand of the checked operators).
+
+pub const MIN32: I32 = I32.MIN
+pub const NEG1_32: I32 = -1
+pub const MIN16: I16 = I16.MIN
+pub const NEG1_16: I16 = -1
+pub const BIG: U32 = 4294967295
+pub const TWO63: F64 = 9223372036854775808.0
+
+pub fn rem_i8(a: I8, b: I8) -> I8 {
+  a % b
+}
+
+pub fn mul_u32(a: U32, b: U32) -> U32 {
+  a * b
+}
+
+pub fn shr_i16(a: I16, n: U32) -> I16 {
+  a >> n
+}
+
+// The high word (part 0) or the low word (part 1) of a 64-bit value.
+pub fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}

@@ -1,0 +1,132 @@
+// onsa.toml
+// [package]
+// name = "c_if_equality"
+// edition = "2026"
+//
+// [export]
+// prefix = "cie_"
+// fns = [
+//   "c_if_equality.pick_eq_u32",
+//   "c_if_equality.pick_eq_i64",
+//   "c_if_equality.steps_to_zero_i32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§7", "§3.4"]
+//
+// [[test.host]]
+// name = "pick_eq_u32"
+// target = "host"
+// fn = "c_if_equality.pick_eq_u32"
+// steps = [
+//   { call = "fn", args = { a = 0, b = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1, b = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 4294967295, b = 4294967294 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "pick_eq_i64"
+// target = "host"
+// fn = "c_if_equality.pick_eq_i64"
+// steps = [
+//   { call = "fn", args = { a = 0, b = 7 }, status = 0, result = 7 },
+//   { call = "fn", args = { a = 7, b = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { a = 3, b = 4 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -9223372036854775808, b = 0 }, status = 0, result = -9223372036854775808 },
+// ]
+//
+// [[test.host]]
+// name = "steps_to_zero_i32"
+// target = "host"
+// fn = "c_if_equality.steps_to_zero_i32"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = 2 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = 3 }, status = 0, result = 2 },
+// ]
+
+// An `if` whose condition is an equality, on a target that is built to C (spec §13.4: the generated C
+// compiles without a warning under GCC and Clang with -Wall -Wextra -pedantic, so a host that builds with
+// -Werror accepts it). Today clang reports -Wparentheses-equality for the C the compiler writes for
+// `if a == b { ... }` (`if ((a == UINT32_C(0)))`): the double parentheses around an equality inside an
+// `if`. The file is not about integer edge cases; it is here because every integer test that branches on
+// an equality (a dispatch on an operation number) stops compiling on it, so the other files compare
+// with `<` instead. The values are the plain meaning of the program:
+//   pick_eq(a, b)   1 when a == b, else 0       first_zero(x)  the number of steps until x is 0
+
+pub fn pick_eq_u32(a: U32, b: U32) -> U32 {
+  if a == b {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn pick_eq_i64(a: I64, b: I64) -> I64 {
+  if a == 0 {
+    b
+  } else if b == 0 {
+    a
+  } else {
+    -1
+  }
+}
+
+pub fn steps_to_zero_i32(x: I32) -> U32 {
+  var v = x
+  var n: U32 = 0
+  while v != 0 {
+    if v == 1 {
+      v = 0
+    } else {
+      v = v / 2
+    }
+    n = n + 1
+  }
+  n
+}
+
+test "pick_eq_u32: the values" {
+  assert pick_eq_u32(0, 0) == 1
+  assert pick_eq_u32(1, 0) == 0
+  assert pick_eq_u32(4294967295, 4294967295) == 1
+  assert pick_eq_u32(4294967295, 4294967294) == 0
+}
+
+test "pick_eq_i64: the values" {
+  assert pick_eq_i64(0, 7) == 7
+  assert pick_eq_i64(7, 0) == 7
+  assert pick_eq_i64(3, 4) == -1
+  assert pick_eq_i64(I64.MIN, 0) == I64.MIN
+}
+
+test "steps_to_zero_i32: the values" {
+  assert steps_to_zero_i32(0) == 0
+  assert steps_to_zero_i32(1) == 1
+  assert steps_to_zero_i32(2) == 2
+  assert steps_to_zero_i32(3) == 2
+}

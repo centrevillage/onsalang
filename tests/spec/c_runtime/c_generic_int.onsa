@@ -1,0 +1,363 @@
+// onsa.toml
+// [package]
+// name = "c_generic_int"
+// edition = "2026"
+//
+// [export]
+// prefix = "cgi_"
+// fns = [
+//   "c_generic_int.gen_rem_i8",
+//   "c_generic_int.gen_div_i8",
+//   "c_generic_int.gen_min_rem_i8",
+//   "c_generic_int.gen_shr_i16",
+//   "c_generic_int.gen_rem_neg1_i32",
+//   "c_generic_int.gen_shl_i32",
+//   "c_generic_int.gen_mul_u16",
+//   "c_generic_int.gen_wmul_u16",
+//   "c_generic_int.gen_smul_u32",
+//   "c_generic_int.gen_wmul_u64",
+//   "c_generic_int.gen_bits_i64",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§4.5", "§6.3", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "gen_rem_i8"
+// target = "host"
+// fn = "c_generic_int.gen_rem_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, b = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, b = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "gen_div_i8"
+// target = "host"
+// fn = "c_generic_int.gen_div_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, b = -1 }, status = 1 },
+//   { call = "fn", args = { a = -128, b = 1 }, status = 0, result = -128 },
+//   { call = "fn", args = { a = -128, b = 127 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "gen_min_rem_i8"
+// target = "host"
+// fn = "c_generic_int.gen_min_rem_i8"
+// steps = [
+//   { call = "fn", args = { d = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { d = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { d = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "gen_shr_i16"
+// target = "host"
+// fn = "c_generic_int.gen_shr_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, n = 1 }, status = 0, result = -16384 },
+//   { call = "fn", args = { a = -32768, n = 15 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -32768, n = 16 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "gen_rem_neg1_i32"
+// target = "host"
+// fn = "c_generic_int.gen_rem_neg1_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483647 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 2147483647 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "gen_shl_i32"
+// target = "host"
+// fn = "c_generic_int.gen_shl_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483648, n = 31 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483648, n = 32 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "gen_mul_u16"
+// target = "host"
+// fn = "c_generic_int.gen_mul_u16"
+// steps = [
+//   { call = "fn", args = { a = 65535, b = 65535 }, status = 1 },
+//   { call = "fn", args = { a = 255, b = 255 }, status = 0, result = 65025 },
+// ]
+//
+// [[test.host]]
+// name = "gen_wmul_u16"
+// target = "host"
+// fn = "c_generic_int.gen_wmul_u16"
+// steps = [
+//   { call = "fn", args = { a = 65535, b = 65535 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 65535, b = 2 }, status = 0, result = 65534 },
+//   { call = "fn", args = { a = 255, b = 255 }, status = 0, result = 65025 },
+// ]
+//
+// [[test.host]]
+// name = "gen_smul_u32"
+// target = "host"
+// fn = "c_generic_int.gen_smul_u32"
+// steps = [
+//   { call = "fn", args = { a = 4294967295, b = 4294967295 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 4294967295, b = 2 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { a = 65535, b = 65535 }, status = 0, result = 4294836225 },
+// ]
+//
+// [[test.host]]
+// name = "gen_wmul_u64"
+// target = "host"
+// fn = "c_generic_int.gen_wmul_u64"
+// steps = [
+//   { call = "fn", args = { ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295, part = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { ah = 4294967295, al = 4294967295, bh = 4294967295, bl = 4294967295, part = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { ah = 4294967295, al = 4294967295, bh = 0, bl = 2, part = 0 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { ah = 4294967295, al = 4294967295, bh = 0, bl = 2, part = 1 }, status = 0, result = 4294967294 },
+// ]
+//
+// [[test.host]]
+// name = "gen_bits_i64"
+// target = "host"
+// fn = "c_generic_int.gen_bits_i64"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 64 },
+//   { call = "fn", args = { x = -1 }, status = 0, result = 64 },
+// ]
+
+// The integer edges reached through generic functions with a numeric bound, on a target that is built to C
+// (spec §4.5, §6.3: `T: Int` gives the wrapping and saturating operators, the bit operators and the
+// constants `ONE` `MIN` `MAX` `BITS`; `T: Num + Int` is the signed integers and gives `-`). The generic
+// function is lowered once for each type it is used with, so the same body has to wrap, saturate, shift
+// and panic at the edge of each width. Today the bound `T: Int` is E0200 ("user-defined traits as
+// bounds"), the same wait as semantics/numeric_generic_edges.onsa (S-84, W5-05); the file is the C side of
+// that one. The rules are the ones of c_div_rem.onsa, c_mul.onsa and c_shift.onsa; a `U64` goes in and out
+// as two `U32` halves.
+
+fn join(h: U32, l: U32) -> U64 {
+  let hh = (h as U64) << 32
+  hh | (l as U64)
+}
+
+// The high word (part 0) or the low word (part 1) of a 64-bit value.
+fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn g_rem[T: Int](a: T, b: T) -> T {
+  a % b
+}
+
+fn g_div[T: Int](a: T, b: T) -> T {
+  a / b
+}
+
+fn g_mul[T: Int](a: T, b: T) -> T {
+  a * b
+}
+
+fn g_wmul[T: Int](a: T, b: T) -> T {
+  a *% b
+}
+
+fn g_smul[T: Int](a: T, b: T) -> T {
+  a *| b
+}
+
+fn g_shr[T: Int](a: T, n: U32) -> T {
+  a >> n
+}
+
+fn g_shl[T: Int](a: T, n: U32) -> T {
+  a << n
+}
+
+fn g_rem_neg1[T: Num + Int](a: T) -> T {
+  let m = -T.ONE
+  a % m
+}
+
+fn g_div_neg1[T: Num + Int](a: T) -> T {
+  let m = -T.ONE
+  a / m
+}
+
+fn g_min_rem_neg1[T: Num + Int](d: T) -> T {
+  let m = T.MIN
+  m % d
+}
+
+fn g_bits[T: Int](x: T) -> U32 {
+  T.BITS
+}
+
+pub fn gen_rem_i8(a: I8, b: I8) -> I8 {
+  g_rem(a, b)
+}
+
+pub fn gen_div_i8(a: I8, b: I8) -> I8 {
+  g_div(a, b)
+}
+
+pub fn gen_min_rem_i8(d: I8) -> I8 {
+  g_min_rem_neg1(d)
+}
+
+pub fn gen_shr_i16(a: I16, n: U32) -> I16 {
+  g_shr(a, n)
+}
+
+pub fn gen_rem_neg1_i32(a: I32) -> I32 {
+  g_rem_neg1(a)
+}
+
+pub fn gen_shl_i32(a: I32, n: U32) -> I32 {
+  g_shl(a, n)
+}
+
+pub fn gen_mul_u16(a: U16, b: U16) -> U16 {
+  g_mul(a, b)
+}
+
+pub fn gen_wmul_u16(a: U16, b: U16) -> U16 {
+  g_wmul(a, b)
+}
+
+pub fn gen_smul_u32(a: U32, b: U32) -> U32 {
+  g_smul(a, b)
+}
+
+pub fn gen_wmul_u64(ah: U32, al: U32, bh: U32, bl: U32, part: U32) -> U32 {
+  let a = join(ah, al)
+  let b = join(bh, bl)
+  part_of(g_wmul(a, b), part)
+}
+
+pub fn gen_bits_i64(x: I64) -> U32 {
+  g_bits(x)
+}
+
+test "gen_rem_i8: the values" {
+  assert gen_rem_i8(I8.MIN, -1) == 0
+  assert gen_rem_i8(I8.MIN, 1) == 0
+}
+
+test "gen_rem_i8(I8.MIN, 0) panics" {   //~ TESTFAIL "gen_rem_i8(I8.MIN, 0) panics"
+  let _ = gen_rem_i8(I8.MIN, 0)
+}
+
+test "gen_div_i8: the values" {
+  assert gen_div_i8(I8.MIN, 1) == I8.MIN
+  assert gen_div_i8(I8.MIN, 127) == -1
+}
+
+test "gen_div_i8(I8.MIN, -1) panics" {   //~ TESTFAIL "gen_div_i8(I8.MIN, -1) panics"
+  let _ = gen_div_i8(I8.MIN, -1)
+}
+
+test "gen_min_rem_i8: the values" {
+  assert gen_min_rem_i8(-1) == 0
+  assert gen_min_rem_i8(1) == 0
+}
+
+test "gen_min_rem_i8(0) panics" {   //~ TESTFAIL "gen_min_rem_i8(0) panics"
+  let _ = gen_min_rem_i8(0)
+}
+
+test "gen_shr_i16: the values" {
+  assert gen_shr_i16(I16.MIN, 1) == -16384
+  assert gen_shr_i16(I16.MIN, 15) == -1
+}
+
+test "gen_shr_i16(I16.MIN, 16) panics" {   //~ TESTFAIL "gen_shr_i16(I16.MIN, 16) panics"
+  let _ = gen_shr_i16(I16.MIN, 16)
+}
+
+test "gen_rem_neg1_i32: the values" {
+  assert gen_rem_neg1_i32(I32.MIN) == 0
+  assert gen_rem_neg1_i32(-2147483647) == 0
+  assert gen_rem_neg1_i32(2147483647) == 0
+}
+
+test "gen_shl_i32: the values" {
+  assert gen_shl_i32(I32.MIN, 1) == 0
+  assert gen_shl_i32(I32.MIN, 31) == 0
+}
+
+test "gen_shl_i32(I32.MIN, 32) panics" {   //~ TESTFAIL "gen_shl_i32(I32.MIN, 32) panics"
+  let _ = gen_shl_i32(I32.MIN, 32)
+}
+
+test "gen_mul_u16: the values" {
+  assert gen_mul_u16(255, 255) == 65025
+}
+
+test "gen_mul_u16(65535, 65535) panics" {   //~ TESTFAIL "gen_mul_u16(65535, 65535) panics"
+  let _ = gen_mul_u16(65535, 65535)
+}
+
+test "gen_wmul_u16: the values" {
+  assert gen_wmul_u16(65535, 65535) == 1
+  assert gen_wmul_u16(65535, 2) == 65534
+  assert gen_wmul_u16(255, 255) == 65025
+}
+
+test "gen_smul_u32: the values" {
+  assert gen_smul_u32(4294967295, 4294967295) == 4294967295
+  assert gen_smul_u32(4294967295, 2) == 4294967295
+  assert gen_smul_u32(65535, 65535) == 4294836225
+}
+
+test "gen_wmul_u64: the values" {
+  assert gen_wmul_u64(4294967295, 4294967295, 4294967295, 4294967295, 0) == 0
+  assert gen_wmul_u64(4294967295, 4294967295, 4294967295, 4294967295, 1) == 1
+  assert gen_wmul_u64(4294967295, 4294967295, 0, 2, 0) == 4294967295
+  assert gen_wmul_u64(4294967295, 4294967295, 0, 2, 1) == 4294967294
+}
+
+test "gen_bits_i64: the values" {
+  assert gen_bits_i64(0) == 64
+  assert gen_bits_i64(-1) == 64
+}

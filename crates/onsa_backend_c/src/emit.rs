@@ -488,7 +488,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         return Err(diags);
     }
     let take_panic = (opts.panic == PanicMode::Poison).then(|| crate::export::take_panic_name(opts));
-    Ok(CUnit { source: out, headers, runtime_header: crate::RUNTIME_HEADER.to_string(), flows, fns, take_panic })
+    Ok(CUnit { source: out, headers, runtime_header: crate::runtime_header(), flows, fns, take_panic })
 }
 
 /// Index into `Module::flows` by qualified name, or by a unique suffix.
@@ -1605,8 +1605,16 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let (lo, hi) = int_range(*to);
                 let c = crate::names::int_c(*to);
                 let some = ident(&self.cx.variants(*id)[1].0);
+                // An unsigned value is above every lower bound, and comparing it with
+                // a negative signed limit would convert the limit to unsigned (R-11):
+                // only the upper bound is compared, in the value's own type.
+                let fits = if from.signed() {
+                    format!("{x} >= {lo} && {x} <= {hi}")
+                } else {
+                    format!("{x} <= ({}){hi}", crate::names::int_c(*from))
+                };
                 self.line(&format!("{tn} {t};"));
-                self.open(&format!("if ({x} >= {lo} && {x} <= {hi}) {{"));
+                self.open(&format!("if ({fits}) {{"));
                 self.line(&format!("{t} = ({tn}){{ .tag = 1, .u = {{ .v_{some} = {{ .f0 = ({c}){x} }} }} }};"));
                 self.indent -= 1;
                 self.line("} else {");

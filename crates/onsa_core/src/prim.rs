@@ -100,6 +100,13 @@ impl MathFn {
     }
 }
 
+/// The bits `to_bits()` gives for every NaN of an `F32`: the positive quiet
+/// NaN (spec §3.4, S-106). Every backend reads it from here (plan D-15): the
+/// interpreter, and the C backend, which writes it into `onsa.h`.
+pub const NAN_BITS_F32: u32 = 0x7FC0_0000;
+/// The same for an `F64`.
+pub const NAN_BITS_F64: u64 = 0x7FF8_0000_0000_0000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CheckedOp {
     Add,

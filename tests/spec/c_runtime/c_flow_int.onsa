@@ -1,0 +1,115 @@
+// onsa.toml
+// [package]
+// name = "c_flow_int"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfi_"
+// flows = ["c_flow_int.lcg", "c_flow_int.quantize", "c_flow_int.strict"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§9.2", "§11.2", "§11.4", "§14.2"]
+//
+// [[test.host]]
+// name = "an integer generator in a flow"
+// target = "host"
+// flow = "c_flow_int.lcg"
+// steps = [
+//   { call = "init", config = { seed = 1 }, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [0.0, 0.0, 0.0], status = 0, output = [3967065.0, 6195333.0, 8459777.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [11825979.0, 847982.0, 6199490.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [0.0, 0.0, 0.0], status = 0, output = [3967065.0, 6195333.0, 8459777.0] },
+// ]
+//
+// [[test.host]]
+// name = "a saturating conversion in a flow"
+// target = "host"
+// flow = "c_flow_int.quantize"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 6, input = [1.5, -1.5, 3000000000.0, -3000000000.0, nan, 2147483520.0], status = 0, output = [1.0, -1.0, 2147483648.0, -2147483648.0, 0.0, 2147483520.0] },
+// ]
+//
+// [[test.host]]
+// name = "a checked conversion in a flow poisons the instance"
+// target = "host"
+// flow = "c_flow_int.strict"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 4294967040.0], status = 0, output = [1.0, 2.0, 4294967040.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, -1.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [1.0, 2.0, 3.0] },
+//   { call = "process", params = {}, frames = 2, input = [-0.5, nan], status = 1, output = [0.0, 0.0] },
+// ]
+
+// Integer rules inside flows (spec §3.3, §3.4, §9.2, §11.2, §11.4), on a target that is built to C. The wrapping
+// product and sum of an integer state, a shift and a conversion to a float are the usual way a DSP program
+// keeps a noise generator or a phase; a checked conversion that panics poisons the instance (§9.2).
+//
+//   lcg        x' = x * 1664525 + 1013904223 modulo 2^32 (the numerical recipes generator), from `seed`;
+//              the output is the input plus the top 24 bits of the state, as a float (exact in F32)
+//   quantize   `trunc_i32_sat` toward zero, clamped to I32, NaN to 0; then the integer as a float: 2^31 - 1 is
+//              not an F32, so it rounds to nearest even, 2^31 (2147483648.0)
+//   strict     `trunc_u32`: -1.0 is out of range and panics; 4294967040.0 = 2^32 - 256 is the largest F32 below 2^32
+//
+// With seed 1 the states are 1015568748, 1586005467, 2165703038, 3027450565, 217083232, 1587069247 (each is
+// the previous times 1664525 plus 1013904223, modulo 4294967296); the top 24 bits are the state shifted right by 8:
+// 3967065, 6195333, 8459777, 11825978, 847981, 6199489.
+// The product of the generator is the multiplicative group and the sum the additive group: `*%` binds tighter
+// (§3.1), so the update is written without parentheses (S-45, W3-07).
+
+pub flow lcg(x: F32 at sample, seed: U32 at init) -> F32 at sample {
+  let s = prev~(^s, seed) *% 1664525 +% 1013904223
+  let top = s >> 8
+  x + top.round_f32()
+}
+
+pub flow quantize(x: F32 at sample) -> F32 at sample {
+  let q = x.trunc_i32_sat()
+  q.round_f32()
+}
+
+pub flow strict(x: F32 at sample) -> F32 at sample {
+  let q = x.trunc_u32()
+  q.round_f32()
+}
+
+test "the generator steps through the recurrence" {
+  let xs: [F32; 3] = [0.0, 0.0, 0.0]
+  var out: [F32; 3] = [0.0; 3]
+  var st = lcg.init(lcg.Config { seed: 1 }, 8.0)
+  lcg.process(inout st, lcg.Params {}, xs, inout out)
+  assert out[0] == 3967065.0
+  assert out[1] == 6195333.0
+  assert out[2] == 8459777.0
+}
+
+test "a saturating conversion in a flow clamps and maps NaN to 0" {
+  let xs: [F32; 4] = [1.5, -1.5, 3000000000.0, -3000000000.0]
+  var out: [F32; 4] = [0.0; 4]
+  var st = quantize.init(quantize.Config {}, 8.0)
+  quantize.process(inout st, quantize.Params {}, xs, inout out)
+  assert out[0] == 1.0
+  assert out[1] == -1.0
+  assert out[2] == 2147483648.0
+  assert out[3] == -2147483648.0
+}
+

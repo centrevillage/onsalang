@@ -1,0 +1,448 @@
+// onsa.toml
+// [package]
+// name = "c_shift"
+// edition = "2026"
+//
+// [export]
+// prefix = "csh_"
+// fns = [
+//   "c_shift.shr_i8",
+//   "c_shift.shl_i8",
+//   "c_shift.shr_i16",
+//   "c_shift.shl_i32",
+//   "c_shift.shr_i64",
+//   "c_shift.shr_loop_i16",
+//   "c_shift.shl_loop_i32",
+//   "c_shift.pair_shr_i8",
+//   "c_shift.pair_shl_i8",
+//   "c_shift.shr_in_some_arm_i16",
+//   "c_shift.shr_in_closure_i8",
+//   "c_shift.shl_in_closure_i32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§3.5", "§9.2", "§14.2"]
+//
+// [[test.host]]
+// name = "shr_i8"
+// target = "host"
+// fn = "c_shift.shr_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, n = 1 }, status = 0, result = -64 },
+//   { call = "fn", args = { a = -128, n = 7 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, n = 0 }, status = 0, result = -128 },
+//   { call = "fn", args = { a = -128, n = 8 }, status = 1 },
+//   { call = "fn", args = { a = -127, n = 1 }, status = 0, result = -64 },
+// ]
+//
+// [[test.host]]
+// name = "shr_i8 on a reset target"
+// target = "fw"
+// fn = "c_shift.shr_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, n = 1 }, status = 0, result = -64 },
+//   { call = "fn", args = { a = -128, n = 7 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, n = 0 }, status = 0, result = -128 },
+//   { call = "fn", args = { a = -127, n = 1 }, status = 0, result = -64 },
+// ]
+//
+// [[test.host]]
+// name = "shl_i8"
+// target = "host"
+// fn = "c_shift.shl_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, n = 7 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, n = 0 }, status = 0, result = -128 },
+//   { call = "fn", args = { a = -128, n = 8 }, status = 1 },
+//   { call = "fn", args = { a = -127, n = 1 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "shl_i8 on a reset target"
+// target = "fw"
+// fn = "c_shift.shl_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, n = 7 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -128, n = 0 }, status = 0, result = -128 },
+//   { call = "fn", args = { a = -127, n = 1 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "shr_i16"
+// target = "host"
+// fn = "c_shift.shr_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, n = 1 }, status = 0, result = -16384 },
+//   { call = "fn", args = { a = -32768, n = 15 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -32768, n = 0 }, status = 0, result = -32768 },
+//   { call = "fn", args = { a = -32768, n = 16 }, status = 1 },
+//   { call = "fn", args = { a = -32767, n = 1 }, status = 0, result = -16384 },
+// ]
+//
+// [[test.host]]
+// name = "shl_i32"
+// target = "host"
+// fn = "c_shift.shl_i32"
+// steps = [
+//   { call = "fn", args = { a = -2147483648, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483648, n = 31 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2147483648, n = 32 }, status = 1 },
+//   { call = "fn", args = { a = -1, n = 1 }, status = 0, result = -2 },
+//   { call = "fn", args = { a = -1, n = 31 }, status = 0, result = -2147483648 },
+// ]
+//
+// [[test.host]]
+// name = "shr_i64"
+// target = "host"
+// fn = "c_shift.shr_i64"
+// steps = [
+//   { call = "fn", args = { a = -9223372036854775808, n = 1 }, status = 0, result = -4611686018427387904 },
+//   { call = "fn", args = { a = -9223372036854775808, n = 63 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -9223372036854775808, n = 64 }, status = 1 },
+//   { call = "fn", args = { a = -1, n = 1 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -1, n = 63 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "shr_loop_i16"
+// target = "host"
+// fn = "c_shift.shr_loop_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, k = 0 }, status = 0, result = -32768 },
+//   { call = "fn", args = { a = -32768, k = 1 }, status = 0, result = -16384 },
+//   { call = "fn", args = { a = -32768, k = 14 }, status = 0, result = -2 },
+//   { call = "fn", args = { a = -32768, k = 15 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "shl_loop_i32"
+// target = "host"
+// fn = "c_shift.shl_loop_i32"
+// steps = [
+//   { call = "fn", args = { k = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { k = 1 }, status = 0, result = 2 },
+//   { call = "fn", args = { k = 30 }, status = 0, result = 1073741824 },
+//   { call = "fn", args = { k = 31 }, status = 0, result = -2147483648 },
+// ]
+//
+// [[test.host]]
+// name = "pair_shr_i8"
+// target = "host"
+// fn = "c_shift.pair_shr_i8"
+// steps = [
+//   { call = "fn", args = { x = -128, n = 1 }, status = 0, result = -64 },
+//   { call = "fn", args = { x = -128, n = 7 }, status = 0, result = -1 },
+//   { call = "fn", args = { x = -128, n = 8 }, status = 1 },
+//   { call = "fn", args = { x = 64, n = 1 }, status = 0, result = 32 },
+// ]
+//
+// [[test.host]]
+// name = "pair_shl_i8"
+// target = "host"
+// fn = "c_shift.pair_shl_i8"
+// steps = [
+//   { call = "fn", args = { x = -128, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = -128, n = 7 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = -128, n = 8 }, status = 1 },
+//   { call = "fn", args = { x = 64, n = 1 }, status = 0, result = -128 },
+// ]
+//
+// [[test.host]]
+// name = "shr_in_some_arm_i16"
+// target = "host"
+// fn = "c_shift.shr_in_some_arm_i16"
+// steps = [
+//   { call = "fn", args = { a = -32768, n = 1 }, status = 0, result = -16384 },
+//   { call = "fn", args = { a = -32768, n = 15 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -32768, n = 16 }, status = 1 },
+//   { call = "fn", args = { a = -1, n = 0 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = 32767, n = 15 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "shr_in_closure_i8"
+// target = "host"
+// fn = "c_shift.shr_in_closure_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, base = 0 }, status = 0, result = -32 },
+//   { call = "fn", args = { a = -128, base = 5 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = -128, base = 6 }, status = 1 },
+//   { call = "fn", args = { a = 127, base = 5 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -1, base = 5 }, status = 0, result = -1 },
+// ]
+//
+// [[test.host]]
+// name = "shl_in_closure_i32"
+// target = "host"
+// fn = "c_shift.shl_in_closure_i32"
+// steps = [
+//   { call = "fn", args = { a = 1, base = 28 }, status = 0, result = 1073741824 },
+//   { call = "fn", args = { a = 1, base = 29 }, status = 0, result = -2147483648 },
+//   { call = "fn", args = { a = 1, base = 30 }, status = 1 },
+//   { call = "fn", args = { a = -1, base = 29 }, status = 0, result = -2147483648 },
+//   { call = "fn", args = { a = -2147483648, base = 0 }, status = 0, result = 0 },
+// ]
+
+// `<<` and `>>` at every width, on a target that is built to C (spec §3.4, §9.2). The amount is a `U32`;
+// the rules:
+//   a << n   zeros come in from below and the bits that leave at the top are dropped; no panic for a
+//            value that no longer fits (`1i32 << 31` is `I32.MIN`, `I32.MIN << 1` is 0)
+//   a >> n   arithmetic for the signed types (the sign bit is copied in: `-1 >> n` is -1, `-128i8 >> 1`
+//            is -64, `-127i8 >> 1` is -64, the floor of the half), logical for the unsigned types
+//   both     panic when n is at least the bit width
+// The negative `I8` and `I16` right shifts are the point (R-10): done in `int` they need the sign bit to
+// be copied from the narrow type, and `-128i8 >> 1` came out as 64. The left shifts of a negative or a
+// sign-bit-reaching value are C undefined behavior if written with the signed C operator.
+// The vectors call one shift on literals; this file adds the places around it: a chain, a loop, a struct
+// literal, the arm of a `match`, an anonymous function. The same functions and expectations run on the
+// interpreter (the test blocks) and on the C target (the host scripts).
+
+use std.array
+
+pub struct Pair {
+  a: I8,
+  b: I8,
+}
+
+fn join(h: U32, l: U32) -> U64 {
+  let hh = (h as U64) << 32
+  hh | (l as U64)
+}
+
+// The high word (part 0) or the low word (part 1) of a 64-bit value.
+fn part_of(x: U64, part: U32) -> U32 {
+  let y = if part < 1 {
+    x >> 32
+  } else {
+    x & 4294967295
+  }
+  var r: U32 = 0
+  match y.narrow_u32() {
+    Some(v) => {
+      r = v
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn shr_arm(o: Option[I16], n: U32) -> I16 {
+  var r: I16 = 7
+  match o {
+    Some(v) => {
+      r = v >> n
+    },
+    None => {
+      r = 7
+    },
+  }
+  r
+}
+
+pub fn shr_i8(a: I8, n: U32) -> I8 {
+  a >> n
+}
+
+pub fn shl_i8(a: I8, n: U32) -> I8 {
+  a << n
+}
+
+pub fn shr_i16(a: I16, n: U32) -> I16 {
+  a >> n
+}
+
+pub fn shl_i32(a: I32, n: U32) -> I32 {
+  a << n
+}
+
+pub fn shr_i64(a: I64, n: U32) -> I64 {
+  a >> n
+}
+
+pub fn shr_loop_i16(a: I16, k: U32) -> I16 {
+  var x: I16 = a
+  for _ in 0..k {
+    x = x >> 1
+  }
+  x
+}
+
+pub fn shl_loop_i32(k: U32) -> I32 {
+  var x: I32 = 1
+  for _ in 0..k {
+    x = x << 1
+  }
+  x
+}
+
+pub fn pair_shr_i8(x: I8, n: U32) -> I8 {
+  let p = Pair { a: x >> n, b: x << n }
+  p.a
+}
+
+pub fn pair_shl_i8(x: I8, n: U32) -> I8 {
+  let p = Pair { a: x >> n, b: x << n }
+  p.b
+}
+
+pub fn shr_in_some_arm_i16(a: I16, n: U32) -> I16 {
+  shr_arm(Some(a), n)
+}
+
+pub fn shr_in_closure_i8(a: I8, base: U32) -> I8 {
+  let ys: [I8; 3] = array.from_fn(fn(i) { a >> (base + i) })
+  ys[2]
+}
+
+pub fn shl_in_closure_i32(a: I32, base: U32) -> I32 {
+  let ys: [I32; 3] = array.from_fn(fn(i) { a << (base + i) })
+  ys[2]
+}
+
+test "shr_i8: the values" {
+  assert shr_i8(I8.MIN, 1) == -64
+  assert shr_i8(I8.MIN, 7) == -1
+  assert shr_i8(I8.MIN, 0) == I8.MIN
+  assert shr_i8(-127, 1) == -64
+}
+
+test "shr_i8(I8.MIN, 8) panics" {   //~ TESTFAIL "shr_i8(I8.MIN, 8) panics"
+  let _ = shr_i8(I8.MIN, 8)
+}
+
+test "shl_i8: the values" {
+  assert shl_i8(I8.MIN, 1) == 0
+  assert shl_i8(I8.MIN, 7) == 0
+  assert shl_i8(I8.MIN, 0) == I8.MIN
+  assert shl_i8(-127, 1) == 2
+}
+
+test "shl_i8(I8.MIN, 8) panics" {   //~ TESTFAIL "shl_i8(I8.MIN, 8) panics"
+  let _ = shl_i8(I8.MIN, 8)
+}
+
+test "shr_i16: the values" {
+  assert shr_i16(I16.MIN, 1) == -16384
+  assert shr_i16(I16.MIN, 15) == -1
+  assert shr_i16(I16.MIN, 0) == I16.MIN
+  assert shr_i16(-32767, 1) == -16384
+}
+
+test "shr_i16(I16.MIN, 16) panics" {   //~ TESTFAIL "shr_i16(I16.MIN, 16) panics"
+  let _ = shr_i16(I16.MIN, 16)
+}
+
+test "shl_i32: the values" {
+  assert shl_i32(I32.MIN, 1) == 0
+  assert shl_i32(I32.MIN, 31) == 0
+  assert shl_i32(-1, 1) == -2
+  assert shl_i32(-1, 31) == I32.MIN
+}
+
+test "shl_i32(I32.MIN, 32) panics" {   //~ TESTFAIL "shl_i32(I32.MIN, 32) panics"
+  let _ = shl_i32(I32.MIN, 32)
+}
+
+test "shr_i64: the values" {
+  assert shr_i64(I64.MIN, 1) == -4611686018427387904
+  assert shr_i64(I64.MIN, 63) == -1
+  assert shr_i64(-1, 1) == -1
+  assert shr_i64(-1, 63) == -1
+}
+
+test "shr_i64(I64.MIN, 64) panics" {   //~ TESTFAIL "shr_i64(I64.MIN, 64) panics"
+  let _ = shr_i64(I64.MIN, 64)
+}
+
+test "shr_loop_i16: the values" {
+  assert shr_loop_i16(I16.MIN, 0) == I16.MIN
+  assert shr_loop_i16(I16.MIN, 1) == -16384
+  assert shr_loop_i16(I16.MIN, 14) == -2
+  assert shr_loop_i16(I16.MIN, 15) == -1
+}
+
+test "shl_loop_i32: the values" {
+  assert shl_loop_i32(0) == 1
+  assert shl_loop_i32(1) == 2
+  assert shl_loop_i32(30) == 1073741824
+  assert shl_loop_i32(31) == I32.MIN
+}
+
+test "pair_shr_i8: the values" {
+  assert pair_shr_i8(I8.MIN, 1) == -64
+  assert pair_shr_i8(I8.MIN, 7) == -1
+  assert pair_shr_i8(64, 1) == 32
+}
+
+test "pair_shr_i8(I8.MIN, 8) panics" {   //~ TESTFAIL "pair_shr_i8(I8.MIN, 8) panics"
+  let _ = pair_shr_i8(I8.MIN, 8)
+}
+
+test "pair_shl_i8: the values" {
+  assert pair_shl_i8(I8.MIN, 1) == 0
+  assert pair_shl_i8(I8.MIN, 7) == 0
+  assert pair_shl_i8(64, 1) == I8.MIN
+}
+
+test "pair_shl_i8(I8.MIN, 8) panics" {   //~ TESTFAIL "pair_shl_i8(I8.MIN, 8) panics"
+  let _ = pair_shl_i8(I8.MIN, 8)
+}
+
+test "shr_in_some_arm_i16: the values" {
+  assert shr_in_some_arm_i16(I16.MIN, 1) == -16384
+  assert shr_in_some_arm_i16(I16.MIN, 15) == -1
+  assert shr_in_some_arm_i16(-1, 0) == -1
+  assert shr_in_some_arm_i16(32767, 15) == 0
+}
+
+test "shr_in_some_arm_i16(I16.MIN, 16) panics" {   //~ TESTFAIL "shr_in_some_arm_i16(I16.MIN, 16) panics"
+  let _ = shr_in_some_arm_i16(I16.MIN, 16)
+}
+
+test "shr_in_closure_i8: the values" {
+  assert shr_in_closure_i8(I8.MIN, 0) == -32
+  assert shr_in_closure_i8(I8.MIN, 5) == -1
+  assert shr_in_closure_i8(127, 5) == 0
+  assert shr_in_closure_i8(-1, 5) == -1
+}
+
+test "shr_in_closure_i8(I8.MIN, 6) panics" {   //~ TESTFAIL "shr_in_closure_i8(I8.MIN, 6) panics"
+  let _ = shr_in_closure_i8(I8.MIN, 6)
+}
+
+test "shl_in_closure_i32: the values" {
+  assert shl_in_closure_i32(1, 28) == 1073741824
+  assert shl_in_closure_i32(1, 29) == I32.MIN
+  assert shl_in_closure_i32(-1, 29) == I32.MIN
+  assert shl_in_closure_i32(I32.MIN, 0) == 0
+}
+
+test "shl_in_closure_i32(1, 30) panics" {   //~ TESTFAIL "shl_in_closure_i32(1, 30) panics"
+  let _ = shl_in_closure_i32(1, 30)
+}
