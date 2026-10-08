@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§18.2", "§11.8"]
+
+// `onsa test` reports E0200 for a `std` function that the interpreter does not
+// provide only at a use that the tests it runs reach (spec §15.2: "届くとは、入口から、
+// 呼ぶ関数、値として使う関数、インスタンスを作る flow、読む `const` の初期化式を静的に
+// たどれること"; the entries of `onsa test` are the tests it runs, §18.2). The
+// generators of `std.test.gen` are the helpers of §11.8 that this version's
+// interpreter does not run (the same ones as negative/test_unsupported_std.onsa).
+//
+// Everything below uses a generator, and none of it is reached from a test, so the
+// tests run and pass: no E0200. `onsa check` does not report it either (it does not
+// depend on the target). The reached counterpart is reach_calls.onsa and reach_const.onsa.
+
+use std.test.{Gen}
+use std.test.gen
+
+// A function that nothing calls.
+fn unused_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+// An exported-looking function is not an entry of `onsa test`.
+pub fn exported_digit(n: U32) -> U32 {
+  let _ = gen.f32(0.0, 1.0)
+  n
+}
+
+// A chain whose first link nothing calls: no link is reached.
+fn deep_leaf(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+fn deep_mid(n: U32) -> U32 {
+  deep_leaf(n) + 1
+}
+
+fn deep_top(n: U32) -> U32 {
+  deep_mid(n) + 1
+}
+
+fn pairs() -> Gen[(U32, U32)] {
+  gen.pair(gen.u32(0, 1), gen.u32(2, 3))
+}
+
+fn generic_digit[T: Copy](x: T) -> T {
+  let _ = gen.u32(0, 1)
+  x
+}
+
+pub struct Dice {
+  sides: U32,
+}
+
+impl Dice {
+  pub fn new(sides: U32) -> Dice {
+    let _ = gen.u32(1, sides)
+    Dice { sides: sides }
+  }
+
+  pub fn roll(self) -> U32 {
+    let _ = gen.u32(1, self.sides)
+    self.sides
+  }
+}
+
+// A `const` that nothing reads, and one that only an unreached function reads: the
+// tests do not reach their initializers (spec §15.2), so a generator in them is not
+// an E0200 and is not evaluated.
+const NOBODY_READS: U32 = unused_digit(7)
+
+const ONLY_UNREACHED_READS: U32 = deep_top(2)
+
+fn reads_a_const() -> U32 {
+  ONLY_UNREACHED_READS
+}
+
+// What the tests do reach: plain code, with a `const` and a chain of calls that never
+// touch a generator.
+fn plain(n: U32) -> U32 {
+  n + 1
+}
+
+fn plain_twice(n: U32) -> U32 {
+  plain(plain(n))
+}
+
+const BASE: U32 = plain_twice(1)
+
+const SECOND: U32 = BASE + 1
+
+test "a plain chain" {
+  assert plain_twice(1) == 3
+}
+
+test "a plain const" {
+  assert SECOND == 4
+}
+
+test "a plain test next to the unused generators" {
+  assert true
+}

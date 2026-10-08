@@ -2448,3 +2448,19 @@ target = "tests/fuzz/71e7eb23.onsa"
 reasons = ["R-190", "S-236"]
 until = "W3-05"
 note = "fix-same-place: fix|E0020|remove the type suffix|E0020。1d. の型の接尾辞を消す候補が、点の後に数字の無い浮動小数のリテラル 1. を残し、E0020 が残る（S-236 の約束を破る）"
+
+# --- W2-13/t: テストが届く範囲の E0200（S-242）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/test/reach_flow.onsa"
+reasons = ["S-242", "S-102"]
+until = "W7-02"
+note = "インスタンスを作る flow を経由して届く使用。最終の構文（at）は W3-09、block のクロックから非 rt の関数を呼ぶ形は W7-02 まで E0805"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/test/reach_fn_value.onsa"
+reasons = ["S-242", "S-191", "S-190"]
+until = "W8-09"
+note = "値として使う関数を経由して届く使用。関数値の呼び出し .(（W3-07）と関数値の降下（W8-09）を今の実装が扱えない"

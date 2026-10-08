@@ -84,6 +84,18 @@ impl FlowFns {
             .chain(self.process_inplace)
             .chain(self.params_default)
     }
+
+    /// The functions a host calls to run an instance of the flow (spec
+    /// §11.6, §15.2): `init`, `reset`, `ctl`, `tick`, `process` and the
+    /// default of its parameters. The entries of a run of the flow for the
+    /// reach ([`crate::reach`]): the C unit of an exported flow, the
+    /// interpreter that runs a flow outside `onsa test`. `render` and
+    /// `process_inplace` are not among them: the C unit does not give them
+    /// (`render` needs `Buf`, D-08), and Onsa code that calls them reaches
+    /// them as any call.
+    pub fn entries(&self) -> impl Iterator<Item = FnId> {
+        [self.init, self.reset, self.ctl, self.tick, self.process].into_iter().chain(self.params_default)
+    }
 }
 
 /// Per-flow metadata kept on the [`Module`] for `onsa interface`, the

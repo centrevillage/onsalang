@@ -1,0 +1,15 @@
+use std.test.gen
+
+pub fn voice_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+pub fn unreached_voice(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+test "a function of its own module" {
+  assert voice_digit(5) == 5
+}

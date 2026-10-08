@@ -1,0 +1,15 @@
+use std.test.gen
+
+fn limit_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+fn unread_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+pub const LIMIT: U32 = limit_digit(3)
+
+pub const UNREAD: U32 = unread_digit(4)

@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§11.6", "§11.5", "§18.2"]
+
+// E0200 at a use of a `std` function that the interpreter does not provide, reached
+// through a flow whose instance a running test makes (spec §15.2: "届くとは、… インス
+// タンスを作る flow … を静的にたどれること"). A test makes an instance by rendering a
+// flow (`tone.render(...)`, §11.6), and a flow makes the instances of the flows it calls
+// with `~` (§11.5), so the body of the flow that is called is reached too. A function
+// that the body of a reached flow calls is reached. The generators of `std.test.gen`
+// are the helpers of §11.8 that this version's interpreter does not run.
+//
+// A flow that no running test renders, and no reached flow instantiates, is not
+// reached: its body is not followed, so a generator in it is not an E0200 (unmarked).
+// Written in the final syntax of the flow (`at`, spec §11.3), which the parser
+// of this version does not read yet.
+
+use std.test.gen
+use std.dsp.test.{impulse}
+
+// Called from the body of `tone`, at the clock `block`.
+fn scale(g: F32) -> F32 {
+  let _ = gen.f32(0.0, 1.0)   //~ E0200
+  g
+}
+
+pub flow tone(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let k = scale(g)
+  x * k
+}
+
+// `outer` makes an instance of `tone`: a test that renders `outer` reaches `tone`.
+fn via_instance(g: F32) -> F32 {
+  let _ = gen.f32(1.0, 2.0)   //~ E0200
+  g
+}
+
+pub flow inner(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let k = via_instance(g)
+  x * k
+}
+
+pub flow outer(x: F32 at sample) -> F32 at sample {
+  let a = inner~(x, 0.5)
+  a
+}
+
+// No test renders `lonely`, and only `lonely_outer` (which no test renders either)
+// makes an instance of it: no marker.
+fn lonely_scale(g: F32) -> F32 {
+  let _ = gen.f32(2.0, 3.0)
+  g
+}
+
+pub flow lonely(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let k = lonely_scale(g)
+  x * k
+}
+
+pub flow lonely_outer(x: F32 at sample) -> F32 at sample {
+  let a = lonely~(x, 0.5)
+  a
+}
+
+test "a flow rendered by a test" {
+  let o = tone.render(tone.Config {}, tone.Params { g: 2.0 }, impulse(4), 48000.0)
+  let first: U32 = 0
+  assert o.out[first] == 2.0
+  assert false
+}
+
+test "a flow that a rendered flow instantiates" {
+  let o = outer.render(outer.Config {}, outer.Params {}, impulse(4), 48000.0)
+  let first: U32 = 0
+  assert o.out[first] == 0.5
+}

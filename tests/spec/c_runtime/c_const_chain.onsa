@@ -1,0 +1,73 @@
+// onsa.toml
+// [package]
+// name = "c_const_chain"
+// edition = "2026"
+//
+// [export]
+// prefix = "ccc_"
+// fns = [
+//   "c_const_chain.chain2",
+//   "c_const_chain.chain4",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§15.2"]
+//
+// [[test.host]]
+// name = "chain2"
+// target = "host"
+// fn = "c_const_chain.chain2"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "chain4"
+// target = "host"
+// fn = "c_const_chain.chain4"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 5 },
+// ]
+
+// An exported function reads a `const` that reads another `const`, down to
+// one whose initializer calls a function (spec §6.6), in chains of 2 and 4.
+// The `const`s are reached from the export (§15.2), and the build evaluates
+// them; the C unit names only the `const` the function reads, so the C
+// compiles with `-Wall -Wextra -Werror` (no unused `static const`).
+
+fn pair() -> [U32; 2] {
+  [1, 2]
+}
+
+const A1: [U32; 2] = pair()
+const A0: [U32; 2] = A1
+
+pub fn chain2() -> U32 {
+  A0[1]
+}
+
+fn three() -> U32 {
+  3
+}
+
+const B3: U32 = three()
+const B2: U32 = B3
+const B1: U32 = B2
+const B0: U32 = B1 + 2
+
+pub fn chain4() -> U32 {
+  B0
+}
+
+test "the chains" {
+  assert chain2() == 2
+  assert chain4() == 5
+}

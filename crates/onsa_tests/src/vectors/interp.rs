@@ -76,9 +76,15 @@ fn run_all(root: &Path, data: &Data, list: &Pending, at: &Mutex<String>) -> Vect
                 continue;
             }
         };
+        let interp = Interp::new(&module);
+        let Some(ids) = bound.callees.iter().map(|c| interp.fn_by_name(&c.name)).collect::<Option<Vec<FnId>>>() else {
+            out.run.errors.push(format!("{pkg}: the interpreter does not find an exported function"));
+            continue;
+        };
         // A fixture the interpreter cannot run is an error of the item (E0200,
-        // S-224), found before any call, as `onsa test` finds it.
-        let unsupported = onsa_interp::unsupported(&module);
+        // S-224), found before any call where the functions it calls reach it
+        // (spec §15.2, S-242), as `onsa test` finds it.
+        let unsupported = onsa_interp::unsupported(&module, &ids);
         if !unsupported.is_empty() {
             out.run.errors.extend(unsupported.iter().map(|u| {
                 let d = u.diagnostic();
@@ -86,11 +92,6 @@ fn run_all(root: &Path, data: &Data, list: &Pending, at: &Mutex<String>) -> Vect
             }));
             continue;
         }
-        let interp = Interp::new(&module);
-        let Some(ids) = bound.callees.iter().map(|c| interp.fn_by_name(&c.name)).collect::<Option<Vec<FnId>>>() else {
-            out.run.errors.push(format!("{pkg}: the interpreter does not find an exported function"));
-            continue;
-        };
         let mut gots = Vec::with_capacity(plans.len());
         let mut current = usize::MAX;
         for p in &plans {

@@ -26,7 +26,6 @@
 mod emit;
 mod export;
 mod names;
-mod reach;
 
 use onsa_core::Module;
 use onsa_diag::unsupported::Feature;
@@ -337,9 +336,17 @@ pub(crate) fn no_span() -> Span {
     Span::new(FileId(0), 0, 0)
 }
 
-/// Emit the C translation unit and headers for `module`.
+/// Emit the C translation unit and headers for `module`: what
+/// [`export_roots`] reach ([`onsa_core::reach`]).
 pub fn emit(module: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Diagnostic>> {
     emit::emit_unit(module, opts)
+}
+
+/// The entries of the unit that `opts` exports (spec §15.2): the roots of
+/// the reach of [`emit`], and of the build-time evaluation of the `const`s
+/// before it (S-242).
+pub fn export_roots(module: &Module, opts: &EmitOptions) -> Vec<onsa_core::FnId> {
+    emit::export_roots(module, opts)
 }
 
 #[cfg(test)]

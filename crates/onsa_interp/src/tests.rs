@@ -982,49 +982,61 @@ fn a_call_of_a_function_without_a_body_is_an_internal_error() {
     })
 }
 
-/// S-224: a `std` function the interpreter does not run is found before the
-/// run ([`crate::unsupported`], in the body of a function and in a `const`),
-/// and stops a run that reaches it with [`Failure::Unsupported`], not a panic.
+/// S-224, S-242: a `std` function the interpreter does not run is found
+/// before the run ([`crate::unsupported`]) where the entries of the run reach
+/// it (spec §15.2): in the body of a function a root is or calls, and in the
+/// initializer of a `const` a reached function reads; nowhere else. A run
+/// that reaches it stops with [`Failure::Unsupported`], not a panic.
 /// [`crate::std_prim`] decides both.
 #[test]
 fn an_unimplemented_std_function_is_unsupported() {
     on_stack(|| {
         let gen_ = || prim(Prim::Std("std.test.gen.f32".into()), Ty::Unit, vec![f32_(0.0), f32_(1.0)]);
         let near = prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(1.0), f64_(1.0), f64_(0.0)]);
+        let read_g = Expr::new(Ty::Unit, sp(), ExprKind::Const(ConstId(0)));
+        let call = |f: u32| Expr::new(Ty::Unit, sp(), ExprKind::Call { fn_: FnId(f), args: Vec::new() });
+        let fn_ = |name: &str, value: Expr| FnDef {
+            name: name.into(),
+            params: Vec::new(),
+            ret: Ty::Unit,
+            sret: false,
+            rt: false,
+            locals: Vec::new(),
+            body: Some(Block { stmts: Vec::new(), value: Some(Box::new(value)) }),
+            span: sp(),
+            fp_relaxed: false,
+            test: None,
+        };
         let m = Module {
             fns: vec![
-                FnDef {
-                    name: "f".into(),
-                    params: Vec::new(),
-                    ret: Ty::Unit,
-                    sret: false,
-                    rt: false,
-                    locals: Vec::new(),
-                    body: Some(Block { stmts: Vec::new(), value: Some(Box::new(gen_())) }),
-                    span: sp(),
-                    fp_relaxed: false,
-                    test: None,
-                },
-                FnDef {
-                    name: "g".into(),
-                    params: Vec::new(),
-                    ret: Ty::Unit,
-                    sret: false,
-                    rt: false,
-                    locals: Vec::new(),
-                    body: Some(Block { stmts: Vec::new(), value: Some(Box::new(near)) }),
-                    span: sp(),
-                    fp_relaxed: false,
-                    test: None,
-                },
+                fn_("f", gen_()),
+                fn_("g", near),
+                // Reads `G`, whose initializer uses the generator.
+                fn_("h", read_g),
+                // Calls `h`.
+                fn_("k", call(2)),
             ],
             consts: vec![ConstDef { name: "G".into(), ty: Ty::Unit, init: gen_() }],
             ..Default::default()
         };
-        let found = crate::unsupported(&m);
-        assert_eq!(found.len(), 2, "{found:?}");
-        assert!(found.iter().all(|u| u.std_fn == "std.test.gen.f32"));
-        let d = found[0].diagnostic();
+        let found = |roots: &[u32]| {
+            let roots: Vec<FnId> = roots.iter().map(|&f| FnId(f)).collect();
+            crate::unsupported(&m, &roots)
+        };
+        // No root, or a root that reaches only what the interpreter runs.
+        assert!(found(&[]).is_empty());
+        assert!(found(&[1]).is_empty(), "{:?}", found(&[1]));
+        // The body of a root; the initializer of a `const` a root reads, and
+        // of one that a function the root calls reads.
+        for roots in [&[0][..], &[2], &[3]] {
+            let got = found(roots);
+            assert_eq!(got.len(), 1, "{roots:?}: {got:?}");
+            assert_eq!(got[0].std_fn, "std.test.gen.f32");
+        }
+        let all = found(&[0, 1, 2, 3]);
+        assert_eq!(all.len(), 2, "{all:?}");
+        assert!(all.iter().all(|u| u.std_fn == "std.test.gen.f32"));
+        let d = all[0].diagnostic();
         assert_eq!(d.code, onsa_diag::Code::E0200);
         assert!(d.message.contains("std.test.gen.f32"), "{}", d.message);
         let interp = Interp::new(&m);
@@ -1032,6 +1044,7 @@ fn an_unimplemented_std_function_is_unsupported() {
             matches!(interp.call(FnId(0), Vec::new()), Err(Failure::Unsupported(u)) if u.std_fn == "std.test.gen.f32")
         );
         assert!(matches!(interp.const_value(ConstId(0)), Err(Failure::Unsupported(_))));
+        assert!(matches!(interp.call(FnId(3), Vec::new()), Err(Failure::Unsupported(_))));
         assert!(interp.call(FnId(1), Vec::new()).is_ok());
     })
 }

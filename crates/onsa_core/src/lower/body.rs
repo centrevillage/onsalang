@@ -336,9 +336,13 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             let c = lower_expr(lw, cx, *e)?;
             // The message of a failed `assert` (§11.8, §18.1): `assert <source
             // of the expression>`, made here only (R-183); the interpreter,
-            // `onsa test` and C's `panic_messages` all show it as it is.
-            // SPEC-GAP(S-284): the source of a multi-line `assert` is as written, with its line breaks.
-            let msg = lw.msg(&format!("assert {}", cx.src(cx.expr(*e).span)));
+            // `onsa test` and C's `panic_messages` all show it as it is. The
+            // source of an expression on several lines is as written, its
+            // line breaks made LF (a CR LF is one line break, §2.5, as `onsa
+            // fmt` makes it; S-284). A lone CR is E0001 (§2.5) only from
+            // W3-04; until then one can stay in the message as written.
+            let src = cx.src(cx.expr(*e).span).replace("\r\n", "\n");
+            let msg = lw.msg(&format!("assert {src}"));
             let not = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
             let then = Block {
                 stmts: vec![stmt(span, StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic(msg))))],

@@ -1,7 +1,7 @@
 //! Generic traversal of Core bodies: every expression, depth first, in
 //! evaluation order (used by reachability, the move bookkeeping and tools).
 
-use crate::ir::{Block, Expr, ExprKind, Place, Stmt, StmtKind};
+use crate::ir::{Block, Expr, ExprKind, FnDef, Place, Stmt, StmtKind};
 
 pub fn walk_block(b: &Block, f: &mut dyn FnMut(&Expr)) {
     for s in &b.stmts {
@@ -99,4 +99,39 @@ pub fn walk_expr(e: &Expr, f: &mut dyn FnMut(&Expr)) {
         }
         ExprKind::Block(b) => walk_block(b, f),
     }
+}
+
+/// Whether a function body contains a `Return` statement anywhere.
+pub fn has_return(def: &FnDef) -> bool {
+    fn block(b: &Block) -> bool {
+        b.stmts.iter().any(stmt) || b.value.as_ref().is_some_and(|v| expr(v))
+    }
+    fn stmt(s: &Stmt) -> bool {
+        match &s.kind {
+            StmtKind::Return(_) => true,
+            StmtKind::Let(_, e) | StmtKind::Expr(e) => expr(e),
+            StmtKind::Assign(_, e) => expr(e),
+            StmtKind::If(c, a, b) => expr(c) || block(a) || block(b),
+            StmtKind::While(c, b) => expr(c) || block(b),
+            StmtKind::ForRange(_, lo, hi, b) => expr(lo) || expr(hi) || block(b),
+            StmtKind::Break | StmtKind::Continue => false,
+        }
+    }
+    fn expr(e: &Expr) -> bool {
+        let mut found = false;
+        walk_expr(e, &mut |x| {
+            if let ExprKind::IfExpr { then, else_, .. } = &x.kind {
+                found |= then.stmts.iter().any(stmt) || else_.stmts.iter().any(stmt);
+            }
+            if let ExprKind::Switch { arms, default, .. } = &x.kind {
+                found |= arms.iter().any(|(_, b)| b.stmts.iter().any(stmt))
+                    || default.as_ref().is_some_and(|b| b.stmts.iter().any(stmt));
+            }
+            if let ExprKind::Block(b) = &x.kind {
+                found |= b.stmts.iter().any(stmt);
+            }
+        });
+        found
+    }
+    def.body.as_ref().is_some_and(block)
 }

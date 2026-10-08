@@ -151,28 +151,24 @@ fn std_unsupported(name: &str, span: Span) -> Unsupported {
     Unsupported { std_fn: name.to_string(), span }
 }
 
-/// Every form of `m` this version of the interpreter cannot run (E0200,
-/// S-224), in the order of the module: the `std` `target fn`s it does not
-/// implement, in every function body and every `const` initializer. `onsa
-/// test` reports them before it runs any test, so what it reports does not
-/// depend on which code the tests reach.
-pub fn unsupported(m: &Module) -> Vec<Unsupported> {
+/// Every form this version of the interpreter cannot run (E0200, S-224) that
+/// a run from the entries `roots` reaches ([`onsa_core::reach`]; spec §15.2,
+/// S-242): the `std` `target fn`s it does not implement, in the bodies of the
+/// reached functions, then in the initializers of the reached `const`s, each
+/// in the order of the module. `onsa test` reports them before it runs any
+/// test, with the tests it runs as the roots, so what it reports does not
+/// depend on which code the run passes, only on what it reaches. A run
+/// from the roots evaluates no other `const` (the interpreter evaluates a
+/// `const` when it reads it), so it cannot step on an unreached one.
+pub fn unsupported(m: &Module, roots: &[FnId]) -> Vec<Unsupported> {
     let mut out = Vec::new();
-    let mut visit = |e: &Expr| {
+    onsa_core::reach(m, roots).walk(m, &mut |e: &Expr| {
         if let ExprKind::Prim { prim: Prim::Std(name), .. } = &e.kind
             && std_prim(name).is_none()
         {
             out.push(std_unsupported(name, e.span));
         }
-    };
-    for f in &m.fns {
-        if let Some(b) = &f.body {
-            onsa_core::walk::walk_block(b, &mut visit);
-        }
-    }
-    for c in &m.consts {
-        onsa_core::walk::walk_expr(&c.init, &mut visit);
-    }
+    });
     out
 }
 

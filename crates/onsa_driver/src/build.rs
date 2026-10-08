@@ -5,6 +5,7 @@
 //! compiles them with `cc` and archives them with `ar`. Cross targets get
 //! the sources and the intended flags (`onsa_build.json`).
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -258,7 +259,6 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     // Lower and emit.
     let lower_opts = LowerOptions { bulk_threshold: settings.bulk_threshold, ptr_size: settings.platform.ptr_size };
     let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
-    let module = consts_stage(module).map_err(internal)?;
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
         package: loaded.name.clone(),
@@ -276,6 +276,10 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
         ptr_size: settings.platform.ptr_size,
         cflags: settings.platform.cflags.clone(),
     };
+    // The exports are the entries of the build (spec §15.2, S-242): the
+    // evaluation of the `const`s and the C unit start from them.
+    let roots = onsa_backend_c::export_roots(&module, &emit_opts);
+    let module = consts_stage(module, &roots).map_err(internal)?;
     let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(|d| diagnostics(LowerError::reported(d)))?;
     let files = unit.files(&loaded.name);
     Ok(BuildOutput { module, settings: settings.clone(), export: export.clone(), unit, files })
@@ -542,10 +546,18 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
     out
 }
 
-/// The build-time `const` evaluation as a stage: [`inline_consts`], then the
-/// verifier at its boundary (R-82).
-fn consts_stage(mut module: Module) -> Result<Module, InternalError> {
-    let replacements = crate::guard_on_stack(|| inline_consts(&module))?;
+/// The build-time `const` evaluation as a stage: [`inline_consts`] of the
+/// `const`s that `roots` reach, then the verifier at its boundary (R-82).
+///
+/// The evaluation and the reach are the same set (S-242, W2-13): a `const`
+/// that no entry reaches is not evaluated, so its initializer cannot stop the
+/// build (an internal error of the evaluation), and every `const` the C unit
+/// reaches after the evaluation was offered to it (the reach of the
+/// evaluated module from the same roots is a part of this one: an evaluated
+/// initializer calls nothing).
+fn consts_stage(mut module: Module, roots: &[onsa_core::FnId]) -> Result<Module, InternalError> {
+    let reached = onsa_core::reach(&module, roots).consts;
+    let replacements = crate::guard_on_stack(|| inline_consts(&module, &reached))?;
     for (i, e) in replacements {
         module.consts[i].init = e;
     }
@@ -555,13 +567,15 @@ fn consts_stage(mut module: Module) -> Result<Module, InternalError> {
 
 /// `const` initializers that call functions are evaluated with the
 /// interpreter at build time (spec §6.6, T3-9): the literals that replace
-/// them, so the C backend can emit a static initializer. Only through
-/// [`consts_stage`], which runs it on the stack of a command (R-05).
-fn inline_consts(module: &Module) -> Vec<(usize, Expr)> {
+/// them, so the C backend can emit a static initializer. Only the `const`s
+/// of `reached`, and only through [`consts_stage`], which runs it on the
+/// stack of a command (R-05).
+fn inline_consts(module: &Module, reached: &BTreeSet<ConstId>) -> Vec<(usize, Expr)> {
     let mut replacements: Vec<(usize, Expr)> = Vec::new();
     {
         let interp = Interp::new(module);
-        for (i, c) in module.consts.iter().enumerate() {
+        for &id in reached {
+            let (i, c) = (id.0 as usize, module.const_(id));
             if is_static_init(&c.init) {
                 continue;
             }
@@ -573,7 +587,7 @@ fn inline_consts(module: &Module) -> Vec<(usize, Expr)> {
             // stops at it with E0200; E0419 at the initializer (spec §6.6,
             // S-222) is W9-03's. A failure of the interpreter itself unwinds
             // to the guard of `consts_stage` (S-67).
-            let v = match interp.const_value(ConstId(i as u32)) {
+            let v = match interp.const_value(id) {
                 Ok(v) => v,
                 Err(onsa_interp::Failure::Panic(_) | onsa_interp::Failure::Unsupported(_)) => continue,
             };
@@ -645,6 +659,29 @@ pub fn value_to_expr(m: &Module, v: &Value, ty: &Ty, span: onsa_diag::Span) -> O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// S-242, W2-13: the build-time evaluation evaluates the `const`s that the
+    /// entries reach (one reaches `READ` through `get`), and no other
+    /// (`UNREAD` keeps its initializer, a call), so the evaluation and the
+    /// reach are the same set.
+    #[test]
+    fn the_const_stage_evaluates_only_the_reached_consts() {
+        let src = "fn three() -> U32 {\n  3\n}\n\nfn four() -> U32 {\n  4\n}\n\nconst READ: U32 = three()\n\nconst UNREAD: U32 = four()\n\npub fn get() -> U32 {\n  READ\n}\n";
+        let input = PackageInput {
+            manifest: None,
+            files: vec![crate::SourceFile { path: "t.onsa".into(), text: src.into() }],
+            root: None,
+        };
+        let mut loaded = Loaded::from_input(input);
+        let analyzed = crate::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+        assert!(analyzed.diagnostics.is_empty());
+        let module = crate::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+        let get = module.fns.iter().position(|f| f.name.ends_with("get")).map(|i| onsa_core::FnId(i as u32));
+        let module = consts_stage(module, &[get.unwrap()]).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+        let init = |name: &str| &module.consts.iter().find(|c| c.name.ends_with(name)).unwrap().init.kind;
+        assert!(matches!(init("READ"), ExprKind::Lit(Lit::Int(3))), "{:?}", init("READ"));
+        assert!(matches!(init("UNREAD"), ExprKind::Call { .. }), "{:?}", init("UNREAD"));
+    }
 
     #[test]
     fn platforms() {

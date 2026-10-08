@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§6.6", "§18.2"]
+
+// E0200 at a use of a `std` function that the interpreter does not provide, reached
+// through the initializer of a `const` that a running test reads (spec §15.2: "届くと
+// は、… 読む `const` の初期化式を静的にたどれること"). A `const` that reads another
+// `const` reaches that one's initializer too, however long the chain is, and a `const`
+// that a reached function reads is read. The use is reported where it is written, in
+// the function that the initializer calls (not at the `const` and not at the test),
+// and no test runs (§18.2). The generators of `std.test.gen` are the helpers of §11.8
+// that this version's interpreter does not run.
+//
+// The `const` that no reached code reads is not reached: its initializer is not
+// followed, so a generator in it is not an E0200 (the unmarked uses below), and it is
+// not another diagnostic or an internal error in its place (the evaluation of a
+// `const` at compile time, §6.6, must not step on a helper that the interpreter does
+// not run, plan W2-13).
+
+use std.test.gen
+
+// Reached by a `const` that a test reads directly.
+fn direct_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+const READ_BY_A_TEST: U32 = direct_digit(7)
+
+// The generator is two calls away from the initializer of the `const`.
+fn inner(n: U32) -> U32 {
+  let _ = gen.f32(0.0, 1.0)   //~ E0200
+  n
+}
+
+fn outer(n: U32) -> U32 {
+  inner(n) + 1
+}
+
+const THROUGH_TWO_CALLS: U32 = outer(1)
+
+// A chain of `const`s: the test reads `TOP`, `TOP` reads `MIDDLE`, `MIDDLE` reads
+// `BOTTOM`, and only `BOTTOM` calls a function that uses a generator.
+fn chain_digit(n: U32) -> U32 {
+  let _ = gen.u32(1, n)   //~ E0200
+  n
+}
+
+const BOTTOM: U32 = chain_digit(5)
+const MIDDLE: U32 = BOTTOM + 1
+const TOP: U32 = MIDDLE + 1
+
+// A `const` that a reached function reads, not the test itself.
+fn reader_digit(n: U32) -> U32 {
+  let _ = gen.u32(2, n)   //~ E0200
+  n
+}
+
+const READ_BY_A_FUNCTION: U32 = reader_digit(9)
+
+fn reads_the_const() -> U32 {
+  READ_BY_A_FUNCTION + 1
+}
+
+// A `const` that a reached function reads only in a branch that is not taken: the
+// path is in the source, so the `const` is reached.
+fn branch_digit(n: U32) -> U32 {
+  let _ = gen.u32(3, n)   //~ E0200
+  n
+}
+
+const READ_IN_A_BRANCH: U32 = branch_digit(4)
+
+fn reads_in_a_branch(flag: Bool) -> U32 {
+  if flag {
+    return READ_IN_A_BRANCH
+  }
+  0
+}
+
+// An associated constant.
+fn assoc_digit(n: U32) -> U32 {
+  let _ = gen.u32(4, n)   //~ E0200
+  n
+}
+
+pub struct Dice {
+  sides: U32,
+}
+
+impl Dice {
+  const FACES: U32 = assoc_digit(6)
+}
+
+// Not read by any code that a test reaches: no marker.
+fn unread_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+const NOBODY_READS: U32 = unread_digit(1)
+
+const READ_BY_AN_UNREACHED_CONST: U32 = unread_digit(2)
+
+const READS_AN_UNREACHED_CONST: U32 = READ_BY_AN_UNREACHED_CONST + 1
+
+fn unreached_reader() -> U32 {
+  READS_AN_UNREACHED_CONST
+}
+
+test "a const read by a test" {
+  assert READ_BY_A_TEST == 7
+  assert false
+}
+
+test "a const that calls two functions" {
+  assert THROUGH_TWO_CALLS == 2
+}
+
+test "the top of a chain of consts" {
+  assert TOP == 7
+}
+
+test "a const read through a function" {
+  assert reads_the_const() == 10
+}
+
+test "a const read in a branch that is not taken" {
+  assert reads_in_a_branch(false) == 0
+}
+
+test "an associated constant" {
+  assert Dice.FACES == 6
+}

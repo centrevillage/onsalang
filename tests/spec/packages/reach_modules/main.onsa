@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§15.1", "§18.2"]
+
+// E0200 at a use of a `std` function that the interpreter does not provide, reached
+// from the tests of several modules of a package (spec §15.2, §18.2). The entries are
+// the tests of every module, so a function that a test of any module calls is reached,
+// wherever the function is defined (here: `util.reached_digit` from `main`,
+// `dsp.voice.voice_digit` from its own module's test, and the initializer of
+// `consts.LIMIT`, a `const` that `main` reads). A function or a `const` that no test of
+// any module reaches (`util.unreached_digit`, `consts.UNREAD`, `dsp.voice.unreached_voice`)
+// has no marker: its generator is not an E0200. No test runs.
+
+use util.{reached_digit, plain_len}
+use consts.{LIMIT}
+
+test "a function of another module" {
+  assert reached_digit(2) == 2
+  assert false
+}
+
+test "a plain function of another module" {
+  assert plain_len(2) == 3
+}
+
+test "a const of another module" {
+  assert LIMIT == 3
+}

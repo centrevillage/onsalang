@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§15.2", "§11.8"]
+
+// `onsa check` does not depend on the target, so it does not report the E0200 of a
+// `std` function that a target does not provide, even where a test reaches the use
+// (spec §15.2: "`onsa check` は変換先によらないので、これを報告しない"). `onsa test` does
+// report it here (reach_calls.onsa and the files beside it); the mode of this case is
+// `check`, so the case has no marker.
+
+use std.test.gen
+
+fn digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+const READ: U32 = digit(3)
+
+test "a call" {
+  assert digit(1) == 1
+}
+
+test "a const" {
+  assert READ == 3
+}

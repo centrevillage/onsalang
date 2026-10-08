@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§18.2", "§11.8"]
+
+// E0200 at a use of a `std` function that the interpreter does not provide, when a
+// test that runs reaches it through calls (spec §15.2: the entry of `onsa test` is the
+// tests it runs, and "届く" follows the function called, statically, "実行時に通るかどう
+// かは見ない"). The generators of `std.test.gen` are the helpers of §11.8 that this
+// version's interpreter does not run. Every reached use is reported at the position of
+// the use (§15.2, "使った位置で"; not at the test, and not at the call that reaches it),
+// and no test runs, so the `assert false` below is never reached (§18.2).
+//
+// Beside them, the same file has uses that no test reaches (unmarked): the
+// interpreter does not report them (reach_unreached.onsa).
+
+use std.test.{Gen}
+use std.test.gen
+use std.array
+
+// One call away.
+fn direct(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+// Three calls away: `first` calls `second`, which calls `third`.
+fn third(n: U32) -> U32 {
+  let _ = gen.f32(0.0, 1.0)   //~ E0200
+  n
+}
+
+fn second(n: U32) -> U32 {
+  third(n) + 1
+}
+
+fn first(n: U32) -> U32 {
+  second(n) + 1
+}
+
+// A call that the run never makes: the branch is not taken, but the call is on a path
+// that the source can follow, and "実行時に通るかどうかは見ない".
+fn never_taken(flag: Bool) -> U32 {
+  if flag {
+    let _ = gen.u32(5, 6)   //~ E0200
+  }
+  0
+}
+
+// A loop that runs zero times.
+fn zero_iterations(go: Bool) -> U32 {
+  while go {
+    let _ = gen.u32(0, 1)   //~ E0200
+    break
+  }
+  0
+}
+
+// An early `return` before the call: the call is still on the path of the source.
+fn after_return(n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+// A generic function, called with two types: one position, so one diagnostic.
+fn generic_use[T: Copy](x: T) -> T {
+  let _ = gen.u32(0, 1)   //~ E0200
+  x
+}
+
+// A method and an associated function of a type.
+pub struct Dice {
+  sides: U32,
+}
+
+impl Dice {
+  pub fn new(sides: U32) -> Dice {
+    let _ = gen.u32(1, sides)   //~ E0200
+    Dice { sides: sides }
+  }
+
+  pub fn roll(self) -> U32 {
+    let _ = gen.u32(1, self.sides)   //~ E0200
+    self.sides
+  }
+}
+
+// The body of an anonymous function that the test passes to `array.from_fn`.
+fn from_a_closure() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    let _ = gen.u32(0, i)   //~ E0200
+    i
+  })
+}
+
+// Not reached by any test, next to the reached ones: no marker.
+fn unreached(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+fn unreached_chain(n: U32) -> U32 {
+  unreached(n)
+}
+
+test "a call" {
+  assert direct(1) == 1
+  assert false
+}
+
+test "three calls away" {
+  assert first(1) == 3
+}
+
+test "a branch that is not taken" {
+  assert never_taken(false) == 0
+}
+
+test "a loop with no iteration" {
+  assert zero_iterations(false) == 0
+}
+
+test "a call after an early return" {
+  assert after_return(0) == 0
+}
+
+test "a generic function at two types" {
+  let f: F32 = 1.5
+  assert generic_use(1) == 1
+  assert generic_use(f) == f
+}
+
+test "an associated function and a method" {
+  let d = Dice.new(6)
+  assert d.roll() == 6
+}
+
+test "a closure given to from_fn" {
+  let xs = from_a_closure()
+  assert xs.len() == 3
+}

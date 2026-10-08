@@ -17,7 +17,8 @@
 //! - `--filter <text>` runs the tests whose full name text contains `<text>` as a substring: by
 //!   code points, case sensitive, no normalization, the empty text matches all, and no match at
 //!   all is a usage error (exit code 2, nothing on the standard output, with `--json` too, §18.2);
-//!   there can be one `--filter` only;
+//!   an empty `--filter` is the same as no filter, so a package without tests succeeds with it
+//!   (the answer to S-286, (e2)); there can be one `--filter` only;
 //! - the checks come first: a diagnostic of the package stops the command before the filter is
 //!   matched, wherever the diagnostic is and whatever the filter selects (§18.2);
 //! - the name of a `test` is a string literal with no interpolation, not empty, and with no control
@@ -297,6 +298,88 @@ fn filter_selects_among_failures_and_the_exit_code_follows_the_selected_tests() 
     let out = run(d.root(), &["test", "--filter", "rings", &root]);
     assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
     assert_eq!(result_lines(&out).len(), 1, "{}", out.stdout);
+}
+
+/// Spec §18.2 and the answer to S-286 ((e2), 2026-10-08): an empty `--filter` is the same as no
+/// filter, so on a package without tests it runs nothing and succeeds (exit code 0, `tests` is an
+/// empty array), as the run without `--filter`; it is not the usage error of a filter that selects
+/// nothing.
+#[test]
+fn an_empty_filter_on_a_package_without_tests_is_no_filter() {
+    let d = Dir::pkg("empty_filter_no_tests");
+    d.write("a.onsa", "pub fn gain() -> I32 {\n  2\n}\n");
+    let root = d.arg();
+    for args in [vec!["test", "--filter", "", &root], vec!["test", &root]] {
+        let out = run(d.root(), &args);
+        assert_eq!(out.code, 0, "{args:?}: {}{}", out.stdout, out.stderr);
+        assert!(result_lines(&out).is_empty(), "{args:?}: {}", out.stdout);
+    }
+    let (out, doc) = test_json(d.root(), &["--filter", "", &root]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(diagnostics(&doc).is_empty(), "{doc}");
+    assert!(tests_of(&doc).is_empty(), "{doc}");
+}
+
+// ---------------------------------------------------------------- a message of several lines
+
+/// A failed `assert` whose expression is written on two lines (`assert (1 == 1) &&` and
+/// `(2 == 3)`), next to a failed one on one line.
+const MULTI_LINE: &str = "test \"multi\" {\n  assert (1 == 1) &&\n(2 == 3)\n}\n\ntest \"one\" {\n  assert 1 == 2\n}\n";
+
+/// `docs/onsa-tools.md` §4 and the answer to S-284 ((t3), 2026-10-08): the message of a failed test
+/// that has several lines puts its first line on the `failed at` line of the test and each of the
+/// others on a line of its own that starts with a space, so the lines that start with `test` are
+/// the lines of the tests. The lines are split at the line breaks of §2.5 (LF and CR LF), and the
+/// width of the indentation is not fixed. The `message` of the JSON record stays the source of the
+/// expression as written (§18.1, the answer (a)).
+#[test]
+fn a_message_of_several_lines_goes_on_indented_lines_after_the_line_of_the_test() {
+    for (tag, newline) in [("lf", "\n"), ("crlf", "\r\n")] {
+        let d = Dir::pkg(&format!("multi_line_{tag}"));
+        d.write("m.onsa", &MULTI_LINE.replace('\n', newline));
+        let root = d.arg();
+        let out = run(d.root(), &["test", &root]);
+        assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
+        assert!(!out.stdout.contains('\r'), "{tag}: {:?}", out.stdout);
+        assert_eq!(
+            sorted_result_lines(&out),
+            [
+                "test m \"multi\" failed at m.onsa:2: assert (1 == 1) &&",
+                "test m \"one\" failed at m.onsa:7: assert 1 == 2"
+            ],
+            "{tag}: {}",
+            out.stdout
+        );
+        let lines: Vec<&str> = out.stdout.lines().collect();
+        let at = lines.iter().position(|l| l.starts_with("test m \"multi\"")).unwrap();
+        let next = lines[at + 1];
+        assert!(next.starts_with(' ') && next.trim() == "(2 == 3)", "{tag}: {:?}", out.stdout);
+        assert!(lines[at + 2].starts_with("test ") || !lines[at + 2].starts_with(' '), "{tag}: {:?}", out.stdout);
+
+        if tag == "lf" {
+            let (_, doc) = test_json(d.root(), &[&root]);
+            assert_eq!(
+                str_of(failure_of(record(&doc, "m", "multi")), "message"),
+                "assert (1 == 1) &&\n(2 == 3)",
+                "{doc}"
+            );
+        }
+    }
+}
+
+/// Spec §18.1, §2.5 and the answer to S-284 (2026-10-08): the line breaks of the `message` of a
+/// failed `assert` are LF, also when the file has CR LF (a CR LF is one line break, as `onsa fmt`
+/// makes it LF), so the message does not depend on the line breaks of the machine. The rest of the
+/// source of the expression is as written.
+#[test]
+fn the_message_of_an_assert_in_a_file_with_cr_lf_has_lf_line_breaks() {
+    let d = Dir::pkg("multi_line_crlf_message");
+    d.write("m.onsa", &MULTI_LINE.replace('\n', "\r\n"));
+    let root = d.arg();
+    let (out, doc) = test_json(d.root(), &[&root]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(str_of(failure_of(record(&doc, "m", "multi")), "message"), "assert (1 == 1) &&\n(2 == 3)", "{doc}");
+    assert_eq!(str_of(failure_of(record(&doc, "m", "one")), "message"), "assert 1 == 2", "{doc}");
 }
 
 // ---------------------------------------------------------------- the order of the checks

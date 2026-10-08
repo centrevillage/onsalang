@@ -28,8 +28,6 @@ pub fn magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32 {
   sqrt(power).round_f32()
 }
 
-// SPEC-GAP(S-285): §11.8 writes the half-open range only; out of range is a panic.
-
 /// Sum of squares over the half-open range `[from, to)`. Panics unless
 /// `from <= to` and `to <= xs.len()`, as an index out of range does: the
 /// range is not cut to the span.

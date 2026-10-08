@@ -1,0 +1,15 @@
+use std.test.gen
+
+pub fn reached_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+pub fn unreached_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)
+  n
+}
+
+pub fn plain_len(n: U32) -> U32 {
+  n + 1
+}

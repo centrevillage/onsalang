@@ -9,10 +9,11 @@
 //! remains has no side effects and its sub-expression order no longer
 //! matters.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 
 use onsa_core::prim::{CheckedOp, MathFn, Prim};
+use onsa_core::walk::{has_return, walk_block};
 use onsa_core::{
     BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
     Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, TypeId, UnOp,
@@ -21,7 +22,6 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::names::{Entry, TypeNames, float_tag, ident, int_tag, qualified};
-use crate::reach::{Reach, has_return, reach, walk_block};
 use crate::{CUnit, EmitOptions, PanicMode, no_span, unsupported};
 
 pub(crate) type R<T> = Result<T, Diagnostic>;
@@ -224,8 +224,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         guarded_names: HashMap::new(),
     };
 
-    // 1. Exports and roots.
-    let mut roots: Vec<FnId> = Vec::new();
+    // 1. Exports, and what they reach ([`export_roots`]).
     for e in &opts.exports {
         let Some(i) = find_flow(m, &e.flow) else {
             diags.push(Diagnostic::new(
@@ -243,19 +242,11 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
             symbol.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_uppercase() } else { '_' }).collect();
         let layout = onsa_core::flow_layout_for(m, meta.fns.state, opts.bulk_threshold, opts.ptr_size);
         cx.exports.push(Export { meta_index: i, symbol, upper, layout });
-        let f = &meta.fns;
-        roots.extend([f.init, f.reset, f.ctl, f.tick, f.process]);
-        if let Some(p) = f.params_default {
-            roots.push(p);
-        }
     }
     let mut export_fns: Vec<FnId> = Vec::new();
     for name in &opts.export_fns {
-        match m.fns.iter().position(|f| &f.name == name) {
-            Some(i) => {
-                roots.push(FnId(i as u32));
-                export_fns.push(FnId(i as u32));
-            }
+        match find_fn(m, name) {
+            Some(f) => export_fns.push(f),
             None => diags.push(Diagnostic::new(
                 Stage::Build,
                 Code::E0302,
@@ -267,7 +258,8 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     if !diags.is_empty() {
         return Err(diags);
     }
-    let reach: Reach = reach(m, &roots);
+    let reach = onsa_core::reach(m, &export_roots(m, opts));
+    let consts = named_consts(m, &reach);
 
     // 2. Bulk regions of exported states (spec §12.4). A bulk-split state
     //    embedded in another reachable type is not supported yet.
@@ -302,7 +294,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     for f in &reach.fns {
         cx.fn_names.insert(*f, qualified(&m.fn_(*f).name));
     }
-    for c in &reach.consts {
+    for c in &consts {
         cx.const_names.insert(*c, qualified(&m.const_(*c).name));
     }
     // The guarded twins (R-167): the functions a `poison` wrapper calls after
@@ -340,7 +332,7 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
 
     // 4. Register every type the unit needs (dependency order falls out),
     //    and the pairs of `narrow_*` the runtime instantiates.
-    for c in &reach.consts {
+    for c in &consts {
         cx.names.name(&m.const_(*c).ty);
     }
     let mut narrows: Vec<(IntKind, IntKind)> = Vec::new();
@@ -496,9 +488,9 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
     }
 
     // Constants.
-    if !reach.consts.is_empty() {
+    if !consts.is_empty() {
         let _ = writeln!(out, "/* ---- constants ---- */");
-        for c in &reach.consts {
+        for c in &consts {
             let def = m.const_(*c);
             let ty = cx.names.name(&def.ty);
             match const_init(&mut cx, &def.init) {
@@ -576,6 +568,44 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
         fns,
         take_panic,
     })
+}
+
+/// The `const`s the unit names: those the reached functions read (the one
+/// place C refers to a `const` by its name). A `const` that only an
+/// initializer reads is reached ([`onsa_core::reach`]) but is written into
+/// that initializer ([`const_init`]), so it gets no `static const` of its
+/// own (it would be an unused variable, `-Wunused-const-variable`).
+fn named_consts(m: &Module, reach: &onsa_core::Reach) -> BTreeSet<ConstId> {
+    let mut named = BTreeSet::new();
+    for &f in &reach.fns {
+        if let Some(b) = &m.fn_(f).body {
+            walk_block(b, &mut |e| {
+                if let ExprKind::Const(c) = &e.kind {
+                    named.insert(*c);
+                }
+            });
+        }
+    }
+    named
+}
+
+/// The entries of the unit (spec §15.2, S-242): the entries of each
+/// exported flow ([`onsa_core::FlowFns::entries`]) and each exported
+/// function. A name that names nothing is left out; [`emit_unit`] reports it
+/// (E0302).
+pub(crate) fn export_roots(m: &Module, opts: &EmitOptions) -> Vec<FnId> {
+    let mut roots = Vec::new();
+    for e in &opts.exports {
+        if let Some(i) = find_flow(m, &e.flow) {
+            roots.extend(m.flows[i].fns.entries());
+        }
+    }
+    roots.extend(opts.export_fns.iter().filter_map(|name| find_fn(m, name)));
+    roots
+}
+
+fn find_fn(m: &Module, name: &str) -> Option<FnId> {
+    m.fns.iter().position(|f| f.name == name).map(|i| FnId(i as u32))
 }
 
 /// Index into `Module::flows` by qualified name, or by a unique suffix.

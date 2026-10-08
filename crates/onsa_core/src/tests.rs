@@ -573,3 +573,99 @@ fn params_default_from_param_attributes() {
     let d = text(src);
     assert!(d.contains("fn t.g.params_default() -> t.g.Params sret {\n  t.g.Params { k: 0.5:F32 }\n}"), "{d}");
 }
+
+// ------------------------------------------------- W2-13: reachability
+
+const REACH_SRC: &str = "use std.array
+
+fn leaf(n: U32) -> U32 {
+  n + 1
+}
+
+fn mid(n: U32) -> U32 {
+  leaf(n) + 1
+}
+
+fn looped(n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  looped(n - 1)
+}
+
+fn in_closure(i: U32) -> U32 {
+  i * 2
+}
+
+fn table() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    in_closure(i)
+  })
+}
+
+fn for_const(n: U32) -> U32 {
+  n
+}
+
+const LOW: U32 = for_const(4)
+const MIDDLE: U32 = LOW + 1
+const HIGH: U32 = MIDDLE + 1
+
+fn only_unreached() -> U32 {
+  2
+}
+
+fn unreached() -> U32 {
+  only_unreached()
+}
+
+const UNREAD: U32 = unreached()
+
+fn reads_unread() -> U32 {
+  UNREAD
+}
+
+pub fn root(n: U32) -> U32 {
+  let t = table()
+  mid(n) + looped(n) + t[0] + HIGH
+}
+";
+
+/// The names of the functions and of the `const`s that the functions `roots` reach, sorted.
+fn reached_names(m: &Module, roots: &[&str]) -> (Vec<String>, Vec<String>) {
+    let ids: Vec<FnId> = roots
+        .iter()
+        .map(|r| FnId(m.fns.iter().position(|f| f.name == format!("t.{r}")).unwrap_or_else(|| panic!("{r}")) as u32))
+        .collect();
+    let r = crate::reach(m, &ids);
+    let mut fns: Vec<String> = r.fns.iter().map(|f| m.fn_(*f).name.clone()).collect();
+    let mut consts: Vec<String> = r.consts.iter().map(|c| m.const_(*c).name.clone()).collect();
+    fns.sort();
+    consts.sort();
+    (fns, consts)
+}
+
+/// Spec §15.2, S-242: from the root, the reach follows a chain of calls, a call to itself (once),
+/// the call in an anonymous function given to `array.from_fn` (expanded in place), and the chain
+/// of `const`s a function reads with the call in the last initializer; it takes no function and no
+/// `const` that nothing reached calls or reads.
+#[test]
+fn reach_follows_calls_closures_and_const_chains_only_from_the_roots() {
+    let m = core(REACH_SRC);
+    let (fns, consts) = reached_names(&m, &["root"]);
+    let mut want: Vec<String> = ["root", "mid", "leaf", "looped", "table", "in_closure", "for_const"]
+        .iter()
+        .map(|n| format!("t.{n}"))
+        .collect();
+    want.sort();
+    assert_eq!(fns, want);
+    assert_eq!(consts, ["t.HIGH", "t.LOW", "t.MIDDLE"]);
+
+    // A root that reads the `const` nothing else reads: its initializer and the calls in it.
+    let (fns, consts) = reached_names(&m, &["reads_unread"]);
+    assert_eq!(fns, ["t.only_unreached", "t.reads_unread", "t.unreached"]);
+    assert_eq!(consts, ["t.UNREAD"]);
+
+    // No root: nothing.
+    assert_eq!(crate::reach(&m, &[]), crate::Reach::default());
+}

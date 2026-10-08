@@ -23,8 +23,7 @@ use std::path::Path;
 
 use onsa_backend_c::{FlowApi, PanicMode};
 use onsa_core::prim::Prim;
-use onsa_core::walk::walk_block;
-use onsa_core::{ExprKind, FlowMeta, FnId, Module, Ty, TypeDefKind, TypeId};
+use onsa_core::{Expr, ExprKind, FlowMeta, Module, Ty, TypeDefKind, TypeId};
 use onsa_driver::BuildOutput;
 use onsa_interp::value::{int_value, zero_array};
 use onsa_interp::{ArrayData, Interp, Proj, SpanRef, Value, slot};
@@ -92,22 +91,18 @@ impl Scalar {
     }
 }
 
+/// Whether the flow reaches a transcendental primitive ([`onsa_core::reach`]
+/// from the entries of the flow, R-80 (3)).
 fn reaches_transcendental(m: &Module, meta: &FlowMeta) -> bool {
-    let mut seen = std::collections::HashSet::new();
-    let mut stack: Vec<FnId> = vec![meta.fns.init, meta.fns.ctl, meta.fns.tick, meta.fns.process];
+    let roots: Vec<_> = meta.fns.entries().collect();
     let mut found = false;
-    while let Some(f) = stack.pop() {
-        if !seen.insert(f) {
-            continue;
+    onsa_core::reach(m, &roots).walk(m, &mut |e: &Expr| {
+        if let ExprKind::Prim { prim: Prim::Math(mf, _), .. } = &e.kind
+            && !mf.is_exact()
+        {
+            found = true;
         }
-        if let Some(b) = &m.fn_(f).body {
-            walk_block(b, &mut |e| match &e.kind {
-                ExprKind::Call { fn_, .. } => stack.push(*fn_),
-                ExprKind::Prim { prim: Prim::Math(mf, _), .. } if !mf.is_exact() => found = true,
-                _ => {}
-            });
-        }
-    }
+    });
     found
 }
 
@@ -305,8 +300,10 @@ fn same_panic(a: &Panic, b: &Panic) -> bool {
 
 fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<Value>>) -> Result<Run, String> {
     // A case the interpreter cannot run is an error of the case (E0200,
-    // S-224), found before any call, as `onsa test` and the vectors find it.
-    let unsupported = onsa_interp::unsupported(module);
+    // S-224), found before any call where the entries of the flow reach it
+    // (spec §15.2, S-242), as `onsa test` and the vectors find it.
+    let roots: Vec<_> = meta.fns.entries().collect();
+    let unsupported = onsa_interp::unsupported(module, &roots);
     if !unsupported.is_empty() {
         let found: Vec<String> = unsupported
             .iter()

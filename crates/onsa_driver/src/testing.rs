@@ -5,8 +5,9 @@
 //! A test is a function of Core with a [`onsa_core::TestMark`]: its module
 //! path and name identify it (S-55, R-68). The order of the steps (§18.2,
 //! S-242): the checks and the E0200 that do not depend on the target come
-//! first (the caller has lowered the package), then `--filter` is matched,
-//! then the E0200 of the interpreter, then the tests run.
+//! first, on the whole package (the caller has lowered it), then `--filter`
+//! is matched, then the E0200 of the interpreter that the selected tests
+//! reach (§15.2, W2-13), then the tests run.
 
 use onsa_diag::{Diagnostic, SourceMap, Span};
 use serde::Serialize;
@@ -87,8 +88,11 @@ impl TestReport {
     /// The text (`docs/onsa-tools.md` §4): a line for each test, `test <full
     /// name text> ok` or `test <full name text> failed at <file>:<line>:
     /// <message>`, then a summary. The file and the line are those of the
-    /// `span` of the JSON record.
-    // SPEC-GAP(S-282): the file of `failed at` is the `span.file` of `--json`.
+    /// `span` of the JSON record. A message of several lines (an `assert` of
+    /// an expression written on several lines, S-284) puts its first line on
+    /// the line of the test and each of the others on a line of its own,
+    /// indented, so that every line that starts with `test` is the line of a
+    /// test.
     pub fn render_text(&self, sources: &SourceMap) -> String {
         let mut out = String::new();
         for t in &self.tests {
@@ -97,7 +101,12 @@ impl TestReport {
                 Some(f) => {
                     let file = sources.file(f.span.file);
                     let line = file.line_col(f.span.start).line;
-                    out.push_str(&format!("test {} failed at {}:{line}: {}\n", t.full_name(), file.name(), f.message));
+                    let mut lines = message_lines(&f.message);
+                    let first = lines.next().unwrap_or_default();
+                    out.push_str(&format!("test {} failed at {}:{line}: {first}\n", t.full_name(), file.name()));
+                    for rest in lines {
+                        out.push_str(&format!("{CONTINUATION}{rest}\n"));
+                    }
                 }
             }
         }
@@ -152,6 +161,16 @@ impl TestReport {
     }
 }
 
+/// The indentation of the lines of a message after its first in the text
+/// (`docs/onsa-tools.md` §4 does not fix its width).
+const CONTINUATION: &str = "    ";
+
+/// The lines of `message`, split at the line breaks of spec §2.5 (LF, and CR
+/// LF as one). A CR that no LF follows is not a line break.
+fn message_lines(message: &str) -> impl Iterator<Item = &str> {
+    message.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l))
+}
+
 /// What `onsa test` did with a lowered module.
 #[derive(Debug, Clone)]
 pub enum TestRun {
@@ -159,8 +178,8 @@ pub enum TestRun {
     Ran(TestReport),
     /// `--filter` selected no test: a usage error, exit code 2 (§18.2).
     NoMatch,
-    /// The module holds forms the interpreter of this version cannot run:
-    /// E0200 for each (spec §18.1, S-224), and no test ran.
+    /// The selected tests reach forms the interpreter of this version cannot
+    /// run: E0200 for each (spec §15.2, §18.1, S-224, S-242), and no test ran.
     Unsupported(Vec<Diagnostic>),
 }
 
@@ -168,11 +187,15 @@ pub enum TestRun {
 /// failures and panics (spec §9.2) fail the test and name the position; a
 /// failure of the interpreter itself is an internal error (S-67, R-137).
 ///
-/// `--filter` is matched first (S-242): no test selected is
-/// [`TestRun::NoMatch`]. Then, before any test runs, the forms the
-/// interpreter cannot run are E0200, all at once
-/// ([`onsa_interp::unsupported`]; W2-13 narrows them to what the selected
-/// tests reach). The interpreter runs on the stack of a command (R-05).
+/// `--filter` is matched first (S-242): a filter that selects no test is
+/// [`TestRun::NoMatch`]; an empty one, as no filter, selects every test, so
+/// a package without tests runs nothing and is not a usage error (S-286).
+/// Then, before any test runs, the forms the interpreter cannot run that the
+/// selected tests reach (spec §15.2: the tests are the entries of the run)
+/// are E0200, all at once ([`onsa_interp::unsupported`]). The interpreter
+/// evaluates a `const` only when the run reads it, so no `const` outside
+/// that reach is evaluated. The interpreter runs on the stack of a command
+/// (R-05).
 pub fn run_tests(
     sources: &SourceMap,
     module: &onsa_core::Module,
@@ -180,15 +203,17 @@ pub fn run_tests(
 ) -> Result<TestRun, InternalError> {
     guard_on_stack(|| {
         let selected = select(module, opts.filter.as_deref());
-        // SPEC-GAP(S-286): an empty `--filter` on a package without tests runs
-        // nothing and is not a usage error, as a run without `--filter`.
         if selected.is_empty() && opts.filter.as_deref().is_some_and(|f| !f.is_empty()) {
             return TestRun::NoMatch;
         }
-        let unsupported = onsa_interp::unsupported(module);
+        let roots: Vec<onsa_core::FnId> = selected.iter().map(|&(id, _)| id).collect();
+        let unsupported = onsa_interp::unsupported(module, &roots);
         if unsupported.is_empty() {
             return TestRun::Ran(run_selected(module, &selected));
         }
+        // SPEC-GAP(S-309): a use that several tests, or several instances of
+        // a generic function, reach is one E0200: the same position, code and
+        // message are reported once.
         let mut diagnostics = reduce::exact(unsupported.iter().map(onsa_interp::Unsupported::diagnostic).collect());
         fill_found(sources, &mut diagnostics);
         debug_contract(sources, &diagnostics);
@@ -243,8 +268,8 @@ fn failure_of(module: &onsa_core::Module, test: onsa_core::FnId, p: onsa_interp:
 /// it is left out, so that the list names no generated function and has the
 /// positions of the source only (the flow's call in the test, a `~` call in a
 /// flow). The generated functions are those of `module.flows`.
-// SPEC-GAP(S-283): a call position is the span of the whole call expression
-// (from the receiver of a method), as Core holds it.
+// A call position is the span of the whole call expression (from the
+// receiver of a method), as Core holds it (S-283).
 fn source_calls(module: &onsa_core::Module, test: onsa_core::FnId, calls: &[onsa_interp::CallSite]) -> Vec<Span> {
     calls
         .iter()

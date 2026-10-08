@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.2", "§6.1", "§18.2"]
+
+// E0200 at a use of a `std` function that the interpreter does not provide, reached
+// through a function that a running test uses as a value (spec §15.2: "届くとは、… 値
+// として使う関数 … を静的にたどれること"). Placing a function in a variable, a field or an
+// argument is a use as a value, whether or not the value is ever called (spec §15.2:
+// "実行時に通るかどうかは見ない"). The generators of `std.test.gen` are the helpers of §11.8
+// that this version's interpreter does not run.
+//
+// A function that only an unreached function uses as a value is not reached: no marker.
+// Written in the final syntax of a call through a function value (`f.(x)`, §6.1), which
+// the parser of this version does not read yet; this version lowers no function value
+// (E0200 for the value itself, whichever target), which W8-09 makes work.
+
+use std.test.gen
+
+fn stored_digit(n: U32) -> U32 {
+  let _ = gen.u32(0, n)   //~ E0200
+  n
+}
+
+fn bound_digit(n: U32) -> U32 {
+  let _ = gen.u32(1, n)   //~ E0200
+  n
+}
+
+fn passed_digit(n: U32) -> U32 {
+  let _ = gen.u32(2, n)   //~ E0200
+  n
+}
+
+fn never_called_digit(n: U32) -> U32 {
+  let _ = gen.u32(3, n)   //~ E0200
+  n
+}
+
+fn unreached_digit(n: U32) -> U32 {
+  let _ = gen.u32(4, n)
+  n
+}
+
+pub struct Holder {
+  f: fn(U32) -> U32,
+}
+
+fn apply(f: fn(U32) -> U32, n: U32) -> U32 {
+  f.(n)
+}
+
+// A function value that only an unreached function makes.
+fn unreached_holder() -> Holder {
+  Holder { f: unreached_digit }
+}
+
+test "a function stored in a field" {
+  let h = Holder { f: stored_digit }
+  assert h.f.(2) == 2
+  assert false
+}
+
+test "a function bound to a variable" {
+  let f = bound_digit
+  assert f.(3) == 3
+}
+
+test "a function passed as an argument" {
+  assert apply(passed_digit, 4) == 4
+}
+
+test "a function used as a value and never called" {
+  let _ = Holder { f: never_called_digit }
+  assert true
+}
