@@ -34,14 +34,14 @@ flow の信号グラフを DOT で出す（`--svg` で SVG。Graphviz の `dot` 
 
 ### 1.3 `par`
 
-- 複製を枠（Graphviz のクラスタ）で囲む。見出しは `par i in 0..N（×N）`。
+- 複製を枠（Graphviz のクラスタ）で囲む。見出しは `par i in 0..<N（×N）`。
 - 複製の添字は、枠の中に `init` のクロックの入力として描く（楕円、灰色）。ノード名は `par` の名前で修飾する（`saws.i`）。入れ子でも重ならない。
 - 本体の結果から、`par` の結果のノードへ辺を引く。
 - 入れ子の `par` は、入れ子の枠にする。
 
 ```dot
 subgraph cluster_saws {
-  label="par i in 0..4（×4）"
+  label="par i in 0..<4（×4）"
   "saws.i" [label="i: U32 at init" shape=ellipse color="gray40"]
   "saws.saw_0" [label="saw_0 = saw~: F32 at sample" style=rounded]
 }
