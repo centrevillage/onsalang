@@ -350,10 +350,20 @@ struct JsonDiagnostic<'a> {
     span: JsonSpan<'a>,
     #[serde(skip_serializing_if = "Option::is_none")]
     found: Option<&'a str>,
+    /// Always there, also when empty; so is `notes` (§18.1, S-213).
     fixes: Vec<JsonFix<'a>>,
-    // SPEC-GAP(S-213): §18.1 has no JSON form for notes. `notes` is always an
-    // array; a note has `message` and, when it has a position, `span`.
     notes: Vec<JsonNote<'a>>,
+}
+
+/// The one object `--json` prints, for every command (§18.1, S-215): the
+/// diagnostics are its `diagnostics` array, an empty one when there is none;
+/// the keys of `rest` (a command's own result, such as `onsa interface`'s)
+/// are beside it in the same object.
+#[derive(Debug, Serialize)]
+struct JsonDocument<'a, T: Serialize> {
+    diagnostics: Vec<JsonDiagnostic<'a>>,
+    #[serde(flatten)]
+    rest: &'a T,
 }
 
 #[derive(Debug, Serialize)]
@@ -368,6 +378,7 @@ struct JsonEdit<'a> {
     replace: &'a str,
 }
 
+/// A note (§18.1, S-213): `message`, and `span` only when it has a position.
 #[derive(Debug, Serialize)]
 struct JsonNote<'a> {
     message: &'a str,
@@ -382,16 +393,50 @@ fn json_span(sources: &SourceMap, span: Span) -> JsonSpan<'_> {
     JsonSpan { file: file.name(), line: start.line, col: start.col, end_line: end.line, end_col: end.col }
 }
 
-/// Diagnostics in the order they are rendered: by file, position and code.
-fn sorted(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
-    let mut sorted: Vec<&Diagnostic> = diagnostics.iter().collect();
-    sorted.sort_by_key(|d| (d.span.file, d.span.start, d.code));
-    sorted
+/// Diagnostics in the order they are rendered, in JSON and in text alike (the
+/// one place of it; §18.1, S-234): by the file name as printed (code points,
+/// so neither the order of reading nor the locale matters), then line,
+/// column, end line, end column, code and message. Equal keys keep the order
+/// they came in (the sort is stable).
+fn sorted<'a>(sources: &SourceMap, diagnostics: &'a [Diagnostic]) -> Vec<&'a Diagnostic> {
+    let mut keyed: Vec<_> = diagnostics
+        .iter()
+        .map(|d| {
+            let file = sources.file(d.span.file);
+            let (start, end) = (file.line_col(d.span.start), file.line_col(d.span.end));
+            ((file.name(), start.line, start.col, end.line, end.col, d.code.as_str(), d.message.as_str()), d)
+        })
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    keyed.into_iter().map(|(_, d)| d).collect()
 }
 
-/// Render diagnostics as a JSON array (spec §18.1). Sorted by file and position.
+/// Render diagnostics as the JSON document of `--json` (spec §18.1, S-215):
+/// one object whose `diagnostics` array is in the order of [`sorted`].
 pub fn to_json(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
-    let items: Vec<JsonDiagnostic> = sorted(diagnostics)
+    #[derive(Serialize)]
+    struct Nothing {}
+    to_json_document(sources, diagnostics, &Nothing {})
+}
+
+/// The JSON document of `--json` with a command's own result: the keys of
+/// `rest` (which serializes as an object without a `diagnostics` key) beside
+/// the `diagnostics` array of [`to_json`]. The one place of the document's
+/// shape for every command.
+pub fn to_json_document<T: Serialize>(sources: &SourceMap, diagnostics: &[Diagnostic], rest: &T) -> String {
+    let document = JsonDocument { diagnostics: json_diagnostics(sources, diagnostics), rest };
+    serde_json::to_string_pretty(&document).expect("diagnostics serialize")
+}
+
+/// The diagnostics as a bare JSON array, in the order of [`sorted`]: the form
+/// `onsa test --json` still prints until it takes the document of [`to_json`]
+/// with its test results (W2-10, S-233). No other command prints it.
+pub fn to_json_array(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
+    serde_json::to_string_pretty(&json_diagnostics(sources, diagnostics)).expect("diagnostics serialize")
+}
+
+fn json_diagnostics<'a>(sources: &'a SourceMap, diagnostics: &'a [Diagnostic]) -> Vec<JsonDiagnostic<'a>> {
+    sorted(sources, diagnostics)
         .into_iter()
         .map(|d| JsonDiagnostic {
             code: d.code.as_str(),
@@ -416,15 +461,15 @@ pub fn to_json(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
                 .map(|n| JsonNote { message: &n.message, span: n.span.map(|s| json_span(sources, s)) })
                 .collect(),
         })
-        .collect();
-    serde_json::to_string_pretty(&items).expect("diagnostics serialize")
+        .collect()
 }
 
-/// Render diagnostics for a terminal: `file:line:col: error[E0010]: message`.
+/// Render diagnostics for a terminal: `file:line:col: error[E0010]: message`,
+/// in the order of the JSON ([`sorted`]; `docs/onsa-tools.md` §4).
 pub fn to_text(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
     use std::fmt::Write;
     let mut out = String::new();
-    for d in sorted(diagnostics) {
+    for d in sorted(sources, diagnostics) {
         let file = sources.file(d.span.file);
         let lc = file.line_col(d.span.start);
         let _ = writeln!(out, "{}:{}:{}: error[{}]: {}", file.name(), lc.line, lc.col, d.code.as_str(), d.message);
@@ -489,7 +534,8 @@ mod tests {
         .with_found("resonator(src, vowel_f1, 80.0)")
         .with_fix(Fix::insert("add `~`", f, tilde, "~"));
         let json = to_json(&sources, &[d]);
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let v = &doc["diagnostics"];
         assert_eq!(v[0]["code"], "E0811");
         assert_eq!(v[0]["span"]["file"], "dsp/voice.onsa");
         assert_eq!(v[0]["span"]["line"], 2);
@@ -510,16 +556,69 @@ mod tests {
             .with_fix(Fix::replace("t", Span::new(f, 0, 4), "fn"))
             .with_note(Span::new(f, 5, 6), "here")
             .with_rule("the rule");
-        let v: serde_json::Value = serde_json::from_str(&to_json(&sources, &[d])).unwrap();
+        let doc: serde_json::Value = serde_json::from_str(&to_json(&sources, &[d])).unwrap();
+        let v = &doc["diagnostics"];
         assert_eq!(v[0]["notes"][0]["message"], "here");
         assert_eq!(v[0]["notes"][0]["span"]["line"], 1);
         assert_eq!(v[0]["notes"][1], serde_json::json!({"message": "the rule"}));
     }
 
     #[test]
-    fn empty_is_empty_array() {
+    fn no_diagnostic_is_an_object_with_an_empty_array() {
         let sources = SourceMap::default();
-        assert_eq!(to_json(&sources, &[]), "[]");
+        let doc: serde_json::Value = serde_json::from_str(&to_json(&sources, &[])).unwrap();
+        assert_eq!(doc, serde_json::json!({"diagnostics": []}));
+        assert_eq!(to_json_array(&sources, &[]), "[]");
+    }
+
+    #[test]
+    fn a_command_result_is_beside_the_diagnostics_in_one_object() {
+        #[derive(Serialize)]
+        struct R {
+            package: &'static str,
+            modules: Vec<u32>,
+        }
+        let sources = SourceMap::default();
+        let text = to_json_document(&sources, &[], &R { package: "p", modules: vec![1] });
+        let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(doc, serde_json::json!({"diagnostics": [], "package": "p", "modules": [1]}));
+    }
+
+    /// §18.1 (S-234): file string, line, column, end line, end column, code,
+    /// message; not the order of the files' ids, the stage or the input.
+    #[test]
+    fn the_order_is_the_file_string_then_the_position_then_code_and_message() {
+        let mut sources = SourceMap::default();
+        let ab = sources.add("a/b.onsa", "xx\nyy\n");
+        let a = sources.add("a.onsa", "xx\nyy\n");
+        let d = |f, s, e, code, m: &str| Diagnostic::new(Stage::Syntax, code, Span::new(f, s, e), m);
+        let ds = [
+            d(ab, 0, 1, Code::E0002, "m"),
+            d(a, 3, 4, Code::E0001, "m"),
+            d(a, 0, 2, Code::E0002, "m"),
+            d(a, 0, 1, Code::E0002, "n"),
+            d(a, 0, 1, Code::E0002, "m"),
+            d(a, 0, 1, Code::E0001, "z"),
+        ];
+        let got: Vec<(&str, u32, u32, &str, &str)> = sorted(&sources, &ds)
+            .iter()
+            .map(|d| (sources.file(d.span.file).name(), d.span.start, d.span.end, d.code.as_str(), d.message.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("a.onsa", 0, 1, "E0001", "z"),
+                ("a.onsa", 0, 1, "E0002", "m"),
+                ("a.onsa", 0, 1, "E0002", "n"),
+                ("a.onsa", 0, 2, "E0002", "m"),
+                ("a.onsa", 3, 4, "E0001", "m"),
+                ("a/b.onsa", 0, 1, "E0002", "m"),
+            ]
+        );
+        let text = to_text(&sources, &ds);
+        let heads: Vec<&str> = text.lines().filter(|l| !l.starts_with(' ')).collect();
+        assert_eq!(heads[0], "a.onsa:1:1: error[E0001]: z");
+        assert_eq!(heads[5], "a/b.onsa:1:1: error[E0002]: m");
     }
 
     #[test]

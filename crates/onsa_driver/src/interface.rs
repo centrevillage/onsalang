@@ -4,10 +4,12 @@
 //! [`Interface`]; `render_text` / `render_json` print it, so the LSP and the
 //! web API can reuse it.
 //!
-//! JSON shape (stable; `--json`):
+//! JSON shape (stable; `--json`): the document of every `--json` (§18.1,
+//! `onsa_diag::to_json_document`), so `diagnostics` is there, empty:
 //!
 //! ```json
-//! { "package": "voice",
+//! { "diagnostics": [],
+//!   "package": "voice",
 //!   "modules": [ { "path": "dsp.voice", "items": [
 //!     { "kind": "fn", "name": "wrap01", "vis": "pub", "rt": true,
 //!       "params": [ { "mode": "borrow", "name": "x", "ty": "F32" } ],
@@ -553,7 +555,7 @@ fn interface_of(analyzed: &Analyzed, core: Option<onsa_core::Module>) -> Interfa
 }
 
 pub fn render_json(iface: &Interface) -> String {
-    serde_json::to_string_pretty(iface).expect("interface serializes")
+    onsa_diag::to_json_document(&onsa_diag::SourceMap::default(), &[], iface)
 }
 
 fn type_header(t: &TypeIface, keyword: &str, out: &mut String, indent: &str) {

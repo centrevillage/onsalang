@@ -219,22 +219,39 @@ fn cannot_work(message: impl std::fmt::Display) -> Outcome {
     Outcome::CannotWork
 }
 
+/// How diagnostics are printed. Every form has the one order of
+/// `onsa_diag` (§18.1, S-234).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Form {
+    /// The text of `docs/onsa-tools.md` §4.
+    Text,
+    /// The one JSON object of `--json` (§18.1, S-215).
+    Json,
+    /// The bare array `onsa test --json` prints until W2-10 gives it the
+    /// object of [`Form::Json`] with its test results (S-233).
+    TestJsonArray,
+}
+
+impl Form {
+    fn json(json: bool) -> Form {
+        if json { Form::Json } else { Form::Text }
+    }
+}
+
 /// The text or the JSON of diagnostics, made inside a guard with the sources,
 /// so that a span a stage broke is an internal error naming its file.
-fn render(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]) -> Result<String, Outcome> {
-    onsa_driver::guard(|| {
-        if json {
-            format!("{}\n", onsa_diag::to_json(sources, diagnostics))
-        } else {
-            onsa_diag::to_text(sources, diagnostics)
-        }
+fn render(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]) -> Result<String, Outcome> {
+    onsa_driver::guard(|| match form {
+        Form::Text => onsa_diag::to_text(sources, diagnostics),
+        Form::Json => format!("{}\n", onsa_diag::to_json(sources, diagnostics)),
+        Form::TestJsonArray => format!("{}\n", onsa_diag::to_json_array(sources, diagnostics)),
     })
     .map_err(|e| internal(sources, &e))
 }
 
 /// Print diagnostics on standard output; `then` is the outcome when they print.
-fn print_diagnostics(json: bool, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic], then: Outcome) -> Outcome {
-    match render(json, sources, diagnostics) {
+fn print_diagnostics(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic], then: Outcome) -> Outcome {
+    match render(form, sources, diagnostics) {
         Ok(text) => {
             out!("{text}");
             then
@@ -260,11 +277,11 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
             }
         };
         let mut sources = SourceMap::default();
-        let file = sources.add(path.to_string_lossy(), text.clone());
+        let file = sources.add(onsa_driver::slash_path(path), text.clone());
         let out = match onsa_driver::format_file(&sources, file) {
             Ok(onsa_driver::Formatted::Text(out)) => out,
             Ok(onsa_driver::Formatted::Syntax(diagnostics)) => {
-                match render(false, &sources, &diagnostics) {
+                match render(Form::Text, &sources, &diagnostics) {
                     Ok(text) => eprint!("{text}"),
                     Err(o) => return o,
                 }
@@ -307,7 +324,7 @@ fn check(json: bool, paths: &[PathBuf]) -> Outcome {
         Err(e) => return internal(&loaded.sources, &e),
     };
     let then = if result.diagnostics.is_empty() { Outcome::Ok } else { Outcome::Problems };
-    print_diagnostics(json, &loaded.sources, &result.diagnostics, then)
+    print_diagnostics(Form::json(json), &loaded.sources, &result.diagnostics, then)
 }
 
 fn explain(code: &str) -> Outcome {
@@ -333,12 +350,12 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
             Ok(t) => t,
             Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
         };
-        files.push(sources.add(path.to_string_lossy(), text));
+        files.push(sources.add(onsa_driver::slash_path(path), text));
     }
     let diffs = match onsa_driver::diff_ast(&sources, files[0], files[1]) {
         Ok(onsa_driver::AstDiff::Items(d)) => d,
         Ok(onsa_driver::AstDiff::Syntax(diagnostics)) => {
-            return print_diagnostics(false, &sources, &diagnostics, Outcome::CannotWork);
+            return print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::CannotWork);
         }
         Err(e) => return internal(&sources, &e),
     };
@@ -358,28 +375,28 @@ fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
 
 /// Load and analyze one package; print the diagnostics and return the
 /// outcome when it does not check.
-fn analyzed(json: bool, paths: &[PathBuf]) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), Outcome> {
+fn analyzed(form: Form, paths: &[PathBuf]) -> Result<(onsa_driver::Loaded, onsa_driver::Analyzed), Outcome> {
     let mut loaded = load(paths)?;
     let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(e) => return Err(internal(&loaded.sources, &e)),
     };
     if !analyzed.diagnostics.is_empty() {
-        return Err(print_diagnostics(json, &loaded.sources, &analyzed.diagnostics, Outcome::Problems));
+        return Err(print_diagnostics(form, &loaded.sources, &analyzed.diagnostics, Outcome::Problems));
     }
     Ok((loaded, analyzed))
 }
 
 /// Lower to Core; print the E0200 and return the outcome when it does not lower.
 fn lowered(
-    json: bool,
+    form: Form,
     loaded: &onsa_driver::Loaded,
     analyzed: &onsa_driver::Analyzed,
 ) -> Result<onsa_core::Module, Outcome> {
     match onsa_driver::lower_core(analyzed) {
         Ok(m) => Ok(m),
         Err(onsa_driver::LowerError::Diagnostics(diags)) => {
-            Err(print_diagnostics(json, &loaded.sources, &diags, Outcome::Problems))
+            Err(print_diagnostics(form, &loaded.sources, &diags, Outcome::Problems))
         }
         Err(onsa_driver::LowerError::Internal(e)) => Err(internal(&loaded.sources, &e)),
     }
@@ -397,7 +414,7 @@ fn dump_cst(tree: bool, paths: &[PathBuf]) -> Outcome {
         Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
     };
     let mut sources = SourceMap::default();
-    let file = sources.add(path.to_string_lossy(), text);
+    let file = sources.add(onsa_driver::slash_path(path), text);
     match onsa_driver::cst_dump(&sources, file, tree) {
         Ok(out) => {
             out!("{out}");
@@ -432,11 +449,11 @@ fn dump(core: bool, paths: &[PathBuf]) -> Outcome {
     if !core {
         return cannot_work("`dump` needs `--core`");
     }
-    let (loaded, analyzed) = match analyzed(false, paths) {
+    let (loaded, analyzed) = match analyzed(Form::Text, paths) {
         Ok(x) => x,
         Err(o) => return o,
     };
-    match lowered(false, &loaded, &analyzed) {
+    match lowered(Form::Text, &loaded, &analyzed) {
         Ok(module) => {
             out!("{}", onsa_core::dump(&module));
             Outcome::Ok
@@ -445,9 +462,10 @@ fn dump(core: bool, paths: &[PathBuf]) -> Outcome {
     }
 }
 
-/// `onsa interface <path> [--json]` (T3-11).
+/// `onsa interface <path> [--json]` (T3-11). With `--json`, diagnostics are
+/// the document of `check --json` (§18.1).
 fn interface(json: bool, path: &PathBuf) -> Outcome {
-    let (loaded, analyzed) = match analyzed(false, std::slice::from_ref(path)) {
+    let (loaded, analyzed) = match analyzed(Form::json(json), std::slice::from_ref(path)) {
         Ok(x) => x,
         Err(o) => return o,
     };
@@ -465,7 +483,7 @@ fn interface(json: bool, path: &PathBuf) -> Outcome {
 
 /// `onsa graph <path> <flow> [--svg]` (T3-12).
 fn graph(svg: bool, path: &PathBuf, flow: &str) -> Outcome {
-    let (loaded, analyzed) = match analyzed(false, std::slice::from_ref(path)) {
+    let (loaded, analyzed) = match analyzed(Form::Text, std::slice::from_ref(path)) {
         Ok(x) => x,
         Err(o) => return o,
     };
@@ -487,11 +505,12 @@ fn graph(svg: bool, path: &PathBuf, flow: &str) -> Outcome {
 
 /// `onsa test <paths> [--json] [--filter <text>]` (T3-8): check, lower, run every `test`.
 fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
-    let (loaded, analyzed) = match analyzed(json, paths) {
+    let form = if json { Form::TestJsonArray } else { Form::Text };
+    let (loaded, analyzed) = match analyzed(form, paths) {
         Ok(x) => x,
         Err(o) => return o,
     };
-    let module = match lowered(json, &loaded, &analyzed) {
+    let module = match lowered(form, &loaded, &analyzed) {
         Ok(m) => m,
         Err(o) => return o,
     };
@@ -499,7 +518,7 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
         // E0200, as those of lowering: no test ran (S-224).
         Ok(onsa_driver::TestRun::Unsupported(diags)) => {
-            return print_diagnostics(json, &loaded.sources, &diags, Outcome::Problems);
+            return print_diagnostics(form, &loaded.sources, &diags, Outcome::Problems);
         }
         Err(e) => return internal(&loaded.sources, &e),
     };
@@ -528,7 +547,7 @@ fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> Outcome {
         }
         Err(onsa_driver::BuildError::Usage(m)) => cannot_work(m),
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
-            print_diagnostics(false, &sources, &diagnostics, Outcome::Problems)
+            print_diagnostics(Form::Text, &sources, &diagnostics, Outcome::Problems)
         }
         Err(onsa_driver::BuildError::Internal { sources, error }) => internal(&sources, &error),
     }

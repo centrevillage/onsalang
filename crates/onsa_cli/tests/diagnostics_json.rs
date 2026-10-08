@@ -1,11 +1,13 @@
-//! The JSON form of a diagnostic and of a fix candidate (spec §18.1, R-87 (1)(2), S-81): the keys
-//! of `span`, `end_line` always, columns in characters, a candidate with `title` and `edits`, an
-//! insertion as a replacement of an empty range. The text a candidate gives is checked by applying
-//! its edits to the source, so the tests do not depend on which tokens an edit covers.
+//! The JSON form of a diagnostic, of a fix candidate and of a note (spec §18.1, R-87 (1)(2), S-81,
+//! S-213): the keys of `span`, `end_line` always, columns in characters, a candidate with `title`
+//! and `edits`, an insertion as a replacement of an empty range, `notes` as a list whose elements
+//! have a `message` and a `span` only when they have a position. The text a candidate gives is
+//! checked by applying its edits to the source, so the tests do not depend on which tokens an edit
+//! covers.
 //!
-//! Not written here: the JSON form of a note (S-213) and the top-level shape of the document
-//! (an array or one object per line; S-NEW). The helper below accepts an array, one object, or
-//! one object per line.
+//! The document around the diagnostics (one object, the `diagnostics` array, the order, the file
+//! names) is in check_json_document.rs (S-215, S-234). The reader below takes the `diagnostics`
+//! array of that one object and nothing else.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -37,7 +39,8 @@ impl Drop for Dir {
     }
 }
 
-/// The diagnostics `onsa check --json <paths>` prints.
+/// The `diagnostics` array of the document `onsa check --json <paths>` prints (§18.1: the output
+/// is one JSON object).
 fn check_json(paths: &[&str]) -> Vec<Value> {
     let mut args = vec!["check", "--json"];
     args.extend_from_slice(paths);
@@ -45,16 +48,12 @@ fn check_json(paths: &[&str]) -> Vec<Value> {
     let code = out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"));
     assert!(code == 1, "onsa {args:?}: exit code {code} (stderr: {})", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    match serde_json::from_str::<Value>(&text) {
-        Ok(Value::Array(a)) => a,
-        Ok(v @ Value::Object(_)) => vec![v],
-        Ok(other) => panic!("not diagnostics: {other}"),
-        Err(_) => text
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(|l| serde_json::from_str(l).unwrap_or_else(|e| panic!("line {l:?} is not JSON: {e}")))
-            .collect(),
-    }
+    let doc: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("not one JSON value ({e}): {text:?}"));
+    doc.get("diagnostics")
+        .unwrap_or_else(|| panic!("no `diagnostics` in the document: {doc}"))
+        .as_array()
+        .unwrap_or_else(|| panic!("`diagnostics` is not an array: {doc}"))
+        .clone()
 }
 
 fn code_of(d: &Value) -> &str {
@@ -65,11 +64,24 @@ fn by_code<'a>(ds: &'a [Value], code: &str) -> Vec<&'a Value> {
     ds.iter().filter(|d| code_of(d) == code).collect()
 }
 
+/// The candidates of a diagnostic. `fixes` is always there, an empty array when there is none (§18.1).
 fn fixes_of(d: &Value) -> Vec<&Value> {
-    match d.get("fixes") {
-        None => vec![],
-        Some(f) => f.as_array().expect("`fixes` is an array").iter().collect(),
-    }
+    d.get("fixes")
+        .unwrap_or_else(|| panic!("{}: no `fixes` (it is written out even when empty): {d}", code_of(d)))
+        .as_array()
+        .expect("`fixes` is an array")
+        .iter()
+        .collect()
+}
+
+/// The notes of a diagnostic. `notes` is always there, an empty array when there is none (§18.1).
+fn notes_of(d: &Value) -> Vec<&Value> {
+    d.get("notes")
+        .unwrap_or_else(|| panic!("{}: no `notes` (it is written out even when empty): {d}", code_of(d)))
+        .as_array()
+        .expect("`notes` is an array")
+        .iter()
+        .collect()
 }
 
 /// A span: file, 1-based line and column, `end_line` and `end_col` (the end is exclusive).
@@ -392,13 +404,13 @@ fn spans_of_a_diagnostic_that_covers_several_lines_end_on_the_later_line() {
 }
 
 #[test]
-fn a_diagnostic_without_a_candidate_has_no_fixes_or_an_empty_list() {
+fn a_diagnostic_without_a_candidate_has_an_empty_fixes_array() {
     let d = Dir::new("nofix");
     let path = d.file("nofix.onsa", "pub fn f() -> I32 {\n  1 $ 2\n}\n");
     let ds = check_json(&[&path]);
     let found = by_code(&ds, "E0001");
     assert_eq!(found.len(), 1, "{ds:?}");
-    assert!(fixes_of(found[0]).is_empty(), "E0001 has no candidate: {}", found[0]);
+    assert_eq!(found[0].get("fixes"), Some(&Value::Array(vec![])), "E0001 has no candidate: {}", found[0]);
 }
 
 #[test]
@@ -417,4 +429,86 @@ fn the_edits_of_two_candidates_of_different_diagnostics_are_independent() {
     let refs: Vec<&Edit> = edits.iter().collect();
     let got = apply(MIXED, &refs); // fails on an overlap
     assert!(got.contains("p.scale!(2)") && got.contains("p.norm()") && got.contains("x: I32"), "{got}");
+}
+
+// ---- notes (S-213) ---------------------------------------------------------------------------------
+
+/// A note: `message` always, a `span` (the same five keys as a diagnostic's) only when it has a
+/// position. A note with no position has no `span` key, and never `"span": null`.
+fn note_span(n: &Value, what: &str) -> Option<Span> {
+    let msg = n.get("message").and_then(Value::as_str);
+    assert!(msg.is_some_and(|m| !m.is_empty()), "{what}: a note has a non-empty `message` string: {n}");
+    match n.get("span") {
+        None => None,
+        Some(s) => {
+            assert!(!s.is_null(), "{what}: `\"span\": null` (a note with no position has no `span` key): {n}");
+            Some(span_of(s, what))
+        }
+    }
+}
+
+/// E0020 for a `;` (§2.5, §18.1): the correct rule goes in a note, and that note has no position.
+#[test]
+fn a_note_that_explains_a_rule_has_a_message_and_no_span() {
+    let d = Dir::new("note_rule");
+    let path = d.file("semi.onsa", "pub fn g() -> I32 {\n  let a = 1;\n  a\n}\n");
+    let ds = check_json(&[&path]);
+    let found = by_code(&ds, "E0020");
+    assert_eq!(found.len(), 1, "{ds:?}");
+    let notes = notes_of(found[0]);
+    assert!(!notes.is_empty(), "E0020 shows the rule in a note (§18.1): {}", found[0]);
+    for n in notes {
+        assert!(note_span(n, "E0020").is_none(), "the rule note has no position: {n}");
+        assert!(n.get("span").is_none(), "no `span` key at all: {n}");
+    }
+}
+
+/// E0304 for a name declared twice (§5.1; §11.2 gives the same rule for E0305): the later
+/// declaration gets the diagnostic and the earlier one is shown by a note, with a position.
+#[test]
+fn a_note_that_points_at_a_place_has_a_message_and_a_full_span() {
+    let d = Dir::new("note_place");
+    let path = d.file("dup.onsa", "pub fn twice() -> I32 {\n  1\n}\n\npub fn twice() -> I32 {\n  2\n}\n");
+    let ds = check_json(&[&path]);
+    let found = by_code(&ds, "E0304");
+    assert_eq!(found.len(), 1, "{ds:?}");
+    let main = span_of(&found[0]["span"], "E0304");
+    assert_eq!(main.line, 5, "the later declaration gets the diagnostic");
+    let notes = notes_of(found[0]);
+    let placed: Vec<Span> = notes.iter().filter_map(|n| note_span(n, "E0304")).collect();
+    assert!(!placed.is_empty(), "the earlier declaration is shown by a note with a position: {}", found[0]);
+    let first =
+        placed.iter().find(|s| s.line == 1).unwrap_or_else(|| panic!("no note at the first declaration: {placed:?}"));
+    assert_eq!(first.file, main.file, "a note's `span.file` has the form of the diagnostic's");
+    assert!(first.file.ends_with("dup.onsa"), "the note's `span.file` is the file: {}", first.file);
+    assert!(
+        (first.col, first.end_col) == (8, 13) && first.end_line == 1,
+        "the note covers the name `twice`: {first:?}"
+    );
+}
+
+#[test]
+fn every_note_of_every_diagnostic_has_a_message_and_a_span_or_no_span_key() {
+    let d = Dir::new("notes_all");
+    let path = d.file("mixed.onsa", MIXED);
+    let ds = check_json(&[&path]);
+    assert!(ds.len() >= 5);
+    for diag in &ds {
+        for n in notes_of(diag) {
+            let _ = note_span(n, code_of(diag));
+        }
+    }
+}
+
+#[test]
+fn a_diagnostic_with_no_note_has_an_empty_notes_array() {
+    // The diagnostics of E0713 and E0714 say what is wrong in the message and give the fix in the
+    // candidate. At least one diagnostic of MIXED has nothing to add in a note, and its `notes` is `[]`.
+    let d = Dir::new("notes_empty");
+    let path = d.file("mixed.onsa", MIXED);
+    let ds = check_json(&[&path]);
+    assert!(
+        ds.iter().any(|x| x.get("notes") == Some(&Value::Array(vec![]))),
+        "no diagnostic whose `notes` is `[]` and written out: {ds:?}"
+    );
 }

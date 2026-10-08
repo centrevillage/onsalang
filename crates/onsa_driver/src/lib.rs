@@ -57,7 +57,8 @@ pub struct Loaded {
 }
 
 /// One source file of a package input: its path (relative to the package
-/// root with a manifest; as given without one) and its text.
+/// root with a manifest; as given without one; `/` between the parts either
+/// way, [`slash_path`]) and its text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceFile {
     pub path: String,
@@ -169,6 +170,15 @@ pub fn module_path(rel: &Path) -> String {
     no_ext.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join(".")
 }
 
+/// The name of a source file in diagnostics (§18.1, S-234): the path with
+/// `/` between its parts. Nothing else changes: `./` and `..` stay as they
+/// were passed. Only the `\` of Windows is a separator to turn; elsewhere it is
+/// a character of the name.
+pub fn slash_path(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    if std::path::MAIN_SEPARATOR == '/' { text.into_owned() } else { text.replace(std::path::MAIN_SEPARATOR, "/") }
+}
+
 /// Load a package from `paths` (S-11): one `onsa.toml` or a directory is a
 /// package; otherwise every `.onsa` file is a module named after its stem
 /// (one file is a one-module package).
@@ -232,20 +242,23 @@ pub fn read_input(paths: &[PathBuf]) -> Result<PackageInput, String> {
     let mut input = PackageInput::default();
     for p in paths {
         let text = std::fs::read_to_string(p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
-        input.files.push(SourceFile { path: p.to_string_lossy().into_owned(), text });
+        input.files.push(SourceFile { path: slash_path(p), text });
     }
     Ok(input)
 }
 
-/// Read `onsa.toml`: the manifest and the package root (its directory).
+/// Read `onsa.toml`: the manifest and the package root (its directory; `.`
+/// for a bare `onsa.toml`, whose parent is the empty path, R-178).
 pub fn read_manifest(manifest: &Path) -> Result<(Manifest, PathBuf), String> {
     let text = std::fs::read_to_string(manifest).map_err(|e| format!("cannot read {}: {e}", manifest.display()))?;
     let (m, _) = Manifest::parse(&text, &[]).map_err(|e| format!("{}: {e}", manifest.display()))?;
-    Ok((m, manifest.parent().unwrap_or(Path::new(".")).to_path_buf()))
+    let root = manifest.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    Ok((m, root.to_path_buf()))
 }
 
 /// The `.onsa` files of the package at `root` (spec §15.1: recursively,
-/// except the root's `tests/` and `target/`), sorted, with paths relative to it.
+/// except the root's `tests/` and `target/`), sorted, with paths relative to it
+/// and `/` between their parts ([`slash_path`]).
 pub fn read_sources(root: &Path) -> Result<Vec<SourceFile>, String> {
     let mut files = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -269,7 +282,7 @@ pub fn read_sources(root: &Path) -> Result<Vec<SourceFile>, String> {
     for p in files {
         let text = std::fs::read_to_string(&p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
         let rel = p.strip_prefix(root).unwrap_or(&p).to_path_buf();
-        out.push(SourceFile { path: rel.to_string_lossy().into_owned(), text });
+        out.push(SourceFile { path: slash_path(&rel), text });
     }
     Ok(out)
 }
