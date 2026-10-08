@@ -39,6 +39,10 @@ pub struct Parsed {
     /// before the diagnostics were reduced to one per item (S-56): what
     /// [`Parsed::syntax_errors`] reads, and what `fmt` and `diff --ast` report.
     pub syntax: Vec<Diagnostic>,
+    /// The levels (spec §2.5) of each top-level item the parser finished, in
+    /// the order of the file (`onsa dump --levels`; the fmt properties check
+    /// that `fmt` makes no item deeper, `tools/fmt_props.py`).
+    pub levels: Vec<u32>,
 }
 
 impl Parsed {
@@ -72,8 +76,11 @@ pub(crate) struct ParseOutput {
     pub diagnostics: Vec<Diagnostic>,
     /// Spans of every top-level item attempt (successful or not), for P-01.
     pub item_ranges: Vec<Span>,
-    /// The height of the tree, as the parser counted it (`Parser::height`).
-    /// W3-14 checks it against the limit of S-183; the tests compare it with the tree.
+    /// The levels of each top-level item that parsed ([`Parsed::levels`]).
+    pub levels: Vec<u32>,
+    /// The height of the tree in levels (spec §2.5), as the parser counted
+    /// it (`Parser::height`): the deepest declaration unit. The tests compare
+    /// it with the tree.
     #[cfg_attr(not(test), allow(dead_code))]
     pub height: u32,
 }
@@ -137,12 +144,23 @@ struct Completed {
     height: u32,
 }
 
-/// An open node: its `Start` event and the greatest height of its children so far.
+/// An open node: its `Start` event, the greatest height of its children so
+/// far, and its level.
 #[derive(Debug, Clone, Copy)]
 struct Open {
     event: u32,
     children: u32,
+    /// The levels (spec §2.5) from the root of the declaration unit down to
+    /// this node, this node included: a child of `height(kind, 0)` levels is
+    /// at `level + height(kind, 0)`. Items, lists and statements count no
+    /// level, so every unit starts from 0. In a binary chain it is the level
+    /// of the operator whose right operand is read ([`Parser::chain_operator`]).
+    level: u32,
 }
+
+/// The deepest nesting of the syntax (spec §2.5, S-183, S-221): a form at a
+/// level above it is E0006 ([`Parser::too_deep`]).
+pub const NESTING_LIMIT: u32 = 256;
 
 /// A parsed path: its node, the number of segments and the first and last segment.
 #[derive(Debug, Clone, Copy)]
@@ -179,6 +197,8 @@ pub(crate) struct Parser<'a> {
     diagnostics: Vec<Diagnostic>,
     /// Spans of every top-level item attempt (successful or not), for P-01.
     item_ranges: Vec<Span>,
+    /// The levels of each top-level item that parsed.
+    levels: Vec<u32>,
 }
 
 impl<'a> Parser<'a> {
@@ -201,6 +221,7 @@ impl<'a> Parser<'a> {
             height: 0,
             diagnostics,
             item_ranges: Vec::new(),
+            levels: Vec::new(),
         }
     }
 
@@ -208,27 +229,142 @@ impl<'a> Parser<'a> {
 
     /// The one place where nodes open (`start`, `precede`, the recovery,
     /// the doc comments of an item). `children` is the height of what the
-    /// node wraps already (for `precede`).
-    fn enter(&mut self, kind: NodeKind, start: u32, children: u32) -> Marker {
+    /// node wraps already (for `precede`). A node whose subtree reaches a
+    /// level over [`NESTING_LIMIT`] is E0006 at the next token, the token that
+    /// makes the level (spec §2.5); nothing is opened then.
+    fn enter(&mut self, kind: NodeKind, start: u32, children: u32) -> PResult<Marker> {
+        let base = self.level();
+        self.limit(base + Self::height(kind, children), self.peek().span, kind)?;
         let event = self.events.len() as u32;
         self.events.push(Event::Start { kind: Some(kind), forward_parent: None });
-        self.open.push(Open { event, children });
-        Marker { event, start }
+        self.open.push(Open { event, children, level: base + Self::height(kind, 0) });
+        Ok(Marker { event, start })
+    }
+
+    /// Open a node of no level (an item, its doc comments, the skipped
+    /// tokens of the recovery, the file): it never reaches the limit.
+    fn enter_unit(&mut self, kind: NodeKind, start: u32) -> Marker {
+        debug_assert_eq!(Self::height(kind, 0), 0, "{kind:?} is not a node of no level");
+        self.enter(kind, start, 0).unwrap_or_else(|ParseError| {
+            onsa_diag::internal::bug(Some(self.peek().span), format!("{kind:?} counts a level"))
+        })
     }
 
     /// Open a node at the next token.
-    fn start(&mut self, kind: NodeKind) -> Marker {
+    fn start(&mut self, kind: NodeKind) -> PResult<Marker> {
         let start = self.peek().span.start;
         self.enter(kind, start, 0)
     }
 
+    /// The level of the innermost open node (0 outside every node).
+    fn level(&self) -> u32 {
+        self.open.last().map_or(0, |o| o.level)
+    }
+
     /// The height of the subtree of a node of `kind` whose highest child has
-    /// height `children`: the one function that counts the depth of the tree.
-    /// Every node counts one level today; W3-14 (S-183) makes the kinds that
-    /// count a table here and stops at the limit (E0006).
-    fn height(kind: NodeKind, children: u32) -> u32 {
-        let _ = kind;
-        children + 1
+    /// height `children`: the one function that counts the depth of the
+    /// syntax (spec §2.5, S-221). Each form of an expression, a type or a
+    /// pattern and each block is one level; names, literals, `_`, lists,
+    /// statements and the headers of declarations are none, so a node of no
+    /// level never nests in another without a node of one level between
+    /// them. No wildcard: a new kind of node decides its level here.
+    pub(crate) fn height(kind: NodeKind, children: u32) -> u32 {
+        use NodeKind::*;
+        let level = match kind {
+            // The file, the items and their headers: a unit starts from 0.
+            SourceFile | Error | Name | Item | Docs | Attr | HashAttr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
+            | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields
+            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
+            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
+            | Param | EffectRow | Path => 0,
+            // Types: a type with arguments counts at its `[` (the `TypeArgs`), a name none.
+            PathType | ConstArg | FnTypeParams => 0,
+            TypeArgs | UnitType | TupleType | ArrayType | FnType => 1,
+            // Statements are none, the loops one (and their blocks one more).
+            LetStmt | VarStmt | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt => 0,
+            ForStmt | WhileStmt | LoopStmt | Block => 1,
+            // Expressions. A binary chain is flat in the tree: its height is
+            // the one of the tree of §3.1, one level per operator ([`Chain`]).
+            Literal | LeadingDotFloat | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField => 0,
+            ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | IfExpr | MatchExpr | ClosureExpr | HandleExpr
+            | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | PrefixExpr | RefExpr | CallExpr | FieldExpr
+            | TupleIndexExpr | IndexExpr | TryExpr | StructLit => 1,
+            // Patterns: `|` is one level for all its alternatives.
+            WildPat | LitPat | NegLitPat | BindPat | PathPat | StructPatField => 0,
+            TuplePat | TupleStructPat | StructPat | OrPat => 1,
+        };
+        children + level
+    }
+
+    /// E0006 when a form whose subtree reaches level `total` is over the
+    /// limit; `at` is the token that makes its level.
+    fn limit(&mut self, total: u32, at: Span, kind: NodeKind) -> PResult<()> {
+        if total <= NESTING_LIMIT {
+            return Ok(());
+        }
+        Err(self.too_deep(at, kind))
+    }
+
+    /// E0006 at `at`, the token of a form of `kind` over the limit (spec §2.5).
+    /// The note says how to split the form: an expression into a `let`, a
+    /// type into a `type` alias, a block into a function. The unit is not
+    /// read further: the error goes up to the recovery.
+    fn too_deep(&mut self, at: Span, kind: NodeKind) -> ParseError {
+        use crate::lower::Class;
+        use NodeKind::*;
+        let split = match (kind, crate::lower::class(kind)) {
+            (Block | ForStmt | WhileStmt | LoopStmt, _) => {
+                "move the inner blocks into a function and call it; a function starts again from level 0"
+            }
+            (TypeArgs | FnTypeParams, _) | (_, Class::Type) => "name an inner part of the type with a `type` alias",
+            (StructPatField, _) | (_, Class::Pat) => "bind an inner part to a name and match that name on its own",
+            _ => "bind an inner part to a name with `let`, or move it into a function",
+        };
+        let message =
+            format!("the syntax is nested deeper than {NESTING_LIMIT} levels, counted from the declaration (§2.5)");
+        let d = Diagnostic::new(Stage::Syntax, Code::E0006, at, message)
+            .with_found(self.src(at).to_string())
+            .with_rule(split);
+        self.report(d);
+        ParseError
+    }
+
+    /// The innermost open node becomes a node of `kind` at the next token: a
+    /// pattern that starts with a name is an enum or struct pattern from its
+    /// `(` or `{` on (spec §2.5: the level is made by the bracket after the name).
+    fn reshape(&mut self, kind: NodeKind) -> PResult<()> {
+        let n = self.open.len();
+        let Some(top) = self.open.last().copied() else {
+            onsa_diag::internal::bug(Some(self.peek().span), "the parser reshapes a node it did not open");
+        };
+        let base = if n >= 2 { self.open[n - 2].level } else { 0 };
+        self.limit(base + Self::height(kind, top.children), self.peek().span, kind)?;
+        if let Event::Start { kind: k, .. } = &mut self.events[top.event as usize] {
+            *k = Some(kind);
+        }
+        self.open[n - 1].level = base + Self::height(kind, 0);
+        Ok(())
+    }
+
+    /// Count a form written without a node of its own (`move x` as an
+    /// argument or the iterated value of `for`, spec §5.2: the form `move`)
+    /// at the token `at`: what `f` reads is one form of `kind` deeper.
+    fn without_node(
+        &mut self,
+        kind: NodeKind,
+        at: Span,
+        f: impl FnOnce(&mut Self) -> PResult<Completed>,
+    ) -> PResult<Completed> {
+        let n = self.open.len();
+        let saved = self.open[n - 1].level;
+        self.limit(saved + Self::height(kind, 0), at, kind)?;
+        self.open[n - 1].level = saved + Self::height(kind, 0);
+        let inner = f(self)?;
+        self.open[n - 1].level = saved;
+        let top = &mut self.open[n - 1];
+        top.children = top.children.max(Self::height(kind, inner.height));
+        Ok(inner)
     }
 
     /// Close the innermost open node; its height goes to its parent.
@@ -261,13 +397,15 @@ impl<'a> Parser<'a> {
         Completed { kind, event, start: m.start, span: self.span_from(m.start), height }
     }
 
-    /// Open a node that wraps the closed node `c` (a postfix, a chain, a cast).
-    fn precede(&mut self, c: Completed, kind: NodeKind) -> Marker {
-        let m = self.enter(kind, c.start, c.height);
+    /// Open a node that wraps the closed node `c` (a postfix, a chain, a
+    /// cast): the left of a chain is counted too, so the first postfix that
+    /// makes the chain too deep is the E0006, before the chain is read on.
+    fn precede(&mut self, c: Completed, kind: NodeKind) -> PResult<Marker> {
+        let m = self.enter(kind, c.start, c.height)?;
         if let Event::Start { forward_parent, .. } = &mut self.events[c.event as usize] {
             *forward_parent = Some(m.event);
         }
-        m
+        Ok(m)
     }
 
     /// Close every node opened above `depth` as incomplete (after an error).
@@ -456,7 +594,7 @@ impl<'a> Parser<'a> {
     // ------------------------------------------------------------ file
 
     pub(crate) fn parse_file(mut self) -> ParseOutput {
-        let root = self.enter(NodeKind::SourceFile, 0, 0);
+        let root = self.enter_unit(NodeKind::SourceFile, 0);
         loop {
             let doc = self.collect_docs();
             if self.at(TokenKind::Eof) {
@@ -479,6 +617,7 @@ impl<'a> Parser<'a> {
             match self.parse_item(ItemCtx::Top, m) {
                 Ok(item) => {
                     self.item_ranges.push(item.span);
+                    self.levels.push(item.height);
                     // Terminator: newline, `;` (E0020), or end of file.
                     match self.peek_kind() {
                         TokenKind::Newline | TokenKind::Eof => {}
@@ -512,6 +651,7 @@ impl<'a> Parser<'a> {
             events: self.events,
             diagnostics: self.diagnostics,
             item_ranges: self.item_ranges,
+            levels: self.levels,
             height: self.height,
         }
     }
@@ -539,7 +679,7 @@ impl<'a> Parser<'a> {
         let first = (from..i).find(|&k| !self.tokens[k].kind.is_trivia());
         let last = (from..i).rev().find(|&k| !self.tokens[k].kind.is_trivia());
         if let (Some(first), Some(last)) = (first, last) {
-            let m = self.enter(NodeKind::Error, self.tokens[first].span.start, 0);
+            let m = self.enter_unit(NodeKind::Error, self.tokens[first].span.start);
             for k in first..=last {
                 self.events.push(Event::Token(self.full[k]));
             }
@@ -581,9 +721,9 @@ impl<'a> Parser<'a> {
     /// first child, `Docs`. The trivia before them belong to the enclosing list.
     fn start_item(&mut self, docs: Option<(usize, usize)>) -> Marker {
         let start = self.peek().span.start;
-        let m = self.enter(NodeKind::Item, start, 0);
+        let m = self.enter_unit(NodeKind::Item, start);
         if let Some((first, last)) = docs {
-            let d = self.enter(NodeKind::Docs, self.tokens[first].span.start, 0);
+            let d = self.enter_unit(NodeKind::Docs, self.tokens[first].span.start);
             for k in first..=last {
                 self.events.push(Event::Token(self.full[k]));
             }
@@ -602,7 +742,7 @@ impl<'a> Parser<'a> {
                 n += 1;
             } else if self.at(TokenKind::Hash) && self.peek2().kind == TokenKind::LBracket {
                 // `#[derive(...)]` → `@derive(...)`
-                let m = self.start(NodeKind::HashAttr);
+                let m = self.start(NodeKind::HashAttr)?;
                 let hash = self.bump();
                 self.bump(); // `[`
                 let inner_start = self.peek().span.start;
@@ -635,7 +775,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_attr(&mut self) -> PResult<()> {
-        let m = self.start(NodeKind::Attr);
+        let m = self.start(NodeKind::Attr)?;
         self.expect(TokenKind::At)?;
         self.parse_attr_body()?;
         self.complete(m, NodeKind::Attr);
@@ -645,12 +785,12 @@ impl<'a> Parser<'a> {
     fn parse_attr_body(&mut self) -> PResult<()> {
         self.parse_ident("attribute name")?;
         if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
-            let m = self.start(NodeKind::AttrArgs);
+            let m = self.start(NodeKind::AttrArgs)?;
             self.bump();
             self.with_nl(false, |p| {
                 while !p.at(TokenKind::RParen) {
                     if p.at(TokenKind::Ident) && p.peek2().kind == TokenKind::Colon {
-                        let a = p.start(NodeKind::AttrNamedArg);
+                        let a = p.start(NodeKind::AttrNamedArg)?;
                         p.parse_ident("key")?;
                         p.bump();
                         p.parse_expr()?;
@@ -675,7 +815,7 @@ impl<'a> Parser<'a> {
         if !self.at(TokenKind::KwPub) {
             return Ok(());
         }
-        let m = self.start(NodeKind::Vis);
+        let m = self.start(NodeKind::Vis)?;
         let public = self.bump();
         if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
             self.bump();
@@ -720,10 +860,18 @@ impl<'a> Parser<'a> {
         }
         self.parse_vis()?;
         let t = self.peek();
-        if let Some((_, parse)) = DECLARATIONS.iter().find(|(k, _)| *k == t.kind) {
+        // `proc name` is the E0020 spelling of `flow name`: it is placed as a flow.
+        let proc = t.kind == TokenKind::Ident && self.token_text(t) == "proc" && self.peek2().kind == TokenKind::Ident;
+        let keyword = if proc { TokenKind::KwFlow } else { t.kind };
+        if let Some((_, _, places)) = DECLARATIONS.iter().find(|(k, _, _)| *k == keyword)
+            && !places.contains(&ctx)
+        {
+            return Err(self.not_a_member(t, ctx));
+        }
+        if let Some((_, parse, _)) = DECLARATIONS.iter().find(|(k, _, _)| *k == t.kind) {
             parse(self, ctx)?;
-        } else if t.kind == TokenKind::Ident && self.token_text(t) == "proc" && self.peek2().kind == TokenKind::Ident {
-            let d = self.start(NodeKind::Flow);
+        } else if proc {
+            let d = self.start(NodeKind::Flow)?;
             self.bump();
             self.foreign(
                 t.span,
@@ -739,15 +887,45 @@ impl<'a> Parser<'a> {
         Ok(self.complete(m, NodeKind::Item))
     }
 
+    /// E0002 for the declaration at `t` in the list of declarations of
+    /// `ctx`, where it is not a member: the members are a closed list
+    /// (§18.1: methods and associated constants; the operations of an
+    /// `effect`, the functions of a `handler` and of an `extern`, and the
+    /// opaque types of an `extern`, §14.1). A declaration with a list of its
+    /// own is never a member, so declarations do not nest without bound
+    /// (they count no level, spec §2.5).
+    // SPEC-GAP(S-263): the closed list of the declarations a declaration holds is not written in the spec; the conservative reading of §18.1, §8.1 and §14.1.
+    fn not_a_member(&mut self, t: Token, ctx: ItemCtx) -> ParseError {
+        let (owner, members) = match ctx {
+            ItemCtx::Trait => ("a `trait`", "functions and `const`s"),
+            ItemCtx::Impl => ("an `impl`", "functions and `const`s"),
+            ItemCtx::Effect => ("an `effect`", "its operations, declared as functions"),
+            ItemCtx::Handler | ItemCtx::InlineHandler => ("a handler", "functions"),
+            ItemCtx::Extern => ("an `extern` block", "functions and opaque `type`s"),
+            ItemCtx::Top => onsa_diag::internal::bug(Some(t.span), "a declaration of the top level is refused there"),
+        };
+        let word = self.token_text(t).to_string();
+        let d = Diagnostic::new(
+            Stage::Syntax,
+            Code::E0002,
+            t.span,
+            format!("`{word}` cannot be declared in {owner}; declare it at the top level of the module"),
+        )
+        .with_found(word)
+        .with_rule(format!("the members of {owner} are {members} (§18.1)"));
+        self.report(d);
+        ParseError
+    }
+
     fn parse_flow(&mut self, _: ItemCtx) -> PResult<()> {
-        let d = self.start(NodeKind::Flow);
+        let d = self.start(NodeKind::Flow)?;
         self.bump();
         self.parse_flow_after_keyword(d)
     }
 
     /// `[rt] fn name[generics](params) [-> T] [uses {..}] [body]`
     fn parse_fn(&mut self, ctx: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Fn);
+        let m = self.start(NodeKind::Fn)?;
         self.eat(TokenKind::KwRt);
         self.expect(TokenKind::KwFn)?;
         self.parse_name("function name")?;
@@ -791,12 +969,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_struct(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Struct);
+        let m = self.start(NodeKind::Struct)?;
         self.expect(TokenKind::KwStruct)?;
         self.parse_name("struct name")?;
         self.parse_generics_opt()?;
         if self.at(TokenKind::LParen) {
-            let b = self.start(NodeKind::TupleStructBody);
+            let b = self.start(NodeKind::TupleStructBody)?;
             self.bump();
             self.with_nl(false, |p| {
                 p.parse_type()?;
@@ -805,11 +983,11 @@ impl<'a> Parser<'a> {
             })?;
             self.complete(b, NodeKind::TupleStructBody);
         } else {
-            let l = self.start(NodeKind::FieldList);
+            let l = self.start(NodeKind::FieldList)?;
             self.expect(TokenKind::LBrace)?;
             self.with_nl(false, |p| {
                 while !p.at(TokenKind::RBrace) {
-                    let f = p.start(NodeKind::Field);
+                    let f = p.start(NodeKind::Field)?;
                     p.parse_vis()?;
                     p.parse_name("field name")?;
                     p.expect(TokenKind::Colon)?;
@@ -829,18 +1007,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_enum(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Enum);
+        let m = self.start(NodeKind::Enum)?;
         self.expect(TokenKind::KwEnum)?;
         self.parse_name("enum name")?;
         self.parse_generics_opt()?;
-        let l = self.start(NodeKind::VariantList);
+        let l = self.start(NodeKind::VariantList)?;
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RBrace) {
-                let v = p.start(NodeKind::Variant);
+                let v = p.start(NodeKind::Variant)?;
                 p.parse_name("variant name")?;
                 if p.at(TokenKind::LParen) {
-                    let f = p.start(NodeKind::VariantFields);
+                    let f = p.start(NodeKind::VariantFields)?;
                     p.bump();
                     while !p.at(TokenKind::RParen) {
                         p.parse_type()?;
@@ -873,7 +1051,7 @@ impl<'a> Parser<'a> {
 
     /// `type Name = T` (alias) or `type Name` (opaque, in `extern` / `target`).
     fn parse_type_item(&mut self, ctx: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::TypeAlias);
+        let m = self.start(NodeKind::TypeAlias)?;
         self.expect(TokenKind::KwType)?;
         let name = self.parse_name("type name")?;
         if self.eat(TokenKind::Eq).is_some() {
@@ -892,7 +1070,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_trait(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Trait);
+        let m = self.start(NodeKind::Trait)?;
         self.expect(TokenKind::KwTrait)?;
         self.parse_name("trait name")?;
         self.parse_generics_opt()?;
@@ -902,7 +1080,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_impl(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Impl);
+        let m = self.start(NodeKind::Impl)?;
         self.expect(TokenKind::KwImpl)?;
         self.parse_generics_opt()?;
         let (first, args) = self.parse_type_ex()?;
@@ -918,7 +1096,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_effect(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Effect);
+        let m = self.start(NodeKind::Effect)?;
         self.eat(TokenKind::KwBlocking);
         self.expect(TokenKind::KwEffect)?;
         self.parse_name("effect name")?;
@@ -928,7 +1106,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_handler(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Handler);
+        let m = self.start(NodeKind::Handler)?;
         self.expect(TokenKind::KwHandler)?;
         self.parse_name("handler name")?;
         if self.at(TokenKind::LParen) {
@@ -942,7 +1120,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_const(&mut self, ctx: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Const);
+        let m = self.start(NodeKind::Const)?;
         self.expect(TokenKind::KwConst)?;
         self.parse_name("constant name")?;
         self.expect(TokenKind::Colon)?;
@@ -958,9 +1136,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_use(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Use);
+        let m = self.start(NodeKind::Use)?;
         self.expect(TokenKind::KwUse)?;
-        let tree = self.start(NodeKind::UseTree);
+        let tree = self.start(NodeKind::UseTree)?;
         self.parse_ident("module path")?;
         loop {
             if self.at(TokenKind::ColonColon) {
@@ -976,7 +1154,7 @@ impl<'a> Parser<'a> {
                 break;
             }
             if self.at(TokenKind::LBrace) {
-                let n = self.start(NodeKind::UseNames);
+                let n = self.start(NodeKind::UseNames)?;
                 self.bump();
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
@@ -1007,7 +1185,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_extern(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Extern);
+        let m = self.start(NodeKind::Extern)?;
         self.expect(TokenKind::KwExtern)?;
         self.expect(TokenKind::Str)?;
         let t = self.peek();
@@ -1022,11 +1200,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_target(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Target);
+        let m = self.start(NodeKind::Target)?;
         self.expect(TokenKind::KwTarget)?;
         match self.peek_kind() {
             TokenKind::KwType => {
-                let o = self.start(NodeKind::OpaqueType);
+                let o = self.start(NodeKind::OpaqueType)?;
                 self.bump();
                 self.parse_name("type name")?;
                 self.complete(o, NodeKind::OpaqueType);
@@ -1039,7 +1217,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_test(&mut self, _: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::Test);
+        let m = self.start(NodeKind::Test)?;
         self.expect(TokenKind::KwTest)?;
         self.expect(TokenKind::Str)?;
         self.parse_block_expr()?;
@@ -1049,7 +1227,7 @@ impl<'a> Parser<'a> {
 
     /// `{ item NL item NL ... }` for trait / impl / effect / handler / extern bodies.
     fn parse_item_body(&mut self, ctx: ItemCtx) -> PResult<()> {
-        let m = self.start(NodeKind::ItemList);
+        let m = self.start(NodeKind::ItemList)?;
         self.expect(TokenKind::LBrace)?;
         self.with_nl(true, |p| {
             loop {
@@ -1088,7 +1266,7 @@ impl<'a> Parser<'a> {
 
     /// The name a declaration introduces, in a `Name` node.
     fn parse_name(&mut self, what: &str) -> PResult<Token> {
-        let m = self.start(NodeKind::Name);
+        let m = self.start(NodeKind::Name)?;
         let t = self.parse_ident(what)?;
         self.complete(m, NodeKind::Name);
         Ok(t)
@@ -1106,7 +1284,7 @@ impl<'a> Parser<'a> {
 
     /// `a.b.c` (also accepts `Self` as a segment). `::` is E0020.
     fn parse_path(&mut self, what: &str) -> PResult<PathInfo> {
-        let m = self.start(NodeKind::Path);
+        let m = self.start(NodeKind::Path)?;
         let first = self.parse_path_segment(what)?;
         let mut last = first;
         let mut segments = 1;
@@ -1159,7 +1337,7 @@ impl<'a> Parser<'a> {
     fn parse_generics_opt(&mut self) -> PResult<()> {
         if self.at(TokenKind::Lt) && !self.peek_gap().is_some() {
             // `fn f<T>` → `[T]`
-            let m = self.start(NodeKind::GenericParams);
+            let m = self.start(NodeKind::GenericParams)?;
             let lt = self.bump();
             self.with_nl(false, |p| p.parse_generic_list(TokenKind::Gt))?;
             let span = self.span_from(lt.span.start);
@@ -1178,7 +1356,7 @@ impl<'a> Parser<'a> {
         if !self.at(TokenKind::LBracket) || self.peek_gap().is_some() {
             return Ok(());
         }
-        let m = self.start(NodeKind::GenericParams);
+        let m = self.start(NodeKind::GenericParams)?;
         self.bump();
         self.with_nl(false, |p| p.parse_generic_list(TokenKind::RBracket))?;
         self.complete(m, NodeKind::GenericParams);
@@ -1187,7 +1365,7 @@ impl<'a> Parser<'a> {
 
     fn parse_generic_list(&mut self, close: TokenKind) -> PResult<()> {
         while !self.at(close) {
-            let m = self.start(NodeKind::TypeParam);
+            let m = self.start(NodeKind::TypeParam)?;
             if self.eat(TokenKind::KwConst).is_some() {
                 self.parse_name("const parameter name")?;
                 self.expect(TokenKind::Colon)?;
@@ -1200,7 +1378,7 @@ impl<'a> Parser<'a> {
                 } else {
                     if self.eat(TokenKind::Colon).is_some() {
                         loop {
-                            let b = self.start(NodeKind::Bound);
+                            let b = self.start(NodeKind::Bound)?;
                             self.eat(TokenKind::Question);
                             self.parse_path("trait bound")?;
                             self.complete(b, NodeKind::Bound);
@@ -1222,11 +1400,11 @@ impl<'a> Parser<'a> {
 
     /// `(params)`; `require_types` is false for anonymous functions (§6.1).
     fn parse_params(&mut self, require_types: bool) -> PResult<()> {
-        let m = self.start(NodeKind::ParamList);
+        let m = self.start(NodeKind::ParamList)?;
         self.expect(TokenKind::LParen)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RParen) {
-                let param = p.start(NodeKind::Param);
+                let param = p.start(NodeKind::Param)?;
                 p.parse_attrs()?;
                 p.parse_mode();
                 let t = p.peek();
@@ -1245,7 +1423,7 @@ impl<'a> Parser<'a> {
                 let t = p.peek();
                 let is_self = match t.kind {
                     TokenKind::KwSelf | TokenKind::Underscore => {
-                        let n = p.start(NodeKind::Name);
+                        let n = p.start(NodeKind::Name)?;
                         p.bump();
                         p.complete(n, NodeKind::Name);
                         t.kind == TokenKind::KwSelf
@@ -1308,7 +1486,7 @@ impl<'a> Parser<'a> {
         if self.eat(TokenKind::KwUses).is_none() {
             return Ok(());
         }
-        let m = self.start(NodeKind::EffectRow);
+        let m = self.start(NodeKind::EffectRow)?;
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RBrace) {
@@ -1335,7 +1513,7 @@ impl<'a> Parser<'a> {
         let mut nargs = 0;
         let c = match self.peek_kind() {
             TokenKind::LParen => {
-                let m = self.start(NodeKind::TupleType);
+                let m = self.start(NodeKind::TupleType)?;
                 self.bump();
                 let kind = self.with_nl(false, |p| {
                     if p.eat(TokenKind::RParen).is_some() {
@@ -1362,7 +1540,7 @@ impl<'a> Parser<'a> {
                 self.complete(m, kind)
             }
             TokenKind::LBracket => {
-                let m = self.start(NodeKind::ArrayType);
+                let m = self.start(NodeKind::ArrayType)?;
                 self.bump();
                 self.with_nl(false, |p| {
                     p.parse_type()?;
@@ -1374,10 +1552,10 @@ impl<'a> Parser<'a> {
                 self.complete(m, NodeKind::ArrayType)
             }
             TokenKind::KwRt | TokenKind::KwFn => {
-                let m = self.start(NodeKind::FnType);
+                let m = self.start(NodeKind::FnType)?;
                 self.eat(TokenKind::KwRt);
                 self.expect(TokenKind::KwFn)?;
-                let l = self.start(NodeKind::FnTypeParams);
+                let l = self.start(NodeKind::FnTypeParams)?;
                 self.expect(TokenKind::LParen)?;
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RParen) {
@@ -1398,7 +1576,7 @@ impl<'a> Parser<'a> {
                 self.complete(m, NodeKind::FnType)
             }
             TokenKind::Ident | TokenKind::KwSelfType => {
-                let m = self.start(NodeKind::PathType);
+                let m = self.start(NodeKind::PathType)?;
                 let path = self.parse_path("a type")?;
                 if path.segments == 1 {
                     let name = self.token_text(path.first);
@@ -1413,12 +1591,12 @@ impl<'a> Parser<'a> {
                     }
                 }
                 if self.at(TokenKind::LBracket) && !self.peek_gap().is_some() {
-                    let a = self.start(NodeKind::TypeArgs);
+                    let a = self.start(NodeKind::TypeArgs)?;
                     self.bump();
                     nargs = self.with_nl(false, |p| p.parse_type_args(TokenKind::RBracket))?;
                     self.complete(a, NodeKind::TypeArgs);
                 } else if self.at(TokenKind::Lt) && !self.peek_gap().is_some() {
-                    let a = self.start(NodeKind::TypeArgs);
+                    let a = self.start(NodeKind::TypeArgs)?;
                     let lt = self.bump();
                     nargs = self.with_nl(false, |p| p.parse_type_args(TokenKind::Gt))?;
                     let span = self.span_from(lt.span.start);
@@ -1461,7 +1639,7 @@ impl<'a> Parser<'a> {
             self.parse_type()?;
             return Ok(());
         }
-        let m = self.start(NodeKind::ConstArg);
+        let m = self.start(NodeKind::ConstArg)?;
         self.eat(TokenKind::Minus);
         let tok = self.expect(TokenKind::Int)?;
         self.check_int(tok);
@@ -1473,7 +1651,7 @@ impl<'a> Parser<'a> {
 
     /// `{ stmts }` as an expression (newlines significant inside).
     fn parse_block_expr(&mut self) -> PResult<Completed> {
-        let m = self.start(NodeKind::Block);
+        let m = self.start(NodeKind::Block)?;
         self.expect(TokenKind::LBrace)?;
         let saved = std::mem::replace(&mut self.no_struct_lit, false);
         let block = self.with_nl(true, |p| p.parse_block_body());
@@ -1523,7 +1701,7 @@ impl<'a> Parser<'a> {
         let t = self.peek();
         match t.kind {
             TokenKind::KwLet => {
-                let m = self.start(NodeKind::LetStmt);
+                let m = self.start(NodeKind::LetStmt)?;
                 self.bump();
                 let mt = self.peek();
                 if self.is_ident(mt, "mut") {
@@ -1548,29 +1726,34 @@ impl<'a> Parser<'a> {
                 Ok(self.complete(m, NodeKind::LetStmt))
             }
             TokenKind::KwVar => {
-                let m = self.start(NodeKind::VarStmt);
+                let m = self.start(NodeKind::VarStmt)?;
                 self.bump();
                 self.parse_var_rest(m)
             }
             TokenKind::KwFor => {
-                let m = self.start(NodeKind::ForStmt);
+                let m = self.start(NodeKind::ForStmt)?;
                 self.bump();
                 self.parse_pattern()?;
                 self.expect(TokenKind::KwIn)?;
-                self.eat(TokenKind::KwMove);
-                self.parse_head_expr(true)?;
+                if self.at(TokenKind::KwMove) {
+                    // `for s in move xs`: `move xs` is the form `move` (§5.2).
+                    let mv = self.bump();
+                    self.without_node(NodeKind::MoveExpr, mv.span, |p| p.parse_head_expr(true))?;
+                } else {
+                    self.parse_head_expr(true)?;
+                }
                 self.parse_block_expr()?;
                 Ok(self.complete(m, NodeKind::ForStmt))
             }
             TokenKind::KwWhile => {
-                let m = self.start(NodeKind::WhileStmt);
+                let m = self.start(NodeKind::WhileStmt)?;
                 self.bump();
                 self.parse_head_expr(false)?;
                 self.parse_block_expr()?;
                 Ok(self.complete(m, NodeKind::WhileStmt))
             }
             TokenKind::Ident if self.token_text(t) == "loop" && self.peek2().kind == TokenKind::LBrace => {
-                let m = self.start(NodeKind::LoopStmt);
+                let m = self.start(NodeKind::LoopStmt)?;
                 self.bump();
                 self.foreign(
                     t.span,
@@ -1583,17 +1766,17 @@ impl<'a> Parser<'a> {
                 Ok(self.complete(m, NodeKind::LoopStmt))
             }
             TokenKind::KwBreak => {
-                let m = self.start(NodeKind::BreakStmt);
+                let m = self.start(NodeKind::BreakStmt)?;
                 self.bump();
                 Ok(self.complete(m, NodeKind::BreakStmt))
             }
             TokenKind::KwContinue => {
-                let m = self.start(NodeKind::ContinueStmt);
+                let m = self.start(NodeKind::ContinueStmt)?;
                 self.bump();
                 Ok(self.complete(m, NodeKind::ContinueStmt))
             }
             TokenKind::KwReturn => {
-                let m = self.start(NodeKind::ReturnStmt);
+                let m = self.start(NodeKind::ReturnStmt)?;
                 self.bump();
                 if !matches!(
                     self.peek_kind(),
@@ -1604,7 +1787,7 @@ impl<'a> Parser<'a> {
                 Ok(self.complete(m, NodeKind::ReturnStmt))
             }
             TokenKind::KwAssert => {
-                let m = self.start(NodeKind::AssertStmt);
+                let m = self.start(NodeKind::AssertStmt)?;
                 self.bump();
                 self.parse_expr()?;
                 Ok(self.complete(m, NodeKind::AssertStmt))
@@ -1612,13 +1795,13 @@ impl<'a> Parser<'a> {
             _ => {
                 let expr = self.parse_expr()?;
                 if self.at(TokenKind::Eq) {
-                    let m = self.precede(expr, NodeKind::AssignStmt);
+                    let m = self.precede(expr, NodeKind::AssignStmt)?;
                     self.bump();
                     self.skip_newlines();
                     self.parse_consumed()?;
                     return Ok(self.complete(m, NodeKind::AssignStmt));
                 }
-                let m = self.precede(expr, NodeKind::ExprStmt);
+                let m = self.precede(expr, NodeKind::ExprStmt)?;
                 Ok(self.complete(m, NodeKind::ExprStmt))
             }
         }
@@ -1641,7 +1824,7 @@ impl<'a> Parser<'a> {
         if !self.at(TokenKind::KwMove) {
             return self.parse_expr();
         }
-        let m = self.start(NodeKind::MoveExpr);
+        let m = self.start(NodeKind::MoveExpr)?;
         self.bump();
         self.parse_postfix()?;
         Ok(self.complete(m, NodeKind::MoveExpr))
@@ -1663,16 +1846,25 @@ impl<'a> Parser<'a> {
     }
 
     /// Binary chain, kept flat (§3.1; groups are checked in `groups.rs`).
+    /// Its height is the one of the tree of §3.1 ([`Chain`]).
     fn parse_expr_inner(&mut self, allow_range: bool) -> PResult<Completed> {
         let first = self.parse_cast()?;
         let mut expr = first;
         if binop(self.peek_kind()) {
-            let m = self.precede(first, NodeKind::BinaryExpr);
-            while binop(self.peek_kind()) {
+            let m = self.precede(first, NodeKind::BinaryExpr)?;
+            let base = self.level();
+            let mut chain = Chain::new(first.height);
+            while let Some(op) = crate::lower::binop(self.peek_kind()) {
+                let (pending, left) = chain.operator(op.group());
+                self.chain_operator(base, pending, left)?;
                 self.bump();
                 self.skip_newlines(); // operator at the end of the line continues it (§2.5)
-                self.parse_cast()?;
+                let right = self.parse_cast()?;
+                chain.operand(right.height);
             }
+            let top = self.open.len() - 1;
+            self.open[top].children = chain.height();
+            self.open[top].level = base;
             expr = self.complete(m, NodeKind::BinaryExpr);
         }
         if matches!(self.peek_kind(), TokenKind::DotDot | TokenKind::DotDotEq) {
@@ -1680,7 +1872,7 @@ impl<'a> Parser<'a> {
             if !allow_range {
                 return Err(self.error(Code::E0002, t.span, "ranges are only allowed in `for` and `par` heads (§7)"));
             }
-            let m = self.precede(expr, NodeKind::RangeExpr);
+            let m = self.precede(expr, NodeKind::RangeExpr)?;
             self.bump();
             if t.kind == TokenKind::DotDotEq {
                 // No candidate keeps the value (`a..b + 1` panics at the top of
@@ -1702,11 +1894,25 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+    /// The next operator of a chain whose node is at the level `base`: in the
+    /// tree of §3.1 it is under `pending - 1` operators that wait for their
+    /// right operand, and its left operand is `left` high (one level per
+    /// operator, [`Chain`]). E0006 at the operator when that is over the limit,
+    /// before the chain is read on (spec §2.5); else its right operand is read
+    /// at its level.
+    fn chain_operator(&mut self, base: u32, pending: u32, left: u32) -> PResult<()> {
+        let at = self.peek().span;
+        self.limit(base + pending + left, at, NodeKind::BinaryExpr)?;
+        let top = self.open.len() - 1;
+        self.open[top].level = base + pending;
+        Ok(())
+    }
+
     /// `prefix [as Type]*` — prefix binds tighter than `as` (§3.1).
     fn parse_cast(&mut self) -> PResult<Completed> {
         let mut expr = self.parse_prefix()?;
         while self.at(TokenKind::KwAs) {
-            let m = self.precede(expr, NodeKind::CastExpr);
+            let m = self.precede(expr, NodeKind::CastExpr)?;
             self.bump();
             self.parse_type()?;
             expr = self.complete(m, NodeKind::CastExpr);
@@ -1717,7 +1923,7 @@ impl<'a> Parser<'a> {
     fn parse_prefix(&mut self) -> PResult<Completed> {
         let t = self.peek();
         if matches!(t.kind, TokenKind::Minus | TokenKind::Bang) {
-            let m = self.start(NodeKind::PrefixExpr);
+            let m = self.start(NodeKind::PrefixExpr)?;
             self.bump();
             self.parse_prefix()?;
             return Ok(self.complete(m, NodeKind::PrefixExpr));
@@ -1725,7 +1931,7 @@ impl<'a> Parser<'a> {
         if t.kind == TokenKind::Amp {
             // `&mut x` / `&x` in argument position → `inout x` / `x`. The AST
             // has no node for it: the `RefExpr` node gives the inner expression.
-            let m = self.start(NodeKind::RefExpr);
+            let m = self.start(NodeKind::RefExpr)?;
             self.bump();
             let mt = self.peek();
             let is_mut = self.is_ident(mt, "mut");
@@ -1762,7 +1968,7 @@ impl<'a> Parser<'a> {
             let t = self.peek();
             match t.kind {
                 TokenKind::LParen => {
-                    let m = self.precede(expr, NodeKind::CallExpr);
+                    let m = self.precede(expr, NodeKind::CallExpr)?;
                     self.parse_arg_list()?;
                     expr = self.complete(m, NodeKind::CallExpr);
                     chain = None;
@@ -1773,7 +1979,7 @@ impl<'a> Parser<'a> {
                         && !self.gap(self.peek2_index()).is_some()
                         && matches!(expr.kind, NodeKind::PathExpr | NodeKind::FieldExpr) =>
                 {
-                    let m = self.precede(expr, NodeKind::CallExpr);
+                    let m = self.precede(expr, NodeKind::CallExpr)?;
                     self.bump();
                     self.parse_arg_list()?;
                     expr = self.complete(m, NodeKind::CallExpr);
@@ -1787,7 +1993,7 @@ impl<'a> Parser<'a> {
                     ));
                 }
                 TokenKind::ColonColon => {
-                    let m = self.precede(expr, NodeKind::FieldExpr);
+                    let m = self.precede(expr, NodeKind::FieldExpr)?;
                     self.bump();
                     self.foreign(
                         t.span,
@@ -1801,7 +2007,7 @@ impl<'a> Parser<'a> {
                     chain = chain.map(|_| name);
                 }
                 TokenKind::Dot => {
-                    let m = self.precede(expr, NodeKind::FieldExpr);
+                    let m = self.precede(expr, NodeKind::FieldExpr)?;
                     self.bump();
                     let n = self.peek();
                     match n.kind {
@@ -1822,7 +2028,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 TokenKind::LBracket if !self.peek_gap().is_some() => {
-                    let m = self.precede(expr, NodeKind::IndexExpr);
+                    let m = self.precede(expr, NodeKind::IndexExpr)?;
                     self.bump();
                     self.with_nl(false, |p| {
                         p.parse_expr()?;
@@ -1833,7 +2039,7 @@ impl<'a> Parser<'a> {
                     chain = None;
                 }
                 TokenKind::Question => {
-                    let m = self.precede(expr, NodeKind::TryExpr);
+                    let m = self.precede(expr, NodeKind::TryExpr)?;
                     self.bump();
                     expr = self.complete(m, NodeKind::TryExpr);
                     chain = None;
@@ -1842,12 +2048,12 @@ impl<'a> Parser<'a> {
                     if !self.no_struct_lit
                         && chain.is_some_and(|c| self.token_text(c).starts_with(|c: char| c.is_ascii_uppercase())) =>
                 {
-                    let m = self.precede(expr, NodeKind::StructLit);
-                    let l = self.start(NodeKind::StructLitFields);
+                    let m = self.precede(expr, NodeKind::StructLit)?;
+                    let l = self.start(NodeKind::StructLitFields)?;
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
-                            let f = p.start(NodeKind::StructLitField);
+                            let f = p.start(NodeKind::StructLitField)?;
                             p.parse_ident("field name")?;
                             p.expect(TokenKind::Colon)?;
                             p.parse_consumed()?;
@@ -1871,14 +2077,20 @@ impl<'a> Parser<'a> {
 
     /// `( args )`.
     fn parse_arg_list(&mut self) -> PResult<()> {
-        let m = self.start(NodeKind::ArgList);
+        let m = self.start(NodeKind::ArgList)?;
         self.bump(); // `(`
         self.with_nl(false, |p| {
             let saved = std::mem::replace(&mut p.no_struct_lit, false);
             while !p.at(TokenKind::RParen) {
-                let a = p.start(NodeKind::Arg);
-                p.parse_mode();
-                p.parse_expr()?;
+                let a = p.start(NodeKind::Arg)?;
+                if p.at(TokenKind::KwMove) {
+                    // `f(move x)`: `move x` is the form `move` (§5.2).
+                    let mv = p.bump();
+                    p.without_node(NodeKind::MoveExpr, mv.span, |p| p.parse_expr())?;
+                } else {
+                    p.parse_mode();
+                    p.parse_expr()?;
+                }
                 p.complete(a, NodeKind::Arg);
                 if p.eat(TokenKind::Comma).is_none() {
                     break;
@@ -1910,7 +2122,7 @@ impl<'a> Parser<'a> {
                 ));
             }
             TokenKind::Int => {
-                let m = self.start(NodeKind::Literal);
+                let m = self.start(NodeKind::Literal)?;
                 self.bump();
                 self.check_int(t);
                 return Ok(self.complete(m, NodeKind::Literal));
@@ -1921,7 +2133,7 @@ impl<'a> Parser<'a> {
             TokenKind::Underscore => NodeKind::HoleExpr,
             TokenKind::Ident | TokenKind::KwSelf | TokenKind::KwSelfType => NodeKind::PathExpr,
             TokenKind::LParen => {
-                let m = self.start(NodeKind::TupleExpr);
+                let m = self.start(NodeKind::TupleExpr)?;
                 self.bump();
                 let kind = self.with_nl(false, |p| {
                     let saved = std::mem::replace(&mut p.no_struct_lit, false);
@@ -1932,7 +2144,7 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, kind));
             }
             TokenKind::LBracket => {
-                let m = self.start(NodeKind::ArrayExpr);
+                let m = self.start(NodeKind::ArrayExpr)?;
                 self.bump();
                 let kind = self.with_nl(false, |p| {
                     let saved = std::mem::replace(&mut p.no_struct_lit, false);
@@ -1945,11 +2157,11 @@ impl<'a> Parser<'a> {
             TokenKind::LBrace => return self.parse_block_expr(),
             TokenKind::KwIf => return self.parse_if(),
             TokenKind::KwMatch => {
-                let m = self.start(NodeKind::MatchExpr);
+                let m = self.start(NodeKind::MatchExpr)?;
                 self.bump();
                 if self.at(TokenKind::KwMove) {
                     // `match move x` consumes the value (§7, S-21).
-                    let mv = self.start(NodeKind::MoveExpr);
+                    let mv = self.start(NodeKind::MoveExpr)?;
                     self.bump();
                     let saved = std::mem::replace(&mut self.no_struct_lit, true);
                     let inner = self.parse_postfix();
@@ -1959,11 +2171,11 @@ impl<'a> Parser<'a> {
                 } else {
                     self.parse_head_expr(false)?;
                 }
-                let arms = self.start(NodeKind::MatchArms);
+                let arms = self.start(NodeKind::MatchArms)?;
                 self.expect(TokenKind::LBrace)?;
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
-                        let a = p.start(NodeKind::MatchArm);
+                        let a = p.start(NodeKind::MatchArm)?;
                         p.parse_pattern()?;
                         if p.eat(TokenKind::KwIf).is_some() {
                             p.parse_expr()?;
@@ -1982,7 +2194,7 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::MatchExpr));
             }
             TokenKind::KwFn => {
-                let m = self.start(NodeKind::ClosureExpr);
+                let m = self.start(NodeKind::ClosureExpr)?;
                 self.bump();
                 self.parse_params(false)?;
                 if self.eat(TokenKind::Arrow).is_some() {
@@ -1993,7 +2205,7 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::ClosureExpr));
             }
             TokenKind::KwHandle => {
-                let m = self.start(NodeKind::HandleExpr);
+                let m = self.start(NodeKind::HandleExpr)?;
                 self.bump();
                 self.parse_block_expr()?;
                 self.expect(TokenKind::KwWith)?;
@@ -2006,13 +2218,13 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::HandleExpr));
             }
             TokenKind::KwUnsafe => {
-                let m = self.start(NodeKind::UnsafeExpr);
+                let m = self.start(NodeKind::UnsafeExpr)?;
                 self.bump();
                 self.parse_block_expr()?;
                 return Ok(self.complete(m, NodeKind::UnsafeExpr));
             }
             TokenKind::KwPar => {
-                let m = self.start(NodeKind::ParExpr);
+                let m = self.start(NodeKind::ParExpr)?;
                 self.bump();
                 self.parse_name("replication index")?;
                 self.expect(TokenKind::KwIn)?;
@@ -2025,7 +2237,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Dot if self.peek2().kind == TokenKind::Int && !self.gap(self.peek2_index()).is_some() => {
                 // `.5` → `0.5`
-                let m = self.start(NodeKind::LeadingDotFloat);
+                let m = self.start(NodeKind::LeadingDotFloat)?;
                 let start = t.span.start;
                 self.bump();
                 let n = self.bump();
@@ -2042,9 +2254,32 @@ impl<'a> Parser<'a> {
             }
             _ => return Err(self.unexpected("an expression")),
         };
-        let m = self.start(kind);
-        self.bump();
+        let m = self.start(kind)?;
+        let t = self.bump();
+        if t.kind == TokenKind::Str {
+            self.interpolation_levels(t)?;
+        }
         Ok(self.complete(m, kind))
+    }
+
+    /// The holes of the string literal `t`, the innermost open node (spec
+    /// §2.5): a hole `{a.b.c}` counts as the path `a.b.c` written as an
+    /// expression, one level per `.`. E0006 at the `.` over the limit.
+    fn interpolation_levels(&mut self, t: Token) -> PResult<()> {
+        let lit = crate::lower::str_lit(self.token_text(t), t.span);
+        let level = self.level();
+        let mut height = 0;
+        for seg in &lit.segments {
+            let crate::ast::StrSeg::Interp(path) = seg else { continue };
+            for (i, name) in path.segments.iter().enumerate().skip(1) {
+                let dot = Span::new(self.file, name.span.start - 1, name.span.start);
+                self.limit(level + Self::height(NodeKind::FieldExpr, i as u32 - 1), dot, NodeKind::FieldExpr)?;
+            }
+            height = height.max(path.segments.len().saturating_sub(1) as u32);
+        }
+        let top = self.open.len() - 1;
+        self.open[top].children = self.open[top].children.max(height);
+        Ok(())
     }
 
     /// After `(`: `()`, `(e)` or `(a, b, ...)`.
@@ -2132,7 +2367,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_if(&mut self) -> PResult<Completed> {
-        let m = self.start(NodeKind::IfExpr);
+        let m = self.start(NodeKind::IfExpr)?;
         self.expect(TokenKind::KwIf)?;
         self.parse_head_expr(false)?;
         self.parse_block_expr()?;
@@ -2166,7 +2401,7 @@ impl<'a> Parser<'a> {
         if !self.at(TokenKind::Pipe) {
             return Ok(first);
         }
-        let m = self.precede(first, NodeKind::OrPat);
+        let m = self.precede(first, NodeKind::OrPat)?;
         while self.eat(TokenKind::Pipe).is_some() {
             self.parse_pattern_alt()?;
         }
@@ -2206,7 +2441,7 @@ impl<'a> Parser<'a> {
             // `-1`, and `-(1)` / `-((1))`: the parentheses between `-` and the integer are not
             // seen (§7, §4.7; S-184, S-185). `-(-1)` is no literal (S-227) and stays E0002.
             TokenKind::Minus if self.peek2().kind == TokenKind::Int || self.parenthesised_int_after_minus() => {
-                let m = self.start(NodeKind::NegLitPat);
+                let m = self.start(NodeKind::NegLitPat)?;
                 self.bump();
                 self.with_nl(false, |p| {
                     let mut opens = 0;
@@ -2222,7 +2457,7 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::NegLitPat));
             }
             TokenKind::Int => {
-                let m = self.start(NodeKind::LitPat);
+                let m = self.start(NodeKind::LitPat)?;
                 self.bump();
                 self.check_int(t);
                 return Ok(self.complete(m, NodeKind::LitPat));
@@ -2236,7 +2471,7 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Char | TokenKind::Str | TokenKind::KwTrue | TokenKind::KwFalse => NodeKind::LitPat,
             TokenKind::LParen => {
-                let m = self.start(NodeKind::TuplePat);
+                let m = self.start(NodeKind::TuplePat)?;
                 self.bump();
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RParen) {
@@ -2251,9 +2486,10 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::TuplePat));
             }
             TokenKind::Ident | TokenKind::KwSelfType => {
-                let m = self.start(NodeKind::PathPat);
+                let m = self.start(NodeKind::PathPat)?;
                 let path = self.parse_path("a pattern")?;
                 if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
+                    self.reshape(NodeKind::TupleStructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RParen) {
@@ -2270,6 +2506,7 @@ impl<'a> Parser<'a> {
                 if self.at(TokenKind::LBrace)
                     && self.token_text(path.last).starts_with(|c: char| c.is_ascii_uppercase())
                 {
+                    self.reshape(NodeKind::StructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
@@ -2281,7 +2518,7 @@ impl<'a> Parser<'a> {
                                     "struct patterns name every field; use `_` for the unused ones (§7)",
                                 ));
                             }
-                            let f = p.start(NodeKind::StructPatField);
+                            let f = p.start(NodeKind::StructPatField)?;
                             p.parse_ident("field name")?;
                             p.expect(TokenKind::Colon)?;
                             p.parse_pattern()?;
@@ -2301,7 +2538,7 @@ impl<'a> Parser<'a> {
             }
             _ => return Err(self.unexpected("a pattern")),
         };
-        let m = self.start(kind);
+        let m = self.start(kind)?;
         self.bump();
         Ok(self.complete(m, kind))
     }
@@ -2311,34 +2548,97 @@ fn binop(kind: TokenKind) -> bool {
     crate::lower::binop(kind).is_some()
 }
 
+/// The height of a binary chain read as the tree of §3.1 (spec §2.5): the
+/// strengths of the groups ([`crate::ast::OpGroup::stronger`]) and left
+/// associativity, one level per operator. The chain is read from the left,
+/// as the shunting-yard algorithm reads it: the operators on the stack wait
+/// for their right operand, each in the right operand of the one below it.
+/// Groups without a strength between them (E0010) are read left to right.
+pub(crate) struct Chain {
+    /// The waiting operators: the height of their left operand and their group.
+    stack: Vec<(u32, crate::ast::OpGroup)>,
+    /// The height of the last operand, or of the operators it closed.
+    current: u32,
+}
+
+impl Chain {
+    pub(crate) fn new(first: u32) -> Chain {
+        Chain { stack: Vec::new(), current: first }
+    }
+
+    /// An operator of `group` after the last operand: the waiting operators
+    /// it does not bind tighter than take the operand as their right one and
+    /// close. Returns how many operators wait then, this one included, and
+    /// the height of its left operand.
+    pub(crate) fn operator(&mut self, group: crate::ast::OpGroup) -> (u32, u32) {
+        while let Some(&(left, waiting)) = self.stack.last() {
+            if group.stronger(waiting) {
+                break;
+            }
+            self.current = left.max(self.current) + 1;
+            self.stack.pop();
+        }
+        self.stack.push((self.current, group));
+        (self.stack.len() as u32, self.current)
+    }
+
+    pub(crate) fn operand(&mut self, height: u32) {
+        self.current = height;
+    }
+
+    /// The height of the whole chain.
+    pub(crate) fn height(mut self) -> u32 {
+        while let Some((left, _)) = self.stack.pop() {
+            self.current = left.max(self.current) + 1;
+        }
+        self.current
+    }
+}
+
 /// How a declaration is parsed after its attributes and visibility.
 type DeclParser = fn(&mut Parser<'_>, ItemCtx) -> PResult<()>;
 
-/// The keywords that start a declaration, with how to parse it: the one
-/// list. `parse_item` dispatches on it, and the recovery's item starts
+/// Where a declaration may be written: the top level of a module, and the
+/// lists of declarations it is a member of (§18.1, [`Parser::not_a_member`]).
+const TOP: &[ItemCtx] = &[ItemCtx::Top];
+const FUNCTION_PLACES: &[ItemCtx] = &[
+    ItemCtx::Top,
+    ItemCtx::Trait,
+    ItemCtx::Impl,
+    ItemCtx::Effect,
+    ItemCtx::Handler,
+    ItemCtx::Extern,
+    ItemCtx::InlineHandler,
+];
+const CONST_PLACES: &[ItemCtx] = &[ItemCtx::Top, ItemCtx::Trait, ItemCtx::Impl];
+const TYPE_PLACES: &[ItemCtx] = &[ItemCtx::Top, ItemCtx::Extern];
+
+/// The keywords that start a declaration, with how to parse it and where it
+/// may be written: the one list. `parse_item` dispatches on it and refuses a
+/// declaration out of its places, and the recovery's item starts
 /// ([`is_item_start`]) are these keywords and what may come before them.
-const DECLARATIONS: &[(TokenKind, DeclParser)] = &[
-    (TokenKind::KwFn, |p, c| p.parse_fn(c)),
-    (TokenKind::KwRt, |p, c| p.parse_fn(c)),
-    (TokenKind::KwFlow, |p, c| p.parse_flow(c)),
-    (TokenKind::KwStruct, |p, c| p.parse_struct(c)),
-    (TokenKind::KwEnum, |p, c| p.parse_enum(c)),
-    (TokenKind::KwType, |p, c| p.parse_type_item(c)),
-    (TokenKind::KwTrait, |p, c| p.parse_trait(c)),
-    (TokenKind::KwImpl, |p, c| p.parse_impl(c)),
-    (TokenKind::KwEffect, |p, c| p.parse_effect(c)),
-    (TokenKind::KwBlocking, |p, c| p.parse_effect(c)),
-    (TokenKind::KwHandler, |p, c| p.parse_handler(c)),
-    (TokenKind::KwConst, |p, c| p.parse_const(c)),
-    (TokenKind::KwUse, |p, c| p.parse_use(c)),
-    (TokenKind::KwExtern, |p, c| p.parse_extern(c)),
-    (TokenKind::KwTarget, |p, c| p.parse_target(c)),
-    (TokenKind::KwTest, |p, c| p.parse_test(c)),
+const DECLARATIONS: &[(TokenKind, DeclParser, &[ItemCtx])] = &[
+    (TokenKind::KwFn, |p, c| p.parse_fn(c), FUNCTION_PLACES),
+    (TokenKind::KwRt, |p, c| p.parse_fn(c), FUNCTION_PLACES),
+    (TokenKind::KwFlow, |p, c| p.parse_flow(c), TOP),
+    (TokenKind::KwStruct, |p, c| p.parse_struct(c), TOP),
+    (TokenKind::KwEnum, |p, c| p.parse_enum(c), TOP),
+    (TokenKind::KwType, |p, c| p.parse_type_item(c), TYPE_PLACES),
+    (TokenKind::KwTrait, |p, c| p.parse_trait(c), TOP),
+    (TokenKind::KwImpl, |p, c| p.parse_impl(c), TOP),
+    (TokenKind::KwEffect, |p, c| p.parse_effect(c), TOP),
+    (TokenKind::KwBlocking, |p, c| p.parse_effect(c), TOP),
+    (TokenKind::KwHandler, |p, c| p.parse_handler(c), TOP),
+    (TokenKind::KwConst, |p, c| p.parse_const(c), CONST_PLACES),
+    (TokenKind::KwUse, |p, c| p.parse_use(c), TOP),
+    (TokenKind::KwExtern, |p, c| p.parse_extern(c), TOP),
+    (TokenKind::KwTarget, |p, c| p.parse_target(c), TOP),
+    (TokenKind::KwTest, |p, c| p.parse_test(c), TOP),
 ];
 
 /// A token that starts an item: a declaration keyword, `pub`, an attribute, a doc comment.
 fn is_item_start(kind: TokenKind) -> bool {
-    DECLARATIONS.iter().any(|(k, _)| *k == kind)
+    DECLARATIONS.iter().any(|(k, _, _)| *k == kind)
         || matches!(kind, TokenKind::KwPub | TokenKind::At | TokenKind::DocComment)
 }
 
@@ -2563,6 +2863,70 @@ mod tests {
         let src = "handler arena(inout mem: Span[U8]): Alloc {\n  fn alloc(n: U32) -> U32 { n }\n}\nfn g() { handle { f() } with arena(inout scratch) }\nfn h() { handle { f() } with Fs { fn read(_: Path) -> Str { \"\" } } }";
         let p = parse(src);
         assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
+    }
+
+    /// The members of a list of declarations are a closed list (§18.1,
+    /// S-263): any other declaration there is E0002, so declarations do not
+    /// nest without bound (they count no level, spec §2.5): the 10 000
+    /// nested `impl`s stop at the second one.
+    #[test]
+    fn members_are_a_closed_list() {
+        for kw in [
+            "impl B",
+            "trait T",
+            "effect E",
+            "blocking effect E",
+            "handler h: E",
+            "extern \"C\" lib \"x\"",
+            "struct S",
+            "enum E",
+            "flow g(x: Sig[F32]) -> Sig[F32]",
+            "proc g(x: Sig[F32]) -> Sig[F32]",
+            "test \"t\"",
+        ] {
+            assert_eq!(codes(&format!("impl A {{\n  {kw} {{\n  }}\n}}\n")), vec![Code::E0002], "{kw}");
+        }
+        for member in ["use a.{b}", "type T = I32", "target fn f()"] {
+            assert_eq!(codes(&format!("impl A {{\n  {member}\n}}\n")), vec![Code::E0002], "{member}");
+        }
+        assert_eq!(codes("effect E {\n  const C: I32 = 1\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("handler h: E {\n  const C: I32 = 1\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("extern \"C\" lib \"x\" {\n  const C: I32 = 1\n}\n"), vec![Code::E0002]);
+        assert!(codes("impl A {\n  const C: I32 = 1\n  fn f() { }\n  rt fn g() { }\n}\n").is_empty());
+        assert!(codes("trait T {\n  const C: Self\n  fn f(self)\n}\n").is_empty());
+        assert!(codes("extern \"C\" lib \"x\" {\n  type Raw\n  rt fn f(h: Ptr[Raw])\n}\n").is_empty());
+        let p = parse("impl A {\n  struct S { x: I32 }\n}\n");
+        assert_eq!(p.diagnostics[0].notes.len(), 1, "the note with the members");
+        let deep = format!("{}{}", "impl A { ".repeat(10_000), "}".repeat(10_000));
+        assert_eq!(codes(&deep), vec![Code::E0002]);
+    }
+
+    /// The height of a binary chain is the one of the tree of §3.1 (spec §2.5).
+    #[test]
+    fn chain_heights_follow_the_strengths() {
+        use crate::ast::OpGroup::*;
+        let height = |first: u32, rest: &[(crate::ast::OpGroup, u32)]| {
+            let mut c = super::Chain::new(first);
+            for &(g, h) in rest {
+                c.operator(g);
+                c.operand(h);
+            }
+            c.height()
+        };
+        // a + b + c: ((a + b) + c)
+        assert_eq!(height(0, &[(Additive, 0), (Additive, 0)]), 2);
+        // a + b * c * d: a + ((b * c) * d)
+        assert_eq!(height(0, &[(Additive, 0), (Multiplicative, 0), (Multiplicative, 0)]), 3);
+        // a * b + c * d: (a * b) + (c * d)
+        assert_eq!(height(0, &[(Multiplicative, 0), (Additive, 0), (Multiplicative, 0)]), 2);
+        // lo <= x && x < hi: (lo <= x) && (x < hi)
+        assert_eq!(height(0, &[(Comparison, 0), (And, 0), (Comparison, 0)]), 2);
+        // a deep operand on the right of the last operator
+        assert_eq!(height(0, &[(Additive, 0), (Additive, 5)]), 6);
+        // the strengths of §3.1
+        assert!(Multiplicative.stronger(Additive) && Additive.stronger(Comparison) && Comparison.stronger(Or));
+        assert!(!And.stronger(Or) && !Or.stronger(And) && !Bitwise.stronger(Or) && !Additive.stronger(Bitwise));
+        assert!(!Additive.stronger(Multiplicative) && !Additive.stronger(Additive));
     }
 
     #[test]

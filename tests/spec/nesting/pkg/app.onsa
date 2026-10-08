@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§15.1"]
+
+// Modules that each have a deep expression, under the limit. The depth is counted per
+// expression, not per package.
+use deep.{total, nested}
+
+pub fn run(x: I32) -> I32 {
+  total(x) + nested(x)
+}
+
+test "a deep module is used" {
+  assert total(2) == 300
+  assert nested(5) == 5
+  assert run(1) == 151
+}

@@ -1,0 +1,10 @@
+use a.{total, ok}
+use b.{nested, plain}
+
+pub fn run(x: I32) -> I32 {
+  total(x) + nested(x) + ok(x) + plain(x)
+}
+
+pub fn unresolved() -> I32 {
+  nothing                       //~ E0302
+}

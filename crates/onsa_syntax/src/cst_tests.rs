@@ -1,5 +1,5 @@
 //! Tests of the CST (R-86, W3-01): the round trip, the invariants, where the
-//! trivia go, the positions, the height the parser counts.
+//! trivia go, the positions, the levels the parser counts (spec §2.5).
 
 use std::path::{Path as FsPath, PathBuf};
 
@@ -66,21 +66,26 @@ fn assert_round_trip(src: &str) {
 
 #[test]
 fn round_trip_of_every_repository_file() {
-    let files = repo_files();
-    assert!(files.len() > 400, "only {} files found", files.len());
-    let mut ran = 0;
-    for (name, text) in &files {
-        match try_parse(text) {
-            Some(p) => {
-                assert_eq!(p.cst.text(text), *text, "{name}: the CST does not give the source back");
-                p.cst.validate(text).unwrap_or_else(|e| panic!("{name}: {e:?}"));
-                check_spans(&p, name);
-                ran += 1;
+    let run = || {
+        let files = repo_files();
+        assert!(files.len() > 400, "only {} files found", files.len());
+        let mut ran = 0;
+        for (name, text) in &files {
+            match try_parse(text) {
+                Some(p) => {
+                    assert_eq!(p.cst.text(text), *text, "{name}: the CST does not give the source back");
+                    p.cst.validate(text).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+                    check_spans(&p, name);
+                    ran += 1;
+                }
+                None => assert!(LEXER_PANICS.contains(&name.as_str()), "{name}: the parser panics"),
             }
-            None => assert!(LEXER_PANICS.contains(&name.as_str()), "{name}: the parser panics"),
         }
-    }
-    assert!(ran > 400);
+        assert!(ran > 400);
+    };
+    // The stack of a command (`onsa_diag::stack`): every file is at most 256
+    // levels deep or stops there with E0006 (spec §2.5, W3-14).
+    onsa_diag::stack::run(run);
 }
 
 #[test]
@@ -393,53 +398,170 @@ fn doc_comments_after_a_failed_item_belong_to_the_next_item() {
     }
 }
 
-/// The height the parser counts ([`crate::parser`], one function) and the
-/// height of the tree, both by `Cst::height` and by the indentation of
-/// `dump --cst --tree`.
-fn heights(src: &str) -> (u32, u32, u32) {
+/// The levels of the subtree of `n` (spec §2.5), counted again on the
+/// finished tree with the parser's one function (`Parser::height`) and its
+/// reading of a binary chain (`Chain`): what the parser counted while it read.
+fn levels(cst: &Cst, src: &str, n: NodeId) -> u32 {
+    use crate::parser::{Chain, Parser};
+    let kind = cst.kind(n);
+    if kind == NodeKind::BinaryExpr {
+        let mut chain: Option<Chain> = None;
+        for e in cst.children(n) {
+            match *e {
+                Elem::Node(c) => {
+                    let h = levels(cst, src, c);
+                    match &mut chain {
+                        Some(ch) => ch.operand(h),
+                        None => chain = Some(Chain::new(h)),
+                    }
+                }
+                Elem::Token(t) => {
+                    if let Some(op) = crate::lower::binop(cst.token(t).kind) {
+                        chain.as_mut().expect("an operand first").operator(op.group());
+                    }
+                }
+            }
+        }
+        return chain.expect("a chain has operands").height();
+    }
+    // `for s in move xs` and `f(move x)`: the form `move` has no node of its own.
+    let mut children = 0;
+    let mut after_move = false;
+    for e in cst.children(n) {
+        match *e {
+            Elem::Token(t) if cst.token(t).kind.is_trivia() => {}
+            Elem::Token(t) => {
+                after_move = cst.token(t).kind == TokenKind::KwMove && matches!(kind, NodeKind::ForStmt | NodeKind::Arg)
+            }
+            Elem::Node(c) => {
+                let h = levels(cst, src, c);
+                children = children.max(if after_move { Parser::height(NodeKind::MoveExpr, h) } else { h });
+                after_move = false;
+            }
+        }
+    }
+    if kind == NodeKind::Literal {
+        for e in cst.children(n) {
+            if let Elem::Token(t) = *e
+                && cst.token(t).kind == TokenKind::Str
+            {
+                let tok = cst.token(t);
+                let lit = crate::lower::str_lit(&src[tok.span.start as usize..tok.span.end as usize], tok.span);
+                for seg in &lit.segments {
+                    if let StrSeg::Interp(p) = seg {
+                        children = children.max(p.segments.len() as u32 - 1);
+                    }
+                }
+            }
+        }
+    }
+    Parser::height(kind, children)
+}
+
+/// The levels the parser counts while it reads (the deepest unit) and the
+/// levels counted again on the tree.
+fn counted(src: &str) -> (u32, u32) {
     let lexed = crate::lex(FileId(0), src);
     let counted = crate::parser::Parser::new(FileId(0), src, lexed.tokens, lexed.diagnostics).parse_file().height;
     let p = parse(src);
-    let tree = p.cst.height(p.cst.root());
-    let indent = p
-        .cst
-        .tree(src)
-        .lines()
-        .filter(|l| !l.contains('"'))
-        .map(|l| (l.len() - l.trim_start().len()) as u32 / 2 + 1)
-        .max()
-        .unwrap();
-    (counted, tree, indent)
+    (counted, levels(&p.cst, src, p.cst.root()))
 }
 
 #[test]
-fn the_parser_counts_the_height_of_the_tree() {
-    // A thread with a large stack: the parser and the lowering recurse on
-    // nested parentheses and `else if` (the limit of S-183 is W3-14's).
-    let run = || {
-        let n = 300;
-        let body = |e: &str| format!("fn f() {{\n  {e}\n}}\n");
-        let cases = [
+fn the_parser_counts_the_levels_of_spec_2_5() {
+    // Each case and its depth in levels: a function body is level 1, a form
+    // of an expression, a type or a pattern and a block one level each.
+    let body = |e: &str| format!("fn f() {{\n  {e}\n}}\n");
+    let cases: Vec<(String, u32)> = vec![
+        (body("1"), 1),
+        (body("(1)"), 2),
+        (body("a + b + c"), 3),
+        (body("a + b * c"), 3),
+        (body("a * b + c"), 3),
+        (body("a + b * c * d"), 4),
+        (body("lo <= x && x < hi"), 3),
+        (body("a.f(x)"), 3),
+        (body("f(g(x))"), 3),
+        (body("-(-x)"), 4),
+        (body("x as I32 as F32"), 3),
+        (body("if c { 1 } else if d { 2 } else { 3 }"), 4),
+        (body("match x { Some((a, b)) | None => 1 }"), 5),
+        (body("match x { S { v: T { w: _ } } => 1 }"), 4),
+        (body("\"{a.b.c} {d}\""), 3),
+        (body("for s in move xs.a { }"), 4),
+        (body("for s in xs.a { }"), 3),
+        (body("f(move x.a)"), 4),
+        (body("f(inout x.a)"), 3),
+        (body("S { x: 1 }"), 2),
+        (body("let t: Option[Option[I32]] = 1"), 3),
+        (body("f(fn(x: I32) -> I32 { x })"), 4),
+        ("fn f(t: (I32, (I32, I32))) {}\n".to_string(), 2),
+        ("fn f(t: Option[I32]) {}\n".to_string(), 1),
+        ("const C: I32 = (1)\n".to_string(), 1),
+        ("impl A {\n  fn m() { (1) }\n}\n".to_string(), 2),
+        ("test \"t\" {\n  assert (true)\n}\n".to_string(), 2),
+        // units do not add up
+        ("fn f() { (1) }\nfn g() { ((1)) }\nfn h() { 1 }\n".to_string(), 3),
+    ];
+    onsa_diag::stack::run(|| {
+        for (k, (src, want)) in cases.iter().enumerate() {
+            assert_eq!(counted(src), (*want, *want), "case {k}: {src}");
+        }
+        // Deep inputs under the limit: the parser and the tree agree.
+        let n = 200;
+        let deep = [
             body(&format!("{}1{}", "(".repeat(n), ")".repeat(n))),
             body(&format!("a{}", ".b".repeat(n))),
             body(&format!("f{}", "()".repeat(n))),
             body(&format!("a{}", "[0]".repeat(n))),
             body(&format!("x{}", " as A".repeat(n))),
             body(&format!("1{}", " + 1".repeat(n))),
+            body(&format!("1{}", " + 1 * 1".repeat(n / 2))),
             body(&format!("if a {{ 1 }}{} else {{ 2 }}", " else if a { 1 }".repeat(n - 1))),
             body(&format!("{}x", "-".repeat(n))),
             "fn f(\n".to_string(),
             "fn f() { a.b.c(d[0] as I32 + 1) }\nstruct S { x: Ring[F32, -4] }\n".to_string(),
         ];
-        for (k, src) in cases.iter().enumerate() {
-            let (counted, tree, indent) = heights(src);
-            assert_eq!((counted, counted), (tree, indent), "case {k}");
-            if k < 5 || k == 6 || k == 7 {
-                assert!(counted >= n as u32, "case {k}: height {counted}");
+        for (k, src) in deep.iter().enumerate() {
+            let (counted, tree) = counted(src);
+            assert_eq!(counted, tree, "deep case {k}");
+            if k < 9 {
+                assert!(counted > n as u32 / 2, "deep case {k}: {counted} levels");
             }
         }
-    };
-    std::thread::Builder::new().stack_size(512 << 20).spawn(run).unwrap().join().unwrap();
+    });
+}
+
+/// Over the limit: E0006 at the token that makes level 257, the unit is not
+/// read further (no other diagnostic), and the units after it are read.
+#[test]
+fn over_the_limit_is_e0006_at_its_token() {
+    let limit = crate::parser::NESTING_LIMIT as usize;
+    let head = "fn f() { ";
+    // (body, the byte offset of the token in the body, the token)
+    let cases: Vec<(String, usize, &str)> = vec![
+        (format!("{}1{}", "(".repeat(limit), ")".repeat(limit)), limit - 1, "("),
+        ("(".repeat(10_000), limit - 1, "("),
+        (format!("1{}", " + 1".repeat(limit)), 1 + 4 * (limit - 1) + 1, "+"),
+        (format!("1{}", " + 1".repeat(10_000)), 1 + 4 * (limit - 1) + 1, "+"),
+        (format!("a{}", ".b".repeat(limit)), 1 + 2 * (limit - 1), "."),
+        (format!("{}x", "-(".repeat(limit)), 2 * (limit / 2 - 1) + 1, "("),
+        (format!("\"{{a{}}}\"", ".b".repeat(limit)), 2 + 1 + 2 * (limit - 1), "."),
+    ];
+    onsa_diag::stack::run(|| {
+        for (k, (b, at, token)) in cases.iter().enumerate() {
+            let src = format!("{head}{b} }}\nfn g() {{ zz.( }}\n");
+            let p = parse(&src);
+            let got: Vec<_> =
+                p.diagnostics.iter().map(|d| (d.code, d.span.start as usize, d.span.end as usize)).collect();
+            let start = head.len() + at;
+            assert_eq!(&src[start..start + token.len()], *token, "case {k}: the arithmetic");
+            assert_eq!(got[0], (onsa_diag::Code::E0006, start, start + token.len()), "case {k}: {got:?}");
+            // the second unit is read on its own: its own error
+            assert_eq!(got.len(), 2, "case {k}: {got:?}");
+            assert_eq!(got[1].0, onsa_diag::Code::E0002, "case {k}: {got:?}");
+        }
+    });
 }
 
 #[test]

@@ -28,11 +28,13 @@ they are (a `\r` stays, invalid UTF-8 too).
     tools/fuzz.py [--per-seed N] [--version V] [--jobs N] [--binary PATH]
                   [--time-budget S] [--deep] [--save]
 
-`--deep` adds mutants that nest brackets or blocks thousands deep, to find
-the stack overflows of S-183. They are off in the gate, and their crashes
-are not saved under `tests/` (with `--save` they go to `target/fuzz/new/`):
-until S-183 sets a limit on the nesting, an overflow aborts the process,
-and the system writes a crash report for each one.
+`--deep` adds mutants that nest brackets or blocks thousands deep: the
+nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
+the stack runs out. They are off in the gate (W3-14 ran them once: no
+signal; `fmt --check` timed out on thousands of lexer diagnostics, which
+W3-03 reduces, S-214). A signal is not saved under `tests/` (with `--save`
+it goes to `target/fuzz/new/`): a stack overflow aborts the process, and
+the system writes a crash report for each one.
 
 The compiler is `<target directory>/debug/onsa`, the target directory of
 `cargo metadata` (which follows `CARGO_TARGET_DIR` and the cargo
@@ -74,8 +76,8 @@ VERSION = "2"
 MINIMIZE_RUNS = 400
 MINIMIZE_SECONDS = 60  # per crash class
 TIME_BUDGET = 600  # seconds for the whole run
-# Nesting depths of the deep mutants (S-183): around and above what the
-# stack of the compiler holds today.
+# Nesting depths of the deep mutants (S-183): far above the nesting limit
+# (256, spec §2.5) and above what the stack of a command would hold without it.
 DEPTHS = (2000, 5000, 20000)
 DEEP = (("(", ")"), ("{ ", " }"), ("[", "]"), ("-", ""), ("!", ""))
 
@@ -387,7 +389,7 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
         small = minimize(runner, text, signature, commands, seconds=seconds) if seconds > 0 else text
         name = f"{short_name(small)}.onsa"
         target = (FUZZ_DIR / name).as_posix()
-        # A stack overflow (a signal) is not saved under tests/ until S-183.
+        # A signal (a stack overflow) is never saved under tests/: replaying it would abort again.
         dest_dir = root / FUZZ_DIR if save and not signature.startswith("signal ") else work / "new"
         dest_dir.mkdir(parents=True, exist_ok=True)
         (dest_dir / name).write_bytes(encode(small))
@@ -436,7 +438,7 @@ def main(argv=None):
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
     ap.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
-    ap.add_argument("--deep", action="store_true", help="also nest thousands deep (S-183; not in the gate)")
+    ap.add_argument("--deep", action="store_true", help="also nest thousands deep (S-183, W3-14; not in the gate)")
     ap.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
     args = ap.parse_args(argv)
     if args.per_seed < 0 or args.jobs < 1 or args.time_budget <= 0:

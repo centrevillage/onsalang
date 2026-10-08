@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§2.5", "§3.1"]
+
+// Boundary of the nesting depth, chains of one group of binary operators.
+//
+// Levels are counted per declaration unit from 0 (spec 2.5): a function body is level 1, and each
+// form (parenthesis, operator, postfix, keyword, block, type with arguments, pattern) is one level;
+// names, literals, `_`, sequences and statements are not counted. These cases are the largest that
+// the limit accepts: every case unit is exactly 256 levels deep (the helper declarations are
+// shallower).
+//
+// A chain of one group is left-nested: one level per operator (`1 + 1 + 1` is two levels), so the
+// body block and D - 1 operators make D. The groups mixed in one chain are in
+// boundary_binary_groups.onsa.
+
+pub fn sum_chain_256() -> I32 {
+  1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1
+}
+
+pub fn add_sub_chain_256() -> I32 {
+  1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1 - 1 + 1
+}
+
+pub fn and_chain_256(a: Bool) -> Bool {
+  a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a && a
+}

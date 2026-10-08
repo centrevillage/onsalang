@@ -1,0 +1,3 @@
+[package]
+name = "nesting_ok"
+edition = "2026"

@@ -1874,6 +1874,10 @@ if args[0] == "fmt":
 elif args[0] == "diff":
     a, b = (read(p) for p in args[-2:])
     sys.exit(0 if code(a) == code(b) else 1)
+elif args[0] == "dump" and args[1] == "--levels":
+    # one item; the output of fmt (written under b/) is deeper when the source says DEEPER
+    t = read(args[-1])
+    sys.stdout.write("2\n" if "DEEPER" in t and "/b/" in args[-1].replace("\\", "/") else "1\n")
 elif args[0] == "dump":
     t = read(args[-1])
     sys.stdout.write(t.strip() if "CST_BAD" in t else t)
@@ -2009,6 +2013,7 @@ class FmtProps(TempRepo):
             ("let x = g(a, b) // NOT_IDEMPOTENT", "FAIL idempotence: tests/spec/a.onsa [source]"),
             ("let x = g(a, b) // lose LOSE_COMMENT", "FAIL comment-text: tests/spec/a.onsa [source]: comment: 1 lost"),
             ("/// d LOSE_DOC\n  let x = 1", "FAIL docs: tests/spec/a.onsa [source]: doc comment: 1 lost"),
+            ("let DEEPER = g(a, b)", "FAIL depth: tests/spec/a.onsa [source]: item 1: 1 levels before fmt, 2 after"),
         ):
             with self.subTest(marker=marker):
                 self.repo.write("tests/spec/a.onsa", f"fn f() {{\n  {marker}\n  x\n}}\n")

@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§6.2", "§9.1", "§4.4", "§4.5"]
+
+// Postfix chains (§2.5, §3.1: calls, fields, indexes, `?` bind tighter than everything). The tree
+// of `a.b().c().d()` is as deep as the chain, and a type or a literal of the same depth makes the
+// operand deep too. Method chain: 80 calls. Index and tuple field chains: 100; struct field chain: 70 (the struct values are built by nested calls of a generic `wrap`). `?`
+// chain: 60.
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn inc(self) -> Counter {
+    Counter { n: self.n + 1 }
+  }
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn wrap[T](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}
+
+type Grid = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[I32; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+type Pairs = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((I32, I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32)
+type Boxed = Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type Opts = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+
+pub fn bump(c: Counter) -> Counter {
+  c.inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc().inc()
+}
+
+pub fn bottom(xs: Grid) -> I32 {
+  xs[0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0]
+}
+
+pub fn first_of(t: Pairs) -> I32 {
+  t.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0
+}
+
+pub fn inner(w: Boxed) -> I32 {
+  w.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v.v
+}
+
+pub fn unwrap_all(v: Opts) -> Option[I32] {
+  Some(v????????????????????????????????????????????????????????????)
+}
+
+test "method chain" {
+  let c = Counter { n: 0 }
+  assert bump(c).n == 80
+}
+
+test "index chain" {
+  let xs: Grid = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[7]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+  assert bottom(xs) == 7
+}
+
+test "tuple field chain" {
+  let t: Pairs = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((7, 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1)
+  assert first_of(t) == 7
+}
+
+test "struct field chain" {
+  let w: Boxed = wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(7))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  assert inner(w) == 7
+}
+
+test "question mark chain" {
+  let v: Opts = Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(5))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  assert unwrap_all(v) == Some(5)
+  let n: Opts = None
+  assert unwrap_all(n) == None
+}

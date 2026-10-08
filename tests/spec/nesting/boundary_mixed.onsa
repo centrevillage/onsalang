@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§2.5", "§3.1", "§4.5"]
+
+// Boundary of the nesting depth, forms of every kind in one nest: a cycle of parenthesis, call,
+// prefix with parenthesis, array literal with index, and `if` with its block (one, one, two, two and
+// two levels). The kind of the form does not matter, only the count.
+//
+// Levels are counted per declaration unit from 0 (spec 2.5): a function body is level 1, and each
+// form (parenthesis, operator, postfix, keyword, block, type with arguments, pattern) is one level;
+// names, literals, `_`, sequences and statements are not counted. These cases are the largest that
+// the limit accepts: every case unit is exactly 256 levels deep (the helper declarations are
+// shallower).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn mixed_256(c: Bool, x: I32) -> I32 {
+  (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([if c { (id(-([(x)][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0]))) } else { 0 }][0])))
+}

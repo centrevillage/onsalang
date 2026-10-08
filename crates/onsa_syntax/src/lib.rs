@@ -74,5 +74,5 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     // earlier diagnostic of a later stage must not hide a syntax one.
     let syntax: Vec<onsa_diag::Diagnostic> = diagnostics.iter().filter(|d| d.stage == Stage::Syntax).cloned().collect();
     let diagnostics = parser::first_per_item(&out.item_ranges, diagnostics);
-    Parsed { ast, cst, map, diagnostics, syntax }
+    Parsed { ast, cst, map, diagnostics, syntax, levels: out.levels }
 }

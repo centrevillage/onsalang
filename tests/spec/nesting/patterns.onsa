@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§7"]
+
+// Nested patterns that a `let` takes (irrefutable): a tuple pattern (100 deep) and a struct pattern
+// (70 deep). The scrutinee types have the same depth. The enum pattern `Some(Some(...))` is in
+// `patterns_enum.onsa`, the parenthesized pattern in `patterns_group.onsa`.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn wrap[T](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}
+
+type TupP = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((I32, I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32)
+type WrapP = Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[Wrap[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+
+pub fn untuple(t: TupP) -> I32 {
+  let ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((x, _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _), _) = t
+  x
+}
+
+pub fn unwrap_struct(w: WrapP) -> I32 {
+  let Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: Wrap { v: x } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } = w
+  x
+}
+
+test "deep irrefutable patterns" {
+  let t: TupP = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((7, 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1), 1)
+  assert untuple(t) == 7
+  let w: WrapP = wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(7))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  assert unwrap_struct(w) == 7
+}

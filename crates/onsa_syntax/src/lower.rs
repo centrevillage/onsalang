@@ -54,14 +54,14 @@ pub(crate) fn lower(cst: &Cst, text: &str) -> (Ast, AstMap) {
 
 /// What an AST node made from a CST node of this kind is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Class {
+pub(crate) enum Class {
     Expr,
     Type,
     Pat,
     Other,
 }
 
-fn class(kind: NodeKind) -> Class {
+pub(crate) fn class(kind: NodeKind) -> Class {
     use NodeKind::*;
     match kind {
         Literal | LeadingDotFloat | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block
@@ -949,8 +949,9 @@ fn char_value(text: &str) -> char {
     }
 }
 
-/// A string literal with its interpolations split out (§2.4).
-fn str_lit(raw: &str, span: Span) -> StrLit {
+/// A string literal with its interpolations split out (§2.4). The parser
+/// counts the levels of the holes with it (spec §2.5).
+pub(crate) fn str_lit(raw: &str, span: Span) -> StrLit {
     let inner = raw.strip_prefix('"').unwrap_or(raw);
     let inner = inner.strip_suffix('"').unwrap_or(inner);
     let base = span.start + 1;

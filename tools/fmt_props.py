@@ -57,7 +57,11 @@ The properties (`--property`):
                  in `p` and `fmt(p)` (`docs/onsa-tools.md` §3.5: the AST and the doc comments
                  agree; this makes up for `diff --ast` until W3-12 compares
                  the docs, S-56);
-              5. the normal form of the code: for space and blank, `fmt(p)` and
+              5. the depth: `fmt` makes no declaration deeper (spec §2.5: the
+                 rewrites take parentheses and `return` away, never add a
+                 level): the levels of each item, `onsa dump --levels`, of
+                 `fmt(p)` are at most those of `p` (W3-14);
+              6. the normal form of the code: for space and blank, `fmt(p)` and
                  `fmt(x)`, each without its comments and formatted again, are
                  the same. Where the comments go is the item `fmt-comments`;
                  break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2), and
@@ -649,7 +653,7 @@ def sequence_problem(what, want, got):
 @dataclass(frozen=True)
 class Failure:
     # unread, perturbation, rejected, internal, ast, idempotence, comment-text,
-    # docs, items, convergence, comments, cst
+    # docs, items, depth, convergence, comments, cst
     prop: str
     case: str
     label: str
@@ -782,6 +786,9 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
         problem = sequence_problem(what, want, got)
         if problem:
             fail(prop_name, problem)
+    problem = depth_problem(onsa, a, d / "b" / name, bool(item_heads(text)))
+    if problem:
+        fail(*problem)
     code_only, problem = fmt_text(onsa, d / "c" / name, strip_comments(formatted))
     if problem:
         fail(problem[0], "on fmt(p) without the comments: " + problem[1])
@@ -789,6 +796,36 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
     if base is not None and kind in CONVERGES and code_only != base.code:
         fail("convergence", "without the comments: " + first_difference(base.code, code_only))
     return fails, Baseline(a, formatted, code_only)
+
+
+def levels_of(onsa, path):
+    """The levels of each item of `path` (`onsa dump --levels`), or the failure as (prop, detail)."""
+    code, out, err = onsa.run("dump", "--levels", path)
+    crash = onsa.crash(("dump", "--levels"), code, err)
+    if crash:
+        return None, ("internal", crash)
+    if code != 0:
+        return None, ("depth", f"dump --levels exit {code}: " + " | ".join(err.strip().splitlines()[:1]))
+    return [int(x) for x in fuzz.decode(out).split()], None
+
+
+def depth_problem(onsa, before, after, has_items):
+    """The failure when `after` (fmt of `before`) has an item deeper than in `before`, or None.
+    `has_items`: `before` has items (`item_heads`), so the levels of none is a failure."""
+    want, problem = levels_of(onsa, before)
+    if problem:
+        return problem
+    if has_items and not want:
+        return "depth", "dump --levels printed no item"
+    got, problem = levels_of(onsa, after)
+    if problem:
+        return problem
+    if len(want) != len(got):
+        return "depth", f"{len(want)} items before fmt, {len(got)} after"
+    for i, (w, g) in enumerate(zip(want, got)):
+        if g > w:
+            return "depth", f"item {i + 1}: {w} levels before fmt, {g} after"
+    return None
 
 
 def first_difference(want, got):
@@ -926,7 +963,7 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
 
 
 # The properties `shrink` keeps on a smaller input (the others need the source).
-SHRINKABLE = ("rejected", "internal", "ast", "idempotence", "comment-text", "docs", "items")
+SHRINKABLE = ("rejected", "internal", "ast", "idempotence", "comment-text", "docs", "items", "depth")
 ERROR_CODE = re.compile(r"error\[(E\d{4})\]")
 
 

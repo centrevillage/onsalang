@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§2.5", "§7"]
+
+// Boundary of the nesting depth, the parenthesized pattern `(p)` (a form, level 3 first in a `match`
+// arm). A parenthesis around a pattern is grouping (2.4, R-43), so the accepted unit also needs
+// W3-07.
+//
+// Levels are counted per declaration unit from 0 (spec 2.5): a function body is level 1, and each
+// form (parenthesis, operator, postfix, keyword, block, type with arguments, pattern) is one level;
+// names, literals, `_`, sequences and statements are not counted. These cases are the largest that
+// the limit accepts: every case unit is exactly 256 levels deep (the helper declarations are
+// shallower).
+
+pub fn group_pattern_256(n: I32) -> I32 {
+  match n {
+    ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((m)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) => m,
+  }
+}

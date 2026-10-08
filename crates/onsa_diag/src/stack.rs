@@ -15,15 +15,23 @@ use std::cell::Cell;
 use std::thread::{Builder, JoinHandle, Scope, ScopedJoinHandle};
 
 /// The stack size of the thread a command, a test case or a run of the
-/// interpreter goes on. One value for the CLI and the test runner, so that
-/// both reach the same depth.
+/// interpreter goes on: the one place that decides it. The CLI, the test
+/// runner, the tests that parse sources (`onsa_syntax`'s CST tests) and the
+/// interpreter's tests all run on it, so that all reach the same depth.
 ///
-/// The interpreter bounds its call depth well inside it
-/// (`onsa_interp::MAX_CALL_DEPTH`, measured there). The syntax is not bounded
-/// yet: a deeper nesting overflows this stack and the process ends with a
-/// signal, not with the internal error (the fuzzing keeps such inputs,
-/// `tools/fuzz.py`).
-// SPEC-GAP(S-183): no limit on the nesting depth of the syntax; this stack bounds it, and an overflow aborts the process.
+/// The syntax is at most 256 levels deep (spec §2.5, S-183: the parser stops
+/// at the limit with E0006, `onsa_syntax::parser::NESTING_LIMIT`), so the
+/// stages that recurse on the written tree are bounded. What is made from it
+/// is not yet: a chain of type aliases (`type A2 = Option[A1]`, ...) expands
+/// to a type as deep as the chain is long, each alias one level deep in the
+/// source, and a chain of pairs (`type A2 = (A1, A1)`) takes exponential
+/// time; their bound is S-264 (to decide before W4-05). Measured on
+/// aarch64-apple-darwin in a debug build (2026-10-08, W3-14, the stack
+/// painted under the call): `check` of one function 256 levels deep uses at
+/// most 3.9 MiB (256 nested calls `id(id(...))`; parentheses 2.2 MiB, of
+/// which the parser takes most, about 8.5 K a level), and `build` of a package
+/// of such functions to C 8.3 MiB. The interpreter bounds its call depth well
+/// inside the stack (`onsa_interp::MAX_CALL_DEPTH`, measured there).
 pub const STACK_SIZE: usize = 64 << 20;
 
 thread_local! {

@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§6.1", "§5.3"]
+
+// Anonymous functions nested in anonymous functions: 30 levels, each a `let` of a function value in
+// the body of the previous one (called with `.(`), and 25 levels as arguments of a call on one line.
+// No level captures a variable of an outer function; each uses its own parameter.
+
+pub fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn nested(x0: I32) -> I32 {
+  let f1 = fn(x1: I32) -> I32 {
+    let f2 = fn(x2: I32) -> I32 {
+      let f3 = fn(x3: I32) -> I32 {
+        let f4 = fn(x4: I32) -> I32 {
+          let f5 = fn(x5: I32) -> I32 {
+            let f6 = fn(x6: I32) -> I32 {
+              let f7 = fn(x7: I32) -> I32 {
+                let f8 = fn(x8: I32) -> I32 {
+                  let f9 = fn(x9: I32) -> I32 {
+                    let f10 = fn(x10: I32) -> I32 {
+                      let f11 = fn(x11: I32) -> I32 {
+                        let f12 = fn(x12: I32) -> I32 {
+                          let f13 = fn(x13: I32) -> I32 {
+                            let f14 = fn(x14: I32) -> I32 {
+                              let f15 = fn(x15: I32) -> I32 {
+                                let f16 = fn(x16: I32) -> I32 {
+                                  let f17 = fn(x17: I32) -> I32 {
+                                    let f18 = fn(x18: I32) -> I32 {
+                                      let f19 = fn(x19: I32) -> I32 {
+                                        let f20 = fn(x20: I32) -> I32 {
+                                          let f21 = fn(x21: I32) -> I32 {
+                                            let f22 = fn(x22: I32) -> I32 {
+                                              let f23 = fn(x23: I32) -> I32 {
+                                                let f24 = fn(x24: I32) -> I32 {
+                                                  let f25 = fn(x25: I32) -> I32 {
+                                                    let f26 = fn(x26: I32) -> I32 {
+                                                      let f27 = fn(x27: I32) -> I32 {
+                                                        let f28 = fn(x28: I32) -> I32 {
+                                                          let f29 = fn(x29: I32) -> I32 {
+                                                            let f30 = fn(x30: I32) -> I32 {
+                                                              x30 * 2
+                                                            }
+                                                            f30.(x29 + 1)
+                                                          }
+                                                          f29.(x28 + 1)
+                                                        }
+                                                        f28.(x27 + 1)
+                                                      }
+                                                      f27.(x26 + 1)
+                                                    }
+                                                    f26.(x25 + 1)
+                                                  }
+                                                  f25.(x24 + 1)
+                                                }
+                                                f24.(x23 + 1)
+                                              }
+                                              f23.(x22 + 1)
+                                            }
+                                            f22.(x21 + 1)
+                                          }
+                                          f21.(x20 + 1)
+                                        }
+                                        f20.(x19 + 1)
+                                      }
+                                      f19.(x18 + 1)
+                                    }
+                                    f18.(x17 + 1)
+                                  }
+                                  f17.(x16 + 1)
+                                }
+                                f16.(x15 + 1)
+                              }
+                              f15.(x14 + 1)
+                            }
+                            f14.(x13 + 1)
+                          }
+                          f13.(x12 + 1)
+                        }
+                        f12.(x11 + 1)
+                      }
+                      f11.(x10 + 1)
+                    }
+                    f10.(x9 + 1)
+                  }
+                  f9.(x8 + 1)
+                }
+                f8.(x7 + 1)
+              }
+              f7.(x6 + 1)
+            }
+            f6.(x5 + 1)
+          }
+          f5.(x4 + 1)
+        }
+        f4.(x3 + 1)
+      }
+      f3.(x2 + 1)
+    }
+    f2.(x1 + 1)
+  }
+  f1.(x0)
+}
+
+pub fn nested_args(start: I32) -> I32 {
+  apply(fn(a1: I32) -> I32 { apply(fn(a2: I32) -> I32 { apply(fn(a3: I32) -> I32 { apply(fn(a4: I32) -> I32 { apply(fn(a5: I32) -> I32 { apply(fn(a6: I32) -> I32 { apply(fn(a7: I32) -> I32 { apply(fn(a8: I32) -> I32 { apply(fn(a9: I32) -> I32 { apply(fn(a10: I32) -> I32 { apply(fn(a11: I32) -> I32 { apply(fn(a12: I32) -> I32 { apply(fn(a13: I32) -> I32 { apply(fn(a14: I32) -> I32 { apply(fn(a15: I32) -> I32 { apply(fn(a16: I32) -> I32 { apply(fn(a17: I32) -> I32 { apply(fn(a18: I32) -> I32 { apply(fn(a19: I32) -> I32 { apply(fn(a20: I32) -> I32 { apply(fn(a21: I32) -> I32 { apply(fn(a22: I32) -> I32 { apply(fn(a23: I32) -> I32 { apply(fn(a24: I32) -> I32 { apply(fn(a25: I32) -> I32 { a25 + 1 }, a24) }, a23) }, a22) }, a21) }, a20) }, a19) }, a18) }, a17) }, a16) }, a15) }, a14) }, a13) }, a12) }, a11) }, a10) }, a9) }, a8) }, a7) }, a6) }, a5) }, a4) }, a3) }, a2) }, a1) }, start)
+}
+
+test "nested anonymous functions" {
+  // x_k = x0 + k - 1, and the innermost level returns twice x_30
+  assert nested(1) == 60
+  assert nested(10) == 78
+  assert nested_args(5) == 6
+}

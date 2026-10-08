@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§4.1", "§4.4", "§4.5"]
+
+// Nested types: `Option[...]` 80 deep, a fixed array of arrays 100 deep, a tuple type 100 deep, a
+// function type 60 deep, `Result[...]` 60 deep. The types are declared in aliases and used in
+// signatures, fields and annotations. The values are built to the same depth.
+
+type OptDeep = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+type ArrDeep = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[I32; 2]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+type TupDeep = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((I32, I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32), I32)
+type FnDeep = fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(fn(I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32) -> I32
+type ResDeep = Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[Result[I32, Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool], Bool]
+
+pub struct Holder {
+  a: ArrDeep,
+  o: OptDeep,
+}
+
+pub fn takes_opt(x: OptDeep) -> I32 {
+  match x {
+    None => 0,
+    Some(_) => 1,
+  }
+}
+
+pub fn takes_fn(f: FnDeep) -> I32 {
+  2
+}
+
+pub fn takes_res(r: ResDeep) -> I32 {
+  3
+}
+
+pub fn takes_tup(t: TupDeep) -> I32 {
+  4
+}
+
+pub fn holder_len(h: Holder) -> U32 {
+  h.a.len()
+}
+
+test "deep option value" {
+  let v: OptDeep = Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(5))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  assert takes_opt(v) == 1
+  let n: OptDeep = None
+  assert takes_opt(n) == 0
+}
+
+test "deep array value" {
+  let a: ArrDeep = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[3, 4]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]; 1]
+  let h = Holder { a: a, o: None }
+  assert holder_len(h) == 1
+}

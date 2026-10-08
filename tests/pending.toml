@@ -223,13 +223,6 @@ note = "属性の表（一覧に無い属性、付けられない場所、@repr 
 
 [[pending]]
 kind = "diag-code"
-target = "E0006"
-reasons = ["S-183"]
-until = "W3-14"
-note = "構文の入れ子の深さの上限 256（S-183）。どの段もまだ出さない"
-
-[[pending]]
-kind = "diag-code"
 target = "E0011"
 reasons = ["S-118", "R-132"]
 until = "W3-09"
@@ -2316,3 +2309,103 @@ target = "tests/spec/negative/dup_maybe_dup_param.onsa"
 reasons = ["R-176"]
 until = "W5-08"
 note = "?Dup の型パラメータを含む利用者の型（Wrap[U]、U: ?Dup）が Dup の要求（暗黙の Dup、[e; N]）を通る。種が計算できないと通す（§4.5、§4.6）"
+
+# --- W3-14: 入れ子の深さの上限の事例のうち、上限の後もまだ通らないもの（W3-14/t・W3-14/t2 の案から、2026-10-08）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/stmt_apply.onsa"
+reasons = ["S-191"]
+until = "W3-07"
+note = "negative/nesting_stmt.onsa の助けの宣言 apply（関数値の呼び出し `.(`、S-191）を分けたもの。今は E0002"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/nesting_units.onsa"
+reasons = ["S-59", "R-71"]
+until = "W3-03"
+note = "impl のメソッドの E0006 が impl 全体を止め、次のメソッドの E0006 と E0302 が出ない。impl の中はメンバの単位で回復する（S-59、W3-03）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/nesting_boundary_units.onsa"
+reasons = ["S-59", "R-71"]
+until = "W3-03"
+note = "impl の二つ目のメソッドの E0006 が出ない。一つ目の E0006 が impl 全体を止める。メンバの単位の回復は W3-03（S-59）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/nesting_pkg"
+reasons = ["S-59", "R-71"]
+until = "W3-03"
+note = "E0006 の関数が AST から消え、他のモジュールの use と呼び出しに E0302 が出る。失敗した項目のシグネチャを残すのは W3-03（S-59）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/nesting_flow.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "flow の入出力の `at`（S-102）を今の実装が読めず E0002。W3-10 が読めるようにする"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/binary_chain_groups.onsa"
+reasons = ["S-45", "S-61"]
+until = "W3-07"
+note = "比較と && の連鎖、同じビット演算子の連鎖（| & <<）の 180 項。今は E0010（演算子の群、§3.1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/patterns_group.onsa"
+reasons = ["R-43"]
+until = "W3-07"
+note = "パターンの丸括弧（`(e)` はグループ化、§2.4）。今は 1 要素のタプルのパターンとして読み E0401"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/closures.onsa"
+reasons = ["S-191", "R-08"]
+until = "W8-09"
+note = "入れ子の無名関数と関数値の呼び出し `.(`。今は `.(` を読めず E0002（W3-07）、読めても関数値は E0200（W8-09）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/flow_par.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "flow の本体の深い式（par の中の if の入れ子、項の多い和）。flow の入出力の `at`（S-102）を今の実装が読めない（E0002）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/blocks_bool_run.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "Bool の match の入れ子の実行。リテラルの腕の値の match が E0200（平らな列挙子の switch でない match の値、§7）。受理の確かめは blocks_bool.onsa"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/patterns_enum_run.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "Some(Some(...)) のパターンの実行。入れ子の列挙子のパターンの値の match が E0200（平らな列挙子の switch でない match の値、§7）。受理の確かめは patterns_enum.onsa"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/wide_match_run.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "整数のリテラルの腕が 300 個の match の実行。リテラルの腕の値の match が E0200（平らな列挙子の switch でない match の値、§7）。受理の確かめは wide_match.onsa"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/boundary_binary_groups.onsa"
+reasons = ["S-45", "S-61"]
+until = "W3-07"
+note = "強さの違う群が混ざる連鎖の 256 段（`1 + 1 * 1 + ...`、`<` と `&&`、`||` と `<` と `+`）。今は E0010（演算子の群、§3.1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/nesting/boundary_patterns_group.onsa"
+reasons = ["R-43"]
+until = "W3-07"
+note = "パターンの丸括弧 254 個の match（256 段）。`(e)` はグループ化（§2.4）だが、今は 1 要素のタプルのパターンとして読み E0401"

@@ -1,0 +1,516 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§7"]
+
+// Blocks: `if` / `else`, `match` arms with blocks, and `for` bodies nested 50, 40 and 40 levels.
+// Each level is an expression and a block, so two or three tree levels each; the totals stay under
+// 256 by any reasonable count. Every `for` runs once (a range of one element).
+
+pub fn nest_if(c: Bool) -> I32 {
+  if c {
+    if c {
+      if c {
+        if c {
+          if c {
+            if c {
+              if c {
+                if c {
+                  if c {
+                    if c {
+                      if c {
+                        if c {
+                          if c {
+                            if c {
+                              if c {
+                                if c {
+                                  if c {
+                                    if c {
+                                      if c {
+                                        if c {
+                                          if c {
+                                            if c {
+                                              if c {
+                                                if c {
+                                                  if c {
+                                                    if c {
+                                                      if c {
+                                                        if c {
+                                                          if c {
+                                                            if c {
+                                                              if c {
+                                                                if c {
+                                                                  if c {
+                                                                    if c {
+                                                                      if c {
+                                                                        if c {
+                                                                          if c {
+                                                                            if c {
+                                                                              if c {
+                                                                                if c {
+                                                                                  if c {
+                                                                                    if c {
+                                                                                      if c {
+                                                                                        if c {
+                                                                                          if c {
+                                                                                            if c {
+                                                                                              if c {
+                                                                                                if c {
+                                                                                                  if c {
+                                                                                                    if c {
+                                                                                                      1
+                                                                                                    } else {
+                                                                                                      0
+                                                                                                    }
+                                                                                                  } else {
+                                                                                                    0
+                                                                                                  }
+                                                                                                } else {
+                                                                                                  0
+                                                                                                }
+                                                                                              } else {
+                                                                                                0
+                                                                                              }
+                                                                                            } else {
+                                                                                              0
+                                                                                            }
+                                                                                          } else {
+                                                                                            0
+                                                                                          }
+                                                                                        } else {
+                                                                                          0
+                                                                                        }
+                                                                                      } else {
+                                                                                        0
+                                                                                      }
+                                                                                    } else {
+                                                                                      0
+                                                                                    }
+                                                                                  } else {
+                                                                                    0
+                                                                                  }
+                                                                                } else {
+                                                                                  0
+                                                                                }
+                                                                              } else {
+                                                                                0
+                                                                              }
+                                                                            } else {
+                                                                              0
+                                                                            }
+                                                                          } else {
+                                                                            0
+                                                                          }
+                                                                        } else {
+                                                                          0
+                                                                        }
+                                                                      } else {
+                                                                        0
+                                                                      }
+                                                                    } else {
+                                                                      0
+                                                                    }
+                                                                  } else {
+                                                                    0
+                                                                  }
+                                                                } else {
+                                                                  0
+                                                                }
+                                                              } else {
+                                                                0
+                                                              }
+                                                            } else {
+                                                              0
+                                                            }
+                                                          } else {
+                                                            0
+                                                          }
+                                                        } else {
+                                                          0
+                                                        }
+                                                      } else {
+                                                        0
+                                                      }
+                                                    } else {
+                                                      0
+                                                    }
+                                                  } else {
+                                                    0
+                                                  }
+                                                } else {
+                                                  0
+                                                }
+                                              } else {
+                                                0
+                                              }
+                                            } else {
+                                              0
+                                            }
+                                          } else {
+                                            0
+                                          }
+                                        } else {
+                                          0
+                                        }
+                                      } else {
+                                        0
+                                      }
+                                    } else {
+                                      0
+                                    }
+                                  } else {
+                                    0
+                                  }
+                                } else {
+                                  0
+                                }
+                              } else {
+                                0
+                              }
+                            } else {
+                              0
+                            }
+                          } else {
+                            0
+                          }
+                        } else {
+                          0
+                        }
+                      } else {
+                        0
+                      }
+                    } else {
+                      0
+                    }
+                  } else {
+                    0
+                  }
+                } else {
+                  0
+                }
+              } else {
+                0
+              }
+            } else {
+              0
+            }
+          } else {
+            0
+          }
+        } else {
+          0
+        }
+      } else {
+        0
+      }
+    } else {
+      0
+    }
+  } else {
+    0
+  }
+}
+
+pub fn nest_if_one_line(c: Bool) -> I32 {
+  if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { if c { 1 } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 } } else { 0 }
+}
+
+pub fn nest_match(o: Option[I32]) -> I32 {
+  match o {
+    Some(_) => {
+      match o {
+        Some(_) => {
+          match o {
+            Some(_) => {
+              match o {
+                Some(_) => {
+                  match o {
+                    Some(_) => {
+                      match o {
+                        Some(_) => {
+                          match o {
+                            Some(_) => {
+                              match o {
+                                Some(_) => {
+                                  match o {
+                                    Some(_) => {
+                                      match o {
+                                        Some(_) => {
+                                          match o {
+                                            Some(_) => {
+                                              match o {
+                                                Some(_) => {
+                                                  match o {
+                                                    Some(_) => {
+                                                      match o {
+                                                        Some(_) => {
+                                                          match o {
+                                                            Some(_) => {
+                                                              match o {
+                                                                Some(_) => {
+                                                                  match o {
+                                                                    Some(_) => {
+                                                                      match o {
+                                                                        Some(_) => {
+                                                                          match o {
+                                                                            Some(_) => {
+                                                                              match o {
+                                                                                Some(_) => {
+                                                                                  match o {
+                                                                                    Some(_) => {
+                                                                                      match o {
+                                                                                        Some(_) => {
+                                                                                          match o {
+                                                                                            Some(_) => {
+                                                                                              match o {
+                                                                                                Some(_) => {
+                                                                                                  match o {
+                                                                                                    Some(_) => {
+                                                                                                      match o {
+                                                                                                        Some(_) => {
+                                                                                                          match o {
+                                                                                                            Some(_) => {
+                                                                                                              match o {
+                                                                                                                Some(_) => {
+                                                                                                                  match o {
+                                                                                                                    Some(_) => {
+                                                                                                                      match o {
+                                                                                                                        Some(_) => {
+                                                                                                                          match o {
+                                                                                                                            Some(_) => {
+                                                                                                                              match o {
+                                                                                                                                Some(_) => {
+                                                                                                                                  match o {
+                                                                                                                                    Some(_) => {
+                                                                                                                                      match o {
+                                                                                                                                        Some(_) => {
+                                                                                                                                          match o {
+                                                                                                                                            Some(_) => {
+                                                                                                                                              match o {
+                                                                                                                                                Some(_) => {
+                                                                                                                                                  match o {
+                                                                                                                                                    Some(_) => {
+                                                                                                                                                      match o {
+                                                                                                                                                        Some(_) => {
+                                                                                                                                                          match o {
+                                                                                                                                                            Some(_) => {
+                                                                                                                                                              match o {
+                                                                                                                                                                Some(_) => {
+                                                                                                                                                                  1
+                                                                                                                                                                },
+                                                                                                                                                                None => 0,
+                                                                                                                                                              }
+                                                                                                                                                            },
+                                                                                                                                                            None => 0,
+                                                                                                                                                          }
+                                                                                                                                                        },
+                                                                                                                                                        None => 0,
+                                                                                                                                                      }
+                                                                                                                                                    },
+                                                                                                                                                    None => 0,
+                                                                                                                                                  }
+                                                                                                                                                },
+                                                                                                                                                None => 0,
+                                                                                                                                              }
+                                                                                                                                            },
+                                                                                                                                            None => 0,
+                                                                                                                                          }
+                                                                                                                                        },
+                                                                                                                                        None => 0,
+                                                                                                                                      }
+                                                                                                                                    },
+                                                                                                                                    None => 0,
+                                                                                                                                  }
+                                                                                                                                },
+                                                                                                                                None => 0,
+                                                                                                                              }
+                                                                                                                            },
+                                                                                                                            None => 0,
+                                                                                                                          }
+                                                                                                                        },
+                                                                                                                        None => 0,
+                                                                                                                      }
+                                                                                                                    },
+                                                                                                                    None => 0,
+                                                                                                                  }
+                                                                                                                },
+                                                                                                                None => 0,
+                                                                                                              }
+                                                                                                            },
+                                                                                                            None => 0,
+                                                                                                          }
+                                                                                                        },
+                                                                                                        None => 0,
+                                                                                                      }
+                                                                                                    },
+                                                                                                    None => 0,
+                                                                                                  }
+                                                                                                },
+                                                                                                None => 0,
+                                                                                              }
+                                                                                            },
+                                                                                            None => 0,
+                                                                                          }
+                                                                                        },
+                                                                                        None => 0,
+                                                                                      }
+                                                                                    },
+                                                                                    None => 0,
+                                                                                  }
+                                                                                },
+                                                                                None => 0,
+                                                                              }
+                                                                            },
+                                                                            None => 0,
+                                                                          }
+                                                                        },
+                                                                        None => 0,
+                                                                      }
+                                                                    },
+                                                                    None => 0,
+                                                                  }
+                                                                },
+                                                                None => 0,
+                                                              }
+                                                            },
+                                                            None => 0,
+                                                          }
+                                                        },
+                                                        None => 0,
+                                                      }
+                                                    },
+                                                    None => 0,
+                                                  }
+                                                },
+                                                None => 0,
+                                              }
+                                            },
+                                            None => 0,
+                                          }
+                                        },
+                                        None => 0,
+                                      }
+                                    },
+                                    None => 0,
+                                  }
+                                },
+                                None => 0,
+                              }
+                            },
+                            None => 0,
+                          }
+                        },
+                        None => 0,
+                      }
+                    },
+                    None => 0,
+                  }
+                },
+                None => 0,
+              }
+            },
+            None => 0,
+          }
+        },
+        None => 0,
+      }
+    },
+    None => 0,
+  }
+}
+
+pub fn nest_for() -> I32 {
+  var n = 0
+  for i40 in 0..1 {
+    for i39 in 0..1 {
+      for i38 in 0..1 {
+        for i37 in 0..1 {
+          for i36 in 0..1 {
+            for i35 in 0..1 {
+              for i34 in 0..1 {
+                for i33 in 0..1 {
+                  for i32 in 0..1 {
+                    for i31 in 0..1 {
+                      for i30 in 0..1 {
+                        for i29 in 0..1 {
+                          for i28 in 0..1 {
+                            for i27 in 0..1 {
+                              for i26 in 0..1 {
+                                for i25 in 0..1 {
+                                  for i24 in 0..1 {
+                                    for i23 in 0..1 {
+                                      for i22 in 0..1 {
+                                        for i21 in 0..1 {
+                                          for i20 in 0..1 {
+                                            for i19 in 0..1 {
+                                              for i18 in 0..1 {
+                                                for i17 in 0..1 {
+                                                  for i16 in 0..1 {
+                                                    for i15 in 0..1 {
+                                                      for i14 in 0..1 {
+                                                        for i13 in 0..1 {
+                                                          for i12 in 0..1 {
+                                                            for i11 in 0..1 {
+                                                              for i10 in 0..1 {
+                                                                for i9 in 0..1 {
+                                                                  for i8 in 0..1 {
+                                                                    for i7 in 0..1 {
+                                                                      for i6 in 0..1 {
+                                                                        for i5 in 0..1 {
+                                                                          for i4 in 0..1 {
+                                                                            for i3 in 0..1 {
+                                                                              for i2 in 0..1 {
+                                                                                for i1 in 0..1 {
+                                                                                  n = n + 1
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  n
+}
+
+test "nested blocks" {
+  assert nest_if(true) == 1
+  assert nest_if(false) == 0
+  assert nest_if_one_line(true) == 1
+  assert nest_if_one_line(false) == 0
+  assert nest_match(Some(5)) == 1
+  assert nest_match(None) == 0
+  assert nest_for() == 1
+}

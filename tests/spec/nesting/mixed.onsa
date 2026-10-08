@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§3.1", "§4.5"]
+
+// Mixed nesting: every cycle nests a parenthesis, a binary operator, a call and an array literal
+// with an index (25 cycles of five nodes), and a prefix operator, a parenthesis, a binary
+// operator, a call and an index (25 cycles).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn mixed_a(b: I32) -> I32 {
+  (id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([(id([b][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)][0]) + 0)
+}
+
+pub fn mixed_b(xs: [I32; 1]) -> I32 {
+  -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + -(0 - id(xs[0] - xs[0] + 1))))))))))))))))))))))))))))))))))))))))))))))))))
+}
+
+test "mixed nesting" {
+  assert mixed_a(42) == 42
+  let xs: [I32; 1] = [5]
+  assert mixed_b(xs) == 1
+}

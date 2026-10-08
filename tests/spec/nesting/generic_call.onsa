@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§4.5", "§6.1"]
+
+// Calls nested in arguments, through a generic function (§4.5): the type argument is decided at
+// every level from the argument. 80 levels.
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn deep_id() -> I32 {
+  id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(5))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+}
+
+pub fn deep_id_float() -> F32 {
+  id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(0.5))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+}
+
+pub fn deep_id_bool(b: Bool) -> Bool {
+  id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(id(b))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+}
+
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn deep_add() -> I32 {
+  add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, add(1, 0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+}
+
+test "nested generic calls" {
+  assert deep_id() == 5
+  assert deep_id_float() == 0.5
+  assert deep_id_bool(true)
+  assert deep_add() == 80
+}

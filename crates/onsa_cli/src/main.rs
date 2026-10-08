@@ -53,6 +53,9 @@ enum Command {
         /// With `--cst`: the tree as indented lines instead of the text
         #[arg(long, requires = "cst")]
         tree: bool,
+        /// The levels of the syntax (spec §2.5) of each declaration of one file, a line each
+        #[arg(long, conflicts_with_all = ["core", "cst"])]
+        levels: bool,
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
@@ -187,8 +190,10 @@ fn run(command: Command) -> Outcome {
         Command::Check { json, paths } => check(json, &paths),
         Command::Fmt { check, paths } => fmt(check, &paths),
         Command::Diff { ast, old, new } => diff(ast, &old, &new),
-        Command::Dump { core, cst, tree, paths } => {
-            if cst {
+        Command::Dump { core, cst, tree, levels, paths } => {
+            if levels {
+                dump_levels(&paths)
+            } else if cst {
                 dump_cst(tree, &paths)
             } else {
                 dump(core, &paths)
@@ -394,6 +399,26 @@ fn dump_cst(tree: bool, paths: &[PathBuf]) -> Outcome {
     let mut sources = SourceMap::default();
     let file = sources.add(path.to_string_lossy(), text);
     match onsa_driver::cst_dump(&sources, file, tree) {
+        Ok(out) => {
+            out!("{out}");
+            Outcome::Ok
+        }
+        Err(e) => internal(&sources, &e),
+    }
+}
+
+/// `onsa dump --levels`: the levels of each declaration of one file (the fmt properties).
+fn dump_levels(paths: &[PathBuf]) -> Outcome {
+    let [path] = paths else {
+        return cannot_work("`dump --levels` takes one file");
+    };
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => return cannot_work(format!("cannot read {}: {e}", path.display())),
+    };
+    let mut sources = SourceMap::default();
+    let file = sources.add(path.to_string_lossy(), text);
+    match onsa_driver::levels_dump(&sources, file) {
         Ok(out) => {
             out!("{out}");
             Outcome::Ok

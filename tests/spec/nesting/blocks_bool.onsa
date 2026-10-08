@@ -1,0 +1,211 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§2.5", "§7"]
+
+// A `match` on a Bool whose `true` arm is a block holding the next `match`: 40 levels.
+// Only checked here; `blocks_bool_run.onsa` runs it (the interpreter's match on a scalar is R-06).
+
+pub fn nest_bool(c: Bool) -> I32 {
+  match c {
+    true => {
+      match c {
+        true => {
+          match c {
+            true => {
+              match c {
+                true => {
+                  match c {
+                    true => {
+                      match c {
+                        true => {
+                          match c {
+                            true => {
+                              match c {
+                                true => {
+                                  match c {
+                                    true => {
+                                      match c {
+                                        true => {
+                                          match c {
+                                            true => {
+                                              match c {
+                                                true => {
+                                                  match c {
+                                                    true => {
+                                                      match c {
+                                                        true => {
+                                                          match c {
+                                                            true => {
+                                                              match c {
+                                                                true => {
+                                                                  match c {
+                                                                    true => {
+                                                                      match c {
+                                                                        true => {
+                                                                          match c {
+                                                                            true => {
+                                                                              match c {
+                                                                                true => {
+                                                                                  match c {
+                                                                                    true => {
+                                                                                      match c {
+                                                                                        true => {
+                                                                                          match c {
+                                                                                            true => {
+                                                                                              match c {
+                                                                                                true => {
+                                                                                                  match c {
+                                                                                                    true => {
+                                                                                                      match c {
+                                                                                                        true => {
+                                                                                                          match c {
+                                                                                                            true => {
+                                                                                                              match c {
+                                                                                                                true => {
+                                                                                                                  match c {
+                                                                                                                    true => {
+                                                                                                                      match c {
+                                                                                                                        true => {
+                                                                                                                          match c {
+                                                                                                                            true => {
+                                                                                                                              match c {
+                                                                                                                                true => {
+                                                                                                                                  match c {
+                                                                                                                                    true => {
+                                                                                                                                      match c {
+                                                                                                                                        true => {
+                                                                                                                                          match c {
+                                                                                                                                            true => {
+                                                                                                                                              match c {
+                                                                                                                                                true => {
+                                                                                                                                                  match c {
+                                                                                                                                                    true => {
+                                                                                                                                                      match c {
+                                                                                                                                                        true => {
+                                                                                                                                                          match c {
+                                                                                                                                                            true => {
+                                                                                                                                                              match c {
+                                                                                                                                                                true => {
+                                                                                                                                                                  1
+                                                                                                                                                                },
+                                                                                                                                                                false => 0,
+                                                                                                                                                              }
+                                                                                                                                                            },
+                                                                                                                                                            false => 0,
+                                                                                                                                                          }
+                                                                                                                                                        },
+                                                                                                                                                        false => 0,
+                                                                                                                                                      }
+                                                                                                                                                    },
+                                                                                                                                                    false => 0,
+                                                                                                                                                  }
+                                                                                                                                                },
+                                                                                                                                                false => 0,
+                                                                                                                                              }
+                                                                                                                                            },
+                                                                                                                                            false => 0,
+                                                                                                                                          }
+                                                                                                                                        },
+                                                                                                                                        false => 0,
+                                                                                                                                      }
+                                                                                                                                    },
+                                                                                                                                    false => 0,
+                                                                                                                                  }
+                                                                                                                                },
+                                                                                                                                false => 0,
+                                                                                                                              }
+                                                                                                                            },
+                                                                                                                            false => 0,
+                                                                                                                          }
+                                                                                                                        },
+                                                                                                                        false => 0,
+                                                                                                                      }
+                                                                                                                    },
+                                                                                                                    false => 0,
+                                                                                                                  }
+                                                                                                                },
+                                                                                                                false => 0,
+                                                                                                              }
+                                                                                                            },
+                                                                                                            false => 0,
+                                                                                                          }
+                                                                                                        },
+                                                                                                        false => 0,
+                                                                                                      }
+                                                                                                    },
+                                                                                                    false => 0,
+                                                                                                  }
+                                                                                                },
+                                                                                                false => 0,
+                                                                                              }
+                                                                                            },
+                                                                                            false => 0,
+                                                                                          }
+                                                                                        },
+                                                                                        false => 0,
+                                                                                      }
+                                                                                    },
+                                                                                    false => 0,
+                                                                                  }
+                                                                                },
+                                                                                false => 0,
+                                                                              }
+                                                                            },
+                                                                            false => 0,
+                                                                          }
+                                                                        },
+                                                                        false => 0,
+                                                                      }
+                                                                    },
+                                                                    false => 0,
+                                                                  }
+                                                                },
+                                                                false => 0,
+                                                              }
+                                                            },
+                                                            false => 0,
+                                                          }
+                                                        },
+                                                        false => 0,
+                                                      }
+                                                    },
+                                                    false => 0,
+                                                  }
+                                                },
+                                                false => 0,
+                                              }
+                                            },
+                                            false => 0,
+                                          }
+                                        },
+                                        false => 0,
+                                      }
+                                    },
+                                    false => 0,
+                                  }
+                                },
+                                false => 0,
+                              }
+                            },
+                            false => 0,
+                          }
+                        },
+                        false => 0,
+                      }
+                    },
+                    false => 0,
+                  }
+                },
+                false => 0,
+              }
+            },
+            false => 0,
+          }
+        },
+        false => 0,
+      }
+    },
+    false => 0,
+  }
+}

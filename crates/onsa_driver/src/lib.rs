@@ -337,6 +337,16 @@ pub fn cst_dump(sources: &SourceMap, file: FileId, tree: bool) -> Result<String,
     })
 }
 
+/// The levels (spec §2.5) of each top-level item of a file that parsed, one
+/// line each, in the order of the file (`onsa dump --levels`, for the fmt
+/// properties: `tools/fmt_props.py`).
+pub fn levels_dump(sources: &SourceMap, file: FileId) -> Result<String, InternalError> {
+    guard(|| {
+        let parsed = parse_file(file, sources.file(file).text());
+        parsed.levels.iter().map(|l| format!("{l}\n")).collect()
+    })
+}
+
 /// The structural difference of two files (`onsa diff --ast`).
 #[derive(Debug, Clone)]
 pub enum AstDiff {

@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§2.5", "§7"]
+
+// The enum pattern `Some(Some(...))`, 80 deep, in a `match` over 80 nested `Option`s.
+// Only checked here; `patterns_enum_run.onsa` runs it (the interpreter's nested enum pattern is R-06).
+
+type OptP = Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[Option[I32]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+
+pub fn peel(v: OptP) -> I32 {
+  match v {
+    Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(Some(x)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) => x,
+    _ => -1,
+  }
+}

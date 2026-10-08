@@ -488,6 +488,26 @@ pub enum OpGroup {
     Bitwise,
 }
 
+impl OpGroup {
+    /// The strengths of §3.1, the one table of them: whether an expression of
+    /// this group may be, without parentheses, an operand of an operator of
+    /// `weaker` (multiplicative > additive > comparison > `&&`, `||`; `&&` and
+    /// `||` have none between them, the bitwise group none with any group).
+    /// The height of a chain (`Parser::chain_operator`, spec §2.5) reads it;
+    /// the check of the groups (E0010) is to read the same table (W3-07).
+    // The remainder group of §3.1 (`%`, stronger than comparison only) is
+    // still inside the multiplicative group here (W3-07, S-45).
+    pub fn stronger(self, weaker: OpGroup) -> bool {
+        use OpGroup::*;
+        matches!(
+            (self, weaker),
+            (Multiplicative, Additive | Comparison | And | Or)
+                | (Additive, Comparison | And | Or)
+                | (Comparison, And | Or)
+        )
+    }
+}
+
 impl BinOp {
     pub fn group(self) -> OpGroup {
         use BinOp::*;

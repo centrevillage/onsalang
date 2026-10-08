@@ -1,0 +1,401 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.1"]
+
+// Boundary of the nesting depth, anonymous functions: the function value and its body block are two
+// levels. The inner function is bound by `let` in the body of the outer one, not called.
+//
+// Levels are counted per declaration unit from 0 (spec 2.5): a function body is level 1, and each
+// form (parenthesis, operator, postfix, keyword, block, type with arguments, pattern) is one level;
+// names, literals, `_`, sequences and statements are not counted. Every case unit is exactly 257
+// levels deep, one over the limit: each gets one E0006, and the marker is on the line of the token
+// that makes level 257 (the first one in reading order). The helper declarations are at most 256
+// deep and are accepted.
+
+pub fn closure_nest_257() -> I32 {
+  let f1 = fn(a1: I32) -> I32 {
+    let f2 = fn(a2: I32) -> I32 {
+      let f3 = fn(a3: I32) -> I32 {
+        let f4 = fn(a4: I32) -> I32 {
+          let f5 = fn(a5: I32) -> I32 {
+            let f6 = fn(a6: I32) -> I32 {
+              let f7 = fn(a7: I32) -> I32 {
+                let f8 = fn(a8: I32) -> I32 {
+                  let f9 = fn(a9: I32) -> I32 {
+                    let f10 = fn(a10: I32) -> I32 {
+                      let f11 = fn(a11: I32) -> I32 {
+                        let f12 = fn(a12: I32) -> I32 {
+                          let f13 = fn(a13: I32) -> I32 {
+                            let f14 = fn(a14: I32) -> I32 {
+                              let f15 = fn(a15: I32) -> I32 {
+                                let f16 = fn(a16: I32) -> I32 {
+                                  let f17 = fn(a17: I32) -> I32 {
+                                    let f18 = fn(a18: I32) -> I32 {
+                                      let f19 = fn(a19: I32) -> I32 {
+                                        let f20 = fn(a20: I32) -> I32 {
+                                          let f21 = fn(a21: I32) -> I32 {
+                                            let f22 = fn(a22: I32) -> I32 {
+                                              let f23 = fn(a23: I32) -> I32 {
+                                                let f24 = fn(a24: I32) -> I32 {
+                                                  let f25 = fn(a25: I32) -> I32 {
+                                                    let f26 = fn(a26: I32) -> I32 {
+                                                      let f27 = fn(a27: I32) -> I32 {
+                                                        let f28 = fn(a28: I32) -> I32 {
+                                                          let f29 = fn(a29: I32) -> I32 {
+                                                            let f30 = fn(a30: I32) -> I32 {
+                                                              let f31 = fn(a31: I32) -> I32 {
+                                                                let f32 = fn(a32: I32) -> I32 {
+                                                                  let f33 = fn(a33: I32) -> I32 {
+                                                                    let f34 = fn(a34: I32) -> I32 {
+                                                                      let f35 = fn(a35: I32) -> I32 {
+                                                                        let f36 = fn(a36: I32) -> I32 {
+                                                                          let f37 = fn(a37: I32) -> I32 {
+                                                                            let f38 = fn(a38: I32) -> I32 {
+                                                                              let f39 = fn(a39: I32) -> I32 {
+                                                                                let f40 = fn(a40: I32) -> I32 {
+                                                                                  let f41 = fn(a41: I32) -> I32 {
+                                                                                    let f42 = fn(a42: I32) -> I32 {
+                                                                                      let f43 = fn(a43: I32) -> I32 {
+                                                                                        let f44 = fn(a44: I32) -> I32 {
+                                                                                          let f45 = fn(a45: I32) -> I32 {
+                                                                                            let f46 = fn(a46: I32) -> I32 {
+                                                                                              let f47 = fn(a47: I32) -> I32 {
+                                                                                                let f48 = fn(a48: I32) -> I32 {
+                                                                                                  let f49 = fn(a49: I32) -> I32 {
+                                                                                                    let f50 = fn(a50: I32) -> I32 {
+                                                                                                      let f51 = fn(a51: I32) -> I32 {
+                                                                                                        let f52 = fn(a52: I32) -> I32 {
+                                                                                                          let f53 = fn(a53: I32) -> I32 {
+                                                                                                            let f54 = fn(a54: I32) -> I32 {
+                                                                                                              let f55 = fn(a55: I32) -> I32 {
+                                                                                                                let f56 = fn(a56: I32) -> I32 {
+                                                                                                                  let f57 = fn(a57: I32) -> I32 {
+                                                                                                                    let f58 = fn(a58: I32) -> I32 {
+                                                                                                                      let f59 = fn(a59: I32) -> I32 {
+                                                                                                                        let f60 = fn(a60: I32) -> I32 {
+                                                                                                                          let f61 = fn(a61: I32) -> I32 {
+                                                                                                                            let f62 = fn(a62: I32) -> I32 {
+                                                                                                                              let f63 = fn(a63: I32) -> I32 {
+                                                                                                                                let f64 = fn(a64: I32) -> I32 {
+                                                                                                                                  let f65 = fn(a65: I32) -> I32 {
+                                                                                                                                    let f66 = fn(a66: I32) -> I32 {
+                                                                                                                                      let f67 = fn(a67: I32) -> I32 {
+                                                                                                                                        let f68 = fn(a68: I32) -> I32 {
+                                                                                                                                          let f69 = fn(a69: I32) -> I32 {
+                                                                                                                                            let f70 = fn(a70: I32) -> I32 {
+                                                                                                                                              let f71 = fn(a71: I32) -> I32 {
+                                                                                                                                                let f72 = fn(a72: I32) -> I32 {
+                                                                                                                                                  let f73 = fn(a73: I32) -> I32 {
+                                                                                                                                                    let f74 = fn(a74: I32) -> I32 {
+                                                                                                                                                      let f75 = fn(a75: I32) -> I32 {
+                                                                                                                                                        let f76 = fn(a76: I32) -> I32 {
+                                                                                                                                                          let f77 = fn(a77: I32) -> I32 {
+                                                                                                                                                            let f78 = fn(a78: I32) -> I32 {
+                                                                                                                                                              let f79 = fn(a79: I32) -> I32 {
+                                                                                                                                                                let f80 = fn(a80: I32) -> I32 {
+                                                                                                                                                                  let f81 = fn(a81: I32) -> I32 {
+                                                                                                                                                                    let f82 = fn(a82: I32) -> I32 {
+                                                                                                                                                                      let f83 = fn(a83: I32) -> I32 {
+                                                                                                                                                                        let f84 = fn(a84: I32) -> I32 {
+                                                                                                                                                                          let f85 = fn(a85: I32) -> I32 {
+                                                                                                                                                                            let f86 = fn(a86: I32) -> I32 {
+                                                                                                                                                                              let f87 = fn(a87: I32) -> I32 {
+                                                                                                                                                                                let f88 = fn(a88: I32) -> I32 {
+                                                                                                                                                                                  let f89 = fn(a89: I32) -> I32 {
+                                                                                                                                                                                    let f90 = fn(a90: I32) -> I32 {
+                                                                                                                                                                                      let f91 = fn(a91: I32) -> I32 {
+                                                                                                                                                                                        let f92 = fn(a92: I32) -> I32 {
+                                                                                                                                                                                          let f93 = fn(a93: I32) -> I32 {
+                                                                                                                                                                                            let f94 = fn(a94: I32) -> I32 {
+                                                                                                                                                                                              let f95 = fn(a95: I32) -> I32 {
+                                                                                                                                                                                                let f96 = fn(a96: I32) -> I32 {
+                                                                                                                                                                                                  let f97 = fn(a97: I32) -> I32 {
+                                                                                                                                                                                                    let f98 = fn(a98: I32) -> I32 {
+                                                                                                                                                                                                      let f99 = fn(a99: I32) -> I32 {
+                                                                                                                                                                                                        let f100 = fn(a100: I32) -> I32 {
+                                                                                                                                                                                                          let f101 = fn(a101: I32) -> I32 {
+                                                                                                                                                                                                            let f102 = fn(a102: I32) -> I32 {
+                                                                                                                                                                                                              let f103 = fn(a103: I32) -> I32 {
+                                                                                                                                                                                                                let f104 = fn(a104: I32) -> I32 {
+                                                                                                                                                                                                                  let f105 = fn(a105: I32) -> I32 {
+                                                                                                                                                                                                                    let f106 = fn(a106: I32) -> I32 {
+                                                                                                                                                                                                                      let f107 = fn(a107: I32) -> I32 {
+                                                                                                                                                                                                                        let f108 = fn(a108: I32) -> I32 {
+                                                                                                                                                                                                                          let f109 = fn(a109: I32) -> I32 {
+                                                                                                                                                                                                                            let f110 = fn(a110: I32) -> I32 {
+                                                                                                                                                                                                                              let f111 = fn(a111: I32) -> I32 {
+                                                                                                                                                                                                                                let f112 = fn(a112: I32) -> I32 {
+                                                                                                                                                                                                                                  let f113 = fn(a113: I32) -> I32 {
+                                                                                                                                                                                                                                    let f114 = fn(a114: I32) -> I32 {
+                                                                                                                                                                                                                                      let f115 = fn(a115: I32) -> I32 {
+                                                                                                                                                                                                                                        let f116 = fn(a116: I32) -> I32 {
+                                                                                                                                                                                                                                          let f117 = fn(a117: I32) -> I32 {
+                                                                                                                                                                                                                                            let f118 = fn(a118: I32) -> I32 {
+                                                                                                                                                                                                                                              let f119 = fn(a119: I32) -> I32 {
+                                                                                                                                                                                                                                                let f120 = fn(a120: I32) -> I32 {
+                                                                                                                                                                                                                                                  let f121 = fn(a121: I32) -> I32 {
+                                                                                                                                                                                                                                                    let f122 = fn(a122: I32) -> I32 {
+                                                                                                                                                                                                                                                      let f123 = fn(a123: I32) -> I32 {
+                                                                                                                                                                                                                                                        let f124 = fn(a124: I32) -> I32 {
+                                                                                                                                                                                                                                                          let f125 = fn(a125: I32) -> I32 {
+                                                                                                                                                                                                                                                            let f126 = fn(a126: I32) -> I32 {
+                                                                                                                                                                                                                                                              let f127 = fn(a127: I32) -> I32 {
+                                                                                                                                                                                                                                                                let f128 = fn(a128: I32) -> I32 {  //~ E0006
+                                                                                                                                                                                                                                                                  a128
+                                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                                                a127
+                                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                                              a126
+                                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                                            a125
+                                                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                                                          a124
+                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                        a123
+                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                      a122
+                                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                    a121
+                                                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                                                  a120
+                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                                a119
+                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                              a118
+                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                            a117
+                                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                                          a116
+                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                        a115
+                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                      a114
+                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                    a113
+                                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                                  a112
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                a111
+                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                              a110
+                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                            a109
+                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                          a108
+                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                        a107
+                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                      a106
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                    a105
+                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                  a104
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                                a103
+                                                                                                                                                                                                              }
+                                                                                                                                                                                                              a102
+                                                                                                                                                                                                            }
+                                                                                                                                                                                                            a101
+                                                                                                                                                                                                          }
+                                                                                                                                                                                                          a100
+                                                                                                                                                                                                        }
+                                                                                                                                                                                                        a99
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                      a98
+                                                                                                                                                                                                    }
+                                                                                                                                                                                                    a97
+                                                                                                                                                                                                  }
+                                                                                                                                                                                                  a96
+                                                                                                                                                                                                }
+                                                                                                                                                                                                a95
+                                                                                                                                                                                              }
+                                                                                                                                                                                              a94
+                                                                                                                                                                                            }
+                                                                                                                                                                                            a93
+                                                                                                                                                                                          }
+                                                                                                                                                                                          a92
+                                                                                                                                                                                        }
+                                                                                                                                                                                        a91
+                                                                                                                                                                                      }
+                                                                                                                                                                                      a90
+                                                                                                                                                                                    }
+                                                                                                                                                                                    a89
+                                                                                                                                                                                  }
+                                                                                                                                                                                  a88
+                                                                                                                                                                                }
+                                                                                                                                                                                a87
+                                                                                                                                                                              }
+                                                                                                                                                                              a86
+                                                                                                                                                                            }
+                                                                                                                                                                            a85
+                                                                                                                                                                          }
+                                                                                                                                                                          a84
+                                                                                                                                                                        }
+                                                                                                                                                                        a83
+                                                                                                                                                                      }
+                                                                                                                                                                      a82
+                                                                                                                                                                    }
+                                                                                                                                                                    a81
+                                                                                                                                                                  }
+                                                                                                                                                                  a80
+                                                                                                                                                                }
+                                                                                                                                                                a79
+                                                                                                                                                              }
+                                                                                                                                                              a78
+                                                                                                                                                            }
+                                                                                                                                                            a77
+                                                                                                                                                          }
+                                                                                                                                                          a76
+                                                                                                                                                        }
+                                                                                                                                                        a75
+                                                                                                                                                      }
+                                                                                                                                                      a74
+                                                                                                                                                    }
+                                                                                                                                                    a73
+                                                                                                                                                  }
+                                                                                                                                                  a72
+                                                                                                                                                }
+                                                                                                                                                a71
+                                                                                                                                              }
+                                                                                                                                              a70
+                                                                                                                                            }
+                                                                                                                                            a69
+                                                                                                                                          }
+                                                                                                                                          a68
+                                                                                                                                        }
+                                                                                                                                        a67
+                                                                                                                                      }
+                                                                                                                                      a66
+                                                                                                                                    }
+                                                                                                                                    a65
+                                                                                                                                  }
+                                                                                                                                  a64
+                                                                                                                                }
+                                                                                                                                a63
+                                                                                                                              }
+                                                                                                                              a62
+                                                                                                                            }
+                                                                                                                            a61
+                                                                                                                          }
+                                                                                                                          a60
+                                                                                                                        }
+                                                                                                                        a59
+                                                                                                                      }
+                                                                                                                      a58
+                                                                                                                    }
+                                                                                                                    a57
+                                                                                                                  }
+                                                                                                                  a56
+                                                                                                                }
+                                                                                                                a55
+                                                                                                              }
+                                                                                                              a54
+                                                                                                            }
+                                                                                                            a53
+                                                                                                          }
+                                                                                                          a52
+                                                                                                        }
+                                                                                                        a51
+                                                                                                      }
+                                                                                                      a50
+                                                                                                    }
+                                                                                                    a49
+                                                                                                  }
+                                                                                                  a48
+                                                                                                }
+                                                                                                a47
+                                                                                              }
+                                                                                              a46
+                                                                                            }
+                                                                                            a45
+                                                                                          }
+                                                                                          a44
+                                                                                        }
+                                                                                        a43
+                                                                                      }
+                                                                                      a42
+                                                                                    }
+                                                                                    a41
+                                                                                  }
+                                                                                  a40
+                                                                                }
+                                                                                a39
+                                                                              }
+                                                                              a38
+                                                                            }
+                                                                            a37
+                                                                          }
+                                                                          a36
+                                                                        }
+                                                                        a35
+                                                                      }
+                                                                      a34
+                                                                    }
+                                                                    a33
+                                                                  }
+                                                                  a32
+                                                                }
+                                                                a31
+                                                              }
+                                                              a30
+                                                            }
+                                                            a29
+                                                          }
+                                                          a28
+                                                        }
+                                                        a27
+                                                      }
+                                                      a26
+                                                    }
+                                                    a25
+                                                  }
+                                                  a24
+                                                }
+                                                a23
+                                              }
+                                              a22
+                                            }
+                                            a21
+                                          }
+                                          a20
+                                        }
+                                        a19
+                                      }
+                                      a18
+                                    }
+                                    a17
+                                  }
+                                  a16
+                                }
+                                a15
+                              }
+                              a14
+                            }
+                            a13
+                          }
+                          a12
+                        }
+                        a11
+                      }
+                      a10
+                    }
+                    a9
+                  }
+                  a8
+                }
+                a7
+              }
+              a6
+            }
+            a5
+          }
+          a4
+        }
+        a3
+      }
+      a2
+    }
+    a1
+  }
+  0
+}

@@ -90,7 +90,10 @@ fn internal_errors() {
         let path = path.to_string_lossy().into_owned();
         let out = onsa(&["check", "--json", &path]);
         if out.status.code() != Some(101) {
-            continue; // a signal (a stack overflow, S-183)
+            // A listed input whose `check` does not end in 101 fails elsewhere (in `fmt --check` only,
+            // or by a time-out; the fuzz item of the gate checks how). Only the inputs listed as
+            // `fuzz-input` are run here, so nothing else is passed over.
+            continue;
         }
         seen += 1;
         assert!(out.stdout.is_empty(), "{path}: {}", String::from_utf8_lossy(&out.stdout));
