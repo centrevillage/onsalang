@@ -380,6 +380,7 @@ fn push_fn(lw: &mut Lowerer, name: String, rt: bool, span: Span) -> FnId {
         locals: Vec::new(),
         body: None,
         span,
+        fp_relaxed: false,
         test: None,
     });
     id

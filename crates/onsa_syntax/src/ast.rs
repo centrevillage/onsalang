@@ -231,6 +231,24 @@ pub struct Attr {
     pub span: Span,
 }
 
+impl Attr {
+    /// `@fp(relaxed)` (spec §15.5): the floating-point operations may be
+    /// contracted and reassociated. The one place that reads the attribute's
+    /// name and value; W3-08 replaces it with the table of the attributes and
+    /// their errors.
+    pub fn is_fp_relaxed(&self) -> bool {
+        match self.name.name.as_str() {
+            "fp" => matches!(
+                self.args.as_slice(),
+                [AttrArg::Path(p)] if p.segments.len() == 1 && p.segments[0].name == "relaxed"
+            ),
+            // The older form, accepted until W3-08 makes it E0020 with the fix `@fp(relaxed)` (§18.1).
+            "relaxed" => self.args.is_empty(),
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum AttrArg {
     /// `min: -60.0`

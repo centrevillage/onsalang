@@ -84,11 +84,11 @@ STEPS = [
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
     # The generated C (Q-07, W1-06): Clang and gcc-15 with -Wall -Wextra -Werror -pedantic and
     # conformance, the sanitizers, x86_64 under Rosetta, the public headers in C11, C99 and C++11.
-    # A `-strict` item keeps the warnings its pair switches off for a known cause
-    # (`onsa_tests::c::GCC_KNOWN_OFF`): the list holds the strict one, the pair always runs.
+    # A `-strict` item keeps the warnings its pair switches off for a known cause (the `off` of
+    # the row in `onsa_tests::c::ITEMS`; none since W2-09): the list holds the strict one, the
+    # pair always runs.
     Step("c-clang", (*C_CHECK, "c-clang"), pendable=True, slow=True),
     Step("c-gcc", (*C_CHECK, "c-gcc"), pendable=True, slow=True),
-    Step("c-gcc-strict", (*C_CHECK, "c-gcc-strict"), pendable=True, slow=True),
     Step("c-sanitize", (*C_CHECK, "c-sanitize"), pendable=True, slow=True),
     Step("c-x86", (*C_CHECK, "c-x86"), pendable=True, slow=True),
     Step("c-header", (*C_CHECK, "c-header"), pendable=True, slow=True),

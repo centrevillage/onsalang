@@ -1,0 +1,180 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§15.1", "§3.3", "§6.5", "§7"]
+//
+// [[test.host]]
+// name = "count_in_range"
+// target = "host"
+// fn = "stage.count_in_range"
+// steps = [
+//   { call = "fn", args = { base = 0 }, status = 0, result = 4 },
+//   { call = "fn", args = { base = 250 }, status = 0, result = 4 },
+//   { call = "fn", args = { base = 4294967292 }, status = 0, result = 4 },
+//   { call = "fn", args = { base = 4294967293 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "count_in_range on a reset target"
+// target = "fw"
+// fn = "stage.count_in_range"
+// steps = [
+//   { call = "fn", args = { base = 0 }, status = 0, result = 4 },
+//   { call = "fn", args = { base = 250 }, status = 0, result = 4 },
+//   { call = "fn", args = { base = 4294967292 }, status = 0, result = 4 },
+// ]
+//
+// [[test.host]]
+// name = "wide_ok"
+// target = "host"
+// fn = "stage.wide_ok"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = -32768 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = 32768 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = -32769 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "wide_ok on a reset target"
+// target = "fw"
+// fn = "stage.wide_ok"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = -32768 }, status = 0, result = 1 },
+//   { call = "fn", args = { x = 32768 }, status = 0, result = 2 },
+//   { call = "fn", args = { x = -32769 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "in_range_u8"
+// target = "host"
+// fn = "limits.in_range_u8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = true },
+//   { call = "fn", args = { x = 255 }, status = 0, result = true },
+//   { call = "fn", args = { x = 100 }, status = 0, result = true },
+// ]
+//
+// [[test.host]]
+// name = "in_range_u8 on a reset target"
+// target = "fw"
+// fn = "limits.in_range_u8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = true },
+//   { call = "fn", args = { x = 255 }, status = 0, result = true },
+//   { call = "fn", args = { x = 100 }, status = 0, result = true },
+// ]
+//
+// [[test.host]]
+// name = "in_range_i16"
+// target = "host"
+// fn = "limits.in_range_i16"
+// steps = [
+//   { call = "fn", args = { x = -32768 }, status = 0, result = true },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = true },
+//   { call = "fn", args = { x = 0 }, status = 0, result = true },
+// ]
+//
+// [[test.host]]
+// name = "in_range_i16 on a reset target"
+// target = "fw"
+// fn = "limits.in_range_i16"
+// steps = [
+//   { call = "fn", args = { x = -32768 }, status = 0, result = true },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = true },
+//   { call = "fn", args = { x = 0 }, status = 0, result = true },
+// ]
+//
+// [[test.host]]
+// name = "narrow_or_max"
+// target = "host"
+// fn = "limits.narrow_or_max"
+// steps = [
+//   { call = "fn", args = { x = 300 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 7 }, status = 0, result = 7 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 256 }, status = 0, result = 255 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_or_max on a reset target"
+// target = "fw"
+// fn = "limits.narrow_or_max"
+// steps = [
+//   { call = "fn", args = { x = 300 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 7 }, status = 0, result = 7 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 256 }, status = 0, result = 255 },
+// ]
+
+// A closure that calls an imported function (`array.from_fn`, spec §5.3, §15.1): the module `stage` reads
+// `limits` and runs `narrow_or_max` and `in_range_u8` four times in the closure. `in_range_u8` is true
+// for every value, so `count_in_range(base)` is 4, and it panics (status 1) when `base + i` leaves U32.
+// `wide_ok(x)` is 1 when `x` fits I16 (the bounds are in range, so the answer is the fit), 2 when it does
+// not.
+
+use limits.{in_range_i16, in_range_u8, narrow_or_max}
+use std.array
+
+pub fn count_in_range(base: U32) -> U32 {
+  let flags: [U32; 4] = array.from_fn(fn(i) {
+    let v = narrow_or_max(base + i)
+    if in_range_u8(v) {
+      1
+    } else {
+      0
+    }
+  })
+  flags[0] + flags[1] + flags[2] + flags[3]
+}
+
+pub fn wide_ok(x: I32) -> U32 {
+  var r: U32 = 2
+  match x.narrow_i16() {
+    Some(v) => {
+      if in_range_i16(v) {
+        r = 1
+      } else {
+        r = 0
+      }
+    },
+    None => {
+      r = 2
+    },
+  }
+  r
+}
+
+test "count_in_range: the values" {
+  assert count_in_range(0) == 4
+  assert count_in_range(250) == 4
+  assert count_in_range(4294967292) == 4
+}
+
+test "count_in_range(4294967293) panics" {   //~ TESTFAIL "count_in_range(4294967293) panics"
+  let _ = count_in_range(4294967293)
+}
+
+test "wide_ok: the values" {
+  assert wide_ok(0) == 1
+  assert wide_ok(32767) == 1
+  assert wide_ok(-32768) == 1
+  assert wide_ok(32768) == 2
+  assert wide_ok(-32769) == 2
+}
+
+test "the bounds of limits are in range" {
+  assert in_range_u8(0)
+  assert in_range_u8(255)
+  assert in_range_u8(100)
+  assert in_range_i16(I16.MIN)
+  assert in_range_i16(I16.MAX)
+  assert in_range_i16(0)
+  assert narrow_or_max(300) == 255
+  assert narrow_or_max(7) == 7
+  assert narrow_or_max(255) == 255
+  assert narrow_or_max(256) == 255
+}

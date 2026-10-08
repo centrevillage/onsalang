@@ -325,6 +325,7 @@ fn verifier_rejects_bad_modules() {
             value: Some(Box::new(Expr::new(Ty::Int(IntKind::I32), span, ExprKind::Local(LocalId(0))))),
         }),
         span,
+        fp_relaxed: false,
         test: None,
     });
     let err = verify(&m).unwrap_err();

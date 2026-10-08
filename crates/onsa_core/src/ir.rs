@@ -137,6 +137,10 @@ pub struct FnDef {
     /// `None`: declared only (`target` functions the backend provides).
     pub body: Option<Block>,
     pub span: Span,
+    /// `@fp(relaxed)` (§15.5, S-287): the floating-point operations of a call of
+    /// it may be contracted and reassociated, a permission a backend may leave
+    /// unused (the interpreter does).
+    pub fp_relaxed: bool,
     /// The function of a `test` block: what identifies the test (spec
     /// §11.8, S-55, R-68). `onsa test` runs the functions with this mark;
     /// the name of the function decides nothing.

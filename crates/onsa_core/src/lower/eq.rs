@@ -22,6 +22,7 @@ pub(crate) fn eq_fn(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<FnId> {
         locals: Vec::new(),
         body: None,
         span,
+        fp_relaxed: false,
         test: None,
     });
     lw.eq_fns.insert(ty.clone(), id);

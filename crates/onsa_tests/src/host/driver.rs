@@ -68,7 +68,7 @@ pub fn program(out: &BuildOutput, plans: &[SeqPlan]) -> Program {
          fprintf(stderr, \"{PANIC_LINE} %s (%s:%lu)\\n\", msg, file, (unsigned long)line);\n}}"
     );
     if out.settings.panic == PanicMode::Reset {
-        let _ = writeln!(d, "ONSA_NORETURN void onsa_reset_hook(void) {{ _Exit({}); }}", c::RESET_HOOK_EXIT);
+        let _ = writeln!(d, "_Noreturn void onsa_reset_hook(void) {{ _Exit({}); }}", c::RESET_HOOK_EXIT);
     }
     let _ = writeln!(d, "void onsa_host_step(uint32_t k) {{ onsa_driver_write(&k, sizeof k); }}\n");
     let mut seqs = Vec::new();

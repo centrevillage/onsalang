@@ -1,0 +1,22 @@
+// Comparisons that the type of an operand already decides, in a module that another module imports (spec
+// §13.4: the generated C compiles without a warning under `-Wall -Wextra -pedantic`, so a host that builds
+// with `-Werror` accepts it; §15.1). `x >= 0` on a U8 and `x <= U8.MAX` are always true, and so are the
+// bounds of an I16; a C compiler warns about them as written (gcc `-Wtype-limits`, clang
+// `-Wtautological-constant-out-of-range-compare`), so the C of a function that is imported and inlined
+// must not hold the warned form either. `narrow_or_max` gives a `match` on the `Option` of `narrow_u8()`.
+
+pub fn in_range_u8(x: U8) -> Bool {
+  (x >= 0) && (x <= U8.MAX)
+}
+
+pub fn in_range_i16(x: I16) -> Bool {
+  (x >= I16.MIN) && (x <= I16.MAX)
+}
+
+pub fn narrow_or_max(x: U32) -> U8 {
+  let r = match x.narrow_u8() {
+    Some(v) => v,
+    None => 255,
+  }
+  r
+}

@@ -85,11 +85,10 @@ pub fn platform(triple: &str) -> Result<Platform, String> {
     } else {
         return Err(format!("unknown operating system in `{triple}`"));
     };
-    let mut cflags: Vec<String> = if msvc {
-        vec!["/std:c11".into(), "/O2".into(), "/fp:strict".into()]
-    } else {
-        vec!["-std=c11".into(), "-O2".into(), "-ffp-contract=off".into(), "-fno-fast-math".into()]
-    };
+    // The flags the generated C needs (spec §13.4) are the backend's; then
+    // the optimization level, then the flags of the architecture.
+    let (fp, opt) = if msvc { (onsa_backend_c::FP_CFLAGS_MSVC, "/O2") } else { (onsa_backend_c::FP_CFLAGS, "-O2") };
+    let mut cflags: Vec<String> = fp.iter().chain([&opt]).map(|f| f.to_string()).collect();
     match arch.as_str() {
         "i686" | "i586" | "i386" if !msvc => cflags.extend(["-m32".into(), "-msse2".into(), "-mfpmath=sse".into()]),
         a if a.starts_with("thumbv") => {
@@ -275,11 +274,10 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
             (f.name().to_string(), f.line_col(span.start).line)
         })),
         ptr_size: settings.platform.ptr_size,
+        cflags: settings.platform.cflags.clone(),
     };
     let unit = onsa_backend_c::emit(&module, &emit_opts).map_err(|d| diagnostics(LowerError::reported(d)))?;
-    let mut files = vec![(onsa_backend_c::RUNTIME_HEADER_NAME.to_string(), unit.runtime_header.clone())];
-    files.extend(unit.headers.iter().cloned());
-    files.push((onsa_backend_c::CUnit::source_name(&loaded.name), unit.source.clone()));
+    let files = unit.files(&loaded.name);
     Ok(BuildOutput { module, settings: settings.clone(), export: export.clone(), unit, files })
 }
 

@@ -1,0 +1,398 @@
+// onsa.toml
+// [package]
+// name = "c_match_arms"
+// edition = "2026"
+//
+// [export]
+// prefix = "cma_"
+// fns = [
+//   "c_match_arms.opt_u8_or",
+//   "c_match_arms.turn_n",
+//   "c_match_arms.shape_area",
+//   "c_match_arms.nested_opt",
+//   "c_match_arms.res_sum",
+//   "c_match_arms.loop_match",
+//   "c_match_arms.narrow_or_max",
+//   "c_match_arms.block_arms",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§13.4", "§3.3", "§4.4"]
+//
+// [[test.host]]
+// name = "opt_u8_or"
+// target = "host"
+// fn = "c_match_arms.opt_u8_or"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 200 }, status = 0, result = 200 },
+//   { call = "fn", args = { sel = 1, v = 200 }, status = 0, result = 7 },
+//   { call = "fn", args = { sel = 5, v = 0 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "turn_n"
+// target = "host"
+// fn = "c_match_arms.turn_n"
+// steps = [
+//   { call = "fn", args = { sel = 0, n = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 0, n = 4 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 3, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 2, n = 3 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 1, n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 1, n = 7 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "shape_area"
+// target = "host"
+// fn = "c_match_arms.shape_area"
+// steps = [
+//   { call = "fn", args = { kind = 0, k = 99 }, status = 0, result = 0 },
+//   { call = "fn", args = { kind = 1, k = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { kind = 2, k = 65536 }, status = 0, result = 4294967296 },
+//   { call = "fn", args = { kind = 2, k = 3 }, status = 0, result = 9 },
+//   { call = "fn", args = { kind = 1, k = 4294967295 }, status = 0, result = 4294967295 },
+//   { call = "fn", args = { kind = 2, k = 4294967295 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "nested_opt"
+// target = "host"
+// fn = "c_match_arms.nested_opt"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 5 }, status = 0, result = -1 },
+//   { call = "fn", args = { sel = 1, v = 5 }, status = 0, result = -2 },
+//   { call = "fn", args = { sel = 2, v = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { sel = 9, v = -8 }, status = 0, result = -8 },
+// ]
+//
+// [[test.host]]
+// name = "res_sum"
+// target = "host"
+// fn = "c_match_arms.res_sum"
+// steps = [
+//   { call = "fn", args = { ok = 1, a = 10, b = 20 }, status = 0, result = 11 },
+//   { call = "fn", args = { ok = 0, a = 10, b = 20 }, status = 0, result = 19 },
+//   { call = "fn", args = { ok = 1, a = -1, b = 0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "loop_match"
+// target = "host"
+// fn = "c_match_arms.loop_match"
+// steps = [
+//   { call = "fn", args = { n = 4, v = 10 }, status = 0, result = 22 },
+//   { call = "fn", args = { n = 0, v = 10 }, status = 0, result = 0 },
+//   { call = "fn", args = { n = 1, v = 10 }, status = 0, result = 10 },
+//   { call = "fn", args = { n = 3, v = -5 }, status = 0, result = -9 },
+// ]
+//
+// [[test.host]]
+// name = "narrow_or_max"
+// target = "host"
+// fn = "c_match_arms.narrow_or_max"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 256 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 300 }, status = 0, result = 255 },
+//   { call = "fn", args = { x = 7 }, status = 0, result = 7 },
+//   { call = "fn", args = { x = 4294967295 }, status = 0, result = 255 },
+// ]
+//
+// [[test.host]]
+// name = "block_arms"
+// target = "host"
+// fn = "c_match_arms.block_arms"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 5 }, status = 0, result = 11 },
+//   { call = "fn", args = { sel = 1, v = 5 }, status = 0, result = 12 },
+//   { call = "fn", args = { sel = 1, v = -3 }, status = 0, result = -12 },
+// ]
+//
+// [[test.host]]
+// name = "opt_u8_or on a reset target"
+// target = "fw"
+// fn = "c_match_arms.opt_u8_or"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 200 }, status = 0, result = 200 },
+//   { call = "fn", args = { sel = 1, v = 200 }, status = 0, result = 7 },
+//   { call = "fn", args = { sel = 5, v = 0 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "turn_n on a reset target"
+// target = "fw"
+// fn = "c_match_arms.turn_n"
+// steps = [
+//   { call = "fn", args = { sel = 0, n = 1 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 0, n = 4 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 3, n = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 2, n = 3 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 1, n = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { sel = 1, n = 7 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "nested_opt on a reset target"
+// target = "fw"
+// fn = "c_match_arms.nested_opt"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 5 }, status = 0, result = -1 },
+//   { call = "fn", args = { sel = 1, v = 5 }, status = 0, result = -2 },
+//   { call = "fn", args = { sel = 2, v = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { sel = 9, v = -8 }, status = 0, result = -8 },
+// ]
+
+// A `match` that gives a value, on a target that is built to C (spec §7: the arms must be exhaustive, so
+// the last arm is taken when no other is; §13.4: the generated C compiles without a warning under
+// `-Wall -Wextra -pedantic`, so a host that builds with `-Werror` accepts it). A `match` written as an
+// `if … else if (tag == k)` chain whose last test is still a test leaves the result variable "sometimes
+// uninitialized" for clang (`-Wsometimes-uninitialized`, R-145 (1)); the last arm must need no test. The
+// shapes: a value-giving `match` bound by `let` (Option, Result, an enum with four variants and one with
+// payloads, `Option[Option[_]]`), inside a loop, on the `Option` that
+// `narrow_*` returns, and an arm that is a block of statements. The values are the plain meaning (§7).
+//   opt_u8_or(sel, v)       Some(v) when sel is 0, else None; the value of the match, 7 for None
+//   turn_n(sel, n)          the direction `sel` (0 N, 1 E, 2 S, 3 W) turned n quarter turns, as its number
+//   shape_area(kind, k)     0 for Dot, k for Line(k), k * k (checked, as I64) for Sq(k)
+//   nested_opt(sel, v)      None -> -1, Some(None) -> -2, Some(Some(v)) -> v
+//   res_sum(ok, a, b)       Ok(a) -> a + 1, Err(b) -> b - 1
+//   loop_match(n, v)        the sum over n rounds of Some(v) -> v on even rounds, None -> 1 on odd ones
+//   narrow_or_max(x)        x as U8 when it fits, else 255
+//   block_arms(sel, v)      arms that are blocks with a statement before the value
+
+pub enum Dir {
+  N,
+  E,
+  S,
+  W,
+}
+
+pub enum Shape {
+  Dot,
+  Line(U32),
+  Sq(U32),
+}
+
+fn turn(d: Dir) -> Dir {
+  match d {
+    Dir.N => Dir.E,
+    Dir.E => Dir.S,
+    Dir.S => Dir.W,
+    Dir.W => Dir.N,
+  }
+}
+
+fn dir_code(d: Dir) -> U32 {
+  match d {
+    Dir.N => 0,
+    Dir.E => 1,
+    Dir.S => 2,
+    Dir.W => 3,
+  }
+}
+
+fn dir_of(sel: U32) -> Dir {
+  var d = Dir.N
+  if sel == 1 {
+    d = Dir.E
+  } else if sel == 2 {
+    d = Dir.S
+  } else if sel == 3 {
+    d = Dir.W
+  }
+  d
+}
+
+fn area(s: Shape) -> I64 {
+  match s {
+    Shape.Dot => 0,
+    Shape.Line(n) => n as I64,
+    Shape.Sq(k) => (k as I64) * (k as I64),
+  }
+}
+
+pub fn opt_u8_or(sel: U32, v: U8) -> U8 {
+  var o: Option[U8] = None
+  if sel < 1 {
+    o = Some(v)
+  }
+  let r = match o {
+    Some(x) => x,
+    None => 7,
+  }
+  r
+}
+
+pub fn turn_n(sel: U32, n: U32) -> U32 {
+  var d = dir_of(sel)
+  for _ in 0..n {
+    d = turn(d)
+  }
+  dir_code(d)
+}
+
+pub fn shape_area(kind: U32, k: U32) -> I64 {
+  var s = Shape.Dot
+  if kind == 1 {
+    s = Shape.Line(k)
+  } else if kind == 2 {
+    s = Shape.Sq(k)
+  }
+  area(s)
+}
+
+pub fn nested_opt(sel: U32, v: I32) -> I32 {
+  var o: Option[Option[I32]] = None
+  if sel == 1 {
+    o = Some(None)
+  } else if sel > 1 {
+    o = Some(Some(v))
+  }
+  let r = match o {
+    None => -1,
+    Some(inner) => match inner {
+      None => -2,
+      Some(x) => x,
+    },
+  }
+  r
+}
+
+pub fn res_sum(ok: U32, a: I32, b: I32) -> I32 {
+  var r: Result[I32, I32] = Err(b)
+  if ok > 0 {
+    r = Ok(a)
+  }
+  let t = match r {
+    Ok(v) => v + 1,
+    Err(e) => e - 1,
+  }
+  t
+}
+
+pub fn loop_match(n: U32, v: I32) -> I32 {
+  var acc: I32 = 0
+  for i in 0..n {
+    var o: Option[I32] = None
+    if (i % 2) == 0 {
+      o = Some(v)
+    }
+    let t = match o {
+      Some(x) => x,
+      None => 1,
+    }
+    acc = acc + t
+  }
+  acc
+}
+
+pub fn narrow_or_max(x: U32) -> U8 {
+  let r = match x.narrow_u8() {
+    Some(v) => v,
+    None => 255,
+  }
+  r
+}
+
+pub fn block_arms(sel: U32, v: I32) -> I32 {
+  var o: Option[I32] = None
+  if sel < 1 {
+    o = Some(v)
+  }
+  let r = match o {
+    Some(x) => {
+      let y = x * 2
+      y + 1
+    },
+    None => {
+      let z = v - 1
+      z * 3
+    },
+  }
+  r
+}
+
+test "opt_u8_or: the values" {
+  assert opt_u8_or(0, 200) == 200
+  assert opt_u8_or(1, 200) == 7
+  assert opt_u8_or(5, 0) == 7
+}
+
+test "turn_n: the values" {
+  assert turn_n(0, 1) == 1
+  assert turn_n(0, 4) == 0
+  assert turn_n(3, 1) == 0
+  assert turn_n(2, 3) == 1
+  assert turn_n(1, 0) == 1
+  assert turn_n(1, 7) == 0
+}
+
+test "shape_area: the values" {
+  assert shape_area(0, 99) == 0
+  assert shape_area(1, 5) == 5
+  assert shape_area(2, 65536) == 4294967296
+  assert shape_area(2, 3) == 9
+  assert shape_area(1, 4294967295) == 4294967295
+}
+
+test "shape_area(2, 4294967295) panics" {   //~ TESTFAIL "shape_area(2, 4294967295) panics"
+  let _ = shape_area(2, 4294967295)
+}
+
+test "nested_opt: the values" {
+  assert nested_opt(0, 5) == -1
+  assert nested_opt(1, 5) == -2
+  assert nested_opt(2, 5) == 5
+  assert nested_opt(9, -8) == -8
+}
+
+test "res_sum: the values" {
+  assert res_sum(1, 10, 20) == 11
+  assert res_sum(0, 10, 20) == 19
+  assert res_sum(1, -1, 0) == 0
+}
+
+test "loop_match: the values" {
+  assert loop_match(4, 10) == 22
+  assert loop_match(0, 10) == 0
+  assert loop_match(1, 10) == 10
+  assert loop_match(3, -5) == -9
+}
+
+test "narrow_or_max: the values" {
+  assert narrow_or_max(0) == 0
+  assert narrow_or_max(255) == 255
+  assert narrow_or_max(256) == 255
+  assert narrow_or_max(300) == 255
+  assert narrow_or_max(7) == 7
+  assert narrow_or_max(4294967295) == 255
+}
+
+test "block_arms: the values" {
+  assert block_arms(0, 5) == 11
+  assert block_arms(1, 5) == 12
+  assert block_arms(1, -3) == -12
+}

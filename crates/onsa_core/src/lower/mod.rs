@@ -32,6 +32,7 @@
 mod body;
 mod eq;
 pub mod flow;
+pub mod fold;
 pub mod moves;
 
 use std::collections::{HashMap, HashSet};
@@ -240,6 +241,9 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         return Err(LowerFailure::Unsupported(lw.unsupported));
     }
     let mut module = lw.m;
+    // The comparisons the types decide and the assignments of a place to
+    // itself (S-288), before the copies are counted.
+    fold::fold_module(&mut module);
     module.moves = moves::collect(&module);
     // The verifier runs at the stage boundary in the driver (R-82,
     // `onsa_driver::verify_core`), not here.
@@ -567,6 +571,7 @@ impl<'a> Lowerer<'a> {
         let id = FnId(self.m.fns.len() as u32);
         let name = format!("{}{}", self.qual_name(d), self.mangle_args(&args));
         let span = self.a.def(d).span;
+        let fp_relaxed = matches!(&self.a.def(d).kind, DefKind::Fn(f) if f.fp_relaxed);
         self.m.fns.push(FnDef {
             name,
             params: Vec::new(),
@@ -576,6 +581,7 @@ impl<'a> Lowerer<'a> {
             locals: Vec::new(),
             body: None,
             span,
+            fp_relaxed,
             test: None,
         });
         self.fn_ids.insert((d, args.clone()), id);

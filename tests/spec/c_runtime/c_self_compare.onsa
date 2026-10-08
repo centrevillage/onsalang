@@ -1,0 +1,206 @@
+// onsa.toml
+// [package]
+// name = "c_self_compare"
+// edition = "2026"
+//
+// [export]
+// prefix = "csc_"
+// fns = [
+//   "c_self_compare.self_cmp_u8",
+//   "c_self_compare.self_cmp_i32",
+//   "c_self_compare.self_cmp_u64",
+//   "c_self_compare.self_cmp_f32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4"]
+//
+// [[test.host]]
+// name = "self_cmp_u8"
+// target = "host"
+// fn = "c_self_compare.self_cmp_u8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "self_cmp_i32"
+// target = "host"
+// fn = "c_self_compare.self_cmp_i32"
+// steps = [
+//   { call = "fn", args = { x = -2147483648 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 7 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "self_cmp_u64"
+// target = "host"
+// fn = "c_self_compare.self_cmp_u64"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 9223372036854775807 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "self_cmp_f32"
+// target = "host"
+// fn = "c_self_compare.self_cmp_f32"
+// steps = [
+//   { call = "fn", args = { x = 1.5 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 0.0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = -0.0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = nan }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "self_cmp_i32 on a reset target"
+// target = "fw"
+// fn = "c_self_compare.self_cmp_i32"
+// steps = [
+//   { call = "fn", args = { x = 7 }, status = 0, result = 21 },
+// ]
+
+// A value compared with itself, in the Onsa source (spec §13.4: the generated C compiles without a warning
+// under `-Wall -Wextra -pedantic`, so a host that builds with `-Werror` accepts it). The source is valid
+// and its meaning is plain: `x == x`, `x <= x` and `x >= x` are true for an integer and false for a NaN
+// (§3.4, IEEE comparison), `x != x` is false for an integer and true for a NaN, `x < x` and `x > x` are
+// false. A C compiler warns about the same text (gcc and clang `-Wtautological-compare`, in `-Wall`), so
+// the C that the compiler writes must not be the plain `x == x` for an integer.
+// `self_cmp_<t>(x)` adds up one bit for each that is true: 1 for `==`, 2 for `!=`, 4 for `<=`, 8 for `<`,
+// 16 for `>=`, 32 for `>`. An integer gives 21; a NaN gives 2; `0.0` and `-0.0` give 21.
+
+pub fn self_cmp_u8(x: U8) -> U32 {
+  var m: U32 = 0
+  if x == x {
+    m = m + 1
+  }
+  if x != x {
+    m = m + 2
+  }
+  if x <= x {
+    m = m + 4
+  }
+  if x < x {
+    m = m + 8
+  }
+  if x >= x {
+    m = m + 16
+  }
+  if x > x {
+    m = m + 32
+  }
+  m
+}
+
+pub fn self_cmp_i32(x: I32) -> U32 {
+  var m: U32 = 0
+  if x == x {
+    m = m + 1
+  }
+  if x != x {
+    m = m + 2
+  }
+  if x <= x {
+    m = m + 4
+  }
+  if x < x {
+    m = m + 8
+  }
+  if x >= x {
+    m = m + 16
+  }
+  if x > x {
+    m = m + 32
+  }
+  m
+}
+
+pub fn self_cmp_u64(x: U64) -> U32 {
+  var m: U32 = 0
+  if x == x {
+    m = m + 1
+  }
+  if x != x {
+    m = m + 2
+  }
+  if x <= x {
+    m = m + 4
+  }
+  if x < x {
+    m = m + 8
+  }
+  if x >= x {
+    m = m + 16
+  }
+  if x > x {
+    m = m + 32
+  }
+  m
+}
+
+pub fn self_cmp_f32(x: F32) -> U32 {
+  var m: U32 = 0
+  if x == x {
+    m = m + 1
+  }
+  if x != x {
+    m = m + 2
+  }
+  if x <= x {
+    m = m + 4
+  }
+  if x < x {
+    m = m + 8
+  }
+  if x >= x {
+    m = m + 16
+  }
+  if x > x {
+    m = m + 32
+  }
+  m
+}
+
+test "self_cmp_u8: the values" {
+  assert self_cmp_u8(0) == 21
+  assert self_cmp_u8(255) == 21
+}
+
+test "self_cmp_i32: the values" {
+  assert self_cmp_i32(I32.MIN) == 21
+  assert self_cmp_i32(7) == 21
+}
+
+test "self_cmp_u64: the values" {
+  assert self_cmp_u64(0) == 21
+  assert self_cmp_u64(9223372036854775807) == 21
+}
+
+test "self_cmp_f32: the values" {
+  assert self_cmp_f32(1.5) == 21
+  assert self_cmp_f32(0.0) == 21
+  assert self_cmp_f32(-0.0) == 21
+}

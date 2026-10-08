@@ -1,0 +1,319 @@
+// onsa.toml
+// [package]
+// name = "c_fp_contract"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfc_"
+// fns = [
+//   "c_fp_contract.muladd_f32",
+//   "c_fp_contract.mulsub_f32",
+//   "c_fp_contract.nmuladd_f32",
+//   "c_fp_contract.negmul_add_f32",
+//   "c_fp_contract.dot2_f32",
+//   "c_fp_contract.mac_loop_f32",
+//   "c_fp_contract.via_helper_f32",
+//   "c_fp_contract.zero_sign_bits_f32",
+//   "c_fp_contract.muladd_f64",
+//   "c_fp_contract.mulsub_f64",
+//   "c_fp_contract.mac_loop_f64",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4", "§15.5"]
+//
+// [[test.host]]
+// name = "muladd_f32"
+// target = "host"
+// fn = "c_fp_contract.muladd_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+//   { call = "fn", args = { a = 0.5, b = 0.5, c = 0.25 }, status = 0, result = 0.5 },
+// ]
+//
+// [[test.host]]
+// name = "mulsub_f32"
+// target = "host"
+// fn = "c_fp_contract.mulsub_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = 1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = 1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 5.0 },
+// ]
+//
+// [[test.host]]
+// name = "nmuladd_f32"
+// target = "host"
+// fn = "c_fp_contract.nmuladd_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = 1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = 1.0 }, status = 0, result = -0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 10.0 }, status = 0, result = 4.0 },
+// ]
+//
+// [[test.host]]
+// name = "negmul_add_f32"
+// target = "host"
+// fn = "c_fp_contract.negmul_add_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = 1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 10.0 }, status = 0, result = 4.0 },
+// ]
+//
+// [[test.host]]
+// name = "dot2_f32"
+// target = "host"
+// fn = "c_fp_contract.dot2_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625, d = 1.0 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.0, d = 1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 4.0, d = 5.0 }, status = 0, result = 26.0 },
+// ]
+//
+// [[test.host]]
+// name = "mac_loop_f32"
+// target = "host"
+// fn = "c_fp_contract.mac_loop_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 1 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 2 }, status = 0, result = 1.000244140625 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 3 }, status = 0, result = 2.00048828125 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.0, n = 1 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, init = 1.0, n = 0 }, status = 0, result = 1.0 },
+// ]
+//
+// [[test.host]]
+// name = "via_helper_f32"
+// target = "host"
+// fn = "c_fp_contract.via_helper_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "zero_sign_bits_f32"
+// target = "host"
+// fn = "c_fp_contract.zero_sign_bits_f32"
+// steps = [
+//   { call = "fn", args = { a = 8.271806125530277e-25, b = -8.271806125530277e-25 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -8.271806125530277e-25, b = 8.271806125530277e-25 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 8.271806125530277e-25, b = 8.271806125530277e-25 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1.0, b = -0.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "muladd_f64"
+// target = "host"
+// fn = "c_fp_contract.muladd_f64"
+// steps = [
+//   { call = "fn", args = { a = 1.0000000074505806, b = 1.0000000074505806, c = -1.0000000149011612 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0000000074505806, b = 1.0000000074505806, c = -1.0 }, status = 0, result = 1.4901161193847656e-8 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "mulsub_f64"
+// target = "host"
+// fn = "c_fp_contract.mulsub_f64"
+// steps = [
+//   { call = "fn", args = { a = 1.0000000074505806, b = 1.0000000074505806, c = 1.0000000149011612 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 5.0 },
+// ]
+//
+// [[test.host]]
+// name = "mac_loop_f64"
+// target = "host"
+// fn = "c_fp_contract.mac_loop_f64"
+// steps = [
+//   { call = "fn", args = { a = 1.0000000074505806, b = 1.0000000074505806, init = -1.0000000149011612, n = 1 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0000000074505806, b = 1.0000000074505806, init = -1.0000000149011612, n = 2 }, status = 0, result = 1.0000000149011612 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, init = 1.0, n = 2 }, status = 0, result = 13.0 },
+// ]
+//
+// [[test.host]]
+// name = "muladd_f32 on a reset target"
+// target = "fw"
+// fn = "c_fp_contract.muladd_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+//   { call = "fn", args = { a = 0.5, b = 0.5, c = 0.25 }, status = 0, result = 0.5 },
+// ]
+//
+// [[test.host]]
+// name = "mac_loop_f32 on a reset target"
+// target = "fw"
+// fn = "c_fp_contract.mac_loop_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 1 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 2 }, status = 0, result = 1.000244140625 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 3 }, status = 0, result = 2.00048828125 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.0, n = 1 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, init = 1.0, n = 0 }, status = 0, result = 1.0 },
+// ]
+
+// Floating-point expressions that a fused multiply-add changes, on a target that is built to C (spec
+// §13.4: "FMA への縮約と再結合を禁止する"; §3.4: every operation is rounded by itself, `strict` is the
+// default profile of §15.5). GNU-mode gcc contracts `a * b + c` into one fused operation by default, also
+// across statements and after inlining, and gcc ignores `#pragma STDC FP_CONTRACT OFF`, so the generated C
+// depends on the flags of the target and on the `#error` checks of the internal runtime header (S-54, R-67);
+// clang contracts within one expression unless the pragma or the flag stops it. Each row is chosen so that
+// the fused result is a different number from the result of the two rounded operations (the fused result is
+// in a comment). The expected values are the two-rounding results, derived by the rules of §3.4 (the
+// product of two binary32 values is rounded to binary32, then the sum is).
+//   (1 + 2^-13)^2 = 1 + 2^-12 + 2^-26, which rounds to 1 + 2^-12 in F32 (ulp 2^-23 at 1).
+//   (1 + 2^-27)^2 = 1 + 2^-26 + 2^-54, which rounds to 1 + 2^-26 in F64 (ulp 2^-52 at 1).
+// The functions: muladd `(a * b) + c`, mulsub `(a * b) - c`, nmuladd `c - (a * b)`, negmul_add
+// `-(a * b) + c`, dot2 `(a * b) + (c * d)`, mac_loop (`acc = (a * b) + acc` n times), via_helper (the
+// product comes from a function that is inlined), zero_sign_bits (the bits of `(a * b) + 0.0`: the product
+// of `2^-80` and `-2^-80` underflows to `-0.0`, and `-0.0 + 0.0` is `+0.0` (§3.4, S-207); the fused result
+// is `-0.0`).
+
+fn product_f32(a: F32, b: F32) -> F32 {
+  a * b
+}
+
+pub fn muladd_f32(a: F32, b: F32, c: F32) -> F32 {
+  (a * b) + c
+}
+
+pub fn mulsub_f32(a: F32, b: F32, c: F32) -> F32 {
+  (a * b) - c
+}
+
+pub fn nmuladd_f32(a: F32, b: F32, c: F32) -> F32 {
+  c - (a * b)
+}
+
+pub fn negmul_add_f32(a: F32, b: F32, c: F32) -> F32 {
+  -(a * b) + c
+}
+
+pub fn dot2_f32(a: F32, b: F32, c: F32, d: F32) -> F32 {
+  (a * b) + (c * d)
+}
+
+pub fn mac_loop_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
+  var acc: F32 = init
+  for _ in 0..n {
+    acc = (a * b) + acc
+  }
+  acc
+}
+
+pub fn via_helper_f32(a: F32, b: F32, c: F32) -> F32 {
+  product_f32(a, b) + c
+}
+
+pub fn zero_sign_bits_f32(a: F32, b: F32) -> U32 {
+  ((a * b) + 0.0).to_bits()
+}
+
+pub fn muladd_f64(a: F64, b: F64, c: F64) -> F64 {
+  (a * b) + c
+}
+
+pub fn mulsub_f64(a: F64, b: F64, c: F64) -> F64 {
+  (a * b) - c
+}
+
+pub fn mac_loop_f64(a: F64, b: F64, init: F64, n: U32) -> F64 {
+  var acc: F64 = init
+  for _ in 0..n {
+    acc = (a * b) + acc
+  }
+  acc
+}
+
+test "muladd_f32: the values" {
+  assert muladd_f32(1.0001220703125, 1.0001220703125, -1.000244140625) == 0.0
+  assert muladd_f32(1.0001220703125, 1.0001220703125, -1.0) == 0.000244140625
+  assert muladd_f32(2.0, 3.0, 1.0) == 7.0
+  assert muladd_f32(0.5, 0.5, 0.25) == 0.5
+}
+
+test "mulsub_f32: the values" {
+  assert mulsub_f32(1.0001220703125, 1.0001220703125, 1.000244140625) == 0.0
+  assert mulsub_f32(1.0001220703125, 1.0001220703125, 1.0) == 0.000244140625
+  assert mulsub_f32(2.0, 3.0, 1.0) == 5.0
+}
+
+test "nmuladd_f32: the values" {
+  assert nmuladd_f32(1.0001220703125, 1.0001220703125, 1.000244140625) == 0.0
+  assert nmuladd_f32(1.0001220703125, 1.0001220703125, 1.0) == -0.000244140625
+  assert nmuladd_f32(2.0, 3.0, 10.0) == 4.0
+}
+
+test "negmul_add_f32: the values" {
+  assert negmul_add_f32(1.0001220703125, 1.0001220703125, 1.000244140625) == 0.0
+  assert negmul_add_f32(2.0, 3.0, 10.0) == 4.0
+}
+
+test "dot2_f32: the values" {
+  assert dot2_f32(1.0001220703125, 1.0001220703125, -1.000244140625, 1.0) == 0.0
+  assert dot2_f32(1.0001220703125, 1.0001220703125, -1.0, 1.0) == 0.000244140625
+  assert dot2_f32(2.0, 3.0, 4.0, 5.0) == 26.0
+}
+
+test "mac_loop_f32: the values" {
+  assert mac_loop_f32(1.0001220703125, 1.0001220703125, -1.000244140625, 1) == 0.0
+  assert mac_loop_f32(1.0001220703125, 1.0001220703125, -1.000244140625, 2) == 1.000244140625
+  assert mac_loop_f32(1.0001220703125, 1.0001220703125, -1.000244140625, 3) == 2.00048828125
+  assert mac_loop_f32(1.0001220703125, 1.0001220703125, -1.0, 1) == 0.000244140625
+  assert mac_loop_f32(2.0, 3.0, 1.0, 0) == 1.0
+}
+
+test "via_helper_f32: the values" {
+  assert via_helper_f32(1.0001220703125, 1.0001220703125, -1.000244140625) == 0.0
+  assert via_helper_f32(2.0, 3.0, 1.0) == 7.0
+}
+
+test "zero_sign_bits_f32: the values" {
+  assert zero_sign_bits_f32(8.271806125530277e-25, -8.271806125530277e-25) == 0
+  assert zero_sign_bits_f32(-8.271806125530277e-25, 8.271806125530277e-25) == 0
+  assert zero_sign_bits_f32(8.271806125530277e-25, 8.271806125530277e-25) == 0
+  assert zero_sign_bits_f32(1.0, -0.0) == 0
+}
+
+test "muladd_f64: the values" {
+  assert muladd_f64(1.0000000074505806, 1.0000000074505806, -1.0000000149011612) == 0.0
+  assert muladd_f64(1.0000000074505806, 1.0000000074505806, -1.0) == 1.4901161193847656e-8
+  assert muladd_f64(2.0, 3.0, 1.0) == 7.0
+}
+
+test "mulsub_f64: the values" {
+  assert mulsub_f64(1.0000000074505806, 1.0000000074505806, 1.0000000149011612) == 0.0
+  assert mulsub_f64(2.0, 3.0, 1.0) == 5.0
+}
+
+test "mac_loop_f64: the values" {
+  assert mac_loop_f64(1.0000000074505806, 1.0000000074505806, -1.0000000149011612, 1) == 0.0
+  assert mac_loop_f64(1.0000000074505806, 1.0000000074505806, -1.0000000149011612, 2) == 1.0000000149011612
+  assert mac_loop_f64(2.0, 3.0, 1.0, 2) == 13.0
+}

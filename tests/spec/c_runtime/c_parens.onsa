@@ -1,0 +1,516 @@
+// onsa.toml
+// [package]
+// name = "c_parens"
+// edition = "2026"
+//
+// [export]
+// prefix = "cpa_"
+// fns = [
+//   "c_parens.if_ne_u8",
+//   "c_parens.if_lt_i64",
+//   "c_parens.if_and_or",
+//   "c_parens.if_eq_of_eqs",
+//   "c_parens.if_not_eq",
+//   "c_parens.if_not_flag_eq",
+//   "c_parens.logic_mix",
+//   "c_parens.bit_mix",
+//   "c_parens.bit_test",
+//   "c_parens.bit_or_ne",
+//   "c_parens.arith_mix",
+//   "c_parens.gcd_u32",
+//   "c_parens.count_until",
+//   "c_parens.eq_f32",
+//   "c_parens.pick_value",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.1", "§3.4", "§7"]
+//
+// [[test.host]]
+// name = "if_ne_u8"
+// target = "host"
+// fn = "c_parens.if_ne_u8"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 5, b = 5 }, status = 0, result = 6 },
+//   { call = "fn", args = { a = 255, b = 255 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0, b = 255 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 200, b = 7 }, status = 0, result = 200 },
+// ]
+//
+// [[test.host]]
+// name = "if_lt_i64"
+// target = "host"
+// fn = "c_parens.if_lt_i64"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 5 }, status = 0, result = 4 },
+//   { call = "fn", args = { a = 5, b = 1 }, status = 0, result = 4 },
+//   { call = "fn", args = { a = -3, b = -3 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -9223372036854775808, b = 0 }, status = 1 },
+//   { call = "fn", args = { a = 9223372036854775807, b = 0 }, status = 0, result = 9223372036854775807 },
+// ]
+//
+// [[test.host]]
+// name = "if_and_or"
+// target = "host"
+// fn = "c_parens.if_and_or"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 1, c = 2, d = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1, b = 1, c = 2, d = 3 }, status = 0, result = 2 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 3 }, status = 0, result = 2 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4 }, status = 0, result = 3 },
+// ]
+//
+// [[test.host]]
+// name = "if_eq_of_eqs"
+// target = "host"
+// fn = "c_parens.if_eq_of_eqs"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 1, c = 2, d = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1, b = 1, c = 2, d = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 3 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "if_not_eq"
+// target = "host"
+// fn = "c_parens.if_not_eq"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 3, b = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -1, b = 1 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "if_not_flag_eq"
+// target = "host"
+// fn = "c_parens.if_not_flag_eq"
+// steps = [
+//   { call = "fn", args = { p = false, q = true }, status = 0, result = 1 },
+//   { call = "fn", args = { p = true, q = true }, status = 0, result = 0 },
+//   { call = "fn", args = { p = true, q = false }, status = 0, result = 1 },
+//   { call = "fn", args = { p = false, q = false }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "logic_mix"
+// target = "host"
+// fn = "c_parens.logic_mix"
+// steps = [
+//   { call = "fn", args = { p = true, q = true, r = false }, status = 0, result = 11 },
+//   { call = "fn", args = { p = true, q = false, r = true }, status = 0, result = 11 },
+//   { call = "fn", args = { p = false, q = false, r = true }, status = 0, result = 1 },
+//   { call = "fn", args = { p = false, q = true, r = false }, status = 0, result = 0 },
+//   { call = "fn", args = { p = true, q = false, r = false }, status = 0, result = 0 },
+//   { call = "fn", args = { p = false, q = false, r = false }, status = 0, result = 0 },
+//   { call = "fn", args = { p = false, q = true, r = true }, status = 0, result = 1 },
+//   { call = "fn", args = { p = true, q = true, r = true }, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "bit_mix"
+// target = "host"
+// fn = "c_parens.bit_mix"
+// steps = [
+//   { call = "fn", args = { x = 12, y = 10, z = 1 }, status = 0, result = 57 },
+//   { call = "fn", args = { x = 4294967295, y = 0, z = 0 }, status = 0, result = 4294967292 },
+//   { call = "fn", args = { x = 0, y = 0, z = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1, y = 1, z = 0 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "bit_test"
+// target = "host"
+// fn = "c_parens.bit_test"
+// steps = [
+//   { call = "fn", args = { m = 2 }, status = 0, result = 0 },
+//   { call = "fn", args = { m = 3 }, status = 0, result = 1 },
+//   { call = "fn", args = { m = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { m = 4294967295 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "bit_or_ne"
+// target = "host"
+// fn = "c_parens.bit_or_ne"
+// steps = [
+//   { call = "fn", args = { m = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { m = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { m = 0 }, status = 0, result = 1 },
+//   { call = "fn", args = { m = 4294967295 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "arith_mix"
+// target = "host"
+// fn = "c_parens.arith_mix"
+// steps = [
+//   { call = "fn", args = { a = 10, b = 4, c = 3 }, status = 0, result = 14 },
+//   { call = "fn", args = { a = -7, b = 2, c = 5 }, status = 0, result = -49 },
+//   { call = "fn", args = { a = 1, b = 1, c = 0 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "gcd_u32"
+// target = "host"
+// fn = "c_parens.gcd_u32"
+// steps = [
+//   { call = "fn", args = { a = 12, b = 18 }, status = 0, result = 6 },
+//   { call = "fn", args = { a = 7, b = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { a = 0, b = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 4294967295, b = 65535 }, status = 0, result = 65535 },
+//   { call = "fn", args = { a = 17, b = 5 }, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "count_until"
+// target = "host"
+// fn = "c_parens.count_until"
+// steps = [
+//   { call = "fn", args = { a = 0, stop = 5 }, status = 0, result = 5 },
+//   { call = "fn", args = { a = 3, stop = 3 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = -2, stop = 2 }, status = 0, result = 4 },
+// ]
+//
+// [[test.host]]
+// name = "eq_f32"
+// target = "host"
+// fn = "c_parens.eq_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0, b = 1.0 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = nan, b = nan }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0.0, b = -0.0 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1.0, b = 2.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "pick_value"
+// target = "host"
+// fn = "c_parens.pick_value"
+// steps = [
+//   { call = "fn", args = { a = 3, b = 3 }, status = 0, result = 11 },
+//   { call = "fn", args = { a = 3, b = 4 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "if_and_or on a reset target"
+// target = "fw"
+// fn = "c_parens.if_and_or"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 1, c = 2, d = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1, b = 1, c = 2, d = 3 }, status = 0, result = 2 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 3 }, status = 0, result = 2 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4 }, status = 0, result = 3 },
+// ]
+//
+// [[test.host]]
+// name = "logic_mix on a reset target"
+// target = "fw"
+// fn = "c_parens.logic_mix"
+// steps = [
+//   { call = "fn", args = { p = true, q = true, r = false }, status = 0, result = 11 },
+//   { call = "fn", args = { p = true, q = false, r = true }, status = 0, result = 11 },
+//   { call = "fn", args = { p = false, q = false, r = true }, status = 0, result = 1 },
+//   { call = "fn", args = { p = false, q = true, r = false }, status = 0, result = 0 },
+//   { call = "fn", args = { p = true, q = false, r = false }, status = 0, result = 0 },
+//   { call = "fn", args = { p = false, q = false, r = false }, status = 0, result = 0 },
+//   { call = "fn", args = { p = false, q = true, r = true }, status = 0, result = 1 },
+//   { call = "fn", args = { p = true, q = true, r = true }, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "bit_mix on a reset target"
+// target = "fw"
+// fn = "c_parens.bit_mix"
+// steps = [
+//   { call = "fn", args = { x = 12, y = 10, z = 1 }, status = 0, result = 57 },
+//   { call = "fn", args = { x = 4294967295, y = 0, z = 0 }, status = 0, result = 4294967292 },
+//   { call = "fn", args = { x = 0, y = 0, z = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1, y = 1, z = 0 }, status = 0, result = 5 },
+// ]
+
+// The parentheses of the generated C: an `if` or a `while` on a comparison, and expressions that mix
+// groups of operators (spec §13.4: the generated C compiles without a warning under `-Wall -Wextra
+// -pedantic`, so a host that builds with `-Werror` accepts it; §3.1: the groups that cannot mix without
+// parentheses). Two opposite mistakes show up here:
+//   - a comparison that is the whole condition of an `if` must not get a second pair of parentheses
+//     (`if ((a == b))` is clang's `-Wparentheses-equality`, R-142);
+//   - a parenthesis that carries the meaning must stay: `(a == b) == (c == d)`, `(!p) == q`, `(m & 1) == 0`,
+//     `(p && q) || r`, `(x & y) | z`, `a - (b - c)` (a C compiler warns with `-Wlogical-not-parentheses`,
+//     `-Wlogical-op-parentheses` or `-Wbitwise-op-parentheses` when they are gone, and the value changes
+//     for the others).
+// The Onsa source writes the parentheses that §3.1 requires and a few that it only allows (`(a * b) % c`
+// needs them; `-(a + b)` and `(!p) == q` are the prefix forms). The values are the plain meaning of each
+// program (§3.4); the NaN row is the IEEE comparison (`NaN == NaN` is false, `0.0 == -0.0` is true).
+//   if_ne_u8             a != b ? a : b + 1 (wrapping)        if_lt_i64            the distance, checked
+//   if_and_or            1 when both pairs are equal, 2 when one is, else 3
+//   if_eq_of_eqs         (a == b) == (c == d)                 if_not_eq            !(a == b)
+//   if_not_flag_eq       (!p) == q                            logic_mix            (p && q) || r and p && (q || r)
+//   bit_mix              ((x & y) | z) ^ (x << 2)             bit_test / bit_or_ne  (m & 1) == 0, (m | 1) != m
+//   arith_mix            a - (b - c), (a - b) - c, -(a + b), (a * b) % c
+//   gcd_u32              a loop on `y != 0`                   count_until          a loop on `x != stop`
+//   eq_f32               a == b on F32                        pick_value           an `if` as a value
+
+pub fn if_ne_u8(a: U8, b: U8) -> U8 {
+  if a != b {
+    a
+  } else {
+    b +% 1
+  }
+}
+
+pub fn if_lt_i64(a: I64, b: I64) -> I64 {
+  if a < b {
+    b - a
+  } else {
+    a - b
+  }
+}
+
+pub fn if_and_or(a: I32, b: I32, c: I32, d: I32) -> I32 {
+  if (a == b) && (c == d) {
+    1
+  } else if (a == b) || (c == d) {
+    2
+  } else {
+    3
+  }
+}
+
+pub fn if_eq_of_eqs(a: I32, b: I32, c: I32, d: I32) -> I32 {
+  if (a == b) == (c == d) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn if_not_eq(a: I32, b: I32) -> I32 {
+  if !(a == b) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn if_not_flag_eq(p: Bool, q: Bool) -> I32 {
+  if !p == q {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn logic_mix(p: Bool, q: Bool, r: Bool) -> I32 {
+  let x = (p && q) || r
+  let y = p && (q || r)
+  var n: I32 = 0
+  if x {
+    n = n + 1
+  }
+  if y {
+    n = n + 10
+  }
+  n
+}
+
+pub fn bit_mix(x: U32, y: U32, z: U32) -> U32 {
+  ((x & y) | z) ^ (x << 2)
+}
+
+pub fn bit_test(m: U32) -> I32 {
+  if (m & 1) == 0 {
+    0
+  } else {
+    1
+  }
+}
+
+pub fn bit_or_ne(m: U32) -> U32 {
+  if (m | 1) != m {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn arith_mix(a: I32, b: I32, c: I32) -> I32 {
+  let d = a - (b - c)
+  let e = (a - b) - c
+  let f = -(a + b)
+  let g = (a * b) % c
+  ((d * 2) + (e * 3)) + (f + g)
+}
+
+pub fn gcd_u32(a: U32, b: U32) -> U32 {
+  var x: U32 = a
+  var y: U32 = b
+  while y != 0 {
+    let t = x % y
+    x = y
+    y = t
+  }
+  x
+}
+
+pub fn count_until(a: I32, stop: I32) -> I32 {
+  var x: I32 = a
+  var n: I32 = 0
+  while x != stop {
+    x = x + 1
+    n = n + 1
+  }
+  n
+}
+
+pub fn eq_f32(a: F32, b: F32) -> I32 {
+  if a == b {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn pick_value(a: I32, b: I32) -> I32 {
+  let z = if a == b {
+    10
+  } else {
+    20
+  }
+  z + 1
+}
+
+test "if_ne_u8: the values" {
+  assert if_ne_u8(1, 2) == 1
+  assert if_ne_u8(5, 5) == 6
+  assert if_ne_u8(255, 255) == 0
+  assert if_ne_u8(0, 255) == 0
+  assert if_ne_u8(200, 7) == 200
+}
+
+test "if_lt_i64: the values" {
+  assert if_lt_i64(1, 5) == 4
+  assert if_lt_i64(5, 1) == 4
+  assert if_lt_i64(-3, -3) == 0
+  assert if_lt_i64(9223372036854775807, 0) == 9223372036854775807
+}
+
+test "if_lt_i64(I64.MIN, 0) panics" {   //~ TESTFAIL "if_lt_i64(I64.MIN, 0) panics"
+  let _ = if_lt_i64(I64.MIN, 0)
+}
+
+test "if_and_or: the values" {
+  assert if_and_or(1, 1, 2, 2) == 1
+  assert if_and_or(1, 1, 2, 3) == 2
+  assert if_and_or(1, 2, 3, 3) == 2
+  assert if_and_or(1, 2, 3, 4) == 3
+}
+
+test "if_eq_of_eqs: the values" {
+  assert if_eq_of_eqs(1, 1, 2, 2) == 1
+  assert if_eq_of_eqs(1, 2, 3, 4) == 1
+  assert if_eq_of_eqs(1, 1, 2, 3) == 0
+  assert if_eq_of_eqs(1, 2, 3, 3) == 0
+}
+
+test "if_not_eq: the values" {
+  assert if_not_eq(1, 2) == 1
+  assert if_not_eq(3, 3) == 0
+  assert if_not_eq(-1, 1) == 1
+}
+
+test "if_not_flag_eq: the values" {
+  assert if_not_flag_eq(false, true) == 1
+  assert if_not_flag_eq(true, true) == 0
+  assert if_not_flag_eq(true, false) == 1
+  assert if_not_flag_eq(false, false) == 0
+}
+
+test "logic_mix: the values" {
+  assert logic_mix(true, true, false) == 11
+  assert logic_mix(true, false, true) == 11
+  assert logic_mix(false, false, true) == 1
+  assert logic_mix(false, true, false) == 0
+  assert logic_mix(true, false, false) == 0
+  assert logic_mix(false, false, false) == 0
+  assert logic_mix(false, true, true) == 1
+  assert logic_mix(true, true, true) == 11
+}
+
+test "bit_mix: the values" {
+  assert bit_mix(12, 10, 1) == 57
+  assert bit_mix(4294967295, 0, 0) == 4294967292
+  assert bit_mix(0, 0, 0) == 0
+  assert bit_mix(1, 1, 0) == 5
+}
+
+test "bit_test: the values" {
+  assert bit_test(2) == 0
+  assert bit_test(3) == 1
+  assert bit_test(0) == 0
+  assert bit_test(4294967295) == 1
+}
+
+test "bit_or_ne: the values" {
+  assert bit_or_ne(2) == 1
+  assert bit_or_ne(3) == 0
+  assert bit_or_ne(0) == 1
+  assert bit_or_ne(4294967295) == 0
+}
+
+test "arith_mix: the values" {
+  assert arith_mix(10, 4, 3) == 14
+  assert arith_mix(-7, 2, 5) == -49
+}
+
+test "arith_mix(1, 1, 0) panics" {   //~ TESTFAIL "arith_mix(1, 1, 0) panics"
+  let _ = arith_mix(1, 1, 0)
+}
+
+test "gcd_u32: the values" {
+  assert gcd_u32(12, 18) == 6
+  assert gcd_u32(7, 0) == 7
+  assert gcd_u32(0, 0) == 0
+  assert gcd_u32(4294967295, 65535) == 65535
+  assert gcd_u32(17, 5) == 1
+}
+
+test "count_until: the values" {
+  assert count_until(0, 5) == 5
+  assert count_until(3, 3) == 0
+  assert count_until(-2, 2) == 4
+}
+
+test "eq_f32: the values" {
+  assert eq_f32(1.0, 1.0) == 1
+  assert eq_f32(0.0, -0.0) == 1
+  assert eq_f32(1.0, 2.0) == 0
+}
+
+test "pick_value: the values" {
+  assert pick_value(3, 3) == 11
+  assert pick_value(3, 4) == 21
+}

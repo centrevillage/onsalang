@@ -1,5 +1,5 @@
 //! C11 backend (M4: T4-1 `onsa.h`, T4-2 Core → C, T4-3 flow API and export
-//! wrappers). Pure: it turns a [`onsa_core::Module`] into strings, so it
+//! wrappers; W2-09: the public and the internal runtime header, the flags). Pure: it turns a [`onsa_core::Module`] into strings, so it
 //! builds for `wasm32` and the driver does the file I/O and compiling (T4-5).
 //!
 //! Shape of the output (docs/implementation-tasks.md §1 D-10):
@@ -12,8 +12,14 @@
 //! - a function returning an aggregate takes an output pointer first
 //!   (`sret`, spec §12.7); borrowed aggregates are `const T*`, `inout` is
 //!   `T*`, scalars go by value;
-//! - every `F32` operation is wrapped in `(float)` and the file starts with
-//!   `#pragma STDC FP_CONTRACT OFF` (through `onsa.h`), spec §13.4;
+//! - the `.c` starts with a comment of the flags it needs and includes the
+//!   internal header `onsa__runtime.h`, which checks the flags (`#error`) and
+//!   turns contraction off for the compilers that know the STDC pragma; the
+//!   headers of a host read the public `onsa.h` alone (spec §13.4, §14.2,
+//!   S-53, S-54);
+//! - every `F32` operation is wrapped in `(float)`; a `@fp(relaxed)` function
+//!   is relaxed by the runtime's marks (`ONSA_FP_RELAXED_FN`,
+//!   `ONSA_FP_RELAXED_BODY`), spec §15.5, S-287;
 //! - only what is reachable from the exported flows and functions is
 //!   emitted; `render` and tests never reach C (they need `Buf`, D-08).
 
@@ -26,27 +32,67 @@ use onsa_core::Module;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Diagnostic, FileId, Span, Stage};
 
-/// The source of the runtime header every generated file includes (T4-1):
-/// [`runtime_header`] writes the constants of `onsa_core` into it.
-const RUNTIME_HEADER_SOURCE: &str = include_str!("../../../runtime/c/onsa.h");
-/// The line of [`RUNTIME_HEADER_SOURCE`] that [`runtime_header`] replaces.
+/// The public runtime header (spec §14.2, S-53): the types and the ABI
+/// version a host reads through the header of a package. The same text for
+/// every package and target.
+pub const PUBLIC_HEADER: &str = include_str!("../../../runtime/c/onsa.h");
+/// Its file name, as the headers of the packages include it.
+pub const RUNTIME_HEADER_NAME: &str = "onsa.h";
+
+/// The source of the internal runtime header that only the generated `.c`
+/// includes (T4-1, S-53): [`internal_header`] writes the constants of
+/// `onsa_core` into it.
+const INTERNAL_HEADER_SOURCE: &str = include_str!("../../../runtime/c/onsa__runtime.h");
+/// Its file name, as the generated `.c` includes it.
+pub const INTERNAL_HEADER_NAME: &str = "onsa__runtime.h";
+/// The line of [`INTERNAL_HEADER_SOURCE`] that [`internal_header`] replaces.
 const CONSTANTS_MARKER: &str = "/* @onsa-core-constants@ */";
 
-/// The runtime header, `onsa.h`, as the backend writes it: its source with
-/// the values the backends share written from `onsa_core` (plan D-15), so the
-/// C and the interpreter read one definition.
-pub fn runtime_header() -> String {
+/// How many times `needle` occurs in `hay` (for the check of the marker at
+/// compile time).
+const fn occurrences(hay: &str, needle: &str) -> usize {
+    let (h, n) = (hay.as_bytes(), needle.as_bytes());
+    let mut count = 0;
+    let mut i = 0;
+    while i + n.len() <= h.len() {
+        let mut j = 0;
+        while j < n.len() && h[i + j] == n[j] {
+            j += 1;
+        }
+        if j == n.len() {
+            count += 1;
+            i += n.len();
+        } else {
+            i += 1;
+        }
+    }
+    count
+}
+
+// The marker is in the internal header exactly once: the build of the
+// compiler stops otherwise, so a header without the constants is never written.
+const _: () = assert!(occurrences(INTERNAL_HEADER_SOURCE, CONSTANTS_MARKER) == 1);
+const _: () = assert!(occurrences(PUBLIC_HEADER, CONSTANTS_MARKER) == 0);
+
+/// The internal runtime header, `onsa__runtime.h`, as the backend writes it:
+/// its source with the values the backends share written from `onsa_core`
+/// (plan D-15), so the C and the interpreter read one definition.
+pub fn internal_header() -> String {
     use onsa_core::prim::{NAN_BITS_F32, NAN_BITS_F64};
     let constants = format!(
         "/* to_bits() of a NaN (spec §3.4, S-106): onsa_core::prim::NAN_BITS_F32 / _F64 */\n\
          #define ONSA_NAN_BITS_F32 UINT32_C({NAN_BITS_F32:#010X})\n\
          #define ONSA_NAN_BITS_F64 UINT64_C({NAN_BITS_F64:#018X})"
     );
-    RUNTIME_HEADER_SOURCE.replacen(CONSTANTS_MARKER, &constants, 1)
+    INTERNAL_HEADER_SOURCE.replacen(CONSTANTS_MARKER, &constants, 1)
 }
 
-/// Its file name, as every generated file includes it.
-pub const RUNTIME_HEADER_NAME: &str = "onsa.h";
+/// The compiler flags the generated C needs (spec §13.4) from a compiler
+/// like GCC or Clang, and from MSVC: what `onsa build` passes for a target
+/// (with the flags of its architecture and the optimization level) and what
+/// the first comment of the generated `.c` lists.
+pub const FP_CFLAGS: &[&str] = &["-std=c11", "-ffp-contract=off", "-fno-fast-math"];
+pub const FP_CFLAGS_MSVC: &[&str] = &["/std:c11", "/fp:strict"];
 
 /// Target `panic` setting (spec §9.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -101,6 +147,9 @@ pub struct EmitOptions {
     pub locate: Option<Locator>,
     /// Pointer width of the target in bytes (the bulk slot, spans in states), T4-5.
     pub ptr_size: u32,
+    /// The compiler flags of the target (spec §13.4), for the first comment
+    /// of the `.c`; [`FP_CFLAGS`] when nothing is chosen.
+    pub cflags: Vec<String>,
 }
 
 impl Default for EmitOptions {
@@ -116,6 +165,7 @@ impl Default for EmitOptions {
             panic_messages: true,
             locate: None,
             ptr_size: onsa_core::layout::PTR_SIZE,
+            cflags: FP_CFLAGS.iter().map(|f| f.to_string()).collect(),
         }
     }
 }
@@ -132,6 +182,7 @@ impl std::fmt::Debug for EmitOptions {
             .field("provides_alloc", &self.provides_alloc)
             .field("panic_messages", &self.panic_messages)
             .field("ptr_size", &self.ptr_size)
+            .field("cflags", &self.cflags)
             .finish()
     }
 }
@@ -143,8 +194,11 @@ pub struct CUnit {
     pub source: String,
     /// `(file name, contents)` — one `onsa_<flow>.h` per exported flow.
     pub headers: Vec<(String, String)>,
-    /// `onsa.h`
+    /// `onsa.h`: the public runtime header ([`PUBLIC_HEADER`]), the one a host
+    /// reads (not the runtime of the generated code, which is `internal_header`).
     pub runtime_header: String,
+    /// `onsa__runtime.h`, the internal runtime header ([`internal_header`]).
+    pub internal_header: String,
     /// The C API of each exported flow, as the backend named it.
     pub flows: Vec<FlowApi>,
     /// The C API of each exported function (`[export] fns`), as the backend named it.
@@ -239,11 +293,24 @@ impl CUnit {
     }
 
     /// The headers a host includes (spec §14.2), as `(file name, text)`: the
-    /// runtime header and one per export. An internal header (S-53) is not
+    /// runtime header and one per export. The internal header (S-53) is not
     /// one of them.
     pub fn public_headers(&self) -> Vec<(&str, &str)> {
         let mut v = vec![(RUNTIME_HEADER_NAME, self.runtime_header.as_str())];
         v.extend(self.headers.iter().map(|(n, t)| (n.as_str(), t.as_str())));
+        v
+    }
+
+    /// Every file of the unit, as `(file name, text)`, in the order a build
+    /// writes them: the public headers, the internal header, the `.c` last
+    /// (spec §14.2: `kind = "source"` writes the internal header too).
+    pub fn files(&self, package: &str) -> Vec<(String, String)> {
+        let mut v = vec![
+            (RUNTIME_HEADER_NAME.to_string(), self.runtime_header.clone()),
+            (INTERNAL_HEADER_NAME.to_string(), self.internal_header.clone()),
+        ];
+        v.extend(self.headers.iter().cloned());
+        v.push((Self::source_name(package), self.source.clone()));
         v
     }
 }

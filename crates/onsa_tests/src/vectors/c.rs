@@ -56,7 +56,7 @@ const HEAD: usize = 5;
 
 /// The toolchains: every compile-and-run row of the C checks, once per
 /// distinct compile (with `-w`, the warnings a row switches off do not make
-/// another program: `c-gcc-strict` is `c-gcc`'s).
+/// another program: a `-strict` row runs as its pair's).
 pub fn toolchains() -> Vec<&'static Item> {
     let mut out: Vec<&'static Item> = Vec::new();
     for i in c::ITEMS {

@@ -324,6 +324,9 @@
 "U64" = 2
 "U8" = 2
 
+[allow."crates/onsa_syntax/src/ast.rs"]
+"fp" = 1
+
 [allow."crates/onsa_syntax/src/parser.rs"]
 "Bool" = 1
 "F32" = 1

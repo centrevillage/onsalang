@@ -1,0 +1,142 @@
+// onsa.toml
+// [package]
+// name = "c_fp_flow"
+// edition = "2026"
+//
+// [export]
+// prefix = "cff_"
+// flows = [
+//   "c_fp_flow.mac_x",
+//   "c_fp_flow.ema",
+//   "c_fp_flow.rel_mac",
+//   "c_fp_flow.mac_x_after",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§15.5", "§11.2", "§11.6", "§14.2"]
+//
+// [[test.host]]
+// name = "mac_x: a multiply-add per sample is rounded twice"
+// target = "host"
+// flow = "c_fp_flow.mac_x"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { a = 1.0001220703125, b = -1.000244140625 }, frames = 4, input = [1.0001220703125, 1.0, 2.0, 0.5], status = 0, output = [0.0, -0.0001220703125, 1.0, -0.50018310546875] },
+// ]
+//
+// [[test.host]]
+// name = "ema: a multiply-add in a feedback loop is rounded twice"
+// target = "host"
+// flow = "c_fp_flow.ema"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { k = 1.0001220703125 }, frames = 5, input = [1.0001220703125, -1.000244140625, 0.0, 0.0, 0.0], status = 0, output = [1.0001220703125, 0.0, 0.0, 0.0, 0.0] },
+// ]
+//
+// [[test.host]]
+// name = "rel_mac: a relaxed flow with values that do not depend on the fusion"
+// target = "host"
+// flow = "c_fp_flow.rel_mac"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { a = 2.0, b = 1.0 }, frames = 4, input = [1.0, 2.0, 3.0, 4.0], status = 0, output = [3.0, 5.0, 7.0, 9.0] },
+// ]
+//
+// [[test.host]]
+// name = "mac_x_after: a strict flow after a relaxed one stays strict"
+// target = "host"
+// flow = "c_fp_flow.mac_x_after"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { a = 1.0001220703125, b = -1.000244140625 }, frames = 4, input = [1.0001220703125, 1.0, 2.0, 0.5], status = 0, output = [0.0, -0.0001220703125, 1.0, -0.50018310546875] },
+// ]
+//
+// [[test.host]]
+// name = "mac_x on a reset target"
+// target = "fw"
+// flow = "c_fp_flow.mac_x"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = { a = 1.0001220703125, b = -1.000244140625 }, frames = 4, input = [1.0001220703125, 1.0, 2.0, 0.5], status = 0, output = [0.0, -0.0001220703125, 1.0, -0.50018310546875] },
+// ]
+
+// A multiply-add in the sample loop of a flow, on a target that is built to C (spec §13.4: "FMA への縮約と
+// 再結合を禁止する"; §15.5: `strict` is the default profile, and `@fp(relaxed)` relaxes one flow). The rows
+// are chosen as in c_fp_contract.onsa: with a = 1 + 2^-13 the product a * a is 1 + 2^-12 + 2^-26, which
+// F32 rounds to p = 1 + 2^-12, so (a * a) + (-p) is 0.0 when the product is rounded first and 2^-26 when a
+// fused multiply-add computes it. `mac_x` computes `(a * x) + b` for each sample with the block inputs
+// a and b; `ema` is the one-pole `y = (k * y_prev) + x`, whose multiply-add sits in the feedback loop that a
+// compiler cannot vectorize. `rel_mac` is the same as mac_x with `@fp(relaxed)`, called with values for which
+// the fused and the separately rounded results are the same number (2.0 * x + 1.0 of small integers):
+// the relaxed flow may be fused, and its result does not depend on it. `mac_x_after` is the strict flow
+// again, written after the relaxed one: a relaxation of a flow does not reach the code that follows it.
+
+pub flow mac_x(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  (a * x) + b
+}
+
+pub flow ema(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let y = (k * prev~(^y)) + x
+  y
+}
+
+@fp(relaxed)
+pub flow rel_mac(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  (a * x) + b
+}
+
+pub flow mac_x_after(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  (a * x) + b
+}
+
+test "mac_x rounds the product before the sum" {
+  let xs: [F32; 4] = [1.0001220703125, 1.0, 2.0, 0.5]
+  let o = mac_x.render(mac_x.Config {}, mac_x.Params { a: 1.0001220703125, b: -1.000244140625 }, xs, 48000.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == -0.0001220703125
+  assert o.out[2] == 1.0
+  assert o.out[3] == -0.50018310546875
+}
+
+test "ema rounds the product before the sum" {
+  let xs: [F32; 5] = [1.0001220703125, -1.000244140625, 0.0, 0.0, 0.0]
+  let o = ema.render(ema.Config {}, ema.Params { k: 1.0001220703125 }, xs, 48000.0)
+  assert o.out[0] == 1.0001220703125
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 0.0
+}
+
+test "rel_mac with values that do not depend on the fusion" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = rel_mac.render(rel_mac.Config {}, rel_mac.Params { a: 2.0, b: 1.0 }, xs, 48000.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 5.0
+  assert o.out[2] == 7.0
+  assert o.out[3] == 9.0
+}
+
+test "mac_x_after rounds the product before the sum" {
+  let xs: [F32; 4] = [1.0001220703125, 1.0, 2.0, 0.5]
+  let o = mac_x_after.render(mac_x_after.Config {}, mac_x_after.Params { a: 1.0001220703125, b: -1.000244140625 }, xs, 48000.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == -0.0001220703125
+  assert o.out[2] == 1.0
+  assert o.out[3] == -0.50018310546875
+}

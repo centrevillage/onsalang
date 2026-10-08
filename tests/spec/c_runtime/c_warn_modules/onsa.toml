@@ -1,0 +1,34 @@
+[package]
+name = "c_warn_modules"
+edition = "2026"
+
+[export]
+prefix = "cwm_"
+fns = [
+  "stage.count_in_range",
+  "stage.wide_ok",
+  "limits.in_range_u8",
+  "limits.in_range_i16",
+  "limits.narrow_or_max",
+]
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "poison"
+provides = []
+
+[targets.fw]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "reset"
+provides = []
+
+[targets.dbg]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "trap"
+provides = []

@@ -416,7 +416,7 @@ fn c_driver(api: &FlowApi, shape: &Shape, bulk_size: u32, panic: PanicMode) -> S
         c::PANIC_EXIT
     );
     if panic == PanicMode::Reset {
-        let _ = writeln!(d, "ONSA_NORETURN void onsa_reset_hook(void) {{ _Exit({}); }}", c::PANIC_EXIT);
+        let _ = writeln!(d, "_Noreturn void onsa_reset_hook(void) {{ _Exit({}); }}", c::PANIC_EXIT);
     }
     // The C types are the backend's records (D-15); an undeclared name where
     // a record is missing: the program does not compile (never a silent type).

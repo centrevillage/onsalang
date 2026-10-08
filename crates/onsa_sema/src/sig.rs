@@ -249,6 +249,7 @@ impl<'p> Sema<'p> {
                         body: f.body,
                         target,
                         flow_fn: None,
+                        fp_relaxed: item.attrs.iter().any(Attr::is_fp_relaxed),
                     }),
                 );
                 let id = self.add_def(def);
@@ -756,7 +757,8 @@ impl<'p> Sema<'p> {
                         out.push(d);
                     }
                 }
-                "repr" | "relaxed" | "deprecated" | "param" => {}
+                "repr" | "deprecated" | "param" => {}
+                _ if attr.is_fp_relaxed() => {}
                 other => {
                     self.report(
                         cx.def,
@@ -1547,6 +1549,7 @@ impl<'p> Sema<'p> {
                         body: None,
                         target: false,
                         flow_fn: Some(which),
+                        fp_relaxed: false,
                     }),
                 )
             };

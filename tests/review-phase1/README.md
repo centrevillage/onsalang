@@ -78,7 +78,7 @@
 | `cback/p11/` | R-15、R-48 |
 | `cback/p12/` | R-93 |
 | `cback/p14/` | R-10。W2-05 で期待値付きのテストへ移した: テストベクトルの `u32.mul`・`u32.smul`・`u32.checked_mul`（`vectors-c` の `c-gcc` が、gcc の -O2 で消えていた検査を確かめる）、`tests/spec/c_runtime/c_mul.onsa` |
-| `cback/fma.c` | R-67 |
+| `cback/fma.c` | R-67。W2-09/t で期待値付きのテストへ移した: `tests/spec/c_runtime/c_fp_contract.onsa`（FMA で値が変わる行。全ての C の検査が -ffp-contract=off の下で）、`c_fp_relaxed.onsa`・`c_fp_flow.onsa`（緩和した関数や flow の前後の厳密な関数）、`crates/onsa_tests/tests/c_fp_flags.rs`（GNU モードの gcc・fast-math・FLT_EVAL_METHOD の `#error`、`ONSA_ALLOW_INEXACT_FP`、STDC のプラグマ、公開と内部のヘッダ、フラグなしの GCC / Clang での結果）。W2-09 で実装し、この再現（`cback/fma.c`）を消した |
 | `cback/voice_host/host.cpp` | R-65 |
 | `types/rec*.onsa`、`types/constcyc*.onsa` | R-02 |
 | `types/derive2.onsa` | R-35 |

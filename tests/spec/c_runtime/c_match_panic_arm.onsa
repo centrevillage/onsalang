@@ -1,0 +1,115 @@
+// onsa.toml
+// [package]
+// name = "c_match_panic_arm"
+// edition = "2026"
+//
+// [export]
+// prefix = "cmp_"
+// fns = [
+//   "c_match_panic_arm.unwrap_or_panic",
+//   "c_match_panic_arm.pick_or_panic",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§9.2", "§13.4", "§14.2"]
+//
+// [[test.host]]
+// name = "unwrap_or_panic"
+// target = "host"
+// fn = "c_match_panic_arm.unwrap_or_panic"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 42 }, status = 0, result = 42 },
+//   { call = "fn", args = { sel = 1, v = 42 }, status = 1 },
+//   { call = "fn", args = { sel = 0, v = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 0, v = 7 }, status = 0, result = 7 },
+// ]
+//
+// [[test.host]]
+// name = "pick_or_panic"
+// target = "host"
+// fn = "c_match_panic_arm.pick_or_panic"
+// steps = [
+//   { call = "fn", args = { c = true, v = 1 }, status = 0, result = 2 },
+//   { call = "fn", args = { c = false, v = 1 }, status = 1 },
+//   { call = "fn", args = { c = true, v = -1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "unwrap_or_panic on a reset target"
+// target = "fw"
+// fn = "c_match_panic_arm.unwrap_or_panic"
+// steps = [
+//   { call = "fn", args = { sel = 0, v = 42 }, status = 0, result = 42 },
+//   { call = "fn", args = { sel = 0, v = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { sel = 0, v = 7 }, status = 0, result = 7 },
+// ]
+
+// A value-giving `match` whose last arm diverges (`panic(msg)`, spec §7, §9.2: it can stand where a value of
+// any type is needed), on a target that is built to C. The last arm of the C is the `else` of the chain and
+// does not return, so the result variable is set on every path that goes on (R-145 (1): clang's
+// `-Wsometimes-uninitialized` and gcc's `-Wmaybe-uninitialized` under `-Wall -Wextra -Werror`). A panic is
+// the status 1 of the call on a poison target (§14.2) and the next call is unaffected.
+//   unwrap_or_panic(sel, v)   Some(v) -> v, None -> a panic
+//   pick_or_panic(c, v)       an `if` whose else branch is a panic
+
+pub fn unwrap_or_panic(sel: U32, v: U32) -> U32 {
+  var o: Option[U32] = None
+  if sel < 1 {
+    o = Some(v)
+  }
+  let r = match o {
+    Some(x) => x,
+    None => panic("none"),
+  }
+  r
+}
+
+pub fn pick_or_panic(c: Bool, v: I32) -> I32 {
+  let r = if c {
+    v + 1
+  } else {
+    panic("no")
+  }
+  r
+}
+
+test "unwrap_or_panic: the values" {
+  assert unwrap_or_panic(0, 42) == 42
+  assert unwrap_or_panic(0, 0) == 0
+  assert unwrap_or_panic(0, 7) == 7
+}
+
+test "unwrap_or_panic(1, 42) panics" {   //~ TESTFAIL "unwrap_or_panic(1, 42) panics"
+  let _ = unwrap_or_panic(1, 42)
+}
+
+test "pick_or_panic: the values" {
+  assert pick_or_panic(true, 1) == 2
+  assert pick_or_panic(true, -1) == 0
+}
+
+test "pick_or_panic(false, 1) panics" {   //~ TESTFAIL "pick_or_panic(false, 1) panics"
+  let _ = pick_or_panic(false, 1)
+}

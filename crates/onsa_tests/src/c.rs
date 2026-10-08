@@ -7,19 +7,21 @@
 //!
 //! ```text
 //! c-clang          clang   -Wall -Wextra -Werror -pedantic, the target's flags; conformance
-//! c-gcc            gcc-15  the same, without the warnings of [`GCC_KNOWN_OFF`]
-//! c-gcc-strict     gcc-15  the same with every warning
+//! c-gcc            gcc-15  the same
 //! c-sanitize       clang   as c-clang with ASan and UBSan; conformance under the sanitizers
 //! c-x86            clang   as c-clang with -arch x86_64; conformance under Rosetta
-//! c-header         the public headers alone in C11 (clang; gcc-15 without [`GCC_KNOWN_OFF`])
+//! c-header         the public headers alone in C11 (clang, gcc-15)
 //! c-header-strict  the public headers alone in C99 (clang, gcc-15) and C++11 (clang++, g++-15)
 //! ```
 //!
 //! A check that waits for a later work is split so that a new error never
 //! hides behind the known one: the item that runs every warning (`-strict`)
 //! is the one the pending list holds as a whole; its pair switches off only
-//! the warnings of the known causes, one table each ([`GCC_KNOWN_OFF`]), and
-//! is never pending.
+//! the warnings of the known causes, one table each (the `off` of the row),
+//! and is never pending. W2-09 removed the last such table (`GCC_KNOWN_OFF`:
+//! the STDC pragma and the `-Wtype-limits` of the runtime, R-67, S-54) and,
+//! with it, `c-gcc-strict`, which had become the same check as `c-gcc`.
+//! (`c-header-strict` is not such a pair: it checks other standards.)
 //!
 //! A compiler that is not on the PATH fails the item: nothing is skipped
 //! silently (R-113 3).
@@ -369,21 +371,14 @@ pub enum Runner {
     Rosetta,
 }
 
-/// The warnings `c-gcc` and the C11 header check of gcc-15 switch off, each
-/// for a known cause that a later work removes; `c-gcc-strict` and
-/// `c-header-strict` keep them. W2-09 (R-67, S-54) removes both causes and
-/// this table: GCC does not know `#pragma STDC FP_CONTRACT`
-/// (`-Wunknown-pragmas`), and the integer helpers of `onsa.h` compare an
-/// unsigned value with 0 (`-Wtype-limits`).
-pub const GCC_KNOWN_OFF: &[&str] = &["-Wno-unknown-pragmas", "-Wno-type-limits"];
-
 /// A compiler and the flags it adds to the target's.
 #[derive(Debug, Clone, Copy)]
 pub struct Toolchain {
     pub cc: &'static str,
     /// After the target's flags and [`WARNINGS`].
     pub flags: &'static [&'static str],
-    /// Warnings switched off for a known cause (last: they win), [`GCC_KNOWN_OFF`].
+    /// Warnings switched off for a known cause that a later work removes (last:
+    /// they win); a row with them has a `-strict` pair without them.
     pub off: &'static [&'static str],
     pub runner: Runner,
 }
@@ -395,7 +390,7 @@ pub struct HeaderCompiler {
     pub label: &'static str,
     pub cc: &'static str,
     pub flags: &'static [&'static str],
-    /// Warnings switched off for a known cause, [`GCC_KNOWN_OFF`].
+    /// Warnings switched off for a known cause, as [`Toolchain::off`].
     pub off: &'static [&'static str],
     /// The extension of the file that includes the headers (`c`, `cpp`).
     pub ext: &'static str,
@@ -479,15 +474,14 @@ const fn header(
 /// The C checks, one gate item each (Q-07).
 pub const ITEMS: &[Item] = &[
     Item { name: "c-clang", check: unit("clang", &[], &[], Runner::Native) },
-    Item { name: "c-gcc", check: unit("gcc-15", &[], GCC_KNOWN_OFF, Runner::Native) },
-    Item { name: "c-gcc-strict", check: unit("gcc-15", &[], &[], Runner::Native) },
+    Item { name: "c-gcc", check: unit("gcc-15", &[], &[], Runner::Native) },
     Item { name: "c-sanitize", check: unit("clang", SANITIZE, &[], Runner::Sanitized) },
     Item { name: "c-x86", check: unit("clang", &["-arch", "x86_64"], &[], Runner::Rosetta) },
     Item {
         name: "c-header",
         check: Check::Headers(&[
             header("c11-clang", "clang", HEADER_C11, &[], "c"),
-            header("c11-gcc-15", "gcc-15", HEADER_C11, GCC_KNOWN_OFF, "c"),
+            header("c11-gcc-15", "gcc-15", HEADER_C11, &[], "c"),
         ]),
     },
     Item {
@@ -659,30 +653,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp);
     }
 
-    /// An item that switches warnings off has a `-strict` pair that runs the
-    /// same compilers with every warning (a new error never hides).
+    /// No item switches a warning off since W2-09 (R-67, S-54): every C check
+    /// runs every warning of §13.4. A row that switches one off for a known
+    /// cause again needs a `-strict` pair without it (the module's doc), so
+    /// that a new error never hides behind the known one.
     #[test]
-    fn relaxed_items_have_a_strict_pair() {
-        let offs = |i: &Item| -> Vec<&'static [&'static str]> {
-            match i.check {
+    fn no_item_switches_a_warning_off() {
+        for i in ITEMS {
+            let offs: Vec<&[&str]> = match i.check {
                 Check::Unit(t) => vec![t.off],
                 Check::Headers(cs) => cs.iter().map(|h| h.off).collect(),
-            }
-        };
-        let relaxed: Vec<&Item> = ITEMS.iter().filter(|i| offs(i).iter().any(|o| !o.is_empty())).collect();
-        assert_eq!(relaxed.iter().map(|i| i.name).collect::<Vec<_>>(), ["c-gcc", "c-header"]);
-        for i in relaxed {
-            let strict =
-                item(&format!("{}-strict", i.name)).unwrap_or_else(|| panic!("{} has no -strict pair", i.name));
-            assert!(offs(strict).iter().all(|o| o.is_empty()), "{}", strict.name);
-            let mut a = i.programs();
-            a.sort();
-            let mut b = strict.programs();
-            b.sort();
-            assert!(a.iter().all(|p| b.contains(p)), "{}: {a:?} vs {b:?}", i.name);
-        }
-        for i in ITEMS {
-            assert!(i.name.ends_with("-strict") || offs(i).iter().all(|o| o.is_empty() || *o == GCC_KNOWN_OFF));
+            };
+            assert!(offs.iter().all(|o| o.is_empty()), "{} switches warnings off without a -strict pair", i.name);
         }
     }
 }

@@ -1,0 +1,399 @@
+// onsa.toml
+// [package]
+// name = "c_clobber"
+// edition = "2026"
+//
+// [export]
+// prefix = "ccl_"
+// fns = [
+//   "c_clobber.shr_loop_i8",
+//   "c_clobber.wadd_loop_u8",
+//   "c_clobber.two_vars_i32",
+//   "c_clobber.halvings_u32",
+//   "c_clobber.decay_f32",
+//   "c_clobber.decay_f64",
+//   "c_clobber.parity_flag",
+//   "c_clobber.nested_u16",
+//   "c_clobber.checked_loop_i16",
+//   "c_clobber.many_args_i32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§9.2", "§13.4", "§14.2", "§3.4"]
+//
+// [[test.host]]
+// name = "shr_loop_i8"
+// target = "host"
+// fn = "c_clobber.shr_loop_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, k = 3 }, status = 0, result = -16 },
+//   { call = "fn", args = { a = 127, k = 3 }, status = 0, result = 15 },
+//   { call = "fn", args = { a = -1, k = 5 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = 100, k = 0 }, status = 0, result = 100 },
+//   { call = "fn", args = { a = -128, k = 7 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = 127, k = 20 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "wadd_loop_u8"
+// target = "host"
+// fn = "c_clobber.wadd_loop_u8"
+// steps = [
+//   { call = "fn", args = { a = 250, n = 3 }, status = 0, result = 3 },
+//   { call = "fn", args = { a = 0, n = 100 }, status = 0, result = 44 },
+//   { call = "fn", args = { a = 7, n = 0 }, status = 0, result = 7 },
+//   { call = "fn", args = { a = 255, n = 1 }, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "two_vars_i32"
+// target = "host"
+// fn = "c_clobber.two_vars_i32"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 10, n = 3 }, status = 0, result = 28 },
+//   { call = "fn", args = { a = 5, b = 7, n = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { a = 2147483647, b = 1, n = 1 }, status = 0, result = -2147483648 },
+//   { call = "fn", args = { a = 0, b = 0, n = 4 }, status = 0, result = -6 },
+// ]
+//
+// [[test.host]]
+// name = "halvings_u32"
+// target = "host"
+// fn = "c_clobber.halvings_u32"
+// steps = [
+//   { call = "fn", args = { a = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 2 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 3 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1000 }, status = 0, result = 9 },
+//   { call = "fn", args = { a = 4294967295 }, status = 0, result = 31 },
+// ]
+//
+// [[test.host]]
+// name = "decay_f32"
+// target = "host"
+// fn = "c_clobber.decay_f32"
+// steps = [
+//   { call = "fn", args = { a = 8.0, n = 3 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = 3.0, n = 2 }, status = 0, result = 0.75 },
+//   { call = "fn", args = { a = 1.0, n = 0 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = -6.0, n = 1 }, status = 0, result = -3.0 },
+//   { call = "fn", args = { a = 1.0, n = 24 }, status = 0, result = 5.960464477539063e-8 },
+// ]
+//
+// [[test.host]]
+// name = "decay_f64"
+// target = "host"
+// fn = "c_clobber.decay_f64"
+// steps = [
+//   { call = "fn", args = { a = 8.0, n = 3 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = 3.0, n = 2 }, status = 0, result = 0.75 },
+//   { call = "fn", args = { a = 1.0, n = 60 }, status = 0, result = 8.673617379884035e-19 },
+// ]
+//
+// [[test.host]]
+// name = "parity_flag"
+// target = "host"
+// fn = "c_clobber.parity_flag"
+// steps = [
+//   { call = "fn", args = { a = 0, n = 0 }, status = 0, result = false },
+//   { call = "fn", args = { a = 0, n = 1 }, status = 0, result = true },
+//   { call = "fn", args = { a = -5, n = 2 }, status = 0, result = false },
+//   { call = "fn", args = { a = 9, n = 7 }, status = 0, result = true },
+// ]
+//
+// [[test.host]]
+// name = "nested_u16"
+// target = "host"
+// fn = "c_clobber.nested_u16"
+// steps = [
+//   { call = "fn", args = { a = 65535, n = 2, m = 3 }, status = 0, result = 5 },
+//   { call = "fn", args = { a = 10, n = 0, m = 5 }, status = 0, result = 10 },
+//   { call = "fn", args = { a = 10, n = 4, m = 0 }, status = 0, result = 10 },
+//   { call = "fn", args = { a = 0, n = 3, m = 4 }, status = 0, result = 12 },
+// ]
+//
+// [[test.host]]
+// name = "checked_loop_i16: a panic in the loop is a status, the next call is fine"
+// target = "host"
+// fn = "c_clobber.checked_loop_i16"
+// steps = [
+//   { call = "fn", args = { a = 0, n = 32 }, status = 0, result = 32000 },
+//   { call = "fn", args = { a = -32768, n = 65 }, status = 0, result = 32232 },
+//   { call = "fn", args = { a = 0, n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 0, n = 33 }, status = 1 },
+//   { call = "fn", args = { a = -32768, n = 66 }, status = 1 },
+//   { call = "fn", args = { a = 5, n = 3 }, status = 0, result = 3005 },
+// ]
+//
+// [[test.host]]
+// name = "many_args_i32"
+// target = "host"
+// fn = "c_clobber.many_args_i32"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, n = 2 }, status = 0, result = 25 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, n = 0 }, status = 0, result = 3 },
+//   { call = "fn", args = { a = 0, b = 0, c = 65536, d = 65536, e = 0, f = 0, n = 1 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "shr_loop_i8 on a reset target"
+// target = "fw"
+// fn = "c_clobber.shr_loop_i8"
+// steps = [
+//   { call = "fn", args = { a = -128, k = 3 }, status = 0, result = -16 },
+//   { call = "fn", args = { a = 127, k = 3 }, status = 0, result = 15 },
+//   { call = "fn", args = { a = -1, k = 5 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = 100, k = 0 }, status = 0, result = 100 },
+//   { call = "fn", args = { a = -128, k = 7 }, status = 0, result = -1 },
+//   { call = "fn", args = { a = 127, k = 20 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "two_vars_i32 on a reset target"
+// target = "fw"
+// fn = "c_clobber.two_vars_i32"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 10, n = 3 }, status = 0, result = 28 },
+//   { call = "fn", args = { a = 5, b = 7, n = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { a = 2147483647, b = 1, n = 1 }, status = 0, result = -2147483648 },
+//   { call = "fn", args = { a = 0, b = 0, n = 4 }, status = 0, result = -6 },
+// ]
+//
+// [[test.host]]
+// name = "decay_f32 on a reset target"
+// target = "fw"
+// fn = "c_clobber.decay_f32"
+// steps = [
+//   { call = "fn", args = { a = 8.0, n = 3 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = 3.0, n = 2 }, status = 0, result = 0.75 },
+//   { call = "fn", args = { a = 1.0, n = 0 }, status = 0, result = 1.0 },
+//   { call = "fn", args = { a = -6.0, n = 1 }, status = 0, result = -3.0 },
+//   { call = "fn", args = { a = 1.0, n = 24 }, status = 0, result = 5.960464477539063e-8 },
+// ]
+//
+// [[test.host]]
+// name = "checked_loop_i16 on a reset target"
+// target = "fw"
+// fn = "c_clobber.checked_loop_i16"
+// steps = [
+//   { call = "fn", args = { a = 0, n = 32 }, status = 0, result = 32000 },
+//   { call = "fn", args = { a = -32768, n = 65 }, status = 0, result = 32232 },
+//   { call = "fn", args = { a = 0, n = 0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 5, n = 3 }, status = 0, result = 3005 },
+// ]
+//
+// [[test.host]]
+// name = "many_args_i32 on a reset target"
+// target = "fw"
+// fn = "c_clobber.many_args_i32"
+// steps = [
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, n = 2 }, status = 0, result = 25 },
+//   { call = "fn", args = { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, n = 0 }, status = 0, result = 3 },
+//   { call = "fn", args = { a = 0, b = 0, c = 65536, d = 65536, e = 0, f = 0, n = 1 }, status = 0, result = 0 },
+// ]
+
+// Exported functions with loops and variables, on a target with `panic = "poison"` (spec §9.2, §13.4,
+// §14.2). A poison export is a wrapper that calls `setjmp` and has the body of the function inlined. gcc
+// at -O2 can keep a loop variable or an argument of the inlined body in a register of the wrapper and
+// then reports `-Wclobbered` ("might be clobbered by `longjmp`"). §13.4 promises that the generated C
+// compiles without a warning under `-Wall -Wextra -pedantic` (the host may build with `-Werror`), so every
+// shape below, with the arguments and the variables of the several widths and of both float widths, must
+// compile under gcc and clang (R-167). The values are the plain meaning of each program (§3.4), and a
+// panic in the middle of a loop is reported by the status 1 of the call (§14.2) with the next call
+// unaffected. `fw` (`panic = "reset"`) runs the calls that do not panic.
+//   shr_loop_i8(a, k)       a shifted right by 1, k times (the sign stays)
+//   wadd_loop_u8(a, n)      a + 3 n times, wrapping
+//   two_vars_i32(a, b, n)   x = x + y; y = y - 1, n times, wrapping, from x = a, y = b
+//   halvings_u32(a)         how many times a can be halved while it is greater than 1
+//   decay_f32 / decay_f64   a times 0.5, n times (exact)
+//   parity_flag(a, n)       false toggled n times (a is a second variable that moves)
+//   nested_u16(a, n, m)     a + 1, n * m times, wrapping, in two loops
+//   checked_loop_i16(a, n)  a + 1000, n times, checked: a panic when the sum leaves I16
+//   many_args_i32(...)      six arguments and two loop variables
+
+pub fn shr_loop_i8(a: I8, k: U32) -> I8 {
+  var x: I8 = a
+  for _ in 0..k {
+    x = x >> 1
+  }
+  x
+}
+
+pub fn wadd_loop_u8(a: U8, n: U32) -> U8 {
+  var x: U8 = a
+  for _ in 0..n {
+    x = x +% 3
+  }
+  x
+}
+
+pub fn two_vars_i32(a: I32, b: I32, n: U32) -> I32 {
+  var x: I32 = a
+  var y: I32 = b
+  for _ in 0..n {
+    x = x +% y
+    y = y -% 1
+  }
+  x
+}
+
+pub fn halvings_u32(a: U32) -> U32 {
+  var v: U32 = a
+  var c: U32 = 0
+  while v > 1 {
+    v = v / 2
+    c = c + 1
+  }
+  c
+}
+
+pub fn decay_f32(a: F32, n: U32) -> F32 {
+  var x: F32 = a
+  for _ in 0..n {
+    x = x * 0.5
+  }
+  x
+}
+
+pub fn decay_f64(a: F64, n: U32) -> F64 {
+  var x: F64 = a
+  for _ in 0..n {
+    x = x * 0.5
+  }
+  x
+}
+
+pub fn parity_flag(a: I64, n: U32) -> Bool {
+  var f = false
+  var i: I64 = a
+  for _ in 0..n {
+    f = !f
+    i = i +% 1
+  }
+  f
+}
+
+pub fn nested_u16(a: U16, n: U32, m: U32) -> U16 {
+  var s: U16 = a
+  for _ in 0..n {
+    for _ in 0..m {
+      s = s +% 1
+    }
+  }
+  s
+}
+
+pub fn checked_loop_i16(a: I16, n: U32) -> I16 {
+  var x: I16 = a
+  for _ in 0..n {
+    x = x + 1000
+  }
+  x
+}
+
+pub fn many_args_i32(a: I32, b: I32, c: I32, d: I32, e: I32, f: I32, n: U32) -> I32 {
+  var s: I32 = a
+  var t: I32 = b
+  for _ in 0..n {
+    s = s +% (c *% d)
+    t = t +% (e -% f)
+  }
+  s +% t
+}
+
+test "shr_loop_i8: the values" {
+  assert shr_loop_i8(I8.MIN, 3) == -16
+  assert shr_loop_i8(127, 3) == 15
+  assert shr_loop_i8(-1, 5) == -1
+  assert shr_loop_i8(100, 0) == 100
+  assert shr_loop_i8(I8.MIN, 7) == -1
+  assert shr_loop_i8(127, 20) == 0
+}
+
+test "wadd_loop_u8: the values" {
+  assert wadd_loop_u8(250, 3) == 3
+  assert wadd_loop_u8(0, 100) == 44
+  assert wadd_loop_u8(7, 0) == 7
+  assert wadd_loop_u8(255, 1) == 2
+}
+
+test "two_vars_i32: the values" {
+  assert two_vars_i32(1, 10, 3) == 28
+  assert two_vars_i32(5, 7, 0) == 5
+  assert two_vars_i32(2147483647, 1, 1) == I32.MIN
+  assert two_vars_i32(0, 0, 4) == -6
+}
+
+test "halvings_u32: the values" {
+  assert halvings_u32(0) == 0
+  assert halvings_u32(1) == 0
+  assert halvings_u32(2) == 1
+  assert halvings_u32(3) == 1
+  assert halvings_u32(1000) == 9
+  assert halvings_u32(4294967295) == 31
+}
+
+test "decay_f32: the values" {
+  assert decay_f32(8.0, 3) == 1.0
+  assert decay_f32(3.0, 2) == 0.75
+  assert decay_f32(1.0, 0) == 1.0
+  assert decay_f32(-6.0, 1) == -3.0
+  assert decay_f32(1.0, 24) == 5.960464477539063e-8
+}
+
+test "decay_f64: the values" {
+  assert decay_f64(8.0, 3) == 1.0
+  assert decay_f64(3.0, 2) == 0.75
+  assert decay_f64(1.0, 60) == 8.673617379884035e-19
+}
+
+test "parity_flag: the values" {
+  assert !parity_flag(0, 0)
+  assert parity_flag(0, 1)
+  assert !parity_flag(-5, 2)
+  assert parity_flag(9, 7)
+}
+
+test "nested_u16: the values" {
+  assert nested_u16(65535, 2, 3) == 5
+  assert nested_u16(10, 0, 5) == 10
+  assert nested_u16(10, 4, 0) == 10
+  assert nested_u16(0, 3, 4) == 12
+}
+
+test "checked_loop_i16: the values" {
+  assert checked_loop_i16(0, 32) == 32000
+  assert checked_loop_i16(I16.MIN, 65) == 32232
+  assert checked_loop_i16(0, 0) == 0
+  assert checked_loop_i16(5, 3) == 3005
+}
+
+test "checked_loop_i16(0, 33) panics" {   //~ TESTFAIL "checked_loop_i16(0, 33) panics"
+  let _ = checked_loop_i16(0, 33)
+}
+
+test "checked_loop_i16(I16.MIN, 66) panics" {   //~ TESTFAIL "checked_loop_i16(I16.MIN, 66) panics"
+  let _ = checked_loop_i16(I16.MIN, 66)
+}
+
+test "many_args_i32: the values" {
+  assert many_args_i32(1, 2, 3, 4, 5, 6, 2) == 25
+  assert many_args_i32(1, 2, 3, 4, 5, 6, 0) == 3
+  assert many_args_i32(0, 0, 65536, 65536, 0, 0, 1) == 0
+}

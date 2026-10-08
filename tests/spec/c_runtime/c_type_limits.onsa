@@ -1,0 +1,683 @@
+// onsa.toml
+// [package]
+// name = "c_type_limits"
+// edition = "2026"
+//
+// [export]
+// prefix = "ctl_"
+// fns = [
+//   "c_type_limits.lim_u8",
+//   "c_type_limits.lim_u16",
+//   "c_type_limits.lim_u32",
+//   "c_type_limits.lim_u64",
+//   "c_type_limits.lim_i8",
+//   "c_type_limits.lim_i16",
+//   "c_type_limits.lim_i32",
+//   "c_type_limits.lim_i64",
+//   "c_type_limits.lim_wide_u8",
+//   "c_type_limits.lim_wide_u16",
+//   "c_type_limits.lim_wide_u32",
+//   "c_type_limits.lim_wide_i8",
+//   "c_type_limits.lim_wide_i16",
+//   "c_type_limits.lim_wide_i32",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§13.4", "§3.4", "§3.3", "§6.6"]
+//
+// [[test.host]]
+// name = "lim_u8"
+// target = "host"
+// fn = "c_type_limits.lim_u8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 127 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 254 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 149 },
+// ]
+//
+// [[test.host]]
+// name = "lim_u16"
+// target = "host"
+// fn = "c_type_limits.lim_u16"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 65534 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 65535 }, status = 0, result = 149 },
+// ]
+//
+// [[test.host]]
+// name = "lim_u32"
+// target = "host"
+// fn = "c_type_limits.lim_u32"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 2147483647 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 4294967294 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 4294967295 }, status = 0, result = 149 },
+// ]
+//
+// [[test.host]]
+// name = "lim_u64"
+// target = "host"
+// fn = "c_type_limits.lim_u64"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 9223372036854775807 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "lim_i8"
+// target = "host"
+// fn = "c_type_limits.lim_i8"
+// steps = [
+//   { call = "fn", args = { x = -128 }, status = 0, result = 213 },
+//   { call = "fn", args = { x = -1 }, status = 0, result = 85 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 127 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "lim_i16"
+// target = "host"
+// fn = "c_type_limits.lim_i16"
+// steps = [
+//   { call = "fn", args = { x = -32768 }, status = 0, result = 213 },
+//   { call = "fn", args = { x = -1 }, status = 0, result = 85 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "lim_i32"
+// target = "host"
+// fn = "c_type_limits.lim_i32"
+// steps = [
+//   { call = "fn", args = { x = -2147483648 }, status = 0, result = 213 },
+//   { call = "fn", args = { x = -1 }, status = 0, result = 85 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 2147483647 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "lim_i64"
+// target = "host"
+// fn = "c_type_limits.lim_i64"
+// steps = [
+//   { call = "fn", args = { x = -9223372036854775808 }, status = 0, result = 213 },
+//   { call = "fn", args = { x = -1 }, status = 0, result = 85 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 9223372036854775807 }, status = 0, result = 21 },
+// ]
+//
+// [[test.host]]
+// name = "lim_wide_u8"
+// target = "host"
+// fn = "c_type_limits.lim_wide_u8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "lim_wide_u16"
+// target = "host"
+// fn = "c_type_limits.lim_wide_u16"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 65535 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "lim_wide_u32"
+// target = "host"
+// fn = "c_type_limits.lim_wide_u32"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 4294967295 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "lim_wide_i8"
+// target = "host"
+// fn = "c_type_limits.lim_wide_i8"
+// steps = [
+//   { call = "fn", args = { x = -128 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 127 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "lim_wide_i16"
+// target = "host"
+// fn = "c_type_limits.lim_wide_i16"
+// steps = [
+//   { call = "fn", args = { x = -32768 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 32767 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "lim_wide_i32"
+// target = "host"
+// fn = "c_type_limits.lim_wide_i32"
+// steps = [
+//   { call = "fn", args = { x = -2147483648 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 0 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 1 }, status = 0, result = 5 },
+//   { call = "fn", args = { x = 2147483647 }, status = 0, result = 5 },
+// ]
+//
+// [[test.host]]
+// name = "lim_u8 on a reset target"
+// target = "fw"
+// fn = "c_type_limits.lim_u8"
+// steps = [
+//   { call = "fn", args = { x = 0 }, status = 0, result = 21 },
+//   { call = "fn", args = { x = 255 }, status = 0, result = 149 },
+// ]
+//
+// [[test.host]]
+// name = "lim_i16 on a reset target"
+// target = "fw"
+// fn = "c_type_limits.lim_i16"
+// steps = [
+//   { call = "fn", args = { x = -32768 }, status = 0, result = 213 },
+//   { call = "fn", args = { x = 5 }, status = 0, result = 21 },
+// ]
+
+// Comparisons that the type of an operand already decides, written in the Onsa source, on a target that is
+// built to C (spec §13.4: the generated C compiles without a warning under `-Wall -Wextra -pedantic`, so a
+// host that builds with `-Werror` accepts it). A C compiler warns about such a comparison when it is written
+// as it is: gcc `-Wtype-limits` ("comparison of unsigned expression in '< 0' is always false", "always
+// true due to limited range of data type"), clang `-Wtautological-constant-out-of-range-compare`,
+// `-Wtautological-unsigned-zero-compare`. The Onsa program is
+// valid and means exactly what it says (§3.4 gives `x >= 0` on an unsigned value its plain value), so the
+// C the compiler writes must not contain the warned form, in the helpers of the runtime (`-Wtype-limits`
+// in `onsa.h`, R-67, S-54) as well as in the code of the program (R-145 (3)).
+//
+// `lim_<t>(x)` adds up one bit for each of these that is true:
+//   1  x >= MIN                       (always true)         16  MIN <= x           (always true)
+//   2  x < MIN                        (always false)        32  MAX < x            (always false)
+//   4  x <= MAX                       (always true)         64  x < 0   (signed: depends; unsigned: false)
+//   8  x > MAX                        (always false)       128  x >= MAX (unsigned) / x <= MIN (signed)
+// where MIN is 0 for an unsigned type. So an unsigned x gives 21, plus 128 when x is MAX; a signed x gives
+// 21, plus 64 when x is negative, plus 128 when x is MIN. `lim_wide_<t>` makes the same decisions after
+// widening with `as` (`(x as I32) >= 0` for a U8 is always true as well).
+
+pub fn lim_u8(x: U8) -> U32 {
+  var m: U32 = 0
+  if x >= 0 {
+    m = m + 1
+  }
+  if x < 0 {
+    m = m + 2
+  }
+  if x <= U8.MAX {
+    m = m + 4
+  }
+  if x > U8.MAX {
+    m = m + 8
+  }
+  if 0 <= x {
+    m = m + 16
+  }
+  if U8.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x >= U8.MAX {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_u16(x: U16) -> U32 {
+  var m: U32 = 0
+  if x >= 0 {
+    m = m + 1
+  }
+  if x < 0 {
+    m = m + 2
+  }
+  if x <= U16.MAX {
+    m = m + 4
+  }
+  if x > U16.MAX {
+    m = m + 8
+  }
+  if 0 <= x {
+    m = m + 16
+  }
+  if U16.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x >= U16.MAX {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_u32(x: U32) -> U32 {
+  var m: U32 = 0
+  if x >= 0 {
+    m = m + 1
+  }
+  if x < 0 {
+    m = m + 2
+  }
+  if x <= U32.MAX {
+    m = m + 4
+  }
+  if x > U32.MAX {
+    m = m + 8
+  }
+  if 0 <= x {
+    m = m + 16
+  }
+  if U32.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x >= U32.MAX {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_u64(x: U64) -> U32 {
+  var m: U32 = 0
+  if x >= 0 {
+    m = m + 1
+  }
+  if x < 0 {
+    m = m + 2
+  }
+  if x <= U64.MAX {
+    m = m + 4
+  }
+  if x > U64.MAX {
+    m = m + 8
+  }
+  if 0 <= x {
+    m = m + 16
+  }
+  if U64.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x >= U64.MAX {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_i8(x: I8) -> U32 {
+  var m: U32 = 0
+  if x >= I8.MIN {
+    m = m + 1
+  }
+  if x < I8.MIN {
+    m = m + 2
+  }
+  if x <= I8.MAX {
+    m = m + 4
+  }
+  if x > I8.MAX {
+    m = m + 8
+  }
+  if I8.MIN <= x {
+    m = m + 16
+  }
+  if I8.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x <= I8.MIN {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_i16(x: I16) -> U32 {
+  var m: U32 = 0
+  if x >= I16.MIN {
+    m = m + 1
+  }
+  if x < I16.MIN {
+    m = m + 2
+  }
+  if x <= I16.MAX {
+    m = m + 4
+  }
+  if x > I16.MAX {
+    m = m + 8
+  }
+  if I16.MIN <= x {
+    m = m + 16
+  }
+  if I16.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x <= I16.MIN {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_i32(x: I32) -> U32 {
+  var m: U32 = 0
+  if x >= I32.MIN {
+    m = m + 1
+  }
+  if x < I32.MIN {
+    m = m + 2
+  }
+  if x <= I32.MAX {
+    m = m + 4
+  }
+  if x > I32.MAX {
+    m = m + 8
+  }
+  if I32.MIN <= x {
+    m = m + 16
+  }
+  if I32.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x <= I32.MIN {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_i64(x: I64) -> U32 {
+  var m: U32 = 0
+  if x >= I64.MIN {
+    m = m + 1
+  }
+  if x < I64.MIN {
+    m = m + 2
+  }
+  if x <= I64.MAX {
+    m = m + 4
+  }
+  if x > I64.MAX {
+    m = m + 8
+  }
+  if I64.MIN <= x {
+    m = m + 16
+  }
+  if I64.MAX < x {
+    m = m + 32
+  }
+  if x < 0 {
+    m = m + 64
+  }
+  if x <= I64.MIN {
+    m = m + 128
+  }
+  m
+}
+
+pub fn lim_wide_u8(x: U8) -> U32 {
+  let w = x as I32
+  var m: U32 = 0
+  if w >= 0 {
+    m = m + 1
+  }
+  if w < 0 {
+    m = m + 2
+  }
+  if w <= 255 {
+    m = m + 4
+  }
+  if w > 255 {
+    m = m + 8
+  }
+  m
+}
+
+pub fn lim_wide_u16(x: U16) -> U32 {
+  let w = x as I32
+  var m: U32 = 0
+  if w >= 0 {
+    m = m + 1
+  }
+  if w < 0 {
+    m = m + 2
+  }
+  if w <= 65535 {
+    m = m + 4
+  }
+  if w > 65535 {
+    m = m + 8
+  }
+  m
+}
+
+pub fn lim_wide_u32(x: U32) -> U32 {
+  let w = x as I64
+  var m: U32 = 0
+  if w >= 0 {
+    m = m + 1
+  }
+  if w < 0 {
+    m = m + 2
+  }
+  if w <= 4294967295 {
+    m = m + 4
+  }
+  if w > 4294967295 {
+    m = m + 8
+  }
+  m
+}
+
+pub fn lim_wide_i8(x: I8) -> U32 {
+  let w = x as I32
+  var m: U32 = 0
+  if w >= -128 {
+    m = m + 1
+  }
+  if w < -128 {
+    m = m + 2
+  }
+  if w <= 127 {
+    m = m + 4
+  }
+  if w > 127 {
+    m = m + 8
+  }
+  m
+}
+
+pub fn lim_wide_i16(x: I16) -> U32 {
+  let w = x as I32
+  var m: U32 = 0
+  if w >= -32768 {
+    m = m + 1
+  }
+  if w < -32768 {
+    m = m + 2
+  }
+  if w <= 32767 {
+    m = m + 4
+  }
+  if w > 32767 {
+    m = m + 8
+  }
+  m
+}
+
+pub fn lim_wide_i32(x: I32) -> U32 {
+  let w = x as I64
+  var m: U32 = 0
+  if w >= -2147483648 {
+    m = m + 1
+  }
+  if w < -2147483648 {
+    m = m + 2
+  }
+  if w <= 2147483647 {
+    m = m + 4
+  }
+  if w > 2147483647 {
+    m = m + 8
+  }
+  m
+}
+
+test "lim_u8: the values" {
+  assert lim_u8(0) == 21
+  assert lim_u8(1) == 21
+  assert lim_u8(127) == 21
+  assert lim_u8(254) == 21
+  assert lim_u8(255) == 149
+}
+
+test "lim_u16: the values" {
+  assert lim_u16(0) == 21
+  assert lim_u16(1) == 21
+  assert lim_u16(32767) == 21
+  assert lim_u16(65534) == 21
+  assert lim_u16(65535) == 149
+}
+
+test "lim_u32: the values" {
+  assert lim_u32(0) == 21
+  assert lim_u32(1) == 21
+  assert lim_u32(2147483647) == 21
+  assert lim_u32(4294967294) == 21
+  assert lim_u32(4294967295) == 149
+}
+
+test "lim_u64: the values" {
+  assert lim_u64(0) == 21
+  assert lim_u64(1) == 21
+  assert lim_u64(9223372036854775807) == 21
+}
+
+test "lim_i8: the values" {
+  assert lim_i8(I8.MIN) == 213
+  assert lim_i8(-1) == 85
+  assert lim_i8(0) == 21
+  assert lim_i8(1) == 21
+  assert lim_i8(127) == 21
+}
+
+test "lim_i16: the values" {
+  assert lim_i16(I16.MIN) == 213
+  assert lim_i16(-1) == 85
+  assert lim_i16(0) == 21
+  assert lim_i16(1) == 21
+  assert lim_i16(32767) == 21
+}
+
+test "lim_i32: the values" {
+  assert lim_i32(I32.MIN) == 213
+  assert lim_i32(-1) == 85
+  assert lim_i32(0) == 21
+  assert lim_i32(1) == 21
+  assert lim_i32(2147483647) == 21
+}
+
+test "lim_i64: the values" {
+  assert lim_i64(I64.MIN) == 213
+  assert lim_i64(-1) == 85
+  assert lim_i64(0) == 21
+  assert lim_i64(1) == 21
+  assert lim_i64(9223372036854775807) == 21
+}
+
+test "lim_wide_u8: the values" {
+  assert lim_wide_u8(0) == 5
+  assert lim_wide_u8(1) == 5
+  assert lim_wide_u8(255) == 5
+}
+
+test "lim_wide_u16: the values" {
+  assert lim_wide_u16(0) == 5
+  assert lim_wide_u16(1) == 5
+  assert lim_wide_u16(65535) == 5
+}
+
+test "lim_wide_u32: the values" {
+  assert lim_wide_u32(0) == 5
+  assert lim_wide_u32(1) == 5
+  assert lim_wide_u32(4294967295) == 5
+}
+
+test "lim_wide_i8: the values" {
+  assert lim_wide_i8(I8.MIN) == 5
+  assert lim_wide_i8(0) == 5
+  assert lim_wide_i8(1) == 5
+  assert lim_wide_i8(127) == 5
+}
+
+test "lim_wide_i16: the values" {
+  assert lim_wide_i16(I16.MIN) == 5
+  assert lim_wide_i16(0) == 5
+  assert lim_wide_i16(1) == 5
+  assert lim_wide_i16(32767) == 5
+}
+
+test "lim_wide_i32: the values" {
+  assert lim_wide_i32(I32.MIN) == 5
+  assert lim_wide_i32(0) == 5
+  assert lim_wide_i32(1) == 5
+  assert lim_wide_i32(2147483647) == 5
+}

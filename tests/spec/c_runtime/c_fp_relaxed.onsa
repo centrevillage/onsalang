@@ -1,0 +1,331 @@
+// onsa.toml
+// [package]
+// name = "c_fp_relaxed"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfr_"
+// fns = [
+//   "c_fp_relaxed.strict_before_f32",
+//   "c_fp_relaxed.rel_muladd_f32",
+//   "c_fp_relaxed.rel_loop_f32",
+//   "c_fp_relaxed.rel_muladd_f64",
+//   "c_fp_relaxed.rel_int_overflow",
+//   "c_fp_relaxed.rel_trunc",
+//   "c_fp_relaxed.rel_nan_check",
+//   "c_fp_relaxed.rel_inf",
+//   "c_fp_relaxed.strict_after_f32",
+//   "c_fp_relaxed.strict_loop_after_f32",
+//   "c_fp_relaxed.strict_after_f64",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [targets.fw]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "reset"
+// provides = []
+//
+// [targets.dbg]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§15.5", "§13.4", "§3.4", "§6.5", "§9.2"]
+//
+// [[test.host]]
+// name = "strict_before_f32"
+// target = "host"
+// fn = "c_fp_relaxed.strict_before_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "rel_muladd_f32"
+// target = "host"
+// fn = "c_fp_relaxed.rel_muladd_f32"
+// steps = [
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+//   { call = "fn", args = { a = 0.5, b = 0.5, c = 0.25 }, status = 0, result = 0.5 },
+//   { call = "fn", args = { a = -4.0, b = 2.0, c = 8.0 }, status = 0, result = 0.0 },
+// ]
+//
+// [[test.host]]
+// name = "rel_loop_f32"
+// target = "host"
+// fn = "c_fp_relaxed.rel_loop_f32"
+// steps = [
+//   { call = "fn", args = { a = 2.0, n = 3 }, status = 0, result = 7.0 },
+//   { call = "fn", args = { a = 2.0, n = 0 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0, n = 5 }, status = 0, result = 5.0 },
+// ]
+//
+// [[test.host]]
+// name = "rel_muladd_f64"
+// target = "host"
+// fn = "c_fp_relaxed.rel_muladd_f64"
+// steps = [
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+//   { call = "fn", args = { a = 0.25, b = 8.0, c = -2.0 }, status = 0, result = 0.0 },
+// ]
+//
+// [[test.host]]
+// name = "rel_int_overflow: a checked integer operation still panics"
+// target = "host"
+// fn = "c_fp_relaxed.rel_int_overflow"
+// steps = [
+//   { call = "fn", args = { a = 5 }, status = 0, result = 6 },
+//   { call = "fn", args = { a = -1 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = 2147483647 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "rel_trunc: a conversion still panics on a NaN and on a value outside the type"
+// target = "host"
+// fn = "c_fp_relaxed.rel_trunc"
+// steps = [
+//   { call = "fn", args = { a = 2.0, b = 3.0 }, status = 0, result = 7 },
+//   { call = "fn", args = { a = nan, b = 1.0 }, status = 1 },
+//   { call = "fn", args = { a = 10000000000.0, b = 1.0 }, status = 1 },
+//   { call = "fn", args = { a = -2.0, b = 3.0 }, status = 0, result = -5 },
+// ]
+//
+// [[test.host]]
+// name = "rel_nan_check: a NaN is still a NaN"
+// target = "host"
+// fn = "c_fp_relaxed.rel_nan_check"
+// steps = [
+//   { call = "fn", args = { x = nan }, status = 0, result = 1 },
+//   { call = "fn", args = { x = inf }, status = 0, result = 0 },
+//   { call = "fn", args = { x = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { x = -0.0 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "rel_inf: an infinity is still an infinity"
+// target = "host"
+// fn = "c_fp_relaxed.rel_inf"
+// steps = [
+//   { call = "fn", args = { a = 3.4028234663852886e38 }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 1.0 }, status = 0, result = 0 },
+//   { call = "fn", args = { a = inf }, status = 0, result = 1 },
+//   { call = "fn", args = { a = 8.507059173023462e37 }, status = 0, result = 0 },
+// ]
+//
+// [[test.host]]
+// name = "strict_after_f32: a function after a relaxed one is strict"
+// target = "host"
+// fn = "c_fp_relaxed.strict_after_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "strict_loop_after_f32"
+// target = "host"
+// fn = "c_fp_relaxed.strict_loop_after_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, init = -1.000244140625, n = 1 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, init = 1.0, n = 2 }, status = 0, result = 13.0 },
+// ]
+//
+// [[test.host]]
+// name = "strict_after_f64"
+// target = "host"
+// fn = "c_fp_relaxed.strict_after_f64"
+// steps = [
+//   { call = "fn", args = { a = 1.0000000074505806, b = 1.0000000074505806, c = -1.0000000149011612 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "rel_muladd_f32 on a reset target"
+// target = "fw"
+// fn = "c_fp_relaxed.rel_muladd_f32"
+// steps = [
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+//   { call = "fn", args = { a = 0.5, b = 0.5, c = 0.25 }, status = 0, result = 0.5 },
+//   { call = "fn", args = { a = -4.0, b = 2.0, c = 8.0 }, status = 0, result = 0.0 },
+// ]
+//
+// [[test.host]]
+// name = "strict_after_f32 on a reset target"
+// target = "fw"
+// fn = "c_fp_relaxed.strict_after_f32"
+// steps = [
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.000244140625 }, status = 0, result = 0.0 },
+//   { call = "fn", args = { a = 1.0001220703125, b = 1.0001220703125, c = -1.0 }, status = 0, result = 0.000244140625 },
+//   { call = "fn", args = { a = 2.0, b = 3.0, c = 1.0 }, status = 0, result = 7.0 },
+// ]
+
+// `@fp(relaxed)` on a function, on a target that is built to C (spec §15.5, §13.4). The attribute relaxes
+// the function it is written on and nothing else: "FMA と再結合を許可" (§15.5) and, in C, "関数ごとの緩和"
+// (§13.4: it may be lost without a harm to the result, and the generated C must still compile without a
+// warning under `-Wall -Wextra -pedantic`, so a host that builds with `-Werror` accepts it, whatever the
+// compiler does with a function attribute or a pragma it does not know). What a relaxed function does not
+// change, and this file checks:
+//   - the other functions of the file stay strict, before and after the relaxed ones (`strict_*`: the
+//     rows are the ones of c_fp_contract.onsa where a fused multiply-add gives another number). A pragma
+//     that is not closed after a function, or a compiler flag that the generated C sets for the rest of the
+//     file, breaks this;
+//   - the checked integer operations still panic (`rel_int_overflow`), and a conversion still panics on
+//     a NaN and on a value outside the type (`rel_trunc`): §15.5 allows only the contraction and the
+//     reassociation, so a NaN is still a NaN and an infinity still an infinity inside the function
+//     (`rel_nan_check`, `rel_inf`).
+// The values of the relaxed functions are chosen so that every allowed rewriting gives the same number
+// (small integers and powers of two), because the result of a relaxed function is not promised (§15.5:
+// 再現性 "保証しない"); the strict functions have the two-rounding results (§3.4).
+//   rel_muladd_f32 / f64   (a * b) + c          rel_loop_f32      acc = (a * acc) + 1.0, n times
+//   rel_int_overflow       a + 1 on I32         rel_trunc         ((a * b) + 1.0).trunc_i32()
+//   rel_nan_check          1 when x != x        rel_inf           1 when a * 2.0 > F32.MAX
+
+pub fn strict_before_f32(a: F32, b: F32, c: F32) -> F32 {
+  (a * b) + c
+}
+
+@fp(relaxed)
+pub fn rel_muladd_f32(a: F32, b: F32, c: F32) -> F32 {
+  (a * b) + c
+}
+
+@fp(relaxed)
+pub fn rel_loop_f32(a: F32, n: U32) -> F32 {
+  var acc: F32 = 0.0
+  for _ in 0..n {
+    acc = (a * acc) + 1.0
+  }
+  acc
+}
+
+@fp(relaxed)
+pub fn rel_muladd_f64(a: F64, b: F64, c: F64) -> F64 {
+  (a * b) + c
+}
+
+@fp(relaxed)
+pub fn rel_int_overflow(a: I32) -> I32 {
+  a + 1
+}
+
+@fp(relaxed)
+pub fn rel_trunc(a: F32, b: F32) -> I32 {
+  ((a * b) + 1.0).trunc_i32()
+}
+
+@fp(relaxed)
+pub fn rel_nan_check(x: F32) -> U32 {
+  if x != x {
+    1
+  } else {
+    0
+  }
+}
+
+@fp(relaxed)
+pub fn rel_inf(a: F32) -> U32 {
+  if (a * 2.0) > F32.MAX {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn strict_after_f32(a: F32, b: F32, c: F32) -> F32 {
+  (a * b) + c
+}
+
+pub fn strict_loop_after_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
+  var acc: F32 = init
+  for _ in 0..n {
+    acc = (a * b) + acc
+  }
+  acc
+}
+
+pub fn strict_after_f64(a: F64, b: F64, c: F64) -> F64 {
+  (a * b) + c
+}
+
+test "strict_before_f32: the values" {
+  assert strict_before_f32(1.0001220703125, 1.0001220703125, -1.000244140625) == 0.0
+  assert strict_before_f32(1.0001220703125, 1.0001220703125, -1.0) == 0.000244140625
+  assert strict_before_f32(2.0, 3.0, 1.0) == 7.0
+}
+
+test "rel_muladd_f32: the values" {
+  assert rel_muladd_f32(2.0, 3.0, 1.0) == 7.0
+  assert rel_muladd_f32(0.5, 0.5, 0.25) == 0.5
+  assert rel_muladd_f32(-4.0, 2.0, 8.0) == 0.0
+}
+
+test "rel_loop_f32: the values" {
+  assert rel_loop_f32(2.0, 3) == 7.0
+  assert rel_loop_f32(2.0, 0) == 0.0
+  assert rel_loop_f32(1.0, 5) == 5.0
+}
+
+test "rel_muladd_f64: the values" {
+  assert rel_muladd_f64(2.0, 3.0, 1.0) == 7.0
+  assert rel_muladd_f64(0.25, 8.0, -2.0) == 0.0
+}
+
+test "rel_int_overflow: the values" {
+  assert rel_int_overflow(5) == 6
+  assert rel_int_overflow(-1) == 0
+}
+
+test "rel_int_overflow(2147483647) panics" {   //~ TESTFAIL "rel_int_overflow(2147483647) panics"
+  let _ = rel_int_overflow(2147483647)
+}
+
+test "rel_trunc: the values" {
+  assert rel_trunc(2.0, 3.0) == 7
+  assert rel_trunc(-2.0, 3.0) == -5
+}
+
+test "rel_trunc(10000000000.0, 1.0) panics" {   //~ TESTFAIL "rel_trunc(10000000000.0, 1.0) panics"
+  let _ = rel_trunc(10000000000.0, 1.0)
+}
+
+test "rel_nan_check: the values" {
+  assert rel_nan_check(1.0) == 0
+  assert rel_nan_check(-0.0) == 0
+}
+
+test "rel_inf: the values" {
+  assert rel_inf(3.4028234663852886e38) == 1
+  assert rel_inf(1.0) == 0
+  assert rel_inf(8.507059173023462e37) == 0
+}
+
+test "strict_after_f32: the values" {
+  assert strict_after_f32(1.0001220703125, 1.0001220703125, -1.000244140625) == 0.0
+  assert strict_after_f32(1.0001220703125, 1.0001220703125, -1.0) == 0.000244140625
+  assert strict_after_f32(2.0, 3.0, 1.0) == 7.0
+}
+
+test "strict_loop_after_f32: the values" {
+  assert strict_loop_after_f32(1.0001220703125, 1.0001220703125, -1.000244140625, 1) == 0.0
+  assert strict_loop_after_f32(2.0, 3.0, 1.0, 2) == 13.0
+}
+
+test "strict_after_f64: the values" {
+  assert strict_after_f64(1.0000000074505806, 1.0000000074505806, -1.0000000149011612) == 0.0
+  assert strict_after_f64(2.0, 3.0, 1.0) == 7.0
+}

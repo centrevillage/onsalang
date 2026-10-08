@@ -48,6 +48,7 @@ fn one_fn(ty: Ty, body: Expr, extra_types: Vec<TypeDef>) -> Module {
             locals: vec![Local { name: "x".into(), ty: ty.clone() }, Local { name: "y".into(), ty }],
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(body)) }),
             span: sp(),
+            fp_relaxed: false,
             test: None,
         }],
         messages: Vec::new(),
@@ -207,13 +208,16 @@ fn array_wrappers_are_shared_and_enums_switch() {
             value: Some(Box::new(e(Ty::Int(IntKind::I32), ExprKind::Tag(Box::new(local(0, Ty::Enum(TypeId(0)))))))),
         }),
         span: sp(),
+        fp_relaxed: false,
         test: None,
     });
     let opts = EmitOptions { export_fns: vec!["m.g".into()], ..Default::default() };
     let c = emit(&m2, &opts).unwrap_or_else(|d| panic!("{d:?}")).source;
     assert!(c.contains("typedef struct m__E { uint8_t tag; union { struct { int32_t f0; } v_B; } u; } m__E;"), "{c}");
     assert!(c.contains("if ((*x).tag == 0) {"), "{c}");
-    assert!(c.contains("} else if ((*x).tag == 1) {"), "{c}");
+    // Every tag is covered: the last arm is the `else` (R-145, no `-Wsometimes-uninitialized`).
+    assert!(c.contains("} else {\n    onsa_t1 = ((m__E){ .tag = 1,"), "{c}");
+    assert!(!c.contains("else if ((*x).tag"), "{c}");
     assert!(c.contains(".u = { .v_B = { .f0 = (*x).u.v_B.f0 } }"), "{c}");
 }
 
@@ -282,7 +286,7 @@ fn checks_under_trap_and_reset_are_a_compare_and_a_branch() {
         local(1, i32t.clone()),
     );
     let m = one_fn(i32t, body, vec![]);
-    let header = crate::runtime_header();
+    let header = crate::internal_header();
     for (mode, define, panic_body) in [
         (crate::PanicMode::Trap, "#define ONSA_PANIC_TRAP", "__builtin_trap();"),
         (crate::PanicMode::Reset, "#define ONSA_PANIC_RESET", "onsa_reset_hook();"),
@@ -298,7 +302,8 @@ fn checks_under_trap_and_reset_are_a_compare_and_a_branch() {
                 assert!(!text.contains(word), "{mode:?}: `{word}` in {name}:\n{text}");
             }
         }
-        assert_eq!(unit.runtime_header, header);
+        assert_eq!(unit.internal_header, header);
+        assert_eq!(unit.runtime_header, crate::PUBLIC_HEADER);
         let branch = panic_branch(&header, mode);
         assert!(branch.contains(panic_body), "{mode:?}:\n{branch}");
         for word in ["setjmp", "longjmp", "onsa_current_jmp"] {
@@ -316,23 +321,30 @@ fn checks_under_trap_and_reset_are_a_compare_and_a_branch() {
         let check = format!(
             "ONSA_INLINE bool onsa_{op}_##N(T a, T b, T* r) {{ return !__builtin_{builtin}_overflow(a, b, r); }}"
         );
-        assert!(header.contains(&check), "no `{check}` in onsa.h");
+        assert!(header.contains(&check), "no `{check}` in onsa__runtime.h");
         assert!(header.contains(&format!("if (!onsa_{op}_##N(a, b, &r)) onsa_panic(")), "the panic of {op}");
     }
-    // Every integer type takes the builtins when the compiler has them.
+    // Every integer type takes the builtins when the compiler has them: the
+    // branch defines the checks once, for every width.
     let builtins = &header[header.find("#if ONSA_HAS_BUILTIN_OVERFLOW").expect("the builtin branch")..];
     let builtins = &builtins[..builtins.find("#else").expect("its end")];
-    assert!(builtins.contains("#define ONSA_INT_CHECKED_64 ONSA_INT_CHECKED"), "{builtins}");
+    assert!(builtins.contains("#define ONSA_INT_CHECKED(N, T, UT, BITS, MIN, MAX, SIGNED, MAXP1)"), "{builtins}");
+    assert!(!builtins.contains("ONSA_INT_CHECKED_"), "{builtins}");
+    assert!(header.contains("ONSA_INT_TYPES(ONSA_INT_CHECKED)"), "every type of the table");
 }
 
 /// Plan D-15, S-106: the bits `to_bits()` gives for a NaN are written into
-/// `onsa.h` from onsa_core's constants, the ones the interpreter reads.
+/// `onsa__runtime.h` from onsa_core's constants, the ones the interpreter reads.
 #[test]
 fn the_runtime_header_takes_the_nan_bits_from_core() {
     use onsa_core::prim::{NAN_BITS_F32, NAN_BITS_F64};
-    assert_eq!(crate::RUNTIME_HEADER_SOURCE.matches(crate::CONSTANTS_MARKER).count(), 1);
-    let header = crate::runtime_header();
-    assert!(!header.contains(crate::CONSTANTS_MARKER), "the marker is left in onsa.h");
+    assert_eq!(crate::INTERNAL_HEADER_SOURCE.matches(crate::CONSTANTS_MARKER).count(), 1);
+    assert_eq!(crate::occurrences(crate::INTERNAL_HEADER_SOURCE, crate::CONSTANTS_MARKER), 1);
+    assert_eq!(crate::occurrences("ab ab aab", "ab"), 3);
+    assert_eq!(crate::occurrences("aaa", "aa"), 1);
+    let header = crate::internal_header();
+    assert!(!header.contains(crate::CONSTANTS_MARKER), "the marker is left in onsa__runtime.h");
+    assert!(!crate::PUBLIC_HEADER.contains("ONSA_NAN_BITS"), "the constants are the runtime's, not the host's");
     let value = |name: &str, wrap: &str| -> u64 {
         let line = header
             .lines()
@@ -350,9 +362,10 @@ fn the_runtime_header_takes_the_nan_bits_from_core() {
     assert!(defined < header.find("return ONSA_NAN_BITS_F32;").expect("the use"));
 }
 
-/// R-11: `narrow_*` from an unsigned type compares the upper bound alone, in
-/// the source's own type (a signed lower bound converted to unsigned made
-/// every value fall outside); from a signed type it compares both bounds.
+/// R-11, R-145: `narrow_*` is the runtime's check for the pair of types, with
+/// the signs of both (a signed lower bound converted to unsigned made every
+/// value fall outside, R-11); the generated function compares no limit itself
+/// (no `-Wsign-compare` or `-Wtype-limits`, R-145).
 #[test]
 fn narrow_from_unsigned_compares_the_upper_bound_alone() {
     let opt = TypeDef {
@@ -361,10 +374,22 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
             variants: vec![("None".into(), vec![]), ("Some".into(), vec![Ty::Int(IntKind::I32)])],
         },
     };
-    for (from, fits) in [
-        (IntKind::U32, "if (onsa_t1 <= (uint32_t)INT32_MAX) {"),
-        (IntKind::U64, "if (onsa_t1 <= (uint64_t)INT32_MAX) {"),
-        (IntKind::I64, "if (onsa_t1 >= INT32_MIN && onsa_t1 <= INT32_MAX) {"),
+    for (from, fits, define) in [
+        (
+            IntKind::U32,
+            "if (onsa_narrow_u32_i32(x, &onsa_t2)) {",
+            "ONSA_DEFINE_NARROW(u32, uint32_t, 0, i32, int32_t, 1)",
+        ),
+        (
+            IntKind::U64,
+            "if (onsa_narrow_u64_i32(x, &onsa_t2)) {",
+            "ONSA_DEFINE_NARROW(u64, uint64_t, 0, i32, int32_t, 1)",
+        ),
+        (
+            IntKind::I64,
+            "if (onsa_narrow_i64_i32(x, &onsa_t2)) {",
+            "ONSA_DEFINE_NARROW(i64, int64_t, 1, i32, int32_t, 1)",
+        ),
     ] {
         let narrow = e(
             Ty::Enum(TypeId(0)),
@@ -394,6 +419,7 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
                     ))),
                 }),
                 span: sp(),
+                fp_relaxed: false,
                 test: None,
             }],
             messages: Vec::new(),
@@ -402,8 +428,11 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
         };
         let c = emit_fn(&m);
         assert!(c.contains(fits), "{from:?}: {c}");
-        if !from.signed() {
-            assert!(!c.contains("INT32_MIN"), "{from:?}: {c}");
-        }
+        assert_eq!(c.matches(define).count(), 1, "{from:?}: {c}");
+        assert!(!c.contains("INT32_MIN") && !c.contains("INT32_MAX"), "{from:?}: {c}");
     }
+    // The runtime's test of an unsigned value for a signed type is below 2^(bits - 1): no signed limit.
+    let h = crate::internal_header();
+    let test = h.lines().find(|l| l.starts_with("#define ONSA_NARROW_TEST_01")).expect("the test of the pair");
+    assert!(!test.contains("MIN") && !test.contains("MAX"), "{test}");
 }

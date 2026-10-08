@@ -47,11 +47,11 @@
 #                 最後に仕上げる作業。そのテストの票が否定例を書く）、2. どの作業も触れない
 #                 実装済みのコードは W1-10、3. 第 2 期のコードは "P2"
 #   gate          載せてよい gate の項目の名前（tools/gate_steps.py の STEPS で pendable=True のもの。
-#                 今は C の検査の c-clang、c-gcc、c-gcc-strict、c-sanitize、c-x86、c-header、
+#                 今は C の検査の c-clang、c-gcc、c-sanitize、c-x86、c-header、
 #                 c-header-strict。W1-06）。後の作業を待つ検査は、既知の原因の警告だけを外して常に回す項目
-#                 （c-gcc、c-header。外す警告は onsa_tests::c::GCC_KNOWN_OFF の一か所）と、外さない項目
+#                 （外す警告は onsa_tests::c::ITEMS の行の off。W2-09 の後は外す警告が無い）と、外さない項目
 #                 （名前に -strict）に分け、全体を載せるのは -strict の項目だけにする（新しい誤りを隠さない）。
-#                 項目の全体を載せる "c-gcc-strict" の照合は gate（tools/gate.py）が行う。全体で載る項目は
+#                 項目の全体を載せる -strict の項目の照合は gate（tools/gate.py）が行う。全体で載る項目は
 #                 落ちると分かっているので、gate は --work <その until> か --stage-end のときだけ回す
 #                 （それ以外は SKIPPED。2026-10-08）。項目が自分で報告する事例は
 #                 "<項目>/<事例>" で、照合はその項目が行う: 載っていて落ちる事例は実装待ち、載って
@@ -999,20 +999,6 @@ note = "モジュールをまたぐ flow（use dsp.synth.{…}、filters.avg~(x)
 
 [[pending]]
 kind = "gate"
-target = "c-gcc-strict"
-reasons = ["R-67", "S-54"]
-until = "W2-09"
-note = "GCC は #pragma STDC FP_CONTRACT を知らず（-Wunknown-pragmas）、onsa.h の整数の補助が -Wtype-limits に当たり、-Werror で全てのビルドが落ちる（c-gcc はこの二つだけを外して常に回す）"
-
-[[pending]]
-kind = "gate"
-target = "c-header-strict"
-reasons = ["S-53", "R-65"]
-until = "W10-04"
-note = "公開ヘッダ（onsa.h を含む）が C99 / C++11 の -pedantic で通らない（_Static_assert、_Noreturn、_Thread_local は C11。GCC は STDC のプラグマも）。C11 の取り込みは c-header が常に回す"
-
-[[pending]]
-kind = "gate"
 target = "c-clang/tests/pipeline/span_const.onsa[host]"
 reasons = ["R-109", "S-94"]
 until = "W10-04"
@@ -1048,29 +1034,6 @@ note = "process の重なりの検査が、型の違う入出力の組で一方�
 
 [[pending]]
 kind = "gate"
-target = "c-clang/tests/pipeline/if_compare.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/pipeline/if_compare.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/pipeline/if_compare.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる"
-
-# --- W1-07: fmt の性質テスト（gate の fmt の項目）の実装待ち（2026-10-07）
-
-[[pending]]
-kind = "gate"
 target = "fmt-comments"
 reasons = ["R-70"]
 until = "W3-11"
@@ -1103,37 +1066,6 @@ target = "tests/vectors/fixture/zero_one"
 reasons = ["S-84"]
 until = "W5-05"
 note = "組込み型の関連定数 ZERO / ONE が無い（E0302、§6.6）。テストベクトルの 20 演算"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/vectors/fixture/scalar[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/vectors/fixture/scalar[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/vectors/fixture/scalar[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/vectors/fixture/scalar[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: Option の match の最後の腕が else if（-Wsometimes-uninitialized）、narrow_* の範囲の検査の符号の違う比較（-Wsign-compare）と常に真の比較"
-
-# --- テストベクトル（W2-02）: 演算ごとの失敗（vectors-interp/<演算>）と、ツールチェーンごとの失敗
-# （vectors-c/<演算>[<ツールチェーン>]）。照合は onsa_tests::vectors
 
 [[pending]]
 kind = "gate"
@@ -1930,27 +1862,6 @@ note = "const の初期化式の整数の panic（U64 の積、MIN / -1、2^63 �
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/c_runtime/c_if_equality.onsa"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality（-Werror）で落ちる（§13.4）。gcc は exported な関数の -Wclobbered も出す"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_match_value.onsa"
-reasons = ["R-145"]
-until = "W2-09"
-note = "値を返す match（Option / enum / Result の平らな switch）の C が clang の -Wsometimes-uninitialized で通らない（§13.4）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_narrow_s2u.onsa"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "符号付きから符号無しへの narrow_* の C が clang の -Wtautological-constant-out-of-range-compare / -Wsign-compare で通らない（§3.3）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/c_runtime/c_generic_int.onsa"
 reasons = ["S-84"]
 until = "W5-05"
@@ -1978,234 +1889,6 @@ until = "W3-10"
 note = "flow の新しい構文（at、prev~(^s, seed)、積と和の群）。整数のラップ積・飽和変換・trunc_u32 の panic の poison の C 側"
 
 # --- W2-05/t: 上の事例を C の検査（c-clang など）で -Werror にかけた結果（2026-10-08）
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_if_equality.onsa[dbg]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_if_equality.onsa[fw]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_if_equality.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_match_value.onsa[dbg]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_match_value.onsa[fw]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_match_value.onsa[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/spec/c_runtime/c_if_equality.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_if_equality.onsa[dbg]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_if_equality.onsa[fw]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_if_equality.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_match_value.onsa[dbg]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_match_value.onsa[fw]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_match_value.onsa[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_if_equality.onsa[dbg]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_if_equality.onsa[fw]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_if_equality.onsa[host]"
-reasons = ["R-142"]
-until = "W2-09"
-note = "if の条件の比較が if ((a == b)) と二重の括弧で出て、clang の -Wparentheses-equality で落ちる。gcc は exported な関数に -Wclobbered も出す"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_match_value.onsa[dbg]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_match_value.onsa[fw]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_match_value.onsa[host]"
-reasons = ["R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: 値を返す match の最後の腕が else if（-Wsometimes-uninitialized）"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_narrow_s2u.onsa[dbg]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_narrow_s2u.onsa[fw]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/spec/c_runtime/c_narrow_s2u.onsa[host]"
-reasons = ["R-11", "R-145"]
-until = "W2-09"
-note = "生成した C が -Werror で落ちる: narrow_* の範囲の検査の符号の違う比較と常に真の比較"
-
-# --- W2-05: gcc の -Wclobbered（R-167、2026-10-08）
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/spec/c_runtime/c_shift.onsa[host]"
-reasons = ["R-167"]
-until = "W2-09"
-note = "poison の export の wrapper に本体が inline され、gcc-15 が -Wclobbered（variable 'x' / argument 'a' might be clobbered by longjmp）を出し -Werror で落ちる。I8 / I16 の >> の古い誤った式が隠していた"
-
-# --- W2-06: 実装の後も通らない事例（W2-06/t・t2 の案から。2026-10-08）
 
 [[pending]]
 kind = "test-case"
@@ -2439,6 +2122,19 @@ reasons = ["S-257"]
 until = "W3-07"
 note = "範囲の書き方 0..<MAX_VOICES。今の構文解析器は ..< を読めないので、写しは 0..MAX_VOICES のまま（W3-07 が範囲の構文と一緒に写しを書き換える）"
 
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_fp_flow.onsa"
+reasons = ["S-102", "S-44"]
+until = "W3-10"
+note = "at と flow の新しい構文を今の実装が読めない（E0002）。構文の後は FMA に縮約されない flow と @fp(relaxed) の flow の C 側（§13.4、§15.5）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/c_runtime/c_match_panic_arm.onsa"
+reasons = ["S-40"]
+until = "W5-08"
+note = "panic が prelude に無い（E0302、§9.2）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
 # --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
 
 [[pending]]
@@ -2743,3 +2439,12 @@ target = "tests/fuzz/7a6a3c65.onsa"
 reasons = ["S-248", "S-236"]
 until = "W3-15"
 note = "fix-same-place: fix|E0020|remove the `…`|E0020。続いた ;; の候補が ; を一つだけ消し、E0020 が残る（一つの形は一つの候補で直す、S-248）"
+
+# --- W2-09/i: 新しい種（tests/spec/c_runtime/ の W2-09/t の事例）で変異が変わり、ファズが見つけた修正候補の型（2026-10-08。親が R を登録して付け替える）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/71e7eb23.onsa"
+reasons = ["R-190", "S-236"]
+until = "W3-05"
+note = "fix-same-place: fix|E0020|remove the type suffix|E0020。1d. の型の接尾辞を消す候補が、点の後に数字の無い浮動小数のリテラル 1. を残し、E0020 が残る（S-236 の約束を破る）"

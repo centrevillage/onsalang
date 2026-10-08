@@ -45,6 +45,7 @@ fn eval(e: Expr) -> Result<Value, Panic> {
             locals: Vec::new(),
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(e)) }),
             span: sp(),
+            fp_relaxed: false,
             test: None,
         }],
         ..Default::default()
@@ -311,6 +312,7 @@ fn recursive_fn(name: &str, zero: Expr, deeper: Expr, extra: Vec<Ty>) -> FnDef {
         locals,
         body: Some(value_block(Vec::new(), body)),
         span: sp(),
+        fp_relaxed: false,
         test: None,
     }
 }
@@ -915,6 +917,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
                 locals: vec![Local { name: "i".into(), ty: Ty::Int(IntKind::I32) }],
                 body: Some(Block { stmts: vec![for_], value: None }),
                 span: sp(),
+                fp_relaxed: false,
                 test: None,
             }],
             ..Default::default()
@@ -942,6 +945,7 @@ fn an_internal_failure_is_not_a_panic() {
                 locals: vec![Local { name: "x".into(), ty: Ty::Int(IntKind::I32) }],
                 body: Some(Block { stmts: Vec::new(), value: Some(Box::new(read)) }),
                 span: sp(),
+                fp_relaxed: false,
                 test: None,
             }],
             ..Default::default()
@@ -967,6 +971,7 @@ fn a_call_of_a_function_without_a_body_is_an_internal_error() {
                 locals: Vec::new(),
                 body: None,
                 span: sp(),
+                fp_relaxed: false,
                 test: None,
             }],
             ..Default::default()
@@ -997,6 +1002,7 @@ fn an_unimplemented_std_function_is_unsupported() {
                     locals: Vec::new(),
                     body: Some(Block { stmts: Vec::new(), value: Some(Box::new(gen_())) }),
                     span: sp(),
+                    fp_relaxed: false,
                     test: None,
                 },
                 FnDef {
@@ -1008,6 +1014,7 @@ fn an_unimplemented_std_function_is_unsupported() {
                     locals: Vec::new(),
                     body: Some(Block { stmts: Vec::new(), value: Some(Box::new(near)) }),
                     span: sp(),
+                    fp_relaxed: false,
                     test: None,
                 },
             ],
