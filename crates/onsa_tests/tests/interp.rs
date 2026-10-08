@@ -230,8 +230,11 @@ test "process runs block by block with reset" {
 fn interp_api_calls_functions_directly() {
     let (_, analyzed) = load("pub fn twice(x: I32) -> I32 { x * 2 }\n");
     let module = onsa_driver::lower_core(&analyzed).unwrap();
-    let interp = Interp::new(&module);
-    let f = interp.fn_by_name("t.twice").expect("fn");
-    let v = interp.call(f, vec![Value::I32(21)]).unwrap();
-    assert_eq!(v.to_i128(), Some(42));
+    // The interpreter runs on the stack of a command (R-05).
+    onsa_diag::stack::run(|| {
+        let interp = Interp::new(&module);
+        let f = interp.fn_by_name("t.twice").expect("fn");
+        let v = interp.call(f, vec![Value::I32(21)]).unwrap();
+        assert_eq!(v.to_i128(), Some(42));
+    });
 }

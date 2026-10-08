@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.6", "§6.1", "§12.5"]
+
+// A `const` initializer calls a function with an empty effect row (spec §6.6),
+// and the function is not `rt`, so it may recurse. The depth is at most 50: the
+// evaluator of constants has the same limit of the call depth as `onsa test`,
+// 128 (§12.5), and each initializer here is far inside it (const_depth.onsa has
+// the boundary). The value is the same as when the call is made at run time.
+
+fn sum_to(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    n + sum_to(n - 1)
+  }
+}
+
+fn fib(n: U32) -> U32 {
+  if n < 2 {
+    n
+  } else {
+    fib(n - 1) + fib(n - 2)
+  }
+}
+
+fn is_even(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    is_odd(n - 1)
+  }
+}
+
+fn is_odd(n: U32) -> Bool {
+  if n == 0 {
+    false
+  } else {
+    is_even(n - 1)
+  }
+}
+
+fn hold[T: Copy](x: T, n: U32) -> T {
+  if n == 0 {
+    x
+  } else {
+    hold(x, n - 1)
+  }
+}
+
+pub struct Count {
+  base: U32,
+}
+
+impl Count {
+  pub fn start(base: U32) -> Count {
+    Count { base: base }
+  }
+
+  pub fn up(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      1 + self.up(n - 1)
+    }
+  }
+}
+
+const SUM_30: U32 = sum_to(30)
+const FIB_15: U32 = fib(15)
+const EVEN_40: Bool = is_even(40)
+const HELD: F32 = hold(2.5, 30)
+const UP: U32 = Count.start(7).up(20)
+
+test "a const initializer calls a recursive function" {
+  assert SUM_30 == 465
+  assert FIB_15 == 610
+}
+
+test "a const initializer calls mutually recursive functions" {
+  assert EVEN_40
+}
+
+test "a const initializer calls a generic recursive function" {
+  assert HELD == 2.5
+}
+
+test "a const initializer calls a recursive method" {
+  assert UP == 27
+}
+
+test "a constant is the same value as the run time call" {
+  assert SUM_30 == sum_to(30)
+  assert FIB_15 == fib(15)
+}

@@ -542,8 +542,21 @@ pub struct Outcome {
 }
 
 /// Run every flow the build exported in both, with the C of toolchain `t`.
-/// `dir` is a scratch directory.
+/// `dir` is a scratch directory. The interpreter runs on the stack of a
+/// command (R-05, `onsa_diag::stack`), under a guard on that thread: an
+/// internal error of the interpreter is a problem of this build with its
+/// position (S-67), not a panic of the caller's thread (P-2).
 pub fn run(out: &BuildOutput, t: &Toolchain, dir: &Path) -> Outcome {
+    onsa_driver::guard_on_stack(|| run_on_stack(out, t, dir)).unwrap_or_else(|e| Outcome {
+        problems: vec![format!(
+            "conformance: {}",
+            e.render(&onsa_diag::SourceMap::default()).trim_end().replace('\n', "\n  ")
+        )],
+        ..Default::default()
+    })
+}
+
+fn run_on_stack(out: &BuildOutput, t: &Toolchain, dir: &Path) -> Outcome {
     let module = &out.module;
     let mut outcome = Outcome::default();
     for api in &out.unit.flows {

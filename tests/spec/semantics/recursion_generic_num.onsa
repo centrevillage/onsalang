@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.3", "§6.6", "§12.5"]
+
+// A generic function with a numeric bound that calls itself (spec §6.3 numeric
+// traits, §6.6 `T.ONE` / `T.ZERO`). Depth at most 50 (the limit of the call
+// depth is 128, §12.5; the boundary is in recursion_limit.onsa).
+
+fn count_up[T: Int](n: U32, acc: T) -> T {
+  if n == 0 {
+    acc
+  } else {
+    count_up(n - 1, acc + T.ONE)
+  }
+}
+
+// `-acc` needs `Num` (a negative value, spec §6.3).
+fn flip[T: Num](n: U32, acc: T) -> T {
+  if n == 0 {
+    acc
+  } else {
+    flip(n - 1, -acc)
+  }
+}
+
+// The bound is kept through two functions that call each other.
+fn up_a[T: Int](n: U32, acc: T) -> T {
+  if n == 0 {
+    acc
+  } else {
+    up_b(n - 1, acc + T.ONE)
+  }
+}
+
+fn up_b[T: Int](n: U32, acc: T) -> T {
+  if n == 0 {
+    acc
+  } else {
+    up_a(n - 1, acc + T.ONE + T.ONE)
+  }
+}
+
+test "a recursion that counts at three integer types" {
+  let a: I64 = 100
+  let b: U8 = 5
+  let c: I32 = -20
+  assert count_up(40, a) == 140
+  assert count_up(40, b) == 45
+  assert count_up(40, c) == 20
+}
+
+test "a recursion with a Num bound" {
+  let f: F32 = 4.0
+  let i: I16 = 4
+  assert flip(45, f) == -4.0
+  assert flip(44, f) == 4.0
+  assert flip(45, i) == -4
+  assert flip(0, i) == 4
+}
+
+test "two generic functions with an Int bound that call each other" {
+  let x: I32 = 0
+  // up_a adds 1, up_b adds 2: 10 levels give 5 * 1 + 5 * 2.
+  assert up_a(10, x) == 15
+  let y: U8 = 0
+  assert up_a(11, y) == 16
+}

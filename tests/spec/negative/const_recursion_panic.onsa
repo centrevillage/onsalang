@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§9.2"]
+
+// E0419 through a recursion (spec §6.6): a `const` initializer calls a function
+// that is not `rt`, so it may recurse (§10 rule 5 is for `rt` functions only),
+// and a panic anywhere in the chain of calls is a panic of the compile time
+// evaluation, reported at the position of the initializer. The depths are small
+// (at most 20, far inside the limit of the call depth, 128, §12.5): the panics
+// here are of the arithmetic and the index. The panic of exceeding the limit
+// is in const_depth_limit.onsa.
+
+// 1 - 2 underflows on the way back up.
+fn under(n: U32) -> U32 {
+  if n == 0 {
+    1
+  } else {
+    under(n - 1) - 2
+  }
+}
+
+const A: U32 = under(5)   //~ E0419
+
+// 1 / 0 at the bottom of a recursion.
+fn zero_div(n: U32) -> U32 {
+  if n == 0 {
+    1 / n
+  } else {
+    zero_div(n - 1) + 1
+  }
+}
+
+const B: U32 = zero_div(4)   //~ E0419
+
+// 100 + 100 + 100 overflows U8 in the accumulator.
+fn overflow_up(n: U32, acc: U8) -> U8 {
+  if n == 0 {
+    acc
+  } else {
+    overflow_up(n - 1, acc + 100)
+  }
+}
+
+const C: U8 = overflow_up(5, 0)   //~ E0419
+
+// An index past the end, reached by the recursion.
+fn at_end(xs: [U32; 4], i: U32) -> U32 {
+  if i == 4 {
+    xs[i]
+  } else {
+    at_end(xs, i + 1)
+  }
+}
+
+const D: U32 = at_end([1, 2, 3, 4], 0)   //~ E0419
+
+// A panic in the second function of a pair that call each other.
+fn ping(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    pong(n - 1)
+  }
+}
+
+fn pong(n: U32) -> U32 {
+  if n == 0 {
+    n - 1
+  } else {
+    ping(n - 1)
+  }
+}
+
+const E: U32 = ping(7)   //~ E0419
+
+// A recursion that does not panic is accepted.
+fn ok_down(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + ok_down(n - 1)
+  }
+}
+
+const F: U32 = ok_down(20)

@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§9.2", "§11.6", "§10"]
+
+// A flow's `process` never recurses (§12.5: an `rt` function does not recurse,
+// §10 rule 5, and a flow body calls only `rt` functions, §11.2). A test that
+// uses a flow and also makes a deep recursion in its own body fails by the
+// limit of the call depth (128, §12.5), and the flow keeps working in the tests
+// that follow: the panic of one test does not leave an instance of the flow in a
+// state that spoils the next test (each test makes its own instance, §11.6). The
+// deep call is 300 levels.
+//
+// Pending (W3-10): the flow `at` syntax is not implemented yet.
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+pub flow gain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+test "a flow render and then a deep recursion fails the test" {   //~ TESTFAIL "a flow render and then a deep recursion fails the test"
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert dive(300) == 300
+}
+
+test "the flow runs in the next test" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "a deep recursion on a value from the flow fails the test" {   //~ TESTFAIL "a deep recursion on a value from the flow fails the test"
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  let k = dive(300)
+  assert o.out[1] == 4.0
+  assert k == 300
+}
+
+test "the flow runs again after the second failure" {
+  let xs: [F32; 2] = [5.0, 6.0]
+  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 12.0
+  assert dive(50) == 50
+}

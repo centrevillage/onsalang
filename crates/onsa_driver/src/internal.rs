@@ -22,13 +22,6 @@ use onsa_diag::{SourceMap, Span};
 
 use crate::VerifyFailure;
 
-/// The stack size of the thread a command or a test case runs on. One
-/// value for the CLI and the test runner, so that both reach the same depth.
-/// A deeper input overflows it and the process ends with a signal, not with
-/// the internal error (the fuzzing keeps such inputs, `tools/fuzz.py`).
-// SPEC-GAP(S-183): no limit on the nesting depth of the syntax; this stack bounds it, and an overflow aborts the process.
-pub const STACK_SIZE: usize = 64 << 20;
-
 /// Where an internal error comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
@@ -181,10 +174,38 @@ pub fn guard<T>(f: impl FnOnce() -> T) -> Result<T, InternalError> {
     })
 }
 
+/// [`guard`] on a thread with the stack of a command
+/// ([`onsa_diag::stack::run`]): the current thread when it is one, else a new
+/// one. Every run of the interpreter goes through it (R-05).
+pub fn guard_on_stack<T: Send>(f: impl FnOnce() -> T + Send) -> Result<T, InternalError> {
+    onsa_diag::stack::run(|| guard(f))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use onsa_diag::FileId;
+
+    /// P-2: from a thread that is not a command's, `guard_on_stack` guards
+    /// on the new thread and keeps the position of the panic; a guard around
+    /// `onsa_diag::stack::run` does not see it (the hook ran on the other
+    /// thread).
+    #[test]
+    fn guard_on_stack_keeps_the_position_from_another_thread() {
+        assert!(!onsa_diag::stack::is_command_thread());
+        let e = guard_on_stack(|| -> u32 { onsa_diag::internal::bug(None, "inside") }).unwrap_err();
+        assert!(matches!(e.origin, Origin::Panic { location: Some(_) }), "{:?}", e.origin);
+        let e = guard(|| onsa_diag::stack::run(|| -> u32 { onsa_diag::internal::bug(None, "outside") })).unwrap_err();
+        assert_eq!(e.message, "outside");
+        assert_eq!(e.origin, Origin::Panic { location: None });
+    }
+
+    #[test]
+    fn guard_on_stack_runs_on_a_command_thread() {
+        assert_eq!(guard_on_stack(onsa_diag::stack::is_command_thread), Ok(true));
+        let e = guard_on_stack(|| -> u32 { onsa_diag::internal::bug(None, "on the stack") }).unwrap_err();
+        assert_eq!(e.message, "on the stack");
+    }
 
     fn sources() -> SourceMap {
         let mut s = SourceMap::default();

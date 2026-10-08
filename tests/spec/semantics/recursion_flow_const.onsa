@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§6.6", "§10", "§12.5"]
+
+// A flow body calls only `rt` functions, and an `rt` function does not recurse
+// (§10 rule 5), so a flow's `process` never recurses. The one place where a
+// flow body meets a recursive function is a call at the constant clock: "a
+// function call with constant arguments and an empty effect row, `rt` or not,
+// is evaluated at compile time by the evaluator of `const` initializers"
+// (§11.3). The depth is at most 50 (the limit of the call depth of the
+// evaluator is 128, §12.5), and the same value as when the call is made a
+// `const`.
+
+fn sum_to(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    n + sum_to(n - 1)
+  }
+}
+
+fn is_even(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    is_odd(n - 1)
+  }
+}
+
+fn is_odd(n: U32) -> Bool {
+  if n == 0 {
+    false
+  } else {
+    is_even(n - 1)
+  }
+}
+
+pub flow scaled(x: F32 at sample) -> F32 at sample {
+  let k = sum_to(10).round_f32()
+  x * k
+}
+
+pub flow chosen(x: F32 at sample) -> F32 at sample {
+  if is_even(20) {
+    x
+  } else {
+    -x
+  }
+}
+
+test "a constant clock call of a recursive function in a flow body" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = scaled.render(scaled.Config {}, scaled.Params {}, xs, 8.0)
+  assert o.out[0] == 55.0
+  assert o.out[1] == 110.0
+  assert o.out[2] == 165.0
+}
+
+test "a constant clock call of mutually recursive functions in a flow condition" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = chosen.render(chosen.Config {}, chosen.Params {}, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}

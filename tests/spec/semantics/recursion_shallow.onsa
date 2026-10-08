@@ -1,0 +1,301 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.1", "§6.2", "§6.3", "§4.5", "§12.5", "§9.2"]
+
+// Recursion in the interpreter (spec §10 rule 5, §12.5): a function that is not
+// `rt` may call itself, directly or through others. `onsa test` runs it. The
+// limit of the call depth is 128 (§12.5), and every depth here is at most 50, so
+// each case is far inside it. The boundary of the limit is in
+// recursion_limit.onsa, and the panic beyond it in recursion_deep.onsa.
+
+// ------------------------------------------------------------ direct recursion
+
+fn sum_to(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    n + sum_to(n - 1)
+  }
+}
+
+// Tail position, an accumulator.
+fn sum_acc(n: U32, acc: U32) -> U32 {
+  if n == 0 {
+    acc
+  } else {
+    sum_acc(n - 1, acc + n)
+  }
+}
+
+// Two recursive calls in one body (tree shaped).
+fn fib(n: U32) -> U32 {
+  if n < 2 {
+    n
+  } else {
+    fib(n - 1) + fib(n - 2)
+  }
+}
+
+// Nested recursion: the argument of the recursive call is itself a recursive call.
+fn ack(m: U32, n: U32) -> U32 {
+  if m == 0 {
+    n + 1
+  } else if n == 0 {
+    ack(m - 1, 1)
+  } else {
+    ack(m - 1, ack(m, n - 1))
+  }
+}
+
+// Recursion through `match` on an Option.
+fn count_some(n: U32) -> U32 {
+  let o: Option[U32] = if n == 0 {
+    None
+  } else {
+    Some(n)
+  }
+  match o {
+    Some(k) => 1 + count_some(k - 1),
+    None => 0,
+  }
+}
+
+// Early `return` at the bottom of the recursion.
+fn first_square_over(n: U32, limit: U32) -> U32 {
+  let sq = n * n
+  if sq > limit {
+    return n
+  }
+  first_square_over(n + 1, limit)
+}
+
+// `inout`: each level writes one element.
+fn fill(inout xs: [U32; 40], i: U32) {
+  if i < 40 {
+    xs[i] = i * 2
+    fill(inout xs, i + 1)
+  }
+}
+
+test "direct recursion at depth 50" {
+  assert sum_to(50) == 1275
+  assert sum_to(0) == 0
+  assert sum_to(1) == 1
+}
+
+test "a recursion with an accumulator" {
+  assert sum_acc(50, 0) == 1275
+}
+
+test "a tree shaped recursion" {
+  assert fib(15) == 610
+  assert fib(0) == 0
+  assert fib(1) == 1
+}
+
+test "a recursive call whose argument is a recursive call" {
+  assert ack(2, 3) == 9
+  assert ack(3, 3) == 61
+}
+
+test "a recursion through a match" {
+  assert count_some(30) == 30
+  assert count_some(0) == 0
+}
+
+test "a recursion that returns early at the bottom" {
+  assert first_square_over(0, 0) == 1
+  assert first_square_over(0, 48) == 7
+  assert first_square_over(0, 2000) == 45
+  assert first_square_over(30, 100) == 30
+}
+
+test "a recursion with an inout argument" {
+  var xs: [U32; 40] = [0; 40]
+  fill(inout xs, 0)
+  assert xs[0] == 0
+  assert xs[1] == 2
+  assert xs[39] == 78
+}
+
+test "the depth of a finished call is released" {
+  // 2000 calls of depth 50 in a row: a depth counter that is not decremented on
+  // return would reach any limit.
+  var i: U32 = 0
+  var total: U32 = 0
+  while i < 2000 {
+    total = total + sum_to(50)
+    i = i + 1
+  }
+  assert total == 2550000
+}
+
+// -------------------------------------------------------------- mutual recursion
+
+fn is_even(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    is_odd(n - 1)
+  }
+}
+
+fn is_odd(n: U32) -> Bool {
+  if n == 0 {
+    false
+  } else {
+    is_even(n - 1)
+  }
+}
+
+// A cycle of three.
+fn ra(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + rb(n - 1)
+  }
+}
+
+fn rb(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    10 + rc(n - 1)
+  }
+}
+
+fn rc(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    100 + ra(n - 1)
+  }
+}
+
+test "mutual recursion of two functions" {
+  assert is_even(40)
+  assert !is_odd(40)
+  assert is_odd(41)
+  assert !is_even(41)
+}
+
+test "mutual recursion of three functions" {
+  // ra(6) = 1 + 10 + 100 + 1 + 10 + 100.
+  assert ra(6) == 222
+  assert ra(7) == 223
+  assert rb(2) == 110
+}
+
+// ------------------------------------------------------------------- methods
+
+pub struct Counter {
+  base: U32,
+}
+
+impl Counter {
+  pub fn make(base: U32) -> Counter {
+    Counter { base: base }
+  }
+
+  // An associated function that calls itself.
+  pub fn triangle(n: U32) -> U32 {
+    if n == 0 {
+      0
+    } else {
+      n + Counter.triangle(n - 1)
+    }
+  }
+
+  // A method that calls itself.
+  pub fn down(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      self.down(n - 1) + 1
+    }
+  }
+
+  pub fn bump(inout self, n: U32) {
+    if n > 0 {
+      self.base = self.base + 1
+      self.bump!(n - 1)
+    }
+  }
+
+  // Two methods that call each other.
+  pub fn ping(self, n: U32) -> U32 {
+    if n == 0 {
+      0
+    } else {
+      1 + self.pong(n - 1)
+    }
+  }
+
+  pub fn pong(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      2 + self.ping(n - 1)
+    }
+  }
+}
+
+test "a method that calls itself" {
+  let c = Counter.make(100)
+  assert c.down(0) == 100
+  assert c.down(40) == 140
+}
+
+test "an associated function that calls itself" {
+  assert Counter.triangle(40) == 820
+}
+
+test "an inout method that calls itself" {
+  var c = Counter.make(5)
+  c.bump!(30)
+  assert c.base == 35
+}
+
+test "two methods that call each other" {
+  let c = Counter.make(7)
+  // ping(4) = 1 + pong(3) = 1 + 2 + ping(2) = 1 + 2 + 1 + pong(1) = 1 + 2 + 1 + 2 + ping(0).
+  assert c.ping(4) == 6
+  // ping(3) = 1 + 2 + 1 + pong(0), and pong(0) is the base, 7.
+  assert c.ping(3) == 11
+}
+
+// ------------------------------------------------ a panic inside a recursion
+
+fn checked_down(n: U32, zero: U32) -> U32 {
+  if n == 0 {
+    1 / zero
+  } else {
+    1 + checked_down(n - 1, zero)
+  }
+}
+
+// 3 - 4 underflows on the way back up.
+fn dec_to_underflow(n: U32) -> U32 {
+  if n == 0 {
+    3
+  } else {
+    dec_to_underflow(n - 1) - 4
+  }
+}
+
+test "a division by zero at the bottom of a recursion fails the test" {   //~ TESTFAIL "a division by zero at the bottom of a recursion fails the test"
+  let r = checked_down(20, 0)
+  assert r == 0
+}
+
+test "an overflow on the way back up fails the test" {   //~ TESTFAIL "an overflow on the way back up fails the test"
+  let r = dec_to_underflow(10)
+  assert r == 0
+}
+
+test "the test after a panicking recursion runs and passes" {
+  assert sum_to(50) == 1275
+  assert fib(10) == 55
+}

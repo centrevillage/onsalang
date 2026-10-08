@@ -13,7 +13,7 @@ pub mod internal;
 pub mod reduce;
 pub mod verify;
 
-pub use internal::{InternalError, Origin, STACK_SIZE, guard};
+pub use internal::{InternalError, Origin, guard, guard_on_stack};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -644,9 +644,10 @@ impl TestReport {
 
 /// Run every `test` block of the lowered module (T3-8). `assert` failures
 /// and panics (spec §9.2) fail the test and name the position; a panic of
-/// the interpreter itself is an internal error (S-67).
+/// the interpreter itself is an internal error (S-67). The interpreter runs
+/// on the stack of a command (R-05).
 pub fn run_tests(module: &onsa_core::Module, opts: &TestOptions) -> Result<TestReport, InternalError> {
-    guard(|| run_tests_unguarded(module, opts))
+    guard_on_stack(|| run_tests_unguarded(module, opts))
 }
 
 fn run_tests_unguarded(module: &onsa_core::Module, opts: &TestOptions) -> TestReport {

@@ -1,0 +1,792 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§6.6", "§11.3", "§9.2"]
+
+// A `const` is evaluated from its own entry (spec §12.5, decided as S-222): the
+// limit of the call depth is 128, counted from the entry of an evaluation (the
+// initializer of the `const`) by the number of nested calls, and READING a
+// `const` is not a call. The value of a `const` is the same wherever it is
+// read, so it does not depend on the depth of the call that reads it, nor on
+// which test reads it first, nor on the order of the tests (§11.3: the same
+// expression gives the same result whether or not it is written as a `const`).
+//
+// Each initializer below makes at most 128 nested calls from its own entry, and
+// is read from places that are nested up to 100 or 127 calls deep, so a depth
+// that was inherited from the reader would be far over the limit. The reader
+// that is itself too deep (`user(128)`) fails its own test, and nothing else.
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+// 128 nested calls from the entry of the initializer.
+const AT_LIMIT: U32 = dive(127)
+const HALF: U32 = dive(63)
+
+// Reads another `const` (not a call) and makes 128 nested calls of its own.
+const SECOND: U32 = AT_LIMIT + dive(127)
+
+// An associated `const` is an entry too (§6.6).
+pub struct Counter {
+  base: U32,
+}
+
+impl Counter {
+  const START: U32 = dive(127)
+}
+
+// A recursion of depth k that reads `AT_LIMIT` at the bottom.
+fn user(n: U32) -> U32 {
+  if n == 0 {
+    AT_LIMIT
+  } else {
+    user(n - 1)
+  }
+}
+
+fn user_half(n: U32) -> U32 {
+  if n == 0 {
+    HALF
+  } else {
+    user_half(n - 1)
+  }
+}
+
+// A first read from a deep place: this test is the first in the file that reads
+// `AT_LIMIT`, at depth 100 (user(100) is depth 1 .. 101, and the read of the
+// `const` is not a call).
+test "a deep user reads a constant first" {
+  assert user(100) == 127
+}
+
+test "the top level reads the same constant" {
+  assert AT_LIMIT == 127
+}
+
+test "a deep user reads it again" {
+  assert user(100) == 127
+}
+
+test "the user at the boundary depth reads it" {
+  // user(127) is depth 1 .. 128: user(0) at depth 128 reads `AT_LIMIT`.
+  assert user(127) == 127
+}
+
+test "a user one level beyond the boundary fails its own test" {   //~ TESTFAIL "a user one level beyond the boundary fails its own test"
+  assert user(128) == 127
+}
+
+test "the constant is the same value after that failed test" {
+  assert AT_LIMIT == 127
+  assert user(127) == 127
+}
+
+test "a constant whose initializer reads another constant" {
+  assert SECOND == 254
+}
+
+test "an associated constant evaluated from its own entry" {
+  assert Counter.START == 127
+  assert user(100) == 127
+}
+
+test "a constant used in the arguments of deep calls" {
+  assert dive(AT_LIMIT) == 127
+  assert user_half(120) == 63
+}
+
+test "a call and a constant in one expression" {
+  // The call `dive(127)` is depth 1 .. 128, and the constants read next to it
+  // do not add to it.
+  assert (dive(127) + AT_LIMIT + HALF) == 317
+}
+
+// ---------------------------------------- an initializer that reads a deep user
+
+// `P1` is initialized by a recursion 100 deep that reads `P0` at the bottom;
+// `P0` is evaluated from its own entry and makes 128 nested calls. If the depth
+// of the reader were inherited, `P0` would be at depth 101 + 128. Each of P1, P2
+// and P3 does the same with the one before.
+const P0: U32 = dive(127)
+
+fn via0(n: U32) -> U32 {
+  if n == 0 {
+    P0
+  } else {
+    via0(n - 1)
+  }
+}
+
+const P1: U32 = via0(100)
+
+fn via1(n: U32) -> U32 {
+  if n == 0 {
+    P1
+  } else {
+    via1(n - 1)
+  }
+}
+
+const P2: U32 = via1(100)
+
+fn via2(n: U32) -> U32 {
+  if n == 0 {
+    P2
+  } else {
+    via2(n - 1)
+  }
+}
+
+const P3: U32 = via2(100)
+
+test "the last constant of a chain through deep readers is read first" {
+  assert P3 == 127
+}
+
+test "the others of that chain have the same value" {
+  assert P1 == 127
+  assert P2 == 127
+  assert P0 == 127
+}
+
+test "a reader in a test reads the end of the chain from the boundary depth" {
+  assert via2(127) == 127
+}
+
+// -------------------------------------- a chain of constants is not a recursion
+
+// L0 .. L299: each reads the one before. A `const` that reads a `const` is not a
+// call, so a chain of 300 is not 300 deep. M0 .. M299 are the same with 128
+// nested calls in each initializer.
+
+const L0: U32 = 1
+const L1: U32 = L0 + 1
+const L2: U32 = L1 + 1
+const L3: U32 = L2 + 1
+const L4: U32 = L3 + 1
+const L5: U32 = L4 + 1
+const L6: U32 = L5 + 1
+const L7: U32 = L6 + 1
+const L8: U32 = L7 + 1
+const L9: U32 = L8 + 1
+const L10: U32 = L9 + 1
+const L11: U32 = L10 + 1
+const L12: U32 = L11 + 1
+const L13: U32 = L12 + 1
+const L14: U32 = L13 + 1
+const L15: U32 = L14 + 1
+const L16: U32 = L15 + 1
+const L17: U32 = L16 + 1
+const L18: U32 = L17 + 1
+const L19: U32 = L18 + 1
+const L20: U32 = L19 + 1
+const L21: U32 = L20 + 1
+const L22: U32 = L21 + 1
+const L23: U32 = L22 + 1
+const L24: U32 = L23 + 1
+const L25: U32 = L24 + 1
+const L26: U32 = L25 + 1
+const L27: U32 = L26 + 1
+const L28: U32 = L27 + 1
+const L29: U32 = L28 + 1
+const L30: U32 = L29 + 1
+const L31: U32 = L30 + 1
+const L32: U32 = L31 + 1
+const L33: U32 = L32 + 1
+const L34: U32 = L33 + 1
+const L35: U32 = L34 + 1
+const L36: U32 = L35 + 1
+const L37: U32 = L36 + 1
+const L38: U32 = L37 + 1
+const L39: U32 = L38 + 1
+const L40: U32 = L39 + 1
+const L41: U32 = L40 + 1
+const L42: U32 = L41 + 1
+const L43: U32 = L42 + 1
+const L44: U32 = L43 + 1
+const L45: U32 = L44 + 1
+const L46: U32 = L45 + 1
+const L47: U32 = L46 + 1
+const L48: U32 = L47 + 1
+const L49: U32 = L48 + 1
+const L50: U32 = L49 + 1
+const L51: U32 = L50 + 1
+const L52: U32 = L51 + 1
+const L53: U32 = L52 + 1
+const L54: U32 = L53 + 1
+const L55: U32 = L54 + 1
+const L56: U32 = L55 + 1
+const L57: U32 = L56 + 1
+const L58: U32 = L57 + 1
+const L59: U32 = L58 + 1
+const L60: U32 = L59 + 1
+const L61: U32 = L60 + 1
+const L62: U32 = L61 + 1
+const L63: U32 = L62 + 1
+const L64: U32 = L63 + 1
+const L65: U32 = L64 + 1
+const L66: U32 = L65 + 1
+const L67: U32 = L66 + 1
+const L68: U32 = L67 + 1
+const L69: U32 = L68 + 1
+const L70: U32 = L69 + 1
+const L71: U32 = L70 + 1
+const L72: U32 = L71 + 1
+const L73: U32 = L72 + 1
+const L74: U32 = L73 + 1
+const L75: U32 = L74 + 1
+const L76: U32 = L75 + 1
+const L77: U32 = L76 + 1
+const L78: U32 = L77 + 1
+const L79: U32 = L78 + 1
+const L80: U32 = L79 + 1
+const L81: U32 = L80 + 1
+const L82: U32 = L81 + 1
+const L83: U32 = L82 + 1
+const L84: U32 = L83 + 1
+const L85: U32 = L84 + 1
+const L86: U32 = L85 + 1
+const L87: U32 = L86 + 1
+const L88: U32 = L87 + 1
+const L89: U32 = L88 + 1
+const L90: U32 = L89 + 1
+const L91: U32 = L90 + 1
+const L92: U32 = L91 + 1
+const L93: U32 = L92 + 1
+const L94: U32 = L93 + 1
+const L95: U32 = L94 + 1
+const L96: U32 = L95 + 1
+const L97: U32 = L96 + 1
+const L98: U32 = L97 + 1
+const L99: U32 = L98 + 1
+const L100: U32 = L99 + 1
+const L101: U32 = L100 + 1
+const L102: U32 = L101 + 1
+const L103: U32 = L102 + 1
+const L104: U32 = L103 + 1
+const L105: U32 = L104 + 1
+const L106: U32 = L105 + 1
+const L107: U32 = L106 + 1
+const L108: U32 = L107 + 1
+const L109: U32 = L108 + 1
+const L110: U32 = L109 + 1
+const L111: U32 = L110 + 1
+const L112: U32 = L111 + 1
+const L113: U32 = L112 + 1
+const L114: U32 = L113 + 1
+const L115: U32 = L114 + 1
+const L116: U32 = L115 + 1
+const L117: U32 = L116 + 1
+const L118: U32 = L117 + 1
+const L119: U32 = L118 + 1
+const L120: U32 = L119 + 1
+const L121: U32 = L120 + 1
+const L122: U32 = L121 + 1
+const L123: U32 = L122 + 1
+const L124: U32 = L123 + 1
+const L125: U32 = L124 + 1
+const L126: U32 = L125 + 1
+const L127: U32 = L126 + 1
+const L128: U32 = L127 + 1
+const L129: U32 = L128 + 1
+const L130: U32 = L129 + 1
+const L131: U32 = L130 + 1
+const L132: U32 = L131 + 1
+const L133: U32 = L132 + 1
+const L134: U32 = L133 + 1
+const L135: U32 = L134 + 1
+const L136: U32 = L135 + 1
+const L137: U32 = L136 + 1
+const L138: U32 = L137 + 1
+const L139: U32 = L138 + 1
+const L140: U32 = L139 + 1
+const L141: U32 = L140 + 1
+const L142: U32 = L141 + 1
+const L143: U32 = L142 + 1
+const L144: U32 = L143 + 1
+const L145: U32 = L144 + 1
+const L146: U32 = L145 + 1
+const L147: U32 = L146 + 1
+const L148: U32 = L147 + 1
+const L149: U32 = L148 + 1
+const L150: U32 = L149 + 1
+const L151: U32 = L150 + 1
+const L152: U32 = L151 + 1
+const L153: U32 = L152 + 1
+const L154: U32 = L153 + 1
+const L155: U32 = L154 + 1
+const L156: U32 = L155 + 1
+const L157: U32 = L156 + 1
+const L158: U32 = L157 + 1
+const L159: U32 = L158 + 1
+const L160: U32 = L159 + 1
+const L161: U32 = L160 + 1
+const L162: U32 = L161 + 1
+const L163: U32 = L162 + 1
+const L164: U32 = L163 + 1
+const L165: U32 = L164 + 1
+const L166: U32 = L165 + 1
+const L167: U32 = L166 + 1
+const L168: U32 = L167 + 1
+const L169: U32 = L168 + 1
+const L170: U32 = L169 + 1
+const L171: U32 = L170 + 1
+const L172: U32 = L171 + 1
+const L173: U32 = L172 + 1
+const L174: U32 = L173 + 1
+const L175: U32 = L174 + 1
+const L176: U32 = L175 + 1
+const L177: U32 = L176 + 1
+const L178: U32 = L177 + 1
+const L179: U32 = L178 + 1
+const L180: U32 = L179 + 1
+const L181: U32 = L180 + 1
+const L182: U32 = L181 + 1
+const L183: U32 = L182 + 1
+const L184: U32 = L183 + 1
+const L185: U32 = L184 + 1
+const L186: U32 = L185 + 1
+const L187: U32 = L186 + 1
+const L188: U32 = L187 + 1
+const L189: U32 = L188 + 1
+const L190: U32 = L189 + 1
+const L191: U32 = L190 + 1
+const L192: U32 = L191 + 1
+const L193: U32 = L192 + 1
+const L194: U32 = L193 + 1
+const L195: U32 = L194 + 1
+const L196: U32 = L195 + 1
+const L197: U32 = L196 + 1
+const L198: U32 = L197 + 1
+const L199: U32 = L198 + 1
+const L200: U32 = L199 + 1
+const L201: U32 = L200 + 1
+const L202: U32 = L201 + 1
+const L203: U32 = L202 + 1
+const L204: U32 = L203 + 1
+const L205: U32 = L204 + 1
+const L206: U32 = L205 + 1
+const L207: U32 = L206 + 1
+const L208: U32 = L207 + 1
+const L209: U32 = L208 + 1
+const L210: U32 = L209 + 1
+const L211: U32 = L210 + 1
+const L212: U32 = L211 + 1
+const L213: U32 = L212 + 1
+const L214: U32 = L213 + 1
+const L215: U32 = L214 + 1
+const L216: U32 = L215 + 1
+const L217: U32 = L216 + 1
+const L218: U32 = L217 + 1
+const L219: U32 = L218 + 1
+const L220: U32 = L219 + 1
+const L221: U32 = L220 + 1
+const L222: U32 = L221 + 1
+const L223: U32 = L222 + 1
+const L224: U32 = L223 + 1
+const L225: U32 = L224 + 1
+const L226: U32 = L225 + 1
+const L227: U32 = L226 + 1
+const L228: U32 = L227 + 1
+const L229: U32 = L228 + 1
+const L230: U32 = L229 + 1
+const L231: U32 = L230 + 1
+const L232: U32 = L231 + 1
+const L233: U32 = L232 + 1
+const L234: U32 = L233 + 1
+const L235: U32 = L234 + 1
+const L236: U32 = L235 + 1
+const L237: U32 = L236 + 1
+const L238: U32 = L237 + 1
+const L239: U32 = L238 + 1
+const L240: U32 = L239 + 1
+const L241: U32 = L240 + 1
+const L242: U32 = L241 + 1
+const L243: U32 = L242 + 1
+const L244: U32 = L243 + 1
+const L245: U32 = L244 + 1
+const L246: U32 = L245 + 1
+const L247: U32 = L246 + 1
+const L248: U32 = L247 + 1
+const L249: U32 = L248 + 1
+const L250: U32 = L249 + 1
+const L251: U32 = L250 + 1
+const L252: U32 = L251 + 1
+const L253: U32 = L252 + 1
+const L254: U32 = L253 + 1
+const L255: U32 = L254 + 1
+const L256: U32 = L255 + 1
+const L257: U32 = L256 + 1
+const L258: U32 = L257 + 1
+const L259: U32 = L258 + 1
+const L260: U32 = L259 + 1
+const L261: U32 = L260 + 1
+const L262: U32 = L261 + 1
+const L263: U32 = L262 + 1
+const L264: U32 = L263 + 1
+const L265: U32 = L264 + 1
+const L266: U32 = L265 + 1
+const L267: U32 = L266 + 1
+const L268: U32 = L267 + 1
+const L269: U32 = L268 + 1
+const L270: U32 = L269 + 1
+const L271: U32 = L270 + 1
+const L272: U32 = L271 + 1
+const L273: U32 = L272 + 1
+const L274: U32 = L273 + 1
+const L275: U32 = L274 + 1
+const L276: U32 = L275 + 1
+const L277: U32 = L276 + 1
+const L278: U32 = L277 + 1
+const L279: U32 = L278 + 1
+const L280: U32 = L279 + 1
+const L281: U32 = L280 + 1
+const L282: U32 = L281 + 1
+const L283: U32 = L282 + 1
+const L284: U32 = L283 + 1
+const L285: U32 = L284 + 1
+const L286: U32 = L285 + 1
+const L287: U32 = L286 + 1
+const L288: U32 = L287 + 1
+const L289: U32 = L288 + 1
+const L290: U32 = L289 + 1
+const L291: U32 = L290 + 1
+const L292: U32 = L291 + 1
+const L293: U32 = L292 + 1
+const L294: U32 = L293 + 1
+const L295: U32 = L294 + 1
+const L296: U32 = L295 + 1
+const L297: U32 = L296 + 1
+const L298: U32 = L297 + 1
+const L299: U32 = L298 + 1
+
+const M0: U32 = dive(127)
+const M1: U32 = M0 + dive(127)
+const M2: U32 = M1 + dive(127)
+const M3: U32 = M2 + dive(127)
+const M4: U32 = M3 + dive(127)
+const M5: U32 = M4 + dive(127)
+const M6: U32 = M5 + dive(127)
+const M7: U32 = M6 + dive(127)
+const M8: U32 = M7 + dive(127)
+const M9: U32 = M8 + dive(127)
+const M10: U32 = M9 + dive(127)
+const M11: U32 = M10 + dive(127)
+const M12: U32 = M11 + dive(127)
+const M13: U32 = M12 + dive(127)
+const M14: U32 = M13 + dive(127)
+const M15: U32 = M14 + dive(127)
+const M16: U32 = M15 + dive(127)
+const M17: U32 = M16 + dive(127)
+const M18: U32 = M17 + dive(127)
+const M19: U32 = M18 + dive(127)
+const M20: U32 = M19 + dive(127)
+const M21: U32 = M20 + dive(127)
+const M22: U32 = M21 + dive(127)
+const M23: U32 = M22 + dive(127)
+const M24: U32 = M23 + dive(127)
+const M25: U32 = M24 + dive(127)
+const M26: U32 = M25 + dive(127)
+const M27: U32 = M26 + dive(127)
+const M28: U32 = M27 + dive(127)
+const M29: U32 = M28 + dive(127)
+const M30: U32 = M29 + dive(127)
+const M31: U32 = M30 + dive(127)
+const M32: U32 = M31 + dive(127)
+const M33: U32 = M32 + dive(127)
+const M34: U32 = M33 + dive(127)
+const M35: U32 = M34 + dive(127)
+const M36: U32 = M35 + dive(127)
+const M37: U32 = M36 + dive(127)
+const M38: U32 = M37 + dive(127)
+const M39: U32 = M38 + dive(127)
+const M40: U32 = M39 + dive(127)
+const M41: U32 = M40 + dive(127)
+const M42: U32 = M41 + dive(127)
+const M43: U32 = M42 + dive(127)
+const M44: U32 = M43 + dive(127)
+const M45: U32 = M44 + dive(127)
+const M46: U32 = M45 + dive(127)
+const M47: U32 = M46 + dive(127)
+const M48: U32 = M47 + dive(127)
+const M49: U32 = M48 + dive(127)
+const M50: U32 = M49 + dive(127)
+const M51: U32 = M50 + dive(127)
+const M52: U32 = M51 + dive(127)
+const M53: U32 = M52 + dive(127)
+const M54: U32 = M53 + dive(127)
+const M55: U32 = M54 + dive(127)
+const M56: U32 = M55 + dive(127)
+const M57: U32 = M56 + dive(127)
+const M58: U32 = M57 + dive(127)
+const M59: U32 = M58 + dive(127)
+const M60: U32 = M59 + dive(127)
+const M61: U32 = M60 + dive(127)
+const M62: U32 = M61 + dive(127)
+const M63: U32 = M62 + dive(127)
+const M64: U32 = M63 + dive(127)
+const M65: U32 = M64 + dive(127)
+const M66: U32 = M65 + dive(127)
+const M67: U32 = M66 + dive(127)
+const M68: U32 = M67 + dive(127)
+const M69: U32 = M68 + dive(127)
+const M70: U32 = M69 + dive(127)
+const M71: U32 = M70 + dive(127)
+const M72: U32 = M71 + dive(127)
+const M73: U32 = M72 + dive(127)
+const M74: U32 = M73 + dive(127)
+const M75: U32 = M74 + dive(127)
+const M76: U32 = M75 + dive(127)
+const M77: U32 = M76 + dive(127)
+const M78: U32 = M77 + dive(127)
+const M79: U32 = M78 + dive(127)
+const M80: U32 = M79 + dive(127)
+const M81: U32 = M80 + dive(127)
+const M82: U32 = M81 + dive(127)
+const M83: U32 = M82 + dive(127)
+const M84: U32 = M83 + dive(127)
+const M85: U32 = M84 + dive(127)
+const M86: U32 = M85 + dive(127)
+const M87: U32 = M86 + dive(127)
+const M88: U32 = M87 + dive(127)
+const M89: U32 = M88 + dive(127)
+const M90: U32 = M89 + dive(127)
+const M91: U32 = M90 + dive(127)
+const M92: U32 = M91 + dive(127)
+const M93: U32 = M92 + dive(127)
+const M94: U32 = M93 + dive(127)
+const M95: U32 = M94 + dive(127)
+const M96: U32 = M95 + dive(127)
+const M97: U32 = M96 + dive(127)
+const M98: U32 = M97 + dive(127)
+const M99: U32 = M98 + dive(127)
+const M100: U32 = M99 + dive(127)
+const M101: U32 = M100 + dive(127)
+const M102: U32 = M101 + dive(127)
+const M103: U32 = M102 + dive(127)
+const M104: U32 = M103 + dive(127)
+const M105: U32 = M104 + dive(127)
+const M106: U32 = M105 + dive(127)
+const M107: U32 = M106 + dive(127)
+const M108: U32 = M107 + dive(127)
+const M109: U32 = M108 + dive(127)
+const M110: U32 = M109 + dive(127)
+const M111: U32 = M110 + dive(127)
+const M112: U32 = M111 + dive(127)
+const M113: U32 = M112 + dive(127)
+const M114: U32 = M113 + dive(127)
+const M115: U32 = M114 + dive(127)
+const M116: U32 = M115 + dive(127)
+const M117: U32 = M116 + dive(127)
+const M118: U32 = M117 + dive(127)
+const M119: U32 = M118 + dive(127)
+const M120: U32 = M119 + dive(127)
+const M121: U32 = M120 + dive(127)
+const M122: U32 = M121 + dive(127)
+const M123: U32 = M122 + dive(127)
+const M124: U32 = M123 + dive(127)
+const M125: U32 = M124 + dive(127)
+const M126: U32 = M125 + dive(127)
+const M127: U32 = M126 + dive(127)
+const M128: U32 = M127 + dive(127)
+const M129: U32 = M128 + dive(127)
+const M130: U32 = M129 + dive(127)
+const M131: U32 = M130 + dive(127)
+const M132: U32 = M131 + dive(127)
+const M133: U32 = M132 + dive(127)
+const M134: U32 = M133 + dive(127)
+const M135: U32 = M134 + dive(127)
+const M136: U32 = M135 + dive(127)
+const M137: U32 = M136 + dive(127)
+const M138: U32 = M137 + dive(127)
+const M139: U32 = M138 + dive(127)
+const M140: U32 = M139 + dive(127)
+const M141: U32 = M140 + dive(127)
+const M142: U32 = M141 + dive(127)
+const M143: U32 = M142 + dive(127)
+const M144: U32 = M143 + dive(127)
+const M145: U32 = M144 + dive(127)
+const M146: U32 = M145 + dive(127)
+const M147: U32 = M146 + dive(127)
+const M148: U32 = M147 + dive(127)
+const M149: U32 = M148 + dive(127)
+const M150: U32 = M149 + dive(127)
+const M151: U32 = M150 + dive(127)
+const M152: U32 = M151 + dive(127)
+const M153: U32 = M152 + dive(127)
+const M154: U32 = M153 + dive(127)
+const M155: U32 = M154 + dive(127)
+const M156: U32 = M155 + dive(127)
+const M157: U32 = M156 + dive(127)
+const M158: U32 = M157 + dive(127)
+const M159: U32 = M158 + dive(127)
+const M160: U32 = M159 + dive(127)
+const M161: U32 = M160 + dive(127)
+const M162: U32 = M161 + dive(127)
+const M163: U32 = M162 + dive(127)
+const M164: U32 = M163 + dive(127)
+const M165: U32 = M164 + dive(127)
+const M166: U32 = M165 + dive(127)
+const M167: U32 = M166 + dive(127)
+const M168: U32 = M167 + dive(127)
+const M169: U32 = M168 + dive(127)
+const M170: U32 = M169 + dive(127)
+const M171: U32 = M170 + dive(127)
+const M172: U32 = M171 + dive(127)
+const M173: U32 = M172 + dive(127)
+const M174: U32 = M173 + dive(127)
+const M175: U32 = M174 + dive(127)
+const M176: U32 = M175 + dive(127)
+const M177: U32 = M176 + dive(127)
+const M178: U32 = M177 + dive(127)
+const M179: U32 = M178 + dive(127)
+const M180: U32 = M179 + dive(127)
+const M181: U32 = M180 + dive(127)
+const M182: U32 = M181 + dive(127)
+const M183: U32 = M182 + dive(127)
+const M184: U32 = M183 + dive(127)
+const M185: U32 = M184 + dive(127)
+const M186: U32 = M185 + dive(127)
+const M187: U32 = M186 + dive(127)
+const M188: U32 = M187 + dive(127)
+const M189: U32 = M188 + dive(127)
+const M190: U32 = M189 + dive(127)
+const M191: U32 = M190 + dive(127)
+const M192: U32 = M191 + dive(127)
+const M193: U32 = M192 + dive(127)
+const M194: U32 = M193 + dive(127)
+const M195: U32 = M194 + dive(127)
+const M196: U32 = M195 + dive(127)
+const M197: U32 = M196 + dive(127)
+const M198: U32 = M197 + dive(127)
+const M199: U32 = M198 + dive(127)
+const M200: U32 = M199 + dive(127)
+const M201: U32 = M200 + dive(127)
+const M202: U32 = M201 + dive(127)
+const M203: U32 = M202 + dive(127)
+const M204: U32 = M203 + dive(127)
+const M205: U32 = M204 + dive(127)
+const M206: U32 = M205 + dive(127)
+const M207: U32 = M206 + dive(127)
+const M208: U32 = M207 + dive(127)
+const M209: U32 = M208 + dive(127)
+const M210: U32 = M209 + dive(127)
+const M211: U32 = M210 + dive(127)
+const M212: U32 = M211 + dive(127)
+const M213: U32 = M212 + dive(127)
+const M214: U32 = M213 + dive(127)
+const M215: U32 = M214 + dive(127)
+const M216: U32 = M215 + dive(127)
+const M217: U32 = M216 + dive(127)
+const M218: U32 = M217 + dive(127)
+const M219: U32 = M218 + dive(127)
+const M220: U32 = M219 + dive(127)
+const M221: U32 = M220 + dive(127)
+const M222: U32 = M221 + dive(127)
+const M223: U32 = M222 + dive(127)
+const M224: U32 = M223 + dive(127)
+const M225: U32 = M224 + dive(127)
+const M226: U32 = M225 + dive(127)
+const M227: U32 = M226 + dive(127)
+const M228: U32 = M227 + dive(127)
+const M229: U32 = M228 + dive(127)
+const M230: U32 = M229 + dive(127)
+const M231: U32 = M230 + dive(127)
+const M232: U32 = M231 + dive(127)
+const M233: U32 = M232 + dive(127)
+const M234: U32 = M233 + dive(127)
+const M235: U32 = M234 + dive(127)
+const M236: U32 = M235 + dive(127)
+const M237: U32 = M236 + dive(127)
+const M238: U32 = M237 + dive(127)
+const M239: U32 = M238 + dive(127)
+const M240: U32 = M239 + dive(127)
+const M241: U32 = M240 + dive(127)
+const M242: U32 = M241 + dive(127)
+const M243: U32 = M242 + dive(127)
+const M244: U32 = M243 + dive(127)
+const M245: U32 = M244 + dive(127)
+const M246: U32 = M245 + dive(127)
+const M247: U32 = M246 + dive(127)
+const M248: U32 = M247 + dive(127)
+const M249: U32 = M248 + dive(127)
+const M250: U32 = M249 + dive(127)
+const M251: U32 = M250 + dive(127)
+const M252: U32 = M251 + dive(127)
+const M253: U32 = M252 + dive(127)
+const M254: U32 = M253 + dive(127)
+const M255: U32 = M254 + dive(127)
+const M256: U32 = M255 + dive(127)
+const M257: U32 = M256 + dive(127)
+const M258: U32 = M257 + dive(127)
+const M259: U32 = M258 + dive(127)
+const M260: U32 = M259 + dive(127)
+const M261: U32 = M260 + dive(127)
+const M262: U32 = M261 + dive(127)
+const M263: U32 = M262 + dive(127)
+const M264: U32 = M263 + dive(127)
+const M265: U32 = M264 + dive(127)
+const M266: U32 = M265 + dive(127)
+const M267: U32 = M266 + dive(127)
+const M268: U32 = M267 + dive(127)
+const M269: U32 = M268 + dive(127)
+const M270: U32 = M269 + dive(127)
+const M271: U32 = M270 + dive(127)
+const M272: U32 = M271 + dive(127)
+const M273: U32 = M272 + dive(127)
+const M274: U32 = M273 + dive(127)
+const M275: U32 = M274 + dive(127)
+const M276: U32 = M275 + dive(127)
+const M277: U32 = M276 + dive(127)
+const M278: U32 = M277 + dive(127)
+const M279: U32 = M278 + dive(127)
+const M280: U32 = M279 + dive(127)
+const M281: U32 = M280 + dive(127)
+const M282: U32 = M281 + dive(127)
+const M283: U32 = M282 + dive(127)
+const M284: U32 = M283 + dive(127)
+const M285: U32 = M284 + dive(127)
+const M286: U32 = M285 + dive(127)
+const M287: U32 = M286 + dive(127)
+const M288: U32 = M287 + dive(127)
+const M289: U32 = M288 + dive(127)
+const M290: U32 = M289 + dive(127)
+const M291: U32 = M290 + dive(127)
+const M292: U32 = M291 + dive(127)
+const M293: U32 = M292 + dive(127)
+const M294: U32 = M293 + dive(127)
+const M295: U32 = M294 + dive(127)
+const M296: U32 = M295 + dive(127)
+const M297: U32 = M296 + dive(127)
+const M298: U32 = M297 + dive(127)
+const M299: U32 = M298 + dive(127)
+
+test "the end of a chain of 300 constants" {
+  assert L299 == 300
+}
+
+test "the middle of the chain" {
+  assert L150 == 151
+  assert L0 == 1
+}
+
+test "the end of a chain of 300 constants that make calls" {
+  assert M299 == 38100
+}
+
+test "the end of the chains is read from a deep place" {
+  assert via_chain(100) == 300
+}
+
+fn via_chain(n: U32) -> U32 {
+  if n == 0 {
+    L299
+  } else {
+    via_chain(n - 1)
+  }
+}

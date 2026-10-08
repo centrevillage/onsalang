@@ -1,0 +1,365 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§9.2", "§18.2", "§6.1", "§6.2", "§4.5"]
+
+// When the stack runs out (spec §12.5): the interpreter (`onsa test`) has the
+// fixed limit 128 for the depth of calls and panics beyond it. The depth is
+// counted from the body of the `test` (depth 0) by the number of nested calls,
+// the calls in a tail position included, and the limit is the same for every
+// kind of build. A panic in a test fails that test (§9.2) and the other tests of
+// the file run. The exact boundary (127 passes, 128 fails) is in
+// recursion_limit.onsa; here every deep call is 300 levels, well beyond the
+// limit, in every shape of recursion that the language has, and every call that
+// is expected to succeed is at most 50 levels deep (recursion_shallow.onsa has
+// more of those).
+//
+// A function below returns a value that fits its type without overflow when it
+// is not stopped (a depth of 300 in a U32), so that a test fails because of the
+// limit only, not because of an overflow or another panic on the way. Every deep
+// case has a shallow control (the same function at a small depth) that passes.
+
+// ------------------------------------------------------------ direct recursion
+
+// Not a tail call: the result is 1 + the result of the call.
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+// A tail call. An interpreter that makes tail calls into loops would pass the
+// deep test; the spec counts the calls in a tail position too (§12.5).
+fn dive_tail(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    dive_tail(n - 1)
+  }
+}
+
+// Two recursive calls in one body (one of them is cut off at once).
+fn dive_branch(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    dive_branch(n - 1) + dive_branch(0)
+  }
+}
+
+// The recursive call is an argument of a recursive call.
+fn dive_nested(n: U32, m: U32) -> U32 {
+  if n == 0 {
+    m
+  } else {
+    dive_nested(n - 1, dive_nested(0, m))
+  }
+}
+
+// The recursion goes through a `match` arm and an `Option`.
+fn dive_match(n: U32) -> U32 {
+  let o: Option[U32] = if n == 0 {
+    None
+  } else {
+    Some(n - 1)
+  }
+  match o {
+    Some(k) => 1 + dive_match(k),
+    None => 0,
+  }
+}
+
+// The recursion goes through a `for` body.
+fn dive_for(n: U32) {
+  if n > 0 {
+    for i in 0..1 {
+      dive_for(n - 1 + i)
+    }
+  }
+}
+
+// `inout`: the same variable is passed down.
+fn dive_inout(inout x: U32, n: U32) {
+  if n > 0 {
+    x = 1
+    dive_inout(inout x, n - 1)
+  }
+}
+
+test "a deep non tail recursion is a panic and fails the test" {   //~ TESTFAIL "a deep non tail recursion is a panic and fails the test"
+  assert dive(300) == 300
+}
+
+test "the same function at depth 50 passes" {
+  assert dive(50) == 50
+}
+
+test "a deep tail recursion is a panic and fails the test" {   //~ TESTFAIL "a deep tail recursion is a panic and fails the test"
+  assert dive_tail(300) == 0
+}
+
+test "the same tail recursion at depth 50 passes" {
+  assert dive_tail(50) == 0
+}
+
+test "a deep recursion with two calls in a body fails the test" {   //~ TESTFAIL "a deep recursion with two calls in a body fails the test"
+  assert dive_branch(300) == 0
+}
+
+test "a deep recursion whose argument is a recursive call fails the test" {   //~ TESTFAIL "a deep recursion whose argument is a recursive call fails the test"
+  assert dive_nested(300, 3) == 3
+}
+
+test "a deep recursion through a match fails the test" {   //~ TESTFAIL "a deep recursion through a match fails the test"
+  assert dive_match(300) == 300
+}
+
+test "a deep recursion through a for body fails the test" {   //~ TESTFAIL "a deep recursion through a for body fails the test"
+  dive_for(300)
+  assert true
+}
+
+test "a deep recursion with an inout argument fails the test" {   //~ TESTFAIL "a deep recursion with an inout argument fails the test"
+  var x: U32 = 0
+  dive_inout(inout x, 300)
+  assert x == 1
+}
+
+test "the controls of the other shapes pass at a small depth" {
+  assert dive_branch(40) == 0
+  assert dive_nested(40, 3) == 3
+  assert dive_match(40) == 40
+  var x: U32 = 0
+  dive_inout(inout x, 40)
+  assert x == 1
+  dive_for(40)
+}
+
+// -------------------------------------------------------------- mutual recursion
+
+fn is_even(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    is_odd(n - 1)
+  }
+}
+
+fn is_odd(n: U32) -> Bool {
+  if n == 0 {
+    false
+  } else {
+    is_even(n - 1)
+  }
+}
+
+fn ra(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    rb(n - 1)
+  }
+}
+
+fn rb(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    rc(n - 1)
+  }
+}
+
+fn rc(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    ra(n - 1)
+  }
+}
+
+test "a deep mutual recursion of two functions fails the test" {   //~ TESTFAIL "a deep mutual recursion of two functions fails the test"
+  assert is_even(300)
+}
+
+test "a deep mutual recursion of three functions fails the test" {   //~ TESTFAIL "a deep mutual recursion of three functions fails the test"
+  assert ra(300) == 0
+}
+
+test "the mutual recursions at a small depth pass" {
+  assert is_even(40)
+  assert !is_odd(40)
+  assert ra(40) == 0
+}
+
+// ----------------------------------------------------------- generic recursion
+
+fn dive_g[T: Copy](x: T, n: U32) -> T {
+  if n == 0 {
+    x
+  } else {
+    dive_g(x, n - 1)
+  }
+}
+
+// Mutual recursion of generic functions that swap the parameters at each level.
+fn swap_down[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    let r = swap_back(b, a, n - 1)
+    (r.1, r.0)
+  }
+}
+
+fn swap_back[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    let r = swap_down(b, a, n - 1)
+    (r.1, r.0)
+  }
+}
+
+test "a deep generic recursion fails the test" {   //~ TESTFAIL "a deep generic recursion fails the test"
+  let x: F32 = 1.5
+  assert dive_g(x, 300) == 1.5
+}
+
+test "a deep recursion of two generic functions fails the test" {   //~ TESTFAIL "a deep recursion of two generic functions fails the test"
+  let a: U8 = 1
+  let b: F64 = 2.0
+  let p = swap_down(a, b, 300)
+  assert p.0 == 1
+}
+
+test "the generic recursions at a small depth pass" {
+  let x: F32 = 1.5
+  assert dive_g(x, 40) == 1.5
+  let a: U8 = 1
+  let b: F64 = 2.0
+  let p = swap_down(a, b, 40)
+  assert p.0 == 1
+  assert p.1 == 2.0
+}
+
+// ------------------------------------------------------------------- methods
+
+pub struct Counter {
+  base: U32,
+}
+
+impl Counter {
+  pub fn make(base: U32) -> Counter {
+    Counter { base: base }
+  }
+
+  pub fn down(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      self.down(n - 1)
+    }
+  }
+
+  pub fn triangle_count(n: U32) -> U32 {
+    if n == 0 {
+      0
+    } else {
+      Counter.triangle_count(n - 1)
+    }
+  }
+
+  pub fn bump(inout self, n: U32) {
+    if n > 0 {
+      self.base = 1
+      self.bump!(n - 1)
+    }
+  }
+
+  pub fn ping(self, n: U32) -> U32 {
+    if n == 0 {
+      0
+    } else {
+      self.pong(n - 1)
+    }
+  }
+
+  pub fn pong(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      self.ping(n - 1)
+    }
+  }
+}
+
+test "a deep recursion of a method fails the test" {   //~ TESTFAIL "a deep recursion of a method fails the test"
+  let c = Counter.make(100)
+  assert c.down(300) == 100
+}
+
+test "a deep recursion of an associated function fails the test" {   //~ TESTFAIL "a deep recursion of an associated function fails the test"
+  assert Counter.triangle_count(300) == 0
+}
+
+test "a deep recursion of an inout method fails the test" {   //~ TESTFAIL "a deep recursion of an inout method fails the test"
+  var c = Counter.make(100)
+  c.bump!(300)
+  assert c.base == 1
+}
+
+test "a deep recursion of two methods that call each other fails the test" {   //~ TESTFAIL "a deep recursion of two methods that call each other fails the test"
+  let c = Counter.make(7)
+  assert c.ping(300) == 0
+}
+
+test "the methods at a small depth pass" {
+  var c = Counter.make(100)
+  assert c.down(40) == 100
+  assert Counter.triangle_count(40) == 0
+  assert c.ping(41) == 100
+  c.bump!(40)
+  assert c.base == 1
+}
+
+// --------------------------------------------- the limit is released, per test
+
+// A test that ends by the limit leaves the interpreter usable: the next deep
+// test fails again by the limit (not by some state that the first one left), and
+// calls at a depth of 50 pass in between (the count of the depth goes back to
+// the start with each test, and with each finished call).
+test "the first deep test of a series fails" {   //~ TESTFAIL "the first deep test of a series fails"
+  assert dive(300) == 300
+}
+
+test "a shallow recursion after it passes" {
+  assert dive(50) == 50
+}
+
+test "the second deep test of a series fails again" {   //~ TESTFAIL "the second deep test of a series fails again"
+  assert dive(300) == 300
+}
+
+test "a loop of shallow recursions after it passes" {
+  var i: U32 = 0
+  while i < 1000 {
+    assert dive(50) == 50
+    i = i + 1
+  }
+}
+
+// A deep recursion inside a loop: the first iteration stops the test.
+test "a deep recursion in a loop stops the test at the first iteration" {   //~ TESTFAIL "a deep recursion in a loop stops the test at the first iteration"
+  var i: U32 = 0
+  while i < 3 {
+    assert dive(300) == 300
+    i = i + 1
+  }
+}
+
+test "the last test of the file runs and passes" {
+  assert dive_tail(50) == 0
+  assert is_even(50)
+}

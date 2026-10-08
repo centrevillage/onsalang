@@ -1,0 +1,460 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§9.2", "§6.1", "§6.2", "§4.5"]
+
+// The boundary of the call depth limit (spec §12.5, decided as S-222). The
+// interpreter (`onsa test`) has the fixed limit 128 for the depth of calls. The
+// depth is counted from the entry of the evaluation: the body of a `test` is
+// depth 0, and the depth of a call is the number of calls nested in it, a call
+// in a tail position included. More than 128 nested calls is a panic, and a
+// panic in a test fails that test and no other (§9.2).
+//
+// So `dive(n)` called from the body of a test makes n + 1 nested calls (the
+// call `dive(n)` is depth 1, the call `dive(0)` at the bottom is depth n + 1):
+// `dive(127)` reaches depth 128 and passes, and `dive(128)` reaches depth 129
+// and panics. Every function below makes exactly one more nested call per level
+// of its argument, so the same pair 127 and 128 is the boundary of each of them.
+//
+// A test that is expected to fail is a failure by the limit only: its assertion
+// is true when the call is not stopped, and the same shape passes at 127 in the
+// test before it. The deepest call anywhere in this file is 300 levels.
+
+// ------------------------------------------------------------ direct recursion
+
+// Not a tail call.
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+// A tail call: it counts as a nested call too (spec: "末尾の呼び出しも数える").
+fn dive_tail(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    dive_tail(n - 1)
+  }
+}
+
+// Two calls in one body: the second is cut off at once, and only one of them is
+// nested in the recursion at a time.
+fn dive_branch(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    dive_branch(n - 1) + dive_branch(0)
+  }
+}
+
+// A recursive call that is an argument of a recursive call. The inner call is
+// finished before the outer one starts, so the argument is not nested in it.
+fn dive_nested(n: U32, m: U32) -> U32 {
+  if n == 0 {
+    m
+  } else {
+    dive_nested(n - 1, dive_nested(0, m))
+  }
+}
+
+fn dive_match(n: U32) -> U32 {
+  let o: Option[U32] = if n == 0 {
+    None
+  } else {
+    Some(n - 1)
+  }
+  match o {
+    Some(k) => 1 + dive_match(k),
+    None => 0,
+  }
+}
+
+fn dive_for(n: U32) {
+  if n > 0 {
+    for i in 0..1 {
+      dive_for(n - 1 + i)
+    }
+  }
+}
+
+fn dive_inout(inout x: U32, n: U32) {
+  if n > 0 {
+    x = 1
+    dive_inout(inout x, n - 1)
+  }
+}
+
+test "dive at depth 128 passes" {
+  assert dive(127) == 127
+}
+
+test "dive at depth 129 fails the test" {   //~ TESTFAIL "dive at depth 129 fails the test"
+  assert dive(128) == 128
+}
+
+test "dive at depth 128 passes again after a failed test" {
+  assert dive(127) == 127
+}
+
+test "dive_tail at depth 128 passes" {
+  assert dive_tail(127) == 0
+}
+
+test "dive_tail at depth 129 fails the test" {   //~ TESTFAIL "dive_tail at depth 129 fails the test"
+  assert dive_tail(128) == 0
+}
+
+test "a tail recursion far beyond the limit fails the test" {   //~ TESTFAIL "a tail recursion far beyond the limit fails the test"
+  assert dive_tail(300) == 0
+}
+
+test "dive_branch at depth 128 passes" {
+  assert dive_branch(127) == 0
+}
+
+test "dive_branch at depth 129 fails the test" {   //~ TESTFAIL "dive_branch at depth 129 fails the test"
+  assert dive_branch(128) == 0
+}
+
+test "dive_nested at depth 128 passes" {
+  assert dive_nested(127, 3) == 3
+}
+
+test "dive_nested at depth 129 fails the test" {   //~ TESTFAIL "dive_nested at depth 129 fails the test"
+  assert dive_nested(128, 3) == 3
+}
+
+test "dive_match at depth 128 passes" {
+  assert dive_match(127) == 127
+}
+
+test "dive_match at depth 129 fails the test" {   //~ TESTFAIL "dive_match at depth 129 fails the test"
+  assert dive_match(128) == 128
+}
+
+test "dive_for at depth 128 passes" {
+  dive_for(127)
+  assert true
+}
+
+test "dive_for at depth 129 fails the test" {   //~ TESTFAIL "dive_for at depth 129 fails the test"
+  dive_for(128)
+  assert true
+}
+
+test "dive_inout at depth 128 passes" {
+  var x: U32 = 0
+  dive_inout(inout x, 127)
+  assert x == 1
+}
+
+test "dive_inout at depth 129 fails the test" {   //~ TESTFAIL "dive_inout at depth 129 fails the test"
+  var x: U32 = 0
+  dive_inout(inout x, 128)
+  assert x == 1
+}
+
+// -------------------------------------------------------------- mutual recursion
+
+fn is_even(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    is_odd(n - 1)
+  }
+}
+
+fn is_odd(n: U32) -> Bool {
+  if n == 0 {
+    false
+  } else {
+    is_even(n - 1)
+  }
+}
+
+fn ra(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    rb(n - 1)
+  }
+}
+
+fn rb(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    rc(n - 1)
+  }
+}
+
+fn rc(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    ra(n - 1)
+  }
+}
+
+test "two functions that call each other, at depth 128, pass" {
+  // is_even(127) -> is_odd(126) -> ... -> is_even(1) -> is_odd(0): 128 calls.
+  assert !is_even(127)
+  assert is_odd(127)
+}
+
+test "two functions that call each other, at depth 129, fail the test" {   //~ TESTFAIL "two functions that call each other, at depth 129, fail the test"
+  assert is_even(128)
+}
+
+test "a cycle of three at depth 128 passes" {
+  assert ra(127) == 0
+  assert rb(127) == 0
+  assert rc(127) == 0
+}
+
+test "a cycle of three at depth 129 fails the test" {   //~ TESTFAIL "a cycle of three at depth 129 fails the test"
+  assert rb(128) == 0
+}
+
+// ----------------------------------------------------------- generic recursion
+
+fn dive_g[T: Copy](x: T, n: U32) -> T {
+  if n == 0 {
+    x
+  } else {
+    dive_g(x, n - 1)
+  }
+}
+
+fn swap_down[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    let r = swap_back(b, a, n - 1)
+    (r.1, r.0)
+  }
+}
+
+fn swap_back[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    let r = swap_down(b, a, n - 1)
+    (r.1, r.0)
+  }
+}
+
+test "a generic recursion at depth 128 passes" {
+  let x: F32 = 1.5
+  assert dive_g(x, 127) == 1.5
+  let flag = true
+  assert dive_g(flag, 127)
+}
+
+test "a generic recursion at depth 129 fails the test" {   //~ TESTFAIL "a generic recursion at depth 129 fails the test"
+  let x: F32 = 1.5
+  assert dive_g(x, 128) == 1.5
+}
+
+test "two generic functions that swap their parameters, at depth 128, pass" {
+  let a: U8 = 1
+  let b: F64 = 2.0
+  let p = swap_down(a, b, 127)
+  assert p.0 == 1
+  assert p.1 == 2.0
+}
+
+test "two generic functions that swap their parameters, at depth 129, fail the test" {   //~ TESTFAIL "two generic functions that swap their parameters, at depth 129, fail the test"
+  let a: U8 = 1
+  let b: F64 = 2.0
+  let p = swap_down(a, b, 128)
+  assert p.0 == 1
+}
+
+// ------------------------------------------------------------------- methods
+
+pub struct Counter {
+  base: U32,
+}
+
+impl Counter {
+  pub fn make(base: U32) -> Counter {
+    Counter { base: base }
+  }
+
+  pub fn down(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      self.down(n - 1)
+    }
+  }
+
+  pub fn depth_count(n: U32) -> U32 {
+    if n == 0 {
+      0
+    } else {
+      Counter.depth_count(n - 1)
+    }
+  }
+
+  pub fn bump(inout self, n: U32) {
+    if n > 0 {
+      self.base = 1
+      self.bump!(n - 1)
+    }
+  }
+
+  pub fn ping(self, n: U32) -> U32 {
+    if n == 0 {
+      0
+    } else {
+      self.pong(n - 1)
+    }
+  }
+
+  pub fn pong(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      self.ping(n - 1)
+    }
+  }
+}
+
+test "a method that calls itself, at depth 128, passes" {
+  let c = Counter.make(100)
+  assert c.down(127) == 100
+}
+
+test "a method that calls itself, at depth 129, fails the test" {   //~ TESTFAIL "a method that calls itself, at depth 129, fails the test"
+  let c = Counter.make(100)
+  assert c.down(128) == 100
+}
+
+test "an associated function that calls itself, at depth 128, passes" {
+  assert Counter.depth_count(127) == 0
+}
+
+test "an associated function that calls itself, at depth 129, fails the test" {   //~ TESTFAIL "an associated function that calls itself, at depth 129, fails the test"
+  assert Counter.depth_count(128) == 0
+}
+
+test "an inout method at depth 128 passes" {
+  var c = Counter.make(100)
+  c.bump!(127)
+  assert c.base == 1
+}
+
+test "an inout method at depth 129 fails the test" {   //~ TESTFAIL "an inout method at depth 129 fails the test"
+  var c = Counter.make(100)
+  c.bump!(128)
+  assert c.base == 1
+}
+
+test "two methods that call each other, at depth 128, pass" {
+  let c = Counter.make(7)
+  // ping(127) -> pong(126) -> ... -> ping(1) -> pong(0), which is the base.
+  assert c.ping(127) == 7
+}
+
+test "two methods that call each other, at depth 129, fail the test" {   //~ TESTFAIL "two methods that call each other, at depth 129, fail the test"
+  let c = Counter.make(7)
+  assert c.ping(128) == 0
+}
+
+// ------------------------------------------- the depth is nesting, not a total
+
+// A call that is nested in k calls and then makes a call of m levels: the
+// deepest call is depth k + m + 2 (then_dive is depth 1 .. k + 1, dive(m) is
+// depth k + 2, dive(0) is depth k + m + 2).
+fn then_dive(k: U32, m: U32) -> U32 {
+  if k == 0 {
+    dive(m)
+  } else {
+    then_dive(k - 1, m)
+  }
+}
+
+test "a recursion that starts under another one counts the whole nesting, 128 passes" {
+  assert then_dive(100, 26) == 26
+  assert then_dive(0, 126) == 126
+  assert then_dive(126, 0) == 0
+}
+
+test "a recursion that starts under another one counts the whole nesting, 129 fails" {   //~ TESTFAIL "a recursion that starts under another one counts the whole nesting, 129 fails"
+  assert then_dive(100, 27) == 27
+}
+
+test "the nesting of two different functions adds up, 129 fails" {   //~ TESTFAIL "the nesting of two different functions adds up, 129 fails"
+  assert then_dive(0, 127) == 127
+}
+
+test "calls one after the other are not nested in each other" {
+  let a = dive(127)
+  let b = dive(127)
+  assert (a + b) == 254
+  assert (dive(127) + dive(127)) == 254
+  var i: U32 = 0
+  var total: U32 = 0
+  while i < 100 {
+    total = total + dive(127)
+    i = i + 1
+  }
+  assert total == 12700
+}
+
+fn add(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+test "a call in an argument position is not nested in the call it is an argument of" {
+  // The arguments are evaluated before `add` is entered (see the gap report of
+  // W2-04/t2 for the reading), so the deepest call is depth 128.
+  assert add(dive(127), dive(127)) == 254
+}
+
+test "blocks, branches, loops and a match add no depth" {
+  var sum: U32 = 0
+  for i in 0..3 {
+    let o: Option[U32] = Some(i)
+    match o {
+      Some(k) => {
+        if k < 5 {
+          let v = {
+            let t = dive(127)
+            t + k
+          }
+          sum = sum + v
+        }
+      },
+      None => {},
+    }
+  }
+  // 127 + 0, 127 + 1, 127 + 2.
+  assert sum == 384
+}
+
+test "the depth starts at 0 in each test" {
+  assert dive(127) == 127
+}
+
+test "the depth is back at 0 after a call that returned" {
+  let a = then_dive(100, 26)
+  let b = dive(127)
+  assert (a + b) == 153
+}
+
+// ------------------------------------------------ far beyond the limit, 300 deep
+
+test "a recursion 300 deep fails the test" {   //~ TESTFAIL "a recursion 300 deep fails the test"
+  assert dive(300) == 300
+}
+
+test "the test after a failed one runs and passes" {
+  assert dive(127) == 127
+  assert dive_tail(127) == 0
+}

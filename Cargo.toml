@@ -29,3 +29,15 @@ all = "warn"
 
 [profile.release]
 opt-level = 3
+
+# The interpreter is optimized a little in the dev profile too, for the
+# stack: `onsa test` and the compile-time evaluation have one call depth
+# limit (spec §12.5, S-222) in every build, and it must come before the
+# safety net of the stack (R-05) also for a recursive call under the deepest
+# nesting of expressions (S-183). A debug build without this does not fit;
+# the numbers are measured in one place, the description of
+# `onsa_interp::MAX_CALL_DEPTH`. `overflow-checks` and `debug-assertions`
+# are the profile's and stay on. The guarantee in every environment (the
+# evaluator keeps its own stack) is W9-03's.
+[profile.dev.package.onsa_interp]
+opt-level = 1

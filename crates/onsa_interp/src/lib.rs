@@ -28,8 +28,8 @@ use std::rc::Rc;
 
 use onsa_core::prim::{CheckedOp, MathFn, Prim};
 use onsa_core::{
-    Arg, BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnId, Lit, LocalId, LogicOp, Mode, Module, Overflow,
-    Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
+    Arg, BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnId, Lit, LocalId, LogicOp, Mode, Module, MsgId,
+    Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
 };
 use onsa_diag::Span;
 
@@ -109,12 +109,111 @@ enum ConstState {
     Done(Value),
 }
 
-const MAX_DEPTH: u32 = 4096;
+/// The upper limit of the call depth (spec §12.5, S-222, R-05, R-112): the
+/// calls nested in one evaluation, which starts at depth 0 (the body of a
+/// `test`, a `const` initializer, any other entry from outside the
+/// interpreter). Calls 1 to 128 run; the 129th is a panic of the program, at
+/// that call. A tail call counts; reading a `const` is not a call, and its
+/// initializer is an evaluation of its own, from 0. The same in every build.
+///
+/// The stack it needs (R-05: measured, `measure_the_stack_of_calls_and_levels`
+/// in the unit tests prints it). The interpreter runs on a thread with
+/// [`onsa_diag::stack::STACK_SIZE`] (64 MiB) of stack, and the safety net keeps
+/// [`STACK_RESERVE`] (4 MiB) of it, so a call may use 60 MiB / 128 = 480 K
+/// before the net comes before the limit. What a call uses is its body's
+/// frames down to the next call: the expressions around that call nest up to
+/// 256 levels (spec §2.5, S-183). Measured on aarch64-apple-darwin
+/// (2026-10-08), bytes of stack, with `onsa_interp` at `opt-level = 1` in the
+/// dev profile (`Cargo.toml`):
+///
+/// | | debug | release |
+/// |---|---|---|
+/// | one call, no nesting (`1 + f(n - 1)`) | 0.8 K | 0.5 K |
+/// | one level of `0 + (x)` | 0.3 K | 0.3 K |
+/// | one level of `(x, 0).0` | 0.7 K | 0.7 K |
+/// | one level of `match`, `[x][0]` (the most) | 0.8–0.9 K | 0.8 K |
+///
+/// So 128 calls, each under 256 levels of the most expensive kind, use 28 MB
+/// in debug and 27 MB in release, less than half of the 60 MiB (the unit
+/// tests `the_limit_comes_before_the_net_under_256_levels` and
+/// `measure_the_stack_of_calls_and_levels`). Without the `opt-level` the debug
+/// build uses 4.2 K a call and up to 5.1 K a level, and the net would come
+/// first under about 96 levels. The guarantee in every environment (the
+/// evaluator keeps its own stack) is W9-03's.
+pub const MAX_CALL_DEPTH: u32 = 128;
+
+/// The safety net under [`MAX_CALL_DEPTH`] (R-05): every call and every entry
+/// checks the stack left to the thread ([`onsa_diag::stack::remaining`]), and
+/// below this many bytes it stops with an internal error (S-67), not a signal.
+/// With a right limit the limit comes first and the net is never reached by
+/// calls; reaching it means the limit does not fit the stack, a bug of the
+/// compiler.
+///
+/// The reserve is also the most stack one stretch between two checks may use:
+/// the body of one function down to its next call, whose expressions nest up
+/// to 256 levels (S-183, W3-14): 256 × 0.9 K = 0.23 MiB here, and 256 × 5.1 K
+/// = 1.3 MiB in a debug build without the `opt-level`, both below 4 MiB. When
+/// the nesting limit grows, measure this again.
+///
+/// The nested evaluations of `const`s (a `const` read in an initializer,
+/// whose initializer reads another, ...) are not calls and have no limit
+/// (S-222): every one checks the net at its entry, and a chain too long for
+/// the stack stops with the internal error. A stand-in until W9-03 evaluates
+/// the `const`s in the order of their dependencies, with no recursion.
+pub const STACK_RESERVE: usize = 4 << 20;
+
+// The reserve is a part of the stack of a command.
+const _: () = assert!(STACK_RESERVE < onsa_diag::stack::STACK_SIZE);
 
 pub struct Interp<'m> {
     pub m: &'m Module,
     consts: Vec<RefCell<ConstState>>,
+    /// The calls nested in the current evaluation (see [`MAX_CALL_DEPTH`]).
     depth: Cell<u32>,
+    /// The evaluations running: more than one when a `const` is evaluated
+    /// inside another evaluation (only for the message of the safety net).
+    evals: Cell<u32>,
+}
+
+/// Where the safety net is checked.
+#[derive(Clone, Copy)]
+enum Check {
+    /// A call nested in an evaluation.
+    Call,
+    /// The entry of an evaluation (a call from outside, a `const`).
+    Entry,
+}
+
+/// Puts the depth of the evaluation that was running, and the number of
+/// evaluations running, back when an entry ends, also when an internal error
+/// unwinds through it (P-1: a tool may go on with the same interpreter after
+/// an internal error).
+struct DepthBack<'a> {
+    depth: &'a Cell<u32>,
+    saved: u32,
+    evals: &'a Cell<u32>,
+}
+
+impl Drop for DepthBack<'_> {
+    fn drop(&mut self) {
+        self.depth.set(self.saved);
+        self.evals.set(self.evals.get() - 1);
+    }
+}
+
+/// Puts a `const` that is being evaluated back to unevaluated when its
+/// evaluation does not finish with a value (a panic, or an internal error
+/// that unwinds), so that a later read evaluates it again and does not see
+/// it as depending on itself.
+struct ConstBack<'a>(&'a RefCell<ConstState>);
+
+impl Drop for ConstBack<'_> {
+    fn drop(&mut self) {
+        let mut st = self.0.borrow_mut();
+        if matches!(*st, ConstState::InProgress) {
+            *st = ConstState::Unevaluated;
+        }
+    }
 }
 
 impl<'m> Interp<'m> {
@@ -123,6 +222,7 @@ impl<'m> Interp<'m> {
             m,
             consts: m.consts.iter().map(|_| RefCell::new(ConstState::Unevaluated)).collect(),
             depth: Cell::new(0),
+            evals: Cell::new(0),
         }
     }
 
@@ -133,18 +233,30 @@ impl<'m> Interp<'m> {
     /// Call a function with by-value arguments (an `inout` parameter gets a
     /// fresh slot, so the caller does not see its writes; use
     /// [`Interp::call_inout`] for that).
+    ///
+    /// A call from outside is the entry of an evaluation: its body is at
+    /// depth 0 (spec §12.5). Every entry runs on a thread with the stack of a
+    /// command ([`onsa_diag::stack`]); on another thread it stops with an
+    /// internal error (S-67). A host without such a thread (the browser's
+    /// IDE, `onsa_web`) needs another way to bound the stack before it runs
+    /// the interpreter: the evaluator with its own stack of W9-03, or a
+    /// [`onsa_diag::stack::remaining`] of its own.
     pub fn call(&self, fn_: FnId, args: Vec<Value>) -> Result<Value, Panic> {
-        self.call_with(fn_, args.into_iter().map(ArgVal::Val).collect()).map_err(Self::into_panic)
+        let site = self.m.fn_(fn_).span;
+        let args = args.into_iter().map(ArgVal::Val).collect();
+        self.enter(site, || self.run_body(fn_, args)).map_err(Self::into_panic)
     }
 
     /// Call with an `inout` first argument held in `state` (flows: `process(inout s, ...)`).
     pub fn call_inout(&self, fn_: FnId, state: &Slot, rest: Vec<Value>) -> Result<Value, Panic> {
         let mut args = vec![ArgVal::Place(PlaceRef { root: state.clone(), projs: Vec::new() })];
         args.extend(rest.into_iter().map(ArgVal::Val));
-        self.call_with(fn_, args).map_err(Self::into_panic)
+        let site = self.m.fn_(fn_).span;
+        self.enter(site, || self.run_body(fn_, args)).map_err(Self::into_panic)
     }
 
-    /// Value of a `const` (evaluated on first use; T3-9).
+    /// Value of a `const` (evaluated on first use; T3-9), from wherever it is
+    /// read: its initializer is an evaluation of its own (spec §12.5).
     pub fn const_value(&self, id: ConstId) -> Result<Value, Panic> {
         self.const_val(id).map_err(Self::into_panic)
     }
@@ -159,46 +271,146 @@ impl<'m> Interp<'m> {
         }
     }
 
+    /// A `const`: its value when evaluated, else the evaluation of its
+    /// initializer as an entry of its own, from depth 0, whatever the depth of
+    /// the read (spec §12.5, S-222). So whether it succeeds does not depend on
+    /// where or in which order it is read first (the order of the tests,
+    /// `--filter`, `onsa test` or a build). Only a value is kept: a failed
+    /// evaluation is made again at the next read, with the same result.
     fn const_val(&self, id: ConstId) -> R<Value> {
-        let cell = &self.consts[id.0 as usize];
-        {
-            let st = cell.borrow();
-            match &*st {
-                ConstState::Done(v) => return Ok(v.clone()),
-                ConstState::InProgress => {
-                    return panic(
-                        self.m.const_(id).init.span,
-                        format!("const `{}` depends on itself", self.m.const_(id).name),
-                    );
-                }
-                ConstState::Unevaluated => {}
-            }
+        match &*self.consts[id.0 as usize].borrow() {
+            ConstState::Done(v) => return Ok(v.clone()),
+            ConstState::InProgress => return self.const_cycle(id),
+            ConstState::Unevaluated => {}
         }
+        self.enter(self.m.const_(id).init.span, || self.eval_const(id))
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn const_cycle(&self, id: ConstId) -> R<Value> {
+        let c = self.m.const_(id);
+        panic(c.init.span, format!("const `{}` depends on itself", c.name))
+    }
+
+    /// The initializer of `id`, inside its entry. Going beyond the call
+    /// depth limit is a panic of the evaluation, as any other: E0419 at the
+    /// initializer (spec §6.6) is W9-03's; until then `onsa test` fails the
+    /// test that reads the `const`, and a build stops with the C backend's
+    /// E0200 (`inline_consts`).
+    #[inline(never)]
+    fn eval_const(&self, id: ConstId) -> R<Value> {
+        let cell = &self.consts[id.0 as usize];
         *cell.borrow_mut() = ConstState::InProgress;
+        let _back = ConstBack(cell);
         let mut f = Frame { locals: Vec::new() };
         let r = self.eval(&mut f, &self.m.const_(id).init);
-        match r {
-            Ok(v) => {
-                *cell.borrow_mut() = ConstState::Done(v.clone());
-                Ok(v)
-            }
-            Err(e) => {
-                *cell.borrow_mut() = ConstState::Unevaluated;
-                Err(e)
-            }
+        if let Ok(v) = &r {
+            *cell.borrow_mut() = ConstState::Done(v.clone());
         }
+        r
     }
 
     // ------------------------------------------------------------ calls
 
-    fn call_with(&self, fn_: FnId, args: Vec<ArgVal>) -> R<Value> {
-        let f = self.m.fn_(fn_);
-        let Some(body) = &f.body else {
-            return panic(f.span, format!("`{}` has no body in this version (target function)", f.name));
-        };
-        if self.depth.get() >= MAX_DEPTH {
-            return panic(f.span, "call depth limit reached");
+    /// The entry of an evaluation at `at` (spec §12.5): `f` counts its calls
+    /// from depth 0, and the depth of the evaluation that was running comes
+    /// back after it, also when an internal error unwinds. The one place an
+    /// evaluation starts; [`Interp::call_with`] is the one place a call is
+    /// counted.
+    fn enter<T>(&self, at: Span, f: impl FnOnce() -> R<T>) -> R<T> {
+        self.check_stack(at, Check::Entry);
+        self.evals.set(self.evals.get() + 1);
+        let _back = DepthBack { depth: &self.depth, saved: self.depth.replace(0), evals: &self.evals };
+        f()
+    }
+
+    /// The safety net (see [`STACK_RESERVE`]) at a call or an entry at `at`.
+    #[inline(always)]
+    fn check_stack(&self, at: Span, check: Check) {
+        match onsa_diag::stack::remaining() {
+            Some(left) if left >= STACK_RESERVE => {}
+            left => self.out_of_stack(at, check, left),
         }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn out_of_stack(&self, at: Span, check: Check, left: Option<usize>) -> ! {
+        let Some(left) = left else {
+            onsa_diag::internal::bug(
+                Some(at),
+                "the interpreter runs on a thread without the stack of a command (`onsa_diag::stack`)",
+            )
+        };
+        let used = onsa_diag::stack::STACK_SIZE - left;
+        // The evaluations the stack holds: the running ones, and the one an
+        // entry starts.
+        let evals = self.evals.get() + matches!(check, Check::Entry) as u32;
+        let message = if evals > 1 {
+            // A `const` read inside another evaluation: not a call (S-222).
+            format!(
+                "the interpreter has used {used} bytes of stack in {evals} nested evaluations: the `const`s read \
+                 inside other evaluations, each an evaluation of its own and not counted as calls (S-222), nest \
+                 deeper than the stack holds (W9-03 evaluates the `const`s in the order of their dependencies)"
+            )
+        } else {
+            match check {
+                Check::Call => format!(
+                    "the interpreter has used {used} bytes of stack at a call depth of {}, below the limit of \
+                     {MAX_CALL_DEPTH}: the limit does not fit the stack",
+                    self.depth.get()
+                ),
+                Check::Entry => format!("an evaluation starts with only {left} bytes of stack left"),
+            }
+        };
+        onsa_diag::internal::bug(Some(at), message)
+    }
+
+    /// A call of `fn_` made at `site`, nested in an evaluation: the one place
+    /// the call depth is counted (spec §12.5).
+    ///
+    /// Each frame on the way down a recursion (this one, [`Interp::exec_block`],
+    /// [`Interp::exec`], [`Interp::eval`] and the arm of `eval` that holds the
+    /// call) is kept small: an arm with more locals, or a message to format, is
+    /// a function of its own, off the way down (R-05).
+    fn call_with(&self, fn_: FnId, args: Vec<ArgVal>, site: Span) -> R<Value> {
+        // The limit comes before the safety net, so a right limit is reached
+        // first.
+        if self.depth.get() >= MAX_CALL_DEPTH {
+            return depth_limit(site);
+        }
+        self.check_stack(site, Check::Call);
+        self.depth.set(self.depth.get() + 1);
+        let r = self.run_body(fn_, args);
+        self.depth.set(self.depth.get() - 1);
+        r
+    }
+
+    /// The body of `fn_` with its parameters bound to `args`, not counted.
+    #[inline(always)]
+    fn run_body(&self, fn_: FnId, args: Vec<ArgVal>) -> R<Value> {
+        let f = self.m.fn_(fn_);
+        let Some(body) = &f.body else { return self.no_body(fn_) };
+        let mut frame = self.bind_params(fn_, args)?;
+        match self.exec_block(&mut frame, body) {
+            Ok(v) | Err(Signal::Return(v)) => Ok(v),
+            Err(Signal::Break) | Err(Signal::Continue) => panic(f.span, "internal: loop control outside a loop"),
+            Err(e) => Err(e),
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn no_body(&self, fn_: FnId) -> R<Value> {
+        let f = self.m.fn_(fn_);
+        panic(f.span, format!("`{}` has no body in this version (target function)", f.name))
+    }
+
+    /// The frame of a call of `fn_`, with the parameters bound to `args`.
+    #[inline(never)]
+    fn bind_params(&self, fn_: FnId, args: Vec<ArgVal>) -> R<Frame> {
+        let f = self.m.fn_(fn_);
         if args.len() != f.params.len() {
             return panic(f.span, format!("internal: `{}` called with {} arguments", f.name, args.len()));
         }
@@ -211,15 +423,7 @@ impl<'m> Interp<'m> {
             };
             frame.locals[p.local.0 as usize] = Some(loc);
         }
-        self.depth.set(self.depth.get() + 1);
-        let r = self.exec_block(&mut frame, body);
-        self.depth.set(self.depth.get() - 1);
-        match r {
-            Ok(v) => Ok(v),
-            Err(Signal::Return(v)) => Ok(v),
-            Err(Signal::Break) | Err(Signal::Continue) => panic(f.span, "internal: loop control outside a loop"),
-            Err(e) => Err(e),
-        }
+        Ok(frame)
     }
 
     // ------------------------------------------------------------ places
@@ -471,68 +675,89 @@ impl<'m> Interp<'m> {
         }
     }
 
+    /// A statement. Each kind with locals of its own is a function (R-05).
     fn exec(&self, f: &mut Frame, s: &Stmt) -> R<()> {
         match &s.kind {
-            StmtKind::Let(l, e) => {
-                let v = self.eval(f, e)?;
-                f.locals[l.0 as usize] = Some(Loc::Slot(slot(v)));
-                Ok(())
-            }
-            StmtKind::Assign(p, e) => {
-                let v = self.eval(f, e)?;
-                let r = self.resolve_place(f, p, s.span)?;
-                self.write(&r, v, s.span)
-            }
-            StmtKind::Expr(e) => {
-                self.eval(f, e)?;
-                Ok(())
-            }
-            StmtKind::If(c, t, e) => {
-                let c = self.eval_bool(f, c)?;
-                self.exec_block(f, if c { t } else { e })?;
-                Ok(())
-            }
-            StmtKind::While(c, body) => {
-                while self.eval_bool(f, c)? {
-                    match self.exec_block(f, body) {
-                        Ok(_) | Err(Signal::Continue) => {}
-                        Err(Signal::Break) => break,
-                        Err(e) => return Err(e),
-                    }
-                }
-                Ok(())
-            }
-            StmtKind::ForRange(l, lo, hi, body) => {
-                let lo_v = self.eval(f, lo)?;
-                let hi_v = self.eval(f, hi)?;
-                let kind = lo_v
-                    .int_kind()
-                    .ok_or_else(|| Signal::Panic(Panic { message: "internal: range bound".into(), span: s.span }))?;
-                let (lo_i, hi_i) = (lo_v.to_i128().unwrap(), hi_v.to_i128().unwrap_or(0));
-                let var = slot(lo_v);
-                f.locals[l.0 as usize] = Some(Loc::Slot(var.clone()));
-                let mut i = lo_i;
-                while i < hi_i {
-                    *var.borrow_mut() = int_value(kind, i);
-                    match self.exec_block(f, body) {
-                        Ok(_) | Err(Signal::Continue) => {}
-                        Err(Signal::Break) => break,
-                        Err(e) => return Err(e),
-                    }
-                    i += 1;
-                }
-                Ok(())
-            }
+            StmtKind::Let(l, e) => self.exec_let(f, *l, e),
+            StmtKind::Assign(p, e) => self.exec_assign(f, p, e, s.span),
+            StmtKind::Expr(e) => self.exec_expr(f, e),
+            StmtKind::If(c, t, e) => self.exec_if(f, c, t, e),
+            StmtKind::While(c, body) => self.exec_while(f, c, body),
+            StmtKind::ForRange(l, lo, hi, body) => self.exec_for(f, *l, lo, hi, body, s.span),
             StmtKind::Break => Err(Signal::Break),
             StmtKind::Continue => Err(Signal::Continue),
-            StmtKind::Return(e) => {
-                let v = match e {
-                    Some(e) => self.eval(f, e)?,
-                    None => Value::Unit,
-                };
-                Err(Signal::Return(v))
+            StmtKind::Return(e) => self.exec_return(f, e.as_ref()),
+        }
+    }
+
+    #[inline(never)]
+    fn exec_let(&self, f: &mut Frame, l: LocalId, e: &Expr) -> R<()> {
+        let v = self.eval(f, e)?;
+        f.locals[l.0 as usize] = Some(Loc::Slot(slot(v)));
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn exec_expr(&self, f: &mut Frame, e: &Expr) -> R<()> {
+        self.eval(f, e)?;
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn exec_if(&self, f: &mut Frame, c: &Expr, t: &Block, e: &Block) -> R<()> {
+        let c = self.eval_bool(f, c)?;
+        self.exec_block(f, if c { t } else { e })?;
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn exec_return(&self, f: &mut Frame, e: Option<&Expr>) -> R<()> {
+        let v = match e {
+            Some(e) => self.eval(f, e)?,
+            None => Value::Unit,
+        };
+        Err(Signal::Return(v))
+    }
+
+    #[inline(never)]
+    fn exec_assign(&self, f: &mut Frame, p: &Place, e: &Expr, span: Span) -> R<()> {
+        let v = self.eval(f, e)?;
+        let r = self.resolve_place(f, p, span)?;
+        self.write(&r, v, span)
+    }
+
+    #[inline(never)]
+    fn exec_while(&self, f: &mut Frame, c: &Expr, body: &Block) -> R<()> {
+        while self.eval_bool(f, c)? {
+            match self.exec_block(f, body) {
+                Ok(_) | Err(Signal::Continue) => {}
+                Err(Signal::Break) => break,
+                Err(e) => return Err(e),
             }
         }
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn exec_for(&self, f: &mut Frame, l: LocalId, lo: &Expr, hi: &Expr, body: &Block, span: Span) -> R<()> {
+        let lo_v = self.eval(f, lo)?;
+        let hi_v = self.eval(f, hi)?;
+        let kind =
+            lo_v.int_kind().ok_or_else(|| Signal::Panic(Panic { message: "internal: range bound".into(), span }))?;
+        let (lo_i, hi_i) = (lo_v.to_i128().unwrap(), hi_v.to_i128().unwrap_or(0));
+        let var = slot(lo_v);
+        f.locals[l.0 as usize] = Some(Loc::Slot(var.clone()));
+        let mut i = lo_i;
+        while i < hi_i {
+            *var.borrow_mut() = int_value(kind, i);
+            match self.exec_block(f, body) {
+                Ok(_) | Err(Signal::Continue) => {}
+                Err(Signal::Break) => break,
+                Err(e) => return Err(e),
+            }
+            i += 1;
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------ expressions
@@ -568,195 +793,272 @@ impl<'m> Interp<'m> {
         Ok(out)
     }
 
+    /// The values of `xs`, in order.
+    fn eval_all(&self, f: &mut Frame, xs: &[Expr]) -> R<Vec<Value>> {
+        let mut out = Vec::with_capacity(xs.len());
+        for x in xs {
+            out.push(self.eval(f, x)?);
+        }
+        Ok(out)
+    }
+
+    /// An expression. The dispatch only: every kind with locals of its own is
+    /// a function, so that this frame, which is on the way down every
+    /// recursion, stays small (R-05).
     fn eval(&self, f: &mut Frame, e: &Expr) -> R<Value> {
         let span = e.span;
         match &e.kind {
-            ExprKind::Lit(l) => Ok(match l {
-                Lit::Int(n) => match &e.ty {
-                    Ty::Int(k) => int_value(*k, *n),
-                    _ => return panic(span, "internal: integer literal type"),
-                },
-                Lit::F32(x) => Value::F32(*x),
-                Lit::F64(x) => Value::F64(*x),
-                Lit::Bool(b) => Value::Bool(*b),
-                Lit::Char(c) => Value::Char(*c),
-                Lit::Unit => Value::Unit,
-            }),
-            ExprKind::Local(l) => {
-                let r = self.local_place(f, *l, span)?;
-                self.read(&r)
-            }
+            ExprKind::Lit(l) => self.eval_lit(l, e),
+            ExprKind::Local(l) => self.eval_local(f, *l, span),
             ExprKind::Const(c) => self.const_val(*c),
-            ExprKind::Zeroed => Ok(zero(self.m, &e.ty)),
-            ExprKind::Unary(op, x) => {
-                let v = self.eval(f, x)?;
-                self.unary(*op, v, span)
-            }
-            ExprKind::Binary { op, overflow, lhs, rhs } => {
-                let a = self.eval(f, lhs)?;
-                let b = self.eval(f, rhs)?;
-                self.binary(*op, *overflow, a, b, span)
-            }
-            ExprKind::Cmp { op, lhs, rhs } => {
-                let a = self.eval(f, lhs)?;
-                let b = self.eval(f, rhs)?;
-                Ok(Value::Bool(self.compare(*op, &a, &b, span)?))
-            }
-            ExprKind::Logic { op, lhs, rhs } => {
-                let a = self.eval_bool(f, lhs)?;
-                Ok(Value::Bool(match op {
-                    LogicOp::And => a && self.eval_bool(f, rhs)?,
-                    LogicOp::Or => a || self.eval_bool(f, rhs)?,
-                }))
-            }
-            ExprKind::Cast(x) => {
-                let v = self.eval(f, x)?;
-                self.cast(v, &e.ty, span)
-            }
-            ExprKind::Call { fn_, args } => {
-                let args = self.eval_args(f, args)?;
-                self.call_with(*fn_, args)
-            }
+            ExprKind::Zeroed => self.eval_zeroed(&e.ty),
+            ExprKind::Unary(op, x) => self.eval_unary(f, *op, x, span),
+            ExprKind::Binary { op, overflow, lhs, rhs } => self.eval_binary(f, (*op, *overflow), lhs, rhs, span),
+            ExprKind::Cmp { op, lhs, rhs } => self.eval_cmp(f, *op, lhs, rhs, span),
+            ExprKind::Logic { op, lhs, rhs } => self.eval_logic(f, *op, lhs, rhs),
+            ExprKind::Cast(x) => self.eval_cast(f, x, e),
+            ExprKind::Call { fn_, args } => self.eval_call(f, *fn_, args, span),
             ExprKind::Prim { prim, args } => self.prim(f, prim, args, &e.ty, span),
-            ExprKind::Field { base, index } => {
-                if let Some(p) = base.as_place() {
-                    let r = self.resolve_place(f, &p, span)?;
-                    let r = self.project_field(r, *index, span)?;
-                    return self.read(&r);
-                }
-                match self.eval(f, base)? {
-                    Value::Struct(fs) | Value::Tuple(fs) | Value::Enum { fields: fs, .. } => fs
-                        .into_iter()
-                        .nth(*index as usize)
-                        .ok_or_else(|| Signal::Panic(Panic { message: "internal: field".into(), span })),
-                    _ => panic(span, "internal: field on a non-aggregate"),
-                }
-            }
-            ExprKind::Index { base, index } => {
-                if let Some(p) = base.as_place() {
-                    let i = self.eval_u32(f, index)?;
-                    let r = self.resolve_place(f, &p, span)?;
-                    let r = self.project_index(r, i, span)?;
-                    return self.read(&r);
-                }
-                let v = self.eval(f, base)?;
-                let i = self.eval_u32(f, index)?;
-                let s = self.seq_of_value(v, span)?;
-                if i >= s.len {
-                    return panic(span, format!("index {i} out of range for a sequence of length {}", s.len));
-                }
-                self.seq_get(&s, i, span)
-            }
-            ExprKind::SpanOf(inner) => {
-                let s = match inner.as_place() {
-                    Some(p) => {
-                        let r = self.resolve_place(f, &p, span)?;
-                        self.seq_of_place(r, span)?
-                    }
-                    None => {
-                        let v = self.eval(f, inner)?;
-                        self.seq_of_value(v, span)?
-                    }
-                };
-                Ok(Value::Span(SpanRef { root: s.root, projs: s.projs, start: s.start, len: s.len }))
-            }
-            ExprKind::Struct { fields, .. } => {
-                let mut out = Vec::with_capacity(fields.len());
-                for x in fields {
-                    out.push(self.eval(f, x)?);
-                }
-                Ok(Value::Struct(out))
-            }
-            ExprKind::Variant { tag, fields, .. } => {
-                let mut out = Vec::with_capacity(fields.len());
-                for x in fields {
-                    out.push(self.eval(f, x)?);
-                }
-                Ok(Value::Enum { tag: *tag, fields: out })
-            }
-            ExprKind::Array(items) => {
-                let mut out = Vec::with_capacity(items.len());
-                for x in items {
-                    out.push(self.eval(f, x)?);
-                }
-                let elem = match &e.ty {
-                    Ty::Array(el, _) => (**el).clone(),
-                    _ => return panic(span, "internal: array literal type"),
-                };
-                Ok(Value::Array(ArrayData::from_values(&elem, out)))
-            }
-            ExprKind::Repeat { elem, n } => {
-                let v = self.eval(f, elem)?;
-                Ok(Value::Array(match v {
-                    Value::F32(x) => ArrayData::F32(vec![x; *n as usize]),
-                    v => ArrayData::Any(vec![v; *n as usize]),
-                }))
-            }
-            ExprKind::Tuple(items) => {
-                let mut out = Vec::with_capacity(items.len());
-                for x in items {
-                    out.push(self.eval(f, x)?);
-                }
-                Ok(Value::Tuple(out))
-            }
-            ExprKind::Tag(x) => {
-                let tag = match x.as_place() {
-                    Some(p) => {
-                        let r = self.resolve_place(f, &p, span)?;
-                        self.peek(&r, span, |v| match v {
-                            Leaf::Val(Value::Enum { tag, .. }) => Some(*tag),
-                            _ => None,
-                        })?
-                    }
-                    None => match self.eval(f, x)? {
-                        Value::Enum { tag, .. } => Some(tag),
-                        _ => None,
-                    },
-                };
-                let Some(tag) = tag else { return panic(span, "internal: tag of a non-enum") };
-                match &e.ty {
-                    Ty::Int(k) => Ok(int_value(*k, tag as i128)),
-                    _ => panic(span, "internal: tag type"),
-                }
-            }
-            ExprKind::Payload { base, tag, index } => {
-                if let Some(p) = base.as_place() {
-                    let r = self.resolve_place(f, &p, span)?;
-                    let ok =
-                        self.peek(&r, span, |v| matches!(v, Leaf::Val(Value::Enum { tag: t, .. }) if *t == *tag))?;
-                    if !ok {
-                        return panic(span, "internal: payload of the wrong variant");
-                    }
-                    let r = self.project_field(r, *index, span)?;
-                    return self.read(&r);
-                }
-                match self.eval(f, base)? {
-                    Value::Enum { tag: t, fields } if t == *tag => fields
-                        .into_iter()
-                        .nth(*index as usize)
-                        .ok_or_else(|| Signal::Panic(Panic { message: "internal: payload".into(), span })),
-                    _ => panic(span, "internal: payload of the wrong variant"),
-                }
-            }
-            ExprKind::IfExpr { cond, then, else_ } => {
-                let c = self.eval_bool(f, cond)?;
-                self.exec_block(f, if c { then } else { else_ })
-            }
-            ExprKind::Switch { scrutinee, arms, default } => {
-                let tag = match self.eval(f, scrutinee)? {
-                    Value::Enum { tag, .. } => tag,
-                    _ => return panic(span, "internal: switch on a non-enum"),
-                };
-                match arms.iter().find(|(t, _)| *t == tag) {
-                    Some((_, b)) => self.exec_block(f, b),
-                    None => match default {
-                        Some(b) => self.exec_block(f, b),
-                        None => panic(span, "internal: switch without a matching arm"),
-                    },
-                }
-            }
+            ExprKind::Field { base, index } => self.eval_field(f, base, *index, span),
+            ExprKind::Index { base, index } => self.eval_index(f, base, index, span),
+            ExprKind::SpanOf(inner) => self.eval_span_of(f, inner, span),
+            ExprKind::Struct { fields, .. } => self.eval_struct(f, fields),
+            ExprKind::Variant { tag, fields, .. } => self.eval_variant(f, *tag, fields),
+            ExprKind::Array(items) => self.eval_array(f, items, e),
+            ExprKind::Repeat { elem, n } => self.eval_repeat(f, elem, *n),
+            ExprKind::Tuple(items) => self.eval_tuple(f, items),
+            ExprKind::Tag(x) => self.eval_tag(f, x, e),
+            ExprKind::Payload { base, tag, index } => self.eval_payload(f, base, *tag, *index, span),
+            ExprKind::IfExpr { cond, then, else_ } => self.eval_if(f, cond, then, else_),
+            ExprKind::Switch { scrutinee, arms, default } => self.eval_switch(f, scrutinee, arms, default, span),
             ExprKind::Block(b) => self.exec_block(f, b),
-            ExprKind::Panic(msg) => panic(span, self.m.messages[msg.0 as usize].clone()),
+            ExprKind::Panic(msg) => self.eval_panic(*msg, span),
+        }
+    }
+
+    #[inline(never)]
+    fn eval_zeroed(&self, ty: &Ty) -> R<Value> {
+        Ok(zero(self.m, ty))
+    }
+
+    #[inline(never)]
+    fn eval_unary(&self, f: &mut Frame, op: UnOp, x: &Expr, span: Span) -> R<Value> {
+        let v = self.eval(f, x)?;
+        self.unary(op, v, span)
+    }
+
+    #[inline(never)]
+    fn eval_cast(&self, f: &mut Frame, x: &Expr, e: &Expr) -> R<Value> {
+        let v = self.eval(f, x)?;
+        self.cast(v, &e.ty, e.span)
+    }
+
+    #[inline(never)]
+    fn eval_call(&self, f: &mut Frame, fn_: FnId, args: &[Arg], span: Span) -> R<Value> {
+        let args = self.eval_args(f, args)?;
+        self.call_with(fn_, args, span)
+    }
+
+    #[inline(never)]
+    fn eval_struct(&self, f: &mut Frame, fields: &[Expr]) -> R<Value> {
+        Ok(Value::Struct(self.eval_all(f, fields)?))
+    }
+
+    #[inline(never)]
+    fn eval_variant(&self, f: &mut Frame, tag: u32, fields: &[Expr]) -> R<Value> {
+        Ok(Value::Enum { tag, fields: self.eval_all(f, fields)? })
+    }
+
+    #[inline(never)]
+    fn eval_tuple(&self, f: &mut Frame, items: &[Expr]) -> R<Value> {
+        Ok(Value::Tuple(self.eval_all(f, items)?))
+    }
+
+    #[inline(never)]
+    fn eval_if(&self, f: &mut Frame, cond: &Expr, then: &Block, else_: &Block) -> R<Value> {
+        let c = self.eval_bool(f, cond)?;
+        self.exec_block(f, if c { then } else { else_ })
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn eval_panic(&self, msg: MsgId, span: Span) -> R<Value> {
+        panic(span, self.m.messages[msg.0 as usize].clone())
+    }
+
+    #[inline(never)]
+    fn eval_lit(&self, l: &Lit, e: &Expr) -> R<Value> {
+        Ok(match l {
+            Lit::Int(n) => match &e.ty {
+                Ty::Int(k) => int_value(*k, *n),
+                _ => return panic(e.span, "internal: integer literal type"),
+            },
+            Lit::F32(x) => Value::F32(*x),
+            Lit::F64(x) => Value::F64(*x),
+            Lit::Bool(b) => Value::Bool(*b),
+            Lit::Char(c) => Value::Char(*c),
+            Lit::Unit => Value::Unit,
+        })
+    }
+
+    #[inline(never)]
+    fn eval_local(&self, f: &Frame, l: LocalId, span: Span) -> R<Value> {
+        let r = self.local_place(f, l, span)?;
+        self.read(&r)
+    }
+
+    #[inline(never)]
+    fn eval_binary(&self, f: &mut Frame, op: (BinOp, Overflow), lhs: &Expr, rhs: &Expr, span: Span) -> R<Value> {
+        let a = self.eval(f, lhs)?;
+        let b = self.eval(f, rhs)?;
+        self.binary(op.0, op.1, a, b, span)
+    }
+
+    #[inline(never)]
+    fn eval_cmp(&self, f: &mut Frame, op: CmpOp, lhs: &Expr, rhs: &Expr, span: Span) -> R<Value> {
+        let a = self.eval(f, lhs)?;
+        let b = self.eval(f, rhs)?;
+        Ok(Value::Bool(self.compare(op, &a, &b, span)?))
+    }
+
+    #[inline(never)]
+    fn eval_logic(&self, f: &mut Frame, op: LogicOp, lhs: &Expr, rhs: &Expr) -> R<Value> {
+        let a = self.eval_bool(f, lhs)?;
+        Ok(Value::Bool(match op {
+            LogicOp::And => a && self.eval_bool(f, rhs)?,
+            LogicOp::Or => a || self.eval_bool(f, rhs)?,
+        }))
+    }
+
+    #[inline(never)]
+    fn eval_field(&self, f: &mut Frame, base: &Expr, index: u32, span: Span) -> R<Value> {
+        if let Some(p) = base.as_place() {
+            let r = self.resolve_place(f, &p, span)?;
+            let r = self.project_field(r, index, span)?;
+            return self.read(&r);
+        }
+        match self.eval(f, base)? {
+            Value::Struct(fs) | Value::Tuple(fs) | Value::Enum { fields: fs, .. } => fs
+                .into_iter()
+                .nth(index as usize)
+                .ok_or_else(|| Signal::Panic(Panic { message: "internal: field".into(), span })),
+            _ => panic(span, "internal: field on a non-aggregate"),
+        }
+    }
+
+    #[inline(never)]
+    fn eval_index(&self, f: &mut Frame, base: &Expr, index: &Expr, span: Span) -> R<Value> {
+        if let Some(p) = base.as_place() {
+            let i = self.eval_u32(f, index)?;
+            let r = self.resolve_place(f, &p, span)?;
+            let r = self.project_index(r, i, span)?;
+            return self.read(&r);
+        }
+        let v = self.eval(f, base)?;
+        let i = self.eval_u32(f, index)?;
+        let s = self.seq_of_value(v, span)?;
+        if i >= s.len {
+            return panic(span, format!("index {i} out of range for a sequence of length {}", s.len));
+        }
+        self.seq_get(&s, i, span)
+    }
+
+    #[inline(never)]
+    fn eval_span_of(&self, f: &mut Frame, inner: &Expr, span: Span) -> R<Value> {
+        let s = match inner.as_place() {
+            Some(p) => {
+                let r = self.resolve_place(f, &p, span)?;
+                self.seq_of_place(r, span)?
+            }
+            None => {
+                let v = self.eval(f, inner)?;
+                self.seq_of_value(v, span)?
+            }
+        };
+        Ok(Value::Span(SpanRef { root: s.root, projs: s.projs, start: s.start, len: s.len }))
+    }
+
+    #[inline(never)]
+    fn eval_array(&self, f: &mut Frame, items: &[Expr], e: &Expr) -> R<Value> {
+        let out = self.eval_all(f, items)?;
+        let elem = match &e.ty {
+            Ty::Array(el, _) => (**el).clone(),
+            _ => return panic(e.span, "internal: array literal type"),
+        };
+        Ok(Value::Array(ArrayData::from_values(&elem, out)))
+    }
+
+    #[inline(never)]
+    fn eval_repeat(&self, f: &mut Frame, elem: &Expr, n: u32) -> R<Value> {
+        let v = self.eval(f, elem)?;
+        Ok(Value::Array(match v {
+            Value::F32(x) => ArrayData::F32(vec![x; n as usize]),
+            v => ArrayData::Any(vec![v; n as usize]),
+        }))
+    }
+
+    #[inline(never)]
+    fn eval_tag(&self, f: &mut Frame, x: &Expr, e: &Expr) -> R<Value> {
+        let span = e.span;
+        let tag = match x.as_place() {
+            Some(p) => {
+                let r = self.resolve_place(f, &p, span)?;
+                self.peek(&r, span, |v| match v {
+                    Leaf::Val(Value::Enum { tag, .. }) => Some(*tag),
+                    _ => None,
+                })?
+            }
+            None => match self.eval(f, x)? {
+                Value::Enum { tag, .. } => Some(tag),
+                _ => None,
+            },
+        };
+        let Some(tag) = tag else { return panic(span, "internal: tag of a non-enum") };
+        match &e.ty {
+            Ty::Int(k) => Ok(int_value(*k, tag as i128)),
+            _ => panic(span, "internal: tag type"),
+        }
+    }
+
+    #[inline(never)]
+    fn eval_payload(&self, f: &mut Frame, base: &Expr, tag: u32, index: u32, span: Span) -> R<Value> {
+        if let Some(p) = base.as_place() {
+            let r = self.resolve_place(f, &p, span)?;
+            let ok = self.peek(&r, span, |v| matches!(v, Leaf::Val(Value::Enum { tag: t, .. }) if *t == tag))?;
+            if !ok {
+                return panic(span, "internal: payload of the wrong variant");
+            }
+            let r = self.project_field(r, index, span)?;
+            return self.read(&r);
+        }
+        match self.eval(f, base)? {
+            Value::Enum { tag: t, fields } if t == tag => fields
+                .into_iter()
+                .nth(index as usize)
+                .ok_or_else(|| Signal::Panic(Panic { message: "internal: payload".into(), span })),
+            _ => panic(span, "internal: payload of the wrong variant"),
+        }
+    }
+
+    #[inline(never)]
+    fn eval_switch(
+        &self,
+        f: &mut Frame,
+        scrutinee: &Expr,
+        arms: &[(u32, Block)],
+        default: &Option<Block>,
+        span: Span,
+    ) -> R<Value> {
+        let tag = match self.eval(f, scrutinee)? {
+            Value::Enum { tag, .. } => tag,
+            _ => return panic(span, "internal: switch on a non-enum"),
+        };
+        match arms.iter().find(|(t, _)| *t == tag) {
+            Some((_, b)) => self.exec_block(f, b),
+            None => match default {
+                Some(b) => self.exec_block(f, b),
+                None => panic(span, "internal: switch without a matching arm"),
+            },
         }
     }
 
@@ -909,12 +1211,28 @@ impl<'m> Interp<'m> {
 
     // ------------------------------------------------------------ primitives
 
+    /// A primitive: its arguments, then the operation, in a function of its
+    /// own, off the way down a recursion through an argument (R-05).
     fn prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: &Ty, span: Span) -> R<Value> {
-        // Sequence prims take their receiver as a sequence reference.
+        if let Prim::Len | Prim::Slice | Prim::Get | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed =
+            prim
+        {
+            return self.seq_prim(f, prim, args, ty, span);
+        }
+        let mut vs = Vec::with_capacity(args.len());
+        for a in args {
+            vs.push(self.eval(f, &a.expr)?);
+        }
+        self.prim_values(prim, &vs, span)
+    }
+
+    /// The primitives that take their receiver as a sequence reference.
+    #[inline(never)]
+    fn seq_prim(&self, f: &mut Frame, prim: &Prim, args: &[Arg], ty: &Ty, span: Span) -> R<Value> {
         match prim {
             Prim::Len => {
                 let s = self.seq_of_arg(f, &args[0])?;
-                return Ok(Value::U32(s.len));
+                Ok(Value::U32(s.len))
             }
             Prim::Slice => {
                 let s = self.seq_of_arg(f, &args[0])?;
@@ -926,17 +1244,12 @@ impl<'m> Interp<'m> {
                         format!("slice {from}..{to} is out of range for a sequence of length {}", s.len),
                     );
                 }
-                return Ok(Value::Span(SpanRef {
-                    root: s.root,
-                    projs: s.projs,
-                    start: s.start + from,
-                    len: to - from,
-                }));
+                Ok(Value::Span(SpanRef { root: s.root, projs: s.projs, start: s.start + from, len: to - from }))
             }
             Prim::Get => {
                 let s = self.seq_of_arg(f, &args[0])?;
                 let i = self.eval_u32(f, &args[1].expr)?;
-                return Ok(if i < s.len { some(self.seq_get(&s, i, span)?) } else { none() });
+                Ok(if i < s.len { some(self.seq_get(&s, i, span)?) } else { none() })
             }
             Prim::Fill => {
                 let s = self.seq_of_arg(f, &args[0])?;
@@ -949,7 +1262,7 @@ impl<'m> Interp<'m> {
                 for i in 0..s.len {
                     self.seq_set(&s, i, v.clone(), span)?;
                 }
-                return Ok(Value::Unit);
+                Ok(Value::Unit)
             }
             Prim::AddFrom | Prim::CopyFrom => {
                 let dst = self.seq_of_arg(f, &args[0])?;
@@ -983,7 +1296,7 @@ impl<'m> Interp<'m> {
                     };
                     self.seq_set(&dst, i, nv, span)?;
                 }
-                return Ok(Value::Unit);
+                Ok(Value::Unit)
             }
             Prim::BufZeroed => {
                 let n = self.eval_u32(f, &args[0].expr)?;
@@ -991,16 +1304,17 @@ impl<'m> Interp<'m> {
                     Ty::Buf(e) => (**e).clone(),
                     _ => return panic(span, "internal: Buf.zeroed type"),
                 };
-                return Ok(Value::Buf(slot(Value::Array(zero_array(self.m, &elem, n)))));
+                Ok(Value::Buf(slot(Value::Array(zero_array(self.m, &elem, n)))))
             }
-            _ => {}
+            _ => panic(span, "internal: not a sequence primitive"),
         }
-        let mut vs = Vec::with_capacity(args.len());
-        for a in args {
-            vs.push(self.eval(f, &a.expr)?);
-        }
+    }
+
+    /// A primitive on the values of its arguments.
+    #[inline(never)]
+    fn prim_values(&self, prim: &Prim, vs: &[Value], span: Span) -> R<Value> {
         match prim {
-            Prim::Math(mf, k) => self.math(*mf, *k, &vs, span),
+            Prim::Math(mf, k) => self.math(*mf, *k, vs, span),
             Prim::IntAbs(k) => {
                 let x = vs[0].to_i128().unwrap_or(0);
                 let r = x.abs();
@@ -1104,7 +1418,7 @@ impl<'m> Interp<'m> {
                 Value::F64(x) => x.is_finite(),
                 _ => false,
             })),
-            Prim::Std(name) => self.std_prim(name, &vs, span),
+            Prim::Std(name) => self.std_prim(name, vs, span),
             Prim::Len | Prim::Slice | Prim::Get | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed => {
                 unreachable!()
             }
@@ -1145,6 +1459,13 @@ impl<'m> Interp<'m> {
             _ => panic(span, format!("`{name}` is not available in this version of the interpreter")),
         }
     }
+}
+
+/// The panic of a call beyond [`MAX_CALL_DEPTH`] (spec §12.5), at the call.
+#[cold]
+#[inline(never)]
+fn depth_limit(site: Span) -> R<Value> {
+    panic(site, format!("the call depth reached its limit of {MAX_CALL_DEPTH}"))
 }
 
 fn buf_len(b: &Slot) -> u32 {

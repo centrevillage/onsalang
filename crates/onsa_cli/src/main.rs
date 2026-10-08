@@ -158,12 +158,9 @@ fn main() -> ExitCode {
     onsa_driver::verify_core_in_debug_only();
     let cli = Cli::parse();
     // The command runs on a thread with the stack of the test runner, so both
-    // reach the same depth. A panic outside the driver's stages (printing,
-    // the file system) is still an internal error (S-67).
-    let run = std::thread::Builder::new()
-        // SPEC-GAP(S-183): the nesting depth is bounded only by this stack.
-        .stack_size(onsa_driver::STACK_SIZE)
-        .spawn(move || onsa_driver::guard(|| run(cli.command)))
+    // reach the same depth (`onsa_diag::stack`). A panic outside the driver's
+    // stages (printing, the file system) is still an internal error (S-67).
+    let run = onsa_diag::stack::spawn("onsa", move || onsa_driver::guard(|| run(cli.command)))
         .map_err(|e| format!("cannot start the command: {e}"));
     let outcome = match run.map(|t| t.join()) {
         Ok(Ok(Ok(outcome))) => outcome,

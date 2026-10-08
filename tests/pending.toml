@@ -2858,3 +2858,67 @@ target = "keywords/priv"
 reasons = ["S-36"]
 until = "W3-08"
 note = "可視性の priv が字句解析器のキーワードに無い"
+
+# W2-04（S-222: 呼び出しの深さの上限 128）の事例のうち、後の作業を待つもの。
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/recursion_fn_values.onsa"
+reasons = ["R-08", "S-191"]
+until = "W8-09"
+note = "再帰を通る関数値と .( の呼び出し（E0002、E0302）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/recursion_deep_fn_values.onsa"
+reasons = ["R-08", "S-191", "S-222"]
+until = "W8-09"
+note = "`.(` の呼び出しが未実装（E0002）。関数値を通る再帰の上限 128 の境界と 300 段"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/recursion_flow_const.onsa"
+reasons = ["S-102"]
+until = "W3-10"
+note = "flow の at を今の実装が読めない（E0002）。定数のクロックの式が再帰する関数を呼ぶ（§11.3）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/recursion_deep_flow.onsa"
+reasons = ["S-102", "S-222"]
+until = "W3-10"
+note = "flow の at を今の実装が読めない（E0002）。flow を使うテストと 300 段の再帰"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/recursion_generic_num.onsa"
+reasons = ["S-84"]
+until = "W5-05"
+note = "T: Int の境界が E0200（user-defined traits as bounds）。再帰する総称の関数"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/recursion_generic_const.onsa"
+reasons = ["R-150"]
+until = "W2-06"
+note = "const パラメータ N の配列 [U32; N] を、const パラメータを持つ関数（自分自身を含む）へ渡すと E0401（expected [U32; ?1], found [U32; N]）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_recursion_panic.onsa"
+reasons = ["S-131", "S-146", "S-222"]
+until = "W9-03"
+note = "再帰する関数を呼ぶ const の初期化式の panic が E0419（§6.6）にならない。今は onsa check で 0 件、onsa test ではそれを読むテストの失敗、onsa build では C のバックエンドの E0200"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_depth_limit.onsa"
+reasons = ["S-222"]
+until = "W9-03"
+note = "const の初期化式が上限 128 を超えたときの E0419（今は onsa check で診断なし。onsa test ではそれを読むテストの失敗、onsa build ではそれを使う所で C のバックエンドの E0200。使われない const は onsa build で診断なし（inline_consts が失敗を捨てる））"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_depth_flow.onsa"
+reasons = ["S-102", "S-222"]
+until = "W9-03"
+note = "定数のクロックの式と @param の値が上限 128 を超えたときの E0419。flow の at は W3-10 まで読めない（E0002）"

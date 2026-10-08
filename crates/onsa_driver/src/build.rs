@@ -18,7 +18,7 @@ use onsa_syntax::ast::Vis;
 
 use crate::{
     Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, PackageInput,
-    VerifyFailure, guard, read_manifest, read_sources,
+    guard, read_manifest, read_sources,
 };
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
@@ -258,7 +258,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     // Lower and emit.
     let lower_opts = LowerOptions { bulk_threshold: settings.bulk_threshold, ptr_size: settings.platform.ptr_size };
     let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
-    let module = consts_stage(module).map_err(|v| internal(v.into()))?;
+    let module = consts_stage(module).map_err(internal)?;
     let sources = loaded.sources.clone();
     let emit_opts = EmitOptions {
         package: loaded.name.clone(),
@@ -550,16 +550,20 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
 
 /// The build-time `const` evaluation as a stage: [`inline_consts`], then the
 /// verifier at its boundary (R-82).
-fn consts_stage(mut module: Module) -> Result<Module, VerifyFailure> {
-    inline_consts(&mut module);
+fn consts_stage(mut module: Module) -> Result<Module, InternalError> {
+    let replacements = crate::guard_on_stack(|| inline_consts(&module))?;
+    for (i, e) in replacements {
+        module.consts[i].init = e;
+    }
     crate::verify_core(&module, CoreStage::Consts)?;
     Ok(module)
 }
 
 /// `const` initializers that call functions are evaluated with the
-/// interpreter at build time (spec §6.6, T3-9) and replaced by literals so
-/// the C backend can emit a static initializer. Only through [`consts_stage`].
-fn inline_consts(module: &mut Module) {
+/// interpreter at build time (spec §6.6, T3-9): the literals that replace
+/// them, so the C backend can emit a static initializer. Only through
+/// [`consts_stage`], which runs it on the stack of a command (R-05).
+fn inline_consts(module: &Module) -> Vec<(usize, Expr)> {
     let mut replacements: Vec<(usize, Expr)> = Vec::new();
     {
         let interp = Interp::new(module);
@@ -569,6 +573,10 @@ fn inline_consts(module: &mut Module) {
             }
             // A panic names this `const` (S-67).
             let _scope = onsa_diag::internal::item_scope(c.init.span);
+            // Each `const` is an evaluation of its own from call depth 0, as
+            // in `onsa test` (spec §12.5). A failed one stays as it is, and
+            // the C backend stops at it with E0200; E0419 at the initializer
+            // (spec §6.6, S-222) is W9-03's.
             if let Ok(v) = interp.const_value(ConstId(i as u32))
                 && let Some(e) = value_to_expr(module, &v, &c.ty, c.init.span)
             {
@@ -576,9 +584,7 @@ fn inline_consts(module: &mut Module) {
             }
         }
     }
-    for (i, e) in replacements {
-        module.consts[i].init = e;
-    }
+    replacements
 }
 
 fn is_static_init(e: &Expr) -> bool {

@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.1", "§12.5"]
+
+// A function with a const parameter that calls itself (spec §4.5): `mean` in §6.1
+// has the same shape of signature. The argument `xs: [U32; N]` passed on to the
+// recursive call has the type `[U32; N]` of the callee's own parameter, so `N` of
+// the call is the caller's `N`. The depth is at most 50 (the limit of the call
+// depth is 128, §12.5; the boundary is in recursion_limit.onsa).
+
+fn sum_from[const N: U32](xs: [U32; N], i: U32) -> U32 {
+  if i >= N {
+    0
+  } else {
+    xs[i] + sum_from(xs, i + 1)
+  }
+}
+
+// `N` as a value (spec §5.4: a const parameter used as a value is a constant).
+fn count_to[const N: U32](xs: [U32; N], i: U32) -> U32 {
+  if i == N {
+    i
+  } else {
+    count_to(xs, i + 1)
+  }
+}
+
+// The caller's `N` is passed on to another function with a const parameter (the
+// same step as the recursive call, without the recursion).
+fn first_of[const M: U32](xs: [U32; M]) -> U32 {
+  xs[0]
+}
+
+fn first_via[const N: U32](xs: [U32; N]) -> U32 {
+  first_of(xs)
+}
+
+test "a function with a const parameter passes its array to another one" {
+  let xs: [U32; 3] = [4, 5, 6]
+  assert first_via(xs) == 4
+}
+
+test "a function with a const parameter calls itself" {
+  let xs: [U32; 5] = [1, 2, 3, 4, 5]
+  assert sum_from(xs, 0) == 15
+  assert sum_from(xs, 3) == 9
+  assert sum_from(xs, 5) == 0
+}
+
+test "a recursion that runs along an array of 40 elements" {
+  var ys: [U32; 40] = [2; 40]
+  ys[39] = 3
+  assert sum_from(ys, 0) == 79
+}
+
+test "a const parameter used as a value in a recursion" {
+  let xs: [U32; 30] = [0; 30]
+  assert count_to(xs, 0) == 30
+}

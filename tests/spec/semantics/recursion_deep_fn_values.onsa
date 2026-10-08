@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§12.5", "§9.2", "§6.1", "§5.2", "§5.3"]
+
+// A recursion through function values is as deep as one through named calls
+// (spec §12.5): the limit of the call depth is 128, and a call of a function
+// value is a nested call like any other; the body of the anonymous function runs
+// inside the call. Every deep call here is 300 levels, well beyond the limit,
+// and the controls are at most 50 levels. The exact boundary with function
+// values is at the end of the file: the call `f.(x)` is one nested call, and the
+// body of the anonymous function is inside it.
+//
+// Pending (W8-09): the `.(` call is not implemented yet.
+
+fn apply_n(f: fn(U32) -> U32, n: U32, x: U32) -> U32 {
+  if n == 0 {
+    x
+  } else {
+    apply_n(f, n - 1, f.(x))
+  }
+}
+
+fn call_with(k: U32, f: fn(U32) -> U32) -> U32 {
+  f.(k)
+}
+
+// Every level of the recursion goes through an anonymous function.
+fn via_closure(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    call_with(n, fn(k: U32) -> U32 { via_closure(k - 1) })
+  }
+}
+
+// The same with a captured value.
+fn via_capture(n: U32, step: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    call_with(n, fn(k: U32) -> U32 { via_capture(k - 1, step) })
+  }
+}
+
+// A named function used as a value calls itself through the value.
+fn walk(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    let g: fn(U32) -> U32 = walk
+    g.(n - 1)
+  }
+}
+
+fn left(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    call_with(n - 1, right)
+  }
+}
+
+fn right(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    left(n - 1)
+  }
+}
+
+test "a deep recursion that passes a function value on fails the test" {   //~ TESTFAIL "a deep recursion that passes a function value on fails the test"
+  assert apply_n(fn(x: U32) -> U32 { x }, 300, 5) == 5
+}
+
+test "a deep recursion through an anonymous function fails the test" {   //~ TESTFAIL "a deep recursion through an anonymous function fails the test"
+  assert via_closure(300) == 0
+}
+
+test "a deep recursion through an anonymous function with a capture fails the test" {   //~ TESTFAIL "a deep recursion through an anonymous function with a capture fails the test"
+  assert via_capture(300, 3) == 0
+}
+
+test "a deep recursion through a named function used as a value fails the test" {   //~ TESTFAIL "a deep recursion through a named function used as a value fails the test"
+  assert walk(300) == 0
+}
+
+test "a deep mutual recursion with a call through a function value fails the test" {   //~ TESTFAIL "a deep mutual recursion with a call through a function value fails the test"
+  assert left(300) == 0
+}
+
+test "the controls at a small depth pass" {
+  assert apply_n(fn(x: U32) -> U32 { x }, 40, 5) == 5
+  assert via_closure(40) == 0
+  assert via_capture(40, 3) == 0
+  assert walk(40) == 0
+  assert left(40) == 0
+}
+
+test "the test after the failed ones runs" {
+  assert via_closure(50) == 0
+}
+
+// ------------------------------------------- the boundary, with a function value
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+fn run_it(f: fn(U32) -> U32, x: U32) -> U32 {
+  f.(x)
+}
+
+// run_it is depth 1, the call of the anonymous function is depth 2, dive(m) is
+// depth 3 and dive(0) is depth m + 3: m = 125 reaches 128, m = 126 reaches 129.
+test "a call through a function value counts as one nested call, 128 passes" {
+  assert run_it(fn(k: U32) -> U32 { dive(k) }, 125) == 125
+}
+
+test "a call through a function value counts as one nested call, 129 fails" {   //~ TESTFAIL "a call through a function value counts as one nested call, 129 fails"
+  assert run_it(fn(k: U32) -> U32 { dive(k) }, 126) == 126
+}
+
+// A named function used as a value is called the same way.
+test "a named function used as a value, 128 passes" {
+  assert run_it(dive, 126) == 126
+}
+
+test "a named function used as a value, 129 fails" {   //~ TESTFAIL "a named function used as a value, 129 fails"
+  assert run_it(dive, 127) == 127
+}

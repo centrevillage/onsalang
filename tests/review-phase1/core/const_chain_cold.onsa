@@ -1,0 +1,1209 @@
+// R-153（W2-04/b2 の B2-1、2026-10-08）: 600 個の `const` の鎖。各初期化式は 120 段
+// 再帰し、底で前の `const` を読む。`const` を読むのは呼び出しに数えない（§12.5、S-222）
+// ので、仕様ではこのテストは通る（C600 == 72001）。W2-04 の実装は鎖を Rust の再帰で
+// 評価し、debug の `onsa test` はスタックの安全網の内部エラー（終了コード 101）になる。
+// 先に `C300` を読むテストを置くと通り、`onsa build` は添字の昇順に評価して通る（合否が
+// 読む順で変わる）。W9-03（依存の順の評価）で直す。シグナルでは終わらない。
+
+const C0: U32 = 1
+fn g1(k: U32) -> U32 { if k == 0 { C0 } else { 1 + g1(k - 1) } }
+const C1: U32 = g1(120)
+fn g2(k: U32) -> U32 { if k == 0 { C1 } else { 1 + g2(k - 1) } }
+const C2: U32 = g2(120)
+fn g3(k: U32) -> U32 { if k == 0 { C2 } else { 1 + g3(k - 1) } }
+const C3: U32 = g3(120)
+fn g4(k: U32) -> U32 { if k == 0 { C3 } else { 1 + g4(k - 1) } }
+const C4: U32 = g4(120)
+fn g5(k: U32) -> U32 { if k == 0 { C4 } else { 1 + g5(k - 1) } }
+const C5: U32 = g5(120)
+fn g6(k: U32) -> U32 { if k == 0 { C5 } else { 1 + g6(k - 1) } }
+const C6: U32 = g6(120)
+fn g7(k: U32) -> U32 { if k == 0 { C6 } else { 1 + g7(k - 1) } }
+const C7: U32 = g7(120)
+fn g8(k: U32) -> U32 { if k == 0 { C7 } else { 1 + g8(k - 1) } }
+const C8: U32 = g8(120)
+fn g9(k: U32) -> U32 { if k == 0 { C8 } else { 1 + g9(k - 1) } }
+const C9: U32 = g9(120)
+fn g10(k: U32) -> U32 { if k == 0 { C9 } else { 1 + g10(k - 1) } }
+const C10: U32 = g10(120)
+fn g11(k: U32) -> U32 { if k == 0 { C10 } else { 1 + g11(k - 1) } }
+const C11: U32 = g11(120)
+fn g12(k: U32) -> U32 { if k == 0 { C11 } else { 1 + g12(k - 1) } }
+const C12: U32 = g12(120)
+fn g13(k: U32) -> U32 { if k == 0 { C12 } else { 1 + g13(k - 1) } }
+const C13: U32 = g13(120)
+fn g14(k: U32) -> U32 { if k == 0 { C13 } else { 1 + g14(k - 1) } }
+const C14: U32 = g14(120)
+fn g15(k: U32) -> U32 { if k == 0 { C14 } else { 1 + g15(k - 1) } }
+const C15: U32 = g15(120)
+fn g16(k: U32) -> U32 { if k == 0 { C15 } else { 1 + g16(k - 1) } }
+const C16: U32 = g16(120)
+fn g17(k: U32) -> U32 { if k == 0 { C16 } else { 1 + g17(k - 1) } }
+const C17: U32 = g17(120)
+fn g18(k: U32) -> U32 { if k == 0 { C17 } else { 1 + g18(k - 1) } }
+const C18: U32 = g18(120)
+fn g19(k: U32) -> U32 { if k == 0 { C18 } else { 1 + g19(k - 1) } }
+const C19: U32 = g19(120)
+fn g20(k: U32) -> U32 { if k == 0 { C19 } else { 1 + g20(k - 1) } }
+const C20: U32 = g20(120)
+fn g21(k: U32) -> U32 { if k == 0 { C20 } else { 1 + g21(k - 1) } }
+const C21: U32 = g21(120)
+fn g22(k: U32) -> U32 { if k == 0 { C21 } else { 1 + g22(k - 1) } }
+const C22: U32 = g22(120)
+fn g23(k: U32) -> U32 { if k == 0 { C22 } else { 1 + g23(k - 1) } }
+const C23: U32 = g23(120)
+fn g24(k: U32) -> U32 { if k == 0 { C23 } else { 1 + g24(k - 1) } }
+const C24: U32 = g24(120)
+fn g25(k: U32) -> U32 { if k == 0 { C24 } else { 1 + g25(k - 1) } }
+const C25: U32 = g25(120)
+fn g26(k: U32) -> U32 { if k == 0 { C25 } else { 1 + g26(k - 1) } }
+const C26: U32 = g26(120)
+fn g27(k: U32) -> U32 { if k == 0 { C26 } else { 1 + g27(k - 1) } }
+const C27: U32 = g27(120)
+fn g28(k: U32) -> U32 { if k == 0 { C27 } else { 1 + g28(k - 1) } }
+const C28: U32 = g28(120)
+fn g29(k: U32) -> U32 { if k == 0 { C28 } else { 1 + g29(k - 1) } }
+const C29: U32 = g29(120)
+fn g30(k: U32) -> U32 { if k == 0 { C29 } else { 1 + g30(k - 1) } }
+const C30: U32 = g30(120)
+fn g31(k: U32) -> U32 { if k == 0 { C30 } else { 1 + g31(k - 1) } }
+const C31: U32 = g31(120)
+fn g32(k: U32) -> U32 { if k == 0 { C31 } else { 1 + g32(k - 1) } }
+const C32: U32 = g32(120)
+fn g33(k: U32) -> U32 { if k == 0 { C32 } else { 1 + g33(k - 1) } }
+const C33: U32 = g33(120)
+fn g34(k: U32) -> U32 { if k == 0 { C33 } else { 1 + g34(k - 1) } }
+const C34: U32 = g34(120)
+fn g35(k: U32) -> U32 { if k == 0 { C34 } else { 1 + g35(k - 1) } }
+const C35: U32 = g35(120)
+fn g36(k: U32) -> U32 { if k == 0 { C35 } else { 1 + g36(k - 1) } }
+const C36: U32 = g36(120)
+fn g37(k: U32) -> U32 { if k == 0 { C36 } else { 1 + g37(k - 1) } }
+const C37: U32 = g37(120)
+fn g38(k: U32) -> U32 { if k == 0 { C37 } else { 1 + g38(k - 1) } }
+const C38: U32 = g38(120)
+fn g39(k: U32) -> U32 { if k == 0 { C38 } else { 1 + g39(k - 1) } }
+const C39: U32 = g39(120)
+fn g40(k: U32) -> U32 { if k == 0 { C39 } else { 1 + g40(k - 1) } }
+const C40: U32 = g40(120)
+fn g41(k: U32) -> U32 { if k == 0 { C40 } else { 1 + g41(k - 1) } }
+const C41: U32 = g41(120)
+fn g42(k: U32) -> U32 { if k == 0 { C41 } else { 1 + g42(k - 1) } }
+const C42: U32 = g42(120)
+fn g43(k: U32) -> U32 { if k == 0 { C42 } else { 1 + g43(k - 1) } }
+const C43: U32 = g43(120)
+fn g44(k: U32) -> U32 { if k == 0 { C43 } else { 1 + g44(k - 1) } }
+const C44: U32 = g44(120)
+fn g45(k: U32) -> U32 { if k == 0 { C44 } else { 1 + g45(k - 1) } }
+const C45: U32 = g45(120)
+fn g46(k: U32) -> U32 { if k == 0 { C45 } else { 1 + g46(k - 1) } }
+const C46: U32 = g46(120)
+fn g47(k: U32) -> U32 { if k == 0 { C46 } else { 1 + g47(k - 1) } }
+const C47: U32 = g47(120)
+fn g48(k: U32) -> U32 { if k == 0 { C47 } else { 1 + g48(k - 1) } }
+const C48: U32 = g48(120)
+fn g49(k: U32) -> U32 { if k == 0 { C48 } else { 1 + g49(k - 1) } }
+const C49: U32 = g49(120)
+fn g50(k: U32) -> U32 { if k == 0 { C49 } else { 1 + g50(k - 1) } }
+const C50: U32 = g50(120)
+fn g51(k: U32) -> U32 { if k == 0 { C50 } else { 1 + g51(k - 1) } }
+const C51: U32 = g51(120)
+fn g52(k: U32) -> U32 { if k == 0 { C51 } else { 1 + g52(k - 1) } }
+const C52: U32 = g52(120)
+fn g53(k: U32) -> U32 { if k == 0 { C52 } else { 1 + g53(k - 1) } }
+const C53: U32 = g53(120)
+fn g54(k: U32) -> U32 { if k == 0 { C53 } else { 1 + g54(k - 1) } }
+const C54: U32 = g54(120)
+fn g55(k: U32) -> U32 { if k == 0 { C54 } else { 1 + g55(k - 1) } }
+const C55: U32 = g55(120)
+fn g56(k: U32) -> U32 { if k == 0 { C55 } else { 1 + g56(k - 1) } }
+const C56: U32 = g56(120)
+fn g57(k: U32) -> U32 { if k == 0 { C56 } else { 1 + g57(k - 1) } }
+const C57: U32 = g57(120)
+fn g58(k: U32) -> U32 { if k == 0 { C57 } else { 1 + g58(k - 1) } }
+const C58: U32 = g58(120)
+fn g59(k: U32) -> U32 { if k == 0 { C58 } else { 1 + g59(k - 1) } }
+const C59: U32 = g59(120)
+fn g60(k: U32) -> U32 { if k == 0 { C59 } else { 1 + g60(k - 1) } }
+const C60: U32 = g60(120)
+fn g61(k: U32) -> U32 { if k == 0 { C60 } else { 1 + g61(k - 1) } }
+const C61: U32 = g61(120)
+fn g62(k: U32) -> U32 { if k == 0 { C61 } else { 1 + g62(k - 1) } }
+const C62: U32 = g62(120)
+fn g63(k: U32) -> U32 { if k == 0 { C62 } else { 1 + g63(k - 1) } }
+const C63: U32 = g63(120)
+fn g64(k: U32) -> U32 { if k == 0 { C63 } else { 1 + g64(k - 1) } }
+const C64: U32 = g64(120)
+fn g65(k: U32) -> U32 { if k == 0 { C64 } else { 1 + g65(k - 1) } }
+const C65: U32 = g65(120)
+fn g66(k: U32) -> U32 { if k == 0 { C65 } else { 1 + g66(k - 1) } }
+const C66: U32 = g66(120)
+fn g67(k: U32) -> U32 { if k == 0 { C66 } else { 1 + g67(k - 1) } }
+const C67: U32 = g67(120)
+fn g68(k: U32) -> U32 { if k == 0 { C67 } else { 1 + g68(k - 1) } }
+const C68: U32 = g68(120)
+fn g69(k: U32) -> U32 { if k == 0 { C68 } else { 1 + g69(k - 1) } }
+const C69: U32 = g69(120)
+fn g70(k: U32) -> U32 { if k == 0 { C69 } else { 1 + g70(k - 1) } }
+const C70: U32 = g70(120)
+fn g71(k: U32) -> U32 { if k == 0 { C70 } else { 1 + g71(k - 1) } }
+const C71: U32 = g71(120)
+fn g72(k: U32) -> U32 { if k == 0 { C71 } else { 1 + g72(k - 1) } }
+const C72: U32 = g72(120)
+fn g73(k: U32) -> U32 { if k == 0 { C72 } else { 1 + g73(k - 1) } }
+const C73: U32 = g73(120)
+fn g74(k: U32) -> U32 { if k == 0 { C73 } else { 1 + g74(k - 1) } }
+const C74: U32 = g74(120)
+fn g75(k: U32) -> U32 { if k == 0 { C74 } else { 1 + g75(k - 1) } }
+const C75: U32 = g75(120)
+fn g76(k: U32) -> U32 { if k == 0 { C75 } else { 1 + g76(k - 1) } }
+const C76: U32 = g76(120)
+fn g77(k: U32) -> U32 { if k == 0 { C76 } else { 1 + g77(k - 1) } }
+const C77: U32 = g77(120)
+fn g78(k: U32) -> U32 { if k == 0 { C77 } else { 1 + g78(k - 1) } }
+const C78: U32 = g78(120)
+fn g79(k: U32) -> U32 { if k == 0 { C78 } else { 1 + g79(k - 1) } }
+const C79: U32 = g79(120)
+fn g80(k: U32) -> U32 { if k == 0 { C79 } else { 1 + g80(k - 1) } }
+const C80: U32 = g80(120)
+fn g81(k: U32) -> U32 { if k == 0 { C80 } else { 1 + g81(k - 1) } }
+const C81: U32 = g81(120)
+fn g82(k: U32) -> U32 { if k == 0 { C81 } else { 1 + g82(k - 1) } }
+const C82: U32 = g82(120)
+fn g83(k: U32) -> U32 { if k == 0 { C82 } else { 1 + g83(k - 1) } }
+const C83: U32 = g83(120)
+fn g84(k: U32) -> U32 { if k == 0 { C83 } else { 1 + g84(k - 1) } }
+const C84: U32 = g84(120)
+fn g85(k: U32) -> U32 { if k == 0 { C84 } else { 1 + g85(k - 1) } }
+const C85: U32 = g85(120)
+fn g86(k: U32) -> U32 { if k == 0 { C85 } else { 1 + g86(k - 1) } }
+const C86: U32 = g86(120)
+fn g87(k: U32) -> U32 { if k == 0 { C86 } else { 1 + g87(k - 1) } }
+const C87: U32 = g87(120)
+fn g88(k: U32) -> U32 { if k == 0 { C87 } else { 1 + g88(k - 1) } }
+const C88: U32 = g88(120)
+fn g89(k: U32) -> U32 { if k == 0 { C88 } else { 1 + g89(k - 1) } }
+const C89: U32 = g89(120)
+fn g90(k: U32) -> U32 { if k == 0 { C89 } else { 1 + g90(k - 1) } }
+const C90: U32 = g90(120)
+fn g91(k: U32) -> U32 { if k == 0 { C90 } else { 1 + g91(k - 1) } }
+const C91: U32 = g91(120)
+fn g92(k: U32) -> U32 { if k == 0 { C91 } else { 1 + g92(k - 1) } }
+const C92: U32 = g92(120)
+fn g93(k: U32) -> U32 { if k == 0 { C92 } else { 1 + g93(k - 1) } }
+const C93: U32 = g93(120)
+fn g94(k: U32) -> U32 { if k == 0 { C93 } else { 1 + g94(k - 1) } }
+const C94: U32 = g94(120)
+fn g95(k: U32) -> U32 { if k == 0 { C94 } else { 1 + g95(k - 1) } }
+const C95: U32 = g95(120)
+fn g96(k: U32) -> U32 { if k == 0 { C95 } else { 1 + g96(k - 1) } }
+const C96: U32 = g96(120)
+fn g97(k: U32) -> U32 { if k == 0 { C96 } else { 1 + g97(k - 1) } }
+const C97: U32 = g97(120)
+fn g98(k: U32) -> U32 { if k == 0 { C97 } else { 1 + g98(k - 1) } }
+const C98: U32 = g98(120)
+fn g99(k: U32) -> U32 { if k == 0 { C98 } else { 1 + g99(k - 1) } }
+const C99: U32 = g99(120)
+fn g100(k: U32) -> U32 { if k == 0 { C99 } else { 1 + g100(k - 1) } }
+const C100: U32 = g100(120)
+fn g101(k: U32) -> U32 { if k == 0 { C100 } else { 1 + g101(k - 1) } }
+const C101: U32 = g101(120)
+fn g102(k: U32) -> U32 { if k == 0 { C101 } else { 1 + g102(k - 1) } }
+const C102: U32 = g102(120)
+fn g103(k: U32) -> U32 { if k == 0 { C102 } else { 1 + g103(k - 1) } }
+const C103: U32 = g103(120)
+fn g104(k: U32) -> U32 { if k == 0 { C103 } else { 1 + g104(k - 1) } }
+const C104: U32 = g104(120)
+fn g105(k: U32) -> U32 { if k == 0 { C104 } else { 1 + g105(k - 1) } }
+const C105: U32 = g105(120)
+fn g106(k: U32) -> U32 { if k == 0 { C105 } else { 1 + g106(k - 1) } }
+const C106: U32 = g106(120)
+fn g107(k: U32) -> U32 { if k == 0 { C106 } else { 1 + g107(k - 1) } }
+const C107: U32 = g107(120)
+fn g108(k: U32) -> U32 { if k == 0 { C107 } else { 1 + g108(k - 1) } }
+const C108: U32 = g108(120)
+fn g109(k: U32) -> U32 { if k == 0 { C108 } else { 1 + g109(k - 1) } }
+const C109: U32 = g109(120)
+fn g110(k: U32) -> U32 { if k == 0 { C109 } else { 1 + g110(k - 1) } }
+const C110: U32 = g110(120)
+fn g111(k: U32) -> U32 { if k == 0 { C110 } else { 1 + g111(k - 1) } }
+const C111: U32 = g111(120)
+fn g112(k: U32) -> U32 { if k == 0 { C111 } else { 1 + g112(k - 1) } }
+const C112: U32 = g112(120)
+fn g113(k: U32) -> U32 { if k == 0 { C112 } else { 1 + g113(k - 1) } }
+const C113: U32 = g113(120)
+fn g114(k: U32) -> U32 { if k == 0 { C113 } else { 1 + g114(k - 1) } }
+const C114: U32 = g114(120)
+fn g115(k: U32) -> U32 { if k == 0 { C114 } else { 1 + g115(k - 1) } }
+const C115: U32 = g115(120)
+fn g116(k: U32) -> U32 { if k == 0 { C115 } else { 1 + g116(k - 1) } }
+const C116: U32 = g116(120)
+fn g117(k: U32) -> U32 { if k == 0 { C116 } else { 1 + g117(k - 1) } }
+const C117: U32 = g117(120)
+fn g118(k: U32) -> U32 { if k == 0 { C117 } else { 1 + g118(k - 1) } }
+const C118: U32 = g118(120)
+fn g119(k: U32) -> U32 { if k == 0 { C118 } else { 1 + g119(k - 1) } }
+const C119: U32 = g119(120)
+fn g120(k: U32) -> U32 { if k == 0 { C119 } else { 1 + g120(k - 1) } }
+const C120: U32 = g120(120)
+fn g121(k: U32) -> U32 { if k == 0 { C120 } else { 1 + g121(k - 1) } }
+const C121: U32 = g121(120)
+fn g122(k: U32) -> U32 { if k == 0 { C121 } else { 1 + g122(k - 1) } }
+const C122: U32 = g122(120)
+fn g123(k: U32) -> U32 { if k == 0 { C122 } else { 1 + g123(k - 1) } }
+const C123: U32 = g123(120)
+fn g124(k: U32) -> U32 { if k == 0 { C123 } else { 1 + g124(k - 1) } }
+const C124: U32 = g124(120)
+fn g125(k: U32) -> U32 { if k == 0 { C124 } else { 1 + g125(k - 1) } }
+const C125: U32 = g125(120)
+fn g126(k: U32) -> U32 { if k == 0 { C125 } else { 1 + g126(k - 1) } }
+const C126: U32 = g126(120)
+fn g127(k: U32) -> U32 { if k == 0 { C126 } else { 1 + g127(k - 1) } }
+const C127: U32 = g127(120)
+fn g128(k: U32) -> U32 { if k == 0 { C127 } else { 1 + g128(k - 1) } }
+const C128: U32 = g128(120)
+fn g129(k: U32) -> U32 { if k == 0 { C128 } else { 1 + g129(k - 1) } }
+const C129: U32 = g129(120)
+fn g130(k: U32) -> U32 { if k == 0 { C129 } else { 1 + g130(k - 1) } }
+const C130: U32 = g130(120)
+fn g131(k: U32) -> U32 { if k == 0 { C130 } else { 1 + g131(k - 1) } }
+const C131: U32 = g131(120)
+fn g132(k: U32) -> U32 { if k == 0 { C131 } else { 1 + g132(k - 1) } }
+const C132: U32 = g132(120)
+fn g133(k: U32) -> U32 { if k == 0 { C132 } else { 1 + g133(k - 1) } }
+const C133: U32 = g133(120)
+fn g134(k: U32) -> U32 { if k == 0 { C133 } else { 1 + g134(k - 1) } }
+const C134: U32 = g134(120)
+fn g135(k: U32) -> U32 { if k == 0 { C134 } else { 1 + g135(k - 1) } }
+const C135: U32 = g135(120)
+fn g136(k: U32) -> U32 { if k == 0 { C135 } else { 1 + g136(k - 1) } }
+const C136: U32 = g136(120)
+fn g137(k: U32) -> U32 { if k == 0 { C136 } else { 1 + g137(k - 1) } }
+const C137: U32 = g137(120)
+fn g138(k: U32) -> U32 { if k == 0 { C137 } else { 1 + g138(k - 1) } }
+const C138: U32 = g138(120)
+fn g139(k: U32) -> U32 { if k == 0 { C138 } else { 1 + g139(k - 1) } }
+const C139: U32 = g139(120)
+fn g140(k: U32) -> U32 { if k == 0 { C139 } else { 1 + g140(k - 1) } }
+const C140: U32 = g140(120)
+fn g141(k: U32) -> U32 { if k == 0 { C140 } else { 1 + g141(k - 1) } }
+const C141: U32 = g141(120)
+fn g142(k: U32) -> U32 { if k == 0 { C141 } else { 1 + g142(k - 1) } }
+const C142: U32 = g142(120)
+fn g143(k: U32) -> U32 { if k == 0 { C142 } else { 1 + g143(k - 1) } }
+const C143: U32 = g143(120)
+fn g144(k: U32) -> U32 { if k == 0 { C143 } else { 1 + g144(k - 1) } }
+const C144: U32 = g144(120)
+fn g145(k: U32) -> U32 { if k == 0 { C144 } else { 1 + g145(k - 1) } }
+const C145: U32 = g145(120)
+fn g146(k: U32) -> U32 { if k == 0 { C145 } else { 1 + g146(k - 1) } }
+const C146: U32 = g146(120)
+fn g147(k: U32) -> U32 { if k == 0 { C146 } else { 1 + g147(k - 1) } }
+const C147: U32 = g147(120)
+fn g148(k: U32) -> U32 { if k == 0 { C147 } else { 1 + g148(k - 1) } }
+const C148: U32 = g148(120)
+fn g149(k: U32) -> U32 { if k == 0 { C148 } else { 1 + g149(k - 1) } }
+const C149: U32 = g149(120)
+fn g150(k: U32) -> U32 { if k == 0 { C149 } else { 1 + g150(k - 1) } }
+const C150: U32 = g150(120)
+fn g151(k: U32) -> U32 { if k == 0 { C150 } else { 1 + g151(k - 1) } }
+const C151: U32 = g151(120)
+fn g152(k: U32) -> U32 { if k == 0 { C151 } else { 1 + g152(k - 1) } }
+const C152: U32 = g152(120)
+fn g153(k: U32) -> U32 { if k == 0 { C152 } else { 1 + g153(k - 1) } }
+const C153: U32 = g153(120)
+fn g154(k: U32) -> U32 { if k == 0 { C153 } else { 1 + g154(k - 1) } }
+const C154: U32 = g154(120)
+fn g155(k: U32) -> U32 { if k == 0 { C154 } else { 1 + g155(k - 1) } }
+const C155: U32 = g155(120)
+fn g156(k: U32) -> U32 { if k == 0 { C155 } else { 1 + g156(k - 1) } }
+const C156: U32 = g156(120)
+fn g157(k: U32) -> U32 { if k == 0 { C156 } else { 1 + g157(k - 1) } }
+const C157: U32 = g157(120)
+fn g158(k: U32) -> U32 { if k == 0 { C157 } else { 1 + g158(k - 1) } }
+const C158: U32 = g158(120)
+fn g159(k: U32) -> U32 { if k == 0 { C158 } else { 1 + g159(k - 1) } }
+const C159: U32 = g159(120)
+fn g160(k: U32) -> U32 { if k == 0 { C159 } else { 1 + g160(k - 1) } }
+const C160: U32 = g160(120)
+fn g161(k: U32) -> U32 { if k == 0 { C160 } else { 1 + g161(k - 1) } }
+const C161: U32 = g161(120)
+fn g162(k: U32) -> U32 { if k == 0 { C161 } else { 1 + g162(k - 1) } }
+const C162: U32 = g162(120)
+fn g163(k: U32) -> U32 { if k == 0 { C162 } else { 1 + g163(k - 1) } }
+const C163: U32 = g163(120)
+fn g164(k: U32) -> U32 { if k == 0 { C163 } else { 1 + g164(k - 1) } }
+const C164: U32 = g164(120)
+fn g165(k: U32) -> U32 { if k == 0 { C164 } else { 1 + g165(k - 1) } }
+const C165: U32 = g165(120)
+fn g166(k: U32) -> U32 { if k == 0 { C165 } else { 1 + g166(k - 1) } }
+const C166: U32 = g166(120)
+fn g167(k: U32) -> U32 { if k == 0 { C166 } else { 1 + g167(k - 1) } }
+const C167: U32 = g167(120)
+fn g168(k: U32) -> U32 { if k == 0 { C167 } else { 1 + g168(k - 1) } }
+const C168: U32 = g168(120)
+fn g169(k: U32) -> U32 { if k == 0 { C168 } else { 1 + g169(k - 1) } }
+const C169: U32 = g169(120)
+fn g170(k: U32) -> U32 { if k == 0 { C169 } else { 1 + g170(k - 1) } }
+const C170: U32 = g170(120)
+fn g171(k: U32) -> U32 { if k == 0 { C170 } else { 1 + g171(k - 1) } }
+const C171: U32 = g171(120)
+fn g172(k: U32) -> U32 { if k == 0 { C171 } else { 1 + g172(k - 1) } }
+const C172: U32 = g172(120)
+fn g173(k: U32) -> U32 { if k == 0 { C172 } else { 1 + g173(k - 1) } }
+const C173: U32 = g173(120)
+fn g174(k: U32) -> U32 { if k == 0 { C173 } else { 1 + g174(k - 1) } }
+const C174: U32 = g174(120)
+fn g175(k: U32) -> U32 { if k == 0 { C174 } else { 1 + g175(k - 1) } }
+const C175: U32 = g175(120)
+fn g176(k: U32) -> U32 { if k == 0 { C175 } else { 1 + g176(k - 1) } }
+const C176: U32 = g176(120)
+fn g177(k: U32) -> U32 { if k == 0 { C176 } else { 1 + g177(k - 1) } }
+const C177: U32 = g177(120)
+fn g178(k: U32) -> U32 { if k == 0 { C177 } else { 1 + g178(k - 1) } }
+const C178: U32 = g178(120)
+fn g179(k: U32) -> U32 { if k == 0 { C178 } else { 1 + g179(k - 1) } }
+const C179: U32 = g179(120)
+fn g180(k: U32) -> U32 { if k == 0 { C179 } else { 1 + g180(k - 1) } }
+const C180: U32 = g180(120)
+fn g181(k: U32) -> U32 { if k == 0 { C180 } else { 1 + g181(k - 1) } }
+const C181: U32 = g181(120)
+fn g182(k: U32) -> U32 { if k == 0 { C181 } else { 1 + g182(k - 1) } }
+const C182: U32 = g182(120)
+fn g183(k: U32) -> U32 { if k == 0 { C182 } else { 1 + g183(k - 1) } }
+const C183: U32 = g183(120)
+fn g184(k: U32) -> U32 { if k == 0 { C183 } else { 1 + g184(k - 1) } }
+const C184: U32 = g184(120)
+fn g185(k: U32) -> U32 { if k == 0 { C184 } else { 1 + g185(k - 1) } }
+const C185: U32 = g185(120)
+fn g186(k: U32) -> U32 { if k == 0 { C185 } else { 1 + g186(k - 1) } }
+const C186: U32 = g186(120)
+fn g187(k: U32) -> U32 { if k == 0 { C186 } else { 1 + g187(k - 1) } }
+const C187: U32 = g187(120)
+fn g188(k: U32) -> U32 { if k == 0 { C187 } else { 1 + g188(k - 1) } }
+const C188: U32 = g188(120)
+fn g189(k: U32) -> U32 { if k == 0 { C188 } else { 1 + g189(k - 1) } }
+const C189: U32 = g189(120)
+fn g190(k: U32) -> U32 { if k == 0 { C189 } else { 1 + g190(k - 1) } }
+const C190: U32 = g190(120)
+fn g191(k: U32) -> U32 { if k == 0 { C190 } else { 1 + g191(k - 1) } }
+const C191: U32 = g191(120)
+fn g192(k: U32) -> U32 { if k == 0 { C191 } else { 1 + g192(k - 1) } }
+const C192: U32 = g192(120)
+fn g193(k: U32) -> U32 { if k == 0 { C192 } else { 1 + g193(k - 1) } }
+const C193: U32 = g193(120)
+fn g194(k: U32) -> U32 { if k == 0 { C193 } else { 1 + g194(k - 1) } }
+const C194: U32 = g194(120)
+fn g195(k: U32) -> U32 { if k == 0 { C194 } else { 1 + g195(k - 1) } }
+const C195: U32 = g195(120)
+fn g196(k: U32) -> U32 { if k == 0 { C195 } else { 1 + g196(k - 1) } }
+const C196: U32 = g196(120)
+fn g197(k: U32) -> U32 { if k == 0 { C196 } else { 1 + g197(k - 1) } }
+const C197: U32 = g197(120)
+fn g198(k: U32) -> U32 { if k == 0 { C197 } else { 1 + g198(k - 1) } }
+const C198: U32 = g198(120)
+fn g199(k: U32) -> U32 { if k == 0 { C198 } else { 1 + g199(k - 1) } }
+const C199: U32 = g199(120)
+fn g200(k: U32) -> U32 { if k == 0 { C199 } else { 1 + g200(k - 1) } }
+const C200: U32 = g200(120)
+fn g201(k: U32) -> U32 { if k == 0 { C200 } else { 1 + g201(k - 1) } }
+const C201: U32 = g201(120)
+fn g202(k: U32) -> U32 { if k == 0 { C201 } else { 1 + g202(k - 1) } }
+const C202: U32 = g202(120)
+fn g203(k: U32) -> U32 { if k == 0 { C202 } else { 1 + g203(k - 1) } }
+const C203: U32 = g203(120)
+fn g204(k: U32) -> U32 { if k == 0 { C203 } else { 1 + g204(k - 1) } }
+const C204: U32 = g204(120)
+fn g205(k: U32) -> U32 { if k == 0 { C204 } else { 1 + g205(k - 1) } }
+const C205: U32 = g205(120)
+fn g206(k: U32) -> U32 { if k == 0 { C205 } else { 1 + g206(k - 1) } }
+const C206: U32 = g206(120)
+fn g207(k: U32) -> U32 { if k == 0 { C206 } else { 1 + g207(k - 1) } }
+const C207: U32 = g207(120)
+fn g208(k: U32) -> U32 { if k == 0 { C207 } else { 1 + g208(k - 1) } }
+const C208: U32 = g208(120)
+fn g209(k: U32) -> U32 { if k == 0 { C208 } else { 1 + g209(k - 1) } }
+const C209: U32 = g209(120)
+fn g210(k: U32) -> U32 { if k == 0 { C209 } else { 1 + g210(k - 1) } }
+const C210: U32 = g210(120)
+fn g211(k: U32) -> U32 { if k == 0 { C210 } else { 1 + g211(k - 1) } }
+const C211: U32 = g211(120)
+fn g212(k: U32) -> U32 { if k == 0 { C211 } else { 1 + g212(k - 1) } }
+const C212: U32 = g212(120)
+fn g213(k: U32) -> U32 { if k == 0 { C212 } else { 1 + g213(k - 1) } }
+const C213: U32 = g213(120)
+fn g214(k: U32) -> U32 { if k == 0 { C213 } else { 1 + g214(k - 1) } }
+const C214: U32 = g214(120)
+fn g215(k: U32) -> U32 { if k == 0 { C214 } else { 1 + g215(k - 1) } }
+const C215: U32 = g215(120)
+fn g216(k: U32) -> U32 { if k == 0 { C215 } else { 1 + g216(k - 1) } }
+const C216: U32 = g216(120)
+fn g217(k: U32) -> U32 { if k == 0 { C216 } else { 1 + g217(k - 1) } }
+const C217: U32 = g217(120)
+fn g218(k: U32) -> U32 { if k == 0 { C217 } else { 1 + g218(k - 1) } }
+const C218: U32 = g218(120)
+fn g219(k: U32) -> U32 { if k == 0 { C218 } else { 1 + g219(k - 1) } }
+const C219: U32 = g219(120)
+fn g220(k: U32) -> U32 { if k == 0 { C219 } else { 1 + g220(k - 1) } }
+const C220: U32 = g220(120)
+fn g221(k: U32) -> U32 { if k == 0 { C220 } else { 1 + g221(k - 1) } }
+const C221: U32 = g221(120)
+fn g222(k: U32) -> U32 { if k == 0 { C221 } else { 1 + g222(k - 1) } }
+const C222: U32 = g222(120)
+fn g223(k: U32) -> U32 { if k == 0 { C222 } else { 1 + g223(k - 1) } }
+const C223: U32 = g223(120)
+fn g224(k: U32) -> U32 { if k == 0 { C223 } else { 1 + g224(k - 1) } }
+const C224: U32 = g224(120)
+fn g225(k: U32) -> U32 { if k == 0 { C224 } else { 1 + g225(k - 1) } }
+const C225: U32 = g225(120)
+fn g226(k: U32) -> U32 { if k == 0 { C225 } else { 1 + g226(k - 1) } }
+const C226: U32 = g226(120)
+fn g227(k: U32) -> U32 { if k == 0 { C226 } else { 1 + g227(k - 1) } }
+const C227: U32 = g227(120)
+fn g228(k: U32) -> U32 { if k == 0 { C227 } else { 1 + g228(k - 1) } }
+const C228: U32 = g228(120)
+fn g229(k: U32) -> U32 { if k == 0 { C228 } else { 1 + g229(k - 1) } }
+const C229: U32 = g229(120)
+fn g230(k: U32) -> U32 { if k == 0 { C229 } else { 1 + g230(k - 1) } }
+const C230: U32 = g230(120)
+fn g231(k: U32) -> U32 { if k == 0 { C230 } else { 1 + g231(k - 1) } }
+const C231: U32 = g231(120)
+fn g232(k: U32) -> U32 { if k == 0 { C231 } else { 1 + g232(k - 1) } }
+const C232: U32 = g232(120)
+fn g233(k: U32) -> U32 { if k == 0 { C232 } else { 1 + g233(k - 1) } }
+const C233: U32 = g233(120)
+fn g234(k: U32) -> U32 { if k == 0 { C233 } else { 1 + g234(k - 1) } }
+const C234: U32 = g234(120)
+fn g235(k: U32) -> U32 { if k == 0 { C234 } else { 1 + g235(k - 1) } }
+const C235: U32 = g235(120)
+fn g236(k: U32) -> U32 { if k == 0 { C235 } else { 1 + g236(k - 1) } }
+const C236: U32 = g236(120)
+fn g237(k: U32) -> U32 { if k == 0 { C236 } else { 1 + g237(k - 1) } }
+const C237: U32 = g237(120)
+fn g238(k: U32) -> U32 { if k == 0 { C237 } else { 1 + g238(k - 1) } }
+const C238: U32 = g238(120)
+fn g239(k: U32) -> U32 { if k == 0 { C238 } else { 1 + g239(k - 1) } }
+const C239: U32 = g239(120)
+fn g240(k: U32) -> U32 { if k == 0 { C239 } else { 1 + g240(k - 1) } }
+const C240: U32 = g240(120)
+fn g241(k: U32) -> U32 { if k == 0 { C240 } else { 1 + g241(k - 1) } }
+const C241: U32 = g241(120)
+fn g242(k: U32) -> U32 { if k == 0 { C241 } else { 1 + g242(k - 1) } }
+const C242: U32 = g242(120)
+fn g243(k: U32) -> U32 { if k == 0 { C242 } else { 1 + g243(k - 1) } }
+const C243: U32 = g243(120)
+fn g244(k: U32) -> U32 { if k == 0 { C243 } else { 1 + g244(k - 1) } }
+const C244: U32 = g244(120)
+fn g245(k: U32) -> U32 { if k == 0 { C244 } else { 1 + g245(k - 1) } }
+const C245: U32 = g245(120)
+fn g246(k: U32) -> U32 { if k == 0 { C245 } else { 1 + g246(k - 1) } }
+const C246: U32 = g246(120)
+fn g247(k: U32) -> U32 { if k == 0 { C246 } else { 1 + g247(k - 1) } }
+const C247: U32 = g247(120)
+fn g248(k: U32) -> U32 { if k == 0 { C247 } else { 1 + g248(k - 1) } }
+const C248: U32 = g248(120)
+fn g249(k: U32) -> U32 { if k == 0 { C248 } else { 1 + g249(k - 1) } }
+const C249: U32 = g249(120)
+fn g250(k: U32) -> U32 { if k == 0 { C249 } else { 1 + g250(k - 1) } }
+const C250: U32 = g250(120)
+fn g251(k: U32) -> U32 { if k == 0 { C250 } else { 1 + g251(k - 1) } }
+const C251: U32 = g251(120)
+fn g252(k: U32) -> U32 { if k == 0 { C251 } else { 1 + g252(k - 1) } }
+const C252: U32 = g252(120)
+fn g253(k: U32) -> U32 { if k == 0 { C252 } else { 1 + g253(k - 1) } }
+const C253: U32 = g253(120)
+fn g254(k: U32) -> U32 { if k == 0 { C253 } else { 1 + g254(k - 1) } }
+const C254: U32 = g254(120)
+fn g255(k: U32) -> U32 { if k == 0 { C254 } else { 1 + g255(k - 1) } }
+const C255: U32 = g255(120)
+fn g256(k: U32) -> U32 { if k == 0 { C255 } else { 1 + g256(k - 1) } }
+const C256: U32 = g256(120)
+fn g257(k: U32) -> U32 { if k == 0 { C256 } else { 1 + g257(k - 1) } }
+const C257: U32 = g257(120)
+fn g258(k: U32) -> U32 { if k == 0 { C257 } else { 1 + g258(k - 1) } }
+const C258: U32 = g258(120)
+fn g259(k: U32) -> U32 { if k == 0 { C258 } else { 1 + g259(k - 1) } }
+const C259: U32 = g259(120)
+fn g260(k: U32) -> U32 { if k == 0 { C259 } else { 1 + g260(k - 1) } }
+const C260: U32 = g260(120)
+fn g261(k: U32) -> U32 { if k == 0 { C260 } else { 1 + g261(k - 1) } }
+const C261: U32 = g261(120)
+fn g262(k: U32) -> U32 { if k == 0 { C261 } else { 1 + g262(k - 1) } }
+const C262: U32 = g262(120)
+fn g263(k: U32) -> U32 { if k == 0 { C262 } else { 1 + g263(k - 1) } }
+const C263: U32 = g263(120)
+fn g264(k: U32) -> U32 { if k == 0 { C263 } else { 1 + g264(k - 1) } }
+const C264: U32 = g264(120)
+fn g265(k: U32) -> U32 { if k == 0 { C264 } else { 1 + g265(k - 1) } }
+const C265: U32 = g265(120)
+fn g266(k: U32) -> U32 { if k == 0 { C265 } else { 1 + g266(k - 1) } }
+const C266: U32 = g266(120)
+fn g267(k: U32) -> U32 { if k == 0 { C266 } else { 1 + g267(k - 1) } }
+const C267: U32 = g267(120)
+fn g268(k: U32) -> U32 { if k == 0 { C267 } else { 1 + g268(k - 1) } }
+const C268: U32 = g268(120)
+fn g269(k: U32) -> U32 { if k == 0 { C268 } else { 1 + g269(k - 1) } }
+const C269: U32 = g269(120)
+fn g270(k: U32) -> U32 { if k == 0 { C269 } else { 1 + g270(k - 1) } }
+const C270: U32 = g270(120)
+fn g271(k: U32) -> U32 { if k == 0 { C270 } else { 1 + g271(k - 1) } }
+const C271: U32 = g271(120)
+fn g272(k: U32) -> U32 { if k == 0 { C271 } else { 1 + g272(k - 1) } }
+const C272: U32 = g272(120)
+fn g273(k: U32) -> U32 { if k == 0 { C272 } else { 1 + g273(k - 1) } }
+const C273: U32 = g273(120)
+fn g274(k: U32) -> U32 { if k == 0 { C273 } else { 1 + g274(k - 1) } }
+const C274: U32 = g274(120)
+fn g275(k: U32) -> U32 { if k == 0 { C274 } else { 1 + g275(k - 1) } }
+const C275: U32 = g275(120)
+fn g276(k: U32) -> U32 { if k == 0 { C275 } else { 1 + g276(k - 1) } }
+const C276: U32 = g276(120)
+fn g277(k: U32) -> U32 { if k == 0 { C276 } else { 1 + g277(k - 1) } }
+const C277: U32 = g277(120)
+fn g278(k: U32) -> U32 { if k == 0 { C277 } else { 1 + g278(k - 1) } }
+const C278: U32 = g278(120)
+fn g279(k: U32) -> U32 { if k == 0 { C278 } else { 1 + g279(k - 1) } }
+const C279: U32 = g279(120)
+fn g280(k: U32) -> U32 { if k == 0 { C279 } else { 1 + g280(k - 1) } }
+const C280: U32 = g280(120)
+fn g281(k: U32) -> U32 { if k == 0 { C280 } else { 1 + g281(k - 1) } }
+const C281: U32 = g281(120)
+fn g282(k: U32) -> U32 { if k == 0 { C281 } else { 1 + g282(k - 1) } }
+const C282: U32 = g282(120)
+fn g283(k: U32) -> U32 { if k == 0 { C282 } else { 1 + g283(k - 1) } }
+const C283: U32 = g283(120)
+fn g284(k: U32) -> U32 { if k == 0 { C283 } else { 1 + g284(k - 1) } }
+const C284: U32 = g284(120)
+fn g285(k: U32) -> U32 { if k == 0 { C284 } else { 1 + g285(k - 1) } }
+const C285: U32 = g285(120)
+fn g286(k: U32) -> U32 { if k == 0 { C285 } else { 1 + g286(k - 1) } }
+const C286: U32 = g286(120)
+fn g287(k: U32) -> U32 { if k == 0 { C286 } else { 1 + g287(k - 1) } }
+const C287: U32 = g287(120)
+fn g288(k: U32) -> U32 { if k == 0 { C287 } else { 1 + g288(k - 1) } }
+const C288: U32 = g288(120)
+fn g289(k: U32) -> U32 { if k == 0 { C288 } else { 1 + g289(k - 1) } }
+const C289: U32 = g289(120)
+fn g290(k: U32) -> U32 { if k == 0 { C289 } else { 1 + g290(k - 1) } }
+const C290: U32 = g290(120)
+fn g291(k: U32) -> U32 { if k == 0 { C290 } else { 1 + g291(k - 1) } }
+const C291: U32 = g291(120)
+fn g292(k: U32) -> U32 { if k == 0 { C291 } else { 1 + g292(k - 1) } }
+const C292: U32 = g292(120)
+fn g293(k: U32) -> U32 { if k == 0 { C292 } else { 1 + g293(k - 1) } }
+const C293: U32 = g293(120)
+fn g294(k: U32) -> U32 { if k == 0 { C293 } else { 1 + g294(k - 1) } }
+const C294: U32 = g294(120)
+fn g295(k: U32) -> U32 { if k == 0 { C294 } else { 1 + g295(k - 1) } }
+const C295: U32 = g295(120)
+fn g296(k: U32) -> U32 { if k == 0 { C295 } else { 1 + g296(k - 1) } }
+const C296: U32 = g296(120)
+fn g297(k: U32) -> U32 { if k == 0 { C296 } else { 1 + g297(k - 1) } }
+const C297: U32 = g297(120)
+fn g298(k: U32) -> U32 { if k == 0 { C297 } else { 1 + g298(k - 1) } }
+const C298: U32 = g298(120)
+fn g299(k: U32) -> U32 { if k == 0 { C298 } else { 1 + g299(k - 1) } }
+const C299: U32 = g299(120)
+fn g300(k: U32) -> U32 { if k == 0 { C299 } else { 1 + g300(k - 1) } }
+const C300: U32 = g300(120)
+fn g301(k: U32) -> U32 { if k == 0 { C300 } else { 1 + g301(k - 1) } }
+const C301: U32 = g301(120)
+fn g302(k: U32) -> U32 { if k == 0 { C301 } else { 1 + g302(k - 1) } }
+const C302: U32 = g302(120)
+fn g303(k: U32) -> U32 { if k == 0 { C302 } else { 1 + g303(k - 1) } }
+const C303: U32 = g303(120)
+fn g304(k: U32) -> U32 { if k == 0 { C303 } else { 1 + g304(k - 1) } }
+const C304: U32 = g304(120)
+fn g305(k: U32) -> U32 { if k == 0 { C304 } else { 1 + g305(k - 1) } }
+const C305: U32 = g305(120)
+fn g306(k: U32) -> U32 { if k == 0 { C305 } else { 1 + g306(k - 1) } }
+const C306: U32 = g306(120)
+fn g307(k: U32) -> U32 { if k == 0 { C306 } else { 1 + g307(k - 1) } }
+const C307: U32 = g307(120)
+fn g308(k: U32) -> U32 { if k == 0 { C307 } else { 1 + g308(k - 1) } }
+const C308: U32 = g308(120)
+fn g309(k: U32) -> U32 { if k == 0 { C308 } else { 1 + g309(k - 1) } }
+const C309: U32 = g309(120)
+fn g310(k: U32) -> U32 { if k == 0 { C309 } else { 1 + g310(k - 1) } }
+const C310: U32 = g310(120)
+fn g311(k: U32) -> U32 { if k == 0 { C310 } else { 1 + g311(k - 1) } }
+const C311: U32 = g311(120)
+fn g312(k: U32) -> U32 { if k == 0 { C311 } else { 1 + g312(k - 1) } }
+const C312: U32 = g312(120)
+fn g313(k: U32) -> U32 { if k == 0 { C312 } else { 1 + g313(k - 1) } }
+const C313: U32 = g313(120)
+fn g314(k: U32) -> U32 { if k == 0 { C313 } else { 1 + g314(k - 1) } }
+const C314: U32 = g314(120)
+fn g315(k: U32) -> U32 { if k == 0 { C314 } else { 1 + g315(k - 1) } }
+const C315: U32 = g315(120)
+fn g316(k: U32) -> U32 { if k == 0 { C315 } else { 1 + g316(k - 1) } }
+const C316: U32 = g316(120)
+fn g317(k: U32) -> U32 { if k == 0 { C316 } else { 1 + g317(k - 1) } }
+const C317: U32 = g317(120)
+fn g318(k: U32) -> U32 { if k == 0 { C317 } else { 1 + g318(k - 1) } }
+const C318: U32 = g318(120)
+fn g319(k: U32) -> U32 { if k == 0 { C318 } else { 1 + g319(k - 1) } }
+const C319: U32 = g319(120)
+fn g320(k: U32) -> U32 { if k == 0 { C319 } else { 1 + g320(k - 1) } }
+const C320: U32 = g320(120)
+fn g321(k: U32) -> U32 { if k == 0 { C320 } else { 1 + g321(k - 1) } }
+const C321: U32 = g321(120)
+fn g322(k: U32) -> U32 { if k == 0 { C321 } else { 1 + g322(k - 1) } }
+const C322: U32 = g322(120)
+fn g323(k: U32) -> U32 { if k == 0 { C322 } else { 1 + g323(k - 1) } }
+const C323: U32 = g323(120)
+fn g324(k: U32) -> U32 { if k == 0 { C323 } else { 1 + g324(k - 1) } }
+const C324: U32 = g324(120)
+fn g325(k: U32) -> U32 { if k == 0 { C324 } else { 1 + g325(k - 1) } }
+const C325: U32 = g325(120)
+fn g326(k: U32) -> U32 { if k == 0 { C325 } else { 1 + g326(k - 1) } }
+const C326: U32 = g326(120)
+fn g327(k: U32) -> U32 { if k == 0 { C326 } else { 1 + g327(k - 1) } }
+const C327: U32 = g327(120)
+fn g328(k: U32) -> U32 { if k == 0 { C327 } else { 1 + g328(k - 1) } }
+const C328: U32 = g328(120)
+fn g329(k: U32) -> U32 { if k == 0 { C328 } else { 1 + g329(k - 1) } }
+const C329: U32 = g329(120)
+fn g330(k: U32) -> U32 { if k == 0 { C329 } else { 1 + g330(k - 1) } }
+const C330: U32 = g330(120)
+fn g331(k: U32) -> U32 { if k == 0 { C330 } else { 1 + g331(k - 1) } }
+const C331: U32 = g331(120)
+fn g332(k: U32) -> U32 { if k == 0 { C331 } else { 1 + g332(k - 1) } }
+const C332: U32 = g332(120)
+fn g333(k: U32) -> U32 { if k == 0 { C332 } else { 1 + g333(k - 1) } }
+const C333: U32 = g333(120)
+fn g334(k: U32) -> U32 { if k == 0 { C333 } else { 1 + g334(k - 1) } }
+const C334: U32 = g334(120)
+fn g335(k: U32) -> U32 { if k == 0 { C334 } else { 1 + g335(k - 1) } }
+const C335: U32 = g335(120)
+fn g336(k: U32) -> U32 { if k == 0 { C335 } else { 1 + g336(k - 1) } }
+const C336: U32 = g336(120)
+fn g337(k: U32) -> U32 { if k == 0 { C336 } else { 1 + g337(k - 1) } }
+const C337: U32 = g337(120)
+fn g338(k: U32) -> U32 { if k == 0 { C337 } else { 1 + g338(k - 1) } }
+const C338: U32 = g338(120)
+fn g339(k: U32) -> U32 { if k == 0 { C338 } else { 1 + g339(k - 1) } }
+const C339: U32 = g339(120)
+fn g340(k: U32) -> U32 { if k == 0 { C339 } else { 1 + g340(k - 1) } }
+const C340: U32 = g340(120)
+fn g341(k: U32) -> U32 { if k == 0 { C340 } else { 1 + g341(k - 1) } }
+const C341: U32 = g341(120)
+fn g342(k: U32) -> U32 { if k == 0 { C341 } else { 1 + g342(k - 1) } }
+const C342: U32 = g342(120)
+fn g343(k: U32) -> U32 { if k == 0 { C342 } else { 1 + g343(k - 1) } }
+const C343: U32 = g343(120)
+fn g344(k: U32) -> U32 { if k == 0 { C343 } else { 1 + g344(k - 1) } }
+const C344: U32 = g344(120)
+fn g345(k: U32) -> U32 { if k == 0 { C344 } else { 1 + g345(k - 1) } }
+const C345: U32 = g345(120)
+fn g346(k: U32) -> U32 { if k == 0 { C345 } else { 1 + g346(k - 1) } }
+const C346: U32 = g346(120)
+fn g347(k: U32) -> U32 { if k == 0 { C346 } else { 1 + g347(k - 1) } }
+const C347: U32 = g347(120)
+fn g348(k: U32) -> U32 { if k == 0 { C347 } else { 1 + g348(k - 1) } }
+const C348: U32 = g348(120)
+fn g349(k: U32) -> U32 { if k == 0 { C348 } else { 1 + g349(k - 1) } }
+const C349: U32 = g349(120)
+fn g350(k: U32) -> U32 { if k == 0 { C349 } else { 1 + g350(k - 1) } }
+const C350: U32 = g350(120)
+fn g351(k: U32) -> U32 { if k == 0 { C350 } else { 1 + g351(k - 1) } }
+const C351: U32 = g351(120)
+fn g352(k: U32) -> U32 { if k == 0 { C351 } else { 1 + g352(k - 1) } }
+const C352: U32 = g352(120)
+fn g353(k: U32) -> U32 { if k == 0 { C352 } else { 1 + g353(k - 1) } }
+const C353: U32 = g353(120)
+fn g354(k: U32) -> U32 { if k == 0 { C353 } else { 1 + g354(k - 1) } }
+const C354: U32 = g354(120)
+fn g355(k: U32) -> U32 { if k == 0 { C354 } else { 1 + g355(k - 1) } }
+const C355: U32 = g355(120)
+fn g356(k: U32) -> U32 { if k == 0 { C355 } else { 1 + g356(k - 1) } }
+const C356: U32 = g356(120)
+fn g357(k: U32) -> U32 { if k == 0 { C356 } else { 1 + g357(k - 1) } }
+const C357: U32 = g357(120)
+fn g358(k: U32) -> U32 { if k == 0 { C357 } else { 1 + g358(k - 1) } }
+const C358: U32 = g358(120)
+fn g359(k: U32) -> U32 { if k == 0 { C358 } else { 1 + g359(k - 1) } }
+const C359: U32 = g359(120)
+fn g360(k: U32) -> U32 { if k == 0 { C359 } else { 1 + g360(k - 1) } }
+const C360: U32 = g360(120)
+fn g361(k: U32) -> U32 { if k == 0 { C360 } else { 1 + g361(k - 1) } }
+const C361: U32 = g361(120)
+fn g362(k: U32) -> U32 { if k == 0 { C361 } else { 1 + g362(k - 1) } }
+const C362: U32 = g362(120)
+fn g363(k: U32) -> U32 { if k == 0 { C362 } else { 1 + g363(k - 1) } }
+const C363: U32 = g363(120)
+fn g364(k: U32) -> U32 { if k == 0 { C363 } else { 1 + g364(k - 1) } }
+const C364: U32 = g364(120)
+fn g365(k: U32) -> U32 { if k == 0 { C364 } else { 1 + g365(k - 1) } }
+const C365: U32 = g365(120)
+fn g366(k: U32) -> U32 { if k == 0 { C365 } else { 1 + g366(k - 1) } }
+const C366: U32 = g366(120)
+fn g367(k: U32) -> U32 { if k == 0 { C366 } else { 1 + g367(k - 1) } }
+const C367: U32 = g367(120)
+fn g368(k: U32) -> U32 { if k == 0 { C367 } else { 1 + g368(k - 1) } }
+const C368: U32 = g368(120)
+fn g369(k: U32) -> U32 { if k == 0 { C368 } else { 1 + g369(k - 1) } }
+const C369: U32 = g369(120)
+fn g370(k: U32) -> U32 { if k == 0 { C369 } else { 1 + g370(k - 1) } }
+const C370: U32 = g370(120)
+fn g371(k: U32) -> U32 { if k == 0 { C370 } else { 1 + g371(k - 1) } }
+const C371: U32 = g371(120)
+fn g372(k: U32) -> U32 { if k == 0 { C371 } else { 1 + g372(k - 1) } }
+const C372: U32 = g372(120)
+fn g373(k: U32) -> U32 { if k == 0 { C372 } else { 1 + g373(k - 1) } }
+const C373: U32 = g373(120)
+fn g374(k: U32) -> U32 { if k == 0 { C373 } else { 1 + g374(k - 1) } }
+const C374: U32 = g374(120)
+fn g375(k: U32) -> U32 { if k == 0 { C374 } else { 1 + g375(k - 1) } }
+const C375: U32 = g375(120)
+fn g376(k: U32) -> U32 { if k == 0 { C375 } else { 1 + g376(k - 1) } }
+const C376: U32 = g376(120)
+fn g377(k: U32) -> U32 { if k == 0 { C376 } else { 1 + g377(k - 1) } }
+const C377: U32 = g377(120)
+fn g378(k: U32) -> U32 { if k == 0 { C377 } else { 1 + g378(k - 1) } }
+const C378: U32 = g378(120)
+fn g379(k: U32) -> U32 { if k == 0 { C378 } else { 1 + g379(k - 1) } }
+const C379: U32 = g379(120)
+fn g380(k: U32) -> U32 { if k == 0 { C379 } else { 1 + g380(k - 1) } }
+const C380: U32 = g380(120)
+fn g381(k: U32) -> U32 { if k == 0 { C380 } else { 1 + g381(k - 1) } }
+const C381: U32 = g381(120)
+fn g382(k: U32) -> U32 { if k == 0 { C381 } else { 1 + g382(k - 1) } }
+const C382: U32 = g382(120)
+fn g383(k: U32) -> U32 { if k == 0 { C382 } else { 1 + g383(k - 1) } }
+const C383: U32 = g383(120)
+fn g384(k: U32) -> U32 { if k == 0 { C383 } else { 1 + g384(k - 1) } }
+const C384: U32 = g384(120)
+fn g385(k: U32) -> U32 { if k == 0 { C384 } else { 1 + g385(k - 1) } }
+const C385: U32 = g385(120)
+fn g386(k: U32) -> U32 { if k == 0 { C385 } else { 1 + g386(k - 1) } }
+const C386: U32 = g386(120)
+fn g387(k: U32) -> U32 { if k == 0 { C386 } else { 1 + g387(k - 1) } }
+const C387: U32 = g387(120)
+fn g388(k: U32) -> U32 { if k == 0 { C387 } else { 1 + g388(k - 1) } }
+const C388: U32 = g388(120)
+fn g389(k: U32) -> U32 { if k == 0 { C388 } else { 1 + g389(k - 1) } }
+const C389: U32 = g389(120)
+fn g390(k: U32) -> U32 { if k == 0 { C389 } else { 1 + g390(k - 1) } }
+const C390: U32 = g390(120)
+fn g391(k: U32) -> U32 { if k == 0 { C390 } else { 1 + g391(k - 1) } }
+const C391: U32 = g391(120)
+fn g392(k: U32) -> U32 { if k == 0 { C391 } else { 1 + g392(k - 1) } }
+const C392: U32 = g392(120)
+fn g393(k: U32) -> U32 { if k == 0 { C392 } else { 1 + g393(k - 1) } }
+const C393: U32 = g393(120)
+fn g394(k: U32) -> U32 { if k == 0 { C393 } else { 1 + g394(k - 1) } }
+const C394: U32 = g394(120)
+fn g395(k: U32) -> U32 { if k == 0 { C394 } else { 1 + g395(k - 1) } }
+const C395: U32 = g395(120)
+fn g396(k: U32) -> U32 { if k == 0 { C395 } else { 1 + g396(k - 1) } }
+const C396: U32 = g396(120)
+fn g397(k: U32) -> U32 { if k == 0 { C396 } else { 1 + g397(k - 1) } }
+const C397: U32 = g397(120)
+fn g398(k: U32) -> U32 { if k == 0 { C397 } else { 1 + g398(k - 1) } }
+const C398: U32 = g398(120)
+fn g399(k: U32) -> U32 { if k == 0 { C398 } else { 1 + g399(k - 1) } }
+const C399: U32 = g399(120)
+fn g400(k: U32) -> U32 { if k == 0 { C399 } else { 1 + g400(k - 1) } }
+const C400: U32 = g400(120)
+fn g401(k: U32) -> U32 { if k == 0 { C400 } else { 1 + g401(k - 1) } }
+const C401: U32 = g401(120)
+fn g402(k: U32) -> U32 { if k == 0 { C401 } else { 1 + g402(k - 1) } }
+const C402: U32 = g402(120)
+fn g403(k: U32) -> U32 { if k == 0 { C402 } else { 1 + g403(k - 1) } }
+const C403: U32 = g403(120)
+fn g404(k: U32) -> U32 { if k == 0 { C403 } else { 1 + g404(k - 1) } }
+const C404: U32 = g404(120)
+fn g405(k: U32) -> U32 { if k == 0 { C404 } else { 1 + g405(k - 1) } }
+const C405: U32 = g405(120)
+fn g406(k: U32) -> U32 { if k == 0 { C405 } else { 1 + g406(k - 1) } }
+const C406: U32 = g406(120)
+fn g407(k: U32) -> U32 { if k == 0 { C406 } else { 1 + g407(k - 1) } }
+const C407: U32 = g407(120)
+fn g408(k: U32) -> U32 { if k == 0 { C407 } else { 1 + g408(k - 1) } }
+const C408: U32 = g408(120)
+fn g409(k: U32) -> U32 { if k == 0 { C408 } else { 1 + g409(k - 1) } }
+const C409: U32 = g409(120)
+fn g410(k: U32) -> U32 { if k == 0 { C409 } else { 1 + g410(k - 1) } }
+const C410: U32 = g410(120)
+fn g411(k: U32) -> U32 { if k == 0 { C410 } else { 1 + g411(k - 1) } }
+const C411: U32 = g411(120)
+fn g412(k: U32) -> U32 { if k == 0 { C411 } else { 1 + g412(k - 1) } }
+const C412: U32 = g412(120)
+fn g413(k: U32) -> U32 { if k == 0 { C412 } else { 1 + g413(k - 1) } }
+const C413: U32 = g413(120)
+fn g414(k: U32) -> U32 { if k == 0 { C413 } else { 1 + g414(k - 1) } }
+const C414: U32 = g414(120)
+fn g415(k: U32) -> U32 { if k == 0 { C414 } else { 1 + g415(k - 1) } }
+const C415: U32 = g415(120)
+fn g416(k: U32) -> U32 { if k == 0 { C415 } else { 1 + g416(k - 1) } }
+const C416: U32 = g416(120)
+fn g417(k: U32) -> U32 { if k == 0 { C416 } else { 1 + g417(k - 1) } }
+const C417: U32 = g417(120)
+fn g418(k: U32) -> U32 { if k == 0 { C417 } else { 1 + g418(k - 1) } }
+const C418: U32 = g418(120)
+fn g419(k: U32) -> U32 { if k == 0 { C418 } else { 1 + g419(k - 1) } }
+const C419: U32 = g419(120)
+fn g420(k: U32) -> U32 { if k == 0 { C419 } else { 1 + g420(k - 1) } }
+const C420: U32 = g420(120)
+fn g421(k: U32) -> U32 { if k == 0 { C420 } else { 1 + g421(k - 1) } }
+const C421: U32 = g421(120)
+fn g422(k: U32) -> U32 { if k == 0 { C421 } else { 1 + g422(k - 1) } }
+const C422: U32 = g422(120)
+fn g423(k: U32) -> U32 { if k == 0 { C422 } else { 1 + g423(k - 1) } }
+const C423: U32 = g423(120)
+fn g424(k: U32) -> U32 { if k == 0 { C423 } else { 1 + g424(k - 1) } }
+const C424: U32 = g424(120)
+fn g425(k: U32) -> U32 { if k == 0 { C424 } else { 1 + g425(k - 1) } }
+const C425: U32 = g425(120)
+fn g426(k: U32) -> U32 { if k == 0 { C425 } else { 1 + g426(k - 1) } }
+const C426: U32 = g426(120)
+fn g427(k: U32) -> U32 { if k == 0 { C426 } else { 1 + g427(k - 1) } }
+const C427: U32 = g427(120)
+fn g428(k: U32) -> U32 { if k == 0 { C427 } else { 1 + g428(k - 1) } }
+const C428: U32 = g428(120)
+fn g429(k: U32) -> U32 { if k == 0 { C428 } else { 1 + g429(k - 1) } }
+const C429: U32 = g429(120)
+fn g430(k: U32) -> U32 { if k == 0 { C429 } else { 1 + g430(k - 1) } }
+const C430: U32 = g430(120)
+fn g431(k: U32) -> U32 { if k == 0 { C430 } else { 1 + g431(k - 1) } }
+const C431: U32 = g431(120)
+fn g432(k: U32) -> U32 { if k == 0 { C431 } else { 1 + g432(k - 1) } }
+const C432: U32 = g432(120)
+fn g433(k: U32) -> U32 { if k == 0 { C432 } else { 1 + g433(k - 1) } }
+const C433: U32 = g433(120)
+fn g434(k: U32) -> U32 { if k == 0 { C433 } else { 1 + g434(k - 1) } }
+const C434: U32 = g434(120)
+fn g435(k: U32) -> U32 { if k == 0 { C434 } else { 1 + g435(k - 1) } }
+const C435: U32 = g435(120)
+fn g436(k: U32) -> U32 { if k == 0 { C435 } else { 1 + g436(k - 1) } }
+const C436: U32 = g436(120)
+fn g437(k: U32) -> U32 { if k == 0 { C436 } else { 1 + g437(k - 1) } }
+const C437: U32 = g437(120)
+fn g438(k: U32) -> U32 { if k == 0 { C437 } else { 1 + g438(k - 1) } }
+const C438: U32 = g438(120)
+fn g439(k: U32) -> U32 { if k == 0 { C438 } else { 1 + g439(k - 1) } }
+const C439: U32 = g439(120)
+fn g440(k: U32) -> U32 { if k == 0 { C439 } else { 1 + g440(k - 1) } }
+const C440: U32 = g440(120)
+fn g441(k: U32) -> U32 { if k == 0 { C440 } else { 1 + g441(k - 1) } }
+const C441: U32 = g441(120)
+fn g442(k: U32) -> U32 { if k == 0 { C441 } else { 1 + g442(k - 1) } }
+const C442: U32 = g442(120)
+fn g443(k: U32) -> U32 { if k == 0 { C442 } else { 1 + g443(k - 1) } }
+const C443: U32 = g443(120)
+fn g444(k: U32) -> U32 { if k == 0 { C443 } else { 1 + g444(k - 1) } }
+const C444: U32 = g444(120)
+fn g445(k: U32) -> U32 { if k == 0 { C444 } else { 1 + g445(k - 1) } }
+const C445: U32 = g445(120)
+fn g446(k: U32) -> U32 { if k == 0 { C445 } else { 1 + g446(k - 1) } }
+const C446: U32 = g446(120)
+fn g447(k: U32) -> U32 { if k == 0 { C446 } else { 1 + g447(k - 1) } }
+const C447: U32 = g447(120)
+fn g448(k: U32) -> U32 { if k == 0 { C447 } else { 1 + g448(k - 1) } }
+const C448: U32 = g448(120)
+fn g449(k: U32) -> U32 { if k == 0 { C448 } else { 1 + g449(k - 1) } }
+const C449: U32 = g449(120)
+fn g450(k: U32) -> U32 { if k == 0 { C449 } else { 1 + g450(k - 1) } }
+const C450: U32 = g450(120)
+fn g451(k: U32) -> U32 { if k == 0 { C450 } else { 1 + g451(k - 1) } }
+const C451: U32 = g451(120)
+fn g452(k: U32) -> U32 { if k == 0 { C451 } else { 1 + g452(k - 1) } }
+const C452: U32 = g452(120)
+fn g453(k: U32) -> U32 { if k == 0 { C452 } else { 1 + g453(k - 1) } }
+const C453: U32 = g453(120)
+fn g454(k: U32) -> U32 { if k == 0 { C453 } else { 1 + g454(k - 1) } }
+const C454: U32 = g454(120)
+fn g455(k: U32) -> U32 { if k == 0 { C454 } else { 1 + g455(k - 1) } }
+const C455: U32 = g455(120)
+fn g456(k: U32) -> U32 { if k == 0 { C455 } else { 1 + g456(k - 1) } }
+const C456: U32 = g456(120)
+fn g457(k: U32) -> U32 { if k == 0 { C456 } else { 1 + g457(k - 1) } }
+const C457: U32 = g457(120)
+fn g458(k: U32) -> U32 { if k == 0 { C457 } else { 1 + g458(k - 1) } }
+const C458: U32 = g458(120)
+fn g459(k: U32) -> U32 { if k == 0 { C458 } else { 1 + g459(k - 1) } }
+const C459: U32 = g459(120)
+fn g460(k: U32) -> U32 { if k == 0 { C459 } else { 1 + g460(k - 1) } }
+const C460: U32 = g460(120)
+fn g461(k: U32) -> U32 { if k == 0 { C460 } else { 1 + g461(k - 1) } }
+const C461: U32 = g461(120)
+fn g462(k: U32) -> U32 { if k == 0 { C461 } else { 1 + g462(k - 1) } }
+const C462: U32 = g462(120)
+fn g463(k: U32) -> U32 { if k == 0 { C462 } else { 1 + g463(k - 1) } }
+const C463: U32 = g463(120)
+fn g464(k: U32) -> U32 { if k == 0 { C463 } else { 1 + g464(k - 1) } }
+const C464: U32 = g464(120)
+fn g465(k: U32) -> U32 { if k == 0 { C464 } else { 1 + g465(k - 1) } }
+const C465: U32 = g465(120)
+fn g466(k: U32) -> U32 { if k == 0 { C465 } else { 1 + g466(k - 1) } }
+const C466: U32 = g466(120)
+fn g467(k: U32) -> U32 { if k == 0 { C466 } else { 1 + g467(k - 1) } }
+const C467: U32 = g467(120)
+fn g468(k: U32) -> U32 { if k == 0 { C467 } else { 1 + g468(k - 1) } }
+const C468: U32 = g468(120)
+fn g469(k: U32) -> U32 { if k == 0 { C468 } else { 1 + g469(k - 1) } }
+const C469: U32 = g469(120)
+fn g470(k: U32) -> U32 { if k == 0 { C469 } else { 1 + g470(k - 1) } }
+const C470: U32 = g470(120)
+fn g471(k: U32) -> U32 { if k == 0 { C470 } else { 1 + g471(k - 1) } }
+const C471: U32 = g471(120)
+fn g472(k: U32) -> U32 { if k == 0 { C471 } else { 1 + g472(k - 1) } }
+const C472: U32 = g472(120)
+fn g473(k: U32) -> U32 { if k == 0 { C472 } else { 1 + g473(k - 1) } }
+const C473: U32 = g473(120)
+fn g474(k: U32) -> U32 { if k == 0 { C473 } else { 1 + g474(k - 1) } }
+const C474: U32 = g474(120)
+fn g475(k: U32) -> U32 { if k == 0 { C474 } else { 1 + g475(k - 1) } }
+const C475: U32 = g475(120)
+fn g476(k: U32) -> U32 { if k == 0 { C475 } else { 1 + g476(k - 1) } }
+const C476: U32 = g476(120)
+fn g477(k: U32) -> U32 { if k == 0 { C476 } else { 1 + g477(k - 1) } }
+const C477: U32 = g477(120)
+fn g478(k: U32) -> U32 { if k == 0 { C477 } else { 1 + g478(k - 1) } }
+const C478: U32 = g478(120)
+fn g479(k: U32) -> U32 { if k == 0 { C478 } else { 1 + g479(k - 1) } }
+const C479: U32 = g479(120)
+fn g480(k: U32) -> U32 { if k == 0 { C479 } else { 1 + g480(k - 1) } }
+const C480: U32 = g480(120)
+fn g481(k: U32) -> U32 { if k == 0 { C480 } else { 1 + g481(k - 1) } }
+const C481: U32 = g481(120)
+fn g482(k: U32) -> U32 { if k == 0 { C481 } else { 1 + g482(k - 1) } }
+const C482: U32 = g482(120)
+fn g483(k: U32) -> U32 { if k == 0 { C482 } else { 1 + g483(k - 1) } }
+const C483: U32 = g483(120)
+fn g484(k: U32) -> U32 { if k == 0 { C483 } else { 1 + g484(k - 1) } }
+const C484: U32 = g484(120)
+fn g485(k: U32) -> U32 { if k == 0 { C484 } else { 1 + g485(k - 1) } }
+const C485: U32 = g485(120)
+fn g486(k: U32) -> U32 { if k == 0 { C485 } else { 1 + g486(k - 1) } }
+const C486: U32 = g486(120)
+fn g487(k: U32) -> U32 { if k == 0 { C486 } else { 1 + g487(k - 1) } }
+const C487: U32 = g487(120)
+fn g488(k: U32) -> U32 { if k == 0 { C487 } else { 1 + g488(k - 1) } }
+const C488: U32 = g488(120)
+fn g489(k: U32) -> U32 { if k == 0 { C488 } else { 1 + g489(k - 1) } }
+const C489: U32 = g489(120)
+fn g490(k: U32) -> U32 { if k == 0 { C489 } else { 1 + g490(k - 1) } }
+const C490: U32 = g490(120)
+fn g491(k: U32) -> U32 { if k == 0 { C490 } else { 1 + g491(k - 1) } }
+const C491: U32 = g491(120)
+fn g492(k: U32) -> U32 { if k == 0 { C491 } else { 1 + g492(k - 1) } }
+const C492: U32 = g492(120)
+fn g493(k: U32) -> U32 { if k == 0 { C492 } else { 1 + g493(k - 1) } }
+const C493: U32 = g493(120)
+fn g494(k: U32) -> U32 { if k == 0 { C493 } else { 1 + g494(k - 1) } }
+const C494: U32 = g494(120)
+fn g495(k: U32) -> U32 { if k == 0 { C494 } else { 1 + g495(k - 1) } }
+const C495: U32 = g495(120)
+fn g496(k: U32) -> U32 { if k == 0 { C495 } else { 1 + g496(k - 1) } }
+const C496: U32 = g496(120)
+fn g497(k: U32) -> U32 { if k == 0 { C496 } else { 1 + g497(k - 1) } }
+const C497: U32 = g497(120)
+fn g498(k: U32) -> U32 { if k == 0 { C497 } else { 1 + g498(k - 1) } }
+const C498: U32 = g498(120)
+fn g499(k: U32) -> U32 { if k == 0 { C498 } else { 1 + g499(k - 1) } }
+const C499: U32 = g499(120)
+fn g500(k: U32) -> U32 { if k == 0 { C499 } else { 1 + g500(k - 1) } }
+const C500: U32 = g500(120)
+fn g501(k: U32) -> U32 { if k == 0 { C500 } else { 1 + g501(k - 1) } }
+const C501: U32 = g501(120)
+fn g502(k: U32) -> U32 { if k == 0 { C501 } else { 1 + g502(k - 1) } }
+const C502: U32 = g502(120)
+fn g503(k: U32) -> U32 { if k == 0 { C502 } else { 1 + g503(k - 1) } }
+const C503: U32 = g503(120)
+fn g504(k: U32) -> U32 { if k == 0 { C503 } else { 1 + g504(k - 1) } }
+const C504: U32 = g504(120)
+fn g505(k: U32) -> U32 { if k == 0 { C504 } else { 1 + g505(k - 1) } }
+const C505: U32 = g505(120)
+fn g506(k: U32) -> U32 { if k == 0 { C505 } else { 1 + g506(k - 1) } }
+const C506: U32 = g506(120)
+fn g507(k: U32) -> U32 { if k == 0 { C506 } else { 1 + g507(k - 1) } }
+const C507: U32 = g507(120)
+fn g508(k: U32) -> U32 { if k == 0 { C507 } else { 1 + g508(k - 1) } }
+const C508: U32 = g508(120)
+fn g509(k: U32) -> U32 { if k == 0 { C508 } else { 1 + g509(k - 1) } }
+const C509: U32 = g509(120)
+fn g510(k: U32) -> U32 { if k == 0 { C509 } else { 1 + g510(k - 1) } }
+const C510: U32 = g510(120)
+fn g511(k: U32) -> U32 { if k == 0 { C510 } else { 1 + g511(k - 1) } }
+const C511: U32 = g511(120)
+fn g512(k: U32) -> U32 { if k == 0 { C511 } else { 1 + g512(k - 1) } }
+const C512: U32 = g512(120)
+fn g513(k: U32) -> U32 { if k == 0 { C512 } else { 1 + g513(k - 1) } }
+const C513: U32 = g513(120)
+fn g514(k: U32) -> U32 { if k == 0 { C513 } else { 1 + g514(k - 1) } }
+const C514: U32 = g514(120)
+fn g515(k: U32) -> U32 { if k == 0 { C514 } else { 1 + g515(k - 1) } }
+const C515: U32 = g515(120)
+fn g516(k: U32) -> U32 { if k == 0 { C515 } else { 1 + g516(k - 1) } }
+const C516: U32 = g516(120)
+fn g517(k: U32) -> U32 { if k == 0 { C516 } else { 1 + g517(k - 1) } }
+const C517: U32 = g517(120)
+fn g518(k: U32) -> U32 { if k == 0 { C517 } else { 1 + g518(k - 1) } }
+const C518: U32 = g518(120)
+fn g519(k: U32) -> U32 { if k == 0 { C518 } else { 1 + g519(k - 1) } }
+const C519: U32 = g519(120)
+fn g520(k: U32) -> U32 { if k == 0 { C519 } else { 1 + g520(k - 1) } }
+const C520: U32 = g520(120)
+fn g521(k: U32) -> U32 { if k == 0 { C520 } else { 1 + g521(k - 1) } }
+const C521: U32 = g521(120)
+fn g522(k: U32) -> U32 { if k == 0 { C521 } else { 1 + g522(k - 1) } }
+const C522: U32 = g522(120)
+fn g523(k: U32) -> U32 { if k == 0 { C522 } else { 1 + g523(k - 1) } }
+const C523: U32 = g523(120)
+fn g524(k: U32) -> U32 { if k == 0 { C523 } else { 1 + g524(k - 1) } }
+const C524: U32 = g524(120)
+fn g525(k: U32) -> U32 { if k == 0 { C524 } else { 1 + g525(k - 1) } }
+const C525: U32 = g525(120)
+fn g526(k: U32) -> U32 { if k == 0 { C525 } else { 1 + g526(k - 1) } }
+const C526: U32 = g526(120)
+fn g527(k: U32) -> U32 { if k == 0 { C526 } else { 1 + g527(k - 1) } }
+const C527: U32 = g527(120)
+fn g528(k: U32) -> U32 { if k == 0 { C527 } else { 1 + g528(k - 1) } }
+const C528: U32 = g528(120)
+fn g529(k: U32) -> U32 { if k == 0 { C528 } else { 1 + g529(k - 1) } }
+const C529: U32 = g529(120)
+fn g530(k: U32) -> U32 { if k == 0 { C529 } else { 1 + g530(k - 1) } }
+const C530: U32 = g530(120)
+fn g531(k: U32) -> U32 { if k == 0 { C530 } else { 1 + g531(k - 1) } }
+const C531: U32 = g531(120)
+fn g532(k: U32) -> U32 { if k == 0 { C531 } else { 1 + g532(k - 1) } }
+const C532: U32 = g532(120)
+fn g533(k: U32) -> U32 { if k == 0 { C532 } else { 1 + g533(k - 1) } }
+const C533: U32 = g533(120)
+fn g534(k: U32) -> U32 { if k == 0 { C533 } else { 1 + g534(k - 1) } }
+const C534: U32 = g534(120)
+fn g535(k: U32) -> U32 { if k == 0 { C534 } else { 1 + g535(k - 1) } }
+const C535: U32 = g535(120)
+fn g536(k: U32) -> U32 { if k == 0 { C535 } else { 1 + g536(k - 1) } }
+const C536: U32 = g536(120)
+fn g537(k: U32) -> U32 { if k == 0 { C536 } else { 1 + g537(k - 1) } }
+const C537: U32 = g537(120)
+fn g538(k: U32) -> U32 { if k == 0 { C537 } else { 1 + g538(k - 1) } }
+const C538: U32 = g538(120)
+fn g539(k: U32) -> U32 { if k == 0 { C538 } else { 1 + g539(k - 1) } }
+const C539: U32 = g539(120)
+fn g540(k: U32) -> U32 { if k == 0 { C539 } else { 1 + g540(k - 1) } }
+const C540: U32 = g540(120)
+fn g541(k: U32) -> U32 { if k == 0 { C540 } else { 1 + g541(k - 1) } }
+const C541: U32 = g541(120)
+fn g542(k: U32) -> U32 { if k == 0 { C541 } else { 1 + g542(k - 1) } }
+const C542: U32 = g542(120)
+fn g543(k: U32) -> U32 { if k == 0 { C542 } else { 1 + g543(k - 1) } }
+const C543: U32 = g543(120)
+fn g544(k: U32) -> U32 { if k == 0 { C543 } else { 1 + g544(k - 1) } }
+const C544: U32 = g544(120)
+fn g545(k: U32) -> U32 { if k == 0 { C544 } else { 1 + g545(k - 1) } }
+const C545: U32 = g545(120)
+fn g546(k: U32) -> U32 { if k == 0 { C545 } else { 1 + g546(k - 1) } }
+const C546: U32 = g546(120)
+fn g547(k: U32) -> U32 { if k == 0 { C546 } else { 1 + g547(k - 1) } }
+const C547: U32 = g547(120)
+fn g548(k: U32) -> U32 { if k == 0 { C547 } else { 1 + g548(k - 1) } }
+const C548: U32 = g548(120)
+fn g549(k: U32) -> U32 { if k == 0 { C548 } else { 1 + g549(k - 1) } }
+const C549: U32 = g549(120)
+fn g550(k: U32) -> U32 { if k == 0 { C549 } else { 1 + g550(k - 1) } }
+const C550: U32 = g550(120)
+fn g551(k: U32) -> U32 { if k == 0 { C550 } else { 1 + g551(k - 1) } }
+const C551: U32 = g551(120)
+fn g552(k: U32) -> U32 { if k == 0 { C551 } else { 1 + g552(k - 1) } }
+const C552: U32 = g552(120)
+fn g553(k: U32) -> U32 { if k == 0 { C552 } else { 1 + g553(k - 1) } }
+const C553: U32 = g553(120)
+fn g554(k: U32) -> U32 { if k == 0 { C553 } else { 1 + g554(k - 1) } }
+const C554: U32 = g554(120)
+fn g555(k: U32) -> U32 { if k == 0 { C554 } else { 1 + g555(k - 1) } }
+const C555: U32 = g555(120)
+fn g556(k: U32) -> U32 { if k == 0 { C555 } else { 1 + g556(k - 1) } }
+const C556: U32 = g556(120)
+fn g557(k: U32) -> U32 { if k == 0 { C556 } else { 1 + g557(k - 1) } }
+const C557: U32 = g557(120)
+fn g558(k: U32) -> U32 { if k == 0 { C557 } else { 1 + g558(k - 1) } }
+const C558: U32 = g558(120)
+fn g559(k: U32) -> U32 { if k == 0 { C558 } else { 1 + g559(k - 1) } }
+const C559: U32 = g559(120)
+fn g560(k: U32) -> U32 { if k == 0 { C559 } else { 1 + g560(k - 1) } }
+const C560: U32 = g560(120)
+fn g561(k: U32) -> U32 { if k == 0 { C560 } else { 1 + g561(k - 1) } }
+const C561: U32 = g561(120)
+fn g562(k: U32) -> U32 { if k == 0 { C561 } else { 1 + g562(k - 1) } }
+const C562: U32 = g562(120)
+fn g563(k: U32) -> U32 { if k == 0 { C562 } else { 1 + g563(k - 1) } }
+const C563: U32 = g563(120)
+fn g564(k: U32) -> U32 { if k == 0 { C563 } else { 1 + g564(k - 1) } }
+const C564: U32 = g564(120)
+fn g565(k: U32) -> U32 { if k == 0 { C564 } else { 1 + g565(k - 1) } }
+const C565: U32 = g565(120)
+fn g566(k: U32) -> U32 { if k == 0 { C565 } else { 1 + g566(k - 1) } }
+const C566: U32 = g566(120)
+fn g567(k: U32) -> U32 { if k == 0 { C566 } else { 1 + g567(k - 1) } }
+const C567: U32 = g567(120)
+fn g568(k: U32) -> U32 { if k == 0 { C567 } else { 1 + g568(k - 1) } }
+const C568: U32 = g568(120)
+fn g569(k: U32) -> U32 { if k == 0 { C568 } else { 1 + g569(k - 1) } }
+const C569: U32 = g569(120)
+fn g570(k: U32) -> U32 { if k == 0 { C569 } else { 1 + g570(k - 1) } }
+const C570: U32 = g570(120)
+fn g571(k: U32) -> U32 { if k == 0 { C570 } else { 1 + g571(k - 1) } }
+const C571: U32 = g571(120)
+fn g572(k: U32) -> U32 { if k == 0 { C571 } else { 1 + g572(k - 1) } }
+const C572: U32 = g572(120)
+fn g573(k: U32) -> U32 { if k == 0 { C572 } else { 1 + g573(k - 1) } }
+const C573: U32 = g573(120)
+fn g574(k: U32) -> U32 { if k == 0 { C573 } else { 1 + g574(k - 1) } }
+const C574: U32 = g574(120)
+fn g575(k: U32) -> U32 { if k == 0 { C574 } else { 1 + g575(k - 1) } }
+const C575: U32 = g575(120)
+fn g576(k: U32) -> U32 { if k == 0 { C575 } else { 1 + g576(k - 1) } }
+const C576: U32 = g576(120)
+fn g577(k: U32) -> U32 { if k == 0 { C576 } else { 1 + g577(k - 1) } }
+const C577: U32 = g577(120)
+fn g578(k: U32) -> U32 { if k == 0 { C577 } else { 1 + g578(k - 1) } }
+const C578: U32 = g578(120)
+fn g579(k: U32) -> U32 { if k == 0 { C578 } else { 1 + g579(k - 1) } }
+const C579: U32 = g579(120)
+fn g580(k: U32) -> U32 { if k == 0 { C579 } else { 1 + g580(k - 1) } }
+const C580: U32 = g580(120)
+fn g581(k: U32) -> U32 { if k == 0 { C580 } else { 1 + g581(k - 1) } }
+const C581: U32 = g581(120)
+fn g582(k: U32) -> U32 { if k == 0 { C581 } else { 1 + g582(k - 1) } }
+const C582: U32 = g582(120)
+fn g583(k: U32) -> U32 { if k == 0 { C582 } else { 1 + g583(k - 1) } }
+const C583: U32 = g583(120)
+fn g584(k: U32) -> U32 { if k == 0 { C583 } else { 1 + g584(k - 1) } }
+const C584: U32 = g584(120)
+fn g585(k: U32) -> U32 { if k == 0 { C584 } else { 1 + g585(k - 1) } }
+const C585: U32 = g585(120)
+fn g586(k: U32) -> U32 { if k == 0 { C585 } else { 1 + g586(k - 1) } }
+const C586: U32 = g586(120)
+fn g587(k: U32) -> U32 { if k == 0 { C586 } else { 1 + g587(k - 1) } }
+const C587: U32 = g587(120)
+fn g588(k: U32) -> U32 { if k == 0 { C587 } else { 1 + g588(k - 1) } }
+const C588: U32 = g588(120)
+fn g589(k: U32) -> U32 { if k == 0 { C588 } else { 1 + g589(k - 1) } }
+const C589: U32 = g589(120)
+fn g590(k: U32) -> U32 { if k == 0 { C589 } else { 1 + g590(k - 1) } }
+const C590: U32 = g590(120)
+fn g591(k: U32) -> U32 { if k == 0 { C590 } else { 1 + g591(k - 1) } }
+const C591: U32 = g591(120)
+fn g592(k: U32) -> U32 { if k == 0 { C591 } else { 1 + g592(k - 1) } }
+const C592: U32 = g592(120)
+fn g593(k: U32) -> U32 { if k == 0 { C592 } else { 1 + g593(k - 1) } }
+const C593: U32 = g593(120)
+fn g594(k: U32) -> U32 { if k == 0 { C593 } else { 1 + g594(k - 1) } }
+const C594: U32 = g594(120)
+fn g595(k: U32) -> U32 { if k == 0 { C594 } else { 1 + g595(k - 1) } }
+const C595: U32 = g595(120)
+fn g596(k: U32) -> U32 { if k == 0 { C595 } else { 1 + g596(k - 1) } }
+const C596: U32 = g596(120)
+fn g597(k: U32) -> U32 { if k == 0 { C596 } else { 1 + g597(k - 1) } }
+const C597: U32 = g597(120)
+fn g598(k: U32) -> U32 { if k == 0 { C597 } else { 1 + g598(k - 1) } }
+const C598: U32 = g598(120)
+fn g599(k: U32) -> U32 { if k == 0 { C598 } else { 1 + g599(k - 1) } }
+const C599: U32 = g599(120)
+fn g600(k: U32) -> U32 { if k == 0 { C599 } else { 1 + g600(k - 1) } }
+const C600: U32 = g600(120)
+test "last first" { assert C600 == 72001 }

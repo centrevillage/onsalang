@@ -5,7 +5,7 @@
 //! interpreter itself (an `unwrap`, an arithmetic overflow of the host in a
 //! debug build) is an internal error of the compiler (S-67), never the
 //! program's panic. The whole run is on its own thread with the stack of a
-//! command ([`onsa_driver::STACK_SIZE`]) and a time budget ([`BUDGET`]).
+//! command ([`onsa_diag::stack`]) and a time budget ([`BUDGET`]).
 
 use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -30,11 +30,9 @@ pub fn run(root: &Path, data: &Data, list: &Pending) -> VectorsRun {
     let (tx, rx) = mpsc::channel();
     let at = Arc::new(Mutex::new(String::from("(loading)")));
     let (root2, data2, list2, at2) = (root.to_path_buf(), data.clone(), list.clone(), at.clone());
-    let spawned = std::thread::Builder::new().name("vectors-interp".into()).stack_size(onsa_driver::STACK_SIZE).spawn(
-        move || {
-            let _ = tx.send(run_all(&root2, &data2, &list2, &at2));
-        },
-    );
+    let spawned = onsa_diag::stack::spawn("vectors-interp", move || {
+        let _ = tx.send(run_all(&root2, &data2, &list2, &at2));
+    });
     let error = |m: String| VectorsRun { run: ItemRun { errors: vec![m], ..Default::default() }, ..Default::default() };
     if let Err(e) = spawned {
         return error(format!("cannot start the interpreter's thread: {e}"));

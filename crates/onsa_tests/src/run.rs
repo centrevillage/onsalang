@@ -1145,23 +1145,21 @@ fn run_parallel(cases: &[Case], f: impl Fn(&Case) -> CaseRun + Sync) -> Vec<Case
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(cases.len().max(1));
     std::thread::scope(|s| {
         for _ in 0..workers {
-            std::thread::Builder::new()
-                // SPEC-GAP(S-183): the nesting depth is bounded only by this stack.
-                .stack_size(onsa_driver::STACK_SIZE)
-                .spawn_scoped(s, || {
-                    loop {
-                        let i = next.fetch_add(1, Ordering::SeqCst);
-                        let Some(c) = cases.get(i) else { break };
-                        // A panic outside the driver's stages: an internal error (S-67).
-                        let r = onsa_driver::guard(|| f(c)).unwrap_or_else(|e| CaseRun {
-                            path: c.path.clone(),
-                            problems: vec![internal_problem(&SourceMap::default(), &e, None)],
-                            ..Default::default()
-                        });
-                        results.lock().expect("results")[i] = Some(r);
-                    }
-                })
-                .expect("spawn a worker");
+            // The stack of a command (`onsa_diag::stack`), as in the CLI.
+            onsa_diag::stack::spawn_scoped(s, "onsa-case", || {
+                loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(c) = cases.get(i) else { break };
+                    // A panic outside the driver's stages: an internal error (S-67).
+                    let r = onsa_driver::guard(|| f(c)).unwrap_or_else(|e| CaseRun {
+                        path: c.path.clone(),
+                        problems: vec![internal_problem(&SourceMap::default(), &e, None)],
+                        ..Default::default()
+                    });
+                    results.lock().expect("results")[i] = Some(r);
+                }
+            })
+            .expect("spawn a worker");
         }
     });
     results.into_inner().expect("results").into_iter().map(|r| r.expect("every case ran")).collect()

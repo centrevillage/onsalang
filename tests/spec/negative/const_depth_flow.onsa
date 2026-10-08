@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§12.5", "§11.3", "§11.7", "§6.6"]
+
+// E0419 through the limit of the call depth, at the other two places that the
+// evaluator of `const` initializers evaluates (spec §12.5): an expression of the
+// constant clock in a flow body (§11.3: a call with constant arguments and an
+// empty effect row, `rt` or not) and a value of `@param` (§11.7). Each of them
+// is an entry of the evaluation, so its depth is counted from 0: 128 nested
+// calls are accepted and 129 are E0419 at the position of the expression (§6.6).
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+// ------------------------------------------------- the constant clock in a body
+
+pub flow clock_ok(x: F32 at sample) -> F32 at sample {
+  let k = dive(127).round_f32()
+  x * k
+}
+
+pub flow clock_over(x: F32 at sample) -> F32 at sample {
+  let k = dive(128).round_f32()   //~ E0419
+  x * k
+}
+
+pub flow clock_far_over(x: F32 at sample) -> F32 at sample {
+  let k = dive(300).round_f32()   //~ E0419
+  x * k
+}
+
+// The condition of an `if` is an expression of the constant clock too.
+pub flow clock_cond_over(x: F32 at sample) -> F32 at sample {
+  if dive(128) == 128 {   //~ E0419
+    x
+  } else {
+    -x
+  }
+}
+
+// ------------------------------------------------------------ `@param` values
+
+pub flow param_ok(
+  x: F32 at sample,
+  @param(min: 0.0, max: 200.0, default: dive(127).round_f32())
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow param_default_over(
+  x: F32 at sample,
+  @param(min: 0.0, max: 200.0, default: dive(128).round_f32())   //~ E0419
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow param_max_over(
+  x: F32 at sample,
+  @param(min: 0.0, max: dive(300).round_f32(), default: 1.0)   //~ E0419
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}

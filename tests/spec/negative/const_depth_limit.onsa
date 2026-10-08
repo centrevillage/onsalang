@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§12.5", "§6.6", "§11.3"]
+
+// E0419 through the limit of the call depth (spec §12.5, §6.6; decided as
+// S-222). The evaluation of a `const` initializer has the same fixed limit as
+// `onsa test`: 128 nested calls, counted from the entry of the initializer (the
+// initializer itself is depth 0), a call in a tail position included. More than
+// 128 is a panic of the compile time evaluation, and a panic of the compile time
+// evaluation is E0419 at the position of the initializer (§6.6). Reading a
+// `const` is not a call, and the `const` read is evaluated from its own entry.
+//
+// So `dive(127)` (128 nested calls) is accepted and `dive(128)` (129) is E0419.
+// The lines without a marker are accepted: they show where the boundary is.
+
+fn dive(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + dive(n - 1)
+  }
+}
+
+fn dive_tail(n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    dive_tail(n - 1)
+  }
+}
+
+fn is_even(n: U32) -> Bool {
+  if n == 0 {
+    true
+  } else {
+    is_odd(n - 1)
+  }
+}
+
+fn is_odd(n: U32) -> Bool {
+  if n == 0 {
+    false
+  } else {
+    is_even(n - 1)
+  }
+}
+
+fn hold[T: Copy](x: T, n: U32) -> T {
+  if n == 0 {
+    x
+  } else {
+    hold(x, n - 1)
+  }
+}
+
+pub struct Counter {
+  base: U32,
+}
+
+impl Counter {
+  pub fn make(base: U32) -> Counter {
+    Counter { base: base }
+  }
+
+  pub fn down(self, n: U32) -> U32 {
+    if n == 0 {
+      self.base
+    } else {
+      self.down(n - 1)
+    }
+  }
+
+  const ASSOC_OK: U32 = dive(127)
+  const ASSOC_DEEP: U32 = dive(128)   //~ E0419
+}
+
+// Reads `AT_LIMIT` at the bottom of a recursion.
+fn user(n: U32) -> U32 {
+  if n == 0 {
+    AT_LIMIT
+  } else {
+    user(n - 1)
+  }
+}
+
+// ------------------------------------------------------------ the boundary
+
+const AT_LIMIT: U32 = dive(127)
+const ONE_OVER: U32 = dive(128)   //~ E0419
+const FAR_OVER: U32 = dive(300)   //~ E0419
+
+// ---------------------------------------------- the shapes of the recursion
+
+const TAIL_OK: U32 = dive_tail(127)
+const TAIL_OVER: U32 = dive_tail(128)   //~ E0419
+
+// is_even(126) is 127 nested calls, is_even(127) 128, is_even(128) 129.
+const MUTUAL_OK: Bool = is_even(127)
+const MUTUAL_OVER: Bool = is_even(128)   //~ E0419
+
+const GENERIC_OK: F32 = hold(2.5, 127)
+const GENERIC_OVER: F32 = hold(2.5, 200)   //~ E0419
+
+const METHOD_OK: U32 = Counter.make(3).down(127)
+const METHOD_OVER: U32 = Counter.make(3).down(128)   //~ E0419
+
+// ------------------------------------- calls side by side, and nested in a sum
+
+// Calls one after the other are not nested in each other.
+const SIDE_BY_SIDE: U32 = dive(127) + dive(127)
+
+// One of the operands is too deep, and the sum is E0419 at this initializer.
+const ONE_SIDE_OVER: U32 = dive(60) + dive(129)   //~ E0419
+
+// ------------------------------------------------ a const that reads a const
+
+// `AT_LIMIT` is evaluated from its own entry, so reading it at the bottom of a
+// recursion (a read is not a call) is accepted while the recursion itself is
+// within the limit, and E0419 when the recursion is beyond it.
+const READ_OK: U32 = user(127)
+const READ_OVER: U32 = user(128)   //~ E0419
+
+// A `const` that reads a `const` adds nothing to the depth of either of them.
+const SUM_OF_CONSTS: U32 = AT_LIMIT + dive(127)

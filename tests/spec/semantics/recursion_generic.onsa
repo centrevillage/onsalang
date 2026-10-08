@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.1", "§12.5"]
+
+// A generic function that calls itself (spec §4.5, §10 rule 5). The depth is at
+// most 50: the limit of the call depth is 128 (§12.5), and the cases at and
+// beyond the limit are in recursion_limit.onsa and recursion_deep.onsa. Numeric bounds are
+// in recursion_generic_num.onsa, a const parameter in recursion_generic_const.onsa.
+
+// An unbounded type parameter is `Dup` (§4.5).
+fn depth_of[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    1 + depth_of(x, n - 1)
+  }
+}
+
+fn hold[T: Copy](x: T, n: U32) -> T {
+  if n == 0 {
+    x
+  } else {
+    hold(x, n - 1)
+  }
+}
+
+fn pair_up[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    pair_up(a, b, n - 1)
+  }
+}
+
+// Mutual recursion between two generic functions, each level with the type
+// parameters swapped.
+fn swap_down[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    let r = swap_back(b, a, n - 1)
+    (r.1, r.0)
+  }
+}
+
+fn swap_back[A: Copy, B: Copy](a: A, b: B, n: U32) -> (A, B) {
+  if n == 0 {
+    (a, b)
+  } else {
+    let r = swap_down(b, a, n - 1)
+    (r.1, r.0)
+  }
+}
+
+test "an unbounded generic function that calls itself" {
+  assert depth_of(true, 30) == 30
+  let f: F32 = 1.5
+  assert depth_of(f, 50) == 50
+  assert depth_of(f, 0) == 0
+}
+
+test "a Copy bounded generic function that calls itself, at three types" {
+  let a: I32 = 7
+  let b: F32 = 2.5
+  let c: Bool = true
+  assert hold(a, 40) == 7
+  assert hold(b, 40) == 2.5
+  assert hold(c, 40)
+}
+
+test "a generic function with two type parameters that calls itself" {
+  let one: U8 = 1
+  let two: F64 = 2.0
+  let p = pair_up(one, two, 25)
+  assert p.0 == 1
+  assert p.1 == 2.0
+}
+
+test "mutual recursion of generic functions that swap their parameters" {
+  let one: U8 = 1
+  let two: F64 = 2.0
+  // Each level swaps the parameters and swaps the result back, so the result
+  // is (a, b) whatever the depth.
+  let p = swap_down(one, two, 21)
+  assert p.0 == 1
+  assert p.1 == 2.0
+  let q = swap_down(one, two, 20)
+  assert q.0 == 1
+  assert q.1 == 2.0
+}
