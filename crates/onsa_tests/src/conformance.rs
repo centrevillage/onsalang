@@ -767,7 +767,7 @@ mod tests {
             ("division by zero", "division by zero"),
             ("index 4 out of range for a sequence of length 4", "index out of range"),
             ("conversion of NaN to an integer", "conversion of NaN to an integer"),
-            ("3e10 is out of range for I32", "float out of range for the integer type"),
+            ("30000000000.0 is out of range for I32", "float out of range for the integer type"),
             ("shift amount 9 is not below the bit width 8", "shift amount exceeds the bit width"),
             ("span lengths differ: 3 and 4", "span lengths differ"),
         ];

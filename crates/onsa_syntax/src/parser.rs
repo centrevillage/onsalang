@@ -193,12 +193,19 @@ pub(crate) struct Parser<'a> {
     diagnostics: Vec<Diagnostic>,
     /// How many of `diagnostics` are the lexer's (the parser's follow).
     lexed: usize,
+    /// The holes of the string literals ([`crate::Lexed::holes`]), in the
+    /// order of the file.
+    holes: Vec<Span>,
+    /// The spans of the lexer's diagnostics, ordered by their start: the
+    /// check of a `test` name finds those in its literal by a binary search.
+    lexed_spans: Vec<Span>,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(file: FileId, text: &'a str, all: Vec<Token>, diagnostics: Vec<Diagnostic>) -> Parser<'a> {
+    pub(crate) fn new(file: FileId, text: &'a str, lexed: crate::Lexed) -> Parser<'a> {
+        let crate::Lexed { tokens: all, diagnostics, holes } = lexed;
         let full: Vec<u32> = (0..all.len() as u32).filter(|&i| all[i as usize].kind != TokenKind::Whitespace).collect();
         let tokens: Vec<Token> = full.iter().map(|&i| all[i as usize]).collect();
         let mut brace_closed = vec![false; tokens.len()];
@@ -231,7 +238,13 @@ impl<'a> Parser<'a> {
             open: Vec::new(),
             height: 0,
             lexed: diagnostics.len(),
+            lexed_spans: {
+                let mut v: Vec<Span> = diagnostics.iter().map(|d| d.span).collect();
+                v.sort_by_key(|s| s.start);
+                v
+            },
             diagnostics,
+            holes,
             levels: Vec::new(),
         }
     }
@@ -1354,10 +1367,62 @@ impl<'a> Parser<'a> {
     fn parse_test(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Test)?;
         self.expect(TokenKind::KwTest)?;
-        self.expect(TokenKind::Str)?;
+        let name = self.expect(TokenKind::Str)?;
+        self.check_test_name(name);
         self.parse_block_expr()?;
         self.complete(m, NodeKind::Test);
         Ok(())
+    }
+
+    /// The name of a `test` (spec §11.8, S-244): a string literal with no
+    /// interpolation, not empty, and with no control character, line
+    /// separator or bidirectional control in its value
+    /// ([`crate::test_name::problem`]). A name that breaks the rule is E0002
+    /// of the syntax stage at the literal, with the rule as a note and no fix.
+    /// The error does not stop the unit: the body is read, and the item is a
+    /// failed one whose body is not checked (S-59).
+    ///
+    /// A hole is an interpolation whatever its form: the lexer's E0001 on the
+    /// form of a hole (`{X}`, which is about the interpolation of an
+    /// expression) gives way to the name's E0002. Any other error of the
+    /// lexer in the literal (an escape, a hole without its `}`) makes the
+    /// literal itself wrong, and the name is not checked further.
+    fn check_test_name(&mut self, t: Token) {
+        let inside = |s: Span| t.span.start <= s.start && s.end <= t.span.end;
+        // The holes are in the order of the file: those of this literal are
+        // found by a binary search, not by a walk over all of them.
+        let first = self.holes.partition_point(|h| h.start < t.span.start);
+        let holes: Vec<Span> = self.holes[first..].iter().copied().take_while(|&h| inside(h)).collect();
+        let problem = if holes.is_empty() {
+            let from = self.lexed_spans.partition_point(|s| s.start < t.span.start);
+            if self.lexed_spans[from..].iter().take_while(|s| s.start < t.span.end).any(|&s| inside(s)) {
+                return;
+            }
+            let lit = crate::lower::str_lit(self.token_text(t), t.span);
+            let Some(value) = crate::test_name::value(&lit) else {
+                onsa_diag::internal::bug(Some(t.span), "a literal without holes read as one with an interpolation")
+            };
+            match crate::test_name::problem(&value) {
+                Some(p) => p,
+                None => return,
+            }
+        } else {
+            let before = self.diagnostics.len();
+            let mut i = 0;
+            self.diagnostics.retain(|d| {
+                let lexer = i < self.lexed;
+                i += 1;
+                !(lexer && d.code == Code::E0001 && holes.contains(&d.span))
+            });
+            self.lexed -= before - self.diagnostics.len();
+            // `lexed_spans` keeps their spans: they lie in this literal, which
+            // no other name shares.
+            "the name of a test cannot hold an interpolation".to_string()
+        };
+        let d = Diagnostic::new(Stage::Syntax, Code::E0002, t.span, problem)
+            .with_found(self.src(t.span).to_string())
+            .with_rule(crate::test_name::RULE);
+        self.report(d);
     }
 
     /// `{ item NL item NL ... }` for trait / impl / effect / handler / extern bodies.

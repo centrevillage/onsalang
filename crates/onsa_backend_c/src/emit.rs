@@ -853,7 +853,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let bt = self.place_ty(b)?;
                 field_ty(self.cx, &bt, *i)?
             }
-            Place::Index(b, _) => match self.place_ty(b)? {
+            Place::Index(b, _, _) => match self.place_ty(b)? {
                 Ty::Array(e, _) | Ty::Span(e) | Ty::Buf(e) => *e,
                 _ => return Err(internal("index of a non-sequence place")),
             },
@@ -886,7 +886,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let bs = self.place(b)?;
                 self.field_access(&bs, &bt, *i)
             }
-            Place::Index(b, i) => {
+            Place::Index(b, i, _) => {
                 let bt = self.place_ty(b)?;
                 let bs = self.place(b)?;
                 let idx = self.expr(i)?;

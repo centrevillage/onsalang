@@ -391,20 +391,26 @@ impl<'p> Sema<'p> {
                 });
             }
             ItemKind::Test { name, body } => {
-                let text: String = name
-                    .segments
-                    .iter()
-                    .map(|s| match s {
-                        onsa_syntax::ast::StrSeg::Text(t) => t.clone(),
-                        onsa_syntax::ast::StrSeg::Interp(_) => String::new(),
-                    })
-                    .collect();
+                // A name with an interpolation is the syntax stage's E0002, and
+                // its item a failed one (S-244): it has no value, so it is no
+                // test and takes no part in E0306. Anywhere else it is a bug.
+                let Some(text) = onsa_syntax::test_name::value(name) else {
+                    if item.failed.is_none() {
+                        onsa_diag::internal::bug(
+                            Some(name.span),
+                            "a test name with an interpolation and no syntax error",
+                        );
+                    }
+                    return;
+                };
                 let dup = self
                     .a
                     .defs_of_module(m)
                     .find(|(_, d)| matches!(&d.kind, DefKind::Test { name: n, .. } if *n == text))
                     .map(|(_, d)| d.span);
-                let ident = Ident { name: format!("test \"{text}\""), span: name.span };
+                // The name as the full name text writes it (§11.8, S-244).
+                let quoted = onsa_syntax::test_name::quote(&text);
+                let ident = Ident { name: format!("test {quoted}"), span: name.span };
                 let id = self.add_def(mk(&ident, DefKind::Test { name: text.clone(), body: *body }));
                 if let Some(prev) = dup {
                     self.report(
@@ -413,9 +419,8 @@ impl<'p> Sema<'p> {
                             Stage::Names,
                             Code::E0306,
                             name.span,
-                            format!("test \"{text}\" is defined twice in this module"),
+                            format!("test {quoted} is defined twice in this module"),
                         )
-                        .with_found(format!("\"{text}\""))
                         .with_note(prev, "first defined here"),
                     );
                 }

@@ -81,9 +81,11 @@ pub struct CheckedMarker {
     pub matched: bool,
 }
 
-/// One `test` block of a `mode = "test"` case.
+/// One `test` block of a `mode = "test"` case, identified as `onsa test`
+/// identifies it: its module path and its name (§11.8, R-184).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestResult {
+    pub module: String,
     pub name: String,
     pub failed: bool,
     pub message: Option<String>,
@@ -93,8 +95,9 @@ pub struct TestResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Problem {
-    /// A `test` block failed without `TESTFAIL` (`<path>::<name>` may list it).
-    TestFailed { name: String, message: String },
+    /// A `test` block failed without `TESTFAIL` (`<path>::<name>` may list
+    /// it). `full` is its full name text (`dsp.voice "decays"`, §11.8).
+    TestFailed { full: String, message: String },
     /// The case does not give what it expects (the list may hold it as pending).
     Failed(String),
     /// The case itself is wrong (its fragment, markers or settings): never pending.
@@ -135,7 +138,7 @@ impl Problem {
 
     pub fn text(&self) -> String {
         match self {
-            Problem::TestFailed { name, message } => format!("test \"{name}\" failed: {message}"),
+            Problem::TestFailed { full, message } => format!("test {full} failed: {message}"),
             Problem::Failed(m) => m.clone(),
             Problem::Case(m) => format!("error in the case: {m}"),
             Problem::Internal(m) => m.clone(),
@@ -305,13 +308,14 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     // Markers of every file of the case (line numbers are per file); read in
     // every mode, so a case that does not run cannot hold a broken marker.
     let mut markers: Vec<(FileId, Expected)> = Vec::new();
-    let mut testfails: Vec<String> = Vec::new();
-    for (file, _) in loaded.modules.clone() {
+    // `//~ TESTFAIL "name"` names a test of the module of its file (R-184).
+    let mut testfails: Vec<(String, String)> = Vec::new();
+    for (file, module) in loaded.modules.clone() {
         let f = loaded.sources.file(file);
         match parse_markers(f.text()) {
             Ok(m) => {
                 markers.extend(m.expected.into_iter().map(|e| (file, e)));
-                testfails.extend(m.testfails);
+                testfails.extend(m.testfails.into_iter().map(|name| (module.clone(), name)));
             }
             Err(e) => run.problems.push(Problem::Case(format!("{}: bad markers: {e}", f.name()))),
         }
@@ -830,10 +834,15 @@ fn run_tests(
     sources: &SourceMap,
     module: &onsa_core::Module,
     markers: &[(FileId, Expected)],
-    testfails: &[String],
+    testfails: &[(String, String)],
 ) {
     let report = match onsa_driver::run_tests(sources, module, &onsa_driver::TestOptions::default()) {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
+        // Without `--filter` every test is selected.
+        Ok(onsa_driver::TestRun::NoMatch) => {
+            run.problems.push(Problem::Failed("`onsa test` without `--filter` selected no test".into()));
+            return;
+        }
         Ok(onsa_driver::TestRun::Unsupported(diagnostics)) => {
             if compare(run, sources, markers, &diagnostics, Stage::Test, None) {
                 negative_rules(run, path, &diagnostics);
@@ -848,30 +857,61 @@ fn run_tests(
     };
     compare(run, sources, markers, &[], Stage::Test, None);
     for t in &report.tests {
-        let failed = t.status == onsa_driver::TestStatus::Failed;
-        let testfail = testfails.contains(&t.name);
+        let failed = t.status() == onsa_driver::TestStatus::Failed;
+        let testfail = testfails.iter().any(|(m, n)| *m == t.module && *n == t.name);
         match (failed, testfail) {
-            (true, false) => run
-                .problems
-                .push(Problem::TestFailed { name: t.name.clone(), message: t.message.clone().unwrap_or_default() }),
+            (true, false) => run.problems.push(Problem::TestFailed {
+                full: t.full_name(),
+                message: t.message().unwrap_or_default().to_string(),
+            }),
             (false, true) => {
-                run.problems.push(Problem::Failed(format!("test \"{}\" passed but is marked TESTFAIL", t.name)))
+                run.problems.push(Problem::Failed(format!("test {} passed but is marked TESTFAIL", t.full_name())))
             }
             _ => {}
         }
-        run.tests.push(TestResult { name: t.name.clone(), failed, message: t.message.clone(), testfail });
+        run.tests.push(TestResult {
+            module: t.module.clone(),
+            name: t.name.clone(),
+            failed,
+            message: t.message().map(str::to_string),
+            testfail,
+        });
     }
     if report.tests.is_empty() {
         run.problems.push(Problem::Case("`mode = \"test\"` but the case has no `test` block".into()));
     }
-    for name in testfails {
-        if !report.tests.iter().any(|t| &t.name == name) {
-            run.problems.push(Problem::Case(format!("TESTFAIL names an unknown test \"{name}\"")));
+    for (module, name) in testfails {
+        if !report.tests.iter().any(|t| t.module == *module && t.name == *name) {
+            run.problems.push(Problem::Case(format!("TESTFAIL names an unknown test \"{name}\" of module `{module}`")));
         }
     }
 }
 
 // ------------------------------------------------------------ the pending list
+
+/// The full name text of a test (§11.8): what `onsa test` shows and matches.
+fn full_name(t: &TestResult) -> String {
+    onsa_core::TestMark { module: t.module.clone(), name: t.name.clone() }.full_name()
+}
+
+/// The test an entry `<path>::<name>` names (R-184): the test whose full name
+/// text is `name` (`dsp.voice "decays"`), else the one test whose name is
+/// `name`. A name of tests of several modules names none of them.
+fn pending_test<'t>(tests: &'t [TestResult], name: &str) -> Result<&'t TestResult, String> {
+    if let Some(t) = tests.iter().find(|t| full_name(t) == name) {
+        return Ok(t);
+    }
+    let by_name: Vec<&TestResult> = tests.iter().filter(|t| t.name == name).collect();
+    match by_name[..] {
+        [t] => Ok(t),
+        [] => Err(format!("tests/pending.toml lists the test \"{name}\", which the case does not have")),
+        _ => Err(format!(
+            "tests/pending.toml lists the test \"{name}\", a name of tests of several modules; write the full name \
+             (`{}`)",
+            by_name.iter().map(|t| full_name(t)).collect::<Vec<_>>().join("`, `")
+        )),
+    }
+}
 
 /// A case after the list of pending tests is applied.
 #[derive(Debug, Clone)]
@@ -1092,11 +1132,14 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
                     ));
                     continue;
                 }
-                let Some(t) = run.tests.iter().find(|t| t.name == *name) else {
-                    failures
-                        .push(format!("tests/pending.toml lists the test \"{name}\", which the case does not have"));
-                    continue;
+                let t = match pending_test(&run.tests, name) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        failures.push(e);
+                        continue;
+                    }
                 };
+                let full = full_name(t);
                 if t.testfail {
                     failures.push(format!(
                         "the test \"{name}\" is both marked TESTFAIL and listed in tests/pending.toml; keep one"
@@ -1104,7 +1147,7 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
                     continue;
                 }
                 let before = run.problems.len();
-                run.problems.retain(|p| !matches!(p, Problem::TestFailed { name: n, .. } if n == name));
+                run.problems.retain(|p| !matches!(p, Problem::TestFailed { full: f, .. } if *f == full));
                 if run.problems.len() < before {
                     pending_tests.push(name.to_string());
                 } else {
@@ -1684,6 +1727,33 @@ mod tests {
         assert_eq!(c.failures.len(), 2, "{:?}", c.failures);
         assert!(c.failures[0].contains("\"good\" passes but is listed"), "{:?}", c.failures);
         assert!(c.failures[1].contains("does not have"), "{:?}", c.failures);
+    }
+
+    /// R-184: a test is identified by its module path and name (§11.8):
+    /// `TESTFAIL` names the test of the module of its file, an entry names a
+    /// test by its full name text, and a bare name of tests of several
+    /// modules names none of them.
+    #[test]
+    fn tests_are_identified_by_module_and_name() {
+        let manifest = "[package]\nname = \"p\"\nedition = \"2026\"\n";
+        let a = "// onsa.toml\n// [test]\n// mode = \"test\"\n\ntest \"same\" { //~ TESTFAIL \"same\"\n  assert 1 == 2\n}\n";
+        let b = "test \"same\" {\n  assert 1 == 2\n}\n";
+        let run = |tag: &str, target: &str| {
+            let list = entry(target);
+            let files =
+                [("tests/p/onsa.toml", manifest), ("tests/p/a.onsa", a), ("tests/p/b.onsa", b), (pending::PATH, &list)];
+            Repo::new(tag, &files).run()
+        };
+        // The entry is TOML: the quotes of the full name text are escaped.
+        let r = run("by_module", r#"tests/p::b \"same\""#);
+        let c = case(&r, "tests/p");
+        assert!(c.failures.is_empty(), "{:?}", c.failures);
+        assert_eq!(c.pending_tests, [r#"b "same""#]);
+
+        let r = run("by_module_bare", "tests/p::same");
+        let c = case(&r, "tests/p");
+        assert!(c.failures.iter().any(|f| f.contains("several modules")), "{:?}", c.failures);
+        assert!(c.failures.iter().any(|f| f.contains(r#"test b "same" failed"#)), "{:?}", c.failures);
     }
 
     /// W1-04: an internal error is not silenced by the list, unless the entry

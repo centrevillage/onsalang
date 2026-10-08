@@ -410,9 +410,10 @@ pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId
     out
 }
 
-/// JSON shape of a span (spec §18.1): `end_line` is always there.
+/// JSON shape of a span (spec §18.1): `end_line` is always there. The one
+/// shape of a position in every `--json` document ([`json_span`]).
 #[derive(Debug, Serialize)]
-struct JsonSpan<'a> {
+pub struct JsonSpan<'a> {
     file: &'a str,
     line: u32,
     col: u32,
@@ -463,7 +464,9 @@ struct JsonNote<'a> {
     span: Option<JsonSpan<'a>>,
 }
 
-fn json_span(sources: &SourceMap, span: Span) -> JsonSpan<'_> {
+/// The JSON of `span` (spec §18.1): the file's name as the source map has
+/// it, lines and columns from 1, the end column not included.
+pub fn json_span(sources: &SourceMap, span: Span) -> JsonSpan<'_> {
     let file = sources.file(span.file);
     let start = file.line_col(span.start);
     let end = file.line_col(span.end);
@@ -503,13 +506,6 @@ pub fn to_json(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
 pub fn to_json_document<T: Serialize>(sources: &SourceMap, diagnostics: &[Diagnostic], rest: &T) -> String {
     let document = JsonDocument { diagnostics: json_diagnostics(sources, diagnostics), rest };
     serde_json::to_string_pretty(&document).expect("diagnostics serialize")
-}
-
-/// The diagnostics as a bare JSON array, in the order of [`sorted`]: the form
-/// `onsa test --json` still prints until it takes the document of [`to_json`]
-/// with its test results (W2-10, S-233). No other command prints it.
-pub fn to_json_array(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
-    serde_json::to_string_pretty(&json_diagnostics(sources, diagnostics)).expect("diagnostics serialize")
 }
 
 fn json_diagnostics<'a>(sources: &'a SourceMap, diagnostics: &'a [Diagnostic]) -> Vec<JsonDiagnostic<'a>> {
@@ -645,7 +641,6 @@ mod tests {
         let sources = SourceMap::default();
         let doc: serde_json::Value = serde_json::from_str(&to_json(&sources, &[])).unwrap();
         assert_eq!(doc, serde_json::json!({"diagnostics": []}));
-        assert_eq!(to_json_array(&sources, &[]), "[]");
     }
 
     #[test]

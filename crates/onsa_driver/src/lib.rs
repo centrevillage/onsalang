@@ -11,9 +11,11 @@ pub mod graph;
 pub mod interface;
 pub mod internal;
 pub mod reduce;
+mod testing;
 pub mod verify;
 
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
+pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -526,7 +528,7 @@ pub(crate) fn debug_contract(sources: &SourceMap, diagnostics: &[Diagnostic]) {
 
 /// Every diagnostic names the offending source (`found`, §18.1): when the
 /// emitter left it out, take the text of the span.
-fn fill_found(sources: &SourceMap, diagnostics: &mut [Diagnostic]) {
+pub(crate) fn fill_found(sources: &SourceMap, diagnostics: &mut [Diagnostic]) {
     fill_found_with(diagnostics, |file| Some(sources.file(file).text()));
 }
 
@@ -615,161 +617,4 @@ mod tests {
         assert_eq!(module_path(Path::new("dsp/voice.onsa")), "dsp.voice");
         assert_eq!(module_path(Path::new("util.onsa")), "util");
     }
-}
-
-// ---------------------------------------------------------------- tests (T3-8)
-
-/// Options of `onsa test`.
-#[derive(Debug, Default, Clone)]
-pub struct TestOptions {
-    /// Run only tests whose name contains this substring.
-    pub filter: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TestStatus {
-    Ok,
-    Failed,
-}
-
-/// Outcome of one `test` block.
-#[derive(Debug, Clone)]
-pub struct TestOutcome {
-    pub name: String,
-    pub status: TestStatus,
-    /// For failures: the message in the S-16 form (`assert <src>` or the panic text).
-    pub message: Option<String>,
-    pub span: Option<Span>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct TestReport {
-    pub tests: Vec<TestOutcome>,
-}
-
-impl TestReport {
-    pub fn failed(&self) -> usize {
-        self.tests.iter().filter(|t| t.status == TestStatus::Failed).count()
-    }
-
-    pub fn passed(&self) -> usize {
-        self.tests.len() - self.failed()
-    }
-
-    /// Text report: one line per test and a summary (spec §11.8, S-16).
-    pub fn render_text(&self, sources: &SourceMap) -> String {
-        let mut out = String::new();
-        for t in &self.tests {
-            match t.status {
-                TestStatus::Ok => out.push_str(&format!("test \"{}\" ok\n", t.name)),
-                TestStatus::Failed => {
-                    let at = t.span.map(|s| {
-                        format!("{}:{}", sources.file(s.file).name(), sources.file(s.file).line_col(s.start).line)
-                    });
-                    out.push_str(&format!(
-                        "test \"{}\" failed at {}: {}\n",
-                        t.name,
-                        at.unwrap_or_else(|| "?".into()),
-                        t.message.as_deref().unwrap_or("")
-                    ));
-                }
-            }
-        }
-        out.push_str(&format!("{} passed, {} failed\n", self.passed(), self.failed()));
-        out
-    }
-
-    /// `[{ "name", "status": "ok" | "failed", "message"?, "span"? }]`.
-    pub fn render_json(&self, sources: &SourceMap) -> String {
-        let items: Vec<serde_json::Value> = self
-            .tests
-            .iter()
-            .map(|t| {
-                let mut o = serde_json::Map::new();
-                o.insert("name".into(), t.name.clone().into());
-                o.insert("status".into(), (if t.status == TestStatus::Ok { "ok" } else { "failed" }).into());
-                if let Some(m) = &t.message {
-                    o.insert("message".into(), m.clone().into());
-                }
-                if let Some(s) = t.span {
-                    let file = sources.file(s.file);
-                    let lc = file.line_col(s.start);
-                    o.insert("span".into(), serde_json::json!({ "file": file.name(), "line": lc.line, "col": lc.col }));
-                }
-                o.insert("kind".into(), "test".into());
-                serde_json::Value::Object(o)
-            })
-            .collect();
-        serde_json::to_string_pretty(&items).expect("report serializes")
-    }
-}
-
-/// What `onsa test` did with a lowered module.
-#[derive(Debug, Clone)]
-pub enum TestRun {
-    /// Every `test` block ran.
-    Ran(TestReport),
-    /// The module holds forms the interpreter of this version cannot run:
-    /// E0200 for each (spec §18.1, S-224), and no test ran.
-    Unsupported(Vec<Diagnostic>),
-}
-
-/// Run every `test` block of the lowered module (T3-8). `assert` failures
-/// and panics (spec §9.2) fail the test and name the position; a failure of
-/// the interpreter itself is an internal error (S-67, R-137). Before any test
-/// runs, the forms the interpreter cannot run are E0200, all at once
-/// ([`onsa_interp::unsupported`]), so what is reported does not depend on
-/// the code the tests reach. The interpreter runs on the stack of a command
-/// (R-05).
-pub fn run_tests(
-    sources: &SourceMap,
-    module: &onsa_core::Module,
-    opts: &TestOptions,
-) -> Result<TestRun, InternalError> {
-    guard_on_stack(|| {
-        let unsupported = onsa_interp::unsupported(module);
-        if unsupported.is_empty() {
-            return TestRun::Ran(run_tests_unguarded(module, opts));
-        }
-        let mut diagnostics = reduce::exact(unsupported.iter().map(onsa_interp::Unsupported::diagnostic).collect());
-        fill_found(sources, &mut diagnostics);
-        debug_contract(sources, &diagnostics);
-        TestRun::Unsupported(diagnostics)
-    })
-}
-
-fn run_tests_unguarded(module: &onsa_core::Module, opts: &TestOptions) -> TestReport {
-    let interp = onsa_interp::Interp::new(module);
-    let mut report = TestReport::default();
-    for (i, f) in module.fns.iter().enumerate() {
-        let Some(name) = f.name.strip_prefix("test.") else { continue };
-        if f.body.is_none() {
-            continue;
-        }
-        if opts.filter.as_deref().is_some_and(|needle| !name.contains(needle)) {
-            continue;
-        }
-        let outcome = match interp.call(onsa_core::FnId(i as u32), Vec::new()) {
-            Ok(_) => TestOutcome { name: name.to_string(), status: TestStatus::Ok, message: None, span: None },
-            Err(onsa_interp::Failure::Panic(p)) => {
-                let message = match p.message.strip_prefix("assertion failed: ") {
-                    Some(src) => format!("assert {src}"),
-                    None => p.message.clone(),
-                };
-                TestOutcome {
-                    name: name.to_string(),
-                    status: TestStatus::Failed,
-                    message: Some(message),
-                    span: Some(p.span),
-                }
-            }
-            // `run_tests` found every one before the tests ran.
-            Err(onsa_interp::Failure::Unsupported(u)) => onsa_diag::internal::bug(
-                Some(u.span),
-                format!("the interpreter reached `{}`, which the check before the tests did not find", u.std_fn),
-            ),
-        };
-        report.tests.push(outcome);
-    }
-    report
 }

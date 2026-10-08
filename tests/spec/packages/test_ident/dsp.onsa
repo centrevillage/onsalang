@@ -1,0 +1,7 @@
+pub fn gain() -> I32 {
+  2
+}
+
+test "decays" {
+  assert gain() == 2
+}

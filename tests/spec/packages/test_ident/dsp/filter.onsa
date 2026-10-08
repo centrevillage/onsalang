@@ -1,0 +1,5 @@
+use dsp.{gain}
+
+test "decays" {
+  assert (gain() - 1) == 1
+}

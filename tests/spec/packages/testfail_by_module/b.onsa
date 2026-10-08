@@ -1,0 +1,3 @@
+test "same" {
+  assert 1 == 1
+}

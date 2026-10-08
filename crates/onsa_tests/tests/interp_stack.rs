@@ -240,8 +240,8 @@ fn the_panic_is_at_the_call() {
     let module = lower(src);
     let report = tests_of(&module);
     let t = &report.tests[0];
-    assert_eq!(t.message.as_deref(), Some(format!("the call depth reached its limit of {MAX_CALL_DEPTH}").as_str()));
-    let span = t.span.expect("a position");
+    assert_eq!(t.message(), Some(format!("the call depth reached its limit of {MAX_CALL_DEPTH}").as_str()));
+    let span = t.failure.as_ref().expect("a failure").span;
     assert_eq!(&src[span.start as usize..span.end as usize], "dive(n - 1)");
 }
 
@@ -254,7 +254,7 @@ fn a_const_beyond_the_limit_is_a_panic_of_the_evaluation() {
     let module = lower(src);
     let report = tests_of(&module);
     let message = format!("the call depth reached its limit of {MAX_CALL_DEPTH}");
-    assert_eq!(report.tests[0].message.as_deref(), Some(message.as_str()));
+    assert_eq!(report.tests[0].message(), Some(message.as_str()));
     let r = onsa_driver::guard_on_stack(|| {
         let interp = Interp::new(&module);
         interp.const_value(onsa_core::ConstId(0)).map(|_| ())
@@ -280,7 +280,10 @@ fn r05_recursion_below_the_limit_passes_in_onsa_test() {
     let module = lower(&src);
     let report = tests_of(&module);
     assert_eq!(report.tests.len(), below.len() + beyond.len());
-    for (t, n) in report.tests.iter().zip(below.iter().chain(&beyond)) {
-        assert_eq!(t.message.is_none(), below.contains(n), "{}: {:?}", t.name, t.message);
+    // The report is ordered by name (§18.1), so each test is found by its name.
+    for n in below.iter().chain(&beyond) {
+        let name = format!("recursion {n} deep");
+        let t = report.tests.iter().find(|t| t.name == name).unwrap_or_else(|| panic!("no test {name:?}"));
+        assert_eq!(t.message().is_none(), below.contains(n), "{}: {:?}", t.name, t.message());
     }
 }

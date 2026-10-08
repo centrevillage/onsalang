@@ -137,6 +137,29 @@ pub struct FnDef {
     /// `None`: declared only (`target` functions the backend provides).
     pub body: Option<Block>,
     pub span: Span,
+    /// The function of a `test` block: what identifies the test (spec
+    /// §11.8, S-55, R-68). `onsa test` runs the functions with this mark;
+    /// the name of the function decides nothing.
+    pub test: Option<TestMark>,
+}
+
+/// The mark of the function of a `test` block (spec §11.8, S-55): a test is
+/// identified by the path of its module and its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestMark {
+    /// The module path (`dsp.voice`; the file name for a single file).
+    pub module: String,
+    /// The value of the name (the literal with its escapes read, S-244).
+    pub name: String,
+}
+
+impl TestMark {
+    /// The full name text (spec §11.8): the module path, one space, and the
+    /// name written as an Onsa string literal (`dsp.voice "decays"`). What
+    /// the result lines show and `onsa test --filter` matches.
+    pub fn full_name(&self) -> String {
+        format!("{} {}", self.module, onsa_syntax::test_name::quote(&self.name))
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -185,6 +208,10 @@ impl Module {
     pub fn const_(&self, id: ConstId) -> &ConstDef {
         &self.consts[id.0 as usize]
     }
+    /// The flow (its index in `flows`) whose generated function `f` is.
+    pub fn flow_of(&self, f: FnId) -> Option<usize> {
+        self.flows.iter().position(|flow| flow.fns.generated().any(|g| g == f))
+    }
 }
 
 /// A statement list with an optional value (used by `If`, `Switch`, `Block`).
@@ -210,6 +237,8 @@ pub struct Stmt {
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     Let(LocalId, Expr),
+    /// `place = value`. From the source, the statement's span is the target
+    /// (`xs[i]`): the position of a panic of the write (§18.1, R-185).
     Assign(Place, Expr),
     Expr(Expr),
     If(Expr, Block, Block),
@@ -226,14 +255,16 @@ pub enum StmtKind {
 pub enum Place {
     Local(LocalId),
     Field(Box<Place>, u32),
-    Index(Box<Place>, Box<Expr>),
+    /// `base[index]`, with the position of the whole element (`xs[i]`): where
+    /// its index out of range panics (§18.1, R-188).
+    Index(Box<Place>, Box<Expr>, Span),
 }
 
 impl Place {
     pub fn root(&self) -> LocalId {
         match self {
             Place::Local(l) => *l,
-            Place::Field(p, _) | Place::Index(p, _) => p.root(),
+            Place::Field(p, _) | Place::Index(p, _, _) => p.root(),
         }
     }
 }
@@ -412,7 +443,7 @@ impl Expr {
         match &self.kind {
             ExprKind::Local(l) => Some(Place::Local(*l)),
             ExprKind::Field { base, index } => Some(Place::Field(Box::new(base.as_place()?), *index)),
-            ExprKind::Index { base, index } => Some(Place::Index(Box::new(base.as_place()?), index.clone())),
+            ExprKind::Index { base, index } => Some(Place::Index(Box::new(base.as_place()?), index.clone(), self.span)),
             _ => None,
         }
     }

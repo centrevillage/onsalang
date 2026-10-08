@@ -46,7 +46,7 @@ pub fn walk_place(p: &Place, f: &mut dyn FnMut(&Expr)) {
     match p {
         Place::Local(_) => {}
         Place::Field(b, _) => walk_place(b, f),
-        Place::Index(b, i) => {
+        Place::Index(b, i, _) => {
             walk_place(b, f);
             walk_expr(i, f);
         }

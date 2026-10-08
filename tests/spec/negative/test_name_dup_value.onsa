@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8"]
+
+// E0306: two tests of one module are the same test when their names have the
+// same value, however the literals are spelled (spec §11.8, S-244): `"a"` and
+// `"\u{61}"` are one name. Nothing is normalized, so the composed é (U+00E9)
+// and the decomposed one (e and U+0301) are two names, and a name differs from
+// the same name with a space after it or in another case. The later test of a
+// name is the error.
+
+test "a" {
+  assert true
+}
+
+test "\u{61}" {                 //~ E0306
+  assert true
+}
+
+test "q\"uote" {
+  assert true
+}
+
+test "q\u{22}uote" {            //~ E0306
+  assert true
+}
+
+test "back\\slash" {
+  assert true
+}
+
+test "back\u{5c}slash" {        //~ E0306
+  assert true
+}
+
+test "\u{e9}" {
+  assert true
+}
+
+test "é" {                      //~ E0306
+  assert true
+}
+
+test "e\u{301}" {
+  assert true
+}
+
+test "a " {
+  assert true
+}
+
+test "A" {
+  assert true
+}
+
+test "a{{b}}" {
+  assert true
+}
+
+test "\u{61}{{b}}" {            //~ E0306
+  assert true
+}

@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8"]
+
+// A test is identified by its module path and its name (spec §11.8, S-55):
+// `a "same"` and `b "same"` are two tests. `a "same"` fails and is marked
+// `TESTFAIL` in this file, the module of the test; `b "same"` passes, so the
+// marker names the test of this module only (R-184).
+
+test "same" {   //~ TESTFAIL "same"
+  assert 1 == 2
+}

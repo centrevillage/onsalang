@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8"]
+
+// The names a `test` may carry (spec §11.8, S-244): a string literal with no
+// interpolation, not empty, and with no control character, line separator or
+// bidirectional control in its value. Everything else is a name, and two names
+// are the same when their values are (the escapes of the literal are read
+// first, there is no Unicode normalization). These all pass and are all
+// different: no E0306. `docs/onsa-tools.md` §4 and the full name text of
+// §11.8 write them back with `\`, `"`, `{` and `}` escaped.
+
+test "plain words" {
+  assert true
+}
+
+test "wrap01 stays in [0, 1)" {
+  assert true
+}
+
+test "a quote \" inside" {
+  assert true
+}
+
+test "a backslash \\ inside" {
+  assert true
+}
+
+test "braces {{x}} are text" {
+  assert true
+}
+
+test "{{{{" {
+  assert true
+}
+
+test "}}" {
+  assert true
+}
+
+test "it's" {
+  assert true
+}
+
+test "an escaped quote \' of the other kind" {
+  assert true
+}
+
+test " " {
+  assert true
+}
+
+test " padded " {
+  assert true
+}
+
+test "padded" {
+  assert true
+}
+
+test "A" {
+  assert true
+}
+
+test "a" {
+  assert true
+}
+
+test "日本語 ✓" {
+  assert true
+}
+
+test "\u{1f600}" {
+  assert true
+}
+
+// The composed é (U+00E9) and the decomposed one (e and U+0301) are different
+// names: nothing is normalized.
+test "é" {
+  assert true
+}
+
+test "e\u{301}" {
+  assert true
+}
+
+// U+00A0 and the code points next to the forbidden ranges are names.
+test "no-break\u{a0}space" {
+  assert true
+}
+
+test "next to the line separator \u{2027}" {
+  assert true
+}
+
+test "next to the bidirectional controls \u{2065} \u{206a}" {
+  assert true
+}

@@ -279,7 +279,51 @@ pub fn zero_array(m: &Module, elem: &Ty, n: u32) -> ArrayData {
     }
 }
 
-/// Human-readable form for panic messages and test reports.
+/// The `Show` string of a float (spec §6.3): the shortest decimal that reads
+/// back to the value in its own type, as an Onsa float literal with a point
+/// (`1.0`, `0.1`, `-0.0`), in the exponent form when the magnitude is at least
+/// `1.0e21` or below `1.0e-7` (`1.0e308`, `1.5e-8`); `NaN`, `inf` and `-inf`.
+/// `x` is the value (an `F32` widened exactly) and `exp` its Rust `{:e}` form
+/// in its own type, which is the shortest round trip (`1.5e-8`, `1e308`).
+fn show_float(x: f64, exp: &str) -> String {
+    if x.is_nan() {
+        return "NaN".into();
+    }
+    if x.is_infinite() {
+        return if x < 0.0 { "-inf".into() } else { "inf".into() };
+    }
+    let (sign, exp) = match exp.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", exp),
+    };
+    // `{:e}` of a finite float is always `<digits>[.<digits>]e<exponent>`.
+    let Some((mantissa, e)) = exp.split_once('e') else {
+        onsa_diag::internal::bug(None, format!("`{exp}` is not the exponent form of a float"))
+    };
+    let Ok(e) = e.parse::<i32>() else {
+        onsa_diag::internal::bug(None, format!("`{exp}` has no exponent the form of a float has"))
+    };
+    let digits: String = mantissa.chars().filter(|c| c.is_ascii_digit()).collect();
+    if x != 0.0 && (x.abs() >= 1.0e21 || x.abs() < 1.0e-7) {
+        let (first, rest) = digits.split_at(1);
+        let rest = if rest.is_empty() { "0" } else { rest };
+        return format!("{sign}{first}.{rest}e{e}");
+    }
+    // The point goes after `e + 1` digits.
+    let point = e + 1;
+    let (int, frac) = if point <= 0 {
+        ("0".to_string(), format!("{}{digits}", "0".repeat((-point) as usize)))
+    } else if point as usize >= digits.len() {
+        (format!("{digits}{}", "0".repeat(point as usize - digits.len())), String::new())
+    } else {
+        (digits[..point as usize].to_string(), digits[point as usize..].to_string())
+    };
+    let frac = if frac.is_empty() { "0".to_string() } else { frac };
+    format!("{sign}{int}.{frac}")
+}
+
+/// Human-readable form for panic messages and test reports. Numbers are in
+/// the `Show` form of spec §6.3 (`docs/onsa-tools.md` §4).
 pub fn show(v: &Value) -> String {
     match v {
         Value::I8(x) => x.to_string(),
@@ -290,8 +334,8 @@ pub fn show(v: &Value) -> String {
         Value::U16(x) => x.to_string(),
         Value::U32(x) => x.to_string(),
         Value::U64(x) => x.to_string(),
-        Value::F32(x) => format!("{x:?}"),
-        Value::F64(x) => format!("{x:?}"),
+        Value::F32(x) => show_float(f64::from(*x), &format!("{x:e}")),
+        Value::F64(x) => show_float(*x, &format!("{x:e}")),
         Value::Bool(b) => b.to_string(),
         Value::Char(c) => format!("{c:?}"),
         Value::Unit => "()".into(),

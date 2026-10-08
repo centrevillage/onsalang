@@ -45,6 +45,7 @@ fn eval(e: Expr) -> Result<Value, Panic> {
             locals: Vec::new(),
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(e)) }),
             span: sp(),
+            test: None,
         }],
         ..Default::default()
     };
@@ -310,6 +311,7 @@ fn recursive_fn(name: &str, zero: Expr, deeper: Expr, extra: Vec<Ty>) -> FnDef {
         locals,
         body: Some(value_block(Vec::new(), body)),
         span: sp(),
+        test: None,
     }
 }
 
@@ -913,6 +915,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
                 locals: vec![Local { name: "i".into(), ty: Ty::Int(IntKind::I32) }],
                 body: Some(Block { stmts: vec![for_], value: None }),
                 span: sp(),
+                test: None,
             }],
             ..Default::default()
         };
@@ -939,6 +942,7 @@ fn an_internal_failure_is_not_a_panic() {
                 locals: vec![Local { name: "x".into(), ty: Ty::Int(IntKind::I32) }],
                 body: Some(Block { stmts: Vec::new(), value: Some(Box::new(read)) }),
                 span: sp(),
+                test: None,
             }],
             ..Default::default()
         };
@@ -963,6 +967,7 @@ fn a_call_of_a_function_without_a_body_is_an_internal_error() {
                 locals: Vec::new(),
                 body: None,
                 span: sp(),
+                test: None,
             }],
             ..Default::default()
         };
@@ -992,6 +997,7 @@ fn an_unimplemented_std_function_is_unsupported() {
                     locals: Vec::new(),
                     body: Some(Block { stmts: Vec::new(), value: Some(Box::new(gen_())) }),
                     span: sp(),
+                    test: None,
                 },
                 FnDef {
                     name: "g".into(),
@@ -1002,6 +1008,7 @@ fn an_unimplemented_std_function_is_unsupported() {
                     locals: Vec::new(),
                     body: Some(Block { stmts: Vec::new(), value: Some(Box::new(near)) }),
                     span: sp(),
+                    test: None,
                 },
             ],
             consts: vec![ConstDef { name: "G".into(), ty: Ty::Unit, init: gen_() }],
@@ -1019,5 +1026,97 @@ fn an_unimplemented_std_function_is_unsupported() {
         );
         assert!(matches!(interp.const_value(ConstId(0)), Err(Failure::Unsupported(_))));
         assert!(interp.call(FnId(1), Vec::new()).is_ok());
+    })
+}
+
+// ------------------------------------------------- W2-10: `onsa test`'s failures
+
+/// Spec §6.3: the `Show` string of a float, which the panic messages use
+/// (`docs/onsa-tools.md` §4): the shortest decimal that reads back, with a
+/// point, in the exponent form at `1.0e21` and above and below `1.0e-7`.
+#[test]
+fn show_of_floats_is_the_form_of_spec_6_3() {
+    let f64s: &[(f64, &str)] = &[
+        (0.0, "0.0"),
+        (-0.0, "-0.0"),
+        (1.0, "1.0"),
+        (-2.5, "-2.5"),
+        (0.1, "0.1"),
+        (0.1 + 0.2, "0.30000000000000004"),
+        (123.456, "123.456"),
+        (1.0e20, "100000000000000000000.0"),
+        (1.0e21, "1.0e21"),
+        (1.5e21, "1.5e21"),
+        (1.0e308, "1.0e308"),
+        (-1.7e308, "-1.7e308"),
+        (f64::MAX, "1.7976931348623157e308"),
+        (1.0e-7, "0.0000001"),
+        (1.5e-8, "1.5e-8"),
+        (5e-324, "5.0e-324"),
+        (f64::NAN, "NaN"),
+        (f64::INFINITY, "inf"),
+        (f64::NEG_INFINITY, "-inf"),
+    ];
+    for &(x, want) in f64s {
+        assert_eq!(crate::show(&Value::F64(x)), want, "{x:?}");
+    }
+    let f32s: &[(f32, &str)] = &[
+        (0.1, "0.1"),
+        (16777216.0, "16777216.0"),
+        (3.4028235e38, "3.4028235e38"),
+        (1.0e-7, "0.0000001"),
+        (-0.0, "-0.0"),
+    ];
+    for &(x, want) in f32s {
+        assert_eq!(crate::show(&Value::F32(x)), want, "{x:?}");
+    }
+}
+
+/// Spec §11.8 (S-241): `assert_near(a, b, tol)` passes when `a == b || abs(a -
+/// b) <= tol`; a `tol` not finite and at least 0 fails before the comparison;
+/// the messages are those of `std/dsp/test.onsa`, with the numbers in `Show`.
+#[test]
+fn assert_near_follows_spec_11_8() {
+    on_stack(|| {
+        let near = |a: f64, b: f64, tol: f64| {
+            eval(prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(a), f64_(b), f64_(tol)]))
+        };
+        let inf = f64::INFINITY;
+        for (a, b, tol) in [(1.0, 1.0, 0.0), (inf, inf, 0.0), (0.0, -0.0, -0.0), (1.0, 1.25, 0.5), (1.0, 2.0, f64::MAX)]
+        {
+            assert!(near(a, b, tol).is_ok(), "({a}, {b}, {tol})");
+        }
+        let failed = |a: f64, b: f64, tol: f64| near(a, b, tol).expect_err("a failure").message;
+        assert_eq!(
+            failed(1.0e308, -1.0e308, 1.0),
+            "assert_near failed: 1.0e308 and -1.0e308 differ by inf, more than 1.0"
+        );
+        assert_eq!(failed(1.0, 1.5, 0.25), "assert_near failed: 1.0 and 1.5 differ by 0.5, more than 0.25");
+        assert_eq!(failed(f64::NAN, f64::NAN, 1.0), "assert_near failed: NaN and NaN differ by NaN, more than 1.0");
+        for (tol, shown) in [(-1.0, "-1.0"), (inf, "inf"), (-inf, "-inf"), (f64::NAN, "NaN")] {
+            assert_eq!(
+                failed(1.0, 1.0, tol),
+                format!("assert_near: the tolerance {shown} is not a finite number at least 0"),
+                "{tol}"
+            );
+        }
+    })
+}
+
+/// Spec §18.1 (S-233): a panic keeps the calls it went out of, innermost
+/// first, up to the entry; a call beyond the limit has the 128 calls under it.
+#[test]
+fn a_panic_lists_the_calls_it_went_out_of() {
+    on_stack(|| {
+        let m = recursion_under_additions(0);
+        let interp = Interp::new(&m);
+        let e = panic_of(interp.call(FnId(0), vec![Value::U32(10_000)]).unwrap_err());
+        assert_eq!(e.calls.len(), crate::MAX_CALL_DEPTH as usize);
+        assert!(e.calls.iter().all(|c| c.callee == FnId(0)), "{:?}", e.calls);
+        // A panic in the entry itself went out of no call.
+        let e =
+            eval(prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(1.0), f64_(2.0), f64_(0.0)]))
+                .expect_err("a failure");
+        assert!(e.calls.is_empty(), "{:?}", e.calls);
     })
 }

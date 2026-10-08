@@ -93,7 +93,7 @@
 | `types/flowimp/`、`types/useorder*.onsa`（推定） | R-50 |
 | `types/tzero.onsa` | R-56 |
 | `types/qlen/`、`types/constlen.onsa` | R-57、R-61 |
-| `types/testmod/`（推定） | R-68 |
+| `types/testmod/`（推定） | R-68。W2-10 で期待値付きのテストへ移した: `tests/spec/packages/test_module_named_test/`（モジュール `test` の関数はテストとして走らない）、`crates/onsa_cli/tests/test_identity.rs`（モジュールの経路と名前での識別） |
 | `types/localshadow.onsa`、`types/shadow.onsa` | R-103 |
 | `types/orphan/`、`types/implspec.onsa` | R-104（`orphan/` の期待値は `main.onsa` の先頭のコメント。S-70） |
 | `types/alias.onsa` | R-105 |

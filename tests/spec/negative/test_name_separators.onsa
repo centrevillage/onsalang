@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8", "§2.5"]
+
+// E0002: the value of the name of a test has no line separator (U+2028,
+// U+2029) and no bidirectional control (U+202A..U+202E, U+2066..U+2069)
+// (spec §11.8, S-244; the list of §2.5), also when it is written with an
+// escape. The code points next to those ranges are names.
+
+test "line \u{2028} separator" {            //~ E0002
+  assert true
+}
+
+test "paragraph \u{2029} separator" {       //~ E0002
+  assert true
+}
+
+test "embedding \u{202a}" {                 //~ E0002
+  assert true
+}
+
+test "override \u{202e}" {                  //~ E0002
+  assert true
+}
+
+test "isolate \u{2066}" {                   //~ E0002
+  assert true
+}
+
+test "pop isolate \u{2069}" {               //~ E0002
+  assert true
+}
+
+test "hyphenation point \u{2027}" {
+  assert true
+}
+
+test "narrow no-break space \u{202f}" {
+  assert true
+}
+
+test "unassigned \u{2065}" {
+  assert true
+}
+
+test "deprecated format character \u{206a}" {
+  assert true
+}

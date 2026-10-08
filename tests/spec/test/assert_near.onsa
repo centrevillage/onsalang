@@ -1,0 +1,165 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8", "§3.4"]
+
+// `std.dsp.test.assert_near(a, b, tol)` (spec §11.8, S-241): it passes when
+// `a == b || abs(a - b) <= tol`, computed with the F64 operations of §3.4.
+// `tol` has to be finite and not negative (`-0.0` is 0); otherwise the call
+// fails without comparing `a` and `b`. A NaN in `a` or `b` fails. The failure
+// is a panic at the call, so it fails the test. `TESTFAIL` marks the tests
+// that are expected to fail (the runner checks that they do).
+//
+// The infinity and the NaN come from `F64.INFINITY` and `F64.NAN`
+// (the `Float` constants of §6.3) through two functions, so that no test
+// depends on how a division by zero in a test body is folded.
+
+use std.dsp.test.{assert_near}
+
+fn inf() -> F64 {
+  F64.INFINITY
+}
+
+fn nan() -> F64 {
+  F64.NAN
+}
+
+fn close(a: F64, b: F64) {
+  assert_near(a, b, 0.5)
+}
+
+// ---- passes
+
+test "equal values pass with a zero tolerance" {
+  assert_near(1.0, 1.0, 0.0)
+}
+
+test "a difference inside the tolerance passes" {
+  assert_near(1.0, 1.05, 0.1)
+  assert_near(1.05, 1.0, 0.1)
+}
+
+test "a difference of exactly the tolerance passes" {
+  // 0.1 + 0.2 is 0.30000000000000004, one unit in the last place above 0.3:
+  // the difference is 2^-54, and `<=` lets the tolerance 2^-54 through.
+  assert_near(0.1 + 0.2, 0.3, 5.5511151231257827e-17)
+}
+
+test "equal infinities pass" {
+  assert_near(inf(), inf(), 0.0)
+  assert_near(-inf(), -inf(), 0.0)
+  assert_near(inf(), inf(), 1.0)
+}
+
+test "the two zeros are equal" {
+  assert_near(0.0, -0.0, 0.0)
+  assert_near(-0.0, 0.0, 0.0)
+  assert_near(-0.0, -0.0, 0.0)
+}
+
+test "a tolerance of negative zero is zero" {
+  assert_near(1.0, 1.0, -0.0)
+  assert_near(0.0, -0.0, -0.0)
+}
+
+test "the biggest finite tolerance is allowed" {
+  assert_near(1.0, 2.0, F64.MAX)
+}
+
+test "huge values within the tolerance pass" {
+  assert_near(1.7e308, 1.6e308, 2.0e307)
+}
+
+test "a value widened from F32 is compared as an F64" {
+  let x: F32 = 0.1
+  assert_near(x as F64, 0.1, 1.0e-7)
+}
+
+test "it can be called from a function and passes" {
+  close(1.0, 1.25)
+}
+
+// ---- fails
+
+test "a difference outside the tolerance fails" {   //~ TESTFAIL "a difference outside the tolerance fails"
+  assert_near(1.0, 1.2, 0.1)
+}
+
+test "a difference just over the tolerance fails" {   //~ TESTFAIL "a difference just over the tolerance fails"
+  // The tolerance is the double below 2^-54, the difference is 2^-54.
+  assert_near(0.1 + 0.2, 0.3, 5.551115123125782e-17)
+}
+
+test "a zero tolerance rejects the smallest difference" {   //~ TESTFAIL "a zero tolerance rejects the smallest difference"
+  assert_near(1.0, 1.0000000000000002, 0.0)
+}
+
+test "a tolerance of negative zero rejects the smallest difference" {   //~ TESTFAIL "a tolerance of negative zero rejects the smallest difference"
+  assert_near(1.0, 1.0000000000000002, -0.0)
+}
+
+test "opposite infinities fail" {   //~ TESTFAIL "opposite infinities fail"
+  assert_near(inf(), -inf(), 1.0)
+}
+
+test "an infinity against a finite value fails" {   //~ TESTFAIL "an infinity against a finite value fails"
+  assert_near(inf(), 1.0, 1.0)
+}
+
+test "a finite value against an infinity fails" {   //~ TESTFAIL "a finite value against an infinity fails"
+  assert_near(1.0, inf(), 1.0)
+}
+
+test "an infinity against the biggest finite value fails" {   //~ TESTFAIL "an infinity against the biggest finite value fails"
+  assert_near(inf(), F64.MAX, F64.MAX)
+}
+
+test "a NaN as a fails" {   //~ TESTFAIL "a NaN as a fails"
+  assert_near(nan(), 1.0, 1.0)
+}
+
+test "a NaN as b fails" {   //~ TESTFAIL "a NaN as b fails"
+  assert_near(1.0, nan(), 1.0)
+}
+
+test "two NaNs fail" {   //~ TESTFAIL "two NaNs fail"
+  assert_near(nan(), nan(), 1.0)
+}
+
+test "a negative tolerance fails for equal values" {   //~ TESTFAIL "a negative tolerance fails for equal values"
+  assert_near(1.0, 1.0, -1.0)
+}
+
+test "a negative tolerance fails" {   //~ TESTFAIL "a negative tolerance fails"
+  assert_near(1.0, 1.5, -1.0)
+}
+
+test "a tiny negative tolerance fails for equal values" {   //~ TESTFAIL "a tiny negative tolerance fails for equal values"
+  assert_near(2.0, 2.0, -1.0e-300)
+}
+
+test "a NaN tolerance fails for equal values" {   //~ TESTFAIL "a NaN tolerance fails for equal values"
+  assert_near(1.0, 1.0, nan())
+}
+
+test "a NaN tolerance fails" {   //~ TESTFAIL "a NaN tolerance fails"
+  assert_near(1.0, 2.0, nan())
+}
+
+test "a difference that overflows to an infinity fails" {   //~ TESTFAIL "a difference that overflows to an infinity fails"
+  // 1.7e308 - (-1.7e308) is 3.4e308, which is beyond the biggest F64.
+  assert_near(1.7e308, -1.7e308, 1.0)
+}
+
+test "an overflowing difference fails against the biggest tolerance" {   //~ TESTFAIL "an overflowing difference fails against the biggest tolerance"
+  assert_near(1.7e308, -1.7e308, F64.MAX)
+}
+
+test "a failure from a function fails the test" {   //~ TESTFAIL "a failure from a function fails the test"
+  close(1.0, 2.0)
+}
+
+test "a value widened from F32 differs by more than a tight tolerance" {   //~ TESTFAIL "a value widened from F32 differs by more than a tight tolerance"
+  let x: F32 = 0.1
+  assert_near(x as F64, 0.1, 1.0e-9)
+}

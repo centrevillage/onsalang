@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8", "§2.4"]
+
+// E0002: the name of a test is a string literal with no interpolation
+// (spec §11.8, S-244). The name is a part of the heading and not an
+// expression, so the interpolation of §2.4 does not apply: a hole is the
+// E0002 of the syntax stage whatever it names (an unknown name is not an
+// E0302 here, the name is never resolved). `{{` and `}}` are text, not an
+// interpolation.
+
+test "a{p}b" {                  //~ E0002
+  assert true
+}
+
+test "{p}" {                    //~ E0002
+  assert true
+}
+
+test "field {p.x} in the middle of a longer name" {   //~ E0002
+  assert true
+}
+
+test "braces {{p}} stay text" {
+  assert true
+}
+
+test "{{p.x}}" {
+  assert true
+}

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8"]
+
+// E0002: the name of a test is not empty (spec §11.8, S-244). The error is of
+// the syntax stage: it is one diagnostic with a note that states the rule and
+// no fix candidate, and the body of the same test is not checked (the unknown
+// name in it is not reported). Names next to the empty one are fine: a name
+// of one space, and a name of one character.
+
+test " " {
+  assert true
+}
+
+test "x" {
+  assert true
+}
+
+test "" {                       //~ E0002
+  let a = no_such_name
+  assert a == 1
+}
+
+pub fn after() -> I32 {
+  missing_too                   //~ E0302
+}

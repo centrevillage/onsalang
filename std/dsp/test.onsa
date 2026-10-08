@@ -28,8 +28,11 @@ pub fn magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32 {
   sqrt(power).round_f32()
 }
 
-/// Sum of squares over the half-open range `[from, to)`; panics when the
-/// range is empty in the wrong direction or runs past the end.
+// SPEC-GAP(S-285): §11.8 writes the half-open range only; out of range is a panic.
+
+/// Sum of squares over the half-open range `[from, to)`. Panics unless
+/// `from <= to` and `to <= xs.len()`, as an index out of range does: the
+/// range is not cut to the span.
 pub fn energy(xs: Span[F32], from: U32, to: U32) -> F64 {
   assert from <= to
   assert to <= xs.len()
@@ -41,5 +44,13 @@ pub fn energy(xs: Span[F32], from: U32, to: U32) -> F64 {
   acc
 }
 
-/// Panics unless `|a - b| <= tol`; the message shows the three values.
+/// Passes when `a == b || abs(a - b) <= tol`, computed with the `F64`
+/// operations: equal infinities and the two zeros pass, a NaN in `a` or `b`
+/// fails, and so does a difference that overflows to an infinity. `tol` has
+/// to be finite and at least 0 (`-0.0` is 0); otherwise the call fails
+/// without comparing `a` and `b`. A failure is a panic at the call, with one
+/// of the messages (the numbers in the `Show` form, `1.0e308`):
+///
+/// - `assert_near failed: <a> and <b> differ by <abs(a - b)>, more than <tol>`
+/// - `assert_near: the tolerance <tol> is not a finite number at least 0`
 pub target fn assert_near(a: F64, b: F64, tol: F64)

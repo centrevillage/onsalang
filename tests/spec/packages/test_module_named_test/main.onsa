@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8"]
+
+// A test is a `test` block, identified by its module path and name (spec
+// §11.8, S-55, R-68): the functions of a module whose path is `test` are not
+// tests. `boom` in test.onsa fails if it runs, so running it as a test would
+// fail this case (the reproduction of R-68, `tests/review-phase1/types/testmod/`).
+
+test "real" {
+  assert true
+}

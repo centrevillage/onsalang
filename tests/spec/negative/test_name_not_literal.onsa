@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8"]
+
+// E0002: the name of a test is a string literal (spec §11.8). A word, a
+// character literal or a number in its place is an unexpected token of the
+// heading (S-244: one code for every name that is not allowed). Each test is
+// a unit of its own, so every one is reported.
+
+test decays {                   //~ E0002
+  assert true
+}
+
+test 'c' {                      //~ E0002
+  assert true
+}
+
+test 12 {                       //~ E0002
+  assert true
+}
+
+test "fine" {
+  assert true
+}

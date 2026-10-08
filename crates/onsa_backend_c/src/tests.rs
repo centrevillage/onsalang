@@ -48,6 +48,7 @@ fn one_fn(ty: Ty, body: Expr, extra_types: Vec<TypeDef>) -> Module {
             locals: vec![Local { name: "x".into(), ty: ty.clone() }, Local { name: "y".into(), ty }],
             body: Some(Block { stmts: Vec::new(), value: Some(Box::new(body)) }),
             span: sp(),
+            test: None,
         }],
         messages: Vec::new(),
         flows: Vec::new(),
@@ -206,6 +207,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
             value: Some(Box::new(e(Ty::Int(IntKind::I32), ExprKind::Tag(Box::new(local(0, Ty::Enum(TypeId(0)))))))),
         }),
         span: sp(),
+        test: None,
     });
     let opts = EmitOptions { export_fns: vec!["m.g".into()], ..Default::default() };
     let c = emit(&m2, &opts).unwrap_or_else(|d| panic!("{d:?}")).source;
@@ -392,6 +394,7 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
                     ))),
                 }),
                 span: sp(),
+                test: None,
             }],
             messages: Vec::new(),
             flows: Vec::new(),

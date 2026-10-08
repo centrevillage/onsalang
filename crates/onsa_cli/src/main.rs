@@ -64,7 +64,7 @@ enum Command {
         /// Emit JSON
         #[arg(long)]
         json: bool,
-        /// Run only tests whose name contains this text
+        /// Run only the tests whose full name (`dsp.voice "decays"`) contains this text
         #[arg(long)]
         filter: Option<String>,
         /// `.onsa` files (one package), or a package directory / `onsa.toml`
@@ -227,9 +227,9 @@ enum Form {
     Text,
     /// The one JSON object of `--json` (§18.1, S-215).
     Json,
-    /// The bare array `onsa test --json` prints until W2-10 gives it the
-    /// object of [`Form::Json`] with its test results (S-233).
-    TestJsonArray,
+    /// The object of `onsa test --json` when no test ran: the one of
+    /// [`Form::Json`] with an empty `tests` array (§18.1, S-233).
+    TestJson,
 }
 
 impl Form {
@@ -244,7 +244,7 @@ fn render(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::Diagnostic]
     onsa_driver::guard(|| match form {
         Form::Text => onsa_diag::to_text(sources, diagnostics),
         Form::Json => format!("{}\n", onsa_diag::to_json(sources, diagnostics)),
-        Form::TestJsonArray => format!("{}\n", onsa_diag::to_json_array(sources, diagnostics)),
+        Form::TestJson => format!("{}\n", onsa_driver::TestReport::default().render_json(sources, diagnostics)),
     })
     .map_err(|e| internal(sources, &e))
 }
@@ -519,9 +519,12 @@ fn graph(svg: bool, path: &PathBuf, flow: &str) -> Outcome {
     Outcome::Ok
 }
 
-/// `onsa test <paths> [--json] [--filter <text>]` (T3-8): check, lower, run every `test`.
+/// `onsa test <paths> [--json] [--filter <text>]` (T3-8, §18.2): check, lower,
+/// match `--filter`, run the selected tests. The checks and the E0200 of
+/// lowering stop the run before the filter is matched; a filter that selects
+/// no test is a usage error (exit 2, nothing on the standard output).
 fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
-    let form = if json { Form::TestJsonArray } else { Form::Text };
+    let form = if json { Form::TestJson } else { Form::Text };
     let (loaded, analyzed) = match analyzed(form, paths) {
         Ok(x) => x,
         Err(o) => return o,
@@ -530,18 +533,31 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
         Ok(m) => m,
         Err(o) => return o,
     };
-    let report = match onsa_driver::run_tests(&loaded.sources, &module, &onsa_driver::TestOptions { filter }) {
+    let opts = onsa_driver::TestOptions { filter };
+    let report = match onsa_driver::run_tests(&loaded.sources, &module, &opts) {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
+        Ok(onsa_driver::TestRun::NoMatch) => {
+            let filter = opts.filter.as_deref().unwrap_or_default();
+            return cannot_work(format!("`--filter {filter:?}` matches no test"));
+        }
         // E0200, as those of lowering: no test ran (S-224).
         Ok(onsa_driver::TestRun::Unsupported(diags)) => {
             return print_diagnostics(form, &loaded.sources, &diags, Outcome::Problems);
         }
         Err(e) => return internal(&loaded.sources, &e),
     };
-    if json {
-        outln!("{}", report.render_json(&loaded.sources));
-    } else {
-        out!("{}", report.render_text(&loaded.sources));
+    // Inside a guard with the sources, as the diagnostics: a span a stage
+    // broke is an internal error naming its file.
+    let text = onsa_driver::guard(|| {
+        if json {
+            format!("{}\n", report.render_json(&loaded.sources, &[]))
+        } else {
+            report.render_text(&loaded.sources)
+        }
+    });
+    match text {
+        Ok(text) => out!("{text}"),
+        Err(e) => return internal(&loaded.sources, &e),
     }
     if report.failed() == 0 { Outcome::Ok } else { Outcome::Problems }
 }

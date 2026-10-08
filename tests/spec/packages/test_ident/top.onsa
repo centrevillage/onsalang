@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8", "§15.1"]
+
+// A test is identified by the path of its module and its name (spec §11.8):
+// the same name in several modules of a package is several tests, and a
+// module that has the file `dsp.onsa` and the directory `dsp/` is fine
+// (§15.1). The module paths here are `top`, `dsp`, `dsp.voice` and
+// `dsp.filter`. Every test passes.
+
+test "decays" {
+  assert (1 + 1) == 2
+}
+
+test "rings" {
+  assert (2 * 2) == 4
+}

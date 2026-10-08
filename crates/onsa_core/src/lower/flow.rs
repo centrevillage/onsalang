@@ -76,6 +76,16 @@ pub struct FlowFns {
     pub params_default: Option<FnId>,
 }
 
+impl FlowFns {
+    /// Every function generated for the flow.
+    pub fn generated(&self) -> impl Iterator<Item = FnId> {
+        [self.init, self.reset, self.ctl, self.tick, self.process, self.render]
+            .into_iter()
+            .chain(self.process_inplace)
+            .chain(self.params_default)
+    }
+}
+
 /// Per-flow metadata kept on the [`Module`] for `onsa interface`, the
 /// backends and the conformance tools.
 #[derive(Debug, Clone)]
@@ -370,6 +380,7 @@ fn push_fn(lw: &mut Lowerer, name: String, rt: bool, span: Span) -> FnId {
         locals: Vec::new(),
         body: None,
         span,
+        test: None,
     });
     id
 }

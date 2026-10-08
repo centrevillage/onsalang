@@ -289,7 +289,10 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             let t = lower_expr(lw, cx, *target)?;
             let Some(place) = t.as_place() else { return Err(internal(span, "assignment target is not a place")) };
             let v = lower_expr(lw, cx, *value)?;
-            out.push(stmt(span, StmtKind::Assign(place, v)));
+            // The position of an assignment is its target (`xs[i]` of `xs[i] =
+            // v`): where its write panics, an index out of range (§18.1,
+            // R-185). The value's panics have the value's own positions.
+            out.push(stmt(cx.expr(*target).span, StmtKind::Assign(place, v)));
             Ok(())
         }
         AS::For { pat, iter, body, .. } => lower_for(lw, cx, *pat, *iter, *body, span, out),
@@ -331,7 +334,11 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
         }
         AS::Assert(e) => {
             let c = lower_expr(lw, cx, *e)?;
-            let msg = lw.msg(&format!("assertion failed: {}", cx.src(cx.expr(*e).span)));
+            // The message of a failed `assert` (§11.8, §18.1): `assert <source
+            // of the expression>`, made here only (R-183); the interpreter,
+            // `onsa test` and C's `panic_messages` all show it as it is.
+            // SPEC-GAP(S-284): the source of a multi-line `assert` is as written, with its line breaks.
+            let msg = lw.msg(&format!("assert {}", cx.src(cx.expr(*e).span)));
             let not = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
             let then = Block {
                 stmts: vec![stmt(span, StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic(msg))))],
@@ -927,7 +934,11 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         AK::Index { base, index: i } => {
             let b = lower_expr(lw, cx, *base)?;
             let i = lower_expr(lw, cx, *i)?;
-            return index(b, i);
+            // The whole `xs[i]`, not its base: the position of its panic
+            // (§18.1, S-233).
+            let mut x = index(b, i)?;
+            x.span = span;
+            return Ok(x);
         }
         AK::Try(inner) => return lower_try(lw, cx, *inner, ty, span),
         AK::Range { .. } => return Err(internal(span, "range outside a loop head")),
@@ -1380,7 +1391,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
     };
     body.push(stmt(
         span,
-        StmtKind::Assign(Place::Index(Box::new(Place::Local(arr)), Box::new(local_expr(cx, i, span))), value),
+        StmtKind::Assign(Place::Index(Box::new(Place::Local(arr)), Box::new(local_expr(cx, i, span)), span), value),
     ));
     let stmts = vec![
         stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))),

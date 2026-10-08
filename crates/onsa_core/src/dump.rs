@@ -317,7 +317,7 @@ impl<'a> Dumper<'a> {
                 self.place(b);
                 let _ = write!(self.out, ".{i}");
             }
-            Place::Index(b, i) => {
+            Place::Index(b, i, _) => {
                 self.place(b);
                 self.out.push('[');
                 self.expr(i);

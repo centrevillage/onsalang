@@ -10,6 +10,11 @@ use crate::token::{Token, TokenKind};
 pub struct Lexed {
     pub tokens: Vec<Token>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The holes of the string literals that a `}` closes (`{x}`, also of a
+    /// form an interpolation may not have, `{X}`), from the `{` to after the
+    /// `}`: the parser tells an interpolation in the name of a `test` by them
+    /// (spec §11.8, S-244).
+    pub holes: Vec<Span>,
 }
 
 pub fn lex(file: FileId, text: &str) -> Lexed {
@@ -259,6 +264,7 @@ impl<'a> Lexer<'a> {
                     let ok = self.interp_path();
                     if self.peek() == Some(b'}') {
                         self.pos += 1;
+                        self.out.holes.push(Span::new(self.file, open as u32, self.pos as u32));
                         if !ok {
                             let span = Span::new(self.file, open as u32, self.pos as u32);
                             self.error(

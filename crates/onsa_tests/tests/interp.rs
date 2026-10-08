@@ -27,9 +27,10 @@ fn run(src: &str) -> (Vec<(String, Option<String>)>, SourceMap) {
     let report = match onsa_driver::run_tests(&sources, &module, &onsa_driver::TestOptions::default()) {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
         Ok(onsa_driver::TestRun::Unsupported(d)) => panic!("{}", onsa_diag::to_text(&sources, &d)),
+        Ok(onsa_driver::TestRun::NoMatch) => panic!("no test selected without `--filter`"),
         Err(e) => panic!("{}", e.render(&sources)),
     };
-    (report.tests.into_iter().map(|t| (t.name, t.message)).collect(), sources)
+    (report.tests.into_iter().map(|t| (t.name.clone(), t.message().map(str::to_string))).collect(), sources)
 }
 
 fn all_pass(src: &str) {

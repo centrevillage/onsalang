@@ -1,0 +1,3 @@
+[package]
+name = "test_module_named_test"
+edition = "2026"

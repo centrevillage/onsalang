@@ -39,6 +39,10 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
         if f.sret != f.ret.is_aggregate() {
             return Err(v.err("sret flag does not match the return type"));
         }
+        // `onsa test` calls a test with nothing and keeps no value (§11.8).
+        if f.test.is_some() && (!f.params.is_empty() || f.ret != Ty::Unit) {
+            return Err(v.err("a test function with parameters or a value"));
+        }
         let t = v.block(body)?;
         if !body.diverges() {
             match t {
@@ -195,7 +199,7 @@ impl<'a> V<'a> {
                 let bt = self.place(b)?;
                 self.field_ty(&bt, *i)
             }
-            Place::Index(b, i) => {
+            Place::Index(b, i, _) => {
                 let bt = self.place(b)?;
                 let it = self.expr(i)?;
                 self.same(&it, &Ty::u32(), "index")?;

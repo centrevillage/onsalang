@@ -349,14 +349,19 @@ impl<'a> Lowerer<'a> {
             }
         }
         match &def.kind {
+            // `test dsp.voice "decays"`: the full name text (§11.8) after
+            // `test `, so that the tests of two modules, and a test and a
+            // function `test.decays`, never share a name (W2-10/b). The name
+            // decides nothing: `onsa test` runs the functions with a mark.
             DefKind::Test { name, .. } => {
-                parts.clear();
-                parts.push("test".into());
-                parts.push(name.clone());
+                let module = info.path.clone();
+                format!("test {}", TestMark { module, name: name.clone() }.full_name())
             }
-            _ => parts.push(def.name.clone()),
+            _ => {
+                parts.push(def.name.clone());
+                parts.join(".")
+            }
         }
-        parts.join(".")
     }
 
     pub(crate) fn mangle(&self, t: &Ty) -> String {
@@ -571,6 +576,7 @@ impl<'a> Lowerer<'a> {
             locals: Vec::new(),
             body: None,
             span,
+            test: None,
         });
         self.fn_ids.insert((d, args.clone()), id);
         self.worklist.push((d, args, id));
@@ -693,7 +699,7 @@ impl<'a> Lowerer<'a> {
                 fd.body = Some(block);
                 Ok(())
             }
-            DefKind::Test { body, .. } => {
+            DefKind::Test { name, body } => {
                 let Some(info) = self.a.bodies.get(&d) else {
                     return Err(internal(def.span, "test body was not checked"));
                 };
@@ -702,10 +708,13 @@ impl<'a> Lowerer<'a> {
                 }
                 let mut cx = body::FnCx::new(self, d, Vec::new(), info, Ty::Unit)?;
                 let block = body::lower_fn_body(self, &mut cx, *body)?;
+                // The mark that identifies the test (§11.8, S-55).
+                let module = self.a.modules.get(def.module).path.clone();
                 let fd = &mut self.m.fns[fid.0 as usize];
                 fd.ret = Ty::Unit;
                 fd.locals = cx.locals;
                 fd.body = Some(block);
+                fd.test = Some(TestMark { module, name: name.clone() });
                 Ok(())
             }
             _ => Err(internal(def.span, "not a function")),

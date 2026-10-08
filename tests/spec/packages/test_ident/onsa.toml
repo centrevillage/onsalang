@@ -1,0 +1,3 @@
+[package]
+name = "test_ident"
+edition = "2026"

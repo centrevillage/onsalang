@@ -42,6 +42,24 @@ use value::{clamp_int, in_range, int_value, wrap_int, zero_array};
 pub struct Panic {
     pub message: String,
     pub span: Span,
+    /// The calls the panic went out of, innermost first, up to the entry of
+    /// the evaluation (the body of a `test`): what `onsa test --json` reports
+    /// as `calls` (spec §18.1, S-233). Reading a `const` is not a call, so the
+    /// calls of its initializer come before the calls around the read, and
+    /// the read itself has no position: the form until W9-03 makes a panic
+    /// of an initializer the E0419 of §6.6.
+    pub calls: Vec<CallSite>,
+}
+
+/// A call a panic went out of ([`Panic::calls`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallSite {
+    /// The position of the call expression in Core (the call of the source,
+    /// or the flow's own position for a call a flow's generated function
+    /// makes to another of the same flow).
+    pub span: Span,
+    /// The function called.
+    pub callee: FnId,
 }
 
 /// A form this version of the interpreter cannot run: E0200 (spec §18.1,
@@ -102,7 +120,7 @@ enum Signal {
 type R<T> = Result<T, Signal>;
 
 fn panic<T>(span: Span, msg: impl Into<String>) -> R<T> {
-    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span })))
+    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span, calls: Vec::new() })))
 }
 
 /// The interpreter found a state it cannot be in at `span`: an internal
@@ -495,7 +513,10 @@ impl<'m> Interp<'m> {
         self.depth.set(self.depth.get() + 1);
         let r = self.run_body(fn_, args);
         self.depth.set(self.depth.get() - 1);
-        r
+        match r {
+            Err(Signal::Fail(Failure::Panic(p))) => Err(out_of_call(p, site, fn_)),
+            r => r,
+        }
     }
 
     /// The body of `fn_` with its parameters bound to `args`, not counted.
@@ -557,10 +578,12 @@ impl<'m> Interp<'m> {
                 let r = self.resolve_place(f, b, span)?;
                 self.project_field(r, *i, span)
             }
-            Place::Index(b, e) => {
+            // Each element has its own position (R-188): an inner `xs[i]` of
+            // `xs[i][0]` that is out of range panics at `xs[i]`.
+            Place::Index(b, e, at) => {
                 let i = self.eval_u32(f, e)?;
                 let r = self.resolve_place(f, b, span)?;
-                self.project_index(r, i, span)
+                self.project_index(r, i, *at)
             }
         }
     }
@@ -1480,7 +1503,7 @@ impl<'m> Interp<'m> {
             }
             Prim::TruncToInt { from, to, sat } => {
                 let [a] = args(prim, vs, span);
-                Ok(int_value(*to, trunc_to_int(float_of(a, *from, span), *to, *sat, span)?))
+                Ok(int_value(*to, trunc_to_int(float_of(a, *from, span), *from, *to, *sat, span)?))
             }
             Prim::ToBits(k) => {
                 let [a] = args(prim, vs, span);
@@ -1562,16 +1585,37 @@ impl<'m> Interp<'m> {
             Some(StdPrim::AssertNear) => {
                 let [a, b, tol] = args(prim, vs, span);
                 let f = |v| float_of(v, FloatKind::F64, span);
-                let (a, b, tol) = (f(a), f(b), f(tol));
-                if (a - b).abs() <= tol {
-                    Ok(Value::Unit)
-                } else {
-                    panic(span, format!("assert_near failed: {a:?} and {b:?} differ by more than {tol:?}"))
-                }
+                assert_near(f(a), f(b), f(tol), span)
             }
             None => Err(Signal::Fail(Failure::Unsupported(std_unsupported(name, span)))),
         }
     }
+}
+
+/// `std.dsp.test.assert_near(a, b, tol)` (spec §11.8, S-241): it passes when
+/// `a == b || abs(a - b) <= tol` with the `F64` operations of §3.4; a `tol`
+/// that is not finite and at least 0 (`-0.0` is 0) fails before `a` and `b`
+/// are compared; a NaN fails. A failure is a panic at the call. The messages
+/// are the ones the doc comment of `std/dsp/test.onsa` writes, with the values
+/// in the `Show` form of §6.3 (`docs/onsa-tools.md` §4).
+fn assert_near(a: f64, b: f64, tol: f64, span: Span) -> R<Value> {
+    let show = |x: f64| value::show(&Value::F64(x));
+    if !(tol.is_finite() && tol >= 0.0) {
+        return panic(span, format!("assert_near: the tolerance {} is not a finite number at least 0", show(tol)));
+    }
+    if a == b || (a - b).abs() <= tol {
+        return Ok(Value::Unit);
+    }
+    panic(
+        span,
+        format!(
+            "assert_near failed: {} and {} differ by {}, more than {}",
+            show(a),
+            show(b),
+            show((a - b).abs()),
+            show(tol)
+        ),
+    )
 }
 
 /// The `N` operands of `prim` (an internal error for another number).
@@ -1615,7 +1659,7 @@ fn arith(op: BinOp, overflow: Overflow, k: IntKind, x: i128, y: i128, span: Span
 /// range is `lo <= t < above`, with `above` the power of two just past the
 /// type's maximum: both exact as `f64`, where the maximum of a 64-bit type is
 /// not (R-19).
-fn trunc_to_int(x: f64, to: IntKind, sat: bool, span: Span) -> R<i128> {
+fn trunc_to_int(x: f64, from: FloatKind, to: IntKind, sat: bool, span: Span) -> R<i128> {
     let (lo, hi) = value::int_range(to);
     let above = (hi + 1) as f64;
     if x.is_nan() {
@@ -1626,10 +1670,24 @@ fn trunc_to_int(x: f64, to: IntKind, sat: bool, span: Span) -> R<i128> {
         return if sat {
             Ok(if t < lo as f64 { lo } else { hi })
         } else {
-            panic(span, format!("{x:?} is out of range for {}", to.name()))
+            // The value in the `Show` form of its own type (`docs/onsa-tools.md` §4):
+            // an `F32` widened to `f64` is exact, and goes back exactly.
+            let shown = value::show(&match from {
+                FloatKind::F32 => Value::F32(x as f32),
+                FloatKind::F64 => Value::F64(x),
+            });
+            panic(span, format!("{shown} is out of range for {}", to.name()))
         };
     }
     Ok(t as i128)
+}
+
+/// A panic that goes out of the call of `callee` at `site` ([`Panic::calls`]).
+#[cold]
+#[inline(never)]
+fn out_of_call(mut p: Panic, site: Span, callee: FnId) -> Signal {
+    p.calls.push(CallSite { span: site, callee });
+    Signal::Fail(Failure::Panic(p))
 }
 
 /// The panic of a call beyond [`MAX_CALL_DEPTH`] (spec §12.5), at the call.

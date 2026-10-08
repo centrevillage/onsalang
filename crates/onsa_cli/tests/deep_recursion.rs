@@ -296,7 +296,10 @@ fn a_shallow_recursion_exits_with_0() {
 
 /// `--json`: the deep failure is reported in JSON on standard output with exit
 /// code 1 (spec §18.2: `--json` prints JSON at exit codes 0 and 1), not by a
-/// signal.
+/// signal. The output is one object (§18.1) with an empty `diagnostics` array and
+/// the `tests` array: a record has `module` (the file name for a single file, so
+/// `direct`), `name` and `status`, only the failed one has `failure`, and there is
+/// no `kind` (S-233). The records are ordered by name.
 #[test]
 fn json_output_of_a_deep_recursion() {
     let d = Dir::new("json");
@@ -305,8 +308,30 @@ fn json_output_of_a_deep_recursion() {
     let out = onsa(&["test", "--json", &f]);
     assert_eq!(out.status.code(), Some(1), "ended by {:?}", out.status);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("\"deep\""), "the failed test is named in the JSON:\n{stdout}");
-    assert!(stdout.contains("\"kind\""), "the spec adds a `kind` field to the diagnostic form:\n{stdout}");
+    let doc: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("not one JSON value ({e}):\n{stdout}"));
+    assert!(doc.is_object(), "the document is one object:\n{stdout}");
+    assert_eq!(doc["diagnostics"].as_array().map(Vec::len), Some(0), "a failed test is no diagnostic:\n{stdout}");
+    let tests = doc["tests"].as_array().unwrap_or_else(|| panic!("`tests` is an array:\n{stdout}"));
+    let seen: Vec<(&str, &str, &str)> = tests
+        .iter()
+        .map(|t| {
+            (
+                t["module"].as_str().unwrap_or("?"),
+                t["name"].as_str().unwrap_or("?"),
+                t["status"].as_str().unwrap_or("?"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        seen,
+        [("direct", "after", "ok"), ("direct", "control", "ok"), ("direct", "deep", "failed")],
+        "the failed test is named in the JSON:\n{stdout}"
+    );
+    for t in tests {
+        assert!(t.get("kind").is_none(), "the `kind` field is gone (S-233): {t}");
+        assert_eq!(t.get("failure").is_some(), t["status"] == "failed", "only a failed record has `failure`: {t}");
+    }
 }
 
 // ------------------------------------------------------------------- `const`

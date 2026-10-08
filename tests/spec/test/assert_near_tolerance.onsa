@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8", "§3.4"]
+
+// The tolerance of `std.dsp.test.assert_near(a, b, tol)` has to be finite
+// (spec §11.8, S-241): an infinite `tol` fails the call without comparing `a`
+// and `b`, whatever they are (`|a - b| <= inf` would let everything through).
+// The other tolerances that fail are in assert_near.onsa. `TESTFAIL` marks
+// the tests that are expected to fail.
+
+use std.dsp.test.{assert_near}
+
+fn inf() -> F64 {
+  F64.INFINITY
+}
+
+test "an infinite tolerance fails" {   //~ TESTFAIL "an infinite tolerance fails"
+  assert_near(1.0, 2.0, inf())
+}
+
+test "an infinite tolerance fails for equal values" {   //~ TESTFAIL "an infinite tolerance fails for equal values"
+  assert_near(1.0, 1.0, inf())
+}
+
+test "an infinite tolerance fails for equal infinities" {   //~ TESTFAIL "an infinite tolerance fails for equal infinities"
+  assert_near(inf(), inf(), inf())
+}
+
+test "a negative infinite tolerance fails" {   //~ TESTFAIL "a negative infinite tolerance fails"
+  assert_near(1.0, 1.0, -inf())
+}

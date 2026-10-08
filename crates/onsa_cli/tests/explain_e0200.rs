@@ -43,7 +43,9 @@ fn a_lowering_e0200_has_found_and_a_note() {
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
-    let d = &v[0];
+    // The document of `onsa test --json` (§18.1, S-233): no test ran.
+    assert_eq!(v["tests"].as_array().map(Vec::len), Some(0), "{v}");
+    let d = &v["diagnostics"][0];
     assert_eq!(d["code"], "E0200", "{v}");
     assert_eq!(d["found"], "match n { 1 => 10, _ => 20 }", "{v}");
     assert_eq!(d["notes"].as_array().map(Vec::len), Some(1), "{v}");

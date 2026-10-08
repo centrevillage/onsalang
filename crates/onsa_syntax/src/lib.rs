@@ -15,6 +15,7 @@ pub mod lexer;
 mod lower;
 mod naming;
 pub mod parser;
+pub mod test_name;
 pub mod token;
 pub mod units;
 
@@ -64,7 +65,7 @@ pub fn diagnostic_contract(sources: &onsa_diag::SourceMap, diagnostics: &[onsa_d
 /// (`onsa_diag::internal::bug`), checked on every parse (R-82).
 pub fn parse(file: FileId, text: &str) -> Parsed {
     let lexed = lex(file, text);
-    let out = parser::Parser::new(file, text, lexed.tokens, lexed.diagnostics).parse_file();
+    let out = parser::Parser::new(file, text, lexed).parse_file();
     let cst = cst::build(out.tokens, out.events);
     if let Err(e) = cst.validate(text) {
         onsa_diag::internal::bug(Some(e.span), format!("the CST is broken: {}", e.message));

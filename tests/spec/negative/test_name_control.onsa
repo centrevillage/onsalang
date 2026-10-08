@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8", "§2.5"]
+
+// E0002: the value of the name of a test has no control character (spec
+// §11.8, S-244): not U+0000..U+001F (the line feed and the tab included) and
+// not U+007F..U+009F. A character written with an escape counts the same as
+// one written raw (a raw one is the E0001 of §2.5, and a tab is the only one a
+// literal may hold raw). The edges: U+0020 and U+00A0 are names.
+
+test "line\nfeed" {             //~ E0002
+  assert true
+}
+
+test "tab\there" {              //~ E0002
+  assert true
+}
+
+test "carriage\rreturn" {       //~ E0002
+  assert true
+}
+
+test "nul\0byte" {              //~ E0002
+  assert true
+}
+
+test "esc \u{1b}[31mred" {      //~ E0002
+  assert true
+}
+
+test "first \u{1}" {            //~ E0002
+  assert true
+}
+
+test "last of the first range \u{1f}" {   //~ E0002
+  assert true
+}
+
+test "delete \u{7f}" {          //~ E0002
+  assert true
+}
+
+test "first of the second range \u{80}" {   //~ E0002
+  assert true
+}
+
+test "next line \u{85}" {       //~ E0002
+  assert true
+}
+
+test "last of the second range \u{9f}" {   //~ E0002
+  assert true
+}
+
+test "space \u{20}" {
+  assert true
+}
+
+test "no-break space \u{a0}" {
+  assert true
+}
+
+test "first after the second range \u{a1}" {
+  assert true
+}

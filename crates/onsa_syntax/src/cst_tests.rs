@@ -467,7 +467,7 @@ fn levels(cst: &Cst, src: &str, n: NodeId) -> u32 {
 /// levels counted again on the tree.
 fn counted(src: &str) -> (u32, u32) {
     let lexed = crate::lex(FileId(0), src);
-    let counted = crate::parser::Parser::new(FileId(0), src, lexed.tokens, lexed.diagnostics).parse_file().height;
+    let counted = crate::parser::Parser::new(FileId(0), src, lexed).parse_file().height;
     let p = parse(src);
     (counted, levels(&p.cst, src, p.cst.root()))
 }

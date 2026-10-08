@@ -1,0 +1,9 @@
+use dsp.{gain}
+
+test "decays" {
+  assert (gain() + 1) == 3
+}
+
+test "rings" {
+  assert (gain() * 2) == 4
+}
