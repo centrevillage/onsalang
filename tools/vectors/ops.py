@@ -33,7 +33,9 @@ BINOP = {"add": "+", "sub": "-", "mul": "*", "div": "/", "rem": "%", "wadd": "+%
          "eq": "==", "ne": "!=", "lt": "<", "le": "<=", "gt": ">", "ge": ">="}
 STD_MATH = {"abs", "min", "max", "sqrt", "floor", "ceil", "trunc", "round", "is_nan", "is_finite"}
 CONSTS_INT = ["ZERO", "ONE", "MIN", "MAX", "BITS"]
-CONSTS_FLT = ["ZERO", "ONE", "MAX", "EPSILON", "INFINITY", "NAN"]
+CONSTS_FLT = ["ZERO", "ONE", "PI", "MAX", "EPSILON", "INFINITY", "NAN"]
+# pi to 60 digits, as an integer ratio (Python integers only): the value that 6.6 rounds to the type (S-211)
+PI_NUM, PI_DEN = 314159265358979323846264338327950288419716939937510582097494, 10 ** 59
 
 
 # The fixture packages. `scalar` holds every operation `onsa check` accepts. The others hold the
@@ -94,11 +96,12 @@ class Op:
 
 # ------------------------------------------------------------ conversions
 def conv_forms(src, dst):
-    """The forms of spec 3.3 for the ordered pair (src, dst), src != dst. The table:
-    as: same-sign widening, unsigned to a wider signed, F32 -> F64, I8 I16 U8 U16 -> F32,
+    """The forms of spec 3.3 for the ordered pair (src, dst). The table:
+    as: the same type (S-210), same-sign widening, unsigned to a wider signed, F32 -> F64, I8 I16 U8 U16 -> F32,
         I8..I32 U8..U32 -> F64; narrow: the other integer pairs; trunc and trunc_sat:
         float -> integer; round: F64 -> F32 and the rest of integer -> float."""
-    assert src != dst
+    if src == dst:
+        return ["as"]
     si, di = src in INTS, dst in INTS
     if si and di:
         sn, ss = INTS[src]
@@ -116,7 +119,7 @@ def conv_forms(src, dst):
 
 def check_registry(ops):
     """The registry covers the table: every ordered pair of distinct numeric types has exactly the
-    forms of 3.3 (one, or two for float -> integer), and no operation id is repeated."""
+    forms of 3.3 (one, or two for float -> integer), the same type included (`as`, S-210), and no operation id is repeated."""
     ids = [o.id for o in ops]
     assert len(ids) == len(set(ids)), "an operation id is repeated"
     assert len({o.fn for o in ops}) == len(ops), "two operations have the same fixture function"
@@ -126,8 +129,6 @@ def check_registry(ops):
             have.setdefault((o.ty, o.name), True)
     for src in NUM:
         for dst in NUM:
-            if src == dst:
-                continue
             for form in conv_forms(src, dst):
                 name = {"as": f"as_{dst}", "narrow": f"narrow_{dst}", "trunc": f"trunc_{dst}",
                         "trunc_sat": f"trunc_{dst}_sat", "round": f"round_{dst}"}[form]
@@ -178,6 +179,10 @@ def float_unary_inputs(t, op):
 
 
 def conv_inputs(src, dst, key):
+    if src == dst:  # `as` to the same type (S-210): the value is not changed; every kind of NaN, -0.0, the ends
+        if src in INTS:
+            return _with_rand([(x,) for x in S.int_wide(src)], [(x,) for x in S.int_random(src, key + ".r", S.RAND_CONV)])
+        return _with_rand([(x,) for x in bits_inputs(src)], [(x,) for x in S.float_random(src, key + ".r", S.RAND_CONV)])
     if src in INTS:
         edge = [(x,) for x in S.conv_ints(src, dst)]
         rnd = [(x,) for x in S.int_random(src, key + ".r", S.RAND_CONV)]
@@ -333,8 +338,6 @@ def registry():
     # conversions (3.3)
     for src in NUM:
         for dst in NUM:
-            if src == dst:
-                continue
             for form in conv_forms(src, dst):
                 D = onsa_type(dst)
                 if form == "as":
@@ -397,8 +400,9 @@ def registry():
                 tokens=(c,), onsa=f"{onsa_type(t)}.{c}", model=(lambda a, v=vals[c]: ("v", v)), inputs=(lambda: [("edge", ())]))
     for t in FLOATS:
         w, p, emax, emin = M.fparams(t)
-        vals = {"ZERO": M.fenc_zero(t, 0), "ONE": M.f_one(t), "MAX": S.fmax_bits(t), "EPSILON": M.fq(t, Fraction(1, 2 ** (p - 1))),
+        vals = {"ZERO": M.fenc_zero(t, 0), "ONE": M.f_one(t), "PI": M.fq(t, Fraction(PI_NUM, PI_DEN)), "MAX": S.fmax_bits(t), "EPSILON": M.fq(t, Fraction(1, 2 ** (p - 1))),
                 "INFINITY": M.fenc_inf(t, 0), "NAN": None}
+        assert vals["PI"] == {"f32": 0x40490FDB, "f64": 0x400921FB54442D18}[t], "PI is not the value that 6.6 gives (S-211)"
         for c in CONSTS_FLT:
             add(id=f"{t}.{c}", ty=t, name=c, group="const", args=(), ret=t, spec="§6.6 関連定数の表", tokens=(c,),
                 onsa=f"{onsa_type(t)}.{c}",

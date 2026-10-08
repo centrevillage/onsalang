@@ -129,17 +129,58 @@ class VectorsTools(unittest.TestCase):
         self.assertEqual(O.conv_forms("f32", "f64"), ["as"])
         self.assertEqual(O.conv_forms("f64", "f32"), ["round"])
         self.assertEqual(O.conv_forms("f32", "u8"), ["trunc", "trunc_sat"])
+        self.assertEqual(O.conv_forms("i32", "i32"), ["as"])      # S-210
+        self.assertEqual(O.conv_forms("f64", "f64"), ["as"])
 
-    def test_the_model_decides_the_gaps_by_holds(self):
-        for fn, args, hold in ((M.f_sub, (0x3F800000, 0x3F800000), M.ZERO_SIGN), (M.f_abs, (0x80000000,), M.ABS_ZERO),
-                               (M.f_rem, (0x3F800000, 0x7F800000), M.FMOD_INF)):
+    def test_the_rules_of_3_4_set_no_hold(self):
+        """S-207 .. S-209 are decided: the rules that were held (a zero result, abs(-0.0), finite % infinity) set none."""
+        for fn, args in ((M.f_sub, (0x3F800000, 0x3F800000)), (M.f_abs, (0x80000000,)), (M.f_rem, (0x3F800000, 0x7F800000)),
+                         (M.f_mul, (0x00000000, 0xBF800000)), (M.f_sqrt, (0x80000000,))):
             M.Ctx.reset()
             fn("f32", *args)
-            self.assertEqual(M.Ctx.holds, {hold})
+            self.assertEqual(M.Ctx.holds, set())
         M.Ctx.reset()
-        M.f_neg("f32", 0)  # a rule the spec writes: no hold
-        M.f_minmax("f32", 0, 0x80000000, "min")
-        self.assertEqual(M.Ctx.holds, set())
+
+    def test_a_hold_makes_a_held_row(self):
+        """The mechanism stays for the next gap: a rule that calls Ctx.hold gives `?` and a held-S<number> section."""
+        def model(args):
+            M.Ctx.hold("S999")
+            return ("v", 0)
+        self.assertEqual(M.decide(model, (1,)), (("v", 0), ["S999"]))
+        self.assertEqual(M.decide(lambda a: ("v", 1), (1,)), (("v", 1), []))
+
+    def test_the_rows_of_the_decided_zero_signs(self):
+        """The expected values of S-207 .. S-209, written by hand here (not by the model) and found in the data."""
+        f32 = (self.copy / "float-f32.tsv").read_text()
+        for row in (
+            "0x3f800000 0xbf800000\t0x00000000\tS-207",     # 1.0 + -1.0 = +0.0 (add; sub of equal values too)
+            "0x80000000 0x80000000\t0x80000000\tS-207",     # -0.0 + -0.0 = -0.0 (add) ... and -0.0 * -0.0 below is +0.0
+            "0x00000000 0xbf800000\t0x80000000\tS-207",     # 0.0 * -1.0 and 0.0 / -1.0 = -0.0
+            "0x80000000\t0x80000000\tS-207",                # sqrt(-0.0), floor(-0.0), ceil(-0.4), ... = -0.0
+            "0x80000000\t0x00000000\tS-208",                # abs(-0.0) = +0.0
+            "0x80000000 0x7f800000\t0x80000000\tS-209",     # -0.0 % inf = -0.0
+            "0x3f800000 0xff800000\t0x3f800000\tS-209",     # 1.0 % -inf = 1.0
+        ):
+            self.assertIn(row, f32)
+        expr = (self.copy / "expr-f32.tsv").read_text()
+        self.assertIn("0x40000000 100\t0x00000000\tS-207", expr)      # vdelay_f with d = 2.0: f = +0.0
+        self.assertIn("0x80000000 0x3f800000 0x00000000\t0x00000000\tS-207", expr)  # interp(-0.0, 1.0, +0.0) = +0.0
+
+    def test_pi_and_the_same_type_as(self):
+        """S-211: the bits of PI (6.6). S-210: `as` to the same type, ten operations, from the table's rule."""
+        const = (self.copy / "const.tsv").read_text()
+        self.assertIn("@ f32.PI edge\n()\t0x40490fdb\n", const)
+        self.assertIn("@ f64.PI edge\n()\t0x400921fb54442d18\n", const)
+        self.assertEqual(spec_tokens.CONSTANTS_LEFT_OUT, {})
+        for t in M.NUM:
+            self.assertEqual(O.conv_forms(t, t), ["as"])
+        ids = {o.id for o in O.registry()}
+        self.assertEqual({f"{t}.as_{t}" for t in M.NUM} - ids, set())
+        conv = (self.copy / "conv-f32.tsv").read_text()
+        self.assertIn("@ f32.as_f32 edge", conv)
+        self.assertIn("0x80000000\t0x80000000\tS-210", conv)   # -0.0 is kept
+        self.assertIn("0xff800001\tnan\tS-210", conv)           # a NaN stays a NaN
+        self.assertIn("@ i8.as_i8 edge", (self.copy / "conv-i8.tsv").read_text())
 
     def test_held_rows_have_no_expected_value(self):
         text = (self.copy / "float-f32.tsv").read_text()

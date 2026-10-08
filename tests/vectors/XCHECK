@@ -1,19 +1,19 @@
 # Written by tools/vectors/xcheck.py after generating the vectors. Not a norm (R-133): a record that the data was
 # recomputed by independent implementations. `rows` are the rows compared; `held` rows have no expected value.
 # Known divergences of Rust, counted (xcheck.rs): D1 MIN % -1 family, D2 min/max with a NaN, D3 to_bits of a NaN.
-data_sha256 72bb258543a53d824f488c72bb377520abef5cb79849a76d43f13ae5826f8765
-run rust data :: rows 186222 mismatches 0 held 1376 sections 952 D1 16 D2 689 D3 18 :: rustc 1.94.1 (e408947bf 2026-03-25)
-run rust exhaustive-8bit :: rows 4093696 mismatches 0 held 0 sections 93 D1 4 D2 0 D3 0 :: rustc 1.94.1 (e408947bf 2026-03-25)
-run rust float-sweep :: rows 1120155 mismatches 0 held 59493 sections 72 D1 0 D2 2998 D3 71 :: rustc 1.94.1 (e408947bf 2026-03-25)
-run c-clang-arm64 data :: rows 186222 mismatches 0 held 1376 skipped 0 guarded 434 :: Apple clang version 21.0.0 (clang-2100.0.123.102)
-run c-clang-arm64 exhaustive-8bit :: rows 4093696 mismatches 0 held 0 skipped 0 guarded 1024 :: Apple clang version 21.0.0 (clang-2100.0.123.102)
-run c-clang-arm64 float-sweep :: rows 1120155 mismatches 0 held 59493 skipped 0 guarded 0 :: Apple clang version 21.0.0 (clang-2100.0.123.102)
-run c-gcc-15 data :: rows 186222 mismatches 0 held 1376 skipped 0 guarded 434 :: gcc-15 (Homebrew GCC 15.2.0_1) 15.2.0
-run c-gcc-15 exhaustive-8bit :: rows 4093696 mismatches 0 held 0 skipped 0 guarded 1024 :: gcc-15 (Homebrew GCC 15.2.0_1) 15.2.0
-run c-gcc-15 float-sweep :: rows 1120155 mismatches 0 held 59493 skipped 0 guarded 0 :: gcc-15 (Homebrew GCC 15.2.0_1) 15.2.0
-run c-clang-x86_64 data :: rows 186222 mismatches 0 held 1376 skipped 0 guarded 434 :: Apple clang version 21.0.0 (clang-2100.0.123.102) (x86_64 under Rosetta)
-run c-clang-x86_64 exhaustive-8bit :: rows 4093696 mismatches 0 held 0 skipped 0 guarded 1024 :: Apple clang version 21.0.0 (clang-2100.0.123.102) (x86_64 under Rosetta)
-run c-clang-x86_64 float-sweep :: rows 1120155 mismatches 0 held 59493 skipped 0 guarded 0 :: Apple clang version 21.0.0 (clang-2100.0.123.102) (x86_64 under Rosetta)
-run control-gcc-15-contract data :: rows 186222 mismatches 547 held 1376 skipped 0 guarded 434 :: gcc-15 -std=gnu11 -O2 (contraction allowed)
+data_sha256 a7c91bac1a8ac163f52301b7aeae016e562d55ab6c748456b096650eccba057e
+run rust data :: rows 189303 mismatches 0 held 0 sections 972 D1 16 D2 689 D3 18 :: rustc 1.94.1 (e408947bf 2026-03-25)
+run rust exhaustive-8bit :: rows 4094208 mismatches 0 held 0 sections 95 D1 4 D2 0 D3 0 :: rustc 1.94.1 (e408947bf 2026-03-25)
+run rust float-sweep :: rows 1212416 mismatches 0 held 0 sections 74 D1 0 D2 2998 D3 71 :: rustc 1.94.1 (e408947bf 2026-03-25)
+run c-clang-arm64 data :: rows 189303 mismatches 0 held 0 skipped 0 guarded 434 :: Apple clang version 21.0.0 (clang-2100.0.123.102)
+run c-clang-arm64 exhaustive-8bit :: rows 4094208 mismatches 0 held 0 skipped 0 guarded 1024 :: Apple clang version 21.0.0 (clang-2100.0.123.102)
+run c-clang-arm64 float-sweep :: rows 1212416 mismatches 0 held 0 skipped 0 guarded 0 :: Apple clang version 21.0.0 (clang-2100.0.123.102)
+run c-gcc-15 data :: rows 189303 mismatches 0 held 0 skipped 0 guarded 434 :: gcc-15 (Homebrew GCC 15.2.0_1) 15.2.0
+run c-gcc-15 exhaustive-8bit :: rows 4094208 mismatches 0 held 0 skipped 0 guarded 1024 :: gcc-15 (Homebrew GCC 15.2.0_1) 15.2.0
+run c-gcc-15 float-sweep :: rows 1212416 mismatches 0 held 0 skipped 0 guarded 0 :: gcc-15 (Homebrew GCC 15.2.0_1) 15.2.0
+run c-clang-x86_64 data :: rows 189303 mismatches 0 held 0 skipped 0 guarded 434 :: Apple clang version 21.0.0 (clang-2100.0.123.102) (x86_64 under Rosetta)
+run c-clang-x86_64 exhaustive-8bit :: rows 4094208 mismatches 0 held 0 skipped 0 guarded 1024 :: Apple clang version 21.0.0 (clang-2100.0.123.102) (x86_64 under Rosetta)
+run c-clang-x86_64 float-sweep :: rows 1212416 mismatches 0 held 0 skipped 0 guarded 0 :: Apple clang version 21.0.0 (clang-2100.0.123.102) (x86_64 under Rosetta)
+run control-gcc-15-contract data :: rows 189303 mismatches 547 held 0 skipped 0 guarded 434 :: gcc-15 -std=gnu11 -O2 (contraction allowed)
 # the control: the same rows with contraction allowed must disagree (the expression rows tell fused from unfused):
-# rows 186222 mismatches 547 held 1376 skipped 0 guarded 434
+# rows 189303 mismatches 547 held 0 skipped 0 guarded 434

@@ -10,7 +10,7 @@
 | `float-<型>.tsv`（`f32` `f64`） | 浮動小数の演算（§3.4 の浮動小数の表と `std.math` の正確な関数）|
 | `conv-<型>.tsv`（10 の数の型） | 変換（§3.3 の表。`from_bits` は `conv-f32` / `conv-f64`）|
 | `expr-f32.tsv`、`expr-f64.tsv` | 縮約と再結合をしない式（§3.4）、`vdelay~` の補間と添字（§11.4、S-194）|
-| `const.tsv` | 組込み型の関連定数（§6.6）|
+| `const.tsv` | 組込み型の関連定数（§6.6。`F32.PI` `F64.PI` を含む、S-211）|
 | `OPS.tsv` | 演算の登録簿 |
 | `MANIFEST` | ファイルごとの SHA-256 と行数、乱数の種 |
 | `XCHECK` | 独立した実装との突き合わせの記録 |
@@ -26,7 +26,7 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 - `@ <演算> <段>`: 節の始まり。以後の行は、次の節までこの演算の行。
 - 行: `<引数> TAB <期待> [TAB <注釈>]`。引数は空白で区切る。引数が無いとき（定数）は `()`。注釈は、行の由来の印で、読み手は無視する: 仕様の決定に由来する行は `S-189`、`S-106` など、`held-*` の行は空白の番号 `S-207` など（複数は `,` で区切る）。
 
-演算は `<型>.<名前>`（型は小文字）。名前は、メソッド・関数の名前（§3.3、§3.4 の表）、演算子を脱糖した trait の名前（`add sub mul div rem neg not and or xor shl shr wadd wsub wmul sadd ssub smul eq ne lt le gt ge`）、式の名前（`expr_muladd` `expr_mulsub` `expr_add3_l` `expr_add3_r` `expr_interp` `vdelay_k` `vdelay_f`）、定数（`MIN` など）。変換は `<元の型>.<書き方>`: `as_<型>`、`narrow_<型>`、`trunc_<型>`、`trunc_<型>_sat`、`round_f32` / `round_f64`、`to_bits`、`from_bits`（型は浮動小数）。型の組と書き方の一対一は `OPS.tsv` と `tools/vectors/ops.py` の `conv_forms` が §3.3 の表から導く。
+演算は `<型>.<名前>`（型は小文字）。名前は、メソッド・関数の名前（§3.3、§3.4 の表）、演算子を脱糖した trait の名前（`add sub mul div rem neg not and or xor shl shr wadd wsub wmul sadd ssub smul eq ne lt le gt ge`）、式の名前（`expr_muladd` `expr_mulsub` `expr_add3_l` `expr_add3_r` `expr_interp` `vdelay_k` `vdelay_f`）、定数（`MIN` など）。変換は `<元の型>.<書き方>`: `as_<型>`（同じ型への `as_<元の型>` を含む。値を変えない。§3.3、S-210）、`narrow_<型>`、`trunc_<型>`、`trunc_<型>_sat`、`round_f32` / `round_f64`、`to_bits`、`from_bits`（型は浮動小数）。型の組と書き方の一対一は `OPS.tsv` と `tools/vectors/ops.py` の `conv_forms` が §3.3 の表から導く。
 
 **段**: `edge`（境界値の全組合せ）、`rand`（決まった種の乱数）、`held-<S 番号>`（下。期待を書かない）。
 
@@ -53,13 +53,9 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 
 ## 仕様の空白（`held-*`）
 
-期待を決められない行は、段を `held-<S 番号>` にして、期待を `?` にする（計画 §8.5）。決定の後は、`tools/vectors/model.py` の該当の保留を外して生成し直す。行はそのまま `edge` / `rand` の行になる。
+期待を決められない行は、段を `held-<S 番号>` にして、期待を `?` にする（計画 §8.5）。決定の後は、`tools/vectors/model.py` の該当の保留（`Ctx.hold`）を外して生成し直す。行はそのまま `edge` / `rand` の行になる。
 
-| 段 | 空白 |
-|---|---|
-| `held-S207` | 結果が 0 のときの符号（厳密に打ち消す和と差、0 との積と商、`sqrt(-0.0)`、丸めで 0 になった結果、`floor` `ceil` `trunc` `round` と `F64` → `F32` の 0）|
-| `held-S208` | `abs(+0.0)` と `abs(-0.0)` |
-| `held-S209` | 有限の数 `%` 無限大 |
+今は保留の節が無い。S-207（結果が 0 のときの符号）、S-208（`abs(-0.0)` は `+0.0`）、S-209（有限の数 `%` 無限大は `a`）は 2026-10-08 に決まり、仕様 §3.4 に規則が書かれたので、W2-12 で保留を外した（外した行は 1376。`held-S207` が 1268、`held-S208` が 4、`held-S209` が 104）。この三つの決定の行には、注釈に `S-207` `S-208` `S-209` を付けた事例が `edge` の節にある（`tools/vectors/named.py`。他の行と同じ節に混ざる）。
 
 ## 乱数と入力の選び方
 

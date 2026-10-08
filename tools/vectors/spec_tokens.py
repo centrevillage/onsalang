@@ -17,8 +17,8 @@ NOT_OPERATIONS = {
     "fmod": "the name of the meaning of `%` on floats",
     "std.math": "a module path", "rem_s": "the WASM instruction, named as a comparison",
 }
-# Constants of the table of 6.6 that the vectors leave out.
-CONSTANTS_LEFT_OUT = {"PI": "S-211: the rounding of the value is not written"}
+# Constants of the table of 6.6 that the vectors leave out (none: S-211 wrote the value of PI, W2-12).
+CONSTANTS_LEFT_OUT = {}
 
 COMPARISONS = {"==", "!=", "<", "<=", ">", ">="}
 OPERATOR = re.compile(r"[-+*/%&|^<>]+")

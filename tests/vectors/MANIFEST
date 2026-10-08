@@ -1,33 +1,33 @@
 format 1
 seed 0x4f4e5341
-operations 520
-data_sha256 72bb258543a53d824f488c72bb377520abef5cb79849a76d43f13ae5826f8765
-file OPS.tsv sha256=954966949b618ecdd66e6cc134a78f2be47f711165a0346a397c5dff173ba95f rows=0
-file const.tsv sha256=ca92f22ff4bfe13d60b5dd623b0ab1da02ab0fa1e32022ced0acfc75010cd9a7 rows=52 edge=52
-file conv-f32.tsv sha256=6ba4eb6c4f77a588685925639ea08d362560e21232b5d6f11ac29aec1e8afa9d rows=4024 edge=3392 rand=632
-file conv-f64.tsv sha256=226e8e2de8b406600615e255391d1afc452469e1a92e3ccb4c8c785d432991ae rows=4343 edge=3662 held=23 rand=658
-file conv-i16.tsv sha256=bdba296c6504271ab1ad6be0f41af4776f7bc022d0825e173d1009f5dc0c704e rows=441 edge=86 rand=355
-file conv-i32.tsv sha256=f88cf7d42a961db98b12c103466882a27a5a35803ad8071ab887c816e68de51c rows=580 edge=210 rand=370
-file conv-i64.tsv sha256=3cab9b4d6ced6767886e5951d36859a7889ba67551aaa46545f0c4c832fef83a rows=1172 edge=794 rand=378
-file conv-i8.tsv sha256=6bd89416c0ed0b08487b0f5a089cec0daf4c7247f5af0b26d6ad1cc7cdf6e6df rows=375 edge=72 rand=303
-file conv-u16.tsv sha256=62cb47ed716090fdf1d67f62f4338d019c26e7ce7748c11b9cff8c26b79a59e4 rows=396 edge=45 rand=351
-file conv-u32.tsv sha256=c5046ec3f63db5048d4c01fcabba725076456e53cbb99379a8ae4740af52c255 rows=466 edge=112 rand=354
-file conv-u64.tsv sha256=e6fe86a1b70b94b77f82de834431d1fb11c81a0bea8f60dc586be66ec3699bca rows=777 edge=413 rand=364
-file conv-u8.tsv sha256=edbc2ea0c5d4528c5244ff6ac8cb3cbd1c2cecc4af3193c85a6c3eeca50c3609 rows=352 edge=39 rand=313
-file expr-f32.tsv sha256=4894463e6926d20beb13deb17b4c004ba8bc80893ddd4785c6d56c439b45da51 rows=1480 edge=1219 held=133 rand=128
-file expr-f64.tsv sha256=3615c54e594557283329e9b880519d656be92f19cd7c547202a6b3317476f7f8 rows=1488 edge=1225 held=135 rand=128
+operations 532
+data_sha256 a7c91bac1a8ac163f52301b7aeae016e562d55ab6c748456b096650eccba057e
+file OPS.tsv sha256=e18ee050a74e621ecbe309955a33968146c8e4d585bbc6894eef10b0c1003c48 rows=0
+file const.tsv sha256=a5c69bda4b6b50dbfc18f66b25e2a128101af3979aa1da651d24fea608fd9634 rows=54 edge=54
+file conv-f32.tsv sha256=a87b81a5c21b389e7041bdaf25e7bd049c90b6c9d0a1e667430a2a952c4143c5 rows=4210 edge=3539 rand=671
+file conv-f64.tsv sha256=2b91c0a7836d8bdf7300ade27cc71457abe701866c885c5d226dd3925b314686 rows=4531 edge=3830 rand=701
+file conv-i16.tsv sha256=534a4a5bc31919ce1c5afa70db580fd7f93d67dfa3df88576646f79816003205 rows=535 edge=142 rand=393
+file conv-i32.tsv sha256=4a35ccab560d5e410816382f360c745b024ecf8a3c7a9c0f18dae259b13f9fde rows=711 edge=303 rand=408
+file conv-i64.tsv sha256=6f4572fb38dc5f21cf9533f107f828b85f8792747eb170a076b8116bb74217e0 rows=1369 edge=956 rand=413
+file conv-i8.tsv sha256=68d7827fdfc6ff295ed847981115645547a2404dd36beec16545d09afe206c9e rows=631 edge=328 rand=303
+file conv-u16.tsv sha256=4f1c16636b8c0de299f2fc88da874a4ca2677273e355da3bdf632c44c20423bd rows=470 edge=85 rand=385
+file conv-u32.tsv sha256=5070113ef0200520e1bee1a768435c6320668e35ab647f6d49fa4fc5ab0ff51b rows=572 edge=186 rand=386
+file conv-u64.tsv sha256=9b218e76af9d4a6a0e79a395bf15e5e4736a75c7527e27bcf46264352201ce75 rows=954 edge=553 rand=401
+file conv-u8.tsv sha256=31026a5c5e8f40f283b877809bcd9770e98d1d278c4bd5098739f05bea2271ce rows=608 edge=295 rand=313
+file expr-f32.tsv sha256=f4b472c77e9df4eab876d9efd330651ba60b9eaf8306d1baea80f7280a670f41 rows=1481 edge=1353 rand=128
+file expr-f64.tsv sha256=e11a2b295f3511ac8ca8d9b41884ee06a9441fe771e4968d1e8ea3e6afe49e0a rows=1489 edge=1361 rand=128
 file fixture/checked/onsa.toml sha256=28cf581d52a4410ba7489b6a09332471acbc7f058bb9ebf011e7e1b1cf40fa88 rows=0
 file fixture/checked/ops.onsa sha256=c768a1ee188e096071baa474eeae3b83486c5f338268456fe3d497229ce9ef27 rows=0
 file fixture/mixed/onsa.toml sha256=456a99f96b25c083395041cc1e466560a8fda2cf4a0ea09b645220d5dcb71a0d rows=0
 file fixture/mixed/ops.onsa sha256=ab469c6b44270f43e93d9a1158dc10f98a8bea289d7c3d6b6cd345cbe71afe36 rows=0
 file fixture/predicates/onsa.toml sha256=4a62bded02dc1d1ea20c87e86b406db1f0af04d175ce5fe3c1b366fb6f5a91b8 rows=0
 file fixture/predicates/ops.onsa sha256=07ec35dbc8611927d75d9842068275fbb8cd9040c7e8c549caea6843d38b9bce rows=0
-file fixture/scalar/onsa.toml sha256=f0e268276df4dc752bf8295ab356f0bec9ea0947c73eb8176549cefcc9c1d578 rows=0
-file fixture/scalar/ops.onsa sha256=de2038e667aeea8fa7e53d3bf1751daac551ad2404c44359cf5c0be7b51dbe9e rows=0
+file fixture/scalar/onsa.toml sha256=3af1eeebeb3665fbfa6990f2e25d0331d64aed898e4ba29ceb2a4bed65cb9594 rows=0
+file fixture/scalar/ops.onsa sha256=12ee974ff68d870fdddaafd8088a12206b2cfb15af8c1d2f0c470b71c98f7028 rows=0
 file fixture/zero_one/onsa.toml sha256=a7e2d20d720d6b2fd2e726c09edf33bdbe661cc715e350c2fa26c05f78b57b90 rows=0
 file fixture/zero_one/ops.onsa sha256=3b9bcb9bdfe2c32e9166c1436ee343b44d01b03d4205691f90cc64771262aa6f rows=0
-file float-f32.tsv sha256=9cc365d74c4d6962e1e1a584f0c1791727301cee20af3248d47aff0be8692c63 rows=17115 edge=14163 held=532 rand=2420
-file float-f64.tsv sha256=80412ff9413c143b245f2e1d2ce08c7572f503497f642c50505fb461d43e16f6 rows=17133 edge=14187 held=553 rand=2393
+file float-f32.tsv sha256=7ea10493d5e2d7d3a118dab8ba29b1f6f1b5112dda7693062203fd124477078d rows=17133 edge=14599 rand=2534
+file float-f64.tsv sha256=005badcc7700a4e5c2bb8db4cc1a69c137c7425921599ed5f673b648dace5aea rows=17151 edge=14635 rand=2516
 file int-i16.tsv sha256=2baa3fc78f875be8a723c0a2f24a084835ecf076f18050b23ab1afb79dac5a00 rows=25840 edge=22844 rand=2996
 file int-i32.tsv sha256=b45f3c131b249398bbce36b3fd08e102ccd791e4845cdaa03ae513944a72624f rows=25714 edge=22680 rand=3034
 file int-i64.tsv sha256=ce6b67f2029881bd5df16cf56f336848dd88143db601b2d7cf8cf8e315dd47ec rows=26095 edge=23060 rand=3035

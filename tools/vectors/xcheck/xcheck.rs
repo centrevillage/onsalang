@@ -194,9 +194,9 @@ fn consts(ty: &str, name: &str) -> String {
     match ty {
         "i8" => int!(i8), "i16" => int!(i16), "i32" => int!(i32), "i64" => int!(i64),
         "u8" => int!(u8), "u16" => int!(u16), "u32" => int!(u32), "u64" => int!(u64),
-        "f32" => match name { "ZERO" => 0f32.show(), "ONE" => 1f32.show(), "MAX" => f32::MAX.show(), "EPSILON" => f32::EPSILON.show(),
+        "f32" => match name { "ZERO" => 0f32.show(), "ONE" => 1f32.show(), "PI" => std::f32::consts::PI.show(), "MAX" => f32::MAX.show(), "EPSILON" => f32::EPSILON.show(),
             "INFINITY" => f32::INFINITY.show(), "NAN" => f32::NAN.show(), _ => panic!("unknown constant") },
-        "f64" => match name { "ZERO" => 0f64.show(), "ONE" => 1f64.show(), "MAX" => f64::MAX.show(), "EPSILON" => f64::EPSILON.show(),
+        "f64" => match name { "ZERO" => 0f64.show(), "ONE" => 1f64.show(), "PI" => std::f64::consts::PI.show(), "MAX" => f64::MAX.show(), "EPSILON" => f64::EPSILON.show(),
             "INFINITY" => f64::INFINITY.show(), "NAN" => f64::NAN.show(), _ => panic!("unknown constant") },
         _ => panic!(),
     }

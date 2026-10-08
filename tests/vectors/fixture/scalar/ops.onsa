@@ -983,6 +983,8 @@ pub fn f64_round(a: F64) -> F64 { round(a) }
 
 pub fn f64_abs(a: F64) -> F64 { abs(a) }
 
+pub fn i8_as_i8(a: I8) -> I8 { a as I8 }
+
 pub fn i8_as_i16(a: I8) -> I16 { a as I16 }
 
 pub fn i8_as_i32(a: I8) -> I32 { a as I32 }
@@ -1062,6 +1064,8 @@ pub fn i16_narrow_i8_val(a: I16) -> I8 {
     None => 0,
   }
 }
+
+pub fn i16_as_i16(a: I16) -> I16 { a as I16 }
 
 pub fn i16_as_i32(a: I16) -> I32 { a as I32 }
 
@@ -1154,6 +1158,8 @@ pub fn i32_narrow_i16_val(a: I32) -> I16 {
     None => 0,
   }
 }
+
+pub fn i32_as_i32(a: I32) -> I32 { a as I32 }
 
 pub fn i32_as_i64(a: I32) -> I64 { a as I64 }
 
@@ -1259,6 +1265,8 @@ pub fn i64_narrow_i32_val(a: I64) -> I32 {
   }
 }
 
+pub fn i64_as_i64(a: I64) -> I64 { a as I64 }
+
 pub fn i64_narrow_u8_some(a: I64) -> Bool {
   match a.narrow_u8() {
     Some(_) => true,
@@ -1339,6 +1347,8 @@ pub fn u8_as_i32(a: U8) -> I32 { a as I32 }
 
 pub fn u8_as_i64(a: U8) -> I64 { a as I64 }
 
+pub fn u8_as_u8(a: U8) -> U8 { a as U8 }
+
 pub fn u8_as_u16(a: U8) -> U16 { a as U16 }
 
 pub fn u8_as_u32(a: U8) -> U32 { a as U32 }
@@ -1394,6 +1404,8 @@ pub fn u16_narrow_u8_val(a: U16) -> U8 {
     None => 0,
   }
 }
+
+pub fn u16_as_u16(a: U16) -> U16 { a as U16 }
 
 pub fn u16_as_u32(a: U16) -> U32 { a as U32 }
 
@@ -1474,6 +1486,8 @@ pub fn u32_narrow_u16_val(a: U32) -> U16 {
     None => 0,
   }
 }
+
+pub fn u32_as_u32(a: U32) -> U32 { a as U32 }
 
 pub fn u32_as_u64(a: U32) -> U64 { a as U64 }
 
@@ -1579,6 +1593,8 @@ pub fn u64_narrow_u32_val(a: U64) -> U32 {
   }
 }
 
+pub fn u64_as_u64(a: U64) -> U64 { a as U64 }
+
 pub fn u64_round_f32(a: U64) -> F32 { a.round_f32() }
 
 pub fn u64_round_f64(a: U64) -> F64 { a.round_f64() }
@@ -1615,6 +1631,8 @@ pub fn f32_trunc_u64(a: F32) -> U64 { a.trunc_u64() }
 
 pub fn f32_trunc_u64_sat(a: F32) -> U64 { a.trunc_u64_sat() }
 
+pub fn f32_as_f32(a: F32) -> F32 { a as F32 }
+
 pub fn f32_as_f64(a: F32) -> F64 { a as F64 }
 
 pub fn f64_trunc_i8(a: F64) -> I8 { a.trunc_i8() }
@@ -1650,6 +1668,8 @@ pub fn f64_trunc_u64(a: F64) -> U64 { a.trunc_u64() }
 pub fn f64_trunc_u64_sat(a: F64) -> U64 { a.trunc_u64_sat() }
 
 pub fn f64_round_f32(a: F64) -> F32 { a.round_f32() }
+
+pub fn f64_as_f64(a: F64) -> F64 { a as F64 }
 
 pub fn f32_to_bits(a: F32) -> U32 { a.to_bits() }
 
@@ -1741,6 +1761,8 @@ pub fn const_u64_max() -> U64 { U64.MAX }
 
 pub fn const_u64_bits() -> U32 { U64.BITS }
 
+pub fn const_f32_pi() -> F32 { F32.PI }
+
 pub fn const_f32_max() -> F32 { F32.MAX }
 
 pub fn const_f32_epsilon() -> F32 { F32.EPSILON }
@@ -1748,6 +1770,8 @@ pub fn const_f32_epsilon() -> F32 { F32.EPSILON }
 pub fn const_f32_infinity() -> F32 { F32.INFINITY }
 
 pub fn const_f32_nan() -> F32 { F32.NAN }
+
+pub fn const_f64_pi() -> F64 { F64.PI }
 
 pub fn const_f64_max() -> F64 { F64.MAX }
 

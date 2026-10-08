@@ -77,6 +77,7 @@ static int conv_float(int is32, const char *name, char *arg, char *o) {
     return 1;
   }
   if (!strcmp(name, "as_f64")) { show_f64(d, o); return 1; }
+  if (!strcmp(name, "as_f32")) { show_f32((float)d, o); return 1; }   /* the same type (S-210) */
   if (!strcmp(name, "round_f32")) { show_f32((float)d, o); return 1; }
   if (strncmp(name, "trunc_", 6)) return 0;
   int sat = strstr(name, "_sat") != NULL;
@@ -121,6 +122,7 @@ static int vdelay(int is32, const char *name, char **a, char *o) {
 static int const_float(int is32, const char *name, char *o) {
   if (!strcmp(name, "ZERO")) { if (is32) show_f32(0.0f, o); else show_f64(0.0, o); return 1; }
   if (!strcmp(name, "ONE")) { if (is32) show_f32(1.0f, o); else show_f64(1.0, o); return 1; }
+  if (!strcmp(name, "PI")) { if (is32) show_f32(3.14159265358979323846264338327950288f, o); else show_f64(3.14159265358979323846264338327950288, o); return 1; }
   if (!strcmp(name, "MAX")) { if (is32) show_f32(FLT_MAX, o); else show_f64(DBL_MAX, o); return 1; }
   if (!strcmp(name, "EPSILON")) { if (is32) show_f32(FLT_EPSILON, o); else show_f64(DBL_EPSILON, o); return 1; }
   if (!strcmp(name, "INFINITY")) { if (is32) show_f32(INFINITY, o); else show_f64(INFINITY, o); return 1; }

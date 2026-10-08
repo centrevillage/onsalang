@@ -9,9 +9,11 @@ the way to rebuild the data.
 A result is one of: ("v", value) | NAN | ("panic", kind) | ("none",) | ("some", value).
 A float value is its IEEE bit pattern (an int); an integer value is a Python int.
 
-Where a rule is not written in the spec (the sign of a zero result, S-207 .. S-209),
-the model still computes the IEEE answer and sets a hold in `Ctx.holds`; the
-generator then writes the row with the expected value `?` in a `held-` section.
+Where a rule is not written in the spec, the model sets a hold in `Ctx.hold(code)`; the
+generator then writes the row with the expected value `?` in a `held-` section. Nothing is
+held now: S-207 (the sign of a zero result, 3.4), S-208 (`abs(-0.0)`) and S-209 (finite %
+infinity) were decided on 2026-10-08 and the rules are written in 3.4; the holds were
+removed in W2-12 and the rows are `edge` / `rand` rows.
 """
 from fractions import Fraction
 from math import isqrt
@@ -24,15 +26,13 @@ FLOATS = {"f32": (32, 24, 127), "f64": (64, 53, 1023)}  # width, precision, emax
 NUM = list(INTS) + list(FLOATS)
 NAN = ("nan",)
 
-# The holds: S numbers of the gaps in the spec that make an expected value undecidable.
-ZERO_SIGN = "S207"   # the sign of a zero result (section 3.4)
-ABS_ZERO = "S208"    # abs(+-0.0)
-FMOD_INF = "S209"    # finite % infinity
+# The holds: S numbers ("S207") of the gaps in the spec that make an expected value undecidable.
+# None now. To hold a row, call `Ctx.hold("S<number>")` in the rule that the spec does not give;
+# the generator writes the row with `?` in a `held-S<number>` section (tests/vectors/FORMAT.md).
 
 
 class Ctx:
     holds = set()
-    zflip = 0   # 1: every zero whose sign the spec does not give is the other zero (see `decide`)
 
     @staticmethod
     def reset():
@@ -44,22 +44,12 @@ class Ctx:
 
 
 def decide(fn, args):
-    """Evaluate `fn(args)` and say which gaps in the spec the answer depends on: (result, [S number]).
-    A zero whose sign the spec does not give matters only if the answer changes when that sign is flipped
-    (`(1.0 - f) * a + f * b` with f = 0 has a +0 intermediate, but the answer is a)."""
+    """Evaluate `fn(args)` and say which gaps in the spec the answer depends on: (result, [S number])."""
     Ctx.reset()
-    Ctx.zflip = 0
     r = fn(args)
-    holds = set(Ctx.holds)
-    if holds & {ZERO_SIGN, ABS_ZERO}:
-        Ctx.holds = set()
-        Ctx.zflip = 1
-        r2 = fn(args)
-        Ctx.zflip = 0
-        if r2 == r:
-            holds -= {ZERO_SIGN, ABS_ZERO}
+    holds = sorted(Ctx.holds)
     Ctx.reset()
-    return r, sorted(holds)
+    return r, holds
 
 
 def int_range(t):
@@ -116,9 +106,7 @@ def round_to(t, sign, q):
         e += 1
     if e > emax:
         return fenc_inf(t, sign)
-    if fl == 0:
-        Ctx.hold(ZERO_SIGN)  # underflow to zero: the spec does not say which zero
-        sign ^= Ctx.zflip
+    # fl == 0: a nonzero exact value rounded to zero keeps the sign of the exact value (3.4)
     if fl < (1 << (p - 1)):  # subnormal (e == emin)
         return (sign << (w - 1)) | fl
     return (sign << (w - 1)) | ((e + emax) << (p - 1)) | (fl & ((1 << (p - 1)) - 1))
@@ -147,9 +135,8 @@ def fneg_bits(t, a):
     return a ^ (1 << (fparams(t)[0] - 1))
 
 
-def _zero_result(t, sign, code=None):
-    Ctx.hold(code or ZERO_SIGN)
-    return ("v", fenc_zero(t, sign ^ Ctx.zflip))
+def _zero_result(t, sign):
+    return ("v", fenc_zero(t, sign))
 
 
 def f_add(t, a, b):
@@ -163,7 +150,8 @@ def f_add(t, a, b):
     x, y = fval(t, a), fval(t, b)
     s = x + y
     if s == 0:
-        # IEEE 754 roundTiesToEven: x + (-x) = +0 and (-0) + (-0) = -0. Not written in 3.4 (S-207).
+        # 3.4 (S-207): an exact zero sum is -0.0 only when both operands are -0.0, otherwise +0.0
+        # (a - b is a + (-b), see f_sub).
         return _zero_result(t, da[1] if (x == 0 and y == 0 and da[1] == db[1]) else 0)
     return ("v", round_to(t, 1 if s < 0 else 0, abs(s)))
 
@@ -212,8 +200,7 @@ def f_rem(t, a, b):
     if da[0] == "nan" or db[0] == "nan" or da[0] == "inf":
         return NAN
     if db[0] == "inf":
-        Ctx.hold(FMOD_INF)  # 3.4 says nothing about a finite a (the formula is 0 * inf)
-        return ("v", a)
+        return ("v", a)  # 3.4 (S-209): a finite a % an infinity is a, -0.0 kept
     if db[2] == 0:
         return NAN
     x, y = da[2], db[2]
@@ -234,7 +221,7 @@ def f_sqrt(t, a):
     if d[0] == "inf":
         return NAN if d[1] else ("v", a)
     if d[2] == 0:
-        return _zero_result(t, d[1])  # sqrt(+-0) = +-0 (IEEE)
+        return _zero_result(t, d[1])  # 3.4 (S-207): sqrt(-0.0) is -0.0
     if d[1]:
         return NAN
     q = d[2]
@@ -279,7 +266,7 @@ def f_floorlike(t, a, mode):
         return ("v", a)
     x = fval(t, a)
     if x == 0:
-        return _zero_result(t, d[1])  # floor(-0.0) and the others: the spec does not say which zero
+        return _zero_result(t, d[1])  # 3.4 (S-207): floor ceil trunc round keep the sign of the operand
     fl = x.numerator // x.denominator
     if mode == "floor":
         r = Fraction(fl)
@@ -291,7 +278,7 @@ def f_floorlike(t, a, mode):
         diff = x - fl
         r = Fraction(fl + 1) if (diff > Fraction(1, 2) or (diff == Fraction(1, 2) and fl & 1)) else Fraction(fl)
     if r == 0:
-        return _zero_result(t, d[1])  # IEEE roundToIntegral keeps the sign of the input
+        return _zero_result(t, d[1])  # 3.4 (S-207): the sign of the operand (ceil(-0.5) is -0.0)
     return ("v", round_to(t, 1 if r < 0 else 0, abs(r)))
 
 
@@ -300,7 +287,7 @@ def f_abs(t, a):
     if d[0] == "nan":
         return NAN
     if d[0] == "fin" and d[2] == 0:
-        return _zero_result(t, 0, ABS_ZERO)  # IEEE: +0; the std body would give -0.0 for -0.0 (S-208)
+        return _zero_result(t, 0)  # 3.4 (S-208): the sign bit cleared, abs(-0.0) is +0.0
     return ("v", a & ~(1 << (fparams(t)[0] - 1)))
 
 
@@ -555,4 +542,36 @@ def selftest():
     assert float_to_int("f64", 0xBFECCCCCCCCCCCCD, "u64", False) == ("v", 0)
     assert float_to_int("f64", 0xBFF0000000000000, "u32", False) == ("panic", "range")
     assert to_bits("f32", 0xFFC00001) == 0x7FC00000
+    # 3.4, the sign of a zero result (S-207), abs (S-208), finite % infinity (S-209): the answers written
+    # by hand from the rules in the spec, so that a change of the model cannot move the expected values.
+    pz, nz, inf, ninf = 0x00000000, 0x80000000, 0x7F800000, 0xFF800000
+    one, mone, half, mhalf = 0x3F800000, 0xBF800000, 0x3F000000, 0xBF000000
+    assert f_add(t, one, mone) == ("v", pz)                    # an exact zero sum is +0.0 ...
+    assert f_add(t, nz, nz) == ("v", nz)                       # ... unless both are -0.0
+    assert f_add(t, nz, pz) == ("v", pz) and f_add(t, pz, nz) == ("v", pz)
+    assert f_sub(t, nz, pz) == ("v", nz)                       # a - b is a + (-b)
+    assert f_sub(t, pz, pz) == ("v", pz) and f_sub(t, 0x40600000, 0x40600000) == ("v", pz)
+    assert f_mul(t, pz, mone) == ("v", nz) and f_mul(t, nz, nz) == ("v", pz)     # the xor of the signs
+    assert f_div(t, pz, mone) == ("v", nz) and f_div(t, mone, inf) == ("v", nz)
+    tiny = fq(t, Fraction(1, 10 ** 30))
+    assert f_mul(t, fneg_bits(t, tiny), tiny) == ("v", nz) and f_mul(t, tiny, tiny) == ("v", pz)  # rounds to zero
+    assert f_sqrt(t, nz) == ("v", nz) and f_sqrt(t, pz) == ("v", pz)
+    assert f_floorlike(t, nz, "floor") == ("v", nz) and f_floorlike(t, pz, "floor") == ("v", pz)
+    assert f_floorlike(t, mhalf, "ceil") == ("v", nz) and f_floorlike(t, mhalf, "trunc") == ("v", nz)
+    assert f_floorlike(t, mhalf, "round") == ("v", nz) and f_floorlike(t, half, "round") == ("v", pz)
+    assert f_floorlike(t, half, "floor") == ("v", pz) and f_floorlike(t, half, "trunc") == ("v", pz)
+    assert float_to_float("f64", "f32", 0x8000000000000000) == ("v", nz)   # F64 -> F32 keeps the sign of a zero
+    assert float_to_float("f64", "f32", fq("f64", -Fraction(1, 10 ** 300))) == ("v", nz)  # and of a rounded-to-zero
+    assert float_widen("f32", "f64", nz) == ("v", 0x8000000000000000)
+    assert int_to_float("f32", 0) == ("v", pz)
+    assert f_abs(t, nz) == ("v", pz) and f_abs(t, pz) == ("v", pz) and f_abs(t, mone) == ("v", one)
+    assert f_rem(t, one, inf) == ("v", one) and f_rem(t, mone, ninf) == ("v", mone)
+    assert f_rem(t, nz, inf) == ("v", nz) and f_rem(t, 0xC0800000, 0x40000000) == ("v", nz)   # -4.0 % 2.0 has the sign of a
+    assert f_rem(t, 0x7F7FFFFF, inf) == ("v", 0x7F7FFFFF)
+    assert f_rem(t, inf, one) == NAN and f_rem(t, one, pz) == NAN
+    # 11.4 consequences of the rules above: an integer d gives f = dc - k = +0.0; a = -0.0, f = +0.0 gives +0.0
+    k, f = vdelay_kf(t, 0x40000000, 100)
+    assert (k, f) == (2, ("v", pz))
+    assert expr_interp(t, nz, one, pz) == ("v", pz)
+    # S-211: PI is checked in ops.py
     Ctx.reset()

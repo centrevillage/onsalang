@@ -344,6 +344,7 @@ f64.round	f64_round	float-f64.tsv	scalar	F64	F64	§3.4 std.math	round	round(a)
 f64.abs	f64_abs	float-f64.tsv	scalar	F64	F64	§3.4 std.math	abs	abs(a)
 f64.is_nan	f64_is_nan	float-f64.tsv	predicates	F64	Bool	§3.4 std.math	is_nan	is_nan(a)
 f64.is_finite	f64_is_finite	float-f64.tsv	predicates	F64	Bool	§3.4 std.math	is_finite	is_finite(a)
+i8.as_i8	i8_as_i8	conv-i8.tsv	scalar	I8	I8	§3.3 変換の表	as	a as I8
 i8.as_i16	i8_as_i16	conv-i8.tsv	scalar	I8	I16	§3.3 変換の表	as	a as I16
 i8.as_i32	i8_as_i32	conv-i8.tsv	scalar	I8	I32	§3.3 変換の表	as	a as I32
 i8.as_i64	i8_as_i64	conv-i8.tsv	scalar	I8	I64	§3.3 変換の表	as	a as I64
@@ -354,6 +355,7 @@ i8.narrow_u64	i8_narrow_u64	conv-i8.tsv	scalar	I8	Option[U64]	§3.3 変換の表
 i8.as_f32	i8_as_f32	conv-i8.tsv	scalar	I8	F32	§3.3 変換の表	as	a as F32
 i8.as_f64	i8_as_f64	conv-i8.tsv	scalar	I8	F64	§3.3 変換の表	as	a as F64
 i16.narrow_i8	i16_narrow_i8	conv-i16.tsv	scalar	I16	Option[I8]	§3.3 変換の表	narrow_<型>	a.narrow_i8()
+i16.as_i16	i16_as_i16	conv-i16.tsv	scalar	I16	I16	§3.3 変換の表	as	a as I16
 i16.as_i32	i16_as_i32	conv-i16.tsv	scalar	I16	I32	§3.3 変換の表	as	a as I32
 i16.as_i64	i16_as_i64	conv-i16.tsv	scalar	I16	I64	§3.3 変換の表	as	a as I64
 i16.narrow_u8	i16_narrow_u8	conv-i16.tsv	scalar	I16	Option[U8]	§3.3 変換の表	narrow_<型>	a.narrow_u8()
@@ -364,6 +366,7 @@ i16.as_f32	i16_as_f32	conv-i16.tsv	scalar	I16	F32	§3.3 変換の表	as	a as F32
 i16.as_f64	i16_as_f64	conv-i16.tsv	scalar	I16	F64	§3.3 変換の表	as	a as F64
 i32.narrow_i8	i32_narrow_i8	conv-i32.tsv	scalar	I32	Option[I8]	§3.3 変換の表	narrow_<型>	a.narrow_i8()
 i32.narrow_i16	i32_narrow_i16	conv-i32.tsv	scalar	I32	Option[I16]	§3.3 変換の表	narrow_<型>	a.narrow_i16()
+i32.as_i32	i32_as_i32	conv-i32.tsv	scalar	I32	I32	§3.3 変換の表	as	a as I32
 i32.as_i64	i32_as_i64	conv-i32.tsv	scalar	I32	I64	§3.3 変換の表	as	a as I64
 i32.narrow_u8	i32_narrow_u8	conv-i32.tsv	scalar	I32	Option[U8]	§3.3 変換の表	narrow_<型>	a.narrow_u8()
 i32.narrow_u16	i32_narrow_u16	conv-i32.tsv	scalar	I32	Option[U16]	§3.3 変換の表	narrow_<型>	a.narrow_u16()
@@ -374,6 +377,7 @@ i32.as_f64	i32_as_f64	conv-i32.tsv	scalar	I32	F64	§3.3 変換の表	as	a as F64
 i64.narrow_i8	i64_narrow_i8	conv-i64.tsv	scalar	I64	Option[I8]	§3.3 変換の表	narrow_<型>	a.narrow_i8()
 i64.narrow_i16	i64_narrow_i16	conv-i64.tsv	scalar	I64	Option[I16]	§3.3 変換の表	narrow_<型>	a.narrow_i16()
 i64.narrow_i32	i64_narrow_i32	conv-i64.tsv	scalar	I64	Option[I32]	§3.3 変換の表	narrow_<型>	a.narrow_i32()
+i64.as_i64	i64_as_i64	conv-i64.tsv	scalar	I64	I64	§3.3 変換の表	as	a as I64
 i64.narrow_u8	i64_narrow_u8	conv-i64.tsv	scalar	I64	Option[U8]	§3.3 変換の表	narrow_<型>	a.narrow_u8()
 i64.narrow_u16	i64_narrow_u16	conv-i64.tsv	scalar	I64	Option[U16]	§3.3 変換の表	narrow_<型>	a.narrow_u16()
 i64.narrow_u32	i64_narrow_u32	conv-i64.tsv	scalar	I64	Option[U32]	§3.3 変換の表	narrow_<型>	a.narrow_u32()
@@ -384,6 +388,7 @@ u8.narrow_i8	u8_narrow_i8	conv-u8.tsv	scalar	U8	Option[I8]	§3.3 変換の表	na
 u8.as_i16	u8_as_i16	conv-u8.tsv	scalar	U8	I16	§3.3 変換の表	as	a as I16
 u8.as_i32	u8_as_i32	conv-u8.tsv	scalar	U8	I32	§3.3 変換の表	as	a as I32
 u8.as_i64	u8_as_i64	conv-u8.tsv	scalar	U8	I64	§3.3 変換の表	as	a as I64
+u8.as_u8	u8_as_u8	conv-u8.tsv	scalar	U8	U8	§3.3 変換の表	as	a as U8
 u8.as_u16	u8_as_u16	conv-u8.tsv	scalar	U8	U16	§3.3 変換の表	as	a as U16
 u8.as_u32	u8_as_u32	conv-u8.tsv	scalar	U8	U32	§3.3 変換の表	as	a as U32
 u8.as_u64	u8_as_u64	conv-u8.tsv	scalar	U8	U64	§3.3 変換の表	as	a as U64
@@ -394,6 +399,7 @@ u16.narrow_i16	u16_narrow_i16	conv-u16.tsv	scalar	U16	Option[I16]	§3.3 変換�
 u16.as_i32	u16_as_i32	conv-u16.tsv	scalar	U16	I32	§3.3 変換の表	as	a as I32
 u16.as_i64	u16_as_i64	conv-u16.tsv	scalar	U16	I64	§3.3 変換の表	as	a as I64
 u16.narrow_u8	u16_narrow_u8	conv-u16.tsv	scalar	U16	Option[U8]	§3.3 変換の表	narrow_<型>	a.narrow_u8()
+u16.as_u16	u16_as_u16	conv-u16.tsv	scalar	U16	U16	§3.3 変換の表	as	a as U16
 u16.as_u32	u16_as_u32	conv-u16.tsv	scalar	U16	U32	§3.3 変換の表	as	a as U32
 u16.as_u64	u16_as_u64	conv-u16.tsv	scalar	U16	U64	§3.3 変換の表	as	a as U64
 u16.as_f32	u16_as_f32	conv-u16.tsv	scalar	U16	F32	§3.3 変換の表	as	a as F32
@@ -404,6 +410,7 @@ u32.narrow_i32	u32_narrow_i32	conv-u32.tsv	scalar	U32	Option[I32]	§3.3 変換�
 u32.as_i64	u32_as_i64	conv-u32.tsv	scalar	U32	I64	§3.3 変換の表	as	a as I64
 u32.narrow_u8	u32_narrow_u8	conv-u32.tsv	scalar	U32	Option[U8]	§3.3 変換の表	narrow_<型>	a.narrow_u8()
 u32.narrow_u16	u32_narrow_u16	conv-u32.tsv	scalar	U32	Option[U16]	§3.3 変換の表	narrow_<型>	a.narrow_u16()
+u32.as_u32	u32_as_u32	conv-u32.tsv	scalar	U32	U32	§3.3 変換の表	as	a as U32
 u32.as_u64	u32_as_u64	conv-u32.tsv	scalar	U32	U64	§3.3 変換の表	as	a as U64
 u32.round_f32	u32_round_f32	conv-u32.tsv	scalar	U32	F32	§3.3 変換の表	round_f32	a.round_f32()
 u32.as_f64	u32_as_f64	conv-u32.tsv	scalar	U32	F64	§3.3 変換の表	as	a as F64
@@ -414,6 +421,7 @@ u64.narrow_i64	u64_narrow_i64	conv-u64.tsv	scalar	U64	Option[I64]	§3.3 変換�
 u64.narrow_u8	u64_narrow_u8	conv-u64.tsv	scalar	U64	Option[U8]	§3.3 変換の表	narrow_<型>	a.narrow_u8()
 u64.narrow_u16	u64_narrow_u16	conv-u64.tsv	scalar	U64	Option[U16]	§3.3 変換の表	narrow_<型>	a.narrow_u16()
 u64.narrow_u32	u64_narrow_u32	conv-u64.tsv	scalar	U64	Option[U32]	§3.3 変換の表	narrow_<型>	a.narrow_u32()
+u64.as_u64	u64_as_u64	conv-u64.tsv	scalar	U64	U64	§3.3 変換の表	as	a as U64
 u64.round_f32	u64_round_f32	conv-u64.tsv	scalar	U64	F32	§3.3 変換の表	round_f32	a.round_f32()
 u64.round_f64	u64_round_f64	conv-u64.tsv	scalar	U64	F64	§3.3 変換の表	round_f64	a.round_f64()
 f32.trunc_i8	f32_trunc_i8	conv-f32.tsv	scalar	F32	I8	§3.3 変換の表	trunc_<型>	a.trunc_i8()
@@ -432,6 +440,7 @@ f32.trunc_u32	f32_trunc_u32	conv-f32.tsv	scalar	F32	U32	§3.3 変換の表	trunc
 f32.trunc_u32_sat	f32_trunc_u32_sat	conv-f32.tsv	scalar	F32	U32	§3.3 変換の表	trunc_<型>_sat	a.trunc_u32_sat()
 f32.trunc_u64	f32_trunc_u64	conv-f32.tsv	scalar	F32	U64	§3.3 変換の表	trunc_<型>	a.trunc_u64()
 f32.trunc_u64_sat	f32_trunc_u64_sat	conv-f32.tsv	scalar	F32	U64	§3.3 変換の表	trunc_<型>_sat	a.trunc_u64_sat()
+f32.as_f32	f32_as_f32	conv-f32.tsv	scalar	F32	F32	§3.3 変換の表	as	a as F32
 f32.as_f64	f32_as_f64	conv-f32.tsv	scalar	F32	F64	§3.3 変換の表	as	a as F64
 f64.trunc_i8	f64_trunc_i8	conv-f64.tsv	scalar	F64	I8	§3.3 変換の表	trunc_<型>	a.trunc_i8()
 f64.trunc_i8_sat	f64_trunc_i8_sat	conv-f64.tsv	scalar	F64	I8	§3.3 変換の表	trunc_<型>_sat	a.trunc_i8_sat()
@@ -450,6 +459,7 @@ f64.trunc_u32_sat	f64_trunc_u32_sat	conv-f64.tsv	scalar	F64	U32	§3.3 変換の�
 f64.trunc_u64	f64_trunc_u64	conv-f64.tsv	scalar	F64	U64	§3.3 変換の表	trunc_<型>	a.trunc_u64()
 f64.trunc_u64_sat	f64_trunc_u64_sat	conv-f64.tsv	scalar	F64	U64	§3.3 変換の表	trunc_<型>_sat	a.trunc_u64_sat()
 f64.round_f32	f64_round_f32	conv-f64.tsv	scalar	F64	F32	§3.3 変換の表	round_f32	a.round_f32()
+f64.as_f64	f64_as_f64	conv-f64.tsv	scalar	F64	F64	§3.3 変換の表	as	a as F64
 f32.to_bits	f32_to_bits	conv-f32.tsv	scalar	F32	U32	§3.3 ビット表現 / §3.4 NaN	to_bits	a.to_bits()
 f32.from_bits	f32_from_bits	conv-f32.tsv	scalar	U32	F32	§3.3 ビット表現	from_bits	F32.from_bits(a)
 f64.to_bits	f64_to_bits	conv-f64.tsv	scalar	F64	U64	§3.3 ビット表現 / §3.4 NaN	to_bits	a.to_bits()
@@ -510,12 +520,14 @@ u64.MAX	const_u64_max	const.tsv	scalar	()	U64	§6.6 関連定数の表	MAX	U64.M
 u64.BITS	const_u64_bits	const.tsv	scalar	()	U32	§6.6 関連定数の表	BITS	U64.BITS
 f32.ZERO	const_f32_zero	const.tsv	zero_one	()	F32	§6.6 関連定数の表	ZERO	F32.ZERO
 f32.ONE	const_f32_one	const.tsv	zero_one	()	F32	§6.6 関連定数の表	ONE	F32.ONE
+f32.PI	const_f32_pi	const.tsv	scalar	()	F32	§6.6 関連定数の表	PI	F32.PI
 f32.MAX	const_f32_max	const.tsv	scalar	()	F32	§6.6 関連定数の表	MAX	F32.MAX
 f32.EPSILON	const_f32_epsilon	const.tsv	scalar	()	F32	§6.6 関連定数の表	EPSILON	F32.EPSILON
 f32.INFINITY	const_f32_infinity	const.tsv	scalar	()	F32	§6.6 関連定数の表	INFINITY	F32.INFINITY
 f32.NAN	const_f32_nan	const.tsv	scalar	()	F32	§6.6 関連定数の表	NAN	F32.NAN
 f64.ZERO	const_f64_zero	const.tsv	zero_one	()	F64	§6.6 関連定数の表	ZERO	F64.ZERO
 f64.ONE	const_f64_one	const.tsv	zero_one	()	F64	§6.6 関連定数の表	ONE	F64.ONE
+f64.PI	const_f64_pi	const.tsv	scalar	()	F64	§6.6 関連定数の表	PI	F64.PI
 f64.MAX	const_f64_max	const.tsv	scalar	()	F64	§6.6 関連定数の表	MAX	F64.MAX
 f64.EPSILON	const_f64_epsilon	const.tsv	scalar	()	F64	§6.6 関連定数の表	EPSILON	F64.EPSILON
 f64.INFINITY	const_f64_infinity	const.tsv	scalar	()	F64	§6.6 関連定数の表	INFINITY	F64.INFINITY
