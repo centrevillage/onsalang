@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8", "§18.1"]
+
+// E0200 for a `std` helper of §11.8 that this version's `onsa test` does not
+// run, reached from a test through other code: a function that builds a
+// generator and a generator of pairs (spec §11.8, `gen.pair(g1, g2)`). §18.1:
+// the compiler reports E0200 at the position where it finds the form it cannot
+// handle (here, each call of a generator), not at the test that reaches it.
+// The test that only passes still does not run.
+
+use std.test.{Gen}
+use std.test.gen
+
+fn unit_range() -> Gen[F32] {
+  gen.f32(0.0, 1.0)   //~ E0200
+}
+
+test "a generator built by a function" {
+  let g = unit_range()
+}
+
+test "a pair of generators" {
+  let p = gen.pair(gen.u32(1, 2), gen.u32(3, 4))   //~ E0200 //~ E0200 //~ E0200
+}
+
+test "a test without a generator" {
+  let two: U32 = 2
+  assert two == 2
+}

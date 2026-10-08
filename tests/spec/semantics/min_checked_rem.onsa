@@ -1,0 +1,179 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§9.2"]
+
+// The checked methods at `MIN` and `-1` for every signed width (spec §3.4):
+// a checked method returns `None` where the operator panics and `Some` of the
+// operator's result otherwise. `MIN % -1` and `MIN.rem_euclid(-1)` do not panic,
+// their result 0 fits, so `checked_rem` and `checked_rem_euclid` are `Some(0)`;
+// `MIN / -1` and `MIN.div_euclid(-1)` panic (one above MAX), so `checked_div`
+// and `checked_div_euclid` are `None`; a zero divisor gives `None` for all four.
+// `-MIN` panics, so `checked_neg` is `None`. The I64 forms are also in
+// checked_ops.onsa; the operators themselves are in min_rem_neg1.onsa.
+
+fn is_none[T](o: Option[T]) -> Bool {
+  match o {
+    None => true,
+    Some(_) => false,
+  }
+}
+
+fn val[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+test "I8: checked_rem and checked_rem_euclid at MIN and -1 are Some(0)" {
+  let a: I8 = I8.MIN
+  let c: I8 = I8.MAX
+  let m: I8 = -1
+  let z: I8 = 0
+  assert !is_none(a.checked_rem(m))
+  assert val(a.checked_rem(m), 7) == 0
+  assert !is_none(a.checked_rem_euclid(m))
+  assert val(a.checked_rem_euclid(m), 7) == 0
+  assert val(c.checked_rem(m), 7) == 0
+  assert val(c.checked_rem_euclid(m), 7) == 0
+  assert is_none(a.checked_rem(z))
+  assert is_none(a.checked_rem_euclid(z))
+}
+
+test "I8: checked_div and checked_div_euclid are None at MIN and -1" {
+  let a: I8 = I8.MIN
+  let c: I8 = I8.MAX
+  let m: I8 = -1
+  let z: I8 = 0
+  assert is_none(a.checked_div(m))
+  assert is_none(a.checked_div_euclid(m))
+  assert val(a.checked_div(1), 7) == a
+  assert val(a.checked_div_euclid(1), 7) == a
+  assert val(c.checked_div(m), 7) == -127
+  assert val(c.checked_div_euclid(m), 7) == -127
+  assert is_none(a.checked_div(z))
+  assert is_none(a.checked_div_euclid(z))
+}
+
+test "I8: checked_neg is None only at MIN" {
+  let a: I8 = I8.MIN
+  let c: I8 = I8.MAX
+  assert is_none(a.checked_neg())
+  assert val(c.checked_neg(), 7) == -127
+  assert val((a + 1).checked_neg(), 7) == 127
+}
+
+test "I16: checked_rem and checked_rem_euclid at MIN and -1 are Some(0)" {
+  let a: I16 = I16.MIN
+  let c: I16 = I16.MAX
+  let m: I16 = -1
+  let z: I16 = 0
+  assert !is_none(a.checked_rem(m))
+  assert val(a.checked_rem(m), 7) == 0
+  assert !is_none(a.checked_rem_euclid(m))
+  assert val(a.checked_rem_euclid(m), 7) == 0
+  assert val(c.checked_rem(m), 7) == 0
+  assert val(c.checked_rem_euclid(m), 7) == 0
+  assert is_none(a.checked_rem(z))
+  assert is_none(a.checked_rem_euclid(z))
+}
+
+test "I16: checked_div and checked_div_euclid are None at MIN and -1" {
+  let a: I16 = I16.MIN
+  let c: I16 = I16.MAX
+  let m: I16 = -1
+  let z: I16 = 0
+  assert is_none(a.checked_div(m))
+  assert is_none(a.checked_div_euclid(m))
+  assert val(a.checked_div(1), 7) == a
+  assert val(a.checked_div_euclid(1), 7) == a
+  assert val(c.checked_div(m), 7) == -32767
+  assert val(c.checked_div_euclid(m), 7) == -32767
+  assert is_none(a.checked_div(z))
+  assert is_none(a.checked_div_euclid(z))
+}
+
+test "I16: checked_neg is None only at MIN" {
+  let a: I16 = I16.MIN
+  let c: I16 = I16.MAX
+  assert is_none(a.checked_neg())
+  assert val(c.checked_neg(), 7) == -32767
+  assert val((a + 1).checked_neg(), 7) == 32767
+}
+
+test "I32: checked_rem and checked_rem_euclid at MIN and -1 are Some(0)" {
+  let a: I32 = I32.MIN
+  let c: I32 = I32.MAX
+  let m: I32 = -1
+  let z: I32 = 0
+  assert !is_none(a.checked_rem(m))
+  assert val(a.checked_rem(m), 7) == 0
+  assert !is_none(a.checked_rem_euclid(m))
+  assert val(a.checked_rem_euclid(m), 7) == 0
+  assert val(c.checked_rem(m), 7) == 0
+  assert val(c.checked_rem_euclid(m), 7) == 0
+  assert is_none(a.checked_rem(z))
+  assert is_none(a.checked_rem_euclid(z))
+}
+
+test "I32: checked_div and checked_div_euclid are None at MIN and -1" {
+  let a: I32 = I32.MIN
+  let c: I32 = I32.MAX
+  let m: I32 = -1
+  let z: I32 = 0
+  assert is_none(a.checked_div(m))
+  assert is_none(a.checked_div_euclid(m))
+  assert val(a.checked_div(1), 7) == a
+  assert val(a.checked_div_euclid(1), 7) == a
+  assert val(c.checked_div(m), 7) == -2147483647
+  assert val(c.checked_div_euclid(m), 7) == -2147483647
+  assert is_none(a.checked_div(z))
+  assert is_none(a.checked_div_euclid(z))
+}
+
+test "I32: checked_neg is None only at MIN" {
+  let a: I32 = I32.MIN
+  let c: I32 = I32.MAX
+  assert is_none(a.checked_neg())
+  assert val(c.checked_neg(), 7) == -2147483647
+  assert val((a + 1).checked_neg(), 7) == 2147483647
+}
+
+test "I64: checked_rem and checked_rem_euclid at MIN and -1 are Some(0)" {
+  let a: I64 = I64.MIN
+  let c: I64 = I64.MAX
+  let m: I64 = -1
+  let z: I64 = 0
+  assert !is_none(a.checked_rem(m))
+  assert val(a.checked_rem(m), 7) == 0
+  assert !is_none(a.checked_rem_euclid(m))
+  assert val(a.checked_rem_euclid(m), 7) == 0
+  assert val(c.checked_rem(m), 7) == 0
+  assert val(c.checked_rem_euclid(m), 7) == 0
+  assert is_none(a.checked_rem(z))
+  assert is_none(a.checked_rem_euclid(z))
+}
+
+test "I64: checked_div and checked_div_euclid are None at MIN and -1" {
+  let a: I64 = I64.MIN
+  let c: I64 = I64.MAX
+  let m: I64 = -1
+  let z: I64 = 0
+  assert is_none(a.checked_div(m))
+  assert is_none(a.checked_div_euclid(m))
+  assert val(a.checked_div(1), 7) == a
+  assert val(a.checked_div_euclid(1), 7) == a
+  assert val(c.checked_div(m), 7) == -9223372036854775807
+  assert val(c.checked_div_euclid(m), 7) == -9223372036854775807
+  assert is_none(a.checked_div(z))
+  assert is_none(a.checked_div_euclid(z))
+}
+
+test "I64: checked_neg is None only at MIN" {
+  let a: I64 = I64.MIN
+  let c: I64 = I64.MAX
+  assert is_none(a.checked_neg())
+  assert val(c.checked_neg(), 7) == -9223372036854775807
+  assert val((a + 1).checked_neg(), 7) == 9223372036854775807
+}

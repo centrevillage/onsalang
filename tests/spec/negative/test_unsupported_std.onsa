@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.8", "§18.1"]
+
+// E0200 from `onsa test` for the `std` helpers of §11.8 that this version's
+// interpreter does not run: the generators of `std.test.gen`. §18.1: E0200
+// tells a feature the compiler of this version cannot handle, including one
+// the spec has and the compiler does not handle yet, and the compiler does
+// not give a wrong result in silence but reports E0200 where it finds it.
+// §11.8: a helper that a target does not provide is E0200 on that target.
+//
+// Every one is reported, each at its call (§18.1: the diagnostics after the
+// checks are not reduced per unit), and no test runs, so the `assert false`
+// below is never reached.
+
+use std.test.gen
+
+test "a generator in the body of a test" {
+  let g = gen.f32(-1.0, 1.0)   //~ E0200
+  assert false
+}
+
+test "a generator of another type in another test" {
+  let g = gen.u32(0, 10)   //~ E0200
+}

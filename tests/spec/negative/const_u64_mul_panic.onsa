@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§3.4", "§6.6", "§9.2"]
+
+// E0419 for the integer panics of §3.4 in a `const` initializer (spec §6.6, §9.2):
+// a panic of the evaluation is reported at the position of the initializer.
+// The cases are the ones whose results do not fit: a checked `U64` product
+// above 2^64 - 1, `MIN / -1`, and the conversion of 2^63 or of a NaN. The
+// neighbours that do fit (`MIN % -1` is 0, the exact product 2^64 - 1) are
+// accepted. The values of the accepted constants are in
+// semantics/u64_mul_const.onsa.
+
+fn mul_checked(a: U64, b: U64) -> U64 {
+  a * b
+}
+
+fn div_i8(a: I8, b: I8) -> I8 {
+  a / b
+}
+
+fn rem_i8(a: I8, b: I8) -> I8 {
+  a % b
+}
+
+fn to_i64(f: F64) -> I64 {
+  f.trunc_i64()
+}
+
+fn to_u64(f: F32) -> U64 {
+  f.trunc_u64()
+}
+
+// 2^32 * 2^32 = 2^64 is one above U64.MAX.
+const A: U64 = mul_checked(4294967296, 4294967296)   //~ E0419
+
+// 2^64 - 1 times 2.
+const B: U64 = mul_checked(18446744073709551615, 2)   //~ E0419
+
+// -128 / -1 = 128 is one above I8.MAX.
+const C: I8 = div_i8(-128, -1)   //~ E0419
+
+// 2^63 does not fit I64.
+const D: I64 = to_i64(9223372036854775808.0)   //~ E0419
+
+// 2^64 as an F32 does not fit U64.
+const E: U64 = to_u64(18446744073709551616.0)   //~ E0419
+
+// These fit and are accepted.
+const OK_EXACT: U64 = mul_checked(4294967295, 4294967297)
+const OK_REM: I8 = rem_i8(-128, -1)
+const OK_DIV: I8 = div_i8(127, -1)

@@ -1,11 +1,12 @@
 //! The interpreter against the vectors (gate item `vectors-interp`).
 //!
 //! The Core it runs is `lower_core`'s, `onsa test`'s path (independent of a
-//! target). Each call is guarded ([`onsa_driver::guard`]): a panic of the
-//! interpreter itself (an `unwrap`, an arithmetic overflow of the host in a
-//! debug build) is an internal error of the compiler (S-67), never the
-//! program's panic. The whole run is on its own thread with the stack of a
-//! command ([`onsa_diag::stack`]) and a time budget ([`BUDGET`]).
+//! target). Each call is guarded ([`onsa_driver::guard`]): a failure of the
+//! interpreter itself (its own report of a state it cannot be in, R-137, or
+//! a panic of the host) is an internal error of the compiler (S-67), never
+//! the program's panic ([`Failure::Panic`]). The whole run is on its own
+//! thread with the stack of a command ([`onsa_diag::stack`]) and a time
+//! budget ([`BUDGET`]).
 
 use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -13,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use onsa_core::FnId;
-use onsa_interp::{Interp, Panic, Value};
+use onsa_interp::{Failure, Interp, Value};
 
 use super::bind::{Callee, Shape, bind, plan};
 use super::data::Data;
@@ -75,6 +76,16 @@ fn run_all(root: &Path, data: &Data, list: &Pending, at: &Mutex<String>) -> Vect
                 continue;
             }
         };
+        // A fixture the interpreter cannot run is an error of the item (E0200,
+        // S-224), found before any call, as `onsa test` finds it.
+        let unsupported = onsa_interp::unsupported(&module);
+        if !unsupported.is_empty() {
+            out.run.errors.extend(unsupported.iter().map(|u| {
+                let d = u.diagnostic();
+                format!("{pkg}: {}: {}", d.code.as_str(), d.message)
+            }));
+            continue;
+        }
         let interp = Interp::new(&module);
         let Some(ids) = bound.callees.iter().map(|c| interp.fn_by_name(&c.name)).collect::<Option<Vec<FnId>>>() else {
             out.run.errors.push(format!("{pkg}: the interpreter does not find an exported function"));
@@ -116,16 +127,13 @@ fn call(interp: &Interp<'_>, f: FnId, callee: &Callee, args: Vec<Value>) -> Got 
             onsa_driver::Origin::Panic { location: Some(l) } => format!("{} (at {l})", e.message),
             _ => e.message,
         }),
-        Ok(Err(p)) if reports_itself(&p) => Got::Internal(p.message),
-        Ok(Err(p)) => Got::Panic(p.message),
+        Ok(Err(Failure::Panic(p))) => Got::Panic(p.message),
+        // `run_all` found every one before the calls.
+        Ok(Err(Failure::Unsupported(u))) => Got::Internal(format!(
+            "the interpreter reached `{}`, which the check before the calls did not find",
+            u.std_fn
+        )),
         Ok(Ok(v)) if callee.ret.holds(&v) => Got::Value(v),
         Ok(Ok(v)) => Got::Internal(format!("`{}` returned {v:?}, not a {}", callee.name, callee.ret.name())),
     }
-}
-
-/// R-137: the interpreter reports some of its own failures as a panic of the
-/// program whose message starts with `internal:`. W2-03 makes them internal
-/// errors (S-67); then this goes, and the guard above sees them.
-fn reports_itself(p: &Panic) -> bool {
-    p.message.starts_with("internal:")
 }

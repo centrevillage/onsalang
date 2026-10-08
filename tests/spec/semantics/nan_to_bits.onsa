@@ -1,0 +1,340 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§6.6"]
+
+// `to_bits()` of a NaN (spec §3.4, S-106). The sign and the payload of a NaN
+// that an operation produces are not specified, so the only way a program can
+// see them, `to_bits()`, normalizes: every NaN reads back as the positive quiet
+// NaN, 0x7FC00000 for F32 and 0x7FF8000000000000 for F64. The cases below make
+// a NaN in each way the spec names (a 0 / 0, an infinity minus an infinity, an
+// infinity times 0, `sqrt` of a negative number, `%` by 0, a propagated NaN, a
+// negated NaN, `min` / `max` with a NaN, the constant `NAN`, `from_bits` of a
+// pattern with a payload or a sign) and check that the bits are always the
+// canonical ones, and that a value that is not a NaN keeps its bits.
+//
+// F32: sign 1 bit, exponent 8 bits (all ones for infinity and NaN), fraction
+// 23 bits, the top fraction bit is the quiet bit. 0x7FC00000 has exponent
+// 0xFF and fraction 0x400000 (only the quiet bit). F64: 11 and 52 bits,
+// 0x7FF8000000000000 has exponent 0x7FF and fraction 0x8000000000000.
+
+use std.array
+use std.math.{max, min, sqrt}
+
+fn bits64(x: F64) -> U64 {
+  x.to_bits()
+}
+
+fn bits32(x: F32) -> U32 {
+  x.to_bits()
+}
+
+fn nan_bits_of_zero_over_zero(i: U32) -> U64 {
+  let z: F64 = 0.0
+  let n = z / z
+  n.to_bits()
+}
+
+// ------------------------------------------------------------------- F64 NaN
+
+test "F64: 0 / 0 reads back as the canonical quiet NaN" {
+  let z: F64 = 0.0
+  let n = z / z
+  assert n.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: infinity minus infinity is a NaN with the canonical bits" {
+  let inf = F64.INFINITY
+  let n   = inf - inf
+  assert n != n
+  assert n.to_bits() == 0x7FF8_0000_0000_0000
+  let m = inf + -inf
+  assert m != m
+  assert m.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: infinity times 0 and infinity over infinity are NaN" {
+  let inf = F64.INFINITY
+  let z: F64 = 0.0
+  let a = inf * z
+  assert a.to_bits() == 0x7FF8_0000_0000_0000
+  let b = inf / inf
+  assert b.to_bits() == 0x7FF8_0000_0000_0000
+  let c = z * -inf
+  assert c.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: sqrt of a negative number is a NaN with the canonical bits" {
+  let a: F64 = -1.0
+  let n = sqrt(a)
+  assert n != n
+  assert n.to_bits() == 0x7FF8_0000_0000_0000
+  let b: F64 = -0.5
+  let m = sqrt(b)
+  assert m.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: a remainder by 0 and of an infinity is a NaN" {
+  let z: F64 = 0.0
+  let one: F64 = 1.0
+  let a = one % z
+  assert a != a
+  assert a.to_bits() == 0x7FF8_0000_0000_0000
+  let inf = F64.INFINITY
+  let b   = inf % one
+  assert b != b
+  assert b.to_bits() == 0x7FF8_0000_0000_0000
+  let c = z % z
+  assert c.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: a NaN that propagates through arithmetic keeps the canonical bits" {
+  let z: F64 = 0.0
+  let n = z / z
+  let a = n + 1.0
+  let b = n * 2.0
+  let c = 3.0 - n
+  let d = n - n
+  assert a.to_bits() == 0x7FF8_0000_0000_0000
+  assert b.to_bits() == 0x7FF8_0000_0000_0000
+  assert c.to_bits() == 0x7FF8_0000_0000_0000
+  assert d.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: a negated NaN has the canonical bits and not the flipped sign" {
+  let z: F64 = 0.0
+  let n = z / z
+  let m = -n
+  assert m != m
+  assert m.to_bits() == 0x7FF8_0000_0000_0000
+  let k = -m
+  assert k.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: min and max with a NaN give a NaN" {
+  let z: F64 = 0.0
+  let n = z / z
+  let one: F64 = 1.0
+  let a = min(n, one)
+  let b = min(one, n)
+  let c = max(n, one)
+  let d = max(one, n)
+  assert a != a
+  assert b != b
+  assert c != c
+  assert d != d
+  assert a.to_bits() == 0x7FF8_0000_0000_0000
+  assert d.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: the constant NAN has the canonical bits" {
+  let n = F64.NAN
+  assert n != n
+  assert n.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: from_bits of a NaN pattern reads back as the canonical NaN" {
+  // Signalling NaN with the payload 1.
+  let a = F64.from_bits(0x7FF0_0000_0000_0001)
+  assert a != a
+  assert a.to_bits() == 0x7FF8_0000_0000_0000
+  // Negative quiet NaN.
+  let b = F64.from_bits(0xFFF8_0000_0000_0000)
+  assert b != b
+  assert b.to_bits() == 0x7FF8_0000_0000_0000
+  // Negative NaN with a payload, and all ones.
+  let c = F64.from_bits(0xFFF0_0000_0000_0123)
+  assert c.to_bits() == 0x7FF8_0000_0000_0000
+  let d = F64.from_bits(0xFFFF_FFFF_FFFF_FFFF)
+  assert d.to_bits() == 0x7FF8_0000_0000_0000
+  // The largest payload of a positive quiet NaN.
+  let e = F64.from_bits(0x7FFF_FFFF_FFFF_FFFF)
+  assert e.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: two NaNs of different origin have the same bits" {
+  let z: F64 = 0.0
+  let a = z / z
+  let b = F64.from_bits(0xFFF0_0000_0000_0001)
+  let c = F64.from_bits(0x7FF4_0000_0000_0000)
+  assert a.to_bits() == b.to_bits()
+  assert b.to_bits() == c.to_bits()
+}
+
+test "F64: a round trip through the bits of a NaN is a NaN" {
+  let z: F64 = 0.0
+  let n    = z / z
+  let back = F64.from_bits(n.to_bits())
+  assert back != back
+  assert back.to_bits() == 0x7FF8_0000_0000_0000
+}
+
+test "F64: the fields of the canonical NaN" {
+  let z: F64 = 0.0
+  let n    = z / z
+  let bits = n.to_bits()
+  // The sign bit is 0, the exponent is all ones, the fraction is only the quiet bit.
+  let sign = bits >> 63
+  assert sign == 0
+  let exponent = (bits >> 52) & 0x7FF
+  assert exponent == 0x7FF
+  let fraction = bits & 0x000F_FFFF_FFFF_FFFF
+  assert fraction == 0x0008_0000_0000_0000
+}
+
+test "F64: the bits of values that are not NaN are unchanged" {
+  let inf = F64.INFINITY
+  assert inf.to_bits() == 0x7FF0_0000_0000_0000
+  let ninf = -inf
+  assert ninf.to_bits() == 0xFFF0_0000_0000_0000
+  let nz: F64 = -0.0
+  assert nz.to_bits() == 0x8000_0000_0000_0000
+  let pz: F64 = 0.0
+  assert pz.to_bits() == 0
+  let tiny = F64.from_bits(1)
+  assert tiny.to_bits() == 1
+  assert tiny > 0.0
+  let big = F64.MAX
+  assert big.to_bits() == 0x7FEF_FFFF_FFFF_FFFF
+  let one: F64 = 1.0
+  assert one.to_bits() == 0x3FF0_0000_0000_0000
+}
+
+// ------------------------------------------------------------------- F32 NaN
+
+test "F32: 0 / 0 reads back as the canonical quiet NaN" {
+  let z: F32 = 0.0
+  let n = z / z
+  assert n.to_bits() == 0x7FC0_0000
+}
+
+test "F32: infinity minus infinity, infinity times 0, infinity over infinity" {
+  let inf = F32.INFINITY
+  let z: F32 = 0.0
+  let a = inf - inf
+  assert a != a
+  assert a.to_bits() == 0x7FC0_0000
+  let b = inf * z
+  assert b.to_bits() == 0x7FC0_0000
+  let c = inf / inf
+  assert c.to_bits() == 0x7FC0_0000
+}
+
+test "F32: sqrt of a negative number is a NaN with the canonical bits" {
+  let a: F32 = -1.0
+  let n = sqrt(a)
+  assert n != n
+  assert n.to_bits() == 0x7FC0_0000
+}
+
+test "F32: a remainder by 0 is a NaN" {
+  let z: F32 = 0.0
+  let one: F32 = 1.0
+  let a = one % z
+  assert a != a
+  assert a.to_bits() == 0x7FC0_0000
+}
+
+test "F32: a propagated and a negated NaN have the canonical bits" {
+  let z: F32 = 0.0
+  let n = z / z
+  let a = n + 1.0
+  assert a.to_bits() == 0x7FC0_0000
+  let b = -n
+  assert b != b
+  assert b.to_bits() == 0x7FC0_0000
+  let c = min(n, 1.0)
+  assert c.to_bits() == 0x7FC0_0000
+  let d = max(1.0, n)
+  assert d.to_bits() == 0x7FC0_0000
+}
+
+test "F32: the constant NAN has the canonical bits" {
+  let n = F32.NAN
+  assert n != n
+  assert n.to_bits() == 0x7FC0_0000
+}
+
+test "F32: from_bits of a NaN pattern reads back as the canonical NaN" {
+  let a = F32.from_bits(0x7F80_0001)
+  assert a != a
+  assert a.to_bits() == 0x7FC0_0000
+  let b = F32.from_bits(0xFFC0_0000)
+  assert b != b
+  assert b.to_bits() == 0x7FC0_0000
+  let c = F32.from_bits(0xFF80_0123)
+  assert c.to_bits() == 0x7FC0_0000
+  let d = F32.from_bits(0xFFFF_FFFF)
+  assert d.to_bits() == 0x7FC0_0000
+  let e = F32.from_bits(0x7FFF_FFFF)
+  assert e.to_bits() == 0x7FC0_0000
+}
+
+test "F32: a NaN made by round_f32 of an F64 NaN has the canonical F32 bits" {
+  let z: F64 = 0.0
+  let n = z / z
+  let m = n.round_f32()
+  assert m != m
+  assert m.to_bits() == 0x7FC0_0000
+  let bad = F64.from_bits(0xFFF0_0000_0000_0001)
+  let k   = bad.round_f32()
+  assert k.to_bits() == 0x7FC0_0000
+}
+
+test "F32: the bits of values that are not NaN are unchanged" {
+  let inf = F32.INFINITY
+  assert inf.to_bits() == 0x7F80_0000
+  let ninf = -inf
+  assert ninf.to_bits() == 0xFF80_0000
+  let nz: F32 = -0.0
+  assert nz.to_bits() == 0x8000_0000
+  let tiny = F32.from_bits(1)
+  assert tiny.to_bits() == 1
+  assert tiny > 0.0
+  let big = F32.MAX
+  assert big.to_bits() == 0x7F7F_FFFF
+  let one: F32 = 1.0
+  assert one.to_bits() == 0x3F80_0000
+}
+
+// ------------------------------------------------------- in other places
+
+test "to_bits of a NaN through a function and through a closure" {
+  let z: F64 = 0.0
+  let n = z / z
+  assert bits64(n) == 0x7FF8_0000_0000_0000
+  let nf = F32.NAN
+  assert bits32(nf) == 0x7FC0_0000
+  assert nan_bits_of_zero_over_zero(0) == 0x7FF8_0000_0000_0000
+  let ys: [U64; 3] = array.from_fn(fn(i) {
+    let a: F64 = 0.0
+    let q = a / a
+    q.to_bits()
+  })
+  assert ys[0] == 0x7FF8_0000_0000_0000
+  assert ys[2] == 0x7FF8_0000_0000_0000
+}
+
+test "to_bits of a NaN in the arm of a match and in an if" {
+  let z: F64 = 0.0
+  let n = z / z
+  let o: Option[F64] = Some(n)
+  let b = match o {
+    Some(v) => v.to_bits(),
+    None => 0,
+  }
+  assert b == 0x7FF8_0000_0000_0000
+  let c = if n != n { n.to_bits() } else { 0 }
+  assert c == 0x7FF8_0000_0000_0000
+}
+
+test "a NaN in a loop accumulates to the canonical NaN" {
+  var acc: F64 = 1.0
+  let z: F64 = 0.0
+  for _ in 0..3 {
+    let n = z / z
+    acc = acc + n
+  }
+  assert acc != acc
+  assert acc.to_bits() == 0x7FF8_0000_0000_0000
+}

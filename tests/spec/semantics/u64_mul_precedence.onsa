@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.1", "§3.4", "§9.2"]
+
+// `U64` products as operands of other groups, written without the redundant
+// parentheses (spec §3.1: the multiplicative group `* / *% *|` binds tighter
+// than the additive group `+ - +% -% +| -|`, which binds tighter than the
+// comparison group; the form `onsa fmt` produces). The value of the product
+// itself is the point (spec §3.4): a wrapped or saturated product does not fit
+// a 64-bit host word, so an interpreter can get the operand wrong while the
+// expression around it parses fine.
+//
+//   a *% b   the mathematical product modulo 2^64
+//   a *| b   the product clamped to U64.MAX = 2^64 - 1
+//   a *  b   the product, panic when it is above 2^64 - 1
+
+test "a wrapping product is the left operand of a wrapping sum" {
+  let umax: U64 = U64.MAX
+  // (2^64 - 1)^2 = 1 and 1 + 1 = 2.
+  let a = umax *% umax +% 1
+  assert a == 2
+  // 2^32 * 2^32 = 0, and 0 - 1 wraps to 2^64 - 1.
+  let h: U64 = 4294967296
+  let b = h *% h -% 1
+  assert b == umax
+  // The sum is on the left: 7 + 2^63 * 2 = 7 + 0.
+  let t: U64 = 9223372036854775808
+  let c = 7 +% t *% 2
+  assert c == 7
+}
+
+test "the LCG step is written without parentheses" {
+  // x' = x * 6364136223846793005 + 1442695040888963407 (mod 2^64), from x = 1.
+  let k: U64 = 6364136223846793005
+  let c: U64 = 1442695040888963407
+  var x: U64 = 1
+  x = x *% k +% c
+  assert x == 7806831264735756412
+  x = x *% k +% c
+  assert x == 9396908728118811419
+  x = x *% k +% c
+  assert x == 11960119808228829710
+}
+
+test "a product is the operand of a comparison" {
+  let umax: U64 = U64.MAX
+  let two: U64 = 2
+  // umax *% 2 = 2^64 - 2 (wrapped) and umax *| 2 = 2^64 - 1 (clamped).
+  assert umax *% two == 18446744073709551614
+  assert umax *| two == umax
+  assert umax *% two < umax *| two
+  assert umax *% umax < two
+  assert umax *% umax != umax *| umax
+  assert umax *| umax >= umax *% two
+}
+
+test "a checked product that fits is the operand of a comparison" {
+  // (2^32 - 1) * (2^32 + 1) = 2^64 - 1.
+  let m: U64 = 4294967295
+  let n: U64 = 4294967297
+  assert m * n == U64.MAX
+  assert m * n > m
+  assert m * 1 == m
+}
+
+test "a saturating sum of products clamps once" {
+  let h: U64 = 4294967296
+  // 2^32 * 2^32 clamps to 2^64 - 1, and 1 * 5 added to it clamps again.
+  let a = h *| h +| 1 *| 5
+  assert a == U64.MAX
+  // (2^32 - 1) * 2^32 = 2^64 - 2^32, plus 2^32 - 1 gives 2^64 - 1 exactly.
+  let m: U64 = 4294967295
+  let b = m *| h +| m
+  assert b == U64.MAX
+}
+
+test "an if condition compares a product" {
+  let a: U64 = 9223372036854775808
+  let r = if a *% 2 == 0 { 1 } else { 2 }
+  assert r == 1
+  let s = if a *| 2 == U64.MAX { 3 } else { 4 }
+  assert s == 3
+}
+
+test "a checked product above U64.MAX in a comparison panics" {   //~ TESTFAIL "a checked product above U64.MAX in a comparison panics"
+  let umax: U64 = U64.MAX
+  assert umax * umax > 0
+}
+
+test "a checked product above U64.MAX in a sum panics" {   //~ TESTFAIL "a checked product above U64.MAX in a sum panics"
+  let h: U64 = 4294967296
+  let _ = h * h + 1
+}

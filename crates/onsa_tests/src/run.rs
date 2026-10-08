@@ -58,6 +58,9 @@ pub enum Stage {
     Parse,
     Check,
     Build,
+    /// `onsa test` before the tests run: E0200 for what the interpreter
+    /// cannot run (S-224), in a `mode = "test"` case without targets.
+    Test,
 }
 
 /// A marker that was compared with the diagnostics of a run.
@@ -358,6 +361,9 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         let files = disk_files(root, case, setup, &loaded);
         run.problems.extend(crate::fixes::compare(&loaded.sources, &files, check, t.fixes));
     }
+    // A `mode = "test"` case without targets that checks compares its markers
+    // with what `onsa test` reports before the tests run ([`run_tests`]).
+    let test_stage = check.is_empty() && targets.is_empty() && t.mode == Mode::Test;
     if !check.is_empty() || targets.is_empty() {
         if targeted > 0 {
             run.problems.push(Problem::Case(if targets.is_empty() {
@@ -370,7 +376,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
                 )
             }));
         }
-        if compare(&mut run, &loaded.sources, &markers, check, Stage::Check, None) {
+        if !test_stage && compare(&mut run, &loaded.sources, &markers, check, Stage::Check, None) {
             negative_rules(&mut run, &case.path, check);
         }
         if !check.is_empty() {
@@ -451,7 +457,8 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     if t.mode == Mode::Test
         && let Some(m) = &module
     {
-        run_tests(&mut run, &loaded.sources, m, &testfails);
+        let stage_markers: &[(FileId, Expected)] = if test_stage { &markers } else { &[] };
+        run_tests(&mut run, &case.path, &loaded.sources, m, stage_markers, &testfails);
     }
     // One name space: an entry `<path>::<name>` names a test or a host sequence.
     for h in &t.host {
@@ -787,14 +794,30 @@ fn negative_rules(run: &mut CaseRun, path: &str, diags: &[Diagnostic]) {
 }
 
 /// `mode = "test"`: every `test` block, as `onsa test` runs them (T3-8).
-fn run_tests(run: &mut CaseRun, sources: &SourceMap, module: &onsa_core::Module, testfails: &[String]) {
-    let report = match onsa_driver::run_tests(module, &onsa_driver::TestOptions::default()) {
-        Ok(r) => r,
+/// `markers` are compared with the E0200 `onsa test` reports before the
+/// tests run (none when the case's markers belong to another stage).
+fn run_tests(
+    run: &mut CaseRun,
+    path: &str,
+    sources: &SourceMap,
+    module: &onsa_core::Module,
+    markers: &[(FileId, Expected)],
+    testfails: &[String],
+) {
+    let report = match onsa_driver::run_tests(sources, module, &onsa_driver::TestOptions::default()) {
+        Ok(onsa_driver::TestRun::Ran(r)) => r,
+        Ok(onsa_driver::TestRun::Unsupported(diagnostics)) => {
+            if compare(run, sources, markers, &diagnostics, Stage::Test, None) {
+                negative_rules(run, path, &diagnostics);
+            }
+            return;
+        }
         Err(e) => {
             run.problems.push(internal_problem(sources, &e, None));
             return;
         }
     };
+    compare(run, sources, markers, &[], Stage::Test, None);
     for t in &report.tests {
         let failed = t.status == onsa_driver::TestStatus::Failed;
         let testfail = testfails.contains(&t.name);

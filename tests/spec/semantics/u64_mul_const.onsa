@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§6.6"]
+
+// `U64` and signed-integer edges in a `const` initializer (spec §3.4, §6.6):
+// the evaluator of constants is the interpreter, so a product that does not fit
+// a 64-bit host word, `MIN % -1`, and the conversion of the largest value that
+// fits have to give the same results as when the code runs. The panics of the
+// evaluation (E0419) are in negative/const_u64_mul_panic.onsa.
+
+fn mul_wrap(a: U64, b: U64) -> U64 {
+  a *% b
+}
+
+fn mul_sat(a: U64, b: U64) -> U64 {
+  a *| b
+}
+
+fn rem_min(a: I32, b: I32) -> I32 {
+  a % b
+}
+
+// 2^64 - 1 squared is 1 modulo 2^64.
+const SQ: U64 = mul_wrap(18446744073709551615, 18446744073709551615)
+
+// 2^32 * 2^32 = 2^64 clamps to 2^64 - 1.
+const SAT: U64 = mul_sat(4294967296, 4294967296)
+
+// The FNV-1a offset basis times the FNV prime, modulo 2^64.
+const FNV: U64 = mul_wrap(14695981039346656037, 1099511628211)
+
+// (2^32 - 1) * (2^32 + 1) = 2^64 - 1 fits, so the checked operator accepts it.
+const EXACT: U64 = 4294967295 * 4294967297
+
+// I32.MIN % -1 is 0 and does not panic.
+const REM: I32 = rem_min(-2147483648, -1)
+
+fn top_of_i64() -> I64 {
+  let f: F64 = 9223372036854774784.0
+  f.trunc_i64()
+}
+
+// 2^63 - 1024 is the largest F64 below 2^63; it fits I64.
+const TOP: I64 = top_of_i64()
+
+test "constants of U64 products are the wrapped, saturated and exact values" {
+  assert SQ == 1
+  assert SAT == 18446744073709551615
+  assert EXACT == 18446744073709551615
+  assert FNV == 12638153115695167455
+}
+
+test "a constant remainder of MIN by -1 is 0" {
+  assert REM == 0
+}
+
+test "a constant conversion of the largest F64 below 2^63" {
+  assert TOP == 9223372036854774784
+}

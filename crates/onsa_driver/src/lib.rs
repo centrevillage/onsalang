@@ -668,12 +668,38 @@ impl TestReport {
     }
 }
 
+/// What `onsa test` did with a lowered module.
+#[derive(Debug, Clone)]
+pub enum TestRun {
+    /// Every `test` block ran.
+    Ran(TestReport),
+    /// The module holds forms the interpreter of this version cannot run:
+    /// E0200 for each (spec §18.1, S-224), and no test ran.
+    Unsupported(Vec<Diagnostic>),
+}
+
 /// Run every `test` block of the lowered module (T3-8). `assert` failures
-/// and panics (spec §9.2) fail the test and name the position; a panic of
-/// the interpreter itself is an internal error (S-67). The interpreter runs
-/// on the stack of a command (R-05).
-pub fn run_tests(module: &onsa_core::Module, opts: &TestOptions) -> Result<TestReport, InternalError> {
-    guard_on_stack(|| run_tests_unguarded(module, opts))
+/// and panics (spec §9.2) fail the test and name the position; a failure of
+/// the interpreter itself is an internal error (S-67, R-137). Before any test
+/// runs, the forms the interpreter cannot run are E0200, all at once
+/// ([`onsa_interp::unsupported`]), so what is reported does not depend on
+/// the code the tests reach. The interpreter runs on the stack of a command
+/// (R-05).
+pub fn run_tests(
+    sources: &SourceMap,
+    module: &onsa_core::Module,
+    opts: &TestOptions,
+) -> Result<TestRun, InternalError> {
+    guard_on_stack(|| {
+        let unsupported = onsa_interp::unsupported(module);
+        if unsupported.is_empty() {
+            return TestRun::Ran(run_tests_unguarded(module, opts));
+        }
+        let mut diagnostics = reduce::exact(unsupported.iter().map(onsa_interp::Unsupported::diagnostic).collect());
+        fill_found(sources, &mut diagnostics);
+        debug_contract(sources, &diagnostics);
+        TestRun::Unsupported(diagnostics)
+    })
 }
 
 fn run_tests_unguarded(module: &onsa_core::Module, opts: &TestOptions) -> TestReport {
@@ -689,7 +715,7 @@ fn run_tests_unguarded(module: &onsa_core::Module, opts: &TestOptions) -> TestRe
         }
         let outcome = match interp.call(onsa_core::FnId(i as u32), Vec::new()) {
             Ok(_) => TestOutcome { name: name.to_string(), status: TestStatus::Ok, message: None, span: None },
-            Err(p) => {
+            Err(onsa_interp::Failure::Panic(p)) => {
                 let message = match p.message.strip_prefix("assertion failed: ") {
                     Some(src) => format!("assert {src}"),
                     None => p.message.clone(),
@@ -701,6 +727,11 @@ fn run_tests_unguarded(module: &onsa_core::Module, opts: &TestOptions) -> TestRe
                     span: Some(p.span),
                 }
             }
+            // `run_tests` found every one before the tests ran.
+            Err(onsa_interp::Failure::Unsupported(u)) => onsa_diag::internal::bug(
+                Some(u.span),
+                format!("the interpreter reached `{}`, which the check before the tests did not find", u.std_fn),
+            ),
         };
         report.tests.push(outcome);
     }

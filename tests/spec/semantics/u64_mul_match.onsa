@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§7", "§9.2"]
+
+// `U64` multiplication in the arms and the scrutinee of a `match` that selects
+// by an integer literal (spec §3.4, §7). The `match` on an `Option` is in
+// u64_mul_contexts.onsa; here the arms are chosen by the literal patterns `0`,
+// `1`, `2` and `_`, which take the general `match` path of the interpreter.
+//
+//   a *% b   the mathematical product modulo 2^64
+//   a *| b   the product clamped to U64.MAX = 2^64 - 1
+//   a *  b   the product, panic when it is above 2^64 - 1
+
+fn pick(tag: U32, a: U64, b: U64) -> U64 {
+  match tag {
+    0 => a *% b,
+    1 => a *| b,
+    2 => a * b,
+    _ => 0,
+  }
+}
+
+test "the arms of a match multiply with different operators" {
+  let a: U64 = 9223372036854775808
+  let b: U64 = 2
+  // 2^63 * 2 = 2^64: 0 wrapped, 2^64 - 1 saturated.
+  assert pick(0, a, b) == 0
+  assert pick(1, a, b) == U64.MAX
+  assert pick(3, a, b) == 0
+  // (2^32 - 1) * (2^32 + 1) = 2^64 - 1 fits for the checked operator.
+  let m: U64 = 4294967295
+  let n: U64 = 4294967297
+  assert pick(2, m, n) == U64.MAX
+}
+
+test "a match on the product of U64" {
+  let umax: U64 = U64.MAX
+  // (2^64 - 1)^2 = 1 (mod 2^64), and saturated it is 2^64 - 1.
+  let r = match umax *% umax {
+    1 => 10,
+    0 => 20,
+    _ => 30,
+  }
+  assert r == 10
+  let s = match umax *| umax {
+    1 => 10,
+    _ => 40,
+  }
+  assert s == 40
+  // 2^32 * 2^32 wraps to 0.
+  let h: U64 = 4294967296
+  let t = match h *% h {
+    1 => 10,
+    0 => 20,
+    _ => 30,
+  }
+  assert t == 20
+}
+
+test "a checked U64 product in a match arm panics" {   //~ TESTFAIL "a checked U64 product in a match arm panics"
+  let a: U64 = U64.MAX
+  let _ = pick(2, a, 2)
+}
+
+test "a checked U64 product as the scrutinee of a match panics" {   //~ TESTFAIL "a checked U64 product as the scrutinee of a match panics"
+  let umax: U64 = U64.MAX
+  let _ = match umax * umax {
+    1 => 10,
+    _ => 20,
+  }
+}

@@ -304,11 +304,25 @@ fn same_panic(a: &Panic, b: &Panic) -> bool {
 }
 
 fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<Value>>) -> Result<Run, String> {
+    // A case the interpreter cannot run is an error of the case (E0200,
+    // S-224), found before any call, as `onsa test` and the vectors find it.
+    let unsupported = onsa_interp::unsupported(module);
+    if !unsupported.is_empty() {
+        let found: Vec<String> = unsupported
+            .iter()
+            .map(|u| {
+                let d = u.diagnostic();
+                format!("{}: {}", d.code.as_str(), d.message)
+            })
+            .collect();
+        return Err(format!("the interpreter of this version does not run the case: {}", found.join("; ")));
+    }
     let interp = Interp::new(module);
     let fns = &meta.fns;
     let state = match interp.call(fns.init, vec![Value::Struct(shape.config_values()), Value::F32(SAMPLE_RATE)]) {
         Ok(s) => slot(s),
-        Err(p) => return Ok(Run::Panicked(Panic { at: At::Init, message: p.message })),
+        Err(onsa_interp::Failure::Panic(p)) => return Ok(Run::Panicked(Panic { at: At::Init, message: p.message })),
+        Err(onsa_interp::Failure::Unsupported(u)) => reached(&u),
     };
     let params = Value::Struct(shape.params.iter().map(|(_, _, v)| v.clone()).collect());
     let mut inputs = stimuli.into_iter();
@@ -340,8 +354,12 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
         let mut args = vec![params.clone()];
         args.extend(shape.inputs.iter().zip(&ins).map(|(s, x)| arg(s, x)));
         args.extend(shape.outputs.iter().zip(&outs).map(|(s, x)| arg(s, x)));
-        if let Err(p) = interp.call_inout(fns.process, &state, args) {
-            return Ok(Run::Panicked(Panic { at: At::Block(b), message: p.message }));
+        match interp.call_inout(fns.process, &state, args) {
+            Ok(_) => {}
+            Err(onsa_interp::Failure::Panic(p)) => {
+                return Ok(Run::Panicked(Panic { at: At::Block(b), message: p.message }));
+            }
+            Err(onsa_interp::Failure::Unsupported(u)) => reached(&u),
         }
     }
     let mut all = Vec::new();
@@ -352,6 +370,15 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
         }
     }
     Ok(Run::Samples(all))
+}
+
+/// A form the interpreter cannot run, reached by a run that the check before
+/// it let through: an internal error (S-67), as in `onsa test`.
+fn reached(u: &onsa_interp::Unsupported) -> ! {
+    onsa_diag::internal::bug(
+        Some(u.span),
+        format!("the interpreter reached `{}`, which the check before the run did not find", u.std_fn),
+    )
 }
 
 /// The line the C program's panic handler writes to stderr.

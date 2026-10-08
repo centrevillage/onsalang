@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.3", "§3.4", "§9.2"]
+
+// The first values that do not fit a 64-bit integer (spec §3.3, §3.4, §9.2):
+// 2^63 = 9223372036854775808 does not fit I64 and 2^64 = 18446744073709551616
+// does not fit U64, for F32 as well as F64 (both are exact in either type), and
+// the conversion has to panic however the call is reached: through a function,
+// the arm of a `match`, an anonymous function, or as part of an expression.
+// trunc_range.onsa has the F64 forms on their own; the edge values that are
+// still in range, NaN, and the infinities are in trunc64_edges.onsa. These tests
+// are in a file of their own because a test that is expected to panic cannot
+// also be listed as pending.
+
+use std.array
+
+fn t_i64(o: Option[F64]) -> I64 {
+  match o {
+    Some(v) => v.trunc_i64(),
+    None => 0,
+  }
+}
+
+fn t_u64(o: Option[F32]) -> U64 {
+  match o {
+    Some(v) => v.trunc_u64(),
+    None => 0,
+  }
+}
+
+test "F32 2^63 -> I64 panics" {   //~ TESTFAIL "F32 2^63 -> I64 panics"
+  let a: F32 = 9223372036854775808.0
+  let _ = a.trunc_i64()
+}
+
+test "F32 2^64 -> U64 panics" {   //~ TESTFAIL "F32 2^64 -> U64 panics"
+  let a: F32 = 18446744073709551616.0
+  let _ = a.trunc_u64()
+}
+
+test "2^63 -> I64 inside a function panics" {   //~ TESTFAIL "2^63 -> I64 inside a function panics"
+  let a: F64 = 9223372036854775808.0
+  let _ = t_i64(Some(a))
+}
+
+test "2^64 -> U64 in the arm of a match panics" {   //~ TESTFAIL "2^64 -> U64 in the arm of a match panics"
+  let a: F32 = 18446744073709551616.0
+  let _ = t_u64(Some(a))
+}
+
+test "2^63 -> I64 inside an anonymous function panics" {   //~ TESTFAIL "2^63 -> I64 inside an anonymous function panics"
+  let _: [I64; 2] = array.from_fn(fn(_) {
+    let a: F64 = 9223372036854775808.0
+    a.trunc_i64()
+  })
+}
+
+test "2^64 -> U64 in the middle of an expression panics" {   //~ TESTFAIL "2^64 -> U64 in the middle of an expression panics"
+  let a: F64 = 18446744073709551616.0
+  let b = a.trunc_u64()
+  let _ = b +% 1
+}

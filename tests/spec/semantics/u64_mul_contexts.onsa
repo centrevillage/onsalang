@@ -1,0 +1,287 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§5.3", "§7", "§9.2"]
+
+// `U64` multiplication in the places the test vectors do not reach (spec §3.4):
+// the vectors call one operation on two literals, here the product is used in
+// the middle of an expression, in a `for` / `while` loop, in an `if` condition,
+// as an array element and a struct field, and
+// inside an anonymous function handed to `array.from_fn`.
+// wrapping_mul_u64.onsa covers the operations by themselves; the generic form
+// is in numeric_generic_edges.onsa, the mixed-group form (`a *% b +% c`,
+// `a *% b == c`) in u64_mul_precedence.onsa, function values in
+// u64_mul_fn_values.onsa, `match` arms and scrutinees in u64_mul_match.onsa.
+//
+//   a *% b   the mathematical product modulo 2^64
+//   a *| b   the product clamped to U64.MAX = 2^64 - 1
+//   a *  b   the product, panic when it is above 2^64 - 1
+//
+// Every expected value is worked out by hand from those three rules; the
+// factors are written out in the comments.
+
+use std.array
+
+struct Pair {
+  lo: U64,
+  hi: U64,
+}
+
+fn square_wrapped(o: Option[U64]) -> U64 {
+  match o {
+    Some(v) => v *% v,
+    None => 0,
+  }
+}
+
+fn square_saturated(o: Option[U64]) -> U64 {
+  match o {
+    Some(v) => v *| v,
+    None => 0,
+  }
+}
+
+fn square_checked(o: Option[U64]) -> U64 {
+  match o {
+    Some(v) => v * v,
+    None => 0,
+  }
+}
+
+// ---------------------------------------------------------- inside an expression
+
+test "the result of *% is used by the next operation" {
+  let umax: U64 = U64.MAX
+  // (2^64 - 1)^2 = 1 (mod 2^64).
+  let sq = umax *% umax
+  let a = sq +% 1
+  assert a == 2
+  // (2^64 - 1) * 2 = 2^65 - 2 = 2^64 - 2 (mod 2^64), and again * 2 gives 2^64 - 4.
+  let b = (umax *% 2) *% 2
+  assert b == 18446744073709551612
+  // The chain is left associative. 3 * (2^63 + 1) = 2^63 + 3 (mod 2^64), and
+  // 5 * (2^63 + 3) = 5 * 2^63 + 15 = 2 * 2^64 + 2^63 + 15 = 2^63 + 15 (mod 2^64).
+  let s: U64 = 9223372036854775809
+  let c = s *% 3 *% 5
+  assert c == 9223372036854775823
+}
+
+test "a wrapped product feeds a wrapping difference and a shift" {
+  // 2^32 * 2^32 = 2^64 = 0 (mod 2^64).
+  let h: U64 = 4294967296
+  let z = h *% h
+  assert z == 0
+  // (2^32 + 1)^2 = 2^64 + 2^33 + 1 = 2^33 + 1 (mod 2^64).
+  let g: U64 = 4294967297
+  let w = g *% g
+  assert w == 8589934593
+  let top = w >> 33
+  assert top == 1
+  let rest = w -% 1
+  assert rest == 8589934592
+}
+
+test "an LCG step and an FNV-1a step with 64-bit wrapping" {
+  // x' = x * 6364136223846793005 + 1442695040888963407 (mod 2^64), from x = 1.
+  let k: U64 = 6364136223846793005
+  let c: U64 = 1442695040888963407
+  var x: U64 = 1
+  let x1 = x *% k
+  x = x1 +% c
+  assert x == 7806831264735756412
+  let x2 = x *% k
+  x = x2 +% c
+  assert x == 9396908728118811419
+  let x3 = x *% k
+  x = x3 +% c
+  assert x == 11960119808228829710
+  // FNV-1a: h = (h ^ byte) * 1099511628211 (mod 2^64), offset basis 14695981039346656037.
+  let basis: U64 = 14695981039346656037
+  let prime: U64 = 1099511628211
+  let h0 = basis *% prime
+  assert h0 == 12638153115695167455
+  let mixed = basis ^ 97
+  let h1 = mixed *% prime
+  assert h1 == 12638187200555641996
+}
+
+test "a saturating product is used by the next saturating operation" {
+  let umax: U64 = U64.MAX
+  // 2 * (2^64 - 1) clamps to 2^64 - 1; subtracting 5 leaves 2^64 - 6.
+  let a = (umax *| 2) -| 5
+  assert a == 18446744073709551610
+  // 2^32 * 2^32 clamps to 2^64 - 1, and adding 1 clamps again.
+  let h: U64 = 4294967296
+  let b = (h *| h) +| 1
+  assert b == umax
+  // (2^32 - 1) * 2^32 = 2^64 - 2^32 fits, so it is left alone.
+  let m: U64 = 4294967295
+  let c = (m *| h) +| 0
+  assert c == 18446744069414584320
+}
+
+test "a product that fits is exact for the checked operator" {
+  // (2^32 - 1) * (2^32 + 1) = 2^64 - 1 = U64.MAX exactly.
+  let m: U64 = 4294967295
+  let n: U64 = 4294967297
+  let p = m * n
+  assert p == U64.MAX
+  let q = p / n
+  assert q == m
+  let umax: U64 = U64.MAX
+  let one = umax * 1
+  assert one == umax
+  let zero = 0 * umax
+  assert zero == 0
+}
+
+// ------------------------------------------------------------ loops and state
+
+test "a loop that doubles a U64 with wrapping reaches 2^63 and then 0" {
+  var x: U64 = 1
+  for _ in 0..63 {
+    x = x *% 2
+  }
+  assert x == 9223372036854775808
+  x = x *% 2
+  assert x == 0
+}
+
+test "a loop that triples a U64 with wrapping gives 3^40 mod 2^64" {
+  // 3^40 = 12157665459056928801 < 2^64, so no wrap yet; 3^41 wraps to
+  // 3 * 12157665459056928801 - 2^64 = 36472996377170786403 - 18446744073709551616.
+  var x: U64 = 1
+  for _ in 0..40 {
+    x = x *% 3
+  }
+  assert x == 12157665459056928801
+  x = x *% 3
+  assert x == 18026252303461234787
+}
+
+test "a while loop with a saturating product stops growing at U64.MAX" {
+  var x: U64 = 1
+  var n: U32 = 0
+  while n < 70 {
+    x = x *| 2
+    n = n + 1
+  }
+  assert x == U64.MAX
+}
+
+test "a checked product in a loop is exact while it fits" {
+  // 10^19 < 2^64 = 18446744073709551616, so nineteen factors of 10 are exact.
+  var x: U64 = 1
+  for _ in 0..19 {
+    x = x * 10
+  }
+  assert x == 10000000000000000000
+}
+
+// ------------------------------------------------- places that hold a product
+
+test "a product is stored in an array and a struct" {
+  let h: U64 = 4294967296
+  let umax: U64 = U64.MAX
+  let xs: [U64; 3] = [h *% h, umax *% umax, h *| h]
+  assert xs[0] == 0
+  assert xs[1] == 1
+  assert xs[2] == umax
+  let p = Pair { lo: umax *% 2, hi: umax *| 2 }
+  assert p.lo == 18446744073709551614
+  assert p.hi == umax
+}
+
+// ---------------------------------------------------------- anonymous functions
+
+test "an anonymous function passed to from_fn multiplies U64 with wrapping" {
+  let ys: [U64; 3] = array.from_fn(fn(i) {
+    let base: U64 = 4294967295
+    let w = i as U64
+    (base + w) *% 4294967297
+  })
+  // i = 0: (2^32 - 1)(2^32 + 1) = 2^64 - 1
+  assert ys[0] == U64.MAX
+  // i = 1: 2^32 (2^32 + 1) = 2^64 + 2^32 = 2^32 (mod 2^64)
+  assert ys[1] == 4294967296
+  // i = 2: (2^32 + 1)^2 = 2^33 + 1 (mod 2^64)
+  assert ys[2] == 8589934593
+}
+
+test "a closure captures a U64 and saturates with it" {
+  let k: U64 = 4294967296
+  let ys: [U64; 3] = array.from_fn(fn(i) {
+    let w = i as U64
+    (w + 4294967295) *| k
+  })
+  // i = 0: (2^32 - 1) * 2^32 = 2^64 - 2^32 fits
+  assert ys[0] == 18446744069414584320
+  // i = 1: 2^32 * 2^32 = 2^64 clamps to 2^64 - 1
+  assert ys[1] == U64.MAX
+  assert ys[2] == U64.MAX
+}
+
+test "the arm of a match on an Option multiplies U64" {
+  // (2^32 + 1)^2 = 2^33 + 1 (mod 2^64); (2^32 + 1)^2 > 2^64 - 1 saturates to 2^64 - 1; 2^32 squared wraps to 0 and also saturates.
+  let g: U64 = 4294967297
+  let h: U64 = 4294967296
+  assert square_wrapped(Some(g)) == 8589934593
+  assert square_wrapped(Some(h)) == 0
+  assert square_wrapped(None) == 0
+  assert square_saturated(Some(g)) == U64.MAX
+  assert square_saturated(Some(h)) == U64.MAX
+  assert square_saturated(None) == 0
+  // 4294967295^2 = 2^64 - 2^33 + 1 fits.
+  let m: U64 = 4294967295
+  assert square_checked(Some(m)) == 18446744065119617025
+  assert square_checked(None) == 0
+}
+
+test "an if condition decides on the product" {
+  let a: U64 = 9223372036854775808
+  let wrapped = a *% 2
+  let r = if wrapped == 0 { 1 } else { 2 }
+  assert r == 1
+  let clamped = a *| 2
+  let s = if clamped == U64.MAX { 3 } else { 4 }
+  assert s == 3
+}
+
+// ---------------------------------------------------------------------- panics
+
+test "a checked U64 product above U64.MAX panics" {   //~ TESTFAIL "a checked U64 product above U64.MAX panics"
+  // 2^32 * 2^32 = 2^64 > 2^64 - 1.
+  let h: U64 = 4294967296
+  let _ = h * h
+}
+
+test "2^63 * 2 panics" {   //~ TESTFAIL "2^63 * 2 panics"
+  let a: U64 = 9223372036854775808
+  let _ = a * 2
+}
+
+test "a checked U64 product in the middle of an expression panics" {   //~ TESTFAIL "a checked U64 product in the middle of an expression panics"
+  let h: U64 = 4294967296
+  // The product of the parentheses is above 2^64 - 1 before the division.
+  let _ = (h * h) / h
+}
+
+test "a checked U64 product in a loop panics when it stops fitting" {   //~ TESTFAIL "a checked U64 product in a loop panics when it stops fitting"
+  // 10^20 > 2^64 - 1 = 18446744073709551615, so the 20th factor panics.
+  var x: U64 = 1
+  for _ in 0..20 {
+    x = x * 10
+  }
+}
+
+test "a checked U64 product inside an anonymous function panics" {   //~ TESTFAIL "a checked U64 product inside an anonymous function panics"
+  let _: [U64; 2] = array.from_fn(fn(i) {
+    let w = i as U64
+    (w + 4294967296) * 4294967296
+  })
+}
+
+test "a checked U64 product in the arm of a match on an Option panics" {   //~ TESTFAIL "a checked U64 product in the arm of a match on an Option panics"
+  let h: U64 = 4294967296
+  let _ = square_checked(Some(h))
+}

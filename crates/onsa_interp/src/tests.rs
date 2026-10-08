@@ -6,7 +6,7 @@ use onsa_core::prim::{MathFn, Prim};
 use onsa_core::*;
 use onsa_diag::{FileId, Span};
 
-use crate::{Interp, Panic, Value};
+use crate::{Failure, Interp, Panic, Value};
 
 fn sp() -> Span {
     Span::new(FileId(0), 0, 0)
@@ -49,7 +49,15 @@ fn eval(e: Expr) -> Result<Value, Panic> {
         ..Default::default()
     };
     let interp = Interp::new(&m);
-    interp.call(FnId(0), Vec::new())
+    interp.call(FnId(0), Vec::new()).map_err(panic_of)
+}
+
+/// The panic of a failure that must be one.
+fn panic_of(f: Failure) -> Panic {
+    match f {
+        Failure::Panic(p) => p,
+        f => panic!("not a panic: {f:?}"),
+    }
 }
 
 /// Run a test on the stack of a command: the interpreter runs only there (R-05).
@@ -407,7 +415,7 @@ fn a_call_beyond_the_limit_is_a_panic() {
         // f(n) makes n nested calls.
         assert_eq!(as_i128(interp.call(FnId(0), vec![Value::U32(crate::MAX_CALL_DEPTH)]).unwrap()), 0);
         for n in [crate::MAX_CALL_DEPTH + 1, crate::MAX_CALL_DEPTH + 2, 10_000_000] {
-            let e = interp.call(FnId(0), vec![Value::U32(n)]).unwrap_err();
+            let e = panic_of(interp.call(FnId(0), vec![Value::U32(n)]).unwrap_err());
             assert_eq!(e.message, limit_message(), "f({n})");
         }
         assert_eq!(as_i128(interp.call(FnId(0), vec![Value::U32(crate::MAX_CALL_DEPTH)]).unwrap()), 0);
@@ -426,7 +434,7 @@ fn the_limit_comes_before_the_net_under_256_levels() {
             let interp = Interp::new(&m);
             let r = interp.call(FnId(0), vec![Value::U32(crate::MAX_CALL_DEPTH)]);
             assert_eq!(r.map(as_i128), Ok(0), "{level:?}");
-            let e = interp.call(FnId(0), vec![Value::U32(10_000_000)]).unwrap_err();
+            let e = panic_of(interp.call(FnId(0), vec![Value::U32(10_000_000)]).unwrap_err());
             assert_eq!(e.message, limit_message(), "{level:?}");
         }
     })
@@ -568,7 +576,7 @@ fn a_const_counts_from_zero_wherever_it_is_read() {
         // One more call: a panic of the evaluation, the same each time.
         let interp = Interp::new(&m);
         for _ in 0..2 {
-            assert_eq!(interp.const_value(ConstId(1)).unwrap_err().message, limit_message());
+            assert_eq!(panic_of(interp.const_value(ConstId(1)).unwrap_err()).message, limit_message());
         }
     })
 }
@@ -594,7 +602,7 @@ fn an_internal_error_leaves_the_interpreter_as_it_was() {
         assert!(message.contains("in 2 nested evaluations"), "{message}");
         assert_eq!(interp.const_value(ConstId(0)).map(as_i128), Ok(0));
         assert_eq!(interp.call(FnId(0), vec![Value::U32(crate::MAX_CALL_DEPTH)]).map(as_i128), Ok(0));
-        let e = interp.call(FnId(0), vec![Value::U32(crate::MAX_CALL_DEPTH + 1)]).unwrap_err();
+        let e = panic_of(interp.call(FnId(0), vec![Value::U32(crate::MAX_CALL_DEPTH + 1)]).unwrap_err());
         assert_eq!(e.message, limit_message());
     })
 }
@@ -605,4 +613,411 @@ fn an_internal_error_leaves_the_interpreter_as_it_was() {
 fn an_entry_off_the_stack_of_a_command_is_an_internal_error() {
     let message = internal_error_of(|| eval(int(IntKind::I32, 1)));
     assert!(message.contains("without the stack of a command"), "{message}");
+}
+
+// ------------------------------------------------- W2-03: the numeric edges
+
+fn f64_(x: f64) -> Expr {
+    Expr::new(Ty::Float(FloatKind::F64), sp(), ExprKind::Lit(Lit::F64(x)))
+}
+
+/// R-04: the products of two `U64`s whose exact value is beyond `i128`
+/// (above 2^127): `*` panics, `*%` wraps modulo 2^64, `*|` saturates, and
+/// `checked_mul` gives `None`; the host's arithmetic never overflows.
+#[test]
+fn u64_products_beyond_i128() {
+    on_stack(|| {
+        let max = u64::MAX as i128;
+        let u = |n: i128| int(IntKind::U64, n);
+        let wrap = |a: i128, b: i128| as_i128(eval(bin(BinOp::Mul, Overflow::Wrap, u(a), u(b))).unwrap());
+        let sat = |a: i128, b: i128| as_i128(eval(bin(BinOp::Mul, Overflow::Sat, u(a), u(b))).unwrap());
+        // (2^64 - 1)^2 = 2^128 - 2^65 + 1 = 1 modulo 2^64.
+        assert_eq!(wrap(max, max), 1);
+        assert_eq!(sat(max, max), max);
+        // 2^63 * 2^63 = 2^126 fits i128; modulo 2^64 it is 0.
+        assert_eq!(wrap(1 << 63, 1 << 63), 0);
+        // (2^64 - 1) * 2 = 2^65 - 2, modulo 2^64: 2^64 - 2.
+        assert_eq!(wrap(max, 2), max - 1);
+        assert_eq!(sat(max, 2), max);
+        // The exact product 2^64 - 1 = (2^32 - 1)(2^32 + 1) fits.
+        let fits = eval(bin(BinOp::Mul, Overflow::Checked, u(4_294_967_295), u(4_294_967_297))).unwrap();
+        assert_eq!(as_i128(fits), max);
+        let e = eval(bin(BinOp::Mul, Overflow::Checked, u(max), u(max))).unwrap_err();
+        assert!(e.message.contains("overflow"), "{}", e.message);
+        let checked = |a: i128, b: i128| {
+            eval(prim(
+                Prim::Checked(onsa_core::prim::CheckedOp::Mul, IntKind::U64),
+                Ty::Enum(TypeId(0)),
+                vec![u(a), u(b)],
+            ))
+            .unwrap()
+        };
+        assert!(matches!(checked(max, max), Value::Enum { tag: 0, .. }));
+        assert!(matches!(checked(4_294_967_295, 4_294_967_297), Value::Enum { tag: 1, .. }));
+        // I64: the most negative product, I64.MIN * I64.MIN = 2^126, saturates to MAX and wraps to 0.
+        let i = |n: i128| int(IntKind::I64, n);
+        let min = i64::MIN as i128;
+        assert_eq!(as_i128(eval(bin(BinOp::Mul, Overflow::Sat, i(min), i(min))).unwrap()), i64::MAX as i128);
+        assert_eq!(as_i128(eval(bin(BinOp::Mul, Overflow::Sat, i(min), i(2))).unwrap()), min);
+        assert_eq!(as_i128(eval(bin(BinOp::Mul, Overflow::Wrap, i(min), i(min))).unwrap()), 0);
+    })
+}
+
+/// R-19, spec §3.4: `MIN % -1` and `MIN.rem_euclid(-1)` are 0 at every
+/// signed width; `MIN / -1` and `MIN.div_euclid(-1)` panic.
+#[test]
+fn min_rem_minus_one_is_zero() {
+    on_stack(|| {
+        for k in [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64] {
+            let (min, _) = crate::value::int_range(k);
+            let rem = eval(bin(BinOp::Rem, Overflow::Checked, int(k, min), int(k, -1))).unwrap();
+            assert_eq!(as_i128(rem), 0, "{k:?}");
+            let e = eval(bin(BinOp::Div, Overflow::Checked, int(k, min), int(k, -1))).unwrap_err();
+            assert!(e.message.contains("overflow") && e.message.contains('/'), "{}", e.message);
+            let re = eval(prim(Prim::RemEuclid(k), Ty::Int(k), vec![int(k, min), int(k, -1)])).unwrap();
+            assert_eq!(as_i128(re), 0, "{k:?}");
+            assert!(eval(prim(Prim::DivEuclid(k), Ty::Int(k), vec![int(k, min), int(k, -1)])).is_err());
+            let e = eval(bin(BinOp::Rem, Overflow::Checked, int(k, min), int(k, 0))).unwrap_err();
+            assert!(e.message.contains("division by zero"), "{}", e.message);
+        }
+    })
+}
+
+/// R-19, spec §3.3: the 64-bit `trunc_*` panic at 2^63 (`I64`) and 2^64
+/// (`U64`), from `F32` and `F64`, and `_sat` gives the bound; the values
+/// just below fit.
+#[test]
+fn trunc_to_64_bits_at_the_powers_of_two() {
+    on_stack(|| {
+        let t = |from: FloatKind, x: f64, to: IntKind, sat: bool| {
+            let arg = match from {
+                FloatKind::F32 => f32_(x as f32),
+                FloatKind::F64 => f64_(x),
+            };
+            eval(prim(Prim::TruncToInt { from, to, sat }, Ty::Int(to), vec![arg]))
+        };
+        let p63 = 9_223_372_036_854_775_808.0;
+        let p64 = 18_446_744_073_709_551_616.0;
+        for from in [FloatKind::F32, FloatKind::F64] {
+            assert!(t(from, p63, IntKind::I64, false).is_err(), "{from:?}");
+            assert!(t(from, p64, IntKind::U64, false).is_err(), "{from:?}");
+            assert_eq!(as_i128(t(from, p63, IntKind::I64, true).unwrap()), i64::MAX as i128);
+            assert_eq!(as_i128(t(from, p64, IntKind::U64, true).unwrap()), u64::MAX as i128);
+            assert_eq!(as_i128(t(from, -p63, IntKind::I64, false).unwrap()), i64::MIN as i128);
+            assert_eq!(as_i128(t(from, p63, IntKind::U64, false).unwrap()), 1 << 63);
+            assert!(t(from, -1.0, IntKind::U64, false).is_err());
+            assert_eq!(as_i128(t(from, -0.9, IntKind::U64, false).unwrap()), 0);
+        }
+        // The largest F64 below 2^63 and below 2^64.
+        assert_eq!(
+            as_i128(t(FloatKind::F64, 9_223_372_036_854_774_784.0, IntKind::I64, false).unwrap()),
+            9_223_372_036_854_774_784
+        );
+        assert_eq!(
+            as_i128(t(FloatKind::F64, 18_446_744_073_709_549_568.0, IntKind::U64, false).unwrap()),
+            18_446_744_073_709_549_568
+        );
+        // I32 keeps its bounds.
+        assert!(t(FloatKind::F64, 2_147_483_648.0, IntKind::I32, false).is_err());
+        assert_eq!(as_i128(t(FloatKind::F64, 2_147_483_647.9, IntKind::I32, false).unwrap()), i32::MAX as i128);
+    })
+}
+
+/// S-106, spec §3.4: `to_bits()` of every NaN is the positive quiet NaN.
+#[test]
+fn to_bits_of_a_nan_is_the_positive_quiet_nan() {
+    on_stack(|| {
+        let b32 =
+            |x: f32| as_i128(eval(prim(Prim::ToBits(FloatKind::F32), Ty::Int(IntKind::U32), vec![f32_(x)])).unwrap());
+        let b64 =
+            |x: f64| as_i128(eval(prim(Prim::ToBits(FloatKind::F64), Ty::Int(IntKind::U64), vec![f64_(x)])).unwrap());
+        for x in [f32::NAN, -f32::NAN, f32::from_bits(0x7F80_0001), f32::from_bits(0xFFC0_1234)] {
+            assert_eq!(b32(x), 0x7FC0_0000, "{:#x}", x.to_bits());
+        }
+        for x in [f64::NAN, -f64::NAN, f64::from_bits(0x7FF0_0000_0000_0001), f64::from_bits(0xFFF8_0000_0000_0042)] {
+            assert_eq!(b64(x), 0x7FF8_0000_0000_0000, "{:#x}", x.to_bits());
+        }
+        assert_eq!(b32(-0.0), 0x8000_0000);
+        assert_eq!(b64(f64::INFINITY), 0x7FF0_0000_0000_0000);
+    })
+}
+
+// ------------------------------------- W2-03: R-92 (1), R-137, S-224
+
+/// R-92 (1), R-137: a value of the wrong type where Core's types promise
+/// another is an internal error, never read as 0 and never a panic of the
+/// program.
+#[test]
+fn values_of_the_wrong_type_are_internal_errors() {
+    on_stack(|| {
+        let i32_ = |n| int(IntKind::I32, n);
+        let i64_ = |n| int(IntKind::I64, n);
+        let int_ = |k: &str, found: &str| format!("an integer of `{k}` expected, found {found}");
+        let i64_found = "an integer of `I64`";
+        // An `I64` value under an expression whose type says `I32`.
+        let lying = || {
+            Expr::new(
+                Ty::Int(IntKind::I32),
+                sp(),
+                ExprKind::Binary {
+                    op: BinOp::Add,
+                    overflow: Overflow::Checked,
+                    lhs: Box::new(i64_(1)),
+                    rhs: Box::new(i64_(2)),
+                },
+            )
+        };
+        let block = |e: Expr| Block { stmts: Vec::new(), value: Some(Box::new(e)) };
+        // (what, the check that stops it, the expression)
+        let cases: Vec<(&str, String, Expr)> = vec![
+            ("two integer types", int_("I32", i64_found), bin(BinOp::Add, Overflow::Checked, i32_(1), i64_(1))),
+            (
+                "a shift by an I32",
+                int_("U32", "an integer of `I32`"),
+                bin(BinOp::Shl, Overflow::Checked, i32_(1), i32_(1)),
+            ),
+            ("an integer and a float", int_("I32", "an `F32`"), bin(BinOp::Mul, Overflow::Checked, i32_(1), f32_(1.0))),
+            (
+                "a negation of a Bool",
+                "an integer expected, found a `Bool`".into(),
+                Expr::new(
+                    Ty::Bool,
+                    sp(),
+                    ExprKind::Unary(UnOp::Neg, Box::new(Expr::new(Ty::Bool, sp(), ExprKind::Lit(Lit::Bool(true))))),
+                ),
+            ),
+            (
+                "a comparison of two integer types",
+                int_("I32", i64_found),
+                Expr::new(
+                    Ty::Bool,
+                    sp(),
+                    ExprKind::Cmp { op: CmpOp::Lt, lhs: Box::new(i32_(1)), rhs: Box::new(i64_(2)) },
+                ),
+            ),
+            (
+                "a comparison of two float types",
+                "an integer expected, found an `F32`".into(),
+                Expr::new(
+                    Ty::Bool,
+                    sp(),
+                    ExprKind::Cmp { op: CmpOp::Lt, lhs: Box::new(f32_(1.0)), rhs: Box::new(f64_(2.0)) },
+                ),
+            ),
+            (
+                "a cast of a value of another type than the operand's",
+                int_("I32", i64_found),
+                Expr::new(Ty::Float(FloatKind::F64), sp(), ExprKind::Cast(Box::new(lying()))),
+            ),
+            (
+                "a cast that narrows",
+                "loses information".into(),
+                Expr::new(Ty::Int(IntKind::I8), sp(), ExprKind::Cast(Box::new(i32_(300)))),
+            ),
+            (
+                "a condition that is not a Bool",
+                "a `Bool` expected, found an integer of `I32`".into(),
+                Expr::new(
+                    Ty::Int(IntKind::I32),
+                    sp(),
+                    ExprKind::IfExpr { cond: Box::new(i32_(1)), then: block(i32_(1)), else_: block(i32_(2)) },
+                ),
+            ),
+            (
+                "abs of a float",
+                int_("I32", "an `F32`"),
+                prim(Prim::IntAbs(IntKind::I32), Ty::Int(IntKind::I32), vec![f32_(1.0)]),
+            ),
+            (
+                "min of another width",
+                int_("I32", i64_found),
+                prim(Prim::IntMin(IntKind::I32), Ty::Int(IntKind::I32), vec![i32_(1), i64_(2)]),
+            ),
+            (
+                "narrow from another width",
+                int_("I64", "an integer of `I32`"),
+                prim(Prim::Narrow { from: IntKind::I64, to: IntKind::I8 }, Ty::Enum(TypeId(0)), vec![i32_(1)]),
+            ),
+            (
+                "is_nan of an integer",
+                "an `F32` expected, found an integer of `I32`".into(),
+                prim(Prim::IsNan(FloatKind::F32), Ty::Bool, vec![i32_(1)]),
+            ),
+            (
+                "is_nan of the other float",
+                "an `F32` expected, found an `F64`".into(),
+                prim(Prim::IsNan(FloatKind::F32), Ty::Bool, vec![f64_(1.0)]),
+            ),
+            (
+                "to_bits of the other float",
+                "an `F64` expected, found an `F32`".into(),
+                prim(Prim::ToBits(FloatKind::F64), Ty::Int(IntKind::U64), vec![f32_(1.0)]),
+            ),
+            (
+                "trunc of the other float",
+                "an `F64` expected, found an `F32`".into(),
+                prim(
+                    Prim::TruncToInt { from: FloatKind::F64, to: IntKind::I32, sat: false },
+                    Ty::Int(IntKind::I32),
+                    vec![f32_(1.0)],
+                ),
+            ),
+            (
+                "the second operand of pow",
+                "an `F32` expected, found an `F64`".into(),
+                prim(Prim::Math(MathFn::Pow, FloatKind::F32), Ty::Float(FloatKind::F32), vec![f32_(1.0), f64_(1.0)]),
+            ),
+            (
+                "pow with one operand",
+                "given 1 operands, not 2".into(),
+                prim(Prim::Math(MathFn::Pow, FloatKind::F32), Ty::Float(FloatKind::F32), vec![f32_(1.0)]),
+            ),
+            (
+                "assert_near of F32s",
+                "an `F64` expected, found an `F32`".into(),
+                prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f32_(1.0), f32_(5.0), f32_(0.0)]),
+            ),
+            (
+                "an index of I32",
+                int_("U32", "an integer of `I32`"),
+                Expr::new(
+                    Ty::Int(IntKind::I32),
+                    sp(),
+                    ExprKind::Index {
+                        base: Box::new(Expr::new(
+                            Ty::Array(Box::new(Ty::Int(IntKind::I32)), 1),
+                            sp(),
+                            ExprKind::Array(vec![i32_(7)]),
+                        )),
+                        index: Box::new(i32_(0)),
+                    },
+                ),
+            ),
+        ];
+        for (what, expected, e) in cases {
+            let message = internal_error_of(|| eval(e));
+            assert!(message.contains(&expected), "{what}: {message}");
+        }
+        // The two bounds of a `for` of two integer types.
+        let for_ = Stmt {
+            kind: StmtKind::ForRange(LocalId(0), i32_(0), i64_(3), Block { stmts: Vec::new(), value: None }),
+            span: sp(),
+        };
+        let m = Module {
+            fns: vec![FnDef {
+                name: "f".into(),
+                params: Vec::new(),
+                ret: Ty::Unit,
+                sret: false,
+                rt: false,
+                locals: vec![Local { name: "i".into(), ty: Ty::Int(IntKind::I32) }],
+                body: Some(Block { stmts: vec![for_], value: None }),
+                span: sp(),
+            }],
+            ..Default::default()
+        };
+        let interp = Interp::new(&m);
+        let message = internal_error_of(|| interp.call(FnId(0), Vec::new()));
+        assert!(message.contains(&int_("I32", i64_found)), "for: {message}");
+    })
+}
+
+/// R-137: an internal failure no longer reaches the program as a panic whose
+/// message starts with `internal:`.
+#[test]
+fn an_internal_failure_is_not_a_panic() {
+    on_stack(|| {
+        // A local read before it is written.
+        let read = Expr::new(Ty::Int(IntKind::I32), sp(), ExprKind::Local(LocalId(0)));
+        let m = Module {
+            fns: vec![FnDef {
+                name: "f".into(),
+                params: Vec::new(),
+                ret: Ty::Int(IntKind::I32),
+                sret: false,
+                rt: false,
+                locals: vec![Local { name: "x".into(), ty: Ty::Int(IntKind::I32) }],
+                body: Some(Block { stmts: Vec::new(), value: Some(Box::new(read)) }),
+                span: sp(),
+            }],
+            ..Default::default()
+        };
+        let interp = Interp::new(&m);
+        let message = internal_error_of(|| interp.call(FnId(0), Vec::new()));
+        assert!(message.contains("before initialization") && !message.starts_with("internal:"), "{message}");
+    })
+}
+
+/// A call of a function without a body is an internal error (lowering never
+/// makes one).
+#[test]
+fn a_call_of_a_function_without_a_body_is_an_internal_error() {
+    on_stack(|| {
+        let m = Module {
+            fns: vec![FnDef {
+                name: "t".into(),
+                params: Vec::new(),
+                ret: Ty::Unit,
+                sret: false,
+                rt: false,
+                locals: Vec::new(),
+                body: None,
+                span: sp(),
+            }],
+            ..Default::default()
+        };
+        let interp = Interp::new(&m);
+        let message = internal_error_of(|| interp.call(FnId(0), Vec::new()));
+        assert!(message.contains("no body"), "{message}");
+    })
+}
+
+/// S-224: a `std` function the interpreter does not run is found before the
+/// run ([`crate::unsupported`], in the body of a function and in a `const`),
+/// and stops a run that reaches it with [`Failure::Unsupported`], not a panic.
+/// [`crate::std_prim`] decides both.
+#[test]
+fn an_unimplemented_std_function_is_unsupported() {
+    on_stack(|| {
+        let gen_ = || prim(Prim::Std("std.test.gen.f32".into()), Ty::Unit, vec![f32_(0.0), f32_(1.0)]);
+        let near = prim(Prim::Std("std.dsp.test.assert_near".into()), Ty::Unit, vec![f64_(1.0), f64_(1.0), f64_(0.0)]);
+        let m = Module {
+            fns: vec![
+                FnDef {
+                    name: "f".into(),
+                    params: Vec::new(),
+                    ret: Ty::Unit,
+                    sret: false,
+                    rt: false,
+                    locals: Vec::new(),
+                    body: Some(Block { stmts: Vec::new(), value: Some(Box::new(gen_())) }),
+                    span: sp(),
+                },
+                FnDef {
+                    name: "g".into(),
+                    params: Vec::new(),
+                    ret: Ty::Unit,
+                    sret: false,
+                    rt: false,
+                    locals: Vec::new(),
+                    body: Some(Block { stmts: Vec::new(), value: Some(Box::new(near)) }),
+                    span: sp(),
+                },
+            ],
+            consts: vec![ConstDef { name: "G".into(), ty: Ty::Unit, init: gen_() }],
+            ..Default::default()
+        };
+        let found = crate::unsupported(&m);
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(found.iter().all(|u| u.std_fn == "std.test.gen.f32"));
+        let d = found[0].diagnostic();
+        assert_eq!(d.code, onsa_diag::Code::E0200);
+        assert!(d.message.contains("std.test.gen.f32"), "{}", d.message);
+        let interp = Interp::new(&m);
+        assert!(
+            matches!(interp.call(FnId(0), Vec::new()), Err(Failure::Unsupported(u)) if u.std_fn == "std.test.gen.f32")
+        );
+        assert!(matches!(interp.const_value(ConstId(0)), Err(Failure::Unsupported(_))));
+        assert!(interp.call(FnId(1), Vec::new()).is_ok());
+    })
 }

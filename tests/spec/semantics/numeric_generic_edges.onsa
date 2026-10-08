@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§4.5", "§6.3", "§6.6", "§9.2"]
+
+// The integer edges of §3.4 reached through a generic function whose type
+// parameter has a numeric bound (spec §4.5, §6.3): `T: Int` gives the wrapping
+// and saturating operators and the associated constants `MIN` `MAX` `BITS`
+// `ONE`; `T: Num + Int` (the signed integers) gives `-` and so `-T.ONE`.
+// The instantiation changes the width, so the same body has to wrap, saturate
+// and panic at the edge of each type: U64 products do not fit a 64-bit host
+// word, and `MIN % -1` is 0 for every signed width while `MIN / -1` panics.
+//
+//   a *% b   the mathematical product modulo 2^(bit width)
+//   a *| b   the product clamped to [MIN, MAX]
+//   a *  b   the product, panic when it does not fit
+//   a % b    a - (a / b) * b, so `MIN % -1` is 0 (no panic)
+//   a / b    truncated toward zero, panic for `MIN / -1`
+
+fn wmul[T: Int](a: T, b: T) -> T {
+  a *% b
+}
+
+fn smul[T: Int](a: T, b: T) -> T {
+  a *| b
+}
+
+fn cmul[T: Int](a: T, b: T) -> T {
+  a * b
+}
+
+fn rem_neg1[T: Num + Int](a: T) -> T {
+  let m = -T.ONE
+  a % m
+}
+
+fn div_neg1[T: Num + Int](a: T) -> T {
+  let m = -T.ONE
+  a / m
+}
+
+fn min_of[T: Int](x: T) -> T {
+  T.MIN
+}
+
+// ----------------------------------------------------- multiplication, U64
+
+test "a generic function with T: Int multiplies U64 with wrapping" {
+  let umax: U64 = U64.MAX
+  assert wmul(umax, umax) == 1
+  let a: U64 = 9223372036854775809
+  assert wmul(a, 3) == 9223372036854775811
+  let h: U64 = 4294967296
+  assert wmul(h, h) == 0
+}
+
+test "a generic function with T: Int saturates U64" {
+  let umax: U64 = U64.MAX
+  assert smul(umax, umax) == umax
+  let h: U64 = 4294967296
+  assert smul(h, h) == umax
+  let m: U64 = 4294967295
+  assert smul(m, h) == 18446744069414584320
+}
+
+test "a generic function with T: Int multiplies U64 with the checked operator" {
+  // (2^32 - 1) * (2^32 + 1) = 2^64 - 1 = U64.MAX exactly.
+  let m: U64 = 4294967295
+  let n: U64 = 4294967297
+  assert cmul(m, n) == U64.MAX
+  let h: U64 = 4294967296
+  assert cmul(h, 1) == h
+}
+
+test "the generic product feeds another generic call" {
+  let umax: U64 = U64.MAX
+  let sq = wmul(umax, umax)
+  assert wmul(sq, umax) == umax
+  // 2^32 * 2^32 = 0 (mod 2^64), and 0 * anything = 0.
+  let h: U64 = 4294967296
+  assert wmul(wmul(h, h), umax) == 0
+  // smul clamps 2^64 to 2^64 - 1, and that times (2^64 - 1) clamps again.
+  assert smul(smul(h, h), umax) == umax
+}
+
+// ---------------------------------------------- multiplication, narrower types
+
+test "the same generic functions wrap and saturate at the width of each type" {
+  // 200 * 3 = 600 = 2 * 256 + 88 for U8.
+  let a: U8 = 200
+  assert wmul(a, 3) == 88
+  assert smul(a, 3) == 255
+  // 2^31 - 1 times 2 is 2^32 - 2 for I32, which is -2 as a two's complement value.
+  let b: I32 = I32.MAX
+  assert wmul(b, 2) == -2
+  assert smul(b, 2) == I32.MAX
+  // 100 * 3 = 300 = 256 + 44 for I8.
+  let c: I8 = 100
+  assert wmul(c, 3) == 44
+  assert smul(c, 3) == 127
+  // I64.MIN * 3 = -3 * 2^63 = -2^64 - 2^63, which is I64.MIN (mod 2^64).
+  let d: I64 = I64.MIN
+  assert wmul(d, 3) == I64.MIN
+  assert smul(d, 3) == I64.MIN
+}
+
+// ---------------------------------------------------------- MIN % -1 is 0
+
+test "MIN % -1 is 0 for every signed width through a generic function" {
+  assert rem_neg1(I8.MIN) == 0
+  assert rem_neg1(I16.MIN) == 0
+  assert rem_neg1(I32.MIN) == 0
+  assert rem_neg1(I64.MIN) == 0
+}
+
+test "the remainder by -1 of other values through a generic function" {
+  // Everything divides by -1, so the remainder is 0 whatever the sign.
+  let a: I8 = 127
+  let b: I8 = -127
+  assert rem_neg1(a) == 0
+  assert rem_neg1(b) == 0
+  let c: I64 = I64.MAX
+  assert rem_neg1(c) == 0
+}
+
+test "MAX / -1 is -MAX through a generic function" {
+  assert div_neg1(I8.MAX) == -127
+  assert div_neg1(I16.MAX) == -32767
+  assert div_neg1(I32.MAX) == -2147483647
+  assert div_neg1(I64.MAX) == -9223372036854775807
+  let a: I64 = -9223372036854775807
+  assert div_neg1(a) == I64.MAX
+}
+
+test "T.MIN of a generic function is the minimum of the instantiated type" {
+  assert min_of(I8.MIN) == -128
+  assert min_of(U8.MAX) == 0
+  assert min_of(I64.MAX) == I64.MIN
+}
+
+// ---------------------------------------------------------------------- panics
+
+test "a checked U64 product inside a generic function panics" {   //~ TESTFAIL "a checked U64 product inside a generic function panics"
+  let h: U64 = 4294967296
+  let _ = cmul(h, h)
+}
+
+test "a checked I8 product inside a generic function panics" {   //~ TESTFAIL "a checked I8 product inside a generic function panics"
+  // 16 * 8 = 128 > 127.
+  let a: I8 = 16
+  let b: I8 = 8
+  let _ = cmul(a, b)
+}
+
+test "I8.MIN / -1 through a generic function panics" {   //~ TESTFAIL "I8.MIN / -1 through a generic function panics"
+  let _ = div_neg1(I8.MIN)
+}
+
+test "I16.MIN / -1 through a generic function panics" {   //~ TESTFAIL "I16.MIN / -1 through a generic function panics"
+  let _ = div_neg1(I16.MIN)
+}
+
+test "I32.MIN / -1 through a generic function panics" {   //~ TESTFAIL "I32.MIN / -1 through a generic function panics"
+  let _ = div_neg1(I32.MIN)
+}
+
+test "I64.MIN / -1 through a generic function panics" {   //~ TESTFAIL "I64.MIN / -1 through a generic function panics"
+  let _ = div_neg1(I64.MIN)
+}

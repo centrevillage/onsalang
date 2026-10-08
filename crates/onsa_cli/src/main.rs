@@ -470,8 +470,12 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
         Ok(m) => m,
         Err(o) => return o,
     };
-    let report = match onsa_driver::run_tests(&module, &onsa_driver::TestOptions { filter }) {
-        Ok(r) => r,
+    let report = match onsa_driver::run_tests(&loaded.sources, &module, &onsa_driver::TestOptions { filter }) {
+        Ok(onsa_driver::TestRun::Ran(r)) => r,
+        // E0200, as those of lowering: no test ran (S-224).
+        Ok(onsa_driver::TestRun::Unsupported(diags)) => {
+            return print_diagnostics(json, &loaded.sources, &diags, Outcome::Problems);
+        }
         Err(e) => return internal(&loaded.sources, &e),
     };
     if json {

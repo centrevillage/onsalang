@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.4", "§4.1", "§5.2", "§5.3", "§6.1", "§9.2"]
+
+// `U64` multiplication inside function values (spec §3.4, §4.1, §5.2, §5.3,
+// §6.1): an anonymous function that is called through a parameter of function
+// type with `.(`, a named function used as a value, and a closure that captures
+// a `U64`. A parameter of function type in the default mode accepts a
+// capturing closure (§5.2). The same operations on array elements via
+// `array.from_fn` are in u64_mul_contexts.onsa.
+//
+//   a *% b   the mathematical product modulo 2^64
+//   a *| b   the product clamped to U64.MAX = 2^64 - 1
+//   a *  b   the product, panic when it is above 2^64 - 1
+
+fn wsquare(x: U64) -> U64 {
+  x *% x
+}
+
+fn apply(f: fn(U64) -> U64, x: U64) -> U64 {
+  f.(x)
+}
+
+fn apply_twice(f: fn(U64) -> U64, x: U64) -> U64 {
+  f.(f.(x))
+}
+
+test "an anonymous function multiplies U64 with wrapping" {
+  let umax: U64 = U64.MAX
+  assert apply(fn(x: U64) -> U64 { x *% x }, umax) == 1
+  assert apply(fn(x) { x *% 3 }, 9223372036854775809) == 9223372036854775811
+}
+
+test "an anonymous function saturates a U64 product" {
+  assert apply(fn(x: U64) -> U64 { x *| x }, 4294967296) == U64.MAX
+  assert apply(fn(x: U64) -> U64 { x *| 2 }, 4611686018427387904) == 9223372036854775808
+}
+
+test "a named function is a value and is called with .(" {
+  let f = wsquare
+  // (2^32 + 1)^2 = 2^33 + 1 (mod 2^64).
+  assert f.(4294967297) == 8589934593
+  assert apply(wsquare, U64.MAX) == 1
+}
+
+test "the result of one call is the argument of the next" {
+  // x -> x * x (mod 2^64): 2^32 -> 0, and (2^32 + 1) -> 2^33 + 1 -> (2^33 + 1)^2 mod 2^64.
+  // (2^33 + 1)^2 = 2^66 + 2^34 + 1 = 2^34 + 1 (mod 2^64) = 17179869185.
+  assert apply_twice(wsquare, 4294967296) == 0
+  assert apply_twice(wsquare, 4294967297) == 17179869185
+}
+
+test "a closure captures a U64 and multiplies by it" {
+  let k: U64 = 4294967297
+  // (2^32 - 1) * (2^32 + 1) = 2^64 - 1.
+  assert apply(fn(x) { x *% k }, 4294967295) == U64.MAX
+  // 2^32 * (2^32 + 1) = 2^64 + 2^32 = 2^32 (mod 2^64).
+  assert apply(fn(x) { x *% k }, 4294967296) == 4294967296
+  // 2^32 * (2^32 + 1) saturates to 2^64 - 1.
+  assert apply(fn(x) { x *| k }, 4294967296) == U64.MAX
+}
+
+test "a checked U64 product in an anonymous function panics" {   //~ TESTFAIL "a checked U64 product in an anonymous function panics"
+  let _ = apply(fn(x: U64) -> U64 { x * x }, 4294967296)
+}
+
+test "a checked U64 product in a captured closure panics" {   //~ TESTFAIL "a checked U64 product in a captured closure panics"
+  let k: U64 = 4294967297
+  let _ = apply(fn(x) { x * k }, 4294967296)
+}

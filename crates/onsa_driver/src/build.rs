@@ -570,12 +570,16 @@ fn inline_consts(module: &Module) -> Vec<(usize, Expr)> {
             // A panic names this `const` (S-67).
             let _scope = onsa_diag::internal::item_scope(c.init.span);
             // Each `const` is an evaluation of its own from call depth 0, as
-            // in `onsa test` (spec §12.5). A failed one stays as it is, and
-            // the C backend stops at it with E0200; E0419 at the initializer
-            // (spec §6.6, S-222) is W9-03's.
-            if let Ok(v) = interp.const_value(ConstId(i as u32))
-                && let Some(e) = value_to_expr(module, &v, &c.ty, c.init.span)
-            {
+            // in `onsa test` (spec §12.5). One that panics or reaches a form
+            // the interpreter cannot run stays as it is, and the C backend
+            // stops at it with E0200; E0419 at the initializer (spec §6.6,
+            // S-222) is W9-03's. A failure of the interpreter itself unwinds
+            // to the guard of `consts_stage` (S-67).
+            let v = match interp.const_value(ConstId(i as u32)) {
+                Ok(v) => v,
+                Err(onsa_interp::Failure::Panic(_) | onsa_interp::Failure::Unsupported(_)) => continue,
+            };
+            if let Some(e) = value_to_expr(module, &v, &c.ty, c.init.span) {
                 replacements.push((i, e));
             }
         }

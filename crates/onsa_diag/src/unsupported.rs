@@ -126,6 +126,9 @@ features! {
     /// `{}`, `{}`: the method's name and the receiver's type.
     Methods: Language, "the method `{}` on `{}`", None;
     ConstBindings: Language, "a `const` initializer with local bindings", None;
+    /// `{}`: the function's path (`std.test.gen.f32`). W2-03: `onsa test`
+    /// finds them before it runs the tests.
+    InterpreterStdFn: Language, "the `std` function `{}` in `onsa test` (the interpreter)", None;
 
     // ----------------------------------------------------------- the C backend
     Buf: CBackend, "`Buf` (heap buffers)", None;

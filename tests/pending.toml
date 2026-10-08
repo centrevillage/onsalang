@@ -811,32 +811,10 @@ note = "Result の map_err が無い（E0413、§9.1）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/wrapping_mul_u64.onsa"
-reasons = ["R-04"]
-until = "W2-03"
-note = "U64 の *% と *| でインタプリタ自体が Rust の乗算の溢れで落ちる（内部エラー）。W2-03 で直す"
-expect = "internal"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/bounds64.onsa::BITS of the 64-bit types"
 reasons = ["R-136"]
 until = "W5-05"
 note = "I64.BITS などが I32 以外で 32 のまま（§6.6）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/bounds64.onsa::MIN % -1 is 0 and does not panic"
-reasons = ["R-19"]
-until = "W2-03"
-note = "MIN % -1 が溢れで panic する。仕様は 0（§3.4、§9.2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/bounds64.onsa::a NaN reads back as the canonical quiet NaN"
-reasons = ["S-106"]
-until = "W2-03"
-note = "to_bits() が NaN を正の quiet NaN にそろえない（§3.4）"
 
 [[pending]]
 kind = "test-case"
@@ -858,13 +836,6 @@ target = "tests/spec/semantics/eval_order.onsa::nested indices are evaluated fro
 reasons = ["R-93", "S-75"]
 until = "W8-03"
 note = "xs[i][j] の添字を内側から評価する（§3.5）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/trunc_range.onsa"
-reasons = ["R-19"]
-until = "W2-03"
-note = "2^63 の trunc_i64 と 2^64 の trunc_u64 が panic しない（§3.3、§3.4）。TESTFAIL の印のある test は一覧に個別に載せられないのでファイルごと"
 
 # --- W1-09 の意味のテスト（flow の世界）。最終の構文で書いたので、ほとんどが実装待ち（2026-10-07）
 
@@ -1180,136 +1151,6 @@ note = "生成した C が -Werror で落ちる: Option の match の最後の�
 
 # --- テストベクトル（W2-02）: 演算ごとの失敗（vectors-interp/<演算>）と、ツールチェーンごとの失敗
 # （vectors-c/<演算>[<ツールチェーン>]）。照合は onsa_tests::vectors
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i8.rem"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "749bec49503d4173"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i16.rem"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "d7e365698ff1a1bc"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i32.rem"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "148bf25eb0fa9337"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/i64.rem"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "be4471f1353d74bb"
-note = "MIN % -1 が panic する（§3.4 は 0）"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u64.mul"
-reasons = ["R-04"]
-until = "W2-03"
-rows = 10
-digest = "61fa4158e56bed8b"
-note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップし、結果は正しい値になる）"
-expect = "internal"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u64.wmul"
-reasons = ["R-04"]
-until = "W2-03"
-rows = 10
-digest = "af539f21b979349b"
-note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップし、結果は正しい値になる）"
-expect = "internal"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u64.smul"
-reasons = ["R-04"]
-until = "W2-03"
-rows = 12
-digest = "8acb4d83954a9bce"
-note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップして誤った値を返す）"
-expect = "internal"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/u64.checked_mul"
-reasons = ["R-04"]
-until = "W2-03"
-rows = 9
-digest = "a46dcdc48771d3a9"
-note = "U64 の乗算を i128 で計算し、ホストの算術が溢れる（gate の debug では内部エラー。release ではラップし、結果は正しい値になる）"
-expect = "internal"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/f32.trunc_i64"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "9ef7d3c5a46a6bdd"
-note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/f32.trunc_u64"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "5580741e30bd4891"
-note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/f64.trunc_i64"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "6a8ff38e194bee72"
-note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/f64.trunc_u64"
-reasons = ["R-19"]
-until = "W2-03"
-rows = 1
-digest = "a185973be7d63b05"
-note = "64 ビットの trunc_* の上限を丸めた値と比べ、2^63 / 2^64 で panic しない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/f32.to_bits"
-reasons = ["S-106"]
-until = "W2-03"
-rows = 9
-digest = "5347a2e37e0f56bb"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
-
-[[pending]]
-kind = "gate"
-target = "vectors-interp/f64.to_bits"
-reasons = ["S-106"]
-until = "W2-03"
-rows = 9
-digest = "c8140f3d576349e8"
-note = "to_bits() が NaN を正の quiet NaN にそろえない"
 
 [[pending]]
 kind = "gate"
@@ -2918,3 +2759,54 @@ target = "tests/spec/semantics/closure_exit_from_fn.onsa"
 reasons = ["R-08", "S-192"]
 until = "W8-09"
 note = "from_fn の無名関数の中の ? と return の脱出（§6.1、§9.1）。W2-07 で E0200、正式な実装は W8-09"
+
+# --- W2-03/t: インタプリタの数の事例（2026-10-08）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/u64_mul_match.onsa"
+reasons = ["R-06"]
+until = "W8-06"
+note = "整数リテラルの腕の値の match の一般経路が W2-07 の E0200 で止まる（R-06、正式な実装は W8-06）。U64 の乗算の溢れ（R-04）は W2-03 で直った"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/u64_mul_fn_values.onsa"
+reasons = ["R-04", "R-08", "S-191"]
+until = "W8-09"
+note = "関数値の呼び出し .( が未実装（E0002）。関数値と捕捉するクロージャの中の U64 の乗算（§3.4、§5.2）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/u64_mul_precedence.onsa"
+reasons = ["S-45"]
+until = "W3-07"
+note = "乗法・加法・比較の群の部分順序（§3.1）。今は E0010。U64 の積を括弧なしで他の群の被演算子にする形"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/numeric_generic_edges.onsa"
+reasons = ["S-84"]
+until = "W5-05"
+note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の U64 の *% *| * と、MIN % -T.ONE、MIN / -T.ONE（§3.4）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/min_rem_precedence.onsa"
+reasons = ["S-45"]
+until = "W3-07"
+note = "剰余と乗法の群が比較より強い（§3.1）。今は E0010。MIN % -1 == 0 の形"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/min_checked_rem.onsa"
+reasons = ["R-79", "S-69"]
+until = "W5-02"
+note = "checked_rem / checked_rem_euclid / checked_div_euclid / checked_neg が無い（E0413、§3.4）。全ての符号付きの幅の MIN と -1"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/const_u64_mul_panic.onsa"
+reasons = ["S-131", "S-146"]
+until = "W9-03"
+note = "const の初期化式の整数の panic（U64 の積、MIN / -1、2^63 と 2^64 の trunc）が E0419 にならない（§6.6）。今は onsa check で 0 件"

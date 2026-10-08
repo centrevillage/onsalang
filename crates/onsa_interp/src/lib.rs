@@ -28,25 +28,72 @@ use std::rc::Rc;
 
 use onsa_core::prim::{CheckedOp, MathFn, Prim};
 use onsa_core::{
-    Arg, BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnId, Lit, LocalId, LogicOp, Mode, Module, MsgId,
-    Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
+    Arg, BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
+    MsgId, Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
 };
-use onsa_diag::Span;
+use onsa_diag::{Diagnostic, Span};
 
 pub use value::{ArrayData, Proj, Slot, SpanRef, Value, show, slot, zero};
 use value::{clamp_int, in_range, int_value, wrap_int, zero_array};
 
-/// A panic (spec §9.2) with the position of the instruction that raised it.
+/// A panic of the program (spec §9.2, and a call beyond the depth limit of
+/// §12.5) with the position of the instruction that raised it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Panic {
     pub message: String,
     pub span: Span,
 }
 
+/// A form this version of the interpreter cannot run: E0200 (spec §18.1,
+/// S-224). [`unsupported`] finds every one in a module before it runs; an
+/// evaluation that reaches one stops with it. Today the one kind is a call of
+/// a `std` `target fn` the interpreter does not implement ([`std_prim`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unsupported {
+    /// The qualified name of the `std` function (`std.test.gen.f32`).
+    pub std_fn: String,
+    pub span: Span,
+}
+
+impl Unsupported {
+    /// Its E0200 (spec §18.1, S-224): the one place that words the feature
+    /// and the note.
+    pub fn diagnostic(&self) -> Diagnostic {
+        onsa_diag::unsupported::Feature::InterpreterStdFn.diagnostic(
+            onsa_diag::Stage::Build,
+            self.span,
+            &[&self.std_fn],
+        )
+    }
+}
+
+/// Why an evaluation gave no value.
+///
+/// A failure of the interpreter itself (a value of the wrong type, a place
+/// that does not exist, control flow that escapes a function: a state the
+/// Core verifier should have ruled out) is neither: it is an internal error
+/// (S-67, R-92, R-137) that unwinds through [`onsa_diag::internal::bug`] to
+/// the guard of the caller (`onsa_driver::guard`). Every entry runs under one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Failure {
+    Panic(Panic),
+    Unsupported(Unsupported),
+}
+
+impl Failure {
+    /// The position of the failure.
+    pub fn span(&self) -> Span {
+        match self {
+            Failure::Panic(p) => p.span,
+            Failure::Unsupported(u) => u.span,
+        }
+    }
+}
+
 /// Non-local control flow inside the interpreter.
 #[derive(Debug)]
 enum Signal {
-    Panic(Panic),
+    Fail(Failure),
     Return(Value),
     Break,
     Continue,
@@ -55,7 +102,60 @@ enum Signal {
 type R<T> = Result<T, Signal>;
 
 fn panic<T>(span: Span, msg: impl Into<String>) -> R<T> {
-    Err(Signal::Panic(Panic { message: msg.into(), span }))
+    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span })))
+}
+
+/// The interpreter found a state it cannot be in at `span`: an internal
+/// error (S-67), never a panic of the program (R-137).
+#[cold]
+#[inline(never)]
+#[track_caller]
+fn internal(span: Span, msg: impl Into<String>) -> ! {
+    onsa_diag::internal::bug(Some(span), msg)
+}
+
+/// The `std` `target fn`s the interpreter runs itself ([`Prim::Std`]). The
+/// one place that decides which it runs (D-15): [`unsupported`] and the
+/// evaluation both ask [`std_prim`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StdPrim {
+    AssertNear,
+}
+
+fn std_prim(name: &str) -> Option<StdPrim> {
+    match name {
+        "std.dsp.test.assert_near" => Some(StdPrim::AssertNear),
+        _ => None,
+    }
+}
+
+fn std_unsupported(name: &str, span: Span) -> Unsupported {
+    Unsupported { std_fn: name.to_string(), span }
+}
+
+/// Every form of `m` this version of the interpreter cannot run (E0200,
+/// S-224), in the order of the module: the `std` `target fn`s it does not
+/// implement, in every function body and every `const` initializer. `onsa
+/// test` reports them before it runs any test, so what it reports does not
+/// depend on which code the tests reach.
+pub fn unsupported(m: &Module) -> Vec<Unsupported> {
+    let mut out = Vec::new();
+    let mut visit = |e: &Expr| {
+        if let ExprKind::Prim { prim: Prim::Std(name), .. } = &e.kind
+            && std_prim(name).is_none()
+        {
+            out.push(std_unsupported(name, e.span));
+        }
+    };
+    for f in &m.fns {
+        if let Some(b) = &f.body {
+            onsa_core::walk::walk_block(b, &mut visit);
+        }
+    }
+    for c in &m.consts {
+        onsa_core::walk::walk_expr(&c.init, &mut visit);
+    }
+    out
 }
 
 /// A resolved memory location: a slot and the projections inside its value.
@@ -123,17 +223,21 @@ enum ConstState {
 /// before the net comes before the limit. What a call uses is its body's
 /// frames down to the next call: the expressions around that call nest up to
 /// 256 levels (spec §2.5, S-183). Measured on aarch64-apple-darwin
-/// (2026-10-08), bytes of stack, with `onsa_interp` at `opt-level = 1` in the
-/// dev profile (`Cargo.toml`):
+/// (2026-10-08, again after W2-03), bytes of stack, with `onsa_interp` at
+/// `opt-level = 1` in the dev profile (`Cargo.toml`):
 ///
 /// | | debug | release |
 /// |---|---|---|
-/// | one call, no nesting (`1 + f(n - 1)`) | 0.8 K | 0.5 K |
+/// | one call, no nesting (`1 + f(n - 1)`) | 1.0 K | 0.7 K |
 /// | one level of `0 + (x)` | 0.3 K | 0.3 K |
 /// | one level of `(x, 0).0` | 0.7 K | 0.7 K |
-/// | one level of `match`, `[x][0]` (the most) | 0.8–0.9 K | 0.8 K |
+/// | one level of `match`, `[x][0]` (the most) | 0.8 K | 0.7–0.8 K |
 ///
-/// So 128 calls, each under 256 levels of the most expensive kind, use 28 MB
+/// The arms of [`Interp::eval`] take the expression, not its span: a span
+/// passed by value kept `eval`'s frame under each level (W2-03 measured 0.6 K
+/// a level of `0 + (x)` that way).
+///
+/// So 128 calls, each under 256 levels of the most expensive kind, use 27 MB
 /// in debug and 27 MB in release, less than half of the 60 MiB (the unit
 /// tests `the_limit_comes_before_the_net_under_256_levels` and
 /// `measure_the_stack_of_calls_and_levels`). Without the `opt-level` the debug
@@ -241,33 +345,33 @@ impl<'m> Interp<'m> {
     /// IDE, `onsa_web`) needs another way to bound the stack before it runs
     /// the interpreter: the evaluator with its own stack of W9-03, or a
     /// [`onsa_diag::stack::remaining`] of its own.
-    pub fn call(&self, fn_: FnId, args: Vec<Value>) -> Result<Value, Panic> {
+    pub fn call(&self, fn_: FnId, args: Vec<Value>) -> Result<Value, Failure> {
         let site = self.m.fn_(fn_).span;
         let args = args.into_iter().map(ArgVal::Val).collect();
-        self.enter(site, || self.run_body(fn_, args)).map_err(Self::into_panic)
+        self.enter(site, || self.run_body(fn_, args)).map_err(|s| Self::failure_of(s, site))
     }
 
     /// Call with an `inout` first argument held in `state` (flows: `process(inout s, ...)`).
-    pub fn call_inout(&self, fn_: FnId, state: &Slot, rest: Vec<Value>) -> Result<Value, Panic> {
+    pub fn call_inout(&self, fn_: FnId, state: &Slot, rest: Vec<Value>) -> Result<Value, Failure> {
         let mut args = vec![ArgVal::Place(PlaceRef { root: state.clone(), projs: Vec::new() })];
         args.extend(rest.into_iter().map(ArgVal::Val));
         let site = self.m.fn_(fn_).span;
-        self.enter(site, || self.run_body(fn_, args)).map_err(Self::into_panic)
+        self.enter(site, || self.run_body(fn_, args)).map_err(|s| Self::failure_of(s, site))
     }
 
     /// Value of a `const` (evaluated on first use; T3-9), from wherever it is
     /// read: its initializer is an evaluation of its own (spec §12.5).
-    pub fn const_value(&self, id: ConstId) -> Result<Value, Panic> {
-        self.const_val(id).map_err(Self::into_panic)
+    pub fn const_value(&self, id: ConstId) -> Result<Value, Failure> {
+        let at = self.m.const_(id).init.span;
+        self.const_val(id).map_err(|s| Self::failure_of(s, at))
     }
 
-    fn into_panic(s: Signal) -> Panic {
+    /// What an entry at `at` gives back: only a failure leaves an entry
+    /// ([`Interp::run_body`] and [`Interp::eval_const`] take the rest).
+    fn failure_of(s: Signal, at: Span) -> Failure {
         match s {
-            Signal::Panic(p) => p,
-            Signal::Return(_) | Signal::Break | Signal::Continue => Panic {
-                message: "internal: control flow escaped a function".into(),
-                span: Span::new(onsa_diag::FileId(0), 0, 0),
-            },
+            Signal::Fail(f) => f,
+            Signal::Return(_) | Signal::Break | Signal::Continue => internal(at, "control flow escaped an evaluation"),
         }
     }
 
@@ -304,11 +408,18 @@ impl<'m> Interp<'m> {
         *cell.borrow_mut() = ConstState::InProgress;
         let _back = ConstBack(cell);
         let mut f = Frame { locals: Vec::new() };
-        let r = self.eval(&mut f, &self.m.const_(id).init);
-        if let Ok(v) = &r {
-            *cell.borrow_mut() = ConstState::Done(v.clone());
+        let init = &self.m.const_(id).init;
+        match self.eval(&mut f, init) {
+            Ok(v) => {
+                *cell.borrow_mut() = ConstState::Done(v.clone());
+                Ok(v)
+            }
+            Err(Signal::Fail(e)) => Err(Signal::Fail(e)),
+            // Not out of an initializer into the evaluation that reads it.
+            Err(Signal::Return(_) | Signal::Break | Signal::Continue) => {
+                internal(init.span, "control flow escaped a `const` initializer")
+            }
         }
-        r
     }
 
     // ------------------------------------------------------------ calls
@@ -395,16 +506,19 @@ impl<'m> Interp<'m> {
         let mut frame = self.bind_params(fn_, args)?;
         match self.exec_block(&mut frame, body) {
             Ok(v) | Err(Signal::Return(v)) => Ok(v),
-            Err(Signal::Break) | Err(Signal::Continue) => panic(f.span, "internal: loop control outside a loop"),
+            Err(Signal::Break) | Err(Signal::Continue) => internal(f.span, "loop control outside a loop"),
             Err(e) => Err(e),
         }
     }
 
+    /// A call of a function without a body: lowering turns every call of a
+    /// `target fn` into a primitive or E0200 (`lower/body.rs`), so Core never
+    /// calls one (an internal error, S-67).
     #[cold]
     #[inline(never)]
     fn no_body(&self, fn_: FnId) -> R<Value> {
         let f = self.m.fn_(fn_);
-        panic(f.span, format!("`{}` has no body in this version (target function)", f.name))
+        internal(f.span, format!("a call of `{}`, which has no body", f.name))
     }
 
     /// The frame of a call of `fn_`, with the parameters bound to `args`.
@@ -412,14 +526,14 @@ impl<'m> Interp<'m> {
     fn bind_params(&self, fn_: FnId, args: Vec<ArgVal>) -> R<Frame> {
         let f = self.m.fn_(fn_);
         if args.len() != f.params.len() {
-            return panic(f.span, format!("internal: `{}` called with {} arguments", f.name, args.len()));
+            internal(f.span, format!("`{}` called with {} arguments", f.name, args.len()));
         }
         let mut frame = Frame { locals: vec![None; f.locals.len()] };
         for (p, a) in f.params.iter().zip(args) {
             let loc = match (p.mode, a) {
                 (Mode::Inout, ArgVal::Place(pr)) => Loc::Alias(pr),
                 (_, ArgVal::Val(v)) => Loc::Slot(slot(v)),
-                (_, ArgVal::Place(pr)) => Loc::Slot(slot(self.read(&pr)?)),
+                (_, ArgVal::Place(pr)) => Loc::Slot(slot(self.read(&pr, f.span)?)),
             };
             frame.locals[p.local.0 as usize] = Some(loc);
         }
@@ -432,7 +546,7 @@ impl<'m> Interp<'m> {
         match &f.locals[l.0 as usize] {
             Some(Loc::Slot(s)) => Ok(PlaceRef { root: s.clone(), projs: Vec::new() }),
             Some(Loc::Alias(p)) => Ok(p.clone()),
-            None => panic(span, "internal: local read before initialization"),
+            None => internal(span, "local read before initialization"),
         }
     }
 
@@ -459,7 +573,7 @@ impl<'m> Interp<'m> {
             _ => false,
         })?;
         if !ok {
-            return panic(span, "internal: field projection on a non-aggregate");
+            internal(span, "field projection on a non-aggregate");
         }
         r.projs.push(Proj::Field(i));
         Ok(r)
@@ -497,16 +611,13 @@ impl<'m> Interp<'m> {
                 Ok(PlaceRef { root: s.root, projs })
             }
             Kind::Buf(b) => {
-                let len = match &*b.borrow() {
-                    Value::Array(a) => a.len(),
-                    _ => 0,
-                };
+                let len = buf_len(&b, span);
                 if i >= len {
                     return panic(span, format!("index {i} out of range for a buffer of length {len}"));
                 }
                 Ok(PlaceRef { root: b, projs: vec![Proj::Index(i)] })
             }
-            Kind::Other => panic(span, "internal: index on a non-sequence"),
+            Kind::Other => internal(span, "index on a non-sequence"),
         }
     }
 
@@ -548,16 +659,16 @@ impl<'m> Interp<'m> {
         let v = r.root.borrow();
         match Self::walk(&v, &r.projs) {
             Some(leaf) => Ok(f(leaf)),
-            None => panic(span, "internal: dangling place"),
+            None => internal(span, "dangling place"),
         }
     }
 
-    fn read(&self, r: &PlaceRef) -> R<Value> {
+    fn read(&self, r: &PlaceRef, span: Span) -> R<Value> {
         let v = r.root.borrow();
         match Self::walk(&v, &r.projs) {
             Some(Leaf::Val(x)) => Ok(x.clone()),
             Some(Leaf::F32(x)) => Ok(Value::F32(x)),
-            None => panic(Span::new(onsa_diag::FileId(0), 0, 0), "internal: dangling place"),
+            None => internal(span, "dangling place"),
         }
     }
 
@@ -573,9 +684,9 @@ impl<'m> Interp<'m> {
                     *x = y;
                     Ok(())
                 }
-                _ => panic(span, "internal: non-F32 written into an F32 array"),
+                _ => internal(span, "non-F32 written into an F32 array"),
             },
-            None => panic(span, "internal: dangling place"),
+            None => internal(span, "dangling place"),
         }
     }
 
@@ -610,10 +721,10 @@ impl<'m> Interp<'m> {
             K::Array(len) => Ok(SeqRef { root: r.root, projs: r.projs, start: 0, len }),
             K::Span(s) => Ok(SeqRef { root: s.root, projs: s.projs, start: s.start, len: s.len }),
             K::Buf(b) => {
-                let len = buf_len(&b);
+                let len = buf_len(&b, span);
                 Ok(SeqRef { root: b, projs: Vec::new(), start: 0, len })
             }
-            K::Other => panic(span, "internal: sequence expected"),
+            K::Other => internal(span, "sequence expected"),
         }
     }
 
@@ -621,14 +732,14 @@ impl<'m> Interp<'m> {
         match v {
             Value::Span(s) => Ok(SeqRef { root: s.root, projs: s.projs, start: s.start, len: s.len }),
             Value::Buf(b) => {
-                let len = buf_len(&b);
+                let len = buf_len(&b, span);
                 Ok(SeqRef { root: b, projs: Vec::new(), start: 0, len })
             }
             Value::Array(a) => {
                 let len = a.len();
                 Ok(SeqRef { root: slot(Value::Array(a)), projs: Vec::new(), start: 0, len })
             }
-            _ => panic(span, "internal: sequence expected"),
+            _ => internal(span, "sequence expected"),
         }
     }
 
@@ -640,7 +751,7 @@ impl<'m> Interp<'m> {
         match Self::walk(&v, &r.projs) {
             Some(Leaf::Val(x)) => Ok(x.clone()),
             Some(Leaf::F32(x)) => Ok(Value::F32(x)),
-            None => panic(span, "internal: dangling sequence"),
+            None => internal(span, "dangling sequence"),
         }
     }
 
@@ -742,9 +853,8 @@ impl<'m> Interp<'m> {
     fn exec_for(&self, f: &mut Frame, l: LocalId, lo: &Expr, hi: &Expr, body: &Block, span: Span) -> R<()> {
         let lo_v = self.eval(f, lo)?;
         let hi_v = self.eval(f, hi)?;
-        let kind =
-            lo_v.int_kind().ok_or_else(|| Signal::Panic(Panic { message: "internal: range bound".into(), span }))?;
-        let (lo_i, hi_i) = (lo_v.to_i128().unwrap(), hi_v.to_i128().unwrap_or(0));
+        let kind = int_kind_of(&lo_v, span);
+        let (lo_i, hi_i) = (int_of(&lo_v, kind, span), int_of(&hi_v, kind, span));
         let var = slot(lo_v);
         f.locals[l.0 as usize] = Some(Loc::Slot(var.clone()));
         let mut i = lo_i;
@@ -763,20 +873,15 @@ impl<'m> Interp<'m> {
     // ------------------------------------------------------------ expressions
 
     fn eval_bool(&self, f: &mut Frame, e: &Expr) -> R<bool> {
-        match self.eval(f, e)? {
-            Value::Bool(b) => Ok(b),
-            _ => panic(e.span, "internal: Bool expected"),
-        }
+        let v = self.eval(f, e)?;
+        Ok(bool_of(&v, e.span))
     }
 
+    /// An index, a length, a bound of a slice: a `U32` and nothing else (R-92).
+    #[inline(never)]
     fn eval_u32(&self, f: &mut Frame, e: &Expr) -> R<u32> {
-        match self.eval(f, e)? {
-            Value::U32(x) => Ok(x),
-            v => match v.to_i128() {
-                Some(i) if (0..=u32::MAX as i128).contains(&i) => Ok(i as u32),
-                _ => panic(e.span, "internal: U32 expected"),
-            },
-        }
+        let v = self.eval(f, e)?;
+        Ok(int_of(&v, IntKind::U32, e.span) as u32)
     }
 
     fn eval_args(&self, f: &mut Frame, args: &[Arg]) -> R<Vec<ArgVal>> {
@@ -812,25 +917,25 @@ impl<'m> Interp<'m> {
             ExprKind::Local(l) => self.eval_local(f, *l, span),
             ExprKind::Const(c) => self.const_val(*c),
             ExprKind::Zeroed => self.eval_zeroed(&e.ty),
-            ExprKind::Unary(op, x) => self.eval_unary(f, *op, x, span),
-            ExprKind::Binary { op, overflow, lhs, rhs } => self.eval_binary(f, (*op, *overflow), lhs, rhs, span),
-            ExprKind::Cmp { op, lhs, rhs } => self.eval_cmp(f, *op, lhs, rhs, span),
+            ExprKind::Unary(op, x) => self.eval_unary(f, *op, x, e),
+            ExprKind::Binary { op, overflow, lhs, rhs } => self.eval_binary(f, (*op, *overflow), lhs, rhs, e),
+            ExprKind::Cmp { op, lhs, rhs } => self.eval_cmp(f, *op, lhs, rhs, e),
             ExprKind::Logic { op, lhs, rhs } => self.eval_logic(f, *op, lhs, rhs),
             ExprKind::Cast(x) => self.eval_cast(f, x, e),
-            ExprKind::Call { fn_, args } => self.eval_call(f, *fn_, args, span),
+            ExprKind::Call { fn_, args } => self.eval_call(f, *fn_, args, e),
             ExprKind::Prim { prim, args } => self.prim(f, prim, args, &e.ty, span),
-            ExprKind::Field { base, index } => self.eval_field(f, base, *index, span),
-            ExprKind::Index { base, index } => self.eval_index(f, base, index, span),
-            ExprKind::SpanOf(inner) => self.eval_span_of(f, inner, span),
+            ExprKind::Field { base, index } => self.eval_field(f, base, *index, e),
+            ExprKind::Index { base, index } => self.eval_index(f, base, index, e),
+            ExprKind::SpanOf(inner) => self.eval_span_of(f, inner, e),
             ExprKind::Struct { fields, .. } => self.eval_struct(f, fields),
             ExprKind::Variant { tag, fields, .. } => self.eval_variant(f, *tag, fields),
             ExprKind::Array(items) => self.eval_array(f, items, e),
             ExprKind::Repeat { elem, n } => self.eval_repeat(f, elem, *n),
             ExprKind::Tuple(items) => self.eval_tuple(f, items),
             ExprKind::Tag(x) => self.eval_tag(f, x, e),
-            ExprKind::Payload { base, tag, index } => self.eval_payload(f, base, *tag, *index, span),
+            ExprKind::Payload { base, tag, index } => self.eval_payload(f, base, *tag, *index, e),
             ExprKind::IfExpr { cond, then, else_ } => self.eval_if(f, cond, then, else_),
-            ExprKind::Switch { scrutinee, arms, default } => self.eval_switch(f, scrutinee, arms, default, span),
+            ExprKind::Switch { scrutinee, arms, default } => self.eval_switch(f, scrutinee, arms, default, e),
             ExprKind::Block(b) => self.exec_block(f, b),
             ExprKind::Panic(msg) => self.eval_panic(*msg, span),
         }
@@ -842,7 +947,8 @@ impl<'m> Interp<'m> {
     }
 
     #[inline(never)]
-    fn eval_unary(&self, f: &mut Frame, op: UnOp, x: &Expr, span: Span) -> R<Value> {
+    fn eval_unary(&self, f: &mut Frame, op: UnOp, x: &Expr, at: &Expr) -> R<Value> {
+        let span = at.span;
         let v = self.eval(f, x)?;
         self.unary(op, v, span)
     }
@@ -850,11 +956,12 @@ impl<'m> Interp<'m> {
     #[inline(never)]
     fn eval_cast(&self, f: &mut Frame, x: &Expr, e: &Expr) -> R<Value> {
         let v = self.eval(f, x)?;
-        self.cast(v, &e.ty, e.span)
+        self.cast(v, &x.ty, &e.ty, e.span)
     }
 
     #[inline(never)]
-    fn eval_call(&self, f: &mut Frame, fn_: FnId, args: &[Arg], span: Span) -> R<Value> {
+    fn eval_call(&self, f: &mut Frame, fn_: FnId, args: &[Arg], at: &Expr) -> R<Value> {
+        let span = at.span;
         let args = self.eval_args(f, args)?;
         self.call_with(fn_, args, span)
     }
@@ -891,7 +998,7 @@ impl<'m> Interp<'m> {
         Ok(match l {
             Lit::Int(n) => match &e.ty {
                 Ty::Int(k) => int_value(*k, *n),
-                _ => return panic(e.span, "internal: integer literal type"),
+                _ => internal(e.span, "integer literal type"),
             },
             Lit::F32(x) => Value::F32(*x),
             Lit::F64(x) => Value::F64(*x),
@@ -904,18 +1011,20 @@ impl<'m> Interp<'m> {
     #[inline(never)]
     fn eval_local(&self, f: &Frame, l: LocalId, span: Span) -> R<Value> {
         let r = self.local_place(f, l, span)?;
-        self.read(&r)
+        self.read(&r, span)
     }
 
     #[inline(never)]
-    fn eval_binary(&self, f: &mut Frame, op: (BinOp, Overflow), lhs: &Expr, rhs: &Expr, span: Span) -> R<Value> {
+    fn eval_binary(&self, f: &mut Frame, op: (BinOp, Overflow), lhs: &Expr, rhs: &Expr, at: &Expr) -> R<Value> {
+        let span = at.span;
         let a = self.eval(f, lhs)?;
         let b = self.eval(f, rhs)?;
         self.binary(op.0, op.1, a, b, span)
     }
 
     #[inline(never)]
-    fn eval_cmp(&self, f: &mut Frame, op: CmpOp, lhs: &Expr, rhs: &Expr, span: Span) -> R<Value> {
+    fn eval_cmp(&self, f: &mut Frame, op: CmpOp, lhs: &Expr, rhs: &Expr, at: &Expr) -> R<Value> {
+        let span = at.span;
         let a = self.eval(f, lhs)?;
         let b = self.eval(f, rhs)?;
         Ok(Value::Bool(self.compare(op, &a, &b, span)?))
@@ -931,31 +1040,38 @@ impl<'m> Interp<'m> {
     }
 
     #[inline(never)]
-    fn eval_field(&self, f: &mut Frame, base: &Expr, index: u32, span: Span) -> R<Value> {
+    fn eval_field(&self, f: &mut Frame, base: &Expr, index: u32, at: &Expr) -> R<Value> {
+        let span = at.span;
         if let Some(p) = base.as_place() {
             let r = self.resolve_place(f, &p, span)?;
             let r = self.project_field(r, index, span)?;
-            return self.read(&r);
+            return self.read(&r, span);
         }
         match self.eval(f, base)? {
-            Value::Struct(fs) | Value::Tuple(fs) | Value::Enum { fields: fs, .. } => fs
-                .into_iter()
-                .nth(index as usize)
-                .ok_or_else(|| Signal::Panic(Panic { message: "internal: field".into(), span })),
-            _ => panic(span, "internal: field on a non-aggregate"),
+            Value::Struct(fs) | Value::Tuple(fs) | Value::Enum { fields: fs, .. } => {
+                fs.into_iter().nth(index as usize).map_or_else(|| internal(span, "field out of range"), Ok)
+            }
+            _ => internal(span, "field on a non-aggregate"),
         }
     }
 
     #[inline(never)]
-    fn eval_index(&self, f: &mut Frame, base: &Expr, index: &Expr, span: Span) -> R<Value> {
+    fn eval_index(&self, f: &mut Frame, base: &Expr, index: &Expr, at: &Expr) -> R<Value> {
+        let span = at.span;
         if let Some(p) = base.as_place() {
             let i = self.eval_u32(f, index)?;
             let r = self.resolve_place(f, &p, span)?;
             let r = self.project_index(r, i, span)?;
-            return self.read(&r);
+            return self.read(&r, span);
         }
         let v = self.eval(f, base)?;
         let i = self.eval_u32(f, index)?;
+        self.index_value(v, i, span)
+    }
+
+    /// Element `i` of the sequence `v`, off the way down a recursion (R-05).
+    #[inline(never)]
+    fn index_value(&self, v: Value, i: u32, span: Span) -> R<Value> {
         let s = self.seq_of_value(v, span)?;
         if i >= s.len {
             return panic(span, format!("index {i} out of range for a sequence of length {}", s.len));
@@ -964,7 +1080,8 @@ impl<'m> Interp<'m> {
     }
 
     #[inline(never)]
-    fn eval_span_of(&self, f: &mut Frame, inner: &Expr, span: Span) -> R<Value> {
+    fn eval_span_of(&self, f: &mut Frame, inner: &Expr, at: &Expr) -> R<Value> {
+        let span = at.span;
         let s = match inner.as_place() {
             Some(p) => {
                 let r = self.resolve_place(f, &p, span)?;
@@ -983,7 +1100,7 @@ impl<'m> Interp<'m> {
         let out = self.eval_all(f, items)?;
         let elem = match &e.ty {
             Ty::Array(el, _) => (**el).clone(),
-            _ => return panic(e.span, "internal: array literal type"),
+            _ => internal(e.span, "array literal type"),
         };
         Ok(Value::Array(ArrayData::from_values(&elem, out)))
     }
@@ -1013,30 +1130,30 @@ impl<'m> Interp<'m> {
                 _ => None,
             },
         };
-        let Some(tag) = tag else { return panic(span, "internal: tag of a non-enum") };
+        let Some(tag) = tag else { internal(span, "tag of a non-enum") };
         match &e.ty {
             Ty::Int(k) => Ok(int_value(*k, tag as i128)),
-            _ => panic(span, "internal: tag type"),
+            _ => internal(span, "tag type"),
         }
     }
 
     #[inline(never)]
-    fn eval_payload(&self, f: &mut Frame, base: &Expr, tag: u32, index: u32, span: Span) -> R<Value> {
+    fn eval_payload(&self, f: &mut Frame, base: &Expr, tag: u32, index: u32, at: &Expr) -> R<Value> {
+        let span = at.span;
         if let Some(p) = base.as_place() {
             let r = self.resolve_place(f, &p, span)?;
             let ok = self.peek(&r, span, |v| matches!(v, Leaf::Val(Value::Enum { tag: t, .. }) if *t == tag))?;
             if !ok {
-                return panic(span, "internal: payload of the wrong variant");
+                internal(span, "payload of the wrong variant");
             }
             let r = self.project_field(r, index, span)?;
-            return self.read(&r);
+            return self.read(&r, span);
         }
         match self.eval(f, base)? {
-            Value::Enum { tag: t, fields } if t == tag => fields
-                .into_iter()
-                .nth(index as usize)
-                .ok_or_else(|| Signal::Panic(Panic { message: "internal: payload".into(), span })),
-            _ => panic(span, "internal: payload of the wrong variant"),
+            Value::Enum { tag: t, fields } if t == tag => {
+                fields.into_iter().nth(index as usize).map_or_else(|| internal(span, "payload field out of range"), Ok)
+            }
+            _ => internal(span, "payload of the wrong variant"),
         }
     }
 
@@ -1047,17 +1164,18 @@ impl<'m> Interp<'m> {
         scrutinee: &Expr,
         arms: &[(u32, Block)],
         default: &Option<Block>,
-        span: Span,
+        at: &Expr,
     ) -> R<Value> {
+        let span = at.span;
         let tag = match self.eval(f, scrutinee)? {
             Value::Enum { tag, .. } => tag,
-            _ => return panic(span, "internal: switch on a non-enum"),
+            _ => internal(span, "switch on a non-enum"),
         };
         match arms.iter().find(|(t, _)| *t == tag) {
             Some((_, b)) => self.exec_block(f, b),
             None => match default {
                 Some(b) => self.exec_block(f, b),
-                None => panic(span, "internal: switch without a matching arm"),
+                None => internal(span, "switch without a matching arm"),
             },
         }
     }
@@ -1069,7 +1187,8 @@ impl<'m> Interp<'m> {
             (UnOp::Neg, Value::F32(x)) => Value::F32(-x),
             (UnOp::Neg, Value::F64(x)) => Value::F64(-x),
             (UnOp::Neg, v) => {
-                let (Some(k), Some(i)) = (v.int_kind(), v.to_i128()) else { return panic(span, "internal: neg") };
+                let k = int_kind_of(&v, span);
+                let i = int_of(&v, k, span);
                 let r = -i;
                 if !in_range(k, r) {
                     return panic(span, format!("integer overflow in `-{i}`"));
@@ -1078,12 +1197,15 @@ impl<'m> Interp<'m> {
             }
             (UnOp::Not, Value::Bool(b)) => Value::Bool(!b),
             (UnOp::Not, v) => {
-                let (Some(k), Some(i)) = (v.int_kind(), v.to_i128()) else { return panic(span, "internal: not") };
+                let k = int_kind_of(&v, span);
+                let i = int_of(&v, k, span);
                 int_value(k, wrap_int(k, !i))
             }
         })
     }
 
+    /// Off the way down a recursion through an operand (R-05).
+    #[inline(never)]
     fn binary(&self, op: BinOp, overflow: Overflow, a: Value, b: Value, span: Span) -> R<Value> {
         match (&a, &b) {
             (Value::F32(x), Value::F32(y)) => {
@@ -1094,7 +1216,7 @@ impl<'m> Interp<'m> {
                     BinOp::Mul => x * y,
                     BinOp::Div => x / y,
                     BinOp::Rem => x % y,
-                    _ => return panic(span, "internal: bit operation on a float"),
+                    _ => internal(span, "bit operation on a float"),
                 }));
             }
             (Value::F64(x), Value::F64(y)) => {
@@ -1105,7 +1227,7 @@ impl<'m> Interp<'m> {
                     BinOp::Mul => x * y,
                     BinOp::Div => x / y,
                     BinOp::Rem => x % y,
-                    _ => return panic(span, "internal: bit operation on a float"),
+                    _ => internal(span, "bit operation on a float"),
                 }));
             }
             (Value::Bool(x), Value::Bool(y)) => {
@@ -1113,19 +1235,23 @@ impl<'m> Interp<'m> {
                     BinOp::BitAnd => *x & *y,
                     BinOp::BitOr => *x | *y,
                     BinOp::BitXor => *x ^ *y,
-                    _ => return panic(span, "internal: arithmetic on Bool"),
+                    _ => internal(span, "arithmetic on Bool"),
                 }));
             }
             _ => {}
         }
-        let (Some(k), Some(x)) = (a.int_kind(), a.to_i128()) else { return panic(span, "internal: binary operand") };
-        let Some(y) = b.to_i128() else { return panic(span, "internal: binary operand") };
+        let k = int_kind_of(&a, span);
+        let x = int_of(&a, k, span);
+        // The amount of a shift is a `U32` (spec §3.4); the other operators
+        // take two operands of one type.
+        let y = match op {
+            BinOp::Shl | BinOp::Shr => int_of(&b, IntKind::U32, span),
+            _ => int_of(&b, k, span),
+        };
         let bits = k.bits() as i128;
         let r = match op {
-            BinOp::Add => x + y,
-            BinOp::Sub => x - y,
-            BinOp::Mul => x * y,
-            BinOp::Div | BinOp::Rem => {
+            BinOp::Add | BinOp::Sub | BinOp::Mul => return arith(op, overflow, k, x, y, span),
+            BinOp::Div => {
                 if y == 0 {
                     return panic(span, "division by zero");
                 }
@@ -1133,32 +1259,23 @@ impl<'m> Interp<'m> {
                 if !in_range(k, q) {
                     return panic(span, format!("integer overflow in `{x} / {y}`"));
                 }
-                if op == BinOp::Div { q } else { x % y }
+                q
+            }
+            // `MIN % -1` is 0 (spec §3.4, R-19): only a zero divisor panics.
+            BinOp::Rem => {
+                if y == 0 {
+                    return panic(span, "division by zero");
+                }
+                x % y
             }
             BinOp::BitAnd => x & y,
             BinOp::BitOr => x | y,
             BinOp::BitXor => x ^ y,
             BinOp::Shl | BinOp::Shr => {
-                if y < 0 || y >= bits {
+                if y >= bits {
                     return panic(span, format!("shift amount {y} is not below the bit width {bits}"));
                 }
                 if op == BinOp::Shl { wrap_int(k, x << y) } else { x >> y }
-            }
-        };
-        let r = match (op, overflow) {
-            (BinOp::Add | BinOp::Sub | BinOp::Mul, Overflow::Wrap) => wrap_int(k, r),
-            (BinOp::Add | BinOp::Sub | BinOp::Mul, Overflow::Sat) => clamp_int(k, r),
-            _ => {
-                if !in_range(k, r) {
-                    let sym = match op {
-                        BinOp::Add => "+",
-                        BinOp::Sub => "-",
-                        BinOp::Mul => "*",
-                        _ => "?",
-                    };
-                    return panic(span, format!("integer overflow in `{x} {sym} {y}` ({})", k.name()));
-                }
-                r
             }
         };
         Ok(int_value(k, r))
@@ -1172,10 +1289,10 @@ impl<'m> Interp<'m> {
             (Value::Bool(x), Value::Bool(y)) => Some(x.cmp(y)),
             (Value::Char(x), Value::Char(y)) => Some(x.cmp(y)),
             (Value::Unit, Value::Unit) => Some(Ordering::Equal),
-            _ => match (a.to_i128(), b.to_i128()) {
-                (Some(x), Some(y)) => Some(x.cmp(&y)),
-                _ => return panic(span, "internal: comparison operands"),
-            },
+            _ => {
+                let k = int_kind_of(a, span);
+                Some(int_of(a, k, span).cmp(&int_of(b, k, span)))
+            }
         };
         Ok(match (op, ord) {
             (CmpOp::Eq, o) => o == Some(Ordering::Equal),
@@ -1187,25 +1304,33 @@ impl<'m> Interp<'m> {
         })
     }
 
-    /// Lossless widening (§3.3).
-    fn cast(&self, v: Value, to: &Ty, span: Span) -> R<Value> {
-        Ok(match (v, to) {
-            (Value::F32(x), Ty::Float(FloatKind::F64)) => Value::F64(x as f64),
-            (Value::F32(x), Ty::Float(FloatKind::F32)) => Value::F32(x),
-            (Value::F64(x), Ty::Float(FloatKind::F64)) => Value::F64(x),
-            (v, Ty::Float(FloatKind::F32)) => match v.to_i128() {
-                Some(i) => Value::F32(i as f32),
-                None => return panic(span, "internal: cast operand"),
+    /// Lossless widening (§3.3) of `v`, of type `from`, to `to`. The value
+    /// has the type the operand declares (R-92 (1)).
+    fn cast(&self, v: Value, from: &Ty, to: &Ty, span: Span) -> R<Value> {
+        Ok(match (from, to) {
+            (Ty::Float(fk), Ty::Float(k)) => {
+                // Exact: an `F32` is exact as an `f64`, and back.
+                let x = float_of(&v, *fk, span);
+                match (fk, k) {
+                    (FloatKind::F32, FloatKind::F32) => Value::F32(x as f32),
+                    (_, FloatKind::F64) => Value::F64(x),
+                    (FloatKind::F64, FloatKind::F32) => {
+                        internal(span, "the cast of an `F64` to `F32` loses information")
+                    }
+                }
+            }
+            (Ty::Int(fk), Ty::Float(k)) => {
+                let i = int_of(&v, *fk, span);
+                match k {
+                    FloatKind::F32 => Value::F32(i as f32),
+                    FloatKind::F64 => Value::F64(i as f64),
+                }
+            }
+            (Ty::Int(fk), Ty::Int(k)) => match int_of(&v, *fk, span) {
+                i if in_range(*k, i) => int_value(*k, i),
+                i => internal(span, format!("the cast of {i} to `{}` loses information", k.name())),
             },
-            (v, Ty::Float(FloatKind::F64)) => match v.to_i128() {
-                Some(i) => Value::F64(i as f64),
-                None => return panic(span, "internal: cast operand"),
-            },
-            (v, Ty::Int(k)) => match v.to_i128() {
-                Some(i) if in_range(*k, i) => int_value(*k, i),
-                _ => return panic(span, "internal: cast out of range"),
-            },
-            _ => return panic(span, "internal: cast type"),
+            _ => internal(span, "a cast that is not a widening of numbers"),
         })
     }
 
@@ -1302,94 +1427,84 @@ impl<'m> Interp<'m> {
                 let n = self.eval_u32(f, &args[0].expr)?;
                 let elem = match ty {
                     Ty::Buf(e) => (**e).clone(),
-                    _ => return panic(span, "internal: Buf.zeroed type"),
+                    _ => internal(span, "Buf.zeroed type"),
                 };
                 Ok(Value::Buf(slot(Value::Array(zero_array(self.m, &elem, n)))))
             }
-            _ => panic(span, "internal: not a sequence primitive"),
+            _ => internal(span, "not a sequence primitive"),
         }
     }
 
-    /// A primitive on the values of its arguments.
+    /// A primitive on the values of its arguments. Each operand has the type
+    /// the primitive names, or the interpreter stops with an internal error
+    /// (R-92 (1)).
     #[inline(never)]
     fn prim_values(&self, prim: &Prim, vs: &[Value], span: Span) -> R<Value> {
         match prim {
-            Prim::Math(mf, k) => self.math(*mf, *k, vs, span),
+            Prim::Math(mf, k) => self.math(prim, *mf, *k, vs, span),
             Prim::IntAbs(k) => {
-                let x = vs[0].to_i128().unwrap_or(0);
+                let [a] = args(prim, vs, span);
+                let x = int_of(a, *k, span);
                 let r = x.abs();
                 if !in_range(*k, r) {
                     return panic(span, format!("integer overflow in `abs({x})`"));
                 }
                 Ok(int_value(*k, r))
             }
-            Prim::IntMin(k) => Ok(int_value(*k, vs[0].to_i128().unwrap_or(0).min(vs[1].to_i128().unwrap_or(0)))),
-            Prim::IntMax(k) => Ok(int_value(*k, vs[0].to_i128().unwrap_or(0).max(vs[1].to_i128().unwrap_or(0)))),
-            Prim::Narrow { to, .. } => {
-                let x = vs[0].to_i128().unwrap_or(0);
+            Prim::IntMin(k) | Prim::IntMax(k) => {
+                let [a, b] = args(prim, vs, span);
+                let (x, y) = (int_of(a, *k, span), int_of(b, *k, span));
+                Ok(int_value(*k, if matches!(prim, Prim::IntMin(_)) { x.min(y) } else { x.max(y) }))
+            }
+            Prim::Narrow { from, to } => {
+                let [a] = args(prim, vs, span);
+                let x = int_of(a, *from, span);
                 Ok(if in_range(*to, x) { some(int_value(*to, x)) } else { none() })
             }
-            Prim::IntToFloat { to, .. } => {
-                let x = vs[0].to_i128().unwrap_or(0);
+            Prim::IntToFloat { from, to } => {
+                let [a] = args(prim, vs, span);
+                let x = int_of(a, *from, span);
+                // Round to nearest, ties to even (§3.3): Rust's `as` from an integer.
                 Ok(match to {
                     FloatKind::F32 => Value::F32(x as f32),
                     FloatKind::F64 => Value::F64(x as f64),
                 })
             }
-            Prim::FloatToFloat { to, .. } => Ok(match (&vs[0], to) {
-                (Value::F64(x), FloatKind::F32) => Value::F32(*x as f32),
-                (Value::F32(x), FloatKind::F64) => Value::F64(*x as f64),
-                (v, _) => v.clone(),
-            }),
-            Prim::TruncToInt { to, sat, .. } => {
-                let x = match &vs[0] {
-                    Value::F32(x) => *x as f64,
-                    Value::F64(x) => *x,
-                    _ => return panic(span, "internal: trunc operand"),
-                };
-                let (lo, hi) = value::int_range(*to);
-                if *sat {
-                    // Rust `as` semantics: saturate, NaN -> 0.
-                    let r = if x.is_nan() {
-                        0
-                    } else {
-                        let t = x.trunc();
-                        if t <= lo as f64 {
-                            lo
-                        } else if t >= hi as f64 {
-                            hi
-                        } else {
-                            t as i128
-                        }
-                    };
-                    Ok(int_value(*to, r))
-                } else {
-                    if x.is_nan() {
-                        return panic(span, "conversion of NaN to an integer");
-                    }
-                    let t = x.trunc();
-                    if t < lo as f64 || t > hi as f64 {
-                        return panic(span, format!("{x:?} is out of range for {}", to.name()));
-                    }
-                    Ok(int_value(*to, t as i128))
-                }
+            Prim::FloatToFloat { from, to } => {
+                let [a] = args(prim, vs, span);
+                let x = float_of(a, *from, span);
+                Ok(match to {
+                    FloatKind::F32 => Value::F32(x as f32),
+                    FloatKind::F64 => Value::F64(x),
+                })
             }
-            Prim::ToBits(_) => Ok(match &vs[0] {
-                Value::F32(x) => Value::U32(x.to_bits()),
-                Value::F64(x) => Value::U64(x.to_bits()),
-                _ => return panic(span, "internal: to_bits operand"),
-            }),
-            Prim::FromBits(k) => Ok(match (k, &vs[0]) {
-                (FloatKind::F32, Value::U32(b)) => Value::F32(f32::from_bits(*b)),
-                (FloatKind::F64, Value::U64(b)) => Value::F64(f64::from_bits(*b)),
-                _ => return panic(span, "internal: from_bits operand"),
-            }),
+            Prim::TruncToInt { from, to, sat } => {
+                let [a] = args(prim, vs, span);
+                Ok(int_value(*to, trunc_to_int(float_of(a, *from, span), *to, *sat, span)?))
+            }
+            Prim::ToBits(k) => {
+                let [a] = args(prim, vs, span);
+                // A NaN reads as the positive quiet NaN (spec §3.4, S-106).
+                Ok(match (k, a) {
+                    (FloatKind::F32, Value::F32(x)) => Value::U32(if x.is_nan() { NAN_BITS_F32 } else { x.to_bits() }),
+                    (FloatKind::F64, Value::F64(x)) => Value::U64(if x.is_nan() { NAN_BITS_F64 } else { x.to_bits() }),
+                    _ => mismatch(span, &format!("an `{}`", k.name()), a),
+                })
+            }
+            Prim::FromBits(k) => {
+                let [a] = args(prim, vs, span);
+                Ok(match k {
+                    FloatKind::F32 => Value::F32(f32::from_bits(int_of(a, IntKind::U32, span) as u32)),
+                    FloatKind::F64 => Value::F64(f64::from_bits(int_of(a, IntKind::U64, span) as u64)),
+                })
+            }
             Prim::Checked(op, k) => {
-                let (x, y) = (vs[0].to_i128().unwrap_or(0), vs[1].to_i128().unwrap_or(0));
+                let [a, b] = args(prim, vs, span);
+                let (x, y) = (int_of(a, *k, span), int_of(b, *k, span));
                 let r = match op {
-                    CheckedOp::Add => Some(x + y),
-                    CheckedOp::Sub => Some(x - y),
-                    CheckedOp::Mul => Some(x * y),
+                    CheckedOp::Add => x.checked_add(y),
+                    CheckedOp::Sub => x.checked_sub(y),
+                    CheckedOp::Mul => x.checked_mul(y),
                     CheckedOp::Div => (y != 0).then(|| x / y),
                 };
                 Ok(match r {
@@ -1398,67 +1513,128 @@ impl<'m> Interp<'m> {
                 })
             }
             Prim::DivEuclid(k) | Prim::RemEuclid(k) => {
-                let (x, y) = (vs[0].to_i128().unwrap_or(0), vs[1].to_i128().unwrap_or(0));
+                let [a, b] = args(prim, vs, span);
+                let (x, y) = (int_of(a, *k, span), int_of(b, *k, span));
                 if y == 0 {
                     return panic(span, "division by zero");
                 }
+                // `MIN.rem_euclid(-1)` is 0; `MIN.div_euclid(-1)` does not fit (§3.4).
                 let r = if matches!(prim, Prim::DivEuclid(_)) { x.div_euclid(y) } else { x.rem_euclid(y) };
                 if !in_range(*k, r) {
                     return panic(span, format!("integer overflow in euclidean division of {x} by {y}"));
                 }
                 Ok(int_value(*k, r))
             }
-            Prim::IsNan(_) => Ok(Value::Bool(match &vs[0] {
-                Value::F32(x) => x.is_nan(),
-                Value::F64(x) => x.is_nan(),
-                _ => false,
-            })),
-            Prim::IsFinite(_) => Ok(Value::Bool(match &vs[0] {
-                Value::F32(x) => x.is_finite(),
-                Value::F64(x) => x.is_finite(),
-                _ => false,
-            })),
-            Prim::Std(name) => self.std_prim(name, vs, span),
+            Prim::IsNan(k) => {
+                let [a] = args(prim, vs, span);
+                Ok(Value::Bool(float_of(a, *k, span).is_nan()))
+            }
+            Prim::IsFinite(k) => {
+                let [a] = args(prim, vs, span);
+                Ok(Value::Bool(float_of(a, *k, span).is_finite()))
+            }
+            Prim::Std(name) => self.std_prim(prim, name, vs, span),
             Prim::Len | Prim::Slice | Prim::Get | Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed => {
-                unreachable!()
+                internal(span, format!("the sequence primitive `{}` on values", prim.name()))
             }
         }
     }
 
-    fn math(&self, mf: MathFn, k: FloatKind, vs: &[Value], span: Span) -> R<Value> {
-        match k {
-            FloatKind::F32 => {
-                let x = vs[0]
-                    .as_f32()
-                    .ok_or_else(|| Signal::Panic(Panic { message: "internal: math operand".into(), span }))?;
-                let y = vs.get(1).and_then(|v| v.as_f32()).unwrap_or(0.0);
-                Ok(Value::F32(math_f32(mf, x, y)))
-            }
-            FloatKind::F64 => {
-                let x = vs[0]
-                    .as_f64()
-                    .ok_or_else(|| Signal::Panic(Panic { message: "internal: math operand".into(), span }))?;
-                let y = vs.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
-                Ok(Value::F64(math_f64(mf, x, y)))
-            }
-        }
+    fn math(&self, prim: &Prim, mf: MathFn, k: FloatKind, vs: &[Value], span: Span) -> R<Value> {
+        let (x, y) = if mf.arity() == 2 {
+            let [a, b] = args(prim, vs, span);
+            (float_of(a, k, span), float_of(b, k, span))
+        } else {
+            let [a] = args(prim, vs, span);
+            (float_of(a, k, span), 0.0)
+        };
+        // An `F32` operand is exact as an `f64`, and back.
+        Ok(match k {
+            FloatKind::F32 => Value::F32(math_f32(mf, x as f32, y as f32)),
+            FloatKind::F64 => Value::F64(math_f64(mf, x, y)),
+        })
     }
 
-    /// `std` `target fn`s the interpreter implements directly.
-    fn std_prim(&self, name: &str, vs: &[Value], span: Span) -> R<Value> {
-        match name {
-            "std.dsp.test.assert_near" => {
-                let (a, b, tol) =
-                    (vs[0].as_f64().unwrap_or(0.0), vs[1].as_f64().unwrap_or(0.0), vs[2].as_f64().unwrap_or(0.0));
+    /// `std` `target fn`s the interpreter implements directly ([`std_prim`]);
+    /// the others are E0200 ([`unsupported`]).
+    fn std_prim(&self, prim: &Prim, name: &str, vs: &[Value], span: Span) -> R<Value> {
+        match std_prim(name) {
+            Some(StdPrim::AssertNear) => {
+                let [a, b, tol] = args(prim, vs, span);
+                let f = |v| float_of(v, FloatKind::F64, span);
+                let (a, b, tol) = (f(a), f(b), f(tol));
                 if (a - b).abs() <= tol {
                     Ok(Value::Unit)
                 } else {
                     panic(span, format!("assert_near failed: {a:?} and {b:?} differ by more than {tol:?}"))
                 }
             }
-            _ => panic(span, format!("`{name}` is not available in this version of the interpreter")),
+            None => Err(Signal::Fail(Failure::Unsupported(std_unsupported(name, span)))),
         }
     }
+}
+
+/// The bits `to_bits()` gives for every NaN: the positive quiet NaN (spec
+/// §3.4, S-106).
+pub const NAN_BITS_F32: u32 = 0x7FC0_0000;
+pub const NAN_BITS_F64: u64 = 0x7FF8_0000_0000_0000;
+
+/// The `N` operands of `prim` (an internal error for another number).
+#[track_caller]
+fn args<'v, const N: usize>(prim: &Prim, vs: &'v [Value], span: Span) -> &'v [Value; N] {
+    match vs.try_into() {
+        Ok(a) => a,
+        Err(_) => internal(span, format!("`{}` given {} operands, not {N}", prim.name(), vs.len())),
+    }
+}
+
+/// `x + y`, `x - y`, `x * y` on integers of kind `k` (spec §3.4, R-04). The
+/// exact result when `i128` holds it, which it does for every sum and
+/// difference of 64-bit values and every product but one of two `U64`s above
+/// 2^127; such a product is beyond every type, and positive.
+fn arith(op: BinOp, overflow: Overflow, k: IntKind, x: i128, y: i128, span: Span) -> R<Value> {
+    let (exact, wrapped, sym) = match op {
+        BinOp::Add => (x.checked_add(y), x.wrapping_add(y), "+"),
+        BinOp::Sub => (x.checked_sub(y), x.wrapping_sub(y), "-"),
+        BinOp::Mul => (x.checked_mul(y), x.wrapping_mul(y), "*"),
+        _ => internal(span, "not an arithmetic operator"),
+    };
+    let r = match (overflow, exact) {
+        // Modulo 2^128, so modulo 2^(bit width) too.
+        (Overflow::Wrap, _) => wrap_int(k, wrapped),
+        (Overflow::Sat, Some(r)) => clamp_int(k, r),
+        (Overflow::Sat, None) => {
+            let (lo, hi) = value::int_range(k);
+            if (x < 0) != (y < 0) { lo } else { hi }
+        }
+        (Overflow::Checked, Some(r)) if in_range(k, r) => r,
+        (Overflow::Checked, _) => {
+            return panic(span, format!("integer overflow in `{x} {sym} {y}` ({})", k.name()));
+        }
+    };
+    Ok(int_value(k, r))
+}
+
+/// `trunc_<type>()` and `trunc_<type>_sat()` of `x` (spec §3.3, §3.4): toward
+/// zero; out of range or NaN is a panic, or the bound and 0 for `_sat`. The
+/// range is `lo <= t < above`, with `above` the power of two just past the
+/// type's maximum: both exact as `f64`, where the maximum of a 64-bit type is
+/// not (R-19).
+fn trunc_to_int(x: f64, to: IntKind, sat: bool, span: Span) -> R<i128> {
+    let (lo, hi) = value::int_range(to);
+    let above = (hi + 1) as f64;
+    if x.is_nan() {
+        return if sat { Ok(0) } else { panic(span, "conversion of NaN to an integer") };
+    }
+    let t = x.trunc();
+    if t < lo as f64 || t >= above {
+        return if sat {
+            Ok(if t < lo as f64 { lo } else { hi })
+        } else {
+            panic(span, format!("{x:?} is out of range for {}", to.name()))
+        };
+    }
+    Ok(t as i128)
 }
 
 /// The panic of a call beyond [`MAX_CALL_DEPTH`] (spec §12.5), at the call.
@@ -1468,10 +1644,86 @@ fn depth_limit(site: Span) -> R<Value> {
     panic(site, format!("the call depth reached its limit of {MAX_CALL_DEPTH}"))
 }
 
-fn buf_len(b: &Slot) -> u32 {
+/// The length of the `Buf` in `b`, whose slot holds an array.
+#[track_caller]
+fn buf_len(b: &Slot, span: Span) -> u32 {
     match &*b.borrow() {
         Value::Array(a) => a.len(),
-        _ => 0,
+        v => mismatch(span, "the array of a `Buf`", v),
+    }
+}
+
+/// A value of the wrong type where Core's types promise another (R-92 (1)):
+/// the interpreter never reads it as 0 or `false`, it is an internal error
+/// (the Core verifier missed it, S-67).
+#[cold]
+#[inline(never)]
+#[track_caller]
+fn mismatch(span: Span, expected: &str, got: &Value) -> ! {
+    internal(span, format!("{expected} expected, found {}", value_kind(got)))
+}
+
+/// The kind of a value, for the message of [`mismatch`].
+fn value_kind(v: &Value) -> String {
+    match v {
+        Value::F32(_) => "an `F32`".into(),
+        Value::F64(_) => "an `F64`".into(),
+        Value::Bool(_) => "a `Bool`".into(),
+        Value::Char(_) => "a `Char`".into(),
+        Value::Unit => "`()`".into(),
+        Value::Array(_) => "an array".into(),
+        Value::Tuple(_) => "a tuple".into(),
+        Value::Struct(_) => "a struct".into(),
+        Value::Enum { .. } => "an enum".into(),
+        Value::Span(_) => "a `Span`".into(),
+        Value::Buf(_) => "a `Buf`".into(),
+        Value::Fn(_) => "a function".into(),
+        v => match v.int_kind() {
+            Some(k) => format!("an integer of `{}`", k.name()),
+            None => "a value".into(),
+        },
+    }
+}
+
+/// The checks of the types of values (R-92 (1)): the one place the
+/// interpreter compares a value with the type Core gives it. Each stops with
+/// [`mismatch`], at its caller (`#[track_caller]`).
+///
+/// The kind of the integer `v`.
+#[track_caller]
+fn int_kind_of(v: &Value, span: Span) -> IntKind {
+    // A `match`, not a closure: `#[track_caller]` does not pass through one.
+    match v.int_kind() {
+        Some(k) => k,
+        None => mismatch(span, "an integer", v),
+    }
+}
+
+/// The `Bool` in `v`.
+#[track_caller]
+fn bool_of(v: &Value, span: Span) -> bool {
+    match v {
+        Value::Bool(b) => *b,
+        _ => mismatch(span, "a `Bool`", v),
+    }
+}
+
+/// The integer of kind `k` in `v` (R-92 (1)).
+#[track_caller]
+fn int_of(v: &Value, k: IntKind, span: Span) -> i128 {
+    match (v.int_kind(), v.to_i128()) {
+        (Some(vk), Some(i)) if vk == k => i,
+        _ => mismatch(span, &format!("an integer of `{}`", k.name()), v),
+    }
+}
+
+/// The float of kind `k` in `v`, as `f64` (exact for `F32`) (R-92 (1)).
+#[track_caller]
+fn float_of(v: &Value, k: FloatKind, span: Span) -> f64 {
+    match (v, k) {
+        (Value::F32(x), FloatKind::F32) => *x as f64,
+        (Value::F64(x), FloatKind::F64) => *x,
+        _ => mismatch(span, &format!("an `{}`", k.name()), v),
     }
 }
 

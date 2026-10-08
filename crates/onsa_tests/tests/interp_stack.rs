@@ -14,6 +14,15 @@ fn lower(src: &str) -> onsa_core::Module {
     onsa_diag::stack::run(|| lower_here(src))
 }
 
+/// `onsa test`'s report of every test of `module`, which holds nothing the
+/// interpreter cannot run.
+fn tests_of(module: &onsa_core::Module) -> onsa_driver::TestReport {
+    match onsa_driver::run_tests(&onsa_diag::SourceMap::default(), module, &onsa_driver::TestOptions::default()) {
+        Ok(onsa_driver::TestRun::Ran(r)) => r,
+        other => panic!("the tests did not run: {other:?}"),
+    }
+}
+
 fn lower_here(src: &str) -> onsa_core::Module {
     let input = onsa_driver::PackageInput {
         manifest: None,
@@ -151,7 +160,7 @@ fn run_left(
     name: &str,
     depth: u32,
     left: Option<usize>,
-) -> Result<Result<Option<i128>, onsa_interp::Panic>, onsa_driver::InternalError> {
+) -> Result<Result<Option<i128>, onsa_interp::Failure>, onsa_driver::InternalError> {
     onsa_driver::guard_on_stack(|| {
         let go = || {
             let interp = Interp::new(module);
@@ -167,8 +176,12 @@ fn run_left(
 
 /// [`run_left`] on the whole stack; an internal error fails the test.
 fn run(module: &onsa_core::Module, name: &str, depth: u32) -> Result<Option<i128>, onsa_interp::Panic> {
-    run_left(module, name, depth, None)
-        .unwrap_or_else(|e| panic!("`{name}({depth})` is an internal error: {}", e.message))
+    match run_left(module, name, depth, None) {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(onsa_interp::Failure::Panic(p))) => Err(p),
+        Ok(Err(f)) => panic!("`{name}({depth})`: {f:?}"),
+        Err(e) => panic!("`{name}({depth})` is an internal error: {}", e.message),
+    }
 }
 
 /// The largest `n` for which `t.<name>(n)`, called from outside, stays within
@@ -225,7 +238,7 @@ fn the_limit_is_exact() {
 fn the_panic_is_at_the_call() {
     let src = "fn dive(n: U32) -> U32 {\n  if n == 0 {\n    0\n  } else {\n    1 + dive(n - 1)\n  }\n}\n\ntest \"deep\" {\n  assert dive(10000000) == 10000000\n}\n";
     let module = lower(src);
-    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default()).unwrap();
+    let report = tests_of(&module);
     let t = &report.tests[0];
     assert_eq!(t.message.as_deref(), Some(format!("the call depth reached its limit of {MAX_CALL_DEPTH}").as_str()));
     let span = t.span.expect("a position");
@@ -239,7 +252,7 @@ fn the_panic_is_at_the_call() {
 fn a_const_beyond_the_limit_is_a_panic_of_the_evaluation() {
     let src = "fn dive(n: U32) -> U32 {\n  if n == 0 {\n    0\n  } else {\n    1 + dive(n - 1)\n  }\n}\n\nconst DEEP: U32 = dive(10000000)\n\ntest \"reads it\" {\n  assert DEEP == 10000000\n}\n";
     let module = lower(src);
-    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default()).unwrap();
+    let report = tests_of(&module);
     let message = format!("the call depth reached its limit of {MAX_CALL_DEPTH}");
     assert_eq!(report.tests[0].message.as_deref(), Some(message.as_str()));
     let r = onsa_driver::guard_on_stack(|| {
@@ -247,7 +260,7 @@ fn a_const_beyond_the_limit_is_a_panic_of_the_evaluation() {
         interp.const_value(onsa_core::ConstId(0)).map(|_| ())
     })
     .unwrap();
-    assert_eq!(r.unwrap_err().message, message);
+    assert!(matches!(r, Err(onsa_interp::Failure::Panic(p)) if p.message == message));
 }
 
 /// R-05's input (`tests/review-phase1/core/deep_*.onsa`): `depth(200)` ended
@@ -265,7 +278,7 @@ fn r05_recursion_below_the_limit_passes_in_onsa_test() {
         src.push_str(&format!("\ntest \"recursion {n} deep\" {{\n  assert depth({n}) == {n}\n}}\n"));
     }
     let module = lower(&src);
-    let report = onsa_driver::run_tests(&module, &onsa_driver::TestOptions::default()).unwrap();
+    let report = tests_of(&module);
     assert_eq!(report.tests.len(), below.len() + beyond.len());
     for (t, n) in report.tests.iter().zip(below.iter().chain(&beyond)) {
         assert_eq!(t.message.is_none(), below.contains(n), "{}: {:?}", t.name, t.message);

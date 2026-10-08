@@ -51,7 +51,10 @@ pub struct InternalBug {
 }
 
 /// Stop with an internal error: the stage found a state it cannot be in.
-/// The driver's guard turns it into the internal error of S-67.
+/// The driver's guard turns it into the internal error of S-67. The panic's
+/// location (`= at` of the report) is the caller's, through the helpers that
+/// are `#[track_caller]` too.
+#[track_caller]
 pub fn bug(span: Option<Span>, message: impl Into<String>) -> ! {
     std::panic::panic_any(InternalBug { span, message: message.into() })
 }

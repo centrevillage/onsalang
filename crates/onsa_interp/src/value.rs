@@ -65,17 +65,26 @@ impl ArrayData {
 
     pub fn set(&mut self, i: u32, v: Value) {
         match self {
-            ArrayData::F32(xs) => xs[i as usize] = v.as_f32().expect("F32 element"),
+            ArrayData::F32(xs) => xs[i as usize] = f32_element(&v),
             ArrayData::Any(xs) => xs[i as usize] = v,
         }
     }
 
     pub fn from_values(elem: &Ty, vs: Vec<Value>) -> ArrayData {
         if *elem == Ty::Float(FloatKind::F32) {
-            ArrayData::F32(vs.into_iter().map(|v| v.as_f32().expect("F32 element")).collect())
+            ArrayData::F32(vs.iter().map(f32_element).collect())
         } else {
             ArrayData::Any(vs)
         }
+    }
+}
+
+/// An element of an `F32` array: an `F32`, or an internal error (R-92 (1)).
+#[track_caller]
+fn f32_element(v: &Value) -> f32 {
+    match v {
+        Value::F32(x) => *x,
+        _ => onsa_diag::internal::bug(None, format!("a value that is not an `F32` in an `F32` array: {v:?}")),
     }
 }
 
@@ -245,14 +254,14 @@ pub fn zero(m: &Module, ty: &Ty) -> Value {
         Ty::Tuple(ts) => Value::Tuple(ts.iter().map(|t| zero(m, t)).collect()),
         Ty::Struct(id) => match &m.ty(*id).kind {
             TypeDefKind::Struct { fields } => Value::Struct(fields.iter().map(|(_, t)| zero(m, t)).collect()),
-            _ => Value::Struct(Vec::new()),
+            _ => onsa_diag::internal::bug(None, "the zero value of a struct type whose definition is not a struct"),
         },
         Ty::Enum(id) => match &m.ty(*id).kind {
             TypeDefKind::Enum { variants } => Value::Enum {
                 tag: 0,
                 fields: variants.first().map(|(_, ts)| ts.iter().map(|t| zero(m, t)).collect()).unwrap_or_default(),
             },
-            _ => Value::Enum { tag: 0, fields: Vec::new() },
+            _ => onsa_diag::internal::bug(None, "the zero value of an enum type whose definition is not an enum"),
         },
         Ty::Span(e) => {
             Value::Span(SpanRef { root: slot(Value::Array(zero_array(m, e, 0))), projs: Vec::new(), start: 0, len: 0 })
