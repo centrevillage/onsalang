@@ -6,7 +6,7 @@
 //!   (`onsa_syntax::units`, made once by the parse); this module puts the
 //!   units of the files of a package in one table and chooses in each unit
 //!   the diagnostic of the earliest stage of [`Stage::CHECK_ORDER`], then the
-//!   first in the text (S-214).
+//!   first in the order of the diagnostics (S-214, S-281).
 //! - [`syntax_report`]: what `fmt` and `diff --ast` report for a file the
 //!   syntax stage fails: the same choice, of which the syntax ones
 //!   (`docs/onsa-tools.md` §3.1).
@@ -58,7 +58,8 @@ pub fn exact(mut diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
 /// heading with an error makes the whole item one unit. A diagnostic of the
 /// item outside its heading and its members (a `;` after its `}`, S-254) is
 /// the item's own and does not take its members. In a unit, the diagnostic of the earliest check stage
-/// is reported, and among those the first in the text. A diagnostic outside
+/// is reported, and among those the first in the order of the diagnostics
+/// (start, end, code, message; §18.1, S-281). A diagnostic outside
 /// every unit (another file, `std`, no check stage) is reported as it is.
 pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagnostics: Vec<Diagnostic>) -> Reduced {
     let mut units: Vec<Unit> = Vec::new();
@@ -96,11 +97,15 @@ pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagno
             *a = Some(p);
         }
     }
-    // The earliest stage, then the first in the text.
-    // SPEC-GAP(S-281): among diagnostics of one stage that start at the same
-    // place, the one found first (the lexer's before the parser's: the E0020 of
-    // `1.` before the E0002 at it), as before W3-03, until S-281 is decided.
-    let key = |i: usize| (diagnostics[i].stage.check_rank().unwrap_or(usize::MAX), diagnostics[i].span.start, i);
+    // The earliest stage, then the first in the order of the diagnostics
+    // (§18.1, S-281: start, end, code, message; one unit is in one file, so
+    // the offsets order as the lines and columns do). Both the E0020 of a
+    // form and the E0002 of its place may be found at one token (`1.` among
+    // the items): the order chooses, here alone.
+    let key = |i: usize| {
+        let d = &diagnostics[i];
+        (d.stage.check_rank().unwrap_or(usize::MAX), d.span.start, d.span.end, d.code.as_str(), d.message.as_str(), i)
+    };
     let mut best: Vec<Option<usize>> = vec![None; units.len()];
     for (i, a) in assigned.iter().enumerate() {
         if let Some(u) = *a
@@ -202,8 +207,16 @@ mod tests {
     }
 
     #[test]
-    fn of_one_stage_at_one_place_the_one_found_first() {
-        // SPEC-GAP(S-281): the lexer's E0020 of `1.` before the parser's E0002 at it.
-        assert_eq!(reduced("1.\n", Vec::new()), vec![(0, Code::E0020)]);
+    fn of_one_stage_at_one_place_the_first_in_the_order_of_the_diagnostics() {
+        // S-281: `1.` among the items is a form of another language (E0020) in a
+        // place where no literal goes (E0002): the same range, and E0002 first.
+        assert_eq!(reduced("1.\n", Vec::new()), vec![(0, Code::E0002)]);
+        assert_eq!(reduced("1u8\n", Vec::new()), vec![(0, Code::E0002)]);
+        // Of one start, the one that ends first.
+        let a = Diagnostic::new(Stage::Types, Code::E0401, Span::new(FileId(0), 18, 30), "a");
+        let b = Diagnostic::new(Stage::Types, Code::E0401, Span::new(FileId(0), 18, 20), "b");
+        let src = "fn g() -> I32 {\n  let x: Bool = 1\n  x\n}\n";
+        let r = per_unit([(FileId(0), &onsa_syntax::parse(FileId(0), src).units)], vec![a, b]);
+        assert_eq!(r.diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["b"]);
     }
 }

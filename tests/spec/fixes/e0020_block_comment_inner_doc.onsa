@@ -1,0 +1,10 @@
+/*! the module */                                  //~ E0020
+pub fn f() -> I32 {
+  1
+}
+
+// E0020 for `/*! */` as the first thing of the file (§2.1, S-247): the candidates are `//!` and
+// `///`, in this order (Rust and Doxygen read it differently). This file has no onsa.toml
+// fragment because the comment must be at the very start of the file. The harness checks that each
+// candidate leaves no error in the unit (S-236); that there are two, in this order, and that the
+// tokens outside the comment stay are checked in crates/onsa_cli/tests/foreign_candidates.rs.

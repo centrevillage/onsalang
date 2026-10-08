@@ -10,6 +10,9 @@ mod cst_tests;
 pub mod diff;
 pub mod dump;
 pub mod fmt;
+pub mod foreign;
+#[cfg(test)]
+mod foreign_tests;
 mod groups;
 pub mod lexer;
 mod lower;

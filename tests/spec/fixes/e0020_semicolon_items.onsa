@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a `;` after a top-level item (§2.5, §18.1). Every top-level item is a unit of its own
+// (§18.1), so each of these is reported, and a `;` on one item does not hide the next item.
+// The candidate removes the `;`.
+
+const LIMIT: I32 = 4;                               //~ E0020
+
+const OTHER: I32 = 5;                               //~ E0020
+
+use std.math.{sqrt};                                //~ E0020
+
+use std.math.{abs};                                 //~ E0020
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+};                                                  //~ E0020
+
+pub fn after_a_body() -> I32 {
+  1
+};                                                  //~ E0020
+
+pub fn fine() -> I32 {
+  LIMIT + OTHER
+}

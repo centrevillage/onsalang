@@ -3,13 +3,29 @@
 //! prefix operators). Binary chains are kept flat by the parser, so each check
 //! looks at one node.
 
-use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
+use std::collections::HashSet;
 
-use crate::ast::{Ast, ExprKind, UnOp};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
+
+use crate::ast::{Ast, ExprId, ExprKind};
 
 pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
     let src = |s: Span| &text[s.start as usize..s.end as usize];
-    for expr in &ast.exprs {
+    // A stack of prefix operators is one form (S-248, S-297): the operators
+    // inside the outermost one of a stack are not reported again.
+    let stacked = |e: ExprId| match ast.expr(e).kind {
+        ExprKind::Unary { expr: inner, .. } => matches!(ast.expr(inner).kind, ExprKind::Unary { .. }),
+        _ => false,
+    };
+    let inner_of_a_stack: HashSet<ExprId> = (0..ast.exprs.len() as u32)
+        .map(ExprId)
+        .filter(|&e| stacked(e))
+        .filter_map(|e| match ast.expr(e).kind {
+            ExprKind::Unary { expr: inner, .. } => Some(inner),
+            _ => None,
+        })
+        .collect();
+    for (i, expr) in ast.exprs.iter().enumerate() {
         match &expr.kind {
             ExprKind::Binary { operands, ops } => {
                 // E0011: a cast must be parenthesized inside a chain.
@@ -69,12 +85,30 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
                     diagnostics.push(d);
                 }
             }
-            ExprKind::Unary { op, expr: inner } if matches!(ast.expr(*inner).kind, ExprKind::Unary { .. }) => {
-                let inner_span = ast.expr(*inner).span;
-                let sym = match op {
-                    UnOp::Neg => "-",
-                    UnOp::Not => "!",
-                };
+            ExprKind::Unary { .. } if stacked(ExprId(i as u32)) && !inner_of_a_stack.contains(&ExprId(i as u32)) => {
+                // The operators of the stack, outermost first: each but the
+                // last takes the rest in parentheses (`- - -x` is
+                // `-(-(-x))`); the blanks between two operators give way
+                // to the `(`.
+                let mut ops = vec![expr.span];
+                let mut e = ExprId(i as u32);
+                while let ExprKind::Unary { expr: inner, .. } = ast.expr(e).kind {
+                    e = inner;
+                    if matches!(ast.expr(inner).kind, ExprKind::Unary { .. }) {
+                        ops.push(ast.expr(inner).span);
+                    }
+                }
+                let mut edits = Vec::new();
+                for w in ops.windows(2) {
+                    let op_end = w[0].start + 1;
+                    let between = Span::new(w[0].file, op_end, w[1].start);
+                    if src(between).trim().is_empty() && !between.is_empty() {
+                        edits.push(Edit::replace(between, "("));
+                    } else {
+                        edits.push(Edit::insert(w[0].file, op_end, "("));
+                    }
+                }
+                edits.push(Edit::insert(expr.span.file, expr.span.end, ")".repeat(ops.len() - 1)));
                 let d = Diagnostic::new(
                     Stage::Syntax,
                     Code::E0012,
@@ -82,11 +116,7 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
                     "prefix operators are not stacked; parenthesize the inner one (§3.1)",
                 )
                 .with_found(src(expr.span))
-                .with_fix(Fix::replace(
-                    "parenthesize the inner operator",
-                    expr.span,
-                    format!("{sym}({})", src(inner_span)),
-                ));
+                .with_fix(Fix::new("parenthesize the inner operator", edits));
                 diagnostics.push(d);
             }
             _ => {}
@@ -98,12 +128,19 @@ pub(crate) fn check(ast: &Ast, text: &str, diagnostics: &mut Vec<Diagnostic>) {
 mod tests {
     use onsa_diag::{Code, FileId};
 
+    /// The diagnostics of `let v = <src>`, and the expression after the
+    /// first candidate of each.
     fn check(src: &str) -> Vec<(Code, Option<String>)> {
-        let p = crate::parse(FileId(0), &format!("fn f() {{\n  let v = {src}\n}}"));
+        let text = format!("fn f() {{\n  let v = {src}\n}}");
+        let p = crate::parse(FileId(0), &text);
         p.diagnostics
             .iter()
             .map(|d| {
-                let fix = d.fixes.first().map(|f| f.edits()[0].replace.clone());
+                let fix = d.fixes.first().map(|f| {
+                    let edits: Vec<&onsa_diag::Edit> = f.edits().iter().collect();
+                    let after = onsa_diag::apply_text(&text, &edits).unwrap();
+                    after["fn f() {\n  let v = ".len()..after.len() - "\n}".len()].to_string()
+                });
                 (d.code, fix)
             })
             .collect()
@@ -135,16 +172,21 @@ mod tests {
 
     #[test]
     fn cast_as_operand() {
-        assert_eq!(check("acc + x as F64"), vec![(Code::E0011, Some("(x as F64)".into()))]);
+        assert_eq!(check("acc + x as F64"), vec![(Code::E0011, Some("acc + (x as F64)".into()))]);
         assert!(check("acc + (x as F64)").is_empty());
         assert!(check("-x as F64").is_empty());
     }
 
     #[test]
     fn stacked_prefix() {
-        assert_eq!(check("--x"), vec![(Code::E0012, Some("-(-x)".into()))]);
+        assert_eq!(check("- -x"), vec![(Code::E0012, Some("-(-x)".into()))]);
         assert_eq!(check("-!x"), vec![(Code::E0012, Some("-(!x)".into()))]);
+        // One stack is one form, fixed whole (S-248, S-297).
+        assert_eq!(check("- - -x"), vec![(Code::E0012, Some("-(-(-x))".into()))]);
+        assert_eq!(check("!- !x"), vec![(Code::E0012, Some("!(-(!x))".into()))]);
         assert!(check("-(-x)").is_empty());
         assert!(check("-x.abs()").is_empty());
+        // `--x` without a space is an increment of another language (S-250).
+        assert_eq!(check("--x"), vec![(Code::E0002, None)]);
     }
 }

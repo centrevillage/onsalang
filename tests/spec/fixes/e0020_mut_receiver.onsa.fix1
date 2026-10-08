@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// E0020 for `&mut` in a signature (§5.2, §18.1). The candidate keeps the mode: `&mut T` after a
+// name is `inout name: T`, and `&mut self` is `inout self`. Removing the `&mut` alone would turn
+// a parameter that is changed into one that is only read (a different program).
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn bump(inout self) {                         //~ E0020
+    self.n = self.n + 1
+  }
+
+  pub fn add(inout self, k: I32) {                  //~ E0020
+    self.n = self.n + k
+  }
+}
+
+pub fn scalar(inout v: I32) {                       //~ E0020
+  v = v + 1
+}
+
+pub fn second_parameter(k: I32, inout v: I32) {     //~ E0020
+  v = v + k
+}
+
+pub fn generic_parameter[T](inout a: T, b: T) {     //~ E0020
+}
+
+pub fn fine(inout v: I32) {
+  v = v + 1
+}

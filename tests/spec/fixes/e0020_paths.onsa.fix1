@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0020 for `::` (§15.1, §18.1): the separator of a path is `.`, in a constant, an associated
+// function, an enum variant (in an expression and in a pattern), a closure body and a `use`.
+// The candidate writes `.`. All the `::` of one path are one syntactic form (S-248): one
+// diagnostic, and one candidate that rewrites every `::` of the path.
+
+use std.math                                        //~ E0020
+
+pub enum Stage {
+  Attack,
+  Decay,
+}
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+impl Point {
+  pub fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+}
+
+pub fn constant() -> I32 {
+  I32.MAX                                           //~ E0020
+}
+
+pub fn associated_function() -> Point {
+  Point.new(1.0, 2.0)                               //~ E0020
+}
+
+pub fn variant() -> Stage {
+  Stage.Attack                                      //~ E0020
+}
+
+pub fn pattern(s: Stage) -> I32 {
+  match s {
+    Stage.Attack => 1,                              //~ E0020
+    Stage.Decay => 2,
+  }
+}
+
+pub fn closure() -> [F32; 4] {
+  array.from_fn(fn(i) { F32.PI })                   //~ E0020
+}
+
+pub fn several_separators() -> F32 {
+  std.math.sqrt(2.0)                                //~ E0020
+}
+
+pub fn fine() -> F32 {
+  F32.PI
+}

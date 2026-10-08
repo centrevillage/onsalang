@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 1
+
+// E0020 for `&mut x` at a call (§5.2, §18.1): the call position writes `inout x`, for a local, a
+// field path, a second argument, a method call (`!`) and a generic function.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+impl Pt {
+  pub fn take(inout self, inout k: I32) {
+    self.x = self.x + k
+    k = 0
+  }
+}
+
+pub fn bump(inout v: I32) {
+  v = v + 1
+}
+
+pub fn add_to(a: I32, inout v: I32) {
+  v = v + a
+}
+
+pub fn swap_with[T: Copy](inout a: T, inout b: T) {
+  let t = a
+  a = b
+  b = t
+}
+
+pub fn local() -> I32 {
+  var a = 1
+  bump(inout a)                                     //~ E0020
+  a
+}
+
+pub fn field_path(inout p: Pt) {
+  bump(inout p.x)                                   //~ E0020
+}
+
+pub fn second_argument(inout p: Pt) {
+  add_to(2, inout p.y)                              //~ E0020
+}
+
+pub fn method_argument(inout p: Pt) {
+  var k = 1
+  p.take!(inout k)                                  //~ E0020
+}
+
+pub fn generic_call(inout a: I32, inout b: I32) {
+  swap_with(inout a, inout b)                       //~ E0020
+}
+
+pub fn fine(inout p: Pt) {
+  bump(inout p.x)
+}

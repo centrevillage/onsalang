@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for angle brackets in a declaration (§4.5, §18.1): type parameters and bounds are
+// written in `[ ]`, in a function, a struct, an enum and an `impl`. The candidate replaces the
+// brackets only; the parameters, bounds and the spacing between them stay as written (the edits
+// are in crates/onsa_cli/tests/foreign_candidates.rs).
+
+pub fn bounded[T: Ord + Eq](x: T) -> T {            //~ E0020
+  x
+}
+
+pub fn two_parameters[T,U](x: T, y: U) -> T {       //~ E0020
+  x
+}
+
+pub fn const_parameter[T, const N: U32](xs: [T; N]) -> U32 {  //~ E0020
+  N
+}
+
+pub struct Holder[T] {                              //~ E0020
+  value: T,
+}
+
+pub enum Tree[T] {                                  //~ E0020
+  Leaf,
+  Node(T),
+}
+
+pub struct Wrapper[T] {
+  value: T,
+}
+
+impl[T] Wrapper[T] {                                //~ E0020
+  pub fn value(self) -> T {
+    self.value
+  }
+}
+
+pub fn square_parameter(x: Option[Option[I32]]) -> I32 {  //~ E0020
+  1
+}
+
+pub fn fine[T: Ord](x: T) -> T {
+  x
+}

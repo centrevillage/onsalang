@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§18.1"]
+// fixes = 2
+
+// E0020 for the other reference forms (§5.2, §18.1, S-250): `&T` loses the `&` (a borrow is the
+// default), `&x` is `x` (and, as an argument, `inout x` is the second candidate), `&self` is
+// `self`, and `mut self` is `move self` (it receives the value; `inout self` would change the
+// caller's value; the body does not assign to `self`, whose check is R-191's). `&mut` forms are in e0020_mut_receiver.onsa and e0020_mut_calls.onsa.
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn get(&self) -> I32 {                        //~ E0020
+    self.n
+  }
+
+  pub fn finish(mut self) -> I32 {                  //~ E0020
+    self.n
+  }
+}
+
+pub fn shared_parameter(v: &I32) -> I32 {           //~ E0020
+  v
+}
+
+pub fn address_of_a_local() -> I32 {
+  let a = 1
+  let r = &a                                        //~ E0020
+  r
+}
+
+pub fn take(v: I32) -> I32 {
+  v
+}
+
+pub fn address_of_an_argument() -> I32 {
+  let a = 1
+  take(&a)                                          //~ E0020
+}
+
+pub fn fine(c: Counter) -> I32 {
+  c.get()
+}

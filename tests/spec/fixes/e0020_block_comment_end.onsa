@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+//
+// # The candidate keeps the words as a `//` comment and does not change the tokens outside the
+// # comment or the line breaks between them (S-247). Where the words go is not decided (in place,
+// # or on an independent line above), so the candidates are checked by that property and not by a
+// # text (`same_code`).
+// [[test.fix]]
+// at = "38:1"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "41:17"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "46:3"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "51:42"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+
+// E0020 for a block comment (§2.1: there are no block comments, §18.1). Here the comment is the
+// last thing on its line (or the only thing). A block comment with code after it on its line is
+// in negative/foreign_block_comment.onsa; a comment over several lines and the doc forms are in
+// e0020_block_comment_forms.onsa.
+
+/* the module header */                             //~ E0020
+
+pub fn at_the_end_of_a_line() -> I32 {
+  let a = 1 + 2 /* three */                         //~ E0020
+  a
+}
+
+pub fn on_its_own_line() -> I32 {
+  /* one */                                         //~ E0020
+  let a = 1
+  a
+}
+
+pub fn after_an_opening_brace() -> I32 { /* start */  //~ E0020
+  1
+}
+
+pub fn fine() -> I32 {
+  // a line comment is the form
+  1
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+
+// A block comment over several lines with code after its `*/` on the same line is E0002 with no
+// candidate and a note (S-302): the only line break between the code before and after it is inside
+// the comment, so a candidate that keeps the line breaks can read the code in another way (removing
+// the comment has the same problem). That there is no candidate and a note is checked in
+// crates/onsa_cli/tests/foreign_candidates.rs. A comment over several lines with no code after its
+// `*/` is E0020 (fixes/e0020_block_comment_forms.onsa).
+
+pub fn code_after_the_end() -> I32 {
+  let a = 1 /* x                                    //~ E0002
+  */ + 2
+  a
+}
+
+pub fn fine() -> I32 {
+  1
+}

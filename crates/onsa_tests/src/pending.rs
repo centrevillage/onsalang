@@ -26,6 +26,9 @@ pub enum Kind {
     /// `"<file from the root>:<line>:<col> <code> fix<K>"` (W3-17,
     /// [`crate::fix_contract`]).
     FixContract,
+    /// A row of `docs/foreign-forms.toml` whose examples do not pass yet:
+    /// its `id` (S-250, W3-15, [`crate::foreign_forms`]).
+    ForeignForm,
 }
 
 /// What a `test-case` entry expects of its case, other than a failure.
@@ -147,6 +150,13 @@ target = "tests/spec/negative/types.onsa:59:3 E0411 fix1"
 reasons = ["S-236"]
 until = "W5-02"
 note = "n"
+
+[[pending]]
+kind = "foreign-form"
+target = "at_binding"
+reasons = ["S-186"]
+until = "W3-07"
+note = "n"
 "#;
         let list = Pending::parse(text).unwrap();
         let kinds: Vec<Kind> = list.pending.iter().map(|e| e.kind).collect();
@@ -159,7 +169,8 @@ note = "n"
                 Kind::TestCase,
                 Kind::FuzzInput,
                 Kind::TestCase,
-                Kind::FixContract
+                Kind::FixContract,
+                Kind::ForeignForm
             ]
         );
         assert_eq!(list.pending[3].expect, None);

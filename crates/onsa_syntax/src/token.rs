@@ -119,7 +119,10 @@ pub enum TokenKind {
     LBrace,
     RBrace,
 
-    // Tokens from other languages, kept so the parser can suggest the Onsa form (E0020)
+    // Tokens of the forms of other languages: the parser accepts none of them
+    // where they are written, and the table of those forms
+    // ([`crate::foreign`]) says what the failure is (E0020 with the Onsa form,
+    // or E0002 with a note).
     /// `::`
     ColonColon,
     /// `;`
@@ -128,6 +131,16 @@ pub enum TokenKind {
     Hash,
     /// `..=`
     DotDotEq,
+    /// `++`
+    PlusPlus,
+    /// `--` (`- -x` with a space is two `-`)
+    MinusMinus,
+    /// `/* ... */`, over lines; nested ones and one never closed reach their
+    /// end or the end of the file (§2.1).
+    BlockComment,
+    /// A number written as in other languages: `1.` (no digit after the
+    /// point) and a number with a type suffix (`1u8`, `1.0f32`, §2.4).
+    ForeignLit,
 
     /// An invalid character (E0001 was reported).
     Error,
@@ -280,6 +293,10 @@ impl TokenKind {
             Semi => "`;`",
             Hash => "`#`",
             DotDotEq => "`..=`",
+            PlusPlus => "`++`",
+            MinusMinus => "`--`",
+            BlockComment => "block comment",
+            ForeignLit => "number literal",
             Error => "invalid token",
             Eof => "end of file",
         }

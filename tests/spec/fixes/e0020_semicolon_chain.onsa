@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+//
+// # `three_statements` holds two `;` that end different statements: two errors in one unit. The
+// # candidate of the first fixes that one; the later `;` is still there (it was not reported, a
+// # unit stops at its first error), and it moves down by the one line that the candidate adds.
+// [[test.fix]]
+// at = "21:12"
+// code = "E0020"
+// candidate = 1
+// leaves = ["23:12 E0020"]
+
+// Separate `;` are separate errors (§18.1, S-248): `a; b` and a later `c;` in one unit are two. A
+// unit stops at its first error (§18.1), so only the first `;` is reported, and its candidate
+// fixes that one. (The `;;` of one form, which one candidate fixes whole, is in
+// e0020_semicolon_repeated.onsa.)
+
+pub fn three_statements() -> I32 {
+  let a = 1; let b = 2                              //~ E0020
+  let c = 3;
+  a + b + c
+}
+
+pub fn fine() -> I32 {
+  1
+}

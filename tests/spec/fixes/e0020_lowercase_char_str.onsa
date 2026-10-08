@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§18.1"]
+// fixes = 1
+
+// E0020 for `char` and `str` (S-250): the lowercase names of the types `Char` and `Str`. They
+// are in the closed list of foreign type names (docs/foreign-forms.toml, row `lowercase_type`);
+// `String`, `Vec`, `i128` and `u128` are not (negative/foreign_not_in_table.onsa, E0302).
+
+pub fn letter(c: char) -> Char {                    //~ E0020
+  c
+}
+
+pub fn text(s: str) -> Str {                        //~ E0020
+  s
+}
+
+pub fn fine(c: Char, s: Str) -> Char {
+  c
+}

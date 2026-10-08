@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0020 in two modules of one package (§18.1): each module's foreign forms are reported, and the
+// candidates are applied in each file. This module uses what util.onsa declares; the forms here
+// are a `;` after a statement, a `::` in a path and a lowercase type.
+
+use util.{Stage, helper, lowered}
+
+pub fn with_a_semicolon() -> I32 {
+  let a = helper(1);                                //~ E0020
+  a
+}
+
+pub fn with_a_path() -> Stage {
+  Stage::Attack                                     //~ E0020
+}
+
+pub fn with_a_lowercase_type(x: u8) -> U8 {         //~ E0020
+  x
+}
+
+pub fn fine() -> I32 {
+  lowered(2) + helper(3)
+}

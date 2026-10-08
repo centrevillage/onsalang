@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a `;` that separates two statements on one line (§2.5, §18.1). A statement ends at
+// the newline, so the candidate cannot only remove the `;`: `let a = 1 let b = 2` is two
+// statements on one line, which is E0002. The candidate puts the next statement on its own line
+// (S-236: applying a candidate leaves no diagnostic of the same or an earlier stage). Spaces and
+// the indentation of the new line are not compared, only that the statement starts a line.
+
+pub fn two_lets() -> I32 {
+  let a = 1
+  let b = 2                                         //~ E0020
+  a + b
+}
+
+pub fn two_assignments(inout x: I32, inout y: I32) {
+  x = x + 1
+  y = y + 1                                         //~ E0020
+}
+
+pub fn inside_an_if(c: Bool, inout x: I32, inout y: I32) {
+  if c {
+    x = 1
+    y = 2                                           //~ E0020
+  }
+}
+
+pub fn inside_a_closure() -> [U32; 4] {
+  array.from_fn(fn(i) {
+    let k = i
+    let m = k + 1                                   //~ E0020
+    m
+  })
+}
+
+pub fn in_a_match_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => {
+      let w = v
+      let z = w + 1                                 //~ E0020
+      z
+    },
+    None => 0,
+  }
+}
+
+pub struct Counter {
+  n: I32,
+  m: I32,
+}
+
+impl Counter {
+  pub fn bump(inout self) {
+    self.n = self.n + 1
+    self.m = self.m + 1                             //~ E0020
+  }
+}
+
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a
+  let d = b
+  c + d
+}

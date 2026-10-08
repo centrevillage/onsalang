@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for nested angle brackets (§4.5, §18.1). `>>` is one token, and the candidate replaces
+// it with `]]`; the result is the same text as with `[ ]` written from the start. A foreign form
+// is E0020 however it is nested: it is not E0002 because of the `>>` token.
+
+pub fn two_levels(x: Option<Option<I32>>) -> I32 {  //~ E0020
+  1
+}
+
+pub fn three_levels() -> Option<Option<Option<I32>>> {  //~ E0020
+  None
+}
+
+pub fn after_a_comma(x: Result<Option<I32>, Str>) -> I32 {  //~ E0020
+  1
+}
+
+pub fn in_a_let() -> I32 {
+  let o: Option<Option<I32>> = None                 //~ E0020
+  1
+}
+
+pub struct Wrapper {
+  value: Option<Option<F32>>,                       //~ E0020
+}
+
+pub fn fine(x: Option[Option[I32]]) -> I32 {
+  1
+}

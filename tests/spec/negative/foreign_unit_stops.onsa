@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// A unit with a foreign form (E0020 in the syntax stage) is not read further (R-87 (4), §18.1): a
+// stage is not run on a unit that an earlier stage failed, so the later-stage errors in the same
+// unit (a type error, an unknown name) are not reported, and no diagnostic comes from reading the
+// foreign form as the Onsa one and going on. Other units are checked on their own: the last
+// function has its own type error, which is reported.
+
+pub fn lowercase_type(x: i32) -> I32 {              //~ E0020
+  let y: Bool = 1
+  y
+}
+
+pub fn semicolon(x: I32) -> I32 {
+  let y: Bool = 1;                                  //~ E0020
+  missing(y)
+}
+
+pub fn path() -> I32 {
+  let z: Bool = I32::MAX                            //~ E0020
+  missing(z)
+}
+
+pub fn angle_brackets<T>(x: T) -> I32 {             //~ E0020
+  let y: Bool = 1
+  missing(y)
+}
+
+pub fn reference(v: &mut I32) {                     //~ E0020
+  let y: Bool = 1
+  missing(y)
+}
+
+pub fn reference_call() {
+  var a = 1
+  take(&mut a)                                      //~ E0020
+  let y: Bool = 1
+}
+
+pub fn mutable_binding() -> I32 {
+  let mut n: Bool = 0                               //~ E0020
+  missing(n)
+}
+
+pub fn endless_loop() -> I32 {
+  loop {                                            //~ E0020
+    missing()
+    break
+  }
+  1
+}
+
+pub fn block_comment() -> I32 {
+  let a: Bool = 1 /* c */ + 2                       //~ E0020
+  a
+}
+
+pub fn take(inout v: I32) {
+}
+
+pub fn independent_unit() -> I32 {
+  let y: Bool = 1                                   //~ E0401
+  y
+}

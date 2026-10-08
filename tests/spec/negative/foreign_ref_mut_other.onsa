@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§18.1"]
+
+// `&mut` where there is no `inout` parameter to write (a `var` annotation, an expression that is not
+// an argument, a result type, a field) is E0002 with no candidate and a note (S-250, R-173):
+// removing the `&mut` would check and change the meaning. A `&mut` in a parameter type or as an
+// argument is E0020 (fixes/e0020_mut_receiver.onsa, fixes/e0020_mut_calls.onsa).
+
+pub fn mutable_reference_annotation() -> I32 {
+  var a = 1
+  var r: &mut I32 = a                               //~ E0002
+  r
+}
+
+pub fn mutable_reference_expression() -> I32 {
+  var a = 1
+  var r = &mut a                                    //~ E0002
+  r
+}
+
+pub fn mutable_reference_result(v: I32) -> &mut I32 {  //~ E0002
+  v
+}
+
+pub struct Holder {
+  r: &mut I32,                                      //~ E0002
+}
+
+pub fn fine(inout x: I32) {
+  x = x + 1
+}

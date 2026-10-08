@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.1", "§5.2"]
+
+// A `move` parameter, and `move self`, can be assigned to in the body (R-191): §5.1 makes only a
+// `let` binding and a borrowed parameter read-only (E0701), and the value is the callee's own.
+// The caller's value does not change (a Copy value is copied). This is the reading behind the
+// `mut self` -> `move self` candidate of docs/foreign-forms.toml (row `mut_self`).
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn bumped(move self) -> I32 {
+    self.n = self.n + 1
+    self.n
+  }
+}
+
+pub fn incremented(move x: I32) -> I32 {
+  x = x + 1
+  x
+}
+
+test "a move parameter can be assigned to, and the caller keeps its value" {
+  let a = 4
+  assert incremented(move a) == 5
+}
+
+test "move self can be assigned to, and the caller keeps its value" {
+  let c = Counter { n: 1 }
+  assert c.bumped() == 2
+  assert c.n == 1
+}

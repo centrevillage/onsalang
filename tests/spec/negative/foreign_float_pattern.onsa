@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0020: a floating-point literal as a pattern (§7, S-109). IEEE equality is a comparison, so it
+// is written in a guard (`x if x == 1.0`); a pattern would hide the case of NaN and of -0.0 that
+// the guard shows. It is E0020 and not E0002, and every position is covered: a whole arm, a
+// negative literal, a choice, inside `Some(..)` and a tuple, an exponent form, in a closure, a
+// generic function and a method. It is a diagnostic of the syntax stage (S-252): it stops
+// `onsa fmt`. The candidate is a guard that checks, with a name that the spec does not fix (S-253;
+// the candidates are checked in fixes/e0020_float_pattern_*.onsa). A float constant as a pattern
+// (`LIMIT =>`) is the type stage (W5-09, not here). All the floats of one arm's pattern are one
+// error with one candidate (S-317, §7); a choice whose branches differ after the replacement has no
+// candidate (E0002). An integer literal is still a pattern.
+
+pub fn whole_arm(sample: F32) -> I32 {
+  match sample {
+    1.0 => 1,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn negative(sample: F32) -> I32 {
+  match sample {
+    -1.0 => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice(sample: F32) -> I32 {
+  match sample {
+    0.5 | 1.5 => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[F32]) -> I32 {
+  match o {
+    Some(2.5) => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (F32, I32)) -> I32 {
+  match t {
+    (0.0, n) => n,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn exponent_form(sample: F64) -> I32 {
+  match sample {
+    1e3 => 1,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_generic_function[T](other: T, sample: F32) -> I32 {
+  match sample {
+    3.0 => 1,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub struct Probe {
+  level: F32,
+}
+
+impl Probe {
+  pub fn is_unity(self) -> Bool {
+    match self.level {
+      1.0 => true,                                  //~ E0020
+      _ => false,
+    }
+  }
+}
+
+pub fn in_a_closure() -> [I32; 4] {
+  array.from_fn(fn(i) {
+    let v: F32 = 0.5
+    match v {
+      0.5 => 1,                                     //~ E0020
+      _ => 0,
+    }
+  })
+}
+
+pub fn choice_of_options(o: Option[F32]) -> I32 {
+  match o {
+    Some(0.5) | Some(1.5) => 1,                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_inside_some(o: Option[F32]) -> I32 {
+  match o {
+    Some(0.5 | 1.5) => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_that_shares_a_binding(t: (F32, I32)) -> I32 {
+  match t {
+    (0.5, n) | (1.5, n) => n,                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_floats_in_a_tuple(t: (F32, F32)) -> I32 {
+  match t {
+    (0.0, 1.0) => 1,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn guarded_choice(sample: F32, flag: Bool) -> I32 {
+  match sample {
+    0.5 | 1.5 if flag => 1,                         //~ E0020
+    _ => 0,
+  }
+}
+
+// The branches are not the same after the floats are replaced: no candidate, E0002 (S-317).
+pub fn branches_of_other_shapes(t: (F32, I32)) -> I32 {
+  match t {
+    (0.5, 1) | (1.5, 2) => 1,                       //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn branch_with_a_binding(o: Option[F32]) -> I32 {
+  match o {
+    Some(0.5) | Some(x) => 1,                       //~ E0002
+    _ => 0,
+  }
+}
+
+// A comment in the branch that the candidate would delete: no candidate (S-251, S-317).
+pub fn comment_in_a_branch(sample: F32) -> I32 {
+  match sample {
+    0.5 | // the second value                       //~ E0002
+    1.5 => 1,
+    _ => 0,
+  }
+}
+
+pub fn fine(sample: F32, n: I32) -> I32 {
+  let a = match sample {
+    v if v == 1.0 => 1,
+    _ => 0,
+  }
+  let b = match n {
+    1 => 1,
+    -1 => 2,
+    _ => 0,
+  }
+  a + b
+}

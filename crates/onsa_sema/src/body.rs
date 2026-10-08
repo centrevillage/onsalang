@@ -2628,8 +2628,10 @@ impl<'a> Checker<'a> {
                         self.unify_at(span, v, ty)?;
                         Ok(P::Lit(if neg { -(*value as i128) } else { *value as i128 }))
                     }
+                    // The parser refuses a float literal in a pattern (the
+                    // table of the forms of other languages, S-252).
                     Lit::Float { .. } => {
-                        Err(self.err(Code::E0002, span, "float literals are not patterns; use a guard (§7)"))
+                        onsa_diag::internal::bug(Some(span), "a float literal pattern after the parse")
                     }
                     Lit::Char(c) => {
                         let t = self.a.types.intern(Ty::Char);

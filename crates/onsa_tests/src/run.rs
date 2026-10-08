@@ -1504,8 +1504,6 @@ mod tests {
                 "// onsa.toml\n// [[test.fix]]\n// at = \"{at}\"\n// code = \"E0020\"\n// candidate = 1\n// {what} = true\n\n{body}"
             )
         };
-        // The candidate of the block comment takes `+ 2` into the comment: no error, other code.
-        let comment = "pub fn f() -> I32 {\n  1 /* one */ + 2 //~ E0020\n}\n";
         let two_units = "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n\npub fn g() -> I32 {\n  let mut m = 0 //~ E0020\n  m\n}\n";
         let list = [
             fix_entry("tests/listed.onsa:2:3 E0010 fix1"),
@@ -1525,7 +1523,8 @@ mod tests {
                 ("tests/keeps_listed.onsa", keeps),
                 ("tests/leaves_right.onsa", &two("\"8:21 E0020\"")),
                 ("tests/leaves_wrong.onsa", &two("\"8:22 E0020\"")),
-                ("tests/same_code.onsa", &promise("same_code", "9:5", comment)),
+                // The candidate of `let mut` changes the code: `same_code` does not hold.
+                ("tests/same_code.onsa", &promise("same_code", "9:3", keeps)),
                 ("tests/clean.onsa", &promise("clean", "9:3", two_units)),
                 ("tests/clean_ok.onsa", &promise("clean", "9:3", keeps)),
                 ("tests/no_diagnostic.onsa", &promise("clean", "9:3", "pub fn f() -> I32 {\n  1\n}\n")),
@@ -1560,7 +1559,7 @@ mod tests {
             "tests/leaves_wrong.onsa",
             "hold 8:21 E0020 of its stage or an earlier one; expected 8:22 E0020 (`leaves`)",
         );
-        has("tests/same_code.onsa", "`same_code`: in tests/same_code.onsa, token 10: `+` before, `}` after");
+        has("tests/same_code.onsa", "`same_code`: in tests/same_code.onsa, token 9: `let` before, `var` after");
         has("tests/clean.onsa", "`clean`: the check after it reports E0020 at 14:3");
         assert!(failures("tests/clean_ok.onsa").is_empty(), "{:?}", failures("tests/clean_ok.onsa"));
         has("tests/no_diagnostic.onsa", "error in the case: line 2: [[test.fix]]: no diagnostic E0020 at 9:3");

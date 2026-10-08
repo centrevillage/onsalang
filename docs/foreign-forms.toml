@@ -1,0 +1,3823 @@
+# 既存言語と旧版の書き方の閉じた一覧（S-250）。
+#
+# 役割
+#   仕様 §18.1 の E0020 の一覧を、機械が読む閉じた一覧にしたもの。基本仕様には表を置かず、このファイルが
+#   一覧そのものである（S-250。§18.1 には置き場所と「一覧に無い形は一般の規則のコード」の一文だけがある）。
+#   次の形が全て行になる:
+#   - 既存言語と旧版の書き方（kind = "foreign"）: `&mut x`、`<T>`、経路の `::`、`;`、`i32`、`proc`、
+#     空白の誤り、`@` 束縛、FAUST と C 系の書き方、など。
+#   - 書き手の誤解を示す冗長な印（kind = "redundant"）: 定義済みの名前への `^`、フィールドの `pub`、
+#     `@mem(fast)`、型の位置の `Buf::[F32]` の `::` など（P2）。
+#   - 候補を作れないので E0002 と note にする既存言語の形（code = "E0002"）。
+#   この表に無い形は E0020 にしない。その形を拒む一般の規則のコード（読めなければ E0002、名前が無ければ
+#   E0302、など）で報告する。行は、決定（S-250 の付録 A の表、仕様の本文、各 S の決定）から足す。
+#   仕様の本文に E0020 の文が無い形も、決定が行にしたものは行にする。
+#   規則の表の実装（`onsa_syntax::foreign`）と、行の `id` で一対一に突き合わせる（自己テストは実装の票が書く。
+#   判断を二か所に置かない、D-15）。
+#
+# 欄
+#   [[form]]
+#     id       snake_case。行の識別。実装の表の行と一対一で、ファイルの中で一意
+#     kind     "foreign"（既存言語と旧版の書き方）| "redundant"（書き手の誤解を示す冗長な印）
+#     origin   出自（人が読む。FAUST、Rust、C 系、C++、旧版など）
+#     stage    検出の段（§18.1 の段の順）: "lexical" | "syntax" | "names" | "types" | "flow"。
+#              "lexical" は字句の段で、構文の段の一部として fmt を止める（§18.2）。
+#              後の段で出る行は、その段の診断のある単位の前の段の結果を前提にする
+#     code     "E0020"（候補を作れる形）| "E0002"（候補を作れない形。Onsa での書き方を note で示す）
+#     spec     拠る仕様の節（"2.5" の形）
+#     rule     note が示す正しい規則の要約（note の文面は約束しないので比べない）
+#
+#   [[form.example]]（一つの行に一つ以上。文脈で候補が変わる形は例を分ける）
+#     source     短い完全なファイル。誤りは一つ（S-236 の「唯一の誤り」の前提）。候補を当てた後も
+#                同じ段以前の診断が出ないこと
+#     at         主の位置 "<行>:<列>"（1 から。列は文字）。主の範囲は外来の形の範囲（形を作る最初のトークン
+#                から最後のトークンまで）で、`at` はその始まり、形の最初のトークンである（S-316）:
+#                `;`、`<`、`::`、`&`、型の名前、`+=`、`++`、`return`、`~`、`'`、`@`、`..`、ブロックコメントの `/*`。
+#                呼び出しの形の誤り（`f(x)` の `f`、`s.f(x)` の `s`）は呼び出しの式の最初のトークン。
+#                空白の誤りの位置は W3-06 で決める。書いていない例は位置を比べない
+#     fixed      候補を順に一つずつ当てた後の全文。候補の数と並べ方も約束する。複数の候補の並べ方は
+#                この表の例の候補の順が規範である（S-315）。code = "E0002" の行では書かない（候補なし）。
+#                比べ方は `.fixK` と同じで、トークンと行の切れ目を比べ、空白の量と空行は比べない
+#     property   仕様が候補の文字列を決めない形（S-247 の言葉の置き場所、S-253 の束縛の名前、S-250 の
+#                タプル形の struct のフィールド名）は fixed を書かず、性質で約束する。意味は
+#                `[[test.fix]]` と同じ: "clean"（当てた後の check が何も報告しない）、
+#                "same_code"（コメントでないトークンの種類と字面と、それらの間の行の切れ目が、当てる前と
+#                同じ。コメントは動いてよい）
+#     candidates 性質だけで確かめる例で、候補の数を約束するとき（仕様が複数の候補を並べる形）
+#
+#   note の文面、title、編集の細かさ（S-251 で、変えるトークンだけを置き換える最小の編集）は、この表の
+#   外で約束する（§18.1）。
+#
+# 行を足す手順
+#   1. 決定（S-250 の付録 A の表、仕様の本文、各 S の決定）を確かめる。基本仕様の §18.1 は書き換えない。
+#   2. この表に行と例を足す（仕様の節、段、規則、例を全て書く）。
+#   3. 実装の規則の表（`onsa_syntax::foreign`）に同じ `id` の行を足す。通るまで、`tests/pending.toml` に
+#      種類 "foreign-form"（target は行の `id`、until は通す作業）の項目を置く。
+#   4. 事例の隣の `.fixK` や `[[test.fix]]` が要る形（文脈の組み合わせ）は、tests/spec/fixes/ に事例を置く。
+#   5. 通ったら、実装待ちの項目を外す。
+
+# ---- 文と項目の区切り ----------------------------------------------------------------------------
+
+[[form]]
+id = "semicolon"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "文と項目は改行で終わる。文と項目の区切りに `;` は使わない（`[e; N]` と `[T; N]` の `;` は配列の書き方の一部）"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1;
+  a
+}
+'''
+at = "2:12"
+fixed = ['''
+pub fn f() -> I32 {
+  let a = 1
+  a
+}
+''']
+
+# 同じ行に次の文が続くときは、`;` を除くだけでは一行に二つの文になる（E0002）。次の文を行頭に移す。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1; let b = 2
+  a + b
+}
+'''
+at = "2:12"
+fixed = ['''
+pub fn f() -> I32 {
+  let a = 1
+  let b = 2
+  a + b
+}
+''']
+
+[[form.example]]
+source = '''
+const LIMIT: I32 = 4;
+
+pub fn f() -> I32 {
+  LIMIT
+}
+'''
+at = "1:21"
+fixed = ['''
+const LIMIT: I32 = 4
+
+pub fn f() -> I32 {
+  LIMIT
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  1
+};
+'''
+at = "3:2"
+fixed = ['''
+pub fn f() -> I32 {
+  1
+}
+''']
+
+# 続いた `;` は一つの構文の形で、一つの診断と一つの候補が全ての `;` を直す（S-248）。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1;;
+  a
+}
+'''
+at = "2:12"
+fixed = ['''
+pub fn f() -> I32 {
+  let a = 1
+  a
+}
+''']
+
+[[form]]
+id = "semicolon_in_list"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "struct と enum の本体と構造体リテラルの要素は `,` で区切る"
+
+[[form.example]]
+source = '''
+pub struct P { x: I32; y: I32 }
+'''
+at = "1:22"
+fixed = ['''
+pub struct P { x: I32, y: I32 }
+''']
+
+[[form.example]]
+source = '''
+pub enum E { A; B }
+'''
+at = "1:15"
+fixed = ['''
+pub enum E { A, B }
+''']
+
+[[form.example]]
+source = '''
+pub struct P {
+  x: I32,
+  y: I32,
+}
+
+pub fn f() -> P {
+  P { x: 1; y: 2 }
+}
+'''
+at = "7:11"
+fixed = ['''
+pub struct P {
+  x: I32,
+  y: I32,
+}
+
+pub fn f() -> P {
+  P { x: 1, y: 2 }
+}
+''']
+
+[[form.example]]
+source = '''
+use std.math.{abs; sqrt}
+
+pub fn f() -> F32 {
+  sqrt(abs(-4.0))
+}
+'''
+at = "1:18"
+fixed = ['''
+use std.math.{abs, sqrt}
+
+pub fn f() -> F32 {
+  sqrt(abs(-4.0))
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn f() -> I32 {
+  add(1; 2)
+}
+'''
+at = "6:8"
+fixed = ['''
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn f() -> I32 {
+  add(1, 2)
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct P {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: P) -> I32 {
+  match p {
+    P { x: a; y: b } => a + b,
+  }
+}
+'''
+at = "8:13"
+fixed = ['''
+pub struct P {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: P) -> I32 {
+  match p {
+    P { x: a, y: b } => a + b,
+  }
+}
+''']
+
+# ---- 経路、型引数、参照、型の名前 ------------------------------------------------------------------
+
+[[form]]
+id = "path_separator"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "経路の区切りは `.` である（`F32.PI`、`std.math`）。一つの経路の全ての `::` は一つの誤りで、一つの候補が全てを直す"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  I32::MAX
+}
+'''
+at = "2:6"
+fixed = ['''
+pub fn f() -> I32 {
+  I32.MAX
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  std::math::sqrt(2.0)
+}
+'''
+at = "2:6"
+fixed = ['''
+pub fn f() -> F32 {
+  std.math.sqrt(2.0)
+}
+''']
+
+[[form.example]]
+source = '''
+use std::math
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)
+}
+'''
+at = "1:8"
+fixed = ['''
+use std.math
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)
+}
+''']
+
+[[form.example]]
+source = '''
+pub enum Stage {
+  Attack,
+  Decay,
+}
+
+pub fn f(s: Stage) -> I32 {
+  match s {
+    Stage::Attack => 1,
+    Stage.Decay => 2,
+  }
+}
+'''
+at = "8:10"
+fixed = ['''
+pub enum Stage {
+  Attack,
+  Decay,
+}
+
+pub fn f(s: Stage) -> I32 {
+  match s {
+    Stage.Attack => 1,
+    Stage.Decay => 2,
+  }
+}
+''']
+
+[[form]]
+id = "angle_brackets"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "型パラメータと型引数は `[ ]` で書く。一つの型引数の並びの入れ子の括弧は一つの誤りで、一つの候補が全てを直す（編集は括弧のトークンごと）"
+
+[[form.example]]
+source = '''
+pub fn id<T>(x: T) -> T {
+  x
+}
+'''
+at = "1:10"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn pick<T: Ord, U>(x: T, y: U) -> T {
+  x
+}
+'''
+at = "1:12"
+fixed = ['''
+pub fn pick[T: Ord, U](x: T, y: U) -> T {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: Option<I32>) -> I32 {
+  1
+}
+'''
+at = "1:19"
+fixed = ['''
+pub fn f(x: Option[I32]) -> I32 {
+  1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: Option<Option<I32>>) -> I32 {
+  1
+}
+'''
+at = "1:19"
+fixed = ['''
+pub fn f(x: Option[Option[I32]]) -> I32 {
+  1
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct H<T> {
+  value: T,
+}
+'''
+at = "1:13"
+fixed = ['''
+pub struct H[T] {
+  value: T,
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct W[T] {
+  v: T,
+}
+
+impl<T> W[T] {
+}
+'''
+at = "5:5"
+fixed = ['''
+pub struct W[T] {
+  v: T,
+}
+
+impl[T] W[T] {
+}
+''']
+
+[[form]]
+id = "ref_mut_param"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "書き換える引数は `inout 名前: 型` と書く。`&mut` を除くだけでは、書き換える引数が読むだけの引数になる"
+
+[[form.example]]
+source = '''
+pub fn bump(v: &mut I32) {
+  v = v + 1
+}
+'''
+at = "1:16"
+fixed = ['''
+pub fn bump(inout v: I32) {
+  v = v + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn add(k: I32, v: &mut I32) {
+  v = v + k
+}
+'''
+at = "1:23"
+fixed = ['''
+pub fn add(k: I32, inout v: I32) {
+  v = v + k
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn fill(v: &mut [I32; 4]) {
+  v[0] = 1
+}
+'''
+at = "1:16"
+fixed = ['''
+pub fn fill(inout v: [I32; 4]) {
+  v[0] = 1
+}
+''']
+
+# `move x: &mut T` は、書き換える読みと渡す読みに分かれるので `inout x: T` と `move x: T` を並べる。
+# 既に `inout` があれば `&mut` を除くだけ（同じ意味の重ね書き）。
+[[form.example]]
+source = '''
+pub fn take(move v: &mut I32) -> I32 {
+  v
+}
+'''
+at = "1:21"
+fixed = [
+'''
+pub fn take(inout v: I32) -> I32 {
+  v
+}
+''',
+'''
+pub fn take(move v: I32) -> I32 {
+  v
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn bump(inout v: &mut I32) {
+  v = v + 1
+}
+'''
+at = "1:22"
+fixed = ['''
+pub fn bump(inout v: I32) {
+  v = v + 1
+}
+''']
+
+[[form]]
+id = "ref_mut_self"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "値を変えるレシーバは `inout self` と書く"
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn bump(&mut self) {
+    self.n = self.n + 1
+  }
+}
+'''
+at = "6:15"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn bump(inout self) {
+    self.n = self.n + 1
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn add(&mut self, k: I32) {
+    self.n = self.n + k
+  }
+}
+'''
+at = "6:14"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn add(inout self, k: I32) {
+    self.n = self.n + k
+  }
+}
+''']
+
+# `mut self` は値を受け取るレシーバ（呼び出し側の値は変わらない）なので `move self`（`inout self` ではない）。
+[[form]]
+id = "mut_self"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "値を受け取って本体で変えるレシーバは `move self` と書く。`inout self` は呼び出し側の値を変える"
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn finish(mut self) -> I32 {
+    self.n
+  }
+}
+'''
+at = "6:17"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn finish(move self) -> I32 {
+    self.n
+  }
+}
+''']
+
+[[form]]
+id = "ref_self"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "読むだけのレシーバは `self` と書く（既定の借用）"
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn get(&self) -> I32 {
+    self.n
+  }
+}
+'''
+at = "6:14"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn get(self) -> I32 {
+    self.n
+  }
+}
+''']
+
+[[form]]
+id = "ref_type"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "読むだけの引数は型をそのまま書く（既定の借用）。`&` は書かない"
+
+[[form.example]]
+source = '''
+pub fn f(v: &I32) -> I32 {
+  v
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(v: I32) -> I32 {
+  v
+}
+''']
+
+# `&x`（式）。呼び出しの引数では、C の `f(&x)`（書き換えを許す渡し方）の読みの `inout x` も並べる。
+[[form]]
+id = "ref_expr"
+kind = "foreign"
+origin = "C と Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "値は `&` を付けずに書く。書き換える渡し方は呼び出しの引数に `inout x` と書く"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1
+  let r = &a
+  r
+}
+'''
+at = "3:11"
+fixed = ['''
+pub fn f() -> I32 {
+  let a = 1
+  let r = a
+  r
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn take(v: I32) -> I32 {
+  v
+}
+
+pub fn f() -> I32 {
+  let a = 1
+  take(&a)
+}
+'''
+at = "7:8"
+fixed = [
+'''
+pub fn take(v: I32) -> I32 {
+  v
+}
+
+pub fn f() -> I32 {
+  let a = 1
+  take(a)
+}
+''',
+'''
+pub fn take(v: I32) -> I32 {
+  v
+}
+
+pub fn f() -> I32 {
+  let a = 1
+  take(inout a)
+}
+''',
+]
+
+[[form]]
+id = "ref_mut_arg"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.2", "18.1"]
+rule = "書き換える渡し方は呼び出しの引数に `inout x` と書く"
+
+[[form.example]]
+source = '''
+pub fn bump(inout v: I32) {
+  v = v + 1
+}
+
+pub fn f() -> I32 {
+  var a = 1
+  bump(&mut a)
+  a
+}
+'''
+at = "7:8"
+fixed = ['''
+pub fn bump(inout v: I32) {
+  v = v + 1
+}
+
+pub fn f() -> I32 {
+  var a = 1
+  bump(inout a)
+  a
+}
+''']
+
+# 引数でない位置の `&mut`（別名を作る意図）は Onsa に対応する形が無い。`&mut` を除くと、検査を通って
+# 意味が変わるので、候補を作らない（R-173）。
+[[form]]
+id = "ref_mut_other"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0002"
+spec = ["5.2", "5.4", "18.1"]
+rule = "別名を作る可変の参照は無い。引数は `inout 名前: 型` と書き、局所の借用束縛は §5.4 の形で書く"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  var a = 1
+  var r: &mut I32 = a
+  r
+}
+'''
+at = "3:10"
+
+[[form.example]]
+source = '''
+pub struct S { r: &mut I32 }
+'''
+at = "1:19"
+
+[[form.example]]
+source = '''
+pub fn f(v: I32) -> &mut I32 {
+  v
+}
+'''
+at = "1:21"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  var a = 1
+  var r = &mut a
+  r
+}
+'''
+at = "3:11"
+
+# 小文字の型名。Rust の基本型の名前のうち Onsa に同じ型があるもの。`usize` は `U32`、`isize` は `I32`
+# （添字と長さは `U32` に固定され、幅の変わる型は無い、§4.1）。`String`・`Vec`・`i128`・`u128` は
+# この表に入れない（E0302）。
+[[form]]
+id = "lowercase_type"
+kind = "foreign"
+origin = "Rust と C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["4.1", "18.1"]
+rule = "型の名前は UpperCamel（`I32`、`F64`、`U8`、`Bool`、`Char`、`Str`）。`usize` は `U32`、`isize` は `I32`"
+
+[[form.example]]
+source = '''
+pub fn f(x: i32) -> I32 {
+  x
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(x: I32) -> I32 {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: u8) -> U8 {
+  x
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(x: U8) -> U8 {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: F32) -> f64 {
+  x as F64
+}
+'''
+at = "1:21"
+fixed = ['''
+pub fn f(x: F32) -> F64 {
+  x as F64
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(n: usize) -> U32 {
+  n
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(n: U32) -> U32 {
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(n: isize) -> I32 {
+  n
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(n: I32) -> I32 {
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(b: bool) -> Bool {
+  b
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(b: Bool) -> Bool {
+  b
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(c: char) -> Char {
+  c
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(c: Char) -> Char {
+  c
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(s: str) -> Str {
+  s
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(s: Str) -> Str {
+  s
+}
+''']
+
+# ---- 代入と増減、束縛、ループ、flow の旧い名前 ----------------------------------------------------
+
+# 複合代入。文の位置で左辺が名前かフィールドの経路のとき、候補は `左辺 = 左辺 演算子 右辺`。
+# 右辺の優先順位が演算子より低いとき（`x *= a + b`）は右辺を括弧で囲む。
+[[form]]
+id = "compound_assign"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["5.1", "18.1"]
+rule = "複合代入は無い。`x = x + 1` と書く"
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x += 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x -= 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x *= 2
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x * 2
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x /= 2
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x / 2
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x %= 2
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x % 2
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: U32) {
+  x &= 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: U32) {
+  x = x & 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: U32) {
+  x |= 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: U32) {
+  x = x | 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: U32) {
+  x ^= 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: U32) {
+  x = x ^ 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: U32) {
+  x <<= 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: U32) {
+  x = x << 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: U32) {
+  x >>= 1
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: U32) {
+  x = x >> 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn bump(inout self) {
+    self.n += 1
+  }
+}
+'''
+at = "7:12"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn bump(inout self) {
+    self.n = self.n + 1
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32, a: I32, b: I32) {
+  x *= a + b
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32, a: I32, b: I32) {
+  x = x * (a + b)
+}
+''']
+
+# 添字など、評価が二度になる左辺と、式の位置の複合代入は、書き直しが一意でないので候補を作らない。
+[[form]]
+id = "compound_assign_unfixable"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0002"
+spec = ["5.1", "18.1"]
+rule = "複合代入は無い。添字の左辺は `let` に取ってから `xs[i] = xs[i] + 1` と書き、式の中には代入を書けない"
+
+[[form.example]]
+source = '''
+pub fn f(inout xs: [I32; 4], i: U32) {
+  xs[i] += 1
+}
+'''
+at = "2:9"
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) -> I32 {
+  let y = x += 1
+  y
+}
+'''
+at = "2:13"
+
+# 増減。空白を空けない `++x` `--x` `x++` `x--` を拾う（空白を空けた `- - x` は前置演算子の重ねで
+# E0012、§3.1）。文の位置で左辺が名前かフィールドの経路のとき、候補は `x = x + 1` / `x = x - 1`。
+[[form]]
+id = "increment"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["5.1", "18.1"]
+rule = "増減の演算子は無い。`x = x + 1` と書く"
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x++
+}
+'''
+at = "2:4"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  ++x
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x--
+}
+'''
+at = "2:4"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  --x
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn bump(inout self) {
+    self.n++
+  }
+}
+'''
+at = "7:11"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+impl C {
+  pub fn bump(inout self) {
+    self.n = self.n + 1
+  }
+}
+''']
+
+# 式の位置（値の意味が言語で分かれる）、添字などの左辺、左辺が名前でない形（`---x` は字句が `--` と
+# `-x` で、S-297）は候補を作らない。
+[[form]]
+id = "increment_unfixable"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0002"
+spec = ["5.1", "18.1"]
+rule = "増減の演算子は無く、式の中には代入を書けない。文として `x = x + 1` と書く"
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) -> I32 {
+  let y = x++
+  y
+}
+'''
+at = "2:12"
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) -> I32 {
+  let y = ++x
+  y
+}
+'''
+at = "2:11"
+
+[[form.example]]
+source = '''
+pub fn f(inout xs: [I32; 4]) {
+  xs[0]++
+}
+'''
+at = "2:8"
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) -> I32 {
+  let y = ---x
+  y
+}
+'''
+at = "2:11"
+
+# ---- 束縛とループ（仕様の本文に E0020 の文が無い。S-250 の付録 A の行で、既存の事例が固定している） ----
+
+[[form]]
+id = "let_mut"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["5.1", "18.1"]
+rule = "変えられる束縛は `var` と書く（`let` は変えられない束縛）"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let mut n = 0
+  n
+}
+'''
+fixed = ['''
+pub fn f() -> I32 {
+  var n = 0
+  n
+}
+''']
+
+[[form]]
+id = "loop"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "`loop {}` は無い。`while true` と書く"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  loop {
+    break
+  }
+  1
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f() -> I32 {
+  while true {
+    break
+  }
+  1
+}
+''']
+
+[[form]]
+id = "proc"
+kind = "foreign"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["11.1", "18.1"]
+rule = "信号の処理の単位は `flow` と書く（旧版の `proc`）"
+
+[[form.example]]
+source = '''
+pub proc gain(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+'''
+at = "1:5"
+fixed = ['''
+pub flow gain(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+''']
+
+# ---- match の腕の `return` ---------------------------------------------------------------------
+
+[[form]]
+id = "arm_return"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "`return`、`break`、`continue` は文で、式の位置に書けない。腕に書くときはブロックで囲む"
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => return 0,
+  }
+}
+'''
+at = "4:13"
+fixed = ['''
+pub fn f(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v,
+    None => { return 0 },
+  }
+}
+''']
+
+# ---- 数値リテラルの形（§2.4、§18.1）。候補は値を変えず、整数か浮動小数かも変えない --------------------
+
+[[form]]
+id = "octal_prefix"
+kind = "foreign"
+origin = "Rust と Python"
+stage = "lexical"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "8 進の接頭辞は無い。10 進で書く（`0o17` は `15`）"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 0o17
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> I32 {
+  let n: I32 = 15
+  n
+}
+''']
+
+# 先頭が 0 の 10 進の整数は、C・Go・Java が 8 進の 15、Rust が 17 と読み、読みが分かれる。
+# 候補は `17` と `15` を、この順に並べる。`00` の候補は `0`。
+[[form]]
+id = "leading_zero"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "10 進の整数は `0` そのもの以外は 0 で始めない（読みが分かれる）"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 017
+  n
+}
+'''
+at = "2:16"
+fixed = [
+'''
+pub fn f() -> I32 {
+  let n: I32 = 17
+  n
+}
+''',
+'''
+pub fn f() -> I32 {
+  let n: I32 = 15
+  n
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 00
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> I32 {
+  let n: I32 = 0
+  n
+}
+''']
+
+[[form]]
+id = "float_trailing_dot"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "小数点を書くときは両側に数字が要る（`1.` は `1.0`）"
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1.
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1.0
+  a
+}
+''']
+
+[[form]]
+id = "float_leading_dot"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "小数点を書くときは両側に数字が要る（`.5` は `0.5`）"
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = .5
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 0.5
+  a
+}
+''']
+
+[[form]]
+id = "float_dot_exponent"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "小数点を書くときは両側に数字が要る（`1.e3` は `1.0e3`）。指数があれば小数点は無くてよい（`48e3`）"
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1.e3
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1.0e3
+  a
+}
+''']
+
+# 型の接尾辞は無い。接尾辞として認めるのは閉じた一覧（Rust の整数・浮動小数の型名、C の `u` `l` `ul`
+# `ll` `ull` `f` とその大文字）だけ。候補は接尾辞とその前の `_` を除いた形で、整数の形に浮動小数の
+# 接尾辞が付いていれば `.0` を足す。一覧に無い接尾辞（`123abc`）は E0001 で、この表の外。
+[[form]]
+id = "literal_suffix"
+kind = "foreign"
+origin = "Rust と C"
+stage = "lexical"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "型の接尾辞は無い。リテラルの型は期待型と推論で決まる"
+
+[[form.example]]
+source = '''
+pub fn f() -> U8 {
+  let n: U8 = 1u8
+  n
+}
+'''
+at = "2:15"
+fixed = ['''
+pub fn f() -> U8 {
+  let n: U8 = 1
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U8 {
+  let n: U8 = 0x1F_u8
+  n
+}
+'''
+at = "2:15"
+fixed = ['''
+pub fn f() -> U8 {
+  let n: U8 = 0x1F
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U64 {
+  let n: U64 = 100ul
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> U64 {
+  let n: U64 = 100
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1f32
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1.0
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 2.5f
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 2.5
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1.0f32
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1.0
+  a
+}
+''']
+
+# ---- ブロックコメント（§2.1、§18.1）。言葉を `//` に残し、コメントの外のトークンの並びと行の切れ目を
+#      変えない。言葉を置く場所（その場か、始まる行の上の独立した行）は決めないので、性質で約束する（S-247）。
+
+[[form]]
+id = "block_comment"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0020"
+spec = ["2.1", "18.1"]
+rule = "ブロックコメントは無い。行コメント `//` を使う"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1 + 2 /* three */
+  a
+}
+'''
+at = "2:17"
+property = ["clean", "same_code"]
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  /* one */
+  let a = 1
+  a
+}
+'''
+at = "2:3"
+property = ["clean", "same_code"]
+
+# 後ろにコードが続く行では、その場で `//` にすると後ろのコードがコメントに入る。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1 /* one */ + 2
+  a
+}
+'''
+at = "2:13"
+property = ["clean", "same_code"]
+
+[[form.example]]
+source = '''
+pub fn f(/* in */ x: I32) -> I32 {
+  x
+}
+'''
+at = "1:10"
+property = ["clean", "same_code"]
+
+# 行をまたぐコメント。字句解析器は `*/` を行をまたいで探す（R-174）。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  /* first
+     second */
+  let a = 1
+  a
+}
+'''
+at = "2:3"
+property = ["clean", "same_code"]
+
+[[form.example]]
+source = '''
+/**/
+pub fn f() -> I32 {
+  1
+}
+'''
+at = "1:1"
+property = ["clean", "same_code"]
+
+# `/** */` は、付けられる宣言が後に続けば `///`、続かなければ `//`（継続行の ` * ` は剥がない）。
+# `///` か `//` かは、コメントでないトークンの並びに現れないので、`foreign_candidates.rs` の
+# テストが確かめる。
+[[form.example]]
+source = '''
+/** the gain */
+pub fn f() -> I32 {
+  1
+}
+'''
+at = "1:1"
+property = ["clean", "same_code"]
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  /** inside */
+  1
+}
+'''
+at = "2:3"
+property = ["clean", "same_code"]
+
+# `/*! */` は、ファイルの先頭なら `//!` と `///` を並べる（Rust と Doxygen で読みが分かれる）。
+# 先頭でなければ `///` か `//`。
+[[form.example]]
+source = '''
+/*! module */
+pub fn f() -> I32 {
+  1
+}
+'''
+at = "1:1"
+property = ["clean", "same_code"]
+candidates = 2
+
+# 行の途中の `/** */` は `//` にする。`///` にするのは、行の先頭にあって次の宣言に付けられるときだけ
+# （上の行へ移した `///` が別の宣言に付かないように、S-302）。`///` か `//` かは、コメントでない
+# トークンの並びに現れないので、`foreign_candidates.rs` のテストが確かめる。
+[[form.example]]
+source = '''
+pub fn f(/** in */ x: I32) -> I32 {
+  x
+}
+'''
+at = "1:10"
+property = ["clean", "same_code"]
+
+[[form.example]]
+source = '''
+/** gain */ pub fn f() -> I32 {
+  1
+}
+'''
+at = "1:1"
+property = ["clean", "same_code"]
+
+# 行をまたぐコメントの `*/` の後ろに同じ行でコードが続く形は、前後のコードの間の改行がコメントの中にしか
+# 無く、行の切れ目を変えない候補が別の読みを作りうる（削除する候補も同じ）ので、候補を作らない（S-302）。
+# 行をまたぎ、後ろにコードが続かない形は E0020 のまま（`block_comment`）。
+[[form]]
+id = "block_comment_multiline_code_after"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0002"
+spec = ["2.1", "18.1"]
+rule = "ブロックコメントは無い。行コメント `//` を使う（行をまたぐコメントの後ろに同じ行でコードを続けない）"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = 1 /* x
+  */ + 2
+  a
+}
+'''
+
+# 閉じないコメントは、残り全てをコメントにする候補がコードを隠すので候補を作らない。コメントの中の
+# `/*`（入れ子）は、終わりの読みが言語で分かれる（C 系は最初の `*/`、Rust と Swift は入れ子）ので
+# 候補を作らない。
+[[form]]
+id = "block_comment_unclosed"
+kind = "foreign"
+origin = "C 系"
+stage = "lexical"
+code = "E0002"
+spec = ["2.1", "18.1"]
+rule = "ブロックコメントは無い。行コメント `//` を使う"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  1
+}
+
+/* never closed
+pub fn g() -> I32 {
+  2
+}
+'''
+
+[[form]]
+id = "block_comment_nested"
+kind = "foreign"
+origin = "Rust と C 系"
+stage = "lexical"
+code = "E0002"
+spec = ["2.1", "18.1"]
+rule = "ブロックコメントは無い（入れ子の終わりの読みが言語で分かれる）。行コメント `//` を使う"
+
+[[form.example]]
+source = '''
+/* a /* b */ c */
+pub fn f() -> I32 {
+  1
+}
+'''
+
+# ---- 空白と行頭の二項演算子（§2.5）。主の位置を仕様が決めないので、`at` を省く ------------------------
+
+[[form]]
+id = "space_before_paren"
+kind = "foreign"
+origin = "Haskell と Ruby"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "並びを開く後置の `(` は、前のトークンの直後に空白を空けずに書く（`f(x)`、`fn f(x: I32)`）"
+
+[[form.example]]
+source = '''
+pub fn square(x: I32) -> I32 {
+  x * x
+}
+
+pub fn f(x: I32) -> I32 {
+  let y = square (x)
+  y
+}
+'''
+fixed = ['''
+pub fn square(x: I32) -> I32 {
+  x * x
+}
+
+pub fn f(x: I32) -> I32 {
+  let y = square(x)
+  y
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f (x: I32) -> I32 {
+  x
+}
+'''
+fixed = ['''
+pub fn f(x: I32) -> I32 {
+  x
+}
+''']
+
+# `xs [0]` は、`xs` に配列を渡す呼び出し `xs([0])` の読みも並べる（Haskell、Ruby、CoffeeScript）。
+[[form]]
+id = "space_before_bracket"
+kind = "foreign"
+origin = "Haskell と Ruby"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "並びを開く後置の `[` は、前のトークンの直後に空白を空けずに書く（`xs[0]`、`Option[I32]`）"
+
+[[form.example]]
+source = '''
+pub fn f(xs: [I32; 4]) -> I32 {
+  let a = xs [0]
+  a
+}
+'''
+fixed = [
+'''
+pub fn f(xs: [I32; 4]) -> I32 {
+  let a = xs[0]
+  a
+}
+''',
+'''
+pub fn f(xs: [I32; 4]) -> I32 {
+  let a = xs([0])
+  a
+}
+''',
+]
+
+[[form]]
+id = "space_around_dot"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "メンバの `.` の前後には、行の中で空白を空けない（`a.b`、`s.f.(x)`）"
+
+[[form.example]]
+source = '''
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: Pt) -> I32 {
+  p . x
+}
+'''
+fixed = ['''
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: Pt) -> I32 {
+  p.x
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: Pt) -> I32 {
+  p .y
+}
+'''
+fixed = ['''
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: Pt) -> I32 {
+  p.y
+}
+''']
+
+[[form]]
+id = "space_before_question"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "後置の `?` の前には空白を空けない（`x?`）。`x ?` は C 系の条件演算子の始まりに見える"
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[I32]) -> Option[I32] {
+  let v = o ?
+  Some(v)
+}
+'''
+fixed = ['''
+pub fn f(o: Option[I32]) -> Option[I32] {
+  let v = o?
+  Some(v)
+}
+''']
+
+[[form]]
+id = "space_before_bang"
+kind = "foreign"
+origin = "Ruby と Julia"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "2.6", "18.1"]
+rule = "名前と `!`（レシーバを変える呼び出し）は空白を空けずに書く（`buf.push!(x)`）"
+
+[[form.example]]
+source = '''
+pub struct Pt {
+  x: I32,
+}
+
+impl Pt {
+  pub fn scale(inout self, k: I32) {
+    self.x = self.x * k
+  }
+}
+
+pub fn f(inout p: Pt) {
+  p.scale !(2)
+}
+'''
+fixed = ['''
+pub struct Pt {
+  x: I32,
+}
+
+impl Pt {
+  pub fn scale(inout self, k: I32) {
+    self.x = self.x * k
+  }
+}
+
+pub fn f(inout p: Pt) {
+  p.scale!(2)
+}
+''']
+
+[[form]]
+id = "space_before_tilde"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "2.6", "18.1"]
+rule = "名前と `~`（flow の呼び出し）は空白を空けずに書く（`saw~(f0)`）。`saw ~(f0)` は FAUST の二項の `~`（帰還）に見える"
+
+[[form.example]]
+source = '''
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = lp ~(x)
+  y
+}
+'''
+fixed = ['''
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = lp~(x)
+  y
+}
+''']
+
+[[form]]
+id = "space_after_prefix"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "前置の `-` と `!` は被演算子と空白を空けずに書く（`-x`、`!done`）"
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) -> I32 {
+  let y = - x
+  y
+}
+'''
+fixed = ['''
+pub fn f(x: I32) -> I32 {
+  let y = -x
+  y
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(done: Bool) -> Bool {
+  let y = ! done
+  y
+}
+'''
+fixed = ['''
+pub fn f(done: Bool) -> Bool {
+  let y = !done
+  y
+}
+''']
+
+[[form]]
+id = "space_after_caret"
+kind = "foreign"
+origin = "FAUST と C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "11.2", "18.1"]
+rule = "帰還の参照 `^` は名前と空白を空けずに書く（`^y`）。`^ y` は二項の排他的論理和に見える"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^ y)
+  y
+}
+'''
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+''']
+
+# 二項にしか使わない演算子で行を始めると、前の行に続かず新しい文として読まれる。候補は演算子を
+# 前の行の末尾へ移す形（行は継続するので次の行のオペランドはそのまま）。
+[[form]]
+id = "leading_operator"
+kind = "foreign"
+origin = "JavaScript と Python"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "二項演算子は行末に置き、次の行の頭には置かない。Onsa の行は行末で終わる"
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a
+  + b
+  c
+}
+'''
+at = "3:3"
+fixed = ['''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a +
+  b
+  c
+}
+''']
+
+# 前置にもなる `-` と `^` で始める行は、空白の規則で E0020。前の行とつないだ形（`a - b`）も並べる。
+[[form]]
+id = "leading_minus"
+kind = "foreign"
+origin = "JavaScript と Python"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "前置にもなる `-` で始める行は、前置の `-` と被演算子の間の空白の誤り。前の行に続けるつもりなら、行末に置く"
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a
+  - b
+  c
+}
+'''
+fixed = [
+'''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a
+  -b
+  c
+}
+''',
+'''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a - b
+  c
+}
+''',
+]
+
+# ---- 呼び出しの形（§6.1、§6.2、§15.2）。呼び先で段が分かれる ----------------------------------------
+
+# 値（ローカルの束縛、引数、フィールド、要素、呼び出しの結果）は `.(` で呼ぶ。値を `x(...)` の形で
+# 呼ぶと、型によらず E0020（名前の解決で決まる）。
+[[form]]
+id = "value_call"
+kind = "foreign"
+origin = "C 系"
+stage = "names"
+code = "E0020"
+spec = ["6.1", "18.1"]
+rule = "関数値は `f.(x)` と呼ぶ。`f(x)` は項目（`fn` で宣言した関数）の呼び出しの形"
+
+[[form.example]]
+source = '''
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f(3)
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn apply(f: fn(I32) -> I32) -> I32 {
+  f.(3)
+}
+''']
+
+# 項目を `.(` で呼ぶ形。
+[[form]]
+id = "item_dot_call"
+kind = "foreign"
+origin = "旧版"
+stage = "names"
+code = "E0020"
+spec = ["6.1", "18.1"]
+rule = "`fn` で宣言した関数（項目）は `f(x)` と呼ぶ。`.(` は関数値の呼び出し"
+
+[[form.example]]
+source = '''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn f() -> I32 {
+  inc.(1)
+}
+'''
+at = "6:3"
+fixed = ['''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn f() -> I32 {
+  inc(1)
+}
+''']
+
+# 名前の経路でも、名前の経路に `[…]` を付けた形でもない呼び先は、項目でありえないので構文の段で決まる。
+[[form]]
+id = "callee_expression"
+kind = "foreign"
+origin = "C 系と JavaScript"
+stage = "syntax"
+code = "E0020"
+spec = ["6.1", "18.1"]
+rule = "括弧で囲んだ式や呼び出しの結果は項目ではない。関数値として `.(` で呼ぶ（`s.f.(x)`、`pick(true).(5)`）"
+
+[[form.example]]
+source = '''
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn f(s: Shaper, x: F32) -> F32 {
+  (s.curve)(x)
+}
+'''
+fixed = ['''
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn f(s: Shaper, x: F32) -> F32 {
+  s.curve.(x)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn dec(x: I32) -> I32 {
+  x - 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  if up { inc } else { dec }
+}
+
+pub fn f() -> I32 {
+  pick(true)(5)
+}
+'''
+fixed = ['''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn dec(x: I32) -> I32 {
+  x - 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  if up { inc } else { dec }
+}
+
+pub fn f() -> I32 {
+  pick(true).(5)
+}
+''']
+
+# 名前の経路に `[…]` を付けた呼び先（`ops[i](x)`）は、`ops` の種類で候補が分かれる（値なら
+# `ops[i].(x)`、項目なら型引数の `ops::[…](x)`）ので名前の解決で決まる。
+[[form]]
+id = "indexed_value_call"
+kind = "foreign"
+origin = "C 系"
+stage = "names"
+code = "E0020"
+spec = ["6.1", "18.1"]
+rule = "要素の関数値は `ops[i].(x)` と呼ぶ"
+
+[[form.example]]
+source = '''
+pub fn f(ops: [fn(F32) -> F32; 2], i: U32, x: F32) -> F32 {
+  ops[i](x)
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(ops: [fn(F32) -> F32; 2], i: U32, x: F32) -> F32 {
+  ops[i].(x)
+}
+''']
+
+# `s.f(x)` は常にメソッドの呼び出しで、メソッドが無く関数型のフィールドがあれば E0020（型の段）。
+[[form]]
+id = "field_call"
+kind = "foreign"
+origin = "JavaScript と Swift と Python"
+stage = "types"
+code = "E0020"
+spec = ["6.2", "18.1"]
+rule = "関数型のフィールドの値は `s.f.(x)` と呼ぶ。`s.f(x)` はメソッドの呼び出し"
+
+[[form.example]]
+source = '''
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn f(s: Shaper, x: F32) -> F32 {
+  s.curve(x) * s.gain
+}
+'''
+at = "7:3"
+fixed = ['''
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn f(s: Shaper, x: F32) -> F32 {
+  s.curve.(x) * s.gain
+}
+''']
+
+# ---- パターン（§7）。ガードの形の候補が新しく置く束縛の名前は、見えている名前と重ならない名前で、
+#      当てた後に E0304 を残さない。どの名前にするかは仕様で決めないので、性質（clean）で約束する（S-253） ----
+
+[[form]]
+id = "float_pattern"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "浮動小数のリテラルはパターンに書けない。IEEE の等値はガードで書く（`x if x == 1.0`）"
+
+# 対象の名前が仕様の例の `x` と同じ。候補が `x` を再束縛すると E0304 になる。
+[[form.example]]
+source = '''
+pub fn f(x: F32) -> I32 {
+  match x {
+    1.0 => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(sample: F32) -> I32 {
+  match sample {
+    -1.0 => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[F32]) -> I32 {
+  match o {
+    Some(2.5) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:10"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(t: (F32, I32)) -> I32 {
+  match t {
+    (0.0, n) => n,
+    _ => 0,
+  }
+}
+'''
+at = "3:6"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(sample: F64) -> I32 {
+  match sample {
+    1e3 => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+property = ["clean"]
+candidates = 1
+
+# 一つの腕のパターンの浮動小数のリテラル（と範囲）の全ては一つの誤りで、一つの候補が直す（S-317、S-248）。
+# 候補は、それぞれを新しい束縛に置き換え、条件を `&&` で結ぶ（`(0.0, 1.0) =>` は
+# `(v, v2) if v == 0.0 && v2 == 1.0 =>`）。選択を含むときは、置き換えた後に全ての枝が同じ形になるときだけ
+# 候補を作り、枝を一つにまとめて、枝ごとの条件を `||` で結ぶ（`0.5 | 1.5 =>` は `v if v == 0.5 || v == 1.5 =>`、
+# `(0.5, n) | (1.5, n) =>` は `(v, n) if … =>`、`Some(0.5 | 1.5)` は `Some(v) if …`）。腕に元からガード `if g` が
+# あれば、作った条件と `g` を `&&` で結ぶ。束縛の名前は決めないので、性質（clean）で約束する（S-253）。
+
+[[form.example]]
+source = '''
+pub fn f(sample: F32) -> I32 {
+  match sample {
+    0.5 | 1.5 => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[F32]) -> I32 {
+  match o {
+    Some(0.5) | Some(1.5) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:10"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(t: (F32, I32)) -> I32 {
+  match t {
+    (0.5, n) | (1.5, n) => n,
+    _ => 0,
+  }
+}
+'''
+at = "3:6"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[F32]) -> I32 {
+  match o {
+    Some(0.5 | 1.5) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:10"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(t: (F32, F32)) -> I32 {
+  match t {
+    (0.0, 1.0) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:6"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(sample: F32, flag: Bool) -> I32 {
+  match sample {
+    0.5 | 1.5 if flag => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+property = ["clean"]
+candidates = 1
+
+# 置き換えた後も枝の形が違うものは、ガードがどの枝で当たったかを区別できず、当たる値が変わるので、候補を
+# 作らない（S-317）。まとめるときに削除する枝の中にコメントがあれば、コメントを範囲に含めない最小の編集
+# （S-251）にできないので、候補を作らない。
+[[form]]
+id = "float_pattern_choice"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0002"
+spec = ["7", "18.1"]
+rule = "浮動小数のリテラルはパターンに書けない。選択の枝の形が違うときは、`match` を分けるか、ガードで書く"
+
+[[form.example]]
+source = '''
+pub fn f(t: (F32, I32)) -> I32 {
+  match t {
+    (0.5, 1) | (1.5, 2) => 1,
+    _ => 0,
+  }
+}
+'''
+
+# `Some(x)` は腕で使わない（選択の枝の束縛の規則は S-318 で決める）。枝の形が違うことだけを確かめる。
+[[form.example]]
+source = '''
+pub fn f(o: Option[F32]) -> I32 {
+  match o {
+    Some(0.5) | Some(x) => 1,
+    _ => 0,
+  }
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn f(sample: F32) -> I32 {
+  match sample {
+    0.5 | // the second value
+    1.5 => 1,
+    _ => 0,
+  }
+}
+'''
+
+# 補間を含む文字列は値を作る式なので、パターンに書けない。補間する名前が全て定数でも同じ。
+[[form]]
+id = "interpolated_string_pattern"
+kind = "foreign"
+origin = "Swift と Kotlin"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "補間を含む文字列はパターンに書けない。ガードで書く（`v if v == \"a{x}b\"`）。`{{` と `}}` だけの文字列は補間を含まない"
+
+[[form.example]]
+source = '''
+pub fn f(s: Str, x: I32) -> I32 {
+  match s {
+    "a{x}b" => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+property = ["clean"]
+candidates = 1
+
+# 書けない型の定数のパターン。型が要るので型の段で出す（浮動小数のリテラルは字面で決まるので構文の段）。
+[[form]]
+id = "float_constant_pattern"
+kind = "foreign"
+origin = "Rust"
+stage = "types"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "パターンに書ける定数の型は整数、`Char`、`Bool`、`Str` だけ。浮動小数の定数はガードで書く（`x if x == LIMIT`）"
+
+[[form.example]]
+source = '''
+const LIMIT: F32 = 1.0
+
+pub fn f(x: F32) -> I32 {
+  match x {
+    LIMIT => 1,
+    _ => 0,
+  }
+}
+'''
+at = "5:5"
+property = ["clean"]
+candidates = 1
+
+[[form]]
+id = "negated_constant_pattern"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "定数に前置の `-` を付けたパターンは書けない。ガードで書く（`x if x == -LIMIT`）"
+
+[[form.example]]
+source = '''
+const LIMIT: I32 = 4
+
+pub fn f(x: I32) -> I32 {
+  match x {
+    -LIMIT => 1,
+    _ => 0,
+  }
+}
+'''
+at = "5:5"
+property = ["clean"]
+candidates = 1
+
+# `@` 束縛。`@` の右がリテラル・範囲・それらの選択だけならガードの形（範囲は範囲のパターンと同じ規則）。
+[[form]]
+id = "at_binding"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "`@` 束縛は無い。ガードで書く（`n @ 1..<5` は `n if 1 <= n && n < 5`）"
+
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    k @ 1..<5 => k,
+    _ => 0,
+  }
+}
+'''
+fixed = ['''
+pub fn f(n: I32) -> I32 {
+  match n {
+    k if 1 <= k && k < 5 => k,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    k @ 1 => k,
+    _ => 0,
+  }
+}
+'''
+property = ["clean"]
+candidates = 1
+
+[[form]]
+id = "at_binding_complex"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0002"
+spec = ["7", "18.1"]
+rule = "`@` 束縛は無い。`@` の右がリテラルと範囲でないときは、ガードか入れ子の `match` で書く"
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[I32]) -> I32 {
+  match o {
+    s @ Some(_) => 1,
+    None => 0,
+  }
+}
+'''
+
+# 構造体のパターンの残りを省く `..`。残りのフィールドを宣言の順に `_` で並べる。
+[[form]]
+id = "struct_pattern_rest"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "構造体のパターンは全てのフィールドを書く。不要なものは `_`。残りを省く `..` は無い"
+
+[[form.example]]
+source = '''
+pub struct P3 {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn f(p: P3) -> I32 {
+  match p {
+    P3 { x: px, .. } => px,
+  }
+}
+'''
+at = "9:17"
+fixed = ['''
+pub struct P3 {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn f(p: P3) -> I32 {
+  match p {
+    P3 { x: px, y: _, z: _ } => px,
+  }
+}
+''']
+
+# 範囲のパターン。候補はガードの形（`1..<3` は `k if 1 <= k && k < 3`、`1..=3` は `k if 1 <= k && k <= 3`、
+# `1..` と `1...` は二つを並べる）。範囲が入れ子や選択の中にあってもガードの形にする。
+[[form]]
+id = "range_pattern"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "範囲はパターンに書けない（`for` と `par` の見出しだけ）。ガードで書く（`1..<3` は `k if 1 <= k && k < 3`）"
+
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    1..<3 => 1,
+    _ => 0,
+  }
+}
+'''
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    1..=3 => 1,
+    _ => 0,
+  }
+}
+'''
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    1..3 => 1,
+    _ => 0,
+  }
+}
+'''
+property = ["clean"]
+candidates = 2
+
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    1...3 => 1,
+    _ => 0,
+  }
+}
+'''
+property = ["clean"]
+candidates = 2
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3) => 1,
+    _ => 0,
+  }
+}
+'''
+property = ["clean"]
+candidates = 1
+
+# 選択の枝で束縛を共有できない形は、ガードの形に書けない。
+[[form]]
+id = "range_pattern_choice"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0002"
+spec = ["7", "18.1"]
+rule = "範囲はパターンに書けない。置き換えた後も選択の枝の形が違う形は、`match` を分けるか、ガードで書く"
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3) | None => 1,
+    _ => 0,
+  }
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn f(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, 1) | (5..<7, 2) => 1,
+    _ => 0,
+  }
+}
+'''
+
+# ---- 範囲（§7、§11.5）。`..` と `...` は終わりを含むかが言語で分かれるので、二つの読みを並べる ----------
+
+[[form]]
+id = "range_dots"
+kind = "foreign"
+origin = "Kotlin と Ruby と Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "11.5", "18.1"]
+rule = "範囲は `a..<b`（終わりを含まない）と `a..=b`（終わりを含む）の二つ。`..` と `...` は終わりを含むかが言語で分かれる"
+
+[[form.example]]
+source = '''
+pub fn f() -> U32 {
+  var t = 0
+  for i in 0..4 {
+    t = t + i
+  }
+  t
+}
+'''
+at = "3:13"
+fixed = [
+'''
+pub fn f() -> U32 {
+  var t = 0
+  for i in 0..<4 {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f() -> U32 {
+  var t = 0
+  for i in 0..=4 {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f() -> U32 {
+  var t = 0
+  for i in 0...4 {
+    t = t + i
+  }
+  t
+}
+'''
+at = "3:13"
+fixed = [
+'''
+pub fn f() -> U32 {
+  var t = 0
+  for i in 0..<4 {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f() -> U32 {
+  var t = 0
+  for i in 0..=4 {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
+# 範囲は `for` と `par` の見出しだけに書ける。見出しの外の範囲は値を作れないので、候補を作らない。
+[[form]]
+id = "range_outside_header"
+kind = "foreign"
+origin = "Rust と Kotlin"
+stage = "syntax"
+code = "E0002"
+spec = ["7", "18.1"]
+rule = "範囲は `for` と `par` の見出しだけに書ける。値としては持てない"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let r = 0..<4
+  1
+}
+'''
+
+# ---- 式の中の型引数（§4.5）。書き方は `名前::[…]`。他言語の形は `::[…]` への構文上の編集を候補にする ----
+
+[[form]]
+id = "type_args_turbofish"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "式の中の型引数は `名前::[…]` と書く（`[` だけでは添字）。`::<…>` は `::[…]` にする"
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::<U8>(250)
+}
+'''
+at = "6:5"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250)
+}
+''']
+
+[[form]]
+id = "type_args_angle"
+kind = "foreign"
+origin = "C++ と Java と TypeScript"
+stage = "syntax"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "式の中の型引数は `名前::[…]` と書く。`f<T>(x)` は比較の連鎖ではなく、`f::[T](x)` にする"
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id<U8>(250)
+}
+'''
+at = "6:5"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250)
+}
+''']
+
+# 名前の経路に付けた `[…]` は名前の段（添字として読めない `[…]` は構文の段）。
+[[form]]
+id = "type_args_square"
+kind = "foreign"
+origin = "Scala"
+stage = "names"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "式の中の型引数は `名前::[…]` と書く（`[` だけでは添字）"
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id[U8](250)
+}
+'''
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U32 {
+  let b = Buf[F32].zeroed(4)
+  b.len()
+}
+'''
+fixed = ['''
+pub fn f() -> U32 {
+  let b = Buf::[F32].zeroed(4)
+  b.len()
+}
+''']
+
+# メソッドに付けた `[…]` は型の段。与えるのはメソッド自身の型パラメータ。
+[[form]]
+id = "type_args_method_square"
+kind = "foreign"
+origin = "Scala"
+stage = "types"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "メソッドの型引数も `名前::[…]` と書く（`v.m::[I32](x)`）"
+
+[[form.example]]
+source = '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv[I32](1)
+}
+'''
+fixed = ['''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv::[I32](1)
+}
+''']
+
+# 呼び先が名前の経路でもメソッドでもない形には `::[` を書けない。型引数を除いて `.(` で呼ぶ形を候補にする
+# （関数値の型は総称でないので、除いても型は変わらない）。
+[[form]]
+id = "type_args_on_expression"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["4.5", "6.1", "18.1"]
+rule = "関数値は `.(` で呼ぶ。名前の経路でない呼び先に型引数は書けない"
+
+[[form.example]]
+source = '''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  inc
+}
+
+pub fn f() -> I32 {
+  pick(true)::<I32>(5)
+}
+'''
+fixed = ['''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  inc
+}
+
+pub fn f() -> I32 {
+  pick(true).(5)
+}
+''']
+
+# 型の位置では型引数は今どおり `[…]` で、印の `::` は式の中だけに要る。
+[[form]]
+id = "type_position_path"
+kind = "redundant"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "型の位置の型引数は `Buf[F32]`。`::` は式の中の型引数にだけ要る"
+
+[[form.example]]
+source = '''
+pub fn f(b: Buf::[F32]) -> U32 {
+  b.len()
+}
+'''
+at = "1:16"
+fixed = ['''
+pub fn f(b: Buf[F32]) -> U32 {
+  b.len()
+}
+''']
+
+# ---- flow（§11） -------------------------------------------------------------------------------------
+
+# レートを型の形で書く（0.3 の草案の形）。`Sig` / `Ctl` / `Init` は予約していない普通の名前なので、
+# この E0020 は名前が解決できないときだけ、名前の段で出る。
+[[form]]
+id = "rate_as_type"
+kind = "foreign"
+origin = "旧版"
+stage = "names"
+code = "E0020"
+spec = ["11.3", "18.1"]
+rule = "レートは型でなくクロックで書く（`x: F32 at sample`）。flow の外ではクロックを書かない"
+
+[[form.example]]
+source = '''
+pub flow g(x: Sig[F32]) -> F32 at sample {
+  x
+}
+'''
+at = "1:15"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> Sig[F32] {
+  x
+}
+'''
+at = "1:33"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: Sig[F32]) -> F32 {
+  x
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f(x: F32) -> F32 {
+  x
+}
+''']
+
+# 見えている名前への `^`。遅延の第 1 引数の中では `^` を外す（値は同じ）。外では意図が一意に決まらないので、
+# `y` と `prev~(y)` を並べる。
+[[form]]
+id = "caret_visible"
+kind = "redundant"
+origin = "FAUST と旧版"
+stage = "names"
+code = "E0020"
+spec = ["11.2", "18.1", "2.6"]
+rule = "`^` は下で定義する名前を指す印で、過去の値ではない。見えている名前には付けない"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  prev~(^x)
+}
+'''
+at = "2:9"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = ^x * 2.0
+  a
+}
+'''
+at = "2:11"
+fixed = [
+'''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  a
+}
+''',
+'''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x) * 2.0
+  a
+}
+''',
+]
+
+# ---- FAUST の書き方（§18.1 の表）-----------------------------------------------------------------------
+
+[[form]]
+id = "faust_feedback"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0020"
+spec = ["2.6", "11.2", "18.1"]
+rule = "帰還は `prev~(^y)`（遅延の第 1 引数の `^y` は下で定義する名前）で書く"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x + ~ _
+  y
+}
+'''
+at = "2:15"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+''']
+
+# `let` の名前が無い位置では、帰還の先の名前が決まらないので候補を作らない。
+[[form]]
+id = "faust_feedback_unnamed"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0002"
+spec = ["2.6", "11.2", "18.1"]
+rule = "帰還は `let` で名前を付けて `prev~(^y)` で書く"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x + ~ _
+}
+'''
+at = "2:7"
+
+[[form]]
+id = "faust_bit_not"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.6", "18.1"]
+rule = "ビット反転は前置の `!`（§2.6）。前置の `~` は FAUST の帰還に見える"
+
+[[form.example]]
+source = '''
+pub fn f(m: U32) -> U32 {
+  let n = ~m
+  n
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f(m: U32) -> U32 {
+  let n = !m
+  n
+}
+''']
+
+[[form]]
+id = "faust_prime"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0020"
+spec = ["2.6", "11.4", "18.1"]
+rule = "1 サンプルの遅延は `prev~(x)` と書く"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x'
+  a
+}
+'''
+at = "2:12"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  a
+}
+''']
+
+# `x@N`。`N` が 1 なら `prev~(x)`、2 以上の定数なら `delay~(x, N)`。名前の定数（`UPPER_SNAKE`）は構文の
+# 段では値が分からないので `delay~(x, N)` を候補にし、値が 1 なら後の検査の E0807 に任せる。
+[[form]]
+id = "faust_delay"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0020"
+spec = ["2.6", "11.4", "18.1"]
+rule = "遅延は `prev~(x)`（1 サンプル）と `delay~(x, N)`（N サンプル）で書く"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x@1
+  a
+}
+'''
+at = "2:12"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x@480
+  a
+}
+'''
+at = "2:12"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 480)
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+const N: U32 = 4
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x@N
+  a
+}
+'''
+at = "4:12"
+fixed = ['''
+const N: U32 = 4
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, N)
+  a
+}
+''']
+
+# 定数でなければ `vdelay~` の上限を決められないので候補を作らない。
+[[form]]
+id = "faust_delay_variable"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0002"
+spec = ["2.6", "11.4", "18.1"]
+rule = "遅延の長さが変数なら `vdelay~(x, d, MAX)` で書く（上限は定数）"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let a = x@k
+  a
+}
+'''
+at = "2:12"
+
+# 合成の演算子は、信号に `let` で名前を付ける書き方を note で示す。
+[[form]]
+id = "faust_compose"
+kind = "foreign"
+origin = "FAUST"
+stage = "syntax"
+code = "E0002"
+spec = ["18.1"]
+rule = "信号の合成の演算子は無い。信号に `let` で名前を付けて使う"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x : x
+  a
+}
+'''
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x <: x
+  a
+}
+'''
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x :> x
+  a
+}
+'''
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x, x
+  a
+}
+'''
+
+# ---- 旧版の属性と、冗長な印（§6.4、§6.5、§12.4、§15.1、§4.6） --------------------------------------------
+
+# 置き換え先の決まった旧形。候補は今の形。
+[[form]]
+id = "derive_attribute"
+kind = "foreign"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["6.4", "6.5", "18.1"]
+rule = "trait の実装は宣言の頭に `: trait + trait` と書く。属性ではない"
+
+[[form.example]]
+source = '''
+@derive(PartialEq, Eq)
+pub struct Key {
+  id: U32,
+}
+'''
+fixed = ['''
+pub struct Key: PartialEq + Eq {
+  id: U32,
+}
+''']
+
+[[form]]
+id = "relaxed_attribute"
+kind = "foreign"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["6.5", "15.5", "18.1"]
+rule = "緩和した浮動小数の規則は `@fp(relaxed)` と書く"
+
+[[form.example]]
+source = '''
+@relaxed
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+'''
+at = "1:1"
+fixed = ['''
+@fp(relaxed)
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+''']
+
+[[form]]
+id = "bulk_attribute"
+kind = "foreign"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["6.5", "12.4", "18.1"]
+rule = "遅延線を bulk に置くには `@mem(bulk)` と書く"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  @bulk let d = delay~(x, 4800)
+  d
+}
+'''
+at = "2:3"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)
+  d
+}
+''']
+
+# fast は既定なので書かない。
+[[form]]
+id = "mem_fast"
+kind = "redundant"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["12.4", "18.1"]
+rule = "`fast` は既定の記憶域なので `@mem(fast)` は書かない"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  @mem(fast) let d = delay~(x, 64)
+  d
+}
+'''
+at = "2:3"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 64)
+  d
+}
+''']
+
+[[form]]
+id = "field_pub"
+kind = "redundant"
+origin = "Java と C++"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "フィールドは struct の可視性を継ぐ。広げる向きの指定は無い。狭めたいフィールドにだけ `priv` を付ける"
+
+[[form.example]]
+source = '''
+pub struct P {
+  pub x: I32,
+  y: I32,
+}
+'''
+at = "2:3"
+fixed = ['''
+pub struct P {
+  x: I32,
+  y: I32,
+}
+''']
+
+[[form]]
+id = "field_priv_in_priv_struct"
+kind = "redundant"
+origin = "Java と C++"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "`priv struct` のフィールドは既に `priv` を継ぐ。重ねて `priv` は書かない"
+
+[[form.example]]
+source = '''
+priv struct P {
+  priv x: I32,
+}
+'''
+at = "2:3"
+fixed = ['''
+priv struct P {
+  x: I32,
+}
+''']
+
+[[form]]
+id = "pub_pkg"
+kind = "foreign"
+origin = "Rust と Java"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "可視性は `pub`、無指定（パッケージ内に公開）、`priv` の 3 段階。`pub(pkg)` の形は無い"
+
+[[form.example]]
+source = '''
+pub(pkg) fn f() -> I32 {
+  1
+}
+'''
+fixed = ['''
+fn f() -> I32 {
+  1
+}
+''']
+
+[[form]]
+id = "priv_use"
+kind = "redundant"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "`use` で取り込んだ名前は、そのモジュールの中でだけ使える。`priv use` は冗長"
+
+[[form.example]]
+source = '''
+priv use std.math
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)
+}
+'''
+at = "1:1"
+fixed = ['''
+use std.math
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)
+}
+''']
+
+# タプル形の struct。候補は名前付きのフィールドが一つの struct で、フィールドの名前は仕様が決めない。
+[[form]]
+id = "tuple_struct"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["4.4", "18.1"]
+rule = "タプル形の struct（newtype）は無い。名前付きのフィールドが一つの struct で書く（`Q.new(x)` で作る）"
+
+[[form.example]]
+source = '''
+pub struct Hz(F32)
+'''
+property = ["clean"]
+candidates = 1
+
+# 種は構造で決まるので、`impl Copy for X` と宣言の `: Copy`（`Dup` も同じ）は書かない。
+[[form]]
+id = "copy_impl"
+kind = "redundant"
+origin = "Rust"
+stage = "names"
+code = "E0020"
+spec = ["4.6", "18.1"]
+rule = "種は構造で決まる。`impl Copy for X` は書かない（Copy でないフィールドがあるときは note で名指しする）"
+
+[[form.example]]
+source = '''
+pub struct P {
+  x: I32,
+}
+
+impl Copy for P {
+}
+'''
+property = ["clean"]
+candidates = 1
+
+[[form]]
+id = "copy_bound"
+kind = "redundant"
+origin = "Rust"
+stage = "names"
+code = "E0020"
+spec = ["4.6", "18.1"]
+rule = "種は構造で決まる。宣言の `: Copy` と `: Dup` は書かない"
+
+[[form.example]]
+source = '''
+pub fn f[T: Copy](x: T) -> T {
+  x
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f[T](x: T) -> T {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f[T: Dup](x: T) -> T {
+  x
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f[T](x: T) -> T {
+  x
+}
+''']
+
+# ---- S-250 の付録 A の行で、仕様の本文に E0020 の文が無いもの（決定が行にした。S-250） --------------------
+
+# `#[name(…)]`。`#[derive(X)]` は宣言の頭の `: X`、他は `@name(…)`。
+[[form]]
+id = "hash_attribute"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["6.4", "6.5", "18.1"]
+rule = "属性は `@name(…)` と書く。trait の実装は属性でなく、宣言の頭に `: trait + trait` と書く"
+
+[[form.example]]
+source = '''
+#[derive(Eq)]
+pub struct Key {
+  id: U32,
+}
+'''
+at = "1:1"
+fixed = ['''
+pub struct Key: Eq {
+  id: U32,
+}
+''']
+
+[[form.example]]
+source = '''
+#[derive(PartialEq, Eq)]
+pub struct Key {
+  id: U32,
+}
+'''
+at = "1:1"
+fixed = ['''
+pub struct Key: PartialEq + Eq {
+  id: U32,
+}
+''']
+
+[[form.example]]
+source = '''
+#[repr(c)]
+pub struct P {
+  x: I32,
+}
+'''
+at = "1:1"
+fixed = ['''
+@repr(c)
+pub struct P {
+  x: I32,
+}
+''']
+
+[[form.example]]
+source = '''
+#[fp(relaxed)]
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+'''
+at = "1:1"
+fixed = ['''
+@fp(relaxed)
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+''']
+
+[[form]]
+id = "pub_crate"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "可視性は `pub`、無指定（パッケージ内に公開）、`priv` の 3 段階。`pub(crate)` の形は無い"
+
+[[form.example]]
+source = '''
+pub(crate) fn f() -> I32 {
+  1
+}
+'''
+fixed = ['''
+fn f() -> I32 {
+  1
+}
+''']
+
+# クロックは束縛でなく値に付ける。
+[[form]]
+id = "clock_on_binding"
+kind = "foreign"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["11.3", "18.1"]
+rule = "クロックは値に付ける（`let y: F32 = x at sample`）。束縛の型には付けない"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y: F32 at sample = x
+  y
+}
+'''
+at = "2:15"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y: F32 = x at sample
+  y
+}
+''']

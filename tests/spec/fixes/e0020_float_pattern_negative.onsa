@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0020 for a float literal as a pattern (§7, S-109, S-252, in the syntax stage). The candidate is a
+// guard with a binding whose name the spec does not fix (S-253); that it checks (`clean`) is tested in
+// crates/onsa_cli/tests/foreign_candidates.rs, because a `[[test.fix]]` for a diagnostic that is not
+// reported yet is an error in the case, which the pending list cannot silence.
+// A negative float literal.
+
+pub fn f(sample: F32) -> I32 {
+  match sample {
+    -1.0 => 1,                                      //~ E0020
+    _ => 0,
+  }
+}

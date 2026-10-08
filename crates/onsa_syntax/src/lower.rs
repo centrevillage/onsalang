@@ -11,10 +11,9 @@
 //! item whose name was not read has no AST (a unit of `crate::units` only).
 //!
 //! The span of an AST node is the span of the CST node it is made from
-//! ([`Cst::span`]), except three spans kept from the parser before the CST
-//! (marked `SPAN-QUIRK` below): an attribute written `#[...]` ends before
-//! the `]`, the condition `true` made for `loop` has the span of `loop`, the
-//! literal of a negative const argument has the span of its digits.
+//! ([`Cst::span`]), except one span kept from the parser before the CST
+//! (marked `SPAN-QUIRK` below): the literal of a negative const argument has
+//! the span of its digits.
 
 use onsa_diag::Span;
 
@@ -26,13 +25,9 @@ use crate::token::TokenKind;
 /// arenas of [`Ast`]). The parts of the AST that are not arena nodes (`Ident`,
 /// `Path`, `Param`, ...) are found with [`Cst::covering_nodes`].
 ///
-/// The node pointed at is not always a node of the same sort: the condition
-/// `true` made for `loop` points at the `LoopStmt`; the literal and the
-/// negation of a const argument and its type all point at the `ConstArg`; an
-/// expression written `&x` (E0020) is the expression `x` and points at the
-/// node of `x` (the `RefExpr` around it makes no AST node).
-/// The parts that are not arena nodes may come from more than one kind too:
-/// an `Attr` from an `Attr` or a `HashAttr` node.
+/// The node pointed at is not always a node of the same sort: the literal
+/// and the negation of a const argument and its type all point at the
+/// `ConstArg`.
 #[derive(Debug, Default, Clone)]
 pub struct AstMap {
     pub items: Vec<NodeId>,
@@ -68,20 +63,18 @@ pub(crate) enum Class {
 pub(crate) fn class(kind: NodeKind) -> Class {
     use NodeKind::*;
     match kind {
-        Literal | LeadingDotFloat | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block
-        | IfExpr | MatchExpr | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr
-        | CastExpr | PrefixExpr | RefExpr | CallExpr | FieldExpr | TupleIndexExpr | IndexExpr | TryExpr | StructLit => {
-            Class::Expr
-        }
+        Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr | MatchExpr
+        | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr
+        | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | IndexExpr | TryExpr | StructLit => Class::Expr,
         PathType | ConstArg | UnitType | TupleType | ArrayType | FnType => Class::Type,
         WildPat | LitPat | NegLitPat | TuplePat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => Class::Pat,
-        SourceFile | Error | Name | Item | Docs | Attr | HashAttr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-        | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
+        SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
+        | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
         | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target | Test
         | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow
-        | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | LoopStmt | BreakStmt
-        | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
-        | StructLitFields | StructLitField | StructPatField => Class::Other,
+        | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt | ContinueStmt
+        | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg | StructLitFields
+        | StructLitField | StructPatField => Class::Other,
     }
 }
 
@@ -234,7 +227,7 @@ impl<'a> Lower<'a> {
                         }
                     }
                 }
-                NodeKind::Attr | NodeKind::HashAttr => attrs.push(self.attr(c)),
+                NodeKind::Attr => attrs.push(self.attr(c)),
                 NodeKind::Vis => vis = self.vis(c),
                 _ => decl = Some(c),
             }
@@ -267,9 +260,9 @@ impl<'a> Lower<'a> {
                         }
                     }
                 }
-                NodeKind::Attr | NodeKind::HashAttr if complete => attrs.push(self.attr(c)),
+                NodeKind::Attr if complete => attrs.push(self.attr(c)),
                 NodeKind::Vis if complete => vis = self.vis(c),
-                NodeKind::Attr | NodeKind::HashAttr | NodeKind::Vis | NodeKind::Error => {}
+                NodeKind::Attr | NodeKind::Vis | NodeKind::Error => {}
                 _ => decl = Some(c),
             }
         }
@@ -567,20 +560,7 @@ impl<'a> Lower<'a> {
                 }
             }
         }
-        let span = if self.cst.kind(n) == NodeKind::HashAttr {
-            // SPAN-QUIRK: `#[name(...)]` (E0020) ends before the `]`, as the
-            // parser before the CST gave it (W3-08 revisits attributes).
-            let before_close = self.cst.token_range(n).rev().find(|&i| {
-                let k = self.cst.tokens()[i].kind;
-                !k.is_trivia() && k != TokenKind::RBracket
-            });
-            let s = self.span(n);
-            let end = before_close.map_or(s.end, |i| self.cst.tokens()[i].span.end);
-            Span::new(s.file, s.start, end)
-        } else {
-            self.span(n)
-        };
-        Attr { name, args, span }
+        Attr { name, args, span: self.span(n) }
     }
 
     fn item_kind(&mut self, n: NodeId) -> ItemKind {
@@ -663,7 +643,7 @@ impl<'a> Lower<'a> {
                 let segments = self
                     .toks(tree)
                     .into_iter()
-                    .filter(|&t| !matches!(self.kind_of(t), TokenKind::Dot | TokenKind::ColonColon))
+                    .filter(|&t| self.kind_of(t) != TokenKind::Dot)
                     .map(|t| self.ident(t))
                     .collect();
                 let path = Path { segments, span: self.span(tree) };
@@ -785,12 +765,10 @@ impl<'a> Lower<'a> {
                 let attrs = self
                     .nodes(p)
                     .into_iter()
-                    .filter(|&a| matches!(self.cst.kind(a), NodeKind::Attr | NodeKind::HashAttr))
+                    .filter(|&a| self.cst.kind(a) == NodeKind::Attr)
                     .map(|a| self.attr(a))
                     .collect();
-                // The name is in the `Name` node; an identifier outside it is
-                // the `mut` of `mut self` (E0020), read as `inout self`.
-                let mode = if self.has(p, TokenKind::Ident) { Mode::Inout } else { self.mode(p) };
+                let mode = self.mode(p);
                 let t = self.name_token(p);
                 let name = match self.kind_of(t) {
                     TokenKind::KwSelf => ParamName::SelfParam(self.cst.token(t).span),
@@ -813,12 +791,8 @@ impl<'a> Lower<'a> {
     }
 
     fn path(&self, n: NodeId) -> Path {
-        let segments = self
-            .toks(n)
-            .into_iter()
-            .filter(|&t| !matches!(self.kind_of(t), TokenKind::Dot | TokenKind::ColonColon))
-            .map(|t| self.ident(t))
-            .collect();
+        let segments =
+            self.toks(n).into_iter().filter(|&t| self.kind_of(t) != TokenKind::Dot).map(|t| self.ident(t)).collect();
         Path { segments, span: self.span(n) }
     }
 
@@ -939,15 +913,6 @@ impl<'a> Lower<'a> {
                 let body = self.expr(exprs[1]);
                 StmtKind::While { cond, body }
             }
-            NodeKind::LoopStmt => {
-                // `loop { }` (E0020) is read as `while true { }`.
-                // SPAN-QUIRK: the condition has the span of `loop`.
-                let kw = self.toks(n)[0];
-                let span = self.cst.token(kw).span;
-                let cond = self.add_expr(n, span, ExprKind::Lit(Lit::Bool(true)));
-                let body = self.block(self.need(n, NodeKind::Block));
-                StmtKind::While { cond, body }
-            }
             NodeKind::BreakStmt => StmtKind::Break,
             NodeKind::ContinueStmt => StmtKind::Continue,
             NodeKind::ReturnStmt => StmtKind::Return(self.first_expr(n).map(|e| self.expr(e))),
@@ -974,10 +939,6 @@ impl<'a> Lower<'a> {
             NodeKind::Literal => {
                 let t = self.toks(n)[0];
                 ExprKind::Lit(self.lit(t))
-            }
-            NodeKind::LeadingDotFloat => {
-                let int = self.tok(n, TokenKind::Int).unwrap_or_else(|| self.bug(n, "digits"));
-                ExprKind::Lit(Lit::Float { text: format!("0.{}", self.text_of(int)) })
             }
             NodeKind::HoleExpr => ExprKind::Hole,
             NodeKind::PathExpr => {
@@ -1072,8 +1033,6 @@ impl<'a> Lower<'a> {
                 let op = if self.has(n, TokenKind::Minus) { UnOp::Neg } else { UnOp::Not };
                 ExprKind::Unary { op, expr: self.need_expr(n) }
             }
-            // `&x` (E0020): the AST holds `x`.
-            NodeKind::RefExpr => return self.need_expr(n),
             NodeKind::CallExpr => {
                 let callee = self.need_expr(n);
                 let kind = if self.has(n, TokenKind::Tilde) {

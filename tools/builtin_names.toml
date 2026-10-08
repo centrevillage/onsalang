@@ -327,14 +327,16 @@
 [allow."crates/onsa_syntax/src/ast.rs"]
 "fp" = 1
 
-[allow."crates/onsa_syntax/src/parser.rs"]
+[allow."crates/onsa_syntax/src/foreign.rs"]
 "Bool" = 1
+"Char" = 1
 "F32" = 1
 "F64" = 1
 "I16" = 1
 "I32" = 2
 "I64" = 1
 "I8" = 1
+"Str" = 1
 "U16" = 1
 "U32" = 2
 "U64" = 1
@@ -371,7 +373,7 @@
 "max" = { count = 2, note = "@param のキー（std.math.max と同じ綴り）" }
 "min" = { count = 2, note = "@param のキー（std.math.min と同じ綴り）" }
 
-[same_spelling."crates/onsa_syntax/src/parser.rs"]
+[same_spelling."crates/onsa_syntax/src/foreign.rs"]
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 "u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 

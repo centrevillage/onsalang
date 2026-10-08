@@ -1,29 +1,38 @@
 //! The contract of the fix candidates (spec §18.1; S-236, S-247, S-248,
-//! S-266; W3-17).
+//! S-266, S-302, S-314; W3-17, W3-15).
 //!
 //! §18.1: "every candidate, applied alone and checked again, leaves no
-//! diagnostic of the same or an earlier stage in any unit its edits touch,
-//! when the original diagnostic was the only error of that stage or earlier
-//! in its unit". The runner checks it on every candidate of every diagnostic
-//! of every case of `mode = "check"` or `"test"` ([`check`]):
+//! diagnostic of the same or an earlier stage in any unit it touches after
+//! it, when the original diagnostic was the only error of that stage or
+//! earlier in every unit it touches before it"; and "the lexical reading of
+//! the text outside its edits does not change". The runner checks it on
+//! every candidate of every diagnostic of every case of `mode = "check"` or
+//! `"test"` ([`check`]):
 //!
 //! 1. the candidate alone is applied to the case's files
 //!    ([`onsa_diag::apply_mapped`]), and the case runs again through the same
 //!    entry as the case (`Loaded::from_input`, `analyze_loaded`, plan D-05);
-//! 2. the units its edits touch are those of the check after it (the
-//!    driver's table, `Analyzed::units`; never computed here, D-15) whose
-//!    range meets the range of a replacement (both ends included, so a
-//!    deletion and the borders count). A unit with members is touched only
-//!    outside them (its heading and braces): an edit inside one member
-//!    touches that member. The unit of the original diagnostic is not added
-//!    (S-266: the edits alone decide);
+//! 2. the units it touches (S-302) are the units of the check after it but
+//!    the untouched ones: a unit of the check before it (the driver's table,
+//!    `Analyzed::units`; never computed here, D-15) whose characters no edit
+//!    replaces and no insertion falls inside (for a unit with members, its
+//!    characters outside them), and whose range, moved by the edits before
+//!    it, is a unit after it too. The unit of the original diagnostic is not
+//!    added (S-266: the edits alone decide). One definition serves the
+//!    premise and the promise (S-314): the runner does not compute the
+//!    premise; a case whose touched units hold other errors before the
+//!    candidate says what is left with `leaves`;
 //! 3. the diagnostics the check after it reports in those units, of the
 //!    stage of the original diagnostic or an earlier one (the order of
 //!    [`onsa_diag::Stage::CHECK_ORDER`]), are the ones the case expects:
 //!    none by default (the reported diagnostic is the only error of its unit,
 //!    S-236; one syntactic form is one error, S-248), else the `leaves` of a
 //!    `[[test.fix]]` entry ([`FixSpec`]). A diagnostic outside every unit
-//!    counts when it meets a replacement. Later stages are not looked at.
+//!    counts when it meets a replacement. Later stages are not looked at;
+//! 4. the tokens and comments outside the edits are read the same after it
+//!    (kind and range, moved by the edits before them; blanks are not
+//!    compared, and an insertion at an end of a token is not inside it,
+//!    [`reading_difference`]).
 //!
 //! A `[[test.fix]]` entry may also promise more of one candidate: `clean`
 //! (the check after it reports nothing at all, S-253) and `same_code` (the
@@ -51,6 +60,7 @@ use serde::{Deserialize, Deserializer};
 use onsa_diag::{Applied, Code, Diagnostic, FileId, Fix, SourceMap, Span};
 use onsa_driver::reduce::Unit;
 use onsa_driver::{Analyzed, Loaded, PackageInput, SourceFile};
+use onsa_syntax::Token;
 use onsa_syntax::TokenKind;
 
 use crate::case::{Case, CaseKind, Setup};
@@ -319,7 +329,20 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
             };
             out.targets.push(target.clone());
             let spec = spec.map(|i| &specs[i]);
-            for message in judge(&files, rank, &after, spec) {
+            let edits = moved(fix, &after.applied);
+            for (file, text) in &after.applied.texts {
+                if let Some(diff) = reading_difference(loaded.sources.file(*file).text(), text, *file, &edits) {
+                    out.problems.push(Problem::FixContract {
+                        target: target.clone(),
+                        message: format!(
+                            "fix candidate {target} `{}`: the reading outside its edits changed: in {}, {diff}",
+                            fix.title(),
+                            loaded.sources.file(*file).name()
+                        ),
+                    });
+                }
+            }
+            for message in judge(&files, rank, &analyzed.units, &edits, &after, spec) {
                 out.problems.push(Problem::FixContract {
                     target: target.clone(),
                     message: format!("fix candidate {target} `{}`: {message}", fix.title()),
@@ -434,35 +457,119 @@ fn meet(a: Span, b: Span) -> bool {
     a.file == b.file && a.start <= b.end && b.start <= a.end
 }
 
-/// The units the replacements `ranges` touch (the module's documentation, 2).
-// SPEC-GAP(S-302): "the units the edits touch" is read as the units of the text
-// after the candidate whose range meets a replacement, both ends included (so a
-// unit that only borders a replacement counts too). A candidate that takes code
-// after it into its replacement and moves the border of the units (a block
-// comment before `pub fn`, turned into `//`) is not seen, until S-302.
-fn touched(units: &[Unit], ranges: &[Span]) -> BTreeSet<usize> {
-    let mut out = BTreeSet::new();
-    for r in ranges {
-        for (u, unit) in units.iter().enumerate() {
-            if !meet(unit.span, *r) {
-                continue;
-            }
-            let in_member = units.iter().any(|m| {
-                m.parent == Some(u) && m.span.file == r.file && m.span.start <= r.start && r.end <= m.span.end
-            });
-            if !in_member {
-                out.insert(u);
-            }
+/// One edit of a candidate: its range before it, and the length of its
+/// replacement after it.
+#[derive(Debug, Clone, Copy)]
+struct Moved {
+    before: Span,
+    /// The range of its replacement after the candidate.
+    after: Span,
+}
+
+/// The edits of `fix` as `applied` placed them.
+fn moved(fix: &Fix, applied: &Applied) -> Vec<Moved> {
+    fix.edits().iter().zip(&applied.ranges).map(|(e, r)| Moved { before: e.span, after: *r }).collect()
+}
+
+/// Where the offset `at` of `file` lies after the edits: moved by the length
+/// differences of the edits before it. An insertion at `at` is before a
+/// `start` and after an end (an insertion at an end of a range is not inside
+/// it; [`Applied::map_span`] puts it inside, so it is not used here, S-302).
+fn shift(edits: &[Moved], file: FileId, at: u32, start: bool) -> u32 {
+    let mut delta: i64 = 0;
+    for e in edits.iter().filter(|e| e.before.file == file) {
+        let b = e.before;
+        let before = if b.is_empty() { b.start < at || (start && b.start == at) } else { b.end <= at };
+        if before {
+            delta += e.after.len() as i64 - b.len() as i64;
         }
     }
-    out
+    (at as i64 + delta) as u32
+}
+
+/// Whether the edit range `edit` falls in `range`: it replaces a character of
+/// it, or it is an insertion strictly inside it.
+fn falls_in(edit: Span, range: Span) -> bool {
+    edit.file == range.file
+        && if edit.is_empty() {
+            range.start < edit.start && edit.start < range.end
+        } else {
+            edit.start < range.end && range.start < edit.end
+        }
+}
+
+/// The units a candidate touches (the module's documentation, 2; S-302): the
+/// indexes of `after` but those of the untouched units of `before`.
+fn touched(before: &[Unit], after: &[Unit], edits: &[Moved]) -> BTreeSet<usize> {
+    let mut untouched = BTreeSet::new();
+    for (u, unit) in before.iter().enumerate() {
+        let members: Vec<Span> = before.iter().filter(|m| m.parent == Some(u)).map(|m| m.span).collect();
+        // An edit inside a member touches the member, not the item.
+        let in_member = |e: Span| {
+            members.iter().any(|m| {
+                m.file == e.file
+                    && if e.is_empty() {
+                        m.start < e.start && e.start < m.end
+                    } else {
+                        m.start <= e.start && e.end <= m.end
+                    }
+            })
+        };
+        if edits.iter().any(|e| falls_in(e.before, unit.span) && !in_member(e.before)) {
+            continue;
+        }
+        let s = unit.span;
+        let moved = Span::new(s.file, shift(edits, s.file, s.start, true), shift(edits, s.file, s.end, false));
+        if let Some(a) = after.iter().position(|x| x.span == moved) {
+            untouched.insert(a);
+        }
+    }
+    (0..after.len()).filter(|a| !untouched.contains(a)).collect()
+}
+
+/// Where the lexical reading of the text outside the edits differs before
+/// and after a candidate (the module's documentation, 4; S-302): the tokens
+/// and comments no edit falls in, but blanks, with their kinds and ranges
+/// (those before moved by the edits before them), in the order of the text.
+fn reading_difference(before: &str, after: &str, file: FileId, edits: &[Moved]) -> Option<String> {
+    let blank = |t: &Token| matches!(t.kind, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Eof);
+    let mine: Vec<Moved> = edits.iter().copied().filter(|e| e.before.file == file).collect();
+    let old: Vec<(TokenKind, u32, u32)> = onsa_syntax::lex(file, before)
+        .tokens
+        .iter()
+        .filter(|t| !blank(t) && !mine.iter().any(|e| falls_in(e.before, t.span)))
+        .map(|t| (t.kind, shift(&mine, file, t.span.start, true), shift(&mine, file, t.span.end, false)))
+        .collect();
+    // The ranges of the replacements after the candidate.
+    let new_ranges: Vec<Span> = mine.iter().map(|e| e.after).collect();
+    let new: Vec<(TokenKind, u32, u32)> = onsa_syntax::lex(file, after)
+        .tokens
+        .iter()
+        .filter(|t| !blank(t) && !new_ranges.iter().any(|r| falls_in(*r, t.span)))
+        .map(|t| (t.kind, t.span.start, t.span.end))
+        .collect();
+    let i = (0..old.len().max(new.len())).find(|&i| old.get(i) != new.get(i))?;
+    let show = |text: &str, t: Option<&(TokenKind, u32, u32)>| {
+        t.map_or("nothing".to_string(), |&(k, s, e)| format!("{k:?} `{}` at {s}..{e}", &text[s as usize..e as usize]))
+    };
+    Some(format!("token {} outside the edits: {} after, {} expected", i + 1, show(after, new.get(i)), {
+        let t = old.get(i);
+        t.map_or("nothing".to_string(), |&(k, s, e)| format!("{k:?} at {s}..{e}"))
+    }))
 }
 
 /// What breaks the contract after one candidate (the module's documentation, 3).
-fn judge(files: &Files, rank: usize, after: &After, spec: Option<&FixSpec>) -> Vec<String> {
+fn judge(
+    files: &Files,
+    rank: usize,
+    before: &[Unit],
+    edits: &[Moved],
+    after: &After,
+    spec: Option<&FixSpec>,
+) -> Vec<String> {
     let sources = &after.loaded.sources;
     let ranges = &after.applied.ranges;
-    let units = touched(&after.analyzed.units, ranges);
+    let units = touched(before, &after.analyzed.units, edits);
     let mut left: Vec<(Place, Code)> = Vec::new();
     let mut shown = Vec::new();
     for (d, unit) in after.analyzed.diagnostics.iter().zip(&after.analyzed.diagnostic_units) {
@@ -529,7 +636,8 @@ fn describe(files: &Files, sources: &SourceMap, diagnostics: &[Diagnostic]) -> S
 }
 
 /// The code of a text for `same_code`: every token but whitespace, newlines
-/// and comments, with whether a line break lies between it and the token
+/// and comments (block comments too: they are what a candidate of S-247
+/// rewrites), with whether a line break lies between it and the token
 /// before it (not before the first one: a comment may move above the first
 /// line).
 fn code_shape(text: &str) -> Vec<(TokenKind, &str, bool)> {
@@ -538,7 +646,11 @@ fn code_shape(text: &str) -> Vec<(TokenKind, &str, bool)> {
     for t in onsa_syntax::lex(FileId(0), text).tokens {
         match t.kind {
             TokenKind::Newline => line_break = true,
-            TokenKind::Whitespace | TokenKind::Comment | TokenKind::DocComment | TokenKind::Eof => {}
+            TokenKind::Whitespace
+            | TokenKind::Comment
+            | TokenKind::DocComment
+            | TokenKind::BlockComment
+            | TokenKind::Eof => {}
             kind => {
                 let first = out.is_empty();
                 out.push((kind, &text[t.span.start as usize..t.span.end as usize], line_break && !first));
@@ -566,6 +678,68 @@ fn code_difference(before: &str, after: &str) -> Option<String> {
         ));
     }
     Some(format!("token {}: {} before, {} after (the code but comments changed)", i + 1, token(x), token(y)))
+}
+
+// ------------------------------------------------------------ one file
+
+/// A single-file input checked as `onsa check` checks it (`m.onsa`, no
+/// manifest): the entry of the fuzzing and of the examples of the closed
+/// list of the forms of other languages ([`crate::foreign_forms`]).
+pub struct TextCheck {
+    pub loaded: Loaded,
+    pub analyzed: Analyzed,
+}
+
+fn single_file(text: String) -> PackageInput {
+    PackageInput { manifest: None, files: vec![SourceFile { path: "m.onsa".into(), text }], root: None }
+}
+
+/// Check `text` as a single-file package. `Err`: the internal error.
+pub fn check_text(text: &str) -> Result<TextCheck, String> {
+    let mut loaded = Loaded::from_input(single_file(text.to_string()));
+    let analyzed = onsa_driver::analyze_loaded(&mut loaded).map_err(|e| e.render(&loaded.sources))?;
+    Ok(TextCheck { loaded, analyzed })
+}
+
+/// One candidate of a diagnostic of a [`TextCheck`], applied alone and the
+/// text checked again.
+pub struct CandidateCheck {
+    /// The text after it.
+    pub text: String,
+    /// What the check after it reports.
+    pub diagnostics: Vec<Diagnostic>,
+    /// How it breaks the contract (the module's documentation, 2 to 4; the
+    /// default promise: nothing left in the units it touches).
+    pub problems: Vec<String>,
+}
+
+/// Apply `fix` of `d` (a diagnostic of `run`) alone and check the text again.
+/// `Err`: it cannot be checked (another stage, it does not apply, an
+/// internal error after it).
+pub fn check_candidate(run: &TextCheck, d: &Diagnostic, fix: &Fix) -> Result<CandidateCheck, String> {
+    let rank = d.stage.check_rank().ok_or_else(|| format!("a candidate of the {} stage", d.stage.name()))?;
+    let applied = onsa_diag::apply_mapped(&run.loaded.sources, fix.edits())?;
+    let file = FileId(0);
+    let text = applied.texts.get(&file).filter(|_| applied.texts.len() == 1).cloned();
+    let text = text.ok_or("it edits a file other than the input")?;
+    let mut again = Loaded::from_input(single_file(text.clone()));
+    let analyzed = onsa_driver::analyze_loaded(&mut again).map_err(|e| e.render(&again.sources))?;
+    let files = Files { list: vec![(file, "m.onsa".into(), "m.onsa".into())], package: false };
+    let edits = moved(fix, &applied);
+    let mut problems = Vec::new();
+    if let Some(diff) = reading_difference(run.loaded.sources.file(file).text(), &text, file, &edits) {
+        problems.push(format!("the reading outside its edits changed: {diff}"));
+    }
+    let diagnostics = analyzed.diagnostics.clone();
+    let after = After { loaded: again, analyzed, applied };
+    problems.extend(judge(&files, rank, &run.analyzed.units, &edits, &after, None));
+    Ok(CandidateCheck { text, diagnostics, problems })
+}
+
+/// Where the code of `after` first differs from that of `before` (the
+/// promise `same_code`, S-247): `None` when the same.
+pub fn same_code(before: &str, after: &str) -> Option<String> {
+    code_difference(before, after)
 }
 
 // ------------------------------------------------------------ the fuzzing
@@ -599,7 +773,8 @@ pub struct SamePlace {
 }
 
 /// The near "same place" of S-236 for the fuzzing, which cannot know how many
-/// errors an input holds: the file `text` checked as a single-file package
+/// errors an input holds (and the reading outside the edits, S-302, with the
+/// kind `reading`): the file `text` checked as a single-file package
 /// (as `onsa check` checks it); for each diagnostic, its first candidate
 /// alone applied and the file checked again. A violation is a diagnostic of
 /// the check after it, of the original's stage or an earlier one, whose
@@ -617,11 +792,7 @@ pub struct SamePlace {
 /// choice per unit). The units are not used: this is a net for new kinds,
 /// not the contract.
 pub fn same_place(text: &str) -> SamePlace {
-    let input = |text: String| PackageInput {
-        manifest: None,
-        files: vec![SourceFile { path: "m.onsa".into(), text }],
-        root: None,
-    };
+    let input = single_file;
     let mut loaded = Loaded::from_input(input(text.to_string()));
     let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
         Ok(a) => a,
@@ -658,6 +829,10 @@ pub fn same_place(text: &str) -> SamePlace {
             out.violations.push(violation("other-file".into(), None, "it edits a file other than the input".into()));
             continue;
         };
+        // The reading outside its edits stays (S-302), as in the contract.
+        if let Some(diff) = reading_difference(text, new_text, FileId(0), &moved(fix, &applied)) {
+            out.violations.push(violation("reading".into(), None, diff));
+        }
         let mut again = Loaded::from_input(input(new_text.clone()));
         let after = match onsa_driver::analyze_loaded(&mut again) {
             Ok(a) => a,
@@ -668,7 +843,7 @@ pub fn same_place(text: &str) -> SamePlace {
         };
         let mut places: Vec<Span> = applied.ranges.clone();
         places.push(applied.map_span(d.span));
-        let in_place = |s: Span| places.iter().any(|p| p.file == s.file && p.start <= s.start && s.start <= p.end);
+        let in_place = |s: Span| in_same_place(&places, s);
         for d2 in &after.diagnostics {
             if d2.stage.check_rank().is_none_or(|r| r > rank) || !in_place(d2.span) {
                 continue;
@@ -693,6 +868,21 @@ pub fn same_place(text: &str) -> SamePlace {
         }
     }
     out
+}
+
+/// Whether the diagnostic at `s` starts in the same place as one of
+/// `places` (the near "same place" of [`same_place`]): inside a range that is
+/// not empty, half open (`start <= s.start < end`), or at the point of an
+/// empty one (what a deletion or an insertion of nothing leaves). An error
+/// that starts right at the end of a replacement is not in it: the input held
+/// another error there, which the candidate let the check reach (the premise
+/// of S-236 does not hold), as an insertion at an end of a token is not
+/// inside it (S-302); a change of reading at that border is what the
+/// `reading` check finds.
+fn in_same_place(places: &[Span], s: Span) -> bool {
+    places.iter().any(|p| {
+        p.file == s.file && if p.is_empty() { s.start == p.start } else { p.start <= s.start && s.start < p.end }
+    })
 }
 
 /// Every diagnostic the stages found, before the choice of one per unit.
@@ -763,21 +953,67 @@ mod tests {
         spans.iter().map(|&(s, e, p)| Unit { span: Span::new(FileId(0), s, e), parent: p }).collect()
     }
 
+    /// An edit replacing `s..e` of file 0 with `len` characters.
+    fn edit(s: u32, e: u32, len: u32) -> Moved {
+        Moved { before: Span::new(FileId(0), s, e), after: Span::new(FileId(0), s, s + len) }
+    }
+
     #[test]
-    fn touched_units_meet_the_replacements_and_skip_the_parent_inside_a_member() {
-        // 0: an item 0..10; 1: an impl 20..60 with members 2 (25..35) and 3 (40..50).
+    fn touched_units_are_all_but_the_untouched_ones() {
+        // S-302. 0: an item 0..10; 1: an impl 20..60 with members 2 (25..35) and 3 (40..50).
         let us = units(&[(0, 10, None), (20, 60, None), (25, 35, Some(1)), (40, 50, Some(1))]);
+        let t = |after: &[Unit], es: &[Moved]| touched(&us, after, es).into_iter().collect::<Vec<_>>();
+        // A replacement of the same length inside the item: the units after are the same.
+        assert_eq!(t(&us, &[edit(3, 4, 1)]), [0]);
+        // Between the units: nothing touched, the units after it moved.
+        let moved = units(&[(0, 10, None), (22, 62, None), (27, 37, Some(1)), (42, 52, Some(1))]);
+        assert_eq!(t(&moved, &[edit(12, 12, 2)]), Vec::<usize>::new());
+        // An insertion at a border of a unit is not inside it.
+        let moved = units(&[(2, 12, None), (22, 62, None), (27, 37, Some(1)), (42, 52, Some(1))]);
+        assert_eq!(t(&moved, &[edit(0, 0, 2)]), Vec::<usize>::new());
+        // Inside a member: the member, not its impl (moved by the length difference).
+        let longer = units(&[(0, 10, None), (20, 61, None), (25, 36, Some(1)), (41, 51, Some(1))]);
+        assert_eq!(t(&longer, &[edit(27, 29, 3)]), [2]);
+        // The heading of the impl.
+        assert_eq!(t(&us, &[edit(21, 22, 1)]), [1]);
+        // A border that moved: a unit after it that is no unit before (S-302: a
+        // candidate that takes the next item into a comment); the members keep their range.
+        let merged = units(&[(0, 60, None), (25, 35, Some(0)), (40, 50, Some(0))]);
+        assert_eq!(t(&merged, &[edit(3, 4, 1)]), [0]);
+        // Another file is not touched.
+        let other = Moved { before: Span::new(FileId(1), 3, 4), after: Span::new(FileId(1), 3, 4) };
+        assert_eq!(t(&us, &[other]), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn the_same_place_is_half_open_and_a_point_for_an_empty_range() {
         let r = |s: u32, e: u32| Span::new(FileId(0), s, e);
-        let t = |rs: &[Span]| touched(&us, rs).into_iter().collect::<Vec<_>>();
-        assert_eq!(t(&[r(3, 4)]), [0]);
-        assert_eq!(t(&[r(10, 10)]), [0], "a deletion at the end of a unit");
-        assert_eq!(t(&[r(12, 15)]), Vec::<usize>::new(), "between the units");
-        assert_eq!(t(&[r(27, 29)]), [2], "inside a member: not its impl");
-        assert_eq!(t(&[r(21, 22)]), [1], "the heading of the impl");
-        assert_eq!(t(&[r(30, 42)]), [1, 2, 3], "over two members and the impl between them");
-        assert_eq!(t(&[r(3, 4), r(45, 45)]), [0, 3], "every replacement");
+        assert!(in_same_place(&[r(3, 6)], r(3, 4)) && in_same_place(&[r(3, 6)], r(5, 9)));
+        assert!(!in_same_place(&[r(3, 6)], r(6, 7)), "the end of a range is not in it");
+        assert!(!in_same_place(&[r(3, 6)], r(2, 4)));
+        assert!(in_same_place(&[r(4, 4)], r(4, 5)) && !in_same_place(&[r(4, 4)], r(5, 5)));
         let other = Span::new(FileId(1), 3, 4);
-        assert_eq!(t(&[other]), Vec::<usize>::new(), "another file");
+        assert!(!in_same_place(&[r(3, 6)], other));
+        // The forms it caught still are: `;;` fixed by halves, and `---x` (`--`
+        // and `-x`) parenthesized by its first operator alone, were violations
+        // inside the original range.
+        assert!(in_same_place(&[r(10, 12)], r(11, 12)));
+    }
+
+    #[test]
+    fn the_reading_outside_the_edits_is_compared() {
+        let e = |s: u32, e: u32, len: u32| vec![edit(s, e, len)];
+        // `let mut` to `var`: the tokens outside are the same, moved.
+        let before = "let mut n = 0\n";
+        assert_eq!(reading_difference(before, "var n = 0\n", FileId(0), &[edit(0, 3, 3), edit(4, 8, 0)]), None);
+        // A block comment written `//` in place takes the code after it (S-302).
+        let before = "let a = 1 /* one */ + 2\n";
+        let d = reading_difference(before, "let a = 1 // one + 2\n", FileId(0), &e(10, 19, 6)).unwrap();
+        assert!(d.contains("token"), "{d}");
+        // Blanks are not compared.
+        assert_eq!(reading_difference("a  b\n", "a b\n", FileId(0), &e(1, 3, 1)), None);
+        // Two tokens that touch after a deletion are read as one.
+        assert!(reading_difference("a /*c*/ b\n", "ab\n", FileId(0), &e(1, 8, 0)).is_some());
     }
 
     #[test]
@@ -795,13 +1031,13 @@ mod tests {
         let v: Vec<(&str, &str, Option<u32>)> =
             left.violations.iter().map(|v| (v.code.as_str(), v.left.as_str(), v.left_line)).collect();
         assert_eq!(v, [("E0010", "E0010", Some(2))], "{left:?}");
-        // The inner `--x` of `---x` is a part of the one form (S-248): left, it is a violation.
-        let form = same_place("pub fn f(x: I32) -> I32 {\n  ---x\n}\n");
-        let v: Vec<(&str, &str)> = form.violations.iter().map(|v| (v.code.as_str(), v.left.as_str())).collect();
-        assert_eq!(v, [("E0012", "E0012")], "{form:?}");
-        // A stray `1.` holds two errors (E0020 and E0002): the E0002 left after `1.0` was there before.
+        // A stack of prefix operators is one form, fixed whole (S-248, S-297): nothing left.
+        let form = same_place("pub fn f(x: I32) -> I32 {\n  - - -x\n}\n");
+        assert_eq!(form.candidates, 1, "{form:?}");
+        assert!(form.violations.is_empty(), "{form:?}");
+        // A stray `1.` holds two errors at one place (E0020 and E0002); the E0002 is
+        // reported (S-281), and it has no candidate.
         let stray = same_place("1.\n");
-        assert_eq!(stray.candidates, 1, "{stray:?}");
-        assert!(stray.violations.is_empty(), "{stray:?}");
+        assert_eq!(stray.candidates, 0, "{stray:?}");
     }
 }

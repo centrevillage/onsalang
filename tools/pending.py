@@ -29,6 +29,10 @@ the form of `target`:
                   <code> fix<K>", the K-th candidate of the diagnostic of that
                   code at that place of a case's check (matched by the test
                   runner, `onsa_tests::run::reconcile`, W3-17)
+    foreign-form  a row of the closed list of the forms of other languages,
+                  `docs/foreign-forms.toml` (S-250), whose examples do not pass
+                  yet: the row's `id`, "semicolon" (matched by
+                  `onsa_tests::foreign_forms`, W3-15)
 
 Paths are in their canonical form: relative, `/`-separated, no `.` or `..`
 component, no empty component, no trailing `/`.
@@ -85,7 +89,7 @@ import spec_blocks  # noqa: E402
 ROOT = repo.ROOT
 PENDING = repo.PENDING
 
-KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input", "fix-contract")
+KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input", "fix-contract", "foreign-form")
 FIELDS = ("kind", "target", "reasons", "until", "note")
 # Optional fields: `expect` (only "internal": a whole test case, a case of an item with
 # `expect_internal`), `rows` and `digest` (both required on, and only on, a case of an item with
@@ -102,7 +106,12 @@ TARGET_FORMS = {
     "test-case": re.compile(r"[^\s:][^:]*(?:::\S.*)?"),
     "fuzz-input": re.compile(r"[^\s:][^:]*"),
     "fix-contract": re.compile(r"[^\s:][^:\s]*:[1-9]\d*:[1-9]\d* E\d{4} fix[1-9]\d*"),
+    "foreign-form": re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*"),
 }
+# The closed list of the forms of other languages (S-250): the rows a
+# `foreign-form` entry names.
+FOREIGN_FORMS = "docs/foreign-forms.toml"
+
 REASON = re.compile(r"[SR]-\d+")
 # A spec section as a reason, only of `until = "P2"` (the spec §20 sets what the first phase is).
 SECTION = re.compile(r"§\d+(?:\.\d+)*")
@@ -323,9 +332,29 @@ def _whole_and_cases(entries):
     return out
 
 
+def foreign_form_ids(root):
+    """The `id`s of the rows of `docs/foreign-forms.toml` under `root`, or an
+    error message (the file is missing or not TOML)."""
+    path = Path(root) / FOREIGN_FORMS
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return f"`{FOREIGN_FORMS}` does not exist"
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as err:
+        return f"`{FOREIGN_FORMS}` is not TOML: {err}"
+    forms = data.get("form", [])
+    return {f.get("id") for f in forms if isinstance(f, dict)} if isinstance(forms, list) else set()
+
+
 def _check_target(e, root, pendable_steps):
     if not TARGET_FORMS[e.kind].fullmatch(e.target):
         return [f"target is not of the {e.kind} form"]
+    if e.kind == "foreign-form":
+        ids = foreign_form_ids(root)
+        if isinstance(ids, str):
+            return [ids]
+        if e.target not in ids:
+            return [f"`{e.target}` is not the `id` of a row of `{FOREIGN_FORMS}` (remove the entry, or fix the id)"]
     if e.kind == "gate":
         item = e.target.split("/", 1)[0]
         if item not in pendable_steps:

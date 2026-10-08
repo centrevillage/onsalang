@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// Two diagnostics of the same stage that start at the same place: the unit reports the first by
+// the order of `diagnostics` (start, end, code, message; S-281). At the position of an item, `1.`
+// and `1u8` are a foreign literal (E0020 from the lexer) and a token that cannot start an item
+// (E0002 from the parser), with the same range; E0002 sorts first, so E0002 is reported and there
+// is no candidate. (Inside an expression the same literals are E0020, fixes/e0020_literals.onsa.)
+
+1.                                                  //~ E0002
+
+pub fn first() -> I32 {
+  1
+}
+
+1u8                                                 //~ E0002
+
+pub fn second() -> I32 {
+  2
+}

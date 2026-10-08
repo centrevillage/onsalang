@@ -35,6 +35,20 @@ fn named(a: &Analysis, name: &str) -> crate::TyId {
     a.types.find(&Ty::Named(crate::DefId(d as u32), Vec::new())).unwrap_or_else(|| panic!("{name} not interned"))
 }
 
+/// The guard-form candidates of the syntax stage bind names no identifier of
+/// the file spells (`onsa_syntax::foreign::guard_name`, S-253): visible
+/// without being written are only the names of the prelude, and none of them
+/// is one of those.
+#[test]
+fn the_prelude_has_no_name_of_the_guard_candidates() {
+    let a = check("pub fn f() -> I32 {\n  1\n}\n");
+    assert!(!a.prelude.is_empty());
+    for n in 1..=100 {
+        let name = onsa_syntax::foreign::guard_name(n);
+        assert!(!a.prelude.contains_key(&name), "{name} is a name of the prelude");
+    }
+}
+
 #[test]
 fn kinds_from_structure() {
     let a = check(

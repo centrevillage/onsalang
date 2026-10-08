@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a compound assignment (S-250; docs/foreign-forms.toml rows `compound_assign`). In a
+// statement position, with a name or a field path on the left, the candidate is `x = x op rhs`
+// (the right side in parentheses when its precedence is lower than the operator's). Each of the
+// ten operators is a unit of its own here.
+
+pub struct Counter {
+  n: I32,
+}
+
+pub fn add(inout x: I32) {
+  x = x + 1                                            //~ E0020
+}
+
+pub fn subtract(inout x: I32) {
+  x = x - 1                                            //~ E0020
+}
+
+pub fn multiply(inout x: I32) {
+  x = x * 2                                            //~ E0020
+}
+
+pub fn divide(inout x: I32) {
+  x = x / 2                                            //~ E0020
+}
+
+pub fn remainder(inout x: I32) {
+  x = x % 2                                            //~ E0020
+}
+
+pub fn bit_and(inout x: U32) {
+  x = x & 1                                            //~ E0020
+}
+
+pub fn bit_or(inout x: U32) {
+  x = x | 1                                            //~ E0020
+}
+
+pub fn bit_xor(inout x: U32) {
+  x = x ^ 1                                            //~ E0020
+}
+
+pub fn shift_left(inout x: U32) {
+  x = x << 1                                           //~ E0020
+}
+
+pub fn shift_right(inout x: U32) {
+  x = x >> 1                                           //~ E0020
+}
+
+pub fn field_path(inout c: Counter) {
+  c.n = c.n + 1                                          //~ E0020
+}
+
+pub fn lower_precedence_on_the_right(inout x: I32, a: I32, b: I32) {
+  x = x * (a + b)                                        //~ E0020
+}
+
+pub fn fine(inout x: I32) {
+  x = x + 1
+}

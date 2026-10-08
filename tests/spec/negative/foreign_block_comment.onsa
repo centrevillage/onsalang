@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+//
+// # A candidate writes the words as `//` and changes no token outside the comment and no line
+// # break (S-247). Where the words go is not decided, so each candidate is checked by that
+// # property (`same_code`).
+// [[test.fix]]
+// at = "44:13"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "49:10"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "52:23"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "57:3"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "62:14"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+
+// E0020: a block comment with code after it on the same line (§2.1: there are no block comments,
+// §18.1). Writing it as `//` would comment the code out, so a candidate may not do that: it must
+// leave every token but the comment as it was (crates/onsa_cli/tests/foreign_candidates.rs
+// checks the candidates; where the words go is not decided).
+
+pub fn between_operands() -> I32 {
+  let a = 1 /* one */ + 2                           //~ E0020
+  a
+}
+
+pub fn between_arguments() -> I32 {
+  max(1, /* two */ 2)                               //~ E0020
+}
+
+pub fn in_a_signature(/* in */ x: I32) -> I32 {     //~ E0020
+  x
+}
+
+pub fn before_a_statement() -> I32 {
+  /* first */ let a = 1                             //~ E0020
+  a
+}
+
+pub fn around_an_operator() -> I32 {
+  let a = 1 +/* plus */2                            //~ E0020
+  a
+}
+
+pub fn fine() -> I32 {
+  let a = 1 // one
+  a + 2
+}

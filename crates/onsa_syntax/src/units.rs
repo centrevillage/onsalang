@@ -175,8 +175,8 @@ impl Builder<'_> {
                 }
                 Elem::Token(t) => {
                     let token = self.cst.token(t);
-                    // A `;`, and trivia with a diagnostic of the lexer (a block
-                    // comment): tokens of no item (S-259).
+                    // A `;`, and trivia with a diagnostic of the lexer: tokens
+                    // of no item (S-259).
                     let diagnosed = || {
                         let k = self.starts.partition_point(|&s| s < token.span.start);
                         self.starts.get(k).is_some_and(|&s| s < token.span.end.max(token.span.start + 1))
@@ -201,12 +201,9 @@ impl Builder<'_> {
     /// The declaration node of an `Item` node; `None` when the parser found
     /// none (tokens of no item).
     fn declaration(&self, n: NodeId) -> Option<NodeId> {
-        self.cst.child_nodes(n).find(|&c| {
-            !matches!(
-                self.cst.kind(c),
-                NodeKind::Docs | NodeKind::Attr | NodeKind::HashAttr | NodeKind::Vis | NodeKind::Error
-            )
-        })
+        self.cst
+            .child_nodes(n)
+            .find(|&c| !matches!(self.cst.kind(c), NodeKind::Docs | NodeKind::Attr | NodeKind::Vis | NodeKind::Error))
     }
 
     fn push(&mut self, span: Span, item: Option<ItemId>, parent: Option<usize>) -> usize {
@@ -289,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn trivia_with_a_lexer_diagnostic_joins_the_run_of_tokens_of_no_item() {
+    fn block_comments_between_items_join_the_run_of_tokens_of_no_item() {
         // S-259: block comments between items (E0020) and the tokens after them are one unit.
         let src = "fn a() {}\n/* x */\n/* y */\n$\nfn b() {}\n";
         assert_eq!(units(src), [s("fn a() {}", None), s("/* x */\n/* y */\n$", None), s("fn b() {}", None)]);

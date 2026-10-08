@@ -273,7 +273,7 @@ fn validate_finds_a_broken_tree() {
 // ---------------------------------------------------------------- positions
 
 /// Every AST node has the span of the CST node it was made from, except the
-/// three kept from the parser before the CST (lower.rs, `SPAN-QUIRK`).
+/// one kept from the parser before the CST (lower.rs, `SPAN-QUIRK`).
 fn check_spans(p: &crate::Parsed, name: &str) {
     let cst = &p.cst;
     let (ast, map) = (&p.ast, &p.map);
@@ -287,7 +287,7 @@ fn check_spans(p: &crate::Parsed, name: &str) {
     }
     for (i, e) in ast.exprs.iter().enumerate() {
         let n = map.exprs[i];
-        let quirk = matches!(cst.kind(n), NodeKind::LoopStmt | NodeKind::ConstArg);
+        let quirk = cst.kind(n) == NodeKind::ConstArg;
         if quirk {
             let s = cst.span(n);
             assert!(s.start <= e.span.start && e.span.end <= s.end, "{name}: expr {i}");
@@ -309,18 +309,13 @@ fn check_spans(p: &crate::Parsed, name: &str) {
 #[test]
 fn spans_come_from_the_cst() {
     for src in [
-        "fn f() {\n  loop { }\n}\n",
         "fn f(r: Ring[F32, -4]) {}\n",
-        "#[derive(PartialEq)]\nstruct A { }\n",
+        "@derive(PartialEq)\nstruct A { }\n",
         "fn f() { g(&mut x) + &y }\n",
+        "fn f(x: &mut I32) -> I32 { x }\n",
     ] {
         check_spans(&parse(src), src);
     }
-    // The quirks themselves.
-    let src = "#[derive(PartialEq)]\nstruct A { }\n";
-    let p = parse(src);
-    let a = &p.ast.item(p.ast.root[0]).attrs[0];
-    assert_eq!(&src[a.span.start as usize..a.span.end as usize], "#[derive(PartialEq)");
 }
 
 #[test]
@@ -523,7 +518,7 @@ fn the_parser_counts_the_levels_of_spec_2_5() {
             body(&format!("1{}", " + 1".repeat(n))),
             body(&format!("1{}", " + 1 * 1".repeat(n / 2))),
             body(&format!("if a {{ 1 }}{} else {{ 2 }}", " else if a { 1 }".repeat(n - 1))),
-            body(&format!("{}x", "-".repeat(n))),
+            body(&format!("{}x", "- ".repeat(n))),
             "fn f(\n".to_string(),
             "fn f() { a.b.c(d[0] as I32 + 1) }\nstruct S { x: Ring[F32, -4] }\n".to_string(),
         ];
@@ -570,23 +565,23 @@ fn over_the_limit_is_e0006_at_its_token() {
 }
 
 #[test]
-fn names_are_nodes_and_foreign_forms_have_their_own_shape() {
+fn foreign_forms_have_no_shape_of_their_own_and_fail_their_unit() {
+    // R-87 (4): the parser reads a form of another language as nothing; the
+    // unit fails at it, and its tokens are in the item's `Error` node.
     let src = "impl A {\n  fn f(mut self, _: I32) { }\n}\nproc g(x: Sig[F32]) -> Sig[F32] { x }\n\
                fn h() {\n  let mut v = 1\n}\n#[derive(Eq)]\nstruct S { }\n";
     let p = parse(src);
-    let param = find(&p.cst, NodeKind::Param)[0];
-    assert_eq!(kinds_of(&p.cst, param), ["Ident", "Whitespace", "Name"]);
-    assert_eq!(find(&p.cst, NodeKind::HashAttr).len(), 1);
+    let codes: Vec<_> = p.diagnostics.iter().map(|d| d.code).collect();
+    assert_eq!(codes, [onsa_diag::Code::E0020; 4], "{:?}", p.diagnostics);
+    // `f` keeps its name and is a failed item; `h` too; `proc g` and `#[derive]` have no name read.
     let ItemKind::Impl(i) = &p.ast.item(p.ast.root[0]).kind else { unreachable!() };
-    let ItemKind::Fn(f) = &p.ast.item(i.items[0]).kind else { unreachable!() };
-    assert!(matches!(f.params[0].name, ParamName::SelfParam(_)) && f.params[0].mode == Mode::Inout);
-    assert!(matches!(f.params[1].name, ParamName::Wild(_)) && f.params[1].mode == Mode::Borrow);
-    let ItemKind::Flow(g) = &p.ast.item(p.ast.root[1]).kind else { unreachable!() };
-    assert_eq!(g.name.name, "g");
-    let ItemKind::Fn(h) = &p.ast.item(p.ast.root[2]).kind else { unreachable!() };
-    let ExprKind::Block(b) = &p.ast.expr(h.body.unwrap()).kind else { unreachable!() };
-    let StmtKind::Var { name, .. } = &p.ast.stmt(b.stmts[0]).kind else { unreachable!() };
-    assert_eq!(name.name, "v");
+    assert!(p.ast.item(i.items[0]).failed.is_some());
+    let ItemKind::Fn(h) = &p.ast.item(p.ast.root[1]).kind else { unreachable!() };
+    assert_eq!(h.name.name, "h");
+    assert!(p.ast.item(p.ast.root[1]).failed.is_some());
+    // `struct S` is read on its own: `#[derive(Eq)]` starts a unit (the recovery).
+    assert_eq!(p.ast.root.len(), 3, "{}", crate::dump(&p.ast));
+    assert!(find(&p.cst, NodeKind::Error).len() >= 4);
 }
 
 #[test]

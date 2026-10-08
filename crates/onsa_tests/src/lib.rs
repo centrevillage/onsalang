@@ -39,6 +39,7 @@ pub mod ccheck;
 pub mod conformance;
 pub mod fix_contract;
 pub mod fixes;
+pub mod foreign_forms;
 pub mod fragment;
 pub mod golden;
 pub mod host;

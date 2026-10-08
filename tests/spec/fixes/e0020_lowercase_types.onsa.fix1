@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a numeric type written in lowercase (§18.1: `i32` is `I32`), in every place a type
+// can be written: an array element, a type argument, a tuple, a field, an enum payload, a method
+// parameter, a function type, a constant parameter, a cast and a closure parameter.
+// `usize` is `U32`, `isize` is `I32` and `bool` is `Bool` (S-250; `char` and `str` are in
+// e0020_lowercase_char_str.onsa).
+// Each is a unit of its own, so each is reported.
+
+pub fn array_element(x: [U8; 4]) -> U8 {            //~ E0020
+  x[0]
+}
+
+pub fn type_argument(x: Option[F64]) -> F64 {       //~ E0020
+  1.0
+}
+
+pub fn tuple_element(x: (I32, I32)) -> I32 {        //~ E0020
+  1
+}
+
+pub fn return_type() -> U64 {                       //~ E0020
+  1
+}
+
+pub struct Gain {
+  amount: F32,                                      //~ E0020
+}
+
+pub enum Slot {
+  Free,
+  Used(I16),                                        //~ E0020
+}
+
+pub struct Meter {
+  n: I32,
+}
+
+impl Meter {
+  pub fn add(self, k: I64) -> I64 {                 //~ E0020
+    1
+  }
+}
+
+pub fn function_type(g: fn(I32) -> I32) -> I32 {    //~ E0020
+  1
+}
+
+pub struct Ring[T, const N: U32] {                  //~ E0020
+  data: [T; N],
+}
+
+pub fn cast(x: F32) -> F64 {
+  let y = x as F64                                  //~ E0020
+  y
+}
+
+pub fn closure_parameter() -> [F32; 4] {
+  array.from_fn(fn(i: U32) { 1.0 })                 //~ E0020
+}
+
+pub fn small_widths(a: I8, b: I8) -> I8 {           //~ E0020
+  b
+}
+
+pub fn width_of_an_index(n: U32) -> U32 {        //~ E0020
+  n
+}
+
+pub fn signed_width(n: I32) -> I32 {              //~ E0020
+  n
+}
+
+pub fn flag(b: Bool) -> Bool {                      //~ E0020
+  b
+}
+
+pub fn fine(x: [U8; 4], y: Option[F64], z: (I32, F32)) -> U8 {
+  x[0]
+}

@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+//
+// # Every candidate keeps the tokens outside the comment and the line breaks between them
+// # (`same_code`, S-247).
+// [[test.fix]]
+// at = "37:1"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "42:1"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "49:3"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+//
+// [[test.fix]]
+// at = "56:3"
+// code = "E0020"
+// candidate = 1
+// same_code = true
+
+// E0020 for the forms of a block comment that the end-of-line case does not cover (§2.1, §18.1):
+// the empty `/**/`, a comment over several lines (the lexer looks for `*/` across lines, R-174),
+// `/** */` (doc comment of the declaration that follows, `///` for it, `//` when none follows).
+// `/*! */` is in e0020_block_comment_inner_doc.onsa. Whether the words are written `///` or
+// `//` is checked in crates/onsa_cli/tests/foreign_candidates.rs.
+
+/**/                                                //~ E0020
+pub fn empty_comment() -> I32 {
+  1
+}
+
+/** the gain                                        //~ E0020
+ * of the voice */
+pub fn documented() -> I32 {
+  1
+}
+
+pub fn several_lines() -> I32 {
+  /* first                                          //~ E0020
+     second */
+  let a = 1
+  a
+}
+
+pub fn not_before_a_declaration() -> I32 {
+  /** inside a body */                              //~ E0020
+  1
+}
+
+pub fn fine() -> I32 {
+  1
+}

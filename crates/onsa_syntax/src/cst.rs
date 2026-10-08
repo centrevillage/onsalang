@@ -58,7 +58,7 @@ pub enum Elem {
 /// elements and their `,`, and the closing token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeKind {
-    /// The file: `Item`, `Error`, stray `;`, then `Eof`.
+    /// The file: `Item`, `Error`, then `Eof`.
     SourceFile,
     /// Tokens skipped by the recovery after a syntax error. It is in one of
     /// two places: the last child of the item the error stopped (`Item`, not
@@ -71,24 +71,22 @@ pub enum NodeKind {
     Name,
 
     // ------------------------------------------------------------ items
-    /// `Docs`?, `(Attr | HashAttr)`*, `Vis`?, then one declaration node.
+    /// `Docs`?, `Attr`*, `Vis`?, then one declaration node.
     Item,
     /// The doc comments the parser took for the item: from the first `///`
     /// to the last, with the blank lines and `//` between them.
     Docs,
     /// `@name AttrArgs?`
     Attr,
-    /// `#[name AttrArgs?]` (E0020; read as `@name(...)`)
-    HashAttr,
     /// `( (AttrNamedArg | Path | Str), ... )`
     AttrArgs,
     /// `key: Expr`
     AttrNamedArg,
-    /// `pub`, `pub(pkg)`, `pub(crate)` (E0020)
+    /// `pub`, `pub(pkg)`
     Vis,
     /// `rt? fn name GenericParams? ParamList (-> Type)? (uses EffectRow)? Block?`
     Fn,
-    /// `flow name ParamList -> Type Block` (or `proc`, E0020)
+    /// `flow name ParamList -> Type Block`
     Flow,
     /// `struct name GenericParams? (FieldList | TupleStructBody)`
     Struct,
@@ -122,7 +120,7 @@ pub enum NodeKind {
     Const,
     /// `use UseTree`
     Use,
-    /// `name (. name)* (. UseNames)?` (`::` is E0020)
+    /// `name (. name)* (. UseNames)?`
     UseTree,
     /// `{ name, ... }`
     UseNames,
@@ -134,7 +132,7 @@ pub enum NodeKind {
     Test,
     /// `{ Item ... }` (the body of `trait`, `impl`, `effect`, `handler`, `extern`, an inline handler)
     ItemList,
-    /// `[ (TypeParam | ConstParam | EffectParam), ... ]` (or `< >`, E0020)
+    /// `[ (TypeParam | ConstParam | EffectParam), ... ]`
     GenericParams,
     /// `Name (: Bound (+ Bound)*)?`
     TypeParam,
@@ -150,13 +148,13 @@ pub enum NodeKind {
     Param,
     /// `{ Path, ... }` after `uses`
     EffectRow,
-    /// `name (. name)*` (`::` is E0020)
+    /// `name (. name)*`
     Path,
 
     // ------------------------------------------------------------ types
     /// `Path TypeArgs?`
     PathType,
-    /// `[ (Type | ConstArg), ... ]` (or `< >`, E0020)
+    /// `[ (Type | ConstArg), ... ]`
     TypeArgs,
     /// `-? Int`
     ConstArg,
@@ -172,18 +170,16 @@ pub enum NodeKind {
     FnTypeParams,
 
     // ------------------------------------------------------------ statements
-    /// `{ statements }`: the statement nodes, the newlines between them and stray `;`.
+    /// `{ statements }`: the statement nodes and the newlines between them.
     Block,
     /// `let Pat (: Type)? = Expr`
     LetStmt,
-    /// `var name (: Type)? = Expr`, or `let mut name ...` (E0020)
+    /// `var name (: Type)? = Expr`
     VarStmt,
     /// `for Pat in move? Expr Block`
     ForStmt,
     /// `while Expr Block`
     WhileStmt,
-    /// `loop Block` (E0020; read as `while true`)
-    LoopStmt,
     BreakStmt,
     ContinueStmt,
     /// `return Expr?`
@@ -198,8 +194,6 @@ pub enum NodeKind {
     // ------------------------------------------------------------ expressions
     /// One literal token: `Int`, `Float`, `Char`, `Str`, `true`, `false`.
     Literal,
-    /// `. Int` (E0020; read as `0.<Int>`)
-    LeadingDotFloat,
     /// `_`
     HoleExpr,
     /// One name token: an identifier, `self`, `Self`.
@@ -232,21 +226,19 @@ pub enum NodeKind {
     MoveExpr,
     /// `Expr (op Expr)+` (a flat chain; groups are checked on the AST)
     BinaryExpr,
-    /// `Expr .. Expr` (or `..=`, E0020)
+    /// `Expr (.. | ..=) Expr`
     RangeExpr,
     /// `Expr as Type`
     CastExpr,
     /// `- Expr`, `! Expr`
     PrefixExpr,
-    /// `& mut? Expr` (E0020; the AST holds the inner expression only)
-    RefExpr,
     /// `Expr (~ | !)? ArgList`
     CallExpr,
     /// `( Arg, ... )`
     ArgList,
     /// `(inout | move)? Expr`
     Arg,
-    /// `Expr . name` (or `::`, E0020)
+    /// `Expr . name`
     FieldExpr,
     /// `Expr . Int`
     TupleIndexExpr,
@@ -294,7 +286,6 @@ impl NodeKind {
             Item => "Item",
             Docs => "Docs",
             Attr => "Attr",
-            HashAttr => "HashAttr",
             AttrArgs => "AttrArgs",
             AttrNamedArg => "AttrNamedArg",
             Vis => "Vis",
@@ -344,7 +335,6 @@ impl NodeKind {
             VarStmt => "VarStmt",
             ForStmt => "ForStmt",
             WhileStmt => "WhileStmt",
-            LoopStmt => "LoopStmt",
             BreakStmt => "BreakStmt",
             ContinueStmt => "ContinueStmt",
             ReturnStmt => "ReturnStmt",
@@ -352,7 +342,6 @@ impl NodeKind {
             AssignStmt => "AssignStmt",
             ExprStmt => "ExprStmt",
             Literal => "Literal",
-            LeadingDotFloat => "LeadingDotFloat",
             HoleExpr => "HoleExpr",
             PathExpr => "PathExpr",
             ParenExpr => "ParenExpr",
@@ -372,7 +361,6 @@ impl NodeKind {
             RangeExpr => "RangeExpr",
             CastExpr => "CastExpr",
             PrefixExpr => "PrefixExpr",
-            RefExpr => "RefExpr",
             CallExpr => "CallExpr",
             ArgList => "ArgList",
             Arg => "Arg",
@@ -727,10 +715,7 @@ impl Cst {
         self.covering_nodes(span).next().unwrap_or(self.root())
     }
 
-    /// The innermost node of `kind` whose span contains `span`. One AST
-    /// shape may come from more than one kind: an AST `Attr` is a CST `Attr`
-    /// (`@x`) or a `HashAttr` (`#[x]`, E0020), so look for both there
-    /// ([`Cst::covering_nodes`] with a set of kinds).
+    /// The innermost node of `kind` whose span contains `span`.
     pub fn covering_node_of(&self, span: Span, kind: NodeKind) -> Option<NodeId> {
         self.covering_nodes(span).find(|&n| self.kind(n) == kind)
     }

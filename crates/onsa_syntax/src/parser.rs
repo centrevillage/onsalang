@@ -15,7 +15,12 @@
 //! whitespace) are placed in the tree by [`crate::cst::build`].
 //!
 //! Errors: the parser reports every diagnostic; the choice of one per unit is
-//! the driver's (`onsa_driver::reduce`, spec §18.1). A parse error is fatal for
+//! the driver's (`onsa_driver::reduce`, spec §18.1). The parser has no branch
+//! for the forms of other languages (`;`, `::`, `<T>`, `&mut`, ...): it fails
+//! at them as at any token it does not accept, and every failure goes through
+//! [`Parser::fail`], which asks the table of those forms ([`crate::foreign`])
+//! what the failure is (an E0020 with the Onsa form, or the general E0002).
+//! A parse error is fatal for
 //! its unit (a top-level item, or a member of an `impl`, `trait`, `effect`,
 //! `handler` or `extern`, S-59): the parser closes the nodes it was in as
 //! incomplete, puts the tokens up to the end of the unit in an `Error` node
@@ -25,6 +30,7 @@ use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Span, Stage};
 
 use crate::ast::Ast;
 use crate::cst::{Cst, Event, NodeKind};
+use crate::foreign::{self, Want};
 use crate::lower::AstMap;
 use crate::token::{Gap, Token, TokenKind};
 
@@ -92,22 +98,6 @@ enum ItemCtx {
     InlineHandler,
 }
 
-const BUILTIN_TYPE_FIXES: &[(&str, &str)] = &[
-    ("i8", "I8"),
-    ("i16", "I16"),
-    ("i32", "I32"),
-    ("i64", "I64"),
-    ("u8", "U8"),
-    ("u16", "U16"),
-    ("u32", "U32"),
-    ("u64", "U64"),
-    ("f32", "F32"),
-    ("f64", "F64"),
-    ("bool", "Bool"),
-    ("usize", "U32"),
-    ("isize", "I32"),
-];
-
 /// An open node. It is closed by [`Parser::complete`]; a syntax error leaves
 /// it open and `parse_file` closes it as incomplete (no check on drop: `?`
 /// drops markers).
@@ -126,7 +116,7 @@ struct Completed {
     event: u32,
     /// Where the node starts (a node that wraps it starts there too).
     start: u32,
-    /// The span of the AST node it gives (for a `RefExpr`, the inner expression).
+    /// The span of the AST node it gives.
     span: Span,
     /// The height of its subtree ([`Parser::height`]).
     height: u32,
@@ -137,6 +127,8 @@ struct Completed {
 #[derive(Debug, Clone, Copy)]
 struct Open {
     event: u32,
+    /// Where it starts (the table of the forms of other languages reads it).
+    start: u32,
     children: u32,
     /// The levels (spec §2.5) from the root of the declaration unit down to
     /// this node, this node included: a child of `height(kind, 0)` levels is
@@ -188,6 +180,10 @@ pub(crate) struct Parser<'a> {
     events: Vec<Event>,
     /// The open nodes, innermost last.
     open: Vec<Open>,
+    /// The nodes closed since the last token was consumed, innermost first,
+    /// and where each starts: what ended right before the next token (the
+    /// table of the forms of other languages reads it at a failure).
+    closed: Vec<(NodeKind, u32)>,
     /// The height of the tree, once the root closed.
     height: u32,
     diagnostics: Vec<Diagnostic>,
@@ -236,6 +232,7 @@ impl<'a> Parser<'a> {
             reported_stop: None,
             events: Vec::new(),
             open: Vec::new(),
+            closed: Vec::new(),
             height: 0,
             lexed: diagnostics.len(),
             lexed_spans: {
@@ -261,7 +258,7 @@ impl<'a> Parser<'a> {
         self.limit(base + Self::height(kind, children), self.peek().span, kind)?;
         let event = self.events.len() as u32;
         self.events.push(Event::Start { kind: Some(kind), forward_parent: None });
-        self.open.push(Open { event, children, level: base + Self::height(kind, 0) });
+        self.open.push(Open { event, start, children, level: base + Self::height(kind, 0) });
         Ok(Marker { event, start })
     }
 
@@ -296,23 +293,23 @@ impl<'a> Parser<'a> {
         use NodeKind::*;
         let level = match kind {
             // The file, the items and their headers: a unit starts from 0.
-            SourceFile | Error | Name | Item | Docs | Attr | HashAttr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-            | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields
-            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
-            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
-            | Param | EffectRow | Path => 0,
+            SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
+            | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
+            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
+            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path => 0,
             // Types: a type with arguments counts at its `[` (the `TypeArgs`), a name none.
             PathType | ConstArg | FnTypeParams => 0,
             TypeArgs | UnitType | TupleType | ArrayType | FnType => 1,
             // Statements are none, the loops one (and their blocks one more).
             LetStmt | VarStmt | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt => 0,
-            ForStmt | WhileStmt | LoopStmt | Block => 1,
+            ForStmt | WhileStmt | Block => 1,
             // Expressions. A binary chain is flat in the tree: its height is
             // the one of the tree of §3.1, one level per operator ([`Chain`]).
-            Literal | LeadingDotFloat | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg
-            | StructLitFields | StructLitField => 0,
+            Literal | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg | StructLitFields
+            | StructLitField => 0,
             ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | IfExpr | MatchExpr | ClosureExpr | HandleExpr
-            | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | PrefixExpr | RefExpr | CallExpr | FieldExpr
+            | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | PrefixExpr | CallExpr | FieldExpr
             | TupleIndexExpr | IndexExpr | TryExpr | StructLit => 1,
             // Patterns: `|` is one level for all its alternatives.
             WildPat | LitPat | NegLitPat | BindPat | PathPat | StructPatField => 0,
@@ -338,7 +335,7 @@ impl<'a> Parser<'a> {
         use crate::lower::Class;
         use NodeKind::*;
         let split = match (kind, crate::lower::class(kind)) {
-            (Block | ForStmt | WhileStmt | LoopStmt, _) => {
+            (Block | ForStmt | WhileStmt, _) => {
                 "move the inner blocks into a function and call it; a function starts again from level 0"
             }
             (TypeArgs | FnTypeParams, _) | (_, Class::Type) => "name an inner part of the type with a `type` alias",
@@ -418,6 +415,7 @@ impl<'a> Parser<'a> {
     fn complete(&mut self, m: Marker, kind: NodeKind) -> Completed {
         debug_assert_eq!(self.open.last().map(|o| o.event), Some(m.event), "nodes close in order");
         let (event, height) = self.finish(Some(kind), true);
+        self.closed.push((kind, m.start));
         Completed { kind, event, start: m.start, span: self.span_from(m.start), height }
     }
 
@@ -522,6 +520,7 @@ impl<'a> Parser<'a> {
         if t.kind != TokenKind::Eof {
             self.pos = i + 1;
             self.last_end = t.span.end;
+            self.closed.clear();
             self.events.push(Event::Token(self.full[i]));
             if is_opening(t.kind) {
                 self.braces.push(i);
@@ -581,25 +580,69 @@ impl<'a> Parser<'a> {
     }
 
     fn unexpected(&mut self, expected: &str) -> ParseError {
-        let t = self.peek();
-        let msg = format!("expected {expected}, found {}", t.kind.describe());
-        self.error(Code::E0002, t.span, msg)
+        self.fail(Want::Other, expected)
+    }
+
+    /// The one entry of the failures of the parser at the next token, where
+    /// it wanted `want` (`expected`, for the message). The table of the forms
+    /// of other languages says first whether the token starts such a form
+    /// ([`foreign::at_failure`]); else, and also when the form is in a place
+    /// where nothing of its kind goes (a literal `1.` among the items), the
+    /// failure is the general E0002 (both are reported; the driver chooses
+    /// one per unit, S-281).
+    fn fail(&mut self, want: Want, expected: &str) -> ParseError {
+        let at = self.peek_index();
+        let t = self.tokens[at];
+        // The number of a literal written with a suffix is checked as any
+        // integer literal (E0408): two errors of one token, of which the
+        // driver reports one.
+        if t.kind == TokenKind::ForeignLit {
+            let number = foreign::number_part(self.token_text(t));
+            if foreign::is_integer(number) && !number.is_empty() && crate::lower::int_value(number).is_none() {
+                self.report(Diagnostic::new(
+                    Stage::Syntax,
+                    Code::E0408,
+                    t.span,
+                    "integer literal is larger than any integer type holds",
+                ));
+            }
+        }
+        let cursor = foreign::Cursor {
+            file: self.file,
+            text: self.text,
+            tokens: &self.tokens,
+            all: &self.all,
+            full: &self.full,
+            holes: &self.holes,
+            at,
+            open: self
+                .open
+                .iter()
+                .map(|o| match self.events[o.event as usize] {
+                    Event::Start { kind: Some(k), .. } => (k, o.start),
+                    _ => (NodeKind::Error, o.start),
+                })
+                .collect(),
+            closed: &self.closed,
+            want,
+            found: std::cell::Cell::new(None),
+        };
+        let general = match foreign::at_failure(&cursor) {
+            Some((d, misplaced)) => {
+                self.report(d);
+                misplaced
+            }
+            None => true,
+        };
+        if general {
+            let msg = format!("expected {expected}, found {}", t.kind.describe());
+            self.error(Code::E0002, t.span, msg);
+        }
+        ParseError
     }
 
     fn expect(&mut self, kind: TokenKind) -> PResult<Token> {
         if self.at(kind) { Ok(self.bump()) } else { Err(self.unexpected(kind.describe())) }
-    }
-
-    /// E0020 with one candidate that replaces `span`, and the note with the
-    /// correct rule (S-114), non-fatal (§18.1). W3-15 moves these into the
-    /// table of `onsa_syntax::foreign`.
-    fn foreign(&mut self, span: Span, message: &str, title: &str, replace: &str, rule: &str) {
-        let found = self.src(span).to_string();
-        let d = Diagnostic::new(Stage::Syntax, Code::E0020, span, message)
-            .with_found(found)
-            .with_fix(Fix::replace(title, span, replace))
-            .with_rule(rule);
-        self.report(d);
     }
 
     /// E0408 when an integer literal does not fit any integer type (the
@@ -624,36 +667,15 @@ impl<'a> Parser<'a> {
             if self.at(TokenKind::Eof) {
                 break; // trailing doc comments without a declaration are dropped
             }
-            if self.at(TokenKind::Semi) {
-                let t = self.bump();
-                self.foreign(
-                    t.span,
-                    "`;` is not used in Onsa; statements end at the newline",
-                    "remove the `;`",
-                    "",
-                    "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
-                );
-                continue;
-            }
             let start = self.peek().span.start;
             let depth = self.open.len();
             let m = self.start_item(doc);
             match self.parse_item(ItemCtx::Top, m) {
                 Ok(item) => {
                     self.levels.push(item.height);
-                    // Terminator: newline, `;` (E0020), or end of file.
+                    // Terminator: newline or end of file.
                     match self.peek_kind() {
                         TokenKind::Newline | TokenKind::Eof => {}
-                        TokenKind::Semi => {
-                            let t = self.bump();
-                            self.foreign(
-                                t.span,
-                                "`;` is not used in Onsa; statements end at the newline",
-                                "remove the `;`",
-                                "",
-                                "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
-                            );
-                        }
                         _ => {
                             // The tokens after the item on its line are of its
                             // unit (`crate::units`, S-274).
@@ -701,8 +723,6 @@ impl<'a> Parser<'a> {
     /// With `line`, the unit is a finished item and the tokens after it on
     /// its line (S-274): the skip also ends at the end of that line, outside
     /// the brackets it opens.
-    // SPEC-GAP(S-280): an unclosed `(` or `[` ends at an item keyword indented
-    // as its line, as a `{` does (§18.1 names the `{` only).
     fn skip_unit(&mut self, unit_start: u32, base: usize, member: bool, line: bool) {
         let mut braces = self.braces.clone();
         let from = self.peek_index();
@@ -884,29 +904,9 @@ impl<'a> Parser<'a> {
     fn parse_attrs(&mut self) -> PResult<usize> {
         let mut n = 0;
         loop {
-            self.skip_newlines_if_followed_by(|k| matches!(k, TokenKind::At | TokenKind::Hash));
+            self.skip_newlines_if_followed_by(|k| k == TokenKind::At);
             if self.at(TokenKind::At) {
                 self.parse_attr()?;
-                n += 1;
-            } else if self.at(TokenKind::Hash) && self.peek2().kind == TokenKind::LBracket {
-                // `#[derive(...)]` → `@derive(...)`
-                let m = self.start(NodeKind::HashAttr)?;
-                let hash = self.bump();
-                self.bump(); // `[`
-                let inner_start = self.peek().span.start;
-                self.with_nl(false, |p| p.parse_attr_body())?;
-                let inner_end = self.last_end;
-                self.expect(TokenKind::RBracket)?;
-                let span = self.span_from(hash.span.start);
-                let fix = format!("@{}", &self.text[inner_start as usize..inner_end as usize]);
-                self.foreign(
-                    span,
-                    "attributes are written `@name(...)`",
-                    "write the attribute with `@`",
-                    &fix,
-                    "an attribute is written `@name(...)` (§6.5)",
-                );
-                self.complete(m, NodeKind::HashAttr);
                 n += 1;
             } else {
                 break;
@@ -964,38 +964,16 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         let m = self.start(NodeKind::Vis)?;
-        let public = self.bump();
+        self.bump();
+        // `pub(pkg)` (S-36: W3-08 makes it E0020 too).
         if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
             self.bump();
             let t = self.peek();
-            let is_crate = self.is_ident(t, "crate");
-            if self.is_ident(t, "pkg") || is_crate {
-                self.bump();
-            } else {
+            if !self.is_ident(t, "pkg") {
                 return Err(self.unexpected("`pkg`"));
             }
-            let close = self.expect(TokenKind::RParen)?;
-            if is_crate {
-                // `pub(crate)` is visibility within the package, the default
-                // (§15.1): the candidate removes it with the spaces after it.
-                // (`pub(pkg)` is E0020 too, S-36: W3-08.)
-                let span = Span::new(self.file, public.span.start, close.span.end);
-                let at = self.all.partition_point(|x| x.span.start < close.span.end);
-                let end = match self.all.get(at) {
-                    Some(w) if w.kind == TokenKind::Whitespace => w.span.end,
-                    _ => close.span.end,
-                };
-                let d = Diagnostic::new(
-                    Stage::Syntax,
-                    Code::E0020,
-                    span,
-                    "`pub(crate)` is visibility within the package, which is the default; remove it",
-                )
-                .with_found(self.src(span).to_string())
-                .with_fix(Fix::delete("remove the visibility", Span::new(self.file, span.start, end)))
-                .with_rule("visibility is `pub` (outside the package), nothing (the package), or `priv` (§15.1)");
-                self.report(d);
-            }
+            self.bump();
+            self.expect(TokenKind::RParen)?;
         }
         self.complete(m, NodeKind::Vis);
         Ok(())
@@ -1008,27 +986,13 @@ impl<'a> Parser<'a> {
         }
         self.parse_vis()?;
         let t = self.peek();
-        // `proc name` is the E0020 spelling of `flow name`: it is placed as a flow.
-        let proc = t.kind == TokenKind::Ident && self.token_text(t) == "proc" && self.peek2().kind == TokenKind::Ident;
-        let keyword = if proc { TokenKind::KwFlow } else { t.kind };
-        if let Some((_, _, places)) = DECLARATIONS.iter().find(|(k, _, _)| *k == keyword)
+        if let Some((_, _, places)) = DECLARATIONS.iter().find(|(k, _, _)| *k == t.kind)
             && !places.contains(&ctx)
         {
             return Err(self.not_a_member(t, ctx));
         }
         if let Some((_, parse, _)) = DECLARATIONS.iter().find(|(k, _, _)| *k == t.kind) {
             parse(self, ctx)?;
-        } else if proc {
-            let d = self.start(NodeKind::Flow)?;
-            self.bump();
-            self.foreign(
-                t.span,
-                "a signal-processing node is declared with `flow`",
-                "write `flow`",
-                "flow",
-                "a stateful signal-processing node is declared with `flow` (§11)",
-            );
-            self.parse_flow_after_keyword(d)?;
         } else {
             return Err(self.unexpected("a declaration"));
         }
@@ -1066,9 +1030,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_flow(&mut self, _: ItemCtx) -> PResult<()> {
-        let d = self.start(NodeKind::Flow)?;
+        let m = self.start(NodeKind::Flow)?;
         self.bump();
-        self.parse_flow_after_keyword(d)
+        self.parse_name("flow name")?;
+        self.parse_params(true)?;
+        self.expect(TokenKind::Arrow)?;
+        self.parse_type()?;
+        self.parse_block_expr()?;
+        self.complete(m, NodeKind::Flow);
+        Ok(())
     }
 
     /// `[rt] fn name[generics](params) [-> T] [uses {..}] [body]`
@@ -1103,16 +1073,6 @@ impl<'a> Parser<'a> {
             }
         }
         self.complete(m, NodeKind::Fn);
-        Ok(())
-    }
-
-    fn parse_flow_after_keyword(&mut self, m: Marker) -> PResult<()> {
-        self.parse_name("flow name")?;
-        self.parse_params(true)?;
-        self.expect(TokenKind::Arrow)?;
-        self.parse_type()?;
-        self.parse_block_expr()?;
-        self.complete(m, NodeKind::Flow);
         Ok(())
     }
 
@@ -1289,16 +1249,7 @@ impl<'a> Parser<'a> {
         let tree = self.start(NodeKind::UseTree)?;
         self.parse_ident("module path")?;
         loop {
-            if self.at(TokenKind::ColonColon) {
-                let t = self.bump();
-                self.foreign(
-                    t.span,
-                    "paths are separated with `.`",
-                    "write `.`",
-                    ".",
-                    "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
-                );
-            } else if self.eat(TokenKind::Dot).is_none() {
+            if self.eat(TokenKind::Dot).is_none() {
                 break;
             }
             if self.at(TokenKind::LBrace) {
@@ -1464,16 +1415,6 @@ impl<'a> Parser<'a> {
                 }
                 match p.peek_kind() {
                     TokenKind::Newline | TokenKind::RBrace => {}
-                    TokenKind::Semi => {
-                        let t = p.bump();
-                        p.foreign(
-                            t.span,
-                            "`;` is not used in Onsa; declarations end at the newline",
-                            "remove the `;`",
-                            "",
-                            "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
-                        );
-                    }
                     _ if ctx == ItemCtx::InlineHandler => return Err(p.unexpected("newline or `}`")),
                     _ => {
                         // The tokens after the member on its line are of its
@@ -1510,25 +1451,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `a.b.c` (also accepts `Self` as a segment). `::` is E0020.
+    /// `a.b.c` (also accepts `Self` as a segment).
     fn parse_path(&mut self, what: &str) -> PResult<PathInfo> {
         let m = self.start(NodeKind::Path)?;
         let first = self.parse_path_segment(what)?;
         let mut last = first;
         let mut segments = 1;
         loop {
-            if self.at(TokenKind::ColonColon) {
-                let t = self.bump();
-                self.foreign(
-                    t.span,
-                    "paths are separated with `.`",
-                    "write `.`",
-                    ".",
-                    "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
-                );
-            } else if self.at(TokenKind::Dot)
-                && (self.peek2().kind == TokenKind::Ident || self.peek2().kind.is_keyword())
-            {
+            if self.at(TokenKind::Dot) && (self.peek2().kind == TokenKind::Ident || self.peek2().kind.is_keyword()) {
                 self.bump();
             } else {
                 break;
@@ -1563,35 +1493,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_generics_opt(&mut self) -> PResult<()> {
-        if self.at(TokenKind::Lt) && !self.peek_gap().is_some() {
-            // `fn f<T>` → `[T]`
-            let m = self.start(NodeKind::GenericParams)?;
-            let lt = self.bump();
-            self.with_nl(false, |p| p.parse_generic_list(TokenKind::Gt))?;
-            let span = self.span_from(lt.span.start);
-            let inner = &self.text[lt.span.end as usize..self.last_end as usize - 1];
-            let fix = format!("[{inner}]");
-            self.foreign(
-                span,
-                "generic parameters are written in `[ ]`",
-                "write the type parameters in `[ ]`",
-                &fix,
-                "type parameters and type arguments are written in `[ ]` (§4.5)",
-            );
-            self.complete(m, NodeKind::GenericParams);
-            return Ok(());
-        }
         if !self.at(TokenKind::LBracket) || self.peek_gap().is_some() {
             return Ok(());
         }
         let m = self.start(NodeKind::GenericParams)?;
         self.bump();
-        self.with_nl(false, |p| p.parse_generic_list(TokenKind::RBracket))?;
+        self.with_nl(false, |p| p.parse_generic_list())?;
         self.complete(m, NodeKind::GenericParams);
         Ok(())
     }
 
-    fn parse_generic_list(&mut self, close: TokenKind) -> PResult<()> {
+    fn parse_generic_list(&mut self) -> PResult<()> {
+        let close = TokenKind::RBracket;
         while !self.at(close) {
             let m = self.start(NodeKind::TypeParam)?;
             if self.eat(TokenKind::KwConst).is_some() {
@@ -1636,19 +1549,6 @@ impl<'a> Parser<'a> {
                 p.parse_attrs()?;
                 p.parse_mode();
                 let t = p.peek();
-                // `mut self` → `inout self`
-                if p.is_ident(t, "mut") && p.peek2().kind == TokenKind::KwSelf {
-                    p.bump();
-                    let span = p.span_from(t.span.start).to(p.peek().span);
-                    p.foreign(
-                        span,
-                        "a receiver that changes is written `inout self`",
-                        "write `inout self`",
-                        "inout self",
-                        "the mode comes before the name; a receiver that changes is `inout self` (§5.2)",
-                    );
-                }
-                let t = p.peek();
                 let is_self = match t.kind {
                     TokenKind::KwSelf | TokenKind::Underscore => {
                         let n = p.start(NodeKind::Name)?;
@@ -1660,7 +1560,6 @@ impl<'a> Parser<'a> {
                         p.parse_name("parameter name")?;
                         false
                     }
-                    TokenKind::Amp => return Err(p.borrow_param_error()),
                     _ => return Err(p.unexpected("a parameter name")),
                 };
                 if p.eat(TokenKind::Colon).is_some() {
@@ -1678,30 +1577,6 @@ impl<'a> Parser<'a> {
         })?;
         self.complete(m, NodeKind::ParamList);
         Ok(())
-    }
-
-    /// `&mut x` / `&x` from Rust (E0020): the mode goes before the name (§5.2).
-    fn borrow_param_error(&mut self) -> ParseError {
-        let t = self.peek();
-        let is_mut = self.tokens.get(self.peek_index() + 1).is_some_and(|n| {
-            n.kind == TokenKind::Ident && &self.text[n.span.start as usize..n.span.end as usize] == "mut"
-        });
-        let (span, msg) = if is_mut {
-            let end = self.tokens[self.peek_index() + 1].span.end;
-            (
-                Span::new(t.span.file, t.span.start, end),
-                "`&mut T` is written as `inout name: T`; the mode comes before the name (§5.2)",
-            )
-        } else {
-            (t.span, "`&T` is the default borrow; write `name: T` (§5.2)")
-        };
-        let found = self.text[span.start as usize..span.end as usize].to_string();
-        let d = Diagnostic::new(Stage::Syntax, Code::E0020, span, msg)
-            .with_found(found)
-            .with_fix(Fix::delete("remove the reference mark", span))
-            .with_rule("there are no references; an argument is borrowed by default and changed with `inout` before the name (§5.2)");
-        self.diagnostics.push(d);
-        ParseError
     }
 
     fn parse_mode(&mut self) {
@@ -1806,48 +1681,29 @@ impl<'a> Parser<'a> {
             TokenKind::Ident | TokenKind::KwSelfType => {
                 let m = self.start(NodeKind::PathType)?;
                 let path = self.parse_path("a type")?;
-                if path.segments == 1 {
-                    let name = self.token_text(path.first);
-                    if let Some((_, fix)) = BUILTIN_TYPE_FIXES.iter().find(|(from, _)| *from == name) {
-                        self.foreign(
-                            path.first.span,
-                            "built-in types are written in UpperCamel (`I32`, `F32`, `Bool`)",
-                            "write the built-in type name",
-                            fix,
-                            "type names are UpperCamel, the built-in ones too (`I32`, `F32`, `Bool`, §2.3)",
-                        );
-                    }
+                // A type name of another language that reads as a name (`i32`):
+                // the one form the parser does not fail at by itself.
+                if path.segments == 1
+                    && let Some(d) = foreign::type_name(self.text, path.first)
+                {
+                    self.report(d);
+                    return Err(ParseError);
                 }
                 if self.at(TokenKind::LBracket) && !self.peek_gap().is_some() {
                     let a = self.start(NodeKind::TypeArgs)?;
                     self.bump();
-                    nargs = self.with_nl(false, |p| p.parse_type_args(TokenKind::RBracket))?;
-                    self.complete(a, NodeKind::TypeArgs);
-                } else if self.at(TokenKind::Lt) && !self.peek_gap().is_some() {
-                    let a = self.start(NodeKind::TypeArgs)?;
-                    let lt = self.bump();
-                    nargs = self.with_nl(false, |p| p.parse_type_args(TokenKind::Gt))?;
-                    let span = self.span_from(lt.span.start);
-                    let inner = &self.text[lt.span.end as usize..self.last_end as usize - 1];
-                    let fix = format!("[{inner}]");
-                    self.foreign(
-                        span,
-                        "type arguments are written in `[ ]`",
-                        "write the type arguments in `[ ]`",
-                        &fix,
-                        "type parameters and type arguments are written in `[ ]` (§4.5)",
-                    );
+                    nargs = self.with_nl(false, |p| p.parse_type_args())?;
                     self.complete(a, NodeKind::TypeArgs);
                 }
                 self.complete(m, NodeKind::PathType)
             }
-            TokenKind::Amp => return Err(self.borrow_param_error()),
-            _ => return Err(self.unexpected("a type")),
+            _ => return Err(self.fail(Want::Type, "a type")),
         };
         Ok((c, nargs))
     }
 
-    fn parse_type_args(&mut self, close: TokenKind) -> PResult<usize> {
+    fn parse_type_args(&mut self) -> PResult<usize> {
+        let close = TokenKind::RBracket;
         let mut n = 0;
         while !self.at(close) {
             self.parse_type_arg()?;
@@ -1900,16 +1756,6 @@ impl<'a> Parser<'a> {
             self.parse_stmt()?;
             match self.peek_kind() {
                 TokenKind::Newline | TokenKind::RBrace => {}
-                TokenKind::Semi => {
-                    let t = self.bump();
-                    self.foreign(
-                        t.span,
-                        "`;` is not used in Onsa; statements end at the newline",
-                        "remove the `;`",
-                        "",
-                        "a statement or declaration ends at the end of its line; there is no `;` (§2.5)",
-                    );
-                }
                 TokenKind::DotDot | TokenKind::DotDotEq => {
                     let t = self.peek();
                     return Err(self.error(
@@ -1931,19 +1777,6 @@ impl<'a> Parser<'a> {
             TokenKind::KwLet => {
                 let m = self.start(NodeKind::LetStmt)?;
                 self.bump();
-                let mt = self.peek();
-                if self.is_ident(mt, "mut") {
-                    self.bump();
-                    let span = t.span.to(mt.span);
-                    self.foreign(
-                        span,
-                        "a mutable local is declared with `var`",
-                        "write `var`",
-                        "var",
-                        "`let` binds a value that does not change; a local that changes is declared with `var` (§5.1)",
-                    );
-                    return self.parse_var_rest(m);
-                }
                 self.parse_pattern()?;
                 if self.eat(TokenKind::Colon).is_some() {
                     self.parse_type()?;
@@ -1980,19 +1813,6 @@ impl<'a> Parser<'a> {
                 self.parse_block_expr()?;
                 Ok(self.complete(m, NodeKind::WhileStmt))
             }
-            TokenKind::Ident if self.token_text(t) == "loop" && self.peek2().kind == TokenKind::LBrace => {
-                let m = self.start(NodeKind::LoopStmt)?;
-                self.bump();
-                self.foreign(
-                    t.span,
-                    "there is no `loop`; write `while true`",
-                    "write `while true`",
-                    "while true",
-                    "the loops are `while` and `for`; an endless loop is `while true` (§7)",
-                );
-                self.parse_block_expr()?;
-                Ok(self.complete(m, NodeKind::LoopStmt))
-            }
             TokenKind::KwBreak => {
                 let m = self.start(NodeKind::BreakStmt)?;
                 self.bump();
@@ -2006,10 +1826,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwReturn => {
                 let m = self.start(NodeKind::ReturnStmt)?;
                 self.bump();
-                if !matches!(
-                    self.peek_kind(),
-                    TokenKind::Newline | TokenKind::RBrace | TokenKind::Eof | TokenKind::Semi
-                ) {
+                if !matches!(self.peek_kind(), TokenKind::Newline | TokenKind::RBrace | TokenKind::Eof) {
                     self.parse_expr()?;
                 }
                 Ok(self.complete(m, NodeKind::ReturnStmt))
@@ -2156,30 +1973,6 @@ impl<'a> Parser<'a> {
             self.parse_prefix()?;
             return Ok(self.complete(m, NodeKind::PrefixExpr));
         }
-        if t.kind == TokenKind::Amp {
-            // `&mut x` / `&x` in argument position → `inout x` / `x`. The AST
-            // has no node for it: the `RefExpr` node gives the inner expression.
-            let m = self.start(NodeKind::RefExpr)?;
-            self.bump();
-            let mt = self.peek();
-            let is_mut = self.is_ident(mt, "mut");
-            if is_mut {
-                self.bump();
-            }
-            let inner = self.parse_prefix()?;
-            let span = self.span_from(t.span.start);
-            let inner_src = self.src(inner.span);
-            let fix = if is_mut { format!("inout {inner_src}") } else { inner_src.to_string() };
-            self.foreign(
-                span,
-                "there are no references; arguments are borrowed by default and changed with `inout`",
-                "write the argument without `&`",
-                &fix,
-                "there are no references; an argument is borrowed by default and changed with `inout` (§5.2)",
-            );
-            let c = self.complete(m, NodeKind::RefExpr);
-            return Ok(Completed { span: inner.span, ..c });
-        }
         self.parse_postfix()
     }
 
@@ -2214,25 +2007,7 @@ impl<'a> Parser<'a> {
                     chain = None;
                 }
                 TokenKind::Tilde => {
-                    return Err(self.error(
-                        Code::E0002,
-                        t.span,
-                        "`~` is only the flow-call mark `name~(args)`, written without spaces (§2.6)",
-                    ));
-                }
-                TokenKind::ColonColon => {
-                    let m = self.precede(expr, NodeKind::FieldExpr)?;
-                    self.bump();
-                    self.foreign(
-                        t.span,
-                        "paths are separated with `.`",
-                        "write `.`",
-                        ".",
-                        "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
-                    );
-                    let name = self.parse_ident("a name after `::`")?;
-                    expr = self.complete(m, NodeKind::FieldExpr);
-                    chain = chain.map(|_| name);
+                    return Err(self.fail(Want::Other, "the flow-call mark `name~(args)`, written without spaces"));
                 }
                 TokenKind::Dot => {
                     let m = self.precede(expr, NodeKind::FieldExpr)?;
@@ -2469,24 +2244,7 @@ impl<'a> Parser<'a> {
                 self.parse_block_expr()?;
                 return Ok(self.complete(m, NodeKind::ParExpr));
             }
-            TokenKind::Dot if self.peek2().kind == TokenKind::Int && !self.gap(self.peek2_index()).is_some() => {
-                // `.5` → `0.5`
-                let m = self.start(NodeKind::LeadingDotFloat)?;
-                let start = t.span.start;
-                self.bump();
-                let n = self.bump();
-                let span = self.span_from(start);
-                let fix = format!("0.{}", self.token_text(n));
-                self.foreign(
-                    span,
-                    "a float literal needs digits on both sides of the point",
-                    "add the `0` before the point",
-                    &fix,
-                    "a float literal with a point has digits on both sides of it (`1.0`, `0.5`, §2.4)",
-                );
-                return Ok(self.complete(m, NodeKind::LeadingDotFloat));
-            }
-            _ => return Err(self.unexpected("an expression")),
+            _ => return Err(self.fail(Want::Expr, "an expression")),
         };
         let m = self.start(kind)?;
         let t = self.bump();
@@ -2696,13 +2454,6 @@ impl<'a> Parser<'a> {
                 self.check_int(t);
                 return Ok(self.complete(m, NodeKind::LitPat));
             }
-            TokenKind::Float | TokenKind::Minus => {
-                return Err(self.error(
-                    Code::E0002,
-                    t.span,
-                    "float literals cannot be patterns; compare in a guard (§7)",
-                ));
-            }
             TokenKind::Char | TokenKind::Str | TokenKind::KwTrue | TokenKind::KwFalse => NodeKind::LitPat,
             TokenKind::LParen => {
                 let m = self.start(NodeKind::TuplePat)?;
@@ -2770,7 +2521,7 @@ impl<'a> Parser<'a> {
                     path.segments == 1 && self.token_text(path.first).starts_with(|c: char| c.is_ascii_lowercase());
                 return Ok(self.complete(m, if bind { NodeKind::BindPat } else { NodeKind::PathPat }));
             }
-            _ => return Err(self.unexpected("a pattern")),
+            _ => return Err(self.fail(Want::Pattern, "a pattern")),
         };
         let m = self.start(kind)?;
         self.bump();
@@ -2902,6 +2653,10 @@ fn close_bracket(open: &mut Vec<usize>, tokens: &[Token], kind: TokenKind, base:
 fn is_item_start(kind: TokenKind) -> bool {
     DECLARATIONS.iter().any(|(k, _, _)| *k == kind)
         || matches!(kind, TokenKind::KwPub | TokenKind::At | TokenKind::DocComment)
+        // An attribute of another language, `#[x]` (the table of those forms).
+        // SPEC-GAP(S-321): `#` starts an item for the recovery, as `@` does
+        // (§18.1 names the keywords and `pub`), until S-321.
+        || kind == TokenKind::Hash
 }
 
 #[cfg(test)]
@@ -2950,15 +2705,6 @@ mod tests {
         let after = fixed(after_brace);
         assert!(parse(&after).diagnostics.is_empty(), "{:?}", parse(&after).diagnostics);
         assert!(parse(&fixed(own_line)).diagnostics.is_empty());
-    }
-
-    fn fixes(src: &str) -> Vec<String> {
-        parse(src)
-            .diagnostics
-            .iter()
-            .flat_map(|d| d.fixes.iter())
-            .map(|f| f.edits().iter().map(|e| e.replace.as_str()).collect::<Vec<_>>().join("|"))
-            .collect()
     }
 
     /// Dump of the body of `fn f() { <src> }`.
@@ -3182,24 +2928,13 @@ mod tests {
     }
 
     #[test]
-    fn foreign_forms() {
-        assert_eq!(
-            (codes("fn f() {\n  let x = 1;\n}"), fixes("fn f() {\n  let x = 1;\n}")),
-            (vec![Code::E0020], vec!["".to_string()])
-        );
-        assert_eq!(fixes("fn f() {\n  std::math::exp(x)\n}"), vec![".".to_string(), ".".to_string()]);
-        assert_eq!(fixes("fn f(x: Vec<T>) { }"), vec!["[T]".to_string()]);
-        assert_eq!(fixes("fn f() {\n  g(&mut x)\n}"), vec!["inout x".to_string()]);
-        assert_eq!(fixes("fn f() {\n  g(&x)\n}"), vec!["x".to_string()]);
-        assert_eq!(fixes("fn f() {\n  let mut x = 1\n}"), vec!["var".to_string()]);
-        assert!(dump(&parse("fn f() {\n  let mut x = 1\n}").ast).contains("(var x = 1)"));
-        assert_eq!(fixes("fn f() {\n  loop { }\n}"), vec!["while true".to_string()]);
-        assert_eq!(fixes("fn f(x: i32) -> usize { x }"), vec!["I32".to_string(), "U32".to_string()]);
-        assert_eq!(fixes("#[derive(PartialEq)]\nstruct A { }"), vec!["@derive(PartialEq)".to_string()]);
-        assert_eq!(fixes("proc f(x: Sig[F32]) -> Sig[F32] { x }"), vec!["flow".to_string()]);
-        assert_eq!(fixes("impl A {\n  fn f(mut self) { }\n}"), vec!["inout self".to_string()]);
-        assert_eq!(fixes("fn f<T>(x: T) { }"), vec!["[T]".to_string()]);
-        assert_eq!(fixes("fn f() {\n  let y = .5\n}"), vec!["0.5".to_string()]);
+    fn a_form_of_another_language_fails_its_unit() {
+        // R-87 (4): the first form stops the unit (the table of the forms,
+        // `crate::foreign`, makes the diagnostic); the next unit is read.
+        let p = parse("fn f() {\n  let x = 1;\n  let y = 2;\n}\nfn g(x: i32, y: i32) { }\nfn h() { }\n");
+        assert_eq!(codes_of(&p), [Code::E0020, Code::E0020]);
+        let d = dump(&p.ast);
+        assert!(d.contains("(failed:body fn f()") && d.contains("(fn h()"), "{d}");
         assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0002]);
     }
 

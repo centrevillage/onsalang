@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// Consecutive `;` are one syntactic form (§18.1, S-248): one diagnostic, and one candidate that
+// removes all of them (one edit for each `;` token). After the candidate the unit has no `;`.
+
+pub fn two() -> I32 {
+  let a = 1                                         //~ E0020
+  a
+}
+
+pub fn three() -> I32 {
+  let a = 1                                         //~ E0020
+  a
+}
+
+pub fn after_an_item() -> I32 {
+  1
+}                                                   //~ E0020
+
+pub fn fine() -> I32 {
+  let zeros = [0; 4]
+  zeros[0]
+}

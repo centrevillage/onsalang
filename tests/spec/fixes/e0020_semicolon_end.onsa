@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a `;` (§2.5, §18.1): a statement or an item ends at the newline, and Onsa has no `;`.
+// The candidate removes it. Here nothing but a comment follows the `;` on its line, so removing
+// it is the whole fix. A `;` in `[e; N]` and `[T; N]` is part of the syntax and is not reported.
+// (A `;` after a top-level item is in e0020_semicolon_items.onsa.)
+
+pub fn after_a_let(x: I32) -> I32 {
+  let y = x;                                        //~ E0020
+  y
+}
+
+pub fn after_a_return(x: I32) -> I32 {
+  return x;                                         //~ E0020
+}
+
+pub fn in_nested_blocks(xs: [I32; 4]) -> I32 {
+  var total = 0
+  for x in xs {
+    if x > 1 {
+      total = total + x;                            //~ E0020
+    }
+  }
+  total
+}
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn bump(inout self) {
+    self.n = self.n + 1;                            //~ E0020
+  }
+}
+
+pub fn in_a_match_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => {
+      let w = v;                                    //~ E0020
+      w
+    },
+    None => 0,
+  }
+}
+
+pub fn fine(xs: [I32; 4]) -> I32 {
+  let zeros = [0; 4]
+  xs[0] + zeros[1]
+}

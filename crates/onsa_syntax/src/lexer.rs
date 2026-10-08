@@ -1,7 +1,10 @@
 //! Lexer (spec §2). Never stops: invalid input yields `Error` tokens and
-//! E0001 / E0020 diagnostics, and lexing continues.
+//! E0001 diagnostics, and lexing continues. A form of another language
+//! (a block comment, `1.`, `1u8`, `++`, `::`, ...) is a token of its own and
+//! no diagnostic here: the parser accepts it nowhere, and the table of those
+//! forms ([`crate::foreign`]) says what the failure is (E0020 or E0002).
 
-use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
 use crate::token::{Token, TokenKind};
 
@@ -92,27 +95,28 @@ impl<'a> Lexer<'a> {
         self.push(if doc { TokenKind::DocComment } else { TokenKind::Comment }, start);
     }
 
+    /// There are no block comments (§2.1): `/* ... */` is one token, over
+    /// lines, to the `*/` that closes it (a `/*` inside opens one more, so a
+    /// nested comment is one token too), or to the end of the file. The
+    /// table of the forms of other languages reads it.
     fn block_comment(&mut self, start: usize) {
-        // No block comments (§2.1). Consume to `*/` or end of line so the rest lexes sanely.
         self.pos += 2;
+        let mut depth = 1;
         while let Some(b) = self.peek() {
             if b == b'*' && self.peek_at(1) == Some(b'/') {
                 self.pos += 2;
-                break;
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            } else if b == b'/' && self.peek_at(1) == Some(b'*') {
+                self.pos += 2;
+                depth += 1;
+            } else {
+                self.pos += 1;
             }
-            if b == b'\n' {
-                break;
-            }
-            self.pos += 1;
         }
-        let span = self.span(start);
-        let inner = self.text[start..self.pos].trim_start_matches("/*").trim_end_matches("*/").trim();
-        let d = Diagnostic::new(Stage::Syntax, Code::E0020, span, "Onsa has no block comments; use `//` line comments")
-            .with_found(self.text[start..self.pos].to_string())
-            .with_fix(Fix::replace("write a line comment", span, format!("// {inner}")))
-            .with_rule("comments are line comments `//`, to the end of the line (§2.1)");
-        self.out.diagnostics.push(d);
-        self.push(TokenKind::Comment, start);
+        self.push(TokenKind::BlockComment, start);
     }
 
     fn ident(&mut self, start: usize) {
@@ -150,8 +154,8 @@ impl<'a> Lexer<'a> {
                 let span = self.span(start);
                 self.error(Code::E0001, span, "number prefix without digits");
             }
-            self.trailing_ident_check(start);
-            self.push(TokenKind::Int, start);
+            let kind = if self.suffix() { TokenKind::ForeignLit } else { TokenKind::Int };
+            self.push(kind, start);
             return;
         }
         self.digits(|b| b.is_ascii_digit() || b == b'_');
@@ -167,21 +171,9 @@ impl<'a> Lexer<'a> {
                 Some(b'.') => {}
                 Some(b) if is_ident_start(b) => {}
                 _ => {
-                    // `1.` : E0020 with fix `1.0`
+                    // `1.`: a form of another language.
                     self.pos += 1;
-                    let span = self.span(start);
-                    let fix = format!("{}0", &self.text[start..self.pos]);
-                    let d = Diagnostic::new(
-                        Stage::Syntax,
-                        Code::E0020,
-                        span,
-                        "a float literal needs digits on both sides of the point",
-                    )
-                    .with_found(self.text[start..self.pos].to_string())
-                    .with_fix(Fix::replace("add the `0` after the point", span, fix))
-                    .with_rule("a float literal with a point has digits on both sides of it (`1.0`, `0.5`, §2.4)");
-                    self.out.diagnostics.push(d);
-                    self.push(TokenKind::Float, start);
+                    self.push(TokenKind::ForeignLit, start);
                     return;
                 }
             }
@@ -198,30 +190,35 @@ impl<'a> Lexer<'a> {
                 float = true;
             }
         }
-        self.trailing_ident_check(start);
-        self.push(if float { TokenKind::Float } else { TokenKind::Int }, start);
+        let kind = if self.suffix() {
+            TokenKind::ForeignLit
+        } else if float {
+            TokenKind::Float
+        } else {
+            TokenKind::Int
+        };
+        self.push(kind, start);
     }
 
-    /// `123abc`, `1.0f32`: a suffix is never valid (no typed literals, §2.4).
-    fn trailing_ident_check(&mut self, start: usize) {
-        if self.peek().is_some_and(is_ident_start) {
-            let suffix_start = self.pos;
-            while self.peek().is_some_and(is_ident_continue) {
-                self.pos += 1;
-            }
-            let span = self.span(start);
-            let number = self.text[start..suffix_start].to_string();
-            let d = Diagnostic::new(
-                Stage::Syntax,
-                Code::E0020,
-                span,
-                "literals have no type suffix; the type comes from the context",
-            )
-            .with_found(self.text[start..self.pos].to_string())
-            .with_fix(Fix::replace("remove the type suffix", span, number))
-            .with_rule("a literal has no type suffix; its type comes from the context or an annotation (§2.4)");
-            self.out.diagnostics.push(d);
+    /// `1u8`, `1.0f32`: a suffix is never valid (no typed literals, §2.4).
+    /// The letters after the digits are read into the number, which is then
+    /// a form of another language (`ForeignLit`) when the table of those
+    /// forms knows the suffix ([`crate::foreign::is_type_suffix`]), and
+    /// E0001 when it does not (`123abc`).
+    fn suffix(&mut self) -> bool {
+        if !self.peek().is_some_and(is_ident_start) {
+            return false;
         }
+        let start = self.pos;
+        while self.peek().is_some_and(is_ident_continue) {
+            self.pos += 1;
+        }
+        if crate::foreign::is_type_suffix(&self.text[start..self.pos]) {
+            return true;
+        }
+        let span = Span::new(self.file, start as u32, self.pos as u32);
+        self.error(Code::E0001, span, "a number has no suffix");
+        false
     }
 
     fn digits(&mut self, ok: impl Fn(u8) -> bool) -> usize {
@@ -391,6 +388,11 @@ impl<'a> Lexer<'a> {
             (b'-', Some(b'|'), _) => (MinusPipe, 2),
             (b'*', Some(b'|'), _) => (StarPipe, 2),
             (b'-', Some(b'>'), _) => (Arrow, 2),
+            // Increments of other languages, written without a space (S-250).
+            // SPEC-GAP(S-320): `a--b` and `5--3` (a binary `-` and a prefix one)
+            // read as `--` too, until S-320.
+            (b'+', Some(b'+'), _) => (PlusPlus, 2),
+            (b'-', Some(b'-'), _) => (MinusMinus, 2),
             (b'=', Some(b'>'), _) => (FatArrow, 2),
             (b'=', Some(b'='), _) => (EqEq, 2),
             (b'!', Some(b'='), _) => (NotEq, 2),
@@ -485,10 +487,10 @@ mod tests {
         assert_eq!(kinds("0..n").0, vec![Int, DotDot, Ident, Eof]);
         assert_eq!(kinds("t.0.1").0, vec![Ident, Dot, Int, Dot, Int, Eof]);
         assert_eq!(kinds("1.abs()").0, vec![Int, Dot, Ident, LParen, RParen, Eof]);
-        let (k, d) = kinds("1.");
-        assert_eq!((k, d), (vec![Float, Eof], vec![Code::E0020]));
-        let (k, d) = kinds("1.0f32");
-        assert_eq!((k, d), (vec![Float, Eof], vec![Code::E0020]));
+        // Forms of other languages are tokens without a diagnostic here.
+        assert_eq!(kinds("1."), (vec![ForeignLit, Eof], vec![]));
+        assert_eq!(kinds("1.0f32 1u8 0xFFu8"), (vec![ForeignLit, ForeignLit, ForeignLit, Eof], vec![]));
+        assert_eq!(kinds("1.)").0, vec![ForeignLit, RParen, Eof]);
         assert_eq!(kinds("0x").1, vec![Code::E0001]);
     }
 
@@ -523,7 +525,26 @@ mod tests {
         let (k, d) = kinds("// c\n/// doc\nfn\n");
         assert_eq!(k, vec![Comment, Newline, DocComment, Newline, KwFn, Newline, Eof]);
         assert!(d.is_empty());
-        assert_eq!(kinds("/* x */ a").1, vec![Code::E0020]);
+    }
+
+    #[test]
+    fn block_comments_are_one_token_over_lines() {
+        assert_eq!(kinds("/* x */ a"), (vec![BlockComment, Ident, Eof], vec![]));
+        assert_eq!(kinds("a /* x\ny */ b").0, vec![Ident, BlockComment, Ident, Eof]);
+        // Nested: one token to the `*/` that closes the first `/*`.
+        assert_eq!(kinds("/* a /* b */ c */ d").0, vec![BlockComment, Ident, Eof]);
+        // Never closed: to the end of the file.
+        assert_eq!(kinds("a /* b\nc").0, vec![Ident, BlockComment, Eof]);
+        assert_eq!(kinds("/**/ /** d */ /*! m */").0, vec![BlockComment, BlockComment, BlockComment, Eof]);
+    }
+
+    #[test]
+    fn increments_are_one_token_without_a_space() {
+        assert_eq!(
+            kinds("++x x-- - -x ---x").0,
+            vec![PlusPlus, Ident, Ident, MinusMinus, Minus, Minus, Ident, MinusMinus, Minus, Ident, Eof]
+        );
+        assert_eq!(kinds("a->b a-%b").0, vec![Ident, Arrow, Ident, Ident, MinusPercent, Ident, Eof]);
     }
 
     #[test]

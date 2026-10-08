@@ -1,0 +1,21 @@
+pub enum Stage {
+  Attack,
+  Decay,
+}
+
+pub fn helper(x: I32) -> I32 {                      //~ E0020
+  x
+}
+
+pub fn lowered(x: I32) -> I32 {
+  x
+}
+
+pub struct Holder[T] {                              //~ E0020
+  value: T,
+}
+
+pub fn other(x: I32) -> I32 {
+  let y = x                                         //~ E0020
+  y
+}

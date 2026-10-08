@@ -555,6 +555,18 @@ class PendingList(TempRepo):
         self.assertOneError(entry("test-case", "tests/spec/nope.onsa"), "does not exist")
         self.assertOneError(entry("fix-contract", "tests/spec/nope.onsa:1:1 E0010 fix1"), "does not exist")
 
+    def test_foreign_form(self):
+        # a row of docs/foreign-forms.toml by its id (S-250, W3-15)
+        self.assertOneError(entry("foreign-form", "semicolon"), "`docs/foreign-forms.toml` does not exist")
+        self.repo.write("docs/foreign-forms.toml", '[[form]]\nid = "semicolon"\n\n[[form]]\nid = "let_mut"\n')
+        self.assertEqual(self.errors_of(entry("foreign-form", "semicolon") + entry("foreign-form", "let_mut")), [])
+        self.assertOneError(entry("foreign-form", "loop"), "is not the `id` of a row of `docs/foreign-forms.toml`")
+        for bad in ("Semicolon", "semi colon", "semi-colon", "_semicolon", "semicolon_", "semi__colon", "1st"):
+            with self.subTest(target=bad):
+                self.assertOneError(entry("foreign-form", bad), "not of the foreign-form form")
+        self.repo.write("docs/foreign-forms.toml", "[[form]\n")
+        self.assertOneError(entry("foreign-form", "semicolon"), "is not TOML")
+
     def test_fix_contract_form(self):
         # one candidate: "<file>:<line>:<col> <code> fix<K>" (W3-17)
         for bad in (

@@ -173,7 +173,7 @@ fn compared(text: &str) -> Vec<Compared<'_>> {
 }
 
 /// Where `actual` first differs from `expected` (the width of whitespace aside).
-fn first_difference(expected: &str, actual: &str) -> Option<String> {
+pub(crate) fn first_difference(expected: &str, actual: &str) -> Option<String> {
     let (e, a) = (compared(expected), compared(actual));
     let token = |t: Option<&Compared>| match t {
         Some((_, TokenKind::Newline, _, line)) => format!("a newline (line {line})"),

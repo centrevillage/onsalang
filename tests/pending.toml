@@ -4,7 +4,8 @@
 # 一覧から外すよう促す。意味はどの種類も同じ。外す作業は、対象を通したときに項目を消す。
 #
 # 項目は [[pending]] の表で、次の欄は全て必須（expect、rows、digest のほかの欄は書けない）:
-#   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input" | "fix-contract"
+#   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input" | "fix-contract" |
+#            "foreign-form"
 #   target   対象の識別子（形は種類ごと。下）
 #   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）。until = "P2" の項目に
 #            限り、仕様の節（"§20" の形。仕様の番号付きの見出しにあるもの）も書ける。第 1 期の範囲は
@@ -104,15 +105,20 @@
 #                 <コード> fix<K>"（"tests/spec/negative/types.onsa:60:3 E0411 fix1"）。事例の check が報告した
 #                 その位置・そのコードの診断の K 番目の候補（照合はテストの実行器、onsa_tests::fix_contract と
 #                 onsa_tests::run::reconcile。W3-17）。実行器は mode が check か test の全ての事例の全ての診断の
-#                 全ての候補を一つずつ当て、事例と同じ入口で検査し直す。編集が触れた単位（当てた後の単位の表で、
-#                 置き換えの範囲と両端を含めて重なるもの。メンバを持つ項目はメンバの外だけ）に、元の診断と同じ段
-#                 以前の診断が残れば違反（元の診断の単位は加えない、S-266。後の段の診断は見ない）。既定は「報告
-#                 された診断はその単位の唯一の誤り」で、残ってよい診断は断片の [[test.fix]] の leaves に書く
-#                 （計画 D-05）。項目が黙らせるのはその候補の違反（leaves・clean・same_code の食い違いを含む）
+#                 全ての候補を一つずつ当て、事例と同じ入口で検査し直す。触れた単位（S-302: 当てる前の単位のうち、
+#                 編集も中への挿入も無く、ずらした同じ範囲が当てた後も単位であるもの以外の、当てた後の全ての単位。
+#                 メンバを持つ項目はメンバの外で数える）に、元の診断と同じ段以前の診断が残れば違反（元の診断の
+#                 単位は加えない、S-266。後の段の診断は見ない）。編集の範囲の外の字句の読みが変われば違反（S-302）。
+#                 既定は「報告された診断は触れた単位の唯一の誤り」で、残ってよい診断は断片の [[test.fix]] の
+#                 leaves に書く（計画 D-05、S-314）。項目が黙らせるのはその候補の違反（leaves・clean・same_code の食い違いを含む）
 #                 だけで、事例の全体の test-case の項目では黙らない。指す候補が無い項目と、約束を満たした候補を
 #                 指す項目は失敗。確かめられない候補（事例の外のファイルを編集する、当てられない、検査し直すと
 #                 内部エラー、降下・ビルド・onsa test・マニフェストの段の候補）は、この一覧で黙らせられない。
 #                 確かめた候補が全体で 0 件なら失敗
+#   foreign-form  既存言語の書き方の閉じた一覧 docs/foreign-forms.toml（S-250）の、例がまだ通らない行: 行の id
+#                 （"at_binding"）。照合は onsa_tests::foreign_forms（W3-15）: 一覧の各行の例を事例と同じ入口で
+#                 検査し、行のコードが行の段で例の位置に出ること、fixed と property、全ての候補の約束を確かめる。
+#                 載っていて通る行と、ファイルに無い id は失敗
 # until が完了の印（✅）の付いた作業を指す項目は失敗にする（外すか until を改める）。
 
 # --- 仕様の例（tests/spec の写しが古い形のまま。C-63、C-72、計画 §6）
@@ -1430,13 +1436,6 @@ note = "[a, b]（長さの違う Span）が [Span[F32]; 2] の引数で E0401、
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_old_forms.onsa"
-reasons = ["R-87"]
-until = "W3-15"
-note = "&mut の候補がモードを失う（W3-15 で直す）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_literals.onsa"
 reasons = ["S-62", "R-73"]
 until = "W3-05"
@@ -2314,20 +2313,6 @@ note = "旧い群の規則で一つの単位に E0010 が複数ある"
 
 [[pending]]
 kind = "fix-contract"
-target = "tests/spec/negative/syntax_foreign.onsa:62:3 E0020 fix1"
-reasons = ["S-247", "S-236"]
-until = "W3-15"
-note = "ブロックコメントの候補（// に置き換える）が後ろの 1 をコメントに入れる（same_code を破る）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/syntax_prefix.onsa:42:3 E0012 fix1"
-reasons = ["S-248", "S-236"]
-until = "W3-15"
-note = "---x の候補 -(--x) の後に内側の --x の E0012 が残る（続いた前置の演算子を一つの形として直すか、--x を増減として拾う W3-15 の読みで決める）"
-
-[[pending]]
-kind = "fix-contract"
 target = "tests/spec/fixes/e0020_flow_forms.onsa:14:5 E0020 fix1"
 reasons = ["S-102", "S-236"]
 until = "W3-10"
@@ -2426,28 +2411,7 @@ reasons = ["S-101", "S-236"]
 until = "W7-04"
 note = "fix-same-place: fix|E0812|remove `…`|E0401。fn の中の flow の呼び出し lp~(x) は §11.5 で E0821（候補なし）。今は E0812 で ~ を除く候補を出し、関数でないものの呼び出しの E0401 になる"
 
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/4e712426.onsa"
-reasons = ["S-248", "S-236"]
-until = "W3-15"
-note = "fix-same-place: fix|E0012|parenthesize the inner operator|E0012。---x の候補 -(--x) の後に内側の E0012（tests/spec/negative/syntax_prefix.onsa:42:3 の fix-contract の項目と同じ型）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/7a6a3c65.onsa"
-reasons = ["S-248", "S-236"]
-until = "W3-15"
-note = "fix-same-place: fix|E0020|remove the `…`|E0020。続いた ;; の候補が ; を一つだけ消し、E0020 が残る（一つの形は一つの候補で直す、S-248）"
-
 # --- W2-09/i: 新しい種（tests/spec/c_runtime/ の W2-09/t の事例）で変異が変わり、ファズが見つけた修正候補の型（2026-10-08。親が R を登録して付け替える）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/71e7eb23.onsa"
-reasons = ["R-190", "S-236"]
-until = "W3-05"
-note = "fix-same-place: fix|E0020|remove the type suffix|E0020。1d. の型の接尾辞を消す候補が、点の後に数字の無い浮動小数のリテラル 1. を残し、E0020 が残る（S-236 の約束を破る）"
 
 # --- W2-13/t: テストが届く範囲の E0200（S-242）
 
@@ -2464,3 +2428,391 @@ target = "tests/spec/test/reach_fn_value.onsa"
 reasons = ["S-242", "S-191", "S-190"]
 until = "W8-09"
 note = "値として使う関数を経由して届く使用。関数値の呼び出し .(（W3-07）と関数値の降下（W8-09）を今の実装が扱えない"
+
+# --- W3-15/i: 既存言語の書き方の閉じた一覧（docs/foreign-forms.toml、S-250）の行のうち、例がまだ通らないもの。
+# until は W3-15/t2 の案（proc は例が flow の at の構文を使うので W3-10）。照合は onsa_tests::foreign_forms
+
+[[pending]]
+kind = "foreign-form"
+target = "proc"
+reasons = ["S-250"]
+until = "W3-10"
+note = "候補 flow を当てた後も、例の flow の at の構文を今の実装が読めない（E0002）"
+
+[[pending]]
+kind = "foreign-form"
+target = "arm_return"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "octal_prefix"
+reasons = ["S-62", "R-73"]
+until = "W3-05"
+note = "数値リテラルの形"
+
+[[pending]]
+kind = "foreign-form"
+target = "leading_zero"
+reasons = ["S-62", "R-73"]
+until = "W3-05"
+note = "数値リテラルの形"
+
+[[pending]]
+kind = "foreign-form"
+target = "float_dot_exponent"
+reasons = ["S-62", "R-73"]
+until = "W3-05"
+note = "数値リテラルの形"
+
+[[pending]]
+kind = "foreign-form"
+target = "literal_suffix"
+reasons = ["S-62", "R-73"]
+until = "W3-05"
+note = "数値リテラルの形"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_before_paren"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_before_bracket"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_around_dot"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_before_question"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_before_bang"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_before_tilde"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_after_prefix"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "space_after_caret"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "leading_operator"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "leading_minus"
+reasons = ["S-89", "S-123", "S-203"]
+until = "W3-06"
+note = "空白と行頭の二項演算子、腕の return"
+
+[[pending]]
+kind = "foreign-form"
+target = "value_call"
+reasons = ["S-191"]
+until = "W4-12"
+note = "名前の経路の呼び出し（名前の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "item_dot_call"
+reasons = ["S-191"]
+until = "W4-12"
+note = "名前の経路の呼び出し（名前の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "callee_expression"
+reasons = ["S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でない呼び出し（構文の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "indexed_value_call"
+reasons = ["S-191"]
+until = "W4-12"
+note = "名前の経路の呼び出し（名前の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "field_call"
+reasons = ["S-191"]
+until = "W5-02"
+note = "s.f(x)（型の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "interpolated_string_pattern"
+reasons = ["S-225"]
+until = "W3-07"
+note = "補間を含む文字列のパターン"
+
+[[pending]]
+kind = "foreign-form"
+target = "float_constant_pattern"
+reasons = ["S-185", "S-252"]
+until = "W5-09"
+note = "書けない型の定数のパターン（型の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "negated_constant_pattern"
+reasons = ["S-185", "S-252", "S-319"]
+until = "W3-07"
+note = "定数に前置の - を付けたパターン（字面で決まるので構文の段、S-319）"
+
+[[pending]]
+kind = "foreign-form"
+target = "at_binding"
+reasons = ["S-186"]
+until = "W3-07"
+note = "@ 束縛"
+
+[[pending]]
+kind = "foreign-form"
+target = "struct_pattern_rest"
+reasons = ["S-109"]
+until = "W3-07"
+note = "構造体のパターンの .."
+
+[[pending]]
+kind = "foreign-form"
+target = "range_pattern"
+reasons = ["S-249", "S-257"]
+until = "W3-18"
+note = "範囲の書き方"
+
+[[pending]]
+kind = "foreign-form"
+target = "range_dots"
+reasons = ["S-249", "S-257"]
+until = "W3-18"
+note = "範囲の書き方"
+
+[[pending]]
+kind = "foreign-form"
+target = "type_args_turbofish"
+reasons = ["S-239", "S-277"]
+until = "W3-19"
+note = "式の中の型引数 ::[…]（構文の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "type_args_angle"
+reasons = ["S-239", "S-277"]
+until = "W3-19"
+note = "式の中の型引数 ::[…]（構文の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "type_args_square"
+reasons = ["S-239", "S-256"]
+until = "W4-13"
+note = "名前の経路に付けた [...] の型引数（名前の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "type_args_method_square"
+reasons = ["S-239", "S-256"]
+until = "W5-02"
+note = "メソッドに付けた [...] の型引数（型の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "type_args_on_expression"
+reasons = ["S-239", "S-277"]
+until = "W3-19"
+note = "式の中の型引数 ::[…]（構文の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "type_position_path"
+reasons = ["S-239", "S-277"]
+until = "W3-19"
+note = "式の中の型引数 ::[…]（構文の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "rate_as_type"
+reasons = ["S-120"]
+until = "W4-04"
+note = "Sig[F32] の名前の段"
+
+[[pending]]
+kind = "foreign-form"
+target = "caret_visible"
+reasons = ["S-116"]
+until = "W7-04"
+note = "見えている名前への ^"
+
+[[pending]]
+kind = "foreign-form"
+target = "faust_feedback"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "faust_feedback_unnamed"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "faust_prime"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "faust_delay"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "faust_delay_variable"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "derive_attribute"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "relaxed_attribute"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "bulk_attribute"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "mem_fast"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の構文を読む行"
+
+[[pending]]
+kind = "foreign-form"
+target = "field_pub"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "field_priv_in_priv_struct"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "pub_pkg"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "priv_use"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "tuple_struct"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "宣言と属性の旧い形、可視性"
+
+[[pending]]
+kind = "foreign-form"
+target = "copy_impl"
+reasons = ["S-250"]
+until = "W4-05"
+note = "impl Copy と : Copy（名前の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "copy_bound"
+reasons = ["S-250"]
+until = "W4-05"
+note = "impl Copy と : Copy（名前の段）"
+
+[[pending]]
+kind = "foreign-form"
+target = "hash_attribute"
+reasons = ["S-57", "S-250"]
+until = "W3-08"
+note = "#[derive(Eq)] の候補 struct Key: Eq を今の実装が読めない（宣言の : trait の構文は W3-08）。#[repr(c)] と #[fp(relaxed)] の例は通る"
+
+[[pending]]
+kind = "foreign-form"
+target = "clock_on_binding"
+reasons = ["S-48", "S-102"]
+until = "W3-10"
+note = "flow の at の構文を今の実装が読めない（E0002）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/values/move_assign.onsa"
+reasons = ["R-191"]
+until = "W4-07"
+note = "move の引数と move self への代入が E0701（§5.1 の E0701 は let と借用の引数だけ）"
