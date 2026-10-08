@@ -4,7 +4,7 @@
 # 一覧から外すよう促す。意味はどの種類も同じ。外す作業は、対象を通したときに項目を消す。
 #
 # 項目は [[pending]] の表で、次の欄は全て必須（expect、rows、digest のほかの欄は書けない）:
-#   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input"
+#   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input" | "fix-contract"
 #   target   対象の識別子（形は種類ごと。下）
 #   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）。until = "P2" の項目に
 #            限り、仕様の節（"§20" の形。仕様の番号付きの見出しにあるもの）も書ける。第 1 期の範囲は
@@ -94,7 +94,25 @@
 #                 一覧に無い保存した入力が落ちても失敗。ファズが見つけた落ち方の型が一覧の入力と同じなら
 #                 既知として通し、新しい型なら最小化した入力を target/fuzz/new/ に書いて失敗にする
 #                 （tools/fuzz.py --save で tests/fuzz/ に写す）
+#                 W3-17 から、保存した入力は修正候補の「同じ箇所」の近似（onsa_cases --fix-same-place。
+#                 診断ごとに最初の候補を一つだけ当てて検査し直し、元の診断の範囲と編集の範囲を当てた後へ移した
+#                 所に、元の段以前の診断が出れば違反）にもかける。一覧にある入力は「まだ落ちる、または約束を
+#                 破る」ことを期待し、一覧に無い入力はどちらも起こさないこと。違反の型は「コード・候補の title・
+#                 残ったコード」で、型が一覧の入力と同じなら既知として通す
 #                 パスは正規形だけ（/ で区切る。./、..、//、末尾の /、\ を含まない）
+#   fix-contract  修正候補の約束（仕様 §18.1、S-236）を破る一つの候補: "<リポジトリの根からのファイルのパス>:<行>:<列>
+#                 <コード> fix<K>"（"tests/spec/negative/types.onsa:60:3 E0411 fix1"）。事例の check が報告した
+#                 その位置・そのコードの診断の K 番目の候補（照合はテストの実行器、onsa_tests::fix_contract と
+#                 onsa_tests::run::reconcile。W3-17）。実行器は mode が check か test の全ての事例の全ての診断の
+#                 全ての候補を一つずつ当て、事例と同じ入口で検査し直す。編集が触れた単位（当てた後の単位の表で、
+#                 置き換えの範囲と両端を含めて重なるもの。メンバを持つ項目はメンバの外だけ）に、元の診断と同じ段
+#                 以前の診断が残れば違反（元の診断の単位は加えない、S-266。後の段の診断は見ない）。既定は「報告
+#                 された診断はその単位の唯一の誤り」で、残ってよい診断は断片の [[test.fix]] の leaves に書く
+#                 （計画 D-05）。項目が黙らせるのはその候補の違反（leaves・clean・same_code の食い違いを含む）
+#                 だけで、事例の全体の test-case の項目では黙らない。指す候補が無い項目と、約束を満たした候補を
+#                 指す項目は失敗。確かめられない候補（事例の外のファイルを編集する、当てられない、検査し直すと
+#                 内部エラー、降下・ビルド・onsa test・マニフェストの段の候補）は、この一覧で黙らせられない。
+#                 確かめた候補が全体で 0 件なら失敗
 # until が完了の印（✅）の付いた作業を指す項目は失敗にする（外すか until を改める）。
 
 # --- 仕様の例（tests/spec の写しが古い形のまま。C-63、C-72、計画 §6）
@@ -2413,3 +2431,308 @@ target = "§17.6 9327acb2: use std.array"
 reasons = ["S-257"]
 until = "W3-07"
 note = "範囲の書き方 0..<MAX_VOICES。今の構文解析器は ..< を読めないので、写しは 0..MAX_VOICES のまま（W3-07 が範囲の構文と一緒に写しを書き換える）"
+
+# --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/c_runtime/c_mul_precedence.onsa:162:3 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010（候補を読みごとに作り直す）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/c_runtime/c_mul_precedence.onsa:166:3 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0010_candidates.onsa:35:3 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補（% を括弧で囲む）の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_patterns_at.onsa:26:10 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "ガードの形の E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_semantics/vdelay_edges.onsa:55:3 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/flow_semantics/vdelay_edges.onsa:62:3 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/nesting/binary_chain_groups.onsa:11:3 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/nesting/boundary_binary_groups.onsa:21:3 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "256 段の連鎖の E0010 の候補が括弧を足して入れ子の上限を超え、E0006 になる（約束を満たせない候補は出さない、§18.1）。S-45 の群で E0010 自体が消える"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/nesting/boundary_binary_groups.onsa:25:3 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "256 段の連鎖の E0010 の候補が入れ子の上限を超え、E0006 になる"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/nesting/boundary_binary_groups.onsa:29:3 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "256 段の連鎖の E0010 の候補が入れ子の上限を超え、E0006 になる"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/nesting/boundary_binary_groups.onsa:33:3 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "256 段の連鎖の E0010 の候補が入れ子の上限を超え、E0006 になる"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/min_rem_precedence.onsa:15:10 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数あり、候補の後に別の行の E0010 が残る（S-45 の群で E0010 自体が消える）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/min_rem_precedence.onsa:33:10 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/precedence.onsa:28:11 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/precedence.onsa:55:12 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/precedence.onsa:66:16 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/precedence.onsa:78:16 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/precedence.onsa:91:11 E0010 fix1"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "E0010 の候補の後に同じ位置で E0010"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/precedence.onsa:134:11 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/u64_mul_precedence.onsa:21:11 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/u64_mul_precedence.onsa:38:7 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/u64_mul_precedence.onsa:50:10 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/u64_mul_precedence.onsa:62:10 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/u64_mul_precedence.onsa:70:11 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/semantics/u64_mul_precedence.onsa:80:14 E0010 fix1"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "旧い群の規則で一つの単位に E0010 が複数ある"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/syntax_foreign.onsa:62:3 E0020 fix1"
+reasons = ["S-247", "S-236"]
+until = "W3-15"
+note = "ブロックコメントの候補（// に置き換える）が後ろの 1 をコメントに入れる（same_code を破る）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/syntax_prefix.onsa:42:3 E0012 fix1"
+reasons = ["S-248", "S-236"]
+until = "W3-15"
+note = "---x の候補 -(--x) の後に内側の --x の E0012 が残る（続いた前置の演算子を一つの形として直すか、--x を増減として拾う W3-15 の読みで決める）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_flow_forms.onsa:14:5 E0020 fix1"
+reasons = ["S-102", "S-236"]
+until = "W3-10"
+note = "proc を flow にする候補の後、入出力の at（S-102）を今の実装が読めず E0002"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_rename.onsa:51:24 E0320 fix1"
+reasons = ["R-87", "S-236"]
+until = "W4-04"
+note = "E0320 の候補が使用箇所を直さず、同じ関数に E0302 が残る（R-87 (5)）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/syntax_naming.onsa:18:18 E0320 fix1"
+reasons = ["R-87", "S-236"]
+until = "W4-04"
+note = "引数の名前の E0320 の候補が使用箇所を直さず、E0302 が残る（R-87 (5)）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/syntax_naming.onsa:23:7 E0320 fix1"
+reasons = ["R-87", "S-236"]
+until = "W4-04"
+note = "var の名前の E0320 の候補が使用箇所を直さず、E0302 が残る（R-87 (5)）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_keyword.onsa:9:8 E0320 fix1"
+reasons = ["S-243", "S-236"]
+until = "W4-04"
+note = "規則に揃えた名前が予約語になる E0320 の候補（Match は match で E0002。候補は match_）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0411_as.onsa:28:3 E0411 fix1"
+reasons = ["S-98", "S-236"]
+until = "W5-02"
+note = "整数の縮小の E0411 の候補 .narrow_i32() が Option を返し E0401（仕様 §3.3 は縮小に候補を出さず note で示す）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/types.onsa:60:3 E0411 fix1"
+reasons = ["S-98", "S-236"]
+until = "W5-02"
+note = "整数の縮小の E0411 の候補 .narrow_i32() が Option を返し E0401（仕様 §3.3 は候補を出さない）"
+
+# --- W3-17: ファズの修正候補の「同じ箇所」の近似が見つけた型を示す保存した入力（2026-10-08）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/0139967b.onsa"
+reasons = ["S-45", "S-236"]
+until = "W3-07"
+note = "fix-same-place: fix|E0010|parenthesize the `…`|E0006。256 段の連鎖の E0010 の候補が括弧を足して入れ子の上限を超える"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/656fd6cc.onsa"
+reasons = ["R-72", "S-236"]
+until = "W3-07"
+note = "fix-same-place: fix|E0010|parenthesize the `…`|E0010。E0010 の候補の後に同じ箇所で E0010"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/2674a4fa.onsa"
+reasons = ["S-243", "S-236"]
+until = "W4-04"
+note = "fix-same-place: fix|E0320|rename by the naming rule|E0002。規則に揃えた名前が予約語になる（Match は match）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/1ee024dc.onsa"
+reasons = ["S-98", "S-236"]
+until = "W5-02"
+note = "fix-same-place: fix|E0411|call `…`|E0401。整数の縮小の候補 .narrow_u8() が Option を返す（仕様 §3.3 は候補を出さない）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/67f69e84.onsa"
+reasons = ["S-100", "S-236"]
+until = "W3-07"
+note = "fix-same-place: fix|E0711|add `…`|E0002。if の腕に move を足す候補の後、腕の move が E0002（S-100、tests/review-phase1/parent/p7.onsa）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/4ea5a011.onsa"
+reasons = ["S-267", "S-236"]
+until = "W4-06"
+note = "fix-same-place: fix|E0812|remove `…`|E0302。flow の中の or~(0) の E0812 の候補（~ を除く）の後に E0302。名前の段は flow の段より前なので、段の順（S-267）と単位の中の選び方で決まる"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/2abf12eb.onsa"
+reasons = ["S-101", "S-236"]
+until = "W7-04"
+note = "fix-same-place: fix|E0812|remove `…`|E0401。fn の中の flow の呼び出し lp~(x) は §11.5 で E0821（候補なし）。今は E0812 で ~ を除く候補を出し、関数でないものの呼び出しの E0401 になる"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/4e712426.onsa"
+reasons = ["S-248", "S-236"]
+until = "W3-15"
+note = "fix-same-place: fix|E0012|parenthesize the inner operator|E0012。---x の候補 -(--x) の後に内側の E0012（tests/spec/negative/syntax_prefix.onsa:42:3 の fix-contract の項目と同じ型）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/7a6a3c65.onsa"
+reasons = ["S-248", "S-236"]
+until = "W3-15"
+note = "fix-same-place: fix|E0020|remove the `…`|E0020。続いた ;; の候補が ; を一つだけ消し、E0020 が残る（一つの形は一つの候補で直す、S-248）"

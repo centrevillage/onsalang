@@ -1,0 +1,4 @@
+flow lp(x:g[])->i
+fn w(x:F32)->F32{
+  let y = lp~(x)
+}

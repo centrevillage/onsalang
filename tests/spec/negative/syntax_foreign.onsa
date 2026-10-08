@@ -1,6 +1,21 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1"]
+//
+// # `rust_types` holds two errors in one unit: the candidate of `i32` leaves the E0020 of `f32`
+// # (S-236, W3-17).
+// [[test.fix]]
+// at = "37:22"
+// code = "E0020"
+// candidate = 1
+// leaves = ["37:30 E0020"]
+//
+// # The candidate of a block comment keeps the code outside it and its lines (S-247).
+// [[test.fix]]
+// at = "62:3"
+// code = "E0020"
+// candidate = 1
+// same_code = true
 
 // E0020: forms from other languages, each with a suggested Onsa form (§18.1).
 pub fn semicolon(x: I32) -> I32 {

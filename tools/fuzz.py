@@ -1,32 +1,53 @@
 #!/usr/bin/env python3
 """The short fuzzing of `onsa check` and `onsa fmt` (Q-06, plan D-16 6, W1-04).
 
-The property: whatever the input, the compiler does not fail inside (S-67).
-A run is a crash when the command exits with a code other than 0, 1 and 2
-(101 is the internal error; a signal is a crash too, a stack overflow
-included, S-183), prints a raw Rust panic, or runs longer than `TIMEOUT`.
+The properties: whatever the input, the compiler does not fail inside
+(S-67), and a fix candidate does not leave an error at its own place (the
+near "same place" of the contract of §18.1, S-236, W3-17; 3. below). A run
+is a crash when the command exits with a code other than 0, 1 and 2 (101 is
+the internal error; a signal is a crash too, a stack overflow included,
+S-183), prints a raw Rust panic, or runs longer than `TIMEOUT`.
 
-The gate item `fuzz` (this script without options) does two things:
+The gate item `fuzz` (this script without options) does three things:
 
 1. **Replay.** Every saved input `tests/fuzz/*.onsa` runs through both
-   commands. An input listed in `tests/pending.toml` (kind `fuzz-input`) must
-   still crash: when it does not, the work fixed it, and the entry goes (the
-   file stays, as a regression input). An input not listed must not crash.
+   commands and the fix stage (3.). An input listed in `tests/pending.toml`
+   (kind `fuzz-input`) must still crash or break the contract of a fix
+   candidate: when it does neither, the work fixed it, and the entry goes
+   (the file stays, as a regression input). An input not listed must do
+   neither.
 2. **Fuzz.** Every `.onsa` file under `tests/` (but `tests/fuzz`) is a seed.
    Each seed gives `--per-seed` mutants from a random generator seeded with
    the seed's path and bytes. A mutant also inserts tokens of the whole
    corpus and splices lines of other seeds, so the mutants depend on every
    seed: the run is the same for the same tree on every machine, and adding
-   or changing a seed may change the mutants of the others. A crash of a class (`signature`) that a listed input also shows is known.
+   or changing a seed may change the mutants of the others. A crash of a
+   class (`signature`) that a listed input also shows is known.
    A crash of a new class fails the gate: its first input is minimized and
    written to `target/fuzz/new/`, with the entry to add (the gate writes
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
+3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed
+   rule: the mutants whose index in the run is a multiple of it), and every
+   saved input, go through the near "same place" of the contract of the fix
+   candidates (spec §18.1): `onsa_cases --fix-same-place` applies the first
+   candidate of each diagnostic alone, checks the file again, and reports a
+   diagnostic of the original's stage or an earlier one whose start lies in
+   the original's range or a replacement, moved to the text after it (an
+   error the input held there before is not one, but one of the original's
+   code inside its range is: a part of the same form, S-248). Its
+   class is `fix|<code>|<title>|<code left>` (the quoted text of the title
+   `…`, the numbers `#`). A saved input listed in `tests/pending.toml` must
+   still crash or break the contract; one not listed must do neither; a
+   class a listed input shows is known, a new one is minimized and written
+   as above. The units are not used: this is a net for new kinds of broken
+   candidates, not the contract (the test runner checks the contract on the
+   cases, `onsa_tests::fix_contract`).
 
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
 
     tools/fuzz.py [--per-seed N] [--version V] [--jobs N] [--binary PATH]
-                  [--time-budget S] [--deep] [--save]
+                  [--cases-binary PATH] [--time-budget S] [--deep] [--save]
 
 `--deep` adds mutants that nest brackets or blocks thousands deep: the
 nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
@@ -40,7 +61,8 @@ the system writes a crash report for each one.
 
 The compiler is `<target directory>/debug/onsa`, the target directory of
 `cargo metadata` (which follows `CARGO_TARGET_DIR` and the cargo
-configuration), unless `--binary` names it. `--time-budget` bounds the
+configuration), unless `--binary` names it; the fix stage runs
+`<target directory>/debug/onsa_cases` (`--cases-binary`). `--time-budget` bounds the
 whole run: when it is spent, the remaining mutants do not run and the item
 fails (it never passes on fewer inputs than it says).
 
@@ -77,6 +99,11 @@ PER_SEED = 10
 VERSION = "2"
 MINIMIZE_RUNS = 400
 MINIMIZE_SECONDS = 60  # per crash class
+# One mutant in FIX_EVERY goes through the fix stage (W3-17); the saved inputs all do.
+FIX_EVERY = 4
+# The paths given to one run of `onsa_cases --fix-same-place`.
+FIX_BATCH = 400
+FIX_COMMAND = "fix-same-place"
 TIME_BUDGET = 600  # seconds for the whole run
 # Nesting depths of the deep mutants (S-183): far above the nesting limit
 # (256, spec §2.5) and above what the stack of a command would hold without it.
@@ -178,6 +205,73 @@ class Runner:
             shutil.rmtree(d, ignore_errors=True)
 
 
+def fix_signature(v):
+    """The class of a violation of the near "same place" (S-236): the code,
+    the title of the candidate (its quoted text `…`, its numbers `#`) and
+    the code left after it."""
+    title = re.sub(r"`[^`]*`", "`…`", v["title"])
+    title = re.sub(r"\d+", "#", re.sub(r"\s+", " ", title)).strip()[:80]
+    return f"fix|{v['code']}|{title}|{v['left']}"
+
+
+class FixRunner:
+    """Runs `onsa_cases --fix-same-place` on inputs, written to a directory
+    of their own (W3-17)."""
+
+    def __init__(self, argv, work):
+        self.argv = list(argv)
+        self.work = Path(work)
+        self.work.mkdir(parents=True, exist_ok=True)
+        # Inputs `onsa check` cannot read either (not UTF-8): no candidate to check, counted.
+        self.unreadable = 0
+
+    def violations(self, texts, timeout=TIME_BUDGET):
+        """For each text, its violations as `Crash`es (the command is
+        `FIX_COMMAND`). Raises RuntimeError when the tool fails (never a
+        silent pass)."""
+        d = Path(tempfile.mkdtemp(dir=self.work))
+        try:
+            paths = []
+            for i, text in enumerate(texts):
+                path = d / f"m{i}.onsa"
+                path.write_bytes(encode(text))
+                paths.append(str(path))
+            out = []
+            deadline = time.monotonic() + timeout
+            for start in range(0, len(paths), FIX_BATCH):
+                batch = paths[start:start + FIX_BATCH]
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    raise RuntimeError(f"the time ran out after {start} of {len(paths)} inputs")
+                try:
+                    r = subprocess.run([*self.argv, "--" + FIX_COMMAND, *batch], capture_output=True, timeout=left)
+                except subprocess.TimeoutExpired:
+                    raise RuntimeError(f"timed out after {start} of {len(paths)} inputs") from None
+                try:
+                    items = json.loads(r.stdout) if r.returncode == 0 else None
+                except ValueError:
+                    items = None
+                if not isinstance(items, list) or len(items) != len(batch):
+                    err = r.stderr.decode("utf-8", "replace").strip().splitlines()
+                    raise RuntimeError(f"exit {r.returncode}: {err[-1] if err else 'no list of results'}")
+                for item in items:
+                    if item.get("unreadable"):
+                        self.unreadable += 1
+                    out.append([violation_crash(v) for v in item.get("violations", [])])
+            return out
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def violation_crash(v):
+    """A violation of the fix stage as a `Crash` of its class."""
+    at = f" at {v['left_line']}:{v['left_col']}" if v.get("left_line") else ""
+    head = (v.get("message") or "").splitlines()
+    detail = (f"{v['code']} at {v['line']}:{v['col']}, candidate `{v['title']}`, leaves {v['left']}{at}: "
+              f"{head[0] if head else ''}")
+    return Crash(fix_signature(v), FIX_COMMAND, detail)
+
+
 def decode(data):
     """Bytes as a str that gives them back (`encode`): no newline is
     translated, and invalid UTF-8 stays as surrogates."""
@@ -274,11 +368,18 @@ def mutants(seed_files, per_seed, version=VERSION, deep=False):
 
 def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS):
     """A smaller input with the same crash class: lines, then characters
-    (ddmin), within `budget` runs and `seconds` (a hang takes `TIMEOUT` a run)."""
-    return ddmin(
-        text, lambda candidate: any(c.signature == signature for c in runner.crashes(candidate, commands)),
-        budget, seconds,
-    )
+    (ddmin), within `budget` runs and `seconds` (a hang takes `TIMEOUT` a run).
+    `runner` is a `Runner`, or a `FixRunner` for a class of the fix stage."""
+    if isinstance(runner, FixRunner):
+        def same(candidate):
+            try:
+                return any(c.signature == signature for c in runner.violations([candidate], TIMEOUT)[0])
+            except RuntimeError:
+                return False
+    else:
+        def same(candidate):
+            return any(c.signature == signature for c in runner.crashes(candidate, commands))
+    return ddmin(text, same, budget, seconds)
 
 
 def ddmin(text, still_fails, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS):
@@ -330,11 +431,14 @@ def entry_stub(target, crash):
     )
 
 
-def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET, deep=False):
-    """The gate item. Returns the exit code."""
+def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
+        deep=False):
+    """The gate item. `argv` runs the compiler, `fix_argv` the fix stage
+    (`onsa_cases`). Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fuzz"
     runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
+    fixer = FixRunner(fix_argv, runner.work / "fix")
     failures = []
     start = time.time()
     deadline = time.monotonic() + time_budget
@@ -347,6 +451,13 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
     known = {}
     with ThreadPoolExecutor(jobs) as ex:
         replayed = list(ex.map(lambda p: runner.crashes(read_input(p)), saved))
+    # The saved inputs go through the fix stage too (W3-17).
+    try:
+        broken = fixer.violations([read_input(p) for p in saved], max(1.0, deadline - time.monotonic()))
+    except RuntimeError as e:
+        failures.append(f"the fix stage cannot run on the saved inputs: {e}")
+        broken = [[] for _ in saved]
+    replayed = [crashes + fixes for crashes, fixes in zip(replayed, broken)]
     for p, crashes in zip(saved, replayed):
         rel = p.relative_to(root).as_posix()
         if rel in listed:
@@ -355,11 +466,12 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
                     known.setdefault(c.signature, rel)
             else:
                 failures.append(
-                    f"{rel}: no longer crashes; remove its entry from tests/pending.toml "
-                    "(the file stays as a regression input)"
+                    f"{rel}: no longer crashes nor breaks the contract of a fix candidate; remove its entry from "
+                    "tests/pending.toml (the file stays as a regression input)"
                 )
         elif crashes:
-            failures.append(f"{rel}: crashes but is not listed in tests/pending.toml: {crashes[0].command}: "
+            what = "breaks the contract of a fix candidate" if crashes[0].command == FIX_COMMAND else "crashes"
+            failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {crashes[0].command}: "
                             f"{crashes[0].signature}")
 
     # 2. Fuzz.
@@ -375,20 +487,35 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
     skipped = sum(1 for r in results if r is None)
     if skipped:
         failures.append(f"the time budget ({time_budget} s) ran out: {skipped} of {len(inputs)} mutants did not run")
+    # 3. The fix stage, on one mutant in FIX_EVERY (W3-17).
+    chosen = [i for i in range(len(inputs)) if i % FIX_EVERY == 0]
+    fixes = {}
+    fixer.unreadable = 0  # of the mutants only
+    if time.monotonic() > deadline:
+        failures.append(f"the time budget ({time_budget} s) ran out before the fix stage ({len(chosen)} mutants)")
+    else:
+        try:
+            fixes = dict(zip(chosen, fixer.violations([inputs[i][2] for i in chosen], deadline - time.monotonic())))
+        except RuntimeError as e:
+            failures.append(f"the fix stage cannot run on the mutants: {e}")
     new = {}
     crashing = 0
-    for (seed, k, text), crashes in zip(inputs, results):
+    breaking = 0
+    for i, ((seed, k, text), crashes) in enumerate(zip(inputs, results)):
         crashes = crashes or []
         if crashes:
             crashing += 1
-        for c in crashes:
+        if fixes.get(i):
+            breaking += 1
+        for c in crashes + fixes.get(i, []):
             if c.signature not in known and c.signature not in new:
                 new[c.signature] = (seed, k, text, c)
     written = []
     for signature, (seed, k, text, c) in new.items():
         commands = tuple(cmd for cmd in COMMANDS if " ".join(cmd) == c.command)
         seconds = max(0.0, min(MINIMIZE_SECONDS, deadline - time.monotonic()))
-        small = minimize(runner, text, signature, commands, seconds=seconds) if seconds > 0 else text
+        who = fixer if c.command == FIX_COMMAND else runner
+        small = minimize(who, text, signature, commands, seconds=seconds) if seconds > 0 else text
         name = f"{short_name(small)}.onsa"
         target = (FUZZ_DIR / name).as_posix()
         # A signal (a stack overflow) is never saved under tests/: replaying it would abort again.
@@ -397,12 +524,14 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
         (dest_dir / name).write_bytes(encode(small))
         written.append((dest_dir / name, target, c, seed, k))
         if dest_dir != root / FUZZ_DIR:
-            failures.append(f"a new crash class: {c.command}: {signature} (seed {seed}, mutant {k})")
+            what = "a new class of a broken fix candidate" if c.command == FIX_COMMAND else "a new crash class"
+            failures.append(f"{what}: {c.command}: {signature} (seed {seed}, mutant {k})")
     shutil.rmtree(runner.work, ignore_errors=True)
 
     out(
         f"fuzz: {len(inputs)} inputs from {len(seed_files)} seeds ({per_seed} each), {crashing} crashing, "
-        f"{len(new)} new crash classes; {len(saved)} saved inputs replayed ({len(listed)} listed); "
+        f"{len(new)} new classes; {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
+        f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed); "
         f"{time.time() - start:.1f} s"
     )
     for path, target, c, seed, k in written:
@@ -414,8 +543,10 @@ def run(root, argv, per_seed, version, jobs, save, out=print, target_dir=None, t
     return 1 if failures else 0
 
 
-def build(root):
-    r = subprocess.run(["cargo", "build", "-q", "-p", "onsa_cli"], cwd=root)
+def build(root, cases=False):
+    """Build the compiler (or, with `cases`, the fix stage's `onsa_cases`)."""
+    what = ["-p", "onsa_tests", "--bin", "onsa_cases"] if cases else ["-p", "onsa_cli"]
+    r = subprocess.run(["cargo", "build", "-q", *what], cwd=root)
     return r.returncode == 0
 
 
@@ -439,6 +570,8 @@ def main(argv=None):
     ap.add_argument("--version", default=VERSION)
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
+    ap.add_argument("--cases-binary", type=Path,
+                    help="the fix stage's onsa_cases (default: build <target directory>/debug/onsa_cases)")
     ap.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
     ap.add_argument("--deep", action="store_true", help="also nest thousands deep (S-183, W3-14; not in the gate)")
     ap.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
@@ -455,8 +588,14 @@ def main(argv=None):
             print("fuzz: cannot build the compiler (cargo build -p onsa_cli)", file=sys.stderr)
             return 2
         binary = target / "debug" / "onsa"
+    cases = args.cases_binary
+    if cases is None:
+        if not build(args.root, cases=True):
+            print("fuzz: cannot build onsa_cases (cargo build -p onsa_tests --bin onsa_cases)", file=sys.stderr)
+            return 2
+        cases = target / "debug" / "onsa_cases"
     return run(
-        args.root, [str(binary)], args.per_seed, args.version, args.jobs, args.save,
+        args.root, [str(binary)], [str(cases)], args.per_seed, args.version, args.jobs, args.save,
         target_dir=target, time_budget=args.time_budget, deep=args.deep,
     )
 

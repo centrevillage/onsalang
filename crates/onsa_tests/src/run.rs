@@ -21,6 +21,11 @@
 //! - `[test] fixes = N`: the candidates of the check's diagnostics give the
 //!   files `<file>.fixK` ([`crate::fixes`]: compared token by token, ignoring
 //!   the whitespace tokens).
+//! - `"check"` / `"test"`: every candidate of every diagnostic of the check,
+//!   applied alone and checked again, keeps the contract of §18.1 and the
+//!   promises of its `[[test.fix]]` entry ([`crate::fix_contract`], S-236,
+//!   W3-17). A candidate of the build or of `onsa test` cannot be checked
+//!   again and fails.
 //! - Every diagnostic compared with markers follows the rules of diagnostics
 //!   (`onsa_syntax::diagnostic_contract`: a required fix and note, edits on
 //!   token boundaries that do not overlap). A break is an internal error of
@@ -103,6 +108,14 @@ pub enum Problem {
     /// The harness of the host steps cannot run (no compiler, a file it cannot
     /// write, records it cannot read): never pending.
     Harness(String),
+    /// A fix candidate breaks the contract of §18.1 (S-236) or a promise of
+    /// its `[[test.fix]]` entry ([`crate::fix_contract`]). Only an entry of
+    /// kind `fix-contract` naming `target` silences it (not one of the whole case).
+    FixContract { target: String, message: String },
+    /// A fix candidate the runner cannot check against the contract (it edits
+    /// a file outside the case, it cannot be applied, the check after it ends
+    /// in an internal error, its stage is not a check): never pending.
+    FixUnchecked(String),
 }
 
 impl Problem {
@@ -115,6 +128,8 @@ impl Problem {
             Problem::Internal(_) => "internal",
             Problem::Host { .. } => "host-failed",
             Problem::Harness(_) => "harness",
+            Problem::FixContract { .. } => "fix-contract",
+            Problem::FixUnchecked(_) => "fix-unchecked",
         }
     }
 
@@ -126,6 +141,8 @@ impl Problem {
             Problem::Internal(m) => m.clone(),
             Problem::Host { message, .. } => message.clone(),
             Problem::Harness(m) => format!("the host steps cannot run: {m}"),
+            Problem::FixContract { message, .. } => message.clone(),
+            Problem::FixUnchecked(m) => format!("the contract of a fix candidate cannot be checked: {m}"),
         }
     }
 }
@@ -149,6 +166,9 @@ pub struct CaseRun {
     pub hosts: Vec<crate::host::SeqResult>,
     /// Information for the reader (where `ONSA_C_KEEP` kept files).
     pub notes: Vec<String>,
+    /// The fix candidates checked against the contract of §18.1, by their
+    /// names in `tests/pending.toml` ([`crate::fix_contract`], W3-17).
+    pub fix_targets: Vec<String>,
 }
 
 /// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
@@ -343,6 +363,8 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         match onsa_driver::parse_only(&loaded.sources) {
             Ok(result) => {
                 compare(&mut run, &loaded.sources, &markers, &result.diagnostics, Stage::Parse, None);
+                // Candidates are checked again only in `check` and `test` (W3-17): one here fails.
+                run.problems.extend(crate::fix_contract::unchecked_in_parse(&loaded.sources, &result.diagnostics));
             }
             Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
         }
@@ -357,6 +379,10 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         }
     };
     let check = &analyzed.diagnostics;
+    // Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
+    let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
+    run.fix_targets = contract.targets;
+    run.problems.extend(contract.problems);
     if t.fixes > 0 {
         let files = disk_files(root, case, setup, &loaded);
         run.problems.extend(crate::fixes::compare(&loaded.sources, &files, check, t.fixes));
@@ -563,8 +589,9 @@ fn build_target(ctx: &BuildCtx<'_>, target: &str, write_golden: bool, run: &mut 
             compare(run, &loaded.sources, &expected, &[], Stage::Build, Some(target));
             out
         }
-        Err(BuildError::Diagnostics { diagnostics, .. }) => {
+        Err(BuildError::Diagnostics { diagnostics, sources }) => {
             compare(run, &loaded.sources, &expected, &diagnostics, Stage::Build, Some(target));
+            run.problems.extend(crate::fix_contract::unchecked(&sources, &diagnostics));
             return;
         }
         Err(error) => {
@@ -811,6 +838,7 @@ fn run_tests(
             if compare(run, sources, markers, &diagnostics, Stage::Test, None) {
                 negative_rules(run, path, &diagnostics);
             }
+            run.problems.extend(crate::fix_contract::unchecked(sources, &diagnostics));
             return;
         }
         Err(e) => {
@@ -855,6 +883,8 @@ pub struct CaseReport {
     pub pending_tests: Vec<String>,
     /// Host sequences listed one by one (`<path>::<name>`) that failed as expected.
     pub pending_hosts: Vec<String>,
+    /// Fix candidates listed (kind `fix-contract`) that break the contract as expected.
+    pub pending_fixes: Vec<String>,
     /// What fails the case after the list is applied.
     pub failures: Vec<String>,
 }
@@ -924,6 +954,19 @@ impl Report {
         for c in self.cases.iter().filter(|c| !c.pending_hosts.is_empty()) {
             let _ = write!(s, "\npending host sequences of {}: {}", c.run.path, c.pending_hosts.join(", "));
         }
+        let checked: usize = self.cases.iter().map(|c| c.run.fix_targets.len()).sum();
+        let pending_fixes: usize = self.cases.iter().map(|c| c.pending_fixes.len()).sum();
+        let breaking = self
+            .cases
+            .iter()
+            .flat_map(|c| &c.run.problems)
+            .filter(|p| matches!(p, Problem::FixContract { .. } | Problem::FixUnchecked(_)))
+            .count();
+        let _ = write!(
+            s,
+            "\nfix candidates checked against the contract (§18.1): {checked}, {pending_fixes} pending, \
+             {breaking} failing"
+        );
         for c in &self.cases {
             for n in &c.run.notes {
                 let _ = write!(s, "\n{}: {n}", c.run.path);
@@ -954,8 +997,34 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
             ));
         }
     }
+    // The fix candidates (W3-17): an entry names one candidate the runner checked.
+    let fix_entries: Vec<&pending::Entry> = list.of_kind(pending::Kind::FixContract).collect();
+    let checked: BTreeSet<&str> = runs.iter().flat_map(|r| r.fix_targets.iter().map(String::as_str)).collect();
+    for e in &fix_entries {
+        if !checked.contains(e.target.as_str()) {
+            report.failures.push(format!(
+                "tests/pending.toml: the fix-contract entry `{}` names no fix candidate the runner checked \
+                 (`<file from the root>:<line>:<col> <code> fix<K>` of a diagnostic of a case's check)",
+                e.target
+            ));
+        }
+    }
     for mut run in runs {
         let mut failures = Vec::new();
+        let mut pending_fixes = Vec::new();
+        for e in fix_entries.iter().filter(|e| run.fix_targets.contains(&e.target)) {
+            let before = run.problems.len();
+            run.problems.retain(|p| !matches!(p, Problem::FixContract { target, .. } if *target == e.target));
+            if run.problems.len() < before {
+                pending_fixes.push(e.target.clone());
+            } else {
+                failures.push(format!(
+                    "the fix candidate {} keeps the contract but is listed in tests/pending.toml (until {}); \
+                     remove the entry",
+                    e.target, e.until
+                ));
+            }
+        }
         let mine: Vec<&(&pending::Entry, &str, Option<&str>)> =
             entries.iter().filter(|(_, p, _)| *p == run.path).collect();
         let whole: Vec<&pending::Entry> = mine.iter().filter(|(_, _, n)| n.is_none()).map(|(e, _, _)| *e).collect();
@@ -970,10 +1039,11 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
         } else if let Some(e) = whole.first() {
             let expects_internal = e.expect == Some(pending::Expect::Internal);
             let internal = run.problems.iter().any(|p| matches!(p, Problem::Internal(_)));
-            // Never silenced: the errors of the case and of the harness, and
-            // an internal error the entry does not expect.
+            // Never silenced: the errors of the case and of the harness, an
+            // internal error the entry does not expect, and the fix
+            // candidates (each is listed on its own, W3-17).
             let kept = |p: &Problem| match p {
-                Problem::Case(_) | Problem::Harness(_) => true,
+                Problem::Case(_) | Problem::Harness(_) | Problem::FixContract { .. } | Problem::FixUnchecked(_) => true,
                 Problem::Internal(_) => !expects_internal,
                 _ => false,
             };
@@ -1046,7 +1116,14 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
             }
             failures.extend(run.problems.iter().map(Problem::text));
         }
-        report.cases.push(CaseReport { run, pending: pending_entry, pending_tests, pending_hosts, failures });
+        report.cases.push(CaseReport {
+            run,
+            pending: pending_entry,
+            pending_tests,
+            pending_hosts,
+            pending_fixes,
+            failures,
+        });
     }
     report
 }
@@ -1084,6 +1161,12 @@ pub fn run_all(root: &Path) -> Report {
         report.failures.push(format!("{o}: no case declares this golden file; remove it or declare it"));
     }
     report.failures.extend(crate::fixes::orphans(root, &fix_sources(&cases)));
+    // Nothing passes without a candidate checked (plan §8.5).
+    if report.cases.iter().all(|c| c.run.fix_targets.is_empty()) {
+        report.failures.push(
+            "no fix candidate was checked against the contract of §18.1 (S-236, W3-17): the cases give none".into(),
+        );
+    }
     report
 }
 
@@ -1246,17 +1329,21 @@ mod tests {
             &[("tests/all/m.onsa", &src), ("tests/each/m.onsa", &targeted), ("tests/only_a/m.onsa", &only_a)],
         );
         let r = repo.run();
+        // The E0809 of the build has a candidate (add `@param`), which the runner cannot
+        // check again (W3-17): it fails on each build, never silenced.
+        let unchecked = |f: &String| f.contains("m.onsa:24:25 E0809 fix1: a candidate of the build stage");
         for p in ["tests/all/m.onsa", "tests/each/m.onsa"] {
             let c = case(&r, p);
-            assert!(c.failures.is_empty(), "{p}: {:?}", c.failures);
+            assert!(c.failures.len() == 2 && c.failures.iter().all(unchecked), "{p}: {:?}", c.failures);
             let stages: Vec<(Stage, Option<&str>, bool)> =
                 c.run.checked.iter().map(|m| (m.stage, m.target.as_deref(), m.matched)).collect();
             assert_eq!(stages, [(Stage::Build, Some("a"), true), (Stage::Build, Some("b"), true)], "{p}");
         }
         // `b` reports E0809 too, but no marker expects it there.
         let c = case(&r, "tests/only_a/m.onsa");
-        assert_eq!(c.failures.len(), 1, "{:?}", c.failures);
-        assert!(c.failures[0].contains("the build of `b` differs"), "{:?}", c.failures);
+        let differs: Vec<&String> = c.failures.iter().filter(|f| !unchecked(f)).collect();
+        assert_eq!(differs.len(), 1, "{:?}", c.failures);
+        assert!(differs[0].contains("the build of `b` differs"), "{:?}", c.failures);
     }
 
     #[test]
@@ -1347,6 +1434,137 @@ mod tests {
         assert!(two.iter().any(|f| f.contains("no diagnostic has a candidate 2")), "{two:?}");
         assert!(r.failures.iter().any(|f| f.contains("tests/stray.onsa.fix1: no case declares")), "{:?}", r.failures);
         assert!(r.failures.iter().any(|f| f.contains("tests/good.onsa.fix2: its case declares `fixes = 1`")));
+    }
+
+    fn fix_entry(target: &str) -> String {
+        format!(
+            "[[pending]]\nkind = \"fix-contract\"\ntarget = \"{target}\"\nreasons = [\"S-236\"]\nuntil = \"W9-01\"\nnote = \"n\"\n\n"
+        )
+    }
+
+    /// W3-17: every candidate is applied alone and the case checked again
+    /// (§18.1, S-236); `[[test.fix]]` and the entries of kind `fix-contract`.
+    #[test]
+    fn fix_contract() {
+        // The candidate of the E0010 gives `x >= (0 && x) < 9`: an E0010 is left (R-72).
+        let breaks = "pub fn f(x: I32) -> Bool {\n  x >= 0 && x < 9 //~ E0010\n}\n";
+        let keeps = "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
+        // Two errors in one unit: the candidate of `i32` leaves the E0020 of `f32`.
+        let two = |leaves: &str| {
+            format!(
+                "// onsa.toml\n// [[test.fix]]\n// at = \"8:13\"\n// code = \"E0020\"\n// candidate = 1\n// leaves = [{leaves}]\n\n\
+                 pub fn g(x: i32) -> f32 {{ //~ E0020\n  1.0\n}}\n"
+            )
+        };
+        let promise = |what: &str, at: &str, body: &str| {
+            format!(
+                "// onsa.toml\n// [[test.fix]]\n// at = \"{at}\"\n// code = \"E0020\"\n// candidate = 1\n// {what} = true\n\n{body}"
+            )
+        };
+        // The candidate of the block comment takes `+ 2` into the comment: no error, other code.
+        let comment = "pub fn f() -> I32 {\n  1 /* one */ + 2 //~ E0020\n}\n";
+        let two_units = "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n\npub fn g() -> I32 {\n  let mut m = 0 //~ E0020\n  m\n}\n";
+        let list = [
+            fix_entry("tests/listed.onsa:2:3 E0010 fix1"),
+            fix_entry("tests/keeps_listed.onsa:2:3 E0020 fix1"),
+            fix_entry("tests/nothing.onsa:2:3 E0010 fix1"),
+            fix_entry("tests/breaks.onsa:2:3 E0010 fix2"),
+            entry("tests/whole.onsa"),
+        ]
+        .concat();
+        let repo = Repo::new(
+            "fix_contract",
+            &[
+                ("tests/breaks.onsa", breaks),
+                ("tests/listed.onsa", breaks),
+                ("tests/whole.onsa", &breaks.replace("//~ E0010", "")),
+                ("tests/keeps.onsa", keeps),
+                ("tests/keeps_listed.onsa", keeps),
+                ("tests/leaves_right.onsa", &two("\"8:21 E0020\"")),
+                ("tests/leaves_wrong.onsa", &two("\"8:22 E0020\"")),
+                ("tests/same_code.onsa", &promise("same_code", "9:5", comment)),
+                ("tests/clean.onsa", &promise("clean", "9:3", two_units)),
+                ("tests/clean_ok.onsa", &promise("clean", "9:3", keeps)),
+                ("tests/no_diagnostic.onsa", &promise("clean", "9:3", "pub fn f() -> I32 {\n  1\n}\n")),
+                (pending::PATH, &list),
+            ],
+        );
+        let r = repo.run();
+        let failures = |p: &str| case(&r, p).failures.clone();
+        let has = |p: &str, needle: &str| {
+            let f = failures(p);
+            assert!(f.iter().any(|x| x.contains(needle)), "{p}: {f:?}");
+        };
+        has("tests/breaks.onsa", "fix candidate tests/breaks.onsa:2:3 E0010 fix1");
+        has("tests/breaks.onsa", "hold 2:3 E0010 of its stage or an earlier one; expected none");
+        // An entry silences its candidate only.
+        let listed = case(&r, "tests/listed.onsa");
+        assert!(listed.failures.is_empty(), "{:?}", listed.failures);
+        assert_eq!(listed.pending_fixes, ["tests/listed.onsa:2:3 E0010 fix1"]);
+        // A whole-case entry does not silence a candidate.
+        has("tests/whole.onsa", "fix candidate tests/whole.onsa:2:3 E0010 fix1");
+        assert!(case(&r, "tests/keeps.onsa").failures.is_empty(), "{:?}", failures("tests/keeps.onsa"));
+        has("tests/keeps_listed.onsa", "keeps the contract but is listed");
+        for t in ["tests/nothing.onsa:2:3 E0010 fix1", "tests/breaks.onsa:2:3 E0010 fix2"] {
+            assert!(
+                r.failures.iter().any(|f| f.contains(t) && f.contains("names no fix candidate")),
+                "{t}: {:?}",
+                r.failures
+            );
+        }
+        assert!(failures("tests/leaves_right.onsa").is_empty(), "{:?}", failures("tests/leaves_right.onsa"));
+        has(
+            "tests/leaves_wrong.onsa",
+            "hold 8:21 E0020 of its stage or an earlier one; expected 8:22 E0020 (`leaves`)",
+        );
+        has("tests/same_code.onsa", "`same_code`: in tests/same_code.onsa, token 10: `+` before, `}` after");
+        has("tests/clean.onsa", "`clean`: the check after it reports E0020 at 14:3");
+        assert!(failures("tests/clean_ok.onsa").is_empty(), "{:?}", failures("tests/clean_ok.onsa"));
+        has("tests/no_diagnostic.onsa", "error in the case: line 2: [[test.fix]]: no diagnostic E0020 at 9:3");
+        let checked: usize = r.cases.iter().map(|c| c.run.fix_targets.len()).sum();
+        assert_eq!(checked, 11, "{:?}", r.cases.iter().map(|c| &c.run.fix_targets).collect::<Vec<_>>());
+        assert!(!r.failures.iter().any(|f| f.contains("no fix candidate was checked")), "{:?}", r.failures);
+        // A package names the file of a place; its candidates are named from the root.
+        let toml = "[package]\nname = \"p\"\nedition = \"2026\"\n";
+        let in_pkg = |at: &str, leaf: &str| {
+            format!(
+                "// onsa.toml\n// [[test.fix]]\n// at = \"{at}\"\n// code = \"E0020\"\n// candidate = 1\n// leaves = [\"{leaf}\"]\n\n\
+                 pub fn g(x: i32) -> f32 {{ //~ E0020\n  1.0\n}}\n"
+            )
+        };
+        let pkg = Repo::new(
+            "fix_contract_pkg",
+            &[
+                ("tests/right/onsa.toml", toml),
+                ("tests/right/a.onsa", &in_pkg("a.onsa:8:13", "a.onsa:8:21 E0020")),
+                ("tests/bare/onsa.toml", toml),
+                ("tests/bare/a.onsa", &in_pkg("8:13", "8:21 E0020")),
+            ],
+        );
+        let r = pkg.run();
+        let right = case(&r, "tests/right");
+        assert!(right.failures.is_empty(), "{:?}", right.failures);
+        assert_eq!(right.run.fix_targets, ["tests/right/a.onsa:8:13 E0020 fix1"]);
+        let bare = &case(&r, "tests/bare").failures;
+        assert!(bare.iter().any(|f| f.contains("a package names the file")), "{bare:?}");
+        // A candidate in a `mode = "parse"` case cannot be checked: it fails.
+        let parse = Repo::new(
+            "fix_contract_parse",
+            &[(
+                "tests/p.onsa",
+                "// onsa.toml\n// [test]\n// mode = \"parse\"\n\npub fn g(x: i32) -> I32 { //~ E0020\n  1\n}\n",
+            )],
+        );
+        let r = parse.run();
+        let p = &case(&r, "tests/p.onsa").failures;
+        assert!(
+            p.iter().any(|f| f.contains("tests/p.onsa:5:13 E0020 fix1") && f.contains("mode = \"parse\"")),
+            "{p:?}"
+        );
+        // Nothing passes without a candidate checked.
+        let none = Repo::new("fix_contract_none", &[("tests/plain.onsa", "pub fn f() -> I32 {\n  1\n}\n")]);
+        let r = none.run();
+        assert!(r.failures.iter().any(|f| f.contains("no fix candidate was checked")), "{:?}", r.failures);
     }
 
     #[test]

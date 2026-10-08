@@ -24,6 +24,11 @@ the form of `target`:
     test-case     a test case: a path from the repository root (a file or a
                   package directory), optionally "<path>::<test name>"   (W1-03)
     fuzz-input    a saved fuzz input: a path from the repository root  (W1-04)
+    fix-contract  one fix candidate that breaks the contract of spec §18.1
+                  (S-236): "<file from the repository root>:<line>:<col>
+                  <code> fix<K>", the K-th candidate of the diagnostic of that
+                  code at that place of a case's check (matched by the test
+                  runner, `onsa_tests::run::reconcile`, W3-17)
 
 Paths are in their canonical form: relative, `/`-separated, no `.` or `..`
 component, no empty component, no trailing `/`.
@@ -80,7 +85,7 @@ import spec_blocks  # noqa: E402
 ROOT = repo.ROOT
 PENDING = repo.PENDING
 
-KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input")
+KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input", "fix-contract")
 FIELDS = ("kind", "target", "reasons", "until", "note")
 # Optional fields: `expect` (only "internal": a whole test case, a case of an item with
 # `expect_internal`), `rows` and `digest` (both required on, and only on, a case of an item with
@@ -96,6 +101,7 @@ TARGET_FORMS = {
     "gate": re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*(?:/\S+)?"),
     "test-case": re.compile(r"[^\s:][^:]*(?:::\S.*)?"),
     "fuzz-input": re.compile(r"[^\s:][^:]*"),
+    "fix-contract": re.compile(r"[^\s:][^:\s]*:[1-9]\d*:[1-9]\d* E\d{4} fix[1-9]\d*"),
 }
 REASON = re.compile(r"[SR]-\d+")
 # A spec section as a reason, only of `until = "P2"` (the spec §20 sets what the first phase is).
@@ -325,8 +331,8 @@ def _check_target(e, root, pendable_steps):
         if item not in pendable_steps:
             listed = ", ".join(pendable_steps) or "none yet"
             return [f"`{item}` is not a gate item that may be listed (pendable items: {listed})"]
-    if e.kind in ("test-case", "fuzz-input"):
-        path = e.target.split("::", 1)[0]
+    if e.kind in ("test-case", "fuzz-input", "fix-contract"):
+        path = e.target.split(" ", 1)[0].rsplit(":", 2)[0] if e.kind == "fix-contract" else e.target.split("::", 1)[0]
         problem = path_problem(path)
         if problem:
             return [problem]

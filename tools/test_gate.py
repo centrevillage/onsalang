@@ -392,6 +392,7 @@ class PendingList(TempRepo):
             + entry("gate", "c-header/span_const", ("S-34",), "T5-8")
             + entry("test-case", "tests/spec/ops/groups.onsa::a test", ("S-45",), "W3-08")
             + entry("fuzz-input", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
+            + entry("fix-contract", "tests/spec/ops/groups.onsa:12:3 E0010 fix2", ("S-45",), "W3-08")
         )
         self.assertEqual(self.errors_of(text, pendable=("c-header", "c-x")), [])
 
@@ -552,6 +553,23 @@ class PendingList(TempRepo):
 
     def test_missing_path(self):
         self.assertOneError(entry("test-case", "tests/spec/nope.onsa"), "does not exist")
+        self.assertOneError(entry("fix-contract", "tests/spec/nope.onsa:1:1 E0010 fix1"), "does not exist")
+
+    def test_fix_contract_form(self):
+        # one candidate: "<file>:<line>:<col> <code> fix<K>" (W3-17)
+        for bad in (
+            "tests/spec/ops/groups.onsa:3:5 E0010",
+            "tests/spec/ops/groups.onsa:3:5 E0010 fix0",
+            "tests/spec/ops/groups.onsa:0:5 E0010 fix1",
+            "tests/spec/ops/groups.onsa:3 E0010 fix1",
+            "tests/spec/ops/groups.onsa:3:5 e0010 fix1",
+            "tests/spec/ops/groups.onsa:3:5  E0010 fix1",
+            "tests/spec/ops/groups.onsa:3:5 E0010 fix1 x",
+            "tests/spec/ops/groups.onsa",
+        ):
+            with self.subTest(target=bad):
+                self.assertOneError(entry("fix-contract", bad), "not of the fix-contract form")
+        self.assertOneError(entry("fix-contract", "./tests/spec/ops/groups.onsa:3:5 E0010 fix1"), "canonical")
 
     def test_path_outside(self):
         self.assertOneError(entry("fuzz-input", "../x.onsa"), "canonical")
@@ -1733,15 +1751,36 @@ sys.exit(1 if "e" in text else 0)
 """
 
 
+# A stand-in for `onsa_cases --fix-same-place` (W3-17): an input with `BADCANDIDATE` breaks the
+# contract of a fix candidate; with `CRASH_FIX` in a path list's first input, the tool fails.
+FAKE_CASES = r"""
+import json, sys
+assert sys.argv[1] == "--fix-same-place"
+out = []
+for path in sys.argv[2:]:
+    text = open(path, encoding="utf-8", errors="surrogateescape").read()
+    if "CRASH_FIX" in text:
+        sys.stderr.write("boom\n")
+        sys.exit(3)
+    v = []
+    if "BADCANDIDATE" in text:
+        v.append({"code": "E0010", "line": 1, "col": 1, "title": "parenthesize the `&&` of 12", "left": "E0010",
+                  "left_line": 1, "left_col": 1, "message": "m"})
+    out.append({"file": path, "candidates": len(v), "violations": v, "internal": None})
+print(json.dumps(out))
+"""
+
+
 class Fuzz(TempRepo):
     def setUp(self):
         super().setUp()
         self.fake = self.repo.write("fake_onsa.py", FAKE_ONSA)
         self.argv = [sys.executable, "-B", str(self.fake)]
+        self.fix_argv = [sys.executable, "-B", str(self.repo.write("fake_cases.py", FAKE_CASES))]
 
     def go(self, per_seed=0, save=False):
         lines = []
-        code = fuzz.run(self.repo.root, self.argv, per_seed, "t", 2, save, out=lines.append)
+        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, per_seed, "t", 2, save, out=lines.append)
         return code, "\n".join(lines)
 
     def test_classify(self):
@@ -1822,6 +1861,51 @@ class Fuzz(TempRepo):
         self.assertEqual(code, 0, text)
         self.assertTrue((self.repo.root / "tests" / "fuzz" / f"{fuzz.short_name('Y')}.onsa").exists(), text)
 
+    def test_replay_of_the_fix_stage(self):
+        # W3-17: a listed input that still breaks a candidate's contract is still failing; one not
+        # listed fails; a listed input that does neither asks for its entry to go
+        self.repo.write("tests/fuzz/listed.onsa", "BADCANDIDATE")
+        self.repo.write("tests/fuzz/fixed.onsa", "ok")
+        self.repo.write("tests/fuzz/unlisted.onsa", "BADCANDIDATE")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/listed.onsa")
+                        + entry("fuzz-input", "tests/fuzz/fixed.onsa"))
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        fails = [l for l in text.split("\n") if l.startswith("FAIL")]
+        self.assertEqual(len(fails), 2, text)
+        self.assertIn("tests/fuzz/fixed.onsa: no longer crashes nor breaks the contract", fails[0])
+        self.assertIn("tests/fuzz/unlisted.onsa: breaks the contract of a fix candidate but is not listed", fails[1])
+        self.assertIn("fix|E0010|parenthesize the `…` of #|E0010", fails[1])
+
+    def test_fix_stage_classes(self):
+        # one mutant in FIX_EVERY goes through the fix stage; a new class is minimized and written
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 1, text)
+        self.assertIn("a new class of a broken fix candidate: fix-same-place: fix|E0010|parenthesize the `…` of #|E0010",
+                      text)
+        # 2 seeds of FIX_EVERY mutants: the first of each FIX_EVERY
+        self.assertIn("2 mutants through the fix stage (0 not UTF-8)", text)
+        new = list((self.repo.root / "target" / "fuzz" / "new").glob("*.onsa"))
+        self.assertTrue(new and new[0].read_text() == "BADCANDIDATE", new)
+        # a listed input shows the class: known
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/f.onsa"))
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 0, text)
+
+    def test_fix_stage_failure_fails(self):
+        # the tool failing is never a pass
+        self.repo.write("tests/fuzz/a.onsa", "CRASH_FIX")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn("the fix stage cannot run on the saved inputs: exit 3: boom", text)
+
+    def test_fix_signature(self):
+        v = {"code": "E0320", "title": "rename `Foo1` to `foo1`", "left": "E0002"}
+        self.assertEqual(fuzz.fix_signature(v), "fix|E0320|rename `…` to `…`|E0002")
+        self.assertEqual(fuzz.fix_signature({**v, "title": "use 3 args"}), "fix|E0320|use # args|E0002")
+
     def test_inputs_are_bytes(self):
         # a `\r` and invalid UTF-8 reach the compiler as they are
         raw = b"fn f() {\r\n  1\xff\r\n}\r\n"
@@ -1843,7 +1927,8 @@ class Fuzz(TempRepo):
     def test_time_budget(self):
         self.repo.write("tests/spec/x.onsa", "a\n")
         lines = []
-        code = fuzz.run(self.repo.root, self.argv, 50, "t", 1, False, out=lines.append, time_budget=0.001)
+        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, 50, "t", 1, False, out=lines.append,
+                        time_budget=0.001)
         self.assertEqual(code, 1, lines)
         self.assertTrue(any("time budget" in l for l in lines), lines)
 

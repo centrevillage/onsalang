@@ -83,6 +83,11 @@ pub struct TestSettings {
     /// `[[test.host]]`: sequences of calls at the C boundary of a target (K-14, [`crate::host`]).
     #[serde(default, deserialize_with = "crate::host::de_seqs")]
     pub host: Vec<crate::host::Seq>,
+    /// `[[test.fix]]`: what one fix candidate leaves after it, or promises
+    /// more (`clean`, `same_code`), against the contract of §18.1 (W3-17,
+    /// [`crate::fix_contract`]).
+    #[serde(default, deserialize_with = "crate::fix_contract::de_specs")]
+    pub fix: Vec<crate::fix_contract::FixSpec>,
 }
 
 /// A parsed fragment.
@@ -165,8 +170,10 @@ pub fn parse(text: &str) -> Result<Option<Fragment>, String> {
     }
     let mut test = toml::from_str::<TestTable>(&toml_text).map_err(|e| format!("fragment: [test]: {e}"))?.test;
     crate::host::locate(&mut test.host, &toml_text);
+    crate::fix_contract::locate(&mut test.fix, &toml_text);
     check_settings(&test, &lines[..end])?;
     crate::host::check(&test.host, test.mode).map_err(|e| format!("fragment: {e}"))?;
+    crate::fix_contract::check_specs(&test.fix, test.mode).map_err(|e| format!("fragment: {e}"))?;
     Ok(Some(Fragment { manifest, test }))
 }
 

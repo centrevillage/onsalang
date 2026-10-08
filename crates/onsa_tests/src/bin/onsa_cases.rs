@@ -13,6 +13,8 @@
 //! onsa_cases --keywords      the keywords of the lexer, `onsa_syntax::token::KEYWORDS` (tools/keywords.py)
 //! onsa_cases --std-names     the names the embedded std declares (tools/builtin_names.py, Q-14)
 //! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
+//! onsa_cases --fix-same-place FILE...  the near "same place" of the fix contract for the fuzzing
+//!                            (tools/fuzz.py, S-236, W3-17; `onsa_tests::fix_contract::same_place`)
 //! ```
 //!
 //! The first form prints:
@@ -37,12 +39,26 @@
 //! fails after `tests/pending.toml` is applied, 2 when it cannot run (a
 //! compiler is missing; `onsa_tests::ccheck`). `--vectors IMPL` prints the
 //! failing and pending operations and exits the same way.
+//!
+//! `--fix-same-place` checks each file as `onsa check` does (a single-file
+//! package) and prints, in the order of the files,
+//!
+//! ```text
+//! [{"file": "m.onsa", "candidates": 2,
+//!   "violations": [{"code": "E0010", "line": 2, "col": 3, "title": "parenthesize the `&&`",
+//!                   "left": "E0010", "left_line": 2, "left_col": 3, "message": "..."}],
+//!   "internal": null, "unreadable": null}, ...]
+//! ```
+//!
+//! `internal`: the check of the file itself ended in an internal error;
+//! `unreadable`: the file cannot be read (or is not UTF-8). Exits 0, 2 on a
+//! usage error.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | \
-     --std-names | --builtin-members";
+     --std-names | --builtin-members | --fix-same-place FILE...";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -57,6 +73,7 @@ fn main() -> ExitCode {
     let too_many = match mode {
         "" | "--run" => rest.len() > 1,
         "--c" | "--vectors" => rest.is_empty() || rest.len() > 2,
+        "--fix-same-place" => rest.is_empty(),
         _ => !rest.is_empty(),
     };
     if too_many {
@@ -92,6 +109,10 @@ fn main() -> ExitCode {
             let report = onsa_tests::vectors::run_item(&root, which);
             println!("{}", onsa_tests::vectors::text(&report));
             ExitCode::from(report.exit_code())
+        }
+        "--fix-same-place" => {
+            print(&serde_json::json!(fix_same_place(rest)));
+            ExitCode::SUCCESS
         }
         "--c-items" => {
             print(&serde_json::json!(onsa_tests::c::ITEMS.iter().map(|i| i.name).collect::<Vec<_>>()));
@@ -146,6 +167,40 @@ fn files(c: &onsa_tests::case::Case, s: &onsa_tests::case::Setup) -> serde_json:
         })
         .collect();
     serde_json::json!(files)
+}
+
+/// `--fix-same-place`: each file on a thread with the stack of a command, in parallel.
+fn fix_same_place(files: &[String]) -> Vec<serde_json::Value> {
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let out: std::sync::Mutex<Vec<Option<serde_json::Value>>> = std::sync::Mutex::new(vec![None; files.len()]);
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(files.len().max(1));
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            onsa_diag::stack::spawn_scoped(s, "onsa-fix", || {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let Some(path) = files.get(i) else { break };
+                    let v = match std::fs::read(path).map(String::from_utf8) {
+                        Err(e) => serde_json::json!({"file": path, "unreadable": e.to_string()}),
+                        Ok(Err(_)) => serde_json::json!({"file": path, "unreadable": "not UTF-8"}),
+                        // A panic outside the driver's stages is an internal error too.
+                        Ok(Ok(text)) => match onsa_driver::guard(|| onsa_tests::fix_contract::same_place(&text)) {
+                            Ok(r) => {
+                                let mut v = serde_json::json!(r);
+                                v["file"] = serde_json::json!(path);
+                                v
+                            }
+                            Err(e) => serde_json::json!({"file": path, "candidates": 0, "violations": [],
+                                                          "internal": e.message}),
+                        },
+                    };
+                    out.lock().expect("results")[i] = Some(v);
+                }
+            })
+            .expect("spawn a worker");
+        }
+    });
+    out.into_inner().expect("results").into_iter().map(|v| v.expect("every file ran")).collect()
 }
 
 fn print(v: &serde_json::Value) {

@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+
+// E0012 for two prefix operators written apart, `- - x` (§3.1): the candidate puts the inner
+// one in parentheses. Applied alone, it leaves no error in the unit it touches (§18.1, S-236;
+// checked by the runner, W3-17).
+
+pub fn negate_twice(x: I32) -> I32 {
+  - - x                                             //~ E0012
+}
+
+pub fn not_twice(b: Bool) -> Bool {
+  ! ! b                                             //~ E0012
+}

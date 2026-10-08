@@ -22,6 +22,10 @@ pub enum Kind {
     Gate,
     TestCase,
     FuzzInput,
+    /// One fix candidate that breaks the contract of §18.1 (S-236):
+    /// `"<file from the root>:<line>:<col> <code> fix<K>"` (W3-17,
+    /// [`crate::fix_contract`]).
+    FixContract,
 }
 
 /// What a `test-case` entry expects of its case, other than a failure.
@@ -136,12 +140,27 @@ reasons = ["R-77"]
 until = "W7-03"
 note = "n"
 expect = "internal"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/types.onsa:59:3 E0411 fix1"
+reasons = ["S-236"]
+until = "W5-02"
+note = "n"
 "#;
         let list = Pending::parse(text).unwrap();
         let kinds: Vec<Kind> = list.pending.iter().map(|e| e.kind).collect();
         assert_eq!(
             kinds,
-            [Kind::SpecExample, Kind::DiagCode, Kind::Gate, Kind::TestCase, Kind::FuzzInput, Kind::TestCase]
+            [
+                Kind::SpecExample,
+                Kind::DiagCode,
+                Kind::Gate,
+                Kind::TestCase,
+                Kind::FuzzInput,
+                Kind::TestCase,
+                Kind::FixContract
+            ]
         );
         assert_eq!(list.pending[3].expect, None);
         assert_eq!(list.pending[5].expect, Some(Expect::Internal));

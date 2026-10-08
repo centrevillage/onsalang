@@ -1,6 +1,14 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§2.3", "§2.4", "§2.5"]
+//
+// # `bad_points` holds three naming errors in one unit: the candidate of its name leaves the
+// # E0320 of its first field (S-236, W3-17).
+// [[test.fix]]
+// at = "140:12"
+// code = "E0320"
+// candidate = 1
+// leaves = ["141:3 E0320"]
 
 // The unit of a diagnostic is the declaration, and a unit reports one error (§18.1, S-59, R-71).
 // The stages have a dependency order (syntax, names, types, ...). Where a stage finds an

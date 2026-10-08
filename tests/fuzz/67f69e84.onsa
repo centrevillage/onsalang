@@ -1,0 +1,3 @@
+fn t(c:Bool,move a:Buf[F32],move b:Buf[F32])->Buf[F32] uses {Alloc} { let y = if c { a } else { b }
+  y
+}

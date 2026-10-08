@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+
+// E0320 for a name the naming rule turns into a keyword: `Match` is `match` (§2.2), so the
+// candidate adds `_` at its end, `match_` (§2.3, S-243). Applied alone, the candidate leaves no
+// error in the unit it touches (§18.1, S-236; checked by the runner, W3-17).
+
+pub fn Match() -> I32 {                             //~ E0320
+  1
+}

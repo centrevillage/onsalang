@@ -236,41 +236,118 @@ impl Diagnostic {
 /// Apply edits to the files of `sources` at once. Returns the new text of
 /// every file an edit touches. Fails on overlapping edits ([`overlap`]), a
 /// range outside its file, or an end that is not at a character boundary.
+/// The texts of [`apply_mapped`].
 pub fn apply<'a>(
     sources: &SourceMap,
     edits: impl IntoIterator<Item = &'a Edit>,
 ) -> Result<BTreeMap<FileId, String>, String> {
-    let mut by_file: BTreeMap<FileId, Vec<&Edit>> = BTreeMap::new();
-    for e in edits {
+    apply_mapped(sources, edits).map(|a| a.texts)
+}
+
+/// Edits applied ([`apply_mapped`]): the new texts, and where each edit and
+/// each place of the original texts went.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Applied {
+    /// The new text of every file an edit touches.
+    pub texts: BTreeMap<FileId, String>,
+    /// For each edit, in the order given: the range its replacement takes in
+    /// the new text of its file (empty for a deletion).
+    pub ranges: Vec<Span>,
+    /// Per file, each edit as (old start, old end, new start, new end), in
+    /// the order of the text ([`Applied::map_span`]).
+    moves: BTreeMap<FileId, Vec<[u32; 4]>>,
+}
+
+impl Applied {
+    /// Where the range `span` of an original text is after the edits: each
+    /// end moves by the edits before it; an end inside an edited range goes
+    /// to that end of its replacement, and an insertion at either end of
+    /// `span` goes inside it (the start stays before the inserted text, the
+    /// end goes after it). So an empty `span` at an insertion covers the
+    /// inserted text.
+    pub fn map_span(&self, span: Span) -> Span {
+        let Some(moves) = self.moves.get(&span.file) else { return span };
+        let shift = |at: u32, start: bool| -> u32 {
+            let mut delta: i64 = 0;
+            for &[os, oe, ns, ne] in moves {
+                // Wholly before `at` (an insertion at `at` is before the end, not the start).
+                if oe < at || (oe == at && (os < oe || !start)) {
+                    delta = ne as i64 - oe as i64;
+                } else if os < at || (start && os == at && os < oe) {
+                    // `at` is inside the edited range.
+                    return if start { ns } else { ne };
+                } else {
+                    break;
+                }
+            }
+            (at as i64 + delta) as u32
+        };
+        Span { file: span.file, start: shift(span.start, true), end: shift(span.end, false) }
+    }
+}
+
+/// Apply edits to the files of `sources` at once, as [`apply`] (the one place
+/// of applying them, W3-17), keeping where each replacement lies in the new
+/// texts and where the places of the original texts went.
+pub fn apply_mapped<'a>(sources: &SourceMap, edits: impl IntoIterator<Item = &'a Edit>) -> Result<Applied, String> {
+    let edits: Vec<&Edit> = edits.into_iter().collect();
+    let mut by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
+    for (i, e) in edits.iter().enumerate() {
         if e.span.file.0 as usize >= sources.len() {
             return Err(format!("an edit in an unknown file: {:?}", e.span));
         }
-        by_file.entry(e.span.file).or_default().push(e);
+        by_file.entry(e.span.file).or_default().push(i);
     }
-    let mut out = BTreeMap::new();
-    for (file, edits) in by_file {
-        out.insert(file, apply_text(sources.file(file).text(), &edits)?);
+    let mut out = Applied { ranges: edits.iter().map(|e| e.span).collect(), ..Applied::default() };
+    for (file, idx) in by_file {
+        let mine: Vec<&Edit> = idx.iter().map(|&i| edits[i]).collect();
+        let (text, ranges) = apply_text_mapped(sources.file(file).text(), &mine)?;
+        let mut moves = Vec::with_capacity(idx.len());
+        for (k, &i) in idx.iter().enumerate() {
+            out.ranges[i] = Span::new(file, ranges[k].0, ranges[k].1);
+            moves.push([edits[i].span.start, edits[i].span.end, ranges[k].0, ranges[k].1]);
+        }
+        moves.sort();
+        out.moves.insert(file, moves);
+        out.texts.insert(file, text);
     }
     Ok(out)
 }
 
 /// Apply edits of one file to its `text` at once (the rule of [`apply`]).
 pub fn apply_text(text: &str, edits: &[&Edit]) -> Result<String, String> {
-    let mut edits: Vec<&Edit> = edits.to_vec();
-    sort_edits(&mut edits);
-    if let Some((a, b)) = overlap(&edits) {
+    apply_text_mapped(text, edits).map(|(t, _)| t)
+}
+
+/// [`apply_text`], with the range each replacement takes in the new text (in
+/// the order of `edits`).
+fn apply_text_mapped(text: &str, edits: &[&Edit]) -> Result<(String, Vec<(u32, u32)>), String> {
+    let mut order: Vec<usize> = (0..edits.len()).collect();
+    order.sort_by_key(|&i| {
+        let s = edits[i].span;
+        (s.file, s.start, s.end)
+    });
+    if let Some((a, b)) = overlap(edits) {
         return Err(format!("edits overlap: {:?} and {:?}", edits[a].span, edits[b].span));
     }
-    let mut out = text.to_string();
-    // Back to front, so that earlier offsets stay valid.
-    for e in edits.iter().rev() {
+    let mut out = String::with_capacity(text.len());
+    let mut ranges = vec![(0, 0); edits.len()];
+    let mut pos = 0;
+    // Front to back: the text before each edit, then its replacement.
+    for i in order {
+        let e = edits[i];
         let (s, t) = (e.span.start as usize, e.span.end as usize);
-        if t > out.len() || !out.is_char_boundary(s) || !out.is_char_boundary(t) {
+        if s > t || t > text.len() || !text.is_char_boundary(s) || !text.is_char_boundary(t) {
             return Err(format!("an edit outside its file or inside a character: {:?}", e.span));
         }
-        out.replace_range(s..t, &e.replace);
+        out.push_str(&text[pos..s]);
+        let start = out.len() as u32;
+        out.push_str(&e.replace);
+        ranges[i] = (start, out.len() as u32);
+        pos = t;
     }
-    Ok(out)
+    out.push_str(&text[pos..]);
+    Ok((out, ranges))
 }
 
 /// The longest title of a fix candidate, in characters ([`contract`]).
@@ -648,6 +725,56 @@ mod tests {
         assert_eq!(out[&b], "bad_name()");
         let bad = [Edit::replace(Span::new(a, 0, 7), "v"), Edit::replace(Span::new(a, 4, 5), "w")];
         assert!(apply(&sources, bad.iter()).is_err());
+    }
+
+    #[test]
+    fn apply_mapped_keeps_where_the_edits_went() {
+        let mut sources = SourceMap::default();
+        let a = sources.add("a.onsa", "let mut x = 1 + y");
+        let b = sources.add("b.onsa", "abc");
+        // `mut ` removed, `1` replaced by `22`, `!` inserted at the end; `b` gets `[` at 1.
+        let edits = [
+            Edit::insert(a, 17, "!"),
+            Edit::delete(Span::new(a, 4, 8)),
+            Edit::replace(Span::new(a, 12, 13), "22"),
+            Edit::insert(b, 1, "["),
+        ];
+        let out = apply_mapped(&sources, edits.iter()).unwrap();
+        assert_eq!(out.texts[&a], "let x = 22 + y!");
+        assert_eq!(out.texts[&b], "a[bc");
+        // In the order given, each replacement's range in the new text.
+        assert_eq!(out.ranges, [Span::new(a, 14, 15), Span::new(a, 4, 4), Span::new(a, 8, 10), Span::new(b, 1, 2)]);
+        for (e, r) in edits.iter().zip(&out.ranges) {
+            assert_eq!(&out.texts[&r.file][r.start as usize..r.end as usize], e.replace);
+        }
+        let m = |s: u32, e: u32| {
+            let r = out.map_span(Span::new(a, s, e));
+            (r.start, r.end)
+        };
+        assert_eq!(m(0, 3), (0, 3), "before every edit");
+        assert_eq!(m(8, 9), (4, 5), "`x`, after the deletion");
+        assert_eq!(m(5, 6), (4, 4), "inside the deleted range");
+        assert_eq!(m(12, 13), (8, 10), "the replaced `1`");
+        assert_eq!(m(10, 17), (6, 15), "an insertion at the end goes inside");
+        let mut one = SourceMap::default();
+        let t = one.add("t.onsa", "abc");
+        let ins = [Edit::insert(t, 1, "X")];
+        let at = apply_mapped(&one, ins.iter()).unwrap();
+        assert_eq!(at.texts[&t], "aXbc");
+        assert_eq!(at.map_span(Span::new(t, 1, 2)), Span::new(t, 1, 3), "an insertion at the start goes inside");
+        assert_eq!(at.map_span(Span::new(t, 0, 1)), Span::new(t, 0, 2), "and at the end");
+        assert_eq!(m(16, 17), (13, 15), "`y`, with the insertion at its end");
+        assert_eq!(m(16, 16), (13, 13), "the start of `y`");
+        assert_eq!(m(17, 17), (14, 15), "an empty range at an insertion covers it");
+        assert_eq!(m(4, 8), (4, 4), "the deleted range");
+        // A file no edit touches does not move.
+        let c = sources.add("c.onsa", "x");
+        assert_eq!(out.map_span(Span::new(c, 0, 1)), Span::new(c, 0, 1));
+        // The same rule as `apply`.
+        let bad = [Edit::replace(Span::new(a, 0, 7), "v"), Edit::replace(Span::new(a, 4, 5), "w")];
+        assert!(apply_mapped(&sources, bad.iter()).is_err());
+        let outside = [Edit::replace(Span::new(b, 2, 9), "v")];
+        assert!(apply_mapped(&sources, outside.iter()).is_err());
     }
 
     #[test]

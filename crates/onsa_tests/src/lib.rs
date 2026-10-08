@@ -27,12 +27,17 @@
 //!
 //! The calls at the C boundary of a target, with the values each must give,
 //! are sequences in the fragment's `[[test.host]]` ([`host`], K-14).
+//!
+//! Every fix candidate of a case is applied alone and the case checked again
+//! against the contract of §18.1; what one candidate may leave, or promises
+//! more, is in the fragment's `[[test.fix]]` ([`fix_contract`], W3-17).
 
 pub mod c;
 pub mod capi;
 pub mod case;
 pub mod ccheck;
 pub mod conformance;
+pub mod fix_contract;
 pub mod fixes;
 pub mod fragment;
 pub mod golden;
