@@ -339,6 +339,13 @@ note = "ブロックの途中の文の値"
 
 [[pending]]
 kind = "diag-code"
+target = "E0422"
+reasons = ["S-264"]
+until = "W4-05"
+note = "検査が作る型の深さ 256 と大きさ 4096 の上限（S-264）。別名と書いた型は W4-05、推論した型は W4-05 の作業票で決める W5 の作業"
+
+[[pending]]
+kind = "diag-code"
 target = "E0503"
 reasons = ["S-128", "S-187"]
 until = "W5-09"

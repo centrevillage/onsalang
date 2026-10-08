@@ -295,6 +295,8 @@ codes! {
         "the type of this operand must be known here; add an annotation";
     E0421 = 421, Types, [Types], Optional, Optional,
         "typed hole";
+    E0422 = 422, Types, [Names, Types], Optional, Optional,
+        "type deeper or larger than the limit";
     E0501 = 501, Exhaustiveness, [Types], Optional, Optional,
         "`match` is not exhaustive";
     E0502 = 502, Exhaustiveness, [Types, Flow], Optional, Optional,

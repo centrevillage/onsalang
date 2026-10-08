@@ -4,6 +4,9 @@ use std.math.{pow}
 
 /// Sum of a fixed-length array, folded from `xs[0]` left to right so that the
 /// order of operations, and therefore the result, is the same on every target.
+/// Inside a call of a function or flow marked `@fp(relaxed)`, this order and
+/// exactness do not hold: the relaxation reaches the operations of the
+/// functions it calls (spec §15.5).
 pub rt fn sum[const N: U32](xs: [F32; N]) -> F32 {
   var acc: F32 = 0.0
   for i in 0..N {
