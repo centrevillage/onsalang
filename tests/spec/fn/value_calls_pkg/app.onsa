@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§6.1", "§15.1"]
+
+// The callee of `.(` comes from another module: a field of an imported struct, the result of an
+// imported function called by its imported name or by its qualified name, and an imported function
+// taken as a value (§6.1: a namespace function is a value). The items themselves are called
+// `f(x)` whichever way they are named.
+use shapes
+use shapes.{Shaper, inc, pick, soft_clip}
+
+pub fn field_of_an_imported_struct(s: Shaper, x: F32) -> F32 {
+  s.curve.(x) * s.gain
+}
+
+pub fn result_of_an_imported_function(x: I32) -> I32 {
+  pick(true).(x)
+}
+
+pub fn result_of_a_qualified_function(x: I32) -> I32 {
+  shapes.pick(false).(x)
+}
+
+pub fn imported_function_as_a_value(x: F32) -> F32 {
+  let f = soft_clip
+  f.(x)
+}
+
+pub fn qualified_function_as_a_value(x: F32) -> F32 {
+  let f = shapes.soft_clip
+  f.(shapes.soft_clip(x))
+}
+
+pub fn struct_built_here(x: F32) -> F32 {
+  let s = Shaper { gain: 2.0, curve: shapes.soft_clip }
+  s.curve.(x) + s.run(x)
+}
+
+pub fn associated_function_as_a_value(x: F32) -> F32 {
+  let make = Shaper.new
+  make.(0.5).curve.(x)
+}
+
+pub fn item_calls(x: I32) -> I32 {
+  inc(shapes.inc(x))
+}

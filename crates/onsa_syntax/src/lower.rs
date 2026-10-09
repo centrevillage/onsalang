@@ -63,8 +63,10 @@ pub(crate) fn class(kind: NodeKind) -> Class {
         | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr | TryExpr | StructLit => {
             Class::Expr
         }
-        PathType | ConstArg | UnitType | TupleType | ArrayType | FnType => Class::Type,
-        WildPat | LitPat | NegLitPat | TuplePat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => Class::Pat,
+        PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType => Class::Type,
+        WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => {
+            Class::Pat
+        }
         SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
         | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
         | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target | Test
@@ -199,13 +201,13 @@ impl<'a> Lower<'a> {
     fn add_type(&mut self, n: NodeId, kind: TypeKind) -> TypeId {
         self.map.types.push(n);
         let span = self.span(n);
-        self.ast.add_type(TypeExpr { span, kind })
+        self.ast.add_type(TypeExpr { span, kind, parens: 0 })
     }
 
     fn add_pat(&mut self, n: NodeId, kind: PatKind) -> PatId {
         self.map.pats.push(n);
         let span = self.span(n);
-        self.ast.add_pat(Pat { span, kind })
+        self.ast.add_pat(Pat { span, kind, parens: 0 })
     }
 
     // ------------------------------------------------------------ items
@@ -806,6 +808,12 @@ impl<'a> Lower<'a> {
 
     fn ty(&mut self, n: NodeId) -> TypeId {
         let kind = match self.cst.kind(n) {
+            // `(T)` is `T` (§2.4, R-43); the parentheses are kept for fmt.
+            NodeKind::ParenType => {
+                let t = self.first_type(n).unwrap_or_else(|| self.bug(n, "a type"));
+                self.ast.types[t.index()].parens += 1;
+                return t;
+            }
             NodeKind::PathType => {
                 let path = self.path(self.need(n, NodeKind::Path));
                 let args = match self.child(n, NodeKind::TypeArgs) {
@@ -1017,6 +1025,8 @@ impl<'a> Lower<'a> {
                     CallKind::Flow
                 } else if self.has(n, TokenKind::Bang) {
                     CallKind::Bang
+                } else if let Some(dot) = self.tok(n, TokenKind::Dot) {
+                    CallKind::Value { dot: self.cst.token(dot).span }
                 } else {
                     CallKind::Plain
                 };
@@ -1148,6 +1158,13 @@ impl<'a> Lower<'a> {
 
     fn pat(&mut self, n: NodeId) -> PatId {
         let kind = match self.cst.kind(n) {
+            // `(p)` is `p` (§2.4, R-43); the parentheses are kept for fmt.
+            NodeKind::ParenPat => {
+                let c = self.of_class(n, Class::Pat).into_iter().next().unwrap_or_else(|| self.bug(n, "a pattern"));
+                let p = self.pat(c);
+                self.ast.pats[p.index()].parens += 1;
+                return p;
+            }
             NodeKind::WildPat => PatKind::Wild,
             NodeKind::LitPat => {
                 let t = self.toks(n)[0];

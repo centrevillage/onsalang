@@ -2051,8 +2051,11 @@ impl<'a> Checker<'a> {
                 .with_fix(Fix::delete("remove `~`", Span::new(span.file, at, at + 1))),
             ));
         }
+        // `v.(x)` (§6.1, S-191): the callee is a value, whatever its form;
+        // the names stage tells `inc.(1)` of an item from it (W4-12).
+        let value = matches!(kind, CallKind::Value { .. });
         // 1. Method call `recv.name(...)` when the base is a value.
-        if let ExprKind::Field { base, name } = &self.expr(callee).kind {
+        if !value && let ExprKind::Field { base, name } = &self.expr(callee).kind {
             let base = *base;
             let name = name.clone();
             let chain = self.name_chain(callee);
@@ -2107,7 +2110,8 @@ impl<'a> Checker<'a> {
             return self.check_method_call(e, callee, recv, &name, args, expected, kind);
         }
         // 2. Named function, variant constructor, or prelude constructor.
-        if let ExprKind::Path(p) = &self.expr(callee).kind
+        if !value
+            && let ExprKind::Path(p) = &self.expr(callee).kind
             && p.segments.len() == 1
         {
             let name = p.segments[0].clone();

@@ -7,8 +7,8 @@ fn unit_ret() -> () {}
 // 期待: `fn empty_uses() -> I32 { 1 }`。今は変えない。
 fn empty_uses() -> I32 uses {} { 1 }
 
-// 期待: `fn apply(f: fn(F32), x: F32) { f(x) }`。今は変えない。
-fn apply(f: fn(F32) -> (), x: F32) { f(x) }
+// 期待: `fn apply(f: fn(F32), x: F32) { f.(x) }`。今は変えない。
+fn apply(f: fn(F32) -> (), x: F32) { f.(x) }
 
 // 期待: 末尾の値の無い `return` を外す。今は変えない。
 fn set_one(inout x: I32) {
@@ -19,7 +19,7 @@ fn set_one(inout x: I32) {
 // 期待: `{ x * 2.0 }`（無名関数の末尾の `return`）。今は変えない。
 fn closure() -> F32 {
   let f = fn(x: F32) -> F32 { return x * 2.0 }
-  f(1.0)
+  f.(1.0)
 }
 
 // 期待: `if x < 0 { -1 } else { 1 }` の形（末尾の位置の分岐の `return`。改行は保つ）。今は変えない。

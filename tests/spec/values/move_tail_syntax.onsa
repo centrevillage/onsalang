@@ -1,0 +1,118 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§5.2"]
+
+// The syntax of `move` on the last expression of a block placed where a value is consumed (S-100,
+// §5.2): the arms of `if` and `match` and a block expression may end with `move a`, and the
+// position is inherited by the blocks nested in them. The forms of a block placed where the function
+// returns (`return move a`, a function ending in `move a`, the arms there) are accepted too, but
+// `onsa fmt` removes that `move` (§5.2), so they cannot be in a file that has to be canonical; they
+// are in crates/onsa_cli/tests/call_forms_syntax.rs. Only the syntax is checked here (mode =
+// "parse"): the E0711 of an arm that consumes without the mark, the E0703 of the argument forms and
+// the E0704 after a conditional move belong to the modes stage (W4-09).
+
+fn take(move t: Buf[F32]) -> U32 uses {Alloc} {
+  t.len()
+}
+
+// ------------------------------------------------ the block is where a value is consumed
+
+fn let_if(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { move a } else { move b }
+  y
+}
+
+fn let_if_else_if(k: I32, move a: Buf[F32], move b: Buf[F32], move d: Buf[F32]) -> Buf[F32] {
+  let y = if k == 0 {
+    move a
+  } else if k == 1 {
+    move b
+  } else {
+    move d
+  }
+  y
+}
+
+fn let_match(k: I32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = match k {
+    0 => move a,
+    _ => move b,
+  }
+  y
+}
+
+fn let_match_with_block_arms(k: I32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  let y = match k {
+    0 => {
+      move a
+    },
+    _ => {
+      let n = b.len()
+      move b
+    },
+  }
+  y
+}
+
+fn let_block_expression(move a: Buf[F32]) -> Buf[F32] {
+  let y = { move a }
+  y
+}
+
+fn let_nested(c: Bool, d: Bool, move a: Buf[F32], move b: Buf[F32], move e: Buf[F32]) -> Buf[F32] {
+  let y = if c {
+    if d { move a } else { move b }
+  } else {
+    move e
+  }
+  y
+}
+
+fn let_nested_in_match(k: I32, c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  let y = match k {
+    0 => if c { move a } else { move b },
+    _ => match c {
+      true => move b,
+      false => move a,
+    },
+  }
+  y
+}
+
+fn let_with_a_new_value_in_an_arm(c: Bool, move a: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { move a } else { Buf.zeroed(4) }
+  y
+}
+
+fn var_initializer(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  var y = if c { move a } else { move b }
+  y
+}
+
+fn assigned_value(c: Bool, move a: Buf[F32], move b: Buf[F32], inout out: Buf[F32]) {
+  out = if c { move a } else { move b }
+}
+
+fn tuple_element(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> (Buf[F32], I32) {
+  (if c { move a } else { move b }, 1)
+}
+
+fn array_element(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> [Buf[F32]; 1] {
+  [if c { move a } else { move b }]
+}
+
+fn argument_if(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(if c { move a } else { move b })
+}
+
+fn argument_match(k: I32, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {Alloc} {
+  take(match k {
+    0 => move a,
+    _ => move b,
+  })
+}
+
+fn argument_block(move a: Buf[F32]) -> U32 uses {Alloc} {
+  take({ move a })
+}

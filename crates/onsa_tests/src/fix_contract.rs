@@ -787,7 +787,12 @@ pub struct SamePlace {
 /// unit, but the original, whose start moves into the same place. One of the
 /// original's own code inside the original's range is no other error, though:
 /// it is a part of the same form, which the candidate must fix whole (S-248;
-/// the inner `--x` of `---x`), and stays a violation. The diagnostics are
+/// the inner `--x` of `---x`), and stays a violation. Nor is the outer form of
+/// the original, which the syntax stage did not read past it (the next link
+/// of the chain of calls `g(1)(2)(3)`, S-326): one of the same code and
+/// message that starts where the moved original starts and ends after it, so
+/// the original was not the only error of its unit (the premise of S-314;
+/// [`outer_form`]). The diagnostics are
 /// compared by code, range and message (`found` is filled in only after the
 /// choice per unit). The units are not used: this is a net for new kinds,
 /// not the contract.
@@ -842,7 +847,8 @@ pub fn same_place(text: &str) -> SamePlace {
             }
         };
         let mut places: Vec<Span> = applied.ranges.clone();
-        places.push(applied.map_span(d.span));
+        let moved_original = applied.map_span(d.span);
+        places.push(moved_original);
         let in_place = |s: Span| in_same_place(&places, s);
         for d2 in &after.diagnostics {
             if d2.stage.check_rank().is_none_or(|r| r > rank) || !in_place(d2.span) {
@@ -866,7 +872,7 @@ pub fn same_place(text: &str) -> SamePlace {
                     && d2.span.start <= moved.end
                     && in_place(moved)
             });
-            if held_before {
+            if held_before || outer_form(d, d2, moved_original) {
                 continue;
             }
             let lc2 = again.sources.file(d2.span.file).line_col(d2.span.start);
@@ -874,6 +880,20 @@ pub fn same_place(text: &str) -> SamePlace {
         }
     }
     out
+}
+
+/// Whether `left`, found after the candidate of `original` (whose range,
+/// moved to the text after it, is `moved`), is the outer form of the
+/// original that the syntax stage did not read past it ([`same_place`]): the
+/// same code and message, the same start, and an end strictly after the
+/// moved end. One that ends where the original ends (a candidate that fixed
+/// nothing) or inside it (a part of the same form, S-248) is not.
+fn outer_form(original: &Diagnostic, left: &Diagnostic, moved: Span) -> bool {
+    left.code == original.code
+        && left.message == original.message
+        && left.span.file == moved.file
+        && left.span.start == moved.start
+        && left.span.end > moved.end
 }
 
 /// Whether the diagnostic at `s` starts in the same place as one of
@@ -1050,5 +1070,36 @@ mod tests {
         // reported (S-281), and it has no candidate.
         let stray = same_place("1.\n");
         assert_eq!(stray.candidates, 0, "{stray:?}");
+    }
+
+    #[test]
+    fn same_place_does_not_count_the_outer_link_of_a_chain_of_calls() {
+        // `g(1)(2)(3)`: the candidate fixes the first link (`g(1).(2)(3)`); the next link, which
+        // starts where the first did and ends after it, was not read by the syntax stage before
+        // (S-326, S-314): no violation.
+        let chain = same_place(
+            "pub fn adder(x: I32) -> fn(I32) -> I32 {\n  adder\n}\n\npub fn g(x: I32) -> fn(I32) -> fn(I32) -> I32 {\n  adder\n}\n\npub fn f() -> I32 {\n  g(1)(2)(3)\n}\n",
+        );
+        assert_eq!(chain.candidates, 1, "{chain:?}");
+        assert!(chain.violations.is_empty(), "{chain:?}");
+    }
+
+    #[test]
+    fn the_outer_form_is_only_one_that_ends_after_the_original() {
+        // No input of the compiler has a candidate that leaves its own error on the same range;
+        // the test of `outer_form` is on diagnostics made here.
+        let d = |start: u32, end: u32, message: &str| {
+            Diagnostic::new(onsa_diag::Stage::Syntax, Code::E0020, Span { file: FileId(0), start, end }, message)
+        };
+        let original = d(10, 15, "m");
+        let moved = Span { file: FileId(0), start: 10, end: 16 };
+        // The next link of a chain: the same start, a later end.
+        assert!(outer_form(&original, &d(10, 20, "m"), moved));
+        // A candidate that fixed nothing leaves the same range: a violation.
+        assert!(!outer_form(&original, &d(10, 16, "m"), moved));
+        // Inside the original (a part of the same form, S-248), another start, another message.
+        assert!(!outer_form(&original, &d(10, 12, "m"), moved));
+        assert!(!outer_form(&original, &d(11, 20, "m"), moved));
+        assert!(!outer_form(&original, &d(10, 20, "other"), moved));
     }
 }

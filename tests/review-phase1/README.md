@@ -103,8 +103,8 @@
 | `syntax/cascade.onsa`、`syntax/impl_sema.onsa` | R-71。`impl_errs.onsa` は W3-03 で期待値付きのテストへ移して消した（`tests/spec/negative/unit_members.onsa`） |
 | `syntax/groups.onsa` | R-72 |
 | `syntax/lit.onsa` | R-73 |
-| `syntax/tup1.onsa`、`syntax/tuples.onsa` | R-43 |
-| `syntax/moveargs.onsa`、`syntax/paren_move.onsa` | R-42 |
+| `syntax/tup1.onsa`、`syntax/tuples.onsa` | R-43。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_one_tuple.onsa`（要素 1 個の後の `,` の E0002）、`tests/spec/semantics/paren_group.onsa`（式・型・パターンの `(e)` はグループ化） |
+| `syntax/moveargs.onsa`、`syntax/paren_move.onsa` | R-42。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_move_operand.onsa` |
 | `syntax/nested*.onsa` | R-44 |
 | `syntax/bigfloat.onsa` | R-45 |
 | `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/naming.onsa`、`syntax/modpkg/` | R-46 |
@@ -167,7 +167,7 @@
 | `parent/r122/` | R-122（パッケージの `tests/` の役割。`onsa check` と `onsa test` で確かめる。`tests/api.onsa` はルート直下の `tests/`、`dsp/tests/n.onsa` はルート直下でない `tests/`。期待値と今の出力は各ファイルの先頭のコメント。S-96） |
 | `parent/r125.onsa` | R-125（std のテスト用の補助を呼べる場所。`onsa check` と `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-97） |
 | `parent/r126.onsa` | R-126（組込みのメソッドの一覧。`onsa check` で確かめる。期待値と今の出力は各項目の上のコメント。S-98） |
-| `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100） |
+| `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100）。構文は W3-20 で期待値付きのテストへ移した: `tests/spec/values/move_tail_syntax.onsa`、`crates/onsa_cli/tests/call_forms_syntax.rs`（返り値の位置の `move`）。検査（E0711、E0703、E0704）は W4-09 |
 | `parent/t5.onsa` | `impl-review-0.3.md` の T-5（flow だけの構文を flow の外に書いたときの診断。期待値と今の出力は各関数の上のコメント。S-101。レート型の部分は S-102） |
 | `parent/t8.onsa` | `impl-review-0.3.md` の T-8 と R-105 の残り（診断コードの流用。期待値と今の出力は各項目の上のコメント。S-103） |
 | `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |

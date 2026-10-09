@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 1
+//
+// # Each link of a chain of calls is its own form (§18.1, S-248, S-326): the candidate of the
+// # first link fixes that one, and the next link, whose callee now starts where the first one
+// # did, is reported after it (a unit stops at its first error).
+// [[test.fix]]
+// at = "39:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["39:3 E0020"]
+//
+// [[test.fix]]
+// at = "43:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["43:3 E0020"]
+
+// A chain of calls of function values (`g(1)(2)(3)`, `(f)(x)(x)`, §6.1): every link after the
+// first calls a value and is written with `.(`. The links are separate errors (§18.1, S-248, S-326):
+// the one candidate fixes the first link only (`g(1).(2)(3)`), and the next is reported once it is
+// applied. One error per function (P-01).
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn adder(x: I32) -> fn(I32) -> I32 {
+  inc
+}
+
+pub fn g(x: I32) -> fn(I32) -> fn(I32) -> I32 {
+  adder
+}
+
+pub fn three_links() -> I32 {
+  g(1)(2)(3)                                        //~ E0020
+}
+
+pub fn a_parenthesized_name_and_two_links(f: fn(I32) -> fn(I32) -> I32, x: I32) -> I32 {
+  (f)(x)(x)                                         //~ E0020
+}
+
+pub fn fine(f: fn(I32) -> fn(I32) -> I32, x: I32) -> I32 {
+  g(1).(2).(3) + f.(x).(x)
+}

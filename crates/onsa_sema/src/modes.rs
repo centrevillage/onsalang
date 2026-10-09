@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, Block, CallKind, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
@@ -449,7 +450,21 @@ impl<'a> Walker<'a> {
                 }
             }
             ExprKind::Paren(inner) => self.expr(*inner, pos),
-            ExprKind::Move(inner) => self.expr(*inner, Pos::Moved),
+            // `move x` where a value is consumed or returned, and on the last
+            // expression of a block placed there (§5.2, S-100). Not the list of
+            // `consume`: an element of an array literal that is an argument
+            // (`PlanarElem`) takes a written `move` into the literal, as it did
+            // before S-100, while a place written there bare is viewed, not
+            // consumed (planar spans, §5.3).
+            ExprKind::Move(inner)
+                if matches!(pos, Pos::Consume | Pos::Moved | Pos::MoveArg | Pos::Return | Pos::PlanarElem) =>
+            {
+                self.expr(*inner, Pos::Moved)
+            }
+            // SPEC-GAP(S-343): a block's last `move` where no value is consumed
+            // (a statement, a condition, a borrowed argument) is not decided; it
+            // is stopped rather than read as a move.
+            ExprKind::Move(_) => self.report(Feature::MoveOnUnconsumedTail.diagnostic(Stage::Modes, span, &[])),
             ExprKind::Tuple(elems) | ExprKind::Array(elems) => {
                 let inner = if pos == Pos::Arg || pos == Pos::InoutArg { Pos::PlanarElem } else { Pos::Consume };
                 for &el in elems {
@@ -479,7 +494,11 @@ impl<'a> Walker<'a> {
                 self.merge(then_state, then_div, else_div);
             }
             ExprKind::Match { scrutinee, arms } => {
-                self.expr(*scrutinee, Pos::Scrutinee);
+                // `match move x` consumes (§7, S-21); a `match x` borrows.
+                match &self.ast.expr(*scrutinee).kind {
+                    ExprKind::Move(inner) => self.expr(*inner, Pos::Moved),
+                    _ => self.expr(*scrutinee, Pos::Scrutinee),
+                }
                 let before = self.state.clone();
                 let mut acc: Option<(State, bool)> = None;
                 for arm in arms {
@@ -605,6 +624,9 @@ impl<'a> Walker<'a> {
     /// Affine values move (whole locals only), Dup values are copied.
     fn consume(&mut self, e: ExprId, pos: Pos) {
         // `match x` always borrows (§7, S-21); `match move x` reaches here as `Moved`.
+        // A bare place in an element of an array literal that is an argument
+        // (`PlanarElem`) is viewed as a span, not consumed (§5.3); a `move`
+        // written there reaches here as `Moved` (the arm `ExprKind::Move`).
         if !matches!(pos, Pos::Consume | Pos::Moved | Pos::MoveArg | Pos::Return) {
             return;
         }

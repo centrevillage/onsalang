@@ -2105,7 +2105,7 @@ impl Poly {
 | `onsa fmt [--check]` | 唯一の表記への正規化（下記。正規形は [`docs/onsa-tools.md`](docs/onsa-tools.md) §3） |
 | `onsa build --target <名前>` | マニフェストのターゲットをビルドし、成果物を `target/<名前>/` に置く（C では `onsa.h`、`onsa__runtime.h`、`<prefix><package>.h`、`<prefix><package>.c`、`staticlib` は加えて `lib<prefix><package>.a`。§14.2、§15.3）。`target/` の中の、ここに挙げた成果物以外のファイルは内部の出力で、形は版で変わる。`--target` を省くと使い方の誤り（終了コード 2。既定のターゲットを暗黙に選ばない、§12.1） |
 | `onsa test [--json] [--filter <text>] [--backends all] [--flows] [--target <名前>] [--seed <値>]` | `test` を実行。`--filter` で走らせるテストを絞る（下記）。`--target` を付けると、そのターゲットの `fp` と `platform` で実行する（`strict-ftz` の模倣、§15.5）。省けば `strict`。テストの panic は、ターゲットの `panic` の設定によらず、テストの失敗として報告する。`--seed` は性質の検査の種（§11.8）。`--backends` で変換先間のビット一致も検査（§13.4）。`--flows` で export される flow を `@param` の範囲で自動検査する（角と無作為の内点でパラメータを取り、無音・インパルス・雑音を入れ、出力が有限で panic しないこと） |
-| `onsa interface [--target <名前>] <mod>` | 公開シグネチャ、doc コメント（宣言の前に `///` の形で。モジュールの `//!` は先頭に）、種、大きさ（`--target` が無ければ bulk 無効での値。§12.1）、状態のフィールド（§11.6）、効果、rt、@param だけを出力 |
+| `onsa interface [--target <名前>] <mod>` | 公開シグネチャ、doc コメント（宣言の前に `///` の形で。モジュールの `//!` は先頭に）、種、大きさ（`--target` が無ければ bulk 無効での値。§12.1）、状態のフィールド（§11.6）、効果、rt、@param だけを出力。シグネチャの型は、読み直すと同じ型になる形で書く（外側に `uses` が続く関数型の返り値は括弧で囲む: `fn a() -> (fn()) uses {Alloc}` と `fn b() -> fn() uses {Alloc}` は別の型） |
 | `onsa audit [--stack] [--memory] [--panics]` | extern、unsafe、`@fp(relaxed)`、ポリシーとの差分。スタックの上限と flow の状態の大きさ、閾値以上の移動（コピー）の箇所（§12.7）。`--panics` は export される rt の経路にある panic しうる箇所（検査付きの演算、添字、`unwrap`、非飽和の変換）を列挙する |
 | `onsa graph <flow>` | flow の信号グラフ（SVG / DOT）。ノード名は `let` の名前。描き方はツールの仕様（[`docs/onsa-tools.md`](docs/onsa-tools.md) §1） |
 | `onsa play <flow>` | flow を音で鳴らす。@param から UI を作る |

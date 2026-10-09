@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§5.2"]
+
+// E0002 (R-42): the operand of a `move` or `inout` mark is a postfix expression (a name and the
+// fields, indexes and calls after it), never the operand of a binary operator, and a marked
+// expression stands where it is consumed or passed (§5.2). It can be parenthesized only as an
+// element of a tuple of two or more elements. So `take(move y + 1)` is an error (not
+// `take(move (y + 1))`), as `let z = move y + 1` is, and so are `1 + (move y)` and
+// `if (move y) == 1 {`. One error per function (P-01).
+
+pub fn take(move x: I32) -> I32 {
+  x
+}
+
+pub fn bump(inout x: I32) {
+  x = x + 1
+}
+
+pub fn pair(move a: I32, move b: I32) -> (I32, I32) {
+  (a, b)
+}
+
+pub fn argument_is_a_sum(y: I32) -> I32 {
+  take(move y + 1)                                  //~ E0002
+}
+
+pub fn argument_is_a_product(y: I32) -> I32 {
+  take(move y * 2)                                  //~ E0002
+}
+
+pub fn argument_is_a_comparison(y: I32) -> Bool {
+  let b = take2(move y < 3)                         //~ E0002
+  b
+}
+
+pub fn take2(move b: Bool) -> Bool {
+  b
+}
+
+pub fn inout_argument_is_a_sum() -> I32 {
+  var v = 1
+  bump(inout v + 1)                                 //~ E0002
+  v
+}
+
+pub fn inout_argument_is_negated() -> I32 {
+  var v = 1
+  bump(inout -v)                                    //~ E0002
+  v
+}
+
+pub fn move_argument_is_negated(y: I32) -> I32 {
+  take(move -y)                                     //~ E0002
+}
+
+pub fn move_argument_is_converted(y: I32) -> I64 {
+  take64(move y as I64)                             //~ E0002
+}
+
+pub fn take64(move x: I64) -> I64 {
+  x
+}
+
+pub fn initializer_is_a_sum(y: I32) -> I32 {
+  let z = move y + 1                                //~ E0002
+  z
+}
+
+pub fn assigned_value_is_a_sum(y: I32) -> I32 {
+  var z = 0
+  z = move y + 1                                    //~ E0002
+  z
+}
+
+pub fn marked_operand_of_a_sum(y: I32) -> I32 {
+  let z = 1 + (move y)                              //~ E0002
+  z
+}
+
+pub fn marked_operand_of_a_comparison(y: I32) -> Bool {
+  if (move y) == 1 {                                //~ E0002
+    true
+  } else {
+    false
+  }
+}
+
+pub fn marked_argument_in_parentheses(y: I32) -> I32 {
+  take((move y))                                    //~ E0002
+}
+
+pub fn marked_initializer_in_parentheses(y: I32) -> I32 {
+  let z = (move y)                                  //~ E0002
+  z
+}
+
+pub fn marked_element_of_a_one_element_group(y: I32) -> I32 {
+  let z = ((move y))                                //~ E0002
+  z
+}
+
+pub fn marked_inout_in_parentheses() -> I32 {
+  var v = 1
+  bump((inout v))                                   //~ E0002
+  v
+}
+
+// A mark on a postfix expression stands in every consuming position and in an argument, and may be
+// an element of a tuple of two or more elements.
+pub fn postfix_operands(y: I32, s: (I32, I32)) -> I32 {
+  let a = take(move y)
+  let b = take(move s.0)
+  var xs = [a, b]
+  bump(inout xs[0])
+  var v = xs[1]
+  bump(inout v)
+  let (e, f) = pair(move a, move b)
+  let t = (move e, move f)
+  let u = [move a, move b]
+  let w = move t.0
+  v + w + u[0]
+}

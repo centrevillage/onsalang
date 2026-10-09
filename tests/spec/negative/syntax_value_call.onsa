@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§5.2", "§6.1"]
+
+// E0002 for a call through a function value that cannot be read (§6.1): the arguments of `.(` are the
+// arguments of any call (a `,` between them, each closed), the `.(` follows a callee, and a pattern
+// and a type have no call. One error per function (P-01). The accepted forms are in
+// tests/spec/fn/value_calls.onsa; the E0020 for a callee that is no path of names is in
+// tests/spec/fixes/e0020_call_forms_syntax.onsa.
+
+pub fn missing_comma(f: fn(I32, I32) -> I32) -> I32 {
+  f.(1 2)                                           //~ E0002
+}
+
+pub fn two_commas(f: fn(I32, I32) -> I32) -> I32 {
+  f.(1,, 2)                                         //~ E0002
+}
+
+pub fn only_a_comma(f: fn(I32) -> I32) -> I32 {
+  f.(,)                                             //~ E0002
+}
+
+pub fn leading_comma(f: fn(I32, I32) -> I32) -> I32 {
+  f.(, 1)                                           //~ E0002
+}
+
+pub fn no_callee() -> I32 {
+  let y = .(1)                                      //~ E0002
+  y
+}
+
+pub fn a_mark_without_an_operand(f: fn(inout I32), inout v: I32) {
+  f.(inout)                                         //~ E0002
+}
+
+pub fn a_move_mark_without_an_operand(f: fn(move I32) -> I32, a: I32) -> I32 {
+  f.(move)                                          //~ E0002
+}
+
+pub fn a_call_in_a_pattern(o: Option[I32], f: fn(I32) -> I32) -> I32 {
+  match o {
+    f.(1) => 1,                                     //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_call_in_a_let_pattern(f: fn(I32) -> I32) -> I32 {
+  let f.(1) = 2                                     //~ E0002
+  1
+}
+
+pub fn a_call_in_a_type(f: fn(I32) -> I32) -> I32 {
+  let x: I32.(1) = 2                                //~ E0002
+  1
+}
+
+pub fn a_dot_and_a_bracket(ops: [fn(I32) -> I32; 2]) -> I32 {
+  ops.[0](1)                                        //~ E0002
+}
+
+// The control: a well-formed `.(` is read, so the errors above are about their own forms and not about
+// the `.(` (a parser that does not read `.(` reports E0002 for every function of this file).
+pub fn read_here(x: I32, f: fn(I32) -> I32) -> I32 {
+  f.(x)
+}

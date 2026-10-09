@@ -317,7 +317,9 @@ impl Builder<'_> {
             .chain(f.params.iter().map(|p| format!("{}{}: {}", mode_prefix(p.mode), p.name, self.ty(p.ty, &generics))))
             .collect();
         let _ = write!(sig, "({})", ps.join(", "));
-        if ret != "()" {
+        if self.a.types.parens_before_uses(f.ret, !effects.is_empty()) {
+            let _ = write!(sig, " -> ({ret})");
+        } else if ret != "()" {
             let _ = write!(sig, " -> {ret}");
         }
         if !effects.is_empty() {

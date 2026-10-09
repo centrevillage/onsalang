@@ -52,7 +52,7 @@ pub fn hole_in_else_branch(c: Bool) -> F32 {
 
 pub fn hole_in_closure_body() -> U32 {
   let f = fn(x: U32) -> U32 { x + _ }   //~ E0421
-  f(1)
+  f.(1)
 }
 
 // `_` that is not a hole.

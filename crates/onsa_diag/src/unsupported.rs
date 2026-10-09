@@ -133,6 +133,10 @@ features! {
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
+    /// S-343: a `move` on the last expression of a block placed where no value
+    /// is consumed (W4-09 after S-343 is decided).
+    MoveOnUnconsumedTail: Language, "`move` on the last expression of a block that stands where no value is consumed",
+        Some("write `move` where the value is consumed (a `let`, an assignment, a `move` argument, the result of the function), or remove it");
     FromFnValue: Language, "`array.from_fn` with a non-literal function value",
         Some("pass an anonymous function, or a function by its name");
     PlanarTemporary: Language, "planar spans of a temporary", Some("bind the value to a name with `let` first");

@@ -620,7 +620,16 @@ impl<'a> Fmt<'a> {
 
     // ------------------------------------------------------------ types
 
+    /// A type with the parentheses written around it (§2.4, R-43); W3-12
+    /// removes the redundant ones (S-339).
     fn ty(&mut self, id: TypeId) {
+        let n = self.ast.ty(id).parens as usize;
+        self.push(&"(".repeat(n));
+        self.ty_kind(id);
+        self.push(&")".repeat(n));
+    }
+
+    fn ty_kind(&mut self, id: TypeId) {
         let t = self.ast.ty(id);
         match &t.kind {
             TypeKind::Error => onsa_diag::internal::bug(Some(t.span), "fmt met a type a syntax error left unread"),
@@ -1091,11 +1100,17 @@ impl<'a> Fmt<'a> {
             }
             ExprKind::Call { callee, kind, args } => {
                 self.expr(*callee);
-                let callee_end = self.ast.expr(*callee).span.end;
+                let mut callee_end = self.ast.expr(*callee).span.end;
                 match kind {
                     CallKind::Plain => {}
                     CallKind::Flow => self.push("~"),
                     CallKind::Bang => self.push("!"),
+                    // `v.(x)`, or `.(x)` at the start of the next line (§2.5).
+                    CallKind::Value { dot } => {
+                        self.dot_break(*callee, dot.start);
+                        self.push(".");
+                        callee_end = dot.end;
+                    }
                 }
                 self.args(args, callee_end);
             }
@@ -1169,7 +1184,15 @@ impl<'a> Fmt<'a> {
 
     // ------------------------------------------------------------ patterns
 
+    /// A pattern with the parentheses written around it (§2.4, R-43).
     fn pat(&mut self, id: PatId) {
+        let n = self.ast.pat(id).parens as usize;
+        self.push(&"(".repeat(n));
+        self.pat_kind(id);
+        self.push(&")".repeat(n));
+    }
+
+    fn pat_kind(&mut self, id: PatId) {
         let p = self.ast.pat(id);
         match &p.kind {
             PatKind::Wild => self.push("_"),
@@ -1356,6 +1379,48 @@ mod tests {
             assert_eq!(out.matches("// c").count(), src.matches("// c").count(), "{out}");
             assert!(out.contains("-(5) =>") || out.contains("-(6) |") || out.contains("-((2)) =>"), "{out}");
             assert!(crate::parse(FileId(0), &out).diagnostics.is_empty(), "{out}");
+        }
+    }
+
+    #[test]
+    fn a_value_call_reads_its_dot_from_the_tree_and_not_from_a_comment() {
+        // W3-20/b: fmt took the `.` of `.(` from the text, so a `.` or a `(` in a comment
+        // between the callee and the `.` changed the output, and an integer literal callee
+        // was joined to its `.(` on one line (`1.(` reads as the literal `1.`, S-350). The
+        // output is the same whatever the comment says, keeps the line break before a `.(`
+        // that starts a line (as `.max(1)` does), and reads to the same tree.
+        let cases = [
+            // e3, e4: a comment with and without `.` and `(` between the callee and `.(`.
+            (
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f // a.b ()\n    .(1)\n  a\n}\n",
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f\n    .(1) // a.b ()\n  a\n}\n",
+            ),
+            (
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f // ab ()\n    .(1)\n  a\n}\n",
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f\n    .(1) // ab ()\n  a\n}\n",
+            ),
+            // e5: a `.` in a comment after the call.
+            (
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f.(1) // a.b\n  a\n}\n",
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f.(1) // a.b\n  a\n}\n",
+            ),
+            // d2: a comment line between the callee and the `.(` of the next line.
+            (
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f\n    // see x.y (and z)\n    .(1)\n  a\n}\n",
+                "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f\n    .(1) // see x.y (and z)\n  a\n}\n",
+            ),
+            // w1: an integer literal callee keeps its line break before `.(`.
+            (
+                "pub fn p(f: fn(I32) -> I32) -> I32 {\n  let r = f.(1 // c.d (e)\n    .(1))\n  r\n}\n",
+                "pub fn p(f: fn(I32) -> I32) -> I32 {\n  let r = f.(1\n    .(1)) // c.d (e)\n  r\n}\n",
+            ),
+        ];
+        for (src, want) in cases {
+            let out = fmt(src);
+            assert_eq!(out, want, "from {src}");
+            let (old, new) = (crate::parse(FileId(0), src), crate::parse(FileId(0), &out));
+            assert!(new.diagnostics.is_empty(), "{out}: {:?}", new.diagnostics);
+            assert!(crate::diff::diff(&old, &new).is_empty(), "{out}");
         }
     }
 

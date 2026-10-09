@@ -8,7 +8,7 @@
 // body, and a longer stack.
 pub fn half(x: F32) -> F32 { x * 0.5 }
 
-pub fn apply(f: fn(I32) -> I32) -> I32 { f(3) }
+pub fn apply(f: fn(I32) -> I32) -> I32 { f.(3) }
 
 pub fn stacked_in_argument(x: F32) -> F32 {
   half(- -x)                    //~ E0012

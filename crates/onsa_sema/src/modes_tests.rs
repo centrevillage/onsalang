@@ -343,6 +343,37 @@ fn move_needs_a_place() {
     assert_eq!(codes("pub fn g() -> U32 { 1 }\npub fn f() -> U32 {\n  let y = move g()\n  y\n}\n"), vec![Code::E0711]);
 }
 
+#[test]
+fn a_move_on_the_last_expression_follows_the_position_of_its_block() {
+    // S-100 (§5.2): where the block consumes or returns, the arm's `move` moves.
+    ok(&format!(
+        "{TAKE}pub fn f(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {{\n  let y = if c {{ move a }} else {{ move b }}\n  y\n}}\n"
+    ));
+    ok(&format!("{TAKE}pub fn f(move a: Buf[F32]) -> Buf[F32] {{\n  return move a\n}}\n"));
+    ok(&format!("{TAKE}pub fn f(move a: Buf[F32]) -> Buf[F32] {{\n  move a\n}}\n"));
+    // The other arm still needs its `move` (E0711).
+    assert_eq!(
+        codes(&format!(
+            "{TAKE}pub fn f(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {{Alloc}} {{\n  let y = if c {{ move a }} else {{ b }}\n  y\n}}\n"
+        )),
+        vec![Code::E0711]
+    );
+    // S-343: where no value is consumed (a statement, a borrowed argument), the `move` is stopped
+    // (E0200), not read as a move.
+    assert_eq!(
+        codes(&format!(
+            "{TAKE}pub fn f(c: Bool, move a: Buf[F32], move b: Buf[F32]) uses {{Alloc}} {{\n  if c {{ move a }} else {{ move b }}\n  take(move a)\n}}\n"
+        )),
+        vec![Code::E0200]
+    );
+    assert_eq!(
+        codes(&format!(
+            "{TAKE}pub fn see(b: Buf[F32]) -> U32 {{\n  1\n}}\npub fn f(move a: Buf[F32]) -> U32 uses {{Alloc}} {{\n  see({{ move a }})\n}}\n"
+        )),
+        vec![Code::E0200]
+    );
+}
+
 /// R-194: the ends of a `for` range are read once, before the first
 /// iteration (§3.5): a move in them and a use of a moved value are checked
 /// as anywhere else.

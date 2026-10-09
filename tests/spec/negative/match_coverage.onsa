@@ -85,7 +85,7 @@ pub fn guard_does_not_cover(o: Option[U32]) -> U32 {
   }
 }
 
-pub fn apply(f: fn(U32) -> U32) -> U32 { f(2) }
+pub fn apply(f: fn(U32) -> U32) -> U32 { f.(2) }
 
 pub fn missing_inside_closure() -> U32 {
   apply(fn(x: U32) -> U32 {

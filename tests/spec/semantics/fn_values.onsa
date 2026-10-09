@@ -3,15 +3,13 @@
 // mode = "test"
 // spec = ["§4.1", "§4.4", "§5.2", "§5.3", "§6.1"]
 
-// Function values (spec §4.1, §5.3, §6.1): anonymous and named functions as
+// Function values (spec §4.1, §5.2, §5.3, §6.1): anonymous and named functions as
 // first-class values, passing, returning and storing them, a generic
 // higher-order function, and the argument mode (`inout`, `move`) as part of
-// the function type.
-//
-// Not covered because the spec does not say: passing a capturing closure to a
-// user-written function whose parameter has a `fn(...)` type (§5.3 lets
-// closures appear in argument position, §4.1 types function values as
-// capture-free), and calling a function stored in a field as `s.f(x)`.
+// the function type. Every call through a function value is written `v.(x)`
+// (§6.1): `f.(x)` for an argument or a binding, `s.f.(x)` for a field,
+// `ops[i].(x)` for an element, `t.0.(x)` for a tuple element and `pick(true).(5)`
+// for the result of a call. A named function (an item) is called `inc(1)`.
 
 // ------------------------------------------------------------ function values
 
@@ -24,11 +22,11 @@ fn dec(x: I32) -> I32 {
 }
 
 fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
-  f(x)
+  f.(x)
 }
 
 fn apply_twice[T](f: fn(T) -> T, x: T) -> T {
-  f(f(x))
+  f.(f.(x))
 }
 
 fn pick(up: Bool) -> fn(I32) -> I32 {
@@ -40,8 +38,8 @@ fn pick(up: Bool) -> fn(I32) -> I32 {
 }
 
 fn twice(f: fn(inout F32), inout v: F32) {
-  f(inout v)
-  f(inout v)
+  f.(inout v)
+  f.(inout v)
 }
 
 pub struct Op {
@@ -49,19 +47,32 @@ pub struct Op {
   f: fn(I32) -> I32,
 }
 
+pub struct Wrapped {
+  op: Op,
+  scale: I32,
+}
+
+fn choose(n: I32) -> fn(I32) -> I32 {
+  if n > 0 {
+    inc
+  } else {
+    dec
+  }
+}
+
 test "an anonymous function is a value that can be called" {
   let double = fn(x: I32) -> I32 {
     x * 2
   }
-  assert double(4) == 8
-  assert double(-3) == -6
+  assert double.(4) == 8
+  assert double.(-3) == -6
 }
 
 test "a named function is a value" {
   let g: fn(I32) -> I32 = inc
-  assert g(1) == 2
+  assert g.(1) == 2
   let h = dec
-  assert h(1) == 0
+  assert h.(1) == 0
 }
 
 test "a function value is passed to a function" {
@@ -73,19 +84,19 @@ test "a function value is passed to a function" {
 test "a function value is returned from a function" {
   let up   = pick(true)
   let down = pick(false)
-  assert up(5) == 6
-  assert down(5) == 4
+  assert up.(5) == 6
+  assert down.(5) == 4
 }
 
 test "a function value is stored in a struct and in an array" {
   let op = Op { id: 7, f: inc }
   let f  = op.f
-  assert f(10) == 11
+  assert f.(10) == 11
   assert op.id == 7
   let ops: [fn(I32) -> I32; 3] = [inc, inc, dec]
   var acc: I32 = 0
   for g in ops {
-    acc = g(acc)
+    acc = g.(acc)
   }
   assert acc == 1
 }
@@ -103,7 +114,7 @@ test "an inout parameter is part of the function type" {
     x = x * 2.0
   }
   var v: F32 = 1.5
-  dbl(inout v)
+  dbl.(inout v)
   assert v == 3.0
   twice(dbl, inout v)
   assert v == 12.0
@@ -114,7 +125,71 @@ test "a move parameter of a Copy type copies" {
     x + 1
   }
   var a: I32 = 4
-  let b = succ(move a)
+  let b = succ.(move a)
   assert b == 5
   assert a == 4
+}
+
+test "a function value in a field is called with .( on the field" {
+  let op = Op { id: 7, f: inc }
+  assert op.f.(10) == 11
+  let other = Op { id: 8, f: dec }
+  assert other.f.(10) == 9
+  assert op.f.(other.f.(0)) == 0
+  let wrapped = Wrapped { op: op, scale: 3 }
+  assert wrapped.op.f.(wrapped.scale) == 4
+}
+
+test "a function value in an array element is called with .( on the element" {
+  let ops: [fn(I32) -> I32; 3] = [inc, dec, inc]
+  assert ops[0].(10) == 11
+  assert ops[1].(10) == 9
+  var i: U32 = 0
+  var acc: I32 = 0
+  while i < 3 {
+    acc = ops[i].(acc)
+    i = i + 1
+  }
+  assert acc == 1
+}
+
+test "a function value in a tuple element is called with .( on the index" {
+  let t: (fn(I32) -> I32, I32) = (inc, 5)
+  assert t.0.(t.1) == 6
+  let nested: ((fn(I32) -> I32, I32), I32) = ((dec, 5), 1)
+  assert nested.0.0.(nested.0.1) == 4
+}
+
+test "the result of a call is called with .(" {
+  assert pick(true).(5) == 6
+  assert pick(false).(5) == 4
+  assert choose(5).(1) == 2
+  assert choose(-5).(1) == 0
+  assert pick(true).(pick(false).(0)) == 0
+  // A call through a function value can return a function value, which is called again.
+  let make = choose
+  assert make.(2).(3) == 4
+  assert make.(-2).(3) == 2
+}
+
+test "a capturing anonymous function is passed to a parameter of function type" {
+  let k: I32 = 10
+  assert apply(fn(x: I32) -> I32 { x + k }, 1) == 11
+  assert apply_twice(fn(x: I32) -> I32 { x + k }, 1) == 21
+}
+
+test "a function value is called inside the body of an anonymous function" {
+  let f = fn(g: fn(I32) -> I32, x: I32) -> I32 {
+    g.(x) + g.(x + 1)
+  }
+  assert f.(inc, 1) == 5
+  assert f.(fn(y: I32) -> I32 { y * 2 }, 1) == 6
+}
+
+test "the arguments of .( are ordinary expressions" {
+  var log: I32 = 0
+  let f = fn(a: I32, b: I32) -> I32 { a - b }
+  assert f.(inc(log), inc(inc(log))) == -1
+  log = 5
+  assert f.(log + 1, log) == 1
 }

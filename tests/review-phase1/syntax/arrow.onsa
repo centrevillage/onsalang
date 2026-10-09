@@ -9,5 +9,5 @@ type Alias =
 fn g() -> I32 {
   let h: fn(I32) ->
     I32 = f
-  h(1)
+  h.(1)
 }

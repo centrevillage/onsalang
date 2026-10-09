@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4"]
+
+// E0002 (R-43): a tuple has two or more elements, and `(e)` is grouping in an expression, a type
+// and a pattern alike, so a `,` after the only element is an error (`(1,)`, `(I32,)`, `(p,)`).
+// One error per function (P-01). The accepted forms, `(e)` and the tuples of two or more elements
+// (with or without a `,` after the last one when the elements are on separate lines), are in
+// tests/spec/semantics/paren_group.onsa.
+
+pub struct Holder {
+  pair: (I32,)                                      //~ E0002
+}
+
+pub type OneAlias = (I32,)                          //~ E0002
+
+pub fn one_in_an_expression() -> I32 {
+  let t = (1,)                                      //~ E0002
+  1
+}
+
+pub fn consume(p: (I32, I32)) -> I32 {
+  p.0
+}
+
+pub fn one_in_an_argument() -> I32 {
+  consume((1,))                                     //~ E0002
+}
+
+pub fn one_inside_a_tuple() -> I32 {
+  let t = ((1,), 2)                                 //~ E0002
+  2
+}
+
+pub fn one_in_an_array() -> I32 {
+  let xs = [(1,), (2,)]                             //~ E0002
+  1
+}
+
+pub fn one_of_a_name(x: I32) -> I32 {
+  let t = (x,)                                      //~ E0002
+  x
+}
+
+pub fn one_of_a_group(x: I32) -> I32 {
+  let t = ((x),)                                    //~ E0002
+  x
+}
+
+pub fn one_in_a_parameter_type(t: (I32,)) -> I32 {   //~ E0002
+  1
+}
+
+pub fn one_in_a_result_type() -> (I32,) {            //~ E0002
+  1
+}
+
+pub fn one_in_a_let_type() -> I32 {
+  let t: (I32,) = 1                                 //~ E0002
+  1
+}
+
+pub fn one_in_a_type_argument(o: Option[(I32,)]) -> I32 {   //~ E0002
+  1
+}
+
+pub fn one_in_an_array_type(xs: [(I32,); 2]) -> I32 {   //~ E0002
+  1
+}
+
+pub fn one_in_a_function_type(f: fn((I32,)) -> I32) -> I32 {   //~ E0002
+  1
+}
+
+pub fn one_in_a_let_pattern(v: I32) -> I32 {
+  let (a,) = v                                      //~ E0002
+  a
+}
+
+pub fn one_in_a_match_pattern(v: I32) -> I32 {
+  match v {
+    (0,) => 1,                                      //~ E0002
+    _ => 2,
+  }
+}
+
+pub fn one_in_a_nested_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Some((v,)) => v,                                //~ E0002
+    None => 0,
+  }
+}
+
+pub fn one_in_a_tuple_pattern(p: (I32, I32)) -> I32 {
+  let ((a,), b) = p                                 //~ E0002
+  b
+}
+
+pub fn one_in_a_for_pattern(xs: [I32; 2]) -> I32 {
+  var n = 0
+  for (x,) in xs {                                  //~ E0002
+    n = n + 1
+  }
+  n
+}
+
+pub fn one_in_a_closure_pattern() -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let (y,) = x                                    //~ E0002
+    y
+  }
+  1
+}
+
+// Grouping is not a tuple: these have no `,` after the only element.
+pub fn grouping(x: I32, o: Option[I32]) -> I32 {
+  let a = (x)
+  let b: (I32) = (a)
+  let (c) = b
+  match (o) {
+    (Some(v)) => c + v,
+    (None) => c,
+  }
+}

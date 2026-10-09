@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§2.5", "§7"]
+
+// `(e)` is grouping in an expression, a pattern and a type alike (§2.4, R-43): it never makes a
+// tuple of one element, so `(I32)` is `I32`, `(x)` is `x` and `(p)` is `p`. A tuple has two or more
+// elements, and a `,` after the last of them is written when the elements are on separate lines.
+// The `(e,)` forms are E0002 (negative/syntax_one_tuple.onsa).
+
+fn grouped_type(t: (I32)) -> (I32) {
+  t + 1
+}
+
+fn grouped_type_in_a_let(x: I32) -> I32 {
+  let y: (I32) = x
+  y * 2
+}
+
+fn grouped_type_in_arguments(o: Option[(I32)], xs: [(I32); 2]) -> I32 {
+  let a = match o {
+    Some(v) => v,
+    None => 0,
+  }
+  a + xs[1]
+}
+
+fn grouped_expression(x: I32) -> I32 {
+  let y = (x)
+  let z = (((y)))
+  (z) + (1)
+}
+
+fn grouped_operands(a: I32, b: I32) -> I32 {
+  ((a + b)) * 2
+}
+
+fn grouped_let_pattern(v: I32) -> I32 {
+  let (a) = v
+
+  let ((b)) = a + 1
+  b
+}
+
+fn grouped_arm_patterns(o: Option[I32]) -> I32 {
+  match o {
+    (Some(v)) => v,
+    (None) => 0,
+  }
+}
+
+fn grouped_binding_inside_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Some((v)) => v,
+    None => 0,
+  }
+}
+
+fn grouped_scrutinee(o: Option[I32]) -> I32 {
+  match (o) {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+fn grouped_tuple(p: ((I32, F32))) -> I32 {
+  let ((a, b)) = p
+  if b > 0.0 { a } else { 0 }
+}
+
+fn grouped_elements_of_a_tuple(p: (I32, (F32))) -> F32 {
+  let (a, (b)) = p
+  a.round_f32() + b
+}
+
+fn grouped_pattern_of_a_tuple_element(p: (I32, I32)) -> I32 {
+  let ((a), b) = p
+  a * b
+}
+
+fn tuple_on_separate_lines() -> (I32, I32) {
+  (
+    1,
+    2,
+  )
+}
+
+fn parameters_on_separate_lines(
+  p: (I32, F32),
+  q: (I32),
+) -> I32 {
+  p.0 + q
+}
+
+test "grouping in a type is the type" {
+  assert grouped_type(4) == 5
+  assert grouped_type_in_a_let(4) == 8
+  assert grouped_type_in_arguments(Some(5), [1, 2]) == 7
+  assert grouped_type_in_arguments(None, [1, 2]) == 2
+}
+
+test "grouping in an expression is the expression" {
+  assert grouped_expression(3) == 4
+  assert grouped_operands(1, 2) == 6
+}
+
+test "grouping in a pattern is the pattern" {
+  assert grouped_let_pattern(4) == 5
+  assert grouped_arm_patterns(Some(7)) == 7
+  assert grouped_arm_patterns(None) == 0
+  assert grouped_binding_inside_a_pattern(Some(8)) == 8
+  assert grouped_binding_inside_a_pattern(None) == 0
+  assert grouped_scrutinee(Some(9)) == 9
+}
+
+test "a doubled parenthesis around a tuple is the tuple" {
+  assert grouped_tuple((3, 1.0)) == 3
+  assert grouped_tuple((3, -1.0)) == 0
+  assert grouped_elements_of_a_tuple((1, 2.5)) == 3.5
+  assert grouped_pattern_of_a_tuple_element((4, 2)) == 8
+  let t = ((1, 2))
+  assert t.0 == 1
+  assert t.1 == 2
+}
+
+test "a tuple on separate lines may end with a comma" {
+  let t = tuple_on_separate_lines()
+  assert t.0 == 1
+  assert t.1 == 2
+  assert parameters_on_separate_lines((5, 1.0), 2) == 7
+}

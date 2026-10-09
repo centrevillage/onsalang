@@ -10,7 +10,7 @@ pub rt fn calls_non_rt(x: F32) -> F32 {
 }
 
 pub rt fn calls_non_rt_value(g: fn(F32) -> F32) -> F32 {
-  g(1.0)                        //~ E0901
+  g.(1.0)                       //~ E0901
 }
 
 pub rt fn allocates() -> U32 {
@@ -37,6 +37,6 @@ pub rt fn pong(n: U32) -> U32 {
 }
 
 pub rt fn fine(b: Buf[F32], g: rt fn(F32) -> F32) -> U32 {
-  let y = g(1.0)
+  let y = g.(1.0)
   b.len() + y.trunc_u32()
 }

@@ -422,6 +422,9 @@ pub struct ExternDecl {
 pub struct TypeExpr {
     pub span: Span,
     pub kind: TypeKind,
+    /// The parentheses written around the type (`(I32)` is `I32`, §2.4,
+    /// R-43): no part of the type, kept for `onsa fmt` (W3-12 removes them).
+    pub parens: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -740,6 +743,11 @@ pub enum CallKind {
     Flow,
     /// `x.f!(y)`: `inout self` method
     Bang,
+    /// `v.(x)`: a call through a function value (§6.1, S-191); `dot` is
+    /// the `.`, which follows the callee on its line or starts the next line
+    /// (§2.5). `onsa fmt` and the candidates read it from here, never from
+    /// the text (a comment between the callee and the `.` may hold one).
+    Value { dot: Span },
 }
 
 #[derive(Debug, Clone)]
@@ -851,7 +859,7 @@ pub enum ExprKind {
         op: UnOp,
         expr: ExprId,
     },
-    /// `f(args)`, `f~(args)`, `x.f!(args)`
+    /// `f(args)`, `f~(args)`, `x.f!(args)`, `v.(args)`
     Call {
         callee: ExprId,
         kind: CallKind,
@@ -904,6 +912,9 @@ pub enum HandlerRef {
 pub struct Pat {
     pub span: Span,
     pub kind: PatKind,
+    /// The parentheses written around the pattern (`(p)` is `p`, §2.4,
+    /// R-43): no part of the pattern, kept for `onsa fmt` (W3-12).
+    pub parens: u32,
 }
 
 #[derive(Debug, Clone)]

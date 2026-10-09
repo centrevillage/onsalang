@@ -310,13 +310,6 @@ note = "型引数と const 引数の数（S-103 のコードの割り当て）"
 
 [[pending]]
 kind = "diag-code"
-target = "E0413"
-reasons = ["S-98", "R-126", "S-71", "R-96"]
-until = "W5-03"
-note = "組込みのメソッドの閉じた一覧（W5-02、S-98）、Option / Result のメソッドは unwrap と map_err だけ（W5-03、S-71）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0417"
 reasons = ["S-103", "S-50", "S-132", "S-109"]
 until = "W7-02"
@@ -1429,13 +1422,6 @@ note = "@relaxed の E0020（候補は @fp(relaxed)）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_call_forms_syntax.onsa"
-reasons = ["S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でない呼び出しの E0020（構文の段）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_patterns_at.onsa"
 reasons = ["S-186"]
 until = "W3-21"
@@ -1856,13 +1842,6 @@ note = "at のクロックの構文は W3-09。構文の後も let a = first(0.5
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/infer_open_subject_call.onsa"
-reasons = ["S-174", "S-191"]
-until = "W3-20"
-note = "関数値の呼び出し .( は W3-20。E0420（W2-06）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/infer_operator.onsa"
 reasons = ["S-235", "R-55"]
 until = "W5-01"
@@ -1944,24 +1923,10 @@ note = "?Dup の型パラメータを含む利用者の型（Wrap[U]、U: ?Dup�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/nesting/stmt_apply.onsa"
-reasons = ["S-191"]
-until = "W3-20"
-note = "negative/nesting_stmt.onsa の助けの宣言 apply（関数値の呼び出し `.(`、S-191）を分けたもの。今は E0002"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/nesting_flow.onsa"
 reasons = ["S-102"]
 until = "W3-10"
 note = "flow の入出力の `at`（S-102）を今の実装が読めず E0002。W3-10 が読めるようにする"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/nesting/patterns_group.onsa"
-reasons = ["R-43"]
-until = "W3-20"
-note = "パターンの丸括弧（`(e)` はグループ化、§2.4）。今は 1 要素のタプルのパターンとして読み E0401"
 
 [[pending]]
 kind = "test-case"
@@ -1997,13 +1962,6 @@ target = "tests/spec/nesting/wide_match_run.onsa"
 reasons = ["R-06"]
 until = "W8-06"
 note = "整数のリテラルの腕が 300 個の match の実行。リテラルの腕の値の match が E0200（平らな列挙子の switch でない match の値、§7）。受理の確かめは wide_match.onsa"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/nesting/boundary_patterns_group.onsa"
-reasons = ["R-43"]
-until = "W3-20"
-note = "パターンの丸括弧 254 個の match（256 段）。`(e)` はグループ化（§2.4）だが、今は 1 要素のタプルのパターンとして読み E0401"
 
 # --- W3-03/t: 診断の単位と回復（2026-10-08）。W3-03/i が通したもの以外
 
@@ -2103,13 +2061,6 @@ note = "fix-same-place: fix|E0411|call `…`|E0401。整数の縮小の候補 .n
 
 [[pending]]
 kind = "fuzz-input"
-target = "tests/fuzz/67f69e84.onsa"
-reasons = ["S-100", "S-236"]
-until = "W3-20"
-note = "fix-same-place: fix|E0711|add `…`|E0002。if の腕に move を足す候補の後、腕の move が E0002（S-100、tests/review-phase1/parent/p7.onsa）"
-
-[[pending]]
-kind = "fuzz-input"
 target = "tests/fuzz/4ea5a011.onsa"
 reasons = ["S-267", "S-236"]
 until = "W4-06"
@@ -2201,13 +2152,6 @@ note = "空白と行頭の二項演算子、腕の return"
 
 [[pending]]
 kind = "foreign-form"
-target = "space_around_dot"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
-
-[[pending]]
-kind = "foreign-form"
 target = "space_before_question"
 reasons = ["S-89", "S-123", "S-203"]
 until = "W3-06"
@@ -2268,13 +2212,6 @@ target = "item_dot_call"
 reasons = ["S-191"]
 until = "W4-12"
 note = "名前の経路の呼び出し（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "callee_expression"
-reasons = ["S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でない呼び出し（構文の段）"
 
 [[pending]]
 kind = "foreign-form"
@@ -2345,13 +2282,6 @@ target = "type_args_method_square"
 reasons = ["S-239", "S-256"]
 until = "W5-02"
 note = "メソッドに付けた [...] の型引数（型の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "type_args_on_expression"
-reasons = ["S-239", "S-277", "S-191"]
-until = "W3-20"
-note = "候補の .( を W3-20 が読むまで、候補を当てた後の検査が E0002 になる"
 
 [[pending]]
 kind = "foreign-form"
@@ -2503,42 +2433,6 @@ note = "move の引数と move self への代入が E0701（§5.1 の E0701 は 
 # --- W3-19: 式の中の型引数 `::[…]`。W3-19 で通らない事例（W3-19/t の事例。W3-19/i の報告）。
 
 [[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_callee.onsa:26:13 E0020 fix1"
-reasons = ["S-239", "S-277", "S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-20 が読む"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_callee.onsa:30:13 E0020 fix1"
-reasons = ["S-239", "S-277", "S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-20 が読む"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_callee.onsa:34:8 E0020 fix1"
-reasons = ["S-239", "S-277", "S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-20 が読む"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_callee.onsa:38:12 E0020 fix1"
-reasons = ["S-239", "S-277", "S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-20 が読む"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_callee.onsa:42:12 E0020 fix1"
-reasons = ["S-239", "S-277", "S-191"]
-until = "W3-20"
-note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-20 が読む"
-
-
-[[pending]]
 kind = "test-case"
 target = "tests/spec/fixes/e0020_type_args_spacing_bang.onsa"
 reasons = ["S-239", "S-203"]
@@ -2573,7 +2467,7 @@ kind = "test-case"
 target = "tests/spec/negative/range_move.onsa"
 reasons = ["S-257", "S-103"]
 until = "W4-09"
-note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。E0703 は modes の段（diag-code の E0703 の項目と同じ時期）"
+note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。28 行目の move lo + 1..<hi - 1 は今 + の E0002（§5.2、S-362 で未決）。E0703 は modes の段（diag-code の E0703 の項目と同じ時期）"
 
 # --- W3-18 の gate のファズが見つけた入力（種を足してコーパスが変わり、既存の不具合が表に出た）
 
@@ -2597,13 +2491,6 @@ target = "tests/fuzz/fd47d95d.onsa"
 reasons = ["R-01"]
 until = "W3-04"
 note = "check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（3c3f8d83 と同じ類）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/82d90c5e.onsa"
-reasons = ["R-196", "S-236"]
-until = "W3-20"
-note = "fix-same-place: fix|E0020|write the type arguments as `::[…]`|E0020。型の位置の中の `t[[], l]` に式の型引数の候補（`::` の挿入）が出る"
 
 [[pending]]
 kind = "test-case"

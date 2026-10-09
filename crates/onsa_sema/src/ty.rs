@@ -310,6 +310,15 @@ impl Types {
         })
     }
 
+    /// Whether the return type `ret` is written in parentheses when an effect
+    /// row follows it (`uses` is non-empty): a function type there would take
+    /// that `uses` as its own (`fn() -> (fn()) uses {Alloc}` is not
+    /// `fn() -> fn() uses {Alloc}`, §8.1). The one rule, for [`Self::display`]
+    /// and the signatures of `onsa interface` (W3-20/b).
+    pub fn parens_before_uses(&self, ret: TyId, uses: bool) -> bool {
+        uses && matches!(self.get(ret), Ty::Fn(_))
+    }
+
     /// Source-like rendering, with user types by name via `name_of`.
     pub fn display(&self, id: TyId, name_of: &dyn Fn(DefId) -> String, generic_name: &dyn Fn(u32) -> String) -> String {
         let ty = self.get(id);
@@ -359,10 +368,10 @@ impl Types {
                     .collect::<Vec<_>>()
                     .join(", ");
                 let rt = if f.rt { "rt " } else { "" };
-                let ret = if matches!(self.get(f.ret), Ty::Unit) {
-                    String::new()
-                } else {
-                    format!(" -> {}", self.display(f.ret, name_of, generic_name))
+                let ret = match self.display(f.ret, name_of, generic_name) {
+                    _ if matches!(self.get(f.ret), Ty::Unit) => String::new(),
+                    r if self.parens_before_uses(f.ret, !f.effects.is_empty()) => format!(" -> ({r})"),
+                    r => format!(" -> {r}"),
                 };
                 let eff = if f.effects.is_empty() {
                     String::new()

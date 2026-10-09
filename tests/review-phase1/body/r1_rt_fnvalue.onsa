@@ -1,6 +1,6 @@
 pub fn heavy(x: F32) -> F32 { x }
 
-pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 { f(x) }
+pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 { f.(x) }
 
 pub fn named_value() -> F32 { apply(heavy, 1.0) }
 
@@ -10,5 +10,5 @@ pub rt fn in_rt() -> F32 { apply(heavy, 1.0) }
 
 pub fn stored() -> F32 {
   let g: rt fn(F32) -> F32 = heavy
-  g(2.0)
+  g.(2.0)
 }

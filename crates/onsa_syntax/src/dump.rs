@@ -355,7 +355,15 @@ impl Dumper<'_> {
         }
     }
 
+    /// A type with the parentheses written around it (§2.4, R-43).
     fn ty(&mut self, id: TypeId) {
+        let n = self.ast.ty(id).parens as usize;
+        self.out.push_str(&"(".repeat(n));
+        self.ty_kind(id);
+        self.out.push_str(&")".repeat(n));
+    }
+
+    fn ty_kind(&mut self, id: TypeId) {
         match &self.ast.ty(id).kind {
             TypeKind::Error => self.out.push_str("<error>"),
             TypeKind::Path { path, args } => {
@@ -684,6 +692,7 @@ impl Dumper<'_> {
                     CallKind::Plain => "(call ",
                     CallKind::Flow => "(call~ ",
                     CallKind::Bang => "(call! ",
+                    CallKind::Value { .. } => "(call. ",
                 });
                 self.expr(*callee);
                 self.out.push(' ');
@@ -729,7 +738,15 @@ impl Dumper<'_> {
         }
     }
 
+    /// A pattern with the parentheses written around it (§2.4, R-43).
     fn pat(&mut self, id: PatId) {
+        let n = self.ast.pat(id).parens as usize;
+        self.out.push_str(&"(".repeat(n));
+        self.pat_kind(id);
+        self.out.push_str(&")".repeat(n));
+    }
+
+    fn pat_kind(&mut self, id: PatId) {
         match &self.ast.pat(id).kind {
             PatKind::Wild => self.out.push('_'),
             PatKind::Bind(i) => self.out.push_str(&i.name),

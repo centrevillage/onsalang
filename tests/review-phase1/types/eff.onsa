@@ -1,5 +1,5 @@
 pub fn a() uses {Alloc, Alloc} { }
-pub fn b[e](f: fn() uses {e}) uses {e} { f() }
+pub fn b[e](f: fn() uses {e}) uses {e} { f.() }
 pub fn c() { }
 pub fn d() uses {Alloc} { b(c) }
 pub fn k[e]() -> I32 uses {e} { 1 }

@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+// fixes = 1
+
+// E0020 for `+=` and `++` (and their relatives) whose left side is a field path that contains a
+// tuple index (S-250, S-322): the left side has no evaluation to repeat, so the candidate is
+// `left = left op right`, the same as for a name or a field. A path that contains an index
+// `xs[i]` stays E0002 with no candidate (negative/foreign_no_candidate.onsa). One error per function
+// (P-01).
+
+pub struct Pair {
+  count: I32,
+  both: (I32, I32),
+}
+
+impl Pair {
+  pub fn bump(inout self) {
+    self.both.0 += 1                                //~ E0020
+  }
+}
+
+pub fn add_to_an_element(inout t: (I32, I32)) {
+  t.0 += 1                                          //~ E0020
+}
+
+pub fn subtract_from_the_second_element(inout t: (I32, I32), k: I32) {
+  t.1 -= k                                          //~ E0020
+}
+
+pub fn multiply_an_element_by_a_sum(inout t: (I32, I32), a: I32, b: I32) {
+  t.0 *= a + b                                      //~ E0020
+}
+
+pub fn shift_an_element(inout t: (U32, U32)) {
+  t.1 <<= 2                                         //~ E0020
+}
+
+pub fn mask_an_element(inout t: (U32, U32)) {
+  t.0 &= 255                                        //~ E0020
+}
+
+pub fn increment_an_element(inout t: (I32, I32)) {
+  t.0++                                             //~ E0020
+}
+
+pub fn decrement_an_element(inout t: (I32, I32)) {
+  t.1--                                             //~ E0020
+}
+
+pub fn prefix_increment_an_element(inout t: (I32, I32)) {
+  ++t.0                                             //~ E0020
+}
+
+pub fn prefix_decrement_an_element(inout t: (I32, I32)) {
+  --t.1                                             //~ E0020
+}
+
+pub fn nested_tuple_index(inout t: ((I32, I32), I32)) {
+  t.0.1 += 1                                        //~ E0020
+}
+
+pub fn field_then_tuple_index(inout p: Pair) {
+  p.both.1 -= 1                                     //~ E0020
+}
+
+pub fn tuple_index_then_field(inout t: (Pair, I32)) {
+  t.0.count += 1                                    //~ E0020
+}
+
+pub fn fine(inout t: (I32, I32), inout p: Pair) {
+  t.0 = t.0 + 1
+  p.both.1 = p.both.1 - 1
+  p.count = t.0
+}

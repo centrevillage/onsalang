@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a call whose callee ends with a tuple index after something that is no path of names
+// (§6.1; W3-20/b): `ts[0].0`, `mk2().0`, `(t).0`, `(f, 1).0`, `[t][0].0` and a field of a struct
+// literal are no path of names (§2.4), so the syntax alone decides, as for `(s.f)(x)`
+// (e0020_call_forms_syntax.onsa). The one candidate inserts the `.` of `.(` before the `(`. A
+// tuple index at the end of a path of names (`t.0(x)`, `s.t.0(x)`) waits for S-342 and is read
+// as now (the function `fine`). So is an index after something that is neither a path of names nor
+// a field (`fns()[0](x)`); one after a field (`g(1).m[I32](2)`) is a method's type arguments or an
+// index of a field, which the type stage tells apart (§4.5; tests/spec/negative/callee_member_index.onsa).
+// One error per function (P-01).
+
+pub struct Pair {
+  f: fn(I32) -> I32,
+  t: (fn(I32) -> I32, I32),
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn make() -> (fn(I32) -> I32, I32) {
+  (inc, 1)
+}
+
+pub fn fns() -> [fn(I32) -> I32; 1] {
+  [inc]
+}
+
+pub fn an_element_of_an_array(ts: [(fn(I32) -> I32, I32); 2], x: I32) -> I32 {
+  ts[0].0.(x)                                        //~ E0020
+}
+
+pub fn the_result_of_a_call(x: I32) -> I32 {
+  make().0.(x)                                       //~ E0020
+}
+
+pub fn a_parenthesized_name(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  (t).0.(x)                                          //~ E0020
+}
+
+pub fn a_tuple(f: fn(I32) -> I32, x: I32) -> I32 {
+  (f, 1).0.(x)                                       //~ E0020
+}
+
+pub fn an_element_of_an_array_literal(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  [t][0].0.(x)                                       //~ E0020
+}
+
+pub fn a_field_of_a_struct_literal(f: fn(I32) -> I32, t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  Pair { f: f, t: t }.t.0.(x)                        //~ E0020
+}
+
+pub fn an_index_of_the_result_of_a_call(x: I32) -> I32 {
+  fns()[0].(x)                                       //~ E0020
+}
+
+pub fn fine(p: Pair, t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  t.0(x) + p.t.0(x)
+}

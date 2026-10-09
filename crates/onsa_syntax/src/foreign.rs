@@ -102,6 +102,11 @@ pub enum Want {
     Type,
     /// Anything else (a token of a declaration, a statement's end, ...).
     Other,
+    /// The next link of a postfix chain, at a member `.` with a space (§2.5).
+    Postfix,
+    /// The `(` of a call whose callee [`callee_by_name`] says is no callee
+    /// written by name (§6.1): the table does not judge the callee again.
+    Callee,
 }
 
 /// What the parser gives the table at a failure.
@@ -192,6 +197,8 @@ pub enum RowId {
     SpaceInTypeArgsMark,
     RangeDots,
     RangeOutsideHeader,
+    SpaceAroundDot,
+    CalleeExpression,
 }
 
 pub struct Row {
@@ -593,6 +600,24 @@ pub static ROWS: &[Row] = &[
         rule: "a range is the whole head of a `for` or a `par` and is not a value (§7); a part of a sequence is `xs.slice(from, to)` (§5.3)",
         detect: Detect::Syntax(range_outside_header),
     },
+    Row {
+        id: RowId::SpaceAroundDot,
+        name: "space_around_dot",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a member `.` is written without spaces around it",
+        rule: "the member `.` (a field, a method, a tuple index, the `.(` of a function value) takes no space on either side inside a line: `a.b`, `s.f.(x)`; a `.` that starts the next line continues the expression (§2.5)",
+        detect: Detect::Syntax(space_around_dot),
+    },
+    Row {
+        id: RowId::CalleeExpression,
+        name: "callee_expression",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a callee that is no path of names is a function value; it is called with `.(`",
+        rule: "a function value is called with `.(` (`s.f.(x)`, `pick(true).(5)`); `f(x)` calls an item, whose callee is a path of names (§6.1)",
+        detect: Detect::Syntax(callee_expression),
+    },
 ];
 
 /// The rows of the data file that no work has made yet (the later works
@@ -604,7 +629,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "float_dot_exponent", phase: Phase::Lexical, code: Code::E0020 },
     Waiting { name: "space_before_paren", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_before_bracket", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "space_around_dot", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_before_question", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_before_bang", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_before_tilde", phase: Phase::Syntax, code: Code::E0020 },
@@ -614,7 +638,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "leading_minus", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "value_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "item_dot_call", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "callee_expression", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "indexed_value_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "field_call", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "interpolated_string_pattern", phase: Phase::Syntax, code: Code::E0020 },
@@ -875,16 +898,16 @@ fn hit(span: Span, fixes: Vec<Fix>) -> Option<Hit> {
     Some(Hit { span, fixes, misplaced: false })
 }
 
-/// A name or a path of names: `x`, `self.a.b` (tokens `first..=last`, no
-/// newline between).
-// SPEC-GAP(S-322): a tuple index (`t.0`) is no part of a path of fields here,
-// until S-322.
+/// A name or a path of names and tuple indexes: `x`, `self.a.b`, `t.0.1`
+/// (tokens `first..=last`, no newline between; S-322).
 fn is_place(c: &Cursor, first: usize, last: usize) -> bool {
     if first > last {
         return false;
     }
-    (first..=last).enumerate().all(|(k, i)| {
-        if k % 2 == 0 { matches!(c.kind(i), TokenKind::Ident | TokenKind::KwSelf) } else { c.kind(i) == TokenKind::Dot }
+    (first..=last).enumerate().all(|(k, i)| match k % 2 {
+        0 if k == 0 => matches!(c.kind(i), TokenKind::Ident | TokenKind::KwSelf),
+        0 => matches!(c.kind(i), TokenKind::Ident | TokenKind::KwSelf | TokenKind::Int),
+        _ => c.kind(i) == TokenKind::Dot,
     }) && (last - first) % 2 == 0
 }
 
@@ -1297,6 +1320,63 @@ pub(crate) fn names_a_path(kind: NodeKind) -> bool {
     matches!(kind, NodeKind::PathExpr | NodeKind::FieldExpr | NodeKind::TupleIndexExpr)
 }
 
+/// How a postfix chain has been read so far, for [`callee_by_name`]: a path
+/// of names (§2.4: names and the fields, tuple indexes and `::[…]` after
+/// them), that path with `[…]`s after it, a field of anything else (a
+/// method, `g(x).m`), one `[…]` after such a field (`g(x).m[I32]`), or
+/// anything else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CalleeChain {
+    Names,
+    Indexed,
+    Member,
+    MemberIndexed,
+    Value,
+}
+
+impl CalleeChain {
+    /// The chain that starts with an operand of `kind`.
+    pub(crate) fn start(kind: NodeKind) -> CalleeChain {
+        if kind == NodeKind::PathExpr { CalleeChain::Names } else { CalleeChain::Value }
+    }
+
+    /// The chain after its next link, a node of `kind`, closed. A field keeps
+    /// a path of names (`ops[i].m[T](x)` is a method's, of the type stage,
+    /// S-256); after anything else it is a member, and one `[…]` after it is
+    /// a method's type arguments or an index of a field, which the type stage
+    /// tells apart (`g(x).m[I32](y)`, §4.5); a tuple index ends a path of
+    /// names only after names.
+    pub(crate) fn then(self, kind: NodeKind) -> CalleeChain {
+        use CalleeChain::*;
+        match (self, kind) {
+            (c @ (Names | Indexed), NodeKind::FieldExpr | NodeKind::TypeArgsExpr) => c,
+            (_, NodeKind::FieldExpr) => Member,
+            (Names, NodeKind::TupleIndexExpr) => Names,
+            (Names | Indexed, NodeKind::IndexExpr) => Indexed,
+            (Member, NodeKind::IndexExpr) => MemberIndexed,
+            _ => Value,
+        }
+    }
+}
+
+/// Whether the callee of a call `callee(…)`, the last link (`kind`) of the
+/// chain `chain`, is written by name, so that a later stage decides the
+/// call (§6.1, S-191, S-256): a path of names (`f`, `s.f`; `t.0`, S-342),
+/// a method (`x.f`, `g(x).f`), `::[…]` after one (`f::[T]`), a path of
+/// names with `[…]` after it (`ops[i]`), or a field of anything else with
+/// one `[…]` after it (`g(x).m[I32]`, §4.5). Any other callee (`(s.f)`,
+/// `pick(true)`, `ts[0].0`, `mk2().0`) is no item: the parser fails at the
+/// `(` with [`Want::Callee`], and the row `callee_expression` gives `.(`.
+/// The one test, for the parser and that row.
+pub(crate) fn callee_by_name(kind: NodeKind, chain: CalleeChain) -> bool {
+    match kind {
+        NodeKind::PathExpr | NodeKind::FieldExpr | NodeKind::TypeArgsExpr => true,
+        NodeKind::TupleIndexExpr => chain == CalleeChain::Names,
+        NodeKind::IndexExpr => matches!(chain, CalleeChain::Indexed | CalleeChain::MemberIndexed),
+        _ => false,
+    }
+}
+
 /// A callee that is a value and no path (`(e)`, `g(x)`, `xs[i]`, `x?`): no
 /// `::[` can be written after it, and it is called with `.(` (§6.1).
 fn is_value_callee(kind: NodeKind) -> bool {
@@ -1413,28 +1493,132 @@ fn type_args_call(c: &Cursor) -> Option<Hit> {
 /// The candidate that calls the value `callee` with `.(` in place of the
 /// type arguments in `first..=last` (the call's `(` follows `last`): the
 /// list and the blanks before it become `.`, and the parentheses around a
-/// path of names go (`(s.f)` is `s.f.(x)`, §4.5).
+/// postfix expression go (`(s.f)` is `s.f.(x)`, §4.5).
 fn value_call(c: &Cursor, callee: (NodeKind, u32), first: usize, last: usize) -> Option<Fix> {
     if c.kind(last + 1) != TokenKind::LParen || c.gap(last + 1) != Gap::None {
         return None;
     }
     let before = first.checked_sub(1)?;
     let mut edits = vec![Edit::replace(c.file_span(c.span(before).end, c.span(last).end), ".")];
-    if callee.0 == NodeKind::ParenExpr {
-        let open = c.index_at(callee.1);
-        if is_place(c, open + 1, before - 1) {
-            edits.push(Edit::delete(c.span(open)));
-            edits.push(Edit::delete(c.span(before)));
-        }
+    if let Some(open) = removable_parens(c, callee, before) {
+        edits.push(Edit::delete(c.span(open)));
+        edits.push(Edit::delete(c.span(before)));
     }
     Some(Fix::new("call the function value with `.(`", edits))
 }
 
-/// The expression that ended right before the failure: the innermost
+/// The `(` of the callee `callee` that closes at `close`, when the
+/// parentheses can go before `.(`: the callee is a parenthesis around a
+/// postfix expression (a path of names and the fields, tuple indexes,
+/// indexes, calls and `?` after it), which `.(` follows with the same
+/// reading (S-236). `(a + b)` keeps them, and so does a `(` that touches a
+/// word before it (`return(s.f)`: the word would join the name, S-302).
+fn removable_parens(c: &Cursor, callee: (NodeKind, u32), close: usize) -> Option<usize> {
+    if callee.0 != NodeKind::ParenExpr || c.kind(close) != TokenKind::RParen {
+        return None;
+    }
+    let open = c.index_at(callee.1);
+    let word = |k: TokenKind| matches!(k, TokenKind::Ident | TokenKind::Int | TokenKind::Float) || k.is_keyword();
+    if c.gap(open) == Gap::None && open.checked_sub(1).is_some_and(|b| word(c.kind(b))) {
+        return None;
+    }
+    is_postfix_chain(c, open + 1, close.checked_sub(1)?).then_some(open)
+}
+
+/// The tokens `first..=last` are a postfix expression on one line: a name,
+/// `self` or `Self` and, after it, only `.name`, `.0`, `.(…)`, `(…)`,
+/// `[…]`, `::[…]`, `~(…)`, `!(…)` and `?`.
+fn is_postfix_chain(c: &Cursor, first: usize, last: usize) -> bool {
+    if first > last || !matches!(c.kind(first), TokenKind::Ident | TokenKind::KwSelf | TokenKind::KwSelfType) {
+        return false;
+    }
+    let after_group = |open: usize| closing(c, open).map(|close| close + 1);
+    let mut i = first + 1;
+    while i <= last {
+        let next = match (c.kind(i), c.kind(i + 1)) {
+            (TokenKind::Dot, TokenKind::LParen) => after_group(i + 1),
+            (TokenKind::Dot, k) if k == TokenKind::Ident || k == TokenKind::Int || k.is_keyword() => Some(i + 2),
+            (TokenKind::LParen | TokenKind::LBracket, _) => after_group(i),
+            (TokenKind::ColonColon, TokenKind::LBracket)
+            | (TokenKind::Tilde, TokenKind::LParen)
+            | (TokenKind::Bang, TokenKind::LParen) => after_group(i + 1),
+            (TokenKind::Question, _) => Some(i + 1),
+            _ => None,
+        };
+        let Some(next) = next else { return false };
+        i = next;
+    }
+    i == last + 1
+}
+
+/// A call whose callee is neither a path of names nor a path of names with
+/// `[…]` (`(s.f)(x)`, `pick(true)(5)`, `h.(1)(2)`, §6.1, S-191): no item is
+/// such a callee, so the parser fails at its `(`. The one candidate calls the
+/// value with `.(`: the parentheses around a postfix expression go and the
+/// `)` becomes the `.` (`s.f.(x)`); else a `.` goes before the `(`
+/// (`pick(true).(5)`, `(a + b).(1)`). An integer literal as the callee has
+/// none (`1.(2)` reads as the literal `1.`, §2.4).
+fn callee_expression(c: &Cursor) -> Option<Hit> {
+    // The parser has judged the callee ([`callee_by_name`]).
+    if c.want != Want::Callee {
+        return None;
+    }
+    let callee = closed_expr(c)?;
+    let before = c.at.checked_sub(1)?;
+    // From the callee to the `(` the parser failed at: the arguments, not
+    // read yet, may hold errors of their own.
+    let span = c.file_span(callee.1, c.span(c.at).end);
+    let edits = match removable_parens(c, callee, before) {
+        Some(open) => vec![Edit::delete(c.span(open)), Edit::replace(c.span(before), ".")],
+        // Not a tuple index (`ts[0].0.(x)` reads as written).
+        None if callee.0 == NodeKind::Literal && c.kind(before) == TokenKind::Int => return hit(span, Vec::new()),
+        None => vec![Edit::insert(c.file, c.span(c.at).start, ".")],
+    };
+    hit(span, vec![Fix::new("call the function value with `.(`", edits)])
+}
+
+/// A space before or after a member `.` inside a line (`p . x`, `f .(x)`,
+/// §2.5, S-203): the candidate removes it. A `.` that starts a line
+/// continues the expression; one at the end of a line, or before what no
+/// member is, is the general E0002.
+fn space_around_dot(c: &Cursor) -> Option<Hit> {
+    if c.want != Want::Postfix || c.kind(c.at) != TokenKind::Dot {
+        return None;
+    }
+    let (before, after) = (c.gap(c.at), c.gap(c.at + 1));
+    if after == Gap::Newline || (before != Gap::Space && after != Gap::Space) {
+        return None;
+    }
+    // `t. 0.5` would become the indexes `t.0.5`, `1 . 5` the number `1.5`
+    // and `1 .(2)` the literal `1.` (as `1.(2)` reads, S-350): no candidate
+    // keeps their reading.
+    let literal_before =
+        c.at.checked_sub(1)
+            .filter(|&b| b.checked_sub(1).is_none_or(|d| c.kind(d) != TokenKind::Dot))
+            .map(|b| c.kind(b))
+            .filter(|&k| matches!(k, TokenKind::Int | TokenKind::Float));
+    let next = c.kind(c.at + 1);
+    if !(matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen) || next.is_keyword())
+        || (literal_before.is_some() && next == TokenKind::Int)
+        || (literal_before == Some(TokenKind::Int) && next == TokenKind::LParen)
+    {
+        return None;
+    }
+    let mut edits = Vec::new();
+    if before == Gap::Space {
+        edits.extend(c.space_before(c.at).map(Edit::delete));
+    }
+    if after == Gap::Space {
+        edits.extend(c.space_after(c.at).map(Edit::delete));
+    }
+    hit(c.span(c.at), vec![Fix::new("remove the space", edits)])
+}
+
+/// The expression that ended right before the failure: the outermost
 /// expression among the nodes closed there (an argument list closes before
-/// its call).
+/// its call; the `if` of `if c { f } else { g }`, not its last block, S-316).
 fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
-    c.closed.iter().copied().find(|n| crate::lower::class(n.0) == crate::lower::Class::Expr)
+    c.closed.iter().copied().rfind(|n| crate::lower::class(n.0) == crate::lower::Class::Expr)
 }
 
 /// `::[` written in a type position (`b: Buf::[F32]`, §4.5): the mark is
@@ -1856,6 +2040,9 @@ fn foreign_literal(c: &Cursor) -> Option<Hit> {
             && !after_dot.is_some_and(|b| b == b'.' || b.is_ascii_alphabetic() || b == b'_');
         if joins { Vec::new() } else { vec![Fix::replace("remove the type suffix", span, number)] }
     };
+    // A literal right before a `(` would be a callee that is no path, an
+    // error of the syntax stage at the same place (§6.1): no candidate.
+    let fixes = if next == Some(b'(') { Vec::new() } else { fixes };
     Some(Hit { span, fixes, misplaced: !matches!(c.want, Want::Expr | Want::Pattern) })
 }
 
@@ -1900,6 +2087,11 @@ fn faust_bit_not(c: &Cursor) -> Option<Hit> {
     let prefix =
         |k: TokenKind| matches!(k, TokenKind::Minus | TokenKind::Bang | TokenKind::Tilde | TokenKind::MinusMinus);
     if c.top() == Some(NodeKind::PrefixExpr) || matches!(c.kind(c.at + 1), TokenKind::Tilde | TokenKind::MinusMinus) {
+        return hit(c.span(c.at), Vec::new());
+    }
+    // The operand of `move` and `inout` is a postfix expression (§5.2, R-42):
+    // `move !x` is no form either, so there is no candidate (the E0002).
+    if c.sig_before(c.at).is_some_and(|p| matches!(c.kind(p), TokenKind::KwMove | TokenKind::KwInout)) {
         return hit(c.span(c.at), Vec::new());
     }
     if prefix(c.kind(c.at + 1)) {
@@ -1960,6 +2152,10 @@ fn leading_point(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let span = c.file_span(c.span(c.at).start, c.span(c.at + 1).end);
+    // A literal right before a `(` would be a callee that is no path (§6.1).
+    if c.kind(c.at + 2) == TokenKind::LParen && c.gap(c.at + 2) == Gap::None {
+        return hit(span, Vec::new());
+    }
     let text = format!("0{}", &c.text[span.start as usize..span.end as usize]);
     hit(span, vec![Fix::replace("add the `0` before the point", span, text)])
 }
@@ -2727,7 +2923,8 @@ fn increment(c: &Cursor) -> Option<Hit> {
         return hit(span, vec![fix]);
     }
     // `x++` as a statement: the statement `x` closed before it.
-    if let [(NodeKind::PathExpr | NodeKind::FieldExpr, start), .., (NodeKind::ExprStmt, _)] = c.closed
+    if let [(NodeKind::PathExpr | NodeKind::FieldExpr | NodeKind::TupleIndexExpr, start), .., (NodeKind::ExprStmt, _)] =
+        c.closed
         && c.top() == Some(NodeKind::Block)
         && ends_statement(c, c.at)
     {

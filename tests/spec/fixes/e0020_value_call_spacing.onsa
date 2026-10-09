@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a space around the `.` of `.(` (§2.5: the member `.`, which includes the `.(` of a call
+// through a function value, takes no space before or after it inside a line). The reader would
+// see `f .(x)` as `f` followed by something else. The one candidate removes the space. One error per
+// function (P-01). A `.(` that starts the next line continues the previous line and has no
+// space to remove (value_calls.onsa).
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn space_before_the_dot(f: fn(I32) -> I32, x: I32) -> I32 {
+  f .(x)                                            //~ E0020
+}
+
+pub fn space_after_the_dot(f: fn(I32) -> I32, x: I32) -> I32 {
+  f. (x)                                            //~ E0020
+}
+
+pub fn spaces_on_both_sides(f: fn(I32) -> I32, x: I32) -> I32 {
+  f . (x)                                           //~ E0020
+}
+
+pub fn space_before_the_dot_of_a_field(s: Shaper, x: F32) -> F32 {
+  s.curve .(x)                                      //~ E0020
+}
+
+pub fn space_before_the_dot_of_an_element(ops: [fn(I32) -> I32; 2], i: U32, x: I32) -> I32 {
+  ops[i] .(x)                                       //~ E0020
+}
+
+pub fn space_in_a_chain(h: fn(I32) -> fn(I32) -> I32) -> I32 {
+  h.(1) .(2)                                        //~ E0020
+}
+
+pub fn fine(f: fn(I32) -> I32, s: Shaper, x: I32) -> I32 {
+  f.(x) + s.curve.(1.0).trunc_i32()
+}

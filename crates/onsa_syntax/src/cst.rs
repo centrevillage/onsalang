@@ -162,6 +162,8 @@ pub enum NodeKind {
     UnitType,
     /// `( Type, Type, ... )`
     TupleType,
+    /// `( Type )`: a group, the type in it (§2.4, R-43)
+    ParenType,
     /// `[ Type ; Expr ]`
     ArrayType,
     /// `rt? fn FnTypeParams (-> Type)? (uses EffectRow)?`
@@ -262,8 +264,10 @@ pub enum NodeKind {
     LitPat,
     /// `- Int`
     NegLitPat,
-    /// `( Pat, ... )`
+    /// `( Pat, Pat, ... )`
     TuplePat,
+    /// `( Pat )`: a group, the pattern in it (§2.4, R-43)
+    ParenPat,
     /// `Path` of one lowercase name: a binding
     BindPat,
     /// `Path`
@@ -329,6 +333,7 @@ impl NodeKind {
             ConstArg => "ConstArg",
             UnitType => "UnitType",
             TupleType => "TupleType",
+            ParenType => "ParenType",
             ArrayType => "ArrayType",
             FnType => "FnType",
             FnTypeParams => "FnTypeParams",
@@ -378,6 +383,7 @@ impl NodeKind {
             LitPat => "LitPat",
             NegLitPat => "NegLitPat",
             TuplePat => "TuplePat",
+            ParenPat => "ParenPat",
             BindPat => "BindPat",
             PathPat => "PathPat",
             TupleStructPat => "TupleStructPat",

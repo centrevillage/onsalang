@@ -24,10 +24,10 @@ pub fn capturing_closure_returned(k: U32) -> fn(U32) -> U32 {
 
 pub fn capturing_closure_stored(k: U32) -> U32 {
   let add = fn(x: U32) -> U32 { x + k }   //~ E0710
-  add(1)
+  add.(1)
 }
 
-pub fn apply(f: fn(U32) -> U32) -> U32 { f(1) }
+pub fn apply(f: fn(U32) -> U32) -> U32 { f.(1) }
 
 pub struct Counter {
   n: U32,

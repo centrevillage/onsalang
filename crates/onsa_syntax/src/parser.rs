@@ -363,6 +363,15 @@ impl<'a> Parser<'a> {
         self.enter(kind, start, 0)
     }
 
+    /// Whether the parser reads inside a type (a const argument or the
+    /// length of an array type): an expression there has no `::[…]` (R-196).
+    fn in_type(&self) -> bool {
+        self.open.iter().any(|o| {
+            matches!(self.events[o.event as usize], Event::Start { kind: Some(k), .. }
+                if crate::lower::class(k) == crate::lower::Class::Type)
+        })
+    }
+
     /// The level of the innermost open node (0 outside every node).
     fn level(&self) -> u32 {
         self.open.last().map_or(0, |o| o.level)
@@ -386,7 +395,7 @@ impl<'a> Parser<'a> {
             | EffectRow | Path => 0,
             // Types: a type with arguments counts at its `[` (the `TypeArgs`), a name none.
             PathType | ConstArg | FnTypeParams => 0,
-            TypeArgs | UnitType | TupleType | ArrayType | FnType => 1,
+            TypeArgs | UnitType | TupleType | ParenType | ArrayType | FnType => 1,
             // Statements are none, the loops one (and their blocks one more).
             LetStmt | VarStmt | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt => 0,
             ForStmt | WhileStmt | Block => 1,
@@ -400,7 +409,7 @@ impl<'a> Parser<'a> {
             | TupleIndexExpr | IndexExpr | TryExpr | StructLit => 1,
             // Patterns: `|` is one level for all its alternatives.
             WildPat | LitPat | NegLitPat | BindPat | PathPat | StructPatField => 0,
-            TuplePat | TupleStructPat | StructPat | OrPat => 1,
+            TuplePat | ParenPat | TupleStructPat | StructPat | OrPat => 1,
         };
         children + level
     }
@@ -1709,14 +1718,13 @@ impl<'a> Parser<'a> {
                     if p.eat(TokenKind::RParen).is_some() {
                         return Ok(NodeKind::UnitType);
                     }
-                    let first = p.parse_type()?;
-                    if p.eat(TokenKind::Comma).is_none() {
+                    p.parse_type()?;
+                    let Some(comma) = p.eat(TokenKind::Comma) else {
                         p.expect(TokenKind::RParen)?;
-                        return Err(p.error(
-                            Code::E0002,
-                            first.span,
-                            "a parenthesized type is not a tuple; tuples have two or more elements",
-                        ));
+                        return Ok(NodeKind::ParenType);
+                    };
+                    if p.at(TokenKind::RParen) {
+                        return Err(p.one_element(comma));
                     }
                     while !p.at(TokenKind::RParen) {
                         p.parse_type()?;
@@ -1921,8 +1929,19 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::KwIn)?;
                 if self.at(TokenKind::KwMove) {
                     // `for s in move xs`: `move xs` is the form `move` (§5.2).
+                    // A range after its start (`for i in move 0..<n`) is read
+                    // on, the `move` over the whole range (§7: E0703, of
+                    // the modes stage, W4-09); the start is a postfix
+                    // expression as any operand of `move` (§5.2).
+                    // SPEC-GAP(S-362): `move lo + 1..<hi` is the E0002 of
+                    // §5.2, which §7's E0703 for a range does not settle.
                     let mv = self.bump();
-                    self.without_node(NodeKind::MoveExpr, mv.span, |p| p.parse_head_expr(true))?;
+                    self.without_node(NodeKind::MoveExpr, mv.span, |p| {
+                        let saved = std::mem::replace(&mut p.no_struct_lit, true);
+                        let r = p.parse_marked(mv).and_then(|start| p.parse_range_rest(start));
+                        p.no_struct_lit = saved;
+                        r
+                    })?;
                 } else {
                     self.parse_head_expr(true)?;
                 }
@@ -1950,9 +1969,23 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::ReturnStmt)?;
                 self.bump();
                 if !matches!(self.peek_kind(), TokenKind::Newline | TokenKind::RBrace | TokenKind::Eof) {
-                    self.parse_expr()?;
+                    self.parse_consumed()?;
                 }
                 Ok(self.complete(m, NodeKind::ReturnStmt))
+            }
+            // `move a` on the last expression of a block (§5.2, S-100): where
+            // the block stands decides the rest (the modes stage).
+            TokenKind::KwMove => {
+                let expr = self.parse_consumed()?;
+                if self.peek_past_newlines().kind != TokenKind::RBrace {
+                    return Err(self.error(
+                        Code::E0002,
+                        t.span,
+                        "a `move` statement is written only as the last expression of a block (§5.2)",
+                    ));
+                }
+                let m = self.precede(expr, NodeKind::ExprStmt)?;
+                Ok(self.complete(m, NodeKind::ExprStmt))
             }
             TokenKind::KwAssert => {
                 let m = self.start(NodeKind::AssertStmt)?;
@@ -1986,16 +2019,37 @@ impl<'a> Parser<'a> {
         Ok(self.complete(m, NodeKind::VarStmt))
     }
 
-    /// An expression in a consuming position (§5.2, S-21): `move <place>` or a
-    /// plain expression. The `move` operand is a postfix expression (a place).
+    /// An expression in a consuming position (§5.2, S-21) or where the
+    /// function returns (S-100): `move <place>` or a plain expression.
     fn parse_consumed(&mut self) -> PResult<Completed> {
         if !self.at(TokenKind::KwMove) {
             return self.parse_expr();
         }
         let m = self.start(NodeKind::MoveExpr)?;
-        self.bump();
-        self.parse_postfix()?;
+        let mv = self.bump();
+        self.parse_marked(mv)?;
         Ok(self.complete(m, NodeKind::MoveExpr))
+    }
+
+    /// The operand of the mark `move` or `inout` (§5.2, R-42): a postfix
+    /// expression, never the operand of a binary operator or of `as`
+    /// (`move y + 1` is E0002 at the `+`, not `move (y + 1)`).
+    fn parse_marked(&mut self, mark: Token) -> PResult<Completed> {
+        let prefix = matches!(self.peek_kind(), TokenKind::Minus | TokenKind::Bang);
+        let operand = if prefix { None } else { Some(self.parse_postfix()?) };
+        let t = self.peek();
+        match operand {
+            Some(e) if !binop(t.kind) && t.kind != TokenKind::KwAs => Ok(e),
+            _ => {
+                let (mark, op) = (self.token_text(mark), self.token_text(t));
+                let what = if prefix { "a prefix" } else { "the operand of" };
+                Err(self.error(
+                    Code::E0002,
+                    t.span,
+                    format!("the operand of `{mark}` is a postfix expression (a name and its fields, indexes and calls), not {what} `{op}` (§5.2)"),
+                ))
+            }
+        }
     }
 
     /// Head expression of `if` / `while` / `match` / `for` / `par`: no struct
@@ -2036,12 +2090,20 @@ impl<'a> Parser<'a> {
             self.open[top].level = base;
             expr = self.complete(m, NodeKind::BinaryExpr);
         }
-        // A range is the whole expression of a head and is weaker than the
-        // binary operators (§3.1, S-257). Its other symbols (`..`, `...`) and
-        // a range anywhere else fail at the symbol: the table of the forms of
-        // other languages says what they are (`range_dots`,
-        // `range_outside_header`).
-        if allow_range && self.peek_kind().range_end().is_some() {
+        if allow_range {
+            return self.parse_range_rest(expr);
+        }
+        Ok(expr)
+    }
+
+    /// The rest of a head whose start `expr` is read: a range when a range
+    /// symbol follows, else `expr`. A range is the whole expression of a head
+    /// and is weaker than the binary operators (§3.1, S-257). Its other
+    /// symbols (`..`, `...`) fail at the symbol: the table of the forms of
+    /// other languages says what they are (`range_dots`; a range anywhere
+    /// else, `range_outside_header`).
+    fn parse_range_rest(&mut self, expr: Completed) -> PResult<Completed> {
+        if self.peek_kind().range_end().is_some() {
             let m = self.precede(expr, NodeKind::RangeExpr)?;
             self.bump();
             // A head ends at the `{` of its body: a range without an end
@@ -2054,7 +2116,7 @@ impl<'a> Parser<'a> {
             self.parse_expr_inner(false)?;
             return Ok(self.complete(m, NodeKind::RangeExpr));
         }
-        if allow_range && self.peek_kind().is_foreign_range() {
+        if self.peek_kind().is_foreign_range() {
             return Err(self.unexpected("`..<` or `..=`"));
         }
         Ok(expr)
@@ -2105,6 +2167,8 @@ impl<'a> Parser<'a> {
         let mut expr = self.parse_primary()?;
         // The last name of a chain `a.b.C` of names (a struct literal path, S-08).
         let mut chain: Option<Token> = (expr.kind == NodeKind::PathExpr).then_some(first);
+        // What the chain is so far, for the callee of a `(` (§6.1).
+        let mut links = foreign::CalleeChain::start(expr.kind);
         loop {
             // `.` on the next line continues the expression (§2.5).
             if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::Dot {
@@ -2113,6 +2177,11 @@ impl<'a> Parser<'a> {
             let t = self.peek();
             match t.kind {
                 TokenKind::LParen => {
+                    // A callee not written by name is no item: E0020 here,
+                    // `.(` (§6.1, S-191).
+                    if !foreign::callee_by_name(expr.kind, links) && !self.peek_gap().is_some() {
+                        return Err(self.fail(Want::Callee, "an operator or the end of the expression"));
+                    }
                     let m = self.precede(expr, NodeKind::CallExpr)?;
                     self.parse_arg_list()?;
                     expr = self.complete(m, NodeKind::CallExpr);
@@ -2150,6 +2219,18 @@ impl<'a> Parser<'a> {
                     // (`Pr::[U8] { a: 1 }`).
                     expr = self.complete(m, NodeKind::TypeArgsExpr);
                 }
+                // The member `.` takes no space on either side inside a line (§2.5, S-203).
+                TokenKind::Dot if self.peek_gap() == Gap::Space || self.gap(self.peek2_index()) == Gap::Space => {
+                    return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
+                }
+                // `v.(x)`: a call through a function value (§6.1, S-191).
+                TokenKind::Dot if self.peek2().kind == TokenKind::LParen => {
+                    let m = self.precede(expr, NodeKind::CallExpr)?;
+                    self.bump();
+                    self.parse_arg_list()?;
+                    expr = self.complete(m, NodeKind::CallExpr);
+                    chain = None;
+                }
                 TokenKind::Dot => {
                     let m = self.precede(expr, NodeKind::FieldExpr)?;
                     self.bump();
@@ -2176,9 +2257,11 @@ impl<'a> Parser<'a> {
                 // whether the brackets are such a list ([`foreign::type_list_ahead`]);
                 // the parser fails at them, so `<` is not read as a comparison
                 // nor `[A, B]` as an index.
+                // In a type (a const argument, an array's length) no `::[` is
+                // written, so a `[…]` with `,` is read as an index (R-196).
                 TokenKind::Lt | TokenKind::LBracket
                     if foreign::type_list_ahead(&self.tokens, &self.all, &self.full, self.peek_index(), expr.kind)
-                        && (self.peek_kind() == TokenKind::Lt || self.reads_as_type_list()) =>
+                        && (self.peek_kind() == TokenKind::Lt || (!self.in_type() && self.reads_as_type_list())) =>
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));
                 }
@@ -2226,6 +2309,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => break,
             }
+            links = links.then(expr.kind);
         }
         Ok(expr)
     }
@@ -2241,9 +2325,11 @@ impl<'a> Parser<'a> {
                 if p.at(TokenKind::KwMove) {
                     // `f(move x)`: `move x` is the form `move` (§5.2).
                     let mv = p.bump();
-                    p.without_node(NodeKind::MoveExpr, mv.span, |p| p.parse_expr())?;
+                    p.without_node(NodeKind::MoveExpr, mv.span, |p| p.parse_marked(mv))?;
+                } else if p.at(TokenKind::KwInout) {
+                    let mark = p.bump();
+                    p.parse_marked(mark)?;
                 } else {
-                    p.parse_mode();
                     p.parse_expr()?;
                 }
                 p.complete(a, NodeKind::Arg);
@@ -2266,7 +2352,7 @@ impl<'a> Parser<'a> {
                 return Err(self.error(
                     Code::E0002,
                     t.span,
-                    "`move` is written only where a value is consumed: let/var initializers, assignment, literal elements, `match move x`, and call arguments (§5.2)",
+                    "`move` is written only where a value is consumed: let/var initializers, assignment, literal elements, `match move x`, call arguments, and the last expression of a block (§5.2)",
                 ));
             }
             TokenKind::KwRt => {
@@ -2317,9 +2403,9 @@ impl<'a> Parser<'a> {
                 if self.at(TokenKind::KwMove) {
                     // `match move x` consumes the value (§7, S-21).
                     let mv = self.start(NodeKind::MoveExpr)?;
-                    self.bump();
+                    let mark = self.bump();
                     let saved = std::mem::replace(&mut self.no_struct_lit, true);
-                    let inner = self.parse_postfix();
+                    let inner = self.parse_marked(mark);
                     self.no_struct_lit = saved;
                     inner?;
                     self.complete(mv, NodeKind::MoveExpr);
@@ -2336,7 +2422,7 @@ impl<'a> Parser<'a> {
                             p.parse_expr()?;
                         }
                         p.expect(TokenKind::FatArrow)?;
-                        p.parse_expr()?;
+                        p.parse_consumed()?;
                         p.complete(a, NodeKind::MatchArm);
                         if p.eat(TokenKind::Comma).is_none() {
                             break;
@@ -2434,10 +2520,21 @@ impl<'a> Parser<'a> {
         if self.eat(TokenKind::RParen).is_some() {
             return Ok(NodeKind::TupleExpr);
         }
-        self.parse_consumed()?;
-        if self.eat(TokenKind::Comma).is_none() {
+        let first = self.parse_consumed()?;
+        let Some(comma) = self.eat(TokenKind::Comma) else {
+            if first.kind == NodeKind::MoveExpr {
+                let mv = Span::new(self.file, first.span.start, first.span.start + "move".len() as u32);
+                return Err(self.error(
+                    Code::E0002,
+                    mv,
+                    "a marked expression stands where it is consumed; it is parenthesized only as an element of a tuple of two or more (§5.2)",
+                ));
+            }
             self.expect(TokenKind::RParen)?;
             return Ok(NodeKind::ParenExpr);
+        };
+        if self.at(TokenKind::RParen) {
+            return Err(self.one_element(comma));
         }
         while !self.at(TokenKind::RParen) {
             self.parse_consumed()?;
@@ -2447,6 +2544,16 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::RParen)?;
         Ok(NodeKind::TupleExpr)
+    }
+
+    /// E0002 at the `,` after the only element of a parenthesis (`(e,)`,
+    /// `(I32,)`, `(p,)`, §2.4, R-43): a tuple has two or more elements.
+    fn one_element(&mut self, comma: Token) -> ParseError {
+        self.error(
+            Code::E0002,
+            comma.span,
+            "a tuple has two or more elements; `(e)` is a group, and a `,` after the only element is not written (§2.4)",
+        )
     }
 
     /// After `[`: `[]`, `[a, b]` or `[e; N]`.
@@ -2610,10 +2717,22 @@ impl<'a> Parser<'a> {
                 return Ok(self.complete(m, NodeKind::LitPat));
             }
             TokenKind::Char | TokenKind::Str | TokenKind::KwTrue | TokenKind::KwFalse => NodeKind::LitPat,
+            // `()`, `(p)` (a group, §2.4, R-43) or `(p, q, ...)`.
             TokenKind::LParen => {
                 let m = self.start(NodeKind::TuplePat)?;
                 self.bump();
-                self.with_nl(false, |p| {
+                let kind = self.with_nl(false, |p| {
+                    if p.eat(TokenKind::RParen).is_some() {
+                        return Ok(NodeKind::TuplePat);
+                    }
+                    p.parse_pattern()?;
+                    let Some(comma) = p.eat(TokenKind::Comma) else {
+                        p.expect(TokenKind::RParen)?;
+                        return Ok(NodeKind::ParenPat);
+                    };
+                    if p.at(TokenKind::RParen) {
+                        return Err(p.one_element(comma));
+                    }
                     while !p.at(TokenKind::RParen) {
                         p.parse_pattern()?;
                         if p.eat(TokenKind::Comma).is_none() {
@@ -2621,9 +2740,9 @@ impl<'a> Parser<'a> {
                         }
                     }
                     p.expect(TokenKind::RParen)?;
-                    Ok(())
+                    Ok(NodeKind::TuplePat)
                 })?;
-                return Ok(self.complete(m, NodeKind::TuplePat));
+                return Ok(self.complete(m, kind));
             }
             TokenKind::Ident | TokenKind::KwSelfType => {
                 let m = self.start(NodeKind::PathPat)?;
@@ -3320,10 +3439,16 @@ mod tests {
         let d = crate::dump(&crate::parse(FileId(0), src).ast);
         assert!(d.contains("(let y = (move b))"), "{d}");
         assert!(d.contains("(match (move b)"), "{d}");
-        // Elsewhere it is E0002.
-        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  return move b\n}\n"), vec![Code::E0002]);
-        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  move b\n}\n"), vec![Code::E0002]);
+        // Where the function returns and on the last expression of a block (S-100).
+        assert!(codes("fn f(move b: U32) -> U32 {\n  return move b\n}\n").is_empty());
+        assert!(codes("fn f(move b: U32) -> U32 {\n  move b\n}\n").is_empty());
+        assert!(
+            codes("fn f(c: Bool, move b: U32) -> U32 {\n  let y = if c { move b } else { 1 }\n  y\n}\n").is_empty()
+        );
+        // Elsewhere it is E0002: an operand, a head, a group, a statement that is no block's last.
         assert_eq!(codes("fn f(move b: U32) -> U32 {\n  let y = 1 + move b\n  y\n}\n"), vec![Code::E0002]);
         assert_eq!(codes("fn f(move b: Bool) -> U32 {\n  if move b { 1 } else { 2 }\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  let y = (move b)\n  y\n}\n"), vec![Code::E0002]);
+        assert_eq!(codes("fn f(move b: U32) -> U32 {\n  move b\n  1\n}\n"), vec![Code::E0002]);
     }
 }

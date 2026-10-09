@@ -522,7 +522,8 @@ fn the_parser_counts_the_levels_of_spec_2_5() {
         let deep = [
             body(&format!("{}1{}", "(".repeat(n), ")".repeat(n))),
             body(&format!("a{}", ".b".repeat(n))),
-            body(&format!("f{}", "()".repeat(n))),
+            // A call of a call's result is `.(` (§6.1, S-191).
+            body(&format!("f(){}", ".()".repeat(n - 1))),
             body(&format!("a{}", "[0]".repeat(n))),
             body(&format!("x{}", " as A".repeat(n))),
             body(&format!("1{}", " + 1".repeat(n))),

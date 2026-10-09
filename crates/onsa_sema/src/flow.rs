@@ -684,6 +684,10 @@ impl<'a> Checker<'a> {
         args: &[Arg],
         expected: Option<TyId>,
     ) -> R<Option<TyId>> {
+        // `v.(x)` calls a function value; the flow stage reads it with W8-09.
+        if matches!(kind, CallKind::Value { .. }) {
+            return Ok(None);
+        }
         let span = self.expr(e).span;
         // 1. Reserved builtin names (§2.2).
         if let ExprKind::Path(p) = &self.expr(callee).kind
@@ -752,7 +756,7 @@ impl<'a> Checker<'a> {
                     .with_fix(Fix::delete("remove `~`", Span::new(span.file, at, at + 1))),
                 ))
             }
-            (None, _) => Ok(None),
+            (None, _) | (_, CallKind::Value { .. }) => Ok(None),
         }
     }
 

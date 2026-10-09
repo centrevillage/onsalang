@@ -326,7 +326,6 @@ test \"a parenthesized pattern is the pattern\" {
 ";
 
 #[test]
-#[ignore = "W3-20 (R-43): the parser rejects a parenthesized type (E0002) and reads a parenthesized pattern as a tuple (E0401)"]
 fn a_parenthesized_type_or_pattern_is_grouping() {
     // §2.4: `(e)` is grouping in an expression, a pattern and a type; only `(e,)` is E0002.
     let d = Dir::new("paren");

@@ -1107,6 +1107,105 @@ pub fn f(inout x: I32, a: I32, b: I32) {
 }
 ''']
 
+# 左辺のフィールドの経路にタプルの添字を含む形（S-322）。評価が無いので二度になる問題が無く、名前やフィールドと同じ候補になる。
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) {
+  t.0 += 1
+}
+'''
+at = "2:7"
+fixed = ['''
+pub fn f(inout t: (I32, I32)) {
+  t.0 = t.0 + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32), k: I32) {
+  t.1 -= k
+}
+'''
+at = "2:7"
+fixed = ['''
+pub fn f(inout t: (I32, I32), k: I32) {
+  t.1 = t.1 - k
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32), a: I32, b: I32) {
+  t.0 *= a + b
+}
+'''
+at = "2:7"
+fixed = ['''
+pub fn f(inout t: (I32, I32), a: I32, b: I32) {
+  t.0 = t.0 * (a + b)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: ((I32, I32), I32)) {
+  t.0.1 -= 1
+}
+'''
+at = "2:9"
+fixed = ['''
+pub fn f(inout t: ((I32, I32), I32)) {
+  t.0.1 = t.0.1 - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct C {
+  n: I32,
+}
+
+pub fn f(inout t: (C, I32)) {
+  t.0.n += 1
+}
+'''
+at = "6:9"
+fixed = ['''
+pub struct C {
+  n: I32,
+}
+
+pub fn f(inout t: (C, I32)) {
+  t.0.n = t.0.n + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct P {
+  both: (I32, I32),
+}
+
+impl P {
+  pub fn bump(inout self) {
+    self.both.0 += 1
+  }
+}
+'''
+at = "7:17"
+fixed = ['''
+pub struct P {
+  both: (I32, I32),
+}
+
+impl P {
+  pub fn bump(inout self) {
+    self.both.0 = self.both.0 + 1
+  }
+}
+''']
+
 # 添字など、評価が二度になる左辺と、式の位置の複合代入は、書き直しが一意でないので候補を作らない。
 [[form]]
 id = "compound_assign_unfixable"
@@ -1133,6 +1232,23 @@ pub fn f(inout x: I32) -> I32 {
 }
 '''
 at = "2:13"
+
+# 添字を含む経路は、タプルの添字が付いていても候補を作らない（`xs[0].0` の `xs[0]` は評価が二度になる。S-322）。
+[[form.example]]
+source = '''
+pub fn f(inout xs: [(I32, I32); 4]) {
+  xs[0].0 += 1
+}
+'''
+at = "2:11"
+
+[[form.example]]
+source = '''
+pub fn f(inout xs: [(I32, I32); 4], i: U32) {
+  xs[i].1 -= 1
+}
+'''
+at = "2:11"
 
 # 増減。空白を空けない `++x` `--x` `x++` `x--` を拾う（空白を空けた `- - x` は前置演算子の重ねで
 # E0012、§3.1）。文の位置で左辺が名前かフィールドの経路のとき、候補は `x = x + 1` / `x = x - 1`。
@@ -1222,6 +1338,72 @@ impl C {
 }
 ''']
 
+# 左辺のフィールドの経路にタプルの添字を含む形（S-322）。
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) {
+  t.0++
+}
+'''
+at = "2:6"
+fixed = ['''
+pub fn f(inout t: (I32, I32)) {
+  t.0 = t.0 + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) {
+  t.1--
+}
+'''
+at = "2:6"
+fixed = ['''
+pub fn f(inout t: (I32, I32)) {
+  t.1 = t.1 - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) {
+  ++t.0
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(inout t: (I32, I32)) {
+  t.0 = t.0 + 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) {
+  --t.1
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(inout t: (I32, I32)) {
+  t.1 = t.1 - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: ((I32, I32), I32)) {
+  t.0.1++
+}
+'''
+at = "2:8"
+fixed = ['''
+pub fn f(inout t: ((I32, I32), I32)) {
+  t.0.1 = t.0.1 + 1
+}
+''']
+
 # 式の位置（値の意味が言語で分かれる）、添字などの左辺、左辺が名前でない形（`---x` は字句が `--` と
 # `-x` で、S-297）は候補を作らない。
 [[form]]
@@ -1267,6 +1449,23 @@ pub fn f(x: I32) -> I32 {
 }
 '''
 at = "2:11"
+
+[[form.example]]
+source = '''
+pub fn f(inout xs: [(I32, I32); 4]) {
+  xs[0].0++
+}
+'''
+at = "2:10"
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) -> I32 {
+  let y = t.0++
+  y
+}
+'''
+at = "2:14"
 
 # 二項の `-` の直後に、空白を空けずに前置の `-` を書いた形（`a--b`、`5--3`、S-320）。字句は `--` を一つの
 # トークンにする（上の `increment` の行）ので、被演算子の直後に `--` が来て、その直後に被演算子が
@@ -2027,6 +2226,53 @@ pub fn f(p: Pt) -> I32 {
 }
 ''']
 
+# 後ろの空白、タプルの添字、関数値の呼び出しの `.(`（S-203、§2.5）。
+[[form.example]]
+source = '''
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: Pt) -> I32 {
+  p. x
+}
+'''
+fixed = ['''
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn f(p: Pt) -> I32 {
+  p.x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (I32, I32)) -> I32 {
+  t . 0
+}
+'''
+fixed = ['''
+pub fn f(t: (I32, I32)) -> I32 {
+  t.0
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(g: fn(I32) -> I32) -> I32 {
+  g .(1)
+}
+'''
+fixed = ['''
+pub fn f(g: fn(I32) -> I32) -> I32 {
+  g.(1)
+}
+''']
+
 [[form]]
 id = "space_before_question"
 kind = "foreign"
@@ -2324,6 +2570,7 @@ pub fn f(s: Shaper, x: F32) -> F32 {
   (s.curve)(x)
 }
 '''
+at = "7:3"
 fixed = ['''
 pub struct Shaper {
   gain: F32,
@@ -2353,6 +2600,7 @@ pub fn f() -> I32 {
   pick(true)(5)
 }
 '''
+at = "14:3"
 fixed = ['''
 pub fn inc(x: I32) -> I32 {
   x + 1
@@ -2368,6 +2616,94 @@ pub fn pick(up: Bool) -> fn(I32) -> I32 {
 
 pub fn f() -> I32 {
   pick(true).(5)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (fn(I32) -> I32, I32)) -> I32 {
+  (t.0)(t.1)
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(t: (fn(I32) -> I32, I32)) -> I32 {
+  t.0.(t.1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(h: fn(I32) -> fn(I32) -> I32) -> I32 {
+  h.(1)(2)
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(h: fn(I32) -> fn(I32) -> I32) -> I32 {
+  h.(1).(2)
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct Maker {
+  step: I32,
+}
+
+impl Maker {
+  pub fn make(self) -> fn(I32) -> I32 {
+    inc
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn f(m: Maker) -> I32 {
+  m.make()(3)
+}
+'''
+at = "16:3"
+fixed = ['''
+pub struct Maker {
+  step: I32,
+}
+
+impl Maker {
+  pub fn make(self) -> fn(I32) -> I32 {
+    inc
+  }
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn f(m: Maker) -> I32 {
+  m.make().(3)
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct Rig {
+  pair: (fn(I32) -> I32, I32),
+}
+
+pub fn f(r: Rig) -> I32 {
+  (r.pair.0)(r.pair.1)
+}
+'''
+at = "6:3"
+fixed = ['''
+pub struct Rig {
+  pair: (fn(I32) -> I32, I32),
+}
+
+pub fn f(r: Rig) -> I32 {
+  r.pair.0.(r.pair.1)
 }
 ''']
 
@@ -3650,6 +3986,32 @@ pub struct Shaper {
 
 pub fn f(s: Shaper, x: F32) -> F32 {
   s.curve.(x)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(h: fn(I32) -> fn(I32) -> I32) -> I32 {
+  h.(1)::<I32>(2)
+}
+'''
+at = "2:8"
+fixed = ['''
+pub fn f(h: fn(I32) -> fn(I32) -> I32) -> I32 {
+  h.(1).(2)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (fn(I32) -> I32, I32)) -> I32 {
+  (t.0)<I32>(t.1)
+}
+'''
+at = "2:8"
+fixed = ['''
+pub fn f(t: (fn(I32) -> I32, I32)) -> I32 {
+  t.0.(t.1)
 }
 ''']
 

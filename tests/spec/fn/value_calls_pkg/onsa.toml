@@ -1,0 +1,3 @@
+[package]
+name = "value_calls_pkg"
+edition = "2026"
