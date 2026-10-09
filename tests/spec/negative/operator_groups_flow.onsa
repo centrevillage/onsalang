@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§11.2", "§11.5", "§18.1"]
+
+// E0010 in the body of a `flow`, in a `par` and in the input of a delay (§3.1, §18.1): the groups
+// of the operators are the same as in a function, and the error is a syntax-stage error of the unit
+// (the flow checks, the clocks and the delays are not looked at). One error per declaration unit.
+// The flows at the end have no marker and are accepted.
+//
+// Needs the flow syntax of W3-10 (`at sample`).
+
+pub flow remainder_then_sum(x: F32 at sample) -> F32 at sample {
+  let y = x % 2.0 + 1.0                         //~ E0010
+  y
+}
+
+pub flow product_then_remainder(x: F32 at sample) -> F32 at sample {
+  x * 0.5 % 2.0                                 //~ E0010
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0..<2 { x + i.round_f32() % 2.0 }   //~ E0010
+  a[0]
+}
+
+pub flow in_the_input_of_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(x % 2.0 * 0.5)                          //~ E0010
+}
+
+pub flow in_the_feedback(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^y) % 2.0             //~ E0010
+  y
+}
+
+pub flow in_a_condition(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 && x < 1.0 || x > 2.0 {            //~ E0010
+    1.0
+  } else {
+    0.0
+  }
+}
+
+pub flow in_a_comparison_chain(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let ok = 0.0 < x < g                          //~ E0010
+  x
+}
+
+pub flow in_the_bounds_of_a_par(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0..<2 % 3 + 1 { x }          //~ E0010
+  a[0]
+}
+
+pub flow in_a_sample_rate_expression(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let k = g * 2.0 % 3.0                         //~ E0010
+  x * k
+}
+
+// ---- accepted ----------------------------------------------------------------------------------------
+
+pub flow fine(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let a = par i in 0..<2 { x * i.round_f32() + g * 2.0 }
+  let y = a[0] * 0.5 + a[1] * 0.25 + 0.5 * prev~(^y)
+  if y * g > 1.0 && y < 4.0 {
+    y
+  } else {
+    0.0
+  }
+}

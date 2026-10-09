@@ -1,0 +1,223 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.1", "§4.5", "§6.1", "§6.2", "§6.6", "§7"]
+
+// The groups of §3.1 in the places an expression can stand (W3-07): a function body and an early
+// `return`, a generic function, a method, a closure given to `array.from_fn`, the initializer of a
+// `const`, the guard of a `match` arm, the condition of an `if` and of a `while`, the ends of a
+// `for` range, an argument, a field of a struct literal, a tuple, an array and an index. The same
+// tree is read everywhere (the type check, the lowering, the value), so each of these gives the
+// value the groups imply. No redundant parentheses: this is the form `onsa fmt` writes. (The same
+// expressions in the body of a `flow` and in a `par` are in flow_semantics/precedence_flow.onsa.)
+
+use std.array
+
+pub struct Line {
+  a: I32,
+  b: I32,
+}
+
+// y = a * x + b
+impl Line {
+  pub fn eval(self, x: I32) -> I32 {
+    self.a * x + self.b
+  }
+
+  pub fn below(self, x: I32, y: I32) -> Bool {
+    self.a * x + self.b < y
+  }
+
+  pub fn even_at(self, x: I32) -> Bool {
+    self.eval(x) % 2 == 0
+  }
+}
+
+pub fn mad[T: Num](a: T, b: T, c: T) -> T {
+  a * b + c
+}
+
+pub fn lerp[T: Num](a: T, b: T, t: T) -> T {
+  a + (b - a) * t
+}
+
+pub fn in_range[T: PartialOrd](lo: T, x: T, hi: T) -> Bool {
+  lo <= x && x < hi
+}
+
+pub fn product_below[T: Num](a: T, b: T, c: T, d: T) -> Bool {
+  a * b < c + d
+}
+
+const BASE: I32 = 2 * 3 + 4
+const LIMIT: I32 = 100 - 3 * 4 - 1
+const IN_BAND: Bool = 1 < 2 && 3 + 4 > 5 * 1
+const MASKED: U32 = (0xF0 >> 4) + 1
+const TABLE: [I32; 3] = [1 * 2 + 1, 2 * 3 + 1, 3 * 4 + 1]
+
+// A `match` written as a statement that assigns a `var` in each arm (the value form with guards is
+// not lowered yet, semantics/match_general.onsa).
+fn classify(n: I32, lo: I32, hi: I32) -> I32 {
+  var r: I32 = 0
+  match n {
+    k if lo <= k && k < hi => {
+      r = 1
+    },
+    k if k % 2 == 0 && k > hi => {
+      r = 2
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn early(n: I32) -> I32 {
+  if n * 2 + 1 > 10 {
+    return n * 3 - 1
+  }
+  n + n * n
+}
+
+fn pair(a: I32, b: I32) -> I32 {
+  a * b + a
+}
+
+fn count_below(n: U32) -> U32 {
+  var i: U32 = 0
+  while i * i + 1 < n {
+    i = i + 1
+  }
+  i
+}
+
+test "a function body and an early return" {
+  assert early(6) == 17 // 13 > 10: return 18 - 1
+  assert early(2) == 6  // 5 > 10 is false: 2 + 4
+}
+
+test "arguments and results" {
+  assert pair(1 + 2 * 3, 4 - 1 * 2) == 21 // pair(7, 2) = 14 + 7
+  assert pair(2, 3) * 2 + 1 == 17         // 8 * 2 + 1
+}
+
+test "a method" {
+  let l = Line { a: 3, b: 1 }
+  assert l.eval(4) == 13
+  assert l.eval(1 + 1 * 3) == 13         // the argument is 4
+  assert l.eval(2) + l.eval(3) * 2 == 27 // 7 + 10 * 2
+  assert l.below(4, 14)
+  assert !l.below(4, 13)
+  assert l.even_at(3)  // 10
+  assert !l.even_at(4) // 13
+}
+
+test "a generic function" {
+  let a: I32 = 2
+  let b: I32 = 3
+  let c: I32 = 4
+  assert mad(a, b, c) == 10
+  let x: F32 = 1.0
+  let y: F32 = 3.0
+  let t: F32 = 0.5
+  assert lerp(x, y, t) == 2.0
+  assert lerp(y, x, t) == 2.0
+  assert lerp(a, c, b) == 8 // 2 + (4 - 2) * 3
+  assert in_range(1, 5, 10)
+  assert !in_range(a, 11, c * 2)    // 2 <= 11, but 11 < 8 is false
+  assert product_below(a, b, c, c)  // 6 < 8
+  assert !product_below(a, b, c, a) // 6 < 6
+}
+
+test "the initializer of a const" {
+  assert BASE == 10
+  assert LIMIT == 87
+  assert IN_BAND
+  assert MASKED == 16
+  assert TABLE[0] == 3
+  assert TABLE[1] == 7
+  assert TABLE[2] == 13
+}
+
+test "a closure" {
+  let a: [U32; 4] = array.from_fn(fn(i) { i * i + 1 })
+  assert a[0] == 1
+  assert a[1] == 2
+  assert a[2] == 5
+  assert a[3] == 10
+  let k: U32 = 3
+  let b: [U32; 4] = array.from_fn(fn(i) { (i + k) % 2 })
+  assert b[0] == 1
+  assert b[1] == 0
+  assert b[2] == 1
+  assert b[3] == 0
+  let c: [Bool; 4] = array.from_fn(fn(i) { i % 2 == 0 && i > 0 })
+  assert !c[0]
+  assert !c[1]
+  assert c[2]
+  assert !c[3]
+}
+
+test "the guard of a match arm" {
+  assert classify(5, 1, 10) == 1
+  assert classify(12, 1, 10) == 2 // the first guard is false, the second true
+  assert classify(11, 1, 10) == 0 // odd
+  assert classify(0, 1, 10) == 0  // even but not above hi
+}
+
+test "the condition of an if and of a while" {
+  let a: I32 = 3
+  let b: I32 = 4
+  let r: I32 = 5
+  let on_circle = if a * a + b * b == r * r { 1 } else { 0 }
+  assert on_circle == 1
+  let inside = if a * a + b * b < r * r - 1 { 1 } else { 2 }
+  assert inside == 2
+  assert count_below(30) == 6 // i * i + 1 < 30 holds for i = 0..5
+  assert count_below(1) == 0
+}
+
+test "the ends of a for range" {
+  var count: U32 = 0
+  let n: U32 = 3
+  for _ in 0..<n * 2 + 1 {
+    count = count + 1
+  }
+  assert count == 7
+  var sum: U32 = 0
+  let lo: U32 = 2
+  let hi: U32 = 6
+  for i in lo + 1..<hi {
+    sum = sum + i
+  }
+  assert sum == 12 // 3 + 4 + 5
+  var steps: U32 = 0
+  for i in hi % 4..<hi + 1 {
+    steps = steps + i
+  }
+  assert steps == 20 // 2 + 3 + 4 + 5 + 6
+}
+
+test "a struct literal, a tuple, an array and an index" {
+  let l = Line { a: 2 * 3 + 1, b: 4 - 2 * 1 }
+  assert l.a == 7
+  assert l.b == 2
+  let t = (2 * 3 + 1, 4 - 2 * 1)
+  assert t.0 == 7
+  assert t.1 == 2
+  let xs: [I32; 2] = [2 * 3 + 1, 4 - 2 * 1]
+  assert xs[0] + xs[1] * 2 == 11 // 7 + 4
+  let ys: [I32; 5] = [10, 20, 30, 40, 50]
+  let i: U32 = 1
+  assert ys[i * 2 + 1] == 40
+  assert ys[i * 3 - 1] == 30
+}
+
+test "an if in parentheses as an operand" {
+  let x: I32 = 3
+  let r = (if x > 2 { 10 } else { 20 }) * 2 + 1
+  assert r == 21
+  let s = 1 + (if x > 5 { 10 } else { 20 }) * 2
+  assert s == 41
+}

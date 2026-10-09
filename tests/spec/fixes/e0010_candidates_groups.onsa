@@ -1,0 +1,141 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 3
+
+// The candidates of E0010 for each pair of groups without a strength, and for three groups (§3.1,
+// §18.1, S-60). A candidate is the whole expression read with a temporary strength on the clashing
+// groups; the temporary strength is shown by parentheses, the permanent one (multiplicative and
+// additive over comparison, comparison over `&&` and `||`, remainder over comparison) is not. The
+// readings are listed with the group that appears first in the expression taken as the stronger one
+// first, equal forms once; three groups give up to three candidates in the order of that rule
+// (tests/review-phase1/parent/r72.onsa), more than three give none (the note shows how to write it).
+// A chain of comparisons has the one candidate `a < b && b < c`, only when every middle operand is a
+// name, a literal or a field path.
+//
+// Each operator of the bit group is a group of its own here.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+pub fn and_or(a: Bool, b: Bool, c: Bool) -> Bool {
+  a && b || c  //~ E0010
+}
+
+pub fn or_and(a: Bool, b: Bool, c: Bool) -> Bool {
+  a || b && c  //~ E0010
+}
+
+pub fn and_or_longer(a: Bool, b: Bool, c: Bool, d: Bool) -> Bool {
+  a && b || c && d  //~ E0010
+}
+
+pub fn and_or_of_comparisons(p: I32, q: I32, r: I32) -> Bool {
+  p > 0 && q > 0 || r > 0  //~ E0010
+}
+
+pub fn shift_add(x: U32, y: U32) -> U32 {
+  x << 1 + y  //~ E0010
+}
+
+pub fn shift_then_and(x: U32, m: U32) -> U32 {
+  x << 1 & m  //~ E0010
+}
+
+pub fn shift_both_ways(x: U32) -> U32 {
+  x << 1 >> 2  //~ E0010
+}
+
+pub fn bit_mixed(x: U32, y: U32) -> U32 {
+  x & y | 1  //~ E0010
+}
+
+pub fn bit_xor_or(x: U32, y: U32, z: U32) -> U32 {
+  x ^ y | z  //~ E0010
+}
+
+pub fn bit_over_product(x: U32, m: U32) -> U32 {
+  x * 2 & m  //~ E0010
+}
+
+pub fn bit_over_remainder(x: U32, m: U32) -> U32 {
+  x % 8 & m  //~ E0010
+}
+
+pub fn bit_with_and(x: U32, m: U32, ok: Bool) -> Bool {
+  x & m && ok  //~ E0010
+}
+
+pub fn remainder_then_product(a: U32, b: U32, c: U32) -> U32 {
+  a % b * c  //~ E0010
+}
+
+pub fn remainder_then_sum(a: U32, b: U32, c: U32) -> U32 {
+  a % b + c  //~ E0010
+}
+
+pub fn sum_then_remainder(a: U32, b: U32, c: U32) -> U32 {
+  a + b % c  //~ E0010
+}
+
+pub fn three_groups(x: U32, ok: Bool) -> Bool {
+  x & 1 == 0 && ok  //~ E0010
+}
+
+pub fn three_groups_equal_forms_once(x: U32, m: U32, a: U32, b: U32) -> U32 {
+  x & m + a * b  //~ E0010
+}
+
+pub fn three_groups_equal_forms_once_cmp(a: U32, b: U32, c: U32, d: U32) -> Bool {
+  a & b == c + d  //~ E0010
+}
+
+pub fn four_groups_give_none(x: U32, a: Bool, b: Bool) -> Bool {
+  x & 1 == 0 && a || b  //~ E0010
+}
+
+pub fn three_bit_operators_give_none(a: U32, b: U32, c: U32, d: U32) -> U32 {
+  a & b | c ^ d  //~ E0010
+}
+
+pub fn three_groups_give_none(x: U32) -> U32 {
+  x & 1 + 2 % 3  //~ E0010
+}
+
+pub fn chain_of_two_comparisons(a: I32, b: I32, c: I32) -> Bool {
+  a < b < c  //~ E0010
+}
+
+pub fn chain_with_other_symbols(a: I32, b: I32, c: I32) -> Bool {
+  a < b <= c  //~ E0010
+}
+
+pub fn chain_equal_then_unequal(a: I32, b: I32, c: I32) -> Bool {
+  a != b == c  //~ E0010
+}
+
+pub fn chain_with_a_literal_middle(a: I32, c: I32) -> Bool {
+  a < 0 < c  //~ E0010
+}
+
+pub fn chain_with_a_field_middle(a: I32, p: Pt, c: I32) -> Bool {
+  a <= p.x < c  //~ E0010
+}
+
+pub fn chain_with_a_call_middle(a: I32, b: I32, c: I32) -> Bool {
+  a < id(b) < c  //~ E0010
+}
+
+pub fn chain_with_an_index_middle(a: I32, xs: [I32; 2], c: I32) -> Bool {
+  a < xs[0] < c  //~ E0010
+}
+
+pub fn fine(x: U32, y: U32, z: U32) -> U32 {
+  x + y * z
+}

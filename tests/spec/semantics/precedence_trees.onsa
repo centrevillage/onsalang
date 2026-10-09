@@ -1,0 +1,173 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.1", "§3.4", "§3.5"]
+
+// The tree that §3.1 gives to a chain of binary operators, shown by the value (W3-07). The groups
+// are multiplicative (`* / *% *|`), remainder (`%`), additive (`+ - +% -% +| -|`), comparison, `&&`,
+// `||` and the bit group; a stronger group is an operand of a weaker one without parentheses
+// (multiplicative over additive over comparison over `&&` and `||`; remainder over comparison), a
+// chain of one group is left-associative, and the bit group admits a chain of one operator only.
+// Every expression below is the form `onsa fmt` writes. The numbers are chosen so that reading the
+// chain from left to right as one flat fold, or a chain of one group from the right, gives another
+// value (the comment says which) or a panic.
+
+use std.array
+
+fn id(a: I32) -> I32 {
+  a
+}
+
+// Appends the decimal digit `d` to `log`.
+fn bump(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  d
+}
+
+test "a product on either side of a sum" {
+  let a: I32 = 2
+  let b: I32 = 3
+  let c: I32 = 4
+  let d: I32 = 5
+  assert a * b + c * d == 26  // 6 + 20; a flat fold gives (6 + 4) * 5 = 50
+  assert a + b * c + d == 19  // 2 + 12 + 5; a flat fold gives 25
+  assert a + b * c * d == 62  // 2 + 60
+  assert a * b * c + d == 29  // 24 + 5
+  assert a - b * c - d == -15 // 2 - 12 - 5; a flat fold gives -9
+  assert a * b - c * d == -14 // 6 - 20
+  assert a * b + c == 10
+}
+
+test "a chain of one group is read from the left, also inside another group" {
+  let n: I32 = 20
+  let m: I32 = 3
+  assert n / m * m == 18    // (20 / 3) * 3; from the right it would be 20 / 9 = 2
+  assert n - n / m * m == 2 // 20 - 18
+  assert n / m + 1 == 7     // 6 + 1
+  assert 1 + n / m == 7
+  assert n - m - m - m == 11 // ((20 - 3) - 3) - 3; from the right 20 - (3 - (3 - 3)) = 17
+  assert n / m / m == 2      // (20 / 3) / 3 = 6 / 3; from the right 20 / (3 / 3) = 20
+}
+
+test "the grouping decides whether a U8 expression overflows" {
+  // With U8 the flat reading would add first: (200 + 1) * 2 = 402 does not fit and panics.
+  let a: U8 = 200
+  let b: U8 = 1
+  let c: U8 = 2
+  assert a + b * c == 202
+  assert b * c + a == 202
+  assert a - b * c == 198
+}
+
+test "comparison is looser than the arithmetic on both sides" {
+  let a: I32 = 2
+  let b: I32 = 3
+  let c: I32 = 4
+  let d: I32 = 5
+  assert a * b < c * d            // 6 < 20
+  assert a + b * c < d * d        // 14 < 25
+  assert a * b + c >= c + d + 1   // 10 >= 10
+  assert a * b + c == c * a + a   // 10 == 10
+  assert a + b != c * d || a == b // 5 != 20
+  assert a - b < 0
+}
+
+test "float expressions" {
+  let x: F32 = 1.5
+  let y: F32 = 3.0
+  let z: F32 = 5.0
+  assert x * 2.0 + y * 0.5 < z             // 3.0 + 1.5 = 4.5
+  assert x * 2.0 + y * 0.5 <= 4.5 && y > x // equal, then y > x
+  assert x + (y - x) * 0.5 == 2.25         // x + 0.75
+  assert y * y - x * x == 6.75             // 9.0 - 2.25
+  assert z / y > x                         // 1.666... > 1.5
+}
+
+test "remainder is stronger than a comparison, && and ||" {
+  let i: U32 = 14
+  assert i % 4 == 2
+  assert i % 5 > i % 3            // 4 > 2
+  assert i % 4 == 2 && i % 7 == 0 // 2 == 2 and 0 == 0
+  assert !(i % 4 == 0 || i % 5 == 0)
+  assert (i + 1) % 5 == 0 // parentheses of a clash are still allowed
+  assert (i % 4) + 1 == 3 // and so is a parenthesized remainder in a sum
+}
+
+test "comparison is stronger than && and ||" {
+  let a: I32 = 1
+  let b: I32 = 2
+  let c: I32 = 3
+  assert a < b && b < c
+  assert a == 1 && b == 2 && c == 3
+  assert a > b || b < c
+  assert !(a > b || b > c || c < a)
+  assert a >= b || b >= c || c >= a // the third is true
+  assert (a < b) == (b < c)         // Bool against Bool, written with parentheses
+  assert (a > b) != (b < c)
+}
+
+test "the right operand of && and || is evaluated only if needed, by the tree" {
+  var log: U32 = 0
+  let r1 = bump(inout log, 1) < 0 && bump(inout log, 2) > 0
+  assert !r1
+  assert log == 1 // the second operand was not evaluated
+  let r2 = bump(inout log, 2) > 0 || bump(inout log, 3) > 0
+  assert r2
+  assert log == 12 // 1 then 2; no 3
+  let r3 = bump(inout log, 4) + 1 > 4 && bump(inout log, 5) * 2 > 9
+  assert r3
+  assert log == 1245 // both, left to right
+}
+
+test "the same bit operator chains from the left" {
+  let a: U32 = 1
+  let b: U32 = 2
+  let c: U32 = 4
+  let d: U32 = 8
+  let o = a | b | c | d
+  assert o == 15
+  let m: U32 = 0xFF
+  let n = m & 0x0F & 0x3C & 0xFF
+  assert n == 12 // 0x0C
+  let x = a ^ b ^ c ^ b ^ a
+  assert x == 4
+  let e: U32 = 256
+  let s = e >> 2 >> 1 // (256 >> 2) >> 1 = 32; from the right 256 >> 1 = 128
+  assert s == 32
+  let one: U32 = 1
+  let t = one << 1 << 2 << 3 // ((1 << 1) << 2) << 3 = 64
+  assert t == 64
+}
+
+test "a bit expression is parenthesized next to every other group" {
+  let x: U32 = 0x0700
+  assert ((x >> 8) & 255) == 7
+  assert (x & 1) == 0
+  assert (x | 1) + 1 == 0x0702
+  assert 1 + (x >> 8) == 8
+  assert (x >> 4) * 2 == 0xE0
+  assert (x & 0x100) != 0 || (x & 0x200) != 0
+  assert (x & 0x400) != 0 && (x & 0x800) == 0
+}
+
+test "prefix and postfix operators bind tighter than every group" {
+  let xs: [I32; 3] = [1, 2, 3]
+  assert -xs[1] * 2 + 1 == -3 // (-2) * 2 + 1
+  assert -xs[0] - xs[1] * xs[2] == -7
+  assert xs[0] + xs[1] * xs[2] == 7
+  assert id(xs[2]) * id(2) + id(1) == 7
+  let flag: Bool = false
+  let ok: Bool = true
+  assert !flag && ok
+  assert !flag == ok
+  let n: I32 = 5
+  assert (n as I64) * 2 + 1 == 11
+  assert (-n as I64) == -5
+}
+
+test "operands that are postfix expressions and the results of a closure" {
+  let a: [U32; 3] = array.from_fn(fn(i) { i * 2 + 1 })
+  assert a[0] + a[1] * a[2] == 16 // 1 + 3 * 5
+  assert a[2] * a[1] - a[0] == 14 // 15 - 1
+}

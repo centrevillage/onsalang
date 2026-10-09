@@ -854,11 +854,17 @@ pub fn same_place(text: &str) -> SamePlace {
                     && o.span.file == d.span.file
                     && d.span.start <= o.span.start
                     && o.span.end <= d.span.end;
+                // The same error moved by the edits: its code and its place,
+                // not its message, which may quote the source the candidate
+                // changed (E0010 quotes its chain).
+                let moved = applied.map_span(o.span);
                 !same(o, d)
                     && !part_of_the_form
                     && o.code == d2.code
-                    && o.message == d2.message
-                    && in_place(applied.map_span(o.span))
+                    && moved.file == d2.span.file
+                    && moved.start <= d2.span.end
+                    && d2.span.start <= moved.end
+                    && in_place(moved)
             });
             if held_before {
                 continue;
@@ -1025,12 +1031,17 @@ mod tests {
         assert!(ok.internal.is_none());
         // No diagnostic: nothing to check.
         assert_eq!(same_place("pub fn f() -> I32 {\n  1\n}\n"), SamePlace::default());
-        // The candidate of the E0010 gives `x >= (0 && x) < 9`: an E0010 is left there (R-72).
-        let left = same_place("pub fn f(x: I32) -> Bool {\n  x >= 0 && x < 9\n}\n");
+        // The candidate of the E0411 gives `x.narrow_i32()`, an `Option[I32]`: an E0401 of the
+        // same stage is left there (until W5-02).
+        let left = same_place("pub fn f(x: I64) -> I32 {\n  x as I32\n}\n");
         assert_eq!(left.candidates, 1);
         let v: Vec<(&str, &str, Option<u32>)> =
             left.violations.iter().map(|v| (v.code.as_str(), v.left.as_str(), v.left_line)).collect();
-        assert_eq!(v, [("E0010", "E0010", Some(2))], "{left:?}");
+        assert_eq!(v, [("E0411", "E0401", Some(2))], "{left:?}");
+        // An E0010 there before the candidate of the E0011 is not left by it, though its message
+        // quotes the chain the candidate changed.
+        let before = same_place("pub fn f(a: I32, b: I32) -> I32 {\n  a as I32 * 2 % b\n}\n");
+        assert!(before.violations.is_empty(), "{before:?}");
         // A stack of prefix operators is one form, fixed whole (S-248, S-297): nothing left.
         let form = same_place("pub fn f(x: I32) -> I32 {\n  - - -x\n}\n");
         assert_eq!(form.candidates, 1, "{form:?}");

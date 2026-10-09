@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a binary `-` followed by a prefix `-` written without a space (`a--b`, `5--3`, S-320). The
+// lexer reads `--` as one token (the increment and decrement of C, which Onsa does not have, S-250),
+// and C reads `a--b` as `a-- b` while Rust reads it as `a - (-b)`, so the form is an error, not a
+// guess. The candidate is the one reading both prefix and binary: `a - -b`. The same two characters
+// as the decrement of a statement (`x--` at the end of a line) are another row of the list
+// (docs/foreign-forms.toml, `increment`).
+
+pub fn after_a_name(a: I32, b: I32) -> I32 {
+  a--b                                              //~ E0020
+}
+
+pub fn after_a_literal() -> I32 {
+  5--3                                              //~ E0020
+}
+
+pub fn after_a_float(x: F32) -> F32 {
+  x--1.5                                            //~ E0020
+}
+
+pub fn after_a_parenthesis(a: I32, b: I32) -> I32 {
+  (a + 1)--b                                        //~ E0020
+}
+
+pub fn after_a_call(a: I32, b: I32) -> I32 {
+  id(a)--b                                          //~ E0020
+}
+
+pub fn after_a_field(p: Pt, b: I32) -> I32 {
+  p.x--b                                            //~ E0020
+}
+
+pub fn after_an_index(xs: [I32; 2], b: I32) -> I32 {
+  xs[0]--b                                          //~ E0020
+}
+
+pub fn before_a_call(a: I32, b: I32) -> I32 {
+  a--id(b)                                          //~ E0020
+}
+
+pub fn before_a_parenthesis(a: I32, b: I32) -> I32 {
+  a--(b + 1)                                        //~ E0020
+}
+
+pub fn in_a_let(a: I32, b: I32) -> I32 {
+  let c = a--b                                      //~ E0020
+  c
+}
+
+pub fn in_an_argument(a: I32, b: I32) -> I32 {
+  id(a--b)                                          //~ E0020
+}
+
+pub fn in_a_condition(a: I32, b: I32) -> I32 {
+  if a--b > 0 {                                     //~ E0020
+    1
+  } else {
+    0
+  }
+}
+
+pub fn under_a_product(x: I32, a: I32, b: I32) -> I32 {
+  x * a--b                                          //~ E0020
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+// These are not the form: the operators are separate tokens, or a space separates them.
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a - -b
+  let d = a-b
+  let e = a+-b
+  let f = a*-b
+  let g = a/-b
+  let h = a-(-b)
+  c + d + e + f + g + h
+}

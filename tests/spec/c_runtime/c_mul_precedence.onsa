@@ -133,10 +133,10 @@
 // Integer products and remainders as operands of other groups, written without the redundant parentheses
 // (spec §3.1: the multiplicative group `* / *% *|` binds tighter than the additive group, which binds
 // tighter than the comparison group; the remainder `%` binds tighter than a comparison; the comparison
-// binds tighter than `&&`; the form `onsa fmt` produces), on a target that is built to C. Today the
-// parser reports E0010 for each of these (S-45, W3-07), so the file waits for W3-07; the values are the
-// ones of the checked, wrapping and saturating products and of `MIN % -1` in c_mul.onsa and c_div_rem.onsa.
-// The product is evaluated first, and the checked product panics before the sum is looked at.
+// binds tighter than `&&`; the form `onsa fmt` produces), on a target that is built to C (S-45, W3-07).
+// The values are the ones of the checked, wrapping and saturating products and of `MIN % -1` in
+// c_mul.onsa and c_div_rem.onsa, and the same in the interpreter (the `test` blocks). The product is
+// evaluated first, and the checked product panics before the sum is looked at.
 
 pub fn mulw_addw_u32(a: U32, b: U32, c: U32) -> U32 {
   a *% b +% c

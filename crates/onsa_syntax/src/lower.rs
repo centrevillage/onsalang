@@ -11,7 +11,8 @@
 //! item whose name was not read has no AST (a unit of `crate::units` only).
 //!
 //! The span of an AST node is the span of the CST node it is made from
-//! ([`Cst::span`]).
+//! ([`Cst::span`]); an operator inside a chain (the tree of §3.1 made from
+//! one flat `BinaryExpr`) spans its operands.
 
 use onsa_diag::Span;
 
@@ -999,21 +1000,7 @@ impl<'a> Lower<'a> {
                 ExprKind::Par { var, range, body }
             }
             NodeKind::MoveExpr => ExprKind::Move(self.need_expr(n)),
-            NodeKind::BinaryExpr => {
-                let mut operands = Vec::new();
-                let mut ops = Vec::new();
-                for e in self.cst.children(n).to_vec() {
-                    match e {
-                        Elem::Node(c) => operands.push(self.expr(c)),
-                        Elem::Token(t) => {
-                            if let Some(op) = binop(self.kind_of(t)) {
-                                ops.push((op, self.cst.token(t).span));
-                            }
-                        }
-                    }
-                }
-                ExprKind::Binary { operands, ops }
-            }
+            NodeKind::BinaryExpr => return self.chain(n),
             NodeKind::RangeExpr => ExprKind::Range(self.range_head(n)),
             NodeKind::CastExpr => {
                 let expr = self.need_expr(n);
@@ -1075,6 +1062,38 @@ impl<'a> Lower<'a> {
         };
         let span = self.span(n);
         self.add_expr(n, span, kind)
+    }
+
+    /// A chain of binary operators (flat in the CST) as the tree of §3.1:
+    /// one node per operator, each spanning its operands.
+    fn chain(&mut self, n: NodeId) -> ExprId {
+        let tighter = |o: (BinOp, Span), w: (BinOp, Span)| o.0.group().stronger(w.0.group());
+        let mut chain: Option<Chain<ExprId, (BinOp, Span)>> = None;
+        for e in self.cst.children(n).to_vec() {
+            match e {
+                Elem::Node(c) => {
+                    let operand = self.expr(c);
+                    match &mut chain {
+                        None => chain = Some(Chain::new(operand)),
+                        Some(ch) => ch.operand(operand),
+                    }
+                }
+                Elem::Token(t) => {
+                    if let Some(op) = binop(self.kind_of(t)) {
+                        let span = self.cst.token(t).span;
+                        let Some(ch) = &mut chain else { self.bug(n, "an operand") };
+                        ch.operator((op, span), tighter, |l, o, r| self.binary(n, l, o, r));
+                    }
+                }
+            }
+        }
+        let chain = chain.unwrap_or_else(|| self.bug(n, "an operand"));
+        chain.finish(|l, o, r| self.binary(n, l, o, r))
+    }
+
+    fn binary(&mut self, n: NodeId, lhs: ExprId, (op, op_span): (BinOp, Span), rhs: ExprId) -> ExprId {
+        let (l, r) = (self.ast.expr(lhs).span, self.ast.expr(rhs).span);
+        self.add_expr(n, Span::new(l.file, l.start, r.end), ExprKind::Binary { op, op_span, lhs, rhs })
     }
 
     /// The path of a struct literal from the names of its callee (`a.b.C`),

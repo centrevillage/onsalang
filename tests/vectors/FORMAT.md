@@ -73,7 +73,6 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 
 | パッケージ | 演算 | 診断 | 待つ作業 |
 |---|---|---|---|
-| `mixed` | `expr_muladd` `expr_mulsub` `expr_interp` | E0010（`a * b + c` を括弧なしで書けない。§3.1 は許す）| W3-07 |
 | `checked` | `checked_rem` `checked_div_euclid` `checked_rem_euclid` `checked_shl` `checked_shr` `checked_neg` | E0413（メソッドが無い）| W5-02 |
 | `zero_one` | `T.ZERO` `T.ONE`（定数）| E0302 | W5-05 |
 | `predicates` | `is_nan` `is_finite` | E0302（`std.math` に無い）| W5-02 |

@@ -7,8 +7,8 @@
 //! line:
 //!
 //! ```text
-//! let c = x + y * z   //~ E0010
-//! let c = x + y * z   //~ E0010 @13            (column, 1-based)
+//! let c = x + y % z   //~ E0010
+//! let c = x + y % z   //~ E0010 @13            (column, 1-based)
 //! @param(...) k: Ctl[F32],  //~ E0809 [trap]    (only for the build of target `trap`)
 //! @param(...) k: Ctl[F32],  //~ E0809 @3 [trap, poison]
 //! ```
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn markers_parse() {
         let m = parse_markers(
-            "x\nlet c = x + y * z //~ E0010 @13\nlet d = 1 //~ E0405 //~ E0420\nk //~ E0809 [trap]\nk //~ E0809 @3 [trap, poison]\n",
+            "x\nlet c = x + y % z //~ E0010 @13\nlet d = 1 //~ E0405 //~ E0420\nk //~ E0809 [trap]\nk //~ E0809 @3 [trap, poison]\n",
         )
         .unwrap();
         assert_eq!(

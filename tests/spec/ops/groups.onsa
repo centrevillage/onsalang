@@ -2,9 +2,29 @@
 // [test]
 // spec = ["§3.1"]
 
-pub fn groups(x: F32, y: F32, z: F32, lo: F32, hi: F32) {
-  let a = x + y - z             // OK: 加法群の連鎖
-  let b = x + (y * z)           // OK
-  let c = x + y * z             // E0010: 加法と乗法の混在 //~ E0010
-  let d = (lo <= x) && (x < hi) // OK
+// The example of §3.1, copied as it stands (the six lines are the block of the spec, in a function
+// that declares the names they use). The checks of the groups, with their values, are in
+// semantics/precedence.onsa and the errors in negative/operator_groups.onsa.
+
+const N: U32 = 8
+
+pub fn groups(x: F32, y: F32, z: F32, lo: F32, hi: F32, w: U32, p: Bool, q: Bool, r: Bool, m: U32) -> (F32, F32, U32, Bool, Bool, Bool) {
+  let a = x + y - z         // 加法の連鎖
+  let b = x + y * z         // x + (y * z)。乗法は加法より強い
+  let c = (w + 1) % N       // 剰余と加法は混在できない（w + 1 % N は E0010）
+  let d = lo <= x && x < hi // 比較は論理積より強い
+  let e = (p && q) || r     // 論理積と論理和は混在できない
+  let f = (m & 1) == 0      // ビットは他の群と混在できない
+  (a, b, c, d, e, f)
+}
+
+// A chain of one operator of the bit group is allowed and left-associative (§3.1, S-61); two different
+// operators are not (negative/operator_groups.onsa).
+pub fn bit_chains(a: U32, b: U32, c: U32, x: U32) -> U32 {
+  let o = a | b | c
+  let n = a & b & c
+  let e = a ^ b ^ c
+  let s = x << 1 << 2
+  let r = x >> 1 >> 2
+  o + n + e + s + r
 }

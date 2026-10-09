@@ -182,7 +182,7 @@ fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
         }
         ExprKind::Closure { body, .. } | ExprKind::Handle { body, .. } => out.push(*body),
         ExprKind::Par { range, body, .. } => out.extend([range.lo, range.hi, *body]),
-        ExprKind::Binary { operands, .. } => out.extend(operands.iter().copied()),
+        ExprKind::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
         ExprKind::Call { callee, args, .. } => {
             out.push(*callee);
             out.extend(args.iter().map(|a| a.expr));

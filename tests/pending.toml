@@ -125,13 +125,6 @@
 
 [[pending]]
 kind = "spec-example"
-target = "§3.1 d235a27a: let a = x + y - z // 加法の連鎖"
-reasons = ["S-45"]
-until = "W3-13"
-note = "演算子の群。写し ops/groups.onsa は旧い群の規則の例"
-
-[[pending]]
-kind = "spec-example"
 target = "§6.1 8795a32e: pub struct Shaper {"
 reasons = ["S-191"]
 until = "W3-13"
@@ -244,13 +237,6 @@ target = "E0005"
 reasons = ["S-103", "S-133"]
 until = "W3-08"
 note = "属性の表（一覧に無い属性、付けられない場所、@repr / @fp の値）"
-
-[[pending]]
-kind = "diag-code"
-target = "E0011"
-reasons = ["S-118", "R-132"]
-until = "W3-09"
-note = "as / at の連鎖と二項の中の as / at（S-118）。式の e at k の構文（R-132）が W3-09 で入るまで at の否定例を書けない"
 
 [[pending]]
 kind = "diag-code"
@@ -765,13 +751,6 @@ note = "無名関数の中の ? と return の脱出（§6.1、§9.1、S-192）�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/precedence.onsa"
-reasons = ["S-45"]
-until = "W3-07"
-note = "演算子の群（乗法 > 加法 > 比較 > && ||、% > 比較、§3.1）。今は E0010"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/match_panic.onsa"
 reasons = ["S-40"]
 until = "W5-08"
@@ -824,14 +803,14 @@ note = "xs[i][j] の添字を内側から評価する（§3.5）"
 # --- W1-09: 意味のテスト（flow の世界、tests/spec/flow_semantics/）の実装待ち（2026-10-07）
 # 各ファイルは、待つ作業が一つになるように分けてある。until は「そのファイルが通る最後の作業」。
 # W3-10 のファイルは、実装が flow の新しい構文を今の sema へ写した時点（K-02）で通る見込み
-# （演算子の群 S-45 は W3-07、struct の `: Default` は W3-08、`at` と `prev~` の構文は W3-09）。
+# （struct の `: Default` は W3-08、`at` と `prev~` の構文は W3-09。演算子の群 S-45 は W3-07 で入った）。
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/prev_delay.onsa"
 reasons = ["S-102", "S-44", "S-29", "S-45"]
 until = "W3-10"
-note = "prev~ / delay~ の基本と init の形（数値）。at、prev~(…)、init の省略の構文（W3-09）。start * 2.0 + 1.0 に演算子の群（S-45、W3-07）"
+note = "prev~ / delay~ の基本と init の形（数値）。at、prev~(…)、init の省略の構文（W3-09）。start * 2.0 + 1.0 の演算子の群（S-45）は W3-07 で入った"
 
 [[pending]]
 kind = "test-case"
@@ -901,7 +880,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/hoisting.onsa"
 reasons = ["S-33", "R-17", "S-45"]
 until = "W7-05"
-note = "遅いクロックの panic しうる部分式は、取られない枝と使われない && の右辺へ巻き上げない（§11.3）。演算子の群は W3-07"
+note = "遅いクロックの panic しうる部分式は、取られない枝と使われない && の右辺へ巻き上げない（§11.3）。演算子の群（S-45）は W3-07 で入った"
 
 [[pending]]
 kind = "test-case"
@@ -1037,13 +1016,6 @@ target = "fmt-comments"
 reasons = ["R-70"]
 until = "W3-11"
 note = "fmt がコメントを同じ要素の行に残さない（行末から単独の行へ、並びの中から閉じ括弧の後や本体へ）。移動に伴い、ブロックの先頭の空行が残り、無かった空行が入る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/vectors/fixture/mixed"
-reasons = ["S-45"]
-until = "W3-07"
-note = "a * b + c を括弧なしで書けない（E0010。§3.1 は加法と乗法の混在を許す）。テストベクトルの式の群の 6 関数"
 
 [[pending]]
 kind = "test-case"
@@ -1478,13 +1450,6 @@ note = "構造体のパターンの .. の E0020"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0010_candidates.onsa"
-reasons = ["S-45", "S-60"]
-until = "W3-07"
-note = "E0010 の候補（群の部分順序）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0004_doc_comments.onsa"
 reasons = ["S-51", "R-63"]
 until = "W3-04"
@@ -1814,24 +1779,10 @@ note = "関数値の呼び出し .( が未実装（E0002）。関数値と捕捉
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/u64_mul_precedence.onsa"
-reasons = ["S-45"]
-until = "W3-07"
-note = "乗法・加法・比較の群の部分順序（§3.1）。今は E0010。U64 の積を括弧なしで他の群の被演算子にする形"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/numeric_generic_edges.onsa"
 reasons = ["S-84"]
 until = "W5-05"
 note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の U64 の *% *| * と、MIN % -T.ONE、MIN / -T.ONE（§3.4）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/semantics/min_rem_precedence.onsa"
-reasons = ["S-45"]
-until = "W3-07"
-note = "剰余と乗法の群が比較より強い（§3.1）。今は E0010。MIN % -1 == 0 の形"
 
 [[pending]]
 kind = "test-case"
@@ -1858,20 +1809,6 @@ target = "tests/spec/c_runtime/c_generic_int.onsa"
 reasons = ["S-84"]
 until = "W5-05"
 note = "T: Int / T: Num + Int の境界が E0200（§6.3）。総称の関数の中の整数の端の C 側"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_mul_precedence.onsa"
-reasons = ["S-45"]
-until = "W3-07"
-note = "乗法・加法・比較・&& の群の部分順序（§3.1）。今は E0010。積と剰余を括弧なしで他の群の被演算子にする形の C 側"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_shift_chain.onsa"
-reasons = ["S-45"]
-until = "W3-07"
-note = "同じシフト演算子の連鎖 a >> m >> n（§3.1）。今は E0010"
 
 [[pending]]
 kind = "test-case"
@@ -2021,13 +1958,6 @@ note = "flow の入出力の `at`（S-102）を今の実装が読めず E0002。
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/nesting/binary_chain_groups.onsa"
-reasons = ["S-45", "S-61"]
-until = "W3-07"
-note = "比較と && の連鎖、同じビット演算子の連鎖（| & <<）の 180 項。今は E0010（演算子の群、§3.1）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/nesting/patterns_group.onsa"
 reasons = ["R-43"]
 until = "W3-20"
@@ -2070,13 +2000,6 @@ note = "整数のリテラルの腕が 300 個の match の実行。リテラル
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/nesting/boundary_binary_groups.onsa"
-reasons = ["S-45", "S-61"]
-until = "W3-07"
-note = "強さの違う群が混ざる連鎖の 256 段（`1 + 1 * 1 + ...`、`<` と `&&`、`||` と `<` と `+`）。今は E0010（演算子の群、§3.1）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/nesting/boundary_patterns_group.onsa"
 reasons = ["R-43"]
 until = "W3-20"
@@ -2112,181 +2035,6 @@ reasons = ["S-40"]
 until = "W5-08"
 note = "panic が prelude に無い（E0302、§9.2）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
 # --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/c_runtime/c_mul_precedence.onsa:162:3 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010（候補を読みごとに作り直す）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/c_runtime/c_mul_precedence.onsa:166:3 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0010_candidates.onsa:35:3 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補（% を括弧で囲む）の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_patterns_at.onsa:26:10 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "ガードの形の E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/flow_semantics/vdelay_edges.onsa:55:3 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/flow_semantics/vdelay_edges.onsa:62:3 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/nesting/binary_chain_groups.onsa:11:3 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補（&& を括弧で囲む）の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/nesting/boundary_binary_groups.onsa:21:3 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "256 段の連鎖の E0010 の候補が括弧を足して入れ子の上限を超え、E0006 になる（約束を満たせない候補は出さない、§18.1）。S-45 の群で E0010 自体が消える"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/nesting/boundary_binary_groups.onsa:25:3 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "256 段の連鎖の E0010 の候補が入れ子の上限を超え、E0006 になる"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/nesting/boundary_binary_groups.onsa:29:3 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "256 段の連鎖の E0010 の候補が入れ子の上限を超え、E0006 になる"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/nesting/boundary_binary_groups.onsa:33:3 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "256 段の連鎖の E0010 の候補が入れ子の上限を超え、E0006 になる"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/min_rem_precedence.onsa:15:10 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数あり、候補の後に別の行の E0010 が残る（S-45 の群で E0010 自体が消える）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/min_rem_precedence.onsa:33:10 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/precedence.onsa:28:11 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/precedence.onsa:55:12 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/precedence.onsa:66:16 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/precedence.onsa:78:16 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/precedence.onsa:91:11 E0010 fix1"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "E0010 の候補の後に同じ位置で E0010"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/precedence.onsa:134:11 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/u64_mul_precedence.onsa:21:11 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/u64_mul_precedence.onsa:38:7 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/u64_mul_precedence.onsa:50:10 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/u64_mul_precedence.onsa:62:10 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/u64_mul_precedence.onsa:70:11 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/semantics/u64_mul_precedence.onsa:80:14 E0010 fix1"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "旧い群の規則で一つの単位に E0010 が複数ある"
 
 [[pending]]
 kind = "fix-contract"
@@ -2338,20 +2086,6 @@ until = "W5-02"
 note = "整数の縮小の E0411 の候補 .narrow_i32() が Option を返し E0401（仕様 §3.3 は候補を出さない）"
 
 # --- W3-17: ファズの修正候補の「同じ箇所」の近似が見つけた型を示す保存した入力（2026-10-08）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/0139967b.onsa"
-reasons = ["S-45", "S-236"]
-until = "W3-07"
-note = "fix-same-place: fix|E0010|parenthesize the `…`|E0006。256 段の連鎖の E0010 の候補が括弧を足して入れ子の上限を超える"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/656fd6cc.onsa"
-reasons = ["R-72", "S-236"]
-until = "W3-07"
-note = "fix-same-place: fix|E0010|parenthesize the `…`|E0010。E0010 の候補の後に同じ箇所で E0010"
 
 [[pending]]
 kind = "fuzz-input"
@@ -2600,13 +2334,6 @@ note = "範囲のパターンの候補（ガードの形、S-249）"
 
 [[pending]]
 kind = "foreign-form"
-target = "type_args_angle"
-reasons = ["S-239", "S-277", "S-45"]
-until = "W3-07"
-note = "二つ目の候補（比較の連鎖 f < T && T > (x)）を当てた後、groups.rs が比較と && の混在を E0010 にする（W3-07 が §3.1 の強弱に直す）"
-
-[[pending]]
-kind = "foreign-form"
 target = "type_args_square"
 reasons = ["S-239", "S-256"]
 until = "W4-13"
@@ -2818,41 +2545,6 @@ reasons = ["S-239", "S-203"]
 until = "W3-06"
 note = "並びと ! の間の空白 v.push::[F32] !(x) は space_before_bang の行（W3-06）"
 
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_angle.onsa:41:5 E0020 fix2"
-reasons = ["S-256", "S-45"]
-until = "W3-07"
-note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_angle.onsa:45:13 E0020 fix2"
-reasons = ["S-256", "S-45"]
-until = "W3-07"
-note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_angle.onsa:50:10 E0020 fix2"
-reasons = ["S-256", "S-45"]
-until = "W3-07"
-note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_angle.onsa:54:9 E0020 fix2"
-reasons = ["S-256", "S-45"]
-until = "W3-07"
-note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_type_args_angle.onsa:58:13 E0020 fix2"
-reasons = ["S-256", "S-45"]
-until = "W3-07"
-note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
-
 # --- W3-18: 範囲の書き方 `..<` / `..=`。W3-18 で通らない事例（W3-18/t の事例。W3-18/i の報告）。
 
 [[pending]]
@@ -2912,3 +2604,17 @@ target = "tests/fuzz/82d90c5e.onsa"
 reasons = ["R-196", "S-236"]
 until = "W3-20"
 note = "fix-same-place: fix|E0020|write the type arguments as `::[…]`|E0020。型の位置の中の `t[[], l]` に式の型引数の候補（`::` の挿入）が出る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/precedence_flow.onsa"
+reasons = ["S-45", "S-102"]
+until = "W3-10"
+note = "flow の本体と par の中の演算子の群の値。at の構文（W3-09）と演算子の群（S-45）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/operator_groups_flow.onsa"
+reasons = ["S-45", "S-102"]
+until = "W3-10"
+note = "flow と par の中の E0010。at の構文（W3-09）"

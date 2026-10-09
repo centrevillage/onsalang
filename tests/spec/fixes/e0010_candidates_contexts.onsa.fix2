@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0010 candidates in the places an expression can stand (§3.1, §18.1). Each function is one
+// declaration unit with one E0010; the candidates are the readings of the clashing groups, the group
+// that appears first taken as the stronger one first, with parentheses only where the strength is a
+// temporary one. The context (a `let`, an argument, a condition, a field, an index, a range end, a
+// guard, a `const`, a closure body, a `return`, an `assert`) does not change them, and no edit
+// touches a token outside the expression.
+
+use std.array
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+impl Pt {
+  pub fn add(self, k: U32) -> U32 {
+    self.x + k
+  }
+}
+
+pub fn id(a: U32) -> U32 {
+  a
+}
+
+pub fn in_let(w: U32, n: U32) -> U32 {
+  let r = w + (1 % n)  //~ E0010
+  r
+}
+
+pub fn in_argument(w: U32, n: U32) -> U32 {
+  id(w + (1 % n))  //~ E0010
+}
+
+pub fn in_method_argument(p: Pt, w: U32, n: U32) -> U32 {
+  p.add(w + (1 % n))  //~ E0010
+}
+
+pub fn in_if_condition(a: Bool, b: Bool, c: Bool) -> U32 {
+  if a && (b || c) {  //~ E0010
+    1
+  } else {
+    0
+  }
+}
+
+pub fn in_while_condition(n: U32) -> U32 {
+  var i: U32 = 0
+  while i * (2 % 3) < n {  //~ E0010
+    i = i + 1
+  }
+  i
+}
+
+pub fn in_struct_field(w: U32, n: U32) -> Pt {
+  Pt { x: w + (1 % n), y: 0 }  //~ E0010
+}
+
+pub fn in_array_element(w: U32, n: U32) -> [U32; 2] {
+  [w + (1 % n), 0]  //~ E0010
+}
+
+pub fn in_tuple(w: U32, n: U32) -> (U32, U32) {
+  (w + (1 % n), w)  //~ E0010
+}
+
+pub fn in_index(xs: [U32; 4], w: U32, n: U32) -> U32 {
+  xs[w + (1 % n)]  //~ E0010
+}
+
+pub fn in_return(w: U32, n: U32) -> U32 {
+  if w == 0 {
+    return w + (1 % n)  //~ E0010
+  }
+  w
+}
+
+pub fn in_parentheses(w: U32, n: U32) -> U32 {
+  (w + (1 % n))  //~ E0010
+}
+
+pub fn in_range_end(w: U32, n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<w + (1 % n) {  //~ E0010
+    c = c + 1
+  }
+  c
+}
+
+pub fn in_guard(n: U32, lo: U32, hi: U32) -> U32 {
+  match n {
+    k if lo <= k && (k < hi || k == 9) => 1,  //~ E0010
+    _ => 0,
+  }
+}
+
+pub fn in_closure(w: U32) -> [U32; 3] {
+  array.from_fn(fn(i) { i + (1 % 2) })  //~ E0010
+}
+
+pub fn prefix_and_postfix(xs: [I32; 4], ys: [I32; 4], n: I32) -> I32 {
+  -xs[0] + (ys[1] % n)  //~ E0010
+}
+
+pub fn negation_operands(p: Bool, q: Bool, r: Bool) -> Bool {
+  !p && (q || !r)  //~ E0010
+}
+
+pub fn call_operands(w: U32, n: U32) -> U32 {
+  id(w) + (id(1) % id(n))  //~ E0010
+}
+
+pub fn wrapping_operators(w: U32, n: U32) -> U32 {
+  w +% (1 % n)  //~ E0010
+}
+
+pub fn saturating_operators(w: U32, n: U32) -> U32 {
+  w *| (2 % n)  //~ E0010
+}
+
+pub fn a_longer_chain(a: U32, b: U32, c: U32, d: U32, e: U32) -> U32 {
+  a + b + (c % d) + e  //~ E0010
+}
+
+pub fn clash_under_a_comparison(a: U32, b: U32, c: U32, d: U32) -> Bool {
+  a * (b % c) == d  //~ E0010
+}
+
+pub fn clash_in_both_operands(a: U32, b: U32, c: U32, d: U32) -> Bool {
+  a + (b % c) < d  //~ E0010
+}
+
+test "assert with a mask" {
+  let x: U32 = 6
+  assert x & (1 == 0)  //~ E0010
+}
+
+const CONFLICT: Bool = 1 < 2 && (3 < 4 || false)  //~ E0010
+
+pub fn fine(w: U32, n: U32) -> U32 {
+  (w + 1) % n
+}

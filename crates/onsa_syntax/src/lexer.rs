@@ -389,8 +389,8 @@ impl<'a> Lexer<'a> {
             (b'*', Some(b'|'), _) => (StarPipe, 2),
             (b'-', Some(b'>'), _) => (Arrow, 2),
             // Increments of other languages, written without a space (S-250).
-            // SPEC-GAP(S-320): `a--b` and `5--3` (a binary `-` and a prefix one)
-            // read as `--` too, until S-320.
+            // `a--b` and `5--3` (a binary `-` and a prefix one) read as `--`
+            // too, an E0020 of the parser (S-320).
             (b'+', Some(b'+'), _) => (PlusPlus, 2),
             (b'-', Some(b'-'), _) => (MinusMinus, 2),
             (b'=', Some(b'>'), _) => (FatArrow, 2),

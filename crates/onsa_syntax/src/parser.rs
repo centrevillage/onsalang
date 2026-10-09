@@ -74,8 +74,7 @@ pub(crate) struct ParseOutput {
     pub levels: Vec<u32>,
     /// The height of the tree in levels (spec §2.5), as the parser counted
     /// it (`Parser::height`): the deepest declaration unit. The tests compare
-    /// it with the tree.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// it with the tree; the candidates of E0010 that add levels read it.
     pub height: u32,
 }
 
@@ -2014,7 +2013,8 @@ impl<'a> Parser<'a> {
         self.parse_expr_inner(false)
     }
 
-    /// Binary chain, kept flat (§3.1; groups are checked in `groups.rs`).
+    /// Binary chain, flat in the CST (§3.1: the AST reads it as a tree,
+    /// `lower.rs`; the groups are checked in `groups.rs`).
     /// Its height is the one of the tree of §3.1 ([`Chain`]).
     fn parse_expr_inner(&mut self, allow_range: bool) -> PResult<Completed> {
         let first = self.parse_cast()?;
@@ -2689,50 +2689,39 @@ fn binop(kind: TokenKind) -> bool {
     crate::lower::binop(kind).is_some()
 }
 
-/// The height of a binary chain read as the tree of §3.1 (spec §2.5): the
-/// strengths of the groups ([`crate::ast::OpGroup::stronger`]) and left
-/// associativity, one level per operator. The chain is read from the left,
-/// as the shunting-yard algorithm reads it: the operators on the stack wait
-/// for their right operand, each in the right operand of the one below it.
-/// Groups without a strength between them (E0010) are read left to right.
-pub(crate) struct Chain {
-    /// The waiting operators: the height of their left operand and their group.
-    stack: Vec<(u32, crate::ast::OpGroup)>,
-    /// The height of the last operand, or of the operators it closed.
-    current: u32,
+/// The height of a binary chain read as the tree of §3.1 (spec §2.5), one
+/// level per operator: the one reading of a chain ([`crate::ast::Chain`]),
+/// with heights for its nodes.
+pub(crate) struct Chain(crate::ast::Chain<u32, crate::ast::OpGroup>);
+
+fn tighter(op: crate::ast::OpGroup, waiting: crate::ast::OpGroup) -> bool {
+    op.stronger(waiting)
+}
+
+fn join(left: u32, _: crate::ast::OpGroup, right: u32) -> u32 {
+    left.max(right) + 1
 }
 
 impl Chain {
     pub(crate) fn new(first: u32) -> Chain {
-        Chain { stack: Vec::new(), current: first }
+        Chain(crate::ast::Chain::new(first))
     }
 
-    /// An operator of `group` after the last operand: the waiting operators
-    /// it does not bind tighter than take the operand as their right one and
-    /// close. Returns how many operators wait then, this one included, and
-    /// the height of its left operand.
+    /// An operator of `group` after the last operand. Returns how many
+    /// operators wait then, this one included, and the height of its left
+    /// operand.
     pub(crate) fn operator(&mut self, group: crate::ast::OpGroup) -> (u32, u32) {
-        while let Some(&(left, waiting)) = self.stack.last() {
-            if group.stronger(waiting) {
-                break;
-            }
-            self.current = left.max(self.current) + 1;
-            self.stack.pop();
-        }
-        self.stack.push((self.current, group));
-        (self.stack.len() as u32, self.current)
+        let (waiting, left) = self.0.operator(group, tighter, join);
+        (waiting as u32, left)
     }
 
     pub(crate) fn operand(&mut self, height: u32) {
-        self.current = height;
+        self.0.operand(height);
     }
 
     /// The height of the whole chain.
-    pub(crate) fn height(mut self) -> u32 {
-        while let Some((left, _)) = self.stack.pop() {
-            self.current = left.max(self.current) + 1;
-        }
-        self.current
+    pub(crate) fn height(self) -> u32 {
+        self.0.finish(join)
     }
 }
 
@@ -2880,7 +2869,7 @@ mod tests {
 
     #[test]
     fn newline_continuation() {
-        assert_eq!(body("let a = x +\n  y"), "(block (let a = (chain x + y)))");
+        assert_eq!(body("let a = x +\n  y"), "(block (let a = (+ x y)))");
         assert_eq!(body("let a = xs\n  .len()"), "(block (let a = (call (. xs len) ())))");
         assert_eq!(body("let a =\n  1"), "(block (let a = 1))");
         // Newlines are whitespace inside parentheses and brackets.
@@ -2911,8 +2900,8 @@ mod tests {
     fn call_marks() {
         assert_eq!(body("saw~(f0)"), "(block tail (call~ saw (f0)))");
         assert_eq!(body("out.fill!(0.0)"), "(block tail (call! (. out fill) (0.0)))");
-        assert_eq!(body("a.f!=b"), "(block tail (chain (. a f) != b))");
-        assert_eq!(body("!(a && b)"), "(block tail (not ((chain a && b))))");
+        assert_eq!(body("a.f!=b"), "(block tail (!= (. a f) b))");
+        assert_eq!(body("!(a && b)"), "(block tail (not ((&& a b))))");
         assert_eq!(codes("fn f() {\n  saw ~(f0)\n}"), vec![Code::E0002]);
         assert_eq!(codes("fn f() {\n  saw~ (f0)\n}"), vec![Code::E0002]);
     }
@@ -2930,7 +2919,7 @@ mod tests {
         // S-08: no struct literal in a head expression.
         assert_eq!(
             body("if s == Shape.Circle { 1 } else { 2 }"),
-            "(block tail (if (chain s == (. Shape Circle)) (block tail 1) else (block tail 2)))"
+            "(block tail (if (== s (. Shape Circle)) (block tail 1) else (block tail 2)))"
         );
         assert_eq!(
             body("if f(Point { x: 1.0 }) { 1 } else { 2 }"),
@@ -2944,10 +2933,7 @@ mod tests {
         assert_eq!(body("for i in 0..<n { }"), "(block (for i in (range 0 ..< n) (block)))");
         assert_eq!(body("for i in 0..=n { }"), "(block (for i in (range 0 ..= n) (block)))");
         // Weaker than the binary operators (§3.1).
-        assert_eq!(
-            body("for i in a + 1..<n * 2 { }"),
-            "(block (for i in (range (chain a + 1) ..< (chain n * 2)) (block)))"
-        );
+        assert_eq!(body("for i in a + 1..<n * 2 { }"), "(block (for i in (range (+ a 1) ..< (* n 2)) (block)))");
         assert_eq!(
             body("let s = par i in 0..<N { f~(i) }"),
             "(block (let s = (par i in 0..<N (block tail (call~ f (i))))))"
@@ -3057,7 +3043,7 @@ mod tests {
     fn precedence() {
         assert_eq!(body("-x.abs()"), "(block tail (neg (call (. x abs) ())))");
         assert_eq!(body("-x as F64"), "(block tail (as (neg x) F64))");
-        assert_eq!(body("a + (x as F64)"), "(block tail (chain a + ((as x F64))))");
+        assert_eq!(body("a + (x as F64)"), "(block tail (+ a ((as x F64))))");
         assert_eq!(body("x?.y"), "(block tail (. (try x) y))");
     }
 
@@ -3066,7 +3052,7 @@ mod tests {
         assert_eq!(body("let (a, b) = p"), "(block (let (tuple a b) = p))");
         assert_eq!(
             body("match v { Some(x) if x > 0 => x, None => 0, }"),
-            "(block tail (match v Some(x) if (chain x > 0) => x None => 0))"
+            "(block tail (match v Some(x) if (> x 0) => x None => 0))"
         );
         assert_eq!(
             body("match v { Point { x: px, y: _ } => px, _ => 0 }"),
@@ -3308,7 +3294,7 @@ mod tests {
     fn literals() {
         assert_eq!(body("let s = \"a\\nb {{x}} {p.q}\""), "(block (let s = \"a\\nb {{x}} {p.q}\"))");
         assert_eq!(body("let c = '\\u{1F600}'"), "(block (let c = '\\u{1f600}'))");
-        assert_eq!(body("let n = 0xFF + 1_000"), "(block (let n = (chain 255 + 1000)))");
+        assert_eq!(body("let n = 0xFF + 1_000"), "(block (let n = (+ 255 1000)))");
         assert_eq!(codes("fn f() {\n  let n = 99999999999999999999\n}"), vec![Code::E0408]);
         assert_eq!(body("Ok(())"), "(block tail (call Ok ((tuple))))");
     }
@@ -3317,7 +3303,7 @@ mod tests {
     fn closures_and_args() {
         assert_eq!(
             body("xs.map(fn(x) { x * 2.0 })"),
-            "(block tail (call (. xs map) ((fn(x) (block tail (chain x * 2.0))))))"
+            "(block tail (call (. xs map) ((fn(x) (block tail (* x 2.0))))))"
         );
         assert_eq!(body("f(inout a, move b, inout [c, d])"), "(block tail (call f (inout a, move b, inout [c, d])))");
         assert_eq!(

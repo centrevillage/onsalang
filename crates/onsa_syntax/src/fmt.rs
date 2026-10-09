@@ -1062,23 +1062,20 @@ impl<'a> Fmt<'a> {
                 self.push(" ");
                 self.block(*body, false);
             }
-            ExprKind::Binary { operands, ops } => {
-                self.expr(operands[0]);
-                for (i, (op, op_span)) in ops.iter().enumerate() {
+            ExprKind::Binary { op, op_span, lhs, rhs } => {
+                self.expr(*lhs);
+                self.push(" ");
+                self.push(op.symbol());
+                let rhs_span = self.ast.expr(*rhs).span;
+                if self.line_of(rhs_span.start) > self.line_of(op_span.end) {
+                    // Author's break after the operator (§2.5): one extra level.
+                    self.indent += 1;
+                    self.newline();
+                    self.indent -= 1;
+                } else {
                     self.push(" ");
-                    self.push(op.symbol());
-                    let rhs = operands[i + 1];
-                    let rhs_span = self.ast.expr(rhs).span;
-                    if self.line_of(rhs_span.start) > self.line_of(op_span.end) {
-                        // Author's break after the operator (§2.5): one extra level.
-                        self.indent += 1;
-                        self.newline();
-                        self.indent -= 1;
-                    } else {
-                        self.push(" ");
-                    }
-                    self.expr(rhs);
                 }
+                self.expr(*rhs);
             }
             ExprKind::Cast { expr, ty } => {
                 self.expr(*expr);
@@ -1474,7 +1471,7 @@ mod tests {
 
     #[test]
     fn refuses_files_with_syntax_errors() {
-        let src = "fn f() {\n  let a = x + y * z\n}\n";
+        let src = "fn f() {\n  let a = x + y % z\n}\n";
         let parsed = crate::parse(FileId(0), src);
         assert!(crate::format(&parsed, src).is_none());
         // Naming errors do not block formatting.

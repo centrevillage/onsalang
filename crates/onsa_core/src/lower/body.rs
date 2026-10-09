@@ -909,7 +909,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         AK::Unsafe(_) => return Err(unsupported(span, Feature::Unsafe, &[])),
         // Sema rejects `par` outside a flow body: lowering never sees one.
         AK::Par { .. } => return Err(internal(span, "`par` outside a flow")),
-        AK::Binary { operands, ops } => return lower_binary(lw, cx, e, operands, ops, ty),
+        &AK::Binary { op, op_span, lhs, rhs } => return lower_binary(lw, cx, e, (op, op_span), lhs, rhs, ty),
         AK::Cast { expr: inner, .. } => {
             let x = lower_expr(lw, cx, *inner)?;
             if x.ty == ty {
@@ -1026,91 +1026,89 @@ fn lower_binary(
     lw: &mut Lowerer,
     cx: &mut FnCx,
     e: ExprId,
-    operands: &[ExprId],
-    ops: &[(ABinOp, Span)],
+    (op, op_span): (ABinOp, Span),
+    lhs: ExprId,
+    rhs: ExprId,
     ty: Ty,
 ) -> R<Expr> {
-    let span = cx.expr(e).span;
-    let mut acc = lower_expr(lw, cx, operands[0])?;
-    for (i, (op, op_span)) in ops.iter().enumerate() {
-        let rhs = lower_expr(lw, cx, operands[i + 1])?;
-        let sp = Span::new(span.file, acc.span.start, rhs.span.end);
-        acc = match op.group() {
-            OpGroup::And | OpGroup::Or => {
-                let lop = if op.group() == OpGroup::And { LogicOp::And } else { LogicOp::Or };
-                Expr::new(Ty::Bool, sp, ExprKind::Logic { op: lop, lhs: Box::new(acc), rhs: Box::new(rhs) })
-            }
-            OpGroup::Comparison => {
-                let cop = match op {
-                    ABinOp::Eq => CmpOp::Eq,
-                    ABinOp::Ne => CmpOp::Ne,
-                    ABinOp::Lt => CmpOp::Lt,
-                    ABinOp::Le => CmpOp::Le,
-                    ABinOp::Gt => CmpOp::Gt,
-                    _ => CmpOp::Ge,
-                };
-                if acc.ty.is_scalar() {
-                    Expr::new(Ty::Bool, sp, ExprKind::Cmp { op: cop, lhs: Box::new(acc), rhs: Box::new(rhs) })
-                } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
-                    let f = super::eq::eq_fn(lw, &acc.ty, *op_span)?;
-                    let call = Expr::new(
-                        Ty::Bool,
-                        sp,
-                        ExprKind::Call {
-                            fn_: f,
-                            args: vec![Arg { mode: Mode::Borrow, expr: acc }, Arg { mode: Mode::Borrow, expr: rhs }],
-                        },
-                    );
-                    if cop == CmpOp::Eq {
-                        call
-                    } else {
-                        Expr::new(Ty::Bool, sp, ExprKind::Unary(UnOp::Not, Box::new(call)))
-                    }
+    let sp = cx.expr(e).span;
+    let l = lower_expr(lw, cx, lhs)?;
+    let r = lower_expr(lw, cx, rhs)?;
+    let out = match op.group() {
+        OpGroup::And | OpGroup::Or => {
+            let lop = if op.group() == OpGroup::And { LogicOp::And } else { LogicOp::Or };
+            Expr::new(Ty::Bool, sp, ExprKind::Logic { op: lop, lhs: Box::new(l), rhs: Box::new(r) })
+        }
+        OpGroup::Comparison => {
+            let cop = match op {
+                ABinOp::Eq => CmpOp::Eq,
+                ABinOp::Ne => CmpOp::Ne,
+                ABinOp::Lt => CmpOp::Lt,
+                ABinOp::Le => CmpOp::Le,
+                ABinOp::Gt => CmpOp::Gt,
+                _ => CmpOp::Ge,
+            };
+            if l.ty.is_scalar() {
+                Expr::new(Ty::Bool, sp, ExprKind::Cmp { op: cop, lhs: Box::new(l), rhs: Box::new(r) })
+            } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
+                let f = super::eq::eq_fn(lw, &l.ty, op_span)?;
+                let call = Expr::new(
+                    Ty::Bool,
+                    sp,
+                    ExprKind::Call {
+                        fn_: f,
+                        args: vec![Arg { mode: Mode::Borrow, expr: l }, Arg { mode: Mode::Borrow, expr: r }],
+                    },
+                );
+                if cop == CmpOp::Eq {
+                    call
                 } else {
-                    return Err(unsupported(*op_span, Feature::OrderingAggregates, &[]));
+                    Expr::new(Ty::Bool, sp, ExprKind::Unary(UnOp::Not, Box::new(call)))
                 }
+            } else {
+                return Err(unsupported(op_span, Feature::OrderingAggregates, &[]));
             }
-            OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Bitwise => {
-                let (bop, overflow) = match op {
-                    ABinOp::Add => (BinOp::Add, Overflow::Checked),
-                    ABinOp::Sub => (BinOp::Sub, Overflow::Checked),
-                    ABinOp::Mul => (BinOp::Mul, Overflow::Checked),
-                    ABinOp::Div => (BinOp::Div, Overflow::Checked),
-                    ABinOp::Rem => (BinOp::Rem, Overflow::Checked),
-                    ABinOp::WrapAdd => (BinOp::Add, Overflow::Wrap),
-                    ABinOp::WrapSub => (BinOp::Sub, Overflow::Wrap),
-                    ABinOp::WrapMul => (BinOp::Mul, Overflow::Wrap),
-                    ABinOp::SatAdd => (BinOp::Add, Overflow::Sat),
-                    ABinOp::SatSub => (BinOp::Sub, Overflow::Sat),
-                    ABinOp::SatMul => (BinOp::Mul, Overflow::Sat),
-                    ABinOp::BitAnd => (BinOp::BitAnd, Overflow::Checked),
-                    ABinOp::BitOr => (BinOp::BitOr, Overflow::Checked),
-                    ABinOp::BitXor => (BinOp::BitXor, Overflow::Checked),
-                    ABinOp::Shl => (BinOp::Shl, Overflow::Checked),
-                    ABinOp::Shr => (BinOp::Shr, Overflow::Checked),
-                    _ => unreachable!(),
-                };
-                let t = acc.ty.clone();
-                if bop == BinOp::Rem && t.is_float() {
-                    let Ty::Float(k) = t else { unreachable!() };
-                    Expr::new(
-                        Ty::Float(k),
-                        sp,
-                        ExprKind::Prim {
-                            prim: Prim::Math(MathFn::Fmod, k),
-                            args: vec![Arg { mode: Mode::Borrow, expr: acc }, Arg { mode: Mode::Borrow, expr: rhs }],
-                        },
-                    )
-                } else {
-                    Expr::new(t, sp, ExprKind::Binary { op: bop, overflow, lhs: Box::new(acc), rhs: Box::new(rhs) })
-                }
+        }
+        OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder | OpGroup::Bitwise => {
+            let (bop, overflow) = match op {
+                ABinOp::Add => (BinOp::Add, Overflow::Checked),
+                ABinOp::Sub => (BinOp::Sub, Overflow::Checked),
+                ABinOp::Mul => (BinOp::Mul, Overflow::Checked),
+                ABinOp::Div => (BinOp::Div, Overflow::Checked),
+                ABinOp::Rem => (BinOp::Rem, Overflow::Checked),
+                ABinOp::WrapAdd => (BinOp::Add, Overflow::Wrap),
+                ABinOp::WrapSub => (BinOp::Sub, Overflow::Wrap),
+                ABinOp::WrapMul => (BinOp::Mul, Overflow::Wrap),
+                ABinOp::SatAdd => (BinOp::Add, Overflow::Sat),
+                ABinOp::SatSub => (BinOp::Sub, Overflow::Sat),
+                ABinOp::SatMul => (BinOp::Mul, Overflow::Sat),
+                ABinOp::BitAnd => (BinOp::BitAnd, Overflow::Checked),
+                ABinOp::BitOr => (BinOp::BitOr, Overflow::Checked),
+                ABinOp::BitXor => (BinOp::BitXor, Overflow::Checked),
+                ABinOp::Shl => (BinOp::Shl, Overflow::Checked),
+                ABinOp::Shr => (BinOp::Shr, Overflow::Checked),
+                _ => unreachable!(),
+            };
+            let t = l.ty.clone();
+            if bop == BinOp::Rem && t.is_float() {
+                let Ty::Float(k) = t else { unreachable!() };
+                Expr::new(
+                    Ty::Float(k),
+                    sp,
+                    ExprKind::Prim {
+                        prim: Prim::Math(MathFn::Fmod, k),
+                        args: vec![Arg { mode: Mode::Borrow, expr: l }, Arg { mode: Mode::Borrow, expr: r }],
+                    },
+                )
+            } else {
+                Expr::new(t, sp, ExprKind::Binary { op: bop, overflow, lhs: Box::new(l), rhs: Box::new(r) })
             }
-        };
+        }
+    };
+    if out.ty != ty {
+        return Err(internal(sp, "binary operator type"));
     }
-    if acc.ty != ty {
-        return Err(internal(span, "binary chain type"));
-    }
-    Ok(acc)
+    Ok(out)
 }
 
 fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, inner: ExprId, ty: Ty, span: Span) -> R<Expr> {

@@ -118,7 +118,7 @@ fn the_syntax_diagnostic_that_stops_fmt_is_reported() {
     // E0010 stops `fmt`, and is the diagnostic of the unit even though the E0320 comes earlier in
     // the text (S-214: the earlier stage wins). The report is on the standard output (S-232).
     let d = Dir::new("hidden");
-    let src = "fn f(badName: I32) -> I32 {\n  1 + 2 * 3\n}\n";
+    let src = "fn f(badName: I32) -> I32 {\n  1 + 2 % 3\n}\n";
     let p = d.file("hide.onsa", src);
     let out = onsa(&["fmt", &p]);
     assert_eq!(read(&p), src);

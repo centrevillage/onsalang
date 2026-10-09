@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.5", "§18.1"]
+
+// E0010 in a constant expression (§4.5: "普通の式と同じ規則"): the operators of a constant argument
+// (an array length, an argument of a type, the `::[…]` of an expression, the length of `[e; N]`) are
+// the operators of §3.1, so the groups without a strength between them need parentheses. The
+// remainder is not in a group with `+ - * /`. The products in sums are accepted
+// (types/type_args_const_groups.onsa). One error per declaration unit.
+
+const N: U32 = 4
+
+pub fn remainder_then_sum_in_a_length(x: [F32; N % 2 + 1]) -> U32 {      //~ E0010
+  1
+}
+
+pub fn sum_then_remainder_in_a_length(x: [F32; N + 1 % 2]) -> U32 {      //~ E0010
+  1
+}
+
+pub fn product_then_remainder_in_a_length(x: [F32; N * 2 % 3]) -> U32 {  //~ E0010
+  1
+}
+
+pub fn remainder_in_type_arguments(x: Rg[F32, N % 2 + 1]) -> U32 {       //~ E0010
+  1
+}
+
+pub fn remainder_in_a_result() -> [F32; N % 2 - 1] {                     //~ E0010
+  [0.0; 1]
+}
+
+pub fn remainder_in_a_repeat() -> [F32; 2] {
+  [0.0; N % 2 + 1]                                                       //~ E0010
+}
+
+pub fn remainder_in_an_annotation() -> U32 {
+  let a: [F32; N % 2 + 1] = [0.0; 2]                                     //~ E0010
+  1
+}
+
+pub fn remainder_in_an_expression() -> U32 {
+  let k = Rg::[F32, N % 2 + 1].CAP                                       //~ E0010
+  k
+}
+
+pub fn remainder_in_the_type_arguments_of_a_function() -> U32 {
+  let p = pair::[U8, N % 2 + 1](1, 2)                                    //~ E0010
+  1
+}

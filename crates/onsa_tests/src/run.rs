@@ -1489,8 +1489,9 @@ mod tests {
     /// (§18.1, S-236); `[[test.fix]]` and the entries of kind `fix-contract`.
     #[test]
     fn fix_contract() {
-        // The candidate of the E0010 gives `x >= (0 && x) < 9`: an E0010 is left (R-72).
-        let breaks = "pub fn f(x: I32) -> Bool {\n  x >= 0 && x < 9 //~ E0010\n}\n";
+        // The candidate of the E0411 gives `x.narrow_i32()`, an `Option[I32]`: an E0401 is left
+        // (until W5-02, a candidate that breaks the contract).
+        let breaks = "pub fn f(x: I64) -> I32 {\n  x as I32 //~ E0411\n}\n";
         let keeps = "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
         // Two errors in one unit: the candidate of `i32` leaves the E0020 of `f32`.
         let two = |leaves: &str| {
@@ -1506,10 +1507,10 @@ mod tests {
         };
         let two_units = "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n\npub fn g() -> I32 {\n  let mut m = 0 //~ E0020\n  m\n}\n";
         let list = [
-            fix_entry("tests/listed.onsa:2:3 E0010 fix1"),
+            fix_entry("tests/listed.onsa:2:3 E0411 fix1"),
             fix_entry("tests/keeps_listed.onsa:2:3 E0020 fix1"),
-            fix_entry("tests/nothing.onsa:2:3 E0010 fix1"),
-            fix_entry("tests/breaks.onsa:2:3 E0010 fix2"),
+            fix_entry("tests/nothing.onsa:2:3 E0411 fix1"),
+            fix_entry("tests/breaks.onsa:2:3 E0411 fix2"),
             entry("tests/whole.onsa"),
         ]
         .concat();
@@ -1518,7 +1519,7 @@ mod tests {
             &[
                 ("tests/breaks.onsa", breaks),
                 ("tests/listed.onsa", breaks),
-                ("tests/whole.onsa", &breaks.replace("//~ E0010", "")),
+                ("tests/whole.onsa", &breaks.replace("//~ E0411", "")),
                 ("tests/keeps.onsa", keeps),
                 ("tests/keeps_listed.onsa", keeps),
                 ("tests/leaves_right.onsa", &two("\"8:21 E0020\"")),
@@ -1537,17 +1538,17 @@ mod tests {
             let f = failures(p);
             assert!(f.iter().any(|x| x.contains(needle)), "{p}: {f:?}");
         };
-        has("tests/breaks.onsa", "fix candidate tests/breaks.onsa:2:3 E0010 fix1");
-        has("tests/breaks.onsa", "hold 2:3 E0010 of its stage or an earlier one; expected none");
+        has("tests/breaks.onsa", "fix candidate tests/breaks.onsa:2:3 E0411 fix1");
+        has("tests/breaks.onsa", "hold 2:3 E0401 of its stage or an earlier one; expected none");
         // An entry silences its candidate only.
         let listed = case(&r, "tests/listed.onsa");
         assert!(listed.failures.is_empty(), "{:?}", listed.failures);
-        assert_eq!(listed.pending_fixes, ["tests/listed.onsa:2:3 E0010 fix1"]);
+        assert_eq!(listed.pending_fixes, ["tests/listed.onsa:2:3 E0411 fix1"]);
         // A whole-case entry does not silence a candidate.
-        has("tests/whole.onsa", "fix candidate tests/whole.onsa:2:3 E0010 fix1");
+        has("tests/whole.onsa", "fix candidate tests/whole.onsa:2:3 E0411 fix1");
         assert!(case(&r, "tests/keeps.onsa").failures.is_empty(), "{:?}", failures("tests/keeps.onsa"));
         has("tests/keeps_listed.onsa", "keeps the contract but is listed");
-        for t in ["tests/nothing.onsa:2:3 E0010 fix1", "tests/breaks.onsa:2:3 E0010 fix2"] {
+        for t in ["tests/nothing.onsa:2:3 E0411 fix1", "tests/breaks.onsa:2:3 E0411 fix2"] {
             assert!(
                 r.failures.iter().any(|f| f.contains(t) && f.contains("names no fix candidate")),
                 "{t}: {:?}",

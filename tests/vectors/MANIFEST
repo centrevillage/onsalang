@@ -1,8 +1,8 @@
 format 1
 seed 0x4f4e5341
 operations 532
-data_sha256 a7c91bac1a8ac163f52301b7aeae016e562d55ab6c748456b096650eccba057e
-file OPS.tsv sha256=e18ee050a74e621ecbe309955a33968146c8e4d585bbc6894eef10b0c1003c48 rows=0
+data_sha256 da37ea6b26ae77f1514f4c2565a5a7c951209238309289fc2a2f762ca6536d74
+file OPS.tsv sha256=9a037bbbf9e47c7b085d7b4ee61a4b4b8133c7c7f00967ac6d40d96daed45a0d rows=0
 file const.tsv sha256=a5c69bda4b6b50dbfc18f66b25e2a128101af3979aa1da651d24fea608fd9634 rows=54 edge=54
 file conv-f32.tsv sha256=a87b81a5c21b389e7041bdaf25e7bd049c90b6c9d0a1e667430a2a952c4143c5 rows=4210 edge=3539 rand=671
 file conv-f64.tsv sha256=2b91c0a7836d8bdf7300ade27cc71457abe701866c885c5d226dd3925b314686 rows=4531 edge=3830 rand=701
@@ -18,12 +18,10 @@ file expr-f32.tsv sha256=f4b472c77e9df4eab876d9efd330651ba60b9eaf8306d1baea80f72
 file expr-f64.tsv sha256=e11a2b295f3511ac8ca8d9b41884ee06a9441fe771e4968d1e8ea3e6afe49e0a rows=1489 edge=1361 rand=128
 file fixture/checked/onsa.toml sha256=28cf581d52a4410ba7489b6a09332471acbc7f058bb9ebf011e7e1b1cf40fa88 rows=0
 file fixture/checked/ops.onsa sha256=c768a1ee188e096071baa474eeae3b83486c5f338268456fe3d497229ce9ef27 rows=0
-file fixture/mixed/onsa.toml sha256=456a99f96b25c083395041cc1e466560a8fda2cf4a0ea09b645220d5dcb71a0d rows=0
-file fixture/mixed/ops.onsa sha256=ab469c6b44270f43e93d9a1158dc10f98a8bea289d7c3d6b6cd345cbe71afe36 rows=0
 file fixture/predicates/onsa.toml sha256=4a62bded02dc1d1ea20c87e86b406db1f0af04d175ce5fe3c1b366fb6f5a91b8 rows=0
 file fixture/predicates/ops.onsa sha256=07ec35dbc8611927d75d9842068275fbb8cd9040c7e8c549caea6843d38b9bce rows=0
-file fixture/scalar/onsa.toml sha256=3af1eeebeb3665fbfa6990f2e25d0331d64aed898e4ba29ceb2a4bed65cb9594 rows=0
-file fixture/scalar/ops.onsa sha256=12ee974ff68d870fdddaafd8088a12206b2cfb15af8c1d2f0c470b71c98f7028 rows=0
+file fixture/scalar/onsa.toml sha256=fa7e1e735579e5c115ba41280baadca1365a687d1c54194727336c1f4f326c6c rows=0
+file fixture/scalar/ops.onsa sha256=ee40df5de6a4ebc56c7755feef4b2fd52ffa8f9c2156687049f45bbd7e3153b7 rows=0
 file fixture/zero_one/onsa.toml sha256=a7e2d20d720d6b2fd2e726c09edf33bdbe661cc715e350c2fa26c05f78b57b90 rows=0
 file fixture/zero_one/ops.onsa sha256=3b9bcb9bdfe2c32e9166c1436ee343b44d01b03d4205691f90cc64771262aa6f rows=0
 file float-f32.tsv sha256=7ea10493d5e2d7d3a118dab8ba29b1f6f1b5112dda7693062203fd124477078d rows=17133 edge=14599 rand=2534

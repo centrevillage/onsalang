@@ -359,7 +359,7 @@ impl<'a> Checker<'a> {
     pub(crate) fn non_integer_form(&self, e: ExprId) -> Option<&'static str> {
         match &self.expr(e).kind {
             ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => self.non_integer_form(*x),
-            ExprKind::Binary { operands, .. } => operands.iter().find_map(|&o| self.non_integer_form(o)),
+            ExprKind::Binary { lhs, rhs, .. } => self.non_integer_form(*lhs).or_else(|| self.non_integer_form(*rhs)),
             ExprKind::Lit(Lit::Float { .. }) => Some("a float literal"),
             ExprKind::Lit(Lit::Str(_)) => Some("a string literal"),
             ExprKind::Lit(Lit::Char(_)) => Some("a character literal"),
@@ -1430,7 +1430,7 @@ impl<'a> Checker<'a> {
                 span,
                 "`par` replicates flow instances and is only written inside a flow body (§11.5)",
             )),
-            ExprKind::Binary { operands, ops } => self.check_binary(operands, ops),
+            &ExprKind::Binary { op, op_span, lhs, rhs } => self.check_binary(op, op_span, lhs, rhs),
             ExprKind::Cast { expr: inner, ty } => {
                 let it = self.check_expr(*inner, None)?;
                 let from = self.known(it, self.expr(*inner).span, "operand of `as`")?;
@@ -1920,59 +1920,54 @@ impl<'a> Checker<'a> {
         Ok(self.a.types.intern(Ty::Fn(FnTy { rt, params: ptys, ret: ret_ty, effects })))
     }
 
-    fn check_binary(&mut self, operands: &[ExprId], ops: &[(BinOp, Span)]) -> R<TyId> {
-        let mut t = self.check_expr(operands[0], None)?;
-        for (i, (op, op_span)) in ops.iter().enumerate() {
-            let rhs = operands[i + 1];
-            let group = op.group();
-            match group {
-                OpGroup::And | OpGroup::Or => {
-                    let bool_ = self.bool_();
-                    self.unify_at(self.expr(operands[i]).span, t, bool_)?;
-                    self.check_expr(rhs, Some(bool_))?;
-                    t = bool_;
-                }
-                OpGroup::Comparison => {
-                    let rt = self.check_expr(rhs, None)?;
-                    self.unify_at(self.expr(rhs).span, rt, t)?;
-                    let s = self.shallow(t);
-                    let bound = if matches!(op, BinOp::Eq | BinOp::Ne) { Bound::PartialEq } else { Bound::PartialOrd };
-                    self.require_operand(s, bound, *op, *op_span)?;
-                    t = self.bool_();
-                }
-                OpGroup::Bitwise if matches!(op, BinOp::Shl | BinOp::Shr) => {
-                    let u32 = self.u32();
-                    self.check_expr(rhs, Some(u32))?;
-                    let s = self.shallow(t);
-                    self.require_int(s, *op, *op_span)?;
-                }
-                OpGroup::Bitwise => {
-                    let rt = self.check_expr(rhs, None)?;
-                    self.unify_at(self.expr(rhs).span, rt, t)?;
-                    let s = self.shallow(t);
-                    self.require_int(s, *op, *op_span)?;
-                }
-                OpGroup::Additive | OpGroup::Multiplicative => {
-                    let rt = self.check_expr(rhs, None)?;
-                    self.unify_at(self.expr(rhs).span, rt, t)?;
-                    let s = self.shallow(t);
-                    if matches!(
-                        op,
-                        BinOp::WrapAdd
-                            | BinOp::WrapSub
-                            | BinOp::WrapMul
-                            | BinOp::SatAdd
-                            | BinOp::SatSub
-                            | BinOp::SatMul
-                    ) {
-                        self.require_int(s, *op, *op_span)?;
-                    } else {
-                        self.require_operand(s, Bound::Num, *op, *op_span)?;
-                    }
-                }
+    /// One operator of a chain (the tree of §3.1): the left operand, the
+    /// right one, then what the operator requires of them (S-255).
+    fn check_binary(&mut self, op: BinOp, op_span: Span, lhs: ExprId, rhs: ExprId) -> R<TyId> {
+        let t = self.check_expr(lhs, None)?;
+        Ok(match op.group() {
+            OpGroup::And | OpGroup::Or => {
+                let bool_ = self.bool_();
+                self.unify_at(self.expr(lhs).span, t, bool_)?;
+                self.check_expr(rhs, Some(bool_))?;
+                bool_
             }
-        }
-        Ok(t)
+            OpGroup::Comparison => {
+                let rt = self.check_expr(rhs, None)?;
+                self.unify_at(self.expr(rhs).span, rt, t)?;
+                let s = self.shallow(t);
+                let bound = if matches!(op, BinOp::Eq | BinOp::Ne) { Bound::PartialEq } else { Bound::PartialOrd };
+                self.require_operand(s, bound, op, op_span)?;
+                self.bool_()
+            }
+            OpGroup::Bitwise if matches!(op, BinOp::Shl | BinOp::Shr) => {
+                let u32 = self.u32();
+                self.check_expr(rhs, Some(u32))?;
+                let s = self.shallow(t);
+                self.require_int(s, op, op_span)?;
+                t
+            }
+            OpGroup::Bitwise => {
+                let rt = self.check_expr(rhs, None)?;
+                self.unify_at(self.expr(rhs).span, rt, t)?;
+                let s = self.shallow(t);
+                self.require_int(s, op, op_span)?;
+                t
+            }
+            OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder => {
+                let rt = self.check_expr(rhs, None)?;
+                self.unify_at(self.expr(rhs).span, rt, t)?;
+                let s = self.shallow(t);
+                if matches!(
+                    op,
+                    BinOp::WrapAdd | BinOp::WrapSub | BinOp::WrapMul | BinOp::SatAdd | BinOp::SatSub | BinOp::SatMul
+                ) {
+                    self.require_int(s, op, op_span)?;
+                } else {
+                    self.require_operand(s, Bound::Num, op, op_span)?;
+                }
+                t
+            }
+        })
     }
 
     /// The operand type of an operator must support it (via its builtin trait, §3.2).

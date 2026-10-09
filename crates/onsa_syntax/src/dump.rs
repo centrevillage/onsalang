@@ -656,13 +656,11 @@ impl Dumper<'_> {
                 self.expr(*body);
                 self.out.push(')');
             }
-            ExprKind::Binary { operands, ops } => {
-                self.out.push_str("(chain ");
-                self.expr(operands[0]);
-                for (i, (op, _)) in ops.iter().enumerate() {
-                    let _ = write!(self.out, " {} ", op.symbol());
-                    self.expr(operands[i + 1]);
-                }
+            ExprKind::Binary { op, lhs, rhs, .. } => {
+                let _ = write!(self.out, "({} ", op.symbol());
+                self.expr(*lhs);
+                self.out.push(' ');
+                self.expr(*rhs);
                 self.out.push(')');
             }
             ExprKind::Cast { expr, ty } => {

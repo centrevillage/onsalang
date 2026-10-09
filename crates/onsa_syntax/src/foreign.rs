@@ -166,6 +166,7 @@ pub enum RowId {
     LowercaseType,
     CompoundAssign,
     CompoundAssignUnfixable,
+    BinaryMinusPrefixMinus,
     Increment,
     IncrementUnfixable,
     LetMut,
@@ -357,6 +358,15 @@ pub static ROWS: &[Row] = &[
         message: "there is no compound assignment, and this one cannot be written out as it stands",
         rule: "an assignment is `place = value`; the operation is written out, `x = x + 1` (§5.1)",
         detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::BinaryMinusPrefixMinus,
+        name: "binary_minus_prefix_minus",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a binary `-` and a prefix `-` are written apart, not as `--`",
+        rule: "a prefix `-` after a binary `-` is written with a blank between them, `a - -b` (§2.5)",
+        detect: Detect::Syntax(binary_minus_prefix_minus),
     },
     Row {
         id: RowId::Increment,
@@ -2657,11 +2667,40 @@ fn compound_assignment(c: &Cursor) -> Option<Hit> {
     hit(span, vec![Fix::new("write the assignment out", edits)])
 }
 
+/// `a--b`, `5--3` (S-320): a binary `-` and a prefix one written without a
+/// blank between them are the `--` of other languages, which read it apart
+/// (C: `a-- b`, an error; Rust: `a - (-b)`). The candidate is `a - -b`. The
+/// `--` follows an operand on its line and an operand that is not a prefix
+/// one follows it at once; else it is an increment ([`increment`]).
+fn binary_minus_prefix_minus(c: &Cursor) -> Option<Hit> {
+    if !binary_minus_minus(c) {
+        return None;
+    }
+    let span = c.span(c.at);
+    let text = if c.gap(c.at) == Gap::None { " - -" } else { "- -" };
+    hit(span, vec![Fix::replace("write the two `-` apart", span, text)])
+}
+
+fn binary_minus_minus(c: &Cursor) -> bool {
+    if c.kind(c.at) != TokenKind::MinusMinus {
+        return false;
+    }
+    // A `--` is not the last token (an `Eof` follows it).
+    let next = c.kind(c.at + 1);
+    // SPEC-GAP(S-349): a blank before the `--` (`a --b`) is the form too.
+    c.before(c.at).is_some()
+        && c.gap(c.at) != Gap::Newline
+        && closed_expr(c).is_some()
+        && c.gap(c.at + 1) == Gap::None
+        && !matches!(next, TokenKind::Minus | TokenKind::Bang)
+        && crate::parser::starts_operand(next)
+}
+
 /// `++x`, `x++`, `--x`, `x--` (S-250, S-297): `x = x + 1` as a statement
 /// whose operand is a name or a path of fields; else E0002 with the note.
 fn increment(c: &Cursor) -> Option<Hit> {
     let kind = c.kind(c.at);
-    if !matches!(kind, TokenKind::PlusPlus | TokenKind::MinusMinus) {
+    if !matches!(kind, TokenKind::PlusPlus | TokenKind::MinusMinus) || binary_minus_minus(c) {
         return None;
     }
     let op = if kind == TokenKind::PlusPlus { "+" } else { "-" };

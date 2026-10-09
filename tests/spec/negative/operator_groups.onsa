@@ -1,0 +1,259 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+
+// E0010: operators of groups without a strength between them, in one expression (§3.1). The strengths
+// are multiplicative > additive > comparison > `&&` and `||`, and remainder > comparison; the
+// groups without a strength between them are multiplicative and remainder, additive and remainder,
+// `&&` and `||`, the bit group and every other group, and two different operators of the bit group.
+// A chain of comparisons is an error too (`a < b < c`). One error per declaration unit (§18.1), so
+// each function has one marker; the functions at the end have none and are accepted.
+
+use std.array
+
+// ---- remainder is not in a group with the multiplicative and additive operators --------------------
+
+pub fn add_then_rem(w: U32, n: U32) -> U32 {
+  w + 1 % n                                   //~ E0010
+}
+
+pub fn rem_then_add(a: U32, b: U32, c: U32) -> U32 {
+  a % b + c                                   //~ E0010
+}
+
+pub fn sub_then_rem(a: U32, b: U32, c: U32) -> U32 {
+  a - b % c                                   //~ E0010
+}
+
+pub fn mul_then_rem(a: U32, b: U32, c: U32) -> U32 {
+  a * b % c                                   //~ E0010
+}
+
+pub fn rem_then_mul(a: U32, b: U32, c: U32) -> U32 {
+  a % b * c                                   //~ E0010
+}
+
+pub fn div_then_rem(a: U32, b: U32, c: U32) -> U32 {
+  a / b % c                                   //~ E0010
+}
+
+pub fn wrapping_mul_then_rem(a: U32, b: U32, c: U32) -> U32 {
+  a *% b % c                                  //~ E0010
+}
+
+pub fn rem_then_saturating_add(a: U32, b: U32, c: U32) -> U32 {
+  a % b +| c                                  //~ E0010
+}
+
+pub fn rem_in_the_middle_of_a_sum(a: U32, b: U32, c: U32, d: U32) -> U32 {
+  a + b % c + d                               //~ E0010
+}
+
+pub fn rem_under_a_comparison_still_clashes_with_a_sum(i: U32, n: U32, m: U32) -> Bool {
+  i + 1 % n < m                               //~ E0010
+}
+
+// ---- && and || -------------------------------------------------------------------------------------
+
+pub fn and_then_or(p: Bool, q: Bool, r: Bool) -> Bool {
+  p && q || r                                 //~ E0010
+}
+
+pub fn or_then_and(p: Bool, q: Bool, r: Bool) -> Bool {
+  p || q && r                                 //~ E0010
+}
+
+pub fn and_or_of_comparisons(a: I32, b: I32, c: I32) -> Bool {
+  a < b && b < c || c < a                     //~ E0010
+}
+
+pub fn or_and_in_a_condition(p: Bool, q: Bool, r: Bool) -> U32 {
+  if p || q && r {                            //~ E0010
+    1
+  } else {
+    0
+  }
+}
+
+// ---- a chain of comparisons -------------------------------------------------------------------------
+
+pub fn chain_less(a: I32, b: I32, c: I32) -> Bool {
+  a < b < c                                   //~ E0010
+}
+
+pub fn chain_equal(a: I32, b: I32, c: I32) -> Bool {
+  a == b == c                                 //~ E0010
+}
+
+pub fn chain_unequal(a: I32, b: I32, c: I32) -> Bool {
+  a != b != c                                 //~ E0010
+}
+
+pub fn chain_of_two_symbols(a: I32, b: I32, c: I32) -> Bool {
+  a < b == c                                  //~ E0010
+}
+
+pub fn chain_with_sums(a: I32, b: I32, c: I32) -> Bool {
+  a + 1 < b * 2 < c                           //~ E0010
+}
+
+pub fn chain_of_three(a: I32, b: I32, c: I32, d: I32) -> Bool {
+  a < b <= c < d                              //~ E0010
+}
+
+// ---- the bit group and every other group -------------------------------------------------------------
+
+pub fn mask_then_compare(x: U32) -> Bool {
+  x & 1 == 0                                  //~ E0010
+}
+
+pub fn compare_then_mask(m: U32, x: U32) -> Bool {
+  m == x & 1                                  //~ E0010
+}
+
+pub fn shift_then_add(x: U32, y: U32) -> U32 {
+  x << 1 + y                                  //~ E0010
+}
+
+pub fn add_then_mask(x: U32, y: U32, m: U32) -> U32 {
+  x + y & m                                   //~ E0010
+}
+
+pub fn product_then_mask(x: U32, m: U32) -> U32 {
+  x * 2 & m                                   //~ E0010
+}
+
+pub fn remainder_then_mask(x: U32, m: U32) -> U32 {
+  x % 8 & m                                   //~ E0010
+}
+
+pub fn mask_then_and(x: U32, m: U32, ok: Bool) -> Bool {
+  x & m && ok                                 //~ E0010
+}
+
+pub fn or_then_bit_or(ok: Bool, x: U32, m: U32) -> Bool {
+  ok || x | m                                 //~ E0010
+}
+
+pub fn bit_xor_in_a_sum(x: U32, y: U32, z: U32) -> U32 {
+  x + y ^ z                                   //~ E0010
+}
+
+// ---- two different operators of the bit group ---------------------------------------------------------
+
+pub fn and_then_or_bits(a: U32, b: U32, c: U32) -> U32 {
+  a & b | c                                   //~ E0010
+}
+
+pub fn or_then_xor_bits(a: U32, b: U32, c: U32) -> U32 {
+  a | b ^ c                                   //~ E0010
+}
+
+pub fn xor_then_and_bits(a: U32, b: U32, c: U32) -> U32 {
+  a ^ b & c                                   //~ E0010
+}
+
+pub fn shift_then_or_bits(a: U32, b: U32) -> U32 {
+  a << 1 | b                                  //~ E0010
+}
+
+pub fn shifts_both_ways(a: U32) -> U32 {
+  a << 1 >> 2                                 //~ E0010
+}
+
+pub fn shift_then_and_bits(a: U32, m: U32) -> U32 {
+  a >> 1 & m                                  //~ E0010
+}
+
+pub fn mask_then_shift_bits(a: U32, m: U32) -> U32 {
+  a & m << 2                                  //~ E0010
+}
+
+pub fn same_operator_then_another(a: U32, b: U32, c: U32, d: U32) -> U32 {
+  a | b | c & d                               //~ E0010
+}
+
+// ---- in the places an expression stands ----------------------------------------------------------------
+
+pub fn in_a_call(w: U32, n: U32) -> U32 {
+  id(w + 1 % n)                               //~ E0010
+}
+
+pub fn in_an_index(xs: [U32; 4], w: U32, n: U32) -> U32 {
+  xs[w + 1 % n]                               //~ E0010
+}
+
+pub fn in_a_return(w: U32, n: U32) -> U32 {
+  if w == 0 {
+    return w + 1 % n                          //~ E0010
+  }
+  w
+}
+
+pub fn in_a_while(a: U32, b: U32, n: U32) -> U32 {
+  var i: U32 = 0
+  while i * a % b < n {                       //~ E0010
+    i = i + 1
+  }
+  i
+}
+
+pub fn in_a_closure(w: U32) -> [U32; 2] {
+  array.from_fn(fn(i) { i + w % 2 })          //~ E0010
+}
+
+pub fn in_a_struct_literal(w: U32, n: U32) -> Pt {
+  Pt { x: w + 1 % n, y: 0 }                   //~ E0010
+}
+
+pub fn in_a_method_chain(p: Pt, w: U32, n: U32) -> U32 {
+  p.add(w + 1 % n)                            //~ E0010
+}
+
+pub fn in_parentheses(w: U32, n: U32) -> U32 {
+  (w + 1 % n)                                 //~ E0010
+}
+
+pub fn in_a_nested_parenthesis(w: U32, n: U32) -> U32 {
+  (w + 1) * (w + 1 % n)                       //~ E0010
+}
+
+test "in an assert" {
+  let x: U32 = 6
+  assert x & 1 == 0                           //~ E0010
+}
+
+const CONST_CLASH: Bool = 1 < 2 && 3 < 4 || false   //~ E0010
+
+// ---- accepted ----------------------------------------------------------------------------------------
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+impl Pt {
+  pub fn add(self, k: U32) -> U32 {
+    self.x + k
+  }
+}
+
+pub fn id(a: U32) -> U32 {
+  a
+}
+
+pub fn fine_arithmetic(a: I32, b: I32, c: I32, d: I32) -> I32 {
+  a * b + c * d - a / b
+}
+
+pub fn fine_remainder(i: U32, n: U32) -> Bool {
+  i % 2 == 0 && i % n != 1
+}
+
+pub fn fine_ring_index(w: U32, n: U32) -> U32 {
+  (w + 1) % n
+}
+
+pub fn fine_comparison_and_logic(lo: I32, x: I32, hi: I32, ok: Bool) -> Bool {
+  (lo <= x && x < hi) || ok
+}

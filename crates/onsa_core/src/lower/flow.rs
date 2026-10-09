@@ -579,7 +579,7 @@ fn children(expr: &ast::Expr) -> Vec<ExprId> {
             }
             v
         }
-        AK::Binary { operands, .. } => operands.clone(),
+        AK::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         AK::TupleIndex { base, .. } | AK::TypeArgs { base, .. } => vec![*base],
         AK::Index { base, index } => vec![*base, *index],
         AK::Call { args, .. } => args.iter().map(|a| a.expr).collect(),

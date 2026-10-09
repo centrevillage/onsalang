@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// The candidates of E0010 change the parentheses and nothing else (§18.1: an edit replaces only the
+// token it changes, and the tokens and comments between are not in its range). So a chain that
+// continues over several lines after a binary operator (§2.5), with comment-only lines in it and a
+// comment at the end of a line, keeps its breaks, its comments and its indentation; a candidate
+// inserts `(` in front of the first token of an operand and `)` after the last token of an operand.
+
+pub fn broken_after_the_operator(w: U32, n: U32) -> U32 {
+  (w +                                //~ E0010
+    1) % n
+}
+
+pub fn comments_inside(w: U32, n: U32) -> U32 {
+  (w +                                //~ E0010
+    // the next index
+    1) % n // modulo the length
+}
+
+pub fn three_lines(a: U32, b: U32, c: U32, d: U32) -> U32 {
+  (a +                                //~ E0010
+    b) %
+    (c +
+    d)
+}
+
+pub fn in_a_condition(a: Bool, b: Bool, c: Bool) -> U32 {
+  if (a &&                            //~ E0010
+    b) || // second
+    c {
+    1
+  } else {
+    0
+  }
+}

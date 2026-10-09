@@ -538,10 +538,9 @@ impl<'a> Walker<'a> {
                 self.expr(range.hi, Pos::Other);
                 self.expr(*body, Pos::Other);
             }
-            ExprKind::Binary { operands, .. } => {
-                for &o in operands {
-                    self.expr(o, Pos::Other);
-                }
+            ExprKind::Binary { lhs, rhs, .. } => {
+                self.expr(*lhs, Pos::Other);
+                self.expr(*rhs, Pos::Other);
             }
             ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } | ExprKind::Try(expr) => {
                 self.expr(*expr, Pos::Other)

@@ -655,14 +655,11 @@ impl<'a> Checker<'a> {
                 shape.neg = true;
                 self.const_shape(*x, shape);
             }
-            ExprKind::Binary { operands, ops } => {
+            ExprKind::Binary { op, lhs, rhs, .. } => {
                 shape.ops = true;
-                shape.arith &= ops
-                    .iter()
-                    .all(|(op, _)| matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem));
-                for &o in operands {
-                    self.const_shape(o, shape);
-                }
+                shape.arith &= matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem);
+                self.const_shape(*lhs, shape);
+                self.const_shape(*rhs, shape);
             }
             _ => shape.leaves.push(e),
         }
@@ -1218,13 +1215,7 @@ impl<'a> Rater<'a> {
                 r
             }
             ExprKind::Closure { .. } | ExprKind::Handle { .. } => FlowRate::Const,
-            ExprKind::Binary { operands, .. } => {
-                let mut r = FlowRate::Const;
-                for &x in operands {
-                    r = r.max(self.rate(x)?);
-                }
-                r
-            }
+            ExprKind::Binary { lhs, rhs, .. } => self.rate(*lhs)?.max(self.rate(*rhs)?),
             ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => self.rate(*base)?,
             ExprKind::Index { base, index } => self.rate(*base)?.max(self.rate(*index)?),
             ExprKind::Par { body, .. } => self.rate_par(e, *body)?,
@@ -1550,7 +1541,7 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
             }
             v
         }
-        ExprKind::Binary { operands, .. } => operands.clone(),
+        ExprKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => vec![*base],
         ExprKind::Index { base, index } => vec![*base, *index],
         ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),

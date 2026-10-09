@@ -59,7 +59,7 @@
 
 // A chain of the same shift operator, written as the spec allows it (§3.1: in the bit group a chain of the
 // same operator is left associative, `x << a << b` is `(x << a) << b`), on a target that is built to C.
-// Today the parser reports E0010 for `a >> m >> n` (S-45), so the file waits for W3-07. The values:
+// The values:
 // `-128i8 >> 3` is -16 and `-16 >> 4` is -1; `1i16 << 7` is 128 and `128 << 8` is -32768 (the bit that
 // reaches the sign is kept, nothing panics); an amount of the bit width or more panics in either step.
 

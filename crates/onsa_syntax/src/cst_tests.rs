@@ -274,7 +274,8 @@ fn validate_finds_a_broken_tree() {
 
 // ---------------------------------------------------------------- positions
 
-/// Every AST node has the span of the CST node it was made from.
+/// Every AST node has the span of the CST node it was made from, but an
+/// operator inside a chain, which spans its operands inside the chain.
 fn check_spans(p: &crate::Parsed, name: &str) {
     let cst = &p.cst;
     let (ast, map) = (&p.ast, &p.map);
@@ -288,7 +289,12 @@ fn check_spans(p: &crate::Parsed, name: &str) {
     }
     for (i, e) in ast.exprs.iter().enumerate() {
         let n = map.exprs[i];
-        assert_eq!(cst.span(n), e.span, "{name}: expr {i} ({:?})", cst.kind(n));
+        let s = cst.span(n);
+        if cst.kind(n) == NodeKind::BinaryExpr && matches!(e.kind, crate::ast::ExprKind::Binary { .. }) {
+            assert!(s.start <= e.span.start && e.span.end <= s.end, "{name}: expr {i} inside its chain");
+            continue;
+        }
+        assert_eq!(s, e.span, "{name}: expr {i} ({:?})", cst.kind(n));
     }
     for (i, s) in ast.stmts.iter().enumerate() {
         assert_eq!(cst.span(map.stmts[i]), s.span, "{name}: stmt {i}");

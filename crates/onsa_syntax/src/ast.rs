@@ -1,6 +1,7 @@
 //! AST (D-02): nodes live in arenas inside [`Ast`] and refer to each other by
-//! id. Every node carries its [`Span`]. Binary expressions are kept as flat
-//! operand/operator lists; operator groups (E0010) are checked after parsing.
+//! id. Every node carries its [`Span`]. A chain of binary operators is the
+//! tree of §3.1 ([`Chain`], made once when the AST is made from the CST);
+//! its operator groups (E0010) are checked after parsing.
 
 use onsa_diag::Span;
 
@@ -569,6 +570,8 @@ pub enum BinOp {
 pub enum OpGroup {
     Additive,
     Multiplicative,
+    /// `%`, a group of its own (S-45).
+    Remainder,
     Comparison,
     And,
     Or,
@@ -578,21 +581,36 @@ pub enum OpGroup {
 impl OpGroup {
     /// The strengths of §3.1, the one table of them: whether an expression of
     /// this group may be, without parentheses, an operand of an operator of
-    /// `weaker` (multiplicative > additive > comparison > `&&`, `||`; `&&` and
-    /// `||` have none between them, the bitwise group none with any group).
-    /// The height of a chain (`Parser::chain_operator`, spec §2.5) reads it;
-    /// the check of the groups (E0010) is to read the same table (W3-07).
-    // The remainder group of §3.1 (`%`, stronger than comparison only) is
-    // still inside the multiplicative group here (W3-07, S-45).
+    /// `weaker` (multiplicative > additive > comparison > `&&`, `||`;
+    /// remainder > comparison; `&&` and `||` have none between them, the
+    /// remainder none with the additive and multiplicative groups, the
+    /// bitwise group none with any group). The table is closed under
+    /// transitivity. The tree of a chain ([`Chain`]: the AST, the height of
+    /// spec §2.5, the readings of E0010) and [`BinOp::takes`] read it.
     pub fn stronger(self, weaker: OpGroup) -> bool {
         use OpGroup::*;
         matches!(
             (self, weaker),
             (Multiplicative, Additive | Comparison | And | Or)
                 | (Additive, Comparison | And | Or)
+                | (Remainder, Comparison | And | Or)
                 | (Comparison, And | Or)
         )
     }
+
+    /// Whether `a op b op c` of one group is allowed (§3.1 table): every
+    /// group but comparison and bitwise; in the bitwise group, the same
+    /// operator only ([`BinOp::takes`]).
+    fn chains(self) -> bool {
+        !matches!(self, OpGroup::Comparison | OpGroup::Bitwise)
+    }
+}
+
+/// The side of an operand of a binary operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Left,
+    Right,
 }
 
 impl BinOp {
@@ -600,7 +618,8 @@ impl BinOp {
         use BinOp::*;
         match self {
             Add | Sub | WrapAdd | WrapSub | SatAdd | SatSub => OpGroup::Additive,
-            Mul | Div | Rem | WrapMul | SatMul => OpGroup::Multiplicative,
+            Mul | Div | WrapMul | SatMul => OpGroup::Multiplicative,
+            Rem => OpGroup::Remainder,
             Eq | Ne | Lt | Le | Gt | Ge => OpGroup::Comparison,
             And => OpGroup::And,
             Or => OpGroup::Or,
@@ -608,9 +627,15 @@ impl BinOp {
         }
     }
 
-    /// Whether `a op b op c` is allowed within the group (§3.1 table).
-    pub fn chains(self) -> bool {
-        !matches!(self.group(), OpGroup::Comparison | OpGroup::Bitwise)
+    /// Whether an operator node `child`, not in parentheses, may be the
+    /// operand on `side` of this operator (§3.1): its group is stronger, or
+    /// it is on the left, of the same group, and the group chains (in the
+    /// bitwise group, the same operator, S-61). The one judgment of an edge
+    /// of the tree: E0010, the parentheses its candidates need, and the
+    /// parentheses `fmt` may remove read it.
+    pub fn takes(self, side: Side, child: BinOp) -> bool {
+        let (g, c) = (self.group(), child.group());
+        c.stronger(g) || (side == Side::Left && c == g && (g.chains() || (g == OpGroup::Bitwise && self == child)))
     }
 
     pub fn symbol(self) -> &'static str {
@@ -641,6 +666,60 @@ impl BinOp {
             Shl => "<<",
             Shr => ">>",
         }
+    }
+}
+
+/// A chain of binary operators read as a tree (§3.1): the shunting-yard
+/// algorithm, read from the left. The operators on the stack wait for their
+/// right operand, each in the right operand of the one below it; an
+/// operator closes the waiting ones it does not bind tighter than (left
+/// associativity; groups without a strength between them, E0010, are read
+/// left to right too). The one reading of a chain: the AST (`T` a node), the
+/// height of spec §2.5 the parser counts (`T` a height), and the readings of
+/// the candidates of E0010 (`tighter` a placement of strengths).
+pub struct Chain<T, O> {
+    /// The waiting operators, each with its left operand.
+    stack: Vec<(T, O)>,
+    /// The last operand, or the operators it closed.
+    current: T,
+}
+
+impl<T: Copy, O: Copy> Chain<T, O> {
+    pub fn new(first: T) -> Self {
+        Chain { stack: Vec::new(), current: first }
+    }
+
+    /// An operator `op` after the last operand: the waiting operators it does
+    /// not bind tighter than (`tighter(op, waiting)`) take the last operand
+    /// as their right one and close (`join(left, waiting, right)`). Returns
+    /// how many operators wait then, this one included, and its left operand.
+    pub fn operator(
+        &mut self,
+        op: O,
+        mut tighter: impl FnMut(O, O) -> bool,
+        mut join: impl FnMut(T, O, T) -> T,
+    ) -> (usize, T) {
+        while let Some(&(left, waiting)) = self.stack.last() {
+            if tighter(op, waiting) {
+                break;
+            }
+            self.current = join(left, waiting, self.current);
+            self.stack.pop();
+        }
+        self.stack.push((self.current, op));
+        (self.stack.len(), self.current)
+    }
+
+    pub fn operand(&mut self, operand: T) {
+        self.current = operand;
+    }
+
+    /// The whole chain: the waiting operators close.
+    pub fn finish(mut self, mut join: impl FnMut(T, O, T) -> T) -> T {
+        while let Some((left, op)) = self.stack.pop() {
+            self.current = join(left, op, self.current);
+        }
+        self.current
     }
 }
 
@@ -755,10 +834,13 @@ pub enum ExprKind {
         range: RangeHead,
         body: ExprId,
     },
-    /// Flat chain `operands[0] ops[0] operands[1] ops[1] ...` (groups checked later).
+    /// `lhs op rhs`: one operator of a chain, the chain read as the tree of
+    /// §3.1 ([`Chain`]; groups checked later, E0010).
     Binary {
-        operands: Vec<ExprId>,
-        ops: Vec<(BinOp, Span)>,
+        op: BinOp,
+        op_span: Span,
+        lhs: ExprId,
+        rhs: ExprId,
     },
     /// `e as T`
     Cast {

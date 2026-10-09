@@ -44,8 +44,6 @@ PI_NUM, PI_DEN = 314159265358979323846264338327950288419716939937510582097494, 1
 # delete the rule: the operations fall back to `scalar` on the next generation (the function names do
 # not change). Found by W2-01 on 2026-10-08.
 PENDING_PACKAGES = [
-    # E0010: `a * b + c` mixes the multiplicative and the additive group, which spec 3.1 allows (W3-07)
-    ("mixed", lambda o: o.name in ("expr_muladd", "expr_mulsub", "expr_interp")),
     # E0413: the checked methods after `checked_div` do not exist yet (W5-02)
     ("checked", lambda o: o.group == "int" and o.name in (
         "checked_rem", "checked_div_euclid", "checked_rem_euclid", "checked_shl", "checked_shr", "checked_neg")),

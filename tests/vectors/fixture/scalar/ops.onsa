@@ -1679,9 +1679,15 @@ pub fn f64_to_bits(a: F64) -> U64 { a.to_bits() }
 
 pub fn f64_from_bits(a: U64) -> F64 { F64.from_bits(a) }
 
+pub fn f32_expr_muladd(a: F32, b: F32, c: F32) -> F32 { a * b + c }
+
+pub fn f32_expr_mulsub(a: F32, b: F32, c: F32) -> F32 { a * b - c }
+
 pub fn f32_expr_add3_l(a: F32, b: F32, c: F32) -> F32 { (a + b) + c }
 
 pub fn f32_expr_add3_r(a: F32, b: F32, c: F32) -> F32 { a + (b + c) }
+
+pub fn f32_expr_interp(a: F32, b: F32, c: F32) -> F32 { (1.0 - c) * a + c * b }
 
 pub fn f32_vdelay_k(d: F32, top: U32) -> U32 {
   let m  = top.round_f32()
@@ -1696,9 +1702,15 @@ pub fn f32_vdelay_f(d: F32, top: U32) -> F32 {
   dc - k.round_f32()
 }
 
+pub fn f64_expr_muladd(a: F64, b: F64, c: F64) -> F64 { a * b + c }
+
+pub fn f64_expr_mulsub(a: F64, b: F64, c: F64) -> F64 { a * b - c }
+
 pub fn f64_expr_add3_l(a: F64, b: F64, c: F64) -> F64 { (a + b) + c }
 
 pub fn f64_expr_add3_r(a: F64, b: F64, c: F64) -> F64 { a + (b + c) }
+
+pub fn f64_expr_interp(a: F64, b: F64, c: F64) -> F64 { (1.0 - c) * a + c * b }
 
 pub fn f64_vdelay_k(d: F64, top: U32) -> U32 {
   let m  = top as F64

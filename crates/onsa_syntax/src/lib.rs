@@ -69,6 +69,7 @@ pub fn diagnostic_contract(sources: &onsa_diag::SourceMap, diagnostics: &[onsa_d
 pub fn parse(file: FileId, text: &str) -> Parsed {
     let lexed = lex(file, text);
     let out = parser::Parser::new(file, text, lexed).parse_file();
+    let deepest = out.height;
     let cst = cst::build(out.tokens, out.events);
     if let Err(e) = cst.validate(text) {
         onsa_diag::internal::bug(Some(e.span), format!("the CST is broken: {}", e.message));
@@ -80,7 +81,7 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     // after it is the unit's syntax error: §18.1 ("the first in the text")
     // may not hold there until the recovery by statement (M7, T7-1) lowers
     // the statements before the error (accepted, 2026-10-08).
-    groups::check(&ast, text, &mut diagnostics);
+    groups::check(&ast, text, deepest, &mut diagnostics);
     naming::check(&ast, &mut diagnostics);
     let units = units::build(&cst, &map, text, &diagnostics, &mut ast);
     Parsed { ast, cst, map, diagnostics, units, levels: out.levels }
