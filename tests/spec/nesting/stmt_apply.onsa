@@ -4,7 +4,7 @@
 // spec = ["§6.1"]
 
 // The helper of `nested_functions` in `tests/spec/negative/nesting_stmt.onsa` (W3-14): a function that
-// calls its function value with `f.(x)`. Split from that file so that its E0006 cases run before W3-07
+// calls its function value with `f.(x)`. Split from that file so that its E0006 cases run before W3-20
 // reads `.(`; the expectation is the one it had there (no diagnostic).
 
 pub fn apply(f: fn(I32) -> I32, x: I32) -> I32 { f.(x) }

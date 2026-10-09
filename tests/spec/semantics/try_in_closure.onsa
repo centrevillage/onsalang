@@ -14,7 +14,7 @@
 // The anonymous functions here are called with `.(` (§6.1), as a local binding, as an
 // argument of a function-typed parameter and as an argument that is written in place.
 // The anonymous functions passed to `array.from_fn` are in closure_exit_from_fn.onsa.
-// The call `f.(x)` is read from W3-07 and function values are lowered from W8-09, so
+// The call `f.(x)` is read from W3-20 and function values are lowered from W8-09, so
 // this file waits for both.
 
 pub enum ParseError {

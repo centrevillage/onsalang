@@ -2142,7 +2142,7 @@ fn block_comment(c: &Cursor) -> Option<Hit> {
 // ------------------------------------------------------------ float patterns
 
 /// What a hole of a pattern tests, once it is a name of the guard (S-317).
-/// The ranges of patterns (S-249, W3-07) are the next kind of hole.
+/// The ranges of patterns (S-249, W3-21) are the next kind of hole.
 #[derive(Clone)]
 enum Test {
     /// `name == <literal>`: a float literal.

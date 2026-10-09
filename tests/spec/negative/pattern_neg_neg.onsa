@@ -5,7 +5,7 @@
 // E0002: the integer literal of a pattern takes one `-` written directly on it, parentheses
 // between them not seen. `-(-1)` is not a literal (the outer `-` would be a negation of a
 // value, which a pattern does not compute), so it cannot be written (spec §7; S-227). The
-// message text is W3-07's (R-156); the code is E0002. One error per function (P-01).
+// message text is W3-21's (R-156); the code is E0002. One error per function (P-01).
 
 pub struct Point {
   x: I8,

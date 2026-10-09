@@ -7,7 +7,7 @@
 // method (§4.5, §6.1, §18.1): `::[` cannot be written there, so the one candidate drops the type
 // arguments and calls the function value with `.(` (the type of a function value is not generic, so
 // dropping them changes no type). The syntax alone decides, as for `(s.f)(x)` in
-// tests/spec/fixes/e0020_call_forms_syntax.onsa. The candidate writes `.(` (§6.1, W3-07).
+// tests/spec/fixes/e0020_call_forms_syntax.onsa. The candidate writes `.(` (§6.1, W3-20).
 
 pub struct Shaper {
   gain: F32,

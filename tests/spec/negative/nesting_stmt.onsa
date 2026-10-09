@@ -8,7 +8,7 @@
 // patterns (280 deep: enum, tuple, struct, parenthesized). §2.5 counts blocks and `else if` chains.
 
 // `nested_functions` calls `apply(f, x)`, which calls its function value with `f.(x)` (§6.1, read
-// from W3-07): it is declared in `tests/spec/nesting/stmt_apply.onsa`, so that this file runs now.
+// from W3-20): it is declared in `tests/spec/nesting/stmt_apply.onsa`, so that this file runs now.
 // The unit stops at its E0006 before names are resolved (§18.1), so the name needs no declaration here.
 
 pub struct Wrap[T] { v: T }

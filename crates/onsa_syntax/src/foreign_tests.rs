@@ -132,7 +132,7 @@ fn type_args_in_an_expression() {
     // Turbofish: the nested brackets, the `>>` one edit (S-248).
     e0020(&body("  id::<Option<U8>>(None)"), &body("  id::[Option[U8]](None)"));
     e0020(&body("  t.0::<U8>(1)"), &body("  t.0::[U8](1)"));
-    // After an expression that is no path: the call of the value (`.(` is W3-07's).
+    // After an expression that is no path: the call of the value (`.(` is W3-20's).
     assert_eq!(fixed(&body("  (s.f)::<U8>(1)")), body("  s.f.(1)"));
     assert_eq!(fixed(&body("  g(x)::<U8>(1)")), body("  g(x).(1)"));
     assert_eq!(fixed(&body("  (a + b)<U8>(1)")), body("  (a + b).(1)"));
@@ -191,7 +191,7 @@ fn type_args_before_a_call_whatever_follows() {
         e0020(&body(src), &body(want));
     }
     // A value before the list: the call with `.(`, the blanks before the list
-    // too (`.(` is read from W3-07).
+    // too (`.(` is read from W3-20).
     for (src, want) in [
         ("  (s.f)<T, U>(x)", "  s.f.(x)"),
         ("  g(x)<T, U>(y)", "  g(x).(y)"),
