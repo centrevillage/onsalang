@@ -3022,7 +3022,7 @@ Fable は、下書きの「今の実装」（括弧の中の行末の `.` が通
   - データのファイル: `clock_in_type` の行に例を一つ（クロックの無い flow の入力の関数型、候補は括弧で囲む形）。
   - 作業: W3-09（作業ツリーの `parser.rs` の関数型の返り値を `parse_type` にし、`SPEC-GAP(S-367)` を外す。`foreign/flow.rs` の `in_type` に、移す先の型が効果行の無い関数型なら括弧で囲む分岐、約 10〜20 行。否定例に 4 件（flow の入力、フィールド、fn の引数、`uses` が続く fn の返り値）と fixes の事例 1 件）。interface の括弧は flow の署名を出す回（W3-10 か W7。`TyStore::parens_before_uses` を `at` にも、約 5 行）。fmt はこの括弧を外さない（S-339 の基準、W3-12）。
   - 作業ツリーのテストの期待値: W3-09/i の `crates/onsa_cli/tests/flow_syntax_decisions.rs` の冒頭の「仕様が開けている形」から S-367 を外す。`tests/cst/err_flow_syntax.onsa` の無名関数の見出しは変わらない。(a) なら W3-09/i のまま。テストベクトルの保留の節は関係しない。
-- 回答:
+- 回答: (b)（2026-10-09、利用者が ID を挙げて了承）
 
 ### S-369 括弧の中の、空白を空けない位置の改行
 
