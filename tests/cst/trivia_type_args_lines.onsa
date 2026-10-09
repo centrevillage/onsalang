@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§4.5"]
+
+// A list of type arguments in an expression over several lines (§2.5, §4.5): the brackets of the
+// list take a newline as a space, so the syntax stage reads it with no diagnostic
+// (`onsa_syntax::cst_tests::a_list_of_type_arguments_over_several_lines_is_read`). The normal form
+// `onsa fmt` writes for it is not decided yet (S-328), so the file is out of the fmt checks
+// (mode = "none") and is an input of the CST round trip. Moved from
+// tests/spec/types/type_args_syntax.onsa (W3-19).
+
+pub fn across_lines() -> U32 {
+  let p = pair::[
+    U8,
+    F32
+  ](1, 2.0)
+  let r = Rg::[
+    F32,
+    4,
+  ].CAP
+  r
+}

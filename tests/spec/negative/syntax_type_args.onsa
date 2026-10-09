@@ -1,0 +1,145 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§4.5", "§18.1"]
+
+// E0002: the places where `::[…]` cannot be read (§4.5, §2.5, §2.6). The syntax cannot say what the
+// writer meant, so there is no candidate. One error per function (or per member / item, §18.1), and
+// the functions around it are checked on their own.
+//
+// The forms that are read (§4.5) are in tests/spec/types/type_args_syntax.onsa, the forms of other
+// languages (E0020) in tests/spec/fixes/e0020_type_args_*.onsa.
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn on_a_method_declaration::[T](self, x: T) -> T {   //~ E0002
+    x
+  }
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+// After an expression that is not a path of names (§4.5).
+pub fn after_a_parenthesis(x: I32) -> I32 {
+  (id)::[I32](x)                                    //~ E0002
+}
+
+pub fn after_a_call(x: I32) -> I32 {
+  id(x)::[I32](x)                                   //~ E0002
+}
+
+pub fn after_a_method_call(v: V, x: I32) -> I32 {
+  v.conv(x)::[I32](x)                               //~ E0002
+}
+
+pub fn after_a_literal() -> I32 {
+  1::[I32]                                          //~ E0002
+}
+
+pub fn after_a_string() -> Str {
+  "s"::[Str]                                        //~ E0002
+}
+
+pub fn after_a_question_mark(o: Option[I32]) -> Option[I32] {
+  Some(o?::[I32](1))                                //~ E0002
+}
+
+// A line does not continue with `::` (§2.5): only a line that starts with `.` continues the previous one.
+pub fn at_the_start_of_a_line(x: I32) -> I32 {
+  let f = id
+  ::[I32](x)                                        //~ E0002
+}
+
+pub fn at_the_start_of_a_line_after_a_call(x: I32) -> I32 {
+  id(x)
+  ::[I32]                                           //~ E0002
+}
+
+// The type parameters of a declaration are written in `[…]` after the name (§4.5), never `::[…]`.
+pub fn on_a_function_declaration::[T](x: T) -> T {  //~ E0002
+  x
+}
+
+pub struct OnAStructDeclaration::[T] {              //~ E0002
+  value: T,
+}
+
+pub enum OnAnEnumDeclaration::[T] {                 //~ E0002
+  A(T),
+  B,
+}
+
+// An empty list (§4.5): the same as an empty list of a type's arguments.
+pub fn empty_list() -> I32 {
+  id::[](1)                                         //~ E0002
+}
+
+pub fn empty_list_of_a_type() -> U32 {
+  Buf::[].zeroed(4).len()                           //~ E0002
+}
+
+pub fn empty_list_of_a_method(v: V) -> I32 {
+  v.conv::[](1)                                     //~ E0002
+}
+
+// Not a list of types: no comma between the elements, a comma with nothing before it.
+pub fn missing_comma() -> I32 {
+  id::[I32 U8](1)                                   //~ E0002
+}
+
+pub fn comma_alone() -> I32 {
+  id::[,](1)                                        //~ E0002
+}
+
+pub fn two_commas() -> I32 {
+  id::[I32,, U8](1)                                 //~ E0002
+}
+
+// A pattern takes no type arguments: the type comes from the matched value (§4.5).
+pub fn none_in_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    None::[I32] => 0,                               //~ E0002
+    Some(n) => n,
+  }
+}
+
+pub fn some_in_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Some::[I32](n) => n,                            //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn variant_of_an_enum_in_a_pattern(e: E[I32]) -> I32 {
+  match e {
+    E::[I32].B => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn in_a_binding_pattern(t: (I32, I32)) -> I32 {
+  let (a::[I32], b) = t                             //~ E0002
+  b
+}
+
+// `!` goes after the list, directly before the `(` (§2.6).
+pub fn bang_before_the_list(inout v: V, x: I32) {
+  v.conv!::[I32](x)                                 //~ E0002
+}
+
+pub fn fine(x: I32) -> I32 {
+  id(x)
+}

@@ -151,6 +151,7 @@ fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
         | ExprKind::Move(x)
         | ExprKind::Field { base: x, .. }
         | ExprKind::TupleIndex { base: x, .. }
+        | ExprKind::TypeArgs { base: x, .. }
         | ExprKind::Unsafe(x) => out.push(*x),
         ExprKind::Tuple(xs) | ExprKind::Array(xs) => out.extend(xs.iter().copied()),
         ExprKind::Repeat { elem, len } => out.extend([*elem, *len]),

@@ -269,7 +269,7 @@ origin = "Rust"
 stage = "syntax"
 code = "E0020"
 spec = ["15.1", "18.1"]
-rule = "経路の区切りは `.` である（`F32.PI`、`std.math`）。一つの経路の全ての `::` は一つの誤りで、一つの候補が全てを直す"
+rule = "経路の区切りは `.` である（`F32.PI`、`std.math`）。一つの経路の全ての `::`（`[` が続かない `::`。`::[…]` の前後を問わない）は一つの誤りで、一つの候補が全てを直す"
 
 [[form.example]]
 source = '''
@@ -2920,6 +2920,10 @@ pub fn f() -> I32 {
 '''
 
 # ---- 式の中の型引数（§4.5）。書き方は `名前::[…]`。他言語の形は `::[…]` への構文上の編集を候補にする ----
+#
+# 候補の並べ方（S-315）: `P<…>(…)` は `::[…]` の候補（総称の呼び出しの読み）を先、比較の連鎖の候補を後に並べる
+# （S-256）。比較の連鎖の候補は §18.1 の条件（中央の被演算子が名前・リテラル・フィールドの経路）のときだけで、
+# `,` を含む並びは連鎖でないので `::[…]` の候補だけ。呼び先が名前の経路でもメソッドでもない形は `.(` の一つの候補（S-277）。
 
 [[form]]
 id = "type_args_turbofish"
@@ -2928,7 +2932,7 @@ origin = "Rust"
 stage = "syntax"
 code = "E0020"
 spec = ["4.5", "18.1"]
-rule = "式の中の型引数は `名前::[…]` と書く（`[` だけでは添字）。`::<…>` は `::[…]` にする"
+rule = "式の中の型引数は `名前::[…]` と書く（`[` だけでは添字）。`::<…>` は `::[…]` にする。入れ子の括弧（`>>`）は一つの誤り"
 
 [[form.example]]
 source = '''
@@ -2951,6 +2955,97 @@ pub fn f() -> U8 {
 }
 ''']
 
+# メソッド。`::` は経路の区切りではない（次のトークンが `<`）。
+[[form.example]]
+source = '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv::<I32>(1)
+}
+'''
+at = "12:9"
+fixed = ['''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv::[I32](1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair::<U8, F32>(1, 2.0)
+}
+'''
+at = "6:7"
+fixed = ['''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair::[U8, F32](1, 2.0)
+}
+''']
+
+# 入れ子の括弧 `>>` は一つのトークンで、`]]` に置き換える（一つの型引数の並びの入れ子の括弧は一つの誤り、S-248）。
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> Option[U8] {
+  id::<Option<U8>>(None)
+}
+'''
+at = "6:5"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> Option[U8] {
+  id::[Option[U8]](None)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  std.conv.parse::<I32>("3")
+}
+'''
+at = "2:17"
+fixed = ['''
+pub fn f() -> I32 {
+  std.conv.parse::[I32]("3")
+}
+''']
+
+# `f<T>(x)` は比較の連鎖の E0010 にしない（`>` の次が `(`）。候補は `::[…]` を先、比較の連鎖を後に並べる。
 [[form]]
 id = "type_args_angle"
 kind = "foreign"
@@ -2979,9 +3074,166 @@ pub fn id[T](x: T) -> T {
 pub fn f() -> U8 {
   id::[U8](250)
 }
+''', '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id < U8 && U8 > (250)
+}
 ''']
 
-# 名前の経路に付けた `[…]` は名前の段（添字として読めない `[…]` は構文の段）。
+# `,` を含む並びは比較の連鎖でない。候補は `::[…]` だけ。
+[[form.example]]
+source = '''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair<U8, F32>(1, 2.0)
+}
+'''
+at = "6:7"
+fixed = ['''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair::[U8, F32](1, 2.0)
+}
+''']
+
+# メソッド（呼び先が名前の経路）。
+[[form.example]]
+source = '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv<I32>(1)
+}
+'''
+at = "12:9"
+fixed = ['''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv::[I32](1)
+}
+''', '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv < I32 && I32 > (1)
+}
+''']
+
+# `,` を含む `[…]` は添字として読めない。構文の段（読みが一つに決まる最初の段）。名前の経路に付けた添字として
+# 読める `[…]`（`id[U8](250)`）は名前の段（次の行 `type_args_square`）。
+[[form]]
+id = "type_args_square_comma"
+kind = "foreign"
+origin = "Scala と Go"
+stage = "syntax"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "式の中の型引数は `名前::[…]` と書く。`,` を含む `[…]` は添字として読めないので、構文の段で `[` の前に `::` を挿す"
+
+[[form.example]]
+source = '''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair[U8, F32](1, 2.0)
+}
+'''
+at = "6:7"
+fixed = ['''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair::[U8, F32](1, 2.0)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U32 {
+  Rg[F32, 4].CAP
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f() -> U32 {
+  Rg::[F32, 4].CAP
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv2[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv2[I32, F32](1, 2.0)
+}
+'''
+at = "12:10"
+fixed = ['''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv2[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv2::[I32, F32](1, 2.0)
+}
+''']
+
+# 名前の経路に付けた `[…]` のうち、添字として読めるもの（`,` を含まない）は名前の段。`,` を含むもの（`pair[U8, F32](1, 2.0)`）は
+# 構文の段の行 `type_args_square_comma`（上）。
 [[form]]
 id = "type_args_square"
 kind = "foreign"
@@ -3068,7 +3320,8 @@ pub fn f(v: V) -> I32 {
 ''']
 
 # 呼び先が名前の経路でもメソッドでもない形には `::[` を書けない。型引数を除いて `.(` で呼ぶ形を候補にする
-# （関数値の型は総称でないので、除いても型は変わらない）。
+# （関数値の型は総称でないので、除いても型は変わらない）。候補は一つ（比較の連鎖の候補は無い、S-277）。
+# 候補の `.(` は W3-07 が読めるようにする。
 [[form]]
 id = "type_args_on_expression"
 kind = "foreign"
@@ -3076,7 +3329,7 @@ origin = "Rust"
 stage = "syntax"
 code = "E0020"
 spec = ["4.5", "6.1", "18.1"]
-rule = "関数値は `.(` で呼ぶ。名前の経路でない呼び先に型引数は書けない"
+rule = "関数値は `.(` で呼ぶ。名前の経路でもメソッドでもない呼び先に型引数は書けない"
 
 [[form.example]]
 source = '''
@@ -3106,6 +3359,77 @@ pub fn f() -> I32 {
 }
 ''']
 
+[[form.example]]
+source = '''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  inc
+}
+
+pub fn f() -> I32 {
+  pick(true)<I32>(5)
+}
+'''
+fixed = ['''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  inc
+}
+
+pub fn f() -> I32 {
+  pick(true).(5)
+}
+''']
+
+# `(e)<I32>(x)` は `e.(x)`（かっこを外す）。
+[[form.example]]
+source = '''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn f() -> I32 {
+  (inc)<I32>(5)
+}
+'''
+fixed = ['''
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn f() -> I32 {
+  inc.(5)
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn f(s: Shaper, x: F32) -> F32 {
+  (s.curve)<F32>(x)
+}
+'''
+fixed = ['''
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn f(s: Shaper, x: F32) -> F32 {
+  s.curve.(x)
+}
+''']
+
 # 型の位置では型引数は今どおり `[…]` で、印の `::` は式の中だけに要る。
 [[form]]
 id = "type_position_path"
@@ -3126,6 +3450,188 @@ at = "1:16"
 fixed = ['''
 pub fn f(b: Buf[F32]) -> U32 {
   b.len()
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> Buf::[F32] {
+  Buf.zeroed(4)
+}
+'''
+at = "1:18"
+fixed = ['''
+pub fn f() -> Buf[F32] {
+  Buf.zeroed(4)
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct H {
+  data: Buf::[F32],
+}
+'''
+at = "2:12"
+fixed = ['''
+pub struct H {
+  data: Buf[F32],
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[Buf::[F32]]) -> U32 {
+  1
+}
+'''
+at = "1:23"
+fixed = ['''
+pub fn f(o: Option[Buf[F32]]) -> U32 {
+  1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> Rg::[F32, 4] {
+  Rg.zeroed()
+}
+'''
+at = "1:17"
+fixed = ['''
+pub fn f() -> Rg[F32, 4] {
+  Rg.zeroed()
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct W[T] {
+  value: T,
+}
+
+impl[T] W::[T] {
+  pub fn get(self) -> T {
+    self.value
+  }
+}
+'''
+at = "5:10"
+fixed = ['''
+pub struct W[T] {
+  value: T,
+}
+
+impl[T] W[T] {
+  pub fn get(self) -> T {
+    self.value
+  }
+}
+''']
+
+# 式の中の並びの要素も型の位置（並びの要素は型の位置の並びと同じに読む、§4.5）。
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> Option[I32] {
+  id::[Option::[I32]](None)
+}
+'''
+at = "6:14"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> Option[I32] {
+  id::[Option[I32]](None)
+}
+''']
+
+# 式の中の型引数の印 `::[` の中の空白（名前と `::` の間、`::` と `[` の間、§2.5、§4.5、S-239）。候補は空白を除く。
+# 改行は別の形（行頭の `::` は E0002、`::` の後の改行は S-327）。並びと `!` の間の空白は `space_before_bang` の行。
+[[form]]
+id = "space_in_type_args_mark"
+kind = "foreign"
+origin = "Rust と C++（経路の `::` の前後の空白）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "4.5", "18.1"]
+rule = "式の中の型引数は `名前::[…]` と書き、名前と `::` の間と `::` と `[` の間に空白を空けない"
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id ::[U8](250)
+}
+'''
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id:: [U8](250)
+}
+'''
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250)
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv ::[I32](1)
+}
+'''
+fixed = ['''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv::[I32](1)
 }
 ''']
 

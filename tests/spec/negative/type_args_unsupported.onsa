@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// E0200 for a type argument written in an expression (`name::[…]`, §4.5), from W3-19 (the syntax) to
+// W4-13 (the name and type stages). The syntax stage reads the list into the tree. Until the later
+// stages instantiate the item, the stage that meets a name with a list says E0200 (§18.1): the
+// compiler neither drops the list nor accepts the program as if it were not there (R-81).
+//
+// W4-13 removes this file: after it the same programs check, and their errors (E0412, E0308, E0406,
+// E0416) are in the cases of W4-13.
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub struct Pr[T] {
+  a: T,
+}
+
+impl[T] Pr[T] {
+  pub fn make(a: T) -> Pr[T] {
+    Pr { a: a }
+  }
+
+  pub fn first[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn on_a_function() -> U8 {
+  id::[U8](250)                                     //~ E0200
+}
+
+pub fn on_an_associated_function() -> Pr[U8] {
+  Pr::[U8].make(250)                                //~ E0200
+}
+
+pub fn on_a_struct_literal() -> Pr[U8] {
+  Pr::[U8] { a: 250 }                               //~ E0200
+}
+
+pub fn on_a_method(p: Pr[U8]) -> I32 {
+  p.first::[I32](1)                                 //~ E0200
+}
+
+pub fn on_a_prelude_variant() -> Option[I32] {
+  None::[I32]                                       //~ E0200
+}
+
+pub fn on_a_value() -> U8 {
+  let g = id::[U8]                                  //~ E0200
+  1
+}
+
+pub fn without_a_list(x: U8) -> U8 {
+  id(x)
+}

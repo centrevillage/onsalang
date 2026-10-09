@@ -589,12 +589,33 @@ impl<'a> Fmt<'a> {
     }
 
     fn path(&mut self, p: &Path) {
+        self.path_with_args(p, &[]);
+    }
+
+    /// A path with the `::[…]` written after its names (a struct literal).
+    fn path_with_args(&mut self, p: &Path, lists: &[(usize, TypeArgList)]) {
         for (i, s) in p.segments.iter().enumerate() {
             if i > 0 {
                 self.push(".");
             }
             self.push(&s.name);
+            for (_, l) in lists.iter().filter(|(at, _)| *at == i) {
+                self.type_arg_list(l);
+            }
         }
+    }
+
+    /// `::[A, B]` (§4.5, docs/onsa-tools.md §3.2): no space around `::[`, the
+    /// elements as in a type's list.
+    fn type_arg_list(&mut self, l: &TypeArgList) {
+        self.push("::[");
+        for (i, &a) in l.args.iter().enumerate() {
+            if i > 0 {
+                self.push(", ");
+            }
+            self.ty(a);
+        }
+        self.push("]");
     }
 
     // ------------------------------------------------------------ types
@@ -937,8 +958,8 @@ impl<'a> Fmt<'a> {
                 self.expr(*len);
                 self.push("]");
             }
-            ExprKind::Struct { path, fields } => {
-                self.path(path);
+            ExprKind::Struct { path, type_args, fields } => {
+                self.path_with_args(path, type_args);
                 self.push(" ");
                 let open = self.find_char(path.span.end, '{');
                 let items: Vec<Elem<'_, 'a>> = fields
@@ -1088,6 +1109,10 @@ impl<'a> Fmt<'a> {
                 self.dot_break(*base, name.span.start);
                 self.push(".");
                 self.push(&name.name);
+            }
+            ExprKind::TypeArgs { base, args } => {
+                self.expr(*base);
+                self.type_arg_list(args);
             }
             ExprKind::TupleIndex { base, index, index_span } => {
                 self.expr(*base);

@@ -2406,10 +2406,10 @@ note = "fix-same-place: fix|E0812|remove `…`|E0302。flow の中の or~(0) の
 
 [[pending]]
 kind = "fuzz-input"
-target = "tests/fuzz/2abf12eb.onsa"
+target = "tests/fuzz/847b5cf3.onsa"
 reasons = ["S-101", "S-236"]
 until = "W7-04"
-note = "fix-same-place: fix|E0812|remove `…`|E0401。fn の中の flow の呼び出し lp~(x) は §11.5 で E0821（候補なし）。今は E0812 で ~ を除く候補を出し、関数でないものの呼び出しの E0401 になる"
+note = "fix-same-place: fix|E0812|remove `…`|E0401。fn の中の flow の呼び出し lp~(x) は §11.5 で E0821（候補なし）。今は E0812 で ~ を除く候補を出し、関数でないものの呼び出しの E0401 になる。W3-19 で 2abf12eb.onsa の g[] が空の並びの E0002 になったので、g[2] の入力に付け替えた"
 
 # --- W2-09/i: 新しい種（tests/spec/c_runtime/ の W2-09/t の事例）で変異が変わり、ファズが見つけた修正候補の型（2026-10-08。親が R を登録して付け替える）
 
@@ -2630,17 +2630,10 @@ note = "範囲の書き方"
 
 [[pending]]
 kind = "foreign-form"
-target = "type_args_turbofish"
-reasons = ["S-239", "S-277"]
-until = "W3-19"
-note = "式の中の型引数 ::[…]（構文の段）"
-
-[[pending]]
-kind = "foreign-form"
 target = "type_args_angle"
-reasons = ["S-239", "S-277"]
-until = "W3-19"
-note = "式の中の型引数 ::[…]（構文の段）"
+reasons = ["S-239", "S-277", "S-45"]
+until = "W3-07"
+note = "二つ目の候補（比較の連鎖 f < T && T > (x)）を当てた後、groups.rs が比較と && の混在を E0010 にする（W3-07 が §3.1 の強弱に直す）"
 
 [[pending]]
 kind = "foreign-form"
@@ -2659,16 +2652,9 @@ note = "メソッドに付けた [...] の型引数（型の段）"
 [[pending]]
 kind = "foreign-form"
 target = "type_args_on_expression"
-reasons = ["S-239", "S-277"]
-until = "W3-19"
-note = "式の中の型引数 ::[…]（構文の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "type_position_path"
-reasons = ["S-239", "S-277"]
-until = "W3-19"
-note = "式の中の型引数 ::[…]（構文の段）"
+reasons = ["S-239", "S-277", "S-191"]
+until = "W3-07"
+note = "候補の .( を W3-07 が読むまで、候補を当てた後の検査が E0002 になる"
 
 [[pending]]
 kind = "foreign-form"
@@ -2816,3 +2802,83 @@ target = "tests/spec/values/move_assign.onsa"
 reasons = ["R-191"]
 until = "W4-07"
 note = "move の引数と move self への代入が E0701（§5.1 の E0701 は let と借用の引数だけ）"
+
+# --- W3-19: 式の中の型引数 `::[…]`。W3-19 で通らない事例（W3-19/t の事例。W3-19/i の報告）。
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_callee.onsa:26:13 E0020 fix1"
+reasons = ["S-239", "S-277", "S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-07 が読む"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_callee.onsa:30:13 E0020 fix1"
+reasons = ["S-239", "S-277", "S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-07 が読む"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_callee.onsa:34:8 E0020 fix1"
+reasons = ["S-239", "S-277", "S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-07 が読む"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_callee.onsa:38:12 E0020 fix1"
+reasons = ["S-239", "S-277", "S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-07 が読む"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_callee.onsa:42:12 E0020 fix1"
+reasons = ["S-239", "S-277", "S-191"]
+until = "W3-07"
+note = "呼び先が名前の経路でもメソッドでもない型引数の E0020。候補の .( を W3-07 が読む"
+
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_type_args_spacing_bang.onsa"
+reasons = ["S-239", "S-203"]
+until = "W3-06"
+note = "並びと ! の間の空白 v.push::[F32] !(x) は space_before_bang の行（W3-06）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_angle.onsa:41:5 E0020 fix2"
+reasons = ["S-256", "S-45"]
+until = "W3-07"
+note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_angle.onsa:45:13 E0020 fix2"
+reasons = ["S-256", "S-45"]
+until = "W3-07"
+note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_angle.onsa:50:10 E0020 fix2"
+reasons = ["S-256", "S-45"]
+until = "W3-07"
+note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_angle.onsa:54:9 E0020 fix2"
+reasons = ["S-256", "S-45"]
+until = "W3-07"
+note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_type_args_angle.onsa:58:13 E0020 fix2"
+reasons = ["S-256", "S-45"]
+until = "W3-07"
+note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"

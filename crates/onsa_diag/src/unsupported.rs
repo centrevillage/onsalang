@@ -118,6 +118,9 @@ features! {
     OrPatternBindings: Language, "or-patterns with bindings", Some("write one arm for each alternative");
     Closures: Language, "anonymous functions anywhere but as the argument of `array.from_fn`", None;
     FnValues: Language, "function values", None;
+    /// S-239: the syntax reads `name::[…]` (W3-19); the name and type stages
+    /// give the list to the item from W4-13.
+    TypeArgsInExpressions: Language, "instantiating an item with type arguments written in an expression (`name::[…]`)", None;
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
     FromFnValue: Language, "`array.from_fn` with a non-literal function value",

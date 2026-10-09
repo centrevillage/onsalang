@@ -156,7 +156,7 @@ pub enum NodeKind {
     PathType,
     /// `[ (Type | ConstArg), ... ]`
     TypeArgs,
-    /// `-? Int`
+    /// `Expr`: a constant expression that is not a type (§4.5)
     ConstArg,
     /// `( )`
     UnitType,
@@ -242,11 +242,13 @@ pub enum NodeKind {
     FieldExpr,
     /// `Expr . Int`
     TupleIndexExpr,
+    /// `(PathExpr | FieldExpr | TupleIndexExpr) :: TypeArgs` (§4.5)
+    TypeArgsExpr,
     /// `Expr [ Expr ]`
     IndexExpr,
     /// `Expr ?`
     TryExpr,
-    /// `(PathExpr | FieldExpr) StructLitFields`
+    /// `(PathExpr | FieldExpr | TypeArgsExpr) StructLitFields`
     StructLit,
     /// `{ StructLitField, ... }`
     StructLitFields,
@@ -366,6 +368,7 @@ impl NodeKind {
             Arg => "Arg",
             FieldExpr => "FieldExpr",
             TupleIndexExpr => "TupleIndexExpr",
+            TypeArgsExpr => "TypeArgsExpr",
             IndexExpr => "IndexExpr",
             TryExpr => "TryExpr",
             StructLit => "StructLit",

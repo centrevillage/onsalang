@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.5"]
+
+// A const argument is a constant expression (§4.5): integer literals, names of constants, the
+// arithmetic operators and parentheses, and a prefix `-`. The syntax stage reads such an expression
+// wherever a type's argument list is read, in a type position and in the `::[…]` of an expression
+// ("the elements of the list read like the elements of a list of a type's arguments"). Whether the
+// expression is a constant of type `U32` is for the type stage (E0401, E0417), so a call
+// (`size(3)`, E0417) and a negative number (`-1`, E0401) are read here as well.
+//
+// The type-position part of this file is read by the same code as `::[…]` and does not depend on it.
+// The file is read by the parser only (mode = "parse"). The operators of one argument are of one group
+// here: mixing groups (`TABLE_SIZE * 2 + 1`) is the rule of §3.1 (W3-07).
+
+pub fn in_a_parameter(r: Rg[F32, 2 * 4]) -> U32 {
+  1
+}
+
+pub fn in_a_result() -> Rg[F32, TABLE_SIZE * 2] {
+  Rg.zeroed()
+}
+
+pub fn in_a_tuple(t: (Rg[F32, (1 + 2) * 3], U8)) -> U8 {
+  t.1
+}
+
+pub fn in_an_annotation() -> U32 {
+  let r: Rg[F32, 7 % 4] = Rg.zeroed()
+  1
+}
+
+pub fn qualified_names(a: Rg[F32, cfg.N + 1], b: Rg[F32, I32.BITS / 2]) -> U32 {
+  1
+}
+
+pub fn a_call_is_read(r: Rg[F32, size(3)]) -> U32 {
+  1
+}
+
+pub fn in_an_expression() -> U32 {
+  let a = Rg::[F32, 2 * 4].CAP
+  let b = Rg::[F32, (1 + 2)].CAP
+  let c = Rg::[F32, TABLE_SIZE + 1].CAP
+  let d = Rg::[F32, cfg.N - 1].CAP
+  let e = Rg::[F32, 7 % 4].CAP
+  let f = Rg::[F32, 8 / 2].CAP
+  let g = Rg::[F32, -(1)].CAP
+  let h = Rg::[F32, size(3)].CAP
+  let i = pair::[U8, 2 * 3](1, 2)
+  a
+}

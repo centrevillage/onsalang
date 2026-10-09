@@ -11,9 +11,7 @@
 //! item whose name was not read has no AST (a unit of `crate::units` only).
 //!
 //! The span of an AST node is the span of the CST node it is made from
-//! ([`Cst::span`]), except one span kept from the parser before the CST
-//! (marked `SPAN-QUIRK` below): the literal of a negative const argument has
-//! the span of its digits.
+//! ([`Cst::span`]).
 
 use onsa_diag::Span;
 
@@ -24,10 +22,6 @@ use crate::token::TokenKind;
 /// From each AST node to the CST node it was made from (same indices as the
 /// arenas of [`Ast`]). The parts of the AST that are not arena nodes (`Ident`,
 /// `Path`, `Param`, ...) are found with [`Cst::covering_nodes`].
-///
-/// The node pointed at is not always a node of the same sort: the literal
-/// and the negation of a const argument and its type all point at the
-/// `ConstArg`.
 #[derive(Debug, Default, Clone)]
 pub struct AstMap {
     pub items: Vec<NodeId>,
@@ -65,7 +59,9 @@ pub(crate) fn class(kind: NodeKind) -> Class {
     match kind {
         Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr | MatchExpr
         | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr
-        | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | IndexExpr | TryExpr | StructLit => Class::Expr,
+        | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr | TryExpr | StructLit => {
+            Class::Expr
+        }
         PathType | ConstArg | UnitType | TupleType | ArrayType | FnType => Class::Type,
         WildPat | LitPat | NegLitPat | TuplePat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => Class::Pat,
         SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
@@ -808,18 +804,7 @@ impl<'a> Lower<'a> {
                 };
                 TypeKind::Path { path, args }
             }
-            NodeKind::ConstArg => {
-                let int = self.tok(n, TokenKind::Int).unwrap_or_else(|| self.bug(n, "an integer"));
-                // SPAN-QUIRK: the literal has the span of its digits, also after a `-`.
-                let lit_span = self.cst.token(int).span;
-                let lit = self.int_lit(int);
-                let mut e = self.add_expr(n, lit_span, ExprKind::Lit(lit));
-                if self.has(n, TokenKind::Minus) {
-                    let span = self.span(n);
-                    e = self.add_expr(n, span, ExprKind::Unary { op: UnOp::Neg, expr: e });
-                }
-                TypeKind::ConstArg(e)
-            }
+            NodeKind::ConstArg => TypeKind::ConstArg(self.need_expr(n)),
             NodeKind::UnitType => TypeKind::Unit,
             NodeKind::TupleType => {
                 TypeKind::Tuple(self.of_class(n, Class::Type).into_iter().map(|t| self.ty(t)).collect())
@@ -1050,6 +1035,10 @@ impl<'a> Lower<'a> {
                 let t = *self.toks(n).last().unwrap_or_else(|| self.bug(n, "a name"));
                 ExprKind::Field { base, name: self.ident(t) }
             }
+            NodeKind::TypeArgsExpr => {
+                let base = self.need_expr(n);
+                ExprKind::TypeArgs { base, args: self.type_arg_list(n) }
+            }
             NodeKind::TupleIndexExpr => {
                 let base = self.need_expr(n);
                 let t = self.tok(n, TokenKind::Int).unwrap_or_else(|| self.bug(n, "an index"));
@@ -1063,7 +1052,7 @@ impl<'a> Lower<'a> {
             NodeKind::TryExpr => ExprKind::Try(self.need_expr(n)),
             NodeKind::StructLit => {
                 let callee = self.first_expr(n).unwrap_or_else(|| self.bug(n, "a path"));
-                let path = self.struct_lit_path(callee);
+                let (path, type_args) = self.struct_lit_path(callee);
                 let list = self.need(n, NodeKind::StructLitFields);
                 let fields = self
                     .nodes(list)
@@ -1074,7 +1063,7 @@ impl<'a> Lower<'a> {
                         (name, value)
                     })
                     .collect();
-                ExprKind::Struct { path, fields }
+                ExprKind::Struct { path, type_args, fields }
             }
             _ => self.bug(n, "the kind of an expression"),
         };
@@ -1082,11 +1071,20 @@ impl<'a> Lower<'a> {
         self.add_expr(n, span, kind)
     }
 
-    /// The path of a struct literal from the names of its callee (`a.b.C`).
-    fn struct_lit_path(&self, callee: NodeId) -> Path {
+    /// The path of a struct literal from the names of its callee (`a.b.C`),
+    /// and the type arguments written after its names (`E::[I32].V`): the
+    /// index of the name each list follows.
+    fn struct_lit_path(&mut self, callee: NodeId) -> (Path, Vec<(usize, TypeArgList)>) {
         let mut segments = Vec::new();
+        // The lists, with the number of names after the one each follows.
+        let mut lists = Vec::new();
         let mut cur = callee;
         loop {
+            if self.cst.kind(cur) == NodeKind::TypeArgsExpr {
+                lists.push((segments.len(), self.type_arg_list(cur)));
+                cur = self.first_expr(cur).unwrap_or_else(|| self.bug(cur, "a base"));
+                continue;
+            }
             let t = *self.toks(cur).last().unwrap_or_else(|| self.bug(cur, "a name"));
             segments.push(self.ident(t));
             match self.cst.kind(cur) {
@@ -1096,7 +1094,18 @@ impl<'a> Lower<'a> {
             }
         }
         segments.reverse();
-        Path { segments, span: self.span(callee) }
+        let last = segments.len() - 1;
+        let mut lists: Vec<(usize, TypeArgList)> = lists.into_iter().map(|(after, l)| (last - after, l)).collect();
+        lists.reverse();
+        (Path { segments, span: self.span(callee) }, lists)
+    }
+
+    /// The list of a `::[…]` (a `TypeArgsExpr`): from its `::` to its `]`.
+    fn type_arg_list(&mut self, n: NodeId) -> TypeArgList {
+        let list = self.need(n, NodeKind::TypeArgs);
+        let args = self.of_class(list, Class::Type).into_iter().map(|t| self.ty(t)).collect();
+        let colons = self.tok(n, TokenKind::ColonColon).unwrap_or_else(|| self.bug(n, "a `::`"));
+        TypeArgList { args, span: self.cst.token(colons).span.to(self.span(list)) }
     }
 
     fn args(&mut self, list: NodeId) -> Vec<Arg> {

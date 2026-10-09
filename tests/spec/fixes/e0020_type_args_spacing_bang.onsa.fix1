@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a space between the list of a type argument and the `!` of a call that changes its
+// receiver (§2.5, §2.6, §4.5): `!` is written right after the list, `buf.push::[F32]!(x)`, and the
+// candidate removes the space. It is the form `space_before_bang` of docs/foreign-forms.toml (the
+// spaces of W3-06). Moved from tests/spec/fixes/e0020_type_args_spacing.onsa (W3-19).
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn push[T](inout self, x: T) {
+  }
+}
+
+pub fn space_before_the_bang(inout v: V, x: F32) {
+  v.push::[F32]!(x)                                //~ E0020
+}

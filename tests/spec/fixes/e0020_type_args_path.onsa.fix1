@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for the `::` of a path next to a type argument (§4.5, §18.1, S-248). The separator of a path is
+// `.` (tests/spec/fixes/e0020_paths.onsa). All the `::` of one path that are not followed by `[` are
+// one syntactic form, on either side of a `::[…]`: one diagnostic, and one candidate that writes `.`
+// for each of them and leaves the list as it is.
+
+pub fn after_the_list_of_a_type() -> U32 {
+  Buf::[F32].zeroed(4).len()                       //~ E0020
+}
+
+pub fn after_the_list_of_a_type_with_a_const() -> U32 {
+  Rg::[F32, 4].CAP                                 //~ E0020
+}
+
+pub fn after_the_list_of_an_enum() -> E[I32] {
+  E::[I32].B                                       //~ E0020
+}
+
+pub fn before_the_list() -> I32 {
+  conv.parse::[I32]("3")                           //~ E0020
+}
+
+pub fn two_separators_before_the_list() -> I32 {
+  std.conv.parse::[I32]("3")                      //~ E0020
+}
+
+pub fn on_both_sides_of_the_list() -> U32 {
+  m.Buf::[F32].zeroed(4).len()                    //~ E0020
+}

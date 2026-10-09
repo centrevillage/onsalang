@@ -1152,7 +1152,7 @@ impl<'a> Rater<'a> {
                 }
                 r
             }
-            ExprKind::TupleIndex { base, .. } => self.rate(*base)?,
+            ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => self.rate(*base)?,
             ExprKind::Index { base, index } => self.rate(*base)?.max(self.rate(*index)?),
             ExprKind::Par { body, .. } => self.rate_par(e, *body)?,
             ExprKind::Call { callee, args, .. } => {
@@ -1478,7 +1478,7 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
             v
         }
         ExprKind::Binary { operands, .. } => operands.clone(),
-        ExprKind::TupleIndex { base, .. } => vec![*base],
+        ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => vec![*base],
         ExprKind::Index { base, index } => vec![*base, *index],
         ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
         ExprKind::Range { lo, hi } => vec![*lo, *hi],

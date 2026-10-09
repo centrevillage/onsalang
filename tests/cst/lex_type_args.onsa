@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6", "§4.5"]
+
+// The tokens around the mark of a type argument `::[` (§4.5), with and without spaces, next to the
+// other runs of the same characters (`::`, `:::`, `<`, `>>`, `[[`, `]]`, `]::[`). An input of the
+// CST round trip and of the fmt properties; it holds many errors (E0020, E0002) on purpose, so fmt
+// refuses it and the round trip is what is checked.
+
+a::[b] a::[b, c] a::[b](c) a::[b].c a::[b]!(c) a::[b] { c: d }
+a ::[b] a:: [b] a :: [b] a::[ b ] a::[b ,c]
+a::
+[b]
+a
+::[b]
+a:::[b] a::::[b] a::[[b]] a::[b]::[c] a::[b]::c a::[b]]::[
+a::<b> a::<b>(c) a<b>(c) a<b, c>(d) a<b<c>>(d) a<b<c<d>>>(e) a::<b<c>>(d) a::<b<c<d>>>(e)
+a[b, c](d) a[b](c) a[b, c].d a [b, c](d)
+::[a] ::a :: ::
+a.::[b] a?::[b] a)::[b] (a)::[b] a]::[b] 1::[b] "s"::[b] 'c'::[b]
+a.0::[b] a.b.c::[d](e) a!::[b](c) a~::[b](c) a^::[b] ^a::[b]
+a::[] a::[,] a::[b,,c] a::[b c] a::[b a::[c]]
+fn f::[T](x: T) -> T { x }
+struct S::[T] { v: T }
+enum E::[T] { A(T), B }
+impl::[T] S[T] { }
+let x: Buf::[F32] = y
+fn g(b: Buf::[F32]) -> Rg::[F32, 4] { b }
+match o { None::[I32] => 0, Some::[U8](n) => n, E::[I32].B => 1 }

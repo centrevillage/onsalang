@@ -566,9 +566,14 @@ impl Dumper<'_> {
                 self.expr(*len);
                 self.out.push(']');
             }
-            ExprKind::Struct { path, fields } => {
+            ExprKind::Struct { path, type_args, fields } => {
                 self.out.push_str("(struct ");
                 self.path(path);
+                for (at, l) in type_args {
+                    let _ = write!(self.out, " (args@{at} ");
+                    self.comma(&l.args, |d, t| d.ty(*t));
+                    self.out.push(')');
+                }
                 for (name, value) in fields {
                     let _ = write!(self.out, " {}: ", name.name);
                     self.expr(*value);
@@ -691,6 +696,13 @@ impl Dumper<'_> {
                 self.out.push_str("(. ");
                 self.expr(*base);
                 let _ = write!(self.out, " {})", name.name);
+            }
+            ExprKind::TypeArgs { base, args } => {
+                self.out.push_str("(args ");
+                self.expr(*base);
+                self.out.push(' ');
+                self.comma(&args.args, |d, t| d.ty(*t));
+                self.out.push(')');
             }
             ExprKind::TupleIndex { base, index, .. } => {
                 self.out.push_str("(. ");

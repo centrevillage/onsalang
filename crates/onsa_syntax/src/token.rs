@@ -375,6 +375,17 @@ impl Gap {
     }
 }
 
+/// The mark `::[` of type arguments in an expression at `tokens[i]` (§2.5,
+/// §4.5): `::` and `[` with no space or newline before either. `all` is the
+/// full token list and `full[k]` the index in it of `tokens[k]`. The one
+/// test of the mark, for the parser and the table of the forms.
+pub(crate) fn is_type_args_mark(all: &[Token], full: &[u32], tokens: &[Token], i: usize) -> bool {
+    tokens.get(i).is_some_and(|t| t.kind == TokenKind::ColonColon)
+        && tokens.get(i + 1).is_some_and(|t| t.kind == TokenKind::LBracket)
+        && gap_before(all, full[i] as usize) == Gap::None
+        && gap_before(all, full[i + 1] as usize) == Gap::None
+}
+
 /// What precedes `tokens[i]` in the full token list of the lexer: a newline
 /// when the last token before it that is not whitespace is a newline, a space
 /// when whitespace comes right before it, nothing otherwise. A comment right

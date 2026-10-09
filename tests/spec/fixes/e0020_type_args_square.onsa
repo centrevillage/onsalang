@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a `[…]` after a name that cannot be an index (§4.5, §18.1): it holds a `,` (an index is one
+// expression). Scala and Go write the type arguments of a call so. The syntax alone decides, so the
+// stage is the syntax stage; a `[…]` that can be an index (`id[U8](250)`) is read only once the name is
+// known (the name stage, docs/foreign-forms.toml `type_args_square`). The one candidate puts `::` in
+// front of the `[`.
+
+pub fn show(x: U8) -> U8 {
+  x
+}
+
+pub struct V {
+  n: I32,
+}
+
+pub fn two_arguments() -> (U8, F32) {
+  pair[U8, F32](1, 2.0)                             //~ E0020
+}
+
+pub fn three_arguments() -> (U8, F32, Str) {
+  triple[U8, F32, Str](1, 2.0, "s")                 //~ E0020
+}
+
+pub fn in_a_binding() -> (U8, F32) {
+  let p = pair[U8, F32](1, 2.0)                     //~ E0020
+  p
+}
+
+pub fn in_an_argument() -> U8 {
+  show(pair[U8, F32](1, 2.0).0)                     //~ E0020
+}
+
+pub fn of_an_associated_constant() -> U32 {
+  Rg[F32, 4].CAP                                    //~ E0020
+}
+
+pub fn of_an_associated_function() -> U32 {
+  Rg[F32, 4].zeroed().len()                         //~ E0020
+}
+
+pub fn of_a_method(v: V) -> I32 {
+  v.conv2[I32, F32](1, 2.0)                         //~ E0020
+}
+
+pub fn of_a_path_of_modules() -> I32 {
+  conv.parse2[I32, F32]("3")                        //~ E0020
+}
+
+pub fn nested_list() -> (Option[U8], F32) {
+  pair[Option[U8], F32](None, 2.0)                  //~ E0020
+}

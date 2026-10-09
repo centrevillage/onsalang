@@ -272,8 +272,7 @@ fn validate_finds_a_broken_tree() {
 
 // ---------------------------------------------------------------- positions
 
-/// Every AST node has the span of the CST node it was made from, except the
-/// one kept from the parser before the CST (lower.rs, `SPAN-QUIRK`).
+/// Every AST node has the span of the CST node it was made from.
 fn check_spans(p: &crate::Parsed, name: &str) {
     let cst = &p.cst;
     let (ast, map) = (&p.ast, &p.map);
@@ -287,13 +286,7 @@ fn check_spans(p: &crate::Parsed, name: &str) {
     }
     for (i, e) in ast.exprs.iter().enumerate() {
         let n = map.exprs[i];
-        let quirk = cst.kind(n) == NodeKind::ConstArg;
-        if quirk {
-            let s = cst.span(n);
-            assert!(s.start <= e.span.start && e.span.end <= s.end, "{name}: expr {i}");
-        } else {
-            assert_eq!(cst.span(n), e.span, "{name}: expr {i} ({:?})", cst.kind(n));
-        }
+        assert_eq!(cst.span(n), e.span, "{name}: expr {i} ({:?})", cst.kind(n));
     }
     for (i, s) in ast.stmts.iter().enumerate() {
         assert_eq!(cst.span(map.stmts[i]), s.span, "{name}: stmt {i}");
@@ -304,6 +297,15 @@ fn check_spans(p: &crate::Parsed, name: &str) {
     for (i, q) in ast.pats.iter().enumerate() {
         assert_eq!(cst.span(map.pats[i]), q.span, "{name}: pat {i}");
     }
+}
+
+/// A list of type arguments over several lines is read (§2.5, §4.5); its
+/// fmt normal form waits for S-328, so the file is an input of mode "none".
+#[test]
+fn a_list_of_type_arguments_over_several_lines_is_read() {
+    let text = std::fs::read_to_string(root_dir().join("tests/cst/trivia_type_args_lines.onsa")).unwrap();
+    let p = parse(&text);
+    assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
 }
 
 #[test]

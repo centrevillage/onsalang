@@ -435,8 +435,9 @@ pub enum TypeKind {
     Tuple(Vec<TypeId>),
     /// `rt fn(inout A, B) -> R uses {E}`
     Fn { rt: bool, params: Vec<(Mode, TypeId)>, ret: Option<TypeId>, effects: Option<EffectRow> },
-    /// A const generic argument written as an integer literal (`Ring[F32, 4]`,
-    /// S-24); only valid inside a `Path` type's `args`. A constant's name
+    /// A const generic argument written as a constant expression that is not
+    /// a type (`Ring[F32, 4]`, `Ring[F32, N * 2]`, §4.5, S-24, R-192); only
+    /// valid inside a `Path` type's `args`. A constant's name
     /// (`Ring[F32, TABLE_SIZE]`) parses as a `Path` type and is resolved by
     /// the expected parameter kind.
     ConstArg(ExprId),
@@ -639,6 +640,14 @@ pub struct Block {
     pub tail: Option<ExprId>,
 }
 
+/// The list of a `::[…]` in an expression (§4.5): its types and const
+/// arguments, and its span from `::` to `]`.
+#[derive(Debug, Clone)]
+pub struct TypeArgList {
+    pub args: Vec<TypeId>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub pat: PatId,
@@ -670,9 +679,12 @@ pub enum ExprKind {
         elem: ExprId,
         len: ExprId,
     },
-    /// `Point { x: 1.0, y: 2.0 }`
+    /// `Point { x: 1.0, y: 2.0 }`, `Pr::[U8] { a: 250 }`
     Struct {
         path: Path,
+        /// The type arguments written after a name of the path (`::[…]`,
+        /// §4.5): the index of that segment and the list.
+        type_args: Vec<(usize, TypeArgList)>,
         fields: Vec<(Ident, ExprId)>,
     },
     Block(Block),
@@ -731,6 +743,13 @@ pub enum ExprKind {
     Field {
         base: ExprId,
         name: Ident,
+    },
+    /// `e::[T, …]`: type arguments written after a path of names in an
+    /// expression (§4.5, S-239). The later stages give them to the item the
+    /// path names (W4-13).
+    TypeArgs {
+        base: ExprId,
+        args: TypeArgList,
     },
     /// `e.0`
     TupleIndex {

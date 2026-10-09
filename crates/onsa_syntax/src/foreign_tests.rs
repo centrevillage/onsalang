@@ -112,8 +112,128 @@ fn paths() {
         "fn f(s: Shape) -> I32 {\n  match s {\n    Shape::Circle(r) => 1,\n    _ => 0,\n  }\n}\n",
         "fn f(s: Shape) -> I32 {\n  match s {\n    Shape.Circle(r) => 1,\n    _ => 0,\n  }\n}\n",
     );
-    // `::[` and `::<` are forms of the type arguments (S-239, W3-19).
-    assert_eq!(codes(&body("  parse::<I32>(s)")), [Code::E0002]);
+    // `::<` is a form of the type arguments (S-239), not a separator.
+    e0020(&body("  parse::<I32>(s)"), &body("  parse::[I32](s)"));
+}
+
+#[test]
+fn type_args_in_an_expression() {
+    // The path goes on across `::[…]`, whose `::` is no separator (S-248, S-239).
+    e0020(&body("  m::Buf::[F32]::zeroed(4)"), &body("  m.Buf::[F32].zeroed(4)"));
+    e0020(&body("  Buf::[F32]::zeroed(4)"), &body("  Buf::[F32].zeroed(4)"));
+    // A path with `::<…>` in it is two forms, fixed one after the other: the
+    // list first (in the order of the text), then the separator after it (S-326).
+    let first = fixed(&body("  Buf::<F32>::zeroed(4)"));
+    assert_eq!(first, body("  Buf::[F32]::zeroed(4)"));
+    assert_eq!(codes(&first), [Code::E0020]);
+    assert_eq!(fixed(&first), body("  Buf::[F32].zeroed(4)"));
+    // The path before a `::<` is one form, and the list another (S-326).
+    assert_eq!(fixed(&body("  std::conv::parse::<I32>(s)")), body("  std.conv.parse::<I32>(s)"));
+    // Turbofish: the nested brackets, the `>>` one edit (S-248).
+    e0020(&body("  id::<Option<U8>>(None)"), &body("  id::[Option[U8]](None)"));
+    e0020(&body("  t.0::<U8>(1)"), &body("  t.0::[U8](1)"));
+    // After an expression that is no path: the call of the value (`.(` is W3-07's).
+    assert_eq!(fixed(&body("  (s.f)::<U8>(1)")), body("  s.f.(1)"));
+    assert_eq!(fixed(&body("  g(x)::<U8>(1)")), body("  g(x).(1)"));
+    assert_eq!(fixed(&body("  (a + b)<U8>(1)")), body("  (a + b).(1)"));
+    // Angle brackets: read as a chain without a `,`, a failure at the `,` with one.
+    assert_eq!(fixed_by(&body("  id<U8>(250)"), 1), body("  id < U8 && U8 > (250)"));
+    e0020(&body("  id<Option<U8>>(None)"), &body("  id::[Option[U8]](None)"));
+    assert_eq!(parse(&body("  id<Option<U8>>(None)")).diagnostics[0].fixes.len(), 1);
+    e0020(&body("  pair<Option<U8>, F32>(x, y)"), &body("  pair::[Option[U8], F32](x, y)"));
+    // A chain written with spaces, or not before a call, stays a chain (§3.1).
+    assert_eq!(codes(&body("  a < b > (c)")), [Code::E0010]);
+    assert_eq!(codes(&body("  a<b>c")), [Code::E0010]);
+    // A `[…]` with a `,` is no index.
+    e0020(&body("  s.pair[U8, F32](1, 2.0)"), &body("  s.pair::[U8, F32](1, 2.0)"));
+    assert_eq!(codes(&body("  g(x)[U8, F32]")), [Code::E0002]);
+    // Not for a list that no `]` closes, or with nothing before the `,`
+    // (tests/fuzz/fbdbd5d8.onsa); a bracket that closes no bracket of the
+    // element ends it (tests/fuzz/b2ecacdc.onsa).
+    assert_eq!(codes("fn o(v: V) {\n  v[,\n}\n"), [Code::E0002]);
+    assert_eq!(codes(&body("  pair[U8, F32\n")), [Code::E0002]);
+    assert_eq!(codes("struct H { f: f[(] }\n"), [Code::E0002]);
+    // The type position, also inside a list of an expression.
+    e0020("fn f(b: Buf::[F32]) { }\n", "fn f(b: Buf[F32]) { }\n");
+    e0020("fn f(b: Buf:: [F32]) { }\n", "fn f(b: Buf[F32]) { }\n");
+    e0020(&body("  id::[Option::[U8]](None)"), &body("  id::[Option[U8]](None)"));
+    // Spaces around the `::` of an expression; a newline is no space here.
+    e0020(&body("  id :: [U8](1)"), &body("  id::[U8](1)"));
+    assert_eq!(codes(&body("  let a = id\n  ::[U8](1)")), [Code::E0002]);
+    // Where `::[` cannot be read: E0002 with no candidate.
+    for src in ["  (id)::[U8](1)", "  id::[U8]::[U8](1)", "  id::[](1)", "  1::[U8]"] {
+        let p = parse(&body(src));
+        assert_eq!(codes(&body(src)), [Code::E0002], "{src}");
+        assert!(p.diagnostics[0].fixes.is_empty(), "{src}");
+    }
+    // The elements of a list are types and constant expressions (§4.5, R-192).
+    for src in ["fn f(r: Rg[F32, 2 * N * 3, N - 1]) { }\n", "fn f(r: Rg[F32, (1 + 2) * 3, -(1), size(3)]) { }\n"] {
+        assert!(codes(src).is_empty(), "{src}");
+    }
+    assert_eq!(codes("fn f(r: Rg[]) { }\n"), [Code::E0002]);
+}
+
+/// W3-19/b: the forms of a call's type arguments are found from the tokens
+/// before the `<` or `[` is read, whatever follows the call.
+#[test]
+fn type_args_before_a_call_whatever_follows() {
+    for (src, want) in [
+        ("  f<I32>(s).unwrap()", "  f::[I32](s).unwrap()"),
+        ("  f<I32>(s)?", "  f::[I32](s)?"),
+        ("  f<I32>(s) as F32", "  f::[I32](s) as F32"),
+        ("  f<I32>(s)[0]", "  f::[I32](s)[0]"),
+        ("  f<I32>(s) + 1", "  f::[I32](s) + 1"),
+        ("  2 * f<I32>(s)", "  2 * f::[I32](s)"),
+        ("  f<A<B<C>>>(x)", "  f::[A[B[C]]](x)"),
+        ("  show(pair<U8, F32>(1, 2.0))", "  show(pair::[U8, F32](1, 2.0))"),
+        ("  t.0<U8>(1)", "  t.0::[U8](1)"),
+    ] {
+        e0020(&body(src), &body(want));
+    }
+    // A value before the list: the call with `.(`, the blanks before the list
+    // too (`.(` is read from W3-07).
+    for (src, want) in [
+        ("  (s.f)<T, U>(x)", "  s.f.(x)"),
+        ("  g(x)<T, U>(y)", "  g(x).(y)"),
+        ("  (e)[T, U](x)", "  e.(x)"),
+        ("  (e) ::<T>(x)", "  e.(x)"),
+    ] {
+        assert_eq!(codes(&body(src)), [Code::E0020], "{src}");
+        assert_eq!(fixed(&body(src)), body(want), "{src}");
+    }
+    // No candidate: a literal before the list, an empty list, a list after an
+    // index of a value with no call, `_` in a list, a type position list that
+    // is empty or followed by what no type is.
+    // `d<->>(x)` and `d<U->8>(x)`: tests/fuzz/1a0a32db.onsa, 807eade3.onsa.
+    for src in [
+        "  1::<T>(x)",
+        "  f::<>(x)",
+        "  a[i][j, k]",
+        "  a[i, _]",
+        "  pair::[U8, _](1, 2)",
+        "  d<->>(x)",
+        "  f<A,>(x)",
+        "  d<U->8>(x)",
+    ] {
+        let p = parse(&body(src));
+        assert!(p.diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}: {:?}", p.diagnostics);
+    }
+    for src in ["fn g(x: Buf::[]) { }\n", "fn g(x: Buf::[F32].Inner) { }\n"] {
+        assert!(parse(src).diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}");
+    }
+    // The elements of a list that are no type read as expressions (the later
+    // stages check the constant): `(N)`, `1.5`, `"s"`, `if`.
+    for src in [
+        "  Rg::[F32, (N)].CAP",
+        "  f::[(K)](x)",
+        "  Rg::[F32, 1.5].CAP",
+        "  Rg::[F32, \"s\"].CAP",
+        "  Rg::[F32, if c { 1 } else { 2 }].CAP",
+    ] {
+        assert!(codes(&body(src)).is_empty(), "{src}");
+    }
+    // A chain written with spaces stays a chain (§3.1).
+    assert_eq!(codes(&body("  a < b > (c)")), [Code::E0010]);
 }
 
 #[test]

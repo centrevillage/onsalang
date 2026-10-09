@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// E0020 for the type arguments of other languages written between angle brackets in front of a call,
+// `f<T>(x)` (§4.5, §18.1). The syntax alone decides: the `>` is followed by `(`, and a call written
+// with `<…>` is not read as a chain of comparisons (E0010). The first candidate is the Onsa form: `<`
+// becomes `::[` and `>` becomes `]`, and the type arguments stay. The second is the reading of the
+// languages that read `f<T>(x)` as comparisons (§3.1), `f < T && T > (x)`, only where the middle is
+// a name (§18.1); a list with a `,` cannot be a chain of comparisons, so it has the first candidate
+// only. The order is that of the rows of docs/foreign-forms.toml (S-315).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn triple[A, B, C](a: A, b: B, c: C) -> (A, B, C) {
+  (a, b, c)
+}
+
+pub fn show(x: U8) -> U8 {
+  x
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn one_argument() -> U8 {
+  id::[U8](250)                                       //~ E0020
+}
+
+pub fn in_a_binding() -> U8 {
+  let y = id::[U8](250)                               //~ E0020
+  y
+}
+
+pub fn in_an_argument() -> U8 {
+  show(id::[U8](250))                                 //~ E0020
+}
+
+pub fn of_a_method(v: V) -> I32 {
+  v.conv::[I32](1)                                    //~ E0020
+}
+
+pub fn of_a_path_of_modules() -> I32 {
+  conv.parse::[I32]("3")                              //~ E0020
+}
+
+pub fn two_arguments() -> (U8, F32) {
+  pair::[U8, F32](1, 2.0)                             //~ E0020
+}
+
+pub fn three_arguments() -> (U8, F32, Str) {
+  triple::[U8, F32, Str](1, 2.0, "s")                 //~ E0020
+}

@@ -434,7 +434,12 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::Range { .. } => {}
+            // A `::[…]` names an item (W4-13; E0200 until then), not a local.
+            ExprKind::Lit(_)
+            | ExprKind::Hole
+            | ExprKind::Error
+            | ExprKind::Range { .. }
+            | ExprKind::TypeArgs { .. } => {}
             ExprKind::Path(_) => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
                     let id = *id;

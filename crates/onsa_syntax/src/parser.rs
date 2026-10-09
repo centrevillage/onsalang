@@ -197,6 +197,23 @@ pub(crate) struct Parser<'a> {
     lexed_spans: Vec<Span>,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
+    /// How many trial readings ([`Parser::snapshot`]) are open: a reading
+    /// that is tried inside another one does not try the brackets of a
+    /// call's type arguments again, so trials nest at most once per level.
+    trials: u32,
+}
+
+/// What a trial reading restores ([`Parser::snapshot`]).
+struct Snapshot {
+    pos: usize,
+    last_end: u32,
+    events: usize,
+    diagnostics: usize,
+    open: Vec<Open>,
+    closed: Vec<(NodeKind, u32)>,
+    braces: Vec<usize>,
+    nl: Vec<bool>,
+    no_struct_lit: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -243,7 +260,46 @@ impl<'a> Parser<'a> {
             diagnostics,
             holes,
             levels: Vec::new(),
+            trials: 0,
         }
+    }
+
+    /// The state before a trial reading: a reading that fails is undone with
+    /// [`Parser::restore`] (its events and diagnostics are dropped). A trial
+    /// opens and closes only nodes of its own (no `precede` of a node read
+    /// before it).
+    fn snapshot(&mut self) -> Snapshot {
+        self.trials += 1;
+        Snapshot {
+            pos: self.pos,
+            last_end: self.last_end,
+            events: self.events.len(),
+            diagnostics: self.diagnostics.len(),
+            open: self.open.clone(),
+            closed: self.closed.clone(),
+            braces: self.braces.clone(),
+            nl: self.nl.clone(),
+            no_struct_lit: self.no_struct_lit,
+        }
+    }
+
+    /// Undo the reading since `s`.
+    fn restore(&mut self, s: Snapshot) {
+        self.end_trial();
+        self.pos = s.pos;
+        self.last_end = s.last_end;
+        self.events.truncate(s.events);
+        self.diagnostics.truncate(s.diagnostics);
+        self.open = s.open;
+        self.closed = s.closed;
+        self.braces = s.braces;
+        self.nl = s.nl;
+        self.no_struct_lit = s.no_struct_lit;
+    }
+
+    /// Keep the reading since the snapshot.
+    fn end_trial(&mut self) {
+        self.trials -= 1;
     }
 
     // ------------------------------------------------------------ nodes
@@ -306,8 +362,9 @@ impl<'a> Parser<'a> {
             ForStmt | WhileStmt | Block => 1,
             // Expressions. A binary chain is flat in the tree: its height is
             // the one of the tree of §3.1, one level per operator ([`Chain`]).
+            // A `::[…]` counts at its `[` (the `TypeArgs`), as a type with arguments.
             Literal | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg | StructLitFields
-            | StructLitField => 0,
+            | StructLitField | TypeArgsExpr => 0,
             ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | IfExpr | MatchExpr | ClosureExpr | HandleExpr
             | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | PrefixExpr | CallExpr | FieldExpr
             | TupleIndexExpr | IndexExpr | TryExpr | StructLit => 1,
@@ -1702,8 +1759,14 @@ impl<'a> Parser<'a> {
         Ok((c, nargs))
     }
 
+    /// The elements of a list of type arguments after its `[`, and its `]`:
+    /// the one reading of the lists of a type position and of `::[…]` in an
+    /// expression (§4.5). An empty list is E0002.
     fn parse_type_args(&mut self) -> PResult<usize> {
         let close = TokenKind::RBracket;
+        if self.at(close) {
+            return Err(self.fail(Want::Type, "a type argument"));
+        }
         let mut n = 0;
         while !self.at(close) {
             self.parse_type_arg()?;
@@ -1716,19 +1779,57 @@ impl<'a> Parser<'a> {
         Ok(n)
     }
 
-    /// A type argument: a type, or a const argument written as an integer
-    /// literal, optionally negated (`Ring[F32, 4]`, S-24 / spec §4.5).
+    /// A type argument: a type, or a const argument written as a constant
+    /// expression (`Ring[F32, 4]`, `Ring[F32, N * 2]`, spec §4.5, S-24,
+    /// R-192). The element is a type when it reads as a type up to the `,`
+    /// or `]` that ends it; else it is read as an expression, whose constant
+    /// rules are the later stages' (E0417, E0401). A constant's name
+    /// (`TABLE_SIZE`, `cfg.N`) reads as a type; the later stages take it by
+    /// the kind of the parameter. A type that fails with a diagnostic of its
+    /// own (a form of the table, E0020; E0006) keeps it.
     fn parse_type_arg(&mut self) -> PResult<()> {
-        if !matches!(self.peek_kind(), TokenKind::Int | TokenKind::Minus) {
-            self.parse_type()?;
-            return Ok(());
+        let s = self.snapshot();
+        let as_type = self.parse_type();
+        // A type followed by `::` keeps its reading: `Option::[I32]` in a
+        // list is the mark in a type position (E0020), and a constant
+        // expression with `::[…]` waits for S-329.
+        let ends = matches!(self.peek_kind(), TokenKind::Comma | TokenKind::RBracket | TokenKind::ColonColon);
+        match as_type {
+            Ok(_) if ends => {
+                self.end_trial();
+                return Ok(());
+            }
+            // `_` is no type (§2.2) and no constant: `pair::[U8, _]` is E0002 (§4.5).
+            Err(ParseError)
+                if self.diagnostics[s.diagnostics..].iter().any(|d| d.code != Code::E0002)
+                    || self.tokens[s.pos..]
+                        .iter()
+                        .find(|t| !t.kind.is_trivia())
+                        .is_some_and(|t| t.kind == TokenKind::Underscore) =>
+            {
+                self.end_trial();
+                return Err(ParseError);
+            }
+            _ => self.restore(s),
         }
         let m = self.start(NodeKind::ConstArg)?;
-        self.eat(TokenKind::Minus);
-        let tok = self.expect(TokenKind::Int)?;
-        self.check_int(tok);
+        self.parse_expr()?;
         self.complete(m, NodeKind::ConstArg);
         Ok(())
+    }
+
+    /// Whether the tokens from the `[` at `open` read as a list of type
+    /// arguments with two or more elements (a `[…]` that is no index, §4.5):
+    /// a trial reading, undone whatever its result. Not inside another trial.
+    fn reads_as_type_list(&mut self) -> bool {
+        if self.trials > 0 {
+            return false;
+        }
+        let s = self.snapshot();
+        self.bump();
+        let n = self.with_nl(false, |p| p.parse_type_args());
+        self.restore(s);
+        matches!(n, Ok(n) if n >= 2)
     }
 
     // ------------------------------------------------------------ blocks and statements
@@ -1998,7 +2099,7 @@ impl<'a> Parser<'a> {
                     if !self.peek_gap().is_some()
                         && self.peek2().kind == TokenKind::LParen
                         && !self.gap(self.peek2_index()).is_some()
-                        && matches!(expr.kind, NodeKind::PathExpr | NodeKind::FieldExpr) =>
+                        && (foreign::names_a_path(expr.kind) || expr.kind == NodeKind::TypeArgsExpr) =>
                 {
                     let m = self.precede(expr, NodeKind::CallExpr)?;
                     self.bump();
@@ -2008,6 +2109,23 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Tilde => {
                     return Err(self.fail(Want::Other, "the flow-call mark `name~(args)`, written without spaces"));
+                }
+                // Type arguments after a path of names (§4.5, S-239): `::[`
+                // with no space on either side of `::`. Elsewhere `::` is not
+                // read (the forms of other languages, `crate::foreign`).
+                TokenKind::ColonColon
+                    if crate::token::is_type_args_mark(&self.all, &self.full, &self.tokens, self.peek_index())
+                        && foreign::names_a_path(expr.kind) =>
+                {
+                    let m = self.precede(expr, NodeKind::TypeArgsExpr)?;
+                    self.bump();
+                    let a = self.start(NodeKind::TypeArgs)?;
+                    self.bump();
+                    self.with_nl(false, |p| p.parse_type_args())?;
+                    self.complete(a, NodeKind::TypeArgs);
+                    // The name before the list stays the last name of a chain
+                    // (`Pr::[U8] { a: 1 }`).
+                    expr = self.complete(m, NodeKind::TypeArgsExpr);
                 }
                 TokenKind::Dot => {
                     let m = self.precede(expr, NodeKind::FieldExpr)?;
@@ -2029,6 +2147,17 @@ impl<'a> Parser<'a> {
                         }
                         _ => return Err(self.unexpected("a field name or tuple index after `.`")),
                     }
+                }
+                // Type arguments of other languages before a call, `f<T>(x)`
+                // and `f[A, B](x)` (§4.5): the table says from the tokens
+                // whether the brackets are such a list ([`foreign::type_list_ahead`]);
+                // the parser fails at them, so `<` is not read as a comparison
+                // nor `[A, B]` as an index.
+                TokenKind::Lt | TokenKind::LBracket
+                    if foreign::type_list_ahead(&self.tokens, &self.all, &self.full, self.peek_index(), expr.kind)
+                        && (self.peek_kind() == TokenKind::Lt || self.reads_as_type_list()) =>
+                {
+                    return Err(self.fail(Want::Other, "an operator or the end of the expression"));
                 }
                 TokenKind::LBracket if !self.peek_gap().is_some() => {
                     let m = self.precede(expr, NodeKind::IndexExpr)?;
@@ -2653,9 +2782,8 @@ fn close_bracket(open: &mut Vec<usize>, tokens: &[Token], kind: TokenKind, base:
 fn is_item_start(kind: TokenKind) -> bool {
     DECLARATIONS.iter().any(|(k, _, _)| *k == kind)
         || matches!(kind, TokenKind::KwPub | TokenKind::At | TokenKind::DocComment)
-        // An attribute of another language, `#[x]` (the table of those forms).
-        // SPEC-GAP(S-321): `#` starts an item for the recovery, as `@` does
-        // (§18.1 names the keywords and `pub`), until S-321.
+        // An attribute of another language, `#[x]` (the table of those
+        // forms), starts an item as `@` does (§18.1, S-321).
         || kind == TokenKind::Hash
 }
 

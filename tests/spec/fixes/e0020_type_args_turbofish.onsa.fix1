@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for the type arguments written the way Rust writes them, `f::<T>(x)` (§4.5, §18.1). The syntax
+// alone decides. The one candidate keeps the `::` and the type arguments and changes the two brackets:
+// `::<` becomes `::[` and `>` becomes `]`; the `>>` of a nested list is one token and becomes `]]`.
+// The `::` is not a path separator here (the next token is `<`), so it is not the E0020 of the paths
+// (tests/spec/fixes/e0020_paths.onsa).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn show(x: U8) -> U8 {
+  x
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn on_a_function() -> U8 {
+  id::[U8](250)                                     //~ E0020
+}
+
+pub fn in_a_binding(s: Str) -> I32 {
+  let n = parse::[I32](s)                           //~ E0020
+  n
+}
+
+pub fn in_an_argument() -> U8 {
+  show(id::[U8](250))                               //~ E0020
+}
+
+pub fn on_a_method(v: V) -> I32 {
+  v.conv::[I32](1)                                  //~ E0020
+}
+
+pub fn on_an_associated_function() -> U32 {
+  Buf.zeroed::[F32](4).len()                        //~ E0020
+}
+
+pub fn on_a_path_of_modules() -> I32 {
+  std.conv.parse::[I32]("3")                        //~ E0020
+}
+
+pub fn two_arguments() -> (U8, F32) {
+  pair::[U8, F32](1, 2.0)                           //~ E0020
+}
+
+pub fn nested_list() -> Option[U8] {
+  id::[Option[U8]](None)                            //~ E0020
+}
+
+pub fn nested_list_of_three_levels() -> Option[Option[U8]] {
+  id::[Option[Option[U8]]](None)                    //~ E0020
+}
+
+pub fn tuple_type() -> (I32, F32) {
+  id::[(I32, F32)]((1, 2.0))                        //~ E0020
+}

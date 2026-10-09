@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for the type arguments of other languages after a callee that is neither a path of names nor a
+// method (§4.5, §6.1, §18.1): `::[` cannot be written there, so the one candidate drops the type
+// arguments and calls the function value with `.(` (the type of a function value is not generic, so
+// dropping them changes no type). The syntax alone decides, as for `(s.f)(x)` in
+// tests/spec/fixes/e0020_call_forms_syntax.onsa. The candidate writes `.(` (§6.1, W3-07).
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn pick(up: Bool) -> fn(I32) -> I32 {
+  inc
+}
+
+pub fn result_of_a_call_with_turbofish() -> I32 {
+  pick(true).(5)                              //~ E0020
+}
+
+pub fn result_of_a_call_with_angle_brackets() -> I32 {
+  pick(true).(5)                                //~ E0020
+}
+
+pub fn parenthesized_name() -> I32 {
+  inc.(5)                                     //~ E0020
+}
+
+pub fn parenthesized_field(s: Shaper, x: F32) -> F32 {
+  s.curve.(x)                                 //~ E0020
+}
+
+pub fn parenthesized_field_with_turbofish(s: Shaper, x: F32) -> F32 {
+  s.curve.(x)                               //~ E0020
+}

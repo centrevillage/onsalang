@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for the `::` of a type argument in a type position (§4.5, §18.1): the mark exists only in an
+// expression, where a `[` alone would be an index. In a type (a parameter, a result, an annotation, a
+// field, an argument of another type, the header of an `impl`, an alias, and the elements of a list
+// that is itself in an expression) the `[` can only open type arguments, so `::` says nothing and
+// misleads about the rule (P2). The one candidate removes the `::`.
+
+pub struct Wrapper[T] {
+  value: T,
+}
+
+pub struct Holder {
+  data: Buf[F32],                                 //~ E0020
+}
+
+pub fn as_a_parameter(b: Buf[F32]) -> U32 {       //~ E0020
+  b.len()
+}
+
+pub fn as_a_result() -> Buf[F32] {                //~ E0020
+  Buf.zeroed(4)
+}
+
+pub fn as_an_annotation() -> U32 {
+  let b: Buf[F32] = Buf.zeroed(4)                 //~ E0020
+  b.len()
+}
+
+pub fn as_an_argument_of_a_type(o: Option[Buf[F32]]) -> U32 {   //~ E0020
+  1
+}
+
+pub fn with_a_const_argument() -> Rg[F32, 4] {    //~ E0020
+  Rg.zeroed()
+}
+
+pub fn in_a_tuple(t: (Buf[F32], U8)) -> U8 {      //~ E0020
+  t.1
+}
+
+pub fn in_an_array(a: [Buf[F32]; 2]) -> U32 {     //~ E0020
+  1
+}
+
+pub fn in_a_function_type(f: fn(Buf[F32]) -> U8) -> U8 {   //~ E0020
+  1
+}
+
+impl[T] Wrapper[T] {                              //~ E0020
+  pub fn get(self) -> T {
+    self.value
+  }
+}
+
+type Alias = Buf[F32]                             //~ E0020
+
+pub fn inside_the_list_of_an_expression() -> Option[I32] {
+  id::[Option[I32]](None)                         //~ E0020
+}

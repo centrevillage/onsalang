@@ -1,0 +1,231 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§2.6", "§4.1", "§4.5", "§6.1"]
+
+// Type arguments written in an expression (§4.5): `name::[types]`, right after a path of names and
+// before whatever follows the name (a call, `.`, a struct literal, `!`). This file is read by the
+// parser only (mode = "parse"). Which name is generic, how many arguments it takes and what the
+// types are belong to the later stages (W4-13), so no name here is looked up and the syntax stage
+// reports nothing for any function. Each function is one place where the mark is read.
+//
+// The mark is `::[` with no space on either side: `id::[U8]`, never `id ::[U8]` (E0020, §2.5).
+// The file is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2). A list of type
+// arguments over several lines, whose normal form the spec does not say yet (S-328), is only read:
+// tests/cst/trivia_type_args_lines.onsa.
+
+// A function, and a function reached through a path of modules (§4.5).
+pub fn on_a_function(s: Str) -> U32 {
+  let n = parse::[U32]("1")
+  let m = parse::[U32](s)
+  n + m
+}
+
+pub fn on_a_module_path() -> I32 {
+  let a = conv.parse::[I32]("3")
+  let b = std.conv.parse::[I32]("4")
+  a + b
+}
+
+// The type arguments go to the item that declares the type parameters: a type for its associated
+// functions and constants, the function name for a function's own parameters.
+pub fn on_an_associated_function() -> U32 {
+  let b = Buf::[F32].zeroed(4)
+  b.len()
+}
+
+pub fn on_an_associated_constant() -> U32 {
+  Rg::[F32, 4].CAP
+}
+
+pub fn on_an_associated_function_of_a_type_with_a_const_parameter() -> U32 {
+  let r = Rg::[F32, 4].zeroed()
+  r.len()
+}
+
+// The associated function's own type parameters are listed after the function's name (the type's
+// parameters are listed after the type's, above).
+pub fn on_the_own_parameters_of_an_associated_function() -> U32 {
+  let n = Buf.from_len::[F32](4)
+  n
+}
+
+pub fn on_a_struct_literal() -> Pr[U8] {
+  Pr::[U8] { a: 250 }
+}
+
+pub fn on_a_struct_literal_of_two_parameters() -> Pair[U8, F32] {
+  let p = Pair::[U8, F32] { a: 1, b: 2.0 }
+  p
+}
+
+pub fn on_a_struct_literal_as_an_argument() -> U8 {
+  show(Pr::[U8] { a: 1 })
+}
+
+// A method gets its own type parameters (the `impl`'s come from the receiver), and `!` goes after the
+// list (§2.6): the list belongs to the name and `!` to the call.
+pub fn on_a_method(v: V, x: I32) -> I32 {
+  v.m::[I32](x)
+}
+
+pub fn on_a_method_chain(v: V) -> F32 {
+  v.m::[I32](1).n::[F32](2.0)
+}
+
+pub fn on_a_method_of_self(v: V) -> I32 {
+  v.m::[I32](v.n::[I32](1))
+}
+
+pub fn on_a_receiver_changing_call(inout buf: Buf[F32], x: F32) {
+  buf.push::[F32]!(x)
+}
+
+pub fn on_a_receiver_changing_call_with_two_type_arguments(inout buf: Buf[F32], x: F32) {
+  buf.push_with::[F32, U8]!(x, 1)
+}
+
+// A path of names reaches a field or a tuple index, and the list may follow it (a value; whether
+// that name takes type arguments is the name stage's business, W4-13).
+pub fn on_a_field_path(s: Shaper, x: I32) -> I32 {
+  s.f::[I32](x)
+}
+
+pub fn on_a_tuple_index(t: (I32, I32), x: I32) -> I32 {
+  t.0::[I32](x)
+}
+
+// A generic function taken as a value: no call follows the list (§6.1).
+pub fn as_a_value() -> U8 {
+  let g = id::[U8]
+  let h = id::[fn(U8) -> U8]
+  apply(id::[U8], 3)
+}
+
+// The variants (§4.1, §4.5): the variants of the prelude's enums are written without the enum's
+// name, so the list goes after the variant's name; any other generic enum takes it on the enum.
+pub fn on_prelude_variants() -> Option[I32] {
+  let a = None::[I32]
+  let b = Some::[U8](250)
+  let c = Ok::[I32, Str](1)
+  let d = Err::[I32, Str]("e")
+  a
+}
+
+pub fn on_generic_enum_variants() -> E[I32] {
+  let a = E::[I32].B
+  let b = E::[I32].A(1)
+  b
+}
+
+// The elements of the list read like the elements of a type's argument list (§4.5): a type of any
+// form, and a constant expression for a const parameter.
+pub fn with_nested_types(xs: [F32; 4]) -> U32 {
+  let a = id::[Option[Option[U8]]](None)
+  let b = id::[(I32, F32)]((1, 2.0))
+  let c = id::[[F32; 4]](xs)
+  let d = id::[fn(I32) -> I32](inc)
+  let e = id::[Buf[F32]](buf)
+  let f = id::[conv.Wrapper[U8]](w)
+  let g = pair::[Option[U8], Result[I32, Str]](x, y)
+  let h = id::[Option[Buf[F32]]](None)
+  1
+}
+
+// Lists inside lists and calls inside calls (a few levels; the limit of the nesting depth, where the
+// list is one level like a type with arguments, is §2.5).
+pub fn with_nested_lists_and_calls() -> U8 {
+  let a = id::[Option[Option[Option[Option[Option[Option[Option[Option[U8]]]]]]]]](None)
+  let b = id::[U8](id::[U8](id::[U8](id::[U8](id::[U8](1)))))
+  1
+}
+
+pub fn with_const_arguments() -> U32 {
+  let a = Rg::[F32, 4].CAP
+  let b = Rg::[F32, TABLE_SIZE].CAP
+  let c = Rg::[F32, cfg.N].CAP
+  let d = Rg::[F32, I32.BITS].CAP
+  let e = Rg::[F32, -1].CAP
+  a
+}
+
+// Wherever an expression stands.
+pub fn in_conditions(s: Str) -> I32 {
+  if check::[I32](s) {
+    return 1
+  }
+  while more::[I32](s) {
+    break
+  }
+  match parse::[I32](s) {
+    Ok(n) => n,
+    Err(e) => 0,
+  }
+}
+
+pub fn in_expressions(xs: [U8; 4], k: U32, s: Str) -> U8 {
+  let a = id::[U8](1) + id::[U8](2) + id::[U8](3)
+  let b = -id::[I32](4)
+  let c = !flag::[Bool](5)
+  let d = parse::[F32]("1") as F64
+  let e = [id::[U8](1), id::[U8](2)]
+  let f = [id::[U8](0); 4]
+  let g = xs[idx::[U32](k)]
+  let h = (id::[U8](1), id::[U8](2))
+  let i = parse::[I32](s)?
+  let j = pair::[U8, F32](1, 2.0).0
+  a
+}
+
+pub fn in_a_closure() -> I32 {
+  apply(fn(x: I32) -> I32 { id::[I32](x) }, 1)
+}
+
+pub fn in_an_argument_list() -> U8 {
+  show(id::[U8](1), pair::[U8, F32](2, 3.0), None::[I32])
+}
+
+pub fn in_a_return(x: I32) -> I32 {
+  if x < 0 {
+    return id::[I32](x)
+  }
+  x
+}
+
+pub fn in_an_assignment(inout y: I32, x: I32) {
+  y = id::[I32](x)
+}
+
+pub fn in_a_method_of_an_impl(h: Holder) -> U8 {
+  h.get()
+}
+
+impl Holder {
+  pub fn get(self) -> U8 {
+    id::[U8](self.x)
+  }
+
+  pub fn make() -> Holder {
+    Holder { x: id::[U8](1) }
+  }
+}
+
+const SLOTS: U32 = Rg::[F32, 4].CAP
+
+test "in a test" {
+  assert id::[U8](1) == 1
+  assert Rg::[F32, 4].CAP == 4
+}
+
+// The list continues the line: a method chain on the next line starts with `.` (§2.5), and the
+// parentheses of the call take a newline as a space (the brackets of the list too:
+// tests/cst/trivia_type_args_lines.onsa).
+pub fn across_lines(s: Str) -> U32 {
+  let n = Buf::[F32]
+    .zeroed(4)
+    .len()
+  let q = parse::[U32](
+    s,
+  )
+  n
+}

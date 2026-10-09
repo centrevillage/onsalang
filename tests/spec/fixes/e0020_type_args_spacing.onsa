@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§4.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a space inside the mark of a type argument (§2.5, §2.6, §4.5): between the name and `::`,
+// and between `::` and `[` (between the list and the `!` of a call that changes its receiver:
+// tests/spec/fixes/e0020_type_args_spacing_bang.onsa). A space
+// gives a reader another reading (`id ::[U8]` looks like a path or a type ascription in other
+// languages), and the candidate removes it. A newline instead of a space is another case (a line that
+// starts with `::` is E0002, tests/spec/negative/syntax_type_args.onsa).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn push[T](inout self, x: T) {
+  }
+}
+
+pub fn space_before_the_colons() -> U8 {
+  id ::[U8](250)                                    //~ E0020
+}
+
+pub fn space_after_the_colons() -> U8 {
+  id:: [U8](250)                                    //~ E0020
+}
+
+pub fn space_before_the_colons_of_a_method(v: V) -> I32 {
+  v.conv ::[I32](1)                                 //~ E0020
+}
+
+pub fn space_after_the_colons_of_a_method(v: V) -> I32 {
+  v.conv:: [I32](1)                                 //~ E0020
+}
+
+pub fn space_before_the_colons_of_a_type() -> U32 {
+  Buf ::[F32].zeroed(4).len()                       //~ E0020
+}
+
+pub fn space_after_the_colons_of_a_type() -> U32 {
+  Buf:: [F32].zeroed(4).len()                       //~ E0020
+}
+
+pub fn space_before_the_colons_of_a_variant() -> Option[I32] {
+  None ::[I32]                                      //~ E0020
+}

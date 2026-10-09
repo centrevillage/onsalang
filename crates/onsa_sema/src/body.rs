@@ -311,6 +311,14 @@ impl<'a> Checker<'a> {
         self.diag(Diagnostic::new(Stage::Names, code, span, msg).with_found(self.src(span)))
     }
 
+    /// E0200 for a type argument written in an expression (`name::[…]`, §4.5)
+    /// at the list `span`: the names stage gives the list to its item from
+    /// W4-13; until then the list is neither dropped nor read (R-81).
+    pub(crate) fn type_args_unsupported(&mut self, span: Span) -> Stop {
+        let d = Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]);
+        self.diag(d.with_found(self.src(span)))
+    }
+
     /// E0200 for `feature` (S-224), with the details its phrase takes.
     pub(crate) fn unsupported(&mut self, span: Span, feature: Feature, details: &[&str]) -> Stop {
         self.diag(feature.diagnostic(Stage::Types, span, details).with_found(self.src(span)))
@@ -1342,7 +1350,11 @@ impl<'a> Checker<'a> {
                 self.defer(span, et, DeferredKind::Require { bound: Bound::Dup, what: Required::RepeatElement });
                 Ok(self.a.types.intern(Ty::Array(et, n)))
             }
-            ExprKind::Struct { path, fields } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
+            ExprKind::Struct { type_args, .. } if !type_args.is_empty() => {
+                Err(self.type_args_unsupported(type_args[0].1.span))
+            }
+            ExprKind::Struct { path, fields, .. } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
+            ExprKind::TypeArgs { args, .. } => Err(self.type_args_unsupported(args.span)),
             ExprKind::Block(b) => self.check_block(b, expected),
             ExprKind::If { cond, then, else_ } => {
                 let bool_ = self.bool_();
@@ -1973,6 +1985,9 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
+        if let ExprKind::TypeArgs { args, .. } = &self.expr(callee).kind {
+            return Err(self.type_args_unsupported(args.span));
+        }
         if self.flow.is_some()
             && let Some(t) = self.check_flow_call(e, callee, kind, args, expected)?
         {
