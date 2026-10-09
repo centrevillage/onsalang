@@ -19,6 +19,7 @@ use crate::deferred::{Deferred, DeferredKind, Required};
 use crate::exhaust::P;
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
 use crate::resolve::{Builtin, Entity, ResolveError};
+use crate::structpat::Written;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
@@ -2757,56 +2758,22 @@ impl<'a> Checker<'a> {
                 }
                 Ok(P::Ctor(0, subs))
             }
-            PatKind::Struct { path, fields } => {
-                let entity = match self.a.resolve_path(self.m, path) {
-                    Ok(en) => en,
-                    Err(err) => return Err(self.resolve_error(path, err)),
-                };
-                let d = match entity {
-                    Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-                    _ => return Err(self.err(Code::E0401, path.span, "a struct pattern needs a struct")),
-                };
-                let sd = self.a.def(d).as_struct().unwrap().clone();
-                let Fields::Named(defs) = &sd.fields else {
-                    return Err(self.err(Code::E0410, path.span, "this struct has no named fields"));
-                };
-                let args = self.fresh_args(d);
-                let named = self.a.types.intern(Ty::Named(d, args.clone()));
-                self.unify_at(span, named, ty)?;
-                let mut subs = vec![P::Wild; defs.len()];
-                let mut seen: Vec<&str> = Vec::new();
-                // SPEC-GAP(S-260): as for the fields of a struct literal.
-                let failed = self.a.partly_read(d);
-                for (name, fp) in fields {
-                    let Some(i) = defs.iter().position(|f| f.name == name.name) else {
-                        if failed {
-                            let error = self.a.types.error();
-                            self.bind_pat(*fp, error, irrefutable, borrow, kind)?;
-                            continue;
-                        }
-                        return Err(self.err(
-                            Code::E0410,
-                            name.span,
-                            format!("`{}` has no field `{}`", sd_name(self.a, d), name.name),
-                        ));
-                    };
-                    if seen.contains(&name.name.as_str()) {
-                        return Err(self.err(Code::E0410, name.span, format!("field `{}` is given twice", name.name)));
-                    }
-                    seen.push(&name.name);
-                    let ft = self.subst(defs[i].ty, &args);
-                    subs[i] = self.bind_pat(*fp, ft, irrefutable, borrow, kind)?;
-                }
-                let missing: Vec<&str> = defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.contains(n)).collect();
-                if !missing.is_empty() && !failed {
-                    return Err(self.err(
-                        Code::E0410,
-                        span,
-                        format!(
-                            "struct patterns name every field; missing {} (use `_`, §7)",
-                            missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
-                        ),
-                    ));
+            PatKind::Struct { path, fields, rest } => {
+                let mut bound: Vec<(usize, P)> = Vec::new();
+                let count = self.struct_pattern(
+                    Stage::Types,
+                    span,
+                    ty,
+                    Written { path, fields, rest: *rest },
+                    &mut |ck, fp, ft, i| {
+                        let sub = ck.bind_pat(fp, ft, irrefutable, borrow, kind)?;
+                        bound.extend(i.map(|i| (i, sub)));
+                        Ok(())
+                    },
+                )?;
+                let mut subs = vec![P::Wild; count];
+                for (i, sub) in bound {
+                    subs[i] = sub;
                 }
                 Ok(P::Ctor(0, subs))
             }
@@ -2952,10 +2919,6 @@ impl<'a> Checker<'a> {
     pub(crate) fn subst_pub(&mut self, ty: TyId, args: &[TyId]) -> TyId {
         self.subst(ty, args)
     }
-}
-
-fn sd_name(a: &Analysis, d: DefId) -> String {
-    a.def(d).name.clone()
 }
 
 /// `have` implies `want` among the builtin bounds (§6.3): `Ord` ⇒ `PartialOrd`, `Eq`;

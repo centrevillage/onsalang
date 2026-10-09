@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// The rest `..` in a pattern (§7, S-109). Only a struct pattern has a candidate: E0020, and the
+// candidate lists the remaining fields with `_` (the texts are in e0020_patterns_rest_forms.onsa).
+// This file holds the edges the candidate texts of that file cannot pin (the runner still applies the
+// candidate of each diagnostic and checks that it leaves no error of the syntax stage, §18.1):
+// - a struct pattern that already spells every field: nothing remains, and `..` is still E0020;
+// - the `..` of a tuple pattern and of an enum variant pattern is not in the closed list of §18.1
+//   (`docs/foreign-forms.toml` has the struct pattern only), so it is the general rule: E0002, a pattern
+//   that cannot be read, and no candidate.
+
+pub struct P3 {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+}
+
+pub fn every_field_and_the_rest(p: P3) -> I32 {
+  match p {
+    P3 { x: a, y: b, z: c, .. } => a + b + c,       //~ E0020
+  }
+}
+
+// The `..` on a line of its own after every field (W3-21/b2): the candidate removes the `,` and the
+// blanks before the `..`, or the `..` alone when a comment is between; its title is one line.
+
+pub fn the_rest_on_its_own_line(p: P3) -> I32 {
+  match p {
+    P3 {
+      x: a,
+      y: b,
+      z: c,
+      ..                                            //~ E0020
+    } => a + b + c,
+  }
+}
+
+pub fn the_rest_after_a_comment(p: P3) -> I32 {
+  match p {
+    P3 {
+      x: a,
+      y: b,
+      z: c, // the last field,
+      ..                                            //~ E0020
+    } => a + b + c,
+  }
+}
+
+pub fn the_rest_after_tabs(p: P3) -> I32 {
+  match p {
+    P3 {
+		x: a,
+		y: b,
+		z: c,
+		..                                              //~ E0020
+    } => a + b + c,
+  }
+}
+
+pub fn the_rest_after_wide_blanks(p: P3) -> I32 {
+  match p {
+    P3 { x: a, y: b, z: c,                                        .. } => a + b + c, //~ E0020
+  }
+}
+
+pub fn the_rest_of_a_tuple(t: (I32, I32, I32)) -> I32 {
+  match t {
+    (a, ..) => a,                                   //~ E0002
+  }
+}
+
+pub fn the_rest_of_a_variant(s: Shape) -> I32 {
+  match s {
+    Shape.Rect(w, ..) => w,                         //~ E0002
+    Shape.Circle(r) => r,
+  }
+}
+
+pub fn the_rest_of_a_tuple_in_some(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some((a, ..)) => a,                             //~ E0002
+    None => 0,
+  }
+}
+
+pub fn fine(p: P3) -> I32 {
+  match p {
+    P3 { x: a, y: b, z: c } => a + b + c,
+  }
+}

@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.4", "§7", "§18.1"]
+
+// In the header of an `if`, `while`, `match`, `for` or `par`, a `{` at the start of an expression
+// outside parentheses is the start of the body (S-338, decided 2026-10-09), like the `{` of a struct
+// literal (§4.4): a block expression in a header is written in parentheses. A `{` that follows a
+// keyword inside the header (`if c { 1 } else { 2 }` as an end) belongs to that expression. A violation
+// is E0002 of the syntax stage with a note, and has no candidate. That `0.. {` (a range with one end,
+// S-278) is a different E0002 is in crates/onsa_cli/tests/pattern_guard_candidates.rs. One diagnostic
+// per function. The case of `par` is in header_block_expression_par.onsa.
+
+pub fn block_as_the_end(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<{ n } {                              //~ E0002
+    c = c + i
+  }
+  c
+}
+
+pub fn block_as_the_condition(c: Bool) -> U32 {
+  if { c } {                                        //~ E0002
+    1
+  } else {
+    2
+  }
+}
+
+pub fn block_in_a_comparison(x: U32, n: U32) -> U32 {
+  var t: U32 = 0
+  while x < { n } {                                 //~ E0002
+    t = t + 1
+    break
+  }
+  t
+}
+
+pub fn block_as_the_scrutinee(n: U32) -> U32 {
+  match { n } {                                     //~ E0002
+    _ => 1,
+  }
+}
+
+pub fn block_as_the_iterated_value(xs: [U32; 3]) -> U32 {
+  var t: U32 = 0
+  for x in { xs } {                                 //~ E0002
+    t = t + x
+  }
+  t
+}
+
+pub fn block_after_an_operator_in_the_end(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n + { 1 } {                          //~ E0002
+    c = c + i
+  }
+  c
+}
+
+pub fn block_as_the_start(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in { 0 }..<n {                              //~ E0002
+    c = c + i
+  }
+  c
+}
+
+// ---------------------------------------------------------------- fine: in parentheses, or after a keyword
+
+pub fn parenthesized_end(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<({ n }) {
+    c = c + i
+  }
+  c
+}
+
+pub fn parenthesized_condition(c: Bool) -> U32 {
+  if ({ c }) {
+    1
+  } else {
+    2
+  }
+}
+
+pub fn parenthesized_in_a_comparison(x: U32, n: U32) -> U32 {
+  var t: U32 = 0
+  while x < ({ n }) {
+    t = t + 1
+    break
+  }
+  t
+}
+
+pub fn parenthesized_scrutinee(n: U32) -> U32 {
+  match ({ n }) {
+    _ => 1,
+  }
+}
+
+pub fn parenthesized_iterated_value(xs: [U32; 3]) -> U32 {
+  var t: U32 = 0
+  for x in ({ xs }) {
+    t = t + x
+  }
+  t
+}
+
+pub fn parenthesized_after_an_operator(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n + ({ 1 }) {
+    c = c + i
+  }
+  c
+}
+
+pub fn an_if_as_the_end(c: Bool) -> U32 {
+  var t: U32 = 0
+  for i in 0..<if c { 4 } else { 8 } {
+    t = t + i
+  }
+  t
+}
+
+pub fn a_match_as_the_end(o: Option[U32]) -> U32 {
+  var t: U32 = 0
+  for i in 0..<match o { Some(n) => n, None => 0 } {
+    t = t + i
+  }
+  t
+}
+
+pub fn an_if_in_a_condition(a: Bool, b: Bool) -> U32 {
+  if if a { b } else { false } {
+    1
+  } else {
+    2
+  }
+}

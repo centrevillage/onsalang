@@ -1,0 +1,143 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for the rest `..` in a struct pattern (§7, S-109): every field is written, the unwanted ones as
+// `_`, and the candidate puts the remaining fields in place of `..` with `_`, in the order of the
+// declaration (not in the order the pattern was written in), so the text of the candidate is fixed by
+// the spec and `.fix1` holds it. The struct is declared in this file (before or after the function that
+// matches it); a struct of another module is in pkg_patterns_rest/. The `..` of a struct pattern is
+// found in the syntax stage (it stops `onsa fmt`, §18.2), and the shapes around the struct (`Some(..)`,
+// a tuple, a field that is a struct, `let`, a method) are the same error. One error per function.
+
+pub struct P3 {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Wrap {
+  inner: P3,
+  tag: I32,
+}
+
+pub struct Pair[T] {
+  first: T,
+  second: T,
+  third: T,
+}
+
+pub fn only_the_rest(p: P3) -> I32 {
+  match p {
+    P3 { .. } => 1,                                 //~ E0020
+  }
+}
+
+pub fn last_field_given(p: P3) -> I32 {
+  match p {
+    P3 { z: pz, .. } => pz,                         //~ E0020
+  }
+}
+
+pub fn middle_field_given(p: P3) -> I32 {
+  match p {
+    P3 { y: py, .. } => py,                         //~ E0020
+  }
+}
+
+pub fn first_and_last_given(p: P3) -> I32 {
+  match p {
+    P3 { x: a, z: c, .. } => a + c,                 //~ E0020
+  }
+}
+
+pub fn fields_given_out_of_order(p: P3) -> I32 {
+  match p {
+    P3 { z: c, x: a, .. } => a + c,                 //~ E0020
+  }
+}
+
+pub fn a_literal_in_a_field(p: P3) -> I32 {
+  match p {
+    P3 { x: 1, .. } => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_a_guard(p: P3) -> I32 {
+  match p {
+    P3 { x: a, .. } if a > 0 => a,                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[P3]) -> I32 {
+  match o {
+    Some(P3 { x: a, .. }) => a,                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (P3, I32)) -> I32 {
+  match t {
+    (P3 { x: a, .. }, n) => a + n,                  //~ E0020
+  }
+}
+
+pub fn a_field_that_is_a_struct(w: Wrap) -> I32 {
+  match w {
+    Wrap { inner: P3 { x: a, .. }, tag: _ } => a,   //~ E0020
+  }
+}
+
+pub fn the_outer_struct(w: Wrap) -> I32 {
+  match w {
+    Wrap { tag: t, .. } => t,                       //~ E0020
+  }
+}
+
+pub fn a_generic_struct(p: Pair[I32]) -> I32 {
+  match p {
+    Pair { first: a, .. } => a,                     //~ E0020
+  }
+}
+
+pub fn a_struct_declared_later(l: Late) -> I32 {
+  match l {
+    Late { a: v, .. } => v,                         //~ E0020
+  }
+}
+
+pub fn a_second_arm(p: P3) -> I32 {
+  match p {
+    P3 { x: 0, y: _, z: _ } => 0,
+    P3 { y: b, .. } => b,                           //~ E0020
+  }
+}
+
+pub fn in_a_let(p: P3) -> I32 {
+  let P3 { x: a, .. } = p                           //~ E0020
+  a
+}
+
+impl P3 {
+  pub fn first_two(self) -> I32 {
+    match self {
+      P3 { x: a, y: b, .. } => a + b,               //~ E0020
+    }
+  }
+}
+
+pub struct Late {
+  a: I32,
+  b: I32,
+}
+
+// The patterns that spell every field are fine.
+
+pub fn fine(p: P3) -> I32 {
+  match p {
+    P3 { x: a, y: _, z: _ } => a,
+  }
+}

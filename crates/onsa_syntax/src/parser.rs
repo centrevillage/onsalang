@@ -408,7 +408,7 @@ impl<'a> Parser<'a> {
             | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | PrefixExpr | CallExpr | FieldExpr
             | TupleIndexExpr | IndexExpr | TryExpr | StructLit => 1,
             // Patterns: `|` is one level for all its alternatives.
-            WildPat | LitPat | NegLitPat | BindPat | PathPat | StructPatField => 0,
+            WildPat | LitPat | NegLitPat | BindPat | PathPat | StructPatField | StructPatRest => 0,
             TuplePat | ParenPat | TupleStructPat | StructPat | OrPat => 1,
         };
         children + level
@@ -2106,13 +2106,7 @@ impl<'a> Parser<'a> {
         if self.peek_kind().range_end().is_some() {
             let m = self.precede(expr, NodeKind::RangeExpr)?;
             self.bump();
-            // A head ends at the `{` of its body: a range without an end
-            // does not read the body as its end.
-            // SPEC-GAP(S-338): an end that starts with `{` (`0..<{ n }`) is
-            // read as no end either; the spec does not say it.
-            if self.at(TokenKind::LBrace) {
-                return Err(self.fail(Want::Expr, "the end of the range"));
-            }
+            // A `{` after the symbol starts the body (S-338): `parse_primary` says so.
             self.parse_expr_inner(false)?;
             return Ok(self.complete(m, NodeKind::RangeExpr));
         }
@@ -2394,6 +2388,21 @@ impl<'a> Parser<'a> {
                     r
                 })?;
                 return Ok(self.complete(m, kind));
+            }
+            // In a header, a `{` at the start of an expression outside
+            // parentheses starts the body (§4.4, S-338), as the `{` of a
+            // struct literal does (S-08): a block is written in parentheses.
+            TokenKind::LBrace if self.no_struct_lit => {
+                let d = Diagnostic::new(
+                    Stage::Syntax,
+                    Code::E0002,
+                    t.span,
+                    "a `{` at the start of an expression in a header starts the body",
+                )
+                .with_found("{")
+                .with_rule("in the header of `if`, `while`, `match`, `for` and `par`, a `{` at the start of an expression outside parentheses starts the body: a block expression there is written in parentheses, `({ … })`, and a range has both ends, `0..<n` (§3.1, §4.4, §7)");
+                self.report(d);
+                return Err(ParseError);
             }
             TokenKind::LBrace => return self.parse_block_expr(),
             TokenKind::KwIf => return self.parse_if(),
@@ -2688,8 +2697,49 @@ impl<'a> Parser<'a> {
         (0..opens).all(|_| next(&mut i) == TokenKind::RParen)
     }
 
+    /// After a `-` in a pattern: `(`s and a `-` (`-(-1)`, S-227).
+    fn negated_negative(&self) -> bool {
+        let mut kinds = self.tokens[self.peek_index() + 1..].iter().map(|t| t.kind).filter(|k| !k.is_trivia());
+        let mut opens = 0;
+        loop {
+            match kinds.next() {
+                Some(TokenKind::LParen) => opens += 1,
+                Some(TokenKind::Minus) => return opens > 0,
+                _ => return false,
+            }
+        }
+    }
+
+    /// What follows the pattern being read: `=>` in an arm of `match`, `=`
+    /// in a `let`, `in` in a `for` (the words of a failure in it).
+    fn pattern_end(&self) -> &'static str {
+        let owner = self.open.iter().rev().find_map(|o| match self.events[o.event as usize] {
+            Event::Start { kind: Some(k @ (NodeKind::MatchArm | NodeKind::LetStmt | NodeKind::ForStmt)), .. } => {
+                Some(k)
+            }
+            _ => None,
+        });
+        match owner {
+            Some(NodeKind::LetStmt) => "`=`",
+            Some(NodeKind::ForStmt) => "`in`",
+            _ => "`=>`",
+        }
+    }
+
+    /// Whether the string literal `t` interpolates (`{x}`, §2.4).
+    fn has_holes(&self, t: Token) -> bool {
+        foreign::guard::interpolated(self.file, self.text, &self.holes, t)
+    }
+
     fn parse_pattern_alt(&mut self) -> PResult<Completed> {
         let t = self.peek();
+        // A range (`1..<3`, `..=5`, `lo..<n + 1`; spec §7): no pattern. The
+        // table of the forms reads it from its first token (the guard form).
+        let rest =
+            self.tokens[self.pos..].iter().map(|t| t.kind).filter(|k| !k.is_trivia() || *k == TokenKind::Newline);
+        if pattern_alternative(rest).1.is_some() {
+            return Err(self.fail(Want::Pattern, "a pattern"));
+        }
         let kind = match t.kind {
             TokenKind::Underscore => NodeKind::WildPat,
             // `-1`, and `-(1)` / `-((1))`: the parentheses between `-` and the integer are not
@@ -2710,12 +2760,22 @@ impl<'a> Parser<'a> {
                 });
                 return Ok(self.complete(m, NodeKind::NegLitPat));
             }
+            // `-(-1)` is no literal (S-227, R-156).
+            TokenKind::Minus if self.negated_negative() => {
+                return Err(self.error(
+                    Code::E0002,
+                    t.span,
+                    "a pattern's `-` is on an integer literal or a constant; `-(-1)` is neither (§7)",
+                ));
+            }
             TokenKind::Int => {
                 let m = self.start(NodeKind::LitPat)?;
                 self.bump();
                 self.check_int(t);
                 return Ok(self.complete(m, NodeKind::LitPat));
             }
+            // A string with an interpolation makes a value: no pattern (§7, S-225).
+            TokenKind::Str if self.has_holes(t) => return Err(self.fail(Want::Pattern, "a pattern")),
             TokenKind::Char | TokenKind::Str | TokenKind::KwTrue | TokenKind::KwFalse => NodeKind::LitPat,
             // `()`, `(p)` (a group, §2.4, R-43) or `(p, q, ...)`.
             TokenKind::LParen => {
@@ -2762,21 +2822,18 @@ impl<'a> Parser<'a> {
                     })?;
                     return Ok(self.complete(m, NodeKind::TupleStructPat));
                 }
-                if self.at(TokenKind::LBrace)
-                    && self.token_text(path.last).starts_with(|c: char| c.is_ascii_uppercase())
-                {
+                if self.at(TokenKind::LBrace) && crate::naming::is_type_name(self.token_text(path.last)) {
                     self.reshape(NodeKind::StructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
-                            // `..` and `...` (both tokens of the range symbols).
-                            if p.peek_kind().is_foreign_range() {
-                                let t = p.peek();
-                                return Err(p.error(
-                                    Code::E0002,
-                                    t.span,
-                                    "struct patterns name every field; use `_` for the unused ones (§7)",
-                                ));
+                            // The rest `..`, last (§7: the stage that counts the
+                            // fields reports it, S-109, S-366).
+                            if p.at(TokenKind::DotDot) {
+                                let r = p.start(NodeKind::StructPatRest)?;
+                                p.bump();
+                                p.complete(r, NodeKind::StructPatRest);
+                                break;
                             }
                             let f = p.start(NodeKind::StructPatField)?;
                             p.parse_ident("field name")?;
@@ -2792,8 +2849,12 @@ impl<'a> Parser<'a> {
                     })?;
                     return Ok(self.complete(m, NodeKind::StructPat));
                 }
-                let bind =
-                    path.segments == 1 && self.token_text(path.first).starts_with(|c: char| c.is_ascii_lowercase());
+                // `n @ p` (§7, S-186): no pattern; the table reads it at `@`.
+                if self.at(TokenKind::At) {
+                    let after = self.pattern_end();
+                    return Err(self.fail(Want::Pattern, after));
+                }
+                let bind = path.segments == 1 && crate::naming::is_binding_name(self.token_text(path.first));
                 return Ok(self.complete(m, if bind { NodeKind::BindPat } else { NodeKind::PathPat }));
             }
             _ => return Err(self.fail(Want::Pattern, "a pattern")),
@@ -2806,6 +2867,63 @@ impl<'a> Parser<'a> {
 
 fn binop(kind: TokenKind) -> bool {
     crate::lower::binop(kind).is_some()
+}
+
+/// The alternative of a pattern whose tokens (no comment; newlines kept)
+/// are `kinds`: where it ends (the first `|`, `if`, `=>`, `,`, `@`, `:`,
+/// `=`, `in` or newline outside brackets, a closing bracket of none of its
+/// own, or the end of the file) and the first range symbol outside brackets
+/// before that, as positions among the tokens that are no newline (spec §7,
+/// S-341: the ends of a range pattern are read as the ends of a range in a
+/// header, and end there). The newlines before the alternative do not end
+/// it, nor one after a binary operator (§2.5, as in an expression). The one
+/// reading of a range in a pattern: the parser fails at it, and the table
+/// of the forms reads its ends ([`crate::foreign`]).
+pub(crate) fn pattern_alternative(kinds: impl Iterator<Item = TokenKind>) -> (usize, Option<usize>) {
+    use TokenKind::*;
+    let mut depth = 0u32;
+    let mut range = None;
+    let mut n = 0;
+    let mut last = Eof;
+    for k in kinds {
+        match k {
+            Newline if n == 0 || depth > 0 || binop(last) => continue,
+            Eof | Newline => break,
+            LParen | LBracket | LBrace => depth += 1,
+            RParen | RBracket | RBrace if depth == 0 => break,
+            RParen | RBracket | RBrace => depth -= 1,
+            Pipe | KwIf | FatArrow | Comma | At | Colon | Eq | KwIn if depth == 0 => break,
+            _ if depth == 0 && range.is_none() && !k.range_readings().is_empty() => range = Some(n),
+            _ => {}
+        }
+        last = k;
+        n += 1;
+    }
+    (n, range)
+}
+
+/// Whether the tokens `all[first..=last]` of a file are one expression,
+/// read as an end of a range in a header (no struct literal and no block
+/// at its start, §4.4, S-338; newlines not significant): the ends of a
+/// range pattern (§7, S-341), read by the parser's own grammar (one
+/// reading). Its diagnostics are not kept.
+pub(crate) fn reads_as_expr(
+    file: FileId,
+    text: &str,
+    all: &[Token],
+    holes: &[Span],
+    first: usize,
+    last: usize,
+) -> bool {
+    let mut tokens = all[first..=last].to_vec();
+    let end = all[last].span.end;
+    tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
+    let (from, to) = (all[first].span.start, end);
+    let holes = holes.iter().copied().filter(|h| from <= h.start && h.end <= to).collect();
+    let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), holes });
+    p.nl = vec![false];
+    p.no_struct_lit = true;
+    p.parse_expr_inner(false).is_ok() && p.at(TokenKind::Eof) && p.diagnostics.is_empty()
 }
 
 /// The height of a binary chain read as the tree of §3.1 (spec §2.5), one
@@ -3144,17 +3262,15 @@ mod tests {
 
     #[test]
     fn struct_pattern_rest_dots() {
-        // `..` and `...` (the range symbols of other languages) say the same.
-        for rest in ["..", "..."] {
+        // `..` last is read (S-366: the stage that counts the fields reports it);
+        // `...`, and `..` before another field, are no struct pattern.
+        let p = parse("struct P { x: U32, y: U32 }\nfn f(p: P) -> U32 {\n  match p {\n    P { x: a, .. } => a\n  }\n}");
+        assert_eq!(codes_of(&p), [], "{:?}", p.diagnostics);
+        for rest in ["x: a, ...", ".., x: a", "x: a, ..,"] {
             let p = parse(&format!(
-                "struct P {{ x: U32, y: U32 }}\nfn f(p: P) -> U32 {{\n  match p {{\n    P {{ x: a, {rest} }} => a\n  }}\n}}"
+                "struct P {{ x: U32, y: U32 }}\nfn f(p: P) -> U32 {{\n  match p {{\n    P {{ {rest} }} => a\n  }}\n}}"
             ));
             assert_eq!(codes_of(&p), [Code::E0002], "{rest}");
-            assert!(
-                p.diagnostics[0].message.contains("struct patterns name every field"),
-                "{rest}: {:?}",
-                p.diagnostics
-            );
         }
     }
 

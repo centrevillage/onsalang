@@ -35,7 +35,7 @@
 | `body/a1_tuple_arg.onsa` | R-34 |
 | `body/c1_capture_assign.onsa` | R-25 |
 | `body/t2_neg_generic.onsa` | R-03、R-94 |
-| `body/l1_strpat.onsa` | R-03 |
+| `body/l1_strpat.onsa` | R-03。W3-21/t で期待値付きのテストへ移した: `tests/spec/negative/pattern_str.onsa`（補間を含む文字列のパターン E0020。候補の形は `crates/onsa_cli/tests/pattern_guard_candidates.rs`） |
 | `body/p1_pat_range.onsa`、`body/u1_unresolved.onsa` | R-03。W2-06 で期待値付きのテストへ移した: `tests/spec/negative/pattern_range.onsa`（パターンのリテラルの範囲 E0408 と符号なしの `-1` の E0401）、`tests/spec/negative/infer_unresolved.onsa`（関数の終わりに残る型変数の E0406。`Buf.zeroed(4)` と `None` は作った式に出す、S-226） |
 | `body/i1_generic_lit.onsa` | R-53 |
 | `body/b1_let_borrow_affine.onsa` | R-54 |

@@ -1,0 +1,3 @@
+[package]
+name = "patterns_rest"
+edition = "2026"

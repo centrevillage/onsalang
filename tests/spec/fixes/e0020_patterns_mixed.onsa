@@ -1,0 +1,145 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+//
+// # A function with two wrong arms is two errors that the unit reports one at a time (§18.1, S-259,
+// # S-314): the candidate of the first leaves the second.
+// [[test.fix]]
+// at = "122:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["123:7 E0020"]
+//
+// [[test.fix]]
+// at = "131:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["132:5 E0020"]
+
+// The forms that have the guard form as a candidate (a float literal, a range, a string with an
+// interpolation, a `-` before a constant, an `@` binding; §7, S-317, S-319) are one error when they are
+// in the pattern of one arm, and one candidate replaces every one of them (§18.1: one syntactic form,
+// S-248). The conditions are joined with `&&`, a choice becomes one guard when its branches have one
+// shape once all of them are replaced, and the arm's own guard follows with `&&`. The runner applies
+// the candidate of each diagnostic here and checks that it leaves no error of the syntax stage and no
+// E0304; the shape of the candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs. A unit
+// stops at its first error (§18.1), so a function with two wrong arms is one error.
+
+const LIMIT: I32 = 4
+
+// ---------------------------------------------------------------- the forms next to each other
+
+pub fn float_and_string(t: (F32, Str), x: U32) -> U32 {
+  match t {
+    (0.5, "a{x}") => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn range_and_float(t: (I32, F32)) -> U32 {
+  match t {
+    (1..<3, 0.5) => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_and_negated_constant(t: (I32, I32)) -> I32 {
+  match t {
+    (k @ 1..<3, -LIMIT) => k,                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn all_five(t: (I32, Str, I32, F32, I32), x: U32) -> I32 {
+  match t {
+    (-LIMIT, "a{x}", 1..<3, 0.5, j @ 7) => j,       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[(F32, I32)]) -> I32 {
+  match o {
+    Some((0.5, 1..<3)) => 1,                        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_the_arms_own_guard(t: (F32, I32), flag: Bool) -> I32 {
+  match t {
+    (0.5, 1..<3) if flag => 1,                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn the_same_form_twice_in_a_choice_of_tuples(t: (F32, I32)) -> I32 {
+  match t {
+    (0.5, 1..<3) | (1.5, 5..<7) => 1,               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_of_tuples_with_a_string(t: (F32, Str), x: U32) -> U32 {
+  match t {
+    (0.5, "a{x}") | (1.5, "b{x}") => 1,             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_in_a_choice_of_tuples(t: (I32, F32)) -> I32 {
+  match t {
+    (k @ 1..<3, 0.5) | (k @ 5..<7, 1.5) => k,       //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- the branches differ in one place: E0002
+
+pub fn one_branch_has_a_plain_string(t: (F32, Str), x: U32) -> U32 {
+  match t {
+    (0.5, "a{x}") | (1.5, "b") => 1,                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn one_branch_has_a_binding_for_the_range(t: (F32, I32)) -> I32 {
+  match t {
+    (0.5, 1..<3) | (1.5, n) => n,                   //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn one_branch_has_an_at_binding(t: (I32, F32)) -> I32 {
+  match t {
+    (k @ 1..<3, 0.5) | (5, 1.5) => k,               //~ E0002
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- one error for the unit
+
+pub fn two_wrong_arms(n: I32, x: F32) -> I32 {
+  match n {
+    1..<3 => 1,                                     //~ E0020
+    k @ 5..<7 => k,
+    _ => 0,
+  }
+}
+
+pub fn the_second_arm_is_the_wrong_one(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    k @ 5..<7 => k,                                 //~ E0020
+    1..<3 => 1,
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn fine(t: (F32, I32), flag: Bool) -> I32 {
+  match t {
+    (v, k) if v == 0.5 && 1 <= k && k < 3 && flag => 1,
+    (v, 7) if v == 1.5 || v == 2.5 => 2,
+    _ => 0,
+  }
+}

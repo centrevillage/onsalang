@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§11.5", "§18.1"]
+
+// The correct heads of negative/range_header_one_sided.onsa (§7): a range with both ends. Apart because
+// a range with its end in the head of a `for` is E0200 until W8-03.
+
+pub fn fine(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  for j in 1..=n {
+    t = t + j
+  }
+  t
+}

@@ -389,7 +389,6 @@ fn the_candidate_for_angle_brackets_edits_the_brackets_only() {
 // ---- Forms with no candidate: E0002 and a note (§18.1) -------------------------------------------
 
 #[test]
-#[ignore = "W3-21: the note of `s @ Some(_)` and `Some(1..<3) | None` (the rows at_binding_complex and range_pattern_choice); the W3-15 forms pass"]
 fn a_foreign_form_with_no_candidate_is_e0002_with_a_note_and_no_candidate() {
     // §18.1: E0020 only when a candidate can be made; otherwise E0002, and the Onsa form may be
     // shown in a note. The rows are docs/foreign-forms.toml rows with code = "E0002" (S-250,

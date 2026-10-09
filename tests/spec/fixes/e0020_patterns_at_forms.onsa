@@ -1,0 +1,292 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for an `@` binding whose right side is a literal, a constant by its spelling (S-352), a range
+// or a choice of them (§7, S-186, S-319): the candidate is the guard form. The name on the left stays the binding and the whole right
+// side becomes the condition (`n @ 1..<5` is `n if 1 <= n && n < 5`; the literal `1` too, `k @ 1` is
+// `k if k == 1`), so the text of every candidate is fixed by the spec and `.fix1` holds it. A range
+// follows the rule of a range pattern: `..<` is `lo <= k && k < hi`, `..=` is `lo <= k && k <= hi`, a
+// range with one end is one comparison (S-278). `@` binds more strongly than `|` (`n @ 1 | 2` is
+// `n @ 1` or `2`), a choice on the right is in parentheses, and the branches of a choice are joined
+// with `||` (a branch with more than one comparison is in parentheses, as the spec shows:
+// `n @ (1 | 1..<3)` is `n if n == 1 || (1 <= n && n < 3)`). The choice of two arms (`n @ 1 | n @ 2`) has
+// the same shape in both branches once the `@` is replaced, so it is one guard; the others do not and
+// are E0002 (S-317, S-319). A right side that is not a literal, a constant, a range or a choice of them
+// (an enum variant `k @ Color.Red` too) is E0002 with a note. One error per function.
+
+const LIMIT: I32 = 4
+
+pub enum Color {
+  Red,
+  Green,
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+// ---------------------------------------------------------------- E0020: a literal
+
+pub fn a_literal(n: I32) -> I32 {
+  match n {
+    k @ 1 => k,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_negative_literal(n: I32) -> I32 {
+  match n {
+    k @ -1 => k,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_char(c: Char) -> I32 {
+  match c {
+    l @ 'a' => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_bool(b: Bool) -> I32 {
+  match b {
+    t @ true => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_str(s: Str) -> I32 {
+  match s {
+    m @ "x" => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_float_literal(x: F32) -> I32 {
+  match x {
+    y @ 0.5 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+// A constant by its spelling (S-352): the name and the path, with `-` too.
+
+pub fn a_constant(n: I32) -> I32 {
+  match n {
+    k @ LIMIT => k,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_negated_constant(n: I32) -> I32 {
+  match n {
+    k @ -LIMIT => k,                                //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- E0020: a range
+
+pub fn a_closed_range(n: I32) -> I32 {
+  match n {
+    k @ 1..=5 => k,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_negative_range(n: I32) -> I32 {
+  match n {
+    k @ -5..<-1 => k,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_char_range(c: Char) -> I32 {
+  match c {
+    l @ 'a'..='z' => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_float_range(x: F32) -> I32 {
+  match x {
+    y @ 0.5..<1.5 => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_range_from(n: I32) -> I32 {
+  match n {
+    k @ 5.. => k,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_range_up_to(n: I32) -> I32 {
+  match n {
+    k @ ..<5 => k,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_range_through(n: I32) -> I32 {
+  match n {
+    k @ ..=5 => k,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- E0020: a choice on the right
+
+pub fn a_choice_of_a_literal_and_a_range(n: I32) -> I32 {
+  match n {
+    k @ (1 | 1..<3) => k,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_choice_of_literals(n: I32) -> I32 {
+  match n {
+    k @ (1 | 2) => k,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_choice_of_ranges(n: I32) -> I32 {
+  match n {
+    k @ (1..<3 | 5..<7) => k,                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_choice_of_three(n: I32) -> I32 {
+  match n {
+    k @ (1 | 2 | 3) => k,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn the_same_name_in_both_arms(n: I32) -> I32 {
+  match n {
+    k @ 1 | k @ 2 => k,                             //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- E0020: inside a pattern
+
+pub fn inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(k @ 1..<3) => k,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some_twice(o: Option[Option[I32]]) -> I32 {
+  match o {
+    Some(Some(k @ 1)) => k,                         //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (k @ 1..<3, n) => k + n,                        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_struct(p: Pt) -> I32 {
+  match p {
+    Pt { x: k @ 1..<3, y: _ } => k,                 //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- E0002: a right side that is not a guard form
+
+pub fn a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    u @ (1, 2) => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_binding(n: I32) -> I32 {
+  match n {
+    k @ m => 1,                                     //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_wildcard_in_the_choice(n: I32) -> I32 {
+  match n {
+    k @ (1 | _) => k,                               //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn an_enum_variant(c: Color) -> I32 {
+  match c {
+    k @ Color.Red => 1,                             //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn another_at(n: I32) -> I32 {
+  match n {
+    a @ b @ 1 => a,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn an_enum_pattern(o: Option[I32]) -> I32 {
+  match o {
+    s @ Some(1) => 1,                               //~ E0002
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- E0002: the branches do not have one shape
+
+pub fn at_before_the_bar(n: I32) -> I32 {
+  match n {
+    k @ 1 | 2 => k,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn two_names(n: I32) -> I32 {
+  match n {
+    a @ 1 | b @ 2 => 1,                             //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_wildcard_branch(n: I32) -> I32 {
+  match n {
+    k @ 1 | _ => 1,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn guards(n: I32) -> I32 {
+  match n {
+    k if 1 <= k && k < 5 => k,
+    k if k == 7 || k == 8 => k,
+    _ => 0,
+  }
+}
+
+pub fn a_second_arm(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    k @ 1..<5 => k,                                 //~ E0020
+    _ => 9,
+  }
+}

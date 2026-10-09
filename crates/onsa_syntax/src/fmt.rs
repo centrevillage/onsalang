@@ -1227,7 +1227,7 @@ impl<'a> Fmt<'a> {
                 }
                 self.push(")");
             }
-            PatKind::Struct { path, fields } => {
+            PatKind::Struct { path, fields, rest } => {
                 self.path(path);
                 self.push(" { ");
                 for (i, (name, f)) in fields.iter().enumerate() {
@@ -1237,6 +1237,9 @@ impl<'a> Fmt<'a> {
                     self.push(&name.name);
                     self.push(": ");
                     self.pat(*f);
+                }
+                if rest.is_some() {
+                    self.push(if fields.is_empty() { ".." } else { ", .." });
                 }
                 self.push(" }");
             }

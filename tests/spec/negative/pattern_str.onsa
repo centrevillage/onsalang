@@ -14,7 +14,10 @@
 // error per function (P-01).
 //
 // The fix candidate (`v if v == "a{x}b"`) and the note are not part of the marker, and the
-// text does not say how the name of the binding is chosen, so no `fixes` case is written here.
+// text does not say how the name of the binding is chosen, so no `fixes` case is written here (the
+// shape of the candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs). The arms of one
+// pattern with more than one interpolated string are one error and one candidate (S-319); a choice is
+// one guard only when its branches have one shape, and is E0002 when they do not (S-317).
 
 use std.array
 
@@ -96,9 +99,68 @@ pub fn inside_a_struct(t: Tag, x: U32) -> U32 {
   }
 }
 
+pub fn two_in_a_tuple(a: Str, b: Str, x: U32, y: U32) -> U32 {
+  match (a, b) {
+    ("{x}", "{y}") => 1,        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn beside_a_literal(s: Str, n: U32, x: U32) -> U32 {
+  match (s, n) {
+    ("a{x}", 1) => 1,           //~ E0020
+    _ => 0,
+  }
+}
+
+// A choice is one guard when every branch has the same shape once the interpolated strings are
+// replaced (S-317, S-319): `"a{x}" | "b{x}"` is `v if v == "a{x}" || v == "b{x}"`. A branch that is a
+// plain literal (`"a"`, `"{{"`) stays a literal, so the branches differ and there is no candidate: E0002.
+pub fn choice_of_interpolated(s: Str, x: U32) -> U32 {
+  match s {
+    "a{x}" | "b{x}" => 1,       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_inside_some(o: Option[Str], x: U32) -> U32 {
+  match o {
+    Some("a{x}" | "b{x}") => 1,   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_that_shares_a_binding(t: (Str, U32), x: U32) -> U32 {
+  match t {
+    ("a{x}", n) | ("b{x}", n) => n,   //~ E0020
+    _ => 0,
+  }
+}
+
 pub fn inside_an_alternative(s: Str, x: U32) -> U32 {
   match s {
-    "a" | "b{x}" => 1,          //~ E0020
+    "a" | "b{x}" => 1,          //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn alternative_with_an_escape(s: Str, x: U32) -> U32 {
+  match s {
+    "a{x}" | "{{" => 1,         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn alternative_of_other_shapes(t: (Str, U32), x: U32) -> U32 {
+  match t {
+    ("a{x}", 1) | ("b{x}", 2) => 1,   //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn alternative_of_options(o: Option[Str], x: U32) -> U32 {
+  match o {
+    Some("a{x}") | None => 1,   //~ E0002
     _ => 0,
   }
 }

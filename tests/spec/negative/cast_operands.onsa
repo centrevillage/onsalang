@@ -81,6 +81,32 @@ pub fn id64(a: F64) -> F64 {
   a
 }
 
+// The range symbols of a head are weaker than `as` too (§3.3, S-340): both ends, one diagnostic a head.
+
+pub fn cast_in_the_end_of_a_range(n: I32) -> I64 {
+  var t: I64 = 0
+  for i in 0..<n as I64 {               //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub fn cast_in_the_start_of_a_range(n: I32) -> I64 {
+  var t: I64 = 0
+  for i in n as I64..<9 {               //~ E0011
+    t = t + i
+  }
+  t
+}
+
+pub fn casts_in_both_ends(a: I32, b: I32) -> I64 {
+  var t: I64 = 0
+  for i in a as I64..=b as I64 {        //~ E0011
+    t = t + i
+  }
+  t
+}
+
 // ---- accepted ----------------------------------------------------------------------------------------
 
 pub struct W {

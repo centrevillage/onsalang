@@ -17,6 +17,28 @@ enum Shape {
     SnakeWord,
 }
 
+/// Whether `name` has the shape of a constant (`UPPER_SNAKE`, §2.3): the
+/// last name of a path that names a constant by its spelling alone (§7: a
+/// `-` before it, the right side of `@`; S-319, S-352).
+// SPEC-GAP(S-375): a name of one letter or of capitals only (`Mode.A`,
+// `Status.OK`) has the shape of a variant too; it is read as a constant.
+pub(crate) fn is_constant_name(name: &str) -> bool {
+    Shape::UpperSnake.matches(name)
+}
+
+/// Whether a name in a pattern binds (§7, §2.3): one whose first letter is
+/// lowercase does (a `snake_case` name; the naming rule checks the rest);
+/// others are resolved.
+pub(crate) fn is_binding_name(name: &str) -> bool {
+    name.starts_with(|c: char| c.is_ascii_lowercase())
+}
+
+/// Whether a path whose last name is `name` names a type, whose `{` opens a
+/// struct pattern or literal (§4.4: an `UpperCamel` name).
+pub(crate) fn is_type_name(name: &str) -> bool {
+    name.starts_with(|c: char| c.is_ascii_uppercase())
+}
+
 impl Shape {
     fn matches(self, s: &str) -> bool {
         let mut chars = s.chars();

@@ -102,7 +102,7 @@ pub fn ends_are_fields(w: (U32, U32)) -> U32 {
 
 pub fn conversion_in_the_end(n: I32) -> I64 {
   var t: I64 = 0
-  for i in 0..n as I64 {                            //~ E0020
+  for i in 0..(n as I64) {                          //~ E0020
     t = t + i
   }
   t

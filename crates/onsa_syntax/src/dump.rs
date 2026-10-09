@@ -770,7 +770,7 @@ impl Dumper<'_> {
                 }
                 self.out.push(')');
             }
-            PatKind::Struct { path, fields } => {
+            PatKind::Struct { path, fields, rest } => {
                 self.path(path);
                 self.out.push_str(" {");
                 for (i, (name, p)) in fields.iter().enumerate() {
@@ -779,6 +779,9 @@ impl Dumper<'_> {
                     }
                     let _ = write!(self.out, " {}: ", name.name);
                     self.pat(*p);
+                }
+                if rest.is_some() {
+                    self.out.push_str(if fields.is_empty() { " .." } else { ", .." });
                 }
                 self.out.push_str(" }");
             }

@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§11.5", "§18.1"]
+
+// A range with one end in the header of a `for` or a `par` is E0002 with a note (spec §7, S-278): a
+// loop needs both ends, so `5..` and `..<5` cannot be read as a header (the one-ended range is a
+// pattern only, where it is the guard form, fixes/e0020_patterns_range.onsa). Unlike `0..n`, no
+// candidate can be made: nothing says what the missing end is. That the diagnostic has a note and no
+// candidate is checked in crates/onsa_cli/tests/pattern_guard_candidates.rs. One diagnostic per
+// function.
+//
+// A `{` right after a range symbol that opens a block expression as the end (`for i in 0..<{ n } {`)
+// is another error: a `{` at the start of an expression in a header is the body (S-338), which
+// header_block_expression.onsa has. `5.. {` is a range with one end followed by the body. The cases of
+// `par` are in range_header_one_sided_par.onsa.
+
+pub fn from_header(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 5.. {                                    //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn from_zero(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0.. {                                    //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn from_a_name(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in n.. {                                    //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn up_to_header(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in ..<n {                                   //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn through_header(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in ..=n {                                   //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn up_to_two_dots_header(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in ..n {                                    //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn up_to_a_sum(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in ..<n + 1 {                               //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn inner_loop(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    for _ in i.. {                                  //~ E0002
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn in_a_branch(go: Bool, n: U32) -> U32 {
+  var c: U32 = 0
+  if go {
+    for _ in ..<n {                                 //~ E0002
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn in_a_match_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => {
+      var t: U32 = 0
+      for _ in ..=n {                               //~ E0002
+        t = t + 1
+      }
+      t
+    },
+    None => 0,
+  }
+}

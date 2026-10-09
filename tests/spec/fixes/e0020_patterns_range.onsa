@@ -1,0 +1,361 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§3.1", "§18.1"]
+
+// E0020 for a range as a pattern (§7, S-249, S-257, S-278, S-317, in the syntax stage). A range is
+// written in the header of a `for` or a `par` only; as a pattern it is the guard form: `1..<3 =>` is
+// `k if 1 <= k && k < 3 =>`, `1..=3 =>` is `k if 1 <= k && k <= 3 =>`, and `1..3` and `1...3` are
+// the two of them (the half-open reading first). A range with one end is one comparison
+// (`5..` is `k if 5 <= k`, `..<5` is `k if k < 5`, `..=5` is `k if k <= 5`, `..5` is the two of them).
+// The type of the ends is not looked at: integers, `Char` and floats are all the same error (the
+// comparison of the guard is checked in the type stage). A range inside `Some(..)`, a tuple, a struct
+// or a choice is the same error. All the ranges (and the other guard forms) of the pattern of one arm
+// are one error, and one candidate replaces every one of them with a new binding and joins the
+// conditions with `&&`; a choice becomes one guard only when every branch has the same shape once the
+// ranges are replaced (`Some(1..<3) | Some(5..<7)` does, `Some(1..<3) | None` does not and is E0002,
+// S-317). The name of the new binding is not fixed by the spec (S-253): the candidate must leave no
+// error of the syntax stage and no E0304, which the runner checks for each candidate; the shape of the
+// candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs. One error per function.
+//
+// The arm of a one-ended range is not the first thing of a line in this file: what the spec says of a
+// line that starts with a binary-only operator (§2.5) is not settled for `..<5 =>` (a gap in the report
+// of W3-21/t), so those arms are written on one line or inside another pattern.
+
+use std.array
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+// ---------------------------------------------------------------- the four spellings
+
+pub fn half_open(n: I32) -> I32 {
+  match n {
+    1..<3 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn closed(n: I32) -> I32 {
+  match n {
+    1..=3 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_dots(n: I32) -> I32 {
+  match n {
+    1..3 => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_dots(n: I32) -> I32 {
+  match n {
+    1...3 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- a range with one end
+
+pub fn from(n: I32) -> I32 {
+  match n { 5.. => 1, _ => 0 }                      //~ E0020
+}
+
+pub fn up_to(n: I32) -> I32 {
+  match n { ..<5 => 1, _ => 0 }                     //~ E0020
+}
+
+pub fn through(n: I32) -> I32 {
+  match n { ..=5 => 1, _ => 0 }                     //~ E0020
+}
+
+pub fn up_to_two_dots(n: I32) -> I32 {
+  match n { ..5 => 1, _ => 0 }                      //~ E0020
+}
+
+pub fn from_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(5..) => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn up_to_inside_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (..<5, n) => n,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn through_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(..=5) => 1,                                //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- the type of the ends
+
+pub fn negative_ends(n: I32) -> I32 {
+  match n {
+    -5..<5 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn chars(c: Char) -> I32 {
+  match c {
+    'a'..='z' => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn floats(x: F32) -> I32 {
+  match x {
+    0.0..<1.0 => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn unsigned(n: U8) -> I32 {
+  match n {
+    0..=9 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- inside another pattern
+
+pub fn inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some_twice(o: Option[Option[I32]]) -> I32 {
+  match o {
+    Some(Some(1..=3)) => 1,                         //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, n) => n,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_struct(p: Pt) -> I32 {
+  match p {
+    Pt { x: 1..<3, y: _ } => 1,                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_ranges_are_one_error(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, 5..=7) => 1,                            //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_ranges_with_one_end(t: (I32, I32)) -> I32 {
+  match t {
+    (5.., ..<2) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- a choice whose branches have one shape
+
+pub fn choice_of_ranges(n: I32) -> I32 {
+  match n {
+    1..<3 | 5..<7 => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_of_three(n: I32) -> I32 {
+  match n {
+    1..<3 | 5..<7 | 9..=10 => 1,                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_of_options(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3) | Some(5..<7) => 1,                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3 | 5..<7) => 1,                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_that_shares_a_literal(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, 1) | (5..<7, 1) => 1,                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_that_shares_a_binding(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, n) | (5..<7, n) => n,                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_of_one_ended_ranges(n: I32) -> I32 {
+  match n { ..<0 | 10.. => 1, _ => 0 }              //~ E0020
+}
+
+// ---------------------------------------------------------------- the guard the arm already has
+
+pub fn with_a_guard(n: I32, flag: Bool) -> I32 {
+  match n {
+    1..<3 if flag => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn guarded_choice(n: I32, flag: Bool) -> I32 {
+  match n {
+    1..<3 | 5..<7 if flag => 1,                     //~ E0020
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- where the match is
+
+pub fn second_arm(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    1..<3 => 1,                                     //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn statement(n: I32) -> I32 {
+  var r = 0
+  match n {
+    1..<3 => { r = 1 },                             //~ E0020
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn match_on_a_literal() -> I32 {
+  match 2 {
+    1..<3 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_loop(n: U32) -> I32 {
+  var c = 0
+  for i in 0..<n {
+    if i > 1 {
+      match i {
+        2..<5 => { c = c + 1 },                     //~ E0020
+        _ => { c = c + 0 },
+      }
+    }
+  }
+  c
+}
+
+pub fn in_a_closure() -> [I32; 4] {
+  array.from_fn(fn(i) {
+    match i {
+      1..<3 => 1,                                   //~ E0020
+      _ => 0,
+    }
+  })
+}
+
+pub fn in_a_generic_function[T](other: T, n: I32) -> I32 {
+  match n {
+    1..<3 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+impl Pt {
+  pub fn x_in_range(self) -> I32 {
+    match self.x {
+      1..<3 => 1,                                   //~ E0020
+      _ => 0,
+    }
+  }
+}
+
+test "a range pattern in a test" {
+  let n = 2
+  let r = match n {
+    1..<3 => 1,                                     //~ E0020
+    _ => 0,
+  }
+  assert r == 1
+}
+
+// ---------------------------------------------------------------- the branches do not have one shape: E0002
+
+pub fn some_or_none(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3) | None => 1,                        //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn other_literals(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, 1) | (5..<7, 2) => 1,                   //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_literal_branch(n: I32) -> I32 {
+  match n {
+    1..<3 | 7 => 1,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_wildcard_branch(n: I32) -> I32 {
+  match n {
+    1..<3 | _ => 1,                                 //~ E0002
+  }
+}
+
+pub fn a_binding_branch(o: Option[I32]) -> I32 {
+  match o {
+    Some(1..<3) | Some(x) => x,                     //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn other_places(t: (I32, I32)) -> I32 {
+  match t {
+    (1..<3, _) | (_, 5..<7) => 1,                   //~ E0002
+    _ => 0,
+  }
+}
+
+// A comment in the branch that the candidate would delete: no candidate, E0002 (S-251, S-317).
+pub fn comment_in_a_branch(n: I32) -> I32 {
+  match n {
+    1..<3 | // the second range                     //~ E0002
+    5..<7 => 1,
+    _ => 0,
+  }
+}

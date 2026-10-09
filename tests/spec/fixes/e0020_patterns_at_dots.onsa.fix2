@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020 for an `@` binding whose right side is a range written `a..b` or `a...b` (§7, S-249, S-278).
+// Whether the end is included differs between languages (§7, §0.3 rule 4), so the writer's meaning is
+// not known and the candidates are both readings, the half-open one first (`lo <= k && k < hi`) and
+// the closed one second (`lo <= k && k <= hi`), like the headers of `for` (fixes/e0020_range_dots.onsa).
+// A range with one end and `..` is `k < hi` and `k <= hi`. One diagnostic per function.
+
+pub fn two_dots(n: I32) -> I32 {
+  match n {
+    k if 1 <= k && k <= 5 => k,                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_dots(n: I32) -> I32 {
+  match n {
+    k if 1 <= k && k <= 5 => k,                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn negative_ends(n: I32) -> I32 {
+  match n {
+    k if -5 <= k && k <= -1 => k,                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn chars(c: Char) -> I32 {
+  match c {
+    l if 'a' <= l && l <= 'z' => 1,                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn floats(x: F32) -> I32 {
+  match x {
+    y if 0.5 <= y && y <= 1.5 => 1,                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn up_to_two_dots(n: I32) -> I32 {
+  match n {
+    k if k <= 5 => k,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(k) if 1 <= k && k <= 5 => k,               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (k, n) if 1 <= k && k <= 5 => k + n,            //~ E0020
+    _ => 0,
+  }
+}

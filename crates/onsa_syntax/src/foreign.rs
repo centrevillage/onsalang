@@ -186,6 +186,14 @@ pub enum RowId {
     BlockCommentMultilineCodeAfter,
     FloatPattern,
     FloatPatternChoice,
+    InterpolatedStringPattern,
+    NegatedConstantPattern,
+    AtBinding,
+    AtBindingComplex,
+    RangePattern,
+    RangePatternChoice,
+    RangeHeaderOneSided,
+    StructPatternRest,
     HashAttribute,
     FaustBitNot,
     PubCrate,
@@ -490,7 +498,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "float literals cannot be patterns; compare in a guard",
         rule: "a pattern holds no float literal; IEEE equality is written in a guard, `x if x == 1.0` (§7)",
-        detect: Detect::Syntax(float_pattern),
+        detect: Detect::Syntax(guard_pattern),
     },
     Row {
         id: RowId::FloatPatternChoice,
@@ -499,6 +507,60 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "float literals cannot be patterns, and these alternatives do not merge into one guard",
         rule: "a pattern holds no float literal; alternatives of other shapes are split into arms, or written in a guard (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::InterpolatedStringPattern,
+        name: "interpolated_string_pattern",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a string with an interpolation cannot be a pattern; compare in a guard",
+        rule: "a string with an interpolation makes a value and is no pattern; it is compared in a guard, `v if v == \"a{x}b\"` (a string of `{{` and `}}` only has none); alternatives of other shapes are split into arms (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::NegatedConstantPattern,
+        name: "negated_constant_pattern",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a constant with `-` cannot be a pattern; compare in a guard",
+        rule: "the `-` of a pattern is on an integer literal; a negated constant is compared in a guard, `x if x == -LIMIT`; alternatives of other shapes are split into arms (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::AtBinding,
+        name: "at_binding",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "Onsa has no `@` bindings; compare in a guard",
+        rule: "there is no `@` binding: the name is bound and its value compared in a guard, `n @ 1..<5` is `n if 1 <= n && n < 5`, `k @ LIMIT` is `k if k == LIMIT` (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::AtBindingComplex,
+        name: "at_binding_complex",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "Onsa has no `@` bindings, and this one is no comparison a guard can write",
+        rule: "there is no `@` binding; when its right side is not literals, constants and ranges (and their choice in parentheses), it is written with a guard or a nested `match`; `@` binds more strongly than `|`, and the `|` of a pattern is a choice: a bitwise or in an end is written in parentheses (`1..<(5 | 7)`) (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::RangePattern,
+        name: "range_pattern",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "ranges cannot be patterns; compare in a guard",
+        rule: "a range is written only in the header of a `for` or a `par`; in a pattern it is compared in a guard, `1..<3` is `k if 1 <= k && k < 3` (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::RangePatternChoice,
+        name: "range_pattern_choice",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "ranges cannot be patterns, and these alternatives do not merge into one guard",
+        rule: "a range is no pattern; alternatives of other shapes are split into arms, or written in a guard; the `|` of a pattern is a choice: a bitwise or in an end is written in parentheses (`1..<(5 | 7)`) (§7)",
         detect: Detect::Syntax(no_match),
     },
     Row {
@@ -592,6 +654,24 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Syntax(range_dots),
     },
     Row {
+        id: RowId::StructPatternRest,
+        name: "struct_pattern_rest",
+        phase: Phase::Types,
+        code: Code::E0020,
+        message: "a struct pattern names every field; Onsa has no `..`",
+        rule: "a struct pattern names every field once, the unused ones `_`, so that a field added later makes every pattern of the struct an error (§7)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::RangeHeaderOneSided,
+        name: "range_header_one_sided",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a range in the head of a `for` or a `par` has both ends",
+        rule: "a loop over a range writes both of its ends, `0..<n` or `0..=n`; a range with one end is no head (§7)",
+        detect: Detect::Syntax(range_header_one_sided),
+    },
+    Row {
         id: RowId::RangeOutsideHeader,
         name: "range_outside_header",
         phase: Phase::Syntax,
@@ -640,14 +720,7 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "item_dot_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "indexed_value_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "field_call", phase: Phase::Types, code: Code::E0020 },
-    Waiting { name: "interpolated_string_pattern", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "float_constant_pattern", phase: Phase::Types, code: Code::E0020 },
-    Waiting { name: "negated_constant_pattern", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "at_binding", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "at_binding_complex", phase: Phase::Syntax, code: Code::E0002 },
-    Waiting { name: "struct_pattern_rest", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "range_pattern", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "range_pattern_choice", phase: Phase::Syntax, code: Code::E0002 },
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "rate_as_type", phase: Phase::Names, code: Code::E0020 },
@@ -2030,7 +2103,8 @@ fn foreign_literal(c: &Cursor) -> Option<Hit> {
         vec![Fix::replace("add the `0` after the point", span, format!("{text}0"))]
     } else {
         c.say(RowId::LiteralSuffix);
-        let (number, _) = split_suffix(text);
+        // The `_` before the suffix goes with it (`1_u8` is `1`).
+        let number = split_suffix(text).0.trim_end_matches('_');
         // An integer before a `.` reads with it when a digit follows the `.`
         // (`1d.5` would be `1.5`) or neither a name nor a `.` (`1d.` would be
         // `1.`); `0u32..n` and `1u8.abs()` read the same.
@@ -2058,13 +2132,15 @@ pub(crate) fn number_part(text: &str) -> &str {
 }
 
 /// The Onsa spelling of a float written as in other languages, in a
-/// pattern (§2.4): `1.` is `1.0`, `0.5f32` is `0.5`, `1f32` is `1.0`; `None`
-/// for an integer with an integer suffix (`1u8`).
+/// pattern (§2.4): `1.` is `1.0`, `0.5f32` is `0.5`, `1f32` is `1.0`, the
+/// `_` before a suffix goes (`1.5_f32` is `1.5`); `None` for an integer with
+/// an integer suffix (`1u8`).
 fn float_spelling(text: &str) -> Option<String> {
     if let Some(n) = text.strip_suffix('.') {
         return Some(format!("{n}.0"));
     }
     let (number, suffix) = split_suffix(text);
+    let number = number.trim_end_matches('_');
     if !is_integer(number) {
         return Some(number.to_string());
     }
@@ -2347,454 +2423,10 @@ fn block_comment(c: &Cursor) -> Option<Hit> {
 
 // ------------------------------------------------------------ float patterns
 
-/// What a hole of a pattern tests, once it is a name of the guard (S-317).
-/// The ranges of patterns (S-249, W3-21) are the next kind of hole.
-#[derive(Clone)]
-enum Test {
-    /// `name == <literal>`: a float literal.
-    Equal(String),
-}
+pub mod guard;
 
-/// A pattern read from its tokens (`lo..=hi`, positions of the reader's
-/// tokens), for the guard form: its holes, the forms the guard tests.
-struct Pat {
-    lo: usize,
-    hi: usize,
-    kind: PatKind,
-}
-
-enum PatKind {
-    /// A form the guard tests (a float literal).
-    Hole(Test),
-    /// Tokens with nothing inside (a literal, a name, `_`).
-    Leaf,
-    /// Brackets around patterns (a tuple, `Some(..)`, `S { x: .. }`).
-    Node(Vec<Pat>),
-    /// Alternatives `p | q`.
-    Or(Vec<Pat>),
-}
-
-/// A reader of the tokens `toks` (indexes of `tokens`, without newlines and
-/// comments) of a pattern. It reads what `Parser::parse_pattern` reads, the
-/// float literals too; anything else makes no candidate.
-struct PatReader<'c, 'a> {
-    c: &'c Cursor<'a>,
-    toks: Vec<usize>,
-    pos: usize,
-}
-
-impl PatReader<'_, '_> {
-    fn peek(&self) -> Option<TokenKind> {
-        self.toks.get(self.pos).map(|&i| self.c.kind(i))
-    }
-
-    fn bump(&mut self) -> usize {
-        self.pos += 1;
-        self.pos - 1
-    }
-
-    fn pat(&self, lo: usize, kind: PatKind) -> Pat {
-        Pat { lo, hi: self.pos - 1, kind }
-    }
-
-    fn or(&mut self) -> Option<Pat> {
-        let lo = self.pos;
-        let one = self.one()?;
-        if self.peek() != Some(TokenKind::Pipe) {
-            return Some(one);
-        }
-        let mut alts = vec![one];
-        while self.peek() == Some(TokenKind::Pipe) {
-            self.bump();
-            alts.push(self.one()?);
-        }
-        Some(self.pat(lo, PatKind::Or(alts)))
-    }
-
-    fn list(&mut self, close: TokenKind, fields: bool) -> Option<Vec<Pat>> {
-        let mut out = Vec::new();
-        while self.peek() != Some(close) {
-            if fields {
-                if self.peek() != Some(TokenKind::Ident) {
-                    return None;
-                }
-                self.bump();
-                if self.peek() != Some(TokenKind::Colon) {
-                    return None;
-                }
-                self.bump();
-            }
-            out.push(self.or()?);
-            if self.peek() != Some(TokenKind::Comma) {
-                break;
-            }
-            self.bump();
-        }
-        (self.peek() == Some(close)).then(|| {
-            self.bump();
-            out
-        })
-    }
-
-    /// The literal at the reader: `-`, `(`s, a number and as many `)`s.
-    fn literal(&mut self, lo: usize) -> Option<Pat> {
-        let minus = self.peek() == Some(TokenKind::Minus);
-        if minus {
-            self.bump();
-        }
-        let mut opens = 0;
-        while minus && self.peek() == Some(TokenKind::LParen) {
-            self.bump();
-            opens += 1;
-        }
-        // The number: a float (`1.5`), one written as in other languages
-        // (`1.`, `0.5f32`, `.5`: the guard writes it in the Onsa spelling).
-        let at = self.pos;
-        let float = match self.peek()? {
-            TokenKind::Int => None,
-            TokenKind::Float => Some(self.c.src(self.toks[at]).to_string()),
-            TokenKind::ForeignLit => Some(float_spelling(self.c.src(self.toks[at]))?),
-            TokenKind::Dot if self.toks.get(at + 1).is_some_and(|&n| self.c.kind(n) == TokenKind::Int) => {
-                self.bump();
-                Some(format!("0.{}", self.c.src(self.toks[at + 1])))
-            }
-            _ => return None,
-        };
-        self.bump();
-        for _ in 0..opens {
-            if self.peek() != Some(TokenKind::RParen) {
-                return None;
-            }
-            self.bump();
-        }
-        let kind = match float {
-            Some(value) => {
-                let close = ")".repeat(opens);
-                let open = "(".repeat(opens);
-                PatKind::Hole(Test::Equal(format!("{}{open}{value}{close}", if minus { "-" } else { "" })))
-            }
-            None => PatKind::Leaf,
-        };
-        Some(self.pat(lo, kind))
-    }
-
-    fn one(&mut self) -> Option<Pat> {
-        let lo = self.pos;
-        match self.peek()? {
-            TokenKind::Minus | TokenKind::Int | TokenKind::Float | TokenKind::ForeignLit | TokenKind::Dot => {
-                self.literal(lo)
-            }
-            TokenKind::Char | TokenKind::Str | TokenKind::KwTrue | TokenKind::KwFalse | TokenKind::Underscore => {
-                self.bump();
-                Some(self.pat(lo, PatKind::Leaf))
-            }
-            TokenKind::LParen => {
-                self.bump();
-                let inner = self.list(TokenKind::RParen, false)?;
-                Some(self.pat(lo, PatKind::Node(inner)))
-            }
-            TokenKind::Ident | TokenKind::KwSelfType => {
-                self.bump();
-                while self.peek() == Some(TokenKind::Dot) {
-                    self.bump();
-                    if !self.peek().is_some_and(is_segment) {
-                        return None;
-                    }
-                    self.bump();
-                }
-                let last = self.c.src(self.toks[self.pos - 1]);
-                match self.peek() {
-                    // As the parser: `(` touching the path, `{` after an UpperCamel name.
-                    Some(TokenKind::LParen) if !self.c.gap(self.toks[self.pos]).is_some() => {
-                        self.bump();
-                        let inner = self.list(TokenKind::RParen, false)?;
-                        Some(self.pat(lo, PatKind::Node(inner)))
-                    }
-                    Some(TokenKind::LBrace) if last.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
-                        self.bump();
-                        let inner = self.list(TokenKind::RBrace, true)?;
-                        Some(self.pat(lo, PatKind::Node(inner)))
-                    }
-                    _ => Some(self.pat(lo, PatKind::Leaf)),
-                }
-            }
-            _ => None,
-        }
-    }
-}
-
-/// The condition of a guard over the holes of a shape (by their index).
-#[derive(Clone)]
-enum Cond {
-    True,
-    Test(usize, Test),
-    And(Vec<Cond>),
-    Or(Vec<Cond>),
-}
-
-impl Cond {
-    fn shifted(self, by: usize) -> Cond {
-        match self {
-            Cond::True => Cond::True,
-            Cond::Test(i, t) => Cond::Test(i + by, t),
-            Cond::And(v) => Cond::And(v.into_iter().map(|c| c.shifted(by)).collect()),
-            Cond::Or(v) => Cond::Or(v.into_iter().map(|c| c.shifted(by)).collect()),
-        }
-    }
-
-    /// The text, each comparison in parentheses (`&&` and `||` with a
-    /// comparison are of different groups until W3-07, S-45: the
-    /// parentheses keep it one reading either way, and `fmt` removes them
-    /// after).
-    fn render(&self, names: &[String]) -> String {
-        match self {
-            Cond::True => "true".into(),
-            Cond::Test(i, Test::Equal(lit)) => format!("({} == {lit})", names[*i]),
-            Cond::And(v) => v
-                .iter()
-                .map(|c| match c {
-                    Cond::Or(_) => format!("({})", c.render(names)),
-                    _ => c.render(names),
-                })
-                .collect::<Vec<_>>()
-                .join(" && "),
-            Cond::Or(v) => v
-                .iter()
-                .map(|c| match c {
-                    Cond::And(items) if items.len() > 1 => format!("({})", c.render(names)),
-                    _ => c.render(names),
-                })
-                .collect::<Vec<_>>()
-                .join(" || "),
-        }
-    }
-}
-
-/// One token of a skeleton: a token, or a hole.
-#[derive(PartialEq)]
-enum Skel<'a> {
-    Tok(TokenKind, &'a str),
-    Hole,
-}
-
-/// A pattern as the guard form keeps it: its skeleton, its holes (the first
-/// and last token of each, in the order of the text), the condition on them,
-/// and the edits that merge alternatives.
-struct Shape<'a> {
-    skel: Vec<Skel<'a>>,
-    holes: Vec<(usize, usize)>,
-    cond: Cond,
-    edits: Vec<Edit>,
-}
-
-/// The shape of `p` (S-317): the alternatives of a pattern with holes are
-/// one when they have the same skeleton (the tokens but the holes); the
-/// first stays, the others are removed, and the condition is the `||` of
-/// theirs. `None` when they differ, or a comment lies in what is removed
-/// (S-251).
-fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Option<Shape<'a>> {
-    let tok = |pos: usize| Skel::Tok(c.kind(toks[pos]), c.src(toks[pos]));
-    match &p.kind {
-        PatKind::Hole(t) => Some(Shape {
-            skel: vec![Skel::Hole],
-            holes: vec![(toks[p.lo], toks[p.hi])],
-            cond: Cond::Test(0, t.clone()),
-            edits: Vec::new(),
-        }),
-        PatKind::Leaf => Some(Shape {
-            skel: (p.lo..=p.hi).map(tok).collect(),
-            holes: Vec::new(),
-            cond: Cond::True,
-            edits: Vec::new(),
-        }),
-        PatKind::Node(inner) => {
-            let mut out = Shape { skel: Vec::new(), holes: Vec::new(), cond: Cond::True, edits: Vec::new() };
-            let mut conds = Vec::new();
-            let mut pos = p.lo;
-            for q in inner {
-                out.skel.extend((pos..q.lo).map(tok));
-                let s = shape(c, toks, q)?;
-                out.skel.extend(s.skel);
-                if !matches!(s.cond, Cond::True) {
-                    conds.push(s.cond.shifted(out.holes.len()));
-                }
-                out.holes.extend(s.holes);
-                out.edits.extend(s.edits);
-                pos = q.hi + 1;
-            }
-            out.skel.extend((pos..=p.hi).map(tok));
-            out.cond = match conds.len() {
-                0 => Cond::True,
-                1 => conds.remove(0),
-                _ => Cond::And(conds),
-            };
-            Some(out)
-        }
-        PatKind::Or(alts) => {
-            let shapes = alts.iter().map(|a| shape(c, toks, a)).collect::<Option<Vec<_>>>()?;
-            if shapes.iter().all(|s| s.holes.is_empty()) {
-                // No hole: the alternatives stay as written.
-                let skel = (p.lo..=p.hi).map(tok).collect();
-                return Some(Shape { skel, holes: Vec::new(), cond: Cond::True, edits: Vec::new() });
-            }
-            if shapes.iter().any(|s| s.skel != shapes[0].skel) {
-                return None;
-            }
-            // Remove ` | A_2 | ...`, which must hold no comment.
-            let (from, to) = (toks[alts[0].hi], toks[p.hi]);
-            if (from..=to).any(|i| matches!(c.kind(i), TokenKind::Comment | TokenKind::DocComment)) {
-                return None;
-            }
-            let mut shapes = shapes.into_iter();
-            let mut out = shapes.next()?;
-            let conds = std::iter::once(out.cond).chain(shapes.map(|s| s.cond)).collect();
-            out.cond = Cond::Or(conds);
-            out.edits.push(Edit::delete(c.file_span(c.span(from).end, c.span(to).end)));
-            Some(out)
-        }
-    }
-}
-
-/// A float literal in a pattern (§7, S-109, S-252): E0020 in the syntax
-/// stage. In an arm of `match`, the candidate is the guard form, for all the
-/// float literals of the arm's pattern at once (one form, S-248, S-317):
-/// each becomes a name no other name of the file has (S-253), and the guard
-/// compares them; alternatives are merged when they have the same skeleton
-/// ([`shape`]). Elsewhere (`let`, `for`), or when the alternatives differ,
-/// E0002 with the note.
-fn float_pattern(c: &Cursor) -> Option<Hit> {
-    if c.want != Want::Pattern {
-        return None;
-    }
-    // A float (also written as in other languages: `1.`, `0.5f32`, `.5`),
-    // after a `-` and `(`s.
-    let float_at = |i: usize| match c.kind(i) {
-        TokenKind::Float => Some(i),
-        TokenKind::ForeignLit if float_spelling(c.src(i)).is_some() => Some(i),
-        TokenKind::Dot if c.kind(i + 1) == TokenKind::Int && !c.gap(i + 1).is_some() => Some(i + 1),
-        _ => None,
-    };
-    let lit = match c.kind(c.at) {
-        TokenKind::Minus => {
-            let mut i = c.sig_after(c.at);
-            while c.kind(i) == TokenKind::LParen {
-                i = c.sig_after(i);
-            }
-            float_at(i)?
-        }
-        _ => float_at(c.at)?,
-    };
-    let span = c.file_span(c.span(c.at).start, c.span(lit).end);
-    // The pattern's owner: the innermost `match` arm, `let` or `for`.
-    let owner = c.open.iter().rev().find(|o| matches!(o.0, NodeKind::MatchArm | NodeKind::LetStmt | NodeKind::ForStmt));
-    let Some(&(NodeKind::MatchArm, arm_start)) = owner else { return hit(span, Vec::new()) };
-    let fix = guard_fix(c, arm_start);
-    // Alternatives that do not merge (S-317): their own row.
-    let pattern = (c.index_at(arm_start)..c.tokens.len())
-        .take_while(|&i| !matches!(c.kind(i), TokenKind::FatArrow | TokenKind::KwIf | TokenKind::Eof));
-    if fix.is_none() && pattern.into_iter().any(|i| c.kind(i) == TokenKind::Pipe) {
-        c.say(RowId::FloatPatternChoice);
-    }
-    hit(span, fix.into_iter().collect())
-}
-
-/// The `n`-th name (from 1) the guard-form candidates may bind: `v`, `v2`,
-/// `v3`, ... (S-253). A candidate takes the first ones no identifier of the
-/// file spells: a name visible at the arm is declared or imported in the
-/// file, or is a name of the prelude, which has none of these
-/// (`onsa_sema`'s test `the_prelude_has_no_name_of_the_guard_candidates`);
-/// the names the merged pattern keeps are identifiers of the file too.
-pub fn guard_name(n: usize) -> String {
-    if n <= 1 { "v".to_string() } else { format!("v{n}") }
-}
-
-/// The guard-form candidate of the arm that starts at `arm_start`.
-fn guard_fix(c: &Cursor, arm_start: u32) -> Option<Fix> {
-    // The pattern runs to `if` or `=>` outside brackets; the guard to `=>`.
-    let first = c.index_at(arm_start);
-    let mut depth = 0i32;
-    let mut toks = Vec::new();
-    let mut i = first;
-    let (if_tok, arrow) = loop {
-        match c.kind(i) {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth -= 1,
-            TokenKind::KwIf if depth == 0 => {
-                let mut j = i + 1;
-                while c.kind(j) != TokenKind::FatArrow {
-                    if matches!(c.kind(j), TokenKind::Eof | TokenKind::RBrace) {
-                        return None;
-                    }
-                    j += 1;
-                }
-                break (Some(i), j);
-            }
-            TokenKind::FatArrow if depth == 0 => break (None, i),
-            TokenKind::Eof => return None,
-            _ => {}
-        }
-        if depth < 0 {
-            return None;
-        }
-        if !matches!(c.kind(i), TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment) {
-            toks.push(i);
-        }
-        i += 1;
-    };
-    let last_pat = *toks.last()?;
-    let mut reader = PatReader { c, toks, pos: 0 };
-    let pat = reader.or()?;
-    if reader.pos != reader.toks.len() {
-        return None;
-    }
-    let shape = shape(c, &reader.toks, &pat)?;
-    if shape.holes.is_empty() {
-        return None;
-    }
-    // New names: none that the file has (S-253).
-    // The names in the holes of the string literals count too (S-319): a new
-    // name that a misspelt `{v}` names would hide its E0302.
-    let in_holes = c.holes.iter().flat_map(|h| {
-        let inner = &c.text[h.start as usize..h.end as usize];
-        inner.trim_start_matches('{').trim_end_matches('}').split('.')
-    });
-    let used: std::collections::HashSet<&str> = c
-        .all
-        .iter()
-        .filter(|t| t.kind == TokenKind::Ident)
-        .map(|t| &c.text[t.span.start as usize..t.span.end as usize])
-        .chain(in_holes)
-        .collect();
-    let mut n = 0;
-    let mut names = Vec::new();
-    while names.len() < shape.holes.len() {
-        n += 1;
-        let name = guard_name(n);
-        if !used.contains(name.as_str()) {
-            names.push(name);
-        }
-    }
-    let mut edits = shape.edits;
-    for (&(a, b), name) in shape.holes.iter().zip(&names) {
-        edits.push(Edit::replace(c.file_span(c.span(a).start, c.span(b).end), name.clone()));
-    }
-    let cond = match &shape.cond {
-        // One comparison alone needs no parentheses.
-        Cond::Test(k, Test::Equal(lit)) if if_tok.is_none() => format!("{} == {lit}", names[*k]),
-        Cond::Or(_) if if_tok.is_some() => format!("({})", shape.cond.render(&names)),
-        other => other.render(&names),
-    };
-    match if_tok {
-        None => edits.push(Edit::insert(c.file, c.span(last_pat).end, format!(" if {cond}"))),
-        Some(t) => {
-            let g_first = c.sig_after(t);
-            let g_last = c.sig_before(arrow)?;
-            edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{cond} && (")));
-            edits.push(Edit::insert(c.file, c.span(g_last).end, ")"));
-        }
-    }
-    Some(Fix::new("compare in a guard", edits))
-}
+pub use guard::guard_name;
+use guard::guard_pattern;
 
 // ------------------------------------------------------------ `+=` and `++`
 
@@ -2939,7 +2571,7 @@ fn increment(c: &Cursor) -> Option<Hit> {
 
 /// The range symbol at the failure (`..<`, `..=`, `..`, `...`) after an
 /// expression on its line, outside a pattern (the range patterns are the
-/// rows `range_pattern` and `range_pattern_choice`, W3-07): whether it is
+/// rows `range_pattern` and `range_pattern_choice`, [`guard`]): whether it is
 /// in the head of a `for` or a `par`, where a range is the whole expression
 /// (§3.1), or else none for a symbol in a head after a range
 /// (`for i in 0..<4..5`: the general E0002, as no candidate makes it one).
@@ -2966,11 +2598,11 @@ fn range_symbol(c: &Cursor) -> Option<bool> {
 
 /// `a..b` and `a...b` in a head (S-257): whether the end is included is
 /// read both ways across languages, so the two candidates edit the symbol
-/// only (S-251), `..<` first. An end that is not there (`1..`, a range of
-/// one side, S-278, W3-07) gets no row: the end is a token that starts an
-/// operand ([`crate::parser::starts_operand`]; an end that a later stage
-/// rejects is the error of that stage, after the candidate) but `{`, which
-/// a head reads as its body (the gap S-338, marked at the parser's range).
+/// only (S-251), `..<` first. The end is a token that starts an operand
+/// ([`crate::parser::starts_operand`]; an end that a later stage rejects is
+/// the error of that stage, after the candidate) but `{`, which a head
+/// reads as its body (S-338): a range with one end is another row
+/// ([`range_header_one_sided`], S-278).
 fn range_dots(c: &Cursor) -> Option<Hit> {
     if !range_symbol(c)? || !c.kind(c.at).is_foreign_range() {
         return None;
@@ -2994,6 +2626,40 @@ fn range_dots(c: &Cursor) -> Option<Hit> {
         })
         .collect();
     hit(span, fixes)
+}
+
+/// A range with one end in the head of a `for` or a `par` (`for i in 0.. {`,
+/// `for i in ..<n {`; §7, S-278): E0002 with the note, as nothing says what
+/// the missing end is. A `{` after `..<` or `..=` is the parser's (S-338).
+fn range_header_one_sided(c: &Cursor) -> Option<Hit> {
+    let kind = c.kind(c.at);
+    if kind.range_readings().is_empty() || c.want == Want::Pattern {
+        return None;
+    }
+    let in_head = matches!(c.context(), Some((_, NodeKind::ForStmt | NodeKind::ParExpr)));
+    // No start: the symbol starts the head.
+    let starts =
+        in_head && c.sig_before(c.at).is_some_and(|i| matches!(c.kind(i), TokenKind::KwIn | TokenKind::KwMove));
+    // No end: `..` or `...` before the body.
+    let next = c.kind(c.sig_after(c.at));
+    let ends = range_symbol(c) == Some(true)
+        && kind.is_foreign_range()
+        && (!crate::parser::starts_operand(next) || next == TokenKind::LBrace);
+    if !starts && !ends {
+        return None;
+    }
+    // The range as written: from the start of the head to the body's `{`.
+    let mut first = c.at;
+    while let Some(b) = c.sig_before(first).filter(|&b| !matches!(c.kind(b), TokenKind::KwIn | TokenKind::KwMove)) {
+        first = b;
+    }
+    let mut last = c.at;
+    while !matches!(c.kind(c.sig_after(last)), TokenKind::LBrace | TokenKind::Eof | TokenKind::Newline)
+        && c.sig_after(last) != last
+    {
+        last = c.sig_after(last);
+    }
+    hit(c.file_span(c.span(first).start, c.span(last).end), Vec::new())
 }
 
 /// A range after an expression outside the head of a `for` or a `par`

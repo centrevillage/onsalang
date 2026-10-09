@@ -609,11 +609,49 @@ impl OpGroup {
     }
 }
 
+/// The rest `..` of a struct pattern (§7, S-366): its span, and what a
+/// candidate removes when no field remains: the `,` before it and the
+/// blanks between them, or the `..` alone when a comment is between (S-251).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StructRest {
+    pub span: Span,
+    pub removal: Span,
+}
+
 /// The side of an operand of a binary operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Left,
     Right,
+}
+
+/// What an expression is at its top, as the operand of a binary operator
+/// (§3.1, §3.3): what decides whether it is written in parentheses there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Operand {
+    /// A name, a literal, a postfix chain, a prefix operator, a bracket.
+    Plain,
+    /// A suffix form weaker than every binary operator: `x as T` (and the
+    /// `e at k` of flow, W3-09). It is in parentheses as an operand (E0011).
+    AsAt,
+    /// A chain whose root is this operator.
+    Binary(BinOp),
+}
+
+impl BinOp {
+    /// Whether `operand` is written without parentheses on `side` of this
+    /// operator (§3.1, §3.3; S-339, S-341): the one judgment of the
+    /// parentheses of a written operand ([`BinOp::takes`] for a chain, E0011
+    /// for `as` and `at`). The guard candidates of the patterns read it for
+    /// the ends of a range and the guard of the arm; `fmt` (W3-12) for the
+    /// parentheses it may remove.
+    pub fn bare(self, side: Side, operand: Operand) -> bool {
+        match operand {
+            Operand::Plain => true,
+            Operand::AsAt => false,
+            Operand::Binary(child) => self.takes(side, child),
+        }
+    }
 }
 
 impl BinOp {
@@ -939,6 +977,8 @@ pub enum PatKind {
     Struct {
         path: Path,
         fields: Vec<(Ident, PatId)>,
+        /// The rest `..` (§7: E0020, S-109, S-366).
+        rest: Option<StructRest>,
     },
     /// `p | q`
     Or(Vec<PatId>),

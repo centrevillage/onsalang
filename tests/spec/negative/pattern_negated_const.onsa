@@ -1,0 +1,205 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.3", "§18.1"]
+
+// E0020: a constant with a prefix `-` is not a pattern (spec §7, S-185, S-319; syntax stage). A name
+// that is a constant is known from how it is written (§2.3: `UPPER_SNAKE`, or a path that ends in one,
+// `I64.MAX`), so `-LIMIT` is found in the syntax stage and does not wait for the type of the constant
+// (a constant the pattern can compare is one of the types of the literals; a `-` before a constant is
+// not a literal). The candidate is the guard form `v if v == -LIMIT`, in the same one error and one
+// candidate as the other guard forms of the arm (a choice becomes one guard when every branch has the
+// same shape once the `-LIMIT`s are replaced; `-LIMIT | LIMIT` and `-LIMIT | 1` do not and are E0002).
+// A name that does not exist is the same E0020 (the form decides, the names are not resolved yet).
+// The shape of the candidates is in crates/onsa_cli/tests/pattern_guard_candidates.rs. One error per
+// function.
+
+const LIMIT: I32 = 4
+const OTHER: I32 = 9
+
+// ---------------------------------------------------------------- E0020
+
+pub fn negated_constant(x: I32) -> I32 {
+  match x {
+    -LIMIT => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(-LIMIT) => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (-LIMIT, n) => n,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn an_associated_constant(x: I64) -> I32 {
+  match x {
+    -I64.MAX => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_name_that_does_not_exist(x: I32) -> I32 {
+  match x {
+    -MISSING => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (-LIMIT, -OTHER) => 1,                          //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn beside_a_literal(t: (I32, I32)) -> I32 {
+  match t {
+    (-LIMIT, 3) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_of_negated(x: I32) -> I32 {
+  match x {
+    -LIMIT | -OTHER => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn choice_inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(-LIMIT | -OTHER) => 1,                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_a_guard(x: I32, flag: Bool) -> I32 {
+  match x {
+    -LIMIT if flag => 1,                            //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn second_arm(x: I32) -> I32 {
+  match x {
+    0 => 0,
+    -LIMIT => 1,                                    //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn statement(x: I32) -> I32 {
+  var r = 0
+  match x {
+    -LIMIT => { r = 1 },                            //~ E0020
+    _ => { r = 0 },
+  }
+  r
+}
+
+pub fn match_on_a_literal() -> I32 {
+  match 4 {
+    -LIMIT => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_generic_function[T](other: T, x: I32) -> I32 {
+  match x {
+    -LIMIT => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub struct Level {
+  value: I32,
+}
+
+impl Level {
+  pub fn is_low(self) -> Bool {
+    match self.value {
+      -LIMIT => true,                               //~ E0020
+      _ => false,
+    }
+  }
+}
+
+test "a negated constant in a test" {
+  let x = -4
+  let r = match x {
+    -LIMIT => 1,                                    //~ E0020
+    _ => 0,
+  }
+  assert r == 1
+}
+
+// ---------------------------------------------------------------- E0002: the branches do not have one shape
+
+pub fn choice_with_the_constant(x: I32) -> I32 {
+  match x {
+    -LIMIT | LIMIT => 1,                            //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn choice_with_a_literal(x: I32) -> I32 {
+  match x {
+    -LIMIT | 1 => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn choice_with_a_wildcard(x: I32) -> I32 {
+  match x {
+    -LIMIT | _ => 1,                                //~ E0002
+  }
+}
+
+pub fn choice_in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (-LIMIT, 1) | (-OTHER, 2) => 1,                 //~ E0002
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- E0002: a `-` before something that is not a constant or a number
+
+pub fn negated_binding(x: I32) -> I32 {
+  match x {
+    -y => 1,                                        //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn negated_variant(o: Option[I32]) -> I32 {
+  match o {
+    -Some(1) => 1,                                  //~ E0002
+    _ => 0,
+  }
+}
+
+// ---------------------------------------------------------------- fine: a negative number is a literal
+
+pub fn negative_literals(x: I32) -> I32 {
+  match x {
+    -1 => 1,
+    -2 | -3 => 2,
+    0 => 3,
+    _ => 4,
+  }
+}
+
+pub fn the_guard_form(x: I32) -> I32 {
+  match x {
+    v if v == -LIMIT => 1,
+    _ => 0,
+  }
+}

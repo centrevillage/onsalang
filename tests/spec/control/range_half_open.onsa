@@ -173,7 +173,7 @@ fn negative_literals() -> I32 {
 
 fn widened(n: I32) -> I64 {
   var t: I64 = 0
-  for i in 0..<n as I64 {
+  for i in 0..<(n as I64) {
     t = t + i
   }
   t
@@ -215,7 +215,7 @@ test "the ends may be negative" {
   assert negative_literals() == -2
 }
 
-test "a conversion in an end binds more tightly than the range" {
+test "a conversion in an end is written in parentheses" {
   // 0..<(n as I64) is 0, 1, 2, 3.
   assert widened(4) == 6
   assert widened(0) == 0

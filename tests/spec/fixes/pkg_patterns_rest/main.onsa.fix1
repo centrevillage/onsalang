@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0020 for the rest `..` of a struct pattern when the struct is declared in another module (§7,
+// S-109, §18.1): the candidate puts the remaining fields of that declaration, in its order, in place of
+// `..`. The module `shapes` declares `Rect`, and has a `..` of its own; this module imports
+// them with `use`. Each module is fixed by its own candidate (fixes/pkg_foreign does the same for other
+// forms). A struct of the same file is in e0020_patterns_rest_forms.onsa.
+
+use shapes.{Rect, area}
+
+pub struct Local {
+  a: I32,
+  b: I32,
+}
+
+pub fn width(r: Rect) -> I32 {
+  match r {
+    Rect { w: ww, h: _, depth: _ } => ww,           //~ E0020
+  }
+}
+
+pub fn height_and_depth(r: Rect) -> I32 {
+  match r {
+    Rect { h: hh, depth: dd, w: _ } => hh + dd,     //~ E0020
+  }
+}
+
+pub fn in_some(o: Option[Rect]) -> I32 {
+  match o {
+    Some(Rect { h: hh, w: _, depth: _ }) => hh,     //~ E0020
+    None => 0,
+  }
+}
+
+pub fn local_struct(l: Local) -> I32 {
+  match l {
+    Local { b: bb, a: _ } => bb,                    //~ E0020
+  }
+}
+
+pub fn fine(r: Rect) -> I32 {
+  match r {
+    Rect { w: ww, h: _, depth: _ } => ww + area(r),
+  }
+}

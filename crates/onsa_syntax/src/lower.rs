@@ -73,7 +73,7 @@ pub(crate) fn class(kind: NodeKind) -> Class {
         | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow
         | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt | ContinueStmt
         | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg | StructLitFields
-        | StructLitField | StructPatField => Class::Other,
+        | StructLitField | StructPatField | StructPatRest => Class::Other,
     }
 }
 
@@ -789,6 +789,27 @@ impl<'a> Lower<'a> {
             .collect()
     }
 
+    /// The rest `r` of the struct pattern `n`, with the `,` before it when
+    /// only blanks are between them ([`StructRest`]).
+    fn struct_rest(&self, n: NodeId, r: NodeId) -> StructRest {
+        let span = self.span(r);
+        let before = self.cst.children(n).iter().take_while(|&&e| e != Elem::Node(r));
+        let mut removal = span;
+        for e in before.collect::<Vec<_>>().into_iter().rev() {
+            let Elem::Token(t) = *e else { break };
+            let tok = self.cst.token(t);
+            match tok.kind {
+                TokenKind::Whitespace | TokenKind::Newline => {}
+                TokenKind::Comma => {
+                    removal = Span::new(span.file, tok.span.start, span.end);
+                    break;
+                }
+                _ => break,
+            }
+        }
+        StructRest { span, removal }
+    }
+
     fn of_kind(&self, n: NodeId, kind: NodeKind) -> Vec<NodeId> {
         self.cst.child_nodes(n).filter(|&c| self.cst.kind(c) == kind).collect()
     }
@@ -1197,7 +1218,8 @@ impl<'a> Lower<'a> {
                         (name, self.pat(p))
                     })
                     .collect();
-                PatKind::Struct { path, fields }
+                let rest = self.of_kind(n, NodeKind::StructPatRest).first().map(|&r| self.struct_rest(n, r));
+                PatKind::Struct { path, fields, rest }
             }
             NodeKind::OrPat => PatKind::Or(self.pats(n)),
             _ => self.bug(n, "the kind of a pattern"),

@@ -28,6 +28,7 @@ mod modes_tests;
 pub mod resolve;
 mod rt;
 mod sig;
+mod structpat;
 #[cfg(test)]
 mod tests;
 

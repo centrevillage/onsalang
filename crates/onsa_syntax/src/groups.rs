@@ -84,6 +84,32 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     diagnostics.push(d);
                 }
             }
+            // E0011: a cast is parenthesized as an end of a range too: the
+            // range symbols are weaker than `as` (§3.3, S-340); the casts of
+            // one head are one form (S-348).
+            ExprKind::Range(head) | ExprKind::Par { range: head, .. } => {
+                let casts: Vec<Span> = [head.lo, head.hi]
+                    .into_iter()
+                    .map(|o| ast.expr(o))
+                    .filter(|e| matches!(e.kind, ExprKind::Cast { .. }))
+                    .map(|e| e.span)
+                    .collect();
+                if let Some(&first) = casts.first() {
+                    let edits = casts
+                        .iter()
+                        .flat_map(|s| [Edit::insert(s.file, s.start, "("), Edit::insert(s.file, s.end, ")")])
+                        .collect();
+                    let d = Diagnostic::new(
+                        Stage::Syntax,
+                        Code::E0011,
+                        first,
+                        "`as` is written in parentheses when it is an end of a range (§3.3)",
+                    )
+                    .with_found(src(first))
+                    .with_fix(Fix::new("parenthesize the cast", edits));
+                    diagnostics.push(d);
+                }
+            }
             ExprKind::Cast { expr: mut e, .. }
                 if !inner.contains(&id) && matches!(ast.expr(e).kind, ExprKind::Cast { .. }) =>
             {

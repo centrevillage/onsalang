@@ -48,7 +48,7 @@ use onsa_syntax::ast::{
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, LocalKind, R, Target};
 use crate::consteval::{self, ConstValue};
-use crate::def::{DefKind, Fields, FlowInput};
+use crate::def::{DefKind, FlowInput};
 use crate::resolve::Entity;
 use crate::ty::{FloatKind, Len, Rate, Ty, TyId};
 use crate::{Analysis, DefId, Kind, Module};
@@ -431,55 +431,15 @@ impl<'a> Checker<'a> {
                 }
                 Ok(())
             }
-            PatKind::Struct { path, fields } => {
-                let (path, fields) = (path.clone(), fields.clone());
-                let entity = match self.a.resolve_path(self.m, &path) {
-                    Ok(en) => en,
-                    Err(err) => return Err(self.resolve_error(&path, err)),
-                };
-                let d = match entity {
-                    Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-                    _ => return Err(self.flow_err(Code::E0401, path.span, "a struct pattern needs a struct")),
-                };
-                let sd = self.a.def(d).as_struct().unwrap().clone();
-                let Fields::Named(defs) = &sd.fields else {
-                    return Err(self.flow_err(Code::E0410, path.span, "this struct has no named fields"));
-                };
-                let args = self.fresh_args(d);
-                let named = self.a.types.intern(Ty::Named(d, args.clone()));
-                self.unify_at(span, named, ty)?;
-                let mut seen: Vec<String> = Vec::new();
-                for (name, fp) in &fields {
-                    let Some(fd) = defs.iter().find(|f| f.name == name.name) else {
-                        return Err(self.flow_err(
-                            Code::E0410,
-                            name.span,
-                            format!("`{}` has no field `{}`", self.a.def(d).name, name.name),
-                        ));
-                    };
-                    if seen.contains(&name.name) {
-                        return Err(self.flow_err(
-                            Code::E0410,
-                            name.span,
-                            format!("field `{}` is given twice", name.name),
-                        ));
-                    }
-                    seen.push(name.name.clone());
-                    let ft = self.subst_pub(fd.ty, &args);
-                    self.flow_unify_pat(*fp, ft)?;
-                }
-                let missing: Vec<&str> =
-                    defs.iter().map(|f| f.name.as_str()).filter(|n| !seen.iter().any(|s| s == n)).collect();
-                if !missing.is_empty() {
-                    return Err(self.flow_err(
-                        Code::E0410,
-                        span,
-                        format!(
-                            "struct patterns name every field; missing {} (use `_`, §7)",
-                            missing.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
-                        ),
-                    ));
-                }
+            PatKind::Struct { path, fields, rest } => {
+                let (path, fields, rest) = (path.clone(), fields.clone(), *rest);
+                self.struct_pattern(
+                    Stage::Flow,
+                    span,
+                    ty,
+                    crate::structpat::Written { path: &path, fields: &fields, rest },
+                    &mut |ck, fp, ft, _| ck.flow_unify_pat(fp, ft),
+                )?;
                 Ok(())
             }
             PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) | PatKind::TupleStruct { .. } | PatKind::Or(_) => {

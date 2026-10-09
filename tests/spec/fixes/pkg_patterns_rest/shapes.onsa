@@ -1,0 +1,17 @@
+pub struct Rect {
+  w: I32,
+  h: I32,
+  depth: I32,
+}
+
+pub fn depth_of(r: Rect) -> I32 {
+  match r {
+    Rect { depth: d, .. } => d,                     //~ E0020
+  }
+}
+
+pub fn area(r: Rect) -> I32 {
+  match r {
+    Rect { w: ww, h: hh, depth: _ } => ww * hh,
+  }
+}

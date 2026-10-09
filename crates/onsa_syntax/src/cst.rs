@@ -274,10 +274,13 @@ pub enum NodeKind {
     PathPat,
     /// `Path ( Pat, ... )`
     TupleStructPat,
-    /// `Path { StructPatField, ... }`
+    /// `Path { StructPatField, ... }`, with `StructPatRest` last
     StructPat,
     /// `name : Pat`
     StructPatField,
+    /// `..`: the rest of a struct pattern (§7: E0020 where the fields are
+    /// counted, S-109, S-366)
+    StructPatRest,
     /// `Pat | Pat ...`
     OrPat,
 }
@@ -389,6 +392,7 @@ impl NodeKind {
             TupleStructPat => "TupleStructPat",
             StructPat => "StructPat",
             StructPatField => "StructPatField",
+            StructPatRest => "StructPatRest",
             OrPat => "OrPat",
         }
     }

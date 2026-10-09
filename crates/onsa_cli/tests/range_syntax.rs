@@ -339,7 +339,7 @@ fn the_half_open_range_is_read_whatever_the_ends() {
         "t.0..<t.1 + 1",
         "0..<xs.len()",
         "lo..<hi * 2",
-        "0..<n as U32",
+        "0..<(n as U32)",
     ] {
         let src = loop_with(header);
         let path = d.file("a.onsa", &src);
@@ -350,6 +350,40 @@ fn the_half_open_range_is_read_whatever_the_ends() {
         assert!(!text.contains("error[E0002]"), "{header}: E0002: {text}");
         assert!(!text.contains("error[E0001]"), "{header}: E0001: {text}");
         assert!(!text.contains("error[E0020]"), "{header}: E0020: {text}");
+    }
+}
+
+#[test]
+fn a_bare_conversion_in_an_end_is_e0011() {
+    // §3.3 (S-340): `as` is weaker than the range symbols too, so a conversion in an end is written in
+    // parentheses: E0011, and its candidate puts them (both ends of one head, one diagnostic).
+    let d = Dir::new("bare_cast");
+    for (header, fixed) in [
+        ("0..<n as U32", "0..<(n as U32)"),
+        ("lo as U32..<9", "(lo as U32)..<9"),
+        ("lo as U32..<n as U32", "(lo as U32)..<(n as U32)"),
+    ] {
+        let src = loop_with(header);
+        let path = d.file("a.onsa", &src);
+        let diags = check(&path);
+        assert_eq!(diags.len(), 1, "{header}: {diags:?}");
+        assert_eq!(diags[0]["code"], "E0011", "{header}: {}", diags[0]);
+        let edits = diags[0]["fixes"][0]["edits"].as_array().cloned().unwrap_or_default();
+        let mut out = src.clone();
+        let mut spans: Vec<(usize, String)> = edits
+            .iter()
+            .map(|e| {
+                let line = e["span"]["line"].as_u64().unwrap() as usize;
+                let col = e["span"]["col"].as_u64().unwrap() as usize;
+                let start: usize = src.split_inclusive('\n').take(line - 1).map(str::len).sum::<usize>() + col - 1;
+                (start, e["replace"].as_str().unwrap().to_string())
+            })
+            .collect();
+        spans.sort_by(|a, b| b.0.cmp(&a.0));
+        for (at, text) in spans {
+            out.insert_str(at, &text);
+        }
+        assert_eq!(out, loop_with(fixed), "{header}");
     }
 }
 

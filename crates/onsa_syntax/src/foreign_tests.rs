@@ -407,26 +407,26 @@ fn float_patterns() {
     e0020(&m("    .5 => 1,\n    _ => 0,"), &m("    v if v == 0.5 => 1,\n    _ => 0,"));
     // All the float literals of one pattern are one form (S-248, S-317): the
     // alternatives of one skeleton merge, their conditions joined with `||`.
-    e0020(&m("    1.0 | 2.0 => 1,\n    _ => 0,"), &m("    v if (v == 1.0) || (v == 2.0) => 1,\n    _ => 0,"));
+    e0020(&m("    1.0 | 2.0 => 1,\n    _ => 0,"), &m("    v if v == 1.0 || v == 2.0 => 1,\n    _ => 0,"));
     // Removing the other alternatives would remove a comment (S-251): none.
     e0002(&m("    1.0 // one\n    | 2.0 => 1,\n    _ => 0,"));
-    e0020(&m("    1.0 if g => 1,\n    _ => 0,"), &m("    v if (v == 1.0) && (g) => 1,\n    _ => 0,"));
+    e0020(&m("    1.0 if g => 1,\n    _ => 0,"), &m("    v if v == 1.0 && g => 1,\n    _ => 0,"));
     let t = |arms: &str| format!("fn f(x: (F32, F32)) -> I32 {{\n  match x {{\n{arms}\n  }}\n}}\n");
-    e0020(&t("    (1.0, 2.0) => 1,\n    _ => 0,"), &t("    (v, v2) if (v == 1.0) && (v2 == 2.0) => 1,\n    _ => 0,"));
+    e0020(&t("    (1.0, 2.0) => 1,\n    _ => 0,"), &t("    (v, v2) if v == 1.0 && v2 == 2.0 => 1,\n    _ => 0,"));
     e0020(
         &t("    (0.5, 1.5) | (1.5, 0.5) => 1,\n    _ => 0,"),
-        &t("    (v, v2) if ((v == 0.5) && (v2 == 1.5)) || ((v == 1.5) && (v2 == 0.5)) => 1,\n    _ => 0,"),
+        &t("    (v, v2) if (v == 0.5 && v2 == 1.5) || (v == 1.5 && v2 == 0.5) => 1,\n    _ => 0,"),
     );
     // The alternatives differ outside the holes: no candidate (S-317).
     e0002(&t("    (0.5, 1) | (1.5, 2) => 1,\n    _ => 0,"));
     // An `||` inside an `&&` in parentheses.
     e0020(
         &t("    (0.5 | 1.5, 0.7) => 1,\n    _ => 0,"),
-        &t("    (v, v2) if ((v == 0.5) || (v == 1.5)) && (v2 == 0.7) => 1,\n    _ => 0,"),
+        &t("    (v, v2) if (v == 0.5 || v == 1.5) && v2 == 0.7 => 1,\n    _ => 0,"),
     );
     e0020(
         &t("    (0.5 | 1.5, 0.7 | 1.7) => 1,\n    _ => 0,"),
-        &t("    (v, v2) if ((v == 0.5) || (v == 1.5)) && ((v2 == 0.7) || (v2 == 1.7)) => 1,\n    _ => 0,"),
+        &t("    (v, v2) if (v == 0.5 || v == 1.5) && (v2 == 0.7 || v2 == 1.7) => 1,\n    _ => 0,"),
     );
     e0020(&t("    (1.0, n) => n,\n    _ => 0,"), &t("    (v, n) if v == 1.0 => n,\n    _ => 0,"));
     // A new name no other name of the file has (S-253).
@@ -438,17 +438,17 @@ fn float_patterns() {
     e0020(&h("    1.0 => \"a{v}\",\n    _ => \"b\","), &h("    v2 if v2 == 1.0 => \"a{v}\",\n    _ => \"b\","));
     e0020(
         &s("    Some(0.5) | Some(1.5) => 1,\n    _ => 0,"),
-        &s("    Some(v2) if (v2 == 0.5) || (v2 == 1.5) => 1,\n    _ => 0,"),
+        &s("    Some(v2) if v2 == 0.5 || v2 == 1.5 => 1,\n    _ => 0,"),
     );
     e0020(
         &s("    Some(0.5 | 1.5) => 1,\n    _ => 0,"),
-        &s("    Some(v2) if (v2 == 0.5) || (v2 == 1.5) => 1,\n    _ => 0,"),
+        &s("    Some(v2) if v2 == 0.5 || v2 == 1.5 => 1,\n    _ => 0,"),
     );
     // Nested alternatives, merged where they are, then the outer ones.
     let u = |arms: &str| format!("fn f(x: (F32, I32)) -> I32 {{\n  match x {{\n{arms}\n  }}\n}}\n");
     e0020(
         &u("    (0.5 | 1.5, 1) | (2.5, 1) => 1,\n    _ => 0,"),
-        &u("    (v, 1) if (v == 0.5) || (v == 1.5) || (v == 2.5) => 1,\n    _ => 0,"),
+        &u("    (v, 1) if v == 0.5 || v == 1.5 || v == 2.5 => 1,\n    _ => 0,"),
     );
     // The name cannot be bound in every alternative, and `let`: E0002 (§7).
     e0002(&s("    Some(1.0) | None => 1,\n    _ => 0,"));

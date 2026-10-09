@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§4.4", "§7", "§18.1"]
+
+// The `par` case of header_block_expression.onsa (§3.1, §4.4, S-338): a `{` at the start of an end in
+// the header of a `par` starts the body. Apart because the inputs of a flow are written with `at`
+// (W3-09).
+
+pub flow block_in_a_par_header(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<{ 4 } {                              //~ E0002
+    x * i.round_f32()
+  }
+}

@@ -4,12 +4,12 @@
 // fixes = 1
 
 // E0020 for `@` in a pattern when the right side is a literal, a range or a choice of them (§7):
-// the candidate is the guard form, `n @ 1..5` is `n if 1 <= n && n < 5`. Other `@` patterns are
-// E0002 with no candidate.
+// the candidate is the guard form, `n @ 1..<5` is `n if 1 <= n && n < 5`. Other `@` patterns are
+// E0002 with no candidate and a note (a guard or a nested `match`).
 
 pub fn at_a_range(n: I32) -> I32 {
   match n {
-    k @ 1..5 => k,                                  //~ E0020
+    k @ 1..<5 => k,                                 //~ E0020
     _ => 0,
   }
 }
