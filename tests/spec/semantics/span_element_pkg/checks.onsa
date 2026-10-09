@@ -6,7 +6,7 @@
 // The receiver and index rules for `xs[k]` (S-181, §5.3) with the functions in another module of
 // the package. The same cases in one file are in span_element_receiver.onsa.
 
-use planar.{CHANNELS, at, fill_channel, len_of, number_channels, set}
+use planar.{CHANNELS, element, fill_channel, len_of, number_channels, set}
 
 fn sum_lens(xs: [Span[F32]; 2]) -> U32 {
   var total: U32 = 0
@@ -25,8 +25,8 @@ test "the length of an element through an imported function" {
 
 test "an index read through an imported function" {
   let ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
-  assert at(ins, 0, 1) == 2.0
-  assert at(ins, 1, 0) == 3.0
+  assert element(ins, 0, 1) == 2.0
+  assert element(ins, 1, 0) == 3.0
 }
 
 test "an imported function fills one channel through the receiver" {

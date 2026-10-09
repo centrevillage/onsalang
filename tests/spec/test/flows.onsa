@@ -18,10 +18,10 @@ pub flow echo(x: Sig[F32], time: Ctl[F32], feedback: Ctl[F32]) -> Sig[F32] {
 test "echo repeats the impulse after the delay" {
   let o = echo.render(echo.Config {}, echo.Params { time: 0.5, feedback: 0.5 }, impulse(48000), 48000.0)
   let first: U32 = 0
-  let at: U32 = 24000
+  let half: U32 = 24000
   assert o.out[first] == 1.0
   assert energy(o.out, 1, 24000) == 0.0
-  assert o.out[at] == 0.5
+  assert o.out[half] == 0.5
   assert energy(o.out, 24001, 48000) == 0.0
 }
 

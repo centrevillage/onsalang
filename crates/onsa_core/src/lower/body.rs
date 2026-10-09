@@ -1,7 +1,7 @@
 //! Lowering of function bodies: expressions, statements, patterns (T3-3).
 
 use onsa_diag::Span;
-use onsa_diag::unsupported::Feature;
+use onsa_diag::unsupported::{Feature, FlowForm};
 use onsa_sema::body::{BodyInfo, Target};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
 use onsa_sema::resolve::{Builtin, Entity};
@@ -12,7 +12,7 @@ use onsa_syntax::ast::{
     StmtKind as AS, UnOp as AUnOp,
 };
 
-use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
+use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, flow_form, internal, unsupported};
 use crate::ir::*;
 use crate::prim::{CheckedOp, MathFn, Prim};
 
@@ -359,7 +359,7 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
 fn lower_expr_stmt(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, out: &mut Vec<Stmt>) -> R<()> {
     let span = cx.expr(e).span;
     match &cx.expr(e).kind {
-        AK::If { cond, then, else_ } => {
+        AK::If { cond, then, else_, .. } => {
             let c = lower_expr(lw, cx, *cond)?;
             let t = lower_block_expr(lw, cx, *then)?;
             let el = match else_ {
@@ -889,7 +889,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             let blk = lower_block(lw, cx, b, ty != Ty::Unit)?;
             if ty == Ty::Unit && blk.stmts.is_empty() { ExprKind::Lit(Lit::Unit) } else { ExprKind::Block(blk) }
         }
-        AK::If { cond, then, else_ } => {
+        AK::If { cond, then, else_, .. } => {
             let c = lower_expr(lw, cx, *cond)?;
             let t = lower_block_expr(lw, cx, *then)?;
             let el = match else_ {
@@ -903,8 +903,11 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
                 ExprKind::IfExpr { cond: Box::new(c), then: t, else_: el }
             }
         }
-        AK::Match { scrutinee, arms } => return lower_match(lw, cx, e, *scrutinee, arms, ty),
+        AK::Match { scrutinee, arms, .. } => return lower_match(lw, cx, e, *scrutinee, arms, ty),
         AK::Closure { .. } => return Err(unsupported(span, Feature::Closures, &[])),
+        // The checks stop at the flow syntax (W3-09); never reached.
+        AK::At { .. } => return Err(flow_form(span, FlowForm::Clock)),
+        AK::Feedback(_) => return Err(flow_form(span, FlowForm::Feedback)),
         AK::Handle { .. } => return Err(unsupported(span, Feature::EffectHandlers, &[])),
         AK::Unsafe(_) => return Err(unsupported(span, Feature::Unsafe, &[])),
         // Sema rejects `par` outside a flow body: lowering never sees one.

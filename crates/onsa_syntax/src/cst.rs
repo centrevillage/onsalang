@@ -232,6 +232,14 @@ pub enum NodeKind {
     RangeExpr,
     /// `Expr as Type`
     CastExpr,
+    /// `Expr Clock` (§11.3)
+    AtExpr,
+    /// `at name`: the clock of an expression (in `AtExpr`), of an input or
+    /// output (in `Param`, `Fn`, `Flow`, `ClosureExpr`), or one written where
+    /// no clock goes (a binding, a type: E0020, `crate::foreign`).
+    Clock,
+    /// `^ name` (§2.6): the reference to a `let` of a flow, part of the name.
+    FeedbackExpr,
     /// `- Expr`, `! Expr`
     PrefixExpr,
     /// `Expr (~ | !)? ArgList`
@@ -370,6 +378,9 @@ impl NodeKind {
             BinaryExpr => "BinaryExpr",
             RangeExpr => "RangeExpr",
             CastExpr => "CastExpr",
+            AtExpr => "AtExpr",
+            Clock => "Clock",
+            FeedbackExpr => "FeedbackExpr",
             PrefixExpr => "PrefixExpr",
             CallExpr => "CallExpr",
             ArgList => "ArgList",

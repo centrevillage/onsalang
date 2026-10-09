@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.2", "§18.1"]
+
+// E0002 for a `^` with no name after it (§2.6: "`^名前` は帰還の参照で … `^` は名前の直前に空白を
+// 空けずに書く"; the mark is attached to a name). Where an operand is expected the `^` is the mark
+// (§2.5: it is told from the binary exclusive or by the token before it), and a `)` or a `,` is not
+// a name; the form is read in no rule and has no candidate, so it is the general syntax error
+// (§18.1). What follows a `^` that is neither a name nor a closing token (`^1`, `^(y)`, `^^y`) is
+// not fixed by the spec and is not here. One error per declaration unit.
+
+pub flow caret_then_a_paren(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^)   //~ E0002
+  y
+}
+
+pub flow caret_then_a_comma(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^, 1.0)   //~ E0002
+  y
+}
+
+pub flow caret_last_in_a_list(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(x, ^)   //~ E0002
+  y
+}
+
+pub flow caret_in_an_array(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~([^, x][0])   //~ E0002
+  y
+}
+
+pub flow caret_in_a_call(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(mix(x, ^))   //~ E0002
+  y
+}

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§11.1", "§11.3", "§18.1"]
+
+// E0821 for an `at` after the type of an input or the output of an `fn` (§11.3: "`at` を書けるのは flow
+// の入出力の宣言と本体の式だけで、flow の外は E0821 … `fn f(x: Option[F32 at sample])` は E0020、
+// `fn f(x: F32 at sample)` は E0821", S-356). The syntax stage reads the `at` of the heading (S-356 and
+// the decision of fixes/e0020_clock_in_types.onsa: the E0020 for the clock in a type is of the syntax
+// stage), and the names stage reports it, as a flow-only syntax outside a flow (§18.1). The `at` in
+// a type argument of the same heading is the E0020 of the syntax stage, which hides this one.
+// One error per declaration unit.
+
+pub fn input_clock(x: F32 at sample) -> F32 {       //~ E0821
+  x
+}
+
+pub fn output_clock(x: F32) -> F32 at sample {      //~ E0821
+  x
+}
+
+pub fn both_clocks(x: F32 at block) -> F32 at sample {  //~ E0821
+  x
+}
+
+pub rt fn rt_input_clock(x: F32 at block) -> F32 {  //~ E0821
+  x
+}
+
+pub fn second_input_clock(x: F32, p: F32 at init) -> F32 {  //~ E0821
+  x
+}
+
+pub fn array_input_clock(xs: [F32; 2] at sample) -> F32 {  //~ E0821
+  xs[0]
+}

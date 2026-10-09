@@ -373,6 +373,9 @@
 "max" = { count = 2, note = "@param のキー（std.math.max と同じ綴り）" }
 "min" = { count = 2, note = "@param のキー（std.math.min と同じ綴り）" }
 
+[same_spelling."crates/onsa_syntax/src/cst.rs"]
+"Clock" = { count = 1, note = "CST のノードの種類の名前（`at` とクロックの名前の節、§11.3）" }
+
 [same_spelling."crates/onsa_syntax/src/foreign.rs"]
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 "u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }

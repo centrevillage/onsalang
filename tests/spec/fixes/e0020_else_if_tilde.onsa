@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+// fixes = 2
+
+// E0020 for a `~` on a later `if` of a chain (`else if~`, §11.5, S-355): the `~` is written once, on
+// the first `if`, and covers the whole chain. The one candidate depends on the head of the chain:
+// when the head has the `~`, the later `~` is removed; when it does not, the `~` moves to the head
+// `if` (and leaves the later one). A space after the `if` (`else if ~ d`) is this error and not the
+// error of a space (S-354): the space-removing candidate would write `else if~ d` again, so it is not
+// offered. When the `~` touches its operand (`else if ~d`), the prefix `~` reading gives a second
+// candidate, `else if !d` (S-354), in the first form of the chain (the head is left as written).
+// One error per declaration unit.
+
+pub flow head_plain(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c {
+    1.0
+  } else if~ d {                                    //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow head_with_tilde(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if~ d {                                    //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow spaced_head_plain(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c {
+    1.0
+  } else if ~ d {                                   //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow spaced_head_with_tilde(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if ~ d {                                   //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow adjacent_head_plain(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c {
+    1.0
+  } else if ~d {                                    //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow adjacent_head_with_tilde(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if ~d {                                    //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow third_link(c: Bool at sample, d: Bool at sample, e: Bool at sample) -> F32 at sample {
+  if c {
+    1.0
+  } else if d {
+    2.0
+  } else if~ e {                                    //~ E0020
+    3.0
+  } else {
+    4.0
+  }
+}
+
+pub flow third_link_head_with_tilde(c: Bool at sample, d: Bool at sample, e: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if d {
+    2.0
+  } else if~ e {                                    //~ E0020
+    3.0
+  } else {
+    4.0
+  }
+}
+
+pub flow in_an_arm(a: Bool at sample, b: Bool at sample, c: Bool at sample) -> F32 at sample {
+  if~ a {
+    if b {
+      1.0
+    } else if~ c {                                  //~ E0020
+      2.0
+    } else {
+      3.0
+    }
+  } else {
+    4.0
+  }
+}
+
+pub flow in_a_let(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  let a = if c { 1.0 } else if~ d { 2.0 } else { 3.0 }  //~ E0020
+  a
+}
+
+pub fn in_a_fn(c: Bool, d: Bool) -> F32 {
+  if c {
+    1.0
+  } else if~ d {                                    //~ E0020
+    2.0
+  } else {
+    3.0
+  }
+}

@@ -82,6 +82,7 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     // may not hold there until the recovery by statement (M7, T7-1) lowers
     // the statements before the error (accepted, 2026-10-08).
     groups::check(&ast, text, deepest, &mut diagnostics);
+    foreign::clocks(&cst, text, deepest, &mut diagnostics);
     naming::check(&ast, &mut diagnostics);
     let units = units::build(&cst, &map, text, &diagnostics, &mut ast);
     Parsed { ast, cst, map, diagnostics, units, levels: out.levels }

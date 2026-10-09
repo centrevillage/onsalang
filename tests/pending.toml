@@ -153,13 +153,6 @@ note = "宣言の : trait。写し fn/derive.onsa は @derive"
 
 [[pending]]
 kind = "spec-example"
-target = "§11.2 5325cac7: pub flow one_pole(x: F32 at sample, p: F32 at block) -> F32 at sample {"
-reasons = ["S-102", "S-44", "S-29", "S-45"]
-until = "W3-13"
-note = "at のクロック、prev~(^y)、init の省略、積和の括弧。写し flow/one_pole.onsa は Sig[F32] と prev(y, 0.0)"
-
-[[pending]]
-kind = "spec-example"
 target = "§11.5 05f67d5d: use std.math.{sum}"
 reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
@@ -615,7 +608,7 @@ kind = "test-case"
 target = "tests/spec/negative/names_flow_decl.onsa"
 reasons = ["S-102"]
 until = "W3-10"
-note = "E0305 の否定例 5 件。flow の at（S-102）を今の実装が読めない（E0002）"
+note = "E0305 の否定例 5 件。flow の at（S-102）は W3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -810,7 +803,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/prev_delay.onsa"
 reasons = ["S-102", "S-44", "S-29", "S-45"]
 until = "W3-10"
-note = "prev~ / delay~ の基本と init の形（数値）。at、prev~(…)、init の省略の構文（W3-09）。start * 2.0 + 1.0 の演算子の群（S-45）は W3-07 で入った"
+note = "prev~ / delay~ の基本と init の形（数値）。at、prev~(…)、init の省略の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）。start * 2.0 + 1.0 の演算子の群（S-45）は W3-07 で入った"
 
 [[pending]]
 kind = "test-case"
@@ -831,21 +824,21 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/feedback.onsa"
 reasons = ["S-102", "S-44", "S-45"]
 until = "W3-10"
-note = "遅延の入れ子の無い帰還（^y）と同時読み出し。at と ^ の構文（W3-09）。0.5 * x + 0.5 * … に演算子の群（S-45）"
+note = "遅延の入れ子の無い帰還（^y）と同時読み出し。at と ^ の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）。0.5 * x + 0.5 * … に演算子の群（S-45）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/instances.onsa"
 reasons = ["S-102", "S-44"]
 until = "W3-10"
-note = "呼び出し位置ごとの状態、インスタンスの入れ子、init と block の入力の受け渡し。at と ~ の構文（W3-09）"
+note = "呼び出し位置ごとの状態、インスタンスの入れ子、init と block の入力の受け渡し。at と ~ の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/vdelay_edges.onsa"
 reasons = ["S-102", "S-44", "S-45"]
 until = "W3-10"
-note = "vdelay~ の端点（d = 1、MAX、範囲外、NaN の d、init、補間）。at と vdelay~ の構文（W3-09）。比較と && の混在に演算子の群（S-45）"
+note = "vdelay~ の端点（d = 1、MAX、範囲外、NaN の d、init、補間）。at と vdelay~ の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）。比較と && の混在に演算子の群（S-45）"
 
 [[pending]]
 kind = "test-case"
@@ -859,14 +852,14 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/nan_and_inf.onsa"
 reasons = ["S-98", "R-126", "S-44"]
 until = "W5-02"
-note = "std.math.is_nan が std に無い（E0302）。S-98 / R-126 は W5-02。構文は W3-09"
+note = "std.math.is_nan が std に無い（E0302）。S-98 / R-126 は W5-02。構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/branches_plain.onsa"
 reasons = ["S-102", "S-44", "S-45"]
 until = "W3-10"
-note = "普通の if / match / && / || は取る枝だけを評価する。条件・対象・左辺は状態を持てる。at と ~ の構文（W3-09）。比較と && の混在に演算子の群（S-45）"
+note = "普通の if / match / && / || は取る枝だけを評価する。条件・対象・左辺は状態を持てる。at と ~ の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）。比較と && の混在に演算子の群（S-45）"
 
 [[pending]]
 kind = "test-case"
@@ -887,14 +880,14 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/par_replication.onsa"
 reasons = ["S-102", "S-44", "S-45"]
 until = "W3-10"
-note = "par の複製ごとの状態（遅延、インスタンス、vdelay の長さ、サブインスタンスの位相）。at と ~ の構文（W3-09）。0.5 * x + … に演算子の群（S-45）"
+note = "par の複製ごとの状態（遅延、インスタンス、vdelay の長さ、サブインスタンスの位相）。at と ~ の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）。0.5 * x + … に演算子の群（S-45）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/par_sum.onsa"
 reasons = ["R-23", "S-102"]
 until = "W5-07"
-note = "std.math.sum が std に無い（今は std.dsp.sum。E0302）。W5-07。構文は W3-09"
+note = "std.math.sum が std に無い（今は std.dsp.sum。E0302）。W5-07。構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -915,21 +908,21 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/reset_replay.onsa"
 reasons = ["S-102", "S-44", "S-45"]
 until = "W3-10"
-note = "reset の後は最初からと同じ出力（prev~ / delay~ / vdelay~ / par / サブインスタンス / init の値を保つ）。process の続き。構文は W3-09"
+note = "reset の後は最初からと同じ出力（prev~ / delay~ / vdelay~ / par / サブインスタンス / init の値を保つ）。process の続き。構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/process_blocks.onsa"
 reasons = ["R-31"]
 until = "W4-08"
-note = "process を slice で二回に分けても一回と同じ。inout xs.slice(a, b) は今 E0701（W4-08）。構文は W3-09"
+note = "process を slice で二回に分けても一回と同じ。inout xs.slice(a, b) は今 E0701（W4-08）。構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/planar_io.onsa"
 reasons = ["S-102"]
 until = "W3-10"
-note = "[F32; 2] の入出力（チャンネルごとの Span）、process_inplace。at の構文（W3-09）"
+note = "[F32; 2] の入出力（チャンネルごとの Span）、process_inplace。at の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -971,7 +964,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/pkg_modules"
 reasons = ["S-102", "S-44"]
 until = "W3-10"
-note = "モジュールをまたぐ flow（use dsp.synth.{…}、filters.avg~(x)）、総称の rt fn（clamp[T: PartialOrd]）の F32 と I32 での使用。at の構文（W3-09）"
+note = "モジュールをまたぐ flow（use dsp.synth.{…}、filters.avg~(x)）、総称の rt fn（clamp[T: PartialOrd]）の F32 と I32 での使用。at の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 # --- W1-06: 生成した C の検査（gate の C の項目）の実装待ち（2026-10-07）
 
@@ -1443,17 +1436,10 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/range_header_one_sided_par.onsa"
+target = "tests/spec/control/range_header_fine_par.onsa"
 reasons = ["S-278"]
-until = "W3-09"
-note = "par の見出しの片側の範囲の E0002（range_header_one_sided.onsa から移した）。flow の入出力の at が W3-09"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/header_block_expression_par.onsa"
-reasons = ["S-338"]
-until = "W3-09"
-note = "par の見出しの { は本体の始まり（header_block_expression.onsa から移した）。flow の入出力の at が W3-09"
+until = "W3-10"
+note = "par の見出しの両端のある範囲の flow（negative/range_header_one_sided_par.onsa から移した）。W3-09 の関門の E0200 になる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -1655,13 +1641,6 @@ note = "~ の挿入と除去の候補"
 
 [[pending]]
 kind = "gate"
-target = "keywords/at"
-reasons = ["S-102"]
-until = "W3-04"
-note = "字句解析器のキーワードに at が無い（クロックの構文。§2.2、§11.3）"
-
-[[pending]]
-kind = "gate"
 target = "keywords/clock"
 reasons = ["S-169"]
 until = "W3-04"
@@ -1715,14 +1694,14 @@ kind = "test-case"
 target = "tests/spec/semantics/recursion_flow_const.onsa"
 reasons = ["S-102"]
 until = "W3-10"
-note = "flow の at を今の実装が読めない（E0002）。定数のクロックの式が再帰する関数を呼ぶ（§11.3）"
+note = "flow の at は W3-09 の関門の E0200 で検査が止まる（写しは W3-10）。定数のクロックの式が再帰する関数を呼ぶ（§11.3）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/recursion_deep_flow.onsa"
 reasons = ["S-102", "S-222"]
 until = "W3-10"
-note = "flow の at を今の実装が読めない（E0002）。flow を使うテストと 300 段の再帰"
+note = "flow の at は W3-09 の関門の E0200 で検査が止まる（写しは W3-10）。flow を使うテストと 300 段の再帰"
 
 [[pending]]
 kind = "test-case"
@@ -1858,8 +1837,8 @@ note = "main より後ろに並ぶモジュールの総称の struct を、シ�
 kind = "test-case"
 target = "tests/spec/flow_semantics/infer_generic.onsa"
 reasons = ["S-174", "R-148"]
-until = "W3-09"
-note = "at のクロックの構文は W3-09。構文の後も let a = first(0.5, 0.25) が E0406（W2-06）"
+until = "W3-10"
+note = "mode = test で、旧 sema への写し（W3-10）まで E0200。写しの後も let a = first(0.5, 0.25) が E0406（W2-06）"
 
 [[pending]]
 kind = "test-case"
@@ -1894,7 +1873,7 @@ kind = "test-case"
 target = "tests/spec/negative/flow_const_neg.onsa"
 reasons = ["S-228", "S-132"]
 until = "W7-02"
-note = "遅延線の長さと par の端の前置の - は E0401、0 - 1 は E0419、E0808 は値の範囲（N = 0、空の範囲）だけ。at の構文は W3-09、コードは W7-02"
+note = "遅延線の長さと par の端の前置の - は E0401、0 - 1 は E0419、E0808 は値の範囲（N = 0、空の範囲）だけ。at の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）、コードは W7-02"
 
 [[pending]]
 kind = "test-case"
@@ -1933,7 +1912,7 @@ kind = "test-case"
 target = "tests/spec/negative/nesting_flow.onsa"
 reasons = ["S-102"]
 until = "W3-10"
-note = "flow の入出力の `at`（S-102）を今の実装が読めず E0002。W3-10 が読めるようにする"
+note = "flow の入出力の `at`（S-102）は W3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる。W3-10 が写す"
 
 [[pending]]
 kind = "test-case"
@@ -1947,7 +1926,7 @@ kind = "test-case"
 target = "tests/spec/nesting/flow_par.onsa"
 reasons = ["S-102"]
 until = "W3-10"
-note = "flow の本体の深い式（par の中の if の入れ子、項の多い和）。flow の入出力の `at`（S-102）を今の実装が読めない（E0002）"
+note = "flow の本体の深い式（par の中の if の入れ子、項の多い和）。flow の入出力の `at`（S-102）は W3-09 の関門の E0200 で検査が止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -1977,7 +1956,7 @@ kind = "test-case"
 target = "tests/spec/negative/unit_failed_visible_flow.onsa"
 reasons = ["R-71", "S-102"]
 until = "W3-10"
-note = "失敗した flow をインスタンスにする flow に偽の診断が出ない（R-71）。flow の at を今の実装が読めない（W3-09 / W3-10）"
+note = "失敗した flow をインスタンスにする flow に偽の診断が出ない（R-71）。flow の at はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -1991,7 +1970,7 @@ kind = "test-case"
 target = "tests/spec/c_runtime/c_fp_flow.onsa"
 reasons = ["S-102", "S-44"]
 until = "W3-10"
-note = "at と flow の新しい構文を今の実装が読めない（E0002）。構文の後は FMA に縮約されない flow と @fp(relaxed) の flow の C 側（§13.4、§15.5）"
+note = "at と flow の新しい構文は W3-09 の関門の E0200 で検査が止まる（写しは W3-10）。その後は FMA に縮約されない flow と @fp(relaxed) の flow の C 側（§13.4、§15.5）"
 
 [[pending]]
 kind = "test-case"
@@ -2000,13 +1979,6 @@ reasons = ["S-40"]
 until = "W5-08"
 note = "panic が prelude に無い（E0302、§9.2）。W5-08 の後、値を返す match の最後の腕が panic の C が R-145 の警告に落ちないかを確かめる"
 # --- W3-17: 修正候補の約束（§18.1、S-236）を破る候補。候補ごとに載せ、直す作業が外す（2026-10-08）
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_flow_forms.onsa:14:5 E0020 fix1"
-reasons = ["S-102", "S-236"]
-until = "W3-10"
-note = "proc を flow にする候補の後、入出力の at（S-102）を今の実装が読めず E0002"
 
 [[pending]]
 kind = "fix-contract"
@@ -2089,7 +2061,7 @@ kind = "test-case"
 target = "tests/spec/test/reach_flow.onsa"
 reasons = ["S-242", "S-102"]
 until = "W7-02"
-note = "インスタンスを作る flow を経由して届く使用。最終の構文（at）は W3-09、block のクロックから非 rt の関数を呼ぶ形は W7-02 まで E0805"
+note = "インスタンスを作る flow を経由して届く使用。最終の構文（at）はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）、block のクロックから非 rt の関数を呼ぶ形は W7-02 まで E0805"
 
 [[pending]]
 kind = "test-case"
@@ -2100,13 +2072,6 @@ note = "値として使う関数を経由して届く使用。関数値の呼び
 
 # --- W3-15/i: 既存言語の書き方の閉じた一覧（docs/foreign-forms.toml、S-250）の行のうち、例がまだ通らないもの。
 # until は W3-15/t2 の案（proc は例が flow の at の構文を使うので W3-10）。照合は onsa_tests::foreign_forms
-
-[[pending]]
-kind = "foreign-form"
-target = "proc"
-reasons = ["S-250"]
-until = "W3-10"
-note = "候補 flow を当てた後も、例の flow の at の構文を今の実装が読めない（E0002）"
 
 [[pending]]
 kind = "foreign-form"
@@ -2273,36 +2238,22 @@ note = "見えている名前への ^"
 kind = "foreign-form"
 target = "faust_feedback"
 reasons = ["S-48", "S-102"]
-until = "W3-10"
-note = "flow の構文を読む行"
-
-[[pending]]
-kind = "foreign-form"
-target = "faust_feedback_unnamed"
-reasons = ["S-48", "S-102"]
-until = "W3-10"
-note = "flow の構文を読む行"
+until = "W3-08"
+note = "FAUST の形の照合の関数が無い（W3-08 の FAUST の形の E0020）。例の flow の構文は W3-09 で読める"
 
 [[pending]]
 kind = "foreign-form"
 target = "faust_prime"
 reasons = ["S-48", "S-102"]
-until = "W3-10"
-note = "flow の構文を読む行"
+until = "W3-08"
+note = "FAUST の形の照合の関数が無い（W3-08 の FAUST の形の E0020）。例の flow の構文は W3-09 で読める"
 
 [[pending]]
 kind = "foreign-form"
 target = "faust_delay"
 reasons = ["S-48", "S-102"]
-until = "W3-10"
-note = "flow の構文を読む行"
-
-[[pending]]
-kind = "foreign-form"
-target = "faust_delay_variable"
-reasons = ["S-48", "S-102"]
-until = "W3-10"
-note = "flow の構文を読む行"
+until = "W3-08"
+note = "FAUST の形の照合の関数が無い（W3-08 の FAUST の形の E0020）。例の flow の構文は W3-09 で読める"
 
 [[pending]]
 kind = "foreign-form"
@@ -2389,13 +2340,6 @@ until = "W3-08"
 note = "#[derive(Eq)] の候補 struct Key: Eq を今の実装が読めない（宣言の : trait の構文は W3-08）。#[repr(c)] と #[fp(relaxed)] の例は通る"
 
 [[pending]]
-kind = "foreign-form"
-target = "clock_on_binding"
-reasons = ["S-48", "S-102"]
-until = "W3-10"
-note = "flow の at の構文を今の実装が読めない（E0002）"
-
-[[pending]]
 kind = "test-case"
 target = "tests/spec/values/move_assign.onsa"
 reasons = ["R-191"]
@@ -2425,14 +2369,14 @@ kind = "test-case"
 target = "tests/spec/fixes/e0020_range_dots_par.onsa"
 reasons = ["S-257", "S-102"]
 until = "W3-10"
-note = "par の見出しの .. と ... の E0020。flow の新しい構文（at sample）を今の構文解析器が読めない（E0002）"
+note = "par の見出しの .. と ... の E0020。候補を当てた後の flow の新しい構文（at sample）は W3-09 の関門の E0200 で検査が止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/range_inclusive_par_e0200.onsa"
 reasons = ["S-257", "S-224", "S-102"]
 until = "W3-10"
-note = "par の見出しの ..= の E0200（W7-04 まで）。flow の新しい構文（at sample）を今の構文解析器が読めない（E0002）"
+note = "par の見出しの ..= の E0200（W7-04 まで）。flow の新しい構文（at sample）は W3-09 の関門の E0200 で先に止まる（写しは W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -2469,11 +2413,42 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/precedence_flow.onsa"
 reasons = ["S-45", "S-102"]
 until = "W3-10"
-note = "flow の本体と par の中の演算子の群の値。at の構文（W3-09）と演算子の群（S-45）"
+note = "flow の本体と par の中の演算子の群の値。at の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）と演算子の群（S-45）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/operator_groups_flow.onsa"
 reasons = ["S-45", "S-102"]
 until = "W3-10"
-note = "flow と par の中の E0010。at の構文（W3-09）"
+note = "flow と par の中の E0010。at の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）"
+
+
+# --- W3-09/t2: flow の構文の第 14 組の決定（S-354、S-355、S-356、S-357、S-358、S-363）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0003_if_tilde_else_line.onsa"
+reasons = ["S-355", "S-216"]
+until = "W3-06"
+note = "W3-09 で if~ の次の行の else が E0003 になることは通る。E0003 の主の位置が今は前の行の }（印は else の行、W3-06 が位置を else に移す）。if~ の次の行の else は E0003 が先（E0002 でない）。E0003 の主の位置は else（仕様 §2.5、W3-06 が印を else の行に移す）。W3-06 が先に入っていなければ印の行が合わない"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/syntax_tilde_after_newline.onsa"
+reasons = ["S-363", "S-354"]
+until = "W3-06"
+note = "if / match の後の改行の後の ~ の E0002。行末の E0002 の位置と found は W3-06（今は改行のトークンの位置で found が無く、否定例の規則に合わない）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/names_clock_in_fn_head.onsa"
+reasons = ["S-356", "S-101"]
+until = "W4-12"
+note = "fn の入出力の型の後ろの at は名前の段の E0821。構文の段が at を読む（W3-09）のが前提"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/d3901b88.onsa"
+reasons = ["R-200"]
+until = "W3-06"
+note = "W3-09/t2 が見つけた入力。`.(` の候補を当てた後に E0006 が出る（R-200）"

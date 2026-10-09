@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 1
+
+// A prefix `~` is the bit negation of the languages of the C family, and the candidate is the `!`
+// (§2.6: "ビット反転は `!` と書く", S-123). That candidate is for a `~` that touches its operand
+// only (S-363): `~m` is E0020 with `!m`, and `~ m` (a space) is E0002 with no candidate, because
+// removing the space would give `~m`, which is itself an error (the promise of §18.1 that the
+// candidate leaves no error of the stage could not be kept). The scope is a `~` that follows neither a name
+// nor `if` / `match`: after a name it is the space before the `~` of a call (`saw ~(f0)`), after
+// `if` / `match` it is S-354 (fixes/e0020_if_tilde_gap.onsa). One error per declaration unit.
+
+pub fn id(m: U32) -> U32 {
+  m
+}
+
+pub fn adjacent_let(m: U32) -> U32 {
+  let n = ~m                                        //~ E0020
+  n
+}
+
+pub fn spaced_let(m: U32) -> U32 {
+  let n = ~ m                                       //~ E0002
+  n
+}
+
+pub fn adjacent_argument(m: U32) -> U32 {
+  id(~m)                                            //~ E0020
+}
+
+pub fn spaced_argument(m: U32) -> U32 {
+  id(~ m)                                           //~ E0002
+}
+
+pub fn adjacent_operand(m: U32) -> U32 {
+  m + ~m                                            //~ E0020
+}
+
+pub fn spaced_operand(m: U32) -> U32 {
+  m + ~ m                                           //~ E0002
+}
+
+pub fn adjacent_while(c: Bool) -> U32 {
+  while ~c {                                        //~ E0020
+    break
+  }
+  1
+}
+
+pub fn spaced_while(c: Bool) -> U32 {
+  while ~ c {                                       //~ E0002
+    break
+  }
+  1
+}
+
+pub fn adjacent_return(m: U32) -> U32 {
+  return ~m                                         //~ E0020
+}
+
+pub fn spaced_return(m: U32) -> U32 {
+  return ~ m                                        //~ E0002
+}
+
+pub flow adjacent_in_a_flow(m: U32 at sample) -> U32 at sample {
+  let n = ~m                                        //~ E0020
+  n
+}
+
+pub flow spaced_in_a_flow(m: U32 at sample) -> U32 at sample {
+  let n = ~ m                                       //~ E0002
+  n
+}

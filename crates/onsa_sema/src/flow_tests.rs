@@ -335,7 +335,9 @@ fn e0811_e0812_marks() {
     let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0812);
     assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "h(x)");
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev~(x, 0.0)\n}\n"), vec![Code::E0812]);
+    // `prev~(` is the form of S-44: the checks stop at it with E0200 until W3-10
+    // writes it in their terms (K-02), never with E0812 and its candidate `prev(`.
+    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev~(x, 0.0)\n}\n"), vec![Code::E0200]);
 }
 
 #[test]

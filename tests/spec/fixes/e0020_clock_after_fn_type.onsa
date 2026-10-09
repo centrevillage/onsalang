@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for an `at` right after the result of a function type (§11.3, S-367): it belongs to the
+// result, as `uses` does, so it is an `at` inside a type. Where the clock goes after the whole function
+// type (an input or the output of a flow with no clock after its type), the candidate parenthesizes
+// the function type and writes the clock after it (`(fn(F32) -> F32) at block`); a function type that
+// its `uses` closes takes the clock after it as it is. Where there is no place for a clock, it is
+// removed: after `as`, and where the input has a clock after its type already (the function type is
+// then parenthesized, or the clock after it would become its result's). One error per declaration unit.
+
+pub flow input_of_a_function_type(g: fn(F32) -> F32 at block) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub flow output_of_a_function_type(x: F32 at sample) -> fn() -> F32 at sample {  //~ E0020
+  f
+}
+
+pub flow closed_by_its_effects(g: fn(F32) -> F32 at block uses {Alloc}) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub flow two_clocks(g: fn(F32) -> F32 at block at sample) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub fn after_as(x: F32) -> F32 {
+  let y = x as fn() -> F32 at sample  //~ E0020
+  0.5
+}
+
+pub struct Field {
+  f: fn(F32) -> F32 at sample,  //~ E0020
+}

@@ -1,0 +1,118 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.1", "§2.2", "§11.2", "§11.3", "§11.7", "§18.1"]
+
+// The inputs and the output of a flow are written `name: Type at clock` and `-> Type at clock`
+// (§11.2, §11.3). This file is read by the syntax stage only (mode = "parse"): which clocks are
+// allowed where (E0810), what a value type may be (E0810), the `@param` rules (E0809) and
+// whether a name exists belong to the later stages, so no flow here is checked and the syntax
+// stage reports nothing for any declaration. The file is written the way `onsa fmt` writes it
+// (docs/onsa-tools.md §3.2). The clock is a name, read after `at` (§11.3); `at` is a keyword
+// (§2.2), so it cannot be mistaken for the end of the type.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+const CHANNELS: U32 = 2
+
+// The three clocks of §11.3 on inputs, and the one clock of an output of this version.
+pub flow all_clocks(a: F32 at init, b: F32 at block, c: F32 at sample) -> F32 at sample {
+  c
+}
+
+// Visibility does not change how `at` is read.
+flow no_modifier(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// A flow with no inputs.
+pub flow no_inputs() -> F32 at sample {
+  0.5
+}
+
+// An output of another value type: an integer, a Bool (the clock is read the same way).
+pub flow integer_output(x: I32 at sample) -> I32 at sample {
+  x
+}
+
+pub flow bool_output(x: F32 at sample) -> Bool at sample {
+  x > 0.5
+}
+
+// The value type is read as a type position is, then `at` ends it: arrays with a constant
+// length (a name, an arithmetic expression), a struct, a generic struct, a module path, a type
+// with a constant argument.
+pub flow array_length(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  x
+}
+
+pub flow array_length_name(x: [F32; CHANNELS] at sample) -> [F32; CHANNELS] at sample {
+  x
+}
+
+pub flow array_length_expression(x: [F32; CHANNELS * 2 + 1] at block) -> [F32; CHANNELS * 2 + 1] at sample {
+  [x[0]; CHANNELS * 2 + 1]
+}
+
+pub flow struct_output(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+pub flow generic_struct(a: F32 at sample, b: I32 at block) -> Pair[F32, I32] at sample {
+  Pair { a: a, b: b }
+}
+
+pub flow option_value(x: Option[F32] at sample) -> Option[F32] at sample {
+  x
+}
+
+pub flow module_path_type(x: shapes.Frame at sample) -> shapes.Frame at sample {
+  x
+}
+
+pub flow const_argument(x: Rg[F32, 4] at init) -> F32 at sample {
+  0.5
+}
+
+// A list over several lines (the block form: one element a line, a `,` after each, `)` on its
+// own line), doc comments on the inputs (§2.1) and attributes (§11.7) before an input.
+pub flow block_form(
+  /// The signal.
+  x: F32 at sample,
+  /// The level in dB.
+  @param(min: -60.0, max: 12.0, default: 0.0, unit: "dB")
+  level: F32 at block,
+  /// Set once, when the instance is made.
+  seed: U32 at init,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow block_form_one_input(
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+// The same head on one line and in the block form are two spellings of the same declaration.
+pub flow one_line_form(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  x * p
+}
+
+pub flow wide_head(left: F32 at sample, right: F32 at sample, cutoff: F32 at block, q: F32 at block) -> Stereo at sample {
+  Stereo { l: left * cutoff, r: right * q }
+}
+
+// A fn with a clock in its head: the syntax stage reads it, the names stage reports E0821 for it
+// (§11.1, §11.3: `at` can be written in the inputs and output of a flow only).
+pub fn clock_in_a_fn_head(x: F32 at sample) -> F32 at sample {
+  x
+}

@@ -393,46 +393,6 @@ pub(crate) fn interpolated(file: FileId, text: &str, holes: &[Span], t: Token) -
     has && crate::lex(file, &text[t.span.start as usize..t.span.end as usize]).diagnostics.is_empty()
 }
 
-/// The top of the expression of `kinds` (its tokens, comments and all) as
-/// an operand ([`Operand`]): read by the brackets and the operators outside
-/// them (a `-` or a `!` where an operand starts is a prefix). A chain whose
-/// operators have no weakest group (an error E0010 of its own) is taken as
-/// needing parentheses.
-fn operand(kinds: &[TokenKind]) -> Operand {
-    let mut depth = 0u32;
-    let mut expect = true;
-    let mut ops: Vec<BinOp> = Vec::new();
-    let mut cast = false;
-    for &k in kinds.iter().filter(|k| !k.is_trivia()) {
-        match k {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
-                depth = depth.saturating_sub(1);
-                expect = false;
-            }
-            _ if depth > 0 => {}
-            TokenKind::Minus | TokenKind::Bang if expect => {}
-            TokenKind::KwAs => {
-                cast = true;
-                expect = true;
-            }
-            _ => match crate::lower::binop(k) {
-                Some(op) => {
-                    ops.push(op);
-                    expect = true;
-                }
-                None => expect = false,
-            },
-        }
-    }
-    let weakest = |r: &&BinOp| ops.iter().all(|o| o.group() == r.group() || o.group().stronger(r.group()));
-    match ops.iter().rev().find(weakest) {
-        Some(&root) => Operand::Binary(root),
-        None if !ops.is_empty() || cast => Operand::AsAt,
-        None => Operand::Plain,
-    }
-}
-
 /// What a condition compares: a new binding (a hole, by its index) or the
 /// name of an `@` binding.
 #[derive(Clone)]

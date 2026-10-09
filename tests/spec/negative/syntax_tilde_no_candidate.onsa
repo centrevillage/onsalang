@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+
+// E0002 for a `~` the spec gives no reading and no candidate to (§2.6, S-363, S-354), next to the
+// E0020 of the same mark in fixes/e0020_prefix_tilde_contrast.onsa and fixes/e0020_if_tilde_gap.onsa.
+// - A `~` that is followed by a space where a prefix `~` could stand (after `=`, `(`, `+`,
+//   `return`, `while`) is the general syntax error: the space cannot be removed by a candidate (`~m`
+//   is E0020 itself), so there is none.
+// - The line break between `if` / `match` and `~` is in syntax_tilde_after_newline.onsa.
+// One error per declaration unit.
+
+pub fn id(m: U32) -> U32 {
+  m
+}
+
+pub fn after_let(m: U32) -> U32 {
+  let n = ~ m                                       //~ E0002
+  n
+}
+
+pub fn after_a_paren(m: U32) -> U32 {
+  id(~ m)                                           //~ E0002
+}
+
+pub fn after_an_operator(m: U32) -> U32 {
+  m + ~ m                                           //~ E0002
+}
+
+pub fn after_return(m: U32) -> U32 {
+  return ~ m                                        //~ E0002
+}
+
+pub fn after_while(c: Bool) -> U32 {
+  while ~ c {                                       //~ E0002
+    break
+  }
+  1
+}
+
+pub fn after_a_comma(m: U32) -> (U32, U32) {
+  (m, ~ m)                                          //~ E0002
+}
+
+pub flow after_let_in_a_flow(m: U32 at sample) -> U32 at sample {
+  let n = ~ m                                       //~ E0002
+  n
+}

@@ -10,7 +10,7 @@ pub fn len_of(xs: [Span[F32]; 2], k: U32) -> U32 {
 }
 
 // The value at index `i` of channel `k`.
-pub fn at(xs: [Span[F32]; 2], k: U32, i: U32) -> F32 {
+pub fn element(xs: [Span[F32]; 2], k: U32, i: U32) -> F32 {
   xs[k][i]
 }
 

@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.6", "§11.1", "§11.3", "§18.1"]
+
+// The syntax of a flow written where a flow is not: a `fn` body, a `test` and a `const`
+// initializer (§11.1). The syntax stage reads all of it, and E0821 is the names stage's
+// ("flow の外の flow だけの構文は E0821"; the names stage is after the syntax stage, §18.1), so
+// `onsa fmt` formats such a file and `onsa diff --ast` compares it. The file is read only
+// (mode = "parse"): nothing here is a program that checks. It is written the way `onsa fmt`
+// writes it (docs/onsa-tools.md §3.2).
+
+pub fn instance_in_a_fn(x: F32) -> F32 {
+  saw~(x)
+}
+
+pub fn delay_in_a_fn(x: F32) -> F32 {
+  prev~(x, 1.0)
+}
+
+pub fn feedback_in_a_fn(x: F32) -> F32 {
+  let y = x + prev~(^y)
+  y
+}
+
+pub fn clock_in_a_fn(x: F32) -> F32 {
+  let a = x at sample
+  a
+}
+
+pub fn branches_in_a_fn(x: F32, c: Bool) -> F32 {
+  let a = if~ c { x } else { 0.5 }
+  match~ c {
+    true => a,
+    false => 0.5,
+  }
+}
+
+pub fn par_in_a_fn(x: F32) -> F32 {
+  let a = par i in 0..<4 {
+    x
+  }
+  a[0]
+}
+
+const FROM_A_CONST: F32 = saw~(1.0)
+
+const CLOCK_IN_A_CONST: F32 = 1.0 at init
+
+test "flow syntax in a test" {
+  let y = lp~(1.0) at sample
+  let z = prev~(^z)
+  assert y == z
+}

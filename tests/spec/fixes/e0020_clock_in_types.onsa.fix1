@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for an `at` that is not the clock of a value (§11.3, S-356): inside a type (a type argument,
+// an element of an array or a tuple, an argument of a function type) and after the type of a
+// declaration that is not an input or an output of a flow (a field, an element of a variant, the
+// right side of a `type`, the type of a `const`, the type of a `let` or a `var`), in a flow and
+// outside it. The `at` is a clock for a value; a type has none. The one candidate moves the clock
+// to the place that can have it, and removes it where there is none:
+// - the type of an input or an output of a flow that has no clock after it gets it there
+//   (`x: Option[F32 at sample]` becomes `x: Option[F32] at sample`);
+// - the type of a `let` or a `var` gets it on the value (`let y: Option[F32] = x at sample`);
+// - elsewhere, and where the flow input or output has a clock after the type already, it is removed.
+// An `at` after the type of an input or output of an `fn` is not this error but E0821 of the names
+// stage (see negative/names_clock_in_fn_head.onsa). One error per declaration unit.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+// ---- removed: no place for a clock ----------------------------------------------------------------
+
+pub fn type_arg(x: Option[F32]) -> F32 {  //~ E0020
+  0.5
+}
+
+pub fn type_arg_in_the_output(x: F32) -> Option[F32] {  //~ E0020
+  Some(x)
+}
+
+pub fn array_element(x: [F32; 2]) -> F32 {  //~ E0020
+  x[0]
+}
+
+pub fn tuple_element(x: (F32, F32)) -> F32 {  //~ E0020
+  x.1
+}
+
+pub fn function_type_argument(f: fn(F32) -> F32) -> F32 {  //~ E0020
+  f.(1.0)
+}
+
+pub fn nested_type_argument(x: Option[Option[F32]]) -> F32 {  //~ E0020
+  0.5
+}
+
+pub fn user_generic(x: Wrap[F32]) -> F32 {  //~ E0020
+  0.5
+}
+
+pub struct Field {
+  a: F32,                                 //~ E0020
+}
+
+pub struct FieldInAnArray {
+  a: [F32; 2],                            //~ E0020
+}
+
+pub struct FieldAtBlock {
+  a: F32,
+  b: I32,                                  //~ E0020
+}
+
+pub enum VariantElement {
+  Gain(F32),                              //~ E0020
+  Off,
+}
+
+pub type Alias = F32                      //~ E0020
+
+pub type AliasOfAnOption = Option[F32]    //~ E0020
+
+pub const K: F32 = 1.0                    //~ E0020
+
+pub const KS: [F32; 2] = [1.0, 2.0]         //~ E0020
+
+// ---- moved to the value of a `let` or a `var` -------------------------------------------------------
+
+pub fn let_in_a_fn(x: Option[F32]) -> F32 {
+  let y: Option[F32] = x at sample                  //~ E0020
+  0.5
+}
+
+pub fn let_array_in_a_fn(xs: [F32; 2]) -> F32 {
+  let ys: [F32; 2] = xs at sample                   //~ E0020
+  ys[0]
+}
+
+pub fn let_pattern_in_a_fn(p: (F32, F32)) -> F32 {
+  let (a, b): (F32, F32) = p at sample              //~ E0020
+  a + b
+}
+
+pub fn var_in_a_fn(x: F32) -> F32 {
+  var y: F32 = x at sample                          //~ E0020
+  y
+}
+
+pub fn var_with_a_type_argument(x: Option[F32]) -> F32 {
+  var y: Option[F32] = x at block                   //~ E0020
+  0.5
+}
+
+pub flow let_in_a_flow(x: Option[F32] at sample) -> F32 at sample {
+  let y: Option[F32] = x at sample                  //~ E0020
+  0.5
+}
+
+pub flow let_array_in_a_flow(xs: [F32; 2] at sample) -> F32 at sample {
+  let ys: [F32; 2] = xs at sample                   //~ E0020
+  ys[0]
+}
+
+// ---- moved to the type of an input or an output of a flow ------------------------------------------
+
+pub flow input_type_arg(x: Option[F32] at sample) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub flow output_type_arg(x: F32 at sample) -> Option[F32] at sample {  //~ E0020
+  Some(x)
+}
+
+pub flow input_array(x: [F32; 2] at sample) -> F32 at sample {  //~ E0020
+  x[0]
+}
+
+pub flow input_user_generic(x: Wrap[F32] at sample) -> F32 at sample {  //~ E0020
+  x.v
+}
+
+pub flow output_tuple(x: F32 at sample) -> (F32, F32) at sample {  //~ E0020
+  (x, x)
+}
+
+pub flow second_input(x: F32 at sample, p: Option[F32] at block) -> F32 at sample {  //~ E0020
+  x
+}
+
+// ---- removed: the flow input or output has its clock after the type already -------------------------
+
+pub flow input_with_a_clock(x: Option[F32] at block) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub flow output_with_a_clock(x: F32 at sample) -> [F32; 2] at sample {  //~ E0020
+  [x, x]
+}

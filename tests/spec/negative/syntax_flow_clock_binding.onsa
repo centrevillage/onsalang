@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§11.3", "§18.1"]
+
+// E0020 for a clock written on the binding side of a `let` instead of on the value (§11.3: "`let`
+// の束縛の側にはクロックを書かない（`let y: F32 at sample = x` は E0020、修正候補は
+// `let y: F32 = x at sample`）"), in the forms around the one of fixes/e0020_flow_forms.onsa: another
+// clock, a `let` in a fn, a pattern with a type, an array type. The candidate moves the clock to
+// the value. What the text after it is, for an initializer that is not a single operand, is not
+// said by the spec beyond that example; the runner (W3-17) applies the candidate and checks the
+// promise of §18.1 on it: the E0020 is the only error of the unit, and after the candidate the unit
+// has no error of the syntax stage. So a candidate that writes `x + 1.0 at sample` or
+// `n as F32 at sample` (E0011, §3.1) breaks the promise and is reported as a violation; the
+// initializers below that are a sum, a cast, a comparison and a prefix form are there for that.
+// The note shows the right rule (§18.1: E0020 has a note that gives the correct rule).
+
+rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+rt fn pair(x: F32) -> (F32, F32) {
+  (x, x)
+}
+
+pub flow another_clock(p: F32 at block) -> F32 at sample {
+  let y: F32 at block = p   //~ E0020
+  y
+}
+
+pub flow the_clock_init(p: F32 at init) -> F32 at sample {
+  let y: F32 at init = p   //~ E0020
+  y
+}
+
+pub flow call_initializer(x: F32 at sample) -> F32 at sample {
+  let y: F32 at sample = wrap(x)   //~ E0020
+  y
+}
+
+pub flow flow_call_initializer(x: F32 at sample) -> F32 at sample {
+  let y: F32 at sample = prev~(x)   //~ E0020
+  y
+}
+
+pub flow prefix_initializer(x: F32 at sample) -> F32 at sample {
+  let y: F32 at sample = -x   //~ E0020
+  y
+}
+
+pub flow sum_initializer(x: F32 at sample) -> F32 at sample {
+  let y: F32 at sample = x + 1.0   //~ E0020
+  y
+}
+
+pub flow product_initializer(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let y: F32 at sample = x * p   //~ E0020
+  y
+}
+
+pub flow cast_initializer(n: I32 at sample) -> F32 at sample {
+  let y: F32 at sample = n as F32   //~ E0020
+  y
+}
+
+pub flow comparison_initializer(x: F32 at sample) -> Bool at sample {
+  let y: Bool at sample = x > 0.5   //~ E0020
+  y
+}
+
+pub flow array_type(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  let y: [F32; 2] at sample = x   //~ E0020
+  y
+}
+
+pub flow pattern_with_a_type(x: F32 at sample) -> F32 at sample {
+  let (a, b): (F32, F32) at sample = pair(x)   //~ E0020
+  a + b
+}
+
+pub fn in_a_fn(x: F32) -> F32 {
+  let y: F32 at sample = x   //~ E0020
+  y
+}
+
+pub fn in_a_fn_with_a_sum(x: F32) -> F32 {
+  let y: F32 at block = x + 1.0   //~ E0020
+  y
+}

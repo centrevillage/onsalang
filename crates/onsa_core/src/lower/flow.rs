@@ -562,16 +562,22 @@ fn children(expr: &ast::Expr) -> Vec<ExprId> {
         AK::Error => onsa_diag::internal::bug(Some(expr.span), "lowering met a body a syntax error left unread"),
         AK::Paren(x) | AK::Move(x) | AK::Try(x) | AK::Unsafe(x) => vec![*x],
         AK::Cast { expr, .. } | AK::Unary { expr, .. } => vec![*expr],
+        // Lowering runs only on a package without diagnostics, and the flow
+        // syntax has the E0200 of its gate (`onsa_sema::flow_syntax`, W3-09);
+        // this walk reports nothing.
+        AK::At { .. } | AK::Feedback(_) => {
+            onsa_diag::internal::bug(Some(expr.span), "lowering met the flow syntax its gate stops first")
+        }
         AK::Tuple(xs) | AK::Array(xs) => xs.clone(),
         AK::Repeat { elem, .. } => vec![*elem],
         AK::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
         AK::Block(b) => b.tail.into_iter().collect(),
-        AK::If { cond, then, else_ } => {
+        AK::If { cond, then, else_, .. } => {
             let mut v = vec![*cond, *then];
             v.extend(*else_);
             v
         }
-        AK::Match { scrutinee, arms } => {
+        AK::Match { scrutinee, arms, .. } => {
             let mut v = vec![*scrutinee];
             for arm in arms {
                 v.extend(arm.guard);

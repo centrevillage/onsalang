@@ -55,8 +55,13 @@
 
 use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Span, Stage};
 
+use crate::ast::{BinOp, Operand};
 use crate::cst::NodeKind;
 use crate::token::{Gap, Token, TokenKind};
+
+mod flow;
+
+pub(crate) use flow::clocks;
 
 /// The stage that finds a form, as the data file names it: the lexical and
 /// the syntax stages are both [`Stage::Syntax`] (§18.1).
@@ -150,6 +155,9 @@ pub enum Detect {
     Syntax(fn(&Cursor) -> Option<Hit>),
     /// A type name the parser reads ([`type_name`]).
     TypeName,
+    /// A form the parser reads whole, found on the tree after parsing (the
+    /// clocks of S-356, [`clocks`]).
+    Tree,
 }
 
 /// The rows the compiler finds. `name` is the row's `id` in
@@ -207,6 +215,10 @@ pub enum RowId {
     RangeOutsideHeader,
     SpaceAroundDot,
     CalleeExpression,
+    SpaceAfterBranchKeyword,
+    ElseIfTilde,
+    ClockOnBinding,
+    ClockInType,
 }
 
 pub struct Row {
@@ -698,6 +710,42 @@ pub static ROWS: &[Row] = &[
         rule: "a function value is called with `.(` (`s.f.(x)`, `pick(true).(5)`); `f(x)` calls an item, whose callee is a path of names (§6.1)",
         detect: Detect::Syntax(callee_expression),
     },
+    Row {
+        id: RowId::SpaceAfterBranchKeyword,
+        name: "space_after_branch_keyword",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "`if~` and `match~` are written with no blank between the keyword and `~`",
+        rule: "`if~` / `match~` evaluate every branch; the `~` touches the `if` or `match` (§2.6). A prefix `~` is no operator: the bitwise negation is `!`",
+        detect: Detect::Syntax(flow::space_after_branch_keyword),
+    },
+    Row {
+        id: RowId::ElseIfTilde,
+        name: "else_if_tilde",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the `~` of a chain of `if` is written on its first `if` only",
+        rule: "the `~` of `if~` stands for the whole chain of `else if` (`if~ c { a } else if d { b } else { e }`), and is written on the first `if` (§11.5)",
+        detect: Detect::Syntax(flow::else_if_tilde),
+    },
+    Row {
+        id: RowId::ClockOnBinding,
+        name: "clock_on_binding",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a clock is written on the value, not on the binding",
+        rule: "a clock is written on an expression (`let y: F32 = x at sample`) or after the type of an input or output of a flow, never on the type of a binding (§11.3)",
+        detect: Detect::Tree,
+    },
+    Row {
+        id: RowId::ClockInType,
+        name: "clock_in_type",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a clock is no part of a type",
+        rule: "a clock is written after the type of an input or output of a flow (`x: F32 at sample`) or on an expression (`p at sample`); the type of a value is a plain type everywhere (§11.3)",
+        detect: Detect::Tree,
+    },
 ];
 
 /// The rows of the data file that no work has made yet (the later works
@@ -742,7 +790,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "tuple_struct", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "copy_impl", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "copy_bound", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "clock_on_binding", phase: Phase::Syntax, code: Code::E0020 },
 ];
 
 /// The row of `id`.
@@ -1113,6 +1160,7 @@ fn semicolon(c: &Cursor) -> Option<Hit> {
                     | TokenKind::KwLet
                     | TokenKind::KwVar
                     | TokenKind::KwAs
+                    | TokenKind::KwAt
             ))
     {
         return None;
@@ -1169,7 +1217,9 @@ fn is_segment(kind: TokenKind) -> bool {
 /// (`m::Buf::[F32]::zeroed`, S-239), whose `::` is no separator; it ends at a
 /// `::<` (`Buf::<F32>::zeroed` is two forms, S-326).
 fn path_separator(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::ColonColon {
+    // A clock is one name (§11.3, S-359): a path after `at` is E0002, which
+    // `.` for `::` does not fix.
+    if c.kind(c.at) != TokenKind::ColonColon || c.closed.first().is_some_and(|n| n.0 == NodeKind::Clock) {
         return None;
     }
     let in_use = c.open.iter().chain(c.closed).any(|o| o.0 == NodeKind::Use);
@@ -2150,9 +2200,22 @@ fn float_spelling(text: &str) -> Option<String> {
 /// A prefix `~` of the C languages (the bitwise negation): `!x` (§2.6,
 /// §18.1). `~` after a name is the flow-call mark, and `~ _` is the feedback
 /// of FAUST (another row).
+/// The row reads a prefix `~` that touches its operand and follows no name
+/// (S-123) and is not the `~` of an `if` / `match` with a blank before it
+/// (S-354, S-355: [`Cursor::branch`]; the `if` of a guard is none).
 fn faust_bit_not(c: &Cursor) -> Option<Hit> {
-    if c.want != Want::Expr
-        || c.kind(c.at) != TokenKind::Tilde
+    if c.want != Want::Expr || c.sig_before(c.at).is_some_and(|p| c.branch(p).is_some()) {
+        return None;
+    }
+    hit(c.span(c.at), bit_not(c)?)
+}
+
+/// The prefix `~` at the cursor read as the bitwise negation of C: its
+/// candidates (none: E0002 with the note), or `None` when it does not touch
+/// an operand. `space_after_branch_keyword` and `else_if_tilde` give the
+/// same reading as their second candidate (S-354).
+fn bit_not(c: &Cursor) -> Option<Vec<Fix>> {
+    if c.kind(c.at) != TokenKind::Tilde
         || c.gap(c.at + 1).is_some()
         || matches!(c.kind(c.at + 1), TokenKind::Underscore | TokenKind::LParen)
     {
@@ -2163,22 +2226,26 @@ fn faust_bit_not(c: &Cursor) -> Option<Hit> {
     let prefix =
         |k: TokenKind| matches!(k, TokenKind::Minus | TokenKind::Bang | TokenKind::Tilde | TokenKind::MinusMinus);
     if c.top() == Some(NodeKind::PrefixExpr) || matches!(c.kind(c.at + 1), TokenKind::Tilde | TokenKind::MinusMinus) {
-        return hit(c.span(c.at), Vec::new());
+        return Some(Vec::new());
+    }
+    // The operand of `!` is no `move x` or `inout x` (§5.2): no candidate.
+    if matches!(c.kind(c.at + 1), TokenKind::KwMove | TokenKind::KwInout) {
+        return Some(Vec::new());
     }
     // The operand of `move` and `inout` is a postfix expression (§5.2, R-42):
     // `move !x` is no form either, so there is no candidate (the E0002).
     if c.sig_before(c.at).is_some_and(|p| matches!(c.kind(p), TokenKind::KwMove | TokenKind::KwInout)) {
-        return hit(c.span(c.at), Vec::new());
+        return Some(Vec::new());
     }
     if prefix(c.kind(c.at + 1)) {
         // `~-x`: `!(-x)`, the operand in parentheses (no stack of prefix
         // operators, §3.1); only when the operand is plain.
-        let Some(end) = operand_end(c, c.at + 2) else { return hit(c.span(c.at), Vec::new()) };
+        let Some(end) = operand_end(c, c.at + 2) else { return Some(Vec::new()) };
         let fix =
             Fix::new("write `!`", vec![Edit::replace(c.span(c.at), "!("), Edit::insert(c.file, c.span(end).end, ")")]);
-        return hit(c.span(c.at), vec![fix]);
+        return Some(vec![fix]);
     }
-    hit(c.span(c.at), vec![Fix::replace("write `!`", c.span(c.at), "!")])
+    Some(vec![Fix::replace("write `!`", c.span(c.at), "!")])
 }
 
 /// The last token of a plain operand that starts at token `i`: a name or a
@@ -2436,23 +2503,61 @@ fn compound_operator(kind: TokenKind) -> bool {
     matches!(kind, Plus | Minus | Star | Slash | Percent | Amp | Pipe | Caret | Shl | Shr)
 }
 
+/// The top of the expression of `kinds` (its tokens, comments and all) as
+/// an operand ([`Operand`]): read by the brackets and the operators outside
+/// them (a `-`, a `!` or a `^` where an operand starts is a prefix, or the
+/// mark of a name). The one reading of the written text for the candidates
+/// that parenthesize (the guards, `needs_parens`, the clock moved to a value);
+/// [`crate::ast::BinOp::bare`] decides with it. A chain whose
+/// operators have no weakest group (an error E0010 of its own) is taken as
+/// needing parentheses.
+fn operand(kinds: &[TokenKind]) -> Operand {
+    let mut depth = 0u32;
+    let mut expect = true;
+    let mut ops: Vec<BinOp> = Vec::new();
+    let mut cast = false;
+    for &k in kinds.iter().filter(|k| !k.is_trivia()) {
+        match k {
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                depth = depth.saturating_sub(1);
+                expect = false;
+            }
+            _ if depth > 0 => {}
+            // A prefix operator, and the mark `^` of a name (§2.6), where an
+            // operand starts.
+            TokenKind::Minus | TokenKind::Bang | TokenKind::Caret if expect => {}
+            TokenKind::KwAs | TokenKind::KwAt => {
+                cast = true;
+                expect = true;
+            }
+            _ => match crate::lower::binop(k) {
+                Some(op) => {
+                    ops.push(op);
+                    expect = true;
+                }
+                None => expect = false,
+            },
+        }
+    }
+    let weakest = |r: &&BinOp| ops.iter().all(|o| o.group() == r.group() || o.group().stronger(r.group()));
+    match ops.iter().rev().find(weakest) {
+        Some(&root) => Operand::Binary(root),
+        None if !ops.is_empty() || cast => Operand::AsAt,
+        None => Operand::Plain,
+    }
+}
+
 /// Whether the expression `first..=last` needs parentheses as the right
-/// operand of a binary operator: it holds an operator outside brackets, or
-/// starts with a prefix operator.
-fn needs_parens(c: &Cursor, first: usize, last: usize) -> bool {
+/// operand of the binary operator `op` ([`crate::ast::BinOp::bare`]). An
+/// operand that starts with a prefix operator is parenthesized too, so that
+/// the written-out assignment reads as the compound one (`x = x - (-y)`).
+fn needs_parens(c: &Cursor, op: TokenKind, first: usize, last: usize) -> bool {
     if matches!(c.kind(first), TokenKind::Minus | TokenKind::Bang) {
         return true;
     }
-    let mut depth = 0;
-    for i in first..=last {
-        match c.kind(i) {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth -= 1,
-            k if depth == 0 && (k.is_binary_op() || k == TokenKind::KwAs) => return true,
-            _ => {}
-        }
-    }
-    false
+    let operand = operand(&(first..=last).map(|i| c.kind(i)).collect::<Vec<_>>());
+    crate::lower::binop(op).is_none_or(|op| !op.bare(crate::ast::Side::Right, operand))
 }
 
 /// `x += 1` (and the other operators): `x = x + 1` when it is a statement
@@ -2481,7 +2586,7 @@ fn compound_assignment(c: &Cursor) -> Option<Hit> {
         return unfixable();
     }
     let lhs = &c.text[c.span(lhs_first).start as usize..c.span(op - 1).end as usize];
-    let parens = needs_parens(c, rhs_first, rhs_last);
+    let parens = needs_parens(c, c.kind(op), rhs_first, rhs_last);
     let mut edits = vec![
         Edit::delete(c.span(op)),
         Edit::replace(

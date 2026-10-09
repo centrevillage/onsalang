@@ -1,7 +1,7 @@
 //! Post-parse checks on operator chains (spec §3.1): E0010 (an operator of a
 //! chain with an operand the strengths of the groups do not allow), E0011
-//! (`as` as a bare operand, and `as` chained), E0012 (stacked prefix
-//! operators).
+//! (`as` and `at` as a bare operand, and `as` / `at` chained), E0012
+//! (stacked prefix operators).
 //!
 //! A chain is the tree of §3.1 in the AST ([`Chain`]). The candidates of
 //! E0010 (S-60, §18.1) are the readings of the chain with temporary
@@ -33,18 +33,18 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
             _ => None,
         })
         .collect();
-    // The operators under another one of their chain, and the casts under
-    // another cast (a chain of `as` is one form, as a stack is).
+    // The operators under another one of their chain, and the casts and
+    // clocks under another one (a chain of `as` / `at` is one form, as a stack
+    // is).
     let mut inner = HashSet::new();
-    for e in &ast.exprs {
-        match e.kind {
-            ExprKind::Binary { lhs, rhs, .. } => {
-                inner.extend([lhs, rhs].into_iter().filter(|&c| matches!(ast.expr(c).kind, ExprKind::Binary { .. })));
-            }
-            ExprKind::Cast { expr, .. } if matches!(ast.expr(expr).kind, ExprKind::Cast { .. }) => {
-                inner.insert(expr);
-            }
-            _ => {}
+    for (i, e) in ast.exprs.iter().enumerate() {
+        if let ExprKind::Binary { lhs, rhs, .. } = e.kind {
+            inner.extend([lhs, rhs].into_iter().filter(|&c| matches!(ast.expr(c).kind, ExprKind::Binary { .. })));
+        }
+        if let Some(operand) = ast.as_or_at_operand(ExprId(i as u32))
+            && ast.as_or_at_operand(operand).is_some()
+        {
+            inner.insert(operand);
         }
     }
     for (i, expr) in ast.exprs.iter().enumerate() {
@@ -55,15 +55,15 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     continue;
                 }
                 let chain = Flat::new(ast, text, id);
-                // E0011: a cast is parenthesized as an operand of a chain;
-                // SPEC-GAP(S-348): the casts of one chain are one form,
+                // E0011: a cast or a clock is parenthesized as an operand of
+                // a chain.
+                // SPEC-GAP(S-348): those of one chain are one form,
                 // parenthesized whole.
                 let casts: Vec<Span> = chain
                     .operands
                     .iter()
-                    .map(|&o| ast.expr(o))
-                    .filter(|e| matches!(e.kind, ExprKind::Cast { .. }))
-                    .map(|e| e.span)
+                    .filter(|&&o| ast.as_or_at_operand(o).is_some())
+                    .map(|&o| ast.expr(o).span)
                     .collect();
                 if let Some(&first) = casts.first() {
                     let edits = casts
@@ -74,25 +74,24 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                         Stage::Syntax,
                         Code::E0011,
                         first,
-                        "`as` is written in parentheses when it is an operand (§3.3)",
+                        "`as` and `at` are written in parentheses when they are an operand (§3.1)",
                     )
-                    .with_found(src(first))
-                    .with_fix(Fix::new("parenthesize the cast", edits));
-                    diagnostics.push(d);
+                    .with_found(src(first));
+                    let span = ast.expr(id).span;
+                    diagnostics.push(parenthesized(d, text, span, deepest, "parenthesize it", edits));
                 }
                 if let Some(d) = chain.check(deepest) {
                     diagnostics.push(d);
                 }
             }
-            // E0011: a cast is parenthesized as an end of a range too: the
-            // range symbols are weaker than `as` (§3.3, S-340); the casts of
-            // one head are one form (S-348).
+            // E0011: a cast or a clock is parenthesized as an end of a range
+            // too: the range symbols are weaker than `as` and `at` (§3.1,
+            // §3.3, S-340); those of one head are one form (S-348).
             ExprKind::Range(head) | ExprKind::Par { range: head, .. } => {
                 let casts: Vec<Span> = [head.lo, head.hi]
                     .into_iter()
-                    .map(|o| ast.expr(o))
-                    .filter(|e| matches!(e.kind, ExprKind::Cast { .. }))
-                    .map(|e| e.span)
+                    .filter(|&o| ast.as_or_at_operand(o).is_some())
+                    .map(|o| ast.expr(o).span)
                     .collect();
                 if let Some(&first) = casts.first() {
                     let edits = casts
@@ -103,19 +102,21 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                         Stage::Syntax,
                         Code::E0011,
                         first,
-                        "`as` is written in parentheses when it is an end of a range (§3.3)",
+                        "`as` and `at` are written in parentheses when they are an end of a range (§3.1)",
                     )
-                    .with_found(src(first))
-                    .with_fix(Fix::new("parenthesize the cast", edits));
-                    diagnostics.push(d);
+                    .with_found(src(first));
+                    diagnostics.push(parenthesized(d, text, expr.span, deepest, "parenthesize it", edits));
                 }
             }
-            ExprKind::Cast { expr: mut e, .. }
-                if !inner.contains(&id) && matches!(ast.expr(e).kind, ExprKind::Cast { .. }) =>
+            ExprKind::Cast { .. } | ExprKind::At { .. }
+                if !inner.contains(&id)
+                    && ast.as_or_at_operand(id).is_some_and(|o| ast.as_or_at_operand(o).is_some()) =>
             {
-                // E0011: `x as A as B` is `(x as A) as B` written out (§3.1).
+                // E0011: `x as A as B` is `(x as A) as B` written out, and so
+                // are `at` and the mixed chains (§3.1, S-118).
+                let mut e = ast.as_or_at_operand(id).unwrap_or(id);
                 let mut closes = Vec::new();
-                while let ExprKind::Cast { expr: base, .. } = ast.expr(e).kind {
+                while let Some(base) = ast.as_or_at_operand(e) {
                     closes.push(Edit::insert(expr.span.file, ast.expr(e).span.end, ")"));
                     e = base;
                 }
@@ -125,11 +126,10 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     Stage::Syntax,
                     Code::E0011,
                     expr.span,
-                    "`as` is not chained; parenthesize the inner cast (§3.1)",
+                    "`as` and `at` are not chained; parenthesize the inner one (§3.1)",
                 )
-                .with_found(src(expr.span))
-                .with_fix(Fix::new("parenthesize the inner cast", edits));
-                diagnostics.push(d);
+                .with_found(src(expr.span));
+                diagnostics.push(parenthesized(d, text, expr.span, deepest, "parenthesize the inner one", edits));
             }
             ExprKind::Unary { .. } if stacked(id) && !inner_of_a_stack.contains(&id) => {
                 // The operators of the stack, outermost first: each but the
@@ -161,9 +161,8 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     expr.span,
                     "prefix operators are not stacked; parenthesize the inner operator (§3.1)",
                 )
-                .with_found(src(expr.span))
-                .with_fix(Fix::new("parenthesize the inner operator", edits));
-                diagnostics.push(d);
+                .with_found(src(expr.span));
+                diagnostics.push(parenthesized(d, text, expr.span, deepest, "parenthesize the inner operator", edits));
             }
             _ => {}
         }
@@ -356,6 +355,40 @@ fn reading_title(reading: &str) -> Option<String> {
 /// insertions, S-251).
 type Inserts = BTreeMap<u32, String>;
 
+/// `d` with the candidate `edits` that write parentheses round parts of the
+/// form at `span` (E0011, E0012), when it does not take the unit over the
+/// nesting limit; else with the note that names the way out (§18.1: no
+/// candidate goes over the limit, §2.5).
+fn parenthesized(d: Diagnostic, text: &str, span: Span, deepest: u32, title: &str, edits: Vec<Edit>) -> Diagnostic {
+    let added = edits.iter().map(|e| e.replace.matches('(').count() as u32).sum();
+    if nests_too_deep(text, span, &edits, added, deepest) {
+        return d.with_rule(TOO_DEEP_RULE);
+    }
+    d.with_fix(Fix::new(title, edits))
+}
+
+pub(crate) const TOO_DEEP_RULE: &str =
+    "bind a part of it with `let`: parenthesizing it nests deeper than the limit (§2.5)";
+
+/// Whether the candidate `edits` of the form at `span`, which add up to
+/// `added` levels, may take its unit over the nesting limit (§2.5; §18.1: no
+/// such candidate is made). The parser counts it, on the text with the
+/// candidate, when the deepest unit of the file and `added` are over the
+/// limit. The one check of the candidates of this module.
+pub(crate) fn nests_too_deep(text: &str, span: Span, edits: &[Edit], added: u32, deepest: u32) -> bool {
+    if deepest + added <= crate::parser::NESTING_LIMIT {
+        return false;
+    }
+    let refs: Vec<&Edit> = edits.iter().collect();
+    let Ok(after) = onsa_diag::apply_text(text, &refs) else { return true };
+    let longer = after.len().saturating_sub(text.len()) as u32;
+    let file = span.file;
+    let out = crate::parser::Parser::new(file, &after, crate::lex(file, &after)).parse_file();
+    out.diagnostics
+        .iter()
+        .any(|d| d.code == Code::E0006 && span.start <= d.span.start && d.span.start < span.end + longer)
+}
+
 /// `text` from `start` with the insertions.
 fn inserted(text: &str, start: u32, ins: &Inserts) -> String {
     let mut out = String::new();
@@ -427,7 +460,7 @@ impl Flat<'_> {
                     break;
                 }
                 Ok(ins) if self.nests_too_deep(&ins, deepest) => {
-                    rule = Some("bind a part of it with `let`: parenthesizing it nests deeper than the limit (§2.5)");
+                    rule = Some(TOO_DEEP_RULE);
                 }
                 Ok(ins) => candidates.push(ins),
             }
@@ -544,16 +577,9 @@ impl Flat<'_> {
     /// add are over the limit.
     fn nests_too_deep(&self, ins: &Inserts, deepest: u32) -> bool {
         let added = ins.values().map(|s| s.matches(['(', '&']).count() as u32).sum::<u32>() + self.ops.len() as u32;
-        if deepest + added <= crate::parser::NESTING_LIMIT {
-            return false;
-        }
         let file = self.span.file;
-        let text = inserted(self.text, 0, ins);
-        let longer: u32 = ins.values().map(|s| s.len() as u32).sum();
-        let out = crate::parser::Parser::new(file, &text, crate::lex(file, &text)).parse_file();
-        out.diagnostics
-            .iter()
-            .any(|d| d.code == Code::E0006 && self.span.start <= d.span.start && d.span.start < self.span.end + longer)
+        let edits: Vec<Edit> = ins.iter().map(|(&at, s)| Edit::insert(file, at, s.clone())).collect();
+        nests_too_deep(self.text, self.span, &edits, added, deepest)
     }
 }
 #[cfg(test)]
@@ -745,6 +771,17 @@ mod tests {
         assert_eq!(check("x as I64 as F64"), vec![(Code::E0011, Some("(x as I64) as F64".into()))]);
         assert_eq!(check("x as I16 as I32 as F64"), vec![(Code::E0011, Some("((x as I16) as I32) as F64".into()))]);
         assert!(check("(x as I64) as F64").is_empty());
+    }
+
+    #[test]
+    fn clocks_as_operands_and_chained() {
+        // §3.1, S-118: `at` has the strength of `as`.
+        assert_eq!(check("acc + x at sample"), vec![(Code::E0011, Some("acc + (x at sample)".into()))]);
+        assert_eq!(check("x at block at sample"), vec![(Code::E0011, Some("(x at block) at sample".into()))]);
+        assert_eq!(check("n as F32 at sample"), vec![(Code::E0011, Some("(n as F32) at sample".into()))]);
+        assert_eq!(check("n at sample as F32"), vec![(Code::E0011, Some("(n at sample) as F32".into()))]);
+        assert!(check("-x at sample").is_empty());
+        assert!(check("(x at block) at sample").is_empty());
     }
 
     #[test]

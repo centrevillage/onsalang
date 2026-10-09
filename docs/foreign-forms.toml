@@ -2430,6 +2430,32 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 }
 ''']
 
+# 前置にもなる `^` で始める行は、前の行に続けるつもりの書き方（二項の排他的論理和）。空白の規則で E0020 で、
+# 前の行とつないだ形（`a ^ b`）も並べる（`leading_minus` と同じ。仕様 §2.5）。
+[[form.example]]
+source = '''
+pub fn f(a: U32, b: U32) -> U32 {
+  let c = a
+  ^ b
+  c
+}
+'''
+fixed = [
+'''
+pub fn f(a: U32, b: U32) -> U32 {
+  let c = a
+  ^b
+  c
+}
+''',
+'''
+pub fn f(a: U32, b: U32) -> U32 {
+  let c = a ^ b
+  c
+}
+''',
+]
+
 # 二項にしか使わない演算子で行を始めると、前の行に続かず新しい文として読まれる。候補は演算子を
 # 前の行の末尾へ移す形（行は継続するので次の行のオペランドはそのまま）。
 [[form]]
@@ -5366,6 +5392,11 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 '''
 at = "2:7"
 
+# 対象は、直前が名前でも `if` / `match` でもない前置の `~` で、被演算子に接するもの（S-123、S-363）。
+# 名前の後の `~` は flow の呼び出しの印（空白は `space_before_tilde`）、`if` / `match` の後の `~` は
+# `if~` / `match~` の印（空白は `space_after_branch_keyword`、`else if` の後は `else_if_tilde`）。
+# 空白のある前置の `~ m` は一覧に無い形で、候補の無い E0002 である（空白を除く候補 `~m` 自体がこの行の
+# E0020 になり、候補の約束を満たさないため）。
 [[form]]
 id = "faust_bit_not"
 kind = "foreign"
@@ -5908,10 +5939,323 @@ pub flow g(x: F32 at sample) -> F32 at sample {
   y
 }
 '''
-at = "2:15"
+at = "2:14"
 fixed = ['''
 pub flow g(x: F32 at sample) -> F32 at sample {
   let y: F32 = x at sample
   y
+}
+''']
+
+# 別のクロック。
+[[form.example]]
+source = '''
+pub flow g(p: F32 at block) -> F32 at sample {
+  let y: F32 at block = p
+  y
+}
+'''
+fixed = ['''
+pub flow g(p: F32 at block) -> F32 at sample {
+  let y: F32 = p at block
+  y
+}
+''']
+
+# 配列の型。値が flow の外の fn の中の `let` でも、構文の段の E0020 が先に出る（E0821 は名前の段）。
+[[form.example]]
+source = '''
+pub fn f(x: [F32; 2]) -> [F32; 2] {
+  let y: [F32; 2] at sample = x
+  y
+}
+'''
+fixed = ['''
+pub fn f(x: [F32; 2]) -> [F32; 2] {
+  let y: [F32; 2] = x at sample
+  y
+}
+''']
+
+# ---- flow の構文の誤り（W3-09、第 14 組）------------------------------------------------------------
+
+# `if` / `match` の直後（同じ行）の空白の後の `~`（S-354、§2.6）。連鎖の頭の `if` と `match` だけが対象で、
+# `else if` の後の `~` は `else_if_tilde`。候補の一つ目は空白を除く形。`~` が被演算子に接するときは、
+# 前置の `~` の読み（`faust_bit_not` の候補そのもの）を二つ目に並べる。`if~c` は誤りでなく、fmt が
+# `if~ c` にする。
+[[form]]
+id = "space_after_branch_keyword"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "2.6", "18.1"]
+rule = "`if~` / `match~` は `if` / `match` の直後に空白を空けずに `~` を書く。ビット反転は前置の `!`"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if ~ c { lp~(x) } else { x }
+  a
+}
+'''
+at = "2:14"
+fixed = ['''
+pub flow g(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { lp~(x) } else { x }
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if ~c { lp~(x) } else { x }
+  a
+}
+'''
+at = "2:14"
+fixed = [
+'''
+pub flow g(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c { lp~(x) } else { x }
+  a
+}
+''',
+'''
+pub flow g(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if !c { lp~(x) } else { x }
+  a
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub flow g(k: U32 at sample) -> F32 at sample {
+  match ~ k {
+    0 => saw~(1.0),
+    _ => saw~(2.0),
+  }
+}
+'''
+at = "2:9"
+fixed = ['''
+pub flow g(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => saw~(1.0),
+    _ => saw~(2.0),
+  }
+}
+''']
+
+# `else if` の後の `~`（S-355、§11.5）。`~` は連鎖の全体に掛かり、連鎖の最初の `if` にだけ書く。候補は一つで、
+# 連鎖の頭に `~` があれば後ろの `~` を除く形、無ければ `~` を頭の `if` へ移す形。`~` が被演算子に接するときは、
+# 前置の `~` の読み（`!d`）を二つ目に並べる。一つの連鎖に複数あれば `~` ごとの誤り（S-259）。
+[[form]]
+id = "else_if_tilde"
+kind = "redundant"
+origin = "Rust と Swift（条件ごとの印 `else if let`、`else if case`）"
+stage = "syntax"
+code = "E0020"
+spec = ["11.5", "18.1"]
+rule = "`~` は連鎖の最初の `if` にだけ書き、`else if` の連鎖の全体に掛かる"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else if~ d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+'''
+at = "4:12"
+fixed = ['''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else if d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if c {
+    x
+  } else if~ d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+'''
+at = "4:12"
+fixed = ['''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    x
+  } else if d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else if ~d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+'''
+at = "4:13"
+fixed = [
+'''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else if d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+''',
+'''
+pub flow g(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else if !d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+''',
+]
+
+# 型の中（型引数、配列とタプルの要素、関数型の引数と返り値）と、入出力でない宣言の型（struct のフィールド、
+# enum の列挙子の要素、`type` の右辺、`const` の型）の後ろの `at`（S-356、§11.3）。flow の中でも外でも
+# 構文の段の E0020。候補はクロックを書ける場所へ移す形（クロックの無い flow の入出力の型の後ろ、束縛では
+# 値の式）か、場所が無ければ除く形。fn の入出力の型の後ろの `at` は名前の段の E0821 でこの行ではない。
+# 一つの型に複数の `at` は位置ごとの誤り。
+[[form]]
+id = "clock_in_type"
+kind = "foreign"
+origin = "旧版"
+stage = "syntax"
+code = "E0020"
+spec = ["11.3", "18.1"]
+rule = "クロックは flow の入出力の型の後ろか式に `at` で付ける。値の型はどこでも普通の型"
+
+# struct のフィールド: クロックを書ける場所が無いので除く。
+[[form.example]]
+source = '''
+pub struct S {
+  a: F32 at sample,
+}
+'''
+at = "2:10"
+fixed = ['''
+pub struct S {
+  a: F32,
+}
+''']
+
+# `type` の右辺。
+[[form.example]]
+source = '''
+pub type T = F32 at sample
+'''
+at = "1:18"
+fixed = ['''
+pub type T = F32
+''']
+
+# fn の見出しの型引数の中: 除く（見出しの型の後ろの `at` は E0821）。
+[[form.example]]
+source = '''
+pub fn f(x: Option[F32 at sample]) -> F32 {
+  0.5
+}
+'''
+at = "1:24"
+fixed = ['''
+pub fn f(x: Option[F32]) -> F32 {
+  0.5
+}
+''']
+
+# クロックの無い flow の入力の型引数の中: 入力の型の後ろへ移す。
+[[form.example]]
+source = '''
+pub flow g(x: Option[F32 at sample]) -> F32 at sample {
+  0.5
+}
+'''
+at = "1:26"
+fixed = ['''
+pub flow g(x: Option[F32] at sample) -> F32 at sample {
+  0.5
+}
+''']
+
+# クロックのある flow の入力の型引数の中: 除く。
+[[form.example]]
+source = '''
+pub flow g(x: Option[F32 at block] at sample) -> F32 at sample {
+  0.5
+}
+'''
+at = "1:26"
+fixed = ['''
+pub flow g(x: Option[F32] at sample) -> F32 at sample {
+  0.5
+}
+''']
+
+# 関数型の返り値の後ろの `at` は返り値に付く（S-367）。クロックの無い flow の入力では、関数型を括弧で囲んで
+# クロックを後ろへ移す（編集は `(` と `) at block` の二つ）。
+[[form.example]]
+source = '''
+pub flow g(f: fn(F32) -> F32 at block) -> F32 at sample {
+  0.5
+}
+'''
+at = "1:30"
+fixed = ['''
+pub flow g(f: (fn(F32) -> F32) at block) -> F32 at sample {
+  0.5
+}
+''']
+
+# 束縛の型の中: 値へ移す（`clock_on_binding` と同じ）。
+[[form.example]]
+source = '''
+pub flow g(x: Option[F32] at sample) -> F32 at sample {
+  let y: Option[F32 at sample] = x
+  0.5
+}
+'''
+at = "2:21"
+fixed = ['''
+pub flow g(x: Option[F32] at sample) -> F32 at sample {
+  let y: Option[F32] = x at sample
+  0.5
 }
 ''']

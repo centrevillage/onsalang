@@ -137,6 +137,13 @@ struct Open {
     level: u32,
 }
 
+/// The rule of a `^` with no name right after it (§2.6, S-358).
+const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right before the name of a `let` of the flow (`prev~(^y)`), and no operator; the binary `^` is the exclusive or (§2.6)";
+
+/// The rule of an `if~` with no `else` (§11.5, S-355).
+const IF_TILDE_ELSE_RULE: &str =
+    "`if~` evaluates every branch and takes one, so its chain ends with an `else` block (§11.5)";
+
 /// The deepest nesting of the syntax (spec §2.5, S-183, S-221): a form at a
 /// level above it is E0006 ([`Parser::too_deep`]).
 pub const NESTING_LIMIT: u32 = 256;
@@ -216,7 +223,7 @@ struct Snapshot {
 }
 
 /// Whether a token starts an operand (§3.1): a prefix operator, a literal,
-/// a name, `_`, a bracket, a block, or an expression keyword. `move` and
+/// a name or the reference `^name` (§2.6), `_`, a bracket, a block, or an expression keyword. `move` and
 /// `rt` before an operand are errors of their own and start none.
 pub(crate) fn starts_operand(kind: TokenKind) -> bool {
     use TokenKind::*;
@@ -224,6 +231,7 @@ pub(crate) fn starts_operand(kind: TokenKind) -> bool {
         kind,
         Minus
             | Bang
+            | Caret
             | Int
             | Float
             | Char
@@ -403,9 +411,12 @@ impl<'a> Parser<'a> {
             // the one of the tree of §3.1, one level per operator ([`Chain`]).
             // A `::[…]` counts at its `[` (the `TypeArgs`), as a type with arguments.
             Literal | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg | StructLitFields
-            | StructLitField | TypeArgsExpr => 0,
+            | StructLitField | TypeArgsExpr | FeedbackExpr => 0,
+            // SPEC-GAP(S-361): the clock of an input or output counts no level
+            // (the heading counts none); in an expression it is in an `AtExpr`.
+            Clock => 0,
             ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | IfExpr | MatchExpr | ClosureExpr | HandleExpr
-            | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | PrefixExpr | CallExpr | FieldExpr
+            | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | AtExpr | PrefixExpr | CallExpr | FieldExpr
             | TupleIndexExpr | IndexExpr | TryExpr | StructLit => 1,
             // Patterns: `|` is one level for all its alternatives.
             WildPat | LitPat | NegLitPat | BindPat | PathPat | StructPatField | StructPatRest => 0,
@@ -687,6 +698,18 @@ impl<'a> Parser<'a> {
     /// failure is the general E0002 (both are reported; the driver chooses
     /// one per unit, S-281).
     fn fail(&mut self, want: Want, expected: &str) -> ParseError {
+        self.fail_with(want, expected, None)
+    }
+
+    /// [`Parser::fail`], where the general E0002 says what came instead
+    /// (`found`, a token after the failure: what follows a `^`) and gives the
+    /// correct rule as its note (§18.1: a form of no row whose rule is known,
+    /// S-358).
+    fn fail_noting(&mut self, want: Want, expected: &str, found: Token, rule: &str) -> ParseError {
+        self.fail_with(want, expected, Some((found, rule)))
+    }
+
+    fn fail_with(&mut self, want: Want, expected: &str, noted: Option<(Token, &str)>) -> ParseError {
         let at = self.peek_index();
         let t = self.tokens[at];
         // The number of a literal written with a suffix is checked as any
@@ -731,8 +754,21 @@ impl<'a> Parser<'a> {
             None => true,
         };
         if general {
-            let msg = format!("expected {expected}, found {}", t.kind.describe());
-            self.error(Code::E0002, t.span, msg);
+            let shown = noted.map_or(t, |(found, _)| found);
+            let msg = format!("expected {expected}, found {}", shown.kind.describe());
+            let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, t.span, msg);
+            let found = self.src(shown.span);
+            if !found.is_empty() && !found.contains('\n') {
+                d = d.with_found(found);
+            } else if noted.is_some() {
+                // What came after the failure is no text (a line break, the
+                // end of the file): it is named as the message names it.
+                d = d.with_found(shown.kind.describe());
+            }
+            if let Some((_, rule)) = noted {
+                d = d.with_rule(rule);
+            }
+            self.report(d);
         }
         ParseError
     }
@@ -1288,6 +1324,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwImpl)?;
         self.parse_generics_opt()?;
         let (first, args) = self.parse_type_ex()?;
+        self.parse_clock_opt()?;
         if self.eat(TokenKind::KwFor).is_some() {
             if !(first.kind == NodeKind::PathType && args == 0) {
                 return Err(self.error(Code::E0002, first.span, "expected a trait name before `for`"));
@@ -1703,8 +1740,40 @@ impl<'a> Parser<'a> {
 
     // ------------------------------------------------------------ types
 
+    /// A type and the clock written after it (`F32 at sample`, §11.3): the
+    /// clock is read at every type position but the type of `as`
+    /// ([`Parser::parse_bare_type`]); after the result of a function type it
+    /// is the result's (S-367). Where it goes (the input or output of a
+    /// flow or a function) and where it does not (a binding, a type: E0020)
+    /// is decided on the tree after parsing (`crate::foreign`, S-356).
     fn parse_type(&mut self) -> PResult<Completed> {
+        let c = self.parse_type_ex()?.0;
+        self.parse_clock_opt()?;
+        Ok(c)
+    }
+
+    /// A type with no clock after it: the type of `as`, whose `at` is the
+    /// clock of the cast (E0011, §3.1).
+    fn parse_bare_type(&mut self) -> PResult<Completed> {
         Ok(self.parse_type_ex()?.0)
+    }
+
+    fn parse_clock_opt(&mut self) -> PResult<()> {
+        if self.at(TokenKind::KwAt) {
+            self.parse_clock()?;
+        }
+        Ok(())
+    }
+
+    /// `at name`: a clock (§11.3). The name is read as it is; which names
+    /// are clocks W3-10 looks up (S-359: an unknown one is the names stage's
+    /// E0302).
+    fn parse_clock(&mut self) -> PResult<()> {
+        let m = self.start(NodeKind::Clock)?;
+        self.bump();
+        self.parse_ident("the name of a clock")?;
+        self.complete(m, NodeKind::Clock);
+        Ok(())
     }
 
     /// A type, and the number of its type arguments when it is a path type.
@@ -1768,6 +1837,8 @@ impl<'a> Parser<'a> {
                 })?;
                 self.complete(l, NodeKind::FnTypeParams);
                 if self.eat(TokenKind::Arrow).is_some() {
+                    // A clock after the result belongs to the result, as
+                    // `uses` does (S-367): a clock in a type, E0020.
                     self.parse_type()?;
                 }
                 self.parse_effect_row_opt()?;
@@ -1836,6 +1907,13 @@ impl<'a> Parser<'a> {
             Ok(_) if ends => {
                 self.end_trial();
                 return Ok(());
+            }
+            // A type is read with one clock after it: a second `at` is no
+            // constant expression either (E0002 at it, as at every type
+            // position; S-356).
+            Ok(_) if self.at(TokenKind::KwAt) => {
+                self.end_trial();
+                return Err(self.unexpected("`,` or `]`"));
             }
             // `_` is no type (§2.2) and no constant: `pair::[U8, _]` is E0002 (§4.5).
             Err(ParseError)
@@ -2032,14 +2110,14 @@ impl<'a> Parser<'a> {
     }
 
     /// The operand of the mark `move` or `inout` (§5.2, R-42): a postfix
-    /// expression, never the operand of a binary operator or of `as`
+    /// expression, never the operand of a binary operator, `as` or `at`
     /// (`move y + 1` is E0002 at the `+`, not `move (y + 1)`).
     fn parse_marked(&mut self, mark: Token) -> PResult<Completed> {
         let prefix = matches!(self.peek_kind(), TokenKind::Minus | TokenKind::Bang);
         let operand = if prefix { None } else { Some(self.parse_postfix()?) };
         let t = self.peek();
         match operand {
-            Some(e) if !binop(t.kind) && t.kind != TokenKind::KwAs => Ok(e),
+            Some(e) if !binop(t.kind) && !matches!(t.kind, TokenKind::KwAs | TokenKind::KwAt) => Ok(e),
             _ => {
                 let (mark, op) = (self.token_text(mark), self.token_text(t));
                 let what = if prefix { "a prefix" } else { "the operand of" };
@@ -2130,16 +2208,26 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// `prefix [as Type]*` — prefix binds tighter than `as` (§3.1).
+    /// `prefix [as Type | at Clock]*`: a prefix binds tighter than `as` and
+    /// `at` (§3.1). A chain of them is read whole and is E0011 (`groups.rs`).
     fn parse_cast(&mut self) -> PResult<Completed> {
         let mut expr = self.parse_prefix()?;
-        while self.at(TokenKind::KwAs) {
-            let m = self.precede(expr, NodeKind::CastExpr)?;
-            self.bump();
-            self.parse_type()?;
-            expr = self.complete(m, NodeKind::CastExpr);
+        loop {
+            match self.peek_kind() {
+                TokenKind::KwAs => {
+                    let m = self.precede(expr, NodeKind::CastExpr)?;
+                    self.bump();
+                    self.parse_bare_type()?;
+                    expr = self.complete(m, NodeKind::CastExpr);
+                }
+                TokenKind::KwAt => {
+                    let m = self.precede(expr, NodeKind::AtExpr)?;
+                    self.parse_clock()?;
+                    expr = self.complete(m, NodeKind::AtExpr);
+                }
+                _ => return Ok(expr),
+            }
         }
-        Ok(expr)
     }
 
     // The tokens `parse_prefix` reads as the start of an operand are those of
@@ -2367,6 +2455,19 @@ impl<'a> Parser<'a> {
             }
             TokenKind::Underscore => NodeKind::HoleExpr,
             TokenKind::Ident | TokenKind::KwSelf | TokenKind::KwSelfType => NodeKind::PathExpr,
+            // `^name` (§2.6): a mark of the name, no operator; the `^` after
+            // an operand is the binary one. A `^` with no name right after it
+            // is E0002 with the rule (S-358).
+            TokenKind::Caret => {
+                if self.peek2().kind != TokenKind::Ident || self.gap(self.peek2_index()).is_some() {
+                    let next = self.peek2();
+                    return Err(self.fail_noting(Want::Expr, "a name right after `^`", next, CARET_RULE));
+                }
+                let m = self.start(NodeKind::FeedbackExpr)?;
+                self.bump();
+                self.bump();
+                return Ok(self.complete(m, NodeKind::FeedbackExpr));
+            }
             TokenKind::LParen => {
                 let m = self.start(NodeKind::TupleExpr)?;
                 self.bump();
@@ -2405,10 +2506,11 @@ impl<'a> Parser<'a> {
                 return Err(ParseError);
             }
             TokenKind::LBrace => return self.parse_block_expr(),
-            TokenKind::KwIf => return self.parse_if(),
+            TokenKind::KwIf => return self.parse_if(None),
             TokenKind::KwMatch => {
                 let m = self.start(NodeKind::MatchExpr)?;
                 self.bump();
+                self.branch_tilde()?;
                 if self.at(TokenKind::KwMove) {
                     // `match move x` consumes the value (§7, S-21).
                     let mv = self.start(NodeKind::MoveExpr)?;
@@ -2629,9 +2731,21 @@ impl<'a> Parser<'a> {
         Fix::new(title, vec![Edit::insert(self.file, end, format!(" {moved}")), Edit::delete(removed)])
     }
 
-    fn parse_if(&mut self) -> PResult<Completed> {
+    /// `if [~] cond { } [else (if … | { })]` (§11.5). `chain` is `None` for
+    /// the first `if` of a chain and, for an `if` after `else`, whether the
+    /// first one has the `~`: the `~` is written on the first `if` only (a
+    /// later one is `else_if_tilde` of the table, S-355), and the chain of an
+    /// `if~` ends with an `else` block (E0002 with the rule, S-355).
+    fn parse_if(&mut self, chain: Option<bool>) -> PResult<Completed> {
         let m = self.start(NodeKind::IfExpr)?;
         self.expect(TokenKind::KwIf)?;
+        let tilde = match chain {
+            None => self.branch_tilde()?,
+            Some(_) if self.at(TokenKind::Tilde) => {
+                return Err(self.fail(Want::Expr, "the condition of `else if`"));
+            }
+            Some(tilde) => tilde,
+        };
         self.parse_head_expr(false)?;
         self.parse_block_expr()?;
         let close_brace_end = self.last_end;
@@ -2649,12 +2763,36 @@ impl<'a> Parser<'a> {
         }
         if self.eat(TokenKind::KwElse).is_some() {
             if self.at(TokenKind::KwIf) {
-                self.parse_if()?;
+                self.parse_if(Some(tilde))?;
             } else {
                 self.parse_block_expr()?;
             }
+        } else if tilde {
+            // The chain of an `if~` ends without `else` (S-355): E0002 at the
+            // `}` of its last block, after which the `else` goes.
+            let close = Span::new(self.file, close_brace_end - 1, close_brace_end);
+            let d =
+                Diagnostic::new(Stage::Syntax, Code::E0002, close, "expected `else` after the last block of an `if~`")
+                    .with_found("}")
+                    .with_rule(IF_TILDE_ELSE_RULE);
+            self.report(d);
+            return Err(ParseError);
         }
         Ok(self.complete(m, NodeKind::IfExpr))
+    }
+
+    /// The `~` of `if~` and `match~` (§2.6), read when it touches the
+    /// keyword. With a blank between them the parser fails at it, and the
+    /// table names the form (`space_after_branch_keyword`, S-354).
+    fn branch_tilde(&mut self) -> PResult<bool> {
+        if !self.at(TokenKind::Tilde) {
+            return Ok(false);
+        }
+        if self.peek_gap().is_some() {
+            return Err(self.fail(Want::Expr, "the condition, after a `~` written without a blank"));
+        }
+        self.bump();
+        Ok(true)
     }
 
     // ------------------------------------------------------------ patterns

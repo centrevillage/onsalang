@@ -92,6 +92,14 @@ pub(crate) fn unsupported(span: Span, feature: Feature, details: &[&str]) -> Fai
     Fail { kind: FailKind::Unsupported, span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
 }
 
+/// The E0200 of a form of the flow syntax (W3-09): the checks stop its item
+/// first (`onsa_sema::flow_syntax`), so lowering meets it only through a gap
+/// in that gate.
+pub(crate) fn flow_form(span: Span, form: onsa_diag::unsupported::FlowForm) -> Fail {
+    let d = form.diagnostic(Stage::Build, span);
+    Fail { kind: FailKind::Unsupported, span, msg: d.message.clone(), hole: None, report: Some(Box::new(d)) }
+}
+
 /// Why [`lower`] produced no Core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LowerFailure {

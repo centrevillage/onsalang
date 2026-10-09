@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.5", "§18.1"]
+// fixes = 2
+
+// E0020 for a space between `if` / `match` and `~` (§2.6, S-354): `if~` and `match~` are written with
+// the `~` right after the keyword. The first candidate removes the space (`if~ c`). When the `~`
+// touches its operand (`if ~c`), the prefix `~` reading gives a second candidate, `if !c` (the `~`
+// of a prefix is the bit negation of `faust_bit_not`, which is written `!`). A space on both
+// sides leaves the first candidate only: the second reading is not offered where the `~` does not
+// touch the operand. One error per declaration unit.
+
+pub flow if_space(c: Bool at sample) -> F32 at sample {
+  if ~ c {                                          //~ E0020
+    1.0
+  } else {
+    2.0
+  }
+}
+
+pub flow if_wide_space(c: Bool at sample) -> F32 at sample {
+  if    ~ c {                                       //~ E0020
+    1.0
+  } else {
+    2.0
+  }
+}
+
+pub flow match_space(k: U32 at sample) -> F32 at sample {
+  match ~ k {                                       //~ E0020
+    0 => 1.0,
+    _ => 2.0,
+  }
+}
+
+pub flow let_if_space(c: Bool at sample) -> F32 at sample {
+  let a = if ~ c { 1.0 } else { 2.0 }               //~ E0020
+  a
+}
+
+pub flow condition_with_an_operator(a: Bool at sample, b: Bool at sample) -> F32 at sample {
+  if ~ a && b {                                     //~ E0020
+    1.0
+  } else {
+    2.0
+  }
+}
+
+pub flow if_adjacent(c: Bool at sample) -> F32 at sample {
+  if ~c {                                           //~ E0020
+    1.0
+  } else {
+    2.0
+  }
+}
+
+pub flow match_adjacent(k: U32 at sample) -> F32 at sample {
+  match ~k {                                        //~ E0020
+    0 => 1.0,
+    _ => 2.0,
+  }
+}
+
+pub flow adjacent_with_an_operator(a: Bool at sample, b: Bool at sample) -> F32 at sample {
+  if ~a && b {                                      //~ E0020
+    1.0
+  } else {
+    2.0
+  }
+}
+
+pub flow let_if_adjacent(c: Bool at sample) -> F32 at sample {
+  let a = if ~c { 1.0 } else { 2.0 }                //~ E0020
+  a
+}
+
+pub flow chain_head_space(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if ~ c {                                          //~ E0020
+    1.0
+  } else if d {
+    2.0
+  } else {
+    3.0
+  }
+}
+
+pub flow inner_if_space(a: Bool at sample, b: Bool at sample) -> F32 at sample {
+  if~ a {
+    if ~ b { 1.0 } else { 2.0 }                     //~ E0020
+  } else {
+    3.0
+  }
+}
+
+pub flow in_par(c: Bool at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    if ~ c { 1.0 } else { 2.0 }                     //~ E0020
+  }
+}
+
+pub fn in_a_fn_space(c: Bool) -> F32 {
+  if ~ c { 1.0 } else { 2.0 }                       //~ E0020
+}
+
+pub fn in_a_fn_adjacent(c: Bool) -> F32 {
+  if ~c { 1.0 } else { 2.0 }                        //~ E0020
+}

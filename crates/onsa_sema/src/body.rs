@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::Feature;
+use onsa_diag::unsupported::{Feature, FlowForm};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
@@ -322,6 +322,12 @@ impl<'a> Checker<'a> {
     /// E0200 for `feature` (S-224), with the details its phrase takes.
     pub(crate) fn unsupported(&mut self, span: Span, feature: Feature, details: &[&str]) -> Stop {
         self.unsupported_in(Stage::Types, span, feature, details)
+    }
+
+    /// E0200 for a form of the flow syntax (W3-09): `crate::flow_syntax`
+    /// stops its item first, so this is reached only through a gap in it.
+    pub(crate) fn flow_form(&mut self, span: Span, form: FlowForm) -> Stop {
+        self.diag(form.diagnostic(Stage::Names, span).with_found(self.src(span)))
     }
 
     /// E0200 for `feature` found by `stage`.
@@ -1403,7 +1409,15 @@ impl<'a> Checker<'a> {
             ExprKind::Struct { path, fields, .. } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
             ExprKind::TypeArgs { args, .. } => Err(self.type_args_unsupported(args.span)),
             ExprKind::Block(b) => self.check_block(b, expected),
-            ExprKind::If { cond, then, else_ } => {
+            // The flow syntax does not reach here (`crate::flow_syntax`); the
+            // forms the checks do not read stop with its E0200.
+            ExprKind::If { tilde: Some(t), .. } => Err(self.flow_form(*t, FlowForm::IfTilde)),
+            ExprKind::Match { tilde: Some(t), .. } => Err(self.flow_form(*t, FlowForm::MatchTilde)),
+            ExprKind::Closure { ret_clock: Some(c), .. } | ExprKind::At { clock: c, .. } => {
+                Err(self.flow_form(c.span, FlowForm::Clock))
+            }
+            ExprKind::Feedback(_) => Err(self.flow_form(span, FlowForm::Feedback)),
+            ExprKind::If { cond, then, else_, tilde: None } => {
                 let bool_ = self.bool_();
                 self.check_expr(*cond, Some(bool_))?;
                 match else_ {
@@ -1420,8 +1434,8 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            ExprKind::Match { scrutinee, arms } => self.check_match(*scrutinee, arms, expected, span),
-            ExprKind::Closure { params, ret, effects, body } => {
+            ExprKind::Match { scrutinee, arms, tilde: None } => self.check_match(*scrutinee, arms, expected, span),
+            ExprKind::Closure { params, ret, ret_clock: None, effects, body } => {
                 self.check_closure(e, params, *ret, effects.as_ref(), *body, expected)
             }
             ExprKind::Handle { .. } => Err(self.unsupported(span, Feature::EffectHandlers, &[])),

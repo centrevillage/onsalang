@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.2", "§18.1"]
+
+// E0002 for a `^` that no name follows (§2.6, S-358): "`^名前` は帰還の参照 … `^` は名前の直前に空白を
+// 空けずに書き、`let` の名前にだけ付く。名前の続かない `^`（`^(y)`、`^1.0`、`^^y`）は構文の段の
+// E0002". The `^` is a part of the name, not an operator, so a `^` before a parenthesis, a literal,
+// another `^` or a prefix operator is not read, in a delay or outside it, in a flow or in a fn; there
+// is no candidate, and the note says that the `^` is written right before the name of a `let`. (A `^`
+// before `)`, `,` and the end of a list is in syntax_flow_caret.onsa.) One error per declaration unit.
+
+pub flow caret_paren(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^(y))                           //~ E0002
+  y
+}
+
+pub flow caret_float(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^1.0)                           //~ E0002
+  y
+}
+
+pub flow caret_integer(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^1)                             //~ E0002
+  y
+}
+
+pub flow caret_caret(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^^y)                            //~ E0002
+  y
+}
+
+pub flow caret_minus(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^-y)                            //~ E0002
+  y
+}
+
+pub flow caret_bracket(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~([^[y]][0])                      //~ E0002
+  y
+}
+
+pub flow caret_true(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^true)                          //~ E0002
+  y
+}
+
+pub flow caret_paren_in_delay_line(x: F32 at sample) -> F32 at sample {
+  let y = x + delay~(^(y), 4)                       //~ E0002
+  y
+}
+
+pub flow caret_float_in_a_variable_delay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let y = x + vdelay~(^1.0, d, 64)                  //~ E0002
+  y
+}
+
+pub flow caret_paren_after_an_operator(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(x + ^(y))                 //~ E0002
+  y
+}
+
+pub flow caret_paren_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = x + ^(y)                                  //~ E0002
+  y
+}
+
+pub flow caret_float_as_a_value(x: F32 at sample) -> F32 at sample {
+  let y = ^1.0                                      //~ E0002
+  y + x
+}
+
+pub fn caret_paren_in_a_fn(x: F32) -> F32 {
+  let y = ^(x)                                      //~ E0002
+  y
+}

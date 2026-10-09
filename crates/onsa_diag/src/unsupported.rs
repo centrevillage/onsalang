@@ -97,6 +97,11 @@ features! {
     ComputedArrayLengths: Language, "constants computed by expressions as array lengths",
         Some("give the constant a literal value, or write the length as a literal");
     CtlOutputs: Language, "`Ctl` outputs of flows (§19)", None;
+    /// `{}`: the form (`at`, `^name`, `prev~`, `if~`, ...). W3-09: the syntax
+    /// stage reads the flow syntax of S-102, S-44, S-110; the checks read it
+    /// from W3-10 (K-02, `onsa_sema::flow_syntax`).
+    /// The second `{}`: the forms of the list, [`FlowForm::listing`].
+    FlowSyntax: Language, "checking the flow syntax `{}` (of the forms {})", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
     FlowSelfInstance: Language, "a flow that instantiates itself", None;
     Equality: Language, "equality on this type", None;
@@ -176,6 +181,57 @@ features! {
     /// `{}`: the effect.
     ManifestProvides: Manifest, "`provides` other than `Alloc` (`{}`)", None;
     ManifestBind: Manifest, "`bind` in a target", None;
+}
+
+/// A form of the flow syntax that the checks after the syntax stage do not
+/// read yet ([`Feature::FlowSyntax`]; W3-09 stops at them, W3-10 writes them
+/// in the checks' terms, K-02): the one list of them and of how they are
+/// shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlowForm {
+    /// A clock: `x: T at k`, `-> T at k`, `e at k` (S-102).
+    Clock,
+    /// `^name` (S-44).
+    Feedback,
+    /// A built-in delay `name~(…)`, by its name (the names are the flow
+    /// stage's table, S-44).
+    Delay(&'static str),
+    /// `if~` (S-110).
+    IfTilde,
+    /// `match~` (S-110).
+    MatchTilde,
+}
+
+impl FlowForm {
+    /// Every form, a delay standing for all of them (in [`FlowForm::listing`]).
+    const ALL: [FlowForm; 5] =
+        [FlowForm::Clock, FlowForm::Feedback, FlowForm::Delay(""), FlowForm::IfTilde, FlowForm::MatchTilde];
+
+    /// How the form is shown in the E0200 (`at`, `prev~`).
+    pub fn label(self) -> String {
+        match self {
+            FlowForm::Clock => "at".into(),
+            FlowForm::Feedback => "^name".into(),
+            FlowForm::Delay(name) => format!("{name}~"),
+            FlowForm::IfTilde => "if~".into(),
+            FlowForm::MatchTilde => "match~".into(),
+        }
+    }
+
+    /// The forms of the list as the message names them, from [`FlowForm::ALL`]:
+    /// "`at`, `^name`, `name~(…)`, `if~`, `match~`".
+    pub fn listing() -> String {
+        let shown = |f: FlowForm| match f {
+            FlowForm::Delay(_) => "`name~(…)` of a built-in delay".to_string(),
+            f => format!("`{}`", f.label()),
+        };
+        FlowForm::ALL.iter().map(|&f| shown(f)).collect::<Vec<_>>().join(", ")
+    }
+
+    /// The E0200 of the form at `span`, reported by `stage`.
+    pub fn diagnostic(self, stage: Stage, span: Span) -> Diagnostic {
+        Feature::FlowSyntax.diagnostic(stage, span, &[&self.label(), &FlowForm::listing()])
+    }
 }
 
 impl Feature {
@@ -573,6 +629,10 @@ mod tests {
                 let rest = &code[i + "Feature::".len()..];
                 let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
                 used.insert(name);
+            }
+            // A form of the flow syntax reports its feature ([`FlowForm::diagnostic`]).
+            if code.contains("FlowForm::") {
+                used.insert(Feature::FlowSyntax.name().to_string());
             }
         }
         assert!(scanned > 50, "the scan found {scanned} source files only");

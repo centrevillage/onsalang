@@ -125,6 +125,7 @@ impl Dumper<'_> {
                 self.params(&f.params);
                 self.out.push_str(" -> ");
                 self.ty(f.ret);
+                self.clock(&f.ret_clock);
                 self.nested(|d| d.expr(f.body));
             }
             ItemKind::Struct(s) => {
@@ -256,6 +257,7 @@ impl Dumper<'_> {
             self.out.push_str(" -> ");
             self.ty(r);
         }
+        self.clock(&f.ret_clock);
         if let Some(e) = &f.effects {
             self.effects(e);
         }
@@ -334,8 +336,16 @@ impl Dumper<'_> {
                 self.out.push_str(": ");
                 self.ty(t);
             }
+            self.clock(&p.clock);
         }
         self.out.push(')');
+    }
+
+    /// ` at name`, the clock of an input or output (§11.3).
+    fn clock(&mut self, c: &Option<Clock>) {
+        if let Some(c) = c {
+            let _ = write!(self.out, " at {}", c.name.name);
+        }
     }
 
     fn mode(&mut self, m: Mode) {
@@ -589,8 +599,8 @@ impl Dumper<'_> {
                 self.out.push(')');
             }
             ExprKind::Block(b) => self.block(b),
-            ExprKind::If { cond, then, else_ } => {
-                self.out.push_str("(if ");
+            ExprKind::If { cond, then, else_, tilde } => {
+                self.out.push_str(if tilde.is_some() { "(if~ " } else { "(if " });
                 self.expr(*cond);
                 self.out.push(' ');
                 self.expr(*then);
@@ -600,8 +610,8 @@ impl Dumper<'_> {
                 }
                 self.out.push(')');
             }
-            ExprKind::Match { scrutinee, arms } => {
-                self.out.push_str("(match ");
+            ExprKind::Match { scrutinee, arms, tilde } => {
+                self.out.push_str(if tilde.is_some() { "(match~ " } else { "(match " });
                 self.expr(*scrutinee);
                 for arm in arms {
                     self.nested(|d| {
@@ -616,13 +626,14 @@ impl Dumper<'_> {
                 }
                 self.out.push(')');
             }
-            ExprKind::Closure { params, ret, effects, body } => {
+            ExprKind::Closure { params, ret, ret_clock, effects, body } => {
                 self.out.push_str("(fn");
                 self.params(params);
                 if let Some(r) = ret {
                     self.out.push_str(" -> ");
                     self.ty(*r);
                 }
+                self.clock(ret_clock);
                 if let Some(e) = effects {
                     self.effects(e);
                 }
@@ -677,6 +688,14 @@ impl Dumper<'_> {
                 self.out.push(' ');
                 self.ty(*ty);
                 self.out.push(')');
+            }
+            ExprKind::At { expr, clock } => {
+                self.out.push_str("(at ");
+                self.expr(*expr);
+                let _ = write!(self.out, " {})", clock.name.name);
+            }
+            ExprKind::Feedback(name) => {
+                let _ = write!(self.out, "^{}", name.name);
             }
             ExprKind::Unary { op, expr } => {
                 self.out.push('(');

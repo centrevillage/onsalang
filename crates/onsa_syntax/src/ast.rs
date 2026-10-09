@@ -72,6 +72,18 @@ impl Ast {
         PatId(self.pats.len() as u32 - 1)
     }
 
+    /// The operand of `e` when `e` is an `as` or an `at` expression (`x as T`,
+    /// `x at k`): the forms of one strength between the prefix and the binary
+    /// operators (§3.1), which are parenthesized as an operand of a binary
+    /// operator and are not chained (E0011, S-118). The one judgment of
+    /// those forms on the tree ([`Operand::AsAt`] of the written text).
+    pub fn as_or_at_operand(&self, e: ExprId) -> Option<ExprId> {
+        match self.expr(e).kind {
+            ExprKind::Cast { expr, .. } | ExprKind::At { expr, .. } => Some(expr),
+            _ => None,
+        }
+    }
+
     /// The literal of a negative literal (spec §4.7, S-184, S-227): `e` is a prefix
     /// `-` whose operand, without its parentheses, is a numeric literal itself
     /// (`-1`, `-(128)`, `-((1.5))`). The `-` is then a part of the literal's
@@ -102,6 +114,15 @@ pub struct Ident {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
     pub segments: Vec<Ident>,
+    pub span: Span,
+}
+
+/// `at name`: the clock of an input or output of a flow or a function, or of
+/// an expression (§11.3). `span` runs from `at` to the end of the name; the
+/// name is not resolved here (clocks are a namespace of their own, §11.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clock {
+    pub name: Ident,
     pub span: Span,
 }
 
@@ -267,6 +288,8 @@ pub struct FnDecl {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub ret: Option<TypeId>,
+    /// The clock after the result type (§11.3; outside a flow E0821, W4-12).
+    pub ret_clock: Option<Clock>,
     pub effects: Option<EffectRow>,
     /// `None` for signatures (trait, effect, extern, target).
     pub body: Option<ExprId>,
@@ -296,6 +319,10 @@ pub struct Param {
     pub name: ParamName,
     /// `None` only for `self` and for closure parameters without annotation.
     pub ty: Option<TypeId>,
+    /// The clock after the type (`x: F32 at sample`, §11.3): of a flow's
+    /// input; on any other parameter list (a function, a method, an anonymous
+    /// function, `extern`, a handler, S-368) the names stage's E0821 (W4-12).
+    pub clock: Option<Clock>,
     pub span: Span,
 }
 
@@ -320,6 +347,8 @@ pub struct FlowDecl {
     pub name: Ident,
     pub params: Vec<Param>,
     pub ret: TypeId,
+    /// The clock of the output (`-> F32 at sample`, §11.3).
+    pub ret_clock: Option<Clock>,
     pub body: ExprId,
 }
 
@@ -631,11 +660,21 @@ pub enum Side {
 pub enum Operand {
     /// A name, a literal, a postfix chain, a prefix operator, a bracket.
     Plain,
-    /// A suffix form weaker than every binary operator: `x as T` (and the
-    /// `e at k` of flow, W3-09). It is in parentheses as an operand (E0011).
+    /// A suffix form weaker than every binary operator: `x as T` and the
+    /// `e at k` of flow. It is in parentheses as an operand (E0011).
     AsAt,
     /// A chain whose root is this operator.
     Binary(BinOp),
+}
+
+impl Operand {
+    /// Whether the operand is written without parentheses before `as` or
+    /// `at` (§3.1: they bind tighter than every binary operator and do not
+    /// chain, E0011): the candidate that writes a clock or a cast after an
+    /// expression (`clock_on_binding`) reads it.
+    pub fn bare_before_as_at(self) -> bool {
+        self == Operand::Plain
+    }
 }
 
 impl BinOp {
@@ -851,19 +890,26 @@ pub enum ExprKind {
     },
     Block(Block),
     /// `if c { a } else { b }`; `else if` nests another `If` in `else_`.
+    /// `tilde` is the `~` of `if~` (§11.5): only the first `if` of a chain
+    /// has it, and it stands for the whole chain.
     If {
         cond: ExprId,
         then: ExprId,
         else_: Option<ExprId>,
+        tilde: Option<Span>,
     },
+    /// `match x { … }`; `tilde` is the `~` of `match~` (§11.5).
     Match {
         scrutinee: ExprId,
         arms: Vec<MatchArm>,
+        tilde: Option<Span>,
     },
     /// `fn(x: F32) -> F32 { ... }` (anonymous function)
     Closure {
         params: Vec<Param>,
         ret: Option<TypeId>,
+        /// The clock after the result type (E0821, W4-12).
+        ret_clock: Option<Clock>,
         effects: Option<EffectRow>,
         body: ExprId,
     },
@@ -893,6 +939,14 @@ pub enum ExprKind {
         expr: ExprId,
         ty: TypeId,
     },
+    /// `e at k` (§11.3): the clock of an expression.
+    At {
+        expr: ExprId,
+        clock: Clock,
+    },
+    /// `^name` (§2.6, §11.2): the reference to a `let` of a flow; the span of
+    /// the expression starts at the `^`, the ident is the name.
+    Feedback(Ident),
     Unary {
         op: UnOp,
         expr: ExprId,

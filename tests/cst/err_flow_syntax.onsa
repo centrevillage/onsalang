@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6", "§3.1", "§11.2", "§11.3", "§18.1"]
+
+// Syntax errors in and around the syntax of a flow: a clock that is missing or is not a name, a
+// chain of `at`, an `at` in an operand, a mark `^` with no name, the binary `^` and the mark side
+// by side, `if~` and `match~` cut or spaced. Whatever the recovery does with the text after an
+// error (§18.1), the round trip of the CST gives the file back byte for byte (R-86). An input of
+// the CST round trip; fmt refuses it (several syntax diagnostics), as it must.
+
+pub flow missing_clock(x: F32 at, y: F32 at block) -> F32 at sample {
+  x
+}
+
+pub flow clock_not_a_name(x: F32 at 1) -> F32 at (sample) {
+  x
+}
+
+pub flow two_clocks(x: F32 at sample at block) -> F32 at sample at block {
+  x
+}
+
+pub flow chain_and_operand(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = p at sample at block
+  let b = p at sample + x
+  let c = x + p at sample
+  let d = n as F32 at sample
+  let e = n at sample as F32
+  a
+}
+
+pub flow at_alone(x: F32 at block) -> F32 at sample {
+  at
+  at sample
+  x at
+  x at )
+  (x at)
+}
+
+pub flow carets(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^)
+  let z = x + prev~(^, )
+  let w = x ^ ^ y
+  let v = x ^^y
+  let u = ^ y
+  let t = prev~(^(y))
+  let s = prev~(^1.0)
+  y
+}
+
+pub flow tildes(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if ~ c { 1.0 } else { 2.0 }
+  let b = if~ { 1.0 } else { 2.0 }
+  let d = if~ c { 1.0 }
+  let e = match ~ x { _ => 1.0 }
+  let f = match~ { _ => 1.0 }
+  let g = lp ~(x)
+  let h = lp~ (x)
+  let i = lp~x
+  let j = if~ c { 1.0 } else if~ c { 2.0 } else { 3.0 }
+  a
+}
+
+pub flow at_in_other_places(x: F32 at sample) -> F32 at sample {
+  let a: F32 at sample = x
+  let (b, c): (F32, F32) at sample = pair(x)
+  let d = [F32; 2] at sample
+  let e = fn(y: F32 at sample) -> F32 at sample { y }
+  a
+}
+
+pub struct S {
+  a: F32 at sample,
+}
+
+pub type T = F32 at sample

@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§2.6", "§3.1", "§11.2", "§11.4", "§18.1"]
+
+// `^name`, a reference to a name defined further down (§2.6, §11.2). The mark is a prefix, glued
+// to the name; it is part of the name, so a postfix form after it applies to the reference
+// (`^y.l` is the field `l` of `y`, §3.1). The binary `^` (exclusive or, §3.1) is told from it by
+// its place: after an operand the `^` is binary, where an operand is expected it is the mark
+// (§2.5: "前置か二項かは、直前のトークンが同じ式の被演算子かどうかで決まる"). The syntax stage reads
+// `^name` wherever an expression may stand; where it may be used (the first argument of a delay,
+// E0801) and in what kind of body (E0821) are judged by the names stage, so the file is read
+// only (mode = "parse"). It is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+
+// The feedback of §11.2.
+pub flow one_pole(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let y = (1.0 - p) * x + p * prev~(^y)
+  y
+}
+
+// The mark follows an operator, a prefix operator, a `,` or a `[`: an operand is expected there.
+pub flow after_operators(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow after_a_prefix_operator(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(-^y)
+  y
+}
+
+pub flow after_a_comma(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(mix(x, ^y))
+  y
+}
+
+pub flow after_a_bracket(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~([^y, x][0])
+  y
+}
+
+// A postfix form applies to the reference: a field, an index, a tuple index, a method call.
+pub flow postfix_after_the_mark(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(^b.l)
+  let b = Pair { l: a, r: x }
+  b.r
+}
+
+pub flow index_after_the_mark(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(^b[0])
+  let b = [a, x]
+  b[1]
+}
+
+pub flow tuple_index_after_the_mark(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(^b.0)
+  let b = (a, x)
+  b.1
+}
+
+pub flow method_after_the_mark(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(^b.abs())
+  let b = a * 0.5
+  b
+}
+
+// Two references in one expression, to names further down.
+pub flow two_references(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(^b)
+  let b = a * 0.5 + prev~(^a)
+  b
+}
+
+// A reference as the whole first argument and inside an expression.
+pub flow inside_an_expression(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(0.5 * ^y + 0.25 * ^y.l)
+  y
+}
+
+// The exclusive or and the mark side by side: after an operand the `^` is binary, and after a
+// binary `^` an operand is expected, so the next `^` is the mark.
+pub fn exclusive_or(a: U32, b: U32) -> U32 {
+  let c = a ^ b
+  let d = c ^ ^b
+  d
+}
+
+pub flow xor_then_mark(a: U32 at sample, b: U32 at sample) -> U32 at sample {
+  let c = a ^ prev~(^c)
+  c
+}
+
+pub flow mark_then_xor(a: U32 at sample) -> U32 at sample {
+  let c = prev~(^c ^ a)
+  c
+}
+
+pub flow mark_xor_mark(a: U32 at sample) -> U32 at sample {
+  let c = prev~(^c ^ ^d)
+  let d = c
+  d
+}
+
+// A statement that starts with the mark: the line before has ended (§2.5), so this is a new
+// statement and not an operand of a binary `^` continued from above.
+pub flow mark_starts_a_line(x: U32 at sample) -> U32 at sample {
+  let a = x
+  ^a
+}
+
+// The mark on a reference to a name that is an input, a constant or defined above is E0020, a
+// misreading (§11.2) the names stage reports; the syntax stage reads it all the same.
+pub flow reads_every_reference(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^x)
+  y
+}

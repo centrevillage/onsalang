@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.6", "§11.4", "§11.5", "§12.4", "§18.1"]
+
+// The built-in delays `prev~`, `delay~` and `vdelay~` (§11.4) are calls of the flow form
+// `name~(...)` (§2.6), with an `init` that may be left out: `prev~(e)` or `prev~(e, init)`,
+// `delay~(e, N)` or `delay~(e, N, init)`, `vdelay~(e, d, MAX)` or `vdelay~(e, d, MAX, init)`.
+// The syntax stage reads the lists as lists of any length; the number of arguments, the types and
+// the clocks belong to the later stages, so the file is read only (mode = "parse"). No `init`
+// below is a default value of its type (`0`, `0.0`, `false`): `onsa fmt` takes such an `init` out
+// (§11.4), and the file is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+
+const N: U32 = 4
+const MAX: U32 = 64
+const MAX_ECHO: U32 = 96000
+
+// `init` left out, and given as a literal and as an input of the clock `init`.
+pub flow prev_forms(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  let a = prev~(x)
+  let b = prev~(x, 1.0)
+  let c = prev~(x, start)
+  let d = prev~(x, start * 2.0 + 1.0)
+  a + b + c + d
+}
+
+pub flow delay_forms(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 4)
+  let b = delay~(x, N)
+  let c = delay~(x, N + 1)
+  let d = delay~(x, N * 2, 0.5)
+  a + b + c + d
+}
+
+pub flow vdelay_forms(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let a = vdelay~(x, d, MAX)
+  let b = vdelay~(x, d, 64)
+  let c = vdelay~(x, d * 2.0, MAX, 0.25)
+  a + b + c
+}
+
+// Delays in the places an expression stands, and inside each other.
+pub flow nested(x: F32 at sample) -> F32 at sample {
+  prev~(prev~(x))
+}
+
+pub flow sums(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  prev~(x) + prev~(y, 1.0) * delay~(x, 8)
+}
+
+pub flow in_arguments(x: F32 at sample) -> F32 at sample {
+  mix(prev~(x), delay~(x, 8, 0.5))
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    prev~(x)
+  } else {
+    delay~(x, 2)
+  }
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ds = par i in 0..<4 {
+    delay~(x, 2 + 2)
+  }
+  ds[0]
+}
+
+pub flow with_a_clock(p: F32 at block) -> F32 at sample {
+  prev~(p at sample)
+}
+
+// A feedback through a variable delay, the delay line of §17.4.
+pub flow echo(x: F32 at sample, d: F32 at block, feedback: F32 at block) -> F32 at sample {
+  let l = vdelay~(^y, d, MAX_ECHO)
+  let y = x + feedback * l
+  y
+}
+
+// A delay whose arguments are written over several lines (the block form of a list).
+pub flow block_form(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let y = vdelay~(
+    x,
+    d,
+    MAX,
+    0.25,
+  )
+  y
+}
+
+// The flow of another module, and a flow of this module, are called the same way (§2.6).
+pub flow qualified(x: F32 at sample) -> F32 at sample {
+  let a = filters.lowpass~(x, 1000.0)
+  let b = std.dsp.lowpass~(x, 2.0)
+  a + b
+}
+
+// The names of the built-ins are plain names to the syntax stage (they are not keywords, §2.2).
+pub flow builtin_names(x: F32 at sample) -> F32 at sample {
+  x / sample_rate()
+}

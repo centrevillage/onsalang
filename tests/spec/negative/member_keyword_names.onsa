@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§4.4", "§6.2", "§11.3", "§18.1"]
+
+// A keyword after a `.` is read as a name, because the keywords are the module names of a path
+// there (§2.2: "キーワードは、パスの `.` の直後と `use` の経路の頭では、モジュール名として使える …
+// `.` の直後のキーワードは名前として読み、フィールドとメソッドの名前にはキーワードを宣言できない
+// ので、`xs.at(0)` のような形は後の段で解決できない誤りになる", S-357). So the syntax stage reads
+// `xs.at(0)` and `s.at`, and the type stage reports that the type has no such method or field
+// (E0413: §4.4 for a field, §6.2 for a method). `at` is a keyword (§2.2, §11.3), so these
+// are not the E0002 of an `at` written as a name (negative/syntax_at_keyword.onsa). One error per
+// declaration unit.
+
+pub struct S {
+  a: F32,
+}
+
+pub fn index_method(xs: [I32; 2]) -> I32 {
+  xs.at(0)                                          //~ E0413
+}
+
+pub fn field_at(s: S) -> F32 {
+  s.at                                              //~ E0413
+}
+
+pub fn method_at_on_an_option(o: Option[F32]) -> F32 {
+  o.at(0)                                           //~ E0413
+}
+
+pub fn method_at_after_a_call(xs: [I32; 2]) -> I32 {
+  id(xs).at(1)                                      //~ E0413
+}
+
+pub fn method_at_on_the_next_line(xs: [I32; 2]) -> I32 {
+  xs
+    .at(0)                                          //~ E0413
+}
+
+pub fn field_at_then_a_field(s: S) -> F32 {
+  s.at.a                                            //~ E0413
+}
+
+pub fn id(xs: [I32; 2]) -> [I32; 2] {
+  xs
+}
+
+pub fn keyword_if(s: S) -> F32 {
+  s.if                                              //~ E0413
+}
+
+pub fn keyword_fn(s: S) -> F32 {
+  s.fn.a                                            //~ E0413
+}
+
+pub fn keyword_match_call(xs: [I32; 2]) -> I32 {
+  xs.match(0)                                       //~ E0413
+}

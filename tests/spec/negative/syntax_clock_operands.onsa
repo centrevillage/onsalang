@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§11.3", "§18.1"]
+
+// E0011 for `at` (§3.1: "`as` と `at` は連鎖できず、二つ目の被演算子には括弧が要る"; §3.3: "flow の
+// `at` 式も同じ"; §11.3: "二項演算子の被演算子にするときと、`as` / `at` と連鎖させるときは括弧が要る
+// (E0011)"). An `at` expression is not an operand of a binary operator without parentheses, on
+// either side, and does not chain with another `at` or an `as` in either order. `at` binds tighter
+// than the binary operators and looser than the prefix and postfix forms, so `-x at sample` is
+// `(-x) at sample` and is accepted (flow_syntax/clock_expressions.onsa). E0011 is of the syntax
+// stage: a unit with one has no names or types checked (the E0302 below is not reported), and one
+// unit does not hide the next. One error per declaration unit, so each has one marker and the
+// bare `at` in it is the only one (the case of several bare operands in one chain is open, S-348).
+// The candidates of E0011 are not fixed by the spec; the runner applies every one that is offered
+// and checks the promise of §18.1 on it.
+
+// ---- a binary operator takes the `at` expression, on either side -----------------------------
+
+pub flow at_then_sum(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  p at sample + x   //~ E0011
+}
+
+pub flow sum_then_at(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x + p at sample   //~ E0011
+}
+
+pub flow at_then_product(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  p at sample * x   //~ E0011
+}
+
+pub flow product_then_at(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * p at sample   //~ E0011
+}
+
+pub flow at_then_difference(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  p at sample - x   //~ E0011
+}
+
+pub flow difference_then_at(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x - p at sample   //~ E0011
+}
+
+pub flow at_then_compare(p: F32 at block, x: F32 at sample) -> Bool at sample {
+  p at sample < x   //~ E0011
+}
+
+pub flow compare_then_at(p: F32 at block, x: F32 at sample) -> Bool at sample {
+  x == p at sample   //~ E0011
+}
+
+pub flow at_then_and(p: Bool at block, q: Bool at sample) -> Bool at sample {
+  p at sample && q   //~ E0011
+}
+
+pub flow and_then_at(p: Bool at block, q: Bool at sample) -> Bool at sample {
+  q || p at sample   //~ E0011
+}
+
+pub flow at_then_shift(p: U32 at block, n: U32 at sample) -> U32 at sample {
+  p at sample << n   //~ E0011
+}
+
+pub flow at_after_a_prefix_then_sum(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  -p at sample + x   //~ E0011
+}
+
+pub flow at_in_a_condition(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  if p at sample > 0.5 {   //~ E0011
+    x
+  } else {
+    0.5
+  }
+}
+
+pub flow at_in_a_let(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = x + p at sample   //~ E0011
+  a
+}
+
+pub flow at_in_an_argument(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  mix(x, p at sample + x)   //~ E0011
+}
+
+pub flow at_in_a_delay(p: F32 at block) -> F32 at sample {
+  prev~(p at sample + 1.0)   //~ E0011
+}
+
+pub flow at_in_a_branch(p: F32 at block, x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else {
+    x + p at sample   //~ E0011
+  }
+}
+
+pub flow at_in_a_match_arm(p: F32 at block, x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k {
+    0 => x * p at sample,   //~ E0011
+    _ => x,
+  }
+}
+
+pub flow at_in_a_par(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let a = par i in 0..<4 {
+    x + p at sample   //~ E0011
+  }
+  a[0]
+}
+
+// ---- the `at` expression chains with neither `at` nor `as` ------------------------------------
+
+pub flow at_at(p: F32 at init) -> F32 at sample {
+  p at block at sample   //~ E0011
+}
+
+pub flow at_at_in_a_let(p: F32 at init) -> F32 at sample {
+  let a = p at block at sample   //~ E0011
+  a
+}
+
+pub flow at_at_at(p: F32 at init) -> F32 at sample {
+  p at init at block at sample   //~ E0011
+}
+
+pub flow as_then_at(n: I32 at block) -> F32 at sample {
+  n as F32 at sample   //~ E0011
+}
+
+pub flow at_then_as(n: I32 at block) -> F32 at sample {
+  n at sample as F32   //~ E0011
+}
+
+pub flow chain_after_a_prefix(p: F32 at init) -> F32 at sample {
+  -p at block at sample   //~ E0011
+}
+
+pub flow chain_after_a_parenthesis(p: F32 at init) -> F32 at sample {
+  (p at block) at sample at sample   //~ E0011
+}
+
+pub flow chain_after_a_postfix(p: F32 at init) -> F32 at sample {
+  design(p) at block at sample   //~ E0011
+}
+
+pub flow chain_in_an_argument(p: F32 at init) -> F32 at sample {
+  mix(p at block at sample, p)   //~ E0011
+}
+
+pub flow chain_in_a_tuple(p: F32 at init) -> F32 at sample {
+  let t = (p at block at sample, p)   //~ E0011
+  t.0
+}
+
+pub flow chain_of_a_cast_and_a_clock(n: I32 at init) -> F32 at sample {
+  let a = n as I64 as F32 at sample   //~ E0011
+  a
+}
+
+// ---- in a fn the syntax stage reports it the same: E0821 is the names stage's ------------------
+
+pub fn at_in_a_sum_in_a_fn(x: F32) -> F32 {
+  x at sample + 1.0   //~ E0011
+}
+
+pub fn at_chain_in_a_fn(x: F32) -> F32 {
+  x at block at sample   //~ E0011
+}
+
+// ---- E0011 hides the later stages of its own unit and no other unit ---------------------------
+
+pub flow hides_the_names_of_its_unit(x: F32 at sample) -> F32 at sample {
+  nope(x at sample + 1.0)   //~ E0011
+}
+
+pub fn unit_after_the_error() -> I32 {
+  missing_name   //~ E0302
+}

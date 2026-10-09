@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.6", "§11.1", "§11.5", "§18.1"]
+
+// `if~` and `match~` (§2.6, §11.5): the `~` is glued to the keyword, and one `~` covers the whole
+// `else if` chain. The syntax stage reads them as it reads `if` and `match` (and anywhere an
+// expression may stand); whether a branch holds a state (E0811, E0812), what a branch may hold
+// and the values of the branches belong to the later stages, so the file is read only
+// (mode = "parse"). It is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+
+// `if~` and `match~`, one line and over several lines.
+pub flow if_tilde_one_line(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { lp~(x) } else { x }
+}
+
+pub flow if_tilde_blocks(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else {
+    hp~(x)
+  }
+}
+
+pub flow match_tilde_one_line(k: U32 at sample) -> F32 at sample {
+  match~ k { 0 => saw~(1.0), _ => saw~(2.0) }
+}
+
+pub flow match_tilde_arms(k: U32 at sample) -> F32 at sample {
+  match~ k {
+    0 => saw~(1.0),
+    1 => saw~(2.0),
+    _ => saw~(3.0),
+  }
+}
+
+// The `~` covers the whole chain: `else if` has none of its own.
+pub flow else_if_chain(x: F32 at sample) -> F32 at sample {
+  if~ x > 1.0 {
+    lp~(x)
+  } else if x > 0.5 {
+    hp~(x)
+  } else {
+    x
+  }
+}
+
+// Guards, patterns and bindings in the arms of `match~`.
+pub flow match_tilde_guards(x: Option[F32] at sample) -> F32 at sample {
+  match~ x {
+    Some(v) if v > 0.5 => lp~(v),
+    Some(v) => v,
+    None => 0.5,
+  }
+}
+
+// Where the keyword stands: a `let`, a last expression, an argument, a `par` body and a branch of
+// another `if~`.
+pub flow in_places(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  let a = if~ c { lp~(x) } else { x }
+  let b = if~ d { hp~(x) } else { 0.5 }
+  let e = mix(if~ c { lp~(x) } else { x }, x)
+  let f = par i in 0..<4 {
+    if~ c { saw~(1.0) } else { 0.5 }
+  }
+  let g = if~ c {
+    if~ d { lp~(x) } else { hp~(x) }
+  } else {
+    x
+  }
+  a + b + e + f[0] + g
+}
+
+// Plain `if` and `match` have no `~`: they take one branch (§11.5).
+pub flow plain_branches(x: F32 at sample, c: Bool at sample, k: U32 at sample) -> F32 at sample {
+  let a = if c { x } else { 0.5 }
+  let b = match k {
+    0 => 1.0,
+    _ => 2.0,
+  }
+  a + b
+}
+
+// A plain `if` inside an arm of `if~`, the way §11.5 spells a branch taken on its own.
+pub flow plain_inside_tilde(x: F32 at sample, c: Bool at sample, d: F32 at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else {
+    if d != 0.5 { 100.0 / d } else { 0.5 }
+  }
+}
+
+// The condition and the scrutinee may hold a clock; the clock does not take the brace.
+pub flow tilde_with_a_clock(p: F32 at block, c: Bool at block) -> F32 at sample {
+  if~ c at sample {
+    lp~(p)
+  } else {
+    p
+  }
+}

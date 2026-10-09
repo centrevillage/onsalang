@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§11.5", "§18.1"]
+// fixes = 1
+
+// An `else` on the line after the `}` of an `if~` is E0003 (§2.5): the `else` is read first, as for any
+// `if`, and not the E0002 of an `if~` with no `else` (§11.5, S-355). The main position is the `else`
+// token, so the marker is on its line; the candidate moves it to the end of the line of the `}`. After
+// it the chain is complete and nothing is left in the syntax stage.
+
+pub flow else_on_the_next_line(c: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else {
+  //~ E0003
+    2.0
+  }
+}
+
+pub flow let_else_on_the_next_line(c: Bool at sample) -> F32 at sample {
+  let a = if~ c { 1.0 } else { 2.0 }
+  //~ E0003
+  a
+}
+
+pub flow chain_else_on_the_next_line(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if d {
+    2.0
+  } else {
+  //~ E0003
+    3.0
+  }
+}

@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.2", "§5.1", "§11.3", "§11.4", "§11.6", "§18.1"]
+
+// The names of the clocks (`init`, `block`, `sample`) are not keywords: they live in a namespace of
+// their own, searched only after `at` (§11.3), and an ordinary name may be spelled the same
+// ("`sample` や `block` を変数の名前に使ってもよい"). `at` is a keyword (§2.2). The syntax stage
+// reads each of these forms; which name an identifier means is the names stage's. The file is
+// read only (mode = "parse") and written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+
+pub struct Timing {
+  init: F32,
+  block: F32,
+  sample: F32,
+}
+
+// Variables, inputs and a function with the name of a clock, next to the clock of the same name.
+pub flow names_of_clocks(sample: F32 at sample, block: F32 at block, init: F32 at init) -> F32 at sample {
+  let b1 = block at sample
+  let i1 = init at sample
+  sample + b1 + i1
+}
+
+pub flow variable_named_like_its_clock(x: F32 at block) -> F32 at sample {
+  let sample = x at sample
+
+  let block = x at block
+  sample + block
+}
+
+pub flow fields_named_like_clocks(t: Timing at block) -> F32 at sample {
+  let a = t.init at sample
+  let b = t.block at sample
+  let c = t.sample at sample
+  a + b + c
+}
+
+pub flow struct_literal_with_clock_names(x: F32 at block) -> Timing at sample {
+  Timing { init: x, block: x, sample: x at sample }
+}
+
+// A function and a module path with the name of a clock; the generated `init` of §11.6 is called
+// as the path `voice.init`.
+pub rt fn block(x: F32) -> F32 {
+  x
+}
+
+pub fn make_state(sample_rate: F32) -> voice.State {
+  voice.init(voice.Config {}, sample_rate)
+}
+
+pub flow calls_block(x: F32 at block) -> F32 at sample {
+  block(x) at sample
+}
+
+// `sample_rate` and the names of the delays are plain names to the syntax stage (they are not
+// keywords).
+pub flow reserved_built_in_names(x: F32 at sample) -> F32 at sample {
+  x / sample_rate()
+}

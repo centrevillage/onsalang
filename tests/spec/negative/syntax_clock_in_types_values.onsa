@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§11.3", "§18.1"]
+
+// E0020 for an `at` inside the type of a `let` or a `var` (§11.3, S-356), where the value that gets
+// the clock instead is not a single operand. The spec gives the text of the candidate for a plain
+// value only (`let y: Option[F32] = x at sample`); an `at` on a sum, a cast or a comparison is E0011
+// (§3.1, §3.3: an `at` expression is parenthesized when it is an operand of a binary operator or
+// is chained). So the runner does not compare a text here: it applies each candidate and checks the
+// promise of §18.1 (the E0020 is the only error of the unit, and after the candidate the unit has
+// no error of the syntax stage), which a candidate that writes `x + 1.0 at sample` or
+// `n as F32 at sample` breaks. The note shows the right rule (§18.1). One error per declaration unit.
+
+pub fn sum_initializer(x: F32) -> F32 {
+  let y: Option[F32 at sample] = x + 1.0            //~ E0020
+  0.5
+}
+
+pub fn product_initializer(x: F32, p: F32) -> F32 {
+  let y: Option[F32 at block] = x * p               //~ E0020
+  0.5
+}
+
+pub fn cast_initializer(n: I32) -> F32 {
+  let y: Option[F32 at sample] = n as F32           //~ E0020
+  0.5
+}
+
+pub fn comparison_initializer(x: F32) -> F32 {
+  let y: Option[Bool at sample] = x > 0.5           //~ E0020
+  0.5
+}
+
+pub fn prefix_initializer(x: F32) -> F32 {
+  let y: Option[F32 at sample] = -x                 //~ E0020
+  0.5
+}
+
+pub fn call_initializer(x: F32) -> F32 {
+  let y: Option[F32 at sample] = Some(x)            //~ E0020
+  0.5
+}
+
+pub fn var_sum_initializer(x: F32) -> F32 {
+  var y: [F32 at block; 2] = [x, x + 1.0]           //~ E0020
+  0.5
+}
+
+pub fn var_binary_initializer(x: F32) -> F32 {
+  var y: F32 at sample = x + 1.0                    //~ E0020
+  y
+}
+
+pub flow flow_sum_initializer(x: F32 at sample) -> F32 at sample {
+  let y: Option[F32 at sample] = x + 1.0            //~ E0020
+  0.5
+}
+
+pub flow flow_delay_initializer(x: F32 at sample) -> F32 at sample {
+  let y: Option[F32 at sample] = prev~(x)           //~ E0020
+  0.5
+}
+
+pub flow flow_cast_initializer(n: I32 at sample) -> F32 at sample {
+  let y: Option[F32 at sample] = n as F32           //~ E0020
+  0.5
+}

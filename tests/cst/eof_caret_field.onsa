@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.5", "§2.6", "§11.2", "§18.2"]
+
+// The file ends inside or right after the construct below (with no newline unless one is shown).
+
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y.

@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§11.3", "§18.1"]
+
+// E0002 for the keyword `at` used as a name (§2.2: `at` is in the list of all the keywords; a
+// keyword is not a name, and a token that cannot stand where a name is expected is an unexpected
+// token, §18.1). The same for every place a name is made: a binding, a pattern, a parameter, an
+// input of a flow, a field, a function, a flow. (`at` after a `.`, as the name of a field or a
+// method, is not fixed by the spec and is not here.) One error per declaration unit.
+
+pub fn at_as_a_binding() -> I32 {
+  let at = 1   //~ E0002
+  at
+}
+
+pub fn at_as_a_variable() -> I32 {
+  var at = 1   //~ E0002
+  at
+}
+
+pub fn at_in_a_tuple_pattern() -> I32 {
+  let (at, b) = (1, 2)   //~ E0002
+  b
+}
+
+pub fn at_as_a_match_binding(x: I32) -> I32 {
+  match x {
+    at => 1,   //~ E0002
+    _ => 2,
+  }
+}
+
+pub fn at_as_a_parameter(at: I32) -> I32 {   //~ E0002
+  1
+}
+
+pub fn at() -> I32 {   //~ E0002
+  1
+}
+
+pub flow at_as_an_input(at: F32 at sample) -> F32 at sample {   //~ E0002
+  at
+}
+
+pub flow at(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub struct HasAt {
+  at: I32,   //~ E0002
+}
+
+pub fn at_as_a_closure_parameter() -> I32 {
+  let f = fn(at: I32) -> I32 { at }   //~ E0002
+  1
+}

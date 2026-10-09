@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "54:31"
+// code = "E0020"
+// candidate = 1
+// leaves = ["54:36 E0020"]
+//
+// [[test.fix]]
+// at = "58:39"
+// code = "E0020"
+// candidate = 1
+// leaves = ["58:44 E0020"]
+//
+// [[test.fix]]
+// at = "62:38"
+// code = "E0020"
+// candidate = 1
+// leaves = ["62:43 E0020"]
+//
+// [[test.fix]]
+// at = "67:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["67:16 E0020"]
+//
+// [[test.fix]]
+// at = "71:15"
+// code = "E0020"
+// candidate = 1
+// leaves = ["71:20 E0020"]
+
+// Each `at` in a type is its own error (§11.3, S-356: "一つの型に複数の `at` は位置ごとの誤り"). A unit
+// stops at its first error (§18.1), so only the first `at` is reported, and its candidate fixes that
+// one. The next is still there after it (it moves left by the length of the first `at sample`) and is
+// reported by the next check.
+//
+// The `[[test.fix]]` entries in the header are commented out (`// # `): the case runner reports a
+// `[[test.fix]]` that names a diagnostic the check does not report as an error of the case, and
+// `tests/pending.toml` does not silence an error of the case. W3-09/i takes the `# ` off when the check
+// reports these diagnostics, and corrects the `at` positions (the main position of an `at` in a type is
+// not given by the spec; the entries assume the `at` token, the first token of the wrong mark, S-316) and
+// the `leaves` positions with them. Without the entries the candidate of the first error breaks the
+// promise of §18.1, because the next `at` is still there.
+
+pub struct Pair[A, B] {
+  first: A,
+  second: B,
+}
+
+pub fn two_in_a_tuple(x: (F32 at sample, F32 at block)) -> F32 {  //~ E0020
+  0.5
+}
+
+pub fn two_type_arguments(x: Pair[F32 at sample, F32 at block]) -> F32 {  //~ E0020
+  0.5
+}
+
+pub flow two_in_an_input(x: Pair[F32 at sample, F32 at block]) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub struct TwoInAField {
+  a: (F32 at sample, F32 at block),                 //~ E0020
+}
+
+pub fn two_in_a_let(p: (F32, F32)) -> F32 {
+  let y: (F32 at sample, F32 at block) = p          //~ E0020
+  0.5
+}

@@ -289,6 +289,7 @@ impl<'a> Fmt<'a> {
                 self.params(&f.params, f.name.span.end);
                 self.push(" -> ");
                 self.ty(f.ret);
+                self.clock(&f.ret_clock);
                 self.push(" ");
                 self.block(f.body, false);
             }
@@ -466,6 +467,7 @@ impl<'a> Fmt<'a> {
             self.push(" -> ");
             self.ty(r);
         }
+        self.clock(&f.ret_clock);
         if let Some(e) = &f.effects {
             self.effect_row(e);
         }
@@ -566,6 +568,15 @@ impl<'a> Fmt<'a> {
         if let Some(t) = p.ty {
             self.push(": ");
             self.ty(t);
+        }
+        self.clock(&p.clock);
+    }
+
+    /// ` at name`: the clock of an input or output (§11.3).
+    fn clock(&mut self, c: &Option<Clock>) {
+        if let Some(c) = c {
+            self.push(" at ");
+            self.push(&c.name.name);
         }
     }
 
@@ -719,6 +730,7 @@ impl<'a> Fmt<'a> {
             self.indent += 1;
             self.newline();
             let mut prev_end_line = first_line;
+            let (mut prev_end, mut first) = (open, true);
             for (i, (span, print)) in items.iter().enumerate() {
                 let line = self.line_of(span.start);
                 if i > 0 {
@@ -729,7 +741,15 @@ impl<'a> Fmt<'a> {
                         self.push(", ");
                     }
                 }
+                // The comments on the lines before an element of a block-style
+                // list (the doc comments of the inputs of a flow, §2.1) stay
+                // before it. W3-11 keeps every comment on its line (S-58).
+                if line > prev_end_line || i == 0 {
+                    self.leading_comments(span.start, &mut prev_end, &mut first);
+                }
                 print(self);
+                prev_end = span.end;
+                first = false;
                 prev_end_line = self.line_of(span.end);
             }
             self.push(",");
@@ -988,8 +1008,8 @@ impl<'a> Fmt<'a> {
                 self.list("{", "}", open, e.span.end - 1, &items, true);
             }
             ExprKind::Block(_) => self.block(id, false),
-            ExprKind::If { cond, then, else_ } => {
-                self.push("if ");
+            ExprKind::If { cond, then, else_, tilde } => {
+                self.push(if tilde.is_some() { "if~ " } else { "if " });
                 self.expr(*cond);
                 self.push(" ");
                 self.block(*then, false);
@@ -1003,8 +1023,8 @@ impl<'a> Fmt<'a> {
                     }
                 }
             }
-            ExprKind::Match { scrutinee, arms } => {
-                self.push("match ");
+            ExprKind::Match { scrutinee, arms, tilde } => {
+                self.push(if tilde.is_some() { "match~ " } else { "match " });
                 self.expr(*scrutinee);
                 self.push(" ");
                 let open = self.find_char(self.ast.expr(*scrutinee).span.end, '{');
@@ -1027,13 +1047,14 @@ impl<'a> Fmt<'a> {
                     .collect();
                 self.list("{", "}", open, e.span.end - 1, &items, true);
             }
-            ExprKind::Closure { params, ret, effects, body } => {
+            ExprKind::Closure { params, ret, ret_clock, effects, body } => {
                 self.push("fn");
                 self.params(params, e.span.start + 2);
                 if let Some(r) = ret {
                     self.push(" -> ");
                     self.ty(*r);
                 }
+                self.clock(ret_clock);
                 if let Some(ef) = effects {
                     self.effect_row(ef);
                 }
@@ -1090,6 +1111,15 @@ impl<'a> Fmt<'a> {
                 self.expr(*expr);
                 self.push(" as ");
                 self.ty(*ty);
+            }
+            ExprKind::At { expr, clock } => {
+                self.expr(*expr);
+                self.push(" at ");
+                self.push(&clock.name.name);
+            }
+            ExprKind::Feedback(name) => {
+                self.push("^");
+                self.push(&name.name);
             }
             ExprKind::Unary { op, expr } => {
                 self.push(match op {

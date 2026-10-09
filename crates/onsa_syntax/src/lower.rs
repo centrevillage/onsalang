@@ -59,10 +59,9 @@ pub(crate) fn class(kind: NodeKind) -> Class {
     use NodeKind::*;
     match kind {
         Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr | MatchExpr
-        | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr
-        | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr | TryExpr | StructLit => {
-            Class::Expr
-        }
+        | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr | AtExpr
+        | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr | TryExpr
+        | StructLit => Class::Expr,
         PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType => Class::Type,
         WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => {
             Class::Pat
@@ -73,7 +72,7 @@ pub(crate) fn class(kind: NodeKind) -> Class {
         | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow
         | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt | ContinueStmt
         | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg | StructLitFields
-        | StructLitField | StructPatField | StructPatRest => Class::Other,
+        | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
     }
 }
 
@@ -164,6 +163,15 @@ impl<'a> Lower<'a> {
     fn first_ident(&self, n: NodeId) -> Ident {
         let t = self.tok(n, TokenKind::Ident).unwrap_or_else(|| self.bug(n, "an identifier"));
         self.ident(t)
+    }
+
+    /// The clock written after the type of `n` (a parameter, a function, a
+    /// flow, an anonymous function, §11.3), when it was read whole. A clock
+    /// anywhere else is not in the AST: it is an E0020 of its unit (S-356).
+    fn clock(&self, n: NodeId) -> Option<Clock> {
+        let c = self.child(n, NodeKind::Clock).filter(|&c| self.cst.is_complete(c))?;
+        let t = self.tok(c, TokenKind::Ident)?;
+        Some(Clock { name: self.ident(t), span: self.span(c) })
     }
 
     fn first_type(&mut self, n: NodeId) -> Option<TypeId> {
@@ -379,7 +387,8 @@ impl<'a> Lower<'a> {
                         None
                     }
                 };
-                ItemKind::Fn(FnDecl { rt, name, generics, params, ret, effects, body })
+                let ret_clock = self.clock(d);
+                ItemKind::Fn(FnDecl { rt, name, generics, params, ret, ret_clock, effects, body })
             }
             NodeKind::Flow => {
                 let name = self.read_name(d)?;
@@ -391,6 +400,7 @@ impl<'a> Lower<'a> {
                         self.error_type(d)
                     }
                 };
+                let ret_clock = self.clock(d);
                 let body = match self.child(d, NodeKind::Block) {
                     Some(b) => self.failed_expr(b),
                     None => {
@@ -399,7 +409,7 @@ impl<'a> Lower<'a> {
                         self.add_expr(d, span, ExprKind::Error)
                     }
                 };
-                ItemKind::Flow(FlowDecl { name, params, ret, body })
+                ItemKind::Flow(FlowDecl { name, params, ret, ret_clock, body })
             }
             NodeKind::Struct => {
                 let name = self.read_name(d)?;
@@ -578,8 +588,9 @@ impl<'a> Lower<'a> {
                 let name = self.name(n);
                 let params = self.params(self.need(n, NodeKind::ParamList));
                 let ret = self.first_type(n).unwrap_or_else(|| self.bug(n, "a return type"));
+                let ret_clock = self.clock(n);
                 let body = self.block(self.need(n, NodeKind::Block));
-                ItemKind::Flow(FlowDecl { name, params, ret, body })
+                ItemKind::Flow(FlowDecl { name, params, ret, ret_clock, body })
             }
             NodeKind::Struct => {
                 let name = self.name(n);
@@ -711,9 +722,10 @@ impl<'a> Lower<'a> {
         let generics = self.generics(n);
         let params = self.params(self.need(n, NodeKind::ParamList));
         let ret = self.first_type(n);
+        let ret_clock = self.clock(n);
         let effects = self.child(n, NodeKind::EffectRow).map(|e| self.effect_row(e));
         let body = self.child(n, NodeKind::Block).map(|b| self.block(b));
-        FnDecl { rt, name, generics, params, ret, effects, body }
+        FnDecl { rt, name, generics, params, ret, ret_clock, effects, body }
     }
 
     /// The members of a declaration's list: the members read whole and the
@@ -784,7 +796,8 @@ impl<'a> Lower<'a> {
                     _ => ParamName::Ident(self.ident(t)),
                 };
                 let ty = self.first_type(p);
-                Param { attrs, mode, name, ty, span: self.span(p) }
+                let clock = self.clock(p);
+                Param { attrs, mode, name, ty, clock, span: self.span(p) }
             })
             .collect()
     }
@@ -865,10 +878,12 @@ impl<'a> Lower<'a> {
                             TokenKind::KwMove => mode = Mode::Move,
                             _ => {}
                         },
-                        Elem::Node(c) => {
+                        // A clock in the list is an E0020 of its unit (S-356).
+                        Elem::Node(c) if class(self.cst.kind(c)) == Class::Type => {
                             let ty = self.ty(c);
                             params.push((std::mem::replace(&mut mode, Mode::Borrow), ty));
                         }
+                        Elem::Node(_) => {}
                     }
                 }
                 let ret = self.first_type(n);
@@ -981,7 +996,8 @@ impl<'a> Lower<'a> {
             NodeKind::Block => ExprKind::Block(self.block_body(n)),
             NodeKind::IfExpr => {
                 let e = self.exprs(n);
-                ExprKind::If { cond: e[0], then: e[1], else_: e.get(2).copied() }
+                let tilde = self.tok(n, TokenKind::Tilde).map(|t| self.cst.token(t).span);
+                ExprKind::If { cond: e[0], then: e[1], else_: e.get(2).copied(), tilde }
             }
             NodeKind::MatchExpr => {
                 let scrutinee = self.need_expr(n);
@@ -999,14 +1015,16 @@ impl<'a> Lower<'a> {
                         MatchArm { pat, guard, body, span: self.span(a) }
                     })
                     .collect();
-                ExprKind::Match { scrutinee, arms }
+                let tilde = self.tok(n, TokenKind::Tilde).map(|t| self.cst.token(t).span);
+                ExprKind::Match { scrutinee, arms, tilde }
             }
             NodeKind::ClosureExpr => {
                 let params = self.params(self.need(n, NodeKind::ParamList));
                 let ret = self.first_type(n);
+                let ret_clock = self.clock(n);
                 let effects = self.child(n, NodeKind::EffectRow).map(|e| self.effect_row(e));
                 let body = self.block(self.need(n, NodeKind::Block));
-                ExprKind::Closure { params, ret, effects, body }
+                ExprKind::Closure { params, ret, ret_clock, effects, body }
             }
             NodeKind::HandleExpr => {
                 let body = self.block(self.need(n, NodeKind::Block));
@@ -1035,6 +1053,15 @@ impl<'a> Lower<'a> {
                 let expr = self.need_expr(n);
                 let ty = self.first_type(n).unwrap_or_else(|| self.bug(n, "a type"));
                 ExprKind::Cast { expr, ty }
+            }
+            NodeKind::AtExpr => {
+                let expr = self.need_expr(n);
+                let clock = self.clock(n).unwrap_or_else(|| self.bug(n, "a clock"));
+                ExprKind::At { expr, clock }
+            }
+            NodeKind::FeedbackExpr => {
+                let t = self.tok(n, TokenKind::Ident).unwrap_or_else(|| self.bug(n, "a name"));
+                ExprKind::Feedback(self.ident(t))
             }
             NodeKind::PrefixExpr => {
                 let op = if self.has(n, TokenKind::Minus) { UnOp::Neg } else { UnOp::Not };

@@ -4,7 +4,8 @@
 
 // The `par` cases of range_header_one_sided.onsa (§7, §11.5, S-278): a range with one end in the
 // header of a `par` is E0002 with a note. They are apart because the inputs of a flow are written with
-// `at` (W3-09). One diagnostic per flow.
+// `at` (W3-09). One diagnostic per flow. The flow with both ends is in
+// control/range_header_fine_par.onsa.
 
 pub flow par_from(x: F32 at sample) -> [F32; 4] at sample {
   par i in 0.. {                                    //~ E0002
@@ -29,11 +30,5 @@ pub flow inner_par(x: F32 at sample) -> [[F32; 2]; 2] at sample {
     par j in ..<2 {                                 //~ E0002
       x * (i + j).round_f32()
     }
-  }
-}
-
-pub flow fine_par(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0..<4 {
-    x * i.round_f32()
   }
 }

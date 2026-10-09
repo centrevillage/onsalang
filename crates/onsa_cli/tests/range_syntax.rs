@@ -236,7 +236,6 @@ fn the_candidate_with_the_half_open_symbol_leaves_a_program_with_no_diagnostic()
 }
 
 #[test]
-#[ignore = "W3-10: the syntax of a flow (`at sample`); W3-18 for the symbol"]
 fn a_wrong_symbol_in_a_par_header_is_e0020_with_the_same_two_candidates() {
     // §11.5, §18.1: the same diagnostic and candidates as in a `for` header. The ends of a `par` are
     // constant expressions; a range binds more weakly than their operators (§3.1).
@@ -385,6 +384,48 @@ fn a_bare_conversion_in_an_end_is_e0011() {
         }
         assert_eq!(out, loop_with(fixed), "{header}");
     }
+}
+
+#[test]
+fn a_bare_clock_in_an_end_is_e0011() {
+    // §3.1, §11.3 (S-340, S-118): `at` has the strength of `as`, so a clock in an end of a range is
+    // written in parentheses too: E0011 (of the syntax stage, also in a fn, where the clock itself is
+    // the names stage's E0821), its candidate puts them; `as` and `at` in the two ends of one head are
+    // one diagnostic.
+    let d = Dir::new("bare_clock");
+    for (header, fixed) in [
+        ("0..<n at sample", "0..<(n at sample)"),
+        ("lo at block..<9", "(lo at block)..<9"),
+        ("lo as U32..<n at sample", "(lo as U32)..<(n at sample)"),
+    ] {
+        let src = loop_with(header);
+        let path = d.file("a.onsa", &src);
+        let diags = check(&path);
+        assert_eq!(diags.len(), 1, "{header}: {diags:?}");
+        assert_eq!(diags[0]["code"], "E0011", "{header}: {}", diags[0]);
+        let edits = diags[0]["fixes"][0]["edits"].as_array().cloned().unwrap_or_default();
+        let mut out = src.clone();
+        let mut spans: Vec<(usize, String)> = edits
+            .iter()
+            .map(|e| {
+                let line = e["span"]["line"].as_u64().unwrap() as usize;
+                let col = e["span"]["col"].as_u64().unwrap() as usize;
+                let start: usize = src.split_inclusive('\n').take(line - 1).map(str::len).sum::<usize>() + col - 1;
+                (start, e["replace"].as_str().unwrap().to_string())
+            })
+            .collect();
+        spans.sort_by(|a, b| b.0.cmp(&a.0));
+        for (at, text) in spans {
+            out.insert_str(at, &text);
+        }
+        assert_eq!(out, loop_with(fixed), "{header}");
+    }
+    // The head of a `par` in a flow.
+    let src = "pub flow g(n: U32 at init) -> [U32; 4] at sample {\n  par i in 0..<4 at init {\n    i\n  }\n}\n";
+    let path = d.file("b.onsa", src);
+    let diags = check(&path);
+    assert_eq!(diags.len(), 1, "{diags:?}");
+    assert_eq!(diags[0]["code"], "E0011", "{}", diags[0]);
 }
 
 // ---- fmt and diff --ast stop at the errors of the syntax stage (§18.2) ------------------------------

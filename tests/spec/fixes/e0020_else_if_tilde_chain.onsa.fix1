@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "48:12"
+// code = "E0020"
+// candidate = 1
+// leaves = ["50:12 E0020"]
+//
+// [[test.fix]]
+// at = "60:12"
+// code = "E0020"
+// candidate = 1
+// leaves = ["62:12 E0020"]
+//
+// [[test.fix]]
+// at = "70:31"
+// code = "E0020"
+// candidate = 1
+// leaves = ["70:50 E0020"]
+//
+// [[test.fix]]
+// at = "77:12"
+// code = "E0020"
+// candidate = 1
+// leaves = ["79:12 E0020"]
+
+// Each `~` on a later `if` of a chain is its own error (`else if~`, §11.5, S-355). A unit stops at
+// its first error (§18.1), so only the first one is reported, and its candidate fixes that one. The
+// next is still there after it, and it is reported by the next check: when the head had no `~`,
+// the first candidate moves the `~` to the head, so the next candidate (for the second `~`) removes
+// its `~`, because the head has one now. Applying the candidate once for each error, one at a time,
+// ends in the chain with the `~` on the head only.
+//
+// The `[[test.fix]]` entries in the header are commented out (`// # `): the case runner reports a
+// `[[test.fix]]` that names a diagnostic the check does not report as an error of the case, and
+// `tests/pending.toml` does not silence an error of the case. W3-09/i takes the `# ` off when the check
+// reports these diagnostics, and corrects the `at` positions (the main position of an `else if~` is not
+// given by the spec; the entries assume the `~`, the first token of the wrong mark, S-316) and the
+// `leaves` positions with them. Without the entries the candidate of the first error breaks the
+// promise of §18.1, because the next `~` is still there.
+
+pub flow two_links(c: Bool at sample, d: Bool at sample, e: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if d {                                    //~ E0020
+    2.0
+  } else if~ e {
+    3.0
+  } else {
+    4.0
+  }
+}
+
+pub flow two_links_head_with_tilde(c: Bool at sample, d: Bool at sample, e: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if d {                                    //~ E0020
+    2.0
+  } else if~ e {
+    3.0
+  } else {
+    4.0
+  }
+}
+
+pub flow one_line(c: Bool at sample, d: Bool at sample, e: Bool at sample) -> F32 at sample {
+  let a = if~ c { 1.0 } else if d { 2.0 } else if~ e { 3.0 } else { 4.0 }  //~ E0020
+  a
+}
+
+pub flow three_links(c: Bool at sample, d: Bool at sample, e: Bool at sample, f: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if d {                                    //~ E0020
+    2.0
+  } else if~ e {
+    3.0
+  } else if~ f {
+    4.0
+  } else {
+    5.0
+  }
+}

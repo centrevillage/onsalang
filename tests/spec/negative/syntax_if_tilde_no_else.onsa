@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.5", "§18.1"]
+
+// E0002 for an `if~` with no `else` (§11.5, S-355): `if~` evaluates all branches and selects one, so
+// the `else` is needed, and the chain must end with one. The error is the general syntax error of
+// the stage and has no candidate (there is no value to put in the missing branch); the note says
+// that the `else` is needed. The marker is on the line of the `}` that ends the last branch (where
+// the `else` was expected). An `else` on the next line is not this error but E0003 (§2.5, see
+// fixes/e0003_if_tilde_else_line.onsa). One error per declaration unit.
+
+pub flow no_else(c: Bool at sample) -> F32 at sample {
+  if~ c { 1.0 }                                     //~ E0002
+}
+
+pub flow no_else_in_lines(c: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  }                                                 //~ E0002
+}
+
+pub flow no_else_in_a_let(c: Bool at sample) -> F32 at sample {
+  let a = if~ c { 1.0 }                             //~ E0002
+  a
+}
+
+pub flow chain_with_no_final_else(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c { 1.0 } else if d { 2.0 }                   //~ E0002
+}
+
+pub flow chain_with_no_final_else_in_lines(c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    1.0
+  } else if d {
+    2.0
+  }                                                 //~ E0002
+}
+
+pub flow no_else_in_an_arm(a: Bool at sample, b: Bool at sample) -> F32 at sample {
+  if~ a {
+    if~ b { 1.0 }                                   //~ E0002
+  } else {
+    2.0
+  }
+}
+
+pub flow no_else_in_a_par(c: Bool at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    if~ c { 1.0 }                                   //~ E0002
+  }
+}
+
+pub flow no_else_in_a_call(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  max(if~ c { x }, 0.5)                             //~ E0002
+}
+
+pub fn no_else_in_a_fn(c: Bool) -> F32 {
+  if~ c { 1.0 }                                     //~ E0002
+}

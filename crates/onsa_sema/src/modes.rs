@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::Feature;
+use onsa_diag::unsupported::{Feature, FlowForm};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, Block, CallKind, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
@@ -481,7 +481,7 @@ impl<'a> Walker<'a> {
                 }
             }
             ExprKind::Block(b) => self.block(b, pos),
-            ExprKind::If { cond, then, else_ } => {
+            ExprKind::If { cond, then, else_, .. } => {
                 self.expr(*cond, Pos::Other);
                 let before = self.state.clone();
                 self.expr(*then, pos);
@@ -493,7 +493,7 @@ impl<'a> Walker<'a> {
                 let else_div = std::mem::replace(&mut self.diverged, false);
                 self.merge(then_state, then_div, else_div);
             }
-            ExprKind::Match { scrutinee, arms } => {
+            ExprKind::Match { scrutinee, arms, .. } => {
                 // `match move x` consumes (§7, S-21); a `match x` borrows.
                 match &self.ast.expr(*scrutinee).kind {
                     ExprKind::Move(inner) => self.expr(*inner, Pos::Moved),
@@ -563,6 +563,17 @@ impl<'a> Walker<'a> {
             }
             ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } | ExprKind::Try(expr) => {
                 self.expr(*expr, Pos::Other)
+            }
+            // The gate of the flow syntax stops their item before the checks
+            // (`crate::flow_syntax`, W3-09; W3-10 writes them, K-02, K-08):
+            // through a gap in it, its E0200.
+            ExprKind::At { .. } | ExprKind::Feedback(_) => {
+                let form = if matches!(self.ast.expr(e).kind, ExprKind::At { .. }) {
+                    FlowForm::Clock
+                } else {
+                    FlowForm::Feedback
+                };
+                self.report(form.diagnostic(Stage::Modes, self.ast.expr(e).span));
             }
             ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => {
                 // Reading a field: the base is read; an Affine field in a consuming

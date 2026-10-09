@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+
+// E0002 for a `~` after a line break that follows `if` / `match` (§2.6, S-354; moved from
+// syntax_tilde_no_candidate.onsa, the expectations unchanged).
+// - A line break between `if` / `match` and `~` is not the space of S-354, which is "right after the
+//   keyword, on the same line": an `if` ends its line (§2.5: a line goes on after a binary operator,
+//   a range mark, `=`, `->`, an attribute, a leading `.` or `uses`), so the `if` has no condition and
+//   the error is on the `if` line.
+// One error per declaration unit.
+
+pub flow if_then_a_line_break(c: Bool at sample) -> F32 at sample {
+  let a = if                                        //~ E0002
+    ~c { 1.0 } else { 2.0 }
+  a
+}
+
+pub flow match_then_a_line_break(k: U32 at sample) -> F32 at sample {
+  match                                             //~ E0002
+    ~k {
+    0 => 1.0,
+    _ => 2.0,
+  }
+}

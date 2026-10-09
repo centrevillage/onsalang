@@ -1,0 +1,118 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.2", "§2.6", "§11.3", "§11.5"]
+
+// The right forms that lie next to the errors of S-354 to S-358 and S-363 (the errors are in
+// fixes/e0020_if_tilde_gap.onsa, fixes/e0020_else_if_tilde.onsa, fixes/e0020_clock_in_types.onsa,
+// fixes/e0020_prefix_tilde_contrast.onsa, negative/syntax_if_tilde_no_else.onsa,
+// negative/syntax_caret_not_a_name.onsa and negative/member_keyword_names.onsa). The syntax stage
+// reads them, so the file is read only (mode = "parse"); it is written the way `onsa fmt` writes it
+// (docs/onsa-tools.md §3.2).
+
+// `if~` and `match~`: the `~` right after the keyword, one `~` on the head of a chain, and an `else`
+// that ends it. A plain `if` after `else` has no `~`.
+pub flow tilde_forms(x: F32 at sample, c: Bool at sample, d: Bool at sample, k: U32 at sample) -> F32 at sample {
+  let a = if~ c { lp~(x) } else { x }
+  let b = if~ c {
+    lp~(x)
+  } else if d {
+    hp~(x)
+  } else {
+    x
+  }
+  let e = match~ k {
+    0 => lp~(x),
+    _ => x,
+  }
+  a + b + e
+}
+
+// The prefix operators next to `if` / `match`, the bit negation of a value, and the `~` of a prefix
+// is the `!` (§2.6): none of these is a `~` on the keyword.
+pub flow prefix_operators(c: Bool at sample, k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let a = if !c { x } else { 0.5 }
+  let b = if~ !c { lp~(x) } else { x }
+  let e = match !k {
+    0 => 1.0,
+    _ => 2.0,
+  }
+  a + b + e
+}
+
+pub fn bit_negation(m: U32, c: Bool) -> U32 {
+  while !c {
+    break
+  }
+  let n = !m
+  n
+}
+
+// The clock after the whole type of an input or an output of a flow, and on the value of a `let`.
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub flow composite_inputs(a: Option[F32] at sample, b: [F32; 2] at block, c: (F32, F32) at init) -> F32 at sample {
+  let e: Option[F32] = a at sample
+  0.5
+}
+
+pub flow wrap_input(d: Wrap[F32] at sample) -> Wrap[F32] at sample {
+  let f: [F32; 2] = [0.5, 0.5] at block
+  d
+}
+
+pub flow output_types(x: F32 at sample) -> (F32, F32) at sample {
+  (x, x)
+}
+
+pub flow output_array(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x]
+}
+
+// A type that has no clock: a field, an element of a variant, a `type`, a `const`, the type of a
+// `var` (with the clock on the value, if there is one).
+pub struct Fields {
+  a: F32,
+  b: Option[F32],
+  c: [F32; 2],
+}
+
+pub enum Elements {
+  Gain(F32),
+  Pair(F32, Option[F32]),
+  Off,
+}
+
+pub type Alias = Option[F32]
+
+pub const K: [F32; 2] = [1.0, 2.0]
+
+pub fn var_with_a_clock(x: F32) -> F32 {
+  var v: F32 = x at sample
+  v
+}
+
+// A keyword after a `.` is a name (§2.2, S-357): `xs.at(0)` is read here and rejected by the type
+// stage (negative/member_keyword_names.onsa).
+pub struct Cell {
+  v: F32,
+}
+
+pub fn keywords_after_a_dot(xs: [I32; 2], s: Cell, o: Option[F32]) -> I32 {
+  let a = xs.at(0)
+  let b = s.at
+  let c = o.at(1).v
+  let d = s.if
+  let e = s.fn.v
+  let f = xs.match(0)
+  a
+}
+
+// `^name` and the binary `^`: the first is a reference, the second the exclusive or.
+pub flow caret_forms(x: U32 at sample, m: U32 at sample) -> U32 at sample {
+  let z = x ^ m
+  let y = z + prev~(^y)
+  y
+}

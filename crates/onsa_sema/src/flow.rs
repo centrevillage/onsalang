@@ -39,7 +39,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::Feature;
+use onsa_diag::unsupported::{Feature, FlowForm};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, Path, RangeEnd, RangeHead, StmtId,
@@ -208,7 +208,11 @@ pub(crate) struct FlowCx {
     output: Option<ExprId>,
 }
 
-const BUILTINS: [&str; 4] = ["prev", "delay", "vdelay", "sample_rate"];
+/// The built-in delays (§11.4), the stateful flows of [`BUILTINS`] (written
+/// `name~(…)`, the E0200 of W3-09 shows them so, `crate::flow_syntax`).
+pub(crate) const DELAYS: [&str; 3] = ["prev", "delay", "vdelay"];
+
+const BUILTINS: [&str; 4] = [DELAYS[0], DELAYS[1], DELAYS[2], "sample_rate"];
 
 impl<'a> Checker<'a> {
     fn fcx(&mut self) -> &mut FlowCx {
@@ -1138,6 +1142,11 @@ impl<'a> Rater<'a> {
             ExprKind::Paren(inner) | ExprKind::Cast { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
                 self.rate(*inner)?
             }
+            // The gate of the flow syntax stops their item before the checks
+            // (`crate::flow_syntax`, W3-09; W3-10 writes them, K-02, K-08):
+            // through a gap in it, its E0200.
+            ExprKind::At { .. } => return Err(self.fail(FlowForm::Clock.diagnostic(Stage::Flow, span))),
+            ExprKind::Feedback(_) => return Err(self.fail(FlowForm::Feedback.diagnostic(Stage::Flow, span))),
             ExprKind::Move(inner) | ExprKind::Try(inner) | ExprKind::Unsafe(inner) => self.rate(*inner)?,
             ExprKind::Tuple(elems) | ExprKind::Array(elems) => {
                 let mut r = FlowRate::Const;
@@ -1158,7 +1167,7 @@ impl<'a> Rater<'a> {
                 Some(t) => self.rate(t)?,
                 None => FlowRate::Const,
             },
-            ExprKind::If { cond, then, else_ } => {
+            ExprKind::If { cond, then, else_, .. } => {
                 let mut r = self.rate(*cond)?;
                 r = r.max(self.rate(*then)?);
                 if let Some(el) = else_ {
@@ -1166,7 +1175,7 @@ impl<'a> Rater<'a> {
                 }
                 r
             }
-            ExprKind::Match { scrutinee, arms } => {
+            ExprKind::Match { scrutinee, arms, .. } => {
                 let sr = self.rate(*scrutinee)?;
                 let mut r = sr;
                 for arm in arms {
@@ -1488,16 +1497,21 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
     match &expr.kind {
         ExprKind::Paren(x) | ExprKind::Move(x) | ExprKind::Try(x) | ExprKind::Unsafe(x) => vec![*x],
         ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } => vec![*expr],
+        // The gate of the flow syntax stops the item before the flow checks
+        // (`crate::flow_syntax`, W3-09); this walk reports nothing.
+        ExprKind::At { .. } | ExprKind::Feedback(_) => {
+            onsa_diag::internal::bug(Some(expr.span), "the flow walk met the flow syntax its gate stops first")
+        }
         ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.clone(),
         ExprKind::Repeat { elem, .. } => vec![*elem],
         ExprKind::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
         ExprKind::Block(b) => b.tail.into_iter().collect(),
-        ExprKind::If { cond, then, else_ } => {
+        ExprKind::If { cond, then, else_, .. } => {
             let mut v = vec![*cond, *then];
             v.extend(*else_);
             v
         }
-        ExprKind::Match { scrutinee, arms } => {
+        ExprKind::Match { scrutinee, arms, .. } => {
             let mut v = vec![*scrutinee];
             for arm in arms {
                 v.extend(arm.guard);

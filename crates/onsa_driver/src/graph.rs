@@ -144,6 +144,12 @@ fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
             onsa_diag::internal::bug(Some(ast.expr(e).span), "the graph met a body a syntax error left unread")
         }
         ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Hole => {}
+        // A package with the flow syntax has the E0200 of its gate (W3-09):
+        // no graph is drawn for it, and no diagnostic can be reported here.
+        ExprKind::At { .. } | ExprKind::Feedback(_) => onsa_diag::internal::bug(
+            Some(ast.expr(e).span),
+            "the graph met the flow syntax its gate stops first (`onsa_sema::flow_syntax`, W3-09)",
+        ),
         ExprKind::Paren(x)
         | ExprKind::Unary { expr: x, .. }
         | ExprKind::Cast { expr: x, .. }
@@ -169,11 +175,11 @@ fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
             }
             out.extend(b.tail);
         }
-        ExprKind::If { cond, then, else_ } => {
+        ExprKind::If { cond, then, else_, .. } => {
             out.extend([*cond, *then]);
             out.extend(*else_);
         }
-        ExprKind::Match { scrutinee, arms } => {
+        ExprKind::Match { scrutinee, arms, .. } => {
             out.push(*scrutinee);
             for arm in arms {
                 out.extend(arm.guard);

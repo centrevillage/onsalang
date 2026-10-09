@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.5", "§11.2", "§11.3", "§18.1"]
+
+// E0002 for an `at` that cannot be read (§18.1: a form that is read in no rule and has no
+// candidate is the general syntax error). `at` is followed by the name of a clock (§11.3: the
+// grammar `Cast = Prefix [ "as" Type | "at" Clock ]`, Clock a name), so a token that is not a name
+// after it, an `at` where no type or operand stands before it, and a second `at` in a head are all
+// unexpected tokens. One error per declaration unit, so each declaration has one marker and
+// the E0002 of one unit does not hide the next (§18.1). None of these has a candidate (the next
+// token cannot be told apart from a clock the writer meant).
+
+// The clock is missing, in an input and in the output.
+pub flow input_without_a_clock(x: F32 at, y: F32 at block) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow output_without_a_clock(x: F32 at sample) -> F32 at {   //~ E0002
+  x
+}
+
+// The token after `at` is not a name: a number, a string, a parenthesis, a keyword.
+pub flow clock_is_a_number(x: F32 at 1) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow clock_is_a_string(x: F32 at "sample") -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow clock_is_in_parentheses(x: F32 at (sample)) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow clock_is_a_keyword(x: F32 at true) -> F32 at sample {   //~ E0002
+  x
+}
+
+// A second `at` in a head: the clock ends the type, a `,` or `)` is what follows.
+pub flow two_clocks_in_an_input(x: F32 at sample at block) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow two_clocks_in_the_output(x: F32 at sample) -> F32 at sample at block {   //~ E0002
+  x
+}
+
+// An `at` where the head has no type or no name for it.
+pub flow clock_without_a_type(x: at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow clock_without_a_colon(x at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub flow clock_without_an_output_type(x: F32 at sample) -> at sample {   //~ E0002
+  x
+}
+
+// In an expression: the clock is missing, is not a name, or the `at` has no operand.
+pub flow expression_without_a_clock(x: F32 at block) -> F32 at sample {
+  mix(x at)   //~ E0002
+}
+
+pub flow expression_clock_is_a_number(x: F32 at block) -> F32 at sample {
+  let a = x at 1   //~ E0002
+  a
+}
+
+pub flow expression_clock_is_a_string(x: F32 at block) -> F32 at sample {
+  let a = x at "sample"   //~ E0002
+  a
+}
+
+pub flow at_without_an_operand(x: F32 at block) -> F32 at sample {
+  let a = at sample   //~ E0002
+  a
+}
+
+pub flow at_after_an_operator(x: F32 at block) -> F32 at sample {
+  let a = x + at sample   //~ E0002
+  a
+}
+
+// `at` does not continue a line (the list of §2.5 has the binary operators, the range symbols,
+// `=`, `->` and attributes), so on a line of its own it starts a statement, and no statement
+// starts with it.
+pub flow at_starts_a_line(x: F32 at block) -> F32 at sample {
+  let a = x
+  at sample   //~ E0002
+}

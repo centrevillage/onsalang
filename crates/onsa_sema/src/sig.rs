@@ -163,11 +163,22 @@ impl<'p> Sema<'p> {
     // ------------------------------------------------------------ collection
 
     fn add_def(&mut self, def: Def) -> DefId {
-        let failed = def.item.and_then(|i| self.module(def.module).and_then(|m| m.parsed.ast.item(i).failed));
+        let module = def.item.and_then(|i| self.module(def.module).map(|m| (i, m)));
+        let failed = module.and_then(|(i, m)| m.parsed.ast.item(i).failed);
+        // The flow syntax the checks do not read yet (W3-09, K-02): E0200, and
+        // the def is not checked further (as a cut heading).
+        let flow_syntax = match (failed, module) {
+            (None, Some((i, m))) => crate::flow_syntax::first_form(&m.parsed, &m.text, i),
+            _ => None,
+        };
         self.a.defs.push(def);
         let id = DefId(self.a.defs.len() as u32 - 1);
         if let Some(f) = failed {
             self.a.failed.insert(id, f);
+        }
+        if let Some((span, form)) = flow_syntax {
+            self.report(id, form.diagnostic(Stage::Names, span));
+            self.a.failed.insert(id, onsa_syntax::ast::Failed::Heading);
         }
         id
     }

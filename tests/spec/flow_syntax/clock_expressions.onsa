@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.2", "§3.1", "§3.3", "§11.3", "§18.1"]
+
+// `e at k`, an expression that gives `e` the clock `k` (§11.3). Its strength is that of `as`
+// (§3.1): looser than every postfix and prefix form, tighter than the binary operators, and a
+// binary operator or another `as` / `at` takes it only in parentheses (E0011, the negative
+// cases are in negative/syntax_clock_operands.onsa). The file is read by the syntax stage only
+// (mode = "parse"); which clock is faster or slower than another (E0815), where `at` may be
+// written (E0821) and whether a name exists belong to the later stages. It is written the way
+// `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+// The three clocks, as the value of a `let` and as the last expression.
+pub flow the_clocks(p: F32 at init, q: F32 at block) -> F32 at sample {
+  let a = p at init
+  let b = q at block
+  let c = q at sample
+  a + b + c
+}
+
+pub flow promote_tail(p: F32 at block) -> F32 at sample {
+  p at sample
+}
+
+// Looser than the postfix forms (a call, a flow call, a method call, a field, an index, a tuple
+// index, type arguments) and than the prefix operators: each of these is `(operand) at k`.
+pub flow postfix_operands(p: F32 at block, ps: [F32; 4] at block, i: U32 at init) -> F32 at sample {
+  let a = design(p) at block
+  let b = lp~(p) at sample
+  let c = p.abs() at sample
+  let d = ps[i] at sample
+  let e = ps[i].abs() at sample
+  let f = pair(p).0 at sample
+  let g = pair(p).a at sample
+  let h = id::[F32](p) at block
+  h
+}
+
+pub flow prefix_operands(p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = -p at sample
+  let b = !c at sample
+  a
+}
+
+// Tighter than a binary operator: the operand that takes an `at` is written in parentheses, on
+// either side, and a cast and a clock take each other the same way.
+pub flow parenthesized_operands(p: F32 at block, x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let a = (p at sample) * x
+  let b = x + (p at sample)
+  let c = (n as F32) at sample
+  let d = (p at sample) as F64
+  let e = ((p at block) at sample) * x
+  a + b + c
+}
+
+// The places an expression may stand: an argument, a tuple element, an array element, a field of
+// a struct literal, an index, an arm, a branch, a `par` body.
+pub flow in_places(p: F32 at block, q: F32 at block, k: U32 at block, c: Bool at sample) -> F32 at sample {
+  let a = mix(p at sample, q at sample)
+  let b = (p at sample, q at block)
+  let d = [p at sample, q at sample]
+  let e = Pair { a: p at sample, b: q at sample }
+  let f = ps[k at sample]
+  let g = match k at sample {
+    0 => p at sample,
+    _ => q at sample,
+  }
+  let h = if c {
+    p at sample
+  } else {
+    q at sample
+  }
+  let i = par j in 0..<4 {
+    saw~(p at block)
+  }
+  a
+}
+
+// The clock ends the expression: a block `{` after it (the heading of `if`, `match`) is not a
+// struct literal of the clock's name, because the clock is a name of its own kind and not an
+// expression (§11.3).
+pub flow before_a_brace(p: F32 at block, c: Bool at block) -> F32 at sample {
+  if c at sample {
+    p at sample
+  } else {
+    0.5
+  }
+}
+
+pub flow before_a_brace_in_match(k: U32 at block) -> F32 at sample {
+  match k at sample {
+    0 => 1.0,
+    _ => 2.0,
+  }
+}
+
+// A clock inside a clock: the inner one stands in parentheses of its call.
+pub flow nested_in_calls(p: F32 at init) -> F32 at sample {
+  f(g(p at block) at sample)
+}
+
+// A clock on the last line, and on the right of `=`, with a comment after it.
+pub flow with_comments(p: F32 at block) -> F32 at sample {
+  // promoted
+  let a = p at sample // the value does not change
+  a
+}
