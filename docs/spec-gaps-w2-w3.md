@@ -2584,7 +2584,7 @@ Fable の補足（決定の反映で直す）:
   - データのファイル: `docs/foreign-forms.toml` の `at_binding` の行に例を 1 件（`n @ (1..<5 | 7)` の候補 2）。`range_pattern_choice` の行の note の文。
   - 作業: W3-21。`crates/onsa_syntax/src/foreign.rs` の `@` の候補を作る所で、右の選択の枝を見て二つ目の候補を足す（1 か所、約 30〜50 行。`guard_fix` が候補の並びを返す形は `..` の二つの候補で既に要る）。`crates/onsa_cli/tests/pattern_guard_candidates.rs` に事例 3 件（二つの候補、`1..<5 | 7..<9` は一つ、`..` との組で候補なし）。
   - 作業ツリーのテストの期待値: W3-21/t の `@` の右の選択の事例（`k @ (1 | 1..<3)`、`k @ (1..<3 | 5..<7)`）のうち、前者は (b) で候補が二つになり（二つ目は `k if (1 | 1) <= k && k < 3`）、`.fix1` は変わらず `.fix2` が増える。後者は変わらない。`@` の外の `1..<3 | 7` の E0002 はどの案でも変わらない。
-- 回答:
+- 回答: (a)（2026-10-09、利用者。修正する割に利益が薄い）
 
 ### S-352 `@` の右の定数
 
@@ -2612,7 +2612,7 @@ Fable の補足（決定の反映で直す）:
   - データのファイル: `docs/foreign-forms.toml` の `at_binding` の行に例を 2 件（`k @ LIMIT`、`k @ -LIMIT`。候補 1）。E0002 の行に列挙子の例（`k @ Color.Red`）を 1 件。
   - 作業: W3-21。`crates/onsa_syntax/src/foreign.rs` の穴の読み手で、`@` の右の名前と経路の最後の名前が小文字を含まなければ等値の穴にする（1 か所、約 10〜20 行。`-LIMIT` の穴と同じ `Test::Equal`）。
   - 作業ツリーのテストの期待値（(a) で変わる）: W3-21/t の `pattern_guard_candidates.rs` の `an_at_binding_that_is_not_a_literal_or_a_range_is_e0002_with_a_note_and_no_candidate` の `a_constant`（`k @ LIMIT`）を候補のある事例へ移し、`tests/spec/fixes/e0020_patterns_at_forms.onsa` の `a_constant` の `//~ E0002` を `//~ E0020` にして `.fix1` に `k if k == LIMIT` を書く。事例の冒頭のコメントの「a literal, a range or a choice of them」も改める。
-- 回答:
+- 回答: 推奨の (a)（2026-10-09、利用者）
 
 ### 第 13 組の付録: 調べる途中で見つけたもの
 
