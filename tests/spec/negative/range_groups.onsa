@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§7", "§18.1"]
+
+// The ends of a range are expressions of binary operators (spec §3.1), so the groups of §3.1
+// apply inside an end as anywhere: operators of two groups with no strength between them are
+// E0010, and the range does not decide. The range binds more weakly than all of them, so `a..<b`
+// with `b` or `a` a clash is a clash of the end or of the start. One diagnostic per function.
+
+pub fn remainder_after_a_sum(w: U32, n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<w + 1 % n {                          //~ E0010
+    c = c + 1
+  }
+  c
+}
+
+pub fn bit_operators_in_the_start(a: U32, b: U32, k: U32, n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in a & b | k..<n {                          //~ E0010
+    c = c + 1
+  }
+  c
+}
+
+pub fn a_comparison_chain_in_the_end(a: U32, b: U32, k: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<a < b < k {                          //~ E0010
+    c = c + 1
+  }
+  c
+}
+
+// Operators of one group, or of a start and an end that do not meet, need no parentheses.
+
+pub fn fine(w: U32, n: U32, lo: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<w * 2 {
+    c = c + 1
+  }
+  for _ in lo + 1..<n % 4 {
+    c = c + 1
+  }
+  c
+}

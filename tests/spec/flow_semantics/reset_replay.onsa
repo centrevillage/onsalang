@@ -29,7 +29,7 @@ pub flow rs(x: F32 at sample, g: F32 at block, start: F32 at init) -> F32 at sam
 // vdelay~ (fractional), par with delays, and a sub-instance.
 pub flow rs2(x: F32 at sample) -> F32 at sample {
   let v = vdelay~(x, 1.5, 4, 5.0)
-  let p = par i in 0..2 { prev~(x * (i + 1).round_f32(), 1.0) }
+  let p = par i in 0..<2 { prev~(x * (i + 1).round_f32(), 1.0) }
   let s = acc~(x)
   v + p[0] + p[1] + s
 }

@@ -160,7 +160,7 @@ test "a waiting bound in a branch and a loop" {
       n = n + 1
     }
   }
-  for i in 0..2 {
+  for i in 0..<2 {
     if !need_f(o) {
       n = n + 10
     }

@@ -194,7 +194,7 @@ test "a closure inside a function captures that function's parameter" {
 
 test "a closure built in a loop captures the loop variable" {
   var total: U32 = 0
-  for n in 1..4 {
+  for n in 1..<4 {
     let xs: [U32; 3] = array.from_fn(fn(i) { n + i })
     total = total + xs[2]
   }

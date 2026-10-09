@@ -535,7 +535,7 @@ fn sub_instances_are_wired_per_phase() {
 
 #[test]
 fn par_replicates_state_and_loops() {
-    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: Ctl[F32]) -> Sig[F32] {\n  let phase = prev(phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: Ctl[F32]) -> Sig[F32] {\n  let saws = par i in 0..N {\n    saw~(f0 * (1.0 + (i.round_f32() * 0.01)))\n  }\n  sum(saws)\n}\n";
+    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: Ctl[F32]) -> Sig[F32] {\n  let phase = prev(phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: Ctl[F32]) -> Sig[F32] {\n  let saws = par i in 0..<N {\n    saw~(f0 * (1.0 + (i.round_f32() * 0.01)))\n  }\n  sum(saws)\n}\n";
     let d = text(src);
     assert!(
         d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool, initialized: Bool }"),

@@ -210,7 +210,7 @@ pub fn narrow_u64_to_i64(xh: U32, xl: U32) -> I64 {
 pub fn count_fits_u32_i32(base: U32, n: U32) -> U32 {
   var x: U32 = base
   var c: U32 = 0
-  for _ in 0..n {
+  for _ in 0..<n {
     match x.narrow_i32() {
       Some(_) => {
         c = c + 1

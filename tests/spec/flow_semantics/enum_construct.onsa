@@ -61,7 +61,7 @@ pub flow mixed(x: F32 at sample) -> F32 at sample {
 
 // Variants built in each copy of a `par`, then read by an `rt fn`.
 pub flow par_modes(x: F32 at sample) -> F32 at sample {
-  let ms = par i in 0..3 {
+  let ms = par i in 0..<3 {
     if i == 1 { Mode.Off } else { Mode.Gain((i + 1).round_f32()) }
   }
   amount(ms[0], x) + amount(ms[1], x) + amount(ms[2], x)

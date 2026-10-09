@@ -31,7 +31,7 @@ pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
 
 fn sum_span(s: Span[F32]) -> F32 {
   var total: F32 = 0.0
-  for i in 0..s.len() {
+  for i in 0..<s.len() {
     total = total + s[i]
   }
   total
@@ -58,7 +58,7 @@ fn sum_both(inp: pair.In) -> F32 {
 }
 
 fn copy_swapped(inp: pair.In, inout out: pair.Out) {
-  for i in 0..inp.l.len() {
+  for i in 0..<inp.l.len() {
     out.l[i] = inp.r[i]
     out.r[i] = inp.l[i]
   }

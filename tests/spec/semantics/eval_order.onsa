@@ -348,7 +348,7 @@ test "the taken branch of an if is evaluated" {   //~ TESTFAIL "the taken branch
 
 test "the loop body sees the writes of earlier iterations in order" {
   var log: U32 = 0
-  for i in 1..4 {
+  for i in 1..<4 {
     let seen = tick(inout log, i)
     assert seen == i
   }

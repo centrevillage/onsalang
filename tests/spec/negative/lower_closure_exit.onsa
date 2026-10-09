@@ -113,7 +113,7 @@ pub fn r_value() -> [U32; 3] {
 
 pub fn r_in_loop() -> [U32; 3] {
   array.from_fn(fn(i: U32) -> U32 {
-    for j in 0..4 {
+    for j in 0..<4 {
       if j == i {
         return j   //~ E0200
       }

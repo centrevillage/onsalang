@@ -10,7 +10,7 @@ use planar.{CHANNELS, at, fill_channel, len_of, number_channels, set}
 
 fn sum_lens(xs: [Span[F32]; 2]) -> U32 {
   var total: U32 = 0
-  for k in 0..CHANNELS {
+  for k in 0..<CHANNELS {
     total = total + len_of(xs, k)
   }
   total

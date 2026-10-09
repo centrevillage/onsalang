@@ -10,7 +10,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
-    PatId, PatKind, Path, StmtId, StmtKind, StrSeg, UnOp,
+    PatId, PatKind, Path, RangeEnd, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
 };
 
 use crate::builtin;
@@ -315,13 +315,59 @@ impl<'a> Checker<'a> {
     /// at the list `span`: the names stage gives the list to its item from
     /// W4-13; until then the list is neither dropped nor read (R-81).
     pub(crate) fn type_args_unsupported(&mut self, span: Span) -> Stop {
-        let d = Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]);
-        self.diag(d.with_found(self.src(span)))
+        self.unsupported_in(Stage::Names, span, Feature::TypeArgsInExpressions, &[])
     }
 
     /// E0200 for `feature` (S-224), with the details its phrase takes.
     pub(crate) fn unsupported(&mut self, span: Span, feature: Feature, details: &[&str]) -> Stop {
-        self.diag(feature.diagnostic(Stage::Types, span, details).with_found(self.src(span)))
+        self.unsupported_in(Stage::Types, span, feature, details)
+    }
+
+    /// E0200 for `feature` found by `stage`.
+    pub(crate) fn unsupported_in(&mut self, stage: Stage, span: Span, feature: Feature, details: &[&str]) -> Stop {
+        self.diag(feature.diagnostic(stage, span, details).with_found(self.src(span)))
+    }
+
+    /// E0200 for a range with its end (`a..=b`, S-224) in the head of a
+    /// `for` (W8-03, the types stage) or a `par` (W7-04, the flow stage),
+    /// once its ends are checked; it is never read as `a..<b` (R-81).
+    pub(crate) fn closed_range_unsupported(&mut self, r: &RangeHead, stage: Stage, feature: Feature) -> Stop {
+        let (lo, hi) = (self.expr(r.lo).span, self.expr(r.hi).span);
+        self.unsupported_in(stage, Span::new(lo.file, lo.start, hi.end), feature, &[])
+    }
+
+    /// E0401 for an end of a range whose form is no integer, whatever its
+    /// type is inferred to be (§7, S-257; [`Checker::non_integer_form`]).
+    /// The `for` and the `par` heads both check it first.
+    pub(crate) fn range_end_forms(&mut self, r: &RangeHead) -> R<()> {
+        for e in [r.lo, r.hi] {
+            if let Some(form) = self.non_integer_form(e) {
+                let span = self.expr(e).span;
+                let msg = format!("the ends of a range are integers; found {form} (§7)");
+                return Err(self.err(Code::E0401, span, msg));
+            }
+        }
+        Ok(())
+    }
+
+    /// The form of a value that is no integer in the operands of `e`
+    /// (through parentheses, prefix and binary operators; a cast makes an
+    /// integer): a float, string, character or `Bool` literal, a tuple, an
+    /// array. The one check of the integer positions that are read before
+    /// their type is inferred (the ends of a range, the constants of a
+    /// flow), so that a message names the form, not a type variable (`?0`).
+    pub(crate) fn non_integer_form(&self, e: ExprId) -> Option<&'static str> {
+        match &self.expr(e).kind {
+            ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => self.non_integer_form(*x),
+            ExprKind::Binary { operands, .. } => operands.iter().find_map(|&o| self.non_integer_form(o)),
+            ExprKind::Lit(Lit::Float { .. }) => Some("a float literal"),
+            ExprKind::Lit(Lit::Str(_)) => Some("a string literal"),
+            ExprKind::Lit(Lit::Char(_)) => Some("a character literal"),
+            ExprKind::Lit(Lit::Bool(_)) => Some("a `Bool` literal"),
+            ExprKind::Tuple(_) => Some("a tuple"),
+            ExprKind::Array(_) | ExprKind::Repeat { .. } => Some("an array"),
+            _ => None,
+        }
     }
 
     /// A diagnostic of the flow checks (`flow.rs`, stage `Flow`).
@@ -1542,8 +1588,11 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            ExprKind::Range { .. } => {
-                Err(self.err(Code::E0002, span, "ranges are only written in `for` and `par` heads (§7)"))
+            // The parser makes a range only as a head; the words of the row
+            // that finds one elsewhere (`range_outside_header`).
+            ExprKind::Range(_) => {
+                let row = onsa_syntax::foreign::row(onsa_syntax::foreign::RowId::RangeOutsideHeader);
+                Err(self.diag(Diagnostic::new(Stage::Syntax, Code::E0002, span, row.message).with_rule(row.rule)))
             }
         }
     }
@@ -1605,7 +1654,7 @@ impl<'a> Checker<'a> {
                     crate::constarg::ConstU32::Param(i) => Ok(Len::Param(i)),
                 }
             }
-            Err(crate::constarg::ConstErr::Report(d)) => Err(self.diag(d)),
+            Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => Err(self.diag(d)),
             // A constant whose value was not read (S-59): the check of this
             // body stops there without a diagnostic.
             Err(crate::constarg::ConstErr::Unknown) => {
@@ -2530,10 +2579,11 @@ impl<'a> Checker<'a> {
     /// Element type of a `for` iteration and whether the binding is a borrow.
     fn check_iter(&mut self, iter: ExprId, moved: bool) -> R<(TyId, bool)> {
         let span = self.expr(iter).span;
-        if let ExprKind::Range { lo, hi } = &self.expr(iter).kind {
-            let (lo, hi) = (*lo, *hi);
-            let lt = self.check_expr(lo, None)?;
-            self.check_expr(hi, Some(lt))?;
+        if let ExprKind::Range(r) = &self.expr(iter).kind {
+            let r = *r;
+            self.range_end_forms(&r)?;
+            let lt = self.check_expr(r.lo, None)?;
+            self.check_expr(r.hi, Some(lt))?;
             let s = self.shallow(lt);
             match self.ty(s) {
                 Ty::Int(_) | Ty::Error => {}
@@ -2541,12 +2591,17 @@ impl<'a> Checker<'a> {
                 Ty::Var(_) => return Err(self.known(lt, span, "range bound").unwrap_err()),
                 _ => {
                     let shown = self.display(lt);
-                    return Err(self.err(Code::E0401, span, format!("a range needs integer bounds; found `{shown}`")));
+                    let msg = format!("the ends of a range are integers; found `{shown}` (§7)");
+                    return Err(self.err(Code::E0401, span, msg));
                 }
             }
             self.record(iter, lt);
             if moved {
                 return Err(self.err(Code::E0401, span, "`move` applies to collections, not ranges (§7)"));
+            }
+            if r.end == RangeEnd::Included {
+                // Until the loop that ends at the type's maximum (W8-03).
+                return Err(self.closed_range_unsupported(&r, Stage::Types, Feature::InclusiveRangeFor));
             }
             return Ok((lt, false));
         }

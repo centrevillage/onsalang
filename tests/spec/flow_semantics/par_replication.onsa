@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.5", "§11.4", "§11.6", "§17.4"]
 
-// `par i in a..b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
+// `par i in a..<b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
 // a, a+1, ..., b-1 of the init clock; the result has type [T; N]; every flow call and every delay
 // in `e` is a separate instance in each replica. `par` is a replication of structure, not a loop:
 // a delay's `^name` inside the body still means the later `let` of the same sample.
@@ -17,21 +17,21 @@ pub flow acc(x: F32 at sample) -> F32 at sample {
 
 // Two replicas, each with its own accumulator instance: sum(x), and sum(x + 1).
 pub flow two_accs(x: F32 at sample) -> [F32; 2] at sample {
-  par i in 0..2 { acc~(x + i.round_f32()) }
+  par i in 0..<2 { acc~(x + i.round_f32()) }
 }
 
 // Stateless replicas make no state; the index starts at the lower bound.
 pub flow scaled_by_index(x: F32 at sample) -> [F32; 3] at sample {
-  par i in 2..5 { x * i.round_f32() }
+  par i in 2..<5 { x * i.round_f32() }
 }
 
 pub flow one_replica(x: F32 at sample) -> [F32; 1] at sample {
-  par i in 5..6 { prev~(x) + i.round_f32() }
+  par i in 5..<6 { prev~(x) + i.round_f32() }
 }
 
 // A different delay length in each replica: the length comes from the init-clock index.
 pub flow own_delay_each(x: F32 at sample) -> [F32; 2] at sample {
-  par i in 0..2 { vdelay~(x, ((i + 1) * 2).round_f32(), 8) }
+  par i in 0..<2 { vdelay~(x, ((i + 1) * 2).round_f32(), 8) }
 }
 
 // A detuned pair of saws: a sub-instance with its own phase in each replica (§17.4).
@@ -44,13 +44,13 @@ pub rt fn wrap01(x: F32) -> F32 {
   x - floor(x)
 }
 
-/// 0..n spread over [-0.5, 0.5].
+/// 0..<n spread over [-0.5, 0.5].
 pub rt fn spread(i: U32, n: U32) -> F32 {
   i.round_f32() / (n - 1).round_f32() - 0.5
 }
 
 pub flow detuned_pair(f0: F32 at block, detune: F32 at block) -> [F32; 2] at sample {
-  par i in 0..2 { saw~(f0 * (1.0 + detune * spread(i, 2))) }
+  par i in 0..<2 { saw~(f0 * (1.0 + detune * spread(i, 2))) }
 }
 
 test "each replica has its own instance" {

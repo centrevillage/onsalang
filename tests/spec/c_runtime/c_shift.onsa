@@ -287,7 +287,7 @@ pub fn shr_i64(a: I64, n: U32) -> I64 {
 
 pub fn shr_loop_i16(a: I16, k: U32) -> I16 {
   var x: I16 = a
-  for _ in 0..k {
+  for _ in 0..<k {
     x = x >> 1
   }
   x
@@ -295,7 +295,7 @@ pub fn shr_loop_i16(a: I16, k: U32) -> I16 {
 
 pub fn shl_loop_i32(k: U32) -> I32 {
   var x: I32 = 1
-  for _ in 0..k {
+  for _ in 0..<k {
     x = x << 1
   }
   x

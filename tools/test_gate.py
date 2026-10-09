@@ -2045,6 +2045,8 @@ class FmtProps(TempRepo):
              ("code", "x"), ("code", "->"), ("code", "y"), ("code", "..="), ("code", "z"), ("code", "'\"'"),
              ("code", "+%")],
         )
+        # The range symbols are one token each (S-257).
+        self.assertEqual([t.text for t in fmt_props.tokenize("0..<n 0..=n")], ["0", "..<", "n", "0", "..=", "n"])
 
     def test_perturbations_keep_the_places_where_whitespace_means_something(self):
         # C-118: no space before a postfix `(` / `[`, around `~` `!` `^` and the prefix `-`; no newline

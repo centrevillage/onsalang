@@ -8,7 +8,7 @@ match v {
   Some(x) => x,
   None => 0,
 }
-for i in 0..n { ... }       // `..` は半開区間
+for i in 0..<n { ... }      // n を含まない。0..=n は n を含む
 for s in xs { ... }         // 借用の反復（§5.4）。xs は変わらない
 for s in move xs { ... }    // 消費する反復。s は所有する値
 while cond { ... }

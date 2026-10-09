@@ -139,7 +139,7 @@ test "a product that fits is exact for the checked operator" {
 
 test "a loop that doubles a U64 with wrapping reaches 2^63 and then 0" {
   var x: U64 = 1
-  for _ in 0..63 {
+  for _ in 0..<63 {
     x = x *% 2
   }
   assert x == 9223372036854775808
@@ -151,7 +151,7 @@ test "a loop that triples a U64 with wrapping gives 3^40 mod 2^64" {
   // 3^40 = 12157665459056928801 < 2^64, so no wrap yet; 3^41 wraps to
   // 3 * 12157665459056928801 - 2^64 = 36472996377170786403 - 18446744073709551616.
   var x: U64 = 1
-  for _ in 0..40 {
+  for _ in 0..<40 {
     x = x *% 3
   }
   assert x == 12157665459056928801
@@ -172,7 +172,7 @@ test "a while loop with a saturating product stops growing at U64.MAX" {
 test "a checked product in a loop is exact while it fits" {
   // 10^19 < 2^64 = 18446744073709551616, so nineteen factors of 10 are exact.
   var x: U64 = 1
-  for _ in 0..19 {
+  for _ in 0..<19 {
     x = x * 10
   }
   assert x == 10000000000000000000
@@ -269,7 +269,7 @@ test "a checked U64 product in the middle of an expression panics" {   //~ TESTF
 test "a checked U64 product in a loop panics when it stops fitting" {   //~ TESTFAIL "a checked U64 product in a loop panics when it stops fitting"
   // 10^20 > 2^64 - 1 = 18446744073709551615, so the 20th factor panics.
   var x: U64 = 1
-  for _ in 0..20 {
+  for _ in 0..<20 {
     x = x * 10
   }
 }

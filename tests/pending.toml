@@ -168,9 +168,9 @@ note = "at のクロック、prev~(^y)、init の省略、積和の括弧。写�
 [[pending]]
 kind = "spec-example"
 target = "§11.5 05f67d5d: use std.math.{sum}"
-reasons = ["R-23", "S-102", "S-45", "S-257"]
+reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
-note = "std.math.sum、at のクロック、積和の括弧、範囲の ..<。写し flow/unison.onsa は std.dsp.sum と Ctl[F32]、0..UNISON（範囲の書き換えは W3-07）"
+note = "std.math.sum、at のクロック、積和の括弧。写し flow/unison.onsa は std.dsp.sum と Ctl[F32]（範囲は W3-18 で 0..<UNISON に書き換えた）"
 
 [[pending]]
 kind = "spec-example"
@@ -628,13 +628,6 @@ target = "tests/spec/negative/flow_fn_clock.onsa"
 reasons = ["S-147"]
 until = "W7-02"
 note = "非 rt の fn に sample の値を渡すのは E0815（§11.5）。元の期待値は E0805 で、今の実装も E0805 を出す"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_delay_const.onsa"
-reasons = ["S-132"]
-until = "W7-02"
-note = "遅延の長さの定数式でないものは E0417（§11.4）。元の期待値は E0808 で、今の実装も E0808 を出す"
 
 # --- W1-10 の否定例のうち、まだ通らないもの（2026-10-07）
 
@@ -2105,22 +2098,6 @@ reasons = ["S-214", "S-59"]
 until = "W4-06"
 note = "本体の名前の誤り E0302 が、前の行の型の誤り E0401 を隠す（names_before_types）。単位の中の選び方は段の順になった（W3-03）が、本体の検査は名前と型を一度に行い、最初の誤り（E0401）で止まるので E0302 が出ない。名前の段を型の前に置くのは W4-06"
 
-# --- S-257: 範囲の書き方 a..<b / a..=b（決定の反映、2026-10-08）
-
-[[pending]]
-kind = "spec-example"
-target = "§7 cef932f2: if c { a } else { b }"
-reasons = ["S-257"]
-until = "W3-07"
-note = "範囲の書き方 a..<b。今の構文解析器は ..< を読めないので、写しは 0..n のまま（W3-07 が範囲の構文と一緒に写しを書き換える）"
-
-[[pending]]
-kind = "spec-example"
-target = "§17.6 9327acb2: use std.array"
-reasons = ["S-257"]
-until = "W3-07"
-note = "範囲の書き方 0..<MAX_VOICES。今の構文解析器は ..< を読めないので、写しは 0..MAX_VOICES のまま（W3-07 が範囲の構文と一緒に写しを書き換える）"
-
 [[pending]]
 kind = "test-case"
 target = "tests/spec/c_runtime/c_fp_flow.onsa"
@@ -2618,15 +2595,8 @@ note = "構造体のパターンの .."
 kind = "foreign-form"
 target = "range_pattern"
 reasons = ["S-249", "S-257"]
-until = "W3-18"
-note = "範囲の書き方"
-
-[[pending]]
-kind = "foreign-form"
-target = "range_dots"
-reasons = ["S-249", "S-257"]
-until = "W3-18"
-note = "範囲の書き方"
+until = "W3-07"
+note = "範囲のパターンの候補（ガードの形、S-249）"
 
 [[pending]]
 kind = "foreign-form"
@@ -2882,3 +2852,63 @@ target = "tests/spec/fixes/e0020_type_args_angle.onsa:58:13 E0020 fix2"
 reasons = ["S-256", "S-45"]
 until = "W3-07"
 note = "比較の連鎖の候補 f < T && T > (x) を当てた後、比較と && の混在が E0010（W3-07 が §3.1 の強弱に直す）"
+
+# --- W3-18: 範囲の書き方 `..<` / `..=`。W3-18 で通らない事例（W3-18/t の事例。W3-18/i の報告）。
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/range_half_open_bounds.onsa"
+reasons = ["S-257", "S-84"]
+until = "W5-05"
+note = "型の最大値の端の範囲を総称の関数（T: Int）で書く。数の trait の境界が E0200（user-defined traits as bounds）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0020_range_dots_par.onsa"
+reasons = ["S-257", "S-102"]
+until = "W3-10"
+note = "par の見出しの .. と ... の E0020。flow の新しい構文（at sample）を今の構文解析器が読めない（E0002）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/range_inclusive_par_e0200.onsa"
+reasons = ["S-257", "S-224", "S-102"]
+until = "W3-10"
+note = "par の見出しの ..= の E0200（W7-04 まで）。flow の新しい構文（at sample）を今の構文解析器が読めない（E0002）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/range_move.onsa"
+reasons = ["S-257", "S-103"]
+until = "W4-09"
+note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。E0703 は modes の段（diag-code の E0703 の項目と同じ時期）"
+
+# --- W3-18 の gate のファズが見つけた入力（種を足してコーパスが変わり、既存の不具合が表に出た）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/3c3f8d83.onsa"
+reasons = ["R-01"]
+until = "W3-04"
+note = "check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（閉じない補間の `{` の直後の多バイト文字）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/b330941f.onsa"
+reasons = ["R-193", "S-236"]
+until = "W3-08"
+note = "fix-same-place: fix|E0020|write the brackets `[ ]`|E0002。`fn b<T q>` の `<…>` の候補を当てると `[T q]` が E0002"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/fd47d95d.onsa"
+reasons = ["R-01"]
+until = "W3-04"
+note = "check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（3c3f8d83 と同じ類）"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/82d90c5e.onsa"
+reasons = ["R-196", "S-236"]
+until = "W3-07"
+note = "fix-same-place: fix|E0020|write the type arguments as `::[…]`|E0020。型の位置の中の `t[[], l]` に式の型引数の候補（`::` の挿入）が出る"

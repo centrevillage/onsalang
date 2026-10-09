@@ -139,7 +139,7 @@ fn on_char(inout x: I32, c: Char) {
 }
 
 fn in_loop(inout x: I32, n: I32) -> I32 {
-  for i in 0..n {
+  for i in 0..<n {
     match i {
       1 => {
         continue

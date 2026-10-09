@@ -1,0 +1,247 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020: `a..b` and `a...b` in the header of a `for` (spec §7, §18.1, S-257). Whether the end is
+// included differs between languages (Rust and C# do not, Ruby and Kotlin do), so the writer's
+// meaning is not known and the candidates are both readings, `a..<b` first and `a..=b` second.
+// The main span is the range symbol; the edit changes that token and nothing else, so the ends,
+// whatever binary operators they have, are untouched (a range binds more weakly than every binary
+// operator, §3.1). One diagnostic per function. The `par` header has its own file.
+
+use std.array
+
+pub fn two_dots(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {                                   //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn three_dots(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {                                  //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn end_is_a_sum(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n + 1 {                               //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn ends_are_sums(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..<hi - 1 {                         //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn three_dots_with_sums(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..<hi * 2 {                        //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn names(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..<hi {                                 //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn names_three_dots(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..<hi {                                //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn signed_literals() -> I32 {
+  var t: I32 = 0
+  for i in -2..<2 {                                  //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn hex_literals() -> U32 {
+  var t: U32 = 0
+  for i in 0x10..<0x14 {                             //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn end_is_a_call(xs: [F32; 3]) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<xs.len() {                            //~ E0020
+    c = c + 1
+  }
+  c
+}
+
+pub fn ends_are_fields(w: (U32, U32)) -> U32 {
+  var t: U32 = 0
+  for i in w.0..<w.1 {                               //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn conversion_in_the_end(n: I32) -> I64 {
+  var t: I64 = 0
+  for i in 0..<n as I64 {                            //~ E0020
+    t = t + i
+  }
+  t
+}
+
+const LIMIT: U32 = 3
+
+pub fn constant_end() -> U32 {
+  var c: U32 = 0
+  for _ in 0..<LIMIT {                               //~ E0020
+    c = c + 1
+  }
+  c
+}
+
+// A range loop in a loop, in a branch, in an arm, in a method, in a generic function and in an
+// anonymous function. The error is the header of the one loop with a wrong symbol.
+
+pub fn inner_loop(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    for _ in 0..<i + 1 {                             //~ E0020
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn outer_loop(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {                                   //~ E0020
+    for _ in 0..<i + 1 {
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn in_a_branch(go: Bool, n: U32) -> U32 {
+  var c: U32 = 0
+  if go {
+    for _ in 0..<n {                                 //~ E0020
+      c = c + 1
+    }
+  } else {
+    for _ in 0..<n {
+      c = c + 2
+    }
+  }
+  c
+}
+
+pub fn in_an_else_branch(go: Bool, n: U32) -> U32 {
+  var c: U32 = 0
+  if go {
+    c = 1
+  } else {
+    for _ in 0..<n {                                //~ E0020
+      c = c + 2
+    }
+  }
+  c
+}
+
+pub fn in_a_match_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => {
+      var t: U32 = 0
+      for i in 0..<n {                               //~ E0020
+        t = t + i
+      }
+      t
+    },
+    None => 0,
+  }
+}
+
+pub fn in_a_while(n: U32) -> U32 {
+  var k: U32 = 0
+  var c: U32 = 0
+  while k < n {
+    for _ in 0..<k {                                 //~ E0020
+      c = c + 1
+    }
+    k = k + 1
+  }
+  c
+}
+
+pub struct Window {
+  lo: U32,
+  hi: U32,
+}
+
+impl Window {
+  pub fn total(self) -> U32 {
+    var t: U32 = 0
+    for i in self.lo..<self.hi {                     //~ E0020
+      t = t + i
+    }
+    t
+  }
+}
+
+pub fn in_a_generic_function[T](x: T, n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n {                                   //~ E0020
+    c = c + 1
+  }
+  c
+}
+
+pub fn in_a_const_generic_function[const N: U32](xs: [F32; N]) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<N + 1 {                               //~ E0020
+    c = c + 1
+  }
+  c
+}
+
+pub fn in_an_anonymous_function() -> [U32; 4] {
+  array.from_fn(fn(i: U32) -> U32 {
+    var t: U32 = 0
+    for j in 0..<i + 1 {                             //~ E0020
+      t = t + j
+    }
+    t
+  })
+}
+
+// The correct headers are not diagnosed.
+
+pub fn fine(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  for j in 0..<n + 1 {
+    t = t + j
+  }
+  t
+}

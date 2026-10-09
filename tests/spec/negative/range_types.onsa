@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§3.1", "§2.4", "§18.1"]
+
+// The ends of a range are integers (spec §7, S-257): any other type is E0401. A range binds more
+// weakly than every binary operator (§3.1), so an end that is a comparison is a `Bool` and the
+// comparison is not the range's: `0..<n < m` is `0..<(n < m)`. One diagnostic per function.
+// Two ends of different integer types, and a `for` whose start is above its end, are not covered
+// here: the spec does not say what they are.
+
+pub fn float_variables(a: F32, b: F32) -> U32 {
+  var c: U32 = 0
+  for _ in a..<b {                                  //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn float_literals() -> U32 {
+  var c: U32 = 0
+  for _ in 0.0..<1.0 {                              //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn float_end(x: F32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<x {                                  //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn float_start(x: F64) -> U32 {
+  var c: U32 = 0
+  for _ in x..<10 {                                 //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn float_end_that_is_a_sum(x: F32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<x + 1.0 {                            //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn bool_ends() -> U32 {
+  var c: U32 = 0
+  for _ in false..<true {                           //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn char_ends() -> U32 {
+  var c: U32 = 0
+  for _ in 'a'..<'e' {                              //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn string_ends() -> U32 {
+  var c: U32 = 0
+  for _ in "a"..<"e" {                              //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn the_end_is_a_comparison(n: U32, m: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n < m {                              //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn the_end_is_a_conjunction(a: Bool, b: Bool) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<a && b {                             //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn the_end_is_a_tuple(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<(n, n) {                             //~ E0401
+    c = c + 1
+  }
+  c
+}
+
+pub fn nested_header(n: U32, x: F32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n {
+    for _ in 0..<x {                                //~ E0401
+      c = c + 1
+    }
+  }
+  c
+}
+
+// Integers of any width are fine, and so are the other forms of an end.
+
+pub fn fine(n: U8, m: I64, k: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n {
+    c = c + 1
+  }
+  for _ in -m..<m {
+    c = c + 1
+  }
+  for _ in k..<k + 1 {
+    c = c + 1
+  }
+  c
+}

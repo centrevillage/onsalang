@@ -1040,7 +1040,7 @@ impl<'p> Sema<'p> {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
-                    Err(crate::constarg::ConstErr::Report(mut d)) => {
+                    Err(crate::constarg::ConstErr::Report(mut d) | crate::constarg::ConstErr::Uncomputed(mut d)) => {
                         // The whole argument (`-1`), as written in the type.
                         d.span = te.span;
                         d.found = Some(src(cx, te.span));
@@ -1062,7 +1062,7 @@ impl<'p> Sema<'p> {
                         Ok(Some(v)) => return self.a.types.intern(Ty::ConstVal(v)),
                         Ok(None) => {}
                         Err(crate::constarg::ConstErr::Unknown) => return self.a.types.error(),
-                        Err(crate::constarg::ConstErr::Report(d)) => {
+                        Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => {
                             self.report(cx.def, d);
                             return self.a.types.error();
                         }
@@ -1208,7 +1208,7 @@ impl<'p> Sema<'p> {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,
-            Err(crate::constarg::ConstErr::Report(d)) => {
+            Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => {
                 self.report(cx.def, d);
                 None
             }

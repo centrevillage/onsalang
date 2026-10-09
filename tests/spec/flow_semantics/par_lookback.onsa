@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.5", "§11.2", "§11.4"]
 
-// `par i in a..b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
+// `par i in a..<b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
 // a, a+1, ..., b-1 of the init clock; the result has type [T; N]; every flow call and every delay
 // in `e` is a separate instance in each replica. `par` is a replication of structure, not a loop:
 // a delay's `^name` inside the body still means the later `let` of the same sample.
@@ -14,7 +14,7 @@ use std.math.{sum}
 
 // `^y` inside a replica refers to the later `let y`.  Replica i is prev~(^y) + i.
 pub flow lookback_in_par(x: F32 at sample) -> F32 at sample {
-  let a = par i in 0..2 { prev~(^y) + i.round_f32() }
+  let a = par i in 0..<2 { prev~(^y) + i.round_f32() }
   let y = x
   sum(a)
 }
@@ -22,7 +22,7 @@ pub flow lookback_in_par(x: F32 at sample) -> F32 at sample {
 // The feedback goes through every replica: each replica is (i + 1) * x + 0.5 * y[n-1], and the sum
 // is 3 * x + y[n-1].
 pub flow feedback_in_par(x: F32 at sample) -> F32 at sample {
-  let y = sum(par i in 0..2 { x * (i + 1).round_f32() + prev~(^y) * 0.5 })
+  let y = sum(par i in 0..<2 { x * (i + 1).round_f32() + prev~(^y) * 0.5 })
   y
 }
 

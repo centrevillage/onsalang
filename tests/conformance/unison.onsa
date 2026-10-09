@@ -33,7 +33,7 @@ pub flow unison(
   @param(min: 0.0, max: 0.1, default: 0.01)
   detune: Ctl[F32],
 ) -> Sig[F32] {
-  let saws = par i in 0..UNISON {
+  let saws = par i in 0..<UNISON {
     saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
   }
   sum(saws) * 0.25

@@ -41,7 +41,7 @@ const POLY: &str = "pub struct V { g: F32 }\npub struct Poly { voices: [V; 4], p
 fn different_fields_of_self_do_not_overlap() {
     // §17.6: `self.voices[i]` inout and `self.params[i]` borrowed in one call.
     ok(&format!(
-        "{POLY}impl Poly {{\n  pub rt fn process(inout self) {{\n    for i in 0..4 {{ step(inout self.voices[i], self.params[i]) }}\n  }}\n}}\n"
+        "{POLY}impl Poly {{\n  pub rt fn process(inout self) {{\n    for i in 0..<4 {{ step(inout self.voices[i], self.params[i]) }}\n  }}\n}}\n"
     ));
 }
 
@@ -197,15 +197,15 @@ fn use_after_move() {
     // Moved inside a loop.
     assert_eq!(
         codes(&format!(
-            "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for i in 0..n {{ take(move b) }} }}\n"
+            "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for i in 0..<n {{ take(move b) }} }}\n"
         )),
         vec![Code::E0704]
     );
     ok(&format!(
-        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for i in 0..n {{ take(move b)\n break }} }}\n"
+        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ for i in 0..<n {{ take(move b)\n break }} }}\n"
     ));
     ok(&format!(
-        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ var v = move b\n for i in 0..n {{ take(move v)\n v = Buf.zeroed(4) }} }}\n"
+        "{take}pub fn g(move b: Buf[F32], n: U32) uses {{Alloc}} {{ var v = move b\n for i in 0..<n {{ take(move v)\n v = Buf.zeroed(4) }} }}\n"
     ));
     // `match` arms are branches.
     assert_eq!(
@@ -341,4 +341,36 @@ fn match_borrows_unless_moved() {
 #[test]
 fn move_needs_a_place() {
     assert_eq!(codes("pub fn g() -> U32 { 1 }\npub fn f() -> U32 {\n  let y = move g()\n  y\n}\n"), vec![Code::E0711]);
+}
+
+/// R-194: the ends of a `for` range are read once, before the first
+/// iteration (§3.5): a move in them and a use of a moved value are checked
+/// as anywhere else.
+#[test]
+fn range_ends_are_read() {
+    let take = "pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} { 3 }\n";
+    let f = |body: &str| {
+        codes(&format!(
+            "{take}pub fn g(move b: Buf[F32], n: U32) -> U32 uses {{Alloc}} {{\n  var s: U32 = 0\n{body}\n  s\n}}\n"
+        ))
+    };
+    // A use of a moved value in an end.
+    assert_eq!(f("  take(move b)\n  for i in 0..<b.len() { s = s + i }"), vec![Code::E0704]);
+    assert_eq!(f("  take(move b)\n  for i in b.len()..<n { s = s + i }"), vec![Code::E0704]);
+    // A move in the ends of two loops: the second is a use after the move.
+    assert_eq!(
+        f("  for i in 0..<take(move b) { s = s + 1 }\n  for j in 0..<take(move b) { s = s + 1 }"),
+        vec![Code::E0704]
+    );
+    // The ends of an inner `for` are read once per iteration of the outer one.
+    assert_eq!(f("  for k in 0..<n {\n    for i in 0..<take(move b) { s = s + 1 }\n  }"), vec![Code::E0704]);
+    // A move in the body, then a use in the ends of a nested `for`.
+    assert_eq!(
+        f("  for k in 0..<n {\n    take(move b)\n    for i in 0..<b.len() { s = s + 1 }\n  }"),
+        vec![Code::E0704]
+    );
+    // Read once: a move in the ends is not a move in each iteration.
+    assert_eq!(f("  for i in 0..<take(move b) { s = s + 1 }"), vec![]);
+    // A borrow in the ends, then the move after the loop.
+    assert_eq!(f("  for i in 0..<b.len() { s = s + 1 }\n  s = s + take(move b)"), vec![]);
 }

@@ -45,7 +45,7 @@ pub fn element_of_call_target() {
 }
 
 pub fn inside_loop_and_branch(n: U32, flag: Bool) {
-  for i in 0..n {
+  for i in 0..<n {
     if flag {
       table()[i] = i            //~ E0415
     }

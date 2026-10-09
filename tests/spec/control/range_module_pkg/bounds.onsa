@@ -1,0 +1,36 @@
+// A module that other modules of the package import: constants used as the ends of a range, and
+// functions and a method whose bodies have range loops (spec §7, §15.1).
+
+pub const SIZE: U32 = 4
+pub const HOLD: U32 = 2
+
+pub struct Window {
+  lo: U32,
+  hi: U32,
+}
+
+impl Window {
+  pub fn total(self) -> U32 {
+    var t: U32 = 0
+    for i in self.lo..<self.hi {
+      t = t + i
+    }
+    t
+  }
+}
+
+pub fn count(lo: U32, hi: U32) -> U32 {
+  var n: U32 = 0
+  for _ in lo..<hi {
+    n = n + 1
+  }
+  n
+}
+
+pub fn size_sum() -> U32 {
+  var t: U32 = 0
+  for i in 0..<SIZE {
+    t = t + i
+  }
+  t
+}

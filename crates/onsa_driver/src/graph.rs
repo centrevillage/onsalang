@@ -112,7 +112,7 @@ impl Graph<'_> {
             Node::Delay { n, .. } => format!("delay({n})"),
             Node::Vdelay { max, .. } => format!("vdelay({max})"),
             Node::Instance { callee, .. } => format!("{}~", self.a.def(*callee).name),
-            Node::Par { from, to, .. } => format!("par {from}..{to}"),
+            Node::Par { from, to, .. } => format!("par {from}..<{to}"),
         };
         format!("{} = {what}: {} @{}", node.name(), self.ty_of(e), rate_name(self.rate_of(e)))
     }
@@ -181,14 +181,14 @@ fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
             }
         }
         ExprKind::Closure { body, .. } | ExprKind::Handle { body, .. } => out.push(*body),
-        ExprKind::Par { from, to, body, .. } => out.extend([*from, *to, *body]),
+        ExprKind::Par { range, body, .. } => out.extend([range.lo, range.hi, *body]),
         ExprKind::Binary { operands, .. } => out.extend(operands.iter().copied()),
         ExprKind::Call { callee, args, .. } => {
             out.push(*callee);
             out.extend(args.iter().map(|a| a.expr));
         }
         ExprKind::Index { base, index } => out.extend([*base, *index]),
-        ExprKind::Range { lo, hi } => out.extend([*lo, *hi]),
+        ExprKind::Range(r) => out.extend([r.lo, r.hi]),
     }
     out
 }

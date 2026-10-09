@@ -1054,13 +1054,11 @@ impl<'a> Fmt<'a> {
                 self.push("unsafe ");
                 self.block(*b, false);
             }
-            ExprKind::Par { var, from, to, body } => {
+            ExprKind::Par { var, range, body } => {
                 self.push("par ");
                 self.push(&var.name);
                 self.push(" in ");
-                self.expr(*from);
-                self.push("..");
-                self.expr(*to);
+                self.range(range);
                 self.push(" ");
                 self.block(*body, false);
             }
@@ -1130,12 +1128,18 @@ impl<'a> Fmt<'a> {
                 self.expr(*inner);
                 self.push("?");
             }
-            ExprKind::Range { lo, hi } => {
-                self.expr(*lo);
-                self.push("..");
-                self.expr(*hi);
-            }
+            ExprKind::Range(r) => self.range(r),
         }
+    }
+
+    /// A range: the canonical form of the spec's examples, with no space
+    /// around the symbol (`0..<n + 1`, §3.1).
+    // SPEC-GAP(S-334): the spec and onsa-tools.md §3.2 do not say the spaces
+    // around the symbol, nor a break after it.
+    fn range(&mut self, r: &RangeHead) {
+        self.expr(r.lo);
+        self.push(r.end.symbol());
+        self.expr(r.hi);
     }
 
     /// A method chain continued on the next line with a leading `.` (§2.5).

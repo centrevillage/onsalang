@@ -583,7 +583,7 @@ fn children(expr: &ast::Expr) -> Vec<ExprId> {
         AK::TupleIndex { base, .. } | AK::TypeArgs { base, .. } => vec![*base],
         AK::Index { base, index } => vec![*base, *index],
         AK::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
-        AK::Range { lo, hi } => vec![*lo, *hi],
+        AK::Range(r) => vec![r.lo, r.hi],
         AK::Par { body, .. } => vec![*body],
         AK::Lit(_) | AK::Path(_) | AK::Hole | AK::Field { .. } | AK::Closure { .. } | AK::Handle { .. } => Vec::new(),
     }

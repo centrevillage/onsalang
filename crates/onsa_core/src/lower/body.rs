@@ -8,8 +8,8 @@ use onsa_sema::resolve::{Builtin, Entity};
 use onsa_sema::ty::TyId;
 use onsa_sema::{DefId, ModId};
 use onsa_syntax::ast::{
-    self, Ast, BinOp as ABinOp, ExprId, ExprKind as AK, Lit as ALit, OpGroup, PatId, PatKind, StmtId, StmtKind as AS,
-    UnOp as AUnOp,
+    self, Ast, BinOp as ABinOp, ExprId, ExprKind as AK, Lit as ALit, OpGroup, PatId, PatKind, RangeEnd, StmtId,
+    StmtKind as AS, UnOp as AUnOp,
 };
 
 use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
@@ -399,9 +399,14 @@ fn lower_for(
     span: Span,
     out: &mut Vec<Stmt>,
 ) -> R<()> {
-    if let AK::Range { lo, hi } = &cx.expr(iter).kind {
-        let lo = lower_expr(lw, cx, *lo)?;
-        let hi = lower_expr(lw, cx, *hi)?;
+    if let AK::Range(r) = &cx.expr(iter).kind {
+        let r = *r;
+        if r.end != RangeEnd::Excluded {
+            // The checker gives E0200 until W8-03 (S-224); never as `..<` (R-81).
+            return Err(internal(span, "a `for` over `a..=b` reached the lowering"));
+        }
+        let lo = lower_expr(lw, cx, r.lo)?;
+        let hi = lower_expr(lw, cx, r.hi)?;
         let var = match &cx.ast.pat(pat).kind {
             PatKind::Bind(_) => cx.pat_local(pat)?,
             PatKind::Wild => cx.temp("_", lo.ty.clone()),
@@ -947,7 +952,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             return Ok(x);
         }
         AK::Try(inner) => return lower_try(lw, cx, *inner, ty, span),
-        AK::Range { .. } => return Err(internal(span, "range outside a loop head")),
+        AK::Range(_) => return Err(internal(span, "range outside a loop head")),
     };
     Ok(Expr::new(ty, span, kind))
 }

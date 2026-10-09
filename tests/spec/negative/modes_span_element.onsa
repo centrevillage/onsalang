@@ -92,7 +92,7 @@ pub fn separate_calls_for_each_element(inout xs: [Span[F32]; 2]) {
 }
 
 pub fn clear_each_in_a_loop(inout xs: [Span[F32]; 2]) {
-  for k in 0..2 {
+  for k in 0..<2 {
     clear(inout xs[k])
   }
 }

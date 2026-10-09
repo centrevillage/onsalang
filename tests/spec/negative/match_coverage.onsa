@@ -104,7 +104,7 @@ pub fn missing_in_generic_function[T: Copy](o: Option[T]) -> T {
 
 pub fn missing_inside_loop(os: [Option[U32]; 2]) -> U32 {
   var total: U32 = 0
-  for i in 0..2 {
+  for i in 0..<2 {
     match os[i] {               //~ E0501
       Some(n) => { total = total + n },
     }
@@ -169,7 +169,7 @@ pub fn literal_inside_struct(f: Flags) -> Bool {
 
 pub fn variant_in_let_inside_loop(os: [Option[U32]; 2]) -> U32 {
   var total: U32 = 0
-  for i in 0..2 {
+  for i in 0..<2 {
     let Some(n) = os[i]         //~ E0502
     total = total + n
   }

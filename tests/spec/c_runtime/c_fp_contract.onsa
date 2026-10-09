@@ -221,7 +221,7 @@ pub fn dot2_f32(a: F32, b: F32, c: F32, d: F32) -> F32 {
 
 pub fn mac_loop_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
   var acc: F32 = init
-  for _ in 0..n {
+  for _ in 0..<n {
     acc = (a * b) + acc
   }
   acc
@@ -245,7 +245,7 @@ pub fn mulsub_f64(a: F64, b: F64, c: F64) -> F64 {
 
 pub fn mac_loop_f64(a: F64, b: F64, init: F64, n: U32) -> F64 {
   var acc: F64 = init
-  for _ in 0..n {
+  for _ in 0..<n {
     acc = (a * b) + acc
   }
   acc

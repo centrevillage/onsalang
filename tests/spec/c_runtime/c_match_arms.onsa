@@ -248,7 +248,7 @@ pub fn opt_u8_or(sel: U32, v: U8) -> U8 {
 
 pub fn turn_n(sel: U32, n: U32) -> U32 {
   var d = dir_of(sel)
-  for _ in 0..n {
+  for _ in 0..<n {
     d = turn(d)
   }
   dir_code(d)
@@ -295,7 +295,7 @@ pub fn res_sum(ok: U32, a: I32, b: I32) -> I32 {
 
 pub fn loop_match(n: U32, v: I32) -> I32 {
   var acc: I32 = 0
-  for i in 0..n {
+  for i in 0..<n {
     var o: Option[I32] = None
     if (i % 2) == 0 {
       o = Some(v)

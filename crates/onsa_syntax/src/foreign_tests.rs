@@ -338,7 +338,7 @@ fn literals() {
     e0020(&body("  let a = 1u8"), &body("  let a = 1"));
     e0020(&body("  let a = 1.5f32"), &body("  let a = 1.5"));
     // The suffix goes where the number reads the same (`0u32..n`, `1u8.abs()`).
-    e0020(&body("  for i in 0u32..n { }"), &body("  for i in 0..n { }"));
+    e0020(&body("  for i in 0u32..<n { }"), &body("  for i in 0..<n { }"));
     e0020(&body("  let a = 1u8.abs()"), &body("  let a = 1.abs()"));
     e0020(&body("  let a = 1.0f32.abs()"), &body("  let a = 1.0.abs()"));
     // Not where it would read with the `.` (`1d.5`, `1d.`).

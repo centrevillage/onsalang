@@ -7,7 +7,7 @@ pub flow lp(x: Sig[F32]) -> Sig[F32] { x }
 // 期待: E0821（修正候補なし。note で `array.from_fn` / `[e; N]`）。
 // 今: E0401「`par` replicates flow instances and is only written inside a flow body」（型の不一致のコード）。
 fn with_par(x: F32) -> F32 {
-  let y = par i in 0..4 { 1.0 }
+  let y = par i in 0..<4 { 1.0 }
   x
 }
 

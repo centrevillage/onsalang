@@ -9,7 +9,7 @@ use std.math.{pow}
 /// functions it calls (spec §15.5).
 pub rt fn sum[const N: U32](xs: [F32; N]) -> F32 {
   var acc: F32 = 0.0
-  for i in 0..N {
+  for i in 0..<N {
     acc = acc + xs[i]
   }
   acc

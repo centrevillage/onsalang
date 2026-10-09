@@ -40,7 +40,7 @@ pub flow chain(
 ) -> Sig[Stereo] {
   let a = delay(x, 3, 0.0)
   let b = tap~(a)
-  let taps = par i in 0..4 {
+  let taps = par i in 0..<4 {
     tap~(x * (i.round_f32() + 1.0))
   }
   let s = sum(taps)

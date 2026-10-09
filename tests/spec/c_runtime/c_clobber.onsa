@@ -229,7 +229,7 @@
 
 pub fn shr_loop_i8(a: I8, k: U32) -> I8 {
   var x: I8 = a
-  for _ in 0..k {
+  for _ in 0..<k {
     x = x >> 1
   }
   x
@@ -237,7 +237,7 @@ pub fn shr_loop_i8(a: I8, k: U32) -> I8 {
 
 pub fn wadd_loop_u8(a: U8, n: U32) -> U8 {
   var x: U8 = a
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x +% 3
   }
   x
@@ -246,7 +246,7 @@ pub fn wadd_loop_u8(a: U8, n: U32) -> U8 {
 pub fn two_vars_i32(a: I32, b: I32, n: U32) -> I32 {
   var x: I32 = a
   var y: I32 = b
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x +% y
     y = y -% 1
   }
@@ -265,7 +265,7 @@ pub fn halvings_u32(a: U32) -> U32 {
 
 pub fn decay_f32(a: F32, n: U32) -> F32 {
   var x: F32 = a
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x * 0.5
   }
   x
@@ -273,7 +273,7 @@ pub fn decay_f32(a: F32, n: U32) -> F32 {
 
 pub fn decay_f64(a: F64, n: U32) -> F64 {
   var x: F64 = a
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x * 0.5
   }
   x
@@ -282,7 +282,7 @@ pub fn decay_f64(a: F64, n: U32) -> F64 {
 pub fn parity_flag(a: I64, n: U32) -> Bool {
   var f = false
   var i: I64 = a
-  for _ in 0..n {
+  for _ in 0..<n {
     f = !f
     i = i +% 1
   }
@@ -291,8 +291,8 @@ pub fn parity_flag(a: I64, n: U32) -> Bool {
 
 pub fn nested_u16(a: U16, n: U32, m: U32) -> U16 {
   var s: U16 = a
-  for _ in 0..n {
-    for _ in 0..m {
+  for _ in 0..<n {
+    for _ in 0..<m {
       s = s +% 1
     }
   }
@@ -301,7 +301,7 @@ pub fn nested_u16(a: U16, n: U32, m: U32) -> U16 {
 
 pub fn checked_loop_i16(a: I16, n: U32) -> I16 {
   var x: I16 = a
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x + 1000
   }
   x
@@ -310,7 +310,7 @@ pub fn checked_loop_i16(a: I16, n: U32) -> I16 {
 pub fn many_args_i32(a: I32, b: I32, c: I32, d: I32, e: I32, f: I32, n: U32) -> I32 {
   var s: I32 = a
   var t: I32 = b
-  for _ in 0..n {
+  for _ in 0..<n {
     s = s +% (c *% d)
     t = t +% (e -% f)
   }

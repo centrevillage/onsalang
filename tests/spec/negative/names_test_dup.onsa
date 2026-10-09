@@ -33,7 +33,7 @@ test "decays" {                 //~ E0306
 
 test "with a block" {
   var n: U32 = 0
-  for i in 0..3 {
+  for i in 0..<3 {
     n = n + i
   }
   assert n == 3

@@ -85,7 +85,7 @@ pub fn in_a_match_arm(n: U32) {
 }
 
 pub fn in_a_loop() {
-  for i in 0..3 {
+  for i in 0..<3 {
     let q = none()              //~ E0406
     let _ = q
   }
@@ -155,7 +155,7 @@ pub fn method_on_a_buffer_binding() -> U32 uses {Alloc} {
 
 pub fn method_on_a_buffer_in_a_loop() -> U32 uses {Alloc} {
   var total = 0
-  for i in 0..3 {
+  for i in 0..<3 {
     let b = Buf.zeroed(4)       //~ E0406
     total = total + b.len()
     let _ = move b

@@ -169,7 +169,7 @@ test "a return of a call in an arm of a match on an enum" {
 // ------------------------------------------------------------------- loops
 
 fn first_hit(inout log: U32, limit: U32) {
-  for i in 0..5 {
+  for i in 0..<5 {
     if i == limit {
       return mark(inout log, i)
     }

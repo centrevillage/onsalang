@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§11.5", "§11.4", "§13.4"]
 
-// `par i in a..b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
+// `par i in a..<b { e }` (spec §11.5): `e` is replicated N = b - a times; the index `i` is the value
 // a, a+1, ..., b-1 of the init clock; the result has type [T; N]; every flow call and every delay
 // in `e` is a separate instance in each replica. `par` is a replication of structure, not a loop:
 // a delay's `^name` inside the body still means the later `let` of the same sample.
@@ -14,14 +14,14 @@ use std.math.{sum}
 
 // Three replicas, each with its own delay: (1 + 2 + 3) * x[n-1].
 pub flow three_delays(x: F32 at sample) -> F32 at sample {
-  let a = par i in 0..3 { prev~(x * (i + 1).round_f32()) }
+  let a = par i in 0..<3 { prev~(x * (i + 1).round_f32()) }
   sum(a)
 }
 
 // par inside par: the multipliers are 1, 2 (i = 0) and 3, 4 (i = 1); the sum is 10.
 pub flow nested(x: F32 at sample) -> F32 at sample {
-  let rows = par i in 0..2 {
-    sum(par j in 0..2 { prev~(x * (2 * i + j + 1).round_f32()) })
+  let rows = par i in 0..<2 {
+    sum(par j in 0..<2 { prev~(x * (2 * i + j + 1).round_f32()) })
   }
   sum(rows)
 }

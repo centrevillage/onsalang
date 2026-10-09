@@ -121,6 +121,16 @@ features! {
     /// S-239: the syntax reads `name::[…]` (W3-19); the name and type stages
     /// give the list to the item from W4-13.
     TypeArgsInExpressions: Language, "instantiating an item with type arguments written in an expression (`name::[…]`)", None;
+    /// S-224, S-257: the `for` loop over `a..=b` that ends when `b` is the
+    /// type's maximum (W8-03); never lowered as `..<` (R-81).
+    InclusiveRangeFor: Language, "a range with its end (`a..=b`) in a `for` head",
+        Some("write `a..<b + 1` when `b + 1` fits in the type");
+    /// S-224, S-257: the `b - a + 1` instances of `par i in a..=b` (W7-04).
+    InclusiveRangePar: Language, "a range with its end (`a..=b`) in a `par` head", None;
+    /// R-195: the values of the constant expressions of §4.5 other than an
+    /// integer literal and a `const` with a literal value (W7-02).
+    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par` bound, a delay length, the maximum of a `vdelay`)",
+        Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
     FromFnValue: Language, "`array.from_fn` with a non-literal function value",

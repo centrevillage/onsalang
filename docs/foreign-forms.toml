@@ -2901,6 +2901,103 @@ pub fn f() -> U32 {
 ''',
 ]
 
+# 端に二項演算子の式があっても、置き換えるのは範囲の記号のトークンだけ（範囲は二項演算子より弱い、§3.1）。
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..n + 1 {
+    t = t + i
+  }
+  t
+}
+'''
+at = "3:13"
+fixed = [
+'''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n + 1 {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..=n + 1 {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..hi * 2 {
+    t = t + i
+  }
+  t
+}
+'''
+at = "3:18"
+fixed = [
+'''
+pub fn f(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..<hi * 2 {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..=hi * 2 {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo...hi {
+    t = t + i
+  }
+  t
+}
+'''
+at = "3:14"
+fixed = [
+'''
+pub fn f(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..<hi {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..=hi {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
 # 範囲は `for` と `par` の見出しだけに書ける。見出しの外の範囲は値を作れないので、候補を作らない。
 [[form]]
 id = "range_outside_header"
@@ -2916,6 +3013,52 @@ source = '''
 pub fn f() -> I32 {
   let r = 0..<4
   1
+}
+'''
+
+# 綴りが `..`、`...`、`..=` でも同じ（見出しの外では候補を作らない。`..` の候補を当てても見出しの外の誤りが残るため、§18.1）。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let r = 0..4
+  1
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let r = 0...4
+  1
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let r = 0..=4
+  1
+}
+'''
+
+# 配列の一部。note は `xs.slice(from, to)`（§5.3）を示す。
+[[form.example]]
+source = '''
+pub fn f(xs: [I32; 4]) -> I32 {
+  let s = xs[1..<3]
+  1
+}
+'''
+
+# 引数。
+[[form.example]]
+source = '''
+pub fn g(r: I32) -> I32 {
+  r
+}
+
+pub fn f() -> I32 {
+  g(0..<4)
 }
 '''
 

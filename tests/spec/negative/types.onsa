@@ -12,7 +12,7 @@ pub fn float_literal_undecided() -> U32 {
 
 pub fn integer_literal_defaults_to_i32() -> U32 {
   let a = 1
-  for i in 0..4 {
+  for i in 0..<4 {
   }
   assert 1 == 1
   2
@@ -117,7 +117,7 @@ pub fn refutable_let(o: Option[U8]) -> U8 {
 }
 
 pub fn shadowing(xs: [F32; 4]) -> F32 {
-  for i in 0..4 {
+  for i in 0..<4 {
     let i = 1                   //~ E0304
   }
   1.0
@@ -130,7 +130,7 @@ pub fn mismatch() -> F32 {
 
 pub fn inferred_later(xs: [F32; 4]) -> F32 {
   var acc = 0.0
-  for i in 0..4 {
+  for i in 0..<4 {
     acc = acc + xs[i]
   }
   acc
@@ -138,8 +138,8 @@ pub fn inferred_later(xs: [F32; 4]) -> F32 {
 
 pub fn siblings_may_reuse(xs: [F32; 4]) -> F32 {
   var s: F32 = 0.0
-  for i in 0..4 { s = s + xs[i] }
-  for i in 0..4 { s = s + xs[i] }
+  for i in 0..<4 { s = s + xs[i] }
+  for i in 0..<4 { s = s + xs[i] }
   s
 }
 

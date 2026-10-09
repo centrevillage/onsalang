@@ -1,0 +1,621 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.1", "§3.5", "§2.4", "§5.3", "§6.6"]
+
+// The range `a..<b` in the header of a `for` (spec §7, S-257): the values from `a` up to, but not
+// including, `b`. A range binds more weakly than every binary operator, so an end may be an
+// expression of binary operators (`0..<n + 1` ends at `n + 1`, §3.1), and both ends are evaluated
+// once, `a` then `b`, before the first iteration (§3.5). The ends are integers (§7).
+//
+// Every value below is worked out by hand from the spec text. The closed form `a..=b` has no
+// case here: its meaning is not lowered yet (E0200, negative/range_inclusive_for_e0200.onsa), and
+// W8-03 writes its cases. A `par` header has its own file (flow_semantics/par_range_half_open.onsa).
+
+use std.array
+
+// ----------------------------------------------------------------------- the values of a range
+
+fn sum_below(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  t
+}
+
+// The last value the loop variable took; 99 when the loop did not run.
+fn last_below(n: U32) -> U32 {
+  var last: U32 = 99
+  for i in 0..<n {
+    last = i
+  }
+  last
+}
+
+// The values read as decimal digits, in the order of the iterations.
+fn digits(lo: U32, hi: U32) -> U32 {
+  var seen: U32 = 0
+  for i in lo..<hi {
+    let shifted = seen * 10
+    seen = shifted + i
+  }
+  seen
+}
+
+fn count(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n {
+    c = c + 1
+  }
+  c
+}
+
+test "a range ends before its end" {
+  assert sum_below(4) == 6
+  assert sum_below(5) == 10
+  assert sum_below(1) == 0
+  assert last_below(5) == 4
+  assert last_below(1) == 0
+}
+
+test "a range with equal ends is empty" {
+  assert sum_below(0) == 0
+  assert last_below(0) == 99
+  assert digits(4, 4) == 0
+  assert count(0) == 0
+}
+
+test "a range starts at its start" {
+  assert digits(3, 6) == 345
+  assert digits(7, 8) == 7
+  assert digits(0, 3) == 12
+}
+
+test "a loop with an unused variable runs the end minus the start times" {
+  assert count(7) == 7
+  assert count(1) == 1
+}
+
+// ----------------------------------------------------------- the ends are expressions (§3.1)
+
+fn sum_through(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n + 1 {
+    t = t + i
+  }
+  t
+}
+
+fn middle(lo: U32, hi: U32) -> U32 {
+  var seen: U32 = 0
+  for i in lo + 1..<hi - 1 {
+    let shifted = seen * 10
+    seen = shifted + i
+  }
+  seen
+}
+
+fn twice(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n * 2 {
+    c = c + 1
+  }
+  c
+}
+
+fn product(n: U32, m: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n * m {
+    c = c + 1
+  }
+  c
+}
+
+fn remainder_end(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n % 4 {
+    c = c + 1
+  }
+  c
+}
+
+fn signed_sum(lo: I32, hi: I32) -> I32 {
+  var t: I32 = 0
+  for i in lo..<hi {
+    t = t + i
+  }
+  t
+}
+
+fn negated_start(n: I32) -> I32 {
+  var t: I32 = 0
+  for i in -n..<n {
+    t = t + i
+  }
+  t
+}
+
+fn negative_literals() -> I32 {
+  var t: I32 = 0
+  for i in -2..<2 {
+    t = t + i
+  }
+  t
+}
+
+fn widened(n: I32) -> I64 {
+  var t: I64 = 0
+  for i in 0..<n as I64 {
+    t = t + i
+  }
+  t
+}
+
+test "an end that is a sum ends at the sum" {
+  // 0..<n + 1 is 0, 1, ..., n.
+  assert sum_through(3) == 6
+  assert sum_through(4) == 10
+  assert sum_through(0) == 0
+}
+
+test "the start and the end may both be sums" {
+  // lo + 1..<hi - 1: for 1 and 6 the range is 2..<5.
+  assert middle(1, 6) == 234
+  // 2..<2 is empty, 1..<2 is the single value 1.
+  assert middle(1, 3) == 0
+  assert middle(0, 3) == 1
+}
+
+test "an end that is a product or a remainder" {
+  assert twice(3) == 6
+  assert twice(0) == 0
+  assert product(3, 4) == 12
+  assert product(0, 4) == 0
+  // 10 % 4 = 2, 8 % 4 = 0.
+  assert remainder_end(10) == 2
+  assert remainder_end(8) == 0
+}
+
+test "the ends may be negative" {
+  // -3, -2.
+  assert signed_sum(-3, -1) == -5
+  // -1, 0, 1.
+  assert signed_sum(-1, 2) == 0
+  // The prefix minus binds more tightly than the range: (-n)..<n is -2, -1, 0, 1.
+  assert negated_start(2) == -2
+  assert negated_start(0) == 0
+  assert negative_literals() == -2
+}
+
+test "a conversion in an end binds more tightly than the range" {
+  // 0..<(n as I64) is 0, 1, 2, 3.
+  assert widened(4) == 6
+  assert widened(0) == 0
+}
+
+// ------------------------------------------------------ the spellings of the ends (§2.4, §7)
+
+pub struct Window {
+  lo: U32,
+  hi: U32,
+}
+
+impl Window {
+  pub fn total(self) -> U32 {
+    var t: U32 = 0
+    for i in self.lo..<self.hi {
+      t = t + i
+    }
+    t
+  }
+}
+
+fn hex_ends() -> U32 {
+  var t: U32 = 0
+  for i in 0x10..<0x14 {
+    t = t + i
+  }
+  t
+}
+
+fn separated_ends() -> U32 {
+  var t: U32 = 0
+  for i in 1_000..<1_003 {
+    t = t + i
+  }
+  t
+}
+
+fn over_fields(w: Window) -> U32 {
+  var t: U32 = 0
+  for i in w.lo..<w.hi {
+    t = t + i
+  }
+  t
+}
+
+// `t.0` and `t.1` are fields: the digits after the `.` are an index, so the `..<` after `t.0`
+// starts the range symbol (§4).
+fn over_tuple_fields(t: (U32, U32)) -> U32 {
+  var s: U32 = 0
+  for i in t.0..<t.1 {
+    s = s + i
+  }
+  s
+}
+
+fn over_elements(xs: [U32; 2]) -> U32 {
+  var t: U32 = 0
+  for i in xs[0]..<xs[1] + 1 {
+    t = t + i
+  }
+  t
+}
+
+fn length_of(xs: [F32; 3]) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<xs.len() {
+    c = c + 1
+  }
+  c
+}
+
+fn double_all(inout xs: [F32; 3]) {
+  for i in 0..<xs.len() {
+    xs[i] = xs[i] * 2.0
+  }
+}
+
+test "integer literals in any spelling" {
+  // 16 + 17 + 18 + 19.
+  assert hex_ends() == 70
+  assert separated_ends() == 3003
+}
+
+test "the ends are fields, tuple fields, elements and calls" {
+  assert over_fields(Window { lo: 2, hi: 5 }) == 9
+  assert over_tuple_fields((2, 5)) == 9
+  // xs[0]..<xs[1] + 1 is 1..<5.
+  assert over_elements([1, 4]) == 10
+  assert length_of([0.0; 3]) == 3
+  let w = Window { lo: 2, hi: 5 }
+  assert w.total() == 9
+}
+
+test "a loop over the indices of an array writes its elements" {
+  var xs: [F32; 3] = [1.0, 2.0, 3.0]
+  double_all(inout xs)
+  assert xs[0] == 2.0
+  assert xs[1] == 4.0
+  assert xs[2] == 6.0
+}
+
+// ----------------------------------------------------- the type of the ends: the edge values
+
+fn count_u8() -> U32 {
+  var n: U32 = 0
+  for _ in 0..<U8.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn last_u8() -> U8 {
+  var last: U8 = 0
+  for i in 250..<U8.MAX {
+    last = i
+  }
+  last
+}
+
+fn near_the_top_i64() -> I64 {
+  var last: I64 = 0
+  for i in I64.MAX - 2..<I64.MAX {
+    last = i
+  }
+  last
+}
+
+fn near_the_top_count() -> U32 {
+  var n: U32 = 0
+  for _ in I64.MAX - 2..<I64.MAX {
+    n = n + 1
+  }
+  n
+}
+
+fn u8_sum(n: U8) -> U8 {
+  var t: U8 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  t
+}
+
+test "an end that is the largest value of the type is not a value of the loop" {
+  // 0..<255 for U8 is 255 values, 0 up to 254.
+  assert count_u8() == 255
+  // 250..<255 is 250, ..., 254.
+  assert last_u8() == 254
+  // I64.MAX - 2..<I64.MAX is two values, the last one I64.MAX - 1.
+  assert near_the_top_count() == 2
+  let below_the_top = I64.MAX - 1
+  assert near_the_top_i64() == below_the_top
+}
+
+test "the loop variable has the type of the ends" {
+  // 0 + 1 + 2 + 3 + 4 in U8.
+  assert u8_sum(5) == 10
+  assert u8_sum(0) == 0
+}
+
+// ------------------------------------------------------------------ the body of the loop (§7)
+
+fn until_four(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    if i == 4 {
+      break
+    }
+    c = c + 1
+  }
+  c
+}
+
+fn evens(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    let r = i % 2
+    if r == 1 {
+      continue
+    }
+    c = c + 1
+  }
+  c
+}
+
+fn first_square_over(limit: U32) -> U32 {
+  for i in 0..<100 {
+    let square = i * i
+    if square > limit {
+      return i
+    }
+  }
+  0
+}
+
+test "break, continue and return leave a range loop" {
+  assert until_four(10) == 4
+  assert until_four(3) == 3
+  // 0, 2, 4, 6, 8 and 0, 2, 4, 6.
+  assert evens(10) == 5
+  assert evens(7) == 4
+  // 3 * 3 = 9 is not over 10, 4 * 4 = 16 is. No square up to 99 * 99 is over a million.
+  assert first_square_over(10) == 4
+  assert first_square_over(1000000) == 0
+}
+
+// ---------------------------------------------- the ends are evaluated once, in order (§3.5)
+
+fn tick(inout log: U32, d: U32) -> U32 {
+  let shifted = log * 10
+  log = shifted + d
+  d
+}
+
+fn next(inout k: U32) -> U32 {
+  k = k + 1
+  k
+}
+
+test "an end changed by the body does not change the number of iterations" {
+  var hi: U32 = 3
+  var n: U32 = 0
+  for _ in 0..<hi {
+    hi = hi + 1
+    n = n + 1
+  }
+  assert n == 3
+  assert hi == 6
+  var lo: U32 = 0
+  var sum: U32 = 0
+  for i in lo..<3 {
+    lo = 2
+    sum = sum + i
+  }
+  // 0, 1, 2 although lo is 2 after the first iteration.
+  assert sum == 3
+}
+
+test "an end that is a sum is evaluated once" {
+  var k: U32 = 0
+  var n: U32 = 0
+  // next gives 1, so the end is 1 + 1; had the end run again, k would not stay 1.
+  for _ in 0..<next(inout k) + 1 {
+    n = n + 1
+  }
+  assert n == 2
+  assert k == 1
+}
+
+test "the operands of the ends run in the order of the expression: the start, then the end left to right" {
+  var log: U32 = 0
+  var n: U32 = 0
+  // start 1; end 2 + 3 = 5; the range is 1..<5.
+  for _ in tick(inout log, 1)..<tick(inout log, 2) + tick(inout log, 3) {
+    n = n + 1
+  }
+  assert log == 123
+  assert n == 4
+}
+
+test "the start is read before the end changes what it reads" {
+  var c: U32 = 1
+  var n: U32 = 0
+  // start 1 (c before the end runs); the end sets c to 14 and is 4 + 1; the range is 1..<5.
+  for _ in c..<tick(inout c, 4) + 1 {
+    n = n + 1
+  }
+  assert n == 4
+  assert c == 14
+}
+
+test "each execution of an inner header evaluates its own ends once" {
+  var log: U32 = 0
+  var n: U32 = 0
+  for _ in 0..<2 {
+    // 1..<2 + 1 is 1..<3: two iterations; the header runs once for each outer iteration.
+    for _ in tick(inout log, 1)..<tick(inout log, 2) + 1 {
+      n = n + 1
+    }
+  }
+  assert log == 1212
+  assert n == 4
+}
+
+test "the ends of a loop in a branch that is not taken are not evaluated" {
+  var log: U32 = 0
+  let go = false
+  if go {
+    for _ in tick(inout log, 1)..<tick(inout log, 2) {
+      log = log + 100
+    }
+  }
+  assert log == 0
+}
+
+// ---------------------------------------------------- nesting, branches, generics, closures
+
+fn triangle(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    for _ in 0..<i + 1 {
+      c = c + 1
+    }
+  }
+  c
+}
+
+fn grid(n: U32, m: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n {
+    for _ in 0..<m {
+      c = c + 1
+    }
+  }
+  c
+}
+
+fn by_kind(k: U32, n: U32) -> U32 {
+  var t: U32 = 0
+  if k == 0 {
+    for _ in 0..<n {
+      t = t + 1
+    }
+  } else if k == 1 {
+    for i in 0..<n {
+      t = t + i
+    }
+  } else {
+    t = 100
+  }
+  t
+}
+
+fn sum_option(o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => {
+      var t: U32 = 0
+      for i in 0..<n {
+        t = t + i
+      }
+      t
+    },
+    None => 0,
+  }
+}
+
+fn count_with[T](x: T, n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..<n {
+    c = c + 1
+  }
+  c
+}
+
+fn width[const N: U32](xs: [F32; N]) -> U32 {
+  var n: U32 = 0
+  for _ in 0..<N {
+    n = n + 1
+  }
+  n
+}
+
+fn width_plus_one[const N: U32](xs: [F32; N]) -> U32 {
+  var n: U32 = 0
+  for _ in 0..<N + 1 {
+    n = n + 1
+  }
+  n
+}
+
+fn triangles() -> [U32; 4] {
+  array.from_fn(fn(i: U32) -> U32 {
+    var t: U32 = 0
+    for j in 0..<i + 1 {
+      t = t + j
+    }
+    t
+  })
+}
+
+fn remaining(k: U32) -> [U32; 4] {
+  array.from_fn(fn(i: U32) -> U32 {
+    var c: U32 = 0
+    for _ in i..<k {
+      c = c + 1
+    }
+    c
+  })
+}
+
+test "a range loop in a range loop: the inner end may be the outer variable" {
+  // 1 + 2 + 3 + 4.
+  assert triangle(4) == 10
+  assert triangle(0) == 0
+  assert grid(3, 4) == 12
+  assert grid(3, 0) == 0
+  assert grid(0, 4) == 0
+}
+
+test "a range loop in the branches of an if and in the arm of a match" {
+  assert by_kind(0, 5) == 5
+  assert by_kind(1, 5) == 10
+  assert by_kind(2, 5) == 100
+  assert sum_option(Some(4)) == 6
+  assert sum_option(None) == 0
+}
+
+test "the ends of a range in a generic function" {
+  let f: F32 = 1.5
+  assert count_with(f, 3) == 3
+  assert count_with(true, 0) == 0
+  assert width([0.0; 5]) == 5
+  assert width_plus_one([0.0; 5]) == 6
+}
+
+test "a range loop in an anonymous function" {
+  // 0, 0 + 1, 0 + 1 + 2, 0 + 1 + 2 + 3.
+  let t = triangles()
+  assert t[0] == 0
+  assert t[1] == 1
+  assert t[2] == 3
+  assert t[3] == 6
+  // The end k is captured: i..<3 for i = 0, 1, 2, 3.
+  let r = remaining(3)
+  assert r[0] == 3
+  assert r[1] == 2
+  assert r[2] == 1
+  assert r[3] == 0
+}

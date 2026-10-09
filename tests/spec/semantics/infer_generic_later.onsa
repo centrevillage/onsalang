@@ -157,7 +157,7 @@ test "the arms of a match decide each other" {
 
 fn in_loop() -> I32 {
   var total = 0
-  for i in 0..3 {
+  for i in 0..<3 {
     // `o` is open here; the literal 10 given to `or_default` is the only thing that
     // touches it, so it is an integer literal variable until the function ends.
     let o = none()
@@ -368,7 +368,7 @@ test "the enumerators of a user enum unify with the subject" {
 test "a literal pattern in a loop and a closure" {
   let o     = None
   var total = 0
-  for i in 0..2 {
+  for i in 0..<2 {
     total = total + match o {
       Some(3) => 10,
       _ => 1,

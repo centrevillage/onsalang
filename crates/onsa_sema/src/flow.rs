@@ -39,8 +39,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, Path, StmtId, StmtKind};
+use onsa_syntax::ast::{
+    Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, Path, RangeEnd, RangeHead, StmtId,
+    StmtKind, UnOp,
+};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, LocalKind, R, Target};
 use crate::consteval::{self, ConstValue};
@@ -499,34 +503,44 @@ impl<'a> Checker<'a> {
             ExprKind::Unsafe(_) => "`unsafe`",
             ExprKind::Try(_) => "`?`; a flow has no error path",
             ExprKind::Move(_) => "`move`; signals are values and are never moved",
-            ExprKind::Par { var, from, to, body } => {
-                let (var, from, to, body) = (var.clone(), *from, *to, *body);
-                return self.check_par(e, &var, from, to, body, expected).map(Some);
+            ExprKind::Par { var, range, body } => {
+                let (var, range, body) = (var.clone(), *range, *body);
+                return self.check_par(e, &var, &range, body, expected).map(Some);
             }
             _ => return Ok(None),
         };
         Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
     }
 
-    /// `par i in a..b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
+    /// `par i in a..<b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
+    /// `par i in a..=b` (`b - a + 1` instances) is E0200 until W7-04 (S-224).
     fn check_par(
         &mut self,
         e: ExprId,
         var: &Ident,
-        from: ExprId,
-        to: ExprId,
+        range: &RangeHead,
         body: ExprId,
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        let lo = self.flow_const_u32(from, "a `par` bound")?;
-        let hi = self.flow_const_u32(to, "a `par` bound")?;
-        if hi <= lo {
+        self.range_end_forms(range)?;
+        let lo = self.flow_const_u32(range.lo, "a `par` bound")?;
+        let hi = self.flow_const_u32(range.hi, "a `par` bound")?;
+        let end = range.end;
+        let (empty, count) = match end {
+            RangeEnd::Excluded => (hi <= lo, "`b - a`"),
+            RangeEnd::Included => (hi < lo, "`b - a + 1`"),
+        };
+        if empty {
+            let sym = end.symbol();
             return Err(self.flow_err(
                 Code::E0808,
                 span,
-                format!("`par` replicates `b - a` instances; the bounds `{lo}..{hi}` give none (§11.5)"),
+                format!("`par` replicates {count} instances; the bounds `{lo}{sym}{hi}` give none (§11.5)"),
             ));
+        }
+        if end == RangeEnd::Included {
+            return Err(self.closed_range_unsupported(range, Stage::Flow, Feature::InclusiveRangePar));
         }
         let exp_elem = expected.and_then(|t| match self.ty(self.shallow(t)) {
             Ty::Array(el, _) => Some(el),
@@ -544,62 +558,121 @@ impl<'a> Checker<'a> {
         Ok(self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))))
     }
 
-    /// A compile-time `U32` (§11.4, E0808): an integer literal or a `const` with a known value.
+    /// A compile-time `U32` (§11.4, §4.5): the value of a constant
+    /// expression. This version computes an integer literal and a `const`
+    /// with a literal value; the other constant expressions are E0200 until
+    /// W7-02 (R-195), and what is no constant expression is E0417.
     fn flow_const_u32(&mut self, e: ExprId, what: &str) -> R<u32> {
         let span = self.expr(e).span;
         let u32 = self.u32();
-        match &self.expr(e).kind {
-            ExprKind::Lit(Lit::Int { value, .. }) => {
-                let value = *value;
-                if value > u32::MAX as u64 {
-                    return Err(self.flow_err(Code::E0408, span, format!("{what} does not fit in `U32`")));
-                }
-                self.record(e, u32);
-                Ok(value as u32)
-            }
-            ExprKind::Path(_) | ExprKind::Field { .. } => {
-                let path = match &self.expr(e).kind {
-                    ExprKind::Path(p) => p.clone(),
-                    _ => match self.name_chain(e) {
-                        Some(c) => Path { segments: c.iter().map(|(_, i)| i.clone()).collect(), span },
-                        None => return Err(self.flow_not_const(span, what)),
-                    },
-                };
-                if path.segments.len() == 1 && self.is_local_head(&path.segments[0].name) {
-                    return Err(self.flow_not_const(span, what));
-                }
-                match self.a.resolve_path(self.m, &path) {
-                    Ok(Entity::Def(d)) | Ok(Entity::Member(d)) => {
-                        if let DefKind::Const(c) = &self.a.def(d).kind {
-                            let (ty, int_value) = (c.ty, c.int_value);
-                            self.unify_at(span, ty, u32)?;
-                            self.record(e, ty);
-                            self.info.targets.insert(e, Target::Const(d));
-                            return match int_value {
-                                Some(v) if v <= u32::MAX as u64 => Ok(v as u32),
-                                Some(_) => {
-                                    Err(self.flow_err(Code::E0408, span, format!("{what} does not fit in `U32`")))
-                                }
-                                None => Err(self.flow_not_const(span, what)),
-                            };
+        let mut shape = ConstShape { leaves: Vec::new(), arith: true, neg: false, ops: false };
+        self.const_shape(e, &mut shape);
+        // Each leaf, its names read as the constants of type positions are
+        // (`constarg::named`: `N`, `cfg.N`, `I32.BITS`).
+        let mut leaves = Vec::new();
+        for &l in &shape.leaves {
+            let leaf = match &self.expr(l).kind {
+                ExprKind::Lit(Lit::Int { value, .. }) => Leaf::Int(*value),
+                ExprKind::Path(_) | ExprKind::Field { .. } => match crate::constarg::path_of(self.ast, l) {
+                    // A local, or a field of one.
+                    Some(p) if self.is_local_head(&p.segments[0].name) => Leaf::Other,
+                    Some(p) => {
+                        let lspan = self.expr(l).span;
+                        match crate::constarg::named(self.a, self.m, self.ast, self.text, &p, lspan) {
+                            Ok(Some(v)) => match self.a.resolve_path(self.m, &p) {
+                                Ok(Entity::Def(d) | Entity::Member(d)) => Leaf::Value(v, Some(d)),
+                                _ => Leaf::Value(v, None),
+                            },
+                            Ok(None) => Leaf::Other,
+                            Err(crate::constarg::ConstErr::Uncomputed(_)) => Leaf::Uncomputed,
+                            Err(crate::constarg::ConstErr::Report(d)) => Leaf::Error(d),
+                            // A constant whose unit failed (S-59): no diagnostic.
+                            Err(crate::constarg::ConstErr::Unknown) => {
+                                self.failed = true;
+                                return Err(crate::body::Stop);
+                            }
                         }
-                        Err(self.flow_not_const(span, what))
                     }
-                    Ok(_) => Err(self.flow_not_const(span, what)),
-                    Err(err) => Err(self.resolve_error(&path, err)),
+                    None => Leaf::Other,
+                },
+                _ => Leaf::Other,
+            };
+            leaves.push((l, leaf));
+        }
+        // The names stage first (§18.1): a name that does not resolve.
+        if let Some(i) = leaves.iter().position(|(_, l)| matches!(l, Leaf::Error(d) if d.stage == Stage::Names)) {
+            let Leaf::Error(d) = leaves.swap_remove(i).1 else { unreachable!() };
+            return Err(self.diag(d));
+        }
+        // The type: an integer (§7, §4.5), with no prefix `-` (S-228).
+        if let Some(form) = self.non_integer_form(e) {
+            return Err(self.err(Code::E0401, span, format!("{what} is an integer (`U32`); found {form}")));
+        }
+        if shape.neg {
+            return Err(self.err(Code::E0401, span, format!("{what} is a `U32`, which has no prefix `-` (§4.5)")));
+        }
+        // A constant expression is made of literals and constants (§4.5).
+        if !shape.arith || leaves.iter().any(|(_, l)| matches!(l, Leaf::Other)) {
+            return Err(self.flow_not_const(span, what));
+        }
+        if let Some(i) = leaves.iter().position(|(_, l)| matches!(l, Leaf::Error(_))) {
+            let Leaf::Error(d) = leaves.swap_remove(i).1 else { unreachable!() };
+            return Err(self.diag(d));
+        }
+        // A literal that no `U32` holds, wherever it is (before the values
+        // this version does not compute, S-224).
+        if let Some(&(l, _)) = leaves.iter().find(|(_, l)| matches!(l, Leaf::Int(v) if *v > u32::MAX as u64)) {
+            let lspan = self.expr(l).span;
+            return Err(self.flow_err(Code::E0408, lspan, format!("{what} does not fit in `U32`")));
+        }
+        // The value: one literal or one constant, in parentheses or not.
+        let value = match leaves.as_slice() {
+            [(l, Leaf::Int(v))] if !shape.ops => {
+                self.record(*l, u32);
+                *v as u32
+            }
+            [(l, Leaf::Value(v, d))] if !shape.ops => {
+                self.record(*l, u32);
+                if let Some(d) = d {
+                    self.info.targets.insert(*l, Target::Const(*d));
+                }
+                *v
+            }
+            // The values of the other constant expressions (W7-02, R-195).
+            _ => return Err(self.unsupported_in(Stage::Flow, span, Feature::FlowConstExprs, &[])),
+        };
+        self.record(e, u32);
+        Ok(value)
+    }
+
+    /// The leaves of `e` under parentheses, prefix `-` and binary operators,
+    /// and whether those are the operators of a constant expression (§4.5:
+    /// `+ - * / %`).
+    fn const_shape(&self, e: ExprId, shape: &mut ConstShape) {
+        match &self.expr(e).kind {
+            ExprKind::Paren(x) => self.const_shape(*x, shape),
+            ExprKind::Unary { op: UnOp::Neg, expr: x } => {
+                shape.neg = true;
+                self.const_shape(*x, shape);
+            }
+            ExprKind::Binary { operands, ops } => {
+                shape.ops = true;
+                shape.arith &= ops
+                    .iter()
+                    .all(|(op, _)| matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem));
+                for &o in operands {
+                    self.const_shape(o, shape);
                 }
             }
-            _ => Err(self.flow_not_const(span, what)),
+            _ => shape.leaves.push(e),
         }
     }
 
     fn flow_not_const(&mut self, span: Span, what: &str) -> crate::body::Stop {
-        self.flow_err(
-            Code::E0808,
+        self.err(
+            Code::E0417,
             span,
-            format!(
-                "{what} must be a compile-time constant (an integer literal or a `const`), so that the state size is fixed (§11.4)"
-            ),
+            format!("{what} must be a constant expression (§4.5), so that the state size is fixed (§11.4)"),
         )
     }
 
@@ -1089,7 +1162,7 @@ impl<'a> Rater<'a> {
         let expr = self.expr(e);
         let span = expr.span;
         let r = match &expr.kind {
-            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::Range { .. } => FlowRate::Const,
+            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::Range(_) => FlowRate::Const,
             ExprKind::Path(_) => match self.body.targets.get(&e).cloned() {
                 Some(t) => self.rate_target(e, &t)?.unwrap_or(FlowRate::Const),
                 None => FlowRate::Const,
@@ -1365,7 +1438,7 @@ impl<'a> Rater<'a> {
         }
     }
 
-    /// `par i in a..b { e }` (§11.5): nodes of the body are nested in the `Par` node.
+    /// `par i in a..<b { e }` (§11.5): nodes of the body are nested in the `Par` node.
     fn rate_par(&mut self, e: ExprId, body: ExprId) -> RR<FlowRate> {
         let (var, from, to) = self.fcx.pars[&e];
         self.local_rates.insert(var, FlowRate::Init);
@@ -1481,7 +1554,7 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
         ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => vec![*base],
         ExprKind::Index { base, index } => vec![*base, *index],
         ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
-        ExprKind::Range { lo, hi } => vec![*lo, *hi],
+        ExprKind::Range(r) => vec![r.lo, r.hi],
         ExprKind::Par { body, .. } => vec![*body],
         ExprKind::Lit(_)
         | ExprKind::Path(_)
@@ -1491,4 +1564,27 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
         | ExprKind::Closure { .. }
         | ExprKind::Handle { .. } => Vec::new(),
     }
+}
+
+/// The shape of a constant expression of a flow ([`Checker::const_shape`]).
+struct ConstShape {
+    leaves: Vec<ExprId>,
+    /// Every binary operator is one of a constant expression.
+    arith: bool,
+    /// A prefix `-` (S-228).
+    neg: bool,
+    /// A binary operator.
+    ops: bool,
+}
+
+/// A leaf of a constant expression of a flow.
+enum Leaf {
+    Int(u64),
+    /// A constant with a value (and its item, for a `const`).
+    Value(u32, Option<crate::DefId>),
+    /// A constant whose value this version does not compute (W7-02).
+    Uncomputed,
+    Error(Diagnostic),
+    /// No constant: a local, a function, a call, ...
+    Other,
 }

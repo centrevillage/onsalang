@@ -34,7 +34,7 @@ pub flow bound_to_a_let(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow inside_par(x: F32 at sample) -> F32 at sample {
-  let ds = par i in 0..2 {
+  let ds = par i in 0..<2 {
     delay~(x * i.round_f32(), 1)   //~ E0807
   }
   ds[0] + ds[1]

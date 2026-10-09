@@ -29,7 +29,7 @@ pub flow calls_broken_sig(x: F32 at sample) -> F32 at sample {
 // later stages inside its unit are not reported.
 pub flow par_broken(x: F32 at sample) -> F32 at sample {
   let hidden = missing_name
-  let bank = par i in 0..4 {
+  let bank = par i in 0..<4 {
     x + )                       //~ E0002
   }
   x

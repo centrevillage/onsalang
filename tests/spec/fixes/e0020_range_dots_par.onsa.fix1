@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§7", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020: `a..b` and `a...b` in the header of a `par` (spec §11.5, §7, §18.1, S-257): the same
+// diagnostic and the same two candidates as in the header of a `for`, `a..<b` first and `a..=b`
+// second (fixes/e0020_range_dots.onsa). The ends of a `par` are constant expressions, and a range
+// binds more weakly than the binary operators in them (§3.1). One diagnostic per flow.
+
+const N: U32 = 3
+
+pub flow two_dots(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4 {                                   //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow three_dots(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4 {                                  //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow constant_end(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0..<N {                                   //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow sum_end(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 1..<N + 1 {                               //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow sums_in_both(x: F32 at sample) -> [F32; 2] at sample {
+  par i in N - 1..<N * 2 - 3 {                      //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow bound_by_let(x: F32 at sample) -> [F32; 2] at sample {
+  let rows = par i in 2..<4 {                        //~ E0020
+    x + i.round_f32()
+  }
+  rows
+}
+
+pub flow inner_par(x: F32 at sample) -> [[F32; 2]; 2] at sample {
+  par i in 0..<2 {
+    par j in 0..<2 {                                 //~ E0020
+      x * (i + j).round_f32()
+    }
+  }
+}
+
+pub flow outer_par(x: F32 at sample) -> [[F32; 2]; 2] at sample {
+  par i in 0..<2 {                                   //~ E0020
+    par j in 0..<2 {
+      x * (i + j).round_f32()
+    }
+  }
+}
+
+pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0..<N {
+    x * i.round_f32()
+  }
+}

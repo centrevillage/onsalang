@@ -31,7 +31,7 @@ fn read_at(xs: [Span[F32]; 2], k: U32, i: U32) -> F32 {
 
 fn sum_span(s: Span[F32]) -> F32 {
   var total: F32 = 0.0
-  for i in 0..s.len() {
+  for i in 0..<s.len() {
     total = total + s[i]
   }
   total
@@ -65,14 +65,14 @@ fn clear_channel(inout xs: [Span[F32]; 2], k: U32) {
 
 // A runtime `k` as the loop variable, for the receiver and for the index.
 fn fill_all(inout xs: [Span[F32]; 2], v: F32) {
-  for k in 0..2 {
+  for k in 0..<2 {
     xs[k].fill!(v)
   }
 }
 
 fn ramp_all(inout xs: [Span[F32]; 2]) {
-  for k in 0..2 {
-    for i in 0..xs[k].len() {
+  for k in 0..<2 {
+    for i in 0..<xs[k].len() {
       xs[k][i] = ((k * 10) + i).round_f32()
     }
   }
@@ -82,7 +82,7 @@ fn ramp_all(inout xs: [Span[F32]; 2]) {
 // from the argument's, but indices of one array are taken to overlap (§5.2), so the copy goes
 // through a read loop instead of `copy_from!`.
 fn copy_channel(inout xs: [Span[F32]; 2], from: U32, to: U32) {
-  for i in 0..xs[to].len() {
+  for i in 0..<xs[to].len() {
     xs[to][i] = xs[from][i]
   }
 }

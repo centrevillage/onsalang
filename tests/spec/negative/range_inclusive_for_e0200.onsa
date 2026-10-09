@@ -1,0 +1,86 @@
+// onsa.toml
+// [package]
+// name = "range_inclusive_for_e0200"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0200: the closed range `a..=b` in the header of a `for` (spec §7, §18.1, S-257, S-224). The
+// range is part of the language and it is read, but its lowering (`b` may be the largest value
+// of its type, so the loop ends by testing `b` first and does not overflow) is not made in this
+// version, so the header is reported where it is, with the feature named, and no wrong code is
+// made. The ends are the same as in `a..<b`: integers, `a` then `b` evaluated once, an end may
+// have binary operators.
+//
+// W8-03 lowers it. That work deletes this file and writes the cases of the meaning of `a..=b`
+// (the largest value of the type, the empty range, the order of the ends).
+
+pub fn literal_ends() -> U32 {
+  var t: U32 = 0
+  for i in 0..=3 {                                  //~ E0200
+    t = t + i
+  }
+  t
+}
+
+pub fn named_ends(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..=hi {                                //~ E0200
+    t = t + i
+  }
+  t
+}
+
+pub fn ends_are_sums(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..=hi - 1 {                        //~ E0200
+    t = t + i
+  }
+  t
+}
+
+pub fn the_end_is_the_largest_value() -> U32 {
+  var c: U32 = 0
+  for _ in 250..=U8.MAX {                           //~ E0200
+    c = c + 1
+  }
+  c
+}
+
+pub fn in_an_inner_loop(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0..<n {
+    for _ in 0..=i {                                //~ E0200
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn in_a_branch(go: Bool, n: U32) -> U32 {
+  var c: U32 = 0
+  if go {
+    for _ in 0..=n {                                //~ E0200
+      c = c + 1
+    }
+  }
+  c
+}
+
+// The half-open range is lowered.
+
+pub fn fine(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  t
+}

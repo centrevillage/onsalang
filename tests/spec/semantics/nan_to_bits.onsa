@@ -331,7 +331,7 @@ test "to_bits of a NaN in the arm of a match and in an if" {
 test "a NaN in a loop accumulates to the canonical NaN" {
   var acc: F64 = 1.0
   let z: F64 = 0.0
-  for _ in 0..3 {
+  for _ in 0..<3 {
     let n = z / z
     acc = acc + n
   }

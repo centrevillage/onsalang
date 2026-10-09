@@ -100,6 +100,15 @@ impl<'a> Lower<'a> {
         self.cst.token(t).kind
     }
 
+    /// The range `n`: the parser makes a range only of `..<` and `..=` (the
+    /// other symbols fail, S-257).
+    fn range_head(&mut self, n: NodeId) -> RangeHead {
+        let end = self.cst.child_tokens(n).find_map(|t| self.kind_of(t).range_end());
+        let end = end.unwrap_or_else(|| self.bug(n, "a range symbol `..<` or `..=`"));
+        let e = self.exprs(n);
+        RangeHead { lo: e[0], hi: e[1], end }
+    }
+
     fn ident(&self, t: TokenIdx) -> Ident {
         Ident { name: self.text_of(t).to_string(), span: self.cst.token(t).span }
     }
@@ -985,9 +994,9 @@ impl<'a> Lower<'a> {
             NodeKind::ParExpr => {
                 let var = self.name(n);
                 let range = self.need(n, NodeKind::RangeExpr);
-                let bounds = self.exprs(range);
+                let range = self.range_head(range);
                 let body = self.block(self.need(n, NodeKind::Block));
-                ExprKind::Par { var, from: bounds[0], to: bounds[1], body }
+                ExprKind::Par { var, range, body }
             }
             NodeKind::MoveExpr => ExprKind::Move(self.need_expr(n)),
             NodeKind::BinaryExpr => {
@@ -1005,10 +1014,7 @@ impl<'a> Lower<'a> {
                 }
                 ExprKind::Binary { operands, ops }
             }
-            NodeKind::RangeExpr => {
-                let e = self.exprs(n);
-                ExprKind::Range { lo: e[0], hi: e[1] }
-            }
+            NodeKind::RangeExpr => ExprKind::Range(self.range_head(n)),
             NodeKind::CastExpr => {
                 let expr = self.need_expr(n);
                 let ty = self.first_type(n).unwrap_or_else(|| self.bug(n, "a type"));

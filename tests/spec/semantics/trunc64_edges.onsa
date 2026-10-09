@@ -163,7 +163,7 @@ test "a conversion in range inside a function, a closure and a match arm" {
 test "a conversion in a loop adds up exactly" {
   // 2^61 = 2305843009213693952 is exact in F64; 3 * 2^61 = 6917529027641081856 fits I64.
   var acc: I64 = 0
-  for _ in 0..3 {
+  for _ in 0..<3 {
     let top: F64 = 2305843009213693952.0
     acc = acc + top.trunc_i64()
   }
@@ -226,7 +226,7 @@ test "F32 negative infinity -> U64 panics" {   //~ TESTFAIL "F32 negative infini
 test "a conversion in a loop panics when the sum stops fitting I64" {   //~ TESTFAIL "a conversion in a loop panics when the sum stops fitting I64"
   // The 4th addition reaches 4 * 2^61 = 2^63, one above I64.MAX.
   var acc: I64 = 0
-  for _ in 0..4 {
+  for _ in 0..<4 {
     let top: F64 = 2305843009213693952.0
     acc = acc + top.trunc_i64()
   }

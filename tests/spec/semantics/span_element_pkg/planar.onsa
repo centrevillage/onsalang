@@ -24,7 +24,7 @@ pub fn set(inout xs: [Span[F32]; 2], k: U32, i: U32, v: F32) {
 
 // Writes the channel number into every element of the channel.
 pub fn number_channels(inout xs: [Span[F32]; 2]) {
-  for k in 0..CHANNELS {
+  for k in 0..<CHANNELS {
     xs[k].fill!(k.round_f32())
   }
 }

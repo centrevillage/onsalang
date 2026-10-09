@@ -421,7 +421,7 @@ test "MIN % -1 in a function, a closure, a match arm and a loop is 0" {
   assert ys[0] == 0
   assert ys[2] == 0
   var acc: I8 = 0
-  for _ in 0..3 {
+  for _ in 0..<3 {
     let m: I8 = I8.MIN
     let r = m % -1
     acc = acc + r
@@ -447,7 +447,7 @@ test "MIN / -1 inside an anonymous function panics" {   //~ TESTFAIL "MIN / -1 i
 
 test "MIN / -1 in a loop panics" {   //~ TESTFAIL "MIN / -1 in a loop panics"
   var acc: I8 = 0
-  for _ in 0..3 {
+  for _ in 0..<3 {
     let m: I8 = I8.MIN
     let q = m / -1
     acc = acc + q

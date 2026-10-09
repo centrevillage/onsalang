@@ -149,7 +149,7 @@ pub fn in_a_branch(flag: Bool) -> Bool {
 
 pub fn in_a_loop() -> Bool {
   let o = None
-  for i in 0..2 {
+  for i in 0..<2 {
     let _ = need_f(o)           //~ E0416
   }
   take_oi(o)

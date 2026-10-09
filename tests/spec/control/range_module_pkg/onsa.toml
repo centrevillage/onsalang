@@ -1,0 +1,3 @@
+[package]
+name = "range_module_pkg"
+edition = "2026"

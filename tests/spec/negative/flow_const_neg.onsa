@@ -44,7 +44,7 @@ pub flow delay_bound_to_a_let(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow delay_inside_par(x: F32 at sample) -> F32 at sample {
-  let ds = par i in 0..2 {
+  let ds = par i in 0..<2 {
     delay~(x * i.round_f32(), -2)   //~ E0401
   }
   ds[0] + ds[1]
@@ -71,35 +71,35 @@ pub flow vdelay_negative_constant(x: F32 at sample, d: F32 at sample) -> F32 at 
 // ---------------------------------------------------------------- E0401: par
 
 pub flow par_negative_start(x: F32 at sample) -> F32 at sample {
-  let ys = par i in -1..2 {     //~ E0401
+  let ys = par i in -1..<2 {     //~ E0401
     x * i.round_f32()
   }
   ys[0]
 }
 
 pub flow par_negative_end(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..-1 {     //~ E0401
+  let ys = par i in 0..<-1 {     //~ E0401
     x * i.round_f32()
   }
   ys[0]
 }
 
 pub flow par_negative_zero_start(x: F32 at sample) -> F32 at sample {
-  let ys = par i in -0..2 {     //~ E0401
+  let ys = par i in -0..<2 {     //~ E0401
     x * i.round_f32()
   }
   ys[0]
 }
 
 pub flow par_negative_constant(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..-TWO {   //~ E0401
+  let ys = par i in 0..<-TWO {   //~ E0401
     x * i.round_f32()
   }
   ys[0]
 }
 
 pub flow par_negative_parenthesised(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..-(2) {   //~ E0401
+  let ys = par i in 0..<-(2) {   //~ E0401
     x * i.round_f32()
   }
   ys[0]
@@ -112,7 +112,7 @@ pub flow delay_subtraction(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_subtraction(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 0..ONE - 2 {   //~ E0419
+  let ys = par i in 0..<ONE - 2 {   //~ E0419
     x * i.round_f32()
   }
   ys[0]
@@ -133,14 +133,14 @@ pub flow vdelay_zero(x: F32 at sample, d: F32 at sample) -> F32 at sample {
 }
 
 pub flow par_empty(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 2..2 {      //~ E0808
+  let ys = par i in 2..<2 {      //~ E0808
     x * i.round_f32()
   }
   ys[0]
 }
 
 pub flow par_reversed(x: F32 at sample) -> F32 at sample {
-  let ys = par i in 3..1 {      //~ E0808
+  let ys = par i in 3..<1 {      //~ E0808
     x * i.round_f32()
   }
   ys[0]
@@ -152,7 +152,7 @@ pub flow fine(x: F32 at sample, d: F32 at sample) -> F32 at sample {
   let a = delay~(x, 2)
   let b = delay~(x, TWO + 1, 0.5)
   let c = vdelay~(x, d, 8)
-  let ys = par i in 0..2 {
+  let ys = par i in 0..<2 {
     x * i.round_f32()
   }
   a + b + c + ys[0] + ys[1]

@@ -1,0 +1,64 @@
+// onsa.toml
+// [package]
+// name = "range_inclusive_par_e0200"
+// edition = "2026"
+//
+// [export]
+// prefix = "onsa_"
+// flows = ["range_inclusive_par_e0200.literal_ends", "range_inclusive_par_e0200.constant_end", "range_inclusive_par_e0200.sums_in_the_ends", "range_inclusive_par_e0200.bound_by_let", "range_inclusive_par_e0200.fine"]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [targets.host.memory]
+// bulk_threshold = 4096
+//
+// [test]
+// spec = ["§11.5", "§7", "§18.1"]
+
+// E0200: the closed range `a..=b` in the header of a `par` (spec §11.5, §18.1, S-257, S-224). The
+// replication `par i in a..=b` makes `b - a + 1` copies, an empty range (`a > b`) is E0808, and
+// that is not made in this version, so the header is reported where it is, with the feature
+// named. The ends are constant expressions as in `a..<b`.
+//
+// W7-04 makes it. That work deletes this file and writes the cases of the meaning of `a..=b` in
+// a `par` (the number of copies, the empty range, the index).
+
+const N: U32 = 3
+
+pub flow literal_ends(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..=3 {                                  //~ E0200
+    x * i.round_f32()
+  }
+}
+
+pub flow constant_end(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..=N {                                  //~ E0200
+    x * i.round_f32()
+  }
+}
+
+pub flow sums_in_the_ends(x: F32 at sample) -> [F32; 3] at sample {
+  par i in N - 2..=N + 1 {                          //~ E0200
+    x * i.round_f32()
+  }
+}
+
+pub flow bound_by_let(x: F32 at sample) -> [F32; 2] at sample {
+  let rows = par i in 2..=3 {                       //~ E0200
+    x + i.round_f32()
+  }
+  rows
+}
+
+// The half-open range is made.
+
+pub flow fine(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 0..<N {
+    x * i.round_f32()
+  }
+}

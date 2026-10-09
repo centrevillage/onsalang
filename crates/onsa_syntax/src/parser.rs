@@ -216,6 +216,37 @@ struct Snapshot {
     no_struct_lit: bool,
 }
 
+/// Whether a token starts an operand (§3.1): a prefix operator, a literal,
+/// a name, `_`, a bracket, a block, or an expression keyword. `move` and
+/// `rt` before an operand are errors of their own and start none.
+pub(crate) fn starts_operand(kind: TokenKind) -> bool {
+    use TokenKind::*;
+    matches!(
+        kind,
+        Minus
+            | Bang
+            | Int
+            | Float
+            | Char
+            | Str
+            | KwTrue
+            | KwFalse
+            | Underscore
+            | Ident
+            | KwSelf
+            | KwSelfType
+            | LParen
+            | LBracket
+            | LBrace
+            | KwIf
+            | KwMatch
+            | KwFn
+            | KwHandle
+            | KwUnsafe
+            | KwPar
+    )
+}
+
 impl<'a> Parser<'a> {
     pub(crate) fn new(file: FileId, text: &'a str, lexed: crate::Lexed) -> Parser<'a> {
         let crate::Lexed { tokens: all, diagnostics, holes } = lexed;
@@ -1857,14 +1888,6 @@ impl<'a> Parser<'a> {
             self.parse_stmt()?;
             match self.peek_kind() {
                 TokenKind::Newline | TokenKind::RBrace => {}
-                TokenKind::DotDot | TokenKind::DotDotEq => {
-                    let t = self.peek();
-                    return Err(self.error(
-                        Code::E0002,
-                        t.span,
-                        "ranges are only allowed in `for` and `par` heads (§7)",
-                    ));
-                }
                 _ => return Err(self.unexpected("newline or `}`")),
             }
         }
@@ -2013,29 +2036,26 @@ impl<'a> Parser<'a> {
             self.open[top].level = base;
             expr = self.complete(m, NodeKind::BinaryExpr);
         }
-        if matches!(self.peek_kind(), TokenKind::DotDot | TokenKind::DotDotEq) {
-            let t = self.peek();
-            if !allow_range {
-                return Err(self.error(Code::E0002, t.span, "ranges are only allowed in `for` and `par` heads (§7)"));
-            }
+        // A range is the whole expression of a head and is weaker than the
+        // binary operators (§3.1, S-257). Its other symbols (`..`, `...`) and
+        // a range anywhere else fail at the symbol: the table of the forms of
+        // other languages says what they are (`range_dots`,
+        // `range_outside_header`).
+        if allow_range && self.peek_kind().range_end().is_some() {
             let m = self.precede(expr, NodeKind::RangeExpr)?;
             self.bump();
-            if t.kind == TokenKind::DotDotEq {
-                // No candidate keeps the value (`a..b + 1` panics at the top of
-                // the type), so E0002 with the note (§18.1, S-48; it was an E0020
-                // without a candidate). W3-15 moves it into the table (D10).
-                let d = Diagnostic::new(
-                    Stage::Syntax,
-                    Code::E0002,
-                    t.span,
-                    "there is no inclusive range; use `..` with an adjusted end",
-                )
-                .with_found("..=")
-                .with_rule("a range `a..b` excludes `b`; there is no inclusive range (§7)");
-                self.report(d);
+            // A head ends at the `{` of its body: a range without an end
+            // does not read the body as its end.
+            // SPEC-GAP(S-338): an end that starts with `{` (`0..<{ n }`) is
+            // read as no end either; the spec does not say it.
+            if self.at(TokenKind::LBrace) {
+                return Err(self.fail(Want::Expr, "the end of the range"));
             }
             self.parse_expr_inner(false)?;
             return Ok(self.complete(m, NodeKind::RangeExpr));
+        }
+        if allow_range && self.peek_kind().is_foreign_range() {
+            return Err(self.unexpected("`..<` or `..=`"));
         }
         Ok(expr)
     }
@@ -2066,6 +2086,9 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+    // The tokens `parse_prefix` reads as the start of an operand are those of
+    // `starts_operand` (a `debug_assert` in `parse_primary` and the test
+    // `operand_starts` hold the two together).
     fn parse_prefix(&mut self) -> PResult<Completed> {
         let t = self.peek();
         if matches!(t.kind, TokenKind::Minus | TokenKind::Bang) {
@@ -2368,12 +2391,15 @@ impl<'a> Parser<'a> {
                 self.expect(TokenKind::KwIn)?;
                 let range = self.parse_head_expr(true)?;
                 if range.kind != NodeKind::RangeExpr {
-                    return Err(self.error(Code::E0002, range.span, "`par` needs a range `a..b`"));
+                    return Err(self.error(Code::E0002, range.span, "`par` needs a range `a..<b` or `a..=b`"));
                 }
                 self.parse_block_expr()?;
                 return Ok(self.complete(m, NodeKind::ParExpr));
             }
-            _ => return Err(self.fail(Want::Expr, "an expression")),
+            _ => {
+                debug_assert!(!starts_operand(t.kind), "{:?} starts an operand", t.kind);
+                return Err(self.fail(Want::Expr, "an expression"));
+            }
         };
         let m = self.start(kind)?;
         let t = self.bump();
@@ -2624,7 +2650,8 @@ impl<'a> Parser<'a> {
                     self.bump();
                     self.with_nl(false, |p| {
                         while !p.at(TokenKind::RBrace) {
-                            if p.at(TokenKind::DotDot) {
+                            // `..` and `...` (both tokens of the range symbols).
+                            if p.peek_kind().is_foreign_range() {
                                 let t = p.peek();
                                 return Err(p.error(
                                     Code::E0002,
@@ -2914,13 +2941,116 @@ mod tests {
 
     #[test]
     fn ranges_only_in_heads() {
-        assert_eq!(body("for i in 0..n { }"), "(block (for i in (range 0 n) (block)))");
+        assert_eq!(body("for i in 0..<n { }"), "(block (for i in (range 0 ..< n) (block)))");
+        assert_eq!(body("for i in 0..=n { }"), "(block (for i in (range 0 ..= n) (block)))");
+        // Weaker than the binary operators (§3.1).
         assert_eq!(
-            body("let s = par i in 0..N { f~(i) }"),
-            "(block (let s = (par i in 0..N (block tail (call~ f (i))))))"
+            body("for i in a + 1..<n * 2 { }"),
+            "(block (for i in (range (chain a + 1) ..< (chain n * 2)) (block)))"
         );
-        assert_eq!(codes("fn f() {\n  let r = 0..n\n}"), vec![Code::E0002]);
-        assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0002]);
+        assert_eq!(
+            body("let s = par i in 0..<N { f~(i) }"),
+            "(block (let s = (par i in 0..<N (block tail (call~ f (i))))))"
+        );
+        assert_eq!(
+            body("let s = par i in 0..=N { f~(i) }"),
+            "(block (let s = (par i in 0..=N (block tail (call~ f (i))))))"
+        );
+        // A range is the whole head (§3.1): in parentheses or an argument it
+        // is outside the head (`range_outside_header`, E0002 with the note).
+        let outside = |src: &str| {
+            let p = parse(&format!("fn f() {{\n  {src}\n}}"));
+            assert_eq!(codes_of(&p), [Code::E0002], "{src}");
+            let d = &p.diagnostics[0];
+            assert!(d.fixes.is_empty() && d.message.contains("`for` and `par` heads"), "{src}: {d:?}");
+            assert!(d.notes.iter().any(|n| n.message.contains("xs.slice(from, to)")), "{src}: {d:?}");
+            d.found.clone().unwrap_or_default()
+        };
+        assert_eq!(outside("let r = 0..<n"), "..<");
+        assert_eq!(outside("let r = 0..=n"), "..=");
+        assert_eq!(outside("let r = 0..n"), "..");
+        assert_eq!(outside("let r = xs[1...3]"), "...");
+        assert_eq!(outside("for i in (0..<4) { }"), "..<");
+        assert_eq!(outside("for i in f(0..<3) { }"), "..<");
+        assert_eq!(outside("while 0..<4 { }"), "..<");
+        // A symbol after a range in a head: the general E0002, no candidate.
+        let p = parse("fn f() {\n  for i in 0..<4..5 { }\n}");
+        assert_eq!(codes_of(&p), [Code::E0002]);
+        assert!(
+            p.diagnostics[0].fixes.is_empty() && !p.diagnostics[0].message.contains("heads"),
+            "{:?}",
+            p.diagnostics
+        );
+        // The candidates of `..` for every end that starts an operand; none
+        // for a range of one side (S-278).
+        for end in
+            ["n", "-n", "!n", "(n)", "[n][0]", "if c { 1 } else { 2 }", "match c { _ => 1 }", "'a'", "\"a\"", "_"]
+        {
+            let p = parse(&format!("fn f() {{\n  for i in 0..{end} {{ }}\n}}"));
+            assert_eq!(p.diagnostics[0].code, Code::E0020, "{end}");
+            assert_eq!(p.diagnostics[0].fixes.len(), 2, "{end}");
+        }
+        let p = parse("fn f() {\n  for i in 0.. { }\n}");
+        assert!(p.diagnostics[0].fixes.is_empty(), "{:?}", p.diagnostics);
+    }
+
+    /// `starts_operand` is the set of tokens `parse_primary` and
+    /// `parse_prefix` read as the start of an operand.
+    #[test]
+    fn operand_starts() {
+        let operands = [
+            "-x",
+            "!x",
+            "1",
+            "1.0",
+            "'a'",
+            "\"s\"",
+            "true",
+            "false",
+            "_",
+            "x",
+            "self",
+            "Self",
+            "(x)",
+            "[x]",
+            "{ x }",
+            "if c { 1 } else { 2 }",
+            "match x { _ => 1 }",
+            "fn(x: U32) -> U32 { x }",
+            "unsafe { x }",
+            "handle { x } with h",
+            "par i in 0..<2 { x }",
+        ];
+        for src in operands {
+            let p = parse(&format!("fn f() {{\n  let a = {src}\n}}"));
+            let first = crate::lex(FileId(0), src).tokens.into_iter().find(|t| !t.kind.is_trivia()).unwrap();
+            assert!(super::starts_operand(first.kind), "{src}");
+            assert!(
+                p.diagnostics.iter().all(|d| d.span.start as usize > "fn f() {\n  let a = ".len()),
+                "{src}: {:?}",
+                p.diagnostics
+            );
+        }
+        for src in ["..<", "..", ".", ",", ")", "}", "=>", "+", "*", "move", "rt", "@", "<"] {
+            let first = crate::lex(FileId(0), src).tokens.into_iter().find(|t| !t.kind.is_trivia()).unwrap();
+            assert!(!super::starts_operand(first.kind), "{src}");
+        }
+    }
+
+    #[test]
+    fn struct_pattern_rest_dots() {
+        // `..` and `...` (the range symbols of other languages) say the same.
+        for rest in ["..", "..."] {
+            let p = parse(&format!(
+                "struct P {{ x: U32, y: U32 }}\nfn f(p: P) -> U32 {{\n  match p {{\n    P {{ x: a, {rest} }} => a\n  }}\n}}"
+            ));
+            assert_eq!(codes_of(&p), [Code::E0002], "{rest}");
+            assert!(
+                p.diagnostics[0].message.contains("struct patterns name every field"),
+                "{rest}: {:?}",
+                p.diagnostics
+            );
+        }
     }
 
     #[test]
@@ -3063,7 +3193,7 @@ mod tests {
         assert_eq!(codes_of(&p), [Code::E0020, Code::E0020]);
         let d = dump(&p.ast);
         assert!(d.contains("(failed:body fn f()") && d.contains("(fn h()"), "{d}");
-        assert_eq!(codes("fn f() {\n  for i in 0..=n { }\n}"), vec![Code::E0002]);
+        assert_eq!(codes("fn f() {\n  for i in 0..n { }\n}"), vec![Code::E0020]);
     }
 
     #[test]

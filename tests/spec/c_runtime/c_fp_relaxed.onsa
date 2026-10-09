@@ -207,7 +207,7 @@ pub fn rel_muladd_f32(a: F32, b: F32, c: F32) -> F32 {
 @fp(relaxed)
 pub fn rel_loop_f32(a: F32, n: U32) -> F32 {
   var acc: F32 = 0.0
-  for _ in 0..n {
+  for _ in 0..<n {
     acc = (a * acc) + 1.0
   }
   acc
@@ -252,7 +252,7 @@ pub fn strict_after_f32(a: F32, b: F32, c: F32) -> F32 {
 
 pub fn strict_loop_after_f32(a: F32, b: F32, init: F32, n: U32) -> F32 {
   var acc: F32 = init
-  for _ in 0..n {
+  for _ in 0..<n {
     acc = (a * b) + acc
   }
   acc

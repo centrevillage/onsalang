@@ -35,7 +35,7 @@ pub fn energy(xs: Span[F32], from: U32, to: U32) -> F64 {
   assert from <= to
   assert to <= xs.len()
   var acc: F64 = 0.0
-  for i in from..to {
+  for i in from..<to {
     let x = xs[i] as F64
     acc = acc + (x * x)
   }

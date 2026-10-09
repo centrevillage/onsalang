@@ -1,0 +1,160 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// A range outside the header of a `for` or a `par` is E0002 (spec §7, S-257): a range is not a
+// value, and a part of an array is written `xs.slice(from, to)` (§5.3), which the note shows.
+// The spelling does not matter: a candidate for `0..n` (`0..<n`) would leave this error, so the
+// candidates of §18.1 are not made and the general syntax error stands (that the diagnostics have
+// no `fixes` and a note is checked in crates/onsa_cli/tests/range_syntax.rs). One diagnostic per
+// function.
+
+pub fn take(r: U32) -> U32 {
+  r
+}
+
+pub struct Window {
+  lo: U32,
+  hi: U32,
+}
+
+pub fn let_half_open(n: U32) -> U32 {
+  let r = 0..<n                                     //~ E0002
+  n
+}
+
+pub fn let_closed(n: U32) -> U32 {
+  let r = 0..=n                                     //~ E0002
+  n
+}
+
+pub fn let_two_dots(n: U32) -> U32 {
+  let r = 0..n                                      //~ E0002
+  n
+}
+
+pub fn let_three_dots(n: U32) -> U32 {
+  let r = 0...n                                     //~ E0002
+  n
+}
+
+pub fn let_with_a_sum(n: U32) -> U32 {
+  let r = 0..<n + 1                                 //~ E0002
+  n
+}
+
+pub fn parenthesized(n: U32) -> U32 {
+  let r = (0..<n)                                   //~ E0002
+  n
+}
+
+pub fn a_part_of_an_array(xs: [I32; 4]) -> I32 {
+  let s = xs[1..<3]                                 //~ E0002
+  0
+}
+
+pub fn a_part_of_an_array_closed(xs: [I32; 4]) -> I32 {
+  let s = xs[1..=2]                                 //~ E0002
+  0
+}
+
+pub fn a_part_of_an_array_two_dots(xs: [I32; 4]) -> I32 {
+  let s = xs[1..3]                                  //~ E0002
+  0
+}
+
+pub fn an_argument(n: U32) -> U32 {
+  take(0..<4)                                       //~ E0002
+}
+
+pub fn the_tail_expression(n: U32) -> U32 {
+  0..<n                                             //~ E0002
+}
+
+pub fn a_return_value(n: U32) -> U32 {
+  return 0..<n                                      //~ E0002
+}
+
+pub fn an_assignment(n: U32) -> U32 {
+  var r = 0
+  r = 0..<n                                         //~ E0002
+  n
+}
+
+pub fn a_tuple(n: U32) -> U32 {
+  let t = (0..<2, n)                                //~ E0002
+  n
+}
+
+pub fn an_array(n: U32) -> U32 {
+  let a = [0..<2, 1..<3]                            //~ E0002
+  n
+}
+
+pub fn a_struct_field(n: U32) -> U32 {
+  let w = Window { lo: 0..<1, hi: n }               //~ E0002
+  n
+}
+
+pub fn an_operand(n: U32) -> U32 {
+  let b = 1 + 0..<n                                 //~ E0002
+  n
+}
+
+pub fn a_condition(n: U32) -> U32 {
+  if 0..<n {                                        //~ E0002
+    1
+  } else {
+    2
+  }
+}
+
+pub fn a_loop_condition(n: U32) -> U32 {
+  while 0..<n {                                     //~ E0002
+    break
+  }
+  n
+}
+
+pub fn a_scrutinee(n: U32) -> U32 {
+  match 0..<n {                                     //~ E0002
+    _ => 1,
+  }
+}
+
+pub fn a_loop_over_a_value_of_a_range(n: U32) -> U32 {
+  var c: U32 = 0
+  let r = 0..<n                                     //~ E0002
+  for _ in r {
+    c = c + 1
+  }
+  c
+}
+
+// A header with a missing end or start is not a range.
+
+pub fn missing_end(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0..< {                                   //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+pub fn missing_start(n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in ..<n {                                   //~ E0002
+    c = c + 1
+  }
+  c
+}
+
+// The headers of a `for` are not touched by the errors above.
+
+pub fn fine(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  t
+}

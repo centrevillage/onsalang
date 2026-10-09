@@ -103,7 +103,7 @@ test "the fields of a struct give the expected type" {
 
 fn sum_to(n: U32) -> U32 {
   var acc = id(0)
-  for i in 0..n {
+  for i in 0..<n {
     acc = acc + i
   }
   acc

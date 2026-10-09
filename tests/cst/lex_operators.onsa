@@ -17,6 +17,7 @@ a.b a.(x) f(x) f~(x) f!(x) xs[i] x? ^y x as T x at s
 a = b
 a -> b => c
 a .. b ..= c ... d
+a ..< b ..<= c ..<< d ..<. e
 a::b a: b a, b
 @attr @param(min: 1.0) @repr(c)
 a+b-c*d/e%f
@@ -36,6 +37,7 @@ a?.b a??b a?[0] a?(x)
 (a)(b) a (b) a[b][c] a [b] a. b a .b a . b a ?
 a ~(b) a~ (b) a~(b) a! (b) a !(b) a ^b ^ a ^a a^b
 a..b a..=b a...b a....b a.b..c
+a..<b a..<=b a..<<b a...<b a..=<b
 a.0 a.0.1 a.(0) a.{0} a.[0]
 # ## $ $$ \ \\ ` `` ; @@ @ § ¥ ¬ ± × ÷ ∑ → ←
 @

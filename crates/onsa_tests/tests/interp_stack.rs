@@ -76,7 +76,7 @@ pub fn dive_match(n: U32) -> U32 {
 
 fn dive_for_go(n: U32) {
   if n > 0 {
-    for i in 0..1 {
+    for i in 0..<1 {
       dive_for_go(n - 1 + i)
     }
   }

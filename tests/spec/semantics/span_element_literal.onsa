@@ -30,8 +30,8 @@ fn clear_channel(inout xs: [Span[F32]; 2], k: U32) {
 }
 
 fn ramp_all(inout xs: [Span[F32]; 2]) {
-  for k in 0..2 {
-    for i in 0..xs[k].len() {
+  for k in 0..<2 {
+    for i in 0..<xs[k].len() {
       xs[k][i] = ((k * 10) + i).round_f32()
     }
   }

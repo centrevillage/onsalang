@@ -137,7 +137,7 @@ impl Poly {
   }
 
   pub rt fn note_off(inout self, note: U8) {
-    for i in 0..MAX_VOICES {
+    for i in 0..<MAX_VOICES {
       if self.notes[i] == Some(note) {
         self.notes[i] = None
         self.params[i].gain = 0.0 // smooth により 10 ms で減衰する
@@ -147,7 +147,7 @@ impl Poly {
 
   pub rt fn process(inout self, inout out: Span[F32], inout scratch: Span[F32]) {
     out.fill!(0.0)
-    for i in 0..MAX_VOICES {
+    for i in 0..<MAX_VOICES {
       voice.process(inout self.voices[i], self.params[i], inout scratch)
       out.add_from!(scratch)
     }

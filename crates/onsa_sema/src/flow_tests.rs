@@ -239,7 +239,7 @@ fn e0806_forms() {
     for body in [
         "var a = 1.0\n  a",
         "let a = x\n  a = x\n  a",
-        "for i in 0..4 { }\n  x",
+        "for i in 0..<4 { }\n  x",
         "while true { }\n  x",
         "return x",
         "assert true\n  x",
@@ -261,13 +261,63 @@ fn e0807_e0808_delay_lengths() {
     assert_eq!(a.diagnostics[0].code, Code::E0807);
     assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev(x, 0.0)");
     assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, 0, 0.0)\n}\n"), vec![Code::E0808]);
+    // Not a constant: E0417 (§11.4).
     assert_eq!(
         codes("pub flow f(x: Sig[F32], n: Init[U32]) -> Sig[F32] {\n  delay(x, n, 0.0)\n}\n"),
-        vec![Code::E0808]
+        vec![Code::E0417]
     );
     assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  vdelay(x, 2.0, 0, 0.0)\n}\n"), vec![Code::E0808]);
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[[F32; 0]] {\n  par i in 2..2 { x }\n}\n"), vec![Code::E0808]);
+    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[[F32; 0]] {\n  par i in 2..<2 { x }\n}\n"), vec![Code::E0808]);
     ok("const N: U32 = 8\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, N, 0.0) + vdelay(x, 2.0, N, 0.0)\n}\n");
+}
+
+#[test]
+fn par_ranges() {
+    let par = |ret: &str, head: &str| {
+        codes(&format!("pub flow f(x: Sig[F32], n: Init[U32]) -> Sig[{ret}] {{\n  par i in {head} {{ x }}\n}}\n"))
+    };
+    // The bounds: integer constants (§7 E0401, §11.5 E0417), not empty (E0808).
+    assert_eq!(par("[F32; 2]", "0.0..<2.0"), vec![Code::E0401]);
+    assert_eq!(par("[F32; 2]", "0..<n"), vec![Code::E0417]);
+    assert_eq!(par("[F32; 0]", "3..=2"), vec![Code::E0808]);
+    // `..=` is E0200 until W7-04 (S-224), also for one instance (`2..=2`).
+    assert_eq!(par("[F32; 1]", "2..=2"), vec![Code::E0200]);
+    assert_eq!(par("[F32; 3]", "0..=2"), vec![Code::E0200]);
+    // Not read by the modes (a local is no constant): no move happens in a
+    // `par` head, unlike a `for` head (R-194).
+    assert_eq!(par("[F32; 2]", "0..<n.min(2)"), vec![Code::E0417]);
+    // The forms of §4.5 that this version does not compute: E0200 until
+    // W7-02 (R-195); a prefix `-` on a `U32` is E0401 (S-228).
+    assert_eq!(par("[F32; 4]", "0..<3 + 1"), vec![Code::E0200]);
+    assert_eq!(par("[F32; 4]", "0..<(2 * 2)"), vec![Code::E0200]);
+    assert_eq!(par("[F32; 4]", "(0)..<(4)"), vec![]);
+    assert_eq!(par("[F32; 3]", "-1..<2"), vec![Code::E0401]);
+    assert_eq!(par("[F32; 2]", "0..<n + 1"), vec![Code::E0417]);
+    let computed = "const N: U32 = 2\nconst M: U32 = N * 2\npub flow f(x: Sig[F32]) -> Sig[[F32; 4]] {\n  par i in 0..<M { x }\n}\n";
+    assert_eq!(codes(computed), vec![Code::E0200]);
+    let delay = "const N: U32 = 4\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, N + 1, 0.0)\n}\n";
+    assert_eq!(codes(delay), vec![Code::E0200]);
+    // The names of the leaves are resolved first (§18.1): a name that is not
+    // declared is E0302, a function is no constant (E0417), and a constant
+    // of a type is a constant expression (E0200 until W7-02).
+    let g = "pub fn g() -> U32 { 3 }\npub flow f(x: Sig[F32]) -> Sig[[F32; 2]] {\n  par i in 0..<g + 1 { x }\n}\n";
+    assert_eq!(codes(g), vec![Code::E0417]);
+    assert_eq!(par("[F32; 2]", "0..<zzz + 1"), vec![Code::E0302]);
+    assert_eq!(par("[F32; 2]", "0..<1 + zzz"), vec![Code::E0302]);
+    assert_eq!(par("[F32; 2]", "0..<n + zzz"), vec![Code::E0302]);
+    assert_eq!(par("[F32; 32]", "0..<I32.BITS"), vec![Code::E0200]);
+    assert_eq!(par("[F32; 2]", "0..<F32.PI"), vec![Code::E0401]);
+    let bits = "pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, I32.BITS, 0.0)\n}\n";
+    assert_eq!(codes(bits), vec![Code::E0200]);
+    // A float literal among the operands is a type error (E0401).
+    let float = "const N: U32 = 2\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, N + 1.5, 0.0)\n}\n";
+    assert_eq!(codes(float), vec![Code::E0401]);
+    assert_eq!(par("[F32; 2]", "-1.5..<3"), vec![Code::E0401]);
+    // A literal that no `U32` holds is E0408 in a computed expression too.
+    assert_eq!(par("[F32; 2]", "0..<4294967296"), vec![Code::E0408]);
+    assert_eq!(par("[F32; 2]", "0..<4294967296 + 1"), vec![Code::E0408]);
+    let big = "const N: U32 = 2\npub flow f(x: Sig[F32]) -> Sig[[F32; 2]] {\n  par i in 0..<N + 4294967296 { x }\n}\n";
+    assert_eq!(codes(big), vec![Code::E0408]);
 }
 
 #[test]

@@ -109,7 +109,7 @@ test "two const parameters and a nested array" {
 }
 
 fn bump[const N: U32](inout xs: [U32; N]) {
-  for i in 0..N {
+  for i in 0..<N {
     xs[i] = xs[i] + 1
   }
 }

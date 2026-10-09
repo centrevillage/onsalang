@@ -74,7 +74,7 @@ fn dive_match(n: U32) -> U32 {
 // The recursion goes through a `for` body.
 fn dive_for(n: U32) {
   if n > 0 {
-    for i in 0..1 {
+    for i in 0..<1 {
       dive_for(n - 1 + i)
     }
   }

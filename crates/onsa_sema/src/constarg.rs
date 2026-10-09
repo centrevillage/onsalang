@@ -27,6 +27,10 @@ pub(crate) enum ConstU32 {
 pub(crate) enum ConstErr {
     /// A diagnostic for the caller to report.
     Report(Diagnostic),
+    /// A constant expression whose value this version does not compute (a
+    /// `const` computed by an expression, `I32.BITS`): the diagnostic of the
+    /// array lengths, for the caller to report or to say in its own words.
+    Uncomputed(Diagnostic),
     /// A constant whose unit failed in the syntax stage (S-59): its value was
     /// not read, and its users get no diagnostic for it (R-71).
     Unknown,
@@ -91,7 +95,7 @@ pub(crate) fn expr(
 }
 
 /// `N`, `cfg.N`, `I32.BITS` as a path (a field chain of names is a qualified name here).
-fn path_of(ast: &Ast, e: ExprId) -> Option<Path> {
+pub(crate) fn path_of(ast: &Ast, e: ExprId) -> Option<Path> {
     let expr = ast.expr(e);
     match &expr.kind {
         ExprKind::Path(p) => Some(p.clone()),
@@ -187,10 +191,11 @@ pub(crate) fn named(
                     .with_found(found)
                     .into()),
                 },
-                None => Err(onsa_diag::unsupported::Feature::ComputedArrayLengths
-                    .diagnostic(Stage::Types, span, &[])
-                    .with_found(found)
-                    .into()),
+                None => Err(ConstErr::Uncomputed(
+                    onsa_diag::unsupported::Feature::ComputedArrayLengths
+                        .diagnostic(Stage::Types, span, &[])
+                        .with_found(found),
+                )),
             }
         }
         Ok(_) => Ok(None),
@@ -214,10 +219,11 @@ pub(crate) fn named(
                         }
                         // A `U32` associated constant (`I32.BITS`): its value is the
                         // constant evaluator's (W5-08 types the whole grammar).
-                        return Err(onsa_diag::unsupported::Feature::ComputedArrayLengths
-                            .diagnostic(Stage::Types, span, &[])
-                            .with_found(found)
-                            .into());
+                        return Err(ConstErr::Uncomputed(
+                            onsa_diag::unsupported::Feature::ComputedArrayLengths
+                                .diagnostic(Stage::Types, span, &[])
+                                .with_found(found),
+                        ));
                     }
                 }
             }

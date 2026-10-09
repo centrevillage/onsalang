@@ -91,7 +91,7 @@ pub fn name_error_alone() -> I32 {
 // or a generic function. Whatever comes before or after it in the unit is not reported.
 pub fn in_loops() -> I32 {
   let hidden: Bool = 1
-  for i in 0..3 {
+  for i in 0..<3 {
     if i > 1 {
       let = i                   //~ E0002
     }

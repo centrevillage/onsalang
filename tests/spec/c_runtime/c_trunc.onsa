@@ -390,7 +390,7 @@ pub fn trunc_neg09_u64_f32(k: F32) -> Bool {
 
 pub fn trunc_sum_loop_i64(n: U32) -> I64 {
   var acc: I64 = 0
-  for _ in 0..n {
+  for _ in 0..<n {
     let top: F64 = 2305843009213693952.0
     acc = acc + top.trunc_i64()
   }
@@ -399,7 +399,7 @@ pub fn trunc_sum_loop_i64(n: U32) -> I64 {
 
 pub fn trunc_sat_sum_loop_u64(n: U32, part: U32) -> U32 {
   var acc: U64 = 0
-  for _ in 0..n {
+  for _ in 0..<n {
     let top: F64 = 9223372036854775808.0
     acc = acc +| top.trunc_u64_sat()
   }

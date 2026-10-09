@@ -94,7 +94,7 @@ rt fn f.reset(inout s: f.State)                       // 遅延を init 値に�
 rt fn f.ctl(inout s: f.State, params: f.Params)       // block のクロックのノードを順に評価（ブロックに 1 回）。sample から読まれるものは状態へ
 rt fn f.tick(inout s: f.State, sample の入力の値...) -> 出力の値   // sample のクロックのノードを順に評価する 1 サンプル分。遅延の保存は最後にまとめて（R-13）
 rt fn f.process(inout s: f.State, params: f.Params, input..., inout output...) {   // 引数の形と名前は S-30
-  // ctl を 1 回、for i in 0..frames { 入力を全て読む、tick、出力を全て書く }（詳細 D-03）
+  // ctl を 1 回、for i in 0..<frames { 入力を全て読む、tick、出力を全て書く }（詳細 D-03）
 }
 rt fn f.process_inplace(inout s: f.State, p: f.Params, inout 入出力: Span[T]...)  // 入出力の形が一致するときだけ
 fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ。sample の入力があれば frames 無し

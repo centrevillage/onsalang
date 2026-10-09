@@ -50,7 +50,7 @@ pub fn captures_inout_argument(inout k: U32) -> U32 {
 
 pub fn captures_inout_inside_a_loop(inout total: U32, n: U32) -> U32 {
   var out: U32 = 0
-  for i in 0..n {
+  for i in 0..<n {
     out = out + apply(fn(x: U32) -> U32 { x + total + i })   //~ E0712
   }
   out

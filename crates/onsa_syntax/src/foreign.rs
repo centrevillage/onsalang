@@ -189,6 +189,8 @@ pub enum RowId {
     TypeArgsOnExpression,
     TypePositionPath,
     SpaceInTypeArgsMark,
+    RangeDots,
+    RangeOutsideHeader,
 }
 
 pub struct Row {
@@ -563,6 +565,24 @@ pub static ROWS: &[Row] = &[
         rule: "type arguments in an expression are written `name::[T]`, with no space before or after the `::` (§2.5, §4.5)",
         detect: Detect::Syntax(space_in_type_args_mark),
     },
+    Row {
+        id: RowId::RangeDots,
+        name: "range_dots",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a range is written `a..<b` (without its end) or `a..=b` (with it)",
+        rule: "a range `a..<b` excludes `b` and `a..=b` includes it; `..` and `...` include the end in some languages and not in others (§7)",
+        detect: Detect::Syntax(range_dots),
+    },
+    Row {
+        id: RowId::RangeOutsideHeader,
+        name: "range_outside_header",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "ranges are only written in `for` and `par` heads",
+        rule: "a range is the whole head of a `for` or a `par` and is not a value (§7); a part of a sequence is `xs.slice(from, to)` (§5.3)",
+        detect: Detect::Syntax(range_outside_header),
+    },
 ];
 
 /// The rows of the data file that no work has made yet (the later works
@@ -595,8 +615,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "struct_pattern_rest", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "range_pattern", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "range_pattern_choice", phase: Phase::Syntax, code: Code::E0002 },
-    Waiting { name: "range_dots", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "range_outside_header", phase: Phase::Syntax, code: Code::E0002 },
     Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "rate_as_type", phase: Phase::Names, code: Code::E0020 },
@@ -2681,4 +2699,74 @@ fn increment(c: &Cursor) -> Option<Hit> {
         }
     }
     none()
+}
+
+/// The range symbol at the failure (`..<`, `..=`, `..`, `...`) after an
+/// expression on its line, outside a pattern (the range patterns are the
+/// rows `range_pattern` and `range_pattern_choice`, W3-07): whether it is
+/// in the head of a `for` or a `par`, where a range is the whole expression
+/// (§3.1), or else none for a symbol in a head after a range
+/// (`for i in 0..<4..5`: the general E0002, as no candidate makes it one).
+fn range_symbol(c: &Cursor) -> Option<bool> {
+    if c.kind(c.at).range_readings().is_empty() || c.want == Want::Pattern || c.before(c.at).is_none() {
+        return None;
+    }
+    let pattern = |k: NodeKind| crate::lower::class(k) == crate::lower::Class::Pat;
+    if c.closed.first().is_some_and(|n| pattern(n.0)) || c.top().is_some_and(pattern) {
+        return None;
+    }
+    closed_expr(c)?;
+    // The head: the expression that closed here starts right after `in`
+    // (or `in move`) of the innermost open `for` or `par` (the context: the
+    // block of the body may be open before its `{`).
+    let outer = c.closed.iter().rev().find(|n| crate::lower::class(n.0) == crate::lower::Class::Expr)?;
+    let head = matches!(c.context(), Some((_, NodeKind::ForStmt | NodeKind::ParExpr)))
+        && c.sig_before(c.index_at(outer.1)).is_some_and(|i| matches!(c.kind(i), TokenKind::KwIn | TokenKind::KwMove));
+    if head && outer.0 == NodeKind::RangeExpr {
+        return None;
+    }
+    Some(head)
+}
+
+/// `a..b` and `a...b` in a head (S-257): whether the end is included is
+/// read both ways across languages, so the two candidates edit the symbol
+/// only (S-251), `..<` first. An end that is not there (`1..`, a range of
+/// one side, S-278, W3-07) gets no row: the end is a token that starts an
+/// operand ([`crate::parser::starts_operand`]; an end that a later stage
+/// rejects is the error of that stage, after the candidate) but `{`, which
+/// a head reads as its body (the gap S-338, marked at the parser's range).
+fn range_dots(c: &Cursor) -> Option<Hit> {
+    if !range_symbol(c)? || !c.kind(c.at).is_foreign_range() {
+        return None;
+    }
+    // A symbol is never the last token (`Eof` is).
+    let next = c.kind(c.at + 1);
+    if !crate::parser::starts_operand(next) || next == TokenKind::LBrace {
+        return None;
+    }
+    let span = c.span(c.at);
+    let fixes = c
+        .kind(c.at)
+        .range_readings()
+        .iter()
+        .map(|end| {
+            let label = match end {
+                crate::ast::RangeEnd::Excluded => "exclude the end with `..<`",
+                crate::ast::RangeEnd::Included => "include the end with `..=`",
+            };
+            Fix::replace(label, span, end.symbol())
+        })
+        .collect();
+    hit(span, fixes)
+}
+
+/// A range after an expression outside the head of a `for` or a `par`
+/// (`let r = 0..<4`, `xs[1..<3]`, `for i in (0..<4)`): E0002 with the note,
+/// whatever its symbol (a candidate for `..` would leave the range where
+/// none goes, §18.1).
+fn range_outside_header(c: &Cursor) -> Option<Hit> {
+    if range_symbol(c)? {
+        return None;
+    }
+    hit(c.span(c.at), Vec::new())
 }

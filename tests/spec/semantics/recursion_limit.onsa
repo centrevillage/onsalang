@@ -74,7 +74,7 @@ fn dive_match(n: U32) -> U32 {
 
 fn dive_for(n: U32) {
   if n > 0 {
-    for i in 0..1 {
+    for i in 0..<1 {
       dive_for(n - 1 + i)
     }
   }
@@ -419,7 +419,7 @@ test "a call in an argument position is not nested in the call it is an argument
 
 test "blocks, branches, loops and a match add no depth" {
   var sum: U32 = 0
-  for i in 0..3 {
+  for i in 0..<3 {
     let o: Option[U32] = Some(i)
     match o {
       Some(k) => {

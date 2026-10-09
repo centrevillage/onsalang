@@ -435,11 +435,12 @@ impl<'a> Walker<'a> {
                 }
             }
             // A `::[…]` names an item (W4-13; E0200 until then), not a local.
-            ExprKind::Lit(_)
-            | ExprKind::Hole
-            | ExprKind::Error
-            | ExprKind::Range { .. }
-            | ExprKind::TypeArgs { .. } => {}
+            ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::TypeArgs { .. } => {}
+            // The ends are read once, before the first iteration (§3.5).
+            ExprKind::Range(r) => {
+                self.expr(r.lo, Pos::Other);
+                self.expr(r.hi, Pos::Other);
+            }
             ExprKind::Path(_) => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
                     let id = *id;
@@ -532,9 +533,9 @@ impl<'a> Walker<'a> {
                 self.diverged = saved_div;
             }
             ExprKind::Handle { body, .. } | ExprKind::Unsafe(body) => self.expr(*body, pos),
-            ExprKind::Par { from, to, body, .. } => {
-                self.expr(*from, Pos::Other);
-                self.expr(*to, Pos::Other);
+            ExprKind::Par { range, body, .. } => {
+                self.expr(range.lo, Pos::Other);
+                self.expr(range.hi, Pos::Other);
                 self.expr(*body, Pos::Other);
             }
             ExprKind::Binary { operands, .. } => {

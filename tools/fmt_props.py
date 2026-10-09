@@ -141,7 +141,7 @@ MARKER_END = re.compile(r"[ ]*// " + MARKER + r"(\d+)[ ]*$")
 
 # The operators of more than one character (§3.1); the rest are one character.
 OPERATORS = sorted(
-    "..= .. :: -> => == != <= >= << >> && || +% -% *% +| -| *|".split(), key=len, reverse=True
+    "..< ..= ... .. :: -> => == != <= >= << >> && || +% -% *% +| -| *|".split(), key=len, reverse=True
 )
 # A line ending in one of these continues (§2.5: a binary operator, `=`, `->`).
 CONTINUING = frozenset("+ - * / % == != < > <= >= && || ^ << >> +% -% *% +| -| *| = ->".split())

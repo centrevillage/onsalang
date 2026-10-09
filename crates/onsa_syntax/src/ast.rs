@@ -499,6 +499,43 @@ pub struct Expr {
     pub kind: ExprKind,
 }
 
+/// Whether a range has its end (§7, S-257): `a..<b` does not, `a..=b` does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RangeEnd {
+    /// `a..<b`
+    Excluded,
+    /// `a..=b`
+    Included,
+}
+
+impl RangeEnd {
+    /// The symbol of the range.
+    pub fn symbol(self) -> &'static str {
+        match self {
+            RangeEnd::Excluded => "..<",
+            RangeEnd::Included => "..=",
+        }
+    }
+
+    /// The comparison of a value with the end that holds inside the range
+    /// (`k < b`, `k <= b`; the guards of the range patterns, S-249).
+    pub fn cmp(self) -> &'static str {
+        match self {
+            RangeEnd::Excluded => "<",
+            RangeEnd::Included => "<=",
+        }
+    }
+}
+
+/// A range `lo..<hi` or `lo..=hi`: the head of a `for` ([`ExprKind::Range`])
+/// or of a `par` ([`ExprKind::Par`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RangeHead {
+    pub lo: ExprId,
+    pub hi: ExprId,
+    pub end: RangeEnd,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinOp {
     Add,
@@ -712,11 +749,10 @@ pub enum ExprKind {
     },
     /// `unsafe { ... }`
     Unsafe(ExprId),
-    /// `par i in a..b { ... }`
+    /// `par i in a..<b { ... }`, `par i in a..=b { ... }`
     Par {
         var: Ident,
-        from: ExprId,
-        to: ExprId,
+        range: RangeHead,
         body: ExprId,
     },
     /// Flat chain `operands[0] ops[0] operands[1] ops[1] ...` (groups checked later).
@@ -768,11 +804,8 @@ pub enum ExprKind {
     /// assignment value, literal element, `match move x`. Call arguments keep
     /// `Arg.mode` and `for ... in move xs` keeps `StmtKind::For.moved`.
     Move(ExprId),
-    /// `a..b` (only in `for` / `par` heads)
-    Range {
-        lo: ExprId,
-        hi: ExprId,
-    },
+    /// `a..<b`, `a..=b` (only in `for` heads; a `par` head is in `Par`)
+    Range(RangeHead),
 }
 
 #[derive(Debug, Clone)]

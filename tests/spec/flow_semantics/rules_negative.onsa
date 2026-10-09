@@ -44,7 +44,7 @@ pub flow match_with_instance(k: U32 at sample, x: F32 at sample) -> F32 at sampl
 }
 
 pub flow if_with_par(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { sum(par i in 0..2 { prev~(x) * i.round_f32() }) } else { 0.0 }   //~ E0811
+  if x > 0.0 { sum(par i in 0..<2 { prev~(x) * i.round_f32() }) } else { 0.0 }   //~ E0811
 }
 
 pub flow flow_without_tilde(x: F32 at sample) -> F32 at sample {
@@ -148,11 +148,11 @@ pub flow block_into_vdelay(p: F32 at block) -> F32 at sample {
 // ---- E0808: ranges of the lengths and of par ----
 
 pub flow par_range_empty(x: F32 at sample) -> F32 at sample {
-  sum(par i in 3..3 { x * i.round_f32() })                        //~ E0808
+  sum(par i in 3..<3 { x * i.round_f32() })                        //~ E0808
 }
 
 pub flow par_range_reversed(x: F32 at sample) -> F32 at sample {
-  sum(par i in 4..2 { x * i.round_f32() })                        //~ E0808
+  sum(par i in 4..<2 { x * i.round_f32() })                        //~ E0808
 }
 
 pub flow vdelay_max_zero(x: F32 at sample) -> F32 at sample {
@@ -201,7 +201,7 @@ pub flow vdelay_max_from_an_input(x: F32 at sample, m: U32 at init) -> F32 at sa
 }
 
 pub flow par_count_from_an_input(x: F32 at sample, n: U32 at init) -> F32 at sample {
-  sum(par i in 0..n { x * i.round_f32() })                        //~ E0417
+  sum(par i in 0..<n { x * i.round_f32() })                        //~ E0417
 }
 
 // ---- E0806: state on the right of && / ||, a let in a nested block ----
@@ -217,7 +217,7 @@ pub flow or_with_state_on_the_right(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow let_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  sum(par i in 0..2 {
+  sum(par i in 0..<2 {
     let t = x * i.round_f32()                                     //~ E0806
     t
   })
@@ -239,7 +239,7 @@ pub flow instance_of_itself(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow instance_of_itself_in_a_par(x: F32 at sample) -> F32 at sample {
-  sum(par i in 0..2 { instance_of_itself_in_a_par~(x) * i.round_f32() })   //~ E0817
+  sum(par i in 0..<2 { instance_of_itself_in_a_par~(x) * i.round_f32() })   //~ E0817
 }
 
 pub flow instance_of_itself_in_a_branch(x: F32 at sample) -> F32 at sample {

@@ -13,7 +13,7 @@ pub fn missing_paren(x: I32 -> I32 {   //~ E0002
 }
 
 pub fn range_outside() -> I32 {
-  let r = 0..3                  //~ E0002
+  let r = 0..<3                 //~ E0002
   1
 }
 

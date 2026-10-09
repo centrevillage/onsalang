@@ -398,7 +398,7 @@ pub fn wmul_then_wsub_i16(a: I16, b: I16, c: I16) -> I16 {
 
 pub fn wmul_loop_u32(n: U32) -> U32 {
   var x: U32 = 1
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x *% 3
   }
   x
@@ -406,7 +406,7 @@ pub fn wmul_loop_u32(n: U32) -> U32 {
 
 pub fn wmul_loop_u64(n: U32, part: U32) -> U32 {
   var x: U64 = 1
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x *% 6364136223846793005
   }
   part_of(x, part)
@@ -414,7 +414,7 @@ pub fn wmul_loop_u64(n: U32, part: U32) -> U32 {
 
 pub fn mul_loop_u64(n: U32, part: U32) -> U32 {
   var x: U64 = 1
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x * 10
   }
   part_of(x, part)

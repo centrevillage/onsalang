@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§6.3", "§6.6"]
+
+// A range whose ends have a generic integer type (spec §7, S-257): the ends are integers, and a
+// type parameter bounded by `Int` (§6.3) is an integer type, so `T.ZERO..<n` is a range whose loop
+// variable has the type `T`. The same body runs at each width. This waits for the numeric bounds
+// (E0200 today, W5-05), which is why it is not in range_half_open.onsa.
+//
+// Every value below is worked out by hand from the spec text.
+
+fn sum_generic[T: Int](n: T) -> T {
+  var t = T.ZERO
+  for i in T.ZERO..<n {
+    t = t + i
+  }
+  t
+}
+
+// The end is the largest value of the type: the range stops before it, so it does not overflow.
+fn count_to_max[T: Int](start: T) -> U32 {
+  var c: U32 = 0
+  for _ in start..<T.MAX {
+    c = c + 1
+  }
+  c
+}
+
+fn sum_with_end[T: Int](n: T) -> T {
+  var t = T.ZERO
+  for i in T.ZERO..<n + T.ONE {
+    t = t + i
+  }
+  t
+}
+
+test "the same range at three widths" {
+  let a: U8 = 5
+  let b: I64 = 5
+  let c: U64 = 100
+  assert sum_generic(a) == 10
+  assert sum_generic(b) == 10
+  // 0 + 1 + ... + 99.
+  assert sum_generic(c) == 4950
+  let zero: I32 = 0
+  assert sum_generic(zero) == 0
+}
+
+test "an end that is a sum of generic values" {
+  // 0..<n + 1 is 0, ..., n.
+  let a: U8 = 4
+  let b: I64 = 4
+  assert sum_with_end(a) == 10
+  assert sum_with_end(b) == 10
+}
+
+test "a range that ends at the largest value of its type" {
+  let a: U8 = 250
+  let b: I32 = 2147483645
+  // 250..<255 and I32.MAX - 2..<I32.MAX.
+  assert count_to_max(a) == 5
+  assert count_to_max(b) == 2
+}

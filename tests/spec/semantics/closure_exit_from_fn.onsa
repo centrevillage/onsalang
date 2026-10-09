@@ -148,7 +148,7 @@ fn doubled_or_fifty() -> [U32; 3] {
 
 fn first_match() -> [U32; 5] {
   array.from_fn(fn(i: U32) -> U32 {
-    for j in 0..4 {
+    for j in 0..<4 {
       if j == i {
         return j * 100
       }

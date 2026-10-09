@@ -49,6 +49,8 @@ const LEXER_PANICS: &[&str] = &[
     "tests/review-phase1/syntax/interp_utf8.onsa",
     "tests/fuzz/b60c431d.onsa",
     "tests/fuzz/3f72dc47.onsa",
+    "tests/fuzz/3c3f8d83.onsa",
+    "tests/fuzz/fd47d95d.onsa",
 ];
 
 fn try_parse(src: &str) -> Option<crate::Parsed> {

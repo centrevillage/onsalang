@@ -36,7 +36,7 @@ fn def(a: &Analysis, name: &str) -> crate::DefId {
 
 #[test]
 fn literal_resolved_by_later_statement() {
-    let a = ok("pub fn f(xs: [F32; 4]) -> F32 {\n  var acc = 0.0\n  for i in 0..4 { acc = acc + xs[i] }\n  acc\n}\n");
+    let a = ok("pub fn f(xs: [F32; 4]) -> F32 {\n  var acc = 0.0\n  for i in 0..<4 { acc = acc + xs[i] }\n  acc\n}\n");
     let body = &a.bodies[&def(&a, "f")];
     let acc = body.locals.iter().find(|l| l.name == "acc").unwrap();
     assert!(matches!(a.types.get(acc.ty), Ty::Float(FloatKind::F32)));
@@ -59,7 +59,7 @@ fn unresolved_integer_literal_defaults_to_i32() {
     // S-22 (§2.4, §4.7): applied at the end of the body only.
     assert_eq!(codes("pub fn f() {\n  let a = 1\n}\n"), vec![]);
     assert_eq!(codes("test \"t\" { assert 1 == 1 }\n"), vec![]);
-    assert_eq!(codes("pub fn f() {\n  for i in 0..4 {\n  }\n}\n"), vec![]);
+    assert_eq!(codes("pub fn f() {\n  for i in 0..<4 {\n  }\n}\n"), vec![]);
     let a = check("pub fn f() {\n  let a = 1\n}\n");
     let body = a.bodies.values().next().unwrap();
     let int = body.locals.iter().find(|l| l.name == "a").unwrap().ty;
@@ -123,7 +123,7 @@ fn generics_from_arguments_and_expected_type() {
 #[test]
 fn const_generics_and_arrays() {
     let a = ok(
-        "pub fn sum[const N: U32](xs: [F32; N]) -> F32 {\n  var acc: F32 = 0.0\n  for i in 0..N { acc = acc + xs[i] }\n  acc\n}\npub fn g(ys: [F32; 4]) -> F32 { sum(ys) }\n",
+        "pub fn sum[const N: U32](xs: [F32; N]) -> F32 {\n  var acc: F32 = 0.0\n  for i in 0..<N { acc = acc + xs[i] }\n  acc\n}\npub fn g(ys: [F32; 4]) -> F32 { sum(ys) }\n",
     );
     let body = &a.bodies[&def(&a, "g")];
     assert_eq!(body.instances.len(), 1);
@@ -156,9 +156,9 @@ fn closures_take_types_from_the_expected_function_type() {
 #[test]
 fn shadowing_rules() {
     ok(
-        "pub fn f(xs: [F32; 4]) -> F32 {\n  var s: F32 = 0.0\n  for i in 0..4 { s = s + xs[i] }\n  for i in 0..4 { s = s + xs[i] }\n  s\n}\n",
+        "pub fn f(xs: [F32; 4]) -> F32 {\n  var s: F32 = 0.0\n  for i in 0..<4 { s = s + xs[i] }\n  for i in 0..<4 { s = s + xs[i] }\n  s\n}\n",
     );
-    assert_eq!(codes("pub fn f(xs: [F32; 4]) {\n  for i in 0..4 { let i = 1 }\n}\n"), vec![Code::E0304]);
+    assert_eq!(codes("pub fn f(xs: [F32; 4]) {\n  for i in 0..<4 { let i = 1 }\n}\n"), vec![Code::E0304]);
     assert_eq!(codes("pub fn f(x: I32) -> I32 {\n  let x = x + 1\n  x\n}\n"), vec![Code::E0304]);
     ok(
         "pub fn f(o: Option[U8]) -> U8 {\n  match o {\n    Some(x) => x,\n    None => 0,\n  }\n}\npub fn g(o: Option[U8]) -> U8 {\n  let a = match o { Some(x) => x, None => 0 }\n  let b = match o { Some(x) => x, None => 1 }\n  a + b\n}\n",
@@ -329,7 +329,7 @@ fn typed_hole_reports_candidates() {
 
 #[test]
 fn tables_are_resolved() {
-    let a = ok("pub fn f(xs: [F32; 4]) -> F32 {\n  var acc = 0.0\n  for i in 0..4 { acc = acc + xs[i] }\n  acc\n}\n");
+    let a = ok("pub fn f(xs: [F32; 4]) -> F32 {\n  var acc = 0.0\n  for i in 0..<4 { acc = acc + xs[i] }\n  acc\n}\n");
     let body = &a.bodies[&def(&a, "f")];
     for &t in body.expr_types.values() {
         assert!(!matches!(a.types.get(t), Ty::Var(_)), "unresolved expression type");
@@ -423,4 +423,34 @@ fn the_type_around_the_error_type_is_checked() {
     assert_eq!(got.len(), 3, "{got:?}");
     assert!(got.iter().all(|(c, _)| *c == Code::E0401), "{got:?}");
     assert_eq!(got[0].1, "expected `[I32; 3]`, found `[_; 2]`");
+}
+
+#[test]
+fn for_ranges() {
+    let f = |head: &str| codes(&format!("pub fn f(n: U32) {{\n  for i in {head} {{ }}\n}}\n"));
+    assert_eq!(f("0..<n"), vec![]);
+    // The bounds are integers (§7).
+    assert_eq!(f("0.0..<1.0"), vec![Code::E0401]);
+    // `..=` is E0200 until the loop that ends at the type's maximum (W8-03,
+    // S-224), after the checks of the bounds; never read as `..<` (R-81).
+    let d = check("pub fn f(n: U32) {\n  for i in 0..=n { }\n}\n").diagnostics;
+    assert_eq!(d.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0200]);
+    assert!(d[0].message.contains("`a..=b`") && d[0].message.contains("`for`"), "{}", d[0].message);
+    assert_eq!(f("0.0..=1.0"), vec![Code::E0401]);
+    // The form of an end is named, not a type variable (`?0`).
+    for head in [
+        "1.5..<2",
+        "0..<1.5",
+        "(1, 2)..<(3, 4)",
+        "0..<\"a\"",
+        "[1]..<n",
+        "(1.5)..<n",
+        "-1.5..<3",
+        "0..<1.5 + 2.5",
+        "1.5 + 2.5..<n",
+    ] {
+        let d = check(&format!("pub fn f(n: U32) {{\n  for i in {head} {{ }}\n}}\n")).diagnostics;
+        assert_eq!(d.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::E0401], "{head}");
+        assert!(!d[0].message.contains('?') && d[0].message.contains("integers"), "{head}: {}", d[0].message);
+    }
 }

@@ -294,7 +294,7 @@ pub fn div_then_div_i16(a: I16, b: I16, c: I16) -> I16 {
 
 pub fn rem_sum_loop_i32(d: I32) -> I32 {
   var acc: I32 = 0
-  for _ in 0..3 {
+  for _ in 0..<3 {
     let m: I32 = I32.MIN
     let r = m % d
     acc = acc + r

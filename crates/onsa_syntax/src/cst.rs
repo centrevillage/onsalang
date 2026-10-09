@@ -226,7 +226,7 @@ pub enum NodeKind {
     MoveExpr,
     /// `Expr (op Expr)+` (a flat chain; groups are checked on the AST)
     BinaryExpr,
-    /// `Expr (.. | ..=) Expr`
+    /// `Expr (..< | ..=) Expr`
     RangeExpr,
     /// `Expr as Type`
     CastExpr,

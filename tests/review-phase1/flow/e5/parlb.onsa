@@ -2,7 +2,7 @@ use std.dsp.test.{impulse}
 
 // a[k] = y[n-1] for each replica; y = x + 0 -> output a[0] = x[n-1]
 pub flow pl(x: Sig[F32]) -> Sig[F32] {
-  let a = par i in 0..2 { prev(y, 0.0) }
+  let a = par i in 0..<2 { prev(y, 0.0) }
   let y = x
   a[0] + a[1]
 }

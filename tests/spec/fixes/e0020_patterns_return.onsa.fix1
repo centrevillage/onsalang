@@ -15,7 +15,7 @@ pub fn arm_return(o: Option[I32]) -> I32 {
 
 pub fn arm_break(n: U32) -> U32 {
   var total = 0
-  for i in 0..n {
+  for i in 0..<n {
     match i {
       0 => { continue },                                //~ E0020
       _ => { total = total + i },

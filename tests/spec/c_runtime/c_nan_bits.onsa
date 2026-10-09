@@ -338,7 +338,7 @@ pub fn bits_roundtrip_f64(bh: U32, bl: U32, part: U32) -> U32 {
 
 pub fn nan_loop_f32(z: F32, n: U32) -> U32 {
   var x = z / z
-  for _ in 0..n {
+  for _ in 0..<n {
     x = x + 1.0
   }
   x.to_bits()

@@ -423,7 +423,7 @@ test "a match arm that would panic is not evaluated when it is not taken" {
 
 fn sum_from_one(n: I32) -> I32 {
   var total: I32 = 0
-  for i in 0..n {
+  for i in 0..<n {
     let add = match i {
       0 => {
         continue
@@ -440,7 +440,7 @@ fn sum_from_one(n: I32) -> I32 {
 
 fn last_below(n: I32) -> I32 {
   var last: I32 = -1
-  for i in 0..n {
+  for i in 0..<n {
     let v = match i {
       k if (k * k) > 20 => {
         break

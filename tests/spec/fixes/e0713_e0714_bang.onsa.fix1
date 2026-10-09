@@ -37,7 +37,7 @@ pub fn missing_on_an_array_element(inout ps: [Pt; 2]) {
 
 pub fn missing_in_a_loop(n: U32) -> U32 {
   var p = Pt { x: 1, y: 1 }
-  for i in 0..n {
+  for i in 0..<n {
     p.scale!(i)                                      //~ E0713
   }
   p.norm()

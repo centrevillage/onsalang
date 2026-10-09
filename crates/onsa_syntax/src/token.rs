@@ -2,6 +2,8 @@
 
 use onsa_diag::Span;
 
+use crate::ast::RangeEnd;
+
 /// Kind of a token. Whitespace, comments and newlines are tokens too
 /// (trivia), so the tokens cover every byte of the source and the CST holds
 /// all of them (R-86). The parser skips whitespace and comments and treats
@@ -107,7 +109,10 @@ pub enum TokenKind {
     Arrow,
     FatArrow,
     Dot,
-    DotDot,
+    /// `..<`: a range without its end (§7).
+    DotDotLt,
+    /// `..=`: a range with its end (§7).
+    DotDotEq,
     Comma,
     Colon,
     Question,
@@ -129,8 +134,11 @@ pub enum TokenKind {
     Semi,
     /// `#`
     Hash,
-    /// `..=`
-    DotDotEq,
+    /// `..`: a range of other languages (S-257), and the rest of a struct
+    /// pattern of Rust (S-109).
+    DotDot,
+    /// `...`: a range of other languages (S-257).
+    DotDotDot,
     /// `++`
     PlusPlus,
     /// `--` (`- -x` with a space is two `-`)
@@ -149,6 +157,33 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
+    /// The readings of a range symbol (S-257), in the order of the
+    /// candidates: one for `..<` and `..=`, both for `..` and `...` of other
+    /// languages; none for another token. The one place that classifies the
+    /// range symbols (the parser, the table of the forms, the lowering).
+    pub fn range_readings(self) -> &'static [RangeEnd] {
+        match self {
+            TokenKind::DotDotLt => &[RangeEnd::Excluded],
+            TokenKind::DotDotEq => &[RangeEnd::Included],
+            TokenKind::DotDot | TokenKind::DotDotDot => &[RangeEnd::Excluded, RangeEnd::Included],
+            _ => &[],
+        }
+    }
+
+    /// The end of an Onsa range symbol (`..<`, `..=`); none for another
+    /// token, the symbols of other languages too.
+    pub fn range_end(self) -> Option<RangeEnd> {
+        match self.range_readings() {
+            [end] => Some(*end),
+            _ => None,
+        }
+    }
+
+    /// A range symbol of other languages (`..`, `...`).
+    pub fn is_foreign_range(self) -> bool {
+        self.range_readings().len() > 1
+    }
+
     pub fn is_trivia(self) -> bool {
         matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
     }
@@ -278,7 +313,8 @@ impl TokenKind {
             Arrow => "`->`",
             FatArrow => "`=>`",
             Dot => "`.`",
-            DotDot => "`..`",
+            DotDotLt => "`..<`",
+            DotDotEq => "`..=`",
             Comma => "`,`",
             Colon => "`:`",
             Question => "`?`",
@@ -292,7 +328,8 @@ impl TokenKind {
             ColonColon => "`::`",
             Semi => "`;`",
             Hash => "`#`",
-            DotDotEq => "`..=`",
+            DotDot => "`..`",
+            DotDotDot => "`...`",
             PlusPlus => "`++`",
             MinusMinus => "`--`",
             BlockComment => "block comment",

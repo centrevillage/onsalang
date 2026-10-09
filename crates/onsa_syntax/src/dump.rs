@@ -647,11 +647,11 @@ impl Dumper<'_> {
                 self.expr(*e);
                 self.out.push(')');
             }
-            ExprKind::Par { var, from, to, body } => {
+            ExprKind::Par { var, range, body } => {
                 let _ = write!(self.out, "(par {} in ", var.name);
-                self.expr(*from);
-                self.out.push_str("..");
-                self.expr(*to);
+                self.expr(range.lo);
+                self.out.push_str(range.end.symbol());
+                self.expr(range.hi);
                 self.out.push(' ');
                 self.expr(*body);
                 self.out.push(')');
@@ -721,11 +721,11 @@ impl Dumper<'_> {
                 self.expr(*e);
                 self.out.push(')');
             }
-            ExprKind::Range { lo, hi } => {
+            ExprKind::Range(r) => {
                 self.out.push_str("(range ");
-                self.expr(*lo);
-                self.out.push(' ');
-                self.expr(*hi);
+                self.expr(r.lo);
+                let _ = write!(self.out, " {} ", r.end.symbol());
+                self.expr(r.hi);
                 self.out.push(')');
             }
         }

@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.1", "§15.1"]
+
+// Ranges across the modules of a package (spec §7, §15.1, S-257): the ends are constants and
+// functions of another module, imported by name or written with the module's name, and the loops
+// are in the importing module and in the module that declares them. Every value is worked out by
+// hand from the spec text.
+
+use bounds
+use bounds.{SIZE, HOLD, Window, count}
+
+fn through_size() -> U32 {
+  var t: U32 = 0
+  for i in 0..<SIZE + 1 {
+    t = t + i
+  }
+  t
+}
+
+fn from_hold() -> U32 {
+  var seen: U32 = 0
+  for i in HOLD..<SIZE {
+    let shifted = seen * 10
+    seen = shifted + i
+  }
+  seen
+}
+
+fn qualified() -> U32 {
+  var n: U32 = 0
+  for _ in 0..<bounds.SIZE * 2 {
+    n = n + 1
+  }
+  n
+}
+
+fn qualified_both() -> U32 {
+  var t: U32 = 0
+  for i in bounds.HOLD..<bounds.SIZE + 2 {
+    t = t + i
+  }
+  t
+}
+
+fn counted_end(lo: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo..<lo + count(HOLD, SIZE) {
+    t = t + i
+  }
+  t
+}
+
+test "the ends are constants of another module" {
+  // 0..<5 is 0, 1, 2, 3, 4.
+  assert through_size() == 10
+  // 2..<4 is 2, 3.
+  assert from_hold() == 23
+  // 0..<8.
+  assert qualified() == 8
+  // 2..<6 is 2, 3, 4, 5.
+  assert qualified_both() == 14
+}
+
+test "an end that calls a function of another module" {
+  // count(2, 4) is 2: 3..<5 is 3, 4.
+  assert counted_end(3) == 7
+  assert count(1, 6) == 5
+}
+
+test "a range loop in the module that declares it" {
+  // 0 + 1 + 2 + 3.
+  assert bounds.size_sum() == 6
+  let w = Window { lo: 1, hi: 4 }
+  // 1 + 2 + 3.
+  assert w.total() == 6
+}

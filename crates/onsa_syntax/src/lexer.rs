@@ -167,7 +167,7 @@ impl<'a> Lexer<'a> {
                     self.digits(|b| b.is_ascii_digit() || b == b'_');
                     float = true;
                 }
-                // `1..n`, `1.abs()`: the int ends here.
+                // `1..<n`, `1..=n`, `1...n`, `1.abs()`: the int ends here.
                 Some(b'.') => {}
                 Some(b) if is_ident_start(b) => {}
                 _ => {
@@ -402,7 +402,9 @@ impl<'a> Lexer<'a> {
             (b'>', Some(b'>'), _) => (Shr, 2),
             (b'&', Some(b'&'), _) => (AndAnd, 2),
             (b'|', Some(b'|'), _) => (OrOr, 2),
+            (b'.', Some(b'.'), Some(b'<')) => (DotDotLt, 3),
             (b'.', Some(b'.'), Some(b'=')) => (DotDotEq, 3),
+            (b'.', Some(b'.'), Some(b'.')) => (DotDotDot, 3),
             (b'.', Some(b'.'), _) => (DotDot, 2),
             (b':', Some(b':'), _) => (ColonColon, 2),
             (b'+', _, _) => (Plus, 1),
@@ -485,6 +487,14 @@ mod tests {
         assert_eq!(kinds("42 0xFF 0b1010 1_000_000").0, vec![Int, Int, Int, Int, Eof]);
         assert_eq!(kinds("1.0 2.5e-3 1e3").0, vec![Float, Float, Float, Eof]);
         assert_eq!(kinds("0..n").0, vec![Int, DotDot, Ident, Eof]);
+        assert_eq!(kinds("0..<n").0, vec![Int, DotDotLt, Ident, Eof]);
+        assert_eq!(kinds("0..=n").0, vec![Int, DotDotEq, Ident, Eof]);
+        assert_eq!(kinds("0...4").0, vec![Int, DotDotDot, Int, Eof]);
+        // The longest symbol first (S-257).
+        assert_eq!(kinds("a....b").0, vec![Ident, DotDotDot, Dot, Ident, Eof]);
+        assert_eq!(kinds("1.. ..4").0, vec![Int, DotDot, DotDot, Int, Eof]);
+        assert_eq!(kinds("1.5..<2").0, vec![Float, DotDotLt, Int, Eof]);
+        assert_eq!(kinds("0..<=n").0, vec![Int, DotDotLt, Eq, Ident, Eof]);
         assert_eq!(kinds("t.0.1").0, vec![Ident, Dot, Int, Dot, Int, Eof]);
         assert_eq!(kinds("1.abs()").0, vec![Int, Dot, Ident, LParen, RParen, Eof]);
         // Forms of other languages are tokens without a diagnostic here.

@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.2", "§18.1"]
+
+// `move` on a range (spec §7, S-257): a range has no value to consume, so `move` is not written
+// in front of it, and `for i in move 0..<n` is E0703 (a mode at the place of use that does not
+// match: the range is not passed as an owned value). The loop over a collection is where `move`
+// belongs: `for s in move xs` (§7). One diagnostic per function.
+
+pub fn move_before_literals(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in move 0..<n {                             //~ E0703
+    t = t + i
+  }
+  t
+}
+
+pub fn move_before_names(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in move lo..<hi {                           //~ E0703
+    t = t + i
+  }
+  t
+}
+
+pub fn move_before_sums(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in move lo + 1..<hi - 1 {                   //~ E0703
+    t = t + i
+  }
+  t
+}
+
+pub fn move_in_an_inner_loop(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    for j in move 0..<i + 1 {                       //~ E0703
+      t = t + j
+    }
+  }
+  t
+}
+
+pub fn move_in_a_branch(go: Bool, n: U32) -> U32 {
+  var t: U32 = 0
+  if go {
+    for _ in move 0..<n {                           //~ E0703
+      t = t + 1
+    }
+  }
+  t
+}
+
+// The loops over a value are the ones that move, and the plain range is fine.
+
+pub fn fine(xs: [U32; 3], n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  for s in xs {
+    t = t + s
+  }
+  t
+}

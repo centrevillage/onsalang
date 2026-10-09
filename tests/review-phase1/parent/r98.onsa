@@ -20,7 +20,7 @@ pub flow top(x: Sig[F32]) -> Sig[F32] {
   let a = prev(lp~(x), 0.0) + prev(x, 1.0)
   let b = lp~(prev(a, 0.0))
   let c = prev(prev(b, 0.0), 0.0)
-  let vs = par i in 0..2 {
+  let vs = par i in 0..<2 {
     lp~(prev(x, 0.0)) + lp~(x)
   }
   (lp~(lp~(x)) * c) + vs[0]

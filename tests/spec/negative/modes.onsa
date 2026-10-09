@@ -69,7 +69,7 @@ pub fn used_after_move(move b: Buf[F32]) -> U32 uses {Alloc} {
 }
 
 pub fn moved_in_loop(move b: Buf[F32], n: U32) uses {Alloc} {
-  for i in 0..n {
+  for i in 0..<n {
     take(move b)                //~ E0704
   }
 }
