@@ -1,8 +1,8 @@
 //! Conformance (T4-7, spec §13.4) of one build: every exported flow is run
 //! through the interpreter and through the generated C with the same stimuli
-//! (impulse, silence, deterministic noise per `Sig` input channel; two
+//! (impulse, silence, deterministic noise per `sample` input channel; two
 //! blocks of 2048 frames so `ctl` runs twice; `@param` defaults, fixed
-//! `Init` values). Flows that reach a transcendental primitive are compared
+//! `init` values). Flows that reach a transcendental primitive are compared
 //! within 2 ULP (S-14); the others must match bit for bit; NaNs compare
 //! equal (§13.4). A panic is part of the result: both must panic, or
 //! neither. The interpreter runs the same Core module the C was emitted
@@ -13,7 +13,7 @@
 //! dropped silently: it is counted in [`Outcome::skipped`] with the reason
 //! (R-113 3).
 //!
-//! The C program reads the `Init` values, the `Ctl` values and the inputs
+//! The C program reads the `init` values, the `block` values and the inputs
 //! from its standard input as bytes, and writes the outputs to its standard
 //! output; the stimuli are made once, here. It never ends by a signal
 //! (`crate::c`): a panic exits with [`crate::c::PANIC_EXIT`].
@@ -65,7 +65,7 @@ impl Scalar {
         }
     }
 
-    /// The value the harness gives an `Init` input (no default exists): a
+    /// The value the harness gives an `init` input (no default exists): a
     /// fixed value other than zero.
     fn init_value(self) -> Value {
         match self {
@@ -77,7 +77,7 @@ impl Scalar {
         }
     }
 
-    /// The value of a `Ctl` input: its `@param` default (an integer input
+    /// The value of a `block` input: its `@param` default (an integer input
     /// takes it when it is a whole number in range), else zero.
     fn param_value(self, default: Option<f64>) -> Value {
         match (self, default) {
@@ -106,7 +106,7 @@ fn reaches_transcendental(m: &Module, meta: &FlowMeta) -> bool {
     found
 }
 
-/// A `Sig` input or an output: its scalar type and its channels (`None`:
+/// A `sample` input or an output: its scalar type and its channels (`None`:
 /// one buffer; `Some(n)`: `[T; n]`, a buffer per channel).
 #[derive(Debug, Clone)]
 struct Signal {
@@ -154,22 +154,22 @@ impl Shape {
     fn of(m: &Module, meta: &FlowMeta) -> Result<Shape, String> {
         let config = struct_fields(m, meta.fns.config)
             .iter()
-            .map(|(n, t)| Ok((n.clone(), scalar_of(t, &format!("the `Init` input `{n}`"))?)))
+            .map(|(n, t)| Ok((n.clone(), scalar_of(t, &format!("the `init` input `{n}`"))?)))
             .collect::<Result<_, String>>()?;
         let pfields = struct_fields(m, meta.fns.params);
         if pfields.len() != meta.params.len() {
-            return Err(format!("{} `Ctl` inputs but {} fields in its params", meta.params.len(), pfields.len()));
+            return Err(format!("{} `block` inputs but {} fields in its params", meta.params.len(), pfields.len()));
         }
         let params = pfields
             .iter()
             .zip(&meta.params)
             .map(|((n, t), (_, _, pm))| {
-                let s = scalar_of(t, &format!("the `Ctl` input `{n}`"))?;
+                let s = scalar_of(t, &format!("the `block` input `{n}`"))?;
                 Ok((n.clone(), s, s.param_value(pm.as_ref().and_then(|p| p.default))))
             })
             .collect::<Result<_, String>>()?;
         let inputs =
-            meta.sig_inputs.iter().map(|(n, t)| signal(n, t, None, "the `Sig` input")).collect::<Result<_, _>>()?;
+            meta.sig_inputs.iter().map(|(n, t)| signal(n, t, None, "the `sample` input")).collect::<Result<_, _>>()?;
         let outputs = meta.outputs.iter().map(|(n, t, p)| signal(n, t, *p, "the output")).collect::<Result<_, _>>()?;
         Ok(Shape { config, params, inputs, outputs })
     }
@@ -203,7 +203,7 @@ impl Shape {
         self.config.iter().map(|(_, s)| s.init_value()).collect()
     }
 
-    /// The standard input of the C program: `Init` values, `Ctl` values, inputs.
+    /// The standard input of the C program: `init` values, `block` values, inputs.
     fn stdin(&self, stimuli: &[Vec<Value>]) -> Vec<u8> {
         let mut b = Vec::new();
         for ((_, s), v) in self.config.iter().zip(self.config_values()) {
@@ -397,7 +397,7 @@ fn c_panic(stderr: &str) -> Result<Panic, String> {
     Ok(Panic { at, message: msg.to_string() })
 }
 
-/// The C program: reads the `Init` values, the `Ctl` values and the inputs
+/// The C program: reads the `init` values, the `block` values and the inputs
 /// from stdin, runs two blocks, writes the outputs to stdout. The names come
 /// from the C backend (`FlowApi`); the form of the calls from
 /// [`crate::capi`]; the start of the program is [`c::driver_preamble`].
@@ -724,7 +724,7 @@ mod tests {
         onsa_driver::build_analyzed(&loaded, &analyzed, "host").unwrap_or_else(|_| panic!("the build failed"))
     }
 
-    const FLOWS: &str = "pub flow f(x: Sig[F32], n: Init[I32]) -> Sig[F32] {\n  x * n.round_f32()\n}\n";
+    const FLOWS: &str = "pub flow f(x: F32 at sample, n: I32 at init) -> F32 at sample {\n  x * n.round_f32()\n}\n";
 
     #[test]
     fn shapes_and_the_flows_that_are_skipped() {
@@ -740,10 +740,10 @@ mod tests {
         let mut odd = meta.clone();
         odd.sig_inputs[0].1 = Ty::Tuple(Vec::new());
         let why = Shape::of(&out.module, &odd).unwrap_err();
-        assert!(why.contains("the `Sig` input `x`") && why.contains("is not a scalar"), "{why}");
+        assert!(why.contains("the `sample` input `x`") && why.contains("is not a scalar"), "{why}");
         let mut odd = meta.clone();
         odd.params.push(("k".into(), Ty::Float(FloatKind::F32), None));
-        assert!(Shape::of(&out.module, &odd).unwrap_err().contains("1 `Ctl` inputs but 0 fields"));
+        assert!(Shape::of(&out.module, &odd).unwrap_err().contains("1 `block` inputs but 0 fields"));
         // Through `run`: counted in `skipped`, nothing compiled.
         out.module.flows[0].outputs[0].1 = Ty::Unit;
         let t = Toolchain { cc: "onsa-no-such-cc", flags: &[], off: &[], runner: Runner::Native };

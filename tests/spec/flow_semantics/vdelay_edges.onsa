@@ -42,9 +42,9 @@ pub flow vd64(x: F64 at sample, d: F64 at block) -> F64 at sample {
 
 // The echo of spec §17.4 with MAX = 4: y[n] = x[n] + 0.5 * y[n - d].
 pub flow echo(x: F32 at sample, time: F32 at block) -> F32 at sample {
-  let d = time * sample_rate()
+  let d    = time * sample_rate()
   let line = vdelay~(^y, d, 4)
-  let y = x + 0.5 * line
+  let y    = x + 0.5 * line
   y
 }
 

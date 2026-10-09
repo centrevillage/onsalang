@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.2"]
+
+// Delays inside the first argument of a delay, in the forms that do not read as `prev~(prev~(x))`
+// on the page (spec §11.4, R-13; the plain nesting is in lookback_nesting.onsa). Every delay
+// outputs its stored value first, then every value to store is evaluated, then all are stored:
+// the inner delay is read from *before* its store, wherever it stands in the first argument.
+// The stimulus is 1, 2, 3, 4, 5; the value before the first sample is 0.
+
+pub rt fn same(v: F32) -> F32 {
+  v
+}
+
+// Through a call of an rt fn: the inner delay is x[n-1], the outer one delays it again.
+pub flow through_a_call(x: F32 at sample) -> F32 at sample {
+  prev~(same(prev~(x)))
+}
+
+// Through an array literal and an index.
+pub flow through_an_array(x: F32 at sample) -> F32 at sample {
+  prev~([prev~(x), x][0])
+}
+
+// As the first argument of a variable delay: e[n] = x[n-1], and d = 2 reads e[n-2] = x[n-3].
+pub flow in_a_variable_delay(x: F32 at sample) -> F32 at sample {
+  vdelay~(prev~(x), 2.0, 4)
+}
+
+// A delay line around a two-sample delay: x[n-2] delayed by 2 is x[n-4].
+pub flow in_a_delay_line(x: F32 at sample) -> F32 at sample {
+  delay~(prev~(prev~(x)), 2)
+}
+
+// With the values before the first sample given: the inner one is 2.0, the outer one 3.0.
+pub flow with_inits(x: F32 at sample) -> F32 at sample {
+  prev~(prev~(x, 2.0) + 0.5, 3.0)
+}
+
+test "an inner delay behind a call is read before its store" {
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = through_a_call.render(through_a_call.Config {}, through_a_call.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+}
+
+test "an inner delay behind an index is read before its store" {
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = through_an_array.render(through_an_array.Config {}, through_an_array.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+}
+
+test "a variable delay of a delay is three samples at d = 2" {
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = in_a_variable_delay.render(in_a_variable_delay.Config {}, in_a_variable_delay.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+}
+
+test "a delay line of two nested delays is four samples" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = in_a_delay_line.render(in_a_delay_line.Config {}, in_a_delay_line.Params {}, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+  assert o.out[5] == 2.0
+}
+
+test "the inits of nested delays are the values before the first sample" {
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = with_inits.render(with_inits.Config {}, with_inits.Params {}, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 2.5
+  assert o.out[2] == 1.5
+  assert o.out[3] == 2.5
+  assert o.out[4] == 3.5
+}

@@ -21,7 +21,7 @@
 // An `if` on a comparison, in a flow and in a function. The generated C must
 // compile without a warning under `-Wall -Wextra -pedantic` (§13.4); the C
 // checks of the gate (`c-clang` etc.) compile it.
-pub flow pick(c: Sig[Char], d: Init[Char]) -> Sig[Char] {
+pub flow pick(c: Char at sample, d: Char at init) -> Char at sample {
   if c == d { 'z' } else { c }
 }
 

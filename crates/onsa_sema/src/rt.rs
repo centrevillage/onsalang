@@ -280,7 +280,6 @@ pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId, visiting: &mut HashSet<Def
         Ty::Builtin(_, args) => args.iter().any(|&x| needs_alloc_drop(a, x, visiting)),
         Ty::Array(el, _) => needs_alloc_drop(a, *el, visiting),
         Ty::Tuple(ts) => ts.iter().any(|&x| needs_alloc_drop(a, x, visiting)),
-        Ty::Rate(_, inner) => needs_alloc_drop(a, *inner, visiting),
         Ty::Named(d, args) => {
             if !visiting.insert(*d) {
                 return false;

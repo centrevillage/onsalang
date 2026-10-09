@@ -9,8 +9,8 @@
 //! ```text
 //! let c = x + y % z   //~ E0010
 //! let c = x + y % z   //~ E0010 @13            (column, 1-based)
-//! @param(...) k: Ctl[F32],  //~ E0809 [trap]    (only for the build of target `trap`)
-//! @param(...) k: Ctl[F32],  //~ E0809 @3 [trap, poison]
+//! @param(...) k: F32 at block,  //~ E0809 [trap]    (only for the build of target `trap`)
+//! @param(...) k: F32 at block,  //~ E0809 @3 [trap, poison]
 //! ```
 //!
 //! A file without markers expects zero diagnostics. A marker without targets

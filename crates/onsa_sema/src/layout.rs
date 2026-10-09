@@ -124,7 +124,6 @@ pub fn layout_of(a: &Analysis, ty: TyId) -> Option<Layout> {
         },
         Ty::Fn(_) => Some(Layout::scalar(PTR_SIZE)),
         Ty::Named(d, args) => layout_of_def(a, *d, args),
-        Ty::Rate(_, t) => layout_of(a, *t),
         Ty::ConstVal(_) | Ty::Param(_) | Ty::Var(_) | Ty::Error => None,
     }
 }

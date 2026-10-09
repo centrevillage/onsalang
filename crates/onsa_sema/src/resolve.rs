@@ -6,7 +6,7 @@ use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
 
 use crate::def::{DefId, DefKind, ModId};
-use crate::ty::{BuiltinTy, Rate, TyId};
+use crate::ty::{BuiltinTy, TyId};
 
 /// Names in scope everywhere (prelude, §15.1) and builtin types (§4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,8 +15,6 @@ pub enum Builtin {
     Scalar(TyId),
     /// `Str`, `Array`, `Option`, `Span`, ...
     Generic(BuiltinTy),
-    /// `Init`, `Ctl`, `Sig` (flow signatures only, §11.3)
-    Rate(Rate),
     /// `Some`
     Some,
     /// `None`

@@ -16,7 +16,7 @@ const HEAD: &str = "// onsa.toml\n// [package]\n// name = \"m\"\n// edition = \"
                     // kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n\
                     // provides = []\n//\n// [test]\n";
 
-const SRC: &str = "\npub flow f(\n  x: Sig[F32],\n  @param(min: 0.0, max: 10.0, default: 1.0)\n  k: Ctl[F32],\n) -> Sig[F32] {\n  x * k\n}\n\n\
+const SRC: &str = "\npub flow f(\n  x: F32 at sample,\n  @param(min: 0.0, max: 10.0, default: 1.0)\n  k: F32 at block,\n) -> F32 at sample {\n  x * k\n}\n\n\
                    pub fn sub(a: I32, b: I32) -> I32 {\n  a - b\n}\n";
 
 /// A flow sequence and a function sequence that pass.
@@ -539,14 +539,14 @@ const SHAPES_HOSTS: &str = "// [[test.host]]\n// name = \"swap /* in C */ \\\\\"
 /// The output fields are not named as the inputs: this version's C API puts
 /// both in one parameter list, where the names collide.
 const SHAPES_SRC: &str = "\npub struct Stereo {\n  a: F32,\n  b: F32,\n}\n\n\
-pub flow swap(l: Sig[F32], r: Sig[F32]) -> Sig[Stereo] {\n  Stereo { a: r, b: l }\n}\n\n\
-pub flow mirror(x: Sig[[F32; 2]]) -> Sig[[F32; 2]] {\n  [x[1], x[0]]\n}\n\n\
-pub flow gate(x: Sig[I16], on: Init[Bool]) -> Sig[I16] {\n  if on { x } else { 0 }\n}\n\n\
-pub flow acc(x: Sig[F32]) -> Sig[F32] {\n  let y = x + prev(y, 0.0)\n  y\n}\n\n\
-pub flow lin(x: Sig[F32], a: Init[F32], b: Init[F32]) -> Sig[F32] {\n  (x * a) + b\n}\n\n\
-pub flow gain(\n  x: Sig[F32],\n  @param(min: 0.0, max: 10.0, default: 1.0)\n  g: Ctl[F32],\n  \
-@param(min: 0.0, max: 10.0, default: 0.0)\n  o: Ctl[F32],\n) -> Sig[F32] {\n  (x * g) + o\n}\n\n\
-pub flow rate(x: Sig[F32]) -> Sig[F32] {\n  x * sample_rate()\n}\n\n\
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {\n  Stereo { a: r, b: l }\n}\n\n\
+pub flow mirror(x: [F32; 2] at sample) -> [F32; 2] at sample {\n  [x[1], x[0]]\n}\n\n\
+pub flow gate(x: I16 at sample, on: Bool at init) -> I16 at sample {\n  if on { x } else { 0 }\n}\n\n\
+pub flow acc(x: F32 at sample) -> F32 at sample {\n  let y = x + prev~(^y, 0.0)\n  y\n}\n\n\
+pub flow lin(x: F32 at sample, a: F32 at init, b: F32 at init) -> F32 at sample {\n  (x * a) + b\n}\n\n\
+pub flow gain(\n  x: F32 at sample,\n  @param(min: 0.0, max: 10.0, default: 1.0)\n  g: F32 at block,\n  \
+@param(min: 0.0, max: 10.0, default: 0.0)\n  o: F32 at block,\n) -> F32 at sample {\n  (x * g) + o\n}\n\n\
+pub flow rate(x: F32 at sample) -> F32 at sample {\n  x * sample_rate()\n}\n\n\
 pub fn first(xs: Span[F32]) -> F32 {\n  xs[0]\n}\n";
 
 fn shapes(hosts: &str) -> String {

@@ -453,7 +453,7 @@ impl TargetSettings {
     }
 }
 
-/// E0809 (exported `Ctl` inputs need `@param`, §11.7) and E0610 (exported
+/// E0809 (exported `block` inputs need `@param`, §11.7) and E0610 (exported
 /// functions may use only provided effects, §14.2), plus unknown names.
 fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &TargetSettings) -> Vec<Diagnostic> {
     let a = &analyzed.analysis;
@@ -489,7 +489,7 @@ fn check_exports(analyzed: &Analyzed, export: &ExportSettings, settings: &Target
                         Code::E0809,
                         input.span,
                         format!(
-                            "the exported flow `{name}` needs `@param` on its `Ctl` input `{}` (§11.7)",
+                            "the exported flow `{name}` needs `@param` on its `block` input `{}` (§11.7)",
                             input.name
                         ),
                     )

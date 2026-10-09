@@ -166,8 +166,8 @@ use std.dsp.test.{impulse, energy}
 
 const UNISON: U32 = 4
 
-pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
-  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase, 0.0) + (f0 / sample_rate()))
   (2.0 * phase) - 1.0
 }
 
@@ -179,20 +179,20 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
   (i.round_f32() / (n - 1).round_f32()) - 0.5
 }
 
-pub flow unison(f0: Ctl[F32], detune: Ctl[F32]) -> Sig[F32] {
+pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
   let saws = par i in 0..<UNISON {
     saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
   }
   sum(saws) * 0.25
 }
 
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
   let r  = exp(-(F32.PI * bw) / sample_rate())
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
   let b2 = r * r
-  let y1 = prev(y, 0.0)
-  let y2 = prev(y1, 0.0)
+  let y1 = prev~(^y, 0.0)
+  let y2 = prev~(y1, 0.0)
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
   y
 }

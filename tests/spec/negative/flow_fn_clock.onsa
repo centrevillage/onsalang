@@ -7,6 +7,6 @@
 // which is for fns with effects. Pending until W7-02 (tests/pending.toml).
 pub fn slow(x: F32) -> F32 { x }
 
-pub flow non_rt_at_sig(x: Sig[F32]) -> Sig[F32] {
+pub flow non_rt_at_sig(x: F32 at sample) -> F32 at sample {
   slow(x)                       //~ E0815
 }

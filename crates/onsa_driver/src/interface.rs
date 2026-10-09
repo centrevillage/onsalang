@@ -22,7 +22,7 @@
 //!     { "kind": "alias", "name": "Samples", "ty": "Buf[F32]" },
 //!     { "kind": "impl", "ty": "Poly", "fns": [ ...fn items... ], "consts": [ ...const items... ] },
 //!     { "kind": "flow", "name": "voice", "vis": "pub",
-//!       "inputs": [ { "name": "f0", "rate": "Ctl", "ty": "F32",
+//!       "inputs": [ { "name": "f0", "clock": "block", "ty": "F32",
 //!                     "param": { "min": 20.0, "max": 2000.0, "default": 110.0, "unit": "Hz", "scale": "log" } } ],
 //!       "out": "F32", "members": [ ...struct / const / fn items named `voice.State` etc... ] }
 //!   ] } ] }
@@ -145,8 +145,13 @@ pub struct FlowIface {
 #[derive(Debug, Clone, Serialize)]
 pub struct FlowInputIface {
     pub name: String,
-    pub rate: String,
+    /// The clock after the type (`init`, `block`, `sample`, §11.3).
+    pub clock: String,
     pub ty: String,
+    /// The type is a function type, written in parentheses before `at` in
+    /// the text form (S-367).
+    #[serde(skip)]
+    pub parens: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub param: Option<ParamIfaceMeta>,
 }
@@ -423,13 +428,9 @@ impl Builder<'_> {
             .iter()
             .map(|i| FlowInputIface {
                 name: i.name.clone(),
-                rate: match i.rate {
-                    Rate::Init => "Init",
-                    Rate::Ctl => "Ctl",
-                    Rate::Sig => "Sig",
-                }
-                .into(),
+                clock: i.rate.clock().into(),
                 ty: self.ty(i.ty, &[]),
+                parens: self.a.types.parens_before_uses(i.ty, true),
                 param: i.param.as_ref().map(param_meta),
             })
             .collect();
@@ -676,9 +677,11 @@ fn render_item(item: &Item, out: &mut String, indent: &str) {
                     }
                     let _ = writeln!(out, "{indent}  @param({})", kv.join(", "));
                 }
-                let _ = writeln!(out, "{indent}  {}: {}[{}],", i.name, i.rate, i.ty);
+                let ty = if i.parens { format!("({})", i.ty) } else { i.ty.clone() };
+                let _ = writeln!(out, "{indent}  {}: {ty} at {},", i.name, i.clock);
             }
-            let _ = writeln!(out, "{indent}) -> Sig[{}]", f.out);
+            // The output is at the clock `sample` (§11.6).
+            let _ = writeln!(out, "{indent}) -> {} at {}", f.out, Rate::Sig.clock());
             for m in &f.members {
                 render_item(m, out, &format!("{indent}  "));
             }

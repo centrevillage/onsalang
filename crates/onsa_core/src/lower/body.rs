@@ -1,7 +1,7 @@
 //! Lowering of function bodies: expressions, statements, patterns (T3-3).
 
 use onsa_diag::Span;
-use onsa_diag::unsupported::{Feature, FlowForm};
+use onsa_diag::unsupported::Feature;
 use onsa_sema::body::{BodyInfo, Target};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
 use onsa_sema::resolve::{Builtin, Entity};
@@ -12,7 +12,7 @@ use onsa_syntax::ast::{
     StmtKind as AS, UnOp as AUnOp,
 };
 
-use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, flow_form, internal, unsupported};
+use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
 use crate::ir::*;
 use crate::prim::{CheckedOp, MathFn, Prim};
 
@@ -905,9 +905,11 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         }
         AK::Match { scrutinee, arms, .. } => return lower_match(lw, cx, e, *scrutinee, arms, ty),
         AK::Closure { .. } => return Err(unsupported(span, Feature::Closures, &[])),
-        // The checks stop at the flow syntax (W3-09); never reached.
-        AK::At { .. } => return Err(flow_form(span, FlowForm::Clock)),
-        AK::Feedback(_) => return Err(flow_form(span, FlowForm::Feedback)),
+        // `e at k` is the value of `e` (§11.3): the clock is the flow
+        // lowering's, from the rates of sema.
+        AK::At { expr: inner, .. } => return lower_expr(lw, cx, *inner),
+        // `^y` has the `Target::Local` of `y`, lowered above.
+        AK::Feedback(_) => return Err(internal(span, "a feedback reference without its local")),
         AK::Handle { .. } => return Err(unsupported(span, Feature::EffectHandlers, &[])),
         AK::Unsafe(_) => return Err(unsupported(span, Feature::Unsafe, &[])),
         // Sema rejects `par` outside a flow body: lowering never sees one.

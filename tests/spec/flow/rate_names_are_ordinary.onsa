@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§18.1"]
+
+// `Sig`, `Ctl` and `Init` are not reserved (§11.3: "`Sig` / `Ctl` / `Init` は予約していない普通の名前
+// なので（利用者が `struct Sig[T]` を宣言してよい）、この E0020 は名前が解決できないときだけ"). The
+// rate is written with `at` (the clocks `init`, `block`, `sample`), and these three are names for
+// the program to use: a type declared with one of them is that type, in a flow and outside it.
+
+pub struct Sig[T] {
+  v: T,
+}
+
+pub struct Ctl {
+  gain: F32,
+}
+
+pub struct Init {
+  start: U32,
+}
+
+pub rt fn unwrap(s: Sig[F32]) -> F32 {
+  s.v
+}
+
+pub rt fn scale(c: Ctl, x: F32) -> F32 {
+  c.gain * x
+}
+
+// The names may be used as the names of values and as the type of a `let` inside a flow too.
+pub flow shaped(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c: Ctl = Ctl { gain: 2.0 }
+  let s: Sig[F32] = Sig { v: x }
+  let i: Init = Init { start: 1 }
+  unwrap(s) * scale(c, g) * i.start.round_f32()
+}
+
+test "a program may declare types named Sig, Ctl and Init" {
+  let c = Ctl { gain: 3.0 }
+  let s = Sig { v: 2.0 }
+  assert scale(c, unwrap(s)) == 6.0
+}
+
+test "a flow may use them" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = shaped.render(shaped.Config {}, shaped.Params { g: 0.5 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}

@@ -1,15 +1,15 @@
 digraph "voice" {
   rankdir=LR
   node [shape=box fontname="monospace"]
-  "f0" [label="f0: F32 @Ctl" shape=ellipse color="blue" fontcolor="blue"]
-  "vowel_f1" [label="vowel_f1: F32 @Ctl" shape=ellipse color="blue" fontcolor="blue"]
-  "vowel_f2" [label="vowel_f2: F32 @Ctl" shape=ellipse color="blue" fontcolor="blue"]
-  "gain" [label="gain: F32 @Ctl" shape=ellipse color="blue" fontcolor="blue"]
-  "src" [label="src = saw~: F32 @Sig" color="black" fontcolor="black"]
-  "f1" [label="f1 = resonator~: F32 @Sig" color="black" fontcolor="black"]
-  "f2" [label="f2 = resonator~: F32 @Sig" color="black" fontcolor="black"]
-  "out" [label="out: F32 @Sig" shape=doubleoctagon color="black" fontcolor="black"]
-  "smooth_0" [label="smooth_0 = smooth~: F32 @Sig" style=rounded color="black" fontcolor="black"]
+  "f0" [label="f0: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "vowel_f1" [label="vowel_f1: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "vowel_f2" [label="vowel_f2: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "gain" [label="gain: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "src" [label="src = saw~: F32 at sample" color="black" fontcolor="black"]
+  "f1" [label="f1 = resonator~: F32 at sample" color="black" fontcolor="black"]
+  "f2" [label="f2 = resonator~: F32 at sample" color="black" fontcolor="black"]
+  "out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "smooth_0" [label="smooth_0 = smooth~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "f0" -> "src"
   "src" -> "f1"
   "vowel_f1" -> "f1"

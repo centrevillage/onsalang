@@ -1,0 +1,2 @@
+flow c(x:F32 at sample)->F32 at sample{v~(x) /20
+}

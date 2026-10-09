@@ -161,7 +161,9 @@ pub enum Len {
     Var(u32),
 }
 
-/// Rates of flow signals (§11.3). Constants have no rate (`None` elsewhere).
+/// Rates of flow signals (§11.3), the clocks `init`, `block`, `sample` of
+/// the inputs and the output of a flow.
+/// Constants have no rate (`None` elsewhere).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Rate {
     Init,
@@ -170,21 +172,21 @@ pub enum Rate {
 }
 
 impl Rate {
-    pub fn name(self) -> &'static str {
+    /// Every clock, slowest first.
+    pub const ALL: [Rate; 3] = [Rate::Init, Rate::Ctl, Rate::Sig];
+
+    /// The name of the clock (§11.3): the one table of the clock names.
+    pub fn clock(self) -> &'static str {
         match self {
-            Rate::Init => "Init",
-            Rate::Ctl => "Ctl",
-            Rate::Sig => "Sig",
+            Rate::Init => "init",
+            Rate::Ctl => "block",
+            Rate::Sig => "sample",
         }
     }
 
-    pub fn parse(s: &str) -> Option<Rate> {
-        Some(match s {
-            "Init" => Rate::Init,
-            "Ctl" => Rate::Ctl,
-            "Sig" => Rate::Sig,
-            _ => return None,
-        })
+    /// The clock of the name `name`, if it is one.
+    pub fn of_clock(name: &str) -> Option<Rate> {
+        Rate::ALL.into_iter().find(|r| r.clock() == name)
     }
 }
 
@@ -229,8 +231,6 @@ pub enum Ty {
     Fn(FnTy),
     /// A generic type parameter of the enclosing item (index into its generics).
     Param(u32),
-    /// `Init[T]` / `Ctl[T]` / `Sig[T]` in flow signatures (§11.3).
-    Rate(Rate, TyId),
     /// A const generic argument in a `Named` argument list (`Ring[F32, 4]`
     /// is `Named(Ring, [F32, ConstVal(4)])`).
     ConstVal(u32),
@@ -310,13 +310,14 @@ impl Types {
         })
     }
 
-    /// Whether the return type `ret` is written in parentheses when an effect
-    /// row follows it (`uses` is non-empty): a function type there would take
-    /// that `uses` as its own (`fn() -> (fn()) uses {Alloc}` is not
-    /// `fn() -> fn() uses {Alloc}`, §8.1). The one rule, for [`Self::display`]
-    /// and the signatures of `onsa interface` (W3-20/b).
-    pub fn parens_before_uses(&self, ret: TyId, uses: bool) -> bool {
-        uses && matches!(self.get(ret), Ty::Fn(_))
+    /// Whether the type `ty` is written in parentheses when a `uses` or an
+    /// `at` follows it (`follows`): a function type there would take that
+    /// `uses` or `at` as its own result's (`fn() -> (fn()) uses {Alloc}` is
+    /// not `fn() -> fn() uses {Alloc}`, §8.1; `g: (fn(F32) -> F32) at block`,
+    /// §11.3, S-367). The one rule, for [`Self::display`] and the signatures
+    /// of `onsa interface` (W3-20/b, W3-10).
+    pub fn parens_before_uses(&self, ty: TyId, follows: bool) -> bool {
+        follows && matches!(self.get(ty), Ty::Fn(_))
     }
 
     /// Source-like rendering, with user types by name via `name_of`.
@@ -387,7 +388,6 @@ impl Types {
                 format!("{rt}fn({ps}){ret}{eff}")
             }
             Ty::Param(i) => generic_name(*i),
-            Ty::Rate(r, t) => format!("{}[{}]", r.name(), self.display(*t, name_of, generic_name)),
             Ty::ConstVal(n) => n.to_string(),
             Ty::Var(i) => format!("?{i}"),
             // What a syntax error left unread (S-59): shown as a hole, so that a

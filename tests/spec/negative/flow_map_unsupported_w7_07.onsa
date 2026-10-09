@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§18.1"]
+
+// E0200 while the flow syntax is written in the terms of this version's checks (W3-10, K-02, K-08):
+// a delay inside the first argument of a delay reads the value after the inner store in this
+// version (R-13; §11.4 reads the stored value before every store, `prev~(prev~(x))` is
+// `x[n-2]`), and the omitted `init` of a value type that is no number is `T.default()` (§11.4,
+// S-29), which this version does not compute. One error per flow (P-01).
+//
+// W7-07 removes this file: after it these programs check (lookback_nesting.onsa,
+// prev_default_types.onsa).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow two_prevs(x: F32 at sample) -> F32 at sample {
+  prev~(prev~(x)) //~ E0200
+}
+
+pub flow delay_in_prev(x: F32 at sample) -> F32 at sample {
+  let a = prev~(delay~(x, 2) + x) //~ E0200
+  a
+}
+
+pub flow through_an_instance(x: F32 at sample) -> F32 at sample {
+  vdelay~(lp~(prev~(x)), 2.0, 4) //~ E0200
+}
+
+pub flow default_bool(c: Bool at sample) -> Bool at sample {
+  prev~(c) //~ E0200
+}
+
+pub flow default_array(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  delay~(x, 3) //~ E0200
+}
+
+// An instance in the first argument of a delay, and the omitted `init` of a number.
+pub flow fine(x: F32 at sample, k: I32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x))
+  let b = prev~(k)
+  a + b.round_f32()
+}

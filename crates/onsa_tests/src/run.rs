@@ -1364,7 +1364,9 @@ mod tests {
     #[test]
     fn build_stage_markers() {
         // E0809 comes from the build of each target (the check is clean).
-        let src = format!("{MANIFEST}\npub flow f(x: Sig[F32], k: Ctl[F32]) -> Sig[F32] {{ //~ E0809\n  x * k\n}}\n");
+        let src = format!(
+            "{MANIFEST}\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {{ //~ E0809\n  x * k\n}}\n"
+        );
         let targeted = src.replace("//~ E0809", "//~ E0809 [a] //~ E0809 [b]");
         let only_a = src.replace("//~ E0809", "//~ E0809 [a]");
         let repo = Repo::new(
@@ -1374,7 +1376,7 @@ mod tests {
         let r = repo.run();
         // The E0809 of the build has a candidate (add `@param`), which the runner cannot
         // check again (W3-17): it fails on each build, never silenced.
-        let unchecked = |f: &String| f.contains("m.onsa:24:25 E0809 fix1: a candidate of the build stage");
+        let unchecked = |f: &String| f.contains("m.onsa:24:30 E0809 fix1: a candidate of the build stage");
         for p in ["tests/all/m.onsa", "tests/each/m.onsa"] {
             let c = case(&r, p);
             assert!(c.failures.len() == 2 && c.failures.iter().all(unchecked), "{p}: {:?}", c.failures);
@@ -1392,10 +1394,11 @@ mod tests {
     #[test]
     fn errors_of_the_case() {
         let check_error = format!("{MANIFEST}\npub fn g() -> I32 {{ x }} //~ E0302 [a]\n");
-        let unknown_target =
-            format!("{MANIFEST}\npub flow f(x: Sig[F32], k: Ctl[F32]) -> Sig[F32] {{ //~ E0809 [z]\n  x * k\n}}\n");
+        let unknown_target = format!(
+            "{MANIFEST}\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {{ //~ E0809 [z]\n  x * k\n}}\n"
+        );
         let golden_and_build = MANIFEST.to_string()
-            + "//\n// [test]\n// golden = [\"c\"]\n\npub flow f(x: Sig[F32], k: Ctl[F32]) -> Sig[F32] { //~ E0809\n  x * k\n}\n";
+            + "//\n// [test]\n// golden = [\"c\"]\n\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample { //~ E0809\n  x * k\n}\n";
         let old_mode = "//! mode: parse\nfn f() {}\n";
         let repo = Repo::new(
             "errors",
@@ -1619,9 +1622,8 @@ mod tests {
                  // panic = \"trap\"\n// provides = []\n//\n// [test]\n// conformance = true\n\n"
             )
         };
-        let two =
-            "pub flow f(x: Sig[F32]) -> Sig[F32] {\n  x\n}\n\npub flow g(x: Sig[F32]) -> Sig[F32] {\n  x * 2.0\n}\n";
-        let init_only = "pub flow f(x: Sig[F32], n: Init[F32]) -> Sig[F32] {\n  x * n\n}\n";
+        let two = "pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub flow g(x: F32 at sample) -> F32 at sample {\n  x * 2.0\n}\n";
+        let init_only = "pub flow f(x: F32 at sample, n: F32 at init) -> F32 at sample {\n  x * n\n}\n";
         let repo = Repo::new(
             "conformance",
             &[
@@ -1652,7 +1654,7 @@ mod tests {
         let bad_target = MANIFEST.replace("panic = \"poison\"", "panic = \"boom\"") + "\npub fn f() -> I32 {\n  1\n}\n";
         let flow = |name: &str| {
             MANIFEST.replace("name = \"m\"", &format!("name = \"{name}\"")).replace("m.f", &format!("{name}.f"))
-                + "\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  x\n}\n"
+                + "\npub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n"
         };
         let repo = Repo::new(
             "holes",
@@ -1807,7 +1809,9 @@ mod tests {
 
     #[test]
     fn runs_as_json() {
-        let src = format!("{MANIFEST}\npub flow f(x: Sig[F32], k: Ctl[F32]) -> Sig[F32] {{ //~ E0809\n  x * k\n}}\n");
+        let src = format!(
+            "{MANIFEST}\npub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {{ //~ E0809\n  x * k\n}}\n"
+        );
         let repo = Repo::new(
             "json",
             &[

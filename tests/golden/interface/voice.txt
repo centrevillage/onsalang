@@ -3,10 +3,10 @@ package voice
 module voice
 
 pub flow resonator(
-  x: Sig[F32],
-  fc: Ctl[F32],
-  bw: Ctl[F32],
-) -> Sig[F32]
+  x: F32 at sample,
+  fc: F32 at block,
+  bw: F32 at block,
+) -> F32 at sample
   pub struct resonator.State  // Affine; size 28, bulk 0, align 4
     sample_rate: 4 bytes, align 4, fast  // offset 0
     r: 4 bytes, align 4, fast  // offset 4
@@ -31,8 +31,8 @@ pub flow resonator(
   pub fn resonator.render(cfg: resonator.Config, params: resonator.Params, x: Span[F32], sample_rate: F32) -> resonator.Out uses {Alloc}
 
 pub flow saw(
-  f0: Ctl[F32],
-) -> Sig[F32]
+  f0: F32 at block,
+) -> F32 at sample
   pub struct saw.State  // Affine; size 16, bulk 0, align 4
     sample_rate: 4 bytes, align 4, fast  // offset 0
     f0: 4 bytes, align 4, fast  // offset 4
@@ -54,9 +54,9 @@ pub flow saw(
 pub rt fn wrap01(x: F32) -> F32
 
 pub flow smooth(
-  x: Ctl[F32],
-  time: Init[F32],
-) -> Sig[F32]
+  x: F32 at block,
+  time: F32 at init,
+) -> F32 at sample
   pub struct smooth.State  // Affine; size 16, bulk 0, align 4
     x: 4 bytes, align 4, fast  // offset 0
     a: 4 bytes, align 4, fast  // offset 4
@@ -78,14 +78,14 @@ pub flow smooth(
 
 pub flow voice(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
-  f0: Ctl[F32],
+  f0: F32 at block,
   @param(min: 200.0, max: 1200.0, default: 700.0, unit: "Hz")
-  vowel_f1: Ctl[F32],
+  vowel_f1: F32 at block,
   @param(min: 600.0, max: 3000.0, default: 1220.0, unit: "Hz")
-  vowel_f2: Ctl[F32],
+  vowel_f2: F32 at block,
   @param(min: 0.0, max: 1.0, default: 0.5)
-  gain: Ctl[F32],
-) -> Sig[F32]
+  gain: F32 at block,
+) -> F32 at sample
   pub struct voice.State  // Affine; size 92, bulk 0, align 4
     src: 16 bytes, align 4, fast  // offset 0
     f1: 28 bytes, align 4, fast  // offset 16
@@ -110,12 +110,12 @@ pub flow voice(
   pub fn voice.params_default() -> voice.Params
 
 pub flow echo(
-  x: Sig[F32],
+  x: F32 at sample,
   @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
-  time: Ctl[F32],
+  time: F32 at block,
   @param(min: 0.0, max: 0.95, default: 0.5)
-  feedback: Ctl[F32],
-) -> Sig[F32]
+  feedback: F32 at block,
+) -> F32 at sample
   pub struct echo.State  // Affine; size 384024, bulk 0, align 4
     sample_rate: 4 bytes, align 4, fast  // offset 0
     feedback: 4 bytes, align 4, fast  // offset 4

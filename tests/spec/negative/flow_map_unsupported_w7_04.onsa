@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+
+// E0200 while the flow syntax is written in the terms of this version's checks (W3-10, K-02):
+// `^name` on a name that is defined above it (an input, an earlier `let`, a constant) is the E0020
+// of the names stage (§11.2, S-116), and a `^name` inside a `par` reads the later `let` through
+// the replicas (R-03). This version says E0200 for both. One error per flow (P-01).
+//
+// W7-04 removes this file: after it the first ones are E0020 with their candidates
+// (e0020_caret_visible.onsa), and the last checks (par_lookback.onsa).
+
+const K: F32 = 2.0
+
+pub flow caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  prev~(^x) //~ E0200
+}
+
+pub flow caret_on_an_earlier_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  let b = prev~(^a) //~ E0200
+  b
+}
+
+pub flow caret_on_a_constant(x: F32 at sample) -> F32 at sample {
+  x + prev~(^K) //~ E0200
+}
+
+pub flow caret_in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  let a = par i in 0..<2 { prev~(^y) } //~ E0200
+  let y = x
+  a
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x
+  let b = x * 0.5
+  a
+}

@@ -561,13 +561,9 @@ fn children(expr: &ast::Expr) -> Vec<ExprId> {
         // Lowering runs only on a package without diagnostics (S-59).
         AK::Error => onsa_diag::internal::bug(Some(expr.span), "lowering met a body a syntax error left unread"),
         AK::Paren(x) | AK::Move(x) | AK::Try(x) | AK::Unsafe(x) => vec![*x],
-        AK::Cast { expr, .. } | AK::Unary { expr, .. } => vec![*expr],
-        // Lowering runs only on a package without diagnostics, and the flow
-        // syntax has the E0200 of its gate (`onsa_sema::flow_syntax`, W3-09);
-        // this walk reports nothing.
-        AK::At { .. } | AK::Feedback(_) => {
-            onsa_diag::internal::bug(Some(expr.span), "lowering met the flow syntax its gate stops first")
-        }
+        AK::Cast { expr, .. } | AK::Unary { expr, .. } | AK::At { expr, .. } => vec![*expr],
+        // `^y` has the `Target::Local` of `y`, which the walk reads first.
+        AK::Feedback(_) => Vec::new(),
         AK::Tuple(xs) | AK::Array(xs) => xs.clone(),
         AK::Repeat { elem, .. } => vec![*elem],
         AK::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),

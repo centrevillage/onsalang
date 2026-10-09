@@ -14,7 +14,7 @@ pub fn uses_unknown(x: Missing) -> F32 {   //~ E0302
 pub fn twice() -> I32 { 1 }
 pub fn twice() -> I32 { 2 }     //~ E0304
 
-pub flow voice(x: Sig[F32]) -> Sig[F32] {
+pub flow voice(x: F32 at sample) -> F32 at sample {
   x
 }
 

@@ -1,9 +1,10 @@
 //! `onsa graph` (T3-12; spec §18.2): the signal graph of a flow as DOT.
 //! Nodes are the inputs, the top-level `let`s, the stateful nodes that are not
 //! a `let` of their own (named per S-06) and the output; edges follow the
-//! reads of each initializer. The look-back edges of `prev` / `delay` /
-//! `vdelay` are dashed. Rates colour the nodes (`Init` gray, `Ctl` blue,
-//! `Sig` black).
+//! reads of each initializer. The look-back edges of `prev~` / `delay~` /
+//! `vdelay~` are dashed. A label is `name: type at clock` (no clock for a
+//! constant), and clocks colour the nodes (`init` and constants gray,
+//! `block` blue, `sample` black; `docs/onsa-tools.md` §1.1).
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -107,23 +108,25 @@ impl Graph<'_> {
     }
 
     fn node_label(&self, node: &Node, e: ExprId) -> String {
-        let what = match node {
-            Node::Prev { .. } => "prev".to_string(),
-            Node::Delay { n, .. } => format!("delay({n})"),
-            Node::Vdelay { max, .. } => format!("vdelay({max})"),
-            Node::Instance { callee, .. } => format!("{}~", self.a.def(*callee).name),
-            Node::Par { from, to, .. } => format!("par {from}..<{to}"),
+        // `prev_0 = prev~`, `src = saw~` (docs/onsa-tools.md §1.1).
+        let what = match (node, node.delay()) {
+            (_, Some(d)) => format!("{}~", d.name()),
+            (Node::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
+            (Node::Par { from, to, .. }, None) => format!("par {from}..<{to}"),
+            // `Node::delay` names every delay.
+            (Node::Prev { .. } | Node::Delay { .. } | Node::Vdelay { .. }, None) => {
+                onsa_diag::internal::bug(None, "a delay node without its delay")
+            }
         };
-        format!("{} = {what}: {} @{}", node.name(), self.ty_of(e), rate_name(self.rate_of(e)))
+        format!("{} = {what}: {}", node.name(), typed(&self.ty_of(e), self.rate_of(e)))
     }
 }
 
-fn rate_name(r: FlowRate) -> &'static str {
+/// `type at clock`, or the type alone for a constant (§11.3).
+fn typed(ty: &str, r: FlowRate) -> String {
     match r {
-        FlowRate::Const => "const",
-        FlowRate::Init => "Init",
-        FlowRate::Ctl => "Ctl",
-        FlowRate::Sig => "Sig",
+        FlowRate::Const => ty.to_string(),
+        r => format!("{ty} at {}", r.name()),
     }
 }
 
@@ -144,13 +147,10 @@ fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
             onsa_diag::internal::bug(Some(ast.expr(e).span), "the graph met a body a syntax error left unread")
         }
         ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Hole => {}
-        // A package with the flow syntax has the E0200 of its gate (W3-09):
-        // no graph is drawn for it, and no diagnostic can be reported here.
-        ExprKind::At { .. } | ExprKind::Feedback(_) => onsa_diag::internal::bug(
-            Some(ast.expr(e).span),
-            "the graph met the flow syntax its gate stops first (`onsa_sema::flow_syntax`, W3-09)",
-        ),
+        // `^y` reads the local `y` (a `Target::Local`, an edge of `visit`).
+        ExprKind::Feedback(_) => {}
         ExprKind::Paren(x)
+        | ExprKind::At { expr: x, .. }
         | ExprKind::Unary { expr: x, .. }
         | ExprKind::Cast { expr: x, .. }
         | ExprKind::Try(x)
@@ -267,9 +267,8 @@ fn graph_of(analyzed: &Analyzed, flow: &str) -> Result<String, String> {
         let rate = FlowRate::from_rate(input.rate);
         let _ = writeln!(
             out,
-            "  \"{name}\" [label=\"{name}: {} @{}\" shape=ellipse color=\"{}\" fontcolor=\"{}\"]",
-            a.display_type(input.ty),
-            rate_name(rate),
+            "  \"{name}\" [label=\"{name}: {}\" shape=ellipse color=\"{}\" fontcolor=\"{}\"]",
+            typed(&a.display_type(input.ty), rate),
             rate_color(rate),
             rate_color(rate)
         );
@@ -288,7 +287,7 @@ fn graph_of(analyzed: &Analyzed, flow: &str) -> Result<String, String> {
         let whole = info.node_of_expr.get(&l.init).and_then(|&idx| info.nodes.get(idx)).filter(|n| n.expr() == l.init);
         let label = match whole {
             Some(node) => g.node_label(node, l.init).replacen(&format!("{} =", node.name()), &format!("{name} ="), 1),
-            None => format!("{name}: {} @{}", a.display_type(l.ty), rate_name(l.rate)),
+            None => format!("{name}: {}", typed(&a.display_type(l.ty), l.rate)),
         };
         let _ = writeln!(
             out,
@@ -309,9 +308,8 @@ fn graph_of(analyzed: &Analyzed, flow: &str) -> Result<String, String> {
         let rate = g.rate_of(o);
         let _ = writeln!(
             out,
-            "  \"out\" [label=\"out: {} @{}\" shape=doubleoctagon color=\"{}\" fontcolor=\"{}\"]",
-            g.ty_of(o),
-            rate_name(rate),
+            "  \"out\" [label=\"out: {}\" shape=doubleoctagon color=\"{}\" fontcolor=\"{}\"]",
+            typed(&g.ty_of(o), rate),
             rate_color(rate),
             rate_color(rate)
         );
@@ -360,13 +358,13 @@ mod tests {
     use onsa_diag::SourceMap;
 
     const RESONATOR: &str = "use std.math.{exp, cos}\n\
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {\n\
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {\n\
   let r  = exp(-(F32.PI * bw) / sample_rate())\n\
   let w  = (2.0 * F32.PI * fc) / sample_rate()\n\
   let b1 = 2.0 * r * cos(w)\n\
   let b2 = r * r\n\
-  let y1 = prev(y, 0.0)\n\
-  let y2 = prev(y1, 0.0)\n\
+  let y1 = prev~(^y, 0.0)\n\
+  let y2 = prev~(y1, 0.0)\n\
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)\n\
   y\n\
 }\n";
@@ -384,8 +382,8 @@ pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {\n\
         assert_eq!(node_lines, 11, "{dot}");
         let dashed: Vec<&str> = dot.lines().filter(|l| l.contains("style=dashed")).collect();
         assert_eq!(dashed, vec!["  \"y\" -> \"y1\" [style=dashed]", "  \"y1\" -> \"y2\" [style=dashed]"], "{dot}");
-        assert!(dot.contains("\"r\" [label=\"r: F32 @Ctl\" color=\"blue\""), "{dot}");
-        assert!(dot.contains("\"y1\" [label=\"y1 = prev: F32 @Sig\""), "{dot}");
+        assert!(dot.contains("\"r\" [label=\"r: F32 at block\" color=\"blue\""), "{dot}");
+        assert!(dot.contains("\"y1\" [label=\"y1 = prev~: F32 at sample\""), "{dot}");
         assert!(dot.contains("  \"x\" -> \"y\"\n"), "{dot}");
         assert!(dot.contains("  \"y\" -> \"out\"\n"), "{dot}");
     }

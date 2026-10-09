@@ -35,13 +35,13 @@
 const MAX_ECHO: U32 = 96000
 
 pub flow echo(
-  x: Sig[F32],
+  x: F32 at sample,
   @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
-  time: Ctl[F32],
+  time: F32 at block,
   @param(min: 0.0, max: 0.95, default: 0.5)
-  feedback: Ctl[F32],
-) -> Sig[F32] {
+  feedback: F32 at block,
+) -> F32 at sample {
   let d = time * sample_rate()
-  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
+  let y = x + (feedback * vdelay~(^y, d, MAX_ECHO))
   y
 }

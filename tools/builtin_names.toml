@@ -125,23 +125,14 @@
 [allow."crates/onsa_driver/src/build.rs"]
 "Alloc" = 2
 
-[allow."crates/onsa_driver/src/graph.rs"]
-"Ctl" = 1
-"Init" = 1
-"Sig" = 1
-"prev" = 1
-
 [allow."crates/onsa_driver/src/interface.rs"]
 "ALIGN" = 1
 "Alloc" = 1
 "BULK_SIZE" = 1
 "Config" = 1
-"Ctl" = 1
-"Init" = 1
 "Out" = 1
 "Params" = 1
 "SIZE" = 1
-"Sig" = 1
 "State" = 3
 
 [allow."crates/onsa_driver/src/lib.rs"]
@@ -237,13 +228,12 @@
 "Some" = 1
 
 [allow."crates/onsa_sema/src/flow.rs"]
-"Ctl" = 1
-"Init" = 1
-"Sig" = 1
-"delay" = 5
-"prev" = 5
-"sample_rate" = 2
-"vdelay" = 4
+"sample_rate" = 1
+
+[allow."crates/onsa_sema/src/flow_names.rs"]
+"delay" = 1
+"prev" = 1
+"vdelay" = 1
 
 [allow."crates/onsa_sema/src/kind.rs"]
 "Copy" = 1
@@ -303,26 +293,26 @@
 "Buf" = 2
 "Bytes" = 2
 "Char" = 2
-"Ctl" = 2
 "F32" = 2
 "F64" = 2
 "I16" = 2
 "I32" = 2
 "I64" = 2
 "I8" = 2
-"Init" = 2
 "Map" = 2
 "Option" = 2
 "Ptr" = 2
 "Result" = 2
 "Set" = 2
-"Sig" = 2
 "Span" = 2
 "Str" = 2
 "U16" = 2
 "U32" = 2
 "U64" = 2
 "U8" = 2
+"block" = 1
+"init" = 1
+"sample" = 1
 
 [allow."crates/onsa_syntax/src/ast.rs"]
 "fp" = 1

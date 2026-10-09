@@ -62,13 +62,13 @@
 // ]
 
 // The poison wrappers of `panic = "poison"` end to end (T4-4, spec §9.2, §14.2), moved from
-// crates/onsa_tests/tests/poison.rs (K-14). Old syntax: W3 rewrites it with the other cases.
+// crates/onsa_tests/tests/poison.rs (K-14).
 
 pub flow boom(
-  x: Sig[F32],
+  x: F32 at sample,
   @param(min: 0.0, max: 10000000000.0, default: 1.0)
-  k: Ctl[F32],
-) -> Sig[F32] {
+  k: F32 at block,
+) -> F32 at sample {
   let n = k.trunc_u32()
   x * n.round_f32()
 }
@@ -78,7 +78,7 @@ pub fn checked(a: I32, b: I32) -> I32 {
 }
 
 /// `init` panics when `n` overflows (S-27): the instance stays uninitialized.
-pub flow fragile(x: Sig[F32], n: Init[I32]) -> Sig[F32] {
+pub flow fragile(x: F32 at sample, n: I32 at init) -> F32 at sample {
   let m = n + 1
   x * m.round_f32()
 }

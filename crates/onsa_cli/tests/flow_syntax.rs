@@ -585,6 +585,9 @@ fn syntax_errors() -> Vec<(&'static str, String, &'static str)> {
         ("the keyword at as a name", f("  let at = 1\n  at"), "E0002"),
         ("the clock on a binding", f("  let y: F32 at sample = x\n  y"), "E0020"),
         ("the clock on a binding of another clock", f("  let y: F32 at block = p\n  y"), "E0020"),
+        // The value is cut by a syntax error (W3-09/b2): that error is the unit's, not the
+        // clock's E0020 with a candidate on the part that was read.
+        ("the clock on a binding of a cut value", f("  let y: F32 at sample = 0..<3\n  x"), "E0002"),
     ]
 }
 

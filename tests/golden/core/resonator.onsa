@@ -6,13 +6,13 @@
 // Golden source for the flow lowering (T3-5): spec §17.3 alone.
 use std.math.{exp, cos}
 
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
   let r  = exp(-(F32.PI * bw) / sample_rate())
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
   let b2 = r * r
-  let y1 = prev(y, 0.0)
-  let y2 = prev(y1, 0.0)
+  let y1 = prev~(^y)
+  let y2 = prev~(y1)
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
   y
 }

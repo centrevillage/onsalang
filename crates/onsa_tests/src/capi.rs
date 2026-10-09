@@ -20,7 +20,7 @@
 
 use onsa_backend_c::{ApiField, FlowApi, FnApi, FnParamKind, IoArg};
 
-/// The `Init` inputs of an `init` call.
+/// The `init` inputs of an `init` call.
 pub enum Cfg<'a> {
     /// The C expression of each input ([`FlowApi::init_args`]).
     Values(&'a dyn Fn(&ApiField) -> String),
@@ -65,7 +65,7 @@ pub fn init(api: &FlowApi, s: &str, bulk: &str, cfg: Cfg<'_>, sample_rate: &str)
         Cfg::Values(value) => args.extend(api.init_args.iter().map(value)),
         Cfg::Null => {
             return Err(Unsupported(
-                "this version's `init` takes the `Init` inputs by value: there is no `cfg` pointer to pass NULL \
+                "this version's `init` takes the `init` inputs by value: there is no `cfg` pointer to pass NULL \
                  (W10-02, W10-03)"
                     .into(),
             ));

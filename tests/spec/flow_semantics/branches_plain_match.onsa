@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§3.5"]
+
+// The scrutinee of a `match` in a flow body is always evaluated and may hold state (spec §11.5),
+// as in branches_plain.onsa. Apart from it because the value of a `match` on literal patterns is
+// lowered from W8-06 (R-06).
+
+pub flow scrutinee_with_state(k: U32 at sample) -> F32 at sample {
+  match prev~(k) {
+    0 => 10.0,
+    _ => 20.0,
+  }
+}
+
+test "the scrutinee of a match may hold state" {
+  // k = 0 1 0 0.  prev~(k) = 0 0 1 0.
+  let ks: [U32; 4] = [0, 1, 0, 0]
+  let o = scrutinee_with_state.render(scrutinee_with_state.Config {}, scrutinee_with_state.Params {}, ks, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 10.0
+  assert o.out[2] == 20.0
+  assert o.out[3] == 10.0
+}

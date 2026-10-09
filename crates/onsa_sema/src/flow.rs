@@ -10,8 +10,9 @@
 //!   bindings are `LocalKind::Let`, `par` variables `LocalKind::Let`, match
 //!   bindings `MatchBind`), `targets`, `pat_locals`, `instances` (generic
 //!   instantiations used by the body, for monomorphization). Flow-instance
-//!   calls (`saw~(f0)`) and the builtins `prev` / `delay` / `vdelay` /
-//!   `sample_rate` have no `Target`; use `node_of_expr` / `sample_rate_calls`.
+//!   calls (`saw~(f0)`), the delays `prev~` / `delay~` / `vdelay~` and
+//!   `sample_rate()` have no `Target`; use `node_of_expr` / `sample_rate_calls`.
+//!   A feedback reference `^y` has the `Target::Local` of `y`.
 //! - `expr_rates: HashMap<ExprId, FlowRate>` — the rate of every expression
 //!   (`Const < Init < Ctl < Sig`, §11.3).
 //! - `local_rates` — the rate of every local (inputs: declared; `let`s: the
@@ -25,7 +26,7 @@
 //!   can be inlined).
 //! - `nodes: Vec<Node>` — the stateful nodes in source order with their S-06
 //!   names: the `let` name when the node is the whole initializer (`let y1 =
-//!   prev(y, 0.0)`, `let src = saw~(f0)`), otherwise `prev_0`, `delay_0`,
+//!   prev~(^y)`, `let src = saw~(f0)`), otherwise `prev_0`, `delay_0`,
 //!   `vdelay_0`, `<callee>_0`, numbered per kind in source order over the
 //!   whole body. Nodes inside a `par` body are nested in `Node::Par.nodes`.
 //! - `node_of_expr` — call expression → index into the node list that
@@ -36,6 +37,9 @@
 //!   `Ctl` / `Sig`: store it, S-05). `sample_rate_calls` lists the calls.
 //! - `output: ExprId` — the output expression (rate ≤ `Sig`, promoted).
 //! - `complete` — `false` when checking stopped at a diagnostic (tables partial).
+//!
+//! The flow syntax of 0.3 (`at`, `^name`, `prev~`, the omitted `init`,
+//! `if~` / `match~`) is read into these tables by [`map`] (W3-10, K-02).
 
 use std::collections::{HashMap, HashSet};
 
@@ -53,6 +57,10 @@ use crate::resolve::Entity;
 use crate::ty::{FloatKind, Len, Rate, Ty, TyId};
 use crate::{Analysis, DefId, Kind, Module};
 
+#[path = "flow_map.rs"]
+pub(crate) mod map;
+use crate::flow_names::Delay;
+
 /// Rates with constants as the bottom (§11.3: `定数 < Init < Ctl < Sig`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FlowRate {
@@ -66,9 +74,9 @@ impl FlowRate {
     pub fn name(self) -> &'static str {
         match self {
             FlowRate::Const => "constant",
-            FlowRate::Init => "Init",
-            FlowRate::Ctl => "Ctl",
-            FlowRate::Sig => "Sig",
+            FlowRate::Init => Rate::Init.clock(),
+            FlowRate::Ctl => Rate::Ctl.clock(),
+            FlowRate::Sig => Rate::Sig.clock(),
         }
     }
 
@@ -92,15 +100,14 @@ pub struct FlowLet {
     /// Type of the initializer (resolved).
     pub ty: TyId,
     pub rate: FlowRate,
-    /// Rate written in the annotation (`let ps: Sig[F32] = p`), if any.
-    pub annotated: Option<FlowRate>,
     pub init: ExprId,
     pub span: Span,
     /// Read at a higher rate than its own: becomes a state field (S-05).
     pub state: bool,
 }
 
-/// The `init` argument of `prev` / `delay` / `vdelay` (§11.4).
+/// The `init` argument of `prev~` / `delay~` / `vdelay~` (§11.4), or the
+/// value of an omitted one (`map`).
 #[derive(Debug, Clone)]
 pub enum InitArg {
     /// A compile-time constant: no storage needed.
@@ -127,6 +134,16 @@ impl Node {
             | Node::Vdelay { name, .. }
             | Node::Instance { name, .. }
             | Node::Par { name, .. } => name,
+        }
+    }
+
+    /// The built-in delay of the node, if it is one.
+    pub fn delay(&self) -> Option<Delay> {
+        match self {
+            Node::Prev { .. } => Some(Delay::Prev),
+            Node::Delay { .. } => Some(Delay::Fixed),
+            Node::Vdelay { .. } => Some(Delay::Variable),
+            Node::Instance { .. } | Node::Par { .. } => None,
         }
     }
 
@@ -158,7 +175,7 @@ pub struct FlowInfo {
 
 // ---------------------------------------------------------------- checker side
 
-/// A `let` of the body, pre-declared before checking (so that `prev(y, 0.0)`
+/// A `let` of the body, pre-declared before checking (so that `prev~(^y)`
 /// can name a later `let`, §11.2).
 #[derive(Debug, Clone)]
 struct PendingLet {
@@ -167,15 +184,17 @@ struct PendingLet {
     init: ExprId,
     locals: Vec<LocalId>,
     name: Option<String>,
-    annotated: Option<FlowRate>,
+    /// The value type written on the `let` (`let s: St = …`), lowered when
+    /// the `let` is pre-declared: a `^s` above it has that type (§4.7).
+    annotation: Option<TyId>,
     span: Span,
 }
 
 #[derive(Debug, Clone)]
 enum NodeKind {
-    Prev,
-    Delay(u32),
-    Vdelay(u32),
+    /// A built-in delay and its length (`N` of `delay~`, `MAX` of `vdelay~`,
+    /// 0 for `prev~`).
+    Delay(Delay, u32),
     Instance(DefId),
 }
 
@@ -184,7 +203,10 @@ struct NodeCall {
     expr: ExprId,
     kind: NodeKind,
     args: Vec<ExprId>,
+    /// The `init` of a delay; `None` with no `init_expr` when it is omitted
+    /// (its value is the rate pass's, `map`).
     init: Option<InitArg>,
+    init_expr: Option<ExprId>,
     ty: TyId,
 }
 
@@ -197,8 +219,16 @@ pub(crate) struct FlowCx {
     pending: Vec<PendingLet>,
     let_of_local: HashMap<LocalId, usize>,
     defined: HashSet<LocalId>,
-    /// > 0 while checking the first argument of `prev` / `delay` / `vdelay`.
+    /// Nonzero while checking the first argument of a delay, where `^name` may
+    /// look back; 0 again in the arguments of an instance there (§11.2).
     lookback: u32,
+    /// Nonzero while checking the first argument of a delay, instances included
+    /// (a delay there is E0200, K-08).
+    delay_arg: u32,
+    /// Nonzero while checking the body of a `par` (a `^` there is E0200, R-03).
+    par_depth: u32,
+    /// The clock of each `e at k` (§11.3), for the rate pass.
+    ats: HashMap<ExprId, FlowRate>,
     calls: Vec<NodeCall>,
     /// `par` expression → (variable, from, to).
     pars: HashMap<ExprId, (LocalId, u32, u32)>,
@@ -208,11 +238,9 @@ pub(crate) struct FlowCx {
     output: Option<ExprId>,
 }
 
-/// The built-in delays (§11.4), the stateful flows of [`BUILTINS`] (written
-/// `name~(…)`, the E0200 of W3-09 shows them so, `crate::flow_syntax`).
-pub(crate) const DELAYS: [&str; 3] = ["prev", "delay", "vdelay"];
-
-const BUILTINS: [&str; 4] = [DELAYS[0], DELAYS[1], DELAYS[2], "sample_rate"];
+/// The builtin of a flow that is no delay (§11.4); the delays are
+/// [`Delay`].
+const SAMPLE_RATE: &str = "sample_rate";
 
 impl<'a> Checker<'a> {
     fn fcx(&mut self) -> &mut FlowCx {
@@ -263,9 +291,22 @@ impl<'a> Checker<'a> {
         let ast = self.ast;
         for s in stmts {
             let stmt = ast.stmt(s);
-            if let StmtKind::Let { pat, init, .. } = stmt.kind {
+            if let StmtKind::Let { pat, init, ty } = stmt.kind {
                 let mut locals = Vec::new();
                 self.predeclare_pat(pat, &mut locals)?;
+                // The annotation types the locals from the start, so that a
+                // feedback reference above the `let` reads it (`prev~(^s.l)`).
+                let annotation = match ty {
+                    Some(t) => {
+                        let lowered = self.lower_type_expr(t)?;
+                        self.flow_unify_pat(pat, lowered)?;
+                        Some(lowered)
+                    }
+                    // SPEC-GAP(S-395): with no annotation the locals stay unknown
+                    // above the `let`, so `^s.l` there is E0420 (§4.7); the type is
+                    // not taken from the value of the later `let`.
+                    None => None,
+                };
                 let name = match &ast.pat(pat).kind {
                     PatKind::Bind(id) => Some(id.name.clone()),
                     _ => None,
@@ -274,15 +315,7 @@ impl<'a> Checker<'a> {
                 for &l in &locals {
                     self.fcx().let_of_local.insert(l, k);
                 }
-                self.fcx().pending.push(PendingLet {
-                    stmt: s,
-                    pat,
-                    init,
-                    locals,
-                    name,
-                    annotated: None,
-                    span: stmt.span,
-                });
+                self.fcx().pending.push(PendingLet { stmt: s, pat, init, locals, name, annotation, span: stmt.span });
             }
         }
         match tail {
@@ -325,12 +358,11 @@ impl<'a> Checker<'a> {
     }
 
     /// E0801: a `let` name read before its definition (its own initializer
-    /// included), outside the first argument of `prev` / `delay` / `vdelay`.
+    /// included); a later `let` is read only as `^name` (§11.2).
     pub(crate) fn flow_use_local(&mut self, id: LocalId, span: Span) -> R<()> {
         let f = self.fcx();
         if let Some(&k) = f.let_of_local.get(&id)
             && !f.defined.contains(&id)
-            && f.lookback == 0
         {
             let name = self.info.locals[id.0 as usize].name.clone();
             let def_span = self.fcx().pending[k].span;
@@ -339,7 +371,7 @@ impl<'a> Checker<'a> {
                     Stage::Flow, Code::E0801,
                     span,
                     format!(
-                        "`{name}` is defined below; only the first argument of `prev`/`delay`/`vdelay` may refer to a later or current `let` (§11.2)"
+                        "`{name}` is defined below; names are defined from the top, and a later `let` is read as `^{name}` in the first argument of `prev~` / `delay~` / `vdelay~` (§11.2)"
                     ),
                 )
                 .with_found(name)
@@ -355,8 +387,8 @@ impl<'a> Checker<'a> {
         let stmt = ast.stmt(s);
         let span = stmt.span;
         let what = match &stmt.kind {
-            StmtKind::Let { pat, ty, init } => return self.check_flow_let(s, *pat, *ty, *init),
-            StmtKind::Var { .. } => "`var`; a flow has no mutable variables, state lives in `prev` / `delay`",
+            StmtKind::Let { pat, init, .. } => return self.check_flow_let(s, *pat, *init),
+            StmtKind::Var { .. } => "`var`; a flow has no mutable variables, state lives in `prev~` / `delay~`",
             StmtKind::Assign { .. } => "assignment; every signal is defined once by `let`",
             StmtKind::For { .. } => "`for`; a flow body has no loops (use `par` to replicate structure)",
             StmtKind::While { .. } => "`while`; a flow body has no loops",
@@ -368,7 +400,7 @@ impl<'a> Checker<'a> {
         Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
     }
 
-    fn check_flow_let(&mut self, s: StmtId, pat: PatId, ty: Option<onsa_syntax::ast::TypeId>, init: ExprId) -> R<()> {
+    fn check_flow_let(&mut self, s: StmtId, pat: PatId, init: ExprId) -> R<()> {
         let span = self.ast.stmt(s).span;
         if self.fcx().depth != 1 {
             return Err(self.flow_err(
@@ -380,21 +412,13 @@ impl<'a> Checker<'a> {
         let Some(k) = self.fcx().pending.iter().position(|p| p.stmt == s) else {
             return Err(self.flow_err(Code::E0806, span, "unexpected `let` in a flow body"));
         };
-        // Annotation: `Sig[F32]` promotes (§11.3); a plain type only constrains the value.
-        let (annotated, expected) = match ty {
-            Some(t) => {
-                let lowered = self.lower_type_expr(t)?;
-                match self.ty(lowered) {
-                    Ty::Rate(r, inner) => (Some(FlowRate::from_rate(r)), Some(inner)),
-                    _ => (None, Some(lowered)),
-                }
-            }
-            None => (None, None),
-        };
+        // The annotation is a value type (§11.2), lowered when the `let` was
+        // pre-declared; the clock is written on the value (`let ps = p at
+        // sample`, §11.3).
+        let expected = self.fcx().pending[k].annotation;
         let it = self.check_expr(init, expected)?;
         self.flow_unify_pat(pat, it)?;
         let f = self.fcx();
-        f.pending[k].annotated = annotated;
         let locals = f.pending[k].locals.clone();
         f.defined.extend(locals);
         Ok(())
@@ -471,6 +495,14 @@ impl<'a> Checker<'a> {
                 let (var, range, body) = (var.clone(), *range, *body);
                 return self.check_par(e, &var, &range, body, expected).map(Some);
             }
+            ExprKind::At { expr: inner, clock } => {
+                let (inner, clock) = (*inner, clock.clone());
+                return self.check_at(e, inner, &clock, expected).map(Some);
+            }
+            ExprKind::Feedback(name) => {
+                let name = name.clone();
+                return self.check_feedback(e, &name).map(Some);
+            }
             _ => return Ok(None),
         };
         Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
@@ -515,7 +547,10 @@ impl<'a> Checker<'a> {
             let u32 = self.u32();
             let lid = self.declare(var, u32, LocalKind::Let, false)?;
             self.fcx().pars.insert(e, (lid, lo, hi));
-            self.check_expr(body, exp_elem)
+            self.fcx().par_depth += 1;
+            let r = self.check_expr(body, exp_elem);
+            self.fcx().par_depth -= 1;
+            r
         })();
         self.pop_scope();
         let t = r?;
@@ -637,8 +672,8 @@ impl<'a> Checker<'a> {
         )
     }
 
-    /// Calls in flow mode (§11.5, §2.6): flow instances `f~(...)`, the builtins
-    /// `prev` / `delay` / `vdelay` / `sample_rate`, E0811 / E0812. `None` hands
+    /// Calls in flow mode (§11.5, §2.6): flow instances `f~(...)`, the delays
+    /// `prev~` / `delay~` / `vdelay~`, `sample_rate()`, E0811 / E0812. `None` hands
     /// the call back to the ordinary checker (functions, methods, constructors).
     pub(crate) fn check_flow_call(
         &mut self,
@@ -653,17 +688,35 @@ impl<'a> Checker<'a> {
             return Ok(None);
         }
         let span = self.expr(e).span;
-        // 1. Reserved builtin names (§2.2).
+        // 1. Reserved builtin names (§2.2): the delays are stateful flows
+        // (`prev~(…)`), `sample_rate()` is not.
         if let ExprKind::Path(p) = &self.expr(callee).kind
             && p.segments.len() == 1
-            && BUILTINS.contains(&p.segments[0].name.as_str())
+            && (Delay::named(&p.segments[0].name).is_some() || p.segments[0].name == SAMPLE_RATE)
             && self.lookup_local(&p.segments[0].name).is_none()
         {
             let name = p.segments[0].name.clone();
-            if kind != CallKind::Plain {
-                return Err(self.flow_bad_mark(span, kind, &name));
-            }
-            return self.check_flow_builtin(e, &name, args, expected).map(Some);
+            return match (Delay::named(&name), kind) {
+                (Some(d), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
+                (Some(_), CallKind::Plain) => {
+                    // `~` goes right after the callee (`prev~(`, §2.6).
+                    let at = self.expr(callee).span.end;
+                    Err(self.diag(
+                        Diagnostic::new(
+                            Stage::Flow,
+                            Code::E0811,
+                            span,
+                            format!(
+                                "`{name}` is a built-in delay; it holds state and is written `{name}~(…)` (§2.6, §11.4)"
+                            ),
+                        )
+                        .with_found(self.src(span))
+                        .with_fix(Fix::insert("add `~`", span.file, at, "~")),
+                    ))
+                }
+                (None, CallKind::Plain) => self.check_sample_rate(e, args).map(Some),
+                _ => Err(self.flow_bad_mark(span, kind, &name)),
+            };
         }
         // 2. A path that names a flow.
         let chain = match &self.expr(callee).kind {
@@ -787,97 +840,128 @@ impl<'a> Checker<'a> {
         if let Some(exp) = expected {
             self.unify_at(span, f.out, exp)?;
         }
-        let mut arg_exprs = Vec::new();
-        for (arg, input) in args.iter().zip(&f.inputs) {
-            self.check_expr(arg.expr, Some(input.ty))?;
-            arg_exprs.push(arg.expr);
-        }
+        // An argument of an instance takes no `^` (§11.2), even in the first
+        // argument of a delay.
+        let lookback = std::mem::take(&mut self.fcx().lookback);
+        let r = (|| -> R<Vec<ExprId>> {
+            let mut arg_exprs = Vec::new();
+            for (arg, input) in args.iter().zip(&f.inputs) {
+                self.check_expr(arg.expr, Some(input.ty))?;
+                arg_exprs.push(arg.expr);
+            }
+            Ok(arg_exprs)
+        })();
+        self.fcx().lookback = lookback;
+        let arg_exprs = r?;
         self.fcx().calls.push(NodeCall {
             expr: e,
             kind: NodeKind::Instance(d),
             args: arg_exprs,
             init: None,
+            init_expr: None,
             ty: f.out,
         });
         Ok(f.out)
     }
 
-    /// `prev(e, init)`, `delay(e, N, init)`, `vdelay(e, d, MAX, init)`, `sample_rate()` (§11.4).
-    fn check_flow_builtin(&mut self, e: ExprId, name: &str, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
-        let span = self.expr(e).span;
-        let arity = match name {
-            "prev" => 2,
-            "delay" => 3,
-            "vdelay" => 4,
-            _ => 0,
-        };
-        if args.len() != arity {
+    /// `sample_rate()` (§11.4).
+    fn check_sample_rate(&mut self, e: ExprId, args: &[Arg]) -> R<TyId> {
+        if !args.is_empty() {
+            let span = self.expr(e).span;
             return Err(self.flow_err(
                 Code::E0412,
                 span,
-                format!("`{name}` takes {arity} argument(s) but {} were given", args.len()),
+                format!("`{SAMPLE_RATE}` takes 0 argument(s) but {} were given", args.len()),
+            ));
+        }
+        let f32 = self.a.types.float(FloatKind::F32);
+        self.fcx().sample_rate_calls.push(e);
+        Ok(f32)
+    }
+
+    /// `prev~(e)`, `delay~(e, N)`, `vdelay~(e, d, MAX)`, each with an
+    /// optional last `init` (§11.4).
+    fn check_delay(&mut self, e: ExprId, d: Delay, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
+        let span = self.expr(e).span;
+        let name = d.name();
+        let most = d.init_index() + 1;
+        if args.len() != most && args.len() != most - 1 {
+            return Err(self.flow_err(
+                Code::E0412,
+                span,
+                format!(
+                    "`{name}~` takes {} or {most} arguments (the last, `init`, may be omitted) but {} were given",
+                    most - 1,
+                    args.len()
+                ),
             ));
         }
         self.plain_args(args)?;
-        if name == "sample_rate" {
-            let f32 = self.a.types.float(FloatKind::F32);
-            self.fcx().sample_rate_calls.push(e);
-            return Ok(f32);
-        }
-        // The first argument may look back to a later `let` (§11.2).
+        // The first argument may look back to a later `let` with `^` (§11.2).
         self.fcx().lookback += 1;
+        self.fcx().delay_arg += 1;
         let r = self.check_expr(args[0].expr, expected);
         self.fcx().lookback -= 1;
+        self.fcx().delay_arg -= 1;
         let t = r?;
-        let (kind, init_idx) = match name {
-            "prev" => (NodeKind::Prev, 1),
-            "delay" => {
+        let init_expr = args.get(d.init_index()).map(|a| a.expr);
+        let len = match d {
+            Delay::Prev => 0,
+            Delay::Fixed => {
                 let n_expr = args[1].expr;
-                let n = self.flow_const_u32(n_expr, "the length of `delay`")?;
+                let n = self.flow_const_u32(n_expr, "the length of `delay~`")?;
                 if n == 1 {
-                    let fix = format!(
-                        "prev({}, {})",
-                        self.src(self.expr(args[0].expr).span),
-                        self.src(self.expr(args[2].expr).span)
-                    );
+                    let mut shown = vec![self.src(self.expr(args[0].expr).span)];
+                    shown.extend(init_expr.map(|i| self.src(self.expr(i).span)));
+                    let fix = format!("{}~({})", Delay::Prev.name(), shown.join(", "));
                     return Err(self.diag(
-                        Diagnostic::new(Stage::Flow, Code::E0807, span, "a 1-sample delay is written `prev` (§11.4)")
+                        Diagnostic::new(Stage::Flow, Code::E0807, span, "a 1-sample delay is written `prev~` (§11.4)")
                             .with_found(self.src(span))
-                            .with_fix(Fix::replace("write `prev`", span, fix)),
+                            .with_fix(Fix::replace("write `prev~`", span, fix)),
                     ));
                 }
                 if n < 2 {
                     return Err(self.flow_err(
                         Code::E0808,
                         self.expr(n_expr).span,
-                        "`delay` needs a length of at least 2 (§11.4)",
+                        "`delay~` needs a length of at least 2 (§11.4)",
                     ));
                 }
-                (NodeKind::Delay(n), 2)
+                n
             }
-            _ => {
+            Delay::Variable => {
                 self.check_expr(args[1].expr, Some(t))?;
                 let max_expr = args[2].expr;
-                let max = self.flow_const_u32(max_expr, "the maximum of `vdelay`")?;
+                let max = self.flow_const_u32(max_expr, "the maximum of `vdelay~`")?;
                 if max < 1 {
                     return Err(self.flow_err(
                         Code::E0808,
                         self.expr(max_expr).span,
-                        "`vdelay` needs a maximum of at least 1 (§11.4)",
+                        "`vdelay~` needs a maximum of at least 1 (§11.4)",
                     ));
                 }
                 self.fcx().float_checks.push((span, e));
-                (NodeKind::Vdelay(max), 3)
+                max
             }
         };
-        let init = args[init_idx].expr;
-        self.check_expr(init, Some(t))?;
-        let init_arg = match consteval::eval(self, init) {
-            Some(v) => InitArg::Const(v),
-            None => InitArg::Init(init),
+        let kind = NodeKind::Delay(d, len);
+        let init = match init_expr {
+            Some(i) => {
+                self.check_expr(i, Some(t))?;
+                Some(match consteval::eval(self, i) {
+                    Some(v) => InitArg::Const(v),
+                    None => InitArg::Init(i),
+                })
+            }
+            None => None,
         };
+        // K-08, R-13: the store of a delay inside the first argument of a
+        // delay comes before the outer one reads it (W7-07).
+        if self.fcx().delay_arg > 0 {
+            return Err(self.unsupported_in(Stage::Flow, span, Feature::NestedDelays, &[]));
+        }
         let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-        self.fcx().calls.push(NodeCall { expr: e, kind, args: arg_exprs, init: Some(init_arg), ty: t });
+        self.fcx().calls.push(NodeCall { expr: e, kind, args: arg_exprs, init, init_expr, ty: t });
         Ok(t)
     }
 }
@@ -916,6 +1000,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         sample_rate_at: None,
         let_names: HashMap::new(),
         call_of_expr: HashMap::new(),
+        branch: 0,
     };
     for (i, c) in fcx.calls.iter().enumerate() {
         r.call_of_expr.insert(c.expr, i);
@@ -925,7 +1010,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
             r.let_names.insert(p.init, n.clone());
         }
     }
-    // Fixpoint on the `let` rates: a look-back (`prev(y, 0.0)` before `let y`)
+    // Fixpoint on the `let` rates: a look-back (`prev~(^y)` before `let y`)
     // reads a rate that is only known after its `let` is rated. Rates only go
     // up, and the lattice has four levels, so this converges quickly.
     for _ in 0..6 {
@@ -982,6 +1067,8 @@ struct Rater<'a> {
     sample_rate_at: Option<FlowRate>,
     let_names: HashMap<ExprId, String>,
     call_of_expr: HashMap<ExprId, usize>,
+    /// Nonzero inside a branch, a guard or the right side of `&&` / `||` (K-08).
+    branch: u32,
 }
 
 impl<'a> Rater<'a> {
@@ -1017,6 +1104,7 @@ impl<'a> Rater<'a> {
         self.node_of_expr.clear();
         self.counters.clear();
         self.sample_rate_at = None;
+        self.branch = 0;
         for &(l, r) in &self.fcx.inputs {
             self.local_rates.insert(l, r);
         }
@@ -1026,22 +1114,7 @@ impl<'a> Rater<'a> {
     fn pass_inner(&mut self) -> RR<()> {
         for k in 0..self.fcx.pending.len() {
             let p = self.fcx.pending[k].clone();
-            let mut rate = self.rate(p.init)?;
-            if let Some(ann) = p.annotated {
-                if self.final_pass && rate > ann {
-                    let span = self.expr(p.init).span;
-                    return Err(self.err(
-                        Code::E0810,
-                        span,
-                        format!(
-                            "cannot lower the rate: the initializer is `{}` but the annotation says `{}` (§11.3)",
-                            rate.name(),
-                            ann.name()
-                        ),
-                    ));
-                }
-                rate = ann;
-            }
+            let rate = self.rate(p.init)?;
             // §11.3: the value type of a signal must be Copy.
             let ty = self.body.expr_types.get(&p.init).copied().unwrap_or_else(|| self.a.types.error());
             if self.final_pass
@@ -1064,7 +1137,6 @@ impl<'a> Rater<'a> {
                 name: p.name.clone(),
                 ty,
                 rate,
-                annotated: p.annotated,
                 init: p.init,
                 span: p.span,
                 state: false,
@@ -1076,7 +1148,7 @@ impl<'a> Rater<'a> {
                 return Err(self.err(
                     Code::E0401,
                     span,
-                    "`vdelay` interpolates and needs a float signal (`F32` / `F64`, §11.4)",
+                    "`vdelay~` interpolates and needs a float signal (`F32` / `F64`, §11.4)",
                 ));
             }
         }
@@ -1122,13 +1194,13 @@ impl<'a> Rater<'a> {
     }
 
     /// The rate of an expression (§11.3): the maximum of its operands;
-    /// `prev` / `delay` / `vdelay` and instances are `Sig`.
+    /// the delays and instances are `Sig`.
     fn rate(&mut self, e: ExprId) -> RR<FlowRate> {
         let expr = self.expr(e);
         let span = expr.span;
         let r = match &expr.kind {
             ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::Range(_) => FlowRate::Const,
-            ExprKind::Path(_) => match self.body.targets.get(&e).cloned() {
+            ExprKind::Path(_) | ExprKind::Feedback(_) => match self.body.targets.get(&e).cloned() {
                 Some(t) => self.rate_target(e, &t)?.unwrap_or(FlowRate::Const),
                 None => FlowRate::Const,
             },
@@ -1142,11 +1214,7 @@ impl<'a> Rater<'a> {
             ExprKind::Paren(inner) | ExprKind::Cast { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
                 self.rate(*inner)?
             }
-            // The gate of the flow syntax stops their item before the checks
-            // (`crate::flow_syntax`, W3-09; W3-10 writes them, K-02, K-08):
-            // through a gap in it, its E0200.
-            ExprKind::At { .. } => return Err(self.fail(FlowForm::Clock.diagnostic(Stage::Flow, span))),
-            ExprKind::Feedback(_) => return Err(self.fail(FlowForm::Feedback.diagnostic(Stage::Flow, span))),
+            ExprKind::At { expr: inner, .. } => self.rate_at(e, *inner)?,
             ExprKind::Move(inner) | ExprKind::Try(inner) | ExprKind::Unsafe(inner) => self.rate(*inner)?,
             ExprKind::Tuple(elems) | ExprKind::Array(elems) => {
                 let mut r = FlowRate::Const;
@@ -1167,28 +1235,50 @@ impl<'a> Rater<'a> {
                 Some(t) => self.rate(t)?,
                 None => FlowRate::Const,
             },
-            ExprKind::If { cond, then, else_, .. } => {
+            ExprKind::If { tilde: Some(t), .. } => return Err(self.tilde_branches(*t, FlowForm::IfTilde)),
+            ExprKind::Match { tilde: Some(t), .. } => return Err(self.tilde_branches(*t, FlowForm::MatchTilde)),
+            ExprKind::If { cond, then, else_, tilde: None } => {
                 let mut r = self.rate(*cond)?;
-                r = r.max(self.rate(*then)?);
-                if let Some(el) = else_ {
-                    r = r.max(self.rate(*el)?);
-                }
+                self.branch += 1;
+                let b = (|| -> RR<FlowRate> {
+                    let mut r = self.rate(*then)?;
+                    if let Some(el) = else_ {
+                        r = r.max(self.rate(*el)?);
+                    }
+                    Ok(r)
+                })();
+                self.branch -= 1;
+                r = r.max(b?);
                 r
             }
-            ExprKind::Match { scrutinee, arms, .. } => {
+            ExprKind::Match { scrutinee, arms, tilde: None } => {
                 let sr = self.rate(*scrutinee)?;
                 let mut r = sr;
-                for arm in arms {
-                    self.bind_pat_rates(arm.pat, sr);
-                    if let Some(g) = arm.guard {
-                        r = r.max(self.rate(g)?);
+                self.branch += 1;
+                let b = (|| -> RR<FlowRate> {
+                    let mut r = FlowRate::Const;
+                    for arm in arms {
+                        self.bind_pat_rates(arm.pat, sr);
+                        if let Some(g) = arm.guard {
+                            r = r.max(self.rate(g)?);
+                        }
+                        r = r.max(self.rate(arm.body)?);
                     }
-                    r = r.max(self.rate(arm.body)?);
-                }
+                    Ok(r)
+                })();
+                self.branch -= 1;
+                r = r.max(b?);
                 r
             }
             ExprKind::Closure { .. } | ExprKind::Handle { .. } => FlowRate::Const,
-            ExprKind::Binary { lhs, rhs, .. } => self.rate(*lhs)?.max(self.rate(*rhs)?),
+            ExprKind::Binary { op, lhs, rhs, .. } => {
+                let l = self.rate(*lhs)?;
+                let short = Self::short_circuits(*op);
+                self.branch += short as u32;
+                let r = self.rate(*rhs);
+                self.branch -= short as u32;
+                l.max(r?)
+            }
             ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => self.rate(*base)?,
             ExprKind::Index { base, index } => self.rate(*base)?.max(self.rate(*index)?),
             ExprKind::Par { body, .. } => self.rate_par(e, *body)?,
@@ -1235,9 +1325,13 @@ impl<'a> Rater<'a> {
         {
             r = r.max(self.rate(*base)?);
         }
-        for a in args {
-            r = r.max(self.rate(a.expr)?);
-        }
+        // The arguments a builtin evaluates on some paths only are a branch
+        // (`o.unwrap_or(d)`, K-08).
+        let lazy = matches!(self.body.targets.get(&e), Some(Target::BuiltinMethod { lazy_args: true, .. }));
+        self.branch += lazy as u32;
+        let rated = args.iter().try_fold(r, |r, a| Ok(r.max(self.rate(a.expr)?)));
+        self.branch -= lazy as u32;
+        r = rated?;
         let target = self.body.targets.get(&e).cloned();
         match target {
             Some(Target::Fn { def, .. }) | Some(Target::Method { def, .. }) => {
@@ -1256,7 +1350,7 @@ impl<'a> Rater<'a> {
                             Code::E0805,
                             span,
                             format!(
-                                "non-rt function `{name}` can only be called at Init rate; mark it `rt` or pass Init-rate arguments (§11.5)"
+                                "`{name}` is not `rt` and takes arguments at the clock `init` or constants only; mark it `rt` or pass values at `init` (§11.5)"
                             ),
                         ));
                     }
@@ -1295,10 +1389,11 @@ impl<'a> Rater<'a> {
         }
     }
 
-    /// `prev` / `delay` / `vdelay` / instance calls (§11.4, §11.5, S-04, S-06).
+    /// The delays and instance calls (§11.4, §11.5, S-04, S-06).
     fn rate_node(&mut self, e: ExprId, i: usize) -> RR<FlowRate> {
         let call = self.fcx.calls[i].clone();
         let span = self.expr(e).span;
+        self.stateful_here(span)?;
         match call.kind {
             NodeKind::Instance(callee) => {
                 let inputs = self.a.def(callee).as_flow().map(|f| f.inputs.clone()).unwrap_or_default();
@@ -1312,7 +1407,7 @@ impl<'a> Rater<'a> {
                             Code::E0815,
                             aspan,
                             format!(
-                                "this argument is `{}` rate but input `{}` of `{callee_name}` is `{}`; rates only go up (§11.3)",
+                                "this argument is at the clock `{}` but the input `{}` of `{callee_name}` is at `{}`; a value is never made slower (§11.3)",
                                 ra.name(),
                                 input.name,
                                 ri.name()
@@ -1326,74 +1421,67 @@ impl<'a> Rater<'a> {
                 }
                 Ok(FlowRate::Sig)
             }
-            NodeKind::Prev | NodeKind::Delay(_) | NodeKind::Vdelay(_) => {
-                let what = match call.kind {
-                    NodeKind::Prev => "prev",
-                    NodeKind::Delay(_) => "delay",
-                    _ => "vdelay",
-                };
+            NodeKind::Delay(delay, len) => {
+                let what = delay.name();
                 let arg = call.args[0];
                 let ra = self.rate(arg)?;
                 if self.final_pass && ra != FlowRate::Sig {
                     let aspan = self.expr(arg).span;
-                    let ty = self.body.expr_types.get(&arg).map(|&t| self.display(t)).unwrap_or_default();
                     let mut d = Diagnostic::new(
                         Stage::Flow,
                         Code::E0813,
                         aspan,
-                        format!(
-                            "the first argument of `{what}` must be a `Sig` signal; this one is `{}` (§11.4)",
-                            ra.name()
-                        ),
+                        match ra {
+                            FlowRate::Const => {
+                                format!("the first argument of `{what}~` must be at the clock `sample`; this one is a constant (§11.4)")
+                            }
+                            _ => format!(
+                                "the first argument of `{what}~` must be at the clock `sample`; this one is at `{}` (§11.4)",
+                                ra.name()
+                            ),
+                        },
                     )
                     .with_found(self.src(aspan));
-                    if ra == FlowRate::Ctl {
+                    // The form to write is `prev~(p at sample)` (§11.4), where
+                    // this version holds the promotion (`rate_at`).
+                    if ra == FlowRate::Ctl && self.promotes_as_written(arg) {
                         let src = self.src(aspan);
-                        d = d.with_note(
-                            aspan,
-                            format!("write `let ps: Sig[{ty}] = {src}` to promote it per sample, then delay `ps`"),
-                        );
+                        d = d.with_note(aspan, format!("write `{what}~({src} at sample)` to delay it per sample"));
                     }
                     return Err(self.fail(d));
                 }
-                let (init_e, d_e) = match call.kind {
-                    NodeKind::Prev => (call.args[1], None),
-                    NodeKind::Delay(_) => (call.args[2], None),
-                    _ => (call.args[3], Some(call.args[1])),
-                };
+                let d_e = (delay == Delay::Variable).then(|| call.args[1]);
                 if let Some(d) = d_e {
                     self.rate(d)?;
                 }
-                let ri = self.rate(init_e)?;
-                if self.final_pass && ri > FlowRate::Init {
-                    let ispan = self.expr(init_e).span;
-                    // The clock of a value is faster than its position (S-147).
-                    return Err(self.err(
-                        Code::E0815,
-                        ispan,
-                        format!(
-                            "the `init` of `{what}` must be `Init` rate or a constant; this one is `{}` (§11.4)",
-                            ri.name()
-                        ),
-                    ));
+                if let Some(init_e) = call.init_expr {
+                    let ri = self.rate(init_e)?;
+                    if self.final_pass && ri > FlowRate::Init {
+                        let ispan = self.expr(init_e).span;
+                        // The clock of a value is faster than its position (S-147).
+                        return Err(self.err(
+                            Code::E0815,
+                            ispan,
+                            format!(
+                                "the `init` of `{what}~` must be at the clock `init` or a constant; this one is at `{}` (§11.4)",
+                                ri.name()
+                            ),
+                        ));
+                    }
                 }
                 if self.final_pass {
-                    let init = call.init.clone().unwrap_or(InitArg::Init(init_e));
                     let ty = self.body.expr_types.get(&e).copied().unwrap_or(call.ty);
-                    let node = match call.kind {
-                        NodeKind::Prev => {
-                            let name = self.node_name(e, "prev");
-                            Node::Prev { name, expr: e, arg, init, ty }
-                        }
-                        NodeKind::Delay(n) => {
-                            let name = self.node_name(e, "delay");
-                            Node::Delay { name, expr: e, arg, n, init, ty }
-                        }
-                        NodeKind::Vdelay(max) => {
-                            let name = self.node_name(e, "vdelay");
-                            Node::Vdelay { name, expr: e, arg, d: d_e.unwrap(), max, init, ty }
-                        }
-                        NodeKind::Instance(_) => unreachable!(),
+                    let init = match (&call.init, call.init_expr) {
+                        (Some(init), _) => init.clone(),
+                        (None, Some(init_e)) => InitArg::Init(init_e),
+                        (None, None) => self.default_init(ty, span)?,
+                    };
+                    let name = self.node_name(e, what);
+                    let node = match (delay, d_e) {
+                        (Delay::Prev, _) => Node::Prev { name, expr: e, arg, init, ty },
+                        (Delay::Fixed, _) => Node::Delay { name, expr: e, arg, n: len, init, ty },
+                        (Delay::Variable, Some(d)) => Node::Vdelay { name, expr: e, arg, d, max: len, init, ty },
+                        (Delay::Variable, None) => onsa_diag::internal::bug(Some(span), "a `vdelay~` without its `d`"),
                     };
                     self.push_node(node);
                 }
@@ -1404,6 +1492,7 @@ impl<'a> Rater<'a> {
 
     /// `par i in a..<b { e }` (§11.5): nodes of the body are nested in the `Par` node.
     fn rate_par(&mut self, e: ExprId, body: ExprId) -> RR<FlowRate> {
+        self.stateful_here(self.expr(e).span)?;
         let (var, from, to) = self.fcx.pars[&e];
         self.local_rates.insert(var, FlowRate::Init);
         self.node_lists.push(Vec::new());
@@ -1434,7 +1523,7 @@ impl<'a> Rater<'a> {
     fn mark(&mut self, e: ExprId, ctx: FlowRate) {
         let expr = self.expr(e);
         match &expr.kind {
-            ExprKind::Path(_) | ExprKind::Field { .. } => {
+            ExprKind::Path(_) | ExprKind::Feedback(_) | ExprKind::Field { .. } => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e)
                     && let Some(&k) = self.fcx.let_of_local.get(id)
                     && k < self.lets.len()
@@ -1459,19 +1548,20 @@ impl<'a> Rater<'a> {
                                 self.mark(*arg, FlowRate::from_rate(input.rate));
                             }
                         }
-                        NodeKind::Prev | NodeKind::Delay(_) => {
+                        NodeKind::Delay(delay, _) => {
                             self.mark(call.args[0], FlowRate::Sig);
-                            self.mark(*call.args.last().unwrap(), FlowRate::Init);
-                        }
-                        NodeKind::Vdelay(_) => {
-                            self.mark(call.args[0], FlowRate::Sig);
-                            self.mark(call.args[1], FlowRate::Sig);
-                            self.mark(call.args[3], FlowRate::Init);
+                            if delay == Delay::Variable {
+                                self.mark(call.args[1], FlowRate::Sig);
+                            }
+                            if let Some(i) = call.init_expr {
+                                self.mark(i, FlowRate::Init);
+                            }
                         }
                     }
                 } else if self.fcx.sample_rate_calls.contains(&e) {
                     self.sample_rate_at = Some(self.sample_rate_at.map_or(ctx, |r| r.max(ctx)));
                 } else {
+                    self.non_rt_here(e, ctx);
                     if let ExprKind::Field { base, .. } = &self.expr(*callee).kind
                         && self.body.expr_types.contains_key(base)
                     {
@@ -1496,12 +1586,7 @@ impl<'a> Rater<'a> {
 fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
     match &expr.kind {
         ExprKind::Paren(x) | ExprKind::Move(x) | ExprKind::Try(x) | ExprKind::Unsafe(x) => vec![*x],
-        ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } => vec![*expr],
-        // The gate of the flow syntax stops the item before the flow checks
-        // (`crate::flow_syntax`, W3-09); this walk reports nothing.
-        ExprKind::At { .. } | ExprKind::Feedback(_) => {
-            onsa_diag::internal::bug(Some(expr.span), "the flow walk met the flow syntax its gate stops first")
-        }
+        ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } | ExprKind::At { expr, .. } => vec![*expr],
         ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.clone(),
         ExprKind::Repeat { elem, .. } => vec![*elem],
         ExprKind::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
@@ -1527,6 +1612,7 @@ fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
         ExprKind::Par { body, .. } => vec![*body],
         ExprKind::Lit(_)
         | ExprKind::Path(_)
+        | ExprKind::Feedback(_)
         | ExprKind::Hole
         | ExprKind::Error
         | ExprKind::Field { .. }

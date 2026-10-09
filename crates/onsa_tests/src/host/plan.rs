@@ -192,7 +192,7 @@ pub struct Arg {
     pub values: Vec<Value>,
 }
 
-/// The type of each `Init` input, `Ctl` input, `sample` input and output of a flow.
+/// The type of each `init` input, `block` input, `sample` input and output of a flow.
 struct FlowTypes {
     config: Vec<(String, Scalar)>,
     params: Vec<(String, Scalar)>,
@@ -220,8 +220,8 @@ fn flow_types(m: &Module, meta: &FlowMeta) -> Result<FlowTypes, String> {
     let named = |fields: &[(String, Ty)], what: &str| -> Result<Vec<(String, Scalar)>, String> {
         fields.iter().map(|(n, t)| Ok((n.clone(), scalar_of(m, t, &format!("the {what} `{n}`"))?))).collect()
     };
-    let config = named(struct_fields(m, meta.fns.config), "`Init` input")?;
-    let params = named(struct_fields(m, meta.fns.params), "`Ctl` input")?;
+    let config = named(struct_fields(m, meta.fns.config), "`init` input")?;
+    let params = named(struct_fields(m, meta.fns.params), "`block` input")?;
     let inputs = meta
         .sig_inputs
         .iter()

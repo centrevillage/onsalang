@@ -24,7 +24,3 @@ target fn open() -> I32         //~ E0200
 pub fn bounded[T: Iter](x: T) -> T {   //~ E0200
   x
 }
-
-pub flow ctl_out(x: Ctl[F32]) -> Ctl[F32] {   //~ E0200
-  x
-}

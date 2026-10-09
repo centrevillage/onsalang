@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// The rate written as a type, the form of the 0.3 draft (`Sig[F32]`, `Ctl[F32]`, `Init[F32]`), is
+// not accepted any more (§11.3: "レートを型の形で書く（`x: Sig[F32]`、0.3 の草案の形）と E0020"). It is
+// E0020 only because the name does not resolve (`Sig`, `Ctl` and `Init` are ordinary names), so the
+// error comes from the names stage (S-120): before that stage is built (W4-04) the name is an
+// unknown name, E0302 (tests/pending.toml). The primary position is the first token of the form,
+// the name. The candidate for each form is not fixed by the spec for `Ctl` and `Init`, so there is
+// no `fixes` here (fixes/e0020_sig_rate.onsa has the `Sig` candidates). One error per declaration.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+// ---- In a flow: an input and the output ----
+
+pub flow ctl_input(x: F32 at sample, p: Ctl[F32]) -> F32 at sample {   //~ E0020 @41
+  x * p
+}
+
+pub flow init_input(x: F32 at sample, n: Init[U32]) -> F32 at sample {   //~ E0020 @42
+  x * n.round_f32()
+}
+
+pub flow sig_nested_array(x: Sig[[F32; 2]]) -> F32 at sample {   //~ E0020 @30
+  x[0]
+}
+
+pub flow ctl_output(x: F32 at block) -> Ctl[F32] {   //~ E0020 @41
+  x
+}
+
+pub flow sig_struct_output(x: F32 at sample) -> Sig[Pair] {   //~ E0020 @49
+  Pair { l: x, r: x }
+}
+
+pub flow init_output(x: F32 at init) -> Init[F32] {   //~ E0020 @41
+  x
+}
+
+pub flow multi_line_list(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: Ctl[F32],   //~ E0020 @6
+  x: F32 at sample,
+) -> F32 at sample {
+  x * g
+}
+
+// ---- Outside a flow the clock is not written at all ----
+
+pub fn ctl_in_a_fn(p: Ctl[F32]) -> F32 {   //~ E0020 @23
+  p
+}
+
+pub fn init_in_a_return(p: F32) -> Init[F32] {   //~ E0020 @36
+  p
+}
+
+pub struct HasRate {
+  r: Sig[F32],   //~ E0020 @6
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample, p: F32 at block, n: U32 at init) -> F32 at sample {
+  x * p * n.round_f32()
+}

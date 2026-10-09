@@ -9,9 +9,9 @@ use std.dsp.test.{impulse, energy}
 
 const MAX_ECHO: U32 = 96000
 
-pub flow echo(x: Sig[F32], time: Ctl[F32], feedback: Ctl[F32]) -> Sig[F32] {
+pub flow echo(x: F32 at sample, time: F32 at block, feedback: F32 at block) -> F32 at sample {
   let d = time * sample_rate()
-  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
+  let y = x + (feedback * vdelay~(^y, d, MAX_ECHO))
   y
 }
 
@@ -25,8 +25,8 @@ test "echo repeats the impulse after the delay" {
   assert energy(o.out, 24001, 48000) == 0.0
 }
 
-pub flow counter(x: Sig[F32]) -> Sig[F32] {
-  let y = delay(x, 3, 0.0)
+pub flow counter(x: F32 at sample) -> F32 at sample {
+  let y = delay~(x, 3)
   y
 }
 
@@ -39,11 +39,11 @@ test "delay shifts by N samples" {
   assert energy(o.out, 0, 8) == 1.0
 }
 
-pub flow gain2(x: Sig[F32], g: Ctl[F32]) -> Sig[F32] {
+pub flow gain2(x: F32 at sample, g: F32 at block) -> F32 at sample {
   x * g
 }
 
-pub flow chain(x: Sig[F32]) -> Sig[F32] {
+pub flow chain(x: F32 at sample) -> F32 at sample {
   let a = gain2~(x, 0.5)
   let b = gain2~(a, 0.5)
   b

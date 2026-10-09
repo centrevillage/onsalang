@@ -1,0 +1,3 @@
+flow e(x: F32 at sample, d: F32 at block) -> F32 at sample { let y =delay(y,0) //~  @21
+  y
+}

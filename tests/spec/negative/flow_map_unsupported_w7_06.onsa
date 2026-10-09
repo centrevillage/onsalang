@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// E0200 while the flow syntax is written in the terms of this version's checks (W3-10, K-02, K-08):
+// `if~` / `match~` evaluate every branch (§11.5), and a stateful call (an instance, a delay, `par`)
+// in a branch of `if` / `match`, in a guard or on the right of `&&` / `||` is E0811 / E0806 of the
+// flow plan (S-110). This version advances an instance only where its branch is taken (R-14), so
+// it says E0200 rather than read the program in another meaning. One error per flow (P-01).
+//
+// W7-06 removes this file: after it `if~` / `match~` check, and the errors of the others are in
+// the cases of W7-06 (rules_negative.onsa, branches_tilde.onsa).
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow tilde_if(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { acc~(x) } else { x } //~ E0200
+}
+
+pub flow tilde_match(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = match~ k { 0 => acc~(x), _ => x } //~ E0200
+  a
+}
+
+pub flow in_then(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if c { prev~(x) } else { x } //~ E0200
+}
+
+pub flow in_else_if_condition(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if c { x } else if acc~(x) > 2.0 { x } else { 0.0 } //~ E0200
+}
+
+pub flow in_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = match k { 0 => acc~(x), _ => x } //~ E0200
+  a
+}
+
+pub flow in_guard(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = match k { 0 if acc~(x) > 2.0 => x, _ => x } //~ E0200
+  a
+}
+
+pub flow right_of_and(x: F32 at sample) -> F32 at sample {
+  let hit = x > 0.0 && acc~(x) > 2.0 //~ E0200
+  if hit { 1.0 } else { 0.0 }
+}
+
+pub flow right_of_or(x: F32 at sample) -> F32 at sample {
+  let hit = x > 0.0 || delay~(x, 2) > 2.0 //~ E0200
+  if hit { 1.0 } else { 0.0 }
+}
+
+pub flow par_in_branch(x: F32 at sample, c: Bool at sample) -> [F32; 2] at sample {
+  if c { par i in 0..<2 { x } } else { [x, x] } //~ E0200
+}
+
+// The condition, the scrutinee and the left of `&&` are always evaluated, and may hold state.
+pub flow fine(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = if acc~(x) > 2.0 { x } else { 0.0 }
+  let b = if prev~(k) == 0 { a } else { x }
+  let c = acc~(x) > 1.0 && x > 0.0
+  if c { b } else { a }
+}

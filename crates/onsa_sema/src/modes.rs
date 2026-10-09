@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use onsa_diag::unsupported::{Feature, FlowForm};
+use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, Block, CallKind, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
@@ -442,14 +442,16 @@ impl<'a> Walker<'a> {
                 self.expr(r.lo, Pos::Other);
                 self.expr(r.hi, Pos::Other);
             }
-            ExprKind::Path(_) => {
+            // `^y` reads the local `y` (a flow's feedback reference, §11.2).
+            ExprKind::Path(_) | ExprKind::Feedback(_) => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
                     let id = *id;
                     self.check_moved(id, span);
                     self.consume(e, pos);
                 }
             }
-            ExprKind::Paren(inner) => self.expr(*inner, pos),
+            // `e at k` is the value of `e` (§11.3).
+            ExprKind::Paren(inner) | ExprKind::At { expr: inner, .. } => self.expr(*inner, pos),
             // `move x` where a value is consumed or returned, and on the last
             // expression of a block placed there (§5.2, S-100). Not the list of
             // `consume`: an element of an array literal that is an argument
@@ -563,17 +565,6 @@ impl<'a> Walker<'a> {
             }
             ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } | ExprKind::Try(expr) => {
                 self.expr(*expr, Pos::Other)
-            }
-            // The gate of the flow syntax stops their item before the checks
-            // (`crate::flow_syntax`, W3-09; W3-10 writes them, K-02, K-08):
-            // through a gap in it, its E0200.
-            ExprKind::At { .. } | ExprKind::Feedback(_) => {
-                let form = if matches!(self.ast.expr(e).kind, ExprKind::At { .. }) {
-                    FlowForm::Clock
-                } else {
-                    FlowForm::Feedback
-                };
-                self.report(form.diagnostic(Stage::Modes, self.ast.expr(e).span));
             }
             ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => {
                 // Reading a field: the base is read; an Affine field in a consuming

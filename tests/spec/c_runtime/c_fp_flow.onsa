@@ -86,21 +86,43 @@
 // the relaxed flow may be fused, and its result does not depend on it. `mac_x_after` is the strict flow
 // again, written after the relaxed one: a relaxation of a flow does not reach the code that follows it.
 
-pub flow mac_x(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+pub flow mac_x(
+  x: F32 at sample,
+  @param(min: -4.0, max: 4.0, default: 1.0)
+  a: F32 at block,
+  @param(min: -4.0, max: 4.0, default: 0.0)
+  b: F32 at block,
+) -> F32 at sample {
   (a * x) + b
 }
 
-pub flow ema(x: F32 at sample, k: F32 at block) -> F32 at sample {
+pub flow ema(
+  x: F32 at sample,
+  @param(min: -4.0, max: 4.0, default: 0.5)
+  k: F32 at block,
+) -> F32 at sample {
   let y = (k * prev~(^y)) + x
   y
 }
 
 @fp(relaxed)
-pub flow rel_mac(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+pub flow rel_mac(
+  x: F32 at sample,
+  @param(min: -4.0, max: 4.0, default: 1.0)
+  a: F32 at block,
+  @param(min: -4.0, max: 4.0, default: 0.0)
+  b: F32 at block,
+) -> F32 at sample {
   (a * x) + b
 }
 
-pub flow mac_x_after(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+pub flow mac_x_after(
+  x: F32 at sample,
+  @param(min: -4.0, max: 4.0, default: 1.0)
+  a: F32 at block,
+  @param(min: -4.0, max: 4.0, default: 0.0)
+  b: F32 at block,
+) -> F32 at sample {
   (a * x) + b
 }
 

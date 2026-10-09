@@ -27,6 +27,6 @@ fn half_of(x: F32) -> F32 {
   x * 0.5
 }
 
-pub flow scaled(x: Sig[F32]) -> Sig[F32] {
+pub flow scaled(x: F32 at sample) -> F32 at sample {
   x * HALF
 }

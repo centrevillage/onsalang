@@ -53,7 +53,7 @@ fn the_prelude_has_no_name_of_the_guard_candidates() {
 fn kinds_from_structure() {
     let a = check(
         "pub struct P { x: F32, y: F32 }\npub struct S { name: Str, n: U32 }\npub struct B { buf: Buf[F32] }\n\
-         pub enum E { A(P), B(S) }\npub struct T(F32)\npub flow f(x: Sig[F32]) -> Sig[F32] { x }\n\
+         pub enum E { A(P), B(S) }\npub struct T(F32)\npub flow f(x: F32 at sample) -> F32 at sample { x }\n\
          pub struct W { s: f.State }\n",
     );
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
@@ -137,8 +137,8 @@ fn generics_and_bounds() {
 #[test]
 fn flow_namespace_items() {
     let a = check(
-        "pub flow voice(@param(min: 0.0, max: 1.0, default: 0.5) gain: Ctl[F32], time: Init[F32]) -> Sig[F32] { 1.0 }\n\
-         pub flow echo(x: Sig[F32], t: Ctl[F32]) -> Sig[F32] { x }\n\
+        "pub flow voice(@param(min: 0.0, max: 1.0, default: 0.5) gain: F32 at block, time: F32 at init) -> F32 at sample { 1.0 }\n\
+         pub flow echo(x: F32 at sample, t: F32 at block) -> F32 at sample { x }\n\
          pub struct Poly { voices: [voice.State; 4], p: voice.Params }\n",
     );
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
@@ -181,7 +181,7 @@ fn name_diagnostics() {
     assert_eq!(codes(&a), vec![Code::E0302]);
     let a = check("pub fn f() {}\npub fn f() {}\n");
     assert_eq!(codes(&a), vec![Code::E0304]);
-    let a = check("pub flow v(x: Sig[F32]) -> Sig[F32] { x }\npub fn v() {}\n");
+    let a = check("pub flow v(x: F32 at sample) -> F32 at sample { x }\npub fn v() {}\n");
     assert_eq!(codes(&a), vec![Code::E0305]);
     let a = check("test \"a\" { assert true }\ntest \"a\" { assert true }\n");
     assert_eq!(codes(&a), vec![Code::E0306]);

@@ -19,6 +19,12 @@ pub struct MethodSig {
     pub ret: TyId,
     /// `inout self` (needs the `!` mark, §5.2).
     pub bang: bool,
+    /// The arguments are evaluated on some paths only (`o.unwrap_or(d)`
+    /// evaluates `d` when `o` is `None`; the lowering of the method): a
+    /// flow takes no stateful call there (K-08, W3-10). W5-03 removes it
+    /// with `unwrap_or` (no method of §4.1, R-96, E0413), and the case
+    /// `tests/spec/negative/flow_map_unsupported_w5_03.onsa` with it.
+    pub lazy_args: bool,
 }
 
 const INTS: [IntKind; 8] =
@@ -82,6 +88,8 @@ struct Method {
     ret: T,
     /// `inout self`.
     bang: bool,
+    /// [`MethodSig::lazy_args`].
+    lazy_args: bool,
 }
 
 /// Every builtin method.
@@ -90,7 +98,7 @@ fn methods() -> &'static [Method] {
     TABLE.get_or_init(|| {
         let mut v = Vec::new();
         let mut add = |recv, name: &str, params: &'static [T], ret, bang| {
-            v.push(Method { recv, name: name.to_string(), params, ret, bang })
+            v.push(Method { recv, name: name.to_string(), params, ret, bang, lazy_args: false })
         };
         // Integers (§3.3, §3.4).
         for t in INTS {
@@ -141,10 +149,19 @@ fn methods() -> &'static [Method] {
         add(Recv::Option, "unwrap", &[], T::Inner, false);
         add(Recv::Option, "is_some", &[], T::Bool, false);
         add(Recv::Option, "is_none", &[], T::Bool, false);
-        add(Recv::Option, "unwrap_or", &[T::Inner], T::Inner, false);
         add(Recv::Result, "unwrap", &[], T::Inner, false);
         add(Recv::Result, "is_ok", &[], T::Bool, false);
         add(Recv::Result, "is_err", &[], T::Bool, false);
+        // The default is evaluated only for `None` (the lowering's `Switch`).
+        let unwrap_or = "unwrap_or".to_string();
+        v.push(Method {
+            recv: Recv::Option,
+            name: unwrap_or,
+            params: &[T::Inner],
+            ret: T::Inner,
+            bang: false,
+            lazy_args: true,
+        });
         v
     })
 }
@@ -167,7 +184,7 @@ pub fn method(types: &mut Types, recv: TyId, name: &str) -> Option<MethodSig> {
     let mut ty = |t: T| sig_ty(types, t, recv, &recv_ty, inner);
     let params = m.params.iter().map(|t| ty(*t)).collect::<Option<Vec<_>>>()?;
     let ret = ty(m.ret)?;
-    Some(MethodSig { params, ret, bang: m.bang })
+    Some(MethodSig { params, ret, bang: m.bang, lazy_args: m.lazy_args })
 }
 
 fn sig_ty(types: &mut Types, t: T, recv: TyId, recv_ty: &Ty, inner: Option<TyId>) -> Option<TyId> {

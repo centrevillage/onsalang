@@ -43,7 +43,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     }
     let mut params_fields = Vec::new();
     for (name, ty) in &pfields {
-        let tn = scalar_c(cx, ty, &format!("the `Ctl` input `{name}`"))?;
+        let tn = scalar_c(cx, ty, &format!("the `block` input `{name}`"))?;
         let _ = write!(h, " {tn} {};", ident(name));
         params_fields.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
     }
@@ -120,7 +120,7 @@ fn config_args(cx: &mut Cx, config: onsa_core::TypeId) -> R<ConfigArgs> {
     let mut out = Vec::new();
     let mut api = Vec::new();
     for (name, ty) in &fields {
-        let tn = scalar_c(cx, ty, &format!("the `Init` input `{name}`"))?;
+        let tn = scalar_c(cx, ty, &format!("the `init` input `{name}`"))?;
         let _ = write!(decls, "{tn} {}, ", ident(name));
         out.push((ident(name), ident(name)));
         api.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });

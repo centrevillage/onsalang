@@ -5,9 +5,9 @@
 use std.dsp.{db_to_amp}
 
 pub flow gain(
-  x: Sig[F32],
+  x: F32 at sample,
   @param(min: -60.0, max: 12.0, default: 0.0, unit: "dB")
-  level: Ctl[F32],
-) -> Sig[F32] {
+  level: F32 at block,
+) -> F32 at sample {
   x * db_to_amp(level)
 }

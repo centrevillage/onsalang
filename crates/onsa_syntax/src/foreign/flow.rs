@@ -227,6 +227,18 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fi
     if !cst.is_complete(stmt) {
         return None;
     }
+    // A value a syntax error cut on its line (`= 0..<3`: `0`, then `..<3`
+    // left unread) is not the whole value: that error is the unit's (W3-09/b2).
+    let next = cst.tokens()[cst.token_range(stmt).end..]
+        .iter()
+        .position(|t| !matches!(t.kind, TokenKind::Whitespace | TokenKind::Comment | TokenKind::BlockComment))
+        .map(|k| cst.token_range(stmt).end + k);
+    if let Some(k) = next
+        && cst.tokens()[k].kind != TokenKind::Newline
+        && cst.kind(cst.token_parent(TokenIdx(k as u32))) == NodeKind::Error
+    {
+        return None;
+    }
     let first_expr = |n: NodeId| cst.child_nodes(n).find(|&c| class(cst.kind(c)) == Class::Expr);
     let value = cst.child_nodes(stmt).filter(|&n| class(cst.kind(n)) == Class::Expr).last()?;
     let Some(out) = take_out(cst, clock) else { return Some(Vec::new()) };

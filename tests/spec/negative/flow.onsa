@@ -6,63 +6,63 @@
 pub rt fn id(x: F32) -> F32 { x }
 pub fn slow(x: F32) -> F32 { x }
 pub fn with_alloc(x: F32) -> F32 uses {Alloc} { x }
-pub flow sub(x: Sig[F32], c: Ctl[F32]) -> Sig[F32] { x * c }
+pub flow sub(x: F32 at sample, c: F32 at block) -> F32 at sample { x * c }
 
-pub flow forward(x: Sig[F32]) -> Sig[F32] {
+pub flow forward(x: F32 at sample) -> F32 at sample {
   let a = b                     //~ E0801
   let b = x
   a
 }
 
-pub flow self_ref(x: Sig[F32]) -> Sig[F32] {
+pub flow self_ref(x: F32 at sample) -> F32 at sample {
   let y = x + y                 //~ E0801
   y
 }
 
-pub flow effects(x: Sig[F32]) -> Sig[F32] {
+pub flow effects(x: F32 at sample) -> F32 at sample {
   x * with_alloc(x)             //~ E0805
 }
 
-pub flow no_var(x: Sig[F32]) -> Sig[F32] {
+pub flow no_var(x: F32 at sample) -> F32 at sample {
   var a = x                     //~ E0806
   a
 }
 
-pub flow no_loop(x: Sig[F32]) -> Sig[F32] {
+pub flow no_loop(x: F32 at sample) -> F32 at sample {
   for i in 0..<4 { }             //~ E0806
   x
 }
 
-pub flow one_sample(x: Sig[F32]) -> Sig[F32] {
-  delay(x, 1, 0.0)              //~ E0807
+pub flow one_sample(x: F32 at sample) -> F32 at sample {
+  delay~(x, 1)                  //~ E0807
 }
 
-pub flow not_copy(x: Sig[F32]) -> Sig[F32] {
+pub flow not_copy(x: F32 at sample) -> F32 at sample {
   let s = "text"                //~ E0810
   x
 }
 
-pub flow lower_rate(x: Sig[F32]) -> Sig[F32] {
-  let c: Ctl[F32] = x           //~ E0810
+pub flow lower_rate(x: F32 at sample) -> F32 at sample {
+  let c = x at block            //~ E0815
   c
 }
 
-pub flow no_tilde(x: Sig[F32], c: Ctl[F32]) -> Sig[F32] {
+pub flow no_tilde(x: F32 at sample, c: F32 at block) -> F32 at sample {
   sub(x, c)                     //~ E0811
 }
 
-pub flow tilde_on_fn(x: Sig[F32]) -> Sig[F32] {
+pub flow tilde_on_fn(x: F32 at sample) -> F32 at sample {
   id~(x)                        //~ E0812
 }
 
-pub flow ctl_into_prev(p: Ctl[F32]) -> Sig[F32] {
-  prev(p, 0.0)                  //~ E0813
+pub flow ctl_into_prev(p: F32 at block) -> F32 at sample {
+  prev~(p)                      //~ E0813
 }
 
-pub flow sig_init(x: Sig[F32]) -> Sig[F32] {
-  prev(x, x)                    //~ E0815
+pub flow sig_init(x: F32 at sample) -> F32 at sample {
+  prev~(x, x)                   //~ E0815
 }
 
-pub flow rate_too_high(x: Sig[F32]) -> Sig[F32] {
+pub flow rate_too_high(x: F32 at sample) -> F32 at sample {
   sub~(x, x)                    //~ E0815
 }

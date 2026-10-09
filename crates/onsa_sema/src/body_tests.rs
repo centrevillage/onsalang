@@ -393,7 +393,7 @@ fn the_uses_of_failed_items_get_no_diagnostic() {
     // The namespace of a flow whose heading was cut (F-4).
     assert_eq!(
         codes(
-            "pub flow g(x: ) -> Sig[F32] {\n  x\n}\ntest \"t\" {\n  let z = g.init\n  let c = g.Config {}\n}\nfn h(s: g.State) -> I32 { 1 }\n"
+            "pub flow g(x: ) -> F32 at sample {\n  x\n}\ntest \"t\" {\n  let z = g.init\n  let c = g.Config {}\n}\nfn h(s: g.State) -> I32 { 1 }\n"
         ),
         []
     );

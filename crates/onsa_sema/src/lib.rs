@@ -17,6 +17,7 @@ mod effects;
 mod effects_tests;
 mod exhaust;
 pub mod flow;
+pub mod flow_names;
 mod flow_syntax;
 #[cfg(test)]
 mod flow_tests;

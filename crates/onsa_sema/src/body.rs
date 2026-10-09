@@ -104,6 +104,8 @@ pub enum Target {
         recv: TyId,
         name: String,
         bang: bool,
+        /// [`crate::builtin::MethodSig::lazy_args`].
+        lazy_args: bool,
     },
     /// A call through a function value (closure or `fn` value).
     Value,
@@ -288,7 +290,7 @@ impl<'a> Checker<'a> {
         match self.ty(self.shallow(t)) {
             Ty::Named(d, args) => self.a.partly_read(d) || args.iter().any(|&a| self.mentions_failed(a)),
             Ty::Tuple(ts) | Ty::Builtin(_, ts) => ts.iter().any(|&a| self.mentions_failed(a)),
-            Ty::Array(e, _) | Ty::Rate(_, e) => self.mentions_failed(e),
+            Ty::Array(e, _) => self.mentions_failed(e),
             _ => false,
         }
     }
@@ -324,10 +326,11 @@ impl<'a> Checker<'a> {
         self.unsupported_in(Stage::Types, span, feature, details)
     }
 
-    /// E0200 for a form of the flow syntax (W3-09): `crate::flow_syntax`
-    /// stops its item first, so this is reached only through a gap in it.
+    /// E0200 for a form of the flow syntax outside a flow body (E0821 from
+    /// W4-12): `crate::flow_syntax` stops its item first, so this is reached
+    /// only through a gap in it.
     pub(crate) fn flow_form(&mut self, span: Span, form: FlowForm) -> Stop {
-        self.diag(form.diagnostic(Stage::Names, span).with_found(self.src(span)))
+        self.diag(form.outside_flow(Stage::Names, span).with_found(self.src(span)))
     }
 
     /// E0200 for `feature` found by `stage`.
@@ -926,10 +929,6 @@ impl<'a> Checker<'a> {
                 let ret = self.subst(f.ret, args);
                 self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }))
             }
-            Ty::Rate(r, t) => {
-                let t2 = self.subst(t, args);
-                self.a.types.intern(Ty::Rate(r, t2))
-            }
             _ => ty,
         }
     }
@@ -1409,15 +1408,19 @@ impl<'a> Checker<'a> {
             ExprKind::Struct { path, fields, .. } => self.check_struct_lit(path, fields, expected, self.expr(e).span),
             ExprKind::TypeArgs { args, .. } => Err(self.type_args_unsupported(args.span)),
             ExprKind::Block(b) => self.check_block(b, expected),
-            // The flow syntax does not reach here (`crate::flow_syntax`); the
-            // forms the checks do not read stop with its E0200.
-            ExprKind::If { tilde: Some(t), .. } => Err(self.flow_form(*t, FlowForm::IfTilde)),
-            ExprKind::Match { tilde: Some(t), .. } => Err(self.flow_form(*t, FlowForm::MatchTilde)),
+            // The flow syntax outside a flow body does not reach here
+            // (`crate::flow_syntax`). In a flow body, `if~` and `match~` are
+            // typed as `if` and `match`, and the flow checks read the `~`
+            // (`crate::flow::map`); `at` and `^` are theirs.
+            ExprKind::If { tilde: Some(t), .. } if self.flow.is_none() => Err(self.flow_form(*t, FlowForm::IfTilde)),
+            ExprKind::Match { tilde: Some(t), .. } if self.flow.is_none() => {
+                Err(self.flow_form(*t, FlowForm::MatchTilde))
+            }
             ExprKind::Closure { ret_clock: Some(c), .. } | ExprKind::At { clock: c, .. } => {
                 Err(self.flow_form(c.span, FlowForm::Clock))
             }
             ExprKind::Feedback(_) => Err(self.flow_form(span, FlowForm::Feedback)),
-            ExprKind::If { cond, then, else_, tilde: None } => {
+            ExprKind::If { cond, then, else_, .. } => {
                 let bool_ = self.bool_();
                 self.check_expr(*cond, Some(bool_))?;
                 match else_ {
@@ -1434,7 +1437,7 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            ExprKind::Match { scrutinee, arms, tilde: None } => self.check_match(*scrutinee, arms, expected, span),
+            ExprKind::Match { scrutinee, arms, .. } => self.check_match(*scrutinee, arms, expected, span),
             ExprKind::Closure { params, ret, ret_clock: None, effects, body } => {
                 self.check_closure(e, params, *ret, effects.as_ref(), *body, expected)
             }
@@ -2348,7 +2351,10 @@ impl<'a> Checker<'a> {
             self.unify_at(span, sig.ret, exp)?;
         }
         self.check_args(args, &params, span)?;
-        self.info.targets.insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), bang: sig.bang });
+        self.info.targets.insert(
+            e,
+            Target::BuiltinMethod { recv, name: name.name.clone(), bang: sig.bang, lazy_args: sig.lazy_args },
+        );
         Ok(sig.ret)
     }
 
@@ -2388,7 +2394,9 @@ impl<'a> Checker<'a> {
         let params: Vec<(Mode, TyId)> = params.into_iter().map(|t| (Mode::Borrow, t)).collect();
         self.check_args(args, &params, span)?;
         let recv = scalar.unwrap_or_else(|| self.a.builtin_key[&generic.unwrap()]);
-        self.info.targets.insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), bang: false });
+        self.info
+            .targets
+            .insert(e, Target::BuiltinMethod { recv, name: name.name.clone(), bang: false, lazy_args: false });
         Ok(ret)
     }
 

@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.1", "§11.4", "§18.1"]
+
+// The built-in delays are flows, so they are called with `~` (§2.6: "組込みの遅延 `prev` / `delay` /
+// `vdelay` も状態を持つ flow なので、`prev~(x)` と書く"). The old forms `prev(x, 0.0)`,
+// `delay(x, n, 0.0)` and `vdelay(x, d, MAX, 0.0)` call a flow without `~`, which is E0811 from the
+// names stage (S-267): the primary position is the name of the flow, and the candidate inserts `~`
+// (§18.1). The `0.0` is the default of `F32`, which `prev~(x)` leaves out. Before that stage is
+// built (W4-12) the calls are not accepted in some other way (tests/pending.toml). One error per
+// flow; when the old feedback form also holds a forward use (`prev(y, 0.0)` in the definition of
+// `y`), the reported error is the first by position, the E0811 at the name of the delay.
+
+pub flow prev_without_tilde(x: F32 at sample) -> F32 at sample {
+  prev(x)   //~ E0811 @3
+}
+
+pub flow prev_with_an_init(x: F32 at sample) -> F32 at sample {
+  prev(x, 1.0)   //~ E0811 @3
+}
+
+pub flow prev_with_the_default_init(x: F32 at sample) -> F32 at sample {
+  prev(x, 0.0)   //~ E0811 @3
+}
+
+pub flow delay_without_tilde(x: F32 at sample) -> F32 at sample {
+  delay(x, 3, 0.0)   //~ E0811 @3
+}
+
+pub flow vdelay_without_tilde(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay(x, d, 64, 0.0)   //~ E0811 @3
+}
+
+// The old feedback form: the name of the delay comes first, so the E0811 is reported and not the
+// E0801 for `y`.
+pub flow old_feedback(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev(y, 0.0)   //~ E0811 @21
+  y
+}
+
+pub flow old_feedback_in_a_delay_line(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let y = x + 0.5 * vdelay(y, d, 64, 0.0)   //~ E0811 @21
+  y
+}
+
+pub flow old_delay_in_an_expression(x: F32 at sample) -> F32 at sample {
+  x - delay(x, 2, 0.0)   //~ E0811 @7
+}
+
+pub flow old_delay_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    prev(x, 0.0) * i.round_f32()   //~ E0811 @5
+  }
+  xs[0]
+}
+
+pub flow old_delay_as_a_let(x: F32 at sample) -> F32 at sample {
+  let a = prev(x, 0.0)   //~ E0811 @11
+  a
+}
+
+pub flow nested_old_delays(x: F32 at sample) -> F32 at sample {
+  prev(prev(x, 0.0), 0.0)   //~ E0811 @3
+}
+
+// ---- Not errors ----
+
+pub flow with_a_tilde(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let y: F32 = x + 0.5 * vdelay~(^y, d, 64)
+  let a = delay~(x, 3)
+  y + a + prev~(x)
+}

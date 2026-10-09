@@ -18,7 +18,7 @@
 // spec = ["§11.6", "§13.4"]
 // conformance = true
 
-// Conformance of the scalar types at the boundary (§11.6; R-113 3, W1-06): `Init`
+// Conformance of the scalar types at the boundary (§11.6; R-113 3, W1-06): `init`
 // inputs (`I32`, `F64`, `Bool`, `Char`, `U64`), integer, `Char` and `Bool` signals, an
 // `F64` output and a planar input. `wrap` overflows on the noise stimulus only: the
 // interpreter and the C must both panic there, with the same check in the same block
@@ -26,35 +26,35 @@
 // that the overlap check of `process` measures wrongly are in `boundary_overlap.onsa`.
 
 pub flow ints(
-  x: Sig[I32],
-  n: Init[I32],
-  @param(min: 0.0, max: 10.0, default: 2.0)
-  k: Ctl[I32],
-) -> Sig[I32] {
-  (x * n) + k + prev(x, 0)
+  x: I32 at sample,
+  n: I32 at init,
+  @param(min: 0, max: 10, default: 2)
+  k: I32 at block,
+) -> I32 at sample {
+  (x * n) + k + prev~(x)
 }
 
-pub flow mixed(x: Sig[F32], g: Init[F64], on: Init[Bool]) -> Sig[F64] {
+pub flow mixed(x: F32 at sample, g: F64 at init, on: Bool at init) -> F64 at sample {
   let y = (x as F64) * g
   if on { y } else { 0.0 }
 }
 
-pub flow wrap(x: Sig[I8]) -> Sig[I8] {
+pub flow wrap(x: I8 at sample) -> I8 at sample {
   x * 2
 }
 
-pub flow side(x: Sig[[F32; 2]]) -> Sig[F32] {
+pub flow side(x: [F32; 2] at sample) -> F32 at sample {
   x[0] - x[1]
 }
 
 // The comparisons are bound by `let` first: an `if` on a comparison is in
 // `tests/pipeline/if_compare.onsa`.
-pub flow chars(c: Sig[Char], d: Init[Char]) -> Sig[Char] {
+pub flow chars(c: Char at sample, d: Char at init) -> Char at sample {
   let same = c == d
   if same { 'z' } else { c }
 }
 
-pub flow wide(x: Sig[U16], a: Init[Char], b: Init[U64]) -> Sig[U64] {
+pub flow wide(x: U16 at sample, a: Char at init, b: U64 at init) -> U64 at sample {
   let on = a == 'a'
   if on { (x as U64) + b } else { 0 }
 }

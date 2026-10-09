@@ -77,7 +77,7 @@
 // (§3.1), so the update is written without parentheses (S-45, W3-07).
 
 pub flow lcg(x: F32 at sample, seed: U32 at init) -> F32 at sample {
-  let s = prev~(^s, seed) *% 1664525 +% 1013904223
+  let s   = prev~(^s, seed) *% 1664525 +% 1013904223
   let top = s >> 8
   x + top.round_f32()
 }
@@ -112,4 +112,3 @@ test "a saturating conversion in a flow clamps and maps NaN to 0" {
   assert out[2] == 2147483648.0
   assert out[3] == -2147483648.0
 }
-

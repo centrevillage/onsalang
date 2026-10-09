@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§15.1", "§18.1"]
+
+// E0302 for a name after `at` that is not a clock of this version (§11.3: "クロックの名前
+// (`init` `block` `sample`) は、値と型とは別の名前空間にあり、`at` の後ろでだけ引く … クロックの名前空間に
+// 無い名前は、値や型に同じ名前があっても E0302（名前の段。主の位置はその名前）", S-359). The
+// primary position is the token after `at`, and the code is E0302 and not E0308 even when the name
+// is a value, a type or a function in scope: the clocks are a namespace of their own, so the name
+// is simply not found there. The note shows the clocks of this version; the markers do not check
+// it. One error per flow (one declaration unit each).
+
+// An unknown name in each place a clock is written: an input, the output, an expression.
+pub flow unknown_in_an_input(x: F32 at fast) -> F32 at sample {   //~ E0302 @40
+  x
+}
+
+pub flow unknown_in_the_output(x: F32 at sample) -> F32 at fast {   //~ E0302 @60
+  x
+}
+
+pub flow unknown_in_an_expression(x: F32 at sample) -> F32 at sample {
+  let y = x at fast   //~ E0302 @16
+  y
+}
+
+pub flow unknown_in_a_multi_line_list(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at fast,   //~ E0302 @13
+  x: F32 at sample,
+) -> F32 at sample {
+  x * g
+}
+
+// The expression form deep in the body: in a `par`, an `if` branch and a `match` arm.
+pub flow unknown_in_a_par(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    x at fast   //~ E0302 @10
+  }
+  xs[0]
+}
+
+pub flow unknown_in_a_branch(x: F32 at sample, c: Bool at block) -> F32 at sample {
+  if c { x at fast } else { x }   //~ E0302 @15
+}
+
+pub flow unknown_in_a_match_arm(x: F32 at sample, m: U32 at block) -> F32 at sample {
+  match m {
+    0 => x at fast,   //~ E0302 @15
+    _ => x,
+  }
+}
+
+// A name of a value in scope is not a clock: an input, a `let`, a constant, a function.
+const FAST: U32 = 4
+
+pub rt fn helper(x: F32) -> F32 {
+  x
+}
+
+pub flow clock_is_an_input(x: F32 at sample, fast: F32 at block) -> F32 at sample {
+  x at fast   //~ E0302 @8
+}
+
+pub flow clock_is_a_let(x: F32 at sample) -> F32 at sample {
+  let fast = x
+  x at fast   //~ E0302 @8
+}
+
+pub flow clock_is_a_constant(x: F32 at sample) -> F32 at sample {
+  x at FAST   //~ E0302 @8
+}
+
+pub flow clock_is_a_function(x: F32 at sample) -> F32 at sample {
+  x at helper   //~ E0302 @8
+}
+
+// A name of a type, and of a flow, is not a clock either (not E0308).
+pub flow clock_is_a_type(x: F32 at F32) -> F32 at sample {   //~ E0302 @36
+  x
+}
+
+pub flow clock_is_a_flow(x: F32 at sample) -> F32 at sample {
+  x at clock_is_a_flow   //~ E0302 @8
+}
+
+// The names are written in lower case: `Sample` is not `sample`.
+pub flow capitalized_in_an_input(x: F32 at Sample) -> F32 at sample {   //~ E0302 @44
+  x
+}
+
+pub flow capitalized_in_the_output(x: F32 at sample) -> F32 at Block {   //~ E0302 @64
+  x
+}
+
+pub flow capitalized_in_an_expression(x: F32 at block) -> F32 at sample {
+  x at SAMPLE   //~ E0302 @8
+}
+
+// A name spelled like a clock is a value, and `at` still finds the clock (a variable named
+// `sample` or `block` is allowed, §11.3).
+pub flow clock_names_are_not_values(sample: F32 at sample, block: F32 at block) -> F32 at sample {
+  let b = block at sample
+  let s = sample at sample
+  b + s
+}

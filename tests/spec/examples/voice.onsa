@@ -32,14 +32,14 @@ use std.dsp.test.{impulse, energy}
 
 /// 二極レゾネータ。極は r·e^{±jw} にあり、bw > 0 なら |r| < 1 で安定。
 /// 入力に (1 - r) を掛けて、ピークのゲインをおおよそ正規化する。
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
-  let r  = exp(-(F32.PI * bw) / sample_rate())     // Ctl
-  let w  = (2.0 * F32.PI * fc) / sample_rate()     // Ctl
-  let b1 = 2.0 * r * cos(w)                        // Ctl
-  let b2 = r * r                                   // Ctl
-  let y1 = prev(y, 0.0)                            // Sig: y は下で定義される（過去の値）
-  let y2 = prev(y1, 0.0)                           // Sig
-  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2) // Sig: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
+  let r  = exp(-(F32.PI * bw) / sample_rate()) // block
+  let w  = (2.0 * F32.PI * fc) / sample_rate() // block
+  let b1 = 2.0 * r * cos(w)                    // block
+  let b2 = r * r                               // block
+  let y1 = prev~(^y)                           // sample: ^y は下で定義される y（帰還）
+  let y2 = prev~(y1)                           // sample
+  let y  = (1.0 - r) * x + b1 * y1 - b2 * y2   // sample: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
   y
 }
 
@@ -54,34 +54,34 @@ test "resonator decays" {
 use std.math.{floor}
 
 /// 素朴なのこぎり波（エイリアシングあり。例示用）
-pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
-  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
-  (2.0 * phase) - 1.0
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + f0 / sample_rate())
+  2.0 * phase - 1.0
 }
 
 pub rt fn wrap01(x: F32) -> F32 {
   x - floor(x)
 }
 
-/// Ctl 値を、時定数 time 秒の一次遅れで Sig に滑らかにする
-pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
-  let a = exp(-1.0 / (time * sample_rate())) // Init: init で 1 回
-  let y = x + (a * (prev(y, 0.0) - x))
+/// block の値を、時定数 time 秒の一次遅れでサンプルごとに滑らかにする
+pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
+  let a = exp(-1.0 / (time * sample_rate())) // init: init で 1 回
+  let y = x + a * (prev~(^y) - x)
   y
 }
 
 pub flow voice(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
-  f0: Ctl[F32],
+  f0: F32 at block,
   @param(min: 200.0, max: 1200.0, default: 700.0, unit: "Hz")
-  vowel_f1: Ctl[F32],
+  vowel_f1: F32 at block,
   @param(min: 600.0, max: 3000.0, default: 1220.0, unit: "Hz")
-  vowel_f2: Ctl[F32],
+  vowel_f2: F32 at block,
   @param(min: 0.0, max: 1.0, default: 0.5)
-  gain: Ctl[F32],
-) -> Sig[F32] {
+  gain: F32 at block,
+) -> F32 at sample {
   let src = saw~(f0)
-  let f1  = resonator~(src, vowel_f1, 80.0) // 80.0: 定数から Ctl へ昇格
+  let f1  = resonator~(src, vowel_f1, 80.0) // 80.0: 定数から block へ昇格
   let f2  = resonator~(src, vowel_f2, 120.0)
   (f1 + f2) * smooth~(gain, 0.01)
 }
@@ -89,14 +89,14 @@ pub flow voice(
 const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒
 
 pub flow echo(
-  x: Sig[F32],
+  x: F32 at sample,
   @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
-  time: Ctl[F32],
+  time: F32 at block,
   @param(min: 0.0, max: 0.95, default: 0.5)
-  feedback: Ctl[F32],
-) -> Sig[F32] {
-  let d = time * sample_rate() // Ctl（サンプル数）
-  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))
+  feedback: F32 at block,
+) -> F32 at sample {
+  let d = time * sample_rate() // block（サンプル数）
+  let y = x + (feedback * vdelay~(^y, d, MAX_ECHO))
   y
 }
 

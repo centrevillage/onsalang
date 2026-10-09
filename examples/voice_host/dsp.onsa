@@ -3,20 +3,20 @@
 use std.math.{exp, cos, floor}
 
 /// 二極レゾネータ。極は r·e^{±jw} にあり、bw > 0 なら |r| < 1 で安定。
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
   let r  = exp(-(F32.PI * bw) / sample_rate())
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
   let b2 = r * r
-  let y1 = prev(y, 0.0)
-  let y2 = prev(y1, 0.0)
+  let y1 = prev~(^y)
+  let y2 = prev~(y1)
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
   y
 }
 
 /// 素朴なのこぎり波（エイリアシングあり。例示用）
-pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
-  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + (f0 / sample_rate()))
   (2.0 * phase) - 1.0
 }
 
@@ -24,23 +24,23 @@ pub rt fn wrap01(x: F32) -> F32 {
   x - floor(x)
 }
 
-/// Ctl 値を、時定数 time 秒の一次遅れで Sig に滑らかにする
-pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
+/// block の値を、時定数 time 秒の一次遅れでサンプルごとに滑らかにする
+pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
   let a = exp(-1.0 / (time * sample_rate()))
-  let y = x + (a * (prev(y, 0.0) - x))
+  let y = x + (a * (prev~(^y) - x))
   y
 }
 
 pub flow voice(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
-  f0: Ctl[F32],
+  f0: F32 at block,
   @param(min: 200.0, max: 1200.0, default: 700.0, unit: "Hz")
-  vowel_f1: Ctl[F32],
+  vowel_f1: F32 at block,
   @param(min: 600.0, max: 3000.0, default: 1220.0, unit: "Hz")
-  vowel_f2: Ctl[F32],
+  vowel_f2: F32 at block,
   @param(min: 0.0, max: 1.0, default: 0.5)
-  gain: Ctl[F32],
-) -> Sig[F32] {
+  gain: F32 at block,
+) -> F32 at sample {
   let src = saw~(f0)
   let f1  = resonator~(src, vowel_f1, 80.0)
   let f2  = resonator~(src, vowel_f2, 120.0)

@@ -346,13 +346,13 @@ codes! {
     E0715 = 715, Modes, [Modes], Optional, Optional,
         "the place being iterated or matched is modified";
     E0801 = 801, Flow, [Flow], Optional, Optional,
-        "name used before its definition in a flow (only `prev`/`delay`/`vdelay` may look back)";
+        "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
         "a function with effects cannot be called from a flow";
     E0806 = 806, Flow, [Flow], Optional, Optional,
         "this form is not allowed in a flow body";
     E0807 = 807, Flow, [Flow], Optional, Optional,
-        "`delay` with length 1; write `prev` instead";
+        "`delay~` with length 1; write `prev~` instead";
     E0808 = 808, Flow, [Flow], Optional, Optional,
         "delay length or `par` range out of its allowed values (a non-constant one is E0417)";
     E0809 = 809, Flow, [Flow, Build], Optional, Optional,
@@ -364,7 +364,7 @@ codes! {
     E0812 = 812, Flow, [Types, Flow], Required, Optional,
         "`~` used on something that is not a flow";
     E0813 = 813, Flow, [Flow], Optional, Optional,
-        "first argument of `prev`/`delay`/`vdelay` must be `Sig` rate";
+        "first argument of `prev~` / `delay~` / `vdelay~` must be at the clock `sample`";
     E0815 = 815, Flow, [Flow], Optional, Optional,
         "a value's clock is faster than its place (flow input, delay `init`, non-`rt` fn argument)";
     E0816 = 816, Flow, [Flow], Optional, Optional,

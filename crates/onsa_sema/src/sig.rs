@@ -124,9 +124,6 @@ impl<'p> Sema<'p> {
             let key = t.builtin(b, Vec::new());
             self.a.builtin_key.insert(b, key);
         }
-        for r in [Rate::Init, Rate::Ctl, Rate::Sig] {
-            p.insert(r.name().to_string(), Builtin::Rate(r));
-        }
         p.insert("Some".into(), Builtin::Some);
         p.insert("None".into(), Builtin::None);
         p.insert("Ok".into(), Builtin::Ok);
@@ -165,7 +162,7 @@ impl<'p> Sema<'p> {
     fn add_def(&mut self, def: Def) -> DefId {
         let module = def.item.and_then(|i| self.module(def.module).map(|m| (i, m)));
         let failed = module.and_then(|(i, m)| m.parsed.ast.item(i).failed);
-        // The flow syntax the checks do not read yet (W3-09, K-02): E0200, and
+        // The flow syntax outside a flow body (E0821 from W4-12): E0200, and
         // the def is not checked further (as a cut heading).
         let flow_syntax = match (failed, module) {
             (None, Some((i, m))) => crate::flow_syntax::first_form(&m.parsed, &m.text, i),
@@ -177,7 +174,7 @@ impl<'p> Sema<'p> {
             self.a.failed.insert(id, f);
         }
         if let Some((span, form)) = flow_syntax {
-            self.report(id, form.diagnostic(Stage::Names, span));
+            self.report(id, form.outside_flow(Stage::Names, span));
             self.a.failed.insert(id, onsa_syntax::ast::Failed::Heading);
         }
         id
@@ -1142,12 +1139,6 @@ impl<'p> Sema<'p> {
                 }
                 self.a.types.builtin(b, args)
             }
-            Entity::Builtin(Builtin::Rate(r)) => {
-                if args.len() != 1 {
-                    return arity_err(self, 1);
-                }
-                self.a.types.intern(Ty::Rate(r, args[0]))
-            }
             Entity::Def(d) | Entity::Member(d) => {
                 let def = &self.a.defs[d.0 as usize];
                 match &def.kind {
@@ -1260,69 +1251,76 @@ impl<'p> Sema<'p> {
             }
             let Some(t) = p.ty else { continue };
             let lowered = self.lower_type(&cx, t);
-            // An input whose type is in error stays, as the error type, so that
-            // the body sees its name (no cascade in the unit, R-71).
-            let error_input = |s: &mut Self| FlowInput {
-                name: name.clone(),
-                rate: Rate::Sig,
-                ty: s.a.types.error(),
-                param: None,
-                span: p.span,
-            };
-            let (rate, ty) = match self.a.types.get(lowered).clone() {
-                Ty::Rate(r, inner) => (r, inner),
-                Ty::Error => {
-                    let input = error_input(self);
-                    inputs.push(input);
-                    continue;
-                }
-                _ => {
+            let tspan = cx.ast.ty(t).span;
+            // The clock after the type (§11.3): the rate of the input (W3-10).
+            let rate = match &p.clock {
+                Some(c) => match crate::flow_names::clock_rate(c) {
+                    Ok(r) => Some(r),
+                    Err(d) => {
+                        self.report(id, d);
+                        None
+                    }
+                },
+                None => {
                     self.report(
                         id,
                         Diagnostic::new(
                             Stage::Flow,
                             Code::E0810,
-                            cx.ast.ty(t).span,
-                            "a flow input needs a rate: `Init[T]`, `Ctl[T]` or `Sig[T]` (§11.3)",
+                            tspan,
+                            "a flow input needs a clock after its type: `at init`, `at block` or `at sample` (§11.3)",
                         )
-                        .with_found(src(&cx, cx.ast.ty(t).span))
-                        .with_fix(Fix::replace(
-                            "write `Sig[...]`",
-                            cx.ast.ty(t).span,
-                            format!("Sig[{}]", src(&cx, cx.ast.ty(t).span)),
-                        )),
+                        .with_found(src(&cx, tspan)),
                     );
-                    let input = error_input(self);
-                    inputs.push(input);
-                    continue;
+                    None
                 }
             };
-            self.check_rate_value_type(&cx, id, ty, cx.ast.ty(t).span, rate == Rate::Sig);
+            // An input whose type or clock is in error stays, as the error
+            // type, so that the body sees its name (no cascade in the unit, R-71).
+            let (Some(rate), false) = (rate, matches!(self.a.types.get(lowered), Ty::Error)) else {
+                let error = self.a.types.error();
+                inputs.push(FlowInput { name, rate: Rate::Sig, ty: error, param: None, span: p.span });
+                continue;
+            };
+            self.check_rate_value_type(&cx, id, lowered, tspan, rate == Rate::Sig);
             let param = self.lower_param_attr(&cx, id, &p.attrs, rate);
-            inputs.push(FlowInput { name, rate, ty, param, span: p.span });
+            inputs.push(FlowInput { name, rate, ty: lowered, param, span: p.span });
         }
         let out_lowered = self.lower_type(&cx, f.ret);
-        let out = match self.a.types.get(out_lowered).clone() {
-            Ty::Rate(Rate::Sig, inner) => {
-                self.check_rate_value_type(&cx, id, inner, cx.ast.ty(f.ret).span, true);
-                inner
-            }
-            Ty::Rate(Rate::Ctl, _) => {
-                self.unsupported(id, cx.ast.ty(f.ret).span, Feature::CtlOutputs, &[]);
-                self.a.types.error()
-            }
-            Ty::Error => out_lowered,
-            _ => {
-                self.report(
-                    id,
+        let rspan = cx.ast.ty(f.ret).span;
+        // The output's clock is `sample` in this version (§11.3, §11.6, §19.1).
+        let out_clock = match &f.ret_clock {
+            Some(c) => match crate::flow_names::clock_rate(c) {
+                Ok(Rate::Sig) => None,
+                Ok(_) => Some(
                     Diagnostic::new(
                         Stage::Flow,
                         Code::E0810,
-                        cx.ast.ty(f.ret).span,
-                        "a flow output is `Sig[T]` (§11.6)",
+                        c.span,
+                        "the output of a flow is at the clock `sample` in this version (§11.6)",
                     )
-                    .with_found(src(&cx, cx.ast.ty(f.ret).span)),
-                );
+                    .with_found(src(&cx, c.span)),
+                ),
+                Err(d) => Some(d),
+            },
+            None => Some(
+                Diagnostic::new(
+                    Stage::Flow,
+                    Code::E0810,
+                    rspan,
+                    "a flow output needs its clock after its type: `-> T at sample` (§11.3)",
+                )
+                .with_found(src(&cx, rspan)),
+            ),
+        };
+        let out = match (out_clock, self.a.types.get(out_lowered)) {
+            (_, Ty::Error) => out_lowered,
+            (None, _) => {
+                self.check_rate_value_type(&cx, id, out_lowered, rspan, true);
+                out_lowered
+            }
+            (Some(d), _) => {
+                self.report(id, d);
                 self.a.types.error()
             }
         };
@@ -1335,7 +1333,7 @@ impl<'p> Sema<'p> {
     }
 
     /// §11.3: the value type of a rate must be Copy; §11.6: at the boundary
-    /// (`Sig` inputs and the output) only scalars, `[scalar; N]`, and structs
+    /// (`sample` inputs and the output) only scalars, `[scalar; N]`, and structs
     /// of those.
     fn check_rate_value_type(&mut self, _cx: &Cx<'p>, id: DefId, ty: TyId, span: Span, boundary: bool) {
         if let Some(k) = self.a.kind_of(ty)
@@ -1358,7 +1356,7 @@ impl<'p> Sema<'p> {
                 Diagnostic::new(
                     Stage::Flow, Code::E0810,
                     span,
-                    "`Sig` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)",
+                    "`sample` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)",
                 ),
             );
         }
@@ -1391,7 +1389,7 @@ impl<'p> Sema<'p> {
         if rate != Rate::Ctl {
             self.report(
                 id,
-                Diagnostic::new(Stage::Flow, Code::E0809, attr.span, "`@param` goes on `Ctl` inputs only (§11.7)"),
+                Diagnostic::new(Stage::Flow, Code::E0809, attr.span, "`@param` goes on `block` inputs only (§11.7)"),
             );
             return None;
         }

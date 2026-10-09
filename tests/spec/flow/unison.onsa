@@ -7,7 +7,7 @@ use std.dsp.{sum}
 
 const UNISON: U32 = 4
 
-pub flow unison(f0: Ctl[F32], detune: Ctl[F32]) -> Sig[F32] {
+pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
   let saws = par i in 0..<UNISON {
     saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
   }
@@ -22,8 +22,8 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
 use std.math.{floor}
 
 /// 素朴なのこぎり波（§17.4 と同じ）
-pub flow saw(f0: Ctl[F32]) -> Sig[F32] {
-  let phase = wrap01(prev(phase, 0.0) + (f0 / sample_rate()))
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + (f0 / sample_rate()))
   (2.0 * phase) - 1.0
 }
 

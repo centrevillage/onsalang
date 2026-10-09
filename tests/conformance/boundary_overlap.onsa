@@ -21,10 +21,10 @@
 // Inputs and outputs of different element types (§11.6). The overlap check of the
 // exported `process` (§14.2: 2 only for partially overlapping buffers) must measure
 // each buffer by its own element type; distinct buffers never overlap (R-141).
-pub flow split(x: Sig[F32]) -> Sig[[Bool; 2]] {
+pub flow split(x: F32 at sample) -> [Bool; 2] at sample {
   [x > 0.0, x < 0.0]
 }
 
-pub flow narrow(x: Sig[[I64; 2]]) -> Sig[[U8; 3]] {
+pub flow narrow(x: [I64; 2] at sample) -> [U8; 3] at sample {
   [1, 2, 3]
 }

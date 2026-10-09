@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.4", "§18.1"]
+
+// E0801 for a name used before its `let` without the mark `^` (§11.2: "印の無い前方参照は E0801"),
+// in the places a name may stand: a `par` body, a branch, a condition, an argument of a call, and
+// the arguments of a delay other than the first. `^name` is written only in the first argument of
+// a delay (§11.2, §2.6): in the `init` of `prev~` / `delay~` or the `d` of `vdelay~` it is E0801
+// too, and so is a use of the name itself in its own definition (a `let` is defined from the
+// line after it). One error per flow; the marker is on the line of the use. The candidates
+// (`^`, `prev~(^name)`) are in fixes/e0801_forward.onsa.
+
+pub rt fn wrap(x: F32) -> F32 {
+  x
+}
+
+// ---- A use before the `let`, without `^` ----
+
+pub flow forward_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    y * i.round_f32()                                             //~ E0801
+  }
+  let y = x
+  xs[0]
+}
+
+pub flow forward_in_a_branch(x: F32 at sample) -> F32 at sample {
+  let a = if x > 0.0 { y } else { 0.0 }                           //~ E0801
+  let y = x
+  a
+}
+
+pub flow forward_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let a = if y > 0.0 { 1.0 } else { 0.0 }                         //~ E0801
+  let y = x
+  a
+}
+
+pub flow forward_in_a_match_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let a = match k { 0 => y, _ => 0.0 }                            //~ E0801
+  let y = x
+  a
+}
+
+pub flow forward_in_a_call(x: F32 at sample) -> F32 at sample {
+  let a = wrap(y)                                                 //~ E0801
+  let y = x
+  a
+}
+
+pub flow forward_in_a_field(x: F32 at sample) -> F32 at sample {
+  let a = p.0                                                     //~ E0801
+  let p = (x, x)
+  a
+}
+
+pub flow chain_of_forward_uses(x: F32 at sample) -> F32 at sample {
+  let a = b                                                       //~ E0801
+  let b = c
+  let c = x
+  a
+}
+
+// ---- A delay: only its first argument takes a name below, and with the mark ----
+
+pub flow forward_in_the_init(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x, k)                                             //~ E0801
+  let k = 0.5
+  a
+}
+
+pub flow caret_in_the_init(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x, ^k)                                            //~ E0801
+  let k = 0.5
+  a
+}
+
+pub flow caret_in_the_delay_init(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 3, ^k)                                        //~ E0801
+  let k = 0.5
+  a
+}
+
+pub flow caret_in_the_length_of_a_vdelay(x: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, ^d, 4)                                       //~ E0801
+  let d = 2.0
+  a
+}
+
+pub flow forward_in_the_length_of_a_vdelay(x: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 4)                                        //~ E0801
+  let d = 2.0
+  a
+}
+
+pub flow itself_in_the_init(x: F32 at sample) -> F32 at sample {
+  let y = prev~(x, y)                                             //~ E0801
+  y
+}
+
+pub flow itself_without_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = wrap(y) + x                                             //~ E0801
+  y
+}
+
+// ---- Not errors: `^` anywhere inside the first argument of a delay (the type of the `let` is
+// written, so the check does not depend on how far the type of a later name is inferred) ----
+
+pub flow caret_inside_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y: F32 = x + prev~(if c { ^y } else { 0.0 })
+  y
+}
+
+pub flow caret_inside_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let y: F32 = x + prev~(match k { 0 => ^y, _ => 0.5 })
+  y
+}
+
+pub flow caret_inside_a_call(x: F32 at sample) -> F32 at sample {
+  let y: F32 = x + prev~(wrap(^y))
+  y
+}
+
+pub flow caret_in_a_delay_line(x: F32 at sample) -> F32 at sample {
+  let y: F32 = x + 0.5 * delay~(^y, 3)
+  y
+}
+
+pub flow caret_in_a_variable_delay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let y: F32 = x + 0.5 * vdelay~(^y, d, 8)
+  y
+}

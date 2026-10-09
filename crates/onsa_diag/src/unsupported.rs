@@ -96,12 +96,33 @@ features! {
         Some("write the length as a literal or as the name of a constant");
     ComputedArrayLengths: Language, "constants computed by expressions as array lengths",
         Some("give the constant a literal value, or write the length as a literal");
-    CtlOutputs: Language, "`Ctl` outputs of flows (§19)", None;
-    /// `{}`: the form (`at`, `^name`, `prev~`, `if~`, ...). W3-09: the syntax
-    /// stage reads the flow syntax of S-102, S-44, S-110; the checks read it
-    /// from W3-10 (K-02, `onsa_sema::flow_syntax`).
-    /// The second `{}`: the forms of the list, [`FlowForm::listing`].
-    FlowSyntax: Language, "checking the flow syntax `{}` (of the forms {})", None;
+    /// `{}`: the form (`at`, `^name`, `prev~`, `if~`, ...). W3-10: the
+    /// checks read the flow syntax in a flow body (`onsa_sema::flow::map`);
+    /// written elsewhere it is the names stage's E0821 (W4-12), and until
+    /// then its item stops here (`onsa_sema::flow_syntax`).
+    FlowSyntaxOutsideFlow: Language, "the flow syntax `{}` outside a flow body (its error E0821)", None;
+    /// `{}`: `if~` or `match~` (S-110, W7-06; K-02).
+    TildeBranches: Language, "`{}`, which evaluates every branch", None;
+    /// K-08, S-110: what the branch does not evaluate holds state (W7-06).
+    StatefulInBranch: Language,
+        "a flow instance, a delay or a `par` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`, an argument a method evaluates on some paths)",
+        Some("bind it with a `let` before the expression that holds it");
+    /// K-08, R-13: the store of the inner delay comes first (W7-07).
+    NestedDelays: Language, "a delay inside the first argument of a delay",
+        Some("bind the inner delay with a `let`, and delay that name");
+    /// K-02: `e at k` evaluates `e` at its own clock (W7-02).
+    ClockPromotion: Language, "`at` that makes a computed expression faster than its operands",
+        Some("bind the expression with a `let`, and write `at` on its name");
+    /// `{}`: the value type. K-02, S-29: `T.default()` (W7-07).
+    DefaultInit: Language, "the omitted `init` of a delay whose value type `{}` is not a number",
+        Some("write the `init`");
+    /// `{}`: the clock. R-17, S-33: hoisting computes it at `init` (W7-05).
+    NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
+        Some("bind the call with a `let` of its own, which is computed at `init`");
+    /// R-03: the look-back of a replica (W7-04).
+    FeedbackInPar: Language, "a feedback reference `^name` inside a `par`", None;
+    /// S-44, S-116: its E0020 is the names stage's (W7-04).
+    CaretOnVisible: Language, "`^` on a name that is defined above it (a redundant mark)", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
     FlowSelfInstance: Language, "a flow that instantiates itself", None;
     Equality: Language, "equality on this type", None;
@@ -134,7 +155,7 @@ features! {
     InclusiveRangePar: Language, "a range with its end (`a..=b`) in a `par` head", None;
     /// R-195: the values of the constant expressions of §4.5 other than an
     /// integer literal and a `const` with a literal value (W7-02).
-    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par` bound, a delay length, the maximum of a `vdelay`)",
+    FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par` bound, a delay length, the maximum of a `vdelay~`)",
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
@@ -183,10 +204,8 @@ features! {
     ManifestBind: Manifest, "`bind` in a target", None;
 }
 
-/// A form of the flow syntax that the checks after the syntax stage do not
-/// read yet ([`Feature::FlowSyntax`]; W3-09 stops at them, W3-10 writes them
-/// in the checks' terms, K-02): the one list of them and of how they are
-/// shown.
+/// A form of the flow syntax (S-102, S-44, S-110), as the E0200 that names
+/// one shows it ([`Feature::FlowSyntaxOutsideFlow`], [`Feature::TildeBranches`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlowForm {
     /// A clock: `x: T at k`, `-> T at k`, `e at k` (S-102).
@@ -203,10 +222,6 @@ pub enum FlowForm {
 }
 
 impl FlowForm {
-    /// Every form, a delay standing for all of them (in [`FlowForm::listing`]).
-    const ALL: [FlowForm; 5] =
-        [FlowForm::Clock, FlowForm::Feedback, FlowForm::Delay(""), FlowForm::IfTilde, FlowForm::MatchTilde];
-
     /// How the form is shown in the E0200 (`at`, `prev~`).
     pub fn label(self) -> String {
         match self {
@@ -218,19 +233,10 @@ impl FlowForm {
         }
     }
 
-    /// The forms of the list as the message names them, from [`FlowForm::ALL`]:
-    /// "`at`, `^name`, `name~(…)`, `if~`, `match~`".
-    pub fn listing() -> String {
-        let shown = |f: FlowForm| match f {
-            FlowForm::Delay(_) => "`name~(…)` of a built-in delay".to_string(),
-            f => format!("`{}`", f.label()),
-        };
-        FlowForm::ALL.iter().map(|&f| shown(f)).collect::<Vec<_>>().join(", ")
-    }
-
-    /// The E0200 of the form at `span`, reported by `stage`.
-    pub fn diagnostic(self, stage: Stage, span: Span) -> Diagnostic {
-        Feature::FlowSyntax.diagnostic(stage, span, &[&self.label(), &FlowForm::listing()])
+    /// The E0200 of the form written outside a flow body, at `span`,
+    /// reported by `stage` (E0821 from W4-12).
+    pub fn outside_flow(self, stage: Stage, span: Span) -> Diagnostic {
+        Feature::FlowSyntaxOutsideFlow.diagnostic(stage, span, &[&self.label()])
     }
 }
 
@@ -630,9 +636,10 @@ mod tests {
                 let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
                 used.insert(name);
             }
-            // A form of the flow syntax reports its feature ([`FlowForm::diagnostic`]).
-            if code.contains("FlowForm::") {
-                used.insert(Feature::FlowSyntax.name().to_string());
+            // A form of the flow syntax outside a flow reports its feature
+            // ([`FlowForm::outside_flow`]).
+            if code.contains(".outside_flow(") {
+                used.insert(Feature::FlowSyntaxOutsideFlow.name().to_string());
             }
         }
         assert!(scanned > 50, "the scan found {scanned} source files only");

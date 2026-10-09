@@ -228,7 +228,7 @@ fn span_coercions_and_bang_methods() {
 #[test]
 fn flow_members_are_lowered_when_referenced() {
     let d = text(
-        "pub flow one(x: Sig[F32]) -> Sig[F32] {\n  x\n}\n\npub fn mk(sr: F32) -> one.State {\n  one.init(one.Config {}, sr)\n}\n",
+        "pub flow one(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub fn mk(sr: F32) -> one.State {\n  one.init(one.Config {}, sr)\n}\n",
     );
     assert!(d.contains("type t.one.State = struct { poisoned: Bool, initialized: Bool }"), "{d}");
     assert!(d.contains("fn t.one.init(cfg: t.one.Config, sample_rate: F32) -> t.one.State sret {"), "{d}");
@@ -362,13 +362,13 @@ fn pos(hay: &str, needle: &str) -> usize {
 
 const RESONATOR: &str = "use std.math.{exp, cos}
 
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
   let r  = exp(-(F32.PI * bw) / sample_rate())
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
   let b2 = r * r
-  let y1 = prev(y, 0.0)
-  let y2 = prev(y1, 0.0)
+  let y1 = prev~(^y, 0.0)
+  let y2 = prev~(y1, 0.0)
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
   y
 }
@@ -432,7 +432,7 @@ fn process_reads_all_inputs_then_writes_all_outputs() {
 
 #[test]
 fn delay_ring_buffer_order() {
-    let d = text("pub flow dl(x: Sig[F32]) -> Sig[F32] {\n  let y = delay(x, 4, 0.0)\n  y\n}\n");
+    let d = text("pub flow dl(x: F32 at sample) -> F32 at sample {\n  let y = delay~(x, 4, 0.0)\n  y\n}\n");
     assert!(
         d.contains("type t.dl.State = struct { y.buf: [F32; 4], y.w: U32, poisoned: Bool, initialized: Bool }"),
         "{d}"
@@ -449,7 +449,7 @@ fn delay_ring_buffer_order() {
 #[test]
 fn vdelay_formula_order() {
     let d = text(
-        "pub flow ec(x: Sig[F32], fb: Ctl[F32], t: Ctl[F32]) -> Sig[F32] {\n  let d = t * 100.0\n  let y = x + (fb * vdelay(y, d, 8, 0.0))\n  y\n}\n",
+        "pub flow ec(x: F32 at sample, fb: F32 at block, t: F32 at block) -> F32 at sample {\n  let d = t * 100.0\n  let y = x + (fb * vdelay~(^y, d, 8, 0.0))\n  y\n}\n",
     );
     assert!(d.contains("vdelay_0.buf: [F32; 9], vdelay_0.w: U32"), "{d}");
     let tick = pos(&d, "rt fn t.ec.tick(");
@@ -477,7 +477,7 @@ fn vdelay_formula_order() {
 
 #[test]
 fn echo_bulk_layout() {
-    let src = "const MAX_ECHO: U32 = 96000\n\npub flow echo(x: Sig[F32], time: Ctl[F32], feedback: Ctl[F32]) -> Sig[F32] {\n  let d = time * sample_rate()\n  let y = x + (feedback * vdelay(y, d, MAX_ECHO, 0.0))\n  y\n}\n";
+    let src = "const MAX_ECHO: U32 = 96000\n\npub flow echo(x: F32 at sample, time: F32 at block, feedback: F32 at block) -> F32 at sample {\n  let d = time * sample_rate()\n  let y = x + (feedback * vdelay~(^y, d, MAX_ECHO, 0.0))\n  y\n}\n";
     let m = core_with(src, Some(4096));
     let f = &m.flows[0];
     assert_eq!(f.layout.bulk_size, 384004);
@@ -503,7 +503,7 @@ fn echo_bulk_layout() {
 
 #[test]
 fn sub_instances_are_wired_per_phase() {
-    let src = "pub flow saw(f0: Ctl[F32]) -> Sig[F32] {\n  let phase = prev(phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {\n  let a = 1.0 / (time * sample_rate())\n  let y = x + (a * (prev(y, 0.0) - x))\n  y\n}\n\npub flow voice(f0: Ctl[F32], gain: Ctl[F32]) -> Sig[F32] {\n  let src = saw~(f0)\n  src * smooth~(gain, 0.01)\n}\n";
+    let src = "pub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {\n  let a = 1.0 / (time * sample_rate())\n  let y = x + (a * (prev~(^y, 0.0) - x))\n  y\n}\n\npub flow voice(f0: F32 at block, gain: F32 at block) -> F32 at sample {\n  let src = saw~(f0)\n  src * smooth~(gain, 0.01)\n}\n";
     let d = text(src);
     assert!(
         d.contains("type t.voice.State = struct { src: t.saw.State, smooth_0: t.smooth.State, poisoned: Bool, initialized: Bool }"),
@@ -535,7 +535,7 @@ fn sub_instances_are_wired_per_phase() {
 
 #[test]
 fn par_replicates_state_and_loops() {
-    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: Ctl[F32]) -> Sig[F32] {\n  let phase = prev(phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: Ctl[F32]) -> Sig[F32] {\n  let saws = par i in 0..<N {\n    saw~(f0 * (1.0 + (i.round_f32() * 0.01)))\n  }\n  sum(saws)\n}\n";
+    let src = "use std.dsp.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase, 0.0) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: F32 at block) -> F32 at sample {\n  let saws = par i in 0..<N {\n    saw~(f0 * (1.0 + (i.round_f32() * 0.01)))\n  }\n  sum(saws)\n}\n";
     let d = text(src);
     assert!(
         d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool, initialized: Bool }"),
@@ -554,7 +554,7 @@ fn par_replicates_state_and_loops() {
 
 #[test]
 fn planar_and_struct_outputs() {
-    let src = "pub struct Stereo {\n  l: F32,\n  r: F32,\n}\n\npub flow pan(x: Sig[F32], p: Ctl[F32]) -> Sig[Stereo] {\n  Stereo { l: x * (1.0 - p), r: x * p }\n}\n\npub flow dup(x: Sig[[F32; 2]]) -> Sig[[F32; 2]] {\n  x\n}\n";
+    let src = "pub struct Stereo {\n  l: F32,\n  r: F32,\n}\n\npub flow pan(x: F32 at sample, p: F32 at block) -> Stereo at sample {\n  Stereo { l: x * (1.0 - p), r: x * p }\n}\n\npub flow dup(x: [F32; 2] at sample) -> [F32; 2] at sample {\n  x\n}\n";
     let d = text(src);
     assert!(d.contains("inout l: Span[F32], inout r: Span[F32]) -> () {"), "{d}");
     assert!(d.contains("l[i] = v.0\n    r[i] = v.1"), "{d}");
@@ -568,8 +568,7 @@ fn planar_and_struct_outputs() {
 
 #[test]
 fn params_default_from_param_attributes() {
-    let src =
-        "pub flow g(x: Sig[F32], @param(min: 0.0, max: 1.0, default: 0.5) k: Ctl[F32]) -> Sig[F32] {\n  x * k\n}\n";
+    let src = "pub flow g(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) k: F32 at block) -> F32 at sample {\n  x * k\n}\n";
     let d = text(src);
     assert!(d.contains("fn t.g.params_default() -> t.g.Params sret {\n  t.g.Params { k: 0.5:F32 }\n}"), "{d}");
 }

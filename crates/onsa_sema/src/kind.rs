@@ -54,7 +54,6 @@ fn kind_rec(a: &Analysis, ty: TyId, visiting: &mut HashSet<DefId>) -> Option<Kin
             visiting.remove(d);
             r
         }
-        Ty::Rate(_, t) => kind_rec(a, *t, visiting),
         Ty::Param(_) | Ty::Var(_) | Ty::Error => None,
     }
 }

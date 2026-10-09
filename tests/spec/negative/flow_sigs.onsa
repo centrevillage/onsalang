@@ -3,7 +3,7 @@
 // spec = ["§11.3", "§11.6", "§11.7"]
 
 // E0810 / E0809: flow signatures (§11.3, §11.6, §11.7).
-pub flow no_rate(x: F32) -> Sig[F32] {   //~ E0810
+pub flow no_rate(x: F32) -> F32 at sample {   //~ E0810
   x
 }
 
@@ -12,35 +12,49 @@ pub struct Pair {
   r: F32,
 }
 
-pub flow struct_out(x: Sig[F32]) -> Sig[Pair] {
+pub flow struct_out(x: F32 at sample) -> Pair at sample {
   Pair { l: x, r: x }
 }
 
-pub flow nested(x: Sig[[[F32; 2]; 2]]) -> Sig[F32] {   //~ E0810
+pub flow nested(x: [[F32; 2]; 2] at sample) -> F32 at sample {   //~ E0810
   1.0
 }
 
-pub flow shared(x: Sig[Str]) -> Sig[F32] {   //~ E0810
+pub flow shared(x: Str at sample) -> F32 at sample {   //~ E0810
   1.0
+}
+
+// The output clock is `sample` only in this version; any other clock is E0810, for an output at
+// `block` or at `init` alike (§11.3, §11.6, S-119). It was E0200 when the rate was a type.
+pub flow block_out(x: F32 at block) -> F32 at block {   //~ E0810
+  x
+}
+
+pub flow init_out(x: F32 at init) -> F32 at init {   //~ E0810
+  x
+}
+
+pub flow no_output_rate(x: F32 at sample) -> F32 {   //~ E0810
+  x
 }
 
 pub flow param_on_sig(
   @param(min: 0.0, max: 1.0)    //~ E0809
-  x: Sig[F32],
-) -> Sig[F32] {
+  x: F32 at sample,
+) -> F32 at sample {
   x
 }
 
 pub flow bad_key(
   @param(min: 0.0, max: 1.0, color: "red") //~ E0809
-  g: Ctl[F32],
-) -> Sig[F32] {
+  g: F32 at block,
+) -> F32 at sample {
   g
 }
 
 pub flow bad_scale(
   @param(min: 0.0, max: 1.0, scale: "exp") //~ E0809
-  g: Ctl[F32],
-) -> Sig[F32] {
+  g: F32 at block,
+) -> F32 at sample {
   g
 }

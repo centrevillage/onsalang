@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// E0200 while the flow syntax is written in the terms of this version's checks (W3-10, K-02):
+// `e at k` with `k` faster than the clock of `e` evaluates `e` at its own clock and reads it at
+// `k` (§11.3). This version evaluates a `let` at the clock of its value, so it would compute a
+// computed `e` at `k`; it says E0200 for it, and promotes a name, a literal and a constant only (a
+// constant goes to every clock, §11.3). One error per flow (P-01).
+//
+// W7-02 removes this file: after it these programs check (the clock analysis).
+
+pub rt fn twice(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow sum_at_sample(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * ((g + 1.0) at sample) //~ E0200
+}
+
+pub flow call_at_block(x: F32 at sample, t: F32 at init) -> F32 at sample {
+  let c = twice(t) at block //~ E0200
+  x * c
+}
+
+pub flow negated_at_sample(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = -g at sample //~ E0200
+  x * c
+}
+
+pub flow index_at_sample(x: F32 at sample, s: [F32; 2] at block) -> F32 at sample {
+  let c = s[0] at sample //~ E0200
+  x * c
+}
+
+// A name, a literal and a constant are promoted, and an `at` of the clock of the value changes
+// nothing.
+pub flow fine(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let gs  = g at sample
+  let one = 1.0 at block
+  let six = (2.0 * 3.0) at init
+  let neg = -1.0 at sample
+  let y   = (x * g) at sample
+  prev~(g at sample) + gs * one * six * neg + y
+}

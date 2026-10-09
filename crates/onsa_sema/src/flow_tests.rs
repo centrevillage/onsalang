@@ -69,13 +69,13 @@ fn spec(path: &str) -> String {
 const RESONATOR: &str = r#"
 use std.math.{exp, cos}
 
-pub flow resonator(x: Sig[F32], fc: Ctl[F32], bw: Ctl[F32]) -> Sig[F32] {
+pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
   let r  = exp(-(F32.PI * bw) / sample_rate())
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
   let b2 = r * r
-  let y1 = prev(y, 0.0)
-  let y2 = prev(y1, 0.0)
+  let y1 = prev~(^y)
+  let y2 = prev~(y1)
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
   y
 }
@@ -120,9 +120,9 @@ fn smooth_init_let_is_state() {
     let a = ok(r#"
 use std.math.{exp}
 
-pub flow smooth(x: Ctl[F32], time: Init[F32]) -> Sig[F32] {
+pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
   let a = exp(-1.0 / (time * sample_rate()))
-  let y = x + (a * (prev(y, 0.0) - x))
+  let y = x + (a * (prev~(^y) - x))
   y
 }
 "#);
@@ -174,18 +174,22 @@ fn unison_par_nests_instances() {
 // ---------------------------------------------------------------- rates
 
 #[test]
-fn annotation_promotes_and_cannot_lower() {
-    let a = ok("pub flow f(p: Ctl[F32]) -> Sig[F32] {\n  let ps: Sig[F32] = p\n  prev(ps, 0.0)\n}\n");
+fn at_promotes_and_cannot_lower() {
+    let a = ok("pub flow f(p: F32 at block) -> F32 at sample {\n  let ps = p at sample\n  prev~(ps)\n}\n");
     let f = flow(&a, "f");
     assert_eq!(let_rate(f, "ps"), (FlowRate::Sig, false));
-    assert_eq!(f.lets[0].annotated, Some(FlowRate::Sig));
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let c: Ctl[F32] = x\n  c\n}\n"), vec![Code::E0810]);
+    // `at` does not make a value slower: E0815 (§11.3; the annotation of the
+    // draft was E0810).
+    assert_eq!(
+        codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let c = x at block\n  c\n}\n"),
+        vec![Code::E0815]
+    );
 }
 
 #[test]
 fn match_and_if_are_pointwise() {
     let a = ok(
-        "pub flow f(x: Sig[F32], g: Ctl[Bool]) -> Sig[F32] {\n  let y = if g { x } else { 0.0 }\n  let o = match Some(y) {\n    Some(v) => v,\n    None => 1.0,\n  }\n  o\n}\n",
+        "pub flow f(x: F32 at sample, g: Bool at block) -> F32 at sample {\n  let y = if g { x } else { 0.0 }\n  let o = match Some(y) {\n    Some(v) => v,\n    None => 1.0,\n  }\n  o\n}\n",
     );
     let f = flow(&a, "f");
     assert_eq!(let_rate(f, "y"), (FlowRate::Sig, false));
@@ -194,20 +198,20 @@ fn match_and_if_are_pointwise() {
 
 #[test]
 fn non_rt_function_only_at_init() {
-    let src = "pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(t: Init[F32], c: Ctl[F32]) -> Sig[F32] {\n  let a = make(t)\n  let b = make(2.0)\n  a + b + c\n}\n";
+    let src = "pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(t: F32 at init, c: F32 at block) -> F32 at sample {\n  let a = make(t)\n  let b = make(2.0)\n  a + b + c\n}\n";
     let a = ok(src);
     let f = flow(&a, "f");
     assert_eq!(let_rate(f, "a"), (FlowRate::Init, true));
     assert_eq!(let_rate(f, "b"), (FlowRate::Init, true));
     assert_eq!(
-        codes("pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(c: Ctl[F32]) -> Sig[F32] {\n  make(c)\n}\n"),
+        codes("pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(c: F32 at block) -> F32 at sample {\n  make(c)\n}\n"),
         vec![Code::E0805]
     );
 }
 
 #[test]
 fn constant_lets_are_never_state() {
-    let a = ok("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let two = 2.0\n  x * two\n}\n");
+    let a = ok("pub flow f(x: F32 at sample) -> F32 at sample {\n  let two = 2.0\n  x * two\n}\n");
     assert_eq!(let_rate(flow(&a, "f"), "two"), (FlowRate::Const, false));
 }
 
@@ -215,12 +219,15 @@ fn constant_lets_are_never_state() {
 
 #[test]
 fn e0801_forward_reference() {
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let a = b\n  let b = x\n  a\n}\n"), vec![Code::E0801]);
+    assert_eq!(
+        codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = b\n  let b = x\n  a\n}\n"),
+        vec![Code::E0801]
+    );
     // Its own initializer, outside a look-back.
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let y = x + y\n  y\n}\n"), vec![Code::E0801]);
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let y = x + y\n  y\n}\n"), vec![Code::E0801]);
     // Look-back through a function call in the first argument is fine.
     ok(
-        "pub rt fn id(x: F32) -> F32 { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  let y = x + prev(id(y), 0.0)\n  y\n}\n",
+        "pub rt fn id(x: F32) -> F32 { x }\npub flow f(x: F32 at sample) -> F32 at sample {\n  let y = x + prev~(id(^y))\n  y\n}\n",
     );
 }
 
@@ -228,7 +235,7 @@ fn e0801_forward_reference() {
 fn e0805_effects() {
     assert_eq!(
         codes(
-            "pub fn alloc_it() -> F32 uses {Alloc} { 1.0 }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  x * alloc_it()\n}\n"
+            "pub fn alloc_it() -> F32 uses {Alloc} { 1.0 }\npub flow f(x: F32 at sample) -> F32 at sample {\n  x * alloc_it()\n}\n"
         ),
         vec![Code::E0805]
     );
@@ -248,33 +255,43 @@ fn e0806_forms() {
         "let a = if true { let b = x\n b } else { x }\n  a",
         "x\n  x",
     ] {
-        let src = format!("pub flow f(x: Sig[F32]) -> Sig[F32] {{\n  {body}\n}}\n");
+        let src = format!("pub flow f(x: F32 at sample) -> F32 at sample {{\n  {body}\n}}\n");
         assert_eq!(codes(&src), vec![Code::E0806], "{body}");
     }
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let a = x\n}\n"), vec![Code::E0806]);
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = x\n}\n"), vec![Code::E0806]);
 }
 
 #[test]
 fn e0807_e0808_delay_lengths() {
-    let src = "pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, 1, 0.0)\n}\n";
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, 1, 0.0)\n}\n";
     let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0807);
-    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev(x, 0.0)");
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, 0, 0.0)\n}\n"), vec![Code::E0808]);
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev~(x, 0.0)");
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, 0, 0.0)\n}\n"), vec![Code::E0808]);
     // Not a constant: E0417 (§11.4).
     assert_eq!(
-        codes("pub flow f(x: Sig[F32], n: Init[U32]) -> Sig[F32] {\n  delay(x, n, 0.0)\n}\n"),
+        codes("pub flow f(x: F32 at sample, n: U32 at init) -> F32 at sample {\n  delay~(x, n, 0.0)\n}\n"),
         vec![Code::E0417]
     );
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  vdelay(x, 2.0, 0, 0.0)\n}\n"), vec![Code::E0808]);
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[[F32; 0]] {\n  par i in 2..<2 { x }\n}\n"), vec![Code::E0808]);
-    ok("const N: U32 = 8\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, N, 0.0) + vdelay(x, 2.0, N, 0.0)\n}\n");
+    assert_eq!(
+        codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  vdelay~(x, 2.0, 0, 0.0)\n}\n"),
+        vec![Code::E0808]
+    );
+    assert_eq!(
+        codes("pub flow f(x: F32 at sample) -> [F32; 0] at sample {\n  par i in 2..<2 { x }\n}\n"),
+        vec![Code::E0808]
+    );
+    ok(
+        "const N: U32 = 8\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N, 0.0) + vdelay~(x, 2.0, N, 0.0)\n}\n",
+    );
 }
 
 #[test]
 fn par_ranges() {
     let par = |ret: &str, head: &str| {
-        codes(&format!("pub flow f(x: Sig[F32], n: Init[U32]) -> Sig[{ret}] {{\n  par i in {head} {{ x }}\n}}\n"))
+        codes(&format!(
+            "pub flow f(x: F32 at sample, n: U32 at init) -> {ret} at sample {{\n  par i in {head} {{ x }}\n}}\n"
+        ))
     };
     // The bounds: integer constants (§7 E0401, §11.5 E0417), not empty (E0808).
     assert_eq!(par("[F32; 2]", "0.0..<2.0"), vec![Code::E0401]);
@@ -293,63 +310,70 @@ fn par_ranges() {
     assert_eq!(par("[F32; 4]", "(0)..<(4)"), vec![]);
     assert_eq!(par("[F32; 3]", "-1..<2"), vec![Code::E0401]);
     assert_eq!(par("[F32; 2]", "0..<n + 1"), vec![Code::E0417]);
-    let computed = "const N: U32 = 2\nconst M: U32 = N * 2\npub flow f(x: Sig[F32]) -> Sig[[F32; 4]] {\n  par i in 0..<M { x }\n}\n";
+    let computed = "const N: U32 = 2\nconst M: U32 = N * 2\npub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par i in 0..<M { x }\n}\n";
     assert_eq!(codes(computed), vec![Code::E0200]);
-    let delay = "const N: U32 = 4\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, N + 1, 0.0)\n}\n";
+    let delay = "const N: U32 = 4\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1, 0.0)\n}\n";
     assert_eq!(codes(delay), vec![Code::E0200]);
     // The names of the leaves are resolved first (§18.1): a name that is not
     // declared is E0302, a function is no constant (E0417), and a constant
     // of a type is a constant expression (E0200 until W7-02).
-    let g = "pub fn g() -> U32 { 3 }\npub flow f(x: Sig[F32]) -> Sig[[F32; 2]] {\n  par i in 0..<g + 1 { x }\n}\n";
+    let g = "pub fn g() -> U32 { 3 }\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par i in 0..<g + 1 { x }\n}\n";
     assert_eq!(codes(g), vec![Code::E0417]);
     assert_eq!(par("[F32; 2]", "0..<zzz + 1"), vec![Code::E0302]);
     assert_eq!(par("[F32; 2]", "0..<1 + zzz"), vec![Code::E0302]);
     assert_eq!(par("[F32; 2]", "0..<n + zzz"), vec![Code::E0302]);
     assert_eq!(par("[F32; 32]", "0..<I32.BITS"), vec![Code::E0200]);
     assert_eq!(par("[F32; 2]", "0..<F32.PI"), vec![Code::E0401]);
-    let bits = "pub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, I32.BITS, 0.0)\n}\n";
+    let bits = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, I32.BITS, 0.0)\n}\n";
     assert_eq!(codes(bits), vec![Code::E0200]);
     // A float literal among the operands is a type error (E0401).
-    let float = "const N: U32 = 2\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  delay(x, N + 1.5, 0.0)\n}\n";
+    let float = "const N: U32 = 2\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1.5, 0.0)\n}\n";
     assert_eq!(codes(float), vec![Code::E0401]);
     assert_eq!(par("[F32; 2]", "-1.5..<3"), vec![Code::E0401]);
     // A literal that no `U32` holds is E0408 in a computed expression too.
     assert_eq!(par("[F32; 2]", "0..<4294967296"), vec![Code::E0408]);
     assert_eq!(par("[F32; 2]", "0..<4294967296 + 1"), vec![Code::E0408]);
-    let big = "const N: U32 = 2\npub flow f(x: Sig[F32]) -> Sig[[F32; 2]] {\n  par i in 0..<N + 4294967296 { x }\n}\n";
+    let big = "const N: U32 = 2\npub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  par i in 0..<N + 4294967296 { x }\n}\n";
     assert_eq!(codes(big), vec![Code::E0408]);
 }
 
 #[test]
 fn e0810_non_copy_let() {
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let s = \"a\"\n  x\n}\n"), vec![Code::E0810]);
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let s = \"a\"\n  x\n}\n"), vec![Code::E0810]);
 }
 
 #[test]
 fn e0811_e0812_marks() {
-    let src = "pub flow g(x: Sig[F32]) -> Sig[F32] { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  g(x)\n}\n";
+    let src = "pub flow g(x: F32 at sample) -> F32 at sample { x }\npub flow f(x: F32 at sample) -> F32 at sample {\n  g(x)\n}\n";
     let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0811);
     assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "g~(x)");
-    let src = "pub rt fn h(x: F32) -> F32 { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  h~(x)\n}\n";
+    let src = "pub rt fn h(x: F32) -> F32 { x }\npub flow f(x: F32 at sample) -> F32 at sample {\n  h~(x)\n}\n";
     let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0812);
     assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "h(x)");
-    // `prev~(` is the form of S-44: the checks stop at it with E0200 until W3-10
-    // writes it in their terms (K-02), never with E0812 and its candidate `prev(`.
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev~(x, 0.0)\n}\n"), vec![Code::E0200]);
+    // A delay is written `prev~(` (S-44); `prev(` is E0811 with the candidate `~`.
+    ok("pub flow f(x: F32 at sample) -> F32 at sample {\n  prev~(x, 0.0)\n}\n");
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  prev(x)\n}\n";
+    let a = check(src);
+    assert_eq!(a.diagnostics[0].code, Code::E0811);
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev~(x)");
 }
 
 #[test]
 fn e0813_e0815_delay_argument_rates() {
-    let a = check("pub flow f(p: Ctl[F32]) -> Sig[F32] {\n  prev(p, 0.0)\n}\n");
+    let a = check("pub flow f(p: F32 at block) -> F32 at sample {\n  prev~(p)\n}\n");
     assert_eq!(a.diagnostics[0].code, Code::E0813);
-    assert!(a.diagnostics[0].notes.iter().any(|n| n.message.contains("let ps: Sig[F32] = p")));
+    assert!(a.diagnostics[0].notes.iter().any(|n| n.message.contains("prev~(p at sample)")));
     // The `init` of a delay is faster than `init`: E0815 (S-147; E0814 is retired).
-    assert_eq!(codes("pub flow f(x: Sig[F32], p: Ctl[F32]) -> Sig[F32] {\n  prev(x, p)\n}\n"), vec![Code::E0815]);
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  prev(x, x)\n}\n"), vec![Code::E0815]);
-    ok("pub flow f(x: Sig[F32], t: Init[F32]) -> Sig[F32] {\n  prev(x, t)\n}\n");
-    let a = ok("pub flow f(x: Sig[F32], t: Init[F32]) -> Sig[F32] {\n  let y = prev(x, t * 2.0)\n  y\n}\n");
+    assert_eq!(
+        codes("pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {\n  prev~(x, p)\n}\n"),
+        vec![Code::E0815]
+    );
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  prev~(x, x)\n}\n"), vec![Code::E0815]);
+    ok("pub flow f(x: F32 at sample, t: F32 at init) -> F32 at sample {\n  prev~(x, t)\n}\n");
+    let a =
+        ok("pub flow f(x: F32 at sample, t: F32 at init) -> F32 at sample {\n  let y = prev~(x, t * 2.0)\n  y\n}\n");
     assert!(matches!(&flow(&a, "f").nodes[0], Node::Prev { init: InitArg::Init(_), .. }));
 }
 
@@ -357,7 +381,7 @@ fn e0813_e0815_delay_argument_rates() {
 fn e0815_argument_rate_too_high() {
     assert_eq!(
         codes(
-            "pub flow g(c: Ctl[F32]) -> Sig[F32] { prev(x, 0.0) }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  g~(x)\n}\n"
+            "pub flow g(c: F32 at block) -> F32 at sample { prev~(x, 0.0) }\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x)\n}\n"
         )
         .iter()
         .filter(|&&c| c == Code::E0815)
@@ -366,7 +390,7 @@ fn e0815_argument_rate_too_high() {
     );
     assert_eq!(
         codes(
-            "pub flow g(t: Init[F32], x: Sig[F32]) -> Sig[F32] { x * t }\npub flow f(x: Sig[F32], c: Ctl[F32]) -> Sig[F32] {\n  g~(c, x)\n}\n"
+            "pub flow g(t: F32 at init, x: F32 at sample) -> F32 at sample { x * t }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  g~(c, x)\n}\n"
         ),
         vec![Code::E0815]
     );
@@ -375,11 +399,15 @@ fn e0815_argument_rate_too_high() {
 #[test]
 fn e0412_instance_arity_and_e0401_type() {
     assert_eq!(
-        codes("pub flow g(x: Sig[F32]) -> Sig[F32] { x }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  g~(x, x)\n}\n"),
+        codes(
+            "pub flow g(x: F32 at sample) -> F32 at sample { x }\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x, x)\n}\n"
+        ),
         vec![Code::E0412]
     );
     assert_eq!(
-        codes("pub flow g(x: Sig[F32]) -> Sig[F32] { x }\npub flow f(x: Sig[I32]) -> Sig[F32] {\n  g~(x)\n}\n"),
+        codes(
+            "pub flow g(x: F32 at sample) -> F32 at sample { x }\npub flow f(x: I32 at sample) -> F32 at sample {\n  g~(x)\n}\n"
+        ),
         vec![Code::E0401]
     );
 }
@@ -387,7 +415,7 @@ fn e0412_instance_arity_and_e0401_type() {
 #[test]
 fn let_patterns_destructure() {
     let a = ok(
-        "pub struct P { l: F32, r: F32 }\npub rt fn mk(x: F32) -> P { P { l: x, r: x } }\npub flow f(x: Sig[F32]) -> Sig[F32] {\n  let P { l: l, r: r } = mk(x)\n  let (a, b) = (l, r)\n  a + b\n}\n",
+        "pub struct P { l: F32, r: F32 }\npub rt fn mk(x: F32) -> P { P { l: x, r: x } }\npub flow f(x: F32 at sample) -> F32 at sample {\n  let P { l: l, r: r } = mk(x)\n  let (a, b) = (l, r)\n  a + b\n}\n",
     );
     let f = flow(&a, "f");
     assert_eq!(f.lets.len(), 2);
@@ -398,6 +426,9 @@ fn let_patterns_destructure() {
 
 #[test]
 fn no_shadowing_in_flows() {
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let x = 1.0\n  x\n}\n"), vec![Code::E0304]);
-    assert_eq!(codes("pub flow f(x: Sig[F32]) -> Sig[F32] {\n  let a = x\n  let a = x\n  a\n}\n"), vec![Code::E0304]);
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let x = 1.0\n  x\n}\n"), vec![Code::E0304]);
+    assert_eq!(
+        codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = x\n  let a = x\n  a\n}\n"),
+        vec![Code::E0304]
+    );
 }

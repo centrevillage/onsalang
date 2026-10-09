@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.2", "§4.7", "§3.1"]
+
+// A feedback reference `^name` to a later `let` that has a value type written on it reads that type
+// (§4.7: an annotation decides the type that a field, a method or an index needs; §3.1: `^s.l` is
+// the field `l` of `s`). The expected values are worked out by hand from §11.4.
+
+pub struct St {
+  l: F32,
+  r: F32,
+}
+
+pub flow field(x: F32 at sample) -> F32 at sample {
+  let s: St = St { l: x + prev~(^s.l), r: x }
+  s.l + s.r
+}
+
+pub flow method(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b.abs())
+  let b: F32 = x - 1.0
+  a + b
+}
+
+pub flow index(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b[0])
+  let b: [F32; 2] = [x, x * 2.0]
+  a + b[1]
+}
+
+pub flow tuple(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^c)
+  let (c, d): (F32, F32) = (x, x * 2.0)
+  a + d
+}
+
+test "an annotated later let types the feedback reference" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = field.render(field.Config {}, field.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 5.0
+  let m = method.render(method.Config {}, method.Params {}, xs, 8.0)
+  assert m.out[0] == 0.0
+  assert m.out[1] == 1.0
+  assert m.out[2] == 3.0
+  let i = index.render(index.Config {}, index.Params {}, xs, 8.0)
+  assert i.out[1] == 5.0
+  let t = tuple.render(tuple.Config {}, tuple.Params {}, xs, 8.0)
+  assert t.out[1] == 5.0
+}

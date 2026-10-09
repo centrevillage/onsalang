@@ -3,6 +3,7 @@
 [`docs/review-impl-phase1.md`](../../docs/review-impl-phase1.md)（R-01〜R-133）と `impl-review-0.3.md` の持ち越しの項目の指摘と、決定の点検（`consistency-check-phase1.md`）で見つけた穴を再現した入力を、資料として残したもの。2026-10-02〜06。
 
 - **自動では実行しない。** `onsa_tests` のランナーは `tests/spec`、`tests/conformance`、`tests/golden` だけを読む。パッケージの収集も `tests/` を除く（§15.1）。
+- **flow の旧い書き方。** 多くの flow の入力は 0.3 の草案の書き方（`x: Sig[F32]`、`prev(y, 0.0)`）で書いてある。W3-10（2026-10-10）から今の実装はこの書き方を受け付けない（`Sig[F32]` は E0302、`prev(` は E0811）。再現に使うときは、最終の構文（`x: F32 at sample`、後の `let` を読む遅延は `prev~(^y)`）に書き換える。
 - 多くは「今の実装が誤る」入力で、期待値は各ファイルのコメントか `assert` に書いてある。修正の段階（レビュー §7）で、直した項目の入力を `tests/spec` などの回帰テストへ移す。
 - 除いたもの: ビルドの生成物（`target/`）、実行ファイル、golden の写し、ファズが生成した約 830 個の入力。
 

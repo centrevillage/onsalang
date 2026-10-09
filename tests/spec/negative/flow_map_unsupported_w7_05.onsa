@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// E0200 while the flow syntax is written in the terms of this version's checks (W3-10, K-02):
+// a function that is not `rt` takes arguments at the clock `init` or constants and is computed at
+// `init` or at compile time wherever it is written (§11.5, §11.3). This version computes the
+// expression that holds the call at the clock of that expression, in `process`; it says E0200
+// for a call in an expression at `block` or `sample`. One error per flow (P-01).
+//
+// W7-05 removes this file: after it these programs check (hoisting, R-17, S-33).
+
+pub fn design(f: F32) -> F32 {
+  f * 0.5
+}
+
+pub flow at_sample(x: F32 at sample, f: F32 at init) -> F32 at sample {
+  x * design(f) //~ E0200
+}
+
+pub flow at_block(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = g + design(2.0) //~ E0200
+  x * c
+}
+
+// A `let` of its own is at `init`, and its value is read at `sample`.
+pub flow fine(x: F32 at sample, f: F32 at init) -> F32 at sample {
+  let c = design(f)
+  x * c
+}

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§11.3", "§18.1"]
+
+// `clock` is a reserved word (§2.2: "`clock`、`when`、`reset_if`、`ser` は、将来の機能 … のために予約
+// している。宣言の名前には使えず、この版では構文としても受け付けない（現れた位置で E0200、機能名を
+// 添える）"), so a word `clock` after `at` is E0200 at the word, and not the E0302 of an unknown
+// name (S-359, S-169). A declared clock would be written `clock fast = sample / 32` and then
+// `at fast` (§19.1), which this version does not read. Until W3-04 makes `clock` a keyword the
+// word is an unknown name and the code is E0302 (tests/pending.toml). One error per flow (one
+// declaration unit each).
+
+pub flow reserved_in_an_input(x: F32 at clock) -> F32 at sample {   //~ E0200 @41
+  x
+}
+
+pub flow reserved_in_the_output(x: F32 at sample) -> F32 at clock {   //~ E0200 @61
+  x
+}
+
+pub flow reserved_in_an_expression(x: F32 at sample) -> F32 at sample {
+  let y = x at clock   //~ E0200 @16
+  y
+}
+
+pub flow reserved_in_a_multi_line_list(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at clock,   //~ E0200 @13
+  x: F32 at sample,
+) -> F32 at sample {
+  x * g
+}
+
+pub flow reserved_in_a_par(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    x at clock   //~ E0200 @10
+  }
+  xs[0]
+}
