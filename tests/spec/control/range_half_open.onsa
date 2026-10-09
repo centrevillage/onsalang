@@ -66,6 +66,33 @@ test "a range with equal ends is empty" {
   assert count(0) == 0
 }
 
+// A start past the end is an empty range too: the body never runs, and a literal pair of ends
+// that gives an empty range is no error (spec §7, S-219).
+
+fn reversed_literal() -> U32 {
+  var c: U32 = 0
+  for _ in 5..<2 {
+    c = c + 1
+  }
+  c
+}
+
+fn reversed_signed(lo: I32, hi: I32) -> I32 {
+  var c: I32 = 0
+  for _ in lo..<hi {
+    c = c + 1
+  }
+  c
+}
+
+test "a range whose start is past its end is empty" {
+  assert digits(6, 3) == 0
+  assert digits(1, 0) == 0
+  assert reversed_literal() == 0
+  assert reversed_signed(-1, -5) == 0
+  assert reversed_signed(-5, -1) == 4
+}
+
 test "a range starts at its start" {
   assert digits(3, 6) == 345
   assert digits(7, 8) == 7
