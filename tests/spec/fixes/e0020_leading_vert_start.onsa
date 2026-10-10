@@ -1,0 +1,170 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "152:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["152:5 E0020"]
+//
+// [[test.fix]]
+// at = "159:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["160:5 E0020"]
+
+// The `[[test.fix]]` entries in the header name what a candidate leaves in its unit: a second misplaced
+// token, reported by the next check (§18.1, S-236). The `at` and `leaves` positions are those of the spec
+// (the misplaced token). The entries were commented out (`// # `) until W3-06/i made the check report
+// the diagnostics.
+//
+// E0020: a `|` before the first alternative of a pattern (spec §7, S-383, R-160). The `|` goes between the
+// alternatives and not before the first (Rust writes a leading `|` in an arm, and OCaml and F# write
+// the `|` at the head of every arm, so `| 0 | 1 =>` is a writer's habit, and the arms are separated by `,`
+// here). It is an error at every place where a pattern starts: the head of an arm, after the `(` or the
+// `,` of a nested pattern, the field of a struct pattern, and the binding of a `let` and a `for`. The
+// candidate removes the `|` and the blank after it. The main position is the `|`, so the marker is on
+// its line. A form with two bars in a row (`| | 0`) and a choice that starts on one line and goes on with
+// a `|` at the start of the next line are one error at a time: the first one is the diagnostic and the
+// candidate fixes it, and the next is reported by the next check (the `[[test.fix]]` above, the `|` of
+// the next line is the E0020 of e0020_leading_vert.onsa). One error in each declaration unit. The form
+// where nothing follows the `|` (`| =>`) has no candidate: tests/spec/negative/pattern_vert_no_candidate.onsa.
+
+use std.array
+
+pub fn arm_head(x: U32) -> U32 {
+  match x {
+    | 0 | 1 => 10,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn first_arm_one_alternative(x: U32) -> U32 {
+  match x {
+    | 0 => 10,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn later_arm_after_a_comma(x: U32) -> U32 {
+  match x {
+    0 => 10,
+    | 1 => 20,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn wildcard_arm(x: U32) -> U32 {
+  match x {
+    0 => 10,
+    | _ => 0,                                       //~ E0020
+  }
+}
+
+pub fn in_a_variant(o: Option[U32]) -> U32 {
+  match o {
+    Some(| 0 | 1) => 1,                             //~ E0020
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+pub fn in_a_variant_second_alternative(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 | | 1) => 1,                             //~ E0020
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+pub fn in_a_tuple_first(t: (U32, U32)) -> U32 {
+  match t {
+    (| 0 | 1, _) => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_tuple_second(t: (U32, U32)) -> U32 {
+  match t {
+    (_, | 5 | 6) => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+pub fn in_a_struct_pattern(p: Pt) -> U32 {
+  match p {
+    Pt { x: | 0 | 1, y: _ } => 1,                   //~ E0020
+    Pt { x: _, y: _ } => 0,
+  }
+}
+
+pub fn nested_twice(o: Option[Option[U32]]) -> U32 {
+  match o {
+    Some(Some(| 0 | 1)) => 1,                       //~ E0020
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+pub fn before_a_guard(x: U32, a: Bool) -> U32 {
+  match x {
+    | 0 | 1 if a => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_let(p: (U32, U32)) -> U32 {
+  let | (a, b) = p                                  //~ E0020
+  a + b
+}
+
+pub fn in_a_let_name(p: U32) -> U32 {
+  let | a = p                                       //~ E0020
+  a
+}
+
+pub fn in_a_for(n: U32) -> U32 {
+  var t: U32 = 0
+  for | i in 0..<n {                                //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn in_a_closure_body() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    match i {
+      | 0 => 1,                                     //~ E0020
+      _ => 2,
+    }
+  })
+}
+
+pub fn two_bars(x: U32) -> U32 {
+  match x {
+    | | 0 => 10,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn then_the_bar_of_the_next_line(x: U32) -> U32 {
+  match x {
+    | 0                                             //~ E0020
+    | 1 => 10,
+    _ => 0,
+  }
+}
+
+pub fn fine(x: U32) -> U32 {
+  match x {
+    0 | 1 => 10,
+    _ => 0,
+  }
+}

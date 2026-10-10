@@ -9,8 +9,8 @@
 // inside a list and outside it (`let c = a -b`). Candidate 1 puts a space on both sides. Candidate 2, only
 // in a list whose elements are expressions (arguments, an array, a tuple), inserts the comma. An index, a
 // field value, an arm body, a condition and a `let` have the first candidate only. `a -(b)` and `a -1` are
-// the same form, and so is `x -^y` (a prefix `^` operand); `a - b`, `a-b` and `a - -b` are not (`fine`, and tests/spec/lex/gaps_ok.onsa): in `a - -b` the binary `-` has a space on both sides and the second `-` is a prefix that touches its operand. The binary `+` has no
-// prefix reading and is not part of this rule. Candidate 2 leaves errors of the later stages only (the
+// the same form, and so is `x -^y` (a prefix `^` operand); `a - b`, `a-b` and `a - -b` are not (`fine`, and tests/spec/lex/gaps_ok.onsa): in `a - -b` the binary `-` has a space on both sides and the second `-` is a prefix that touches its operand. The binary `+` is in the
+// rule too (S-405 (ii), tests/spec/fixes/e0020_binary_plus_space.onsa). Candidate 2 leaves errors of the later stages only (the
 // number of arguments). One error per declaration unit (P-01).
 
 pub struct Pt {

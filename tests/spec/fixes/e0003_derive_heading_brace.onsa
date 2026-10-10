@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.4", "§18.1"]
+// fixes = 1
+
+// E0003 for the `{` of the body of a struct or an enum whose head has a derive (spec §2.5, §6.4, S-415, S-216): the
+// last token of the head is the last trait of the `: trait + trait` (`Eq` in `pub struct Key: PartialEq + Eq`), or the name or
+// the `]` when there is no derive, and the `{` goes on its line. A derive that goes on over lines after a `+`
+// ends on the line of its last trait, and the `{` is on that line (the head continues after an operator at the
+// end of a line, §2.5). The rule and the candidate are those of e0003_decl_body_brace.onsa. The syntax of
+// the derive is W3-08, so this case is pending until both are done. The main position is the `{`. One error in each
+// declaration unit (P-01).
+
+pub struct Key: PartialEq + Eq
+{                                                   //~ E0003
+  id: U32,
+}
+
+pub struct One: PartialEq
+{                                                   //~ E0003
+  id: U32,
+}
+
+pub struct Ring[T]: PartialEq
+{                                                   //~ E0003
+  item: T,
+}
+
+pub enum Mode: PartialEq + Eq
+{                                                   //~ E0003
+  Off,
+  On,
+}
+
+pub enum Slot[T]: PartialEq
+{                                                   //~ E0003
+  Empty,
+  Full(T),
+}
+
+pub struct Continued: PartialEq +
+  Eq
+{                                                   //~ E0003
+  id: U32,
+}
+
+pub struct WithComment: PartialEq // the derive
+{                                                   //~ E0003
+  id: U32,
+}
+
+// The right forms.
+pub struct FineKey: PartialEq + Eq {
+  id: U32,
+}
+
+pub struct FineContinued: PartialEq +
+  Eq {
+  id: U32,
+}

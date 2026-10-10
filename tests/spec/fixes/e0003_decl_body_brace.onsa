@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§6.3", "§8.1", "§14.1", "§18.1"]
+// fixes = 1
+
+// E0003 for the `{` of the body of a `struct` or an `enum` that is not on the line of the last token of its head (spec
+// §2.5, S-415, S-216). The body of a `struct` and of an `enum` is a list in which a line break is a space, so a
+// `{` on the next line could be read all the same; it is the body of a declaration like that of a `fn`
+// (e0003_brace_line.onsa), and the `{` goes on the line of the last token of the head, which is the name or the
+// `]` that ends the type parameters. A `test` is the same (tests/spec/fixes/e0003_brace_line.onsa has one more).
+// The main position is the `{`, so the marker is on its line, and the candidate moves the `{` and the rest of
+// its line, up to the comment, to the end of the line of the last token of the head, before the comment of that
+// line; the comment lines and blank lines between stay where they are. The `trait`, `effect`, `handler` and `extern`
+// blocks are in e0003_decl_body_brace_unsupported.onsa, and the derive in the head (`pub struct Key: PartialEq`) in
+// e0003_derive_heading_brace.onsa. One error in each declaration unit (P-01). The right forms are at the end.
+
+pub struct Point
+{                                                   //~ E0003
+  x: I32,
+  y: I32,
+}
+
+pub struct Pair[A, B]
+{                                                   //~ E0003
+  a: A,
+  b: B,
+}
+
+pub struct Dot
+{ x: I32, y: I32 }                                  //~ E0003
+
+pub struct Spaced // the head
+{                                                   //~ E0003
+  x: I32,
+}
+
+pub struct Between
+// the fields
+{                                                   //~ E0003
+  x: I32,
+}
+
+pub struct Indented
+    {                                               //~ E0003
+  x: I32,
+}
+
+struct Private
+{                                                   //~ E0003
+  x: I32,
+}
+
+pub enum Shape
+{                                                   //~ E0003
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+pub enum Maybe[T]
+{                                                   //~ E0003
+  Nothing,
+  Just(T),
+}
+
+pub enum Flat
+{ Left, Right }                                     //~ E0003
+
+pub enum Alone
+{                                                   //~ E0003
+  Only,
+}
+
+test "a test with a body on the next line"
+{                                                   //~ E0003
+  assert 1 + 1 == 2
+}
+
+// The right forms: the `{` on the line of the last token of the head.
+pub struct FinePoint {
+  x: I32,
+  y: I32,
+}
+
+pub struct FinePair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub enum FineShape {
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+pub enum FineMaybe[T] {
+  Nothing,
+  Just(T),
+}
+
+test "the right forms of the heads" {
+  assert 1 + 1 == 2
+}

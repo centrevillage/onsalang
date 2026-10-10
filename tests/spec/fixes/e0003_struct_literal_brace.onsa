@@ -1,0 +1,199 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "184:7"
+// code = "E0003"
+// candidate = 1
+// leaves = ["183:11 E0002"]
+
+// The `[[test.fix]]` entry in the header names what the candidate leaves in its unit, reported by the
+// next check (§18.1, S-236, S-413): the `at` position is the misplaced `{` (the spec's), and the `leaves`
+// position is the error of what is left of the literal, where the implementation reports it (the spec
+// does not place it). The entry was commented out (`// # `) until W3-06/i made the check report the
+// diagnostic (W3-06/t3 wrote it).
+//
+// E0003 for the `{` of a struct literal that is not on the line of the type name (spec §2.5, S-413, S-216):
+// `{` goes on the line of the name (or of the `]` that ends its type arguments, e0003_struct_literal_brace_type_arguments.onsa). In a
+// pair of brackets a line break is a space, and a `{` after it could be read as a struct literal all the same,
+// but the rule of where a symbol stands is the same inside the brackets and outside them (S-370), so the
+// `{` that the name needs is an E0003 at the `{`, and the candidate moves the `{` and the rest of its line
+// up to the comment to the end of the line of the name, before the comment of that line. The comments of the
+// line of the `{` and the lines between stay where they are. The same holds for a literal in an array, a tuple,
+// the value of a field of another literal, a group and the head of an `if` (the group is needed there).
+// A name that stands for a constant (`N`) is read as the name of a type by its form, so `two(N` and
+// `{ 1 })` is the same error with the same candidate, and what is left after it (`N { 1 }` is not a
+// struct literal) is the error of the next check, an error outside the promise of S-236 (the `[[test.fix]]`
+// above). Outside the brackets the name ends the line (tests/spec/negative/s413_literal_outside_brackets.onsa).
+// The main position is the `{`, so the marker is on its line. One error in each declaration unit (P-01).
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Wrap {
+  inner: Pt,
+  k: I32,
+}
+
+pub fn px(p: Pt, k: I32) -> I32 {
+  p.x + k
+}
+
+pub fn kx(k: I32, p: Pt) -> I32 {
+  p.x + k
+}
+
+pub fn pair_sum(p: Pair[I32, I32]) -> I32 {
+  p.a + p.b
+}
+
+pub fn wrap_sum(w: Wrap) -> I32 {
+  w.inner.x + w.k
+}
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x + y
+}
+
+const N: I32 = 3
+
+pub fn first_of[T](p: Pair[T, T]) -> T {
+  p.a
+}
+
+pub struct Fp {
+  x: F32,
+}
+
+pub rt fn fx(p: Fp) -> F32 {
+  p.x
+}
+
+pub fn in_a_call(a: I32) -> I32 {
+  px(Pt
+     { x: a, y: 2 }, 3)                             //~ E0003
+}
+
+pub fn in_a_call_second_argument(a: I32) -> I32 {
+  kx(1, Pt
+        { x: a, y: 2 })                             //~ E0003
+}
+
+pub fn in_a_nested_call(a: I32) -> I32 {
+  two(px(Pt
+         { x: a, y: 2 }, 3), 4)                     //~ E0003
+}
+
+pub fn in_an_array(a: I32) -> U32 {
+  let v = [Pt
+           { x: a, y: 2 }]                          //~ E0003
+  v.len()
+}
+
+pub fn in_an_array_last(a: I32) -> U32 {
+  let v = [Pt { x: 1, y: 2 }, Pt
+                              { x: a, y: 2 }]       //~ E0003
+  v.len()
+}
+
+pub fn in_a_tuple(a: I32) -> I32 {
+  let t = (Pt
+           { x: a, y: 2 }, 3)                       //~ E0003
+  t.1
+}
+
+pub fn in_a_field_value(a: I32) -> I32 {
+  let w = Wrap { inner: Pt
+                        { x: a, y: 2 }, k: 3 }      //~ E0003
+  w.k
+}
+
+pub fn in_a_group(a: I32) -> I32 {
+  let k = (Pt
+           { x: a, y: 2 }).x                        //~ E0003
+  k
+}
+
+pub fn in_a_group_in_a_head(a: I32) -> I32 {
+  if (Pt
+      { x: 1, y: 2 }).x > a {                       //~ E0003
+    1
+  } else {
+    0
+  }
+}
+
+pub fn in_an_arm_body(n: I32) -> Pt {
+  match n {
+    0 => Pt
+      { x: 0, y: 0 },                               //~ E0003
+    _ => Pt { x: 1, y: 1 },
+  }
+}
+
+pub fn in_a_value_call(a: I32) -> I32 {
+  let f = fn(p: Pt, k: I32) -> I32 {
+    p.x + k
+  }
+  f.(Pt
+      { x: a, y: 2 }, 3)                            //~ E0003
+}
+
+pub fn in_a_generic_head[T: Num](x: T, y: T) -> T {
+  first_of(Pair
+           { a: x, b: y })                          //~ E0003
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4 {
+    fx(Fp
+       { x: x * i.round_f32() })                    //~ E0003
+  }
+}
+
+pub fn a_comment_on_the_line_of_the_name(a: I32) -> I32 {
+  px(Pt // the point
+     { x: a, y: 2 }, 3)                             //~ E0003
+}
+
+pub fn a_comment_line_between(a: I32) -> I32 {
+  px(Pt
+     // the fields
+     { x: a, y: 2 }, 3)                             //~ E0003
+}
+
+pub fn only_the_brace_is_moved(a: I32) -> I32 {
+  px(Pt
+     {                                              //~ E0003
+       x: a,
+       y: 2,
+     }, 3)
+}
+
+pub fn after_a_constant_name() -> I32 {
+  two(N
+      { 1 })                                        //~ E0003
+}
+
+// The right forms: the `{` on the line of the name (or of the `]` of its type arguments) in and out of brackets.
+pub fn fine(a: I32) -> I32 {
+  let p = Pt { x: a, y: 2 }
+  let w = Wrap {
+    inner: Pt {
+      x: 1,
+      y: 2,
+    },
+    k: 3,
+  }
+  let q = Pair { a: 1, b: 2 }
+  px(Pt { x: a, y: 2 }, 3) + kx(1, p) + wrap_sum(w) + pair_sum(q)
+}

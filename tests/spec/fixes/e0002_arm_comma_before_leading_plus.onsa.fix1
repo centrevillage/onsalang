@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§7", "§18.1"]
+// fixes = 1
+
+// E0002: an arm without its `,` before a line that starts with a `+` (spec §2.5, §3.1, S-405, S-386). A `+` at
+// the start of a line is the binary operator that the writer meant to continue the line before (S-124); when
+// the move would end the line before at the `=>` of the next arm (`0 => 2` and `+1 => 3` would be `0 => 2 +` and
+// `1 => 3`: the arm body `2 + 1` and then a `=>`), the binary reading does not hold and the line is the head
+// of the next arm, whose `,` is missing (e0002_arm_comma_before_leading.onsa, for `|` and `-`). The error is
+// the general one of a missing `,` (S-384), and the main position is the `+` that starts the line.
+// A `+` is not a sign in Onsa (§3.1), so a candidate that only inserted the `,` would leave the E0020 of a
+// prefix `+` in the pattern. The one candidate inserts the `,` (right after the last token of the line before
+// it, before its comment) and removes the `+` and the space after it in one edit, and nothing is left. The same
+// candidate serves `+ 1`, where the `+` is not next to its operand: unlike the `- 1` of S-386, the `+` and the
+// space are removed together, so the candidate can be made. One error in each declaration unit (P-01).
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn plus_after_a_block_body(x: I32) -> I32 {
+  match x {
+    0 => { 1 },
+    1 => 2,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn plus_after_a_plain_body(x: I32) -> I32 {
+  match x {
+    0 => 2,
+    1 => 3,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn plus_after_a_name_body(x: I32, a: I32) -> I32 {
+  match x {
+    0 => a,
+    1 => 2,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn plus_after_a_comment(x: I32) -> I32 {
+  match x {
+    0 => 2, // two
+    1 => 3,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn plus_before_a_choice(x: I32) -> I32 {
+  match x {
+    0 => 1,
+    1 | 2 => 3,                                     //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn spaced_after_a_block_body(x: I32) -> I32 {
+  match x {
+    0 => { 1 },
+    1 => 2,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn spaced_after_a_plain_body(x: I32) -> I32 {
+  match x {
+    0 => 2,
+    1 => 3,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn spaced_after_a_comment(x: I32) -> I32 {
+  match x {
+    0 => 2, // two
+    1 => 3,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn plus_second_arm(x: I32) -> I32 {
+  match x {
+    0 => 1,
+    1 => { 2 },
+    2 => 3,                                         //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn plus_in_a_match_in_a_call(x: I32) -> I32 {
+  id(match x {
+    0 => { 1 },
+    1 => 2,                                         //~ E0002
+    _ => 0,
+  })
+}
+
+pub fn plus_in_a_closure(x: I32) -> I32 {
+  let f = fn(k: I32) -> I32 {
+    match k {
+      0 => 2,
+      1 => 3,                                       //~ E0002
+      _ => 0,
+    }
+  }
+  f.(x)
+}
+
+pub fn plus_in_a_generic_head[T: Num](x: I32, a: T) -> T {
+  match x {
+    0 => a,
+    1 => a,                                         //~ E0002
+    _ => a,
+  }
+}
+
+pub flow plus_in_a_flow(k: I32 at block, x: F32 at sample) -> F32 at sample {
+  match k {
+    0 => x,
+    1 => x * 2.0,                                   //~ E0002
+    _ => 0.0,
+  }
+}
+
+// The right forms: the `,` ends each arm, and a `+` at the end of a line is a binary operator that goes on.
+pub fn fine(x: I32, a: I32, b: I32) -> I32 {
+  match x {
+    0 => 2,
+    1 => 3,
+    -1 => 4,
+    _ => a +
+      b,
+  }
+}

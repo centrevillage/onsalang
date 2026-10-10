@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0002 for a `(` or a `[` on the line after an arm of a `match` (spec §2.5, S-419, S-89, S-399, S-384): in the list of
+// the arms a line break is a space, so the `(` is the start of the next arm (the arm before it lacks a `,`) or the
+// call of the name before it (a line break between a name and its `(` is E0002 in a pair of brackets, the opening does not
+// attach). The check reads the tokens up to the next `,` or `}` that is not inside brackets, and offers the one reading that
+// holds, not both: when a `=>` is found there outside the brackets, the `(` starts an arm (only the `,`
+// inserted right after the last token of the line before, before its comment); when it is not, the `(` can
+// only belong to an arm body that goes on (only the line break removed). The `=>` and the `,` inside the
+// brackets of the arm (`(a, b)`, `{ 0 => 1, _ => 2 }`) are not counted. So the form is a single error with a single candidate,
+// and nothing is left after it. The main position is the `(`, so the marker is on its line. A `)` or a `}` before the line break
+// has no call reading and gives the `,` (S-399). One error in each declaration unit (P-01). The cases of a
+// type list are in e0002_type_list_scan.onsa. The form that no candidate mends (`0 => one` and `(1 + 2) => 3,`: the
+// `(1 + 2)` is not a pattern) is an input with two errors, outside the promise of S-236, and has no case of its own.
+
+pub fn one(x: I32) -> I32 {
+  x
+}
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x + y
+}
+
+pub fn the_body_is_called(n: I32) -> I32 {
+  match n {
+    0 => one(1),
+    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn the_body_is_called_with_two_arguments(n: I32) -> I32 {
+  match n {
+    0 => two(1, 2),
+    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn the_body_is_indexed(n: I32, xs: [I32; 4]) -> I32 {
+  match n {
+    0 => xs[0],
+    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn the_last_arm(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    _ => one(1)
+    //~ E0002
+  }
+}
+
+pub fn a_match_in_the_brackets(n: I32, q: I32) -> I32 {
+  match n {
+    0 => one(match q { 0 => 1, _ => 2 }),
+    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn in_a_call(n: I32) -> I32 {
+  one(match n {
+    0 => one(1),
+    //~ E0002
+    _ => 0,
+  })
+}
+
+pub fn in_a_closure(n: I32) -> I32 {
+  let f = fn(k: I32) -> I32 {
+    match k {
+      0 => one(1),
+      //~ E0002
+      _ => 0,
+    }
+  }
+  f.(n)
+}
+
+pub fn in_a_generic_head[T: Num](n: I32, x: T) -> T {
+  match n {
+    0 => id(x),
+    //~ E0002
+    _ => x,
+  }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn the_second_arm_is_called(n: I32) -> I32 {
+  match n {
+    0 => 0,
+    1 => one(1),
+    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_tuple_pattern_after_a_name(p: (I32, I32)) -> fn(I32) -> I32 {
+  match p {
+    (0, 0) => one,
+    (a, b) => one,                                  //~ E0002
+  }
+}
+
+pub fn a_tuple_pattern_after_a_value(p: (I32, I32), k: I32) -> I32 {
+  match p {
+    (0, 0) => k,
+    (a, b) => a + b,                                //~ E0002
+  }
+}
+
+pub fn a_tuple_pattern_after_a_call(p: (I32, I32)) -> I32 {
+  match p {
+    (0, 0) => one(0),
+    (a, b) => a + b,                                //~ E0002
+  }
+}
+
+pub fn a_tuple_pattern_after_a_block(p: (I32, I32)) -> I32 {
+  match p {
+    (0, 0) => { 1 },
+    (a, b) => a + b,                                //~ E0002
+  }
+}
+
+pub fn a_variant_pattern(o: Option[(I32, I32)], k: I32) -> I32 {
+  match o {
+    None => k,
+    Some((a, b)) => a + b,                          //~ E0002
+  }
+}
+
+pub fn a_comma_in_the_brackets_of_the_arm(p: (I32, I32), k: I32) -> I32 {
+  match p {
+    (0, 0) => k,
+    (a, b) => two(a, b),                            //~ E0002
+  }
+}
+
+pub fn a_comment_on_the_line_of_the_arm(p: (I32, I32), k: I32) -> I32 {
+  match p {
+    (0, 0) => k, // the body
+    (a, b) => a + b,                                //~ E0002
+  }
+}
+
+pub fn a_guard_after_the_pattern(p: (I32, I32), k: I32) -> I32 {
+  match p {
+    (0, 0) => k,
+    (a, b) if a > b => a,                           //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn in_a_call_of_arms(p: (I32, I32), k: I32) -> I32 {
+  one(match p {
+    (0, 0) => k,
+    (a, b) => a + b,                                //~ E0002
+  })
+}
+
+pub flow in_a_flow(p: (I32, I32) at block, x: F32 at sample) -> F32 at sample {
+  match p {
+    (0, 0) => x,
+    (a, b) => x * 2.0,                              //~ E0002
+  }
+}
+
+// The right forms: the `,` ends the arm, and the `(` of a call is next to its name.
+pub fn fine(n: I32, p: (I32, I32)) -> I32 {
+  let a = match n {
+    0 => one(1),
+    1 => two(1, 2),
+    _ => 0,
+  }
+  let b = match p {
+    (0, 0) => one(0),
+    (c, d) => c + d,
+  }
+  a + b
+}

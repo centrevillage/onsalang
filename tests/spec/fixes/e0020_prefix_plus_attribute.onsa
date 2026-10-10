@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§6.5", "§11.7", "§18.1"]
+// fixes = 1
+
+// E0020 for a prefix `+` in the argument of an attribute (spec §3.1, §11.7, S-405 (a)): the values of
+// `@param(min: …, max: …, default: …)` are expressions, and a prefix `+` is not part of the language in an
+// expression, an attribute argument or a pattern alike (e0020_prefix_plus.onsa). The candidate removes the
+// `+` and the space after it; the main position is the `+`. One error in each declaration unit. The right
+// forms, with a `-`, are at the end of the file.
+
+pub flow in_min(
+  x: F32 at sample,
+  @param(min: +0.0, max: 1.0, default: 0.5)         //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow in_max(
+  x: F32 at sample,
+  @param(min: 0.0, max: +1.0, default: 0.5)         //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow in_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: +0.5)         //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow with_a_space(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: + 0.5)        //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow on_the_next_line(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0,
+    default: +0.5)                                  //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow in_the_second_input(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+  @param(min: +0.0, max: 1.0, default: 0.5)         //~ E0020
+  depth: F32 at block,
+) -> F32 at sample {
+  x * level * depth
+}
+
+// The right forms: no sign, or a `-`.
+pub flow fine(
+  x: F32 at sample,
+  @param(min: -1.0, max: 1.0, default: 0.0)
+  offset: F32 at block,
+) -> F32 at sample {
+  x + offset
+}

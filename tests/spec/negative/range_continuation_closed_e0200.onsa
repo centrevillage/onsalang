@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§11.5", "§18.1"]
+
+// The closed range `..=` at the end of a line goes on, as `..<` does (§2.5, §7, S-335): the head is read,
+// so the only error is the E0200 of this version (the closed range in the head of a `for` or a `par` is
+// not lowered, S-257), reported at the start of the range, which is on the first line. A line that did
+// not go on would be an E0002 of the head. The same heads with `..<` are in
+// tests/spec/lex/continuation_range.onsa.
+//
+// W8-03 lowers `..=`. That work moves the functions to a case that runs them and deletes this file.
+
+pub fn for_head(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..=                                     //~ E0200
+    n {
+    t = t + i
+  }
+  t
+}
+
+pub fn for_head_with_a_comment(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..=                                     //~ E0200
+    // the last value of the range
+
+    n {
+    t = t + i
+  }
+  t
+}
+
+pub flow par_head(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..=                                     //~ E0200
+    3 {
+    x * i.round_f32()
+  }
+}

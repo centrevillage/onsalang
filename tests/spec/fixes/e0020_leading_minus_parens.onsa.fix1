@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 2
+
+// E0020: a line that starts with `-` or `^` in the pair of brackets of a call, an array or a tuple
+// (spec §2.5, S-370, S-216, R-160). A binary operator at the start of a line is E0020 in the
+// brackets as it is outside (e0020_leading_operator.onsa), and the candidate is the operator moved to the
+// end of the line before it. `-` and `^` also start an element (a negative number, a `^name`), so the line
+// has a second reading, an element after a missing `,` (`two(a` and `-b, 1)` is `two(a, -b, 1)`), and the
+// writer's reading and that one split: the candidates are both, in this order, the operator moved to the
+// end of the line before it (before that line's comment) and a `,` inserted right after the last token of
+// the line before it (before its comment). The main position is the `-` or `^`, so the marker is on its
+// line. (`- b` with a space is the rule of a space after a prefix operator, tests/spec/fixes/
+// e0020_leading_minus.onsa.) One error in each declaration unit.
+
+use std.array
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn three(x: I32, y: I32, z: I32) -> I32 {
+  x - y - z
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a -
+      b, 1)                                          //~ E0020
+}
+
+pub fn in_a_call_second_argument(a: I32, b: I32) -> I32 {
+  two(1, a -
+         b)                                          //~ E0020
+}
+
+pub fn in_a_call_third_argument(a: I32, b: I32) -> I32 {
+  three(1, 2, a -
+              b)                                     //~ E0020
+}
+
+pub fn in_a_nested_call(a: I32, b: I32) -> I32 {
+  two(two(a -
+          b, 1), 2)                                  //~ E0020
+}
+
+pub fn in_an_array(a: I32, b: I32) -> [I32; 2] {
+  [a -
+   b, 1]                                             //~ E0020
+}
+
+pub fn in_an_array_last(a: I32, b: I32) -> [I32; 2] {
+  [1, a -
+      b]                                             //~ E0020
+}
+
+pub fn in_a_tuple(a: I32, b: I32) -> (I32, I32) {
+  (a -
+   b, 1)                                             //~ E0020
+}
+
+pub fn in_a_tuple_last(a: I32, b: I32) -> (I32, I32) {
+  (1, a -
+      b)                                             //~ E0020
+}
+
+pub fn with_a_call_in_front(a: I32, b: I32) -> I32 {
+  two(two(a, 1) -
+      b, 2)                                          //~ E0020
+}
+
+// The `^` has the same two readings.
+pub fn caret_in_a_call(a: U32, b: U32) -> U32 {
+  two_u(a ^
+        b, 1)                                        //~ E0020
+}
+
+pub fn caret_in_an_array(a: U32, b: U32) -> [U32; 2] {
+  [a ^
+   b, 1]                                             //~ E0020
+}
+
+pub fn two_u(x: U32, y: U32) -> U32 {
+  x + y
+}
+
+// The comment of the line before: the moved operator and the inserted `,` go before it.
+pub fn comment_at_the_end_of_the_line(a: I32, b: I32) -> I32 {
+  two(a -  // the first operand
+      b, 1)                                          //~ E0020
+}
+
+pub fn comment_line_between(a: I32, b: I32) -> I32 {
+  two(a -
+      // the second operand
+      b, 1)                                          //~ E0020
+}
+
+pub fn blank_and_comment_lines_between(a: I32, b: I32) -> I32 {
+  two(a -  // the first operand
+
+      // the second operand
+
+      b, 1)                                          //~ E0020
+}
+
+pub fn in_a_closure_argument() -> [I32; 3] {
+  array.from_fn(fn(i) {
+    two(1 -
+        2, 3)                                        //~ E0020
+  })
+}
+
+// These are the right forms: the operator at the end of a line, and a `,` after the element.
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = two(a -
+    b, 1)
+  let d = two(a,
+    -b)
+  let e = [a -
+    b, 1]
+  let f = [a,
+    -b]
+  c + d + e[0] + f[1]
+}

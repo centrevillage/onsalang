@@ -1,0 +1,85 @@
+# The classes of the fix stage of the fuzzing that the spec puts outside the contract of the fix
+# candidates (spec §18.1, S-236; R-207). The gate item `fuzz` (tools/fuzz.py) takes a mutant that shows
+# a class listed here with the message listed with it as known for good. The input of an entry must
+# show them on every run, and nothing else: when it no longer does, the entry goes (the input stays as
+# a regression input). Only the classes of the fix stage (`fix|<code>|<title>|<code left>`) are listed;
+# a crash or a signal never is. The contract itself is checked on the cases (onsa_tests::fix_contract).
+#
+# Every field is required:
+#   class    the class the fuzzing prints
+#   left     the message of the diagnostic left after the candidate, written as the class writes the
+#            title (quoted text `…`, numbers `#`)
+#   input    the saved input that shows them, `tests/fuzz/<name>.onsa` (not listed in tests/pending.toml;
+#            one entry each)
+#   reasons  the S numbers of plan §2 that put it outside the contract (one or more)
+#   note     a short note
+
+[[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0020"
+left = "a `…` goes between the alternatives of a pattern, not before the first"
+input = "tests/fuzz/0562ac9f.onsa"
+reasons = ["S-386", "S-383"]
+note = "an arm without its `,` before a line that starts with `|`: the `,`, then the `|` before the first alternative (S-383), two steps as S-386 decided"
+
+[[allowed]]
+class = "fix|E0020|write one `…`|E0020"
+left = "a `…` goes between the alternatives of a pattern, not before the first"
+input = "tests/fuzz/1cf48968.onsa"
+reasons = ["S-389", "S-383"]
+note = "a `||` where a pattern starts: one `|`, then the `|` before the first alternative (S-383), two steps as S-389 decided"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected effect name, found `…`"
+input = "tests/fuzz/3516409a.onsa"
+reasons = ["S-384", "S-413"]
+note = "an input with two errors: the `{` of an effect row on the next line in brackets, and a second `{` where an effect name goes (the kind of `two(N` and `{ 1 })` of S-413)"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/10f0bfcf.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a blank before the `(` of a call, and the `(` never closed at the end of the file"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/8fc9fb69.onsa"
+reasons = ["S-384", "S-413"]
+note = "an input with two errors: the `{` of an effect row on the next line in brackets, and the body's `{` never closed at the end of the file"
+
+[[allowed]]
+class = "fix|E0020|write one `…`|E0020"
+left = "a line does not start with an operator that goes on with the line before"
+input = "tests/fuzz/33e26e15.onsa"
+reasons = ["S-389", "S-380"]
+note = "a `||` at the head of a line in a pattern: one `|`, then the `|` at the head of the line (S-380), two steps as S-389 decided"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected newline or `…`, found identifier"
+input = "tests/fuzz/67dcb9ef.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a blank before the `(` of a call, and a name right after the `)`"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected newline or `…`, found identifier"
+input = "tests/fuzz/d877b39a.onsa"
+reasons = ["S-384", "S-216"]
+note = "an input with two errors: an `else` on the line after its `}`, and two expressions on one line in its block"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected an expression, found `…`"
+input = "tests/fuzz/ba778556.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a blank before the `(` of a call, and no argument where one goes after it"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected field name, found integer literal"
+input = "tests/fuzz/7e0c855f.onsa"
+reasons = ["S-413"]
+note = "a `{` after a constant's name on the next line in brackets (`two(N` and `{ 1 })`): the E0003 first, and what is left of the literal is reported by the next check, as S-413 decided"

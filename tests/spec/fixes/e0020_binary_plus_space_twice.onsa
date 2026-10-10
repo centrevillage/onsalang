@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "58:14"
+// code = "E0020"
+// candidate = 1
+// leaves = ["58:18 E0020"]
+//
+// [[test.fix]]
+// at = "58:14"
+// code = "E0020"
+// candidate = 2
+// leaves = ["58:17 E0020"]
+//
+// [[test.fix]]
+// at = "63:14"
+// code = "E0020"
+// candidate = 1
+// leaves = ["63:18 E0020"]
+//
+// [[test.fix]]
+// at = "63:14"
+// code = "E0020"
+// candidate = 2
+// leaves = ["63:17 E0020"]
+//
+// [[test.fix]]
+// at = "68:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["68:17 E0020"]
+//
+
+// The `[[test.fix]]` entries in the header name what a candidate leaves in its unit, reported by the
+// next check (§18.1, S-236). The `at` and `leaves` positions are those of the spec (the main position).
+// The entries were commented out (`// # `) until W3-06/i made the check report the diagnostics
+// (W3-06/t3 wrote them).
+//
+// E0020 twice in one unit (spec §2.5, §3.1, S-405 (ii), S-236): `[1 +1 +1]` has two binary `+` with a space before
+// them and none after. A unit reports its first error only, so the check reports the first `+` and a
+// candidate fixes that one; the second is still there after it, and the next check reports it (the
+// entries in the header say what is left: `leaves`, the position in the fixed text). That is outside the
+// promise of S-236, which holds when the reported diagnostic is the only error of the unit. Each candidate
+// is then applied to the text that is left, as the next check would: the units `the_second_…` are the text that
+// candidate 1 (the spaces on both sides) or candidate 2 (the `,` and the removed `+`) of the first check
+// leaves, and their candidates leave nothing. So `[1 +1 +1]` is fixed in two rounds, to `[1 + 1 + 1]`, to
+// `[1 + 1, 1]`, to `[1, 1 + 1]` or to `[1, 1, 1]`, and `let d = a +b +c` is `a + b + c`. The main position
+// is the `+`, so the marker is on its line. One unit has one marker (P-01).
+
+pub fn three(x: I32, y: I32, z: I32) -> I32 {
+  x + y + z
+}
+
+pub fn two_in_an_array() -> U32 {
+  let v = [1 +1 +1]                                 //~ E0020
+  v.len()
+}
+
+pub fn two_in_a_tuple(a: I32, b: I32, c: I32) -> I32 {
+  let t = (a +b +c, 1)                              //~ E0020
+  t.0
+}
+
+pub fn two_in_a_let(a: I32, b: I32, c: I32) -> I32 {
+  let d = a +b +c                                   //~ E0020
+  d
+}
+
+pub fn the_second_after_the_spaces() -> U32 {
+  let v = [1 + 1 +1]                                //~ E0020
+  v.len()
+}
+
+pub fn the_second_in_a_tuple_after_the_spaces(a: I32, b: I32, c: I32) -> I32 {
+  let t = (a + b +c, 1)                             //~ E0020
+  t.0
+}
+
+pub fn the_second_in_a_let_after_the_spaces(a: I32, b: I32, c: I32) -> I32 {
+  let d = a + b +c                                  //~ E0020
+  d
+}
+
+pub fn the_second_after_the_comma() -> U32 {
+  let v = [1, 1 +1]                                 //~ E0020
+  v.len()
+}
+
+pub fn the_second_in_a_tuple_after_the_comma(a: I32, b: I32, c: I32) -> I32 {
+  let t = (a, b +c, 1)                              //~ E0020
+  t.0
+}
+
+// The right forms.
+pub fn fine(a: I32, b: I32, c: I32) -> I32 {
+  let d = a + b + c
+  let e = [1, 1, 1]
+  three(a, b, c) + d + e[0]
+}

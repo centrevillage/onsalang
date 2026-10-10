@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§4.4", "§7", "§15.1", "§18.1"]
+// fixes = 2
+
+// The forms of S-405, S-413, S-414, S-415 and S-419 in two modules of one package (spec §2.5, §3.1, §15.1, §18.1): each
+// module's errors are reported, and the candidates are applied in each file (tests/spec/fixes/pkg_space/ is the same for the
+// rules of S-123 and S-203). This module uses what util.onsa declares: the struct literal and the call of an imported type
+// and function with the `{` or the `(` on the next line, a prefix `+`, a binary `+` with a space before it and none after it (two
+// candidates), an `else` and the `if` that follows it, and an arm of a `match` whose body is called. util.onsa has the
+// `{` of the body of a struct and of a struct pattern on the next line, and a prefix `+`. One error in each
+// declaration unit (P-01).
+
+use util.{Pt, make, px, first, id}
+
+pub fn a_literal_of_an_imported_type(a: I32) -> I32 {
+  px(Pt { x: a, y: 2 }, 3)
+                                                    //~ E0003
+}
+
+pub fn a_binary_plus(a: I32) -> U32 {
+  let v = [a + 1]                                   //~ E0020
+  v.len()
+}
+
+pub fn a_prefix_plus(a: I32) -> I32 {
+  px(make(a, 2), 1)                                 //~ E0020
+}
+
+pub fn a_leading_plus_in_a_call(a: I32, b: I32) -> U32 {
+  let v = [a +
+           b, 1]                                    //~ E0020
+  v.len()
+}
+
+pub fn an_if_after_an_else(c: Bool, d: Bool) -> I32 {
+  if c { 1 } else if d { 2 } else { 3 }
+                                                    //~ E0003
+}
+
+pub fn a_called_body(n: I32) -> I32 {
+  match n {
+    0 => id(1),
+    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_pattern_of_an_imported_type(p: Pt) -> I32 {
+  match p {
+    Pt { x: a, y: _ } => a,
+                                                    //~ E0003
+  }
+}
+
+// The right forms.
+pub fn fine(a: I32, c: Bool, d: Bool) -> I32 {
+  let v = [a + 1]
+  let w = px(Pt { x: a, y: 2 }, 3)
+  let e = if c { 1 } else if d { 2 } else { 3 }
+  v[0] + w + e + first(make(1, 2)) + id(1)
+}

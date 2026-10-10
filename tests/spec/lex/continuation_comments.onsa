@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
+// decided in W3-11); the case is about what the parser accepts.
+
+// A continuation is decided by the tokens, and the lines that hold only a comment and the blank lines
+// between the two lines are skipped (§2.5, S-124): the line after the comment lines is the continued
+// line. This holds for each of the ways a line goes on: a binary operator, `=`, `->`, an attribute,
+// a leading `.` and a leading `uses`, at the top level, in a block and in a pair of brackets.
+
+const LIMIT: I32 =
+  // the limit of the table
+
+  // (a second comment line)
+  8
+
+type Gain =
+  // the sample type
+
+  F32
+
+pub fn scale(x: Gain) ->
+  // the output type
+  Gain {
+  x * 2.0
+}
+
+pub fn counted(n: U32) -> U32
+  // the effect line starts after this comment
+  uses {Alloc} {
+  n + 1
+}
+
+// An attribute goes on over the comment lines and the blank lines: the item is the `fn` below.
+@fp(relaxed)
+// the attribute is for the function
+
+pub fn mix(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+impl Pt {
+  pub fn norm1(self) -> I32 {
+    self.x + self.y
+  }
+}
+
+pub fn in_a_block(a: I32, b: I32, p: Pt) -> I32 {
+  let c = a +
+    // a comment line
+
+    b
+  let d = a * // a comment at the end of the line
+    // a comment line
+    b
+  let e = p
+    // a comment line
+    .x
+  let f = p
+
+    .norm1()
+  c + d + e + f
+}
+
+pub fn in_brackets(a: I32, b: I32) -> I32 {
+  two(a +
+    // a comment line
+    1,
+    b *
+
+    2)
+}
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+test "the lines between are skipped" {
+  assert LIMIT == 8
+  assert scale(1.5) == 3.0
+  assert counted(1) == 2
+  assert mix(1.0, 2.0) == 3.0
+  let p = Pt { x: 3, y: 4 }
+  assert in_a_block(2, 3, p) == 5 + 6 + 3 + 7
+  assert in_brackets(2, 3) == 3 - 6
+}

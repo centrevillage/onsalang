@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§8.1", "§18.1"]
+
+// E0002 for an effect row whose `{` is on the line after the `uses`, outside every pair of brackets (spec §2.5, §8.1,
+// S-413). Inside the arguments of a function type, a tuple type and the body of a struct the same form is the E0003
+// of tests/spec/fixes/e0003_uses_brace.onsa (a line break is a space there, and the row could be read); in a
+// declaration head and a `let` the line ends at the `uses` (a line ends the statement or the head, §2.5), the
+// `{` that the row needs is missing, and the error is the E0002 of the form as it stood before S-413,
+// kept, without a candidate. The marker is on the line of the `uses`. One error in each declaration unit (P-01).
+
+pub fn in_a_function_head() -> I32 uses                  //~ E0002
+  {Alloc} {
+  1
+}
+
+pub fn after_a_generic_head[T: Num](x: T) -> T uses      //~ E0002
+  {Alloc} {
+  x
+}
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn bump(self) -> I32 uses                          //~ E0002
+    {Alloc} {
+    self.n
+  }
+}
+
+pub fn in_a_return_type() -> fn(I32) -> I32 uses         //~ E0002
+  {Alloc} {
+  let f = fn(x: I32) -> I32 { x }
+  f
+}
+
+pub fn in_a_let_annotation(f: fn(I32) -> I32) -> I32 {
+  let g: fn(I32) -> I32 uses                             //~ E0002
+    {Alloc} = f
+  g.(1)
+}
+
+// The right forms: the `{` on the line of the `uses`.
+pub fn fine() -> I32 uses {Alloc} {
+  1
+}
+
+pub fn fine_with_a_row_on_lines(x: I32) -> I32 uses {
+  Alloc
+} {
+  x
+}

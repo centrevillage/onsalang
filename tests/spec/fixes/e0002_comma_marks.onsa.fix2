@@ -43,11 +43,13 @@ pub flow lp(x: F32 at sample) -> F32 at sample {
 }
 
 pub fn a_bang_after_a_line_break(inout b: Pt) -> I32 {
-  two(b.bump!(1), 2)                                //~ E0002
+  two(b.bump!(1), 2)
+    //~ E0002
 }
 
 pub fn a_bang_in_an_array(inout b: Pt) -> I32 {
-  let v = [b.bump!(1), 2]                           //~ E0002
+  let v = [b.bump!(1), 2]
+    //~ E0002
   v[0]
 }
 

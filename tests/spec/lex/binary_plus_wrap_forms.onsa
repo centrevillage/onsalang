@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1"]
+// canonical = false
+
+// The wrapping and saturating operators `+%`, `+|`, `-%` and `-|` are not the `+` and `-` of the rule of the space before
+// and after (spec §2.5, §3.1, S-405 (ii), S-398): they are operators of the table of §3.1 of their own, so `[a +%b]` is
+// not the asymmetric `+` (E0020 of tests/spec/fixes/e0020_binary_plus_space.onsa) and the syntax stage reports nothing. `onsa fmt`
+// writes the spaces on both sides, so the case says `canonical = false`.
+
+pub fn wrapping(a: I32, b: I32) -> I32 {
+  let v = [a +%b, a +%b, a +% b, a+%b]
+  v[0] + v[1] + v[2] + v[3]
+}
+
+pub fn saturating(a: I32, b: I32) -> I32 {
+  let v = [a +|b, a +|b, a +| b, a+|b]
+  v[0] + v[1] + v[2] + v[3]
+}
+
+pub fn wrapping_minus(a: I32, b: I32) -> I32 {
+  let v = [a -%b, a -% b, a-%b]
+  v[0] + v[1] + v[2]
+}
+
+pub fn saturating_minus(a: I32, b: I32) -> I32 {
+  let v = [a -|b, a -| b, a-|b]
+  v[0] + v[1] + v[2]
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a +%b, a +|b)
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}

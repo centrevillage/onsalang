@@ -2,11 +2,12 @@
 // [test]
 // spec = ["§2.5"]
 
-// E0003: `else` must follow `}` on the same line (§2.5). The span is the line break
-// after `}`, so the marker sits on the `if` line; the fix joins the two lines.
+// E0003: `else` must follow `}` on the same line (§2.5, S-216). The main position is the `else`
+// itself, so the marker sits on the `else` line; the fix joins the two lines (the more cases of the
+// rule, in a call, an arm and a closure, are in tests/spec/fixes/e0003_else_line.onsa).
 pub fn choose(c: Bool) -> I32 {
-  if c { 1 }                    //~ E0003
-  else { 2 }
+  if c { 1 }
+  else { 2 }                    //~ E0003
 }
 
 pub fn fine(c: Bool) -> I32 {

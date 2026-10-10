@@ -1,0 +1,185 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§11.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "168:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["169:3 E0003"]
+
+// The `[[test.fix]]` entries in the header name what a candidate leaves in its unit: a second misplaced
+// token, reported by the next check (§18.1, S-236). The `at` and `leaves` positions are those of the spec
+// (the misplaced token). The entries were commented out (`// # `) until W3-06/i made the check report
+// the diagnostics.
+//
+// E0020: a range symbol at the start of a line, in the head of a `for` or a `par` (spec §2.5, §7, S-335,
+// S-216, R-160). A range symbol is a binary operator for the line rule: it goes at the end of the line, and
+// a line that starts with it is not the continuation of the line before it. The writer's reading is the
+// head going on, so the candidate moves the symbol to the end of the line before it (before that line's
+// comment), as for any binary operator (e0020_leading_operator.onsa). The other languages' `..` and `...`
+// start a line the same way, and they are one error (the symbol is replaced and moved in one candidate)
+// with the two readings of §7 as candidates, `..<` first and then `..=`. The main position is the
+// symbol, so the marker is on its line. The closed range `..=` is not lowered in this version (E0200),
+// which is a later stage and the case does not list. A symbol that would start a range outside the head
+// is not this rule: tests/spec/negative/range_leading_outside_header.onsa.
+
+pub fn half_open(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {                                            //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn closed(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..=
+    n {                                            //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn two_dots(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {                                             //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn three_dots(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {                                            //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn named_ends(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo ..<
+    hi {                                           //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn ends_with_operators(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1 ..<
+    hi - 1 {                                       //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn symbol_with_a_space(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {                                           //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn nested(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    for j in 0 ..<
+      i {                                          //~ E0020
+      t = t + j
+    }
+  }
+  t
+}
+
+pub fn in_a_branch(n: U32, c: Bool) -> U32 {
+  var t: U32 = 0
+  if c {
+    for i in 0 ..<
+      n {                                          //~ E0020
+      t = t + i
+    }
+  }
+  t
+}
+
+pub flow par_half_open(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..<
+    4 {                                            //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow par_closed(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..=
+    3 {                                            //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow par_two_dots(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..<
+    4 {                                             //~ E0020
+    x * i.round_f32()
+  }
+}
+
+// The comments of the line before it, and the lines between.
+pub fn comment_at_the_end_of_the_line(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<  // the start of the range
+    n {                                            //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn comment_line_between(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    // the end of the range
+    n {                                            //~ E0020
+    t = t + i
+  }
+  t
+}
+
+pub fn two_dots_with_a_comment(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<  // the start of the range
+    n {                                             //~ E0020
+    t = t + i
+  }
+  t
+}
+
+// The `{` of the head is also misplaced: the first error is the range symbol, the candidate fixes
+// it, and the `{` is reported by the next check (the `[[test.fix]]` above).
+pub fn range_and_brace(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n                                              //~ E0020
+  {
+    t = t + i
+  }
+  t
+}
+
+pub fn fine(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  for i in 0..<
+    n {
+    t = t + i
+  }
+  t
+}

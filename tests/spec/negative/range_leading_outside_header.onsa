@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+
+// E0002 for a range symbol at the start of a line when the line before it is a complete statement
+// (spec §2.5, §7, S-335). In the head of a `for` or a `par` the symbol is the E0020 of
+// tests/spec/fixes/e0020_leading_range.onsa, because the head expects a `{` and its candidate (the symbol
+// at the end of the line before it) gives a head. Here moving the symbol would make a range outside
+// the head, which is an E0002 whatever its spelling is (§7, tests/spec/negative/range_outside_header.onsa),
+// so there is no candidate and the general syntax error stands. The marker is on the line of the
+// symbol, the first token that cannot continue the unit. One error in each declaration unit.
+
+pub fn after_a_let(n: U32) -> U32 {
+  let r = 0
+  ..<n                                              //~ E0002
+  n
+}
+
+pub fn after_a_let_closed(n: U32) -> U32 {
+  let r = 0
+  ..=n                                              //~ E0002
+  n
+}
+
+pub fn after_a_let_two_dots(n: U32) -> U32 {
+  let r = 0
+  ..n                                               //~ E0002
+  n
+}
+
+pub fn after_a_let_three_dots(n: U32) -> U32 {
+  let r = 0
+  ...n                                              //~ E0002
+  n
+}
+
+pub fn after_an_assignment(n: U32) -> U32 {
+  var t: U32 = 0
+  t = 1
+  ..<n                                              //~ E0002
+  t
+}
+
+pub fn after_a_call(n: U32) -> U32 {
+  consume(1)
+  ..<n                                              //~ E0002
+  n
+}
+
+pub fn consume(x: U32) -> U32 {
+  x
+}
+
+pub fn after_a_block(n: U32) -> U32 {
+  if n > 0 {
+    return 1
+  }
+  ..<n                                              //~ E0002
+  0
+}
+
+pub fn first_line_of_a_body(n: U32) -> U32 {
+  ..<n                                              //~ E0002
+  n
+}

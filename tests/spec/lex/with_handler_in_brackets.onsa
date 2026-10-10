@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§8.3"]
+// canonical = false
+
+// The `with` of a `handle` and its handler (spec §2.5, S-414, S-416): the `with` stands on the line of the `}` before it (E0003
+// of tests/spec/fixes/e0003_with_line.onsa), but the line break between `with` and the name of its handler is not in that rule
+// (S-414: it is the same kind as the one between `if` and its condition): the handler has no rule of where it stands,
+// and in a pair of brackets a line break is a space there, so the syntax stage reports nothing. (Outside the brackets the
+// `with` ends the line: tests/spec/negative/s416_keyword_operand_outside_brackets.onsa.) This version has no handler
+// declaration (E0200, tests/spec/negative/unsupported.onsa), so the case reads the syntax only: `mode = "parse"`.
+// `onsa fmt` joins these lines (docs/onsa-tools.md §3.2): `canonical = false`.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn handler_on_the_next_line(x: I32) -> I32 {
+  two(handle { x } with
+    quiet, 1)
+}
+
+pub fn handler_with_arguments(x: I32) -> I32 {
+  two(handle { x } with
+    arena(inout x), 1)
+}
+
+pub fn in_an_array(x: I32) -> U32 {
+  let v = [handle { x } with
+    quiet, 2]
+  v.len()
+}

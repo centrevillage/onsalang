@@ -142,6 +142,13 @@ def entry(kind, target, reasons=("S-45",), until="W3-07", note="n"):
     return f'[[pending]]\nkind = "{kind}"\ntarget = {t}\nreasons = [{rs}]\nuntil = "{until}"\nnote = "{note}"\n\n'
 
 
+def allowed(cls, inp, reasons=("S-45",), note="n", left="m"):
+    """An entry of `tests/fuzz/allowed.toml` (R-207)."""
+    rs = ", ".join(f'"{r}"' for r in reasons)
+    return (f"[[allowed]]\nclass = {spec_blocks.toml_string(cls)}\nleft = {spec_blocks.toml_string(left)}\n"
+            f"input = {spec_blocks.toml_string(inp)}\nreasons = [{rs}]\nnote = \"{note}\"\n\n")
+
+
 def quiet(fn, *args, **kw):
     old = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
@@ -1905,6 +1912,67 @@ class Fuzz(TempRepo):
         self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/f.onsa"))
         code, text = self.go(per_seed=fuzz.FIX_EVERY)
         self.assertEqual(code, 0, text)
+
+    BAD = "fix|E0010|parenthesize the `…` of #|E0010"
+
+    def test_allowed_classes(self):
+        # R-207: a class of the fix stage that the spec puts outside the contract is known through
+        # tests/fuzz/allowed.toml, as long as its input shows it
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE")
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa"))
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 0, text)
+        self.assertIn("(0 listed, 1 allowed)", text)
+        # the input no longer shows the class: the entry goes
+        self.repo.write("tests/fuzz/f.onsa", "ok")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn(f"tests/fuzz/f.onsa: the class `{self.BAD}` with `m` no longer shows; remove its entry", text)
+        # the class with another message left is not the entry's: a new class, and the input
+        # does not show the entry's
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE")
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa", left="another"))
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 1, text)
+        self.assertIn(f"a new class of a broken fix candidate: fix-same-place: {self.BAD}", text)
+        self.assertIn(f"tests/fuzz/f.onsa: shows `{self.BAD}` with `m`, which is not the entry's", text)
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa"))
+        # the input shows another class too
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE X")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn("tests/fuzz/f.onsa: shows `internal|", text)
+
+    def test_allowed_entries_are_checked(self):
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE")
+        good = allowed(self.BAD, "tests/fuzz/f.onsa")
+        for toml, want in (
+            (good.replace('note = "n"', 'note = "n"\nuntil = "W3-06"'), "unknown field `until`"),
+            (good.replace('note = "n"\n', ""), "missing field `note`"),
+            (allowed("internal|crates/a.rs|boom", "tests/fuzz/f.onsa"), "a crash is never allowed"),
+            (allowed(self.BAD, "tests/fuzz/none.onsa"), "the input `tests/fuzz/none.onsa` does not exist"),
+            (allowed(self.BAD, "tests/spec/ops/groups.onsa"), "must be a saved input"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("R-1",)), "one or more S numbers"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-99999",)), "the reason `S-99999` is not in plan §2"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", note=""), "`note` must be a non-empty string"),
+            (good + good, f"the class `{self.BAD}` with `m` is listed twice"),
+            (good + allowed(self.BAD, "tests/fuzz/f.onsa", left="other"), "is the input of another entry"),
+            (good.replace('left = "m"\n', ""), "missing field `left`"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", left="line 3"), "`left` must be the message"),
+            ("[x]\n" + good, "unknown top-level key `x`"),
+        ):
+            with self.subTest(want=want):
+                self.repo.write("tests/fuzz/allowed.toml", toml)
+                code, text = self.go()
+                self.assertEqual(code, 1, text)
+                self.assertIn(want, text)
+        # an input listed in tests/pending.toml too
+        self.repo.write("tests/fuzz/allowed.toml", good)
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/f.onsa"))
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn("is listed in tests/pending.toml too", text)
 
     def test_fix_stage_failure_fails(self):
         # the tool failing is never a pass

@@ -230,7 +230,8 @@ pub fn a_tuple_after_a_tuple_over_two_lines() -> I32 {
   v[0].0
 }
 
-pub fn type_arguments_after_a_line_break(o: Option[I32]) -> I32 {  //~ E0002
+pub fn type_arguments_after_a_line_break(o: Option[I32]) -> I32 {
+    //~ E0002
   0
 }
 

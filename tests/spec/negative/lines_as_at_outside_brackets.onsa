@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.3", "§11.3", "§18.1"]
+
+// E0002 for a line break before or after `as` and `at` outside the pairs of brackets (spec §2.5, S-374).
+// `as` and `at` have no rule for where they stand on a line, and a line ends at its end (the list of
+// §2.5 that go on has the binary operators, the range symbols, `=`, `->`, an attribute, a leading `.`
+// and `uses`, and not these two), so outside the brackets the break ends the statement: an `as` at
+// the start of a line starts a statement that nothing can start, and an `as` at the end of a line has no
+// type after it. There is no candidate (the writer's reading is the one with the break as a blank, which
+// holds in the brackets, tests/spec/lex/parens_as_at.onsa, and is not a rule outside them). The marker is
+// on the line of the first token that cannot continue the statement. One error in each declaration unit.
+
+pub fn as_at_the_start_of_a_line(a: I32) -> I64 {
+  let y = a
+  as I64                                            //~ E0002
+  y
+}
+
+pub fn as_at_the_end_of_a_line(a: I32) -> I64 {
+  let y = a as                                      //~ E0002
+    I64
+  y
+}
+
+pub fn as_at_the_start_of_a_line_in_a_tail(a: I32) -> I64 {
+  a
+  as I64                                            //~ E0002
+}
+
+pub fn as_at_the_end_of_a_line_in_a_tail(a: I32) -> I64 {
+  a as                                              //~ E0002
+    I64
+}
+
+pub fn as_after_a_call(a: I32) -> I64 {
+  let y = id(a)
+  as I64                                            //~ E0002
+  y
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+pub flow at_at_the_end_of_a_line(x: F32 at block) -> F32 at sample {
+  let a = x at                                      //~ E0002
+    sample
+  a
+}
+
+pub flow at_after_a_call(x: F32 at block) -> F32 at sample {
+  let a = id_f(x)
+  at sample                                         //~ E0002
+  a
+}
+
+pub rt fn id_f(x: F32) -> F32 {
+  x
+}
+
+pub fn fine(a: I32) -> I64 {
+  let y = (a
+    as I64)
+  let z = a as I64
+  y + z
+}

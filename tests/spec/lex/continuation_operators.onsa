@@ -1,0 +1,164 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§3.1", "§7"]
+
+// A line that ends with a binary operator goes on (§2.5). The operator is at the end of the line, never at
+// the start of the next one (that is E0020, tests/spec/fixes/e0020_leading_operator.onsa). The rule is
+// the same in a block, in the pairs of brackets and in an arm, where a line break is a blank (S-370), and
+// in the head of an `if` and a `while`, whose `{` stays on the last line of the head (S-202; the head of
+// a `match` is in continuation_match_heads.onsa). The values are checked by the `test` at the end.
+
+use std.array
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn every(a: I32, b: I32) -> I32 {
+  let s = a +
+    b
+  let d = a -
+    b
+  let p = a *
+    b
+  let q = a /
+    b
+  let r = a %
+    b
+  s + d + p + q + r
+}
+
+pub fn compares(a: I32, b: I32) -> Bool {
+  let eq = a ==
+    b
+  let ne = a !=
+    b
+  let lt = a <
+    b
+  let le = a <=
+    b
+  let gt = a >
+    b
+  let ge = a >=
+    b
+  (eq && ne) || (lt && le) || (gt && ge)
+}
+
+pub fn logic(a: Bool, b: Bool) -> Bool {
+  let x = a &&
+    b
+  let y = a ||
+    b
+  x || y
+}
+
+pub fn bits(a: U32, b: U32) -> U32 {
+  let x = a &
+    b
+  let y = a |
+    b
+  let z = a ^
+    b
+  let s = a <<
+    1
+  let t = a >>
+    1
+  x + y + z + s + t
+}
+
+// Inside the brackets of a call, an array, a tuple, a struct literal and an index.
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn in_brackets(a: I32, b: I32, k: U32, xs: [I32; 4]) -> I32 {
+  let c = two(a +
+    1, b *
+    2)
+  let arr = [a +
+    1, b -
+    1]
+  let (u, v) = (a *
+    2, b +
+    3)
+  let p = Pt { x: a +
+    1, y: b *
+    2 }
+  c + arr[0] + u + v + p.x + p.y + xs[k -
+    1]
+}
+
+// In the arms of a `match`, whose list is a pair of brackets of its own. (The arms with literal
+// patterns are in continuation_match_heads.onsa; the interpreter of this version runs the plain switch
+// on the variants of one enum only.)
+pub enum Op {
+  Add,
+  Mul,
+  Sub,
+}
+
+pub fn in_arms(k: Op, a: I32, b: I32) -> I32 {
+  match k {
+    Op.Add => a +
+      b,
+    Op.Mul => a *
+      b,
+    Op.Sub => a -
+      b,
+  }
+}
+
+// In the body of a closure, and in a nested pair of brackets.
+pub fn in_closure() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    i *
+      2 +
+      1
+  })
+}
+
+pub fn nested(a: I32, b: I32) -> I32 {
+  two(two(a +
+    1, b *
+    2), two(b -
+    1, a))
+}
+
+// The heads: the operator ends the line, and the `{` is on the last line of the head.
+pub fn heads(a: Bool, b: Bool, n: I32) -> I32 {
+  var t = 0
+  if a &&
+    b {
+    t = t + 1
+  }
+  while t < n &&
+    a {
+    t = t + 1
+  }
+  if t >
+    100 {
+    t = 0
+  } else if t ==
+    n {
+    t = t + 1000
+  }
+  t
+}
+
+test "a line that ends with a binary operator goes on" {
+  assert every(7, 2) == 9 + 5 + 14 + 3 + 1
+  assert compares(1, 2)
+  assert logic(true, false)
+  assert bits(6, 3) == (6 & 3) + (6 | 3) + (6 ^ 3) + 12 + 3
+  assert in_brackets(3, 4, 3, [10, 20, 30, 40]) == two(4, 8) + 4 + 6 + 7 + 4 + 8 + 30
+  assert in_arms(Op.Add, 5, 3) == 8
+  assert in_arms(Op.Mul, 5, 3) == 15
+  assert in_arms(Op.Sub, 5, 3) == 2
+  let t = in_closure()
+  assert t[0] == 1
+  assert t[2] == 5
+  assert nested(3, 2) == two(two(4, 4), two(1, 3))
+  assert heads(true, true, 5) == 1005
+}

@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// E0020: a `->` or a `=` at the start of a line (spec §2.5, S-374, S-47, S-216, R-160). The continuing `->`
+// and `=` go at the end of the line, as the binary operators do (a line that ends with them goes on:
+// tests/spec/lex/continuation_top_level.onsa), and a line that starts with one is an error, in the
+// brackets and outside them alike. The candidate moves the symbol to the end of the line before it (before
+// that line's comment), where the head or the binding then goes on over the break. The main position
+// is the symbol, so the marker is on its line. (`as` and `at` have no such rule inside brackets:
+// tests/spec/lex/parens_as_at.onsa; outside the brackets they are E0002, tests/spec/negative/
+// lines_as_at_outside_brackets.onsa.) One error in each declaration unit.
+
+pub fn function_head(a: I32) ->
+  I32 {                                            //~ E0020
+  a
+}
+
+pub flow flow_head(x: F32 at sample) ->
+  F32 at sample {                                  //~ E0020
+  x
+}
+
+pub fn generic_head[T: PartialOrd](x: T, lo: T) ->
+  T {                                              //~ E0020
+  if x < lo { lo } else { x }
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+impl Pt {
+  pub fn norm1(self) ->
+    I32 {                                          //~ E0020
+    self.x + self.y
+  }
+}
+
+pub fn function_type_in_the_head(f: fn(I32) ->
+                                 I32, x: I32) -> I32 {     //~ E0020
+  x
+}
+
+type Op = fn(I32) ->
+  I32                                              //~ E0020
+
+pub fn local_function_type() -> I32 {
+  let h: fn(I32) ->
+    I32 = fn(x) { x }                              //~ E0020
+  1
+}
+
+pub fn return_type_in_a_closure(n: U32) -> I32 {
+  let h = fn(x: I32) ->
+    I32 { x }                                      //~ E0020
+  1
+}
+
+pub fn the_arrow_and_a_comment(a: I32) ->  // the head
+  I32 {                                            //~ E0020
+  a
+}
+
+pub fn the_arrow_after_comment_lines(a: I32) ->
+  // the return type
+  I32 {                                            //~ E0020
+  a
+}
+
+// The `=` of a binding and of an assignment.
+pub fn let_with_a_type() -> I32 {
+  let c: I32 =
+  5                                                 //~ E0020
+  c
+}
+
+pub fn let_without_a_type() -> I32 {
+  let c =
+  5                                                 //~ E0020
+  c
+}
+
+pub fn var_with_a_type() -> I32 {
+  var t: I32 =
+  0                                                 //~ E0020
+  t
+}
+
+pub fn assignment() -> I32 {
+  var t: I32 = 0
+  t =
+  5                                                 //~ E0020
+  t
+}
+
+pub fn assignment_to_a_field(p: Pt) -> I32 {
+  var q = p
+  q.x =
+  5                                                 //~ E0020
+  q.x
+}
+
+pub fn the_equals_and_a_comment() -> I32 {
+  let c: I32 =  // the type
+  5                                                 //~ E0020
+  c
+}
+
+pub fn the_equals_after_comment_lines() -> I32 {
+  let c: I32 =
+  // the value
+  5                                                 //~ E0020
+  c
+}
+
+const LIMIT: U32 =
+  8                                                 //~ E0020
+
+type Gain =
+  F32                                               //~ E0020
+
+pub fn fine(a: I32) -> I32 {
+  let c: I32 =
+    5
+  a + c
+}
+
+pub fn fine_head(a: I32) ->
+  I32 {
+  a
+}

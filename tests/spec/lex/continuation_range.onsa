@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§11.5"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
+// decided in W3-11); the case is about what the parser accepts.
+
+// A range symbol is a binary operator for the line rule (§2.5, §7, S-335): a line that ends with `..<`
+// goes on, and the `{` of the head is on the last line of the head (S-202). The head of a `for` and the
+// head of a `par` are the only places where a range can stand; a range symbol is never at the start
+// of a line (that is E0020, tests/spec/fixes/e0020_leading_range.onsa). The closed range `..=` goes on
+// in the same way; its `for` and `par` heads are not lowered in this version (E0200), so those are in
+// tests/spec/negative/range_continuation_closed_e0200.onsa.
+
+pub fn sum_to(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<
+    n {
+    t = t + i
+  }
+  t
+}
+
+pub fn sum_between(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo +
+    1..<
+    hi -
+    1 {
+    t = t + i
+  }
+  t
+}
+
+pub fn nested_loops(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<
+    n {
+    for j in 0..<
+      i {
+      t = t + j
+    }
+  }
+  t
+}
+
+pub fn comment_between(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<
+    // the end of the range
+
+    n {
+    t = t + 1
+  }
+  t
+}
+
+pub fn in_a_branch(n: U32, c: Bool) -> U32 {
+  var t: U32 = 0
+  if c {
+    for i in 0..<
+      n {
+      t = t + 1
+    }
+  } else {
+    t = 100
+  }
+  t
+}
+
+pub flow copies(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<
+    4 {
+    x * i.round_f32()
+  }
+}
+
+test "a range symbol at the end of a line goes on" {
+  assert sum_to(4) == 6
+  assert sum_between(0, 5) == 1 + 2 + 3
+  assert nested_loops(4) == 0 + 1 + 3
+  assert comment_between(3) == 3
+  assert in_a_branch(3, true) == 3
+  assert in_a_branch(3, false) == 100
+}

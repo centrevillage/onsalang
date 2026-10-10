@@ -359,7 +359,12 @@ fn block_comments() {
     // Code after it: the words go above the line, the code stays (S-247).
     e0020(&body("  1 /* one */ + 2"), &body("  // one\n  1 + 2"));
     e0020(&body("  1 /* one */+ 2"), &body("  // one\n  1 + 2"));
-    e0020(&body("  1/* one */+2"), &body("  // one\n  1 +2"));
+    // Between tokens it touches, no blank goes in where they stay apart
+    // without one: `1 +2` would be the asymmetric `+` (S-405).
+    e0020(&body("  1/* one */+2"), &body("  // one\n  1+2"));
+    e0020(&body("  1 /* one */-2"), &body("  // one\n  1-2"));
+    e0020(&body("  1 +/* one */2"), &body("  // one\n  1 + 2"));
+    e0020(&body("  let x = 1/* one */as I64"), &body("  // one\n  let x = 1 as I64"));
     e0020("/* c */ pub fn f() { }\n", "// c\npub fn f() { }\n");
     // Over lines.
     e0020(&body("  /* a\n     b */"), &body("  // a\n  // b"));

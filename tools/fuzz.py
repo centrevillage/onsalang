@@ -43,6 +43,23 @@ The gate item `fuzz` (this script without options) does three things:
    candidates, not the contract (the test runner checks the contract on the
    cases, `onsa_tests::fix_contract`).
 
+**The classes the spec puts outside the contract** (R-207): `tests/fuzz/allowed.toml`
+lists, as `[[allowed]]` entries, classes of the fix stage that the spec
+decided are no broken candidate, with an input that shows each: a fix that
+the spec makes in two steps (S-386: the `,`, then the `|` before the first
+alternative, S-383), and an input with two errors (S-384, S-413), which the
+mutants cut short at the end of a file often are. Every field is required:
+`class` (`fix|<code>|<title>|<code left>`; a crash or a signal is never
+listed), `input` (a saved input `tests/fuzz/<name>.onsa`, not listed in
+`tests/pending.toml`; one entry each), `left` (the message of the
+diagnostic left after the candidate, as the class writes the title: quoted
+text `…`, numbers `#`), `reasons` (S numbers of plan §2) and `note`. A
+mutant is known when it shows the class with that message (the class alone
+is too coarse a net); the input must show them on every run (when it no
+longer does, the entry goes), and nothing else. The net gets
+coarser for such a class: the contract on the cases (`onsa_tests::fix_contract`)
+is what holds it.
+
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
 
@@ -80,6 +97,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -104,6 +122,10 @@ FIX_EVERY = 4
 # The paths given to one run of `onsa_cases --fix-same-place`.
 FIX_BATCH = 400
 FIX_COMMAND = "fix-same-place"
+# The classes of the fix stage that the spec puts outside the contract (R-207).
+ALLOWED = FUZZ_DIR / "allowed.toml"
+ALLOWED_FIELDS = ("class", "left", "input", "reasons", "note")
+S_NUMBER = re.compile(r"S-\d+")
 TIME_BUDGET = 600  # seconds for the whole run
 # Nesting depths of the deep mutants (S-183): far above the nesting limit
 # (256, spec §2.5) and above what the stack of a command would hold without it.
@@ -125,6 +147,10 @@ class Crash:
     signature: str  # the class: the same bug gives the same signature
     command: str
     detail: str  # what the command printed, shortened
+    # For a class of the fix stage, the message of the diagnostic left after
+    # the candidate, as the title is in the class (`normalized`): what an entry
+    # of `tests/fuzz/allowed.toml` names besides the class (R-207).
+    left: str = ""
 
 
 def message_head(message):
@@ -205,13 +231,17 @@ class Runner:
             shutil.rmtree(d, ignore_errors=True)
 
 
+def normalized(text):
+    """A title or a message as a class names it: its quoted text `…`, its
+    numbers `#`, its blanks one space, the first 80 characters."""
+    text = re.sub(r"`[^`]*`", "`…`", text)
+    return re.sub(r"\d+", "#", re.sub(r"\s+", " ", text)).strip()[:80]
+
+
 def fix_signature(v):
     """The class of a violation of the near "same place" (S-236): the code,
-    the title of the candidate (its quoted text `…`, its numbers `#`) and
-    the code left after it."""
-    title = re.sub(r"`[^`]*`", "`…`", v["title"])
-    title = re.sub(r"\d+", "#", re.sub(r"\s+", " ", title)).strip()[:80]
-    return f"fix|{v['code']}|{title}|{v['left']}"
+    the title of the candidate (`normalized`) and the code left after it."""
+    return f"fix|{v['code']}|{normalized(v['title'])}|{v['left']}"
 
 
 class FixRunner:
@@ -269,7 +299,7 @@ def violation_crash(v):
     head = (v.get("message") or "").splitlines()
     detail = (f"{v['code']} at {v['line']}:{v['col']}, candidate `{v['title']}`, leaves {v['left']}{at}: "
               f"{head[0] if head else ''}")
-    return Crash(fix_signature(v), FIX_COMMAND, detail)
+    return Crash(fix_signature(v), FIX_COMMAND, detail, normalized(head[0]) if head else "")
 
 
 def decode(data):
@@ -366,14 +396,16 @@ def mutants(seed_files, per_seed, version=VERSION, deep=False):
     return out
 
 
-def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS):
+def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS, left=None):
     """A smaller input with the same crash class: lines, then characters
     (ddmin), within `budget` runs and `seconds` (a hang takes `TIMEOUT` a run).
-    `runner` is a `Runner`, or a `FixRunner` for a class of the fix stage."""
+    `runner` is a `Runner`, or a `FixRunner` for a class of the fix stage,
+    whose message left (`left`, R-207) stays too."""
     if isinstance(runner, FixRunner):
         def same(candidate):
             try:
-                return any(c.signature == signature for c in runner.violations([candidate], TIMEOUT)[0])
+                return any(c.signature == signature and (left is None or c.left == left)
+                           for c in runner.violations([candidate], TIMEOUT)[0])
             except RuntimeError:
                 return False
     else:
@@ -419,6 +451,72 @@ def short_name(text):
     return hashlib.sha256(encode(text)).hexdigest()[:8]
 
 
+def load_allowed(root, listed):
+    """The entries of `tests/fuzz/allowed.toml` ({(class, left): input}) and
+    the errors of the file (R-207). `listed`: the inputs of `tests/pending.toml`."""
+    root = Path(root)
+    path = root / ALLOWED
+    if not path.exists():
+        return {}, []
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        return {}, [f"{ALLOWED.as_posix()}: {e}"]
+    errors = [f"{ALLOWED.as_posix()}: unknown top-level key `{k}` (only [[allowed]])" for k in data if k != "allowed"]
+    raw = data.get("allowed", [])
+    if not isinstance(raw, list):
+        return {}, errors + [f"{ALLOWED.as_posix()}: `allowed` must be an array of tables ([[allowed]])"]
+    try:
+        numbers = pending.load_docs(root).reasons
+    except pending.DocsError as e:
+        numbers = None
+        errors.append(f"{ALLOWED.as_posix()}: the S numbers cannot be read: {e}")
+    out = {}
+    inputs = set()
+    for i, item in enumerate(raw):
+        where = f"{ALLOWED.as_posix()}: allowed[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{where}: not a table")
+            continue
+        problems = [f"unknown field `{k}`" for k in item if k not in ALLOWED_FIELDS]
+        problems += [f"missing field `{k}`" for k in ALLOWED_FIELDS if k not in item]
+        if not problems:
+            cls, left, inp, reasons, note = (item[k] for k in ALLOWED_FIELDS)
+            if not isinstance(cls, str) or not cls.startswith("fix|"):
+                problems.append("`class` must be a class of the fix stage (`fix|<code>|<title>|<code left>`); "
+                                "a crash is never allowed")
+            if not isinstance(left, str) or not left.strip() or normalized(left) != left:
+                problems.append("`left` must be the message of the diagnostic left, as the fuzzing writes it "
+                                "(quoted text `…`, numbers `#`)")
+            elif isinstance(cls, str) and (cls, left) in out:
+                problems.append(f"the class `{cls}` with `{left}` is listed twice")
+            fuzz_dir = FUZZ_DIR.as_posix() + "/"
+            if (not isinstance(inp, str) or pending.path_problem(inp) or not inp.startswith(fuzz_dir)
+                    or "/" in inp[len(fuzz_dir):] or not inp.endswith(".onsa")):
+                problems.append("`input` must be a saved input `tests/fuzz/<name>.onsa`")
+            elif not (root / inp).is_file():
+                problems.append(f"the input `{inp}` does not exist")
+            elif inp in listed:
+                problems.append(f"the input `{inp}` is listed in tests/pending.toml too")
+            elif inp in inputs:
+                problems.append(f"the input `{inp}` is the input of another entry")
+            if (not isinstance(reasons, list) or not reasons
+                    or not all(isinstance(r, str) and S_NUMBER.fullmatch(r) for r in reasons)):
+                problems.append("`reasons` must be an array of one or more S numbers (`S-386`)")
+            elif len(set(reasons)) != len(reasons):
+                problems.append("a reason is listed twice")
+            elif numbers is not None:
+                problems += [f"the reason `{r}` is not in plan §2" for r in reasons if r not in numbers]
+            if not isinstance(note, str) or not note.strip():
+                problems.append("`note` must be a non-empty string")
+        if problems:
+            errors += [f"{where}: {p}" for p in problems]
+            continue
+        out[(cls, left)] = inp
+        inputs.add(inp)
+    return out, errors
+
+
 def entry_stub(target, crash):
     note = crash.signature.replace('"', "'")
     return (
@@ -447,6 +545,9 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     entries, errors = pending.load(root / repo.PENDING)
     failures += errors
     listed = {e.target for e in pending.of_kind(entries, "fuzz-input")}
+    allowed, errors = load_allowed(root, listed)
+    failures += errors
+    allowed_inputs = {inp: key for key, inp in allowed.items()}
     saved = sorted((root / FUZZ_DIR).glob("*.onsa")) if (root / FUZZ_DIR).is_dir() else []
     known = {}
     with ThreadPoolExecutor(jobs) as ex:
@@ -469,6 +570,17 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
                     f"{rel}: no longer crashes nor breaks the contract of a fix candidate; remove its entry from "
                     "tests/pending.toml (the file stays as a regression input)"
                 )
+        elif rel in allowed_inputs:
+            # A class the spec puts outside the contract (R-207): its input shows it with the
+            # message left, and nothing else.
+            key = allowed_inputs[rel]
+            shown = {(c.signature, c.left) for c in crashes}
+            if key not in shown:
+                failures.append(f"{rel}: the class `{key[0]}` with `{key[1]}` no longer shows; remove its entry "
+                                f"from {ALLOWED.as_posix()} (the file stays as a regression input)")
+            for other, left in sorted(shown - {key}):
+                failures.append(f"{rel}: shows `{other}` with `{left}`, which is not the entry's in "
+                                f"{ALLOWED.as_posix()}")
         elif crashes:
             what = "breaks the contract of a fix candidate" if crashes[0].command == FIX_COMMAND else "crashes"
             failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {crashes[0].command}: "
@@ -508,6 +620,8 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         if fixes.get(i):
             breaking += 1
         for c in crashes + fixes.get(i, []):
+            if (c.signature, c.left) in allowed:
+                continue
             if c.signature not in known and c.signature not in new:
                 new[c.signature] = (seed, k, text, c)
     written = []
@@ -515,7 +629,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         commands = tuple(cmd for cmd in COMMANDS if " ".join(cmd) == c.command)
         seconds = max(0.0, min(MINIMIZE_SECONDS, deadline - time.monotonic()))
         who = fixer if c.command == FIX_COMMAND else runner
-        small = minimize(who, text, signature, commands, seconds=seconds) if seconds > 0 else text
+        small = minimize(who, text, signature, commands, seconds=seconds, left=c.left or None) if seconds > 0 else text
         name = f"{short_name(small)}.onsa"
         target = (FUZZ_DIR / name).as_posix()
         # A signal (a stack overflow) is never saved under tests/: replaying it would abort again.
@@ -531,7 +645,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     out(
         f"fuzz: {len(inputs)} inputs from {len(seed_files)} seeds ({per_seed} each), {crashing} crashing, "
         f"{len(new)} new classes; {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
-        f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed); "
+        f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed, {len(allowed)} allowed); "
         f"{time.time() - start:.1f} s"
     )
     for path, target, c, seed, k in written:

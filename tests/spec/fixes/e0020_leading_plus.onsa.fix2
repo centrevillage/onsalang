@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020 for a line that starts with a `+` that touches its operand (spec §2.5, §3.1, S-405, S-124, S-370, S-216).
+// Outside a pair of brackets the line before ends with an operand, so `+b` at the start of a line is the
+// binary operator of the line before (the rule of the operator at the start of a line, S-124 and
+// e0020_leading_operator.onsa: the candidate moves the `+` to the end of the line before it). Inside a pair
+// of brackets the line has a second reading, an element after a missing `,` (`two(a` and `+b, 1)` is
+// `two(a, +b, 1)`), as `-b` has (e0020_leading_minus_parens.onsa); the `+` is not a sign in Onsa, so that
+// second reading is `two(a, b, 1)` and the candidate that stands for it inserts the `,` and removes the `+`
+// in one edit (the `,` right after the last token of the line before it, before the comment of that line).
+// The candidates are, in this order, the `+` moved to the end of the line before it and that one. A `+` with a
+// space after it (`+ b`) has the first reading only (e0020_leading_operator.onsa). The main position is the `+`,
+// so the marker is on its line. One error in each declaration unit (P-01). The right forms are at the end.
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x + y
+}
+
+pub fn three(x: I32, y: I32, z: I32) -> I32 {
+  x + y + z
+}
+
+pub rt fn mix(x: F32, y: F32) -> F32 {
+  x + y
+}
+
+pub fn in_a_block(a: I32, b: I32) -> I32 {
+  let c = a
+  +b                                                //~ E0020
+  c
+}
+
+pub fn in_a_block_after_a_comment(a: I32, b: I32) -> I32 {
+  let c = a // the first operand
+  +b                                                //~ E0020
+  c
+}
+
+pub fn as_a_statement_value(a: I32, b: I32) -> I32 {
+  a
+  +b                                                //~ E0020
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a,
+      b, 1)                                         //~ E0020
+}
+
+pub fn in_a_call_second_argument(a: I32, b: I32) -> I32 {
+  three(1, a,
+          b, 2)                                     //~ E0020
+}
+
+pub fn in_a_nested_call(a: I32, b: I32) -> I32 {
+  two(two(a,
+          b, 1), 2)                                 //~ E0020
+}
+
+pub fn in_an_array(a: I32, b: I32) -> U32 {
+  let v = [a,
+           b, 1]                                    //~ E0020
+  v.len()
+}
+
+pub fn in_an_array_last(a: I32, b: I32) -> U32 {
+  let v = [1, a,
+              b]                                    //~ E0020
+  v.len()
+}
+
+pub fn with_numbers() -> U32 {
+  let v = [1,
+           2]                                       //~ E0020
+  v.len()
+}
+
+pub fn in_a_tuple(a: I32, b: I32) -> I32 {
+  let t = (a,
+           b, 1)                                    //~ E0020
+  t.0
+}
+
+pub fn after_a_comment_on_the_line(a: I32, b: I32) -> I32 {
+  two(a, // the first operand
+      b, 1)                                         //~ E0020
+}
+
+pub fn with_a_comment_line_between(a: I32, b: I32) -> I32 {
+  two(a,
+      // the second operand
+      b, 1)                                         //~ E0020
+}
+
+pub fn with_blank_and_comment_lines_between(a: I32, b: I32) -> I32 {
+  two(a, // the first operand
+
+      // the second operand
+
+      b, 1)                                         //~ E0020
+}
+
+pub fn in_an_arm_body(n: I32, a: I32, b: I32) -> I32 {
+  match n {
+    0 => two(a,
+          b, 1),                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure_body(a: I32, b: I32) -> U32 {
+  let f = fn(x: I32, y: I32) -> U32 {
+    let v = [x,
+             y, 1]                                  //~ E0020
+    v.len()
+  }
+  f.(a, b)
+}
+
+pub fn in_a_generic_head[T: Num](a: T, b: T) -> U32 {
+  let v = [a,
+           b, a]                                    //~ E0020
+  v.len()
+}
+
+pub flow in_a_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  mix(x,
+      y, 0.5)                                       //~ E0020
+}
+
+pub flow in_a_par(x: F32 at sample, y: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4 {
+    mix(x,
+        y, i.round_f32())                           //~ E0020
+  }
+}
+
+// The right forms: the `+` at the end of the line, and an element after a `,`.
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a +
+    b
+  let d = two(a +
+    b, 1)
+  let e = two(a,
+    b)
+  let f = [a +
+    b, 1]
+  let g = [a,
+    b]
+  c + d + e + f[0] + g[1]
+}

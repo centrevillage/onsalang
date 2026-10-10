@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§4.5", "§18.1"]
+// fixes = 1
+
+// E0003 for the `{` of a struct literal whose type name has type arguments (spec §2.5, §4.5, S-413): the `{` goes on the
+// line of the `]` that ends the type arguments (`Pair::[I32, I32] { … }`, the form of a type argument in an
+// expression is `::[…]`). The rule and the candidate are those of e0003_struct_literal_brace.onsa. The
+// check of the names and types that follows the syntax stage reports the E0200 of this version for a type
+// argument written in an expression; that is a later stage than the one the candidate has to leave clean
+// (S-236), and the unit with the E0003 is not taken to that stage. One error in each declaration unit.
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Wrap {
+  inner: Pair[I32, I32],
+  k: I32,
+}
+
+pub fn pair_sum(p: Pair[I32, I32]) -> I32 {
+  p.a + p.b
+}
+
+pub fn in_a_call(a: I32) -> I32 {
+  pair_sum(Pair::[I32, I32]
+           { a: a, b: 2 })                          //~ E0003
+}
+
+pub fn in_a_tuple(a: I32) -> I32 {
+  let t = (Pair::[I32, I32]
+           { a: a, b: 2 }, 3)                       //~ E0003
+  t.1
+}
+
+pub fn in_a_field_value(a: I32) -> I32 {
+  let w = Wrap { inner: Pair::[I32, I32]
+                        { a: a, b: 2 }, k: 3 }      //~ E0003
+  w.k
+}
+
+pub fn in_an_array(a: I32) -> I32 {
+  let v = [Pair::[I32, I32]
+           { a: a, b: 2 }]                          //~ E0003
+  a
+}

@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§7", "§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a prefix `+` in a pattern (spec §3.1, §7, S-405 (a)): a number in a pattern is a literal, with a
+// `-` for a negative one, and there is no prefix `+` (the same rule as in an expression, e0020_prefix_plus.onsa).
+// The candidate removes the `+` and the space after it. The main position is the `+`. A `+` between two
+// choices (`0 | +1`) or at the end of a line after a `|` is prefix too. One error in each declaration unit.
+// The right forms are at the end of the file.
+
+pub fn a_literal(n: I32) -> I32 {
+  match n {
+    1 => 10,                                        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_float_free_literal(n: U32) -> U32 {
+  match n {
+    3 => 30,                                        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_a_space(n: I32) -> I32 {
+  match n {
+    1 => 10,                                        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_variant(o: Option[I32]) -> I32 {
+  match o {
+    Some(1) => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_tuple(p: (I32, I32)) -> I32 {
+  match p {
+    (1, b) => b,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_the_second_place(p: (I32, I32)) -> I32 {
+  match p {
+    (a, 2) => a,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn nested(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some((1, b)) => b,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn after_a_choice(n: I32) -> I32 {
+  match n {
+    0 | 1 => 10,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn first_of_a_choice(n: I32) -> I32 {
+  match n {
+    0 | 1 => 10,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn after_a_choice_at_the_end_of_a_line(n: I32) -> I32 {
+  match n {
+    0 |
+    1 => 10,                                        //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_guarded_arm(n: I32) -> I32 {
+  match n {
+    1 if n > 0 => 10,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_match_move(o: Option[I32]) -> I32 {
+  match move o {
+    Some(4) => 4,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure(n: I32) -> I32 {
+  let f = fn(k: I32) -> I32 {
+    match k {
+      1 => 10,                                      //~ E0020
+      _ => 0,
+    }
+  }
+  f.(n)
+}
+
+pub fn in_a_generic_head[T: Num](o: Option[I32], x: T) -> T {
+  match o {
+    Some(1) => x,                                   //~ E0020
+    _ => x,
+  }
+}
+
+pub flow in_a_flow(k: I32 at block, x: F32 at sample) -> F32 at sample {
+  match k {
+    1 => x * 2.0,                                   //~ E0020
+    _ => x,
+  }
+}
+
+// The right forms: a literal, a negative literal, and choices.
+pub fn fine(n: I32, o: Option[I32], p: (I32, I32)) -> I32 {
+  let ra = match n {
+    1 => 10,
+    -1 => 20,
+    0 | 2 | 3 => 30,
+    _ => 0,
+  }
+  let rb = match o {
+    Some(1) => 1,
+    Some(-1) => 2,
+    _ => 0,
+  }
+  let rc = match p {
+    (1, b) => b,
+    (a, 2) => a,
+    _ => 0,
+  }
+  ra + rb + rc
+}

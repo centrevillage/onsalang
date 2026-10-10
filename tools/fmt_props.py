@@ -29,10 +29,10 @@ Perturbations (C-118: only where whitespace means nothing). The kinds:
              `,` (the innermost bracket is `(` or `[`), unless the next token
              is `{` or a closing bracket.
     continue a line break that continues the line (§2.5): after a binary
-             operator between two operands, after the `=` of `let` / `var` /
-             `const`, before the `.` of a method call after `)`; never on a
-             line with a `{` after the place (where the `{` of a header goes
-             is left alone).
+             operator between two operands (in the head of an `if` or a
+             `while` too: the `{` stays on the head's last line, S-202), after
+             the `=` of `let` / `var` / `const` / `type`, after a `->`, before
+             `uses` and before the `.` of a method call after `)`.
     mixed    comment, then blank, then space.
 
 Never touched: the gaps of no whitespace other than the ones named above
@@ -143,8 +143,10 @@ MARKER_END = re.compile(r"[ ]*// " + MARKER + r"(\d+)[ ]*$")
 OPERATORS = sorted(
     "..< ..= ... .. :: -> => == != <= >= << >> && || +% -% *% +| -| *|".split(), key=len, reverse=True
 )
-# A line ending in one of these continues (§2.5: a binary operator, `=`, `->`).
-CONTINUING = frozenset("+ - * / % == != < > <= >= && || ^ << >> +% -% *% +| -| *| = ->".split())
+# A line ending in one of these continues (§2.5: a binary operator, a range symbol, `=`, `->`): the
+# set of `onsa_syntax::layout::continues`, which the test `layout_tests::fmt_props_continues_as_the_parser`
+# holds it to.
+CONTINUING = frozenset("+ - * / % == != < > <= >= && || & | ^ << >> +% -% *% +| -| *| ..< ..= = ->".split())
 NUMBER = re.compile(r"0[xXbB][0-9A-Za-z_]*|[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9_]+)?")
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 OPENERS = {"(": ")", "[": "]", "{": "}"}
@@ -394,11 +396,11 @@ def operand_end(t):
 
 
 def perturb_continue(rng, text):
-    """Line breaks that continue a line (§2.5): after a binary operator
-    between two operands, after the `=` of `let` / `var` / `const`, and before
-    the `.` of a method call after `)`. Never on a line with a `{` after the place."""
-    # SPEC-GAP(S-202): §2.5 puts the `{` of a block on the line of its header, but does not say where it goes when
-    # the header continues over lines (`if a &&` / `b {`); no break is made before a `{` of the same line.
+    """Line breaks that continue a line (§2.5, S-47, R-58): after a binary
+    operator between two operands, after the `=` of `let` / `var` / `const` /
+    `type`, after a `->`, before `uses`, and before the `.` of a method call
+    after `)`. A break in the head of a block leaves its `{` on the head's
+    last line (S-202); no break goes before a `{`."""
     toks = tokenize(text)
     lines = lines_of(text, toks)
     sites = []
@@ -406,12 +408,16 @@ def perturb_continue(rng, text):
         code = line.code
         for k in range(1, len(code) - 1):
             a, b = code[k], code[k + 1]
-            if any(t.text == "{" for t in code[k + 1:]):
-                break
+            if b.text == "{":
+                continue
             spaced = a.end < b.start and code[k - 1].end < a.start  # an operator written apart
             if a.text in CONTINUING and a.text not in ("=", "->") and operand_end(code[k - 1]) and spaced:
                 sites.append((a.end, b.start))
-            elif a.text == "=" and code[0].text in ("let", "var", "const") and spaced:
+            elif a.text == "=" and code[0].text in ("let", "var", "const", "type") and spaced:
+                sites.append((a.end, b.start))
+            elif a.text == "->" and spaced:
+                sites.append((a.end, b.start))
+            elif b.text == "uses" and a.end < b.start:
                 sites.append((a.end, b.start))
             elif a.text == ")" and b.text == "." and k + 2 < len(code) and IDENT.fullmatch(code[k + 2].text):
                 sites.append((a.end, b.start))
@@ -607,11 +613,16 @@ def item_heads(text):
     a keyword of §2.2 that is not an operand), the keyword and the token after
     it (`("fn", "f")`, `("impl", "Show")`). A continued line or a line break
     inside an attribute makes no head."""
-    out, depth = [], 0
+    out, depth, last = [], 0, None
     words = keywords() - OPERAND_WORDS - {"pub", "priv"}
     for line in lines_of(text, tokenize(text)):
         code = [t.text for t in line.code]
-        if code and depth == 0:
+        # A line that goes on with the line before (§2.5: after a continuing
+        # token, or starting with `.` or `uses`) starts no item.
+        continued = last in CONTINUING or (code and code[0] in (".", "uses"))
+        if code:
+            last = code[-1]
+        if code and depth == 0 and not continued:
             k = 0
             while k + 1 < len(code) and code[k] == "@" and IDENT.fullmatch(code[k + 1]):
                 k += 2

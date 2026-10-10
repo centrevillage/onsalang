@@ -845,6 +845,7 @@ mod tests {
             closed: &[],
             want: Want::Pattern,
             detached: None,
+            ends: &[],
             found: std::cell::Cell::new(None),
         };
         let start = src.find("((").unwrap_or_default() as u32;

@@ -1554,6 +1554,163 @@ pub fn f(a: I32, b: I32) -> I32 {
 }
 ''']
 
+# 前置の `+`（S-405 の (a)、仕様 §3.1）。Onsa に前置の `+` は無く、`+x` は E0020 で、候補は `+` と後ろの空白を除く
+# 形。式、属性の引数（`@param(min: +0.0, …)`）、パターン（`+1 =>`）で同じ。Python、JavaScript、C 系、Swift は `+x` を
+# `x` と読み（値を変えない余分）、Rust は拒む。読みは割れないので候補は一つ。前置かどうかは直前のトークンが同じ式の
+# 被演算子かどうかで決まる（§2.5）: `(`・`[`・`,`・`=`・`:`・`=>`・演算子・`return` の後と、式の始まりは前置。`let a =` の
+# 行末の後の行頭の `+1` も前置。行頭の `+` で前の行が被演算子で終わる形（`let c = a` 改行 `+ b`）は、行頭の二項演算子の
+# 行（`leading_operator`）が先。
+[[form]]
+id = "prefix_plus"
+kind = "foreign"
+origin = "C 系、JavaScript、Python、Swift"
+stage = "syntax"
+code = "E0020"
+spec = ["3.1", "18.1"]
+rule = "前置の `+` は無い（`+x` は `x` と書く）。式、属性の引数、パターンのどこでも同じで、`+` と後ろの空白を除く。符号を付けるのは負の数の `-` だけ"
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a = +1
+  a
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f() -> I32 {
+  let a = 1
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U32 {
+  let v = [1, +1]
+  v.len()
+}
+'''
+at = "2:15"
+fixed = ['''
+pub fn f() -> U32 {
+  let v = [1, 1]
+  v.len()
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn f(x: I32) -> I32 {
+  two(+x, 1)
+}
+'''
+at = "6:7"
+fixed = ['''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn f(x: I32) -> I32 {
+  two(x, 1)
+}
+''']
+
+# `+` と被演算子の間の空白も除く（候補は `+` と後ろの空白を除く一つの形）。
+[[form.example]]
+source = '''
+pub fn f(x: I32) -> I32 {
+  let a = + x
+  a
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f(x: I32) -> I32 {
+  let a = x
+  a
+}
+''']
+
+# 二項演算子の後の前置の `+`（`a - +1`）。二項の `-` の両側に空白があるので、非対称な空白の行（`asymmetric_binary_space`）には
+# 当たらず、二つ目の `+` だけが前置の誤り。
+[[form.example]]
+source = '''
+pub fn f(a: I32) -> I32 {
+  a - +1
+}
+'''
+at = "2:7"
+fixed = ['''
+pub fn f(a: I32) -> I32 {
+  a - 1
+}
+''']
+
+# 行末の `=` の後の行頭の `+` は前置（`=` の後は式の始まり）。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let a =
+    +1
+  a
+}
+'''
+at = "3:5"
+fixed = ['''
+pub fn f() -> I32 {
+  let a =
+    1
+  a
+}
+''']
+
+# パターンの前置の `+`（`+1 =>`）。パターンの数のリテラルは負のときだけ `-` を付ける（§7）。
+[[form.example]]
+source = '''
+pub fn f(n: I32) -> I32 {
+  match n {
+    +1 => 10,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+fixed = ['''
+pub fn f(n: I32) -> I32 {
+  match n {
+    1 => 10,
+    _ => 0,
+  }
+}
+''']
+
+# 属性の引数の前置の `+`（§3.1、§11.7）。
+[[form.example]]
+source = '''
+pub flow f(
+  x: F32 at sample,
+  @param(min: +0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+'''
+at = "3:15"
+fixed = ['''
+pub flow f(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+''']
+
 # ---- 束縛とループ（仕様の本文に E0020 の文が無い。S-250 の付録 A の行で、既存の事例が固定している） ----
 
 [[form]]
@@ -2745,9 +2902,11 @@ pub fn g(o: Option[I32]) -> Option[I32] {
 }
 ''']
 
-# 二項として読む `-` / `^` の前だけに空白を空け、後ろを被演算子に接する形（S-398、§2.5）。Swift、MATLAB、
-# Julia は `[1 -1]` を要素二つと読み、他の言語は `1 - 1` と読む。括弧の中でも外でも E0020。候補は両側に空白を
-# 置いた形（一つ目）と、式を要素とする並び（引数、配列、タプル）の中では `,` の挿入（二つ目）。
+# 二項として読む `-` / `^` / `+` の前だけに空白を空け、後ろを被演算子に接する形（S-398、S-405 の (ii)、§2.5）。Swift、
+# MATLAB、Julia は `[1 -1]` を要素二つと読み、他の言語は `1 - 1` と読む。括弧の中でも外でも E0020。候補は両側に空白を
+# 置いた形（一つ目）と、式を要素とする並び（引数、配列、タプル）の中では `,` の挿入（二つ目）。`+` の二つ目は `,` の挿入と
+# `+` の削除を一つにした形（`[1 +1]` は `[1, 1]`。Onsa に前置の `+` は無い、`prefix_plus` の行）。`-%`・`-|`・`+%`・`+|` は
+# 別の演算子で対象外。
 [[form]]
 id = "asymmetric_binary_space"
 kind = "foreign"
@@ -2755,7 +2914,7 @@ origin = "MATLAB、Julia、Swift（空白で要素を並べる書き方）"
 stage = "syntax"
 code = "E0020"
 spec = ["2.5", "18.1"]
-rule = "二項の `-` / `^` は両側に空白を置く（`a - b`）。前だけに空白を空けて後ろを被演算子に接する形は、前置の付いた次の要素とも読める"
+rule = "二項の `-` / `^` / `+` は両側に空白を置く（`a - b`、`a + b`）。前だけに空白を空けて後ろを被演算子に接する形は、前置の付いた次の要素とも読める（`+` は前置が無いので、次の要素の読みは `,` の挿入と `+` の削除）"
 
 [[form.example]]
 source = '''
@@ -2859,6 +3018,75 @@ pub fn g(xs: [I32; 4], i: U32) -> I32 {
 }
 ''']
 
+# 二項の `+`（S-405 の (ii)）。並びの中の候補は、両側に空白を置いた形と、`,` の挿入と `+` の削除を一つにした形。
+[[form.example]]
+source = '''
+pub fn g() -> U32 {
+  let v = [1 +1]
+  v.len()
+}
+'''
+fixed = [
+'''
+pub fn g() -> U32 {
+  let v = [1 + 1]
+  v.len()
+}
+''',
+'''
+pub fn g() -> U32 {
+  let v = [1, 1]
+  v.len()
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32, b: I32) -> I32 {
+  two(a +b, 1)
+}
+'''
+fixed = [
+'''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32, b: I32) -> I32 {
+  two(a + b, 1)
+}
+''',
+'''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32, b: I32) -> I32 {
+  two(a, b, 1)
+}
+''',
+]
+
+# 並びの外では候補は一つ。
+[[form.example]]
+source = '''
+pub fn g(a: I32, b: I32) -> I32 {
+  let c = a +b
+  c
+}
+'''
+fixed = ['''
+pub fn g(a: I32, b: I32) -> I32 {
+  let c = a + b
+  c
+}
+''']
+
 # 名前に接する文字列・文字のリテラルと、リテラルに接する名前（S-400、§2.4）。他の言語の接頭辞・接尾辞付きの
 # リテラル。構文の段の E0002 と note（Onsa の文字列の書き方）で、候補は無い（`,` の挿入も出さない）。
 # `extern` の見出しの `lib"m"` は見出しの文法で読み、この行に当たらない。
@@ -2927,6 +3155,166 @@ pub fn f(a: I32, b: I32) -> I32 {
 }
 ''']
 
+# 括弧の中の行頭の二項演算子も、括弧の外と同じ E0020 で、候補は同じ（S-370）。改行を空白として扱う並びの中でも、
+# 記号の置き場所の規則は同じ（仕様 §2.5）。
+[[form.example]]
+source = '''
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a
+      + b, 1)
+}
+'''
+at = "7:7"
+fixed = ['''
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a +
+      b, 1)
+}
+''']
+
+# `if` と `while` の見出しの行頭の演算子（見出しは続き、`{` は見出しの最後の行に置く。S-202）。
+[[form.example]]
+source = '''
+pub fn f(a: Bool, b: Bool) -> I32 {
+  if a
+  && b {
+    1
+  } else {
+    2
+  }
+}
+'''
+at = "3:3"
+fixed = ['''
+pub fn f(a: Bool, b: Bool) -> I32 {
+  if a &&
+  b {
+    1
+  } else {
+    2
+  }
+}
+''']
+
+# 前の行の末尾にコメントがあれば、記号はコメントの前に入れ、コメントは書かれた行に残す（S-216）。
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a // the first operand
+  + b
+  c
+}
+'''
+at = "3:3"
+fixed = ['''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a + // the first operand
+  b
+  c
+}
+''']
+
+# 継続の `->` と `=` も行末に置く。行頭の `->`・`=` は括弧の中でも外でも E0020 で、候補は記号を前の行の末尾へ
+# 移す形（S-374。行末の `->` で続くことは §2.5 の継続の規則）。
+[[form.example]]
+source = '''
+pub fn f(a: I32)
+  -> I32 {
+  a
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(a: I32) ->
+  I32 {
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn take(h: fn(I32)
+    -> I32, x: I32) -> I32 {
+  x
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn take(h: fn(I32) ->
+    I32, x: I32) -> I32 {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let c: I32
+  = 5
+  c
+}
+'''
+at = "3:3"
+fixed = ['''
+pub fn f() -> I32 {
+  let c: I32 =
+  5
+  c
+}
+''']
+
+# パターンの選択の `|` も行末に置く。選択肢の後の行頭の `|` は E0020 で、候補は前の行の末尾へ移す形
+# （S-380。最初の選択肢の前の `|` は `leading_vert` の行）。
+[[form.example]]
+source = '''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0
+    | 1 => 10,
+    _ => 0,
+  }
+}
+'''
+at = "4:5"
+fixed = ['''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0 |
+    1 => 10,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[U32]) -> U32 {
+  match o {
+    Some(0
+      | 1) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "4:7"
+fixed = ['''
+pub fn f(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 |
+      1) => 1,
+    _ => 0,
+  }
+}
+''']
+
 # 前置にもなる `-` と `^` で始める行は、空白の規則で E0020。前の行とつないだ形（`a - b`）も並べる。
 [[form]]
 id = "leading_minus"
@@ -2945,6 +3333,7 @@ pub fn f(a: I32, b: I32) -> I32 {
   c
 }
 '''
+at = "3:3"
 fixed = [
 '''
 pub fn f(a: I32, b: I32) -> I32 {
@@ -2960,6 +3349,433 @@ pub fn f(a: I32, b: I32) -> I32 {
 }
 ''',
 ]
+
+# 括弧の中の行頭の `-` と `^`（空白を空けない形）は、前の要素との二項の読みと、`,` を書き忘れた次の要素の読みに
+# 割れる（S-370）。候補は、記号を前の行の末尾へ移す形と、前の行の末尾へ `,` を挿す形の二つで、この順に並べる。
+[[form.example]]
+source = '''
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a
+      -b, 1)
+}
+'''
+at = "7:7"
+fixed = [
+'''
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a -
+      b, 1)
+}
+''',
+'''
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a,
+      -b, 1)
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> [I32; 2] {
+  [a
+   -b, 1]
+}
+'''
+at = "3:4"
+fixed = [
+'''
+pub fn f(a: I32, b: I32) -> [I32; 2] {
+  [a -
+   b, 1]
+}
+''',
+'''
+pub fn f(a: I32, b: I32) -> [I32; 2] {
+  [a,
+   -b, 1]
+}
+''',
+]
+
+# 範囲の記号で始まる行（S-335）。範囲の記号は二項演算子と同じに、行末に置く。`for` と `par` の見出しが `{` を
+# 期待して改行を見た位置で、次の行の頭の範囲の記号を見つける。候補は記号を前の行の末尾へ移す形で、`..` と `...`
+# （他言語の範囲。終わりを含むかが言語で分かれる、§7）は記号の書き換えと移動を一つの候補にして、`..<` と `..=` の
+# 二つを並べる。移すと見出しの外の範囲になる形（完結した文の後の行頭の記号）は、この行ではなく
+# `range_outside_header` の行の例（候補なしの E0002）。
+[[form]]
+id = "leading_range"
+kind = "foreign"
+origin = "JavaScript と Python の行頭の演算子、Rust と Ruby の範囲"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "7", "18.1"]
+rule = "範囲の記号（`..<`、`..=`）は二項演算子と同じく行末に置き、次の行の頭には置かない。Onsa の行は行末で終わる"
+
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0
+    ..<n {
+    t = t + i
+  }
+  t
+}
+'''
+at = "4:5"
+fixed = ['''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {
+    t = t + i
+  }
+  t
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0
+    ..=n {
+    t = t + i
+  }
+  t
+}
+'''
+at = "4:5"
+fixed = ['''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..=
+    n {
+    t = t + i
+  }
+  t
+}
+''']
+
+# `..` と `...` は一つの誤りで、二つの読みを `..<`、`..=` の順に並べる。
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0
+    ..n {
+    t = t + i
+  }
+  t
+}
+'''
+at = "4:5"
+fixed = [
+'''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..=
+    n {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0
+    ...n {
+    t = t + i
+  }
+  t
+}
+'''
+at = "4:5"
+fixed = [
+'''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    n {
+    t = t + i
+  }
+  t
+}
+''',
+'''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..=
+    n {
+    t = t + i
+  }
+  t
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub flow f(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0
+    ..<4 {
+    x * i.round_f32()
+  }
+}
+'''
+at = "3:5"
+fixed = ['''
+pub flow f(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..<
+    4 {
+    x * i.round_f32()
+  }
+}
+''']
+
+# パターンを読み始める位置の `|`（S-383）。`|` は選択肢の間にだけ書き、最初の選択肢の前には書かない
+# （Rust の腕の先頭の `|`、OCaml と F# の腕ごとの `|`）。腕の頭、入れ子の `(` や `,` の後、構造体のパターンの
+# フィールド、`let` と `for` の束縛の全てで同じ。候補は `|` と後ろの空白を除く形。選択肢の後の行頭の `|` は
+# `leading_operator` の行（S-380）で、パーサーの位置で分かれる。`|` の後にパターンが続かない形（`| =>`）は
+# 候補を作れず、一覧に無い形として E0002（一般の規則のコード）になる。
+[[form]]
+id = "leading_vert"
+kind = "foreign"
+origin = "Rust と OCaml と F#"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "パターンの選択の `|` は選択肢の間にだけ書く。最初の選択肢の前には書かない。腕は `,` で区切り、`|` は腕の頭の印ではない"
+
+[[form.example]]
+source = '''
+pub fn f(x: U32) -> U32 {
+  match x {
+    | 0 | 1 => 10,
+    _ => 0,
+  }
+}
+'''
+at = "3:5"
+fixed = ['''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0 | 1 => 10,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0 => 10,
+    | 1 => 20,
+    _ => 0,
+  }
+}
+'''
+at = "4:5"
+fixed = ['''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0 => 10,
+    1 => 20,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[U32]) -> U32 {
+  match o {
+    Some(| 0 | 1) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:10"
+fixed = ['''
+pub fn f(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 | 1) => 1,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (U32, U32)) -> U32 {
+  match t {
+    (_, | 5 | 6) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:9"
+fixed = ['''
+pub fn f(t: (U32, U32)) -> U32 {
+  match t {
+    (_, 5 | 6) => 1,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(p: (U32, U32)) -> U32 {
+  let | (a, b) = p
+  a + b
+}
+'''
+at = "2:7"
+fixed = ['''
+pub fn f(p: (U32, U32)) -> U32 {
+  let (a, b) = p
+  a + b
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for | i in 0..<n {
+    t = t + i
+  }
+  t
+}
+'''
+at = "3:7"
+fixed = ['''
+pub fn f(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0..<n {
+    t = t + i
+  }
+  t
+}
+''']
+
+# パターンの中の `||`（S-389）。C と JavaScript の `case 0 || 1:` は式の値と比べ、その値は言語で割れる。候補は
+# `||` を `|` にする形一つ。`||` の次のトークンがパターンを始められる字句のときだけ出し、後ろにパターンが続かない形
+# （`0 || =>`、`Some(0 ||)`）と `0 ||| 1` は候補を作れず E0002。`||` を `|` にした後の位置の誤り（`|| 0 =>` の
+# 頭の `|`、行頭の `0` 改行 `|| 1` の行頭の `|`）は次の検査で報告する（一つずつ。tests/spec/fixes/）。
+[[form]]
+id = "pattern_double_vert"
+kind = "foreign"
+origin = "C 系と JavaScript と Ruby"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "パターンの選択の区切りは `|` 一つ。`||` は論理和の演算子で、パターンの中では選択ではない"
+
+[[form.example]]
+source = '''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0 || 1 => 10,
+    _ => 0,
+  }
+}
+'''
+at = "3:7"
+fixed = ['''
+pub fn f(x: U32) -> U32 {
+  match x {
+    0 | 1 => 10,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 || 1) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:12"
+fixed = ['''
+pub fn f(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 | 1) => 1,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (U32, U32)) -> U32 {
+  match t {
+    (0 || 1, _) => 1,
+    _ => 0,
+  }
+}
+'''
+at = "3:8"
+fixed = ['''
+pub fn f(t: (U32, U32)) -> U32 {
+  match t {
+    (0 | 1, _) => 1,
+    _ => 0,
+  }
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: U32, a: Bool) -> U32 {
+  match x {
+    0 || 1 if a => 10,
+    _ => 0,
+  }
+}
+'''
+at = "3:7"
+fixed = ['''
+pub fn f(x: U32, a: Bool) -> U32 {
+  match x {
+    0 | 1 if a => 10,
+    _ => 0,
+  }
+}
+''']
 
 # ---- 呼び出しの形（§6.1、§6.2、§15.2）。呼び先で段が分かれる ----------------------------------------
 
@@ -4901,6 +5717,17 @@ source = '''
 pub fn f() -> I32 {
   let r = 0..<4
   1
+}
+'''
+
+# 完結した文の後の行頭の範囲の記号（S-335）。移すと見出しの外の範囲になるので、`leading_range` の行ではなく、
+# 候補を作らないこの行の E0002 になる。
+[[form.example]]
+source = '''
+pub fn f(n: U32) -> U32 {
+  let r = 0
+  ..<n
+  n
 }
 '''
 

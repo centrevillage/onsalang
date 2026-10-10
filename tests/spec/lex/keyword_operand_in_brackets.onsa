@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§5.2"]
+// canonical = false
+
+// A keyword in an expression and its operand (spec §2.5, S-416): `if` and `match` before the condition or the subject, the `if` after
+// an `else` and its condition, `move` and `inout` before their operand. They have no rule of where the operand stands, as `as` and `at`
+// have none (tests/spec/lex/parens_as_at.onsa): in a pair of brackets a line break is a space there, so the operand may be on the next
+// line, and the syntax stage reports nothing. (`onsa fmt` joins the line, docs/onsa-tools.md §3.2: `canonical = false`; outside the
+// brackets the keyword ends the line and the operand is missing: tests/spec/negative/s416_keyword_operand_outside_brackets.onsa.)
+// The `with` before the handler of a `handle` is the same, but this version has no handler declaration (E0200), so it is
+// only in the case of the E0002 outside the brackets.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn take(move p: Pt) -> I32 {
+  p.x
+}
+
+pub fn bump(inout a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn if_condition(c: Bool) -> I32 {
+  two(if
+    c { 1 } else { 2 }, 1)
+}
+
+pub fn if_condition_in_an_array(c: Bool) -> U32 {
+  let v = [if
+    c { 1 } else { 2 }, 3]
+  v.len()
+}
+
+pub fn match_subject(o: Option[I32]) -> I32 {
+  two(match
+    o {
+      Some(v) => v,
+      None => 0,
+    }, 1)
+}
+
+pub fn else_if_condition(c: Bool, d: Bool) -> I32 {
+  two(if c { 1 } else if
+    d { 2 } else { 3 }, 1)
+}
+
+pub fn else_if_condition_in_a_chain(c: Bool, d: Bool, e: Bool) -> I32 {
+  two(if c { 1 } else if d { 2 } else if
+    e { 3 } else { 4 }, 1)
+}
+
+pub fn move_operand(p: Pt) -> I32 {
+  take(move
+    p)
+}
+
+pub fn inout_operand(inout n: I32) -> I32 {
+  two(1, bump(inout
+    n, 1))
+}
+
+pub fn in_a_field_value(c: Bool) -> Pt {
+  Pt { x: if
+    c { 1 } else { 2 }, y: 0 }
+}
+
+pub fn in_a_group(c: Bool) -> I32 {
+  (if
+    c { 1 } else { 2 })
+}
+
+pub fn in_a_closure_argument(c: Bool) -> I32 {
+  let f = fn(k: Bool, n: I32) -> I32 {
+    two(if
+      k { n } else { 0 }, 1)
+  }
+  f.(c, 4)
+}
+
+pub fn in_a_generic_head[T: Num](c: Bool, x: T, y: T) -> [T; 2] {
+  [if
+    c { x } else { y }, y]
+}
+
+pub flow in_a_flow(c: Bool at sample, x: F32 at sample) -> F32 at sample {
+  mix(if
+    c { x } else { 0.0 }, 1.0)
+}
+
+pub rt fn mix(a: F32, b: F32) -> F32 {
+  a + b
+}

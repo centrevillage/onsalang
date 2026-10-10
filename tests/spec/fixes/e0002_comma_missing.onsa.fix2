@@ -203,20 +203,24 @@ pub fn arms_on_a_line(o: Option[I32]) -> I32 {
 }
 
 pub fn a_call_after_a_line_break(x: I32) -> I32 {
-  h(h(x))                                           //~ E0002
+  h(h(x))
+    //~ E0002
 }
 
 pub fn an_index_after_a_line_break(xs: [I32; 4]) -> I32 {
-  two(xs[0], 1)                                     //~ E0002
+  two(xs[0], 1)
+    //~ E0002
 }
 
 pub fn an_index_in_an_array(xs: [I32; 4]) -> I32 {
-  let v = [xs[0]]                                   //~ E0002
+  let v = [xs[0]]
+    //~ E0002
   v[0]
 }
 
 pub fn an_index_after_a_call(a: I32) -> I32 {
-  let v = [arr(a)[0]]                               //~ E0002
+  let v = [arr(a)[0]]
+    //~ E0002
   v[0]
 }
 

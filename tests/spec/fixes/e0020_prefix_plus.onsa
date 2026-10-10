@@ -1,0 +1,195 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a prefix `+` (spec §3.1, §2.5, S-405 (a)): Onsa has no prefix `+`, so `+x` is not a number with a
+// sign. The error is the same in an expression, an attribute argument (e0020_prefix_plus_attribute.onsa)
+// and a pattern (e0020_prefix_plus_pattern.onsa), and the candidate is the one the writer meant: the `+` and
+// the space after it removed. Python, JavaScript, C and Swift read `+x` as `x`; Rust refuses it. The reading
+// does not split, so there is one candidate. The main position is the `+`, so the marker is on its line.
+//
+// Whether a `+` is prefix or binary depends on the token before it (§2.5): after a `(`, `[`, `,`, `=`, an
+// operator or the start of an expression it is prefix. A `+` at the start of a line whose line before ends
+// with an operand is the binary operator of the rule of the operator at the start of a line (S-124) and is
+// in e0020_leading_plus.onsa; a `+` after an `=` at the end of a line is prefix (`let a =` and `+1`). One
+// error in each declaration unit (P-01). The right forms are at the end of the file.
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x + y
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn let_initializer(a: I32) -> I32 {
+  let b = +a                                        //~ E0020
+  b
+}
+
+pub fn an_integer() -> I32 {
+  +1                                                //~ E0020
+}
+
+pub fn a_float() -> F32 {
+  +0.5                                              //~ E0020
+}
+
+pub fn first_argument(a: I32) -> I32 {
+  two(+a, 1)                                        //~ E0020
+}
+
+pub fn second_argument(a: I32) -> I32 {
+  two(1, +a)                                        //~ E0020
+}
+
+pub fn nested_call(a: I32) -> I32 {
+  two(two(+a, 1), 2)                                //~ E0020
+}
+
+pub fn in_an_array(a: I32) -> [I32; 2] {
+  [1, +a]                                           //~ E0020
+}
+
+pub fn in_a_tuple(a: I32) -> (I32, I32) {
+  (+a, 1)                                           //~ E0020
+}
+
+pub fn in_an_index(xs: [I32; 4], i: U32) -> I32 {
+  xs[+i]                                            //~ E0020
+}
+
+pub fn in_a_struct_literal(a: I32) -> Pt {
+  Pt { x: +a, y: 2 }                                //~ E0020
+}
+
+pub fn after_minus(a: I32, b: I32) -> I32 {
+  a - +b                                            //~ E0020
+}
+
+pub fn after_plus(a: I32, b: I32) -> I32 {
+  a + +b                                            //~ E0020
+}
+
+pub fn after_times(a: I32, b: I32) -> I32 {
+  a * +b                                            //~ E0020
+}
+
+pub fn binds_tighter_than_times(a: I32, b: I32) -> I32 {
+  +a * b                                            //~ E0020
+}
+
+pub fn in_a_condition(a: I32) -> I32 {
+  if +a > 0 { 1 } else { 0 }                        //~ E0020
+}
+
+pub fn before_an_index(xs: [I32; 4]) -> I32 {
+  +xs[0]                                            //~ E0020
+}
+
+pub fn before_a_call(a: I32) -> I32 {
+  +two(a, 1)                                        //~ E0020
+}
+
+pub fn before_a_group(a: I32) -> I32 {
+  +(a + 1)                                          //~ E0020
+}
+
+pub fn with_a_space(a: I32) -> I32 {
+  let b = + a                                       //~ E0020
+  b
+}
+
+pub fn with_a_space_in_a_call(a: I32) -> I32 {
+  two(+ a, 1)                                       //~ E0020
+}
+
+pub fn with_many_spaces(a: I32) -> I32 {
+  let b = +   a                                     //~ E0020
+  b
+}
+
+pub fn with_a_space_after_minus(a: I32, b: I32) -> I32 {
+  a - + b                                           //~ E0020
+}
+
+pub fn returned(a: I32) -> I32 {
+  return +a                                         //~ E0020
+}
+
+pub fn in_a_branch(c: Bool, a: I32, b: I32) -> I32 {
+  if c {
+    +a                                              //~ E0020
+  } else {
+    b
+  }
+}
+
+pub fn after_equals(a: I32) -> I32 {
+  let b =
+    +a                                              //~ E0020
+  b
+}
+
+pub fn after_an_opening_paren(a: I32) -> I32 {
+  two(
+    +a, 1)                                          //~ E0020
+}
+
+pub fn after_a_comma(a: I32) -> I32 {
+  two(a,
+    +1)                                             //~ E0020
+}
+
+pub fn after_an_opening_bracket(a: I32) -> [I32; 2] {
+  [
+    +a, 1]                                          //~ E0020
+}
+
+pub fn after_a_binary_operator(a: I32, b: I32) -> I32 {
+  let c = a +
+    +b                                              //~ E0020
+  c
+}
+
+pub fn in_an_arm(n: I32) -> I32 {
+  match n {
+    0 => +1,                                        //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn in_a_closure(a: I32) -> I32 {
+  let f = fn(x: I32) -> I32 {
+    +x                                              //~ E0020
+  }
+  f.(a)
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4 {
+    +x * i.round_f32()                              //~ E0020
+  }
+}
+
+pub fn in_a_generic_head[T: Num](x: T) -> T {
+  +x                                                //~ E0020
+}
+
+impl Pt {
+  pub fn total(self) -> I32 {
+    +self.x + self.y                                //~ E0020
+  }
+}
+
+// The right forms: no prefix `+`, a binary `+` with a space on both sides and at the end of a line, and the prefix `-`.
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a + b
+  let d = a +
+    b
+  let e = [a, -b, a + b]
+  let f = two(a, -b) - -b
+  c + d + e[0] + f
+}

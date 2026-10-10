@@ -191,13 +191,6 @@ note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今�
 
 [[pending]]
 kind = "diag-code"
-target = "E0003"
-reasons = ["S-47", "R-62"]
-until = "W3-06"
-note = "else と { の位置。括弧や腕の中も（S-47、R-62）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0004"
 reasons = ["S-51", "R-63"]
 until = "W3-04"
@@ -1261,13 +1254,6 @@ note = "数値リテラルの E0020 と候補"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_spacing.onsa"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白の E0020（f (x)、a . b、x ? など）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_old_attributes.onsa"
 reasons = ["S-57"]
 until = "W3-08"
@@ -1879,20 +1865,6 @@ note = "数値リテラルの形"
 
 [[pending]]
 kind = "foreign-form"
-target = "leading_operator"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
-
-[[pending]]
-kind = "foreign-form"
-target = "leading_minus"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
-
-[[pending]]
-kind = "foreign-form"
 target = "value_call"
 reasons = ["S-191"]
 until = "W4-12"
@@ -2111,13 +2083,6 @@ note = "check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not 
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0003_if_tilde_else_line.onsa"
-reasons = ["S-355", "S-216"]
-until = "W3-06"
-note = "W3-09 で if~ の次の行の else が E0003 になることは通る。E0003 の主の位置が今は前の行の }（印は else の行、W3-06 が位置を else に移す）。if~ の次の行の else は E0003 が先（E0002 でない）。E0003 の主の位置は else（仕様 §2.5、W3-06 が印を else の行に移す）。W3-06 が先に入っていなければ印の行が合わない"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/names_clock_in_fn_head.onsa"
 reasons = ["S-356", "S-101"]
 until = "W4-12"
@@ -2206,14 +2171,16 @@ note = "fix-same-place: fix|E0811|add `…`|E0811。入れ子の旧い遅延 pre
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_space_marks_prefix.onsa"
-reasons = ["S-123"]
-until = "W3-06"
-note = "名前と印の間、`^` と名前の間、前置の `-` / `!` の後の空白。行頭の `- q` と `^ b` は二つの候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/lex/if_tilde_newline_ok.onsa"
 reasons = ["S-110"]
 until = "W7-06"
 note = "`if~` は W3-10 の写しで E0200（K-08、W7-06）。W3-06 で `e0020_newline_if_tilde.onsa` から移した正例"
+
+# --- W3-06/t3: S-405、S-413〜S-416、S-419 の事例（W3-06 の単位 2 で外した残り）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/e0003_derive_heading_brace.onsa"
+reasons = ["S-415", "S-34"]
+until = "W3-08"
+note = "derive を持つ見出しの { の E0003。見出しの : trait の構文が W3-08"

@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.3", "§8.1", "§14.1", "§18.1"]
+// fixes = 1
+
+// E0003 for the `{` of the body of a `trait`, an `effect`, a `handler` or an `extern` block that is not on the
+// line of the last token of its head (spec §2.5, S-415, S-216; the same rule and candidate as
+// e0003_decl_body_brace.onsa): the name, the `]` of the type parameters, the effect of a handler, the string of the library. This
+// version does not support these declarations (E0200, tests/spec/negative/unsupported.onsa), but the placement
+// of the `{` is a rule of the syntax stage, and the unit with the E0003 does not reach the stage that reports the
+// E0200. After the candidate the E0200 is reported, a stage after the syntax stage that S-236 asks the candidate to leave clean.
+// One error in each declaration unit (P-01).
+
+pub trait Describe {
+                                                    //~ E0003
+  fn describe(self) -> I32
+}
+
+pub trait Measure[T] {
+                                                    //~ E0003
+  fn measure(self) -> T
+}
+
+pub effect Beep {
+                                                    //~ E0003
+  fn beep(level: I32) -> I32
+}
+
+pub blocking effect Disk {
+                                                    //~ E0003
+  fn spin(ms: I32) -> I32
+}
+
+handler quiet: Beep {
+                                                    //~ E0003
+  fn beep(level: I32) -> I32 { level }
+}
+
+extern "C" lib "m" {
+                                                    //~ E0003
+  fn cos(x: F64) -> F64
+}

@@ -177,28 +177,37 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
             return None;
         }
         c.say(RowId::SpaceAfterCaret);
-        // A line that starts with `^ b` goes on the line before as the binary
-        // `^` too (S-123). The `- b` of `leading_minus` is W3-06's unit 2.
-        if c.gap(c.at) == Gap::Newline
-            && let Some(prev) = c.sig_before(c.at).filter(|&p| crate::layout::ends_operand(c.kind(p)))
-        {
-            let title = "join it to the line before";
-            fixes.push(crate::layout::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], " "));
-        }
     } else if !crate::parser::starts_operand(next) {
         return None;
+    }
+    // A line that starts with `- b` or `^ b` after an operand goes on the
+    // line before as the binary operator too (S-123): the line joined is the
+    // second candidate, and a `- b` is the row `leading_minus` (§2.5).
+    if kind != TokenKind::Bang
+        && let Some((s, prev)) = crate::layout::line_head(c).filter(|&(s, _)| s == c.at)
+    {
+        let title = "join it to the line before";
+        fixes.push(crate::layout::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
+        if kind == TokenKind::Minus {
+            c.say(RowId::LeadingMinus);
+        }
     }
     hit(c.span(c.at), fixes)
 }
 
-/// A binary `-` / `^` with a blank before it and its operand touching it
-/// (`a -b`, `[1 -1]`, `two(a -b, 1)`, `[a ^b]`; S-398): it reads as the prefix
-/// of a next element too. The candidates are the blanks on both sides, and,
-/// in a list whose elements are expressions (arguments, an array, a tuple),
-/// the `,` before it (S-370's order). `a - -b` has blanks on both sides and
-/// is no such form.
+/// A binary `-` / `^` / `+` with a blank before it and its operand touching
+/// it (`a -b`, `[1 -1]`, `two(a -b, 1)`, `[a ^b]`, `[1 +1]`; S-398, S-405): it
+/// reads as the prefix of a next element too. The candidates are the blanks
+/// on both sides, and, in a list whose elements are expressions (arguments,
+/// an array, a tuple), the `,` before it, which takes a `+` out
+/// ([`crate::layout::comma_before_sign`], S-370's order). `a - -b` has
+/// blanks on both sides and is no such form. In the arms of a `match`, a
+/// sign that a `=>` follows starts the next arm (S-386): the missing `,`.
 pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
-    if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret)
+    if c.want == Want::Separator(NodeKind::MatchArms) && crate::layout::arm_ahead(c, c.at) {
+        return None;
+    }
+    if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret | TokenKind::Plus)
         || c.gap(c.at) != Gap::Space
         || c.gap_after(c.at) != Gap::None
         || !crate::parser::starts_operand(c.kind(c.at + 1))
@@ -207,9 +216,14 @@ pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let prev = c.before(c.at)?;
+    // After a `for`, a `while` or a declaration the sign follows no operand
+    // (S-236): no candidate makes it binary.
+    if crate::layout::end_at(c, prev) == Some(crate::layout::End::NoOperand) {
+        return None;
+    }
     let mut fixes = vec![Fix::insert("write blanks on both sides", c.file, c.span(c.at).end, " ")];
-    if matches!(c.want, Want::Separator(NodeKind::ArgList | NodeKind::ArrayExpr | NodeKind::TupleExpr)) {
-        fixes.push(Fix::insert("write the `,` between the elements", c.file, c.span(prev).end, ","));
+    if crate::layout::expression_list(c) {
+        fixes.push(crate::layout::comma_before_sign(c, prev, c.at));
     }
     hit(c.span(c.at), fixes)
 }

@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "64:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["64:11 E0020"]
+//
+// [[test.fix]]
+// at = "71:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["71:5 E0020"]
+//
+// [[test.fix]]
+// at = "79:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["79:5 E0020"]
+
+// The `[[test.fix]]` entries in the header name what a candidate leaves in its unit: a second misplaced
+// token, reported by the next check (§18.1, S-236). The `at` and `leaves` positions are those of the spec
+// (the misplaced token). The entries were commented out (`// # `) until W3-06/i made the check report
+// the diagnostics.
+//
+// E0020: a `||` in a pattern (spec §7, S-389, R-160). The alternatives of a pattern are separated by one
+// `|`; a `||` is the C and JavaScript habit (`case 0 || 1:` compares with the value of the expression
+// `0 || 1`, and the value is not the same in the languages, so the form is not read as either).
+// It is an error wherever the pattern is, and at the start of a line too (a `||` is not an operator
+// there). The candidate replaces the `||` with a `|`; the error that the `|` has in its new place
+// is left for the next check, one at a time: a second `||` of a choice, a `||` at the head of an arm (the `|`
+// before the first alternative is S-383) and a `||` at the start of a line (the `|` at the start of a line
+// is S-380, e0020_leading_vert.onsa); those are the `[[test.fix]]` above. The main position is the `||`, so
+// the marker is on its line. The forms with nothing after the `||` have no candidate:
+// tests/spec/negative/pattern_vert_no_candidate.onsa. The `||` of an expression (the guard) is not a pattern
+// and is right. One error in each declaration unit.
+
+pub fn in_an_arm(x: U32) -> U32 {
+  match x {
+    0 | 1 => 10,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_alternatives(x: U32) -> U32 {
+  match x {
+    0 | 1 | 2 => 10,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn second_separator(x: U32) -> U32 {
+  match x {
+    0 | 1 | 2 => 10,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_double_bars(x: U32) -> U32 {
+  match x {
+    0 | 1 || 2 => 10,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_the_head_of_an_arm(x: U32) -> U32 {
+  match x {
+    | 0 => 10,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_the_start_of_a_line(x: U32) -> U32 {
+  match x {
+    0
+    | 1 => 10,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_the_end_of_a_line(x: U32) -> U32 {
+  match x {
+    0 |                                            //~ E0020
+    1 => 10,
+    _ => 0,
+  }
+}
+
+pub fn in_a_variant(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 | 1) => 1,                              //~ E0020
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+pub fn in_a_tuple(t: (U32, U32)) -> U32 {
+  match t {
+    (0 | 1, _) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_the_second_element(t: (U32, U32)) -> U32 {
+  match t {
+    (_, 5 | 6) => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+pub fn in_a_struct_pattern(p: Pt) -> U32 {
+  match p {
+    Pt { x: 0 | 1, y: _ } => 1,                    //~ E0020
+    Pt { x: _, y: _ } => 0,
+  }
+}
+
+pub fn before_a_guard(x: U32, a: Bool) -> U32 {
+  match x {
+    0 | 1 if a => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn names_and_wildcards(x: U32, y: U32) -> U32 {
+  match (x, y) {
+    (0, _) | (_, 0) => 1,                          //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_match_in_a_call(x: U32) -> U32 {
+  id(match x {
+    0 | 1 => 10,                                   //~ E0020
+    _ => 0,
+  })
+}
+
+pub fn id(x: U32) -> U32 {
+  x
+}
+
+// The `||` of an expression is the logical or, and the choice and the guard are right together.
+pub fn fine(x: U32, a: Bool, b: Bool) -> U32 {
+  match x {
+    0 | 1 if a || b => 10,
+    _ => 0,
+  }
+}

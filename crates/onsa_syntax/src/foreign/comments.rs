@@ -173,9 +173,16 @@ pub(super) fn block_comment(c: &Cursor) -> Option<Hit> {
                 let end = ws_after.map_or(span.end, |s| s.end);
                 return Fix::replace(title, c.file_span(span.start, end), above);
             }
+            // Between two tokens it touches, a blank keeps them apart, but
+            // not before a sign that touches its operand: `1+2`, not `1 +2`,
+            // whose blank before the `+` alone is an error (S-398, S-405).
+            let mut after = c.text[span.end as usize..].chars();
+            let sign =
+                matches!(after.next(), Some('+' | '-' | '^')) && after.next().is_some_and(|ch| !ch.is_whitespace());
             let removal = match (ws_before, ws_after) {
                 (Some(_), Some(after)) => Edit::delete(c.file_span(span.start, after.end)),
-                (None, None) => Edit::replace(span, " "),
+                (None, None) if !sign => Edit::replace(span, " "),
+                (Some(before), None) if sign => Edit::delete(c.file_span(before.start, span.end)),
                 _ => Edit::delete(span),
             };
             let above: String = rendered.iter().map(|l| format!("{indent}{l}\n")).collect();

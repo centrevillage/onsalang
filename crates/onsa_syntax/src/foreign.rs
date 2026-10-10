@@ -163,6 +163,10 @@ pub struct Cursor<'a> {
     /// The postfix opener at `at` that the parser did not read on because a
     /// blank or a line break is before it ([`crate::layout::Detached`], S-89).
     pub detached: Option<crate::layout::Detached>,
+    /// The last tokens of the statements and declarations that end no operand
+    /// (`for`, `while`, a declaration but `const` and `type`) or with a bound
+    /// value (`let`, `var`, an assignment), in order (`Parser::ends`).
+    pub ends: &'a [(usize, crate::layout::End)],
     /// The row a matcher of several rows found ([`Cursor::say`]).
     pub found: std::cell::Cell<Option<RowId>>,
 }
@@ -256,6 +260,12 @@ pub enum RowId {
     NewlineAfterDot,
     NewlineAfterPrefix,
     NewlineBeforeQuestion,
+    LeadingOperator,
+    LeadingMinus,
+    LeadingRange,
+    LeadingVert,
+    PatternDoubleVert,
+    PrefixPlus,
     CalleeExpression,
     SpaceAfterBranchKeyword,
     ElseIfTilde,
@@ -432,7 +442,7 @@ impl Cursor<'_> {
     }
 
     /// The whitespace token right after `tokens[i]`, if any.
-    fn space_after(&self, i: usize) -> Option<Span> {
+    pub(crate) fn space_after(&self, i: usize) -> Option<Span> {
         let k = self.full[i] as usize + 1;
         self.all.get(k).filter(|t| t.kind == TokenKind::Whitespace).map(|t| t.span)
     }
@@ -454,7 +464,7 @@ impl Cursor<'_> {
     }
 
     /// The index in `tokens` of the token that starts at `offset` (or the next one).
-    fn index_at(&self, offset: u32) -> usize {
+    pub(crate) fn index_at(&self, offset: u32) -> usize {
         self.tokens.partition_point(|t| t.span.start < offset)
     }
 
@@ -501,8 +511,8 @@ fn is_place(c: &Cursor, first: usize, last: usize) -> bool {
 }
 
 /// Where the statement that goes on at token `from` ends: the last token of
-/// it (a newline ends it unless the line ends with an operator or `=`, or the
-/// next starts with `.`; a `}` or `)` that closes what it is in ends it too).
+/// it (a newline ends it unless the line goes on, [`crate::layout::continues`];
+/// a `}` or `)` that closes what it is in ends it too).
 fn statement_end(c: &Cursor, from: usize) -> Option<usize> {
     let mut depth = 0i32;
     let mut last: Option<usize> = None;
@@ -513,9 +523,9 @@ fn statement_end(c: &Cursor, from: usize) -> Option<usize> {
             _ if c.comment(i) => {}
             TokenKind::Newline if depth == 0 => {
                 let continued = last.is_some_and(|l| {
-                    c.kind(l).is_binary_op()
-                        || matches!(c.kind(l), TokenKind::Eq | TokenKind::Arrow | TokenKind::FatArrow)
-                }) || c.kind(c.sig_after(i)) == TokenKind::Dot;
+                    let before = c.sig_before(l).map(|b| c.kind(b));
+                    crate::layout::continues(before, c.kind(l), c.kind(c.sig_after(i)))
+                });
                 if !continued {
                     break;
                 }

@@ -88,6 +88,20 @@ pub struct TestSettings {
     /// [`crate::fix_contract`]).
     #[serde(default, deserialize_with = "crate::fix_contract::de_specs")]
     pub fix: Vec<crate::fix_contract::FixSpec>,
+    /// `canonical = false`: a file without markers that `fmt` rewrites (a
+    /// line break the formatter moves, W3-11). It is not compared with the
+    /// normal form; fmt must still take it, change it, and give a text it
+    /// takes again unchanged and that parses ([`crate::run`]).
+    /// Not written: the file is canonical (`Some(true)` says so again).
+    #[serde(default)]
+    pub canonical: Option<bool>,
+}
+
+impl TestSettings {
+    /// Whether a file of the case without markers is in the normal form of fmt.
+    pub fn canonical(&self) -> bool {
+        self.canonical != Some(false)
+    }
 }
 
 /// A parsed fragment.
@@ -222,6 +236,9 @@ fn check_settings(t: &TestSettings, lines: &[&str]) -> Result<(), String> {
     dups("spec", &t.spec).map_err(|e| format!("line {}: {e}", at("spec")))?;
     dups("golden", &t.golden).map_err(|e| format!("line {}: {e}", at("golden")))?;
     dups("golden_graph", &t.golden_graph).map_err(|e| format!("line {}: {e}", at("golden_graph")))?;
+    if !t.canonical() && t.mode == Mode::None {
+        return Err(format!("line {}: fragment: [test] canonical = false needs a mode that runs", at("canonical")));
+    }
     if matches!(t.mode, Mode::Parse | Mode::None) && t.fixes > 0 {
         return Err(format!(
             "line {}: fragment: [test] fixes needs `mode = \"check\"` or `\"test\"` (not {:?})",

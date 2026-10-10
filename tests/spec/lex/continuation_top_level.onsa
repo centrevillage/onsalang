@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§6.5"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
+// decided in W3-11); the case is about what the parser accepts.
+
+// The continuation rule of §2.5 holds at the top level as it does in a block (S-47, S-121, R-58): a line
+// goes on after `=`, after `->`, after an attribute, and when the next line starts with `uses`. Each item
+// below is written over more than one line and means the same as the item on one line. The `test` at the
+// end runs (`mode = "test"`); its values
+// are what the one-line items give, and a continued line that turned into two statements would be an error.
+
+// `type` and `const`: the `=` ends the line.
+type Gain =
+  F32
+
+const LIMIT: I32 =
+  8
+
+const TABLE: [I32; 3] =
+  [1, 2, 3]
+
+// `->` ends the line of a function head, and the body's `{` is on the last line of the head (S-202).
+pub fn scale(x: Gain, k: Gain) ->
+  Gain {
+  x * k
+}
+
+pub fn pair_sum(a: I32, b: I32) ->
+  (I32, I32) {
+  (a + b, a - b)
+}
+
+// The next line starts with `uses`: the effect line goes on the head.
+pub fn counted(n: U32) -> U32
+  uses {Alloc} {
+  n + 1
+}
+
+pub fn counted_two(n: U32, m: U32) ->
+  U32
+  uses {Alloc} {
+  n + m
+}
+
+// An attribute alone on its line does not end the item (S-121).
+@repr(c)
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+@fp(relaxed)
+pub fn mix(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+// Members of an `impl` are items too: the same rule inside the braces.
+impl Pair {
+  pub fn total(self) ->
+    F32 {
+    self.a + self.b
+  }
+
+  pub fn scaled(self, k: F32) ->
+    F32
+    uses {Alloc} {
+    self.a * k
+  }
+}
+
+test "a head, a value and an attribute continue the line" {
+  assert scale(2.0, 3.0) == 6.0
+  let (s, d) = pair_sum(5, 3)
+  assert s == 8
+  assert d == 2
+  assert counted(1) == 2
+  assert counted_two(1, 2) == 3
+  assert LIMIT == 8
+  assert TABLE[2] == 3
+  let p = Pair { a: 1.0, b: 2.0 }
+  assert p.total() == 3.0
+  assert p.scaled(2.0) == 2.0
+  assert mix(1.0, 2.0) == 3.0
+}

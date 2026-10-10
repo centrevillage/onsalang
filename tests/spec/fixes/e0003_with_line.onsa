@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§8.3", "§18.1"]
+// fixes = 1
+
+// E0003: the `with` of `handle { … } with h` that is not on the line of the `}` before it (spec §2.5, S-124,
+// R-62, S-216, R-160). It is the same rule as for `else`: the main position is the `with`, the marker is on
+// its line, and the candidate moves the `with` and the rest of its line up to the comment to the end of the
+// line of the `}`. Effect handlers are not in this version (E0200), but the form is read first, so
+// the E0003 of the position is the only error of a unit; the E0200 of the handle that the candidate
+// leaves is a diagnostic of a later stage (§18.1), which the case does not list.
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn tail_expression() -> I32 {
+  handle { 1 }
+  with scratch                                      //~ E0003
+}
+
+pub fn let_value() -> I32 {
+  let a = handle { id(1) }
+  with scratch                                      //~ E0003
+  a
+}
+
+pub fn block_body() -> I32 {
+  handle {
+    id(2)
+  }
+  with scratch                                      //~ E0003
+}
+
+pub fn in_a_call() -> I32 {
+  id(handle { 1 }
+     with scratch)                                  //~ E0003
+}
+
+pub fn in_an_arm(x: I32) -> I32 {
+  match x {
+    0 => handle { 1 }
+         with scratch,                              //~ E0003
+    _ => 2,
+  }
+}
+
+pub fn in_a_tuple() -> (I32, I32) {
+  (handle { 1 }
+   with scratch, 2)                                 //~ E0003
+}

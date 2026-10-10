@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0003: an `else` that is not on the line of the `}` before it (spec §2.5, S-47, S-124, R-62, S-216, R-160).
+// The rule is the same where the tokens are in a block and where a line break is a blank (a call, a tuple, an
+// arm, a closure). The main position is the `else`, so the marker is on the line of the `else`. The
+// candidate moves the `else` and the rest of its line up to the comment, to the end of the line of the `}`
+// (before that line's comment). The unit is one error: the first `else` is the diagnostic, and a unit
+// with a second misplaced token has it reported by the next check.
+
+use std.array
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn tail_expression(c: Bool) -> I32 {
+  if c { 1 } else { 2 }
+  //~ E0003
+}
+
+pub fn let_value(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 }
+  //~ E0003
+  a
+}
+
+pub fn blocks(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+  //~ E0003
+    2
+  }
+}
+
+pub fn chain_last_else(c: Bool, d: Bool) -> I32 {
+  if c {
+    1
+  } else if d {
+    2
+  } else {
+  //~ E0003
+    3
+  }
+}
+
+pub fn chain_else_if(c: Bool, d: Bool) -> I32 {
+  if c {
+    1
+  } else if d {
+  //~ E0003
+    2
+  } else {
+    3
+  }
+}
+
+// R-62: where a line break is a blank, in a call, in a tuple, in an arm, in a closure.
+pub fn in_a_call(c: Bool) -> I32 {
+  id(if c { 1 } else { 2 })
+     //~ E0003
+}
+
+pub fn in_a_tuple(c: Bool) -> (I32, I32) {
+  (if c { 1 } else { 2 }, 3)
+   //~ E0003
+}
+
+pub fn in_an_arm(c: Bool, x: I32) -> I32 {
+  match x {
+    0 => if c { 1 } else { 2 },
+         //~ E0003
+    _ => 3,
+  }
+}
+
+pub fn in_a_closure_body() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    if i == 0 { 1 } else { 2 }
+    //~ E0003
+  })
+}
+
+pub fn in_a_nested_call(c: Bool, d: Bool) -> I32 {
+  id(id(if c {
+    1
+  } else if d { 2 } else { 3 }))
+  //~ E0003
+}
+
+pub fn fine(c: Bool, x: I32) -> I32 {
+  let a = id(if c { 1 } else { 2 })
+  let b = match x {
+    0 => if c { 1 } else { 2 },
+    _ => 3,
+  }
+  a + b
+}

@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§4.1", "§18.1"]
+// fixes = 1
+
+// E0002 for a `[` on the line after a type in a list of types (spec §2.5, S-419, S-89, S-399): the elements of a variant of
+// an `enum`, the elements of a tuple type and the arguments of a function type are lists of types only. A `[`
+// starts an element of such a list (an array type, `[T; N]`) only when there is a `;` inside it, so
+// `Option` and `[I32]` is the type `Option[I32]` with a line break before its type arguments (the opening
+// does not attach, so the error), and the one candidate is the line break removed, not the `,` (a
+// `,` would make `[I32]` an element, which is not an array type). With a `;` the `[` starts an element, and the one
+// candidate is the `,` inserted right after the last token of the line before, before its comment. The main
+// position is the `[`, so the marker is on its line. One error in each declaration unit (P-01).
+// (A list of type arguments, `Option[Option` and `[I32]]`, is not one of these lists, and the rule says nothing of
+// the `;` there.)
+
+pub struct Pt {
+  x: I32,
+}
+
+pub enum InAVariant {
+  V(Option[I32]),
+    //~ E0002
+}
+
+pub enum InTheSecondElement {
+  V(I32, Option[I32]),
+    //~ E0002
+}
+
+pub fn in_a_tuple_type(t: (Option[I32], I32)) -> I32 {
+    //~ E0002
+  t.1
+}
+
+pub fn in_a_tuple_type_second(t: (I32, Option[I32])) -> I32 {
+    //~ E0002
+  t.0
+}
+
+pub fn in_a_function_type(f: fn(Option[I32]) -> I32) -> I32 {
+    //~ E0002
+  f.(Some(1))
+}
+
+pub fn in_a_function_type_second(f: fn(I32, Option[I32]) -> I32) -> I32 {
+    //~ E0002
+  f.(1, Some(1))
+}
+
+pub enum WithAnArray {
+  V(I32,
+    [I32; 4]),                                      //~ E0002
+}
+
+pub enum WithAnArrayAfterAType {
+  V(Option[I32],
+    [I32; 4]),                                      //~ E0002
+}
+
+pub enum WithAnArrayAfterAName {
+  V(Pt,
+    [I32; 4]),                                      //~ E0002
+}
+
+pub fn a_tuple_type_with_an_array(t: (I32,
+    [I32; 2])) -> I32 {                             //~ E0002
+  t.0
+}
+
+pub fn a_function_type_with_an_array(f: fn(I32,
+    [I32; 2]) -> I32) -> I32 {                      //~ E0002
+  f.(1, [1, 2])
+}
+
+// The right forms: the type arguments next to their name, and an element after a `,`.
+pub enum FineVariant {
+  V(Option[I32]),
+  W(I32, [I32; 4]),
+}
+
+pub fn fine_tuple(t: (Option[I32], [I32; 2])) -> I32 {
+  t.1[0]
+}
+
+pub fn fine_function(f: fn(Option[I32], [I32; 2]) -> I32) -> I32 {
+  f.(Some(1), [1, 2])
+}

@@ -1,0 +1,164 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "56:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["57:5 E0020"]
+
+// The `[[test.fix]]` entries in the header name what a candidate leaves in its unit: a second misplaced
+// token, reported by the next check (§18.1, S-236). The `at` and `leaves` positions are those of the spec
+// (the misplaced token). The entries were commented out (`// # `) until W3-06/i made the check report
+// the diagnostics.
+//
+// E0020: the `|` of a pattern choice at the start of a line, after the first alternative (spec §2.5, §7,
+// S-380, S-216, R-160). The `|` that separates the alternatives of a choice goes at the end of the line,
+// as a binary operator does (tests/spec/lex/pattern_choice_line_end.onsa), and a line that starts with
+// it is an error: the writer's reading is the choice going on, so the candidate moves the `|` to the end
+// of the line before it (before that line's comment). The main position is the `|`, so the marker is on
+// its line. The rule is the same in a nested pattern, in a tuple and a struct pattern, with a guard,
+// and in the pairs of brackets of the arms. A choice over more than two lines is one error at a time
+// (the `[[test.fix]]` above): the first `|` is the diagnostic, and the second is reported by the next
+// check. The `|` that is before the first alternative is another error (S-383,
+// e0020_leading_vert_start.onsa), and so is a `|` after the arm of the line before when the arm has
+// no `,` (S-386, e0002_arm_comma_before_leading.onsa). One error in each declaration unit.
+
+pub fn after_a_literal(x: U32) -> U32 {
+  match x {
+    0
+    | 1 => 10,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn after_a_choice(x: U32) -> U32 {
+  match x {
+    2 | 3
+    | 4 => 20,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn two_spaces_after_the_bar(x: U32) -> U32 {
+  match x {
+    0
+    |  1 => 10,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_lines(x: U32) -> U32 {
+  match x {
+    0
+    | 1                                             //~ E0020
+    | 2 => 10,
+    _ => 0,
+  }
+}
+
+pub fn after_a_name_pattern(o: Option[U32]) -> U32 {
+  match o {
+    Some(0)
+    | None => 1,                                    //~ E0020
+    Some(_) => 2,
+  }
+}
+
+pub fn in_a_variant(o: Option[U32]) -> U32 {
+  match o {
+    Some(0
+      | 1) => 1,                                    //~ E0020
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+pub fn in_a_tuple(t: (U32, U32)) -> U32 {
+  match t {
+    (0
+     | 1, _) => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_the_second_element(t: (U32, U32)) -> U32 {
+  match t {
+    (_, 5
+     | 6) => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+pub fn in_a_struct_pattern(p: Pt) -> U32 {
+  match p {
+    Pt { x: 0
+      | 1, y: _ } => 1,                             //~ E0020
+    Pt { x: _, y: _ } => 0,
+  }
+}
+
+pub fn before_a_guard(x: U32, a: Bool) -> U32 {
+  match x {
+    0
+    | 1 if a => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn comment_at_the_end_of_the_line(x: U32) -> U32 {
+  match x {
+    0 // zero
+    | 1 => 10,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn comment_line_between(x: U32) -> U32 {
+  match x {
+    0
+    // one
+    | 1 => 10,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn blank_and_comment_lines_between(x: U32) -> U32 {
+  match x {
+    0 // zero
+
+    // one
+
+    | 1 => 10,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_an_arm_of_a_match_in_a_call(x: U32) -> U32 {
+  id(match x {
+    0
+    | 1 => 10,                                      //~ E0020
+    _ => 0,
+  })
+}
+
+pub fn id(x: U32) -> U32 {
+  x
+}
+
+pub fn fine(x: U32) -> U32 {
+  match x {
+    0 |
+    1 => 10,
+    2 | 3 |
+    4 => 20,
+    _ => 0,
+  }
+}

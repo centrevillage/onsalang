@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§18.1"]
+
+// E0002 for a struct literal whose `{` is on the line after the type name, outside every pair of brackets (spec §2.5,
+// S-413). The rule of where a `{` stands is the E0003 of tests/spec/fixes/e0003_struct_literal_brace.onsa in a pair of
+// brackets, where a line break is a space and the `{` could be read as the literal's all the same; outside them the
+// name ends the line (a line ends the statement, §2.5), so the `Pt` is an expression of its own and the next
+// line starts another statement, a block, whose content `x: 1` is not a statement (E0002, no candidate: there is no
+// reading that the writer meant to be mended by moving the `{`, the line break before it ends the statement, S-413).
+// The error is that of the form as it stood before S-413 and is kept. The position is that of the first
+// token that is not a statement of the block. One error in each declaration unit (P-01).
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub fn apply(f: fn() -> Pt) -> I32 {
+  f.().x
+}
+
+pub fn in_a_let() -> I32 {
+  let p = Pt
+  { x: 1, y: 2 }                                    //~ E0002
+  p.x
+}
+
+pub fn as_the_value_of_a_function() -> Pt {
+  Pt
+  { x: 1, y: 2 }                                    //~ E0002
+}
+
+pub fn in_a_return() -> Pt {
+  return Pt
+  { x: 1, y: 2 }                                    //~ E0002
+}
+
+pub fn in_a_branch(c: Bool) -> Pt {
+  if c {
+    Pt
+    { x: 1, y: 2 }                                  //~ E0002
+  } else {
+    Pt { x: 0, y: 0 }
+  }
+}
+
+pub fn in_a_closure_in_a_call() -> I32 {
+  apply(fn() -> Pt {
+    Pt
+    { x: 1, y: 2 }                                  //~ E0002
+  })
+}
+
+pub fn in_a_var() -> I32 {
+  var p = Pt
+  { x: 1, y: 2 }                                    //~ E0002
+  p.x
+}
+
+pub fn with_type_arguments() -> I32 {
+  let q = Pair::[I32, I32]
+  { a: 1, b: 2 }                                    //~ E0002
+  q.a
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let p = Pt
+  { x: 1, y: 2 }                                    //~ E0002
+  x
+}
+
+// The right forms: the `{` on the line of the name.
+pub fn fine() -> I32 {
+  let p = Pt { x: 1, y: 2 }
+  let q = Pair {
+    a: 1,
+    b: 2,
+  }
+  p.x + q.a
+}

@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.3", "§11.3"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
+// decided in W3-11); the case is about what the parser accepts.
+
+// `as` and `at` have no rule for where they stand on a line (§2.5, S-374): in a pair of brackets a line
+// break before or after them is a blank, like the break after a `:` or a `=>`. (Outside the brackets the
+// line ends and the break is an E0002: tests/spec/negative/lines_as_at_outside_brackets.onsa.) The
+// brackets are those of an expression, of a call, of an array, of a tuple and of the head of a
+// declaration; in the head the clock of an input is on the next line of its type (the output's `at`
+// is outside the brackets and stays on the line of its type).
+
+pub fn after_the_operand(a: I32) -> I64 {
+  (a
+    as I64)
+}
+
+pub fn after_the_keyword(a: I32) -> I64 {
+  (a as
+    I64)
+}
+
+pub fn both_breaks(a: I32) -> I64 {
+  (a
+    as
+    I64)
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I64 {
+  add64(a
+    as I64, b as
+    I64)
+}
+
+pub fn add64(a: I64, b: I64) -> I64 {
+  a + b
+}
+
+pub fn in_an_array(a: I32, b: I32) -> [I64; 2] {
+  [a
+    as I64, b as
+    I64]
+}
+
+pub fn in_a_tuple(a: I32, b: I32) -> (I64, I64) {
+  (a
+    as I64, b as
+    I64)
+}
+
+pub fn in_a_binary(a: I32, b: I32) -> I64 {
+  (a as I64) +
+    (b
+      as I64)
+}
+
+// `at` in the head of a flow: the input's clock on the line after its type.
+pub flow gain(x: F32
+  at sample, k: F32
+  at block) -> F32 at sample {
+  x * k
+}
+
+pub flow gain_in_two_lines(
+  x: F32 at
+    sample,
+  k: F32
+    at
+    block,
+) -> F32 at sample {
+  x * k
+}
+
+// `at` in an expression inside brackets.
+pub flow promoted(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let ps = (p
+    at sample)
+  let qs = (p at
+    sample)
+  mix2(ps
+    at sample, qs) + x
+}
+
+pub rt fn mix2(a: F32, b: F32) -> F32 {
+  a + b
+}

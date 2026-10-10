@@ -8,7 +8,7 @@
 use onsa_diag::{Edit, FileId, Fix, Span};
 
 use crate::cst::NodeKind;
-use crate::foreign::Cursor;
+use crate::foreign::{Cursor, Want};
 use crate::token::{Gap, Token, TokenKind};
 
 /// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) that the
@@ -117,21 +117,41 @@ pub(crate) fn starts_element(list: NodeKind, kind: TokenKind) -> bool {
 ///   token before is no path of names (S-399): the `,` when the opener
 ///   starts an element, and the gap taken out when that reads;
 /// - else the `,` when the token starts an element (S-384, S-387), whatever
-///   is between the elements.
+///   is between the elements;
+/// - in the arms of a `match`, a `-`, `|` or `+` that a `=>` follows starts
+///   the next arm (S-386): the `,`, which takes a `+` out (S-405); a `- 1`
+///   has none, as its blank is an error of its own.
+///
+/// The two candidates of an opener after a line break are only those that
+/// the scan of the tokens reads (S-419): in the arms, the `,` when a `=>`
+/// follows ([`arm_ahead`]) and the line break taken out when none does; in
+/// a list of types only, a `[` starts an element when a `;` is in it.
 ///
 /// The `,` goes right after the last token of the element, before the
 /// comment of its line.
 pub(crate) fn list_fixes(c: &Cursor, list: Option<NodeKind>) -> Vec<Fix> {
     let Some(prev) = c.sig_before(c.at) else { return Vec::new() };
+    let kind = c.kind(c.at);
+    let arms = list == Some(NodeKind::MatchArms);
+    if arms && matches!(kind, TokenKind::Minus | TokenKind::Pipe | TokenKind::Plus) && arm_ahead(c, c.at) {
+        let spaced = kind == TokenKind::Minus && c.gap_after(c.at).is_some();
+        return if spaced { Vec::new() } else { vec![comma_before_sign(c, prev, c.at)] };
+    }
     let mut fixes = Vec::new();
-    let declaration = crate::parser::declares_a_function(c.kind(c.at), c.kind(c.sig_after(c.at)));
-    if list.is_some_and(|l| starts_element(l, c.kind(c.at))) && !declaration {
+    let declaration = crate::parser::declares_a_function(kind, c.kind(c.sig_after(c.at)));
+    let joins = c.detached.is_some_and(|d| d.at == c.at && d.joins(c.tokens));
+    let types = matches!(list, Some(NodeKind::VariantFields | NodeKind::TupleType | NodeKind::FnTypeParams));
+    let array =
+        (kind != TokenKind::LBracket || !types || bracket_contents(c.tokens, c.at).is_some_and(|(_, _, semi)| semi))
+            && !(list == Some(NodeKind::ArrayExpr) && array_repeats(c));
+    let comma = !(arms && joins && !arm_ahead(c, c.at));
+    if list.is_some_and(|l| starts_element(l, kind)) && !declaration && array && comma {
         fixes.push(Fix::new("write the `,` between the elements", vec![Edit::insert(c.file, c.span(prev).end, ",")]));
     }
-    let strings = c.kind(c.at) == TokenKind::Str && c.kind(prev) == TokenKind::Str;
+    let strings = kind == TokenKind::Str && c.kind(prev) == TokenKind::Str;
     if strings && list.is_some() {
         fixes.extend(merge_strings(c, prev));
-    } else if c.detached.is_some_and(|d| d.at == c.at && d.joins(c.tokens)) {
+    } else if joins && !(arms && arm_ahead(c, c.at)) {
         fixes.extend(join_fix(c));
     }
     fixes
@@ -157,18 +177,20 @@ fn merge_strings(c: &Cursor, prev: usize) -> Option<Fix> {
 /// The candidate that moves `next` up to the line that ends at `end`, with
 /// `sep` between them (S-216: the E0003 of `else`, the line break before a
 /// postfix opener). With only blanks and line breaks between, they become
-/// `sep`. Comments between are kept and keep their order: the code of
+/// `sep`. Comments between and after it are kept and keep their order: the code of
 /// `next`'s line (up to a comment or the end of the line) moves to `end`,
 /// before the comment of that line, and the line of `next` is removed when
 /// nothing else is left on it (W3-02/b 4).
 pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end: u32, next: Token, sep: &str) -> Fix {
     let at = all.partition_point(|t| t.span.start < next.span.start);
+    let comment = |t: &Token| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment);
     let between = all[..at].iter().rev().take_while(|t| t.span.start >= end);
-    if !between.clone().any(|t| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment)) {
+    let rest = &all[at..];
+    let after = rest.iter().take_while(|t| !matches!(t.kind, TokenKind::Newline | TokenKind::Eof));
+    if !between.clone().any(comment) && !after.clone().any(comment) {
         return Fix::replace(title, Span::new(file, end, next.span.start), sep);
     }
     // The code of `next`'s line: up to a comment, a newline or the end.
-    let rest = &all[at..];
     let code_len = rest
         .iter()
         .position(|t| {
@@ -192,6 +214,145 @@ pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end:
         Some(_) => Span::new(file, next.span.start, after.map_or(code_end, |t| t.span.start)),
     };
     Fix::new(title, vec![Edit::insert(file, end, format!("{sep}{moved}")), Edit::delete(removed)])
+}
+
+/// Whether a line break goes on with the line (§2.5, S-47, R-58, S-124,
+/// S-335, S-374): `prev` is the last code token of the line (`before` the one
+/// before it) and `next` the first of the next line, the lines of comments
+/// and the blank lines passed. The line goes on after a binary operator (a
+/// `-` / `^` only after an operand: a prefix one at the end of a line is the
+/// error of S-369), `..<` / `..=`, `=` or `->`, and before a `.` or `uses`. A
+/// line of attributes goes on too, which the tokens do not show
+/// (`Parser::parse_attrs`, S-121). The one judgement of the parser
+/// (`Parser::peek_index`), of its recovery (S-47) and of the table.
+pub(crate) fn continues(before: Option<TokenKind>, prev: TokenKind, next: TokenKind) -> bool {
+    use TokenKind::*;
+    let binary = match prev {
+        Minus | Caret => before.is_some_and(ends_operand),
+        k => crate::lower::binop(k).is_some(),
+    };
+    binary || prev.range_end().is_some() || matches!(prev, Eq | Arrow) || matches!(next, Dot | KwUses)
+}
+
+/// For each token of a list without whitespace (the parser's), whether it is
+/// a newline that goes on with the line ([`continues`]): one pass each way,
+/// so the judgement is linear in the file however long a run of comment
+/// lines and blank lines is.
+pub(crate) fn line_breaks_going_on(tokens: &[Token]) -> Vec<bool> {
+    let code = |k: TokenKind| !k.is_trivia();
+    let mut next = vec![TokenKind::Eof; tokens.len()];
+    let mut after = TokenKind::Eof;
+    for (k, t) in tokens.iter().enumerate().rev() {
+        if code(t.kind) {
+            after = t.kind;
+        }
+        next[k] = after;
+    }
+    let (mut before, mut prev) = (None, None);
+    let mut out = vec![false; tokens.len()];
+    for (k, t) in tokens.iter().enumerate() {
+        if t.kind == TokenKind::Newline {
+            out[k] = prev.is_some_and(|p| continues(before, p, next[k]));
+        } else if code(t.kind) {
+            before = prev;
+            prev = Some(t.kind);
+        }
+    }
+    out
+}
+
+/// Whether an arm goes on from token `i` to its `=>`: a `=>` at the depth of
+/// `i` comes before the next `,` or `}` there (S-386, S-419). The scan of the
+/// tokens, which reads no element on (S-384): a symbol at the head of the
+/// line that starts it is no binary operator of the arm before, and the
+/// line break before an opener there is no gap inside a postfix.
+pub(crate) fn arm_ahead(c: &Cursor, i: usize) -> bool {
+    let mut depth = 0u32;
+    for k in i..c.tokens.len() {
+        match c.kind(k) {
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace if depth == 0 => return false,
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth -= 1,
+            TokenKind::Comma if depth == 0 => return false,
+            TokenKind::FatArrow if depth == 0 => return true,
+            TokenKind::Eof => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// The candidate that makes the sign `sign` the start of the element after
+/// `prev` in a list: the `,` after `prev`, before the comment of its line,
+/// and for a `+`, which is no prefix (§3.1), the `+` and the blanks after it
+/// taken out with it (S-370, S-386, S-398, S-405). The one candidate of the
+/// `,` before a `-`, `^`, `|` or `+`.
+pub(crate) fn comma_before_sign(c: &Cursor, prev: usize, sign: usize) -> Fix {
+    let comma = Edit::insert(c.file, c.span(prev).end, ",");
+    if c.kind(sign) != TokenKind::Plus {
+        return Fix::new("write the `,` between the elements", vec![comma]);
+    }
+    let s = c.span(sign);
+    let end = c.space_after(sign).map_or(s.end, |w| w.end);
+    Fix::new("write the `,` and take the `+` out", vec![comma, Edit::delete(Span::new(c.file, s.start, end))])
+}
+
+/// Whether the list of the failure is one whose elements are expressions
+/// (arguments, a tuple, an array; S-370, S-398), where a sign may start the
+/// next element: not the repetition `[v; n]` of an array, which a `,` does
+/// not make a list (a `;` in its brackets, the scan of S-419).
+pub(crate) fn expression_list(c: &Cursor) -> bool {
+    match c.want {
+        Want::Separator(NodeKind::ArgList | NodeKind::TupleExpr) => true,
+        Want::Separator(NodeKind::ArrayExpr) => !array_repeats(c),
+        _ => false,
+    }
+}
+
+/// Whether the innermost array open at the failure is a repetition (a `;`
+/// at its depth): its brackets close, and a `;` is in them.
+fn array_repeats(c: &Cursor) -> bool {
+    let Some(&(_, start)) = c.open.iter().rev().find(|o| o.0 == NodeKind::ArrayExpr) else { return false };
+    bracket_contents(c.tokens, c.index_at(start)).is_some_and(|(_, _, semi)| semi)
+}
+
+/// The symbol at the head of the line where the parser failed: the token of
+/// the failure, or, when the parser failed at a line break (a head waiting
+/// for its `{`, a `let` for its `=`), the first token of the next line; and
+/// the code before it, when that is an operand the symbol may go on with
+/// (S-124, S-374, S-380): no statement or declaration that ends no operand
+/// (`for`, `while`, a declaration, S-236, [`Cursor::ends`], [`End`]), but
+/// for a `->` or a `=`, which go on with the head of a declaration (the
+/// caller judges whose head).
+pub(crate) fn line_head(c: &Cursor) -> Option<(usize, usize)> {
+    use TokenKind::*;
+    let s = if c.kind(c.at) == Newline { c.sig_after(c.at) } else { c.at };
+    if c.gap(s) != Gap::Newline {
+        return None;
+    }
+    let prev = c.sig_before(s)?;
+    let kind = c.kind(s);
+    let operand = ends_operand(c.kind(prev)) || (matches!(kind, Pipe | Eq) && c.kind(prev) == Underscore);
+    let head = matches!(kind, Arrow | Eq);
+    (operand && (head || end_at(c, prev) != Some(End::NoOperand))).then_some((s, prev))
+}
+
+/// What the statement or declaration whose last token is `i` ends with,
+/// when the parser read one to its end there ([`End`]).
+pub(crate) fn end_at(c: &Cursor, i: usize) -> Option<End> {
+    c.ends.binary_search_by_key(&i, |e| e.0).ok().map(|k| c.ends[k].1)
+}
+
+/// What a statement or a declaration that the parser read to its end ends
+/// with, for a symbol at the head of the next line (`Parser::ends`, S-236).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum End {
+    /// No operand: a `for`, a `while`, a declaration but `const` and `type`.
+    /// No symbol goes on with it.
+    NoOperand,
+    /// The value of a `let`, a `var`, an assignment, a `return` or an
+    /// `assert`: an operator goes on with it, a `=` does not.
+    Bound,
 }
 
 /// Whether a token of `kind` ends an operand: what a postfix `?` or a binary
@@ -252,14 +413,19 @@ fn alone_on_its_line(c: &Cursor, i: usize) -> Option<Span> {
 /// that line (S-216, S-369, S-385). What follows the symbol on its line stays
 /// there; a line left empty goes.
 pub(crate) fn move_token_up(c: &Cursor, title: &str, i: usize) -> Option<Fix> {
+    let s = c.span(i);
+    move_token_up_as(c, title, i, &c.text[s.start as usize..s.end as usize])
+}
+
+/// [`move_token_up`], the symbol written as `symbol` where it goes (` +`
+/// after a blank for a binary operator, ` ..<` for `..`, S-124, S-335).
+pub(crate) fn move_token_up_as(c: &Cursor, title: &str, i: usize, symbol: &str) -> Option<Fix> {
     let prev = c.sig_before(i)?;
     let removed = alone_on_its_line(c, i).unwrap_or_else(|| {
         let k = c.full[i] as usize + 1;
         let end = c.all.get(k).filter(|t| t.kind == TokenKind::Whitespace).map_or(c.span(i).end, |t| t.span.end);
         Span::new(c.file, c.span(i).start, end)
     });
-    let s = c.span(i);
-    let symbol = &c.text[s.start as usize..s.end as usize];
     Some(Fix::new(title, vec![Edit::insert(c.file, c.span(prev).end, symbol), Edit::delete(removed)]))
 }
 

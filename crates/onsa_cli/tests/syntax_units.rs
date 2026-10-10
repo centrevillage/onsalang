@@ -246,10 +246,7 @@ stop_case!(
     fmt_reports_else_on_its_own_line,
     "pub fn f(c: Bool) -> I32 {\n  if c {\n    1\n  }\n  else {\n    2\n  }\n}\n",
     5,
-    "E0003",
-    // W3-03/i: the stop and its report work; the E0003 is at the line break after `}` (line 4)
-    // until W3-06 puts it at the `else` (S-216).
-    reports: "W3-06"
+    "E0003"
 );
 stop_case!(
     fmt_stops_for_mixed_operator_groups,

@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+
+// E0020 for a `|` that is alone on its line (spec §2.5, §7, S-380, S-383). A line break in the list of
+// arms is a blank, so the pattern that follows the `|` is on the next line and the `|` is a `|` of the
+// rules of those two: before the first alternative (S-383, the candidate removes it and leaves an empty
+// line, which the list of arms accepts) or after an alternative (S-380, the candidate moves it to the end
+// of the line before it). The case lists the diagnostic and not its candidate: the spec lets the
+// implementation make the candidate (the promise of §18.1 is checked for it when it is made). The marker is
+// on the line of the `|`. One error in each declaration unit.
+
+pub fn alone_at_the_head_of_the_first_arm(x: U32) -> U32 {
+  match x {
+    |                                               //~ E0020
+    0 => 10,
+    _ => 0,
+  }
+}
+
+pub fn alone_at_the_head_of_a_later_arm(x: U32) -> U32 {
+  match x {
+    0 => 10,
+    |                                               //~ E0020
+    1 => 20,
+    _ => 0,
+  }
+}
+
+pub fn alone_after_an_alternative(x: U32) -> U32 {
+  match x {
+    0
+    |                                               //~ E0020
+    1 => 10,
+    _ => 0,
+  }
+}
+
+pub fn alone_after_a_choice(x: U32) -> U32 {
+  match x {
+    0 | 1
+    |                                               //~ E0020
+    2 => 10,
+    _ => 0,
+  }
+}
+
+pub fn fine(x: U32) -> U32 {
+  match x {
+    0 |
+    1 => 10,
+    _ => 0,
+  }
+}

@@ -54,22 +54,26 @@ pub fn a_bang_in_an_array(inout b: Pt) -> I32 {
 }
 
 pub flow a_tilde_after_a_line_break(x: F32 at sample) -> F32 at sample {
-  two_f(lp~(x), 1.0)                                //~ E0002
+  two_f(lp~(x), 1.0)
+    //~ E0002
 }
 
 pub flow a_tilde_in_an_array(x: F32 at sample) -> F32 at sample {
-  let v = [lp~(x), 1.0]                             //~ E0002
+  let v = [lp~(x), 1.0]
+    //~ E0002
   v[0]
 }
 
 pub flow a_tilde_on_a_delay(x: F32 at sample) -> F32 at sample {
-  let y = two_f(x, prev~(^y))                       //~ E0002
+  let y = two_f(x, prev~(^y))
+    //~ E0002
   y
 }
 
 pub flow a_tilde_in_a_par(x: F32 at sample) -> F32 at sample {
   let ys = par i in 0..<4 {
-    two_f(lp~(x), 1.0)                              //~ E0002
+    two_f(lp~(x), 1.0)
+      //~ E0002
   }
   ys[0]
 }

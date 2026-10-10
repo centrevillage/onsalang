@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0002 for the `|` and `||` of a pattern that have no candidate (spec §7, S-383, S-389). A `|` before the
+// first alternative is the E0020 of tests/spec/fixes/e0020_leading_vert_start.onsa, and a `||` is the
+// E0020 of tests/spec/fixes/e0020_pattern_double_vert.onsa, and their candidate removes the `|` or writes
+// one `|`. When nothing that can be a pattern follows, the candidate would leave an error of the
+// syntax stage (§18.1: a candidate that leaves one is not made), so the form is the general syntax
+// error with no candidate: `| =>`, a `|` followed by what is not a pattern, a `||` followed by what
+// is not a pattern (`0 || =>`, `Some(0 ||)`), and `|||`, whose `|` would join the next `|` and be read as
+// `||` again. The marker is on the line, which is one line in each of these. One error in each
+// declaration unit.
+
+pub fn bar_then_the_arrow(x: U32) -> U32 {
+  match x {
+    | => 10,                                        //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn bar_then_an_expression(x: U32) -> U32 {
+  match x {
+    | x > 0 => 10,                                  //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn bar_then_a_guard(x: U32, a: Bool) -> U32 {
+  match x {
+    | if a => 10,                                   //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn choice_then_the_arrow(x: U32) -> U32 {
+  match x {
+    0 | => 10,                                      //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn double_bar_then_the_arrow(x: U32) -> U32 {
+  match x {
+    0 || => 10,                                     //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn double_bar_then_a_guard(x: U32, a: Bool) -> U32 {
+  match x {
+    0 || if a => 10,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn double_bar_alone(x: U32) -> U32 {
+  match x {
+    || => 10,                                       //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn double_bar_before_a_close(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 ||) => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn double_bar_before_a_comma(t: (U32, U32)) -> U32 {
+  match t {
+    (0 ||, _) => 1,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn three_bars(x: U32) -> U32 {
+  match x {
+    0 ||| 1 => 10,                                  //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn three_bars_at_the_head(x: U32) -> U32 {
+  match x {
+    ||| 0 => 10,                                    //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn bar_before_a_close(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 |) => 1,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn fine(x: U32) -> U32 {
+  match x {
+    0 | 1 => 10,
+    _ => 0,
+  }
+}

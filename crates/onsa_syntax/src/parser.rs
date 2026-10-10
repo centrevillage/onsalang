@@ -207,9 +207,18 @@ pub(crate) struct Parser<'a> {
     /// that is tried inside another one does not try the brackets of a
     /// call's type arguments again, so trials nest at most once per level.
     trials: u32,
+    /// For each token, whether it is a newline that goes on with the line
+    /// (§2.5, [`crate::layout::line_breaks_going_on`]).
+    goes_on: Vec<bool>,
     /// The last postfix opener not read on because of a gap before it
     /// ([`Parser::touches`], S-89): the table reads it at the failure there.
     detached: Option<crate::layout::Detached>,
+    /// The last tokens of the statements and declarations that end no operand
+    /// (`for`, `while`, a declaration but `const` and `type`) or a bound value
+    /// (`let`, `var`, an assignment), in order: a symbol at the head of the
+    /// next line does not go on with the first, and a `=` not with the second
+    /// (S-124, S-374, S-236; the table reads them, [`foreign::Cursor::ends`]).
+    ends: Vec<(usize, crate::layout::End)>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -224,6 +233,7 @@ struct Snapshot {
     nl: Vec<bool>,
     no_struct_lit: bool,
     detached: Option<crate::layout::Detached>,
+    ends: usize,
 }
 
 /// Whether a token starts an operand (§3.1): a prefix operator, a literal,
@@ -283,10 +293,12 @@ impl<'a> Parser<'a> {
                 _ => {}
             }
         }
+        let goes_on = crate::layout::line_breaks_going_on(&tokens);
         Parser {
             file,
             text,
             all,
+            goes_on,
             tokens,
             full,
             pos: 0,
@@ -311,6 +323,7 @@ impl<'a> Parser<'a> {
             levels: Vec::new(),
             trials: 0,
             detached: None,
+            ends: Vec::new(),
         }
     }
 
@@ -331,6 +344,7 @@ impl<'a> Parser<'a> {
             nl: self.nl.clone(),
             no_struct_lit: self.no_struct_lit,
             detached: self.detached,
+            ends: self.ends.len(),
         }
     }
 
@@ -347,6 +361,7 @@ impl<'a> Parser<'a> {
         self.nl = s.nl;
         self.no_struct_lit = s.no_struct_lit;
         self.detached = s.detached;
+        self.ends.truncate(s.ends);
     }
 
     /// Keep the reading since the snapshot.
@@ -571,14 +586,19 @@ impl<'a> Parser<'a> {
         r
     }
 
-    /// Index of the next token that is not trivia under the current context.
+    /// Index of the next token that is not trivia under the current context:
+    /// where a newline is significant, a newline that goes on with the line
+    /// is trivia too ([`crate::layout::continues`], §2.5).
     fn peek_index(&self) -> usize {
-        let mut i = self.pos;
+        self.skip_trivia(self.pos)
+    }
+
+    /// The first token from `i` that is not trivia under the current context.
+    fn skip_trivia(&self, mut i: usize) -> usize {
         loop {
-            let t = self.tokens[i];
-            match t.kind {
+            match self.tokens[i].kind {
                 TokenKind::Comment | TokenKind::DocComment => i += 1,
-                TokenKind::Newline if !self.significant() => i += 1,
+                TokenKind::Newline if !self.significant() || self.goes_on[i] => i += 1,
                 _ => return i,
             }
         }
@@ -630,18 +650,8 @@ impl<'a> Parser<'a> {
 
     /// Index of the token after `peek()` (same skipping rules).
     fn peek2_index(&self) -> usize {
-        let mut i = self.peek_index();
-        if self.tokens[i].kind != TokenKind::Eof {
-            i += 1;
-        }
-        loop {
-            let t = self.tokens[i];
-            match t.kind {
-                TokenKind::Comment | TokenKind::DocComment => i += 1,
-                TokenKind::Newline if !self.significant() => i += 1,
-                _ => return i,
-            }
-        }
+        let i = self.peek_index();
+        if self.tokens[i].kind == TokenKind::Eof { i } else { self.skip_trivia(i + 1) }
     }
 
     /// The token after `peek()` (same skipping rules).
@@ -841,6 +851,7 @@ impl<'a> Parser<'a> {
             closed: &self.closed,
             want,
             detached: self.detached.filter(|d| d.at == at),
+            ends: &self.ends,
             found: std::cell::Cell::new(None),
         };
         let (row, general) = match foreign::at_failure(&cursor) {
@@ -991,8 +1002,7 @@ impl<'a> Parser<'a> {
             if line && t.kind == TokenKind::Newline && braces.len() <= base {
                 break;
             }
-            let line_start = i == 0 || self.tokens[i - 1].kind == TokenKind::Newline;
-            if t.span.start > unit_start && line_start && is_item_start(t.kind) {
+            if t.span.start > unit_start && self.starts_a_line(i) && is_item_start(t.kind) {
                 if braces.len() <= base {
                     break;
                 }
@@ -1067,11 +1077,45 @@ impl<'a> Parser<'a> {
         let i = self.peek_index();
         let t = self.tokens[i];
         let Some(&brace) = self.braces[..base].last() else { return false };
-        let line_start = i == 0 || self.tokens[i - 1].kind == TokenKind::Newline;
-        line_start
+        self.starts_a_line(i)
             && is_item_start(t.kind)
             && !self.brace_closed[brace]
             && self.indent(t.span.start) <= self.indent(self.tokens[brace].span.start)
+    }
+
+    /// The last token read ends a statement or a declaration that is no
+    /// operand ([`Parser::ends`]).
+    fn end_no_operand(&mut self) {
+        self.end_with(crate::layout::End::NoOperand);
+    }
+
+    fn end_with(&mut self, end: crate::layout::End) {
+        if let Some(last) = (0..self.pos).rev().find(|&k| !self.tokens[k].kind.is_trivia()) {
+            // In order (the table searches them): a statement ends after the
+            // ones before it, and a declaration after its own statements.
+            debug_assert!(self.ends.last().is_none_or(|e| e.0 <= last), "the ends out of order");
+            if self.ends.last().is_some_and(|e| e.0 == last) {
+                // A declaration ends where its last statement did (`fn f() { for … { } }`
+                // does not end there): the outer one says what follows.
+                self.ends.pop();
+            }
+            self.ends.push((last, end));
+        }
+    }
+
+    /// Whether the next token is `kind` written at the end of a line, not at
+    /// the head of the next one (`->`, the `|` of a pattern, §2.5, S-374,
+    /// S-380): the one at the head is not read, and the table names it.
+    fn at_line_end(&self, kind: TokenKind) -> bool {
+        let i = self.peek_index();
+        self.tokens[i].kind == kind && self.gap(i) != Gap::Newline
+    }
+
+    /// Whether `tokens[i]` starts a line that does not go on with the line
+    /// before it: the recovery takes an item keyword there as the start of
+    /// the next unit (S-47: `fn(I32) -> I32` after `type Op =` does not start one).
+    fn starts_a_line(&self, i: usize) -> bool {
+        i == 0 || (self.tokens[i - 1].kind == TokenKind::Newline && !self.goes_on[i - 1])
     }
 
     /// The number of blanks before the first token of the line of `at`.
@@ -1247,6 +1291,11 @@ impl<'a> Parser<'a> {
         }
         if let Some((_, parse, _)) = DECLARATIONS.iter().find(|(k, _, _)| *k == t.kind) {
             parse(self, ctx)?;
+            // A constant ends with an expression and a type alias with a
+            // type, which a symbol on the next line may go on with.
+            if !matches!(t.kind, TokenKind::KwConst | TokenKind::KwType) {
+                self.end_no_operand();
+            }
         } else {
             return Err(self.unexpected("a declaration"));
         }
@@ -1290,7 +1339,7 @@ impl<'a> Parser<'a> {
         self.parse_params(true)?;
         self.expect(TokenKind::Arrow)?;
         self.parse_type()?;
-        self.parse_block_expr()?;
+        self.parse_body()?;
         self.complete(m, NodeKind::Flow);
         Ok(())
     }
@@ -1303,7 +1352,8 @@ impl<'a> Parser<'a> {
         self.parse_name("function name")?;
         self.parse_generics_opt()?;
         self.parse_params(true)?;
-        if self.eat(TokenKind::Arrow).is_some() {
+        if self.at_line_end(TokenKind::Arrow) {
+            self.bump();
             self.parse_type()?;
         }
         self.parse_effect_row_opt()?;
@@ -1315,12 +1365,12 @@ impl<'a> Parser<'a> {
                 }
             }
             ItemCtx::Trait => {
-                if self.at(TokenKind::LBrace) {
+                if self.e0003_unless_on_the_line(TokenKind::LBrace) {
                     self.parse_block_expr()?;
                 }
             }
             _ => {
-                if !self.at(TokenKind::LBrace) {
+                if !self.e0003_unless_on_the_line(TokenKind::LBrace) {
                     return Err(self.unexpected("`{` (a function body)"));
                 }
                 self.parse_block_expr()?;
@@ -1346,6 +1396,7 @@ impl<'a> Parser<'a> {
             self.complete(b, NodeKind::TupleStructBody);
         } else {
             let l = self.start(NodeKind::FieldList)?;
+            self.e0003_unless_on_the_line(TokenKind::LBrace);
             self.expect(TokenKind::LBrace)?;
             self.with_nl(false, |p| {
                 while !p.at(TokenKind::RBrace) {
@@ -1374,6 +1425,7 @@ impl<'a> Parser<'a> {
         self.parse_name("enum name")?;
         self.parse_generics_opt()?;
         let l = self.start(NodeKind::VariantList)?;
+        self.e0003_unless_on_the_line(TokenKind::LBrace);
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RBrace) {
@@ -1500,7 +1552,6 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::Colon)?;
         self.parse_type()?;
         if self.eat(TokenKind::Eq).is_some() {
-            self.skip_newlines();
             self.parse_expr()?;
         } else if ctx != ItemCtx::Trait {
             return Err(self.unexpected("`=` (a constant needs a value)"));
@@ -1515,9 +1566,6 @@ impl<'a> Parser<'a> {
         let tree = self.start(NodeKind::UseTree)?;
         self.parse_ident("module path")?;
         loop {
-            if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::Dot {
-                self.skip_newlines();
-            }
             if self.dot_apart() {
                 return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
             }
@@ -1592,7 +1640,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwTest)?;
         let name = self.expect(TokenKind::Str)?;
         self.check_test_name(name);
-        self.parse_block_expr()?;
+        self.parse_body()?;
         self.complete(m, NodeKind::Test);
         Ok(())
     }
@@ -1651,6 +1699,7 @@ impl<'a> Parser<'a> {
     /// `{ item NL item NL ... }` for trait / impl / effect / handler / extern bodies.
     fn parse_item_body(&mut self, ctx: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::ItemList)?;
+        self.e0003_unless_on_the_line(TokenKind::LBrace);
         self.expect(TokenKind::LBrace)?;
         let base = self.braces.len();
         self.with_nl(true, |p| {
@@ -1731,11 +1780,9 @@ impl<'a> Parser<'a> {
         let mut segments = 1;
         loop {
             // A `.` on the next line continues the path, as an expression's
-            // chain (§2.5); the member `.` of a path takes no blank and no line
-            // break after it (S-203, S-353, the one test, [`Parser::dot_apart`]).
-            if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::Dot {
-                self.skip_newlines();
-            }
+            // chain (§2.5, [`Parser::peek_index`]); the member `.` of a path takes
+            // no blank and no line break after it (S-203, S-353, the one test,
+            // [`Parser::dot_apart`]).
             if self.dot_apart() {
                 return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
             }
@@ -1873,6 +1920,11 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
         let m = self.start(NodeKind::EffectRow)?;
+        // In brackets the `{` is on the line of `uses` (E0003, S-413); out of
+        // them the line ends at `uses`.
+        if !self.significant() {
+            self.e0003_unless_on_the_line(TokenKind::LBrace);
+        }
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RBrace) {
@@ -1988,7 +2040,8 @@ impl<'a> Parser<'a> {
                     Ok(())
                 })?;
                 self.complete(l, NodeKind::FnTypeParams);
-                if self.eat(TokenKind::Arrow).is_some() {
+                if self.at_line_end(TokenKind::Arrow) {
+                    self.bump();
                     // A clock after the result belongs to the result, as
                     // `uses` does (S-367): a clock in a type, E0020.
                     self.parse_type()?;
@@ -2108,6 +2161,45 @@ impl<'a> Parser<'a> {
 
     // ------------------------------------------------------------ blocks and statements
 
+    /// The body of a declaration or a head (`fn`, `if`, `while`, ...): a block
+    /// whose `{` is on the line of the head's last token ([`Parser::e0003_unless_on_the_line`]).
+    fn parse_body(&mut self) -> PResult<Completed> {
+        self.e0003_unless_on_the_line(TokenKind::LBrace);
+        self.parse_block_expr()
+    }
+
+    /// Whether the next code token is `kind` (an `else`, a `with`, the `if`
+    /// after `else`, the `{` of a body, a struct literal or pattern, an
+    /// effect row), looked for past the line breaks whatever the context. A
+    /// line break before it is the E0003 of §2.5 (S-47, S-202, R-62, S-413 to
+    /// S-415): at the token (R-160), with the candidate that moves it and the
+    /// rest of its line up to the end of the code before it, before the
+    /// comment there (S-216, [`crate::layout::move_up`]); the reading goes on
+    /// past the line breaks, as if it were on the line.
+    fn e0003_unless_on_the_line(&mut self, kind: TokenKind) -> bool {
+        let i = (self.pos..self.tokens.len()).find(|&k| !self.tokens[k].kind.is_trivia()).unwrap_or(self.pos);
+        let t = self.tokens[i];
+        if t.kind != kind {
+            return false;
+        }
+        if self.tokens[self.pos..i].iter().any(|t| t.kind == TokenKind::Newline) {
+            let word = self.token_text(t).to_string();
+            let title = format!("move `{word}` to the end of the line before");
+            let fix = crate::layout::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
+            let message = match kind {
+                TokenKind::KwElse | TokenKind::KwWith => {
+                    format!("`{word}` must be on the same line as the closing `}}`")
+                }
+                TokenKind::KwIf => "the `if` after `else` must be on the line of the `else`".to_string(),
+                _ => format!("`{word}` must be on the line of the last token of what it belongs to"),
+            };
+            let d = Diagnostic::new(Stage::Syntax, Code::E0003, t.span, message).with_found(word).with_fix(fix);
+            self.report(d);
+            self.with_nl(true, |p| p.skip_newlines());
+        }
+        true
+    }
+
     /// `{ stmts }` as an expression (newlines significant inside).
     fn parse_block_expr(&mut self) -> PResult<Completed> {
         let m = self.start(NodeKind::Block)?;
@@ -2149,8 +2241,8 @@ impl<'a> Parser<'a> {
                     self.parse_type()?;
                 }
                 self.expect(TokenKind::Eq)?;
-                self.skip_newlines();
                 self.parse_consumed()?;
+                self.end_with(crate::layout::End::Bound);
                 Ok(self.complete(m, NodeKind::LetStmt))
             }
             TokenKind::KwVar => {
@@ -2181,14 +2273,16 @@ impl<'a> Parser<'a> {
                 } else {
                     self.parse_head_expr(true)?;
                 }
-                self.parse_block_expr()?;
+                self.parse_body()?;
+                self.end_no_operand();
                 Ok(self.complete(m, NodeKind::ForStmt))
             }
             TokenKind::KwWhile => {
                 let m = self.start(NodeKind::WhileStmt)?;
                 self.bump();
                 self.parse_head_expr(false)?;
-                self.parse_block_expr()?;
+                self.parse_body()?;
+                self.end_no_operand();
                 Ok(self.complete(m, NodeKind::WhileStmt))
             }
             TokenKind::KwBreak => {
@@ -2207,6 +2301,7 @@ impl<'a> Parser<'a> {
                 if !matches!(self.peek_kind(), TokenKind::Newline | TokenKind::RBrace | TokenKind::Eof) {
                     self.parse_consumed()?;
                 }
+                self.end_with(crate::layout::End::Bound);
                 Ok(self.complete(m, NodeKind::ReturnStmt))
             }
             // `move a` on the last expression of a block (§5.2, S-100): where
@@ -2227,6 +2322,7 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::AssertStmt)?;
                 self.bump();
                 self.parse_expr()?;
+                self.end_with(crate::layout::End::Bound);
                 Ok(self.complete(m, NodeKind::AssertStmt))
             }
             _ => {
@@ -2234,8 +2330,8 @@ impl<'a> Parser<'a> {
                 if self.at(TokenKind::Eq) {
                     let m = self.precede(expr, NodeKind::AssignStmt)?;
                     self.bump();
-                    self.skip_newlines();
                     self.parse_consumed()?;
+                    self.end_with(crate::layout::End::Bound);
                     return Ok(self.complete(m, NodeKind::AssignStmt));
                 }
                 let m = self.precede(expr, NodeKind::ExprStmt)?;
@@ -2250,8 +2346,8 @@ impl<'a> Parser<'a> {
             self.parse_type()?;
         }
         self.expect(TokenKind::Eq)?;
-        self.skip_newlines();
         self.parse_consumed()?;
+        self.end_with(crate::layout::End::Bound);
         Ok(self.complete(m, NodeKind::VarStmt))
     }
 
@@ -2317,7 +2413,6 @@ impl<'a> Parser<'a> {
                 let (pending, left) = chain.operator(op.group());
                 self.chain_operator(base, pending, left)?;
                 self.bump();
-                self.skip_newlines(); // operator at the end of the line continues it (§2.5)
                 let right = self.parse_cast()?;
                 chain.operand(right.height);
             }
@@ -2332,18 +2427,19 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    /// The next token is a binary operator read as one here. A `-` or `^`
-    /// with a blank before it and its operand touching it (`a -b`, `[1 -1]`)
-    /// is not (S-398): the grammar fails at it, and the table names the form
-    /// (`asymmetric_binary_space`). `a - -b` has blanks on both sides.
+    /// The next token is a binary operator read as one here. One at the head
+    /// of a line is not (§2.5, S-124, S-370: a line ends at its end), nor a
+    /// `-`, `^` or `+` with a blank before it and its operand touching it
+    /// (`a -b`, `[1 -1]`, `[1 +1]`; S-398, S-405). The grammar fails at it,
+    /// and the table names the form (`leading_operator`, `leading_minus`,
+    /// `asymmetric_binary_space`). `a - -b` has blanks on both sides.
     fn binary_here(&self) -> bool {
         let i = self.peek_index();
-        // SPEC-GAP(S-405): `+` joins `-` and `^` here when the prefix `+` is decided.
-        let asymmetric = matches!(self.tokens[i].kind, TokenKind::Minus | TokenKind::Caret)
+        let asymmetric = matches!(self.tokens[i].kind, TokenKind::Minus | TokenKind::Caret | TokenKind::Plus)
             && self.gap(i) == Gap::Space
             && self.gap_after(i) == Gap::None
             && starts_operand(self.tokens[i + 1].kind);
-        binop(self.tokens[i].kind) && !asymmetric
+        binop(self.tokens[i].kind) && !asymmetric && self.gap(i) != Gap::Newline
     }
 
     /// The rest of a head whose start `expr` is read: a range when a range
@@ -2353,6 +2449,11 @@ impl<'a> Parser<'a> {
     /// other languages says what they are (`range_dots`; a range anywhere
     /// else, `range_outside_header`).
     fn parse_range_rest(&mut self, expr: Completed) -> PResult<Completed> {
+        // A range symbol at the head of a line (in brackets, where a line
+        // break is a blank) is not read: the table names it (`leading_range`, S-335).
+        if !self.peek_kind().range_readings().is_empty() && self.peek_gap() == Gap::Newline {
+            return Err(self.unexpected("`{`"));
+        }
         if self.peek_kind().range_end().is_some() {
             let m = self.precede(expr, NodeKind::RangeExpr)?;
             self.bump();
@@ -2445,10 +2546,8 @@ impl<'a> Parser<'a> {
         // What the chain is so far, for the callee of a `(` (§6.1).
         let mut links = foreign::CalleeChain::start(expr.kind);
         loop {
-            // `.` on the next line continues the expression (§2.5).
-            if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::Dot {
-                self.skip_newlines();
-            }
+            // A `.` on the next line continues the expression (§2.5,
+            // [`Parser::peek_index`]).
             let t = self.peek();
             match t.kind {
                 TokenKind::LParen => {
@@ -2587,6 +2686,8 @@ impl<'a> Parser<'a> {
                     if !self.no_struct_lit
                         && chain.is_some_and(|c| self.token_text(c).starts_with(|c: char| c.is_ascii_uppercase())) =>
                 {
+                    // In brackets the `{` is on the line of the name (E0003, S-413).
+                    self.e0003_unless_on_the_line(TokenKind::LBrace);
                     let m = self.precede(expr, NodeKind::StructLit)?;
                     let l = self.start(NodeKind::StructLitFields)?;
                     self.bump();
@@ -2743,6 +2844,7 @@ impl<'a> Parser<'a> {
                     self.parse_head_expr(false)?;
                 }
                 let arms = self.start(NodeKind::MatchArms)?;
+                self.e0003_unless_on_the_line(TokenKind::LBrace);
                 self.expect(TokenKind::LBrace)?;
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
@@ -2774,19 +2876,24 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::ClosureExpr)?;
                 self.bump();
                 self.parse_params(false)?;
-                if self.eat(TokenKind::Arrow).is_some() {
+                if self.at_line_end(TokenKind::Arrow) {
+                    self.bump();
                     self.parse_type()?;
                 }
                 self.parse_effect_row_opt()?;
-                self.parse_block_expr()?;
+                self.parse_body()?;
                 return Ok(self.complete(m, NodeKind::ClosureExpr));
             }
             TokenKind::KwHandle => {
                 let m = self.start(NodeKind::HandleExpr)?;
                 self.bump();
-                self.parse_block_expr()?;
+                self.parse_body()?;
+                self.e0003_unless_on_the_line(TokenKind::KwWith);
                 self.expect(TokenKind::KwWith)?;
                 self.parse_path("a handler")?;
+                // SPEC-GAP(S-421): the `{` of a handler written in place on the
+                // next line: E0003 in brackets (`parse_item_body`), and out of
+                // them the line ends at the handler's name, as for a struct literal (S-413).
                 if self.at(TokenKind::LBrace) {
                     self.parse_item_body(ItemCtx::InlineHandler)?;
                 // S-412: the `(` after the handler of `with` follows the rule of
@@ -2799,7 +2906,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwUnsafe => {
                 let m = self.start(NodeKind::UnsafeExpr)?;
                 self.bump();
-                self.parse_block_expr()?;
+                self.parse_body()?;
                 return Ok(self.complete(m, NodeKind::UnsafeExpr));
             }
             TokenKind::KwPar => {
@@ -2808,10 +2915,15 @@ impl<'a> Parser<'a> {
                 self.parse_name("replication index")?;
                 self.expect(TokenKind::KwIn)?;
                 let range = self.parse_head_expr(true)?;
+                // A range symbol at the head of the next line: the table names
+                // it (`leading_range`, S-335).
+                if range.kind != NodeKind::RangeExpr && !self.peek_past_newlines().kind.range_readings().is_empty() {
+                    return Err(self.unexpected("`{`"));
+                }
                 if range.kind != NodeKind::RangeExpr {
                     return Err(self.error(Code::E0002, range.span, "`par` needs a range `a..<b` or `a..=b`"));
                 }
-                self.parse_block_expr()?;
+                self.parse_body()?;
                 return Ok(self.complete(m, NodeKind::ParExpr));
             }
             _ => {
@@ -2925,33 +3037,15 @@ impl<'a> Parser<'a> {
             Some(tilde) => tilde,
         };
         self.parse_head_expr(false)?;
-        self.parse_block_expr()?;
+        self.parse_body()?;
         let close_brace_end = self.last_end;
-        // `else` must be on the same line as `}` (E0003).
-        if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::KwElse {
-            let else_tok = self.peek_past_newlines();
-            let span = Span::new(self.file, close_brace_end, else_tok.span.start);
-            let fix = crate::layout::move_up(
-                self.file,
-                self.text,
-                &self.all,
-                "move `else` to the line of the `}`",
-                close_brace_end,
-                else_tok,
-                " ",
-            );
-            let d =
-                Diagnostic::new(Stage::Syntax, Code::E0003, span, "`else` must be on the same line as the closing `}`")
-                    .with_found("else")
-                    .with_fix(fix);
-            self.report(d);
-            self.skip_newlines();
-        }
-        if self.eat(TokenKind::KwElse).is_some() {
-            if self.at(TokenKind::KwIf) {
+        // `else` is on the line of the `}`, and the `if` after it on its line (E0003).
+        if self.e0003_unless_on_the_line(TokenKind::KwElse) {
+            self.bump();
+            if self.e0003_unless_on_the_line(TokenKind::KwIf) {
                 self.parse_if(Some(tilde))?;
             } else {
-                self.parse_block_expr()?;
+                self.parse_body()?;
             }
         } else if tilde {
             // The chain of an `if~` ends without `else` (S-355): E0002 at the
@@ -2985,11 +3079,12 @@ impl<'a> Parser<'a> {
 
     fn parse_pattern(&mut self) -> PResult<Completed> {
         let first = self.parse_pattern_alt()?;
-        if !self.at(TokenKind::Pipe) {
+        if !self.at_line_end(TokenKind::Pipe) {
             return Ok(first);
         }
         let m = self.precede(first, NodeKind::OrPat)?;
-        while self.eat(TokenKind::Pipe).is_some() {
+        while self.at_line_end(TokenKind::Pipe) {
+            self.bump();
             self.parse_pattern_alt()?;
         }
         Ok(self.complete(m, NodeKind::OrPat))
@@ -3159,7 +3254,11 @@ impl<'a> Parser<'a> {
                     })?;
                     return Ok(self.complete(m, NodeKind::TupleStructPat));
                 }
-                if self.at(TokenKind::LBrace) && crate::naming::is_type_name(self.token_text(path.last)) {
+                // The `{` of a struct pattern is on the line of its name, in
+                // brackets and in a `let` alike (E0003, S-413).
+                if crate::naming::is_type_name(self.token_text(path.last))
+                    && self.e0003_unless_on_the_line(TokenKind::LBrace)
+                {
                     self.reshape(NodeKind::StructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {
@@ -3809,6 +3908,20 @@ mod tests {
         assert_eq!(p.diagnostics[0].span.start, 22);
         let d = dump(&p.ast);
         assert!(d.contains("fn b(self)") && d.contains("(fn c()"), "{d}");
+    }
+
+    #[test]
+    fn the_recovery_does_not_start_a_unit_on_a_continued_line() {
+        // S-47: after a line that ends with `=`, a line that starts with `fn`
+        // goes on with it (a function type), so the skip of the unit with the
+        // error does not end there; it ends at `fn g`.
+        let p = parse("type Op = ? =\nfn(I32) -> I32\nfn g() {}\n");
+        assert_eq!(codes_of(&p), [Code::E0002], "{:?}", p.diagnostics);
+        assert!(dump(&p.ast).contains("(fn g()"));
+        // A line that does not go on is the next unit, as before.
+        let p = parse("type Op = ?\nfn g() {}\n");
+        assert_eq!(codes_of(&p), [Code::E0002]);
+        assert!(dump(&p.ast).contains("(fn g()"));
     }
 
     #[test]

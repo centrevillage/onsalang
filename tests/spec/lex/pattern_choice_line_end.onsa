@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
+// decided in W3-11); the case is about what the parser accepts.
+
+// The `|` of a pattern choice is at the end of the line, as a binary operator is (§2.5, §7, S-380). The
+// arms are in a pair of brackets, so the line break after the `|` is a blank, and the choice goes on
+// with its next alternative. The same holds in a pattern that is nested in a tuple, an enum variant, a
+// struct, and with a comment line or a blank line between the two lines (S-124). The `||` of a guard
+// (`if a ||` and the next line) is the operator of an expression, which is not the choice, and goes
+// on in the same way. The interpreter of this version does not run a `match` with literal patterns, so
+// the case is checked and not run.
+
+pub fn arms(x: U32) -> U32 {
+  match x {
+    0 |
+    1 => 10,
+    2 | 3 |
+    4 => 20,
+    _ => 0,
+  }
+}
+
+pub fn comment_between(x: U32) -> U32 {
+  match x {
+    0 |
+    // the second alternative
+
+    1 => 10,
+    _ => 0,
+  }
+}
+
+pub fn in_a_variant(o: Option[U32]) -> U32 {
+  match o {
+    Some(0 |
+      1) => 1,
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+pub fn in_a_tuple(t: (U32, U32)) -> U32 {
+  match t {
+    (0 |
+      1, _) => 1,
+    (_, 5 |
+      6) => 2,
+    _ => 0,
+  }
+}
+
+pub struct Pt {
+  x: U32,
+  y: U32,
+}
+
+pub fn in_a_struct(p: Pt) -> U32 {
+  match p {
+    Pt { x: 0 |
+      1, y: _ } => 1,
+    Pt { x: _, y: _ } => 0,
+  }
+}
+
+pub fn with_a_guard(x: U32, a: Bool, b: Bool) -> U32 {
+  match x {
+    0 | 1 if a ||
+      b => 1,
+    _ => 0,
+  }
+}
+
+pub fn a_choice_and_a_guard_operator(x: U32, a: Bool, b: Bool) -> U32 {
+  match x {
+    0 |
+    1 if a ||
+      b => 1,
+    _ => 0,
+  }
+}

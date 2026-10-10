@@ -1,0 +1,41 @@
+// the other module of the package (see main.onsa)
+
+pub struct Pt {
+                                                    //~ E0003
+  x: I32,
+  y: I32,
+}
+
+pub fn make(a: I32, b: I32) -> Pt {
+  Pt { x: a, y: b }
+}
+
+pub fn px(p: Pt, k: I32) -> I32 {
+  p.x + k
+}
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn first(p: Pt) -> I32 {
+  let Pt { x: a, y: _ } = p
+                                                    //~ E0003
+  a
+}
+
+pub fn a_prefix_plus_in_a_module(a: I32) -> I32 {
+  let b = a                                         //~ E0020
+  b
+}
+
+pub fn a_binary_plus_in_a_module(a: I32) -> U32 {
+  let v = [1, a + 1]                                //~ E0020
+  v.len()
+}
+
+pub enum Slot {
+  Empty,
+  Full(Option[I32]),
+    //~ E0002
+}

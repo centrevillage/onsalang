@@ -1,0 +1,2 @@
+fn e(x:U)->U{match x{0
+||1

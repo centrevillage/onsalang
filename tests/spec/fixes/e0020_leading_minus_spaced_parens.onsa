@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// E0020: a line that starts with `-` or `^` and a space (`- b`, `^ b`) in the pair of brackets of a call,
+// an array or a tuple (spec §2.5, S-123, S-370, S-236, S-216). The rule is the space after a prefix
+// operator, as outside the brackets (e0020_leading_minus.onsa), and the main position is the `-` or `^`,
+// so the marker is on its line. The candidates are not the two of `-b` in the brackets (e0020_leading_minus_parens.onsa):
+// the space removed (`-b`, a line that starts with `-`) leaves the E0020 of the leading `-b`, and a `,`
+// inserted leaves the E0020 of the space, so neither is a candidate (the promise of §18.1: a candidate
+// that leaves an error of the same stage is not made). The only candidate is the line joined to the line
+// before it (`two(a - b, 1)`), which is the moved text before the comment of the line before it, as in
+// S-216. One error in each declaration unit.
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn two_u(x: U32, y: U32) -> U32 {
+  x + y
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a
+      - b, 1)                                       //~ E0020
+}
+
+pub fn in_a_call_second_argument(a: I32, b: I32) -> I32 {
+  two(1, a
+         - b)                                       //~ E0020
+}
+
+pub fn in_a_nested_call(a: I32, b: I32) -> I32 {
+  two(two(a
+          - b, 1), 2)                               //~ E0020
+}
+
+pub fn in_an_array(a: I32, b: I32) -> [I32; 2] {
+  [a
+   - b, 1]                                          //~ E0020
+}
+
+pub fn in_a_tuple(a: I32, b: I32) -> (I32, I32) {
+  (a
+   - b, 1)                                          //~ E0020
+}
+
+pub fn caret_in_a_call(a: U32, b: U32) -> U32 {
+  two_u(a
+        ^ b, 1)                                     //~ E0020
+}
+
+pub fn caret_in_an_array(a: U32, b: U32) -> [U32; 2] {
+  [a
+   ^ b, 1]                                          //~ E0020
+}
+
+pub fn comment_at_the_end_of_the_line(a: I32, b: I32) -> I32 {
+  two(a // the first operand
+      - b, 1)                                       //~ E0020
+}
+
+pub fn comment_line_between(a: I32, b: I32) -> I32 {
+  two(a
+      // the second operand
+      - b, 1)                                       //~ E0020
+}
+
+pub fn fine(a: I32, b: I32) -> I32 {
+  two(a -
+    b, 1)
+}

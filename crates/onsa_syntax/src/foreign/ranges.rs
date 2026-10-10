@@ -16,6 +16,13 @@ fn range_symbol(c: &Cursor) -> Option<bool> {
     if c.closed.first().is_some_and(|n| pattern(n.0)) || c.top().is_some_and(pattern) {
         return None;
     }
+    head(c)
+}
+
+/// Whether the expression that closed at the failure is the start of the
+/// head of a `for` or a `par`, where a range is the whole expression (§3.1),
+/// or else none for one in a head after a range.
+fn head(c: &Cursor) -> Option<bool> {
     closed_expr(c)?;
     // The head: the expression that closed here starts right after `in`
     // (or `in move`) of the innermost open `for` or `par` (the context: the
@@ -95,13 +102,54 @@ pub(super) fn range_header_one_sided(c: &Cursor) -> Option<Hit> {
     hit(c.file_span(c.span(first).start, c.span(last).end), Vec::new())
 }
 
+/// A range symbol at the head of a line after an operand (the token of the
+/// failure, or the first of the line after a head that waits for its `{`,
+/// [`crate::layout::line_head`]), and whether it goes on with the head of a
+/// `for` or a `par` (§2.5, S-335): after a statement that ended, it does not.
+fn line_range(c: &Cursor) -> Option<(usize, bool)> {
+    let (s, _) = crate::layout::line_head(c)?;
+    if c.kind(s).range_readings().is_empty() || c.want == Want::Pattern {
+        return None;
+    }
+    if c.closed.is_empty() {
+        return Some((s, false));
+    }
+    Some((s, head(c)?))
+}
+
+/// A range symbol at the head of a line in the head of a `for` or a `par`
+/// (`for i in 0` and `..<n {` on the next line; §2.5, S-335): it goes at the
+/// end of the line, as a binary operator does, and the candidate moves it
+/// there. `..` and `...` are written as `..<` and `..=` there, one candidate
+/// each (S-257).
+pub(super) fn leading_range(c: &Cursor) -> Option<Hit> {
+    let (s, true) = line_range(c)? else { return None };
+    let readings = c.kind(s).range_readings();
+    let fixes = readings
+        .iter()
+        .filter_map(|end| {
+            // The two readings of `..` and `...` say which end they write (as `range_dots`).
+            let title = match end {
+                _ if readings.len() == 1 => "move it to the end of the line before",
+                crate::ast::RangeEnd::Excluded => "exclude the end with `..<` at the end of the line before",
+                crate::ast::RangeEnd::Included => "include the end with `..=` at the end of the line before",
+            };
+            crate::layout::move_token_up_as(c, title, s, &format!(" {}", end.symbol()))
+        })
+        .collect();
+    hit(c.span(s), fixes)
+}
+
 /// A range after an expression outside the head of a `for` or a `par`
 /// (`let r = 0..<4`, `xs[1..<3]`, `for i in (0..<4)`): E0002 with the note,
 /// whatever its symbol (a candidate for `..` would leave the range where
 /// none goes, §18.1).
 pub(super) fn range_outside_header(c: &Cursor) -> Option<Hit> {
-    if range_symbol(c)? {
-        return None;
-    }
-    hit(c.span(c.at), Vec::new())
+    let at = match range_symbol(c) {
+        Some(head) => (!head).then_some(c.at),
+        // A symbol at the head of a line after a statement (`let r = 0` and
+        // `..<n`, S-335): moved up, the range would be outside a head.
+        None => line_range(c).and_then(|(s, head)| (!head).then_some(s)),
+    }?;
+    hit(c.span(at), Vec::new())
 }

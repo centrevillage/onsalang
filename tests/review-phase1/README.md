@@ -109,9 +109,9 @@
 | `syntax/nested*.onsa` | R-44 |
 | `syntax/bigfloat.onsa` | R-45 |
 | `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/naming.onsa`、`syntax/modpkg/` | R-46 |
-| `syntax/arrow.onsa` | R-58 |
+| `syntax/arrow.onsa` | R-58。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/lex/continuation_function_types.onsa`（全部）と `continuation_top_level.onsa`（トップレベルの行末の `->` の継続） |
 | `syntax/faust.onsa` | R-59 |
-| `syntax/else_paren.onsa` | R-62 |
+| `syntax/else_paren.onsa` | R-62。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |
 | `syntax/unit*.onsa`、`syntax/emptyrow.onsa` | R-78 |
 | `syntax/ret_arm.onsa`、`syntax/space_idx.onsa` | R-101 |
 | `syntax/interp.onsa` | R-102 |
@@ -134,7 +134,7 @@
 | `parent/r119.onsa` | R-119 |
 | `parent/r120.onsa` | R-120 |
 | `parent/r61.onsa` | R-61（計算で決まる定数を長さに使う） |
-| `parent/r62.onsa` | R-62（括弧・腕の中の `else` と `{` の位置） |
+| `parent/r62.onsa` | R-62（括弧・腕の中の `else` と `{` の位置）。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |
 | `parent/r70/` | R-70（コメントの位置の 17 の形。どれも正規形で書いてあり、fmt で変わらないのが期待値。S-58） |
 | `parent/r71/` | R-71（回復と診断の単位の 6 つの形。S-59）。W3-03 で期待値付きのテストへ移して消した: `tests/spec/negative/unit_members.onsa`（`a_impl`）、`unit_failed_visible.onsa`（`b_body`、`d_sig`、`f_struct`）、`unit_unclosed_brace.onsa`（`c_brace`）、`unit_syntax_hides_later.onsa` と `unit_stage_order.onsa`（`g_naming_then_syntax`） |
 | `parent/r72.onsa` | R-72、R-123（S-60、S-61）。W3-07 で期待値付きのテストへ移した: `tests/spec/fixes/e0010_candidates.onsa`・`e0010_candidates_groups.onsa`・`e0010_candidates_contexts.onsa`・`e0010_layout.onsa`・`e0010_nesting_boundary.onsa`（E0010 の修正候補）、`tests/spec/ops/groups.onsa`・`tests/spec/semantics/precedence_trees.onsa`（ビットの群の同じ演算子の連鎖）、`crates/onsa_cli/tests/operator_groups.rs` の `the_candidates_of_e0010_are_the_readings_in_the_order_of_the_rule` ほか（候補の順と文面） |
@@ -178,7 +178,7 @@
 | `parent/r129.onsa` | R-129（効果の名前の解決。期待値は各関数の上のコメント。S-74） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
 | （R-132） | 専用の入力は無い。レートを型の形で書いたときの診断は `parent/t5.onsa`（S-102） |
-| `parent/c119.onsa` | 点検 C-119 と C-12（行頭の `- b` で関数が `-b` を返す。期待値と今の出力は先頭のコメント。S-127、S-124、S-123） |
+| `parent/c119.onsa` | 点検 C-119 と C-12（行頭の `- b` で関数が `-b` を返す。期待値と今の出力は先頭のコメント。S-127、S-124、S-123）。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_leading_minus.onsa`（`c119`。先頭のコメントの E0418 は候補を当てた後の後の段の診断で、移していない） |
 | `parent/c120.onsa` | 点検 C-120（行末の `return` の次の行が黙って実行されない。期待値と今の出力は先頭のコメント。S-128） |
 | `parent/c121.onsa` | 点検 C-121（flow の使われない `let` と、行頭の `- prev` が黙って出力になる。期待値と今の出力は先頭のコメント。S-129） |
 

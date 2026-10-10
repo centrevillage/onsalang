@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7"]
+
+// The same rule in the head and the arms of a `match` (§2.5, S-202, S-370). The scrutinee goes on over
+// a line break after a binary operator, and the `{` stays on the last line of the head. An arm body and
+// a guard go on in the same way: the list of arms is a pair of brackets, so a line break is a blank,
+// and the operator is at the end of the line. The interpreter of this version does not run these
+// `match`es (a literal pattern, a guard), so the case is checked and not run.
+
+pub fn scrutinee(t: I32) -> I32 {
+  match t +
+    1 {
+    1 => 10,
+    _ => 20,
+  }
+}
+
+pub fn scrutinee_compare(a: I32, b: I32) -> I32 {
+  match a ==
+    b {
+    true => 1,
+    false => 0,
+  }
+}
+
+pub fn arm_bodies(k: U32, a: I32, b: I32) -> I32 {
+  match k {
+    0 => a +
+      b,
+    1 => a *
+      b,
+    _ => a -
+      b,
+  }
+}
+
+pub fn guard_goes_on(k: I32, a: Bool, b: Bool) -> I32 {
+  match k {
+    n if a &&
+      b => n,
+    _ => 0,
+  }
+}
+
+pub fn arm_in_a_call(k: U32, a: I32) -> I32 {
+  max2(match k {
+    0 => a +
+      1,
+    _ => a *
+      2,
+  }, a)
+}
+
+pub fn max2(a: I32, b: I32) -> I32 {
+  if a > b { a } else { b }
+}

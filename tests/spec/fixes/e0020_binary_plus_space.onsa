@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020 for a binary `+` with a space before it and none after it (spec §2.5, §3.1, S-405 (ii), S-398): `a +b`,
+// `[1 +1]`, `two(a +b, 1)`. Swift, MATLAB and Julia read `[1 +1]` as two elements (`1` and a `+1`), and the
+// other languages read `1 + 1`, so the form is an error in and out of brackets, as `[1 -1]` is
+// (e0020_space_asymmetric.onsa). There is no prefix `+` in Onsa (§3.1), so the second reading is
+// `[1, 1]`: the candidates in an element list (the arguments of a call, an array, a tuple) are, in this order,
+// the space put on both sides (`1 + 1`) and the `,` inserted with the `+` removed in one edit (`[1, 1]`).
+// Where there is no list to put a `,` in (a `let`, an index, a field of a struct literal, the body of an arm,
+// a condition, a `return`, one operand of a larger expression) the only candidate is the space on both
+// sides. The main position is the `+`, so the marker is on its line. One error in each declaration unit
+// (P-01). The right forms, and `+%` and `+|`, which this rule does not cover, are at the end of the file.
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x + y
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn in_an_array() -> U32 {
+  let v = [1 +1]                                    //~ E0020
+  v.len()
+}
+
+pub fn in_an_array_of_floats() -> F32 {
+  let v = [0.5 +0.5]                                //~ E0020
+  v[0]
+}
+
+pub fn in_an_array_last(a: I32) -> U32 {
+  let v = [1, a +1]                                 //~ E0020
+  v.len()
+}
+
+pub fn in_an_array_first(a: I32) -> U32 {
+  let v = [a +1, 2]                                 //~ E0020
+  v.len()
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a +b, 1)                                      //~ E0020
+}
+
+pub fn in_a_call_second_argument(a: I32, b: I32) -> I32 {
+  two(1, a +b)                                      //~ E0020
+}
+
+pub fn in_a_nested_call(a: I32, b: I32) -> I32 {
+  two(two(a +b, 1), 2)                              //~ E0020
+}
+
+pub fn in_a_tuple(a: I32, b: I32) -> I32 {
+  let t = (a +b, 1)                                 //~ E0020
+  t.0
+}
+
+pub fn in_a_tuple_of_arrays(a: I32) -> U32 {
+  let v = ([a +1], [2])                             //~ E0020
+  v.0.len()
+}
+
+pub fn before_a_group(a: I32, b: I32) -> U32 {
+  let v = [a +(b)]                                  //~ E0020
+  v.len()
+}
+
+pub fn before_a_product(a: I32, b: I32) -> U32 {
+  let v = [a +b * 2]                                //~ E0020
+  v.len()
+}
+
+pub fn before_a_call(a: I32, b: I32) -> U32 {
+  let v = [a +two(b, 1)]                            //~ E0020
+  v.len()
+}
+
+pub fn before_a_member(a: I32, p: Pt) -> U32 {
+  let v = [a +p.x]                                  //~ E0020
+  v.len()
+}
+
+pub fn in_a_let(a: I32, b: I32) -> I32 {
+  let c = a +b                                      //~ E0020
+  c
+}
+
+pub fn in_a_let_with_a_product(a: I32, b: I32) -> I32 {
+  let c = a +b * 2                                  //~ E0020
+  c
+}
+
+pub fn in_a_return(a: I32, b: I32) -> I32 {
+  return a +b                                       //~ E0020
+}
+
+pub fn in_an_index(xs: [I32; 4], i: U32) -> I32 {
+  xs[i +1]                                          //~ E0020
+}
+
+pub fn in_a_struct_literal_field(a: I32) -> Pt {
+  Pt { x: a +1, y: 2 }                              //~ E0020
+}
+
+pub fn in_an_arm_body(n: I32, a: I32, b: I32) -> I32 {
+  match n {
+    0 => a +b,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_condition(a: I32, b: I32) -> I32 {
+  if a +1 > b { 1 } else { 0 }                      //~ E0020
+}
+
+pub fn as_the_value_of_a_branch(c: Bool, a: I32, b: I32) -> I32 {
+  if c {
+    a +b                                            //~ E0020
+  } else {
+    0
+  }
+}
+
+pub fn as_an_assignment(a: I32, b: I32) -> I32 {
+  var s = 0
+  s = a +b                                          //~ E0020
+  s
+}
+
+pub fn in_a_closure(a: I32, b: I32) -> I32 {
+  let f = fn(x: I32, y: I32) -> I32 {
+    x +y                                            //~ E0020
+  }
+  f.(a, b)
+}
+
+pub fn in_a_generic_head[T: Num](x: T, y: T) -> T {
+  x +y                                              //~ E0020
+}
+
+impl Pt {
+  pub fn total(self) -> I32 {
+    self.x +self.y                                  //~ E0020
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  x +y                                              //~ E0020
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4 {
+    x +i.round_f32()                                //~ E0020
+  }
+}
+
+pub fn after_a_comment_line(a: I32, b: I32) -> I32 {
+  // the sum
+  a +b                                              //~ E0020
+}
+
+// The right forms: a space on both sides, a `,` between two elements, and the wrapping and saturating
+// operators, which are not covered by this rule (their forms are in lex/binary_plus_wrap_forms.onsa).
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a + b
+  let d = [a + b, 1]
+  let e = [a, b][0]
+  let f = two(a + b, 1)
+  c + d[0] + e + f
+}

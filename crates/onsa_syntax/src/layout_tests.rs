@@ -6,6 +6,8 @@
 
 use onsa_diag::{Code, Diagnostic, FileId};
 
+use crate::token::TokenKind;
+
 fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
 }
@@ -485,4 +487,402 @@ fn a_stack_of_prefix_operators_over_lines() {
     check(&body("  two(-\n    -a, 1)"), Code::E0012, "-\n    -a", &[&body("  two(-(-a), 1)")]);
     let g = |s: &str| format!("fn g(c: Bool) -> Bool {{\n{s}\n}}\n");
     check(&g("  !\n    !c"), Code::E0012, "!\n    !c", &[&g("  !(!c)")]);
+}
+
+// ------------------------------------------------------------ W3-06 unit 2: lines
+
+/// The codes of the parser's diagnostics of `src`.
+fn codes(src: &str) -> Vec<Code> {
+    parse(src).diagnostics.iter().map(|d| d.code).collect()
+}
+
+#[test]
+fn a_line_goes_on_after_its_continuing_tokens_at_the_top_level_too() {
+    // S-47, R-58, S-121, S-124, S-335, S-374: `=`, `->`, a range symbol, and a
+    // next line that starts with `uses` or `.`; comment lines and blank lines between.
+    for src in [
+        "type Gain =\n  F32\n",
+        "fn f(x: I32) ->\n  I32 {\n  x\n}\n",
+        "fn f(x: I32) -> I32\n  uses {Alloc} {\n  x\n}\n",
+        "type Op =\n  fn(I32) ->\n  I32\n",
+        "fn f(n: U32) {\n  for i in 0..<\n    // the end\n\n    n {\n  }\n}\n",
+        "fn f(a: I32, b: I32) -> I32 {\n  let c = a +\n    // b next\n\n    b\n  c\n}\n",
+        "fn f(a: I32) -> I32 {\n  a\n    // the chain\n    .abs()\n}\n",
+        "@repr(c)\nstruct P {\n  x: I32,\n}\n",
+    ] {
+        assert!(codes(src).is_empty(), "{src}: {:?}", parse(src).diagnostics);
+    }
+    // A prefix `-` at the end of a line does not go on (S-369).
+    assert_eq!(codes("fn f(a: I32) -> I32 {\n  let y = -\n    a\n  y\n}\n"), [Code::E0020]);
+}
+
+#[test]
+fn a_misplaced_else_with_brace_or_if_is_e0003_at_the_token() {
+    // R-160: the main position and `found` are the misplaced token; the
+    // reading goes on. S-414: the `if` after `else`. S-415: the bodies of
+    // the declarations.
+    check(&body("  if a > 0 { 1 }\n  else { 2 }"), Code::E0003, "else", &[&body("  if a > 0 { 1 } else { 2 }")]);
+    check(
+        &body("  if a > 0 { 1 } else\n  if b > 0 { 2 } else { 3 }"),
+        Code::E0003,
+        "if",
+        &[&body("  if a > 0 { 1 } else if b > 0 { 2 } else { 3 }")],
+    );
+    check(
+        &body("  two(if a > 0 { 1 }\n    else { 2 }, 1)"),
+        Code::E0003,
+        "else",
+        &[&body("  two(if a > 0 { 1 } else { 2 }, 1)")],
+    );
+    check("struct P\n{\n  x: I32,\n}\n", Code::E0003, "{", &["struct P {\n  x: I32,\n}\n"]);
+    check("enum E\n{\n  A,\n}\n", Code::E0003, "{", &["enum E {\n  A,\n}\n"]);
+    check("trait T\n{\n}\n", Code::E0003, "{", &["trait T {\n}\n"]);
+    check("test \"t\"\n{\n  assert true\n}\n", Code::E0003, "{", &["test \"t\" {\n  assert true\n}\n"]);
+    check(&body("  while a > b\n  {\n  }\n  a"), Code::E0003, "{", &[&body("  while a > b {\n  }\n  a")]);
+    // The comment of the misplaced token's line stays on its line (S-216).
+    check(
+        &body("  if a > 0 { 1 }\n  else { 2 } // two"),
+        Code::E0003,
+        "else",
+        &[&body("  if a > 0 { 1 } else { 2 }\n  // two")],
+    );
+    // `with` of `handle` (in brackets too).
+    let h = "effect Ask {\n  fn ask() -> I32\n}\nhandler one: Ask {\n  fn ask() -> I32 {\n    1\n  }\n}\n";
+    let g = |e: &str| format!("{h}{DECLS}fn g() -> I32 {{\n  two({e}, 1)\n}}\n");
+    check(&g("handle { 1 }\n    with one"), Code::E0003, "with", &[&g("handle { 1 } with one")]);
+}
+
+#[test]
+fn the_brace_of_a_struct_literal_pattern_or_effect_row_in_brackets() {
+    // S-413: in brackets, and in a `let` pattern, the `{` is on the line of
+    // the name; out of brackets the line ends at the name (another reading).
+    let s = "struct S {\n  a: I32,\n}\nfn two(s: S, b: I32) -> I32 {\n  s.a + b\n}\n";
+    let g = |e: &str| format!("{s}fn g(s: S) -> I32 {{\n{e}\n}}\n");
+    check(&g("  two(S\n    { a: 1 }, 2)"), Code::E0003, "{", &[&g("  two(S { a: 1 }, 2)")]);
+    check(&g("  let S\n    { a: x } = s\n  x"), Code::E0003, "{", &[&g("  let S { a: x } = s\n  x")]);
+    check(
+        "fn h(k: fn(I32) -> I32 uses\n  {Alloc}, x: I32) -> I32 {\n  x\n}\n",
+        Code::E0003,
+        "{",
+        &["fn h(k: fn(I32) -> I32 uses {Alloc}, x: I32) -> I32 {\n  x\n}\n"],
+    );
+    // Out of brackets `uses` ends the line (E0002), as before.
+    assert_eq!(codes("fn h(x: I32) -> I32 uses\n  {Alloc} {\n  x\n}\n"), [Code::E0002]);
+    // A constant before a `{` reads as a struct literal by its spelling; the
+    // E0003 comes first, and the rest is the next check's (S-413).
+    assert_eq!(codes(&body("  h(N\n    { 1 })"))[0], Code::E0003);
+}
+
+#[test]
+fn the_brace_of_a_handler_written_in_place() {
+    // S-421 (the provisional reading (1)): E0003 in brackets; out of them the
+    // line ends at the handler's name.
+    let h = "effect Ask {\n  fn ask() -> I32\n}\n";
+    let g = |e: &str| format!("{h}{DECLS}fn g() -> I32 {{\n{e}\n}}\n");
+    check(
+        &g("  two(handle { 1 } with Ask\n    { fn ask() -> I32 { 1 } }, 1)"),
+        Code::E0003,
+        "{",
+        &[&g("  two(handle { 1 } with Ask { fn ask() -> I32 { 1 } }, 1)")],
+    );
+    assert!(!codes(&g("  handle { 1 } with Ask\n  { fn ask() -> I32 { 1 } }")).contains(&Code::E0003));
+}
+
+#[test]
+fn a_keyword_and_its_operand_in_brackets() {
+    // S-416: no rule of place; in brackets the line break is a blank.
+    assert!(codes(&body("  two(if\n    a > 0 { 1 } else { 2 }, match\n    a { _ => 1 })")).is_empty());
+}
+
+#[test]
+fn an_operator_at_the_head_of_a_line() {
+    // S-124, S-370: the operator moves to the end of the line before, before
+    // its comment (S-216); in brackets too.
+    check(&body("  let c = a\n  + b\n  c"), Code::E0020, "+", &[&body("  let c = a +\n  b\n  c")]);
+    check(&body("  let c = a // one\n  * b\n  c"), Code::E0020, "*", &[&body("  let c = a * // one\n  b\n  c")]);
+    check(&body("  two(a\n    + b, 1)"), Code::E0020, "+", &[&body("  two(a +\n    b, 1)")]);
+    // In a head waiting for its `{`: the next line's operator.
+    check(
+        &body("  if a > 0\n  && b > 0 {\n  }\n  a"),
+        Code::E0020,
+        "&&",
+        &[&body("  if a > 0 &&\n  b > 0 {\n  }\n  a")],
+    );
+    // `->` and `=` (S-374).
+    check("fn f(a: I32)\n  -> I32 {\n  a\n}\n", Code::E0020, "->", &["fn f(a: I32) ->\n  I32 {\n  a\n}\n"]);
+    check(
+        "fn f(h: fn(I32)\n  -> I32, x: I32) -> I32 {\n  x\n}\n",
+        Code::E0020,
+        "->",
+        &["fn f(h: fn(I32) ->\n  I32, x: I32) -> I32 {\n  x\n}\n"],
+    );
+    check(&body("  let c: I32\n  = 5\n  c"), Code::E0020, "=", &[&body("  let c: I32 =\n  5\n  c")]);
+    check(&body("  var d = 1\n  d\n  = 5\n  d"), Code::E0020, "=", &[&body("  var d = 1\n  d =\n  5\n  d")]);
+    // After a statement that has its `=` (or a `return`), a `=` goes on with nothing (S-236).
+    let (d, fixed) = one(&body("  var d = 1\n  d = 2\n  = 5\n  d"));
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0), "{d:?}");
+    check("type A = fn(I32)\n  -> I32\n", Code::E0020, "->", &["type A = fn(I32) ->\n  I32\n"]);
+    // The `|` of a pattern choice (S-380).
+    let m = |arms: &str| format!("fn g(x: U32) -> U32 {{\n  match x {{\n{arms}\n    _ => 0,\n  }}\n}}\n");
+    check(&m("    0\n    | 1 => 1,"), Code::E0020, "|", &[&m("    0 |\n    1 => 1,")]);
+    // `+b` touching its operand in a list of expressions: the `,` with the `+`
+    // taken out is the second candidate (S-405); `+ b` has the move only.
+    check(
+        &body("  two(a\n    +b, 1)"),
+        Code::E0020,
+        "+",
+        &[&body("  two(a +\n    b, 1)"), &body("  two(a,\n    b, 1)")],
+    );
+}
+
+#[test]
+fn no_candidate_moves_a_symbol_after_what_ends_no_operand() {
+    // S-236, S-124: after the `}` of a `for`, a `while` or a declaration, the
+    // moved symbol would follow no operand; the form is then no
+    // `leading_operator` (the general E0002, or `prefix_plus` for a `+`).
+    let d = &parse(&body("  for i in 0..<4 {\n  }\n  * 2")).diagnostics;
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, Code::E0002);
+    check(&body("  while a > b {\n  }\n  +2"), Code::E0020, "+", &[&body("  while a > b {\n  }\n  2")]);
+    assert_eq!(codes("fn f() {\n}\n+ 1\n"), [Code::E0002]);
+    // After an `if` expression the line goes on (an operand).
+    check(
+        &body("  if a > 0 { 1 } else { 2 }\n  + 1"),
+        Code::E0020,
+        "+",
+        &[&body("  if a > 0 { 1 } else { 2 } +\n  1")],
+    );
+}
+
+#[test]
+fn a_line_that_starts_with_minus_or_caret() {
+    // `- b` after an operand: the blank out, or the line joined (leading_minus).
+    check(
+        &body("  let c = a\n  - b\n  c"),
+        Code::E0020,
+        "-",
+        &[&body("  let c = a\n  -b\n  c"), &body("  let c = a - b\n  c")],
+    );
+    // In brackets: `-b` moves up or takes a `,` (S-370); `- b` joins only.
+    check(
+        &body("  two(a\n    -b, 1)"),
+        Code::E0020,
+        "-",
+        &[&body("  two(a -\n    b, 1)"), &body("  two(a,\n    -b, 1)")],
+    );
+    check(&body("  two(a\n    - b, 1)"), Code::E0020, "-", &[&body("  two(a - b, 1)")]);
+    // After a `for`, no join (S-236).
+    check(&body("  for i in 0..<4 {\n  }\n  - b"), Code::E0020, "-", &[&body("  for i in 0..<4 {\n  }\n  -b")]);
+}
+
+#[test]
+fn an_arm_without_its_comma_before_a_sign() {
+    // S-386: a `-` / `|` / `+` at the head of a line that a `=>` follows starts
+    // the next arm: E0002 at it, the `,` the one candidate (for `+`, with the
+    // `+` and its blank out, S-405); `- 1` has none. The same on one line.
+    let m =
+        |arms: &str| format!("fn g(x: I32) -> I32 {{\n  match x {{\n    0 => {{ 1 }}{arms}\n    _ => 3,\n  }}\n}}\n");
+    check(&m("\n    -1 => 2,"), Code::E0002, "-", &[&m(",\n    -1 => 2,")]);
+    check(&m("\n    +1 => 2,"), Code::E0002, "+", &[&m(",\n    1 => 2,")]);
+    check(&m("\n    + 1 => 2,"), Code::E0002, "+", &[&m(",\n    1 => 2,")]);
+    check(&m(" -1 => 2,"), Code::E0002, "-", &[&m(", -1 => 2,")]);
+    let (d, fixed) = one(&m("\n    - 1 => 2,"));
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0), "{d:?}");
+    let (d, fixed) = one(&m("\n    | 1 => 2,"));
+    assert_eq!((d.code, d.found.as_deref()), (Code::E0002, Some("|")));
+    assert_eq!(fixed, [m(",\n    | 1 => 2,")]);
+}
+
+#[test]
+fn a_prefix_plus_and_an_asymmetric_binary_plus() {
+    // S-405 (a): no prefix `+`; the candidate takes it out with its blank.
+    check(&body("  let c = +1\n  c"), Code::E0020, "+", &[&body("  let c = 1\n  c")]);
+    check(&body("  two(+ a, 1)"), Code::E0020, "+", &[&body("  two(a, 1)")]);
+    let m = |p: &str| format!("fn g(x: I32) -> I32 {{\n  match x {{\n    {p} => 1,\n    _ => 0,\n  }}\n}}\n");
+    check(&m("+1"), Code::E0020, "+", &[&m("1")]);
+    // (ii): the blanks on both sides, and in a list of expressions the `,`
+    // with the `+` out.
+    check(
+        &body("  let v = [1 +1]\n  0"),
+        Code::E0020,
+        "+",
+        &[&body("  let v = [1 + 1]\n  0"), &body("  let v = [1, 1]\n  0")],
+    );
+    check(&body("  let c = a +b\n  c"), Code::E0020, "+", &[&body("  let c = a + b\n  c")]);
+}
+
+#[test]
+fn the_two_candidates_of_an_opener_after_a_line_break_are_those_that_read() {
+    // S-419: in the arms, the `,` when a `=>` follows, else the line break out.
+    let m = |arms: &str| {
+        format!(
+            "fn one(x: I32) -> I32 {{\n  x\n}}\nfn g(x: (I32, I32)) -> I32 {{\n  match x {{\n{arms}\n    _ => 0,\n  }}\n}}\n"
+        )
+    };
+    check(&m("    (0, 0) => one\n    (1, 1) => 2,"), Code::E0002, "(", &[&m("    (0, 0) => one,\n    (1, 1) => 2,")]);
+    check(&m("    (0, 0) => one\n    (1),"), Code::E0002, "(", &[&m("    (0, 0) => one(1),")]);
+    // In a list of types only, a `[` without `;` starts no element.
+    check("enum E {\n  V(Option\n    [I32]),\n}\n", Code::E0002, "[", &["enum E {\n  V(Option[I32]),\n}\n"]);
+    let (_, fixed) = one("enum E {\n  V(I32\n    [I32; 2]),\n}\n");
+    assert_eq!(fixed, ["enum E {\n  V(I32,\n    [I32; 2]),\n}\n"]);
+    // Elsewhere both, as before (S-89).
+    check(&body("  two(h\n    (a), 1)"), Code::E0002, "(", &[&body("  two(h,\n    (a), 1)"), &body("  two(h(a), 1)")]);
+}
+
+#[test]
+fn the_vert_of_a_pattern_out_of_its_place() {
+    let m = |arms: &str| format!("fn g(x: U32) -> U32 {{\n  match x {{\n{arms}\n    _ => 0,\n  }}\n}}\n");
+    // S-383: before the first alternative, out with its blank.
+    check(&m("    | 0 | 1 => 1,"), Code::E0020, "|", &[&m("    0 | 1 => 1,")]);
+    check(&body("  let | (c, d) = (a, b)\n  c"), Code::E0020, "|", &[&body("  let (c, d) = (a, b)\n  c")]);
+    let (d, fixed) = one(&m("    | x > 0 => 1,"));
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0));
+    // S-389: `||` is one `|`; with no pattern after it, none.
+    check(&m("    0 || 1 => 1,"), Code::E0020, "||", &[&m("    0 | 1 => 1,")]);
+    let (d, fixed) = one(&m("    0 || => 1,"));
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0));
+}
+
+#[test]
+fn a_range_symbol_at_the_head_of_a_line() {
+    // S-335: in a head, moved up; `..` gives the two readings; after a
+    // statement, the range outside a head (E0002).
+    let f = |head: &str| format!("fn f(n: U32) {{\n  for i in 0{head} {{\n  }}\n}}\n");
+    check(&f("\n    ..<n"), Code::E0020, "..<", &[&f(" ..<\n    n")]);
+    check(&f("\n    ..n"), Code::E0020, "..", &[&f(" ..<\n    n"), &f(" ..=\n    n")]);
+    let (d, fixed) = one("fn f(n: U32) -> U32 {\n  let r = 0\n  ..<n\n  n\n}\n");
+    assert_eq!((d.code, d.found.as_deref(), fixed.len()), (Code::E0002, Some("..<"), 0));
+}
+
+// ------------------------------------------------------------ W3-06 unit 2: the break side's findings
+
+#[test]
+fn fmt_props_continues_as_the_parser() {
+    // tools/fmt_props.py keeps the set of the symbols after which a line goes
+    // on (`CONTINUING`): the same as `layout::continues` (D-15).
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/fmt_props.py");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let line = text.lines().find(|l| l.starts_with("CONTINUING = frozenset(\"")).expect("CONTINUING");
+    let set: std::collections::BTreeSet<&str> =
+        line.trim_start_matches("CONTINUING = frozenset(\"").trim_end_matches("\".split())").split(' ').collect();
+    let kind = |s: &str| {
+        let lexed = crate::lex(FileId(0), s);
+        let code: Vec<_> = lexed.tokens.iter().filter(|t| !t.kind.is_trivia() && t.kind != TokenKind::Eof).collect();
+        assert_eq!(code.len(), 1, "{s} is one token");
+        code[0].kind
+    };
+    let goes_on = |s: &str| crate::layout::continues(Some(TokenKind::Ident), kind(s), TokenKind::Ident);
+    for s in &set {
+        assert!(goes_on(s), "`{s}` is in CONTINUING but a line ending in it does not go on");
+    }
+    let symbols = "+ - * / % +% -% *% +| -| *| == != < <= > >= && || & | ^ << >> = -> ..< ..= .. ... => : , . ! ~ ? @ :: ( ) [ ] { }";
+    for s in symbols.split(' ') {
+        assert_eq!(goes_on(s), set.contains(s), "`{s}`: CONTINUING and layout::continues differ");
+    }
+}
+
+#[test]
+fn a_line_that_starts_with_an_ampersand() {
+    // The break side's 1: the binary `&` at the head of a line goes on with the
+    // line before (leading_operator); `&mut b`, `&*x`, `&= b` are the rows of
+    // the references or the general E0002, never two rows (an internal error).
+    check(&body("  let c = a\n  & b\n  c"), Code::E0020, "&", &[&body("  let c = a &\n  b\n  c")]);
+    check(&body("  two(a\n    & b, 1)"), Code::E0020, "&", &[&body("  two(a &\n    b, 1)")]);
+    for tail in ["&mut b", "&*b", "&= b", "& mut b"] {
+        let p = parse(&body(&format!("  let c = a\n  {tail}\n  c")));
+        assert!(!p.diagnostics.is_empty(), "{tail}");
+        assert!(
+            p.diagnostics.iter().all(|d| d.fixes.iter().all(|f| !f.title().contains("end of the line before"))),
+            "{tail}: {:?}",
+            p.diagnostics
+        );
+    }
+    assert!(!codes(&body("  two(a\n    &mut b, 1)")).is_empty());
+}
+
+#[test]
+fn an_arrow_or_an_equal_at_the_head_of_a_line_after_a_head_without_a_body() {
+    // The break side's 3: S-374 for the members of a trait, an effect and an
+    // `extern`, and a constant of a trait.
+    check("trait T {\n  fn m(self)\n    -> I32\n}\n", Code::E0020, "->", &["trait T {\n  fn m(self) ->\n    I32\n}\n"]);
+    check(
+        "effect Ask {\n  fn ask()\n    -> I32\n}\n",
+        Code::E0020,
+        "->",
+        &["effect Ask {\n  fn ask() ->\n    I32\n}\n"],
+    );
+    check("trait T {\n  const A: I32\n    = 5\n}\n", Code::E0020, "=", &["trait T {\n  const A: I32 =\n    5\n}\n"]);
+    // After a body the line does not go on (S-236).
+    let (d, fixed) = one("fn f() {\n}\n-> I32\n");
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0), "{d:?}");
+    // `let _` and `= v` on the next line (the break side's 10).
+    check(&body("  let _\n    = a\n  b"), Code::E0020, "=", &[&body("  let _ =\n    a\n  b")]);
+}
+
+#[test]
+fn the_vert_after_a_pattern_that_is_a_name() {
+    // The break side's 4: S-380 and S-389 after a name, a variant without
+    // fields, a path; `||` in a `let` and a `for` too.
+    let e = "enum Color {\n  Red,\n  Blue,\n}\n";
+    let m = |arms: &str| format!("{e}fn g(c: Color) -> I32 {{\n  match c {{\n{arms}\n    _ => 0,\n  }}\n}}\n");
+    check(
+        &m("    Color.Red\n    | Color.Blue => 1,"),
+        Code::E0020,
+        "|",
+        &[&m("    Color.Red |\n    Color.Blue => 1,")],
+    );
+    check(&m("    Color.Red || Color.Blue => 1,"), Code::E0020, "||", &[&m("    Color.Red | Color.Blue => 1,")]);
+    let n = |arms: &str| format!("fn g(o: Option[I32]) -> I32 {{\n  match o {{\n{arms}\n    _ => 0,\n  }}\n}}\n");
+    check(&n("    None\n    | Some(1) => 1,"), Code::E0020, "|", &[&n("    None |\n    Some(1) => 1,")]);
+    check(&body("  let c || d = a\n  c"), Code::E0020, "||", &[&body("  let c | d = a\n  c")]);
+}
+
+#[test]
+fn no_blank_or_comma_where_it_does_not_read() {
+    // The break side's 7: a sign after the `}` of a `for` on its line is no
+    // binary operator whatever its blanks (S-236).
+    let (d, fixed) = one(&body("  for i in xs {\n  } +b\n  a"));
+    assert_eq!((d.code, fixed.len()), (Code::E0002, 0), "{d:?}");
+    // The break side's 8: the repetition of an array takes no `,` (S-398).
+    check(&body("  let v = [a -b; 4]\n  v[0]"), Code::E0020, "-", &[&body("  let v = [a - b; 4]\n  v[0]")]);
+    check(&body("  let v = [a\n    -b; 4]\n  v[0]"), Code::E0020, "-", &[&body("  let v = [a -\n    b; 4]\n  v[0]")]);
+    // The break side's 9: a symbol touching another at the head of a line does not move.
+    for tail in ["+= b", "=== b", "** b", "<> b", "-= b"] {
+        let p = parse(&body(&format!("  let c = a\n  {tail}\n  c")));
+        assert!(
+            p.diagnostics.iter().all(|d| d.fixes.iter().all(|f| !f.title().contains("end of the line before"))),
+            "{tail}: {:?}",
+            p.diagnostics
+        );
+    }
+}
+
+#[test]
+fn the_readings_of_a_range_symbol_at_the_head_of_a_line_are_told_apart() {
+    // The break side's 13.
+    let f = "fn f(n: U32) {\n  for i in 0\n    ..n {\n  }\n}\n";
+    let (_, _) = one(f);
+    let d = &parse(f).diagnostics[0];
+    let titles: Vec<&str> = d.fixes.iter().map(|x| x.title()).collect();
+    assert!(titles[0].contains("`..<`") && titles[1].contains("`..=`"), "{titles:?}");
+}
+
+#[test]
+fn a_long_run_of_comment_lines_is_read_in_linear_time() {
+    // The break side's 2: the line breaks are judged once per run.
+    let src = format!("fn f() -> I32 {{\n  let x = 1\n{}  x\n}}\n", "  // c\n".repeat(20000));
+    let start = std::time::Instant::now();
+    assert!(codes(&src).is_empty());
+    assert!(start.elapsed() < std::time::Duration::from_secs(5), "{:?}", start.elapsed());
+}
+
+#[test]
+fn a_line_break_after_a_prefix_plus() {
+    // S-425: the `+` and the blanks after it, the line break too, go; a
+    // comment of the `+`'s line stays on it, after the operand's code (S-216).
+    check(&body("  let y = +\n    a\n  y"), Code::E0020, "+", &[&body("  let y = a\n  y")]);
+    check(&body("  two(+\n    a, 1)"), Code::E0020, "+", &[&body("  two(a, 1)")]);
+    check(&body("  two(+ // c\n    a, 1)"), Code::E0020, "+", &[&body("  two(a, 1) // c")]);
+    let m = |p: &str| format!("fn g(x: I32) -> I32 {{\n  match x {{\n    {p} => 1,\n    _ => 0,\n  }}\n}}\n");
+    check(&m("+\n    1"), Code::E0020, "+", &[&m("1")]);
 }

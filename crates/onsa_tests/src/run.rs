@@ -16,8 +16,10 @@
 //!   --core`, `interface` and `graph`, and in `"test"` every `test` block
 //!   (`onsa test`). The host sequences of `[[test.host]]` run on the builds
 //!   of their targets ([`crate::host`], K-14).
-//! - Every mode but `"none"`: a file without markers is canonical under `fmt`,
-//!   and the parser's diagnostics match markers ([`parser_markers`]).
+//! - Every mode but `"none"`: a file without markers is canonical under `fmt`
+//!   (with `canonical = false`, fmt changes it into a text that parses and
+//!   that it keeps), and the parser's diagnostics match markers
+//!   ([`parser_markers`]).
 //! - `[test] fixes = N`: the candidates of the check's diagnostics give the
 //!   files `<file>.fixK` ([`crate::fixes`]: compared token by token, ignoring
 //!   the whitespace tokens).
@@ -346,21 +348,36 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         return run;
     }
     let targeted = markers.iter().filter(|(_, m)| m.targets.is_some()).count();
+    let unmarked = loaded.modules.iter().filter(|(file, _)| !loaded.sources.file(*file).text().contains("//~")).count();
+    if !t.canonical() && unmarked == 0 {
+        run.problems.push(Problem::Case(
+            "`canonical = false` asks nothing of a case whose files all hold markers (fmt is not asked about them)"
+                .into(),
+        ));
+    }
+    // Whether fmt changed some file of the case (`canonical = false` asks it of one at least).
+    let mut changed = false;
     for (file, _) in &loaded.modules {
         let f = loaded.sources.file(*file);
         // The parser and fmt run here outside the driver's stages: guard them.
         let r = onsa_driver::guard(|| {
             let mut problems = CaseRun::default();
-            if !f.text().contains("//~") {
-                canonical(&mut problems, f.name(), f.text());
-            }
+            let changed = !f.text().contains("//~") && canonical(&mut problems, f.name(), f.text(), t.canonical());
             parser_markers(&mut problems, &loaded.sources, *file, &markers);
-            problems.problems
+            (problems.problems, changed)
         });
         match r {
-            Ok(p) => run.problems.extend(p),
+            Ok((p, c)) => {
+                run.problems.extend(p);
+                changed |= c;
+            }
             Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
         }
+    }
+    if !t.canonical() && unmarked > 0 && !changed {
+        run.problems.push(Problem::Failed(
+            "fmt leaves every file of the case unchanged; take `canonical = false` out of the case".into(),
+        ));
     }
 
     if t.mode == Mode::Parse {
@@ -782,21 +799,31 @@ fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers:
 }
 
 /// A file without markers is already canonical: `fmt` leaves it unchanged
-/// and is idempotent (M1, T1-9).
-fn canonical(run: &mut CaseRun, name: &str, text: &str) {
+/// and is idempotent (M1, T1-9). A case that says `canonical = false` (a line
+/// break fmt moves, W3-11) is not compared with the normal form, and only
+/// that: fmt takes it, its output parses with no diagnostic and is taken
+/// again unchanged, and fmt changes one of the files of the case at least
+/// (else the setting is to go; the caller judges it from the result: whether
+/// fmt changed this file). Whether the output means the same is R-204's (W3-11).
+fn canonical(run: &mut CaseRun, name: &str, text: &str, normal: bool) -> bool {
     let parsed = onsa_syntax::parse(FileId(0), text);
     let Some(out) = onsa_syntax::format(&parsed, text) else {
         run.problems.push(Problem::Failed(format!("{name}: fmt refused it (diagnostics)")));
-        return;
+        return false;
     };
-    if out != text {
+    if normal && out != text {
         run.problems.push(Problem::Failed(format!("{name}: fmt changes it\n{}", first_diff(text, &out))));
-        return;
+        return true;
     }
     let again = onsa_syntax::parse(FileId(0), &out);
+    if !normal && !again.diagnostics.is_empty() {
+        run.problems.push(Problem::Failed(format!("{name}: the output of fmt does not parse\n{out}")));
+        return true;
+    }
     if onsa_syntax::format(&again, &out).as_deref() != Some(out.as_str()) {
         run.problems.push(Problem::Failed(format!("{name}: fmt is not idempotent on it")));
     }
+    out != text
 }
 
 fn first_diff(a: &str, b: &str) -> String {
@@ -1452,6 +1479,16 @@ mod tests {
             &[
                 ("tests/ugly.onsa", "pub fn f()->I32{1}\n"),
                 ("tests/none.onsa", "// onsa.toml\n// [test]\n// mode = \"none\"\n\nif c { a }\n"),
+                // `canonical = false`: fmt changes it, and that is all the case says.
+                ("tests/ugly_said.onsa", "// onsa.toml\n// [test]\n// canonical = false\n\npub fn f()->I32{1}\n"),
+                (
+                    "tests/fine_said.onsa",
+                    "// onsa.toml\n// [test]\n// canonical = false\n\npub fn f() -> I32 {\n  1\n}\n",
+                ),
+                (
+                    "tests/marked_said.onsa",
+                    "// onsa.toml\n// [test]\n// canonical = false\n\npub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n",
+                ),
                 (
                     "tests/syntax.onsa",
                     // E0003 only the syntax stage reports: its marker must come from the parser.
@@ -1462,6 +1499,36 @@ mod tests {
         let r = repo.run();
         assert!(case(&r, "tests/ugly.onsa").failures.iter().any(|f| f.contains("fmt changes it")));
         assert!(case(&r, "tests/none.onsa").failures.is_empty());
+        assert!(
+            case(&r, "tests/ugly_said.onsa").failures.is_empty(),
+            "{:?}",
+            case(&r, "tests/ugly_said.onsa").failures
+        );
+        assert!(
+            case(&r, "tests/fine_said.onsa")
+                .failures
+                .iter()
+                .any(|f| f.contains("leaves every file of the case unchanged")),
+            "{:?}",
+            case(&r, "tests/fine_said.onsa").failures
+        );
+        assert!(
+            case(&r, "tests/marked_said.onsa").failures.iter().any(|f| f.contains("asks nothing")),
+            "{:?}",
+            case(&r, "tests/marked_said.onsa").failures
+        );
+        // In a package, one file fmt changes is enough; the others stay in the normal form.
+        let toml = "[package]\nname = \"p\"\nedition = \"2026\"\n";
+        let pkg = Repo::new(
+            "canonical_pkg",
+            &[
+                ("tests/p/onsa.toml", toml),
+                ("tests/p/a.onsa", "// onsa.toml\n// [test]\n// canonical = false\n\npub fn f()->I32{1}\n"),
+                ("tests/p/b.onsa", "pub fn g() -> I32 {\n  2\n}\n"),
+            ],
+        );
+        let pr = pkg.run();
+        assert!(case(&pr, "tests/p").failures.is_empty(), "{:?}", case(&pr, "tests/p").failures);
         assert!(
             case(&r, "tests/syntax.onsa").failures.iter().any(|f| f.contains("the parser's diagnostics differ")),
             "{:?}",

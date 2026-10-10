@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 2
+
+// E0020: a line that starts with `-` or `^` and a space (`- b`, `^ b`), outside the brackets (spec §2.5,
+// S-123, S-124, c119). The two characters are also prefix operators, so the line is the start of a
+// statement with a prefix operator and a space after it, which is E0020 as `- x` is anywhere. The
+// writer's reading is the line before it going on, as a binary operator (`a - b`). The candidates are,
+// in this order, the space removed (`-b`, a new statement, so the value of `a` is dropped, which a later
+// stage reports, S-127, and the case does not list) and the line joined to the line before it
+// (`a - b`). The joined line takes the code of the line up to its comment, and the comments stay where
+// they are written (S-216). The main position is the `-` or `^`, so the marker is on its line. A
+// line that starts with `-b`, with no space, is a valid statement and not an E0020. The forms in a
+// pair of brackets (`two(a` and `-b, 1)`) are in e0020_leading_minus_parens.onsa.
+
+use std.array
+
+pub fn let_value(a: I32, b: I32) -> I32 {
+  let c = a
+  -b                                               //~ E0020
+  c
+}
+
+pub fn tail_expression(a: I32, b: I32) -> I32 {
+  a
+    -b                                             //~ E0020
+}
+
+// The case of `tests/review-phase1/parent/c119.onsa` (C-119, C-12): the line `- b` after `a` was read as a new
+// statement, `a` was dropped without a word, and `f(3.0, 1.0)` returned `-1.0` and not `2.0`.
+pub fn c119(a: F32, b: F32) -> F32 {
+  a
+    -b                                             //~ E0020
+}
+
+pub fn assignment(a: I32, b: I32) -> I32 {
+  var t = a
+  t = t
+  -b                                               //~ E0020
+  t
+}
+
+pub fn after_a_call(a: I32, b: I32) -> I32 {
+  let c = two(a, b)
+  -1                                               //~ E0020
+  c
+}
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x - y
+}
+
+pub fn comment_at_the_end_of_the_line(a: I32, b: I32) -> I32 {
+  let c = a // the first operand
+  -b                                               //~ E0020
+  c
+}
+
+pub fn comment_line_between(a: I32, b: I32) -> I32 {
+  let c = a
+  // the second operand
+  -b                                               //~ E0020
+  c
+}
+
+pub fn caret(a: U32, b: U32) -> U32 {
+  let c = a
+  ^b                                               //~ E0020
+  c
+}
+
+pub fn caret_in_the_tail(a: U32, b: U32) -> U32 {
+  a
+  ^b                                               //~ E0020
+}
+
+pub fn in_a_closure_body() -> [I32; 3] {
+  array.from_fn(fn(i) {
+    let a = 1
+    a
+    -2                                             //~ E0020
+  })
+}
+
+// These are valid statements and an operator: `-b` at the start of a line is a prefix operator and
+// is not an error of the syntax (its value is not used: a later stage), and `a - b` is a binary one.
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a - b
+  let d = a -
+    b
+  c + d
+}

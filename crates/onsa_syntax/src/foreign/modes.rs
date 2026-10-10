@@ -9,7 +9,9 @@ use super::*;
 /// form: E0002), before an argument (`&mut x` is `inout x`; `&x` is `x`, or
 /// `inout x`) and in another expression (`&x` is `x`; `&mut x`: E0002).
 pub(super) fn reference(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::Amp {
+    // A `&` at the head of a line that goes on with the line before is the
+    // binary operator's (`leading_operator`, S-124; the one judgement).
+    if c.kind(c.at) != TokenKind::Amp || super::lines::leading(c).is_some() {
         return None;
     }
     let amp = c.at;

@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§4.4", "§18.1"]
+// fixes = 1
+
+// E0003 for the `{` of a struct pattern that is not on the line of the type name (spec §2.5, §7, S-413, S-216): the
+// `{` of a struct pattern goes on the line of the name, as the `{` of a struct literal does (e0003_struct_literal_brace.onsa),
+// in the head of a `let`, in the arms of a `match` (a list in which a line break is a space), inside the
+// pattern of a variant or a tuple, and in a closure. A pattern is not a place where the name could end a statement
+// alone, so the error is the E0003 of the `{` in a pair of brackets and outside them alike, and the
+// candidate moves the `{` and the rest of its line, up to the comment, to the end of the line of the name.
+// The main position is the `{`, so the marker is on its line. One error in each declaration unit (P-01).
+// The right forms are at the end of the file.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub fn in_a_let(p: Pt) -> I32 {
+  let Pt { x: a, y: b } = p
+                                                    //~ E0003
+  a + b
+}
+
+pub fn in_an_arm(p: Pt) -> I32 {
+  match p {
+    Pt { x: a, y: b } => a + b,
+                                                    //~ E0003
+  }
+}
+
+pub fn in_the_second_arm(p: Pt, n: I32) -> I32 {
+  match n {
+    0 => 0,
+    1 => match p {
+      Pt { x: a, y: _ } => a,
+                                                    //~ E0003
+    },
+    _ => 1,
+  }
+}
+
+pub fn in_a_variant(o: Option[Pt]) -> I32 {
+  match o {
+    Some(Pt { x: a, y: b }) => a + b,
+                                                    //~ E0003
+    None => 0,
+  }
+}
+
+pub fn in_a_tuple(p: (Pt, I32)) -> I32 {
+  match p {
+    (Pt { x: a, y: b }, k) => a + b + k,
+                                                    //~ E0003
+  }
+}
+
+pub fn in_a_nested_pattern(p: Option[Option[Pt]]) -> I32 {
+  match p {
+    Some(Some(Pt { x: a, y: _ })) => a,
+                                                    //~ E0003
+    _ => 0,
+  }
+}
+
+pub fn in_a_choice(p: Pt) -> I32 {
+  match p {
+    Pt { x: 0, y: _ } | Pt { x: _, y: 0 } => 1,
+                                                    //~ E0003
+    _ => 0,
+  }
+}
+
+pub fn in_a_guarded_arm(p: Pt) -> I32 {
+  match p {
+    Pt { x: a, y: b } if a > b => a,
+                                                    //~ E0003
+    _ => 0,
+  }
+}
+
+pub fn with_a_comment_on_the_line_of_the_name(p: Pt) -> I32 {
+  let Pt { x: a, y: b } = p // the point
+                                                    //~ E0003
+  a + b
+}
+
+pub fn with_a_comment_line_between(p: Pt) -> I32 {
+  let Pt { x: a, y: b } = p
+    // the fields
+                                                    //~ E0003
+  a + b
+}
+
+pub fn only_the_brace_is_moved(p: Pt) -> I32 {
+  let Pt {
+                                                    //~ E0003
+      x: a,
+      y: b,
+    } = p
+  a + b
+}
+
+pub fn in_a_closure(p: Pt) -> I32 {
+  let f = fn(q: Pt) -> I32 {
+    match q {
+      Pt { x: a, y: b } => a + b,
+                                                    //~ E0003
+    }
+  }
+  f.(p)
+}
+
+pub fn in_a_generic_head[T: Num](p: Pair[T, T]) -> T {
+  match p {
+    Pair { a: x, b: y } => x + y,
+                                                    //~ E0003
+  }
+}
+
+// The right forms: the `{` on the line of the name.
+pub fn fine(p: Pt, o: Option[Pt], q: Pair[I32, I32]) -> I32 {
+  let Pt { x: a, y: b } = p
+  let Pair { a: c, b: d } = q
+  let e = match o {
+    Some(Pt { x: m, y: _ }) => m,
+    None => 0,
+  }
+  let f = match p {
+    Pt { x: 0, y: _ } => 1,
+    Pt { x: _, y: _ } => 2,
+  }
+  a + b + c + d + e + f
+}
