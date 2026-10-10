@@ -432,6 +432,19 @@ pub(crate) fn is_type_args_mark(all: &[Token], full: &[u32], tokens: &[Token], i
 /// when whitespace comes right before it, nothing otherwise. A comment right
 /// before a token is not a gap (`/* */a`); a line comment is always followed
 /// by a newline.
+/// What separates `tokens[i]` from the token after it, where `tokens` are
+/// the tokens without whitespace and `full[k]` the index of `tokens[k]` in
+/// the full list `all`: a newline or a line comment after it is a line
+/// break (§2.5: the one test of the gap after a token, for the parser and
+/// the table of the forms).
+pub(crate) fn gap_after(all: &[Token], full: &[u32], tokens: &[Token], i: usize) -> Gap {
+    match tokens.get(i + 1).map(|t| t.kind) {
+        Some(TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment) => Gap::Newline,
+        Some(_) => gap_before(all, full[i + 1] as usize),
+        None => Gap::None,
+    }
+}
+
 pub fn gap_before(tokens: &[Token], i: usize) -> Gap {
     let mut j = i;
     let mut space = false;

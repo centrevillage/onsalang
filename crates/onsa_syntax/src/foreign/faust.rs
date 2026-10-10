@@ -21,8 +21,9 @@ pub(super) fn faust_bit_not(c: &Cursor) -> Option<Hit> {
 /// an operand. `space_after_branch_keyword` and `else_if_tilde` give the
 /// same reading as their second candidate (S-354).
 pub(super) fn bit_not(c: &Cursor) -> Option<Vec<Fix>> {
+    // It touches its operand only on its line with no blank (S-385).
     if c.kind(c.at) != TokenKind::Tilde
-        || c.gap(c.at + 1).is_some()
+        || c.gap_after(c.at).is_some()
         || matches!(c.kind(c.at + 1), TokenKind::Underscore | TokenKind::LParen)
     {
         return None;

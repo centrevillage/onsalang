@@ -597,6 +597,32 @@ impl<'a> Parser<'a> {
         self.gap(self.peek_index())
     }
 
+    /// The next token is a member `.` with a blank before it, or a blank or a
+    /// line break after it (§2.5, S-203, S-353): the one test, for the chain
+    /// of an expression and for a path (a type, a pattern, a `use`, an
+    /// `impl`). The parser fails at it ([`Want::Postfix`]), and the table names
+    /// the form (`space_around_dot`, `newline_after_dot`).
+    fn dot_apart(&self) -> bool {
+        let i = self.peek_index();
+        self.tokens[i].kind == TokenKind::Dot && (self.gap(i) == Gap::Space || self.gap_after(i).is_some())
+    }
+
+    /// The token after `tokens[i]`, newlines and comments skipped.
+    fn next_code(&self, i: usize) -> usize {
+        let mut j = i + 1;
+        while j + 1 < self.tokens.len()
+            && matches!(self.tokens[j].kind, TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
+        {
+            j += 1;
+        }
+        j.min(self.tokens.len() - 1)
+    }
+
+    /// What separates `tokens[i]` from the token after it ([`crate::token::gap_after`]).
+    fn gap_after(&self, i: usize) -> Gap {
+        crate::token::gap_after(&self.all, &self.full, &self.tokens, i)
+    }
+
     /// What separates `tokens[i]` from the token before it in the source.
     fn gap(&self, i: usize) -> Gap {
         crate::token::gap_before(&self.all, self.full[i] as usize)
@@ -834,11 +860,22 @@ impl<'a> Parser<'a> {
         if general {
             let shown = noted.map_or(t, |(found, _)| found);
             let msg = format!("expected {expected}, found {}", shown.kind.describe());
-            let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, t.span, msg);
+            // A line that ends where it cannot: the main position is the end
+            // of its code, before its comment, and the range is empty, so no
+            // `found` (§18.1).
+            let span = match t.kind {
+                TokenKind::Newline => {
+                    let code = (0..at).rev().find(|&k| !self.tokens[k].kind.is_trivia());
+                    let end = code.map_or(t.span.start, |k| self.tokens[k].span.end);
+                    Span::new(self.file, end, end)
+                }
+                _ => t.span,
+            };
+            let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, span, msg);
             let found = self.src(shown.span);
-            if !found.is_empty() && !found.contains('\n') {
+            if !span.is_empty() && !found.is_empty() && !found.contains('\n') {
                 d = d.with_found(found);
-            } else if noted.is_some() {
+            } else if !span.is_empty() && noted.is_some() {
                 // What came after the failure is no text (a line break, the
                 // end of the file): it is named as the message names it.
                 d = d.with_found(shown.kind.describe());
@@ -1478,6 +1515,12 @@ impl<'a> Parser<'a> {
         let tree = self.start(NodeKind::UseTree)?;
         self.parse_ident("module path")?;
         loop {
+            if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::Dot {
+                self.skip_newlines();
+            }
+            if self.dot_apart() {
+                return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
+            }
             if self.eat(TokenKind::Dot).is_none() {
                 break;
             }
@@ -1687,6 +1730,15 @@ impl<'a> Parser<'a> {
         let mut last = first;
         let mut segments = 1;
         loop {
+            // A `.` on the next line continues the path, as an expression's
+            // chain (§2.5); the member `.` of a path takes no blank and no line
+            // break after it (S-203, S-353, the one test, [`Parser::dot_apart`]).
+            if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::Dot {
+                self.skip_newlines();
+            }
+            if self.dot_apart() {
+                return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
+            }
             if self.at(TokenKind::Dot) && (self.peek2().kind == TokenKind::Ident || self.peek2().kind.is_keyword()) {
                 self.bump();
             } else {
@@ -2257,11 +2309,11 @@ impl<'a> Parser<'a> {
     fn parse_expr_inner(&mut self, allow_range: bool) -> PResult<Completed> {
         let first = self.parse_cast()?;
         let mut expr = first;
-        if binop(self.peek_kind()) {
+        if self.binary_here() {
             let m = self.precede(first, NodeKind::BinaryExpr)?;
             let base = self.level();
             let mut chain = Chain::new(first.height);
-            while let Some(op) = crate::lower::binop(self.peek_kind()) {
+            while let Some(op) = crate::lower::binop(self.peek_kind()).filter(|_| self.binary_here()) {
                 let (pending, left) = chain.operator(op.group());
                 self.chain_operator(base, pending, left)?;
                 self.bump();
@@ -2278,6 +2330,20 @@ impl<'a> Parser<'a> {
             return self.parse_range_rest(expr);
         }
         Ok(expr)
+    }
+
+    /// The next token is a binary operator read as one here. A `-` or `^`
+    /// with a blank before it and its operand touching it (`a -b`, `[1 -1]`)
+    /// is not (S-398): the grammar fails at it, and the table names the form
+    /// (`asymmetric_binary_space`). `a - -b` has blanks on both sides.
+    fn binary_here(&self) -> bool {
+        let i = self.peek_index();
+        // SPEC-GAP(S-405): `+` joins `-` and `^` here when the prefix `+` is decided.
+        let asymmetric = matches!(self.tokens[i].kind, TokenKind::Minus | TokenKind::Caret)
+            && self.gap(i) == Gap::Space
+            && self.gap_after(i) == Gap::None
+            && starts_operand(self.tokens[i + 1].kind);
+        binop(self.tokens[i].kind) && !asymmetric
     }
 
     /// The rest of a head whose start `expr` is read: a range when a range
@@ -2340,11 +2406,32 @@ impl<'a> Parser<'a> {
     // `starts_operand` (a `debug_assert` in `parse_primary` and the test
     // `operand_starts` hold the two together).
     fn parse_prefix(&mut self) -> PResult<Completed> {
+        self.parse_prefix_in(false)
+    }
+
+    /// [`Parser::parse_prefix`], `in_a_stack` under another prefix operator.
+    fn parse_prefix_in(&mut self, in_a_stack: bool) -> PResult<Completed> {
         let t = self.peek();
         if matches!(t.kind, TokenKind::Minus | TokenKind::Bang) {
+            // The prefix `-` / `!` touches its operand (§2.5, S-123, S-369):
+            // after a blank or a line break the parser fails at it
+            // ([`Want::Prefix`]), and the table names the form
+            // (`space_after_prefix`, `newline_after_prefix`). A stack of
+            // prefix operators with blanks or line breaks between them
+            // (`- - x`, `-` and `-a` on the next line) is one form, the
+            // E0012 of the stack (S-410, S-248).
+            let i = self.peek_index();
+            let stacked = matches!(self.tokens[self.next_code(i)].kind, TokenKind::Minus | TokenKind::Bang);
+            let gap = self.gap_after(i);
+            if gap.is_some() && !(stacked || in_a_stack) {
+                return Err(self.fail(Want::Prefix, "an operand right after the prefix operator"));
+            }
             let m = self.start(NodeKind::PrefixExpr)?;
             self.bump();
-            self.parse_prefix()?;
+            if gap == Gap::Newline {
+                self.skip_newlines();
+            }
+            self.parse_prefix_in(true)?;
             return Ok(self.complete(m, NodeKind::PrefixExpr));
         }
         self.parse_postfix()
@@ -2380,11 +2467,25 @@ impl<'a> Parser<'a> {
                     chain = None;
                 }
                 TokenKind::Tilde | TokenKind::Bang
-                    if self.peek2().kind == TokenKind::LParen
-                        && !self.gap(self.peek2_index()).is_some()
+                    if self.tokens[self.next_code(self.peek_index())].kind == TokenKind::LParen
                         && (foreign::names_a_path(expr.kind) || expr.kind == NodeKind::TypeArgsExpr) =>
                 {
-                    if !self.touches(t.kind, true, true) {
+                    // The mark touches the name and the `(` touches the mark
+                    // (S-123, S-412): a gap after the mark makes the call's
+                    // list the required one of `Parser::opens`.
+                    let mark = self.peek_index();
+                    let after = self.gap_after(mark);
+                    if !self.touches(t.kind, true, true) || after.is_some() {
+                        if after.is_some() {
+                            let kept = self.detached.filter(|d| d.at == mark);
+                            let d = kept.unwrap_or(crate::layout::Detached {
+                                at: mark,
+                                by_name: true,
+                                expr: true,
+                                required: false,
+                            });
+                            self.detached = Some(crate::layout::Detached { required: true, ..d });
+                        }
                         break;
                     }
                     let m = self.precede(expr, NodeKind::CallExpr)?;
@@ -2414,7 +2515,7 @@ impl<'a> Parser<'a> {
                     expr = self.complete(m, NodeKind::TypeArgsExpr);
                 }
                 // The member `.` takes no space on either side inside a line (§2.5, S-203).
-                TokenKind::Dot if self.peek_gap() == Gap::Space || self.gap(self.peek2_index()) == Gap::Space => {
+                TokenKind::Dot if self.dot_apart() => {
                     return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
                 }
                 // `v.(x)`: a call through a function value (§6.1, S-191).
@@ -2472,6 +2573,10 @@ impl<'a> Parser<'a> {
                     expr = self.complete(m, NodeKind::IndexExpr);
                     chain = None;
                 }
+                // A `?` after a blank or a line break is not read on: the
+                // grammar fails at it, and the table names the form
+                // (`space_before_question`, `newline_before_question`).
+                TokenKind::Question if self.peek_gap().is_some() => break,
                 TokenKind::Question => {
                     let m = self.precede(expr, NodeKind::TryExpr)?;
                     self.bump();
@@ -2963,6 +3068,19 @@ impl<'a> Parser<'a> {
             TokenKind::Underscore => NodeKind::WildPat,
             // `-1`, and `-(1)` / `-((1))`: the parentheses between `-` and the integer are not
             // seen (§7, §4.7; S-184, S-185). `-(-1)` is no literal (S-227) and stays E0002.
+            // The `-` of a negative literal touches it, as every prefix `-` does
+            // (§2.5, S-411): the table names the form ([`Want::Prefix`],
+            // `space_after_prefix`, `newline_after_prefix`). Only the `-` of a
+            // negative literal: a range, a float or a constant after it is the
+            // form of its own row (read above and below), and another operand
+            // is no pattern whatever the blank (the general E0002).
+            TokenKind::Minus
+                if self.gap_after(self.peek_index()).is_some()
+                    && (self.tokens[self.next_code(self.peek_index())].kind == TokenKind::Int
+                        || self.parenthesised_int_after_minus()) =>
+            {
+                return Err(self.fail(Want::Prefix, "a pattern"));
+            }
             TokenKind::Minus if self.peek2().kind == TokenKind::Int || self.parenthesised_int_after_minus() => {
                 let m = self.start(NodeKind::NegLitPat)?;
                 self.bump();
@@ -3372,7 +3490,8 @@ mod tests {
         assert_eq!(body("!(a && b)"), "(block tail (not ((&& a b))))");
         // A blank between the name and its mark (S-123, `space_before_tilde`).
         assert_eq!(codes("fn f() {\n  saw ~(f0)\n}"), vec![Code::E0020]);
-        assert_eq!(codes("fn f() {\n  saw~ (f0)\n}"), vec![Code::E0002]);
+        // A blank between the mark and its `(` (S-412).
+        assert_eq!(codes("fn f() {\n  saw~ (f0)\n}"), vec![Code::E0020]);
     }
 
     #[test]

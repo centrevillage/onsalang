@@ -127,6 +127,11 @@ pub enum Want {
     /// The `(` of a call whose callee [`callee_by_name`] says is no callee
     /// written by name (§6.1): the table does not judge the callee again.
     Callee,
+    /// A blank or a line break after a prefix `-` / `!` of an expression, or
+    /// after the `-` of a negative integer literal of a pattern (§2.5, S-123,
+    /// S-369, S-411): the parser judged the gap (`Parser::parse_prefix`,
+    /// `Parser::parse_pattern_alt`), at the symbol.
+    Prefix,
     /// The `,` or the closing bracket after an element of a list of the
     /// node's kind (`Parser::close_list`, §2.5): the general E0002 of the
     /// failure is the missing `,` ([`crate::layout::list_fixes`], S-384).
@@ -243,6 +248,14 @@ pub enum RowId {
     SpaceBeforeBang,
     SpaceBeforeTilde,
     StringPrefix,
+    ArmReturn,
+    SpaceBeforeQuestion,
+    SpaceAfterPrefix,
+    SpaceAfterCaret,
+    AsymmetricBinarySpace,
+    NewlineAfterDot,
+    NewlineAfterPrefix,
+    NewlineBeforeQuestion,
     CalleeExpression,
     SpaceAfterBranchKeyword,
     ElseIfTilde,
@@ -409,6 +422,11 @@ impl Cursor<'_> {
     }
 
     /// What separates `tokens[i]` from the token before it.
+    /// What separates `tokens[i]` from the token after it ([`crate::token::gap_after`]).
+    pub(crate) fn gap_after(&self, i: usize) -> Gap {
+        crate::token::gap_after(self.all, self.full, self.tokens, i)
+    }
+
     pub(crate) fn gap(&self, i: usize) -> Gap {
         crate::token::gap_before(self.all, self.full[i] as usize)
     }
@@ -562,6 +580,7 @@ mod comments;
 mod decls;
 mod faust;
 pub mod guard;
+mod lines;
 mod literals;
 mod modes;
 mod paths;

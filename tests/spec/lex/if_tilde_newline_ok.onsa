@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6"]
+
+// The right form of tests/spec/fixes/e0020_newline_if_tilde.onsa (moved from that file, W3-06): the `~` of
+// `if~` / `match~` is written right after the keyword inside parentheses too (§2.5, §2.6, S-385), and the
+// syntax stage reports nothing. The later stages report the E0200 of `if~` in this version (W7-06).
+
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow fine(c: Bool at sample, k: U32 at sample) -> F32 at sample {
+  two(if~ c { 1.0 } else { 2.0 }, match~ k { 0 => 1.0, _ => 2.0 })
+}

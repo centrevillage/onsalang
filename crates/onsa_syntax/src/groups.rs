@@ -135,7 +135,7 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                 // The operators of the stack, outermost first: each but the
                 // last takes the rest in parentheses (`- - -x` is
                 // `-(-(-x))`); the blanks between two operators give way
-                // to the `(`.
+                // to the `(` (S-410).
                 let mut ops = vec![expr.span];
                 let mut e = id;
                 while let ExprKind::Unary { expr: inner, .. } = ast.expr(e).kind {
@@ -153,6 +153,13 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     } else {
                         edits.push(Edit::insert(w[0].file, op_end, "("));
                     }
+                }
+                // The blank after the innermost operator goes too (S-410:
+                // `- - x` is `-(-x)`, which leaves no blank after a prefix).
+                let last = ops[ops.len() - 1];
+                let operand = Span::new(last.file, last.start + 1, ast.expr(e).span.start);
+                if !operand.is_empty() && src(operand).trim().is_empty() {
+                    edits.push(Edit::delete(operand));
                 }
                 edits.push(Edit::insert(expr.span.file, expr.span.end, ")".repeat(ops.len() - 1)));
                 let d = Diagnostic::new(

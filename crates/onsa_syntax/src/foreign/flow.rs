@@ -6,6 +6,8 @@ use onsa_diag::{Diagnostic, Edit, Fix, Span};
 
 use super::{Cursor, Hit, RowId, Want, bit_not, diagnostic, hit};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
+// The clock written after a type is apart from the token after it (R-205).
+use crate::layout::insert_apart;
 use crate::lower::{Class, class};
 use crate::token::{Gap, TokenKind};
 
@@ -63,22 +65,30 @@ impl Cursor<'_> {
 }
 
 /// `if ~ c`, `if ~c`, `match ~ x` (S-354): the `~` of the first `if` of a
-/// chain, or of a `match`, after a blank on the line. The first candidate
-/// takes the blank out (`if~ c`); a `~` that touches its operand is also the
-/// bitwise negation of C, whose candidate (`if !c`) is the second.
+/// chain, or of a `match`, after a blank on the line, or after a line break
+/// in a list or the arms of a `match`, where it is a blank (S-385). The
+/// first candidate takes the blank out (`if~ c`), or moves the `~` up to the
+/// keyword; a `~` that touches its operand (on its line, with no blank) is
+/// also the bitwise negation of C, whose candidate (`if !c`) is the second.
 pub(super) fn space_after_branch_keyword(c: &Cursor) -> Option<Hit> {
-    if c.want != Want::Expr || c.kind(c.at) != TokenKind::Tilde || c.gap(c.at) != Gap::Space {
+    if c.want != Want::Expr || c.kind(c.at) != TokenKind::Tilde || !c.gap(c.at).is_some() {
         return None;
     }
-    let kw = c.before(c.at)?;
+    let kw = c.sig_before(c.at)?;
     if c.branch(kw) != Some(Branch::First) {
         return None;
     }
-    let mut edits = vec![Edit::delete(c.space_before(c.at)?)];
-    if c.gap(c.at + 1) == Gap::None {
-        edits.push(Edit::insert(c.file, c.span(c.at).end, " "));
-    }
-    let mut fixes = vec![Fix::new(format!("write `{}~`", c.src(kw)), edits)];
+    let title = format!("write `{}~`", c.src(kw));
+    let first = if c.gap(c.at) == Gap::Space {
+        let mut edits = vec![Edit::delete(c.space_before(c.at)?)];
+        if c.gap_after(c.at) == Gap::None {
+            edits.push(Edit::insert(c.file, c.span(c.at).end, " "));
+        }
+        Fix::new(title, edits)
+    } else {
+        crate::layout::move_token_up(c, &title, c.at)?
+    };
+    let mut fixes = vec![first];
     fixes.extend(bit_not(c).unwrap_or_default());
     hit(c.span(c.at), fixes)
 }
@@ -258,9 +268,9 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fi
         // the spec gives no other place for it: no candidate.
         NodeKind::MoveExpr => return Some(Vec::new()),
         _ if !super::operand(&kinds).bare_before_as_at() => {
-            edits.extend([Edit::insert(s.file, s.start, "("), Edit::insert(s.file, s.end, format!("){at}"))]);
+            edits.extend([Edit::insert(s.file, s.start, "("), insert_apart(s.file, text, s.end, &format!("){at}"))]);
         }
-        _ => edits.push(Edit::insert(s.file, s.end, at)),
+        _ => edits.push(insert_apart(s.file, text, s.end, &at)),
     }
     Some(vec![Fix::new("write the clock on the value", edits)])
 }
@@ -305,7 +315,7 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
         let at = clock_text(cst, text, clock);
         let edits = if !open(ty) {
             let mut e = out.edits("");
-            e.push(Edit::insert(s.file, s.end, at));
+            e.push(insert_apart(s.file, text, s.end, &at));
             e
         } else if out.clock.end == s.end {
             // The clock was the end of the function type: the `)` goes where
@@ -316,7 +326,7 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
         } else {
             let mut e = vec![Edit::insert(s.file, s.start, "(")];
             e.extend(out.edits(""));
-            e.push(Edit::insert(s.file, s.end, format!("){at}")));
+            e.push(insert_apart(s.file, text, s.end, &format!("){at}")));
             e
         };
         return Some(vec![Fix::new("write the clock after the type", edits)]);

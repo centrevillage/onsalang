@@ -1406,7 +1406,7 @@ mod tests {
         for src in [
             "fn p(x: I32) -> I32 {\n  match x {\n    -( // c\n      5\n    ) => 5,\n    _ => 0,\n  }\n}\n",
             "fn p(x: I32) -> I32 {\n  match x {\n    -(6 // c\n    ) | -7 => 6,\n    _ => 0,\n  }\n}\n",
-            "fn p(x: I32) -> I32 {\n  match x {\n    - ( ( 2 ) ) => 2,\n    _ => 0,\n  }\n}\n",
+            "fn p(x: I32) -> I32 {\n  match x {\n    -( ( 2 ) ) => 2,\n    _ => 0,\n  }\n}\n",
         ] {
             let out = fmt(src);
             assert_eq!(out.matches("// c").count(), src.matches("// c").count(), "{out}");
@@ -1464,7 +1464,7 @@ mod tests {
             "fn f(x: F32) -> F32 {\n  let a = x + (y * z)\n  a\n}\n"
         );
         assert_eq!(fmt("fn f( a : I32 , b:I32 ) { g( a,b ) }"), "fn f(a: I32, b: I32) { g(a, b) }\n");
-        assert_eq!(fmt("fn f(x: F32) -> F32 { - x.abs() }"), "fn f(x: F32) -> F32 { -x.abs() }\n");
+        assert_eq!(fmt("fn f(x: F32) -> F32 {  -x.abs()  }"), "fn f(x: F32) -> F32 { -x.abs() }\n");
         assert_eq!(fmt("fn f(x: I32) -> F64 { ( x as F64 ) }"), "fn f(x: I32) -> F64 { (x as F64) }\n");
         assert_eq!(fmt("fn f() uses { Alloc , Fs } {}"), "fn f() uses {Alloc, Fs} {}\n");
         assert_eq!(fmt("use std.math.{ exp ,cos }"), "use std.math.{exp, cos}\n");

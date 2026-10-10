@@ -158,5 +158,12 @@ pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
         None if callee.0 == NodeKind::Literal && c.kind(before) == TokenKind::Int => return hit(span, Vec::new()),
         None => vec![Edit::insert(c.file, c.span(c.at).start, ".")],
     };
+    // The call takes the callee one level down (§2.5): no candidate that
+    // takes the unit over the limit, where the check after it would report
+    // the E0006 of the same stage (S-236, R-200).
+    let added = u32::from(edits.len() == 1);
+    if crate::groups::nests_too_deep(c.text, span, &edits, added, crate::parser::NESTING_LIMIT) {
+        return hit(span, Vec::new());
+    }
     hit(span, vec![Fix::new("call the function value with `.(`", edits)])
 }

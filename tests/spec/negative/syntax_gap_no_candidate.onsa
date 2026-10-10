@@ -76,6 +76,14 @@ pub fn a_string_after_the_dot(s: Sf) -> I32 {
   a
 }
 
+// A keyword after the line break starts the next statement, which the `.` would join (`.let`): no
+// candidate (§2.5: the `.` moves before a name, a tuple index or the `(` of `.(`; W3-06/b).
+pub fn a_statement_after_the_dot(s: Sf) -> I32 {
+  let c = s.                                        //~ E0002
+  let d = 1
+  d
+}
+
 pub fn fine(xs: [I32; 4], i: U32, s: Sf) -> I32 {
   two(xs[i], g(s
     .f))

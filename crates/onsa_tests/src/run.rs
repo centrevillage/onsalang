@@ -812,17 +812,23 @@ fn first_diff(a: &str, b: &str) -> String {
 }
 
 /// T2-12: every diagnostic of a negative example carries the offending source
-/// (`found`, §18.1). Whether a code needs a fix candidate is the registry's
-/// (`Code::fix_rule`), checked on every diagnostic by [`compare`].
+/// (`found`, §18.1), but one whose main range is empty: there `found` is not
+/// given (§18.1: an empty range or one of blanks has none; a line that ends
+/// where it cannot is reported at the end of its code, W3-06). Whether a code
+/// needs a fix candidate is the registry's (`Code::fix_rule`), checked on
+/// every diagnostic by [`compare`].
 fn negative_rules(run: &mut CaseRun, path: &str, diags: &[Diagnostic]) {
     if !path.contains("negative") {
         return;
     }
-    for d in diags {
-        if d.found.as_deref().is_none_or(str::is_empty) {
-            run.problems.push(Problem::Failed(format!("{} at {} has no `found` text", d.code.as_str(), d.span.start)));
-        }
+    for d in diags.iter().filter(|d| lacks_found(d)) {
+        run.problems.push(Problem::Failed(format!("{} at {} has no `found` text", d.code.as_str(), d.span.start)));
     }
+}
+
+/// The diagnostic has a main range with text but no `found` ([`negative_rules`]).
+fn lacks_found(d: &Diagnostic) -> bool {
+    !d.span.is_empty() && d.found.as_deref().is_none_or(str::is_empty)
 }
 
 /// `mode = "test"`: every `test` block, as `onsa test` runs them (T3-8).
@@ -1319,6 +1325,21 @@ fn run_parallel(cases: &[Case], f: impl Fn(&Case) -> CaseRun + Sync) -> Vec<Case
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn a_negative_example_needs_found_but_with_an_empty_range() {
+        let d = |start: u32, end: u32| {
+            Diagnostic::new(
+                onsa_diag::Stage::Syntax,
+                onsa_diag::Code::E0002,
+                onsa_diag::Span::new(onsa_diag::FileId(0), start, end),
+                "m",
+            )
+        };
+        assert!(lacks_found(&d(3, 5)), "a range with text and no `found`");
+        assert!(!lacks_found(&d(3, 5).with_found("ab")));
+        assert!(!lacks_found(&d(4, 4)), "an empty range has no `found` (§18.1)");
+    }
 
     /// A made-up repository: `files` under its root, `tests/pending.toml` included.
     struct Repo(PathBuf);

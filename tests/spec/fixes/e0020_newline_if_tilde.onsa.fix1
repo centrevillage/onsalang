@@ -70,10 +70,6 @@ pub flow a_line_break_after_the_tilde(c: Bool at sample) -> F32 at sample {
 }
 
 pub flow a_space_before_the_tilde_too(c: Bool at sample) -> F32 at sample {
-  two(if~
-    c { 1.0 } else { 2.0 }, 1.0)                    //~ E0020
-}
-
-pub flow fine(c: Bool at sample, k: U32 at sample) -> F32 at sample {
-  two(if~ c { 1.0 } else { 2.0 }, match~ k { 0 => 1.0, _ => 2.0 })
+  two(if~                                           //~ E0020
+    c { 1.0 } else { 2.0 }, 1.0)
 }

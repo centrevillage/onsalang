@@ -323,3 +323,166 @@ fn a_blank_before_the_type_parameters_of_an_impl() {
     let p = "struct P[T] {\n  a: T,\n}\n";
     check(&format!("{p}impl [T] P[T] {{\n}}\n"), Code::E0020, "[", &[&format!("{p}impl[T] P[T] {{\n}}\n")]);
 }
+
+// ------------------------------------------------------------ unit 1b of W3-06
+
+#[test]
+fn a_binary_minus_with_a_blank_only_before_it() {
+    // S-398: `a - -b` has blanks on both sides; `a -b` is the form, with the
+    // `,` in a list whose elements are expressions.
+    assert!(parse(&body("  let c = a - -b\n  c")).diagnostics.is_empty());
+    check(&body("  let c = a -b\n  c"), Code::E0020, "-", &[&body("  let c = a - b\n  c")]);
+    check(&body("  two(a -b, 1)"), Code::E0020, "-", &[&body("  two(a - b, 1)"), &body("  two(a, -b, 1)")]);
+    check(&body("  xs[a -1]"), Code::E0020, "-", &[&body("  xs[a - 1]")]);
+}
+
+#[test]
+fn a_blank_or_a_line_break_after_a_prefix_symbol() {
+    // S-123, S-369, S-411.
+    check(&body("  let c = - a\n  c"), Code::E0020, "-", &[&body("  let c = -a\n  c")]);
+    check(&body("  two(-\n    a, 1)"), Code::E0020, "-", &[&body("  two(\n    -a, 1)")]);
+    let m = |arm: &str| format!("fn g(k: I32) -> I32 {{\n  match k {{\n    {arm} => 1,\n    _ => 0,\n  }}\n}}\n");
+    check(&m("- 1"), Code::E0020, "-", &[&m("-1")]);
+    // S-410: a stack with blanks is the E0012 of the stack, and its candidate
+    // takes the blanks out.
+    check(&body("  let c = - - a\n  c"), Code::E0012, "- - a", &[&body("  let c = -(-a)\n  c")]);
+}
+
+#[test]
+fn a_line_break_after_a_member_dot_and_before_a_question_mark() {
+    // S-353, S-369.
+    check(&body("  let c = (a, b).\n    0\n  c"), Code::E0020, ".", &[&body("  let c = (a, b)\n    .0\n  c")]);
+    let o = |s: &str| format!("{DECLS}fn f(o: Option[I32]) -> Option[I32] {{\n{s}\n}}\n");
+    check(&o("  Some(two(o\n    ?, 1))"), Code::E0020, "?", &[&o("  Some(two(o?\n    , 1))")]);
+    check(&o("  let v = o ?\n  Some(v)"), Code::E0020, "?", &[&o("  let v = o?\n  Some(v)")]);
+}
+
+#[test]
+fn a_blank_or_a_line_break_between_a_mark_and_its_parenthesis() {
+    // S-412: one form with the blank before the mark too.
+    let lp = "flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    let g = |call: &str| format!("{lp}flow g(x: F32 at sample) -> F32 at sample {{\n  {call}\n}}\n");
+    check(&g("lp~ (x)"), Code::E0020, "~", &[&g("lp~(x)")]);
+    check(&g("lp ~ (x)"), Code::E0020, "~", &[&g("lp~(x)")]);
+    check(&g("lp~\n  (x)"), Code::E0020, "~", &[&g("lp~(x)")]);
+}
+
+#[test]
+fn a_line_break_between_if_and_its_tilde_in_the_arms_of_a_match() {
+    // S-385: the arms are a list where a line break is a blank; `~` and a
+    // line break after it is no `!`.
+    let g = |arm: &str| {
+        format!("fn g(k: U32, c: Bool) -> F32 {{\n  match k {{\n    0 => {arm},\n    _ => 0.0,\n  }}\n}}\n")
+    };
+    check(
+        &g("if\n      ~c { 1.0 } else { 2.0 }"),
+        Code::E0020,
+        "~",
+        &[&g("if~\n      c { 1.0 } else { 2.0 }"), &g("if\n      !c { 1.0 } else { 2.0 }")],
+    );
+    let (d, fixed) = one(&g("if ~\n      c { 1.0 } else { 2.0 }"));
+    assert_eq!((d.code, fixed.len()), (Code::E0020, 1), "{d:?}");
+}
+
+#[test]
+fn a_statement_as_the_body_of_an_arm() {
+    let g = |arm: &str| {
+        format!("fn g(o: Option[I32]) -> I32 {{\n  match o {{\n    Some(v) => v,\n    None => {arm},\n  }}\n}}\n")
+    };
+    check(&g("return 0"), Code::E0020, "return", &[&g("{ return 0 }")]);
+}
+
+#[test]
+fn a_line_that_ends_where_it_cannot_has_an_empty_range() {
+    // The end of the code of the line, before its comment; no `found` (§18.1).
+    let src = "fn g(c: Bool) -> I32 {\n  let a = if // c\n    ~c { 1 } else { 2 }\n  a\n}\n";
+    let p = parse(src);
+    let d = &p.diagnostics[0];
+    assert_eq!((d.code, d.span.start, d.span.end, d.found.as_deref()), (Code::E0002, 35, 35, None), "{d:?}");
+}
+
+#[test]
+fn a_clock_written_after_a_type_is_apart_from_the_name_after_it() {
+    // R-205 (tests/fuzz/f60b27e5.onsa): ` at a` before `e` is not ` at ae`.
+    let src = "flow m(x:(((F at a)))e";
+    let p = parse(src);
+    let d = p.diagnostics.iter().find(|d| d.code == Code::E0020).unwrap_or_else(|| panic!("{:?}", p.diagnostics));
+    let fixed = onsa_diag::apply_text(src, &d.fixes[0].edits().iter().collect::<Vec<_>>()).unwrap();
+    assert_eq!(fixed, "flow m(x:(((F))) at a e");
+}
+
+#[test]
+fn the_prefix_rows_of_a_pattern_take_only_a_negative_integer() {
+    // H1 and L1 of W3-06/b (1b): a range, a float or a constant after the
+    // `-` is the form of its own row (no two rows on one failure, which is an
+    // internal error), and another operand is no pattern (E0002, no candidate).
+    let m = |pat: &str| {
+        format!("const S: I32 = 1\nfn g(x: I32) -> I32 {{\n  match x {{\n    {pat} => 1,\n    _ => 0,\n  }}\n}}\n")
+    };
+    for (pat, message) in [
+        ("- 1..<3", "ranges cannot be patterns"),
+        ("-\n    1..=3", "ranges cannot be patterns"),
+        ("- 0.5", "float literals cannot be patterns"),
+        ("- S", "a constant with `-` cannot be a pattern"),
+    ] {
+        let p = parse(&m(pat));
+        assert!(p.diagnostics.iter().any(|d| d.message.starts_with(message)), "{pat}: {:?}", p.diagnostics);
+    }
+    // The guard writes the `-` against the constant (S-123).
+    let (d, fixed) = one(&m("- S"));
+    assert_eq!((d.code, fixed[0].contains("v == -S")), (Code::E0020, true), "{fixed:?}");
+    for pat in ["- x", "- _", "- true", "- (x)", "- (-1)"] {
+        let (d, fixed) = one(&m(pat));
+        assert_eq!((d.code, fixed.len()), (Code::E0002, 0), "{pat}: {d:?}");
+    }
+    check(&m("- (8)"), Code::E0020, "-", &[&m("-(8)")]);
+    check(&m("-\n    1"), Code::E0020, "-", &[&m("-1")]);
+}
+
+#[test]
+fn the_guard_of_a_range_writes_a_leading_minus_against_its_operand() {
+    // W3-06/b (1b, the second check): `- 1..<3` has the guard `-1 <= v`, not
+    // `- 1 <= v` (which the check after it would report, S-123, S-236).
+    let m = |arm: &str| format!("fn g(x: I32) -> I32 {{\n  match x {{\n    {arm} => 1,\n    _ => 0,\n  }}\n}}\n");
+    check(&m("- 1..<3"), Code::E0020, "- 1..<3", &[&m("v if -1 <= v && v < 3")]);
+}
+
+#[test]
+fn a_line_break_after_a_dot_before_a_keyword() {
+    // M1 of W3-06/b (1b): the keyword starts the next statement; no candidate.
+    let s = "struct S {\n  f: I32,\n}\n";
+    let (d, fixed) = one(&format!("{s}fn g(s: S) -> I32 {{\n  let c = s.\n  let d = 1\n  d\n}}\n"));
+    assert_eq!((d.code, d.found.as_deref(), fixed.len()), (Code::E0002, Some("."), 0), "{d:?}");
+}
+
+#[test]
+fn the_dot_of_a_path() {
+    // M2 of W3-06/b (1b): the `.` of a path in a pattern, a type, a `use` and
+    // an `impl` takes no blank and no line break after it, as in an expression.
+    let e = "enum E {\n  A,\n  B,\n}\n";
+    let m = |pat: &str| format!("{e}fn g(e: E) -> I32 {{\n  match e {{\n    {pat} => 1,\n    _ => 0,\n  }}\n}}\n");
+    check(&m("E. A"), Code::E0020, ".", &[&m("E.A")]);
+    check(&m("E .A"), Code::E0020, ".", &[&m("E.A")]);
+    check(&m("E.\n      A"), Code::E0020, ".", &[&m("E\n      .A")]);
+    check(
+        &format!("{e}fn g(e: E) -> I32 {{\n  let x: E. A = e\n  1\n}}\n"),
+        Code::E0020,
+        ".",
+        &[&format!("{e}fn g(e: E) -> I32 {{\n  let x: E.A = e\n  1\n}}\n")],
+    );
+    let (d, fixed) = one("use std. math\n");
+    assert_eq!((d.code, fixed.as_slice()), (Code::E0020, ["use std.math\n".to_string()].as_slice()), "{d:?}");
+    let (d, fixed) = one("use std.\n  math\n");
+    assert_eq!((d.code, fixed.as_slice()), (Code::E0020, ["use std\n  .math\n".to_string()].as_slice()), "{d:?}");
+    assert!(parse("use std\n  .math\n").diagnostics.is_empty());
+    let (d, fixed) = one("struct S {\n  a: I32,\n}\nimpl S. T {\n}\n");
+    assert_eq!((d.code, fixed[0].contains("impl S.T")), (Code::E0020, true), "{d:?}");
+}
+
+#[test]
+fn a_stack_of_prefix_operators_over_lines() {
+    // M3 of W3-06/b (1b): one form, the E0012 of the stack (S-410, S-248).
+    check(&body("  two(-\n    -a, 1)"), Code::E0012, "-\n    -a", &[&body("  two(-(-a), 1)")]);
+    let g = |s: &str| format!("fn g(c: Bool) -> Bool {{\n{s}\n}}\n");
+    check(&g("  !\n    !c"), Code::E0012, "!\n    !c", &[&g("  !(!c)")]);
+}

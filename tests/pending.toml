@@ -1268,13 +1268,6 @@ note = "空白の E0020（f (x)、a . b、x ? など）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_patterns_return.onsa"
-reasons = ["S-89"]
-until = "W3-06"
-note = "腕の return / continue の E0020"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_old_attributes.onsa"
 reasons = ["S-57"]
 until = "W3-08"
@@ -1300,13 +1293,6 @@ target = "tests/spec/fixes/e0004_doc_comments.onsa"
 reasons = ["S-51", "R-63"]
 until = "W3-04"
 note = "付ける宣言の無い /// と先頭以外の //! の E0004"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_spacing_flow.onsa"
-reasons = ["S-123", "S-102"]
-until = "W3-06"
-note = "at は W3-10 で通るが、lp ~(x) と ^ y の E0020 の行（space_before_tilde、space_after_caret）が W3-06 まで無い（E0002）"
 
 [[pending]]
 kind = "test-case"
@@ -1865,13 +1851,6 @@ note = "値として使う関数を経由して届く使用。関数値の呼び
 
 [[pending]]
 kind = "foreign-form"
-target = "arm_return"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
-
-[[pending]]
-kind = "foreign-form"
 target = "octal_prefix"
 reasons = ["S-62", "R-73"]
 until = "W3-05"
@@ -1897,27 +1876,6 @@ target = "literal_suffix"
 reasons = ["S-62", "R-73"]
 until = "W3-05"
 note = "数値リテラルの形"
-
-[[pending]]
-kind = "foreign-form"
-target = "space_before_question"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
-
-[[pending]]
-kind = "foreign-form"
-target = "space_after_prefix"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
-
-[[pending]]
-kind = "foreign-form"
-target = "space_after_caret"
-reasons = ["S-89", "S-123", "S-203"]
-until = "W3-06"
-note = "空白と行頭の二項演算子、腕の return"
 
 [[pending]]
 kind = "foreign-form"
@@ -2160,33 +2118,13 @@ note = "W3-09 で if~ の次の行の else が E0003 になることは通る。
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/syntax_tilde_after_newline.onsa"
-reasons = ["S-363", "S-354"]
-until = "W3-06"
-note = "if / match の後の改行の後の ~ の E0002。行末の E0002 の位置と found は W3-06（今は改行のトークンの位置で found が無く、否定例の規則に合わない）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/names_clock_in_fn_head.onsa"
 reasons = ["S-356", "S-101"]
 until = "W4-12"
 note = "fn の入出力の型の後ろの at は名前の段の E0821。構文の段が at を読む（W3-09）のが前提"
 
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/d3901b88.onsa"
-reasons = ["R-200"]
-until = "W3-06"
-note = "W3-09/t2 が見つけた入力。`.(` の候補を当てた後に E0006 が出る（R-200）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/f60b27e5.onsa"
-reasons = ["R-205"]
-until = "W3-06"
-note = "W3-06/t1 の gate のファズが見つけた入力。`clock_in_type` の候補が差し込んだ ` at a` を後ろの名前 `e` とつなげる（fix-same-place: fix|E0020|write the clock after the type|reading）"
-
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
+
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/flow_clock_reserved.onsa"
@@ -2275,105 +2213,7 @@ note = "名前と印の間、`^` と名前の間、前置の `-` / `!` の後の
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_space_member_question.onsa"
-reasons = ["S-203"]
-until = "W3-06"
-note = "メンバの `.` の両側と `?` の前の空白"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_space_asymmetric.onsa"
-reasons = ["S-398"]
-until = "W3-06"
-note = "非対称な空白の `-`・`^`。並びの中は二つの候補、並びの外は一つ"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_newline_after_dot.onsa"
-reasons = ["S-353"]
-until = "W3-06"
-note = "メンバの `.` の後の改行（タプルの添字、`.(`、コメント行と空行を挟む形、括弧の内外）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_newline_after_prefix.onsa"
-reasons = ["S-369"]
-until = "W3-06"
-note = "前置の記号の後と `?` の前の改行（`prev~(^` 改行 `y)` を含む）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_newline_if_tilde.onsa"
-reasons = ["S-385"]
-until = "W3-06"
-note = "括弧の中の `if` / `match` と `~` の間の改行。`~` の後が改行なら `!` の候補を出さない"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_arm_return_forms.onsa"
-reasons = ["S-89", "R-101"]
-until = "W3-06"
-note = "腕の `return` / `break` / `continue`（候補はブロックで囲む形）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/pkg_space"
-reasons = ["S-89", "S-353", "S-384"]
-until = "W3-06"
-note = "二つのモジュールの空白・改行・`,` の抜け"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0012_prefix_spaced.onsa"
-reasons = ["S-410"]
-until = "W3-06"
-note = "間に空白を空けた前置の重ねの E0012。候補は `-(-x)`・`!(!b)`"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_space_negative_pattern.onsa"
-reasons = ["S-411"]
-until = "W3-06"
-note = "パターンの負のリテラルの `-` の後の空白"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/syntax_gap_no_candidate.onsa"
-reasons = ["S-384", "S-353", "S-399", "R-203"]
-until = "W3-06"
-note = "候補の無い形（`xs[i` 改行 `j]`、並びの外の `g(x) (y)`、`.` の後の改行の後が名前・整数・`(` でない形）"
-
-[[pending]]
-kind = "foreign-form"
-target = "newline_after_dot"
-reasons = ["S-353"]
-until = "W3-06"
-note = "W3-06/t2 が足した例（S-353）"
-
-[[pending]]
-kind = "foreign-form"
-target = "newline_after_prefix"
-reasons = ["S-369"]
-until = "W3-06"
-note = "W3-06/t2 が足した例（S-369）"
-
-[[pending]]
-kind = "foreign-form"
-target = "newline_before_question"
-reasons = ["S-369"]
-until = "W3-06"
-note = "W3-06/t2 が足した例（S-369）"
-
-[[pending]]
-kind = "foreign-form"
-target = "asymmetric_binary_space"
-reasons = ["S-398"]
-until = "W3-06"
-note = "W3-06/t2 が足した例（S-398）"
-
-[[pending]]
-kind = "foreign-form"
-target = "space_after_branch_keyword"
-reasons = ["S-385"]
-until = "W3-06"
-note = "W3-06/t2 が足した例（S-385）"
+target = "tests/spec/lex/if_tilde_newline_ok.onsa"
+reasons = ["S-110"]
+until = "W7-06"
+note = "`if~` は W3-10 の写しで E0200（K-08、W7-06）。W3-06 で `e0020_newline_if_tilde.onsa` から移した正例"

@@ -5,7 +5,7 @@
 use super::assign::{binary_minus_prefix_minus, compound_assignment, increment};
 use super::calls::callee_expression;
 use super::comments::block_comment;
-use super::decls::{endless_loop, hash_attribute, let_mut, proc, pub_crate};
+use super::decls::{arm_return, endless_loop, hash_attribute, let_mut, proc, pub_crate};
 use super::faust::faust_bit_not;
 use super::literals::{foreign_literal, leading_point};
 use super::modes::{mut_self, reference};
@@ -30,6 +30,78 @@ const BLOCK_COMMENT_RULE: &str =
 const TYPE_ARGS_RULE: &str = "a type argument in an expression is written after the name, `name::[T]` (`id::[U8](250)`); a `[` alone is an index (§4.5)";
 
 pub static ROWS: &[Row] = &[
+    Row {
+        id: RowId::ArmReturn,
+        name: "arm_return",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "`return`, `break` and `continue` are statements; an arm that is one is written as a block",
+        rule: "`return`, `break` and `continue` are statements, written in a block: `None => { return 0 },` (§7)",
+        detect: Detect::Syntax(arm_return),
+    },
+    Row {
+        id: RowId::SpaceBeforeQuestion,
+        name: "space_before_question",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a postfix `?` is written right after its operand",
+        rule: "the postfix `?` is written right after its operand, with no blank or line break before it (`x?`); `x ?` reads as the start of the conditional operator of C (§2.5)",
+        detect: Detect::Syntax(spaces::space_before_question),
+    },
+    Row {
+        id: RowId::SpaceAfterPrefix,
+        name: "space_after_prefix",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a prefix operator is written right before its operand",
+        rule: "the prefix `-` and `!` are written right before their operand, with no blank or line break (`-x`, `!done`, the pattern `-1`, §2.5)",
+        detect: Detect::Syntax(spaces::space_after_prefix),
+    },
+    Row {
+        id: RowId::SpaceAfterCaret,
+        name: "space_after_caret",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the mark `^` is written right before the name",
+        rule: "the mark `^` of a feedback reference is written right before the name, `^y`; `^ y` reads as the binary exclusive or (§2.5, §2.6)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::AsymmetricBinarySpace,
+        name: "asymmetric_binary_space",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a binary operator with a blank only before it reads as the prefix of the next element too",
+        rule: "a binary `-` or `^` has blanks on both sides or on none (`a - b`); `a -b` reads as `a` and `-b` too (§2.5)",
+        detect: Detect::Syntax(spaces::asymmetric_binary_space),
+    },
+    Row {
+        id: RowId::NewlineAfterDot,
+        name: "newline_after_dot",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a member `.` is written at the head of the line of its member",
+        rule: "no line break goes after a member `.`, also in a list; a chain goes on with the `.` at the head of the next line (§2.5)",
+        detect: Detect::Syntax(lines::newline_after_dot),
+    },
+    Row {
+        id: RowId::NewlineAfterPrefix,
+        name: "newline_after_prefix",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a prefix symbol is written on the line of its operand",
+        rule: "the prefix `-`, `!` and `^` are written on the line of their operand, also in a list (§2.5)",
+        detect: Detect::Syntax(lines::newline_after_prefix),
+    },
+    Row {
+        id: RowId::NewlineBeforeQuestion,
+        name: "newline_before_question",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a postfix `?` is written on the line of its operand",
+        rule: "the postfix `?` is written right after its operand, with no line break before it, also in a list (§2.5)",
+        detect: Detect::Syntax(lines::newline_before_question),
+    },
     Row {
         id: RowId::Semicolon,
         name: "semicolon",
@@ -575,17 +647,9 @@ pub static ROWS: &[Row] = &[
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
 pub static WAITING: &[Waiting] = &[
-    Waiting { name: "arm_return", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "octal_prefix", phase: Phase::Lexical, code: Code::E0020 },
     Waiting { name: "leading_zero", phase: Phase::Lexical, code: Code::E0020 },
     Waiting { name: "float_dot_exponent", phase: Phase::Lexical, code: Code::E0020 },
-    Waiting { name: "space_before_question", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "newline_after_dot", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "newline_after_prefix", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "newline_before_question", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "asymmetric_binary_space", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "space_after_prefix", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "space_after_caret", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "leading_operator", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "leading_minus", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "value_call", phase: Phase::Names, code: Code::E0020 },

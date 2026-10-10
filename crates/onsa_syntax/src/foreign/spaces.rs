@@ -4,7 +4,8 @@
 
 use onsa_diag::{Edit, Fix};
 
-use super::{Cursor, Hit, RowId, Want, closing, hit};
+use super::{Cursor, Hit, RowId, Want, closed_expr, closing, hit};
+use crate::cst::NodeKind;
 use crate::token::{Gap, TokenKind};
 
 /// A blank before a postfix opener that the parser did not read on
@@ -40,7 +41,23 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let mut fixes = Vec::new();
-    if d.joins(c.tokens) {
+    let mark = matches!(row, RowId::SpaceBeforeBang | RowId::SpaceBeforeTilde);
+    if mark && c.gap_after(c.at).is_some() {
+        // A gap between the mark and its `(` (S-412): the one candidate takes
+        // both gaps out (`saw ~ (f0)` is one form).
+        let paren = c.tokens.iter().enumerate().skip(c.at + 1).find(|(_, t)| !t.kind.is_trivia()).map(|(k, _)| k)?;
+        let after =
+            crate::layout::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");
+        match c.gap(c.at) {
+            Gap::None => fixes.push(after),
+            Gap::Space => {
+                let mut edits = vec![Edit::delete(c.space_before(c.at)?)];
+                edits.extend(after.edits().iter().cloned());
+                fixes.push(Fix::new("remove the spaces", edits));
+            }
+            Gap::Newline => {}
+        }
+    } else if d.joins(c.tokens) {
         fixes.extend(crate::layout::join_fix(c));
     }
     if row == RowId::SpaceBeforeBracket
@@ -96,7 +113,7 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
     if c.want != Want::Postfix || c.kind(c.at) != TokenKind::Dot {
         return None;
     }
-    let (before, after) = (c.gap(c.at), c.gap(c.at + 1));
+    let (before, after) = (c.gap(c.at), c.gap_after(c.at));
     if after == Gap::Newline || (before != Gap::Space && after != Gap::Space) {
         return None;
     }
@@ -123,4 +140,76 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
         edits.extend(c.space_after(c.at).map(Edit::delete));
     }
     hit(c.span(c.at), vec![Fix::new("remove the space", edits)])
+}
+
+/// A blank before a postfix `?` (`o ?`, S-203): `x ?` reads as the start of
+/// the conditional operator of C. The candidate takes the blank out.
+pub(super) fn space_before_question(c: &Cursor) -> Option<Hit> {
+    if c.kind(c.at) != TokenKind::Question || c.gap(c.at) != Gap::Space {
+        return None;
+    }
+    let prev = c.before(c.at)?;
+    if !crate::layout::ends_operand(c.kind(prev)) {
+        return None;
+    }
+    hit(c.span(c.at), vec![Fix::delete("remove the space", c.space_before(c.at)?)])
+}
+
+/// A blank after a prefix `-` / `!` (`- x`, `! done`, also of a negative
+/// literal pattern `- 1`; S-123, S-411) or after the `^` of a name (`^ y`):
+/// the candidate takes the blank out. A stack of prefix operators with
+/// blanks is the E0012 of the stack (S-410), which the parser reads on.
+pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
+    let kind = c.kind(c.at);
+    // The parser judged the gap after a `-` / `!` (`Want::Prefix`); a `^`
+    // with no name right after it fails where an expression goes.
+    let want = if kind == TokenKind::Caret { Want::Expr } else { Want::Prefix };
+    if !matches!(kind, TokenKind::Minus | TokenKind::Bang | TokenKind::Caret)
+        || c.want != want
+        || c.gap_after(c.at) != Gap::Space
+    {
+        return None;
+    }
+    let next = c.kind(c.at + 1);
+    let mut fixes = vec![Fix::delete("remove the space", c.space_after(c.at)?)];
+    if kind == TokenKind::Caret {
+        if next != TokenKind::Ident {
+            return None;
+        }
+        c.say(RowId::SpaceAfterCaret);
+        // A line that starts with `^ b` goes on the line before as the binary
+        // `^` too (S-123). The `- b` of `leading_minus` is W3-06's unit 2.
+        if c.gap(c.at) == Gap::Newline
+            && let Some(prev) = c.sig_before(c.at).filter(|&p| crate::layout::ends_operand(c.kind(p)))
+        {
+            let title = "join it to the line before";
+            fixes.push(crate::layout::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], " "));
+        }
+    } else if !crate::parser::starts_operand(next) {
+        return None;
+    }
+    hit(c.span(c.at), fixes)
+}
+
+/// A binary `-` / `^` with a blank before it and its operand touching it
+/// (`a -b`, `[1 -1]`, `two(a -b, 1)`, `[a ^b]`; S-398): it reads as the prefix
+/// of a next element too. The candidates are the blanks on both sides, and,
+/// in a list whose elements are expressions (arguments, an array, a tuple),
+/// the `,` before it (S-370's order). `a - -b` has blanks on both sides and
+/// is no such form.
+pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
+    if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret)
+        || c.gap(c.at) != Gap::Space
+        || c.gap_after(c.at) != Gap::None
+        || !crate::parser::starts_operand(c.kind(c.at + 1))
+        || closed_expr(c).is_none()
+    {
+        return None;
+    }
+    let prev = c.before(c.at)?;
+    let mut fixes = vec![Fix::insert("write blanks on both sides", c.file, c.span(c.at).end, " ")];
+    if matches!(c.want, Want::Separator(NodeKind::ArgList | NodeKind::ArrayExpr | NodeKind::TupleExpr)) {
+        fixes.push(Fix::insert("write the `,` between the elements", c.file, c.span(prev).end, ","));
+    }
+    hit(c.span(c.at), fixes)
 }

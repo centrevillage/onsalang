@@ -258,7 +258,11 @@ impl<'c, 'a> PatReader<'c, 'a> {
                 let sign = if minus { "-" } else { "" };
                 PatKind::Hole(Form::Float, Test::Equal(format!("{sign}{open}{value}{close}")))
             }
-            None if constant => PatKind::Hole(Form::Negated, Test::Equal(self.text(lo, self.pos - 1))),
+            // The `-` is written against the constant (§2.5, S-123): the blanks
+            // after it in the pattern do not go into the guard.
+            None if constant => {
+                PatKind::Hole(Form::Negated, Test::Equal(format!("-{}", self.text(lo + 1, self.pos - 1))))
+            }
             None => PatKind::Leaf(Leaf::Lit),
         };
         Some(self.pat(lo, kind))
@@ -272,11 +276,17 @@ impl<'c, 'a> PatReader<'c, 'a> {
             return None;
         }
         let c = self.c;
-        let (first, last) = (c.full[self.toks[a]] as usize, c.full[self.toks[b]] as usize);
+        // A leading prefix `-` is written against its operand in the guard
+        // (§2.5, S-123): the blanks after it in the pattern do not go into it.
+        let minus = a < b
+            && c.kind(self.toks[a]) == TokenKind::Minus
+            && !matches!(c.kind(self.toks[a + 1]), TokenKind::Minus | TokenKind::Bang);
+        let from = if minus { a + 1 } else { a };
+        let (first, last) = (c.full[self.toks[from]] as usize, c.full[self.toks[b]] as usize);
         if !crate::parser::reads_as_expr(c.file, c.text, c.all, c.holes, first, last) {
             return None;
         }
-        let text = self.text(a, b);
+        let text = if minus { format!("-{}", self.text(a + 1, b)) } else { self.text(a, b) };
         let top = operand(&(self.toks[a]..=self.toks[b]).map(|i| c.kind(i)).collect::<Vec<_>>());
         Some(if BinOp::Le.bare(side, top) { text } else { format!("({text})") })
     }

@@ -255,7 +255,7 @@ const NORMAL_FORMS: &[(&str, &str, &str)] = &[
     ("the comma of a delay line", "  delay~(^y,4)", "  delay~(^y, 4)"),
     ("the commas of a variable delay", "  vdelay~(^y,d,64,0.5)", "  vdelay~(^y, d, 64, 0.5)"),
     ("a space before a comma of a delay", "  prev~(^y , 1.0)", "  prev~(^y, 1.0)"),
-    ("a binary caret with a space before only", "  let z = a ^b\n  z", "  let z = a ^ b\n  z"),
+    // `a ^b` (a blank before only) is the E0020 of S-398 (W3-06), no longer a form `fmt` writes.
     ("a binary caret with no space", "  let z = a^b\n  z", "  let z = a ^ b\n  z"),
     ("a binary caret with wide spaces", "  let z = a   ^    b\n  z", "  let z = a ^ b\n  z"),
     ("the mark after a binary operator", "  let z = a +   ^y\n  z", "  let z = a + ^y\n  z"),

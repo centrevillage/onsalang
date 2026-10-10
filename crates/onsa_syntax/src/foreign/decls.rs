@@ -172,3 +172,33 @@ pub(super) fn pub_crate(c: &Cursor) -> Option<Hit> {
     let end = c.space_after(close).map_or(span.end, |s| s.end);
     hit(span, vec![Fix::delete("remove the visibility", c.file_span(span.start, end))])
 }
+
+/// `return`, `break` or `continue` as the whole body of an arm of `match`
+/// (`None => return 0,`; S-89): they are statements, so the one candidate puts
+/// the block around the statement, up to the `,` or the `}` that ends the arm.
+pub(super) fn arm_return(c: &Cursor) -> Option<Hit> {
+    if c.want != Want::Expr
+        || !matches!(c.kind(c.at), TokenKind::KwReturn | TokenKind::KwBreak | TokenKind::KwContinue)
+        || c.top() != Some(NodeKind::MatchArm)
+        || c.sig_before(c.at).is_none_or(|p| c.kind(p) != TokenKind::FatArrow)
+    {
+        return None;
+    }
+    // The last token of the statement: before the `,` or the `}` of the arms.
+    let mut depth = 0u32;
+    let mut last = c.at;
+    let mut i = c.at;
+    loop {
+        i = c.sig_after(i);
+        match c.kind(i) {
+            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace if depth > 0 => depth -= 1,
+            TokenKind::Comma | TokenKind::RBrace if depth == 0 => break,
+            TokenKind::Eof | TokenKind::RParen | TokenKind::RBracket => return hit(c.span(c.at), Vec::new()),
+            _ => {}
+        }
+        last = i;
+    }
+    let edits = vec![Edit::insert(c.file, c.span(c.at).start, "{ "), Edit::insert(c.file, c.span(last).end, " }")];
+    hit(c.span(c.at), vec![Fix::new("put the statement in a block", edits)])
+}
