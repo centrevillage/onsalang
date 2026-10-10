@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+
+// E0002 and a note, with no candidate, for a name touching a string or character literal, and for a literal
+// touching a name (§2.4, S-400): `f"{x}"`, `r"\d+"`, `b"x"`, `u8"x"`, `L"x"`, `b'x'`, `"x"_s`,
+// `"x"u8`. They are the prefixes and suffixes of other languages; Onsa has none, and the one reading of
+// the form is not a missing `,` (so no `,` candidate, S-387) and not one literal and a name (no candidate
+// can be made without guessing the intent: the note shows the Onsa forms, `"{x}"` for interpolation and
+// `"x".as_bytes()` for bytes). The form is found where the parser fails, whatever list it is in: an
+// argument, an array, a tuple, a field value, an arm, a closure body, after a path. A string that does not
+// touch a name (`show(a, "x")`) is not part of this rule, and neither is `lib"m"` in the heading of an
+// `extern` block (tests/spec/ffi/extern_lib_adjacent.onsa). One error per declaration unit (P-01).
+
+pub struct Label {
+  text: Str,
+}
+
+pub fn show(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn an_interpolating_prefix(x: I32) -> U32 {
+  let s = f"{x}"                                    //~ E0002
+  show(s)
+}
+
+pub fn a_raw_prefix() -> U32 {
+  let s = r"\d+"                                    //~ E0002
+  show(s)
+}
+
+pub fn a_bytes_prefix() -> U32 {
+  let s = b"x"                                      //~ E0002
+  show(s)
+}
+
+pub fn an_encoding_prefix() -> U32 {
+  let s = u8"x"                                     //~ E0002
+  show(s)
+}
+
+pub fn a_wide_prefix() -> U32 {
+  let s = L"x"                                      //~ E0002
+  show(s)
+}
+
+pub fn a_prefix_on_a_character() -> Char {
+  b'x'                                              //~ E0002
+}
+
+pub fn a_user_defined_suffix() -> U32 {
+  let s = "x"_s                                     //~ E0002
+  show(s)
+}
+
+pub fn an_encoding_suffix() -> U32 {
+  let s = "x"u8                                     //~ E0002
+  show(s)
+}
+
+pub fn in_an_argument() -> U32 {
+  show(b"x")                                        //~ E0002
+}
+
+pub fn in_an_interpolating_argument(x: I32) -> U32 {
+  show(f"{x}")                                      //~ E0002
+}
+
+pub fn in_an_array() -> U32 {
+  let xs = [r"a", "b"]                              //~ E0002
+  xs.len()
+}
+
+pub fn in_a_struct_literal() -> Label {
+  Label { text: f"x" }                              //~ E0002
+}
+
+pub fn in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(x) => show(f"{x}"),                        //~ E0002
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(x: I32) -> U32 {
+  let f = fn(y: I32) -> U32 { show(b"y") }          //~ E0002
+  f.(x)
+}
+
+pub fn in_a_tuple() -> U32 {
+  let t = ("a", u8"b")                              //~ E0002
+  t.0.len()
+}
+
+pub fn after_a_path(x: I32) -> U32 {
+  show(Label.f"{x}")                                //~ E0002
+}
+
+pub fn fine(x: I32) -> U32 uses {Alloc} {
+  let a = "{x}"
+  let b = "y"
+  show(a) + show(b)
+}

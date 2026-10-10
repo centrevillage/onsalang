@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 2
+
+// E0020 for a line break between `if` / `match` and the `~` inside parentheses (§2.5, §2.6, S-385): the
+// `~` of `if~` / `match~` is written right after the keyword, and a line break counts as a space
+// inside parentheses and in the arms of a `match`, which §2.5 lists with the lists where a line break is a space (S-354 is the same form on one line). Candidate 1 moves the `~` to the keyword
+// (`if~` and `c {...}` on the next line). When the `~` touches its operand on the same line (`~c`), the
+// prefix reading is candidate 2, `!c`; a `~` that is followed by a space or by a line break touches nothing
+// and has no second candidate. Outside parentheses the `if` ends its line and the error is the existing
+// E0002 of tests/spec/negative/syntax_tilde_after_newline.onsa. The branches are constants (the later-stage
+// errors of `if~` without state are not the subject). The main position of the error is the `~`
+// token (as for S-354, positions of W3-06), so the marker is on the line of the `~` the candidate moves.
+//  One error per declaration unit (P-01).
+
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow if_in_an_argument(c: Bool at sample) -> F32 at sample {
+  two(if
+    ~c { 1.0 } else { 2.0 }, 1.0)                   //~ E0020
+}
+
+pub flow match_in_an_argument(k: U32 at sample) -> F32 at sample {
+  two(match
+    ~k { 0 => 1.0, _ => 2.0 }, 1.0)                 //~ E0020
+}
+
+pub flow if_in_a_group(c: Bool at sample) -> F32 at sample {
+  let a = (if
+    ~c { 1.0 } else { 2.0 })                        //~ E0020
+  a
+}
+
+pub flow if_in_an_array(c: Bool at sample) -> F32 at sample {
+  let v = [if
+    ~c { 1.0 } else { 2.0 }, 3.0]                   //~ E0020
+  v[0]
+}
+
+pub flow if_with_an_operator(a: Bool at sample, b: Bool at sample) -> F32 at sample {
+  two(if
+    ~a && b { 1.0 } else { 2.0 }, 1.0)              //~ E0020
+}
+
+pub flow if_in_an_arm(k: U32 at sample, c: Bool at sample) -> F32 at sample {
+  match k {
+    0 => if
+      ~c { 1.0 } else { 2.0 },                      //~ E0020
+    _ => 3.0,
+  }
+}
+
+pub flow if_with_a_space_after_the_tilde(c: Bool at sample) -> F32 at sample {
+  two(if
+    ~ c { 1.0 } else { 2.0 }, 1.0)                  //~ E0020
+}
+
+pub flow match_with_a_space_after_the_tilde(k: U32 at sample) -> F32 at sample {
+  two(match
+    ~ k { 0 => 1.0, _ => 2.0 }, 1.0)                //~ E0020
+}
+
+pub flow a_line_break_after_the_tilde(c: Bool at sample) -> F32 at sample {
+  two(if
+    ~                                               //~ E0020
+    c { 1.0 } else { 2.0 }, 1.0)
+}
+
+pub flow a_space_before_the_tilde_too(c: Bool at sample) -> F32 at sample {
+  two(if ~
+    c { 1.0 } else { 2.0 }, 1.0)                    //~ E0020
+}
+
+pub flow fine(c: Bool at sample, k: U32 at sample) -> F32 at sample {
+  two(if~ c { 1.0 } else { 2.0 }, match~ k { 0 => 1.0, _ => 2.0 })
+}

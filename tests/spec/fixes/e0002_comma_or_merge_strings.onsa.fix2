@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+// fixes = 2
+
+// E0002 for two string literals side by side in a list (§2.5, S-388): Python and C join them into one
+// literal, and the reading as a missing `,` is the other one, so there are two candidates, in this order:
+// the `,` inserted after the first literal, and the two literals merged into one (`"ab"`). Only the `,`
+// would silently make a long string written over two lines in an array into two elements. A string
+// literal cannot span a line, so the merge moves the text of the later literal before the closing `"` of the
+// earlier one and removes the token of the later one; the other tokens (`]`, `)`) and the comments stay on
+// the line where they were written (S-216), so `"b"]` on its own line leaves `]` there, and on one line
+// `"a" "b"` leaves the space before what follows (`"ab" ]`). The main position is the token that starts
+// the next element, the later literal (positions of W3-06). One error per declaration unit (P-01).
+
+pub fn show(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn an_array_over_two_lines() -> U32 uses {Alloc} {
+  let xs = ["ab"
+    ]                                               //~ E0002
+  xs.len()
+}
+
+pub fn an_array_on_one_line() -> U32 uses {Alloc} {
+  let xs = ["ab" ]                                  //~ E0002
+  xs.len()
+}
+
+pub fn the_third_element() -> U32 uses {Alloc} {
+  let xs = ["a", "bc"
+    ]                                               //~ E0002
+  xs.len()
+}
+
+pub fn an_argument_over_two_lines() -> U32 {
+  show("ab"
+    )                                               //~ E0002
+}
+
+pub fn an_argument_on_one_line() -> U32 {
+  show("ab" )                                       //~ E0002
+}
+
+pub fn a_comment_between() -> U32 uses {Alloc} {
+  let xs = ["ab" // the first
+    ]                                               //~ E0002
+  xs.len()
+}
+
+pub fn fine() -> U32 uses {Alloc} {
+  let xs = ["a", "b"]
+  xs.len() + show("ab")
+}

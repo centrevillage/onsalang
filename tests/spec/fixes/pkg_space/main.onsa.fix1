@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 2
+
+// E0020 and E0002 for the spaces and line breaks of §2.5 in two modules of one package (§15.1, §18.1):
+// each module's errors are reported, and the candidates are applied in each file. This module uses what
+// util.onsa declares, so the forms are the call of an imported function, an associated function and a
+// method of an imported type, an index (two candidates), the member `.`, a missing `,` and the `.` at the
+// end of a line. util.onsa has the gaps of a declaration, a pattern and a type. One error per declaration
+// unit (P-01).
+
+use util.{Counter, double, first_of}
+
+pub fn a_call_of_an_imported_function(x: I32) -> I32 {
+  double(x)                                         //~ E0020
+}
+
+pub fn an_associated_function_of_an_imported_type() -> Counter {
+  Counter.new(0)                                    //~ E0020
+}
+
+pub fn a_method_of_an_imported_type(inout c: Counter) -> I32 {
+  c.bump!(1)
+  c.n                                               //~ E0020
+}
+
+pub fn an_index_in_a_module(xs: [I32; 4]) -> I32 {
+  first_of(xs[0], 1)                                //~ E0020
+}
+
+pub fn a_missing_comma_in_a_module(x: I32) -> I32 {
+  first_of(x,
+    x)                                              //~ E0002
+}
+
+pub fn a_line_break_after_the_dot(c: Counter) -> I32 {
+  c                                                 //~ E0020
+    .n
+}
+
+pub fn fine(x: I32, c: Counter) -> I32 {
+  double(x) + c.n
+}

@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.1", "§18.1"]
+
+// E0002 with no candidate where the rules of S-384, S-353 and S-399 give none:
+// - an index is one element in brackets (`xs[i` and `j]`, `xs[i j]`): the next token is not the start of
+//   a second element of the list, so `,` is not offered (S-384);
+// - a call after a token that is not a name path, outside a list (`let v = g(x) (y)`, S-399, R-203; `xs[0] (y)` is not here: an index is a callee form of §6.1, so the space is an E0020 with its candidate, e0020_space_calls.onsa): the
+//   space-removed candidate (`g(x)(y)`) would leave the call of a non-name, an error of the same stage, so
+//   S-236 withholds it, and the error stays an E0002 (§18.1: a candidate that cannot be made is not offered);
+// - a line break after the member `.` with no name, integer or `(` after it (S-353): the `.` cannot be moved
+//   to a place where it reads.
+// The main position is the `.` (positions of W3-06). One error per declaration unit
+// (P-01). The R-203 reproduction input is the first of these (tests/review-phase1/README.md).
+
+pub fn g(x: I32) -> I32 {
+  x
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub struct Sf {
+  f: I32,
+}
+
+pub fn an_index_over_two_lines(xs: [I32; 4], i: U32, j: U32) -> I32 {
+  xs[i
+    j]                                              //~ E0002
+}
+
+pub fn an_index_on_a_line(xs: [I32; 4], i: U32, j: U32) -> I32 {
+  xs[i j]                                           //~ E0002
+}
+
+pub fn an_index_of_an_index(xs: [[I32; 4]; 2], i: U32, j: U32) -> I32 {
+  xs[0][i
+    j]                                              //~ E0002
+}
+
+pub fn a_call_after_a_call(x: I32, y: I32) -> I32 {
+  let v = g(x) (y)                                  //~ E0002
+  v
+}
+
+pub fn a_call_after_a_tuple() -> I32 {
+  let v = (1, 2) (3, 4)                             //~ E0002
+  v.0
+}
+
+pub fn a_call_after_a_group(x: I32, y: I32) -> I32 {
+  let v = (g) (x)                                   //~ E0002
+  v
+}
+
+pub fn an_array_after_the_dot(s: Sf) -> I32 {
+  two(s.                                            //~ E0002
+    [0], 1)
+}
+
+pub fn a_prefix_after_the_dot(s: Sf) -> I32 {
+  let a = s.                                        //~ E0002
+    -1
+  a
+}
+
+pub fn a_closer_after_the_dot(s: Sf) -> I32 {
+  two(s.                                            //~ E0002
+    )
+}
+
+pub fn a_string_after_the_dot(s: Sf) -> I32 {
+  let a = s.                                        //~ E0002
+    "f"
+  a
+}
+
+pub fn fine(xs: [I32; 4], i: U32, s: Sf) -> I32 {
+  two(xs[i], g(s
+    .f))
+}

@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§2.6", "§3.1"]
+
+// The forms that the rules of spaces and line breaks (§2.5, S-89, S-123, S-203, S-374, S-398) accept. These
+// are the counterparts of tests/spec/fixes/e0020_space_*.onsa and e0020_newline_*.onsa: the same
+// places, written the right way.
+//
+// - Inside parentheses, brackets, a struct literal and the arms of a `match` a line break is a space, so the
+//   elements of a list may be on lines of their own, with comments between, a blank line, and a `,`
+//   after the last one.
+// - (`:`, `=>`, `as` and `at` have no rule of placement either, S-374, but `onsa fmt` joins the line, so those
+//   forms are in crates/onsa_cli/tests/gap_forms.rs: a case here must be in the normal form of `fmt`.)
+// - The postfix `(` and `[`, the member `.`, `?`, the marks `~` `!` and a prefix `-` `!` `^` touch what they
+//   belong to; a `-` between two operands has a space on both sides (`a - b`, fmt writes it so), and a
+//   prefix `-` after a `,` or an opening bracket touches its operand (`[a - b, -b]`).
+// - `a - -b` is not the asymmetric form of S-398: the binary `-` has a space on both sides and the second `-` is a
+//   prefix that touches its operand (`[a - -b]`, `let c = a - -b`, `x - -^y`).
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn lists(a: I32, b: I32) -> I32 {
+  let v = [
+    // the first
+    a,
+    b,
+
+    // a comment line
+    a - b,
+    -b,
+  ]
+  let t = (
+    a,
+    b,
+  )
+  two(
+    v[0],
+    t.1,
+  )
+}
+
+pub fn minus_forms(a: I32, b: I32) -> [I32; 4] {
+  [a - b, -b, -a + b, two(a - b, -b)]
+}
+
+pub fn binary_then_prefix(a: I32, b: I32) -> I32 {
+  let v = [a - -b, b]
+  let c = a - -b
+  v[0] + c
+}
+
+pub flow binary_then_a_caret(x: F32 at sample) -> F32 at sample {
+  let y: F32 = prev~(x - -^y)
+  y
+}
+
+pub fn index_forms(xs: [I32; 4], i: U32) -> I32 {
+  xs[i - 1] + xs[i - 2] + xs[0]
+}
+
+pub flow marks(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub fn prefix_forms(a: I32, done: Bool, o: Option[I32]) -> Option[I32] {
+  let n = -a
+  let m = !done
+  let v = o?
+  if m { Some(n + v) } else { None }
+}
+
+test "elements on lines of their own" {
+  assert lists(5, 2) == 7
+  assert two(
+    1,
+    2,
+  ) == 3
+}
+
+test "a minus between two operands and a prefix minus" {
+  let r = minus_forms(5, 2)
+  assert r[0] == 3
+  assert r[1] == -2
+  assert r[2] == -3
+  assert r[3] == 1
+}
+
+test "a binary minus then a prefix minus is not the asymmetric form" {
+  assert binary_then_prefix(5, 2) == 14
+}
+
+test "an index with an expression" {
+  assert index_forms([10, 20, 30, 40], 2) == 40
+}
+
+test "prefixes that touch their operand" {
+  assert prefix_forms(1, false, Some(5)) == Some(4)
+  assert prefix_forms(1, true, Some(5)) == None
+}

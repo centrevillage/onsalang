@@ -34,10 +34,16 @@
 #                から最後のトークンまで）で、`at` はその始まり、形の最初のトークンである（S-316）:
 #                `;`、`<`、`::`、`&`、型の名前、`+=`、`++`、`return`、`~`、`'`、`@`、`..`、ブロックコメントの `/*`。
 #                呼び出しの形の誤り（`f(x)` の `f`、`s.f(x)` の `s`）は呼び出しの式の最初のトークン。
-#                空白の誤りの位置は W3-06 で決める。書いていない例は位置を比べない
+#                空白と行の置き場所の誤り（W3-06）は、置き場所の規則を持つ記号のトークン一つが主の位置で、
+#                主の範囲もそのトークンだけ: 前に空白も改行も置けない後置の記号（`(`、`[`、`!`、`~`、`?`）、
+#                後ろに空白も改行も置けない前置の記号（`-`、`!`、`^`）、メンバの `.`、行頭に置けない記号
+#                （二項演算子、範囲の記号、パターンの `|`、`->`、`=`）、非対称な空白の `-`・`^`、読み始めの
+#                `|` とパターンの中の `||`。`string_prefix` は名前からリテラルまでを一つの形の範囲にする。
+#                書いていない例は位置を比べない
 #     fixed      候補を順に一つずつ当てた後の全文。候補の数と並べ方も約束する。複数の候補の並べ方は
 #                この表の例の候補の順が規範である（S-315）。code = "E0002" の行では書かない（候補なし）。
-#                比べ方は `.fixK` と同じで、トークンと行の切れ目を比べ、空白の量と空行は比べない
+#                比べ方は `.fixK` と同じで、トークンと行の切れ目を比べる。空白の量は比べない。行の切れ目は
+#                空行も比べる
 #     property   仕様が候補の文字列を決めない形（S-247 の言葉の置き場所、S-253 の束縛の名前、S-250 の
 #                タプル形の struct のフィールド名）は fixed を書かず、性質で約束する。意味は
 #                `[[test.fix]]` と同じ: "clean"（当てた後の check が何も報告しない）、
@@ -2173,6 +2179,7 @@ pub fn f(xs: [I32; 4]) -> I32 {
 ''',
 ]
 
+# 同じ行の空白。`.` の後の改行は別の形（`newline_after_dot`、S-353）。
 [[form]]
 id = "space_around_dot"
 kind = "foreign"
@@ -2407,6 +2414,25 @@ pub fn f(done: Bool) -> Bool {
 }
 ''']
 
+# パターンの負のリテラルの `-` の後も同じ（S-411、§7）。
+[[form.example]]
+source = '''
+pub fn f(k: I32) -> I32 {
+  match k {
+    - 1 => 10,
+    _ => 0,
+  }
+}
+'''
+fixed = ['''
+pub fn f(k: I32) -> I32 {
+  match k {
+    -1 => 10,
+    _ => 0,
+  }
+}
+''']
+
 [[form]]
 id = "space_after_caret"
 kind = "foreign"
@@ -2455,6 +2481,422 @@ pub fn f(a: U32, b: U32) -> U32 {
 }
 ''',
 ]
+
+# ---- 空白を空けない位置の改行と、非対称な空白、他の言語の文字列の接頭辞（W3-06、第 15〜20 組）----------
+# 空白と改行の誤りの主の位置は W3-06 で決めるので、`at` を省く。
+
+# メンバの `.` の後の改行（S-353、§2.5）。括弧の中でも外でも E0020。連鎖は次の行の頭の `.` で続けるので、
+# 候補は `.` を次の行の頭（名前、タプルの添字、`.(` の `(` の直前）へ移す形一つ。間のコメントと空行は残る。
+# 改行の後が名前・整数・`(` でない形は候補を作れず E0002（tests/spec/negative/syntax_gap_no_candidate.onsa）。
+# `.` の前にも空白があるとき（`s .` と改行）は一つの置き場所の誤りで、候補は同じ一つ。
+[[form]]
+id = "newline_after_dot"
+kind = "foreign"
+origin = "Ruby と JavaScript（行末の `.` で次の行のメンバへ続ける）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "メンバの `.` の後には、括弧の中でも改行を置かない。連鎖は次の行の頭に `.` を置いて続ける"
+
+[[form.example]]
+source = '''
+pub struct S {
+  f: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a = s.
+    f
+  a
+}
+'''
+fixed = ['''
+pub struct S {
+  f: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a = s
+    .f
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(t: (I32, I32)) -> I32 {
+  two(t.
+    0, 1)
+}
+'''
+fixed = ['''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(t: (I32, I32)) -> I32 {
+  two(t
+    .0, 1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn g(f: fn(I32) -> I32) -> I32 {
+  let a = f.
+    (1)
+  a
+}
+'''
+fixed = ['''
+pub fn g(f: fn(I32) -> I32) -> I32 {
+  let a = f
+    .(1)
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct S {
+  f: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a = s .
+    f
+  a
+}
+'''
+fixed = ['''
+pub struct S {
+  f: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a = s
+    .f
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct S {
+  f: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a = s.
+    // the field
+    f
+  a
+}
+'''
+fixed = ['''
+pub struct S {
+  f: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a = s
+    // the field
+    .f
+  a
+}
+''']
+
+# 前置の `-` / `!` / `^` と被演算子の間の改行（S-369、§2.5）。括弧の中でも外でも E0020。候補は記号を相手の行へ
+# 移す形（前置の記号は次の行の頭へ）。行末の前置の記号は継続にならない。
+[[form]]
+id = "newline_after_prefix"
+kind = "foreign"
+origin = "C 系と JavaScript（前置の記号の後の改行を空白として読む）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "2.6", "18.1"]
+rule = "前置の `-` / `!` / `^` は被演算子と同じ行に書く。括弧の中でも改行を置かない"
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32) -> I32 {
+  two(-
+    a, 1)
+}
+'''
+fixed = ['''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32) -> I32 {
+  two(
+    -a, 1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn pick(c: Bool, n: I32) -> I32 {
+  if c { n } else { 0 }
+}
+
+pub fn g(c: Bool) -> I32 {
+  pick(!
+    c, 1)
+}
+'''
+fixed = ['''
+pub fn pick(c: Bool, n: I32) -> I32 {
+  if c { n } else { 0 }
+}
+
+pub fn g(c: Bool) -> I32 {
+  pick(
+    !c, 1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^
+    y)
+  y
+}
+'''
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(
+    ^y)
+  y
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn g(a: I32) -> I32 {
+  let y = -
+    a
+  y
+}
+'''
+fixed = ['''
+pub fn g(a: I32) -> I32 {
+  let y =
+    -a
+  y
+}
+''']
+
+# 後置の `?` の前の改行（S-369、§2.5）。括弧の中でも外でも E0020。候補は `?` を被演算子の行の末尾へ移す形。
+[[form]]
+id = "newline_before_question"
+kind = "foreign"
+origin = "C 系と JavaScript（条件演算子の `?` を行頭に置く書き方）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "後置の `?` は被演算子と同じ行に書く。括弧の中でも前に改行を置かない"
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(o: Option[I32]) -> Option[I32] {
+  Some(two(o
+    ?, 1))
+}
+'''
+fixed = ['''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(o: Option[I32]) -> Option[I32] {
+  Some(two(o?
+    , 1))
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn g(o: Option[I32]) -> Option[I32] {
+  let v = o
+  ?
+  Some(v)
+}
+'''
+fixed = ['''
+pub fn g(o: Option[I32]) -> Option[I32] {
+  let v = o?
+  Some(v)
+}
+''']
+
+# 二項として読む `-` / `^` の前だけに空白を空け、後ろを被演算子に接する形（S-398、§2.5）。Swift、MATLAB、
+# Julia は `[1 -1]` を要素二つと読み、他の言語は `1 - 1` と読む。括弧の中でも外でも E0020。候補は両側に空白を
+# 置いた形（一つ目）と、式を要素とする並び（引数、配列、タプル）の中では `,` の挿入（二つ目）。
+[[form]]
+id = "asymmetric_binary_space"
+kind = "foreign"
+origin = "MATLAB、Julia、Swift（空白で要素を並べる書き方）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "18.1"]
+rule = "二項の `-` / `^` は両側に空白を置く（`a - b`）。前だけに空白を空けて後ろを被演算子に接する形は、前置の付いた次の要素とも読める"
+
+[[form.example]]
+source = '''
+pub fn g() -> U32 {
+  let v = [1 -1]
+  v.len()
+}
+'''
+fixed = [
+'''
+pub fn g() -> U32 {
+  let v = [1 - 1]
+  v.len()
+}
+''',
+'''
+pub fn g() -> U32 {
+  let v = [1, -1]
+  v.len()
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32, b: I32) -> I32 {
+  two(a -b, 1)
+}
+'''
+fixed = [
+'''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32, b: I32) -> I32 {
+  two(a - b, 1)
+}
+''',
+'''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn g(a: I32, b: I32) -> I32 {
+  two(a, -b, 1)
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn g(a: U32, b: U32) -> U32 {
+  let v = [a ^b]
+  v.len()
+}
+'''
+fixed = [
+'''
+pub fn g(a: U32, b: U32) -> U32 {
+  let v = [a ^ b]
+  v.len()
+}
+''',
+'''
+pub fn g(a: U32, b: U32) -> U32 {
+  let v = [a, ^b]
+  v.len()
+}
+''',
+]
+
+# 並びの外では候補は一つ（`,` を足せる要素の並びが無い）。
+[[form.example]]
+source = '''
+pub fn g(a: I32, b: I32) -> I32 {
+  let c = a -b
+  c
+}
+'''
+fixed = ['''
+pub fn g(a: I32, b: I32) -> I32 {
+  let c = a - b
+  c
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn g(xs: [I32; 4], i: U32) -> I32 {
+  xs[i -1]
+}
+'''
+fixed = ['''
+pub fn g(xs: [I32; 4], i: U32) -> I32 {
+  xs[i - 1]
+}
+''']
+
+# 名前に接する文字列・文字のリテラルと、リテラルに接する名前（S-400、§2.4）。他の言語の接頭辞・接尾辞付きの
+# リテラル。構文の段の E0002 と note（Onsa の文字列の書き方）で、候補は無い（`,` の挿入も出さない）。
+# `extern` の見出しの `lib"m"` は見出しの文法で読み、この行に当たらない。
+[[form]]
+id = "string_prefix"
+kind = "foreign"
+origin = "Python、Rust、C / C++、C#（接頭辞・接尾辞付きの文字列）"
+stage = "syntax"
+code = "E0002"
+spec = ["2.4", "18.1"]
+rule = "文字列と文字のリテラルに接頭辞と接尾辞は無い。UTF-8 の `\"…\"`、補間は `\"{x}\"`、バイト列は `\"x\".as_bytes()`"
+
+[[form.example]]
+source = '''
+pub fn g(x: I32) -> Str {
+  f"{x}"
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  r"x"
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  b"x"
+}
+'''
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  "x"_s
+}
+'''
 
 # 二項にしか使わない演算子で行を始めると、前の行に続かず新しい文として読まれる。候補は演算子を
 # 前の行の末尾へ移す形（行は継続するので次の行のオペランドはそのまま）。
@@ -5983,6 +6425,9 @@ pub fn f(x: [F32; 2]) -> [F32; 2] {
 # `else if` の後の `~` は `else_if_tilde`。候補の一つ目は空白を除く形。`~` が被演算子に接するときは、
 # 前置の `~` の読み（`faust_bit_not` の候補そのもの）を二つ目に並べる。`if~c` は誤りでなく、fmt が
 # `if~ c` にする。
+# 括弧の中では `if` / `match` と `~` の間の改行も同じ形（S-385、§2.6）: 候補の一つ目は `~` をキーワードの直後へ
+# 移す形、`~` が同じ行で被演算子に接するときだけ二つ目に `!` の形（`~` の後が空白か改行なら `!` は出さない）。
+# 括弧の外は `if` / `match` で行が終わり、行末の E0002（tests/spec/negative/syntax_tilde_after_newline.onsa）。
 [[form]]
 id = "space_after_branch_keyword"
 kind = "foreign"
@@ -6046,6 +6491,84 @@ pub flow g(k: U32 at sample) -> F32 at sample {
     0 => saw~(1.0),
     _ => saw~(2.0),
   }
+}
+''']
+
+[[form.example]]
+source = '''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(c: Bool at sample) -> F32 at sample {
+  two(if
+    ~c { 1.0 } else { 2.0 }, 1.0)
+}
+'''
+fixed = [
+'''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(c: Bool at sample) -> F32 at sample {
+  two(if~
+    c { 1.0 } else { 2.0 }, 1.0)
+}
+''',
+'''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(c: Bool at sample) -> F32 at sample {
+  two(if
+    !c { 1.0 } else { 2.0 }, 1.0)
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(k: U32 at sample) -> F32 at sample {
+  two(match
+    ~ k { 0 => 1.0, _ => 2.0 }, 1.0)
+}
+'''
+fixed = ['''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(k: U32 at sample) -> F32 at sample {
+  two(match~
+    k { 0 => 1.0, _ => 2.0 }, 1.0)
+}
+''']
+
+[[form.example]]
+source = '''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(c: Bool at sample) -> F32 at sample {
+  two(if ~
+    c { 1.0 } else { 2.0 }, 1.0)
+}
+'''
+fixed = ['''
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow g(c: Bool at sample) -> F32 at sample {
+  two(if~
+    c { 1.0 } else { 2.0 }, 1.0)
 }
 ''']
 

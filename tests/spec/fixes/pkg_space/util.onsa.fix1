@@ -1,0 +1,32 @@
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn new(n: I32) -> Counter {                   //~ E0020
+    Counter { n: n }
+  }
+
+  pub fn bump(inout self, k: I32) {
+    self.n = self.n + k
+  }
+}
+
+pub fn double(x: I32) -> I32 {                      //~ E0020
+  x * 2
+}
+
+pub fn first_of(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn a_pattern_in_a_module(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) => x,                                   //~ E0020
+    None => 0,
+  }
+}
+
+pub fn a_type_in_a_module(o: Option[I32]) -> I32 {  //~ E0020
+  0
+}

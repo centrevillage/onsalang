@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "38:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["38:7 E0002"]
+//
+// [[test.fix]]
+// at = "42:16"
+// code = "E0002"
+// candidate = 1
+// leaves = ["42:21 E0002"]
+//
+// [[test.fix]]
+// at = "47:14"
+// code = "E0002"
+// candidate = 1
+// leaves = ["47:21 E0002"]
+
+// E0002 for a missing `,` in a list that has two (S-384, S-236): `two(a` and `b b)` has a gap after `a`
+// and another after the first `b`. A unit reports its first error only, so the check reports the first gap
+// and its candidate inserts one `,`; the next gap is still there after it, and the next check reports it. This
+// is outside the promise of S-236 (the candidate of a diagnostic leaves no diagnostic of the same stage in
+// the unit), which holds when the reported diagnostic is the only error of the unit; the entries in the
+// header say what is left (`leaves`, the position in the fixed text). The main position is the first token
+// of the element after the first gap (positions of W3-06). One list per unit.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn two_gaps_over_two_lines(a: I32, b: I32) -> I32 {
+  two(a,
+    b b)                                            //~ E0002
+}
+
+pub fn two_gaps_on_a_line() -> F32 {
+  let v = [0.1, 0.2 0.3]                            //~ E0002
+  v[0]
+}
+
+pub fn a_gap_in_each_of_two_lists(a: I32, b: I32) -> I32 {
+  let t = (a, b, (a b))                             //~ E0002
+  t.0
+}

@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 2
+
+// E0020 for a space between a name and the `[` of an index (§2.5, S-89, §18.1): the candidates are the
+// space removed (`xs[0]`) and, because `xs [0]` can also be read as passing the array to a call, the
+// call `xs([0])` (Haskell, Ruby and CoffeeScript read it so). The second candidate is there wherever the
+// index stands: after a `let`, as an operand, argument or element, after a field, inside another index, in
+// an arm, a closure body and the body of a `par`. The call leaves only errors of the later stages
+// (`xs` is not a function). Moved from tests/review-phase1/parent/r101/space_index.onsa and the `xs [0]`
+// of tests/review-phase1/syntax/space_idx.onsa (R-101). One error per declaration unit (P-01).
+
+pub struct Holder {
+  data: [I32; 4],
+}
+
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn in_a_let(xs: [I32; 4]) -> I32 {
+  let a = xs[0]                                     //~ E0020
+  a
+}
+
+pub fn one_line(xs: [I32; 2]) -> I32 { xs[0] }      //~ E0020
+
+pub fn as_an_operand(a: I32, xs: [I32; 4], i: U32) -> I32 {
+  a + xs[i]                                         //~ E0020
+}
+
+pub fn as_an_argument(xs: [I32; 4]) -> I32 {
+  add(xs[0], 1)                                     //~ E0020
+}
+
+pub fn as_an_element(xs: [I32; 4]) -> I32 {
+  let v = [xs[0], 1]                                //~ E0020
+  v[1]
+}
+
+pub fn as_a_tuple_element(xs: [I32; 4]) -> I32 {
+  let t = (xs[0], 1)                                //~ E0020
+  t.1
+}
+
+pub fn a_field(h: Holder) -> I32 {
+  h.data[0]                                         //~ E0020
+}
+
+pub fn inside_an_index(xs: [I32; 4], k: [U32; 2]) -> I32 {
+  xs[k[0]]                                          //~ E0020
+}
+
+pub fn a_wide_gap(xs: [I32; 4]) -> I32 {
+  xs[0]                                             //~ E0020
+}
+
+pub fn in_an_arm(o: Option[U32], xs: [I32; 4]) -> I32 {
+  match o {
+    Some(i) => xs[i],                               //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(xs: [I32; 4]) -> I32 {
+  let f = fn(zs: [I32; 4], i: U32) -> I32 { zs[i] }  //~ E0020
+  f.(xs, 0)
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<4 {
+    x
+  }
+  ys[0]                                             //~ E0020
+}
+
+pub fn fine(xs: [I32; 4], h: Holder, i: U32) -> I32 {
+  add(xs[0], h.data[i]) + [xs[1], 2][0]
+}

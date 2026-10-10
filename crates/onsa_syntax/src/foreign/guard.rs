@@ -829,10 +829,12 @@ mod tests {
             all: &all,
             full: &full,
             holes: &lexed.holes,
+            lexed: &[],
             at: 0,
             open: Vec::new(),
             closed: &[],
             want: Want::Pattern,
+            detached: None,
             found: std::cell::Cell::new(None),
         };
         let start = src.find("((").unwrap_or_default() as u32;

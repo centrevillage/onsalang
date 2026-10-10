@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§5.2", "§18.1"]
+// fixes = 2
+
+// E0002 for a line break between a name and the mark `!` or `~` of a call, inside parentheses (§2.5, S-373):
+// the mark attaches to the name before it, so a `!(` or `~(` at the start of a line is the start of the next
+// element, and the error is the same as for a `(` after a line break (e0002_comma_missing.onsa): a missing
+// `,`. After a name, the candidates are the comma and the line break removed (`b.bump,` and `!(1), 2)`, then
+// `b.bump!(1)`); a `~(` has the second candidate only, because `lp, ~(x)` would keep a prefix `~` (an error of
+// its own), so it has one candidate. When the token before the mark is not a name (`two(h(a)` and `!(1), 2)`)
+// the line break cannot be removed either and the comma is the only candidate. Outside parentheses the line
+// is a statement of its own (`b.bump` and `!(1)` are two statements), so there is no rule. The main position
+// is the token that starts the next element, the mark (positions of W3-06), so the marker is on its line.
+//  One error per declaration unit (P-01).
+
+pub struct Pt {
+  x: I32,
+}
+
+impl Pt {
+  pub fn bump(inout self, k: I32) -> I32 {
+    self.x = self.x + k
+    self.x
+  }
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn h(x: I32) -> I32 {
+  x
+}
+
+pub rt fn two_f(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub fn a_bang_after_a_line_break(inout b: Pt) -> I32 {
+  two(b.bump,
+    !(1), 2)                                        //~ E0002
+}
+
+pub fn a_bang_in_an_array(inout b: Pt) -> I32 {
+  let v = [b.bump,
+    !(1), 2]                                        //~ E0002
+  v[0]
+}
+
+pub flow a_tilde_after_a_line_break(x: F32 at sample) -> F32 at sample {
+  two_f(lp~(x), 1.0)                                //~ E0002
+}
+
+pub flow a_tilde_in_an_array(x: F32 at sample) -> F32 at sample {
+  let v = [lp~(x), 1.0]                             //~ E0002
+  v[0]
+}
+
+pub flow a_tilde_on_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = two_f(x, prev~(^y))                       //~ E0002
+  y
+}
+
+pub flow a_tilde_in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<4 {
+    two_f(lp~(x), 1.0)                              //~ E0002
+  }
+  ys[0]
+}
+
+pub fn a_bang_after_a_call(a: I32) -> I32 {
+  two(h(a),
+    !(1), 2)                                        //~ E0002
+}
+
+pub fn fine(inout b: Pt, a: I32) -> I32 {
+  two(b.bump!(1), h(a)) +
+    two(a, a)
+}

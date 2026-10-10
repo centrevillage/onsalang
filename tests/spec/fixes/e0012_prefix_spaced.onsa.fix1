@@ -15,23 +15,23 @@ pub fn two(a: I32, b: I32) -> I32 {
 }
 
 pub fn negate_twice(x: I32) -> I32 {
-  - - x                                             //~ E0012
+  -(-x)                                             //~ E0012
 }
 
 pub fn not_twice(b: Bool) -> Bool {
-  ! ! b                                             //~ E0012
+  !(!b)                                             //~ E0012
 }
 
 pub fn a_space_before_the_inner_one(x: I32) -> I32 {
-  - -x                                              //~ E0012
+  -(-x)                                             //~ E0012
 }
 
 pub fn in_an_argument(a: I32) -> I32 {
-  two(- -a, 1)                                      //~ E0012
+  two(-(-a), 1)                                     //~ E0012
 }
 
 pub fn in_a_let(a: I32) -> I32 {
-  let b = - - a                                     //~ E0012
+  let b = -(-a)                                     //~ E0012
   b
 }
 

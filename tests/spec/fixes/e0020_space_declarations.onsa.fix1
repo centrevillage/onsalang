@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§6.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0020 for a space before the opener of a declaration's parameters, a list of type parameters, a list
+// of type arguments, a pattern and an attribute (§2.5, S-89, §18.1): the same rule as for a call, one
+// function for all of them. `fn f (x: I32)`, `fn g [T](x: T)`, `Option [I32]`, `Some (x)` and
+// `@param (min: 0.0, ...)` have the candidate that removes the space. There is one candidate: the call
+// `xs([0])` is a reading of an index expression (`xs [0]`, e0020_space_index.onsa), not of a type or a
+// declaration. Moved from tests/review-phase1/parent/r101/space_decl.onsa, space_pat.onsa and
+// space_type.onsa (R-101). One error per declaration unit (P-01).
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+}
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+fn f(x: I32) -> I32 { x }                           //~ E0020
+
+impl Pt {
+  pub fn scale(self, k: I32) -> I32 {               //~ E0020
+    self.x * k
+  }
+}
+
+pub fn type_params_gap[T](x: T) -> T {              //~ E0020
+  x
+}
+
+pub struct Wrap[T] {                                //~ E0020
+  v: T,
+}
+
+fn g(o: Option[I32]) -> I32 { 0 }                   //~ E0020
+
+pub fn return_type_gap(o: Option[I32]) -> Option[I32] {  //~ E0020
+  o
+}
+
+pub struct Holder {
+  v: Option[I32],                                   //~ E0020
+}
+
+pub fn annotation_gap(o: Option[I32]) -> Option[I32] {
+  let q: Option[I32] = o                            //~ E0020
+  q
+}
+
+pub fn nested_type_gap(o: Option[Option[I32]]) -> I32 {  //~ E0020
+  0
+}
+
+pub fn pattern_gap(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) => x,                                   //~ E0020
+    None => 0,
+  }
+}
+
+pub fn variant_pattern_gap(s: Shape) -> F32 {
+  match s {
+    Shape.Circle(r) => r,
+    Shape.Rect(w, h) => w * h,                      //~ E0020
+  }
+}
+
+pub fn nested_pattern_gap(o: Option[Option[I32]]) -> I32 {
+  match o {
+    Some(Some(v)) => v,                             //~ E0020
+    Some(None) => 1,
+    None => 0,
+  }
+}
+
+@repr(c)                                            //~ E0020
+pub struct Packet {
+  a: U8,
+  b: U8,
+}
+
+pub flow param_gap(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)          //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+@repr(c)
+pub struct Fine {
+  a: U8,
+}
+
+pub fn fine(o: Option[I32]) -> Option[I32] {
+  let m: Option[I32] = match o {
+    Some(x) => Some(x),
+    None => None,
+  }
+  m
+}

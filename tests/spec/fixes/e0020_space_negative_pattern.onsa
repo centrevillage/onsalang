@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0020 for a space after the `-` of a negative literal in a pattern (§2.5, §7, S-411): the rule of S-123 for
+// a prefix `-` and its operand does not depend on the place, and §7 treats the negative integer pattern
+// like the literal of an expression. The candidate removes the space (`-1`). It is the form
+// `space_after_prefix` of docs/foreign-forms.toml. One error per declaration unit (P-01).
+
+pub fn an_arm(k: I32) -> I32 {
+  match k {
+    - 1 => 10,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn the_last_arm(k: I32) -> I32 {
+  match k {
+    0 => 1,
+    - 5 => 2,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_an_enum_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Some(- 1) => 10,                                //~ E0020
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn inside_a_tuple_pattern(p: (I32, I32)) -> I32 {
+  match p {
+    (- 1, y) => y,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_wide_gap(k: I32) -> I32 {
+  match k {
+    -    2 => 10,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure_body(k: I32) -> I32 {
+  let f = fn(j: I32) -> I32 {
+    match j {
+      - 1 => 10,                                    //~ E0020
+      _ => 0,
+    }
+  }
+  f.(k)
+}
+
+pub fn fine(k: I32, o: Option[I32]) -> I32 {
+  let a = match k {
+    -1 => 10,
+    _ => 0,
+  }
+  let b = match o {
+    Some(-1) => 1,
+    Some(_) => 2,
+    None => 3,
+  }
+  a + b
+}

@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for a `return`, `break` or `continue` that is the whole body of a `match` arm (§7, S-89): they are
+// statements, not expressions, so the arm needs the block, `None => { return 0 }`, which is the
+// candidate. The forms are tried in the places an arm can stand: after a `let`, as the first and the last
+// arm (with and without the trailing comma), with a value that is an expression, without a value, in a
+// `for` (`continue`, `break`), in a nested `match`, in a closure body and in an argument. Moved from
+// tests/review-phase1/syntax/ret_arm.onsa and tests/review-phase1/parent/r101/arm_return.onsa (R-101;
+// the `{ return 0 }` arm of ret_arm.onsa is the first arm of `fine`). One error per declaration unit (P-01).
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn in_a_let(o: Option[I32]) -> I32 {
+  let v = match o {
+    Some(x) => x,
+    None => { return 0 },                           //~ E0020
+  }
+  v
+}
+
+pub fn the_first_arm(o: Option[I32]) -> I32 {
+  match o {
+    None => { return 0 },                           //~ E0020
+    Some(x) => x,
+  }
+}
+
+pub fn the_last_arm_without_a_comma(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) => x,
+    None => { return 0 }                            //~ E0020
+  }
+}
+
+pub fn a_value_that_is_an_expression(o: Option[I32], k: I32) -> I32 {
+  match o {
+    Some(x) => x,
+    None => { return k + 1 },                       //~ E0020
+  }
+}
+
+pub fn without_a_value(o: Option[I32]) {
+  match o {
+    Some(x) => {
+      let _ = x
+    },
+    None => { return },                             //~ E0020
+  }
+}
+
+pub fn a_continue(n: U32) -> U32 {
+  var total = 0
+  for i in 0..<n {
+    match i {
+      0 => { continue },                            //~ E0020
+      _ => { total = total + i },
+    }
+  }
+  total
+}
+
+pub fn a_break(n: U32) -> U32 {
+  var total = 0
+  for i in 0..<n {
+    match i {
+      5 => { break },                               //~ E0020
+      _ => { total = total + i },
+    }
+  }
+  total
+}
+
+pub fn a_nested_match(o: Option[Option[I32]]) -> I32 {
+  match o {
+    Some(p) => match p {
+      Some(x) => x,
+      None => { return 1 },                         //~ E0020
+    },
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(o: Option[I32]) -> I32 {
+  let f = fn(p: Option[I32]) -> I32 {
+    match p {
+      Some(x) => x,
+      None => { return 0 },                         //~ E0020
+    }
+  }
+  f.(o)
+}
+
+pub fn in_an_argument(o: Option[I32]) -> I32 {
+  two(match o {
+    Some(x) => x,
+    None => { return 0 },                           //~ E0020
+  }, 1)
+}
+
+pub fn one_line(o: Option[I32]) -> I32 {
+  match o { Some(x) => x, None => { return 0 } }    //~ E0020
+}
+
+pub fn fine(o: Option[I32], n: U32) -> I32 {
+  let v = match o {
+    Some(x) => x,
+    None => { return 0 },
+  }
+  var total = 0
+  for i in 0..<n {
+    match i {
+      0 => { continue },
+      5 => { break },
+      _ => { total = total + 1 },
+    }
+  }
+  v + total
+}

@@ -14,6 +14,9 @@ pub mod foreign;
 #[cfg(test)]
 mod foreign_tests;
 mod groups;
+mod layout;
+#[cfg(test)]
+mod layout_tests;
 pub mod lexer;
 mod lower;
 mod naming;

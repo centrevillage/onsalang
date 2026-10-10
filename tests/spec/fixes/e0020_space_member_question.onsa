@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a space next to the member `.` and before a postfix `?` (§2.5, S-203, §18.1). The member
+// `.` (a field, a method, a qualified name, a tuple index and the `.(` of a call of a function value) takes
+// no space on either side within a line: `a . b` reads as a binary operator and `x ?` as the start of a
+// conditional operator. The candidate removes the space. The forms are tried in the places they can
+// stand: an argument, a chain, an arm, a closure body, with a tab. A `.` that begins the next line is a
+// continuation (a line break is not a space of this rule). One error per declaration unit (P-01).
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Line {
+  a: Pt,
+  b: Pt,
+}
+
+impl Pt {
+  pub fn scale(self, k: I32) -> I32 {
+    self.x * k
+  }
+}
+
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn spaces_on_both_sides_in_an_argument(p: Pt) -> I32 {
+  add(p . x, 1)                                     //~ E0020
+}
+
+pub fn a_space_after_the_dot(p: Pt) -> I32 {
+  p. y                                              //~ E0020
+}
+
+pub fn a_space_before_the_dot_in_a_chain(l: Line) -> I32 {
+  l.a .x                                            //~ E0020
+}
+
+pub fn a_space_in_the_middle_of_a_chain(l: Line) -> I32 {
+  l.a . x                                           //~ E0020
+}
+
+pub fn a_method_call_with_a_space(p: Pt) -> I32 {
+  p . scale(2)                                      //~ E0020
+}
+
+pub fn in_an_arm(o: Option[Pt]) -> I32 {
+  match o {
+    Some(q) => q . x,                               //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(p: Pt) -> I32 {
+  let f = fn(q: Pt) -> I32 { q . x }                //~ E0020
+  f.(p)
+}
+
+pub fn a_tuple_index_with_a_space(t: (I32, I32)) -> I32 {
+  t . 1                                             //~ E0020
+}
+
+pub fn a_value_call_with_a_space(g: fn(I32) -> I32) -> I32 {
+  g . (1)                                           //~ E0020
+}
+
+pub fn a_value_call_with_a_space_before_the_dot(g: fn(I32) -> I32) -> I32 {
+  add(g .(1), 2)                                    //~ E0020
+}
+
+pub fn a_tab_around_the_dot(p: Pt) -> I32 {
+  p	.	x                                             //~ E0020
+}
+
+pub fn a_question_gap_in_an_argument(o: Option[I32]) -> Option[I32] {
+  Some(add(o ?, 1))                                 //~ E0020
+}
+
+pub fn a_question_gap_in_a_tuple(o: Option[I32]) -> Option[(I32, I32)] {
+  let t = (o ?, 1)                                  //~ E0020
+  Some(t)
+}
+
+pub fn a_question_gap_in_a_chain(o: Option[Pt]) -> Option[I32] {
+  let q = o ?                                       //~ E0020
+  Some(q.x)
+}
+
+pub fn a_question_gap_in_an_arm(o: Option[Option[I32]]) -> Option[I32] {
+  match o {
+    Some(p) => Some(p ?),                           //~ E0020
+    None => None,
+  }
+}
+
+pub fn a_wide_question_gap(o: Option[I32]) -> Option[I32] {
+  let v = o      ?                                  //~ E0020
+  Some(v)
+}
+
+pub fn fine(p: Pt, l: Line, t: (I32, I32), g: fn(I32) -> I32, o: Option[I32]) -> Option[I32] {
+  let v = o?
+  Some(add(p.x, l.a.y) + t.0 + g.(1) + v + p.scale(2))
+}

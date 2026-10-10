@@ -26,7 +26,7 @@
 //! incomplete, puts the tokens up to the end of the unit in an `Error` node
 //! ([`Parser::skip_unit`]), and continues with the next unit.
 
-use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
 use crate::ast::Ast;
 use crate::cst::{Cst, Event, NodeKind};
@@ -207,6 +207,9 @@ pub(crate) struct Parser<'a> {
     /// that is tried inside another one does not try the brackets of a
     /// call's type arguments again, so trials nest at most once per level.
     trials: u32,
+    /// The last postfix opener not read on because of a gap before it
+    /// ([`Parser::touches`], S-89): the table reads it at the failure there.
+    detached: Option<crate::layout::Detached>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -220,6 +223,7 @@ struct Snapshot {
     braces: Vec<usize>,
     nl: Vec<bool>,
     no_struct_lit: bool,
+    detached: Option<crate::layout::Detached>,
 }
 
 /// Whether a token starts an operand (§3.1): a prefix operator, a literal,
@@ -252,6 +256,13 @@ pub(crate) fn starts_operand(kind: TokenKind) -> bool {
             | KwUnsafe
             | KwPar
     )
+}
+
+/// Whether the tokens `first` and `second` declare a function (`fn name`),
+/// which no expression is (§6.1): the one test, for the parser and the
+/// missing `,` of a list ([`crate::layout::list_fixes`]).
+pub(crate) fn declares_a_function(first: TokenKind, second: TokenKind) -> bool {
+    first == TokenKind::KwFn && second == TokenKind::Ident
 }
 
 impl<'a> Parser<'a> {
@@ -299,6 +310,7 @@ impl<'a> Parser<'a> {
             holes,
             levels: Vec::new(),
             trials: 0,
+            detached: None,
         }
     }
 
@@ -318,6 +330,7 @@ impl<'a> Parser<'a> {
             braces: self.braces.clone(),
             nl: self.nl.clone(),
             no_struct_lit: self.no_struct_lit,
+            detached: self.detached,
         }
     }
 
@@ -333,6 +346,7 @@ impl<'a> Parser<'a> {
         self.braces = s.braces;
         self.nl = s.nl;
         self.no_struct_lit = s.no_struct_lit;
+        self.detached = s.detached;
     }
 
     /// Keep the reading since the snapshot.
@@ -648,6 +662,61 @@ impl<'a> Parser<'a> {
         if self.at(kind) { Some(self.bump()) } else { None }
     }
 
+    /// Whether the next token is the postfix opener `open` (`(`, `[`, or the
+    /// mark `!` / `~` of a call) written right after the token before it
+    /// (§2.5, S-89: the arguments of a call, an index, type arguments, the
+    /// parameters of a declaration and of an anonymous function, a function
+    /// type, a pattern, an attribute, the fields of a variant, the arguments
+    /// of a handler, S-412). An opener after a blank or a line break is not
+    /// read on: it is recorded with whether the token before ends a path of
+    /// names (`by_name`, S-399) and whether an expression is before it
+    /// (`expr`), and the grammar fails at it where it fails; the table names
+    /// the form there ([`crate::layout::Detached`]). Two openers are read
+    /// otherwise: the `(` of `pub(pkg)` and `pub(crate)` across a blank
+    /// (one form each, [`Parser::parse_vis`], S-248), and the `(` of the
+    /// tuple struct `struct P (I32)` (a form of another language whatever the
+    /// blank, the table's `tuple_struct`, W3-08).
+    fn touches(&mut self, open: TokenKind, by_name: bool, expr: bool) -> bool {
+        let at = self.peek_index();
+        if self.tokens[at].kind != open {
+            return false;
+        }
+        if !self.gap(at).is_some() {
+            return true;
+        }
+        // The site that read the opener first judges it: after `with h`,
+        // the `handle` expression is no callee, but `h` takes the list.
+        if self.detached.is_none_or(|d| d.at != at) {
+            self.detached = Some(crate::layout::Detached { at, by_name, expr, required: false });
+        }
+        false
+    }
+
+    /// The opener `open` of a list that is required here (the parameters of
+    /// a declaration or an anonymous function, a function type): one that a
+    /// blank or a line break keeps apart from the token before it is the
+    /// E0020 of [`Parser::touches`], with the gap taken out (S-89, S-412).
+    fn opens(&mut self, open: TokenKind) -> PResult<Token> {
+        if self.touches(open, true, false) {
+            return Ok(self.bump());
+        }
+        let at = self.peek_index();
+        if let Some(d) = self.detached.as_mut().filter(|d| d.at == at) {
+            d.required = true;
+        }
+        Err(self.unexpected(open.describe()))
+    }
+
+    /// The closing bracket `close` of a list of `list` after its elements:
+    /// any other token is the E0002 of the missing `,` or of what does not go
+    /// there ([`Want::Separator`], S-384).
+    fn close_list(&mut self, list: NodeKind, close: TokenKind) -> PResult<Token> {
+        if self.at(close) {
+            return Ok(self.bump());
+        }
+        Err(self.fail(Want::Separator(list), &format!("`,` or {}", close.describe())))
+    }
+
     fn skip_newlines(&mut self) {
         while matches!(self.peek_kind(), TokenKind::Newline) {
             self.bump();
@@ -733,6 +802,7 @@ impl<'a> Parser<'a> {
             all: &self.all,
             full: &self.full,
             holes: &self.holes,
+            lexed: &self.lexed_spans,
             at,
             open: self
                 .open
@@ -744,15 +814,23 @@ impl<'a> Parser<'a> {
                 .collect(),
             closed: &self.closed,
             want,
+            detached: self.detached.filter(|d| d.at == at),
             found: std::cell::Cell::new(None),
         };
-        let general = match foreign::at_failure(&cursor) {
-            Some((d, misplaced)) => {
-                self.report(d);
-                misplaced
-            }
-            None => true,
+        let (row, general) = match foreign::at_failure(&cursor) {
+            Some((d, misplaced)) => (Some(d), misplaced),
+            None => (None, true),
         };
+        // After an element of a list, the general error is the missing `,`;
+        // an opener after a line break takes it out (S-89).
+        let fixes = match want {
+            Want::Separator(list) if general => crate::layout::list_fixes(&cursor, Some(list)),
+            _ if general => crate::layout::list_fixes(&cursor, None),
+            _ => Vec::new(),
+        };
+        if let Some(d) = row {
+            self.report(d);
+        }
         if general {
             let shown = noted.map_or(t, |(found, _)| found);
             let msg = format!("expected {expected}, found {}", shown.kind.describe());
@@ -767,6 +845,9 @@ impl<'a> Parser<'a> {
             }
             if let Some((_, rule)) = noted {
                 d = d.with_rule(rule);
+            }
+            for f in fixes {
+                d = d.with_fix(f);
             }
             self.report(d);
         }
@@ -1064,7 +1145,7 @@ impl<'a> Parser<'a> {
 
     fn parse_attr_body(&mut self) -> PResult<()> {
         self.parse_ident("attribute name")?;
-        if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
+        if self.touches(TokenKind::LParen, true, false) {
             let m = self.start(NodeKind::AttrArgs)?;
             self.bump();
             self.with_nl(false, |p| {
@@ -1084,7 +1165,7 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
-                p.expect(TokenKind::RParen)
+                p.close_list(NodeKind::AttrArgs, TokenKind::RParen)
             })?;
             self.complete(m, NodeKind::AttrArgs);
         }
@@ -1097,8 +1178,12 @@ impl<'a> Parser<'a> {
         }
         let m = self.start(NodeKind::Vis)?;
         self.bump();
-        // `pub(pkg)` (S-36: W3-08 makes it E0020 too).
-        if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
+        // `pub(pkg)` (S-36: W3-08 makes it E0020 too) and `pub(crate)` (the
+        // table's `pub_crate`) are each one form with the blanks in them
+        // (S-248): a blank before the `(` is read across, so that the form's
+        // row reports it once.
+        let words = |p: &Self| ["pkg", "crate"].iter().any(|w| p.is_ident(p.peek2(), w));
+        if self.at(TokenKind::LParen) && (!self.peek_gap().is_some() || words(self)) {
             self.bump();
             let t = self.peek();
             if !self.is_ident(t, "pkg") {
@@ -1237,7 +1322,7 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
-                p.expect(TokenKind::RBrace)?;
+                p.close_list(NodeKind::FieldList, TokenKind::RBrace)?;
                 Ok(())
             })?;
             self.complete(l, NodeKind::FieldList);
@@ -1257,7 +1342,9 @@ impl<'a> Parser<'a> {
             while !p.at(TokenKind::RBrace) {
                 let v = p.start(NodeKind::Variant)?;
                 p.parse_name("variant name")?;
-                if p.at(TokenKind::LParen) {
+                // S-412: the `(` of the fields of a variant follows the
+                // rule of the postfix `(` (a blank before it is E0020).
+                if p.touches(TokenKind::LParen, true, false) {
                     let f = p.start(NodeKind::VariantFields)?;
                     p.bump();
                     while !p.at(TokenKind::RParen) {
@@ -1266,7 +1353,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    p.expect(TokenKind::RParen)?;
+                    p.close_list(NodeKind::VariantFields, TokenKind::RParen)?;
                     p.complete(f, NodeKind::VariantFields);
                 } else if p.at(TokenKind::LBrace) {
                     let t = p.peek();
@@ -1281,7 +1368,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            p.expect(TokenKind::RBrace)?;
+            p.close_list(NodeKind::VariantList, TokenKind::RBrace)?;
             Ok(())
         })?;
         self.complete(l, NodeKind::VariantList);
@@ -1323,6 +1410,15 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Impl)?;
         self.expect(TokenKind::KwImpl)?;
         self.parse_generics_opt()?;
+        // The type parameters of `impl` after a blank (`impl [T] P[T]`, S-412)
+        // are not read as an array type: a `[` with no `;` in it is the
+        // list `touches` did not read.
+        let at = self.peek_index();
+        if self.detached.is_some_and(|d| d.at == at)
+            && crate::layout::bracket_contents(&self.tokens, at).is_some_and(|(_, _, semi)| !semi)
+        {
+            return Err(self.unexpected("a type"));
+        }
         let (first, args) = self.parse_type_ex()?;
         self.parse_clock_opt()?;
         if self.eat(TokenKind::KwFor).is_some() {
@@ -1395,7 +1491,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    p.expect(TokenKind::RBrace)?;
+                    p.close_list(NodeKind::UseNames, TokenKind::RBrace)?;
                     Ok(())
                 })?;
                 self.complete(n, NodeKind::UseNames);
@@ -1626,7 +1722,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_generics_opt(&mut self) -> PResult<()> {
-        if !self.at(TokenKind::LBracket) || self.peek_gap().is_some() {
+        if !self.touches(TokenKind::LBracket, true, false) {
             return Ok(());
         }
         let m = self.start(NodeKind::GenericParams)?;
@@ -1668,14 +1764,16 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        self.expect(close)?;
+        self.close_list(NodeKind::GenericParams, close)?;
         Ok(())
     }
 
     /// `(params)`; `require_types` is false for anonymous functions (§6.1).
     fn parse_params(&mut self, require_types: bool) -> PResult<()> {
         let m = self.start(NodeKind::ParamList)?;
-        self.expect(TokenKind::LParen)?;
+        // S-412: the `(` after `fn` of an anonymous function follows
+        // the rule of the parameters of a declaration (a blank before it is E0020).
+        self.opens(TokenKind::LParen)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RParen) {
                 let param = p.start(NodeKind::Param)?;
@@ -1705,7 +1803,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            p.expect(TokenKind::RParen)?;
+            p.close_list(NodeKind::ParamList, TokenKind::RParen)?;
             Ok(())
         })?;
         self.complete(m, NodeKind::ParamList);
@@ -1731,7 +1829,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            p.expect(TokenKind::RBrace)?;
+            p.close_list(NodeKind::EffectRow, TokenKind::RBrace)?;
             Ok(())
         })?;
         self.complete(m, NodeKind::EffectRow);
@@ -1789,7 +1887,7 @@ impl<'a> Parser<'a> {
                     }
                     p.parse_type()?;
                     let Some(comma) = p.eat(TokenKind::Comma) else {
-                        p.expect(TokenKind::RParen)?;
+                        p.close_list(NodeKind::TupleType, TokenKind::RParen)?;
                         return Ok(NodeKind::ParenType);
                     };
                     if p.at(TokenKind::RParen) {
@@ -1801,7 +1899,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    p.expect(TokenKind::RParen)?;
+                    p.close_list(NodeKind::TupleType, TokenKind::RParen)?;
                     Ok(NodeKind::TupleType)
                 })?;
                 self.complete(m, kind)
@@ -1823,7 +1921,9 @@ impl<'a> Parser<'a> {
                 self.eat(TokenKind::KwRt);
                 self.expect(TokenKind::KwFn)?;
                 let l = self.start(NodeKind::FnTypeParams)?;
-                self.expect(TokenKind::LParen)?;
+                // S-412: the `(` after `fn` in a function type follows the
+                // rule of the postfix `(` (a blank before it is E0020).
+                self.opens(TokenKind::LParen)?;
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RParen) {
                         p.parse_mode();
@@ -1832,7 +1932,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    p.expect(TokenKind::RParen)?;
+                    p.close_list(NodeKind::FnTypeParams, TokenKind::RParen)?;
                     Ok(())
                 })?;
                 self.complete(l, NodeKind::FnTypeParams);
@@ -1855,7 +1955,7 @@ impl<'a> Parser<'a> {
                     self.report(d);
                     return Err(ParseError);
                 }
-                if self.at(TokenKind::LBracket) && !self.peek_gap().is_some() {
+                if self.touches(TokenKind::LBracket, true, false) {
                     let a = self.start(NodeKind::TypeArgs)?;
                     self.bump();
                     nargs = self.with_nl(false, |p| p.parse_type_args())?;
@@ -1884,40 +1984,46 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        self.expect(close)?;
+        self.close_list(NodeKind::TypeArgs, close)?;
         Ok(n)
     }
 
     /// A type argument: a type, or a const argument written as a constant
     /// expression (`Ring[F32, 4]`, `Ring[F32, N * 2]`, spec §4.5, S-24,
-    /// R-192). The element is a type when it reads as a type up to the `,`
-    /// or `]` that ends it; else it is read as an expression, whose constant
-    /// rules are the later stages' (E0417, E0401). A constant's name
-    /// (`TABLE_SIZE`, `cfg.N`) reads as a type; the later stages take it by
-    /// the kind of the parameter. A type that fails with a diagnostic of its
-    /// own (a form of the table, E0020; E0006) keeps it.
+    /// R-192). The element is a type when it reads as a type and no operator
+    /// or postfix goes on after it ([`continues_an_expression`]); else it is
+    /// read as an expression, whose constant rules are the later stages'
+    /// (E0417, E0401). A constant's name (`TABLE_SIZE`, `cfg.N`) reads as a
+    /// type; the later stages take it by the kind of the parameter. What
+    /// follows a type is the list's error (`Option[I32 Bool]`: the missing
+    /// `,` of a list of type arguments, S-384), and so is the error inside a
+    /// list of type arguments the type opened (`Option[Option[I32 Bool]]`;
+    /// the expression would read the brackets as an index and lose the list). A type that fails
+    /// with a diagnostic of its own (a form of the table, E0020; E0006) keeps
+    /// it too.
     fn parse_type_arg(&mut self) -> PResult<()> {
         let s = self.snapshot();
         let as_type = self.parse_type();
         // A type followed by `::` keeps its reading: `Option::[I32]` in a
         // list is the mark in a type position (E0020), and a constant
         // expression with `::[…]` waits for S-329.
-        let ends = matches!(self.peek_kind(), TokenKind::Comma | TokenKind::RBracket | TokenKind::ColonColon);
+        let next = self.peek_index();
+        let ends = self.tokens[next].kind == TokenKind::ColonColon
+            || !continues_an_expression(self.tokens[next].kind, self.gap(next));
+        // A list of type arguments the type opened (`Option[…]`): an
+        // expression reads its brackets as an index, so its error stays the
+        // type's. Parentheses are not: `(1 + 2) * 3` is a constant.
+        let opened_a_list =
+            || self.events[s.events..].iter().any(|e| matches!(e, Event::Start { kind: Some(NodeKind::TypeArgs), .. }));
         match as_type {
             Ok(_) if ends => {
                 self.end_trial();
                 return Ok(());
             }
-            // A type is read with one clock after it: a second `at` is no
-            // constant expression either (E0002 at it, as at every type
-            // position; S-356).
-            Ok(_) if self.at(TokenKind::KwAt) => {
-                self.end_trial();
-                return Err(self.unexpected("`,` or `]`"));
-            }
             // `_` is no type (§2.2) and no constant: `pair::[U8, _]` is E0002 (§4.5).
             Err(ParseError)
                 if self.diagnostics[s.diagnostics..].iter().any(|d| d.code != Code::E0002)
+                    || opened_a_list()
                     || self.tokens[s.pos..]
                         .iter()
                         .find(|t| !t.kind.is_trivia())
@@ -2261,7 +2367,11 @@ impl<'a> Parser<'a> {
                 TokenKind::LParen => {
                     // A callee not written by name is no item: E0020 here,
                     // `.(` (§6.1, S-191).
-                    if !foreign::callee_by_name(expr.kind, links) && !self.peek_gap().is_some() {
+                    let by_name = foreign::callee_by_name(expr.kind, links);
+                    if !self.touches(TokenKind::LParen, by_name, true) {
+                        break;
+                    }
+                    if !by_name {
                         return Err(self.fail(Want::Callee, "an operator or the end of the expression"));
                     }
                     let m = self.precede(expr, NodeKind::CallExpr)?;
@@ -2270,11 +2380,13 @@ impl<'a> Parser<'a> {
                     chain = None;
                 }
                 TokenKind::Tilde | TokenKind::Bang
-                    if !self.peek_gap().is_some()
-                        && self.peek2().kind == TokenKind::LParen
+                    if self.peek2().kind == TokenKind::LParen
                         && !self.gap(self.peek2_index()).is_some()
                         && (foreign::names_a_path(expr.kind) || expr.kind == NodeKind::TypeArgsExpr) =>
                 {
+                    if !self.touches(t.kind, true, true) {
+                        break;
+                    }
                     let m = self.precede(expr, NodeKind::CallExpr)?;
                     self.bump();
                     self.parse_arg_list()?;
@@ -2347,7 +2459,9 @@ impl<'a> Parser<'a> {
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));
                 }
-                TokenKind::LBracket if !self.peek_gap().is_some() => {
+                TokenKind::LBracket
+                    if self.touches(TokenKind::LBracket, foreign::callee_by_name(expr.kind, links), true) =>
+                {
                     let m = self.precede(expr, NodeKind::IndexExpr)?;
                     self.bump();
                     self.with_nl(false, |p| {
@@ -2382,7 +2496,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                         }
-                        p.expect(TokenKind::RBrace)?;
+                        p.close_list(NodeKind::StructLitFields, TokenKind::RBrace)?;
                         Ok(())
                     })?;
                     self.complete(l, NodeKind::StructLitFields);
@@ -2420,7 +2534,7 @@ impl<'a> Parser<'a> {
                 }
             }
             p.no_struct_lit = saved;
-            p.expect(TokenKind::RParen)?;
+            p.close_list(NodeKind::ArgList, TokenKind::RParen)?;
             Ok(())
         })?;
         self.complete(m, NodeKind::ArgList);
@@ -2539,7 +2653,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    p.expect(TokenKind::RBrace)?;
+                    p.close_list(NodeKind::MatchArms, TokenKind::RBrace)?;
                     Ok(())
                 })?;
                 self.complete(arms, NodeKind::MatchArms);
@@ -2548,7 +2662,7 @@ impl<'a> Parser<'a> {
             // `fn name` declares a function, which is written at the top level
             // or in a list of members: the error is at the `fn`, so that the
             // recovery may start the next unit there (an unclosed `{`, §18.1).
-            TokenKind::KwFn if self.peek2().kind == TokenKind::Ident => {
+            TokenKind::KwFn if declares_a_function(t.kind, self.peek2().kind) => {
                 return Err(self.unexpected("an expression (a function is declared at the top level)"));
             }
             TokenKind::KwFn => {
@@ -2570,7 +2684,9 @@ impl<'a> Parser<'a> {
                 self.parse_path("a handler")?;
                 if self.at(TokenKind::LBrace) {
                     self.parse_item_body(ItemCtx::InlineHandler)?;
-                } else if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
+                // S-412: the `(` after the handler of `with` follows the rule of
+                // the postfix `(` (a blank before it is E0020).
+                } else if self.touches(TokenKind::LParen, true, false) {
                     self.parse_arg_list()?;
                 }
                 return Ok(self.complete(m, NodeKind::HandleExpr));
@@ -2641,7 +2757,7 @@ impl<'a> Parser<'a> {
                     "a marked expression stands where it is consumed; it is parenthesized only as an element of a tuple of two or more (§5.2)",
                 ));
             }
-            self.expect(TokenKind::RParen)?;
+            self.close_list(NodeKind::TupleExpr, TokenKind::RParen)?;
             return Ok(NodeKind::ParenExpr);
         };
         if self.at(TokenKind::RParen) {
@@ -2653,7 +2769,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        self.expect(TokenKind::RParen)?;
+        self.close_list(NodeKind::TupleExpr, TokenKind::RParen)?;
         Ok(NodeKind::TupleExpr)
     }
 
@@ -2684,51 +2800,8 @@ impl<'a> Parser<'a> {
             }
             self.parse_consumed()?;
         }
-        self.expect(TokenKind::RBracket)?;
+        self.close_list(NodeKind::ArrayExpr, TokenKind::RBracket)?;
         Ok(NodeKind::ArrayExpr)
-    }
-
-    /// The candidate of E0003 (§2.5): `next` (`else`, and later `with` and a
-    /// block's `{`) goes up to the line that ends at `end`. With only spaces
-    /// and newlines between, they become one space. Comments between are kept
-    /// and keep their order: the code of `next`'s line (up to a comment or the
-    /// end of the line) moves to `end`, and that line is removed when nothing
-    /// else is left on it (W3-02/b 4).
-    fn join_line_fix(&self, title: &str, end: u32, next: Token) -> Fix {
-        let at = self.all.partition_point(|t| t.span.start < next.span.start);
-        let between = self.all[..at].iter().rev().take_while(|t| t.span.start >= end);
-        if !between.clone().any(|t| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment)) {
-            return Fix::replace(title, Span::new(self.file, end, next.span.start), " ");
-        }
-        // The code of `next`'s line: up to a comment, a newline or the end.
-        let rest = &self.all[at..];
-        let code_len = rest
-            .iter()
-            .position(|t| {
-                matches!(t.kind, TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment | TokenKind::Eof)
-            })
-            .unwrap_or(rest.len());
-        let code_end = rest[..code_len]
-            .iter()
-            .rev()
-            .find(|t| t.kind != TokenKind::Whitespace)
-            .map_or(next.span.end, |t| t.span.end);
-        let moved = &self.text[next.span.start as usize..code_end as usize];
-        let after = rest[code_len..].first().copied();
-        let removed = match after.map(|t| t.kind) {
-            // Nothing else on the line: remove the line, its indentation and its newline.
-            Some(TokenKind::Newline) | Some(TokenKind::Eof) | None => {
-                let line_start = match self.all[at.saturating_sub(1)] {
-                    t if at > 0 && t.kind == TokenKind::Whitespace => t.span.start,
-                    _ => next.span.start,
-                };
-                let line_end = after.map_or(code_end, |t| t.span.end);
-                Span::new(self.file, line_start, line_end)
-            }
-            // A comment stays on the line, after the indentation.
-            Some(_) => Span::new(self.file, next.span.start, after.map_or(code_end, |t| t.span.start)),
-        };
-        Fix::new(title, vec![Edit::insert(self.file, end, format!(" {moved}")), Edit::delete(removed)])
     }
 
     /// `if [~] cond { } [else (if … | { })]` (§11.5). `chain` is `None` for
@@ -2753,7 +2826,15 @@ impl<'a> Parser<'a> {
         if self.at(TokenKind::Newline) && self.peek_past_newlines().kind == TokenKind::KwElse {
             let else_tok = self.peek_past_newlines();
             let span = Span::new(self.file, close_brace_end, else_tok.span.start);
-            let fix = self.join_line_fix("move `else` to the line of the `}`", close_brace_end, else_tok);
+            let fix = crate::layout::move_up(
+                self.file,
+                self.text,
+                &self.all,
+                "move `else` to the line of the `}`",
+                close_brace_end,
+                else_tok,
+                " ",
+            );
             let d =
                 Diagnostic::new(Stage::Syntax, Code::E0003, span, "`else` must be on the same line as the closing `}`")
                     .with_found("else")
@@ -2925,7 +3006,7 @@ impl<'a> Parser<'a> {
                     }
                     p.parse_pattern()?;
                     let Some(comma) = p.eat(TokenKind::Comma) else {
-                        p.expect(TokenKind::RParen)?;
+                        p.close_list(NodeKind::TuplePat, TokenKind::RParen)?;
                         return Ok(NodeKind::ParenPat);
                     };
                     if p.at(TokenKind::RParen) {
@@ -2937,7 +3018,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    p.expect(TokenKind::RParen)?;
+                    p.close_list(NodeKind::TuplePat, TokenKind::RParen)?;
                     Ok(NodeKind::TuplePat)
                 })?;
                 return Ok(self.complete(m, kind));
@@ -2945,7 +3026,7 @@ impl<'a> Parser<'a> {
             TokenKind::Ident | TokenKind::KwSelfType => {
                 let m = self.start(NodeKind::PathPat)?;
                 let path = self.parse_path("a pattern")?;
-                if self.at(TokenKind::LParen) && !self.peek_gap().is_some() {
+                if self.touches(TokenKind::LParen, true, false) {
                     self.reshape(NodeKind::TupleStructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {
@@ -2955,7 +3036,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                         }
-                        p.expect(TokenKind::RParen)?;
+                        p.close_list(NodeKind::TupleStructPat, TokenKind::RParen)?;
                         Ok(())
                     })?;
                     return Ok(self.complete(m, NodeKind::TupleStructPat));
@@ -2982,7 +3063,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                         }
-                        p.expect(TokenKind::RBrace)?;
+                        p.close_list(NodeKind::StructPat, TokenKind::RBrace)?;
                         Ok(())
                     })?;
                     return Ok(self.complete(m, NodeKind::StructPat));
@@ -3001,6 +3082,18 @@ impl<'a> Parser<'a> {
         self.bump();
         Ok(self.complete(m, kind))
     }
+}
+
+/// Whether a token of `kind` after `gap` goes on with an expression before
+/// it: a binary operator, a range symbol (whose place the table judges,
+/// `range_outside_header`), `as`, a member `.`, `?`, or a postfix opener
+/// written right after it (a type argument, [`Parser::parse_type_arg`]).
+fn continues_an_expression(kind: TokenKind, gap: Gap) -> bool {
+    use TokenKind::*;
+    binop(kind)
+        || !kind.range_readings().is_empty()
+        || matches!(kind, KwAs | Dot | Question)
+        || (matches!(kind, LParen | LBracket | Bang | Tilde) && gap == Gap::None)
 }
 
 fn binop(kind: TokenKind) -> bool {
@@ -3277,7 +3370,8 @@ mod tests {
         assert_eq!(body("out.fill!(0.0)"), "(block tail (call! (. out fill) (0.0)))");
         assert_eq!(body("a.f!=b"), "(block tail (!= (. a f) b))");
         assert_eq!(body("!(a && b)"), "(block tail (not ((&& a b))))");
-        assert_eq!(codes("fn f() {\n  saw ~(f0)\n}"), vec![Code::E0002]);
+        // A blank between the name and its mark (S-123, `space_before_tilde`).
+        assert_eq!(codes("fn f() {\n  saw ~(f0)\n}"), vec![Code::E0020]);
         assert_eq!(codes("fn f() {\n  saw~ (f0)\n}"), vec![Code::E0002]);
     }
 

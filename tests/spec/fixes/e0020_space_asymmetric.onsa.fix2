@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020 for a `-` or `^` that has a space before it and none after it (§2.5, S-398): `a -b`, `[1 -1]`,
+// `two(a -b, 1)`, `[a ^b]`. Read as a binary operator it is `a - b`; read as a prefix on the next
+// element it is `a, -b` (Swift, MATLAB and Julia read `[1 -1]` as two elements), so the form is an error
+// inside a list and outside it (`let c = a -b`). Candidate 1 puts a space on both sides. Candidate 2, only
+// in a list whose elements are expressions (arguments, an array, a tuple), inserts the comma. An index, a
+// field value, an arm body, a condition and a `let` have the first candidate only. `a -(b)` and `a -1` are
+// the same form, and so is `x -^y` (a prefix `^` operand); `a - b`, `a-b` and `a - -b` are not (`fine`, and tests/spec/lex/gaps_ok.onsa): in `a - -b` the binary `-` has a space on both sides and the second `-` is a prefix that touches its operand. The binary `+` has no
+// prefix reading and is not part of this rule. Candidate 2 leaves errors of the later stages only (the
+// number of arguments). One error per declaration unit (P-01).
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn three(a: I32, b: I32, c: I32) -> I32 {
+  a + b + c
+}
+
+pub fn an_array_of_integers() -> U32 {
+  let v = [1, -1]                                   //~ E0020
+  v.len()
+}
+
+pub fn an_array_of_floats() -> F32 {
+  let v = [0.5, -0.5]                               //~ E0020
+  v[0]
+}
+
+pub fn arguments(a: I32, b: I32) -> I32 {
+  two(a, -b, 1)                                     //~ E0020
+}
+
+pub fn a_tuple(a: I32, b: I32) -> I32 {
+  let t = (a, -b, 1)                                //~ E0020
+  t.1
+}
+
+pub fn a_caret_in_an_array(a: U32, b: U32) -> U32 {
+  let v = [a, ^b]                                   //~ E0020
+  v.len()
+}
+
+pub fn a_group_in_arguments(a: I32, b: I32) -> I32 {
+  two(a, -(b), 1)                                   //~ E0020
+}
+
+pub fn a_literal_in_arguments(a: I32) -> I32 {
+  three(a, -1, 2, 3)                                //~ E0020
+}
+
+pub fn in_an_arm(o: Option[I32], a: I32) -> I32 {
+  match o {
+    Some(b) => two(a, -b, 1),                       //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(a: I32, b: I32) -> I32 {
+  let f = fn(p: I32, q: I32) -> I32 { two(p, -q, 1) }  //~ E0020
+  f.(a, b)
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<4 {
+    [x, -0.5]                                       //~ E0020
+  }
+  ys[0][0]
+}
+
+pub flow a_caret_operand(x: F32 at sample) -> F32 at sample {
+  let y = prev~(x, -^y)                             //~ E0020
+  y
+}
+
+pub fn in_a_let(a: I32, b: I32) -> I32 {
+  let c = a -b                                      //~ E0020
+  c
+}
+
+pub fn a_literal_in_a_let(a: I32) -> I32 {
+  let c = a -1                                      //~ E0020
+  c
+}
+
+pub fn a_group_in_a_let(a: I32, b: I32) -> I32 {
+  let c = a -(b)                                    //~ E0020
+  c
+}
+
+pub fn a_caret_in_a_let(a: U32, b: U32) -> U32 {
+  let c = a ^b                                      //~ E0020
+  c
+}
+
+pub fn in_an_index(xs: [I32; 4], i: U32) -> I32 {
+  xs[i -1]                                          //~ E0020
+}
+
+pub fn in_a_field_value(a: I32, b: I32) -> Pt {
+  Pt { x: a -b, y: 0 }                              //~ E0020
+}
+
+pub fn in_an_arm_body(o: Option[I32], a: I32) -> I32 {
+  match o {
+    Some(b) => a -b,                                //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_condition(a: I32, b: I32) -> I32 {
+  if a -b > 0 { 1 } else { 2 }                      //~ E0020
+}
+
+pub fn a_wide_gap(a: I32, b: I32) -> I32 {
+  let c = a    -b                                   //~ E0020
+  c
+}
+
+pub fn fine(a: I32, b: I32, u: U32, v: U32, xs: [I32; 4]) -> (I32, U32) {
+  let s = [a - b, -b, a-b]
+  let t = two(a - b, -b)
+  let w = u ^ v
+  (xs[0] - s[0] + t, w)
+}

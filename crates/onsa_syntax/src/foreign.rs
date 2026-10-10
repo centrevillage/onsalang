@@ -60,6 +60,7 @@ use crate::cst::NodeKind;
 use crate::token::{Gap, Token, TokenKind};
 
 mod flow;
+mod spaces;
 
 pub(crate) use flow::clocks;
 
@@ -112,6 +113,10 @@ pub enum Want {
     /// The `(` of a call whose callee [`callee_by_name`] says is no callee
     /// written by name (§6.1): the table does not judge the callee again.
     Callee,
+    /// The `,` or the closing bracket after an element of a list of the
+    /// node's kind (`Parser::close_list`, §2.5): the general E0002 of the
+    /// failure is the missing `,` ([`crate::layout::list_fixes`], S-384).
+    Separator(NodeKind),
 }
 
 /// What the parser gives the table at a failure.
@@ -126,6 +131,8 @@ pub struct Cursor<'a> {
     pub full: &'a [u32],
     /// The holes of the string literals (`{name}`, [`crate::Lexed::holes`]).
     pub holes: &'a [Span],
+    /// The spans of the lexer's diagnostics, ordered by their start.
+    pub lexed: &'a [Span],
     /// The token the parser failed at (an index of `tokens`).
     pub at: usize,
     /// The open nodes, outermost first, and where each starts.
@@ -134,6 +141,9 @@ pub struct Cursor<'a> {
     /// where each starts.
     pub closed: &'a [(NodeKind, u32)],
     pub want: Want,
+    /// The postfix opener at `at` that the parser did not read on because a
+    /// blank or a line break is before it ([`crate::layout::Detached`], S-89).
+    pub detached: Option<crate::layout::Detached>,
     /// The row a matcher of several rows found ([`Cursor::say`]).
     pub found: std::cell::Cell<Option<RowId>>,
 }
@@ -214,6 +224,11 @@ pub enum RowId {
     RangeDots,
     RangeOutsideHeader,
     SpaceAroundDot,
+    SpaceBeforeParen,
+    SpaceBeforeBracket,
+    SpaceBeforeBang,
+    SpaceBeforeTilde,
+    StringPrefix,
     CalleeExpression,
     SpaceAfterBranchKeyword,
     ElseIfTilde,
@@ -247,6 +262,7 @@ const NO_REFERENCES: &str =
     "there are no references: an argument is borrowed by default and changed with `inout` before it (§5.2)";
 const SEMICOLON_RULE: &str = "a statement or declaration ends at the end of its line; there is no `;` (§2.5)";
 const FLOAT_LITERAL_RULE: &str = "a float literal with a point has digits on both sides of it (`1.0`, `0.5`, §2.4)";
+const SPACE_BEFORE_OPEN_RULE: &str = "a postfix `(` or `[` that opens a list (the arguments of a call, an index, type arguments, the parameters of a declaration, a pattern, an attribute) is written right after the token before it, with no blank or line break between them (`f(x)`, `xs[0]`, §2.5)";
 const BLOCK_COMMENT_RULE: &str =
     "comments are line comments `//`, to the end of the line; `///` documents the next declaration (§2.1)";
 
@@ -699,7 +715,52 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a member `.` is written without spaces around it",
         rule: "the member `.` (a field, a method, a tuple index, the `.(` of a function value) takes no space on either side inside a line: `a.b`, `s.f.(x)`; a `.` that starts the next line continues the expression (§2.5)",
-        detect: Detect::Syntax(space_around_dot),
+        detect: Detect::Syntax(spaces::space_around_dot),
+    },
+    Row {
+        id: RowId::SpaceBeforeParen,
+        name: "space_before_paren",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a `(` that opens a list is written right after the token before it",
+        rule: SPACE_BEFORE_OPEN_RULE,
+        detect: Detect::Syntax(spaces::space_before_open),
+    },
+    Row {
+        id: RowId::SpaceBeforeBracket,
+        name: "space_before_bracket",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a `[` that opens a list is written right after the token before it",
+        rule: SPACE_BEFORE_OPEN_RULE,
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::SpaceBeforeBang,
+        name: "space_before_bang",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the `!` of a call that changes its receiver is written right after the name",
+        rule: "a name and its mark `!` are written without a blank between them, and the `(` right after the mark (`buf.push!(x)`, §2.5, §2.6)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::SpaceBeforeTilde,
+        name: "space_before_tilde",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the `~` of a flow call is written right after the name",
+        rule: "a name and its mark `~` are written without a blank between them, and the `(` right after the mark (`saw~(f0)`); `saw ~(f0)` reads as the binary `~` of FAUST (§2.5, §2.6)",
+        detect: Detect::Syntax(no_match),
+    },
+    Row {
+        id: RowId::StringPrefix,
+        name: "string_prefix",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a string or character literal has no prefix or suffix",
+        rule: "a string is written `\"…\"` in UTF-8, with the interpolation `\"{x}\"`, and a byte string is `\"x\".as_bytes()`; no name is written right before or after a literal (§2.4)",
+        detect: Detect::Syntax(spaces::string_prefix),
     },
     Row {
         id: RowId::CalleeExpression,
@@ -755,11 +816,11 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "octal_prefix", phase: Phase::Lexical, code: Code::E0020 },
     Waiting { name: "leading_zero", phase: Phase::Lexical, code: Code::E0020 },
     Waiting { name: "float_dot_exponent", phase: Phase::Lexical, code: Code::E0020 },
-    Waiting { name: "space_before_paren", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "space_before_bracket", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_before_question", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "space_before_bang", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "space_before_tilde", phase: Phase::Syntax, code: Code::E0020 },
+    Waiting { name: "newline_after_dot", phase: Phase::Syntax, code: Code::E0020 },
+    Waiting { name: "newline_after_prefix", phase: Phase::Syntax, code: Code::E0020 },
+    Waiting { name: "newline_before_question", phase: Phase::Syntax, code: Code::E0020 },
+    Waiting { name: "asymmetric_binary_space", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_after_prefix", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "space_after_caret", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "leading_operator", phase: Phase::Syntax, code: Code::E0020 },
@@ -888,11 +949,11 @@ pub(crate) fn is_type_suffix(_suffix: &str) -> bool {
 // ------------------------------------------------------------ the cursor
 
 impl Cursor<'_> {
-    fn kind(&self, i: usize) -> TokenKind {
+    pub(crate) fn kind(&self, i: usize) -> TokenKind {
         self.tokens[i].kind
     }
 
-    fn span(&self, i: usize) -> Span {
+    pub(crate) fn span(&self, i: usize) -> Span {
         self.tokens[i].span
     }
 
@@ -907,8 +968,16 @@ impl Cursor<'_> {
 
     /// A comment of any kind (a block comment is a token of its own, which
     /// its own row reports; elsewhere it is passed over as a comment).
-    fn comment(&self, i: usize) -> bool {
+    pub(crate) fn comment(&self, i: usize) -> bool {
         matches!(self.kind(i), TokenKind::Comment | TokenKind::DocComment | TokenKind::BlockComment)
+    }
+
+    /// Whether the literal token `i` is one the lexer read with no error in
+    /// it (closed, with valid escapes and holes, one scalar in a character).
+    pub(crate) fn literal_ok(&self, i: usize) -> bool {
+        let s = self.span(i);
+        let from = self.lexed.partition_point(|l| l.start < s.start);
+        !self.lexed[from..].iter().take_while(|l| l.start < s.end).any(|l| l.end <= s.end)
     }
 
     /// The token after `i`, comments skipped (a newline is a token).
@@ -924,7 +993,7 @@ impl Cursor<'_> {
     }
 
     /// The token after `i`, newlines and comments skipped.
-    fn sig_after(&self, i: usize) -> usize {
+    pub(crate) fn sig_after(&self, i: usize) -> usize {
         let mut j = i;
         while j + 1 < self.tokens.len() {
             j += 1;
@@ -936,13 +1005,13 @@ impl Cursor<'_> {
     }
 
     /// The token before `i`, newlines and comments skipped.
-    fn sig_before(&self, i: usize) -> Option<usize> {
+    pub(crate) fn sig_before(&self, i: usize) -> Option<usize> {
         (0..i).rev().find(|&j| !self.comment(j) && self.kind(j) != TokenKind::Newline)
     }
 
     /// The token right before `i` on its line (a comment or a newline before
     /// it gives none).
-    fn before(&self, i: usize) -> Option<usize> {
+    pub(crate) fn before(&self, i: usize) -> Option<usize> {
         let j = i.checked_sub(1)?;
         (!self.comment(j) && self.kind(j) != TokenKind::Newline).then_some(j)
     }
@@ -958,7 +1027,7 @@ impl Cursor<'_> {
     }
 
     /// What separates `tokens[i]` from the token before it.
-    fn gap(&self, i: usize) -> Gap {
+    pub(crate) fn gap(&self, i: usize) -> Gap {
         crate::token::gap_before(self.all, self.full[i] as usize)
     }
 
@@ -969,7 +1038,7 @@ impl Cursor<'_> {
     }
 
     /// The whitespace token right before `tokens[i]`, if any.
-    fn space_before(&self, i: usize) -> Option<Span> {
+    pub(crate) fn space_before(&self, i: usize) -> Option<Span> {
         let k = (self.full[i] as usize).checked_sub(1)?;
         self.all.get(k).filter(|t| t.kind == TokenKind::Whitespace).map(|t| t.span)
     }
@@ -1264,7 +1333,7 @@ fn is_type_args_mark(c: &Cursor, i: usize) -> bool {
 }
 
 /// The bracket that closes the one at `open` (`(`, `[` or `{`).
-fn closing(c: &Cursor, open: usize) -> Option<usize> {
+pub(crate) fn closing(c: &Cursor, open: usize) -> Option<usize> {
     let mut depth = 0u32;
     for i in open..c.tokens.len() {
         match c.kind(i) {
@@ -1532,23 +1601,7 @@ pub(crate) fn type_list_ahead(tokens: &[Token], all: &[Token], full: &[u32], i: 
 
 /// The `]` that closes the `[` at `open` when a `,` is directly in it.
 fn bracket_with_comma(tokens: &[Token], open: usize) -> Option<usize> {
-    let mut depth = 0u32;
-    let mut comma = false;
-    for (i, t) in tokens.iter().enumerate().skip(open) {
-        match t.kind {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return (comma && t.kind == TokenKind::RBracket).then_some(i);
-                }
-            }
-            TokenKind::Comma if depth == 1 => comma = true,
-            TokenKind::Eof => return None,
-            _ => {}
-        }
-    }
-    None
+    crate::layout::bracket_contents(tokens, open).filter(|b| b.1).map(|b| b.0)
 }
 
 /// Type arguments of another language before a call (§4.5, S-239, S-256,
@@ -1698,43 +1751,6 @@ fn callee_expression(c: &Cursor) -> Option<Hit> {
         None => vec![Edit::insert(c.file, c.span(c.at).start, ".")],
     };
     hit(span, vec![Fix::new("call the function value with `.(`", edits)])
-}
-
-/// A space before or after a member `.` inside a line (`p . x`, `f .(x)`,
-/// §2.5, S-203): the candidate removes it. A `.` that starts a line
-/// continues the expression; one at the end of a line, or before what no
-/// member is, is the general E0002.
-fn space_around_dot(c: &Cursor) -> Option<Hit> {
-    if c.want != Want::Postfix || c.kind(c.at) != TokenKind::Dot {
-        return None;
-    }
-    let (before, after) = (c.gap(c.at), c.gap(c.at + 1));
-    if after == Gap::Newline || (before != Gap::Space && after != Gap::Space) {
-        return None;
-    }
-    // `t. 0.5` would become the indexes `t.0.5`, `1 . 5` the number `1.5`
-    // and `1 .(2)` the literal `1.` (as `1.(2)` reads, S-350): no candidate
-    // keeps their reading.
-    let literal_before =
-        c.at.checked_sub(1)
-            .filter(|&b| b.checked_sub(1).is_none_or(|d| c.kind(d) != TokenKind::Dot))
-            .map(|b| c.kind(b))
-            .filter(|&k| matches!(k, TokenKind::Int | TokenKind::Float));
-    let next = c.kind(c.at + 1);
-    if !(matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen) || next.is_keyword())
-        || (literal_before.is_some() && next == TokenKind::Int)
-        || (literal_before == Some(TokenKind::Int) && next == TokenKind::LParen)
-    {
-        return None;
-    }
-    let mut edits = Vec::new();
-    if before == Gap::Space {
-        edits.extend(c.space_before(c.at).map(Edit::delete));
-    }
-    if after == Gap::Space {
-        edits.extend(c.space_after(c.at).map(Edit::delete));
-    }
-    hit(c.span(c.at), vec![Fix::new("remove the space", edits)])
 }
 
 /// The expression that ended right before the failure: the outermost

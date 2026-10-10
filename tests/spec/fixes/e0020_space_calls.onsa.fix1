@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a space between a name and the `(` that opens a call (§2.5, S-89, §18.1): the `(` of a
+// postfix call is written right after the name, `f(x)`. A space (or several, or a tab) is E0020 and the
+// candidate removes it. The rule is the same in every place a call can stand: an argument, a method call,
+// an associated function, a constructor, an arm, a closure body, a condition, a field value, an array,
+// a tuple, an `rt fn`, and the body of a `par`. `Pt.new (a, 2)` and `p.scale (2)` end in a name path, so
+// they are the same form as `f (x)`. Moved from tests/review-phase1/parent/r101/space_call.onsa and
+// from the `a ([x, x])` of tests/review-phase1/syntax/space_idx.onsa (R-101). One error per
+// declaration unit (P-01). `xs[0] (y)` is the form of S-399 whose previous token is a name path with an index (a
+// callee form of §6.1, `callee_by_name`), so it is this error with this candidate, not the E0002 of `g(x) (y)`.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+impl Pt {
+  pub fn new(x: I32, y: I32) -> Pt {
+    Pt { x: x, y: y }
+  }
+
+  pub fn scale(self, k: I32) -> I32 {
+    self.x * k
+  }
+}
+
+pub fn square(x: I32) -> I32 {
+  x * x
+}
+
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn first(xs: [I32; 2]) -> I32 {
+  xs[0]
+}
+
+pub rt fn two_f(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub fn nested_arg(a: I32) -> I32 {
+  add(square(a), 1)                                 //~ E0020
+}
+
+pub fn method_call(p: Pt) -> I32 {
+  p.scale(2)                                        //~ E0020
+}
+
+pub fn associated_function(a: I32) -> Pt {
+  Pt.new(a, 2)                                      //~ E0020
+}
+
+pub fn constructor(a: I32) -> Option[I32] {
+  Some(a)                                           //~ E0020
+}
+
+pub fn in_an_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => square(v),                           //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(a: I32) -> I32 {
+  let f = fn(x: I32) -> I32 { square(x) }           //~ E0020
+  f.(a)
+}
+
+pub fn in_a_condition(a: I32) -> I32 {
+  if square(a) > 0 { 1 } else { 2 }                 //~ E0020
+}
+
+pub fn in_a_field_value(a: I32) -> Pt {
+  Pt { x: square(a), y: 0 }                         //~ E0020
+}
+
+pub fn in_an_array(a: I32) -> I32 {
+  let v = [square(a), 2]                            //~ E0020
+  v[0]
+}
+
+pub fn in_a_tuple(a: I32) -> I32 {
+  let t = (square(a), 1)                            //~ E0020
+  t.0
+}
+
+pub fn an_array_argument(x: I32) -> I32 {
+  first([x, x])                                     //~ E0020
+}
+
+pub fn a_wide_gap(a: I32) -> I32 {
+  square(a)                                         //~ E0020
+}
+
+pub fn a_tab_gap(a: I32) -> I32 {
+  square(a)                                         //~ E0020
+}
+
+pub fn one_line(x: I32) -> I32 { square(x) }        //~ E0020
+
+pub fn after_an_index(xs: [I32; 4], y: I32) -> I32 {
+  let v = xs[0](y)                                  //~ E0020
+  v
+}
+
+pub rt fn in_an_rt_fn(a: F32) -> F32 {
+  two_f(a, 1.0)                                     //~ E0020
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<4 {
+    two_f(x, 1.0)                                   //~ E0020
+  }
+  ys[0]
+}
+
+pub fn fine(a: I32, p: Pt, o: Option[I32]) -> I32 {
+  add(square(a), p.scale(2)) + first([a, a])
+}

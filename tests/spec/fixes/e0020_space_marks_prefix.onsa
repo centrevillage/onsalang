@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§11.2", "§18.1"]
+// fixes = 2
+
+// E0020 for the spaces that give a reader another reading, between a mark or a prefix and what it
+// belongs to (§2.5, §2.6, S-123): a name and `~` or `!` (`lp ~(x)` is the FAUST binary `~`), `^` and its
+// name, a prefix `-` or `!` and its operand. The candidate removes the space. A line that starts with
+// `-` or `^` (`- q`) is a space after the prefix as well, and it has a second candidate, the line joined
+// to the previous one (`let c = p - q`), because it is written to continue that line. The forms are tried
+// in the places they can stand: an argument, an arm, a closure body, an array, a condition, a `par` and
+// a flow. Moved from tests/review-phase1/parent/c119.onsa's `- b` family into this file's lines for `^`.
+// One error per declaration unit (P-01). The `!` and `- q` forms of the body units end in errors of the
+// later stages that the spec allows (a value statement is E0418).
+
+pub struct Pt {
+  x: I32,
+}
+
+impl Pt {
+  pub fn bump(inout self, k: I32) -> I32 {
+    self.x = self.x + k
+    self.x
+  }
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub rt fn two_f(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow a_tilde_gap(x: F32 at sample) -> F32 at sample {
+  let y = lp ~(x)                                   //~ E0020
+  y
+}
+
+pub flow a_tilde_gap_in_an_argument(x: F32 at sample) -> F32 at sample {
+  two_f(lp ~(x), 1.0)                               //~ E0020
+}
+
+pub flow a_tilde_gap_in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<4 {
+    lp ~(x)                                         //~ E0020
+  }
+  ys[0]
+}
+
+pub flow a_tilde_gap_on_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = x + prev ~(^y)                            //~ E0020
+  y
+}
+
+pub fn a_bang_gap(inout p: Pt) -> I32 {
+  p.bump !(1)                                       //~ E0020
+}
+
+pub fn a_bang_gap_in_an_argument(inout p: Pt) -> I32 {
+  two(p.bump !(1), 2)                               //~ E0020
+}
+
+pub flow a_caret_gap(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^ y)                            //~ E0020
+  y
+}
+
+pub flow a_caret_gap_on_a_delay(x: F32 at sample) -> F32 at sample {
+  let y = x + delay~(^ y, 4)                        //~ E0020
+  y
+}
+
+pub fn a_minus_gap_in_an_argument(a: I32) -> I32 {
+  two(- a, 1)                                       //~ E0020
+}
+
+pub fn a_minus_gap_before_a_group(a: I32, b: I32) -> I32 {
+  - (a + b)                                         //~ E0020
+}
+
+pub fn a_minus_gap_in_an_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(x) => - x,                                 //~ E0020
+    None => 0,
+  }
+}
+
+pub fn a_minus_gap_in_a_closure_body(a: I32) -> I32 {
+  let f = fn(x: I32) -> I32 { - x }                 //~ E0020
+  f.(a)
+}
+
+pub fn a_minus_gap_in_an_array(a: I32) -> I32 {
+  let v = [- 1, a]                                  //~ E0020
+  v[0]
+}
+
+pub fn a_not_gap_in_a_condition(done: Bool) -> I32 {
+  if ! done { 1 } else { 2 }                        //~ E0020
+}
+
+pub fn a_not_gap_before_a_group(a: Bool, b: Bool) -> Bool {
+  ! (a && b)                                        //~ E0020
+}
+
+pub fn a_line_starts_with_minus_in_a_closure(a: I32, b: I32) -> I32 {
+  let f = fn(p: I32, q: I32) -> I32 {
+    let c = p
+    - q                                             //~ E0020
+    c
+  }
+  f.(a, b)
+}
+
+pub fn a_line_starts_with_caret(a: U32, b: U32) -> U32 {
+  let c = a
+  ^ b                                               //~ E0020
+  c
+}
+
+pub flow a_line_starts_with_caret_in_a_flow(a: U32 at sample, b: U32 at sample) -> U32 at sample {
+  let c = a
+  ^ b                                               //~ E0020
+  c
+}
+
+pub flow fine(x: F32 at sample, c: I32 at sample, u: U32 at sample, v: U32 at sample) -> F32 at sample {
+  let a = lp~(x) + prev~(^a)
+  let b = -c
+  let d = !(u ^ v)
+  a
+}

@@ -65,7 +65,8 @@ pub fn not_gap(done: Bool) -> Bool {
 }
 
 pub fn line_starts_with_minus(a: I32, b: I32) -> I32 {
-  let c = a - b                                               //~ E0020
+  let c = a - b
+                                                    //~ E0020
   c
 }
 
