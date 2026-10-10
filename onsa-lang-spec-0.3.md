@@ -1473,7 +1473,7 @@ void vc_voice_reset(vc_voice* s);
 void vc_voice_params_default(vc_voice_params* params);
 int  vc_voice_process(vc_voice* s, const vc_voice_params* params,
                       float* output, uint32_t frames);
-     /* 0: ok, 1: poisoned か未初期化, 2: 入出力の部分的な重なり。frames は U32（§4.1） */
+     /* 0: ok, 1: poisoned か未初期化, 2: 許されない重なり（in-place の対でない重なり）。0 以外なら出力は全て 0。frames は U32（§4.1） */
 
 extern const onsa_param_info vc_voice_param_info[];    /* @param のメタデータ。Params のフィールドの順。長さは VC_VOICE_PARAM_COUNT */
 int vc_voice_param_index(uint32_t number);   /* 数値の ID（§11.7）から上の表の添字。無ければ -1 */
@@ -1497,7 +1497,7 @@ int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 - export した関数は状態の `int`（0: ok、1: panic）を返し、返り値は最後の引数の出力ポインタに書く（`int vc_version(uint32_t* out)`。返り値の無い関数は状態だけを返す）。形はターゲットの `panic` 設定に依らない（`"trap"` などでは panic した呼び出しは戻らないので、常に 0 を返す）。`init` / `process` の状態の値と同じ考え方で、結果を出力ポインタで受け取るのは §12.7 の集成体の返り値と同じ形である。引数は §14.1 と同じ対応で、スカラは値、`inout` のスカラは `T*`、`Span[T]` は `const T* name, uint32_t name_len`（`inout` なら `T*`）になる。この版で export の引数と返り値に使えるのは、スカラとスカラの `Span` だけである（`@repr(c)` の構造体、借用した `Str`、集成体の返り値は E0200）。
 - `init` の中の panic（`panic = "poison"` のとき）は `init` を中断して 1 を返し、状態をゼロで埋めて未初期化の印を付ける。未初期化のインスタンスに対する `process` は、出力を全て 0 で埋めて 1 を返し（poisoned のときと同じ、§9.2）、`reset` は何もしない。復帰は `init` のやり直しだけである。`reset` は `void` を返す。保存した `init` の値を戻すだけで panic しないので、知らせることが無い（未初期化のインスタンスに何もしなかったことは、次の `process` が 1 を返して知らせる）。
 - `process` の入出力の引数は §11.6 と同じく数で形が決まり、名前は `input` / `output`。単一の `Span` はポインタ（`const T*` / `T*`）、`[Span[T]; N]` はポインタの配列、`In` / `Out` は `<prefix><name>_in` / `<prefix><name>_out`（各フィールドがポインタの struct）へのポインタになる。例: `vc_swap_process(s, &params, &(vc_swap_in){ inl, inr }, &(vc_swap_out){ outl, outr }, frames)`。
-- 入力と出力のバッファは、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。部分的な重なり、および二つの出力が同じポインタの場合は検出して 2 を返す。
+- 入力と出力のバッファは、入力と出力の組ごとに、要素の型が同じなら、完全に同じポインタ（in-place 処理）であってよい。意味は `process_inplace`（§11.6）と同じである。型の違う入力と出力の同じポインタ（`F32` の入力と `F64` や `I32` の出力。大きさが同じでも、C では違う型として読み書きするので許さない）、部分的な重なり（出力どうしを含む）、および二つの出力が同じポインタの場合は検出して 2 を返す。入力どうしは読むだけなので、重なってもよい。poisoned か未初期化のインスタンスは、重なりがあっても 1 を返す（判定は 1 が先）。2 を返す呼び出しも、全ての出力（全てのチャンネルと全てのフレーム。他の出力や入力と重なる所も含む）を 0 で埋め、状態を進めず、poisoned にせず、どの段も評価しない（1 の呼び出しと同じく、0 以外を返した `process` の出力は全て 0。出力に書き込まないと落ちるホストがあるためでもある）。
 - `process` の入出力の各ポインタは、`frames` 個以上の要素を指していなければならない。これはホストの責務で、生成したコードは検査しない（C のポインタは長さを持たない）。全てのチャンネルが一つの `frames` を使うので、§11.6 の長さの不一致は C の境界では起こらない。
 - `frames` が 0 の `process` は正しい呼び出しで、`block` の段だけを評価する（§11.6。poisoned か未初期化のインスタンスは、他の呼び出しと同じく評価せずに 1 を返す）。入出力のポインタ（`In` / `Out` の構造体へのポインタを含む）は読まないので NULL でよく、重なりの検査もしない（0 サンプルのバッファや 0 チャンネルのバスを渡すホストがある）。`s` と `params` は要る（`block` の段が読む）。
 - C の名前は `prefix` と名前の最後の要素をつなげたもの（`dsp.voice` は `vc_voice`、`util.version` は `vc_version`）。export する flow は、その C の名前 `<p>`（大文字は `<P>`）を頭にした次の名前を生成する。これで全てである（閉じた一覧）。

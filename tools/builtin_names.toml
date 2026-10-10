@@ -387,6 +387,6 @@
 
 [same_spelling."crates/onsa_tests/src/host/plan.rs"]
 "fill" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
-"input" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
-"output" = { count = 2, note = "[[test.host]] の欄の名前（K-14、W1-11）と、出力を指すメッセージの語" }
+"input" = { count = 3, note = "[[test.host]] の欄の名前（K-14、W1-11）と、place の中のキー（W2-08）" }
+"output" = { count = 3, note = "[[test.host]] の欄の名前（K-14、W1-11）と、place の中のキー（W2-08）と、出力を指すメッセージの語" }
 "params" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）" }

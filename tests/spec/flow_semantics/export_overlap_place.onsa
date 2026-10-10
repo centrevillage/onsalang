@@ -1,0 +1,402 @@
+// onsa.toml
+// [package]
+// name = "export_overlap_place"
+// edition = "2026"
+//
+// [export]
+// prefix = "eo_"
+// flows = [
+//   "export_overlap_place.narrow",
+//   "export_overlap_place.widen",
+//   "export_overlap_place.split2",
+//   "export_overlap_place.gain2",
+//   "export_overlap_place.names",
+//   "export_overlap_place.names_r",
+//   "export_overlap_place.cast32",
+//   "export_overlap_place.flag",
+//   "export_overlap_place.twice",
+//   "export_overlap_place.fi",
+//   "export_overlap_place.add2",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§14.2", "§11.6"]
+//
+// # R-141 (§14.2 "入力と出力のバッファは、完全に同じポインタ…部分的な重なり、および二つの出力が同じポインタの場合
+// # は検出して 2 を返す"): the overlap check of the exported `process` measures each range by the
+// # element size of its own argument. The step field `place` puts the listed buffers into one
+// # shared region of bytes (an offset in bytes, a multiple of the element size; the buffers that
+// # are not listed stay apart), so the layout is the one the step says and not the one the
+// # allocator happens to give. Before the call the output holds its old contents, then the input
+// # values are written (where they overlap, the input values stay). A call that returns 2 zeroes
+// # every output, every channel and every frame, also where it overlaps an input or another
+// # output (S-206, decided 2026-10-10: the output of a `process` that does not return 0 is all
+// # zero); the groups below end with that call. The field `place` is not in the step vessel yet (W2-08), so the whole
+// # case waits for it.
+// #
+// # No overlap, buffers of different element sizes that touch each other: the check must not
+// # see an overlap (a false overlap would come from measuring a buffer by the element size of
+// # another one). `narrow` reads an F32 (4 bytes) and writes a U8 (1 byte), 4 frames: the input
+// # is 16 bytes, the output 4.
+// [[test.host]]
+// name = "narrow: the output just before the input does not overlap it"
+// target = "host"
+// flow = "export_overlap_place.narrow"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1.5, 2.5, 3.5, 4.5], place = { output = 0, input = 4 }, status = 0, output = [1, 2, 3, 4] },
+// ]
+//
+// [[test.host]]
+// name = "narrow: the output just after the input does not overlap it"
+// target = "host"
+// flow = "export_overlap_place.narrow"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1.5, 2.5, 3.5, 4.5], place = { input = 0, output = 16 }, status = 0, output = [1, 2, 3, 4] },
+// ]
+//
+// # The output (4 bytes) is inside the input (16 bytes): a partial overlap, at the end of the
+// # input and in the middle of it. Measuring the input by the 1 byte of the output would miss it.
+// [[test.host]]
+// name = "narrow: an output inside the input at its end overlaps partially"
+// target = "host"
+// flow = "export_overlap_place.narrow"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1.5, 2.5, 3.5, 4.5], place = { input = 0, output = 12 }, status = 2, output = [0, 0, 0, 0] },
+// ]
+//
+// [[test.host]]
+// name = "narrow: an output across the end of the input overlaps partially"
+// target = "host"
+// flow = "export_overlap_place.narrow"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1.5, 2.5, 3.5, 4.5], place = { input = 0, output = 15 }, status = 2, output = [0, 0, 0, 0] },
+// ]
+//
+// # The output element (F32) is larger than the input element (U8). The input is 4 bytes, the
+// # output 16 bytes. Touching: the input at 0 and the output at 4. Measuring the input by the
+// # F32 size would see an overlap.
+// [[test.host]]
+// name = "widen: the output just after a smaller input does not overlap it"
+// target = "host"
+// flow = "export_overlap_place.widen"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1, 2, 3, 4], place = { input = 0, output = 4 }, status = 0, output = [1.0, 2.0, 3.0, 4.0] },
+// ]
+//
+// [[test.host]]
+// name = "widen: the output just before a smaller input does not overlap it"
+// target = "host"
+// flow = "export_overlap_place.widen"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1, 2, 3, 4], place = { output = 0, input = 16 }, status = 0, output = [1.0, 2.0, 3.0, 4.0] },
+// ]
+//
+// # The input (4 bytes) is inside the output (16 bytes), and it starts after the first 4 bytes of
+// # the output: measuring the output by the 1 byte of the input would miss the overlap (R-141: a
+// # larger output element, a partial overlap).
+// [[test.host]]
+// name = "widen: a smaller input inside the output overlaps partially"
+// target = "host"
+// flow = "export_overlap_place.widen"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1, 2, 3, 4], place = { input = 8, output = 0 }, status = 2, output = [0.0, 0.0, 0.0, 0.0] },
+// ]
+//
+// [[test.host]]
+// name = "widen: a smaller input across the start of the output overlaps partially"
+// target = "host"
+// flow = "export_overlap_place.widen"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1, 2, 3, 4], place = { input = 2, output = 4 }, status = 2, output = [0.0, 0.0, 0.0, 0.0] },
+// ]
+//
+// # Two planar outputs of 1 byte per frame (`split2`, U8) after an input of 4 bytes per frame
+// # (F32), 3 frames: the input is 12 bytes, each output 3 bytes. Touching is no overlap
+// # (measuring a channel by the F32 size would make 12..24 overlap 15..18).
+// [[test.host]]
+// name = "split2: touching channels and an input of other element sizes do not overlap"
+// target = "host"
+// flow = "export_overlap_place.split2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = [12, 15] }, status = 0, output = [[1, 2, 3], [2, 3, 4]] },
+// ]
+//
+// [[test.host]]
+// name = "split2: the channels in the other order do not overlap"
+// target = "host"
+// flow = "export_overlap_place.split2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = [15, 12] }, status = 0, output = [[1, 2, 3], [2, 3, 4]] },
+// ]
+//
+// [[test.host]]
+// name = "split2: two channels at the same pointer return 2"
+// target = "host"
+// flow = "export_overlap_place.split2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { output = [12, 12] }, status = 2, output = [[0, 0, 0], [0, 0, 0]] },
+// ]
+//
+// [[test.host]]
+// name = "split2: a channel that overlaps the input partially returns 2"
+// target = "host"
+// flow = "export_overlap_place.split2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = [10, 20] }, status = 2, output = [[0, 0, 0], [0, 0, 0]] },
+// ]
+//
+// # Planar F32 in and out, 3 frames (12 bytes per channel). The same pointers channel by channel
+// # are the in-place processing and give the result of separate buffers (doubled); channels one
+// # after the other are no overlap; an output channel across the end of an input channel is a
+// # partial overlap.
+// [[test.host]]
+// name = "gain2: the same pointers channel by channel process in place"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], place = { input = [0, 12], output = [0, 12] }, status = 0, output = [[2.0, 4.0, 6.0], [8.0, 10.0, 12.0]] },
+// ]
+//
+// [[test.host]]
+// name = "gain2: the channels one after the other do not overlap"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], place = { input = [0, 12], output = [24, 36] }, status = 0, output = [[2.0, 4.0, 6.0], [8.0, 10.0, 12.0]] },
+// ]
+//
+// [[test.host]]
+// name = "gain2: an output channel across the end of an input channel returns 2"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], place = { input = [0, 12], output = [16, 28] }, status = 2, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// [[test.host]]
+// name = "gain2: an output channel shifted by one frame against its input returns 2"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], place = { input = [0, 12], output = [4, 36] }, status = 2, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// # The inputs `x` (U8) and `xs` (F32) of one flow: the check must not take one argument for the
+// # other because the name of one starts with the name of the other (R-141). Touching, no overlap
+// # (x 0..4, the output 4..20, xs 32..48): measuring `x` as `xs` (16 bytes) would overlap the
+// # output.
+// [[test.host]]
+// name = "names: x and xs are told apart when nothing overlaps"
+// target = "host"
+// flow = "export_overlap_place.names"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = { x = [1, 2, 3, 4], xs = [0.5, 0.5, 0.5, 0.5] }, place = { input = { x = 0, xs = 32 }, output = 4 }, status = 0, output = [1.5, 2.5, 3.5, 4.5] },
+// ]
+//
+// # `xs` (16 bytes at 0) is overlapped by the output at 12 only beyond its first 4 bytes; `x` is
+// # far away (40..44). Measuring `xs` as `x` (4 bytes) would miss the overlap.
+// [[test.host]]
+// name = "names: xs overlapping the output is found by its own size"
+// target = "host"
+// flow = "export_overlap_place.names"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = { x = [1, 2, 3, 4], xs = [0.5, 0.5, 0.5, 0.5] }, place = { input = { x = 40, xs = 0 }, output = 12 }, status = 2, output = [0.0, 0.0, 0.0, 0.0] },
+// ]
+//
+// # The same two checks with the arguments in the other order (`xs` first).
+// [[test.host]]
+// name = "names_r: x and xs are told apart when nothing overlaps"
+// target = "host"
+// flow = "export_overlap_place.names_r"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = { xs = [0.5, 0.5, 0.5, 0.5], x = [1, 2, 3, 4] }, place = { input = { x = 0, xs = 32 }, output = 4 }, status = 0, output = [1.5, 2.5, 3.5, 4.5] },
+// ]
+//
+// [[test.host]]
+// name = "names_r: xs overlapping the output is found by its own size"
+// target = "host"
+// flow = "export_overlap_place.names_r"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = { xs = [0.5, 0.5, 0.5, 0.5], x = [1, 2, 3, 4] }, place = { input = { x = 40, xs = 0 }, output = 12 }, status = 2, output = [0.0, 0.0, 0.0, 0.0] },
+// ]
+//
+// # 0 frames (S-204): the ranges are empty and the buffers are not checked, so the same pointer
+// # for the two outputs, and ranges that would overlap, are no error. Then a call of 3 frames at
+// # the same pointers returns 2.
+// [[test.host]]
+// name = "gain2: a zero-frame call does not check the buffers for overlap"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, input = [[], []], place = { output = [0, 0] }, status = 0, output = [[], []] },
+//   { call = "process", params = {}, frames = 0, input = [[], []], place = { input = [0, 4], output = [4, 0] }, status = 0, output = [[], []] },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], status = 0, output = [[2.0, 4.0, 6.0], [8.0, 10.0, 12.0]] },
+// ]
+//
+// [[test.host]]
+// name = "gain2: two outputs at the same pointer return 2"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], place = { output = [0, 0] }, status = 2, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// # S-403 (decided 2026-10-10): the one pair of buffers that may share a pointer is an input and
+// # an output of the same element type (in place, §14.2 "完全に同じポインタ（in-place 処理）であってよい").
+// # An input and an output of different element types at the same pointer return 2, even when the
+// # sizes are the same (F32 and I32, U8 and Bool), and every output is zero (S-206). Touching
+// # buffers of those types do not overlap.
+// [[test.host]]
+// name = "cast32: an I32 output at the pointer of the F32 input returns 2"
+// target = "host"
+// flow = "export_overlap_place.cast32"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = 12 }, status = 0, output = [1, 2, 3] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = 0 }, status = 2, output = [0, 0, 0] },
+// ]
+//
+// [[test.host]]
+// name = "flag: a Bool output at the pointer of the U8 input returns 2"
+// target = "host"
+// flow = "export_overlap_place.flag"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1, 0, 2], place = { input = 0, output = 3 }, status = 0, output = [true, false, true] },
+//   { call = "process", params = {}, frames = 3, input = [1, 0, 2], place = { input = 0, output = 0 }, status = 2, output = [false, false, false] },
+// ]
+//
+// # The same element type at the same pointer is in place: 0, and the values are those of
+// # separate buffers (§11.6: every input of a sample is read before any output is written).
+// [[test.host]]
+// name = "twice: an F32 output at the pointer of the F32 input is in place"
+// target = "host"
+// flow = "export_overlap_place.twice"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], place = { input = 0, output = 0 }, status = 0, output = [2.0, 4.0, 6.0] },
+// ]
+//
+// # A struct output is compared field by field: its F32 field may share the pointer of the F32
+// # input (in place), its I32 field may not (2, every field zero).
+// [[test.host]]
+// name = "fi: the F32 field is in place and the I32 field returns 2"
+// target = "host"
+// flow = "export_overlap_place.fi"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = { f = 0 } }, status = 0, output = { f = [3.0, 5.0, 7.0], i = [1, 2, 3] } },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], place = { input = 0, output = { i = 0 } }, status = 2, output = { f = [0.0, 0.0, 0.0], i = [0, 0, 0] } },
+// ]
+//
+// # S-409 (decided 2026-10-10): every pair with an output is checked, so two outputs that overlap
+// # partially at pointers that differ return 2 (every output zero); two inputs are not checked
+// # (they are only read), so inputs that overlap, or share a pointer, process.
+// [[test.host]]
+// name = "gain2: output channels that overlap partially return 2"
+// target = "host"
+// flow = "export_overlap_place.gain2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], place = { output = [0, 4] }, status = 2, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// [[test.host]]
+// name = "add2: inputs that overlap are not checked"
+// target = "host"
+// flow = "export_overlap_place.add2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = { a = [1.0, 2.0, 3.0], b = [2.0, 3.0, 4.0] }, place = { input = { a = 0, b = 4 } }, status = 0, output = [3.0, 5.0, 7.0] },
+//   { call = "process", params = {}, frames = 3, input = { a = [1.0, 2.0, 3.0], b = [1.0, 2.0, 3.0] }, place = { input = { a = 0, b = 0 } }, status = 0, output = [2.0, 4.0, 6.0] },
+// ]
+
+/// F32 in, U8 out.
+pub flow narrow(x: F32 at sample) -> U8 at sample {
+  x.trunc_u8()
+}
+
+/// U8 in, F32 out.
+pub flow widen(x: U8 at sample) -> F32 at sample {
+  x as F32
+}
+
+/// F32 in, two planar U8 out.
+pub flow split2(x: F32 at sample) -> [U8; 2] at sample {
+  let n = x.trunc_u8()
+  [n, n + 1]
+}
+
+/// Planar F32 in and out.
+pub flow gain2(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [x[0] * 2.0, x[1] * 2.0]
+}
+
+/// Two inputs, one name the start of the other.
+pub flow names(x: U8 at sample, xs: F32 at sample) -> F32 at sample {
+  (x as F32) + xs
+}
+
+/// The same in the other order.
+pub flow names_r(xs: F32 at sample, x: U8 at sample) -> F32 at sample {
+  (x as F32) + xs
+}
+
+/// F32 in, I32 out: the same size, another element type (S-403).
+pub flow cast32(x: F32 at sample) -> I32 at sample {
+  x.trunc_i32()
+}
+
+/// U8 in, Bool out: the same size, another element type (S-403).
+pub flow flag(x: U8 at sample) -> Bool at sample {
+  x > 0
+}
+
+/// F32 in and out.
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub struct FI {
+  f: F32,
+  i: I32,
+}
+
+/// A struct output of an F32 field and an I32 field.
+pub flow fi(x: F32 at sample) -> FI at sample {
+  FI { f: x * 2.0, i: x.trunc_i32() }
+}
+
+/// Two F32 inputs (S-409).
+pub flow add2(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  a + b
+}

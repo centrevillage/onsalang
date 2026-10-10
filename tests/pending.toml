@@ -829,9 +829,9 @@ note = "別々の変数の [a, b] / inout [a, b]、inout の slice、process_inp
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/planar_structs.onsa"
-reasons = ["S-30", "R-22"]
+reasons = ["S-30"]
 until = "W7-03"
-note = "名前付きの入力 In と struct 出力 Out（render の o.l / o.r、process の inout Out）。生成項目の Onsa の側は W7-03（S-30）。長さの違う In は panic（R-22、W2-08）"
+note = "名前付きの入力 In と struct 出力 Out（render の o.l / o.r、process の inout Out）。生成項目の Onsa の側は W7-03（S-30）"
 
 [[pending]]
 kind = "test-case"
@@ -839,6 +839,13 @@ target = "tests/spec/flow_semantics/planar_length_panics.onsa"
 reasons = ["R-22", "R-31"]
 until = "W4-08"
 note = "入力のチャンネル間・出力のチャンネル間・入出力間で Span の長さが違うと process は panic（全チャンネルを比べる。R-22、W2-08）。[a, b] / inout [a, b] は W4-08"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/export_planar_lengths_out.onsa"
+reasons = ["R-22", "S-196", "R-31"]
+until = "W4-08"
+note = "平面の出力のチャンネル間の長さの比較（C の側）。inout [a.slice(..), b.slice(..)] は W4-08 まで E0701。W2-08 の直しは W4-08 の後に確かめる"
 
 [[pending]]
 kind = "test-case"
@@ -883,13 +890,6 @@ target = "c-x86/tests/pipeline/span_const.onsa[host]"
 reasons = ["R-109", "S-94"]
 until = "W10-04"
 note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/conformance/boundary_overlap.onsa[host]"
-reasons = ["R-141"]
-until = "W2-08"
-note = "process の重なりの検査が、型の違う入出力の組で一方の要素の大きさを両方に使う（Bool / U8 の出力を F32 / I64 の大きさで測る）。gcc の配置では偽の重なりになり、process が 2 を返す"
 
 [[pending]]
 kind = "gate"
@@ -1211,13 +1211,6 @@ target = "tests/spec/flow_semantics/inplace_struct_output.onsa"
 reasons = ["S-102", "S-197"]
 until = "W7-03"
 note = "at と、struct の出力の flow に process_inplace が無い（4 引数を要求する）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/reset_boundary_silence.onsa"
-reasons = ["S-102", "R-12", "S-199"]
-until = "W2-08"
-note = "at（W3-10）の後も、poisoned / 未初期化の process が出力を 0 で埋めない手順の組が R-12 で落ちる"
 
 [[pending]]
 kind = "test-case"
@@ -2224,20 +2217,6 @@ note = "W3-09/t2 が見つけた入力。`.(` の候補を当てた後に E0006 
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/poison_boundary.onsa::boom poisoned outputs silence"
-reasons = ["R-12"]
-until = "W2-08"
-note = "poisoned のインスタンスの process が出力を 0 で埋めない（R-12、W2-08）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/poison_boundary.onsa::init_boom uninitialized outputs silence"
-reasons = ["R-12"]
-until = "W2-08"
-note = "未初期化のインスタンスの process が出力を 0 で埋めない（R-12、W2-08）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/flow_clock_reserved.onsa"
 reasons = ["S-359", "S-169"]
 until = "W3-04"
@@ -2277,13 +2256,6 @@ target = "tests/spec/negative/flow_delay_one.onsa:45:5 E0807 fix1"
 reasons = ["S-110", "R-14"]
 until = "W7-06"
 note = "if~ の中の delay~(x, 1) の候補 prev~(x) を当てた後、if~ の E0200（W3-10 の写し、K-02）が同じ単位に残る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/c_runtime/c_flow_int.onsa::a checked conversion in a flow poisons the instance"
-reasons = ["R-12"]
-until = "W2-08"
-note = "poisoned のインスタンスの process が出力を 0 で埋めない（R-12、W2-08）"
 
 [[pending]]
 kind = "test-case"

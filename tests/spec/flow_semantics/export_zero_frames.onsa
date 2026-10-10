@@ -1,0 +1,164 @@
+// onsa.toml
+// [package]
+// name = "export_zero_frames"
+// edition = "2026"
+//
+// [export]
+// prefix = "ez_"
+// flows = [
+//   "export_zero_frames.tally",
+//   "export_zero_frames.tally_cfg",
+//   "export_zero_frames.trunc0",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§11.3", "§9.2"]
+//
+// # S-204 (§11.6 "長さが 0 の呼び出し", §14.2 "`frames` が 0 の `process`"): a call with 0 frames is a
+// # valid call. It evaluates the `block` stage once (so a panic of the block stage still poisons
+// # the instance), evaluates the `sample` stage 0 times (the state does not advance), reads no
+// # input or output pointer (they may be NULL: the step field `null`) and does not check the
+// # buffers for overlap, so the return value is 0 (not 2). A poisoned or uninitialized instance
+// # returns 1 without evaluating anything. Only mono signals here: the planar and the struct
+// # shapes with NULL pointers are in export_zero_frames_null.onsa, and the same pointer for two
+// # outputs is in export_overlap_place.onsa.
+//
+// # The state is the running sum; the block stage gives `100 / d` (d = 100 gives 1), added to the
+// # output. Frames 1 1 1 give the sums 1 2 3 (outputs 2 3 4), the 0-frame call changes nothing,
+// # and two more frames of 1 give the sums 4 5 (outputs 5 6).
+// [[test.host]]
+// name = "a zero-frame call leaves the sample state alone"
+// target = "host"
+// flow = "export_zero_frames.tally"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 100 }, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [2.0, 3.0, 4.0] },
+//   { call = "process", params = { d = 100 }, frames = 0, input = [], status = 0, output = [] },
+//   { call = "process", params = { d = 100 }, frames = 0, input = [], status = 0, output = [] },
+//   { call = "process", params = { d = 100 }, frames = 2, input = [1.0, 1.0], status = 0, output = [5.0, 6.0] },
+// ]
+//
+// # The block stage is evaluated by a call with 0 frames: `100 / 0` panics, the call returns 1
+// # and the instance is poisoned; `reset` recovers it with the sum from the beginning.
+// [[test.host]]
+// name = "a zero-frame call evaluates the block stage"
+// target = "host"
+// flow = "export_zero_frames.tally"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 100 }, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [2.0, 3.0, 4.0] },
+//   { call = "process", params = { d = 0 }, frames = 0, input = [], status = 1, output = [] },
+//   { call = "reset" },
+//   { call = "process", params = { d = 100 }, frames = 2, input = [1.0, 1.0], status = 0, output = [2.0, 3.0] },
+// ]
+//
+// # After the panic of the block stage in a 0-frame call the instance is poisoned: the next call
+// # returns 1 and outputs silence (R-12), until `reset`.
+// [[test.host]]
+// name = "an instance poisoned by a zero-frame call is silent"
+// target = "host"
+// flow = "export_zero_frames.tally"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 0 }, frames = 0, input = [], status = 1, output = [] },
+//   { call = "process", params = { d = 100 }, frames = 2, input = [1.0, 1.0], status = 1, output = [0.0, 0.0] },
+// ]
+//
+// # A poisoned instance returns 1 for a 0-frame call, then `reset` recovers it and the 0-frame
+// # call is a good call again.
+// [[test.host]]
+// name = "a zero-frame call on a poisoned instance returns 1"
+// target = "host"
+// flow = "export_zero_frames.tally"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 0 }, frames = 2, input = [1.0, 1.0], status = 1, output = [0.0, 0.0] },
+//   { call = "process", params = { d = 100 }, frames = 0, input = [], status = 1, output = [] },
+//   { call = "reset" },
+//   { call = "process", params = { d = 100 }, frames = 0, input = [], status = 0, output = [] },
+// ]
+//
+// # An uninitialized instance (n = 0: `100 / n` panics in `init`) returns 1 for a 0-frame call;
+// # `reset` does nothing for it, and a good `init` makes the 0-frame call return 0.
+// [[test.host]]
+// name = "a zero-frame call on an uninitialized instance returns 1"
+// target = "host"
+// flow = "export_zero_frames.tally_cfg"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 8.0, status = 1 },
+//   { call = "process", params = {}, frames = 0, input = [], status = 1, output = [] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 0, input = [], status = 1, output = [] },
+//   { call = "init", config = { n = 4 }, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, input = [], status = 0, output = [] },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 1.0], status = 0, output = [26.0, 27.0] },
+// ]
+//
+// # NULL input and output pointers with 0 frames: the call reads nothing, so it returns 0, and
+// # the state is as it was (the sums go on from 3 to 4 5).
+// [[test.host]]
+// name = "a zero-frame call may pass NULL input and output pointers"
+// target = "host"
+// flow = "export_zero_frames.tally"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 100 }, frames = 3, input = [1.0, 1.0, 1.0], status = 0, output = [2.0, 3.0, 4.0] },
+//   { call = "process", params = { d = 100 }, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = { d = 100 }, frames = 0, null = ["input"], status = 0, output = [] },
+//   { call = "process", params = { d = 100 }, frames = 0, null = ["output"], input = [], status = 0 },
+//   { call = "process", params = { d = 100 }, frames = 2, input = [1.0, 1.0], status = 0, output = [5.0, 6.0] },
+// ]
+//
+// # The sample stage does not run for 0 frames: the flow would panic for a NaN input in the
+// # sample stage, but the NULL input is not read and the call returns 0.
+// [[test.host]]
+// name = "a zero-frame call does not evaluate the sample stage"
+// target = "host"
+// flow = "export_zero_frames.trunc0"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [1.0, nan, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+// ]
+//
+// # A poisoned instance with NULL pointers and 0 frames returns 1 without reading them.
+// [[test.host]]
+// name = "a zero-frame call with NULL pointers on a poisoned instance returns 1"
+// target = "host"
+// flow = "export_zero_frames.trunc0"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, nan, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 1 },
+// ]
+
+/// The running sum plus `100 / d`: the state is the previous sum, the block stage is the division.
+pub flow tally(
+  x: F32 at sample,
+  @param(min: 0, max: 1000, default: 100)
+  d: I32 at block,
+) -> F32 at sample {
+  let g = 100 / d
+  let y = x + prev~(^y)
+  y + g.round_f32()
+}
+
+/// `100 / n` is computed once at init: n = 0 panics inside `init`. The sum plus 25 (n = 4).
+pub flow tally_cfg(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let k = 100 / n
+  let y = x + prev~(^y)
+  y + k.round_f32()
+}
+
+/// `x + trunc(x)`: panics in the sample stage for NaN.
+pub flow trunc0(x: F32 at sample) -> F32 at sample {
+  x + x.trunc_i32().round_f32()
+}

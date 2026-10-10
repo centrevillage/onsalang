@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3", "§9.2"]
+
+// The tests of planar_length_bufs.onsa whose panic the implementation misses (R-22: only the channel 0
+// of the input, or of the output, is compared, so a longer later channel goes unnoticed); they wait for
+// W2-08 as a whole file (a test marked TESTFAIL cannot be listed alone, tests/pending.toml).
+//
+// R-22, S-196 (§11.6): every `Span` of a `process` call has the same length, compared before any
+// state moves; a difference in ANY channel is a panic (in a `test` it fails the test). The
+// channels here are `Buf`s of lengths chosen at run time in `[Buf[F32]; N]` (§5.3: "`[Buf[T]; N]` の
+// 値をそのまま渡せる"), so the lengths of the channels can differ, and the forms of the call do not
+// need an `inout` array literal (planar_length_panics.onsa has the literal forms, W4-08). The good
+// calls keep the tests honest: the same calls with equal lengths run.
+
+/// Swaps the channels.
+pub flow flip(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [x[1], x[0]]
+}
+
+/// Three channels to three, rotated.
+pub flow rot3(x: [F32; 3] at sample) -> [F32; 3] at sample {
+  [x[2], x[0], x[1]]
+}
+
+/// The mean of two channels.
+pub flow mean2(x: [F32; 2] at sample) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+test "a longer channel 1 of the input panics" {   //~ TESTFAIL "a longer channel 1 of the input panics"
+  let ins: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(5)]
+  var outs: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(4)]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process(inout st, flip.Params {}, ins, inout outs)
+  assert outs[0][0] == 0.0
+}
+
+test "a longer channel 1 of the output panics" {   //~ TESTFAIL "a longer channel 1 of the output panics"
+  let ins: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(4)]
+  var outs: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(6)]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process(inout st, flip.Params {}, ins, inout outs)
+  assert outs[0][0] == 0.0
+}
+
+test "a mismatch in the last of three channels of the input panics" {   //~ TESTFAIL "a mismatch in the last of three channels of the input panics"
+  let ins: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(5)]
+  var outs: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(4)]
+  var st = rot3.init(rot3.Config {}, 8.0)
+  rot3.process(inout st, rot3.Params {}, ins, inout outs)
+  assert outs[0][0] == 0.0
+}
+
+test "a mismatch in the last of three channels of the output panics" {   //~ TESTFAIL "a mismatch in the last of three channels of the output panics"
+  let ins: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(4)]
+  var outs: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(7)]
+  var st = rot3.init(rot3.Config {}, 8.0)
+  rot3.process(inout st, rot3.Params {}, ins, inout outs)
+  assert outs[0][0] == 0.0
+}
+
+test "a mismatch in the planar input of a mono-output flow panics" {   //~ TESTFAIL "a mismatch in the planar input of a mono-output flow panics"
+  let ins: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(6)]
+  var out: Buf[F32] = Buf.zeroed(4)
+  var st = mean2.init(mean2.Config {}, 8.0)
+  mean2.process(inout st, mean2.Params {}, ins, inout out)
+  assert out[0] == 0.0
+}
+
+test "process_inplace with channels of different lengths panics" {   //~ TESTFAIL "process_inplace with channels of different lengths panics"
+  var bufs: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(5)]
+  var st = flip.init(flip.Config {}, 8.0)
+  flip.process_inplace(inout st, flip.Params {}, inout bufs)
+  assert bufs[0][0] == 0.0
+}

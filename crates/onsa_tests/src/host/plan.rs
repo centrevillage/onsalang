@@ -140,6 +140,8 @@ pub struct SigIn {
     pub c_type: String,
     pub planar: Option<u32>,
     pub data: Vec<Vec<Value>>,
+    /// `place`: the byte offset of each channel in the shared region.
+    pub place: Option<Vec<usize>>,
 }
 
 /// An output: what its buffer holds before the call, and what it must hold after.
@@ -152,6 +154,8 @@ pub struct SigOut {
     pub planar: Option<u32>,
     pub before: Before,
     pub expected: Vec<Vec<Value>>,
+    /// `place`: the byte offset of each channel in the shared region.
+    pub place: Option<Vec<usize>>,
 }
 
 impl SigOut {
@@ -159,6 +163,18 @@ impl SigOut {
     pub fn byte_len(&self, frames: u32) -> usize {
         self.scalar.size() * frames as usize * self.planar.unwrap_or(1) as usize
     }
+}
+
+/// The bytes of the shared region of `place` (0: no buffer is placed): up to
+/// the end of the last placed channel, and at least 1 (a call of 0 frames
+/// still places its buffers).
+pub fn region_len(inputs: &[SigIn], outputs: &[SigOut], frames: u32) -> usize {
+    let ins = inputs.iter().map(|i| (&i.place, i.scalar));
+    let outs = outputs.iter().map(|o| (&o.place, o.scalar));
+    ins.chain(outs)
+        .flat_map(|(p, s)| p.iter().flatten().map(move |o| (o + s.size() * frames as usize).max(1)))
+        .max()
+        .unwrap_or(0)
 }
 
 /// The number of bytes the program writes after the index of a step
@@ -346,16 +362,28 @@ fn flow_step(st: &Step, api: &FlowApi, t: &FlowTypes) -> Result<Op, PlanError> {
             let params =
                 table_values(st.params.as_ref().ok_or("no `params`")?, "params", &t.params, &api.params_fields)?;
             let frames = st.frames.ok_or("no `frames`")?;
+            let (in_place, out_place) = placement(st, t)?;
             let inputs = if st.is_null(NullArg::Input) {
                 if t.inputs.is_empty() {
                     return Err("`null = [\"input\"]`, but the flow has no `sample` input".into());
                 }
                 None
             } else {
-                Some(inputs(st, api, t, frames)?)
+                let mut ins = inputs(st, api, t, frames)?;
+                for (i, p) in ins.iter_mut().zip(in_place) {
+                    i.place = p;
+                }
+                Some(ins)
             };
-            let outputs =
-                if st.is_null(NullArg::Output) { None } else { Some(outputs(st, api, t, frames, inputs.as_deref())?) };
+            let outputs = if st.is_null(NullArg::Output) {
+                None
+            } else {
+                let mut outs = outputs(st, api, t, frames, inputs.as_deref())?;
+                for (o, p) in outs.iter_mut().zip(out_place) {
+                    o.place = p;
+                }
+                Some(outs)
+            };
             Op::Process { params, frames, inputs, outputs, status: status(st)? }
         }
         Call::Reset => Op::Reset,
@@ -375,7 +403,7 @@ fn io_type(api: &FlowApi, name: &str, output: bool, s: Scalar) -> Result<String,
 fn inputs(st: &Step, api: &FlowApi, t: &FlowTypes, frames: u32) -> Result<Vec<SigIn>, PlanError> {
     let sig = |(n, s, p): &(String, Scalar, Option<u32>), v: &toml::Value, what: &str| -> Result<SigIn, PlanError> {
         let data = channels(v, *s, *p, frames, what)?;
-        Ok(SigIn { name: n.clone(), scalar: *s, c_type: io_type(api, n, false, *s)?, planar: *p, data })
+        Ok(SigIn { name: n.clone(), scalar: *s, c_type: io_type(api, n, false, *s)?, planar: *p, data, place: None })
     };
     match (t.inputs.as_slice(), &st.input) {
         ([], None) => Ok(Vec::new()),
@@ -397,7 +425,6 @@ fn outputs(
     frames: u32,
     inputs: Option<&[SigIn]>,
 ) -> Result<Vec<SigOut>, PlanError> {
-    let output = st.output.as_ref().ok_or("no `output`")?;
     let per = |v: &toml::Value, what: &str| -> Result<Vec<Vec<Vec<Value>>>, String> {
         if t.out_struct {
             let names: Vec<&str> = t.outputs.iter().map(|(n, _, _)| n.as_str()).collect();
@@ -410,7 +437,7 @@ fn outputs(
             }
         }
     };
-    let expected = per(output, "output")?;
+    let expected = per(st.output.as_ref().ok_or("no `output`")?, "output")?;
     let inplace = st.inplace == Some(true);
     if inplace {
         let ins = inputs.unwrap_or_default();
@@ -448,9 +475,76 @@ fn outputs(
             Before::Pattern
         };
         let c_type = io_type(api, n, true, *s)?;
-        out.push(SigOut { name: n.clone(), scalar: *s, c_type, planar: *p, before, expected: exp });
+        out.push(SigOut { name: n.clone(), scalar: *s, c_type, planar: *p, before, expected: exp, place: None });
     }
     Ok(out)
+}
+
+/// The most a placed buffer may reach into the shared region, in bytes.
+const REGION_MAX: usize = 1 << 20;
+
+/// The offsets of `place`, by input and by output (in the order of the
+/// flow's types): `None` for a buffer it does not name.
+type Places = Vec<Option<Vec<usize>>>;
+
+/// `place` (spec §14.2, W2-08): the byte offset of each channel it names, a
+/// multiple of the element's size. Like `input` and `output`, a group of one
+/// signal (one input, an output that is not a struct) is written directly,
+/// otherwise by name; `[T; N]` takes one offset per channel.
+fn placement(st: &Step, t: &FlowTypes) -> Result<(Places, Places), String> {
+    let mut ins: Places = vec![None; t.inputs.len()];
+    let mut outs: Places = vec![None; t.outputs.len()];
+    let Some(place) = &st.place else { return Ok((ins, outs)) };
+    for (k, v) in place {
+        let (sigs, slots, by_name) = match k.as_str() {
+            "input" => (&t.inputs, &mut ins, t.inputs.len() != 1),
+            "output" => (&t.outputs, &mut outs, t.out_struct),
+            _ => return Err(format!("`place` has `{k}`, which is not `input` or `output`")),
+        };
+        if sigs.is_empty() {
+            return Err(format!("`place.{k}`, but the flow has no `sample` {k}"));
+        }
+        if !by_name {
+            let (_, s, p) = &sigs[0];
+            slots[0] = Some(offsets(v, *s, *p, &format!("place.{k}"))?);
+            continue;
+        }
+        let table = v.as_table().ok_or_else(|| format!("`place.{k}` is a table by name"))?;
+        for (n, x) in table {
+            let j = sigs.iter().position(|(m, _, _)| m == n).ok_or_else(|| {
+                let names: Vec<&str> = sigs.iter().map(|(m, _, _)| m.as_str()).collect();
+                format!("`place.{k}` has `{n}`, which is not one of {}", names.join(", "))
+            })?;
+            let (_, s, p) = &sigs[j];
+            slots[j] = Some(offsets(x, *s, *p, &format!("place.{k}.{n}"))?);
+        }
+    }
+    Ok((ins, outs))
+}
+
+/// The byte offsets of the channels of one signal in `place`.
+fn offsets(v: &toml::Value, s: Scalar, planar: Option<u32>, what: &str) -> Result<Vec<usize>, String> {
+    let one = |x: &toml::Value, what: &str| -> Result<usize, String> {
+        let o = x
+            .as_integer()
+            .and_then(|o| usize::try_from(o).ok())
+            .filter(|o| *o <= REGION_MAX)
+            .ok_or_else(|| format!("`{what}` is a byte offset (an integer from 0 to {REGION_MAX})"))?;
+        if o % s.size() != 0 {
+            return Err(format!("`{what} = {o}` is not a multiple of {}, the size of {}", s.size(), s.name()));
+        }
+        Ok(o)
+    };
+    match planar {
+        None => Ok(vec![one(v, what)?]),
+        Some(n) => {
+            let a = v.as_array().ok_or_else(|| format!("`{what}` is an array of {n} offsets (`[T; {n}]`)"))?;
+            if a.len() != n as usize {
+                return Err(format!("`{what}` has {} offsets, but the type has {n} channels", a.len()));
+            }
+            a.iter().enumerate().map(|(c, x)| one(x, &format!("{what}[{c}]"))).collect()
+        }
+    }
 }
 
 /// A table with exactly the keys `names`.
@@ -644,11 +738,7 @@ pub fn input_bytes(p: &SeqPlan, steps: usize) -> Vec<u8> {
                 for v in params {
                     v.scalar.bytes(&v.value, &mut b);
                 }
-                for i in inputs.iter().flatten() {
-                    for v in i.data.iter().flatten() {
-                        i.scalar.bytes(v, &mut b);
-                    }
-                }
+                // The outputs' contents, then the inputs: where `place` overlaps them, the input holds its values.
                 for o in outputs.iter().flatten() {
                     match &o.before {
                         Before::Fill(f) => {
@@ -658,6 +748,11 @@ pub fn input_bytes(p: &SeqPlan, steps: usize) -> Vec<u8> {
                         }
                         Before::Pattern => b.extend(std::iter::repeat_n(PATTERN, o.byte_len(*frames))),
                         Before::Inplace(_) => {}
+                    }
+                }
+                for i in inputs.iter().flatten() {
+                    for v in i.data.iter().flatten() {
+                        i.scalar.bytes(v, &mut b);
                     }
                 }
             }

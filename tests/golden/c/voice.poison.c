@@ -373,7 +373,12 @@ void onsa_voice_params_default(onsa_voice_params* p) { voice__voice__params_defa
 
 int onsa_voice_process(onsa_voice* s, const onsa_voice_params* p, float* out, uint32_t frames) {
   voice__voice__Params q;
-  if (!s->initialized || s->poisoned) return 1;
+  if (!s->initialized || s->poisoned) {
+    if (frames != 0) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+    }
+    return 1;
+  }
   q = *p;
   q.f0 = onsa_clamp_f32(q.f0, 20.0f, 2000.0f);
   q.vowel_f1 = onsa_clamp_f32(q.vowel_f1, 200.0f, 1200.0f);
@@ -383,7 +388,9 @@ int onsa_voice_process(onsa_voice* s, const onsa_voice_params* p, float* out, ui
   jmp_buf* volatile onsa_prev = onsa_current_jmp;
   if (setjmp(onsa_jb)) {
     onsa_current_jmp = onsa_prev;
-    memset(out, 0, (size_t)frames * sizeof(float));
+    if (frames != 0) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+    }
     s->poisoned = true;
     return 1;
   }
@@ -424,8 +431,18 @@ void onsa_echo_params_default(onsa_echo_params* p) { voice__echo__params_default
 
 int onsa_echo_process(onsa_echo* s, const onsa_echo_params* p, const float* x, float* out, uint32_t frames) {
   voice__echo__Params q;
-  if (!s->initialized || s->poisoned) return 1;
-  if (onsa_overlaps(x, (size_t)frames * sizeof(float), out, (size_t)frames * sizeof(float))) return 2;
+  if (!s->initialized || s->poisoned) {
+    if (frames != 0) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+    }
+    return 1;
+  }
+  if (frames != 0) {
+    if (onsa_overlaps(x, (size_t)frames * sizeof(float), out, (size_t)frames * sizeof(float))) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+      return 2;
+    }
+  }
   q = *p;
   q.time = onsa_clamp_f32(q.time, 0.01f, 1.0f);
   q.feedback = onsa_clamp_f32(q.feedback, 0.0f, 0.95f);
@@ -433,7 +450,9 @@ int onsa_echo_process(onsa_echo* s, const onsa_echo_params* p, const float* x, f
   jmp_buf* volatile onsa_prev = onsa_current_jmp;
   if (setjmp(onsa_jb)) {
     onsa_current_jmp = onsa_prev;
-    memset(out, 0, (size_t)frames * sizeof(float));
+    if (frames != 0) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+    }
     s->poisoned = true;
     return 1;
   }

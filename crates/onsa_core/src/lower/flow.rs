@@ -1247,14 +1247,30 @@ fn vdelay_read(
     Ok(y)
 }
 
-/// Length of a `Span` / planar `[Span; N]` parameter.
+/// Channel `k` of a `Span` (only 0) / planar `[Span; N]` parameter, and the
+/// number of its channels.
+fn channel(e: &Expr, k: u32, span: Span) -> R<(Expr, u32)> {
+    match &e.ty {
+        Ty::Span(_) => Ok((e.clone(), 1)),
+        Ty::Array(inner, n) if matches!(**inner, Ty::Span(_)) => Ok((index(e.clone(), u32_lit(span, k))?, *n)),
+        _ => Err(internal(span, "length of a non-span")),
+    }
+}
+
+fn len_of(s: Expr, span: Span) -> Expr {
+    Expr::new(Ty::u32(), span, ExprKind::Prim { prim: Prim::Len, args: vec![borrow(s)] })
+}
+
+/// Length of a `Span` / planar `[Span; N]` parameter (the first channel).
 fn span_len(e: &Expr, span: Span) -> R<Expr> {
-    let s = match &e.ty {
-        Ty::Span(_) => e.clone(),
-        Ty::Array(inner, _) if matches!(**inner, Ty::Span(_)) => index(e.clone(), u32_lit(span, 0))?,
-        _ => return Err(internal(span, "length of a non-span")),
-    };
-    Ok(Expr::new(Ty::u32(), span, ExprKind::Prim { prim: Prim::Len, args: vec![borrow(s)] }))
+    Ok(len_of(channel(e, 0, span)?.0, span))
+}
+
+/// The length of every channel of a `Span` / planar `[Span; N]` parameter
+/// (R-22: the length check of `process` compares all of them).
+fn channel_lens(e: &Expr, span: Span) -> R<Vec<Expr>> {
+    let (_, n) = channel(e, 0, span)?;
+    (0..n).map(|k| Ok(len_of(channel(e, k, span)?.0, span))).collect()
 }
 
 /// `process(inout s, params, <inputs>, inout <outputs>)` (§11.6).
@@ -1271,14 +1287,25 @@ fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, 
         .filter(|i| i.rate == Rate::Sig)
         .map(|i| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
         .collect::<R<_>>()?;
-    // All spans must have the same length (§11.6): panic otherwise (poisoned at the export).
+    // All spans, every channel of the planar ones, must have the same length (§11.6, R-22):
+    // compared once, before any state moves (S-196); panic otherwise (poisoned at the export).
     let mut spans: Vec<Expr> = sig_inputs.iter().map(|(n, _)| ps[n].clone()).collect();
     spans.extend(shape.outputs.iter().map(|(n, _, _)| ps[n].clone()));
-    let first = spans.first().ok_or_else(|| internal(span, "flow without spans"))?.clone();
-    let len = g.let_("len", span_len(&first, span)?);
+    let mut lens = Vec::new();
+    for sp in &spans {
+        lens.extend(channel_lens(sp, span)?);
+    }
+    let mut lens = lens.into_iter();
+    let first = match lens.next() {
+        Some(l) => l,
+        // SPEC-GAP(S-407): no channel at all (no `sample` input, a `[T; 0]` output) gives no
+        // length; channel 0 is read, which panics as an index out of range, as before R-22.
+        None => span_len(spans.first().ok_or_else(|| internal(span, "flow without spans"))?, span)?,
+    };
+    let len = g.let_("len", first);
     let msg = lw.msg("span lengths differ");
-    for sp in spans.iter().skip(1) {
-        let bad = cmp(CmpOp::Ne, span_len(sp, span)?, len.clone());
+    for other in lens {
+        let bad = cmp(CmpOp::Ne, other, len.clone());
         let panic = Block {
             stmts: vec![stmt(span, StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic(msg))))],
             value: None,

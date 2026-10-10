@@ -21,7 +21,8 @@ typedef struct onsa_scaled_params { uint8_t onsa_empty; } onsa_scaled_params;
 int  onsa_scaled_init(onsa_scaled* s, void* bulk, float sample_rate);
 void onsa_scaled_reset(onsa_scaled* s);   /* clears `poisoned`; no effect on an uninitialized instance */
 void onsa_scaled_params_default(onsa_scaled_params* p);
-/* 0: ok, 1: poisoned or uninitialized, 2: partially overlapping buffers (identical in/out pointers are in-place). */
+/* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair
+ * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */
 int  onsa_scaled_process(onsa_scaled* s, const onsa_scaled_params* p, const float* x, float* out, uint32_t frames);
 
 #ifdef __cplusplus

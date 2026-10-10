@@ -23,7 +23,7 @@ use std::fmt::Write as _;
 use onsa_backend_c::{IoArg, PanicMode};
 use onsa_driver::BuildOutput;
 
-use super::plan::{Before, Callee, Op, SeqPlan};
+use super::plan::{Before, Callee, Op, SeqPlan, region_len};
 use crate::c;
 use crate::capi;
 
@@ -163,12 +163,30 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
             }
             let n = (*frames).max(1);
             let buf = |kind: &str, j: usize, ch: u32| format!("{kind}{k}_{j}_{ch}");
+            // `place`: the placed buffers point into one region (allocated, so that it has no declared type).
+            let region =
+                region_len(inputs.as_deref().unwrap_or_default(), outputs.as_deref().unwrap_or_default(), *frames);
+            let rg = format!("rg{k}");
+            if region > 0 {
+                let _ = writeln!(
+                    b,
+                    "    unsigned char* {rg} = (unsigned char*)malloc({region}u); if (!{rg}) _Exit({});",
+                    c::SETUP_EXIT
+                );
+            }
+            let declare = |t: &str, x: &str, place: Option<&Vec<usize>>, ch: u32| match place {
+                Some(p) => format!("{t}* {x} = ({t}*)({rg} + {});", p[ch as usize]),
+                None => format!("static {t} {x}[{n}];"),
+            };
+            // The outputs' contents are read first, then the inputs (plan::input_bytes).
+            let mut in_reads = String::new();
             let mut in_expr: Vec<(String, String)> = Vec::new();
             for (j, s) in inputs.iter().flatten().enumerate() {
                 let t = &s.c_type;
                 for ch in 0..s.planar.unwrap_or(1) {
                     let x = buf("in", j, ch);
-                    let _ = writeln!(b, "    static {t} {x}[{n}]; onsa_driver_need({x}, sizeof({t}) * {frames}u);");
+                    let _ = writeln!(b, "    {}", declare(t, &x, s.place.as_ref(), ch));
+                    let _ = writeln!(in_reads, "    onsa_driver_need({x}, sizeof({t}) * {frames}u);");
                 }
                 let e = match s.planar {
                     None => buf("in", j, 0),
@@ -191,8 +209,8 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                     _ => (0..chans)
                         .map(|ch| {
                             let x = buf("out", j, ch);
-                            let _ =
-                                writeln!(b, "    static {t} {x}[{n}]; onsa_driver_need({x}, sizeof({t}) * {frames}u);");
+                            let d = declare(t, &x, o.place.as_ref(), ch);
+                            let _ = writeln!(b, "    {d} onsa_driver_need({x}, sizeof({t}) * {frames}u);");
                             x
                         })
                         .collect(),
@@ -207,6 +225,7 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                 out_bufs.extend(names.into_iter().map(|x| (x, t.clone())));
                 out_expr.push((o.name.clone(), e));
             }
+            b.push_str(&in_reads);
             let io = |a: &IoArg| {
                 let list = if a.output { &out_expr } else { &in_expr };
                 let null = if a.output { outputs.is_none() } else { inputs.is_none() };
@@ -222,6 +241,9 @@ fn step(body: &mut String, k: usize, op: &Op, callee: &Callee, bulk: &str) -> Re
                 writeln!(b, "    onsa_host_step({k}u);\n    int st = {call};\n    onsa_driver_write(&st, sizeof st);");
             for (x, t) in &out_bufs {
                 let _ = writeln!(b, "    onsa_driver_write({x}, sizeof({t}) * {frames}u);");
+            }
+            if region > 0 {
+                let _ = writeln!(b, "    free({rg});");
             }
         }
         (Op::Reset, Callee::Flow(api)) => {

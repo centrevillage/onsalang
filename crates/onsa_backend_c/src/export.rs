@@ -66,7 +66,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     let io = process_io(cx, fns.process)?;
     let _ = writeln!(
         h,
-        "/* 0: ok, 1: poisoned or uninitialized, 2: partially overlapping buffers (identical in/out pointers are in-place). */"
+        "/* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair\n * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */"
     );
     let _ = writeln!(h, "int  {sym}_process({sym}* s, const {sym}_params* p, {}uint32_t frames);", io.decls);
     if !meta.params.is_empty() {
@@ -179,6 +179,88 @@ fn process_io(cx: &mut Cx, process: FnId) -> R<ProcessIo> {
     Ok(ProcessIo { decls, params })
 }
 
+/// One channel of a signal of `process`: one pointer and its range.
+struct IoRange<'a> {
+    ptr: String,
+    output: bool,
+    /// The type of its elements, and its C spelling.
+    elem: &'a Ty,
+    c_type: String,
+}
+
+/// Every channel of every signal of `process` (one range per pointer), from
+/// the parameters of the Core `process` (R-141: by structure, not by name).
+fn io_ranges<'a>(cx: &mut Cx, io: &'a ProcessIo) -> Vec<IoRange<'a>> {
+    let mut ranges = Vec::new();
+    for p in &io.params {
+        let c_type = cx.names.name(&p.elem);
+        let range = |ptr: String| IoRange { ptr, output: p.output, elem: &p.elem, c_type: c_type.clone() };
+        match p.planar {
+            None => ranges.push(range(p.name.clone())),
+            Some(n) => ranges.extend((0..n).map(|k| range(channel_ptr(p, k)))),
+        }
+    }
+    ranges
+}
+
+/// The pointer of channel `k` of a planar `[Span[T]; N]` parameter.
+fn channel_ptr(p: &IoParam, k: u32) -> String {
+    format!("{}[{k}]", p.name)
+}
+
+/// `body` guarded by `frames != 0` (S-204: a call of 0 frames reads no signal
+/// pointer); nothing when `body` is empty.
+fn when_frames(body: &str, indent: &str) -> String {
+    if body.is_empty() { String::new() } else { format!("{indent}if (frames != 0) {{\n{body}{indent}}}\n") }
+}
+
+/// The statements that zero every channel of every output, all `frames`
+/// (R-12, S-199, S-206): every call that does not return 0 outputs silence.
+fn zero_lines(cx: &mut Cx, io: &ProcessIo) -> String {
+    let mut s = String::new();
+    for r in io_ranges(cx, io).iter().filter(|r| r.output) {
+        let _ = writeln!(s, "      memset({}, 0, (size_t)frames * sizeof({}));", r.ptr, r.c_type);
+    }
+    s
+}
+
+/// [`zero_lines`] when `frames != 0` (S-204: no pointer is read then).
+fn zero_outputs(cx: &mut Cx, io: &ProcessIo) -> String {
+    when_frames(&zero_lines(cx, io), "    ")
+}
+
+/// The overlap checks (spec §14.2, R-141): every output against every input
+/// and every other output, each range measured by its own element type. Two
+/// outputs at the same pointer are an error; an input and an output are
+/// in place only when their byte ranges are the same. A call that returns 2
+/// zeroes every output, where they overlap too, and evaluates nothing (S-206).
+fn overlap_checks(cx: &mut Cx, io: &ProcessIo) -> String {
+    let ranges = io_ranges(cx, io);
+    let mut conds = Vec::new();
+    for (i, a) in ranges.iter().enumerate() {
+        for b in ranges.iter().skip(i + 1) {
+            // S-409: two inputs are not checked (they are only read); every pair with an output is.
+            if !(a.output || b.output) {
+                continue;
+            }
+            // S-403: the one pair that may share a pointer is an input and an output of the same
+            // element type (in place); any other pair at the same pointer returns 2.
+            let in_place = a.output != b.output && a.elem == b.elem;
+            let same =
+                if in_place { String::new() } else { format!("(const void*){} == (const void*){} || ", a.ptr, b.ptr) };
+            conds.push(format!(
+                "{same}onsa_overlaps({}, (size_t)frames * sizeof({}), {}, (size_t)frames * sizeof({}))",
+                a.ptr, a.c_type, b.ptr, b.c_type
+            ));
+        }
+    }
+    if conds.is_empty() {
+        return String::new();
+    }
+    let body = format!("    if ({}) {{\n{}      return 2;\n    }}\n", conds.join(" ||\n        "), zero_lines(cx, io));
+    when_frames(&body, "  ")
+}
+
 /// The wrappers of one exported flow in the translation unit.
 pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let meta = cx.m.flows[e.meta_index].clone();
@@ -258,44 +340,23 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let io = process_io(cx, fns.process)?;
     let _ = writeln!(s, "int {sym}_process({sym}* s, const {sym}_params* p, {}uint32_t frames) {{", io.decls);
     let _ = writeln!(s, "  {params} q;");
-    let _ = writeln!(s, "  if (!s->{initialized} || s->{poisoned}) return 1;");
-    // Overlap checks (spec §14.2): every output against every input and every other output.
-    let mut ranges: Vec<(String, bool)> = Vec::new(); // (pointer expr, is_output)
-    for p in &io.params {
-        match p.planar {
-            None => ranges.push((p.name.clone(), p.output)),
-            Some(n) => {
-                for k in 0..n {
-                    ranges.push((format!("{}[{k}]", p.name), p.output));
-                }
-            }
-        }
+    // The order of the entry (spec §14.2, §11.6): a poisoned or uninitialized instance outputs
+    // silence and returns 1 (R-12, S-199); the overlap checks (2); then the call. A call of 0
+    // frames reads none of the signal pointers (they may be NULL) and checks no overlap (S-204).
+    // S-404: an instance that is poisoned or uninitialized returns 1 even when the
+    // buffers overlap (the 1 is decided first).
+    for p in io.params.iter().filter(|p| p.planar == Some(0)) {
+        // `[Span[T]; 0]`: no channel pointer is read (S-407), so the parameter is not referenced.
+        let _ = writeln!(s, "  (void){};", p.name);
     }
-    for (i, (a, ao)) in ranges.iter().enumerate() {
-        for (b, bo) in ranges.iter().skip(i + 1) {
-            if !(ao | bo) {
-                continue;
-            }
-            let et = io
-                .params
-                .iter()
-                .find(|p| a.starts_with(&p.name))
-                .map(|p| p.elem.clone())
-                .unwrap_or(Ty::Float(onsa_core::FloatKind::F32));
-            let etn = cx.names.name(&et);
-            if *ao && *bo {
-                let _ = writeln!(
-                    s,
-                    "  if ({a} == {b} || onsa_overlaps({a}, (size_t)frames * sizeof({etn}), {b}, (size_t)frames * sizeof({etn}))) return 2;"
-                );
-            } else {
-                let _ = writeln!(
-                    s,
-                    "  if (onsa_overlaps({a}, (size_t)frames * sizeof({etn}), {b}, (size_t)frames * sizeof({etn}))) return 2;"
-                );
-            }
-        }
+    if io_ranges(cx, &io).is_empty() {
+        // No channel at all (S-407): only the Core `process` reads `frames`, through no span.
+        let _ = writeln!(s, "  (void)frames;");
     }
+    let zero = zero_outputs(cx, &io);
+    let _ = writeln!(s, "  if (!s->{initialized} || s->{poisoned}) {{");
+    let _ = writeln!(s, "{zero}    return 1;\n  }}");
+    s.push_str(&overlap_checks(cx, &io));
     let _ = writeln!(s, "  q = *p;");
     for (name, ty, pm) in &meta.params {
         let Some(pm) = pm else { continue };
@@ -334,24 +395,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
         let _ = writeln!(s, "  jmp_buf* volatile onsa_prev = onsa_current_jmp;");
         let _ = writeln!(s, "  if (setjmp(onsa_jb)) {{");
         let _ = writeln!(s, "    onsa_current_jmp = onsa_prev;");
-        for p in &io.params {
-            if !p.output {
-                continue;
-            }
-            let et = cx.names.name(&p.elem);
-            match p.planar {
-                None => {
-                    let _ = writeln!(s, "    memset({}, 0, (size_t)frames * sizeof({et}));", p.name);
-                }
-                Some(n) => {
-                    let _ = writeln!(
-                        s,
-                        "    for (uint32_t onsa_k = 0; onsa_k < {n}; onsa_k++) memset({}[onsa_k], 0, (size_t)frames * sizeof({et}));",
-                        p.name
-                    );
-                }
-            }
-        }
+        s.push_str(&zero);
         let _ = writeln!(s, "    s->{poisoned} = true;");
         let _ = writeln!(s, "    return 1;");
         let _ = writeln!(s, "  }}");
@@ -367,8 +411,13 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
                 let arr = cx.names.name(&Ty::Array(Box::new(Ty::Span(Box::new(p.elem.clone()))), n));
                 let _ = writeln!(s, "  {arr} {}_spans;", p.name);
                 for k in 0..n {
-                    let _ =
-                        writeln!(s, "  {}_spans.a[{k}] = onsa_span_{tag}_of({cast}{}[{k}], frames);", p.name, p.name);
+                    // With 0 frames the array of channel pointers is not read (S-204).
+                    let _ = writeln!(
+                        s,
+                        "  {}_spans.a[{k}] = onsa_span_{tag}_of({cast}(frames != 0 ? {} : NULL), frames);",
+                        p.name,
+                        channel_ptr(p, k)
+                    );
                 }
                 // `[Span[T]; N]` parameters are aggregates: borrowed → `const T*`, `inout` → `T*`.
                 args.push(format!("&{}_spans", p.name));

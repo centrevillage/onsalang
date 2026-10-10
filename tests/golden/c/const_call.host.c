@@ -91,8 +91,18 @@ void onsa_scaled_params_default(onsa_scaled_params* p) { const_call__scaled__par
 
 int onsa_scaled_process(onsa_scaled* s, const onsa_scaled_params* p, const float* x, float* out, uint32_t frames) {
   const_call__scaled__Params q;
-  if (!s->initialized || s->poisoned) return 1;
-  if (onsa_overlaps(x, (size_t)frames * sizeof(float), out, (size_t)frames * sizeof(float))) return 2;
+  if (!s->initialized || s->poisoned) {
+    if (frames != 0) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+    }
+    return 1;
+  }
+  if (frames != 0) {
+    if (onsa_overlaps(x, (size_t)frames * sizeof(float), out, (size_t)frames * sizeof(float))) {
+      memset(out, 0, (size_t)frames * sizeof(float));
+      return 2;
+    }
+  }
   q = *p;
   const_call__scaled__process(s, &q, onsa_span_f32_of((float*)x, frames), onsa_span_f32_of(out, frames));
   return 0;

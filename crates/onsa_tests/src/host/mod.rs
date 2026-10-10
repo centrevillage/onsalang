@@ -15,6 +15,15 @@
 //! // ]
 //! ```
 //!
+//! `place` (a `process` step) puts buffers in one shared region at byte
+//! offsets, to make partial overlaps and adjacent buffers (spec §14.2):
+//! `place = { input = 0, output = 4 }`; by name when there are several
+//! (`input = { l = 0, r = 16 }`, a struct `output = { a = 32 }`); one offset
+//! per channel for `[T; N]` (`output = [0, 12]`). The buffers it does not
+//! name keep their own storage. Before the call the outputs' contents
+//! (`fill` or the pattern) are written first, then the inputs, so an input
+//! holds its values where buffers overlap.
+//!
 //! The layers, so that a change of the C API touches one place:
 //!
 //! - this module: the form of a sequence and the checks that need no build
@@ -91,6 +100,7 @@ pub struct Step {
     pub input: Option<toml::Value>,
     pub fill: Option<toml::Value>,
     pub inplace: Option<bool>,
+    pub place: Option<toml::Table>,
     pub null: Option<Vec<NullArg>>,
     pub status: Option<i64>,
     pub output: Option<toml::Value>,
@@ -254,7 +264,7 @@ fn check_step(st: &Step, flow: bool) -> Result<(), String> {
         _ => {}
     }
     // (field, written, allowed for this call)
-    let fields: [(&str, bool, &[Call]); 12] = [
+    let fields: [(&str, bool, &[Call]); 13] = [
         ("config", st.config.is_some(), &[Call::Init]),
         ("sample_rate", st.sample_rate.is_some(), &[Call::Init]),
         ("params", st.params.is_some(), &[Call::Process]),
@@ -262,6 +272,7 @@ fn check_step(st: &Step, flow: bool) -> Result<(), String> {
         ("input", st.input.is_some(), &[Call::Process]),
         ("fill", st.fill.is_some(), &[Call::Process]),
         ("inplace", st.inplace.is_some(), &[Call::Process]),
+        ("place", st.place.is_some(), &[Call::Process]),
         ("null", st.null.is_some(), &[Call::Init, Call::Process]),
         ("status", st.status.is_some(), &[Call::Init, Call::Process, Call::Fn]),
         ("output", st.output.is_some(), &[Call::Process]),
@@ -330,6 +341,14 @@ fn check_step(st: &Step, flow: bool) -> Result<(), String> {
                 }
             } else {
                 need("output", st.output.is_some())?;
+            }
+            if st.place.is_some() {
+                if !nulls.is_empty() {
+                    return Err("`place` with `null`: a NULL buffer has no place".into());
+                }
+                if st.inplace.is_some() {
+                    return Err("`place` with `inplace`: write the same offset in `place` instead".into());
+                }
             }
             if st.inplace == Some(true) {
                 if !nulls.is_empty() {

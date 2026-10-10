@@ -1,0 +1,117 @@
+// onsa.toml
+// [package]
+// name = "export_planar_lengths_out"
+// edition = "2026"
+//
+// [export]
+// prefix = "epo_"
+// fns = [
+//   "export_planar_lengths_out.dup_at",
+//   "export_planar_lengths_out.trio_at",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§5.3", "§9.2", "§14.2"]
+//
+// # R-22, S-196 (§11.6): the lengths of the channels of a planar OUTPUT are compared too (the
+// # companion of export_planar_lengths_in.onsa, which has the input channels). The output
+// # channels here are views of local arrays made with `inout xs.slice(from, to)` in an
+// # `inout [..]` literal (§5.3), so the lengths can differ in Onsa code (the C API itself has one
+// # `frames`). The case waits for W4-08: an `inout` array literal of views is E0701 until then.
+// # The sum of the last frames of the channels is returned; a panic of `process` is the status 1.
+//
+// # `dup` writes `x` and `x * 2` to the two channels: the last frames are 4 and 8, the sum 12.
+// [[test.host]]
+// name = "dup_at: equal output channel lengths process"
+// target = "host"
+// fn = "export_planar_lengths_out.dup_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 4 }, status = 0, result = 12.0 },
+// ]
+//
+// # The output channel 1 is longer or shorter than the output channel 0 and the input (4).
+// [[test.host]]
+// name = "dup_at: a longer output channel 1 panics"
+// target = "host"
+// fn = "export_planar_lengths_out.dup_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 5 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "dup_at: a shorter output channel 1 panics"
+// target = "host"
+// fn = "export_planar_lengths_out.dup_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 3 }, status = 1 },
+// ]
+//
+// # Both output channels are equal (4) but the input has another length.
+// [[test.host]]
+// name = "dup_at: an input of another length than the output panics"
+// target = "host"
+// fn = "export_planar_lengths_out.dup_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0, 5.0], n = 4 }, status = 1 },
+// ]
+//
+// # Three output channels, the mismatch in the last one and in the middle one.
+// [[test.host]]
+// name = "trio_at: equal output channel lengths process"
+// target = "host"
+// fn = "export_planar_lengths_out.trio_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n1 = 4, n2 = 4 }, status = 0, result = 24.0 },
+// ]
+//
+// [[test.host]]
+// name = "trio_at: a longer last output channel panics"
+// target = "host"
+// fn = "export_planar_lengths_out.trio_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n1 = 4, n2 = 5 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "trio_at: a longer middle output channel panics"
+// target = "host"
+// fn = "export_planar_lengths_out.trio_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n1 = 5, n2 = 4 }, status = 1 },
+// ]
+
+/// The input and its double.
+pub flow dup(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x * 2.0]
+}
+
+/// The input, its double and its triple.
+pub flow trio(x: F32 at sample) -> [F32; 3] at sample {
+  [x, x * 2.0, x * 3.0]
+}
+
+/// Runs `dup` over `src` into the views of 4 frames of channel 0 and `n` frames of channel 1.
+pub fn dup_at(src: Span[F32], n: U32) -> F32 {
+  var st = dup.init(dup.Config {}, 8.0)
+  var a: [F32; 6] = [0.0; 6]
+  var b: [F32; 6] = [0.0; 6]
+  dup.process(inout st, dup.Params {}, src, inout [a.slice(0, 4), b.slice(0, n)])
+  a[3] + b[3]
+}
+
+/// Runs `trio` over `src` into the views of 4 frames of channel 0, `n1` of channel 1, `n2` of channel 2.
+pub fn trio_at(src: Span[F32], n1: U32, n2: U32) -> F32 {
+  var st = trio.init(trio.Config {}, 8.0)
+  var a: [F32; 6] = [0.0; 6]
+  var b: [F32; 6] = [0.0; 6]
+  var c: [F32; 6] = [0.0; 6]
+  trio.process(inout st, trio.Params {}, src, inout [a.slice(0, 4), b.slice(0, n1), c.slice(0, n2)])
+  a[3] + b[3] + c[3]
+}

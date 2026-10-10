@@ -1,0 +1,223 @@
+// onsa.toml
+// [package]
+// name = "export_silence_shapes"
+// edition = "2026"
+//
+// [export]
+// prefix = "es_"
+// flows = [
+//   "export_silence_shapes.guard2",
+//   "export_silence_shapes.fold",
+//   "export_silence_shapes.fan",
+//   "export_silence_shapes.guard2_cfg",
+//   "export_silence_shapes.scaled",
+//   "export_silence_shapes.trunc1",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§9.2", "§11.6", "§14.2"]
+//
+// # S-199, R-12 (§9.2 "export された flow の process", §14.2): the output of a call that returns 1 is
+// # zero in every channel and every frame, in all the shapes of the signals (a mono, a planar
+// # input, a planar output). It is the same for the call that panics (also the frames it had
+// # computed before the panic), the later calls of a poisoned instance, and the calls of an
+// # uninitialized instance, whatever the input and whatever the buffer held (the driver fills an
+// # output with the pattern 0xa5 unless the step says `fill`). The steps that only make the state
+// # are checked again in groups that do not wait for R-12.
+//
+// # Stereo in, stereo out: channel 0 is `x0 + trunc(x1)`, channel 1 is `x1`. The panic is in the
+// # frame 1 (NaN in channel 1), after the frame 0 of both channels is computed.
+// [[test.host]]
+// name = "a stereo call that panics is zero-filled in both channels"
+// target = "host"
+// flow = "export_silence_shapes.guard2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], status = 0, output = [[2.0, 4.0, 6.0], [1.0, 2.0, 3.0]] },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, nan, 3.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], status = 0, output = [[2.0, 4.0, 6.0], [1.0, 2.0, 3.0]] },
+// ]
+//
+// # The calls after the panic: both channels are silent whatever the input, also with the output
+// # buffers of the old contents and with the input buffers as the output (`process_inplace`: the
+// # input must not pass through).
+// [[test.host]]
+// name = "a poisoned stereo instance outputs silence in both channels"
+// target = "host"
+// flow = "export_silence_shapes.guard2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, nan, 3.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 3, input = [[5.0, 6.0, 7.0], [8.0, 9.0, 10.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 3, input = [[5.0, 6.0, 7.0], [8.0, 9.0, 10.0]], inplace = true, status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], fill = [[9.0, 9.0, 9.0], [7.0, 7.0, 7.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// # A stereo input and a mono output.
+// [[test.host]]
+// name = "a stereo call that panics is zero-filled in the mono output"
+// target = "host"
+// flow = "export_silence_shapes.fold"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, nan]], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], status = 0, output = [2.0, 4.0, 6.0] },
+// ]
+//
+// [[test.host]]
+// name = "a poisoned instance with a stereo input and a mono output outputs silence"
+// target = "host"
+// flow = "export_silence_shapes.fold"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, 2.0, nan]], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 3, input = [[5.0, 6.0, 7.0], [8.0, 9.0, 10.0]], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = {}, frames = 3, input = [[5.0, 6.0, 7.0], [8.0, 9.0, 10.0]], fill = [9.0, 9.0, 9.0], status = 1, output = [0.0, 0.0, 0.0] },
+// ]
+//
+// # A mono input and a stereo output: `[trunc(x), x]`.
+// [[test.host]]
+// name = "a mono call that panics is zero-filled in the stereo output"
+// target = "host"
+// flow = "export_silence_shapes.fan"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [[1.0, 2.0, 3.0], [1.5, 2.5, 3.5]] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, nan], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 0, output = [[1.0, 2.0, 3.0], [1.5, 2.5, 3.5]] },
+// ]
+//
+// [[test.host]]
+// name = "a poisoned instance with a stereo output outputs silence in both channels"
+// target = "host"
+// flow = "export_silence_shapes.fan"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, nan], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 3, input = [1.5, 2.5, 3.5], fill = [[9.0, 9.0, 9.0], [7.0, 7.0, 7.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// # An instance whose `init` panicked (n = 0: `100 / n`): every `process` returns 1 with silence
+// # in both channels, `reset` changes nothing, and a good `init` (n = 4: 100 / 4 = 25 is added to
+// # channel 0) recovers it.
+// [[test.host]]
+// name = "an uninitialized stereo instance outputs silence"
+// target = "host"
+// flow = "export_silence_shapes.guard2_cfg"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 8.0, status = 1 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], inplace = true, status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], fill = [[9.0, 9.0, 9.0], [7.0, 7.0, 7.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+// ]
+//
+// [[test.host]]
+// name = "a good init recovers an uninitialized stereo instance"
+// target = "host"
+// flow = "export_silence_shapes.guard2_cfg"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 8.0, status = 1 },
+//   { call = "reset" },
+//   { call = "init", config = { n = 4 }, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], status = 0, output = [[26.0, 27.0, 28.0], [4.0, 5.0, 6.0]] },
+// ]
+//
+// # A panic in the `block` stage (`100 / d` with d = 0) aborts the call before any frame: the
+// # whole output is zero. The block input `d` is a field of `params`.
+// [[test.host]]
+// name = "a panic in the block stage zero-fills the call"
+// target = "host"
+// flow = "export_silence_shapes.scaled"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 5 }, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [20.0, 40.0, 60.0] },
+//   { call = "process", params = { d = 0 }, frames = 3, input = [1.0, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "reset" },
+//   { call = "process", params = { d = 5 }, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [20.0, 40.0, 60.0] },
+// ]
+//
+// # The instance that the block stage poisoned is silent for the calls that follow, also for
+// # parameters that would not panic.
+// [[test.host]]
+// name = "an instance poisoned by the block stage outputs silence"
+// target = "host"
+// flow = "export_silence_shapes.scaled"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = { d = 0 }, frames = 3, input = [1.0, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = { d = 5 }, frames = 3, input = [1.0, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+//   { call = "process", params = { d = 5 }, frames = 3, input = [1.0, 2.0, 3.0], inplace = true, status = 1, output = [0.0, 0.0, 0.0] },
+// ]
+//
+// # The position of the panic in the call does not matter: in the first frame, in the last frame
+// # (the frames before it are computed and zeroed too).
+// [[test.host]]
+// name = "a panic in the first frame zero-fills the call"
+// target = "host"
+// flow = "export_silence_shapes.trunc1"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [2.0, 4.0, 6.0] },
+//   { call = "process", params = {}, frames = 3, input = [nan, 2.0, 3.0], status = 1, output = [0.0, 0.0, 0.0] },
+// ]
+//
+// [[test.host]]
+// name = "a panic in the last frame zero-fills the frames computed before it"
+// target = "host"
+// flow = "export_silence_shapes.trunc1"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, nan], status = 1, output = [0.0, 0.0, 0.0] },
+// ]
+
+/// Channel 0 is `x0 + trunc(x1)`, channel 1 is `x1`. `trunc_i32` panics for NaN.
+pub flow guard2(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  let n = x[1].trunc_i32()
+  [x[0] + n.round_f32(), x[1]]
+}
+
+/// Stereo to mono.
+pub flow fold(x: [F32; 2] at sample) -> F32 at sample {
+  let n = x[1].trunc_i32()
+  x[0] + n.round_f32()
+}
+
+/// Mono to stereo.
+pub flow fan(x: F32 at sample) -> [F32; 2] at sample {
+  let n = x.trunc_i32()
+  [n.round_f32(), x]
+}
+
+/// `100 / n` is computed once at init: n = 0 panics inside `init`.
+pub flow guard2_cfg(x: [F32; 2] at sample, n: I32 at init) -> [F32; 2] at sample {
+  let k = 100 / n
+  [x[0] + k.round_f32(), x[1]]
+}
+
+/// `100 / d` is computed once per call: d = 0 panics in the block stage.
+pub flow scaled(
+  x: F32 at sample,
+  @param(min: 0, max: 1000, default: 5)
+  d: I32 at block,
+) -> F32 at sample {
+  let g = 100 / d
+  x * g.round_f32()
+}
+
+/// `x + trunc(x)`.
+pub flow trunc1(x: F32 at sample) -> F32 at sample {
+  x + x.trunc_i32().round_f32()
+}

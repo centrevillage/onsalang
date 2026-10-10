@@ -559,7 +559,12 @@ fn planar_and_struct_outputs() {
     assert!(d.contains("inout l: Span[F32], inout r: Span[F32]) -> () {"), "{d}");
     assert!(d.contains("l[i] = v.0\n    r[i] = v.1"), "{d}");
     assert!(d.contains(": [Span[F32]; 2], inout out: [Span[F32]; 2]) -> () {"), "{d}");
-    assert!(d.contains("[0:U32])\n  if (len(out[0:U32]) != len) {"), "{d}");
+    // R-22: every channel of every span is compared with the first, before `ctl`.
+    assert!(
+        d.contains("[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  if (len(out[0:U32]) != len) {"),
+        "{d}"
+    );
+    assert!(d.contains("if (len(out[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  t.dup.ctl("), "{d}");
     assert!(d.contains("[0:U32][i], x"), "{d}");
     assert!(d.contains("[1:U32][i]]\n"), "{d}");
     assert!(d.contains("out[0:U32][i] = v[0:U32]\n    out[1:U32][i] = v[1:U32]"), "{d}");

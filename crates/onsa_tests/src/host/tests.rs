@@ -100,6 +100,10 @@ fn the_forms_of_a_sequence() {
             flow_seq(&[INIT, "{ call = \"process\", params = {}, frames = 0, input = [], status = 0 }"]),
         ),
         (
+            "needs `output`",
+            flow_seq(&[INIT, "{ call = \"process\", params = {}, frames = 0, input = [], status = 2 }"]),
+        ),
+        (
             "needs `frames = 0`",
             flow_seq(&[
                 INIT,
@@ -139,6 +143,24 @@ fn the_forms_of_a_sequence() {
             flow_seq(&[INIT, "{ call = \"process\", params = {}, frames = 0, input = [], status = 3, output = [] }"]),
         ),
         ("`status = 2`", GOOD.replacen("status = 1 }", "status = 2 }", 1)),
+        (
+            "`place` with `null`",
+            flow_seq(&[
+                INIT,
+                "{ call = \"process\", params = {}, frames = 0, null = [\"input\"], place = { output = 0 }, status = 0, output = [] }",
+            ]),
+        ),
+        (
+            "`place` with `inplace`",
+            flow_seq(&[
+                INIT,
+                "{ call = \"process\", params = {}, frames = 1, input = [1.0], inplace = true, place = { input = 0 }, status = 0, output = [1.0] }",
+            ]),
+        ),
+        (
+            "is not a field of `call = \"init\"`",
+            flow_seq(&["{ call = \"init\", config = {}, sample_rate = 8.0, status = 0, place = {} }"]),
+        ),
         ("belongs to a sequence of `fn`", flow_seq(&[INIT, "{ call = \"fn\", args = {}, status = 0 }"])),
         (
             "is not a field of `call = \"init\"`",
@@ -231,6 +253,22 @@ fn values_are_checked_against_the_build() {
         ),
         ("needs `input`", "{ call = \"process\", params = { k = 1.0 }, frames = 0, status = 0, output = [] }"),
         (
+            "`place.output = 2` is not a multiple of 4",
+            "{ call = \"process\", params = { k = 1.0 }, frames = 1, input = [1.0], place = { output = 2 }, status = 0, output = [1.0] }",
+        ),
+        (
+            "`place` has `out`, which is not `input` or `output`",
+            "{ call = \"process\", params = { k = 1.0 }, frames = 1, input = [1.0], place = { out = 0 }, status = 0, output = [1.0] }",
+        ),
+        (
+            "`place.input` is a byte offset",
+            "{ call = \"process\", params = { k = 1.0 }, frames = 1, input = [1.0], place = { input = -4 }, status = 0, output = [1.0] }",
+        ),
+        (
+            "`place.input` is a byte offset",
+            "{ call = \"process\", params = { k = 1.0 }, frames = 1, input = [1.0], place = { input = [0] }, status = 0, output = [1.0] }",
+        ),
+        (
             "unwritten pattern",
             "{ call = \"process\", params = { k = 1.0 }, frames = 1, input = [1.0], status = 0, output = [-2.8735182454018313e-16] }",
         ),
@@ -253,6 +291,15 @@ fn values_are_checked_against_the_build() {
         let e = p[0].as_ref().map(|_| ()).unwrap_err();
         assert!(e.contains(needle), "{needle}: {e}");
     }
+    // `place` (W2-08): the region reaches the end of the last placed channel; a step of status 2
+    // records and compares its outputs like any other (S-206: they are zero).
+    let step2 = "{ call = \"process\", params = { k = 1.0 }, frames = 3, input = [1.0, 2.0, 3.0], place = { input = 4, output = 0 }, status = 2, output = [0.0, 0.0, 0.0] }";
+    let (_, p) = plans(&flow_seq(&[INIT, step2]));
+    let op = &p[0].as_ref().unwrap().steps[1].op;
+    let plan::Op::Process { inputs: Some(ins), outputs: Some(outs), .. } = op else { panic!("{op:?}") };
+    assert_eq!(plan::region_len(ins, outs, 3), 16);
+    assert_eq!(plan::record_len(op), 16);
+    assert!(outs[0].place == Some(vec![0]) && ins[0].place == Some(vec![4]));
     let unexported = GOOD.replacen("fn = \"m.sub\"", "fn = \"m.nope\"", 1);
     let (_, p) = plans(&unexported);
     assert!(p[1].as_ref().map(|_| ()).unwrap_err().contains("is not exported for target `t`"));
@@ -633,19 +680,20 @@ fn the_program_and_its_input() {
     let bytes = |p: &SeqPlan| plan::input_bytes(p, p.steps.len());
     let f32s = |xs: &[f32]| xs.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
     let pat = |n: usize| vec![PATTERN; n];
+    // A step reads the outputs' contents before the inputs (W2-08: an input placed over an output keeps its values).
     let swap = [
         f32s(&[8.0]),
-        f32s(&[1.0, 2.0, 3.0, 4.0]),
         pat(16),
+        f32s(&[1.0, 2.0, 3.0, 4.0]),
         f32s(&[5.0, 6.0, 7.0, 8.0]),
-        f32s(&[1.0, 2.0]),
         f32s(&[9.0, -9.0]),
+        f32s(&[1.0, 2.0]),
     ]
     .concat();
     assert_eq!(bytes(&plans[0]), swap);
-    assert_eq!(bytes(&plans[4]), [f32s(&[2.0, 0.5, 8.0]), f32s(&[2.0]), pat(4)].concat());
+    assert_eq!(bytes(&plans[4]), [f32s(&[2.0, 0.5, 8.0]), pat(4), f32s(&[2.0])].concat());
     let gain = bytes(&plans[5]);
-    assert_eq!(gain[..20], [f32s(&[8.0]), f32s(&[3.0, 1.0, 2.0]), pat(4)].concat());
+    assert_eq!(gain[..20], [f32s(&[8.0]), f32s(&[3.0, 1.0]), pat(4), f32s(&[2.0])].concat());
     assert_eq!(bytes(&plans[7]), [f32s(&[2.5, 1.0])].concat());
     // the order of a function's arguments
     let (_, p) = plans_of(GOOD);

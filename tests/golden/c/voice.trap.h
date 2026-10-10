@@ -21,7 +21,8 @@ typedef struct onsa_voice_params { float f0; float vowel_f1; float vowel_f2; flo
 int  onsa_voice_init(onsa_voice* s, void* bulk, float sample_rate);
 void onsa_voice_reset(onsa_voice* s);   /* clears `poisoned`; no effect on an uninitialized instance */
 void onsa_voice_params_default(onsa_voice_params* p);
-/* 0: ok, 1: poisoned or uninitialized, 2: partially overlapping buffers (identical in/out pointers are in-place). */
+/* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair
+ * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */
 int  onsa_voice_process(onsa_voice* s, const onsa_voice_params* p, float* out, uint32_t frames);
 extern const onsa_param_info onsa_voice_param_info[4];
 
@@ -56,7 +57,8 @@ typedef struct onsa_echo_params { float time; float feedback; } onsa_echo_params
 int  onsa_echo_init(onsa_echo* s, void* bulk, float sample_rate);
 void onsa_echo_reset(onsa_echo* s);   /* clears `poisoned`; no effect on an uninitialized instance */
 void onsa_echo_params_default(onsa_echo_params* p);
-/* 0: ok, 1: poisoned or uninitialized, 2: partially overlapping buffers (identical in/out pointers are in-place). */
+/* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair
+ * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */
 int  onsa_echo_process(onsa_echo* s, const onsa_echo_params* p, const float* x, float* out, uint32_t frames);
 extern const onsa_param_info onsa_echo_param_info[2];
 

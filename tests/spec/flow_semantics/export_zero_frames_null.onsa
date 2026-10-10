@@ -1,0 +1,160 @@
+// onsa.toml
+// [package]
+// name = "export_zero_frames_null"
+// edition = "2026"
+//
+// [export]
+// prefix = "ezn_"
+// flows = [
+//   "export_zero_frames_null.st2",
+//   "export_zero_frames_null.down2",
+//   "export_zero_frames_null.up2",
+//   "export_zero_frames_null.guard2",
+//   "export_zero_frames_null.guard2_cfg",
+//   "export_zero_frames_null.names0",
+//   "export_zero_frames_null.pairs",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§14.2", "§11.6"]
+//
+// # S-204 (§14.2 "`frames` が 0 の `process`…入出力のポインタ（`In` / `Out` の構造体へのポインタを含む）は
+// # 読まないので NULL でよく、重なりの検査もしない"): the pointers of the shapes that are not a plain
+// # mono signal. WARNING: the process of the implementation before W2-08 reads `x[0]` of a NULL
+// # planar input in its overlap check and dies with SIGSEGV (the machine shows a crash dialog,
+// # agent-rules.md 3), so this file must not be run before that is fixed: it is kept apart from
+// # export_zero_frames.onsa (the mono shapes) for that reason. The meaning of `null = ["input"]`
+// # for the shapes: all the pointers of the input are NULL, and, for a flow with named inputs or
+// # a struct output, also the pointer to the `In` / `Out` struct of the C API of spec §14.2
+// # (the implementation passes the per-field pointers until W10-03).
+//
+// # A planar flow: channel 0 is the input of the previous sample, channel 1 passes. The NULL
+// # calls change nothing: the next call goes on from the last input 3 of channel 0.
+// [[test.host]]
+// name = "a zero-frame call may pass NULL planar pointers"
+// target = "host"
+// flow = "export_zero_frames_null.st2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], status = 0, output = [[0.0, 1.0, 2.0], [4.0, 5.0, 6.0]] },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input"], status = 0, output = [[], []] },
+//   { call = "process", params = {}, frames = 0, null = ["output"], input = [[], []], status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [[7.0, 8.0], [9.0, 10.0]], status = 0, output = [[3.0, 7.0], [9.0, 10.0]] },
+// ]
+//
+// # A planar input with a mono output, and a mono input with a planar output.
+// [[test.host]]
+// name = "a zero-frame call may pass NULL pointers to a planar input and a mono output"
+// target = "host"
+// flow = "export_zero_frames_null.down2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [[1.0, 2.0], [3.0, 4.0]], status = 0, output = [2.0, 3.0] },
+// ]
+//
+// [[test.host]]
+// name = "a zero-frame call may pass NULL pointers to a mono input and a planar output"
+// target = "host"
+// flow = "export_zero_frames_null.up2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = [[1.0, 2.0], [2.0, 4.0]] },
+// ]
+//
+// # Several named inputs (the `In` struct of §11.6) and a struct output (the `Out` struct).
+// [[test.host]]
+// name = "a zero-frame call may pass NULL pointers to named inputs"
+// target = "host"
+// flow = "export_zero_frames_null.names0"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 2, input = { x = [1, 2], xs = [0.5, 1.5] }, status = 0, output = [1.5, 3.5] },
+// ]
+//
+// [[test.host]]
+// name = "a zero-frame call may pass a NULL struct output"
+// target = "host"
+// flow = "export_zero_frames_null.pairs"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = { l = [1.0, 2.0], r = [2.0, 4.0] } },
+// ]
+//
+// # A poisoned or uninitialized planar instance returns 1 for a 0-frame call with NULL pointers
+// # without reading them.
+// [[test.host]]
+// name = "a zero-frame call with NULL planar pointers on a poisoned instance returns 1"
+// target = "host"
+// flow = "export_zero_frames_null.guard2"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [[1.0, 2.0, 3.0], [1.0, nan, 3.0]], status = 1, output = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 1 },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+// ]
+//
+// [[test.host]]
+// name = "a zero-frame call with NULL planar pointers on an uninitialized instance returns 1"
+// target = "host"
+// flow = "export_zero_frames_null.guard2_cfg"
+// steps = [
+//   { call = "init", config = { n = 0 }, sample_rate = 8.0, status = 1 },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 1 },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 1 },
+// ]
+
+/// Channel 0 is the previous input, channel 1 passes.
+pub flow st2(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [prev~(x[0]), x[1]]
+}
+
+/// The mean of two channels.
+pub flow down2(x: [F32; 2] at sample) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+/// A mono input and its double.
+pub flow up2(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x * 2.0]
+}
+
+/// Panics for a NaN in channel 1.
+pub flow guard2(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  let n = x[1].trunc_i32()
+  [x[0] + n.round_f32(), x[1]]
+}
+
+/// `100 / n` is computed once at init: n = 0 panics inside `init`.
+pub flow guard2_cfg(x: [F32; 2] at sample, n: I32 at init) -> [F32; 2] at sample {
+  let k = 100 / n
+  [x[0] + k.round_f32(), x[1]]
+}
+
+/// Two inputs, `x` a U8 and `xs` an F32.
+pub flow names0(x: U8 at sample, xs: F32 at sample) -> F32 at sample {
+  (x as F32) + xs
+}
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+/// A struct output.
+pub flow pairs(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 2.0 }
+}

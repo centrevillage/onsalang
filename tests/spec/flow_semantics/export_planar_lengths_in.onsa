@@ -1,0 +1,143 @@
+// onsa.toml
+// [package]
+// name = "export_planar_lengths_in"
+// edition = "2026"
+//
+// [export]
+// prefix = "epi_"
+// fns = [
+//   "export_planar_lengths_in.mix2_at",
+//   "export_planar_lengths_in.mix3_at",
+// ]
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§5.3", "§9.2", "§14.2"]
+//
+// # R-22, S-196 (§11.6 "全ての `Span` の長さは等しくなければならず、違えば panic する。長さは呼び出しの最初に…
+// # 一度だけ比べる"): the generated `process` compares the lengths of ALL the `Span`s of the planar
+// # input and of the output, not the channel 0 only. The Onsa function below calls `process` of a
+// # flow with the Spans of its arguments (each argument is a pointer and a length at the export
+// # boundary, §14.2) and an output array of 4 frames, and returns the last frame of the output;
+// # the panic of `process` is a panic of the function, which the boundary reports by the status
+// # 1 (§9.2; the result of a panicked call is not compared). The `process` of the C API itself
+// # has one `frames` for all the channels, so the unequal lengths can only be made in Onsa code.
+// #
+// # The lengths are equal (4 and 4, output 4): the call is good, the last frame of the output is
+// # (4 + 6) * 0.5 = 5.
+// [[test.host]]
+// name = "mix2_at: equal lengths process"
+// target = "host"
+// fn = "export_planar_lengths_in.mix2_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [3.0, 4.0, 5.0, 6.0] }, status = 0, result = 5.0 },
+// ]
+//
+// # Channel 1 longer than channel 0 and than the output: only a comparison of every channel
+// # finds it (R-22: the loop would read the first 4 frames of both and never notice).
+// [[test.host]]
+// name = "mix2_at: a longer channel 1 panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix2_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [3.0, 4.0, 5.0, 6.0, 7.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mix2_at: a shorter channel 1 panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix2_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [3.0, 4.0, 5.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mix2_at: a longer channel 0 panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix2_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0, 5.0], b = [3.0, 4.0, 5.0, 6.0] }, status = 1 },
+// ]
+//
+// # Both input channels are equal but longer or shorter than the output (4): the input and the
+// # output have different lengths.
+// [[test.host]]
+// name = "mix2_at: an input longer than the output panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix2_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0, 5.0], b = [3.0, 4.0, 5.0, 6.0, 7.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mix2_at: an input shorter than the output panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix2_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0], b = [3.0, 4.0, 5.0] }, status = 1 },
+// ]
+//
+// # Three channels: the mismatch is in the last channel, or in the middle one.
+// [[test.host]]
+// name = "mix3_at: equal lengths process"
+// target = "host"
+// fn = "export_planar_lengths_in.mix3_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [1.0, 2.0, 3.0, 6.0], c = [1.0, 2.0, 3.0, 8.0] }, status = 0, result = 4.5 },
+// ]
+//
+// [[test.host]]
+// name = "mix3_at: a longer last channel panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix3_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [1.0, 2.0, 3.0, 6.0], c = [1.0, 2.0, 3.0, 8.0, 9.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mix3_at: a longer middle channel panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix3_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [1.0, 2.0, 3.0, 6.0, 9.0], c = [1.0, 2.0, 3.0, 8.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "mix3_at: a shorter last channel panics"
+// target = "host"
+// fn = "export_planar_lengths_in.mix3_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [1.0, 2.0, 3.0, 6.0], c = [1.0, 2.0, 3.0] }, status = 1 },
+// ]
+
+/// Stereo to mono.
+pub flow mix2(x: [F32; 2] at sample) -> F32 at sample {
+  (x[0] + x[1]) * 0.5
+}
+
+/// Three channels to mono.
+pub flow mix3(x: [F32; 3] at sample) -> F32 at sample {
+  (x[0] + x[1] + x[2]) * 0.25
+}
+
+/// Runs `mix2` over the Spans `a` and `b` into an output of 4 frames; the last frame.
+pub fn mix2_at(a: Span[F32], b: Span[F32]) -> F32 {
+  var st = mix2.init(mix2.Config {}, 8.0)
+  var out: [F32; 4] = [0.0; 4]
+  mix2.process(inout st, mix2.Params {}, [a, b], inout out)
+  out[3]
+}
+
+/// Runs `mix3` over the Spans `a`, `b` and `c` into an output of 4 frames; the last frame.
+pub fn mix3_at(a: Span[F32], b: Span[F32], c: Span[F32]) -> F32 {
+  var st = mix3.init(mix3.Config {}, 8.0)
+  var out: [F32; 4] = [0.0; 4]
+  mix3.process(inout st, mix3.Params {}, [a, b, c], inout out)
+  out[3]
+}

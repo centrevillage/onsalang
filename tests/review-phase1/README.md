@@ -51,7 +51,7 @@
 | `flow/e5/` | R-03（`par` の中の look-back） |
 | `flow/e8/`、`flow/e9/`、`flow/e18/` | R-15 |
 | `flow/e10/` | R-03（自分をインスタンスにする flow） |
-| `flow/e11/` | R-22 |
+| `flow/e11/` | R-22。W2-08 で期待値付きのテストへ移した: `tests/spec/flow_semantics/export_planar_lengths_in.onsa`、`planar_length_bufs.onsa`・`planar_length_bufs_late.onsa`（全てのチャンネルの長さの比較） |
 | `flow/e12/` | R-41 |
 | `flow/e13/` | R-100、R-03 |
 | `flow/e6/`、`flow/e14/` | R-48 |
@@ -71,7 +71,7 @@
 | `cback/p1/` | R-10、R-11、R-48、R-93。R-10 と R-11 の部分（`narrow_u32`、`shr_i8` / `shr_i16`、`wmul_u16` / `wmul_i16`、`cmul_u32`、`sat_i64` / `sat_u64`）は W2-05 で期待値付きのテストへ移した: テストベクトル（`tests/vectors/` の `u32.narrow_i32`、`i8.shr`、`i16.shr`、`u16.wmul`、`i16.wmul`、`u32.checked_mul`、`f64.trunc_i64_sat`、`f64.trunc_u64_sat` などを gate の `vectors-c` が全てのツールチェーンで）、`tests/spec/c_runtime/` の `c_narrow_u2s.onsa`・`c_shift.onsa`・`c_mul.onsa`・`c_trunc.onsa`・`c_int_modules/` |
 | `cback/p2/` | R-09、R-48 |
 | `cback/p3/` | R-47、R-64 |
-| `cback/p4/` | R-12、R-21 |
+| `cback/p4/` | R-12、R-21。R-12 は W2-08 で期待値付きのテストへ移した: `tests/spec/flow_semantics/export_silence_shapes.onsa`、`poison_boundary.onsa`、`tests/host/poison.onsa`（poisoned と未初期化の出力は全て 0）。R-141（入出力の重なりの検査）の決定的な事例は `tests/spec/flow_semantics/export_overlap_place.onsa` |
 | `cback/p5/`、`cback/p13/` | R-48 |
 | `cback/p6/` | R-66 |
 | `cback/p8/` | R-09、R-109 |

@@ -636,12 +636,15 @@ ONSA_INLINE double onsa_clamp_f64(double x, double lo, double hi) { return x < l
   }
 
 /* ---- export wrappers (spec §14.2) ----------------------------------------- */
-/* Partial overlap of two byte ranges (identical starts are in-place, allowed). */
+/* Partial overlap of two byte ranges [a, a + an) and [b, b + bn): the same range is in place
+ * (allowed); the same start with lengths that differ is a partial overlap (S-403). Compared as
+ * integers (the ranges may be distinct objects, which C's `<` on pointers does not order), by the
+ * distance from the lower start, so that a range at the top of the address space does not wrap. */
 ONSA_INLINE bool onsa_overlaps(const void* a, size_t an, const void* b, size_t bn) {
-  const char* pa = (const char*)a;
-  const char* pb = (const char*)b;
-  if (pa == pb) return false;
-  return pa < pb + bn && pb < pa + an;
+  uintptr_t pa = (uintptr_t)a;
+  uintptr_t pb = (uintptr_t)b;
+  if (pa == pb && an == bn) return false;
+  return pa >= pb ? pa - pb < bn : pb - pa < an;
 }
 
 #endif /* ONSA__RUNTIME_H */
