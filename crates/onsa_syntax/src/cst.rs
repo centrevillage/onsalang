@@ -293,7 +293,39 @@ pub enum NodeKind {
     OrPat,
 }
 
+/// What an AST node made from a CST node of a kind is ([`NodeKind::class`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Class {
+    Expr,
+    Type,
+    Pat,
+    Other,
+}
+
 impl NodeKind {
+    /// What an AST node made from a CST node of this kind is (the parser, the
+    /// lowering and the table of the forms of other languages read it).
+    #[inline]
+    pub(crate) fn class(self) -> Class {
+        use NodeKind::*;
+        match self {
+            Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr
+            | MatchExpr | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr
+            | CastExpr | AtExpr | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr
+            | IndexExpr | TryExpr | StructLit => Class::Expr,
+            PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType => Class::Type,
+            WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat
+            | OrPat => Class::Pat,
+            SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
+            | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
+            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
+            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
+            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
+        }
+    }
+
     pub fn name(self) -> &'static str {
         use NodeKind::*;
         match self {

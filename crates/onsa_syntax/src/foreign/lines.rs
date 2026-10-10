@@ -1,14 +1,18 @@
 //! The rows of the line breaks where a symbol touches its partner (§2.5,
 //! W3-06): after a member `.` (S-353), after a prefix `-` / `!` / `^` and
 //! before a postfix `?` (S-369). The candidate moves the symbol to its
-//! partner's line ([`crate::layout::move_token_down`],
-//! [`crate::layout::move_token_up`]). And the symbols at the head of a line
+//! partner's line ([`super::edits::move_token_down`],
+//! [`super::edits::move_token_up`]). And the symbols at the head of a line
 //! that go at the end of the line before (S-124, S-370, S-374, S-380), the
 //! `|` and `||` of a pattern out of their place (S-383, S-389), and the
 //! prefix `+` that Onsa has not (S-405).
 
+use super::edits::move_up;
+use super::edits::{move_token_down, move_token_up};
+use super::lists::comma_before_sign;
 use super::*;
-use crate::layout::{arm_ahead, comma_before_sign, ends_operand, line_head, move_token_down, move_token_up, move_up};
+use crate::scan::arm_ahead;
+use crate::starts::ends_operand;
 
 /// A line break after a member `.` (`s.` and `f` on the next line, also in
 /// a list; S-353): the `.` moves to the head of the next line, before a
@@ -44,7 +48,7 @@ pub(super) fn newline_after_prefix(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let next = c.kind(c.sig_after(c.at));
-    let operand = if kind == TokenKind::Caret { next == TokenKind::Ident } else { crate::parser::starts_operand(next) };
+    let operand = if kind == TokenKind::Caret { next == TokenKind::Ident } else { crate::starts::starts_operand(next) };
     let fixes = if operand {
         move_token_down(c, "write it against its operand", c.at).into_iter().collect()
     } else {
@@ -56,7 +60,7 @@ pub(super) fn newline_after_prefix(c: &Cursor) -> Option<Hit> {
 /// A line break before a postfix `?` (`two(o` and `?, 1)` on the next line;
 /// `let v = o` and `?`; S-369): the `?` moves up to its operand.
 pub(super) fn newline_before_question(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::Question || c.gap(c.at) != Gap::Newline {
+    if c.kind(c.at) != TokenKind::Question || !c.at_line_head(c.at) {
         return None;
     }
     let operand = c.sig_before(c.at).is_some_and(|p| ends_operand(c.kind(p)));
@@ -69,12 +73,12 @@ pub(super) fn newline_before_question(c: &Cursor) -> Option<Hit> {
 /// Whether the failure is inside a pattern: where one starts, after one
 /// that closed there, or in a list of patterns.
 fn in_pattern(c: &Cursor) -> bool {
-    use crate::lower::{Class, class};
+    use crate::cst::Class;
     // The innermost node that closed there and is an expression, a type or a
     // pattern (a name's path inside a pattern is none of them: `Red`).
-    let innermost = c.closed.iter().find(|n| class(n.0) != Class::Other);
+    let innermost = c.closed.iter().find(|n| n.0.class() != Class::Other);
     c.want == Want::Pattern
-        || innermost.is_some_and(|n| class(n.0) == Class::Pat)
+        || innermost.is_some_and(|n| n.0.class() == Class::Pat)
         || matches!(c.want, Want::Separator(NodeKind::TuplePat | NodeKind::TupleStructPat | NodeKind::StructPat))
 }
 
@@ -104,14 +108,14 @@ pub(super) fn leading_symbol(c: &Cursor) -> Option<Hit> {
             fixes.push(move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
         }
         gap => {
-            fixes.extend(crate::layout::move_token_up_as(
+            fixes.extend(super::edits::move_token_up_as(
                 c,
                 "move it to the end of the line before",
                 s,
                 &format!(" {symbol}"),
             ));
-            let list = crate::layout::expression_list(c);
-            let operand = gap == Gap::None && crate::parser::starts_operand(c.kind(s + 1));
+            let list = super::lists::expression_list(c);
+            let operand = gap == Gap::None && crate::starts::starts_operand(c.kind(s + 1));
             if list && operand && matches!(kind, Minus | Caret | Plus) {
                 fixes.push(comma_before_sign(c, prev, s));
             }
@@ -129,18 +133,18 @@ pub(super) fn leading_symbol(c: &Cursor) -> Option<Hit> {
 /// `&mut x`) does not move: what is left would be wrong (S-236).
 pub(super) fn leading(c: &Cursor) -> Option<(usize, usize)> {
     use TokenKind::*;
-    let (s, prev) = line_head(c)?;
+    let (s, prev) = c.head_symbol_after_operand()?;
     let kind = c.kind(s);
     let sign = matches!(kind, Minus | Caret);
-    let operator = crate::lower::binop(kind).is_some() || matches!(kind, Arrow | Eq);
+    let operator = kind.binop().is_some() || matches!(kind, Arrow | Eq);
     // The prefix rows judge a `- b` and a `^ b` where an expression goes.
     if !operator || (sign && matches!(c.want, Want::Prefix | Want::Expr)) || c.want == Want::Pattern {
         return None;
     }
-    if (kind == OrOr && in_pattern(c)) || (c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c, s)) {
+    if (kind == OrOr && in_pattern(c)) || (c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, s)) {
         return None;
     }
-    let touching = c.gap_after(s) == Gap::None && !crate::parser::starts_operand(c.kind(s + 1));
+    let touching = c.gap_after(s) == Gap::None && !crate::starts::starts_operand(c.kind(s + 1));
     if touching || (kind == Amp && c.is_ident(c.sig_after(s), "mut")) {
         return None;
     }
@@ -158,7 +162,7 @@ pub(super) fn leading(c: &Cursor) -> Option<(usize, usize)> {
         // that has its `=` already (`x = 2` and `= 3` on the next line); the
         // value of a constant of a trait.
         Eq => {
-            (c.want == Want::Expr && c.closed.is_empty() && crate::layout::end_at(c, prev).is_none())
+            (c.want == Want::Expr && c.closed.is_empty() && c.end_at(prev).is_none())
                 || (closed(&[NodeKind::Const]) && closed_expr(c).is_none())
         }
         // After an operand that closed there, or at the start of a statement
@@ -179,9 +183,9 @@ pub(super) fn leading_vert(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let next = c.sig_after(c.at);
-    let starts = c.kind(next) == TokenKind::Pipe || crate::layout::starts_element(NodeKind::TuplePat, c.kind(next));
+    let starts = c.kind(next) == TokenKind::Pipe || crate::starts::starts_element(NodeKind::TuplePat, c.kind(next));
     let kinds = c.tokens[next..].iter().map(|t| t.kind).filter(|k| !k.is_trivia());
-    let (n, _) = crate::parser::pattern_alternative(kinds.clone());
+    let (n, _) = crate::scan::pattern_alternative(kinds.clone());
     let mut depth = 0u32;
     let operator = kinds.take(n).enumerate().any(|(k, kind)| {
         match kind {
@@ -189,7 +193,7 @@ pub(super) fn leading_vert(c: &Cursor) -> Option<Hit> {
             TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth = depth.saturating_sub(1),
             _ => {}
         }
-        depth == 0 && crate::lower::binop(kind).is_some() && !(k == 0 && kind == TokenKind::Minus)
+        depth == 0 && kind.binop().is_some() && !(k == 0 && kind == TokenKind::Minus)
     });
     if !starts || operator {
         return None;
@@ -207,7 +211,7 @@ pub(super) fn pattern_double_vert(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let next = c.kind(c.sig_after(c.at));
-    if next == TokenKind::Pipe || !crate::layout::starts_element(NodeKind::TuplePat, next) {
+    if next == TokenKind::Pipe || !crate::starts::starts_element(NodeKind::TuplePat, next) {
         return None;
     }
     hit(c.span(c.at), vec![Fix::replace("write one `|`", c.span(c.at), "|")])
@@ -228,7 +232,7 @@ pub(super) fn prefix_plus(c: &Cursor) -> Option<Hit> {
     let fits = if c.want == Want::Pattern {
         c.kind(next) == TokenKind::Int
     } else {
-        crate::parser::starts_operand(c.kind(next))
+        crate::starts::starts_operand(c.kind(next))
     };
     if !fits {
         return None;

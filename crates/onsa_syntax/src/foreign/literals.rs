@@ -2,45 +2,7 @@
 //! §2.4).
 
 use super::*;
-
-/// The number and the suffix of a `ForeignLit` written with a suffix
-/// (`1u8`: `1` and `u8`), as the lexer reads them.
-fn split_suffix(text: &str) -> (&str, &str) {
-    let b = text.as_bytes();
-    let mut i = 0;
-    let digits = |i: &mut usize, ok: &dyn Fn(u8) -> bool| {
-        while *i < b.len() && ok(b[*i]) {
-            *i += 1;
-        }
-    };
-    if b.len() > 1 && b[0] == b'0' && matches!(b[1], b'x' | b'b') {
-        let hex = b[1] == b'x';
-        i = 2;
-        if hex {
-            digits(&mut i, &|x: u8| x.is_ascii_hexdigit() || x == b'_');
-        } else {
-            digits(&mut i, &|x: u8| matches!(x, b'0' | b'1' | b'_'));
-        }
-    } else {
-        digits(&mut i, &|x: u8| x.is_ascii_digit() || x == b'_');
-        if i + 1 < b.len() && b[i] == b'.' && b[i + 1].is_ascii_digit() {
-            i += 1;
-            digits(&mut i, &|x: u8| x.is_ascii_digit() || x == b'_');
-        }
-        if i < b.len() && matches!(b[i], b'e' | b'E') {
-            let mut j = i + 1;
-            if j < b.len() && matches!(b[j], b'+' | b'-') {
-                j += 1;
-            }
-            let start = j;
-            digits(&mut j, &|x: u8| x.is_ascii_digit());
-            if j > start {
-                i = j;
-            }
-        }
-    }
-    text.split_at(i)
-}
+use crate::literal::{is_integer, split_suffix};
 
 /// `1.` (a digit after the point is needed) and `1u8` (no type suffix, §2.4).
 /// Where no literal goes (a declaration), the place is an error of its own
@@ -83,17 +45,6 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<Hit> {
     Some(Hit { span, fixes, misplaced: !matches!(c.want, Want::Expr | Want::Pattern) })
 }
 
-/// Whether the number `number` (no suffix) is written as an integer.
-pub(crate) fn is_integer(number: &str) -> bool {
-    let hex = number.starts_with("0x") || number.starts_with("0b");
-    hex || !number.contains(['.', 'e', 'E'])
-}
-
-/// The number part of a number written as in other languages (`1u8`: `1`).
-pub(crate) fn number_part(text: &str) -> &str {
-    split_suffix(text).0
-}
-
 /// The Onsa spelling of a float written as in other languages, in a
 /// pattern (§2.4): `1.` is `1.0`, `0.5f32` is `0.5`, `1f32` is `1.0`, the
 /// `_` before a suffix goes (`1.5_f32` is `1.5`); `None` for an integer with
@@ -115,7 +66,7 @@ pub(super) fn leading_point(c: &Cursor) -> Option<Hit> {
     if c.want != Want::Expr
         || c.kind(c.at) != TokenKind::Dot
         || c.kind(c.at + 1) != TokenKind::Int
-        || c.gap(c.at + 1).is_some()
+        || c.gap_after(c.at).is_some()
     {
         return None;
     }

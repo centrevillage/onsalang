@@ -37,7 +37,7 @@ pub(super) fn operand(kinds: &[TokenKind]) -> Operand {
                 cast = true;
                 expect = true;
             }
-            _ => match crate::lower::binop(k) {
+            _ => match k.binop() {
                 Some(op) => {
                     ops.push(op);
                     expect = true;
@@ -63,7 +63,7 @@ fn needs_parens(c: &Cursor, op: TokenKind, first: usize, last: usize) -> bool {
         return true;
     }
     let operand = operand(&(first..=last).map(|i| c.kind(i)).collect::<Vec<_>>());
-    crate::lower::binop(op).is_none_or(|op| !op.bare(crate::ast::Side::Right, operand))
+    op.binop().is_none_or(|op| !op.bare(crate::ast::Side::Right, operand))
 }
 
 /// `x += 1` (and the other operators): `x = x + 1` when it is a statement
@@ -128,11 +128,11 @@ fn binary_minus_minus(c: &Cursor) -> bool {
     let next = c.kind(c.at + 1);
     // SPEC-GAP(S-349): a blank before the `--` (`a --b`) is the form too.
     c.before(c.at).is_some()
-        && c.gap(c.at) != Gap::Newline
+        && !c.at_line_head(c.at)
         && closed_expr(c).is_some()
-        && c.gap(c.at + 1) == Gap::None
+        && c.gap_after(c.at) == Gap::None
         && !matches!(next, TokenKind::Minus | TokenKind::Bang)
-        && crate::parser::starts_operand(next)
+        && crate::starts::starts_operand(next)
 }
 
 /// `++x`, `x++`, `--x`, `x--` (S-250, S-297): `x = x + 1` as a statement

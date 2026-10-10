@@ -10,11 +10,11 @@ use crate::token::{Gap, TokenKind};
 
 /// A blank before a postfix opener that the parser did not read on
 /// (`square (x)`, `xs [0]`, `fn f (x: I32)`, `p.scale !(2)`, `lp ~(x)`;
-/// [`crate::layout::Detached`], S-89, S-123): E0020, and the candidate takes
+/// [`super::Detached`], S-89, S-123): E0020, and the candidate takes
 /// the blank out (`xs [0]` has the call `xs([0])` as the second, §2.5).
 /// When the token before is no path of names (`)`, `]`, `}`, a literal, `?`;
 /// S-399), the form is the missing `,` in a list
-/// ([`crate::layout::list_fixes`]); out of a list the candidate is made only
+/// ([`super::lists::list_fixes`]); out of a list the candidate is made only
 /// when the code without the blank reads (`h(x) [0]`; `g(x) (y)` has none:
 /// E0002, R-203). When no candidate reads in a list (`(I32 [I32; 2])`: an
 /// array type is no list of type arguments), the form is the missing `,`
@@ -25,7 +25,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
     let d = c.detached.filter(|d| d.at == c.at)?;
     // A line break before a required list is the blank of it (S-412: the
     // `(` after `fn` in a list, where a line break is a blank).
-    let newline = c.gap(c.at) == Gap::Newline;
+    let newline = c.at_line_head(c.at);
     if newline && !d.required {
         return None;
     }
@@ -47,7 +47,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
         // both gaps out (`saw ~ (f0)` is one form).
         let paren = c.tokens.iter().enumerate().skip(c.at + 1).find(|(_, t)| !t.kind.is_trivia()).map(|(k, _)| k)?;
         let after =
-            crate::layout::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");
+            super::edits::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");
         match c.gap(c.at) {
             Gap::None => fixes.push(after),
             Gap::Space => {
@@ -58,7 +58,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
             Gap::Newline => {}
         }
     } else if d.joins(c.tokens) {
-        fixes.extend(crate::layout::join_fix(c));
+        fixes.extend(super::lists::join_fix(c));
     }
     if row == RowId::SpaceBeforeBracket
         && d.expr
@@ -149,7 +149,7 @@ pub(super) fn space_before_question(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let prev = c.before(c.at)?;
-    if !crate::layout::ends_operand(c.kind(prev)) {
+    if !crate::starts::ends_operand(c.kind(prev)) {
         return None;
     }
     hit(c.span(c.at), vec![Fix::delete("remove the space", c.space_before(c.at)?)])
@@ -177,17 +177,17 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
             return None;
         }
         c.say(RowId::SpaceAfterCaret);
-    } else if !crate::parser::starts_operand(next) {
+    } else if !crate::starts::starts_operand(next) {
         return None;
     }
     // A line that starts with `- b` or `^ b` after an operand goes on the
     // line before as the binary operator too (S-123): the line joined is the
     // second candidate, and a `- b` is the row `leading_minus` (§2.5).
     if kind != TokenKind::Bang
-        && let Some((s, prev)) = crate::layout::line_head(c).filter(|&(s, _)| s == c.at)
+        && let Some((s, prev)) = c.head_symbol_after_operand().filter(|&(s, _)| s == c.at)
     {
         let title = "join it to the line before";
-        fixes.push(crate::layout::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
+        fixes.push(super::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
         if kind == TokenKind::Minus {
             c.say(RowId::LeadingMinus);
         }
@@ -200,17 +200,17 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
 /// reads as the prefix of a next element too. The candidates are the blanks
 /// on both sides, and, in a list whose elements are expressions (arguments,
 /// an array, a tuple), the `,` before it, which takes a `+` out
-/// ([`crate::layout::comma_before_sign`], S-370's order). `a - -b` has
+/// ([`super::lists::comma_before_sign`], S-370's order). `a - -b` has
 /// blanks on both sides and is no such form. In the arms of a `match`, a
 /// sign that a `=>` follows starts the next arm (S-386): the missing `,`.
 pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
-    if c.want == Want::Separator(NodeKind::MatchArms) && crate::layout::arm_ahead(c, c.at) {
+    if c.want == Want::Separator(NodeKind::MatchArms) && crate::scan::arm_ahead(c.tokens, c.at) {
         return None;
     }
     if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret | TokenKind::Plus)
         || c.gap(c.at) != Gap::Space
         || c.gap_after(c.at) != Gap::None
-        || !crate::parser::starts_operand(c.kind(c.at + 1))
+        || !crate::starts::starts_operand(c.kind(c.at + 1))
         || closed_expr(c).is_none()
     {
         return None;
@@ -218,12 +218,12 @@ pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
     let prev = c.before(c.at)?;
     // After a `for`, a `while` or a declaration the sign follows no operand
     // (S-236): no candidate makes it binary.
-    if crate::layout::end_at(c, prev) == Some(crate::layout::End::NoOperand) {
+    if c.end_at(prev) == Some(super::End::NoOperand) {
         return None;
     }
     let mut fixes = vec![Fix::insert("write blanks on both sides", c.file, c.span(c.at).end, " ")];
-    if crate::layout::expression_list(c) {
-        fixes.push(crate::layout::comma_before_sign(c, prev, c.at));
+    if super::lists::expression_list(c) {
+        fixes.push(super::lists::comma_before_sign(c, prev, c.at));
     }
     hit(c.span(c.at), fixes)
 }

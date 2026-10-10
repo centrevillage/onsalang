@@ -10,7 +10,7 @@
 //! whenever the top of the stack says they are insignificant.
 //!
 //! The parser reads the tokens without the whitespace tokens (what separates
-//! two tokens is [`crate::token::gap_before`]). A token it consumes is an
+//! two tokens is read from the line facts, [`crate::layout::Lines`]). A token it consumes is an
 //! event `Token`; the tokens it skips (comments, insignificant newlines,
 //! whitespace) are placed in the tree by [`crate::cst::build`].
 //!
@@ -29,9 +29,13 @@
 use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
 use crate::ast::Ast;
-use crate::cst::{Cst, Event, NodeKind};
-use crate::foreign::{self, Want};
+use crate::cst::{Class, Cst, Event, NodeKind};
+use crate::foreign::{self, Detached, End, Want};
+use crate::layout::Lines;
+use crate::literal::Literals;
 use crate::lower::AstMap;
+use crate::scan::pattern_alternative;
+use crate::starts::{declares_a_function, starts_operand};
 use crate::token::{Gap, Token, TokenKind};
 
 /// Result of [`crate::parse`].
@@ -195,30 +199,27 @@ pub(crate) struct Parser<'a> {
     diagnostics: Vec<Diagnostic>,
     /// How many of `diagnostics` are the lexer's (the parser's follow).
     lexed: usize,
-    /// The holes of the string literals ([`crate::Lexed::holes`]), in the
-    /// order of the file.
-    holes: Vec<Span>,
-    /// The spans of the lexer's diagnostics, ordered by their start: the
-    /// check of a `test` name finds those in its literal by a binary search.
-    lexed_spans: Vec<Span>,
+    /// The holes of the string literals and the lexer's errors in them
+    /// ([`Literals`]).
+    literals: Literals,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
     /// How many trial readings ([`Parser::snapshot`]) are open: a reading
     /// that is tried inside another one does not try the brackets of a
     /// call's type arguments again, so trials nest at most once per level.
     trials: u32,
-    /// For each token, whether it is a newline that goes on with the line
-    /// (§2.5, [`crate::layout::line_breaks_going_on`]).
-    goes_on: Vec<bool>,
+    /// The line facts of `tokens` (§2.5): the gaps around each token and the
+    /// line breaks that go on with their line ([`Lines`]).
+    lines: Lines,
     /// The last postfix opener not read on because of a gap before it
     /// ([`Parser::touches`], S-89): the table reads it at the failure there.
-    detached: Option<crate::layout::Detached>,
+    detached: Option<Detached>,
     /// The last tokens of the statements and declarations that end no operand
     /// (`for`, `while`, a declaration but `const` and `type`) or a bound value
     /// (`let`, `var`, an assignment), in order: a symbol at the head of the
     /// next line does not go on with the first, and a `=` not with the second
     /// (S-124, S-374, S-236; the table reads them, [`foreign::Cursor::ends`]).
-    ends: Vec<(usize, crate::layout::End)>,
+    ends: Vec<(usize, End)>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -232,54 +233,14 @@ struct Snapshot {
     braces: Vec<usize>,
     nl: Vec<bool>,
     no_struct_lit: bool,
-    detached: Option<crate::layout::Detached>,
+    detached: Option<Detached>,
     ends: usize,
-}
-
-/// Whether a token starts an operand (§3.1): a prefix operator, a literal,
-/// a name or the reference `^name` (§2.6), `_`, a bracket, a block, or an expression keyword. `move` and
-/// `rt` before an operand are errors of their own and start none.
-pub(crate) fn starts_operand(kind: TokenKind) -> bool {
-    use TokenKind::*;
-    matches!(
-        kind,
-        Minus
-            | Bang
-            | Caret
-            | Int
-            | Float
-            | Char
-            | Str
-            | KwTrue
-            | KwFalse
-            | Underscore
-            | Ident
-            | KwSelf
-            | KwSelfType
-            | LParen
-            | LBracket
-            | LBrace
-            | KwIf
-            | KwMatch
-            | KwFn
-            | KwHandle
-            | KwUnsafe
-            | KwPar
-    )
-}
-
-/// Whether the tokens `first` and `second` declare a function (`fn name`),
-/// which no expression is (§6.1): the one test, for the parser and the
-/// missing `,` of a list ([`crate::layout::list_fixes`]).
-pub(crate) fn declares_a_function(first: TokenKind, second: TokenKind) -> bool {
-    first == TokenKind::KwFn && second == TokenKind::Ident
 }
 
 impl<'a> Parser<'a> {
     pub(crate) fn new(file: FileId, text: &'a str, lexed: crate::Lexed) -> Parser<'a> {
-        let crate::Lexed { tokens: all, diagnostics, holes } = lexed;
-        let full: Vec<u32> = (0..all.len() as u32).filter(|&i| all[i as usize].kind != TokenKind::Whitespace).collect();
-        let tokens: Vec<Token> = full.iter().map(|&i| all[i as usize]).collect();
+        let crate::Lexed { tokens: all, diagnostics, literals } = lexed;
+        let (tokens, full, lines) = crate::layout::code_tokens(&all);
         let mut brace_closed = vec![false; tokens.len()];
         let mut open = Vec::new();
         for (k, t) in tokens.iter().enumerate() {
@@ -293,12 +254,11 @@ impl<'a> Parser<'a> {
                 _ => {}
             }
         }
-        let goes_on = crate::layout::line_breaks_going_on(&tokens);
         Parser {
             file,
             text,
             all,
-            goes_on,
+            lines,
             tokens,
             full,
             pos: 0,
@@ -313,13 +273,8 @@ impl<'a> Parser<'a> {
             closed: Vec::new(),
             height: 0,
             lexed: diagnostics.len(),
-            lexed_spans: {
-                let mut v: Vec<Span> = diagnostics.iter().map(|d| d.span).collect();
-                v.sort_by_key(|s| s.start);
-                v
-            },
             diagnostics,
-            holes,
+            literals,
             levels: Vec::new(),
             trials: 0,
             detached: None,
@@ -405,7 +360,7 @@ impl<'a> Parser<'a> {
     fn in_type(&self) -> bool {
         self.open.iter().any(|o| {
             matches!(self.events[o.event as usize], Event::Start { kind: Some(k), .. }
-                if crate::lower::class(k) == crate::lower::Class::Type)
+                if k.class() == Class::Type)
         })
     }
 
@@ -468,9 +423,8 @@ impl<'a> Parser<'a> {
     /// type into a `type` alias, a block into a function. The unit is not
     /// read further: the error goes up to the recovery.
     fn too_deep(&mut self, at: Span, kind: NodeKind) -> ParseError {
-        use crate::lower::Class;
         use NodeKind::*;
-        let split = match (kind, crate::lower::class(kind)) {
+        let split = match (kind, kind.class()) {
             (Block | ForStmt | WhileStmt, _) => {
                 "move the inner blocks into a function and call it; a function starts again from level 0"
             }
@@ -588,7 +542,7 @@ impl<'a> Parser<'a> {
 
     /// Index of the next token that is not trivia under the current context:
     /// where a newline is significant, a newline that goes on with the line
-    /// is trivia too ([`crate::layout::continues`], §2.5).
+    /// is trivia too ([`Lines::goes_on`], §2.5).
     fn peek_index(&self) -> usize {
         self.skip_trivia(self.pos)
     }
@@ -598,7 +552,7 @@ impl<'a> Parser<'a> {
         loop {
             match self.tokens[i].kind {
                 TokenKind::Comment | TokenKind::DocComment => i += 1,
-                TokenKind::Newline if !self.significant() || self.goes_on[i] => i += 1,
+                TokenKind::Newline if !self.significant() || self.lines.goes_on(i) => i += 1,
                 _ => return i,
             }
         }
@@ -638,14 +592,14 @@ impl<'a> Parser<'a> {
         j.min(self.tokens.len() - 1)
     }
 
-    /// What separates `tokens[i]` from the token after it ([`crate::token::gap_after`]).
+    /// What separates `tokens[i]` from the token after it ([`Lines::after`]).
     fn gap_after(&self, i: usize) -> Gap {
-        crate::token::gap_after(&self.all, &self.full, &self.tokens, i)
+        self.lines.after(i)
     }
 
-    /// What separates `tokens[i]` from the token before it in the source.
+    /// What separates `tokens[i]` from the token before it ([`Lines::before`]).
     fn gap(&self, i: usize) -> Gap {
-        crate::token::gap_before(&self.all, self.full[i] as usize)
+        self.lines.before(i)
     }
 
     /// Index of the token after `peek()` (same skipping rules).
@@ -661,12 +615,16 @@ impl<'a> Parser<'a> {
 
     /// The next token ignoring newlines regardless of context.
     fn peek_past_newlines(&self) -> Token {
+        self.tokens[self.past_newlines()]
+    }
+
+    /// Index of [`Parser::peek_past_newlines`].
+    fn past_newlines(&self) -> usize {
         let mut i = self.pos;
         loop {
-            let t = self.tokens[i];
-            match t.kind {
+            match self.tokens[i].kind {
                 TokenKind::Comment | TokenKind::DocComment | TokenKind::Newline => i += 1,
-                _ => return t,
+                _ => return i,
             }
         }
     }
@@ -707,7 +665,7 @@ impl<'a> Parser<'a> {
     /// read on: it is recorded with whether the token before ends a path of
     /// names (`by_name`, S-399) and whether an expression is before it
     /// (`expr`), and the grammar fails at it where it fails; the table names
-    /// the form there ([`crate::layout::Detached`]). Two openers are read
+    /// the form there ([`Detached`]). Two openers are read
     /// otherwise: the `(` of `pub(pkg)` and `pub(crate)` across a blank
     /// (one form each, [`Parser::parse_vis`], S-248), and the `(` of the
     /// tuple struct `struct P (I32)` (a form of another language whatever the
@@ -723,7 +681,7 @@ impl<'a> Parser<'a> {
         // The site that read the opener first judges it: after `with h`,
         // the `handle` expression is no callee, but `h` takes the list.
         if self.detached.is_none_or(|d| d.at != at) {
-            self.detached = Some(crate::layout::Detached { at, by_name, expr, required: false });
+            self.detached = Some(Detached { at, by_name, expr, required: false });
         }
         false
     }
@@ -821,8 +779,8 @@ impl<'a> Parser<'a> {
         // integer literal (E0408): two errors of one token, of which the
         // driver reports one.
         if t.kind == TokenKind::ForeignLit {
-            let number = foreign::number_part(self.token_text(t));
-            if foreign::is_integer(number) && !number.is_empty() && crate::lower::int_value(number).is_none() {
+            let number = crate::literal::number_part(self.token_text(t));
+            if crate::literal::is_integer(number) && !number.is_empty() && crate::literal::int_value(number).is_none() {
                 self.report(Diagnostic::new(
                     Stage::Syntax,
                     Code::E0408,
@@ -837,8 +795,8 @@ impl<'a> Parser<'a> {
             tokens: &self.tokens,
             all: &self.all,
             full: &self.full,
-            holes: &self.holes,
-            lexed: &self.lexed_spans,
+            lines: &self.lines,
+            literals: &self.literals,
             at,
             open: self
                 .open
@@ -854,21 +812,11 @@ impl<'a> Parser<'a> {
             ends: &self.ends,
             found: std::cell::Cell::new(None),
         };
-        let (row, general) = match foreign::at_failure(&cursor) {
-            Some((d, misplaced)) => (Some(d), misplaced),
-            None => (None, true),
-        };
-        // After an element of a list, the general error is the missing `,`;
-        // an opener after a line break takes it out (S-89).
-        let fixes = match want {
-            Want::Separator(list) if general => crate::layout::list_fixes(&cursor, Some(list)),
-            _ if general => crate::layout::list_fixes(&cursor, None),
-            _ => Vec::new(),
-        };
+        let foreign::Failure { row, general } = foreign::at_failure(&cursor);
         if let Some(d) = row {
             self.report(d);
         }
-        if general {
+        if let Some(fixes) = general {
             let shown = noted.map_or(t, |(found, _)| found);
             let msg = format!("expected {expected}, found {}", shown.kind.describe());
             // A line that ends where it cannot: the main position is the end
@@ -909,7 +857,7 @@ impl<'a> Parser<'a> {
     /// E0408 when an integer literal does not fit any integer type (the
     /// value is read by the same function when the AST is made).
     fn check_int(&mut self, t: Token) {
-        if crate::lower::int_value(self.token_text(t)).is_none() {
+        if crate::literal::int_value(self.token_text(t)).is_none() {
             self.report(Diagnostic::new(
                 Stage::Syntax,
                 Code::E0408,
@@ -1086,10 +1034,10 @@ impl<'a> Parser<'a> {
     /// The last token read ends a statement or a declaration that is no
     /// operand ([`Parser::ends`]).
     fn end_no_operand(&mut self) {
-        self.end_with(crate::layout::End::NoOperand);
+        self.end_with(End::NoOperand);
     }
 
-    fn end_with(&mut self, end: crate::layout::End) {
+    fn end_with(&mut self, end: End) {
         if let Some(last) = (0..self.pos).rev().find(|&k| !self.tokens[k].kind.is_trivia()) {
             // In order (the table searches them): a statement ends after the
             // ones before it, and a declaration after its own statements.
@@ -1108,14 +1056,14 @@ impl<'a> Parser<'a> {
     /// S-380): the one at the head is not read, and the table names it.
     fn at_line_end(&self, kind: TokenKind) -> bool {
         let i = self.peek_index();
-        self.tokens[i].kind == kind && self.gap(i) != Gap::Newline
+        self.tokens[i].kind == kind && !self.lines.at_line_head(i)
     }
 
     /// Whether `tokens[i]` starts a line that does not go on with the line
     /// before it: the recovery takes an item keyword there as the start of
     /// the next unit (S-47: `fn(I32) -> I32` after `type Op =` does not start one).
     fn starts_a_line(&self, i: usize) -> bool {
-        i == 0 || (self.tokens[i - 1].kind == TokenKind::Newline && !self.goes_on[i - 1])
+        i == 0 || (self.tokens[i - 1].kind == TokenKind::Newline && !self.lines.goes_on(i - 1))
     }
 
     /// The number of blanks before the first token of the line of `at`.
@@ -1504,7 +1452,7 @@ impl<'a> Parser<'a> {
         // list `touches` did not read.
         let at = self.peek_index();
         if self.detached.is_some_and(|d| d.at == at)
-            && crate::layout::bracket_contents(&self.tokens, at).is_some_and(|(_, _, semi)| !semi)
+            && crate::scan::bracket_contents(&self.tokens, at).is_some_and(|(_, _, semi)| !semi)
         {
             return Err(self.unexpected("a type"));
         }
@@ -1659,17 +1607,13 @@ impl<'a> Parser<'a> {
     /// lexer in the literal (an escape, a hole without its `}`) makes the
     /// literal itself wrong, and the name is not checked further.
     fn check_test_name(&mut self, t: Token) {
-        let inside = |s: Span| t.span.start <= s.start && s.end <= t.span.end;
-        // The holes are in the order of the file: those of this literal are
-        // found by a binary search, not by a walk over all of them.
-        let first = self.holes.partition_point(|h| h.start < t.span.start);
-        let holes: Vec<Span> = self.holes[first..].iter().copied().take_while(|&h| inside(h)).collect();
+        // The holes of this literal, found by a binary search.
+        let holes: Vec<Span> = self.literals.holes_in(t.span).to_vec();
         let problem = if holes.is_empty() {
-            let from = self.lexed_spans.partition_point(|s| s.start < t.span.start);
-            if self.lexed_spans[from..].iter().take_while(|s| s.start < t.span.end).any(|&s| inside(s)) {
+            if !self.literals.ok(t.span) {
                 return;
             }
-            let lit = crate::lower::str_lit(self.token_text(t), t.span);
+            let lit = crate::literal::str_lit(self.token_text(t), t.span);
             let Some(value) = crate::test_name::value(&lit) else {
                 onsa_diag::internal::bug(Some(t.span), "a literal without holes read as one with an interpolation")
             };
@@ -1686,7 +1630,7 @@ impl<'a> Parser<'a> {
                 !(lexer && d.code == Code::E0001 && holes.contains(&d.span))
             });
             self.lexed -= before - self.diagnostics.len();
-            // `lexed_spans` keeps their spans: they lie in this literal, which
+            // `literals` keeps their spans: they lie in this literal, which
             // no other name shares.
             "the name of a test cannot hold an interpolation".to_string()
         };
@@ -2174,7 +2118,7 @@ impl<'a> Parser<'a> {
     /// line break before it is the E0003 of §2.5 (S-47, S-202, R-62, S-413 to
     /// S-415): at the token (R-160), with the candidate that moves it and the
     /// rest of its line up to the end of the code before it, before the
-    /// comment there (S-216, [`crate::layout::move_up`]); the reading goes on
+    /// comment there (S-216, [`crate::foreign::move_up`]); the reading goes on
     /// past the line breaks, as if it were on the line.
     fn e0003_unless_on_the_line(&mut self, kind: TokenKind) -> bool {
         let i = (self.pos..self.tokens.len()).find(|&k| !self.tokens[k].kind.is_trivia()).unwrap_or(self.pos);
@@ -2185,7 +2129,7 @@ impl<'a> Parser<'a> {
         if self.tokens[self.pos..i].iter().any(|t| t.kind == TokenKind::Newline) {
             let word = self.token_text(t).to_string();
             let title = format!("move `{word}` to the end of the line before");
-            let fix = crate::layout::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
+            let fix = crate::foreign::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
             let message = match kind {
                 TokenKind::KwElse | TokenKind::KwWith => {
                     format!("`{word}` must be on the same line as the closing `}}`")
@@ -2242,7 +2186,7 @@ impl<'a> Parser<'a> {
                 }
                 self.expect(TokenKind::Eq)?;
                 self.parse_consumed()?;
-                self.end_with(crate::layout::End::Bound);
+                self.end_with(End::Bound);
                 Ok(self.complete(m, NodeKind::LetStmt))
             }
             TokenKind::KwVar => {
@@ -2301,7 +2245,7 @@ impl<'a> Parser<'a> {
                 if !matches!(self.peek_kind(), TokenKind::Newline | TokenKind::RBrace | TokenKind::Eof) {
                     self.parse_consumed()?;
                 }
-                self.end_with(crate::layout::End::Bound);
+                self.end_with(End::Bound);
                 Ok(self.complete(m, NodeKind::ReturnStmt))
             }
             // `move a` on the last expression of a block (§5.2, S-100): where
@@ -2322,7 +2266,7 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::AssertStmt)?;
                 self.bump();
                 self.parse_expr()?;
-                self.end_with(crate::layout::End::Bound);
+                self.end_with(End::Bound);
                 Ok(self.complete(m, NodeKind::AssertStmt))
             }
             _ => {
@@ -2331,7 +2275,7 @@ impl<'a> Parser<'a> {
                     let m = self.precede(expr, NodeKind::AssignStmt)?;
                     self.bump();
                     self.parse_consumed()?;
-                    self.end_with(crate::layout::End::Bound);
+                    self.end_with(End::Bound);
                     return Ok(self.complete(m, NodeKind::AssignStmt));
                 }
                 let m = self.precede(expr, NodeKind::ExprStmt)?;
@@ -2347,7 +2291,7 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::Eq)?;
         self.parse_consumed()?;
-        self.end_with(crate::layout::End::Bound);
+        self.end_with(End::Bound);
         Ok(self.complete(m, NodeKind::VarStmt))
     }
 
@@ -2409,7 +2353,7 @@ impl<'a> Parser<'a> {
             let m = self.precede(first, NodeKind::BinaryExpr)?;
             let base = self.level();
             let mut chain = Chain::new(first.height);
-            while let Some(op) = crate::lower::binop(self.peek_kind()).filter(|_| self.binary_here()) {
+            while let Some(op) = self.peek_kind().binop().filter(|_| self.binary_here()) {
                 let (pending, left) = chain.operator(op.group());
                 self.chain_operator(base, pending, left)?;
                 self.bump();
@@ -2439,7 +2383,7 @@ impl<'a> Parser<'a> {
             && self.gap(i) == Gap::Space
             && self.gap_after(i) == Gap::None
             && starts_operand(self.tokens[i + 1].kind);
-        binop(self.tokens[i].kind) && !asymmetric && self.gap(i) != Gap::Newline
+        binop(self.tokens[i].kind) && !asymmetric && !self.lines.at_line_head(i)
     }
 
     /// The rest of a head whose start `expr` is read: a range when a range
@@ -2451,7 +2395,7 @@ impl<'a> Parser<'a> {
     fn parse_range_rest(&mut self, expr: Completed) -> PResult<Completed> {
         // A range symbol at the head of a line (in brackets, where a line
         // break is a blank) is not read: the table names it (`leading_range`, S-335).
-        if !self.peek_kind().range_readings().is_empty() && self.peek_gap() == Gap::Newline {
+        if !self.peek_kind().range_readings().is_empty() && self.lines.at_line_head(self.peek_index()) {
             return Err(self.unexpected("`{`"));
         }
         if self.peek_kind().range_end().is_some() {
@@ -2577,13 +2521,8 @@ impl<'a> Parser<'a> {
                     if !self.touches(t.kind, true, true) || after.is_some() {
                         if after.is_some() {
                             let kept = self.detached.filter(|d| d.at == mark);
-                            let d = kept.unwrap_or(crate::layout::Detached {
-                                at: mark,
-                                by_name: true,
-                                expr: true,
-                                required: false,
-                            });
-                            self.detached = Some(crate::layout::Detached { required: true, ..d });
+                            let d = kept.unwrap_or(Detached { at: mark, by_name: true, expr: true, required: false });
+                            self.detached = Some(Detached { required: true, ..d });
                         }
                         break;
                     }
@@ -2600,7 +2539,7 @@ impl<'a> Parser<'a> {
                 // with no space on either side of `::`. Elsewhere `::` is not
                 // read (the forms of other languages, `crate::foreign`).
                 TokenKind::ColonColon
-                    if crate::token::is_type_args_mark(&self.all, &self.full, &self.tokens, self.peek_index())
+                    if self.lines.type_args_mark(&self.tokens, self.peek_index())
                         && foreign::names_a_path(expr.kind) =>
                 {
                     let m = self.precede(expr, NodeKind::TypeArgsExpr)?;
@@ -2637,7 +2576,7 @@ impl<'a> Parser<'a> {
                         }
                         TokenKind::Int => {
                             self.bump();
-                            if crate::lower::tuple_index_value(self.token_text(n)).is_none() {
+                            if crate::literal::tuple_index_value(self.token_text(n)).is_none() {
                                 return Err(self.error(Code::E0408, n.span, "tuple index is too large"));
                             }
                             expr = self.complete(m, NodeKind::TupleIndexExpr);
@@ -2654,7 +2593,7 @@ impl<'a> Parser<'a> {
                 // In a type (a const argument, an array's length) no `::[` is
                 // written, so a `[…]` with `,` is read as an index (R-196).
                 TokenKind::Lt | TokenKind::LBracket
-                    if foreign::type_list_ahead(&self.tokens, &self.all, &self.full, self.peek_index(), expr.kind)
+                    if foreign::type_list_ahead(&self.tokens, &self.lines, self.peek_index(), expr.kind)
                         && (self.peek_kind() == TokenKind::Lt || (!self.in_type() && self.reads_as_type_list())) =>
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));
@@ -2917,7 +2856,11 @@ impl<'a> Parser<'a> {
                 let range = self.parse_head_expr(true)?;
                 // A range symbol at the head of the next line: the table names
                 // it (`leading_range`, S-335).
-                if range.kind != NodeKind::RangeExpr && !self.peek_past_newlines().kind.range_readings().is_empty() {
+                let next = self.past_newlines();
+                if range.kind != NodeKind::RangeExpr
+                    && !self.tokens[next].kind.range_readings().is_empty()
+                    && self.lines.at_line_head(next)
+                {
                     return Err(self.unexpected("`{`"));
                 }
                 if range.kind != NodeKind::RangeExpr {
@@ -2943,7 +2886,7 @@ impl<'a> Parser<'a> {
     /// §2.5): a hole `{a.b.c}` counts as the path `a.b.c` written as an
     /// expression, one level per `.`. E0006 at the `.` over the limit.
     fn interpolation_levels(&mut self, t: Token) -> PResult<()> {
-        let lit = crate::lower::str_lit(self.token_text(t), t.span);
+        let lit = crate::literal::str_lit(self.token_text(t), t.span);
         let level = self.level();
         let mut height = 0;
         for seg in &lit.segments {
@@ -3145,9 +3088,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Whether the string literal `t` interpolates (`{x}`, §2.4).
+    /// Whether the string literal `t` interpolates (`{x}`, §2.4,
+    /// [`Literals::interpolated`]).
     fn has_holes(&self, t: Token) -> bool {
-        foreign::guard::interpolated(self.file, self.text, &self.holes, t)
+        self.literals.interpolated(t.span)
     }
 
     fn parse_pattern_alt(&mut self) -> PResult<Completed> {
@@ -3314,40 +3258,7 @@ fn continues_an_expression(kind: TokenKind, gap: Gap) -> bool {
 }
 
 fn binop(kind: TokenKind) -> bool {
-    crate::lower::binop(kind).is_some()
-}
-
-/// The alternative of a pattern whose tokens (no comment; newlines kept)
-/// are `kinds`: where it ends (the first `|`, `if`, `=>`, `,`, `@`, `:`,
-/// `=`, `in` or newline outside brackets, a closing bracket of none of its
-/// own, or the end of the file) and the first range symbol outside brackets
-/// before that, as positions among the tokens that are no newline (spec §7,
-/// S-341: the ends of a range pattern are read as the ends of a range in a
-/// header, and end there). The newlines before the alternative do not end
-/// it, nor one after a binary operator (§2.5, as in an expression). The one
-/// reading of a range in a pattern: the parser fails at it, and the table
-/// of the forms reads its ends ([`crate::foreign`]).
-pub(crate) fn pattern_alternative(kinds: impl Iterator<Item = TokenKind>) -> (usize, Option<usize>) {
-    use TokenKind::*;
-    let mut depth = 0u32;
-    let mut range = None;
-    let mut n = 0;
-    let mut last = Eof;
-    for k in kinds {
-        match k {
-            Newline if n == 0 || depth > 0 || binop(last) => continue,
-            Eof | Newline => break,
-            LParen | LBracket | LBrace => depth += 1,
-            RParen | RBracket | RBrace if depth == 0 => break,
-            RParen | RBracket | RBrace => depth -= 1,
-            Pipe | KwIf | FatArrow | Comma | At | Colon | Eq | KwIn if depth == 0 => break,
-            _ if depth == 0 && range.is_none() && !k.range_readings().is_empty() => range = Some(n),
-            _ => {}
-        }
-        last = k;
-        n += 1;
-    }
-    (n, range)
+    kind.binop().is_some()
 }
 
 /// Whether the tokens `all[first..=last]` of a file are one expression,
@@ -3359,16 +3270,17 @@ pub(crate) fn reads_as_expr(
     file: FileId,
     text: &str,
     all: &[Token],
-    holes: &[Span],
+    literals: &Literals,
     first: usize,
     last: usize,
 ) -> bool {
     let mut tokens = all[first..=last].to_vec();
     let end = all[last].span.end;
     tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
-    let (from, to) = (all[first].span.start, end);
-    let holes = holes.iter().copied().filter(|h| from <= h.start && h.end <= to).collect();
-    let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), holes });
+    // The holes and the lexer's errors of the literals in the run read as
+    // they do in the file; its diagnostics are not this reading's.
+    let literals = literals.within(all[first].span.start, end);
+    let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), literals });
     p.nl = vec![false];
     p.no_struct_lit = true;
     p.parse_expr_inner(false).is_ok() && p.at(TokenKind::Eof) && p.diagnostics.is_empty()
@@ -3697,7 +3609,7 @@ mod tests {
         for src in operands {
             let p = parse(&format!("fn f() {{\n  let a = {src}\n}}"));
             let first = crate::lex(FileId(0), src).tokens.into_iter().find(|t| !t.kind.is_trivia()).unwrap();
-            assert!(super::starts_operand(first.kind), "{src}");
+            assert!(crate::starts::starts_operand(first.kind), "{src}");
             assert!(
                 p.diagnostics.iter().all(|d| d.span.start as usize > "fn f() {\n  let a = ".len()),
                 "{src}: {:?}",
@@ -3706,7 +3618,7 @@ mod tests {
         }
         for src in ["..<", "..", ".", ",", ")", "}", "=>", "+", "*", "move", "rt", "@", "<"] {
             let first = crate::lex(FileId(0), src).tokens.into_iter().find(|t| !t.kind.is_trivia()).unwrap();
-            assert!(!super::starts_operand(first.kind), "{src}");
+            assert!(!crate::starts::starts_operand(first.kind), "{src}");
         }
     }
 

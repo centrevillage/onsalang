@@ -7,33 +7,6 @@ fn holds_lines(kind: Option<NodeKind>) -> bool {
     matches!(kind, Some(NodeKind::Block | NodeKind::SourceFile | NodeKind::ItemList))
 }
 
-/// The lists whose elements are separated with `,`.
-fn comma_list(kind: Option<NodeKind>) -> bool {
-    matches!(
-        kind,
-        Some(
-            NodeKind::ArgList
-                | NodeKind::ParamList
-                | NodeKind::FieldList
-                | NodeKind::VariantList
-                | NodeKind::VariantFields
-                | NodeKind::TupleExpr
-                | NodeKind::StructLitFields
-                | NodeKind::GenericParams
-                | NodeKind::TypeArgs
-                | NodeKind::TupleType
-                | NodeKind::FnTypeParams
-                | NodeKind::TuplePat
-                | NodeKind::TupleStructPat
-                | NodeKind::StructPat
-                | NodeKind::MatchArms
-                | NodeKind::UseNames
-                | NodeKind::EffectRow
-                | NodeKind::AttrArgs
-        )
-    )
-}
-
 /// The run of `;` at `c.at` on one line (S-248: `;;` is one form).
 fn semicolon_run(c: &Cursor) -> Option<usize> {
     if c.kind(c.at) != TokenKind::Semi {
@@ -66,7 +39,7 @@ pub(super) fn semicolon(c: &Cursor) -> Option<Hit> {
     }
     // What comes before can end a statement (not `let x = ;`).
     if let Some(p) = c.sig_before(c.at)
-        && (c.kind(p).is_binary_op()
+        && (c.kind(p).binop().is_some()
             || matches!(
                 c.kind(p),
                 TokenKind::Eq
@@ -107,7 +80,7 @@ pub(super) fn semicolon(c: &Cursor) -> Option<Hit> {
 /// the separator is `,` (S-250). Before the closing bracket, it is removed.
 pub(super) fn semicolon_in_list(c: &Cursor) -> Option<Hit> {
     let last = semicolon_run(c)?;
-    if !comma_list(c.context().map(|o| o.1)) {
+    if !c.context().is_some_and(|o| crate::starts::comma_list(o.1)) {
         return None;
     }
     // After an element (not `(;` or `,;`).

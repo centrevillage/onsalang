@@ -283,7 +283,7 @@ impl<'c, 'a> PatReader<'c, 'a> {
             && !matches!(c.kind(self.toks[a + 1]), TokenKind::Minus | TokenKind::Bang);
         let from = if minus { a + 1 } else { a };
         let (first, last) = (c.full[self.toks[from]] as usize, c.full[self.toks[b]] as usize);
-        if !crate::parser::reads_as_expr(c.file, c.text, c.all, c.holes, first, last) {
+        if !crate::parser::reads_as_expr(c.file, c.text, c.all, c.literals, first, last) {
             return None;
         }
         let text = if minus { format!("-{}", self.text(a + 1, b)) } else { self.text(a, b) };
@@ -326,7 +326,7 @@ impl<'c, 'a> PatReader<'c, 'a> {
         // The alternative as the parser reads it: newlines are seen, comments not.
         let first = *self.toks.get(self.pos)?;
         let rest = self.c.tokens[first..].iter().map(|t| t.kind).filter(|k| !k.is_trivia() || *k == TokenKind::Newline);
-        if let (end, Some(sym)) = crate::parser::pattern_alternative(rest) {
+        if let (end, Some(sym)) = crate::scan::pattern_alternative(rest) {
             return self.range(lo, lo + sym, lo + end);
         }
         match self.peek()? {
@@ -336,7 +336,7 @@ impl<'c, 'a> PatReader<'c, 'a> {
             TokenKind::Str => {
                 let at = self.bump();
                 let t = self.c.tokens[self.toks[at]];
-                let kind = match interpolated(self.c.file, self.c.text, self.c.holes, t) {
+                let kind = match self.c.literals.interpolated(t.span) {
                     true => PatKind::Hole(Form::Str, Test::Equal(self.text(lo, lo))),
                     false => PatKind::Leaf(Leaf::Lit),
                 };
@@ -391,16 +391,6 @@ impl<'c, 'a> PatReader<'c, 'a> {
             _ => None,
         }
     }
-}
-
-/// Whether the string literal `t` interpolates (§2.4, §7, S-225): it has a
-/// hole, and the lexer finds no error in it (a hole of another form,
-/// `{}`, `{a + b}`, is the lexer's E0001, which a guard that copies the
-/// literal would keep).
-pub(crate) fn interpolated(file: FileId, text: &str, holes: &[Span], t: Token) -> bool {
-    let first = holes.partition_point(|h| h.start < t.span.start);
-    let has = holes.get(first).is_some_and(|h| h.end <= t.span.end);
-    has && crate::lex(file, &text[t.span.start as usize..t.span.end as usize]).diagnostics.is_empty()
 }
 
 /// What a condition compares: a new binding (a hole, by its index) or the
@@ -761,7 +751,7 @@ impl Arm {
         // New names: none that the file has (S-253), the names in the holes
         // of the string literals too (S-319): a new name that a misspelt
         // `{v}` names would hide its E0302.
-        let in_holes = c.holes.iter().flat_map(|h| {
+        let in_holes = c.literals.holes().iter().flat_map(|h| {
             let inner = &c.text[h.start as usize..h.end as usize];
             inner.trim_start_matches('{').trim_end_matches('}').split('.')
         });
@@ -830,16 +820,15 @@ mod tests {
     fn arm_reads(src: &str, limit: u32) -> bool {
         let lexed = crate::lex(FileId(0), src);
         let all = lexed.tokens;
-        let full: Vec<u32> = (0..all.len() as u32).filter(|&i| all[i as usize].kind != TokenKind::Whitespace).collect();
-        let tokens: Vec<Token> = full.iter().map(|&i| all[i as usize]).collect();
+        let (tokens, full, lines) = crate::layout::code_tokens(&all);
         let c = Cursor {
             file: FileId(0),
             text: src,
             tokens: &tokens,
             all: &all,
             full: &full,
-            holes: &lexed.holes,
-            lexed: &[],
+            lines: &lines,
+            literals: &lexed.literals,
             at: 0,
             open: Vec::new(),
             closed: &[],

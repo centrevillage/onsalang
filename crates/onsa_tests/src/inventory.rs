@@ -1,9 +1,11 @@
 //! What the compiler holds, listed for the gate's static checks (W1-02):
-//! the registry of diagnostic codes, and the names the embedded std declares.
+//! the registry of diagnostic codes, the names the embedded std declares, and
+//! the symbols after which a line goes on.
 //! Each list is read from the compiler's own structures, so the gate's Python
 //! never parses Rust or Onsa source to find them.
 
 use onsa_diag::{Code, FileId};
+use onsa_syntax::TokenKind;
 use onsa_syntax::ast::{ItemKind, StructKind};
 
 /// Every registered code with what the registry holds (R-87 (3)):
@@ -79,6 +81,27 @@ fn item_names(kind: &ItemKind, out: &mut Vec<String>) {
     }
 }
 
+/// The spelling of a token of `kind` when it is a symbol (`+`, `..<`; no
+/// keyword, name or literal): what [`TokenKind::describe`] writes between
+/// its backticks.
+fn symbol(kind: TokenKind) -> Option<&'static str> {
+    let spelling = kind.describe().strip_prefix('`')?.strip_suffix('`')?;
+    spelling.chars().all(|c| c.is_ascii_punctuation()).then_some(spelling)
+}
+
+/// The spellings of the symbols after which a line goes on after an operand
+/// (§2.5, `onsa_syntax::continues`), every kind of [`TokenKind::ALL`]
+/// considered: `tools/fmt_props.py` reads them (`onsa_cases --continuing`).
+pub fn continuing_spellings() -> Vec<&'static str> {
+    let mut out: Vec<&str> = TokenKind::ALL
+        .iter()
+        .filter(|&&k| onsa_syntax::continues(Some(TokenKind::Ident), k, TokenKind::Ident))
+        .filter_map(|&k| symbol(k))
+        .collect();
+    out.sort_unstable();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +116,30 @@ mod tests {
         assert!(list.iter().any(|c| c["code"] == "E1104" && c["category"] == "manifest"));
         assert!(list.iter().any(|c| c["code"] == "E0020" && c["fix"] == "required" && c["note"] == "rule"));
         assert!(!list.iter().any(|c| c["code"] == "E0814"), "E0814 is retired (S-147)");
+    }
+
+    #[test]
+    fn the_continuing_symbols_are_every_symbol_after_which_a_line_goes_on() {
+        // Every kind after which a line goes on is a symbol the tool can
+        // read (none is left out, however long its spelling), and the lexer
+        // reads each spelling as that one token.
+        let set = continuing_spellings();
+        for &k in TokenKind::ALL {
+            if !onsa_syntax::continues(Some(TokenKind::Ident), k, TokenKind::Ident) {
+                continue;
+            }
+            let s = symbol(k).unwrap_or_else(|| panic!("{k:?} goes on but is no symbol"));
+            assert!(set.contains(&s), "{s}");
+            let lexed = onsa_syntax::lex(FileId(0), s);
+            let kinds: Vec<TokenKind> = lexed.tokens.iter().map(|t| t.kind).collect();
+            assert_eq!(kinds, vec![k, TokenKind::Eof], "{s}");
+        }
+        for s in ["+", "->", "=", "..<", "..=", "&&", "+%"] {
+            assert!(set.contains(&s), "{s}");
+        }
+        for s in ["..", "...", "=>", ".", "?", "!", "~", "::"] {
+            assert!(!set.contains(&s), "{s}");
+        }
     }
 
     #[test]

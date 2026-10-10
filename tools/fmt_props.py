@@ -143,10 +143,29 @@ MARKER_END = re.compile(r"[ ]*// " + MARKER + r"(\d+)[ ]*$")
 OPERATORS = sorted(
     "..< ..= ... .. :: -> => == != <= >= << >> && || +% -% *% +| -| *|".split(), key=len, reverse=True
 )
-# A line ending in one of these continues (§2.5: a binary operator, a range symbol, `=`, `->`): the
-# set of `onsa_syntax::layout::continues`, which the test `layout_tests::fmt_props_continues_as_the_parser`
-# holds it to.
-CONTINUING = frozenset("+ - * / % == != < > <= >= && || & | ^ << >> +% -% *% +| -| *| ..< ..= = ->".split())
+
+
+def load_continuing(root, cmd):
+    """Read the symbols a line ending in which continues (§2.5: a binary
+    operator, a range symbol, `=`, `->`) from the compiler's own judgement
+    (`<cmd> --continuing`, `onsa_syntax::continues`), once, before the
+    perturbations read them ([`continuing`]). Raises RepoError when they cannot
+    be had or the set is empty."""
+    global _CONTINUING
+    symbols = repo.cases_json(root, cmd, "--continuing")
+    if not isinstance(symbols, list) or not symbols or not all(isinstance(s, str) for s in symbols):
+        raise repo.RepoError(f"`--continuing` gave no list of symbols: {symbols!r}")
+    _CONTINUING = frozenset(symbols)
+
+
+def continuing():
+    """The symbols read by [`load_continuing`]."""
+    if _CONTINUING is None:
+        raise RuntimeError("fmt_props.load_continuing was not called")
+    return _CONTINUING
+
+
+_CONTINUING = None
 NUMBER = re.compile(r"0[xXbB][0-9A-Za-z_]*|[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9_]+)?")
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 OPENERS = {"(": ")", "[": "]", "{": "}"}
@@ -321,7 +340,7 @@ def perturb_blank(rng, text):
             sites.add(i)  # a continuation
         if i > 0:
             prev = lines[i - 1].code
-            if prev and (prev[-1].text in ("{", "(", "[") or prev[-1].text in CONTINUING):
+            if prev and (prev[-1].text in ("{", "(", "[") or prev[-1].text in continuing()):
                 sites.add(i)  # the start of a block or a list; a continuation
             if attribute_only(lines[i - 1]):
                 sites.add(i)
@@ -411,7 +430,7 @@ def perturb_continue(rng, text):
             if b.text == "{":
                 continue
             spaced = a.end < b.start and code[k - 1].end < a.start  # an operator written apart
-            if a.text in CONTINUING and a.text not in ("=", "->") and operand_end(code[k - 1]) and spaced:
+            if a.text in continuing() and a.text not in ("=", "->") and operand_end(code[k - 1]) and spaced:
                 sites.append((a.end, b.start))
             elif a.text == "=" and code[0].text in ("let", "var", "const", "type") and spaced:
                 sites.append((a.end, b.start))
@@ -505,7 +524,7 @@ def unperturb(text):
             continue
         code = [t.text for t in tokenize(line) if t.kind == "code"]
         prev = [t.text for t in tokenize(out[-1]) if t.kind == "code"] if out else []
-        if prev and code and (prev[-1] in (",", "(", "[") or prev[-1] in CONTINUING or code[0] == "."):
+        if prev and code and (prev[-1] in (",", "(", "[") or prev[-1] in continuing() or code[0] == "."):
             out[-1] = out[-1] + ("" if prev[-1] in ("(", "[") or code[0] == "." else " ") + line
         else:
             out.append(line)
@@ -619,7 +638,7 @@ def item_heads(text):
         code = [t.text for t in line.code]
         # A line that goes on with the line before (§2.5: after a continuing
         # token, or starting with `.` or `uses`) starts no item.
-        continued = last in CONTINUING or (code and code[0] in (".", "uses"))
+        continued = last in continuing() or (code and code[0] in (".", "uses"))
         if code:
             last = code[-1]
         if code and depth == 0 and not continued:
@@ -902,6 +921,11 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
         files = sources(root, cases_cmd)
     except (repo.RepoError, KeyError, OSError) as e:
         out(f"fmt-props: cannot list the sources: {e}")
+        return 2
+    try:
+        load_continuing(root, cases_cmd)
+    except repo.RepoError as e:
+        out(f"fmt-props: cannot read the symbols that continue a line: {e}")
         return 2
 
     def one_source(src):

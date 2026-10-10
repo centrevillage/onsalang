@@ -36,13 +36,6 @@ pub(crate) fn type_name(text: &str, t: Token) -> Option<Diagnostic> {
     Some(diagnostic(text, RowId::LowercaseType, Hit { span: t.span, fixes: vec![fix], misplaced: false }))
 }
 
-/// Whether a number may carry `suffix` as a type suffix of another
-/// language (§2.4, §18.1): the lexer reads such a number as one token.
-/// Every suffix until W3-05 closes the list (the others are E0001 then).
-pub(crate) fn is_type_suffix(_suffix: &str) -> bool {
-    true
-}
-
 pub(super) fn is_segment(kind: TokenKind) -> bool {
     kind == TokenKind::Ident || kind.is_keyword()
 }
@@ -96,7 +89,7 @@ pub(super) fn path_separator(c: &Cursor) -> Option<Hit> {
 
 /// The mark `::[` of type arguments in an expression at token `i`.
 fn is_type_args_mark(c: &Cursor, i: usize) -> bool {
-    crate::token::is_type_args_mark(c.all, c.full, c.tokens, i)
+    c.lines.type_args_mark(c.tokens, i)
 }
 
 /// `<` ... `>` of type parameters (`fn f<T>`) or type arguments
@@ -253,9 +246,9 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
 /// parser asks it before it reads `<` as a comparison or `[` as an index, and
 /// reads a `[` on as a list of type arguments to be sure; the table builds
 /// the diagnostic where the parser then fails ([`type_args_call`]).
-pub(crate) fn type_list_ahead(tokens: &[Token], all: &[Token], full: &[u32], i: usize, callee: NodeKind) -> bool {
+pub(crate) fn type_list_ahead(tokens: &[Token], lines: &crate::layout::Lines, i: usize, callee: NodeKind) -> bool {
     let name = names_a_path(callee);
-    if !(name || is_value_callee(callee)) || crate::token::gap_before(all, full[i] as usize) != Gap::None {
+    if !(name || is_value_callee(callee)) || lines.before(i) != Gap::None {
         return false;
     }
     let close = match tokens[i].kind {
@@ -264,14 +257,14 @@ pub(crate) fn type_list_ahead(tokens: &[Token], all: &[Token], full: &[u32], i: 
         _ => None,
     };
     let Some(close) = close else { return false };
-    let called = tokens.get(close + 1).is_some_and(|t| t.kind == TokenKind::LParen)
-        && crate::token::gap_before(all, full[close + 1] as usize) == Gap::None;
+    let called =
+        tokens.get(close + 1).is_some_and(|t| t.kind == TokenKind::LParen) && lines.before(close + 1) == Gap::None;
     called || (name && tokens[i].kind == TokenKind::LBracket)
 }
 
 /// The `]` that closes the `[` at `open` when a `,` is directly in it.
 fn bracket_with_comma(tokens: &[Token], open: usize) -> Option<usize> {
-    crate::layout::bracket_contents(tokens, open).filter(|b| b.1).map(|b| b.0)
+    crate::scan::bracket_contents(tokens, open).filter(|b| b.1).map(|b| b.0)
 }
 
 /// Type arguments of another language before a call (§4.5, S-239, S-256,
@@ -289,7 +282,7 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<Hit> {
     let callee = closed_expr(c)?;
     let (row, open) = match c.kind(c.at) {
         TokenKind::ColonColon if c.kind(c.at + 1) == TokenKind::Lt => (RowId::TypeArgsTurbofish, c.at + 1),
-        TokenKind::Lt | TokenKind::LBracket if type_list_ahead(c.tokens, c.all, c.full, c.at, callee.0) => {
+        TokenKind::Lt | TokenKind::LBracket if type_list_ahead(c.tokens, c.lines, c.at, callee.0) => {
             let row = if c.kind(c.at) == TokenKind::Lt { RowId::TypeArgsAngle } else { RowId::TypeArgsSquareComma };
             (row, c.at)
         }
@@ -345,7 +338,7 @@ pub(super) fn type_position_path(c: &Cursor) -> Option<Hit> {
     if c.kind(c.at) != TokenKind::ColonColon || c.kind(c.at + 1) != TokenKind::LBracket {
         return None;
     }
-    if !c.closed.iter().any(|n| n.0 == NodeKind::PathType) || c.gap(c.at + 1) == Gap::Newline {
+    if !c.closed.iter().any(|n| n.0 == NodeKind::PathType) || c.gap_after(c.at) == Gap::Newline {
         return None;
     }
     let close = closing(c, c.at + 1)?;
@@ -366,7 +359,7 @@ pub(super) fn space_in_type_args_mark(c: &Cursor) -> Option<Hit> {
     if !closed_expr(c).is_some_and(|n| names_a_path(n.0)) {
         return None;
     }
-    let (before, after) = (c.gap(c.at), c.gap(c.at + 1));
+    let (before, after) = (c.gap(c.at), c.gap_after(c.at));
     if before == Gap::Newline || after == Gap::Newline {
         return None;
     }

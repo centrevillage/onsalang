@@ -17,7 +17,8 @@
 use onsa_diag::Span;
 
 use crate::ast::*;
-use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
+use crate::cst::{Class, Cst, Elem, NodeId, NodeKind, TokenIdx};
+use crate::literal::{char_value, int_value, str_lit, tuple_index_value};
 use crate::token::TokenKind;
 
 /// From each AST node to the CST node it was made from (same indices as the
@@ -44,36 +45,6 @@ pub(crate) fn lower(cst: &Cst, text: &str) -> (Ast, AstMap) {
         }
     }
     (l.ast, l.map)
-}
-
-/// What an AST node made from a CST node of this kind is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Class {
-    Expr,
-    Type,
-    Pat,
-    Other,
-}
-
-pub(crate) fn class(kind: NodeKind) -> Class {
-    use NodeKind::*;
-    match kind {
-        Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr | MatchExpr
-        | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr | AtExpr
-        | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr | TryExpr
-        | StructLit => Class::Expr,
-        PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType => Class::Type,
-        WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => {
-            Class::Pat
-        }
-        SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
-        | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
-        | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target | Test
-        | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow
-        | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt | ContinueStmt
-        | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg | StructLitFields
-        | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
-    }
 }
 
 struct Lower<'a> {
@@ -145,7 +116,7 @@ impl<'a> Lower<'a> {
     }
 
     fn of_class(&self, n: NodeId, c: Class) -> Vec<NodeId> {
-        self.cst.child_nodes(n).filter(|&k| class(self.cst.kind(k)) == c).collect()
+        self.cst.child_nodes(n).filter(|&k| self.cst.kind(k).class() == c).collect()
     }
 
     /// The name a declaration introduces: the token of its `Name` node.
@@ -879,7 +850,7 @@ impl<'a> Lower<'a> {
                             _ => {}
                         },
                         // A clock in the list is an E0020 of its unit (S-356).
-                        Elem::Node(c) if class(self.cst.kind(c)) == Class::Type => {
+                        Elem::Node(c) if self.cst.kind(c).class() == Class::Type => {
                             let ty = self.ty(c);
                             params.push((std::mem::replace(&mut mode, Mode::Borrow), ty));
                         }
@@ -1137,7 +1108,7 @@ impl<'a> Lower<'a> {
                     }
                 }
                 Elem::Token(t) => {
-                    if let Some(op) = binop(self.kind_of(t)) {
+                    if let Some(op) = self.kind_of(t).binop() {
                         let span = self.cst.token(t).span;
                         let Some(ch) = &mut chain else { self.bug(n, "an operand") };
                         ch.operator((op, span), tighter, |l, o, r| self.binary(n, l, o, r));
@@ -1283,152 +1254,4 @@ impl<'a> Lower<'a> {
         let tok = self.cst.token(t);
         str_lit(self.text_of(t), tok.span)
     }
-}
-
-/// The value of an integer literal (`1_000`, `0xFF`, `0b1010`), or `None`
-/// when it is larger than `u64::MAX` (E0408).
-pub(crate) fn int_value(text: &str) -> Option<u64> {
-    let digits: String = text.chars().filter(|&c| c != '_').collect();
-    let parsed = if let Some(h) = digits.strip_prefix("0x") {
-        u64::from_str_radix(h, 16)
-    } else if let Some(b) = digits.strip_prefix("0b") {
-        u64::from_str_radix(b, 2)
-    } else {
-        digits.parse::<u64>()
-    };
-    parsed.ok()
-}
-
-/// The value of a tuple index (`t.0`), or `None` when it is too large (E0408).
-pub(crate) fn tuple_index_value(text: &str) -> Option<u32> {
-    text.parse::<u32>().ok()
-}
-
-/// The character of a char literal (`'a'`, `'\n'`).
-fn char_value(text: &str) -> char {
-    let inner = &text[1..];
-    let inner = inner.strip_suffix('\'').unwrap_or(inner);
-    let mut chars = inner.chars();
-    match chars.next() {
-        Some('\\') => unescape(&mut chars).unwrap_or('\u{FFFD}'),
-        Some(c) => c,
-        None => '\u{FFFD}',
-    }
-}
-
-/// A string literal with its interpolations split out (§2.4). The parser
-/// counts the levels of the holes with it (spec §2.5).
-pub(crate) fn str_lit(raw: &str, span: Span) -> StrLit {
-    let inner = raw.strip_prefix('"').unwrap_or(raw);
-    let inner = inner.strip_suffix('"').unwrap_or(inner);
-    let base = span.start + 1;
-    let mut segments = Vec::new();
-    let mut text = String::new();
-    let mut chars = inner.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        match c {
-            '\\' => {
-                let mut rest = inner[i + 1..].chars();
-                if let Some(ch) = unescape(&mut rest) {
-                    text.push(ch);
-                    let consumed = inner[i + 1..].len() - rest.as_str().len();
-                    for _ in inner[i + 1..i + 1 + consumed].chars() {
-                        chars.next();
-                    }
-                }
-            }
-            '{' if chars.peek().is_some_and(|&(_, n)| n == '{') => {
-                chars.next();
-                text.push('{');
-            }
-            '}' if chars.peek().is_some_and(|&(_, n)| n == '}') => {
-                chars.next();
-                text.push('}');
-            }
-            '{' => {
-                if !text.is_empty() {
-                    segments.push(StrSeg::Text(std::mem::take(&mut text)));
-                }
-                let path_start = i + 1;
-                let mut path_end = path_start;
-                for (j, n) in chars.by_ref() {
-                    if n == '}' {
-                        path_end = j;
-                        break;
-                    }
-                }
-                let path_text = &inner[path_start..path_end];
-                let mut offset = base + path_start as u32;
-                let mut seg_spans = Vec::new();
-                for seg in path_text.split('.') {
-                    let span = Span::new(span.file, offset, offset + seg.len() as u32);
-                    seg_spans.push(Ident { name: seg.to_string(), span });
-                    offset += seg.len() as u32 + 1;
-                }
-                let pspan = Span::new(span.file, base + path_start as u32, base + path_end as u32);
-                segments.push(StrSeg::Interp(Path { segments: seg_spans, span: pspan }));
-            }
-            _ => text.push(c),
-        }
-    }
-    if !text.is_empty() || segments.is_empty() {
-        segments.push(StrSeg::Text(text));
-    }
-    StrLit { segments, span }
-}
-
-/// `\n` etc. after the backslash has been consumed (S-19).
-fn unescape(chars: &mut std::str::Chars) -> Option<char> {
-    match chars.next()? {
-        'n' => Some('\n'),
-        't' => Some('\t'),
-        'r' => Some('\r'),
-        '0' => Some('\0'),
-        '\\' => Some('\\'),
-        '"' => Some('"'),
-        '\'' => Some('\''),
-        'u' => {
-            let rest = chars.as_str();
-            let rest = rest.strip_prefix('{')?;
-            let end = rest.find('}')?;
-            let ch = u32::from_str_radix(&rest[..end], 16).ok().and_then(char::from_u32)?;
-            for _ in 0..end + 2 {
-                chars.next();
-            }
-            Some(ch)
-        }
-        _ => None,
-    }
-}
-
-/// The binary operator of a token (§3.1), if it is one.
-pub(crate) fn binop(kind: TokenKind) -> Option<BinOp> {
-    use TokenKind::*;
-    Some(match kind {
-        Plus => BinOp::Add,
-        Minus => BinOp::Sub,
-        Star => BinOp::Mul,
-        Slash => BinOp::Div,
-        Percent => BinOp::Rem,
-        PlusPercent => BinOp::WrapAdd,
-        MinusPercent => BinOp::WrapSub,
-        StarPercent => BinOp::WrapMul,
-        PlusPipe => BinOp::SatAdd,
-        MinusPipe => BinOp::SatSub,
-        StarPipe => BinOp::SatMul,
-        EqEq => BinOp::Eq,
-        NotEq => BinOp::Ne,
-        Lt => BinOp::Lt,
-        LtEq => BinOp::Le,
-        Gt => BinOp::Gt,
-        GtEq => BinOp::Ge,
-        AndAnd => BinOp::And,
-        OrOr => BinOp::Or,
-        Amp => BinOp::BitAnd,
-        Pipe => BinOp::BitOr,
-        Caret => BinOp::BitXor,
-        Shl => BinOp::Shl,
-        Shr => BinOp::Shr,
-        _ => return None,
-    })
 }

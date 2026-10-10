@@ -11,6 +11,7 @@
 //!                            vectors-c; W2-02, `onsa_tests::vectors`)
 //! onsa_cases --codes         the registry of diagnostic codes (tools/diag_codes.py, S-109)
 //! onsa_cases --keywords      the keywords of the lexer, `onsa_syntax::token::KEYWORDS` (tools/keywords.py)
+//! onsa_cases --continuing    the symbols after which a line goes on, `onsa_tests::inventory::continuing_spellings` (tools/fmt_props.py)
 //! onsa_cases --std-names     the names the embedded std declares (tools/builtin_names.py, Q-14)
 //! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
 //! onsa_cases --fix-same-place FILE...  the near "same place" of the fix contract for the fuzzing
@@ -57,7 +58,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | \
+const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | --continuing | \
      --std-names | --builtin-members | --fix-same-place FILE...";
 
 fn main() -> ExitCode {
@@ -124,6 +125,10 @@ fn main() -> ExitCode {
         }
         "--keywords" => {
             print(&serde_json::json!(onsa_syntax::token::KEYWORDS.iter().map(|(text, _)| *text).collect::<Vec<_>>()));
+            ExitCode::SUCCESS
+        }
+        "--continuing" => {
+            print(&serde_json::json!(onsa_tests::inventory::continuing_spellings()));
             ExitCode::SUCCESS
         }
         "--builtin-members" => {

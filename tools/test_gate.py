@@ -2079,17 +2079,27 @@ class FmtProps(TempRepo):
         "}\n"
     )
 
+    # The answer of the fake `onsa_cases --continuing` (the compiler's is
+    # `onsa_tests::inventory::continuing_spellings`, tested there).
+    CONTINUING = "+ - * / % == != < > <= >= && || & | ^ << >> +% -% *% +| -| *| ..< ..= = ->".split()
+
+    def cases_cmd(self, listed):
+        """A fake `onsa_cases`: the cases `listed`, or the continuing symbols."""
+        return (sys.executable, "-B", "-c",
+                f"import json, sys; print(json.dumps({self.CONTINUING!r} if '--continuing' in sys.argv else {listed!r}))")
+
     def setUp(self):
         super().setUp()
         self.fake = self.repo.write("fake_onsa.py", FAKE_FMT)
         self.argv = [sys.executable, "-B", str(self.fake)]
+        fmt_props.load_continuing(self.repo.root, self.cases_cmd([]))
 
     def go(self, prop="core", per_kind=3, cases=None, minimize=False):
         """Run the item over `tests/spec/a.onsa` (or `cases`: [(path, mode, syntax_errors)])."""
         cases = cases or [("tests/spec/a.onsa", "check", False)]
         listed = [{"path": p, "kind": "file", "mode": m, "files": [{"path": p, "syntax_errors": s}]}
                   for p, m, s in cases]
-        cmd = (sys.executable, "-B", "-c", f"import json; print(json.dumps({listed!r}))")
+        cmd = self.cases_cmd(listed)
         lines = []
         code = fmt_props.run(self.repo.root, self.argv, prop, per_kind, "t", 2, cmd, out=lines.append,
                              minimize=minimize)
@@ -2133,7 +2143,7 @@ class FmtProps(TempRepo):
                         self.assertNotIn(b, ("{", "else", "with"))
                         if b in ("(", "["):
                             self.assertIn(a, ("(", "[", ","))
-                        self.assertTrue(a in ("(", "[", ",", "=") or a in fmt_props.CONTINUING or b == ".", (a, b))
+                        self.assertTrue(a in ("(", "[", ",", "=") or a in fmt_props.continuing() or b == ".", (a, b))
                     if g0 == "none" and g1 == "space":
                         self.assertTrue(a in ("(", "[", ",") or b in (")", "]", ",", ":"), (a, b))
                 self.assertNotIn("\t", p)
@@ -2201,6 +2211,23 @@ class FmtProps(TempRepo):
                 self.assertEqual(code, 1, text)
                 self.assertIn(failure, text)
         self.assertFalse((self.repo.root / "tests" / "spec" / "a.onsa").read_text().count("fmtprop"))
+
+    def test_the_continuing_symbols_are_read_once_and_checked(self):
+        # Read on the main thread from the injected command, before any
+        # perturbation; none or an empty list is a usage error (exit 2).
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n  x\n}\n")
+        listed = [{"path": "tests/spec/a.onsa", "kind": "file", "mode": "check",
+                   "files": [{"path": "tests/spec/a.onsa", "syntax_errors": False}]}]
+        for answer in ("[]", "1"):
+            with self.subTest(answer=answer):
+                cmd = (sys.executable, "-B", "-c",
+                       f"import json, sys; print({answer!r} if '--continuing' in sys.argv else json.dumps({listed!r}))")
+                lines = []
+                code = fmt_props.run(self.repo.root, self.argv, "core", 1, "t", 2, cmd, out=lines.append)
+                self.assertEqual(code, 2, lines)
+                self.assertIn("cannot read the symbols that continue a line", "\n".join(lines))
+        fmt_props.load_continuing(self.repo.root, self.cases_cmd([]))
+        self.assertEqual(fmt_props.continuing(), frozenset(self.CONTINUING))
 
     def test_internal_and_cst_failures(self):
         self.repo.write("tests/spec/a.onsa", "fn f() {\n  PANIC\n}\n")

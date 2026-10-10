@@ -36,9 +36,26 @@
 //!   [`report`]: they find the form and give the span and the candidates; the
 //!   code, the stage, the message and the note come from the row.
 //!
+//! The general E0002 of a failure that no row names is the parser's, but
+//! its candidates are this module's too ([`Failure`], `lists`): the missing
+//! `,` between the elements of a list (S-384, S-387, S-386, S-398, S-405),
+//! two string literals made one (S-388) and the gap before a postfix opener
+//! taken out (S-89, S-373, S-399).
+//!
+//! What it reads: the line facts of the tokens ([`crate::layout::Lines`]),
+//! what a token starts ([`crate::starts`]), the scans of the tokens
+//! ([`crate::scan`]), the facts of the literals ([`crate::literal::Literals`])
+//! and what the parser recorded ([`Cursor`], [`Detached`], [`End`]). It asks
+//! the parser nothing of its judgements; it reads the parser only to read a
+//! candidate's code again (`parser::reads_as_expr`, and
+//! `groups::nests_too_deep` with `parser::NESTING_LIMIT`), which a candidate
+//! must keep readable (S-236).
+//!
 //! Where the code is: this module holds the types ([`Row`], [`RowId`],
-//! [`Cursor`], [`Want`], [`Hit`], [`Detect`]), the entries ([`at_failure`],
-//! [`report`]) and the helpers of the cursor that many rows read. The table
+//! [`Cursor`], [`Want`], [`Hit`], [`Detect`], [`Detached`], [`End`]), the
+//! entries ([`at_failure`], [`report`]) and the helpers of the cursor that
+//! many rows read; `lists` the candidates of the general E0002 and `edits`
+//! the edits that move a symbol to its partner's line. The table
 //! of the rows ([`ROWS`], [`WAITING`]) is `foreign/rows.rs`; the matchers are
 //! in a module per family of forms: `semicolons` (`;`), `paths` (the `::` of
 //! a path, `<T>`, the type arguments of other languages, the type names of
@@ -70,7 +87,8 @@
 use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, Span, Stage};
 
 use crate::ast::{BinOp, Operand};
-use crate::cst::NodeKind;
+use crate::cst::{Class, NodeKind};
+use crate::starts::ends_operand;
 use crate::token::{Gap, Token, TokenKind};
 
 mod flow;
@@ -134,7 +152,7 @@ pub enum Want {
     Prefix,
     /// The `,` or the closing bracket after an element of a list of the
     /// node's kind (`Parser::close_list`, §2.5): the general E0002 of the
-    /// failure is the missing `,` ([`crate::layout::list_fixes`], S-384).
+    /// failure is the missing `,` ([`super::lists::list_fixes`], S-384).
     Separator(NodeKind),
 }
 
@@ -148,10 +166,12 @@ pub struct Cursor<'a> {
     pub all: &'a [Token],
     /// Index in `all` of each of `tokens`.
     pub full: &'a [u32],
-    /// The holes of the string literals (`{name}`, [`crate::Lexed::holes`]).
-    pub holes: &'a [Span],
-    /// The spans of the lexer's diagnostics, ordered by their start.
-    pub lexed: &'a [Span],
+    /// The line facts of `tokens` (the gaps around each, the line breaks
+    /// that go on, [`crate::layout::Lines`]).
+    pub(crate) lines: &'a crate::layout::Lines,
+    /// The holes of the string literals and the lexer's errors in them
+    /// ([`crate::literal::Literals`]).
+    pub(crate) literals: &'a crate::literal::Literals,
     /// The token the parser failed at (an index of `tokens`).
     pub at: usize,
     /// The open nodes, outermost first, and where each starts.
@@ -161,14 +181,64 @@ pub struct Cursor<'a> {
     pub closed: &'a [(NodeKind, u32)],
     pub want: Want,
     /// The postfix opener at `at` that the parser did not read on because a
-    /// blank or a line break is before it ([`crate::layout::Detached`], S-89).
-    pub detached: Option<crate::layout::Detached>,
+    /// blank or a line break is before it ([`Detached`], S-89).
+    pub detached: Option<Detached>,
     /// The last tokens of the statements and declarations that end no operand
     /// (`for`, `while`, a declaration but `const` and `type`) or with a bound
     /// value (`let`, `var`, an assignment), in order (`Parser::ends`).
-    pub ends: &'a [(usize, crate::layout::End)],
+    pub ends: &'a [(usize, End)],
     /// The row a matcher of several rows found ([`Cursor::say`]).
     pub found: std::cell::Cell<Option<RowId>>,
+}
+
+/// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) that the
+/// parser did not read on, because a blank or a line break is before it
+/// (§2.5, S-89): the grammar fails where it fails, and the table reads this
+/// at that failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Detached {
+    /// The opener, an index of the parser's tokens.
+    pub at: usize,
+    /// The token before it ends a path of names (§6.1: what a callee is,
+    /// [`callee_by_name`]; a name of a declaration, a type,
+    /// a pattern or an attribute is one), S-399.
+    pub by_name: bool,
+    /// The opener follows an expression (else a declaration, a type, a
+    /// pattern or an attribute).
+    pub expr: bool,
+    /// The list is required there (`Parser::opens`): a line break before
+    /// the opener is no next element either.
+    pub required: bool,
+}
+
+impl Detached {
+    /// Whether the code with the gap taken out reads as the postfix it would
+    /// be (S-373, S-399, read from the tokens): a `(` or a mark after a path
+    /// of names; a `[` whose list closes, is not empty and holds no `;` (an
+    /// array, `[T; N]`), and, after an expression, holds no `,` either
+    /// (`xs[0, 1]` is no index).
+    pub(crate) fn joins(self, tokens: &[Token]) -> bool {
+        match tokens[self.at].kind {
+            TokenKind::LParen | TokenKind::Bang | TokenKind::Tilde => self.by_name,
+            TokenKind::LBracket => {
+                let Some((close, comma, semi)) = crate::scan::bracket_contents(tokens, self.at) else { return false };
+                close > self.at + 1 && !semi && !(self.expr && comma)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// What a statement or a declaration that the parser read to its end ends
+/// with, for a symbol at the head of the next line (`Parser::ends`, S-236).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum End {
+    /// No operand: a `for`, a `while`, a declaration but `const` and `type`.
+    /// No symbol goes on with it.
+    NoOperand,
+    /// The value of a `let`, a `var`, an assignment, a `return` or an
+    /// `assert`: an operator goes on with it, a `=` does not.
+    Bound,
 }
 
 /// A form a row found: its span (the main position), its candidates (none:
@@ -321,9 +391,34 @@ fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
     d.with_rule(row.rule)
 }
 
-/// The diagnostics of a failure of the parser, when a row recognises it, and
+/// What the table says of a failure of the parser: the diagnostic of the row
+/// that recognises it, if one does, and the candidates of the parser's
+/// general E0002 when that is reported too (no row, or a form in a place
+/// where nothing of its kind goes, [`Hit`]): the missing `,` of a list and
+/// the gap before an opener taken out ([`lists::list_fixes`]).
+pub(crate) struct Failure {
+    pub row: Option<Diagnostic>,
+    pub general: Option<Vec<Fix>>,
+}
+
+/// The table's reading of a failure of the parser ([`Failure`]).
+pub(crate) fn at_failure(c: &Cursor) -> Failure {
+    let (row, general) = match row_at_failure(c) {
+        Some((d, misplaced)) => (Some(d), misplaced),
+        None => (None, true),
+    };
+    // After an element of a list, the general error is the missing `,`;
+    // an opener after a line break takes it out (S-89).
+    let general = general.then(|| match c.want {
+        Want::Separator(list) => lists::list_fixes(c, Some(list)),
+        _ => lists::list_fixes(c, None),
+    });
+    Failure { row, general }
+}
+
+/// The diagnostic of a failure of the parser, when a row recognises it, and
 /// whether the parser's general E0002 is to be reported too ([`Hit`]).
-pub(crate) fn at_failure(c: &Cursor) -> Option<(Diagnostic, bool)> {
+fn row_at_failure(c: &Cursor) -> Option<(Diagnostic, bool)> {
     let mut found: Option<(RowId, Hit)> = None;
     for row in ROWS {
         let Detect::Syntax(matcher) = row.detect else { continue };
@@ -372,17 +467,16 @@ impl Cursor<'_> {
     }
 
     /// A comment of any kind (a block comment is a token of its own, which
-    /// its own row reports; elsewhere it is passed over as a comment).
+    /// its own row reports; elsewhere it is passed over as a comment,
+    /// [`TokenKind::is_comment`], as the line facts pass it over).
     pub(crate) fn comment(&self, i: usize) -> bool {
-        matches!(self.kind(i), TokenKind::Comment | TokenKind::DocComment | TokenKind::BlockComment)
+        self.kind(i).is_comment()
     }
 
     /// Whether the literal token `i` is one the lexer read with no error in
-    /// it (closed, with valid escapes and holes, one scalar in a character).
+    /// it ([`crate::literal::Literals::ok`]).
     pub(crate) fn literal_ok(&self, i: usize) -> bool {
-        let s = self.span(i);
-        let from = self.lexed.partition_point(|l| l.start < s.start);
-        !self.lexed[from..].iter().take_while(|l| l.start < s.end).any(|l| l.end <= s.end)
+        self.literals.ok(self.span(i))
     }
 
     /// The token after `i`, comments skipped (a newline is a token).
@@ -431,14 +525,19 @@ impl Cursor<'_> {
         self.open.iter().enumerate().rev().find(|(_, o)| o.0 == NodeKind::SourceFile || o.1 < at).map(|(k, o)| (k, o.0))
     }
 
-    /// What separates `tokens[i]` from the token before it.
-    /// What separates `tokens[i]` from the token after it ([`crate::token::gap_after`]).
+    /// What separates `tokens[i]` from the token after it ([`crate::layout::Lines::after`]).
     pub(crate) fn gap_after(&self, i: usize) -> Gap {
-        crate::token::gap_after(self.all, self.full, self.tokens, i)
+        self.lines.after(i)
     }
 
+    /// What separates `tokens[i]` from the token before it ([`crate::layout::Lines::before`]).
     pub(crate) fn gap(&self, i: usize) -> Gap {
-        crate::token::gap_before(self.all, self.full[i] as usize)
+        self.lines.before(i)
+    }
+
+    /// Whether `tokens[i]` is at the head of its line ([`crate::layout::Lines::at_line_head`]).
+    pub(crate) fn at_line_head(&self, i: usize) -> bool {
+        self.lines.at_line_head(i)
     }
 
     /// The whitespace token right after `tokens[i]`, if any.
@@ -486,6 +585,35 @@ impl Cursor<'_> {
 }
 
 impl Cursor<'_> {
+    /// The symbol at the head of the line where the parser failed: the token of
+    /// the failure, or, when the parser failed at a line break (a head waiting
+    /// for its `{`, a `let` for its `=`), the first token of the next line; and
+    /// the code before it, when that is an operand the symbol may go on with
+    /// (S-124, S-374, S-380): no statement or declaration that ends no operand
+    /// (`for`, `while`, a declaration, S-236, [`Cursor::ends`], [`End`]), but
+    /// for a `->` or a `=`, which go on with the head of a declaration (the
+    /// caller judges whose head).
+    pub(crate) fn head_symbol_after_operand(&self) -> Option<(usize, usize)> {
+        use TokenKind::*;
+        let s = if self.kind(self.at) == Newline { self.sig_after(self.at) } else { self.at };
+        if !self.lines.at_line_head(s) {
+            return None;
+        }
+        let prev = self.sig_before(s)?;
+        let kind = self.kind(s);
+        let operand = ends_operand(self.kind(prev)) || (matches!(kind, Pipe | Eq) && self.kind(prev) == Underscore);
+        let head = matches!(kind, Arrow | Eq);
+        (operand && (head || self.end_at(prev) != Some(End::NoOperand))).then_some((s, prev))
+    }
+
+    /// What the statement or declaration whose last token is `i` ends with,
+    /// when the parser read one to its end there ([`End`]).
+    pub(crate) fn end_at(&self, i: usize) -> Option<End> {
+        self.ends.binary_search_by_key(&i, |e| e.0).ok().map(|k| self.ends[k].1)
+    }
+}
+
+impl Cursor<'_> {
     /// A matcher of several rows says which row it found (a matcher is a
     /// plain function of the cursor).
     fn say(&self, row: RowId) {
@@ -511,8 +639,9 @@ fn is_place(c: &Cursor, first: usize, last: usize) -> bool {
 }
 
 /// Where the statement that goes on at token `from` ends: the last token of
-/// it (a newline ends it unless the line goes on, [`crate::layout::continues`];
-/// a `}` or `)` that closes what it is in ends it too).
+/// it (a newline ends it unless the line goes on, as the parser reads it,
+/// [`crate::layout::Lines::goes_on`]; a `}` or `)` that closes what it is in
+/// ends it too).
 fn statement_end(c: &Cursor, from: usize) -> Option<usize> {
     let mut depth = 0i32;
     let mut last: Option<usize> = None;
@@ -522,11 +651,7 @@ fn statement_end(c: &Cursor, from: usize) -> Option<usize> {
             TokenKind::Eof | TokenKind::Semi => break,
             _ if c.comment(i) => {}
             TokenKind::Newline if depth == 0 => {
-                let continued = last.is_some_and(|l| {
-                    let before = c.sig_before(l).map(|b| c.kind(b));
-                    crate::layout::continues(before, c.kind(l), c.kind(c.sig_after(i)))
-                });
-                if !continued {
+                if !(last.is_some() && c.lines.goes_on(i)) {
                     break;
                 }
             }
@@ -579,7 +704,7 @@ pub(crate) fn closing(c: &Cursor, open: usize) -> Option<usize> {
 /// expression among the nodes closed there (an argument list closes before
 /// its call; the `if` of `if c { f } else { g }`, not its last block, S-316).
 fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
-    c.closed.iter().copied().rfind(|n| crate::lower::class(n.0) == crate::lower::Class::Expr)
+    c.closed.iter().copied().rfind(|n| n.0.class() == Class::Expr)
 }
 
 // ------------------------------------------------------------ the rows by their families
@@ -588,9 +713,11 @@ mod assign;
 mod calls;
 mod comments;
 mod decls;
+mod edits;
 mod faust;
 pub mod guard;
 mod lines;
+mod lists;
 mod literals;
 mod modes;
 mod paths;
@@ -602,9 +729,9 @@ pub use guard::guard_name;
 use guard::guard_pattern;
 
 pub(crate) use calls::{CalleeChain, callee_by_name, names_a_path};
-pub(crate) use literals::{is_integer, number_part};
+pub(crate) use edits::move_up;
 pub use paths::TYPE_NAMES;
-pub(crate) use paths::{is_type_suffix, type_list_ahead, type_name};
+pub(crate) use paths::{type_list_ahead, type_name};
 pub use rows::{ROWS, WAITING};
 // The helpers that the rows of `guard` and `flow` share with a family.
 use assign::operand;

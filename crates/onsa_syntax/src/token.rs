@@ -2,8 +2,25 @@
 
 use onsa_diag::Span;
 
-use crate::ast::RangeEnd;
+use crate::ast::{BinOp, RangeEnd};
 
+/// Declares [`TokenKind`] and [`TokenKind::ALL`] from one list, so that the
+/// list of every kind cannot miss one.
+macro_rules! token_kinds {
+    ($(#[$meta:meta])* pub enum TokenKind { $($(#[$vmeta:meta])* $variant:ident,)* }) => {
+        $(#[$meta])*
+        pub enum TokenKind {
+            $($(#[$vmeta])* $variant,)*
+        }
+
+        impl TokenKind {
+            /// Every kind, in the order of its declaration.
+            pub const ALL: &'static [TokenKind] = &[$(TokenKind::$variant),*];
+        }
+    };
+}
+
+token_kinds! {
 /// Kind of a token. Whitespace, comments and newlines are tokens too
 /// (trivia), so the tokens cover every byte of the source and the CST holds
 /// all of them (R-86). The parser skips whitespace and comments and treats
@@ -157,6 +174,7 @@ pub enum TokenKind {
     /// End of file.
     Eof,
 }
+}
 
 impl TokenKind {
     /// The readings of a range symbol (S-257), in the order of the
@@ -190,40 +208,58 @@ impl TokenKind {
         matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
     }
 
+    /// A comment of any kind: `//`, `///` and the block comment of other
+    /// languages (a token of its own, which its row reports): the one test
+    /// of a comment where code is looked for (the line facts, the table).
+    #[inline]
+    pub fn is_comment(self) -> bool {
+        matches!(self, TokenKind::Comment | TokenKind::DocComment | TokenKind::BlockComment)
+    }
+
+    /// Code: no whitespace, line break or comment ([`TokenKind::is_comment`]).
+    /// A line goes on or not by its code (§2.5).
+    #[inline]
+    pub fn is_code(self) -> bool {
+        !matches!(self, TokenKind::Whitespace | TokenKind::Newline) && !self.is_comment()
+    }
+
     /// A keyword (§2.2): one of [`KEYWORDS`], not an order of the declarations (R-87).
     pub fn is_keyword(self) -> bool {
         KEYWORDS.iter().any(|&(_, k)| k == self)
     }
 
-    /// Binary operators (§3.1), excluding `as`.
-    pub fn is_binary_op(self) -> bool {
+    /// The binary operator of the token (§3.1), if it is one (`as` is none):
+    /// the one map, for the parser, the line facts, the table and the lowering.
+    #[inline]
+    pub fn binop(self) -> Option<BinOp> {
         use TokenKind::*;
-        matches!(
-            self,
-            Plus | Minus
-                | Star
-                | Slash
-                | Percent
-                | PlusPercent
-                | MinusPercent
-                | StarPercent
-                | PlusPipe
-                | MinusPipe
-                | StarPipe
-                | EqEq
-                | NotEq
-                | Lt
-                | LtEq
-                | Gt
-                | GtEq
-                | AndAnd
-                | OrOr
-                | Amp
-                | Pipe
-                | Caret
-                | Shl
-                | Shr
-        )
+        Some(match self {
+            Plus => BinOp::Add,
+            Minus => BinOp::Sub,
+            Star => BinOp::Mul,
+            Slash => BinOp::Div,
+            Percent => BinOp::Rem,
+            PlusPercent => BinOp::WrapAdd,
+            MinusPercent => BinOp::WrapSub,
+            StarPercent => BinOp::WrapMul,
+            PlusPipe => BinOp::SatAdd,
+            MinusPipe => BinOp::SatSub,
+            StarPipe => BinOp::SatMul,
+            EqEq => BinOp::Eq,
+            NotEq => BinOp::Ne,
+            Lt => BinOp::Lt,
+            LtEq => BinOp::Le,
+            Gt => BinOp::Gt,
+            GtEq => BinOp::Ge,
+            AndAnd => BinOp::And,
+            OrOr => BinOp::Or,
+            Amp => BinOp::BitAnd,
+            Pipe => BinOp::BitOr,
+            Caret => BinOp::BitXor,
+            Shl => BinOp::Shl,
+            Shr => BinOp::Shr,
+            _ => return None,
+        })
     }
 
     /// Keyword for an identifier text, if it is one ([`KEYWORDS`]).
@@ -416,47 +452,31 @@ impl Gap {
     }
 }
 
-/// The mark `::[` of type arguments in an expression at `tokens[i]` (§2.5,
-/// §4.5): `::` and `[` with no space or newline before either. `all` is the
-/// full token list and `full[k]` the index in it of `tokens[k]`. The one
-/// test of the mark, for the parser and the table of the forms.
-pub(crate) fn is_type_args_mark(all: &[Token], full: &[u32], tokens: &[Token], i: usize) -> bool {
-    tokens.get(i).is_some_and(|t| t.kind == TokenKind::ColonColon)
-        && tokens.get(i + 1).is_some_and(|t| t.kind == TokenKind::LBracket)
-        && gap_before(all, full[i] as usize) == Gap::None
-        && gap_before(all, full[i + 1] as usize) == Gap::None
-}
-
-/// What precedes `tokens[i]` in the full token list of the lexer: a newline
-/// when the last token before it that is not whitespace is a newline, a space
-/// when whitespace comes right before it, nothing otherwise. A comment right
-/// before a token is not a gap (`/* */a`); a line comment is always followed
-/// by a newline.
-/// What separates `tokens[i]` from the token after it, where `tokens` are
-/// the tokens without whitespace and `full[k]` the index of `tokens[k]` in
-/// the full list `all`: a newline or a line comment after it is a line
-/// break (§2.5: the one test of the gap after a token, for the parser and
-/// the table of the forms).
-pub(crate) fn gap_after(all: &[Token], full: &[u32], tokens: &[Token], i: usize) -> Gap {
-    match tokens.get(i + 1).map(|t| t.kind) {
-        Some(TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment) => Gap::Newline,
-        Some(_) => gap_before(all, full[i + 1] as usize),
-        None => Gap::None,
-    }
-}
-
-pub fn gap_before(tokens: &[Token], i: usize) -> Gap {
-    let mut j = i;
-    let mut space = false;
-    while j > 0 {
-        j -= 1;
-        match tokens[j].kind {
-            TokenKind::Whitespace => space = true,
-            TokenKind::Newline => return Gap::Newline,
-            _ => break,
+impl Gap {
+    /// The gap before the token after a token of `kind`, when `self` is the
+    /// gap before that token: a newline after a newline (with or without
+    /// blanks after it), a blank after whitespace, and nothing after any
+    /// other token (a comment right before a token is not a gap, `/* */a`; a
+    /// line comment is always followed by a newline). The one rule of the
+    /// gaps: [`gap_before`] and the line facts ([`crate::layout::Lines`],
+    /// which keep it for every token the parser reads) fold it over the full
+    /// token list.
+    #[inline]
+    pub fn then(self, kind: TokenKind) -> Gap {
+        match kind {
+            TokenKind::Whitespace if self == Gap::None => Gap::Space,
+            TokenKind::Whitespace => self,
+            TokenKind::Newline => Gap::Newline,
+            _ => Gap::None,
         }
     }
-    if space { Gap::Space } else { Gap::None }
+}
+
+/// What precedes the token `tokens[i]` of the full token list of the lexer
+/// ([`Gap::then`] from the last token before it that is no whitespace).
+pub fn gap_before(tokens: &[Token], i: usize) -> Gap {
+    let from = tokens[..i].iter().rposition(|t| t.kind != TokenKind::Whitespace).unwrap_or(0);
+    tokens[from..i].iter().fold(Gap::None, |gap, t| gap.then(t.kind))
 }
 
 #[cfg(test)]

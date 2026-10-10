@@ -1,4 +1,5 @@
-//! Tests of the lines and blanks of §2.5 ([`crate::layout`] and the rows of
+//! Tests of the lines and blanks of §2.5 (the line facts of
+//! [`crate::layout`], the candidates of `foreign/lists.rs` and the rows of
 //! `foreign/spaces.rs`): the postfix openers kept apart from the token before
 //! them (S-89, S-123, S-399), the missing `,` of a list (S-384, S-387, S-388,
 //! S-373) and the literals with a prefix (S-400). Every candidate is applied
@@ -6,7 +7,7 @@
 
 use onsa_diag::{Code, Diagnostic, FileId};
 
-use crate::token::TokenKind;
+use crate::token::{Gap, TokenKind};
 
 fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
@@ -757,31 +758,6 @@ fn a_range_symbol_at_the_head_of_a_line() {
 // ------------------------------------------------------------ W3-06 unit 2: the break side's findings
 
 #[test]
-fn fmt_props_continues_as_the_parser() {
-    // tools/fmt_props.py keeps the set of the symbols after which a line goes
-    // on (`CONTINUING`): the same as `layout::continues` (D-15).
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/fmt_props.py");
-    let text = std::fs::read_to_string(&path).unwrap();
-    let line = text.lines().find(|l| l.starts_with("CONTINUING = frozenset(\"")).expect("CONTINUING");
-    let set: std::collections::BTreeSet<&str> =
-        line.trim_start_matches("CONTINUING = frozenset(\"").trim_end_matches("\".split())").split(' ').collect();
-    let kind = |s: &str| {
-        let lexed = crate::lex(FileId(0), s);
-        let code: Vec<_> = lexed.tokens.iter().filter(|t| !t.kind.is_trivia() && t.kind != TokenKind::Eof).collect();
-        assert_eq!(code.len(), 1, "{s} is one token");
-        code[0].kind
-    };
-    let goes_on = |s: &str| crate::layout::continues(Some(TokenKind::Ident), kind(s), TokenKind::Ident);
-    for s in &set {
-        assert!(goes_on(s), "`{s}` is in CONTINUING but a line ending in it does not go on");
-    }
-    let symbols = "+ - * / % +% -% *% +| -| *| == != < <= > >= && || & | ^ << >> = -> ..< ..= .. ... => : , . ! ~ ? @ :: ( ) [ ] { }";
-    for s in symbols.split(' ') {
-        assert_eq!(goes_on(s), set.contains(s), "`{s}`: CONTINUING and layout::continues differ");
-    }
-}
-
-#[test]
 fn a_line_that_starts_with_an_ampersand() {
     // The break side's 1: the binary `&` at the head of a line goes on with the
     // line before (leading_operator); `&mut b`, `&*x`, `&= b` are the rows of
@@ -885,4 +861,68 @@ fn a_line_break_after_a_prefix_plus() {
     check(&body("  two(+ // c\n    a, 1)"), Code::E0020, "+", &[&body("  two(a, 1) // c")]);
     let m = |p: &str| format!("fn g(x: I32) -> I32 {{\n  match x {{\n    {p} => 1,\n    _ => 0,\n  }}\n}}\n");
     check(&m("+\n    1"), Code::E0020, "+", &[&m("1")]);
+}
+
+#[test]
+fn the_line_facts_of_each_token() {
+    // The gaps around each token the parser reads, the tokens at the head of
+    // a line and the line breaks that go on (§2.5), found once (D-13).
+    let src = "a +\n  // c\n\n  b\n.c ? d\n-e";
+    let all = crate::lex(FileId(0), src).tokens;
+    let (tokens, full, lines) = crate::layout::code_tokens(&all);
+    // The gaps are those that `gap_before` reads in the full list.
+    for (k, &i) in full.iter().enumerate() {
+        assert_eq!(lines.before(k), crate::token::gap_before(&all, i as usize), "{k}");
+    }
+    let text = |i: usize| &src[tokens[i].span.start as usize..tokens[i].span.end as usize];
+    let at = |s: &str| (0..tokens.len()).find(|&i| text(i) == s).unwrap();
+    use Gap::*;
+    assert_eq!((lines.before(at("+")), lines.after(at("+"))), (Space, Newline));
+    assert_eq!((lines.before(at("b")), lines.after(at("b"))), (Newline, Newline));
+    assert_eq!((lines.before(at("?")), lines.after(at("?"))), (Space, Space));
+    assert!(lines.at_line_head(at("b")) && lines.at_line_head(at(".")) && lines.at_line_head(at("-")));
+    assert!(!lines.at_line_head(at("+")) && !lines.at_line_head(at("c")));
+    // The line breaks after `+` (and over the comment and the blank line) go
+    // on; the one before `.` goes on; the one before `-` does not.
+    let newlines: Vec<bool> =
+        (0..tokens.len()).filter(|&i| tokens[i].kind == TokenKind::Newline).map(|i| lines.goes_on(i)).collect();
+    assert_eq!(newlines, vec![true, true, true, true, false]);
+    assert_eq!(lines.after(tokens.len() - 1), None);
+}
+
+#[test]
+fn the_gaps_are_those_of_gap_before() {
+    // One rule of the gaps (`Gap::then`): the line facts keep what
+    // `token::gap_before` reads in the full list, with CRLF, tabs, block
+    // comments, blanks before a newline and blanks at the start.
+    for src in [
+        "a\r\n  b",
+        "\t a\t+\tb",
+        "a /* c */ + /* d */b",
+        "/* c */a",
+        "  a  \n\n \t b\r\n",
+        "a // c\r\n  b",
+        "",
+        "\n\n",
+    ] {
+        let all = crate::lex(FileId(0), src).tokens;
+        let (_, full, lines) = crate::layout::code_tokens(&all);
+        for (k, &i) in full.iter().enumerate() {
+            assert_eq!(lines.before(k), crate::token::gap_before(&all, i as usize), "{src:?} {k}");
+        }
+    }
+}
+
+#[test]
+fn a_line_goes_on_across_a_block_comment() {
+    // A comment is passed over where the code of a line is looked for
+    // (`TokenKind::is_comment`, §2.5): a line that ends in an operator and a
+    // block comment goes on, as one that ends in a line comment does.
+    for src in ["a |\n/* c */\n  b", "a | /* c */\n  b", "a |\n  /* c */ b"] {
+        let all = crate::lex(FileId(0), src).tokens;
+        let (tokens, _, lines) = crate::layout::code_tokens(&all);
+        let newlines: Vec<bool> =
+            (0..tokens.len()).filter(|&i| tokens[i].kind == TokenKind::Newline).map(|i| lines.goes_on(i)).collect();
+        assert!(newlines.iter().all(|&g| g), "{src:?}: {newlines:?}");
+    }
 }

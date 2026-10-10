@@ -7,8 +7,8 @@ use onsa_diag::{Diagnostic, Edit, Fix, Span};
 use super::{Cursor, Hit, RowId, Want, bit_not, diagnostic, hit};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
 // The clock written after a type is apart from the token after it (R-205).
-use crate::layout::insert_apart;
-use crate::lower::{Class, class};
+use super::edits::insert_apart;
+use crate::cst::Class;
 use crate::token::{Gap, TokenKind};
 
 // ------------------------------------------------------------ `if~`, `match~`
@@ -86,7 +86,7 @@ pub(super) fn space_after_branch_keyword(c: &Cursor) -> Option<Hit> {
         }
         Fix::new(title, edits)
     } else {
-        crate::layout::move_token_up(c, &title, c.at)?
+        super::edits::move_token_up(c, &title, c.at)?
     };
     let mut fixes = vec![first];
     fixes.extend(bit_not(c).unwrap_or_default());
@@ -97,7 +97,7 @@ pub(super) fn space_after_branch_keyword(c: &Cursor) -> Option<Hit> {
 /// it out when the first `if` has one, else moves it to the first `if`; a
 /// `~` that touches its operand has the bitwise negation as the second.
 pub(super) fn else_if_tilde(c: &Cursor) -> Option<Hit> {
-    if c.want != Want::Expr || c.kind(c.at) != TokenKind::Tilde || c.gap(c.at) == Gap::Newline {
+    if c.want != Want::Expr || c.kind(c.at) != TokenKind::Tilde || c.at_line_head(c.at) {
         return None;
     }
     let kw = c.before(c.at)?;
@@ -249,8 +249,8 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fi
     {
         return None;
     }
-    let first_expr = |n: NodeId| cst.child_nodes(n).find(|&c| class(cst.kind(c)) == Class::Expr);
-    let value = cst.child_nodes(stmt).filter(|&n| class(cst.kind(n)) == Class::Expr).last()?;
+    let first_expr = |n: NodeId| cst.child_nodes(n).find(|&c| cst.kind(c).class() == Class::Expr);
+    let value = cst.child_nodes(stmt).filter(|&n| cst.kind(n).class() == Class::Expr).last()?;
     let Some(out) = take_out(cst, clock) else { return Some(Vec::new()) };
     let mut inner = value;
     while cst.kind(inner) == NodeKind::ParenExpr {
@@ -283,7 +283,7 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fi
 /// candidate when the clock holds a comment.
 fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
     let typeish = |n: NodeId| {
-        class(cst.kind(n)) == Class::Type || matches!(cst.kind(n), NodeKind::TypeArgs | NodeKind::FnTypeParams)
+        cst.kind(n).class() == Class::Type || matches!(cst.kind(n), NodeKind::TypeArgs | NodeKind::FnTypeParams)
     };
     let mut place = clock;
     while let Some(p) = cst.parent(place) {
@@ -303,7 +303,7 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
     };
     let Some(out) = take_out(cst, clock) else { return Some(Vec::new()) };
     // The type of the input, the output or the binding: the type child of the node.
-    let ty = cst.child_nodes(place).find(|&n| class(cst.kind(n)) == Class::Type && cst.is_complete(n));
+    let ty = cst.child_nodes(place).find(|&n| cst.kind(n).class() == Class::Type && cst.is_complete(n));
     // A function type that no `uses` closes: a clock after it belongs to its
     // result (S-367), so the type is parenthesized to take one after it.
     let open = |t: NodeId| cst.kind(t) == NodeKind::FnType && !has_effects(cst, t);

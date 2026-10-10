@@ -426,7 +426,7 @@ fn levels(cst: &Cst, src: &str, n: NodeId) -> u32 {
                     }
                 }
                 Elem::Token(t) => {
-                    if let Some(op) = crate::lower::binop(cst.token(t).kind) {
+                    if let Some(op) = cst.token(t).kind.binop() {
                         chain.as_mut().expect("an operand first").operator(op.group());
                     }
                 }
@@ -456,7 +456,7 @@ fn levels(cst: &Cst, src: &str, n: NodeId) -> u32 {
                 && cst.token(t).kind == TokenKind::Str
             {
                 let tok = cst.token(t);
-                let lit = crate::lower::str_lit(&src[tok.span.start as usize..tok.span.end as usize], tok.span);
+                let lit = crate::literal::str_lit(&src[tok.span.start as usize..tok.span.end as usize], tok.span);
                 for seg in &lit.segments {
                     if let StrSeg::Interp(p) = seg {
                         children = children.max(p.segments.len() as u32 - 1);

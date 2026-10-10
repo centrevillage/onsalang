@@ -12,7 +12,7 @@ fn range_symbol(c: &Cursor) -> Option<bool> {
     if c.kind(c.at).range_readings().is_empty() || c.want == Want::Pattern || c.before(c.at).is_none() {
         return None;
     }
-    let pattern = |k: NodeKind| crate::lower::class(k) == crate::lower::Class::Pat;
+    let pattern = |k: NodeKind| k.class() == crate::cst::Class::Pat;
     if c.closed.first().is_some_and(|n| pattern(n.0)) || c.top().is_some_and(pattern) {
         return None;
     }
@@ -27,7 +27,7 @@ fn head(c: &Cursor) -> Option<bool> {
     // The head: the expression that closed here starts right after `in`
     // (or `in move`) of the innermost open `for` or `par` (the context: the
     // block of the body may be open before its `{`).
-    let outer = c.closed.iter().rev().find(|n| crate::lower::class(n.0) == crate::lower::Class::Expr)?;
+    let outer = c.closed.iter().rev().find(|n| n.0.class() == crate::cst::Class::Expr)?;
     let head = matches!(c.context(), Some((_, NodeKind::ForStmt | NodeKind::ParExpr)))
         && c.sig_before(c.index_at(outer.1)).is_some_and(|i| matches!(c.kind(i), TokenKind::KwIn | TokenKind::KwMove));
     if head && outer.0 == NodeKind::RangeExpr {
@@ -39,7 +39,7 @@ fn head(c: &Cursor) -> Option<bool> {
 /// `a..b` and `a...b` in a head (S-257): whether the end is included is
 /// read both ways across languages, so the two candidates edit the symbol
 /// only (S-251), `..<` first. The end is a token that starts an operand
-/// ([`crate::parser::starts_operand`]; an end that a later stage rejects is
+/// ([`crate::starts::starts_operand`]; an end that a later stage rejects is
 /// the error of that stage, after the candidate) but `{`, which a head
 /// reads as its body (S-338): a range with one end is another row
 /// ([`range_header_one_sided`], S-278).
@@ -49,7 +49,7 @@ pub(super) fn range_dots(c: &Cursor) -> Option<Hit> {
     }
     // A symbol is never the last token (`Eof` is).
     let next = c.kind(c.at + 1);
-    if !crate::parser::starts_operand(next) || next == TokenKind::LBrace {
+    if !crate::starts::starts_operand(next) || next == TokenKind::LBrace {
         return None;
     }
     let span = c.span(c.at);
@@ -84,7 +84,7 @@ pub(super) fn range_header_one_sided(c: &Cursor) -> Option<Hit> {
     let next = c.kind(c.sig_after(c.at));
     let ends = range_symbol(c) == Some(true)
         && kind.is_foreign_range()
-        && (!crate::parser::starts_operand(next) || next == TokenKind::LBrace);
+        && (!crate::starts::starts_operand(next) || next == TokenKind::LBrace);
     if !starts && !ends {
         return None;
     }
@@ -104,10 +104,10 @@ pub(super) fn range_header_one_sided(c: &Cursor) -> Option<Hit> {
 
 /// A range symbol at the head of a line after an operand (the token of the
 /// failure, or the first of the line after a head that waits for its `{`,
-/// [`crate::layout::line_head`]), and whether it goes on with the head of a
+/// [`Cursor::head_symbol_after_operand`]), and whether it goes on with the head of a
 /// `for` or a `par` (§2.5, S-335): after a statement that ended, it does not.
 fn line_range(c: &Cursor) -> Option<(usize, bool)> {
-    let (s, _) = crate::layout::line_head(c)?;
+    let (s, _) = c.head_symbol_after_operand()?;
     if c.kind(s).range_readings().is_empty() || c.want == Want::Pattern {
         return None;
     }
@@ -134,7 +134,7 @@ pub(super) fn leading_range(c: &Cursor) -> Option<Hit> {
                 crate::ast::RangeEnd::Excluded => "exclude the end with `..<` at the end of the line before",
                 crate::ast::RangeEnd::Included => "include the end with `..=` at the end of the line before",
             };
-            crate::layout::move_token_up_as(c, title, s, &format!(" {}", end.symbol()))
+            super::edits::move_token_up_as(c, title, s, &format!(" {}", end.symbol()))
         })
         .collect();
     hit(c.span(s), fixes)

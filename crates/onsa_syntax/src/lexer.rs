@@ -6,6 +6,7 @@
 
 use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
+use crate::literal::Literals;
 use crate::token::{Token, TokenKind};
 
 /// Result of lexing one file.
@@ -13,17 +14,18 @@ use crate::token::{Token, TokenKind};
 pub struct Lexed {
     pub tokens: Vec<Token>,
     pub diagnostics: Vec<Diagnostic>,
-    /// The holes of the string literals that a `}` closes (`{x}`, also of a
-    /// form an interpolation may not have, `{X}`), from the `{` to after the
-    /// `}`: the parser tells an interpolation in the name of a `test` by them
-    /// (spec §11.8, S-244).
-    pub holes: Vec<Span>,
+    /// The holes of the string literals and the spans of the errors above,
+    /// found once here and read by the parser and the table of the forms of
+    /// other languages ([`Literals`]).
+    pub(crate) literals: Literals,
 }
 
 pub fn lex(file: FileId, text: &str) -> Lexed {
-    let mut lx = Lexer { file, text, bytes: text.as_bytes(), pos: 0, out: Lexed::default() };
+    let mut lx = Lexer { file, text, bytes: text.as_bytes(), pos: 0, out: Lexed::default(), holes: Vec::new() };
     lx.run();
-    lx.out
+    let mut out = lx.out;
+    out.literals = Literals::new(lx.holes, &out.diagnostics);
+    out
 }
 
 struct Lexer<'a> {
@@ -32,6 +34,9 @@ struct Lexer<'a> {
     bytes: &'a [u8],
     pos: usize,
     out: Lexed,
+    /// The holes of the string literals that a `}` closes, from the `{` to
+    /// after the `}` ([`Literals`]).
+    holes: Vec<Span>,
 }
 
 impl<'a> Lexer<'a> {
@@ -202,9 +207,9 @@ impl<'a> Lexer<'a> {
 
     /// `1u8`, `1.0f32`: a suffix is never valid (no typed literals, §2.4).
     /// The letters after the digits are read into the number, which is then
-    /// a form of another language (`ForeignLit`) when the table of those
-    /// forms knows the suffix ([`crate::foreign::is_type_suffix`]), and
-    /// E0001 when it does not (`123abc`).
+    /// a form of another language (`ForeignLit`) when the suffix is a type
+    /// suffix of other languages ([`crate::literal::is_type_suffix`]), and E0001 when it is
+    /// not (`123abc`).
     fn suffix(&mut self) -> bool {
         if !self.peek().is_some_and(is_ident_start) {
             return false;
@@ -213,7 +218,7 @@ impl<'a> Lexer<'a> {
         while self.peek().is_some_and(is_ident_continue) {
             self.pos += 1;
         }
-        if crate::foreign::is_type_suffix(&self.text[start..self.pos]) {
+        if crate::literal::is_type_suffix(&self.text[start..self.pos]) {
             return true;
         }
         let span = Span::new(self.file, start as u32, self.pos as u32);
@@ -261,7 +266,7 @@ impl<'a> Lexer<'a> {
                     let ok = self.interp_path();
                     if self.peek() == Some(b'}') {
                         self.pos += 1;
-                        self.out.holes.push(Span::new(self.file, open as u32, self.pos as u32));
+                        self.holes.push(Span::new(self.file, open as u32, self.pos as u32));
                         if !ok {
                             let span = Span::new(self.file, open as u32, self.pos as u32);
                             self.error(
