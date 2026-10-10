@@ -1,0 +1,2 @@
+pub flow l(c:e)->F { let a = if~ c {}
+else（全//

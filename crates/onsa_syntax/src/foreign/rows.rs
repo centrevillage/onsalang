@@ -37,7 +37,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`return`, `break` and `continue` are statements; an arm that is one is written as a block",
         rule: "`return`, `break` and `continue` are statements, written in a block: `None => { return 0 },` (§7)",
-        detect: Detect::Syntax(arm_return),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceBeforeQuestion,
@@ -46,7 +46,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a postfix `?` is written right after its operand",
         rule: "the postfix `?` is written right after its operand, with no blank or line break before it (`x?`); `x ?` reads as the start of the conditional operator of C (§2.5)",
-        detect: Detect::Syntax(spaces::space_before_question),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceAfterPrefix,
@@ -55,7 +55,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a prefix operator is written right before its operand",
         rule: "the prefix `-` and `!` are written right before their operand, with no blank or line break (`-x`, `!done`, the pattern `-1`, §2.5)",
-        detect: Detect::Syntax(spaces::space_after_prefix),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceAfterCaret,
@@ -64,7 +64,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "the mark `^` is written right before the name",
         rule: "the mark `^` of a feedback reference is written right before the name, `^y`; `^ y` reads as the binary exclusive or (§2.5, §2.6)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::AsymmetricBinarySpace,
@@ -73,7 +73,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a binary operator with a blank only before it reads as the prefix of the next element too",
         rule: "a binary `-`, `^` or `+` has blanks on both sides or on none (`a - b`); `a -b` reads as `a` and `-b` too (§2.5)",
-        detect: Detect::Syntax(spaces::asymmetric_binary_space),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LeadingOperator,
@@ -82,7 +82,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a line does not start with an operator that goes on with the line before",
         rule: "a binary operator, the `|` of a pattern choice, a `->` and a `=` go at the end of the line, not at the head of the next: a line ends at its end, in brackets too (§2.5)",
-        detect: Detect::Syntax(lines::leading_symbol),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LeadingMinus,
@@ -91,7 +91,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a line that starts with a `-` or `^` reads as a new line with a prefix",
         rule: "a binary `-` or `^` goes at the end of the line; a prefix one touches its operand (`-b`, §2.5)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LeadingRange,
@@ -100,7 +100,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a line does not start with a range symbol",
         rule: "a range symbol (`..<`, `..=`) goes at the end of the line, as a binary operator does (§2.5)",
-        detect: Detect::Syntax(ranges::leading_range),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LeadingVert,
@@ -109,7 +109,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a `|` goes between the alternatives of a pattern, not before the first",
         rule: "the `|` of a pattern choice is written between its alternatives only; arms are separated by `,` (§7)",
-        detect: Detect::Syntax(lines::leading_vert),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::PatternDoubleVert,
@@ -118,7 +118,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "the alternatives of a pattern are separated by one `|`",
         rule: "a pattern choice is `p | q`; `||` is the logical or of expressions (§7)",
-        detect: Detect::Syntax(lines::pattern_double_vert),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::PrefixPlus,
@@ -127,7 +127,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "there is no prefix `+`",
         rule: "Onsa has no prefix `+`: a number or an operand is written without it (§3.1)",
-        detect: Detect::Syntax(lines::prefix_plus),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::NewlineAfterDot,
@@ -136,7 +136,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a member `.` is written at the head of the line of its member",
         rule: "no line break goes after a member `.`, also in a list; a chain goes on with the `.` at the head of the next line (§2.5)",
-        detect: Detect::Syntax(lines::newline_after_dot),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::NewlineAfterPrefix,
@@ -145,7 +145,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a prefix symbol is written on the line of its operand",
         rule: "the prefix `-`, `!` and `^` are written on the line of their operand, also in a list (§2.5)",
-        detect: Detect::Syntax(lines::newline_after_prefix),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::NewlineBeforeQuestion,
@@ -154,7 +154,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a postfix `?` is written on the line of its operand",
         rule: "the postfix `?` is written right after its operand, with no line break before it, also in a list (§2.5)",
-        detect: Detect::Syntax(lines::newline_before_question),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::Semicolon,
@@ -163,7 +163,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`;` is not used in Onsa; a statement or declaration ends at the end of its line",
         rule: SEMICOLON_RULE,
-        detect: Detect::Syntax(semicolon),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SemicolonInList,
@@ -172,7 +172,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "the elements of a list are separated with `,`",
         rule: "the elements of a list (fields, arguments, parameters, ...) are separated with `,`; there is no `;` (§2.5)",
-        detect: Detect::Syntax(semicolon_in_list),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::PathSeparator,
@@ -181,7 +181,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "paths are separated with `.`",
         rule: "the separator of a path is `.` (`F32.PI`, `std.math`, §15.1)",
-        detect: Detect::Syntax(path_separator),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::AngleBrackets,
@@ -190,7 +190,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "type parameters and type arguments are written in `[ ]`",
         rule: "type parameters and type arguments are written in `[ ]` (§4.5)",
-        detect: Detect::Syntax(angle_brackets),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefMutParam,
@@ -199,7 +199,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`&mut T` is written `inout name: T`; the mode comes before the name",
         rule: NO_REFERENCES,
-        detect: Detect::Syntax(reference),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefMutSelf,
@@ -208,7 +208,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a receiver that changes is written `inout self`",
         rule: "the mode comes before the name; a receiver that changes is `inout self` (§5.2)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::MutSelf,
@@ -217,7 +217,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a receiver the method takes is written `move self`",
         rule: "the mode comes before the name: `self` borrows, `inout self` changes the caller's value, `move self` takes it (§5.2)",
-        detect: Detect::Syntax(mut_self),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefSelf,
@@ -226,7 +226,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`&self` is the default borrow; write `self`",
         rule: "the mode comes before the name; `self` is borrowed by default (§5.2)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefType,
@@ -235,7 +235,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`&T` is the default borrow; write the type without `&`",
         rule: NO_REFERENCES,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefExpr,
@@ -244,7 +244,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "there are no references; a value is borrowed by default",
         rule: NO_REFERENCES,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefMutArg,
@@ -253,7 +253,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "an argument that changes is written `inout x`",
         rule: NO_REFERENCES,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RefMutOther,
@@ -262,7 +262,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "there are no mutable references; only a parameter or an argument changes a value it borrows, with `inout`",
         rule: NO_REFERENCES,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LowercaseType,
@@ -280,7 +280,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "there is no compound assignment; write the operation out",
         rule: "an assignment is `place = value`; the operation is written out, `x = x + 1` (§5.1)",
-        detect: Detect::Syntax(compound_assignment),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::CompoundAssignUnfixable,
@@ -289,7 +289,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "there is no compound assignment, and this one cannot be written out as it stands",
         rule: "an assignment is `place = value`; the operation is written out, `x = x + 1` (§5.1)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::BinaryMinusPrefixMinus,
@@ -298,7 +298,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a binary `-` and a prefix `-` are written apart, not as `--`",
         rule: "a prefix `-` after a binary `-` is written with a blank between them, `a - -b` (§2.5)",
-        detect: Detect::Syntax(binary_minus_prefix_minus),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::Increment,
@@ -307,7 +307,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "there is no `++` or `--`; write the assignment out",
         rule: "there is no increment; a statement `x = x + 1` writes it out (§5.1)",
-        detect: Detect::Syntax(increment),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::IncrementUnfixable,
@@ -316,7 +316,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "there is no `++` or `--`, and an assignment is a statement, not an expression",
         rule: "there is no increment; a statement `x = x + 1` writes it out (§5.1)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LetMut,
@@ -325,7 +325,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a local that changes is declared with `var`",
         rule: "`let` binds a value that does not change; a local that changes is declared with `var` (§5.1)",
-        detect: Detect::Syntax(let_mut),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::Loop,
@@ -334,7 +334,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "there is no `loop`; an endless loop is `while true`",
         rule: "the loops are `while` and `for`; an endless loop is `while true` (§7)",
-        detect: Detect::Syntax(endless_loop),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::Proc,
@@ -343,7 +343,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a signal-processing node is declared with `flow`",
         rule: "a stateful signal-processing node is declared with `flow` (§11)",
-        detect: Detect::Syntax(proc),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::FloatTrailingDot,
@@ -352,7 +352,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a float literal needs digits on both sides of the point",
         rule: FLOAT_LITERAL_RULE,
-        detect: Detect::Syntax(foreign_literal),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::FloatLeadingDot,
@@ -361,7 +361,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a float literal needs digits on both sides of the point",
         rule: FLOAT_LITERAL_RULE,
-        detect: Detect::Syntax(leading_point),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::LiteralSuffix,
@@ -370,7 +370,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "literals have no type suffix; the type comes from the context",
         rule: "a literal has no type suffix; its type comes from the context or an annotation (§2.4)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::BlockComment,
@@ -379,7 +379,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "Onsa has no block comments; comments are line comments `//`",
         rule: BLOCK_COMMENT_RULE,
-        detect: Detect::Syntax(block_comment),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::BlockCommentUnclosed,
@@ -388,7 +388,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "Onsa has no block comments, and this one is never closed",
         rule: BLOCK_COMMENT_RULE,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::BlockCommentNested,
@@ -397,7 +397,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "Onsa has no block comments, and this one holds another",
         rule: BLOCK_COMMENT_RULE,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::BlockCommentMultilineCodeAfter,
@@ -406,7 +406,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "Onsa has no block comments, and code follows this one on the line it ends",
         rule: BLOCK_COMMENT_RULE,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::FloatPattern,
@@ -415,7 +415,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "float literals cannot be patterns; compare in a guard",
         rule: "a pattern holds no float literal; IEEE equality is written in a guard, `x if x == 1.0` (§7)",
-        detect: Detect::Syntax(guard_pattern),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::FloatPatternChoice,
@@ -424,7 +424,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "float literals cannot be patterns, and these alternatives do not merge into one guard",
         rule: "a pattern holds no float literal; alternatives of other shapes are split into arms, or written in a guard (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::InterpolatedStringPattern,
@@ -433,7 +433,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a string with an interpolation cannot be a pattern; compare in a guard",
         rule: "a string with an interpolation makes a value and is no pattern; it is compared in a guard, `v if v == \"a{x}b\"` (a string of `{{` and `}}` only has none); alternatives of other shapes are split into arms (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::NegatedConstantPattern,
@@ -442,7 +442,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a constant with `-` cannot be a pattern; compare in a guard",
         rule: "the `-` of a pattern is on an integer literal; a negated constant is compared in a guard, `x if x == -LIMIT`; alternatives of other shapes are split into arms (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::AtBinding,
@@ -451,7 +451,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "Onsa has no `@` bindings; compare in a guard",
         rule: "there is no `@` binding: the name is bound and its value compared in a guard, `n @ 1..<5` is `n if 1 <= n && n < 5`, `k @ LIMIT` is `k if k == LIMIT` (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::AtBindingComplex,
@@ -460,7 +460,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "Onsa has no `@` bindings, and this one is no comparison a guard can write",
         rule: "there is no `@` binding; when its right side is not literals, constants and ranges (and their choice in parentheses), it is written with a guard or a nested `match`; `@` binds more strongly than `|`, and the `|` of a pattern is a choice: a bitwise or in an end is written in parentheses (`1..<(5 | 7)`) (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RangePattern,
@@ -469,7 +469,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "ranges cannot be patterns; compare in a guard",
         rule: "a range is written only in the header of a `for` or a `par`; in a pattern it is compared in a guard, `1..<3` is `k if 1 <= k && k < 3` (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RangePatternChoice,
@@ -478,7 +478,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "ranges cannot be patterns, and these alternatives do not merge into one guard",
         rule: "a range is no pattern; alternatives of other shapes are split into arms, or written in a guard; the `|` of a pattern is a choice: a bitwise or in an end is written in parentheses (`1..<(5 | 7)`) (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::HashAttribute,
@@ -487,7 +487,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "attributes are written `@name(...)`",
         rule: "an attribute is written `@name(...)` (§6.5)",
-        detect: Detect::Syntax(hash_attribute),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::FaustBitNot,
@@ -496,7 +496,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "bits are negated with the prefix `!`",
         rule: "the bitwise negation is the prefix `!` (§2.6); a prefix `~` reads as the feedback of FAUST",
-        detect: Detect::Syntax(faust_bit_not),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::PubCrate,
@@ -505,7 +505,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`pub(crate)` is visibility within the package, which is the default; remove it",
         rule: "visibility is `pub` (outside the package), nothing (the package), or `priv` (§15.1)",
-        detect: Detect::Syntax(pub_crate),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::TypeArgsTurbofish,
@@ -514,7 +514,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "type arguments in an expression are written `name::[…]`, in `[ ]`",
         rule: TYPE_ARGS_RULE,
-        detect: Detect::Syntax(type_args_call),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::TypeArgsAngle,
@@ -523,7 +523,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "type arguments of a call are written `name::[…]`, not in `< >`",
         rule: TYPE_ARGS_RULE,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::TypeArgsSquareComma,
@@ -532,7 +532,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "type arguments in an expression are written `name::[…]`; a `[…]` with `,` is no index",
         rule: TYPE_ARGS_RULE,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::TypeArgsOnExpression,
@@ -541,7 +541,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a function value takes no type arguments; it is called with `.(`",
         rule: "a function value is called with `.(` (§6.1); type arguments go after the name of an item, `name::[T]` (§4.5)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::TypePositionPath,
@@ -550,7 +550,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a type writes its arguments in `[ ]` without `::`",
         rule: "in a type the arguments follow the name, `Buf[F32]`; `name::[…]` is written only in an expression, where a `[` alone is an index (§4.5)",
-        detect: Detect::Syntax(type_position_path),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceInTypeArgsMark,
@@ -559,7 +559,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`::[` is written without spaces",
         rule: "type arguments in an expression are written `name::[T]`, with no space before or after the `::` (§2.5, §4.5)",
-        detect: Detect::Syntax(space_in_type_args_mark),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RangeDots,
@@ -568,7 +568,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a range is written `a..<b` (without its end) or `a..=b` (with it)",
         rule: "a range `a..<b` excludes `b` and `a..=b` includes it; `..` and `...` include the end in some languages and not in others (§7)",
-        detect: Detect::Syntax(range_dots),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::StructPatternRest,
@@ -577,7 +577,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a struct pattern names every field; Onsa has no `..`",
         rule: "a struct pattern names every field once, the unused ones `_`, so that a field added later makes every pattern of the struct an error (§7)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Reported,
     },
     Row {
         id: RowId::RangeHeaderOneSided,
@@ -586,7 +586,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "a range in the head of a `for` or a `par` has both ends",
         rule: "a loop over a range writes both of its ends, `0..<n` or `0..=n`; a range with one end is no head (§7)",
-        detect: Detect::Syntax(range_header_one_sided),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::RangeOutsideHeader,
@@ -595,7 +595,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "ranges are only written in `for` and `par` heads",
         rule: "a range is the whole head of a `for` or a `par` and is not a value (§7); a part of a sequence is `xs.slice(from, to)` (§5.3)",
-        detect: Detect::Syntax(range_outside_header),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceAroundDot,
@@ -604,7 +604,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a member `.` is written without spaces around it",
         rule: "the member `.` (a field, a method, a tuple index, the `.(` of a function value) takes no space on either side inside a line: `a.b`, `s.f.(x)`; a `.` that starts the next line continues the expression (§2.5)",
-        detect: Detect::Syntax(spaces::space_around_dot),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceBeforeParen,
@@ -613,7 +613,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a `(` that opens a list is written right after the token before it",
         rule: SPACE_BEFORE_OPEN_RULE,
-        detect: Detect::Syntax(spaces::space_before_open),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceBeforeBracket,
@@ -622,7 +622,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a `[` that opens a list is written right after the token before it",
         rule: SPACE_BEFORE_OPEN_RULE,
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceBeforeBang,
@@ -631,7 +631,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "the `!` of a call that changes its receiver is written right after the name",
         rule: "a name and its mark `!` are written without a blank between them, and the `(` right after the mark (`buf.push!(x)`, §2.5, §2.6)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceBeforeTilde,
@@ -640,7 +640,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "the `~` of a flow call is written right after the name",
         rule: "a name and its mark `~` are written without a blank between them, and the `(` right after the mark (`saw~(f0)`); `saw ~(f0)` reads as the binary `~` of FAUST (§2.5, §2.6)",
-        detect: Detect::Syntax(no_match),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::StringPrefix,
@@ -649,7 +649,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "a string or character literal has no prefix or suffix",
         rule: "a string is written `\"…\"` in UTF-8, with the interpolation `\"{x}\"`, and a byte string is `\"x\".as_bytes()`; no name is written right before or after a literal (§2.4)",
-        detect: Detect::Syntax(spaces::string_prefix),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::CalleeExpression,
@@ -658,7 +658,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a callee that is no path of names is a function value; it is called with `.(`",
         rule: "a function value is called with `.(` (`s.f.(x)`, `pick(true).(5)`); `f(x)` calls an item, whose callee is a path of names (§6.1)",
-        detect: Detect::Syntax(callee_expression),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::SpaceAfterBranchKeyword,
@@ -667,7 +667,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "`if~` and `match~` are written with no blank between the keyword and `~`",
         rule: "`if~` / `match~` evaluate every branch; the `~` touches the `if` or `match` (§2.6). A prefix `~` is no operator: the bitwise negation is `!`",
-        detect: Detect::Syntax(flow::space_after_branch_keyword),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::ElseIfTilde,
@@ -676,7 +676,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "the `~` of a chain of `if` is written on its first `if` only",
         rule: "the `~` of `if~` stands for the whole chain of `else if` (`if~ c { a } else if d { b } else { e }`), and is written on the first `if` (§11.5)",
-        detect: Detect::Syntax(flow::else_if_tilde),
+        detect: Detect::Syntax,
     },
     Row {
         id: RowId::ClockOnBinding,
@@ -730,4 +730,92 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "tuple_struct", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "copy_impl", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "copy_bound", phase: Phase::Names, code: Code::E0020 },
+];
+
+/// The matchers of the syntax stage and the rows each may name: every one
+/// runs at every failure of the parser ([`super::at_failure`]), in no order
+/// of priority. When two recognise one failure (`--..<3`: a `--` and a range
+/// pattern), both diagnostics are reported, and the driver chooses the first
+/// in the order of the diagnostics (start, end, code, message; §18.1, S-281).
+pub static MATCHERS: &[Matcher] = &[
+    Matcher::one(&[RowId::ArmReturn], arm_return),
+    Matcher::one(&[RowId::SpaceBeforeQuestion], spaces::space_before_question),
+    Matcher::many(&[RowId::SpaceAfterPrefix, RowId::SpaceAfterCaret, RowId::LeadingMinus], spaces::space_after_prefix),
+    Matcher::one(&[RowId::AsymmetricBinarySpace], spaces::asymmetric_binary_space),
+    Matcher::many(&[RowId::LeadingOperator, RowId::LeadingMinus], lines::leading_symbol),
+    Matcher::one(&[RowId::LeadingRange], ranges::leading_range),
+    Matcher::one(&[RowId::LeadingVert], lines::leading_vert),
+    Matcher::one(&[RowId::PatternDoubleVert], lines::pattern_double_vert),
+    Matcher::one(&[RowId::PrefixPlus], lines::prefix_plus),
+    Matcher::one(&[RowId::NewlineAfterDot], lines::newline_after_dot),
+    Matcher::one(&[RowId::NewlineAfterPrefix], lines::newline_after_prefix),
+    Matcher::one(&[RowId::NewlineBeforeQuestion], lines::newline_before_question),
+    Matcher::one(&[RowId::Semicolon], semicolon),
+    Matcher::one(&[RowId::SemicolonInList], semicolon_in_list),
+    Matcher::one(&[RowId::PathSeparator], path_separator),
+    Matcher::one(&[RowId::AngleBrackets], angle_brackets),
+    Matcher::many(
+        &[
+            RowId::RefMutParam,
+            RowId::RefMutSelf,
+            RowId::RefSelf,
+            RowId::RefType,
+            RowId::RefExpr,
+            RowId::RefMutArg,
+            RowId::RefMutOther,
+        ],
+        reference,
+    ),
+    Matcher::one(&[RowId::MutSelf], mut_self),
+    Matcher::many(&[RowId::CompoundAssign, RowId::CompoundAssignUnfixable], compound_assignment),
+    Matcher::one(&[RowId::BinaryMinusPrefixMinus], binary_minus_prefix_minus),
+    Matcher::many(&[RowId::Increment, RowId::IncrementUnfixable], increment),
+    Matcher::one(&[RowId::LetMut], let_mut),
+    Matcher::one(&[RowId::Loop], endless_loop),
+    Matcher::one(&[RowId::Proc], proc),
+    Matcher::many(&[RowId::FloatTrailingDot, RowId::LiteralSuffix], foreign_literal),
+    Matcher::one(&[RowId::FloatLeadingDot], leading_point),
+    Matcher::many(
+        &[
+            RowId::BlockComment,
+            RowId::BlockCommentUnclosed,
+            RowId::BlockCommentNested,
+            RowId::BlockCommentMultilineCodeAfter,
+        ],
+        block_comment,
+    ),
+    Matcher::many(
+        &[
+            RowId::FloatPattern,
+            RowId::FloatPatternChoice,
+            RowId::InterpolatedStringPattern,
+            RowId::NegatedConstantPattern,
+            RowId::AtBinding,
+            RowId::AtBindingComplex,
+            RowId::RangePattern,
+            RowId::RangePatternChoice,
+        ],
+        guard_pattern,
+    ),
+    Matcher::one(&[RowId::HashAttribute], hash_attribute),
+    Matcher::one(&[RowId::FaustBitNot], faust_bit_not),
+    Matcher::one(&[RowId::PubCrate], pub_crate),
+    Matcher::many(
+        &[RowId::TypeArgsTurbofish, RowId::TypeArgsAngle, RowId::TypeArgsSquareComma, RowId::TypeArgsOnExpression],
+        type_args_call,
+    ),
+    Matcher::one(&[RowId::TypePositionPath], type_position_path),
+    Matcher::one(&[RowId::SpaceInTypeArgsMark], space_in_type_args_mark),
+    Matcher::one(&[RowId::RangeDots], range_dots),
+    Matcher::one(&[RowId::RangeHeaderOneSided], range_header_one_sided),
+    Matcher::one(&[RowId::RangeOutsideHeader], range_outside_header),
+    Matcher::one(&[RowId::SpaceAroundDot], spaces::space_around_dot),
+    Matcher::many(
+        &[RowId::SpaceBeforeParen, RowId::SpaceBeforeBracket, RowId::SpaceBeforeBang, RowId::SpaceBeforeTilde],
+        spaces::space_before_open,
+    ),
+    Matcher::one(&[RowId::StringPrefix], spaces::string_prefix),
+    Matcher::one(&[RowId::CalleeExpression], callee_expression),
+    Matcher::one(&[RowId::SpaceAfterBranchKeyword], flow::space_after_branch_keyword),
+    Matcher::one(&[RowId::ElseIfTilde], flow::else_if_tilde),
 ];

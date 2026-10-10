@@ -19,10 +19,13 @@
 //!   accept where it is written (the lexer makes `/* */`, `1.`, `1u8`, `++`
 //!   tokens of their own), so the parser fails at it; at every failure it asks
 //!   [`at_failure`] with what it was reading ([`Cursor`]: the token, the open
-//!   nodes, the nodes that closed before it, what it wanted). A row that
-//!   recognises the failure gives the diagnostic; else the failure is the
-//!   general E0002. A form of the syntax stage fails its unit (R-87 (4)): the
-//!   parser reads it as nothing else and goes on with the next unit.
+//!   nodes, the nodes that closed before it, what it wanted). Every matcher
+//!   of [`MATCHERS`] runs, and every row that recognises the failure gives
+//!   its diagnostic (one failure may be more than one form: `--..<3`); the
+//!   driver reports the first of them in the order of the diagnostics
+//!   (§18.1, S-281). When none does, the failure is the general E0002. A
+//!   form of the syntax stage fails its unit (R-87 (4)): the parser reads it
+//!   as nothing else and goes on with the next unit.
 //! - The type arguments of another language before a call, `f<T>(x)` and
 //!   `f[A, B](x)`, which the parser could read as a comparison or an index:
 //!   the parser asks [`type_list_ahead`] from the tokens (and reads a `[…]`
@@ -59,7 +62,7 @@
 //! of the rows ([`ROWS`], [`WAITING`]) is `foreign/rows.rs`; the matchers are
 //! in a module per family of forms: `semicolons` (`;`), `paths` (the `::` of
 //! a path, `<T>`, the type arguments of other languages, the type names of
-//! other languages), `calls` (the callee of a call), `modes` (`&mut`,
+//! other languages), `calls` (a callee that is no path), `modes` (`&mut`,
 //! `mut self`), `decls` (`let mut`, `loop`, `proc`, `#[…]`, `pub(crate)`),
 //! `literals` (the number literals), `faust` (the prefix `~` of C),
 //! `comments` (the block comments), `assign` (`+=`, `++`), `ranges` (the
@@ -73,8 +76,10 @@
 //!    `docs/foreign-forms.toml`, the message and the rule); a new form is
 //!    added to the data file from its decision (an S row of the plan), not
 //!    to the text of the spec (§18.1 only names where the list is, S-250);
-//! 2. write its matcher ([`Detect::Syntax`]) in the module of its family (or
-//!    a new one), or call [`report`] from its stage; a candidate edits only
+//! 2. write its matcher in the module of its family (or a new one) and put
+//!    it in [`MATCHERS`] with the rows it names ([`Matcher::one`],
+//!    [`Matcher::many`]; the row's `detect` is [`Detect::Syntax`]), or call
+//!    [`report`] from its stage ([`Detect::Reported`]); a candidate edits only
 //!    the tokens it changes (S-251), one form is one diagnostic with one
 //!    candidate that fixes all of it (S-248), and a form for which no
 //!    candidate keeps the contract of §18.1 (S-236) has none (the
@@ -142,7 +147,7 @@ pub enum Want {
     Other,
     /// The next link of a postfix chain, at a member `.` with a space (§2.5).
     Postfix,
-    /// The `(` of a call whose callee [`callee_by_name`] says is no callee
+    /// The `(` of a call whose callee [`crate::callee::Callee::by_name`] says is no callee
     /// written by name (§6.1): the table does not judge the callee again.
     Callee,
     /// A blank or a line break after a prefix `-` / `!` of an expression, or
@@ -187,8 +192,6 @@ pub struct Cursor<'a> {
     /// (`for`, `while`, a declaration but `const` and `type`) or with a bound
     /// value (`let`, `var`, an assignment), in order (`Parser::ends`).
     pub ends: &'a [(usize, End)],
-    /// The row a matcher of several rows found ([`Cursor::say`]).
-    pub found: std::cell::Cell<Option<RowId>>,
 }
 
 /// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) that the
@@ -200,7 +203,7 @@ pub struct Detached {
     /// The opener, an index of the parser's tokens.
     pub at: usize,
     /// The token before it ends a path of names (§6.1: what a callee is,
-    /// [`callee_by_name`]; a name of a declaration, a type,
+    /// [`crate::callee::Callee::by_name`]; a name of a declaration, a type,
     /// a pattern or an attribute is one), S-399.
     pub by_name: bool,
     /// The opener follows an expression (else a declaration, a type, a
@@ -252,15 +255,61 @@ pub struct Hit {
 }
 
 /// How a row's form is found.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Detect {
-    /// Where the parser fails ([`at_failure`]).
-    Syntax(fn(&Cursor) -> Option<Hit>),
+    /// Where the parser fails ([`at_failure`]): a matcher of [`MATCHERS`]
+    /// names it.
+    Syntax,
     /// A type name the parser reads ([`type_name`]).
     TypeName,
     /// A form the parser reads whole, found on the tree after parsing (the
     /// clocks of S-356, [`clocks`]).
     Tree,
+    /// A form a later stage finds and reports with [`report`] (the rest `..`
+    /// of a struct pattern, `onsa_sema`).
+    Reported,
+}
+
+/// A matcher of the syntax stage: a plain function of the cursor that
+/// recognises a form at the failure, and the rows it may name. A matcher of
+/// one row gives the hit ([`Matcher::one`]); a matcher of several gives the
+/// row with it ([`Matcher::many`]). The registry of [`MATCHERS`] says which
+/// rows each finds.
+pub struct Matcher {
+    /// The rows the matcher may name.
+    pub rows: &'static [RowId],
+    find: Find,
+}
+
+#[derive(Clone, Copy)]
+enum Find {
+    One(fn(&Cursor) -> Option<Hit>),
+    Many(fn(&Cursor) -> Option<(RowId, Hit)>),
+}
+
+impl Matcher {
+    /// A matcher of the one row `rows[0]`.
+    pub(crate) const fn one(rows: &'static [RowId; 1], find: fn(&Cursor) -> Option<Hit>) -> Matcher {
+        Matcher { rows, find: Find::One(find) }
+    }
+
+    /// A matcher that names one of `rows`.
+    pub(crate) const fn many(rows: &'static [RowId], find: fn(&Cursor) -> Option<(RowId, Hit)>) -> Matcher {
+        Matcher { rows, find: Find::Many(find) }
+    }
+
+    /// The row and the hit of the failure `c`, when the matcher recognises
+    /// it. A row the matcher does not list is a bug of the table.
+    fn find(&self, c: &Cursor) -> Option<(RowId, Hit)> {
+        let (row, hit) = match self.find {
+            Find::One(find) => (self.rows[0], find(c)?),
+            Find::Many(find) => find(c)?,
+        };
+        if !self.rows.contains(&row) {
+            onsa_diag::internal::bug(Some(hit.span), format!("a matcher of {:?} names {row:?}", self.rows));
+        }
+        Some((row, hit))
+    }
 }
 
 /// The rows the compiler finds. `name` is the row's `id` in
@@ -397,53 +446,41 @@ fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
 /// where nothing of its kind goes, [`Hit`]): the missing `,` of a list and
 /// the gap before an opener taken out ([`lists::list_fixes`]).
 pub(crate) struct Failure {
-    pub row: Option<Diagnostic>,
+    pub rows: Vec<Diagnostic>,
     pub general: Option<Vec<Fix>>,
 }
 
-/// The table's reading of a failure of the parser ([`Failure`]).
+/// The table's reading of a failure of the parser ([`Failure`]): every
+/// matcher runs, and the diagnostic of every row that recognises the failure
+/// is reported. The table does not choose among them: one failure may be
+/// read as more than one form (`--..<3`, a `--` and a range pattern), and the
+/// driver reports, of the diagnostics of a unit, the first in the order of
+/// the diagnostics (start, end, code, message; §18.1, S-281,
+/// `onsa_driver::reduce`), the one place of that choice. Four readings of a
+/// token that the decisions fixed are in the matchers instead, and are no
+/// order of the rows: a `+` and a `&` at the head of a line after an operand
+/// are the binary operator (S-405, W3-06; the order of the diagnostics gives
+/// the same, by the order of their messages), and a `--` is one form or the
+/// other (S-297, S-320) and a float in a pattern is the float pattern
+/// (S-248), which the order of the diagnostics would not give. The general
+/// E0002 is reported too when no row recognises the failure, or when a form
+/// is where nothing of its kind goes ([`Hit::misplaced`]).
 pub(crate) fn at_failure(c: &Cursor) -> Failure {
-    let (row, general) = match row_at_failure(c) {
-        Some((d, misplaced)) => (Some(d), misplaced),
-        None => (None, true),
-    };
+    let mut rows = Vec::new();
+    let mut misplaced = false;
+    for m in MATCHERS {
+        if let Some((row, hit)) = m.find(c) {
+            misplaced |= hit.misplaced;
+            rows.push(diagnostic(c.text, row, hit));
+        }
+    }
     // After an element of a list, the general error is the missing `,`;
     // an opener after a line break takes it out (S-89).
-    let general = general.then(|| match c.want {
+    let general = (rows.is_empty() || misplaced).then(|| match c.want {
         Want::Separator(list) => lists::list_fixes(c, Some(list)),
         _ => lists::list_fixes(c, None),
     });
-    Failure { row, general }
-}
-
-/// The diagnostic of a failure of the parser, when a row recognises it, and
-/// whether the parser's general E0002 is to be reported too ([`Hit`]).
-fn row_at_failure(c: &Cursor) -> Option<(Diagnostic, bool)> {
-    let mut found: Option<(RowId, Hit)> = None;
-    for row in ROWS {
-        let Detect::Syntax(matcher) = row.detect else { continue };
-        c.found.set(None);
-        let Some(hit) = matcher(c) else { continue };
-        let id = c.found.get().unwrap_or(row.id);
-        // The rows do not overlap: one failure is one form (checked in the
-        // debug builds, where every matcher runs).
-        debug_assert!(found.is_none(), "two rows match one failure: {:?} and {id:?}", found.as_ref().map(|f| f.0));
-        if found.is_none() {
-            found = Some((id, hit));
-        }
-        if !cfg!(debug_assertions) {
-            break;
-        }
-    }
-    let (id, hit) = found?;
-    let misplaced = hit.misplaced;
-    Some((diagnostic(c.text, id, hit), misplaced))
-}
-
-/// The matcher of a row whose form the matcher of another row finds and
-/// names ([`Cursor::say`]).
-fn no_match(_: &Cursor) -> Option<Hit> {
-    None
+    Failure { rows, general }
 }
 
 // ------------------------------------------------------------ the cursor
@@ -464,6 +501,19 @@ impl Cursor<'_> {
 
     fn is_ident(&self, i: usize, text: &str) -> bool {
         self.kind(i) == TokenKind::Ident && self.src(i) == text
+    }
+
+    /// Whether token `i` is the word `mut` of other languages, which Onsa
+    /// has not (a name): the one test of it (`let mut`, `mut self`, `&mut`).
+    pub(crate) fn mut_word(&self, i: usize) -> bool {
+        self.is_ident(i, "mut")
+    }
+
+    /// Whether the `&` at `amp` is the `&mut` of other languages: the word
+    /// `mut` is the next code after it (a line break or a comment between
+    /// them is passed over, as the code of a line is read).
+    pub(crate) fn ref_mut(&self, amp: usize) -> bool {
+        self.mut_word(self.sig_after(amp))
     }
 
     /// A comment of any kind (a block comment is a token of its own, which
@@ -595,7 +645,7 @@ impl Cursor<'_> {
     /// caller judges whose head).
     pub(crate) fn head_symbol_after_operand(&self) -> Option<(usize, usize)> {
         use TokenKind::*;
-        let s = if self.kind(self.at) == Newline { self.sig_after(self.at) } else { self.at };
+        let s = self.symbol_ahead();
         if !self.lines.at_line_head(s) {
             return None;
         }
@@ -606,6 +656,13 @@ impl Cursor<'_> {
         (operand && (head || self.end_at(prev) != Some(End::NoOperand))).then_some((s, prev))
     }
 
+    /// The symbol the failure is at: the token of the failure, or, when the
+    /// parser failed at a line break, the first token of the next line
+    /// ([`Cursor::head_symbol_after_operand`]; a row asks its kind first).
+    pub(crate) fn symbol_ahead(&self) -> usize {
+        if self.kind(self.at) == TokenKind::Newline { self.sig_after(self.at) } else { self.at }
+    }
+
     /// What the statement or declaration whose last token is `i` ends with,
     /// when the parser read one to its end there ([`End`]).
     pub(crate) fn end_at(&self, i: usize) -> Option<End> {
@@ -613,16 +670,14 @@ impl Cursor<'_> {
     }
 }
 
-impl Cursor<'_> {
-    /// A matcher of several rows says which row it found (a matcher is a
-    /// plain function of the cursor).
-    fn say(&self, row: RowId) {
-        self.found.set(Some(row));
-    }
-}
-
+/// The hit of a matcher of one row ([`Matcher::one`]).
 fn hit(span: Span, fixes: Vec<Fix>) -> Option<Hit> {
     Some(Hit { span, fixes, misplaced: false })
+}
+
+/// The row and the hit of a matcher of several rows ([`Matcher::many`]).
+fn found(row: RowId, span: Span, fixes: Vec<Fix>) -> Option<(RowId, Hit)> {
+    Some((row, Hit { span, fixes, misplaced: false }))
 }
 
 /// A name or a path of names and tuple indexes: `x`, `self.a.b`, `t.0.1`
@@ -728,11 +783,10 @@ mod semicolons;
 pub use guard::guard_name;
 use guard::guard_pattern;
 
-pub(crate) use calls::{CalleeChain, callee_by_name, names_a_path};
 pub(crate) use edits::move_up;
 pub use paths::TYPE_NAMES;
 pub(crate) use paths::{type_list_ahead, type_name};
-pub use rows::{ROWS, WAITING};
+pub use rows::{MATCHERS, ROWS, WAITING};
 // The helpers that the rows of `guard` and `flow` share with a family.
 use assign::operand;
 use faust::bit_not;

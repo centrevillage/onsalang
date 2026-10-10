@@ -65,6 +65,24 @@ fn the_rows_have_distinct_names_and_codes_of_their_kind() {
 }
 
 #[test]
+fn every_row_of_the_syntax_stage_has_a_matcher() {
+    // The registry of the matchers (R-206): each row found where the parser
+    // fails is named by a matcher, each matcher names rows of that kind only,
+    // and a matcher lists a row once.
+    use crate::foreign::{Detect, MATCHERS};
+    for r in ROWS {
+        let named = MATCHERS.iter().any(|m| m.rows.contains(&r.id));
+        assert_eq!(named, r.detect == Detect::Syntax, "{}", r.name);
+    }
+    for m in MATCHERS {
+        for (i, id) in m.rows.iter().enumerate() {
+            assert!(!m.rows[..i].contains(id), "{id:?} twice");
+            assert_eq!(crate::foreign::row(*id).detect, Detect::Syntax, "{id:?}");
+        }
+    }
+}
+
+#[test]
 fn semicolons() {
     e0020(&body("  let x = 1;"), &body("  let x = 1"));
     // `;;` is one form (S-248).

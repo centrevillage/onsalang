@@ -636,7 +636,7 @@ fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
 /// form makes no candidate, E0002 with the note (S-48). The row is the one
 /// of the first form of the pattern, and the main span runs from the first
 /// form to the last (S-316).
-pub(super) fn guard_pattern(c: &Cursor) -> Option<Hit> {
+pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     if c.want != Want::Pattern {
         return None;
     }
@@ -645,33 +645,21 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<Hit> {
     // The pattern's owner: the innermost `match` arm, `let` or `for`.
     let owner = c.open.iter().rev().find(|o| matches!(o.0, NodeKind::MatchArm | NodeKind::LetStmt | NodeKind::ForStmt));
     let Some(&(NodeKind::MatchArm, arm_start)) = owner else {
-        c.say(form.row());
-        return hit(alone, Vec::new());
+        return found(form.row(), alone, Vec::new());
     };
     let Some(arm) = Arm::read(c, arm_start, crate::parser::NESTING_LIMIT) else {
-        c.say(form.row());
-        return hit(alone, Vec::new());
+        return found(form.row(), alone, Vec::new());
     };
-    let mut found = Vec::new();
-    forms(&arm.pat, &mut found);
-    let (Some(&(head, a, _)), Some(&(_, _, b))) = (found.first(), found.last()) else {
-        c.say(form.row());
-        return hit(alone, Vec::new());
+    let mut in_arm = Vec::new();
+    forms(&arm.pat, &mut in_arm);
+    let (Some(&(head, a, _)), Some(&(_, _, b))) = (in_arm.first(), in_arm.last()) else {
+        return found(form.row(), alone, Vec::new());
     };
     let span = c.file_span(c.span(arm.toks[a]).start, c.span(arm.toks[b]).end);
     match arm.candidates(c) {
-        Ok(fixes) => {
-            c.say(head.row());
-            hit(span, fixes)
-        }
-        Err(Why::Differ) => {
-            c.say(head.choice_row());
-            hit(span, Vec::new())
-        }
-        Err(Why::Bad(bad)) => {
-            c.say(if bad == Form::At { Form::At.choice_row() } else { head.row() });
-            hit(span, Vec::new())
-        }
+        Ok(fixes) => found(head.row(), span, fixes),
+        Err(Why::Differ) => found(head.choice_row(), span, Vec::new()),
+        Err(Why::Bad(bad)) => found(if bad == Form::At { Form::At.choice_row() } else { head.row() }, span, Vec::new()),
     }
 }
 
@@ -835,7 +823,6 @@ mod tests {
             want: Want::Pattern,
             detached: None,
             ends: &[],
-            found: std::cell::Cell::new(None),
         };
         let start = src.find("((").unwrap_or_default() as u32;
         Arm::read(&c, start, limit).is_some()

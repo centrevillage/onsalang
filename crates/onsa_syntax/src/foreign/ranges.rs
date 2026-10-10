@@ -107,10 +107,10 @@ pub(super) fn range_header_one_sided(c: &Cursor) -> Option<Hit> {
 /// [`Cursor::head_symbol_after_operand`]), and whether it goes on with the head of a
 /// `for` or a `par` (§2.5, S-335): after a statement that ended, it does not.
 fn line_range(c: &Cursor) -> Option<(usize, bool)> {
-    let (s, _) = c.head_symbol_after_operand()?;
-    if c.kind(s).range_readings().is_empty() || c.want == Want::Pattern {
+    if c.kind(c.symbol_ahead()).range_readings().is_empty() || c.want == Want::Pattern {
         return None;
     }
+    let (s, _) = c.head_symbol_after_operand()?;
     if c.closed.is_empty() {
         return Some((s, false));
     }

@@ -3,8 +3,9 @@
 //! the type arguments of other languages before a call, and `::[` where it
 //! does not go (§4.5, S-239, S-250, S-256).
 
-use super::calls::{is_value_callee, names_a_path, value_call};
+use super::calls::value_call;
 use super::*;
+use crate::callee::Link;
 
 /// The type names of other languages (`i32`: `I32`, `usize`: `U32`, S-250).
 /// `String`, `Vec`, `i128` and `u128` are not here: they are names that
@@ -247,8 +248,9 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
 /// reads a `[` on as a list of type arguments to be sure; the table builds
 /// the diagnostic where the parser then fails ([`type_args_call`]).
 pub(crate) fn type_list_ahead(tokens: &[Token], lines: &crate::layout::Lines, i: usize, callee: NodeKind) -> bool {
-    let name = names_a_path(callee);
-    if !(name || is_value_callee(callee)) || lines.before(i) != Gap::None {
+    let link = Link::of(callee);
+    let name = link.names_a_path();
+    if !(name || link.is_value()) || lines.before(i) != Gap::None {
         return false;
     }
     let close = match tokens[i].kind {
@@ -278,7 +280,10 @@ fn bracket_with_comma(tokens: &[Token], open: usize) -> Option<usize> {
 /// (`g(x)`, `(e)`), no `::[` can be written: the one candidate drops the list
 /// and calls the value with `.(` (§6.1). After anything else, and for an
 /// empty list, the form is not this table's (the general E0002).
-pub(super) fn type_args_call(c: &Cursor) -> Option<Hit> {
+pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
+    if !matches!(c.kind(c.at), TokenKind::ColonColon | TokenKind::Lt | TokenKind::LBracket) {
+        return None;
+    }
     let callee = closed_expr(c)?;
     let (row, open) = match c.kind(c.at) {
         TokenKind::ColonColon if c.kind(c.at + 1) == TokenKind::Lt => (RowId::TypeArgsTurbofish, c.at + 1),
@@ -299,14 +304,12 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let span = c.file_span(c.span(c.at).start, c.span(close).end);
-    if is_value_callee(callee.0) {
-        c.say(RowId::TypeArgsOnExpression);
-        return hit(span, value_call(c, callee, c.at, close).into_iter().collect());
+    if Link::of(callee.0).is_value() {
+        return found(RowId::TypeArgsOnExpression, span, value_call(c, callee, c.at, close).into_iter().collect());
     }
-    if !names_a_path(callee.0) {
+    if !Link::of(callee.0).names_a_path() {
         return None;
     }
-    c.say(row);
     let mut fixes = vec![Fix::new("write the type arguments as `::[…]`", edits)];
     let single = is_place(c, open + 1, close - 1)
         || (open + 2 == close
@@ -326,7 +329,7 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<Hit> {
             vec![Edit::replace(c.span(open), " < "), Edit::replace(c.span(close), format!(" && {m} > "))],
         ));
     }
-    hit(span, fixes)
+    found(row, span, fixes)
 }
 
 /// `::[` written in a type position (`b: Buf::[F32]`, §4.5): the mark is
@@ -356,7 +359,7 @@ pub(super) fn space_in_type_args_mark(c: &Cursor) -> Option<Hit> {
     if c.kind(c.at) != TokenKind::ColonColon || c.kind(c.at + 1) != TokenKind::LBracket {
         return None;
     }
-    if !closed_expr(c).is_some_and(|n| names_a_path(n.0)) {
+    if !closed_expr(c).is_some_and(|n| Link::of(n.0).names_a_path()) {
         return None;
     }
     let (before, after) = (c.gap(c.at), c.gap_after(c.at));

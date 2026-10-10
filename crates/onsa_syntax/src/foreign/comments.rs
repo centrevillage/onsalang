@@ -98,7 +98,7 @@ fn documents(c: &Cursor) -> bool {
 /// code around it is only inside it, so no candidate keeps the line breaks
 /// without another reading: E0002). One never closed and one that holds
 /// another are E0002.
-pub(super) fn block_comment(c: &Cursor) -> Option<Hit> {
+pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
     if c.kind(c.at) != TokenKind::BlockComment {
         return None;
     }
@@ -106,12 +106,10 @@ pub(super) fn block_comment(c: &Cursor) -> Option<Hit> {
     let text = c.src(c.at);
     let (closed, nested) = block_shape(text);
     if !closed {
-        c.say(RowId::BlockCommentUnclosed);
-        return hit(span, Vec::new());
+        return found(RowId::BlockCommentUnclosed, span, Vec::new());
     }
     if nested {
-        c.say(RowId::BlockCommentNested);
-        return hit(span, Vec::new());
+        return found(RowId::BlockCommentNested, span, Vec::new());
     }
     let inner = &text[2..text.len() - 2];
     let (doc, inner) = match inner.as_bytes().first() {
@@ -137,8 +135,7 @@ pub(super) fn block_comment(c: &Cursor) -> Option<Hit> {
     let rest_end = c.text[rest_start..].find('\n').map_or(c.text.len(), |n| rest_start + n);
     let post = !c.text[rest_start..rest_end].trim().is_empty();
     if post && text.contains('\n') {
-        c.say(RowId::BlockCommentMultilineCodeAfter);
-        return hit(span, Vec::new());
+        return found(RowId::BlockCommentMultilineCodeAfter, span, Vec::new());
     }
     // What may come after the comment: a declaration a `///` documents.
     let documents = pre && documents(c);
@@ -189,5 +186,5 @@ pub(super) fn block_comment(c: &Cursor) -> Option<Hit> {
             Fix::new(title, vec![Edit::insert(c.file, line_start, above), removal])
         })
         .collect();
-    hit(span, fixes)
+    found(RowId::BlockComment, span, fixes)
 }

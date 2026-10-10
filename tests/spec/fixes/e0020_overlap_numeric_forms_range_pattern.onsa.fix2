@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§7", "§18.1"]
+// fixes = 2
+// # The [[test.fix]] entries below wait for the rows of the numeric literals (W3-05): remove their `# ` then.
+// # [[test.fix]]
+// # at = "66:5"
+// # code = "E0020"
+// # candidate = 1
+// # leaves = ["66:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "73:5"
+// # code = "E0020"
+// # candidate = 1
+// # leaves = ["73:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "73:5"
+// # code = "E0020"
+// # candidate = 2
+// # leaves = ["73:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "80:5"
+// # code = "E0020"
+// # candidate = 1
+// # leaves = ["80:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "87:5"
+// # code = "E0020"
+// # candidate = 1
+// # leaves = ["87:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "94:5"
+// # code = "E0020"
+// # candidate = 1
+// # leaves = ["94:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "101:5"
+// # code = "E0020"
+// # candidate = 1
+// # leaves = ["101:5 E0020"]
+//
+// # [[test.fix]]
+// # at = "101:5"
+// # code = "E0020"
+// # candidate = 2
+// # leaves = ["101:5 E0020"]
+
+// E0020 for a range pattern that starts with a numeric literal of another language (R-206; docs/foreign-forms.toml
+// rows `octal_prefix`, `leading_zero`, `float_leading_dot`, `literal_suffix` and `range_pattern`; §2.4, §7). It is the
+// case of tests/spec/fixes/e0020_overlap_range_pattern.onsa for the literal forms that W3-05 makes into
+// rows of the syntax (the compiler of W3-03 reads `0o17` as a suffix and does not report `017`): the literal
+// ends before the range does, so it is the error (S-281), and its candidate keeps the value (§18.1): `0o17`
+// is `15`, `017` is `17` or `15` (the candidates are in this order, §2.4: C, Java and Go read it as 15
+// and Rust as 17), `.5` is `0.5`, and `1f32` is `1.0` (a float suffix on the form of an integer adds
+// `.0`). The range pattern is still there after the candidate and is the `leaves` entry (the range starts
+// where the literal did). One error per function (P-01).
+
+pub fn octal_prefix_before_half_open(x: I32) -> I32 {
+  match x {
+    0o17..<20 => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn leading_zero_before_half_open(x: I32) -> I32 {
+  match x {
+    15..<20 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn leading_dot_before_half_open(x: F32) -> I32 {
+  match x {
+    .5..<3 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn float_suffix_on_an_integer_form(x: F32) -> I32 {
+  match x {
+    1f32..<3 => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn c_float_suffix_before_half_open(x: F32) -> I32 {
+  match x {
+    2.5f..<3 => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn leading_zero_before_closed(x: I32) -> I32 {
+  match x {
+    8..=19 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+// The right forms.
+pub fn fine(x: I32, y: F32) -> I32 {
+  let a = match x {
+    15 => 1,
+    k if 17 <= k && k < 20 => 2,
+    _ => 0,
+  }
+  let b = y + 0.5 + 1.0 + 2.5
+  a
+}

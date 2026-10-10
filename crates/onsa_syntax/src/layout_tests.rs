@@ -13,12 +13,16 @@ fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
 }
 
-/// The one diagnostic of `src`, and the source after each of its candidates.
+/// The one diagnostic `src` reports, and the source after each of its
+/// candidates: the diagnostics are of one failure (they start at one place;
+/// one failure may be read as more than one form), of which the driver
+/// reports the first in the order of the diagnostics (S-281).
 #[track_caller]
 fn one(src: &str) -> (Diagnostic, Vec<String>) {
     let p = parse(src);
-    assert_eq!(p.diagnostics.len(), 1, "{src}: {:?}", p.diagnostics);
-    let d = p.diagnostics[0].clone();
+    let first = p.diagnostics.iter().min_by(|a, b| a.order_in_file().cmp(&b.order_in_file()));
+    let Some(d) = first.cloned() else { panic!("{src}: no diagnostic") };
+    assert!(p.diagnostics.iter().all(|e| e.span.start == d.span.start), "{src}: {:?}", p.diagnostics);
     let fixed =
         d.fixes.iter().map(|f| onsa_diag::apply_text(src, &f.edits().iter().collect::<Vec<_>>()).unwrap()).collect();
     (d, fixed)

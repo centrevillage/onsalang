@@ -29,6 +29,7 @@
 use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
 use crate::ast::Ast;
+use crate::callee::Callee;
 use crate::cst::{Class, Cst, Event, NodeKind};
 use crate::foreign::{self, Detached, End, Want};
 use crate::layout::Lines;
@@ -810,10 +811,9 @@ impl<'a> Parser<'a> {
             want,
             detached: self.detached.filter(|d| d.at == at),
             ends: &self.ends,
-            found: std::cell::Cell::new(None),
         };
-        let foreign::Failure { row, general } = foreign::at_failure(&cursor);
-        if let Some(d) = row {
+        let foreign::Failure { rows, general } = foreign::at_failure(&cursor);
+        for d in rows {
             self.report(d);
         }
         if let Some(fixes) = general {
@@ -2488,7 +2488,7 @@ impl<'a> Parser<'a> {
         // The last name of a chain `a.b.C` of names (a struct literal path, S-08).
         let mut chain: Option<Token> = (expr.kind == NodeKind::PathExpr).then_some(first);
         // What the chain is so far, for the callee of a `(` (§6.1).
-        let mut links = foreign::CalleeChain::start(expr.kind);
+        let mut callee = Callee::start(expr.kind);
         loop {
             // A `.` on the next line continues the expression (§2.5,
             // [`Parser::peek_index`]).
@@ -2497,7 +2497,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LParen => {
                     // A callee not written by name is no item: E0020 here,
                     // `.(` (§6.1, S-191).
-                    let by_name = foreign::callee_by_name(expr.kind, links);
+                    let by_name = callee.by_name();
                     if !self.touches(TokenKind::LParen, by_name, true) {
                         break;
                     }
@@ -2511,7 +2511,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Tilde | TokenKind::Bang
                     if self.tokens[self.next_code(self.peek_index())].kind == TokenKind::LParen
-                        && (foreign::names_a_path(expr.kind) || expr.kind == NodeKind::TypeArgsExpr) =>
+                        && callee.last().takes_a_mark() =>
                 {
                     // The mark touches the name and the `(` touches the mark
                     // (S-123, S-412): a gap after the mark makes the call's
@@ -2539,8 +2539,7 @@ impl<'a> Parser<'a> {
                 // with no space on either side of `::`. Elsewhere `::` is not
                 // read (the forms of other languages, `crate::foreign`).
                 TokenKind::ColonColon
-                    if self.lines.type_args_mark(&self.tokens, self.peek_index())
-                        && foreign::names_a_path(expr.kind) =>
+                    if self.lines.type_args_mark(&self.tokens, self.peek_index()) && callee.last().names_a_path() =>
                 {
                     let m = self.precede(expr, NodeKind::TypeArgsExpr)?;
                     self.bump();
@@ -2598,9 +2597,7 @@ impl<'a> Parser<'a> {
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));
                 }
-                TokenKind::LBracket
-                    if self.touches(TokenKind::LBracket, foreign::callee_by_name(expr.kind, links), true) =>
-                {
+                TokenKind::LBracket if self.touches(TokenKind::LBracket, callee.by_name(), true) => {
                     let m = self.precede(expr, NodeKind::IndexExpr)?;
                     self.bump();
                     self.with_nl(false, |p| {
@@ -2650,7 +2647,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => break,
             }
-            links = links.then(expr.kind);
+            callee = callee.then(expr.kind);
         }
         Ok(expr)
     }

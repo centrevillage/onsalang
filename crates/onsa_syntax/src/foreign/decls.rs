@@ -8,7 +8,7 @@ pub(super) fn let_mut(c: &Cursor) -> Option<Hit> {
     if c.kind(c.at) != TokenKind::Ident || c.top() != Some(NodeKind::LetStmt) {
         return None;
     }
-    let m = c.before(c.at).filter(|&m| c.is_ident(m, "mut"))?;
+    let m = c.before(c.at).filter(|&m| c.mut_word(m))?;
     let l = c.before(m).filter(|&l| c.kind(l) == TokenKind::KwLet)?;
     let span = c.file_span(c.span(l).start, c.span(m).end);
     let fix = Fix::new(

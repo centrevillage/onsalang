@@ -1254,6 +1254,20 @@ note = "数値リテラルの E0020 と候補"
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa"
+reasons = ["S-62", "R-73", "R-206"]
+until = "W3-05"
+note = "8 進・先頭 0・先頭の小数点・浮動小数の接尾辞と範囲のパターン。数値リテラルの行（W3-05）が無い形は一般の E0002"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa:66:5 E0020 fix1"
+reasons = ["S-281", "R-206"]
+until = "W3-05"
+note = "接尾辞の候補の後に同じ位置の範囲のパターンの E0020 が残る（S-281 の二つの形）。事例の [[test.fix]] の leaves が W3-05 まで # でコメントにしてあるので、その間は約束の器が残りを期待できない"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/fixes/e0020_old_attributes.onsa"
 reasons = ["S-57"]
 until = "W3-08"
@@ -1596,7 +1610,6 @@ until = "W9-03"
 note = "const の初期化式の整数の panic（U64 の積、MIN / -1、2^63 と 2^64 の trunc）が E0419 にならない（§6.6）。今は onsa check で 0 件"
 
 # --- W2-05/t: C のランタイムの整数の文脈（2026-10-08）
-
 
 # --- W2-05/t: C のターゲットで走る整数の事例（2026-10-08）
 

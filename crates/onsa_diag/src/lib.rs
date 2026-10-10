@@ -210,6 +210,14 @@ impl Diagnostic {
         Diagnostic { code, stage, message: message.into(), span, found: None, fixes: Vec::new(), notes: Vec::new() }
     }
 
+    /// The order of the diagnostics of one file (§18.1, S-281): start, end,
+    /// code, message. Of the diagnostics of one unit, the driver reports the
+    /// first in this order (`onsa_driver::reduce`), also when one failure of
+    /// the parser is read as more than one form.
+    pub fn order_in_file(&self) -> (u32, u32, &str, &str) {
+        (self.span.start, self.span.end, self.code.as_str(), self.message.as_str())
+    }
+
     pub fn with_found(mut self, found: impl Into<String>) -> Diagnostic {
         self.found = Some(found.into());
         self

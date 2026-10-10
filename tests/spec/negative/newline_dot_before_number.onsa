@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+
+// E0002 for a `.` at the end of a line, where an operand is expected, and a number at the start of the next
+// line (`.` and `5` for `.5`). A float literal with no digit before the point is E0020 (`.5`, §2.4, the row
+// `float_leading_dot`), but a `.` and its digits are one literal only when no break is between them. Here the
+// `.` is not a member dot either (no operand is before it): the rule for a break after the member `.` (E0020,
+// §2.5, the row `newline_after_dot`) has an operand to put the `.` after. Every reading of the pair gives the
+// same error at the `.`: nothing that is an operand starts with `.`, and the candidates that the two rows
+// would make do not exist, since moving the `.` to the head of the next line writes `.5`, which is E0020
+// itself (§18.1: a candidate leaves no error of its own stage), and a literal cannot be joined over a break
+// with edits of tokens. So the error is E0002, with no candidate, at the `.` (the first token that cannot
+// start an operand). A break after the `.` of a tuple index with an operand is in
+// tests/spec/fixes/e0020_newline_after_dot.onsa; `.5` on one line is in tests/spec/fixes/e0020_literals.onsa.
+// One error per declaration unit (P-01).
+
+pub fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub fn after_an_equals() -> F32 {
+  let c = .                                         //~ E0002 @11
+    5
+  c
+}
+
+pub fn a_comment_after_the_dot() -> F32 {
+  let c = . // the digits                           //~ E0002 @11
+    5
+  c
+}
+
+pub fn a_comment_line_between() -> F32 {
+  let c = .                                         //~ E0002 @11
+    // the digits
+    5
+  c
+}
+
+pub fn a_blank_line_between() -> F32 {
+  let c = .                                         //~ E0002 @11
+
+    5
+  c
+}
+
+pub fn digits_with_a_fraction() -> F32 {
+  let c = .                                         //~ E0002 @11
+    25
+  c
+}
+
+pub fn after_a_binary_operator() -> F32 {
+  let c = 1.0 + .                                   //~ E0002 @17
+    5
+  c
+}
+
+pub fn in_an_argument() -> F32 {
+  two(.                                             //~ E0002 @7
+    5, 1.0)
+}
+
+pub fn in_the_second_argument() -> F32 {
+  two(1.0, .                                        //~ E0002 @12
+    5)
+}
+
+pub fn in_an_array() -> F32 {
+  let v = [.                                        //~ E0002 @12
+    5, 1.0]
+  v[0]
+}
+
+pub fn in_a_tuple() -> F32 {
+  let t = (.                                        //~ E0002 @12
+    5, 1.0)
+  t.0
+}
+
+pub fn after_a_return() -> F32 {
+  return .                                          //~ E0002 @10
+    5
+}
+
+pub fn in_an_arm(k: I32) -> F32 {
+  match k {
+    0 => .                                          //~ E0002 @10
+      5,
+    _ => 1.0,
+  }
+}
+
+pub fn in_a_struct_literal_field() -> F32 {
+  let p = Pt { x: .                                 //~ E0002 @19
+    5, y: 1.0 }
+  p.x
+}
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub fn in_a_closure_body() -> F32 {
+  let f = fn() -> F32 { .                           //~ E0002 @25
+    5 }
+  1.0
+}
+
+// The right forms: the literal on one line, and a number after a binary operator at the end of a line.
+pub fn fine() -> F32 {
+  let a: F32 = 0.5
+  let b: F32 = 1.0 +
+    0.5
+  let t: (F32, F32) = (1.0, 2.0)
+  a + b + t.0
+}

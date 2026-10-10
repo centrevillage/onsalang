@@ -1,0 +1,2 @@
+pub fn o(x:I)->I{match x{
+0o..0 =>

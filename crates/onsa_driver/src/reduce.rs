@@ -104,7 +104,7 @@ pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagno
     // the items): the order chooses, here alone.
     let key = |i: usize| {
         let d = &diagnostics[i];
-        (d.stage.check_rank().unwrap_or(usize::MAX), d.span.start, d.span.end, d.code.as_str(), d.message.as_str(), i)
+        (d.stage.check_rank().unwrap_or(usize::MAX), d.order_in_file(), i)
     };
     let mut best: Vec<Option<usize>> = vec![None; units.len()];
     for (i, a) in assigned.iter().enumerate() {
@@ -218,5 +218,26 @@ mod tests {
         let src = "fn g() -> I32 {\n  let x: Bool = 1\n  x\n}\n";
         let r = per_unit([(FileId(0), &onsa_syntax::parse(FileId(0), src).units)], vec![a, b]);
         assert_eq!(r.diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["b"]);
+    }
+
+    #[test]
+    fn one_failure_read_as_two_forms_is_one_error_of_its_unit() {
+        // R-206: the table reports every row a failure is (the `--` and the
+        // range pattern of `--..<3`, the suffix and the range pattern of
+        // `1u8..<3`); the unit reports one, the first in the order of the
+        // diagnostics (S-281): the shorter one from the same start.
+        let src = "fn f(x: I32) -> I32 {\n  match x { --..<3 => 1, _ => 0 }\n}\n";
+        let parsed = onsa_syntax::parse(FileId(0), src);
+        assert!(parsed.diagnostics.len() >= 2, "{:?}", parsed.diagnostics);
+        let at = src.find("--").unwrap() as u32;
+        assert_eq!(reduced(src, Vec::new()), vec![(at, Code::E0002)]);
+        let src = "fn f(x: U8) -> I32 {\n  match x { 1u8..<3 => 1, _ => 0 }\n}\n";
+        let at = src.find("1u8").unwrap() as u32;
+        assert_eq!(reduced(src, Vec::new()), vec![(at, Code::E0020)]);
+        // Two units with such a failure each: one diagnostic each.
+        let src = "fn f(x: I32) -> I32 {\n  match x { --..<3 => 1, _ => 0 }\n}\n\
+                   fn g(x: U8) -> I32 {\n  match x { 1u8..<3 => 1, _ => 0 }\n}\n";
+        let got = reduced(src, Vec::new());
+        assert_eq!(got.iter().map(|g| g.1).collect::<Vec<_>>(), [Code::E0002, Code::E0020]);
     }
 }

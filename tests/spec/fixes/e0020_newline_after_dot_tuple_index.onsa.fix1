@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a line break between the member `.` of a tuple index and the number (`t.` and `0`; §2.5, S-353;
+// docs/foreign-forms.toml row `newline_after_dot`), outside the pairs of brackets and with the places that
+// tests/spec/fixes/e0020_newline_after_dot.onsa does not have: a `let`, a comment on the line of the `.`, a
+// comment line between, a path of fields, the result of a call, an element of an array, an arm. The `.`
+// has an operand before it, so it is the member `.`, not the start of a float literal: the candidate moves it to the
+// head of the next line, where `.0` continues the line before (a line that starts with `.` goes on, §2.5), and
+// the number is the index. The break after a `.` that has no operand is E0002
+// (tests/spec/negative/newline_dot_before_number.onsa). The marker is on the line of the `.`. One error per
+// declaration unit (P-01).
+
+pub struct Pair {
+  t: (I32, I32),
+}
+
+pub fn make() -> (I32, I32) {
+  (1, 2)
+}
+
+pub fn in_a_let(t: (I32, I32)) -> I32 {
+  let a = t                                         //~ E0020
+    .0
+  a
+}
+
+pub fn the_second_element(t: (I32, I32)) -> I32 {
+  let a = t                                         //~ E0020
+    .1
+  a
+}
+
+pub fn a_comment_after_the_dot(t: (I32, I32)) -> I32 {
+  let a = t // the index                           //~ E0020
+    .0
+  a
+}
+
+pub fn a_comment_line_between(t: (I32, I32)) -> I32 {
+  let a = t                                         //~ E0020
+    // the index
+    .0
+  a
+}
+
+pub fn a_blank_line_between(t: (I32, I32)) -> I32 {
+  let a = t                                         //~ E0020
+
+    .0
+  a
+}
+
+pub fn a_space_before_the_dot(t: (I32, I32)) -> I32 {
+  let a = t                                         //~ E0020
+    .0
+  a
+}
+
+pub fn a_field_then_an_index(p: Pair) -> I32 {
+  let a = p.t                                       //~ E0020
+    .1
+  a
+}
+
+pub fn the_result_of_a_call() -> I32 {
+  let a = make()                                    //~ E0020
+    .0
+  a
+}
+
+pub fn an_element_of_an_array(ts: [(I32, I32); 2]) -> I32 {
+  let a = ts[0]                                     //~ E0020
+    .1
+  a
+}
+
+pub fn in_an_arm(o: Option[(I32, I32)]) -> I32 {
+  match o {
+    Some(q) => q                                    //~ E0020
+      .0,
+    None => 0,
+  }
+}
+
+pub fn at_the_start_of_a_line(t: (I32, I32)) -> I32 {
+  t                                                 //~ E0020
+  .0
+}
+
+pub fn in_a_closure_body(t: (I32, I32)) -> I32 {
+  let f = fn(q: (I32, I32)) -> I32 { q              //~ E0020
+    .0 }
+  f.(t)
+}
+
+// The right forms: the `.` of the index at the head of the next line, and on the line of its operand.
+pub fn fine(t: (I32, I32), p: Pair) -> I32 {
+  let a = t
+    .0
+  let b = t.1
+  let c = p.t
+    .1
+  a + b + c + make().0
+}

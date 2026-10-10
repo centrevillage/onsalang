@@ -10,7 +10,10 @@ use super::*;
 /// (S-123) and is not the `~` of an `if` / `match` with a blank before it
 /// (S-354, S-355: [`Cursor::branch`]; the `if` of a guard is none).
 pub(super) fn faust_bit_not(c: &Cursor) -> Option<Hit> {
-    if c.want != Want::Expr || c.sig_before(c.at).is_some_and(|p| c.branch(p).is_some()) {
+    if c.kind(c.at) != TokenKind::Tilde
+        || c.want != Want::Expr
+        || c.sig_before(c.at).is_some_and(|p| c.branch(p).is_some())
+    {
         return None;
     }
     hit(c.span(c.at), bit_not(c)?)

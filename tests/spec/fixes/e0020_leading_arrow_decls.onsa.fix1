@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.3", "§8.1", "§18.1"]
+// fixes = 1
+
+// E0020: a `->` at the start of a line, in the declarations that tests/spec/fixes/e0020_leading_arrow_assign.onsa does
+// not have (spec §2.5, S-374, S-216; docs/foreign-forms.toml row `leading_operator`): the method of a trait, the
+// operation of an effect, the method of an `impl` of a trait, the type of a field, a function type inside
+// type arguments and a function type that returns a function type. The continuing `->` goes at the end
+// of the line, as the binary operators do, and a line that starts with one is an error, in a pair of brackets and
+// outside them alike. The candidate moves the symbol to the end of the line before it (before that line's
+// comment), where the head then goes on over the break. The main position is the symbol, so the marker
+// is on its line. One error in each declaration unit.
+
+pub struct Sq {
+  side: F32,
+}
+
+pub trait Shape {
+  fn area(self) ->
+    F32                                             //~ E0020
+}
+
+pub trait Sized {
+  fn side(self) ->
+    // the return type
+    F32                                             //~ E0020
+}
+
+pub trait Scaled {
+  fn scale(self, k: F32) -> // the head
+    F32                                             //~ E0020
+}
+
+pub effect Clock {
+  fn now() ->
+    U32                                             //~ E0020
+}
+
+impl Area for Sq {
+  fn area(self) ->
+    F32 {                                           //~ E0020
+    self.side * self.side
+  }
+}
+
+pub struct Shaper {
+  curve: fn(F32) ->
+    F32,                                            //~ E0020
+}
+
+pub fn type_argument_of_an_option(o: Option[fn(I32) ->
+    I32]) -> I32 {                                  //~ E0020
+  1
+}
+
+pub fn type_argument_of_an_array(a: [fn(I32) ->
+    I32; 2]) -> I32 {                               //~ E0020
+  1
+}
+
+pub fn a_function_type_that_returns_a_function_type(f: fn(I32) -> fn(I32) ->
+    I32) -> I32 {                                   //~ E0020
+  1
+}
+
+type Curried = fn(I32) -> fn(I32) ->
+  I32                                               //~ E0020
+
+pub fn a_tuple_with_a_function_type(t: (fn(I32) ->
+    I32, I32)) -> I32 {                             //~ E0020
+  1
+}
+
+pub fn a_closure_with_two_lines(n: U32) -> I32 {
+  let h = fn(x: I32, y: I32) ->
+    I32 { x + y }                                   //~ E0020
+  1
+}
+
+// The right forms: the `->` at the end of the line. (The trait of the `impl` above is not declared: a unit stops at
+// its first error, so the names of the unit are not looked up.)
+pub struct Curve {
+  curve: fn(F32) ->
+    F32,
+}
+
+pub fn fine(o: Option[fn(I32) ->
+    I32]) -> I32 {
+  1
+}

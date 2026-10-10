@@ -1,0 +1,233 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§3.1"]
+// canonical = false
+
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2); the case is
+// about what the parser accepts.
+
+// A line that ends with a binary operator, a `,`, an opening bracket or an `=` goes on, and the next line
+// can start with a prefix `-` or `!`: the prefix is the first token of an operand (§2.5: the line goes on
+// after a token that expects an operand; a line that starts with a prefix after a complete operand is
+// not a continuation, tests/spec/fixes/e0020_leading_minus.onsa). The prefix and its operand are on
+// one line (a prefix at the end of a line is E0020, tests/spec/fixes/e0020_newline_prefix_after_binary.onsa).
+// Comment lines and blank lines between are skipped. The values are checked by the `test` at the end.
+
+use std.array
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a - b
+}
+
+pub fn pick(c: Bool, n: I32) -> I32 {
+  if c { n } else { 0 }
+}
+
+pub fn minus_after_minus(a: I32, b: I32) -> I32 {
+  a -
+    -b
+}
+
+pub fn minus_after_plus(a: I32, b: I32) -> I32 {
+  a +
+    -b
+}
+
+pub fn minus_after_times(a: I32, b: I32) -> I32 {
+  a *
+    -b
+}
+
+pub fn minus_after_divide(a: I32, b: I32) -> I32 {
+  a /
+    -b
+}
+
+pub fn minus_after_remainder(a: I32, b: I32) -> I32 {
+  a %
+    -b
+}
+
+pub fn minus_after_a_comparison(a: I32, b: I32) -> Bool {
+  a <
+    -b
+}
+
+pub fn not_after_and(a: Bool, b: Bool) -> Bool {
+  a &&
+    !b
+}
+
+pub fn not_after_or(a: Bool, b: Bool) -> Bool {
+  a ||
+    !b
+}
+
+pub fn not_after_equals(a: Bool, b: Bool) -> Bool {
+  a ==
+    !b
+}
+
+pub fn bit_not_after_and(a: U32, b: U32) -> U32 {
+  a &
+    !b
+}
+
+pub fn minus_after_an_equals(a: I32) -> I32 {
+  let c =
+    -a
+  c
+}
+
+pub fn not_after_an_equals(a: Bool) -> Bool {
+  let c =
+    !a
+  c
+}
+
+pub fn minus_after_an_assignment(a: I32) -> I32 {
+  var t = 0
+  t =
+    -a
+  t
+}
+
+pub fn minus_after_an_open_parenthesis(a: I32, b: I32) -> I32 {
+  two(
+    -a, b)
+}
+
+pub fn minus_after_a_comma(a: I32, b: I32) -> I32 {
+  two(a,
+    -b)
+}
+
+pub fn minus_after_a_comma_in_an_array(a: I32, b: I32) -> I32 {
+  let v = [a,
+    -b]
+  v[0] + v[1]
+}
+
+pub fn minus_after_a_comma_in_a_tuple(a: I32, b: I32) -> I32 {
+  let t = (a,
+    -b)
+  t.0 + t.1
+}
+
+pub fn minus_after_an_open_bracket(a: I32) -> I32 {
+  let v = [
+    -a, a]
+  v[0]
+}
+
+pub fn minus_in_an_argument_after_an_operator(a: I32, b: I32) -> I32 {
+  two(a *
+    -b, 1)
+}
+
+pub fn minus_in_a_condition(a: I32, b: I32) -> I32 {
+  if a <
+    -b {
+    1
+  } else {
+    2
+  }
+}
+
+pub fn minus_in_a_while_condition(a: I32) -> I32 {
+  var n = a
+  while n >
+    -3 {
+    n = n - 1
+  }
+  n
+}
+
+pub enum Op {
+  Times,
+  Plus,
+}
+
+pub fn minus_after_an_operator_in_an_arm(k: Op, a: I32, b: I32) -> I32 {
+  match k {
+    Op.Times => a *
+      -b,
+    Op.Plus => a +
+      -b,
+  }
+}
+
+pub fn bit_not_in_a_closure_body() -> [U32; 4] {
+  array.from_fn(fn(i) { i &
+    !2 })
+}
+
+pub fn not_in_an_argument(a: Bool, b: Bool) -> I32 {
+  pick(a &&
+    !b, 1)
+}
+
+pub fn a_comment_at_the_end_of_the_line(a: I32, b: I32) -> I32 {
+  a - // the operand
+    -b
+}
+
+pub fn a_comment_line_between(a: I32, b: I32) -> I32 {
+  a -
+    // the operand
+    -b
+}
+
+pub fn blank_and_comment_lines_between(a: I32, b: I32) -> I32 {
+  a +
+
+    // the operand
+
+    -b
+}
+
+pub fn a_prefix_after_a_prefix_operand(a: I32, b: I32) -> I32 {
+  a -
+    -(-b)
+}
+
+test "a prefix at the head of the line after an operator is the operand" {
+  assert minus_after_minus(5, 2) == 7
+  assert minus_after_plus(5, 2) == 3
+  assert minus_after_times(5, 2) == -10
+  assert minus_after_divide(8, 2) == -4
+  assert minus_after_remainder(7, 3) == 1
+  assert minus_after_a_comparison(-5, 2)
+  assert !minus_after_a_comparison(1, 2)
+  assert not_after_and(true, false)
+  assert !not_after_and(true, true)
+  assert not_after_or(false, false)
+  assert !not_after_or(false, true)
+  assert not_after_equals(true, false)
+  assert !not_after_equals(true, true)
+  assert bit_not_after_and(0b1100, 0b1010) == 0b0100
+  assert minus_after_an_equals(4) == -4
+  assert not_after_an_equals(false)
+  assert minus_after_an_assignment(4) == -4
+  assert minus_after_an_open_parenthesis(5, 2) == -7
+  assert minus_after_a_comma(5, 2) == 7
+  assert minus_after_a_comma_in_an_array(5, 2) == 3
+  assert minus_after_a_comma_in_a_tuple(5, 2) == 3
+  assert minus_after_an_open_bracket(4) == -4
+  assert minus_in_an_argument_after_an_operator(5, 2) == -11
+  assert minus_in_a_condition(1, 2) == 2
+  assert minus_in_a_condition(1, -2) == 1
+  assert minus_in_a_while_condition(2) == -3
+  assert minus_after_an_operator_in_an_arm(Op.Times, 5, 2) == -10
+  assert minus_after_an_operator_in_an_arm(Op.Plus, 5, 2) == 3
+  assert bit_not_in_a_closure_body()[1] == 1
+  assert bit_not_in_a_closure_body()[2] == 0
+  assert bit_not_in_a_closure_body()[3] == 1
+  assert not_in_an_argument(true, false) == 1
+  assert not_in_an_argument(true, true) == 0
+  assert a_comment_at_the_end_of_the_line(5, 2) == 7
+  assert a_comment_line_between(5, 2) == 7
+  assert blank_and_comment_lines_between(5, 2) == 3
+  assert a_prefix_after_a_prefix_operand(5, 2) == 3
+}

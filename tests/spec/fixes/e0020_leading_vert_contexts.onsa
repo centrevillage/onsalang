@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§11.5", "§18.1"]
+// fixes = 1
+
+// E0020: the `|` of a pattern choice at the start of a line, in the places that tests/spec/fixes/e0020_leading_vert.onsa
+// does not have (spec §2.5, §7, S-380, S-216; docs/foreign-forms.toml row `leading_vert`): the arms of a `match~`
+// and of a `match move`, the variants of an enum, a nested variant, the body of a closure, a flow, a choice
+// after a name pattern and a negative literal. The `|` that separates the alternatives of a choice goes at the
+// end of the line, as a binary operator does, and a line that starts with it is an error: the writer's reading
+// is the choice going on, so the candidate moves the `|` to the end of the line before it (before that line's
+// comment). The main position is the `|`, so the marker is on its line. One error in each declaration unit.
+
+pub enum Stage {
+  Attack,
+  Decay,
+  Release,
+}
+
+pub flow match_tilde_arms(c: Bool at block, x: F32 at sample) -> F32 at sample {
+  match~ c {
+    true
+    | false => x,                                   //~ E0020
+  }
+}
+
+pub fn match_move_arms(o: Option[U32]) -> U32 {
+  match move o {
+    Some(0)
+    | None => 1,                                    //~ E0020
+    Some(_) => 2,
+  }
+}
+
+pub fn variants_of_an_enum(s: Stage) -> U32 {
+  match s {
+    Stage.Attack
+    | Stage.Decay => 1,                             //~ E0020
+    Stage.Release => 2,
+  }
+}
+
+pub fn variants_in_a_tuple(t: (Stage, U32)) -> U32 {
+  match t {
+    (Stage.Attack
+     | Stage.Decay, n) => n,                        //~ E0020
+    (Stage.Release, _) => 0,
+  }
+}
+
+pub fn nested_variants(o: Option[Option[U32]]) -> U32 {
+  match o {
+    Some(Some(0)
+      | Some(1)) => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_negative_literal(x: I32) -> I32 {
+  match x {
+    -1
+    | -2 => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn characters(c: Char) -> U32 {
+  match c {
+    'a'
+    | 'b' => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn booleans(b: Bool) -> U32 {
+  match b {
+    true
+    | false => 1,                                   //~ E0020
+  }
+}
+
+pub fn a_closure_body(x: U32) -> U32 {
+  let f = fn(k: U32) -> U32 {
+    match k {
+      0
+      | 1 => 1,                                     //~ E0020
+      _ => 0,
+    }
+  }
+  f.(x)
+}
+
+pub fn a_match_in_a_statement(x: U32) -> U32 {
+  var r = 0
+  match x {
+    0
+    | 1 => { r = 1 },                               //~ E0020
+    _ => { r = 2 },
+  }
+  r
+}
+
+pub fn a_match_in_a_branch(x: U32, c: Bool) -> U32 {
+  if c {
+    match x {
+      0
+      | 1 => 1,                                     //~ E0020
+      _ => 0,
+    }
+  } else {
+    0
+  }
+}
+
+pub flow a_match_in_a_flow(k: U32 at block, x: F32 at sample) -> F32 at sample {
+  match k {
+    0
+    | 1 => x,                                       //~ E0020
+    _ => 0.0,
+  }
+}
+
+test "a leading bar in a test" {
+  let r = match 1 {
+    0
+    | 1 => 1,                                       //~ E0020
+    _ => 0,
+  }
+  assert r == 1
+}
+
+pub fn bar_then_a_comment_on_the_first_line(x: U32) -> U32 {
+  match x {
+    0 | 1 // the low values
+    | 2 => 1,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+// The right forms: the `|` at the end of the line.
+pub fn fine(s: Stage, o: Option[U32]) -> U32 {
+  let a = match s {
+    Stage.Attack |
+    Stage.Decay => 1,
+    Stage.Release => 2,
+  }
+  let b = match o {
+    Some(0) |
+    None => 1,
+    Some(_) => 2,
+  }
+  a + b
+}

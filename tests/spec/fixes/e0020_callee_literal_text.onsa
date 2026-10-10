@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a call whose callee is a literal (§6.1): a literal is no path of names, so the callee can be
+// no item, and the syntax alone decides, as for `(s.f)(x)` (tests/spec/fixes/e0020_call_forms_syntax.onsa; docs/
+// foreign-forms.toml row `callee_expression`). The one candidate inserts the `.` of `.(` before the `(`, so
+// the literal is called as a function value (a value of another type is a later error of the type stage:
+// the candidate removes the error of its own stage, §18.1). The main position is the first token of the callee (the
+// literal; W3-20). An integer literal as the callee (`5(x)`, `0x1F(x)`) is not here: `5.(x)` reads as the
+// float literal `5.` and a `(x)` (S-350), so the candidate would write another error. One error per function
+// (P-01). This file: text and boolean literals.
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn call_a_string(x: I32) -> I32 {
+  "a"(x)                                            //~ E0020
+}
+
+pub fn call_an_empty_string(x: I32) -> I32 {
+  ""(x)                                             //~ E0020
+}
+
+pub fn call_a_string_with_an_interpolation(x: I32) -> I32 {
+  "a{x}"(x)                                         //~ E0020
+}
+
+pub fn call_a_character(x: I32) -> I32 {
+  'a'(x)                                            //~ E0020
+}
+
+pub fn call_true(x: I32) -> I32 {
+  true(x)                                           //~ E0020
+}
+
+pub fn call_false(x: I32) -> I32 {
+  false(x)                                          //~ E0020
+}
+
+// The right forms: a function value is called with `.(`, and a literal is a value of its own.
+pub fn fine(f: fn(I32) -> I32, x: I32) -> I32 {
+  let a = f.(x)
+  let b = [1, 2][0]
+  let c = (1, 2).0
+  id(a + b + c)
+}

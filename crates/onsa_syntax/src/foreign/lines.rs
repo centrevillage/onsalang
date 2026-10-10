@@ -94,83 +94,108 @@ fn in_pattern(c: &Cursor) -> bool {
 /// is the second candidate ([`comma_before_sign`], S-370, S-405). In the
 /// arms of a `match`, a symbol that a `=>` follows starts the next arm
 /// (S-386): the missing `,` of the list.
-pub(super) fn leading_symbol(c: &Cursor) -> Option<Hit> {
+pub(super) fn leading_symbol(c: &Cursor) -> Option<(RowId, Hit)> {
     use TokenKind::*;
     let (s, prev) = leading(c)?;
-    let kind = c.kind(s);
-    let sign = matches!(kind, Minus | Caret);
-    let symbol = &c.text[c.span(s).start as usize..c.span(s).end as usize];
-    let mut fixes = Vec::new();
-    match c.gap_after(s) {
+    let sign = matches!(c.kind(s), Minus | Caret);
+    let fixes = match c.gap_after(s) {
         Gap::Newline if sign => return None,
         Gap::Space if sign => {
             let title = "join it to the line before";
-            fixes.push(move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
+            vec![move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ")]
         }
-        gap => {
-            fixes.extend(super::edits::move_token_up_as(
-                c,
-                "move it to the end of the line before",
-                s,
-                &format!(" {symbol}"),
-            ));
-            let list = super::lists::expression_list(c);
-            let operand = gap == Gap::None && crate::starts::starts_operand(c.kind(s + 1));
-            if list && operand && matches!(kind, Minus | Caret | Plus) {
-                fixes.push(comma_before_sign(c, prev, s));
-            }
-        }
+        gap => moved_to_the_line_before(c, s, prev, gap),
+    };
+    found(if sign { RowId::LeadingMinus } else { RowId::LeadingOperator }, c.span(s), fixes)
+}
+
+/// The candidates of a symbol `s` at the head of a line that moves to the end
+/// of the line before (after `prev`), and in a list whose elements are
+/// expressions, of a `-`, `^` or `+` touching its operand, the `,` before it
+/// (S-370, S-405).
+fn moved_to_the_line_before(c: &Cursor, s: usize, prev: usize, gap: Gap) -> Vec<Fix> {
+    use TokenKind::*;
+    let symbol = &c.text[c.span(s).start as usize..c.span(s).end as usize];
+    let title = "move it to the end of the line before";
+    let mut fixes: Vec<Fix> = super::edits::move_token_up_as(c, title, s, &format!(" {symbol}")).into_iter().collect();
+    let list = super::lists::expression_list(c);
+    let operand = gap == Gap::None && crate::starts::starts_operand(c.kind(s + 1));
+    if list && operand && matches!(c.kind(s), Minus | Caret | Plus) {
+        fixes.push(comma_before_sign(c, prev, s));
     }
-    c.say(if sign { RowId::LeadingMinus } else { RowId::LeadingOperator });
-    hit(c.span(s), fixes)
+    fixes
 }
 
 /// Whether the failure is at a symbol at the head of a line that goes on with
-/// the line before ([`leading_symbol`]): the symbol and the code before it.
-/// The one judgement: the rows that a symbol at the head of a line could
-/// also be (the references `&x` and `&mut x`, the prefix `+`) take it when
-/// this does not. A symbol that another touches (`+=`, `===`, `&*x`,
-/// `&mut x`) does not move: what is left would be wrong (S-236).
+/// the line before ([`leading_symbol`]): the symbol and the code before it,
+/// by the kind of the symbol ([`leading_arrow`], [`leading_eq`],
+/// [`leading_binary`]). Not in a pattern (the rows of the patterns judge it),
+/// nor a symbol that starts the next arm of a `match` (S-386, the missing
+/// `,`), nor one that another touches (`+=`, `===`, `&*x`): what is left
+/// would be wrong (S-236). A `&` or a `+` at the head of a line that this
+/// finds is read as the binary one (W3-06, S-405): the reference's and the
+/// prefix `+`'s rows ask it ([`super::modes::reference`], [`prefix_plus`]).
 pub(super) fn leading(c: &Cursor) -> Option<(usize, usize)> {
     use TokenKind::*;
+    let kind = c.kind(c.symbol_ahead());
+    if !(matches!(kind, Arrow | Eq) || kind.binop().is_some()) {
+        return None;
+    }
     let (s, prev) = c.head_symbol_after_operand()?;
-    let kind = c.kind(s);
-    let sign = matches!(kind, Minus | Caret);
-    let operator = kind.binop().is_some() || matches!(kind, Arrow | Eq);
-    // The prefix rows judge a `- b` and a `^ b` where an expression goes.
-    if !operator || (sign && matches!(c.want, Want::Prefix | Want::Expr)) || c.want == Want::Pattern {
-        return None;
-    }
-    if (kind == OrOr && in_pattern(c)) || (c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, s)) {
-        return None;
-    }
+    let arm = c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, s);
     let touching = c.gap_after(s) == Gap::None && !crate::starts::starts_operand(c.kind(s + 1));
-    if touching || (kind == Amp && c.is_ident(c.sig_after(s), "mut")) {
+    if c.want == Want::Pattern || arm || touching {
         return None;
     }
-    let newline = c.kind(c.at) == Newline;
-    let closed = |kinds: &[NodeKind]| c.closed.iter().any(|n| kinds.contains(&n.0));
     let fits = match kind {
-        // The result of a head, with a body or without (a member of a trait,
-        // an effect or an `extern`, a `target fn`).
-        Arrow => closed(&[NodeKind::ParamList, NodeKind::FnTypeParams]),
-        Eq if newline => matches!(
-            c.context(),
-            Some((_, NodeKind::LetStmt | NodeKind::VarStmt | NodeKind::Const | NodeKind::TypeAlias))
-        ),
-        // A statement after which a `=` goes on to an assignment, not one
-        // that has its `=` already (`x = 2` and `= 3` on the next line); the
-        // value of a constant of a trait.
-        Eq => {
-            (c.want == Want::Expr && c.closed.is_empty() && c.end_at(prev).is_none())
-                || (closed(&[NodeKind::Const]) && closed_expr(c).is_none())
-        }
-        // After an operand that closed there, or at the start of a statement
-        // after one (the line break read, nothing closed since).
-        Pipe if in_pattern(c) => true,
-        _ => closed_expr(c).is_some() || (!newline && c.closed.is_empty()),
+        Arrow => leading_arrow(c),
+        Eq => leading_eq(c, prev),
+        _ => leading_binary(c, s),
     };
     fits.then_some((s, prev))
+}
+
+/// A `->` at the head of a line: the result of a head, with a body or
+/// without (a member of a trait, an effect or an `extern`, a `target fn`;
+/// S-374).
+fn leading_arrow(c: &Cursor) -> bool {
+    c.closed.iter().any(|n| matches!(n.0, NodeKind::ParamList | NodeKind::FnTypeParams))
+}
+
+/// A `=` at the head of a line (S-374): of a binding or a definition waiting
+/// for it, after a statement after which it goes on to an assignment (not
+/// one that has its `=` already: `x = 2` and `= 3` on the next line), or the
+/// value of a constant of a trait.
+fn leading_eq(c: &Cursor, prev: usize) -> bool {
+    if c.kind(c.at) == TokenKind::Newline {
+        return matches!(
+            c.context(),
+            Some((_, NodeKind::LetStmt | NodeKind::VarStmt | NodeKind::Const | NodeKind::TypeAlias))
+        );
+    }
+    (c.want == Want::Expr && c.closed.is_empty() && c.end_at(prev).is_none())
+        || (c.closed.iter().any(|n| n.0 == NodeKind::Const) && closed_expr(c).is_none())
+}
+
+/// A binary operator at the head of a line (S-124, S-370), or the `|` of a
+/// pattern choice (S-380): after an operand that closed there, or at the
+/// start of a statement after one (the line break read, nothing closed
+/// since). A `- b` and a `^ b` where an expression goes are the prefix rows',
+/// a `||` in a pattern is `pattern_double_vert`'s (S-389), and `&mut` is the
+/// reference's ([`Cursor::ref_mut`]).
+fn leading_binary(c: &Cursor, s: usize) -> bool {
+    use TokenKind::*;
+    let kind = c.kind(s);
+    if matches!(kind, Minus | Caret) && matches!(c.want, Want::Prefix | Want::Expr) {
+        return false;
+    }
+    if (kind == OrOr && in_pattern(c)) || (kind == Amp && c.ref_mut(s)) {
+        return false;
+    }
+    if kind == Pipe && in_pattern(c) {
+        return true;
+    }
+    closed_expr(c).is_some() || (c.kind(c.at) != Newline && c.closed.is_empty())
 }
 
 /// A `|` where a pattern starts (`| 0 | 1 =>`, `Some(| 0)`, `let | (a, b) = p`;
@@ -222,8 +247,13 @@ pub(super) fn pattern_double_vert(c: &Cursor) -> Option<Hit> {
 /// takes it out with the blanks after it. After a line break (`let y = +`
 /// and `a` on the next line, S-425) the operand's line comes up to its place,
 /// before the comment of the `+`'s line (S-216). A `+` at the head of a line
-/// after an operand is `leading_operator`'s ([`leading`]). In a pattern only
-/// before an integer.
+/// after an operand is read as the binary one, `leading_operator`'s
+/// ([`leading`], S-405): no form of its own. The order of the diagnostics
+/// would choose the same (S-281), by the order of the two messages (`a
+/// line …` before `there …`: to be checked again when either changes), but
+/// the reading is decided, and a second diagnostic that is never reported
+/// costs its candidates at every such line (W3-06's long inputs). In a
+/// pattern only before an integer.
 pub(super) fn prefix_plus(c: &Cursor) -> Option<Hit> {
     if c.kind(c.at) != TokenKind::Plus || !matches!(c.want, Want::Expr | Want::Pattern) || leading(c).is_some() {
         return None;

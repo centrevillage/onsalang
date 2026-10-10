@@ -1,78 +1,9 @@
-//! The callee of a call (§6.1, S-191, S-256): what is a path of names, and
-//! the row of a callee that is no path of names (`.(`).
+//! The row of a callee that is no path of names (`.(`, §6.1, S-191, S-256;
+//! what a callee is, [`crate::callee`]), and the candidate that calls a
+//! value with `.(`.
 
+use super::literals::literal_call;
 use super::*;
-
-/// The nodes of an expression that name a path (a path of names, a method,
-/// a tuple index): what a `::[…]`, a `!` or a `~` may follow, and the callees
-/// whose type arguments of another language become `::[…]`. The one test,
-/// for the parser and this table.
-pub(crate) fn names_a_path(kind: NodeKind) -> bool {
-    matches!(kind, NodeKind::PathExpr | NodeKind::FieldExpr | NodeKind::TupleIndexExpr)
-}
-
-/// How a postfix chain has been read so far, for [`callee_by_name`]: a path
-/// of names (§2.4: names and the fields, tuple indexes and `::[…]` after
-/// them), that path with `[…]`s after it, a field of anything else (a
-/// method, `g(x).m`), one `[…]` after such a field (`g(x).m[I32]`), or
-/// anything else.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CalleeChain {
-    Names,
-    Indexed,
-    Member,
-    MemberIndexed,
-    Value,
-}
-
-impl CalleeChain {
-    /// The chain that starts with an operand of `kind`.
-    pub(crate) fn start(kind: NodeKind) -> CalleeChain {
-        if kind == NodeKind::PathExpr { CalleeChain::Names } else { CalleeChain::Value }
-    }
-
-    /// The chain after its next link, a node of `kind`, closed. A field keeps
-    /// a path of names (`ops[i].m[T](x)` is a method's, of the type stage,
-    /// S-256); after anything else it is a member, and one `[…]` after it is
-    /// a method's type arguments or an index of a field, which the type stage
-    /// tells apart (`g(x).m[I32](y)`, §4.5); a tuple index ends a path of
-    /// names only after names.
-    pub(crate) fn then(self, kind: NodeKind) -> CalleeChain {
-        use CalleeChain::*;
-        match (self, kind) {
-            (c @ (Names | Indexed), NodeKind::FieldExpr | NodeKind::TypeArgsExpr) => c,
-            (_, NodeKind::FieldExpr) => Member,
-            (Names, NodeKind::TupleIndexExpr) => Names,
-            (Names | Indexed, NodeKind::IndexExpr) => Indexed,
-            (Member, NodeKind::IndexExpr) => MemberIndexed,
-            _ => Value,
-        }
-    }
-}
-
-/// Whether the callee of a call `callee(…)`, the last link (`kind`) of the
-/// chain `chain`, is written by name, so that a later stage decides the
-/// call (§6.1, S-191, S-256): a path of names (`f`, `s.f`; `t.0`, S-342),
-/// a method (`x.f`, `g(x).f`), `::[…]` after one (`f::[T]`), a path of
-/// names with `[…]` after it (`ops[i]`), or a field of anything else with
-/// one `[…]` after it (`g(x).m[I32]`, §4.5). Any other callee (`(s.f)`,
-/// `pick(true)`, `ts[0].0`, `mk2().0`) is no item: the parser fails at the
-/// `(` with [`Want::Callee`], and the row `callee_expression` gives `.(`.
-/// The one test, for the parser and that row.
-pub(crate) fn callee_by_name(kind: NodeKind, chain: CalleeChain) -> bool {
-    match kind {
-        NodeKind::PathExpr | NodeKind::FieldExpr | NodeKind::TypeArgsExpr => true,
-        NodeKind::TupleIndexExpr => chain == CalleeChain::Names,
-        NodeKind::IndexExpr => matches!(chain, CalleeChain::Indexed | CalleeChain::MemberIndexed),
-        _ => false,
-    }
-}
-
-/// A callee that is a value and no path (`(e)`, `g(x)`, `xs[i]`, `x?`): no
-/// `::[` can be written after it, and it is called with `.(` (§6.1).
-pub(super) fn is_value_callee(kind: NodeKind) -> bool {
-    matches!(kind, NodeKind::ParenExpr | NodeKind::CallExpr | NodeKind::IndexExpr | NodeKind::TryExpr)
-}
 
 /// The candidate that calls the value `callee` with `.(` in place of the
 /// type arguments in `first..=last` (the call's `(` follows `last`): the
@@ -111,7 +42,8 @@ fn removable_parens(c: &Cursor, callee: (NodeKind, u32), close: usize) -> Option
 
 /// The tokens `first..=last` are a postfix expression on one line: a name,
 /// `self` or `Self` and, after it, only `.name`, `.0`, `.(…)`, `(…)`,
-/// `[…]`, `::[…]`, `~(…)`, `!(…)` and `?`.
+/// `[…]`, `::[…]`, `~(…)`, `!(…)` and `?` (the links of
+/// [`crate::callee::Link`], read in the text).
 fn is_postfix_chain(c: &Cursor, first: usize, last: usize) -> bool {
     if first > last || !matches!(c.kind(first), TokenKind::Ident | TokenKind::KwSelf | TokenKind::KwSelfType) {
         return false;
@@ -143,7 +75,7 @@ fn is_postfix_chain(c: &Cursor, first: usize, last: usize) -> bool {
 /// (`pick(true).(5)`, `(a + b).(1)`). An integer literal as the callee has
 /// none (`1.(2)` reads as the literal `1.`, §2.4).
 pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
-    // The parser has judged the callee ([`callee_by_name`]).
+    // The parser has judged the callee ([`crate::callee::Callee::by_name`]).
     if c.want != Want::Callee {
         return None;
     }
@@ -155,7 +87,9 @@ pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
     let edits = match removable_parens(c, callee, before) {
         Some(open) => vec![Edit::delete(c.span(open)), Edit::replace(c.span(before), ".")],
         // Not a tuple index (`ts[0].0.(x)` reads as written).
-        None if callee.0 == NodeKind::Literal && c.kind(before) == TokenKind::Int => return hit(span, Vec::new()),
+        None if callee.0 == NodeKind::Literal && literal_call(c, before) == Some(TokenKind::Int) => {
+            return hit(span, Vec::new());
+        }
         None => vec![Edit::insert(c.file, c.span(c.at).start, ".")],
     };
     // The call takes the callee one level down (§2.5): no candidate that

@@ -83,3 +83,31 @@ left = "expected field name, found integer literal"
 input = "tests/fuzz/7e0c855f.onsa"
 reasons = ["S-413"]
 note = "a `{` after a constant's name on the next line in brackets (`two(N` and `{ 1 })`): the E0003 first, and what is left of the literal is reported by the next check, as S-413 decided"
+
+[[allowed]]
+class = "fix|E0020|remove the type suffix|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/930900db.onsa"
+reasons = ["S-281", "S-236"]
+note = "one failure read as two forms (R-206): a literal with a suffix that starts a range pattern (`0o..0`); the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_range_pattern.onsa)"
+
+[[allowed]]
+class = "fix|E0020|take the `…` out|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/9ab30c13.onsa"
+reasons = ["S-281", "S-405"]
+note = "one failure read as two forms (R-206): a prefix `+` that starts a range pattern (`(+1..)`); the `+` is reported first (S-281), and the range pattern is left for the next check, at the same place"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "invalid character `…`"
+input = "tests/fuzz/d035fd58.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: an `else` on the next line, and an invalid character (`（`) right after it, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0001"
+left = "number prefix without digits"
+input = "tests/fuzz/1a77f5a9.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a blank before the `(` of a call, and a number prefix without digits (`0x`) right after it, which the input has before the candidate"

@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a line break between a prefix `-` / `!` and its operand when the prefix follows a binary operator
+// (§2.5, S-369; docs/foreign-forms.toml row `newline_after_prefix`). The prefix is written on the line of its
+// operand (a line goes on after a binary operator, not after a prefix), and
+// the candidate moves the mark to the head of the operand's line, where the line before it, which now
+// ends in the binary operator, goes on. The first `-` of `a - -` is the binary one (the token before it is an
+// operand) and the second is the prefix (the token before it is an operator, §2.5), so the error is the
+// second, and its marker is on the line of the mark that the candidate moves. The cases of
+// tests/spec/fixes/e0020_newline_after_prefix.onsa are the marks after `(`, `[` and `=>`; here the mark follows an
+// operator, a `,` or an `=`. The accepted form, an operator at the end of a line and the prefix at the head of
+// the next one, is in tests/spec/lex/continuation_prefix_after_operator.onsa. One error per declaration unit
+// (P-01).
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn pick(c: Bool, n: I32) -> I32 {
+  if c { n } else { 0 }
+}
+
+pub fn minus_after_minus(a: I32, b: I32) -> I32 {
+  let c = a - -                                     //~ E0020
+    b
+  c
+}
+
+pub fn minus_after_times(a: I32, b: I32) -> I32 {
+  let c = a * -                                     //~ E0020
+    b
+  c
+}
+
+pub fn minus_after_plus(a: I32, b: I32) -> I32 {
+  let c = a + -                                     //~ E0020
+    b
+  c
+}
+
+pub fn minus_after_a_comparison(a: I32, b: I32) -> Bool {
+  let c = a == -                                    //~ E0020
+    b
+  c
+}
+
+pub fn not_after_and(a: Bool, b: Bool) -> Bool {
+  let c = a && !                                    //~ E0020
+    b
+  c
+}
+
+pub fn not_after_or(a: Bool, b: Bool) -> Bool {
+  let c = a || !                                    //~ E0020
+    b
+  c
+}
+
+pub fn minus_after_a_comma(a: I32, b: I32) -> I32 {
+  two(a, -                                          //~ E0020
+    b)
+}
+
+pub fn minus_in_a_second_argument(a: I32, b: I32) -> I32 {
+  two(a * -                                         //~ E0020
+    b, 1)
+}
+
+pub fn minus_after_an_equals(a: I32) -> I32 {
+  let c = -                                         //~ E0020
+    a
+  c
+}
+
+pub fn not_after_an_equals(a: Bool) -> Bool {
+  let c = !                                         //~ E0020
+    a
+  c
+}
+
+pub fn minus_after_an_arrow_of_an_arm(a: I32, b: I32) -> I32 {
+  match a {
+    0 => -                                          //~ E0020
+      b,
+    _ => 0,
+  }
+}
+
+pub fn minus_after_an_operator_in_an_arm(a: I32, b: I32) -> I32 {
+  match a {
+    0 => a * -                                      //~ E0020
+      b,
+    _ => 0,
+  }
+}
+
+pub fn minus_after_an_operator_in_a_condition(a: I32, b: I32) -> I32 {
+  if a < -                                          //~ E0020
+    b {
+    1
+  } else {
+    2
+  }
+}
+
+pub fn minus_after_an_operator_in_a_pick(a: I32, b: I32) -> I32 {
+  pick(a == -                                       //~ E0020
+    b, 1)
+}
+
+pub fn comment_at_the_end_of_the_line(a: I32, b: I32) -> I32 {
+  let c = a * - // the operand                      //~ E0020
+    b
+  c
+}
+
+pub fn comment_line_between(a: I32, b: I32) -> I32 {
+  let c = a * -                                     //~ E0020
+    // the operand
+    b
+  c
+}
+
+pub fn blank_and_comment_lines_between(a: I32, b: I32) -> I32 {
+  let c = a + -                                     //~ E0020
+
+    // the operand
+
+    b
+  c
+}
+
+pub fn minus_before_a_group(a: I32, b: I32) -> I32 {
+  let c = a * -                                     //~ E0020
+    (b + 1)
+  c
+}
+
+pub fn minus_in_a_closure_body(a: I32, b: I32) -> I32 {
+  let f = fn(x: I32) -> I32 { x * -                 //~ E0020
+    b }
+  f.(a)
+}
+
+// The right forms: the prefix on the line of its operand, after an operator at the end of the line or not.
+pub fn fine(a: I32, b: I32, p: Bool, q: Bool) -> I32 {
+  let c = a - -b
+  let d = a -
+    -b
+  let e = a * -b
+  let f = !p && !q
+  two(c + d, e) + pick(f, a)
+}

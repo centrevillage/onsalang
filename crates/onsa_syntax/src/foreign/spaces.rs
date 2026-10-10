@@ -4,7 +4,7 @@
 
 use onsa_diag::{Edit, Fix};
 
-use super::{Cursor, Hit, RowId, Want, closed_expr, closing, hit};
+use super::{Cursor, Hit, RowId, Want, closed_expr, closing, found, hit};
 use crate::cst::NodeKind;
 use crate::token::{Gap, TokenKind};
 
@@ -21,7 +21,7 @@ use crate::token::{Gap, TokenKind};
 /// too (S-387, S-236). A line break before the opener is the missing `,`
 /// in a list, and elsewhere the general E0002 with the line break taken out
 /// (S-89; the parser's `fail_with`).
-pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
+pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
     let d = c.detached.filter(|d| d.at == c.at)?;
     // A line break before a required list is the blank of it (S-412: the
     // `(` after `fn` in a list, where a line break is a blank).
@@ -74,8 +74,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
     if fixes.is_empty() && in_list {
         return None;
     }
-    c.say(row);
-    hit(c.span(c.at), fixes)
+    found(row, c.span(c.at), fixes)
 }
 
 /// A string or character literal right against a name (`f"{x}"`, `r"\d"`,
@@ -87,6 +86,9 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<Hit> {
 /// the error (`f"abc` at the end of a line, `x'ab'`).
 pub(super) fn string_prefix(c: &Cursor) -> Option<Hit> {
     let literal = |k: TokenKind| matches!(k, TokenKind::Str | TokenKind::Char);
+    if !(literal(c.kind(c.at)) || c.kind(c.at) == TokenKind::Ident) {
+        return None;
+    }
     let prev = c.before(c.at)?;
     if c.gap(c.at) != Gap::None {
         return None;
@@ -159,7 +161,8 @@ pub(super) fn space_before_question(c: &Cursor) -> Option<Hit> {
 /// literal pattern `- 1`; S-123, S-411) or after the `^` of a name (`^ y`):
 /// the candidate takes the blank out. A stack of prefix operators with
 /// blanks is the E0012 of the stack (S-410), which the parser reads on.
-pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
+pub(super) fn space_after_prefix(c: &Cursor) -> Option<(RowId, Hit)> {
+    let mut row = RowId::SpaceAfterPrefix;
     let kind = c.kind(c.at);
     // The parser judged the gap after a `-` / `!` (`Want::Prefix`); a `^`
     // with no name right after it fails where an expression goes.
@@ -176,7 +179,7 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
         if next != TokenKind::Ident {
             return None;
         }
-        c.say(RowId::SpaceAfterCaret);
+        row = RowId::SpaceAfterCaret;
     } else if !crate::starts::starts_operand(next) {
         return None;
     }
@@ -189,10 +192,10 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
         let title = "join it to the line before";
         fixes.push(super::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
         if kind == TokenKind::Minus {
-            c.say(RowId::LeadingMinus);
+            row = RowId::LeadingMinus;
         }
     }
-    hit(c.span(c.at), fixes)
+    found(row, c.span(c.at), fixes)
 }
 
 /// A binary `-` / `^` / `+` with a blank before it and its operand touching
@@ -204,11 +207,13 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<Hit> {
 /// blanks on both sides and is no such form. In the arms of a `match`, a
 /// sign that a `=>` follows starts the next arm (S-386): the missing `,`.
 pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
+    if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret | TokenKind::Plus) {
+        return None;
+    }
     if c.want == Want::Separator(NodeKind::MatchArms) && crate::scan::arm_ahead(c.tokens, c.at) {
         return None;
     }
-    if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret | TokenKind::Plus)
-        || c.gap(c.at) != Gap::Space
+    if c.gap(c.at) != Gap::Space
         || c.gap_after(c.at) != Gap::None
         || !crate::starts::starts_operand(c.kind(c.at + 1))
         || closed_expr(c).is_none()

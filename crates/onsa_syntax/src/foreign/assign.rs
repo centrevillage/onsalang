@@ -70,16 +70,13 @@ fn needs_parens(c: &Cursor, op: TokenKind, first: usize, last: usize) -> bool {
 /// whose left side is a name or a path of fields (S-250). A left side that
 /// would be read twice (`a[i] += 1`) and an expression (`let y = x += 1`) are
 /// E0002 with the note.
-pub(super) fn compound_assignment(c: &Cursor) -> Option<Hit> {
+pub(super) fn compound_assignment(c: &Cursor) -> Option<(RowId, Hit)> {
     if c.want != Want::Expr || c.kind(c.at) != TokenKind::Eq || c.gap(c.at).is_some() {
         return None;
     }
     let op = c.at.checked_sub(1).filter(|&o| compound_operator(c.kind(o)))?;
     let span = c.file_span(c.span(op).start, c.span(c.at).end);
-    let unfixable = || {
-        c.say(RowId::CompoundAssignUnfixable);
-        hit(span, Vec::new())
-    };
+    let unfixable = || found(RowId::CompoundAssignUnfixable, span, Vec::new());
     let statement = c.top() == Some(NodeKind::BinaryExpr) && c.open_at(1).is_some_and(|o| o.0 == NodeKind::Block);
     if !statement {
         return unfixable();
@@ -103,7 +100,7 @@ pub(super) fn compound_assignment(c: &Cursor) -> Option<Hit> {
     if parens {
         edits.push(Edit::insert(c.file, c.span(rhs_last).end, ")"));
     }
-    hit(span, vec![Fix::new("write the assignment out", edits)])
+    found(RowId::CompoundAssign, span, vec![Fix::new("write the assignment out", edits)])
 }
 
 /// `a--b`, `5--3` (S-320): a binary `-` and a prefix one written without a
@@ -137,17 +134,17 @@ fn binary_minus_minus(c: &Cursor) -> bool {
 
 /// `++x`, `x++`, `--x`, `x--` (S-250, S-297): `x = x + 1` as a statement
 /// whose operand is a name or a path of fields; else E0002 with the note.
-pub(super) fn increment(c: &Cursor) -> Option<Hit> {
+pub(super) fn increment(c: &Cursor) -> Option<(RowId, Hit)> {
     let kind = c.kind(c.at);
+    // A `--` is the one form or the other ([`binary_minus_minus`], S-297,
+    // S-320): a decided reading of the token, outside the order of the
+    // diagnostics of S-281 (which would choose the E0002 of an increment).
     if !matches!(kind, TokenKind::PlusPlus | TokenKind::MinusMinus) || binary_minus_minus(c) {
         return None;
     }
     let op = if kind == TokenKind::PlusPlus { "+" } else { "-" };
     let span = c.span(c.at);
-    let none = || {
-        c.say(RowId::IncrementUnfixable);
-        hit(span, Vec::new())
-    };
+    let none = || found(RowId::IncrementUnfixable, span, Vec::new());
     // `++x` as a statement: nothing of it was read yet.
     if c.want == Want::Expr && c.top() == Some(NodeKind::Block) {
         let first = c.at + 1;
@@ -163,7 +160,7 @@ pub(super) fn increment(c: &Cursor) -> Option<Hit> {
                 Edit::insert(c.file, c.span(last).end, format!(" = {place} {op} 1")),
             ],
         );
-        return hit(span, vec![fix]);
+        return found(RowId::Increment, span, vec![fix]);
     }
     // `x++` as a statement: the statement `x` closed before it.
     if let [(NodeKind::PathExpr | NodeKind::FieldExpr | NodeKind::TupleIndexExpr, start), .., (NodeKind::ExprStmt, _)] =
@@ -174,7 +171,11 @@ pub(super) fn increment(c: &Cursor) -> Option<Hit> {
         let first = c.index_at(*start);
         if is_place(c, first, c.at - 1) && c.gap(c.at) == Gap::None {
             let place = &c.text[c.span(first).start as usize..c.span(c.at - 1).end as usize];
-            return hit(span, vec![Fix::replace("write the assignment out", span, format!(" = {place} {op} 1"))]);
+            return found(
+                RowId::Increment,
+                span,
+                vec![Fix::replace("write the assignment out", span, format!(" = {place} {op} 1"))],
+            );
         }
     }
     none()
