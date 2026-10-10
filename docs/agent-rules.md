@@ -46,7 +46,8 @@
 
 | 役割 | 作業の途中 | 報告の前 | 回さないもの |
 |---|---|---|---|
-| t、i | 変えた所に関わるテストだけを絞って回す（`cargo test -p <crate> <テストの名前>`、変えたファイルへの `onsa check`）。広く確かめたいときは `tools/gate.sh --quick` | gate の全体を一度、`tools/gate.sh --work <作業 ID>`。要約を報告に付ける（直しの往復でも、直すたびには回さない） | fuzz（`tools/fuzz.py`）、fmt の性質（`tools/fmt_props.py`）、C の検査とテストベクトル（`onsa_cases --c`、`--vectors`）は、作業がその道具か生成した C を扱うときだけ |
+| t | 書いた事例だけを絞って確かめる（下の「事例を絞って走らせる」、データのファイルの自己テスト `cargo test -p onsa_tests --test foreign_forms`、変えたファイルへの `onsa check` と `onsa fmt --check`）。載せる項目は仮に実装待ちの一覧に入れて回し、回した後は元に戻す | gate は回さない（親が成果を写した後と、実装の担当の報告の前に回る）。絞った確かめの結果を報告に付ける | fuzz（`tools/fuzz.py`）、fmt の性質（`tools/fmt_props.py`）、C の検査とテストベクトル（`onsa_cases --c`、`--vectors`）は、作業がその道具か生成した C を扱うときだけ |
+| i | 変えた所に関わるテストだけを絞って回す（`cargo test -p <crate> <テストの名前>`、変えたファイルへの `onsa check`）。広く確かめたいときは `tools/gate.sh --quick` | gate の全体を一度、`tools/gate.sh --work <作業 ID>`。要約を報告に付ける（直しの往復でも、直すたびには回さない） | fuzz（`tools/fuzz.py`）、fmt の性質（`tools/fmt_props.py`）、C の検査とテストベクトル（`onsa_cases --c`、`--vectors`）は、作業がその道具か生成した C を扱うときだけ |
 | b | 個々の入力へのコマンドと、絞ったテスト | — | gate（実装の担当が回し、親が要約を読む）。fuzz・fmt の性質・C の検査は、作業票がそれを対象にするときだけ |
 | advisor、gap | 個々の入力へのコマンドだけ | — | gate、`cargo test --workspace`、fuzz、fmt の性質、C の検査。自分でビルドしない（親が渡すバイナリを使う） |
 
