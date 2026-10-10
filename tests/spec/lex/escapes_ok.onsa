@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5"]
+
+// (S-19, R-01.) The escapes of the closed list `\n \t \r \0 \\ \" \' \u{XXXX}` (§2.4, S-19), in strings and in
+// character literals, with multi-byte text next to them (R-01: the lexer walks characters). The
+// values of `\u{…}` run over the Unicode scalar values: the edges around the surrogates
+// (U+D7FF and U+E000) and the last one (U+10FFFF) are fine, one to six hexadecimal digits of
+// either case. The bad escapes and the values that are no scalar value are in
+// negative/lex_escapes.onsa and negative/lex_utf8_escapes.onsa.
+
+pub fn every_escape() -> Str {
+  "tab\there, line\nfeed, return\rhere, nul\0here, \\backslash, \"quote\", \'apostrophe\'"
+}
+
+pub fn unicode_escapes() -> Str {
+  "\u{41} \u{e9} \u{3042} \u{1F600} \u{10FFFF} \u{0} \u{a} \u{D7FF} \u{E000} \u{ffff} \u{FFFF} \u{aBcD}"
+}
+
+pub fn escapes_next_to_multibyte_text() -> Str {
+  "日本\n語\t😀\u{41}é\\é\"日本\""
+}
+
+pub fn escapes_next_to_braces() -> Str {
+  "{{\n}} {{\u{41}}} \u{7b}\u{7d}"
+}
+
+pub fn the_last_scalar_value() -> Char {
+  '\u{10FFFF}'
+}
+
+pub fn character_escapes() -> Char {
+  let a: Char = '\n'
+  let b: Char = '\t'
+  let c: Char = '\r'
+  let d: Char = '\0'
+  let e: Char = '\\'
+  let f: Char = '\''
+  let g: Char = '"'
+  let h: Char = '\u{41}'
+  let i: Char = '\u{e9}'
+  let j: Char = '\u{1F600}'
+  a
+}
+
+pub fn character_literals_of_one_scalar() -> Char {
+  let a: Char = 'a'
+  let b: Char = 'é'
+  let c: Char = '日'
+  let d: Char = '😀'
+  let e: Char = '𠮷'
+  let f: Char = ' '
+  let g: Char = '"'
+  a
+}
+
+pub fn quotes_in_the_other_literal() -> Str {
+  "it's, 'quoted', and a \" mark"
+}
+
+pub fn a_comment_has_no_escapes() -> I32 {
+  // a backslash at the end of a comment \
+  // an unknown escape \q and a bad \u{110000} in a comment are text
+  1
+}
+
+pub fn nested_places() -> Str {
+  let f = fn(n: I32) -> Str { "\u{41}\n" }
+  if true {
+    "日本\u{3042}"
+  } else {
+    "\t"
+  }
+}

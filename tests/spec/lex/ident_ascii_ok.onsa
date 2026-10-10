@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§2.2", "§2.1", "§2.4"]
+
+// (S-89, R-101, S-169, S-279, S-371.) A name is ASCII letters, digits and `_`, and does not start with a digit (§2.3, S-89). Names
+// written with other scripts are E0001 (negative/lex_ident_ascii.onsa), but the same text inside a
+// comment or a string is fine. A name that only starts with, ends with or contains a reserved
+// word (`clock`, `when`, `reset_if`, `ser`; §2.2) is an ordinary name: the lexer reads the longest
+// run of name characters and then decides if it is a keyword (S-169, S-279, S-371).
+
+pub struct Names {
+  clock_rate: F32,
+  clocks: I32,
+  serial: I32,
+  ser1: I32,
+  when_done: I32,
+  whenever: I32,
+  reset_if_x: I32,
+  reset_ifx: I32,
+  reset: I32,
+  my_clock: I32,
+  user: I32,
+  conserve: I32,
+}
+
+pub fn names_with_a_reserved_prefix(clock_rate: F32, clocks: I32, serial: I32) -> F32 {
+  let when_done  = clocks
+  let whenever   = serial
+  let reset_if_x = 1
+  let reset_ifx  = 2
+  let reset      = 3
+  let ser1       = 4
+  let my_clock   = 5
+  let user       = 6
+  let conserve   = 7
+  clock_rate
+}
+
+pub fn fields_with_a_reserved_prefix(n: Names) -> I32 {
+  n.clocks + n.serial + n.ser1 + n.when_done + n.whenever + n.reset_if_x + n.reset_ifx + n.reset + n.my_clock + n.user + n.conserve
+}
+
+pub fn clock_ratio() -> F32 {
+  1.0
+}
+
+pub fn serial_number() -> I32 {
+  clock_count() + 1
+}
+
+pub fn clock_count() -> I32 {
+  2
+}
+
+pub fn when_ready() -> I32 {
+  reset_if_y() + whenever_x()
+}
+
+pub fn whenever_x() -> I32 {
+  3
+}
+
+pub fn reset_if_y() -> I32 {
+  4
+}
+
+pub flow clock_rate_flow(clock_rate: F32 at sample) -> F32 at sample {
+  clock_rate
+}
+
+pub flow serial_flow(serial: F32 at sample) -> F32 at sample {
+  let when_done = serial
+  when_done
+}
+
+pub fn digits_and_underscores(a_1: I32, b_2_c: I32, x9: I32, snake_case_name_2: I32) -> I32 {
+  a_1 + b_2_c + x9 + snake_case_name_2
+}
+
+pub fn other_scripts_in_comments_and_strings() -> Str {
+  // 変数 é Привет 😀 in a comment
+  "変数 é Привет 😀 in a string"
+}
+
+pub fn a_hole_with_a_reserved_prefix(clock_rate: F32) -> Str uses {Alloc} {
+  "{clock_rate} {clock_rate}"
+}

@@ -511,7 +511,6 @@ fn a_bad_name_is_an_error_of_the_syntax_stage() {
 /// Spec §2.5 and S-244: a control character written raw in a literal is E0001 (a name too), except
 /// the tab, which a literal may hold; a raw tab in a name is then the E0002 of the name rule.
 #[test]
-#[ignore = "W3-04"]
 fn raw_characters_in_a_name() {
     let d = Dir::bare("raw");
     let with = |c: char| format!("test \"a{c}b\" {{\n  assert true\n}}\n");

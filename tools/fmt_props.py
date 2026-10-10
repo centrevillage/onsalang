@@ -139,33 +139,41 @@ MARKER_END = re.compile(r"[ ]*// " + MARKER + r"(\d+)[ ]*$")
 
 # ------------------------------------------------------------------ tokens
 
-# The operators of more than one character (§3.1); the rest are one character.
-OPERATORS = sorted(
-    "..< ..= ... .. :: -> => == != <= >= << >> && || +% -% *% +| -| *|".split(), key=len, reverse=True
-)
-
-
-def load_continuing(root, cmd):
-    """Read the symbols a line ending in which continues (§2.5: a binary
-    operator, a range symbol, `=`, `->`) from the compiler's own judgement
-    (`<cmd> --continuing`, `onsa_syntax::continues`), once, before the
-    perturbations read them ([`continuing`]). Raises RepoError when they cannot
-    be had or the set is empty."""
-    global _CONTINUING
-    symbols = repo.cases_json(root, cmd, "--continuing")
-    if not isinstance(symbols, list) or not symbols or not all(isinstance(s, str) for s in symbols):
-        raise repo.RepoError(f"`--continuing` gave no list of symbols: {symbols!r}")
-    _CONTINUING = frozenset(symbols)
+def load_symbols(root, cmd):
+    """Read the symbols of the lexer from the compiler, once, before the
+    tokens and the perturbations read them: the symbols a line ending in which
+    continues (§2.5: a binary operator, a range symbol, `=`, `->`; `<cmd>
+    --continuing`, `onsa_syntax::continues`, [`continuing`]) and the symbols of
+    more than one character that the lexer reads as one token (`<cmd>
+    --symbols`, [`long_symbols`]). Raises RepoError when they cannot be had or
+    a set is empty."""
+    global _CONTINUING, _LONG
+    found = {}
+    for flag in ("--continuing", "--symbols"):
+        symbols = repo.cases_json(root, cmd, flag)
+        if not isinstance(symbols, list) or not symbols or not all(isinstance(s, str) for s in symbols):
+            raise repo.RepoError(f"`{flag}` gave no list of symbols: {symbols!r}")
+        found[flag] = symbols
+    _CONTINUING = frozenset(found["--continuing"])
+    _LONG = tuple(sorted(found["--symbols"], key=len, reverse=True))
 
 
 def continuing():
-    """The symbols read by [`load_continuing`]."""
+    """The symbols after which a line goes on ([`load_symbols`])."""
     if _CONTINUING is None:
-        raise RuntimeError("fmt_props.load_continuing was not called")
+        raise RuntimeError("fmt_props.load_symbols was not called")
     return _CONTINUING
 
 
+def long_symbols():
+    """The symbols of more than one character, the longest first ([`load_symbols`])."""
+    if _LONG is None:
+        raise RuntimeError("fmt_props.load_symbols was not called")
+    return _LONG
+
+
 _CONTINUING = None
+_LONG = None
 NUMBER = re.compile(r"0[xXbB][0-9A-Za-z_]*|[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9_]+)?")
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 OPENERS = {"(": ")", "[": "]", "{": "}"}
@@ -187,9 +195,10 @@ def tokenize(text):
     out, i, n = [], 0, len(text)
     while i < n:
         c = text[i]
-        if c == "\n":
-            out.append(Tok("nl", i, i + 1, c))
-            i += 1
+        if c == "\n" or text.startswith("\r\n", i):  # a line ends with LF or CR LF (§2.5)
+            j = i + (1 if c == "\n" else 2)
+            out.append(Tok("nl", i, j, text[i:j]))
+            i = j
             continue
         if c in " \t\r":
             i += 1
@@ -197,6 +206,8 @@ def tokenize(text):
         if text.startswith("//", i):
             j = text.find("\n", i)
             j = n if j < 0 else j
+            if j > i and text[j - 1] == "\r":  # a CR LF ends the line (§2.5)
+                j -= 1
         elif c in "\"'":
             j = i + 1
             while j < n and text[j] not in (c, "\n"):
@@ -207,7 +218,7 @@ def tokenize(text):
         elif c.isascii() and (c.isalpha() or c == "_"):
             j = IDENT.match(text, i).end()
         else:
-            j = i + next((len(op) for op in OPERATORS if text.startswith(op, i)), 1)
+            j = i + next((len(op) for op in long_symbols() if text.startswith(op, i)), 1)
         out.append(Tok("comment" if text.startswith("//", i) else "code", i, j, text[i:j]))
         i = j
     return out
@@ -295,9 +306,13 @@ def pick(rng, sites, p):
     return chosen
 
 
+def blanks(rng, n):
+    """`n` blanks, each a space or a tab (§2.5)."""
+    return "".join(rng.choice(" \t") for _ in range(n))
+
+
 def perturb_space(rng, text):
-    # SPEC-GAP(S-201): §2 does not say which characters are whitespace (the lexer also skips a tab and a
-    # `\r`); only spaces are used.
+    # The blanks are the space and the tab, and a line ends with LF or CR LF (§2.5, S-201).
     toks = tokenize(text)
     lines = lines_of(text, toks)
     sites = []
@@ -305,23 +320,27 @@ def perturb_space(rng, text):
         row = line.toks
         for a, b in zip(row, row[1:]):
             gap = text[a.end:b.start]
-            if gap and set(gap) == {" "}:
+            if gap and set(gap) <= {" ", "\t"}:
                 sites.append((a.end, len(gap), None))
             elif not gap and a.kind == "code" and (a.text in ("(", "[", ",") or b.text in (")", "]", ",", ":")):
                 sites.append((a.end, 0, None))
         if row:
             indent = row[0].start - line.start
-            if set(text[line.start:row[0].start]) <= {" "}:
+            if set(text[line.start:row[0].start]) <= {" ", "\t"}:
                 sites.append((line.start, indent, "indent"))
         if line.comment is None and (row or line.end < len(text)):
             sites.append((line.end, 0, "trail"))  # not after a comment: its text would change
     edits = []
     for pos, length, what in pick(rng, sites, 0.3):
         if what == "indent":
-            edits.append((pos, length, " " * rng.randint(0, 8)))
+            edits.append((pos, length, blanks(rng, rng.randint(0, 8))))
         else:
-            edits.append((pos, length, " " * rng.randint(1, 4 if what is None else 3)))
-    return apply(text, edits)
+            edits.append((pos, length, blanks(rng, rng.randint(1, 4 if what is None else 3))))
+    spaced = apply(text, edits)
+    # Some line ends as CR LF: a string does not span lines, and a comment
+    # ends before its CR LF, so no text but the line ends changes.
+    *lines, last = spaced.split("\n")
+    return "".join(ln.removesuffix("\r") + ("\r\n" if rng.random() < 0.3 else "\n") for ln in lines) + last
 
 
 def perturb_blank(rng, text):
@@ -481,11 +500,11 @@ def is_doc(comment):
 
 
 def comment_texts(text):
-    """(plain comments, doc comments): the texts of the comments in order, without trailing spaces."""
+    """(plain comments, doc comments): the texts of the comments in order, without trailing blanks (§2.5)."""
     plain, docs = [], []
     for t in tokenize(text):
         if t.kind == "comment":
-            (docs if is_doc(t.text) else plain).append(t.text.rstrip(" "))
+            (docs if is_doc(t.text) else plain).append(t.text.rstrip(" \t"))
     return plain, docs
 
 
@@ -498,7 +517,7 @@ def strip_comments(text):
         if c is None:
             out.append(line)
         elif any(t.kind == "code" for t in toks):
-            out.append(line[: c.start].rstrip(" "))
+            out.append(line[: c.start].rstrip(" \t"))
     return "\n".join(out)
 
 
@@ -584,7 +603,7 @@ def comment_places(text):
         c = line.comment
         if c is None:
             continue
-        body = c.text.rstrip(" ")
+        body = c.text.rstrip(" \t")
         key = (body, seen.get(body, 0))
         seen[body] = key[1] + 1
         if line.code:
@@ -923,9 +942,9 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
         out(f"fmt-props: cannot list the sources: {e}")
         return 2
     try:
-        load_continuing(root, cases_cmd)
+        load_symbols(root, cases_cmd)
     except repo.RepoError as e:
-        out(f"fmt-props: cannot read the symbols that continue a line: {e}")
+        out(f"fmt-props: cannot read the symbols of the lexer: {e}")
         return 2
 
     def one_source(src):

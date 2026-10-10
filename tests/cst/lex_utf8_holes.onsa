@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4", "§2.5"]
+
+// Interpolation holes that hold multi-byte characters (R-01, S-90): right after the `{`, after a
+// `.`, inside a path, next to the escapes `{{` `}}`, and characters that §2.5 does not allow
+// (controls, line separators, bidirectional controls) or that are not identifier characters
+// (BOM, NBSP, emoji, full-width forms, combining marks). Each line is a string the lexer has to
+// walk character by character; the file has to round-trip (the diagnostics are in
+// tests/spec/negative/lex_utf8_holes.onsa). The last line has an open hole at the end of the file.
+
+let h0 = "{é}"
+let h1 = "{日本}"
+let h2 = "{a.é}"
+let h3 = "{😀}"
+let h4 = "{﻿a}"
+let h5 = "{}"
+let h6 = "{日本
+let h7 = "{a.日本}"
+let h8 = "{é.a}"
+let h9 = "{a.b.é}"
+let h10 = "{a.0é}"
+let h11 = "{ é }"
+let h12 = "{é"
+let h13 = "{é}}"
+let h14 = "{{é}}"
+let h15 = "{{é}"
+let h16 = "é{a}é{b.c}日本"
+let h17 = "{a}{é}{b}"
+let h18 = "{a.0.1}"
+let h19 = "{é:.2}"
+let h20 = "{f(é)}"
+let h21 = "{a[é]}"
+let h22 = "{\é}"
+let h23 = "{'é'}"
+let h24 = "{\"é\"}"
+let h25 = "{日本\u{3042}}"
+let h26 = "{ }"
+let h27 = "{‮a}"
+let h28 = "{a }"
+let h29 = "{‍}"
+let h30 = "{é}"
+let h31 = "{a.é}"
+let h32 = "{}"
+let h33 = "{}"
+let h34 = "{}"
+let h35 = "{a⁦b}"
+let h36 = "{a⁩}"
+let h37 = "{‎}"
+let h38 = "{🇯🇵}"
+let h39 = "{👨‍👩‍👧}"
+let h40 = "{a.𠮷}"
+let h41 = "{𠮷野家}"
+let h42 = "{ア}"
+let h43 = "{１}"
+let h44 = "{_é}"
+let h45 = "{é_}"
+let h46 = "{a_é}"
+let h47 = "{Σ}"
+let h48 = "{а}"
+f("{é}", 1)
+f("{日本}", 1)
+f("{a.é}", 1)
+f("{😀}", 1)
+f("{﻿a}", 1)
+f("{}", 1)
+f("{日本, 1)
+f("{a.日本}", 1)
+match s {
+  "{é}" => 1,
+}
+match s {
+  "{日本}" => 1,
+}
+match s {
+  "{a.é}" => 1,
+}
+match s {
+  "{😀}" => 1,
+}
+let last = "{日本

@@ -191,13 +191,6 @@ note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今�
 
 [[pending]]
 kind = "diag-code"
-target = "E0004"
-reasons = ["S-51", "R-63"]
-until = "W3-04"
-note = "付ける宣言の無い ///、先頭以外の //!（S-51）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0005"
 reasons = ["S-103", "S-133"]
 until = "W3-08"
@@ -618,27 +611,6 @@ target = "tests/spec/negative/names_reserved_inputs.onsa"
 reasons = ["R-77", "S-67"]
 until = "W7-03"
 note = "入力名の予約名（sample_rate、poisoned、initialized、bulk）の E0304。今は at を読めず E0002（W3-10）、読めても E0304 を出さない（W7-03）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/pattern_str_paths.onsa"
-reasons = ["S-225"]
-until = "W3-04"
-note = "補間の穴が大文字の定数・修飾した名前・タプルの添字（{K}、{F32.PI}、{t.0}）でも E0020。今は字句解析が E0001（補間の穴を名前の経路として読むのは W3-04）。字句の誤りのある文字列は W3-21 のガードの形に入れない（候補が E0001 を写す）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/b60c431d.onsa"
-reasons = ["R-01"]
-until = "W3-04"
-note = "check / fmt --check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（補間の中の多バイト文字）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/0d975ef7.onsa"
-reasons = ["R-01"]
-until = "W3-04"
-note = "check（onsa_driver の fill_found）と fmt --check（onsa_diag の line_col）で内部エラー: 文字の途中のオフセット（文字列の \\ の後の多バイト文字。字句解析器が文字の途中に範囲を置く。W3-02 から fmt --check では line_col が文字の途中のオフセットを内部エラーとして報告する）。W3-03 で、元の入力 73f70bf0.onsa（`{` が閉じていない）は閉じていない `{` の E0002 が単位の診断に選ばれて落ちなくなったので、`{` を閉じた入力に替えた（73f70bf0.onsa は回帰の入力として残す）"
 
 # --- W1-08 の意味のテスト（fn の世界）のうち、まだ通らないもの（2026-10-07）
 
@@ -1289,13 +1261,6 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0004_doc_comments.onsa"
-reasons = ["S-51", "R-63"]
-until = "W3-04"
-note = "付ける宣言の無い /// と先頭以外の //! の E0004"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_faust.onsa"
 reasons = ["S-48", "S-102"]
 until = "W3-08"
@@ -1470,34 +1435,6 @@ until = "W7-06"
 note = "~ の挿入と除去の候補"
 
 # --- 字句解析器のキーワードと仕様 §2.2 の一覧の差（gate の項目 keywords、tools/keywords.py。W3-02/b 12）
-
-[[pending]]
-kind = "gate"
-target = "keywords/clock"
-reasons = ["S-169"]
-until = "W3-04"
-note = "予約語 clock が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
-
-[[pending]]
-kind = "gate"
-target = "keywords/when"
-reasons = ["S-169"]
-until = "W3-04"
-note = "予約語 when が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
-
-[[pending]]
-kind = "gate"
-target = "keywords/ser"
-reasons = ["S-279"]
-until = "W3-04"
-note = "予約語 ser（flow の直列の複製）が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
-
-[[pending]]
-kind = "gate"
-target = "keywords/reset_if"
-reasons = ["S-169"]
-until = "W3-04"
-note = "予約語 reset_if が字句解析器のキーワードに無い（現れた位置の E0200 と一緒に）"
 
 [[pending]]
 kind = "gate"
@@ -1692,13 +1629,6 @@ reasons = ["S-227", "R-155"]
 until = "W9-03"
 note = "const K: I32 = -(-2147483648) は E0419（check でも出す）。0 - 1 の U32、-LOW、-(I32.MIN) も同じ"
 
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/3f72dc47.onsa"
-reasons = ["R-01"]
-until = "W3-04"
-note = "check / fmt --check で内部エラー: 字句解析器の補間の中の多バイト文字（W2-06/t の gate の fuzz が見つけた新しい類）"
-
 # --- W2-06/b: 実装の担当が足した事例のうち、後の作業を待つもの（2026-10-08）
 
 [[pending]]
@@ -1785,13 +1715,6 @@ note = "var の名前の E0320 の候補が使用箇所を直さず、E0302 が�
 
 [[pending]]
 kind = "fix-contract"
-target = "tests/spec/fixes/e0320_keyword.onsa:9:8 E0320 fix1"
-reasons = ["S-243", "S-236"]
-until = "W4-04"
-note = "規則に揃えた名前が予約語になる E0320 の候補（Match は match で E0002。候補は match_）"
-
-[[pending]]
-kind = "fix-contract"
 target = "tests/spec/fixes/e0411_as.onsa:28:3 E0411 fix1"
 reasons = ["S-98", "S-236"]
 until = "W5-02"
@@ -1805,13 +1728,6 @@ until = "W5-02"
 note = "整数の縮小の E0411 の候補 .narrow_i32() が Option を返し E0401（仕様 §3.3 は候補を出さない）"
 
 # --- W3-17: ファズの修正候補の「同じ箇所」の近似が見つけた型を示す保存した入力（2026-10-08）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/2674a4fa.onsa"
-reasons = ["S-243", "S-236"]
-until = "W4-04"
-note = "fix-same-place: fix|E0320|rename by the naming rule|E0002。規則に揃えた名前が予約語になる（Match は match）"
 
 [[pending]]
 kind = "fuzz-input"
@@ -2073,24 +1989,10 @@ note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。28 �
 
 [[pending]]
 kind = "fuzz-input"
-target = "tests/fuzz/3c3f8d83.onsa"
-reasons = ["R-01"]
-until = "W3-04"
-note = "check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（閉じない補間の `{` の直後の多バイト文字）"
-
-[[pending]]
-kind = "fuzz-input"
 target = "tests/fuzz/b330941f.onsa"
 reasons = ["R-193", "S-236"]
 until = "W3-08"
 note = "fix-same-place: fix|E0020|write the brackets `[ ]`|E0002。`fn b<T q>` の `<…>` の候補を当てると `[T q]` が E0002"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/fd47d95d.onsa"
-reasons = ["R-01"]
-until = "W3-04"
-note = "check で内部エラー: onsa_syntax/src/lexer.rs: byte index # is not a char boundary（3c3f8d83 と同じ類）"
 
 # --- W3-09/t2: flow の構文の第 14 組の決定（S-354、S-355、S-356、S-357、S-358、S-363）
 
@@ -2102,13 +2004,6 @@ until = "W4-12"
 note = "fn の入出力の型の後ろの at は名前の段の E0821。構文の段が at を読む（W3-09）のが前提"
 
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_clock_reserved.onsa"
-reasons = ["S-359", "S-169"]
-until = "W3-04"
-note = "予約語 clock は at の後ろで E0200（現れた位置）。W3-04 の前は clock が名前なので、クロックの名前の E0302（S-359、W3-10）"
 
 [[pending]]
 kind = "test-case"
@@ -2197,3 +2092,19 @@ target = "tests/spec/fixes/e0003_derive_heading_brace.onsa"
 reasons = ["S-415", "S-34"]
 until = "W3-08"
 note = "derive を持つ見出しの { の E0003。見出しの : trait の構文が W3-08"
+
+# --- W3-04/t の事例（字句: R-01、S-201、S-89、S-90、S-51、S-169、S-279、S-371）
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/lex/interp_paths_resolved.onsa"
+reasons = ["S-90", "R-102"]
+until = "W4-04"
+note = "定数・関連定数・タプルの添字の穴を名前の段で解決する（字句と構文は W3-04）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/interp_path_modules"
+reasons = ["S-90", "R-102"]
+until = "W4-04"
+note = "修飾した名前の穴 {cfg.N}、{kp.clock.TICKS} の解決（字句と構文は W3-04）"

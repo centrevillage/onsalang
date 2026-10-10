@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.2", "§15.1", "§18.1"]
+
+// (S-90, R-102, S-169.) A hole of an interpolation that names a constant of another module: the qualified name
+// `{cfg.N}` (§2.4: "名前と、それに `.` で続くフィールド・タプルの添字・修飾"), and the same through
+// a module whose name is a reserved word, `kp/clock.onsa` (§2.2: the word after a `.` is read as a
+// name, so `{kp.clock.TICKS}` is a path like the others). The word in the head of a hole is
+// E0200 (`"{clock}"`, negative/reserved_words.onsa), and a path through a module of that name
+// is fine. The names are resolved as in an expression (names stage, W4-04): `use kp` makes `kp` a name, and
+// `kp.clock.TICKS` is the path of the constant.
+
+use cfg
+use kp
+
+pub fn qualified() -> Str uses {Alloc} {
+  "{cfg.N}"
+}
+
+pub fn qualified_float() -> Str uses {Alloc} {
+  "{cfg.RATE}"
+}
+
+pub fn through_a_module_named_as_a_reserved_word() -> Str uses {Alloc} {
+  "{kp.clock.TICKS}"
+}
+
+pub fn mixed(n: U32) -> Str uses {Alloc} {
+  "{n}/{cfg.N}/{kp.clock.TICKS}/{F32.PI}"
+}
+
+pub fn same_in_an_expression() -> U32 {
+  cfg.N + kp.clock.TICKS
+}

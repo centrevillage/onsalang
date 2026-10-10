@@ -102,9 +102,33 @@ pub fn continuing_spellings() -> Vec<&'static str> {
     out
 }
 
+/// The spellings of the symbols of more than one character that the lexer
+/// reads as one token, every kind of [`TokenKind::ALL`] considered, the
+/// longest first: `tools/fmt_props.py` splits the text as the lexer does
+/// with them (`onsa_cases --symbols`).
+pub fn long_symbols() -> Vec<&'static str> {
+    let mut out: Vec<&str> = TokenKind::ALL.iter().filter_map(|&k| symbol(k)).filter(|s| s.len() > 1).collect();
+    out.sort_unstable_by(|a, b| b.len().cmp(&a.len()).then(a.cmp(b)));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_long_symbols_are_one_token_each() {
+        let set = long_symbols();
+        for s in &set {
+            let kinds: Vec<TokenKind> = onsa_syntax::lex(FileId(0), s).tokens.iter().map(|t| t.kind).collect();
+            assert_eq!(kinds.len(), 2, "{s}: {kinds:?}");
+            assert_eq!(symbol(kinds[0]), Some(*s), "{s}");
+        }
+        for s in ["..<", "===", "**", "++", "::", "->", "+%"] {
+            assert!(set.contains(&s), "{s}");
+        }
+        assert!(set.windows(2).all(|w| w[0].len() >= w[1].len()), "the longest first");
+    }
 
     #[test]
     fn codes_list_the_registry() {

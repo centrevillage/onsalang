@@ -33,6 +33,9 @@ pub struct Ast {
     pub pats: Vec<Pat>,
     /// Top-level items in source order.
     pub root: Vec<ItemId>,
+    /// The spans of the `//!` lines at the head of the file, the
+    /// documentation of the module (§2.1).
+    pub module_doc: Vec<Span>,
 }
 
 impl Ast {
@@ -314,6 +317,9 @@ pub struct Bound {
 
 #[derive(Debug, Clone)]
 pub struct Param {
+    /// Spans of the `///` lines directly before the parameter: an input of
+    /// a flow only (§2.1).
+    pub doc: Vec<Span>,
     pub attrs: Vec<Attr>,
     pub mode: Mode,
     pub name: ParamName,
@@ -368,6 +374,8 @@ pub enum StructKind {
 
 #[derive(Debug, Clone)]
 pub struct Field {
+    /// Spans of the `///` lines directly before the field (§2.1).
+    pub doc: Vec<Span>,
     pub vis: Vis,
     pub name: Ident,
     pub ty: TypeId,
@@ -383,6 +391,8 @@ pub struct EnumDecl {
 
 #[derive(Debug, Clone)]
 pub struct Variant {
+    /// Spans of the `///` lines directly before the variant (§2.1).
+    pub doc: Vec<Span>,
     pub name: Ident,
     /// Empty for unit variants.
     pub fields: Vec<TypeId>,

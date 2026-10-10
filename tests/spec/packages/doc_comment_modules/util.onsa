@@ -1,0 +1,14 @@
+//! Documentation of the module `util`.
+//! It stands at the start of this file, though other files of the package have items before it.
+
+/// Documents `twice`.
+pub fn twice(a: I32) -> I32 {
+  a + a
+}
+
+pub struct Pair {
+  /// The first.
+  a: I32,
+  /// The second.
+  b: I32,
+}

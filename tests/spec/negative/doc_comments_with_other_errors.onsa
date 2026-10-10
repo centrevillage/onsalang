@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1", "§2.5"]
+
+// Doc comments next to other errors (§2.1, §18.1, S-51, R-63). The first error in the text wins
+// inside the syntax stage (E0004 hiding the later stages is in e0004_hides_later_stages.onsa); the
+// function next to a broken one is checked on its own, and a `///` before it documents it: the `///` that follows a broken
+// declaration is not stray (it is not taken for part of the broken one, and it is not lost).
+// One error per function (P-01).
+//
+// A stray `///` and another syntax error in one function is not written here: the candidate `//`
+// of the first leaves the second, and the place of the second error is not in the spec.
+
+// ---- a syntax error comes first in the text: the stray doc after it is not reported
+
+pub fn syntax_error_then_a_stray_doc() -> I32 {
+  let = 1                                                //~ E0002
+  /// Stray, after the syntax error.
+  1
+}
+
+// ---- a broken declaration, then a doc comment for the next one
+
+pub fn broken_header( {                                  //~ E0002
+  1
+}
+
+/// Documents `after_a_broken_header`.
+pub fn after_a_broken_header() -> I32 {
+  1
+}
+
+pub fn broken_statement() -> I32 {
+  let = 1                                                //~ E0002
+  1
+}
+
+/// Documents `after_a_broken_statement`.
+pub fn after_a_broken_statement() -> I32 {
+  1
+}
+
+pub struct BrokenField {
+  a I32,                                                 //~ E0002
+}
+
+/// Documents `after_a_broken_field`.
+pub fn after_a_broken_field() -> I32 {
+  1
+}
+
+pub enum BrokenVariant {
+  A(,                                                    //~ E0002
+}
+
+/// Documents a struct after a broken variant.
+pub struct AfterABrokenVariant {
+  /// Documents a field of it.
+  a: I32,
+}
+
+pub fn invalid_character() -> I32 {
+  1 $ 2                                                  //~ E0001
+}
+
+/// Documents `after_an_invalid_character`.
+pub fn after_an_invalid_character() -> I32 {
+  1
+}
+
+pub fn unterminated_string() -> Str {
+  "abc                                                   //~ E0001
+}
+
+/// Documents `after_an_unterminated_string`.
+pub fn after_an_unterminated_string() -> I32 {
+  1
+}
+
+// ---- a doc comment at the end of a broken function body is part of that function
+
+pub fn broken_then_the_last_line_is_a_doc() -> I32 {
+  let = 1                                                //~ E0002
+  /// Last line of the broken function.
+}
+
+/// Documents `after_the_broken_function_that_ends_in_a_doc`.
+pub fn after_the_broken_function_that_ends_in_a_doc() -> I32 {
+  1
+}
+
+// ---- members of an impl: a broken member does not hide the doc of the next one
+
+pub struct Holder {
+  a: I32,
+}
+
+impl Holder {
+  pub fn broken_member(self) -> I32 {
+    let = 1                                              //~ E0002
+    1
+  }
+
+  /// Documents the member after the broken one.
+  pub fn good_member(self) -> I32 {
+    self.a
+  }
+}
+
+// ---- the last one is fine
+
+/// Documents `last`.
+pub fn last() -> I32 {
+  1
+}

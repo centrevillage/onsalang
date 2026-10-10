@@ -120,7 +120,12 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         if ident.name == "_" || shape.matches(&ident.name) {
             return;
         }
-        let to = shape.convert(&ident.name);
+        let mut to = shape.convert(&ident.name);
+        // A name by the rule that is a keyword or a reserved word (`match`,
+        // `clock`) takes a `_` at its end (§2.3, R-211).
+        if crate::token::TokenKind::keyword(&to).is_some() {
+            to.push('_');
+        }
         // S-82 (W4-04): the candidate also renames every use in the package.
         let d = Diagnostic::new(
             Stage::Names,
@@ -262,5 +267,14 @@ mod tests {
         );
         let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
         assert_eq!(fixes, vec!["foo", "Point", "x", "MAX", "bad_param", "bad_name"]);
+    }
+
+    #[test]
+    fn a_name_by_the_rule_that_is_a_keyword_takes_an_underscore() {
+        // §2.3, R-211: `match_`, and the reserved words too.
+        let src = "pub fn Match() {}\nfn Clock() {}\nfn When() {}\nstruct S { Ser: I32 }\nconst true_: I32 = 1\n";
+        let parsed = crate::parse(onsa_diag::FileId(0), src);
+        let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
+        assert_eq!(fixes, vec!["match_", "clock_", "when_", "ser_", "TRUE"]);
     }
 }

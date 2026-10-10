@@ -9,6 +9,7 @@ pub mod cst;
 #[cfg(test)]
 mod cst_tests;
 pub mod diff;
+mod docs;
 pub mod dump;
 pub mod fmt;
 pub mod foreign;
@@ -82,7 +83,7 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     if let Err(e) = cst.validate(text) {
         onsa_diag::internal::bug(Some(e.span), format!("the CST is broken: {}", e.message));
     }
-    let (mut ast, map) = lower::lower(&cst, text);
+    let (mut ast, map) = lower::lower(&cst, text, &out.literals);
     let mut diagnostics = out.diagnostics;
     // The operator groups (E0010) are checked on the AST, so an E0010 in the
     // part of a failed body that has no AST is not found, and the parse error
@@ -91,6 +92,7 @@ pub fn parse(file: FileId, text: &str) -> Parsed {
     // the statements before the error (accepted, 2026-10-08).
     groups::check(&ast, text, deepest, &mut diagnostics);
     foreign::clocks(&cst, text, deepest, &mut diagnostics);
+    docs::check(&cst, text, &mut diagnostics);
     naming::check(&ast, &mut diagnostics);
     let units = units::build(&cst, &map, text, &diagnostics, &mut ast);
     Parsed { ast, cst, map, diagnostics, units, levels: out.levels }

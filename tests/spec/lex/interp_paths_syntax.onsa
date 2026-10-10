@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.4", "§2.5", "§2.2", "§18.1"]
+
+// The holes of an interpolation that are a name path are read by the lexer and the parser (§2.4,
+// S-90, R-102): a local, a parameter, `self`, a constant, a field, a field of a field, a tuple
+// index (also of a tuple in a tuple), an associated constant (`F32.PI`) and a qualified name
+// (`{cfg.N}`, `{kp.clock.TICKS}`). The case reads the syntax only (`mode = "parse"`): the
+// resolution of the names is a later stage (names stage, W4-04), and lex/interp_paths_ok.onsa and
+// lex/interp_paths_resolved.onsa check the names. The same forms are fine in the places a string
+// stands: nested blocks, a closure, a `match` arm, a loop, a generic function, a call argument.
+// A string with an interpolation makes a new `Str`, so the functions use `Alloc` (§2.4). `{{` and
+// `}}` are escapes and make no hole. Multi-byte text next to holes is fine (R-01). The forms that
+// are no path (E0001) are in negative/lex_interp_holes.onsa.
+
+const MAX_VOICES: U32 = 8
+
+pub struct Inner {
+  leaf: U32,
+}
+
+pub struct Outer {
+  inner: Inner,
+  pos: (F32, F32),
+  pair: ((I32, I32), I32),
+}
+
+impl Outer {
+  pub fn show_leaf(self) -> Str uses {Alloc} {
+    "{self.inner.leaf}"
+  }
+
+  pub fn show_pos(self) -> Str uses {Alloc} {
+    "{self.pos.0} {self.pos.1}"
+  }
+}
+
+pub fn a_local(n: U32) -> Str uses {Alloc} {
+  let m = n
+  "{m}"
+}
+
+pub fn a_parameter(n: U32) -> Str uses {Alloc} {
+  "{n}"
+}
+
+pub fn a_constant() -> Str uses {Alloc} {
+  "{MAX_VOICES}"
+}
+
+pub fn an_associated_constant() -> Str uses {Alloc} {
+  "{F32.PI}"
+}
+
+pub fn a_field(o: Outer) -> Str uses {Alloc} {
+  "{o.inner.leaf}"
+}
+
+pub fn a_tuple_index(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.1}"
+}
+
+pub fn a_nested_tuple_index(o: Outer) -> Str uses {Alloc} {
+  "{o.pair.0.1} {o.pair.1}"
+}
+
+pub fn a_field_then_a_tuple_index(o: Outer) -> Str uses {Alloc} {
+  "{o.pos.1}"
+}
+
+pub fn many_holes(n: U32, t: (I32, I32), o: Outer) -> Str uses {Alloc} {
+  "{n}/{t.0}/{o.inner.leaf}/{MAX_VOICES}/{F32.PI}"
+}
+
+pub fn adjacent_holes(n: U32) -> Str uses {Alloc} {
+  "{n}{n}{n}"
+}
+
+pub fn text_next_to_holes(n: U32) -> Str uses {Alloc} {
+  "日本{n}語 é{n}é 😀{n}😀"
+}
+
+pub fn escaped_braces_next_to_a_hole(n: U32) -> Str uses {Alloc} {
+  "{{literal}} {{{n}}} {{ {n} }}"
+}
+
+pub fn escaped_braces_only() -> Str {
+  "{{only}} {{braces}}"
+}
+
+pub fn a_hole_in_a_nested_block(n: U32, c: Bool) -> Str uses {Alloc} {
+  if c {
+    if c {
+      "{n}"
+    } else {
+      "{MAX_VOICES}"
+    }
+  } else {
+    "{n}"
+  }
+}
+
+pub fn a_hole_in_a_closure(n: U32) -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}" }
+  f.(1)
+}
+
+pub fn a_hole_in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{n}",
+    _ => "{MAX_VOICES}",
+  }
+}
+
+pub fn a_hole_in_a_loop(n: U32) -> Str uses {Alloc} {
+  var last = "none"
+  for i in 0..<n {
+    last = "{i}"
+  }
+  last
+}
+
+pub fn a_hole_in_a_generic_function[T](x: T, n: U32) -> Str uses {Alloc} {
+  "{n}"
+}
+
+pub fn a_hole_in_a_call_argument(n: U32) -> U32 uses {Alloc} {
+  length("{n}")
+}
+
+pub fn length(s: Str) -> U32 {
+  0
+}
+
+pub fn a_hole_and_a_comment_in_the_text(n: U32) -> Str uses {Alloc} {
+  "// {n} is not a comment"
+}
+
+pub fn qualified(n: U32) -> Str uses {Alloc} {
+  "{cfg.N} {kp.clock.TICKS} {n}"
+}

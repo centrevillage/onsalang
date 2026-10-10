@@ -98,7 +98,7 @@
 | `types/localshadow.onsa`、`types/shadow.onsa` | R-103 |
 | `types/orphan/`、`types/implspec.onsa` | R-104（`orphan/` の期待値は `main.onsa` の先頭のコメント。S-70） |
 | `types/alias.onsa` | R-105 |
-| `syntax/esc_utf8.onsa`、`syntax/interp_utf8.onsa` | R-01 |
+| `syntax/esc_utf8.onsa`、`syntax/interp_utf8.onsa` | R-01。W3-04 で期待値付きのテストへ移した: `tests/spec/negative/lex_utf8_escapes.onsa`（`unknown_japanese`）、`tests/spec/negative/lex_utf8_holes.onsa`（`single_kanji`）、`tests/cst/lex_utf8_*.onsa` と `eof_*_multibyte.onsa`（往復） |
 | `syntax/fmt_drop*.onsa` | R-69。`fmt_drop_orig.onsa` は W3-03 で期待値付きのテストへ移して消した（`crates/onsa_cli/tests/syntax_units.rs` の `FMT_DROP`） |
 | `syntax/fmt_comments.onsa`、`syntax/fmt2.onsa`（fmt の前の原本は `.orig`） | R-70 |
 | `syntax/cascade.onsa`、`syntax/impl_sema.onsa` | R-71。`impl_errs.onsa` は W3-03 で期待値付きのテストへ移して消した（`tests/spec/negative/unit_members.onsa`） |
@@ -114,9 +114,9 @@
 | `syntax/else_paren.onsa` | R-62。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |
 | `syntax/unit*.onsa`、`syntax/emptyrow.onsa` | R-78 |
 | `syntax/ret_arm.onsa`、`syntax/space_idx.onsa` | R-101 |
-| `syntax/interp.onsa` | R-102 |
+| `syntax/interp.onsa` | R-102。W3-04 で期待値付きのテストへ移した: `tests/spec/lex/interp_paths_syntax.onsa`（字句と構文）、`tests/spec/lex/interp_paths_resolved.onsa`（名前の段の解決、W4-04 まで実装待ち） |
 | `syntax/fuzz.py`、`syntax/fuzz2.py` | 変異入力の簡易ファズ（R-01 の確認、Q-06 の参考）。`fuzz.py` は W1-04 の `tools/fuzz.py`（gate の項目 `fuzz`）に置き換えた。記録として残す。`fuzz2.py`（fmt の AST の保存）は W1-07 の `tools/fmt_props.py`（gate の項目 `fmt-props`）に置き換えた。どちらも記録として残す |
-| `parent/r1.onsa` | R-01 |
+| `parent/r1.onsa` | R-01。W3-04 で期待値付きのテストへ移した: `tests/spec/negative/lex_utf8_holes.onsa`（`single_kanji`） |
 | `parent/t2.onsa` | R-02 |
 | `parent/r2.onsa` | R-69 |
 | `parent/r4.onsa` | R-72 |
@@ -158,8 +158,8 @@
 | `parent/r98.onsa` | R-98（名前の無いノードの名前と配置。今の実装の構文で書いた。`onsa interface` と `onsa graph` で確かめる。期待値と今の出力は先頭のコメント。S-86） |
 | `parent/r99.onsa` | R-99（`@param` の値型と値。期待値と今の出力は各 flow の上のコメント。S-87） |
 | `parent/r100/` | R-100（`delay.onsa` は `vdelay` の `MAX` と `F32`、`check` と `test` で確かめる。`size.onsa` は大きさの上限、`interface` で確かめる。期待値と今の出力は各項目の上のコメント。S-88） |
-| `parent/r101/` | R-101（字句と fmt の細則。形ごとのファイルで、`align.onsa` は `onsa fmt`、他は `onsa check` で確かめる。期待値と今の出力は各ファイルの先頭のコメント。S-89） |
-| `parent/r102.onsa` | R-102（補間の範囲。期待値と今の出力は各関数の上のコメント。S-90） |
+| `parent/r101/` | R-101（字句と fmt の細則。形ごとのファイルで、`align.onsa` は `onsa fmt`、他は `onsa check` で確かめる。期待値と今の出力は各ファイルの先頭のコメント。S-89）。W3-04 で字句の部分を期待値付きのテストへ移した: `ident.onsa` は `tests/spec/negative/lex_ident_ascii.onsa`（`let_japanese`）、`slashes.onsa` は `tests/spec/lex/doc_comment_positions.onsa`（`after_a_rule_and_no_doc`）。後置の括弧の前の空白（`space_*.onsa`）と腕の `return`（`arm_return.onsa`）は `tests/spec/fixes/e0020_space_*.onsa`・`e0020_spacing.onsa`・`e0020_arm_return_forms.onsa` にある |
+| `parent/r102.onsa` | R-102（補間の範囲。期待値と今の出力は各関数の上のコメント。S-90）。W3-04 で期待値付きのテストへ移した: 定数・タプル・関連定数の穴は `tests/spec/lex/interp_paths_resolved.onsa`（W4-04 まで実装待ち）、ローカルと `self` は `tests/spec/lex/interp_paths_ok.onsa`、式・呼び出し・添字・書式は `tests/spec/negative/lex_interp_holes.onsa` |
 | `parent/r105/` | R-105（型別名。`alias.onsa`・`generic.onsa`・`cycle.onsa` は `onsa check`、`impl/` は別名を通した孤児規則のパッケージ。期待値と今の出力は各項目の上か `onsa.toml` の先頭のコメント。S-91） |
 | `parent/r107/` | R-107（C の生成 API と設定。パッケージで、`onsa build --target host` と `--target bare` の生成物で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-92） |
 | `parent/r108/` | R-108（`const` の評価の超越関数。パッケージで、二台の機械で `onsa build --target src` の生成した C の表を比べる。手順と期待値は `m.onsa` の先頭のコメント。S-93） |

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§15.1", "§18.1"]
+
+// (S-51, R-63.) `//!` is the documentation of the module, the file (§2.1): it stands at the start of each file, before
+// the first item of that file, whatever the other files of the package hold (util.onsa starts with
+// one; this file does too, after the fragment). A `//!` after the first item of a file and a
+// `///` before a `use` are E0004, in the file they stand in (late.onsa has both; each is reported
+// at its own file and line). The package is checked as a whole: a function in a module next to the
+// broken ones is checked on its own.
+
+//! Documentation of the module `main`.
+
+use util.{twice, Pair}
+use late.{first}
+
+/// Documents `run`.
+pub fn run(p: Pair) -> I32 {
+  twice(p.a) + first()
+}
+
+/// Documents `broken_in_the_main_module`.
+pub fn broken_in_the_main_module() -> I32 {
+  /// Stray.                                  //~ E0004
+  1
+}

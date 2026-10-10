@@ -1,6 +1,7 @@
 //! Tokens of Onsa (spec §2).
 
 use onsa_diag::Span;
+use onsa_diag::unsupported::Feature;
 
 use crate::ast::{BinOp, RangeEnd};
 
@@ -28,14 +29,17 @@ token_kinds! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     // Trivia
-    /// A run of spaces, tabs and carriage returns.
+    /// A run of spaces and tabs (§2.5).
     Whitespace,
-    /// A line break (one token per physical newline).
+    /// A line break: a line feed, or a carriage return and a line feed (§2.5).
     Newline,
-    /// `// ...`
+    /// `// ...` (and `////...`, four slashes or more, §2.1)
     Comment,
-    /// `/// ...` (attaches to the next declaration).
+    /// `/// ...` (attaches to the next declaration, §2.1).
     DocComment,
+    /// `//! ...`: the documentation of the module, at the start of the file
+    /// only (§2.1).
+    ModuleDoc,
 
     // Identifiers and literals
     /// Identifier of any shape (`snake_case`, `UpperCamel`, `UPPER_SNAKE`). The
@@ -92,6 +96,12 @@ pub enum TokenKind {
     KwSelfType,
     KwTrue,
     KwFalse,
+    // Reserved words (§2.2): keywords that no construct of this version
+    // takes; where one is read, it is E0200 ([`TokenKind::reserved`]).
+    KwClock,
+    KwWhen,
+    KwResetIf,
+    KwSer,
 
     // Operators (§3.1)
     Plus,
@@ -162,6 +172,13 @@ pub enum TokenKind {
     PlusPlus,
     /// `--` (`- -x` with a space is two `-`)
     MinusMinus,
+    /// `**`, the power of other languages: one token, so that the failure
+    /// names it whole (W3-04).
+    StarStar,
+    /// `===`, the strict equality of other languages (one token, W3-04).
+    EqEqEq,
+    /// `!==`, the strict inequality of other languages (one token, W3-04).
+    NotEqEq,
     /// `/* ... */`, over lines; nested ones and one never closed reach their
     /// end or the end of the file (§2.1).
     BlockComment,
@@ -205,15 +222,29 @@ impl TokenKind {
     }
 
     pub fn is_trivia(self) -> bool {
-        matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
+        matches!(self, TokenKind::Whitespace | TokenKind::Newline) || self.is_line_comment()
     }
 
-    /// A comment of any kind: `//`, `///` and the block comment of other
-    /// languages (a token of its own, which its row reports): the one test
-    /// of a comment where code is looked for (the line facts, the table).
+    /// A comment to the end of its line: `//`, `///` or `//!` (§2.1). The
+    /// one test of it (a line comment ends its line, §2.5).
+    #[inline]
+    pub fn is_line_comment(self) -> bool {
+        matches!(self, TokenKind::Comment | TokenKind::DocComment | TokenKind::ModuleDoc)
+    }
+
+    /// A doc comment, `///` or `//!` (§2.1): what the parser takes into a
+    /// `Docs` or `ModuleDocs` node.
+    #[inline]
+    pub fn is_doc(self) -> bool {
+        matches!(self, TokenKind::DocComment | TokenKind::ModuleDoc)
+    }
+
+    /// A comment of any kind: the line comments and the block comment of
+    /// other languages (a token of its own, which its row reports): the one
+    /// test of a comment where code is looked for (the line facts, the table).
     #[inline]
     pub fn is_comment(self) -> bool {
-        matches!(self, TokenKind::Comment | TokenKind::DocComment | TokenKind::BlockComment)
+        self.is_line_comment() || self == TokenKind::BlockComment
     }
 
     /// Code: no whitespace, line break or comment ([`TokenKind::is_comment`]).
@@ -225,7 +256,13 @@ impl TokenKind {
 
     /// A keyword (§2.2): one of [`KEYWORDS`], not an order of the declarations (R-87).
     pub fn is_keyword(self) -> bool {
-        KEYWORDS.iter().any(|&(_, k)| k == self)
+        KEYWORDS.iter().any(|k| k.kind == self)
+    }
+
+    /// The feature a reserved word is kept for (§2.2, §19.1), for its E0200
+    /// wherever it is read: `None` for every other token ([`KEYWORDS`]).
+    pub fn reserved(self) -> Option<Feature> {
+        KEYWORDS.iter().find(|k| k.kind == self).and_then(|k| k.reserved)
     }
 
     /// The binary operator of the token (§3.1), if it is one (`as` is none):
@@ -264,7 +301,7 @@ impl TokenKind {
 
     /// Keyword for an identifier text, if it is one ([`KEYWORDS`]).
     pub fn keyword(text: &str) -> Option<TokenKind> {
-        KEYWORDS.iter().find(|&&(t, _)| t == text).map(|&(_, k)| k)
+        KEYWORDS.iter().find(|k| k.text == text).map(|k| k.kind)
     }
 
     /// How the token is written, for messages (`expected `)``).
@@ -273,7 +310,7 @@ impl TokenKind {
         match self {
             Whitespace => "whitespace",
             Newline => "newline",
-            Comment | DocComment => "comment",
+            Comment | DocComment | ModuleDoc => "comment",
             Ident => "identifier",
             Underscore => "`_`",
             Int => "integer literal",
@@ -322,6 +359,10 @@ impl TokenKind {
             KwSelfType => "`Self`",
             KwTrue => "`true`",
             KwFalse => "`false`",
+            KwClock => "`clock`",
+            KwWhen => "`when`",
+            KwResetIf => "`reset_if`",
+            KwSer => "`ser`",
             Plus => "`+`",
             Minus => "`-`",
             Star => "`*`",
@@ -371,6 +412,9 @@ impl TokenKind {
             DotDotDot => "`...`",
             PlusPlus => "`++`",
             MinusMinus => "`--`",
+            StarStar => "`**`",
+            EqEqEq => "`===`",
+            NotEqEq => "`!==`",
             BlockComment => "block comment",
             ForeignLit => "number literal",
             Error => "invalid token",
@@ -379,51 +423,73 @@ impl TokenKind {
     }
 }
 
+/// A keyword of the language (§2.2): its text, its token, and for a word
+/// reserved for a future feature, the feature (its E0200 names it).
+#[derive(Debug, Clone, Copy)]
+pub struct Keyword {
+    pub text: &'static str,
+    pub kind: TokenKind,
+    pub reserved: Option<Feature>,
+}
+
+const fn kw(text: &'static str, kind: TokenKind) -> Keyword {
+    Keyword { text, kind, reserved: None }
+}
+
+const fn reserved(text: &'static str, kind: TokenKind, feature: Feature) -> Keyword {
+    Keyword { text, kind, reserved: Some(feature) }
+}
+
 /// The keywords of the language (§2.2) and their tokens: the one list that
-/// [`TokenKind::keyword`] and [`TokenKind::is_keyword`] read (R-87).
-pub const KEYWORDS: &[(&str, TokenKind)] = &[
-    ("fn", TokenKind::KwFn),
-    ("rt", TokenKind::KwRt),
-    ("flow", TokenKind::KwFlow),
-    ("par", TokenKind::KwPar),
-    ("struct", TokenKind::KwStruct),
-    ("enum", TokenKind::KwEnum),
-    ("trait", TokenKind::KwTrait),
-    ("impl", TokenKind::KwImpl),
-    ("effect", TokenKind::KwEffect),
-    ("blocking", TokenKind::KwBlocking),
-    ("handler", TokenKind::KwHandler),
-    ("handle", TokenKind::KwHandle),
-    ("with", TokenKind::KwWith),
-    ("uses", TokenKind::KwUses),
-    ("let", TokenKind::KwLet),
-    ("var", TokenKind::KwVar),
-    ("if", TokenKind::KwIf),
-    ("else", TokenKind::KwElse),
-    ("match", TokenKind::KwMatch),
-    ("for", TokenKind::KwFor),
-    ("in", TokenKind::KwIn),
-    ("while", TokenKind::KwWhile),
-    ("break", TokenKind::KwBreak),
-    ("continue", TokenKind::KwContinue),
-    ("return", TokenKind::KwReturn),
-    ("pub", TokenKind::KwPub),
-    ("use", TokenKind::KwUse),
-    ("extern", TokenKind::KwExtern),
-    ("unsafe", TokenKind::KwUnsafe),
-    ("target", TokenKind::KwTarget),
-    ("test", TokenKind::KwTest),
-    ("assert", TokenKind::KwAssert),
-    ("const", TokenKind::KwConst),
-    ("type", TokenKind::KwType),
-    ("as", TokenKind::KwAs),
-    ("at", TokenKind::KwAt),
-    ("inout", TokenKind::KwInout),
-    ("move", TokenKind::KwMove),
-    ("self", TokenKind::KwSelf),
-    ("Self", TokenKind::KwSelfType),
-    ("true", TokenKind::KwTrue),
-    ("false", TokenKind::KwFalse),
+/// [`TokenKind::keyword`], [`TokenKind::is_keyword`] and
+/// [`TokenKind::reserved`] read (R-87).
+pub const KEYWORDS: &[Keyword] = &[
+    kw("fn", TokenKind::KwFn),
+    kw("rt", TokenKind::KwRt),
+    kw("flow", TokenKind::KwFlow),
+    kw("par", TokenKind::KwPar),
+    kw("struct", TokenKind::KwStruct),
+    kw("enum", TokenKind::KwEnum),
+    kw("trait", TokenKind::KwTrait),
+    kw("impl", TokenKind::KwImpl),
+    kw("effect", TokenKind::KwEffect),
+    kw("blocking", TokenKind::KwBlocking),
+    kw("handler", TokenKind::KwHandler),
+    kw("handle", TokenKind::KwHandle),
+    kw("with", TokenKind::KwWith),
+    kw("uses", TokenKind::KwUses),
+    kw("let", TokenKind::KwLet),
+    kw("var", TokenKind::KwVar),
+    kw("if", TokenKind::KwIf),
+    kw("else", TokenKind::KwElse),
+    kw("match", TokenKind::KwMatch),
+    kw("for", TokenKind::KwFor),
+    kw("in", TokenKind::KwIn),
+    kw("while", TokenKind::KwWhile),
+    kw("break", TokenKind::KwBreak),
+    kw("continue", TokenKind::KwContinue),
+    kw("return", TokenKind::KwReturn),
+    kw("pub", TokenKind::KwPub),
+    kw("use", TokenKind::KwUse),
+    kw("extern", TokenKind::KwExtern),
+    kw("unsafe", TokenKind::KwUnsafe),
+    kw("target", TokenKind::KwTarget),
+    kw("test", TokenKind::KwTest),
+    kw("assert", TokenKind::KwAssert),
+    kw("const", TokenKind::KwConst),
+    kw("type", TokenKind::KwType),
+    kw("as", TokenKind::KwAs),
+    kw("at", TokenKind::KwAt),
+    kw("inout", TokenKind::KwInout),
+    kw("move", TokenKind::KwMove),
+    kw("self", TokenKind::KwSelf),
+    kw("Self", TokenKind::KwSelfType),
+    kw("true", TokenKind::KwTrue),
+    kw("false", TokenKind::KwFalse),
+    reserved("clock", TokenKind::KwClock, Feature::DerivedClocks),
+    reserved("when", TokenKind::KwWhen, Feature::ConditionalInstances),
+    reserved("reset_if", TokenKind::KwResetIf, Feature::ResetInstances),
+    reserved("ser", TokenKind::KwSer, Feature::SerialFlows),
 ];
 
 /// A token. What precedes it (a space, a newline or nothing) is read from the
@@ -485,12 +551,16 @@ mod tests {
 
     #[test]
     fn the_keyword_list_is_one_to_one() {
-        for (i, &(text, kind)) in KEYWORDS.iter().enumerate() {
+        for (i, k) in KEYWORDS.iter().enumerate() {
+            let (text, kind) = (k.text, k.kind);
             assert_eq!(TokenKind::keyword(text), Some(kind), "{text}");
             assert!(kind.is_keyword(), "{text}");
             assert_eq!(kind.describe(), format!("`{text}`"));
-            assert!(KEYWORDS[..i].iter().all(|&(t, k)| t != text && k != kind), "{text} twice");
+            assert!(KEYWORDS[..i].iter().all(|k| k.text != text && k.kind != kind), "{text} twice");
         }
+        let reserved: Vec<&str> = KEYWORDS.iter().filter(|k| k.reserved.is_some()).map(|k| k.text).collect();
+        assert_eq!(reserved, ["clock", "when", "reset_if", "ser"]);
+        assert_eq!(TokenKind::KwIf.reserved(), None);
         for not in [TokenKind::Ident, TokenKind::Underscore, TokenKind::Plus, TokenKind::Eof, TokenKind::Semi] {
             assert!(!not.is_keyword(), "{not:?}");
         }

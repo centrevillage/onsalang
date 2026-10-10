@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+
+// (S-169, S-279, S-371.) A module whose file is named as a reserved word (`clock.onsa`, `when.onsa`, `ser.onsa`,
+// `reset_if.onsa`, and the same under the directory `kp/`) is fine, because the word after a `.` and
+// at the head of a `use` path is read as a name (§2.2: "パスの `.` の直後と `use` の経路の頭は、
+// 他のキーワードと同じく名前として読む（… `clock.onsa` のモジュールは `kp.clock.tick()` で
+// 使える）"; S-169, S-279, S-371). A module name cannot start an expression, so the module is
+// reached through the module before it (`kp.clock.tick()`) or by a name taken from it
+// (`use kp.clock.{tick}`). The word standing alone where a name is read (the head of an
+// expression, an element of the list of a `use`) is E0200 at the word.
+
+use kp
+use kp.clock.{tick}
+use kp.when.{after}
+use kp.ser.{order}
+use kp.reset_if.{latch}
+use clock.{beat}
+use when.{late}
+use ser.{rank}
+use reset_if.{gate}
+
+pub fn through_the_path() -> U32 {
+  kp.clock.tick() + kp.clock.TICKS + kp.when.after() + kp.ser.order() + kp.reset_if.latch()
+}
+
+pub fn through_the_names() -> U32 {
+  tick() + after() + order() + latch() + beat() + late() + rank() + gate()
+}
+
+// ---- the word where a name is read: E0200 at the word
+
+use kp.{clock}                  //~ E0200 @9
+
+use kp.{when, after}            //~ E0200 @9
+
+use kp.{tick, reset_if}         //~ E0200 @15
+
+use kp.{ser}                    //~ E0200 @9
+
+pub fn word_as_the_head_of_a_path() -> U32 {
+  clock.beat()                  //~ E0200 @3
+}
+
+pub fn word_as_the_head_of_another_path() -> U32 {
+  when.late()                   //~ E0200 @3
+}
+
+pub fn word_as_a_call() -> U32 {
+  ser(1)                        //~ E0200 @3
+}
+
+pub fn word_as_a_value() -> U32 {
+  reset_if                      //~ E0200 @3
+}

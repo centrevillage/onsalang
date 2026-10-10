@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5"]
+
+// The holes of an interpolation that are a name path, the ones whose names resolve (§2.4, S-90,
+// R-102): a local, a parameter, `self`, a field, a field of a field. A string with an
+// interpolation makes a new `Str`, so the functions use `Alloc` (§2.4). `{{` and `}}` are escapes
+// and make no hole. Multi-byte text next to holes is fine (R-01). The constants, the associated
+// constants, the tuple indexes and the qualified names are in lex/interp_paths_resolved.onsa and
+// packages/interp_path_modules (their resolution is W4-04); the forms that are no path (E0001)
+// are in negative/lex_interp_holes.onsa.
+
+pub struct Inner {
+  leaf: U32,
+}
+
+pub struct Outer {
+  inner: Inner,
+  pos: (F32, F32),
+}
+
+impl Outer {
+  pub fn show_leaf(self) -> Str uses {Alloc} {
+    "{self.inner.leaf}"
+  }
+}
+
+pub fn a_local(n: U32) -> Str uses {Alloc} {
+  let m = n
+  "{m}"
+}
+
+pub fn a_parameter(n: U32) -> Str uses {Alloc} {
+  "{n}"
+}
+
+pub fn a_field(o: Outer) -> Str uses {Alloc} {
+  "{o.inner.leaf}"
+}
+
+pub fn many_holes(n: U32, o: Outer) -> Str uses {Alloc} {
+  "{n}/{o.inner.leaf}/{n}"
+}
+
+pub fn adjacent_holes(n: U32) -> Str uses {Alloc} {
+  "{n}{n}{n}"
+}
+
+pub fn text_next_to_holes(n: U32) -> Str uses {Alloc} {
+  "日本{n}語 é{n}é 😀{n}😀"
+}
+
+pub fn escaped_braces_next_to_a_hole(n: U32) -> Str uses {Alloc} {
+  "{{literal}} {{{n}}} {{ {n} }}"
+}
+
+pub fn escaped_braces_only() -> Str {
+  "{{only}} {{braces}}"
+}
+
+pub fn a_hole_in_a_nested_block(n: U32, c: Bool) -> Str uses {Alloc} {
+  if c {
+    if c {
+      "{n}"
+    } else {
+      "{n}"
+    }
+  } else {
+    "{n}"
+  }
+}
+
+pub fn a_hole_in_a_closure(n: U32) -> Str uses {Alloc} {
+  let f = fn(k: U32) -> Str uses {Alloc} { "{k}" }
+  f.(1)
+}
+
+pub fn a_hole_in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{n}",
+    _ => "{n}",
+  }
+}
+
+pub fn a_hole_in_a_loop(n: U32) -> Str uses {Alloc} {
+  var last = "none"
+  for i in 0..<n {
+    last = "{i}"
+  }
+  last
+}
+
+pub fn a_hole_in_a_generic_function[T](x: T, n: U32) -> Str uses {Alloc} {
+  "{n}"
+}
+
+pub fn a_hole_in_a_call_argument(n: U32) -> U32 uses {Alloc} {
+  length("{n}")
+}
+
+pub fn length(s: Str) -> U32 {
+  0
+}
+
+pub fn a_hole_and_a_comment_in_the_text(n: U32) -> Str uses {Alloc} {
+  "// {n} is not a comment"
+}

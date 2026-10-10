@@ -1,0 +1,297 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+
+// (S-89, R-101.) E0001: a name is ASCII letters, digits and `_` (§2.3). Any other character in a name
+// is E0001 (the message names the characters a name may use, which the markers do not compare),
+// wherever a name is written: a binding, a function, a parameter, a field, a type, a constant, a
+// flow, a pattern, a path, a name that only ends with such a character. Letters of other scripts
+// and look-alikes (the Cyrillic `а`, U+0430) are no names, because the case of a letter decides the
+// kind of a name and a look-alike cannot be told from the ASCII letter. One error per function
+// (P-01); the same inputs inside comments and strings are fine (lex/ident_ascii_ok.onsa).
+
+pub fn let_japanese() -> I32 {
+  let 音 = 1  //~ E0001
+  1
+}
+
+pub fn let_accent() -> I32 {
+  let é = 1  //~ E0001
+  1
+}
+
+pub fn let_accent_upper() -> I32 {
+  let É = 1  //~ E0001
+  1
+}
+
+pub fn let_greek() -> I32 {
+  let α = 1  //~ E0001
+  1
+}
+
+pub fn let_cyrillic_a() -> I32 {
+  let а = 1  //~ E0001
+  1
+}
+
+pub fn let_hebrew() -> I32 {
+  let ש = 1  //~ E0001
+  1
+}
+
+pub fn let_emoji() -> I32 {
+  let 😀 = 1  //~ E0001
+  1
+}
+
+pub fn let_supplementary_plane() -> I32 {
+  let 𠮷 = 1  //~ E0001
+  1
+}
+
+pub fn let_full_width_latin() -> I32 {
+  let ａ = 1  //~ E0001
+  1
+}
+
+pub fn let_full_width_digit() -> I32 {
+  let １ = 1  //~ E0001
+  1
+}
+
+pub fn let_arabic_indic_digit() -> I32 {
+  let ٣ = 1  //~ E0001
+  1
+}
+
+pub fn let_kana() -> I32 {
+  let ア = 1  //~ E0001
+  1
+}
+
+pub fn let_combining_acute() -> I32 {
+  let é = 1  //~ E0001
+  1
+}
+
+pub fn let_ligature() -> I32 {
+  let ﬁ = 1  //~ E0001
+  1
+}
+
+pub fn let_german_sharp_s() -> I32 {
+  let ß = 1  //~ E0001
+  1
+}
+
+pub fn let_turkish_dotless_i() -> I32 {
+  let ı = 1  //~ E0001
+  1
+}
+
+pub fn use_japanese() -> I32 {
+  let a = 1
+  a + 音  //~ E0001
+}
+
+pub fn use_accent() -> I32 {
+  let a = 1
+  a + é  //~ E0001
+}
+
+pub fn use_accent_upper() -> I32 {
+  let a = 1
+  a + É  //~ E0001
+}
+
+pub fn use_greek() -> I32 {
+  let a = 1
+  a + α  //~ E0001
+}
+
+pub fn use_cyrillic_a() -> I32 {
+  let a = 1
+  a + а  //~ E0001
+}
+
+pub fn use_hebrew() -> I32 {
+  let a = 1
+  a + ש  //~ E0001
+}
+
+pub fn use_emoji() -> I32 {
+  let a = 1
+  a + 😀  //~ E0001
+}
+
+pub fn use_supplementary_plane() -> I32 {
+  let a = 1
+  a + 𠮷  //~ E0001
+}
+
+pub fn name_ends_with_japanese() -> I32 {
+  let abc音 = 1  //~ E0001
+  1
+}
+
+pub fn name_has_japanese_inside() -> I32 {
+  let ab音c = 1  //~ E0001
+  1
+}
+
+pub fn name_ends_with_accent() -> I32 {
+  let abcé = 1  //~ E0001
+  1
+}
+
+pub fn name_has_accent_inside() -> I32 {
+  let abéc = 1  //~ E0001
+  1
+}
+
+pub fn name_ends_with_accent_upper() -> I32 {
+  let abcÉ = 1  //~ E0001
+  1
+}
+
+pub fn name_has_accent_upper_inside() -> I32 {
+  let abÉc = 1  //~ E0001
+  1
+}
+
+pub fn name_ends_with_greek() -> I32 {
+  let abcα = 1  //~ E0001
+  1
+}
+
+pub fn name_has_greek_inside() -> I32 {
+  let abαc = 1  //~ E0001
+  1
+}
+
+pub fn name_ends_with_cyrillic_a() -> I32 {
+  let abcа = 1  //~ E0001
+  1
+}
+
+pub fn name_has_cyrillic_a_inside() -> I32 {
+  let abаc = 1  //~ E0001
+  1
+}
+
+pub fn name_ends_with_hebrew() -> I32 {
+  let abcש = 1  //~ E0001
+  1
+}
+
+pub fn name_has_hebrew_inside() -> I32 {
+  let abשc = 1  //~ E0001
+  1
+}
+
+pub fn 日本語() -> I32 {  //~ E0001
+  1
+}
+
+pub fn param_name(音: I32) -> I32 {  //~ E0001
+  1
+}
+
+pub fn second_param_name(a: I32, é: I32) -> I32 {  //~ E0001
+  a
+}
+
+pub struct Field音 {  //~ E0001
+  a: I32,
+}
+
+pub struct Café {  //~ E0001
+  a: I32,
+}
+
+pub struct Holder {
+  音: I32,  //~ E0001
+}
+
+pub struct Holder2 {
+  a: I32,
+  é: I32,  //~ E0001
+}
+
+pub enum Color {
+  Rouge,
+  Vért,  //~ E0001
+}
+
+pub const 定数: U32 = 1  //~ E0001
+
+pub const MAX_É: U32 = 1  //~ E0001
+
+pub type Типы = I32  //~ E0001
+
+pub flow gain_é(x: F32 at sample) -> F32 at sample {  //~ E0001
+  x
+}
+
+pub flow flow_input_name(音: F32 at sample) -> F32 at sample {  //~ E0001
+  x
+}
+
+pub fn pattern_binding(n: I32) -> I32 {
+  match n {
+    é => 1,  //~ E0001
+  }
+}
+
+pub fn tuple_pattern_binding(t: (I32, I32)) -> I32 {
+  match t {
+    (a, 音) => a,  //~ E0001
+  }
+}
+
+pub fn for_binding() -> I32 {
+  for 音 in 0..<2 {  //~ E0001
+    1
+  }
+  1
+}
+
+pub fn closure_param() -> I32 {
+  let f = fn(é: I32) -> I32 { 1 }  //~ E0001
+  1
+}
+
+pub fn field_access(h: Holder) -> I32 {
+  h.音  //~ E0001
+}
+
+pub fn method_call(h: Holder) -> I32 {
+  h.é()  //~ E0001
+}
+
+pub fn path_head() -> I32 {
+  É.X  //~ E0001
+}
+
+use ünits.{a}  //~ E0001
+
+use std.ünits  //~ E0001
+
+use std.math.{sín}  //~ E0001
+
+pub fn type_annotation() -> I32 {
+  let a: Tipé = 1  //~ E0001
+  1
+}
+
+pub fn generic_header[Té](x: I32) -> I32 {  //~ E0001
+  x
+}
+
+// ... and the ASCII names are fine next to the broken ones.
+
+pub fn plain_ascii(a_1: I32, b2: I32) -> I32 {
+  let cafe = a_1
+  cafe + b2
+}

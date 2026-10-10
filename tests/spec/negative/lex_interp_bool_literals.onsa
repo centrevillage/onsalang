@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.2", "§18.1"]
+
+// (S-90, R-102.) E0001: `true` and `false` in a hole. They are keywords (§2.2) that stand for the literals of
+// `Bool`, and a literal is not a name path (§2.4 lists the literals among the
+// forms a hole cannot hold: E0001). The names stage must not get a chance to say E0302 (an unknown name
+// `true`): a hole holds a name or a path, and a keyword that is a literal is a literal. The other
+// keywords in the head of a hole are not decided by the spec (see the report of W3-04/t). One error per
+// function (P-01).
+
+pub fn true_literal() -> Str uses {Alloc} {
+  "{true}"                      //~ E0001
+}
+
+pub fn false_literal() -> Str uses {Alloc} {
+  "{false}"                     //~ E0001
+}
+
+pub fn true_field(p: U32) -> Str uses {Alloc} {
+  "{true.x}"                    //~ E0001
+}
+
+pub fn text_around(p: U32) -> Str uses {Alloc} {
+  "is {p} {true}"               //~ E0001
+}

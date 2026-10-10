@@ -1,0 +1,343 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1", "§2.5", "§7"]
+// fixes = 1
+
+// E0004: a `///` that has no declaration to document, and a `//!` that is not at the start of the
+// file (§2.1, S-51, R-63). The declarations a `///` documents are the items except `use` and
+// `test`, the members of an `impl`, the associated constants, the fields of a struct, the variants
+// of an enum and the inputs of a flow; a `///` in any other place (a statement, a parameter of a
+// function, an arm of a `match`, an element of a list, the end of a block or of a list of members,
+// the end of the file) has nothing to attach to. The candidate of a stray `///` is `//`; the
+// candidate of a `//!` after the first item is `///` (it then documents the declaration that
+// follows). The marker is on the line of the comment. One error per declaration (P-01), so each
+// stray comment has a declaration of its own. The file starts with the `//!` that is allowed.
+
+//! Module documentation, at the start of the file.
+
+pub struct Holder {
+  a: I32,
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+// ---- before an item that takes no doc comment
+
+/// Before a test.                                       //~ E0004
+test "documented test" {
+  assert true
+}
+
+/// Before a use.                                        //~ E0004
+use std.math.{sqrt}
+
+// ---- before a statement
+
+pub fn before_let() -> I32 {
+  /// Before a let.                                      //~ E0004
+  let a = 1
+  a
+}
+
+pub fn before_an_expression() -> I32 {
+  /// Before the last expression.                        //~ E0004
+  1
+}
+
+pub fn before_a_return() -> I32 {
+  /// Before a return.                                   //~ E0004
+  return 1
+}
+
+pub fn before_an_if(c: Bool) -> I32 {
+  /// Before an if.                                      //~ E0004
+  if c { 1 } else { 2 }
+}
+
+pub fn before_a_for() -> I32 {
+  /// Before a for.                                      //~ E0004
+  for i in 0..<2 {
+    let x = id(i)
+  }
+  1
+}
+
+pub fn before_a_while(c: Bool) -> I32 {
+  /// Before a while.                                    //~ E0004
+  while c {
+    let x = id(1)
+  }
+  1
+}
+
+pub fn before_an_assert() -> I32 {
+  /// Before an assert.                                  //~ E0004
+  assert true
+  1
+}
+
+pub fn in_an_if_body(c: Bool) -> I32 {
+  if c {
+    /// In the body of an if.                            //~ E0004
+    id(1)
+  } else {
+    2
+  }
+}
+
+pub fn in_an_else_body(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    /// In the body of an else.                          //~ E0004
+    id(2)
+  }
+}
+
+pub fn in_a_nested_block(c: Bool) -> I32 {
+  if c {
+    if c {
+      /// Two blocks down.                               //~ E0004
+      let x = id(1)
+    }
+  }
+  1
+}
+
+pub fn in_a_loop_body() -> I32 {
+  for i in 0..<2 {
+    /// In the body of a loop.                           //~ E0004
+    let x = id(i)
+  }
+  1
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(a: I32) -> I32 {
+    /// In the body of a closure.                        //~ E0004
+    a
+  }
+  1
+}
+
+pub fn in_a_generic_function[T](x: T) -> I32 {
+  /// In a generic function.                             //~ E0004
+  1
+}
+
+pub fn in_an_arm_body(n: I32) -> I32 {
+  match n {
+    0 => {
+      /// In the block of an arm.                        //~ E0004
+      id(1)
+    },
+    _ => 2,
+  }
+}
+
+pub fn before_an_arm(n: I32) -> I32 {
+  match n {
+    /// Before an arm.                                   //~ E0004
+    0 => 1,
+    _ => 2,
+  }
+}
+
+pub fn before_the_second_arm(n: I32) -> I32 {
+  match n {
+    0 => 1,
+    /// Before the second arm.                           //~ E0004
+    _ => 2,
+  }
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    /// In the body of a par.                            //~ E0004
+    x
+  }
+  ys[0]
+}
+
+pub flow before_a_flow_statement(x: F32 at sample) -> F32 at sample {
+  /// Before a let of a flow.                            //~ E0004
+  let y = x
+  y
+}
+
+test "stray doc comment in a test" {
+  /// In the body of a test.                             //~ E0004
+  assert true
+}
+
+impl Holder {
+  pub fn in_a_method(self) -> I32 {
+    /// In the body of a method.                         //~ E0004
+    self.a
+  }
+}
+
+// ---- before a parameter, and before the end of a list
+
+pub fn before_the_first_parameter(
+  /// Before a parameter.                                //~ E0004
+  a: I32,
+) -> I32 {
+  a
+}
+
+pub fn before_the_second_parameter(
+  a: I32,
+  /// Before the second parameter.                       //~ E0004
+  b: I32,
+) -> I32 {
+  a
+}
+
+pub fn before_the_closing_parenthesis(
+  a: I32,
+  /// Nothing follows, before the parenthesis.           //~ E0004
+) -> I32 {
+  a
+}
+
+pub fn in_an_empty_parameter_list(
+  /// Nothing to document, nothing after it.            //~ E0004
+) {
+}
+
+pub const AFTER_THE_EMPTY_LIST: U32 = 2
+
+pub fn before_a_closure_parameter() -> I32 {
+  let f = fn(
+    /// Before a parameter of a closure.                 //~ E0004
+    a: I32,
+  ) -> I32 {
+    a
+  }
+  1
+}
+
+// ---- before an element of a list
+
+pub fn before_a_call_argument() -> I32 {
+  id(
+    /// Before an argument.                              //~ E0004
+    1
+  )
+}
+
+pub fn before_an_array_element() -> I32 {
+  let xs = [
+    /// Before an element.                               //~ E0004
+    1,
+    2
+  ]
+  1
+}
+
+pub fn before_a_tuple_element() -> I32 {
+  let t = (
+    1,
+    /// Before an element of a tuple.                    //~ E0004
+    2
+  )
+  1
+}
+
+pub fn before_a_field_of_a_literal() -> I32 {
+  let h = Holder {
+    /// Before a field of a struct literal.              //~ E0004
+    a: 1
+  }
+  1
+}
+
+// ---- at the end of a block and at the end of a list of members
+
+pub fn at_the_end_of_a_block() -> I32 {
+  1
+  /// At the end of the block.                           //~ E0004
+}
+
+pub fn at_the_start_of_an_empty_block() {
+  /// Alone in the block.                                //~ E0004
+}
+
+pub struct EndOfFields {
+  a: I32,
+  /// After the last field.                              //~ E0004
+}
+
+pub struct AloneInFields {
+  /// Alone in the fields.                               //~ E0004
+}
+
+pub enum EndOfVariants {
+  A,
+  B,
+  /// After the last variant.                            //~ E0004
+}
+
+impl EndOfFields {
+  pub fn only_member(self) -> I32 {
+    1
+  }
+  /// After the last member.                             //~ E0004
+}
+
+impl AloneInFields {
+  /// Alone in the members.                              //~ E0004
+}
+
+// ---- the module comment `//!` after the first item (the candidate `///` documents what follows)
+
+//! A module comment before a function.                   //~ E0004
+pub fn after_the_first_item() -> I32 {
+  1
+}
+
+//! A module comment before a struct.                     //~ E0004
+pub struct AfterTheFirstItem {
+  b: I32,
+}
+
+//! A module comment before a constant.                   //~ E0004
+pub const AFTER_THE_FIRST_ITEM: U32 = 1
+
+pub struct ModuleCommentBeforeAField {
+  //! A module comment before a field.                    //~ E0004
+  a: I32,
+}
+
+pub enum ModuleCommentBeforeAVariant {
+  //! A module comment before a variant.                  //~ E0004
+  A,
+  B,
+}
+
+impl Holder {
+  //! A module comment before a member.                   //~ E0004
+  pub fn another_method(self) -> I32 {
+    2
+  }
+}
+
+pub flow module_comment_before_an_input(
+  //! A module comment before an input.                   //~ E0004
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+// ---- the last one: at the end of the file, after items, blank lines and ordinary comments
+
+pub fn last_item() -> I32 {
+  1
+}
+
+/// Nothing follows this one, only a comment.              //~ E0004
+
+// An ordinary comment after it.

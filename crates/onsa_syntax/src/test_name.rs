@@ -9,12 +9,11 @@ pub(crate) const RULE: &str = "the name of a test is a string literal that is no
      U+2028 / U+2029 and no bidirectional control (U+202A to U+202E, U+2066 to U+2069), also when the character is \
      written with an escape (§11.8)";
 
-/// A character the value of a name may not hold (spec §11.8): the control
-/// characters (U+0000 to U+001F and U+007F to U+009F, the line feed and the
-/// tab included), U+2028 / U+2029, and the bidirectional controls of §2.5
-/// (U+202A to U+202E and U+2066 to U+2069).
+/// A character the value of a name may not hold (spec §11.8): the
+/// characters written nowhere (§2.5, [`crate::lexer::unwritable`]), the
+/// line feed and the tab included.
 pub(crate) fn forbidden(c: char) -> bool {
-    matches!(c, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+    crate::lexer::unwritable(c)
 }
 
 /// The value of the name written as `lit`: the text of the literal with its

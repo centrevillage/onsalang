@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§18.1"]
+// fixes = 1
+
+// E0002 for a missing `,` after a field, a variant or an input of a flow whose next element has
+// doc comments (§2.5, §2.1): the error is the missing `,` at the next element, with the candidate
+// that writes it, and not an E0004 of the doc comments, which the next element takes once the `,`
+// is written (§18.1: the candidate leaves no error of its stage). W3-04/b 1. One error per
+// declaration unit (P-01).
+
+pub struct S {
+  a: I32
+  /// The second field.
+  b: I32,                    //~ E0002
+}
+
+pub struct T {
+  a: I32
+  /// Two lines
+  /// of documentation.
+  b: I32,                    //~ E0002
+}
+
+pub enum E {
+  A
+  /// The second variant.
+  B,                         //~ E0002
+}
+
+pub flow f(
+  x: F32 at sample
+  /// The second input.
+  y: F32 at sample,          //~ E0002
+) -> F32 at sample {
+  x + y
+}

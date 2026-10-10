@@ -1,0 +1,171 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// (S-19, R-01.) E0001: a backslash escape that is not in the closed list (§2.4: `\n \t \r \0 \\ \" \' \u{XXXX}`,
+// in strings and in character literals alike), a `\u{…}` that is not a Unicode scalar value (past
+// U+10FFFF, a surrogate), has no digits, has a character that is not a hexadecimal digit, or is never
+// closed, and a character literal that does not hold exactly one scalar value. One error per function
+// (P-01). The marker is the line only: the spec does not say where in the literal the span starts.
+// The escapes that are fine are in lex/escapes_ok.onsa; the escapes followed by multi-byte
+// characters, which ended in an internal error (R-01), are in lex_utf8_escapes.onsa.
+//
+// Not written here, because the spec does not say: how many digits `\u{…}` may have when the
+// value is in range (`\u{0000041}`).
+
+pub fn unknown_ascii() -> Str {
+  "\q"                          //~ E0001
+}
+
+pub fn backslash_x() -> Str {
+  "\x41"                        //~ E0001
+}
+
+pub fn backslash_big_u() -> Str {
+  "\U0001F600"                  //~ E0001
+}
+
+pub fn backslash_space() -> Str {
+  "\ "                          //~ E0001
+}
+
+pub fn backslash_digit() -> Str {
+  "\1"                          //~ E0001
+}
+
+pub fn backslash_brace() -> Str {
+  "\{x}"                        //~ E0001
+}
+
+pub fn backslash_before_the_end_of_the_line() -> Str {
+  "abc\                         //~ E0001
+}
+
+pub fn backslash_before_the_closing_quote_is_an_escaped_quote() -> Str {
+  "abc\"                        //~ E0001
+}
+
+pub fn u_without_braces() -> Str {
+  "\u41"                        //~ E0001
+}
+
+pub fn u_without_digits() -> Str {
+  "\u{}"                        //~ E0001
+}
+
+pub fn u_past_the_last_scalar() -> Str {
+  "\u{110000}"                  //~ E0001
+}
+
+pub fn u_far_past_the_last_scalar() -> Str {
+  "\u{FFFFFFFF}"                //~ E0001
+}
+
+pub fn u_seven_digits_past_the_last_scalar() -> Str {
+  "\u{1000000}"                 //~ E0001
+}
+
+pub fn u_first_surrogate() -> Str {
+  "\u{D800}"                    //~ E0001
+}
+
+pub fn u_last_high_surrogate() -> Str {
+  "\u{DBFF}"                    //~ E0001
+}
+
+pub fn u_first_low_surrogate() -> Str {
+  "\u{DC00}"                    //~ E0001
+}
+
+pub fn u_last_surrogate() -> Str {
+  "\u{DFFF}"                    //~ E0001
+}
+
+pub fn u_surrogate_in_lower_case() -> Str {
+  "\u{d800}"                    //~ E0001
+}
+
+pub fn u_never_closed_at_the_quote() -> Str {
+  "\u{12"                       //~ E0001
+}
+
+pub fn u_never_closed_with_text() -> Str {
+  "\u{12 and more"              //~ E0001
+}
+
+pub fn u_never_closed_at_the_end_of_the_line() -> Str {
+  "\u{                          //~ E0001
+}
+
+pub fn u_not_a_digit() -> Str {
+  "\u{G}"                       //~ E0001
+}
+
+pub fn u_not_a_digit_after_digits() -> Str {
+  "\u{41G}"                     //~ E0001
+}
+
+pub fn u_with_a_space() -> Str {
+  "\u{ 41}"                     //~ E0001
+}
+
+pub fn u_with_a_sign() -> Str {
+  "\u{+41}"                     //~ E0001
+}
+
+pub fn u_with_a_prefix() -> Str {
+  "\u{0x41}"                    //~ E0001
+}
+
+pub fn char_unknown_ascii() -> Char {
+  '\q'                          //~ E0001
+}
+
+pub fn char_u_surrogate() -> Char {
+  '\u{D800}'                    //~ E0001
+}
+
+pub fn char_u_past_the_last_scalar() -> Char {
+  '\u{110000}'                  //~ E0001
+}
+
+pub fn char_u_without_digits() -> Char {
+  '\u{}'                        //~ E0001
+}
+
+pub fn char_u_never_closed() -> Char {
+  '\u{12'                       //~ E0001
+}
+
+pub fn char_empty() -> Char {
+  ''                            //~ E0001
+}
+
+pub fn char_two_characters() -> Char {
+  'ab'                          //~ E0001
+}
+
+pub fn char_unterminated_ascii() -> Char {
+  'a                            //~ E0001
+}
+
+pub fn two(s: Str, n: I32) -> I32 {
+  n
+}
+
+pub fn in_a_nested_block(c: Bool) -> I32 {
+  if c {
+    if c {
+      let s = "\u{D800}"        //~ E0001
+    }
+  }
+  1
+}
+
+pub fn good() -> Str {
+  "\n\t\r\0\\\"\'\u{41}\u{0}\u{D7FF}\u{E000}\u{10FFFF}"
+}
+
+pub fn good_char() -> Char {
+  '\u{10FFFF}'
+}

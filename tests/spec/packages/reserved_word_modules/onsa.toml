@@ -1,0 +1,3 @@
+[package]
+name = "reserved_word_modules"
+edition = "2026"

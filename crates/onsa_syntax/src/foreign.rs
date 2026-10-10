@@ -626,7 +626,7 @@ impl Cursor<'_> {
     fn indent(&self, offset: u32) -> &str {
         let start = self.line_start(offset) as usize;
         let rest = &self.text[start..];
-        &rest[..rest.len() - rest.trim_start_matches([' ', '\t']).len()]
+        &rest[..rest.len() - rest.trim_start_matches(crate::lexer::BLANKS).len()]
     }
 
     fn file_span(&self, start: u32, end: u32) -> Span {

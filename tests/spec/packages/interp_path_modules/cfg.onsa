@@ -1,0 +1,3 @@
+pub const N: U32 = 4
+
+pub const RATE: F32 = 0.5

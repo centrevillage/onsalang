@@ -1,0 +1,1 @@
+pub const TICKS: U32 = 24

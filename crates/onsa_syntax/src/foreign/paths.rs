@@ -139,6 +139,7 @@ fn follows_type(kind: TokenKind) -> bool {
             | Eof
             | Comment
             | DocComment
+            | ModuleDoc
             | KwFor
             | KwUses
             | Ident
@@ -175,8 +176,7 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
     // The last token before `i` that is no comment or newline.
     let mut prev = TokenKind::Lt;
     for (i, t) in tokens.iter().enumerate().skip(open) {
-        let blank =
-            matches!(t.kind, TokenKind::Comment | TokenKind::DocComment | TokenKind::BlockComment | TokenKind::Newline);
+        let blank = t.kind.is_comment() || t.kind == TokenKind::Newline;
         if i > open && !blank {
             if matches!(prev, TokenKind::Lt | TokenKind::Comma) && !starts(t.kind) {
                 return None;
@@ -229,6 +229,7 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
             | TokenKind::Semi
             | TokenKind::Comment
             | TokenKind::DocComment
+            | TokenKind::ModuleDoc
             | TokenKind::BlockComment => {}
             _ => return None,
         }

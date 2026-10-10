@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4", "§2.5"]
+
+// (R-01, S-201; the carry-over of W3-06/b.) A lexical error (E0001) and a syntax error (E0002) in one function (§18.1: the lexical errors
+// and the syntax errors are both of the syntax stage; a unit reports one error, "the first one in
+// the text"). Here the lexical error stands strictly before the syntax error, so it is the
+// one reported, however the span of each is drawn: the lexical error is inside the first literal
+// or at the first character, and the missing comma (E0002, §2.5) is at or after the end of that
+// literal. W3-06/b saw the other order (`two("a" "\q", 1)`) report only the E0002 of the missing
+// comma, and the spec does not say which of the two spans starts first, or if a lexical error
+// goes before a syntax error whatever their places (see the report of W3-04/t), so that order is
+// not written here.
+
+pub fn two(a: Str, n: I32) -> I32 {
+  n
+}
+
+pub fn lexical_error_in_the_first_of_two_literals() -> I32 {
+  two("\q" "b", 1)              //~ E0001
+}
+
+pub fn lexical_error_in_the_first_of_two_array_elements() -> I32 {
+  let xs = ["\q" "b"]           //~ E0001
+  1
+}
+
+pub fn bad_hole_in_the_first_of_two_literals() -> I32 {
+  two("{f(x)}" "b", 1)          //~ E0001
+}
+
+pub fn lexical_error_before_a_missing_comma_between_numbers() -> I32 {
+  two("\q", 1 2)                //~ E0001
+}
+
+pub fn lexical_error_on_an_earlier_line() -> I32 {
+  let a = "\q"                  //~ E0001
+  let = 1
+  a
+}
+
+pub fn invalid_character_on_an_earlier_line() -> I32 {
+  let a = 1 $ 2                 //~ E0001
+  let = 1
+  a
+}
+
+// The syntax error first, then a lexical error on a later line: the syntax error is the first one
+// in the text and the only one of the function.
+
+pub fn syntax_error_on_an_earlier_line() -> I32 {
+  let = 1                       //~ E0002
+  let a = "\q"
+  a
+}
+
+// The units next to them are checked on their own, each with its own error.
+
+pub fn next_unit_with_a_syntax_error() -> I32 {
+  let = 2                       //~ E0002
+  1
+}
+
+pub fn next_unit_with_a_lexical_error() -> I32 {
+  "\q"                          //~ E0001
+}
+
+pub fn last_unit_is_fine() -> I32 {
+  two("a" , 1)
+}

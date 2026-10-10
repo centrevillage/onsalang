@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+
+// (S-201.) E0001: a string literal cannot span lines (§2.4: "文字列リテラルは行をまたげない（改行を含む値は
+// `\n` で書く。閉じないまま行が終わると E0001）"). The diagnostic is on the line where the string
+// starts, the line that ends without the closing quote: the marker is on that line, and the next
+// line is not a continuation of the string (what is on it is read as code again). A character
+// literal does not span lines either. One error per function (P-01), and the first one in the text
+// is the one reported (§18.1). The form with the string closed on the next line, and the form that
+// ends the file inside the string, are both here.
+
+pub fn newline_in_a_string() -> Str {
+  "a                            //~ E0001
+  b"
+}
+
+pub fn newline_after_the_opening_quote() -> Str {
+  "                             //~ E0001
+  "
+}
+
+pub fn newline_before_the_closing_quote() -> Str {
+  "text                         //~ E0001
+"
+}
+
+pub fn newline_in_a_long_text() -> Str {
+  "first line                   //~ E0001
+second line
+third line"
+}
+
+pub fn newline_in_a_hole(a: U32) -> Str uses {Alloc} {
+  "{a                           //~ E0001
+  b
+}
+
+pub fn newline_after_a_hole(a: U32) -> Str uses {Alloc} {
+  "{a}                          //~ E0001
+  rest"
+}
+
+pub fn newline_after_an_escape() -> Str {
+  "a\n                          //~ E0001
+  b"
+}
+
+pub fn newline_after_a_multibyte_text() -> Str {
+  "日本語                         //~ E0001
+  日本語"
+}
+
+pub fn newline_in_a_character() -> Char {
+  '                             //~ E0001
+  '
+}
+
+pub fn newline_in_an_argument() -> I32 {
+  two("a                        //~ E0001
+  b", 1)
+}
+
+pub fn two(s: Str, n: I32) -> I32 {
+  n
+}
+
+pub fn newline_in_an_array() -> I32 {
+  let xs = ["a,                 //~ E0001
+  "b"]
+  1
+}
+
+// The string value is written with `\n` for a line end: that is fine, in every place.
+
+pub fn newline_escape_is_fine() -> Str {
+  "first line\nsecond line\nthird line"
+}
+
+pub fn separate_strings_on_separate_lines() -> I32 {
+  two("one", 1) + two("two", 2)
+}

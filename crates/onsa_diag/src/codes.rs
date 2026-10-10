@@ -90,7 +90,8 @@ impl Stage {
 /// Whether every diagnostic of a code carries a fix candidate (D-04).
 ///
 /// `Required` only where the spec text says the code always shows a candidate:
-/// E0003, E0004, E0020, E0320, E0713, E0714, E0811, E0812 (W3-02, D5).
+/// E0003, E0020, E0320, E0713, E0714, E0811, E0812 (W3-02, D5; E0004 is
+/// not, S-430).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FixRule {
     Required,
@@ -219,7 +220,9 @@ codes! {
         "unexpected token";
     E0003 = 3, Syntax, [Syntax], Required, Optional,
         "`else` / `with` must follow the `}` on its line, and a block's `{` the line of its header";
-    E0004 = 4, Syntax, [Syntax], Required, Optional,
+    // S-430: a `//!` after the head of the file with no
+    // declaration after it that `///` would document has no candidate.
+    E0004 = 4, Syntax, [Syntax], Optional, Optional,
         "doc comment in a place it cannot document";
     E0005 = 5, Syntax, [Syntax], Optional, Optional,
         "unknown attribute, or an attribute in a place it cannot be attached to";
@@ -448,7 +451,7 @@ mod tests {
         // W3-02 D5: the spec text says these always show a candidate.
         let required: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Required).map(|c| c.as_str()).collect();
-        assert_eq!(required, ["E0003", "E0004", "E0020", "E0320", "E0713", "E0714", "E0811", "E0812"]);
+        assert_eq!(required, ["E0003", "E0020", "E0320", "E0713", "E0714", "E0811", "E0812"]);
         let rule: Vec<&str> =
             Code::ALL.iter().filter(|c| c.note_rule() == NoteRule::Rule).map(|c| c.as_str()).collect();
         assert_eq!(rule, ["E0020"]);

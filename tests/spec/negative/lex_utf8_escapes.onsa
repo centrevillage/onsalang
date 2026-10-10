@@ -1,0 +1,207 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+
+// E0001: a backslash escape that is not in the closed list (§2.4: `\n \t \r \0 \\ \" \' \u{XXXX}`,
+// in strings and in character literals alike). The lexer used to stop with an internal error
+// (exit code 101) when the character after the backslash is a multi-byte one (R-01): it has to go
+// on by characters and report the diagnostic. A `\u{…}` that is not a Unicode scalar value (past
+// U+10FFFF, a surrogate), has no digits, has a character that is not a hexadecimal digit, or is
+// never closed is not an escape of the list either. One error per function (P-01). The same lines
+// as a round trip are in tests/cst/lex_utf8_escapes.onsa and tests/cst/lex_escape_u_forms.onsa.
+// The marker is the line only: the spec does not say where in the literal the span starts. The
+// ASCII forms of the same diagnostics are in lex_escapes.onsa.
+
+pub fn unknown_accent() -> Str {
+  "\é"                          //~ E0001
+}
+
+pub fn unknown_japanese() -> Str {
+  "\音"                          //~ E0001
+}
+
+pub fn unknown_emoji() -> Str {
+  "\😀"                         //~ E0001
+}
+
+pub fn unknown_supplementary_plane() -> Str {
+  "\𠮷"                          //~ E0001
+}
+
+pub fn unknown_after_text() -> Str {
+  "日本語 \é 日本語"              //~ E0001
+}
+
+pub fn unknown_after_valid_escapes() -> Str {
+  "\n\t\é"                      //~ E0001
+}
+
+pub fn unknown_before_valid_escapes() -> Str {
+  "\é\n\t"                      //~ E0001
+}
+
+pub fn unknown_twice() -> Str {
+  "\é\é"                        //~ E0001
+}
+
+pub fn unknown_before_a_hole(x: U32) -> Str uses {Alloc} {
+  "\é{x}"                       //~ E0001
+}
+
+pub fn unknown_after_a_hole(x: U32) -> Str uses {Alloc} {
+  "{x}\é"                       //~ E0001
+}
+
+pub fn unknown_next_to_escaped_braces() -> Str {
+  "{{\é}}"                      //~ E0001
+}
+
+pub fn unknown_is_a_bom() -> Str {
+  "\﻿"                    //~ E0001
+}
+
+pub fn unknown_is_a_no_break_space() -> Str {
+  "\ "                    //~ E0001
+}
+
+pub fn unknown_is_a_combining_mark() -> Str {
+  "\́"                    //~ E0001
+}
+
+pub fn unknown_is_a_zero_width_joiner() -> Str {
+  "\‍"                    //~ E0001
+}
+
+pub fn unknown_is_a_next_line() -> Str {
+  "\"                    //~ E0001
+}
+
+pub fn unknown_is_a_line_separator() -> Str {
+  "\ "                    //~ E0001
+}
+
+pub fn unknown_is_an_override() -> Str {
+  "\‮"                    //~ E0001
+}
+
+pub fn backslash_before_a_multibyte_end_of_the_line() -> Str {
+  "日本\                         //~ E0001
+}
+
+pub fn u_never_closed_before_a_multibyte_text() -> Str {
+  "\u{12日本"                    //~ E0001
+}
+
+pub fn u_with_an_accent() -> Str {
+  "\u{é}"                       //~ E0001
+}
+
+pub fn u_with_japanese() -> Str {
+  "\u{日}"                       //~ E0001
+}
+
+pub fn u_with_an_emoji() -> Str {
+  "\u{😀}"                      //~ E0001
+}
+
+pub fn u_with_an_accent_after_digits() -> Str {
+  "\u{12é}"                     //~ E0001
+}
+
+pub fn u_with_an_accent_before_digits() -> Str {
+  "\u{é12}"                     //~ E0001
+}
+
+pub fn u_with_a_full_width_digit() -> Str {
+  "\u{４１}"                     //~ E0001
+}
+
+pub fn u_after_valid_escapes_and_text() -> Str {
+  "日本 \u{41} \n \u{110000} 日本"  //~ E0001
+}
+
+pub fn char_unknown_accent() -> Char {
+  '\é'                          //~ E0001
+}
+
+pub fn char_unknown_japanese() -> Char {
+  '\音'                          //~ E0001
+}
+
+pub fn char_unknown_emoji() -> Char {
+  '\😀'                         //~ E0001
+}
+
+pub fn char_u_with_an_accent() -> Char {
+  '\u{é}'                       //~ E0001
+}
+
+pub fn char_two_multibyte_characters() -> Char {
+  '日本'                         //~ E0001
+}
+
+pub fn char_unterminated_accent() -> Char {
+  'é                            //~ E0001
+}
+
+pub fn in_a_call_argument() -> I32 {
+  two("\é", 1)                  //~ E0001
+}
+
+pub fn in_the_first_of_two_literals() -> I32 {
+  two("\é" "b", 1)              //~ E0001
+}
+
+pub fn in_an_array_element() -> I32 {
+  let xs = ["a", "\音"]          //~ E0001
+  1
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(n: I32) -> Str { "\é" }   //~ E0001
+  1
+}
+
+pub fn in_a_match_pattern(s: Str) -> I32 {
+  match s {
+    "\é" => 1,                  //~ E0001
+    _ => 0,
+  }
+}
+
+pub fn in_a_match_arm_body(n: I32) -> I32 {
+  match n {
+    0 => { let s = "\é" },      //~ E0001
+    _ => 1,
+  }
+}
+
+pub fn in_a_generic_function[T](x: T) -> I32 {
+  let s = "\é"                  //~ E0001
+  1
+}
+
+impl Gain {
+  pub fn label(self) -> Str {
+    "\é"                        //~ E0001
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = "\é"                  //~ E0001
+  x
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    let s = "\é"                //~ E0001
+    x
+  }
+  ys[0]
+}
+
+pub const BAD: Str = "\é"       //~ E0001
+
+pub fn good() -> Str {
+  "\n\t\r\0\\\"\'\u{41}\u{0}\u{D7FF}\u{E000}\u{10FFFF}é日本😀"
+}

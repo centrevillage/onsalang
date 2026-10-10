@@ -543,9 +543,13 @@ fn fill_found_with<'t>(diagnostics: &mut [Diagnostic], text_of: impl Fn(FileId) 
             let Some(file) = text_of(d.span.file) else {
                 onsa_diag::internal::bug(Some(d.span), "a diagnostic in a file the package does not hold");
             };
-            let text = &file[d.span.start as usize..d.span.end as usize];
-            if !text.trim().is_empty() {
-                d.found = Some(text.trim().to_string());
+            // The blanks are the space and the tab (§2.5, S-441): a range of
+            // other characters (NBSP, a line separator, a CR alone) has its
+            // `found`.
+            let text = file[d.span.start as usize..d.span.end as usize]
+                .trim_matches(|c| onsa_syntax::lexer::is_blank(c) || c == '\n');
+            if !text.is_empty() {
+                d.found = Some(text.to_string());
             }
         }
     }

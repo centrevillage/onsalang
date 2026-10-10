@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.2", "§2.4"]
+
+// (S-90, S-357, S-169.) A keyword after a `.` is read as a name (§2.2: "パスの `.` の直後と `use` の経路の頭は、他の
+// キーワードと同じく名前として読む"), and the path of a hole is a path like the one of an
+// expression (§2.4: "式に書いたときと同じ規則"), so the holes below are read by the lexer and the
+// parser. The names stage then says there is no such field (E0413: the words cannot be declared
+// as names of fields). The case reads the syntax only (`mode = "parse"`). The reserved words of
+// S-169, S-279 and S-371 are first. The same words in the head of a hole are E0200
+// (negative/reserved_words.onsa).
+
+pub struct Holder {
+  a: I32,
+}
+
+pub fn reserved_words_after_a_dot(o: Holder) -> Str uses {Alloc} {
+  "{o.clock} {o.when} {o.reset_if} {o.ser}"
+}
+
+pub fn other_keywords_after_a_dot(o: Holder) -> Str uses {Alloc} {
+  "{o.type} {o.fn} {o.at} {o.if} {o.test}"
+}
+
+pub fn after_a_field_after_a_dot(o: Holder) -> Str uses {Alloc} {
+  "{o.a.clock}"
+}

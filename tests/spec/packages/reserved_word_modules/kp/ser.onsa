@@ -1,0 +1,3 @@
+pub fn order() -> U32 {
+  6
+}

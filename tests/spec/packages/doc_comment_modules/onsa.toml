@@ -1,0 +1,3 @@
+[package]
+name = "doc_comment_modules"
+edition = "2026"

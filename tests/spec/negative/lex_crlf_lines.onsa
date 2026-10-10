@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.4", "§2.1", "§18.1"]
+
+// (S-201, S-51.) The whole file ends its lines in CR LF (§2.5: CR LF is one newline; LF alone is the newline of the
+// language, a CR that is not before a LF is E0001). The lines in the diagnostics are those of the
+// CR LF line ends (one line per CR LF, like an LF), and a string still cannot span lines: the CR LF
+// ends the line, and the string that is not closed before it is E0001. A lone CR in the middle of
+// such a line, and CR CR LF at the end of one, are E0001 on their line (not a line end). A doc
+// comment with a stray position is E0004 in a CR LF file as well. One error per function (P-01).
+
+pub fn invalid_character() -> I32 {
+  1 $ 2                         //~ E0001
+}
+
+pub fn unterminated_string_at_the_crlf() -> Str {
+  "abc                          //~ E0001
+}
+
+pub fn unterminated_string_after_a_crlf_line() -> Str {
+  let a = 1
+  let b = 2
+  "abc                          //~ E0001
+}
+
+pub fn lone_cr_in_the_middle_of_a_line() -> I32 {
+  1 + 2                     //~ E0001
+}
+
+pub fn lone_cr_before_the_crlf_is_two_cr() -> I32 {
+  1 + 2                         //~ E0001
+}
+
+pub fn lone_cr_in_a_comment() -> I32 {
+  // texttext                //~ E0001
+  1
+}
+
+pub fn lone_cr_in_a_string() -> Str {
+  "ab"                      //~ E0001
+}
+
+pub fn lone_cr_after_a_good_line() -> I32 {
+  let a = 1
+  a+ 1                      //~ E0001
+}
+
+pub fn syntax_error_after_crlf_lines() -> I32 {
+  let a = 1
+  let b = 2
+  let = 3                       //~ E0002
+  a
+}
+
+/// This one is attached to the function.
+pub fn doc_comment_in_a_crlf_file() -> I32 {
+  /// Stray.                      //~ E0004
+  1
+}
+
+pub fn good_line_ends() -> I32 {
+  let a = 1
+  a
+}

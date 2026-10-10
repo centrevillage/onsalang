@@ -739,10 +739,8 @@ impl Arm {
         // New names: none that the file has (S-253), the names in the holes
         // of the string literals too (S-319): a new name that a misspelt
         // `{v}` names would hide its E0302.
-        let in_holes = c.literals.holes().iter().flat_map(|h| {
-            let inner = &c.text[h.start as usize..h.end as usize];
-            inner.trim_start_matches('{').trim_end_matches('}').split('.')
-        });
+        let in_holes = c.literals.holes().iter().flat_map(|h| h.path.iter().flatten());
+        let in_holes = in_holes.map(|s| &c.text[s.start as usize..s.end as usize]);
         let used: std::collections::HashSet<&str> = c
             .all
             .iter()

@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4"]
+
+// (R-01.) The forms of `\u{…}` (§2.4: the closed list ends with `\u{XXXX}`; a character is a Unicode scalar
+// value): no digits, too many digits, a value past U+10FFFF, surrogates, an escape that is never
+// closed, characters that are not hexadecimal digits, and the values at the edges of the scalar
+// range that are fine. Whether seven or more digits with leading zeros are an escape is not in the
+// spec, and the diagnostics of the cases that are decided are in
+// tests/spec/negative/lex_utf8_escapes.onsa.
+
+let u0 = "\u{}"
+let u1 = "\u{ 41}"
+let u2 = "\u{41 }"
+let u3 = "\u{4 1}"
+let u4 = "\u{0000041}"
+let u5 = "\u{00000000041}"
+let u6 = "\u{1000000}"
+let u7 = "\u{110000}"
+let u8 = "\u{FFFFFFFF}"
+let u9 = "\u{D800}"
+let u10 = "\u{DBFF}"
+let u11 = "\u{DC00}"
+let u12 = "\u{DFFF}"
+let u13 = "\u{12
+let u14 = "\u{12"
+let u15 = "\u{
+let u16 = "\u
+let u17 = "\u"
+let u18 = "\u41"
+let u19 = "\u{41}}"
+let u20 = "\u{{41}}"
+let u21 = "\U{41}"
+let u22 = "\U00000041"
+let u23 = "\u{+41}"
+let u24 = "\u{-1}"
+let u25 = "\u{0x41}"
+let u26 = "\u{_41}"
+let u27 = "\u{4_1}"
+let u28 = "\u{G}"
+let u29 = "\u{41G}"
+let u30 = "\u{ABCDEF}"
+let u31 = "\u{abcdef}"
+let u32 = "\u{AbCdEf}"
+let u33 = "\u{10FFFF}"
+let u34 = "\u{10ffff}"
+let u35 = "\u{D7FF}"
+let u36 = "\u{E000}"
+let u37 = "\u{0}"
+let u38 = "\u{a}"
+let u39 = "\u{41}"
+let u40 = "\u{1F600}"
+let u41 = "\u{41}\u{42}\u{43}"
+let u42 = "\u{41}{x}\u{42}"
+let u43 = '\u{}'
+let u44 = '\u{110000}'
+let u45 = '\u{D800}'
+let u46 = '\u{12'
+let u47 = '\u{41}'
+let u48 = '\u{10FFFF}'
+let u49 = '\u{41}\u{42}'

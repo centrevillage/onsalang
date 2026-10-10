@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.3", "§18.1"]
+
+// (S-201, S-89.) E0001: outside a comment and a string, the format characters (zero width space, joiners, direction marks, soft hyphen, word joiner, the byte order mark in the middle of a file) are E0001: they are no space of the language and no name character (§2.5: "コメントと文字列の外では、その他の Unicode の
+// 空白（NBSP など）と BOM も E0001"; §2.3: a name is ASCII letters, digits and `_`, anything else is
+// E0001). The same characters inside a comment or a string are fine (lex/chars_allowed.onsa). One
+// error per function (P-01); each function is named by the code point, the character is written
+// raw in the file.
+
+pub fn u00ad_soft_hyphen() -> I32 {
+  1 ­+ 2  //~ E0001
+}
+
+pub fn u00ad_soft_hyphen_in_a_name(a: I32) -> I32 {
+  a­  //~ E0001
+}
+
+pub fn u061c_arabic_letter_mark() -> I32 {
+  1 ؜+ 2  //~ E0001
+}
+
+pub fn u061c_arabic_letter_mark_in_a_name(a: I32) -> I32 {
+  a؜  //~ E0001
+}
+
+pub fn u200b_zero_width_space() -> I32 {
+  1 ​+ 2  //~ E0001
+}
+
+pub fn u200b_zero_width_space_in_a_name(a: I32) -> I32 {
+  a​  //~ E0001
+}
+
+pub fn u200c_zero_width_non_joiner() -> I32 {
+  1 ‌+ 2  //~ E0001
+}
+
+pub fn u200c_zero_width_non_joiner_in_a_name(a: I32) -> I32 {
+  a‌  //~ E0001
+}
+
+pub fn u200d_zero_width_joiner() -> I32 {
+  1 ‍+ 2  //~ E0001
+}
+
+pub fn u200d_zero_width_joiner_in_a_name(a: I32) -> I32 {
+  a‍  //~ E0001
+}
+
+pub fn u200e_left_to_right_mark() -> I32 {
+  1 ‎+ 2  //~ E0001
+}
+
+pub fn u200e_left_to_right_mark_in_a_name(a: I32) -> I32 {
+  a‎  //~ E0001
+}
+
+pub fn u200f_right_to_left_mark() -> I32 {
+  1 ‏+ 2  //~ E0001
+}
+
+pub fn u200f_right_to_left_mark_in_a_name(a: I32) -> I32 {
+  a‏  //~ E0001
+}
+
+pub fn u2060_word_joiner() -> I32 {
+  1 ⁠+ 2  //~ E0001
+}
+
+pub fn u2060_word_joiner_in_a_name(a: I32) -> I32 {
+  a⁠  //~ E0001
+}
+
+pub fn u2061_function_application() -> I32 {
+  1 ⁡+ 2  //~ E0001
+}
+
+pub fn u2061_function_application_in_a_name(a: I32) -> I32 {
+  a⁡  //~ E0001
+}
+
+pub fn u206a_inhibit_symmetric_swapping() -> I32 {
+  1 ⁪+ 2  //~ E0001
+}
+
+pub fn u206a_inhibit_symmetric_swapping_in_a_name(a: I32) -> I32 {
+  a⁪  //~ E0001
+}
+
+pub fn ufeff_byte_order_mark() -> I32 {
+  1 ﻿+ 2  //~ E0001
+}
+
+pub fn ufeff_byte_order_mark_in_a_name(a: I32) -> I32 {
+  a﻿  //~ E0001
+}

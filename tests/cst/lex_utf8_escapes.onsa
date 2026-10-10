@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4"]
+
+// Escapes in strings and character literals followed by multi-byte characters (R-01): an unknown
+// escape (`\é`, E0001) has to leave the lexer on a character boundary; `\u{…}` with a multi-byte
+// character inside; escapes of the closed list next to multi-byte text; the escape at the end of
+// the line. The diagnostics are in tests/spec/negative/lex_utf8_escapes.onsa.
+
+let e0 = "\é"
+let e1 = "\音"
+let e2 = "\😀"
+let e3 = "\é\é"
+let e4 = "a\éb"
+let e5 = "\é{x}"
+let e6 = "{x}\é"
+let e7 = "\u{é}"
+let e8 = "\u{日}"
+let e9 = "\u{😀}"
+let e10 = "\u{1é}"
+let e11 = "\u{é1}"
+let e12 = "\u{1F600é}"
+let e13 = "\é\u{41}"
+let e14 = '\é'
+let e15 = '\音'
+let e16 = '\😀'
+let e17 = '\u{é}'
+let e18 = "\﻿"
+let e19 = "\"
+let e20 = "\ "
+let e21 = "\ "
+let e22 = "\́"
+let e23 = "\‍"
+let e24 = "\‮"
+let e25 = "\"
+let e26 = "\\é"
+let e27 = "\\\é"
+let e28 = "\"é"
+let e29 = "\'é"
+let e30 = "é\n日\t本\r"
+let e31 = "\n\é\n"
+let e32 = "\é
+let e33 = '\é
+let e34 = "\u{é
+let e35 = "\u{1F600
+let e36 = "\𠮷"
+let e37 = "\a\b\é\c"

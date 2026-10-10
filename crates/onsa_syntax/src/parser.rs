@@ -77,6 +77,9 @@ pub(crate) struct ParseOutput {
     pub diagnostics: Vec<Diagnostic>,
     /// The levels of each top-level item that parsed ([`Parsed::levels`]).
     pub levels: Vec<u32>,
+    /// The facts of the literals, from the lexer: the AST takes the paths of
+    /// the holes from them.
+    pub literals: Literals,
     /// The height of the tree in levels (spec §2.5), as the parser counted
     /// it (`Parser::height`): the deepest declaration unit. The tests compare
     /// it with the tree; the candidates of E0010 that add levels read it.
@@ -381,11 +384,11 @@ impl<'a> Parser<'a> {
         use NodeKind::*;
         let level = match kind {
             // The file, the items and their headers: a unit starts from 0.
-            SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
-            | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
-            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
-            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
-            | EffectRow | Path => 0,
+            SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
+            | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields
+            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
+            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
+            | Param | EffectRow | Path => 0,
             // Types: a type with arguments counts at its `[` (the `TypeArgs`), a name none.
             PathType | ConstArg | FnTypeParams => 0,
             TypeArgs | UnitType | TupleType | ParenType | ArrayType | FnType => 1,
@@ -552,7 +555,7 @@ impl<'a> Parser<'a> {
     fn skip_trivia(&self, mut i: usize) -> usize {
         loop {
             match self.tokens[i].kind {
-                TokenKind::Comment | TokenKind::DocComment => i += 1,
+                k if k.is_line_comment() => i += 1,
                 TokenKind::Newline if !self.significant() || self.lines.goes_on(i) => i += 1,
                 _ => return i,
             }
@@ -586,7 +589,7 @@ impl<'a> Parser<'a> {
     fn next_code(&self, i: usize) -> usize {
         let mut j = i + 1;
         while j + 1 < self.tokens.len()
-            && matches!(self.tokens[j].kind, TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment)
+            && (self.tokens[j].kind == TokenKind::Newline || self.tokens[j].kind.is_line_comment())
         {
             j += 1;
         }
@@ -624,7 +627,7 @@ impl<'a> Parser<'a> {
         let mut i = self.pos;
         loop {
             match self.tokens[i].kind {
-                TokenKind::Comment | TokenKind::DocComment | TokenKind::Newline => i += 1,
+                k if k == TokenKind::Newline || k.is_line_comment() => i += 1,
                 _ => return i,
             }
         }
@@ -816,8 +819,16 @@ impl<'a> Parser<'a> {
         for d in rows {
             self.report(d);
         }
+        // A reserved word, where nothing of this version takes it: its E0200
+        // where it is read, instead of the general E0002 (§2.2, S-169, S-371).
+        let shown = noted.map_or(t, |(found, _)| found);
+        if let Some(feature) = shown.kind.reserved() {
+            let word = self.token_text(shown);
+            let d = feature.diagnostic(Stage::Syntax, shown.span, &[]).with_found(word.to_string());
+            self.report(d);
+            return ParseError;
+        }
         if let Some(fixes) = general {
-            let shown = noted.map_or(t, |(found, _)| found);
             let msg = format!("expected {expected}, found {}", shown.kind.describe());
             // A line that ends where it cannot: the main position is the end
             // of its code, before its comment, and the range is empty, so no
@@ -871,6 +882,7 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_file(mut self) -> ParseOutput {
         let root = self.enter_unit(NodeKind::SourceFile, 0);
+        self.module_docs();
         loop {
             let doc = self.collect_docs();
             if self.at(TokenKind::Eof) {
@@ -907,6 +919,7 @@ impl<'a> Parser<'a> {
             events: self.events,
             diagnostics: self.diagnostics,
             levels: self.levels,
+            literals: self.literals,
             height: self.height,
         }
     }
@@ -1109,14 +1122,19 @@ impl<'a> Parser<'a> {
     /// Skip the blank lines and plain comments before an item; return the
     /// first and the last doc comment directly before it (blank lines and
     /// plain comments may come between the doc comments). This is where a
-    /// doc comment is taken for the item (the `Docs` node).
+    /// doc comment is taken for the item (the `Docs` node). A `//!` there is
+    /// taken too: it is not at the head of the file, and its E0004 has the
+    /// candidate `///` where a `///` is taken (§2.1, [`crate::docs`]).
     fn collect_docs(&mut self) -> Option<(usize, usize)> {
         let mut docs = None;
         loop {
             let t = self.tokens[self.pos];
             match t.kind {
                 TokenKind::Newline | TokenKind::Comment => self.pos += 1,
-                TokenKind::DocComment => {
+                // SPEC-GAP(S-444): a doc comment after code on its line
+                // documents nothing (its E0004, [`crate::docs`]).
+                TokenKind::DocComment | TokenKind::ModuleDoc if !self.starts_its_line(self.pos) => self.pos += 1,
+                TokenKind::DocComment | TokenKind::ModuleDoc => {
                     let first = docs.map_or(self.pos, |(f, _)| f);
                     docs = Some((first, self.pos));
                     self.pos += 1;
@@ -1127,11 +1145,28 @@ impl<'a> Parser<'a> {
         docs
     }
 
-    /// Open the `Item` node; its doc comments (from `collect_docs`) are its
-    /// first child, `Docs`. The trivia before them belong to the enclosing list.
-    fn start_item(&mut self, docs: Option<(usize, usize)>) -> Marker {
-        let start = self.peek().span.start;
-        let m = self.enter_unit(NodeKind::Item, start);
+    /// The doc comments before the next element of a list in which a line
+    /// break is a blank (a field, a variant, an input of a flow, §2.1), as
+    /// [`Parser::collect_docs`] takes them before an item.
+    fn element_docs(&mut self) -> Option<(usize, usize)> {
+        let next = self.peek_index();
+        let mut docs = (self.pos..next).filter(|&k| self.tokens[k].kind.is_doc() && self.starts_its_line(k));
+        let first = docs.next()?;
+        let last = docs.next_back().unwrap_or(first);
+        self.pos = last + 1;
+        Some((first, last))
+    }
+
+    /// Whether `tokens[k]` has no code before it on its line (S-444: a doc
+    /// comment that does not is attached to nothing).
+    fn starts_its_line(&self, k: usize) -> bool {
+        k == 0 || self.tokens[k - 1].kind == TokenKind::Newline
+    }
+
+    /// The `Docs` node of the doc comments `docs` (from
+    /// [`Parser::collect_docs`] or [`Parser::element_docs`]), in the node
+    /// open: the one place a doc comment is attached (§2.1, S-51).
+    fn attach_docs(&mut self, docs: Option<(usize, usize)>) {
         if let Some((first, last)) = docs {
             let d = self.enter_unit(NodeKind::Docs, self.tokens[first].span.start);
             for k in first..=last {
@@ -1139,6 +1174,38 @@ impl<'a> Parser<'a> {
             }
             self.complete(d, NodeKind::Docs);
         }
+    }
+
+    /// The `//!` at the head of the file, before its first item and the doc
+    /// comments of that item (§2.1): the `ModuleDocs` node, the documentation
+    /// of the module.
+    fn module_docs(&mut self) {
+        let mut docs = None;
+        let mut k = self.pos;
+        loop {
+            match self.tokens[k].kind {
+                TokenKind::Newline | TokenKind::Comment => {}
+                TokenKind::ModuleDoc => docs = Some((docs.map_or(k, |(f, _)| f), k)),
+                _ => break,
+            }
+            k += 1;
+        }
+        if let Some((first, last)) = docs {
+            self.pos = last + 1;
+            let d = self.enter_unit(NodeKind::ModuleDocs, self.tokens[first].span.start);
+            for k in first..=last {
+                self.events.push(Event::Token(self.full[k]));
+            }
+            self.complete(d, NodeKind::ModuleDocs);
+        }
+    }
+
+    /// Open the `Item` node; its doc comments (from `collect_docs`) are its
+    /// first child, `Docs`. The trivia before them belong to the enclosing list.
+    fn start_item(&mut self, docs: Option<(usize, usize)>) -> Marker {
+        let start = self.peek().span.start;
+        let m = self.enter_unit(NodeKind::Item, start);
+        self.attach_docs(docs);
         m
     }
 
@@ -1284,7 +1351,7 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Flow)?;
         self.bump();
         self.parse_name("flow name")?;
-        self.parse_params(true)?;
+        self.parse_params(true, true)?;
         self.expect(TokenKind::Arrow)?;
         self.parse_type()?;
         self.parse_body()?;
@@ -1299,7 +1366,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwFn)?;
         self.parse_name("function name")?;
         self.parse_generics_opt()?;
-        self.parse_params(true)?;
+        self.parse_params(true, false)?;
         if self.at_line_end(TokenKind::Arrow) {
             self.bump();
             self.parse_type()?;
@@ -1348,7 +1415,9 @@ impl<'a> Parser<'a> {
             self.expect(TokenKind::LBrace)?;
             self.with_nl(false, |p| {
                 while !p.at(TokenKind::RBrace) {
+                    let docs = p.element_docs();
                     let f = p.start(NodeKind::Field)?;
+                    p.attach_docs(docs);
                     p.parse_vis()?;
                     p.parse_name("field name")?;
                     p.expect(TokenKind::Colon)?;
@@ -1377,7 +1446,9 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::LBrace)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RBrace) {
+                let docs = p.element_docs();
                 let v = p.start(NodeKind::Variant)?;
+                p.attach_docs(docs);
                 p.parse_name("variant name")?;
                 // S-412: the `(` of the fields of a variant follows the
                 // rule of the postfix `(` (a blank before it is E0020).
@@ -1484,7 +1555,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwHandler)?;
         self.parse_name("handler name")?;
         if self.at(TokenKind::LParen) {
-            self.parse_params(true)?;
+            self.parse_params(true, false)?;
         }
         self.expect(TokenKind::Colon)?;
         self.parse_path("effect name")?;
@@ -1512,7 +1583,10 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Use)?;
         self.expect(TokenKind::KwUse)?;
         let tree = self.start(NodeKind::UseTree)?;
-        self.parse_ident("module path")?;
+        // The head of the path of a `use` reads a keyword as a name, as
+        // after a `.` (S-20, S-37, S-371: `use test.{Gen}` in std).
+        // SPEC-GAP(S-443): a reserved word there too (`use clock.{x}`).
+        self.parse_name_after_dot("module path")?;
         loop {
             if self.dot_apart() {
                 return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
@@ -1608,12 +1682,15 @@ impl<'a> Parser<'a> {
     /// literal itself wrong, and the name is not checked further.
     fn check_test_name(&mut self, t: Token) {
         // The holes of this literal, found by a binary search.
-        let holes: Vec<Span> = self.literals.holes_in(t.span).to_vec();
+        let holes: Vec<Span> = self.literals.holes_in(t.span).iter().map(|h| h.span).collect();
+        // The places of the lexer's reports of a reserved word at the head of
+        // a hole ([`crate::literal::Hole::reserved_head`]).
+        let reserved: Vec<Span> = self.literals.holes_in(t.span).iter().filter_map(|h| h.reserved_head).collect();
         let problem = if holes.is_empty() {
             if !self.literals.ok(t.span) {
                 return;
             }
-            let lit = crate::literal::str_lit(self.token_text(t), t.span);
+            let lit = crate::literal::str_lit(self.text, t.span, &[]);
             let Some(value) = crate::test_name::value(&lit) else {
                 onsa_diag::internal::bug(Some(t.span), "a literal without holes read as one with an interpolation")
             };
@@ -1627,7 +1704,10 @@ impl<'a> Parser<'a> {
             self.diagnostics.retain(|d| {
                 let lexer = i < self.lexed;
                 i += 1;
-                !(lexer && d.code == Code::E0001 && holes.contains(&d.span))
+                // The E0001 of the form of a hole (its span is the hole's),
+                // and the report of a reserved word at its head.
+                let of_hole = (d.code == Code::E0001 && holes.contains(&d.span)) || reserved.contains(&d.span);
+                !(lexer && of_hole)
             });
             self.lexed -= before - self.diagnostics.len();
             // `literals` keeps their spans: they lie in this literal, which
@@ -1742,7 +1822,8 @@ impl<'a> Parser<'a> {
         Ok(PathInfo { segments, first, last })
     }
 
-    /// After `.`, a keyword is an ordinary name (`std.test`, `x.type`).
+    /// After `.` and at the head of the path of a `use`, a keyword is an
+    /// ordinary name (`std.test`, `x.type`, `use test.{Gen}`; §2.2).
     fn parse_name_after_dot(&mut self, what: &str) -> PResult<Token> {
         let t = self.peek();
         if t.kind == TokenKind::Ident || t.kind.is_keyword() {
@@ -1811,15 +1892,19 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// `(params)`; `require_types` is false for anonymous functions (§6.1).
-    fn parse_params(&mut self, require_types: bool) -> PResult<()> {
+    /// `(params)`; `require_types` is false for anonymous functions (§6.1),
+    /// `inputs` is true for the inputs of a flow, which take doc comments
+    /// (§2.1).
+    fn parse_params(&mut self, require_types: bool, inputs: bool) -> PResult<()> {
         let m = self.start(NodeKind::ParamList)?;
         // S-412: the `(` after `fn` of an anonymous function follows
         // the rule of the parameters of a declaration (a blank before it is E0020).
         self.opens(TokenKind::LParen)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RParen) {
+                let docs = if inputs { p.element_docs() } else { None };
                 let param = p.start(NodeKind::Param)?;
+                p.attach_docs(docs);
                 p.parse_attrs()?;
                 p.parse_mode();
                 let t = p.peek();
@@ -2811,7 +2896,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwFn => {
                 let m = self.start(NodeKind::ClosureExpr)?;
                 self.bump();
-                self.parse_params(false)?;
+                self.parse_params(false, false)?;
                 if self.at_line_end(TokenKind::Arrow) {
                     self.bump();
                     self.parse_type()?;
@@ -2883,16 +2968,15 @@ impl<'a> Parser<'a> {
     /// §2.5): a hole `{a.b.c}` counts as the path `a.b.c` written as an
     /// expression, one level per `.`. E0006 at the `.` over the limit.
     fn interpolation_levels(&mut self, t: Token) -> PResult<()> {
-        let lit = crate::literal::str_lit(self.token_text(t), t.span);
         let level = self.level();
         let mut height = 0;
-        for seg in &lit.segments {
-            let crate::ast::StrSeg::Interp(path) = seg else { continue };
-            for (i, name) in path.segments.iter().enumerate().skip(1) {
-                let dot = Span::new(self.file, name.span.start - 1, name.span.start);
+        let paths: Vec<Vec<Span>> = self.literals.holes_in(t.span).iter().filter_map(|h| h.path.clone()).collect();
+        for path in paths {
+            for (i, name) in path.iter().enumerate().skip(1) {
+                let dot = Span::new(self.file, name.start - 1, name.start);
                 self.limit(level + Self::height(NodeKind::FieldExpr, i as u32 - 1), dot, NodeKind::FieldExpr)?;
             }
-            height = height.max(path.segments.len().saturating_sub(1) as u32);
+            height = height.max(path.len().saturating_sub(1) as u32);
         }
         let top = self.open.len() - 1;
         self.open[top].children = self.open[top].children.max(height);
@@ -3040,7 +3124,7 @@ impl<'a> Parser<'a> {
                 *i += 1;
             }
             match t.kind {
-                TokenKind::Comment | TokenKind::DocComment | TokenKind::Newline => {}
+                k if k == TokenKind::Newline || k.is_line_comment() => {}
                 k => return k,
             }
         };
@@ -3391,7 +3475,8 @@ fn close_bracket(open: &mut Vec<usize>, tokens: &[Token], kind: TokenKind, base:
 /// A token that starts an item: a declaration keyword, `pub`, an attribute, a doc comment.
 fn is_item_start(kind: TokenKind) -> bool {
     DECLARATIONS.iter().any(|(k, _, _)| *k == kind)
-        || matches!(kind, TokenKind::KwPub | TokenKind::At | TokenKind::DocComment)
+        || matches!(kind, TokenKind::KwPub | TokenKind::At)
+        || kind.is_doc()
         // An attribute of another language, `#[x]` (the table of those
         // forms), starts an item as `@` does (§18.1, S-321).
         || kind == TokenKind::Hash
@@ -3939,5 +4024,32 @@ mod tests {
         assert_eq!(codes("fn f(move b: Bool) -> U32 {\n  if move b { 1 } else { 2 }\n}\n"), vec![Code::E0002]);
         assert_eq!(codes("fn f(move b: U32) -> U32 {\n  let y = (move b)\n  y\n}\n"), vec![Code::E0002]);
         assert_eq!(codes("fn f(move b: U32) -> U32 {\n  move b\n  1\n}\n"), vec![Code::E0002]);
+    }
+
+    #[test]
+    fn a_reserved_word_is_e0200_where_it_is_read() {
+        // §2.2, S-169, S-279, S-371: the E0200 at the word, wherever it is
+        // read, and no E0002 there.
+        for (src, word) in [
+            ("fn f() {\n  let when = 1\n}\n", "when"),
+            ("fn ser() {\n}\n", "ser"),
+            ("fn f(reset_if: I32) {\n}\n", "reset_if"),
+            ("struct S {\n  clock: I32,\n}\n", "clock"),
+            ("use std.math.{clock}\n", "clock"),
+            ("flow f(x: F32 at clock) -> F32 at sample {\n  x\n}\n", "clock"),
+            ("flow f(x: F32) -> F32 {\n  let y = x + prev~(^clock)\n  y\n}\n", "clock"),
+            ("fn f() {\n  when\n}\n", "when"),
+            ("clock fast = sample / 32\n", "clock"),
+            ("fn f(x: I32) {\n  x when 1\n}\n", "when"),
+        ] {
+            let p = parse(src);
+            let d: Vec<(Code, &str)> =
+                p.diagnostics.iter().map(|d| (d.code, &src[d.span.start as usize..d.span.end as usize])).collect();
+            assert_eq!(d, vec![(Code::E0200, word)], "{src}");
+        }
+        // After a `.` and at the head of the path of a `use`, a name (S-357, S-20, S-37).
+        for src in ["fn f(s: S) -> I32 {\n  s.clock\n}\n", "use clock.{x}\n", "use test.{Gen}\n", "use a.ser.{x}\n"] {
+            assert_eq!(codes(src), vec![], "{src}");
+        }
     }
 }

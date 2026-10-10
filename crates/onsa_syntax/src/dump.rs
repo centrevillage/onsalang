@@ -84,9 +84,7 @@ impl Dumper<'_> {
             Some(Failed::Heading) => self.out.push_str("failed:heading "),
             None => {}
         }
-        if !item.doc.is_empty() {
-            let _ = write!(self.out, "doc:{} ", item.doc.len());
-        }
+        self.doc(&item.doc);
         for a in &item.attrs {
             self.attr(a);
             self.out.push(' ');
@@ -135,6 +133,7 @@ impl Dumper<'_> {
                     StructKind::Named(fields) => {
                         for f in fields {
                             self.nested(|d| {
+                                d.doc(&f.doc);
                                 d.vis(f.vis);
                                 let _ = write!(d.out, "{}: ", f.name.name);
                                 d.ty(f.ty);
@@ -153,6 +152,7 @@ impl Dumper<'_> {
                 self.generics(&e.generics);
                 for v in &e.variants {
                     self.nested(|d| {
+                        d.doc(&v.doc);
                         d.out.push_str(&v.name.name);
                         if !v.fields.is_empty() {
                             d.out.push('(');
@@ -316,12 +316,20 @@ impl Dumper<'_> {
         self.out.push(']');
     }
 
+    /// `doc:N ` for the `N` lines of the doc comments of a declaration (§2.1).
+    fn doc(&mut self, doc: &[onsa_diag::Span]) {
+        if !doc.is_empty() {
+            let _ = write!(self.out, "doc:{} ", doc.len());
+        }
+    }
+
     fn params(&mut self, ps: &[Param]) {
         self.out.push('(');
         for (i, p) in ps.iter().enumerate() {
             if i > 0 {
                 self.out.push_str(", ");
             }
+            self.doc(&p.doc);
             for a in &p.attrs {
                 self.attr(a);
                 self.out.push(' ');

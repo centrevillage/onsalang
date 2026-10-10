@@ -18,7 +18,7 @@ use onsa_diag::Span;
 
 use crate::ast::*;
 use crate::cst::{Class, Cst, Elem, NodeId, NodeKind, TokenIdx};
-use crate::literal::{char_value, int_value, str_lit, tuple_index_value};
+use crate::literal::{Literals, char_value, int_value, str_lit, tuple_index_value};
 use crate::token::TokenKind;
 
 /// From each AST node to the CST node it was made from (same indices as the
@@ -33,11 +33,15 @@ pub struct AstMap {
     pub pats: Vec<NodeId>,
 }
 
-/// Make the AST of `cst` (the source is `text`).
-pub(crate) fn lower(cst: &Cst, text: &str) -> (Ast, AstMap) {
-    let mut l = Lower { cst, text, ast: Ast::default(), map: AstMap::default() };
+/// Make the AST of `cst` (the source is `text`, the facts of its literals
+/// `literals`, the lexer's).
+pub(crate) fn lower(cst: &Cst, text: &str, literals: &Literals) -> (Ast, AstMap) {
+    let mut l = Lower { cst, text, literals, ast: Ast::default(), map: AstMap::default() };
     let root = cst.root();
     for n in cst.child_nodes(root) {
+        if cst.kind(n) == NodeKind::ModuleDocs {
+            l.ast.module_doc = l.doc_lines(n, TokenKind::ModuleDoc);
+        }
         if cst.kind(n) == NodeKind::Item
             && let Some(id) = l.any_item(n)
         {
@@ -50,6 +54,7 @@ pub(crate) fn lower(cst: &Cst, text: &str) -> (Ast, AstMap) {
 struct Lower<'a> {
     cst: &'a Cst,
     text: &'a str,
+    literals: &'a Literals,
     ast: Ast,
     map: AstMap,
 }
@@ -88,6 +93,22 @@ impl<'a> Lower<'a> {
 
     fn span(&self, n: NodeId) -> Span {
         self.cst.span(n)
+    }
+
+    /// The lines of the doc comments of `kind` in the `Docs` or `ModuleDocs`
+    /// node `n` (§2.1; a `//!` in a `Docs` is an E0004, not a line of it).
+    fn doc_lines(&self, n: NodeId, kind: TokenKind) -> Vec<Span> {
+        let tokens = self.cst.children(n).iter().filter_map(|e| match *e {
+            Elem::Token(t) => Some(self.cst.token(t)),
+            Elem::Node(_) => None,
+        });
+        tokens.filter(|t| t.kind == kind).map(|t| t.span).collect()
+    }
+
+    /// The doc comments the parser attached to the field, the variant or
+    /// the input of a flow `n` (its `Docs` node).
+    fn docs_of(&self, n: NodeId) -> Vec<Span> {
+        self.child(n, NodeKind::Docs).map_or_else(Vec::new, |d| self.doc_lines(d, TokenKind::DocComment))
     }
 
     fn nodes(&self, n: NodeId) -> Vec<NodeId> {
@@ -205,15 +226,7 @@ impl<'a> Lower<'a> {
         for c in self.nodes(n) {
             match self.cst.kind(c) {
                 // The doc comments the parser took for the item.
-                NodeKind::Docs => {
-                    for e in self.cst.children(c) {
-                        if let Elem::Token(t) = *e
-                            && self.kind_of(t) == TokenKind::DocComment
-                        {
-                            doc.push(self.cst.token(t).span);
-                        }
-                    }
-                }
+                NodeKind::Docs => doc = self.doc_lines(c, TokenKind::DocComment),
                 NodeKind::Attr => attrs.push(self.attr(c)),
                 NodeKind::Vis => vis = self.vis(c),
                 _ => decl = Some(c),
@@ -238,15 +251,7 @@ impl<'a> Lower<'a> {
         for c in self.nodes(n) {
             let complete = self.cst.is_complete(c);
             match self.cst.kind(c) {
-                NodeKind::Docs => {
-                    for e in self.cst.children(c) {
-                        if let Elem::Token(t) = *e
-                            && self.kind_of(t) == TokenKind::DocComment
-                        {
-                            doc.push(self.cst.token(t).span);
-                        }
-                    }
-                }
+                NodeKind::Docs => doc = self.doc_lines(c, TokenKind::DocComment),
                 NodeKind::Attr if complete => attrs.push(self.attr(c)),
                 NodeKind::Vis if complete => vis = self.vis(c),
                 NodeKind::Attr | NodeKind::Vis | NodeKind::Error => {}
@@ -675,7 +680,7 @@ impl<'a> Lower<'a> {
         let vis = self.child(f, NodeKind::Vis).map_or(Vis::Private, |v| self.vis(v));
         let name = self.name(f);
         let ty = self.first_type(f).unwrap_or_else(|| self.bug(f, "a type"));
-        Field { vis, name, ty, span: self.span(f) }
+        Field { doc: self.docs_of(f), vis, name, ty, span: self.span(f) }
     }
 
     fn variant(&mut self, v: NodeId) -> Variant {
@@ -684,7 +689,7 @@ impl<'a> Lower<'a> {
             Some(f) => self.of_class(f, Class::Type).into_iter().map(|t| self.ty(t)).collect(),
             None => Vec::new(),
         };
-        Variant { name, fields, span: self.span(v) }
+        Variant { doc: self.docs_of(v), name, fields, span: self.span(v) }
     }
 
     fn fn_decl(&mut self, n: NodeId) -> FnDecl {
@@ -768,7 +773,7 @@ impl<'a> Lower<'a> {
                 };
                 let ty = self.first_type(p);
                 let clock = self.clock(p);
-                Param { attrs, mode, name, ty, clock, span: self.span(p) }
+                Param { doc: self.docs_of(p), attrs, mode, name, ty, clock, span: self.span(p) }
             })
             .collect()
     }
@@ -1252,6 +1257,6 @@ impl<'a> Lower<'a> {
 
     fn str_lit(&self, t: TokenIdx) -> StrLit {
         let tok = self.cst.token(t);
-        str_lit(self.text_of(t), tok.span)
+        str_lit(self.text, tok.span, self.literals.holes_in(tok.span))
     }
 }

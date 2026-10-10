@@ -1,0 +1,362 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// E0001: what a hole of an interpolation may not hold (§2.4, S-90, R-102). Only a name path may
+// stand in a hole: a name, and `.` with a name or an integer after it. A call, an index `[i]`, an
+// operator, a literal, a format specifier (`{x:.2}`) and anything else is E0001 (the message says
+// so and the note says to name the value with a `let` first; neither is compared). A hole that is
+// empty, or never closed, or has a `.` with nothing after it, is not a path either. A name that is
+// not defined is not a lexical matter (E0302 of the names stage, so it is not here). The marker is
+// the line only: the spec does not say where in the string the span starts. One error per function
+// (P-01). The multi-byte characters in holes are in lex_utf8_holes.onsa.
+
+pub fn call(n: U32) -> Str uses {Alloc} {
+  "{f(n)}"                      //~ E0001
+}
+
+pub fn call_without_arguments() -> Str uses {Alloc} {
+  "{f()}"                       //~ E0001
+}
+
+pub fn method_call(p: U32) -> Str uses {Alloc} {
+  "{p.round()}"                 //~ E0001
+}
+
+pub fn path_then_call(p: U32) -> Str uses {Alloc} {
+  "{p.x.round_f32()}"           //~ E0001
+}
+
+pub fn flow_call(p: U32) -> Str uses {Alloc} {
+  "{f~(p)}"                     //~ E0001
+}
+
+pub fn mutating_call(p: U32) -> Str uses {Alloc} {
+  "{p.push!(1)}"                //~ E0001
+}
+
+pub fn index(xs: [I32; 2]) -> Str uses {Alloc} {
+  "{xs[0]}"                     //~ E0001
+}
+
+pub fn index_after_a_field(p: U32) -> Str uses {Alloc} {
+  "{p.xs[0]}"                   //~ E0001
+}
+
+pub fn binary_operator(n: U32) -> Str uses {Alloc} {
+  "{n + 1}"                     //~ E0001
+}
+
+pub fn operator_without_spaces(n: U32) -> Str uses {Alloc} {
+  "{n+1}"                       //~ E0001
+}
+
+pub fn prefix_minus(n: I32) -> Str uses {Alloc} {
+  "{-n}"                        //~ E0001
+}
+
+pub fn prefix_not(b: Bool) -> Str uses {Alloc} {
+  "{!b}"                        //~ E0001
+}
+
+pub fn cast(n: U32) -> Str uses {Alloc} {
+  "{n as U64}"                  //~ E0001
+}
+
+pub fn clock_annotation(n: U32) -> Str uses {Alloc} {
+  "{n at sample}"               //~ E0001
+}
+
+pub fn question_mark(n: U32) -> Str uses {Alloc} {
+  "{n?}"                        //~ E0001
+}
+
+pub fn integer_literal() -> Str uses {Alloc} {
+  "{1}"                         //~ E0001
+}
+
+pub fn float_literal() -> Str uses {Alloc} {
+  "{1.5}"                       //~ E0001
+}
+
+pub fn hex_literal() -> Str uses {Alloc} {
+  "{0xFF}"                      //~ E0001
+}
+
+pub fn char_literal() -> Str uses {Alloc} {
+  "{'a'}"                       //~ E0001
+}
+
+pub fn string_literal() -> Str uses {Alloc} {
+  "{"a"}"                       //~ E0001
+}
+
+pub fn nested_interpolation(p: U32) -> Str uses {Alloc} {
+  "{"{p}"}"                     //~ E0001
+}
+
+pub fn array_literal(p: U32) -> Str uses {Alloc} {
+  "{[p]}"                       //~ E0001
+}
+
+pub fn tuple_literal(p: U32) -> Str uses {Alloc} {
+  "{(p, p)}"                    //~ E0001
+}
+
+pub fn parenthesized_name(p: U32) -> Str uses {Alloc} {
+  "{(p)}"                       //~ E0001
+}
+
+pub fn struct_literal() -> Str uses {Alloc} {
+  "{ {a: 1} }"                  //~ E0001
+}
+
+pub fn format_specifier(x: F32) -> Str uses {Alloc} {
+  "{x:.2}"                      //~ E0001
+}
+
+pub fn format_specifier_width(x: F32) -> Str uses {Alloc} {
+  "{x:>8}"                      //~ E0001
+}
+
+pub fn format_specifier_debug(x: F32) -> Str uses {Alloc} {
+  "{x:?}"                       //~ E0001
+}
+
+pub fn format_specifier_on_a_field(p: U32) -> Str uses {Alloc} {
+  "{p.x:.2}"                    //~ E0001
+}
+
+pub fn empty() -> Str uses {Alloc} {
+  "{}"                          //~ E0001
+}
+
+pub fn empty_between_text() -> Str uses {Alloc} {
+  "a {} b"                      //~ E0001
+}
+
+pub fn dot_after(p: U32) -> Str uses {Alloc} {
+  "{p.}"                        //~ E0001
+}
+
+pub fn dot_before(p: U32) -> Str uses {Alloc} {
+  "{.p}"                        //~ E0001
+}
+
+pub fn dot_only() -> Str uses {Alloc} {
+  "{.}"                         //~ E0001
+}
+
+pub fn two_dots(p: U32) -> Str uses {Alloc} {
+  "{p..q}"                      //~ E0001
+}
+
+pub fn range(p: U32) -> Str uses {Alloc} {
+  "{p..<3}"                     //~ E0001
+}
+
+pub fn dot_after_a_second_name(p: U32) -> Str uses {Alloc} {
+  "{p.x.}"                      //~ E0001
+}
+
+pub fn dot_after_a_tuple_index(p: U32) -> Str uses {Alloc} {
+  "{p.0.}"                      //~ E0001
+}
+
+pub fn tuple_index_with_letters(p: U32) -> Str uses {Alloc} {
+  "{p.0x}"                      //~ E0001
+}
+
+pub fn negative_tuple_index(p: U32) -> Str uses {Alloc} {
+  "{p.-1}"                      //~ E0001
+}
+
+pub fn two_names(p: U32, q: U32) -> Str uses {Alloc} {
+  "{p q}"                       //~ E0001
+}
+
+pub fn name_and_text(p: U32) -> Str uses {Alloc} {
+  "{p is p}"                    //~ E0001
+}
+
+pub fn path_separator(p: U32) -> Str uses {Alloc} {
+  "{p::q}"                      //~ E0001
+}
+
+pub fn type_arguments(p: U32) -> Str uses {Alloc} {
+  "{p::[U32]}"                  //~ E0001
+}
+
+pub fn comma(p: U32) -> Str uses {Alloc} {
+  "{p, p}"                      //~ E0001
+}
+
+pub fn semicolon(p: U32) -> Str uses {Alloc} {
+  "{p;}"                        //~ E0001
+}
+
+pub fn assignment(p: U32) -> Str uses {Alloc} {
+  "{p = 1}"                     //~ E0001
+}
+
+pub fn comparison(p: U32) -> Str uses {Alloc} {
+  "{p == 1}"                    //~ E0001
+}
+
+pub fn line_comment_in_a_hole(p: U32) -> Str uses {Alloc} {
+  "{p//q}"                      //~ E0001
+}
+
+pub fn minus_between_names() -> Str uses {Alloc} {
+  "{a-b}"                       //~ E0001
+}
+
+pub fn hash(p: U32) -> Str uses {Alloc} {
+  "{p#}"                        //~ E0001
+}
+
+pub fn dollar(p: U32) -> Str uses {Alloc} {
+  "${p}x{"                      //~ E0001
+}
+
+pub fn at_sign(p: U32) -> Str uses {Alloc} {
+  "{@p}"                        //~ E0001
+}
+
+pub fn caret(p: U32) -> Str uses {Alloc} {
+  "{^p}"                        //~ E0001
+}
+
+pub fn tilde(p: U32) -> Str uses {Alloc} {
+  "{~p}"                        //~ E0001
+}
+
+pub fn backslash(p: U32) -> Str uses {Alloc} {
+  "{\p}"                        //~ E0001
+}
+
+// A hole that is never closed, or a string that never ends.
+
+pub fn unclosed(p: U32) -> Str uses {Alloc} {
+  "{p"                          //~ E0001
+}
+
+pub fn unclosed_after_a_dot(p: U32) -> Str uses {Alloc} {
+  "{p."                         //~ E0001
+}
+
+pub fn unclosed_brace_only() -> Str uses {Alloc} {
+  "{"                           //~ E0001
+}
+
+pub fn unclosed_after_text(p: U32) -> Str uses {Alloc} {
+  "text {p} and {"              //~ E0001
+}
+
+pub fn unclosed_with_text(p: U32) -> Str uses {Alloc} {
+  "{p and text"                 //~ E0001
+}
+
+pub fn unclosed_to_the_end_of_the_line(p: U32) -> Str uses {Alloc} {
+  "{p                           //~ E0001
+}
+
+pub fn nested_brace(p: U32) -> Str uses {Alloc} {
+  "{a{b}c}"                     //~ E0001
+}
+
+pub fn three_open_braces(p: U32) -> Str uses {Alloc} {
+  "{{{"                         //~ E0001
+}
+
+pub fn good_hole_then_unclosed(p: U32) -> Str uses {Alloc} {
+  "{p}{"                        //~ E0001
+}
+
+// A bad hole in the places a string stands.
+
+pub fn two(s: Str, n: I32) -> I32 {
+  n
+}
+
+pub fn in_a_call_argument() -> I32 {
+  two("{f(1)}", 1)              //~ E0001
+}
+
+pub fn in_an_array_element() -> I32 {
+  let xs = ["a", "{1}"]         //~ E0001
+  1
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(n: I32) -> Str { "{n + 1}" }   //~ E0001
+  1
+}
+
+pub fn in_a_nested_block(c: Bool) -> I32 {
+  if c {
+    if c {
+      let s = "{n[0]}"         //~ E0001
+    }
+  }
+  1
+}
+
+pub fn in_an_else_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    let s = "{p.q()}"          //~ E0001
+    2
+  }
+}
+
+pub fn in_a_match_arm_body(n: I32) -> I32 {
+  match n {
+    0 => { let s = "{n:.2}" },   //~ E0001
+    _ => 1,
+  }
+}
+
+pub fn in_a_loop_body(n: I32) -> I32 {
+  for i in 0..<n {
+    let s = "{i + 1}"          //~ E0001
+  }
+  1
+}
+
+pub fn in_a_generic_function[T](x: T) -> I32 {
+  let s = "{x.f()}"            //~ E0001
+  1
+}
+
+pub struct Gain {
+  g: F32,
+}
+
+impl Gain {
+  pub fn show(self) -> Str uses {Alloc} {
+    "{self.g:.2}"              //~ E0001
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = "{x + 1.0}"          //~ E0001
+  x
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    let s = "{i + 1}"          //~ E0001
+    x
+  }
+  ys[0]
+}
+
+pub const BAD: Str = "{1 + 1}"   //~ E0001
+
+// The unit of a bad hole is the function: the functions around it are checked on their own.
+
+pub fn good(n: U32, p: Gain) -> Str uses {Alloc} {
+  "{n} {p.g}"
+}

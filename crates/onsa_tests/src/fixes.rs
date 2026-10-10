@@ -149,8 +149,8 @@ type Compared<'a> = (Option<Gap>, TokenKind, &'a str, usize);
 
 /// The tokens compared: every token but whitespace, with the kind of the gap
 /// before it ([`onsa_syntax::token::gap_before`]). The gap before a newline
-/// (spaces at the end of a line, the CR of a CR LF, which is whitespace to
-/// the lexer) is not compared: `None` there. The start of the file counts as
+/// (spaces at the end of a line) is not compared: `None` there, and a
+/// newline is one whether it is LF or CR LF (§2.5). The start of the file counts as
 /// the start of a line, so its indentation is not compared either (a token
 /// after a newline has the gap `Newline` with or without indentation).
 fn compared(text: &str) -> Vec<Compared<'_>> {
@@ -159,7 +159,7 @@ fn compared(text: &str) -> Vec<Compared<'_>> {
         .filter(|&i| !matches!(tokens[i].kind, TokenKind::Whitespace | TokenKind::Eof))
         .map(|i| {
             let t = tokens[i];
-            let s = &text[t.span.start as usize..t.span.end as usize];
+            let s = if t.kind == TokenKind::Newline { "\n" } else { &text[t.span.start as usize..t.span.end as usize] };
             let gap = if t.kind == TokenKind::Newline {
                 None
             } else if tokens[..i].iter().all(|p| p.kind == TokenKind::Whitespace) {

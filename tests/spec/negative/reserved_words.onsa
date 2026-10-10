@@ -1,0 +1,1003 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§11.3", "§18.1"]
+
+// (S-169, S-279, S-371.) E0200: `clock`, `when`, `reset_if` and `ser` are reserved words (§2.2). They
+// cannot be the name of a declaration, and this version does not read them as syntax either: the
+// error is E0200 at the place the word stands (the marker has the column of the word), in the
+// syntax stage (so `onsa fmt` stops at it, §18.2) and not the E0302 of an unknown name. After a `.`
+// and at the head of a `use` path the word is read as a name like the other keywords (a later stage
+// says E0413 for `s.clock`; the module `clock.onsa` is in packages/reserved_word_modules). The
+// words are tried one by one in each place (the four groups below), one error per function or
+// declaration (P-01). A name that only starts with a reserved word (`clock_rate`, `serial`) is an
+// ordinary name (lex/ident_ascii_ok.onsa).
+
+pub struct Holder {
+  a: I32,
+}
+
+pub fn pair() -> (I32, I32) {
+  (1, 2)
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+// ---- the name of a declaration, a binding, a parameter or a field
+
+pub fn clock() -> I32 {  //~ E0200 @8
+  1
+}
+
+pub fn when() -> I32 {  //~ E0200 @8
+  1
+}
+
+pub fn reset_if() -> I32 {  //~ E0200 @8
+  1
+}
+
+pub fn ser() -> I32 {  //~ E0200 @8
+  1
+}
+
+pub fn let_clock() -> I32 {
+  let clock = 1  //~ E0200 @7
+  1
+}
+
+pub fn let_when() -> I32 {
+  let when = 1  //~ E0200 @7
+  1
+}
+
+pub fn let_reset_if() -> I32 {
+  let reset_if = 1  //~ E0200 @7
+  1
+}
+
+pub fn let_ser() -> I32 {
+  let ser = 1  //~ E0200 @7
+  1
+}
+
+pub fn var_clock() -> I32 {
+  var clock = 1  //~ E0200 @7
+  1
+}
+
+pub fn var_when() -> I32 {
+  var when = 1  //~ E0200 @7
+  1
+}
+
+pub fn var_reset_if() -> I32 {
+  var reset_if = 1  //~ E0200 @7
+  1
+}
+
+pub fn var_ser() -> I32 {
+  var ser = 1  //~ E0200 @7
+  1
+}
+
+pub fn first_param_clock(clock: I32) -> I32 {  //~ E0200 @26
+  1
+}
+
+pub fn first_param_when(when: I32) -> I32 {  //~ E0200 @25
+  1
+}
+
+pub fn first_param_reset_if(reset_if: I32) -> I32 {  //~ E0200 @29
+  1
+}
+
+pub fn first_param_ser(ser: I32) -> I32 {  //~ E0200 @24
+  1
+}
+
+pub fn second_param_clock(a: I32, clock: I32) -> I32 {  //~ E0200 @35
+  a
+}
+
+pub fn second_param_when(a: I32, when: I32) -> I32 {  //~ E0200 @34
+  a
+}
+
+pub fn second_param_reset_if(a: I32, reset_if: I32) -> I32 {  //~ E0200 @38
+  a
+}
+
+pub fn second_param_ser(a: I32, ser: I32) -> I32 {  //~ E0200 @33
+  a
+}
+
+pub struct clock {  //~ E0200 @12
+  a: I32,
+}
+
+pub struct when {  //~ E0200 @12
+  a: I32,
+}
+
+pub struct reset_if {  //~ E0200 @12
+  a: I32,
+}
+
+pub struct ser {  //~ E0200 @12
+  a: I32,
+}
+
+pub struct FieldHolder_clock {
+  a: I32,
+  clock: I32,  //~ E0200 @3
+}
+
+pub struct FieldHolder_when {
+  a: I32,
+  when: I32,  //~ E0200 @3
+}
+
+pub struct FieldHolder_reset_if {
+  a: I32,
+  reset_if: I32,  //~ E0200 @3
+}
+
+pub struct FieldHolder_ser {
+  a: I32,
+  ser: I32,  //~ E0200 @3
+}
+
+pub enum clock {  //~ E0200 @10
+  A,
+  B,
+}
+
+pub enum when {  //~ E0200 @10
+  A,
+  B,
+}
+
+pub enum reset_if {  //~ E0200 @10
+  A,
+  B,
+}
+
+pub enum ser {  //~ E0200 @10
+  A,
+  B,
+}
+
+pub const clock: U32 = 1  //~ E0200 @11
+
+pub const when: U32 = 1  //~ E0200 @11
+
+pub const reset_if: U32 = 1  //~ E0200 @11
+
+pub const ser: U32 = 1  //~ E0200 @11
+
+pub type clock = I32  //~ E0200 @10
+
+pub type when = I32  //~ E0200 @10
+
+pub type reset_if = I32  //~ E0200 @10
+
+pub type ser = I32  //~ E0200 @10
+
+pub flow clock(x: F32 at sample) -> F32 at sample {  //~ E0200 @10
+  x
+}
+
+pub flow when(x: F32 at sample) -> F32 at sample {  //~ E0200 @10
+  x
+}
+
+pub flow reset_if(x: F32 at sample) -> F32 at sample {  //~ E0200 @10
+  x
+}
+
+pub flow ser(x: F32 at sample) -> F32 at sample {  //~ E0200 @10
+  x
+}
+
+pub flow flow_input_clock(clock: F32 at sample) -> F32 at sample {  //~ E0200 @27
+  clock
+}
+
+pub flow flow_input_when(when: F32 at sample) -> F32 at sample {  //~ E0200 @26
+  when
+}
+
+pub flow flow_input_reset_if(reset_if: F32 at sample) -> F32 at sample {  //~ E0200 @30
+  reset_if
+}
+
+pub flow flow_input_ser(ser: F32 at sample) -> F32 at sample {  //~ E0200 @25
+  ser
+}
+
+pub flow flow_second_input_clock(x: F32 at sample,
+  clock: F32 at sample) -> F32 at sample {  //~ E0200 @3
+  x
+}
+
+pub flow flow_second_input_when(x: F32 at sample,
+  when: F32 at sample) -> F32 at sample {  //~ E0200 @3
+  x
+}
+
+pub flow flow_second_input_reset_if(x: F32 at sample,
+  reset_if: F32 at sample) -> F32 at sample {  //~ E0200 @3
+  x
+}
+
+pub flow flow_second_input_ser(x: F32 at sample,
+  ser: F32 at sample) -> F32 at sample {  //~ E0200 @3
+  x
+}
+
+impl Holder {
+  pub fn clock(self) -> I32 {  //~ E0200 @10
+    1
+  }
+}
+
+impl Holder {
+  pub fn when(self) -> I32 {  //~ E0200 @10
+    1
+  }
+}
+
+impl Holder {
+  pub fn reset_if(self) -> I32 {  //~ E0200 @10
+    1
+  }
+}
+
+impl Holder {
+  pub fn ser(self) -> I32 {  //~ E0200 @10
+    1
+  }
+}
+
+pub fn for_clock() -> I32 {
+  for clock in 0..<2 {  //~ E0200 @7
+    1
+  }
+  1
+}
+
+pub fn for_when() -> I32 {
+  for when in 0..<2 {  //~ E0200 @7
+    1
+  }
+  1
+}
+
+pub fn for_reset_if() -> I32 {
+  for reset_if in 0..<2 {  //~ E0200 @7
+    1
+  }
+  1
+}
+
+pub fn for_ser() -> I32 {
+  for ser in 0..<2 {  //~ E0200 @7
+    1
+  }
+  1
+}
+
+pub fn match_clock(n: I32) -> I32 {
+  match n {
+    clock => 1,  //~ E0200 @5
+  }
+}
+
+pub fn match_when(n: I32) -> I32 {
+  match n {
+    when => 1,  //~ E0200 @5
+  }
+}
+
+pub fn match_reset_if(n: I32) -> I32 {
+  match n {
+    reset_if => 1,  //~ E0200 @5
+  }
+}
+
+pub fn match_ser(n: I32) -> I32 {
+  match n {
+    ser => 1,  //~ E0200 @5
+  }
+}
+
+pub fn payload_clock(o: Option[I32]) -> I32 {
+  match o {
+    Some(clock) => 1,  //~ E0200 @10
+    None => 0,
+  }
+}
+
+pub fn payload_when(o: Option[I32]) -> I32 {
+  match o {
+    Some(when) => 1,  //~ E0200 @10
+    None => 0,
+  }
+}
+
+pub fn payload_reset_if(o: Option[I32]) -> I32 {
+  match o {
+    Some(reset_if) => 1,  //~ E0200 @10
+    None => 0,
+  }
+}
+
+pub fn payload_ser(o: Option[I32]) -> I32 {
+  match o {
+    Some(ser) => 1,  //~ E0200 @10
+    None => 0,
+  }
+}
+
+pub fn tuple_pattern_clock(t: (I32, I32)) -> I32 {
+  match t {
+    (a, clock) => a,  //~ E0200 @9
+  }
+}
+
+pub fn tuple_pattern_when(t: (I32, I32)) -> I32 {
+  match t {
+    (a, when) => a,  //~ E0200 @9
+  }
+}
+
+pub fn tuple_pattern_reset_if(t: (I32, I32)) -> I32 {
+  match t {
+    (a, reset_if) => a,  //~ E0200 @9
+  }
+}
+
+pub fn tuple_pattern_ser(t: (I32, I32)) -> I32 {
+  match t {
+    (a, ser) => a,  //~ E0200 @9
+  }
+}
+
+pub fn struct_pattern_clock(h: Holder) -> I32 {
+  match h {
+    Holder { a: clock } => 1,  //~ E0200 @17
+  }
+}
+
+pub fn struct_pattern_when(h: Holder) -> I32 {
+  match h {
+    Holder { a: when } => 1,  //~ E0200 @17
+  }
+}
+
+pub fn struct_pattern_reset_if(h: Holder) -> I32 {
+  match h {
+    Holder { a: reset_if } => 1,  //~ E0200 @17
+  }
+}
+
+pub fn struct_pattern_ser(h: Holder) -> I32 {
+  match h {
+    Holder { a: ser } => 1,  //~ E0200 @17
+  }
+}
+
+pub fn let_tuple_clock() -> I32 {
+  let (a, clock) = pair()  //~ E0200 @11
+  a
+}
+
+pub fn let_tuple_when() -> I32 {
+  let (a, when) = pair()  //~ E0200 @11
+  a
+}
+
+pub fn let_tuple_reset_if() -> I32 {
+  let (a, reset_if) = pair()  //~ E0200 @11
+  a
+}
+
+pub fn let_tuple_ser() -> I32 {
+  let (a, ser) = pair()  //~ E0200 @11
+  a
+}
+
+pub fn closure_clock() -> I32 {
+  let f = fn(clock: I32) -> I32 { 1 }  //~ E0200 @14
+  1
+}
+
+pub fn closure_when() -> I32 {
+  let f = fn(when: I32) -> I32 { 1 }  //~ E0200 @14
+  1
+}
+
+pub fn closure_reset_if() -> I32 {
+  let f = fn(reset_if: I32) -> I32 { 1 }  //~ E0200 @14
+  1
+}
+
+pub fn closure_ser() -> I32 {
+  let f = fn(ser: I32) -> I32 { 1 }  //~ E0200 @14
+  1
+}
+
+pub fn closure_second_clock() -> I32 {
+  let f = fn(a: I32, clock: I32) -> I32 { a }  //~ E0200 @22
+  1
+}
+
+pub fn closure_second_when() -> I32 {
+  let f = fn(a: I32, when: I32) -> I32 { a }  //~ E0200 @22
+  1
+}
+
+pub fn closure_second_reset_if() -> I32 {
+  let f = fn(a: I32, reset_if: I32) -> I32 { a }  //~ E0200 @22
+  1
+}
+
+pub fn closure_second_ser() -> I32 {
+  let f = fn(a: I32, ser: I32) -> I32 { a }  //~ E0200 @22
+  1
+}
+
+// ---- an expression, a call, a clock annotation: where the word stands
+
+pub fn operand_clock() -> I32 {
+  let y = clock + 1  //~ E0200 @11
+  y
+}
+
+pub fn operand_when() -> I32 {
+  let y = when + 1  //~ E0200 @11
+  y
+}
+
+pub fn operand_reset_if() -> I32 {
+  let y = reset_if + 1  //~ E0200 @11
+  y
+}
+
+pub fn operand_ser() -> I32 {
+  let y = ser + 1  //~ E0200 @11
+  y
+}
+
+pub fn right_operand_clock(x: I32) -> I32 {
+  x + clock  //~ E0200 @7
+}
+
+pub fn right_operand_when(x: I32) -> I32 {
+  x + when  //~ E0200 @7
+}
+
+pub fn right_operand_reset_if(x: I32) -> I32 {
+  x + reset_if  //~ E0200 @7
+}
+
+pub fn right_operand_ser(x: I32) -> I32 {
+  x + ser  //~ E0200 @7
+}
+
+pub fn last_expression_clock() -> I32 {
+  clock  //~ E0200 @3
+}
+
+pub fn last_expression_when() -> I32 {
+  when  //~ E0200 @3
+}
+
+pub fn last_expression_reset_if() -> I32 {
+  reset_if  //~ E0200 @3
+}
+
+pub fn last_expression_ser() -> I32 {
+  ser  //~ E0200 @3
+}
+
+pub fn call_callee_clock() -> I32 {
+  clock(1)  //~ E0200 @3
+}
+
+pub fn call_callee_when() -> I32 {
+  when(1)  //~ E0200 @3
+}
+
+pub fn call_callee_reset_if() -> I32 {
+  reset_if(1)  //~ E0200 @3
+}
+
+pub fn call_callee_ser() -> I32 {
+  ser(1)  //~ E0200 @3
+}
+
+pub fn argument_clock() -> I32 {
+  id(clock)  //~ E0200 @6
+}
+
+pub fn argument_when() -> I32 {
+  id(when)  //~ E0200 @6
+}
+
+pub fn argument_reset_if() -> I32 {
+  id(reset_if)  //~ E0200 @6
+}
+
+pub fn argument_ser() -> I32 {
+  id(ser)  //~ E0200 @6
+}
+
+pub fn field_base_clock() -> I32 {
+  clock.a  //~ E0200 @3
+}
+
+pub fn field_base_when() -> I32 {
+  when.a  //~ E0200 @3
+}
+
+pub fn field_base_reset_if() -> I32 {
+  reset_if.a  //~ E0200 @3
+}
+
+pub fn field_base_ser() -> I32 {
+  ser.a  //~ E0200 @3
+}
+
+pub fn method_base_clock() -> I32 {
+  clock.get()  //~ E0200 @3
+}
+
+pub fn method_base_when() -> I32 {
+  when.get()  //~ E0200 @3
+}
+
+pub fn method_base_reset_if() -> I32 {
+  reset_if.get()  //~ E0200 @3
+}
+
+pub fn method_base_ser() -> I32 {
+  ser.get()  //~ E0200 @3
+}
+
+pub fn array_element_clock() -> I32 {
+  let xs = [1, clock]  //~ E0200 @16
+  1
+}
+
+pub fn array_element_when() -> I32 {
+  let xs = [1, when]  //~ E0200 @16
+  1
+}
+
+pub fn array_element_reset_if() -> I32 {
+  let xs = [1, reset_if]  //~ E0200 @16
+  1
+}
+
+pub fn array_element_ser() -> I32 {
+  let xs = [1, ser]  //~ E0200 @16
+  1
+}
+
+pub fn index_base_clock() -> I32 {
+  clock[0]  //~ E0200 @3
+}
+
+pub fn index_base_when() -> I32 {
+  when[0]  //~ E0200 @3
+}
+
+pub fn index_base_reset_if() -> I32 {
+  reset_if[0]  //~ E0200 @3
+}
+
+pub fn index_base_ser() -> I32 {
+  ser[0]  //~ E0200 @3
+}
+
+pub fn condition_clock() -> I32 {
+  if clock { 1 } else { 2 }  //~ E0200 @6
+}
+
+pub fn condition_when() -> I32 {
+  if when { 1 } else { 2 }  //~ E0200 @6
+}
+
+pub fn condition_reset_if() -> I32 {
+  if reset_if { 1 } else { 2 }  //~ E0200 @6
+}
+
+pub fn condition_ser() -> I32 {
+  if ser { 1 } else { 2 }  //~ E0200 @6
+}
+
+pub fn return_value_clock() -> I32 {
+  return clock  //~ E0200 @10
+}
+
+pub fn return_value_when() -> I32 {
+  return when  //~ E0200 @10
+}
+
+pub fn return_value_reset_if() -> I32 {
+  return reset_if  //~ E0200 @10
+}
+
+pub fn return_value_ser() -> I32 {
+  return ser  //~ E0200 @10
+}
+
+pub flow flow_call_clock(x: F32 at sample) -> F32 at sample {
+  let y = clock~(x)  //~ E0200 @11
+  y
+}
+
+pub flow flow_call_when(x: F32 at sample) -> F32 at sample {
+  let y = when~(x)  //~ E0200 @11
+  y
+}
+
+pub flow flow_call_reset_if(x: F32 at sample) -> F32 at sample {
+  let y = reset_if~(x)  //~ E0200 @11
+  y
+}
+
+pub flow flow_call_ser(x: F32 at sample) -> F32 at sample {
+  let y = ser~(x)  //~ E0200 @11
+  y
+}
+
+pub flow clock_annotation_clock(x: F32 at sample) -> F32 at sample {
+  let y = x at clock  //~ E0200 @16
+  y
+}
+
+pub flow clock_annotation_when(x: F32 at sample) -> F32 at sample {
+  let y = x at when  //~ E0200 @16
+  y
+}
+
+pub flow clock_annotation_reset_if(x: F32 at sample) -> F32 at sample {
+  let y = x at reset_if  //~ E0200 @16
+  y
+}
+
+pub flow clock_annotation_ser(x: F32 at sample) -> F32 at sample {
+  let y = x at ser  //~ E0200 @16
+  y
+}
+
+pub flow input_clock_clock(x: F32 at clock) -> F32 at sample {  //~ E0200 @38
+  x
+}
+
+pub flow input_clock_when(x: F32 at when) -> F32 at sample {  //~ E0200 @37
+  x
+}
+
+pub flow input_clock_reset_if(x: F32 at reset_if) -> F32 at sample {  //~ E0200 @41
+  x
+}
+
+pub flow input_clock_ser(x: F32 at ser) -> F32 at sample {  //~ E0200 @36
+  x
+}
+
+pub flow output_clock_clock(x: F32 at sample) -> F32 at clock {  //~ E0200 @57
+  x
+}
+
+pub flow output_clock_when(x: F32 at sample) -> F32 at when {  //~ E0200 @56
+  x
+}
+
+pub flow output_clock_reset_if(x: F32 at sample) -> F32 at reset_if {  //~ E0200 @60
+  x
+}
+
+pub flow output_clock_ser(x: F32 at sample) -> F32 at ser {  //~ E0200 @55
+  x
+}
+
+pub flow par_body_clock(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    clock  //~ E0200 @5
+  }
+  xs[0]
+}
+
+pub flow par_body_when(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    when  //~ E0200 @5
+  }
+  xs[0]
+}
+
+pub flow par_body_reset_if(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    reset_if  //~ E0200 @5
+  }
+  xs[0]
+}
+
+pub flow par_body_ser(x: F32 at sample) -> F32 at sample {
+  let xs = par i in 0..<2 {
+    ser  //~ E0200 @5
+  }
+  xs[0]
+}
+
+pub fn nested_block_clock(c: Bool) -> I32 {
+  if c {
+    if c {
+      let y = clock  //~ E0200 @15
+    }
+  }
+  1
+}
+
+pub fn nested_block_when(c: Bool) -> I32 {
+  if c {
+    if c {
+      let y = when  //~ E0200 @15
+    }
+  }
+  1
+}
+
+pub fn nested_block_reset_if(c: Bool) -> I32 {
+  if c {
+    if c {
+      let y = reset_if  //~ E0200 @15
+    }
+  }
+  1
+}
+
+pub fn nested_block_ser(c: Bool) -> I32 {
+  if c {
+    if c {
+      let y = ser  //~ E0200 @15
+    }
+  }
+  1
+}
+
+pub fn closure_body_clock() -> I32 {
+  let f = fn(a: I32) -> I32 { clock }  //~ E0200 @31
+  1
+}
+
+pub fn closure_body_when() -> I32 {
+  let f = fn(a: I32) -> I32 { when }  //~ E0200 @31
+  1
+}
+
+pub fn closure_body_reset_if() -> I32 {
+  let f = fn(a: I32) -> I32 { reset_if }  //~ E0200 @31
+  1
+}
+
+pub fn closure_body_ser() -> I32 {
+  let f = fn(a: I32) -> I32 { ser }  //~ E0200 @31
+  1
+}
+
+pub fn generic_function_clock[T](x: T) -> I32 {
+  let y = clock  //~ E0200 @11
+  1
+}
+
+pub fn generic_function_when[T](x: T) -> I32 {
+  let y = when  //~ E0200 @11
+  1
+}
+
+pub fn generic_function_reset_if[T](x: T) -> I32 {
+  let y = reset_if  //~ E0200 @11
+  1
+}
+
+pub fn generic_function_ser[T](x: T) -> I32 {
+  let y = ser  //~ E0200 @11
+  1
+}
+
+pub fn match_arm_body_clock(n: I32) -> I32 {
+  match n {
+    0 => clock,  //~ E0200 @10
+    _ => 1,
+  }
+}
+
+pub fn match_arm_body_when(n: I32) -> I32 {
+  match n {
+    0 => when,  //~ E0200 @10
+    _ => 1,
+  }
+}
+
+pub fn match_arm_body_reset_if(n: I32) -> I32 {
+  match n {
+    0 => reset_if,  //~ E0200 @10
+    _ => 1,
+  }
+}
+
+pub fn match_arm_body_ser(n: I32) -> I32 {
+  match n {
+    0 => ser,  //~ E0200 @10
+    _ => 1,
+  }
+}
+
+test "assert_operand_clock" {
+  assert clock == 1  //~ E0200 @10
+}
+
+test "assert_operand_when" {
+  assert when == 1  //~ E0200 @10
+}
+
+test "assert_operand_reset_if" {
+  assert reset_if == 1  //~ E0200 @10
+}
+
+test "assert_operand_ser" {
+  assert ser == 1  //~ E0200 @10
+}
+
+// ---- the word in a string hole or behind `^` (the marker is the line)
+
+pub fn hole_head_clock(a: I32) -> Str uses {Alloc} {
+  "{clock}"  //~ E0200
+}
+
+pub fn hole_head_when(a: I32) -> Str uses {Alloc} {
+  "{when}"  //~ E0200
+}
+
+pub fn hole_head_reset_if(a: I32) -> Str uses {Alloc} {
+  "{reset_if}"  //~ E0200
+}
+
+pub fn hole_head_ser(a: I32) -> Str uses {Alloc} {
+  "{ser}"  //~ E0200
+}
+
+pub fn hole_head_field_clock() -> Str uses {Alloc} {
+  "{clock.a}"  //~ E0200
+}
+
+pub fn hole_head_field_when() -> Str uses {Alloc} {
+  "{when.a}"  //~ E0200
+}
+
+pub fn hole_head_field_reset_if() -> Str uses {Alloc} {
+  "{reset_if.a}"  //~ E0200
+}
+
+pub fn hole_head_field_ser() -> Str uses {Alloc} {
+  "{ser.a}"  //~ E0200
+}
+
+pub fn hole_after_text_clock(a: I32) -> Str uses {Alloc} {
+  "x {a} y {clock}"  //~ E0200
+}
+
+pub fn hole_after_text_when(a: I32) -> Str uses {Alloc} {
+  "x {a} y {when}"  //~ E0200
+}
+
+pub fn hole_after_text_reset_if(a: I32) -> Str uses {Alloc} {
+  "x {a} y {reset_if}"  //~ E0200
+}
+
+pub fn hole_after_text_ser(a: I32) -> Str uses {Alloc} {
+  "x {a} y {ser}"  //~ E0200
+}
+
+pub flow feedback_reference_clock(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^clock)  //~ E0200
+  y
+}
+
+pub flow feedback_reference_when(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^when)  //~ E0200
+  y
+}
+
+pub flow feedback_reference_reset_if(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^reset_if)  //~ E0200
+  y
+}
+
+pub flow feedback_reference_ser(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^ser)  //~ E0200
+  y
+}
+
+// ---- an element of the list of a `use`
+
+use kp.{clock}  //~ E0200 @9
+
+use kp.{when}  //~ E0200 @9
+
+use kp.{reset_if}  //~ E0200 @9
+
+use kp.{ser}  //~ E0200 @9
+
+use kp.{a, clock}  //~ E0200 @12
+
+use kp.{a, when}  //~ E0200 @12
+
+use kp.{a, reset_if}  //~ E0200 @12
+
+use kp.{a, ser}  //~ E0200 @12
+
+use kp.{clock, a}  //~ E0200 @9
+
+use kp.{when, a}  //~ E0200 @9
+
+use kp.{reset_if, a}  //~ E0200 @9
+
+use kp.{ser, a}  //~ E0200 @9
+
+use kp.sub.{clock}  //~ E0200 @13
+
+use kp.sub.{when}  //~ E0200 @13
+
+use kp.sub.{reset_if}  //~ E0200 @13
+
+use kp.sub.{ser}  //~ E0200 @13
+
+use kp.{a, b, clock, c}  //~ E0200 @15
+
+use kp.{a, b, when, c}  //~ E0200 @15
+
+use kp.{a, b, reset_if, c}  //~ E0200 @15
+
+use kp.{a, b, ser, c}  //~ E0200 @15
+
+// ---- after a `.` the word is a name: no field of that name (E0413), not the E0200 of the syntax stage
+
+pub fn after_dot_clock(h: Holder) -> I32 {
+  h.clock  //~ E0413
+}
+
+pub fn after_dot_when(h: Holder) -> I32 {
+  h.when  //~ E0413
+}
+
+pub fn after_dot_reset_if(h: Holder) -> I32 {
+  h.reset_if  //~ E0413
+}
+
+pub fn after_dot_ser(h: Holder) -> I32 {
+  h.ser  //~ E0413
+}
+
+pub fn after_dot_chain_clock(h: Holder) -> I32 {
+  h.a.clock  //~ E0413
+}
+
+pub fn after_dot_chain_when(h: Holder) -> I32 {
+  h.a.when  //~ E0413
+}
+
+pub fn after_dot_chain_reset_if(h: Holder) -> I32 {
+  h.a.reset_if  //~ E0413
+}
+
+pub fn after_dot_chain_ser(h: Holder) -> I32 {
+  h.a.ser  //~ E0413
+}

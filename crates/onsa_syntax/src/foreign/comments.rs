@@ -1,6 +1,7 @@
 //! The rows of the block comments (§2.1, S-247, R-174).
 
 use super::*;
+use crate::lexer::BLANKS;
 
 /// Whether the block comment `text` is closed, and whether it holds another.
 fn block_shape(text: &str) -> (bool, bool) {
@@ -117,12 +118,12 @@ pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
         Some(b'!') => (Some('!'), &inner[1..]),
         _ => (None, inner),
     };
-    let mut lines: Vec<&str> = inner
-        .split('\n')
-        .enumerate()
-        .map(|(k, l)| if k == 0 { l.trim() } else { l.trim_start_matches([' ', '\t']).trim_end() })
-        .map(|l| l.trim_end_matches('\r'))
-        .collect();
+    // The words of each line without the blanks around them (§2.5: other
+    // characters, NBSP and U+3000 too, are the comment's text).
+    // SPEC-GAP(S-447): a character written nowhere (a control, a CR alone)
+    // is carried into the `//` lines as it is.
+    let mut lines: Vec<&str> =
+        inner.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l).trim_matches(BLANKS)).collect();
     if lines.len() > 1 && lines[0].is_empty() {
         lines.remove(0);
     }
@@ -130,10 +131,11 @@ pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
         lines.pop();
     }
     let line_start = c.line_start(span.start);
-    let pre = c.text[line_start as usize..span.start as usize].trim().is_empty();
+    let pre = c.text[line_start as usize..span.start as usize].trim_matches(BLANKS).is_empty();
     let rest_start = span.end as usize;
     let rest_end = c.text[rest_start..].find('\n').map_or(c.text.len(), |n| rest_start + n);
-    let post = !c.text[rest_start..rest_end].trim().is_empty();
+    let rest = &c.text[rest_start..rest_end];
+    let post = !rest.strip_suffix('\r').unwrap_or(rest).trim_matches(BLANKS).is_empty();
     if post && text.contains('\n') {
         return found(RowId::BlockCommentMultilineCodeAfter, span, Vec::new());
     }

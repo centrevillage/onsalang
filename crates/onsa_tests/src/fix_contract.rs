@@ -646,11 +646,8 @@ fn code_shape(text: &str) -> Vec<(TokenKind, &str, bool)> {
     for t in onsa_syntax::lex(FileId(0), text).tokens {
         match t.kind {
             TokenKind::Newline => line_break = true,
-            TokenKind::Whitespace
-            | TokenKind::Comment
-            | TokenKind::DocComment
-            | TokenKind::BlockComment
-            | TokenKind::Eof => {}
+            k if k.is_comment() => {}
+            TokenKind::Whitespace | TokenKind::Eof => {}
             kind => {
                 let first = out.is_empty();
                 out.push((kind, &text[t.span.start as usize..t.span.end as usize], line_break && !first));

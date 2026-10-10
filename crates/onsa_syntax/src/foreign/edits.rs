@@ -17,7 +17,7 @@ use crate::token::{Token, TokenKind};
 /// nothing else is left on it (W3-02/b 4).
 pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end: u32, next: Token, sep: &str) -> Fix {
     let at = all.partition_point(|t| t.span.start < next.span.start);
-    let comment = |t: &Token| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment);
+    let comment = |t: &Token| t.kind.is_line_comment();
     let between = all[..at].iter().rev().take_while(|t| t.span.start >= end);
     let rest = &all[at..];
     let after = rest.iter().take_while(|t| !matches!(t.kind, TokenKind::Newline | TokenKind::Eof));
@@ -27,9 +27,7 @@ pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end:
     // The code of `next`'s line: up to a comment, a newline or the end.
     let code_len = rest
         .iter()
-        .position(|t| {
-            matches!(t.kind, TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment | TokenKind::Eof)
-        })
+        .position(|t| matches!(t.kind, TokenKind::Newline | TokenKind::Eof) || t.kind.is_line_comment())
         .unwrap_or(rest.len());
     let code_end =
         rest[..code_len].iter().rev().find(|t| t.kind != TokenKind::Whitespace).map_or(next.span.end, |t| t.span.end);

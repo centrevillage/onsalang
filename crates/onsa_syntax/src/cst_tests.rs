@@ -42,17 +42,6 @@ fn repo_files() -> Vec<(String, String)> {
     out
 }
 
-/// The files on which the lexer panics today (R-01, W3-04): a multibyte
-/// character right after `{` in an interpolation.
-const LEXER_PANICS: &[&str] = &[
-    "tests/review-phase1/parent/r1.onsa",
-    "tests/review-phase1/syntax/interp_utf8.onsa",
-    "tests/fuzz/b60c431d.onsa",
-    "tests/fuzz/3f72dc47.onsa",
-    "tests/fuzz/3c3f8d83.onsa",
-    "tests/fuzz/fd47d95d.onsa",
-];
-
 fn try_parse(src: &str) -> Option<crate::Parsed> {
     std::panic::catch_unwind(|| parse(src)).ok()
 }
@@ -80,7 +69,8 @@ fn round_trip_of_every_repository_file() {
                     check_spans(&p, name);
                     ran += 1;
                 }
-                None => assert!(LEXER_PANICS.contains(&name.as_str()), "{name}: the parser panics"),
+                // No file makes the lexer or the parser panic (R-01, W3-04).
+                None => panic!("{name}: the parser panics"),
             }
         }
         assert!(ran > 400);
@@ -456,7 +446,8 @@ fn levels(cst: &Cst, src: &str, n: NodeId) -> u32 {
                 && cst.token(t).kind == TokenKind::Str
             {
                 let tok = cst.token(t);
-                let lit = crate::literal::str_lit(&src[tok.span.start as usize..tok.span.end as usize], tok.span);
+                let lexed = crate::lex(FileId(0), src);
+                let lit = crate::literal::str_lit(src, tok.span, lexed.literals.holes_in(tok.span));
                 for seg in &lit.segments {
                     if let StrSeg::Interp(p) = seg {
                         children = children.max(p.segments.len() as u32 - 1);

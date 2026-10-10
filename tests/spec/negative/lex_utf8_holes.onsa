@@ -1,0 +1,266 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§2.3", "§18.1"]
+
+// E0001: an interpolation hole that is not a name path, when the hole holds multi-byte
+// characters (R-01, S-90, S-89). Only a name path may stand in a hole (§2.4: a name, and `.` with
+// a name or an integer after it), and a name is ASCII letters, digits and `_` (§2.3), so a hole
+// with `é`, a Japanese word or an emoji after the `{`, after a `.` or inside a path is E0001. The
+// lexer used to stop with an internal error here (exit code 101): it must walk the string by
+// characters and report the diagnostic. One error per function (P-01: a unit reports one
+// error); the same lines as a round trip are in tests/cst/lex_utf8_holes.onsa. The marker is the
+// line only: the spec does not say which character the span starts at.
+
+pub fn accent() -> Str uses {Alloc} {
+  "{é}"                         //~ E0001
+}
+
+pub fn japanese() -> Str uses {Alloc} {
+  "{日本}"                       //~ E0001
+}
+
+pub fn single_kanji() -> Str uses {Alloc} {
+  "{音}"                         //~ E0001
+}
+
+pub fn emoji() -> Str uses {Alloc} {
+  "{😀}"                        //~ E0001
+}
+
+pub fn field_accent(a: U32) -> Str uses {Alloc} {
+  "{a.é}"                       //~ E0001
+}
+
+pub fn field_japanese(a: U32) -> Str uses {Alloc} {
+  "{a.日本}"                     //~ E0001
+}
+
+pub fn path_accent_first(a: U32) -> Str uses {Alloc} {
+  "{é.a}"                       //~ E0001
+}
+
+pub fn path_accent_deep(a: U32) -> Str uses {Alloc} {
+  "{a.b.é}"                     //~ E0001
+}
+
+pub fn tuple_index_then_accent(a: U32) -> Str uses {Alloc} {
+  "{a.0é}"                      //~ E0001
+}
+
+pub fn accent_with_spaces() -> Str uses {Alloc} {
+  "{ é }"                       //~ E0001
+}
+
+pub fn accent_then_close_brace() -> Str uses {Alloc} {
+  "{é}}"                        //~ E0001
+}
+
+pub fn accent_unclosed() -> Str uses {Alloc} {
+  "{é"                          //~ E0001
+}
+
+pub fn japanese_unclosed() -> Str uses {Alloc} {
+  "{日本                          //~ E0001
+}
+
+pub fn accent_after_a_good_hole(a: U32) -> Str uses {Alloc} {
+  "{a}{é}{a}"                   //~ E0001
+}
+
+pub fn accent_after_text(a: U32) -> Str uses {Alloc} {
+  "é{a}é{b.c}日本{é}"            //~ E0001
+}
+
+pub fn format_spec_accent(a: U32) -> Str uses {Alloc} {
+  "{a:é}"                       //~ E0001
+}
+
+pub fn call_with_accent(a: U32) -> Str uses {Alloc} {
+  "{f(é)}"                      //~ E0001
+}
+
+pub fn index_with_accent(a: U32) -> Str uses {Alloc} {
+  "{a[é]}"                      //~ E0001
+}
+
+pub fn greek_letter() -> Str uses {Alloc} {
+  "{Σ}"                         //~ E0001
+}
+
+pub fn cyrillic_a_that_looks_latin() -> Str uses {Alloc} {
+  "{а}"                         //~ E0001
+}
+
+pub fn full_width_digit() -> Str uses {Alloc} {
+  "{１}"                         //~ E0001
+}
+
+pub fn katakana() -> Str uses {Alloc} {
+  "{ア}"                         //~ E0001
+}
+
+pub fn supplementary_plane_letter() -> Str uses {Alloc} {
+  "{𠮷野家}"                      //~ E0001
+}
+
+pub fn flag_emoji() -> Str uses {Alloc} {
+  "{🇯🇵}"                         //~ E0001
+}
+
+pub fn combining_acute() -> Str uses {Alloc} {
+  "{é}"                   //~ E0001
+}
+
+pub fn accent_after_underscore() -> Str uses {Alloc} {
+  "{_é}"                        //~ E0001
+}
+
+pub fn accent_after_name_chars() -> Str uses {Alloc} {
+  "{a_é}"                       //~ E0001
+}
+
+// Characters that are not multi-byte letters but are two or more bytes: the byte order mark,
+// the next line (U+0085, a C1 control), no-break space, zero width joiner, the left-to-right mark,
+// the line separator and the right-to-left override. They are not name characters, so the hole
+// is not a path (E0001), and the controls of §2.5 are E0001 in the string whatever the hole holds.
+
+pub fn bom_in_hole() -> Str uses {Alloc} {
+  "{﻿a}"                   //~ E0001
+}
+
+pub fn next_line_in_hole() -> Str uses {Alloc} {
+  "{}"                    //~ E0001
+}
+
+pub fn no_break_space_after_name(a: U32) -> Str uses {Alloc} {
+  "{a }"                   //~ E0001
+}
+
+pub fn zero_width_joiner_in_hole() -> Str uses {Alloc} {
+  "{‍}"                    //~ E0001
+}
+
+pub fn left_to_right_mark_in_hole() -> Str uses {Alloc} {
+  "{‎}"                    //~ E0001
+}
+
+pub fn line_separator_in_hole() -> Str uses {Alloc} {
+  "{ }"                    //~ E0001
+}
+
+pub fn override_before_name(a: U32) -> Str uses {Alloc} {
+  "{‮a}"                   //~ E0001
+}
+
+pub fn isolate_in_the_middle(a: U32) -> Str uses {Alloc} {
+  "{a⁦b}"                  //~ E0001
+}
+
+pub fn control_in_hole() -> Str uses {Alloc} {
+  "{}"                    //~ E0001
+}
+
+pub fn delete_in_hole() -> Str uses {Alloc} {
+  "{}"                    //~ E0001
+}
+
+// A multi-byte character inside a hole, in the other places a string stands: a call argument,
+// an array element, a closure body, a nested block, an `if` branch, a `match` arm.
+
+pub fn two(s: Str, n: I32) -> I32 {
+  n
+}
+
+pub fn in_a_call_argument() -> I32 {
+  two("{日本}", 1)              //~ E0001
+}
+
+pub fn in_an_array_element() -> I32 {
+  let xs = ["a", "{é}"]         //~ E0001
+  1
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(n: I32) -> Str { "{é}" }   //~ E0001
+  1
+}
+
+pub fn in_a_nested_block(c: Bool) -> I32 {
+  if c {
+    if c {
+      let s = "{日本}"         //~ E0001
+    }
+  }
+  1
+}
+
+pub fn in_an_else_branch(c: Bool) -> I32 {
+  if c {
+    1
+  } else {
+    let s = "{😀}"             //~ E0001
+    2
+  }
+}
+
+pub fn in_a_match_arm(n: I32) -> I32 {
+  match n {
+    0 => { let s = "{é}" },    //~ E0001
+    _ => 1,
+  }
+}
+
+pub fn in_a_for_body(n: I32) -> I32 {
+  for i in 0..<n {
+    let s = "{日本}"           //~ E0001
+  }
+  1
+}
+
+pub fn in_a_while_body(c: Bool) -> I32 {
+  while c {
+    let s = "{é}"              //~ E0001
+  }
+  1
+}
+
+pub fn in_a_generic_function[T](x: T) -> I32 {
+  let s = "{é}"                 //~ E0001
+  1
+}
+
+pub struct Gain {
+  g: F32,
+}
+
+impl Gain {
+  pub fn show(self) -> Str uses {Alloc} {
+    "{self.é}"                  //~ E0001
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = "{日本}"              //~ E0001
+  x
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    let s = "{é}"               //~ E0001
+    x
+  }
+  ys[0]
+}
+
+// The units next to the broken ones are checked on their own.
+
+pub fn good(n: U32) -> Str uses {Alloc} {
+  "é{n}日本"
+}
+
+// The column of a diagnostic after multi-byte characters counts characters, not bytes (§18.1).
+
+pub fn column_after_multibyte() -> I32 {
+  let s = "日本語😀" $ 1       //~ E0001 @18
+  1
+}

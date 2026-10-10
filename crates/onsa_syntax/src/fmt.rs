@@ -7,8 +7,9 @@
 use onsa_diag::Span;
 
 use crate::ast::*;
+use crate::lexer::BLANKS;
 use crate::parser::Parsed;
-use crate::token::{Token, TokenKind};
+use crate::token::Token;
 
 /// Format a parsed file. Returns `None` if the lexer or the parser reported a
 /// diagnostic (`Parsed::syntax_errors()`, R-146, S-214); the diagnostics of later
@@ -17,13 +18,7 @@ pub fn format(parsed: &Parsed, text: &str) -> Option<String> {
     if parsed.syntax_errors() {
         return None;
     }
-    let comments: Vec<Token> = parsed
-        .cst
-        .tokens()
-        .iter()
-        .copied()
-        .filter(|t| matches!(t.kind, TokenKind::Comment | TokenKind::DocComment))
-        .collect();
+    let comments: Vec<Token> = parsed.cst.tokens().iter().copied().filter(|t| t.kind.is_line_comment()).collect();
     let mut line_starts = vec![0u32];
     for (i, b) in text.bytes().enumerate() {
         if b == b'\n' {
@@ -160,7 +155,7 @@ impl<'a> Fmt<'a> {
             if !*first {
                 // continue on the current (fresh) line
             }
-            let text = self.src(c.span).trim_end().to_string();
+            let text = self.src(c.span).trim_end_matches(BLANKS).to_string();
             self.push(&text);
             self.newline();
             *prev_end = c.span.end;
@@ -180,7 +175,7 @@ impl<'a> Fmt<'a> {
             return;
         }
         self.next_comment += 1;
-        let text = self.src(c.span).trim_end().to_string();
+        let text = self.src(c.span).trim_end_matches(BLANKS).to_string();
         let author_col = self.col_of(c.span.start);
         let line = self.line_idx;
         self.push(" ");
@@ -770,6 +765,29 @@ impl<'a> Fmt<'a> {
             if i > 0 {
                 if multi && line > prev_end_line {
                     self.push(",");
+                    // The comments before the element, in order: those on the
+                    // lines before it (its doc comments, §2.1) stay on their
+                    // own lines, under it; the first of those on the lines of
+                    // the element before (inside it, which it prints flat, or
+                    // at the end of its line) goes after the `,`, and the
+                    // others each on a line of its own. W3-11 keeps every
+                    // comment on its line (S-58).
+                    let mut own_line = false;
+                    while let Some(c) =
+                        self.comments.get(self.next_comment).copied().filter(|c| c.span.start < span.start)
+                    {
+                        self.next_comment += 1;
+                        let text = self.src(c.span).trim_end_matches(BLANKS).to_string();
+                        if own_line || self.line_of(c.span.start) > prev_end_line {
+                            self.newline();
+                            self.trim_line();
+                            self.pad_to(col);
+                        } else {
+                            self.push(" ");
+                        }
+                        self.push(&text);
+                        own_line = true;
+                    }
                     self.newline();
                     self.trim_line();
                     self.pad_to(col);
@@ -1290,7 +1308,7 @@ impl<'a> Fmt<'a> {
         while self.out.ends_with(' ') || self.out.ends_with('\n') {
             self.out.pop();
         }
-        let mut lines: Vec<String> = self.out.split('\n').map(|l| l.trim_end().to_string()).collect();
+        let mut lines: Vec<String> = self.out.split('\n').map(|l| l.trim_end_matches(BLANKS).to_string()).collect();
 
         // Align ` = ` in runs of consecutive single-line `let` / `var`.
         self.let_marks.sort();
@@ -1328,7 +1346,7 @@ impl<'a> Fmt<'a> {
             let run = &self.comment_marks[i..=j];
             let code_of = |lines: &[String], m: &(usize, String, usize)| -> String {
                 let l = &lines[m.0];
-                l[..l.len() - m.1.len()].trim_end().to_string()
+                l[..l.len() - m.1.len()].trim_end_matches(BLANKS).to_string()
             };
             let longest = run.iter().map(|m| code_of(&lines, m).chars().count()).max().unwrap_or(0);
             let col = longest + 1;

@@ -1,0 +1,17 @@
+//! Documentation of the module `late`, at the start of this file.
+
+pub fn first() -> I32 {
+  1
+}
+
+//! A second module comment, after the first item of this file.   //~ E0004
+pub fn second() -> I32 {
+  2
+}
+
+/// A stray comment before a use.                                  //~ E0004
+use util.{twice}
+
+pub fn third() -> I32 {
+  twice(3)
+}

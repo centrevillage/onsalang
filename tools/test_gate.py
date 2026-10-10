@@ -2022,7 +2022,8 @@ FAKE_FMT = r"""
 import re, sys
 args = sys.argv[1:]
 def norm(t):
-    lines = [re.sub(r" +([)\],:])", r"\1", re.sub(r"([(\[]) +", r"\1", re.sub(r" +", " ", l.strip())))
+    t = t.replace("\r\n", "\n")
+    lines = [re.sub(r" +([)\],:])", r"\1", re.sub(r"([(\[]) +", r"\1", re.sub(r"[ \t]+", " ", l.strip())))
              for l in t.split("\n")]
     if "KEEP_INDENT" in t:
         lines = [l.rstrip() for l in t.split("\n")]
@@ -2036,7 +2037,7 @@ def norm(t):
 def code(t):
     return re.findall(r"\w+|[^\s\w]", re.sub(r"//[^\n]*", "", t))
 def read(p):
-    return open(p, encoding="utf-8").read()
+    return open(p, encoding="utf-8", newline="").read()
 if args[0] == "fmt":
     path = args[-1]
     t = read(path)
@@ -2082,17 +2083,19 @@ class FmtProps(TempRepo):
     # The answer of the fake `onsa_cases --continuing` (the compiler's is
     # `onsa_tests::inventory::continuing_spellings`, tested there).
     CONTINUING = "+ - * / % == != < > <= >= && || & | ^ << >> +% -% *% +| -| *| ..< ..= = ->".split()
+    SYMBOLS = "!== ... ..< ..= === != && *% ** *| +% ++ +| -% -- -> -| .. :: << <= == => >= >> ||".split()
 
     def cases_cmd(self, listed):
         """A fake `onsa_cases`: the cases `listed`, or the continuing symbols."""
         return (sys.executable, "-B", "-c",
-                f"import json, sys; print(json.dumps({self.CONTINUING!r} if '--continuing' in sys.argv else {listed!r}))")
+                f"import json, sys; print(json.dumps({self.CONTINUING!r} if '--continuing' in sys.argv else "
+                f"{self.SYMBOLS!r} if '--symbols' in sys.argv else {listed!r}))")
 
     def setUp(self):
         super().setUp()
         self.fake = self.repo.write("fake_onsa.py", FAKE_FMT)
         self.argv = [sys.executable, "-B", str(self.fake)]
-        fmt_props.load_continuing(self.repo.root, self.cases_cmd([]))
+        fmt_props.load_symbols(self.repo.root, self.cases_cmd([]))
 
     def go(self, prop="core", per_kind=3, cases=None, minimize=False):
         """Run the item over `tests/spec/a.onsa` (or `cases`: [(path, mode, syntax_errors)])."""
@@ -2131,7 +2134,11 @@ class FmtProps(TempRepo):
         # removed, none added before `{` / `else`, nor before an attached `(` / `[`
         before = self.gaps(self.SOURCE)
         comments = [t.text for t in fmt_props.tokenize(self.SOURCE) if t.kind == "comment"]
-        for label, kind, p in fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 20, "t")[1:]:
+        inputs = fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 20, "t")[1:]
+        # The blanks are the space and the tab, and a line ends with LF or CR LF (§2.5, S-201): the
+        # perturbations use both, and never a CR alone.
+        self.assertTrue(any("\t" in p for _, _, p in inputs) and any("\r\n" in p for _, _, p in inputs))
+        for label, kind, p in inputs:
             with self.subTest(label=label):
                 after = self.gaps(p)
                 self.assertEqual([(a, b) for a, _, b in after], [(a, b) for a, _, b in before])
@@ -2146,7 +2153,7 @@ class FmtProps(TempRepo):
                         self.assertTrue(a in ("(", "[", ",", "=") or a in fmt_props.continuing() or b == ".", (a, b))
                     if g0 == "none" and g1 == "space":
                         self.assertTrue(a in ("(", "[", ",") or b in (")", "]", ",", ":"), (a, b))
-                self.assertNotIn("\t", p)
+                self.assertNotRegex(p, r"\r(?!\n)")
                 # the string, the character and the comments are untouched (no space after a comment)
                 self.assertIn('"a // not a comment, (x) [y]"', p)
                 kept = [t.text for t in fmt_props.tokenize(p) if t.kind == "comment" and "fmtprop" not in t.text]
@@ -2225,9 +2232,10 @@ class FmtProps(TempRepo):
                 lines = []
                 code = fmt_props.run(self.repo.root, self.argv, "core", 1, "t", 2, cmd, out=lines.append)
                 self.assertEqual(code, 2, lines)
-                self.assertIn("cannot read the symbols that continue a line", "\n".join(lines))
-        fmt_props.load_continuing(self.repo.root, self.cases_cmd([]))
+                self.assertIn("cannot read the symbols of the lexer", "\n".join(lines))
+        fmt_props.load_symbols(self.repo.root, self.cases_cmd([]))
         self.assertEqual(fmt_props.continuing(), frozenset(self.CONTINUING))
+        self.assertEqual(set(fmt_props.long_symbols()), set(self.SYMBOLS))
 
     def test_internal_and_cst_failures(self):
         self.repo.write("tests/spec/a.onsa", "fn f() {\n  PANIC\n}\n")

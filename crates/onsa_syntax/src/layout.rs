@@ -63,7 +63,7 @@ impl Lines {
         let mut next_code = TokenKind::Eof;
         for (k, t) in tokens.iter().enumerate().rev() {
             line[k].after = match tokens.get(k + 1).map(|t| t.kind) {
-                Some(TokenKind::Newline | TokenKind::Comment | TokenKind::DocComment) => Gap::Newline,
+                Some(k) if k == TokenKind::Newline || k.is_line_comment() => Gap::Newline,
                 Some(_) => line[k + 1].before,
                 None => Gap::None,
             };

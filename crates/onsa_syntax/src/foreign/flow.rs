@@ -207,7 +207,7 @@ impl Out {
 /// diagnostic has no candidate (S-48).
 fn take_out(cst: &Cst, clock: NodeId) -> Option<Out> {
     let range = cst.token_range(clock);
-    if range.clone().any(|k| matches!(cst.tokens()[k].kind, TokenKind::Comment | TokenKind::DocComment)) {
+    if range.clone().any(|k| cst.tokens()[k].kind.is_line_comment()) {
         return None;
     }
     let mut commented = false;
@@ -215,7 +215,7 @@ fn take_out(cst: &Cst, clock: NodeId) -> Option<Out> {
     for k in (0..range.start).rev() {
         let t = cst.tokens()[k];
         match t.kind {
-            TokenKind::Comment | TokenKind::DocComment | TokenKind::BlockComment => commented = true,
+            k if k.is_comment() => commented = true,
             k if k.is_trivia() => {}
             _ => {
                 before = t.span.end;

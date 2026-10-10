@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§11.2"]
+
+// Where a doc comment may stand (§2.1, S-51, R-63): `///` documents the declaration that follows
+// it, with blank lines and `//` comments between them; `//!` documents the module and stands at
+// the start of the file, before the first item, also in several lines and with a blank line and
+// a comment between them. The declarations that take a `///` are the items (except `use` and
+// `test`), the members of an `impl`, the associated constants, the fields of a struct, the variants
+// of an enum and the inputs of a flow; a line of four or more slashes is an ordinary comment, never
+// a doc comment, and it does not hide a `///` above it. A doc comment that is not in one of these
+// places is E0004 (fixes/e0004_doc_positions.onsa). What a doc comment is attached to is not
+// observable in the output of `check`; these are the forms that must not be errors.
+
+//! Module documentation.
+//! A second line of it.
+
+// An ordinary comment between the module documentation and the next lines.
+
+//! A third line, after a blank line and a comment.
+
+/// Documents `Pt`.
+pub struct Pt {
+  /// The x coordinate.
+  x: F32,
+  /// The y coordinate, in two
+  /// lines.
+  y: F32,
+}
+
+/// Documents `Color`.
+pub enum Color {
+  /// The first variant.
+  Red,
+  /// The second variant, with a payload.
+  Green(I32),
+  Blue,
+}
+
+/// Documents the methods of `Pt`.
+impl Pt {
+  /// An associated constant.
+  const ORIGIN_X: F32 = 0.0
+
+  /// A method.
+  pub fn x_plus(self, d: F32) -> F32 {
+    self.x + d
+  }
+
+  // An ordinary comment between two members.
+
+  /// Another method.
+  pub fn y_plus(self, d: F32) -> F32 {
+    self.y + d
+  }
+}
+
+/// Documents a flow and its inputs.
+pub flow gain(
+  /// The input signal.
+  x: F32 at sample,
+  /// The gain.
+  g: F32 at sample,
+) -> F32 at sample {
+  x * g
+}
+
+/// A doc comment separated from its declaration by a blank line
+
+// and an ordinary comment,
+
+/// and followed by another doc comment.
+pub fn separated() -> I32 {
+  1
+}
+
+/// Documents a constant.
+pub const LIMIT: U32 = 16
+
+/// Documents a type alias.
+pub type Index = U32
+
+/// Documents a function that is not `pub`.
+fn hidden() -> I32 {
+  2
+}
+
+//// Four slashes are an ordinary comment.
+//////////////////////////
+/// Documents `after_rule`; the rule above is not a doc comment.
+pub fn after_rule() -> I32 {
+  4
+}
+
+/// Documents `before_rule`; the rule below does not hide it.
+//// Four slashes below the doc comment.
+pub fn before_rule() -> I32 {
+  5
+}
+
+//////////////////////
+pub fn after_a_rule_and_no_doc() -> I32 {
+  6
+}
+
+pub fn ordinary_comments_in_a_body() -> I32 {
+  //// An ordinary comment before a statement.
+  let a = 1
+  //////////
+  a
+  //// And one at the end of the block.
+}
+
+pub fn block_in_a_block() -> I32 {
+  // A comment, not a doc comment, before a nested block.
+  {
+    //// Four slashes in a nested block.
+    1
+  }
+}
+
+////

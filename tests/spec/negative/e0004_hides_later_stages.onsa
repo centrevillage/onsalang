@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+
+// (S-51, R-63.) E0004 is of the syntax stage (E00xx; `onsa fmt` stops at it), so a function with a stray `///`
+// reports it and not the errors of the later stages (names, types; §18.1: "構文の誤りがある単位では
+// 本体の名前解決と型検査をせず"), wherever the later error stands in the text. The candidate `//` of
+// the stray comment leaves the later error, which is of a later stage. One error per function (P-01).
+
+pub fn stray_doc_and_an_unknown_name() -> I32 {
+  /// Stray.                                             //~ E0004
+  missing_name
+}
+
+pub fn stray_doc_after_an_unknown_name() -> I32 {
+  let a = missing_name
+  /// Stray, after the unknown name.                     //~ E0004
+  a
+}
+
+pub fn stray_doc_and_a_type_error() -> I32 {
+  /// Stray.                                             //~ E0004
+  let a: Bool = 1
+  a
+}
+
+pub fn stray_doc_and_a_naming_error() -> I32 {
+  let BadName = 1
+  /// Stray.                                             //~ E0004
+  BadName
+}

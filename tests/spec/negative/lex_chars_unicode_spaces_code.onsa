@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.3", "§18.1"]
+
+// (S-201, S-89.) E0001: outside a comment and a string, the Unicode spaces (no-break space and the others) are E0001 (§2.5: "コメントと文字列の外では、その他の Unicode の
+// 空白（NBSP など）と BOM も E0001"; §2.3: a name is ASCII letters, digits and `_`, anything else is
+// E0001). The same characters inside a comment or a string are fine (lex/chars_allowed.onsa). One
+// error per function (P-01); each function is named by the code point, the character is written
+// raw in the file.
+// The diagnostic of such a character has no `found` text in the check of the case runner today (the span is a space, §18.1: `found` is not written when the range is only white space): see the report of W3-04/t.
+
+pub fn u00a0_no_break_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u00a0_no_break_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u1680_ogham_space_mark() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u1680_ogham_space_mark_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u2000_en_quad() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u2000_en_quad_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u2002_en_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u2002_en_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u2003_em_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u2003_em_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u2009_thin_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u2009_thin_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u200a_hair_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u200a_hair_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u202f_narrow_no_break_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u202f_narrow_no_break_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u205f_medium_mathematical_space() -> I32 {
+  1  + 2  //~ E0001
+}
+
+pub fn u205f_medium_mathematical_space_in_a_name(a: I32) -> I32 {
+  a   //~ E0001
+}
+
+pub fn u3000_ideographic_space() -> I32 {
+  1 　+ 2  //~ E0001
+}
+
+pub fn u3000_ideographic_space_in_a_name(a: I32) -> I32 {
+  a　  //~ E0001
+}

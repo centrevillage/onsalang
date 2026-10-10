@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§2.4"]
+
+// The file ends inside or right after the construct below (with no newline unless one is shown).
+// (R-01: the lexer used to stop with an internal error at a multi-byte character here.)
+
+let c = '\é

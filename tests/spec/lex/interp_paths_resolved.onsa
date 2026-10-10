@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§6.6"]
+
+// The holes of an interpolation that are a name path and need the resolution of a constant, an
+// associated constant or a tuple index (§2.4, S-90, R-102): `{MAX_VOICES}`, `{F32.PI}`, `{t.0}`,
+// `{p.pair.0.1}`, `{p.pos.1}`, `{self.pos.0}`. The lexer and the parser read them
+// (lex/interp_paths_syntax.onsa); the names stage resolves them as in an expression, which is
+// W4-04's. A string with an interpolation makes a new `Str`, so the functions use `Alloc`.
+
+const MAX_VOICES: U32 = 8
+
+pub struct P {
+  x: F32,
+  pos: (F32, F32),
+  pair: ((I32, I32), I32),
+}
+
+impl P {
+  pub fn show_pos(self) -> Str uses {Alloc} {
+    "{self.pos.0} {self.pos.1}"
+  }
+}
+
+pub fn a_constant() -> Str uses {Alloc} {
+  "{MAX_VOICES}"
+}
+
+pub fn an_associated_constant() -> Str uses {Alloc} {
+  "{F32.PI}"
+}
+
+pub fn a_tuple_index(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.1}"
+}
+
+pub fn a_nested_tuple_index(p: P) -> Str uses {Alloc} {
+  "{p.pair.0.1} {p.pair.1}"
+}
+
+pub fn a_field_then_a_tuple_index(p: P) -> Str uses {Alloc} {
+  "{p.pos.1}"
+}
+
+pub fn many_holes(n: U32, t: (I32, I32), p: P) -> Str uses {Alloc} {
+  "{n}/{t.0}/{p.x}/{MAX_VOICES}/{F32.PI}"
+}
+
+pub fn a_constant_in_a_nested_block(c: Bool) -> Str uses {Alloc} {
+  if c {
+    "{MAX_VOICES}"
+  } else {
+    "{F32.PI}"
+  }
+}
+
+pub fn a_constant_in_a_match_arm(n: U32) -> Str uses {Alloc} {
+  match n {
+    0 => "{MAX_VOICES}",
+    _ => "{n}",
+  }
+}

@@ -172,6 +172,12 @@ features! {
     /// `{}`: the function's path (`std.test.gen.f32`). W2-03: `onsa test`
     /// finds them before it runs the tests.
     InterpreterStdFn: Language, "the `std` function `{}` in `onsa test` (the interpreter)", None;
+    /// The reserved words (§2.2, §19.1, S-169, S-279): wherever one is read
+    /// (`onsa_syntax::token::KEYWORDS`).
+    DerivedClocks: Language, "the declaration of a derived clock (the reserved word `clock`)", None;
+    ConditionalInstances: Language, "running an instance on a condition (the reserved word `when`)", None;
+    ResetInstances: Language, "resetting an instance to its initial state (the reserved word `reset_if`)", None;
+    SerialFlows: Language, "the serial copies of a flow (the reserved word `ser`)", None;
 
     // ----------------------------------------------------------- the C backend
     Buf: CBackend, "`Buf` (heap buffers)", None;

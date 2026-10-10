@@ -12,7 +12,9 @@
 //!   the node open when it consumes it; where the tokens it skips go is
 //!   decided in one place, [`build`]: before a node's first token they go
 //!   outside the node, after its last token they leave it. The doc comments
-//!   of an item are consumed by the parser into the item's `Docs` node.
+//!   of an item (a field, a variant, an input of a flow) are consumed by the
+//!   parser into its `Docs` node, the `//!` at the head of the file into the
+//!   `ModuleDocs` node.
 //! - Whether a newline ended a statement shows in the tree: a statement
 //!   newline is a child of a node that holds statements (`SourceFile`,
 //!   `Block`, `ItemList`), a continuation newline is inside an expression.
@@ -73,9 +75,13 @@ pub enum NodeKind {
     // ------------------------------------------------------------ items
     /// `Docs`?, `Attr`*, `Vis`?, then one declaration node.
     Item,
-    /// The doc comments the parser took for the item: from the first `///`
-    /// to the last, with the blank lines and `//` between them.
+    /// The doc comments the parser took for the item (or the field, the
+    /// variant, the input of a flow, §2.1): from the first `///` to the
+    /// last, with the blank lines and `//` between them.
     Docs,
+    /// The `//!` at the head of the file, the documentation of the module
+    /// (§2.1): the first child of `SourceFile`.
+    ModuleDocs,
     /// `@name AttrArgs?`
     Attr,
     /// `( (AttrNamedArg | Path | Str), ... )`
@@ -316,13 +322,13 @@ impl NodeKind {
             PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType => Class::Type,
             WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat
             | OrPat => Class::Pat,
-            SourceFile | Error | Name | Item | Docs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow | Struct
-            | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields | TypeAlias
-            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
-            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
-            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
-            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
-            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
+            SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
+            | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields
+            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
+            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
+            | Param | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt
+            | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm
+            | ArgList | Arg | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
         }
     }
 
@@ -334,6 +340,7 @@ impl NodeKind {
             Name => "Name",
             Item => "Item",
             Docs => "Docs",
+            ModuleDocs => "ModuleDocs",
             Attr => "Attr",
             AttrArgs => "AttrArgs",
             AttrNamedArg => "AttrNamedArg",

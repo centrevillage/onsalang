@@ -64,7 +64,7 @@ pub(super) fn semicolon(c: &Cursor) -> Option<Hit> {
     let span = c.file_span(c.span(c.at).start, c.span(last).end);
     let next = c.after(last);
     let fix = if matches!(c.kind(next), TokenKind::Newline | TokenKind::Eof | TokenKind::RBrace)
-        || matches!(c.kind(last + 1), TokenKind::Comment | TokenKind::DocComment)
+        || c.kind(last + 1).is_line_comment()
     {
         Fix::new(if last > c.at { "remove the `;`s" } else { "remove the `;`" }, remove_run(c, c.at, last))
     } else {

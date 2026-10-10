@@ -3,10 +3,14 @@
 //! (a block comment, `1.`, `1u8`, `++`, `::`, ...) is a token of its own and
 //! no diagnostic here: the parser accepts it nowhere, and the table of those
 //! forms ([`crate::foreign`]) says what the failure is (E0020 or E0002).
+//!
+//! It goes by the characters of the text (R-01, K-10): it compares ASCII
+//! bytes only, and goes over any other character whole ([`Lexer::bump_char`]),
+//! so that every span lies on character boundaries.
 
 use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
-use crate::literal::Literals;
+use crate::literal::{Hole, HoleError, Literals};
 use crate::token::{Token, TokenKind};
 
 /// Result of lexing one file.
@@ -28,15 +32,57 @@ pub fn lex(file: FileId, text: &str) -> Lexed {
     out
 }
 
+/// A character that is written nowhere, also in a comment or a string
+/// (§2.5, S-201): the control characters (U+0000 to U+001F and U+007F to
+/// U+009F), U+2028 / U+2029 and the bidirectional controls (U+202A to
+/// U+202E, U+2066 to U+2069). The lexer takes the tab and the line feed
+/// out of it (and a carriage return before a line feed, a line break); the
+/// value of the name of a test may hold none of them (§11.8,
+/// [`crate::test_name`]). The one list.
+pub(crate) fn unwritable(c: char) -> bool {
+    matches!(c, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+}
+
+/// The blanks (§2.5, S-201, S-441): the space and the tab. The one
+/// definition, for the lexer, fmt, the table of the forms of other languages
+/// and the `found` of a diagnostic (a range of blanks has none, §18.1).
+pub const BLANKS: [char; 2] = [' ', '\t'];
+
+/// Whether `c` is a blank ([`BLANKS`]).
+pub fn is_blank(c: char) -> bool {
+    BLANKS.contains(&c)
+}
+
+/// The length of the line break at the start of `rest`: 1 for a line feed,
+/// 2 for a carriage return and a line feed, `None` for anything else (a
+/// carriage return alone is no line break, §2.5). The one test of a line
+/// break, for the lexer and the escapes ([`crate::literal::escape`]).
+pub(crate) fn line_break(rest: &[u8]) -> Option<usize> {
+    match rest {
+        [b'\n', ..] => Some(1),
+        [b'\r', b'\n', ..] => Some(2),
+        _ => None,
+    }
+}
+
+/// What a character that may not be written is, for the message of its E0001.
+fn unwritable_kind(c: char) -> &'static str {
+    match c {
+        '\r' => "a carriage return without a line feed after it",
+        '\u{2028}' | '\u{2029}' => "a line or paragraph separator",
+        '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' => "a bidirectional control",
+        _ => "a control character",
+    }
+}
+
 struct Lexer<'a> {
     file: FileId,
     text: &'a str,
     bytes: &'a [u8],
     pos: usize,
     out: Lexed,
-    /// The holes of the string literals that a `}` closes, from the `{` to
-    /// after the `}` ([`Literals`]).
-    holes: Vec<Span>,
+    /// The holes of the string literals that a `}` closes ([`Literals`]).
+    holes: Vec<Hole>,
 }
 
 impl<'a> Lexer<'a> {
@@ -48,7 +94,29 @@ impl<'a> Lexer<'a> {
         self.bytes.get(self.pos + n).copied()
     }
 
+    /// The character at the position.
+    fn peek_char(&self) -> Option<char> {
+        self.text[self.pos..].chars().next()
+    }
+
+    /// Go over the character at the position, whole.
+    fn bump_char(&mut self) {
+        self.pos += self.peek_char().map_or(0, char::len_utf8);
+    }
+
+    /// The line break at the position ([`line_break`]).
+    fn line_break(&self) -> Option<usize> {
+        line_break(&self.bytes[self.pos..])
+    }
+
+    /// Whether a line ends at the position: a line break, or the end of the
+    /// text.
+    fn at_line_end(&self) -> bool {
+        self.peek().is_none() || self.line_break().is_some()
+    }
+
     fn span(&self, start: usize) -> Span {
+        debug_assert!(self.text.is_char_boundary(start) && self.text.is_char_boundary(self.pos));
         Span::new(self.file, start as u32, self.pos as u32)
     }
 
@@ -65,13 +133,14 @@ impl<'a> Lexer<'a> {
     fn run(&mut self) {
         while let Some(b) = self.peek() {
             let start = self.pos;
+            if let Some(n) = self.line_break() {
+                self.pos += n;
+                self.push(TokenKind::Newline, start);
+                continue;
+            }
             match b {
-                b'\n' => {
-                    self.pos += 1;
-                    self.push(TokenKind::Newline, start);
-                }
-                b' ' | b'\t' | b'\r' => {
-                    while matches!(self.peek(), Some(b' ' | b'\t' | b'\r')) {
+                b' ' | b'\t' => {
+                    while matches!(self.peek(), Some(b' ' | b'\t')) {
                         self.pos += 1;
                     }
                     self.push(TokenKind::Whitespace, start);
@@ -89,15 +158,92 @@ impl<'a> Lexer<'a> {
         self.push(TokenKind::Eof, end);
     }
 
+    /// Whether the character at the position starts no token (§2.3, §2.5):
+    /// a character other than ASCII, a control character but the tab and the
+    /// line break, and the ASCII characters of no token (`$`, `` ` ``, `\`).
+    fn unusable(&self) -> bool {
+        match self.peek() {
+            None | Some(b' ' | b'\t') => false,
+            _ if self.line_break().is_some() => false,
+            Some(b'$' | b'`' | b'\\') => true,
+            Some(b) => !b.is_ascii_graphic(),
+        }
+    }
+
+    /// A run of characters that start no token ([`Lexer::unusable`]), read
+    /// by characters: one `Error` token and one E0001 (one error, K-10), whose
+    /// message shows its first character and the characters of a name and the
+    /// blanks (§2.3: the message shows the characters of a name).
+    fn invalid(&mut self, start: usize) {
+        let c = self.peek_char().unwrap_or_default();
+        self.bump_char();
+        while self.unusable() {
+            self.bump_char();
+        }
+        let shown = if unwritable(c) || c.is_whitespace() {
+            format!("U+{:04X}", c as u32)
+        } else {
+            format!("`{c}` (U+{:04X})", c as u32)
+        };
+        let message = format!(
+            "{shown} cannot be written outside comments and strings: a name is written with the ASCII letters, digits and `_`, and the blanks are the space and the tab (§2.3, §2.5)"
+        );
+        let span = self.span(start);
+        self.error(Code::E0001, span, message);
+        self.push(TokenKind::Error, start);
+    }
+
+    /// In a comment, a string or a character: a run of characters that are
+    /// written nowhere ([`unwritable`]; a carriage return before a line feed
+    /// ends the line instead) is one E0001, and the run is gone over. Whether
+    /// there was one.
+    fn unwritable_run(&mut self) -> bool {
+        let at = |lx: &Self| lx.peek_char().is_some_and(|c| unwritable(c) && c != '\t' && lx.line_break().is_none());
+        if !at(self) {
+            return false;
+        }
+        let start = self.pos;
+        let c = self.peek_char().unwrap_or_default();
+        while at(self) {
+            self.bump_char();
+        }
+        let span = self.span(start);
+        self.error(
+            Code::E0001,
+            span,
+            format!(
+                "U+{:04X} ({}) cannot be written, also in a comment or a string (§2.5)",
+                c as u32,
+                unwritable_kind(c)
+            ),
+        );
+        true
+    }
+
+    /// `//`, `///` and `//!` to the end of the line (§2.1): `/` four times
+    /// or more is a plain comment.
     fn comment(&mut self, start: usize) {
-        let doc = self.peek_at(2) == Some(b'/') && self.peek_at(3) != Some(b'/');
-        while let Some(b) = self.peek() {
-            if b == b'\n' {
+        let rest = &self.text[start..];
+        let kind = if rest.starts_with("//!") {
+            TokenKind::ModuleDoc
+        } else if rest.starts_with("///") && !rest.starts_with("////") {
+            TokenKind::DocComment
+        } else {
+            TokenKind::Comment
+        };
+        self.pos += 2;
+        loop {
+            // The printable ASCII and the tab at once: none ends the line or
+            // is written nowhere.
+            self.pos += self.bytes[self.pos..].iter().take_while(|&&b| (0x20..0x7f).contains(&b) || b == b'\t').count();
+            if self.at_line_end() {
                 break;
             }
-            self.pos += 1;
+            if !self.unwritable_run() {
+                self.bump_char();
+            }
         }
-        self.push(if doc { TokenKind::DocComment } else { TokenKind::Comment }, start);
+        self.push(kind, start);
     }
 
     /// There are no block comments (§2.1): `/* ... */` is one token, over
@@ -117,8 +263,10 @@ impl<'a> Lexer<'a> {
             } else if b == b'/' && self.peek_at(1) == Some(b'*') {
                 self.pos += 2;
                 depth += 1;
-            } else {
-                self.pos += 1;
+            } else if let Some(n) = self.line_break() {
+                self.pos += n;
+            } else if !self.unwritable_run() {
+                self.bump_char();
             }
         }
         self.push(TokenKind::BlockComment, start);
@@ -238,109 +386,142 @@ impl<'a> Lexer<'a> {
         self.pos - start
     }
 
+    /// A string literal (§2.4): to its closing `"`, on its line.
     fn string(&mut self, start: usize) {
         self.pos += 1;
         loop {
-            let Some(b) = self.peek() else {
+            if self.at_line_end() {
                 let span = self.span(start);
                 self.error(Code::E0001, span, "unterminated string literal");
                 break;
-            };
-            match b {
-                b'"' => {
+            }
+            match self.peek() {
+                Some(b'"') => {
                     self.pos += 1;
                     break;
                 }
-                b'\n' => {
-                    let span = self.span(start);
-                    self.error(Code::E0001, span, "unterminated string literal");
-                    break;
-                }
-                b'\\' => self.escape(),
-                b'{' if self.peek_at(1) == Some(b'{') => self.pos += 2,
-                b'}' if self.peek_at(1) == Some(b'}') => self.pos += 2,
-                b'{' => {
-                    // Interpolation: `{name}` or `{name.field...}` (§2.4)
-                    let open = self.pos;
-                    self.pos += 1;
-                    let ok = self.interp_path();
-                    if self.peek() == Some(b'}') {
-                        self.pos += 1;
-                        self.holes.push(Span::new(self.file, open as u32, self.pos as u32));
-                        if !ok {
-                            let span = Span::new(self.file, open as u32, self.pos as u32);
-                            self.error(
-                                Code::E0001,
-                                span,
-                                "interpolation must be `{name}` or `{name.field}`; expressions are not allowed",
-                            );
-                        }
-                    } else {
-                        let span = Span::new(self.file, open as u32, self.pos as u32);
-                        self.error(Code::E0001, span, "unterminated interpolation; write `{{` for a literal brace");
-                    }
-                }
-                b'}' => {
+                Some(b'\\') => self.escape(),
+                Some(b'{') if self.peek_at(1) == Some(b'{') => self.pos += 2,
+                Some(b'}') if self.peek_at(1) == Some(b'}') => self.pos += 2,
+                Some(b'{') => self.hole(),
+                // SPEC-GAP(S-439): a `}` alone is E0001 (`}}` is the brace).
+                Some(b'}') => {
                     let span = Span::new(self.file, self.pos as u32, self.pos as u32 + 1);
                     self.error(Code::E0001, span, "lone `}` in string; write `}}` for a literal brace");
                     self.pos += 1;
                 }
-                _ => self.pos += 1,
+                _ => {
+                    // The plain ASCII text at once (no quote, escape, brace
+                    // or control character).
+                    let plain =
+                        |b: &u8| (0x20..0x7f).contains(b) && !matches!(b, b'"' | b'\\' | b'{' | b'}') || *b == b'\t';
+                    let n = self.bytes[self.pos..].iter().take_while(|b| plain(b)).count();
+                    self.pos += n;
+                    if n == 0 && !self.unwritable_run() {
+                        self.bump_char();
+                    }
+                }
             }
         }
         self.push(TokenKind::Str, start);
     }
 
-    /// `name(.name)*` with snake_case names. Consumes up to `}` or an invalid byte.
-    fn interp_path(&mut self) -> bool {
-        let mut ok = true;
-        loop {
-            let seg = self.pos;
-            while self.peek().is_some_and(is_ident_continue) {
-                self.pos += 1;
-            }
-            let text = &self.text[seg..self.pos];
-            if text.is_empty() || !text.bytes().next().is_some_and(|b| b.is_ascii_lowercase() || b == b'_') {
-                ok = false;
-            }
-            match self.peek() {
-                Some(b'.') => self.pos += 1,
-                Some(b'}') | None => return ok,
-                Some(b'\n') | Some(b'"') => return false,
-                Some(_) => {
-                    ok = false;
-                    self.pos += 1;
-                }
+    /// A hole `{…}` of a string literal (§2.4, S-90), at its `{`: what it
+    /// holds goes to its `}`, the closing `"` or the end of the line. It
+    /// holds a name path ([`crate::literal::hole_path`]); anything else is
+    /// E0001, and a reserved word at its head is E0200 (§2.2, S-371). The
+    /// lexer reads it once ([`Hole`]); the names stage resolves it (W4-04).
+    fn hole(&mut self) {
+        let open = self.pos;
+        self.pos += 1;
+        let mut unwritable = false;
+        while !matches!(self.peek(), Some(b'}' | b'"')) && !self.at_line_end() {
+            if self.unwritable_run() {
+                unwritable = true;
+            } else {
+                self.bump_char();
             }
         }
+        if self.peek() != Some(b'}') {
+            let span = self.span(open);
+            self.error(Code::E0001, span, "unterminated interpolation; write `{{` for a literal brace");
+            return;
+        }
+        let content = &self.text[open + 1..self.pos];
+        self.pos += 1;
+        let span = self.span(open);
+        let at =
+            |r: std::ops::Range<usize>| Span::new(self.file, (open + 1 + r.start) as u32, (open + 1 + r.end) as u32);
+        let path = match crate::literal::hole_path(content) {
+            Ok(ranges) => Some(ranges.into_iter().map(at).collect::<Vec<_>>()),
+            Err(why) => {
+                // A character written nowhere has its own E0001 already.
+                if !unwritable {
+                    // SPEC-GAP(S-448): the note is chosen by a `:` in the hole.
+                    let note = match why {
+                        HoleError::Format => {
+                            "there is no format in an interpolation; the value is shown as `Show` shows it"
+                        }
+                        HoleError::NotAPath => {
+                            "bind an expression to a name with `let` and interpolate the name; write `{{` and `}}` for braces"
+                        }
+                    };
+                    let d = Diagnostic::new(
+                        Stage::Syntax,
+                        Code::E0001,
+                        span,
+                        "an interpolation holds a name path only: a name, then `.` and a field, a tuple index or a member (§2.4)",
+                    )
+                    .with_rule(note);
+                    self.out.diagnostics.push(d);
+                }
+                None
+            }
+        };
+        // SPEC-GAP(S-449): a reserved word at the head of a hole of another
+        // form is not reported; the form's E0001 is.
+        let head = path.as_ref().map(|p| p[0]);
+        let word = |s: Span| &self.text[s.start as usize..s.end as usize];
+        let reserved = head.and_then(|h| TokenKind::keyword(word(h)).and_then(TokenKind::reserved));
+        if let (Some(head), Some(feature)) = (head, reserved) {
+            self.out.diagnostics.push(feature.diagnostic(Stage::Syntax, head, &[]));
+        }
+        self.holes.push(Hole { span, path, reserved_head: reserved.and(head) });
     }
 
     fn char_lit(&mut self, start: usize) {
         self.pos += 1;
         match self.peek() {
             Some(b'\\') => self.escape(),
-            Some(b'\'') | Some(b'\n') | None => {
+            Some(b'\'') => {
                 let span = self.span(start);
                 self.error(Code::E0001, span, "empty char literal");
             }
-            Some(_) => {
-                let c = self.text[self.pos..].chars().next().unwrap();
-                self.pos += c.len_utf8();
+            _ if self.at_line_end() => {
+                let span = self.span(start);
+                self.error(Code::E0001, span, "empty char literal");
+            }
+            // SPEC-GAP(S-445): a character other than ASCII may be written in
+            // a character literal, as in a string (§2.5 names comments and
+            // strings).
+            _ => {
+                if !self.unwritable_run() {
+                    self.bump_char();
+                }
             }
         }
         if self.peek() == Some(b'\'') {
             self.pos += 1;
         } else {
             // Possibly a lifetime or a multi-char literal from another language.
-            while let Some(b) = self.peek() {
-                if b == b'\'' {
+            while !self.at_line_end() {
+                if self.peek() == Some(b'\'') {
                     self.pos += 1;
                     break;
                 }
-                if b == b'\n' {
-                    break;
+                if !self.unwritable_run() {
+                    self.bump_char();
                 }
-                self.pos += 1;
             }
             let span = self.span(start);
             self.error(Code::E0001, span, "char literal must hold exactly one Unicode scalar value");
@@ -348,35 +529,21 @@ impl<'a> Lexer<'a> {
         self.push(TokenKind::Char, start);
     }
 
-    /// Escapes (S-19): `\n \t \r \0 \\ \" \' \u{XXXX}`.
+    /// An escape (§2.4, S-19), at its `\`: the one grammar of the escapes
+    /// ([`crate::literal::escape`]); one that is not of the closed list is
+    /// E0001.
     fn escape(&mut self) {
         let start = self.pos;
-        self.pos += 1;
-        match self.peek() {
-            Some(b'n' | b't' | b'r' | b'0' | b'\\' | b'"' | b'\'') => self.pos += 1,
-            Some(b'u') if self.peek_at(1) == Some(b'{') => {
-                self.pos += 2;
-                let n = self.digits(|b| b.is_ascii_hexdigit());
-                let close = self.peek() == Some(b'}');
-                if close {
-                    self.pos += 1;
-                }
-                let valid = close && (1..=6).contains(&n) && {
-                    let hex = &self.text[start + 3..self.pos - 1];
-                    u32::from_str_radix(hex, 16).ok().and_then(char::from_u32).is_some()
-                };
-                if !valid {
-                    let span = self.span(start);
-                    self.error(Code::E0001, span, "invalid `\\u{...}` escape");
-                }
-            }
-            _ => {
-                if self.peek().is_some_and(|b| b != b'\n') {
-                    self.pos += 1;
-                }
-                let span = self.span(start);
-                self.error(Code::E0001, span, "unknown escape; allowed: \\n \\t \\r \\0 \\\\ \\\" \\' \\u{...}");
-            }
+        let (value, len) = crate::literal::escape(&self.text[start + 1..]);
+        self.pos += 1 + len;
+        if value.is_none() {
+            let span = self.span(start);
+            let message = if self.text[start + 1..].starts_with("u{") {
+                "invalid `\\u{...}` escape: 1 to 6 hexadecimal digits of a Unicode scalar value"
+            } else {
+                "unknown escape; allowed: \\n \\t \\r \\0 \\\\ \\\" \\' \\u{...}"
+            };
+            self.error(Code::E0001, span, message);
         }
     }
 
@@ -398,6 +565,11 @@ impl<'a> Lexer<'a> {
             // too, an E0020 of the parser (S-320).
             (b'+', Some(b'+'), _) => (PlusPlus, 2),
             (b'-', Some(b'-'), _) => (MinusMinus, 2),
+            // The power and the strict equalities of other languages, one
+            // token each so that the failure names them whole (W3-04).
+            (b'*', Some(b'*'), _) => (StarStar, 2),
+            (b'=', Some(b'='), Some(b'=')) => (EqEqEq, 3),
+            (b'!', Some(b'='), Some(b'=')) => (NotEqEq, 3),
             (b'=', Some(b'>'), _) => (FatArrow, 2),
             (b'=', Some(b'='), _) => (EqEq, 2),
             (b'!', Some(b'='), _) => (NotEq, 2),
@@ -438,14 +610,7 @@ impl<'a> Lexer<'a> {
             (b'}', _, _) => (RBrace, 1),
             (b';', _, _) => (Semi, 1),
             (b'#', _, _) => (Hash, 1),
-            _ => {
-                let c = self.text[self.pos..].chars().next().unwrap();
-                self.pos += c.len_utf8();
-                let span = self.span(start);
-                self.error(Code::E0001, span, format!("invalid character `{}`", c.escape_default()));
-                self.push(Error, start);
-                return;
-            }
+            _ => return self.invalid(start),
         };
         self.pos += len;
         self.push(kind, start);
@@ -595,5 +760,175 @@ mod tests {
         let l = lex(FileId(0), "let 音 = 1");
         let eq = l.tokens.iter().find(|t| t.kind == Eq).unwrap();
         assert_eq!((eq.span.start, eq.span.end), (8, 9));
+    }
+
+    /// The tokens with their texts, the blanks included.
+    fn texts(src: &str) -> Vec<(TokenKind, &str)> {
+        lex(FileId(0), src).tokens.iter().map(|t| (t.kind, &src[t.span.start as usize..t.span.end as usize])).collect()
+    }
+
+    /// The codes and texts of the diagnostics.
+    fn errors(src: &str) -> Vec<(Code, &str)> {
+        lex(FileId(0), src)
+            .diagnostics
+            .iter()
+            .map(|d| (d.code, &src[d.span.start as usize..d.span.end as usize]))
+            .collect()
+    }
+
+    #[test]
+    fn every_span_is_on_character_boundaries_whatever_the_text() {
+        // R-01: the places of the old panics, and every kind of text around
+        // characters of two to four bytes.
+        let chars = ["é", "音", "\u{8f}", "😀", "\u{202e}", "\u{a0}"];
+        let forms = [
+            "\"{{{c}}}\"",
+            "\"{{{c}\"",
+            "\"{{{c}",
+            "\"\\{c}\"",
+            "'{c}'",
+            "'\\{c}'",
+            "// {c}",
+            "/* {c} */",
+            "{c}x",
+            "x{c}",
+        ];
+        for c in chars {
+            for form in forms {
+                let src = form.replace("{c}", c);
+                let l = lex(FileId(0), &src);
+                for s in l.tokens.iter().map(|t| t.span).chain(l.diagnostics.iter().map(|d| d.span)) {
+                    assert!(src.is_char_boundary(s.start as usize) && src.is_char_boundary(s.end as usize), "{src:?}");
+                }
+                assert_eq!(
+                    l.tokens.iter().map(|t| &src[t.span.start as usize..t.span.end as usize]).collect::<String>(),
+                    src
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_blanks_are_the_space_and_the_tab_and_a_line_ends_with_lf_or_crlf() {
+        assert_eq!(
+            texts("a \t b\r\nc\n"),
+            vec![
+                (Ident, "a"),
+                (Whitespace, " \t "),
+                (Ident, "b"),
+                (Newline, "\r\n"),
+                (Ident, "c"),
+                (Newline, "\n"),
+                (Eof, "")
+            ]
+        );
+        // A comment and a string end before the CR LF.
+        assert_eq!(texts("// c\r\n")[0], (Comment, "// c"));
+        assert_eq!(errors("\"a\r\n"), vec![(Code::E0001, "\"a")]);
+        // A carriage return alone is E0001, in the code, a comment and a string (S-201).
+        assert_eq!(texts("a\rb")[1], (Error, "\r"));
+        assert_eq!(errors("a\rb"), vec![(Code::E0001, "\r")]);
+        assert_eq!(errors("// a\rb\n"), vec![(Code::E0001, "\r")]);
+        assert_eq!(errors("\"a\rb\""), vec![(Code::E0001, "\r")]);
+    }
+
+    #[test]
+    fn the_characters_written_nowhere_are_e0001_also_in_comments_and_strings() {
+        for c in [
+            '\u{0}', '\u{1b}', '\u{7f}', '\u{85}', '\u{2028}', '\u{2029}', '\u{202a}', '\u{202e}', '\u{2066}',
+            '\u{2069}',
+        ] {
+            for form in ["// a{c}b", "\"a{c}b\"", "'{c}'", "/* {c} */", "a{c}b"] {
+                let src = form.replace("{c}", &c.to_string());
+                let e = errors(&src);
+                assert_eq!(e, vec![(Code::E0001, &*c.to_string())], "{src:?}");
+            }
+        }
+        // A run is one error (K-10, one error of one edit).
+        assert_eq!(errors("// a\u{202e}\u{2066}b"), vec![(Code::E0001, "\u{202e}\u{2066}")]);
+        // The tab is written anywhere.
+        assert!(errors("// a\tb\n\"a\tb\" '\t'").is_empty());
+        // Other characters are written in comments and strings only.
+        assert!(errors("// é 音 \u{a0}\n\"é 音 \u{a0}\"").is_empty());
+        assert_eq!(errors("a\u{a0}b \u{feff}"), vec![(Code::E0001, "\u{a0}"), (Code::E0001, "\u{feff}")]);
+    }
+
+    #[test]
+    fn a_run_of_characters_of_no_token_is_one_error_token() {
+        assert_eq!(texts("let 日本語 = 1")[2], (Error, "日本語"));
+        assert_eq!(errors("let 日本語 = 1"), vec![(Code::E0001, "日本語")]);
+        let message = &lex(FileId(0), "let é = 1").diagnostics[0].message;
+        assert!(message.contains("ASCII letters, digits and `_`"), "{message}");
+        // A name stops at a character of no token.
+        assert_eq!(kinds("café").0, vec![Ident, Error, Eof]);
+        assert_eq!(errors("a $` b"), vec![(Code::E0001, "$`")]);
+    }
+
+    #[test]
+    fn line_comments_by_their_slashes() {
+        assert_eq!(
+            kinds("//! m\n/// d\n// c\n//// c\n////// c\n").0,
+            vec![ModuleDoc, Newline, DocComment, Newline, Comment, Newline, Comment, Newline, Comment, Newline, Eof]
+        );
+    }
+
+    #[test]
+    fn the_reserved_words_are_keywords() {
+        assert_eq!(kinds("clock when reset_if ser").0, vec![KwClock, KwWhen, KwResetIf, KwSer, Eof]);
+        assert!(KwClock.reserved().is_some() && KwSer.reserved().is_some());
+    }
+
+    #[test]
+    fn the_power_and_the_strict_equalities_are_one_token() {
+        assert_eq!(kinds("a ** b === c !== d").0, vec![Ident, StarStar, Ident, EqEqEq, Ident, NotEqEq, Ident, Eof]);
+        assert_eq!(kinds("a ==== b").0, vec![Ident, EqEqEq, Eq, Ident, Eof]);
+        assert_eq!(kinds("x.f!=y").0, vec![Ident, Dot, Ident, NotEq, Ident, Eof]);
+        // A block comment is read before `**` (§2.1).
+        assert_eq!(kinds("/**/ a **/").0, vec![BlockComment, Ident, StarStar, Slash, Eof]);
+    }
+
+    #[test]
+    fn escapes_are_one_grammar() {
+        assert_eq!(errors(r#""\u{0}\u{10FFFF}\u{41}\n\t\r\0\\\"\'""#), vec![]);
+        for bad in [r#""\u{1234567}""#, r#""\u{0000041}""#, r#""\u{D800}""#, r#""\u{}""#, r#""\u{41""#, r#""\u41""#] {
+            assert_eq!(errors(bad).first().map(|e| e.0), Some(Code::E0001), "{bad}");
+        }
+        // An unknown escape takes the character after the `\` whole.
+        assert_eq!(errors("\"\\音\""), vec![(Code::E0001, "\\音")]);
+        assert_eq!(crate::literal::escape("u{41}x"), (Some('A'), 5));
+        assert_eq!(crate::literal::escape("u{0000041}"), (None, 10));
+        assert_eq!(crate::literal::escape("音"), (None, 3));
+        assert_eq!(crate::literal::escape("\nx"), (None, 0));
+        assert_eq!(crate::literal::char_value("'\\u{0000041}'"), '\u{FFFD}');
+    }
+
+    #[test]
+    fn a_hole_holds_a_name_path() {
+        for ok in
+            ["{x}", "{p.x}", "{self.gain}", "{t.0}", "{MAX_VOICES}", "{cfg.N}", "{F32.PI}", "{Self.N}", "{s.type}"]
+        {
+            assert!(errors(&format!("\"{ok}\"")).is_empty(), "{ok}");
+        }
+        for bad in [
+            "{}", "{ x }", "{x .y}", "{x + 1}", "{f(x)}", "{xs[0]}", "{1}", "{true}", "{_}", "{x.}", "{.x}", "{é}",
+            "{if}",
+        ] {
+            let src = format!("\"{bad}\"");
+            assert_eq!(errors(&src), vec![(Code::E0001, bad)], "{bad}");
+        }
+        let format = lex(FileId(0), "\"{x:.2}\"").diagnostics;
+        assert!(format[0].notes[0].message.contains("no format"), "{format:?}");
+        // A reserved word at the head is E0200 at the word (S-371); after a `.` it is a name.
+        assert_eq!(errors("\"a{clock}b\""), vec![(Code::E0200, "clock")]);
+        assert!(errors("\"{s.clock}\"").is_empty());
+        // The lexer keeps the path of each hole.
+        let l = lex(FileId(0), "\"a{t.0}b{x}\"");
+        let paths: Vec<Vec<&str>> = l
+            .literals
+            .holes()
+            .iter()
+            .map(|h| h.path.iter().flatten().map(|s| &"\"a{t.0}b{x}\""[s.start as usize..s.end as usize]).collect())
+            .collect();
+        assert_eq!(paths, vec![vec!["t", "0"], vec!["x"]]);
     }
 }

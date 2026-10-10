@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// canonical = false
+// spec = ["§2.5", "§2.1", "§2.4"]
+
+// CR LF is one newline (§2.5, S-201): the whole file, the fragment included, ends its lines in CR LF
+// and checks with no diagnostic, the same as with LF (`onsa fmt` writes LF; the fmt cases are in
+// crates/onsa_cli/tests/lexical_syntax.rs). The line ends are in every place a newline matters:
+// between statements, after a binary operator and before a `.` (continuations), in a list, after
+// a comment, after a doc comment, inside the braces of a block, and after a string (a string
+// holds no line end, so CR LF never changes its value).
+
+//! Module documentation, with CR LF.
+//! A second line.
+
+/// Documents `Pt`.
+pub struct Pt {
+  /// The x coordinate.
+  x: F32,
+  y: F32,
+}
+
+pub enum Color {
+  /// The first variant.
+  Red,
+  Green,
+}
+
+pub fn statements(a: I32, b: I32) -> I32 {
+  let c = a +
+    b
+  let d = c
+    .max(a)
+  // a comment
+  let e = [
+    1,
+    2,
+  ]
+  if a > b {
+    c
+  } else {
+    d
+  }
+}
+
+pub fn arms(n: I32) -> I32 {
+  match n {
+    0 => 1,
+    1 => 2,
+    _ => 3,
+  }
+}
+
+pub fn string_values() -> Str {
+  "a\nb"
+}
+
+pub flow gain(
+  /// The input.
+  x: F32 at sample,
+  g: F32 at sample,
+) -> F32 at sample {
+  x * g
+}
+
+test "a test" {
+  assert 1 == 1
+}

@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// canonical = false
+// spec = ["§2.5", "§2.3", "§2.4"]
+
+// What a source may hold (§2.5, S-201). The white space of the language is U+0020 and the tab; a
+// tab is fine between the tokens of code, in a comment and in a string. In a comment and in a
+// string every character is allowed except the ones §2.5 lists (the controls, the line and
+// paragraph separators, the bidirectional controls U+202A..U+202E and U+2066..U+2069), so the
+// no-break space, the other Unicode spaces, the zero width characters, the direction marks
+// U+200E / U+200F, the soft hyphen, the byte order mark in the middle of a file, combining marks
+// and text of any script are fine there. Outside comments and strings those are E0001
+// (negative/lex_chars_unlisted_code.onsa). The file must check with no diagnostic. The spec does
+// not say whether the characters outside the lists may stand in a character literal
+// (`'` NBSP `'`), so none is written here.
+
+pub fn tabs_between_tokens() -> I32 {
+	let	a	=	1		
+		a	+	2	
+}
+
+pub	fn		tab_in_a_header(a:	I32)	->	I32	{
+  a
+}
+
+pub fn tab_in_a_string() -> Str {
+  "before	after and a tab at the end	"
+}
+
+pub fn tab_in_a_comment() -> I32 {
+  // before	after, a tab at the end of the comment	
+  1
+}
+
+pub fn spaces_in_a_comment() -> I32 {
+  // no-break space  , en space  , em space  , narrow no-break space  , ideographic space 　
+  1
+}
+
+pub fn format_characters_in_a_comment() -> I32 {
+  // zero width space ​, joiner ‍, non-joiner ‌, word joiner ⁠, soft hyphen ­
+  // left-to-right mark ‎, right-to-left mark ‏, arabic letter mark ؜, function application ⁡
+  // byte order mark ﻿ in the middle of a file, combining acute é
+  1
+}
+
+pub fn spaces_in_a_string() -> Str {
+  "no-break space  , en space  , em space  , narrow no-break space  , ideographic space 　"
+}
+
+pub fn format_characters_in_a_string() -> Str {
+  "zero width space ​, joiner ‍, non-joiner ‌, word joiner ⁠, soft hyphen ­, left-to-right mark ‎, right-to-left mark ‏, arabic letter mark ؜, byte order mark ﻿, combining acute é"
+}
+
+pub fn next_to_the_lists() -> Str {
+  "U+00A0  , U+2027 ‧, U+202F  , U+2065 ⁥, U+206A ⁪: next to, but outside, the lists"
+}
+
+pub fn scalar_characters() -> Char {
+  let a: Char = '😀'
+  let b: Char = '日'
+  let c: Char = 'é'
+  a
+}
+
+pub fn text_of_any_script() -> Str {
+  "日本語 émoji 😀 שלום مرحبا Привет 你好 안녕 ไทย"
+}
+
+pub fn in_a_comment_of_any_script() -> I32 {
+  // 日本語 émoji 😀 שלום مرحبا Привет 你好 안녕 ไทย
+  1
+}
+
+pub fn escapes_write_the_listed_characters() -> Str {
+  "\u{1}\u{1b}\u{7f}\u{85}\u{2028}\u{202e}\u{2066}\u{2069}\u{feff}"
+}
