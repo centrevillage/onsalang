@@ -2214,6 +2214,13 @@ reasons = ["R-200"]
 until = "W3-06"
 note = "W3-09/t2 が見つけた入力。`.(` の候補を当てた後に E0006 が出る（R-200）"
 
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/f60b27e5.onsa"
+reasons = ["R-205"]
+until = "W3-06"
+note = "W3-06/t1 の gate のファズが見つけた入力。`clock_in_type` の候補が差し込んだ ` at a` を後ろの名前 `e` とつなげる（fix-same-place: fix|E0020|write the clock after the type|reading）"
+
 # --- W3-10: 新しい flow の構文を今の sema へ写した後も通らない事例（W3-10/t の新しい事例と、手順の組）。
 [[pending]]
 kind = "test-case"
