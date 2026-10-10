@@ -317,7 +317,7 @@
 [allow."crates/onsa_syntax/src/ast.rs"]
 "fp" = 1
 
-[allow."crates/onsa_syntax/src/foreign.rs"]
+[allow."crates/onsa_syntax/src/foreign/paths.rs"]
 "Bool" = 1
 "Char" = 1
 "F32" = 1
@@ -366,7 +366,7 @@
 [same_spelling."crates/onsa_syntax/src/cst.rs"]
 "Clock" = { count = 1, note = "CST のノードの種類の名前（`at` とクロックの名前の節、§11.3）" }
 
-[same_spelling."crates/onsa_syntax/src/foreign.rs"]
+[same_spelling."crates/onsa_syntax/src/foreign/paths.rs"]
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 "u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 
