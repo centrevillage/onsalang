@@ -8,73 +8,279 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
 - 2026-10-10 に、親の記憶から移した（利用者）。
 
 - **W3-05（12 回目、RF/b）:** 数値の文法が二つある（字句解析器の `number`・`suffix` と、`literal.rs` の `split_suffix` の再実装）。RF の単位 1 で置き場所は `literal.rs` と `lexer.rs` の字句の段にそろい、接尾辞の一覧を閉じる所は `literal::is_type_suffix` 一つになったが、数値の形（16 進、小数、指数）を変えるときは二か所を直す。W3-05 で一つの文法にする。
-- **W3-05（12 回目、RF/i の単位 2）:** `tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa`（RF/t、範囲のパターンと数値リテラルの形の重なり、R-206）のヘッダの `[[test.fix]]` 8 件は、数値リテラルの行が無いので `// # [[test.fix]]` にコメントにして置いた（W3-06/t1 の前例）。数値リテラルの行（`octal_prefix`、`leading_zero`、`float_dot_exponent`、`literal_suffix`）を実装したら `# ` を外し、実装待ちの一覧の `test-case` の項目と `fix-contract` の項目（`…:66:5 E0020 fix1`。`leaves` をコメントにしたので、接尾辞の候補の後に残る範囲の E0020 を約束の違反として数える分。ともに until W3-05）を外す。
-- **W3-05:** W3-02/b が見た今の候補の誤り: `0o17` の候補が `0`（値が変わる）、`12abc` は仕様では E0001。W3-15 の `literal_suffix` の行（until W3-05）と、`1f32` を `1.0` にする候補。接尾辞を閉じた一覧にする（W3-15 は `foreign::is_type_suffix` の差し込み口だけを置き、今は全ての接尾辞を受ける）。W3-15 のファズの残り（`a`・`s` のような接尾辞の候補の後の誤り）の `fuzz-input` を外す。R-190 は W3-15 で直った（後ろが `.` の数には候補を出さない）。
+- **W3-05（12 回目、RF/i の単位 2）:** `tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa`（RF/t、範囲のパターンと数値リテラルの形の重なり、R-206）のヘッダの `[[test.fix]]` 8 件は、数値リテラルの行が無いので `// # [[test.fix]]` にコメントにして置いた（W3-06/t1 の前例）。
+  - 数値リテラルの行（`octal_prefix`、`leading_zero`、`float_dot_exponent`、`literal_suffix`）を実装したら `# ` を外し、実装待ちの一覧の `test-case` の項目と `fix-contract` の項目（`…:66:5 E0020 fix1`。`leaves` をコメントにしたので、接尾辞の候補の後に残る範囲の E0020 を約束の違反として数える分。ともに until W3-05）を外す。
+- **W3-05:** W3-02/b が見た今の候補の誤り: `0o17` の候補が `0`（値が変わる）、`12abc` は仕様では E0001。
+  - W3-15 の `literal_suffix` の行（until W3-05）と、`1f32` を `1.0` にする候補。
+  - 接尾辞を閉じた一覧にする（W3-15 は `foreign::is_type_suffix` の差し込み口だけを置き、今は全ての接尾辞を受ける）。
+  - W3-15 のファズの残り（`a`・`s` のような接尾辞の候補の後の誤り）の `fuzz-input` を外す。
+  - R-190 は W3-15 で直った（後ろが `.` の数には候補を出さない）。
 - **W3-05（W3-20/b、2026-10-09）:** `1.e3` は型の決まらない文脈（`let a = 1.e3`）で E0420 になる（§2.4 は E0020。型が決まる文脈は `e0020_literals.onsa` が見ている）。`017(2)`・`0o17(2)` は、リテラルの直後の `(` で候補を落とす扱い（S-350）のため、8 進の E0020 でなく呼び先の E0002 になる。
 - **W3-05:** W3-01 で `diag-code` の E0001 の項目を外した（`tests/cst/first_bom_*` で否定例が 3 件を超えたため）。数値リテラルの E0001（接尾辞、`0x_`、S-62）の否定例は、W3-05 のテストの票に明記する（W3-01/b の L-9）。
-- **W3-05（13 回目、W3-04/b の指摘 4）:** 穴の中のキーワードと予約語が字句の E0001・E0200 になったので、名前に接する `f"{fn}"`・`f"{clock}"` が `string_prefix`（S-400）の E0002 でなく一般の E0002（`"{fn}"` の位置）になった（`foreign` の表の行が `Literals::ok` で外れる）。S-406 の決定で S-400 の形も中身を読まないことにしたので、その実装で戻ることを確かめる（再現は 13 回目の scratchpad の `w304b/repro/r4_prefix_*.onsa`）。
+- **W3-05（13 回目、W3-04/b の指摘 4）:** 穴の中のキーワードと予約語が字句の E0001・E0200 になったので、名前に接する `f"{fn}"`・`f"{clock}"` が `string_prefix`（S-400）の E0002 でなく一般の E0002（`"{fn}"` の位置）になった（`foreign` の表の行が `Literals::ok` で外れる）。
+  - S-406 の決定で S-400 の形も中身を読まないことにしたので、その実装で戻ることを確かめる（再現は 13 回目の scratchpad の `w304b/repro/r4_prefix_*.onsa`）。
 - **W3-08（9 回目）:** FAUST の 5 行（`faust_feedback`、`faust_feedback_unnamed`、`faust_prime`、`faust_delay`、`faust_delay_variable`）の照合を作る（rework の W3-08 の「FAUST の形の E0020」。W3-09/i が until を W3-08 に付け替える）。例が `at` を使うので W3-09 の後に行う。
 - **W3-08（9 回目）:** R-202（括弧に接する前置の `~(a)` が `faust_bit_not` にならず E0002）。
 - **W3-08（9 回目、追記）:** `faust_feedback_unnamed` と `faust_delay_variable` は一般の E0002 で例が通るので W3-09 で一覧から外れた（WAITING のまま）。note の付いた E0002 にするのは W3-08。
-- **W3-08:** R-44（項目の文脈ごとに書ける項目）は W3-14 の直しで先に実装した（S-263: メンバは関数と `const` だけ、`extern` は不透明な `type` も。`parser.rs` の `DECLARATIONS` の場所の欄と `not_a_member`、`SPEC-GAP(S-263)`）。W3-08 では `tests/review-phase1/syntax/nested*.onsa` を期待値付きのテストへ移し、README の R-44 の行を直す。`#[..]` の `Attr.span` が `]` を含まない（W3-01 の低下が今の位置の癖を写している）。属性を改めるときに直す。echo（§17.4）の仕様の例の until は W3-13。`@mem(bulk)` を意味の実装（W9-06）まで E0200 にするなら、until を W9 に改める。 `tests/spec/packages/visibility/util.onsa` の `pub(pkg) fn` は §15.1 では E0020（今は印が無く通る）。
+- **W3-08:** R-44（項目の文脈ごとに書ける項目）は W3-14 の直しで先に実装した（S-263: メンバは関数と `const` だけ、`extern` は不透明な `type` も。`parser.rs` の `DECLARATIONS` の場所の欄と `not_a_member`、`SPEC-GAP(S-263)`）。
+  - W3-08 では `tests/review-phase1/syntax/nested*.onsa` を期待値付きのテストへ移し、README の R-44 の行を直す。
+  - `#[..]` の `Attr.span` が `]` を含まない（W3-01 の低下が今の位置の癖を写している）。属性を改めるときに直す。
+  - echo（§17.4）の仕様の例の until は W3-13。
+  - `@mem(bulk)` を意味の実装（W9-06）まで E0200 にするなら、until を W9 に改める。
+  - `tests/spec/packages/visibility/util.onsa` の `pub(pkg) fn` は §15.1 では E0020（今は印が無く通る）。
 - **W3-08（11 回目、W3-06/b）:** `pub_pkg` の行の例に、空白を挟んだ `pub (pkg) fn f()` を足す（S-412 の決定で `pub_pkg` の一つの誤り。W3-06 の単位 1a は `parse_vis` が空白を越えて `pkg` を読むので、`pub_pkg` が入るまで `pub(pkg)` と同じく通る）。
 - **W3-11（9 回目）:** R-199（fmt が継続の前の行の行末のコメントを継続した行の後ろへ移す）。R-201（括弧の中の要素の中の改行を除くときに行末のコメントを遠くへ移す。要素の中の改行を保つかを `onsa-tools.md` に書く）。W3-09/i が fmt の `list` に、ブロック形の並びの要素の前の行のコメントをその要素の前に残す部分的な直し（約 10 行）を入れた。CST に移すときに置き換える。
 - **W3-11（10 回目）:** R-204（`onsa fmt` が書き込む前に出力を解析し直して確かめない。`docs/onsa-tools.md` §3.5。`crates/onsa_cli/src/main.rs` の fmt と `onsa_driver::format_file`）。
-- **W3-11:** `tools/fmt_props.py` の `comment-text` はコメントの行末の空白（U+0020）だけを無視し、fmt が消す行末のタブを違いとして数える（W3-01/t が `tests/cst/err_comment_trailing_ws.onsa` で見つけ、余分な `)` で fmt に拒ませて避けた）。fmt を CST に移すときに揃え、その事例の余分な `)` を外す。R-143（fmt が継続と並びの中の書き手の改行を消す）。直したら fmt の性質テストに「書き手の改行を保つ」を足す。`fmt-comments`（R-70）を一覧から外す。
+- **W3-11:** `tools/fmt_props.py` の `comment-text` はコメントの行末の空白（U+0020）だけを無視し、fmt が消す行末のタブを違いとして数える（W3-01/t が `tests/cst/err_comment_trailing_ws.onsa` で見つけ、余分な `)` で fmt に拒ませて避けた）。
+  - fmt を CST に移すときに揃え、その事例の余分な `)` を外す。
+  - R-143（fmt が継続と並びの中の書き手の改行を消す）。直したら fmt の性質テストに「書き手の改行を保つ」を足す。`fmt-comments`（R-70）を一覧から外す。
 - **W3-11（11 回目、W3-06/t2）:** fmt が `extern "C" lib"m"` を `lib "m"` に書く。`docs/onsa-tools.md` §3.2 に extern の見出しの空白の規則が無い（S-400 は `lib"m"` を見出しの文法で読み、当たらないとした。check の側は `crates/onsa_cli/tests/gap_forms.rs` で確かめている）。正規形を決めて揃える。
-- **W3-11（12 回目、W3-06/t3）:** fmt が複数行のブロック形の構造体のパターン（`let Wrap {` 改行 `inner: q,` 改行 `tag: t,` 改行 `} = w`）を一行に畳み、前の 1 行の `let Pt { x: a, y: b } = p` と `=` の桁を揃える（R-143 の書き手の改行を保たない形の一つ。畳まなければ「複数行の文で列が切れる」、`docs/onsa-tools.md` §3）。W3-11 の fmt の性質テストか事例に入れる（親が dev の `ade4450` で確かめた）。
-- **W3-11（12 回目、W3-06/i の単位 2）:** `tests/cst/trivia_comments_brackets.onsa` から、fmt-props（blank の摂動）の収束を壊す三つの組み合わせを外した（R-70。ファイルの頭に注記）。W3-11 で fmt がコメントを書かれた行に残すようになったら、元の形に戻して fmt-props を通す: (1) 継続の行ごとの行末のコメント（`let x = // c13`、`a + // c14`、`b // c15`、`// c16`、`.abs() // c17`）、(2) 添字の括弧の中のコメント（`xs[ // c53` 改行 `0 // c54` 改行 `] // c55`）、(3) 空の丸括弧の中のコメント（`( // c44` 改行 `// c45` 改行 `) // c46`）。どれも間に空行を入れると fmt の出力が収束しない（W3-06/i の調べ）。
+- **W3-11（12 回目、W3-06/t3）:** fmt が複数行のブロック形の構造体のパターン（`let Wrap {` 改行 `inner: q,` 改行 `tag: t,` 改行 `} = w`）を一行に畳み、前の 1 行の `let Pt { x: a, y: b } = p` と `=` の桁を揃える（R-143 の書き手の改行を保たない形の一つ。畳まなければ「複数行の文で列が切れる」、`docs/onsa-tools.md` §3）。
+  - W3-11 の fmt の性質テストか事例に入れる（親が dev の `ade4450` で確かめた）。
+- **W3-11（12 回目、W3-06/i の単位 2）:** `tests/cst/trivia_comments_brackets.onsa` から、fmt-props（blank の摂動）の収束を壊す三つの組み合わせを外した（R-70。ファイルの頭に注記）。
+  - W3-11 で fmt がコメントを書かれた行に残すようになったら、元の形に戻して fmt-props を通す:
+    - (1) 継続の行ごとの行末のコメント（`let x = // c13`、`a + // c14`、`b // c15`、`// c16`、`.abs() // c17`）、
+    - (2) 添字の括弧の中のコメント（`xs[ // c53` 改行 `0 // c54` 改行 `] // c55`）、
+    - (3) 空の丸括弧の中のコメント（`( // c44` 改行 `// c45` 改行 `) // c46`）。
+  - どれも間に空行を入れると fmt の出力が収束しない（W3-06/i の調べ）。
 - **W3-12（W3-20 の直し、2026-10-09）:** `-> (fn()) uses {…}` の返り値の関数型を囲む括弧は冗長でない（外すと `uses` が内側の型に付き、型が変わる）。S-339 の基準で外さないことを確かめる事例を足す。型を文字列にする所は `TyStore::parens_before_uses` が同じ規則を持つ。
 - **W3-12（9 回目）:** fmt が空の構造体のパターンを `Empty {  }`（空白二つ）にする（`rest` を足した既存の書き方の癖、W3-21/b の 13）。
-- **W3-18 の後（W3-18/b の報告、2026-10-09）:** W7-02: `par` / `delay` の算術の `const` の値の誤り（`0..<0 - 1` など）は今 E0200（`FlowConstExprs`、仕様は E0419）、`flow_const_neg` の `ONE - 2` も E0200。W4-06: 範囲の端の形の検査（`range_end_forms`）が名前の解決より前に走る（`0..<zzz + 1.5` が E0401）。W7-04: `Node::Par` は `end` を持たない（`..=` の降下で `RangeHead` を Core まで運ぶ）。リファクタリングの候補: §4.5 の定数式の文法の判定が flow と型の位置で別（W5-08 / W7-02 で一つに）、範囲の端の形の検査の呼び出しが三か所、`flow.rs` の E0408 の段（Flow）と E0401 / E0417（Types）の混在。控えは 7 回目の scratchpad の `w318b/parent_notes.md`。
+- **W3-18 の後（W3-18/b の報告、2026-10-09）:**
+  - W7-02: `par` / `delay` の算術の `const` の値の誤り（`0..<0 - 1` など）は今 E0200（`FlowConstExprs`、仕様は E0419）、`flow_const_neg` の `ONE - 2` も E0200。
+  - W4-06: 範囲の端の形の検査（`range_end_forms`）が名前の解決より前に走る（`0..<zzz + 1.5` が E0401）。
+  - W7-04: `Node::Par` は `end` を持たない（`..=` の降下で `RangeHead` を Core まで運ぶ）。
+  - リファクタリングの候補: §4.5 の定数式の文法の判定が flow と型の位置で別（W5-08 / W7-02 で一つに）、範囲の端の形の検査の呼び出しが三か所、`flow.rs` の E0408 の段（Flow）と E0401 / E0417（Types）の混在。
+  - 控えは 7 回目の scratchpad の `w318b/parent_notes.md`。
 - **W4〜W7 のテストの票:** 修正候補の細部で仕様が決めないもの（`let` の名前と置き場所、`use` の挿入の位置、`uses` の並び、E0401 の位置など。W3-02/t の空白の 6〜11）は、期待値に書かない。
-- **W4-02:** `crates/onsa_cli/tests/test_json_document.rs` の `a_manifest_diagnostic_prints_the_document_with_an_empty_tests_array` を `#[ignore = "W4-02"]` から戻す（E1102 が入ると通る）。マニフェストの診断を出すときは、`onsa test --json` では CLI の `Form::TestJson` を通して `tests: []` の付いた文書を出す（W2-10/i）。`[export]` の名前の誤り E0302 / E0303 は、位置が `FileId(0)` の 0 バイト目でマーカを書けない。`onsa.toml` と断片の中の位置にする。 R-166（`main_frame` を読んで捨て、E0200 にならない。仕様 §15.3）。S-234 の依存の経路 `std/math.onsa` と、利用者がルート直下に置いた `std/` ディレクトリだけのモジュールが重なるか（E0304 がディレクトリだけのモジュールを含むか）を確かめる（Fable の指摘）。
-- **W4-02:** S-286 (a): パッケージの中のファイルを `onsa test` に渡すと、そのモジュールのテストだけを選ぶ（`--filter` と重ねる）。止める診断はファイルによらず全て出す（§15.1 の「そのファイルの診断だけ」は `check` と LSP の規則）。選んだテストが 0 件なら 0。マニフェストの無いファイルを複数渡すのは使い方の誤り（2）。S-300: 単一のファイルにも §2.3 のモジュールの名前の規則（E0320、候補なし、note、位置はファイルの先頭）。パッケージの中のファイル名の E0320 も今は出ない（`My-File.onsa`）。R-189（複数の単一ファイルでテストが黙って消える）。仕様は `d8b7d8f` で §2.3・§15.1・§18.2 に反映済み。反映の担当はファイル名の E0320（候補なし、note、位置はファイルの先頭）をパッケージの中のファイルにも掛けて §2.3 に書いた（利用者に確かめる）。着手の前に S-311（ファイルと `--filter` を重ねたときの照合の範囲）、S-312（複数のファイルの残りの形と他のコマンド）、S-313（ディレクトリの名前の規則）を決める。W4-02 が大きくなったので、作業票を作るときに `onsa test` のテストの選び方（S-286）を別の作業に分けるかを決める。
+- **W4-02:** `crates/onsa_cli/tests/test_json_document.rs` の `a_manifest_diagnostic_prints_the_document_with_an_empty_tests_array` を `#[ignore = "W4-02"]` から戻す（E1102 が入ると通る）。
+  - マニフェストの診断を出すときは、`onsa test --json` では CLI の `Form::TestJson` を通して `tests: []` の付いた文書を出す（W2-10/i）。
+  - `[export]` の名前の誤り E0302 / E0303 は、位置が `FileId(0)` の 0 バイト目でマーカを書けない。`onsa.toml` と断片の中の位置にする。
+  - R-166（`main_frame` を読んで捨て、E0200 にならない。仕様 §15.3）。
+  - S-234 の依存の経路 `std/math.onsa` と、利用者がルート直下に置いた `std/` ディレクトリだけのモジュールが重なるか（E0304 がディレクトリだけのモジュールを含むか）を確かめる（Fable の指摘）。
+- **W4-02:**
+  - S-286 (a): パッケージの中のファイルを `onsa test` に渡すと、そのモジュールのテストだけを選ぶ（`--filter` と重ねる）。
+    - 止める診断はファイルによらず全て出す（§15.1 の「そのファイルの診断だけ」は `check` と LSP の規則）。
+    - 選んだテストが 0 件なら 0。
+    - マニフェストの無いファイルを複数渡すのは使い方の誤り（2）。
+  - S-300: 単一のファイルにも §2.3 のモジュールの名前の規則（E0320、候補なし、note、位置はファイルの先頭）。
+    - パッケージの中のファイル名の E0320 も今は出ない（`My-File.onsa`）。
+  - R-189（複数の単一ファイルでテストが黙って消える）。
+  - 仕様は `d8b7d8f` で §2.3・§15.1・§18.2 に反映済み。
+    - 反映の担当はファイル名の E0320（候補なし、note、位置はファイルの先頭）をパッケージの中のファイルにも掛けて §2.3 に書いた（利用者に確かめる）。
+  - 着手の前に S-311（ファイルと `--filter` を重ねたときの照合の範囲）、S-312（複数のファイルの残りの形と他のコマンド）、S-313（ディレクトリの名前の規則）を決める。
+  - W4-02 が大きくなったので、作業票を作るときに `onsa test` のテストの選び方（S-286）を別の作業に分けるかを決める。
 - **W4-03（9 回目）:** パターンでのフィールドの可視性の検査が無い（`body.rs`・`flow.rs` のどちらにも無い。W3-21/i の報告。`priv` のフィールドの構文は W3-08）。別のモジュールの `priv` のフィールドをパターンに書くと誤りにする。S-366 の「見えないフィールドが残る `..` は E0410 と note」もこのとき確かめる。
 - **W4-03（9 回目、追記）:** `FieldDef::vis` は書いた可視性で、無指定は `Private`（§15.1 の「struct の可視性を継ぐ」と合わない。W3-21/i の報告）。`structpat.rs` はフィールドの可視性を struct の可視性と見なしている。
-- **W4-03（13 回目、W3-04/i）:** std の自分のパッケージ名での参照 3 か所（`std/dsp.onsa` の `use std.math.{pow}`、`std/dsp/test.onsa` の `use std.math.{cos, sqrt}`、`std/test/gen.onsa` の `use std.test.{Gen}`）が S-37 の決定（自分の名前で参照しない、`use test.{Gen}` にする）のまま直っていない。自分のパッケージ名での参照の E0302（R-106）を入れる回に直す。W3-04 で `use` の経路の頭のキーワードを名前として読むようにしたので、std の中で `use test.{Gen}` が解決できることは W3-04/i が確かめた。
+- **W4-03（13 回目、W3-04/i）:** std の自分のパッケージ名での参照 3 か所（`std/dsp.onsa` の `use std.math.{pow}`、`std/dsp/test.onsa` の `use std.math.{cos, sqrt}`、`std/test/gen.onsa` の `use std.test.{Gen}`）が S-37 の決定（自分の名前で参照しない、`use test.{Gen}` にする）のまま直っていない。
+  - 自分のパッケージ名での参照の E0302（R-106）を入れる回に直す。
+  - W3-04 で `use` の経路の頭のキーワードを名前として読むようにしたので、std の中で `use test.{Gen}` が解決できることは W3-04/i が確かめた。
 - **S-258 の下書き（W4-04 の前、第 15 組の Fable の補足 4）:** クロックの名前空間は閉じた一覧なので「閉じた名前空間では全てを候補に並べる」を論点に含めるか。将来 `clock` の宣言で開くので、閉じた一覧に依る規則を作らない方が管理しやすい、という見立てを添える。
 - **W4-04:** `fix-contract` の E0320 の 4 件と `fuzz-input` の `2674a4fa` を外す（W3-17）。E0320 の候補が空や無効な名前になる（`pub struct __ {}` は削除の編集、`pub const _1` は `1`。W3-02/b）。
 - **W4-04（13 回目、W3-04/t、親は未確認）:** W3-04/t の報告: `use kp.clock` だけを書いて `kp.clock.TICKS` が通る（§15.1 は「`use` で取り込んだ名前でだけ参照できる」とし、`kp` は取り込んでいない）。親の再現はマニフェストの名前が合わず確かめられていない（13 回目の scratchpad の `w304t/pkgprobe/`）。名前の段の経路の解決を作るときに確かめ、誤りなら R を登録する。
 - **W4-05:** E0817（自分をインスタンスにする flow）を実装したら、E0200 の表（`onsa_diag::unsupported`）の `FlowSelfInstance` を外す（W2-07/b）。
 - **W4-07:** R-191（`move` の引数と `move self` への代入が E0701 になる。所有・可変にする）。`tests/spec/values/move_assign.onsa` の `test-case` の項目を外す。
 - **W4-08:** 他の引数の中の `inout`（`f(inout x, g(inout x))`）が平らな変数でも E0702 にならない（S-193）。テストの票は平らな変数の形も足す。S-217（平面の要素の `let`）を着手の前に決める。
-- **W4-09（W3-20/b、2026-10-09）:** 引数の `move` の被演算子が場所でなくても E0711 にならない（`eat(move if c { x } else { y })` は通り、`let z = move if c { x } else { y }` は E0711。W3-20 の前から。R-198 として W3-20 のコミットで登録する）。`for` の反復元に置いたブロックの末尾の `move`（`for x in if c { move xs } else { move ys } {`）は今 E0200 `MoveOnUnconsumedTail`。S-343 に含めて決める。
+- **W4-09（W3-20/b、2026-10-09）:** 引数の `move` の被演算子が場所でなくても E0711 にならない（`eat(move if c { x } else { y })` は通り、`let z = move if c { x } else { y }` は E0711。W3-20 の前から。R-198 として W3-20 のコミットで登録する）。
+  - `for` の反復元に置いたブロックの末尾の `move`（`for x in if c { move xs } else { move ys } {`）は今 E0200 `MoveOnUnconsumedTail`。S-343 に含めて決める。
 - **W4-12（9 回目）:** W3-09 の関門のため、flow の外の `fn` の `prev~(x)` は E0812 から E0200 になった（`tests/review-phase1/parent/t5.onsa` の 25 行、コメントの期待は E0821）。`a.prev~(x)` と自作の `my~(x)` は E0812 のまま。E0821 を入れるときに揃える。
-- **W4-12・W4-13（W3-20 の直し、2026-10-09）:** `~(`・`!(`・`::[` の関門は、まだ種類だけの `names_a_path` で判定する（`mk2().0!(x)`、`mk2().0~(x)`、`mk2().0::[I32](x)` は構文の段を通り、後の段の E0714・E0812・E0200 で止まる）。呼び先の述語 `callee_by_name` に揃えるかを決める。W3-20/b の再確認（2026-10-09、報告 8 回目の scratchpad の `w320b2/`）の D: `callee_by_name` の `TypeArgsExpr` の枝は連鎖を見ず、`mk2().0::[I32](x)`・`ts[0].0::[I32](x)` が構文の段を通り E0200 で止まる。§4.5 は「呼び先が名前の経路でもメソッドでもない形は `::[` を書けない位置」とするので、W4-13 で構文の段の E0020（`.(` の候補）にする。W4-12 は名前の段が「`inc(x)` の呼び先が名前の経路か」を再導出しないよう、関門の結果を AST に持たせるか（`Call` に印）を設計メモで決める。
-- **W4-13:** W3-19 の暫定の E0200（`Feature::TypeArgsInExpressions`、名前の段で `::[…]` の付いた名前を止める）を外し、`tests/spec/negative/type_args_unsupported.onsa` をファイルごと消す。`tests/spec/negative/nesting_boundary_type_args.onsa` の 256 段の側の E0200 の印を直す。`t.0!(x)`・`t.0~(x)` は W3-19 で構文の段を通るようになった（`foreign::names_a_path` に `TupleIndexExpr` を含めた）。§2.6 は `!`・`~` を「名前の直後」とするので、名前の段で扱いを決める。S-329（定数式の `::[…]`）と S-330（型の形だけの `[…]` の段）を着手の前に決める。W3-19/b のリファクタリングの候補（式の `TypeArgs` と struct リテラルの `type_args` の二重の表現、`children` の列挙の 5 か所）を作業票で見る。
-- **W5-02（W3-20/b の再確認、2026-10-09）:** `mks().ops[0](41)`（関数値の配列のフィールドの添字の呼び出し）は構文の段を通り（§4.5 のメソッドの `[…]` と区別できないので型の段）、今は `check` が通って `onsa test` で E0200。型の段の `field_call` の行（W5-02）で、添字の付いた形も E0020（`.(`）にし、正例と否定例を足す。器の `fix_contract::same_place` の例外 `outer_form` はコード・文面・始まり・終わりだけで判定する（W3-20）。範囲の広がる候補が入ると本当の違反を隠しうるので、器を改めるときに、元の行（`RowId`）が連鎖を持つ行であることを条件に足す案を見る（W3-20/b の再確認の E）。
-- **W5-02:** W3-07/i が、修正候補の約束の器の自己テスト（`onsa_tests` の `fix_contract::tests::same_place_…` と `run::tests::fix_contract`）の「約束を破る候補」の題材を、直った E0010 から E0411 の `.narrow_i32()` に移した（2026-10-09）。W5-02 が R-186（E0411 の候補を出さない）を直すと題材を失うので、別の題材（実装待ちの候補）に移すか、器の自己テストを合成の入力で書き直す。
+- **W4-12・W4-13（W3-20 の直し、2026-10-09）:** `~(`・`!(`・`::[` の関門は、まだ種類だけの `names_a_path` で判定する（`mk2().0!(x)`、`mk2().0~(x)`、`mk2().0::[I32](x)` は構文の段を通り、後の段の E0714・E0812・E0200 で止まる）。
+  - 呼び先の述語 `callee_by_name` に揃えるかを決める。
+  - W3-20/b の再確認（2026-10-09、報告 8 回目の scratchpad の `w320b2/`）の D: `callee_by_name` の `TypeArgsExpr` の枝は連鎖を見ず、`mk2().0::[I32](x)`・`ts[0].0::[I32](x)` が構文の段を通り E0200 で止まる。
+    - §4.5 は「呼び先が名前の経路でもメソッドでもない形は `::[` を書けない位置」とするので、W4-13 で構文の段の E0020（`.(` の候補）にする。
+  - W4-12 は名前の段が「`inc(x)` の呼び先が名前の経路か」を再導出しないよう、関門の結果を AST に持たせるか（`Call` に印）を設計メモで決める。
+- **W4-13:** W3-19 の暫定の E0200（`Feature::TypeArgsInExpressions`、名前の段で `::[…]` の付いた名前を止める）を外し、`tests/spec/negative/type_args_unsupported.onsa` をファイルごと消す。
+  - `tests/spec/negative/nesting_boundary_type_args.onsa` の 256 段の側の E0200 の印を直す。
+  - `t.0!(x)`・`t.0~(x)` は W3-19 で構文の段を通るようになった（`foreign::names_a_path` に `TupleIndexExpr` を含めた）。
+    - §2.6 は `!`・`~` を「名前の直後」とするので、名前の段で扱いを決める。
+  - S-329（定数式の `::[…]`）と S-330（型の形だけの `[…]` の段）を着手の前に決める。
+  - W3-19/b のリファクタリングの候補（式の `TypeArgs` と struct リテラルの `type_args` の二重の表現、`children` の列挙の 5 か所）を作業票で見る。
+- **W5-02（W3-20/b の再確認、2026-10-09）:** `mks().ops[0](41)`（関数値の配列のフィールドの添字の呼び出し）は構文の段を通り（§4.5 のメソッドの `[…]` と区別できないので型の段）、今は `check` が通って `onsa test` で E0200。
+  - 型の段の `field_call` の行（W5-02）で、添字の付いた形も E0020（`.(`）にし、正例と否定例を足す。
+  - 器の `fix_contract::same_place` の例外 `outer_form` はコード・文面・始まり・終わりだけで判定する（W3-20）。
+    - 範囲の広がる候補が入ると本当の違反を隠しうるので、器を改めるときに、元の行（`RowId`）が連鎖を持つ行であることを条件に足す案を見る（W3-20/b の再確認の E）。
+- **W5-02:** W3-07/i が、修正候補の約束の器の自己テスト（`onsa_tests` の `fix_contract::tests::same_place_…` と `run::tests::fix_contract`）の「約束を破る候補」の題材を、直った E0010 から E0411 の `.narrow_i32()` に移した（2026-10-09）。
+  - W5-02 が R-186（E0411 の候補を出さない）を直すと題材を失うので、別の題材（実装待ちの候補）に移すか、器の自己テストを合成の入力で書き直す。
 - **W5-03（W3-10、10 回目）:** `unwrap_or` を E0413 にするとき、flow の K-08 の穴を塞いだ仮の機構を消す: `builtin.rs` の `lazy_args`（Rater の `rate_call` が引数を枝として数える）と `tests/spec/negative/flow_map_unsupported_w5_03.onsa`。
 - **W5-08:** R-172・R-176（種の制約）。W2-06 の `deferred.rs` の `meets` の「種が計算できなければ通す」を外す。
-- **W6-01（12 回目、W3-06/t3）:** 名前の付いた純粋な関数を `fn(I32) -> I32 uses {Alloc}` の引数へ渡すと E0401「expected `fn(I32) -> I32 uses {Alloc}`, found `fn(I32) -> I32`」になる（`fn apply(f: fn(I32) -> I32 uses {Alloc}, x: I32) -> I32 uses {Alloc} { f(x) }` に `apply(double, x)`、`let` で束縛した無名関数も同じ）。§8.1 の関数型の互換の 2（純粋な関数は `uses {Alloc}` の位置で使える）に反する。R-27 の (2) の未実装で、この形を W6-01 のテストに入れる（親が dev の `ade4450` で確かめた）。
+- **W6-01（12 回目、W3-06/t3）:** 名前の付いた純粋な関数を `fn(I32) -> I32 uses {Alloc}` の引数へ渡すと E0401「expected `fn(I32) -> I32 uses {Alloc}`, found `fn(I32) -> I32`」になる（`fn apply(f: fn(I32) -> I32 uses {Alloc}, x: I32) -> I32 uses {Alloc} { f(x) }` に `apply(double, x)`、`let` で束縛した無名関数も同じ）。
+  - §8.1 の関数型の互換の 2（純粋な関数は `uses {Alloc}` の位置で使える）に反する。
+  - R-27 の (2) の未実装で、この形を W6-01 のテストに入れる（親が dev の `ade4450` で確かめた）。
 - **W6-03:** E0601 の候補は、`uses {}` が既にあると `uses {} uses {Alloc}` になる（W3-02/b）。
 - **W7 の `@param` の作業:** `sig.rs` の `@param` の `num` が負のリテラルを `-` の直後のリテラルだけで判定し（`Ast::negated_literal` と別の定義、D-15）、`@param(min: -(60.0))` が E0809。§11.7 は `const` の初期化式と同じ規則なので、定数の評価に寄せる（W2-06/b の 9）。
-- **W7-02（W3-10、10 回目）:** 写しを消すときは `crates/onsa_sema/src/flow_map.rs` を消し、その先頭の doc の一覧（`FlowCx` の `delay_arg` / `par_depth` / `ats`、`check_instance` の `lookback` の退避、Rater の `branch` と `rate` の数え方、`check_flow_expr` の `At` / `Feedback` の腕、`unsupported.rs` の写しの間の Feature、`body.rs` の `tilde`、modes・core・graph）を改める。恒久の表は `flow_names.rs` と `ty.rs` の `Rate`。`Ty::Rate` は W3-10 で既に消した（rework の W7-02 の行は W3-10 のコミットで直す）。写しの間の E0200 の事例 `tests/spec/negative/flow_map_unsupported_w7_0{2,4,5,6,7}.onsa` は、それぞれの作業で消す。
+- **W7-02（W3-10、10 回目）:** 写しを消すときは `crates/onsa_sema/src/flow_map.rs` を消し、その先頭の doc の一覧（`FlowCx` の `delay_arg` / `par_depth` / `ats`、`check_instance` の `lookback` の退避、Rater の `branch` と `rate` の数え方、`check_flow_expr` の `At` / `Feedback` の腕、`unsupported.rs` の写しの間の Feature、`body.rs` の `tilde`、modes・core・graph）を改める。
+  - 恒久の表は `flow_names.rs` と `ty.rs` の `Rate`。
+  - `Ty::Rate` は W3-10 で既に消した（rework の W7-02 の行は W3-10 のコミットで直す）。
+  - 写しの間の E0200 の事例 `tests/spec/negative/flow_map_unsupported_w7_0{2,4,5,6,7}.onsa` は、それぞれの作業で消す。
 - **W7-04・W9-03（W3-10 の作業票にも入れた）:** 定数のクロックの式と `@param` の値をインタプリタで評価するときは、`Interp::enter`（評価の入口。深さを 0 にし、`Drop` で戻す）を通る入口を一つ足す（S-222、W2-04 の設計）。
 - **W8-01:** W1-04 の降下のやり直し（穴を埋めて項目ごとにやり直す）の制約を引き継ぐ。引数・戻り値の型、`let` のパターン、自分自身をインスタンス化する flow、束縛を含む `const` の初期化式では項目の残りを報告しない。総称の二つ目の実体化は同じ式の別の機能を報告しない。穴の置き換えの値を W8 の Core でどう表すか（`Zeroed` は W8-07 で無くなる）。
-- **W8-02:** 検証器が範囲外の ID（`FnId(999)`、`ConstId(999)`）で panic し、`TypeId(999)` を素通りする。規則の一覧に ID の範囲を入れる。`onsa_core::lower` / `lower_with` / `verify` が pub のままで、driver の段の関数を通らずに呼べば検証を飛ばせる。gate に「呼び出しは driver の一か所」の検査を足す案。release でも常に検証し、CLI の `verify_core_in_debug_only` を消す。
+- **W8-02:** 検証器が範囲外の ID（`FnId(999)`、`ConstId(999)`）で panic し、`TypeId(999)` を素通りする。
+  - 規則の一覧に ID の範囲を入れる。
+  - `onsa_core::lower` / `lower_with` / `verify` が pub のままで、driver の段の関数を通らずに呼べば検証を飛ばせる。
+  - gate に「呼び出しは driver の一か所」の検査を足す案。
+  - release でも常に検証し、CLI の `verify_core_in_debug_only` を消す。
 - **W8-06:** R-170（`Option[Str]` / `Result[U8, Str]` の `match` が文字列のパターンが無くても内部エラー）。全ての腕が発散する値の `match`（関数の末尾の `match n { 1 => { return 1 }, _ => { return 2 } }`）も、今は E0200（`ValueMatch`）で止まる（W2-07/b の 6）。§7 は発散する文として認める。
 - **W8-07:** `crates/onsa_interp/src/value.rs` の `bug(None, ..)`（Zeroed の型の定義の食い違い、F32 の配列の要素）は位置を持たない。`run_tests` は `item_scope` を置かないので guard の位置の代わりも無い（W2-03/i）。
 - **W8-09:** 関数値の呼び出し `f.(x)` は、`Interp::call_with`（呼び出しを数える一か所）を通し、1 回の呼び出しとして数える（W2-04/t2 の `recursion_deep_fn_values.onsa` がこの読みで境界を書いた。S-229 で確かめる）。
 - **W8-10:** `tests/spec/negative/lower_unsupported.onsa` は配列とタプルの大小の比較を未対応の機能の例にしている。この比較を実装したら、別の未対応の機能に替える。R-119 の flow 側の E0401 も同じ回。
-- **W9-03:** W2-06 の `const` の初期化式の E0419 のつなぎ（値の全体と集合体の中の範囲を見る。`body.rs` の `check_const`）を定数の評価器で置き換える。途中で溢れて最終の値が範囲に入る形（`-(-(-128))`）も E0419。S-222 の E0419 を `onsa test` と `onsa build` の両方で確かめる CLI のテストを足す（W2-04/t2 が `deep_recursion.rs` に `#[ignore]` で書いたが、実装待ちの一覧の外なので W2-04 で消した。形は「`const C = dive(128)` を読む package で、`onsa test` と `onsa build` がどちらも E0419」）。R-153（`const` の鎖を依存の順に評価する。再現は `tests/review-phase1/core/const_chain_cold.onsa`）。使われない `const` の初期化式の失敗も E0419 にする（今は `inline_consts` が捨てる）。 インタプリタの 1 段のスタックの量は、`eval` から `eval_binary` への末尾の呼び出しになるかという最適化の判断に頼っている（W2-03/i が lldb で確かめた。位置を値で渡すと 1 段 292 B → 591 B）。自前のスタックを持つ評価器で根本から解消する。`inline_consts` の `value_to_expr` が None のときに黙って捨てる所が残る。 `onsa test`・`dump --core`・`interface` は `inline_consts` を通らず、ビルドの `inline_consts` は `if let Ok` で定数の評価の失敗を黙って捨てている。S-173 を同じ回に決める。
+- **W9-03:** W2-06 の `const` の初期化式の E0419 のつなぎ（値の全体と集合体の中の範囲を見る。`body.rs` の `check_const`）を定数の評価器で置き換える。
+  - 途中で溢れて最終の値が範囲に入る形（`-(-(-128))`）も E0419。
+  - S-222 の E0419 を `onsa test` と `onsa build` の両方で確かめる CLI のテストを足す（W2-04/t2 が `deep_recursion.rs` に `#[ignore]` で書いたが、実装待ちの一覧の外なので W2-04 で消した。形は「`const C = dive(128)` を読む package で、`onsa test` と `onsa build` がどちらも E0419」）。
+  - R-153（`const` の鎖を依存の順に評価する。再現は `tests/review-phase1/core/const_chain_cold.onsa`）。
+  - 使われない `const` の初期化式の失敗も E0419 にする（今は `inline_consts` が捨てる）。
+  - インタプリタの 1 段のスタックの量は、`eval` から `eval_binary` への末尾の呼び出しになるかという最適化の判断に頼っている（W2-03/i が lldb で確かめた。位置を値で渡すと 1 段 292 B → 591 B）。
+    - 自前のスタックを持つ評価器で根本から解消する。
+    - `inline_consts` の `value_to_expr` が None のときに黙って捨てる所が残る。
+  - `onsa test`・`dump --core`・`interface` は `inline_consts` を通らず、ビルドの `inline_consts` は `if let Ok` で定数の評価の失敗を黙って捨てている。
+    - S-173 を同じ回に決める。
 - **W9-06:** E0819 を実装したら、E0200 の表の `BulkInType`・`BulkBuild`・`BulkCopy` を外す（仕様 §12.4 では E0819。W2-07/b）。
-- **W10-01:** 手順の器の `onsa_tests::capi` は、`<symbol>_init` / `_reset` / `_process` / `_params` と `<UPPER>_SIZE` などを §14.2 の接尾辞で組み立てている（バックエンドの `export.rs` と出どころが二つ。W1-11/b の 5 (d)）。export の計画が全ての名前を記録したら、capi はそこから読む。flow の生成する名前の重なり（`poison_boundary.onsa` で `boom` の `pb_boom_init` と flow `boom_init` が重なった例）を E1011 の否定例に入れる。
+- **W10-01:** 手順の器の `onsa_tests::capi` は、`<symbol>_init` / `_reset` / `_process` / `_params` と `<UPPER>_SIZE` などを §14.2 の接尾辞で組み立てている（バックエンドの `export.rs` と出どころが二つ。W1-11/b の 5 (d)）。
+  - export の計画が全ての名前を記録したら、capi はそこから読む。
+  - flow の生成する名前の重なり（`poison_boundary.onsa` で `boom` の `pb_boom_init` と flow `boom_init` が重なった例）を E1011 の否定例に入れる。
 - **W10-03:** R-107 の `panic_messages = false` で、`onsa.h` の補助関数のメッセージの文字列（`"integer overflow in `+`"` など）も除く（W2-05/i が残っていることを確かめた）。`ONSA_PANIC_HANDLER` をホストが定義すると trap / reset でもハンドラを先に呼ぶ（R-10 の「比較と分岐だけ」は定義しないときの話）。
-- **W10-04:** W2-09 で公開ヘッダと内部のランタイムを分け、`c-header-strict` の全体の項目を外した（W1-06 の公開ヘッダの検査の実装待ちは済み）。行の「W1-06 の公開ヘッダの検査を実装待ちから外す」は済んでいる。パッケージのヘッダの `#if ONSA_ABI_VERSION != 1 #error`（R-121、§14.2 の例）、公開ヘッダの `onsa_reset_hook` の宣言、内部の名前の `onsa__`、S-307（C の符号付きへの変換の前提）。`tests/review-phase1/parent/r109` と `tests/pipeline/span_const.onsa` が重なる。直したら再現の入力の方を消す。`c-header-strict` を一覧から外す。
+- **W10-04:** W2-09 で公開ヘッダと内部のランタイムを分け、`c-header-strict` の全体の項目を外した（W1-06 の公開ヘッダの検査の実装待ちは済み）。
+  - 行の「W1-06 の公開ヘッダの検査を実装待ちから外す」は済んでいる。
+  - パッケージのヘッダの `#if ONSA_ABI_VERSION != 1 #error`（R-121、§14.2 の例）、公開ヘッダの `onsa_reset_hook` の宣言、内部の名前の `onsa__`、S-307（C の符号付きへの変換の前提）。
+  - `tests/review-phase1/parent/r109` と `tests/pipeline/span_const.onsa` が重なる。直したら再現の入力の方を消す。
+  - `c-header-strict` を一覧から外す。
 - **M6:** 手順の器の `host/plan.rs` は `FlowApi` / `ApiField` を持ち、値の並びを C の引数の並びで作る。WASM で同じ手順のデータを使う前に、API によらない計画と C の写しを分ける（W1-11/b の 9）。
 - **S-406 の下書き（10 回目）:** 利用者は C# の `$"…"`（`$` で始まる補間の文字列）を S-406 で判断したい（2026-10-10）。下書きの作業票で論点として明示する。
-- **リファクタリングの候補（9 回目）:** W3-21/b の R-2（`operand()` がトークンから頂点を読み直す。`reads_as_expr` の木を返して AST から `Operand` を作る）、R-3（検出の入口が `FloatPattern` の行だけで、一つの検出が複数の行を選ぶことを登録簿の型に）、R-4（`interpolated` が `foreign/guard.rs` にありパーサーが呼ぶ。字句の事実は字句の段へ）、R-6（`Why::Differ` を理由の列挙型にし、行ごとの note を分ける。E0002 の文面が候補を作れない理由を言わない、指摘 12）。W3-09/b の S-1 の 6（`parse_type` の三通りを `ClockPolicy` で一つに）と 8（`foreign/flow.rs` の位置の判断、`typeish` の閉包）。報告は 9 回目の scratchpad の `w321b/report.md`・`w309b/report.md`。
+- **リファクタリングの候補（9 回目）:**
+  - W3-21/b の R-2（`operand()` がトークンから頂点を読み直す。`reads_as_expr` の木を返して AST から `Operand` を作る）、
+  - R-3（検出の入口が `FloatPattern` の行だけで、一つの検出が複数の行を選ぶことを登録簿の型に）、
+  - R-4（`interpolated` が `foreign/guard.rs` にありパーサーが呼ぶ。字句の事実は字句の段へ）、
+  - R-6（`Why::Differ` を理由の列挙型にし、行ごとの note を分ける。E0002 の文面が候補を作れない理由を言わない、指摘 12）。
+  - W3-09/b の S-1 の 6（`parse_type` の三通りを `ClockPolicy` で一つに）と 8（`foreign/flow.rs` の位置の判断、`typeish` の閉包）。
+  - 報告は 9 回目の scratchpad の `w321b/report.md`・`w309b/report.md`。
 - **リファクタリングの候補（W3-10/b・b2、10 回目）:** `Ty` / `Rate` / `FlowRate` の並行、core の `ReadWalk` と sema の `mark` の重複（`At` / `Feedback` の腕が両方に増えた）、遅延の三つ組の対応（W3-10 の最後の直しで一か所にしなければ）。報告は 10 回目の scratchpad の `w310b/report_b.md`・`w310b2/report_b2.md`。
 - **テストの器の改善の候補:** `//~` のマーカは note の位置を確かめられない（S-176 の「前の宣言を note で示す」など）。W3-02 の JSON の CLI のテストの形で補う案。`//~ TESTFAIL` に panic の文面を指定できない（§3.5 の「最初の panic」を確かめられない）。
 - **マニフェストの診断を足す作業:** `diagnostic_contract` は全てのファイルを Onsa の字句解析器で切ってトークンの境界を確かめる。E1102 / E1104 の候補（`onsa.toml` への編集）を足すときは、ファイルの種類で境界の判定を分ける（W3-02/b）。
 - **仕様の空白の決定で書けるようになったテスト:** W1-08 / W1-09 / W1-10 が「決まるまで書かない」とした事例と否定例は、各決定を実装する W の作業のテストの票が書く（計画 §2 の各 S の行の「実装は」）。今の実装が決定どおりの項目は W2-11 が書く（rework の行に一覧）。
 - **表示:** 組込みの panic の文面は浮動小数を F64 に広げて Rust の `{:?}` で書く（`-1.100000023841858 is out of range for U8`、2^63 は `9.223372036854776e18`）。§Show の最短の 10 進と揃わない。仕様は panic の文面を定めないので、表示の約束として決めるときに揃える（W2-03/b の F-5）。
-- **リファクタリングの候補（時期は別に決める）:** W3-19/b の報告 `scratchpad/w319b/report.md` の節（`foreign.rs` の型引数の塊を `foreign/type_args.rs` に、`body.rs` の E0200 の三か所、`children` の集約など）も材料にする。W3-19 は見積もり 540 行に対し正味約 566 行。 利用者はソースの肥大を気にしている（2026-10-09、W3-15 の報告で）。今は注意だけにし、本格的なリファクタリングは別の時期に行う。W3-15 で `crates/onsa_syntax/src/foreign.rs` が約 2100 行（S-317 の部分は約 230 行）、`crates/onsa_tests/src/fix_contract.rs` の器の直しが約 300 行になった。W3-15/b の報告の「リファクタリングの候補」の節（分けられる単位、`PatReader` と `parse_pattern_alt` の重複、使われない枝）を材料にする。作業の見積もりを出すときは、見積もりと実際の行数の差も記録する。 W3-07/b（2026-10-09）: 強弱の判断の閉包が 3 か所（`parser.rs` の `tighter`、`lower.rs` の `chain()`、`groups.rs` の `Order::tighter`）。`groups.rs` が AST の木を `Flat::new` で平らに戻して読み直す（E0010 の判定は AST の辺で足りる、D-15）。`key()`・`GROUPS`・`KEYS` が位置で対応。AST の子を列挙する `children()` が 3 か所（sema の flow、Core の flow、`graph.rs`）。パーサの高さと AST の木の高さを突き合わせるテストが無い。`groups.rs` は約 430 行で、判定・読みの列挙・候補の書き出し・入れ子の確かめに分けられる。 W3-20/b（2026-10-09、報告は 8 回目の scratchpad の `w320b/report.md`）: 呼び先の判定が parser の関門・`names_a_path`・`callee_expression`・`is_postfix_chain` / `removable_parens`・`is_value_callee` に分かれる（W4-12 が 5 つ目を足す。直しの票で一部を一つの述語にした）、リテラルの直後の `(` の判定が 3 か所（バイト・トークン・`Int`）、`MoveExpr` の節を作る場所が 4 つ、`dump.rs` と `fmt.rs` の `parens` の書き方の重複、`parser.rs` の `in_type()` が `lower::class` に依存する（層の向き）。W3-09: `at` の連鎖の E0011 は実装待ちの一覧から外れたので、作業票に明記する。
-- **trait の定義を実装する作業（第 1 期の W に無い。`onsa_diag::unsupported` の `TraitDefinitions`）:** W3-03 で `tests/spec/negative/unit_members.onsa` から外した trait のメンバの単位の事例を足す。形: `pub trait Measure {` の中に、既定の本体を持つ `fn width(self) -> I32 { let = 1 //~ E0002 … }`、`fn height` も同じ E0002、`fn depth(self) -> I32 { let bad: Bool = 1 //~ E0401 … }`、署名だけの `fn signature_only(self) -> I32`。三つのメンバの誤りが別々の単位として全て報告されることを確かめる。
-- **修正候補の器（W3-17）をビルドの段へ広げる作業:** ビルドの段の E0809 は修正候補（`@param` の挿入、`crates/onsa_driver/src/build.rs`）を持つが、器は降下・ビルド・`onsa test` の段の候補を `FixUnchecked` で失敗にする。この候補を出す事例を最初に足す作業が器を広げる。W5-02: `fix-contract` の E0411 の 2 件と `fuzz-input` の `1ee024dc` を外す。E0411 の整数の縮小の候補 `.narrow_<型>()` は §3.3（候補を出さず note）に反する（R の候補）。W7-06: `fuzz-input` の `4ea5a011`・`2abf12eb`（E0812 の `~` を除く候補、`tests/review-phase1/parent/t5.onsa`）。W3-15: `syntax_prefix.onsa:42:3 E0012`（`---x`、S の候補）。
-- **`foreign.rs` の深いリファクタリング（W3-06 の後、W3-04・W3-05・W3-08 の前の別の作業。2026-10-10、利用者が進め方を了承）:** 目的と条件（2026-10-10、12 回目、利用者）: 第一の目標は管理しやすい状態にすること（同じ判断を一か所に、依存の向き、名前が役割を表す）で、行数の削減を目的にしない（大きさの基準は膨らみすぎの見張りとしてだけ使う）。実行の性能を落とさない（dev と新しいバイナリで、`tests/`・`std`・`examples` の全体の `onsa check`・`onsa fmt --check`、長い入力の組（12 回目の scratchpad の `w306b2/speed/`）、gate の主な段の時間を同じ条件で測り、報告に並べる。誤差を超えて遅くなる直しは採らない）。範囲（2026-10-10、利用者が了承）: RF-1 行の情報をトークンの属性に、RF-2 規則の表の行の優先（R-206）、RF-3 層の向き（`layout`↔`parser` の循環、`lower::class`、`interpolated` を字句の段へ）、RF-4 呼び先の判定を一つの述語に。RF-5〜RF-8 は W3 の終わりなど区切りの良い時に回す（「W3 の終わり」の行）。確かめで分かった事実: 二つの行が一つの失敗に当たる検査は `debug_assert` で、リリースのビルドでは黙って先の行を選ぶ。 出力を変えない条件の例外（2026-10-10、利用者が了承、RF の単位 1）: コメントの定義を一つにし、ブロックコメント（他言語の形で E0020）も行の継続の判定でコメントとして数える（案 A）。ブロックコメントを含む誤りのある入力で、そのコメントが行の継続に関わる周辺の回復と、報告する誤りの選び方が変わる（コメントの行より前の診断が変わる入力もある。RF/b の再確認）。実際のコードのコーパスで差 0 件、テストからの変異 5,640 件で 1 件、系統的な挿入 10 万件で 9 件（`fn g()` と `uses` の間のブロックコメントで、`//` と同じく行が続き、ブロックコメントの E0020 を報告する改善）、トークンの寄せ集め 15,000 件で 384 件。修正候補が当てた後に読めなくなる後退は 0 件。`/ /* … */` 改行 `use …` の `use` が失敗した単位に飲み込まれ、後ろに連鎖の E0302 が一つ増える形は、`/ // …` と書いた基準の挙動と同じ）。差の一覧は 12 回目の scratchpad の `rfi/dif_*.txt`・`rfi/check_diffs.json`。 性能の条件の判断（2026-10-11、利用者が了承、RF の単位 2）: 規則の表の入口で当たった全ての行の診断を出し `reduce` が S-281 の順で選ぶ形（案 A）は、誤りの箇所ごとに 43 の検出を全て走らせるので、誤りだけで埋めた人工の入力で単位 2 の分が +1.9〜2.2%（`fns_errs_20000`、`mixed_fail_8000`。基準・単位 1・単位 2 を交互に 25 回）。実際のコードのコーパスと正しい入力では誤差の内か速い。トークンの種類から検出を引く索引（二つ目の置き場所）や、先に当たった行で止める形には戻さない。 重なりの選び方の範囲（RF/b の単位 2）: 規則の表の行の重なりは `reduce` が S-281 の順で選ぶ。ただし検出の中に除外が四つ残る: 行頭の `+`（`prefix_plus`）と `&`（`reference`）が行頭の二項演算子に譲る二つは S-281 の順でも同じ結果（文面の辞書順に頼った一致なので、文面を変えるときは確かめ直す）で、性能のために残した。`increment` が `--` を `binary_minus_minus` に譲る所と、パターンの浮動小数に `foreign_literal` を出さない所は、決定の読み（S-297・S-320・S-248）で S-281 の外。登録簿の自己テスト（`every_row_of_the_syntax_stage_has_a_matcher`）は、検出が自分の `rows` に無い行を返すこと（実行時に `internal::bug`）、`many` の `rows` の行を検出が実際には作らないこと、除外の呼び出しを捕まえない。`many` の検出に行を足すときは、`ROWS`・`MATCHERS` の `rows`・検出の本体の三か所を直す（RF-7 と同じ回に見直す）。 RF/b（単位 1）の再確認で残った置き場所の指摘（後に回す。RF-6 と同じ回）: (A) コメントの述語が一つになったのは `Lines` と `Cursor::comment()` の二か所だけで、`is_trivia`（ブロックコメントを含まない）を読む約 25 か所（`parser.rs`、`cst.rs`、`guard.rs`、`spaces.rs`、`assign.rs` など）と、局所の `matches!(… Comment | DocComment …)`（`foreign/paths.rs`、`flow.rs`、`semicolons.rs`、`edits.rs` の `move_up`、`onsa_tests/src/fix_contract.rs`）が残る。`Parser::end_with` が記録する最後のトークンがブロックコメントになりうる食い違いも残る（出力の差は作れなかった）。(C) 構文解析器の E0003 の候補を作る `move_up` が他言語の形の表の `foreign/edits.rs` にある（役割と置き場所が合わない）。(D) `token_kinds!` のマクロの本体を rustfmt が整形しない。 材料は、W3-15/b・W3-19/b・W3-21/b・W3-09/b の候補（上の行）、W3-06 の壊す側の報告、W3-06/i の単位 1a の報告の `comma_list`（`;` の行が使う `,` の並びの一覧）と `layout::starts_element` の並びの集合の重なり。W3-06/b（単位 1a）の L2: `layout.rs` と `parser.rs` の循環（`layout` が `parser::starts_operand`・`declares_a_function` と `foreign::Cursor` を使い、`parser` が `layout` を呼ぶ）、`starts_element` の表が構文解析器の「何で始まるか」と別にあること、`merge_strings`（S-388）の置き場所（報告は `scratchpad/w306b1a/report_b.md`。移すだけの整理の回に `layout.rs` に残すと決めた）。W3-06/i の単位 1b の報告: `foreign/paths.rs` の `type_position_path`・`space_in_type_args_mark` と `foreign/assign.rs` の `binary_minus_minus` が、トークンの後ろの間隙を `c.gap(c.at + 1)` で見ていて、次が改行のとき改行を数えない（単位 1b で直した `bit_not` と同じ種類）。`token::gap_after` に揃える。R-206（二つの行が一つの失敗に当たる内部エラー。行の優先順位を表に置く）。範囲の案は W3-06 の後に親が出す。 範囲に入れること（12 回目、W3-06/b の単位 2 の指摘 2・14、利用者が了承）: 行の情報を字句の後に一度だけ計算してトークンの属性にする（行頭のトークンか、その改行が継続するか、前後の間隙）。構文解析器・規則の表・回復・`tools/fmt_props.py` はこれを読むだけにし、「記号が行頭にある」の 5 つの書き方（`Parser::at_line_end`、`binary_here` の `gap(i) != Gap::Newline`、`parse_range_rest` の `peek_gap()`、`par` の `peek_past_newlines`、`layout::line_head`）と、`fmt_props.py` の `CONTINUING`（`layout::continues` の複製）を消す（計画 D-13 の各処理は一度だけ）。壊す側の報告のリファクタリングの候補の節（`Parser::ends` を `closed` から導けるか、`leading_symbol` を記号ごとの小さな関数に分ける、`list_fixes` の三つの分岐を表に寄せる）も材料にする（報告は 12 回目の scratchpad の `w306b2/handback_b.md`）。 同じく W3-06/b の再確認（`w306b2/handback_b2.md`）の B: 「`&` の次が `mut`」の判定が `lines::leading` と `modes::reference` の二か所にある（字句の判断を一つにする）。移すだけの整理（表を `foreign/rows.rs` へ、検出を族ごとのモジュールへ）は、W3-06 の単位 1a のコミットの後に実装の担当が行う。
-- **W3 の終わり（プロセスの整理、2026-10-10、利用者）:** 決定を書く場所が分散している件（仕様、変更点 §4、計画 §2、rework の行、空白の資料）の整理と、保留中のプロセスの改善（事例の器に一つのファイルを受ける形、空白の資料のディレクトリ分けと参照の直し、正規形でない正例を書く器の形の見直し、R-208 の事例の器の修正候補の約束の検査が候補の数に対して指数的に遅くなる件）をまとめて検討する作業を挟む。 同じ作業の候補（2026-10-10、利用者の提案）: 文書の管理の担当を `.claude/agents/` に足す（名前の案は `onsa-docs`）。目的（利用者）は、文書の間の整合を保つこと、文書を構造化して他の担当の認知の負荷を減らすこと、文書を目的（読むのは人か担当か両方か、誰がいつ読むか）に合わせて整理すること。整理の判断は親が行い、担当は親の指示で文書を直し、親が確かめる。親の案: 先に親と利用者で文書の地図（各文書を誰が・いつ・何のために読むか、事実ごとの正本）を決め、それを担当の定義の中身にして、再編を担当の最初の仕事にする。あわせて決めること: (1) 事実ごとに正本を一つにして他は ID で参照し、ID の相互参照・表の列の数・状態の欄の照合を `tools/` の検査にして gate に入れる。(2) 移動と書き換えのコミットを分け、移動は内容が変わらないことをスクリプトで確かめる（`afbfd25` と同じ形）。担当は触った ID と場所の一覧を報告する。(3) 担当が書かない範囲（`.claude/agents/` は利用者、`leader-rules.md` は「親が書く」の規則を改めるか、仕様の文言は親が決めて担当は置くだけ、スワップファイルの確かめは `agent-rules.md` 5 章）。(4) 任せる大きさ（一行の直しは親、決定の組の反映・持ち越しの整理・再編は担当）。(5) 枠は 4 体に数え、作業ツリーで書かせて親が写す。モデルは Sonnet 5.5（high）の案。定義の文は親が提案し、利用者が書く（`leader-rules.md` 6.7）。 同じ作業の論点の候補（2026-10-10、12 回目、利用者の問いへの親の調べ）: 実装を複雑にしている共通要因。S-300〜S-424 の 125 件のうち、修正候補の形・数・順の項目が 71 件、空白・改行・置き場所が 50 件で、7 章の 32 の一覧の外の言語が問題の欄に出るのは 9 件（`docs/foreign-forms.toml` の 99 行のうち、一覧の外の言語だけを出自とする行は 6 行）。規則の表まわり（`foreign/`、`layout.rs`、`groups.rs`）は約 5,000 行で構文の crate の約 4 分の 1、器の `fix_contract.rs` は約 1,100 行。(1) 修正候補の約束を一段弱める案: 約束は S-236 の安全性だけにし、候補の文字列と順（S-315、`.fixK` の全文の比べ）は約束しない。7 章の 18 に照らして、文字列と順まで頼る使い手を示せるかを確かめる。得るもの: 候補の細部の S と期待値の食い違い（W3-06 の単位 2 の `e0002_comma_*` の 11 か所など）が減る。失うもの: 候補の質をテストで細かく縛れない。既に決めた出力を変えるかは別に決める。(2) 仕様の空白を形ごとでなく規則の族ごと（行頭の記号、括弧の中の改行など）にまとめて決める（S-370 → S-386 → S-398 → S-405 → その細部 → S-423 のように、同じ族が時期をずらして決まり、組み合わせの確かめが増えた）。 (3) 長い入力で時間が線形に増えるかを見る gate の項目（12 回目、W3-06/b の単位 2 の指摘 2、利用者が了承）: コメント行・空行・長い行・長い連鎖などを大きさ N と 4N で比べ、増え方が線形を大きく超えたら落とす。W3-06 の単位 2 で、継続の判定が空行とコメント行の数の二乗の時間になった後退（8000 行で 2 秒、dev は 0.01 秒以下）を、gate と fuzz は見つけられず、壊す側の手作業で見つかった。 同じ回に R-209（ガードの形の候補を出す腕が多いファイルで時間が二乗に近く増える。前からある）を直し、その入力（12 回目の scratchpad の `rfi/speed2/`）も検査の組に入れる。 (4) R-207 の `tests/fuzz/allowed.toml` の `left` が一般的な文面（「expected newline or `…`, found identifier」「this `…` is never closed」など）の項目は、同じ類の別の入力も既知にする（W3-06/b の再確認の A）。`left` に診断の位置の種類を足すか、入力の指紋と組にする案。 (5) `foreign.rs` の深いリファクタリングで後に回した項目（2026-10-10、利用者: 区切りの良い時に）: RF-5 強弱の判断の 3 か所（`parser` の `tighter`、`lower` の `chain()`、`groups` の `Order::tighter`）と `groups.rs` が AST を `Flat::new` で平らに戻して読み直すこと、パーサの高さと AST の高さを突き合わせるテスト（W3-07/b）。RF-6 構文解析器の内部の重複（`PatReader` と `parse_pattern_alt`、`parse_type` の三通り、`MoveExpr` の節を作る場所 4 つ、`dump` と `fmt` の `parens`、`operand()` が字句から読み直す W3-21/b の R-2）。RF-7 `Why::Differ` を理由の列挙型に（R-6）、`list_fixes` の分岐を表に、`Parser::ends` を閉じた節から導く（(1) の候補の約束の論点の後）。RF-8 sema・core の `children()` の 3 か所と `Ty`/`Rate`/`FlowRate` の並行（構文の crate の外）。 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
-- **W3 の後、W4 の前（次の段の準備、2026-10-10、12 回目、利用者）:** W4 を始める前に、次の三つを行う作業を挟む（上の「W3 の終わり」のプロセスの整理と同じ区切り）。(1) W4 で行う作業（`docs/rework-phase1.md` §3 の W4 の行と、W4 に回した持ち越し・実装待ちの項目）の作業量を、始める前に見積もる。(2) 見積もった量から、W4 の範囲に入れるものと外すもの（後の段や第 2 期へ回すもの）を、始める前に決める。W3 では範囲を決めずに進めたため、作業の途中で見つかった仕様の空白と直しが範囲に入り続け、作業量が大きく増えた。(3) 見積もった量から、作業を適切な単位に分け、依存の順に並べる（rework の表の W4 の行の分け直しと、依存の欄の更新）。見積もりと範囲の案は親が作り、利用者が決める。
+- **リファクタリングの候補（時期は別に決める）:** W3-19/b の報告 `scratchpad/w319b/report.md` の節（`foreign.rs` の型引数の塊を `foreign/type_args.rs` に、`body.rs` の E0200 の三か所、`children` の集約など）も材料にする。
+  - W3-19 は見積もり 540 行に対し正味約 566 行。
+  - 利用者はソースの肥大を気にしている（2026-10-09、W3-15 の報告で）。
+    - 今は注意だけにし、本格的なリファクタリングは別の時期に行う。
+    - W3-15 で `crates/onsa_syntax/src/foreign.rs` が約 2100 行（S-317 の部分は約 230 行）、`crates/onsa_tests/src/fix_contract.rs` の器の直しが約 300 行になった。
+    - W3-15/b の報告の「リファクタリングの候補」の節（分けられる単位、`PatReader` と `parse_pattern_alt` の重複、使われない枝）を材料にする。
+    - 作業の見積もりを出すときは、見積もりと実際の行数の差も記録する。
+  - W3-07/b（2026-10-09）: 強弱の判断の閉包が 3 か所（`parser.rs` の `tighter`、`lower.rs` の `chain()`、`groups.rs` の `Order::tighter`）。
+    - `groups.rs` が AST の木を `Flat::new` で平らに戻して読み直す（E0010 の判定は AST の辺で足りる、D-15）。
+    - `key()`・`GROUPS`・`KEYS` が位置で対応。
+    - AST の子を列挙する `children()` が 3 か所（sema の flow、Core の flow、`graph.rs`）。
+    - パーサの高さと AST の木の高さを突き合わせるテストが無い。
+    - `groups.rs` は約 430 行で、判定・読みの列挙・候補の書き出し・入れ子の確かめに分けられる。
+  - W3-20/b（2026-10-09、報告は 8 回目の scratchpad の `w320b/report.md`）:
+    - 呼び先の判定が parser の関門・`names_a_path`・`callee_expression`・`is_postfix_chain` / `removable_parens`・`is_value_callee` に分かれる（W4-12 が 5 つ目を足す。直しの票で一部を一つの述語にした）、
+    - リテラルの直後の `(` の判定が 3 か所（バイト・トークン・`Int`）、
+    - `MoveExpr` の節を作る場所が 4 つ、
+    - `dump.rs` と `fmt.rs` の `parens` の書き方の重複、
+    - `parser.rs` の `in_type()` が `lower::class` に依存する（層の向き）。
+  - W3-09: `at` の連鎖の E0011 は実装待ちの一覧から外れたので、作業票に明記する。
+- **trait の定義を実装する作業（第 1 期の W に無い。`onsa_diag::unsupported` の `TraitDefinitions`）:** W3-03 で `tests/spec/negative/unit_members.onsa` から外した trait のメンバの単位の事例を足す。
+  - 形: `pub trait Measure {` の中に、既定の本体を持つ `fn width(self) -> I32 { let = 1 //~ E0002 … }`、`fn height` も同じ E0002、`fn depth(self) -> I32 { let bad: Bool = 1 //~ E0401 … }`、署名だけの `fn signature_only(self) -> I32`。
+  - 三つのメンバの誤りが別々の単位として全て報告されることを確かめる。
+- **修正候補の器（W3-17）をビルドの段へ広げる作業:** ビルドの段の E0809 は修正候補（`@param` の挿入、`crates/onsa_driver/src/build.rs`）を持つが、器は降下・ビルド・`onsa test` の段の候補を `FixUnchecked` で失敗にする。
+  - この候補を出す事例を最初に足す作業が器を広げる。
+  - W5-02: `fix-contract` の E0411 の 2 件と `fuzz-input` の `1ee024dc` を外す。
+    - E0411 の整数の縮小の候補 `.narrow_<型>()` は §3.3（候補を出さず note）に反する（R の候補）。
+  - W7-06: `fuzz-input` の `4ea5a011`・`2abf12eb`（E0812 の `~` を除く候補、`tests/review-phase1/parent/t5.onsa`）。
+  - W3-15: `syntax_prefix.onsa:42:3 E0012`（`---x`、S の候補）。
+- **`foreign.rs` の深いリファクタリング（W3-06 の後、W3-04・W3-05・W3-08 の前の別の作業。2026-10-10、利用者が進め方を了承）:**
+  - 目的と条件（2026-10-10、12 回目、利用者）:
+    - 第一の目標は管理しやすい状態にすること（同じ判断を一か所に、依存の向き、名前が役割を表す）で、行数の削減を目的にしない（大きさの基準は膨らみすぎの見張りとしてだけ使う）。
+    - 実行の性能を落とさない（dev と新しいバイナリで、`tests/`・`std`・`examples` の全体の `onsa check`・`onsa fmt --check`、長い入力の組（12 回目の scratchpad の `w306b2/speed/`）、gate の主な段の時間を同じ条件で測り、報告に並べる。誤差を超えて遅くなる直しは採らない）。
+  - 範囲（2026-10-10、利用者が了承）:
+    - RF-1 行の情報をトークンの属性に、
+    - RF-2 規則の表の行の優先（R-206）、
+    - RF-3 層の向き（`layout`↔`parser` の循環、`lower::class`、`interpolated` を字句の段へ）、
+    - RF-4 呼び先の判定を一つの述語に。
+    - RF-5〜RF-8 は W3 の終わりなど区切りの良い時に回す（「W3 の終わり」の行）。
+  - 確かめで分かった事実: 二つの行が一つの失敗に当たる検査は `debug_assert` で、リリースのビルドでは黙って先の行を選ぶ。
+  - 出力を変えない条件の例外（2026-10-10、利用者が了承、RF の単位 1）:
+    - コメントの定義を一つにし、ブロックコメント（他言語の形で E0020）も行の継続の判定でコメントとして数える（案 A）。
+    - ブロックコメントを含む誤りのある入力で、そのコメントが行の継続に関わる周辺の回復と、報告する誤りの選び方が変わる（コメントの行より前の診断が変わる入力もある。RF/b の再確認）。
+    - 実際のコードのコーパスで差 0 件、テストからの変異 5,640 件で 1 件、系統的な挿入 10 万件で 9 件（`fn g()` と `uses` の間のブロックコメントで、`//` と同じく行が続き、ブロックコメントの E0020 を報告する改善）、トークンの寄せ集め 15,000 件で 384 件。
+    - 修正候補が当てた後に読めなくなる後退は 0 件。
+    - `/ /* … */` 改行 `use …` の `use` が失敗した単位に飲み込まれ、後ろに連鎖の E0302 が一つ増える形は、`/ // …` と書いた基準の挙動と同じ）。
+    - 差の一覧は 12 回目の scratchpad の `rfi/dif_*.txt`・`rfi/check_diffs.json`。
+  - 性能の条件の判断（2026-10-11、利用者が了承、RF の単位 2）:
+    - 規則の表の入口で当たった全ての行の診断を出し `reduce` が S-281 の順で選ぶ形（案 A）は、誤りの箇所ごとに 43 の検出を全て走らせるので、誤りだけで埋めた人工の入力で単位 2 の分が +1.9〜2.2%（`fns_errs_20000`、`mixed_fail_8000`。基準・単位 1・単位 2 を交互に 25 回）。
+    - 実際のコードのコーパスと正しい入力では誤差の内か速い。
+    - トークンの種類から検出を引く索引（二つ目の置き場所）や、先に当たった行で止める形には戻さない。
+  - 重なりの選び方の範囲（RF/b の単位 2）:
+    - 規則の表の行の重なりは `reduce` が S-281 の順で選ぶ。
+    - ただし検出の中に除外が四つ残る:
+      - 行頭の `+`（`prefix_plus`）と `&`（`reference`）が行頭の二項演算子に譲る二つは S-281 の順でも同じ結果（文面の辞書順に頼った一致なので、文面を変えるときは確かめ直す）で、性能のために残した。
+      - `increment` が `--` を `binary_minus_minus` に譲る所と、パターンの浮動小数に `foreign_literal` を出さない所は、決定の読み（S-297・S-320・S-248）で S-281 の外。
+    - 登録簿の自己テスト（`every_row_of_the_syntax_stage_has_a_matcher`）は、検出が自分の `rows` に無い行を返すこと（実行時に `internal::bug`）、`many` の `rows` の行を検出が実際には作らないこと、除外の呼び出しを捕まえない。
+    - `many` の検出に行を足すときは、`ROWS`・`MATCHERS` の `rows`・検出の本体の三か所を直す（RF-7 と同じ回に見直す）。
+  - RF/b（単位 1）の再確認で残った置き場所の指摘（後に回す。RF-6 と同じ回）:
+    - (A) コメントの述語が一つになったのは `Lines` と `Cursor::comment()` の二か所だけで、`is_trivia`（ブロックコメントを含まない）を読む約 25 か所（`parser.rs`、`cst.rs`、`guard.rs`、`spaces.rs`、`assign.rs` など）と、局所の `matches!(… Comment | DocComment …)`（`foreign/paths.rs`、`flow.rs`、`semicolons.rs`、`edits.rs` の `move_up`、`onsa_tests/src/fix_contract.rs`）が残る。
+      - `Parser::end_with` が記録する最後のトークンがブロックコメントになりうる食い違いも残る（出力の差は作れなかった）。
+    - (C) 構文解析器の E0003 の候補を作る `move_up` が他言語の形の表の `foreign/edits.rs` にある（役割と置き場所が合わない）。
+    - (D) `token_kinds!` のマクロの本体を rustfmt が整形しない。
+  - 材料は、W3-15/b・W3-19/b・W3-21/b・W3-09/b の候補（上の行）、W3-06 の壊す側の報告、W3-06/i の単位 1a の報告の `comma_list`（`;` の行が使う `,` の並びの一覧）と `layout::starts_element` の並びの集合の重なり。
+    - W3-06/b（単位 1a）の L2: `layout.rs` と `parser.rs` の循環（`layout` が `parser::starts_operand`・`declares_a_function` と `foreign::Cursor` を使い、`parser` が `layout` を呼ぶ）、`starts_element` の表が構文解析器の「何で始まるか」と別にあること、`merge_strings`（S-388）の置き場所（報告は `scratchpad/w306b1a/report_b.md`。移すだけの整理の回に `layout.rs` に残すと決めた）。
+    - W3-06/i の単位 1b の報告: `foreign/paths.rs` の `type_position_path`・`space_in_type_args_mark` と `foreign/assign.rs` の `binary_minus_minus` が、トークンの後ろの間隙を `c.gap(c.at + 1)` で見ていて、次が改行のとき改行を数えない（単位 1b で直した `bit_not` と同じ種類）。`token::gap_after` に揃える。
+    - R-206（二つの行が一つの失敗に当たる内部エラー。行の優先順位を表に置く）。
+  - 範囲の案は W3-06 の後に親が出す。
+  - 範囲に入れること（12 回目、W3-06/b の単位 2 の指摘 2・14、利用者が了承）: 行の情報を字句の後に一度だけ計算してトークンの属性にする（行頭のトークンか、その改行が継続するか、前後の間隙）。
+    - 構文解析器・規則の表・回復・`tools/fmt_props.py` はこれを読むだけにし、「記号が行頭にある」の 5 つの書き方（`Parser::at_line_end`、`binary_here` の `gap(i) != Gap::Newline`、`parse_range_rest` の `peek_gap()`、`par` の `peek_past_newlines`、`layout::line_head`）と、`fmt_props.py` の `CONTINUING`（`layout::continues` の複製）を消す（計画 D-13 の各処理は一度だけ）。
+    - 壊す側の報告のリファクタリングの候補の節（`Parser::ends` を `closed` から導けるか、`leading_symbol` を記号ごとの小さな関数に分ける、`list_fixes` の三つの分岐を表に寄せる）も材料にする（報告は 12 回目の scratchpad の `w306b2/handback_b.md`）。
+  - 同じく W3-06/b の再確認（`w306b2/handback_b2.md`）の B: 「`&` の次が `mut`」の判定が `lines::leading` と `modes::reference` の二か所にある（字句の判断を一つにする）。
+  - 移すだけの整理（表を `foreign/rows.rs` へ、検出を族ごとのモジュールへ）は、W3-06 の単位 1a のコミットの後に実装の担当が行う。
+- **W3 の終わり（プロセスの整理、2026-10-10、利用者）:** 決定を書く場所が分散している件（仕様、変更点 §4、計画 §2、rework の行、空白の資料）の整理と、保留中のプロセスの改善（事例の器に一つのファイルを受ける形、空白の資料のディレクトリ分けと参照の直し、正規形でない正例を書く器の形の見直し、R-208 の事例の器の修正候補の約束の検査が候補の数に対して指数的に遅くなる件）をまとめて検討する作業を挟む。
+  - 同じ作業の候補（2026-10-10、利用者の提案）: 文書の管理の担当を `.claude/agents/` に足す（名前の案は `onsa-docs`）。
+    - 目的（利用者）は、文書の間の整合を保つこと、文書を構造化して他の担当の認知の負荷を減らすこと、文書を目的（読むのは人か担当か両方か、誰がいつ読むか）に合わせて整理すること。
+    - 整理の判断は親が行い、担当は親の指示で文書を直し、親が確かめる。
+    - 親の案: 先に親と利用者で文書の地図（各文書を誰が・いつ・何のために読むか、事実ごとの正本）を決め、それを担当の定義の中身にして、再編を担当の最初の仕事にする。
+    - あわせて決めること:
+      - (1) 事実ごとに正本を一つにして他は ID で参照し、ID の相互参照・表の列の数・状態の欄の照合を `tools/` の検査にして gate に入れる。
+      - (2) 移動と書き換えのコミットを分け、移動は内容が変わらないことをスクリプトで確かめる（`afbfd25` と同じ形）。担当は触った ID と場所の一覧を報告する。
+      - (3) 担当が書かない範囲（`.claude/agents/` は利用者、`leader-rules.md` は「親が書く」の規則を改めるか、仕様の文言は親が決めて担当は置くだけ、スワップファイルの確かめは `agent-rules.md` 5 章）。
+      - (4) 任せる大きさ（一行の直しは親、決定の組の反映・持ち越しの整理・再編は担当）。
+      - (5) 枠は 4 体に数え、作業ツリーで書かせて親が写す。モデルは Sonnet 5.5（high）の案。定義の文は親が提案し、利用者が書く（`leader-rules.md` 6.7）。
+  - 同じ作業の論点の候補（2026-10-10、12 回目、利用者の問いへの親の調べ）: 実装を複雑にしている共通要因。
+    - S-300〜S-424 の 125 件のうち、修正候補の形・数・順の項目が 71 件、空白・改行・置き場所が 50 件で、7 章の 32 の一覧の外の言語が問題の欄に出るのは 9 件（`docs/foreign-forms.toml` の 99 行のうち、一覧の外の言語だけを出自とする行は 6 行）。
+    - 規則の表まわり（`foreign/`、`layout.rs`、`groups.rs`）は約 5,000 行で構文の crate の約 4 分の 1、器の `fix_contract.rs` は約 1,100 行。
+    - (1) 修正候補の約束を一段弱める案: 約束は S-236 の安全性だけにし、候補の文字列と順（S-315、`.fixK` の全文の比べ）は約束しない。7 章の 18 に照らして、文字列と順まで頼る使い手を示せるかを確かめる。
+      - 得るもの: 候補の細部の S と期待値の食い違い（W3-06 の単位 2 の `e0002_comma_*` の 11 か所など）が減る。
+      - 失うもの: 候補の質をテストで細かく縛れない。
+      - 既に決めた出力を変えるかは別に決める。
+    - (2) 仕様の空白を形ごとでなく規則の族ごと（行頭の記号、括弧の中の改行など）にまとめて決める（S-370 → S-386 → S-398 → S-405 → その細部 → S-423 のように、同じ族が時期をずらして決まり、組み合わせの確かめが増えた）。
+    - (3) 長い入力で時間が線形に増えるかを見る gate の項目（12 回目、W3-06/b の単位 2 の指摘 2、利用者が了承）: コメント行・空行・長い行・長い連鎖などを大きさ N と 4N で比べ、増え方が線形を大きく超えたら落とす。
+      - W3-06 の単位 2 で、継続の判定が空行とコメント行の数の二乗の時間になった後退（8000 行で 2 秒、dev は 0.01 秒以下）を、gate と fuzz は見つけられず、壊す側の手作業で見つかった。
+      - 同じ回に R-209（ガードの形の候補を出す腕が多いファイルで時間が二乗に近く増える。前からある）を直し、その入力（12 回目の scratchpad の `rfi/speed2/`）も検査の組に入れる。
+    - (4) R-207 の `tests/fuzz/allowed.toml` の `left` が一般的な文面（「expected newline or `…`, found identifier」「this `…` is never closed」など）の項目は、同じ類の別の入力も既知にする（W3-06/b の再確認の A）。`left` に診断の位置の種類を足すか、入力の指紋と組にする案。
+    - (5) `foreign.rs` の深いリファクタリングで後に回した項目（2026-10-10、利用者: 区切りの良い時に）:
+      - RF-5 強弱の判断の 3 か所（`parser` の `tighter`、`lower` の `chain()`、`groups` の `Order::tighter`）と `groups.rs` が AST を `Flat::new` で平らに戻して読み直すこと、パーサの高さと AST の高さを突き合わせるテスト（W3-07/b）。
+      - RF-6 構文解析器の内部の重複（`PatReader` と `parse_pattern_alt`、`parse_type` の三通り、`MoveExpr` の節を作る場所 4 つ、`dump` と `fmt` の `parens`、`operand()` が字句から読み直す W3-21/b の R-2）。
+      - RF-7 `Why::Differ` を理由の列挙型に（R-6）、`list_fixes` の分岐を表に、`Parser::ends` を閉じた節から導く（(1) の候補の約束の論点の後）。
+      - RF-8 sema・core の `children()` の 3 か所と `Ty`/`Rate`/`FlowRate` の並行（構文の crate の外）。
+      - 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。
+      - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
+  - トークン効率化対策（2026-10-12、14 回目、利用者）: 週の使用量の上限（全モデルで共通。`/usage` に出るのは session・weekly・Fable だけ）が 4〜5 日で尽きる件。
+    - 10/05〜10/10 の会話記録の集計（API の単価で換算した割合の目安。プランの上限の数え方は公開されていない）: impl 40%、親 28%、test 12%、break 11%、advisor 3.5%、gap 3%。
+    - 費用の大半は呼び出しのたびに文脈の全体を読み直す分で、「呼び出しの回数 × 文脈の長さ」で増えるので、大きい作業ほど二乗に近く高くなる（W3-06 は約 $190、RF は約 $140、ふつうの作業は約 $50）。impl は呼び出しが中央値で 191 回、文脈の最大が中央値で 43 万（多いもので 86 万）。
+    - 済んだ対策（`798a9fd`）:
+      - onsa-impl のキャッシュを 1 時間に（`experimental.cacheTtl: 1h`。担当の既定は 5 分で、親の返事待ちと gate の待ちの後に文脈の全体を書き直していた。試算で約 8〜9% 減）、
+      - `leader-rules.md` 1.2 の区切りを 6 割に（試算で約 5% 減）、
+      - `agent-rules.md` 1 章のまとめて読む注意。
+    - ここで検討する対策:
+      - (1) 担当を短命にする。設計メモの担当と実装の担当を分け、承認の後は新しい担当にメモと審査の結果を渡す。直しの往復は、文脈が大きい（例えば 30 万を超える）ときは同じ担当へ返さず、新しい担当へ引き継ぐ（`leader-rules.md` 2.6 の見直し）。作業票を小さめに切る。
+      - (2) 担当の文脈の上限。`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` は担当にも効く（例えば 40 で、40 万の付近で自動の要約が働く）。要約で細部が落ちるので、1 作業で試して質を比べてから決める。
+      - (3) 推論の努力。test と break を high から medium にして 1 作業で試す（呼び出しが少なく、まとまる傾向がある）。impl は据え置き（W の努力を上げない方針）、下げるかは測ってから決める。
+      - (4) モデル。Opus 5.5 と Sonnet 5.5 はキャッシュの読みの単価が同じ（$0.20/M）なので、impl を Sonnet に替えても API の換算では 25% 前後しか下がらない。上限は全モデルで共通で、モデルごとの重みは公開されていないので、効果は測らないと分からない。
+      - (5) 大きいファイルの分割を先に回す（impl は `parser.rs` だけで延べ約 33 万字を読んだ。RF-5〜RF-8 と同じ回）。上の文書の整理も担当の読む量を減らす（`agent-rules.md` 1 章の注意は、整理の後に見直す）。
+      - (6) 費用を測る道具。
+        - 集計のスクリプト（14 回目の scratchpad の `usage.py`・`agg2.py`・`cost.py`・`miss.py`・`gapcause.py`・`ticket.py`・`sim.py`）を `tools/` に置き、作業ごと・担当ごとの費用を出す。
+        - `leader-rules.md` 2.8 の目安の更新と、対策の効果の確かめに使う。
+        - onsa-impl の 1 時間のキャッシュが効いたかは、担当の記録の `cache_creation.ephemeral_1h_input_tokens` で確かめる。
+    - 同時に動かす担当の数を減らしても、週の総量はほとんど変わらない（効くのは session の上限）。
+- **W3 の後、W4 の前（次の段の準備、2026-10-10、12 回目、利用者）:** W4 を始める前に、次の三つを行う作業を挟む（上の「W3 の終わり」のプロセスの整理と同じ区切り）。
+  - (1) W4 で行う作業（`docs/rework-phase1.md` §3 の W4 の行と、W4 に回した持ち越し・実装待ちの項目）の作業量を、始める前に見積もる。
+  - (2) 見積もった量から、W4 の範囲に入れるものと外すもの（後の段や第 2 期へ回すもの）を、始める前に決める。
+    - W3 では範囲を決めずに進めたため、作業の途中で見つかった仕様の空白と直しが範囲に入り続け、作業量が大きく増えた。
+  - (3) 見積もった量から、作業を適切な単位に分け、依存の順に並べる（rework の表の W4 の行の分け直しと、依存の欄の更新）。
+  - 見積もりと範囲の案は親が作り、利用者が決める。
 - **E0200 の `found`（12 回目、W3-06/i の単位 2）:** `tests/spec/negative/range_continuation_closed_e0200.onsa` の E0200 の `found` が、改行とコメントを含む複数行の字面になる（`'0..=  //~ E0200\n    n'`）。E0200 を出す後の段の範囲の作り方の問題。その E0200 を外す作業か、診断の `found` を揃える作業の作業票に入れる。
