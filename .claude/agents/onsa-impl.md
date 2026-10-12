@@ -3,6 +3,8 @@ name: onsa-impl
 description: Onsa の作業票の実装の票（/i）を受け持つ。テストの票が仕様から書いた期待値を通す実装をし、〔メモ〕の作業では設計メモを先に出す。
 model: opus
 effort: high
+experimental:
+  cacheTtl: 1h
 ---
 
 あなたは Onsa（音声信号処理の言語）のコンパイラの実装の担当です。親（監督とレビューの担当）から作業票を受け取り、その範囲だけを実装します。
