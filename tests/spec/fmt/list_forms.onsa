@@ -1,0 +1,241 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§4.4", "§6.1", "§7", "§8.1", "§11.2", "§15.1", "§18.2"]
+
+// The three forms of a list (docs/onsa-tools.md §3.2, W3-11 unit U2), each written as `onsa fmt` writes it,
+// for each kind of list: the arguments of a call, the parameters of a declaration, the elements of an
+// array and of a tuple, the fields of a struct literal, the inputs of a flow. The lists of a pattern are
+// in list_forms_patterns.onsa and the `use` lists in list_forms_use.onsa.
+//   - one line: every element is on the line of the opening bracket and nothing follows the last element
+//     (a `,` after it goes);
+//   - block form: a line break right after the opening bracket, one element a line, one level deeper,
+//     a `,` after every element, the closing bracket on a line of its own;
+//   - continuation: the first element on the line of the opening bracket, each of the others on a line
+//     of its own under the first, no `,` after the last, the closing bracket after the last element.
+// Which form it is depends on the writer's line breaks, not on the length of the line. The line breaks
+// inside an element and the lists inside lists written in a block or a continuation are not here (the
+// places of the comments, of the blank lines and the levels of the indentation are decided apart).
+// The file is read by the syntax stage only (`mode = "parse"`).
+
+use std.math.{sqrt, sum}
+use shapes.{Point, Circle}
+
+pub struct Point3 {
+  x: F32,
+  y: F32,
+  z: F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Empty,
+}
+
+// Arguments of a call.
+pub fn calls(a: I32, b: I32, c: I32) -> I32 {
+  let one = f(a, b, c)
+  let two = f(
+    a,
+    b,
+    c,
+  )
+  let three = f(a,
+                b,
+                c)
+  let four = f(a)
+  let five = f(
+    a,
+  )
+  one
+}
+
+// Parameters of a declaration.
+pub fn one_line(a: I32, b: I32, c: I32) -> I32 {
+  a
+}
+
+pub fn block_form(
+  a: I32,
+  b: I32,
+  c: I32,
+) -> I32 {
+  a
+}
+
+pub fn continuation(a: I32,
+                    b: I32,
+                    c: I32) -> I32 {
+  a
+}
+
+pub fn one_parameter(
+  a: I32,
+) -> I32 {
+  a
+}
+
+// Elements of an array and of a tuple.
+pub fn arrays() -> I32 {
+  let one = [1, 2, 3]
+  let two = [
+    1,
+    2,
+    3,
+  ]
+  let three = [1,
+               2,
+               3]
+  let four = (1, 2.0)
+  let five = (
+    1,
+    2.0,
+  )
+  let six = (1,
+             2.0)
+  one[0]
+}
+
+// Fields of a struct literal.
+pub fn literals(x: F32) -> Point3 {
+  let one = Point3 { x: x, y: 2.0, z: 3.0 }
+  let two = Point3 {
+    x: x,
+    y: 2.0,
+    z: 3.0,
+  }
+  let three = Point3 { x: x,
+                       y: 2.0,
+                       z: 3.0 }
+  two
+}
+
+// Fields of a struct pattern, elements of a tuple pattern, the payload of a variant pattern, on one line
+// (the block and the continuation are in list_forms_patterns.onsa).
+pub fn patterns(p: Point3, t: (I32, I32, I32), s: Shape) -> F32 {
+  let Point3 { x: a, y: b, z: c } = p
+
+  let (k, l, m) = t
+
+  match s {
+    Shape.Circle(w) => w,
+    Shape.Rect(w, z) => w * z,
+    Shape.Empty => 0.0,
+  }
+}
+
+// The same lists one level deeper: in a branch, a loop and a closure.
+pub fn deeper(c: Bool, n: U32, xs: Span[U32]) -> I32 {
+  if c {
+    let one = f(
+      1,
+      2,
+    )
+    let two = f(1,
+                2)
+    let three = [
+      1,
+      2,
+    ]
+  } else {
+    let four = Point3 {
+      x: 1.0,
+      y: 2.0,
+      z: 3.0,
+    }
+  }
+  for i in xs {
+    g(
+      i,
+      n,
+    )
+  }
+  let h = fn(a: I32) -> I32 {
+    f(
+      a,
+      a,
+    )
+  }
+  1
+}
+
+// Lists in a path of modules, with type arguments, in a flow call, a method call and a generic function.
+pub fn paths_and_marks(s: Str, buf: Buf[F32]) -> U32 {
+  let one = shapes.area(
+    1.0,
+    2.0,
+  )
+  let two = std.math.max(1,
+                         2)
+  let three = Buf::[F32].zeroed(
+    4,
+  )
+  let four = parse::[U32](
+    s,
+  )
+  let five = buf.push_with::[F32, U8](
+    1.0,
+    2,
+  )
+  1
+}
+
+pub flow flow_calls(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = lp~(
+    x,
+    p,
+  )
+  let b = mix~(x,
+               a)
+  a + b
+}
+
+pub fn generic_with_a_block[T, U](
+  x: T,
+  y: U,
+) -> Pair[T, U] {
+  Pair {
+    a: x,
+    b: y,
+  }
+}
+
+// A list whose elements are lists of one line.
+pub fn nested_on_one_line() -> I32 {
+  let one = [
+    Point { x: 1.0, y: 2.0 },
+    Point { x: 3.0, y: 4.0 },
+  ]
+  let two = f(
+    g(1, 2),
+    [3, 4],
+    (5, 6),
+  )
+  one
+}
+
+// The inputs of a flow.
+pub flow one_line_flow(x: F32 at sample, p: F32 at block, q: F32 at init) -> F32 at sample {
+  x
+}
+
+pub flow block_flow(
+  x: F32 at sample,
+  p: F32 at block,
+  q: F32 at init,
+) -> F32 at sample {
+  x
+}
+
+pub flow continuation_flow(x: F32 at sample,
+                           p: F32 at block,
+                           q: F32 at init) -> F32 at sample {
+  x
+}
+
+// The type parameters, the type arguments, the effects and the function types stay on one line.
+pub fn on_one_line[T, U](x: Pair[T, U], g: fn(T, U) -> (T, U)) -> Result[T, Pair[U, T]] uses {Alloc, Fs} {
+  let a = pair::[T, U](x.a, x.b)
+  a
+}

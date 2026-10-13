@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§6.5", "§8.3", "§11.5", "§11.7", "§12.4", "§18.2"]
+
+// Where `docs/onsa-tools.md` §3.2 puts `else`, `with` and an attribute (W3-11, unit U2), written as
+// `onsa fmt` writes it. `else` and `with` are on the line of the `}` before them (a line of their own is
+// E0003, §2.5, so a file that has one is not formatted). The attribute of an item or of an input of a
+// flow is on a line of its own; the attribute of a `let` (`@mem(bulk)`) is on the line of the `let`. The
+// file is read by the syntax stage only (`mode = "parse"`): which name exists, which clock is allowed and
+// which attribute fits which place belong to the later stages.
+
+@repr(c)
+pub struct Frame {
+  left: F32,
+  right: F32,
+}
+
+@repr(c)
+struct Plain {
+  count: I32,
+}
+
+@fp(relaxed)
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(relaxed)
+priv rt fn fast_rt(x: F32) -> F32 {
+  x * 5.0
+}
+
+impl Frame {
+  @fp(relaxed)
+  pub fn scaled(self) -> F32 {
+    self.left * 2.0
+  }
+}
+
+@fp(relaxed)
+pub flow fast_flow(x: F32 at sample) -> F32 at sample {
+  x * 6.0
+}
+
+pub flow with_params(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+  @param(min: -60.0, max: 12.0, default: 0.0, unit: "dB")
+  gain: F32 at block,
+  q: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow with_delays(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)
+  let g = x * 0.5
+  @mem(bulk) let e = delay~(g, 64)
+  d + e
+}
+
+pub flow in_a_branch(c: Bool at block, x: F32 at sample) -> F32 at sample {
+  if c {
+    @mem(bulk) let d = delay~(x, 4800)
+    d
+  } else {
+    x
+  }
+}
+
+pub fn in_a_fn(x: F32) -> F32 {
+  @mem(bulk) let a = x
+  a
+}
+
+pub fn else_forms(c: Bool, d: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+  } else {
+    return 2
+  }
+  if c {
+    return 1
+  } else if d {
+    return 2
+  } else {
+    return 3
+  }
+  let a = if c {
+    1
+  } else {
+    2
+  }
+  let b = if c {
+    1
+  } else if d {
+    2
+  } else {
+    3
+  }
+  a + b
+}
+
+pub flow else_forms_in_a_flow(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  if~ c {
+    lp~(x)
+  } else if d {
+    hp~(x)
+  } else {
+    x
+  }
+}
+
+pub fn with_forms(path: Path) -> Result[Str, IoError] {
+  let a = handle {
+    load(path)
+  } with memory_fs
+  let b = handle {
+    load(path)
+  } with arena(inout scratch)
+  let c = handle {
+    load(path)
+  } with Fs {
+    fn read(_: Path) -> Result[Str, IoError] {
+      Ok("a")
+    }
+    fn write(_: Path, _: Str) -> Result[(), IoError] {
+      Ok(())
+    }
+  }
+  a
+}

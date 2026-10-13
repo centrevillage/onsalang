@@ -1876,6 +1876,20 @@ note = "fmt が属性と宣言の間の // を本体の先頭へ動かす（docs
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/fmt/list_forms_use.onsa"
+reasons = ["R-143", "S-122"]
+until = "W3-11"
+note = "use の並びのブロック形・継続形。今の fmt は 1 行にまとめる"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fmt/list_forms_patterns.onsa"
+reasons = ["R-143", "S-122"]
+until = "W3-11"
+note = "パターン（タプル・struct・列挙子の中身）のブロック形・継続形。今の fmt は 1 行にまとめる"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/semantics/float_literal_rounding_fn_values.onsa"
 reasons = ["R-08", "R-20", "S-211"]
 until = "W8-09"

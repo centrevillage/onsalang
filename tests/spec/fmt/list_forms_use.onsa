@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§15.1", "§18.2"]
+
+// The three forms of a `use` list (docs/onsa-tools.md §3.2, W3-11 unit U2): on one line, in the block form
+// (a line break right after `{`, one name a line, a `,` after every name, `}` on a line of its own) and as a
+// continuation (the first name after `{`, the others under it, no `,` after the last). There is no space
+// inside the braces of a `use` list in any of the three. A list of one name has the three forms too. The
+// file is read by the syntax stage only (`mode = "parse"`).
+
+use std.math.{sqrt, sum}
+use std.array.{
+  from_fn,
+  len,
+}
+use std.string.{concat,
+                join}
+use shapes.{
+  Point,
+}
+use std.test.{check}
+use std.io.{
+  Stdout,
+  Stdin,
+  Log,
+}
+use std.fmt.{show,
+             debug,
+             pad}
+
+pub fn uses_them(a: I32) -> I32 {
+  a
+}

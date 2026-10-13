@@ -1,0 +1,151 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§4.4", "§6.1", "§7", "§18.2"]
+
+// The three forms of a list, as programs that run (W3-11, unit U2): the same list on one line, in the block
+// form and as a continuation means the same thing, and the file is a fixed point of `onsa fmt` (the layout
+// is docs/onsa-tools.md §3.2; list_forms.onsa has the forms of every kind of list, syntax only). The
+// values are worked out by hand from the spec text.
+
+pub struct Point3 {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub enum Shape {
+  Circle(I32),
+  Rect(I32, I32),
+  Empty,
+}
+
+fn sum3(a: I32, b: I32, c: I32) -> I32 {
+  a + b * 10 + c * 100
+}
+
+fn sum3_block(
+  a: I32,
+  b: I32,
+  c: I32,
+) -> I32 {
+  a + b * 10 + c * 100
+}
+
+fn sum3_continuation(a: I32,
+                     b: I32,
+                     c: I32) -> I32 {
+  a + b * 10 + c * 100
+}
+
+fn area(s: Shape) -> I32 {
+  match s {
+    Shape.Circle(r) => 3 * r * r,
+    Shape.Rect(w, h) => w * h,
+    Shape.Empty => 0,
+  }
+}
+
+fn calls() -> I32 {
+  let one = sum3(1, 2, 3)
+  let two = sum3_block(
+    1,
+    2,
+    3,
+  )
+  let three = sum3_continuation(1,
+                                2,
+                                3)
+  one + two + three
+}
+
+fn arrays() -> I32 {
+  let one = [1, 2, 3]
+  let two = [
+    4,
+    5,
+    6,
+  ]
+  let three = [7,
+               8,
+               9]
+  one[2] + two[1] + three[0]
+}
+
+fn tuples() -> I32 {
+  let a = (1, 2)
+  let b = (
+    3,
+    4,
+  )
+  let c = (5,
+           6)
+  a.1 + b.0 + c.1
+}
+
+fn literals() -> I32 {
+  let one = Point3 { x: 1, y: 2, z: 3 }
+  let two = Point3 {
+    x: 4,
+    y: 5,
+    z: 6,
+  }
+  let three = Point3 { x: 7,
+                       y: 8,
+                       z: 9 }
+  one.z + two.y + three.x
+}
+
+fn nested() -> I32 {
+  let ps = [
+    Point3 { x: 1, y: 2, z: 3 },
+    Point3 { x: 4, y: 5, z: 6 },
+  ]
+  let total = sum3(
+    ps[0].x + ps[1].x,
+    ps[0].y,
+    ps[1].z,
+  )
+  total
+}
+
+fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    sum3(
+      1,
+      1,
+      1,
+    )
+  } else {
+    sum3(2,
+         2,
+         2)
+  }
+}
+
+test "calls, arrays, tuples and struct literals in the three forms" {
+  // 1 + 20 + 300 = 321 each, three times.
+  assert calls() == 963
+  // 3 + 5 + 7.
+  assert arrays() == 15
+  // 2 + 3 + 6.
+  assert tuples() == 11
+  // 3 + 5 + 7.
+  assert literals() == 15
+  // sum3(5, 2, 6) = 5 + 20 + 600.
+  assert nested() == 625
+}
+
+test "the parameters and the arms in the block form and the continuation" {
+  assert sum3_block(4, 5, 6) == 654
+  assert sum3_continuation(4, 5, 6) == 654
+  assert area(Shape.Circle(2)) == 12
+  assert area(Shape.Rect(3, 4)) == 12
+  assert area(Shape.Empty) == 0
+}
+
+test "a list in a branch" {
+  // 1 + 10 + 100 and 2 + 20 + 200.
+  assert in_a_branch(true) == 111
+  assert in_a_branch(false) == 222
+}

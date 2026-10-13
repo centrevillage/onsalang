@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.5", "§6.5", "§8.3", "§11.7", "§12.4", "§18.2"]
+
+// The forms of attr_else_with.onsa with the attributes, `else` and `with` where the language lets a writer
+// put them but `onsa fmt` does not (W3-11, unit U2): the attribute of an item on the line of the item, the
+// attribute of an input of a flow on the line of the input, the attribute of a `let` on a line of its own,
+// and more than one space round `else` and `with`. `onsa fmt` writes the forms of attr_else_with.onsa
+// (docs/onsa-tools.md §3.2). The file is not canonical on purpose (`canonical = false`). An `else` or a
+// `with` on a line of its own is E0003, so it is not here.
+
+@repr(c) pub struct Frame {
+  left: F32,
+  right: F32,
+}
+
+@fp(relaxed) pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+
+impl Frame {
+  @fp(relaxed) pub fn scaled(self) -> F32 {
+    self.left * 2.0
+  }
+}
+
+pub flow with_params(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5) level: F32 at block,
+  q: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow with_delays(x: F32 at sample) -> F32 at sample {
+  @mem(bulk)
+  let d = delay~(x, 4800)
+  d
+}
+
+pub fn else_forms(c: Bool, d: Bool, x: I32) -> I32 {
+  if c {
+    return 1
+  }   else   if d {
+    return 2
+  }  else  {
+    return 3
+  }
+  1
+}
+
+pub fn with_forms(path: Path) -> Result[Str, IoError] {
+  let a = handle {
+    load(path)
+  }   with   memory_fs
+  a
+}

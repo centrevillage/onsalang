@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§7", "§18.2"]
+
+// The block form and the continuation of the lists of a pattern (docs/onsa-tools.md §3.2, W3-11 unit U2):
+// the fields of a struct pattern, the elements of a tuple pattern and the payload of a variant pattern.
+// The one-line forms are in list_forms.onsa. A pattern is a list like any other, so the writer's line
+// breaks stay: `onsa fmt` does not put a pattern on one line. The block form has the closing bracket on a
+// line of its own and a `,` after every element, the continuation puts the others under the first element
+// and has no `,` after the last. The file is read by the syntax stage only (`mode = "parse"`).
+
+pub struct Point3 {
+  x: F32,
+  y: F32,
+  z: F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Empty,
+}
+
+pub fn struct_patterns(p: Point3) -> F32 {
+  let Point3 {
+    x: d,
+    y: e,
+    z: g,
+  } = p
+
+  let Point3 { x: h,
+               y: i,
+               z: j } = p
+  d
+}
+
+pub fn tuple_patterns(t: (I32, I32, I32)) -> I32 {
+  let (
+    n,
+    o,
+    q,
+  ) = t
+
+  let (r,
+       u,
+       v) = t
+  n
+}
+
+pub fn variant_patterns(s: Shape) -> F32 {
+  match s {
+    Shape.Rect(
+      w,
+      z,
+    ) => w * z,
+    Shape.Circle(w) => w,
+    Shape.Empty => 0.0,
+  }
+}
+
+pub fn variant_patterns_in_a_continuation(s: Shape) -> F32 {
+  match s {
+    Shape.Rect(w,
+               z) => w * z,
+    Shape.Circle(w) => w,
+    Shape.Empty => 0.0,
+  }
+}
+
+pub fn struct_pattern_in_a_variant(o: Option[Point3]) -> F32 {
+  match o {
+    Some(Point3 { x: a, y: b, z: c }) => a,
+    None => 0.0,
+  }
+}

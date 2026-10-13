@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§2.6", "§3.1", "§4.5", "§6.1", "§8.1", "§11.2", "§11.3", "§18.2"]
+
+// The places where `docs/onsa-tools.md` §3.2 puts no space (W3-11, unit U2): after a prefix symbol
+// (`-x`, `!x`, `^y`), before a postfix one (`f(x)`, `v.(x)`, `xs[i]`, `.f`, `?`), round the marks of a
+// name (`f~(x)`, `f!(x)`), and in a type argument list of an expression (`f::[T](x)`, before and after
+// `::[` and inside the list). Also the places where it puts one: after `,` and `:`, round `as`, `at`,
+// `->`, `=>` and `=`, and inside the braces of a struct literal and of a struct pattern but not inside
+// the braces of an effect row or of a `use` list. All of these are the only spelling the language reads
+// (a space before a postfix symbol or after a prefix one is E0020, §2.5), so this file is a fixed point
+// of `onsa fmt`. The file is read by the syntax stage only (`mode = "parse"`): which name exists, which
+// type a value has and which clock is allowed belong to the later stages.
+
+use std.math.{sqrt, sum}
+use shapes.{Point, Circle}
+use std.array
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Empty,
+}
+
+type Frame = Span[F32]
+
+type Sample = F32
+
+pub fn prefixes(x: I32, xs: Span[I32], b: Bool) -> I32 {
+  let n = -x
+  let m = !b
+  let k = -xs[0]
+  let c = !check(x)
+  let d = -x as I64
+  let e = -(x + 1)
+  n
+}
+
+pub fn postfixes(f: fn(I32) -> I32, ops: Span[fn(I32) -> I32], s: Shaper, t: (I32, I32), xs: Span[I32], i: U32) -> I32 {
+  let a = f.(1)
+  let b = s.curve.(2.0)
+  let c = ops[i].(3)
+  let d = pick(true).(5)
+  let e = xs[i]
+  let g = t.0
+  let h = s.gain
+  let j = xs[xs[i]]
+  let l = parse(1)?
+  let m = a.b(c)[d].e?
+  let n = Point.new(1.0, 2.0).x
+  n
+}
+
+pub flow marks(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = saw~(p)
+  let b = lp~(x, p)
+  let y = x + 0.5 * prev~(^y)
+  let z = x + prev~(-^y)
+  let w = x + prev~(mix(x, ^z.l))
+  let v = (x as F64) at sample
+  let u = p at sample
+  a + b + y + z + w
+}
+
+pub fn bang_calls(inout buf: Buf[F32], x: F32) {
+  buf.push!(x)
+  buf.push_with::[F32, U8]!(x, 1)
+  buf.clear!()
+}
+
+pub fn type_arguments(s: Str, xs: Span[F32], k: U32) -> U8 {
+  let a = parse::[U32]("1")
+  let b = conv.parse::[I32]("3")
+  let c = Buf::[F32].zeroed(4)
+  let d = Rg::[F32, 4].CAP
+  let e = Pr::[U8] { a: 250 }
+  let f = v.m::[I32](x)
+  let g = None::[I32]
+  let h = Some::[U8](250)
+  let i = id::[Option[Option[U8]]](None)
+  let j = pair::[U8, F32](1, 2.0)
+  let l = id::[fn(I32) -> I32](inc)
+  let m = id::[Span[F32]](xs)
+  let n = xs[idx::[U32](k)]
+  let o = id::[U8](id::[U8](1)) + 2
+  let p = Buf::[F32].zeroed(4).len()
+  a
+}
+
+// An expected type and a type argument are two spellings of two things; fmt writes neither as the other.
+pub fn expected_type_and_type_argument() -> U8 {
+  let y: U8 = id(250)
+
+  let z = id::[U8](250)
+
+  let w: U8 = id::[U8](250)
+  y
+}
+
+pub fn struct_literals_and_patterns(p: Point, o: Option[Point]) -> F32 {
+  let a = Point { x: 1.0, y: 2.0 }
+  let b = Pair { a: Point { x: 1.0, y: 2.0 }, b: [Point { x: 3.0, y: 4.0 }] }
+
+  let Point { x: px, y: py } = p
+
+  match o {
+    Some(Point { x: qx, y: _ }) => qx,
+    None => 0.0,
+  }
+}
+
+pub fn commas_and_colons(a: I32, b: (I32, F32), c: Span[fn(I32) -> I32], d: Pair[I32, Pair[U8, Bool]]) -> (I32, F32) {
+  let t = (a, 1.0)
+  let u = [1, 2, 3]
+  let v = [0, 0, 0, 0]
+  let w = ((1, 2), (3, 4))
+  t
+}
+
+pub fn arrows_and_arms(o: Option[I32], g: fn(I32, I32) -> I32, h: fn(fn(I32) -> I32) -> fn() -> I32) -> I32 {
+  let k = fn(x: I32) -> I32 {
+    x + 1
+  }
+  match o {
+    Some(0) => 1,
+    Some(n) => n,
+    None => 0,
+  }
+}
+
+pub fn bindings() {
+  let x: I32 = 1
+  var y: F64 = 2.0
+  y = y + 1.0
+
+  let (a, b) = (1, 2)
+
+  let _ = a + b
+}
+
+pub fn effects(g: fn(I32) -> I32 uses {Alloc}) -> I32 uses {Alloc} {
+  g.(1)
+}
+
+pub fn two_effects() -> I32 uses {Alloc, Fs} {
+  1
+}
+
+pub fn generics[T: PartialOrd](x: T, lo: T) -> T {
+  x
+}
+
+pub fn const_generics[T, const N: U32](xs: Rg[T, N]) -> U32 {
+  N
+}
+
+pub fn extra_nothing[T: ?Dup](x: T) -> T {
+  x
+}
+
+const MAX: U32 = 4
+
+const HALF: F32 = 0.5

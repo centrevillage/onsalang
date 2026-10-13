@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.5", "§4.5", "§8.1", "§18.2"]
+
+// The forms of space_marks.onsa with extra spaces where the language lets a writer put them (W3-11,
+// unit U2): inside `( )` and `[ ]` and the brackets of a type argument list, before `,` and `:`, none
+// or several after them, none inside the braces of a struct literal and of a struct pattern, and one
+// inside the braces of an effect row and of a `use` list. `onsa fmt` writes the forms of
+// space_marks.onsa (docs/onsa-tools.md §3.2): none inside `( )` and `[ ]`, one after `,` and `:` and
+// none before, one inside the braces of a struct literal and of a struct pattern and none inside the
+// braces of an effect row and of a `use` list. The file is not canonical on purpose
+// (`canonical = false`); the places where a space is E0020 are not here (they are in the CLI tests).
+
+use std.math.{ sqrt , sum }
+use shapes.{Point,Circle}
+
+pub struct Pair[ A , B ] {
+  a : A ,
+  b :B,
+}
+
+pub fn calls( a : I32 , b : (I32 , F32) , c : Span[ F32 ] ) -> I32 {
+  let t = ( a , 1.0 )
+  let u = [ 1 , 2 , 3 ]
+  let v = f( a , g( 1 ) )
+  let w = xs[ i ]
+  let x = id::[ U8 ]( 250 )
+  let y = pair::[ U8 , F32 ]( 1 , 2.0 )
+  let z = Opt::[ Opt[ U8 ] ].none( )
+  a
+}
+
+pub fn literals_and_patterns(p: Point, o: Option[Point]) -> F32 {
+  let a = Point {x: 1.0, y: 2.0}
+  let b = Pair {a: Point {x: 1.0,y: 2.0},b: [ Point {x: 3.0, y: 4.0} ]}
+
+  let Point {x: px,y :py} = p
+
+  match o {
+    Some( Point {x: qx, y: _} ) => qx,
+    None => 0.0,
+  }
+}
+
+pub fn effects() -> I32 uses { Alloc , Fs } {
+  1
+}
+
+pub fn effect_of_a_function_type(g: fn( I32 ) -> I32 uses { Alloc }) -> I32 uses { Alloc } {
+  g.( 1 )
+}

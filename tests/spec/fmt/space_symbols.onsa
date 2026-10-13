@@ -1,0 +1,227 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§3.1", "§4.4", "§5.1", "§6.1", "§7", "§18.2"]
+
+// The spaces round the symbols that `docs/onsa-tools.md` §3.2 names (W3-11, unit U2). One space on
+// each side of a binary operator (one case for each group of §3.1, the wrapping and saturating
+// forms included), of `=` (`let`, `var`, an assignment, `const`, `type`), of `->` and of `=>` and
+// of `as`; none after a prefix symbol and none before a postfix one; one after `,` and `:` and
+// none before; none inside `(` `)` and `[` `]`; one inside the `{ }` of a struct literal and of a
+// struct pattern. The file is canonical, so `onsa fmt` leaves it unchanged; the same programs with
+// the spaces broken are in space_symbols_tight.onsa and space_symbols_loose.onsa. Every value is
+// worked out by hand from the spec text.
+
+const SCALE: U32 = 3
+const MASK: U32 = 0xF0
+const WIDTH: U32 = SCALE * 2 + 1
+
+type Count = U32
+
+pub struct Point {
+  x: I32,
+  y: I32,
+}
+
+fn multiplicative(a: I32, b: I32) -> I32 {
+  a * b / 2 * 3
+}
+
+fn remainder(a: U32, b: U32) -> U32 {
+  a % b
+}
+
+fn additive(a: I32, b: I32) -> I32 {
+  a + b - 1 + 2
+}
+
+fn mixed(a: I32, b: I32, c: I32) -> I32 {
+  a + b * c - a / b
+}
+
+fn wrapping(a: U8, b: U8) -> U8 {
+  a +% b -% 1 *% 2
+}
+
+fn saturating(a: U8, b: U8) -> U8 {
+  a +| b -| 1 *| 2
+}
+
+fn comparisons(a: I32, b: I32) -> U32 {
+  var n: U32 = 0
+  if a == b {
+    n = n + 1
+  }
+  if a != b {
+    n = n + 2
+  }
+  if a < b {
+    n = n + 4
+  }
+  if a <= b {
+    n = n + 8
+  }
+  if a > b {
+    n = n + 16
+  }
+  if a >= b {
+    n = n + 32
+  }
+  n
+}
+
+fn inside(x: I32, lo: I32, hi: I32) -> Bool {
+  lo <= x && x < hi
+}
+
+fn all_of(p: Bool, q: Bool, r: Bool) -> Bool {
+  p && q && r
+}
+
+fn any_of(p: Bool, q: Bool, r: Bool) -> Bool {
+  p || q || r
+}
+
+fn grouped(p: Bool, q: Bool, r: Bool) -> Bool {
+  (p && q) || r
+}
+
+fn masks(a: U32) -> U32 {
+  a & MASK
+}
+
+fn shifts(a: U32) -> U32 {
+  a << 1 << 1
+}
+
+fn joins(a: U32) -> U32 {
+  a | 1 | 4
+}
+
+fn mixed_bits(a: U32, b: U32) -> U32 {
+  (a & b) | (a ^ b)
+}
+
+fn casts(n: I32) -> F64 {
+  (n as F64) * 2.0
+}
+
+fn cast_of_a_prefix(n: I32) -> F64 {
+  -n as F64
+}
+
+fn prefix(x: I32, b: Bool) -> I32 {
+  if !b {
+    -x
+  } else {
+    x
+  }
+}
+
+fn postfix(t: (I32, I32), i: U32) -> I32 {
+  let xs = [10, 20, 30, 40]
+  xs[i] + t.0 * t.1
+}
+
+fn field_of(p: Point) -> I32 {
+  p.x * p.y
+}
+
+fn question(x: Option[I32]) -> Option[I32] {
+  let v = x?
+  Some(v + 1)
+}
+
+fn make(x: I32, y: I32) -> Point {
+  Point { x: x, y: y }
+}
+
+fn take_apart(p: Point) -> I32 {
+  let Point { x: a, y: b } = p
+  a - b
+}
+
+fn tuple_apart(t: (I32, I32)) -> I32 {
+  let (a, b) = t
+  a * 10 + b
+}
+
+fn arms(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v + 1,
+    None => 0,
+  }
+}
+
+fn bindings() -> Count {
+  let a: Count = 1
+  var b: Count = a + WIDTH
+  b = b * 2
+  b
+}
+
+test "the arithmetic groups" {
+  // 4 * 6 / 2 * 3 = 36, 7 % 4 = 3, 4 + 6 - 1 + 2 = 11, 7 + 2 * 5 - 7 / 2 = 14.
+  assert multiplicative(4, 6) == 36
+  assert remainder(7, 4) == 3
+  assert additive(4, 6) == 11
+  assert mixed(7, 2, 5) == 14
+}
+
+test "the wrapping and saturating operators" {
+  // 250 +% 10 = 4 and 1 *% 2 = 2, so 4 -% 2 = 2; 250 +| 10 = 255 and 255 -| 2 = 253.
+  assert wrapping(250, 10) == 2
+  assert saturating(250, 10) == 253
+  // 3 +% 4 = 7, 7 -% 2 = 5; the saturating ones agree below the limit.
+  assert wrapping(3, 4) == 5
+  assert saturating(3, 4) == 5
+}
+
+test "comparisons and logic" {
+  // 1 == 2 no, != yes (2), < yes (4), <= yes (8), > no, >= no.
+  assert comparisons(1, 2) == 14
+  // equal: == (1), <= (8), >= (32).
+  assert comparisons(5, 5) == 41
+  // 3 > 2: != (2), > (16), >= (32).
+  assert comparisons(3, 2) == 50
+  assert inside(3, 1, 5)
+  assert !inside(5, 1, 5)
+  assert inside(1, 1, 5)
+  assert all_of(true, true, true)
+  assert !all_of(true, false, true)
+  assert any_of(false, false, true)
+  assert !any_of(false, false, false)
+  assert grouped(true, true, false)
+  assert grouped(false, false, true)
+  assert !grouped(true, false, false)
+}
+
+test "the bit operators" {
+  // 0xAB & 0xF0 = 0xA0 = 160; 171 << 1 << 1 = 684; 171 | 1 | 4 = 175.
+  assert masks(0xAB) == 160
+  assert shifts(171) == 684
+  assert joins(171) == 175
+  // (12 & 10) | (12 ^ 10) = 8 | 6 = 14.
+  assert mixed_bits(12, 10) == 14
+}
+
+test "casts, prefix and postfix forms" {
+  assert casts(3) == 6.0
+  assert cast_of_a_prefix(3) == -3.0
+  assert prefix(5, true) == 5
+  assert prefix(5, false) == -5
+  // xs[2] + t.0 * t.1 = 30 + 1 * 2.
+  assert postfix((1, 2), 2) == 32
+  assert field_of(make(3, 4)) == 12
+  assert question(Some(1)) == Some(2)
+  assert question(None) == None
+}
+
+test "patterns, arms and bindings" {
+  assert take_apart(make(9, 4)) == 5
+  assert tuple_apart((3, 4)) == 34
+  assert arms(Some(4)) == 5
+  assert arms(None) == 0
+  // WIDTH = 3 * 2 + 1 = 7, so a = 1, b = 8, then 16.
+  assert bindings() == 16
+}

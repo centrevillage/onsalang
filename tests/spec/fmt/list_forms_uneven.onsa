@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.5", "§4.4", "§6.1", "§11.2", "§15.1", "§18.2"]
+
+// The lists of list_forms.onsa written unevenly (W3-11, unit U2): a `,` after the last element of a list on
+// one line, no `,` after the last element of a block, a closing bracket on the line of the last element of a
+// block, elements of a block that are not one level deeper than the line of the opening bracket, elements
+// of a continuation that are not under the first, a `,` after the last element of a continuation. The
+// language reads all of them. `onsa fmt` writes the form each list is written in, as list_forms.onsa has
+// it (docs/onsa-tools.md §3.2). The file is not canonical on purpose (`canonical = false`).
+
+use std.math.{sqrt, sum,}
+use std.array.{
+from_fn,
+      len}
+use std.string.{concat,
+  join,}
+
+pub struct Point3 {
+x: F32,
+      y: F32,
+  z: F32
+}
+
+pub enum Shape {
+  Circle(F32,),
+    Rect(F32, F32),
+Empty
+}
+
+pub fn calls(a: I32, b: I32, c: I32,) -> I32 {
+  let one = f(a, b, c,)
+  let two = f(
+a,
+        b,
+    c)
+  let three = f(a,
+    b,
+c,)
+  one
+}
+
+pub fn parameters(
+      a: I32,
+b: I32) -> I32 {
+  a
+}
+
+pub fn continuation(a: I32,
+  b: I32,
+        c: I32,) -> I32 {
+  a
+}
+
+pub fn arrays() -> I32 {
+  let one = [1, 2, 3,]
+  let two = [
+  1,
+        2
+      ]
+  let three = [1,
+ 2,
+3,]
+  let four = (1, 2.0,)
+  let five = (
+      1,
+    2.0)
+  one[0]
+}
+
+pub fn literals(x: F32) -> Point3 {
+  let one = Point3 { x: x, y: 2.0, z: 3.0, }
+  let two = Point3 {
+  x: x,
+       y: 2.0,
+    z: 3.0 }
+  let three = Point3 { x: x,
+   y: 2.0,
+z: 3.0, }
+  two
+}
+
+pub fn patterns(p: Point3, t: (I32, I32, I32), s: Shape) -> F32 {
+  let Point3 { x: a, y: b, z: c, } = p
+
+  let Point3 {
+  x: d,
+      y: e,
+ z: g } = p
+
+  let (k, l, m,) = t
+
+  let (
+    n,
+  o,
+        q) = t
+
+  match s {
+    Shape.Circle(w,) => w,
+    Shape.Rect(
+    w,
+      z) => w * z,
+    Shape.Empty => 0.0,
+  }
+}
+
+pub flow flows(x: F32 at sample, p: F32 at block,) -> F32 at sample {
+  x
+}
+
+pub flow flows_in_a_block(
+      x: F32 at sample,
+p: F32 at block) -> F32 at sample {
+  x
+}
+
+pub flow flows_in_a_continuation(x: F32 at sample,
+  p: F32 at block,) -> F32 at sample {
+  x
+}

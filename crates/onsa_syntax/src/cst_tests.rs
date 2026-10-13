@@ -13,12 +13,12 @@ fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
 }
 
-fn root_dir() -> PathBuf {
+pub(crate) fn root_dir() -> PathBuf {
     FsPath::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 /// Every `.onsa` file under `tests/`, `std/` and `examples/`, sorted.
-fn repo_files() -> Vec<(String, String)> {
+pub(crate) fn repo_files() -> Vec<(String, String)> {
     fn walk(dir: &FsPath, root: &FsPath, out: &mut Vec<(String, String)>) {
         let Ok(entries) = std::fs::read_dir(dir) else { return };
         let mut paths: Vec<PathBuf> = entries.map(|e| e.unwrap().path()).collect();

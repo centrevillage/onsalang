@@ -5,6 +5,13 @@
 //! of `=` in `let` runs and of trailing comments) is normalized.
 
 mod align;
+// The tables of the spaces and of the lists, which the printer reads from W3-11 unit U3 on.
+#[cfg_attr(not(test), allow(dead_code))]
+mod shape;
+#[cfg_attr(not(test), allow(dead_code))]
+mod space;
+#[cfg(test)]
+mod table_tests;
 
 use onsa_diag::Span;
 

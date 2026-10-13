@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§2.5", "§3.1", "§4.4", "§5.1", "§6.1", "§7", "§18.2"]
+
+// Programs of space_symbols.onsa with the spaces broken in the other direction (W3-11, unit U2): more
+// than one space or a tab round an operator, `=`, `->` and `=>`, a space before `,` and `:`, spaces
+// inside `( )` and `[ ]`, and none inside the braces of a struct literal and of a struct pattern. The
+// language reads all of them, and `onsa fmt` writes the forms of space_symbols.onsa (docs/onsa-tools.md
+// §3.2). The file is not canonical on purpose (`canonical = false`) and has tabs. The values
+// are those of space_symbols.onsa.
+
+const SCALE : U32  =  3
+const WIDTH:U32=SCALE  *  2	+	1
+
+type Count  =  U32
+
+pub struct Point {
+  x : I32 ,
+  y : I32 ,
+}
+
+fn multiplicative( a : I32 , b : I32 )  ->  I32 {
+  a  *  b	/	2  *  3
+}
+
+fn additive(a: I32,	b: I32) ->	I32 {
+  a  +  b  -  1	+	2
+}
+
+fn wrapping(a: U8, b: U8) -> U8 {
+  a  +%  b	-%	1  *%  2
+}
+
+fn inside(x: I32, lo: I32, hi: I32) -> Bool {
+  lo  <=  x	&&	x  <  hi
+}
+
+fn grouped(p: Bool, q: Bool, r: Bool) -> Bool {
+  ( p  &&  q )  ||  r
+}
+
+fn shifts(a: U32) -> U32 {
+  a  <<  1	<<	1
+}
+
+fn casts(n: I32) -> F64 {
+  ( n  as  F64 )  *  2.0
+}
+
+fn postfix(t: (I32, I32), i: U32) -> I32 {
+  let xs = [ 10 , 20 , 30 , 40 ]
+  xs[ i ]  +  t.0	*	t.1
+}
+
+fn make(x: I32, y: I32) -> Point {
+  Point {x: x, y: y}
+}
+
+fn take_apart(p: Point) -> I32 {
+  let Point {x: a, y: b}  =  p
+  a  -  b
+}
+
+fn tuple_apart(t: (I32, I32)) -> I32 {
+  let ( a , b )  =  t
+  a  *  10	+	b
+}
+
+fn arms(o: Option[I32]) -> I32 {
+  match o {
+    Some( v )  =>  v  +  1 ,
+    None	=>	0 ,
+  }
+}
+
+fn bindings() -> Count {
+  let a : Count  =  1
+  var b : Count	=	a  +  WIDTH
+  b  =  b  *  2
+  b
+}
+
+test "the spaces round the symbols" {
+  assert multiplicative( 4 , 6 )  ==  36
+  assert additive(4, 6) == 11
+  assert wrapping(250, 10) == 2
+  assert inside(3, 1, 5)
+  assert !inside(5, 1, 5)
+  assert grouped(true, true, false)
+  assert shifts(171) == 684
+  assert casts(3) == 6.0
+  assert postfix(( 1 , 2 ), 2) == 32
+  assert take_apart(make(9, 4)) == 5
+  assert tuple_apart((3, 4)) == 34
+  assert arms(Some(4)) == 5
+  assert arms(None) == 0
+  assert bindings() == 16
+}
