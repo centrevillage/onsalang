@@ -23,9 +23,11 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
   - どれも間に空行を入れると fmt の出力が収束しない（W3-06/i の調べ）。
 - **W3-11（17 回目）:** R-212（fmt が属性と宣言の間の普通のコメントを本体の先頭へ移す。`docs/onsa-tools.md` §3.4）。属性の括弧の中のコメント（`@fp(relaxed // c` 改行 `)`）も本体の先頭へ移り、空行が一つ増える（W3-08 の直し A の報告）。
   再現は `@fp(relaxed)` 改行 `// c` 改行 `fn f() -> F32 {` 改行 `1.0` 改行 `}`。
+- **W3-11（24 回目、S-510）:** U3 で `tests/spec/types/attribute_value_lines.onsa` のコメント「`onsa fmt` writes each of these attributes on one line」と `tests/spec/lex/brace_lines_in_brackets.onsa` のコメント「`onsa fmt` joins what fits on a line」を事実に合わせて直す（`canonical = false` は変えない）。U2 の自己テストの畳む並びの検査（`fold`）は消える。
 - **W3-12（W3-20 の直し、2026-10-09）:** `-> (fn()) uses {…}` の返り値の関数型を囲む括弧は冗長でない（外すと `uses` が内側の型に付き、型が変わる）。S-339 の基準で外さないことを確かめる事例を足す。型を文字列にする所は `TyStore::parens_before_uses` が同じ規則を持つ。
 - **W3-12（23 回目、第 28 組の下書き）:** 括弧の中に継続の位置でない改行があると、その括弧は冗長でない（`let y = (x` 改行 `as F64)` の括弧を外すと `as` が文の頭になり E0002。S-339 の「外しても構文の段の誤りにならない」の基準）。判定を演算子の強弱だけで書くと漏れ、書き込む前の確かめ（R-204）で内部エラーになる。どの改行が残るかは S-497 の決定による。
 - **W3-12（9 回目）:** fmt が空の構造体のパターンを `Empty {  }`（空白二つ）にする（`rest` を足した既存の書き方の癖、W3-21/b の 13）。
+- **W3-13（24 回目、S-513）:** 事例は `tests/spec/negative/`（列挙子の宣言、fn・struct・enum・trait・impl・`impl … for`・メソッド・extern の関数の `[]`、handler の宣言、`with h()`、パターンの `E.A()`・`None()`・`Some()`、中にコメントのある形）と `tests/spec/fixes/`（候補）。`tests/` でぶつかる既存の事例は `tests/fuzz/d769cbca.onsa`（`struct P[]` の後に構文の誤り）だけで、再生は終わり方と候補の約束だけを見るので通る見込み（`tools/fuzz.py` の再生で確かめる。24 回目に親が `tests/`・std・examples と Rust・Python のテストを検索した）。
 - **W3-18 の後（W3-18/b の報告、2026-10-09）:**
   - W7-02: `par` / `delay` の算術の `const` の値の誤り（`0..<0 - 1` など）は今 E0200（`FlowConstExprs`、仕様は E0419）、`flow_const_neg` の `ONE - 2` も E0200。
   - W4-06: 範囲の端の形の検査（`range_end_forms`）が名前の解決より前に走る（`0..<zzz + 1.5` が E0401）。
