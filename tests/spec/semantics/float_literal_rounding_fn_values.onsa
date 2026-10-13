@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§4.7", "§6.1"]
+
+// The value of a float literal in a closure body and as the argument of a call through a function value
+// `.(…)` (spec §2.4, §6.1; S-211, R-20, R-45): the decimal value is rounded to the type once. The strings and
+// their values are the ones of float_literal_rounding.onsa (1 + 2^-24 plus 1e-26 is 0x3F800001 in F32, and the
+// double rounding F32 <- F64 gives 0x3F800000; the middle of the greatest F32 and 2^128 minus a little is
+// 0x7F7FFFFF, and the double rounding overflows). The closure bodies and the arguments are the places where
+// the type of the literal is known only by the type of the function value.
+
+fn apply_bits(f: fn(F32) -> U32, x: F32) -> U32 {
+  f.(x)
+}
+
+test "a closure body" {
+  let make = fn() -> F32 { 1.00000005960464477539062501 }
+  assert make.().to_bits() == 0x3F800001
+}
+
+test "the argument of a call through a function value" {
+  let g: fn(F32) -> U32 = fn(x: F32) -> U32 { x.to_bits() }
+  assert g.(1.00000017881393432617187499) == 0x3F800001
+  assert g.(3.402823567797336616e38) == 0x7F7FFFFF
+  assert apply_bits(g, 7.00649232162408535461864792e-46) == 0x00000001
+}
+
+test "a closure inside a closure" {
+  let nested = fn(n: I32) -> F32 {
+    let inner = fn(m: I32) -> F32 {
+      if m > 0 { 1.00000005960464477539062501 } else { 0.0 }
+    }
+    inner.(n)
+  }
+  assert nested.(1).to_bits() == 0x3F800001
+  assert nested.(0).to_bits() == 0
+}
+
+test "a closure over F64" {
+  let id = fn(x: F64) -> F64 { x }
+  assert id.(9007199254740993.000000000000000000001).to_bits() == 0x4340000000000001
+  assert id.(9007199254740993.0).to_bits() == 0x4340000000000000
+}

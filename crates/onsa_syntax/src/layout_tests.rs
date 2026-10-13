@@ -248,20 +248,57 @@ fn a_literal_that_does_not_close_is_the_lexer_s_error() {
 }
 
 #[test]
-fn a_literal_with_an_error_against_a_name_is_the_lexer_s_error() {
-    // M6 of W3-06/b (1a): S-400 is a whole literal against a name; a literal
-    // that does not close or holds an error is the E0001 of §2.4.
-    for src in [
-        "fn main() -> Str {\n  let a = f\"abc\n  a\n}\n",
-        "fn main() -> I32 { let a = x'ab'\n 0 }\n",
-        "fn main() -> I32 {\n  let a = b'\n  0\n}\n",
-        "flow ap(x: F32 at sample) -> F32 at sample {\n  let a = x'\n  a\n}\n",
+fn a_literal_against_a_name_is_the_form_whatever_it_holds() {
+    // S-400 as changed by S-406: a literal against a name that does not
+    // close or holds an error is the form too, and its content is not read
+    // (no E0001); the range ends at the closing quote, or at the opening one
+    // when the line has none.
+    for (src, range) in [
+        ("fn main() -> Str {\n  let a = f\"abc\n  a\n}\n", "f\""),
+        ("fn main() -> I32 { let a = x'ab'\n 0 }\n", "x'ab'"),
+        ("fn main() -> I32 {\n  let a = b'\n  0\n}\n", "b'"),
+        ("flow ap(x: F32 at sample) -> F32 at sample {\n  let a = x'\n  a\n}\n", "x'"),
+        ("fn main() -> Str {\n  f\"{fn} \\q {clock}\"\n}\n", "f\"{fn} \\q {clock}\""),
+        ("fn main() -> Str {\n  \"\\q {x\"_s\n}\n", "\"\\q {x\"_s"),
+        // The parser fails at the literal before the name, or at the name
+        // before the literal: the same form (the four orders of S-400).
+        ("fn f(a: \"x\"y) -> I32 { 0 }\n", "\"x\"y"),
+        ("f\"x\"\n", "f\"x\""),
+        ("trait T {\n  f\"x\\q\"\n}\n", "f\"x\\q\""),
+        // In a list, before the missing `,` (S-387).
+        ("fn main() -> Str {\n  two(1 \"a\\q\"_s)\n}\n", "\"a\\q\"_s"),
+        ("fn main() -> Str {\n  let a = [x f\"a\n  a\n}\n", "f\""),
     ] {
         let p = parse(src);
-        assert!(p.diagnostics.iter().any(|d| d.code == Code::E0001), "{src}: {:?}", p.diagnostics);
-        let prefix = p.diagnostics.iter().any(|d| d.message.contains("no prefix or suffix"));
-        assert!(!prefix, "{src}: {:?}", p.diagnostics);
+        let prefix: Vec<&str> = p
+            .diagnostics
+            .iter()
+            .filter(|d| d.message.contains("no prefix or suffix"))
+            .map(|d| &src[d.span.start as usize..d.span.end as usize])
+            .collect();
+        assert_eq!(prefix, vec![range], "{src}: {:?}", p.diagnostics);
+        assert!(p.diagnostics.iter().all(|d| d.code == Code::E0002), "{src}: {:?}", p.diagnostics);
     }
+}
+
+#[test]
+fn the_held_errors_of_a_literal_against_a_name_that_is_read_are_reported() {
+    // `lib"m"` is read by the grammar of an `extern` heading (S-400): no
+    // form, and the errors of the literal are its own.
+    let p = parse("extern \"C\" lib\"m\\q\" {\n  fn f(x: F32) -> F32\n}\n");
+    let codes: Vec<Code> = p.diagnostics.iter().map(|d| d.code).collect();
+    assert_eq!(codes, vec![Code::E0001], "{:?}", p.diagnostics);
+    // A form the row reported holds the errors back, with its name before
+    // the literal or after it (the row's report, not its message, says so).
+    for src in ["fn main() -> Str {\n  f\"a\\q\"\n}\n", "fn f(a: \"x\\q\"y) -> I32 { 0 }\n"] {
+        let codes: Vec<Code> = parse(src).diagnostics.iter().map(|d| d.code).collect();
+        assert_eq!(codes, vec![Code::E0002], "{src}");
+    }
+    // A character written nowhere is reported in the form too (S-454).
+    let p = parse("fn main() -> Str {\n  f\"a\u{2028}\\q\"\n}\n");
+    let mut codes: Vec<Code> = p.diagnostics.iter().map(|d| d.code).collect();
+    codes.sort();
+    assert_eq!(codes, vec![Code::E0001, Code::E0002], "{:?}", p.diagnostics);
 }
 
 #[test]

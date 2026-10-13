@@ -1,0 +1,29 @@
+// Items of a module with float literals (spec §2.4, §4.7, §15.1).
+
+pub struct Cell {
+  v: F32,
+}
+
+pub const TOO_BIG: F32 = 1e39                       //~ E0408
+
+pub const TOO_SMALL: F32 = 1e-50                    //~ E0408
+
+pub const FINE: F32 = 3.402823567797336616e38
+
+pub const FINE_64: F64 = 1e39
+
+pub fn in_a_return() -> F32 {
+  1e39                                              //~ E0408
+}
+
+pub fn takes_f32(x: F32) -> F32 {
+  x
+}
+
+pub fn takes_f64(x: F64) -> F64 {
+  x
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}

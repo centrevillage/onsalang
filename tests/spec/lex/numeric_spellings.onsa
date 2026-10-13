@@ -1,0 +1,192 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§2.4", "§4.7", "§3.4"]
+
+// The spellings of numbers that are accepted and mean what they say (spec §2.4; S-62, R-73, S-63, S-126, S-184):
+// an exponent makes a float without a point (`48e3`), the prefix `0X` `0B` and the exponent `E` can be written
+// in capitals, the exponent can have a `+` (`1e+3`), the `_` is only for reading and may stand anywhere in the
+// digits (`1__000`, `1_`, `0x_1F`), a float may have zeros in front of its integer part (`01.5`), and the
+// hexadecimal digits are the same in both cases. `onsa fmt` makes one spelling of each (the file is not
+// canonical on purpose: `canonical = false`). A literal that starts with `-` is checked with the sign
+// (`-0x80` is the least I8). Every value below is worked out by hand from the spec text.
+
+test "an exponent makes a float without a point" {
+  let a: F32 = 48e3
+  assert a == 48000.0
+  let b: F32 = 5e0
+  assert b == 5.0
+  let c: F32 = 25e-1
+  assert c == 2.5
+  let d: F64 = 1e-6
+  assert d == 0.000001
+  let e: F32 = 1e10
+  assert e == 10000000000.0
+  let f: F32 = 0e0
+  assert f == 0.0
+}
+
+test "the exponent in capital letters and with a plus" {
+  let a: F32 = 2E3
+  assert a == 2000.0
+  let b: F32 = 1e+3
+  assert b == 1000.0
+  let c: F32 = 1E+3
+  assert c == 1000.0
+  let d: F32 = 1E-3
+  assert d == 0.001
+  let e: F32 = 2.5E+2
+  assert e == 250.0
+  let f: F32 = 2.5e+0
+  assert f == 2.5
+  let g: F32 = 5e+0
+  assert g == 5.0
+}
+
+test "the prefix and the digits in capitals" {
+  let a: I32 = 0XFF
+  assert a == 255
+  let b: I32 = 0B1010
+  assert b == 10
+  let c: I32 = 0Xff
+  assert c == 255
+  let d: I32 = 0xff
+  assert d == 255
+  let e: I32 = 0xFf
+  assert e == 255
+  let f: I32 = 0b1010
+  assert f == b
+  let g: I64 = 0xDEAD_beef_0
+  assert g == 0xDEADBEEF0
+}
+
+test "the underscores need not stand between digits" {
+  let a: I32 = 1__000
+  assert a == 1000
+  let b: I32 = 1_
+  assert b == 1
+  let c: I32 = 0x_1F
+  assert c == 31
+  let d: I32 = 1_000_
+  assert d == 1000
+  let e: I32 = 0b_101
+  assert e == 5
+  let f: I32 = 0xFF_
+  assert f == 255
+  let g: I32 = 0x1__F
+  assert g == 31
+  let h: I32 = 0x__1__F__
+  assert h == 31
+  let i: I32 = 1_0_0
+  assert i == 100
+}
+
+test "the underscores in a float" {
+  let a: F32 = 1_0.0_5
+  assert a == 10.05
+  let b: F32 = 1__0.5
+  assert b == 10.5
+  let c: F32 = 1e1_0
+  assert c == 10000000000.0
+}
+
+test "zeros in front of the integer part of a float" {
+  let a: F32 = 01.5
+  assert a == 1.5
+  let b: F32 = 007.25
+  assert b == 7.25
+  let c: F32 = 00.5
+  assert c == 0.5
+  let d: F32 = 0.5
+  assert a - d == 1.0
+  let e: F32 = 010.0
+  assert e == 10.0
+  let f: F32 = 00e0
+  assert f == 0.0
+  let g: F32 = 01e2
+  assert g == 100.0
+}
+
+test "the spellings of one number are the same value" {
+  let a: I32 = 255
+  let b: I32 = 0xFF
+  let c: I32 = 0XFF
+  let d: I32 = 0xff
+  let e: I32 = 0b1111_1111
+  let f: I32 = 0B11111111
+  let g: I32 = 2_5_5
+  assert a == b
+  assert b == c
+  assert c == d
+  assert d == e
+  assert e == f
+  assert f == g
+}
+
+test "the greatest U64 in every spelling, and zeros in front of a hexadecimal" {
+  let a: U64 = 18446744073709551615
+  let b: U64 = 0xFFFF_FFFF_FFFF_FFFF
+  let c: U64 = 0XFFFFFFFFFFFFFFFF
+  let d: U64 = 0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111
+  let e: U64 = 18_446_744_073_709_551_615
+  assert a == U64.MAX
+  assert b == a
+  assert c == a
+  assert d == a
+  assert e == a
+  let f: U64 = 0x0000_0000_0000_0000_00FF
+  assert f == 255
+  let g: U64 = 0x_0000_0000_0000_0000_0000_0000_0000_FF
+  assert g == 255
+  let h: U64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0101
+  assert h == 5
+}
+
+test "a literal with a minus is checked with the sign, in every spelling" {
+  let a: I8 = -0x80
+  assert a == I8.MIN
+  let b: I8 = -0X80
+  assert b == I8.MIN
+  let c: I8 = -0b1000_0000
+  assert c == I8.MIN
+  let d: I8 = -(0x80)
+  assert d == I8.MIN
+  let e: I8 = -0x7F
+  assert e == -127
+  let f: I64 = -0x8000_0000_0000_0000
+  assert f == I64.MIN
+  let g: I16 = -1_0_0_0_0
+  assert g == -10000
+}
+
+test "the spellings in a range" {
+  var s: I32 = 0
+  for i in 0X1..<0x4 {
+    s = s + i
+  }
+  assert s == 6
+  var t: I32 = 0
+  for i in 1_0..<1__3 {
+    t = t + i
+  }
+  assert t == 33
+  var u: I32 = 0
+  for i in 0B0..<0b11 {
+    u = u + i
+  }
+  assert u == 3
+}
+
+test "a 0 alone, with separators, and a float with a zero" {
+  let a: I32 = 0
+  let b: I32 = 0_
+  let c: I32 = 0x0
+  let d: I32 = 0b0
+  let e: F32 = 0.0
+  let f: F32 = 0.0e0
+  assert a == b
+  assert b == c
+  assert c == d
+  assert e == f
+}

@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// canonical = false
+// spec = ["§2.4", "§4.5", "§4.7", "§11.5", "§18.1"]
+
+// The accepted spellings of numbers (lex/numeric_spellings.onsa has their values) in the places where a
+// number stands, to be checked with no diagnostic (spec §2.4; S-62, R-73, S-63, S-126): a `const`, a length
+// of an array and a repeated element, a range of `for` and of `par`, a closure body, a generic function, a
+// field, an element, an operand, a branch, an arm, a block in a block and a flow. The file is not canonical
+// on purpose (`canonical = false`): `onsa fmt` makes one spelling of each number.
+
+pub struct Cell {
+  v: F32,
+  n: U32,
+}
+
+const COUNT: U32 = 0X10
+const HALF: F32 = 5E-1
+const BIG: U64 = 0XFFFF_FFFF_FFFF_FFFF
+const SUM: U32 = 0x10 + 1_0 + 0B11
+const SCALE: F32 = 1e+3
+const WIDE: F64 = 01.5
+
+fn takes(x: F32, n: U32) -> F32 {
+  x
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+pub fn in_a_repeated_element_and_a_length() -> [F32; 0x4] {
+  let a: [F32; 0X4] = [0.0; 0b100]
+  let b: [U32; 4_] = [0X1F; 4__]
+  a
+}
+
+pub fn in_an_argument(x: F32) -> F32 {
+  takes(48e3, 0xFF)
+}
+
+pub fn in_a_field() -> Cell {
+  Cell { v: 1E+3, n: 0Xff }
+}
+
+pub fn in_an_array_and_a_tuple() -> ([F32; 3], (U32, F32)) {
+  ([1e+3, 25e-1, 01.5], (0B101, 7E0))
+}
+
+pub fn as_an_operand(x: F32, n: U32) -> F32 {
+  let m: U32 = n + 0x_1F - 1_
+  x * 5e-1 + 02.5
+}
+
+pub fn in_a_branch_and_an_arm(flag: Bool, o: Option[U32]) -> U32 {
+  let a: U32 = if flag { 0XFF } else { 1__0 }
+  match o {
+    Some(n) => n + 0b_1,
+    None => a,
+  }
+}
+
+pub fn in_a_closure_body() -> U32 {
+  let f = fn(y: U32) -> U32 { y + 0XFF }
+  let g = fn(y: F32) -> F32 { y * 1E+3 }
+  f.(1_0)
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let n: U32 = 0x1__F
+  let a: F32 = 48e3
+  x
+}
+
+pub fn deciding_later() -> F32 {
+  let a = id(48e3)
+  let b: F32 = a
+  b
+}
+
+pub fn in_a_block_in_a_block() -> U32 {
+  let r: U32 = {
+    let s: U32 = {
+      0B1111
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_for_range() -> U32 {
+  var s: U32 = 0
+  for i in 0X0..<0b11 {
+    s = s + i
+  }
+  for i in 1_0..<1__2 {
+    s = s + i
+  }
+  s
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 5e-1 + 02.5E-1
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 0X4] at sample {
+  par i in 0B0..<0x4 {
+    x * i.round_f32() + 1E-1
+  }
+}
+
+pub flow in_a_par_over_a_const(x: F32 at sample) -> [F32; 0x10] at sample {
+  par i in 0..<COUNT {
+    x * i.round_f32()
+  }
+}

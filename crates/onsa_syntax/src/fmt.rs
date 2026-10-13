@@ -1437,7 +1437,7 @@ mod tests {
     fn a_value_call_reads_its_dot_from_the_tree_and_not_from_a_comment() {
         // W3-20/b: fmt took the `.` of `.(` from the text, so a `.` or a `(` in a comment
         // between the callee and the `.` changed the output, and an integer literal callee
-        // was joined to its `.(` on one line (`1.(` reads as the literal `1.`, S-350). The
+        // was joined to its `.(` on one line (`1.(` read as the literal `1.` then, S-350). The
         // output is the same whatever the comment says, keeps the line break before a `.(`
         // that starts a line (as `.max(1)` does), and reads to the same tree.
         let cases = [

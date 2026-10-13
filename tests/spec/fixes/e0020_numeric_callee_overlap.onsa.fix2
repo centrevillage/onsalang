@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.1", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "72:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["72:11 E0020"]
+//
+// [[test.fix]]
+// at = "72:11"
+// code = "E0020"
+// candidate = 2
+// leaves = ["72:11 E0020"]
+//
+// [[test.fix]]
+// at = "77:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["77:11 E0020"]
+//
+// [[test.fix]]
+// at = "82:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["82:11 E0020"]
+//
+// [[test.fix]]
+// at = "87:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["87:11 E0020"]
+//
+// [[test.fix]]
+// at = "92:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["92:11 E0020"]
+//
+// [[test.fix]]
+// at = "97:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["97:11 E0020"]
+//
+// [[test.fix]]
+// at = "102:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["102:11 E0020"]
+//
+// [[test.fix]]
+// at = "107:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["107:11 E0020"]
+
+// E0020 for a number whose own form is wrong and that is the callee of a call (spec §2.4, §6.1, §18.1; S-62, S-63,
+// S-350, R-124). The number is read first: `017(2)` and `0o17(2)` are the leading zero and the octal prefix (they were
+// the E0002 of a callee before S-350), and the candidate of the number leaves the E0020 of the callee, which
+// is a second error of the same unit (`leaves` in the header, at the first character of the number, where the
+// callee starts; the unit reports the first error only, and the next check reports the next one). Where the
+// number is the callee of a member's `.(` there is nothing left (`017.(2)`: the candidates `17.(2)` and
+// `15.(2)` are clean, the default promise). The candidates are those of the number alone (fixes/e0020_numeric_
+// leading_zero.onsa, e0020_numeric_suffixes.onsa, e0020_numeric_float_forms.onsa): `017` is `17` or `15`
+// (decimal first), `0o17` is `15`, `00` is `0`, a suffix is removed, `.5` is `0.5`, and `1.e3` is `1.0e3`. The
+// main position is the first character of the number. One error per declaration (P-01).
+
+pub fn leading_zero_callee(x: I32) -> I32 {
+  let a = 15(2)                                    //~ E0020
+  a
+}
+
+pub fn leading_zero_callee_with_two_zeros(x: I32) -> I32 {
+  let a = 00(2)                                     //~ E0020
+  a
+}
+
+pub fn octal_prefix_callee(x: I32) -> I32 {
+  let a = 0o17(2)                                   //~ E0020
+  a
+}
+
+pub fn suffixed_callee(x: I32) -> I32 {
+  let a = 1u8(2)                                    //~ E0020
+  a
+}
+
+pub fn suffixed_hexadecimal_callee(x: I32) -> I32 {
+  let a = 0x1Fu8(2)                                 //~ E0020
+  a
+}
+
+pub fn float_suffix_on_the_form_of_an_integer_callee(x: I32) -> I32 {
+  let a = 1f32(2)                                   //~ E0020
+  a
+}
+
+pub fn leading_point_callee(x: I32) -> I32 {
+  let a = .5(2)                                     //~ E0020
+  a
+}
+
+pub fn point_before_an_exponent_callee(x: I32) -> I32 {
+  let a = 1.e3(2)                                   //~ E0020
+  a
+}
+
+pub fn leading_zero_member(x: I32) -> I32 {
+  let a = 15.(2)                                   //~ E0020
+  a
+}
+
+pub fn octal_prefix_member(x: I32) -> I32 {
+  let a = 0o17.(2)                                  //~ E0020
+  a
+}
+
+pub fn suffixed_member(x: I32) -> I32 {
+  let a = 1u8.(2)                                   //~ E0020
+  a
+}
+
+// The right forms.
+pub fn fine(f: fn(I32) -> I32, x: I32) -> I32 {
+  let a = f.(x)
+  a
+}

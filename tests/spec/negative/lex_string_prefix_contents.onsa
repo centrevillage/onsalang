@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a prefix or a suffix on a string or character literal, whatever the literal holds (spec §2.4, §18.1;
+// S-400 as changed by S-406; the row `string_prefix` of docs/foreign-forms.toml). The name that touches a
+// literal (`f"{x}"`, `r"\d"`, `b'x'`, `x'ab'`) and the name that a literal touches (`"x"_s`) are one form of
+// other languages, and the rule does not read the literal: the error is this E0002 when the literal is not
+// closed on the line (`f"abc`), has an escape that is not in the closed list (`f"\q"`), a character literal of
+// two characters (`x'ab'`), a hole that cannot be written (`f"{f(x)}"`, `f"{fn}"`, `f"{clock}"` with a keyword
+// or a reserved word in it) or a `{` that is never closed. The E0001 of the content (§2.4) is not reported
+// (a character written nowhere, §2.5, is its own E0001 there too, S-454).
+// The range is the name up to the closing delimiter on the same line, and the name up to the opening
+// delimiter when the line has no closing one. The literal without a name (`"\q"`, `'ab'`) is E0001 as before
+// (negative/lex_escapes.onsa). The marker is the line only. One error per declaration (P-01).
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+// ---------------------------------------------------------------- the literal is not closed on the line
+
+pub fn string_not_closed_after_a_prefix() -> Str {
+  f"abc                                             //~ E0002
+}
+
+pub fn string_not_closed_after_a_raw_prefix() -> Str {
+  r"abc                                             //~ E0002
+}
+
+pub fn character_not_closed_after_a_prefix() -> Char {
+  b'a                                               //~ E0002
+}
+
+pub fn string_not_closed_in_an_argument() -> U32 {
+  show(u8"abc)                                      //~ E0002
+}
+
+// ---------------------------------------------------------------- a bad escape or character in the content
+
+pub fn bad_escape_after_a_prefix() -> Str {
+  f"\q"                                             //~ E0002
+}
+
+pub fn bad_unicode_escape_after_a_prefix() -> Str {
+  b"\u{110000}"                                     //~ E0002
+}
+
+pub fn bad_escape_before_a_suffix() -> Str {
+  "\q"_s                                            //~ E0002
+}
+
+pub fn two_characters_after_a_prefix() -> Char {
+  x'ab'                                             //~ E0002
+}
+
+pub fn two_characters_before_a_suffix() -> Char {
+  'ab'_c                                            //~ E0002
+}
+
+pub fn empty_character_after_a_prefix() -> Char {
+  b''                                               //~ E0002
+}
+
+pub fn a_character_that_cannot_be_written() -> Str {
+  f"a b"                                       //~ E0002
+}
+
+// ---------------------------------------------------------------- a hole that cannot be written
+
+pub fn call_in_a_hole_after_a_prefix(x: I32) -> Str {
+  f"{f(x)}"                                         //~ E0002
+}
+
+pub fn keyword_in_a_hole_after_a_prefix() -> Str {
+  f"{fn}"                                           //~ E0002
+}
+
+pub fn reserved_word_in_a_hole_after_a_prefix() -> Str {
+  f"{clock}"                                        //~ E0002
+}
+
+pub fn keyword_in_a_hole_before_a_suffix() -> Str {
+  "{if}"_s                                          //~ E0002
+}
+
+pub fn spaces_in_a_hole_after_a_prefix(x: I32) -> Str {
+  f"{ x }"                                          //~ E0002
+}
+
+pub fn brace_never_closed_after_a_prefix(x: I32) -> Str {
+  f"{x"                                             //~ E0002
+}
+
+pub fn format_in_a_hole_after_a_prefix(x: I32) -> Str {
+  f"{x:.2}"                                         //~ E0002
+}
+
+// ---------------------------------------------------------------- the places of the form
+
+pub fn in_an_argument() -> U32 {
+  show(f"\q")                                       //~ E0002
+}
+
+pub fn in_an_array() -> U32 {
+  let xs = ["a", r"\q"]                             //~ E0002
+  xs.len()
+}
+
+pub fn in_a_tuple() -> U32 {
+  let t = (1, b"\q")                                //~ E0002
+  1
+}
+
+pub fn in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(_) => show(f"{fn}"),                       //~ E0002
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body() -> U32 {
+  let g = fn(y: I32) -> U32 { show(f"{clock}") }    //~ E0002
+  g.(1)
+}
+
+pub fn in_a_block_in_a_block() -> U32 {
+  let r: U32 = {
+    let s: U32 = {
+      show(f"abc                                    //~ E0002
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let s = f"\q"                                     //~ E0002
+  x
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = f"{fn}"                                   //~ E0002
+  x
+}
+
+const IN_A_CONST: Str = f"\q"                      //~ E0002
+
+// The right forms.
+pub fn fine(x: I32) -> U32 uses {Alloc} {
+  let a = "{x}"
+  let b = "\n"
+  let c = 'a'
+  show(a) + show(b)
+}

@@ -1,0 +1,3 @@
+[package]
+name = "float_literal_pkg"
+edition = "2026"

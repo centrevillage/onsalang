@@ -4,7 +4,8 @@
 // spec = ["§2.1", "§2.5", "§2.6"]
 
 // Characters that no token or comment starts with, in the middle of otherwise valid lines:
-// `$` `#` `` ` `` `\` `§`, a lone `'`, `@` and `?` in odd places, and a stray `"`.
+// `$` `#` `\` `§`, a lone `'`, `@` and `?` in odd places, and a stray `"`; and `` ` ``, which opens a
+// string of other languages to the end of its line (S-406).
 
 let x = 1 $ 2
 let y = 1 # 2

@@ -87,8 +87,10 @@ pub fn char_literal() -> Str uses {Alloc} {
   "{'a'}"                       //~ E0001
 }
 
+// A `"` in a hole closes the string there (§2.4): `"{"` and the name `a` right after it are the form of a
+// literal against a name, E0002 of the syntax stage, whose content is not read (S-400, S-465).
 pub fn string_literal() -> Str uses {Alloc} {
-  "{"a"}"                       //~ E0001
+  "{"a"}"                       //~ E0002
 }
 
 pub fn nested_interpolation(p: U32) -> Str uses {Alloc} {

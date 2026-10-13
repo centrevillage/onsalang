@@ -223,7 +223,7 @@ impl<'c, 'a> PatReader<'c, 'a> {
         let float = match self.peek()? {
             TokenKind::Int => None,
             TokenKind::Float => Some(self.c.src(self.toks[at]).to_string()),
-            TokenKind::ForeignLit => Some(float_spelling(self.c.src(self.toks[at]))?),
+            TokenKind::ForeignLit => Some(float_spelling_at(self.c, self.toks[at])?),
             // `.5`: the point and the digits together, as the lexer reads `0.5`.
             TokenKind::Dot
                 if self.toks.get(at + 1).is_some_and(|&n| {
@@ -510,9 +510,15 @@ enum Why {
 fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Result<Shape<'a>, Why> {
     let tok = |pos: usize| Skel::Tok(c.kind(toks[pos]), c.src(toks[pos]));
     let comment = |a: usize, b: usize| (toks[a]..=toks[b]).any(|i| c.comment(i));
+    // A literal with the lexer's error (`1x`) is not copied into the guard,
+    // where the error would stay (S-236, R-215).
+    let unread = |a: usize, b: usize| (toks[a]..=toks[b]).any(|i| !c.literal_ok(i));
     let empty = || Shape { skel: Vec::new(), holes: Vec::new(), cond: Cond::True, edits: Vec::new() };
     match &p.kind {
-        PatKind::Hole(_, t) => {
+        PatKind::Hole(form, t) => {
+            if unread(p.lo, p.hi) {
+                return Err(Why::Bad(*form));
+            }
             if comment(p.lo, p.hi) {
                 return Err(Why::Differ);
             }
@@ -528,7 +534,7 @@ fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Result<Shape<'a>, Wh
         PatKind::Paren(inner) => shape(c, toks, inner),
         PatKind::At { rhs, .. } => {
             let name = c.src(toks[p.lo]);
-            let cond = at_cond(c, toks, name, rhs).ok_or(Why::Bad(Form::At))?;
+            let cond = at_cond(c, toks, name, rhs).filter(|_| !unread(rhs.lo, rhs.hi)).ok_or(Why::Bad(Form::At))?;
             if comment(p.lo, p.hi) {
                 return Err(Why::Differ);
             }
@@ -821,6 +827,7 @@ mod tests {
             want: Want::Pattern,
             detached: None,
             ends: &[],
+            reach: 0,
         };
         let start = src.find("((").unwrap_or_default() as u32;
         Arm::read(&c, start, limit).is_some()

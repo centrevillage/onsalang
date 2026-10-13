@@ -1,0 +1,1 @@
+fn s(n:I)->I{match n{k@1x | k @ 2 => 002

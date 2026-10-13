@@ -1,0 +1,31 @@
+// Items of a module with float literals whose value depends on rounding once (spec §2.4, §15.1).
+
+pub struct Cell {
+  v: F32,
+  w: F64,
+}
+
+// 1 + 2^-24 plus 1e-26: above the middle of 1.0 and 1 + 2^-23, so 0x3F800001 in F32.
+pub const ABOVE_TIE: F32 = 1.00000005960464477539062501
+
+// The same string as F64: 1 + 2^-24 exactly, 0x3FF0000010000000.
+pub const ABOVE_TIE_64: F64 = 1.00000005960464477539062501
+
+// 2^-150 plus a little: above the middle of 0 and 2^-149, so the least subnormal 0x00000001 in F32.
+pub const ABOVE_HALF_OF_LEAST: F32 = 7.00649232162408535461864792e-46
+
+pub fn below_overflow_middle() -> F32 {
+  3.402823567797336616e38
+}
+
+pub fn make_cell() -> Cell {
+  Cell { v: 1.00000017881393432617187499, w: 9007199254740993.000000000000000000001 }
+}
+
+pub fn take(x: F32) -> U32 {
+  x.to_bits()
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}

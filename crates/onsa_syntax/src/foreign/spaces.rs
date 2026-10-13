@@ -2,10 +2,11 @@
 //! postfix opener (S-89, S-123, S-399), around the member `.` (S-203), and a
 //! name written right against a string literal (S-400).
 
-use onsa_diag::{Edit, Fix};
+use onsa_diag::{Diagnostic, Edit, Fix, Span};
 
 use super::{Cursor, Hit, RowId, Want, closed_expr, closing, found, hit};
 use crate::cst::NodeKind;
+use crate::literal::{Base, Literals, Point, point_after_int};
 use crate::token::{Gap, TokenKind};
 
 /// A blank before a postfix opener that the parser did not read on
@@ -79,32 +80,30 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
 
 /// A string or character literal right against a name (`f"{x}"`, `r"\d"`,
 /// `b"x"`, `u8"x"`, `b'x'`) or a name right against a literal (`"x"_s`): the
-/// prefixes and suffixes of other languages (§2.4, S-400). E0002 with the
-/// note and no candidate; found before the missing `,` of a list (S-387),
-/// so no `,` goes between them. The range is the name and the literal (one
-/// form, S-316). The literal is one the lexer read whole; else its E0001 is
-/// the error (`f"abc` at the end of a line, `x'ab'`).
+/// prefixes and suffixes of other languages (§2.4, S-400), as the lexer found
+/// them ([`crate::literal::Touch`]), where the parser fails at the literal
+/// or at the name, before it or after it. E0002 with the note and no
+/// candidate; found before the missing `,` of a list (S-387), so no `,` goes
+/// between them. The literal is not read (S-406): one that does not close
+/// or holds an error is the form too, whose range the lexer gave (the name
+/// to the closing quote, or to the opening one when the line has none). The
+/// lexer's errors in it are held: [`held_errors`] reports those of the forms
+/// this row did not report.
 pub(super) fn string_prefix(c: &Cursor) -> Option<Hit> {
-    let literal = |k: TokenKind| matches!(k, TokenKind::Str | TokenKind::Char);
-    if !(literal(c.kind(c.at)) || c.kind(c.at) == TokenKind::Ident) {
+    if !matches!(c.kind(c.at), TokenKind::Str | TokenKind::Char | TokenKind::Ident) {
         return None;
     }
-    let prev = c.before(c.at)?;
-    if c.gap(c.at) != Gap::None {
-        return None;
-    }
-    let (here, there) = (c.kind(c.at), c.kind(prev));
-    let lit = match (here, there) {
-        (h, TokenKind::Ident) if literal(h) => c.at,
-        (TokenKind::Ident, t) if literal(t) => prev,
-        _ => return None,
-    };
-    // A literal that does not close or holds an error is the lexer's E0001
-    // (§2.4): the form is a whole literal against a name.
-    if !c.literal_ok(lit) {
-        return None;
-    }
-    hit(c.file_span(c.span(prev).start, c.span(c.at).end), Vec::new())
+    hit(c.literals.touch(c.span(c.at))?.range, Vec::new())
+}
+
+/// The lexer's errors held in the literals right against a name
+/// ([`crate::literal::Touch::held`]) whose form the row `string_prefix` did
+/// not report, `reported` being the ranges of those it did
+/// ([`super::Failure::prefixed`]): the literal was read as one (`extern "C"
+/// lib"m\q"` by the grammar of the heading), and its errors are its own.
+pub(crate) fn held_errors<'l>(literals: &'l Literals, reported: &[Span]) -> impl Iterator<Item = &'l Diagnostic> {
+    let reported: std::collections::HashSet<&Span> = reported.iter().collect();
+    literals.touches().iter().filter(move |t| !reported.contains(&t.range)).flat_map(|t| &t.held)
 }
 
 /// A space before or after a member `.` inside a line (`p . x`, `f .(x)`,
@@ -120,17 +119,23 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
         return None;
     }
     // `t. 0.5` would become the indexes `t.0.5`, `1 . 5` the number `1.5`
-    // and `1 .(2)` the literal `1.` (as `1.(2)` reads, S-350): no candidate
-    // keeps their reading.
-    let literal_before =
+    // and `1 .e3` the float `1.e3` (S-452): no candidate keeps their reading.
+    // `1 .(2)` and `1 .abs()` become an integer and its member (S-350): the
+    // `.` after a decimal integer reads as [`point_after_int`] says.
+    let number_before =
         c.at.checked_sub(1)
             .filter(|&b| b.checked_sub(1).is_none_or(|d| c.kind(d) != TokenKind::Dot))
-            .map(|b| c.kind(b))
-            .filter(|&k| matches!(k, TokenKind::Int | TokenKind::Float));
+            .filter(|&b| matches!(c.kind(b), TokenKind::Int | TokenKind::Float));
     let next = c.kind(c.at + 1);
+    let joined: String = c.text[c.span(c.at + 1).start as usize..].chars().take(3).collect();
+    let joins = |b: usize| {
+        next == TokenKind::Int
+            || (c.kind(b) == TokenKind::Int
+                && crate::literal::number(c.src(b)).base == Base::Dec
+                && point_after_int(&format!(".{joined}")) == Point::Exponent)
+    };
     if !(matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen) || next.is_keyword())
-        || (literal_before.is_some() && next == TokenKind::Int)
-        || (literal_before == Some(TokenKind::Int) && next == TokenKind::LParen)
+        || number_before.is_some_and(joins)
     {
         return None;
     }

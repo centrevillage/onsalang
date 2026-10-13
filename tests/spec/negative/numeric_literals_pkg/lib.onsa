@@ -1,0 +1,31 @@
+// Items of a module whose numbers are wrong in their own form (spec §2.4, §15.1, §18.1; S-62, S-63, R-73, R-124). The
+// unit of an error is the declaration, in any module of the package, and the error is reported where the number is.
+
+pub const SUFFIX_NOT_IN_THE_LIST: I32 = 12abc       //~ E0001
+
+pub const PREFIX_WITHOUT_DIGITS: I32 = 0x_          //~ E0001
+
+pub const LEADING_ZERO: I32 = 017                   //~ E0020
+
+pub const OCTAL_PREFIX: I32 = 0o17                  //~ E0020
+
+pub const TYPE_SUFFIX: U8 = 1u8                     //~ E0020
+
+pub const TRAILING_POINT: F32 = 1.                  //~ E0020
+
+pub const POINT_BEFORE_AN_EXPONENT: F32 = 1.e3      //~ E0020
+
+pub const BEYOND_U64: U64 = 0x1_0000_0000_0000_0000   //~ E0408
+
+pub fn word_after_a_float() -> F32 {
+  1.5abc                                            //~ E0001
+}
+
+pub fn leading_zero_in_a_generic_function[T](x: T) -> T {
+  let n: I32 = 017                                  //~ E0020
+  x
+}
+
+pub fn fine() -> I32 {
+  12
+}

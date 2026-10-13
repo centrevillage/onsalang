@@ -2,6 +2,30 @@
 // [test]
 // spec = ["§2.4", "§2.5", "§18.1"]
 // fixes = 2
+//
+// [[test.fix]]
+// at = "84:11"
+// code = "E0002"
+// candidate = 1
+// leaves = ["84:13 E0001"]
+//
+// [[test.fix]]
+// at = "84:11"
+// code = "E0002"
+// candidate = 2
+// leaves = ["84:9 E0001"]
+//
+// [[test.fix]]
+// at = "88:17"
+// code = "E0002"
+// candidate = 1
+// leaves = ["88:19 E0001"]
+//
+// [[test.fix]]
+// at = "88:17"
+// code = "E0002"
+// candidate = 2
+// leaves = ["88:15 E0001"]
 
 // E0002 for two string literals side by side in a list (§2.5, S-388): Python and C join them into one
 // literal, and the reading as a missing `,` is the other one, so there are two candidates, in this order:
@@ -11,7 +35,10 @@
 // earlier one and removes the token of the later one; the other tokens (`]`, `)`) and the comments stay on
 // the line where they were written (S-216), so `"b"]` on its own line leaves `]` there, and on one line
 // `"a" "b"` leaves the space before what follows (`"ab" ]`). The main position is the token that starts
-// the next element, the later literal (positions of W3-06). One error per declaration unit (P-01).
+// the next element, the later literal (positions of W3-06). Two literals that close are merged also when
+// the later one holds an error of its own (`"\q"`, S-438): the E0002 starts before the E0001 of the escape
+// (S-281), and each candidate leaves that E0001 (`leaves` in the header, at the escape after it). One error
+// per declaration unit (P-01).
 
 pub fn show(s: Str) -> U32 {
   s.len()
@@ -46,6 +73,19 @@ pub fn an_argument_on_one_line() -> U32 {
 pub fn a_comment_between() -> U32 uses {Alloc} {
   let xs = ["ab" // the first
     ]                                               //~ E0002
+  xs.len()
+}
+
+pub fn two(s: Str, n: U32) -> U32 {
+  s.len() + n
+}
+
+pub fn an_argument_with_an_error_in_the_second() -> U32 {
+  two("a\q" , 1)                                    //~ E0002
+}
+
+pub fn an_array_with_an_error_in_the_second() -> U32 uses {Alloc} {
+  let xs = ["a\q" ]                                 //~ E0002
   xs.len()
 }
 

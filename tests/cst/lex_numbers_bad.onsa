@@ -4,7 +4,8 @@
 // spec = ["§2.4"]
 
 // Numeric literals that §2.4 rejects (E0020: leading zero, 0o, suffixes, a decimal point
-// without digits on a side), plus the near misses that fail otherwise. Written as-is.
+// without digits on a side), plus the near misses that fail otherwise. The line of the `_`
+// holds spellings §2.4 accepts too (`1__000`, `1_e3`, `1e3_`: `_` goes anywhere). Written as-is.
 
 017 00 007 0_7 00.5 01.5 000 0123456789
 0o17 0o 0O17 0o8 0u 0i

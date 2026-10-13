@@ -1,0 +1,279 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.7"]
+
+// E0408 for a float literal whose value is lost when the type is known (spec §2.4, §4.7; S-211, R-20, R-45):
+// the decimal value is rounded to the type once, to the nearest, ties to even, and the literal is an error if the
+// rounded value is not finite (`1e39` in F32; a string past the middle of the greatest finite value and
+// 2^128 = 3.4028236692e38) or if a literal with a nonzero digit rounds to 0 (`1e-50` in F32; a string at or
+// below the middle of 0 and the least subnormal 2^-149, which is 7.00649232162408535461864791644958...e-46).
+// A value that rounds to a subnormal is not an error (semantics/float_literal_limits.onsa). The literal is where
+// the error is, in every place that decides the type: `const`, a `let` with an annotation, an argument, a
+// return, a field, an array or tuple element, an operand of a binary operator, an assignment, a closure body, an
+// arm and a branch, a block in a block, a flow body and a `par`, a generic function whose type is decided later,
+// the argument of a call through a function value. One error per declaration (P-01). The same strings as F64 are
+// values, and are in the fine functions at the end.
+
+pub struct Cell {
+  v: F32,
+}
+
+pub enum Pick {
+  First,
+  Second,
+}
+
+fn takes_f32(x: F32) -> F32 {
+  x
+}
+
+fn takes_f64(x: F64) -> F64 {
+  x
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn apply(f: fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+// ---------------------------------------------------------------- not finite, F32
+
+const TOO_BIG: F32 = 1e39                           //~ E0408
+
+pub fn spec_example() -> F32 {
+  let x: F32 = 1.0e40                               //~ E0408
+  x
+}
+
+pub fn above_the_middle_of_the_greatest() -> F32 {
+  let x: F32 = 3.402823567797336617e38              //~ E0408
+  x
+}
+
+pub fn a_long_decimal_without_exponent() -> F32 {
+  let x: F32 = 340282356779733661637539395458142568449.0   //~ E0408
+  x
+}
+
+pub fn in_an_argument() -> F32 {
+  takes_f32(1e39)                                   //~ E0408
+}
+
+pub fn in_a_return() -> F32 {
+  1e39                                              //~ E0408
+}
+
+pub fn in_an_early_return(flag: Bool) -> F32 {
+  if flag {
+    return 1e39                                     //~ E0408
+  }
+  0.0
+}
+
+pub fn in_a_field() -> Cell {
+  Cell { v: 1e39 }                                  //~ E0408
+}
+
+pub fn in_an_array() -> [F32; 2] {
+  [0.0, 1e39]                                       //~ E0408
+}
+
+pub fn in_a_tuple() -> (F32, F32) {
+  (1e39, 0.0)                                       //~ E0408
+}
+
+pub fn as_an_operand(x: F32) -> F32 {
+  x + 1e39                                          //~ E0408
+}
+
+pub fn in_a_comparison(x: F32) -> Bool {
+  x < 1e39                                          //~ E0408
+}
+
+pub fn in_an_assignment() -> F32 {
+  var v: F32 = 0.0
+  v = 1e39                                          //~ E0408
+  v
+}
+
+pub fn under_a_minus() -> F32 {
+  let x: F32 = -1e39                                //~ E0408
+  x
+}
+
+pub fn in_a_block_in_a_block() -> F32 {
+  let r: F32 = {
+    let s: F32 = {
+      1e39                                          //~ E0408
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_branch(flag: Bool) -> F32 {
+  if flag { 1.0 } else { 1e39 }                     //~ E0408
+}
+
+pub fn in_an_arm(p: Pick) -> F32 {
+  match p {
+    Pick.First => 1.0,
+    Pick.Second => 1e39,                            //~ E0408
+  }
+}
+
+pub fn in_a_closure_body() -> F32 {
+  let f = fn(y: I32) -> F32 { 1e39 }                //~ E0408
+  f.(1)
+}
+
+pub fn in_an_argument_of_a_function_value() -> F32 {
+  apply(fn(x: F32) -> F32 { x }, 1e39)              //~ E0408
+}
+
+pub fn through_a_function_value(f: fn(F32) -> F32) -> F32 {
+  f.(1e39)                                          //~ E0408
+}
+
+pub fn decided_later_by_an_annotation() -> F32 {
+  let a = id(1e39)                                  //~ E0408
+  let b: F32 = a
+  b
+}
+
+pub fn decided_later_by_an_argument() -> F32 {
+  let a = id(1e39)                                  //~ E0408
+  takes_f32(a)
+}
+
+pub fn decided_later_by_an_operand(x: F32) -> F32 {
+  let a = 1e39                                      //~ E0408
+  x + a
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 1e39                                          //~ E0408
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    x + 1e39                                        //~ E0408
+  }
+}
+
+// ---------------------------------------------------------------- rounds to 0, F32
+
+const TOO_SMALL: F32 = 1e-50                        //~ E0408
+
+pub fn zero_in_a_let() -> F32 {
+  let x: F32 = 1e-50                                //~ E0408
+  x
+}
+
+pub fn zero_by_one_digit_below_half_of_the_least() -> F32 {
+  let x: F32 = 7.00649232162408535461864791e-46     //~ E0408
+  x
+}
+
+pub fn zero_by_a_short_string() -> F32 {
+  let x: F32 = 7e-46                                //~ E0408
+  x
+}
+
+pub fn zero_with_many_digits() -> F32 {
+  let x: F32 = 0.000000000000000000000000000000000000000000000000001   //~ E0408
+  x
+}
+
+pub fn zero_in_an_argument() -> F32 {
+  takes_f32(1e-46)                                  //~ E0408
+}
+
+pub fn zero_in_a_return() -> F32 {
+  1.0e-50                                           //~ E0408
+}
+
+pub fn zero_as_an_operand(x: F32) -> F32 {
+  x * 1e-50                                         //~ E0408
+}
+
+pub fn zero_under_a_minus() -> F32 {
+  let x: F32 = -1e-50                               //~ E0408
+  x
+}
+
+pub fn zero_decided_later() -> F32 {
+  let a = id(1e-50)                                 //~ E0408
+  takes_f32(a)
+}
+
+pub flow zero_in_a_flow(x: F32 at sample) -> F32 at sample {
+  x + 1e-50                                         //~ E0408
+}
+
+// ---------------------------------------------------------------- F64
+
+const TOO_BIG_64: F64 = 1e309                       //~ E0408
+
+pub fn f64_infinite() -> F64 {
+  let x: F64 = 1e309                                //~ E0408
+  x
+}
+
+pub fn f64_above_the_middle_of_the_greatest() -> F64 {
+  let x: F64 = 1.7976931348623159e308               //~ E0408
+  x
+}
+
+pub fn f64_infinite_in_an_argument() -> F64 {
+  takes_f64(1.0e400)                                //~ E0408
+}
+
+pub fn f64_infinite_in_an_array() -> [F64; 2] {
+  [1e309, 0.0]                                      //~ E0408
+}
+
+pub fn f64_zero() -> F64 {
+  let x: F64 = 1e-400                               //~ E0408
+  x
+}
+
+pub fn f64_zero_below_half_of_the_least() -> F64 {
+  let x: F64 = 2.4e-324                             //~ E0408
+  x
+}
+
+pub fn f64_zero_in_a_return() -> F64 {
+  1e-325                                            //~ E0408
+}
+
+pub fn f64_zero_decided_later() -> F64 {
+  let a = id(1e-400)                                //~ E0408
+  takes_f64(a)
+}
+
+// ---------------------------------------------------------------- the same strings that are fine
+
+pub fn fine(x: F64) -> F64 {
+  // As F64, the strings of F32 above are values.
+  let a: F64 = 1e39
+  let b: F64 = 1e-50
+  let c: F64 = 3.402823567797336617e38
+  let d: F64 = 7e-46
+  // The least and the greatest, in F32 and in F64.
+  let e: F32 = 3.402823567797336616e38
+  let f: F32 = 8e-46
+  let g: F32 = 7.00649232162408535461864792e-46
+  let h: F64 = 1.7976931348623157e308
+  let i: F64 = 2.5e-324
+  // Zero is zero.
+  let z: F32 = 0.0e-100
+  let n: F64 = 0e0
+  // Decided later as F64.
+  let l = id(1e39)
+  let m: F64 = l
+  x + a + b + c + d + h + i + n + m
+}

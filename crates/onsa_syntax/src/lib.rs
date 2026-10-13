@@ -21,6 +21,8 @@ mod layout;
 mod layout_tests;
 pub mod lexer;
 mod literal;
+#[cfg(test)]
+mod literal_tests;
 mod lower;
 mod naming;
 pub mod parser;
@@ -37,6 +39,7 @@ pub use dump::dump;
 pub use fmt::format;
 pub use layout::continues;
 pub use lexer::{Lexed, lex};
+pub use literal::{FloatRange, FloatWidth, float_shown, float_value};
 pub use lower::AstMap;
 pub use parser::Parsed;
 pub use token::{Token, TokenKind};

@@ -1,0 +1,237 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// E0002 in the lexical stage for the delimiters of strings of other languages (spec §2.4, §18.1; S-406, the row
+// `string_delimiter` of docs/foreign-forms.toml): `$"…"` and `@"…"` and `$@"…"` of C#, `r#"…"#` of Rust,
+// `#"…"#` of Swift, `"""…"""` of Python, Swift, Java and C#, `'''…'''` of Python and `` `…` `` of JavaScript.
+// Onsa has one string, `"…"` on one line; interpolation is `{name}` in it, and there is no raw string. The
+// error has no candidate: a candidate would have to guess whether the writer meant a plain, an interpolated
+// or a raw string (the note shows the Onsa forms; its words are not compared here). The range is the opening
+// delimiter up to the closing one on the same line, and the opening delimiter alone when the line has no
+// closing one. The content is not read: a bad escape, a hole that cannot be written or a missing `}` in it
+// is no E0001, and the error is this E0002 (a character written nowhere, §2.5, is its own E0001 there too,
+// S-454, after the E0002 in the line). A character
+// literal of more than one character (`'abc'`) is not in this file: it is an E0001 and has no delimiter of
+// the list. The marker is the line only. One error per declaration (P-01); the places are the ones of a
+// literal (an argument, an element, a field, an arm, a closure body, a block in a block, a flow).
+
+pub struct Label {
+  text: Str,
+}
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+// ---------------------------------------------------------------- each delimiter
+
+pub fn csharp_interpolated(x: I32) -> Str {
+  $"a{x}"                                           //~ E0002
+}
+
+pub fn csharp_verbatim() -> Str {
+  @"text"                                           //~ E0002
+}
+
+pub fn csharp_interpolated_verbatim(x: I32) -> Str {
+  $@"a{x}"                                          //~ E0002
+}
+
+pub fn rust_raw_string() -> Str {
+  r#"text"#                                         //~ E0002
+}
+
+pub fn swift_raw_string() -> Str {
+  #"text"#                                          //~ E0002
+}
+
+pub fn triple_double_quotes() -> Str {
+  """text"""                                        //~ E0002
+}
+
+pub fn triple_single_quotes() -> Str {
+  '''text'''                                        //~ E0002
+}
+
+pub fn backticks() -> Str {
+  `text`                                            //~ E0002
+}
+
+pub fn backticks_with_a_hole() -> Str {
+  `a${1}b`                                          //~ E0002
+}
+
+pub fn empty_triple_double_quotes() -> Str {
+  """"""                                            //~ E0002
+}
+
+// ---------------------------------------------------------------- the content is not read
+
+pub fn bad_escape_after_a_dollar() -> Str {
+  $"\q"                                             //~ E0002
+}
+
+pub fn bad_hole_after_a_dollar() -> Str {
+  $"{f(x)} {1 + 2}"                                 //~ E0002
+}
+
+pub fn missing_brace_after_a_dollar() -> Str {
+  $"{x"                                             //~ E0002
+}
+
+pub fn bad_unicode_escape_in_triple_quotes() -> Str {
+  """\u{110000}"""                                  //~ E0002
+}
+
+pub fn windows_path_in_a_verbatim_string() -> Str {
+  @"C:\path\file.txt"                               //~ E0002
+}
+
+pub fn escapes_of_a_raw_string() -> Str {
+  r#"\d+ \q {x}"#                                   //~ E0002
+}
+
+pub fn a_quote_in_the_content() -> Str {
+  """a"b""c"""                                      //~ E0002
+}
+
+pub fn a_hash_in_a_raw_string() -> Str {
+  r#"a"#b"#                                         //~ E0002
+}
+
+pub fn bad_hole_in_a_template() -> Str {
+  `{a b} ${x.f()}`                                  //~ E0002
+}
+
+pub fn a_character_that_cannot_be_written() -> Str {
+  `a b`                                         //~ E0002
+}
+
+// ---------------------------------------------------------------- the closing delimiter is not on the line
+
+pub fn triple_quotes_over_lines() -> Str {
+  """                                               //~ E0002
+  text
+  """
+}
+
+pub fn backtick_over_lines() -> Str {
+  `                                                 //~ E0002
+  text
+  `
+}
+
+pub fn unclosed_dollar() -> Str {
+  $"abc                                             //~ E0002
+}
+
+pub fn unclosed_raw_string() -> Str {
+  r#"abc"                                            //~ E0002
+}
+
+pub fn unclosed_verbatim() -> Str {
+  @"abc                                             //~ E0002
+}
+
+// ---------------------------------------------------------------- the places of a literal
+
+pub fn in_an_argument() -> U32 {
+  show($"x")                                        //~ E0002
+}
+
+pub fn in_a_second_argument() -> U32 {
+  pair("a", @"x")                                   //~ E0002
+}
+
+pub fn in_an_array() -> U32 {
+  let xs = ["a", `x`]                               //~ E0002
+  xs.len()
+}
+
+pub fn in_a_tuple() -> U32 {
+  let t = (1, r#"x"#)                               //~ E0002
+  1
+}
+
+pub fn in_a_field() -> Label {
+  Label { text: $@"x" }                             //~ E0002
+}
+
+pub fn in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(_) => show("""x"""),                       //~ E0002
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body() -> U32 {
+  let f = fn(y: I32) -> U32 { show('''y''') }       //~ E0002
+  f.(1)
+}
+
+pub fn in_a_block_in_a_block() -> U32 {
+  let r: U32 = {
+    let s: U32 = {
+      show($"x")                                    //~ E0002
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let s = #"x"#                                     //~ E0002
+  x
+}
+
+pub fn after_a_return() -> Str {
+  return `x`                                        //~ E0002
+}
+
+pub fn as_a_receiver() -> U32 {
+  `x`.len()                                         //~ E0002
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = $"x"                                      //~ E0002
+  x
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    let s = r#"x"#                                  //~ E0002
+    x
+  }
+}
+
+const IN_A_CONST: Str = """x"""                     //~ E0002
+
+fn pair(a: Str, b: Str) -> U32 {
+  1
+}
+
+// ---------------------------------------------------------------- a character literal of several characters
+
+pub fn several_characters() -> Char {
+  'abc'                                             //~ E0001
+}
+
+pub fn several_characters_in_an_argument() -> U32 {
+  count('ab')                                       //~ E0001
+}
+
+fn count(c: Char) -> U32 {
+  1
+}
+
+// The right forms.
+pub fn fine(x: I32) -> U32 uses {Alloc} {
+  let a = "{x}"
+  let b = "a`b"
+  let c = "$ @ r# #"
+  let d = '\''
+  let e = "'''"
+  let f = "\"\""
+  show(a) + show(b) + show(c) + show(e) + show(f)
+}

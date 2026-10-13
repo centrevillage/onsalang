@@ -2,16 +2,14 @@
 // [test]
 // spec = ["§2.4", "§18.1"]
 
-// (S-19, R-01.) E0001: a backslash escape that is not in the closed list (§2.4: `\n \t \r \0 \\ \" \' \u{XXXX}`,
+// (S-19, R-01.) E0001: a backslash escape that is not in the closed list (§2.4: `\n \t \r \0 \\ \" \' \u{…}`,
 // in strings and in character literals alike), a `\u{…}` that is not a Unicode scalar value (past
-// U+10FFFF, a surrogate), has no digits, has a character that is not a hexadecimal digit, or is never
+// U+10FFFF, a surrogate), has no digits or more than 6 (S-437, also when the value is in range), has a
+// character that is not a hexadecimal digit, or is never
 // closed, and a character literal that does not hold exactly one scalar value. One error per function
-// (P-01). The marker is the line only: the spec does not say where in the literal the span starts.
+// (P-01). The marker is the line only.
 // The escapes that are fine are in lex/escapes_ok.onsa; the escapes followed by multi-byte
 // characters, which ended in an internal error (R-01), are in lex_utf8_escapes.onsa.
-//
-// Not written here, because the spec does not say: how many digits `\u{…}` may have when the
-// value is in range (`\u{0000041}`).
 
 pub fn unknown_ascii() -> Str {
   "\q"                          //~ E0001
@@ -63,6 +61,14 @@ pub fn u_far_past_the_last_scalar() -> Str {
 
 pub fn u_seven_digits_past_the_last_scalar() -> Str {
   "\u{1000000}"                 //~ E0001
+}
+
+pub fn u_seven_digits_in_range() -> Str {
+  "\u{0000041}"                 //~ E0001
+}
+
+pub fn u_eight_digits_in_range() -> Str {
+  "\u{0001F600}"                //~ E0001
 }
 
 pub fn u_first_surrogate() -> Str {

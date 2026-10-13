@@ -380,12 +380,14 @@ pub(crate) const TOO_DEEP_RULE: &str =
 /// Whether the candidate `edits` of the form at `span`, which add up to
 /// `added` levels, may take its unit over the nesting limit (§2.5; §18.1: no
 /// such candidate is made). The parser counts it, on the text with the
-/// candidate, when the deepest unit of the file and `added` are over the
-/// limit. The one check of the candidates of this module.
+/// candidate, when `deepest` (a level the unit reaches at least, the deepest
+/// unit of the file or the level the parser read to) and `added` are over
+/// the limit. The one check of the candidates of the syntax stage.
 pub(crate) fn nests_too_deep(text: &str, span: Span, edits: &[Edit], added: u32, deepest: u32) -> bool {
     if deepest + added <= crate::parser::NESTING_LIMIT {
         return false;
     }
+    let Some(_counting) = Counting::start() else { return false };
     let refs: Vec<&Edit> = edits.iter().collect();
     let Ok(after) = onsa_diag::apply_text(text, &refs) else { return true };
     let longer = after.len().saturating_sub(text.len()) as u32;
@@ -394,6 +396,40 @@ pub(crate) fn nests_too_deep(text: &str, span: Span, edits: &[Edit], added: u32,
     out.diagnostics
         .iter()
         .any(|d| d.code == Code::E0006 && span.start <= d.span.start && d.span.start < span.end + longer)
+}
+
+thread_local! {
+    /// Whether a parse of [`nests_too_deep`] is running ([`Counting`]).
+    static COUNTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// How many parses [`nests_too_deep`] made on this thread: the tests
+    /// see that a file of many units parses again only where a unit is deep.
+    #[cfg(test)]
+    pub(crate) static PARSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// A parse of [`nests_too_deep`] running on this thread: it only counts the
+/// levels, so its own failures need no candidates and make none of the check
+/// (else each candidate of each unit parses the file again inside the parse
+/// of the one before, exponential in the units). The mark goes when the
+/// guard does, also when an internal error unwinds through it.
+struct Counting;
+
+impl Counting {
+    /// The guard, or `None` when a parse of the check is running already.
+    fn start() -> Option<Counting> {
+        let running = COUNTING.replace(true);
+        #[cfg(test)]
+        PARSES.set(PARSES.get() + usize::from(!running));
+        // `then`, not `then_some`: a guard made while a parse runs would drop
+        // at once and take the mark of the running one with it.
+        (!running).then(|| Counting)
+    }
+}
+
+impl Drop for Counting {
+    fn drop(&mut self) {
+        COUNTING.set(false);
+    }
 }
 
 /// `text` from `start` with the insertions.

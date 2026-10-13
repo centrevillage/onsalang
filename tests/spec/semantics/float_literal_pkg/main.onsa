@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§4.7", "§15.1"]
+
+// The values of float literals in the items of another module (spec §2.4, §15.1; S-211, R-20, R-45): the decimal
+// value is rounded to the type once, in the module where the literal is written and in the module that
+// passes it. The strings are the ones of semantics/float_literal_rounding.onsa; each value is worked out from
+// the spec text (1 + 2^-24 is the middle of 1.0 and 1 + 2^-23 in F32; a string just above it is the upper
+// neighbour 0x3F800001, and the double rounding F64 -> F32 would give 0x3F800000).
+
+use lib.{ABOVE_HALF_OF_LEAST, ABOVE_TIE, ABOVE_TIE_64, below_overflow_middle, id, make_cell, take}
+
+test "a const of another module" {
+  assert ABOVE_TIE.to_bits() == 0x3F800001
+  assert ABOVE_TIE_64.to_bits() == 0x3FF0000010000000
+  assert ABOVE_HALF_OF_LEAST.to_bits() == 0x00000001
+}
+
+test "a function of another module" {
+  assert below_overflow_middle().to_bits() == 0x7F7FFFFF
+  let c = make_cell()
+  assert c.v.to_bits() == 0x3F800001
+  assert c.w.to_bits() == 0x4340000000000001
+}
+
+test "a literal passed to a function of another module" {
+  assert take(1.00000005960464477539062501) == 0x3F800001
+  assert take(7.00649232162408535461864792e-46) == 0x00000001
+  assert lib.take(1.00000017881393432617187499) == 0x3F800001
+}
+
+test "a generic function of another module decides the type by the context" {
+  let a: F32 = id(1.00000005960464477539062501)
+  assert a.to_bits() == 0x3F800001
+  let b = id(9007199254740993.000000000000000000001)
+  let c: F64 = b
+  assert c.to_bits() == 0x4340000000000001
+}

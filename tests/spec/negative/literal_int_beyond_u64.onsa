@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// E0408 for an integer literal past the greatest U64 (2^64 - 1 = 18446744073709551615), in every spelling
+// (spec §2.4: an integer literal that fits no integer type has no value, so it is an error of the syntax
+// stage, §18.1; S-62, R-73). The value decides, not the count of the digits: the `_` and the zeros in front
+// are not digits that count (`0x_1F` is 0x1F, §2.4), so a literal with many zeros in front still fits, and a
+// literal with `_` between the digits is as large as the one without them. The capital prefix `0X` and `0B` is
+// a prefix too. One error per declaration (P-01).
+
+const BEYOND_IN_A_CONST: U64 = 18446744073709551616   //~ E0408
+
+pub fn decimal() -> U64 {
+  let x: U64 = 18446744073709551616                 //~ E0408
+  x
+}
+
+pub fn decimal_with_separators() -> U64 {
+  let x: U64 = 18_446_744_073_709_551_616           //~ E0408
+  x
+}
+
+pub fn hexadecimal() -> U64 {
+  let x: U64 = 0x1_0000_0000_0000_0000              //~ E0408
+  x
+}
+
+pub fn hexadecimal_with_a_capital_prefix() -> U64 {
+  let x: U64 = 0X1_0000_0000_0000_0000              //~ E0408
+  x
+}
+
+pub fn hexadecimal_with_a_separator_after_the_prefix() -> U64 {
+  let x: U64 = 0x_1_0000_0000_0000_0000             //~ E0408
+  x
+}
+
+pub fn hexadecimal_all_digits() -> U64 {
+  let x: U64 = 0xFFFF_FFFF_FFFF_FFFF_F              //~ E0408
+  x
+}
+
+pub fn binary() -> U64 {
+  let x: U64 = 0b1_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000   //~ E0408
+  x
+}
+
+pub fn binary_with_a_capital_prefix() -> U64 {
+  let x: U64 = 0B1_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000   //~ E0408
+  x
+}
+
+pub fn under_a_minus() -> I64 {
+  let x: I64 = -18446744073709551616                //~ E0408
+  x
+}
+
+pub fn in_an_argument() -> U64 {
+  max_of(18446744073709551616, 1)                   //~ E0408
+}
+
+pub fn in_an_array() -> [U64; 2] {
+  [1, 0x1_0000_0000_0000_0000]                      //~ E0408
+}
+
+pub fn in_a_closure_body() -> U64 {
+  let f = fn(y: U64) -> U64 { 0x1_0000_0000_0000_0000 }   //~ E0408
+  f.(1)
+}
+
+pub fn in_a_pattern(x: U64) -> I32 {
+  match x {
+    0x1_0000_0000_0000_0000 => 1,                   //~ E0408
+    _ => 0,
+  }
+}
+
+pub flow in_a_flow(x: U64 at sample) -> U64 at sample {
+  x +% 0x1_0000_0000_0000_0000                      //~ E0408
+}
+
+fn max_of(a: U64, b: U64) -> U64 {
+  a
+}
+
+// The greatest U64 and what looks larger but is not.
+pub fn fine() -> U64 {
+  let a: U64 = 18446744073709551615
+  let b: U64 = 18_446_744_073_709_551_615
+  let c: U64 = 0xFFFF_FFFF_FFFF_FFFF
+  let d: U64 = 0XFFFFFFFFFFFFFFFF
+  let e: U64 = 0b1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111_1111
+  let f: U64 = 0x0000_0000_0000_0000_00FF
+  let g: U64 = 0x_0000_0000_0000_0000_0000_0000_0000_FF
+  let h: U64 = 0b0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0101
+  let i: U64 = 1_8_4_4_6_7_4_4_0_7_3_7_0_9_5_5_1_6_1_5
+  a + b + c + d + e + f + g + h + i
+}

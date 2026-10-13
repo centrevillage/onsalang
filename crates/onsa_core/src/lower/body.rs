@@ -825,15 +825,17 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     let kind = match &cx.expr(e).kind {
         AK::Lit(l) => match l {
             ALit::Int { value, .. } => ExprKind::Lit(Lit::Int(*value as i128)),
+            // The one conversion of a float literal (§2.4, R-20): the value
+            // rounded once to the type; the types stage reported one out of
+            // its range (E0408).
             ALit::Float { text } => {
-                let t = text.replace('_', "");
+                let value = |k: FloatKind| {
+                    onsa_syntax::float_value(text, k.width()).map_err(|_| internal(span, "float literal out of range"))
+                };
                 match ty {
-                    Ty::Float(FloatKind::F32) => {
-                        ExprKind::Lit(Lit::F32(t.parse().map_err(|_| internal(span, "float literal"))?))
-                    }
-                    Ty::Float(FloatKind::F64) => {
-                        ExprKind::Lit(Lit::F64(t.parse().map_err(|_| internal(span, "float literal"))?))
-                    }
+                    // Exact: the value is one of `F32` already.
+                    Ty::Float(FloatKind::F32) => ExprKind::Lit(Lit::F32(value(FloatKind::F32)? as f32)),
+                    Ty::Float(FloatKind::F64) => ExprKind::Lit(Lit::F64(value(FloatKind::F64)?)),
                     _ => return Err(internal(span, "float literal type")),
                 }
             }

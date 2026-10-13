@@ -1842,6 +1842,51 @@ pub fn f() -> I32 {
 }
 ''']
 
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 0o777
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> I32 {
+  let n: I32 = 511
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 0o0
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> I32 {
+  let n: I32 = 0
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = -0o17
+  n
+}
+'''
+at = "2:17"
+fixed = ['''
+pub fn f() -> I32 {
+  let n: I32 = -15
+  n
+}
+''']
+
 # 先頭が 0 の 10 進の整数は、C・Go・Java が 8 進の 15、Rust が 17 と読み、読みが分かれる。
 # 候補は `17` と `15` を、この順に並べる。`00` の候補は `0`。
 [[form]]
@@ -1890,6 +1935,90 @@ pub fn f() -> I32 {
   n
 }
 ''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 010
+  n
+}
+'''
+at = "2:16"
+fixed = [
+'''
+pub fn f() -> I32 {
+  let n: I32 = 10
+  n
+}
+''',
+'''
+pub fn f() -> I32 {
+  let n: I32 = 8
+  n
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 0777
+  n
+}
+'''
+at = "2:16"
+fixed = [
+'''
+pub fn f() -> I32 {
+  let n: I32 = 777
+  n
+}
+''',
+'''
+pub fn f() -> I32 {
+  let n: I32 = 511
+  n
+}
+''',
+]
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = 000
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> I32 {
+  let n: I32 = 0
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  let n: I32 = -017
+  n
+}
+'''
+at = "2:17"
+fixed = [
+'''
+pub fn f() -> I32 {
+  let n: I32 = -17
+  n
+}
+''',
+'''
+pub fn f() -> I32 {
+  let n: I32 = -15
+  n
+}
+''',
+]
 
 [[form]]
 id = "float_trailing_dot"
@@ -1959,6 +2088,66 @@ at = "2:16"
 fixed = ['''
 pub fn f() -> F32 {
   let a: F32 = 1.0e3
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1.e+3
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1.0e+3
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1.e-3
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1.0e-3
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 2.e10
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 2.0e10
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1_0.e3
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1_0.0e3
   a
 }
 ''']
@@ -2061,6 +2250,126 @@ at = "2:16"
 fixed = ['''
 pub fn f() -> F32 {
   let a: F32 = 1.0
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U8 {
+  let n: U8 = 0b101u8
+  n
+}
+'''
+at = "2:15"
+fixed = ['''
+pub fn f() -> U8 {
+  let n: U8 = 0b101
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U32 {
+  let n: U32 = 1_000_u32
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> U32 {
+  let n: U32 = 1_000
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U64 {
+  let n: U64 = 7UL
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> U64 {
+  let n: U64 = 7
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> U64 {
+  let n: U64 = 1usize
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> U64 {
+  let n: U64 = 1
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> I64 {
+  let n: I64 = 1i128
+  n
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> I64 {
+  let n: I64 = 1
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 2F
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 2.0
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 1e3f32
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 1e3
+  a
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  let a: F32 = 2.5e-3f64
+  a
+}
+'''
+at = "2:16"
+fixed = ['''
+pub fn f() -> F32 {
+  let a: F32 = 2.5e-3
   a
 }
 ''']
@@ -3126,6 +3435,199 @@ pub fn g() -> Str {
   "x"_s
 }
 '''
+
+# 閉じていないか不正なリテラルも、中身を読まずにこの行で報告する（S-400 の改め、S-406）。範囲は名前から同じ行の
+# 閉じの区切りまで、閉じが無ければ開きの区切りまで。`at` は名前（リテラルが先なら、リテラル）の始まり。
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  f"abc
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  f"\q"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Char {
+  x'ab'
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  f"{fn}"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  f"{clock}"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  "\q"_s
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> U32 {
+  h(f"{fn}")
+}
+'''
+at = "2:5"
+
+# 他の言語の文字列の区切り（S-406）。開きの区切りから同じ行の閉じの区切りまでが範囲で、閉じが無ければ開きの
+# 区切りだけ。中身は読まない（エスケープ・補間・閉じの E0001 は出さない。§2.5 の書けない文字は、コメントと
+# 同じく E0001 を出す。S-454）。候補は出さず、note で Onsa の文字列の書き方を示す。
+# `'abc'`（一字でない文字のリテラル）は E0001 のままで、この行に当たらない。
+[[form]]
+id = "string_delimiter"
+kind = "foreign"
+origin = "C#、Rust、Swift、Python、Java、JavaScript（文字列の区切り）"
+stage = "lexical"
+code = "E0002"
+spec = ["2.4", "18.1"]
+rule = "文字列は一行の `\"…\"` だけで、改行は `\\n`。補間は `{名前}` で、`${x}` や `\\(x)` ではない。`{`・`}` そのものは `{{`・`}}`。エスケープは閉じた一覧で、生の文字列は無い"
+
+[[form.example]]
+source = '''
+pub fn g(x: I32) -> Str {
+  $"a{x}"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  @"x"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  $@"x"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  r#"x"#
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  #"x"#
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  """x"""
+}
+'''
+at = "2:3"
+
+# `'''` は TOML の複数行のリテラル文字列の終わりと同じなので、基本文字列で書く。
+[[form.example]]
+source = "pub fn g() -> Str {\n  '''x'''\n}\n"
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  `x`
+}
+'''
+at = "2:3"
+
+# 中身は読まない: 不正なエスケープ、書けない穴、閉じない `{` があっても、この E0002 だけ。
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  $"\q {f(x)} {"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  @"C:\path\file"
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  r#"\d+ {x}"#
+}
+'''
+at = "2:3"
+
+# 閉じが同じ行に無ければ、範囲は開きの区切りだけ。
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  """
+  text
+  """
+}
+'''
+at = "2:3"
+
+[[form.example]]
+source = '''
+pub fn g() -> Str {
+  $"abc
+}
+'''
+at = "2:3"
+
+# 式の中の場所。
+[[form.example]]
+source = '''
+pub fn g() -> U32 {
+  h($"x")
+}
+'''
+at = "2:5"
+
+[[form.example]]
+source = '''
+pub fn g() -> U32 {
+  h("a", `x`)
+}
+'''
+at = "2:10"
 
 # 二項にしか使わない演算子で行を始めると、前の行に続かず新しい文として読まれる。候補は演算子を
 # 前の行の末尾へ移す形（行は継続するので次の行のオペランドはそのまま）。

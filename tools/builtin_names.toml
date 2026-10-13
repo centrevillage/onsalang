@@ -370,6 +370,10 @@
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 "u32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }
 
+[same_spelling."crates/onsa_syntax/src/literal.rs"]
+"f32" = { count = 1, note = "Rust の型名（数値リテラルの型の接尾辞の閉じた一覧、§18.1、S-62）" }
+"u32" = { count = 1, note = "Rust の型名（数値リテラルの型の接尾辞の閉じた一覧、§18.1、S-62）" }
+
 [same_spelling."crates/onsa_tests/src/conformance.rs"]
 "mem" = { count = 1, note = "生成する driver の C の変数名（状態の記憶域）" }
 

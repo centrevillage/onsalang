@@ -2,21 +2,14 @@
 // [test]
 // spec = ["§2.4", "§2.5", "§5.2", "§18.1"]
 
-// E0002 for forms of the table whose candidate would change the reading (§18.1: an E0020 is given
+// E0002 for a form of the table whose candidate would change the reading (§18.1: an E0020 is given
 // only when a candidate can be made; W3-20/b):
-// - a space around the `.` of `.(` after an integer literal (`1 .(2)`): without the space, `1.(2)`
-//   reads as the literal `1.` (as `1.(2)` itself does, S-350);
 // - the `~` of C after `move` or `inout` (`move ~x`): `!` gives `move !x`, and the operand of a
 //   mark is a postfix expression, never a prefix one (§5.2, R-42).
+// A space around the `.` of `.(` after an integer literal (`1 .(2)`, `1 . (2)`) was here: since S-350 the `.` after
+// the digits of an integer is the member's `.` when `(` follows, so `1.(2)` is a call of the integer 1 and the
+// candidate that removes the spaces is a form like the others (tests/spec/fixes/e0020_numeric_integer_callee.onsa).
 // One error per function (P-01).
-
-pub fn a_space_before_the_dot_of_a_literal(f: fn(I32) -> I32) -> I32 {
-  1 .(2)                                            //~ E0002
-}
-
-pub fn spaces_around_the_dot_of_a_literal(f: fn(I32) -> I32) -> I32 {
-  1 . (2)                                           //~ E0002
-}
 
 pub fn a_tilde_after_move(x: I32) -> I32 {
   let a = move ~x                                   //~ E0002

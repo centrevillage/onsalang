@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§4.7"]
+
+// The literals next to the ends of F32 and F64 that are still values (spec §2.4; S-211, R-20, R-45): a literal that
+// rounds to the greatest finite value is finite, a literal that rounds to a subnormal keeps that value (it is
+// not 0), and a literal whose digits are all zero is 0 and stays 0 (the error for a nonzero literal that
+// rounds to 0 is not for it). The values past the ends (E0408) are in negative/literal_float_range.onsa.
+// The bits are worked out from the format (F32: 1 + 8 + 23 bits, the least subnormal 2^-149 = 1.4e-45, the
+// least normal 2^-126 = 1.17549435e-38, the greatest 2^128 - 2^104 = 3.4028234663852886e38; F64: the least
+// subnormal 2^-1074 = 4.94e-324, the least normal 2^-1022 = 2.2250738585072014e-308, the greatest
+// 1.7976931348623157e308) and checked with exact rational arithmetic.
+//
+// F32 rounds to nearest, so the strings between a value and the middle to the next one go to that value:
+// the middle between the greatest finite F32 and 2^128 is 3.4028235677973366e38, so `3.4028235e38` and
+// `3.4028235677e38` are the greatest finite value; the middle between 0 and 2^-149 is 7.006e-46, so `8e-46`
+// is 2^-149 and not 0.
+
+fn bits32(x: F32) -> U32 {
+  x.to_bits()
+}
+
+fn bits64(x: F64) -> U64 {
+  x.to_bits()
+}
+
+const F32_GREATEST: F32 = 3.4028235e38
+const F32_LEAST_SUBNORMAL: F32 = 1e-45
+const F64_GREATEST: F64 = 1.7976931348623157e308
+const F64_LEAST_SUBNORMAL: F64 = 5e-324
+
+test "the greatest finite F32 and what rounds to it" {
+  assert bits32(3.4028235e38) == 0x7F7FFFFF
+  assert bits32(3.4028234663852886e38) == 0x7F7FFFFF
+  assert bits32(3.4028235677e38) == 0x7F7FFFFF
+  assert bits32(340282346638528859811704183484516925440.0) == 0x7F7FFFFF
+  let a: F32 = 3.4028235e38
+  assert a.to_bits() == 0x7F7FFFFF
+  assert F32_GREATEST.to_bits() == 0x7F7FFFFF
+  assert F32_GREATEST == F32.MAX
+  let neg: F32 = -3.4028235e38
+  assert neg.to_bits() == 0xFF7FFFFF
+}
+
+test "values of F32 that are normal" {
+  assert bits32(1e38) == 0x7E967699
+  assert bits32(3.4e38) == 0x7F7FC99E
+  assert bits32(1.5e38) == 0x7EE1B1E6
+  assert bits32(1.17549435e-38) == 0x00800000
+  assert bits32(1.1754944e-38) == 0x00800000
+  assert bits32(1e-10) == 0x2EDBE6FF
+}
+
+test "the subnormals of F32 keep their value" {
+  assert bits32(1.17549421e-38) == 0x007FFFFF
+  assert bits32(1e-40) == 0x000116C2
+  assert bits32(1e-45) == 0x00000001
+  assert bits32(1.4e-45) == 0x00000001
+  assert bits32(8e-46) == 0x00000001
+  assert F32_LEAST_SUBNORMAL.to_bits() == 0x00000001
+  assert F32_LEAST_SUBNORMAL > 0.0
+  let tiny: F32 = 1e-40
+  assert tiny > 0.0
+  assert tiny.to_bits() == 0x000116C2
+}
+
+test "a literal whose digits are all zero is 0 in every spelling" {
+  assert bits32(0.0) == 0
+  assert bits32(0e0) == 0
+  assert bits32(0.0e-100) == 0
+  assert bits32(0.0e100) == 0
+  assert bits32(0.000000000000000000000000000000000000000000000000000000) == 0
+  assert bits64(0.0) == 0
+  assert bits64(0e0) == 0
+  assert bits64(0.0e-400) == 0
+}
+
+test "the greatest finite F64 and what rounds to it" {
+  assert bits64(1.7976931348623157e308) == 0x7FEFFFFFFFFFFFFF
+  assert F64_GREATEST == F64.MAX
+  let a: F64 = 1.7976931348623157e308
+  assert a.to_bits() == 0x7FEFFFFFFFFFFFFF
+  assert bits64(1e308) == 0x7FE1CCF385EBC8A0
+  assert bits64(1.5e300) == 0x7E41EB2D66005835
+}
+
+test "the subnormals of F64 keep their value" {
+  assert bits64(2.2250738585072014e-308) == 0x0010000000000000
+  assert bits64(2.225073858507201e-308) == 0x000FFFFFFFFFFFFF
+  assert bits64(1e-310) == 0x000012688B70E62B
+  assert bits64(1e-320) == 0x00000000000007E8
+  assert bits64(4.9e-324) == 0x0000000000000001
+  assert bits64(5e-324) == 0x0000000000000001
+  assert bits64(2.5e-324) == 0x0000000000000001
+  assert bits64(2.4703282292062328e-324) == 0x0000000000000001
+  assert F64_LEAST_SUBNORMAL.to_bits() == 0x0000000000000001
+  assert F64_LEAST_SUBNORMAL > 0.0
+}
+
+test "the same string in F32 and in F64 is two values" {
+  let a: F32 = 3.4028235e38
+  let b: F64 = 3.4028235e38
+  assert a.to_bits() == 0x7F7FFFFF
+  assert b.to_bits() == 0x47EFFFFFE54DAFF8
+  let c: F32 = 1e-10
+  let d: F64 = 1e-10
+  assert c.to_bits() == 0x2EDBE6FF
+  assert d.to_bits() == 0x3DDB7CDFD9D7BDBB
+}

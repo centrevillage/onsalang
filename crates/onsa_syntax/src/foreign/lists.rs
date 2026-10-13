@@ -75,11 +75,12 @@ pub(super) fn list_fixes(c: &Cursor, list: Option<NodeKind>) -> Vec<Fix> {
 /// The two string literals `prev` and `c.at` as one (S-388): the text of the
 /// second goes before the closing `"` of the first, and the token of the
 /// second goes; the other tokens and the comments stay on their lines (as
-/// S-216 moves code). Only two literals that the lexer read whole (closed,
-/// with no error in them, [`Cursor::literal_ok`]): a literal that does not
-/// close is the lexer's E0001.
+/// S-216 moves code). Only two literals that close on their line
+/// ([`crate::literal::Literals::closed`]), also with an error in them, which
+/// stays the lexer's E0001 in the one literal (S-438): a literal that does
+/// not close has no end to join.
 fn merge_strings(c: &Cursor, prev: usize) -> Option<Fix> {
-    if !(c.literal_ok(prev) && c.literal_ok(c.at)) {
+    if !(c.literals.closed(c.span(prev)) && c.literals.closed(c.span(c.at))) {
         return None;
     }
     let (first, second) = (c.span(prev), c.span(c.at));

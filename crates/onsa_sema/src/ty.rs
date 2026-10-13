@@ -83,6 +83,14 @@ impl FloatKind {
             FloatKind::F64 => "F64",
         }
     }
+
+    /// The width for the value of a float literal ([`onsa_syntax::float_value`]).
+    pub fn width(self) -> onsa_syntax::FloatWidth {
+        match self {
+            FloatKind::F32 => onsa_syntax::FloatWidth::F32,
+            FloatKind::F64 => onsa_syntax::FloatWidth::F64,
+        }
+    }
 }
 
 /// Builtin generic types (spec §4.1). The kind column of §4.1 is in `kind.rs`.

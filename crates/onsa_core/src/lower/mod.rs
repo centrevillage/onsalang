@@ -622,8 +622,19 @@ impl<'a> Lowerer<'a> {
         use onsa_sema::ConstValue as C;
         let kind = match (v, ty) {
             (C::Int(n), Ty::Int(_)) => ExprKind::Lit(Lit::Int(*n)),
+            // Exact: the evaluation rounded the literal to `F32` once (R-20).
             (C::Float(f), Ty::Float(FloatKind::F32)) => ExprKind::Lit(Lit::F32(*f as f32)),
             (C::Float(f), Ty::Float(FloatKind::F64)) => ExprKind::Lit(Lit::F64(*f)),
+            // Rounded once, now that the type is decided; the types stage
+            // reported a literal out of its range (E0408).
+            (C::FloatText(t), Ty::Float(k)) => {
+                let v =
+                    onsa_syntax::float_value(t, k.width()).map_err(|_| internal(span, "float literal out of range"))?;
+                match k {
+                    FloatKind::F32 => ExprKind::Lit(Lit::F32(v as f32)),
+                    FloatKind::F64 => ExprKind::Lit(Lit::F64(v)),
+                }
+            }
             (C::Bool(b), Ty::Bool) => ExprKind::Lit(Lit::Bool(*b)),
             (C::Char(c), Ty::Char) => ExprKind::Lit(Lit::Char(*c)),
             (C::Unit, Ty::Unit) => ExprKind::Lit(Lit::Unit),

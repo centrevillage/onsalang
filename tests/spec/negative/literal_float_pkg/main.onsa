@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.7", "§15.1"]
+
+// E0408 for float literals whose type is decided by an item of another module: the argument of an imported
+// function, the field of an imported struct, an imported generic function whose type is decided by the context
+// (spec §2.4, §4.7, §15.1; S-211, R-20, R-45). The rule is the one of the calling function, wherever the callee is
+// declared. The items of the module with a literal that loses its value are in lib.onsa. One error per
+// declaration (P-01).
+
+use lib.{Cell, FINE, FINE_64, id, takes_f32, takes_f64}
+
+pub fn imported_argument() -> F32 {
+  takes_f32(1e39)                                   //~ E0408
+}
+
+pub fn imported_argument_zero() -> F32 {
+  takes_f32(1e-50)                                  //~ E0408
+}
+
+pub fn imported_f64_argument() -> F64 {
+  takes_f64(1e309)                                  //~ E0408
+}
+
+pub fn imported_field() -> Cell {
+  Cell { v: 1e39 }                                  //~ E0408
+}
+
+pub fn imported_generic_decided_by_an_annotation() -> F32 {
+  let a = id(1e39)                                  //~ E0408
+  let b: F32 = a
+  b
+}
+
+pub fn qualified_argument() -> F32 {
+  lib.takes_f32(1e39)                               //~ E0408
+}
+
+// The right forms.
+pub fn fine() -> F64 {
+  let a: F32 = FINE
+  let b: F64 = FINE_64
+  let c = takes_f64(1e39)
+  let d: F32 = takes_f32(3.402823567797336616e38)
+  b + c
+}

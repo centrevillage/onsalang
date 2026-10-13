@@ -375,6 +375,18 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
 ";
 
 #[test]
+fn a_delay_init_of_a_type_decided_later_is_rounded_once() {
+    // R-20: `^y` has its type from a later statement, so the initial value is
+    // evaluated before its type is known, and rounded once when it is lowered
+    // (F64 then F32 would give 1.0).
+    let m = core(
+        "pub flow f(x: F32 at sample) -> F32 at sample {\n  let p = prev~(^y, -1.0000000596046447753906250001)\n  let y = x + p\n  y\n}\n",
+    );
+    let d = dump(&m);
+    assert!(d.contains("1.0000001:F32"), "{d}");
+}
+
+#[test]
 fn resonator_lowers_to_the_five_functions() {
     let m = core(RESONATOR);
     let d = dump(&m);

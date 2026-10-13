@@ -7,7 +7,7 @@ use super::calls::callee_expression;
 use super::comments::block_comment;
 use super::decls::{arm_return, endless_loop, hash_attribute, let_mut, proc, pub_crate};
 use super::faust::faust_bit_not;
-use super::literals::{foreign_literal, leading_point};
+use super::literals::{foreign_literal, leading_point, string_delimiter};
 use super::modes::{mut_self, reference};
 use super::paths::{angle_brackets, path_separator, space_in_type_args_mark, type_args_call, type_position_path};
 use super::ranges::{range_dots, range_header_one_sided, range_outside_header};
@@ -364,6 +364,33 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Syntax,
     },
     Row {
+        id: RowId::FloatDotExponent,
+        name: "float_dot_exponent",
+        phase: Phase::Lexical,
+        code: Code::E0020,
+        message: "a float literal needs digits on both sides of the point",
+        rule: "a float literal with a point has digits on both sides of it (`1.0e3`); with an exponent, the point is not needed (`48e3`, §2.4)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::OctalPrefix,
+        name: "octal_prefix",
+        phase: Phase::Lexical,
+        code: Code::E0020,
+        message: "Onsa has no octal numbers",
+        rule: "there is no octal prefix; a number is written in decimal, hexadecimal `0x` or binary `0b` (`0o17` is `15`, §2.4)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::LeadingZero,
+        name: "leading_zero",
+        phase: Phase::Lexical,
+        code: Code::E0020,
+        message: "a decimal integer does not start with 0; C, Go and Java read it as octal and Rust as decimal",
+        rule: "a decimal integer other than `0` itself does not start with `0`: `017` is 15 in C, Go and Java and 17 in Rust (§2.4)",
+        detect: Detect::Syntax,
+    },
+    Row {
         id: RowId::LiteralSuffix,
         name: "literal_suffix",
         phase: Phase::Lexical,
@@ -406,6 +433,15 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "Onsa has no block comments, and code follows this one on the line it ends",
         rule: BLOCK_COMMENT_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::StringDelimiter,
+        name: "string_delimiter",
+        phase: Phase::Lexical,
+        code: Code::E0002,
+        message: "Onsa has no string of this delimiter",
+        rule: "a string is one `\"…\"` on one line, with `\\n` for a line break; the interpolation is `{name}`, not `${x}` or `\\(x)`, and `{{` and `}}` are the braces; the escapes are a closed list, and there is no raw string (§2.4)",
         detect: Detect::Syntax,
     },
     Row {
@@ -701,9 +737,6 @@ pub static ROWS: &[Row] = &[
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
 pub static WAITING: &[Waiting] = &[
-    Waiting { name: "octal_prefix", phase: Phase::Lexical, code: Code::E0020 },
-    Waiting { name: "leading_zero", phase: Phase::Lexical, code: Code::E0020 },
-    Waiting { name: "float_dot_exponent", phase: Phase::Lexical, code: Code::E0020 },
     Waiting { name: "value_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "item_dot_call", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "indexed_value_call", phase: Phase::Names, code: Code::E0020 },
@@ -773,8 +806,18 @@ pub static MATCHERS: &[Matcher] = &[
     Matcher::one(&[RowId::LetMut], let_mut),
     Matcher::one(&[RowId::Loop], endless_loop),
     Matcher::one(&[RowId::Proc], proc),
-    Matcher::many(&[RowId::FloatTrailingDot, RowId::LiteralSuffix], foreign_literal),
+    Matcher::many(
+        &[
+            RowId::FloatTrailingDot,
+            RowId::FloatDotExponent,
+            RowId::OctalPrefix,
+            RowId::LeadingZero,
+            RowId::LiteralSuffix,
+        ],
+        foreign_literal,
+    ),
     Matcher::one(&[RowId::FloatLeadingDot], leading_point),
+    Matcher::one(&[RowId::StringDelimiter], string_delimiter),
     Matcher::many(
         &[
             RowId::BlockComment,

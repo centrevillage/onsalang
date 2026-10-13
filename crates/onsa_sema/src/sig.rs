@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
+use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
     Ast, Attr, AttrArg, EffectRow, ExprKind, GenericParam, Ident, ItemId, ItemKind, Lit, Mode, Param, ParamName,
     StructKind, TypeId, TypeKind, UnOp, Vis,
@@ -1283,7 +1284,7 @@ impl<'p> Sema<'p> {
                 continue;
             };
             self.check_rate_value_type(&cx, id, lowered, tspan, rate == Rate::Sig);
-            let param = self.lower_param_attr(&cx, id, &p.attrs, rate);
+            let param = self.lower_param_attr(&cx, id, &p.attrs, rate, lowered);
             inputs.push(FlowInput { name, rate, ty: lowered, param, span: p.span });
         }
         let out_lowered = self.lower_type(&cx, f.ret);
@@ -1384,8 +1385,16 @@ impl<'p> Sema<'p> {
         }
     }
 
-    fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attrs: &[Attr], rate: Rate) -> Option<ParamMeta> {
+    fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attrs: &[Attr], rate: Rate, ty: TyId) -> Option<ParamMeta> {
         let attr = attrs.iter().find(|a| a.name.name == "param")?;
+        // A number of `@param` is a value of the input's type (§11.7): a float
+        // literal is rounded once to it (§2.4, R-20), and out of its range is
+        // E0408 (R-45).
+        let width = match self.a.types.get(ty) {
+            Ty::Float(k) => k.width(),
+            _ => onsa_syntax::FloatWidth::F64,
+        };
+        let float = |text: &str| onsa_syntax::float_value(text, width);
         if rate != Rate::Ctl {
             self.report(
                 id,
@@ -1393,7 +1402,7 @@ impl<'p> Sema<'p> {
             );
             return None;
         }
-        let mut meta = ParamMeta::empty(attr.span);
+        let mut meta = ParamMeta::empty(attr.span, width);
         for arg in &attr.args {
             let AttrArg::Named { key, value } = arg else {
                 self.report(
@@ -1402,19 +1411,16 @@ impl<'p> Sema<'p> {
                 );
                 continue;
             };
-            let num = |s: &Self, e: onsa_syntax::ast::ExprId| -> Option<f64> {
+            let num = |e: onsa_syntax::ast::ExprId| -> Option<Result<f64, FloatRange>> {
                 match &cx.ast.expr(e).kind {
-                    ExprKind::Lit(Lit::Float { text }) => text.replace('_', "").parse().ok(),
-                    ExprKind::Lit(Lit::Int { value, .. }) => Some(*value as f64),
+                    ExprKind::Lit(Lit::Float { text }) => Some(float(text)),
+                    ExprKind::Lit(Lit::Int { value, .. }) => Some(Ok(*value as f64)),
                     ExprKind::Unary { op: UnOp::Neg, expr } => match &cx.ast.expr(*expr).kind {
-                        ExprKind::Lit(Lit::Float { text }) => text.replace('_', "").parse::<f64>().ok().map(|v| -v),
-                        ExprKind::Lit(Lit::Int { value, .. }) => Some(-(*value as f64)),
+                        ExprKind::Lit(Lit::Float { text }) => Some(float(text).map(|v| -v)),
+                        ExprKind::Lit(Lit::Int { value, .. }) => Some(Ok(-(*value as f64))),
                         _ => None,
                     },
-                    _ => {
-                        let _ = s;
-                        None
-                    }
+                    _ => None,
                 }
             };
             let string = |e: onsa_syntax::ast::ExprId| -> Option<String> {
@@ -1439,14 +1445,27 @@ impl<'p> Sema<'p> {
                 );
             };
             match key.name.as_str() {
-                "min" | "max" | "default" | "step" => match num(self, *value) {
-                    Some(v) => match key.name.as_str() {
+                "min" | "max" | "default" | "step" => match num(*value).map(|v| v.map_err(FloatRange::why)) {
+                    Some(Ok(v)) => match key.name.as_str() {
                         "min" => meta.min = Some(v),
                         "max" => meta.max = Some(v),
                         "default" => meta.default = Some(v),
                         _ => meta.step = Some(v),
                     },
-                    None => bad(self, "a numeric literal"),
+                    Some(Err(Some(why))) => {
+                        self.report(
+                            id,
+                            Diagnostic::new(
+                                Stage::Types,
+                                Code::E0408,
+                                vspan,
+                                format!("this literal is out of range for the type of the input: {why} (§2.4, §11.7)"),
+                            )
+                            .with_found(src(cx, vspan)),
+                        );
+                    }
+                    // A text that is no float has the lexer's E0001 (`1.5abc`).
+                    Some(Err(None)) | None => bad(self, "a numeric literal"),
                 },
                 "unit" | "label" | "id" => match string(*value) {
                     Some(v) => match key.name.as_str() {

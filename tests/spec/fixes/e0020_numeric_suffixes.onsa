@@ -1,0 +1,394 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§7"]
+// fixes = 1
+
+// E0020 for the type suffix of a number (spec §2.4, §18.1; S-62, R-73). A suffix is recognised from a closed
+// list: the integer and float type names of Rust (`i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize f32
+// f64`) and the suffixes of C (`u l ul ll ull f` and their capitals `U L UL LL ULL F`). A number with a suffix
+// of the list is an error with one candidate, which removes the suffix and the `_` in front of it and changes
+// nothing else: the value, the spelling of the digits and the kind of the number (integer or float) stay. The
+// one exception adds what the kind needs: a float suffix (`f32`, `f64`, `f`, `F`) on the form of an integer
+// (`1f32`) adds `.0` (`1.0`), so the candidate is a float as the suffix says. A suffix that is not of the
+// list is E0001 (negative/lex_numeric_e0001.onsa). The main position is the first character of the number.
+// One error per declaration (P-01). The places: a `let`, an argument, a return, a field, an element, an
+// operand, a `const`, a pattern, a closure body, a block in a block, a generic function, a flow.
+
+pub struct Pair {
+  a: I32,
+  b: F32,
+}
+
+fn takes(x: I32) -> I32 {
+  x
+}
+
+fn takes_f32(x: F32) -> F32 {
+  x
+}
+
+pub fn rust_u8() -> U8 {
+  let n: U8 = 1u8                                   //~ E0020
+  n
+}
+
+pub fn rust_u16() -> U16 {
+  let n: U16 = 1u16                                 //~ E0020
+  n
+}
+
+pub fn rust_u32() -> U32 {
+  let n: U32 = 1u32                                 //~ E0020
+  n
+}
+
+pub fn rust_u64() -> U64 {
+  let n: U64 = 1u64                                 //~ E0020
+  n
+}
+
+pub fn rust_u128() -> U64 {
+  let n: U64 = 1u128                                //~ E0020
+  n
+}
+
+pub fn rust_usize() -> U64 {
+  let n: U64 = 1usize                               //~ E0020
+  n
+}
+
+pub fn rust_i8() -> I8 {
+  let n: I8 = 1i8                                   //~ E0020
+  n
+}
+
+pub fn rust_i16() -> I16 {
+  let n: I16 = 1i16                                 //~ E0020
+  n
+}
+
+pub fn rust_i32() -> I32 {
+  let n: I32 = 1i32                                 //~ E0020
+  n
+}
+
+pub fn rust_i64() -> I64 {
+  let n: I64 = 1i64                                 //~ E0020
+  n
+}
+
+pub fn rust_i128() -> I64 {
+  let n: I64 = 1i128                                //~ E0020
+  n
+}
+
+pub fn rust_isize() -> I64 {
+  let n: I64 = 1isize                               //~ E0020
+  n
+}
+
+pub fn rust_f32_on_a_float() -> F32 {
+  let a: F32 = 1.0f32                               //~ E0020
+  a
+}
+
+pub fn rust_f64_on_a_float() -> F64 {
+  let a: F64 = 1.0f64                               //~ E0020
+  a
+}
+
+pub fn rust_f32_on_an_integer_form() -> F32 {
+  let a: F32 = 1f32                                 //~ E0020
+  a
+}
+
+pub fn rust_f64_on_an_integer_form() -> F64 {
+  let a: F64 = 1f64                                 //~ E0020
+  a
+}
+
+pub fn rust_f32_on_an_exponent() -> F32 {
+  let a: F32 = 1e3f32                               //~ E0020
+  a
+}
+
+pub fn rust_f64_on_a_signed_exponent() -> F64 {
+  let a: F64 = 2.5e-3f64                            //~ E0020
+  a
+}
+
+pub fn rust_f32_on_a_fraction() -> F32 {
+  let a: F32 = 2.5f32                               //~ E0020
+  a
+}
+
+pub fn c_u() -> U32 {
+  let n: U32 = 7u                                   //~ E0020
+  n
+}
+
+pub fn c_capital_u() -> U32 {
+  let n: U32 = 7U                                   //~ E0020
+  n
+}
+
+pub fn c_l() -> I64 {
+  let n: I64 = 7l                                   //~ E0020
+  n
+}
+
+pub fn c_capital_l() -> I64 {
+  let n: I64 = 7L                                   //~ E0020
+  n
+}
+
+pub fn c_ul() -> U64 {
+  let n: U64 = 7ul                                  //~ E0020
+  n
+}
+
+pub fn c_capital_ul() -> U64 {
+  let n: U64 = 7UL                                  //~ E0020
+  n
+}
+
+pub fn c_ll() -> I64 {
+  let n: I64 = 7ll                                  //~ E0020
+  n
+}
+
+pub fn c_capital_ll() -> I64 {
+  let n: I64 = 7LL                                  //~ E0020
+  n
+}
+
+pub fn c_ull() -> U64 {
+  let n: U64 = 7ull                                 //~ E0020
+  n
+}
+
+pub fn c_capital_ull() -> U64 {
+  let n: U64 = 7ULL                                 //~ E0020
+  n
+}
+
+pub fn c_f_on_a_fraction() -> F32 {
+  let a: F32 = 2.5f                                 //~ E0020
+  a
+}
+
+pub fn c_capital_f_on_a_fraction() -> F32 {
+  let a: F32 = 2.5F                                 //~ E0020
+  a
+}
+
+pub fn c_f_on_the_form_of_an_integer() -> F32 {
+  let a: F32 = 2f                                   //~ E0020
+  a
+}
+
+pub fn c_capital_f_on_the_form_of_an_integer() -> F32 {
+  let a: F32 = 2F                                   //~ E0020
+  a
+}
+
+pub fn c_f_on_an_exponent() -> F32 {
+  let a: F32 = 1e3f                                 //~ E0020
+  a
+}
+
+pub fn hexadecimal_and_a_separator() -> U8 {
+  let n: U8 = 0x1F_u8                               //~ E0020
+  n
+}
+
+pub fn hexadecimal() -> U8 {
+  let n: U8 = 0xFFu8                                //~ E0020
+  n
+}
+
+pub fn hexadecimal_c_suffix() -> U64 {
+  let n: U64 = 0xDEADBEEFul                         //~ E0020
+  n
+}
+
+pub fn binary_and_a_separator() -> U8 {
+  let n: U8 = 0b101_u8                              //~ E0020
+  n
+}
+
+pub fn binary() -> U8 {
+  let n: U8 = 0b101u8                               //~ E0020
+  n
+}
+
+pub fn capital_prefix() -> U8 {
+  let n: U8 = 0XFFu8                                //~ E0020
+  n
+}
+
+pub fn separators_in_the_digits() -> U32 {
+  let n: U32 = 1_000u32                             //~ E0020
+  n
+}
+
+pub fn separators_and_an_underscore_before_the_suffix() -> U32 {
+  let n: U32 = 1_000_u32                            //~ E0020
+  n
+}
+
+pub fn underscore_before_the_suffix() -> U8 {
+  let n: U8 = 1_u8                                  //~ E0020
+  n
+}
+
+pub fn zero() -> U8 {
+  let n: U8 = 0u8                                   //~ E0020
+  n
+}
+
+pub fn separators_in_a_float() -> F32 {
+  let a: F32 = 1_000.5_f32                          //~ E0020
+  a
+}
+
+pub fn under_a_minus() -> I8 {
+  let n: I8 = -1u8                                  //~ E0020
+  n
+}
+
+pub fn float_under_a_minus() -> F32 {
+  let a: F32 = -2.5f32                              //~ E0020
+  a
+}
+
+pub fn in_an_argument() -> I32 {
+  takes(1u8)                                        //~ E0020
+}
+
+pub fn float_in_an_argument() -> F32 {
+  takes_f32(1.5f32)                                 //~ E0020
+}
+
+pub fn float_form_in_an_argument() -> F32 {
+  takes_f32(1f32)                                   //~ E0020
+}
+
+pub fn in_a_return() -> I32 {
+  1u8                                               //~ E0020
+}
+
+pub fn in_an_early_return(flag: Bool) -> I32 {
+  if flag {
+    return 1i32                                     //~ E0020
+  }
+  0
+}
+
+pub fn in_a_field() -> Pair {
+  Pair { a: 1u8, b: 0.0 }                           //~ E0020
+}
+
+pub fn float_form_in_a_field() -> Pair {
+  Pair { a: 0, b: 1f32 }                            //~ E0020
+}
+
+pub fn in_an_array() -> [I32; 2] {
+  [0, 1u8]                                          //~ E0020
+}
+
+pub fn in_a_tuple() -> (F32, I32) {
+  (1.0f32, 2)                                       //~ E0020
+}
+
+pub fn as_an_operand(x: I32) -> I32 {
+  x + 1u8                                           //~ E0020
+}
+
+pub fn float_form_as_an_operand(x: F32) -> F32 {
+  x * 2f32                                          //~ E0020
+}
+
+pub fn in_a_comparison(x: I32) -> Bool {
+  x < 1u8                                           //~ E0020
+}
+
+pub fn in_a_pattern(x: I32) -> I32 {
+  match x {
+    1u8 => 1,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_an_arm(x: I32) -> I32 {
+  match x {
+    0 => 1u8,                                       //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_branch(flag: Bool) -> I32 {
+  if flag { 1 } else { 1u8 }                        //~ E0020
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(y: I32) -> I32 { 1u8 }                 //~ E0020
+  f.(1)
+}
+
+pub fn float_form_in_a_closure_body() -> F32 {
+  let f = fn(y: I32) -> F32 { 1f32 }                //~ E0020
+  f.(1)
+}
+
+pub fn in_a_block_in_a_block() -> I32 {
+  let r: I32 = {
+    let s: I32 = {
+      1u8                                           //~ E0020
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let n: I32 = 1u8                                  //~ E0020
+  x
+}
+
+pub fn in_a_for_header() -> I32 {
+  var s: I32 = 0
+  for i in 0..<1u8 {                                //~ E0020
+    s = s + i
+  }
+  s
+}
+
+pub flow in_a_par_header(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0..<4u32 {                               //~ E0020
+    x * i.round_f32()
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 0.5f32                                        //~ E0020
+}
+
+pub flow float_form_in_a_flow(x: F32 at sample) -> F32 at sample {
+  x + 1f32                                          //~ E0020
+}
+
+const IN_A_CONST: I32 = 1u8                         //~ E0020
+
+const FLOAT_IN_A_CONST: F32 = 2.5f32                //~ E0020
+
+// The right forms. The hexadecimal digits that look like a suffix (`0x1f`, `0xFF`) are digits.
+pub fn fine(x: I32) -> I32 {
+  let a: I32 = 1
+  let b: F32 = 1.0
+  let c: F32 = 1e3
+  let d: I32 = 0x1f
+  let e: I32 = 0xFF
+  let f: I32 = 0x7EAD_BEEF
+  a + x
+}

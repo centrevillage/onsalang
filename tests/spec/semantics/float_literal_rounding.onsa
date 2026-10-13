@@ -1,0 +1,212 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§4.7", "§6.6", "§3.4"]
+
+// The value of a float literal is the decimal value rounded to the type once, to the nearest, ties to even
+// (spec §2.4; S-211, R-20, R-45). A literal of F32 is not rounded to F64 first. The values below are worked out
+// by hand from the spec text; the decimal strings that tell the one rounding from the two were found with exact
+// rational arithmetic, and the bits were checked against C strtof / strtod:
+//
+// - 1 + 2^-24 is the middle of 1.0 and 1 + 2^-23 in F32 (the spacing of F32 at 1 is 2^-23). As a decimal it is
+//   1.000000059604644775390625. `1.00000005960464477539062501` is that middle plus 1e-26: above the middle,
+//   so F32 takes the upper neighbour, bits 0x3F800001. F64 is finer (2^-52), so it rounds the string to the
+//   middle exactly, and a second rounding of that tie to even goes down to 0x3F800000: the wrong answer.
+// - 1 + 3 * 2^-24 is the middle of 1 + 2^-23 and 1 + 2^-22; `1.00000017881393432617187499` is that middle
+//   minus 1e-26, so F32 takes the lower neighbour 0x3F800001, and the double rounding gives 0x3F800002.
+// - 2.5 * 2^-149 is the middle of the subnormals 2 * 2^-149 and 3 * 2^-149; a string just above it is 0x00000003,
+//   and a string just above the middle of 0 and 2^-149 (2^-150) is 0x00000001, not 0.
+// - the middle of the greatest F32 and 2^128 is 2^128 - 2^103 = 340282356779733661637539395458142568448; a string
+//   just below it is the greatest finite F32, 0x7F7FFFFF, and the double rounding gives infinity.
+// - the ties themselves go to even: 1.000000059604644775390625 -> 0x3F800000, 1.000000178813934326171875 ->
+//   0x3F800002, 16777217.0 -> 0x4B800000 (the neighbours 16777216 and 16777218).
+// - F64: 9007199254740993 = 2^53 + 1 is a tie (neighbours 2^53 and 2^53 + 2), to even 2^53; a digit after
+//   it makes it the upper neighbour.
+//
+// The literals stand in the places where a type is known: `const`, a `let` with an annotation, an argument, a
+// return, a field, array and tuple elements, an arm of a `match` on an enum, a branch of an `if`, a generic
+// function whose type is decided by the context, one side of a comparison, an assignment to a `var`. A closure
+// body and the argument of a call through a function value `.(…)` are in float_literal_rounding_fn_values.onsa.
+// Out of range values (E0408) are in negative/literal_float_range.onsa.
+
+// ---------------------------------------------------------------- the strings
+
+const ABOVE_TIE: F32 = 1.00000005960464477539062501
+const BELOW_TIE: F32 = 1.00000017881393432617187499
+const EXACT_TIE_DOWN: F32 = 1.000000059604644775390625
+const EXACT_TIE_UP: F32 = 1.000000178813934326171875
+const SUBNORMAL_ABOVE_MIDDLE: F32 = 3.503246160812042677309324e-45
+const ABOVE_HALF_OF_MIN: F32 = 7.00649232162408535461864792e-46
+const BELOW_OVERFLOW_MIDDLE: F32 = 3.402823567797336616e38
+const NEXT_AFTER_2_24: F32 = 16777217.0
+
+const ABOVE_TIE_64: F64 = 1.00000005960464477539062501
+const TIE_53: F64 = 9007199254740993.0
+const ABOVE_TIE_53: F64 = 9007199254740993.000000000000000000001
+
+fn bits32(x: F32) -> U32 {
+  x.to_bits()
+}
+
+fn bits64(x: F64) -> U64 {
+  x.to_bits()
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn above_tie() -> F32 {
+  1.00000005960464477539062501
+}
+
+fn first_of(a: [F32; 2]) -> F32 {
+  a[0]
+}
+
+pub struct Cell {
+  v: F32,
+  w: F64,
+}
+
+// ---------------------------------------------------------------- const
+
+test "a const of F32 is rounded once" {
+  assert ABOVE_TIE.to_bits() == 0x3F800001
+  assert BELOW_TIE.to_bits() == 0x3F800001
+  assert ABOVE_TIE != 1.0
+}
+
+test "the ties of F32 go to even" {
+  assert EXACT_TIE_DOWN.to_bits() == 0x3F800000
+  assert EXACT_TIE_UP.to_bits() == 0x3F800002
+  assert NEXT_AFTER_2_24.to_bits() == 0x4B800000
+}
+
+test "the subnormal and the overflow edges of F32 are rounded once" {
+  assert SUBNORMAL_ABOVE_MIDDLE.to_bits() == 0x00000003
+  assert ABOVE_HALF_OF_MIN.to_bits() == 0x00000001
+  assert BELOW_OVERFLOW_MIDDLE.to_bits() == 0x7F7FFFFF
+  assert BELOW_OVERFLOW_MIDDLE == F32.MAX
+}
+
+test "a const of F64 is rounded once" {
+  assert ABOVE_TIE_64.to_bits() == 0x3FF0000010000000
+  assert TIE_53.to_bits() == 0x4340000000000000
+  assert ABOVE_TIE_53.to_bits() == 0x4340000000000001
+}
+
+// ---------------------------------------------------------------- let, argument, return
+
+test "a let with an annotation" {
+  let a: F32 = 1.00000005960464477539062501
+  let b: F32 = 1.00000017881393432617187499
+  assert a.to_bits() == 0x3F800001
+  assert b.to_bits() == 0x3F800001
+}
+
+test "an argument" {
+  assert bits32(1.00000005960464477539062501) == 0x3F800001
+  assert bits32(1.00000017881393432617187499) == 0x3F800001
+  assert bits32(7.00649232162408535461864792e-46) == 0x00000001
+  assert bits32(3.402823567797336616e38) == 0x7F7FFFFF
+  assert bits64(9007199254740993.000000000000000000001) == 0x4340000000000001
+}
+
+test "a return" {
+  assert above_tie().to_bits() == 0x3F800001
+}
+
+test "a value that is not near any edge is the nearest value" {
+  let a: F32 = 0.1
+  let b: F64 = 0.1
+  assert a.to_bits() == 0x3DCCCCCD
+  assert b.to_bits() == 0x3FB999999999999A
+  let c: F32 = 1e-40
+  assert c.to_bits() == 0x000116C2
+  let d: F32 = 3.14159265358979323846264338327950288
+  assert d == F32.PI
+}
+
+// ---------------------------------------------------------------- aggregates
+
+test "a field, an array element and a tuple element" {
+  let cell = Cell { v: 1.00000005960464477539062501, w: 9007199254740993.000000000000000000001 }
+  assert cell.v.to_bits() == 0x3F800001
+  assert cell.w.to_bits() == 0x4340000000000001
+  let xs: [F32; 2] = [1.00000017881393432617187499, 7.00649232162408535461864792e-46]
+  assert xs[0].to_bits() == 0x3F800001
+  assert xs[1].to_bits() == 0x00000001
+  assert first_of([1.00000005960464477539062501, 0.0]).to_bits() == 0x3F800001
+  let t: (F32, F64) = (3.503246160812042677309324e-45, 1.00000005960464477539062501)
+  assert t.0.to_bits() == 0x00000003
+  assert t.1.to_bits() == 0x3FF0000010000000
+}
+
+// ---------------------------------------------------------------- branches, nesting
+
+pub enum Pick {
+  First,
+  Second,
+  Third,
+}
+
+fn arm(p: Pick) -> F32 {
+  match p {
+    Pick.First => 1.00000005960464477539062501,
+    Pick.Second => 1.00000017881393432617187499,
+    Pick.Third => 7.00649232162408535461864792e-46,
+  }
+}
+
+fn branch(flag: Bool) -> F32 {
+  if flag {
+    3.402823567797336616e38
+  } else {
+    3.503246160812042677309324e-45
+  }
+}
+
+test "an arm of a match and a branch of an if" {
+  assert arm(Pick.First).to_bits() == 0x3F800001
+  assert arm(Pick.Second).to_bits() == 0x3F800001
+  assert arm(Pick.Third).to_bits() == 0x00000001
+  assert branch(true).to_bits() == 0x7F7FFFFF
+  assert branch(false).to_bits() == 0x00000003
+}
+
+test "a block in a block" {
+  let r: F32 = {
+    let s: F32 = {
+      let t: F32 = 1.00000005960464477539062501
+      t
+    }
+    s
+  }
+  assert r.to_bits() == 0x3F800001
+}
+
+// ---------------------------------------------------------------- generic functions, comparisons, assignment
+
+test "a generic function whose type is decided by the context" {
+  let a: F32 = id(1.00000005960464477539062501)
+  assert a.to_bits() == 0x3F800001
+  let b = id(1.00000017881393432617187499)
+  let c: F32 = b
+  assert c.to_bits() == 0x3F800001
+  let d = id(9007199254740993.000000000000000000001)
+  let e: F64 = d
+  assert e.to_bits() == 0x4340000000000001
+  assert bits32(id(7.00649232162408535461864792e-46)) == 0x00000001
+}
+
+test "a comparison with a value of the type and an assignment to a var" {
+  let one_ulp_up: F32 = F32.from_bits(0x3F800001)
+  assert one_ulp_up == 1.00000005960464477539062501
+  assert 1.00000017881393432617187499 == one_ulp_up
+  var v: F32 = 0.0
+  v = 1.00000005960464477539062501
+  assert v.to_bits() == 0x3F800001
+  v = 3.503246160812042677309324e-45
+  assert v.to_bits() == 0x00000003
+}

@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1", "§18.1"]
+
+// The numbers that are wrong in their own form, in the main module of a package that imports another module whose
+// items have such numbers too (lib.onsa). Each module reports its own errors, one per declaration.
+
+use lib.fine
+
+pub fn suffix_not_in_the_list() -> I32 {
+  let n: I32 = 12abc                                //~ E0001
+  n
+}
+
+pub fn leading_zero() -> I32 {
+  let n: I32 = 017                                  //~ E0020
+  n
+}
+
+pub fn type_suffix() -> U8 {
+  let n: U8 = 1u8                                   //~ E0020
+  n
+}
+
+pub fn point_before_an_exponent() -> F32 {
+  let a: F32 = 1.e3                                 //~ E0020
+  a
+}
+
+pub fn beyond_u64() -> U64 {
+  let n: U64 = 18446744073709551616                 //~ E0408
+  n
+}
+
+pub fn the_right_forms() -> I32 {
+  fine() + 17
+}

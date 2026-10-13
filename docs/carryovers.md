@@ -7,18 +7,6 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
 - scratchpad の経路は、そのセッションの間だけ残る。
 - 2026-10-10 に、親の記憶から移した（利用者）。
 
-- **W3-05（12 回目、RF/b）:** 数値の文法が二つある（字句解析器の `number`・`suffix` と、`literal.rs` の `split_suffix` の再実装）。RF の単位 1 で置き場所は `literal.rs` と `lexer.rs` の字句の段にそろい、接尾辞の一覧を閉じる所は `literal::is_type_suffix` 一つになったが、数値の形（16 進、小数、指数）を変えるときは二か所を直す。W3-05 で一つの文法にする。
-- **W3-05（12 回目、RF/i の単位 2）:** `tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa`（RF/t、範囲のパターンと数値リテラルの形の重なり、R-206）のヘッダの `[[test.fix]]` 8 件は、数値リテラルの行が無いので `// # [[test.fix]]` にコメントにして置いた（W3-06/t1 の前例）。
-  - 数値リテラルの行（`octal_prefix`、`leading_zero`、`float_dot_exponent`、`literal_suffix`）を実装したら `# ` を外し、実装待ちの一覧の `test-case` の項目と `fix-contract` の項目（`…:66:5 E0020 fix1`。`leaves` をコメントにしたので、接尾辞の候補の後に残る範囲の E0020 を約束の違反として数える分。ともに until W3-05）を外す。
-- **W3-05:** W3-02/b が見た今の候補の誤り: `0o17` の候補が `0`（値が変わる）、`12abc` は仕様では E0001。
-  - W3-15 の `literal_suffix` の行（until W3-05）と、`1f32` を `1.0` にする候補。
-  - 接尾辞を閉じた一覧にする（W3-15 は `foreign::is_type_suffix` の差し込み口だけを置き、今は全ての接尾辞を受ける）。
-  - W3-15 のファズの残り（`a`・`s` のような接尾辞の候補の後の誤り）の `fuzz-input` を外す。
-  - R-190 は W3-15 で直った（後ろが `.` の数には候補を出さない）。
-- **W3-05（W3-20/b、2026-10-09）:** `1.e3` は型の決まらない文脈（`let a = 1.e3`）で E0420 になる（§2.4 は E0020。型が決まる文脈は `e0020_literals.onsa` が見ている）。`017(2)`・`0o17(2)` は、リテラルの直後の `(` で候補を落とす扱い（S-350）のため、8 進の E0020 でなく呼び先の E0002 になる。
-- **W3-05:** W3-01 で `diag-code` の E0001 の項目を外した（`tests/cst/first_bom_*` で否定例が 3 件を超えたため）。数値リテラルの E0001（接尾辞、`0x_`、S-62）の否定例は、W3-05 のテストの票に明記する（W3-01/b の L-9）。
-- **W3-05（13 回目、W3-04/b の指摘 4）:** 穴の中のキーワードと予約語が字句の E0001・E0200 になったので、名前に接する `f"{fn}"`・`f"{clock}"` が `string_prefix`（S-400）の E0002 でなく一般の E0002（`"{fn}"` の位置）になった（`foreign` の表の行が `Literals::ok` で外れる）。
-  - S-406 の決定で S-400 の形も中身を読まないことにしたので、その実装で戻ることを確かめる（再現は 13 回目の scratchpad の `w304b/repro/r4_prefix_*.onsa`）。
 - **W3-08（9 回目）:** FAUST の 5 行（`faust_feedback`、`faust_feedback_unnamed`、`faust_prime`、`faust_delay`、`faust_delay_variable`）の照合を作る（rework の W3-08 の「FAUST の形の E0020」。W3-09/i が until を W3-08 に付け替える）。例が `at` を使うので W3-09 の後に行う。
 - **W3-08（9 回目）:** R-202（括弧に接する前置の `~(a)` が `faust_bit_not` にならず E0002）。
 - **W3-08（9 回目、追記）:** `faust_feedback_unnamed` と `faust_delay_variable` は一般の E0002 で例が通るので W3-09 で一覧から外れた（WAITING のまま）。note の付いた E0002 にするのは W3-08。
@@ -98,6 +86,9 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
     - §2.6 は `!`・`~` を「名前の直後」とするので、名前の段で扱いを決める。
   - S-329（定数式の `::[…]`）と S-330（型の形だけの `[…]` の段）を着手の前に決める。
   - W3-19/b のリファクタリングの候補（式の `TypeArgs` と struct リテラルの `type_args` の二重の表現、`children` の列挙の 5 か所）を作業票で見る。
+- **W5-01（18 回目、W3-05 の直しの往復 1）:** 整数リテラルを `.(` で呼ぶ形（`let b = 17.(x)`）は、W3-05（S-350）の後は E0420「the type of this value must be known here」になる。
+  §6.1 は `.(` で呼んだ値の型が関数でなければ E0401 とし、`y.(1.0)`（`y: F32`）は E0401 になる。整数リテラルは関数型になれないので E0401 にし、否定例を足す。
+  W3-05 では、`tests/spec/fixes/e0020_numeric_callee_overlap.onsa` の `fine()`（正しい形の並び）からこの行を外した。
 - **W5-02（W3-20/b の再確認、2026-10-09）:** `mks().ops[0](41)`（関数値の配列のフィールドの添字の呼び出し）は構文の段を通り（§4.5 のメソッドの `[…]` と区別できないので型の段）、今は `check` が通って `onsa test` で E0200。
   - 型の段の `field_call` の行（W5-02）で、添字の付いた形も E0020（`.(`）にし、正例と否定例を足す。
   - 器の `fix_contract::same_place` の例外 `outer_form` はコード・文面・始まり・終わりだけで判定する（W3-20）。
@@ -276,6 +267,13 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
       - RF-6 構文解析器の内部の重複（`PatReader` と `parse_pattern_alt`、`parse_type` の三通り、`MoveExpr` の節を作る場所 4 つ、`dump` と `fmt` の `parens`、`operand()` が字句から読み直す W3-21/b の R-2）。
       - RF-7 `Why::Differ` を理由の列挙型に（R-6）、`list_fixes` の分岐を表に、`Parser::ends` を閉じた節から導く（(1) の候補の約束の論点の後）。
       - RF-8 sema・core の `children()` の 3 か所と `Ty`/`Rate`/`FlowRate` の並行（構文の crate の外）。
+      - RF-9 W3-05 の壊す側の候補（単位 1・単位 2・直しの往復 1 の再確認。報告は 17 回目の scratchpad の `w305b1/`・`w305b2/`・`w305b3/handback_b.md`）:
+        - `literal::Form` の二つの役割の混在、`literal.rs` と `lexer.rs` の循環（`is_ident_start`）、`ConstValue::FloatText` を持つ理由を doc に。
+        - `Found` と `Literals` の `strings: Vec<(Span, Span)>`・`numbers: Vec<(Span, Number)>` に名前の付いた型を。
+        - `foreign::at_failure` の `RowId::StringPrefix` だけの分かれを、`Hit` の「報告した範囲」の欄に（他の行が同じ手段を要したときに分かれを増やさない）。
+        - 「空白を除くと別の数の読みになるか」の判定が `spaces.rs` の `space_around_dot` と `literals.rs` の `foreign_literal` の二か所（`joins`）。`spaces.rs` の `chars().take(3)` の決め打ち。
+        - 「整数か浮動小数か」で負のパターンに入るかを、パーサの `foreign_integer` でなく表の側の一か所で決める。今は `-(017)`・`-(0o17)`・`-(1u8)` と `-0b11f32` のパターンが「expected a pattern, found `-`」の一般の E0002 のまま（式の `-(017)` は E0020）。
+        - 字句解析器の接する形を、名前の側とリテラルの側の二つにする（S-473 の決定しだい）。
       - 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。
       - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
   - トークン効率化対策（2026-10-12、14 回目、利用者）: 週の使用量の上限（全モデルで共通。`/usage` に出るのは session・weekly・Fable だけ）が 4〜5 日で尽きる件。

@@ -224,6 +224,11 @@ pub(crate) struct Parser<'a> {
     /// next line does not go on with the first, and a `=` not with the second
     /// (S-124, S-374, S-236; the table reads them, [`foreign::Cursor::ends`]).
     ends: Vec<(usize, End)>,
+    /// The ranges of the literals right against a name whose form the row
+    /// `string_prefix` reported ([`foreign::Failure::prefixed`]), kept and
+    /// dropped with the diagnostics: the held errors of the others are
+    /// reported after the file is read ([`Parser::release_held`]).
+    prefixed: Vec<Span>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -239,6 +244,7 @@ struct Snapshot {
     no_struct_lit: bool,
     detached: Option<Detached>,
     ends: usize,
+    prefixed: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -283,6 +289,7 @@ impl<'a> Parser<'a> {
             trials: 0,
             detached: None,
             ends: Vec::new(),
+            prefixed: Vec::new(),
         }
     }
 
@@ -304,6 +311,7 @@ impl<'a> Parser<'a> {
             no_struct_lit: self.no_struct_lit,
             detached: self.detached,
             ends: self.ends.len(),
+            prefixed: self.prefixed.len(),
         }
     }
 
@@ -321,6 +329,7 @@ impl<'a> Parser<'a> {
         self.no_struct_lit = s.no_struct_lit;
         self.detached = s.detached;
         self.ends.truncate(s.ends);
+        self.prefixed.truncate(s.prefixed);
     }
 
     /// Keep the reading since the snapshot.
@@ -779,19 +788,20 @@ impl<'a> Parser<'a> {
     fn fail_with(&mut self, want: Want, expected: &str, noted: Option<(Token, &str)>) -> ParseError {
         let at = self.peek_index();
         let t = self.tokens[at];
-        // The number of a literal written with a suffix is checked as any
-        // integer literal (E0408): two errors of one token, of which the
-        // driver reports one.
-        if t.kind == TokenKind::ForeignLit {
-            let number = crate::literal::number_part(self.token_text(t));
-            if crate::literal::is_integer(number) && !number.is_empty() && crate::literal::int_value(number).is_none() {
-                self.report(Diagnostic::new(
-                    Stage::Syntax,
-                    Code::E0408,
-                    t.span,
-                    "integer literal is larger than any integer type holds",
-                ));
-            }
+        // The number of a literal written as in other languages (`1u8`,
+        // `0o17`, `017`) is checked as any integer literal (E0408): two
+        // errors of one token, of which the driver reports one.
+        if t.kind == TokenKind::ForeignLit
+            && let Some(n) = self.literals.number(t.span)
+            && let Some(number) = n.int_body(self.token_text(t))
+            && crate::literal::int_value(number).is_none()
+        {
+            self.report(Diagnostic::new(
+                Stage::Syntax,
+                Code::E0408,
+                t.span,
+                "integer literal is larger than any integer type holds",
+            ));
         }
         let cursor = foreign::Cursor {
             file: self.file,
@@ -814,8 +824,10 @@ impl<'a> Parser<'a> {
             want,
             detached: self.detached.filter(|d| d.at == at),
             ends: &self.ends,
+            reach: self.open.iter().map(|o| o.level + o.children).max().unwrap_or(0),
         };
-        let foreign::Failure { rows, general } = foreign::at_failure(&cursor);
+        let foreign::Failure { rows, general, prefixed } = foreign::at_failure(&cursor);
+        self.prefixed.extend(prefixed);
         for d in rows {
             self.report(d);
         }
@@ -866,9 +878,10 @@ impl<'a> Parser<'a> {
     }
 
     /// E0408 when an integer literal does not fit any integer type (the
-    /// value is read by the same function when the AST is made).
+    /// value is read by the same function when the AST is made). A number
+    /// with the lexer's E0001 (`123abc`, `0x_`) has that error alone.
     fn check_int(&mut self, t: Token) {
-        if crate::literal::int_value(self.token_text(t)).is_none() {
+        if crate::literal::int_value(self.token_text(t)).is_none() && self.literals.ok(t.span) {
             self.report(Diagnostic::new(
                 Stage::Syntax,
                 Code::E0408,
@@ -876,6 +889,17 @@ impl<'a> Parser<'a> {
                 "integer literal is larger than any integer type holds",
             ));
         }
+    }
+
+    /// The held errors of the content of each literal right against a name
+    /// that no `string_prefix` reported ([`foreign::held_errors`]), after the
+    /// whole file is read (S-400, [`crate::literal::Touch`]).
+    fn release_held(&mut self) {
+        if self.literals.touches().is_empty() {
+            return;
+        }
+        let held: Vec<Diagnostic> = foreign::held_errors(&self.literals, &self.prefixed).cloned().collect();
+        self.diagnostics.extend(held);
     }
 
     // ------------------------------------------------------------ file
@@ -914,6 +938,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.complete(root, NodeKind::SourceFile);
+        self.release_held();
         ParseOutput {
             tokens: self.all,
             events: self.events,
@@ -998,6 +1023,7 @@ impl<'a> Parser<'a> {
             // It is the unclosed bracket: reported at the bracket, not at that
             // token; once for all the units that end there.
             self.diagnostics.truncate(first_at_stop);
+            self.prefixed.retain(|s| s.start < stop);
             if self.reported_stop != Some(i) {
                 self.reported_stop = Some(i);
                 self.unclosed_brace(b, unit_start);
@@ -3140,6 +3166,12 @@ impl<'a> Parser<'a> {
         (0..opens).all(|_| next(&mut i) == TokenKind::RParen)
     }
 
+    /// Whether `t` is a number written as in other languages that is an
+    /// integer in Onsa (`017`, `1u8`, `0o17`; [`crate::literal::Number::is_float`]).
+    fn foreign_integer(&self, t: Token) -> bool {
+        t.kind == TokenKind::ForeignLit && self.literals.number(t.span).is_some_and(|n| !n.is_float())
+    }
+
     /// After a `-` in a pattern: `(`s and a `-` (`-(-1)`, S-227).
     fn negated_negative(&self) -> bool {
         let mut kinds = self.tokens[self.peek_index() + 1..].iter().map(|t| t.kind).filter(|k| !k.is_trivia());
@@ -3200,6 +3232,15 @@ impl<'a> Parser<'a> {
                         || self.parenthesised_int_after_minus()) =>
             {
                 return Err(self.fail(Want::Prefix, "a pattern"));
+            }
+            // `-017`, `-1u8`: an integer written as in other languages, whose
+            // row the table names at the number, as in an expression (§2.4,
+            // §18.1); a float after the `-` is the float pattern's (S-248),
+            // and a blank after the `-` the general E0002, as before a name.
+            TokenKind::Minus if !self.gap_after(self.peek_index()).is_some() && self.foreign_integer(self.peek2()) => {
+                let _negative = self.start(NodeKind::NegLitPat)?;
+                self.bump();
+                return Err(self.fail(Want::Pattern, "a pattern"));
             }
             TokenKind::Minus if self.peek2().kind == TokenKind::Int || self.parenthesised_int_after_minus() => {
                 let m = self.start(NodeKind::NegLitPat)?;

@@ -185,6 +185,10 @@ pub enum TokenKind {
     /// A number written as in other languages: `1.` (no digit after the
     /// point) and a number with a type suffix (`1u8`, `1.0f32`, §2.4).
     ForeignLit,
+    /// A string written with a delimiter of other languages (`$"…"`,
+    /// `r#"…"#`, `"""…"""`, `` `…` ``, §2.4, S-406): to its closing delimiter
+    /// on the line, or to the end of the line; its content is not read.
+    ForeignStr,
 
     /// An invalid character (E0001 was reported).
     Error,
@@ -417,6 +421,7 @@ impl TokenKind {
             NotEqEq => "`!==`",
             BlockComment => "block comment",
             ForeignLit => "number literal",
+            ForeignStr => "string literal of another language",
             Error => "invalid token",
             Eof => "end of file",
         }

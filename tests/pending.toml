@@ -1219,27 +1219,6 @@ note = "[a, b]（長さの違う Span）が [Span[F32]; 2] の引数で E0401、
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_literals.onsa"
-reasons = ["S-62", "R-73"]
-until = "W3-05"
-note = "数値リテラルの E0020 と候補"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa"
-reasons = ["S-62", "R-73", "R-206"]
-until = "W3-05"
-note = "8 進・先頭 0・先頭の小数点・浮動小数の接尾辞と範囲のパターン。数値リテラルの行（W3-05）が無い形は一般の E0002"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa:66:5 E0020 fix1"
-reasons = ["S-281", "R-206"]
-until = "W3-05"
-note = "接尾辞の候補の後に同じ位置の範囲のパターンの E0020 が残る（S-281 の二つの形）。事例の [[test.fix]] の leaves が W3-05 まで # でコメントにしてあるので、その間は約束の器が残りを期待できない"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_old_attributes.onsa"
 reasons = ["S-57"]
 until = "W3-08"
@@ -1766,34 +1745,6 @@ note = "値として使う関数を経由して届く使用。関数値の呼び
 
 [[pending]]
 kind = "foreign-form"
-target = "octal_prefix"
-reasons = ["S-62", "R-73"]
-until = "W3-05"
-note = "数値リテラルの形"
-
-[[pending]]
-kind = "foreign-form"
-target = "leading_zero"
-reasons = ["S-62", "R-73"]
-until = "W3-05"
-note = "数値リテラルの形"
-
-[[pending]]
-kind = "foreign-form"
-target = "float_dot_exponent"
-reasons = ["S-62", "R-73"]
-until = "W3-05"
-note = "数値リテラルの形"
-
-[[pending]]
-kind = "foreign-form"
-target = "literal_suffix"
-reasons = ["S-62", "R-73"]
-until = "W3-05"
-note = "数値リテラルの形"
-
-[[pending]]
-kind = "foreign-form"
 target = "value_call"
 reasons = ["S-191"]
 until = "W4-12"
@@ -2108,3 +2059,47 @@ target = "tests/spec/packages/interp_path_modules"
 reasons = ["S-90", "R-102"]
 until = "W4-04"
 note = "修飾した名前の穴 {cfg.N}、{kp.clock.TICKS} の解決（字句と構文は W3-04）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/lex/numeric_spellings.onsa"
+reasons = ["S-62", "R-73"]
+until = "W3-11"
+note = "canonical = false の正例。字句は W3-05 で通り、fmt が綴りを揃えるのは W3-11（今は fmt が何も変えず、器が canonical = false を誤りにする）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/lex/numeric_spellings_places.onsa"
+reasons = ["S-62", "R-73"]
+until = "W3-11"
+note = "canonical = false の正例。字句は W3-05 で通り、fmt が綴りを揃えるのは W3-11（今は fmt が何も変えず、器が canonical = false を誤りにする）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/float_literal_rounding_fn_values.onsa"
+reasons = ["R-08", "R-20", "S-211"]
+until = "W8-09"
+note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則は W8-09 が入ってから見える"
+
+# --- W3-05 の gate のファズが見つけた入力（種の並びが変わって表に出た既存の不具合。dev のバイナリでも同じ違反）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/4fc90823.onsa"
+reasons = ["R-193"]
+until = "W3-08"
+note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0002。`d<U)>(` の `<…>` の候補（`::[…]`）を当てると `)` の E0002 が残る"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/9e06bb6a.onsa"
+reasons = ["R-214"]
+until = "W3-13"
+note = "fix-same-place: fix|E0020|remove the space|E0002。置き場所の行の空白を除く候補の後に同じ段の誤り（`?` の E0002）が残る"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/45c62d79.onsa"
+reasons = ["R-214"]
+until = "W3-13"
+note = "fix-same-place: fix|E0020|remove the space|E0001。置き場所の行の空白を除く候補の後に同じ段の誤り（U+000D の E0001）が残る"

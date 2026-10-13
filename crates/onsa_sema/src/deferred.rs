@@ -16,12 +16,13 @@
 //! order is in the mark of [`Checker::check_deferred_now`].
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::ExprId;
+use onsa_syntax::FloatRange;
+use onsa_syntax::ast::{ExprId, ExprKind, Lit};
 
 use crate::body::{Checker, LocalId, R, bound_name};
 use crate::def::Bound;
 use crate::infer::Cause;
-use crate::ty::{IntKind, Ty, TyId};
+use crate::ty::{FloatKind, IntKind, Ty, TyId};
 
 /// What a deferred item checks.
 #[derive(Debug, Clone)]
@@ -34,8 +35,10 @@ pub(crate) enum DeferredKind {
     /// A negation of a value whose type is still a literal variable: E0401 when it
     /// is decided to be unsigned (§3.4).
     UnsignedNeg,
-    /// A float literal: E0405 when its type is still open at the end (§2.4).
-    FloatLit,
+    /// A float literal `lit`: its value once the type is known (E0408, §2.4,
+    /// R-45, S-211: not finite, or a literal that is not 0 rounds to 0), and
+    /// E0405 when its type is still open at the end.
+    FloatLit { lit: ExprId },
     /// A type variable that an expression made (a type parameter of a call,
     /// `None`, `Buf.zeroed(4)`, `[]`): E0406 when it is still open at the end
     /// (§4.5, §4.7). `what` names it in the message.
@@ -83,12 +86,10 @@ impl<'a> Checker<'a> {
         let seq = self.deferred_count;
         self.deferred_count += 1;
         let item = Deferred { seq, span, ty, kind };
-        // The items only the end decides (E0405, E0406, E0421) wait in their own list, so
+        // The items only the end decides (E0406, E0421) wait in their own list, so
         // that the statements do not walk them.
         match item.kind {
-            DeferredKind::FloatLit | DeferredKind::Origin { .. } | DeferredKind::Hole { .. } => {
-                self.deferred_end.push(item)
-            }
+            DeferredKind::Origin { .. } | DeferredKind::Hole { .. } => self.deferred_end.push(item),
             _ => self.deferred.push(item),
         }
     }
@@ -177,7 +178,9 @@ impl<'a> Checker<'a> {
     fn look(&mut self, item: &Deferred, end: bool) -> Look {
         // Still waiting: answered without building the resolved type.
         let waits = match item.kind {
-            DeferredKind::IntLit { .. } | DeferredKind::UnsignedNeg => self.infer.is_unresolved(&self.a.types, item.ty),
+            DeferredKind::IntLit { .. } | DeferredKind::UnsignedNeg | DeferredKind::FloatLit { .. } => {
+                self.infer.is_unresolved(&self.a.types, item.ty)
+            }
             DeferredKind::Require { .. } => self.infer.has_vars(&self.a.types, item.ty),
             _ => false,
         };
@@ -204,7 +207,7 @@ impl<'a> Checker<'a> {
                 ),
                 _ => Look::Done,
             },
-            DeferredKind::FloatLit => match self.ty(r) {
+            DeferredKind::FloatLit { lit } => match self.ty(r) {
                 Ty::Var(_) if end => Look::Fail(
                     Diagnostic::new(
                         Stage::Types,
@@ -215,6 +218,7 @@ impl<'a> Checker<'a> {
                     .with_found(self.src(item.span)),
                 ),
                 Ty::Var(_) => Look::Wait,
+                Ty::Float(k) => self.float_lit(item, k, *lit),
                 _ => Look::Done,
             },
             DeferredKind::Origin { what } => {
@@ -321,6 +325,28 @@ impl<'a> Checker<'a> {
                 Code::E0408,
                 item.span,
                 format!("literal `{}{value}` is out of range for `{}`{hint}", if neg { "-" } else { "" }, k.name()),
+            )
+            .with_found(self.src(item.span)),
+        )
+    }
+
+    /// The value of a float literal whose type is decided (§2.4, R-45,
+    /// S-211): E0408 when it is not finite in the type or a literal that is
+    /// not 0 rounds to 0 ([`onsa_syntax::float_value`], the one conversion).
+    fn float_lit(&mut self, item: &Deferred, k: FloatKind, lit: ExprId) -> Look {
+        let ExprKind::Lit(Lit::Float { text }) = &self.ast_expr(lit).kind else {
+            onsa_diag::internal::bug(Some(item.span), "a deferred float literal that is no float literal")
+        };
+        // A text that is no float has the lexer's E0001 (`1.5abc`).
+        let Some(why) = onsa_syntax::float_value(text, k.width()).err().and_then(FloatRange::why) else {
+            return Look::Done;
+        };
+        Look::Fail(
+            Diagnostic::new(
+                Stage::Types,
+                Code::E0408,
+                item.span,
+                format!("literal `{text}` is out of range for `{}`: {why} (§2.4)", k.name()),
             )
             .with_found(self.src(item.span)),
         )

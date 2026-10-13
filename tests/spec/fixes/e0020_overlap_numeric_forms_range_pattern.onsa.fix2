@@ -2,54 +2,54 @@
 // [test]
 // spec = ["§2.4", "§7", "§18.1"]
 // fixes = 2
-// # The [[test.fix]] entries below wait for the rows of the numeric literals (W3-05): remove their `# ` then.
-// # [[test.fix]]
-// # at = "66:5"
-// # code = "E0020"
-// # candidate = 1
-// # leaves = ["66:5 E0020"]
+// # The [[test.fix]] entries below name what a candidate leaves: the range pattern that starts where the literal did (S-281).
+// [[test.fix]]
+// at = "66:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["66:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "73:5"
-// # code = "E0020"
-// # candidate = 1
-// # leaves = ["73:5 E0020"]
+// [[test.fix]]
+// at = "73:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["73:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "73:5"
-// # code = "E0020"
-// # candidate = 2
-// # leaves = ["73:5 E0020"]
+// [[test.fix]]
+// at = "73:5"
+// code = "E0020"
+// candidate = 2
+// leaves = ["73:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "80:5"
-// # code = "E0020"
-// # candidate = 1
-// # leaves = ["80:5 E0020"]
+// [[test.fix]]
+// at = "80:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["80:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "87:5"
-// # code = "E0020"
-// # candidate = 1
-// # leaves = ["87:5 E0020"]
+// [[test.fix]]
+// at = "87:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["87:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "94:5"
-// # code = "E0020"
-// # candidate = 1
-// # leaves = ["94:5 E0020"]
+// [[test.fix]]
+// at = "94:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["94:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "101:5"
-// # code = "E0020"
-// # candidate = 1
-// # leaves = ["101:5 E0020"]
+// [[test.fix]]
+// at = "101:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["101:5 E0020"]
 //
-// # [[test.fix]]
-// # at = "101:5"
-// # code = "E0020"
-// # candidate = 2
-// # leaves = ["101:5 E0020"]
+// [[test.fix]]
+// at = "101:5"
+// code = "E0020"
+// candidate = 2
+// leaves = ["101:5 E0020"]
 
 // E0020 for a range pattern that starts with a numeric literal of another language (R-206; docs/foreign-forms.toml
 // rows `octal_prefix`, `leading_zero`, `float_leading_dot`, `literal_suffix` and `range_pattern`; §2.4, §7). It is the

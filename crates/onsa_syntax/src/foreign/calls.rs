@@ -2,7 +2,6 @@
 //! what a callee is, [`crate::callee`]), and the candidate that calls a
 //! value with `.(`.
 
-use super::literals::literal_call;
 use super::*;
 
 /// The candidate that calls the value `callee` with `.(` in place of the
@@ -72,31 +71,31 @@ fn is_postfix_chain(c: &Cursor, first: usize, last: usize) -> bool {
 /// such a callee, so the parser fails at its `(`. The one candidate calls the
 /// value with `.(`: the parentheses around a postfix expression go and the
 /// `)` becomes the `.` (`s.f.(x)`); else a `.` goes before the `(`
-/// (`pick(true).(5)`, `(a + b).(1)`). An integer literal as the callee has
-/// none (`1.(2)` reads as the literal `1.`, §2.4).
+/// (`pick(true).(5)`, `(a + b).(1)`, `5.(2)`: an integer and `.(` read as a
+/// member call, §2.4, S-350). A number of a row of its own called (`017(2)`)
+/// is such a callee too, where the parser fails at the number (S-457).
 pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
     // The parser has judged the callee ([`crate::callee::Callee::by_name`]).
-    if c.want != Want::Callee {
-        return None;
-    }
-    let callee = closed_expr(c)?;
-    let before = c.at.checked_sub(1)?;
-    // From the callee to the `(` the parser failed at: the arguments, not
-    // read yet, may hold errors of their own.
-    let span = c.file_span(callee.1, c.span(c.at).end);
-    let edits = match removable_parens(c, callee, before) {
-        Some(open) => vec![Edit::delete(c.span(open)), Edit::replace(c.span(before), ".")],
-        // Not a tuple index (`ts[0].0.(x)` reads as written).
-        None if callee.0 == NodeKind::Literal && literal_call(c, before) == Some(TokenKind::Int) => {
-            return hit(span, Vec::new());
-        }
-        None => vec![Edit::insert(c.file, c.span(c.at).start, ".")],
+    let (start, paren, edits) = if c.want == Want::Callee {
+        let callee = closed_expr(c)?;
+        let before = c.at.checked_sub(1)?;
+        let edits = match removable_parens(c, callee, before) {
+            Some(open) => vec![Edit::delete(c.span(open)), Edit::replace(c.span(before), ".")],
+            None => vec![Edit::insert(c.file, c.span(c.at).start, ".")],
+        };
+        (callee.1, c.at, edits)
+    } else {
+        let paren = super::literals::called_number(c)?;
+        (c.span(c.at).start, paren, vec![Edit::insert(c.file, c.span(paren).start, ".")])
     };
+    // From the callee to its `(`: the arguments, not read yet, may hold
+    // errors of their own.
+    let span = c.file_span(start, c.span(paren).end);
     // The call takes the callee one level down (§2.5): no candidate that
     // takes the unit over the limit, where the check after it would report
     // the E0006 of the same stage (S-236, R-200).
     let added = u32::from(edits.len() == 1);
-    if crate::groups::nests_too_deep(c.text, span, &edits, added, crate::parser::NESTING_LIMIT) {
+    if crate::groups::nests_too_deep(c.text, span, &edits, added, c.reach) {
         return hit(span, Vec::new());
     }
     hit(span, vec![Fix::new("call the function value with `.(`", edits)])

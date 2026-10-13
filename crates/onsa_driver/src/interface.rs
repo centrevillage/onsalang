@@ -36,7 +36,7 @@ use std::fmt::Write as _;
 
 use onsa_sema::def::{DefKind, Fields, FlowTy, GenericKind, ParamMeta};
 use onsa_sema::ty::Rate;
-use onsa_sema::{Analysis, DefId, ModId};
+use onsa_sema::{Analysis, ConstValue, DefId, ModId, Ty, TyId};
 use onsa_syntax::ast::{Mode, Vis};
 use serde::Serialize;
 
@@ -200,12 +200,15 @@ fn mode_prefix(m: Mode) -> &'static str {
     }
 }
 
+/// The metadata of `@param`, its numbers shown in the input's type
+/// ([`onsa_syntax::float_shown`]).
 fn param_meta(p: &ParamMeta) -> ParamIfaceMeta {
+    let shown = |x: Option<f64>| x.map(|x| onsa_syntax::float_shown(x, p.width));
     ParamIfaceMeta {
-        min: p.min,
-        max: p.max,
-        default: p.default,
-        step: p.step,
+        min: shown(p.min),
+        max: shown(p.max),
+        default: shown(p.default),
+        step: shown(p.step),
         unit: p.unit.clone(),
         scale: p.scale.clone(),
         label: p.label.clone(),
@@ -415,9 +418,40 @@ impl Builder<'_> {
     fn const_item(&self, d: DefId, display: &str) -> Item {
         let def = self.a.def(d);
         let DefKind::Const(c) = &def.kind else { unreachable!() };
-        let value =
-            self.a.const_values.get(&d).map(|v| format!("{v:?}")).or_else(|| c.int_value.map(|v| v.to_string()));
+        let value = self
+            .a
+            .const_values
+            .get(&d)
+            .map(|v| format!("{:?}", self.shown(v, c.ty)))
+            .or_else(|| c.int_value.map(|v| v.to_string()));
         Item::Const { name: display.to_string(), vis: vis_str(def.vis).into(), ty: self.ty(c.ty, &[]), value }
+    }
+
+    /// The value `v` of the type `ty` as it is shown: each float in its type
+    /// ([`onsa_syntax::float_shown`]), through the arrays, tuples and structs.
+    fn shown(&self, v: &ConstValue, ty: TyId) -> ConstValue {
+        let each = |vs: &[ConstValue], tys: Vec<TyId>| -> Option<Vec<ConstValue>> {
+            (vs.len() == tys.len()).then(|| vs.iter().zip(tys).map(|(v, t)| self.shown(v, t)).collect())
+        };
+        let shown = match (v, self.a.types.get(ty)) {
+            (ConstValue::Float(x), Ty::Float(k)) => Some(ConstValue::Float(onsa_syntax::float_shown(*x, k.width()))),
+            (ConstValue::Array(vs), Ty::Array(elem, _)) => each(vs, vec![*elem; vs.len()]).map(ConstValue::Array),
+            (ConstValue::Tuple(vs), Ty::Tuple(tys)) => each(vs, tys.clone()).map(ConstValue::Tuple),
+            (ConstValue::Struct(vs), Ty::Named(s, args)) => {
+                let tys = match &self.a.def(*s).kind {
+                    DefKind::Struct(s) => match &s.fields {
+                        Fields::Named(fs) => fs.iter().map(|f| f.ty).collect(),
+                        Fields::Tuple(t) => vec![*t],
+                        Fields::Opaque => Vec::new(),
+                    },
+                    _ => Vec::new(),
+                };
+                let tys = tys.into_iter().map(|t| onsa_sema::layout::subst(self.a, t, args)).collect();
+                each(vs, tys).map(ConstValue::Struct)
+            }
+            _ => None,
+        };
+        shown.unwrap_or_else(|| v.clone())
     }
 
     fn flow_item(&self, d: DefId) -> Item {

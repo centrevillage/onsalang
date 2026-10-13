@@ -178,9 +178,14 @@ pub struct ImplDef {
     pub consts: Vec<DefId>,
 }
 
-/// `@param(...)` metadata (§11.7). Numeric values are evaluated from literals.
+/// `@param(...)` metadata (§11.7). Numeric values are evaluated from literals,
+/// as values of the input's type (`onsa_syntax::float_value`: an `F32` value
+/// is held exactly in the `f64`).
 #[derive(Debug, Clone)]
 pub struct ParamMeta {
+    /// The width of the input's type the numbers are values of (`F64` for
+    /// an integer input, whose values every `f64` here holds).
+    pub width: onsa_syntax::FloatWidth,
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub default: Option<f64>,
@@ -193,8 +198,9 @@ pub struct ParamMeta {
 }
 
 impl ParamMeta {
-    pub fn empty(span: Span) -> ParamMeta {
+    pub fn empty(span: Span, width: onsa_syntax::FloatWidth) -> ParamMeta {
         ParamMeta {
+            width,
             min: None,
             max: None,
             default: None,

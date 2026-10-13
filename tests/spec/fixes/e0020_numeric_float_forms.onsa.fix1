@@ -1,0 +1,280 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§6.1"]
+// fixes = 1
+
+// E0020 for a point that has no digit on one side, in every place a float stands (spec §2.4, §18.1; S-62, R-73,
+// S-350). "A float with a point has digits on both sides of it": `1.` is `1.0`, `.5` is `0.5`, and `1.e3` is
+// `1.0e3` (the point of an integer's digits followed by `e` and digits is not the `.` of a member, S-350).
+// The candidate puts the `0` that is missing and changes nothing else: the exponent, its sign, the digits and
+// their `_` stay. After a digit, a `.` is a point when digits follow; a member's `.` when a name or `(` follows
+// (`1.abs()`, `1.(x)`, fixes/e0020_numeric_integer_callee.onsa and lex/numeric_dot_after_integer.onsa); the
+// form `1.e3`; and in every other case it is the `1.` of this file, also when an operator or a bracket
+// follows (`2.*x`, `1.[0]`, `1.)`, `1. + x`, `1.,`). The main position is the first character of the literal.
+// A float with an exponent and no point is no error (`48e3`, the right forms at the end). One error per
+// declaration (P-01).
+
+pub struct Cell {
+  v: F32,
+}
+
+fn takes_f32(x: F32) -> F32 {
+  x
+}
+
+fn max2(a: F32, b: F32) -> F32 {
+  a
+}
+
+pub fn trailing_point() -> F32 {
+  let a: F32 = 1.0                                  //~ E0020
+  a
+}
+
+pub fn trailing_point_after_zero() -> F32 {
+  let a: F32 = 0.0                                  //~ E0020
+  a
+}
+
+pub fn trailing_point_after_digits() -> F32 {
+  let a: F32 = 10.0                                 //~ E0020
+  a
+}
+
+pub fn trailing_point_after_separators() -> F32 {
+  let a: F32 = 1_000.0                              //~ E0020
+  a
+}
+
+pub fn trailing_point_in_f64() -> F64 {
+  let a: F64 = 255.0                                //~ E0020
+  a
+}
+
+pub fn leading_point() -> F32 {
+  let a: F32 = 0.5                                  //~ E0020
+  a
+}
+
+pub fn leading_point_with_digits() -> F32 {
+  let a: F32 = 0.25                                 //~ E0020
+  a
+}
+
+pub fn leading_point_with_separators() -> F32 {
+  let a: F32 = 0.2_5                                //~ E0020
+  a
+}
+
+pub fn leading_point_and_an_exponent() -> F32 {
+  let a: F32 = 0.5e3                                //~ E0020
+  a
+}
+
+pub fn leading_point_and_a_signed_exponent() -> F32 {
+  let a: F32 = 0.5e-3                               //~ E0020
+  a
+}
+
+pub fn point_before_an_exponent() -> F32 {
+  let a: F32 = 1.0e3                                //~ E0020
+  a
+}
+
+pub fn point_before_an_exponent_with_a_plus() -> F32 {
+  let a: F32 = 1.0e+3                               //~ E0020
+  a
+}
+
+pub fn point_before_an_exponent_with_a_minus() -> F32 {
+  let a: F32 = 1.0e-3                               //~ E0020
+  a
+}
+
+pub fn point_before_a_long_exponent() -> F32 {
+  let a: F32 = 2.0e10                               //~ E0020
+  a
+}
+
+pub fn point_before_an_exponent_in_f64() -> F64 {
+  let a: F64 = 1.0e3                                //~ E0020
+  a
+}
+
+pub fn point_before_an_exponent_after_separators() -> F32 {
+  let a: F32 = 1_0.0e3                              //~ E0020
+  a
+}
+
+pub fn under_a_minus() -> F32 {
+  let a: F32 = -1.0                                 //~ E0020
+  a
+}
+
+pub fn in_an_argument() -> F32 {
+  takes_f32(1.0)                                    //~ E0020
+}
+
+pub fn leading_point_in_an_argument() -> F32 {
+  takes_f32(0.5)                                    //~ E0020
+}
+
+pub fn exponent_in_an_argument() -> F32 {
+  takes_f32(1.0e3)                                  //~ E0020
+}
+
+pub fn in_a_return() -> F32 {
+  1.0                                               //~ E0020
+}
+
+pub fn in_an_early_return(flag: Bool) -> F32 {
+  if flag {
+    return 0.5                                      //~ E0020
+  }
+  0.0
+}
+
+pub fn in_a_field() -> Cell {
+  Cell { v: 1.0 }                                   //~ E0020
+}
+
+pub fn in_an_array() -> [F32; 2] {
+  [1.0, 2.0]                                        //~ E0020
+}
+
+pub fn in_the_last_of_an_array() -> [F32; 2] {
+  [2.0, 1.0]                                        //~ E0020
+}
+
+pub fn in_a_tuple() -> (F32, F32) {
+  (1.0, 0.5)                                        //~ E0020
+}
+
+pub fn before_a_star(x: F32) -> F32 {
+  2.0*x                                             //~ E0020
+}
+
+pub fn after_a_star(x: F32) -> F32 {
+  x*2.0                                             //~ E0020
+}
+
+pub fn before_a_bracket(xs: [F32; 2]) -> F32 {
+  1.0[0]                                            //~ E0020
+}
+
+pub fn before_an_operator_after_a_space(x: F32) -> F32 {
+  1.0 + x                                           //~ E0020
+}
+
+pub fn leading_point_as_the_second_operand(x: F32) -> F32 {
+  x - 0.5                                           //~ E0020
+}
+
+pub fn leading_point_as_the_first_operand(x: F32) -> F32 {
+  let a: F32 = 0.5 + x                              //~ E0020
+  a
+}
+
+pub fn in_a_comparison(x: F32) -> Bool {
+  x < 1.0                                           //~ E0020
+}
+
+pub fn before_a_comma_in_a_call(x: F32) -> F32 {
+  max2(1.0, x)                                      //~ E0020
+}
+
+pub fn in_a_pattern_guard(x: F32) -> I32 {
+  match x {
+    v if v < 0.5 => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_an_arm(x: I32) -> F32 {
+  match x {
+    0 => 0.5,                                       //~ E0020
+    _ => 0.0,
+  }
+}
+
+pub fn in_a_branch(flag: Bool) -> F32 {
+  if flag { 1.0 } else { 1.0 }                      //~ E0020
+}
+
+pub fn in_a_closure_body() -> F32 {
+  let f = fn(y: I32) -> F32 { 1.0 }                 //~ E0020
+  f.(1)
+}
+
+pub fn exponent_in_a_closure_body() -> F32 {
+  let f = fn(y: I32) -> F32 { 1.0e3 }               //~ E0020
+  f.(1)
+}
+
+pub fn in_a_block_in_a_block() -> F32 {
+  let r: F32 = {
+    let s: F32 = {
+      1.0                                           //~ E0020
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let a: F32 = 0.5                                  //~ E0020
+  x
+}
+
+const IN_A_CONST: F32 = 1.0                         //~ E0020
+
+const LEADING_POINT_IN_A_CONST: F32 = 0.5           //~ E0020
+
+const EXPONENT_IN_A_CONST: F32 = 1.0e3              //~ E0020
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 0.5                                           //~ E0020
+}
+
+pub flow trailing_point_in_a_flow(x: F32 at sample) -> F32 at sample {
+  x + 1.0                                           //~ E0020
+}
+
+pub flow exponent_in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    x * 1.0e3                                       //~ E0020
+  }
+}
+
+pub fn exponent_whose_type_is_decided_later(y: F32) -> F32 {
+  let a = 1.0e3                                     //~ E0020
+  a + y
+}
+
+pub fn trailing_point_whose_type_is_decided_later(y: F32) -> F32 {
+  let a = 1.0                                       //~ E0020
+  a + y
+}
+
+pub fn leading_point_whose_type_is_decided_later(y: F32) -> F32 {
+  let a = 0.5                                       //~ E0020
+  a + y
+}
+
+pub fn exponent_whose_type_is_never_decided() {
+  let a = 1.0e3                                     //~ E0020
+}
+
+// The right forms: a point with digits on both sides, an exponent with no point, and a `.` that is a member's.
+pub fn fine(t: (F32, (F32, F32)), x: F32) -> F32 {
+  let a: F32 = 1.0
+  let b: F32 = 0.5
+  let c: F32 = 1.0e3
+  let d: F32 = 48e3
+  let e: F32 = 1e3
+  let f: F32 = 1E3
+  let g: F32 = 1e+3
+  let h: F32 = 01.5
+  let i: F32 = 1_0.0_5
+  a + b + c + d + e + f + g + h + i + t.0 + t.1.0 + t.1.1
+}

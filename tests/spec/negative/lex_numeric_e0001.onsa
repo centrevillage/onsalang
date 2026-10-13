@@ -1,0 +1,228 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// E0001 for a number whose letters are not a type suffix of the closed list, and for a prefix with no digits
+// after it (spec §2.4, §18.1; S-62, R-73; the carry-over of W3-01/b, L-9). The closed list of suffixes is the
+// integer and float type names of Rust (`u8`, `i64`, `f32`, ...) and the suffixes `u l ul ll ull f` of C with
+// their capitals; a suffix of the list is an E0020 with a candidate (fixes/e0020_numeric_suffixes.onsa). The
+// rest has no candidate: the letters are not a type of any language the table knows, and `onsa fmt` and the
+// writer need a rule that tells which. The digits after a prefix are counted without the `_`, so `0x_` and
+// `0X_` have none. The marker is the line only. One error per declaration (P-01).
+
+// ---------------------------------------------------------------- letters that are not in the list
+
+pub fn word_after_an_integer() -> I32 {
+  let n: I32 = 12abc                                //~ E0001
+  n
+}
+
+pub fn word_after_a_float() -> F32 {
+  let a: F32 = 1.5abc                               //~ E0001
+  a
+}
+
+pub fn word_after_an_exponent() -> F32 {
+  let a: F32 = 1e3abc                               //~ E0001
+  a
+}
+
+pub fn word_after_a_hexadecimal() -> I32 {
+  let n: I32 = 0x1Fz                                //~ E0001
+  n
+}
+
+pub fn word_after_a_binary() -> I32 {
+  let n: I32 = 0b101z                               //~ E0001
+  n
+}
+
+pub fn word_after_separators() -> I32 {
+  let n: I32 = 1_000xyz                             //~ E0001
+  n
+}
+
+pub fn a_unit_of_time() -> F32 {
+  let t: F32 = 10ms                                 //~ E0001
+  t
+}
+
+pub fn a_unit_of_frequency() -> F32 {
+  let f: F32 = 440hz                                //~ E0001
+  f
+}
+
+pub fn a_unit_of_seconds_on_a_float() -> F32 {
+  let t: F32 = 0.5s                                 //~ E0001
+  t
+}
+
+pub fn a_c_sharp_suffix() -> F32 {
+  let a: F32 = 1.5m                                 //~ E0001
+  a
+}
+
+pub fn a_single_letter() -> I32 {
+  let n: I32 = 100x                                 //~ E0001
+  n
+}
+
+pub fn an_underscore_and_a_word() -> I32 {
+  let n: I32 = 7_abc                                //~ E0001
+  n
+}
+
+pub fn an_exponent_without_digits() -> F32 {
+  let a: F32 = 1e                                   //~ E0001
+  a
+}
+
+pub fn an_exponent_without_digits_after_a_point() -> F32 {
+  let a: F32 = 1.5E                                 //~ E0001
+  a
+}
+
+// ---------------------------------------------------------------- a prefix with no digits
+
+pub fn hexadecimal_prefix_alone() -> I32 {
+  let n: I32 = 0x                                   //~ E0001
+  n
+}
+
+pub fn hexadecimal_prefix_and_a_separator() -> I32 {
+  let n: I32 = 0x_                                  //~ E0001
+  n
+}
+
+pub fn capital_hexadecimal_prefix_and_a_separator() -> I32 {
+  let n: I32 = 0X_                                  //~ E0001
+  n
+}
+
+pub fn hexadecimal_prefix_and_separators() -> I32 {
+  let n: I32 = 0x___                                //~ E0001
+  n
+}
+
+pub fn binary_prefix_alone() -> I32 {
+  let n: I32 = 0b                                   //~ E0001
+  n
+}
+
+pub fn binary_prefix_and_a_separator() -> I32 {
+  let n: I32 = 0b_                                  //~ E0001
+  n
+}
+
+pub fn capital_binary_prefix_and_a_separator() -> I32 {
+  let n: I32 = 0B_                                  //~ E0001
+  n
+}
+
+pub fn hexadecimal_prefix_and_a_letter_that_is_no_digit() -> I32 {
+  let n: I32 = 0xG                                  //~ E0001
+  n
+}
+
+pub fn binary_prefix_and_a_digit_that_is_no_binary_digit() -> I32 {
+  let n: I32 = 0b2                                  //~ E0001
+  n
+}
+
+// ---------------------------------------------------------------- the places of a number
+
+const IN_A_CONST: I32 = 12abc                       //~ E0001
+
+pub fn in_an_argument() -> I32 {
+  takes(12abc)                                      //~ E0001
+}
+
+pub fn in_a_return() -> I32 {
+  12abc                                             //~ E0001
+}
+
+pub fn in_an_array() -> [I32; 2] {
+  [1, 12abc]                                        //~ E0001
+}
+
+pub fn in_a_tuple() -> (I32, I32) {
+  (0x_, 2)                                          //~ E0001
+}
+
+pub fn in_a_field() -> Pair {
+  Pair { a: 1, b: 12abc }                           //~ E0001
+}
+
+pub fn in_a_pattern(x: I32) -> I32 {
+  match x {
+    12abc => 1,                                     //~ E0001
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(y: I32) -> I32 { 12abc }               //~ E0001
+  f.(1)
+}
+
+pub fn in_a_block_in_a_block() -> I32 {
+  let r: I32 = {
+    let s: I32 = {
+      0x_                                           //~ E0001
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_negative() -> I32 {
+  let n: I32 = -12abc                               //~ E0001
+  n
+}
+
+pub fn in_an_operand(x: I32) -> I32 {
+  x + 12abc                                         //~ E0001
+}
+
+pub fn in_a_range(x: I32) -> I32 {
+  var s: I32 = 0
+  for i in 0..<12abc {                              //~ E0001
+    s = s + i
+  }
+  s
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let n: I32 = 12abc                                //~ E0001
+  x
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 0.5abc                                        //~ E0001
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    x * 1e3abc                                      //~ E0001
+  }
+}
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+fn takes(x: I32) -> I32 {
+  x
+}
+
+// The right forms: a number is followed by a space, an operator or a bracket, and a prefix by its digits.
+pub fn fine(x: I32) -> I32 {
+  let a: I32 = 12
+  let b: I32 = 0x1F
+  let c: I32 = 0b101
+  let d: F32 = 1e3
+  let e: F32 = 1.5
+  let f: I32 = 0x_1F
+  a + b + c + f + takes(7)
+}

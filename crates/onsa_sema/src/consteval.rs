@@ -10,7 +10,14 @@ use crate::ty::Ty;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstValue {
     Int(i128),
+    /// The value rounded once to its type (`onsa_syntax::float_value`): an
+    /// `F32` value is held exactly, so it is not rounded twice (R-20).
     Float(f64),
+    /// A float literal (with a `-` written on it) whose type was still open
+    /// when it was evaluated (the initial value of a delay whose type a later
+    /// statement decides, `prev~(^y, 0.1)`): the lowering rounds it once to
+    /// the decided type (`onsa_syntax::float_value`, R-20).
+    FloatText(String),
     Bool(bool),
     Char(char),
     Unit,
@@ -24,13 +31,20 @@ pub(crate) fn eval(ck: &mut Checker<'_>, e: ExprId) -> Option<ConstValue> {
     let expr = ck.ast_expr(e);
     match &expr.kind {
         ExprKind::Lit(Lit::Int { value, .. }) => Some(ConstValue::Int(*value as i128)),
-        ExprKind::Lit(Lit::Float { text }) => text.replace('_', "").parse().ok().map(ConstValue::Float),
+        ExprKind::Lit(Lit::Float { text }) => match ck.ty(ck.shallow(ck.body_type(e)?)) {
+            Ty::Float(k) => onsa_syntax::float_value(text, k.width()).ok().map(ConstValue::Float),
+            Ty::Var(_) => Some(ConstValue::FloatText(text.clone())),
+            _ => None,
+        },
         ExprKind::Lit(Lit::Bool(b)) => Some(ConstValue::Bool(*b)),
         ExprKind::Lit(Lit::Char(c)) => Some(ConstValue::Char(*c)),
         ExprKind::Paren(inner) => eval(ck, *inner),
         ExprKind::Unary { op: UnOp::Neg, expr: inner } => match eval(ck, *inner)? {
             ConstValue::Int(v) => Some(ConstValue::Int(-v)),
             ConstValue::Float(v) => Some(ConstValue::Float(-v)),
+            ConstValue::FloatText(t) => {
+                Some(ConstValue::FloatText(t.strip_prefix('-').map_or_else(|| format!("-{t}"), str::to_string)))
+            }
             _ => None,
         },
         ExprKind::Tuple(elems) => {

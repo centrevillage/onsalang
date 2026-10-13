@@ -82,6 +82,40 @@ fn literal_ranges() {
 }
 
 #[test]
+fn float_literal_ranges() {
+    // §2.4, R-45, S-211: E0408 when the type is decided and the value is not
+    // finite, or a literal that is not 0 rounds to 0; a subnormal value is one.
+    let f = |ty: &str, lit: &str| format!("pub fn f() -> {ty} {{\n  let x: {ty} = {lit}\n  x\n}}\n");
+    assert_eq!(codes(&f("F32", "1.0e40")), vec![Code::E0408]);
+    assert_eq!(codes(&f("F32", "-1.0e40")), vec![Code::E0408]);
+    assert_eq!(codes(&f("F32", "1.0e-50")), vec![Code::E0408]);
+    assert_eq!(codes(&f("F64", "1e-400")), vec![Code::E0408]);
+    ok(&f("F32", "1.0e-40"));
+    ok(&f("F32", "0.0e-99"));
+    ok(&f("F64", "1.0e40"));
+    // The type a later statement decides; a `const`.
+    assert_eq!(codes("pub fn f() -> F32 {\n  let a = 1.0e40\n  let b: F32 = a\n  b\n}\n"), vec![Code::E0408]);
+    assert_eq!(codes("const A: F32 = 1e60\npub fn f() -> F32 {\n  A\n}\n"), vec![Code::E0408]);
+    assert_eq!(codes("const A: F32 = -1e-60\npub fn f() -> F32 {\n  A\n}\n"), vec![Code::E0408]);
+    // R-20: the value of a `const` is the literal rounded once to its type.
+    let a = ok("pub const K: F32 = 1.0000000596046447753906250001\n");
+    assert_eq!(a.const_values[&def(&a, "K")], ConstValue::Float(f64::from(1.000_000_1_f32)));
+}
+
+#[test]
+fn param_values_out_of_the_type_are_e0408() {
+    // §11.7: a number of `@param` is a value of the input's type (§2.4).
+    let src = |v: &str| {
+        format!(
+            "pub flow g(\n  x: F32 at sample,\n  @param(min: 0.0, max: {v}, default: 0.5)\n  level: F32 at block,\n) -> F32 at sample {{\n  x * level\n}}\n"
+        )
+    };
+    assert_eq!(codes(&src("1.0e40")), vec![Code::E0408]);
+    assert_eq!(codes(&src("1.0e-50")), vec![Code::E0408]);
+    ok(&src("1.0"));
+}
+
+#[test]
 fn operations_need_known_types() {
     assert_eq!(
         codes("pub fn f(x: F32) -> F32 {\n  var acc = 0.0\n  let r = acc.round_f32()\n  acc = x\n  r\n}\n"),

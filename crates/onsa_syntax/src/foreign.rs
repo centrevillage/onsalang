@@ -51,7 +51,7 @@
 //! and what the parser recorded ([`Cursor`], [`Detached`], [`End`]). It asks
 //! the parser nothing of its judgements; it reads the parser only to read a
 //! candidate's code again (`parser::reads_as_expr`, and
-//! `groups::nests_too_deep` with `parser::NESTING_LIMIT`), which a candidate
+//! `groups::nests_too_deep` from the level the parser read to, [`Cursor::reach`]), which a candidate
 //! must keep readable (S-236).
 //!
 //! Where the code is: this module holds the types ([`Row`], [`RowId`],
@@ -64,10 +64,11 @@
 //! a path, `<T>`, the type arguments of other languages, the type names of
 //! other languages), `calls` (a callee that is no path), `modes` (`&mut`,
 //! `mut self`), `decls` (`let mut`, `loop`, `proc`, `#[…]`, `pub(crate)`),
-//! `literals` (the number literals), `faust` (the prefix `~` of C),
-//! `comments` (the block comments), `assign` (`+=`, `++`), `ranges` (the
-//! range symbols out of place), `guard` (the patterns written as guards),
-//! `flow` (`if~`, the clocks) and `spaces` (the blanks inside a line).
+//! `literals` (the number literals, the string delimiters), `faust` (the
+//! prefix `~` of C), `comments` (the block comments), `assign` (`+=`, `++`),
+//! `ranges` (the range symbols out of place), `guard` (the patterns written
+//! as guards), `flow` (`if~`, the clocks) and `spaces` (the blanks inside a
+//! line, a literal against a name).
 //!
 //! To add a row (the later works, W3-05 to W5-09):
 //!
@@ -100,6 +101,7 @@ mod flow;
 mod spaces;
 
 pub(crate) use flow::clocks;
+pub(crate) use spaces::held_errors;
 
 /// The stage that finds a form, as the data file names it: the lexical and
 /// the syntax stages are both [`Stage::Syntax`] (§18.1).
@@ -192,6 +194,11 @@ pub struct Cursor<'a> {
     /// (`for`, `while`, a declaration but `const` and `type`) or with a bound
     /// value (`let`, `var`, an assignment), in order (`Parser::ends`).
     pub ends: &'a [(usize, End)],
+    /// The deepest level (§2.5) that the unit of the failure reaches in what
+    /// the parser read of it: a candidate that adds levels where it read is
+    /// counted by [`crate::groups::nests_too_deep`] only when it may go over
+    /// the limit from there.
+    pub reach: u32,
 }
 
 /// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) that the
@@ -339,11 +346,15 @@ pub enum RowId {
     Proc,
     FloatTrailingDot,
     FloatLeadingDot,
+    FloatDotExponent,
+    OctalPrefix,
+    LeadingZero,
     LiteralSuffix,
     BlockComment,
     BlockCommentUnclosed,
     BlockCommentNested,
     BlockCommentMultilineCodeAfter,
+    StringDelimiter,
     FloatPattern,
     FloatPatternChoice,
     InterpolatedStringPattern,
@@ -448,6 +459,10 @@ fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
 pub(crate) struct Failure {
     pub rows: Vec<Diagnostic>,
     pub general: Option<Vec<Fix>>,
+    /// The range of the literal right against a name whose form the row
+    /// `string_prefix` reported: the parser keeps it with its diagnostics,
+    /// and its held errors are not reported ([`spaces::held_errors`]).
+    pub prefixed: Option<Span>,
 }
 
 /// The table's reading of a failure of the parser ([`Failure`]): every
@@ -468,9 +483,13 @@ pub(crate) struct Failure {
 pub(crate) fn at_failure(c: &Cursor) -> Failure {
     let mut rows = Vec::new();
     let mut misplaced = false;
+    let mut prefixed = None;
     for m in MATCHERS {
         if let Some((row, hit)) = m.find(c) {
             misplaced |= hit.misplaced;
+            if row == RowId::StringPrefix {
+                prefixed = Some(hit.span);
+            }
             rows.push(diagnostic(c.text, row, hit));
         }
     }
@@ -480,7 +499,7 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
         Want::Separator(list) => lists::list_fixes(c, Some(list)),
         _ => lists::list_fixes(c, None),
     });
-    Failure { rows, general }
+    Failure { rows, general, prefixed }
 }
 
 // ------------------------------------------------------------ the cursor
@@ -790,5 +809,5 @@ pub use rows::{MATCHERS, ROWS, WAITING};
 // The helpers that the rows of `guard` and `flow` share with a family.
 use assign::operand;
 use faust::bit_not;
-use literals::float_spelling;
+use literals::float_spelling_at;
 use paths::is_segment;

@@ -1,0 +1,3 @@
+[package]
+name = "numeric_literals_pkg"
+edition = "2026"

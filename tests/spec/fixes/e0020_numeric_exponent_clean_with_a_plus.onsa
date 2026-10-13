@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "22:16"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the numbers of other languages whose candidate is not fixed in spelling by the spec: the capital
+// `E` of an exponent after a point (spec §2.4, §18.1; S-62, R-73). `1.E3` is `1.0E3` or `1.0e3` (the spec
+// accepts both spellings of the exponent and `onsa fmt` makes it `e`), so the case does not write the
+// candidate. It promises what the spec promises for every candidate (§18.1): the value, the kind of the
+// number and the rest of the program stay, and the candidate leaves no error of the syntax stage in the unit
+// (`clean`: nothing is reported after it). The main position is the first character of the literal. One error
+// per declaration (P-01).
+// The six forms are in six files (`e0020_numeric_exponent_clean_*.onsa`), one error each, as `clean` is about
+// the whole file.
+
+pub fn capital_exponent_with_a_plus() -> F32 {
+  let a: F32 = 1.E+3                                //~ E0020
+  a
+}
+
+// The right forms.
+pub fn fine() -> F32 {
+  let a: F32 = 1.0e3
+  let b: F32 = 1E3
+  a + b
+}
