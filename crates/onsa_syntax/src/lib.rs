@@ -26,6 +26,8 @@ mod literal_tests;
 mod lower;
 mod naming;
 pub mod parser;
+#[cfg(test)]
+mod parser_tests;
 mod scan;
 mod starts;
 pub mod test_name;
