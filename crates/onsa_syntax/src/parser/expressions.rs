@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// The note of a handler written in place with no body (§8.3, S-421).
+const HANDLER_BODY_RULE: &str = "after the name of an effect, the body `{ ... }` of a handler written in place follows on its line (§8.3); a named handler is a `snake_case` name (§2.3)";
+
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ expressions
 
@@ -493,11 +496,20 @@ impl<'a> Parser<'a> {
                 self.parse_body()?;
                 self.e0003_unless_on_the_line(TokenKind::KwWith);
                 self.expect(TokenKind::KwWith)?;
-                self.parse_path("a handler")?;
-                // SPEC-GAP(S-421): the `{` of a handler written in place on the
-                // next line: E0003 in brackets (`parse_item_body`), and out of
-                // them the line ends at the handler's name, as for a struct literal (S-413).
-                if self.at(TokenKind::LBrace) {
+                let path = self.parse_path("a handler")?;
+                // S-421: after the name of an effect (`UpperCamel`, §2.3) the
+                // body of a handler written in place follows, on the line of
+                // the name in brackets and out of them (E0003 else); with no
+                // `{` there is no body (E0002). A named handler (`snake_case`)
+                // is read as before (S-480).
+                if crate::naming::is_type_name(self.token_text(path.last)) {
+                    if !self.e0003_unless_on_the_line(TokenKind::LBrace) {
+                        let found = self.peek();
+                        let expected = "the body `{ ... }` of the handler";
+                        return Err(self.fail_noting(Want::Other, expected, found, HANDLER_BODY_RULE));
+                    }
+                    self.parse_item_body(ItemCtx::InlineHandler)?;
+                } else if self.at(TokenKind::LBrace) {
                     self.parse_item_body(ItemCtx::InlineHandler)?;
                 // S-412: the `(` after the handler of `with` follows the rule of
                 // the postfix `(` (a blank before it is E0020).

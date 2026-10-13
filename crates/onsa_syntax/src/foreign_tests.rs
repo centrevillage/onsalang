@@ -609,3 +609,58 @@ fn only_the_table_makes_an_e0020() {
     }
     assert!(found.is_empty(), "E0020 made outside `onsa_syntax::foreign`: {found:?}");
 }
+
+/// The messages of the diagnostics of `src`.
+fn messages(src: &str) -> Vec<String> {
+    parse(src).diagnostics.iter().map(|d| d.message.clone()).collect()
+}
+
+fn flow(stmts: &str) -> String {
+    format!("pub flow f(x: I32 at sample, c: Bool at sample) -> I32 at sample {{\n{stmts}")
+}
+
+#[test]
+fn a_delay_cut_at_the_end_of_the_file() {
+    // A file that ends right after the `@` (no line break): a diagnostic,
+    // no internal error (the reads of the cursor past the `Eof`).
+    for cut in ["  x@", "  twice~(x@", "  (x@", "  if~ c { x@", "  let y = x@"] {
+        assert!(codes(&flow(cut)).contains(&Code::E0002), "{cut}");
+    }
+}
+
+#[test]
+fn the_compositions_of_faust_stand_as_statements() {
+    // S-485: the value of a `let` and a statement of a flow's body or a
+    // branch; not in brackets, heads or a block of its own.
+    let compose = "there are no operators that compose signals";
+    for yes in ["  let a = x : x\n  a\n}\n", "  x <: x\n}\n", "  let a = if~ c { x :> x } else { x }\n  a\n}\n"] {
+        assert!(messages(&flow(yes)).iter().any(|m| m == compose), "{yes}");
+    }
+    for no in [
+        "  if c : x\n}\n",
+        "  while x > 0 : x\n}\n",
+        "  let a = xs[1 : 2]\n  a\n}\n",
+        "  { a : 1 }\n}\n",
+        "  lp~(x, cutoff : 1.0)\n}\n",
+        "  if x > 0, x < 2 { x } else { x }\n}\n",
+        "  let a = [0; 3, 4]\n  a\n}\n",
+    ] {
+        assert!(!messages(&flow(no)).iter().any(|m| m == compose), "{no}");
+    }
+}
+
+#[test]
+fn a_hole_in_the_parentheses_of_a_prefix_tilde() {
+    // S-486: `~(_ * 0.5)` is the feedback of FAUST, no `!(…)`; `~(m)` and
+    // `~-(m)` are the bitwise negation.
+    let not = "bits are negated with the prefix `!`";
+    assert!(!messages(&flow("  let y = x + ~(_ * 0.5)\n  y\n}\n")).iter().any(|m| m == not));
+    e0020(&body("  let n = ~(m)\n  n"), &body("  let n = !(m)\n  n"));
+    e0020(&body("  let n = ~-(m)\n  n"), &body("  let n = !(-(m))\n  n"));
+}
+
+#[test]
+fn a_delay_is_no_length_of_an_array_type() {
+    let delay = "a delay is written `prev~(x)` or `delay~(x, N)`";
+    assert!(!messages(&flow("  let y: [I32; N@2] = z\n  y\n}\n")).iter().any(|m| m == delay));
+}

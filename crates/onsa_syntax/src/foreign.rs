@@ -65,7 +65,7 @@
 //! other languages), `calls` (a callee that is no path), `modes` (`&mut`,
 //! `mut self`), `decls` (`let mut`, `loop`, `proc`, `#[…]`, `pub(crate)`),
 //! `literals` (the number literals, the string delimiters), `faust` (the
-//! prefix `~` of C), `comments` (the block comments), `assign` (`+=`, `++`),
+//! forms of FAUST, the prefix `~` of C), `comments` (the block comments), `assign` (`+=`, `++`),
 //! `ranges` (the range symbols out of place), `guard` (the patterns written
 //! as guards), `flow` (`if~`, the clocks) and `spaces` (the blanks inside a
 //! line, a literal against a name).
@@ -367,6 +367,11 @@ pub enum RowId {
     StructPatternRest,
     HashAttribute,
     FaustBitNot,
+    FaustFeedback,
+    FaustFeedbackUnnamed,
+    FaustDelay,
+    FaustDelayVariable,
+    FaustCompose,
     PubCrate,
     TypeArgsTurbofish,
     TypeArgsAngle,
@@ -487,10 +492,16 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
     for m in MATCHERS {
         if let Some((row, hit)) = m.find(c) {
             misplaced |= hit.misplaced;
+            let mut note = None;
             if row == RowId::StringPrefix {
                 prefixed = Some(hit.span);
+                note = faust::prime_note(c.text, hit.span);
             }
-            rows.push(diagnostic(c.text, row, hit));
+            let d = diagnostic(c.text, row, hit);
+            rows.push(match note {
+                Some(n) => d.with_rule(n),
+                None => d,
+            });
         }
     }
     // After an element of a list, the general error is the missing `,`;
@@ -505,12 +516,20 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
 // ------------------------------------------------------------ the cursor
 
 impl Cursor<'_> {
+    /// The index `i` of a token, or of the `Eof` that ends the tokens when
+    /// `i` is past it: the reads of a token by its index (its kind, span and
+    /// gaps) read past the end as the `Eof`, so a row that looks a few tokens
+    /// ahead (`c.at + 2`) does not fail at the end of a file.
+    fn clamp(&self, i: usize) -> usize {
+        i.min(self.tokens.len() - 1)
+    }
+
     pub(crate) fn kind(&self, i: usize) -> TokenKind {
-        self.tokens[i].kind
+        self.tokens[self.clamp(i)].kind
     }
 
     pub(crate) fn span(&self, i: usize) -> Span {
-        self.tokens[i].span
+        self.tokens[self.clamp(i)].span
     }
 
     fn src(&self, i: usize) -> &str {
@@ -596,28 +615,28 @@ impl Cursor<'_> {
 
     /// What separates `tokens[i]` from the token after it ([`crate::layout::Lines::after`]).
     pub(crate) fn gap_after(&self, i: usize) -> Gap {
-        self.lines.after(i)
+        self.lines.after(self.clamp(i))
     }
 
     /// What separates `tokens[i]` from the token before it ([`crate::layout::Lines::before`]).
     pub(crate) fn gap(&self, i: usize) -> Gap {
-        self.lines.before(i)
+        self.lines.before(self.clamp(i))
     }
 
     /// Whether `tokens[i]` is at the head of its line ([`crate::layout::Lines::at_line_head`]).
     pub(crate) fn at_line_head(&self, i: usize) -> bool {
-        self.lines.at_line_head(i)
+        self.lines.at_line_head(self.clamp(i))
     }
 
     /// The whitespace token right after `tokens[i]`, if any.
     pub(crate) fn space_after(&self, i: usize) -> Option<Span> {
-        let k = self.full[i] as usize + 1;
+        let k = self.full[self.clamp(i)] as usize + 1;
         self.all.get(k).filter(|t| t.kind == TokenKind::Whitespace).map(|t| t.span)
     }
 
     /// The whitespace token right before `tokens[i]`, if any.
     pub(crate) fn space_before(&self, i: usize) -> Option<Span> {
-        let k = (self.full[i] as usize).checked_sub(1)?;
+        let k = (self.full[self.clamp(i)] as usize).checked_sub(1)?;
         self.all.get(k).filter(|t| t.kind == TokenKind::Whitespace).map(|t| t.span)
     }
 

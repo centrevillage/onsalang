@@ -106,6 +106,13 @@ reasons = ["S-384"]
 note = "the same two errors as d035fd58 with a letter that is not ASCII (`使`), whose E0001 names the characters of a name (S-89, W3-04)"
 
 [[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
+input = "tests/fuzz/c10af4d8.onsa"
+reasons = ["S-384"]
+note = "the same two errors as d035fd58 with a letter whose code point is digits only (`味`, U+5473): an `else` on the next line and the letter right after it, which the input has before the candidate (W3-23's cases moved the mutants)"
+
+[[allowed]]
 class = "fix|E0002|remove the line break|E0002"
 left = "expected newline or `…`, found integer literal"
 input = "tests/fuzz/01824c64.onsa"

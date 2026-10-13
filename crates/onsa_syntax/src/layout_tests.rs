@@ -617,8 +617,8 @@ fn the_brace_of_a_struct_literal_pattern_or_effect_row_in_brackets() {
 
 #[test]
 fn the_brace_of_a_handler_written_in_place() {
-    // S-421 (the provisional reading (1)): E0003 in brackets; out of them the
-    // line ends at the handler's name.
+    // S-421: after an effect's name the body follows on its line, E0003 in
+    // brackets and out of them; a named handler is read as before.
     let h = "effect Ask {\n  fn ask() -> I32\n}\n";
     let g = |e: &str| format!("{h}{DECLS}fn g() -> I32 {{\n{e}\n}}\n");
     check(
@@ -627,7 +627,13 @@ fn the_brace_of_a_handler_written_in_place() {
         "{",
         &[&g("  two(handle { 1 } with Ask { fn ask() -> I32 { 1 } }, 1)")],
     );
-    assert!(!codes(&g("  handle { 1 } with Ask\n  { fn ask() -> I32 { 1 } }")).contains(&Code::E0003));
+    check(
+        &g("  handle { 1 } with Ask\n  { fn ask() -> I32 { 1 } }"),
+        Code::E0003,
+        "{",
+        &[&g("  handle { 1 } with Ask { fn ask() -> I32 { 1 } }")],
+    );
+    assert!(!codes(&g("  let r = handle { 1 } with quiet\n  { let a = 1 }\n  r")).contains(&Code::E0003));
 }
 
 #[test]

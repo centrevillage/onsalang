@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§18.1"]
+// fixes = 1
+
+// The feedback `~ _` of FAUST in the places an expression stands (S-48, R-59; the rows `faust_feedback` and
+// `faust_feedback_unnamed` of docs/foreign-forms.toml, which tests/spec/fixes/e0020_faust.onsa gives the plain forms of).
+// After a `let` name it is E0020 with one candidate: `prev~(^y)` for the name `y` of the `let` whose initializer holds the
+// `~ _` (the nearest `let` name: the one in `let b = a + ~ _` is `b`, not `a`). The main position is the `~`. With no
+// `let` name (the last expression of the body) no candidate can be made, and it is E0002 with a note that shows the
+// `let` and `prev~(^y)`; the main position is the `~` again. The candidates may leave an error of a later stage (a `^y` in
+// the argument of a flow is E0801, S-236 lets it be); the cases compare the text of the candidates. One error in each unit.
+
+pub flow twice(a: F32 at sample) -> F32 at sample {
+  a * 2.0
+}
+
+pub flow in_parentheses(x: F32 at sample) -> F32 at sample {
+  let y = (x + prev~(^y)) * 0.5                     //~ E0020 @16
+  y
+}
+
+pub flow after_a_minus(x: F32 at sample) -> F32 at sample {
+  let y = x - prev~(^y)                             //~ E0020 @15
+  y
+}
+
+pub flow in_a_product(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let y = g * prev~(^y) + x                         //~ E0020 @15
+  y
+}
+
+pub flow the_nearest_let_name(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  let b = a + prev~(^b)                             //~ E0020 @15
+  b
+}
+
+pub flow with_a_type(x: F32 at sample) -> F32 at sample {
+  let y: F32 = x + prev~(^y)                        //~ E0020 @20
+  y
+}
+
+pub flow on_a_continued_line(x: F32 at sample) -> F32 at sample {
+  let y = x +
+    prev~(^y)                                       //~ E0020 @5
+  y
+}
+
+pub flow in_an_argument(x: F32 at sample) -> F32 at sample {
+  let y = twice~(x + prev~(^y))                     //~ E0020 @22
+  y
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = if~ c { x + prev~(^y) } else { x }        //~ E0020 @23
+  y
+}
+
+pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let y = match~ k { 0 => x + prev~(^y), _ => x }   //~ E0020 @31
+  y
+}
+
+pub flow in_the_last_expression_parentheses(x: F32 at sample) -> F32 at sample {
+  (x + ~ _) * 0.5                                   //~ E0002 @8
+}
+
+pub flow after_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  a + ~ _                                           //~ E0002 @7
+}
+
+pub flow in_a_last_argument(x: F32 at sample) -> F32 at sample {
+  twice~(x + ~ _)                                   //~ E0002 @14
+}
+
+pub flow in_a_last_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c { x + ~ _ } else { x }                      //~ E0002 @15
+}
+
+pub flow in_a_last_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0..<2 {
+    x + ~ _                                         //~ E0002 @9
+  }
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  let z = twice~(y)
+  z
+}

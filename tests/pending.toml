@@ -1240,13 +1240,6 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_faust.onsa"
-reasons = ["S-48", "S-102"]
-until = "W3-23"
-note = "at は W3-10 で通るが、FAUST の形の E0020 の行（faust_feedback、faust_prime、faust_delay）が W3-23 まで無い（E0002 / E0001）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0020_old_attributes_flow.onsa"
 reasons = ["S-43", "S-57"]
 until = "W3-08"
@@ -1805,27 +1798,6 @@ target = "caret_visible"
 reasons = ["S-116"]
 until = "W7-04"
 note = "見えている名前への ^"
-
-[[pending]]
-kind = "foreign-form"
-target = "faust_feedback"
-reasons = ["S-48", "S-102"]
-until = "W3-23"
-note = "FAUST の形の照合の関数が無い（W3-23 の FAUST の形の E0020）。例の flow の構文は W3-09 で読める"
-
-[[pending]]
-kind = "foreign-form"
-target = "faust_prime"
-reasons = ["S-48", "S-102"]
-until = "W3-23"
-note = "FAUST の形の照合の関数が無い（W3-23 の FAUST の形の E0020）。例の flow の構文は W3-09 で読める"
-
-[[pending]]
-kind = "foreign-form"
-target = "faust_delay"
-reasons = ["S-48", "S-102"]
-until = "W3-23"
-note = "FAUST の形の照合の関数が無い（W3-23 の FAUST の形の E0020）。例の flow の構文は W3-09 で読める"
 
 [[pending]]
 kind = "foreign-form"

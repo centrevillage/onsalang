@@ -33,7 +33,7 @@
 #                同じ段以前の診断が出ないこと
 #     at         主の位置 "<行>:<列>"（1 から。列は文字）。主の範囲は外来の形の範囲（形を作る最初のトークン
 #                から最後のトークンまで）で、`at` はその始まり、形の最初のトークンである（S-316）:
-#                `;`、`<`、`::`、`&`、型の名前、`+=`、`++`、`return`、`~`、`'`、`@`、`..`、ブロックコメントの `/*`。
+#                `;`、`<`、`::`、`&`、型の名前、`+=`、`++`、`return`、`~`、`@`、`..`、ブロックコメントの `/*`。
 #                呼び出しの形の誤り（`f(x)` の `f`、`s.f(x)` の `s`）は呼び出しの式の最初のトークン。
 #                空白と行の置き場所の誤り（W3-06）は、置き場所の規則を持つ記号のトークン一つが主の位置で、
 #                主の範囲もそのトークンだけ: 前に空白も改行も置けない後置の記号（`(`、`[`、`!`、`~`、`?`）、
@@ -3461,6 +3461,45 @@ pub fn g() -> Char {
 }
 '''
 at = "2:3"
+
+# FAUST の `x'`（1 サンプルの遅延）も、名前に接する `'` は文字リテラルの始まりで、この行の E0002 になる
+# （S-466。候補は無く、`prev~(x)` の書き方は note が示す）。`x' + y'` の範囲は演算子をまたぐ（`' + y'` を
+# 一つの文字リテラルと読む）。`at` は名前の始まり。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x'
+  a
+}
+'''
+at = "2:11"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  let a = x' + y'
+  a
+}
+'''
+at = "2:11"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = (x + x') * 0.5
+  a
+}
+'''
+at = "2:16"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x''
+  a
+}
+'''
+at = "2:11"
 
 [[form.example]]
 source = '''
@@ -7146,6 +7185,57 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 }
 ''']
 
+# 候補の名前は、`~ _` を初期化式に持つ `let` の名前（`b`。上の `let` の `a` ではない）。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  let b = a + ~ _
+  b
+}
+'''
+at = "3:15"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  let b = a + prev~(^b)
+  b
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = (x + ~ _) * 0.5
+  y
+}
+'''
+at = "2:16"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = (x + prev~(^y)) * 0.5
+  y
+}
+''']
+
+# 行末の二項演算子の次の行（§2.5）。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x +
+    ~ _
+  y
+}
+'''
+at = "3:5"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let y = x +
+    prev~(^y)
+  y
+}
+''']
+
 # `let` の名前が無い位置では、帰還の先の名前が決まらないので候補を作らない。
 [[form]]
 id = "faust_feedback_unnamed"
@@ -7164,11 +7254,30 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 '''
 at = "2:7"
 
+# `let` の後でも、`~ _` が最後の式にあれば `let` の名前は無い。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  a + ~ _
+}
+'''
+at = "3:7"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  (x + ~ _) * 0.5
+}
+'''
+at = "2:8"
+
 # 対象は、直前が名前でも `if` / `match` でもない前置の `~` で、被演算子に接するもの（S-123、S-363）。
 # 名前の後の `~` は flow の呼び出しの印（空白は `space_before_tilde`）、`if` / `match` の後の `~` は
 # `if~` / `match~` の印（空白は `space_after_branch_keyword`、`else if` の後は `else_if_tilde`）。
 # 空白のある前置の `~ m` は一覧に無い形で、候補の無い E0002 である（空白を除く候補 `~m` 自体がこの行の
-# E0020 になり、候補の約束を満たさないため）。
+# E0020 になり、候補の約束を満たさないため）。被演算子が括弧（`~(m)`）でも同じで、接していれば候補 `!(m)` の
+# E0020、空白のある `~ (m)` は一覧に無い形で候補の無い E0002 である（R-202）。
 [[form]]
 id = "faust_bit_not"
 kind = "foreign"
@@ -7193,27 +7302,31 @@ pub fn f(m: U32) -> U32 {
 }
 ''']
 
-[[form]]
-id = "faust_prime"
-kind = "foreign"
-origin = "FAUST"
-stage = "syntax"
-code = "E0020"
-spec = ["2.6", "11.4", "18.1"]
-rule = "1 サンプルの遅延は `prev~(x)` と書く"
+[[form.example]]
+source = '''
+pub fn f(m: U32) -> U32 {
+  let n = ~(m)
+  n
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f(m: U32) -> U32 {
+  let n = !(m)
+  n
+}
+''']
 
 [[form.example]]
 source = '''
-pub flow g(x: F32 at sample) -> F32 at sample {
-  let a = x'
-  a
+pub fn f(m: U32) -> U32 {
+  m & ~(m + 1)
 }
 '''
-at = "2:12"
+at = "2:7"
 fixed = ['''
-pub flow g(x: F32 at sample) -> F32 at sample {
-  let a = prev~(x)
-  a
+pub fn f(m: U32) -> U32 {
+  m & !(m + 1)
 }
 ''']
 
@@ -7240,6 +7353,34 @@ fixed = ['''
 pub flow g(x: F32 at sample) -> F32 at sample {
   let a = prev~(x)
   a
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  let y = a * x@2 + b
+  y
+}
+'''
+at = "2:16"
+fixed = ['''
+pub flow g(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  let y = a * delay~(x, 2) + b
+  y
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x@1
+}
+'''
+at = "2:4"
+fixed = ['''
+pub flow g(x: F32 at sample) -> F32 at sample {
+  prev~(x)
 }
 ''']
 
@@ -7295,6 +7436,15 @@ pub flow g(x: F32 at sample, k: U32 at init) -> F32 at sample {
 }
 '''
 at = "2:12"
+
+[[form.example]]
+source = '''
+pub flow g(x: F32 at sample, a: F32 at block, k: U32 at init) -> F32 at sample {
+  let y = a * x@k + a
+  y
+}
+'''
+at = "2:16"
 
 # 合成の演算子は、信号に `let` で名前を付ける書き方を note で示す。
 [[form]]

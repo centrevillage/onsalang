@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§2.5", "§8.3", "§18.1"]
+
+// E0002 for a handler written in place with no body (spec §8.3, S-421): the last name of the path after `with` is
+// UpperCamel (§2.3), so it names an effect, and the body `{ … }` must follow on the same line. When the line goes on with
+// something else, or ends and the next line does not start with `{`, no candidate can be made, and the error is the
+// E0002 of the syntax stage (the note says that a lower_snake name is a named handler, which is not compared). When the
+// next line is the `{`, the error is the E0003 of tests/spec/fixes/e0003_handler_body_line.onsa. Effects and handlers
+// written in place are not in this version (E0200), but this E0002 is a diagnostic of the syntax stage, which comes
+// first, and the unit has it alone; a named handler is read as before (the last unit). Where the line ends, the marker is
+// on the line of the effect name. One error in each declaration unit.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn at_the_end_of_the_body() -> I32 {
+  handle { 1 } with Ask                             //~ E0002
+}
+
+pub fn before_a_statement() -> I32 {
+  let r = handle { 1 } with Ask                     //~ E0002
+  r
+}
+
+pub fn before_a_comment_and_a_statement() -> I32 {
+  let r = handle { 1 } with Ask                     //~ E0002
+  // not a body
+  r
+}
+
+pub fn before_an_if() -> I32 {
+  let r = handle { 1 } with Ask                     //~ E0002
+  if r > 0 { 1 } else { 2 }
+}
+
+pub fn a_qualified_effect() -> I32 {
+  let r = handle { 1 } with io.Ask                  //~ E0002
+  r
+}
+
+pub fn in_a_call() -> I32 {
+  two(handle { 1 } with Ask, 1)                     //~ E0002
+}
+
+pub fn in_an_array() -> I32 {
+  let v = [handle { 1 } with Ask, 2]                //~ E0002
+  v[0]
+}
+
+pub fn before_an_operator() -> I32 {
+  let r = handle { 1 } with Ask + 1                 //~ E0002
+  r
+}
+
+pub fn a_named_handler() -> I32 {
+  let a = handle { 1 } with quiet                   //~ E0200
+  a
+}
+
+pub fn a_named_handler_in_a_call() -> I32 {
+  two(handle { 2 } with quiet, 1)                   //~ E0200
+}

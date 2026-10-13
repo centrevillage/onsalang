@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.6", "§11.4", "§18.1"]
+
+// The `'` of FAUST after a name (`x'`, a delay of one sample) is a `'` that touches a name, which starts a character
+// literal, so the form is the `string_prefix` E0002 of §2.4 with no candidate (S-466, S-400; the row `string_prefix` of
+// docs/foreign-forms.toml; there is no row `faust_prime`). The rule does not read the literal: it ends at the next `'`
+// on the line when there is one, so `x' + y'` is the name `x` touching the literal `' + y'`, and the error stands over the
+// operator. The note is not compared (it adds that a delay of one sample is written `prev~(x)`). What does not touch a name is
+// not part of this rule: a `'` after `)` or after a space starts a character literal that is not closed, which is E0001 of
+// the literal (§2.4). The cases write `'` at the end of a line or before a closing `'` of the same line, and never before
+// the `}` of the unit on the same line (what an unclosed literal takes of the end of its line is not decided, S-467).
+// The marker is the line only. One error in each declaration unit.
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  let a = x'                                        //~ E0002
+  a
+}
+
+pub flow in_the_last_expression(x: F32 at sample) -> F32 at sample {
+  x'                                                //~ E0002
+}
+
+pub flow in_a_sum(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  let a = x' + y'                                   //~ E0002
+  a
+}
+
+pub flow in_a_product(x: F32 at sample) -> F32 at sample {
+  let a = x'*0.5                                    //~ E0002
+  a
+}
+
+pub flow in_parentheses(x: F32 at sample) -> F32 at sample {
+  let a = (x + x') * 0.5                            //~ E0002
+  a
+}
+
+pub flow in_an_argument(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  let a = twice~(x', y')                            //~ E0002
+  a
+}
+
+pub flow in_a_branch_body(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c {
+    x'                                              //~ E0002
+  } else {
+    x
+  }
+  a
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ds = par i in 0..<2 {
+    x'                                              //~ E0002
+  }
+  ds[0]
+}
+
+pub flow after_a_path(x: F32 at sample) -> F32 at sample {
+  let a = p.x'                                      //~ E0002
+  a
+}
+
+pub flow two_in_a_row(x: F32 at sample) -> F32 at sample {
+  let a = x''                                       //~ E0002
+  a
+}
+
+pub flow three_in_a_row(x: F32 at sample) -> F32 at sample {
+  let a = x'''                                      //~ E0002
+  a
+}
+
+pub fn in_a_function(x: F32) -> F32 {
+  let a = x'                                        //~ E0002
+  a
+}
+
+pub flow after_a_closing_parenthesis(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  let a = (x + y)'                                  //~ E0001
+  a
+}
+
+pub flow after_a_space(x: F32 at sample) -> F32 at sample {
+  let a = x '                                       //~ E0001
+  a
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  let b = delay~(x, 2)
+  a + b
+}

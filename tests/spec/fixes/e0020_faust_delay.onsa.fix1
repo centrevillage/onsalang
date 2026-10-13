@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.4", "§18.1"]
+// fixes = 1
+
+// The delay `x@N` of FAUST in the places an expression stands (S-48, R-59; the row `faust_delay` of
+// docs/foreign-forms.toml, which tests/spec/fixes/e0020_faust.onsa gives the plain `let` forms of). The name `x`, `@`
+// and the number or name that follows are the form, and the rest of the expression is not part of it. E0020 with one
+// candidate: `prev~(x)` for 1, `delay~(x, N)` for an integer literal of 2 or more and for an UPPER_SNAKE name (the
+// syntax stage does not know the value of a name; a constant with the value 1 is left to the later check E0807, which
+// the candidate shows). E0002 with no candidate for what the list does not name: a name that is not a constant (a note
+// shows `vdelay~`), the integer 0 (a delay of 0 is no delay) and a number that is not an integer.
+// A branch of `if~` / `match~` and the body of `par` may hold a state, so the candidates leave a program the later
+// stages accept. One error in each unit; the main position of the E0020 is the `@`.
+
+const N: U32 = 4
+const MAX_DELAY: U32 = 48000
+const ONE: U32 = 1
+
+pub flow twice(a: F32 at sample) -> F32 at sample {
+  a * 2.0
+}
+
+pub flow in_a_sum_and_a_product(x: F32 at sample, a: F32 at block, b: F32 at block) -> F32 at sample {
+  let y = a * delay~(x, 2) + b                      //~ E0020 @16
+  y
+}
+
+pub flow one_in_a_sum(x: F32 at sample) -> F32 at sample {
+  let y = prev~(x) + x                              //~ E0020 @12
+  y
+}
+
+pub flow one_in_a_product(x: F32 at sample, a: F32 at block) -> F32 at sample {
+  let y = a * prev~(x)                              //~ E0020 @16
+  y
+}
+
+pub flow in_the_last_expression(x: F32 at sample) -> F32 at sample {
+  delay~(x, 3)                                      //~ E0020 @4
+}
+
+pub flow one_in_the_last_expression(x: F32 at sample) -> F32 at sample {
+  prev~(x)                                          //~ E0020 @4
+}
+
+pub flow in_an_argument(x: F32 at sample) -> F32 at sample {
+  twice~(delay~(x, 2))                              //~ E0020 @11
+}
+
+pub flow in_parentheses(x: F32 at sample) -> F32 at sample {
+  let y = (delay~(x, 2)) * 0.5                      //~ E0020 @13
+  y
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = if~ c { delay~(x, 2) } else { x }         //~ E0020 @20
+  y
+}
+
+pub flow in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = if~ c { x } else { delay~(x, 10) }        //~ E0020 @31
+  y
+}
+
+pub flow in_a_nested_branch(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F32 at sample {
+  let y = if~ c { if~ d { delay~(x, 2) } else { x } } else { x } //~ E0020 @28
+  y
+}
+
+pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let y = match~ k { 0 => delay~(x, 2), _ => x }    //~ E0020 @28
+  y
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    delay~(x, 3)                                    //~ E0020 @6
+  }
+  ys[0]
+}
+
+pub flow one_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    prev~(x)                                        //~ E0020 @6
+  }
+  ys[0]
+}
+
+pub flow a_constant_in_a_sum(x: F32 at sample) -> F32 at sample {
+  let y = x + delay~(x, MAX_DELAY)                  //~ E0020 @16
+  y
+}
+
+pub flow a_constant_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = if~ c { delay~(x, N) } else { x }         //~ E0020 @20
+  y
+}
+
+pub flow a_constant_with_the_value_1(x: F32 at sample) -> F32 at sample {
+  let y = delay~(x, ONE)                            //~ E0020 @12
+  y
+}
+
+pub flow a_variable_in_a_product(x: F32 at sample, a: F32 at block, k: U32 at init) -> F32 at sample {
+  let y = a * x@k + a                               //~ E0002 @16
+  y
+}
+
+pub flow a_variable_in_a_branch(x: F32 at sample, c: Bool at sample, k: U32 at init) -> F32 at sample {
+  let y = if~ c { x@k } else { x }                  //~ E0002 @20
+  y
+}
+
+pub flow a_variable_in_a_par_body(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    x@k                                             //~ E0002 @6
+  }
+  ys[0]
+}
+
+pub flow zero(x: F32 at sample) -> F32 at sample {
+  let y = x@0                                       //~ E0002
+  y
+}
+
+pub flow zero_in_the_last_expression(x: F32 at sample) -> F32 at sample {
+  x@0                                               //~ E0002
+}
+
+pub flow a_fraction(x: F32 at sample) -> F32 at sample {
+  let y = x@1.5                                     //~ E0002
+  y
+}
+
+pub flow a_fraction_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = if~ c { x@2.5 } else { x }                //~ E0002
+  y
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  let b = delay~(x, 2)
+  let d = delay~(x, N)
+  a + b + d
+}

@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 1
+
+// A prefix `~` that touches a parenthesized operand is the bit negation of the languages of the C family too (R-202,
+// S-123, S-363; the row `faust_bit_not` of docs/foreign-forms.toml): `~(m)` is E0020 with the candidate `!(m)`, as `~m` is
+// (tests/spec/fixes/e0020_prefix_tilde_contrast.onsa). The scope is a `~` that follows neither a name nor `if` / `match`
+// and touches its operand, and a `(` is an operand that it touches. A space between the `~` and the `(` (`~ (m)`) is a
+// form that is not in the list, which is E0002 with no candidate, as `~ m` is: removing the space would give the
+// `~(m)`, which is itself an error. The main position of the E0020 is the `~`. One error in each declaration unit.
+
+pub fn id(m: U32) -> U32 {
+  m
+}
+
+pub fn adjacent_let(m: U32) -> U32 {
+  let n = !(m)                                      //~ E0020 @11
+  n
+}
+
+pub fn adjacent_nested_parentheses(m: U32) -> U32 {
+  let n = !((m))                                    //~ E0020 @11
+  n
+}
+
+pub fn adjacent_expression(m: U32) -> U32 {
+  let n = !(m + 1)                                  //~ E0020 @11
+  n
+}
+
+pub fn adjacent_argument(m: U32) -> U32 {
+  id(!(m))                                          //~ E0020 @6
+}
+
+pub fn adjacent_operand(m: U32) -> U32 {
+  m & !(m)                                          //~ E0020 @7
+}
+
+pub fn adjacent_element(m: U32) -> [U32; 2] {
+  [!(m), m]                                         //~ E0020 @4
+}
+
+pub fn adjacent_while(c: Bool) -> U32 {
+  while !(c) {                                      //~ E0020 @9
+    break
+  }
+  1
+}
+
+pub fn adjacent_return(m: U32) -> U32 {
+  return !(m)                                       //~ E0020 @10
+}
+
+pub fn adjacent_last_expression(m: U32) -> U32 {
+  !(m)                                              //~ E0020 @3
+}
+
+pub flow adjacent_in_a_flow(m: U32 at sample) -> U32 at sample {
+  let n = !(m)                                      //~ E0020 @11
+  n
+}
+
+pub flow adjacent_in_a_flow_branch(m: U32 at sample, c: Bool at sample) -> U32 at sample {
+  let n = if~ c { !(m) } else { m }                 //~ E0020 @19
+  n
+}
+
+pub fn spaced_let(m: U32) -> U32 {
+  let n = ~ (m)                                     //~ E0002
+  n
+}
+
+pub fn spaced_argument(m: U32) -> U32 {
+  id(~ (m))                                         //~ E0002
+}
+
+pub fn spaced_operand(m: U32) -> U32 {
+  m & ~ (m)                                         //~ E0002
+}
+
+pub fn spaced_while(c: Bool) -> U32 {
+  while ~ (c) {                                     //~ E0002
+    break
+  }
+  1
+}
+
+pub fn spaced_return(m: U32) -> U32 {
+  return ~ (m)                                      //~ E0002
+}
+
+pub fn spaced_last_expression(m: U32) -> U32 {
+  ~ (m)                                             //~ E0002
+}
+
+pub flow spaced_in_a_flow(m: U32 at sample) -> U32 at sample {
+  let n = ~ (m)                                     //~ E0002
+  n
+}
+
+pub fn fine(m: U32) -> U32 {
+  let n = !(m)
+  n & !m
+}

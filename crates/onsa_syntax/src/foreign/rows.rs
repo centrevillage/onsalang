@@ -6,7 +6,7 @@ use super::assign::{binary_minus_prefix_minus, compound_assignment, increment};
 use super::calls::callee_expression;
 use super::comments::block_comment;
 use super::decls::{arm_return, endless_loop, hash_attribute, let_mut, proc, pub_crate};
-use super::faust::faust_bit_not;
+use super::faust::{faust_bit_not, faust_compose, faust_delay, faust_feedback};
 use super::literals::{foreign_literal, leading_point, string_delimiter};
 use super::modes::{mut_self, reference};
 use super::paths::{angle_brackets, path_separator, space_in_type_args_mark, type_args_call, type_position_path};
@@ -535,6 +535,51 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Syntax,
     },
     Row {
+        id: RowId::FaustFeedback,
+        name: "faust_feedback",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a feedback is written `prev~(^y)`",
+        rule: "a feedback is written `prev~(^y)`, where `^y` is the name the `let` defines (§11.2); `~ _` is the feedback of FAUST",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::FaustFeedbackUnnamed,
+        name: "faust_feedback_unnamed",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a feedback is written with a `let` name and `prev~(^y)`",
+        rule: "a feedback names its value with `let y = ...` and reads it back with `prev~(^y)` (§11.2); `~ _` is the feedback of FAUST",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::FaustDelay,
+        name: "faust_delay",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a delay is written `prev~(x)` or `delay~(x, N)`",
+        rule: "a delay of one sample is `prev~(x)` and one of N samples `delay~(x, N)` (§11.4); `x@N` is the delay of FAUST",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::FaustDelayVariable,
+        name: "faust_delay_variable",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a delay whose length is a variable is written `vdelay~(x, d, MAX)`",
+        rule: "a delay whose length is a variable is `vdelay~(x, d, MAX)`, with a constant `MAX` as its bound (§11.4); `x@N` is the delay of FAUST",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::FaustCompose,
+        name: "faust_compose",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "there are no operators that compose signals",
+        rule: "signals are not composed by operators: name a signal with `let` and use the name (§18.1); `:`, `<:`, `:>` and `,` are the compositions of FAUST",
+        detect: Detect::Syntax,
+    },
+    Row {
         id: RowId::PubCrate,
         name: "pub_crate",
         phase: Phase::Syntax,
@@ -746,12 +791,6 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "rate_as_type", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "faust_feedback", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "faust_feedback_unnamed", phase: Phase::Syntax, code: Code::E0002 },
-    Waiting { name: "faust_prime", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "faust_delay", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "faust_delay_variable", phase: Phase::Syntax, code: Code::E0002 },
-    Waiting { name: "faust_compose", phase: Phase::Syntax, code: Code::E0002 },
     Waiting { name: "derive_attribute", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "relaxed_attribute", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "bulk_attribute", phase: Phase::Syntax, code: Code::E0020 },
@@ -842,6 +881,9 @@ pub static MATCHERS: &[Matcher] = &[
     ),
     Matcher::one(&[RowId::HashAttribute], hash_attribute),
     Matcher::one(&[RowId::FaustBitNot], faust_bit_not),
+    Matcher::many(&[RowId::FaustFeedback, RowId::FaustFeedbackUnnamed], faust_feedback),
+    Matcher::many(&[RowId::FaustDelay, RowId::FaustDelayVariable], faust_delay),
+    Matcher::one(&[RowId::FaustCompose], faust_compose),
     Matcher::one(&[RowId::PubCrate], pub_crate),
     Matcher::many(
         &[RowId::TypeArgsTurbofish, RowId::TypeArgsAngle, RowId::TypeArgsSquareComma, RowId::TypeArgsOnExpression],
