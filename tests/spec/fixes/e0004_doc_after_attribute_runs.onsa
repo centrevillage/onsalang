@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` between the attributes and the declaration: where the candidate puts the
+// lines, and which lines it takes (§2.1, S-432, S-442). The candidate deletes each line of the doc
+// comment with its line break and inserts the same lines at the start of the line of the first
+// attribute, after the `///` lines that already stand there; the plain comments and the blank
+// lines are not moved (§3.4 of docs/onsa-tools.md; the same fineness as the edits per line of
+// S-442). A `///` before the attribute that is separated from the attribute by a plain comment or
+// a blank line keeps its place, and the moved lines come right before the attribute. Two `///`
+// lines after the attribute with a blank line or a plain comment between them are one error, and
+// the candidate moves both (the marker stands on the first line). One error per declaration
+// (P-01).
+
+// ---- the existing `///` lines are separated from the attribute
+
+/// Before the attribute.
+// A plain comment between the doc comment and the attribute.
+@fp(relaxed)
+/// Moves right before the attribute, after the plain comment.   //~ E0004
+fn plain_comment_before_the_attribute(x: F32) -> F32 {
+  x
+}
+
+/// Before the attribute.
+
+@repr(c)
+/// Moves right before the attribute, after the blank line.      //~ E0004
+pub struct Frame {
+  a: I32,
+}
+
+impl Frame {
+  /// Before the attribute.
+  // A plain comment between the doc comment and the attribute.
+  @fp(relaxed)
+  /// Moves right before the attribute of a method.              //~ E0004
+  pub fn scaled(self, k: F32) -> F32 {
+    k * 2.0
+  }
+}
+
+// ---- two `///` lines with a blank line or a plain comment between them are one error
+
+@fp(relaxed)
+/// First line, before a blank line.                             //~ E0004
+
+/// Second line, after the blank line.
+fn blank_between(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+/// First line, before a plain comment.                          //~ E0004
+// A plain comment between the two lines.
+/// Second line, after the plain comment.
+pub fn comment_between(x: F32) -> F32 {
+  x
+}
+
+impl Frame {
+  @fp(relaxed)
+  /// First line, before a blank line, in a method.              //~ E0004
+
+  /// Second line, after the blank line.
+  pub fn halved(self, k: F32) -> F32 {
+    k * 0.5
+  }
+}

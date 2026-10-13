@@ -125,6 +125,13 @@ pub(crate) fn build(cst: &Cst, map: &AstMap, text: &str, diagnostics: &[Diagnost
     units
 }
 
+/// The declaration node of the `Item` node `n`; `None` when the parser
+/// found none (tokens of no item).
+pub(crate) fn declaration(cst: &Cst, n: NodeId) -> Option<NodeId> {
+    cst.child_nodes(n)
+        .find(|&c| !matches!(cst.kind(c), NodeKind::Docs | NodeKind::Attr | NodeKind::Vis | NodeKind::Error))
+}
+
 struct Builder<'a> {
     cst: &'a Cst,
     text: &'a str,
@@ -143,7 +150,7 @@ impl Builder<'_> {
         let mut last: Option<(usize, bool)> = None;
         for e in self.cst.children(container).to_vec() {
             match e {
-                Elem::Node(n) if self.cst.kind(n) == NodeKind::Item => match self.declaration(n) {
+                Elem::Node(n) if self.cst.kind(n) == NodeKind::Item => match declaration(self.cst, n) {
                     Some(decl) => {
                         let u = self.push(self.item_span(n), self.item_of.get(&n).copied(), parent);
                         last = Some((u, false));
@@ -196,14 +203,6 @@ impl Builder<'_> {
             Some(docs) => Span::new(span.file, self.cst.full_span(docs).start.min(span.start), span.end),
             None => span,
         }
-    }
-
-    /// The declaration node of an `Item` node; `None` when the parser found
-    /// none (tokens of no item).
-    fn declaration(&self, n: NodeId) -> Option<NodeId> {
-        self.cst
-            .child_nodes(n)
-            .find(|&c| !matches!(self.cst.kind(c), NodeKind::Docs | NodeKind::Attr | NodeKind::Vis | NodeKind::Error))
     }
 
     fn push(&mut self, span: Span, item: Option<ItemId>, parent: Option<usize>) -> usize {

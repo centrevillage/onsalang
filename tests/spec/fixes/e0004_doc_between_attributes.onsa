@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` between two attributes of a declaration (§2.1, S-432): the doc comment is
+// not attached, and the candidate moves the line to the place right before the FIRST attribute,
+// after the `///` lines that already stand there. The attributes of this version are one per
+// place (`@repr` on a struct, `@fp` on a `fn` and a `flow`, `@param` on an input; §6.5), so
+// there is no pair of different attributes on one declaration, and the only way to put a line
+// between attributes is to repeat one. The spec does not say whether an attribute may be
+// repeated, so this case relies on a repeated `@fp(relaxed)` being accepted (it is, in this
+// version) and on nothing else about repeated attributes: if the spec makes a repeated attribute
+// an error, this case has to change with it. One error per declaration (P-01).
+
+@fp(relaxed)
+/// Between two attributes.                              //~ E0004
+@fp(relaxed)
+fn between_two(x: F32) -> F32 {
+  x
+}
+
+/// Before the attributes.
+@fp(relaxed)
+/// Between the first and the second.                    //~ E0004
+@fp(relaxed)
+pub fn between_two_with_a_doc_before(x: F32) -> F32 {
+  x
+}
+
+pub struct Holder {
+  a: I32,
+}
+
+impl Holder {
+  @fp(relaxed)
+  /// Between two attributes of a method.                //~ E0004
+  @fp(relaxed)
+  pub fn m(self) -> F32 {
+    1.0
+  }
+}

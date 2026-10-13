@@ -61,6 +61,19 @@ pub fn is_blank(c: char) -> bool {
     BLANKS.contains(&c)
 }
 
+/// The offset where the line of `offset` in `text` starts.
+pub(crate) fn line_start(text: &str, offset: u32) -> u32 {
+    text[..offset as usize].rfind('\n').map_or(0, |i| i as u32 + 1)
+}
+
+/// The offset where the line of `offset` in `text` starts, when nothing but
+/// blanks stands before `offset` on its line (a candidate that moves or adds
+/// whole lines).
+pub(crate) fn line_head(text: &str, offset: u32) -> Option<u32> {
+    let start = line_start(text, offset);
+    text[start as usize..offset as usize].chars().all(is_blank).then_some(start)
+}
+
 /// The length of the line break at the start of `rest`: 1 for a line feed,
 /// 2 for a carriage return and a line feed, `None` for anything else (a
 /// carriage return alone is no line break, §2.5). The one test of a line

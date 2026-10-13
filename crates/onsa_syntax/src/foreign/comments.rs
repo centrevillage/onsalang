@@ -1,7 +1,7 @@
 //! The rows of the block comments (§2.1, S-247, R-174).
 
 use super::*;
-use crate::lexer::BLANKS;
+use crate::lexer::{BLANKS, line_head};
 
 /// Whether the block comment `text` is closed, and whether it holds another.
 fn block_shape(text: &str) -> (bool, bool) {
@@ -25,31 +25,11 @@ fn block_shape(text: &str) -> (bool, bool) {
     (false, nested)
 }
 
-/// A token that may start a declaration a `///` documents: an item but `use`
-/// and `test`, or its attribute or visibility (§2.1).
-fn documented(kind: TokenKind) -> bool {
-    use TokenKind::*;
-    matches!(
-        kind,
-        KwFn | KwRt
-            | KwFlow
-            | KwStruct
-            | KwEnum
-            | KwType
-            | KwTrait
-            | KwImpl
-            | KwEffect
-            | KwBlocking
-            | KwHandler
-            | KwConst
-            | KwExtern
-            | KwTarget
-    )
-}
-
 /// What a `///` in place of the block comment at `c.at` would document
-/// (§2.1): a declaration that takes one (past `pub` and attributes; not
-/// `use` or `test`, whose `///` is E0004), a field, a variant, a flow input.
+/// (§2.1), by the one judgment of `crate::docs`: a declaration that takes
+/// one (past `pub` and attributes; not `use` or `test`, whose `///` is
+/// E0004), a field, a variant, a flow input; nothing between the attributes
+/// of a declaration and the declaration (S-432).
 fn documents(c: &Cursor) -> bool {
     let mut i = c.sig_after(c.at);
     // Past `pub` or `priv` and the attributes (`@name(..)`).
@@ -75,11 +55,12 @@ fn documents(c: &Cursor) -> bool {
         }
     }
     let ctx = c.context();
-    let member = |k: usize, kind: NodeKind| c.open.get(k).is_some_and(|o| o.0 == kind);
     match ctx {
-        Some((_, NodeKind::FieldList | NodeKind::VariantList)) => c.kind(i) == TokenKind::Ident,
-        Some((k, NodeKind::ParamList)) => k > 0 && member(k - 1, NodeKind::Flow) && c.kind(i) == TokenKind::Ident,
-        _ => documented(c.kind(i)),
+        Some((_, kind)) if crate::docs::in_a_heading(kind) => false,
+        Some((k, list @ (NodeKind::FieldList | NodeKind::VariantList | NodeKind::ParamList))) => {
+            k > 0 && crate::docs::elements_take_docs(list, c.open[k - 1].0) && c.kind(i) == TokenKind::Ident
+        }
+        _ => crate::parser::declaration_node(c.kind(i)).is_some_and(crate::docs::declaration_takes_doc),
     }
 }
 
@@ -131,7 +112,7 @@ pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
         lines.pop();
     }
     let line_start = c.line_start(span.start);
-    let pre = c.text[line_start as usize..span.start as usize].trim_matches(BLANKS).is_empty();
+    let pre = line_head(c.text, span.start).is_some();
     let rest_start = span.end as usize;
     let rest_end = c.text[rest_start..].find('\n').map_or(c.text.len(), |n| rest_start + n);
     let rest = &c.text[rest_start..rest_end];

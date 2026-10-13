@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.1", "§8.1", "§8.3", "§14.1", "§15.2", "§18.1"]
+
+// The closed list of what a `///` documents (§2.1, S-431): the items except `use` and `test`
+// (`fn`, `flow`, `struct`, `enum`, `trait`, `effect`, `handler`, `extern`, `target`, `const`,
+// `type`, `impl`), the members of an `impl`, a `trait`, an `effect`, a `handler` and an `extern`
+// (associated constants, operations of an effect, functions and opaque types of an extern, also
+// the members of a handler in its inline form), the fields of a struct, the variants of an enum
+// and the inputs of a flow. The list is the same as the list of units of §18.1. What a doc
+// comment is attached to is not observable in the output of `check`; the case reads the syntax
+// only (`mode = "parse"`, like effects/decl.onsa) so that it does not depend on how far this
+// version of the compiler goes with effects, handlers, `target` and `extern` (E0200, §18.1), and
+// every `///` below stands right before the declaration it documents: none of them is E0004.
+
+/// Documents an effect.
+pub effect Ask {
+  /// Documents the first operation.
+  fn ask() -> I32
+  // An ordinary comment between two operations.
+
+  /// Documents the second operation, in two
+  /// lines.
+  fn tell(v: I32)
+}
+
+/// Documents a blocking effect.
+pub blocking effect Disk {
+  /// Documents an operation of a blocking effect.
+  fn load(n: I32) -> I32
+}
+
+/// Documents a handler.
+handler fixed: Ask {
+  /// Documents the first member of a handler.
+  fn ask() -> I32 { 1 }
+
+  /// Documents the second member of a handler.
+  fn tell(v: I32) {}
+}
+
+/// Documents a handler that takes an argument.
+pub handler counted(inout n: I32): Ask {
+  /// Documents a member of a handler that takes an argument.
+  fn ask() -> I32 { 2 }
+  fn tell(v: I32) {}
+}
+
+pub fn inline_handler() -> I32 {
+  handle { 1 } with Ask {
+    /// Documents the first member of an inline handler.
+    fn ask() -> I32 { 1 }
+    // An ordinary comment between two members.
+    /// Documents the second member of an inline handler.
+    fn tell(v: I32) {}
+  }
+}
+
+/// Documents an extern block.
+extern "C" lib "m" {
+  /// Documents a foreign function.
+  fn sin(x: F64) -> F64
+  /// Documents an opaque type.
+  type Raw
+  /// Documents a foreign function with an effect row.
+  fn make() -> Ptr[Raw] uses {Alloc}
+  /// Documents a foreign `rt` function.
+  rt fn poke(h: Ptr[Raw], v: F64)
+}
+
+/// Documents a function that the target provides.
+target fn open(sample_rate: F32) -> I32
+
+/// Documents a type that the target provides.
+target type Device
+
+/// Documents a public function that the target provides.
+pub target fn close(d: Device)
+
+/// Documents a function of the target that is `rt`.
+target rt fn read_input(inout d: Device, inout buf: Span[F32])
+
+/// Documents a trait.
+pub trait Sized2 {
+  /// Documents an associated constant of a trait.
+  const SIZE: U32
+  /// Documents a method of a trait.
+  fn size(self) -> U32
+}
+
+/// Documents an impl of a trait.
+impl Sized2 for Device {
+  /// Documents an associated constant of an impl.
+  const SIZE: U32 = 4
+  /// Documents a method of an impl.
+  fn size(self) -> U32 { 4 }
+}
+
+/// Documents a function.
+pub fn plain() -> I32 { 1 }
+
+/// Documents a flow and an input of it.
+pub flow gain(
+  /// Documents the input.
+  x: F32 at sample,
+) -> F32 at sample { x }
+
+/// Documents a struct and a field of it.
+pub struct Pt {
+  /// Documents a field.
+  x: F32,
+}
+
+/// Documents an enum and a variant of it.
+pub enum Mode {
+  /// Documents a variant.
+  Off,
+  On,
+}
+
+/// Documents a constant.
+pub const LIMIT: U32 = 16
+
+/// Documents a type alias.
+pub type Index = U32

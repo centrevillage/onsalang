@@ -1108,6 +1108,11 @@ fn declaration(kind: TokenKind) -> Option<&'static Declaration> {
     DECLARATIONS.iter().find(|d| d.keyword == kind)
 }
 
+/// The node of the declaration whose keyword is `kind` ([`DECLARATIONS`]).
+pub(crate) fn declaration_node(kind: TokenKind) -> Option<NodeKind> {
+    declaration(kind).map(|d| d.node)
+}
+
 /// Whether `kind` is the keyword of a declaration ([`DECLARATIONS`]).
 fn is_declaration_keyword(kind: TokenKind) -> bool {
     declaration(kind).is_some()

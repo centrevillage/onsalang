@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§11.7"]
+
+// A `///` before the attributes of a declaration documents the declaration (§2.1, S-432): the
+// doc comment of a declaration stands before its attributes, and a `///` after the attributes is
+// E0004 (fixes/e0004_doc_after_attribute.onsa). The attributes are `@repr` on a struct, `@fp` on a
+// `fn` and a `flow` (also a method) and `@param` on an input of a flow (§6.5). What a doc comment
+// is attached to is not observable in the output of `check`; these are the forms that must not be
+// errors. A plain comment or a blank line between the doc comment and the attributes does not
+// change what it documents (§2.1).
+
+/// Documents a function with an attribute.
+@fp(relaxed)
+fn with_fp(x: F32) -> F32 {
+  x * 2.0
+}
+
+/// Documents a public function, in two
+/// lines, with an attribute.
+@fp(relaxed)
+pub fn with_fp_pub(x: F32) -> F32 {
+  x * 3.0
+}
+
+/// Documents a flow with an attribute.
+@fp(relaxed)
+pub flow with_fp_flow(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+/// Documents a struct with an attribute.
+@repr(c)
+pub struct Frame {
+  /// Documents a field.
+  a: I32,
+  b: I32,
+}
+
+/// Documents a struct with an attribute and a blank line between.
+
+@repr(c)
+pub struct Spaced {
+  a: I32,
+}
+
+// A plain comment, and then the doc comment.
+/// Documents a function; the attribute follows the doc comment after a plain comment.
+// A plain comment between the doc comment and the attribute.
+@fp(relaxed)
+fn with_plain_comments(x: F32) -> F32 {
+  x
+}
+
+/// Documents the methods of `Frame`.
+impl Frame {
+  /// Documents a method with an attribute.
+  @fp(relaxed)
+  pub fn scaled(self, k: F32) -> F32 {
+    k * 2.0
+  }
+
+  /// Documents a method, in two
+  /// lines, with an attribute.
+  @fp(relaxed)
+  pub fn halved(self, k: F32) -> F32 {
+    k * 0.5
+  }
+
+  /// Documents a method without an attribute.
+  pub fn plain(self) -> I32 {
+    self.a
+  }
+}
+
+/// Documents a flow and its inputs; each input has its own doc comment before its attribute.
+pub flow gain(
+  /// Documents the signal input.
+  x: F32 at sample,
+  /// Documents the level, in two
+  /// lines.
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+  /// Documents the offset, after a plain comment.
+  // A plain comment between the doc comment and the attribute.
+  @param(min: -1.0, max: 1.0, default: 0.0)
+  offset: F32 at block,
+) -> F32 at sample {
+  x * level + offset
+}

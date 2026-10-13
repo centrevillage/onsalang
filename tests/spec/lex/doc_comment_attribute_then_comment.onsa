@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§18.2"]
+
+// A `///` before the attributes documents the declaration also when a plain comment stands between
+// the attributes and the declaration (§2.1: "間に空行、`//`、属性があってもよい"; S-432): the doc
+// comment is not E0004. `onsa fmt` does not change the program and keeps a plain comment where it
+// is written (§18.2, docs/onsa-tools.md §3.4); the comment is not moved into the body of the
+// declaration, where it would stand before the first statement (R-212). What a doc comment is
+// attached to is not observable in the output of `check`. A blank line between the attributes and
+// the declaration is not written here: `onsa fmt` removes it (the attribute continues the item,
+// §2.5).
+
+/// Documents a function.
+@fp(relaxed)
+// A plain comment between the attribute and the declaration.
+fn comment_after_the_attribute(x: F32) -> F32 {
+  x
+}
+
+/// Documents a struct.
+@repr(c)
+// A plain comment between the attribute and the declaration.
+pub struct Frame {
+  a: I32,
+}
+
+/// Documents a method.
+impl Frame {
+  /// Documents a method with an attribute.
+  @fp(relaxed)
+  // A plain comment between the attribute and the method.
+  pub fn scaled(self, k: F32) -> F32 {
+    k * 2.0
+  }
+}

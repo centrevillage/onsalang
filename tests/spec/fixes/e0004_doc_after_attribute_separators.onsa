@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` between the attributes and the declaration, with plain comments and blank
+// lines around it (§2.1, S-432). The candidate moves the doc comment to the place right before the
+// first attribute (see fixes/e0004_doc_after_attribute.onsa); the plain comments and the blank
+// lines that stand between the attribute and the declaration are not moved, wherever they stand
+// (before or after the doc comment), so the candidate leaves them in the order they have.
+// One error per declaration (P-01).
+
+@fp(relaxed)
+// A plain comment before the doc comment.
+/// Moves above the attribute; the plain comment stays.   //~ E0004
+fn comment_before(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+
+/// Moves above the attribute; the blank line stays.      //~ E0004
+fn blank_before(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+/// Moves above the attribute; the plain comment stays.   //~ E0004
+// A plain comment after the doc comment.
+fn comment_after(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+/// Moves above the attribute; the blank line stays.      //~ E0004
+
+fn blank_after(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+
+// A plain comment, a blank line and a plain comment around the doc comment.
+
+/// Moves above the attribute; the others stay.           //~ E0004
+
+// Another plain comment.
+pub fn around(x: F32) -> F32 {
+  x
+}
+
+/// Before the attribute.
+@repr(c)
+// A plain comment before the doc comment.
+
+/// Moves above the attribute, after the doc comment that is there. //~ E0004
+// A plain comment after the doc comment.
+pub struct Frame {
+  a: I32,
+}
+
+impl Frame {
+  @fp(relaxed)
+  // A plain comment before the doc comment.
+  /// Moves above the attribute of a method.             //~ E0004
+
+  pub fn scaled(self, k: F32) -> F32 {
+    k * 2.0
+  }
+}

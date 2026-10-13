@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// (S-432.) A `///` between the attributes of a declaration and the declaration is E0004 in the
+// file it stands in, as the position of the doc comment does not depend on the module (§2.1):
+// attrs.onsa has one before a function and one before a method of an `impl`; this file has one
+// before a function and a correct one (a `///` before the attribute) next to it. The package is
+// checked as a whole: the functions next to the broken ones are checked on their own, and the
+// declarations a module imports are read through the `use` of this file. Each error is reported at
+// its own file and line.
+
+use attrs.{scaled, Frame}
+
+/// Documents `run`; the doc comment stands before the attribute.
+@fp(relaxed)
+pub fn run(f: Frame) -> F32 {
+  scaled(f, 2.0)
+}
+
+/// Stands after the attribute.                       //~ E0004
+@fp(relaxed)
+pub fn broken_in_the_main_module(f: Frame) -> F32 {
+  scaled(f, 3.0)
+}

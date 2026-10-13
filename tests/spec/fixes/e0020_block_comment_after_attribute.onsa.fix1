@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a `/** */` between the attributes of a declaration and the declaration (§2.1,
+// §18.1; S-302, S-432). The words are written `///` only where a `///` documents the declaration
+// that follows; between the attributes and the declaration a `///` documents nothing (it is
+// E0004, S-432), so the candidate writes them `//` and leaves no error of its stage. Before the
+// attributes a `///` documents the declaration, so there the candidate is `///`. One error per
+// declaration (P-01).
+
+@fp(relaxed)
+// After the attribute of a function.
+//~ E0020
+fn after_the_attribute(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+// Followed by a plain comment.
+//~ E0020
+// A plain comment.
+fn with_a_plain_comment_after(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+// Between two attributes.
+//~ E0020
+@fp(relaxed)
+fn between_two(x: F32) -> F32 {
+  x
+}
+
+/// Before the attribute: documents the function.
+//~ E0020
+@fp(relaxed)
+fn before_the_attribute(x: F32) -> F32 {
+  x
+}
+
+pub struct Holder {
+  a: F32,
+}
+
+impl Holder {
+  @fp(relaxed)
+  // After the attribute of a method.
+  //~ E0020
+  pub fn m(self) -> F32 {
+    self.a
+  }
+}
+
+pub flow after_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  // After the attribute of an input.
+  //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow before_param(
+  x: F32 at sample,
+  /// Before the attribute of an input: documents it.
+  //~ E0020
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}

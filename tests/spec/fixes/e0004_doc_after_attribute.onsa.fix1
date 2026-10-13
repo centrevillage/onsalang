@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` between the attributes of a declaration and the declaration (§2.1, S-432,
+// S-442). The doc comment of a declaration stands before its attributes: a `///` after the last
+// attribute is not attached, and the candidate (the only one) moves the line of the doc comment,
+// with its indentation, to the place right before the first attribute, after the `///` lines that
+// already stand there. A run of `///` lines is one error with one candidate that moves them all
+// (the marker stands on the first line). The attributes are `@repr` on a struct and `@fp` on a
+// `fn`, a `flow` and a method (§6.5). The error is of the syntax stage, one per declaration
+// (P-01), so each form is in a declaration of its own; the members of an `impl` are units of
+// their own (§18.1). The reverse order, a `///` before the attribute, is attached
+// (lex/doc_comment_before_attributes.onsa). Between the doc comment and the declaration there is
+// a plain comment or a blank line in fixes/e0004_doc_after_attribute_separators.onsa; an
+// attribute that does not stand at the start of its line is in
+// fixes/e0004_doc_after_attribute_flow_input.onsa.
+
+// ---- the only attribute of an item
+
+/// After the attribute of a function.                  //~ E0004
+@fp(relaxed)
+fn after_fp(x: F32) -> F32 {
+  x * 2.0
+}
+
+/// After the attribute of a public function.           //~ E0004
+@fp(relaxed)
+pub fn after_fp_pub(x: F32) -> F32 {
+  x * 3.0
+}
+
+/// After the attribute of a flow.                      //~ E0004
+@fp(relaxed)
+pub flow after_fp_flow(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+/// After the attribute of a struct.                    //~ E0004
+@repr(c)
+pub struct Frame {
+  a: I32,
+  b: I32,
+}
+
+// ---- the `///` lines that already stand before the attribute stay before the moved line
+
+/// Before the attribute.
+/// After the attribute, with a doc comment before it. //~ E0004
+@fp(relaxed)
+fn after_fp_with_a_doc_before(x: F32) -> F32 {
+  x
+}
+
+/// First line before the attribute.
+/// Second line before the attribute.
+/// After the attribute, with two lines before it.      //~ E0004
+@repr(c)
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+// ---- a run of lines after the attribute is one error and one candidate (S-442)
+
+/// First line of a run after the attribute.            //~ E0004
+/// Second line of the run.
+/// Third line of the run.
+@fp(relaxed)
+fn after_fp_run(x: F32) -> F32 {
+  x
+}
+
+/// Before the attribute.
+/// First line of a run, with a doc comment before.     //~ E0004
+/// Second line of the run.
+@fp(relaxed)
+pub fn after_fp_run_and_doc_before(x: F32) -> F32 {
+  x
+}
+
+// ---- the members of an impl
+
+impl Frame {
+  /// After the attribute of a method.                  //~ E0004
+  @fp(relaxed)
+  pub fn scaled(self, k: F32) -> F32 {
+    k * 2.0
+  }
+
+  /// Before the attribute of a method.
+  /// After the attribute of a method, with a doc before. //~ E0004
+  @fp(relaxed)
+  pub fn halved(self, k: F32) -> F32 {
+    k * 0.5
+  }
+
+  /// First line of a run after the attribute of a method. //~ E0004
+  /// Second line of the run.
+  @fp(relaxed)
+  pub fn doubled(self, k: F32) -> F32 {
+    k * 4.0
+  }
+}
+
+// ---- generic declarations
+
+/// After the attribute of a generic function.          //~ E0004
+@fp(relaxed)
+pub fn after_fp_generic[T: Copy](x: T) -> T {
+  x
+}
+
+pub struct Wrapper[T] {
+  v: T,
+}
+
+impl[T: Copy] Wrapper[T] {
+  /// After the attribute of a method of a generic impl. //~ E0004
+  @fp(relaxed)
+  pub fn get(self) -> T {
+    self.v
+  }
+}

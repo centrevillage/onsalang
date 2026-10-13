@@ -737,7 +737,7 @@ impl Cursor<'_> {
 
     /// The offset where the line of `offset` starts.
     fn line_start(&self, offset: u32) -> u32 {
-        self.text[..offset as usize].rfind('\n').map_or(0, |i| i as u32 + 1)
+        crate::lexer::line_start(self.text, offset)
     }
 
     /// The blanks that start the line of `offset`.

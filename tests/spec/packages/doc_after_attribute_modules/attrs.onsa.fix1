@@ -1,0 +1,39 @@
+//! Documentation of the module `attrs`.
+
+/// Documents `Frame`; the doc comment stands before the attribute.
+@repr(c)
+pub struct Frame {
+  a: I32,
+}
+
+/// Documents `scaled`; the doc comment stands before the attribute.
+@fp(relaxed)
+pub fn scaled(f: Frame, k: F32) -> F32 {
+  k
+}
+
+/// Stands after the attribute of a function.         //~ E0004
+@fp(relaxed)
+pub fn broken_function(k: F32) -> F32 {
+  k
+}
+
+/// Stands after the attribute of a struct.           //~ E0004
+@repr(c)
+pub struct Broken {
+  a: I32,
+}
+
+impl Frame {
+  /// Documents `halved`; the doc comment stands before the attribute.
+  @fp(relaxed)
+  pub fn halved(self, k: F32) -> F32 {
+    k * 0.5
+  }
+
+  /// Stands after the attribute of a method.         //~ E0004
+  @fp(relaxed)
+  pub fn broken_method(self, k: F32) -> F32 {
+    k
+  }
+}

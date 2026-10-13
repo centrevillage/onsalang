@@ -238,3 +238,17 @@ left = "there is no attribute `…`"
 input = "tests/fuzz/853d6a85.onsa"
 reasons = ["S-236", "R-220"]
 note = "the unknown attribute `@e` was in the input, hidden behind the E0002 (one error a unit); the candidate is right (low harm)"
+
+[[allowed]]
+class = "fix|E0012|parenthesize the inner operator|E0020"
+left = "a prefix symbol is written on the line of its operand"
+input = "tests/fuzz/2695c80d.onsa"
+reasons = ["S-236", "R-221"]
+note = "the line break between the inner `-` and its operand (a comment ends the line) was in the input, hidden behind the E0012 (one error a unit); the candidate is right (low harm)"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#D) cannot be written outside comments and strings: a name is written wit"
+input = "tests/fuzz/1a9bd535.onsa"
+reasons = ["S-236", "R-219"]
+note = "the `」` against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm, the form of 44fc0733 with another character)"

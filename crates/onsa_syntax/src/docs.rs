@@ -2,11 +2,18 @@
 //! on the CST after the parser, which alone decides where a doc comment is
 //! attached (`Parser::attach_docs`, the `Docs` and `ModuleDocs` nodes; D-15).
 //!
-//! - A `///` documents the declaration its `Docs` node is in: an item but
-//!   `use` and `test`, a member of an `impl` or a `trait`, a field, a
-//!   variant, an input of a flow. Anywhere else (before a statement, a
-//!   parameter of a function, a `use`, the end of the file, ...) it is
-//!   E0004, with the candidate `//`.
+//! - A `///` documents the declaration its `Docs` node is in, from the
+//!   closed list of §2.1 (S-431): an item but `use` and `test`, a member
+//!   of an `impl`, a `trait`, an `effect`, a `handler` (also one of a
+//!   `handle` expression) or an `extern`, a field, a variant, an input of a
+//!   flow.
+//! - A `///` between the attributes of such a declaration and the
+//!   declaration (S-432) is E0004, with the candidate that moves its lines,
+//!   each a line of its own, before the first attribute (after the `///`
+//!   there); the plain comments and blank lines stay. When the attribute
+//!   follows code on its line, a line break goes before the moved lines.
+//! - Anywhere else (before a statement, a parameter of a function, a `use`,
+//!   the end of the file, ...) a `///` is E0004, with the candidate `//`.
 //! - A `//!` documents the module at the head of the file (`ModuleDocs`).
 //!   Anywhere else it is E0004, with the candidate `///` where a `///`
 //!   documents a declaration.
@@ -16,14 +23,14 @@
 //! for one declaration), with one candidate that edits each line.
 
 // A run of doc comments that document nothing is one E0004, with one candidate (S-442).
-// SPEC-GAP(S-432): a `///` after the attributes of a declaration is in no `Docs`: E0004.
 // SPEC-GAP(S-433): a `///` before an element of a variant is in no `Docs`: E0004 (there is no tuple struct, S-39).
 // SPEC-GAP(S-444): a `///` after code on its line is in no `Docs` (`Parser::starts_its_line`): E0004.
 // SPEC-GAP(S-434): a `//!` after the `///` of the first item is not at the head of the file: E0004.
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
-use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
+use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
+use crate::lexer::line_head;
 use crate::token::TokenKind;
 
 /// Where a doc comment is (from the node that holds it).
@@ -76,37 +83,106 @@ pub(crate) fn check(cst: &Cst, text: &str, out: &mut Vec<Diagnostic>) {
 fn place(cst: &Cst, n: NodeId) -> Place {
     match cst.kind(n) {
         NodeKind::ModuleDocs => Place::Head,
-        NodeKind::Docs if documents(cst, n) => Place::Documents,
+        NodeKind::Docs if cst.parent(n).is_some_and(|owner| takes_doc(cst, owner)) => Place::Documents,
         NodeKind::Error => Place::Unread,
         _ if !cst.is_complete(n) => Place::Unread,
         _ => Place::Nothing,
     }
 }
 
-/// Whether the declaration of the `Docs` node `docs` takes a doc comment
-/// (§2.1): not a `use` or a `test`, nor a member of an `effect`, a
-/// `handler` or an `extern` (S-431: §2.1 names the members of an `impl` and
-/// a `trait` only).
-fn documents(cst: &Cst, docs: NodeId) -> bool {
-    let Some(owner) = cst.parent(docs) else { return false };
+/// Whether a declaration whose node is `kind` takes a doc comment (§2.1,
+/// S-431): every declaration but a `use` and a `test`, at the top level or
+/// a member of any body. With [`elements_take_docs`] and [`in_a_heading`],
+/// the one judgment of what a `///` documents: this module, the parser
+/// (which attaches the doc comments) and the candidates for `/** */`
+/// (`foreign::comments`) read it.
+pub(crate) fn declaration_takes_doc(kind: NodeKind) -> bool {
+    !matches!(kind, NodeKind::Use | NodeKind::Test)
+}
+
+/// Whether the elements of the list `list` in the node `around` take doc
+/// comments (§2.1): the fields, the variants, and the inputs of a flow (not
+/// the parameters of a function, a closure or a handler).
+pub(crate) fn elements_take_docs(list: NodeKind, around: NodeKind) -> bool {
+    match list {
+        NodeKind::FieldList | NodeKind::VariantList => true,
+        NodeKind::ParamList => around == NodeKind::Flow,
+        _ => false,
+    }
+}
+
+/// Whether a `///` in a node of `kind`, past where it starts, is between
+/// the attributes of a declaration and the declaration, where it documents
+/// nothing (S-432): an `Item` and a `Param` start at their attributes and
+/// hold their doc comments in `Docs`, before them.
+pub(crate) fn in_a_heading(kind: NodeKind) -> bool {
+    matches!(kind, NodeKind::Item | NodeKind::Param)
+}
+
+/// Whether the declaration of the node `owner` takes a doc comment (§2.1).
+fn takes_doc(cst: &Cst, owner: NodeId) -> bool {
+    let around = |n: NodeId| cst.parent(n).map(|p| cst.kind(p));
     match cst.kind(owner) {
-        NodeKind::Field | NodeKind::Variant | NodeKind::Param => true,
-        NodeKind::Item => {
-            let declaration = cst
-                .child_nodes(owner)
-                .find(|&c| !matches!(cst.kind(c), NodeKind::Docs | NodeKind::Attr | NodeKind::Vis | NodeKind::Error));
-            if declaration.is_some_and(|d| matches!(cst.kind(d), NodeKind::Use | NodeKind::Test)) {
-                return false;
-            }
-            // SPEC-GAP(S-431): a member of an `effect`, a `handler` or an
-            // `extern` takes no doc comment (§2.1 lists those of `impl` and
-            // `trait`).
-            let list = cst.parent(owner).filter(|&l| cst.kind(l) == NodeKind::ItemList);
-            let around = list.and_then(|l| cst.parent(l)).map(|a| cst.kind(a));
-            !matches!(around, Some(NodeKind::Effect | NodeKind::Handler | NodeKind::Extern))
+        NodeKind::Item => crate::units::declaration(cst, owner).is_none_or(|d| declaration_takes_doc(cst.kind(d))),
+        NodeKind::Field | NodeKind::Variant | NodeKind::Param => {
+            cst.parent(owner).is_some_and(|list| around(list).is_some_and(|a| elements_take_docs(cst.kind(list), a)))
         }
         _ => false,
     }
+}
+
+/// The edits that move the run of `///` from `first` to `last` before the
+/// first attribute of the declaration (S-432), when the run stands between
+/// its attributes and it, each line of the run a line of its own: the lines
+/// (with their indentation and line break) go to the head of the line of
+/// the first attribute, after the `///` there. When the attribute follows
+/// code on its line, a line break goes before the lines, and the attribute
+/// starts the next line. The plain comments and blank lines stay.
+/// The lines move as they are written (the decision inserts the same lines):
+/// their indentation and the spelling of their line breaks are kept, and
+/// the line break added before an attribute that follows code takes the
+/// indentation of the first line.
+fn before_the_attributes(cst: &Cst, text: &str, first: usize, last: usize) -> Option<Vec<Edit>> {
+    let tokens = cst.tokens();
+    let owner = cst.token_parent(TokenIdx(first as u32));
+    if !in_a_heading(cst.kind(owner)) || !takes_doc(cst, owner) {
+        return None;
+    }
+    // The first attribute, after the `Docs`. The run stands before what
+    // follows the attributes (`inout` of an input, the declaration); its
+    // lines are tokens of the owner, as nothing but trivia is between them.
+    let attr =
+        cst.child_nodes(owner).find(|&c| cst.kind(c) != NodeKind::Docs).filter(|&a| cst.kind(a) == NodeKind::Attr)?;
+    let at = cst.significant_tokens(attr)?.0.index();
+    let after = cst.children(owner).iter().find_map(|e| match *e {
+        Elem::Node(n) if !matches!(cst.kind(n), NodeKind::Docs | NodeKind::Attr) => {
+            cst.significant_tokens(n).map(|t| t.0.index())
+        }
+        Elem::Token(t) if !tokens[t.index()].kind.is_trivia() => Some(t.index()),
+        _ => None,
+    });
+    if after.is_some_and(|a| a < first) {
+        return None;
+    }
+    let file = tokens[first].span.file;
+    let (mut moved, mut edits) = (String::new(), Vec::new());
+    for k in (first..=last).filter(|&k| tokens[k].kind == TokenKind::DocComment) {
+        let head = line_head(text, tokens[k].span.start)?;
+        let newline = tokens.get(k + 1).filter(|t| t.kind == TokenKind::Newline)?;
+        moved.push_str(&text[head as usize..newline.span.end as usize]);
+        edits.push(Edit::delete(Span::new(file, head, newline.span.end)));
+    }
+    edits.push(match line_head(text, tokens[at].span.start) {
+        Some(head) => Edit::insert(file, head, moved),
+        None => {
+            let line_break = &text[tokens[first + 1].span.start as usize..tokens[first + 1].span.end as usize];
+            let indent = &text[line_head(text, tokens[first].span.start)? as usize..tokens[first].span.start as usize];
+            let from = if tokens[at - 1].kind == TokenKind::Whitespace { at - 1 } else { at };
+            let gap = Span::new(file, tokens[from].span.start, tokens[at].span.start);
+            Edit::replace(gap, format!("{line_break}{moved}{indent}"))
+        }
+    });
+    Some(edits)
 }
 
 /// The E0004 of the run `(kind, place, first, last)`, when it documents
@@ -130,13 +206,22 @@ fn report(
     };
     let d = match (kind, place) {
         (TokenKind::DocComment, Place::Documents) | (TokenKind::ModuleDoc, Place::Head) | (_, Place::Unread) => return,
-        (TokenKind::DocComment, _) => Diagnostic::new(
-            Stage::Syntax,
-            Code::E0004,
-            span,
-            "this doc comment documents no declaration; `///` goes right before an item, a member, a field, a variant or an input of a flow (§2.1)",
-        )
-        .with_fix(Fix::new("make it a plain comment `//`", replaced("//"))),
+        (TokenKind::DocComment, _) => match before_the_attributes(cst, text, first, last) {
+            Some(edits) => Diagnostic::new(
+                Stage::Syntax,
+                Code::E0004,
+                span,
+                "this doc comment stands after an attribute; the doc comment goes before the attributes of the declaration (§2.1)",
+            )
+            .with_fix(Fix::new("move it before the attributes", edits)),
+            None => Diagnostic::new(
+                Stage::Syntax,
+                Code::E0004,
+                span,
+                "this doc comment documents no declaration; `///` goes right before an item, a member, a field, a variant or an input of a flow (§2.1)",
+            )
+            .with_fix(Fix::new("make it a plain comment `//`", replaced("//"))),
+        },
         (_, Place::Documents) => Diagnostic::new(
             Stage::Syntax,
             Code::E0004,
@@ -220,18 +305,80 @@ mod tests {
             // SPEC-GAP(S-444): after code on its line.
             ("const A: I32 = 1 /// doc\nfn f() {\n}\n", "/// doc"),
             ("struct S {\n  a: I32, /// a\n  b: I32,\n}\n", "/// a"),
-            // SPEC-GAP(S-432): after the attributes.
-            ("@repr(c)\n/// d\nstruct S {\n  a: I32,\n}\n", "/// d"),
             // SPEC-GAP(S-433): an element of a variant (there is no tuple struct, S-39).
             ("enum E {\n  V(\n    /// x\n    F32\n  ),\n}\n", "/// x"),
-            // SPEC-GAP(S-431): a member of an `extern` or a `handler`.
-            ("extern \"C\" lib \"m\" {\n  /// sin\n  fn sin(x: F64) -> F64\n}\n", "/// sin"),
-            ("handler h: E {\n  /// op\n  fn op() -> I32 { 1 }\n}\n", "/// op"),
+            // A `use` takes none, so neither does a `///` after its attribute.
+            ("@fp(relaxed)\n/// u\nuse std.math\n", "/// u"),
+            // S-444: after an attribute on its line.
+            ("@fp(relaxed) /// d\nfn f() {\n}\n", "/// d"),
         ] {
             assert_eq!(e0004(src), vec![plain(src, doc)], "{src}");
         }
-        // A member of an `impl` and a `trait` takes one.
-        assert!(e0004("impl S {\n  /// m\n  fn m() {}\n}\ntrait T {\n  /// n\n  fn n()\n}\n").is_empty());
+        // A member of an `impl`, a `trait`, an `effect`, a `handler` (also
+        // one of a `handle` expression) and an `extern` takes one (S-431).
+        for src in [
+            "impl S {\n  /// m\n  fn m() {}\n}\ntrait T {\n  /// n\n  fn n()\n}\n",
+            "effect E {\n  /// op\n  fn op() -> I32\n}\n",
+            "handler h: E {\n  /// op\n  fn op() -> I32 { 1 }\n}\n",
+            "fn f() -> I32 {\n  handle { 1 } with E {\n    /// op\n    fn op() -> I32 { 1 }\n  }\n}\n",
+            "extern \"C\" lib \"m\" {\n  /// sin\n  fn sin(x: F64) -> F64\n  /// raw\n  type Raw\n}\n",
+        ] {
+            assert!(e0004(src).is_empty(), "{src}");
+        }
+    }
+
+    #[test]
+    fn a_doc_comment_after_the_attributes_moves_before_them() {
+        // S-432: one E0004 for the run, and one candidate that moves its
+        // lines to the head of the line of the first attribute.
+        for (src, doc, fixed) in [
+            ("@repr(c)\n/// d\nstruct S {\n  a: I32,\n}\n", "/// d", "/// d\n@repr(c)\nstruct S {\n  a: I32,\n}\n"),
+            (
+                "/// a\n// c\n@fp(relaxed)\n/// b\n\n/// c\n@fp(relaxed)\nfn f() {\n}\n",
+                "/// b\n\n/// c",
+                "/// a\n// c\n/// b\n/// c\n@fp(relaxed)\n\n@fp(relaxed)\nfn f() {\n}\n",
+            ),
+            // The attribute follows code on its line.
+            (
+                "flow g(x: F32 at sample, @param(min: 0.0)\n  /// l\n  l: F32 at block,\n) -> F32 at sample {\n  x\n}\n",
+                "/// l",
+                "flow g(x: F32 at sample,\n  /// l\n  @param(min: 0.0)\n  l: F32 at block,\n) -> F32 at sample {\n  x\n}\n",
+            ),
+            // The texts are compared exactly (the cases of `tests/spec/` do
+            // not compare the width of the white space): the lines go to the
+            // head of the line of the attribute, before its indentation, as
+            // they are written.
+            (
+                "impl S {\n    @fp(relaxed)\n    /// d\n    fn m() {}\n}\n",
+                "/// d",
+                "impl S {\n    /// d\n    @fp(relaxed)\n    fn m() {}\n}\n",
+            ),
+            (
+                "impl S {\n    @fp(relaxed)\n/// d\n    fn m() {}\n}\n",
+                "/// d",
+                "impl S {\n/// d\n    @fp(relaxed)\n    fn m() {}\n}\n",
+            ),
+            // A file of CRLF keeps them, at the head of a line and where a
+            // line break is added.
+            ("@fp(relaxed)\r\n/// d\r\nfn f() {\r\n}\r\n", "/// d", "/// d\r\n@fp(relaxed)\r\nfn f() {\r\n}\r\n"),
+            (
+                "flow g(x: F32 at sample, @param(min: 0.0)\r\n  /// l\r\n  l: F32 at block,\r\n) -> F32 at sample {\r\n  x\r\n}\r\n",
+                "/// l",
+                "flow g(x: F32 at sample,\r\n  /// l\r\n  @param(min: 0.0)\r\n  l: F32 at block,\r\n) -> F32 at sample {\r\n  x\r\n}\r\n",
+            ),
+        ] {
+            assert_eq!(e0004(src), vec![(doc.to_string(), Some(fixed.to_string()))], "{src}");
+            assert!(e0004(fixed).is_empty(), "{fixed}");
+        }
+        // A parameter of a function takes none, and a `///` after the
+        // `inout` of an input is past its attributes, in the declaration:
+        // the candidate is `//`.
+        for src in [
+            "fn f(@fp(relaxed)\n  /// x\n  x: I32) {\n}\n",
+            "flow g(\n  @param(min: 0.0)\n  inout\n  /// x\n  x: F32 at block,\n) -> F32 at block {\n  x\n}\n",
+        ] {
+            assert_eq!(e0004(src), vec![("/// x".to_string(), Some(src.replace("/// x", "// x")))], "{src}");
+        }
     }
 
     #[test]

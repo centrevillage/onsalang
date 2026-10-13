@@ -481,7 +481,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwFn => {
                 let m = self.start(NodeKind::ClosureExpr)?;
                 self.bump();
-                self.parse_params(false, false)?;
+                self.parse_params(false, NodeKind::ClosureExpr)?;
                 if self.at_line_end(TokenKind::Arrow) {
                     self.bump();
                     self.parse_type()?;

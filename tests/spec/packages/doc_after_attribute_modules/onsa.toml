@@ -1,0 +1,3 @@
+[package]
+name = "doc_after_attribute_modules"
+edition = "2026"

@@ -271,6 +271,9 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
         - 事例（`tests/spec/` の旧版の形、`attributes_no_candidate.onsa`、`crates/onsa_cli/tests/declaration_headings.rs` の `export_c` など）と、W3-08 の直し A で寄せなかった `old_attribute` の引数の判定。
         - FAUST: 対象外の行（`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`、`faust_compose`、`x'` の note の `prime_note`）は、支障が無い限り残す（コメントで対象外と示した）。FAUST が説明にだけ出る Onsa 自身の規則の行（`space_before_tilde`、`space_after_caret`、`caret_visible`）は出自を改めて残す。`faust_bit_not`（C 系の前置の `~`）は対象で、名前を改めるかを見る。W3-23 の残り（`holds_wild` が前置の積み重ねの中の `_` を見ない件、`at_failure` の `StringPrefix` の分かれ、`faust_bit_not` と `faust_feedback` に重なる `branch` の条件）は対象外として持ち越しから消した。
       - 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。
+      - RF-12 W3-24 の範囲の外（22 回目、W3-24/i の直し 1 と W3-24/b の再確認）:
+        - 行の頭の判定が三通り残る: `layout.rs` の `Lines::at_line_head`（構文解析器のトークンの添字ごとの bool）、`Parser::starts_its_line`（構文解析器の中の bool）、`lexer.rs` の `line_start` / `line_head`（文面の位置。W3-24 で `foreign.rs` の `Cursor::line_start` から移し、`docs.rs` と `foreign/comments.rs` が読む）。`foreign.rs` の `Cursor::indent` も行の頭を文面から計算する。返り値が違うので W3-24 では寄せていない。
+        - タブで字下げした行の頭の `/** */` の事例が無い（`foreign/comments.rs` の `pre` をスペースだけで数える壊しが通る。W3-24/b の再確認の低）。報告は 22 回目の scratchpad の `w324b/handback_b2.md`。
       - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
     - (6) ファズの範囲（2026-10-13、21 回目、利用者: ファズが過剰な品質保証になって開発速度を下げているなら、区切りの良いところで対策を考える）。材料:
       - `fix-same-place` は、候補の隣に最初から隠れていた誤り（一つの単位で最初の誤りだけを報告するため見えなかったもの）が当てた後に見えるだけの形も、候補の失敗として数える。R-219（`ifから`）・R-220（`p@e`）は候補が正しく、`tests/fuzz/allowed.toml` に回した。候補が誤りを作る R-217 や R-214 の一部と見分けられない。

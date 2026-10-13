@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` that ends the members of an `effect`, a `handler`, an `extern` block, a `trait`
+// and the inline form of a handler, or stands alone in them (§2.1, S-431): the list of what a `///`
+// documents is closed, and a member is documented by the `///` before it, so a `///` after the last
+// member (or in a body without members) has nothing to attach to. The candidate is `//`. The error
+// is of the syntax stage, so it comes before the E0200 that this version gives to effects, handlers,
+// `extern` blocks and traits (§18.1); the candidate leaves only that later error. One error per
+// declaration (P-01): each of them is in a declaration of its own. The members before the stray
+// comment have their own `///`, which is fine.
+
+pub effect AtTheEnd {
+  /// Documents the operation.
+  fn op() -> I32
+  // After the last operation.                          //~ E0004
+}
+
+pub effect Alone {
+  // Alone in the operations.                           //~ E0004
+}
+
+handler at_the_end: AtTheEnd {
+  /// Documents the member.
+  fn op() -> I32 { 1 }
+  // After the last member of a handler.                //~ E0004
+}
+
+handler alone: AtTheEnd {
+  // Alone in the members of a handler.                 //~ E0004
+}
+
+extern "C" lib "m" {
+  /// Documents the function.
+  fn sin(x: F64) -> F64
+  // After the last member of an extern block.          //~ E0004
+}
+
+extern "C" lib "n" {
+  // Alone in an extern block.                          //~ E0004
+}
+
+pub trait AtTheEndOfATrait {
+  /// Documents the method.
+  fn size(self) -> U32
+  // After the last member of a trait.                  //~ E0004
+}
+
+pub trait AloneInATrait {
+  // Alone in a trait.                                  //~ E0004
+}
+
+pub fn inline_handler_end() -> I32 {
+  handle { 1 } with AtTheEnd {
+    /// Documents the member of an inline handler.
+    fn op() -> I32 { 1 }
+    // After the last member of an inline handler.      //~ E0004
+  }
+}
+
+pub fn inline_handler_alone() -> I32 {
+  handle { 1 } with AtTheEnd {
+    // Alone in an inline handler.                      //~ E0004
+  }
+}

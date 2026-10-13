@@ -300,7 +300,7 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Flow)?;
         self.bump();
         self.parse_name("flow name")?;
-        self.parse_params(true, true)?;
+        self.parse_params(true, NodeKind::Flow)?;
         self.expect(TokenKind::Arrow)?;
         self.parse_type()?;
         self.parse_body()?;
@@ -315,7 +315,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwFn)?;
         self.parse_name("function name")?;
         self.parse_generics_opt()?;
-        self.parse_params(true, false)?;
+        self.parse_params(true, NodeKind::Fn)?;
         if self.at_line_end(TokenKind::Arrow) {
             self.bump();
             self.parse_type()?;
@@ -524,7 +524,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwHandler)?;
         self.parse_name("handler name")?;
         if self.at(TokenKind::LParen) {
-            self.parse_params(true, false)?;
+            self.parse_params(true, NodeKind::Handler)?;
         }
         self.expect(TokenKind::Colon)?;
         self.parse_path("effect name")?;

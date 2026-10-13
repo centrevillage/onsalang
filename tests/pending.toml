@@ -1897,6 +1897,13 @@ note = "canonical = false の正例。字句は W3-05 で通り、fmt が綴り�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/lex/doc_comment_attribute_then_comment.onsa"
+reasons = ["R-212"]
+until = "W3-11"
+note = "fmt が属性と宣言の間の // を本体の先頭へ動かす（docs/onsa-tools.md §3.4 に反する）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/semantics/float_literal_rounding_fn_values.onsa"
 reasons = ["R-08", "R-20", "S-211"]
 until = "W8-09"

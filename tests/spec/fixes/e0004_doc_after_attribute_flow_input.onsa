@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§6.5", "§11.7", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` between the `@param` of an input of a flow and the input (§2.1, S-432). The
+// doc comment of an input stands before its attribute. When the attribute is at the start of its
+// line, the candidate moves the line of the doc comment, with its indentation, to the place right
+// before the attribute, after the `///` lines that already stand there. When the attribute does not
+// stand at the start of its line (it follows the `(` of the flow or an input on the same line), the
+// candidate adds a line break and puts the doc comment on a line of its own right before the
+// attribute: the line break is added before the doc comment, and the attribute then starts the
+// next line. The indentation of the line that is added is not fixed by the spec, and the
+// comparison with the `.fix1` file ignores the width of the white space. One error per flow
+// (P-01), so each form is in a flow of its own; a `///` before an input without an attribute is
+// fine.
+
+// ---- the attribute is at the start of its line
+
+pub flow own_line(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  /// The level.                                         //~ E0004
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow first_input(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  /// The level.                                         //~ E0004
+  level: F32 at block,
+  x: F32 at sample,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow with_docs_before(
+  /// The signal.
+  x: F32 at sample,
+  /// The first line, before the attribute.
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  /// The second line, after the attribute.              //~ E0004
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow run_after(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  /// The first line of a run, after the attribute.      //~ E0004
+  /// The second line of the run.
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow plain_comment_between(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  // A plain comment between the attribute and the input.
+  /// The level.                                         //~ E0004
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow indentation_differs(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+          /// Indented deeper than the attribute.        //~ E0004
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow second_attribute(
+  /// The signal.
+  x: F32 at sample,
+  /// The level.
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+  @param(min: -1.0, max: 1.0, default: 0.0)
+  /// The offset.                                        //~ E0004
+  offset: F32 at block,
+) -> F32 at sample {
+  x * level + offset
+}
+
+// ---- the attribute is not at the start of its line
+
+pub flow after_the_parenthesis(@param(min: 0.0, max: 1.0, default: 0.5)
+  /// The level.                                         //~ E0004
+  level: F32 at block,
+  x: F32 at sample,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow after_an_input(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5)
+  /// The level.                                         //~ E0004
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow run_after_the_parenthesis(@param(min: 0.0, max: 1.0, default: 0.5)
+  /// The first line of a run.                           //~ E0004
+  /// The second line of the run.
+  level: F32 at block,
+  x: F32 at sample,
+) -> F32 at sample {
+  x * level
+}

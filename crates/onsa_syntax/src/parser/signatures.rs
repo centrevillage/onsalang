@@ -120,17 +120,20 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// `(params)`; `require_types` is false for anonymous functions (§6.1),
-    /// `inputs` is true for the inputs of a flow, which take doc comments
-    /// (§2.1).
-    pub(super) fn parse_params(&mut self, require_types: bool, inputs: bool) -> PResult<()> {
+    /// `(params)` of the node `around` (`Flow`, `Fn`, `Handler`,
+    /// `ClosureExpr`); `require_types` is false for anonymous functions
+    /// (§6.1). The inputs of a flow take doc comments (§2.1,
+    /// [`crate::docs::elements_take_docs`]) and `@param` (§6.5).
+    pub(super) fn parse_params(&mut self, require_types: bool, around: NodeKind) -> PResult<()> {
+        let inputs = around == NodeKind::Flow;
+        let docs_taken = crate::docs::elements_take_docs(NodeKind::ParamList, around);
         let m = self.start(NodeKind::ParamList)?;
         // S-412: the `(` after `fn` of an anonymous function follows
         // the rule of the parameters of a declaration (a blank before it is E0020).
         self.opens(TokenKind::LParen)?;
         self.with_nl(false, |p| {
             while !p.at(TokenKind::RParen) {
-                let docs = if inputs { p.element_docs() } else { None };
+                let docs = if docs_taken { p.element_docs() } else { None };
                 let param = p.start(NodeKind::Param)?;
                 p.attach_docs(docs);
                 let attrs = p.parse_attrs(false)?;
