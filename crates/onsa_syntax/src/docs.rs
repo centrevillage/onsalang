@@ -17,7 +17,7 @@
 
 // A run of doc comments that document nothing is one E0004, with one candidate (S-442).
 // SPEC-GAP(S-432): a `///` after the attributes of a declaration is in no `Docs`: E0004.
-// SPEC-GAP(S-433): a `///` before an element of a tuple struct or of a variant is in no `Docs`: E0004.
+// SPEC-GAP(S-433): a `///` before an element of a variant is in no `Docs`: E0004 (there is no tuple struct, S-39).
 // SPEC-GAP(S-444): a `///` after code on its line is in no `Docs` (`Parser::starts_its_line`): E0004.
 // SPEC-GAP(S-434): a `//!` after the `///` of the first item is not at the head of the file: E0004.
 
@@ -194,11 +194,11 @@ mod tests {
         assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
         let text = |s: &onsa_diag::Span| &src[s.start as usize..s.end as usize];
         assert_eq!(p.ast.module_doc.iter().map(text).collect::<Vec<_>>(), ["//! m", "//! n"]);
-        use crate::ast::{ItemKind, StructKind};
+        use crate::ast::ItemKind;
         let items: Vec<&crate::ast::Item> = p.ast.root.iter().map(|&i| p.ast.item(i)).collect();
         assert_eq!(items[0].doc.iter().map(text).collect::<Vec<_>>(), ["/// s"]);
         let ItemKind::Struct(s) = &items[0].kind else { panic!("{:?}", items[0].kind) };
-        let StructKind::Named(fields) = &s.kind else { panic!("not named") };
+        let fields = &s.fields;
         assert_eq!(fields[0].doc.iter().map(text).collect::<Vec<_>>(), ["/// a"]);
         assert!(fields[1].doc.is_empty());
         let ItemKind::Enum(e) = &items[1].kind else { panic!("{:?}", items[1].kind) };
@@ -221,9 +221,9 @@ mod tests {
             ("const A: I32 = 1 /// doc\nfn f() {\n}\n", "/// doc"),
             ("struct S {\n  a: I32, /// a\n  b: I32,\n}\n", "/// a"),
             // SPEC-GAP(S-432): after the attributes.
-            ("@derive(Eq)\n/// d\nstruct S {\n  a: I32,\n}\n", "/// d"),
-            // SPEC-GAP(S-433): an element of a tuple struct.
-            ("struct P(\n  /// x\n  F32\n)\n", "/// x"),
+            ("@repr(c)\n/// d\nstruct S {\n  a: I32,\n}\n", "/// d"),
+            // SPEC-GAP(S-433): an element of a variant (there is no tuple struct, S-39).
+            ("enum E {\n  V(\n    /// x\n    F32\n  ),\n}\n", "/// x"),
             // SPEC-GAP(S-431): a member of an `extern` or a `handler`.
             ("extern \"C\" lib \"m\" {\n  /// sin\n  fn sin(x: F64) -> F64\n}\n", "/// sin"),
             ("handler h: E {\n  /// op\n  fn op() -> I32 { 1 }\n}\n", "/// op"),
@@ -258,7 +258,7 @@ mod tests {
         let p = parse(src);
         assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
         let crate::ast::ItemKind::Struct(s) = &p.ast.item(p.ast.root[0]).kind else { panic!("not a struct") };
-        let crate::ast::StructKind::Named(fields) = &s.kind else { panic!("not named") };
+        let fields = &s.fields;
         assert_eq!(fields[1].doc.len(), 1);
         // fmt keeps it on its own line (W3-04/b 2), also after a comment that
         // the element before holds (W3-04/b 6).

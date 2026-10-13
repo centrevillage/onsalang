@@ -413,7 +413,7 @@ impl TargetSettings {
             "strict" | "strict-ftz" => {}
             "relaxed" => {
                 return Err(usage(
-                    "numeric = \"relaxed\" cannot be a target profile; use `@relaxed` per flow (spec §15.5)".into(),
+                    "numeric = \"relaxed\" cannot be a target profile; use `@fp(relaxed)` on a fn or a flow (spec §15.5)".into(),
                 ));
             }
             other => return Err(usage(format!("unknown numeric profile `{other}`"))),

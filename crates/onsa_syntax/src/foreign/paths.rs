@@ -34,7 +34,11 @@ pub(crate) fn type_name(text: &str, t: Token) -> Option<Diagnostic> {
     let name = &text[t.span.start as usize..t.span.end as usize];
     let (_, fix) = TYPE_NAMES.iter().find(|(from, _)| *from == name)?;
     let fix = Fix::replace("write the built-in type name", t.span, *fix);
-    Some(diagnostic(text, RowId::LowercaseType, Hit { span: t.span, fixes: vec![fix], misplaced: false }))
+    Some(diagnostic(
+        text,
+        RowId::LowercaseType,
+        Hit { span: t.span, fixes: vec![fix], misplaced: false, resume: None, note: None },
+    ))
 }
 
 pub(super) fn is_segment(kind: TokenKind) -> bool {
@@ -111,8 +115,12 @@ pub(super) fn angle_brackets(c: &Cursor) -> Option<Hit> {
     if !(after_type || after_name || after_impl) {
         return None;
     }
-    // A `<` that no `>` closes is no list of type parameters (the general E0002).
+    // A `<` that no `>` closes is no list of type parameters (the general
+    // E0002), and neither is one that does not read as one in `[ ]` (R-193).
     let (close_at, edits) = angle_list(c, c.at, "[")?;
+    if !reads_square(c, c.at, after_name || after_impl) {
+        return None;
+    }
     let span = c.file_span(c.span(c.at).start, c.span(close_at).end);
     // What follows the brackets is what follows a type or a list of type
     // parameters; else the brackets are not read so (no candidate).
@@ -145,6 +153,18 @@ fn follows_type(kind: TokenKind) -> bool {
             | Ident
             | KwSelfType
     )
+}
+
+/// Whether the list in angle brackets that opens at the `<` `open` reads as
+/// a list of type parameters (`params`) or of type arguments when its
+/// brackets are written `[ ]` (R-193: `fn b<T q>` and `d<U)>(x)` do not, and
+/// a candidate there would leave an error of the syntax stage, S-236): the
+/// parser reads it ([`crate::parser::reads_as_type_list`]).
+fn reads_square(c: &Cursor, open: usize, params: bool) -> bool {
+    let Some((close, brackets)) = angle_tokens(c.tokens, open) else { return false };
+    let swaps: Vec<(usize, &str)> = brackets.into_iter().map(|(i, to)| (c.full[i] as usize, to)).collect();
+    let run = (c.full[open] as usize, c.full[close] as usize);
+    crate::parser::reads_as_type_list(c.file, c.text, c.all, c.literals, run, &swaps, params)
 }
 
 /// The list in angle brackets that opens at the `<` `open`: the token that
@@ -299,6 +319,10 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
         (close, vec![Edit::insert(c.file, c.span(open).start, "::")])
     } else {
         let first = if row == RowId::TypeArgsAngle { "::[" } else { "[" };
+        // A list that does not read as type arguments in `[ ]` (R-193): the general E0002.
+        if !reads_square(c, open, false) {
+            return None;
+        }
         angle_list(c, open, first)?
     };
     if close == open + 1 {

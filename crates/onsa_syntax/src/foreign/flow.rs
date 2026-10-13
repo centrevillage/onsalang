@@ -159,7 +159,7 @@ pub(crate) fn clocks(cst: &Cst, text: &str, deepest: u32, out: &mut Vec<Diagnost
             crate::groups::nests_too_deep(text, span, f.edits(), added, deepest)
         });
         let fixes = if too_deep { Vec::new() } else { fixes };
-        let d = diagnostic(text, id, Hit { span: cst.span(clock), fixes, misplaced: false });
+        let d = diagnostic(text, id, Hit { span: cst.span(clock), fixes, misplaced: false, resume: None, note: None });
         out.push(if too_deep { d.with_rule(crate::groups::TOO_DEEP_RULE) } else { d });
     }
 }

@@ -211,7 +211,7 @@ impl<'a> Parser<'a> {
     /// Whether the tokens from the `[` at `open` read as a list of type
     /// arguments with two or more elements (a `[…]` that is no index, §4.5):
     /// a trial reading, undone whatever its result. Not inside another trial.
-    pub(super) fn reads_as_type_list(&mut self) -> bool {
+    pub(super) fn type_list_next(&mut self) -> bool {
         if self.trials > 0 {
             return false;
         }
@@ -233,4 +233,65 @@ fn continues_an_expression(kind: TokenKind, gap: Gap) -> bool {
         || !kind.range_readings().is_empty()
         || matches!(kind, KwAs | Dot | Question)
         || (matches!(kind, LParen | LBracket | Bang | Tilde) && gap == Gap::None)
+}
+
+/// Whether the tokens `all[first..=last]` of a file, a list in angle
+/// brackets with its brackets written as `[ ]` (`swaps`: the index in `all`
+/// of each bracket and what it becomes, `paths::angle_tokens`), read as a list
+/// of type parameters (`params`) or of type arguments (R-193): read by the
+/// parser's own grammar (one reading), as `reads_as_expr` reads an
+/// expression. Its diagnostics are not kept.
+pub(crate) fn reads_as_type_list(
+    file: FileId,
+    text: &str,
+    all: &[Token],
+    literals: &Literals,
+    run: (usize, usize),
+    swaps: &[(usize, &str)],
+    params: bool,
+) -> bool {
+    let mut p = trial(file, text, all, literals, run, swaps);
+    p.bump();
+    let read = if params { p.parse_generic_list() } else { p.parse_type_args().map(|_| ()) };
+    read.is_ok() && p.at(TokenKind::Eof) && p.diagnostics.is_empty()
+}
+
+/// Whether the tokens `all[first..=last]` of a file read as one type (the
+/// element of a tuple struct, `tuple_struct`), by the parser's own grammar
+/// as [`reads_as_type_list`] reads a list. Its diagnostics are not kept.
+pub(crate) fn reads_as_type(file: FileId, text: &str, all: &[Token], literals: &Literals, run: (usize, usize)) -> bool {
+    let mut p = trial(file, text, all, literals, run, &[]);
+    p.parse_type().is_ok() && p.at(TokenKind::Eof) && p.diagnostics.is_empty()
+}
+
+/// A parser of the tokens `all[first..=last]` alone, the brackets of
+/// `swaps` written as `[ ]`, newlines not significant.
+fn trial<'a>(
+    file: FileId,
+    text: &'a str,
+    all: &[Token],
+    literals: &Literals,
+    (first, last): (usize, usize),
+    swaps: &[(usize, &str)],
+) -> Parser<'a> {
+    let mut tokens = Vec::new();
+    for (i, t) in all.iter().enumerate().take(last + 1).skip(first) {
+        let bracket = |kind, start: u32, end: u32| Token { kind, span: Span::new(file, start, end) };
+        match swaps.iter().find(|s| s.0 == i).map(|s| s.1) {
+            // `>>` closes two lists, `>=` one before its `=` (the end of the run).
+            Some("]]") => {
+                tokens.push(bracket(TokenKind::RBracket, t.span.start, t.span.start + 1));
+                tokens.push(bracket(TokenKind::RBracket, t.span.start + 1, t.span.end));
+            }
+            Some(s) if s.starts_with(']') => tokens.push(bracket(TokenKind::RBracket, t.span.start, t.span.start + 1)),
+            Some(_) => tokens.push(bracket(TokenKind::LBracket, t.span.start, t.span.end)),
+            None => tokens.push(*t),
+        }
+    }
+    let end = all[last].span.end;
+    tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
+    let literals = literals.within(all[first].span.start, end);
+    let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), literals });
+    p.nl = vec![false];
+    p
 }

@@ -52,8 +52,8 @@ fn documented(kind: TokenKind) -> bool {
 /// `use` or `test`, whose `///` is E0004), a field, a variant, a flow input.
 fn documents(c: &Cursor) -> bool {
     let mut i = c.sig_after(c.at);
-    // Past `pub` (`pub(pkg)`) and the attributes (`@name(..)`).
-    while matches!(c.kind(i), TokenKind::KwPub | TokenKind::At) {
+    // Past `pub` or `priv` and the attributes (`@name(..)`).
+    while matches!(c.kind(i), TokenKind::KwPub | TokenKind::KwPriv | TokenKind::At) {
         if c.kind(i) == TokenKind::At {
             i = c.sig_after(i);
         }

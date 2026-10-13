@@ -263,7 +263,7 @@ impl<'a> Parser<'a> {
                 // written, so a `[…]` with `,` is read as an index (R-196).
                 TokenKind::Lt | TokenKind::LBracket
                     if foreign::type_list_ahead(&self.tokens, &self.lines, self.peek_index(), expr.kind)
-                        && (self.peek_kind() == TokenKind::Lt || (!self.in_type() && self.reads_as_type_list())) =>
+                        && (self.peek_kind() == TokenKind::Lt || (!self.in_type() && self.type_list_next())) =>
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));
                 }

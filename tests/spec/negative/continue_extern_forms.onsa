@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§14.2"]
+
+// `extern` followed by a string and a keyword of an item (`extern "C" fn h`, the Rust way to
+// define a function with the ABI of C), `extern fn h`, and the old `export "C" fn h` are E0002
+// without a candidate (§18.1, S-464): an `extern` head is `extern "C" lib "…" { … }` (§14.1), and
+// to put a function in the interface of C is the business of the manifest (§14.2), which an agent
+// does not edit, so there is nothing to write instead. The keyword and the string are one error
+// (the range starts at the keyword, so the main position is the keyword), and the head is read
+// on from the keyword of the item (a `pub` before it stays a visibility): the function is a name
+// of the module, the callers get no E0302, and a real error of a call is reported. The unit has a
+// syntax error, so its body is not checked. One error in each unit. (The rows `extern_fn` and
+// `export_c` of docs/foreign-forms.toml give these errors a note; the code is E0002 either way.)
+
+extern "C" fn c_abi(a: I32) -> I32 {                //~ E0002 @1
+  a
+}
+
+pub extern "C" fn c_abi_pub() -> I32 {              //~ E0002 @5
+  1
+}
+
+extern fn without_abi(a: I32, b: I32) -> I32 {      //~ E0002 @1
+  a + b
+}
+
+extern fn without_body(a: I32) -> I32               //~ E0002 @1
+
+export "C" fn old_export(a: I32) -> I32 {           //~ E0002 @1
+  a
+}
+
+pub extern "C" fn body_not_checked() -> I32 {       //~ E0002 @5
+  zz
+}
+
+// `unsafe extern "C" fn` has two errors that are two runs: `unsafe` (S-459), and, once it is
+// removed, `extern "C"`. The unit reports the first one; the function is a name of the module.
+unsafe extern "C" fn unsafe_c() -> I32 {            //~ E0002 @1
+  2
+}
+
+// `const` followed by a word that is not a keyword of an item is not read on: E0002, and the
+// function is not a name of the module (its user gets E0302).
+const unsafe fn const_unsafe() -> I32 {             //~ E0002
+  3
+}
+
+fn calls() -> I32 {
+  c_abi(1) + c_abi_pub() + without_abi(1, 2) + without_body(3) + old_export(4)
+}
+
+fn calls_more() -> I32 {
+  body_not_checked() + unsafe_c()
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { c_abi(x) + old_export(x) }
+  if c { f.(1) } else { without_abi(c_abi_pub(), unsafe_c()) }
+}
+
+fn too_many_arguments() -> I32 {
+  c_abi(1, 2)                                       //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  old_export(true)                                  //~ E0401
+}
+
+fn uses_const_unsafe() -> I32 {
+  const_unsafe()                                    //~ E0302
+}
+
+fn own_error() -> I32 {
+  c_abi(1) + zz                                     //~ E0302 @14
+}

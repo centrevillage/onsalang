@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.6", "§18.1"]
+// fixes = 1
+
+// E0020 for `const fn` (spec §6.6, §18.1, S-464; the row `const_fn` of docs/foreign-forms.toml): a function does
+// not need a mark to be called from the initializer of a `const` (a function whose effect row is empty or `{Alloc}` can
+// be, §6.6), so the candidate is `fn`, with the `const` taken out. The main position is the `const`. The form is
+// the same after a visibility word, with type parameters, and as a member of an `impl`. One error in each
+// declaration unit (P-01).
+
+const fn plain() -> I32 {                           //~ E0020
+  1
+}
+
+pub const fn public_one() -> I32 {                  //~ E0020
+  2
+}
+
+priv const fn private_one() -> I32 {                //~ E0020
+  3
+}
+
+pub const fn generic[T](x: T) -> T {                //~ E0020
+  x
+}
+
+pub struct Target {
+  v: I32,
+}
+
+impl Target {
+  const fn get(self) -> I32 {                       //~ E0020
+    self.v
+  }
+
+  pub const fn pub_get(self) -> I32 {               //~ E0020
+    self.v
+  }
+
+  pub fn fine(self) -> I32 {
+    self.v
+  }
+}
+
+pub fn fine() -> I32 {
+  5
+}

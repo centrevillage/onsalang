@@ -68,16 +68,19 @@ fn the_rows_have_distinct_names_and_codes_of_their_kind() {
 fn every_row_of_the_syntax_stage_has_a_matcher() {
     // The registry of the matchers (R-206): each row found where the parser
     // fails is named by a matcher, each matcher names rows of that kind only,
-    // and a matcher lists a row once.
-    use crate::foreign::{Detect, MATCHERS};
-    for r in ROWS {
-        let named = MATCHERS.iter().any(|m| m.rows.contains(&r.id));
-        assert_eq!(named, r.detect == Detect::Syntax, "{}", r.name);
-    }
-    for m in MATCHERS {
-        for (i, id) in m.rows.iter().enumerate() {
-            assert!(!m.rows[..i].contains(id), "{id:?} twice");
-            assert_eq!(crate::foreign::row(*id).detect, Detect::Syntax, "{id:?}");
+    // and a matcher lists a row once. The same for the forms the parser
+    // reads whole (`READS`, `Detect::Read`).
+    use crate::foreign::{Detect, MATCHERS, READS};
+    for (registry, detect) in [(MATCHERS, Detect::Syntax), (READS, Detect::Read)] {
+        for r in ROWS {
+            let named = registry.iter().any(|m| m.rows.contains(&r.id));
+            assert_eq!(named, r.detect == detect, "{}", r.name);
+        }
+        for m in registry {
+            for (i, id) in m.rows.iter().enumerate() {
+                assert!(!m.rows[..i].contains(id), "{id:?} twice");
+                assert_eq!(crate::foreign::row(*id).detect, detect, "{id:?}");
+            }
         }
     }
 }
@@ -309,11 +312,141 @@ fn references_and_mut() {
     e0002(&body("  let y = &mut x"));
 }
 
+/// A derive whose candidate leaves the kinds `Copy` and `Dup` out says why in
+/// a note after the row's rule (the rule of `copy_bound`, S-463); one that
+/// leaves nothing out has the row's rule alone.
+#[test]
+fn a_derive_notes_the_kinds_it_leaves_out() {
+    let kinds = crate::foreign::row(RowId::CopyBound).rule;
+    for (src, left_out) in [
+        ("#[derive(Copy, Eq)]\npub struct P { a: I32 }\n", true),
+        ("#[derive(Dup)]\npub enum E { A }\n", true),
+        ("#[derive(Eq)]\npub struct P { a: I32 }\n", false),
+    ] {
+        let p = parse(src);
+        let [d] = p.diagnostics.as_slice() else { panic!("{src}: {:?}", p.diagnostics) };
+        assert_eq!((d.code, d.fixes.len()), (Code::E0020, 1), "{src}");
+        let rules: Vec<&str> = d.notes.iter().map(|n| n.message.as_str()).collect();
+        let mut want = vec![crate::foreign::row(RowId::HashAttribute).rule];
+        want.extend(left_out.then_some(kinds));
+        assert_eq!(rules, want, "{src}");
+    }
+}
+
+/// The place of a `#[…]` in the head of a declaration is the declaration
+/// the parser read (§6.5, S-435): past the other attributes, both forms, and
+/// a visibility of another language read on, the derive goes to the head of
+/// the struct, and the attribute of Onsa is written with `@`.
+#[test]
+fn a_hash_attribute_goes_to_the_declaration_the_parser_read() {
+    for (src, want) in [
+        ("#[repr(C)]\npub(crate) struct P { x: I32 }\n", "@repr(c)\npub(crate) struct P { x: I32 }\n"),
+        ("#[derive(Eq)] pub(crate) struct P { x: I32 }\n", "pub(crate) struct P: Eq { x: I32 }\n"),
+        (
+            "#[derive(Eq)]\n#[derive(PartialEq)]\npub struct P { x: I32 }\n",
+            "#[derive(PartialEq)]\npub struct P: Eq { x: I32 }\n",
+        ),
+        ("#[derive(Eq)]\n#[repr(C)]\npub struct P { x: I32 }\n", "#[repr(C)]\npub struct P: Eq { x: I32 }\n"),
+        ("#[derive(Eq)] @repr(c) pub struct P { x: I32 }\n", "@repr(c) pub struct P: Eq { x: I32 }\n"),
+        ("@derive(Eq) pub(pkg) struct P { x: I32 }\n", "pub(pkg) struct P: Eq { x: I32 }\n"),
+        ("@derive(Eq)\n@repr(c)\nstruct P { x: I32 }\n", "@repr(c)\nstruct P: Eq { x: I32 }\n"),
+    ] {
+        let p = parse(src);
+        let d = p.diagnostics.iter().min_by_key(|d| d.span.start).unwrap_or_else(|| panic!("{src}"));
+        assert_eq!((d.code, d.span.start), (Code::E0020, 0), "{src}: {:?}", p.diagnostics);
+        let fix = d.fixes.first().unwrap_or_else(|| panic!("{src}: {d:?}"));
+        assert_eq!(onsa_diag::apply_text(src, &fix.edits().iter().collect::<Vec<_>>()).unwrap(), want, "{src}");
+    }
+}
+
+/// A `#[…]` with no candidate says why: the place takes no Onsa form of it
+/// (S-483), or the form as written cannot be rewritten (its names or its
+/// brackets do not read, one not closed on its line, §18.1).
+#[test]
+fn a_hash_attribute_with_no_candidate_says_why() {
+    let no_form = crate::foreign::row(RowId::HashAttributeNoCandidate).message;
+    let unfixable = crate::foreign::row(RowId::HashAttributeUnfixable).message;
+    for (src, message) in [
+        ("#[derive(Eq)]\npub fn h() -> I32 { 1 }\n", no_form),
+        ("#[inline]\npub fn h() -> I32 { 1 }\n", no_form),
+        ("#[repr(C)]\npub fn h() -> I32 { 1 }\n", no_form),
+        ("#[inline]\nfoo bar\n", no_form),
+        ("#[derive(Eq Ord)]\npub struct P { x: I32 }\n", unfixable),
+        ("#[derive(Eq)]\npub struct P: { x: I32 }\n", unfixable),
+        ("#[repr(\nC)]\npub struct P { x: I32 }\n", unfixable),
+        ("#[inline) fn h() -> I32 { 1 }\n", unfixable),
+    ] {
+        let p = parse(src);
+        let d = p.diagnostics.iter().min_by_key(|d| d.span.start).unwrap_or_else(|| panic!("{src}"));
+        assert_eq!((d.code, d.span.start, d.message.as_str()), (Code::E0002, 0, message), "{src}");
+        assert!(d.fixes.is_empty(), "{src}: {d:?}");
+    }
+    // Before the `}` of a list or the end of the file, no declaration comes:
+    // the one error is the attribute's (the head is not read on to the `}`).
+    for src in ["pub struct P { x: I32 }\nimpl P {\n  fn a(self) -> I32 { 1 }\n  #[inline]\n}\n", "#[inline]\n"] {
+        assert_eq!(messages(src), [no_form], "{src}");
+    }
+}
+
+/// A bracket closes on its line only with a closer of its kind (§18.1): a
+/// form closed by another kind is not read on after, at a `pub(…)`, a `#[…]`
+/// and an attribute of Onsa alike.
+#[test]
+fn a_bracket_closed_by_another_kind_does_not_close() {
+    for src in
+        ["pub(crate] fn h() -> I32 { 1 }\n", "pub(crate} fn h() -> I32 { 1 }\n", "#[inline) fn h() -> I32 { 1 }\n"]
+    {
+        let p = parse(src);
+        assert!(p.diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}: {:?}", p.diagnostics);
+        assert!(p.ast.root.is_empty(), "{src}: read on");
+    }
+    let src = "@fp(relaxed, 1 +] fn h() -> I32 { 1 }\n";
+    assert!(parse(src).ast.root.is_empty(), "{src}: read on");
+    let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "(a] b").tokens).0;
+    assert_eq!(crate::scan::closing(&tokens, 0), None);
+    // At a token that opens nothing, none (no overflow, no failure).
+    assert_eq!(crate::scan::closing(&tokens, 1), None);
+    assert_eq!(crate::scan::closing(&tokens, 2), None);
+}
+
+/// The traits a head has end with its list (§6.4): a line break after a
+/// name, or any token that is no part of the list; the candidate of a derive
+/// edits that head only.
+#[test]
+fn the_derive_adds_after_the_list_of_its_head_only() {
+    for (src, want) in [
+        ("#[derive(Eq)]\nstruct P: PartialEq\nfn f() {}\n", "struct P: PartialEq + Eq\nfn f() {}\n"),
+        ("#[derive(Eq)]\nstruct P: PartialEq;\nfn f() {}\n", "struct P: PartialEq + Eq;\nfn f() {}\n"),
+        (
+            "#[derive(Eq)]\npub struct P: PartialEq +\n  Ord { x: I32 }\n",
+            "pub struct P: PartialEq +\n  Ord + Eq { x: I32 }\n",
+        ),
+    ] {
+        assert_eq!(fixed(src), want, "{src}");
+    }
+}
+
+/// The candidate of a tuple struct of one element (S-39): one `,` after the
+/// field, one blank before the `{`, the line break of the file, and the
+/// field `priv` but in a `priv struct` (§15.1, S-494).
+#[test]
+fn the_candidate_of_a_tuple_struct_writes_one_priv_field() {
+    e0020("pub struct Hz(F32,)\n", "pub struct Hz {\n  priv value: F32,\n}\n");
+    e0020("pub struct Hz (F32)\n", "pub struct Hz {\n  priv value: F32,\n}\n");
+    e0020("pub struct Hz: Eq ( F32 , )\n", "pub struct Hz: Eq {\n  priv value: F32,\n}\n");
+    e0020("struct Gain(F32)\n", "struct Gain {\n  priv value: F32,\n}\n");
+    e0020("priv struct Level(I32)\n", "priv struct Level {\n  value: I32,\n}\n");
+    e0020("pub struct Hz(F32)\r\nfn f() {}\r\n", "pub struct Hz {\r\n  priv value: F32,\r\n}\r\nfn f() {}\r\n");
+}
+
 #[test]
 fn keywords_and_marks() {
     e0020(&body("  loop {\n    break\n  }"), &body("  while true {\n    break\n  }"));
     e0020("proc f(x: Sig[F32]) -> Sig[F32] { x }\n", "flow f(x: Sig[F32]) -> Sig[F32] { x }\n");
-    e0020("#[inline]\nfn f() { }\n", "@inline\nfn f() { }\n");
+    // An attribute that the table of the attributes does not take (§6.5): no
+    // candidate, which would leave the E0005 (S-483).
+    e0002("#[inline]\nfn f() { }\n");
+    e0020("#[repr(C)]\nstruct S { }\n", "@repr(c)\nstruct S { }\n");
     // `#[derive(..)]`: the traits at the head (the syntax of `: Eq` is W3-08's).
     assert_eq!(codes("#[derive(Eq, Ord)]\npub struct S { }\n"), [Code::E0020]);
     assert_eq!(fixed("#[derive(Eq, Ord)]\npub struct S { }\n"), "pub struct S: Eq + Ord { }\n");
@@ -400,7 +533,6 @@ fn block_comments() {
     e0020("enum E {\n  /** d */\n  A,\n}\n", "enum E {\n  /// d\n  A,\n}\n");
     // `//` before `use` and `test`, past `pub` and attributes (their `///` is E0004).
     e0020("/** d */\npub use std.math\n", "// d\npub use std.math\n");
-    e0020("/** d */\n@x\nuse std.math\n", "// d\n@x\nuse std.math\n");
     e0020("/** d */\n@fp(relaxed)\npub fn f() { }\n", "/// d\n@fp(relaxed)\npub fn f() { }\n");
     e0020("/*! Module. */\nfn f() { }\n", "//! Module.\nfn f() { }\n");
     assert_eq!(fixed_by("/*! Module. */\nfn f() { }\n", 1), "/// Module.\nfn f() { }\n");

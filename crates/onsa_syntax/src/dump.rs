@@ -69,8 +69,8 @@ impl Dumper<'_> {
 
     fn vis(&mut self, v: Vis) {
         match v {
-            Vis::Private => {}
-            Vis::Pkg => self.out.push_str("pub(pkg) "),
+            Vis::Default => {}
+            Vis::Priv => self.out.push_str("priv "),
             Vis::Pub => self.out.push_str("pub "),
         }
     }
@@ -92,6 +92,19 @@ impl Dumper<'_> {
         self.vis(item.vis);
         self.item_kind(&item.kind);
         self.out.push(')');
+    }
+
+    /// `: A + B` (§6.4); `: ?` when the list is not known (S-460).
+    fn derives(&mut self, d: &Derives) {
+        match d {
+            Derives::Unknown => self.out.push_str(": ?"),
+            Derives::Listed(ps) => {
+                for (i, p) in ps.iter().enumerate() {
+                    self.out.push_str(if i == 0 { ": " } else { " + " });
+                    self.path(p);
+                }
+            }
+        }
     }
 
     fn attr(&mut self, a: &Attr) {
@@ -129,27 +142,25 @@ impl Dumper<'_> {
             ItemKind::Struct(s) => {
                 let _ = write!(self.out, "struct {}", s.name.name);
                 self.generics(&s.generics);
-                match &s.kind {
-                    StructKind::Named(fields) => {
-                        for f in fields {
-                            self.nested(|d| {
-                                d.doc(&f.doc);
-                                d.vis(f.vis);
-                                let _ = write!(d.out, "{}: ", f.name.name);
-                                d.ty(f.ty);
-                            });
-                        }
-                    }
-                    StructKind::Tuple(t) => {
-                        self.out.push('(');
-                        self.ty(*t);
-                        self.out.push(')');
-                    }
+                self.derives(&s.derives);
+                match s.repr {
+                    Repr::Onsa => {}
+                    Repr::C => self.out.push_str(" repr(c)"),
+                    Repr::Unknown => self.out.push_str(" repr(?)"),
+                }
+                for f in &s.fields {
+                    self.nested(|d| {
+                        d.doc(&f.doc);
+                        d.vis(f.vis);
+                        let _ = write!(d.out, "{}: ", f.name.name);
+                        d.ty(f.ty);
+                    });
                 }
             }
             ItemKind::Enum(e) => {
                 let _ = write!(self.out, "enum {}", e.name.name);
                 self.generics(&e.generics);
+                self.derives(&e.derives);
                 for v in &e.variants {
                     self.nested(|d| {
                         d.doc(&v.doc);
@@ -484,8 +495,12 @@ impl Dumper<'_> {
 
     fn stmt(&mut self, id: StmtId) {
         match &self.ast.stmt(id).kind {
-            StmtKind::Let { pat, ty, init } => {
+            StmtKind::Let { attrs, pat, ty, init } => {
                 self.out.push_str("(let ");
+                for a in attrs {
+                    self.attr(a);
+                    self.out.push(' ');
+                }
                 self.pat(*pat);
                 if let Some(t) = ty {
                     self.out.push_str(": ");

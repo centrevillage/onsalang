@@ -289,7 +289,6 @@ pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId, visiting: &mut HashSet<Def
                     Fields::Named(fs) => {
                         fs.iter().any(|f| needs_alloc_drop(a, crate::layout::subst(a, f.ty, args), visiting))
                     }
-                    Fields::Tuple(x) => needs_alloc_drop(a, crate::layout::subst(a, *x, args), visiting),
                     Fields::Opaque => false,
                 },
                 DefKind::Enum(e) => e

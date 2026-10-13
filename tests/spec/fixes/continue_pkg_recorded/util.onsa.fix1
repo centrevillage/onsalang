@@ -1,0 +1,26 @@
+// The declarations of this module have the modifiers written twice or in the wrong order. Each
+// head is one error, with a candidate (§18.1, S-464). The modifiers that were written are
+// recorded and the declaration is read on from the end of the run, so the declaration is a name
+// of the module with the visibility and the `rt` that were written: `pub` here, so that the other
+// module can bring the names in (and a `pub` that the declaration has stays a `pub`).
+
+pub fn twice_pub(a: I32) -> I32 {               //~ E0002
+  a
+}
+
+pub rt fn swapped(x: I32) -> I32 {                  //~ E0002
+  x + 1
+}
+
+pub struct Pt {                                 //~ E0002
+  x: I32,
+}
+
+pub rt fn twice_pub_rt(x: I32) -> I32 {         //~ E0002
+  x
+}
+
+// A name of the module is a name in its own module too.
+fn local(p: Pt) -> I32 {
+  twice_pub(p.x) + swapped(1) + twice_pub_rt(2)
+}

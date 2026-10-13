@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.2", "§4.4"]
+
+// The three visibilities of §15.1 in the places a declaration can have one: `pub` (outside the package), none
+// (inside the package), `priv` (inside the module). They go in front of an item, the members of an `impl`, and
+// the fields of a struct (a field can have `priv` of its own, and takes the visibility of its struct otherwise).
+// Here is the syntax of them and that a name is found where it is visible; what each one lets another module
+// see (E0303) is in packages/visibility and is checked with W4-03. The words come before `rt` (`pub rt fn`).
+
+pub fn public_fn() -> I32 {
+  1
+}
+
+fn package_fn() -> I32 {
+  2
+}
+
+priv fn module_fn() -> I32 {
+  3
+}
+
+pub rt fn public_rt_fn() -> I32 {
+  4
+}
+
+priv rt fn module_rt_fn() -> I32 {
+  5
+}
+
+pub struct PublicStruct {
+  a: I32,
+  priv b: I32,
+}
+
+struct PackageStruct {
+  a: I32,
+  priv b: I32,
+}
+
+priv struct ModuleStruct {
+  a: I32,
+  b: I32,
+}
+
+pub enum PublicEnum {
+  A,
+  B(I32),
+}
+
+enum PackageEnum {
+  A,
+  B(I32),
+}
+
+priv enum ModuleEnum {
+  A,
+  B(I32),
+}
+
+pub const PUBLIC_CONST: I32 = 1
+
+const PACKAGE_CONST: I32 = 2
+
+priv const MODULE_CONST: I32 = 3
+
+pub type PublicSample = F32
+
+type PackageSample = F32
+
+priv type ModuleSample = F32
+
+pub flow public_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+flow package_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+priv flow module_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub use std.math.{sqrt}
+
+use std.math.{sin}
+
+impl PublicStruct {
+  pub fn make() -> PublicStruct {
+    PublicStruct { a: 1, b: 2 }
+  }
+
+  fn package_member(self) -> I32 {
+    self.a
+  }
+
+  priv fn module_member(self) -> I32 {
+    self.b
+  }
+
+  pub rt fn public_rt_member(self) -> I32 {
+    self.a
+  }
+
+  priv rt fn module_rt_member(self) -> I32 {
+    self.b
+  }
+
+  pub const LIMIT: I32 = 1
+
+  const PACKAGE_LIMIT: I32 = 2
+
+  priv const MODULE_LIMIT: I32 = 3
+}
+
+pub fn call_all() -> I32 {
+  package_fn() + module_fn() + PACKAGE_CONST + MODULE_CONST
+}
+
+pub fn call_members(p: PublicStruct) -> I32 {
+  p.package_member() + p.module_member() + PublicStruct.LIMIT
+}
+
+priv fn use_types(a: PackageStruct, b: ModuleStruct, c: PackageEnum, d: ModuleEnum) -> I32 {
+  a.a + b.a
+}

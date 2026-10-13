@@ -1,0 +1,37 @@
+// The declarations of this module have heads with an error, and none of them has a `pub` that was
+// written as a visibility. Each head is one error, and the declaration is read on from the end of
+// the form (§18.1, S-435, S-459, S-464): it is a name of the module, with the visibility that
+// is the default (unspecified, the package).
+
+pub(crate) fn from_crate(a: I32) -> I32 {           //~ E0020
+  a
+}
+
+pub (pkg) struct Pt {                               //~ E0020
+  x: I32,
+}
+
+pub(crate) flow lp(x: F32 at sample) -> F32 at sample {   //~ E0020
+  x
+}
+
+const fn constant(a: I32) -> I32 {                  //~ E0020
+  a + a
+}
+
+export fn exported(a: I32) -> I32 {                 //~ E0002 @1
+  a
+}
+
+priv pub fn both(a: I32) -> I32 {                   //~ E0002
+  a
+}
+
+pub(super) fn narrower() -> I32 {                   //~ E0002
+  1
+}
+
+// A name of the module is a name in its own module too.
+fn local(p: Pt) -> I32 {
+  from_crate(p.x) + constant(2) + exported(3) + both(4) + narrower()
+}

@@ -84,7 +84,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_generic_list(&mut self) -> PResult<()> {
+    pub(super) fn parse_generic_list(&mut self) -> PResult<()> {
         let close = TokenKind::RBracket;
         while !self.at(close) {
             let m = self.start(NodeKind::TypeParam)?;
@@ -133,7 +133,10 @@ impl<'a> Parser<'a> {
                 let docs = if inputs { p.element_docs() } else { None };
                 let param = p.start(NodeKind::Param)?;
                 p.attach_docs(docs);
-                p.parse_attrs()?;
+                let attrs = p.parse_attrs(false)?;
+                // `@param` goes on an input of a flow (§6.5, §11.7).
+                let place = if inputs { Place::FlowInput } else { Place::Other("a parameter of a function") };
+                p.check_attrs(&attrs, place, None);
                 p.parse_mode();
                 let t = p.peek();
                 let is_self = match t.kind {

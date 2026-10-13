@@ -136,10 +136,6 @@ pub fn layout_of_def(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Layout> {
                 let tys: Vec<TyId> = fs.iter().map(|f| subst(a, f.ty, args)).collect();
                 record(a, fs.iter().map(|f| f.name.clone()), &tys)
             }
-            Fields::Tuple(t) => {
-                let l = layout_of(a, subst(a, *t, args))?;
-                Some(Layout { size: l.size, align: l.align, fields: vec![("0".into(), 0)] })
-            }
             Fields::Opaque => None,
         },
         DefKind::Enum(e) => {

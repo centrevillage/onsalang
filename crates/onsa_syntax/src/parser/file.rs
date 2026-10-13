@@ -90,6 +90,17 @@ impl<'a> Parser<'a> {
             if line && t.kind == TokenKind::Newline && braces.len() <= base {
                 break;
             }
+            // SPEC-GAP(S-487): a line that starts with words before a head
+            // (`export "C" fn h`, S-459) starts a declaration too, once the
+            // brackets of the unit are closed; the head is read on after
+            // the words.
+            if t.span.start > unit_start
+                && braces.len() <= base
+                && self.starts_a_line(i)
+                && self.words_before_head_at(i).is_some()
+            {
+                break;
+            }
             if t.span.start > unit_start && self.starts_a_line(i) && is_item_start(t.kind) {
                 if braces.len() <= base {
                     break;
@@ -218,7 +229,7 @@ impl<'a> Parser<'a> {
     fn unclosed_brace(&mut self, b: usize, unit_start: u32) {
         let brace = self.tokens[b];
         let first = self.tokens.partition_point(|t| t.span.start < unit_start);
-        let keyword = (first..b).find(|&k| DECLARATIONS.iter().any(|(kind, _, _)| *kind == self.tokens[k].kind));
+        let keyword = (first..b).find(|&k| is_declaration_keyword(self.tokens[k].kind));
         // An `impl` and an `extern` block have no name of their own.
         let named = keyword.filter(|&k| !matches!(self.tokens[k].kind, TokenKind::KwImpl | TokenKind::KwExtern));
         let name = named.and_then(|k| (k + 1..b).find(|&n| self.tokens[n].kind == TokenKind::Ident));
@@ -246,12 +257,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// A token that starts an item: a declaration keyword, `pub`, an attribute, a doc comment.
+/// A token that starts an item: what starts its head ([`starts_heading`]) or a doc comment.
 fn is_item_start(kind: TokenKind) -> bool {
-    DECLARATIONS.iter().any(|(k, _, _)| *k == kind)
-        || matches!(kind, TokenKind::KwPub | TokenKind::At)
-        || kind.is_doc()
-        // An attribute of another language, `#[x]` (the table of those
-        // forms), starts an item as `@` does (§18.1, S-321).
-        || kind == TokenKind::Hash
+    starts_heading(kind) || kind.is_doc()
 }

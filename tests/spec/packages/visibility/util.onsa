@@ -1,6 +1,16 @@
 pub fn shown() -> I32 { 1 }
-pub(pkg) fn in_package() -> I32 { 2 }
-fn hidden() -> I32 { 3 }
+fn in_package() -> I32 { 2 }
+priv fn hidden() -> I32 { 3 }
+const SHARED: I32 = 5
+priv const SECRET: I32 = 4
+priv struct Inner {
+  x: I32,
+}
+priv enum Mode {
+  A,
+  B,
+}
+priv type Sample = F32
 pub struct Point {
   x: F32,
 }

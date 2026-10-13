@@ -6,8 +6,7 @@
 use std.fs.{Fs, Path, IoError}
 use std.text.{count_lines}
 
-@derive(PartialEq, Eq, Show)
-pub enum ConfigError {
+pub enum ConfigError: PartialEq + Eq + Show {
   Io(IoError),
   Empty,
 }

@@ -1,17 +1,45 @@
 // onsa.toml
 // [test]
-// spec = ["§12.4", "§18.1"]
+// spec = ["§12.4", "§6.5", "§18.1"]
 // fixes = 1
 
-// E0020 for the old attribute spelling `@bulk` on a `let` (§12.4): `@mem(bulk)`, on the line of
-// the `let`.
+// E0020 for the old attribute spelling `@bulk` on a `let` (§12.4, S-43): `@mem(bulk)`, on the line of
+// the `let`. `@mem(fast)` is the default storage written out, so it is E0020 too (S-43): the candidate takes
+// the attribute out. The attribute of a statement is on the line of the `let` and takes effect only for it.
+//
+// `@mem(bulk)` is the right form, and its meaning (the place of the state in the bulk area, E0819 and E0820)
+// is W9-06. Until then this version stops it with E0200 (spec §18.1: what the spec has and the compiler does not
+// handle yet is E0200, never a silent wrong result); E0200 is reported in a later stage than the syntax, so the
+// candidate of `@bulk` leaves no error of the syntax stage (§18.1) and the flow `echo` has E0200 once it is
+// applied. W9-06 takes the E0200 markers of this file out.
 
 pub flow echo(x: F32 at sample) -> F32 at sample {
   @mem(bulk) let d = delay~(x, 4800)                     //~ E0020
   d
 }
 
-pub flow fine(x: F32 at sample) -> F32 at sample {
-  @mem(bulk) let d = delay~(x, 4800)
+pub flow echo_vdelay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  @mem(bulk) let line = vdelay~(x, d, 4800)              //~ E0020
+  line
+}
+
+pub flow fast_only(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 64)                  //~ E0020
   d
+}
+
+pub flow fast_with_others(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let d = delay~(a, 64)                  //~ E0020
+  a + d
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)                //~ E0200
+  d
+}
+
+pub flow fine_vdelay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  @mem(bulk) let line = vdelay~(x, d, 4800)         //~ E0200
+  line
 }

@@ -105,11 +105,13 @@ impl<'a> Checker<'a> {
             (Ty::Named(d, args), _) => {
                 let def = self.a.def(*d);
                 let derives = match &def.kind {
-                    DefKind::Struct(s) => s.derives.clone(),
-                    DefKind::Enum(e) => e.derives.clone(),
-                    _ => Vec::new(),
+                    DefKind::Struct(s) => s.derives.as_deref(),
+                    DefKind::Enum(e) => e.derives.as_deref(),
+                    _ => Some(&[][..]),
                 };
-                let derived = |d: crate::def::Derive| derives.contains(&d);
+                // A list that is not known derives every trait (§18.1, S-460):
+                // the uses that rely on it get no diagnostic.
+                let derived = |d: crate::def::Derive| derives.is_none_or(|ds| ds.contains(&d));
                 match b {
                     Bound::Copy => self.a.kind_of(t) == Some(Kind::Copy),
                     Bound::Dup => matches!(self.a.kind_of(t), Some(Kind::Copy | Kind::Shared)),
@@ -118,6 +120,8 @@ impl<'a> Checker<'a> {
                     Bound::PartialOrd => derived(crate::def::Derive::PartialOrd) || derived(crate::def::Derive::Ord),
                     Bound::Ord => derived(crate::def::Derive::Ord),
                     Bound::Default => derived(crate::def::Derive::Default),
+                    // `Hash` and `Show` are not derived in this version (W5-06).
+                    Bound::Hash | Bound::Show => derives.is_none(),
                     _ => {
                         let _ = args;
                         false

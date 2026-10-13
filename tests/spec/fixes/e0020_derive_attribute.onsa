@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a derive written as an attribute, in the form of the old version (`@derive(…)`) and of Rust
+// (`#[derive(…)]`), on the line of the declaration (spec §6.4, §6.5, S-34, S-463; the rows `derive_attribute` and
+// `hash_attribute` of docs/foreign-forms.toml). The candidate takes the attribute out and writes the names at
+// the head of the declaration, `: name + name`, after the name and the type parameters: the names are copied
+// as they are, and only the kinds `Copy` and `Dup` (§4.6) are left out. When every name is left out, the
+// attribute goes and no `:` is added. When the head has a `:` already, the names come after its list with a `+`,
+// and a name that is spelled in the list already is not added again. The forms with the attribute on a line of its own
+// are in e0020_derive_attribute_lines.onsa. The main position is the attribute (`@` or `#`). One error in
+// each declaration unit (P-01).
+
+@derive(PartialEq, Eq) pub struct Plain {           //~ E0020
+  id: U32,
+}
+
+#[derive(PartialEq, Eq)] pub struct HashForm {      //~ E0020
+  id: U32,
+}
+
+@derive(Copy, PartialEq) pub struct KindDropped {   //~ E0020
+  id: U32,
+}
+
+#[derive(Dup, Eq, PartialEq)] pub struct KindFirst { //~ E0020
+  id: U32,
+}
+
+@derive(Copy) pub struct OnlyKind {                 //~ E0020
+  id: U32,
+}
+
+#[derive(Dup, Copy)] pub struct OnlyKinds {         //~ E0020
+  id: U32,
+}
+
+@derive(PartialEq) pub enum Mode {                  //~ E0020
+  Off,
+  On,
+}
+
+#[derive(PartialEq, Eq)] pub enum Phase {           //~ E0020
+  Rise,
+  Fall,
+}
+
+@derive(PartialEq) pub struct Pair[T] {             //~ E0020
+  a: T,
+  b: T,
+}
+
+#[derive(PartialEq)] pub enum Slot[T] {             //~ E0020
+  Empty,
+  Full(T),
+}
+
+@derive(PartialEq, Eq) priv struct Hidden {         //~ E0020
+  id: U32,
+}
+
+#[derive(PartialEq)] struct NoVisibility {          //~ E0020
+  id: U32,
+}
+
+@derive(PartialEq, Eq) pub struct Already: PartialEq { //~ E0020
+  id: U32,
+}
+
+#[derive(Copy, Eq)] pub struct AlreadyHash: PartialEq { //~ E0020
+  id: U32,
+}
+
+@derive(Eq, PartialEq) pub struct SameNames: Eq + PartialEq { //~ E0020
+  id: U32,
+}
+
+pub struct Fine: PartialEq + Eq {
+  id: U32,
+}

@@ -5,7 +5,10 @@
 use super::assign::{binary_minus_prefix_minus, compound_assignment, increment};
 use super::calls::callee_expression;
 use super::comments::block_comment;
-use super::decls::{arm_return, endless_loop, hash_attribute, let_mut, proc, pub_crate};
+use super::decls::{
+    arm_return, const_fn, endless_loop, export_c, extern_fn, field_visibility, hash_attribute, let_mut, old_attribute,
+    priv_use, proc, tuple_struct, visibility_form,
+};
 use super::faust::{faust_bit_not, faust_compose, faust_delay, faust_feedback};
 use super::literals::{foreign_literal, leading_point, string_delimiter};
 use super::modes::{mut_self, reference};
@@ -23,11 +26,26 @@ const FLOAT_LITERAL_RULE: &str = "a float literal with a point has digits on bot
 
 const SPACE_BEFORE_OPEN_RULE: &str = "a postfix `(` or `[` that opens a list (the arguments of a call, an index, type arguments, the parameters of a declaration, a pattern, an attribute) is written right after the token before it, with no blank or line break between them (`f(x)`, `xs[0]`, §2.5)";
 
+/// The note of the C ABI written at the head of a function (S-464).
+const EXPORTED_RULE: &str = "a function that C calls is chosen by the `[export]` of the manifest (§14.2), and a function of C that Onsa calls is declared in `extern \"C\" lib \"…\" { … }` (§14.1); the head of a function has neither";
+
 const BLOCK_COMMENT_RULE: &str =
     "comments are line comments `//`, to the end of the line; `///` documents the next declaration (§2.1)";
 
 /// The rule of the forms of type arguments in an expression (the note, §4.5).
 const TYPE_ARGS_RULE: &str = "a type argument in an expression is written after the name, `name::[T]` (`id::[U8](250)`); a `[` alone is an index (§4.5)";
+
+/// The rule of the attributes of other languages (§6.4, §6.5).
+const HASH_ATTRIBUTE_RULE: &str = "an attribute is written `@name(...)`, and the attributes are `@repr`, `@fp`, `@param` and `@mem`; the traits derived from a type are written at the head of its declaration, `: Trait + Trait` (§6.4, §6.5)";
+
+/// The rule of the tuple structs (§4.4).
+const TUPLE_STRUCT_RULE: &str = "there are no tuple structs (newtypes); a struct has named fields, and a value told apart by its type is a struct with one field, made by a function (`Q.new(x)`, §4.4)";
+
+/// The rule of the visibility (§15.1).
+const VISIBILITY_RULE: &str = "the visibility is `pub` (out of the package), no word (within the package) or `priv` (within the module); there is no other form (§15.1)";
+
+/// The rule of the visibility of a field (§15.1).
+const FIELD_RULE: &str = "a field inherits the visibility of its struct; only `priv` is written on a field, to keep it within the module (§15.1)";
 
 pub static ROWS: &[Row] = &[
     Row {
@@ -522,7 +540,88 @@ pub static ROWS: &[Row] = &[
         phase: Phase::Syntax,
         code: Code::E0020,
         message: "attributes are written `@name(...)`",
-        rule: "an attribute is written `@name(...)` (§6.5)",
+        rule: HASH_ATTRIBUTE_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::HashAttributeNoCandidate,
+        name: "hash_attribute_no_candidate",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "attributes are written `@name(...)`, and this one has no Onsa form in this place",
+        rule: HASH_ATTRIBUTE_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::HashAttributeUnfixable,
+        name: "hash_attribute_unfixable",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "attributes are written `@name(...)`, and this one cannot be written out as it stands",
+        rule: HASH_ATTRIBUTE_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::DeriveAttribute,
+        name: "derive_attribute",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "derived traits are written at the head of the declaration, not as an attribute",
+        rule: DERIVE_RULE,
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::RelaxedAttribute,
+        name: "relaxed_attribute",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the relaxed floating-point rules are written `@fp(relaxed)`",
+        rule: "the floating-point operations of a fn or a flow are relaxed with `@fp(relaxed)` (§6.5, §15.5)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::BulkAttribute,
+        name: "bulk_attribute",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the storage of a delay line is written `@mem(bulk)`",
+        rule: "a delay line is put in the bulk storage with `@mem(bulk)` before its `let` (§6.5, §12.4)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::MemFast,
+        name: "mem_fast",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "`fast` is the default storage; `@mem(fast)` is not written",
+        rule: "`fast` is the default storage, so `@mem(fast)` is not written; only `@mem(bulk)` is (§12.4)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::OldAttributeNoCandidate,
+        name: "old_attribute_no_candidate",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "an old attribute whose Onsa form does not go in this place",
+        rule: "`@relaxed` is `@fp(relaxed)` on a fn or a flow, `@bulk` is `@mem(bulk)` on a `let`, and the traits of `@derive(…)` are written at the head of a struct or an enum, `: Trait + Trait` (§6.4, §6.5)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::TupleStruct,
+        name: "tuple_struct",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "there are no tuple structs; write a struct with a named field",
+        rule: TUPLE_STRUCT_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::TupleStructMany,
+        name: "tuple_struct_many",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "there are no tuple structs; write a struct with named fields",
+        rule: TUPLE_STRUCT_RULE,
         detect: Detect::Syntax,
     },
     Row {
@@ -584,9 +683,99 @@ pub static ROWS: &[Row] = &[
         name: "pub_crate",
         phase: Phase::Syntax,
         code: Code::E0020,
-        message: "`pub(crate)` is visibility within the package, which is the default; remove it",
-        rule: "visibility is `pub` (outside the package), nothing (the package), or `priv` (§15.1)",
+        message: "there is no `pub(crate)`; without it, the declaration has the default visibility of its place",
+        rule: VISIBILITY_RULE,
         detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::PubPkg,
+        name: "pub_pkg",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "there is no `pub(pkg)`; without it, the declaration has the default visibility of its place",
+        rule: VISIBILITY_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::PubRestricted,
+        name: "pub_restricted",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "there is no visibility with a range of this form",
+        rule: VISIBILITY_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::FieldPubCrate,
+        name: "field_pub_crate",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "the field of a `pub struct` cannot be kept within the package",
+        rule: "a field inherits the visibility of its struct, and the field of a `pub struct` cannot be kept within the package: make it `priv` and put the functions that make and read it with no visibility word, or take the visibility out to let it out of the package (§15.1)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::FieldPub,
+        name: "field_pub",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a field inherits the visibility of its struct; `pub` on it is redundant",
+        rule: FIELD_RULE,
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::FieldPrivInPrivStruct,
+        name: "field_priv_in_priv_struct",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the fields of a `priv struct` are `priv` already",
+        rule: FIELD_RULE,
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::PrivUse,
+        name: "priv_use",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the names a `use` brings in are within its module; `priv` on it is redundant",
+        rule: "the names a `use` brings in are used in its module only; `pub use` exports them again, and `priv use` is not written (§15.1)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::ConstFn,
+        name: "const_fn",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a function is not marked `const`",
+        rule: "a function that the value of a constant calls needs no mark: it is written `fn`, not `const fn` (§6.6)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::ExternFn,
+        name: "extern_fn",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a function is not declared `extern`",
+        rule: EXPORTED_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::ExportC,
+        name: "export_c",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a function is not declared `export`",
+        rule: EXPORTED_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::CopyBound,
+        name: "copy_bound",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "the kind of a type follows from its structure; `Copy` and `Dup` are not derived",
+        rule: "the kind (Copy, Shared, Affine) of a type follows from its structure: `Copy` and `Dup` are written in bounds only, not at the head of a declaration (§4.6)",
+        detect: Detect::Reported,
     },
     Row {
         id: RowId::TypeArgsTurbofish,
@@ -791,17 +980,7 @@ pub static WAITING: &[Waiting] = &[
     Waiting { name: "type_args_method_square", phase: Phase::Types, code: Code::E0020 },
     Waiting { name: "rate_as_type", phase: Phase::Names, code: Code::E0020 },
     Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "derive_attribute", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "relaxed_attribute", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "bulk_attribute", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "mem_fast", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "field_pub", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "field_priv_in_priv_struct", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "pub_pkg", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "priv_use", phase: Phase::Syntax, code: Code::E0020 },
-    Waiting { name: "tuple_struct", phase: Phase::Syntax, code: Code::E0020 },
     Waiting { name: "copy_impl", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "copy_bound", phase: Phase::Names, code: Code::E0020 },
 ];
 
 /// The matchers of the syntax stage and the rows each may name: every one
@@ -845,6 +1024,9 @@ pub static MATCHERS: &[Matcher] = &[
     Matcher::one(&[RowId::LetMut], let_mut),
     Matcher::one(&[RowId::Loop], endless_loop),
     Matcher::one(&[RowId::Proc], proc),
+    Matcher::one(&[RowId::ConstFn], const_fn),
+    Matcher::one(&[RowId::ExternFn], extern_fn),
+    Matcher::one(&[RowId::ExportC], export_c),
     Matcher::many(
         &[
             RowId::FloatTrailingDot,
@@ -879,12 +1061,16 @@ pub static MATCHERS: &[Matcher] = &[
         ],
         guard_pattern,
     ),
-    Matcher::one(&[RowId::HashAttribute], hash_attribute),
+    Matcher::many(
+        &[RowId::HashAttribute, RowId::HashAttributeNoCandidate, RowId::HashAttributeUnfixable],
+        hash_attribute,
+    ),
+    Matcher::many(&[RowId::TupleStruct, RowId::TupleStructMany], tuple_struct),
     Matcher::one(&[RowId::FaustBitNot], faust_bit_not),
     Matcher::many(&[RowId::FaustFeedback, RowId::FaustFeedbackUnnamed], faust_feedback),
     Matcher::many(&[RowId::FaustDelay, RowId::FaustDelayVariable], faust_delay),
     Matcher::one(&[RowId::FaustCompose], faust_compose),
-    Matcher::one(&[RowId::PubCrate], pub_crate),
+    Matcher::many(&[RowId::PubCrate, RowId::PubPkg, RowId::PubRestricted, RowId::FieldPubCrate], visibility_form),
     Matcher::many(
         &[RowId::TypeArgsTurbofish, RowId::TypeArgsAngle, RowId::TypeArgsSquareComma, RowId::TypeArgsOnExpression],
         type_args_call,
@@ -903,4 +1089,21 @@ pub static MATCHERS: &[Matcher] = &[
     Matcher::one(&[RowId::CalleeExpression], callee_expression),
     Matcher::one(&[RowId::SpaceAfterBranchKeyword], flow::space_after_branch_keyword),
     Matcher::one(&[RowId::ElseIfTilde], flow::else_if_tilde),
+];
+
+/// The matchers of the forms the parser reads whole ([`Detect::Read`]): the
+/// parser asks them where it read the form ([`super::at_read`]).
+pub static READS: &[Matcher] = &[
+    Matcher::many(
+        &[
+            RowId::DeriveAttribute,
+            RowId::RelaxedAttribute,
+            RowId::BulkAttribute,
+            RowId::MemFast,
+            RowId::OldAttributeNoCandidate,
+        ],
+        old_attribute,
+    ),
+    Matcher::many(&[RowId::FieldPub, RowId::FieldPrivInPrivStruct], field_visibility),
+    Matcher::one(&[RowId::PrivUse], priv_use),
 ];

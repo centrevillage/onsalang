@@ -25,7 +25,9 @@
 //!   driver reports the first of them in the order of the diagnostics
 //!   (§18.1, S-281). When none does, the failure is the general E0002. A
 //!   form of the syntax stage fails its unit (R-87 (4)): the parser reads it
-//!   as nothing else and goes on with the next unit.
+//!   as nothing else and goes on with the next unit; before the name of a
+//!   declaration, a form that ends on its line ([`Hit::resume`]) is reported
+//!   and the head is read on after it (§18.1, S-435).
 //! - The type arguments of another language before a call, `f<T>(x)` and
 //!   `f[A, B](x)`, which the parser could read as a comparison or an index:
 //!   the parser asks [`type_list_ahead`] from the tokens (and reads a `[…]`
@@ -102,6 +104,20 @@ mod spaces;
 
 pub(crate) use flow::clocks;
 pub(crate) use spaces::held_errors;
+
+/// The kind constraint `Copy` (§4.6): written in bounds, never derived.
+pub const COPY: &str = "Copy";
+/// The kind constraint `Dup` (§4.6).
+pub const DUP: &str = "Dup";
+/// The kind constraints (§4.6): the names a bound takes that are no trait, so
+/// that the head of a declaration does not take them (`copy_bound`) and the
+/// candidate of a derive leaves them out (S-463). The one list.
+pub const KIND_CONSTRAINTS: [&str; 2] = [COPY, DUP];
+
+/// The rule of a derive (§6.4): the note of the old `@derive` (the row
+/// `derive_attribute`) and of a trait that cannot be derived (E0416, whose
+/// other note lists the traits, `onsa_sema`). The one text.
+pub const DERIVE_RULE: &str = "the traits derived from a type are written at the head of its declaration, `pub struct Key: PartialEq + Eq {`; they are no attribute, their list is closed, and another trait is implemented with `impl Trait for Type` (§6.4)";
 
 /// The stage that finds a form, as the data file names it: the lexical and
 /// the syntax stages are both [`Stage::Syntax`] (§18.1).
@@ -199,6 +215,15 @@ pub struct Cursor<'a> {
     /// counted by [`crate::groups::nests_too_deep`] only when it may go over
     /// the limit from there.
     pub reach: u32,
+    /// The place of the attribute at `at`, when the parser asks about an
+    /// attribute it read ([`at_read`], [`at_heading_hash`]): the parser knows
+    /// it there.
+    pub place: Option<crate::attrs::Place>,
+    /// The keyword of the declaration whose head holds the attribute at
+    /// `at`, when the parser asks about it: the parser read the head
+    /// (`Parser::parse_heading`), its attributes, visibility and the forms
+    /// it reads on after, and the rows read no head again.
+    pub declaration: Option<usize>,
 }
 
 /// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) that the
@@ -259,6 +284,13 @@ pub struct Hit {
     pub span: Span,
     pub fixes: Vec<Fix>,
     pub misplaced: bool,
+    /// The token right after the form, when the form ends on the line where
+    /// it starts: in the head of a declaration, the parser reads on from
+    /// there (§18.1, S-435; `Parser::fail_at`).
+    pub resume: Option<usize>,
+    /// A note after the row's rule, on what the candidates leave out (the
+    /// kinds `Copy` and `Dup` a derive does not take, S-463).
+    pub note: Option<&'static str>,
 }
 
 /// How a row's form is found.
@@ -275,6 +307,10 @@ pub enum Detect {
     /// A form a later stage finds and reports with [`report`] (the rest `..`
     /// of a struct pattern, `onsa_sema`).
     Reported,
+    /// A form the parser reads whole and asks about where it read it
+    /// ([`at_read`]: an old attribute, a redundant visibility); a matcher of
+    /// [`READS`] names it.
+    Read,
 }
 
 /// A matcher of the syntax stage: a plain function of the cursor that
@@ -366,6 +402,15 @@ pub enum RowId {
     RangeHeaderOneSided,
     StructPatternRest,
     HashAttribute,
+    HashAttributeNoCandidate,
+    HashAttributeUnfixable,
+    DeriveAttribute,
+    RelaxedAttribute,
+    BulkAttribute,
+    MemFast,
+    OldAttributeNoCandidate,
+    TupleStruct,
+    TupleStructMany,
     FaustBitNot,
     FaustFeedback,
     FaustFeedbackUnnamed,
@@ -373,6 +418,16 @@ pub enum RowId {
     FaustDelayVariable,
     FaustCompose,
     PubCrate,
+    PubPkg,
+    PubRestricted,
+    FieldPubCrate,
+    FieldPub,
+    FieldPrivInPrivStruct,
+    PrivUse,
+    ConstFn,
+    ExternFn,
+    ExportC,
+    CopyBound,
     TypeArgsTurbofish,
     TypeArgsAngle,
     TypeArgsSquareComma,
@@ -439,7 +494,7 @@ pub fn row(id: RowId) -> &'static Row {
 /// stage after the syntax (names, types, flow): the code, the stage, the
 /// message and the note are the row's. No candidate makes it E0002 (S-48).
 pub fn report(id: RowId, text: &str, span: Span, fixes: Vec<Fix>) -> Diagnostic {
-    diagnostic(text, id, Hit { span, fixes, misplaced: false })
+    diagnostic(text, id, Hit { span, fixes, misplaced: false, resume: None, note: None })
 }
 
 fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
@@ -453,7 +508,11 @@ fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
     for f in hit.fixes {
         d = d.with_fix(f);
     }
-    d.with_rule(row.rule)
+    d = d.with_rule(row.rule);
+    match hit.note {
+        Some(note) => d.with_rule(note),
+        None => d,
+    }
 }
 
 /// What the table says of a failure of the parser: the diagnostic of the row
@@ -468,6 +527,8 @@ pub(crate) struct Failure {
     /// `string_prefix` reported: the parser keeps it with its diagnostics,
     /// and its held errors are not reported ([`spaces::held_errors`]).
     pub prefixed: Option<Span>,
+    /// Where the form a row found ends on its line ([`Hit::resume`]).
+    pub resume: Option<usize>,
 }
 
 /// The table's reading of a failure of the parser ([`Failure`]): every
@@ -489,6 +550,7 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
     let mut rows = Vec::new();
     let mut misplaced = false;
     let mut prefixed = None;
+    let mut resume = None;
     for m in MATCHERS {
         if let Some((row, hit)) = m.find(c) {
             misplaced |= hit.misplaced;
@@ -497,6 +559,7 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
                 prefixed = Some(hit.span);
                 note = faust::prime_note(c.text, hit.span);
             }
+            resume = resume.or(hit.resume);
             let d = diagnostic(c.text, row, hit);
             rows.push(match note {
                 Some(n) => d.with_rule(n),
@@ -510,7 +573,24 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
         Want::Separator(list) => lists::list_fixes(c, Some(list)),
         _ => lists::list_fixes(c, None),
     });
-    Failure { rows, general, prefixed }
+    Failure { rows, general, prefixed, resume }
+}
+
+/// The table's reading of a form the parser read whole at `c.at`
+/// ([`Detect::Read`]): the diagnostic of every matcher of [`READS`] that
+/// names it. The parser reads on.
+pub(crate) fn at_read(c: &Cursor) -> Vec<Diagnostic> {
+    READS.iter().filter_map(|m| m.find(c)).map(|(row, hit)| diagnostic(c.text, row, hit)).collect()
+}
+
+/// The table's reading of a `#[…]` at `c.at` in the head of a declaration,
+/// which the parser read on after (S-435) and asks about when it has read
+/// the head (`c.place` and `c.declaration`; none when the head failed): the
+/// row of [`decls::hash_attribute`], as at a failure, at the place the
+/// parser knows (§6.5), as the attributes of Onsa are checked there.
+pub(crate) fn at_heading_hash(c: &Cursor) -> Option<Diagnostic> {
+    let (row, hit) = decls::hash_attribute(c)?;
+    Some(diagnostic(c.text, row, hit))
 }
 
 // ------------------------------------------------------------ the cursor
@@ -667,6 +747,16 @@ impl Cursor<'_> {
         &rest[..rest.len() - rest.trim_start_matches(crate::lexer::BLANKS).len()]
     }
 
+    /// The line break that ends the line of `offset` (`\r\n` where the
+    /// file writes one there), for a candidate that breaks a line.
+    fn line_break(&self, offset: u32) -> &'static str {
+        let rest = &self.text[offset as usize..];
+        match rest.find('\n') {
+            Some(i) if rest[..i].ends_with('\r') => "\r\n",
+            _ => "\n",
+        }
+    }
+
     fn file_span(&self, start: u32, end: u32) -> Span {
         Span::new(self.file, start, end)
     }
@@ -710,12 +800,18 @@ impl Cursor<'_> {
 
 /// The hit of a matcher of one row ([`Matcher::one`]).
 fn hit(span: Span, fixes: Vec<Fix>) -> Option<Hit> {
-    Some(Hit { span, fixes, misplaced: false })
+    Some(Hit { span, fixes, misplaced: false, resume: None, note: None })
 }
 
 /// The row and the hit of a matcher of several rows ([`Matcher::many`]).
 fn found(row: RowId, span: Span, fixes: Vec<Fix>) -> Option<(RowId, Hit)> {
-    Some((row, Hit { span, fixes, misplaced: false }))
+    Some((row, Hit { span, fixes, misplaced: false, resume: None, note: None }))
+}
+
+/// [`found`] for a form that ends on its line, before token `resume`
+/// ([`Hit::resume`]).
+fn found_reading_on(row: RowId, span: Span, fixes: Vec<Fix>, resume: usize) -> Option<(RowId, Hit)> {
+    Some((row, Hit { span, fixes, misplaced: false, resume: Some(resume), note: None }))
 }
 
 /// A name or a path of names and tuple indexes: `x`, `self.a.b`, `t.0.1`
@@ -774,23 +870,10 @@ fn ends_statement(c: &Cursor, i: usize) -> bool {
         || c.comment(i + 1)
 }
 
-/// The bracket that closes the one at `open` (`(`, `[` or `{`).
+/// The bracket that closes the one at `open` (`(`, `[` or `{`; none at any
+/// other token, [`crate::scan::closing`]).
 pub(crate) fn closing(c: &Cursor, open: usize) -> Option<usize> {
-    let mut depth = 0u32;
-    for i in open..c.tokens.len() {
-        match c.kind(i) {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(i);
-                }
-            }
-            TokenKind::Eof => return None,
-            _ => {}
-        }
-    }
-    None
+    crate::scan::closing(c.tokens, open)
 }
 
 /// The expression that ended right before the failure: the outermost
@@ -824,7 +907,7 @@ use guard::guard_pattern;
 pub(crate) use edits::move_up;
 pub use paths::TYPE_NAMES;
 pub(crate) use paths::{type_list_ahead, type_name};
-pub use rows::{MATCHERS, ROWS, WAITING};
+pub use rows::{MATCHERS, READS, ROWS, WAITING};
 // The helpers that the rows of `guard` and `flow` share with a family.
 use assign::operand;
 use faust::bit_not;

@@ -366,7 +366,8 @@ const DOCS_AFTER_ERRORS: &[(&str, &[&[&str]])] = &[
     ),
     ("struct A { x:\n}\n/// a\n\n// c\n/// b\nconst X: U32 = 1\n", &[&["/// a", "/// b"]]),
     // The member `f` is a unit of its own (S-59): `impl A` parses, without doc comments.
-    ("impl A {\n  fn f(\n}\n/// d\n@x\nfn g() {}\n", &[&[], &["/// d"]]),
+    // An attribute of the table (§6.5): `fn g` has no error of its own.
+    ("impl A {\n  fn f(\n}\n/// d\n@fp(relaxed)\nfn g() {}\n", &[&[], &["/// d"]]),
 ];
 
 #[test]
@@ -581,9 +582,14 @@ fn foreign_forms_have_no_shape_of_their_own_and_fail_their_unit() {
     let ItemKind::Fn(h) = &p.ast.item(p.ast.root[1]).kind else { unreachable!() };
     assert_eq!(h.name.name, "h");
     assert!(p.ast.item(p.ast.root[1]).failed.is_some());
-    // `struct S` is read on its own: `#[derive(Eq)]` starts a unit (the recovery).
+    // `struct S` is read on after `#[derive(Eq)]`, which closes on its line
+    // (§18.1, S-435): the attribute is an incomplete `Attr` node of its head,
+    // and its derives are unknown (S-460).
     assert_eq!(p.ast.root.len(), 3, "{}", crate::dump(&p.ast));
-    assert!(find(&p.cst, NodeKind::Error).len() >= 4);
+    let ItemKind::Struct(s) = &p.ast.item(p.ast.root[2]).kind else { unreachable!() };
+    assert!(matches!(s.derives, crate::ast::Derives::Unknown));
+    assert!(find(&p.cst, NodeKind::Attr).iter().any(|&a| !p.cst.is_complete(a)));
+    assert!(find(&p.cst, NodeKind::Error).len() >= 3);
 }
 
 #[test]

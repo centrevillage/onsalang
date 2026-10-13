@@ -2,10 +2,21 @@
 // [test]
 // spec = ["§15.1"]
 
-// E0303: private items are not visible from another module (§15.1).
-use util.{shown, in_package}
-use util.{hidden}               //~ E0303
+// The three visibilities across modules (§15.1): `pub` is outside the package, none is inside the package (so
+// another module of it can take the name with a `use`), and `priv` is inside the module alone. The names that
+// the module `util` has with `priv` are E0303 here, whatever the item is (a function, a constant, a struct,
+// an enum, a type). `pub use` takes only a `pub` item (E0303 for one with no visibility word). Taking a name
+// that does not exist is E0302. The meaning of a visibility is checked from W4-03; `pub(pkg)` is not a
+// visibility (E0020), and util.onsa has the item that it was used for with no visibility word.
+use util.{in_package}
+use util.{hidden} //~ E0303
+use util.{SECRET} //~ E0303
+use util.{Inner}  //~ E0303
+use util.{Mode}   //~ E0303
+use util.{Sample} //~ E0303
 use util.{Point}
-use util.{missing}              //~ E0302
+use util.{missing} //~ E0302
+pub use util.{shown}
+pub use util.{SHARED} //~ E0303
 
 pub fn run() -> I32 { shown() + in_package() }

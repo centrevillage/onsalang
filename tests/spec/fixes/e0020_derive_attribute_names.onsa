@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§4.6", "§18.1"]
+// fixes = 1
+
+// What the candidate of a derive written as an attribute does with names that Onsa does not derive (spec §6.4, §4.6,
+// S-34, S-463). The names are copied as they are: `Debug` and `Clone` are the names of other languages, and the
+// candidate does not translate them. The candidate leaves out only the kinds `Copy` and `Dup`, which cannot be
+// written in the head of a declaration (§4.6), and the rule for that is the one of Onsa, whichever language the
+// attribute comes from. A name that is not in the closed list of §6.4 is E0416 in the head of the declaration, so
+// after the candidate the declaration has that error of a later stage, and no error of the syntax stage
+// (§18.1: a candidate leaves no error of the same or an earlier stage). The note of that E0416 shows that the
+// implementation is written by hand (spec §6.4). The main position is the attribute. One error in each
+// declaration unit (P-01).
+
+@derive(Debug, Clone, Copy, PartialEq) pub struct Everything { //~ E0020
+  id: U32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)] pub struct RustStyle { //~ E0020
+  id: U32,
+}
+
+#[derive(Debug)] pub struct DebugOnly {             //~ E0020
+  id: U32,
+}
+
+@derive(Clone, Copy) pub enum CloneAndCopy {        //~ E0020
+  Off,
+  On,
+}
+
+#[derive(Debug, Eq)] pub struct Already: PartialEq { //~ E0020
+  id: U32,
+}
+
+@derive(Clone) pub struct Generic[T] {              //~ E0020
+  value: T,
+}

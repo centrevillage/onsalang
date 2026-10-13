@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§2.5"]
+
+// A Rust attribute on a function (`#[inline]`, `#[fp(relaxed)]`), on the line of the function or
+// on a line of its own, is one error (the attribute is the item's: "an attribute does not end an
+// item", §2.5): E0020 when the attribute of Onsa it spells goes there, else E0002 (`#[inline]`,
+// S-483). On the line of the function, the form closes on its line, so the function is read
+// on from the end of it (§18.1, S-435): the name is resolved and the head is checked where it
+// is used. On a line of its own, the attribute belongs to the unit of the function, and the unit
+// has a syntax error, so the body of the function is not checked: `zz` raises no E0302, and the
+// function is a name of the module. An attribute changes neither the type nor the head
+// of a function (§6.5), so nothing about the function is unknown. One error in each unit.
+// (The candidate and its text are the rows' business: docs/foreign-forms.toml.)
+
+#[inline] fn same_line(a: I32) -> I32 {             //~ E0002
+  a
+}
+
+#[inline] pub fn same_line_pub() -> I32 {           //~ E0002
+  1
+}
+
+#[inline] fn same_line_body_not_checked() -> I32 {  //~ E0002
+  zz
+}
+
+#[inline]                                           //~ E0002
+fn alone_line(a: I32) -> I32 {
+  a
+}
+
+#[inline]                                           //~ E0002
+fn alone_line_body_not_checked() -> I32 {
+  zz
+}
+
+#[fp(relaxed)]                                      //~ E0020
+fn alone_fp(x: F32) -> F32 {
+  zz
+}
+
+#[repr(c)]                                          //~ E0020
+pub struct Cut {
+  a: Missing,
+}
+
+fn calls() -> I32 {
+  same_line(1) + same_line_pub() + same_line_body_not_checked()
+}
+
+fn calls_alone() -> I32 {
+  alone_line(1) + alone_line_body_not_checked()
+}
+
+fn calls_alone_fp() -> F32 {
+  alone_fp(1.0)
+}
+
+fn takes_cut(c: Cut) -> Cut {
+  c
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { same_line(x) + alone_line(x) }
+  if c { f.(1) } else { same_line(alone_line(2)) }
+}
+
+fn too_many_arguments() -> I32 {
+  same_line(1, 2)                                   //~ E0412
+}
+
+fn too_many_arguments_alone() -> I32 {
+  alone_line(1, 2)                                  //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  alone_line(true)                                  //~ E0401
+}
+
+fn own_error() -> I32 {
+  same_line(1) + zz                                 //~ E0302 @18
+}

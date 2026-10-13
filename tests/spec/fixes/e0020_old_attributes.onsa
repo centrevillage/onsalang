@@ -4,7 +4,8 @@
 // fixes = 1
 
 // E0020 for the old attribute spelling with a fixed replacement (§6.5): `@relaxed` is
-// `@fp(relaxed)`.
+// `@fp(relaxed)` (S-57). It is on a fn or on a flow (§15.5), on a line of its own or on the line of the
+// declaration. The candidate is the new attribute in the same place; no other token changes.
 
 @relaxed                                            //~ E0020
 pub fn fast(x: F32) -> F32 {
@@ -14,6 +15,19 @@ pub fn fast(x: F32) -> F32 {
 @relaxed                                            //~ E0020
 pub fn faster(x: F32) -> F32 {
   x * 4.0
+}
+
+@relaxed                                            //~ E0020
+pub flow boost(x: F32 at sample) -> F32 at sample {
+  x * 8.0
+}
+
+@relaxed pub fn same_line(x: F32) -> F32 {          //~ E0020
+  x * 16.0
+}
+
+@relaxed fn private_same_line(x: F32) -> F32 {      //~ E0020
+  x * 32.0
 }
 
 @fp(relaxed)

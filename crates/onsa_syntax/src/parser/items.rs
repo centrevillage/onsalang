@@ -1,6 +1,7 @@
 //! The declarations: their doc comments, attributes and visibility, the
 //! dispatch on [`DECLARATIONS`] and the parser of each declaration.
 
+use super::heading::Heading;
 use super::*;
 
 impl<'a> Parser<'a> {
@@ -96,19 +97,30 @@ impl<'a> Parser<'a> {
         m
     }
 
-    /// The attributes before a declaration or a parameter; returns how many.
-    pub(super) fn parse_attrs(&mut self) -> PResult<usize> {
-        let mut n = 0;
+    /// The attributes before a declaration, a parameter or a statement, as
+    /// read ([`SeenAttr`]); the place is checked where the parser knows it
+    /// ([`Parser::check_attrs`]). In the head of a declaration (`read_on`),
+    /// one whose arguments do not read is read on after when it closes on
+    /// its line ([`Parser::read_on_after_attribute`]), and is not among them;
+    /// but not after E0006: the unit is read no further (§2.5).
+    pub(super) fn parse_attrs(&mut self, read_on: bool) -> PResult<Vec<SeenAttr>> {
+        let mut seen = Vec::new();
         loop {
             self.skip_newlines_if_followed_by(|k| k == TokenKind::At);
-            if self.at(TokenKind::At) {
-                self.parse_attr()?;
-                n += 1;
-            } else {
+            if !self.at(TokenKind::At) {
                 break;
             }
+            let (at, depth, reported) = (self.peek_index(), self.open.len(), self.diagnostics.len());
+            match self.parse_attr() {
+                Ok(a) => seen.push(a),
+                Err(_)
+                    if read_on
+                        && !self.diagnostics[reported..].iter().any(|d| d.code == Code::E0006)
+                        && self.read_on_after_attribute(at, depth) => {}
+                Err(e) => return Err(e),
+            }
         }
-        Ok(n)
+        Ok(seen)
     }
 
     /// In a significant context, skip newlines only when the next real token satisfies `f`.
@@ -118,88 +130,138 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_attr(&mut self) -> PResult<()> {
+    pub(super) fn parse_attr(&mut self) -> PResult<SeenAttr> {
+        let at = self.peek_index();
         let m = self.start(NodeKind::Attr)?;
         self.expect(TokenKind::At)?;
-        self.parse_attr_body()?;
-        self.complete(m, NodeKind::Attr);
-        Ok(())
+        let name = self.peek();
+        let args = self.parse_attr_body()?;
+        let done = self.complete(m, NodeKind::Attr);
+        // The sole argument, when it is one name (`c`, `relaxed`, `bulk`).
+        let value =
+            args.and_then(|(open, close)| crate::attrs::sole_value(&self.tokens, open, close)).map(|i| self.tokens[i]);
+        let args =
+            args.map(|(open, close)| Span::new(self.file, self.tokens[open].span.start, self.tokens[close].span.end));
+        Ok(SeenAttr { at, finish: self.events.len() - 1, node: done, span: done.span, name, args, value })
     }
 
-    fn parse_attr_body(&mut self) -> PResult<()> {
+    /// The name and the arguments of an attribute; the indices of the `(`
+    /// and the `)` of its arguments, if any.
+    fn parse_attr_body(&mut self) -> PResult<Option<(usize, usize)>> {
         self.parse_ident("attribute name")?;
-        if self.touches(TokenKind::LParen, true, false) {
-            let m = self.start(NodeKind::AttrArgs)?;
-            self.bump();
-            self.with_nl(false, |p| {
-                while !p.at(TokenKind::RParen) {
-                    if p.at(TokenKind::Ident) && p.peek2().kind == TokenKind::Colon {
-                        let a = p.start(NodeKind::AttrNamedArg)?;
-                        p.parse_ident("key")?;
-                        p.bump();
-                        p.parse_expr()?;
-                        p.complete(a, NodeKind::AttrNamedArg);
-                    } else if p.at(TokenKind::Str) {
-                        p.expect(TokenKind::Str)?;
-                    } else {
-                        p.parse_path("attribute argument")?;
-                    }
-                    if p.eat(TokenKind::Comma).is_none() {
-                        break;
-                    }
-                }
-                p.close_list(NodeKind::AttrArgs, TokenKind::RParen)
-            })?;
-            self.complete(m, NodeKind::AttrArgs);
+        if !self.touches(TokenKind::LParen, true, false) {
+            return Ok(None);
         }
-        Ok(())
+        let m = self.start(NodeKind::AttrArgs)?;
+        let open = self.peek_index();
+        self.bump();
+        let close = self.with_nl(false, |p| {
+            while !p.at(TokenKind::RParen) {
+                if p.at(TokenKind::Ident) && p.peek2().kind == TokenKind::Colon {
+                    let a = p.start(NodeKind::AttrNamedArg)?;
+                    p.parse_ident("key")?;
+                    p.bump();
+                    p.parse_expr()?;
+                    p.complete(a, NodeKind::AttrNamedArg);
+                } else if p.at(TokenKind::Str) {
+                    p.expect(TokenKind::Str)?;
+                } else {
+                    p.parse_path("attribute argument")?;
+                }
+                if p.eat(TokenKind::Comma).is_none() {
+                    break;
+                }
+            }
+            let close = p.peek_index();
+            p.close_list(NodeKind::AttrArgs, TokenKind::RParen)?;
+            Ok(close)
+        })?;
+        self.complete(m, NodeKind::AttrArgs);
+        Ok(Some((open, close)))
     }
 
-    fn parse_vis(&mut self) -> PResult<()> {
-        if !self.at(TokenKind::KwPub) {
-            return Ok(());
+    /// The attributes `seen` of a thing at `place`: each the table of the
+    /// forms of other languages names (the old `@derive`, `@relaxed`,
+    /// `@bulk`, `@mem(fast)`, [`foreign::at_read`]) or the table of the
+    /// attributes refuses ([`crate::attrs::check`], E0005) is reported, and
+    /// its node turns incomplete: it is no attribute of the thing (§18.1),
+    /// and the unit goes on (its syntax error keeps its body unchecked).
+    pub(super) fn check_attrs(&mut self, seen: &[SeenAttr], place: Place, declaration: Option<usize>) {
+        for a in seen {
+            let refused = self.read_form(a.at, Some(place), declaration) || {
+                let w = crate::attrs::Written {
+                    span: a.span,
+                    name: self.token_text(a.name),
+                    args: a.args,
+                    value: a.value.map(|v| (v.span, self.token_text(v))),
+                };
+                match crate::attrs::check(self.file, self.text, &w, place) {
+                    Some(d) => {
+                        self.report(d);
+                        true
+                    }
+                    None => false,
+                }
+            };
+            if refused {
+                self.events[a.finish] = Event::Finish { complete: false };
+            }
+        }
+    }
+
+    /// The visibility word `pub` or `priv` (§15.1), if one is next: the
+    /// index of the word. A `(` after `pub` on its line, blanks or none
+    /// between (`pub(crate)`, `pub (pkg)`, `pub(super)`, S-36, S-412, S-417,
+    /// S-420), is no visibility of Onsa: the parser fails at it, and the
+    /// table names the form from `pub` to its `)` (`visibility_form`); one
+    /// that is not closed on the line is the general E0002, with the three
+    /// levels as its note. A form closed on its line with code after it there
+    /// is read on after (§18.1, S-435): the `Vis` node holds it, incomplete.
+    /// `what` is what was expected after the word.
+    pub(super) fn parse_vis(&mut self, what: &str) -> PResult<VisRead> {
+        if !matches!(self.peek_kind(), TokenKind::KwPub | TokenKind::KwPriv) {
+            return Ok(VisRead::Absent);
         }
         let m = self.start(NodeKind::Vis)?;
-        self.bump();
-        // `pub(pkg)` (S-36: W3-08 makes it E0020 too) and `pub(crate)` (the
-        // table's `pub_crate`) are each one form with the blanks in them
-        // (S-248): a blank before the `(` is read across, so that the form's
-        // row reports it once.
-        let words = |p: &Self| ["pkg", "crate"].iter().any(|w| p.is_ident(p.peek2(), w));
-        if self.at(TokenKind::LParen) && (!self.peek_gap().is_some() || words(self)) {
-            self.bump();
-            let t = self.peek();
-            if !self.is_ident(t, "pkg") {
-                return Err(self.unexpected("`pkg`"));
-            }
-            self.bump();
-            self.expect(TokenKind::RParen)?;
+        let word = self.peek_index();
+        let t = self.bump();
+        let next = self.peek_index();
+        if t.kind == TokenKind::KwPub && self.tokens[next].kind == TokenKind::LParen && self.gap(next) != Gap::Newline {
+            let resume = self.fail_at(Want::Other, what, Some((self.tokens[next], VISIBILITY_RULE)), None);
+            let Some(resume) = resume.filter(|&r| self.on_line_after(r - 1).is_some()) else { return Err(ParseError) };
+            self.read_on(resume);
+            self.finish(None, false);
+            return Ok(VisRead::ReadOn);
         }
         self.complete(m, NodeKind::Vis);
-        Ok(())
+        Ok(VisRead::Word(word))
     }
 
     /// The item whose node `m` is open (doc comments, attributes, visibility, declaration).
     pub(super) fn parse_item(&mut self, ctx: ItemCtx, m: Marker) -> PResult<Completed> {
-        if self.parse_attrs()? > 0 {
-            self.skip_newlines();
+        let Heading { attrs, vis, keyword: t, declaration } = self.parse_heading()?;
+        let Declaration { node, parse, places, .. } = *declaration;
+        if !places.contains(&ctx) {
+            let e = self.not_a_member(t, ctx);
+            // It is a declaration, a unit of its own (§18.1, R-44): its node
+            // holds its keyword, so that the declarations out of place after
+            // it are units of their own too, not one run of tokens.
+            self.enter_unit(node, t.span.start);
+            self.bump();
+            return Err(e);
         }
-        self.parse_vis()?;
-        let t = self.peek();
-        if let Some((_, _, places)) = DECLARATIONS.iter().find(|(k, _, _)| *k == t.kind)
-            && !places.contains(&ctx)
+        self.check_attrs(&attrs, crate::attrs::place_of_declaration(t.kind), Some(self.peek_index()));
+        // `priv use` is redundant (§15.1): a `use` is within its module.
+        if let Some(word) = vis
+            && t.kind == TokenKind::KwUse
         {
-            return Err(self.not_a_member(t, ctx));
+            self.read_form(word, None, None);
         }
-        if let Some((_, parse, _)) = DECLARATIONS.iter().find(|(k, _, _)| *k == t.kind) {
-            parse(self, ctx)?;
-            // A constant ends with an expression and a type alias with a
-            // type, which a symbol on the next line may go on with.
-            if !matches!(t.kind, TokenKind::KwConst | TokenKind::KwType) {
-                self.end_no_operand();
-            }
-        } else {
-            return Err(self.unexpected("a declaration"));
+        parse(self, ctx)?;
+        // A constant ends with an expression and a type alias with a
+        // type, which a symbol on the next line may go on with.
+        if !matches!(t.kind, TokenKind::KwConst | TokenKind::KwType) {
+            self.end_no_operand();
         }
         Ok(self.complete(m, NodeKind::Item))
     }
@@ -287,39 +349,58 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwStruct)?;
         self.parse_name("struct name")?;
         self.parse_generics_opt()?;
-        if self.at(TokenKind::LParen) {
-            let b = self.start(NodeKind::TupleStructBody)?;
-            self.bump();
-            self.with_nl(false, |p| {
-                p.parse_type()?;
-                p.expect(TokenKind::RParen)?;
-                Ok(())
-            })?;
-            self.complete(b, NodeKind::TupleStructBody);
-        } else {
-            let l = self.start(NodeKind::FieldList)?;
-            self.e0003_unless_on_the_line(TokenKind::LBrace);
-            self.expect(TokenKind::LBrace)?;
-            self.with_nl(false, |p| {
-                while !p.at(TokenKind::RBrace) {
-                    let docs = p.element_docs();
-                    let f = p.start(NodeKind::Field)?;
-                    p.attach_docs(docs);
-                    p.parse_vis()?;
-                    p.parse_name("field name")?;
-                    p.expect(TokenKind::Colon)?;
-                    p.parse_type()?;
-                    p.complete(f, NodeKind::Field);
-                    if p.eat(TokenKind::Comma).is_none() {
-                        break;
-                    }
+        self.parse_derives_opt()?;
+        // A tuple struct (`struct Hz(F32)`, S-39) is no struct of Onsa: the
+        // parser fails at its `(` whatever the blank before it, and the table
+        // names the form (`tuple_struct`).
+        let l = self.start(NodeKind::FieldList)?;
+        self.e0003_unless_on_the_line(TokenKind::LBrace);
+        self.expect(TokenKind::LBrace)?;
+        self.with_nl(false, |p| {
+            while !p.at(TokenKind::RBrace) {
+                let docs = p.element_docs();
+                let f = p.start(NodeKind::Field)?;
+                p.attach_docs(docs);
+                // A field inherits the visibility of its struct (§15.1):
+                // `pub` on it, and `priv` in a `priv struct`, are redundant
+                // (`field_pub`, `field_priv_in_priv_struct`).
+                if let VisRead::Word(word) = p.parse_vis("a field name")? {
+                    p.read_form(word, None, None);
                 }
-                p.close_list(NodeKind::FieldList, TokenKind::RBrace)?;
-                Ok(())
-            })?;
-            self.complete(l, NodeKind::FieldList);
-        }
+                p.parse_name("field name")?;
+                p.expect(TokenKind::Colon)?;
+                p.parse_type()?;
+                p.complete(f, NodeKind::Field);
+                if p.eat(TokenKind::Comma).is_none() {
+                    break;
+                }
+            }
+            p.close_list(NodeKind::FieldList, TokenKind::RBrace)?;
+            Ok(())
+        })?;
+        self.complete(l, NodeKind::FieldList);
         self.complete(m, NodeKind::Struct);
+        Ok(())
+    }
+
+    /// `: Trait + Trait` after the name and the type parameters of a struct
+    /// or an enum (§6.4, S-34): the traits derived from its structure. A
+    /// line break after a `+` goes on with the head (§2.5).
+    fn parse_derives_opt(&mut self) -> PResult<()> {
+        if !self.at(TokenKind::Colon) {
+            return Ok(());
+        }
+        let m = self.start(NodeKind::Derives)?;
+        self.bump();
+        loop {
+            let b = self.start(NodeKind::Bound)?;
+            self.parse_path("a trait name")?;
+            self.complete(b, NodeKind::Bound);
+            if self.eat(TokenKind::Plus).is_none() {
+                break;
+            }
+        }
+        self.complete(m, NodeKind::Derives);
         Ok(())
     }
 
@@ -328,6 +409,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwEnum)?;
         self.parse_name("enum name")?;
         self.parse_generics_opt()?;
+        self.parse_derives_opt()?;
         let l = self.start(NodeKind::VariantList)?;
         self.e0003_unless_on_the_line(TokenKind::LBrace);
         self.expect(TokenKind::LBrace)?;
@@ -663,3 +745,32 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 }
+
+/// An attribute as the parser read it ([`Parser::parse_attrs`]), for the
+/// check of its place ([`Parser::check_attrs`]).
+pub(super) struct SeenAttr {
+    /// The index of its `@`.
+    at: usize,
+    /// The index of the `Finish` event of its node.
+    finish: usize,
+    /// Its node (a `let` that it is before wraps it, `Parser::parse_stmt`).
+    pub(super) node: Completed,
+    span: Span,
+    name: Token,
+    /// The span of its parentheses with what is in them.
+    args: Option<Span>,
+    /// Its sole argument, when that is one name.
+    value: Option<Token>,
+}
+
+/// The visibility before a declaration or a field, as [`Parser::parse_vis`] read it.
+pub(super) enum VisRead {
+    Absent,
+    /// The word `pub` or `priv` (its index).
+    Word(usize),
+    /// A visibility of another language, reported; the reading goes on after it.
+    ReadOn,
+}
+
+/// The note of a visibility of another language (§15.1).
+const VISIBILITY_RULE: &str = "the visibility is `pub` (out of the package), no word (within the package) or `priv` (within the module); there is no other form (§15.1)";

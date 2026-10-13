@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2", "§11.5", "§11.6"]
+// fixes = 1
+
+// A flow whose head has `pub(crate)` or `pub(pkg)` is one E0020 (the candidate removes the
+// visibility, §15.1), and the flow is read on from the end of the form (§18.1, S-435): it is a
+// name that the flows calling it with `~` find (no E0302, and no E0812 "not a flow", whose
+// candidate removes the `~` and was the first step of a loop that undid itself), whatever the
+// place of the call: nested, in an argument, in the body of a `par`. The unit has a syntax
+// error, so the body of the failed flow is not checked. What was read is checked where it is
+// used: the call without `~` is E0811. A real error of another flow of the module is still
+// reported.
+
+pub(crate) flow lp(x: F32 at sample) -> F32 at sample {     //~ E0020
+  x
+}
+
+pub (pkg) flow mix(a: F32 at sample, b: F32 at sample) -> F32 at sample {   //~ E0020
+  a + b
+}
+
+pub(crate) flow body_not_checked(x: F32 at sample) -> F32 at sample {   //~ E0020
+  zz
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  lp~(lp~(x)) + mix~(x, lp~(x))
+}
+
+pub flow bank(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0..<2 {
+    lp~(x * i.round_f32())
+  }
+  ys[0] + ys[1]
+}
+
+pub flow calls_failed_body(x: F32 at sample) -> F32 at sample {
+  body_not_checked~(x)
+}
+
+pub flow forgot_the_tilde(x: F32 at sample) -> F32 at sample {
+  lp(x)                                             //~ E0811
+}
+
+pub flow own_error(x: F32 at sample) -> F32 at sample {
+  lp~(zz)                                           //~ E0302
+}

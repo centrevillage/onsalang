@@ -53,7 +53,7 @@ fn the_prelude_has_no_name_of_the_guard_candidates() {
 fn kinds_from_structure() {
     let a = check(
         "pub struct P { x: F32, y: F32 }\npub struct S { name: Str, n: U32 }\npub struct B { buf: Buf[F32] }\n\
-         pub enum E { A(P), B(S) }\npub struct T(F32)\npub flow f(x: F32 at sample) -> F32 at sample { x }\n\
+         pub enum E { A(P), B(S) }\npub struct T { v: F32 }\npub flow f(x: F32 at sample) -> F32 at sample { x }\n\
          pub struct W { s: f.State }\n",
     );
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
@@ -189,7 +189,9 @@ fn name_diagnostics() {
     assert_eq!(codes(&a), vec![Code::E0200]);
     let a = analyze(&pkg(&[("a", "use b.{g}\npub fn f() {}\n"), ("b", "use a.{f}\npub fn g() {}\n")]));
     assert_eq!(codes(&a), vec![Code::E0310]);
-    let a = analyze(&pkg(&[("a", "fn hidden() {}\npub(pkg) fn pk() {}\n"), ("b", "use a.{hidden}\nuse a.{pk}\n")]));
+    // Until W4-03, no visibility word is within the module, as `priv` (§15.1).
+    let a =
+        analyze(&pkg(&[("a", "priv fn hidden() {}\npub fn shown() {}\n"), ("b", "use a.{hidden}\nuse a.{shown}\n")]));
     assert_eq!(codes(&a), vec![Code::E0303]);
     let a = analyze(&pkg(&[("a", "use a.{x}\n")]));
     assert_eq!(codes(&a), vec![Code::E0302]);

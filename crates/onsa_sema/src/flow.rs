@@ -291,7 +291,7 @@ impl<'a> Checker<'a> {
         let ast = self.ast;
         for s in stmts {
             let stmt = ast.stmt(s);
-            if let StmtKind::Let { pat, init, ty } = stmt.kind {
+            if let StmtKind::Let { pat, init, ty, .. } = stmt.kind {
                 let mut locals = Vec::new();
                 self.predeclare_pat(pat, &mut locals)?;
                 // The annotation types the locals from the start, so that a

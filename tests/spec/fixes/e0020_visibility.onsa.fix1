@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a visibility of Rust and of the old version, in front of an item, an `impl` member, a `use`, and the field
+// of a struct that has no visibility word or has `priv` (spec §15.1, S-35, S-36, S-412; the rows `pub_pkg` and
+// `pub_crate` of docs/foreign-forms.toml). The visibility is `pub`, none (the package) or `priv` (the module); the
+// forms `pub(pkg)` and `pub(crate)` do not exist, and a space between `pub` and `(` is the same single error.
+// The candidate takes the whole visibility out: the item has then no visibility word (the package). The main
+// position is the `pub`. The `pub struct` field with `pub(crate)` or `pub(pkg)` has no candidate and is
+// E0002 (negative/visibility_restricted.onsa). One error in each declaration unit (P-01).
+
+fn pkg_fn() -> I32 {                       //~ E0020
+  1
+}
+
+fn pkg_fn_spaced() -> I32 {               //~ E0020
+  2
+}
+
+fn crate_fn() -> I32 {                   //~ E0020
+  3
+}
+
+fn crate_fn_spaced() -> I32 {           //~ E0020
+  4
+}
+
+rt fn crate_rt_fn() -> I32 {             //~ E0020
+  5
+}
+
+struct PkgStruct {                         //~ E0020
+  x: I32,
+}
+
+enum CrateEnum {                         //~ E0020
+  A,
+  B,
+}
+
+const CRATE_CONST: I32 = 4               //~ E0020
+
+type PkgSample = F32                       //~ E0020
+
+flow crate_flow(x: F32 at sample) -> F32 at sample { //~ E0020
+  x
+}
+
+use std.math                               //~ E0020
+
+pub struct Target {
+  v: I32,
+}
+
+impl Target {
+  fn crate_member(self) -> I32 {         //~ E0020
+    self.v
+  }
+
+  fn pkg_member(self) -> I32 {             //~ E0020
+    self.v
+  }
+
+  const MEMBER_CONST: I32 = 1            //~ E0020
+
+  pub fn fine_member(self) -> I32 {
+    self.v
+  }
+}
+
+struct NoVisibility {
+  a: I32,                                //~ E0020
+}
+
+priv struct Hidden {
+  b: I32,                                  //~ E0020
+}
+
+pub fn fine() -> I32 {
+  1
+}

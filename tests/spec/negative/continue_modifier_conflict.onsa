@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§10"]
+
+// `pub` and `priv` both at the head of an item (`priv pub fn`, `pub priv fn`) are one E0002
+// without a candidate (§18.1, S-464): the two visibilities disagree and there is no way to know
+// which one the writer meant. The modifiers that were written are recorded and the head is read
+// on; the visibility of the item is the default (unspecified) when they disagree. The item is a
+// name of the module, an `rt` stays an `rt`, and the callers are checked against the head. The
+// unit has a syntax error, so its body is not checked. One error in each unit.
+
+priv pub fn both(a: I32) -> I32 {                   //~ E0002
+  a
+}
+
+pub priv fn both_swapped(a: I32) -> I32 {           //~ E0002
+  a
+}
+
+priv pub rt fn both_rt(x: I32) -> I32 {             //~ E0002
+  x
+}
+
+pub priv struct Pt {                                //~ E0002
+  x: I32,
+}
+
+priv pub fn body_not_checked() -> I32 {             //~ E0002
+  zz
+}
+
+pub rt fn calls_rt(x: I32) -> I32 {
+  both_rt(x)
+}
+
+fn calls(p: Pt) -> I32 {
+  both(1) + both_swapped(2) + p.x + body_not_checked()
+}
+
+fn too_many_arguments() -> I32 {
+  both(1, 2)                                        //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  both_swapped(true)                                //~ E0401
+}
+
+fn own_error() -> I32 {
+  both(1) + zz                                      //~ E0302 @13
+}

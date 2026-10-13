@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.4", "§15.1", "§2.5"]
+
+// The derive is written in the head of the declaration of a struct or an enum, `: trait + trait`, after the
+// name (and the type parameters) and before the `{` of the body (spec §6.4, S-34). The list is read as "the
+// type on the left satisfies the traits on the right", like a bound (§4.5). Here are the heads that are right:
+// a struct or an enum, one trait or several, with `pub`, with no visibility word, and with `priv` (§15.1), a
+// type parameter or a const parameter in front of the `:` (a list that goes on over lines after a `+` is
+// in fixes/e0003_derive_heading_brace.onsa). The functions at the end use what the lists give (`==`, `<`, `!=`), so they show that the list is
+// read as a derive and is not dropped. What the generated implementations are (their values) and the
+// checks of the list (E0416) are W5-06, and they are not here.
+
+pub struct Key: PartialEq + Eq {
+  id: U32,
+}
+
+pub struct One: PartialEq {
+  id: U32,
+}
+
+struct Plain: PartialEq {
+  id: U32,
+}
+
+priv struct Hidden: PartialEq + Eq {
+  id: U32,
+}
+
+pub struct Order: PartialEq + Eq + PartialOrd + Ord {
+  rank: U32,
+}
+
+pub struct Settings: Default {
+  gain: F32,
+  on: Bool,
+}
+
+pub struct Pair[T]: PartialEq {
+  a: T,
+  b: T,
+}
+
+pub struct Ring[T, const N: U32]: PartialEq {
+  data: [T; N],
+  head: U32,
+}
+
+pub enum Mode: PartialEq + Eq {
+  Off,
+  On,
+}
+
+priv enum Phase: PartialEq {
+  Rise,
+  Fall,
+}
+
+pub enum Slot[T]: PartialEq {
+  Empty,
+  Full(T),
+}
+
+pub struct Bare {
+  id: U32,
+}
+
+pub fn same(a: Key, b: Key) -> Bool {
+  a == b
+}
+
+pub fn before(a: Order, b: Order) -> Bool {
+  a < b
+}
+
+pub fn differ(a: Mode, b: Mode) -> Bool {
+  a != b
+}

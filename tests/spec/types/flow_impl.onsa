@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.2", "§6.3"]
+
+// The types that the declaration of a flow makes (`voice.State`, `voice.Params`) are defined in the module of the flow,
+// so an `impl` for them can be written in the same module, and its members are functions like those of any `impl`
+// (spec §11.6, §6.3: the orphan rule). The members are called with the dot (`s.helper()`, `voice.Params.loud()`).
+
+pub flow voice(
+  x: F32 at sample,
+  gain: F32 at block,
+) -> F32 at sample {
+  x * gain
+}
+
+impl voice.State {
+  pub fn helper(self) -> U32 {
+    1
+  }
+}
+
+impl voice.Params {
+  pub fn loud() -> voice.Params {
+    voice.Params { gain: 2.0 }
+  }
+
+  pub fn gain_of(self) -> F32 {
+    self.gain
+  }
+}
+
+pub fn from_state(s: voice.State) -> U32 {
+  s.helper()
+}
+
+pub fn from_params() -> F32 {
+  voice.Params.loud().gain_of()
+}

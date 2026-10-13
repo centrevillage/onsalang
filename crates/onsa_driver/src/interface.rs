@@ -178,8 +178,8 @@ pub struct ParamIfaceMeta {
 
 fn vis_str(v: Vis) -> &'static str {
     match v {
-        Vis::Private => "",
-        Vis::Pkg => "pub(pkg)",
+        Vis::Default => "",
+        Vis::Priv => "priv",
         Vis::Pub => "pub",
     }
 }
@@ -304,7 +304,7 @@ impl Builder<'_> {
         );
         let own_generics = self.generics(&f.generics);
         let mut sig = String::new();
-        if def.vis != Vis::Private {
+        if def.vis == Vis::Pub {
             sig.push_str(vis_str(def.vis));
             sig.push(' ');
         }
@@ -369,7 +369,7 @@ impl Builder<'_> {
         };
         match &def.kind {
             DefKind::Struct(s) => {
-                iface.derives = s.derives.iter().map(|x| format!("{x:?}")).collect();
+                iface.derives = s.derives.iter().flatten().map(|x| format!("{x:?}")).collect();
                 iface.flow_ty = s.flow_ty.map(|t| {
                     match t {
                         FlowTy::State => "State",
@@ -392,15 +392,12 @@ impl Builder<'_> {
                             });
                         }
                     }
-                    Fields::Tuple(t) => {
-                        iface.fields.push(FieldIface { name: "0".into(), ty: self.ty(*t, &generics), offset: Some(0) });
-                    }
                     Fields::Opaque => {}
                 }
                 Item::Struct(iface)
             }
             DefKind::Enum(e) => {
-                iface.derives = e.derives.iter().map(|x| format!("{x:?}")).collect();
+                iface.derives = e.derives.iter().flatten().map(|x| format!("{x:?}")).collect();
                 iface.variants = e
                     .variants
                     .iter()
@@ -441,7 +438,6 @@ impl Builder<'_> {
                 let tys = match &self.a.def(*s).kind {
                     DefKind::Struct(s) => match &s.fields {
                         Fields::Named(fs) => fs.iter().map(|f| f.ty).collect(),
-                        Fields::Tuple(t) => vec![*t],
                         Fields::Opaque => Vec::new(),
                     },
                     _ => Vec::new(),
@@ -528,7 +524,9 @@ impl Builder<'_> {
         defs.sort_by_key(|(_, d)| d.span.start);
         let mut items = Vec::new();
         for (id, def) in defs {
-            let public = def.vis != Vis::Private;
+            // Until W4-03 the items with no visibility word are read as within
+            // their module (`onsa_sema::resolve::Resolver::visible`): only `pub` is shown.
+            let public = def.vis == Vis::Pub;
             match &def.kind {
                 DefKind::Fn(f) if public && f.flow_fn.is_none() => items.push(Item::Fn(self.fn_item(id, &def.name))),
                 DefKind::Struct(s) if public && s.flow_ty.is_none() => items.push(self.type_item(id, &def.name)),
@@ -544,13 +542,13 @@ impl Builder<'_> {
                     let fns: Vec<FnIface> = i
                         .fns
                         .iter()
-                        .filter(|&&f| self.a.def(f).vis != Vis::Private)
+                        .filter(|&&f| self.a.def(f).vis == Vis::Pub)
                         .map(|&f| self.fn_item(f, &self.a.def(f).name))
                         .collect();
                     let consts: Vec<Item> = i
                         .consts
                         .iter()
-                        .filter(|&&c| self.a.def(c).vis != Vis::Private)
+                        .filter(|&&c| self.a.def(c).vis == Vis::Pub)
                         .map(|&c| self.const_item(c, &self.a.def(c).name))
                         .collect();
                     if !fns.is_empty() || !consts.is_empty() {

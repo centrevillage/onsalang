@@ -56,10 +56,6 @@ impl Checker<'_> {
                         let tys: Vec<TyId> = fs.iter().map(|f| self.subst_pub(f.ty, &args)).collect();
                         Some(Ctors { items: vec![(self.a.def(d).name.clone(), tys)] })
                     }
-                    Fields::Tuple(t) => {
-                        let t = self.subst_pub(t, &args);
-                        Some(Ctors { items: vec![(self.a.def(d).name.clone(), vec![t])] })
-                    }
                     Fields::Opaque => None,
                 },
                 _ => None,

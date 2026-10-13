@@ -16,7 +16,7 @@ impl<'a> Checker<'a> {
     fn check_stmt_inner(&mut self, s: StmtId) -> R<()> {
         let stmt = self.ast.stmt(s);
         match &stmt.kind {
-            StmtKind::Let { pat, ty, init } => {
+            StmtKind::Let { pat, ty, init, .. } => {
                 let ann = match ty {
                     Some(t) => Some(self.lower_type_expr(*t)?),
                     None => None,

@@ -259,8 +259,8 @@ impl<'a> Fmt<'a> {
 
     fn vis(&mut self, v: Vis) {
         match v {
-            Vis::Private => {}
-            Vis::Pkg => self.push("pub(pkg) "),
+            Vis::Default => {}
+            Vis::Priv => self.push("priv "),
             Vis::Pub => self.push("pub "),
         }
     }
@@ -292,37 +292,31 @@ impl<'a> Fmt<'a> {
                 self.push("struct ");
                 self.push(&s.name.name);
                 self.generics(&s.generics);
-                match &s.kind {
-                    StructKind::Named(fields) => {
-                        self.push(" ");
-                        let open = self.find_char(s.name.span.end, '{');
-                        let items: Vec<Elem<'_, 'a>> = fields
-                            .iter()
-                            .map(|f| {
-                                (
-                                    f.span,
-                                    Box::new(move |p: &mut Self| {
-                                        p.vis(f.vis);
-                                        p.push(&f.name.name);
-                                        p.push(": ");
-                                        p.ty(f.ty);
-                                    }) as Box<dyn Fn(&mut Self)>,
-                                )
-                            })
-                            .collect();
-                        self.list("{", "}", open, span.end - 1, &items, true);
-                    }
-                    StructKind::Tuple(t) => {
-                        self.push("(");
-                        self.ty(*t);
-                        self.push(")");
-                    }
-                }
+                self.derives(&s.derives);
+                self.push(" ");
+                let open = self.find_char(s.name.span.end, '{');
+                let items: Vec<Elem<'_, 'a>> = s
+                    .fields
+                    .iter()
+                    .map(|f| {
+                        (
+                            f.span,
+                            Box::new(move |p: &mut Self| {
+                                p.vis(f.vis);
+                                p.push(&f.name.name);
+                                p.push(": ");
+                                p.ty(f.ty);
+                            }) as Box<dyn Fn(&mut Self)>,
+                        )
+                    })
+                    .collect();
+                self.list("{", "}", open, span.end - 1, &items, true);
             }
             ItemKind::Enum(e) => {
                 self.push("enum ");
                 self.push(&e.name.name);
                 self.generics(&e.generics);
+                self.derives(&e.derives);
                 self.push(" ");
                 let open = self.find_char(e.name.span.end, '{');
                 let items: Vec<Elem<'_, 'a>> = e
@@ -469,6 +463,14 @@ impl<'a> Fmt<'a> {
         if let Some(b) = f.body {
             self.push(" ");
             self.block(b, true);
+        }
+    }
+
+    /// `: A + B` at the head of a struct or an enum (§6.4).
+    fn derives(&mut self, d: &Derives) {
+        for (i, p) in d.listed().iter().enumerate() {
+            self.push(if i == 0 { ": " } else { " + " });
+            self.path(p);
         }
     }
 
@@ -888,7 +890,12 @@ impl<'a> Fmt<'a> {
     fn stmt(&mut self, id: StmtId) {
         let s = self.ast.stmt(id);
         match &s.kind {
-            StmtKind::Let { pat, ty, init } => {
+            StmtKind::Let { attrs, pat, ty, init } => {
+                // The attributes of a `let` are on its line (`docs/onsa-tools.md` §3.2).
+                for a in attrs {
+                    self.attr(a);
+                    self.push(" ");
+                }
                 let line = self.line_idx;
                 self.push("let ");
                 self.pat(*pat);
@@ -899,7 +906,8 @@ impl<'a> Fmt<'a> {
                 let col = self.cur_col();
                 self.push(" = ");
                 self.expr(*init);
-                if ty.is_none() && self.line_idx == line {
+                // A `let` with an attribute cuts the column of the `=` (`docs/onsa-tools.md` §3.2).
+                if ty.is_none() && attrs.is_empty() && self.line_idx == line {
                     self.let_marks.push((line, col));
                 }
             }

@@ -251,17 +251,11 @@ impl<'a> Checker<'a> {
                 let bt = self.known(bt, self.expr(*base).span, "value")?;
                 match self.ty(bt) {
                     Ty::Tuple(ts) if (*index as usize) < ts.len() => Ok(ts[*index as usize]),
-                    Ty::Named(d, args) => {
-                        if let DefKind::Struct(s) = &self.a.def(d).kind
-                            && let Fields::Tuple(inner) = s.fields
-                            && *index == 0
-                        {
-                            return Ok(self.subst(inner, &args));
-                        }
-                        let shown = self.display(bt);
-                        Err(self.err(Code::E0413, *index_span, format!("`{shown}` has no element `{index}`")))
-                    }
                     Ty::Error => Ok(bt),
+                    // SPEC-GAP(S-260): an element of a struct whose unit failed in
+                    // the syntax stage gets no diagnostic, as a field does
+                    // (`field_type`; a tuple struct `struct Hz(F32)` is one, S-39).
+                    Ty::Named(d, _) if self.a.partly_read(d) => Ok(self.a.types.error()),
                     _ => {
                         let shown = self.display(bt);
                         Err(self.err(Code::E0413, *index_span, format!("`{shown}` has no element `{index}`")))

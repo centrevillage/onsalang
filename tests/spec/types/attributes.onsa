@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§11.7", "§15.5"]
+
+// The attributes and the places they go in (spec §6.5): `@repr(c)` on a struct, `@fp(relaxed)` on a fn and on a
+// flow, `@param(…)` on an input of a flow (a `block` input here), and the members of an `impl` take `@fp`
+// like a fn. The attribute goes on a line of its own in front of the declaration, before the visibility
+// words. `@mem(bulk)` in front of a `let` is in flow_syntax/mem_attribute.onsa (its meaning is
+// not in this version). The places that are errors (E0005) are in negative/attributes_table.onsa.
+
+@repr(c)
+pub struct Frame {
+  left: F32,
+  right: F32,
+}
+
+@repr(c)
+struct Plain {
+  count: I32,
+}
+
+@repr(c)
+priv struct Hidden {
+  count: I32,
+}
+
+@fp(relaxed)
+pub fn fast(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(relaxed)
+fn fast_plain(x: F32) -> F32 {
+  x * 4.0
+}
+
+@fp(relaxed)
+priv rt fn fast_rt(x: F32) -> F32 {
+  x * 5.0
+}
+
+@fp(relaxed)
+pub flow fast_flow(x: F32 at sample) -> F32 at sample {
+  x * 6.0
+}
+
+pub flow with_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub struct Target {
+  x: F32,
+}
+
+impl Target {
+  @fp(relaxed)
+  pub fn scaled(self) -> F32 {
+    self.x * 2.0
+  }
+}

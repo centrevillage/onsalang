@@ -2,7 +2,8 @@
 // [test]
 // spec = ["§6.4"]
 
-@derive(PartialEq, Eq, Hash, Show) //~ E0200
-pub struct Key {
+// The example of §6.4. `Show` is in the list of §6.4, but a derive of `Show` is E0200 in this version (it
+// writes a `Str`, which this version has not, §20; S-13): the error is on the line of the head.
+pub struct Key: PartialEq + Eq + Hash + Show { //~ E0200
   id: U32,
 }

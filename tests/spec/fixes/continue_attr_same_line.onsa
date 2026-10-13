@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.5", "§15.5", "§14.1"]
+// fixes = 1
+
+// An attribute of another language or an old version on the line of the item it belongs to
+// (`#[fp(relaxed)] fn`, `#[repr(c)] struct`, the old `@relaxed fn`) is one E0020 whose candidate
+// writes the attribute as Onsa does (§6.5). The attribute closes on the line, so the item is read
+// on from the end of it (§18.1, S-435): the name is resolved, and the head is a read
+// declaration. An attribute does not change the type of a function, a flow or a constant (§6.5),
+// so nothing about the item is unknown: the calls are checked against the head, and a real error
+// of a call is reported. For the attributes that a struct needs for its derive list or its
+// layout, see continue_derive_unknown.onsa. One error in each unit.
+
+#[fp(relaxed)] fn scaled(x: F32) -> F32 {           //~ E0020
+  x * 2.0
+}
+
+#[fp(relaxed)] pub fn scaled_pub(x: F32, k: F32) -> F32 {   //~ E0020
+  x * k
+}
+
+@relaxed fn halved(x: F32) -> F32 {                 //~ E0020
+  x * 0.5
+}
+
+#[fp(relaxed)] pub flow gain(x: F32 at sample) -> F32 at sample {   //~ E0020
+  x * 0.5
+}
+
+#[fp(relaxed)] fn body_not_checked(x: F32) -> F32 { //~ E0020
+  zz
+}
+
+#[repr(c)] pub struct Frame {                       //~ E0020
+  a: I32,
+  b: I32,
+}
+
+fn calls() -> F32 {
+  scaled(1.0) + scaled_pub(1.0, 2.0) + halved(3.0) + body_not_checked(4.0)
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { halved(scaled(x)) }
+  if c { f.(1.0) } else { scaled_pub(scaled(1.0), halved(2.0)) }
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  gain~(gain~(x))
+}
+
+fn makes() -> Frame {
+  Frame { a: 1, b: 2 }
+}
+
+fn reads(f: Frame) -> I32 {
+  f.a + f.b
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> F32 {
+  scaled(1.0, 2.0)                                  //~ E0412
+}
+
+fn wrong_argument_type() -> F32 {
+  halved(true)                                      //~ E0401
+}
+
+fn missing_field() -> Frame {
+  Frame { a: 1 }                                    //~ E0410
+}
+
+fn no_such_field(f: Frame) -> I32 {
+  f.zz                                              //~ E0413
+}
+
+pub flow wrong_flow_call(x: F32 at sample) -> F32 at sample {
+  gain(x)                                           //~ E0811
+}
+
+// A real error of the module is still reported.
+fn own_error() -> F32 {
+  scaled(1.0) + zz                                  //~ E0302 @17
+}

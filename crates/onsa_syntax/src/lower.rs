@@ -219,23 +219,10 @@ impl<'a> Lower<'a> {
     }
 
     fn item(&mut self, n: NodeId) -> ItemId {
-        let mut doc = Vec::new();
-        let mut attrs = Vec::new();
-        let mut vis = Vis::Private;
-        let mut decl = None;
-        for c in self.nodes(n) {
-            match self.cst.kind(c) {
-                // The doc comments the parser took for the item.
-                NodeKind::Docs => doc = self.doc_lines(c, TokenKind::DocComment),
-                NodeKind::Attr => attrs.push(self.attr(c)),
-                NodeKind::Vis => vis = self.vis(c),
-                _ => decl = Some(c),
-            }
-        }
-        let decl = decl.unwrap_or_else(|| self.bug(n, "a declaration"));
+        let head = self.head(n);
+        let decl = head.decl.unwrap_or_else(|| self.bug(n, "a declaration"));
         let kind = self.item_kind(decl);
-        let span = self.span(n);
-        self.add_item(n, Item { span, doc, attrs, vis, kind, failed: None })
+        self.add_head_item(n, head, kind, None)
     }
 
     /// An item a syntax error stopped (spec §18.1, S-59): its name and the
@@ -244,23 +231,76 @@ impl<'a> Lower<'a> {
     /// they were read whole. `None` when its name was not read, and for a
     /// failed `impl` heading and `use` (R-180: W5-04 and W4-03).
     fn failed_item(&mut self, n: NodeId) -> Option<ItemId> {
-        let mut doc = Vec::new();
-        let mut attrs = Vec::new();
-        let mut vis = Vis::Private;
-        let mut decl = None;
+        let head = self.head(n);
+        let (kind, failed) = self.failed_kind(head.decl?)?;
+        Some(self.add_head_item(n, head, kind, Some(failed)))
+    }
+
+    /// The head of the `Item` node `n`, up to its declaration node (the
+    /// `Error` nodes after it are tokens the recovery skipped): the doc
+    /// comments the parser took for the item, the attributes read whole (one
+    /// that was not read, or that the table refused, is incomplete: no
+    /// attribute), the visibility and the modifiers written (§18.1).
+    fn head(&mut self, n: NodeId) -> Head {
+        let mut head =
+            Head { doc: Vec::new(), attrs: Vec::new(), vis: Vis::Default, rt: false, unread_attr: false, decl: None };
+        let mut words: Vec<Vis> = Vec::new();
+        let mut vis_form = false;
         for c in self.nodes(n) {
             let complete = self.cst.is_complete(c);
             match self.cst.kind(c) {
-                NodeKind::Docs => doc = self.doc_lines(c, TokenKind::DocComment),
-                NodeKind::Attr if complete => attrs.push(self.attr(c)),
-                NodeKind::Vis if complete => vis = self.vis(c),
-                NodeKind::Attr | NodeKind::Vis | NodeKind::Error => {}
-                _ => decl = Some(c),
+                NodeKind::Docs => head.doc = self.doc_lines(c, TokenKind::DocComment),
+                NodeKind::Attr if complete => head.attrs.push(self.attr(c)),
+                NodeKind::Attr => head.unread_attr = true,
+                NodeKind::Vis if complete => words.push(self.vis(c)),
+                NodeKind::Vis => vis_form = true,
+                // The modifiers the parser read on after (S-464): out of
+                // order, with words of other languages, before a keyword.
+                NodeKind::Error => {
+                    for t in self.toks(c) {
+                        match self.kind_of(t) {
+                            TokenKind::KwPub => words.push(Vis::Pub),
+                            TokenKind::KwPriv => words.push(Vis::Priv),
+                            TokenKind::KwRt => head.rt = true,
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {
+                    head.decl = Some(c);
+                    break;
+                }
             }
         }
-        let (kind, failed) = self.failed_kind(decl?)?;
+        // SPEC-GAP(S-482): the visibility written right is kept when the head
+        // was read on after another form; a visibility of another language,
+        // and `pub` with `priv`, are the default.
+        if !vis_form
+            && let Some(&first) = words.first()
+            && words.iter().all(|&w| w == first)
+        {
+            head.vis = first;
+        }
+        head
+    }
+
+    /// Add the item `n` of `head` and `kind`: an `rt` written out of order is
+    /// the function's (S-464), and a struct or an enum with an attribute that
+    /// was not read has its derives and its layout unknown (§18.1, S-460).
+    fn add_head_item(&mut self, n: NodeId, head: Head, mut kind: ItemKind, failed: Option<Failed>) -> ItemId {
+        let Head { doc, attrs, vis, rt, unread_attr, .. } = head;
+        match &mut kind {
+            ItemKind::Fn(f) => f.rt |= rt,
+            ItemKind::Struct(s) if unread_attr => {
+                s.derives = Derives::Unknown;
+                s.repr = Repr::Unknown;
+            }
+            ItemKind::Struct(s) if attrs.iter().any(|a| a.is(crate::attrs::REPR, crate::attrs::C)) => s.repr = Repr::C,
+            ItemKind::Enum(e) if unread_attr => e.derives = Derives::Unknown,
+            _ => {}
+        }
         let span = self.span(n);
-        Some(self.add_item(n, Item { span, doc, attrs, vis, kind, failed: Some(failed) }))
+        self.add_item(n, Item { span, doc, attrs, vis, kind, failed })
     }
 
     /// The name of a declaration when it was read whole.
@@ -390,26 +430,25 @@ impl<'a> Lower<'a> {
             NodeKind::Struct => {
                 let name = self.read_name(d)?;
                 let generics = self.failed_generics(d, &mut heading);
-                let kind = if let Some(b) = self.child(d, NodeKind::TupleStructBody) {
-                    let ty = match self.of_class(b, Class::Type).first() {
-                        Some(&t) if self.cst.is_complete(t) => self.ty(t),
-                        _ => self.error_type(b),
-                    };
-                    StructKind::Tuple(ty)
-                } else if let Some(list) = self.child(d, NodeKind::FieldList) {
-                    let fields = self.nodes(list);
-                    let fields =
-                        fields.into_iter().filter(|&f| self.cst.is_complete(f)).map(|f| self.field(f)).collect();
-                    StructKind::Named(fields)
-                } else {
-                    heading = false;
-                    StructKind::Named(Vec::new())
+                let derives = self.failed_derives(d, &mut heading);
+                let fields = match self.child(d, NodeKind::FieldList) {
+                    // A list cut at its `{` is no list (a tuple struct, S-39): the
+                    // fields were not read, and their uses get no diagnostic (S-260).
+                    Some(list) => {
+                        let fields = self.nodes(list);
+                        fields.into_iter().filter(|&f| self.cst.is_complete(f)).map(|f| self.field(f)).collect()
+                    }
+                    None => {
+                        heading = false;
+                        Vec::new()
+                    }
                 };
-                ItemKind::Struct(StructDecl { name, generics, kind })
+                ItemKind::Struct(StructDecl { name, generics, derives, repr: Repr::Onsa, fields })
             }
             NodeKind::Enum => {
                 let name = self.read_name(d)?;
                 let generics = self.failed_generics(d, &mut heading);
+                let derives = self.failed_derives(d, &mut heading);
                 let variants = match self.child(d, NodeKind::VariantList) {
                     Some(list) => {
                         let vs = self.nodes(list);
@@ -420,7 +459,7 @@ impl<'a> Lower<'a> {
                         Vec::new()
                     }
                 };
-                ItemKind::Enum(EnumDecl { name, generics, variants })
+                ItemKind::Enum(EnumDecl { name, generics, derives, variants })
             }
             NodeKind::TypeAlias | NodeKind::OpaqueType => {
                 let name = self.read_name(d)?;
@@ -531,7 +570,27 @@ impl<'a> Lower<'a> {
     }
 
     fn vis(&self, n: NodeId) -> Vis {
-        if self.has(n, TokenKind::LParen) { Vis::Pkg } else { Vis::Pub }
+        if self.has(n, TokenKind::KwPriv) { Vis::Priv } else { Vis::Pub }
+    }
+
+    /// The traits at the head of a struct or an enum (§6.4).
+    fn derives(&mut self, n: NodeId) -> Derives {
+        let Some(d) = self.child(n, NodeKind::Derives) else { return Derives::Listed(Vec::new()) };
+        let paths =
+            self.of_kind(d, NodeKind::Bound).into_iter().map(|b| self.path(self.need(b, NodeKind::Path))).collect();
+        Derives::Listed(paths)
+    }
+
+    /// The traits at the head of a failed struct or enum; `heading` turns
+    /// false when they were cut.
+    fn failed_derives(&mut self, n: NodeId, heading: &mut bool) -> Derives {
+        match self.child(n, NodeKind::Derives) {
+            Some(d) if !self.cst.is_complete(d) => {
+                *heading = false;
+                Derives::Listed(Vec::new())
+            }
+            _ => self.derives(n),
+        }
     }
 
     fn attr(&mut self, n: NodeId) -> Attr {
@@ -571,21 +630,18 @@ impl<'a> Lower<'a> {
             NodeKind::Struct => {
                 let name = self.name(n);
                 let generics = self.generics(n);
-                let kind = if let Some(b) = self.child(n, NodeKind::TupleStructBody) {
-                    StructKind::Tuple(self.first_type(b).unwrap_or_else(|| self.bug(b, "a type")))
-                } else {
-                    let list = self.need(n, NodeKind::FieldList);
-                    let fields = self.nodes(list).into_iter().map(|f| self.field(f)).collect();
-                    StructKind::Named(fields)
-                };
-                ItemKind::Struct(StructDecl { name, generics, kind })
+                let derives = self.derives(n);
+                let list = self.need(n, NodeKind::FieldList);
+                let fields = self.nodes(list).into_iter().map(|f| self.field(f)).collect();
+                ItemKind::Struct(StructDecl { name, generics, derives, repr: Repr::Onsa, fields })
             }
             NodeKind::Enum => {
                 let name = self.name(n);
                 let generics = self.generics(n);
+                let derives = self.derives(n);
                 let list = self.need(n, NodeKind::VariantList);
                 let variants = self.nodes(list).into_iter().map(|v| self.variant(v)).collect();
-                ItemKind::Enum(EnumDecl { name, generics, variants })
+                ItemKind::Enum(EnumDecl { name, generics, derives, variants })
             }
             NodeKind::TypeAlias => {
                 let name = self.name(n);
@@ -677,7 +733,7 @@ impl<'a> Lower<'a> {
     }
 
     fn field(&mut self, f: NodeId) -> Field {
-        let vis = self.child(f, NodeKind::Vis).map_or(Vis::Private, |v| self.vis(v));
+        let vis = self.child(f, NodeKind::Vis).map_or(Vis::Default, |v| self.vis(v));
         let name = self.name(f);
         let ty = self.first_type(f).unwrap_or_else(|| self.bug(f, "a type"));
         Field { doc: self.docs_of(f), vis, name, ty, span: self.span(f) }
@@ -882,6 +938,11 @@ impl<'a> Lower<'a> {
     fn block_body(&mut self, n: NodeId) -> Block {
         let mut stmts: Vec<(NodeId, StmtKind)> = Vec::new();
         for s in self.nodes(n) {
+            // The attributes before a statement that takes none: its E0005
+            // was reported where it was read (`Parser::parse_stmt`).
+            if self.cst.kind(s) == NodeKind::Attr {
+                continue;
+            }
             let kind = self.stmt_kind(s);
             stmts.push((s, kind));
         }
@@ -905,7 +966,9 @@ impl<'a> Lower<'a> {
                 let pat = self.pat(pat);
                 let ty = self.first_type(n);
                 let init = self.need_expr(n);
-                StmtKind::Let { pat, ty, init }
+                let attrs = self.of_kind(n, NodeKind::Attr);
+                let attrs = attrs.into_iter().filter(|&a| self.cst.is_complete(a)).map(|a| self.attr(a)).collect();
+                StmtKind::Let { attrs, pat, ty, init }
             }
             NodeKind::VarStmt => {
                 let name = self.name(n);
@@ -1259,4 +1322,16 @@ impl<'a> Lower<'a> {
         let tok = self.cst.token(t);
         str_lit(self.text, tok.span, self.literals.holes_in(tok.span))
     }
+}
+
+/// The head of an item as [`Lower::head`] read it.
+struct Head {
+    doc: Vec<Span>,
+    attrs: Vec<Attr>,
+    vis: Vis,
+    /// An `rt` written out of order before the declaration's keyword.
+    rt: bool,
+    /// An attribute that was not read (S-460).
+    unread_attr: bool,
+    decl: Option<NodeId>,
 }

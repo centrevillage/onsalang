@@ -28,6 +28,57 @@ pub(crate) fn bracket_contents(tokens: &[Token], open: usize) -> Option<(usize, 
     None
 }
 
+/// The bracket that closes the one at `open`: the closer of its kind, the
+/// brackets in it paired by kind too (§2.5). None when `open` is no opening
+/// bracket, when a closer of another kind comes first (`pub(crate]` closes
+/// nothing), and at the end of the file. The one scan of where a bracket
+/// closes, for the parser and the table of the forms of other languages.
+pub(crate) fn closing(tokens: &[Token], open: usize) -> Option<usize> {
+    scan_closing(tokens, open, false)
+}
+
+/// [`closing`] on the line of `open` (the code tokens, in which a line break
+/// is a token in brackets too; none when a line break comes first): a form
+/// of one line (§18.1, S-435).
+pub(crate) fn closing_on_line(tokens: &[Token], open: usize) -> Option<usize> {
+    scan_closing(tokens, open, true)
+}
+
+fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
+    closer(tokens.get(open)?.kind)?;
+    let mut wanted = Vec::new();
+    for (i, t) in tokens.iter().enumerate().skip(open) {
+        if let Some(c) = closer(t.kind) {
+            wanted.push(c);
+            continue;
+        }
+        match t.kind {
+            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                if wanted.pop() != Some(t.kind) {
+                    return None;
+                }
+                if wanted.is_empty() {
+                    return Some(i);
+                }
+            }
+            TokenKind::Newline if on_line => return None,
+            TokenKind::Eof => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The closer of an opening bracket.
+fn closer(kind: TokenKind) -> Option<TokenKind> {
+    match kind {
+        TokenKind::LParen => Some(TokenKind::RParen),
+        TokenKind::LBracket => Some(TokenKind::RBracket),
+        TokenKind::LBrace => Some(TokenKind::RBrace),
+        _ => None,
+    }
+}
+
 /// Whether an arm goes on from token `i` to its `=>`: a `=>` at the depth of
 /// `i` comes before the next `,` or `}` there (S-386, S-419). The scan of the
 /// tokens, which reads no element on (S-384): a symbol at the head of the

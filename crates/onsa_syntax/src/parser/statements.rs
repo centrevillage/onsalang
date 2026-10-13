@@ -74,20 +74,45 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// A `let` after its keyword (the node `m` is open): `pat[: T] = e`.
+    fn parse_let_rest(&mut self, m: Marker) -> PResult<Completed> {
+        self.parse_pattern()?;
+        if self.eat(TokenKind::Colon).is_some() {
+            self.parse_type()?;
+        }
+        self.expect(TokenKind::Eq)?;
+        self.parse_consumed()?;
+        self.end_with(End::Bound);
+        Ok(self.complete(m, NodeKind::LetStmt))
+    }
+
     fn parse_stmt(&mut self) -> PResult<Completed> {
+        // The attributes before a statement (§6.5, §12.4: `@mem(bulk) let`):
+        // an `@` with a name right after it. A line break may come before the
+        // statement, as before a declaration (fmt puts them on its line). Only
+        // a `let` takes one (`@mem`); before any other statement, the table's
+        // E0005, and the statement is read on.
+        let i = self.peek_index();
+        if self.tokens[i].kind == TokenKind::At
+            && self.tokens[i + 1].kind == TokenKind::Ident
+            && self.gap(i + 1) == Gap::None
+        {
+            let attrs = self.parse_attrs(false)?;
+            self.skip_newlines();
+            if self.at(TokenKind::KwLet) {
+                let m = self.precede(attrs[0].node, NodeKind::LetStmt)?;
+                self.check_attrs(&attrs, Place::Let, None);
+                self.bump();
+                return self.parse_let_rest(m);
+            }
+            self.check_attrs(&attrs, Place::Other("a statement other than `let`"), None);
+        }
         let t = self.peek();
         match t.kind {
             TokenKind::KwLet => {
                 let m = self.start(NodeKind::LetStmt)?;
                 self.bump();
-                self.parse_pattern()?;
-                if self.eat(TokenKind::Colon).is_some() {
-                    self.parse_type()?;
-                }
-                self.expect(TokenKind::Eq)?;
-                self.parse_consumed()?;
-                self.end_with(End::Bound);
-                Ok(self.complete(m, NodeKind::LetStmt))
+                self.parse_let_rest(m)
             }
             TokenKind::KwVar => {
                 let m = self.start(NodeKind::VarStmt)?;

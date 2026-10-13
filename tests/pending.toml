@@ -146,13 +146,6 @@ note = "Point.norm の積和の括弧。写し fn/methods.onsa は括弧付き"
 
 [[pending]]
 kind = "spec-example"
-target = "§6.4 e8bddb35: pub struct Key: PartialEq + Eq + Hash + Show {"
-reasons = ["S-34"]
-until = "W3-13"
-note = "宣言の : trait。写し fn/derive.onsa は @derive"
-
-[[pending]]
-kind = "spec-example"
 target = "§11.5 05f67d5d: use std.math.{sum}"
 reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
@@ -167,17 +160,11 @@ note = "比較と && の括弧。写し test/check.onsa は括弧付き"
 
 [[pending]]
 kind = "spec-example"
-target = "§17.2 18ae837c: use std.fs.{Fs, Path, IoError}"
-reasons = ["S-34"]
-until = "W3-13"
-note = "ConfigError の : trait。写し examples/line_count.onsa は @derive"
-
-[[pending]]
-kind = "spec-example"
 target = "§17.4 6d30430b: const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒"
 reasons = ["S-102", "S-44", "S-29", "S-45", "S-43"]
-until = "W3-13"
-note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 で写しの examples/voice.onsa と一致したが、積和の括弧と @mem(bulk) の let が残る。W3-08 が @mem(bulk) を意味の実装まで E0200 にするなら、until を W9 の作業に改める（W3-08 の作業票で決める）"
+until = "W9-06"
+note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 で写しの examples/voice.onsa と一致した。積和の括弧（W3-13）が解けた後に残る差は @mem(bulk) の let だけで、@mem の意味（W9-06）まで E0200（W3-08 の決定）"
+
 
 [[pending]]
 kind = "spec-example"
@@ -188,13 +175,6 @@ note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今�
 
 # --- 否定例が 3 件に届かない診断コード（K-13。照合は tools/diag_codes.py、W1-02）
 # 規則 1: コードの規則を作るか変える W の作業（複数なら最後に仕上げる作業）
-
-[[pending]]
-kind = "diag-code"
-target = "E0005"
-reasons = ["S-103", "S-133"]
-until = "W3-08"
-note = "属性の表（一覧に無い属性、付けられない場所、@repr / @fp の値）"
 
 [[pending]]
 kind = "diag-code"
@@ -258,13 +238,6 @@ target = "E0411"
 reasons = ["S-98", "R-126"]
 until = "W5-02"
 note = "as で書けない組。修正候補を読みごとに"
-
-[[pending]]
-kind = "diag-code"
-target = "E0412"
-reasons = ["S-103"]
-until = "W4-04"
-note = "型引数と const 引数の数（S-103 のコードの割り当て）"
 
 [[pending]]
 kind = "diag-code"
@@ -539,13 +512,6 @@ until = "W7-02"
 note = "非 rt の fn に sample の値を渡すのは E0815（§11.5）。元の期待値は E0805 で、今の実装も E0805 を出す"
 
 # --- W1-10 の否定例のうち、まだ通らないもの（2026-10-07）
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/names_flow_decl.onsa"
-reasons = ["S-102", "S-250"]
-until = "W3-08"
-note = "E0305 の否定例 5 件。at は W3-10 で通るが、priv fn（25 行目）が E0002 で、その E0305 の 1 件が W3-08 まで通らない"
 
 [[pending]]
 kind = "test-case"
@@ -1219,13 +1185,6 @@ note = "[a, b]（長さの違う Span）が [Span[F32]; 2] の引数で E0401、
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0020_old_attributes.onsa"
-reasons = ["S-57"]
-until = "W3-08"
-note = "@relaxed の E0020（候補は @fp(relaxed)）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/control/range_guard_fine.onsa"
 reasons = ["S-249"]
 until = "W8-06"
@@ -1237,13 +1196,6 @@ target = "tests/spec/control/range_header_fine.onsa"
 reasons = ["S-278", "S-224"]
 until = "W8-03"
 note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。for の見出しの ..= が E0200（W8-03）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_old_attributes_flow.onsa"
-reasons = ["S-43", "S-57"]
-until = "W3-08"
-note = "at は W3-10 で通るが、@bulk の E0020 の行（bulk_attribute）が W3-08 まで無い（E0002）"
 
 [[pending]]
 kind = "test-case"
@@ -1408,14 +1360,6 @@ note = "~ の挿入と除去の候補"
 
 # --- 字句解析器のキーワードと仕様 §2.2 の一覧の差（gate の項目 keywords、tools/keywords.py。W3-02/b 12）
 
-[[pending]]
-kind = "gate"
-target = "keywords/priv"
-reasons = ["S-36"]
-until = "W3-08"
-note = "可視性の priv が字句解析器のキーワードに無い"
-
-# W2-04（S-222: 呼び出しの深さの上限 128）の事例のうち、後の作業を待つもの。
 [[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/recursion_fn_values.onsa"
@@ -1801,87 +1745,10 @@ note = "見えている名前への ^"
 
 [[pending]]
 kind = "foreign-form"
-target = "derive_attribute"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
-target = "relaxed_attribute"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
-target = "bulk_attribute"
-reasons = ["S-43", "S-57"]
-until = "W3-08"
-note = "属性の旧い形の行（W3-08）。例の flow の構文は W3-10 で通る"
-
-[[pending]]
-kind = "foreign-form"
-target = "mem_fast"
-reasons = ["S-43", "S-57"]
-until = "W3-08"
-note = "属性の冗長な形の行（W3-08）。例の flow の構文は W3-10 で通る"
-
-[[pending]]
-kind = "foreign-form"
-target = "field_pub"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
-target = "field_priv_in_priv_struct"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
-target = "pub_pkg"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
-target = "priv_use"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
-target = "tuple_struct"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "宣言と属性の旧い形、可視性"
-
-[[pending]]
-kind = "foreign-form"
 target = "copy_impl"
 reasons = ["S-250"]
 until = "W4-05"
 note = "impl Copy と : Copy（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "copy_bound"
-reasons = ["S-250"]
-until = "W4-05"
-note = "impl Copy と : Copy（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
-target = "hash_attribute"
-reasons = ["S-57", "S-250"]
-until = "W3-08"
-note = "#[derive(Eq)] の候補 struct Key: Eq を今の実装が読めない（宣言の : trait の構文は W3-08）。#[repr(c)] と #[fp(relaxed)] の例は通る"
 
 [[pending]]
 kind = "test-case"
@@ -1909,15 +1776,6 @@ until = "W4-09"
 note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。28 行目の move lo + 1..<hi - 1 は今 + の E0002（§5.2、S-362 で未決）。E0703 は modes の段（diag-code の E0703 の項目と同じ時期）"
 
 # --- W3-18 の gate のファズが見つけた入力（種を足してコーパスが変わり、既存の不具合が表に出た）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/b330941f.onsa"
-reasons = ["R-193", "S-236"]
-until = "W3-08"
-note = "fix-same-place: fix|E0020|write the brackets `[ ]`|E0002。`fn b<T q>` の `<…>` の候補を当てると `[T q]` が E0002"
-
-# --- W3-09/t2: flow の構文の第 14 組の決定（S-354、S-355、S-356、S-357、S-358、S-363）
 
 [[pending]]
 kind = "test-case"
@@ -2011,15 +1869,6 @@ note = "`if~` は W3-10 の写しで E0200（K-08、W7-06）。W3-06 で `e0020_
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0003_derive_heading_brace.onsa"
-reasons = ["S-415", "S-34"]
-until = "W3-08"
-note = "derive を持つ見出しの { の E0003。見出しの : trait の構文が W3-08"
-
-# --- W3-04/t の事例（字句: R-01、S-201、S-89、S-90、S-51、S-169、S-279、S-371）
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/lex/interp_paths_resolved.onsa"
 reasons = ["S-90", "R-102"]
 until = "W4-04"
@@ -2057,13 +1906,6 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 
 [[pending]]
 kind = "fuzz-input"
-target = "tests/fuzz/4fc90823.onsa"
-reasons = ["R-193"]
-until = "W3-08"
-note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0002。`d<U)>(` の `<…>` の候補（`::[…]`）を当てると `)` の E0002 が残る"
-
-[[pending]]
-kind = "fuzz-input"
 target = "tests/fuzz/9e06bb6a.onsa"
 reasons = ["R-214"]
 until = "W3-13"
@@ -2075,3 +1917,31 @@ target = "tests/fuzz/45c62d79.onsa"
 reasons = ["R-214"]
 until = "W3-13"
 note = "fix-same-place: fix|E0020|remove the space|E0001。置き場所の行の空白を除く候補の後に同じ段の誤り（U+000D の E0001）が残る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/fixes/continue_pkg_unspecified"
+reasons = ["S-435", "S-459", "S-464", "R-180"]
+until = "W4-03"
+note = "読み続けた宣言の可視性は無指定（パッケージ内）。今の実装は無指定の項目の取り込みを E0303 にする（§15.1 は無指定をパッケージ内に公開）。読み続けは W3-08、可視性は W4-03"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/continue_derive_methods.onsa"
+reasons = ["S-460"]
+until = "W5-06"
+note = "derive が作るメソッド（default・ordinal・from_ordinal）の未知を見る 2 か所は W5-06"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/continue_pkg_unspecified/main.onsa:22:3 E0812 fix1"
+reasons = ["S-435"]
+until = "W4-03"
+note = "今の dev の観測（t2）。読み続けが入れば消える"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/visibility"
+reasons = ["S-36"]
+until = "W4-03"
+note = "priv の構文（W3-08）と無指定をパッケージ内にする意味（W4-03）（t1）"

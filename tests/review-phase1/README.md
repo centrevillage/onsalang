@@ -41,7 +41,7 @@
 | `body/i1_generic_lit.onsa` | R-53 |
 | `body/b1_let_borrow_affine.onsa` | R-54 |
 | `body/t1_cmp_lit.onsa` | R-55 |
-| `body/n1_newtype.onsa`、`types/newtype*.onsa` | R-51 |
+| `body/n1_newtype.onsa`、`types/newtype*.onsa` | R-51。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_tuple_struct.onsa`、`tests/spec/negative/tuple_struct_many.onsa`（使う側は型の位置だけ） |
 | `body/d1_while_true.onsa` | R-52 |
 | `body/pm1_partial.onsa` | R-74、R-95 |
 | `body/b2_builtin_methods.onsa` | R-96 |
@@ -83,12 +83,12 @@
 | `cback/voice_host/host.cpp` | R-65 |
 | `types/rec*.onsa`、`types/constcyc*.onsa` | R-02 |
 | `types/derive2.onsa` | R-35 |
-| `types/attrs.onsa` | R-36 |
+| `types/attrs.onsa` | R-36。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/attributes_table.onsa`（E0005）、`attributes_no_candidate.onsa`（S-483）、`tests/spec/fixes/e0005_attribute_values.onsa`。derive の検査（`NoEq` 越し）は W5-06 |
 | `types/bounds.onsa`、`types/bufelem.onsa`、`types/span*.onsa`、`types/nestrate.onsa`、`types/ratefn.onsa`、`types/tyb*.onsa`（推定） | R-37 |
 | `types/fieldvis/` | R-38 |
 | `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39 |
 | `types/dups.onsa` | R-40 |
-| `types/implitems.onsa`、`types/flowimpl.onsa` | R-44 |
+| `types/implitems.onsa`、`types/flowimpl.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/item_contexts.onsa`・`item_contexts_units.onsa`、`tests/spec/types/flow_impl.onsa` |
 | `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46 |
 | `types/single/`、`types/pkguse/`（推定） | R-47 |
 | `types/flowimp/`、`types/useorder*.onsa`（推定） | R-50 |
@@ -106,7 +106,7 @@
 | `syntax/lit.onsa` | R-73 |
 | `syntax/tup1.onsa`、`syntax/tuples.onsa` | R-43。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_one_tuple.onsa`（要素 1 個の後の `,` の E0002）、`tests/spec/semantics/paren_group.onsa`（式・型・パターンの `(e)` はグループ化） |
 | `syntax/moveargs.onsa`、`syntax/paren_move.onsa` | R-42。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_move_operand.onsa` |
-| `syntax/nested*.onsa` | R-44 |
+| `syntax/nested*.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した（`types/implitems.onsa` の行と同じ事例） |
 | `syntax/bigfloat.onsa` | R-45 |
 | `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/naming.onsa`、`syntax/modpkg/` | R-46 |
 | `syntax/arrow.onsa` | R-58。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/lex/continuation_function_types.onsa`（全部）と `continuation_top_level.onsa`（トップレベルの行末の `->` の継続） |

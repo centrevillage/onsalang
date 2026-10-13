@@ -4,6 +4,7 @@
 //! checks on the AST of this crate (operator groups, naming).
 
 pub mod ast;
+pub mod attrs;
 mod callee;
 pub mod cst;
 #[cfg(test)]

@@ -91,7 +91,10 @@ features! {
     UserTargets: Language, "`target` declarations outside `std` (they need a build target)", None;
     ConstGenericKinds: Language, "const generics other than `U32`", None;
     /// `{}`: the derived trait.
-    Derive: Language, "`@derive({})` (needs `Str`)", None;
+    Derive: Language, "deriving `{}` at the head of a type", None;
+    /// S-43: the placing of a delay line in the bulk storage, with E0818 to
+    /// E0820 (W9-06).
+    MemStorage: Language, "the storage attribute `@mem` of a `let`", None;
     ArrayLengthExprs: Language, "expressions as array lengths",
         Some("write the length as a literal or as the name of a constant");
     ComputedArrayLengths: Language, "constants computed by expressions as array lengths",

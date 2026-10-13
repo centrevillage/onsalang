@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§6.2", "§6.6", "§18.1"]
+
+// The members of an `impl` are functions and constants, and nothing else (spec §6.2, §6.6, §18.1: the unit of a
+// member is a method or an associated constant; S-263, R-44). Another declaration in the body of an `impl` is E0002
+// at its keyword. A declaration that is in an `impl`
+// by mistake is not a declaration of the module, so a name that it would have given is not found
+// outside (E0302, at the end of the file). The member after the wrong declaration is checked as usual.
+// This file has one wrong declaration in each `impl`; the members that are units of their own, many in one
+// `impl`, are in item_contexts_units.onsa. One error in each declaration unit (P-01).
+
+pub struct Target {
+  x: F32,
+}
+
+impl Target {
+  struct Inner {                                    //~ E0002
+    y: F32,
+  }
+
+  pub fn after_struct(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  pub struct PubInner {                             //~ E0002
+    y: F32,
+  }
+
+  pub fn after_pub_struct(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  enum InnerEnum {                                  //~ E0002
+    A,
+    B,
+  }
+
+  pub fn after_enum(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  type Sample = F32                                 //~ E0002
+
+  pub fn after_type(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  use std.math.{sqrt}                               //~ E0002
+
+  pub fn after_use(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  test "a test in an impl" {                        //~ E0002
+    assert true
+  }
+
+  pub fn after_test(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  flow inner(x: F32 at sample) -> F32 at sample {   //~ E0002
+    x
+  }
+
+  pub fn after_flow(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  pub flow inner_pub(x: F32 at sample) -> F32 at sample { //~ E0002
+    x
+  }
+
+  pub fn after_pub_flow(self) -> F32 {
+    self.x
+  }
+}
+
+impl Target {
+  impl Target {                                     //~ E0002
+    pub fn nested(self) -> F32 {
+      self.x
+    }
+  }
+
+  pub fn after_impl(self) -> F32 {
+    self.x
+  }
+}
+
+// What an `impl` may have: functions (with `rt`, and a visibility) and constants.
+impl Target {
+  const ORIGIN: I32 = 0
+
+  pub rt fn rt_member(self) -> F32 {
+    self.x
+  }
+
+  priv fn private_member(self) -> F32 {
+    self.x
+  }
+
+  fn plain_member(self) -> F32 {
+    self.x
+  }
+}
+
+pub fn outside(i: Inner) -> F32 {                   //~ E0302
+  1.0
+}

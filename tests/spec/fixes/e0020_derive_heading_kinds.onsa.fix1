@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§6.4", "§18.1"]
+// fixes = 1
+
+// E0020 for a kind written in the list of a derive in the head of a declaration: `Copy` and `Dup` are kinds, not
+// traits, and the kind of a type follows from its structure (spec §4.6, §6.4, S-34; the row `copy_bound` of
+// docs/foreign-forms.toml). The candidate takes the name out, and the `+` that was next to it. When the kind was
+// the only name, the `:` goes too. The E0020 of the names stage goes before the E0416 of the types stage
+// (`Debug`, §18.1), whatever the order of the list. The main position is the name. One error in each
+// declaration unit (P-01).
+
+pub struct OnlyCopy {                         //~ E0020
+  id: U32,
+}
+
+pub struct OnlyDup {                           //~ E0020
+  id: U32,
+}
+
+pub enum Last: PartialEq {                   //~ E0020
+  Off,
+  On,
+}
+
+pub struct First: PartialEq {                 //~ E0020
+  id: U32,
+}
+
+pub struct Middle: PartialEq + Eq {          //~ E0020
+  id: U32,
+}
+
+pub struct Pair[T]: PartialEq {              //~ E0020
+  a: T,
+  b: T,
+}
+
+pub struct DebugFirst: Debug {              //~ E0020
+  id: U32,
+}
+
+pub struct Fine: PartialEq + Eq {
+  id: U32,
+}

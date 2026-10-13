@@ -24,21 +24,26 @@
 //! its unit (a top-level item, or a member of an `impl`, `trait`, `effect`,
 //! `handler` or `extern`, S-59): the parser closes the nodes it was in as
 //! incomplete, puts the tokens up to the end of the unit in an `Error` node
-//! ([`Parser::skip_unit`]), and continues with the next unit.
+//! ([`Parser::skip_unit`]), and continues with the next unit. The head of a
+//! declaration, up to its keyword, is read on after a form there that ends
+//! on its line (§18.1, S-435: `heading`), so that the declaration is a name
+//! of its module.
 //!
 //! Where the code is: this module holds the types (`Parser`, [`Parsed`], the
 //! markers of the nodes), the construction of the parser, the nodes, the
 //! cursor and the diagnostics, and the helpers that several parts read
 //! (`DECLARATIONS`, the brackets, `binop`). The grammar is in a module per
 //! part, each an `impl` of `Parser`: `file` (the file, the units and the
-//! recovery), `items` (the declarations), `signatures`, `types`,
+//! recovery), `heading` (the head of a declaration before its keyword),
+//! `items` (the declarations), `signatures`, `types`,
 //! `statements` (the blocks and the statements), `expressions` (with
 //! `reads_as_expr`) and `patterns`; `chain` is `Chain`, the height of a
 //! binary chain. The tests are `parser_tests.rs`.
 
-use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
+use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 
 use crate::ast::Ast;
+use crate::attrs::Place;
 use crate::callee::Callee;
 use crate::cst::{Class, Cst, Event, NodeKind};
 use crate::foreign::{self, Detached, End, Want};
@@ -52,6 +57,7 @@ use crate::token::{Gap, Token, TokenKind};
 mod chain;
 mod expressions;
 mod file;
+mod heading;
 mod items;
 mod patterns;
 mod signatures;
@@ -60,6 +66,7 @@ mod types;
 
 pub(crate) use chain::Chain;
 pub(crate) use expressions::reads_as_expr;
+pub(crate) use types::{reads_as_type, reads_as_type_list};
 
 /// Result of [`crate::parse`].
 #[derive(Debug)]
@@ -416,10 +423,10 @@ impl<'a> Parser<'a> {
         let level = match kind {
             // The file, the items and their headers: a unit starts from 0.
             SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-            | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields
-            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
-            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
-            | Param | EffectRow | Path => 0,
+            | Struct | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
+            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
+            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path => 0,
             // Types: a type with arguments counts at its `[` (the `TypeArgs`), a name none.
             PathType | ConstArg | FnTypeParams => 0,
             TypeArgs | UnitType | TupleType | ParenType | ArrayType | FnType => 1,
@@ -700,11 +707,10 @@ impl<'a> Parser<'a> {
     /// read on: it is recorded with whether the token before ends a path of
     /// names (`by_name`, S-399) and whether an expression is before it
     /// (`expr`), and the grammar fails at it where it fails; the table names
-    /// the form there ([`Detached`]). Two openers are read
-    /// otherwise: the `(` of `pub(pkg)` and `pub(crate)` across a blank
-    /// (one form each, [`Parser::parse_vis`], S-248), and the `(` of the
-    /// tuple struct `struct P (I32)` (a form of another language whatever the
-    /// blank, the table's `tuple_struct`, W3-08).
+    /// the form there ([`Detached`]). Two openers are not asked here: the
+    /// `(` after `pub` (a visibility of another language whatever the blank,
+    /// [`Parser::parse_vis`], S-248, S-417), and the `(` of the tuple struct
+    /// `struct P (I32)` (the table's `tuple_struct`, S-39).
     fn touches(&mut self, open: TokenKind, by_name: bool, expr: bool) -> bool {
         let at = self.peek_index();
         if self.tokens[at].kind != open {
@@ -808,6 +814,17 @@ impl<'a> Parser<'a> {
     }
 
     fn fail_with(&mut self, want: Want, expected: &str, noted: Option<(Token, &str)>) -> ParseError {
+        self.fail_at(want, expected, noted, None);
+        ParseError
+    }
+
+    /// [`Parser::fail_with`], in the head of a declaration: the general
+    /// E0002 is `own` when the parser knows the form (a run of words before
+    /// the head, a keyword before a keyword, the modifiers out of order;
+    /// §18.1, S-459, S-464). The token to read on from, if the head may be
+    /// read on: after the form a row found when it ends on its line
+    /// ([`foreign::Hit::resume`]), else `own`'s.
+    fn fail_at(&mut self, want: Want, expected: &str, noted: Option<(Token, &str)>, own: Option<Own>) -> Option<usize> {
         let at = self.peek_index();
         let t = self.tokens[at];
         // The number of a literal written as in other languages (`1u8`,
@@ -825,33 +842,22 @@ impl<'a> Parser<'a> {
                 "integer literal is larger than any integer type holds",
             ));
         }
-        let cursor = foreign::Cursor {
-            file: self.file,
-            text: self.text,
-            tokens: &self.tokens,
-            all: &self.all,
-            full: &self.full,
-            lines: &self.lines,
-            literals: &self.literals,
-            at,
-            open: self
-                .open
-                .iter()
-                .map(|o| match self.events[o.event as usize] {
-                    Event::Start { kind: Some(k), .. } => (k, o.start),
-                    _ => (NodeKind::Error, o.start),
-                })
-                .collect(),
-            closed: &self.closed,
-            want,
-            detached: self.detached.filter(|d| d.at == at),
-            ends: &self.ends,
-            reach: self.open.iter().map(|o| o.level + o.children).max().unwrap_or(0),
-        };
-        let foreign::Failure { rows, general, prefixed } = foreign::at_failure(&cursor);
+        let cursor = self.cursor(at, want);
+        let foreign::Failure { rows, general, prefixed, resume } = foreign::at_failure(&cursor);
         self.prefixed.extend(prefixed);
         for d in rows {
             self.report(d);
+        }
+        let resume = resume.or(own.as_ref().map(|o| o.resume));
+        if let (Some(_), Some(own)) = (&general, own) {
+            let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, own.span, own.message)
+                .with_found(self.src(own.span).to_string())
+                .with_rule(own.rule);
+            for f in own.fixes {
+                d = d.with_fix(f);
+            }
+            self.report(d);
+            return resume;
         }
         // A reserved word, where nothing of this version takes it: its E0200
         // where it is read, instead of the general E0002 (§2.2, S-169, S-371).
@@ -860,7 +866,7 @@ impl<'a> Parser<'a> {
             let word = self.token_text(shown);
             let d = feature.diagnostic(Stage::Syntax, shown.span, &[]).with_found(word.to_string());
             self.report(d);
-            return ParseError;
+            return resume;
         }
         if let Some(fixes) = general {
             let msg = format!("expected {expected}, found {}", shown.kind.describe());
@@ -892,7 +898,84 @@ impl<'a> Parser<'a> {
             }
             self.report(d);
         }
-        ParseError
+        resume
+    }
+
+    /// Read on to token `to` after a failure in the head of a declaration
+    /// (§18.1, S-435): the tokens from the cursor up to it go into the node
+    /// open, the part of the head that was not read.
+    fn read_on(&mut self, to: usize) {
+        for k in self.pos..to {
+            let t = self.tokens[k];
+            if t.kind.is_trivia() {
+                continue;
+            }
+            self.events.push(Event::Token(self.full[k]));
+            self.last_end = t.span.end;
+            if is_opening(t.kind) {
+                self.braces.push(k);
+            } else if is_closing(t.kind) {
+                close_bracket(&mut self.braces, &self.tokens, t.kind, 0);
+            }
+        }
+        self.pos = to;
+        self.closed.clear();
+    }
+
+    /// The token after `tokens[k]` on its line, comments passed over; `None`
+    /// at the end of the line or of the file.
+    fn on_line_after(&self, k: usize) -> Option<usize> {
+        let j = (k + 1..self.tokens.len()).find(|&j| !self.tokens[j].kind.is_comment())?;
+        (!matches!(self.tokens[j].kind, TokenKind::Newline | TokenKind::Eof)).then_some(j)
+    }
+
+    /// What the table of the forms of other languages reads of the parser
+    /// at token `at` (a failure, or a form read whole), wanting `want`; the
+    /// place of an attribute read there is set by the caller that knows it.
+    fn cursor(&self, at: usize, want: Want) -> foreign::Cursor<'_> {
+        foreign::Cursor {
+            file: self.file,
+            text: self.text,
+            tokens: &self.tokens,
+            all: &self.all,
+            full: &self.full,
+            lines: &self.lines,
+            literals: &self.literals,
+            at,
+            open: self
+                .open
+                .iter()
+                .map(|o| match self.events[o.event as usize] {
+                    Event::Start { kind: Some(k), .. } => (k, o.start),
+                    _ => (NodeKind::Error, o.start),
+                })
+                .collect(),
+            closed: &self.closed,
+            want,
+            detached: self.detached.filter(|d| d.at == at),
+            ends: &self.ends,
+            reach: self.open.iter().map(|o| o.level + o.children).max().unwrap_or(0),
+            place: None,
+            declaration: None,
+        }
+    }
+
+    /// A form of another language or a redundant mark that the parser reads
+    /// whole, starting at token `at` (an old attribute, a redundant
+    /// visibility; [`foreign::Detect::Read`]), at `place` (an attribute's,
+    /// and the keyword of the declaration whose head holds it, if any): the
+    /// table's diagnostics are reported, and whether there was one. The
+    /// reading goes on (the unit has the syntax error, so its body is not
+    /// checked).
+    fn read_form(&mut self, at: usize, place: Option<Place>, declaration: Option<usize>) -> bool {
+        let mut cursor = self.cursor(at, Want::Other);
+        (cursor.place, cursor.declaration) = (place, declaration);
+        let found = foreign::at_read(&cursor);
+        let any = !found.is_empty();
+        for d in found {
+            self.report(d);
+        }
+        any
     }
 
     fn expect(&mut self, kind: TokenKind) -> PResult<Token> {
@@ -929,6 +1012,26 @@ fn binop(kind: TokenKind) -> bool {
     kind.binop().is_some()
 }
 
+/// The general E0002 of a failure in the head of a declaration whose form
+/// the parser knows ([`Parser::fail_at`]): its range, message, rule and
+/// candidates, and the token the head is read on from.
+struct Own {
+    span: Span,
+    message: String,
+    rule: &'static str,
+    fixes: Vec<Fix>,
+    resume: usize,
+}
+
+/// A token that starts the head of a declaration (§18.1): a visibility, an
+/// attribute (`@`, and `#[` of other languages, S-321) or a keyword of a
+/// declaration ([`DECLARATIONS`]). The one list (the recovery's item starts
+/// add the doc comments, `file::is_item_start`).
+fn starts_heading(kind: TokenKind) -> bool {
+    is_declaration_keyword(kind)
+        || matches!(kind, TokenKind::KwPub | TokenKind::KwPriv | TokenKind::At | TokenKind::Hash)
+}
+
 /// How a declaration is parsed after its attributes and visibility.
 type DeclParser = fn(&mut Parser<'_>, ItemCtx) -> PResult<()>;
 
@@ -947,28 +1050,68 @@ const FUNCTION_PLACES: &[ItemCtx] = &[
 const CONST_PLACES: &[ItemCtx] = &[ItemCtx::Top, ItemCtx::Trait, ItemCtx::Impl];
 const TYPE_PLACES: &[ItemCtx] = &[ItemCtx::Top, ItemCtx::Extern];
 
-/// The keywords that start a declaration, with how to parse it and where it
-/// may be written: the one list. `parse_item` dispatches on it and refuses a
-/// declaration out of its places, and the recovery's item starts
-/// (`file::is_item_start`) are these keywords and what may come before them.
-const DECLARATIONS: &[(TokenKind, DeclParser, &[ItemCtx])] = &[
-    (TokenKind::KwFn, |p, c| p.parse_fn(c), FUNCTION_PLACES),
-    (TokenKind::KwRt, |p, c| p.parse_fn(c), FUNCTION_PLACES),
-    (TokenKind::KwFlow, |p, c| p.parse_flow(c), TOP),
-    (TokenKind::KwStruct, |p, c| p.parse_struct(c), TOP),
-    (TokenKind::KwEnum, |p, c| p.parse_enum(c), TOP),
-    (TokenKind::KwType, |p, c| p.parse_type_item(c), TYPE_PLACES),
-    (TokenKind::KwTrait, |p, c| p.parse_trait(c), TOP),
-    (TokenKind::KwImpl, |p, c| p.parse_impl(c), TOP),
-    (TokenKind::KwEffect, |p, c| p.parse_effect(c), TOP),
-    (TokenKind::KwBlocking, |p, c| p.parse_effect(c), TOP),
-    (TokenKind::KwHandler, |p, c| p.parse_handler(c), TOP),
-    (TokenKind::KwConst, |p, c| p.parse_const(c), CONST_PLACES),
-    (TokenKind::KwUse, |p, c| p.parse_use(c), TOP),
-    (TokenKind::KwExtern, |p, c| p.parse_extern(c), TOP),
-    (TokenKind::KwTarget, |p, c| p.parse_target(c), TOP),
-    (TokenKind::KwTest, |p, c| p.parse_test(c), TOP),
+/// A declaration: its keyword, its node, how it is parsed after its
+/// attributes and visibility, and where it may be written.
+struct Declaration {
+    keyword: TokenKind,
+    node: NodeKind,
+    parse: DeclParser,
+    places: &'static [ItemCtx],
+}
+
+/// The keywords that start a declaration, with the node of the declaration,
+/// how to parse it and where it may be written: the one list. `parse_item`
+/// dispatches on it and refuses a declaration out of its places, and the
+/// recovery's item starts (`file::is_item_start`) are these keywords and
+/// what may come before them.
+const DECLARATIONS: &[Declaration] = &[
+    Declaration { keyword: TokenKind::KwFn, node: NodeKind::Fn, parse: |p, c| p.parse_fn(c), places: FUNCTION_PLACES },
+    Declaration { keyword: TokenKind::KwRt, node: NodeKind::Fn, parse: |p, c| p.parse_fn(c), places: FUNCTION_PLACES },
+    Declaration { keyword: TokenKind::KwFlow, node: NodeKind::Flow, parse: |p, c| p.parse_flow(c), places: TOP },
+    Declaration { keyword: TokenKind::KwStruct, node: NodeKind::Struct, parse: |p, c| p.parse_struct(c), places: TOP },
+    Declaration { keyword: TokenKind::KwEnum, node: NodeKind::Enum, parse: |p, c| p.parse_enum(c), places: TOP },
+    Declaration {
+        keyword: TokenKind::KwType,
+        node: NodeKind::TypeAlias,
+        parse: |p, c| p.parse_type_item(c),
+        places: TYPE_PLACES,
+    },
+    Declaration { keyword: TokenKind::KwTrait, node: NodeKind::Trait, parse: |p, c| p.parse_trait(c), places: TOP },
+    Declaration { keyword: TokenKind::KwImpl, node: NodeKind::Impl, parse: |p, c| p.parse_impl(c), places: TOP },
+    Declaration { keyword: TokenKind::KwEffect, node: NodeKind::Effect, parse: |p, c| p.parse_effect(c), places: TOP },
+    Declaration {
+        keyword: TokenKind::KwBlocking,
+        node: NodeKind::Effect,
+        parse: |p, c| p.parse_effect(c),
+        places: TOP,
+    },
+    Declaration {
+        keyword: TokenKind::KwHandler,
+        node: NodeKind::Handler,
+        parse: |p, c| p.parse_handler(c),
+        places: TOP,
+    },
+    Declaration {
+        keyword: TokenKind::KwConst,
+        node: NodeKind::Const,
+        parse: |p, c| p.parse_const(c),
+        places: CONST_PLACES,
+    },
+    Declaration { keyword: TokenKind::KwUse, node: NodeKind::Use, parse: |p, c| p.parse_use(c), places: TOP },
+    Declaration { keyword: TokenKind::KwExtern, node: NodeKind::Extern, parse: |p, c| p.parse_extern(c), places: TOP },
+    Declaration { keyword: TokenKind::KwTarget, node: NodeKind::Target, parse: |p, c| p.parse_target(c), places: TOP },
+    Declaration { keyword: TokenKind::KwTest, node: NodeKind::Test, parse: |p, c| p.parse_test(c), places: TOP },
 ];
+
+/// The declaration whose keyword is `kind`, if one is ([`DECLARATIONS`]).
+fn declaration(kind: TokenKind) -> Option<&'static Declaration> {
+    DECLARATIONS.iter().find(|d| d.keyword == kind)
+}
+
+/// Whether `kind` is the keyword of a declaration ([`DECLARATIONS`]).
+fn is_declaration_keyword(kind: TokenKind) -> bool {
+    declaration(kind).is_some()
+}
 
 /// A bracket that opens: `(`, `[`, `{`.
 fn is_opening(kind: TokenKind) -> bool {

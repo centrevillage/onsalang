@@ -504,7 +504,6 @@ impl<'a> Lowerer<'a> {
                     }
                     TypeDefKind::Struct { fields }
                 }
-                Fields::Tuple(t) => TypeDefKind::Struct { fields: vec![("0".into(), self.core_ty(*t, &gargs, span)?)] },
                 Fields::Opaque => TypeDefKind::Opaque,
             },
             DefKind::Enum(e) => {

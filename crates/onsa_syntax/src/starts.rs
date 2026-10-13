@@ -80,7 +80,7 @@ fn element_starts(list: NodeKind) -> Option<fn(TokenKind) -> bool> {
         NodeKind::ArgList => |k| starts_operand(k) || matches!(k, KwMove | KwInout),
         NodeKind::TupleExpr | NodeKind::ArrayExpr => |k| starts_operand(k) || k == KwMove,
         NodeKind::StructLitFields | NodeKind::VariantList | NodeKind::UseNames | NodeKind::EffectRow => |k| k == Ident,
-        NodeKind::FieldList => |k| matches!(k, Ident | KwPub),
+        NodeKind::FieldList => |k| matches!(k, Ident | KwPub | KwPriv),
         NodeKind::ParamList => |k| matches!(k, Ident | KwSelf | Underscore | At | KwInout | KwMove),
         NodeKind::GenericParams => |k| matches!(k, Ident | KwConst),
         NodeKind::TypeArgs => |k| starts_type(k) || starts_operand(k),

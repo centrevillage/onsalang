@@ -1,0 +1,172 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§11.7", "§12.4", "§15.5", "§18.1"]
+
+// E0005: the attributes are `@repr` (a struct), `@fp` (a fn and a flow), `@param` (an input of a flow) and
+// `@mem` (a `let`), and no others (spec §6.5, S-103, S-133). An attribute that is not in the list is E0005
+// (`@deprecated` too: it is defined when it is needed, §6.5), and so is an attribute in a place it cannot
+// be put in. The conditions inside the places and the values of `@param` and `@mem` have the codes of their own
+// (E0809, E0818), and the values of `@repr` and `@fp` are in fixes/e0005_attribute_values.onsa. The old
+// attributes (`@derive`, `@relaxed`, `@bulk`) are E0020 (fixes/). The right places are in types/attributes.onsa.
+// One error in each declaration unit (P-01); the marker is on the line of the attribute.
+
+// ---- an attribute that is not in the list
+
+@foo                                                //~ E0005
+pub fn unknown_on_fn() -> I32 {
+  1
+}
+
+@inline                                             //~ E0005
+pub fn inline_on_fn() -> I32 {
+  1
+}
+
+@deprecated                                         //~ E0005
+pub struct Deprecated {
+  x: F32,
+}
+
+@bogus                                              //~ E0005
+const BOGUS: I32 = 1
+
+@bogus                                              //~ E0005
+pub enum UnknownOnEnum {
+  A,
+  B,
+}
+
+@foo                                                //~ E0005
+pub flow unknown_on_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- a known attribute in a place it cannot be put in
+
+@fp(relaxed)                                        //~ E0005
+pub struct FpOnStruct {
+  x: F32,
+}
+
+@fp(relaxed)                                        //~ E0005
+const FP_ON_CONST: F32 = 1.0
+
+@repr(c)                                            //~ E0005
+pub fn repr_on_fn() -> I32 {
+  1
+}
+
+@repr(c)                                            //~ E0005
+pub enum ReprOnEnum {
+  A,
+  B,
+}
+
+@param(default: 0.0)                                //~ E0005
+pub struct ParamOnStruct {
+  x: F32,
+}
+
+@param(default: 0.0)                                //~ E0005
+pub flow param_on_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@mem(bulk)                                          //~ E0005
+pub fn mem_on_fn() -> I32 {
+  1
+}
+
+@mem(bulk)                                          //~ E0005
+pub struct MemOnStruct {
+  x: F32,
+}
+
+pub fn param_on_a_fn_parameter(@param(default: 0.0) x: F32) -> F32 { //~ E0005
+  x
+}
+
+pub struct Target {
+  x: F32,
+}
+
+@foo                                                //~ E0005
+impl Target {
+  pub fn get(self) -> F32 {
+    self.x
+  }
+}
+
+@fp(relaxed)                                        //~ E0005
+use std.math
+
+@foo                                                //~ E0005
+test "an attribute on a test" {
+  assert true
+}
+
+impl Target {
+  @foo                                              //~ E0005
+  pub fn member_unknown(self) -> F32 {
+    self.x
+  }
+
+  @repr(c)                                          //~ E0005
+  const MEMBER_CONST: I32 = 1
+
+  @fp(relaxed)
+  pub fn member_fp(self) -> F32 {
+    self.x
+  }
+}
+
+// ---- an attribute in front of a statement (only `@mem` in front of a `let`, §12.4)
+
+pub flow statement_unknown(x: F32 at sample) -> F32 at sample {
+  @foo let y = x                                    //~ E0005
+  y
+}
+
+pub flow statement_fp(x: F32 at sample) -> F32 at sample {
+  @fp(relaxed) let y = x                            //~ E0005
+  y
+}
+
+pub flow statement_param(x: F32 at sample) -> F32 at sample {
+  @param(default: 0.0) let y = x                    //~ E0005
+  y
+}
+
+pub fn statement_in_a_fn(x: F32) -> F32 {
+  @repr(c) let y = x                                //~ E0005
+  y
+}
+
+pub fn statement_in_a_nested_block(c: Bool, x: F32) -> F32 {
+  if c {
+    @foo let y = x                                  //~ E0005
+    y
+  } else {
+    x
+  }
+}
+
+pub fn statement_in_a_closure(x: F32) -> F32 {
+  let f = fn(a: F32) -> F32 {
+    @foo let b = a                                  //~ E0005
+    b
+  }
+  f.(x)
+}
+
+// ---- the right places are not errors
+
+@repr(c)
+pub struct Fine {
+  x: F32,
+}
+
+@fp(relaxed)
+pub fn fine_fp(x: F32) -> F32 {
+  x * 2.0
+}

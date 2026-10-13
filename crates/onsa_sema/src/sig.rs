@@ -7,9 +7,10 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, EffectRow, ExprKind, GenericParam, Ident, ItemId, ItemKind, Lit, Mode, Param, ParamName,
-    StructKind, TypeId, TypeKind, UnOp, Vis,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ItemId, ItemKind, Lit, Mode, Param,
+    ParamName, TypeId, TypeKind, UnOp, Vis,
 };
+use onsa_syntax::foreign::{self, RowId};
 
 use crate::def::*;
 use crate::resolve::{Binding, Builtin, Entity, Import, ModInfo};
@@ -23,6 +24,11 @@ struct Sema<'p> {
     reported: HashSet<DefId>,
     /// Aliases being expanded (cycle guard).
     expanding: HashSet<DefId>,
+    /// The `copy_bound` diagnostics reported (their index in the
+    /// diagnostics), their type and whether the constraint is `Dup`: once
+    /// every signature is lowered, the note names a field that does not meet
+    /// it ([`Sema::name_non_copy_fields`], §4.6).
+    kind_heads: Vec<(usize, DefId, bool)>,
 }
 
 /// Lowering context for one item.
@@ -38,8 +44,13 @@ struct Cx<'p> {
 }
 
 pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
-    let mut s =
-        Sema { a: Analysis::default(), flat: flatten(pkg), reported: HashSet::new(), expanding: HashSet::new() };
+    let mut s = Sema {
+        a: Analysis::default(),
+        flat: flatten(pkg),
+        reported: HashSet::new(),
+        expanding: HashSet::new(),
+        kind_heads: Vec::new(),
+    };
     s.build_module_tree();
     s.build_prelude();
     s.collect_items();
@@ -177,6 +188,12 @@ impl<'p> Sema<'p> {
         if let Some((span, form)) = flow_syntax {
             self.report(id, form.outside_flow(Stage::Names, span));
             self.a.failed.insert(id, onsa_syntax::ast::Failed::Heading);
+        } else if let Some(span) =
+            module.filter(|_| failed.is_none()).and_then(|(i, m)| crate::flow_syntax::first_mem(&m.parsed, i))
+        {
+            // `@mem` (§12.4) until W9-06: the same way.
+            self.unsupported(id, span, Feature::MemStorage, &[]);
+            self.a.failed.insert(id, onsa_syntax::ast::Failed::Heading);
         }
         id
     }
@@ -288,7 +305,7 @@ impl<'p> Sema<'p> {
                     DefKind::Struct(StructDef {
                         generics: Vec::new(),
                         fields: Fields::Opaque,
-                        derives: Vec::new(),
+                        derives: Some(Vec::new()),
                         flow_ty: None,
                     }),
                 );
@@ -298,7 +315,7 @@ impl<'p> Sema<'p> {
             ItemKind::Enum(e) => {
                 let def = mk(
                     &e.name,
-                    DefKind::Enum(EnumDef { generics: Vec::new(), variants: Vec::new(), derives: Vec::new() }),
+                    DefKind::Enum(EnumDef { generics: Vec::new(), variants: Vec::new(), derives: Some(Vec::new()) }),
                 );
                 let id = self.add_def(def);
                 self.declare(m, &e.name, Entity::Def(id), item.vis, false);
@@ -313,7 +330,7 @@ impl<'p> Sema<'p> {
                     DefKind::Struct(StructDef {
                         generics: Vec::new(),
                         fields: Fields::Opaque,
-                        derives: Vec::new(),
+                        derives: Some(Vec::new()),
                         flow_ty: None,
                     }),
                 );
@@ -501,6 +518,37 @@ impl<'p> Sema<'p> {
             let _scope = onsa_diag::internal::item_scope(self.a.defs[i].span);
             self.lower_def(id);
         }
+        self.name_non_copy_fields();
+    }
+
+    /// The note of each `copy_bound` diagnostic that names the first field
+    /// (or element of a variant) whose kind is not Copy (§4.6): the kinds are
+    /// known once every signature is lowered. A field whose kind is not
+    /// known (a type parameter, an error) is not named.
+    fn name_non_copy_fields(&mut self) {
+        for (at, def, dup) in std::mem::take(&mut self.kind_heads) {
+            let fields: Vec<(String, TyId, Span)> = match &self.a.def(def).kind {
+                DefKind::Struct(s) => match &s.fields {
+                    Fields::Named(fs) => fs.iter().map(|f| (format!("the field `{}`", f.name), f.ty, f.span)).collect(),
+                    Fields::Opaque => Vec::new(),
+                },
+                DefKind::Enum(e) => e
+                    .variants
+                    .iter()
+                    .flat_map(|v| v.fields.iter().map(move |&t| (format!("the variant `{}`", v.name), t, v.span)))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            use crate::kind::Kind;
+            // `Dup` is Copy or Shared: an Affine field does not meet it.
+            let fails = |k: Kind| if dup { k == Kind::Affine } else { k != Kind::Copy };
+            let shown = fields.into_iter().find(|(_, t, _)| crate::kind::kind_of(&self.a, *t).is_some_and(fails));
+            if let Some((what, _, span)) = shown {
+                let (kind, name) = if dup { ("Affine", foreign::DUP) } else { ("not Copy", foreign::COPY) };
+                let d = self.a.diagnostics[at].clone();
+                self.a.diagnostics[at] = d.with_note(span, format!("{what} is {kind}, so the type is not {name}"));
+            }
+        }
     }
 
     fn cx_for(&self, id: DefId, extra: Vec<GenericDef>, self_ty: Option<TyId>) -> Option<Cx<'p>> {
@@ -532,20 +580,18 @@ impl<'p> Sema<'p> {
             ItemKind::Struct(s) => {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &s.generics);
-                let derives = self.lower_derives(&cx, &item.attrs);
-                let fields = match &s.kind {
-                    StructKind::Named(fs) => Fields::Named(
-                        fs.iter()
-                            .map(|f| FieldDef {
-                                name: f.name.name.clone(),
-                                ty: self.lower_type(&cx, f.ty),
-                                vis: f.vis,
-                                span: f.span,
-                            })
-                            .collect(),
-                    ),
-                    StructKind::Tuple(t) => Fields::Tuple(self.lower_type(&cx, *t)),
-                };
+                let derives = self.lower_derives(&cx, &s.derives);
+                let fields = Fields::Named(
+                    s.fields
+                        .iter()
+                        .map(|f| FieldDef {
+                            name: f.name.name.clone(),
+                            ty: self.lower_type(&cx, f.ty),
+                            vis: f.vis,
+                            span: f.span,
+                        })
+                        .collect(),
+                );
                 if let DefKind::Struct(sd) = &mut self.a.defs[id.0 as usize].kind {
                     sd.generics = cx.generics;
                     sd.fields = fields;
@@ -555,7 +601,7 @@ impl<'p> Sema<'p> {
             ItemKind::Enum(e) => {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &e.generics);
-                let derives = self.lower_derives(&cx, &item.attrs);
+                let derives = self.lower_derives(&cx, &e.derives);
                 let variants = e
                     .variants
                     .iter()
@@ -726,63 +772,48 @@ impl<'p> Sema<'p> {
         out
     }
 
-    fn lower_derives(&mut self, cx: &Cx<'p>, attrs: &[Attr]) -> Vec<Derive> {
+    /// The traits at the head of a struct or an enum (§6.4): the closed list
+    /// of the derivable ones ([`DERIVABLE`]); `Hash`, `Show` and `Ordinal` are
+    /// E0200 in this version (S-13, W5-06), a kind constraint is `copy_bound`
+    /// (§4.6) and any other name, or a path of more than one name (S-488),
+    /// E0416. The diagnostics of the names stage go before the E0416 of the
+    /// types stage (§18.1), whatever the order of the list. `None` when the
+    /// list is not known (§18.1, S-460).
+    fn lower_derives(&mut self, cx: &Cx<'p>, derives: &Derives) -> Option<Vec<Derive>> {
+        let Derives::Listed(paths) = derives else { return None };
         let mut out = Vec::new();
-        for attr in attrs {
-            match attr.name.name.as_str() {
-                "derive" => {
-                    for arg in &attr.args {
-                        let AttrArg::Path(p) = arg else {
-                            self.report(
-                                cx.def,
-                                Diagnostic::new(Stage::Names, Code::E0302, attr.span, "`@derive` takes trait names"),
-                            );
-                            continue;
-                        };
-                        let n = p.segments.last().unwrap();
-                        let d = match n.name.as_str() {
-                            "PartialEq" => Derive::PartialEq,
-                            "Eq" => Derive::Eq,
-                            "PartialOrd" => Derive::PartialOrd,
-                            "Ord" => Derive::Ord,
-                            "Default" => Derive::Default,
-                            "Hash" | "Show" => {
-                                self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]);
-                                continue;
-                            }
-                            _ => {
-                                self.report(
-                                    cx.def,
-                                    Diagnostic::new(
-                                        Stage::Names, Code::E0302,
-                                        n.span,
-                                        format!("`{}` cannot be derived; the list is PartialEq Eq PartialOrd Ord Hash Show Default (§6.4)", n.name),
-                                    )
-                                    .with_found(n.name.clone()),
-                                );
-                                continue;
-                            }
-                        };
-                        out.push(d);
+        let mut underivable = Vec::new();
+        for (k, p) in paths.iter().enumerate() {
+            let [n] = p.segments.as_slice() else {
+                underivable.push(p.span);
+                continue;
+            };
+            match DERIVABLE.iter().find(|(name, _)| *name == n.name) {
+                Some((_, Some(d))) => out.push(*d),
+                Some((_, None)) => self.unsupported(cx.def, n.span, Feature::Derive, &[&n.name]),
+                None if foreign::KIND_CONSTRAINTS.contains(&n.name.as_str()) => {
+                    let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_derive(cx, paths, k)]);
+                    let at = self.a.diagnostics.len();
+                    self.report(cx.def, d);
+                    if self.a.diagnostics.len() > at {
+                        self.kind_heads.push((at, cx.def, n.name == foreign::DUP));
                     }
                 }
-                "repr" | "deprecated" | "param" => {}
-                _ if attr.is_fp_relaxed() => {}
-                other => {
-                    self.report(
-                        cx.def,
-                        Diagnostic::new(
-                            Stage::Names,
-                            Code::E0302,
-                            attr.name.span,
-                            format!("unknown attribute `@{other}` (§6.5)"),
-                        )
-                        .with_found(other.to_string()),
-                    );
-                }
+                None => underivable.push(p.span),
             }
         }
-        out
+        for span in underivable {
+            let name = src(cx, span);
+            let list: Vec<String> = DERIVABLE.iter().map(|(name, _)| format!("`{name}`")).collect();
+            self.report(
+                cx.def,
+                Diagnostic::new(Stage::Types, Code::E0416, span, format!("`{name}` cannot be derived"))
+                    .with_found(name)
+                    .with_rule(foreign::DERIVE_RULE)
+                    .with_rule(format!("the traits a type derives are {}", list.join(", "))),
+            );
+        }
+        Some(out)
     }
 
     fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
@@ -1386,7 +1417,7 @@ impl<'p> Sema<'p> {
     }
 
     fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attrs: &[Attr], rate: Rate, ty: TyId) -> Option<ParamMeta> {
-        let attr = attrs.iter().find(|a| a.name.name == "param")?;
+        let attr = attrs.iter().find(|a| a.name.name == onsa_syntax::attrs::PARAM)?;
         // A number of `@param` is a value of the input's type (§11.7): a float
         // literal is rounded once to it (§2.4, R-20), and out of its range is
         // E0408 (R-45).
@@ -1512,7 +1543,7 @@ impl<'p> Sema<'p> {
                 DefKind::Struct(StructDef {
                     generics: Vec::new(),
                     fields,
-                    derives: Vec::new(),
+                    derives: Some(Vec::new()),
                     flow_ty: Some(flow_ty),
                 }),
             )
@@ -1677,7 +1708,13 @@ pub(crate) fn lower_type_in_body(
     t: TypeId,
 ) -> (TyId, Vec<Diagnostic>) {
     let before = a.diagnostics.len();
-    let mut s = Sema { a: std::mem::take(a), flat: Vec::new(), reported: HashSet::new(), expanding: HashSet::new() };
+    let mut s = Sema {
+        a: std::mem::take(a),
+        flat: Vec::new(),
+        reported: HashSet::new(),
+        expanding: HashSet::new(),
+        kind_heads: Vec::new(),
+    };
     let is_std = s.a.modules.pkg_of(m) < s.a.modules.names.len() && s.a.modules.names[s.a.modules.pkg_of(m)] == "std";
     let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, is_std };
     let ty = s.lower_type(&cx, t);
@@ -1696,6 +1733,38 @@ fn cx_clone<'p>(cx: &Cx<'p>) -> Cx<'p> {
         def: cx.def,
         is_std: cx.is_std,
     }
+}
+
+/// The derivable traits (§6.4, S-34), in the order of the spec: the closed
+/// list, and what each is in this version (`None`: E0200, S-13, S-145). The
+/// one list of their names.
+const DERIVABLE: [(&str, Option<Derive>); 8] = [
+    ("PartialEq", Some(Derive::PartialEq)),
+    ("Eq", Some(Derive::Eq)),
+    ("PartialOrd", Some(Derive::PartialOrd)),
+    ("Ord", Some(Derive::Ord)),
+    ("Hash", None),
+    ("Show", None),
+    ("Default", Some(Derive::Default)),
+    ("Ordinal", None),
+];
+
+/// The candidate that takes the trait `k` of the head `paths` out (§4.6,
+/// `copy_bound`): with the `+` before it, or after it when it is the first,
+/// or with the `:` when it is the only one.
+fn drop_derive(cx: &Cx<'_>, paths: &[onsa_syntax::ast::Path], k: usize) -> Fix {
+    let p = paths[k].span;
+    let span = if k > 0 {
+        Span::new(p.file, paths[k - 1].span.end, p.end)
+    } else if paths.len() > 1 {
+        Span::new(p.file, p.start, paths[1].span.start)
+    } else {
+        // The `:` before the only trait (blanks may be between them).
+        let before = cx.text[..p.start as usize].trim_end();
+        let colon = before.strip_suffix(':').map_or(p.start, |b| b.len() as u32);
+        Span::new(p.file, colon, p.end)
+    };
+    Fix::delete(format!("remove `{}`", &cx.text[p.start as usize..p.end as usize]), span)
 }
 
 fn src(cx: &Cx<'_>, span: Span) -> String {

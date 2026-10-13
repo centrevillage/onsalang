@@ -55,7 +55,7 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
         .filter(|(s, _)| !joins(s))
         .map(|(s, title)| Fix::replace(*title, span, s))
         .collect();
-    Some((row, Hit { span, fixes, misplaced: !matches!(c.want, Want::Expr | Want::Pattern) }))
+    Some((row, Hit { span, fixes, misplaced: !matches!(c.want, Want::Expr | Want::Pattern), resume: None, note: None }))
 }
 
 /// The parts of the number written as in other languages at token `i` (a

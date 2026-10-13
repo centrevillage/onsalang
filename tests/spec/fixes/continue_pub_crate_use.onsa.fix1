@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+// fixes = 1
+
+// A `use` whose head has `pub(crate)` or `pub(pkg)` (E0020, the candidate removes the
+// visibility, §15.1) or `priv` (E0020, the candidate removes `priv`, which a `use` already is)
+// is read on from the end of the form (§18.1, S-435): the names it brings in are resolved, so
+// the places that use them get no E0302. The `use` is read in full (the list of its names is
+// not cut), so a real error of the module, an E0302 for a name that no `use` brings in, is still
+// reported where it is.
+
+use std.math.{sqrt}                      //~ E0020
+
+use std.math.{floor}                      //~ E0020
+
+use std.math                                   //~ E0020
+
+fn root(x: F32) -> F32 {
+  sqrt(x) + floor(x)
+}
+
+fn through_the_module(x: F32) -> F32 {
+  math.sqrt(x)
+}
+
+fn nested(x: F32, c: Bool) -> F32 {
+  let f = fn(y: F32) -> F32 { sqrt(y) }
+  if c { f.(floor(x)) } else { math.sqrt(sqrt(x)) }
+}
+
+// The names of the `use` are used as what they are: a call with too many arguments is E0412.
+fn too_many_arguments(x: F32) -> F32 {
+  sqrt(x, x)                                        //~ E0412
+}
+
+fn own_error(x: F32) -> F32 {
+  sqrt(x) + zz                                      //~ E0302 @13
+}

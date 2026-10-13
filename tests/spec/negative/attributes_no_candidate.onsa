@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§12.4", "§15.5", "§18.1"]
+
+// E0002, with no candidate, for an attribute of Rust (`#[…]`) or of the old version whose replacement cannot be
+// written where the attribute stands (spec §6.5, §18.1, S-463; the rows `hash_attribute_no_candidate` and
+// `old_attribute_no_candidate` of docs/foreign-forms.toml). A candidate is made only when the table of attributes
+// (§6.5) takes the replacement in that place: `#[inline]` would become `@inline`, which is E0005; `#[repr(rust)]`
+// and `#[fp(fast)]` keep a value that is not in the list; `@derive(…)` or `#[derive(…)]` on a fn or a `const` has
+// no head of a type to write `: trait` in; `@relaxed` on a struct and `@bulk` on a fn name a place that
+// `@fp` and `@mem` do not go in. The runner tries every candidate, so a candidate that leaves an error of the
+// syntax stage fails this file. (`#[repr(C)]` has a candidate, `@repr(c)`: fixes/e0020_hash_attribute.onsa.) One
+// error in each declaration unit (P-01).
+
+#[inline]                                           //~ E0002
+pub fn inline_on_fn() -> I32 {
+  1
+}
+
+#[inline] fn inline_on_the_line() -> I32 {          //~ E0002
+  2
+}
+
+#[repr(rust)]                                       //~ E0002
+pub struct RustRepr {
+  x: I32,
+}
+
+#[fp(fast)]                                         //~ E0002
+pub fn fast_value(x: F32) -> F32 {
+  x
+}
+
+#[derive(Eq)]                                       //~ E0002
+pub fn derive_on_fn() -> I32 {
+  3
+}
+
+#[derive(PartialEq)]                                //~ E0002
+const DERIVE_ON_CONST: I32 = 4
+
+@derive(Eq)                                         //~ E0002
+pub fn old_derive_on_fn() -> I32 {
+  5
+}
+
+@derive(PartialEq)                                  //~ E0002
+const OLD_DERIVE_ON_CONST: I32 = 6
+
+@relaxed                                            //~ E0002
+pub struct RelaxedStruct {
+  x: F32,
+}
+
+@relaxed                                            //~ E0002
+const RELAXED_CONST: F32 = 1.0
+
+@bulk                                               //~ E0002
+pub fn bulk_on_fn() -> I32 {
+  7
+}
+
+@fp(relaxed)
+pub fn fine() -> F32 {
+  1.0
+}

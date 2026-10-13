@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.6", "§6.2"]
+// fixes = 1
+
+// `const fn` (Rust) is E0020 whose candidate removes `const` (§18.1, S-464; every function whose
+// effect row is empty or `{Alloc}` can be called from the initializer of a `const`, §6.6, so
+// there is no such thing as a `const` function). `const` is the keyword of a constant, and the
+// name it needs is not there: `fn` is the keyword of an item on the line, so the head is read
+// on from `fn` (a `pub` before `const` stays a visibility), and the function is a name of the
+// module like any other: the callers get no E0302, and are checked against the head. The same
+// for the members of an `impl`. The unit has a syntax error, so its body is not checked. One
+// error in each unit.
+
+const fn doubled(a: I32) -> I32 {                   //~ E0020
+  a + a
+}
+
+pub const fn id[T](x: T) -> T {                     //~ E0020
+  x
+}
+
+pub const fn body_not_checked() -> I32 {            //~ E0020
+  zz
+}
+
+pub struct Pt {
+  x: I32,
+}
+
+impl Pt {
+  const fn get(self) -> I32 {                       //~ E0020
+    self.x
+  }
+
+  pub const fn make(x: I32) -> Pt {                 //~ E0020
+    Pt { x: x }
+  }
+}
+
+fn calls() -> I32 {
+  doubled(1) + id(2) + body_not_checked()
+}
+
+fn members(p: Pt) -> I32 {
+  p.get() + Pt.make(3).get()
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { doubled(id(x)) }
+  if c { f.(1) } else { Pt.make(doubled(2)).get() }
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> I32 {
+  doubled(1, 2)                                     //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  doubled(true)                                     //~ E0401
+}
+
+fn no_such_method(p: Pt) -> I32 {
+  p.set()                                           //~ E0413
+}
+
+fn own_error() -> I32 {
+  doubled(1) + zz                                   //~ E0302 @16
+}

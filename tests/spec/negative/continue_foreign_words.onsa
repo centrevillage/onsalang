@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§6.2", "§10"]
+
+// Words that the head of an item does not have (the modifiers of other languages: `export`,
+// `public`, `static`, `async`, `private`, `inline`, `internal`, `unsafe`) on the line of the item,
+// before a head that can start (a visibility, `@` or `#[`, the keyword of an item). The run of
+// words is one E0002 (§18.1, S-459; the range is from the first word to the last, so the main
+// position is the first word), and the item is read on from the token after the run: the name
+// is resolved, the head is a read declaration (the visibility is the default), and the places
+// that use it are checked against the head. The unit has a syntax error, so its body is not
+// checked. The same for the members of an `impl`. One error in each unit.
+
+export fn exported(a: I32) -> I32 {                 //~ E0002 @1
+  a
+}
+
+public fn open_fn() -> I32 {                        //~ E0002 @1
+  1
+}
+
+static fn file_local() -> I32 {                     //~ E0002 @1
+  2
+}
+
+async fn later() -> I32 {                           //~ E0002 @1
+  3
+}
+
+private fn hidden() -> I32 {                        //~ E0002 @1
+  4
+}
+
+inline fn fast() -> I32 {                           //~ E0002 @1
+  5
+}
+
+internal fn in_package() -> I32 {                   //~ E0002 @1
+  6
+}
+
+unsafe fn raw() -> I32 {                            //~ E0002 @1
+  7
+}
+
+// A run of two or three words is one error.
+public static fn two_words() -> I32 {               //~ E0002 @1
+  8
+}
+
+static inline fn c_style() -> I32 {                 //~ E0002 @1
+  9
+}
+
+export default fn default_export() -> I32 {         //~ E0002 @1
+  10
+}
+
+// A word after a visibility: the run starts at the word.
+pub async fn after_pub() -> I32 {                   //~ E0002 @5
+  11
+}
+
+pub static fn after_pub_static() -> I32 {           //~ E0002 @5
+  12
+}
+
+// An attribute or a visibility after the word: the run is the word.
+export @fp(relaxed) fn word_then_attribute(x: F32) -> F32 {   //~ E0002 @1
+  x
+}
+
+static pub fn word_then_pub() -> I32 {              //~ E0002 @1
+  13
+}
+
+// The kinds of item.
+export const LIMIT: I32 = 4                         //~ E0002 @1
+
+export struct Pt {                                  //~ E0002 @1
+  x: I32,
+}
+
+public enum Mode {                                  //~ E0002 @1
+  Off,
+  On(I32),
+}
+
+export type Gain = F32                              //~ E0002 @1
+
+export pub fn exported_pub(a: I32, b: I32) -> I32 { //~ E0002 @1
+  a + b
+}
+
+export rt fn exported_rt(x: I32) -> I32 {           //~ E0002 @1
+  x
+}
+
+// The members of an `impl`.
+pub struct Gadget {
+  v: I32,
+}
+
+impl Gadget {
+  static fn make() -> Gadget {                      //~ E0002 @3
+    Gadget { v: 1 }
+  }
+
+  public fn get(self) -> I32 {                      //~ E0002 @3
+    self.v
+  }
+
+  pub async fn later_get(self) -> I32 {             //~ E0002 @7
+    self.v
+  }
+
+  export const LIMIT: I32 = 9                       //~ E0002 @3
+}
+
+// The users: no E0302, whatever the place of the call.
+fn calls() -> I32 {
+  exported(1) + open_fn() + file_local() + later() + hidden() + fast() + in_package() + raw()
+}
+
+fn calls_more() -> I32 {
+  two_words() + c_style() + default_export() + after_pub() + after_pub_static() + word_then_pub()
+}
+
+fn calls_attribute(x: F32) -> F32 {
+  word_then_attribute(x)
+}
+
+fn nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { exported(x) + hidden() }
+  if c { f.(1) } else { exported(fast()) }
+}
+
+fn kinds(p: Pt, m: Mode, g: Gain) -> I32 {
+  match m {
+    Mode.Off => LIMIT + p.x + exported_pub(1, 2),
+    Mode.On(n) => n + exported_rt(3),
+  }
+}
+
+fn members(g: Gadget) -> I32 {
+  Gadget.make().get() + g.later_get() + Gadget.LIMIT
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> I32 {
+  exported(1, 2)                                    //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  exported(true)                                    //~ E0401
+}
+
+fn wrong_return_type() -> Bool {
+  open_fn()                                         //~ E0401
+}
+
+fn missing_field() -> Pt {
+  Pt {}                                             //~ E0410
+}
+
+fn no_such_method(g: Gadget) -> I32 {
+  g.set()                                           //~ E0413
+}
+
+// A real error of the module is still reported.
+fn own_error() -> I32 {
+  exported(1) + zz                                  //~ E0302 @17
+}
+
+// The forms that are not a run of words before a head: the word on a line of its own (the line
+// ends the item, §2.5, so `export` is the error, and `fn separate` is an item of its own, a
+// name of the module), and a statement of one line.
+export                                              //~ E0002
+fn separate() -> I32 {
+  14
+}
+
+print(1)                                            //~ E0002
+
+fn uses_separate() -> I32 {
+  separate()
+}

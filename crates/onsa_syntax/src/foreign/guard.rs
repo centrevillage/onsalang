@@ -828,6 +828,8 @@ mod tests {
             detached: None,
             ends: &[],
             reach: 0,
+            place: None,
+            declaration: None,
         };
         let start = src.find("((").unwrap_or_default() as u32;
         Arm::read(&c, start, limit).is_some()

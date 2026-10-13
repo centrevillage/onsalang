@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// A form that does not close on its line is not read on (§18.1, S-435): the `)` of `pub(crate`
+// is missing, so the end of the form is not known. It keeps the reading it has: E0002 (the
+// reading of `pub(crate` as the visibility error; the text of the message is not compared), and
+// the item is not a name of the module, so the user of `unclosed` gets E0302. The form is the
+// last item of the file because an open parenthesis takes the lines after it.
+
+fn uses_unclosed() -> I32 {
+  unclosed()                                        //~ E0302
+}
+
+fn own_error() -> I32 {
+  zz                                                //~ E0302
+}
+
+pub(crate fn unclosed() -> I32 {                    //~ E0002
+  1
+}

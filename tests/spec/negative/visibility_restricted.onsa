@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0002, with no candidate, for the visibilities of other languages that limit a range (spec §15.1, S-417,
+// S-420; the rows `pub_restricted` and `field_pub_crate` of docs/foreign-forms.toml): `pub(super)`,
+// `pub(self)`, `pub(in a.b)`, `pub(in crate::a)`, and every other form where the word after `pub(` is not
+// `crate` or `pkg` (`pub()`, `pub(package)`, `pub(module)`). Onsa has no range that is the same, so there is
+// nothing to put in the place of it, and the note shows the three visibilities (`pub`, none, `priv`). A space
+// between `pub` and `(` makes no difference, and the whole form is one error (the `::` of `pub(in crate::a)` is
+// inside it, so no `path_separator` E0020 is added). The same holds for the field of a `pub struct` that
+// has `pub(crate)` or `pub(pkg)`: the candidate that takes it out would widen the field to the `pub` of the
+// struct, against the writer's will (it is E0020 with that candidate in any other place, fixes/e0020_visibility.onsa),
+// so it has no candidate. The `(super)` after a `pub` that ends its line is not in this file. One error in each
+// declaration unit (P-01); the main position is the `pub`.
+
+pub(super) fn super_fn() -> I32 {                   //~ E0002
+  1
+}
+
+pub(self) fn self_fn() -> I32 {                     //~ E0002
+  2
+}
+
+pub(in a.b) fn in_fn() -> I32 {                     //~ E0002
+  3
+}
+
+pub(in crate::a) fn in_crate_fn() -> I32 {          //~ E0002
+  4
+}
+
+pub (super) fn spaced_super_fn() -> I32 {           //~ E0002
+  5
+}
+
+pub () fn empty_fn() -> I32 {                       //~ E0002
+  6
+}
+
+pub(package) fn package_fn() -> I32 {               //~ E0002
+  7
+}
+
+pub(module) struct ModuleStruct {                   //~ E0002
+  x: I32,
+}
+
+pub(super) enum SuperEnum {                         //~ E0002
+  A,
+  B,
+}
+
+pub(super) const SUPER_CONST: I32 = 8               //~ E0002
+
+pub(super) use std.math                             //~ E0002
+
+pub struct Target {
+  v: I32,
+}
+
+impl Target {
+  pub(super) fn super_member(self) -> I32 {         //~ E0002
+    self.v
+  }
+
+  pub fn fine_member(self) -> I32 {
+    self.v
+  }
+}
+
+pub struct CrateField {
+  pub(crate) x: I32,                                //~ E0002
+}
+
+pub struct SpacedCrateField {
+  pub (crate) x: I32,                               //~ E0002
+}
+
+pub struct PkgField {
+  pub(pkg) x: I32,                                  //~ E0002
+}
+
+pub struct GenericCrateField[T] {
+  v: T,
+  pub(crate) w: T,                                  //~ E0002
+}
+
+pub fn fine() -> I32 {
+  1
+}

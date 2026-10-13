@@ -168,12 +168,15 @@ pub enum Mode {
     Move,
 }
 
+/// The visibility of a declaration or a field (§15.1): three levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vis {
-    Private,
-    /// `pub(pkg)`
-    Pkg,
-    /// `pub`
+    /// No word: within the package (§15.1). Until W4-03 gives it that
+    /// meaning, the names stage reads it as within the module, as `priv`.
+    Default,
+    /// `priv`: within the module.
+    Priv,
+    /// `pub`: out of the package.
     Pub,
 }
 
@@ -257,20 +260,18 @@ pub struct Attr {
 }
 
 impl Attr {
+    /// Whether it is `@name(value)` with the one value a name (`@fp(relaxed)`,
+    /// `@repr(c)`): the names and values are those of [`crate::attrs`], the
+    /// table that checked the attribute where the parser read it.
+    pub fn is(&self, name: &str, value: &str) -> bool {
+        self.name.name == name
+            && matches!(self.args.as_slice(), [AttrArg::Path(p)] if p.segments.len() == 1 && p.segments[0].name == value)
+    }
+
     /// `@fp(relaxed)` (spec §15.5): the floating-point operations may be
-    /// contracted and reassociated. The one place that reads the attribute's
-    /// name and value; W3-08 replaces it with the table of the attributes and
-    /// their errors.
+    /// contracted and reassociated.
     pub fn is_fp_relaxed(&self) -> bool {
-        match self.name.name.as_str() {
-            "fp" => matches!(
-                self.args.as_slice(),
-                [AttrArg::Path(p)] if p.segments.len() == 1 && p.segments[0].name == "relaxed"
-            ),
-            // The older form, accepted until W3-08 makes it E0020 with the fix `@fp(relaxed)` (§18.1).
-            "relaxed" => self.args.is_empty(),
-            _ => false,
-        }
+        self.is(crate::attrs::FP, crate::attrs::RELAXED)
     }
 }
 
@@ -362,14 +363,43 @@ pub struct FlowDecl {
 pub struct StructDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
-    pub kind: StructKind,
+    /// `: PartialEq + Eq` at the head (§6.4).
+    pub derives: Derives,
+    /// The layout, from `@repr` (§6.5).
+    pub repr: Repr,
+    pub fields: Vec<Field>,
 }
 
+/// The traits written at the head of a struct or an enum (§6.4).
 #[derive(Debug, Clone)]
-pub enum StructKind {
-    Named(Vec<Field>),
-    /// `struct Hz(F32)` (newtype)
-    Tuple(TypeId),
+pub enum Derives {
+    /// The traits as written (none for no `:`).
+    Listed(Vec<Path>),
+    /// What the head lists is not known: an attribute of the declaration
+    /// could not be read (§18.1, S-460), and the uses that rely on the list
+    /// get no diagnostic.
+    Unknown,
+}
+
+impl Derives {
+    /// The traits as written; none when they are not known.
+    pub fn listed(&self) -> &[Path] {
+        match self {
+            Derives::Listed(ps) => ps,
+            Derives::Unknown => &[],
+        }
+    }
+}
+
+/// The layout of a struct (§6.5, §12.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Repr {
+    /// No `@repr`: the layout of Onsa.
+    Onsa,
+    /// `@repr(c)`.
+    C,
+    /// An attribute of the declaration could not be read (§18.1, S-460).
+    Unknown,
 }
 
 #[derive(Debug, Clone)]
@@ -386,6 +416,8 @@ pub struct Field {
 pub struct EnumDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
+    /// `: PartialEq + Eq` at the head (§6.4).
+    pub derives: Derives,
     pub variants: Vec<Variant>,
 }
 
@@ -499,8 +531,10 @@ pub struct Stmt {
 
 #[derive(Debug, Clone)]
 pub enum StmtKind {
-    /// `let pat[: T] = e`
+    /// `@mem(bulk) let pat[: T] = e`
     Let {
+        /// The attributes before it (`@mem`, §12.4), checked by the table.
+        attrs: Vec<Attr>,
         pat: PatId,
         ty: Option<TypeId>,
         init: ExprId,

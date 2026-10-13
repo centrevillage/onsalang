@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2"]
+// fixes = 1
+
+// The same as continue_flow_loop_lp_first.onsa with the two flows in the other order: `main`
+// calls `lp~(x)` before the declaration of `lp`, whose head has `pub(crate)` (E0020). The order
+// of the declarations does not matter to the name (§11.6), and the candidates applied one at a
+// time end in a file with no diagnostic (S-475, S-435; `onsa_cases --fix-loop` for both
+// `--pick first` and `--pick last`).
+
+pub flow main(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}
+
+flow lp(x: F32 at sample) -> F32 at sample {   //~ E0020
+  x
+}

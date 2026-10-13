@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// The visibilities that limit the range (`pub(super)`, `pub(self)`, `pub(in a.b)`; a space may
+// sit before the `(`) have no candidate: E0002 (§15.1). The error is reported, and the item is
+// read on from the end of the form (§18.1, S-435), like `pub(crate)`: the name is resolved and
+// the visibility is the default, so the places that use the item get no E0302, and what was
+// read (parameters, fields, variants, members) is checked where it is used. The unit has a
+// syntax error, so its body is not checked (`zz` in a failed body raises no E0302). One error
+// in each unit.
+
+pub(super) fn up() -> I32 {                         //~ E0002
+  1
+}
+
+pub(self) fn here(a: I32) -> I32 {                  //~ E0002
+  a
+}
+
+pub(in a.b) fn inside(a: I32, b: I32) -> I32 {      //~ E0002
+  a + b
+}
+
+pub (super) fn spaced() -> I32 {                    //~ E0002
+  2
+}
+
+pub(super) fn body_not_checked() -> I32 {           //~ E0002
+  zz
+}
+
+pub(super) struct Wide {                            //~ E0002
+  x: I32,
+}
+
+pub(self) enum Mode {                               //~ E0002
+  Off,
+  On(I32),
+}
+
+pub(in a.b) const LIMIT: I32 = 4                    //~ E0002
+
+pub(super) type Gain = F32                          //~ E0002
+
+pub(super) flow lp(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub(super) use std.math.{sqrt}                      //~ E0002
+
+impl Wide {
+  pub(super) fn get(self) -> I32 {                  //~ E0002
+    self.x
+  }
+
+  pub(self) const ZERO: I32 = 0                     //~ E0002
+}
+
+// The users: no E0302.
+fn calls() -> I32 {
+  up() + here(1) + inside(1, 2) + spaced() + body_not_checked() + LIMIT
+}
+
+fn types(w: Wide, m: Mode, g: Gain) -> I32 {
+  match m {
+    Mode.Off => w.get() + Wide.ZERO,
+    Mode.On(n) => n + w.x,
+  }
+}
+
+pub flow through(x: F32 at sample) -> F32 at sample {
+  lp~(x) * 0.5
+}
+
+fn root(x: F32) -> F32 {
+  sqrt(x)
+}
+
+// What was read is checked where it is used.
+fn too_many_arguments() -> I32 {
+  here(1, 2)                                        //~ E0412
+}
+
+fn missing_field() -> Wide {
+  Wide {}                                           //~ E0410
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+fn no_such_method(w: Wide) -> I32 {
+  w.set()                                           //~ E0413
+}
+
+// A real error of the module is still reported.
+fn own_error() -> I32 {
+  up() + zz                                         //~ E0302 @10
+}

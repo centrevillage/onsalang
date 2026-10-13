@@ -6,7 +6,7 @@
 
 use onsa_diag::{Code, FileId};
 use onsa_syntax::TokenKind;
-use onsa_syntax::ast::{ItemKind, StructKind};
+use onsa_syntax::ast::ItemKind;
 
 /// Every registered code with what the registry holds (R-87 (3)):
 /// `[{"code": "E0001", "category": "syntax", "stages": ["syntax"], "fix": "optional",
@@ -63,9 +63,7 @@ fn item_names(kind: &ItemKind, out: &mut Vec<String>) {
         ItemKind::Flow(f) => out.push(f.name.name.clone()),
         ItemKind::Struct(s) => {
             out.push(s.name.name.clone());
-            if let StructKind::Named(fields) = &s.kind {
-                out.extend(fields.iter().map(|f| f.name.name.clone()));
-            }
+            out.extend(s.fields.iter().map(|f| f.name.name.clone()));
         }
         ItemKind::Enum(e) => {
             out.push(e.name.name.clone());

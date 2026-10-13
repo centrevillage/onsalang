@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3", "§6.4"]
+
+// The methods that a derive makes (`P.default()`, `m.ordinal()`, `M.from_ordinal(n)`, §6.4). A
+// struct or an enum whose derive is written as an attribute of another language (E0020) has an
+// unknown derive list (§18.1, S-460): what the list would have given raises no diagnostic where
+// it is used. A method that no derive makes is still an E0413. One error in each unit.
+// (The derive that makes the methods is W5-06, so this case holds until then. A derive that
+// overlaps an `impl` written by hand, which is also silent for the unknown list, cannot be
+// written yet: `impl Trait for Type` is an E0200 in this version.)
+
+#[derive(Default)]                                  //~ E0020
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+@derive(Ordinal)                                    //~ E0020
+pub enum Level {
+  Low,
+  High,
+}
+
+fn zero() -> Pt {
+  Pt.default()
+}
+
+fn index(l: Level) -> U32 {
+  l.ordinal()
+}
+
+fn from_index(n: U32) -> Option[Level] {
+  Level.from_ordinal(n)
+}
+
+// A name that no derive makes is not hidden.
+fn not_made(p: Pt) -> I32 {
+  p.missing()                                       //~ E0413
+}
+
+fn no_such_field(p: Pt) -> I32 {
+  p.zz                                              //~ E0413
+}

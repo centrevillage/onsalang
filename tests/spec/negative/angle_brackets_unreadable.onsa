@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// `<…>` for type parameters and type arguments is E0020 with the candidate `[…]` (spec §4.5; the row `angle_brackets`
+// of docs/foreign-forms.toml), but the candidate is made only when the text between the brackets reads as a list
+// of type parameters or type arguments (R-193). When it does not read as one, the candidate would write the same
+// unreadable text in `[ ]`, and applying it would leave an error of the syntax stage (§18.1: a candidate leaves none
+// of the same or an earlier stage), so there is no E0020 and no candidate: it is the E0002 of the general rule. The
+// runner tries every candidate, so a candidate that leaves the error fails this file. One error in each declaration
+// unit (P-01).
+
+pub fn two_names_without_a_comma<T q>(x: T) -> T {  //~ E0002
+  x
+}
+
+pub fn a_closer_of_the_wrong_kind(x: Option<I32)>) -> I32 { //~ E0002
+  1
+}
+
+pub fn a_number_between<3>(x: I32) -> I32 {         //~ E0002
+  x
+}
+
+pub fn in_an_expression(x: I32) -> I32 {
+  let a = d<U)>(x)                                  //~ E0002
+  a
+}
+
+pub fn readable(x: Option<I32>) -> I32 {            //~ E0020
+  1
+}

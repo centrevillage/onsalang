@@ -3,7 +3,7 @@
 
 use onsa_diag::{Code, Diagnostic, Fix, Stage};
 
-use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind, StructKind};
+use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind};
 
 #[derive(Clone, Copy)]
 enum Shape {
@@ -171,10 +171,8 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
             ItemKind::Struct(s) => {
                 check(&s.name, Shape::UpperCamel, "type");
                 generics(&s.generics, &mut check);
-                if let StructKind::Named(fields) = &s.kind {
-                    for f in fields {
-                        check(&f.name, Shape::Snake, "field");
-                    }
+                for f in &s.fields {
+                    check(&f.name, Shape::Snake, "field");
                 }
             }
             ItemKind::Enum(e) => {

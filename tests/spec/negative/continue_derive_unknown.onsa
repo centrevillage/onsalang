@@ -1,0 +1,157 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.4", "§6.5", "§4.4", "§7"]
+
+// A derive written the way another language or an old version does it (`#[derive(PartialEq)]`
+// on its line or on the line of the struct or the enum, the old `@derive(PartialEq)`) is one
+// E0020 (the candidate writes the trait list at the head of the declaration, §6.4). The
+// attribute is the item's, so the item is read (§18.1, S-435, S-460), with one part of it
+// unread: the derive list. What the derive list gives is unknown, so nothing that depends on it
+// is reported: the operators `==` `!=` `<` (the contents of the attribute are not read, so the
+// list is unknown whatever it names, `<` included), the bounds `[T: PartialEq]`, the
+// interpolation that needs `Show`. What does not depend on it is read and checked: the name, the
+// type parameters, the fields, the variants. A real error about the fields, the literal, the
+// arguments and the `match` is reported. One error in each unit.
+// (The candidate and its text are the rows' business: docs/foreign-forms.toml. The methods that
+// a derive makes, and a derive and an `impl` that overlap, are in continue_derive_methods.onsa.)
+
+#[derive(PartialEq)]                                //~ E0020
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+#[derive(PartialEq)] pub struct Same {              //~ E0020
+  x: I32,
+}
+
+@derive(PartialEq)                                  //~ E0020
+struct Old {
+  x: I32,
+}
+
+@derive(PartialEq) pub struct OldSame {             //~ E0020
+  x: I32,
+}
+
+#[derive(PartialEq)]                                //~ E0020
+pub enum Mode {
+  Off,
+  On(I32),
+}
+
+#[derive(PartialEq)] pub enum Switch {              //~ E0020
+  Open,
+  Shut,
+}
+
+#[derive(PartialEq)]                                //~ E0020
+pub struct Wrap[T] {
+  inner: T,
+}
+
+// Nothing that depends on the derive list is reported.
+fn equal(a: Pt, b: Pt) -> Bool {
+  a == b
+}
+
+fn not_equal(a: Same, b: Same) -> Bool {
+  a != b
+}
+
+fn ordered(a: Pt, b: Pt) -> Bool {
+  a < b
+}
+
+fn modes(a: Mode, b: Mode) -> Bool {
+  a == b
+}
+
+fn switches(a: Switch, b: Switch) -> Bool {
+  a == b
+}
+
+fn old_ones(a: Old, b: OldSame) -> Bool {
+  a == a && b != b
+}
+
+fn wraps(a: Wrap[I32], b: Wrap[I32]) -> Bool {
+  a == b
+}
+
+fn bounded[T: PartialEq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn passes_the_bound(a: Pt, c: Mode) -> Bool {
+  bounded(a, a) && bounded(c, c)
+}
+
+fn shows(a: Pt) -> Str uses {Alloc} {
+  "{a}"
+}
+
+fn nested(a: Pt, b: Pt, c: Bool) -> Bool {
+  let f = fn(p: Pt, q: Pt) -> Bool { p == q }
+  if c { f.(a, b) } else { bounded(a, b) }
+}
+
+// What does not depend on the derive list is read, and a use of it is checked.
+fn reads(p: Pt, q: Same, w: Wrap[I32]) -> I32 {
+  p.x + p.y + q.x + w.inner
+}
+
+fn makes() -> Pt {
+  Pt { x: 1, y: 2 }
+}
+
+fn matches_mode(m: Mode) -> I32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On(n) => n,
+  }
+}
+
+fn takes(p: Pt) -> I32 {
+  p.x
+}
+
+fn no_such_field(p: Pt) -> I32 {
+  p.zz                                              //~ E0413
+}
+
+fn missing_field() -> Pt {
+  Pt { x: 1 }                                       //~ E0410
+}
+
+fn wrong_field_type() -> Same {
+  Same { x: true }                                  //~ E0401
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+fn missing_switch(s: Switch) -> I32 {
+  match s {                                         //~ E0501
+    Switch.Open => 1,
+  }
+}
+
+fn too_many_arguments(p: Pt) -> I32 {
+  takes(p, p)                                       //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  takes(1)                                          //~ E0401
+}
+
+fn old_no_such_field(a: Old, b: OldSame) -> I32 {
+  a.x + b.zz                                        //~ E0413
+}
+
+fn own_error(p: Pt) -> I32 {
+  takes(p) + zz                                     //~ E0302 @14
+}

@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// E0005 for a value of `@repr` or `@fp` that is not in the closed list (spec §6.5, S-133, S-57): the list of
+// `@repr` is `c`, and the list of `@fp` is `relaxed` (the other profiles are chosen by the manifest, §15.5). The
+// candidate is the value of the list, in the place of the wrong one; no other token changes. The wrong value
+// may be the spelling of another language (`rust`, `C`, `packed`, `fast`), whose meaning is not looked at:
+// the list has one value, so there is one candidate. The value is read as a list in parentheses is read (§2.5): a
+// line break in them is a blank, and a `,` may end them. One error in each declaration unit (P-01).
+
+@repr(c)                                            //~ E0005
+pub struct Rust {
+  x: I32,
+}
+
+@repr(c)                                            //~ E0005
+pub struct UpperC {
+  x: I32,
+}
+
+@repr(c)                                       //~ E0005
+pub struct Packed {
+  x: I32,
+}
+
+@fp(relaxed)                                      //~ E0005
+pub fn fast_value(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(relaxed)                                       //~ E0005
+pub fn fastmath_value(x: F32) -> F32 {
+  x * 3.0
+}
+
+@fp(relaxed)                                      //~ E0005
+pub flow fast_flow(x: F32 at sample) -> F32 at sample {
+  x * 4.0
+}
+
+@repr(c)                                            //~ E0005
+priv struct HiddenRust {
+  x: I32,
+}
+
+@fp(relaxed,)                                       //~ E0005
+pub fn fast_trailing_comma(x: F32) -> F32 {
+  x * 6.0
+}
+
+@repr(                                              //~ E0005
+  c
+)
+pub struct RustOnItsLine {
+  x: I32,
+}
+
+@repr(c)
+pub struct FineRepr {
+  x: I32,
+}
+
+@fp(relaxed)
+pub fn fine_fp(x: F32) -> F32 {
+  x * 5.0
+}

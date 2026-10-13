@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.6", "§18.1"]
+
+// The list of a derive in the head of a declaration is closed (spec §6.4, S-34): `PartialEq Eq PartialOrd
+// Ord Hash Show Default Ordinal`. A trait that is not in the list is E0416, and the note shows that the
+// implementation is written by hand (`impl Tr for Ty`); a trait of other languages (`Debug`, `Clone`) is such
+// a name, and so is a trait that exists in Onsa but that is not derived (`Drop`). The kinds `Copy` and `Dup`
+// are not traits: they are E0020 (§4.6, the row `copy_bound`; tests/spec/fixes/e0020_derive_heading_kinds.onsa).
+// `Show` is in the list, but this version has no `Str` to write it with (§20), so a derive of `Show` is
+// E0200 (S-13). A name of the list is a name, not a path: `std.Eq` is no name of the list, and is E0416 too
+// (S-488). The E0200 of the names stage goes before the E0416 of the types stage (§18.1), whatever the order
+// of the list. One error per declaration unit (P-01).
+
+pub struct DebugOnly: Debug {                       //~ E0416
+  id: U32,
+}
+
+pub struct DebugAfterOthers: PartialEq + Eq + Debug { //~ E0416
+  id: U32,
+}
+
+pub struct CloneFirst: Clone + PartialEq {          //~ E0416
+  id: U32,
+}
+
+pub enum DropTrait: Drop {                          //~ E0416
+  Off,
+  On,
+}
+
+pub struct GenericDebug[T]: Debug {                 //~ E0416
+  value: T,
+}
+
+pub struct ShowOnly: Show {                         //~ E0200
+  id: U32,
+}
+
+pub enum ShowAfterOthers: PartialEq + Show {        //~ E0200
+  Off,
+  On,
+}
+
+pub struct PathEq: std.Eq {                         //~ E0416
+  id: U32,
+}
+
+pub struct PathCopy: std.Copy {                     //~ E0416
+  id: U32,
+}
+
+pub enum PathHash: PartialEq + std.Hash {           //~ E0416
+  Off,
+  On,
+}
+
+pub struct DebugThenShow: Debug + Show {            //~ E0200
+  id: U32,
+}
+
+pub struct Fine: PartialEq + Eq {
+  id: U32,
+}

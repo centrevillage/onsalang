@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// A `pub(` whose parenthesis is not `crate` or `pkg` and is not one of the forms that limit the
+// range (`pub()`, `pub(package)`, `pub(module)`) is also an E0002 without a candidate (§15.1:
+// "the other forms"; a space before the `(` is the same one error). The form closes on its line,
+// so the item is read on from the end of it (§18.1, S-435), like the other visibilities: the
+// callers get no E0302. One error in each unit.
+
+pub() fn empty() -> I32 {                           //~ E0002
+  1
+}
+
+pub(package) fn word(a: I32) -> I32 {               //~ E0002
+  a
+}
+
+pub (module) fn spaced(a: I32) -> I32 {             //~ E0002
+  a
+}
+
+pub() struct Pt {                                   //~ E0002
+  x: I32,
+}
+
+fn calls() -> I32 {
+  empty() + word(1) + spaced(2)
+}
+
+fn reads(p: Pt) -> I32 {
+  p.x
+}
+
+fn too_many_arguments() -> I32 {
+  word(1, 2)                                        //~ E0412
+}
+
+fn own_error() -> I32 {
+  empty() + zz                                      //~ E0302 @13
+}

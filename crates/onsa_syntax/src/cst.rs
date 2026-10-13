@@ -63,9 +63,11 @@ pub enum NodeKind {
     /// The file: `Item`, `Error`, then `Eof`.
     SourceFile,
     /// Tokens skipped by the recovery after a syntax error. It is in one of
-    /// two places: the last child of the item the error stopped (`Item`, not
-    /// complete), or a child of `SourceFile` for extra tokens after an item
-    /// that parsed (`fn f() {} junk`).
+    /// three places: the last child of the item the error stopped (`Item`, not
+    /// complete), a child of `SourceFile` for extra tokens after an item
+    /// that parsed (`fn f() {} junk`), or in the head of an item before its
+    /// declaration node, a part of the head that the parser read on after
+    /// (§18.1, S-459, S-464: `crate::parser::heading`).
     Error,
     /// The name a declaration introduces (an item, a field, a variant, a
     /// generic parameter, a parameter, `var`, the index of `par`): one token,
@@ -73,7 +75,9 @@ pub enum NodeKind {
     Name,
 
     // ------------------------------------------------------------ items
-    /// `Docs`?, `Attr`*, `Vis`?, then one declaration node.
+    /// `Docs`?, `Attr`*, `Vis`?, then one declaration node. A head read on
+    /// after a form it does not take (§18.1) has more `Attr`, `Vis` and
+    /// `Error` nodes before the declaration; the ones not read are incomplete.
     Item,
     /// The doc comments the parser took for the item (or the field, the
     /// variant, the input of a flow, §2.1): from the first `///` to the
@@ -88,21 +92,21 @@ pub enum NodeKind {
     AttrArgs,
     /// `key: Expr`
     AttrNamedArg,
-    /// `pub`, `pub(pkg)`
+    /// `pub`, `priv` (§15.1)
     Vis,
     /// `rt? fn name GenericParams? ParamList (-> Type)? (uses EffectRow)? Block?`
     Fn,
     /// `flow name ParamList -> Type Block`
     Flow,
-    /// `struct name GenericParams? (FieldList | TupleStructBody)`
+    /// `struct name GenericParams? Derives? FieldList`
     Struct,
     /// `{ Field, ... }`
     FieldList,
     /// `Vis? name: Type`
     Field,
-    /// `( Type )`
-    TupleStructBody,
-    /// `enum name GenericParams? VariantList`
+    /// `: Bound + Bound` at the head of a struct or an enum (§6.4)
+    Derives,
+    /// `enum name GenericParams? Derives? VariantList`
     Enum,
     /// `{ Variant, ... }`
     VariantList,
@@ -323,12 +327,12 @@ impl NodeKind {
             WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat
             | OrPat => Class::Pat,
             SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
-            | Struct | FieldList | Field | TupleStructBody | Enum | VariantList | Variant | VariantFields
-            | TypeAlias | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern
-            | Target | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList
-            | Param | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt
-            | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm
-            | ArgList | Arg | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
+            | Struct | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
+            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
+            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
+            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => Class::Other,
         }
     }
 
@@ -350,7 +354,7 @@ impl NodeKind {
             Struct => "Struct",
             FieldList => "FieldList",
             Field => "Field",
-            TupleStructBody => "TupleStructBody",
+            Derives => "Derives",
             Enum => "Enum",
             VariantList => "VariantList",
             Variant => "Variant",

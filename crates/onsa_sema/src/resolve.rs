@@ -149,8 +149,9 @@ impl Modules {
     pub fn visible(&self, vis: Vis, decl: ModId, from: ModId) -> bool {
         match vis {
             Vis::Pub => true,
-            Vis::Pkg => self.pkg_of(decl) == self.pkg_of(from),
-            Vis::Private => decl == from,
+            // W4-03: no visibility word is within the package (§15.1); until
+            // then it is read as `priv`, within the module.
+            Vis::Default | Vis::Priv => decl == from,
         }
     }
 

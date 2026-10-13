@@ -208,8 +208,8 @@ fn a_blank_inside_a_visibility_is_the_form_of_the_visibility() {
     // `pub(crate)` is one form with its blanks (S-248): its own row, and the
     // candidate leaves nothing.
     check("pub (crate) fn g() {\n}\n", Code::E0020, "pub (crate)", &["fn g() {\n}\n"]);
-    // `pub(pkg)` waits for W3-08 (`pub_pkg`): read as it is without the blank.
-    assert!(parse("pub (pkg) fn g() {\n}\n").diagnostics.is_empty());
+    // `pub(pkg)` too (S-36, S-412: `pub_pkg`).
+    check("pub (pkg) fn g() {\n}\n", Code::E0020, "pub (pkg)", &["fn g() {\n}\n"]);
 }
 
 #[test]

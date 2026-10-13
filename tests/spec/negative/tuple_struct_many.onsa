@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+
+// E0002, with no candidate, for a struct written with a tuple of two elements or more (`struct Pair(F32, F32)`;
+// spec §4.4, §18.1, S-39; the row `tuple_struct_many` of docs/foreign-forms.toml). The names of the fields would
+// have to be made up, so there is no candidate, and the note says to write a struct with named fields (the tuple of
+// one element is E0020 with a candidate: fixes/e0020_tuple_struct.onsa). The fields that were not read are a
+// wrong type for the code that uses the type, so the function below has no diagnostic. One error in each
+// declaration unit (P-01).
+
+pub struct Pair(F32, F32)                           //~ E0002
+
+struct Rgb(U8, U8, U8)                              //~ E0002
+
+priv struct Span2(I32, I32)                         //~ E0002
+
+pub struct Wide[T](T, T)                            //~ E0002
+
+pub fn takes(p: Pair) -> Pair {
+  p
+}
+
+pub struct Named {
+  a: F32,
+  b: F32,
+}

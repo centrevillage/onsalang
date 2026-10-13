@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.1", "§4.4", "§6.2", "§6.6", "§7"]
+// fixes = 1
+
+// The same as continue_pub_crate_fn.onsa for the other kinds of item: a struct, an enum, a type
+// alias, a constant, a generic struct, and the members of an `impl` (a method and an associated
+// constant) whose heads have `pub(crate)` or `pub(pkg)` (E0020, the candidate removes the
+// visibility). The item is read on from the end of the form (§18.1, S-435): the type can be named
+// in a type position, the struct literal and the field reads see its fields, the variants and the
+// members can be used, and the `impl` target resolves. What is read is checked where it is used:
+// a missing field, a field that does not exist, a variant that a `match` leaves out. One error
+// in each unit.
+
+struct Pt {                              //~ E0020
+  x: I32,
+  y: I32,
+}
+
+enum Mode {                               //~ E0020
+  Off,
+  On(I32),
+}
+
+type Gain = F32                          //~ E0020
+
+const LIMIT: I32 = 8                       //~ E0020
+
+struct Pair[T] {                        //~ E0020
+  a: T,
+  b: T,
+}
+
+impl Pt {
+  fn sum(self) -> I32 {                  //~ E0020
+    self.x + self.y
+  }
+
+  const ORIGIN: I32 = 0                   //~ E0020
+}
+
+// The users: no E0302 for the types, the constant, the variants, the method, the associated
+// constant.
+fn makes() -> Pt {
+  Pt { x: 1, y: 2 }
+}
+
+fn reads(p: Pt) -> I32 {
+  p.x + p.sum() + Pt.ORIGIN
+}
+
+fn matches_mode(m: Mode) -> I32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On(n) => n + LIMIT,
+  }
+}
+
+fn builds_mode() -> Mode {
+  Mode.On(LIMIT)
+}
+
+fn scales(g: Gain) -> Gain {
+  g * 2.0
+}
+
+fn pairs(n: I32) -> Pair[I32] {
+  Pair { a: n, b: LIMIT }
+}
+
+fn nests(p: Pair[Pt], q: Pair[Mode]) -> I32 {
+  p.a.x + p.b.y + matches_mode(q.a)
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn no_such_field(p: Pt) -> I32 {
+  p.z                                               //~ E0413
+}
+
+fn missing_field() -> Pt {
+  Pt { x: 1 }                                       //~ E0410
+}
+
+fn wrong_field_type() -> Pt {
+  Pt { x: true, y: 2 }                              //~ E0401
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+fn wrong_alias_use(g: Gain) -> I32 {
+  g                                                 //~ E0401
+}
+
+// A real error of the module is still reported.
+fn own_error() -> I32 {
+  LIMIT + zz                                        //~ E0302 @11
+}

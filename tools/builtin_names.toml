@@ -142,9 +142,7 @@
 "std" = 1
 
 [allow."crates/onsa_sema/src/body.rs"]
-"Copy" = 1
 "Default" = 1
-"Dup" = 1
 "Eq" = 1
 "Float" = 1
 "Hash" = 1
@@ -208,9 +206,7 @@
 "zeroed" = 1
 
 [allow."crates/onsa_sema/src/def.rs"]
-"Copy" = 1
 "Default" = 1
-"Dup" = 1
 "Eq" = 1
 "Float" = 1
 "Hash" = 1
@@ -262,6 +258,7 @@
 "None" = 1
 "Ok" = 1
 "Ord" = 1
+"Ordinal" = 1
 "Out" = 2
 "Params" = 2
 "PartialEq" = 1
@@ -277,13 +274,11 @@
 "cfg" = 2
 "frames" = 1
 "init" = 2
-"param" = 2
 "params" = 3
 "params_default" = 2
 "process" = 2
 "process_inplace" = 2
 "render" = 2
-"repr" = 1
 "reset" = 2
 "sample_rate" = 2
 "std" = 1
@@ -316,8 +311,15 @@
 "init" = 1
 "sample" = 1
 
-[allow."crates/onsa_syntax/src/ast.rs"]
+[allow."crates/onsa_syntax/src/attrs.rs"]
 "fp" = 1
+"mem" = 1
+"param" = 1
+"repr" = 1
+
+[allow."crates/onsa_syntax/src/foreign.rs"]
+"Copy" = 1
+"Dup" = 1
 
 [allow."crates/onsa_syntax/src/foreign/paths.rs"]
 "Bool" = 1

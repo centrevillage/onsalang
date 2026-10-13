@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§2.5"]
+
+// The forms that are not read on (§18.1, S-435): a head that a line break cuts. They keep the
+// reading they have.
+
+// The line break after the form cuts the head: `pub(crate)` is a run of tokens that no item
+// holds (E0020 for the visibility, as everywhere), and `fn on_the_next_line` is an item of its
+// own, a name of the module.
+pub(crate)                                          //~ E0020
+fn on_the_next_line() -> I32 {
+  3
+}
+
+// The same with `pub(pkg)`.
+pub(pkg)                                            //~ E0020
+fn on_the_next_line_pkg(a: I32) -> I32 {
+  a
+}
+
+fn uses_the_next_line() -> I32 {
+  on_the_next_line() + on_the_next_line_pkg(1)
+}
+
+fn too_many_arguments() -> I32 {
+  on_the_next_line_pkg(1, 2)                        //~ E0412
+}
+
+fn own_error() -> I32 {
+  on_the_next_line() + zz                           //~ E0302 @24
+}
+
+fn uses_after_a_break() -> I32 {
+  after_a_break()                                   //~ E0302
+}
+
+// `pub` ends its line (§2.5), and the `(super)` that follows is no item: one E0002, and the
+// `fn` after it is not read as a function either, so `after_a_break` is not a name of the
+// module (its user gets E0302). The form is the last item: the tokens that no item holds go on
+// until the next item.
+pub                                                 //~ E0002
+(super) fn after_a_break() -> I32 {
+  2
+}

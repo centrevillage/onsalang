@@ -78,7 +78,6 @@ fn kind_of_def(a: &Analysis, d: DefId, args: &[TyId], visiting: &mut HashSet<Def
             }
             match &s.fields {
                 Fields::Named(fs) => fs.iter().try_fold(Kind::Copy, |k, f| Some(k.max(field_kind(f.ty, visiting)?))),
-                Fields::Tuple(t) => field_kind(*t, visiting),
                 Fields::Opaque => Some(Kind::Copy),
             }
         }

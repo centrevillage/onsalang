@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§11.2"]
+// fixes = 1
+
+// The candidates of this file, applied one at a time the way a repair loop does, end in a file
+// with no diagnostic (S-475, S-435). The flow `lp` has `pub(crate)` (E0020, the candidate removes
+// the visibility), and `main` calls it with `~`. The error of `lp` is reported and `lp` is read
+// on from the end of the form (§18.1, S-435), so `lp` is a flow for `main`: there is no E0812
+// ("`lp` is not a flow", whose candidate would remove the `~`) and no E0302. The flows are in
+// the other order in continue_flow_loop_main_first.onsa. The loop is checked with
+// `onsa_cases --fix-loop` for both `--pick first` and `--pick last`.
+
+flow lp(x: F32 at sample) -> F32 at sample {   //~ E0020
+  x
+}
+
+pub flow main(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}

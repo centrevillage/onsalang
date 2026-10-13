@@ -257,22 +257,21 @@ fn patterns() {
 
 #[test]
 fn items() {
-    let src = "/// doc\n@derive(PartialEq, Eq)\npub struct Key[T: PartialOrd + Eq, const N: U32, e] {\n  id: U32,\n  xs: [T; N],\n}\n";
+    // The derived traits at the head (§6.4, S-34).
+    let src = "/// doc\n@repr(c)\npub struct Key[T: PartialOrd + Eq, const N: U32, e]: PartialEq + Eq {\n  id: U32,\n  xs: [T; N],\n}\n";
     assert_eq!(
         dump(&parse(src).ast),
-        "(doc:1 @derive(PartialEq, Eq) pub struct Key[T: PartialOrd + Eq, const N: U32, effect e]\n  id: U32\n  xs: [T; N])\n"
+        "(doc:1 @repr(c) pub struct Key[T: PartialOrd + Eq, const N: U32, effect e]: PartialEq + Eq repr(c)\n  id: U32\n  xs: [T; N])\n"
     );
     let src = "pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Alloc, e} { xs }";
     assert_eq!(
         dump(&parse(src).ast),
         "(pub fn map[T, U, effect e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Alloc, e}\n  (block\n    tail xs))\n"
     );
-    let src = "pub(pkg) type S = Buf[F32]\nconst X: (U32, F32) = (1, 2.0)\nuse a.b.{c, d}\ntest \"t\" { assert true }";
+    let src = "priv type S = Buf[F32]\nconst X: (U32, F32) = (1, 2.0)\nuse a.b.{c, d}\ntest \"t\" { assert true }";
     let d = dump(&parse(src).ast);
     assert!(
-        d.starts_with(
-            "(pub(pkg) type S = Buf[F32])\n(const X: (U32, F32) = (tuple 1 2.0))\n(use a.b.{c, d})\n(test \"t\""
-        ),
+        d.starts_with("(priv type S = Buf[F32])\n(const X: (U32, F32) = (tuple 1 2.0))\n(use a.b.{c, d})\n(test \"t\""),
         "{d}"
     );
     let src = "pub trait Show {\n  fn show(self) -> Str uses {Alloc}\n  const ZERO: Self\n}\nimpl Show for Point {\n  fn show(self) -> Str uses {Alloc} { \"({self.x}, {self.y})\" }\n}";
@@ -549,5 +548,72 @@ fn a_reserved_word_is_e0200_where_it_is_read() {
     // After a `.` and at the head of the path of a `use`, a name (S-357, S-20, S-37).
     for src in ["fn f(s: S) -> I32 {\n  s.clock\n}\n", "use clock.{x}\n", "use test.{Gen}\n", "use a.ser.{x}\n"] {
         assert_eq!(codes(src), vec![], "{src}");
+    }
+}
+
+/// The words before a head are one E0002 with its note, and the member is
+/// read on, in every list whose members are units (§18.1, S-459, S-493):
+/// the operations of an `effect` and the functions of a handler written in
+/// place too.
+#[test]
+fn a_member_of_an_effect_and_of_a_handler_in_place_is_read_on_after_words() {
+    use crate::ast::ItemKind;
+    for src in [
+        "effect Ask {\n  public fn ask() -> I32\n}\n",
+        "fn f() -> I32 {\n  handle { ask() } with Ask {\n    public fn ask() -> I32 { 1 }\n  }\n}\n",
+    ] {
+        let p = parse(src);
+        let [d] = p.diagnostics.as_slice() else { panic!("{src}: {:?}", p.diagnostics) };
+        assert_eq!((d.code, &src[d.span.start as usize..d.span.end as usize]), (Code::E0002, "public"), "{src}");
+        assert!(d.notes.iter().any(|n| n.span.is_none() && n.message.contains("§18.1")), "{src}: {d:?}");
+        let read = p.ast.items.iter().any(|i| matches!(&i.kind, ItemKind::Fn(f) if f.name.name == "ask"));
+        assert!(read, "{src}: the member is not read on");
+    }
+}
+
+#[test]
+fn a_head_read_on_keeps_what_was_written_right() {
+    // §18.1, S-435, S-464, S-482: the head is read on after a form that ends on
+    // its line; the declaration is read whole, the modifiers written are
+    // recorded, and a visibility of another language or two that disagree are
+    // the default.
+    use crate::ast::{ItemKind, Vis};
+    let src = "rt pub fn a() {}\npub(crate) fn b() {}\npriv pub fn c() {}\nexport pub fn d() {}\nconst fn e() {}\n\
+               #[inline] priv fn f() {}\n@fp(relaxed, 1 +) fn g() {}\n";
+    let p = parse(src);
+    assert_eq!(p.ast.root.len(), 7, "{:?}", p.diagnostics);
+    let heads: Vec<(String, Vis, bool)> = p
+        .ast
+        .root
+        .iter()
+        .map(|&i| {
+            let item = p.ast.item(i);
+            let ItemKind::Fn(f) = &item.kind else { unreachable!() };
+            (f.name.name.clone(), item.vis, f.rt)
+        })
+        .collect();
+    let want = [
+        ("a", Vis::Pub, true),
+        ("b", Vis::Default, false),
+        ("c", Vis::Default, false),
+        ("d", Vis::Pub, false),
+        ("e", Vis::Default, false),
+        ("f", Vis::Priv, false),
+        ("g", Vis::Default, false),
+    ];
+    let want: Vec<(String, Vis, bool)> = want.iter().map(|&(n, v, rt)| (n.to_string(), v, rt)).collect();
+    assert_eq!(heads, want);
+    // One diagnostic of the syntax stage for each, and every unit is an item's.
+    assert_eq!(p.diagnostics.len(), 7, "{:?}", p.diagnostics);
+    assert!(p.units.list.iter().all(|u| u.item.is_some()), "{:?}", p.units.list);
+    // A form that does not end on its line is not read on; after a line break
+    // after it, the declaration is a unit of its own.
+    for src in ["pub(crate fn a() {}\n", "const unsafe fn a() {}\n"] {
+        assert!(parse(src).ast.root.is_empty(), "{src:?}");
+    }
+    for src in ["pub(crate)\nfn a() {}\n", "export\nfn a() {}\n"] {
+        let p = parse(src);
+        let items: Vec<bool> = p.units.list.iter().map(|u| u.item.is_some()).collect();
+        assert_eq!(items, [false, true], "{src:?}");
     }
 }

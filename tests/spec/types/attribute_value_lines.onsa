@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5"]
+// canonical = false
+
+// The value of an attribute in parentheses (spec §6.5) read as the line rules read a list in parentheses
+// (§2.5): a line break in them is a blank, a comment means nothing, and the list may end with a `,`. So
+// `@fp(` on one line and `relaxed` on the next is `@fp(relaxed)`, and `@repr(c,)` is `@repr(c)`. A value out of
+// the list stays E0005 however it is laid out (negative/attributes_table.onsa). `canonical = false`: `onsa fmt`
+// writes each of these attributes on one line.
+
+@fp(
+  relaxed
+)
+pub fn spread(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(relaxed
+)
+pub fn closed_below(x: F32) -> F32 {
+  x * 3.0
+}
+
+@fp(relaxed // contracted and reassociated
+)
+pub fn commented(x: F32) -> F32 {
+  x * 4.0
+}
+
+@fp(relaxed,)
+pub fn trailing_comma(x: F32) -> F32 {
+  x * 5.0
+}
+
+@fp(
+  relaxed,
+)
+pub flow spread_flow(x: F32 at sample) -> F32 at sample {
+  x * 6.0
+}
+
+@repr(
+  c
+)
+pub struct Frame {
+  left: F32,
+  right: F32,
+}
+
+@repr(c,)
+struct Plain {
+  count: I32,
+}

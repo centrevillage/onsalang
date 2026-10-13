@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§12.4", "§6.5", "§11.2"]
+
+// The syntax of an attribute in front of a statement: `@mem(bulk)` in front of a `let` (spec §12.4, §6.5,
+// S-43). The attribute is on the line of the `let` and takes effect only for it. Only the syntax is read here
+// (`mode = "parse"`): the meaning of `@mem(bulk)` (the place of the state, E0818 for a `let` that is not a delay,
+// E0819, E0820) is not in this version, and a check of the right forms below is E0200 until W9-06
+// (tests/spec/fixes/e0020_old_attributes_flow.onsa has them). The forms are right in every place a `let` can be
+// written, so they include a `let` in a nested block, where the flow stage then says E0806 (§11.2); that is a later
+// stage than the syntax and is not read here.
+
+pub flow echo(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)
+  d
+}
+
+pub flow echo_vdelay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  @mem(bulk) let line = vdelay~(x, d, 4800)
+  line
+}
+
+pub flow two_lines(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let a = delay~(x, 4800)
+  let b = delay~(a, 64)
+  @mem(bulk) let c = delay~(b, 9600)
+  a + b + c
+}
+
+pub flow after_other_lets(x: F32 at sample) -> F32 at sample {
+  let g = x * 0.5
+  @mem(bulk) let d = delay~(g, 4800)
+  g + d
+}
+
+@fp(relaxed)
+pub flow with_an_attribute_on_the_flow(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let d = delay~(x, 4800)
+  d
+}
+
+pub flow in_a_nested_block(c: Bool at block, x: F32 at sample) -> F32 at sample {
+  if c {
+    @mem(bulk) let d = delay~(x, 4800)
+    d
+  } else {
+    x
+  }
+}
+
+pub fn in_a_fn(x: F32) -> F32 {
+  @mem(bulk) let a = x
+  a
+}
+
+pub fn in_a_nested_block_of_a_fn(c: Bool, x: F32) -> F32 {
+  if c {
+    @mem(bulk) let a = x
+    a
+  } else {
+    x
+  }
+}

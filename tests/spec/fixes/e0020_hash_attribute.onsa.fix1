@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// E0020 for an attribute written as `#[name(…)]` in Rust, when `@name(…)` is accepted in that place (spec §6.5,
+// §18.1, S-463; the row `hash_attribute` of docs/foreign-forms.toml). The candidate writes the attribute with
+// `@`; a difference of spelling alone is copied (`#[repr(C)]` is `@repr(c)`: the same concept written otherwise,
+// not a name taken from another language). The attributes whose replacement is not accepted have no
+// candidate (negative/attributes_no_candidate.onsa), and a derive is written in the head (fixes/e0020_derive_attribute.onsa).
+// The value is read as the one of `@name(…)` is (a `,` may end it, types/attribute_value_lines.onsa).
+// The attribute is on the line of the declaration here, so that the marker comment is not between the
+// attribute and the next line. The main position is the `#`. One error in each declaration unit (P-01).
+
+@repr(c) pub struct LowerC {                      //~ E0020
+  x: I32,
+}
+
+@repr(c) pub struct UpperC {                      //~ E0020
+  x: I32,
+}
+
+@repr(c) struct UpperCPlain {                     //~ E0020
+  x: I32,
+}
+
+@fp(relaxed) pub fn fast(x: F32) -> F32 {         //~ E0020
+  x * 2.0
+}
+
+@fp(relaxed) pub flow fast_flow(x: F32 at sample) -> F32 at sample { //~ E0020
+  x * 3.0
+}
+
+@repr(c,) pub struct TrailingComma {             //~ E0020
+  x: I32,
+}
+
+@fp(relaxed,) pub fn fast_comma(x: F32) -> F32 {  //~ E0020
+  x * 4.0
+}
+
+@repr(c)
+pub struct Fine {
+  x: I32,
+}

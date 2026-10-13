@@ -250,7 +250,7 @@ fn operators_and_groups() {
     ok("pub fn f(a: U32) -> U32 { !a }\n");
     assert_eq!(codes("pub fn f(a: U32) -> U32 { -a }\n"), vec![Code::E0401]);
     assert_eq!(codes("pub fn f() -> U32 { -1 }\n"), vec![Code::E0401]);
-    ok("@derive(PartialEq)\npub struct P { x: F32 }\npub fn f(a: P, b: P) -> Bool { a == b }\n");
+    ok("pub struct P: PartialEq { x: F32 }\npub fn f(a: P, b: P) -> Bool { a == b }\n");
     assert_eq!(codes("pub struct P { x: F32 }\npub fn f(a: P, b: P) -> Bool { a == b }\n"), vec![Code::E0401]);
     ok("pub fn f(a: Option[U8], b: Option[U8]) -> Bool { a == b }\n");
 }
@@ -422,6 +422,11 @@ fn the_uses_of_failed_items_get_no_diagnostic() {
         codes(
             "struct S[T: ] { a: T }\nenum F[T: ] { A(T), B }\nfn f1(s: S[F32]) -> F32 { s.a }\nfn f2() -> F[F32] { F.A(1.0) }\n"
         ),
+        []
+    );
+    // An element of a failed struct, as a field (`.0`; a tuple struct is one, S-39).
+    assert_eq!(
+        codes("struct P { x: F32, y: , }\nfn f(p: P) -> F32 { p.0 }\nstruct Hz(F32)\nfn g(h: Hz) -> F32 { h.0 }\n"),
         []
     );
     // The namespace of a flow whose heading was cut (F-4).

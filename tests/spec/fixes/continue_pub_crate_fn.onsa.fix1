@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§10", "§4.5"]
+// fixes = 1
+
+// A function whose head has `pub(crate)` or `pub(pkg)` (a space may sit before the `(`) is one
+// E0020 whose candidate removes the visibility (§15.1). The error is reported, and the
+// declaration is read on from the end of the form (§18.1, S-435): the name is resolved, the
+// visibility is the default (the package), and the rest of the head (type parameters, parameters,
+// return type, `rt`) is a read declaration that the callers are checked against. The unit has a
+// syntax error, so its body is not checked: the `zz` of a failed body raises no E0302. The
+// callers get no E0302 (neither the nested ones), a real error of a caller is still reported,
+// and the real errors that need the head (the number and the types of the arguments, the return
+// type) are reported where the head is used. One error in each unit.
+
+fn plain() -> I32 {                      //~ E0020
+  1
+}
+
+fn twice(a: I32) -> I32 {                 //~ E0020
+  a + a
+}
+
+fn id[T](x: T) -> T {                    //~ E0020
+  x
+}
+
+fn negate(b: Bool) -> Bool {               //~ E0020
+  !b
+}
+
+rt fn rt_plain(x: I32) -> I32 {         //~ E0020
+  x
+}
+
+fn body_not_checked() -> I32 {           //~ E0020
+  zz
+}
+
+// The callers: no E0302.
+fn calls_plain() -> I32 {
+  plain() + twice(2)
+}
+
+fn calls_generic() -> Bool {
+  negate(id(true))
+}
+
+fn calls_nested(c: Bool) -> I32 {
+  let f = fn(x: I32) -> I32 { plain() + twice(x) }
+  let r = if c { f.(1) } else { twice(plain()) }
+  match c {
+    true => r + body_not_checked(),
+    false => r,
+  }
+}
+
+// `rt_plain` is read as an `rt` function, so an `rt` function may call it (E0901 is for an `rt`
+// function that calls a function that is not `rt`).
+pub rt fn calls_rt(x: I32) -> I32 {
+  rt_plain(x) + 1
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> I32 {
+  twice(1, 2)                                       //~ E0412
+}
+
+fn wrong_argument_type() -> I32 {
+  twice(true)                                       //~ E0401
+}
+
+fn wrong_return_type() -> Bool {
+  plain()                                           //~ E0401
+}
+
+// A real error of the module is still reported, in the unit it belongs to.
+fn own_error() -> I32 {
+  plain() + zz                                      //~ E0302 @13
+}
