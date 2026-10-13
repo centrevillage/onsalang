@@ -142,7 +142,6 @@
 "std" = 1
 
 [allow."crates/onsa_sema/src/body.rs"]
-"Alloc" = 1
 "Copy" = 1
 "Default" = 1
 "Dup" = 1
@@ -154,6 +153,9 @@
 "PartialEq" = 1
 "PartialOrd" = 1
 "Show" = 1
+
+[allow."crates/onsa_sema/src/body/expressions.rs"]
+"Alloc" = 1
 
 [allow."crates/onsa_sema/src/builtin.rs"]
 "BITS" = 1
