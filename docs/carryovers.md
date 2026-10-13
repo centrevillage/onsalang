@@ -23,11 +23,13 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
   - どれも間に空行を入れると fmt の出力が収束しない（W3-06/i の調べ）。
 - **W3-11（17 回目）:** R-212（fmt が属性と宣言の間の普通のコメントを本体の先頭へ移す。`docs/onsa-tools.md` §3.4）。属性の括弧の中のコメント（`@fp(relaxed // c` 改行 `)`）も本体の先頭へ移り、空行が一つ増える（W3-08 の直し A の報告）。
   再現は `@fp(relaxed)` 改行 `// c` 改行 `fn f() -> F32 {` 改行 `1.0` 改行 `}`。
-- **W3-11（24 回目、S-510）:** U3 で `tests/spec/types/attribute_value_lines.onsa` のコメント「`onsa fmt` writes each of these attributes on one line」と `tests/spec/lex/brace_lines_in_brackets.onsa` のコメント「`onsa fmt` joins what fits on a line」を事実に合わせて直す（`canonical = false` は変えない）。U2 の自己テストの畳む並びの検査（`fold`）は消える。
+- **W3-11（24 回目、S-510）:** U3 で `tests/spec/types/attribute_value_lines.onsa` のコメント「`onsa fmt` writes each of these attributes on one line」と `tests/spec/lex/brace_lines_in_brackets.onsa` のコメント「`onsa fmt` joins what fits on a line」を事実に合わせて直す（`canonical = false` は変えない）。
+  U2 の自己テストの畳む並びの検査（`fold`）は消える。
 - **W3-12（W3-20 の直し、2026-10-09）:** `-> (fn()) uses {…}` の返り値の関数型を囲む括弧は冗長でない（外すと `uses` が内側の型に付き、型が変わる）。S-339 の基準で外さないことを確かめる事例を足す。型を文字列にする所は `TyStore::parens_before_uses` が同じ規則を持つ。
 - **W3-12（23 回目、第 28 組の下書き）:** 括弧の中に継続の位置でない改行があると、その括弧は冗長でない（`let y = (x` 改行 `as F64)` の括弧を外すと `as` が文の頭になり E0002。S-339 の「外しても構文の段の誤りにならない」の基準）。判定を演算子の強弱だけで書くと漏れ、書き込む前の確かめ（R-204）で内部エラーになる。どの改行が残るかは S-497 の決定による。
 - **W3-12（9 回目）:** fmt が空の構造体のパターンを `Empty {  }`（空白二つ）にする（`rest` を足した既存の書き方の癖、W3-21/b の 13）。
-- **W3-13（24 回目、S-513）:** 事例は `tests/spec/negative/`（列挙子の宣言、fn・struct・enum・trait・impl・`impl … for`・メソッド・extern の関数の `[]`、handler の宣言、`with h()`、パターンの `E.A()`・`None()`・`Some()`、中にコメントのある形）と `tests/spec/fixes/`（候補）。`tests/` でぶつかる既存の事例は `tests/fuzz/d769cbca.onsa`（`struct P[]` の後に構文の誤り）だけで、再生は終わり方と候補の約束だけを見るので通る見込み（`tools/fuzz.py` の再生で確かめる。24 回目に親が `tests/`・std・examples と Rust・Python のテストを検索した）。
+- **W3-13（24 回目、S-513）:** 事例は `tests/spec/negative/`（列挙子の宣言、fn・struct・enum・trait・impl・`impl … for`・メソッド・extern の関数の `[]`、handler の宣言、`with h()`、パターンの `E.A()`・`None()`・`Some()`、中にコメントのある形）と `tests/spec/fixes/`（候補）。
+  `tests/` でぶつかる既存の事例は `tests/fuzz/d769cbca.onsa`（`struct P[]` の後に構文の誤り）だけで、再生は終わり方と候補の約束だけを見るので通る見込み（`tools/fuzz.py` の再生で確かめる。24 回目に親が `tests/`・std・examples と Rust・Python のテストを検索した）。
 - **W3-18 の後（W3-18/b の報告、2026-10-09）:**
   - W7-02: `par` / `delay` の算術の `const` の値の誤り（`0..<0 - 1` など）は今 E0200（`FlowConstExprs`、仕様は E0419）、`flow_const_neg` の `ONE - 2` も E0200。
   - W4-06: 範囲の端の形の検査（`range_end_forms`）が名前の解決より前に走る（`0..<zzz + 1.5` が E0401）。
@@ -89,7 +91,8 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
 - **W5-02:** W3-07/i が、修正候補の約束の器の自己テスト（`onsa_tests` の `fix_contract::tests::same_place_…` と `run::tests::fix_contract`）の「約束を破る候補」の題材を、直った E0010 から E0411 の `.narrow_i32()` に移した（2026-10-09）。
   - W5-02 が R-186（E0411 の候補を出さない）を直すと題材を失うので、別の題材（実装待ちの候補）に移すか、器の自己テストを合成の入力で書き直す。
 - **W5-03（W3-10、10 回目）:** `unwrap_or` を E0413 にするとき、flow の K-08 の穴を塞いだ仮の機構を消す: `builtin.rs` の `lazy_args`（Rater の `rate_call` が引数を枝として数える）と `tests/spec/negative/flow_map_unsupported_w5_03.onsa`。
-- **W5-06（20 回目、W3-08、S-460）:** 誤りの属性の付いた struct・enum の `derives` が未知（`None`）のとき、derive が作るメソッドの引き（`P.default()`・`m.ordinal()`・`M.from_ordinal(n)`）と、手書きの `impl` との重なりの E0304 を黙らせる（事例は `tests/spec/negative/continue_derive_methods.onsa`）。`Hash` の derive は今も E0200（S-138 では境界の判定だけを実装する）。`repr` の `Unknown` を読む所はまだ無い（FFI の配置を検査する回）。
+- **W5-06（20 回目、W3-08、S-460）:** 誤りの属性の付いた struct・enum の `derives` が未知（`None`）のとき、derive が作るメソッドの引き（`P.default()`・`m.ordinal()`・`M.from_ordinal(n)`）と、手書きの `impl` との重なりの E0304 を黙らせる（事例は `tests/spec/negative/continue_derive_methods.onsa`）。
+  `Hash` の derive は今も E0200（S-138 では境界の判定だけを実装する）。`repr` の `Unknown` を読む所はまだ無い（FFI の配置を検査する回）。
 - **W5-08:** R-172・R-176（種の制約）。W2-06 の `deferred.rs` の `meets` の「種が計算できなければ通す」を外す。
 - **W6-01（12 回目、W3-06/t3）:** 名前の付いた純粋な関数を `fn(I32) -> I32 uses {Alloc}` の引数へ渡すと E0401「expected `fn(I32) -> I32 uses {Alloc}`, found `fn(I32) -> I32`」になる（`fn apply(f: fn(I32) -> I32 uses {Alloc}, x: I32) -> I32 uses {Alloc} { f(x) }` に `apply(double, x)`、`let` で束縛した無名関数も同じ）。
   - §8.1 の関数型の互換の 2（純粋な関数は `uses {Alloc}` の位置で使える）に反する。
@@ -226,7 +229,10 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
   - `tests/spec/fixes/` のパッケージの事例（6 個のディレクトリ）は辿らず、数だけを出す。
   - 「一手以上辿った歩みが 0 本なら失敗」は全体で一つだけの判定で、大半の入力が歩けなくなっても気付かない（割合の下限の案）。`tests/` の別の場所が読めないと `case::collect` の誤りでこの項目も失敗する（二重の失敗）。
   - CLI の分岐なしの歩みには期限が無い（上限は 2 × トークンの数 + 8）。`--fix-same-place` の内部エラーは位置を落とす。`fix_loop` の内部エラーの位置（L-3）を直接確かめるテストが無い。
-- **W3-08 の残り（20 回目、W3-08/i の報告。21 回目、W3-08/b3）:** `tuple_struct_many` の文面は要素が一つで型として読めない形（`struct B(4)`）にも出る（文面だけ）。b3 の低い指摘（害が小さいので記録だけ、21 回目）: (1) 見出しが失敗した単位の `#[…]`（`#[repr(C)]` 改行 `pub(crate struct P`）は、場所が分からないのに「この場所に Onsa の形が無い」の文面になる（`hash_attribute` の `place` が無いときの分かれ）。(2) `#[derive(Debug, Clone,)]` と名前の間のコメントは候補なし（`derive()` の名前の走査が `,` の後に名前を求める。`#[repr(C,)]` は候補あり）。(3) `derive()` が既に書かれた名前を経路の最後の語で数える（S-488 の判断が構文の側と sema の二か所）。(4) derive の名前を数千並べると 2 乗の時間。直し B の 1・3・4・7 は単体テストと表の例で押さえ、`tests/spec` の事例は無い。報告は 21 回目の scratchpad の `w308b3/handback_b.md`。W3 の終わりの RF と同じ回に見直す。
+- **W3-08 の残り（20 回目、W3-08/i の報告。21 回目、W3-08/b3）:** `tuple_struct_many` の文面は要素が一つで型として読めない形（`struct B(4)`）にも出る（文面だけ）。
+  b3 の低い指摘（害が小さいので記録だけ、21 回目）: (1) 見出しが失敗した単位の `#[…]`（`#[repr(C)]` 改行 `pub(crate struct P`）は、場所が分からないのに「この場所に Onsa の形が無い」の文面になる（`hash_attribute` の `place` が無いときの分かれ）。
+  (2) `#[derive(Debug, Clone,)]` と名前の間のコメントは候補なし（`derive()` の名前の走査が `,` の後に名前を求める。`#[repr(C,)]` は候補あり）。(3) `derive()` が既に書かれた名前を経路の最後の語で数える（S-488 の判断が構文の側と sema の二か所）。(4) derive の名前を数千並べると 2 乗の時間。
+  直し B の 1・3・4・7 は単体テストと表の例で押さえ、`tests/spec` の事例は無い。報告は 21 回目の scratchpad の `w308b3/handback_b.md`。W3 の終わりの RF と同じ回に見直す。
 - **W3 の終わり（プロセスの整理、2026-10-10、利用者）:** 決定を書く場所が分散している件（仕様、変更点 §4、計画 §2、rework の行、空白の資料）の整理と、保留中のプロセスの改善（事例の器に一つのファイルを受ける形、空白の資料のディレクトリ分けと参照の直し、正規形でない正例を書く器の形の見直し、R-208 の事例の器の修正候補の約束の検査が候補の数に対して指数的に遅くなる件）をまとめて検討する作業を挟む。
   - 同じ作業の候補（2026-10-10、利用者の提案）: 文書の管理の担当を `.claude/agents/` に足す（名前の案は `onsa-docs`）。
     - 目的（利用者）は、文書の間の整合を保つこと、文書を構造化して他の担当の認知の負荷を減らすこと、文書を目的（読むのは人か担当か両方か、誰がいつ読むか）に合わせて整理すること。
@@ -268,14 +274,18 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
         - B-1: `body.rs` の `subst_pub` は `subst` を包むだけ。`body/types.rs` は 18 行。
         - W3-22/b の S-1: 表示の順が二つある（`onsa_diag` の非公開の `sorted` と `Diagnostic::order_in_file`）。`per_unit` の出力の順は段の順で、表示の順と違う（`fix_loop` は `order_in_file` で並べ直す）。一つにする（報告は 19 回目の scratchpad の `w322b/handback_b.md`）。
       - RF-11 旧版と FAUST の行と文の整理（2026-10-13、21 回目、利用者: 旧版は正式なリリースまで、FAUST の文法の形はこれから対象にしない。`agent-rules.md` 7 章 32）:
-        - `docs/foreign-forms.toml` の出自が旧版の行。dev の 10 行（`proc`、`item_dot_call`、`rate_as_type`、`caret_visible`（FAUST と旧版）、`derive_attribute`、`relaxed_attribute`、`bulk_attribute`、`mem_fast`、`clock_on_binding`、`clock_in_type`）と W3-08 の 3 行（`old_attribute_no_candidate`、`export_c`、`field_pub_crate`（Rust と旧版））。
+        - `docs/foreign-forms.toml` の出自が旧版の行。
+          dev の 10 行（`proc`、`item_dot_call`、`rate_as_type`、`caret_visible`（FAUST と旧版）、`derive_attribute`、`relaxed_attribute`、`bulk_attribute`、`mem_fast`、`clock_on_binding`、`clock_in_type`）と W3-08 の 3 行（`old_attribute_no_candidate`、`export_c`、`field_pub_crate`（Rust と旧版））。
         - 行ごとに、消すか、一覧の言語の形として出自を改めて残すかを決める（`caret_visible` は FAUST、`field_pub_crate` は Rust の形でもある。`@derive(…)` は Rust の書き手が混ぜうる形かを見る）。消した形は一般の規則のコード（一覧に無い属性の E0005 など）になる。
         - 仕様と決定の文: §6.4・§6.5 の旧形の E0020、§18.1 の「既存言語と旧版の形」「旧版の `export "C" fn h`」と書き方の一覧、計画 §5 の E0020 の行（旧形の属性、S-133）、S-34・S-133・S-464（`export_c`）・S-483 の (2)、R-36 の表。
         - 事例（`tests/spec/` の旧版の形、`attributes_no_candidate.onsa`、`crates/onsa_cli/tests/declaration_headings.rs` の `export_c` など）と、W3-08 の直し A で寄せなかった `old_attribute` の引数の判定。
-        - FAUST: 対象外の行（`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`、`faust_compose`、`x'` の note の `prime_note`）は、支障が無い限り残す（コメントで対象外と示した）。FAUST が説明にだけ出る Onsa 自身の規則の行（`space_before_tilde`、`space_after_caret`、`caret_visible`）は出自を改めて残す。`faust_bit_not`（C 系の前置の `~`）は対象で、名前を改めるかを見る。W3-23 の残り（`holds_wild` が前置の積み重ねの中の `_` を見ない件、`at_failure` の `StringPrefix` の分かれ、`faust_bit_not` と `faust_feedback` に重なる `branch` の条件）は対象外として持ち越しから消した。
+        - FAUST: 対象外の行（`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`、`faust_compose`、`x'` の note の `prime_note`）は、支障が無い限り残す（コメントで対象外と示した）。
+          FAUST が説明にだけ出る Onsa 自身の規則の行（`space_before_tilde`、`space_after_caret`、`caret_visible`）は出自を改めて残す。`faust_bit_not`（C 系の前置の `~`）は対象で、名前を改めるかを見る。
+          W3-23 の残り（`holds_wild` が前置の積み重ねの中の `_` を見ない件、`at_failure` の `StringPrefix` の分かれ、`faust_bit_not` と `faust_feedback` に重なる `branch` の条件）は対象外として持ち越しから消した。
       - 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。
       - RF-12 W3-24 の範囲の外（22 回目、W3-24/i の直し 1 と W3-24/b の再確認）:
-        - 行の頭の判定が三通り残る: `layout.rs` の `Lines::at_line_head`（構文解析器のトークンの添字ごとの bool）、`Parser::starts_its_line`（構文解析器の中の bool）、`lexer.rs` の `line_start` / `line_head`（文面の位置。W3-24 で `foreign.rs` の `Cursor::line_start` から移し、`docs.rs` と `foreign/comments.rs` が読む）。`foreign.rs` の `Cursor::indent` も行の頭を文面から計算する。返り値が違うので W3-24 では寄せていない。
+        - 行の頭の判定が三通り残る: `layout.rs` の `Lines::at_line_head`（構文解析器のトークンの添字ごとの bool）、`Parser::starts_its_line`（構文解析器の中の bool）、`lexer.rs` の `line_start` / `line_head`（文面の位置。W3-24 で `foreign.rs` の `Cursor::line_start` から移し、`docs.rs` と `foreign/comments.rs` が読む）。
+          `foreign.rs` の `Cursor::indent` も行の頭を文面から計算する。返り値が違うので W3-24 では寄せていない。
         - タブで字下げした行の頭の `/** */` の事例が無い（`foreign/comments.rs` の `pre` をスペースだけで数える壊しが通る。W3-24/b の再確認の低）。報告は 22 回目の scratchpad の `w324b/handback_b2.md`。
       - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
     - (6) ファズの範囲（2026-10-13、21 回目、利用者: ファズが過剰な品質保証になって開発速度を下げているなら、区切りの良いところで対策を考える）。材料:
@@ -305,7 +315,8 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
     - ここで検討する対策:
       - (1) 担当を短命にする。設計メモの担当と実装の担当を分け、承認の後は新しい担当にメモと審査の結果を渡す。直しの往復は、文脈が大きい（例えば 30 万を超える）ときは同じ担当へ返さず、新しい担当へ引き継ぐ（`leader-rules.md` 2.6 の見直し）。作業票を小さめに切る。
         - 試した結果（2026-10-13、17 回目、利用者が了承して W3-05/i の単位 2 で試した）: 文脈が約 49 万になった担当から、単位 2 を新しい担当に引き継いだ。新しい担当は呼び出し 139、文脈の最大 30.2 万、キャッシュの読み 2,590 万、API 換算 $7.7。同じ担当で続けた場合の見込み（読み 6,800 万以上、$14 以上）より、読みは約 6 割減り、費用はおよそ半分。作業の質は落ちなかった。
-        - 引き継ぎの漏れ（次の引き継ぎの作業票に足す）: 前の担当の scratchpad の道具の一覧と使い方、単位の終わりの状態の基（行数を単位ごとに数えるため）、前の単位の gate の fuzz の出力、設計メモの穴（保留の解き放ちの判定）、後の決定より古くなった事例の注記、新しい決定とぶつかる既存の事例。担当の作業ツリーでは変数や `for` を含むシェルの行が許可の判定に拒まれ、Python のスクリプトを引数で渡すと進む。控えは 17 回目の scratchpad の `handover_trial.md`。
+        - 引き継ぎの漏れ（次の引き継ぎの作業票に足す）: 前の担当の scratchpad の道具の一覧と使い方、単位の終わりの状態の基（行数を単位ごとに数えるため）、前の単位の gate の fuzz の出力、設計メモの穴（保留の解き放ちの判定）、後の決定より古くなった事例の注記、新しい決定とぶつかる既存の事例。
+          担当の作業ツリーでは変数や `for` を含むシェルの行が許可の判定に拒まれ、Python のスクリプトを引数で渡すと進む。控えは 17 回目の scratchpad の `handover_trial.md`。
         - W3 の終わりに、`leader-rules.md` 2.6 の改め（文脈が 30 万を超えた担当の次の単位と直しの往復は新しい担当へ）と、引き継ぎの作業票の型を案にして出す。
       - (2) 担当の文脈の上限。`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` は担当にも効く（例えば 40 で、40 万の付近で自動の要約が働く）。要約で細部が落ちるので、1 作業で試して質を比べてから決める。
       - (3) 推論の努力。test と break を high から medium にして 1 作業で試す（呼び出しが少なく、まとまる傾向がある）。impl は据え置き（W の努力を上げない方針）、下げるかは測ってから決める。

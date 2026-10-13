@@ -107,8 +107,33 @@ def first_sentence(text):
     return text.split("。", 1)[0]
 
 
+LIST_ITEM = re.compile(r"(?:[-*+]|\d+\.)\s")
+
+
+def _logical_lines(lines):
+    """The lines with each line that goes on a paragraph or an item joined to the line before it:
+    a long text breaks at the ends of sentences and goes on at the indentation of its item
+    (docs/agent-rules.md 1), so a sentence is found whatever line it was broken onto."""
+    out = []
+    for line in lines:
+        text = line.lstrip(" ")
+        goes_on = (
+            out
+            and text
+            and out[-1].strip()
+            and not LIST_ITEM.match(text)
+            and not text.startswith(("|", "#", ">", "```"))
+            and not out[-1].lstrip(" ").startswith(("|", "#"))
+        )
+        if goes_on:
+            out[-1] += text
+        else:
+            out.append(line)
+    return out
+
+
 def only_line(spec_text, section, what, pred):
-    found = [line for line in _lines(spec_text, section) if pred(line)]
+    found = [line for line in _logical_lines(_lines(spec_text, section)) if pred(line)]
     if len(found) != 1:
         raise CheckError(f"{SPEC} §{section}: expected one line of {what}, found {len(found)}")
     return found[0]

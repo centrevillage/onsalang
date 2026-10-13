@@ -4,7 +4,9 @@
 - 日付: 2026-10-01
 - 前提のレビュー: [`review-draft-0.2.md`](review-draft-0.2.md)。`C-` / `G-` / `I-` / `P-` はそのレビューの ID
 - 作業の詳細: [`implementation-tasks.md`](implementation-tasks.md)。各マイルストーンを作業（`T`）に分け、実装の判断（`D`）と仕様の空白（`S`）を一覧にしたもの
-- 2026-10-06（点検 C-67）: この文書は 2026-10-01 の全体計画である。細部は、その後の決定（`implementation-tasks.md` の D と S、[`review-impl-phase1.md`](review-impl-phase1.md) の R、[`process-improvement-phase1.md`](process-improvement-phase1.md) の Q）が優先する。古くなった行は今の決定に合わせて直した。完了した M3 / M4 の受け入れの記述は当時のまま残す
+- 2026-10-06（点検 C-67）: この文書は 2026-10-01 の全体計画である。
+  細部は、その後の決定（`implementation-tasks.md` の D と S、[`review-impl-phase1.md`](review-impl-phase1.md) の R、[`process-improvement-phase1.md`](process-improvement-phase1.md) の Q）が優先する。古くなった行は今の決定に合わせて直した。
+  完了した M3 / M4 の受け入れの記述は当時のまま残す
 
 ---
 
@@ -118,7 +120,8 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 ### 2.4 数値
 
 - F32 / F64 の演算は Core で型ごとに別の命令にし、バックエンドは混ぜない。
-- `sqrt`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、浮動小数の `%` はビット一致するプリミティブ。超越関数（`exp` / `cos` / `sin` / `log` / `exp2` / `pow` / `tanh`）も各環境のプリミティブ（C の libm、JS の `Math`、WASM は同梱の libm）に対応付け、精度目標 2 ULP を検査する（仕様 §13.4）。満たさない環境の関数だけ Onsa 実装に差し替える。
+- `sqrt`、`floor` / `ceil` / `trunc` / `round`、`abs`、`min` / `max`、浮動小数の `%` はビット一致するプリミティブ。
+  超越関数（`exp` / `cos` / `sin` / `log` / `exp2` / `pow` / `tanh`）も各環境のプリミティブ（C の libm、JS の `Math`、WASM は同梱の libm）に対応付け、精度目標 2 ULP を検査する（仕様 §13.4）。満たさない環境の関数だけ Onsa 実装に差し替える。
 - C: F32 の各演算を `(float)` で囲む。プラグマだけでは不十分（GCC は `#pragma STDC FP_CONTRACT OFF` を無視する）なのでフラグを要求し、守られていないと分かる設定は `#error` にする（S-54、仕様 §13.4）。
 - WASM: 命令がそのまま IEEE。追加の処置なし。
 - JS: F32 の各演算の後に `Math.fround`。F64 はそのまま。`I64` / `U64` は第 1 期では JS の対象外（E02xx）。
@@ -150,7 +153,8 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 ### M2 名前解決と核の型検査（L）
 
-- 成果物: モジュールと `use`（§15.1、循環 E0310）、名前の種別（§2.3）、核の型検査（§2.3 の方針）、シャドーイング E0304、`as` の規則（§3.3）、`const`（§6.6。初期化式はインタプリタで評価するので M3 と同時）、引数モードと排他性（§5.2、E0702）、第二級の値（§5.3、E0710）、借用束縛（§5.4、E0711）、`rt` の規則 3〜4（§10。効果は第 1 期では常に空）、型付きホール、`onsa check --json`。核の外の機能（`Str`、`Array`、効果、handler、trait の定義）は E02xx「未対応」。
+- 成果物: モジュールと `use`（§15.1、循環 E0310）、名前の種別（§2.3）、核の型検査（§2.3 の方針）、シャドーイング E0304、`as` の規則（§3.3）、`const`（§6.6。初期化式はインタプリタで評価するので M3 と同時）、引数モードと排他性（§5.2、E0702）、第二級の値（§5.3、E0710）、借用束縛（§5.4、E0711）、`rt` の規則 3〜4（§10。効果は第 1 期では常に空）、型付きホール、`onsa check --json`。
+  核の外の機能（`Str`、`Array`、効果、handler、trait の定義）は E02xx「未対応」。
 - 受け入れ: §17.1、§17.3〜§17.6 の例が `check` を通る（§17.2 は効果を使うので除く）。各節の否定例が所定のコードで落ちる。E0405 / E0420 / E0702 / E0710 / E0304 / E0903 のテストがある。
 - 決める仕様: なし（G-05 は 0.3 で決定済み、E0406）。
 
@@ -163,7 +167,8 @@ fn    f.render(...) uses {Alloc}                      // process を 1 回呼ぶ
 
 ### M4 C バックエンドと export（L）
 
-- 成果物: Core → C11。関数、Copy の struct / enum / 配列、`const`、flow の生成物、`onsa.h`、生成ヘッダ（§14.2。`frames` は `uint32_t`、C-06）、`@param` のメタデータ表、`[export]` と `prefix`、`_Static_assert` による `SIZE` / `ALIGN` の検証、panic の実現（I-01。ホストは `setjmp`、組込みは `trap` / `reset` / `halt`）、`onsa build`（ターゲット `staticlib` / `exe` の C 出力と、ホストでのコンパイル）、整数の検査（`__builtin_*_overflow`）、§17.5 の C ホストの例のビルド。
+- 成果物: Core → C11。
+  関数、Copy の struct / enum / 配列、`const`、flow の生成物、`onsa.h`、生成ヘッダ（§14.2。`frames` は `uint32_t`、C-06）、`@param` のメタデータ表、`[export]` と `prefix`、`_Static_assert` による `SIZE` / `ALIGN` の検証、panic の実現（I-01。ホストは `setjmp`、組込みは `trap` / `reset` / `halt`）、`onsa build`（ターゲット `staticlib` / `exe` の C 出力と、ホストでのコンパイル）、整数の検査（`__builtin_*_overflow`）、§17.5 の C ホストの例のビルド。
 - 受け入れ: §17.5 がビルドでき、`voice` の 48000 サンプルがインタプリタとビット一致する（conformance の最初のテスト）。panic が `poisoned` を返し、`reset` で復帰する。golden テスト（生成 C の差分）がある。
 - 決める仕様: なし。I-01（panic。仕様 §9.2 の `panic` 設定）、I-02（コンパイル条件。§13.4）、I-04（返り値の構築。§12.7）は 0.3 で決定済み。
 - 注意: 集成体を返す関数は常に出力ポインタで構築する（仕様 §12.7）。`init` の生成はこの規則で書く。NRVO の条件と、`audit --memory` の移動の列挙もここで実装する。
