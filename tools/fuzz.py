@@ -23,13 +23,14 @@ The gate item `fuzz` (this script without options) does three things:
    seed: the run is the same for the same tree on every machine, and adding
    or changing a seed may change the mutants of the others. Each seed also
    gives `--truncations` inputs cut short at the end of the file (FZ-1):
-   the seed up to the end of a token outside a comment, most often right
-   after a symbol (`CUT_AFTER`; the rarer the symbol in the corpus, the
-   more often), without the blanks and the newline before the cut, from a
-   generator of their own (they change no mutant). A truncation is looked
-   at for a crash only: it does not go through the fix stage (3.), since a
-   file cut short often holds two errors or more, which the spec puts
-   outside the contract (S-384, S-413).
+   the seed up to the end of a token outside a line comment, most often
+   right after a symbol (`CUT_AFTER`: the opening brackets, the operators,
+   the marks `@ ~ ' ^ # ? !`, the backslash of an escape; the rarer the
+   symbol in the corpus, the more often), without the blanks and the
+   newline before the cut, from a generator of their own (they change no
+   mutant). A truncation is looked at for a crash only: it does not go
+   through the fix stage (3.), since a file cut short often holds two
+   errors or more, which the spec puts outside the contract (S-384, S-413).
    A crash of a class (`signature`) that a listed input also shows is known.
    A crash of a new class fails the gate: its first input is minimized and
    written to `target/fuzz/new/`, with the entry to add (the gate writes
@@ -62,10 +63,11 @@ mutants cut short at the end of a file often are. Every field is required:
 listed), `input` (a saved input `tests/fuzz/<name>.onsa`, not listed in
 `tests/pending.toml`; one entry each), `left` (the message of the
 diagnostic left after the candidate, as the class writes the title: quoted
-text `…`, numbers `#`), `reasons` (S numbers of plan §2) and `note`. A
-mutant is known when it shows the class with that message (the class alone
-is too coarse a net); the input must show them on every run (when it no
-longer does, the entry goes), and nothing else. The net gets
+text `…`, numbers `#`), `reasons` (S numbers of plan §2, or R numbers of
+the review for a low harm recorded there) and `note`. A mutant is known
+when it shows the class with that message (the class alone is too coarse a
+net); the input must show them on every run (when it no longer does, the
+entry goes), and nothing else. The net gets
 coarser for such a class: the contract on the cases (`onsa_tests::fix_contract`)
 is what holds it.
 
@@ -84,8 +86,12 @@ signal; `fmt --check` timed out on the 20002 lexer diagnostics of a string
 nesting `{ ` 20000 deep, one per unit since W3-03, S-214;
 `tests/fuzz/8858ce8c.onsa`.) A signal is not saved under `tests/` (with `--save`
 it goes to `target/fuzz/new/`): a stack overflow aborts the process, and
-the system writes a crash report for each one. The truncations do not
-depend on `--deep`: a deep run leaves them out unless `--truncations` asks.
+the system writes a crash report for each one. A deep run also sweeps
+(FZ-1): it cuts each seed right after every place of each rare symbol
+(`RARE`), outside a line comment and not at its end, as the truncations do,
+and looks at each cut for a crash only (the fix stage is not run). The
+weighted truncations repeat the gate's: a deep run leaves them out unless
+`--truncations` asks.
 
 The compiler is `<target directory>/debug/onsa`, the target directory of
 `cargo metadata` (which follows `CARGO_TARGET_DIR` and the cargo
@@ -137,7 +143,6 @@ FIX_COMMAND = "fix-same-place"
 # The classes of the fix stage that the spec puts outside the contract (R-207).
 ALLOWED = FUZZ_DIR / "allowed.toml"
 ALLOWED_FIELDS = ("class", "left", "input", "reasons", "note")
-S_NUMBER = re.compile(r"S-\d+")
 TIME_BUDGET = 600  # seconds for the whole run
 # Nesting depths of the deep mutants (S-183): far above the nesting limit
 # (256, spec §2.5) and above what the stack of a command would hold without it.
@@ -155,8 +160,12 @@ TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[^\sA-Za-z0-9_]{1,2}")
 # The truncations (FZ-1): per seed, and the symbols most cuts come right after
 # (`_` only as a token of its own, not inside a name), in CUT_AFTER_SHARE of the cuts.
 TRUNCATIONS = 2
-CUT_AFTER = re.compile(r"""[@~:,'{(\[<>.?!#^\-+&|=;"]|(?<![A-Za-z0-9_])_(?![A-Za-z0-9_])""")
+CUT_AFTER = re.compile(r"""[@~:,'{(\[<>.?!#^\-+*/%&|=;"\\]|(?<![A-Za-z0-9_])_(?![A-Za-z0-9_])""")
 CUT_AFTER_SHARE = 0.75
+# The rare symbols of CUT_AFTER (FZ-1): 1,200 places or fewer each in the corpus (counted 2026-10-13).
+# A deep run cuts right after every place of each (`sweep`). A fixed set, not counted on each run: what
+# the sweep covers shows here and does not move with the corpus.
+RARE = "~!?'^@#/\\%"
 TRAILING_BLANKS = " \t\r\n"
 # A string literal (its `//` starts no comment) or a line comment (spec §2.1), whose words are no token.
 COMMENT = re.compile(r'"(?:[^"\\\n]|\\.)*"?|//[^\n]*')
@@ -423,8 +432,27 @@ def truncate(rng, text, sites, counts):
         pool = after[rng.choices(symbols, [1 / counts[c] for c in symbols])[0]]
     else:
         pool = ends
-    cut = rng.choice(pool) if pool else len(text)
-    return text[:cut].rstrip(TRAILING_BLANKS)
+    return cut_at(text, rng.choice(pool) if pool else len(text))
+
+
+def cut_at(text, place):
+    """`text` cut at `place`, the blanks and newlines before the cut dropped: the file ends there."""
+    return text[:place].rstrip(TRAILING_BLANKS)
+
+
+def sweep(seed_files):
+    """[(seed path, label, text)]: each seed cut right after every place of each symbol of `RARE`
+    (`cut_sites`, `cut_at`), one input for each text, in the order of the seeds and the places. No
+    generator: the same seeds give the same inputs whatever the version (FZ-1, `--deep`)."""
+    out = {}
+    for path, text in seed_files:
+        after, _ = cut_sites(text)
+        for place, symbol in sorted((p, c) for c in RARE for p in after.get(c, ())):
+            at = place - 1  # the symbol
+            line, col = text.count("\n", 0, at) + 1, at - text.rfind("\n", 0, at)
+            cut = cut_at(text, place)
+            out.setdefault(cut, (path, f"sweep `{symbol}` at {line}:{col}", cut))
+    return list(out.values())
 
 
 def truncations(seed_files, per_seed, version=VERSION):
@@ -537,7 +565,7 @@ def load_allowed(root, listed):
         numbers = pending.load_docs(root).reasons
     except pending.DocsError as e:
         numbers = None
-        errors.append(f"{ALLOWED.as_posix()}: the S numbers cannot be read: {e}")
+        errors.append(f"{ALLOWED.as_posix()}: the S / R numbers cannot be read: {e}")
     out = {}
     inputs = set()
     for i, item in enumerate(raw):
@@ -568,12 +596,13 @@ def load_allowed(root, listed):
             elif inp in inputs:
                 problems.append(f"the input `{inp}` is the input of another entry")
             if (not isinstance(reasons, list) or not reasons
-                    or not all(isinstance(r, str) and S_NUMBER.fullmatch(r) for r in reasons)):
-                problems.append("`reasons` must be an array of one or more S numbers (`S-386`)")
+                    or not all(isinstance(r, str) and pending.REASON.fullmatch(r) for r in reasons)):
+                problems.append("`reasons` must be an array of one or more S / R numbers (`S-386`, `R-219`)")
             elif len(set(reasons)) != len(reasons):
                 problems.append("a reason is listed twice")
             elif numbers is not None:
-                problems += [f"the reason `{r}` is not in plan §2" for r in reasons if r not in numbers]
+                problems += [f"the reason `{r}` is not in the tables (plan §2 for S, review for R)"
+                             for r in reasons if r not in numbers]
             if not isinstance(note, str) or not note.strip():
                 problems.append("`note` must be a non-empty string")
         if problems:
@@ -597,9 +626,10 @@ def entry_stub(target, crash):
 
 
 def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
-        deep=False, truncated=TRUNCATIONS):
+        deep=False, truncated=TRUNCATIONS, swept=False):
     """The gate item. `argv` runs the compiler, `fix_argv` the fix stage
-    (`onsa_cases`); `truncated` truncations of each seed. Returns the exit code."""
+    (`onsa_cases`); `truncated` truncations of each seed, and with `swept`
+    the cuts after every rare symbol (`sweep`). Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fuzz"
     runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
@@ -657,9 +687,12 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     seed_files = seeds(root)
     inputs = mutants(seed_files, per_seed, version, deep)
     cuts = truncations(seed_files, truncated, version)
-    # The mutants first: their indices are the fix stage's (3.).
+    swept_cuts = sweep(seed_files) if swept else []
+    if swept and not swept_cuts:
+        failures.append(f"the sweep found no place after a rare symbol ({RARE}) in {len(seed_files)} seeds")
+    # The mutants first: their indices are the fix stage's (3.). The cuts are looked at for a crash only.
     runs = ([(seed, f"mutant {k}", text) for seed, k, text in inputs]
-            + [(seed, f"truncation {k}", text) for seed, k, text in cuts])
+            + [(seed, f"truncation {k}", text) for seed, k, text in cuts] + swept_cuts)
 
     def one(m):
         # Past the budget, the input does not run (and the item fails).
@@ -670,7 +703,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     skipped = sum(1 for r in results if r is None)
     if skipped:
         failures.append(f"the time budget ({time_budget} s) ran out: {skipped} of {len(runs)} inputs "
-                        f"({len(inputs)} mutants, {len(cuts)} truncations) did not run")
+                        f"({len(inputs)} mutants, {len(cuts)} truncations, {len(swept_cuts)} swept) did not run")
     # 3. The fix stage, on one mutant in FIX_EVERY (W3-17).
     chosen = [i for i in range(len(inputs)) if i % FIX_EVERY == 0]
     fixes = {}
@@ -686,11 +719,13 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     crashing = 0
     breaking = 0
     cut_crashing = 0
+    swept_crashing = 0
     for i, ((seed, which, text), crashes) in enumerate(zip(runs, results)):
         crashes = crashes or []
         if crashes:
             crashing += 1
-            cut_crashing += i >= len(inputs)
+            cut_crashing += len(inputs) <= i < len(inputs) + len(cuts)
+            swept_crashing += i >= len(inputs) + len(cuts)
         if fixes.get(i):
             breaking += 1
         for c in crashes + fixes.get(i, []):
@@ -718,7 +753,9 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
 
     out(
         f"fuzz: {len(inputs)} mutants from {len(seed_files)} seeds ({per_seed} each) and {len(cuts)} truncations "
-        f"({truncated} each, {cut_crashing} crashing), {crashing} crashing in all, "
+        f"({truncated} each, {cut_crashing} crashing), "
+        + (f"{len(swept_cuts)} cuts swept after `{RARE}` ({swept_crashing} crashing), " if swept else "")
+        + f"{crashing} crashing in all, "
         f"{len(new)} new classes; {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
         f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed, {len(allowed)} allowed); "
         f"{time.time() - start:.1f} s"
@@ -764,7 +801,9 @@ def main(argv=None):
     ap.add_argument("--cases-binary", type=Path,
                     help="the fix stage's onsa_cases (default: build <target directory>/debug/onsa_cases)")
     ap.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
-    ap.add_argument("--deep", action="store_true", help="also nest thousands deep (S-183, W3-14; not in the gate)")
+    ap.add_argument("--deep", action="store_true",
+                    help="also nest thousands deep (S-183, W3-14) and sweep the rare symbols (FZ-1); "
+                         "the gate item fuzz-deep, at a stage end only")
     ap.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
     args = ap.parse_args(argv)
     truncated = args.truncations if args.truncations is not None else 0 if args.deep else TRUNCATIONS
@@ -788,7 +827,7 @@ def main(argv=None):
         cases = target / "debug" / "onsa_cases"
     return run(
         args.root, [str(binary)], [str(cases)], args.per_seed, args.version, args.jobs, args.save,
-        target_dir=target, time_budget=args.time_budget, deep=args.deep, truncated=truncated,
+        target_dir=target, time_budget=args.time_budget, deep=args.deep, truncated=truncated, swept=args.deep,
     )
 
 

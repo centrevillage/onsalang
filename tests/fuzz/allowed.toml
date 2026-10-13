@@ -11,7 +11,8 @@
 #            title (quoted text `…`, numbers `#`)
 #   input    the saved input that shows them, `tests/fuzz/<name>.onsa` (not listed in tests/pending.toml;
 #            one entry each)
-#   reasons  the S numbers of plan §2 that put it outside the contract (one or more)
+#   reasons  the S numbers of plan §2 that put it outside the contract, or the R numbers of the review
+#            that record it as a low harm left as it is (one or more)
 #   note     a short note
 
 [[allowed]]
@@ -228,12 +229,12 @@ note = "an input with two errors: two elements of a tuple pattern without the `,
 class = "fix|E0003|move `…` to the end of the line before|E0001"
 left = "`…` (U+#B) cannot be written outside comments and strings: a name is written wit"
 input = "tests/fuzz/44fc0733.onsa"
-reasons = ["S-236"]
-note = "the `か` against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (R-219, low harm)"
+reasons = ["S-236", "R-219"]
+note = "the `か` against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm)"
 
 [[allowed]]
 class = "fix|E0002|write the `…` between the elements|E0005"
 left = "there is no attribute `…`"
 input = "tests/fuzz/853d6a85.onsa"
-reasons = ["S-236"]
-note = "the unknown attribute `@e` was in the input, hidden behind the E0002 (one error a unit); the candidate is right (R-220, low harm)"
+reasons = ["S-236", "R-220"]
+note = "the unknown attribute `@e` was in the input, hidden behind the E0002 (one error a unit); the candidate is right (low harm)"

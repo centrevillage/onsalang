@@ -1804,10 +1804,10 @@ class Fuzz(TempRepo):
         self.argv = [sys.executable, "-B", str(self.fake)]
         self.fix_argv = [sys.executable, "-B", str(self.repo.write("fake_cases.py", FAKE_CASES))]
 
-    def go(self, per_seed=0, save=False, truncated=fuzz.TRUNCATIONS):
+    def go(self, per_seed=0, save=False, truncated=fuzz.TRUNCATIONS, swept=False):
         lines = []
         code = fuzz.run(self.repo.root, self.argv, self.fix_argv, per_seed, "t", 2, save, out=lines.append,
-                        truncated=truncated)
+                        truncated=truncated, swept=swept)
         return code, "\n".join(lines)
 
     def test_classify(self):
@@ -1875,6 +1875,100 @@ class Fuzz(TempRepo):
         self.assertEqual(fuzz.truncations([("tests/c.onsa", "// c\n\n")], 2, "1"),
                          [("tests/c.onsa", 0, "// c"), ("tests/c.onsa", 1, "// c")])
         self.assertEqual(fuzz.truncations([("tests/e.onsa", "")], 1, "1"), [("tests/e.onsa", 0, "")])
+
+    # FZ-1: `_` inside a name, a line comment (its words and its end: the `?` and the `!` of the comments
+    # end them), a string (its `@` and `//` are code), the operators `* / %` and the backslash.
+    CUT_TEXT = 'a_b(_) * c/d % e\\f // g@ h?\nx@"s@//t"~\n// end!\n'
+
+    def test_cut_sites_are_exact(self):
+        after, ends = fuzz.cut_sites(self.CUT_TEXT)
+        self.assertEqual(after, {"(": [4], "_": [5], "*": [8], "/": [11, 34, 35], "%": [14], "\\": [17],
+                                 "@": [30, 33], '"': [31, 37], "~": [38]})
+        self.assertEqual(ends, [3, 4, 5, 6, 8, 10, 11, 12, 14, 16, 17, 18, 29, 31, 32, 34, 35, 36, 38])
+        # the rare symbols of the sweep are symbols of CUT_AFTER (else `cut_sites` never gives them)
+        self.assertTrue(all(fuzz.CUT_AFTER.fullmatch(c) for c in fuzz.RARE), fuzz.RARE)
+        self.assertEqual(sorted(fuzz.RARE), sorted("~!?'^@#/\\%"))
+        self.assertEqual(sorted(fuzz.RARE), sorted(set(fuzz.RARE)))
+
+    def test_sweep_cuts_after_every_rare_symbol(self):
+        # FZ-1: every place right after a rare symbol, outside a line comment and not at its end (the
+        # first `/` of a comment is in it), in the order of the seeds and the places; the same text
+        # once; no generator (no version). `*` is not rare: no cut after it.
+        files = [("tests/a.onsa", self.CUT_TEXT), ("tests/b.onsa", "x@\n// ^\n"), ("tests/c.onsa", "y ~ z\n"),
+                 ("tests/d.onsa", "a'b' #[c] !d ?e ^f\n")]
+        self.assertEqual(fuzz.sweep(files), [
+            ("tests/a.onsa", "sweep `/` at 1:11", "a_b(_) * c/"),
+            ("tests/a.onsa", "sweep `%` at 1:14", "a_b(_) * c/d %"),
+            ("tests/a.onsa", "sweep `\\` at 1:17", "a_b(_) * c/d % e\\"),
+            ("tests/a.onsa", "sweep `@` at 2:2", 'a_b(_) * c/d % e\\f // g@ h?\nx@'),
+            ("tests/a.onsa", "sweep `@` at 2:5", 'a_b(_) * c/d % e\\f // g@ h?\nx@"s@'),
+            ("tests/a.onsa", "sweep `/` at 2:6", 'a_b(_) * c/d % e\\f // g@ h?\nx@"s@/'),
+            ("tests/a.onsa", "sweep `/` at 2:7", 'a_b(_) * c/d % e\\f // g@ h?\nx@"s@//'),
+            ("tests/a.onsa", "sweep `~` at 2:10", 'a_b(_) * c/d % e\\f // g@ h?\nx@"s@//t"~'),
+            ("tests/b.onsa", "sweep `@` at 1:2", "x@"),
+            ("tests/c.onsa", "sweep `~` at 1:3", "y ~"),
+            ("tests/d.onsa", "sweep `'` at 1:2", "a'"),
+            ("tests/d.onsa", "sweep `'` at 1:4", "a'b'"),
+            ("tests/d.onsa", "sweep `#` at 1:6", "a'b' #"),
+            ("tests/d.onsa", "sweep `!` at 1:11", "a'b' #[c] !"),
+            ("tests/d.onsa", "sweep `?` at 1:14", "a'b' #[c] !d ?"),
+            ("tests/d.onsa", "sweep `^` at 1:17", "a'b' #[c] !d ?e ^"),
+        ])
+        # the same cut from another seed is not run twice
+        self.assertEqual(fuzz.sweep([("tests/b.onsa", "x@\n"), ("tests/e.onsa", "x@\n\n// y\n")]),
+                         [("tests/b.onsa", "sweep `@` at 1:2", "x@")])
+        self.assertEqual(fuzz.sweep([("tests/c.onsa", "// only ~ a comment\n"), ("tests/e.onsa", "")]), [])
+
+    def test_sweep_finds_crashes_but_skips_the_fix_stage(self):
+        # FZ-1: every cut after a `@` crashes the fake compiler; the seed itself (with its newline) does
+        # not, and the fix stage, which the seed would break, does not see the cuts
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE x@ y@\n")
+        code, text = self.go(truncated=0, swept=True)
+        self.assertEqual(code, 1, text)
+        self.assertIn("a new crash class: check: internal|crates/onsa_sema/src/layout.rs|range end index # out of range "
+                      "for slice of length # (seed tests/spec/x.onsa, sweep `@` at 1:15)", text)
+        self.assertIn("0 truncations (0 each, 0 crashing), 2 cuts swept after `~!?'^@#/\\%` (2 crashing), 2 crashing in all",
+                      text)
+        self.assertIn("0 mutants through the fix stage", text)
+        self.assertNotIn("fix-same-place", text)
+        new = list((self.repo.root / "target" / "fuzz" / "new").glob("*.onsa"))
+        self.assertTrue(new and new[0].read_text() == "@", new)
+        # listed: known
+        self.repo.write("tests/fuzz/at.onsa", "@")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/at.onsa"))
+        code, text = self.go(truncated=0, swept=True)
+        self.assertEqual(code, 0, text)
+        # without the sweep the cuts do not run, and the line does not name them
+        code, text = self.go(truncated=0)
+        self.assertEqual(code, 0, text)
+        self.assertNotIn("swept", text)
+        # a sweep with no place to cut is no pass
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE // x@\n")
+        code, text = self.go(truncated=0, swept=True)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL the sweep found no place after a rare symbol (~!?'^@#/\\%) in 2 seeds", text)
+
+    def test_main_passes_the_options_to_run(self):
+        # FZ-1: --truncations reaches the run; --deep sweeps and has no weighted truncation unless asked
+        calls = []
+
+        def run(*args, **kw):
+            calls.append((args, kw))
+            return 0
+
+        base = ["--root", str(self.repo.root), "--binary", "onsa", "--cases-binary", "onsa_cases"]
+        with mock.patch.object(fuzz, "run", run), \
+                mock.patch.object(fuzz, "target_directory", lambda root: self.repo.root / "target"):
+            for extra, want in (([], (fuzz.PER_SEED, fuzz.TRUNCATIONS, False, False)),
+                                (["--truncations", "5"], (fuzz.PER_SEED, 5, False, False)),
+                                (["--deep"], (fuzz.PER_SEED, 0, True, True)),
+                                (["--deep", "--per-seed", "0", "--truncations", "3"], (0, 3, True, True))):
+                with self.subTest(extra=extra):
+                    calls.clear()
+                    self.assertEqual(fuzz.main(base + extra), 0)
+                    (args, kw), = calls
+                    self.assertEqual((args[3], kw["truncated"], kw["deep"], kw["swept"]), want)
+                    self.assertEqual(args[1:3], (["onsa"], ["onsa_cases"]))
 
     def test_truncations_find_crashes_but_skip_the_fix_stage(self):
         # FZ-1: a file that ends right after `@` crashes the fake compiler; the seed itself (with its
@@ -2017,8 +2111,13 @@ class Fuzz(TempRepo):
             (allowed("internal|crates/a.rs|boom", "tests/fuzz/f.onsa"), "a crash is never allowed"),
             (allowed(self.BAD, "tests/fuzz/none.onsa"), "the input `tests/fuzz/none.onsa` does not exist"),
             (allowed(self.BAD, "tests/spec/ops/groups.onsa"), "must be a saved input"),
-            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("R-1",)), "one or more S numbers"),
-            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-99999",)), "the reason `S-99999` is not in plan §2"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("W3-07",)), "one or more S / R numbers"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-45", "s-45")), "one or more S / R numbers"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-99999",)),
+             "the reason `S-99999` is not in the tables (plan §2 for S, review for R)"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-45", "R-1")),
+             "the reason `R-1` is not in the tables (plan §2 for S, review for R)"),
+            (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("R-23", "R-23")), "a reason is listed twice"),
             (allowed(self.BAD, "tests/fuzz/f.onsa", note=""), "`note` must be a non-empty string"),
             (good + good, f"the class `{self.BAD}` with `m` is listed twice"),
             (good + allowed(self.BAD, "tests/fuzz/f.onsa", left="other"), "is the input of another entry"),
@@ -2031,6 +2130,13 @@ class Fuzz(TempRepo):
                 code, text = self.go()
                 self.assertEqual(code, 1, text)
                 self.assertIn(want, text)
+        # an R number of the review is a reason too (a low harm recorded there)
+        for reasons in (("R-23",), ("S-45", "R-113")):
+            with self.subTest(reasons=reasons):
+                self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa", reasons=reasons))
+                code, text = self.go()
+                self.assertEqual(code, 0, text)
+                self.assertIn("(0 listed, 1 allowed)", text)
         # an input listed in tests/pending.toml too
         self.repo.write("tests/fuzz/allowed.toml", good)
         self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/f.onsa"))
@@ -2080,7 +2186,15 @@ class Fuzz(TempRepo):
         code = fuzz.run(self.repo.root, self.argv, self.fix_argv, 0, "t", 1, False, out=lines.append,
                         time_budget=0.001, truncated=50)
         self.assertEqual(code, 1, lines)
-        self.assertTrue(any("of 100 inputs (0 mutants, 100 truncations) did not run" in l for l in lines), lines)
+        self.assertTrue(any("of 100 inputs (0 mutants, 100 truncations, 0 swept) did not run" in l for l in lines),
+                        lines)
+        # and the sweep (FZ-1)
+        self.repo.write("tests/spec/x.onsa", "a@ b@ c@\n")
+        lines = []
+        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, 0, "t", 1, False, out=lines.append,
+                        time_budget=0.001, truncated=0, swept=True)
+        self.assertEqual(code, 1, lines)
+        self.assertTrue(any("of 3 inputs (0 mutants, 0 truncations, 3 swept) did not run" in l for l in lines), lines)
 
     def test_seeds_skip_the_saved_inputs(self):
         self.repo.write("tests/fuzz/a.onsa", "X")
