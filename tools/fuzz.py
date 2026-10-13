@@ -21,13 +21,22 @@ The gate item `fuzz` (this script without options) does three things:
    the seed's path and bytes. A mutant also inserts tokens of the whole
    corpus and splices lines of other seeds, so the mutants depend on every
    seed: the run is the same for the same tree on every machine, and adding
-   or changing a seed may change the mutants of the others. A crash of a
-   class (`signature`) that a listed input also shows is known.
+   or changing a seed may change the mutants of the others. Each seed also
+   gives `--truncations` inputs cut short at the end of the file (FZ-1):
+   the seed up to the end of a token outside a comment, most often right
+   after a symbol (`CUT_AFTER`; the rarer the symbol in the corpus, the
+   more often), without the blanks and the newline before the cut, from a
+   generator of their own (they change no mutant). A truncation is looked
+   at for a crash only: it does not go through the fix stage (3.), since a
+   file cut short often holds two errors or more, which the spec puts
+   outside the contract (S-384, S-413).
+   A crash of a class (`signature`) that a listed input also shows is known.
    A crash of a new class fails the gate: its first input is minimized and
    written to `target/fuzz/new/`, with the entry to add (the gate writes
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
 3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed
-   rule: the mutants whose index in the run is a multiple of it), and every
+   rule: the mutants whose index in the run is a multiple of it; never a
+   truncation), and every
    saved input, go through the near "same place" of the contract of the fix
    candidates (spec §18.1): `onsa_cases --fix-same-place` applies the first
    candidate of each diagnostic alone, checks the file again, and reports a
@@ -63,8 +72,9 @@ is what holds it.
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
 
-    tools/fuzz.py [--per-seed N] [--version V] [--jobs N] [--binary PATH]
-                  [--cases-binary PATH] [--time-budget S] [--deep] [--save]
+    tools/fuzz.py [--per-seed N] [--truncations N] [--version V] [--jobs N]
+                  [--binary PATH] [--cases-binary PATH] [--time-budget S]
+                  [--deep] [--save]
 
 `--deep` adds mutants that nest brackets or blocks thousands deep: the
 nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
@@ -74,19 +84,21 @@ signal; `fmt --check` timed out on the 20002 lexer diagnostics of a string
 nesting `{ ` 20000 deep, one per unit since W3-03, S-214;
 `tests/fuzz/8858ce8c.onsa`.) A signal is not saved under `tests/` (with `--save`
 it goes to `target/fuzz/new/`): a stack overflow aborts the process, and
-the system writes a crash report for each one.
+the system writes a crash report for each one. The truncations do not
+depend on `--deep`: a deep run leaves them out unless `--truncations` asks.
 
 The compiler is `<target directory>/debug/onsa`, the target directory of
 `cargo metadata` (which follows `CARGO_TARGET_DIR` and the cargo
 configuration), unless `--binary` names it; the fix stage runs
 `<target directory>/debug/onsa_cases` (`--cases-binary`). `--time-budget` bounds the
-whole run: when it is spent, the remaining mutants do not run and the item
-fails (it never passes on fewer inputs than it says).
+whole run: when it is spent, the remaining mutants and truncations do not
+run and the item fails (it never passes on fewer inputs than it says).
 
 Exit 0 when nothing new crashes and the replay agrees with the list, 1
 otherwise, 2 on a usage error (or when the compiler cannot be built).
 """
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -140,6 +152,14 @@ SPECIAL = (
     "0x", "1e999", "99999999999999999999999999999999999999", "0.", "-",
 )
 TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[^\sA-Za-z0-9_]{1,2}")
+# The truncations (FZ-1): per seed, and the symbols most cuts come right after
+# (`_` only as a token of its own, not inside a name), in CUT_AFTER_SHARE of the cuts.
+TRUNCATIONS = 2
+CUT_AFTER = re.compile(r"""[@~:,'{(\[<>.?!#^\-+&|=;"]|(?<![A-Za-z0-9_])_(?![A-Za-z0-9_])""")
+CUT_AFTER_SHARE = 0.75
+TRAILING_BLANKS = " \t\r\n"
+# A string literal (its `//` starts no comment) or a line comment (spec §2.1), whose words are no token.
+COMMENT = re.compile(r'"(?:[^"\\\n]|\\.)*"?|//[^\n]*')
 
 
 @dataclass(frozen=True)
@@ -376,6 +396,53 @@ def mutate(rng, text, corpus, tokens, deep=False):
     return s
 
 
+def cut_sites(text):
+    """The places to cut `text` (FZ-1), outside a line comment and not at its
+    end: ({symbol: the places right after it (`CUT_AFTER`)}, the ends of the
+    tokens (`TOKEN`))."""
+    inside = bytearray(len(text) + 1)
+    for m in COMMENT.finditer(text):
+        if m.group().startswith("//"):
+            inside[m.start() + 1:m.end() + 1] = b"\x01" * (m.end() - m.start())
+    after = {}
+    for m in CUT_AFTER.finditer(text):
+        if not inside[m.end()]:
+            after.setdefault(m.group(), []).append(m.end())
+    return after, [m.end() for m in TOKEN.finditer(text) if not inside[m.end()]]
+
+
+def truncate(rng, text, sites, counts):
+    """One truncation of `text` at one of its `sites` (`cut_sites`), the blanks
+    and newlines before the cut dropped: the file ends there. In
+    `CUT_AFTER_SHARE` of the cuts it is right after a symbol, each symbol of
+    the seed weighted by its rarity in the corpus (`counts`): a form the
+    corpus seldom shows (a new one, `x@`) is cut as often as `(` (FZ-1)."""
+    after, ends = sites
+    if after and (not ends or rng.random() < CUT_AFTER_SHARE):
+        symbols = sorted(after)
+        pool = after[rng.choices(symbols, [1 / counts[c] for c in symbols])[0]]
+    else:
+        pool = ends
+    cut = rng.choice(pool) if pool else len(text)
+    return text[:cut].rstrip(TRAILING_BLANKS)
+
+
+def truncations(seed_files, per_seed, version=VERSION):
+    """[(seed path, index, text)]: `per_seed` truncations of each seed, the
+    same for the same seeds. Their generator is not the mutants' (the
+    truncations change no mutant); the weights of the symbols come from the
+    whole corpus, as the tokens of the mutants do."""
+    sites = [cut_sites(text) for _, text in seed_files]
+    counts = collections.Counter()
+    for after, _ in sites:
+        counts.update({c: len(places) for c, places in after.items()})
+    out = []
+    for (path, text), site in zip(seed_files, sites):
+        rng = seeded_random(version, "truncation", path, text)
+        out += [(path, k, truncate(rng, text, site, counts)) for k in range(per_seed)]
+    return out
+
+
 def seeded_random(*parts):
     """A generator seeded with `parts` (str): the same parts give the same
     numbers on every machine (the mutants here, the perturbations of
@@ -530,9 +597,9 @@ def entry_stub(target, crash):
 
 
 def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
-        deep=False):
+        deep=False, truncated=TRUNCATIONS):
     """The gate item. `argv` runs the compiler, `fix_argv` the fix stage
-    (`onsa_cases`). Returns the exit code."""
+    (`onsa_cases`); `truncated` truncations of each seed. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fuzz"
     runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
@@ -589,16 +656,21 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     # 2. Fuzz.
     seed_files = seeds(root)
     inputs = mutants(seed_files, per_seed, version, deep)
+    cuts = truncations(seed_files, truncated, version)
+    # The mutants first: their indices are the fix stage's (3.).
+    runs = ([(seed, f"mutant {k}", text) for seed, k, text in inputs]
+            + [(seed, f"truncation {k}", text) for seed, k, text in cuts])
 
     def one(m):
-        # Past the budget, the mutant does not run (and the item fails).
+        # Past the budget, the input does not run (and the item fails).
         return None if time.monotonic() > deadline else runner.crashes(m[2])
 
     with ThreadPoolExecutor(jobs) as ex:
-        results = list(ex.map(one, inputs))
+        results = list(ex.map(one, runs))
     skipped = sum(1 for r in results if r is None)
     if skipped:
-        failures.append(f"the time budget ({time_budget} s) ran out: {skipped} of {len(inputs)} mutants did not run")
+        failures.append(f"the time budget ({time_budget} s) ran out: {skipped} of {len(runs)} inputs "
+                        f"({len(inputs)} mutants, {len(cuts)} truncations) did not run")
     # 3. The fix stage, on one mutant in FIX_EVERY (W3-17).
     chosen = [i for i in range(len(inputs)) if i % FIX_EVERY == 0]
     fixes = {}
@@ -613,19 +685,21 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     new = {}
     crashing = 0
     breaking = 0
-    for i, ((seed, k, text), crashes) in enumerate(zip(inputs, results)):
+    cut_crashing = 0
+    for i, ((seed, which, text), crashes) in enumerate(zip(runs, results)):
         crashes = crashes or []
         if crashes:
             crashing += 1
+            cut_crashing += i >= len(inputs)
         if fixes.get(i):
             breaking += 1
         for c in crashes + fixes.get(i, []):
             if (c.signature, c.left) in allowed:
                 continue
             if c.signature not in known and c.signature not in new:
-                new[c.signature] = (seed, k, text, c)
+                new[c.signature] = (seed, which, text, c)
     written = []
-    for signature, (seed, k, text, c) in new.items():
+    for signature, (seed, which, text, c) in new.items():
         commands = tuple(cmd for cmd in COMMANDS if " ".join(cmd) == c.command)
         seconds = max(0.0, min(MINIMIZE_SECONDS, deadline - time.monotonic()))
         who = fixer if c.command == FIX_COMMAND else runner
@@ -636,21 +710,22 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         dest_dir = root / FUZZ_DIR if save and not signature.startswith("signal ") else work / "new"
         dest_dir.mkdir(parents=True, exist_ok=True)
         (dest_dir / name).write_bytes(encode(small))
-        written.append((dest_dir / name, target, c, seed, k))
+        written.append((dest_dir / name, target, c, seed, which))
         if dest_dir != root / FUZZ_DIR:
             what = "a new class of a broken fix candidate" if c.command == FIX_COMMAND else "a new crash class"
-            failures.append(f"{what}: {c.command}: {signature} (seed {seed}, mutant {k})")
+            failures.append(f"{what}: {c.command}: {signature} (seed {seed}, {which})")
     shutil.rmtree(runner.work, ignore_errors=True)
 
     out(
-        f"fuzz: {len(inputs)} inputs from {len(seed_files)} seeds ({per_seed} each), {crashing} crashing, "
+        f"fuzz: {len(inputs)} mutants from {len(seed_files)} seeds ({per_seed} each) and {len(cuts)} truncations "
+        f"({truncated} each, {cut_crashing} crashing), {crashing} crashing in all, "
         f"{len(new)} new classes; {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
         f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed, {len(allowed)} allowed); "
         f"{time.time() - start:.1f} s"
     )
-    for path, target, c, seed, k in written:
+    for path, target, c, seed, which in written:
         shown = path.relative_to(root).as_posix() if root in path.parents else str(path)
-        out(f"\n{shown}  ({c.command}; seed {seed}, mutant {k})\n{c.detail}\nentry to add:\n"
+        out(f"\n{shown}  ({c.command}; seed {seed}, {which})\n{c.detail}\nentry to add:\n"
             f"{entry_stub(target, c)}")
     for f in failures:
         out(f"FAIL {f}")
@@ -681,6 +756,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", type=Path, default=ROOT)
     ap.add_argument("--per-seed", type=int, default=PER_SEED)
+    ap.add_argument("--truncations", type=int,
+                    help=f"truncations of each seed (default {TRUNCATIONS}; 0 with --deep, which would repeat them)")
     ap.add_argument("--version", default=VERSION)
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
@@ -690,8 +767,9 @@ def main(argv=None):
     ap.add_argument("--deep", action="store_true", help="also nest thousands deep (S-183, W3-14; not in the gate)")
     ap.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
     args = ap.parse_args(argv)
-    if args.per_seed < 0 or args.jobs < 1 or args.time_budget <= 0:
-        ap.error("--per-seed must be 0 or more, --jobs 1 or more and --time-budget more than 0")
+    truncated = args.truncations if args.truncations is not None else 0 if args.deep else TRUNCATIONS
+    if args.per_seed < 0 or truncated < 0 or args.jobs < 1 or args.time_budget <= 0:
+        ap.error("--per-seed and --truncations must be 0 or more, --jobs 1 or more and --time-budget more than 0")
     target = target_directory(args.root)
     if target is None:
         print("fuzz: cannot read cargo's target directory (cargo metadata)", file=sys.stderr)
@@ -710,7 +788,7 @@ def main(argv=None):
         cases = target / "debug" / "onsa_cases"
     return run(
         args.root, [str(binary)], [str(cases)], args.per_seed, args.version, args.jobs, args.save,
-        target_dir=target, time_budget=args.time_budget, deep=args.deep,
+        target_dir=target, time_budget=args.time_budget, deep=args.deep, truncated=truncated,
     )
 
 

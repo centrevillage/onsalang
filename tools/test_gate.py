@@ -1753,8 +1753,9 @@ class IgnoredFiles(unittest.TestCase):
 
 
 # A stand-in for the compiler: an input with `X` is an internal error, one with
-# `Y` a raw panic in the `check` command only, one with `Z` a signal. The
-# signal is SIGKILL: an abort would make the system write a crash report.
+# `Y` a raw panic in the `check` command only, one with `Z` a signal, one that
+# ends with `@` (no newline after it) another internal error. The signal is
+# SIGKILL: an abort would make the system write a crash report.
 FAKE_ONSA = r"""
 import os, sys
 text = open(sys.argv[-1], encoding="utf-8").read()
@@ -1762,6 +1763,10 @@ check = sys.argv[1] == "check"
 if "X" in text:
     sys.stderr.write("onsa: internal error: index out of bounds: the len is 3 but the index is 7\n"
                      "  = at crates/onsa_sema/src/body.rs:12:5\n")
+    sys.exit(101)
+if text.endswith("@"):
+    sys.stderr.write("onsa: internal error: range end index 4 out of range for slice of length 3\n"
+                     "  = at crates/onsa_sema/src/layout.rs:7:9\n")
     sys.exit(101)
 if "Y" in text and check:
     sys.stderr.write("thread 'main' panicked at crates/a.rs:1:1:\nboom\n")
@@ -1799,9 +1804,10 @@ class Fuzz(TempRepo):
         self.argv = [sys.executable, "-B", str(self.fake)]
         self.fix_argv = [sys.executable, "-B", str(self.repo.write("fake_cases.py", FAKE_CASES))]
 
-    def go(self, per_seed=0, save=False):
+    def go(self, per_seed=0, save=False, truncated=fuzz.TRUNCATIONS):
         lines = []
-        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, per_seed, "t", 2, save, out=lines.append)
+        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, per_seed, "t", 2, save, out=lines.append,
+                        truncated=truncated)
         return code, "\n".join(lines)
 
     def test_classify(self):
@@ -1839,6 +1845,62 @@ class Fuzz(TempRepo):
         # a new seed file does not change the mutants of the others
         more = fuzz.mutants(files + [("tests/c.onsa", "x\n")], 5, "1")
         self.assertEqual([m for m in more if m[0] != "tests/c.onsa"], a)
+
+    def test_truncations_are_the_same_for_the_same_seeds(self):
+        # FZ-1: each seed cut at the end of a token, with no blank or newline at the end of the file
+        text = "// a comment: (x, y)\npub fn f(x: I32) -> I32 {\n  let y = x@3 ~ _\n  y\n}\n"
+        files = [("tests/a.onsa", text), ("tests/b.onsa", "let x = 2\n")]
+        a = fuzz.truncations(files, 50, "1")
+        self.assertEqual(a, fuzz.truncations(files, 50, "1"))
+        self.assertEqual(len(a), 100)
+        self.assertNotEqual(a, fuzz.truncations(files, 50, "2"))
+        self.assertEqual(len(fuzz.truncations(files, 0, "1")), 0)
+        for path, k, t in a:
+            seed = dict(files)[path]
+            with self.subTest(path=path, k=k, t=t):
+                self.assertTrue(t and seed.startswith(t), t)
+                self.assertNotIn(t[-1], " \t\r\n")
+                self.assertNotIn("//", t.rsplit("\n", 1)[-1])  # never inside the comment
+                # at the end of a token: the next character of the seed does not continue a name or a number
+                self.assertFalse(re.fullmatch(r"\w\w", seed[len(t) - 1:len(t) + 1]), seed[len(t):])
+        # most of the cuts come right after a symbol, some after a name or a number
+        after = [t for p, _, t in a if p == "tests/a.onsa" and fuzz.CUT_AFTER.search(t[-1])]
+        self.assertGreater(len(after), 25)
+        self.assertLess(len(after), 50)
+        self.assertTrue(any(t.endswith("@") for _, _, t in a), a)
+        # a symbol rare in the corpus is cut after as often as a common one: the one `@` among 30 `(`
+        rare = fuzz.truncations([("tests/a.onsa", "f(" * 30 + "x@1\n"), ("tests/b.onsa", "g(" * 200 + "\n")], 40, "1")
+        self.assertGreater(sum(1 for p, _, t in rare if p == "tests/a.onsa" and t.endswith("x@")), 20, rare)
+        # a seed with no token (only a comment, or empty) gives itself without the blanks at its end
+        self.assertEqual(fuzz.truncations([("tests/c.onsa", "// c\n\n")], 2, "1"),
+                         [("tests/c.onsa", 0, "// c"), ("tests/c.onsa", 1, "// c")])
+        self.assertEqual(fuzz.truncations([("tests/e.onsa", "")], 1, "1"), [("tests/e.onsa", 0, "")])
+
+    def test_truncations_find_crashes_but_skip_the_fix_stage(self):
+        # FZ-1: a file that ends right after `@` crashes the fake compiler; the seed itself (with its
+        # newline) and the fix stage do not see it. No mutant here: the truncations alone find it.
+        # (the comment holds no cut: every cut ends with `@`)
+        self.repo.write("tests/spec/x.onsa", "// BADCANDIDATE\n@@@@@@@@@@\n")
+        code, text = self.go(per_seed=0, truncated=3)
+        self.assertEqual(code, 1, text)
+        self.assertIn("a new crash class: check: internal|crates/onsa_sema/src/layout.rs|range end index # out of range "
+                      "for slice of length # (seed tests/spec/x.onsa, truncation 0)", text)
+        self.assertIn("6 truncations (3 each, 3 crashing)", text)
+        # the truncations do not go through the fix stage: no broken candidate is seen
+        self.assertIn("0 mutants through the fix stage", text)
+        self.assertNotIn("fix-same-place", text)
+        new = list((self.repo.root / "target" / "fuzz" / "new").glob("*.onsa"))
+        self.assertTrue(new and new[0].read_text() == "@", new)
+        # listed: known, as the crash classes of the mutants
+        self.repo.write("tests/fuzz/at.onsa", "@")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/at.onsa"))
+        code, text = self.go(per_seed=0, truncated=3)
+        self.assertEqual(code, 0, text)
+        # without truncations nothing crashes
+        self.repo.write("tests/pending.toml", "")
+        self.repo.write("tests/fuzz/at.onsa", "ok")
+        code, text = self.go(per_seed=0, truncated=0)
+        self.assertEqual(code, 0, text)
 
     def test_minimize_keeps_the_class(self):
         runner = fuzz.Runner(self.argv, self.repo.root / "work")
@@ -2013,6 +2075,12 @@ class Fuzz(TempRepo):
                         time_budget=0.001)
         self.assertEqual(code, 1, lines)
         self.assertTrue(any("time budget" in l for l in lines), lines)
+        # the truncations count against the budget too (FZ-1)
+        lines = []
+        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, 0, "t", 1, False, out=lines.append,
+                        time_budget=0.001, truncated=50)
+        self.assertEqual(code, 1, lines)
+        self.assertTrue(any("of 100 inputs (0 mutants, 100 truncations) did not run" in l for l in lines), lines)
 
     def test_seeds_skip_the_saved_inputs(self):
         self.repo.write("tests/fuzz/a.onsa", "X")
