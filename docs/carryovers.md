@@ -7,9 +7,10 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
 - scratchpad の経路は、そのセッションの間だけ残る。
 - 2026-10-10 に、親の記憶から移した（利用者）。
 
-- **W3-08（9 回目）:** FAUST の 5 行（`faust_feedback`、`faust_feedback_unnamed`、`faust_prime`、`faust_delay`、`faust_delay_variable`）の照合を作る（rework の W3-08 の「FAUST の形の E0020」。W3-09/i が until を W3-08 に付け替える）。例が `at` を使うので W3-09 の後に行う。
-- **W3-08（9 回目）:** R-202（括弧に接する前置の `~(a)` が `faust_bit_not` にならず E0002）。
-- **W3-08（9 回目、追記）:** `faust_feedback_unnamed` と `faust_delay_variable` は一般の E0002 で例が通るので W3-09 で一覧から外れた（WAITING のまま）。note の付いた E0002 にするのは W3-08。
+- **W3-23（9 回目、W3-08 から分けた）:** FAUST の 4 行（`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`。`faust_prime` は S-466 で外す）の照合を作る（rework の W3-23 の「FAUST の形の E0020」。until は W3-23）。例が `at` を使うので W3-09 の後に行う。
+- **W3-23（9 回目、W3-08 から分けた）:** R-202（括弧に接する前置の `~(a)` が `faust_bit_not` にならず E0002）。
+- **W3-23（9 回目、追記、W3-08 から分けた）:** `faust_feedback_unnamed` と `faust_delay_variable` は一般の E0002 で例が通るので W3-09 で一覧から外れた（WAITING のまま）。note の付いた E0002 にするのは W3-23。
+- **W3-23（19 回目、第 27 組）:** S-466 の細部は `docs/spec-gaps-w3b.md` の第 27 組の S-466 の節の「利用者の判断」にある。`tests/spec/fixes/e0020_faust.onsa` の 25 行目を `string_prefix` の E0002 に書き直し、実装待ちの `faust_prime` の項目と `WAITING` の行、データのファイルの行を外す。`string_prefix` の note の一文（区切りが `'` のときだけ）。
 - **W3-08:** R-44（項目の文脈ごとに書ける項目）は W3-14 の直しで先に実装した（S-263: メンバは関数と `const` だけ、`extern` は不透明な `type` も。`parser.rs` の `DECLARATIONS` の場所の欄と `not_a_member`、`SPEC-GAP(S-263)`）。
   - W3-08 では `tests/review-phase1/syntax/nested*.onsa` を期待値付きのテストへ移し、README の R-44 の行を直す。
   - `#[..]` の `Attr.span` が `]` を含まない（W3-01 の低下が今の位置の癖を写している）。属性を改めるときに直す。
@@ -19,6 +20,10 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
 - **W3-08（11 回目、W3-06/b）:** `pub_pkg` の行の例に、空白を挟んだ `pub (pkg) fn f()` を足す（S-412 の決定で `pub_pkg` の一つの誤り。W3-06 の単位 1a は `parse_vis` が空白を越えて `pkg` を読むので、`pub_pkg` が入るまで `pub(pkg)` と同じく通る）。
 - **W3-08（17 回目、第 25 組の Fable の補足 1）:** 閉じない `pub(crate fn h()` の E0002 に、`pub_crate` の行の文面（「…remove it」）が付き、候補が無い。
   コードと文面が食い違って見えるので、作業票に入れて直す（S-435 は閉じない形を読み続けない）。
+- **W3-08（19 回目、第 27 組）:** 決定の細部は `docs/spec-gaps-w3b.md` の第 27 組の各節（S-463 の「利用者の懸念と案 (e)」、S-464 の「利用者の問いと案 (e)」）にある。作業票に写す。
+  - S-463: 外す名前の定数の置き場所（`onsa_syntax::foreign`）と、`onsa_sema/src/def.rs` の `Bound` の読み（`"Dup"` の綴り）を一か所にできるか。`tools/builtin_names.toml`。`hash_attribute` の最初の例 `#[derive(Eq)]` を替える。
+    データのファイルの例の `fixed` を検査する器が、第 1 期の `Show` の E0200 を数えるか。`@derive(Debug)` が名前の段の E0302「cannot be derived」で §6.4 の E0416 と違う件（`sig.rs`）を、この票で確かめるか W5-06 へ送るか。
+  - S-464: 3 つの行（`const_fn`・`extern_fn`・`export_c`）をデータのファイルと `WAITING` に登録する。読み続けの再開の位置を構文解析器に渡す配管（`Failure` に形の終わり）は S-435 と共有する。`const unsafe fn`・`pub const struct` は一般の E0002 のまま。
 - **W3-08（19 回目、W3-22）:** S-435 の読み続けを入れた後、段をまたぐ往復が消えたことを `onsa_cases --fix-loop` の `--pick first` と `--pick last` の両方で確かめる（どちらも clean）。
   - 入力は `pub(crate) flow lp(x: F32 at sample) -> F32 at sample {` 改行 `x` 改行 `}` と `pub flow main(x: F32 at sample) -> F32 at sample {` 改行 `lp~(x)` 改行 `}` の二つの項目で、並びを逆にした形も回す。
   - 今の dev では、`lp` が先なら `--pick last`、`main` が先なら `--pick first` で `cycle (undoes step 1) after 3 steps` になる（S-475）。消えたら事例として `tests/` に置く。
