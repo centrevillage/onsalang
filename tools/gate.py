@@ -14,7 +14,7 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
                 runs every item listed whole.
                 Without it, the summary shows what is left per stage.
 --quick         leaves out the slow items (`Step.slow`: the fuzzing, the
-                self-test, the C, the fmt properties) for a check in the middle
+                fix loop, the self-test, the C, the fmt properties) for a check in the middle
                 of a work. Its last line is `gate (quick): ...`: it is not the
                 gate's verdict (plan §8.3 8).
 

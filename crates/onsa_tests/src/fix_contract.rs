@@ -460,14 +460,14 @@ fn meet(a: Span, b: Span) -> bool {
 /// One edit of a candidate: its range before it, and the length of its
 /// replacement after it.
 #[derive(Debug, Clone, Copy)]
-struct Moved {
+pub(crate) struct Moved {
     before: Span,
     /// The range of its replacement after the candidate.
     after: Span,
 }
 
 /// The edits of `fix` as `applied` placed them.
-fn moved(fix: &Fix, applied: &Applied) -> Vec<Moved> {
+pub(crate) fn moved(fix: &Fix, applied: &Applied) -> Vec<Moved> {
     fix.edits().iter().zip(&applied.ranges).map(|(e, r)| Moved { before: e.span, after: *r }).collect()
 }
 
@@ -475,7 +475,9 @@ fn moved(fix: &Fix, applied: &Applied) -> Vec<Moved> {
 /// differences of the edits before it. An insertion at `at` is before a
 /// `start` and after an end (an insertion at an end of a range is not inside
 /// it; [`Applied::map_span`] puts it inside, so it is not used here, S-302).
-fn shift(edits: &[Moved], file: FileId, at: u32, start: bool) -> u32 {
+/// The one rule of moving a place by a candidate's edits here (also
+/// [`crate::fix_loop`]).
+pub(crate) fn shift(edits: &[Moved], file: FileId, at: u32, start: bool) -> u32 {
     let mut delta: i64 = 0;
     for e in edits.iter().filter(|e| e.before.file == file) {
         let b = e.before;
@@ -698,6 +700,36 @@ pub fn check_text(text: &str) -> Result<TextCheck, String> {
     Ok(TextCheck { loaded, analyzed })
 }
 
+/// Why a candidate cannot be applied to a single-file input ([`apply_alone`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Unapplied {
+    /// Its edits do not apply (the reason of [`onsa_diag::apply_mapped`]).
+    CannotApply(String),
+    /// It edits a file other than the input.
+    OtherFile,
+}
+
+impl std::fmt::Display for Unapplied {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Unapplied::CannotApply(e) => f.write_str(e),
+            Unapplied::OtherFile => f.write_str("it edits a file other than the input"),
+        }
+    }
+}
+
+/// Apply `fix` alone to the one file of a single-file input whose sources
+/// are `sources` (a [`TextCheck`]'s): the text after it, and where its edits
+/// went. The one place of applying a candidate to a single file
+/// ([`check_candidate`], [`same_place`], [`crate::fix_loop`]; D-15); the
+/// check again is [`check_text`].
+pub fn apply_alone(sources: &SourceMap, fix: &Fix) -> Result<(String, Applied), Unapplied> {
+    let applied = onsa_diag::apply_mapped(sources, fix.edits()).map_err(Unapplied::CannotApply)?;
+    let text = applied.texts.get(&FileId(0)).filter(|_| applied.texts.len() == 1).cloned();
+    let text = text.ok_or(Unapplied::OtherFile)?;
+    Ok((text, applied))
+}
+
 /// One candidate of a diagnostic of a [`TextCheck`], applied alone and the
 /// text checked again.
 pub struct CandidateCheck {
@@ -715,20 +747,17 @@ pub struct CandidateCheck {
 /// internal error after it).
 pub fn check_candidate(run: &TextCheck, d: &Diagnostic, fix: &Fix) -> Result<CandidateCheck, String> {
     let rank = d.stage.check_rank().ok_or_else(|| format!("a candidate of the {} stage", d.stage.name()))?;
-    let applied = onsa_diag::apply_mapped(&run.loaded.sources, fix.edits())?;
+    let (text, applied) = apply_alone(&run.loaded.sources, fix).map_err(|e| e.to_string())?;
     let file = FileId(0);
-    let text = applied.texts.get(&file).filter(|_| applied.texts.len() == 1).cloned();
-    let text = text.ok_or("it edits a file other than the input")?;
-    let mut again = Loaded::from_input(single_file(text.clone()));
-    let analyzed = onsa_driver::analyze_loaded(&mut again).map_err(|e| e.render(&again.sources))?;
+    let again = check_text(&text)?;
     let files = Files { list: vec![(file, "m.onsa".into(), "m.onsa".into())], package: false };
     let edits = moved(fix, &applied);
     let mut problems = Vec::new();
     if let Some(diff) = reading_difference(run.loaded.sources.file(file).text(), &text, file, &edits) {
         problems.push(format!("the reading outside its edits changed: {diff}"));
     }
-    let diagnostics = analyzed.diagnostics.clone();
-    let after = After { loaded: again, analyzed, applied };
+    let diagnostics = again.analyzed.diagnostics.clone();
+    let after = After { loaded: again.loaded, analyzed: again.analyzed, applied };
     problems.extend(judge(&files, rank, &run.analyzed.units, &edits, &after, None));
     Ok(CandidateCheck { text, diagnostics, problems })
 }
@@ -794,11 +823,9 @@ pub struct SamePlace {
 /// choice per unit). The units are not used: this is a net for new kinds,
 /// not the contract.
 pub fn same_place(text: &str) -> SamePlace {
-    let input = single_file;
-    let mut loaded = Loaded::from_input(input(text.to_string()));
-    let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
-        Ok(a) => a,
-        Err(e) => return SamePlace { internal: Some(e.render(&loaded.sources)), ..SamePlace::default() },
+    let TextCheck { loaded, analyzed } = match check_text(text) {
+        Ok(run) => run,
+        Err(e) => return SamePlace { internal: Some(e), ..SamePlace::default() },
     };
     let mut out = SamePlace::default();
     for d in &analyzed.diagnostics {
@@ -820,26 +847,25 @@ pub fn same_place(text: &str) -> SamePlace {
             out.violations.push(violation("unchecked-stage".into(), None, format!("the {} stage", d.stage.name())));
             continue;
         };
-        let applied = match onsa_diag::apply_mapped(&loaded.sources, fix.edits()) {
+        let (new_text, applied) = match apply_alone(&loaded.sources, fix) {
             Ok(a) => a,
             Err(e) => {
-                out.violations.push(violation("cannot-apply".into(), None, e));
+                let kind = match e {
+                    Unapplied::CannotApply(_) => "cannot-apply",
+                    Unapplied::OtherFile => "other-file",
+                };
+                out.violations.push(violation(kind.into(), None, e.to_string()));
                 continue;
             }
         };
-        let Some(new_text) = applied.texts.get(&FileId(0)).filter(|_| applied.texts.len() == 1) else {
-            out.violations.push(violation("other-file".into(), None, "it edits a file other than the input".into()));
-            continue;
-        };
         // The reading outside its edits stays (S-302), as in the contract.
-        if let Some(diff) = reading_difference(text, new_text, FileId(0), &moved(fix, &applied)) {
+        if let Some(diff) = reading_difference(text, &new_text, FileId(0), &moved(fix, &applied)) {
             out.violations.push(violation("reading".into(), None, diff));
         }
-        let mut again = Loaded::from_input(input(new_text.clone()));
-        let after = match onsa_driver::analyze_loaded(&mut again) {
+        let TextCheck { loaded: again, analyzed: after } = match check_text(&new_text) {
             Ok(a) => a,
             Err(e) => {
-                out.violations.push(violation("internal".into(), None, e.render(&again.sources)));
+                out.violations.push(violation("internal".into(), None, e));
                 continue;
             }
         };
@@ -1067,6 +1093,20 @@ mod tests {
         // reported (S-281), and it has no candidate.
         let stray = same_place("1.\n");
         assert_eq!(stray.candidates, 0, "{stray:?}");
+    }
+
+    #[test]
+    fn a_candidate_applies_alone_to_the_one_file_or_says_why_not() {
+        let mut sources = SourceMap::default();
+        let file = sources.add("m.onsa", "let mut n = 0\n");
+        let (text, applied) = apply_alone(&sources, &Fix::replace("var", Span::new(file, 0, 7), "var")).unwrap();
+        assert_eq!((text.as_str(), applied.ranges[0]), ("var n = 0\n", Span::new(file, 0, 3)));
+        let unknown = Fix::new("x", vec![onsa_diag::Edit::delete(Span::new(FileId(3), 0, 1))]);
+        let e = apply_alone(&sources, &unknown).unwrap_err();
+        assert!(matches!(&e, Unapplied::CannotApply(m) if m.contains("unknown file")), "{e:?}");
+        let other = sources.add("n.onsa", "x\n");
+        let e = apply_alone(&sources, &Fix::delete("x", Span::new(other, 0, 1))).unwrap_err();
+        assert_eq!((e.clone(), e.to_string()), (Unapplied::OtherFile, "it edits a file other than the input".into()));
     }
 
     #[test]

@@ -933,11 +933,13 @@ class RealSteps(unittest.TestCase):
         by_name = {s.name: s for s in gate_steps.STEPS}
         self.assertTrue(by_name["golden"].info)
         self.assertTrue(by_name["spec-coverage"].info)
+        # the convergence of the fix candidates shows its cycles and divergences, never listed (W3-22)
+        self.assertTrue(by_name["fix-loop"].info and not by_name["fix-loop"].pendable)
         self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
         self.assertFalse(by_name["fmt-props"].pendable)
         # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
-        slow = ["fuzz", "fuzz-deep", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
+        slow = ["fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the deep fuzzing runs only at a stage end (W3-03)
         self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])

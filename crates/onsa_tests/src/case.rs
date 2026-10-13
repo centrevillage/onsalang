@@ -20,8 +20,9 @@ pub const EXCLUDED: &[(&str, &str)] = &[
     ),
     (
         "tests/fuzz",
-        "inputs the fuzzing of `check` and `fmt` saved (Q-06, W1-04): mutated sources that crashed the compiler, \
-         replayed by `tools/fuzz.py` (the gate item `fuzz`), not cases",
+        "inputs the fuzzing of `check` and `fmt` saved (Q-06, W1-04): mutated sources that crashed the compiler \
+         or broke a fix candidate, replayed by `tools/fuzz.py` (the gate item `fuzz`) and walked by the fix \
+         loop (the gate item `fix-loop`, `onsa_tests::fix_loop`; [`onsa_files`]), not cases",
     ),
 ];
 
@@ -104,6 +105,22 @@ pub fn collect(root: &Path) -> (Vec<Case>, Vec<String>) {
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
     (out, errors)
+}
+
+/// The `.onsa` files directly in the directory `dir` (relative to `root`;
+/// one of [`EXCLUDED`], which hold inputs that are not cases), sorted, or
+/// why it cannot be read (it is missing too).
+pub fn onsa_files(root: &Path, dir: &str) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(root.join(dir)).map_err(|e| format!("{dir}: cannot read the directory: {e}"))?;
+    let mut out = Vec::new();
+    for e in entries {
+        let p = e.map_err(|e| format!("{dir}: cannot read an entry: {e}"))?.path();
+        if p.is_file() && p.extension().is_some_and(|x| x == "onsa") {
+            out.push(p);
+        }
+    }
+    out.sort();
+    Ok(out)
 }
 
 /// `p` relative to `root`, `/`-separated.

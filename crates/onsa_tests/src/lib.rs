@@ -38,6 +38,7 @@ pub mod case;
 pub mod ccheck;
 pub mod conformance;
 pub mod fix_contract;
+pub mod fix_loop;
 pub mod fixes;
 pub mod foreign_forms;
 pub mod fragment;
@@ -47,6 +48,7 @@ pub mod inventory;
 pub mod pending;
 pub mod run;
 pub mod scalar;
+pub mod single_files;
 pub mod vectors;
 
 pub use fragment::{GoldenKind, Mode, TestSettings};

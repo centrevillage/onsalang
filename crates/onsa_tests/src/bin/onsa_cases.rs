@@ -17,6 +17,10 @@
 //! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
 //! onsa_cases --fix-same-place FILE...  the near "same place" of the fix contract for the fuzzing
 //!                            (tools/fuzz.py, S-236, W3-17; `onsa_tests::fix_contract::same_place`)
+//! onsa_cases --fix-loop [--json] [--branches] [--pick first|last] [--steps N] [--states N] [--diverge N] FILE...
+//!                            the fix candidates applied again and again until the loop stops
+//!                            (S-236, docs/agent-rules.md 7 章の 27, W3-22; `onsa_tests::fix_loop`)
+//! onsa_cases --fix-loop-gate [ROOT]  the gate item fix-loop (`onsa_tests::fix_loop::gate`)
 //! ```
 //!
 //! The first form prints:
@@ -55,12 +59,51 @@
 //! `internal`: the check of the file itself ended in an internal error;
 //! `unreadable`: the file cannot be read (or is not UTF-8). Exits 0, 2 on a
 //! usage error.
+//!
+//! `--fix-loop` checks each file as `--fix-same-place` does and, step by
+//! step, applies the first candidate of the first reported diagnostic that
+//! has candidates (`--pick last`: the last one) and checks the text again,
+//! until the walk stops: `clean`, `no-candidate`, `cycle` (`how` = `state`
+//! or `undo`), `limit` (`--steps N`), `diverge` (`--diverge N`), `internal`
+//! or `cannot-apply`. `--branches` walks every candidate, the walks that take
+//! fewer other candidates first, at most `--states N` texts after the walk
+//! that takes none. The stops (counted by walk, not by text), the
+//! defaults and the order of the branches are `onsa_tests::fix_loop`'s
+//! documentation. It prints a line per file and a line per step:
+//!
+//! ```text
+//! m.onsa: cycle (undoes step 1) after 3 steps; 2 errors at the start (--pick first)
+//!   1. E0812 2:3 candidate 1/1 `remove `~`` -> 2 errors
+//!   2. E0020 5:1 candidate 1/1 `remove the visibility` -> 1 error
+//!   3. E0811 2:3 candidate 1/1 `add `~`` -> 0 errors
+//! ```
+//!
+//! (a step's place is in the text before it), or with `--json`
+//!
+//! ```text
+//! [{"file": "m.onsa", "errors": 2, "pick": "first", "branches": false,
+//!   "stops": {"cycle": 1}, "undos": 1, "longest": 3, "explored": 4, "joined": 0,
+//!   "truncated": false, "discrepancies": null,
+//!   "walks": [{"stop": "cycle", "how": "undo", "back_to": 1,
+//!              "steps": [{"code": "E0812", "line": 2, "col": 3, "candidate": 1, "of": 1,
+//!                         "title": "remove `~`", "errors": 2}, ...]}],
+//!   "internal": null, "unreadable": null}, ...]
+//! ```
+//!
+//! `walks` holds the first walk and those that stop on neither `clean` nor
+//! `no-candidate` (at most 20: `cycle`, then `diverge`, `internal`,
+//! `cannot-apply`, `limit`). Exits 0, 2 on a usage error.
+//!
+//! `--fix-loop-gate` is the gate item `fix-loop` over ROOT (default: the
+//! repository; `onsa_tests::fix_loop::gate`). Exits 1 when it fails to walk
+//! what it says, never on what the walks find.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | --continuing | --symbols | \
-     --std-names | --builtin-members | --fix-same-place FILE...";
+     --std-names | --builtin-members | --fix-same-place FILE... | --fix-loop [--json] [--branches] [--pick first|last] \
+     [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -73,9 +116,9 @@ fn main() -> ExitCode {
         None => onsa_tests::case::repo_root(),
     };
     let too_many = match mode {
-        "" | "--run" => rest.len() > 1,
+        "" | "--run" | "--fix-loop-gate" => rest.len() > 1,
         "--c" | "--vectors" => rest.is_empty() || rest.len() > 2,
-        "--fix-same-place" => rest.is_empty(),
+        "--fix-same-place" | "--fix-loop" => rest.is_empty(),
         _ => !rest.is_empty(),
     };
     if too_many {
@@ -115,6 +158,26 @@ fn main() -> ExitCode {
         "--fix-same-place" => {
             print(&serde_json::json!(fix_same_place(rest)));
             ExitCode::SUCCESS
+        }
+        "--fix-loop" => match fix_loop_args(rest) {
+            Ok((options, json, files)) => {
+                let reports = onsa_tests::fix_loop::walk_files(&files, &options);
+                if json {
+                    print(&serde_json::json!(reports));
+                } else {
+                    print!("{}", onsa_tests::fix_loop::text(&reports));
+                }
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}; usage: {USAGE}");
+                ExitCode::from(2)
+            }
+        },
+        "--fix-loop-gate" => {
+            let g = onsa_tests::fix_loop::gate(&root(), onsa_tests::fix_loop::GATE_BUDGET);
+            println!("{}", g.text);
+            if g.failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
         }
         "--c-items" => {
             print(&serde_json::json!(onsa_tests::c::ITEMS.iter().map(|i| i.name).collect::<Vec<_>>()));
@@ -181,36 +244,53 @@ fn files(c: &onsa_tests::case::Case, s: &onsa_tests::case::Setup) -> serde_json:
 
 /// `--fix-same-place`: each file on a thread with the stack of a command, in parallel.
 fn fix_same_place(files: &[String]) -> Vec<serde_json::Value> {
-    let next = std::sync::atomic::AtomicUsize::new(0);
-    let out: std::sync::Mutex<Vec<Option<serde_json::Value>>> = std::sync::Mutex::new(vec![None; files.len()]);
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(files.len().max(1));
-    std::thread::scope(|s| {
-        for _ in 0..workers {
-            onsa_diag::stack::spawn_scoped(s, "onsa-fix", || {
-                loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    let Some(path) = files.get(i) else { break };
-                    let v = match std::fs::read(path).map(String::from_utf8) {
-                        Err(e) => serde_json::json!({"file": path, "unreadable": e.to_string()}),
-                        Ok(Err(_)) => serde_json::json!({"file": path, "unreadable": "not UTF-8"}),
-                        // A panic outside the driver's stages is an internal error too.
-                        Ok(Ok(text)) => match onsa_driver::guard(|| onsa_tests::fix_contract::same_place(&text)) {
-                            Ok(r) => {
-                                let mut v = serde_json::json!(r);
-                                v["file"] = serde_json::json!(path);
-                                v
-                            }
-                            Err(e) => serde_json::json!({"file": path, "candidates": 0, "violations": [],
-                                                          "internal": e.message}),
-                        },
-                    };
-                    out.lock().expect("results")[i] = Some(v);
+    onsa_tests::single_files::on_stacks(files.len(), |i| {
+        let path = &files[i];
+        match onsa_tests::single_files::read_input(path) {
+            Err(e) => serde_json::json!({"file": path, "unreadable": e}),
+            // A panic outside the driver's stages is an internal error too.
+            Ok(text) => match onsa_driver::guard(|| onsa_tests::fix_contract::same_place(&text)) {
+                Ok(r) => {
+                    let mut v = serde_json::json!(r);
+                    v["file"] = serde_json::json!(path);
+                    v
                 }
-            })
-            .expect("spawn a worker");
+                Err(e) => serde_json::json!({"file": path, "candidates": 0, "violations": [], "internal": e.message}),
+            },
         }
-    });
-    out.into_inner().expect("results").into_iter().map(|v| v.expect("every file ran")).collect()
+    })
+}
+
+/// The options and the files of `--fix-loop`, and whether it prints JSON.
+fn fix_loop_args(args: &[String]) -> Result<(onsa_tests::fix_loop::Options, bool, Vec<String>), String> {
+    let mut options = onsa_tests::fix_loop::Options::default();
+    let mut json = false;
+    let mut files = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut number = |name: &str| -> Result<usize, String> {
+            let v = it.next().ok_or_else(|| format!("{name} needs a number"))?;
+            v.parse().ok().filter(|&n| n > 0).ok_or_else(|| format!("{name} needs a number above 0, not `{v}`"))
+        };
+        match a.as_str() {
+            "--json" => json = true,
+            "--branches" => options.branches = true,
+            "--pick" => {
+                let v = it.next().map(String::as_str).unwrap_or("");
+                options.pick =
+                    onsa_tests::fix_loop::Pick::parse(v).ok_or_else(|| format!("--pick first|last, not `{v}`"))?;
+            }
+            "--steps" => options.steps = Some(number("--steps")?),
+            "--states" => options.states = number("--states")?,
+            "--diverge" => options.diverge = number("--diverge")?,
+            o if o.starts_with("--") => return Err(format!("unknown option `{o}` of --fix-loop")),
+            f => files.push(f.to_string()),
+        }
+    }
+    if files.is_empty() {
+        return Err("--fix-loop needs a file".into());
+    }
+    Ok((options, json, files))
 }
 
 fn print(v: &serde_json::Value) {

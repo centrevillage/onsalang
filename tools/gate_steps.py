@@ -20,8 +20,8 @@ say how many (`rows = N`), and the item fails when the count differs.
 
 An item listed whole (not by case) is known to fail, so the gate skips it
 unless the run names its `until` (`--work`) or ends a stage (`--stage-end`).
-An item with `slow=True` (the fuzzing, the self-test, the C, the fmt
-properties) is left out by `--quick`, a check for the middle of a work that
+An item with `slow=True` (the fuzzing, the fix loop, the self-test, the C,
+the fmt properties) is left out by `--quick`, a check for the middle of a work that
 is not the gate's verdict (2026-10-08). An item with `stage_end_only=True`
 (the deep fuzzing) runs only with `--stage-end`, for the load on the machine
 (W3-03).
@@ -62,6 +62,12 @@ STEPS = [
     # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine
     # (1 to 2.5 minutes on 10 cores), so only at a stage end (W3-03, 2026-10-08).
     Step("fuzz-deep", (*PY, str(TOOLS / "fuzz.py"), "--deep"), slow=True, stage_end_only=True),
+    # The fix candidates applied again and again until the loop stops (S-236, docs/agent-rules.md 7 章の 27,
+    # W3-22): the cases of tests/spec/fixes and the saved inputs of the fuzzing. It shows the cycles and the
+    # divergences (report only, until the known ones are sorted out) and fails when it walks nothing, runs
+    # out of its time, or a walk ends in an internal error.
+    Step("fix-loop", ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--fix-loop-gate"),
+         info=True, slow=True),  # fmt: skip
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),
