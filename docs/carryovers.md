@@ -279,6 +279,11 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
           `foreign.rs` の 162 行目の rustdoc の未解決のリンク（親から子の非公開の項目へのリンクは rustdoc が解決しない）。
         - B-1: `body.rs` の `subst_pub` は `subst` を包むだけ。`body/types.rs` は 18 行。
         - W3-22/b の S-1: 表示の順が二つある（`onsa_diag` の非公開の `sorted` と `Diagnostic::order_in_file`）。`per_unit` の出力の順は段の順で、表示の順と違う（`fix_loop` は `order_in_file` で並べ直す）。一つにする（報告は 19 回目の scratchpad の `w322b/handback_b.md`）。
+      - RF-11 Onsa の旧版の行と文の整理（2026-10-13、21 回目、利用者: 旧版は正式なリリースまで対象にしない。`agent-rules.md` 7 章 32）:
+        - `docs/foreign-forms.toml` の出自が旧版の行。dev の 10 行（`proc`、`item_dot_call`、`rate_as_type`、`caret_visible`（FAUST と旧版）、`derive_attribute`、`relaxed_attribute`、`bulk_attribute`、`mem_fast`、`clock_on_binding`、`clock_in_type`）と W3-08 の 3 行（`old_attribute_no_candidate`、`export_c`、`field_pub_crate`（Rust と旧版））。
+        - 行ごとに、消すか、一覧の言語の形として出自を改めて残すかを決める（`caret_visible` は FAUST、`field_pub_crate` は Rust の形でもある。`@derive(…)` は Rust の書き手が混ぜうる形かを見る）。消した形は一般の規則のコード（一覧に無い属性の E0005 など）になる。
+        - 仕様と決定の文: §6.4・§6.5 の旧形の E0020、§18.1 の「既存言語と旧版の形」「旧版の `export "C" fn h`」と書き方の一覧、計画 §5 の E0020 の行（旧形の属性、S-133）、S-34・S-133・S-464（`export_c`）・S-483 の (2)、R-36 の表。
+        - 事例（`tests/spec/` の旧版の形、`attributes_no_candidate.onsa`、`crates/onsa_cli/tests/declaration_headings.rs` の `export_c` など）と、W3-08 の直し A で寄せなかった `old_attribute` の引数の判定。
       - 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。
       - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
   - トークン効率化対策（2026-10-12、14 回目、利用者）: 週の使用量の上限（全モデルで共通。`/usage` に出るのは session・weekly・Fable だけ）が 4〜5 日で尽きる件。
