@@ -45,7 +45,7 @@ test "feedback through a flow instance with a prev~ outside it" {
   //   n3: in 0.1875,   lp 0.28125,    y 0.140625
   //   n4: in 0.140625, lp 0.2109375,  y 0.10546875
   let xs: [F32; 5] = [1.0, 0.0, 0.0, 0.0, 0.0]
-  let o = loop_through_instance.render(loop_through_instance.Config {}, loop_through_instance.Params {}, xs, 8.0)
+  let o            = loop_through_instance.render(loop_through_instance.Config {}, loop_through_instance.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 0.25
   assert o.out[2] == 0.1875

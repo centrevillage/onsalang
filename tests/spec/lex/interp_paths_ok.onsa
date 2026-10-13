@@ -84,7 +84,7 @@ pub fn a_hole_in_a_match_arm(n: U32) -> Str uses {Alloc} {
 
 pub fn a_hole_in_a_loop(n: U32) -> Str uses {Alloc} {
   var last = "none"
-  for i in 0..<n {
+  for i in 0 ..< n {
     last = "{i}"
   }
   last

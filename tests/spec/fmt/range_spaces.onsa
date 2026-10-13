@@ -1,0 +1,164 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§3.1", "§11.5", "§18.2"]
+
+// The canonical spaces round a range symbol (docs/onsa-tools.md §3.2, S-334): one space on each side of
+// `..<`, and the ends keep the spaces of their own operators. A range binds more weakly than every
+// binary operator (§3.1), so the spaces show what the ends are: `lo + 1 ..< hi - 1` ends at `hi - 1`.
+// The file is canonical, so `onsa fmt` leaves it unchanged; the same programs written without the
+// spaces are in range_spaces_tight.onsa and range_spaces_loose.onsa. The closed range `..=` is not
+// lowered in this version (E0200), so its spaces are in range_spaces_closed.onsa (`mode = "parse"`).
+// Every value below is worked out by hand from the spec text.
+
+use std.array
+
+const N: U32 = 4
+
+fn sum_below(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< n {
+    t = t + i
+  }
+  t
+}
+
+fn sum_inside(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1 ..< hi - 1 {
+    t = t + i
+  }
+  t
+}
+
+fn sum_scaled(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in n * 2 ..< n * 2 + 3 {
+    t = t + i
+  }
+  t
+}
+
+fn sum_between_numbers() -> U32 {
+  var t: U32 = 0
+  for i in 0x1 ..< 0x4 {
+    t = t + i
+  }
+  for i in 1_0 ..< 1_3 {
+    t = t + i
+  }
+  t
+}
+
+fn count_pairs(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0 ..< n {
+    for _ in 0 ..< i {
+      c = c + 1
+    }
+  }
+  c
+}
+
+fn sum_signed() -> I32 {
+  var t: I32 = 0
+  for i in -4 ..< 4 {
+    t = t + i
+  }
+  t
+}
+
+fn in_a_closure() -> [U32; 4] {
+  array.from_fn(fn(i: U32) -> U32 {
+    var t: U32 = 0
+    for j in 0 ..< i + 1 {
+      t = t + j
+    }
+    t
+  })
+}
+
+fn in_a_branch(c: Bool, n: U32) -> U32 {
+  var t: U32 = 0
+  if c {
+    for i in 1 ..< n + 1 {
+      t = t + i
+    }
+  } else {
+    t = 100
+  }
+  t
+}
+
+fn in_a_generic_function[T](x: T, n: U32) -> U32 {
+  var c: U32 = 0
+  for _ in 0 ..< n - 1 {
+    c = c + 1
+  }
+  c
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 3] at sample {
+  par i in 1 ..< 4 {
+    x * i.round_f32()
+  }
+}
+
+pub flow in_a_par_over_a_const(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 2 ..< N {
+    x * i.round_f32()
+  }
+}
+
+test "the ends of a range keep the spaces of their operators" {
+  assert sum_below(4) == 6
+  assert sum_below(0) == 0
+  // lo + 1 = 3 and hi - 1 = 6: 3 + 4 + 5.
+  assert sum_inside(2, 7) == 12
+  // n * 2 = 4 and n * 2 + 3 = 7: 4 + 5 + 6.
+  assert sum_scaled(2) == 15
+  // 0x1 ..< 0x4 is 1 + 2 + 3, and 1_0 ..< 1_3 is 10 + 11 + 12.
+  assert sum_between_numbers() == 39
+}
+
+test "a range inside a range, a negative start, a closure, a branch and a generic function" {
+  // 0 + 1 + 2 + 3 iterations of the inner loop.
+  assert count_pairs(4) == 6
+  // -4 + -3 + -2 + -1 + 0 + 1 + 2 + 3.
+  assert sum_signed() == -4
+  // The closure of the index i sums 0 ..< i + 1: 0, 1, 3, 6.
+  let a = in_a_closure()
+  assert a[0] == 0
+  assert a[1] == 1
+  assert a[2] == 3
+  assert a[3] == 6
+  // 1 ..< 5: 1 + 2 + 3 + 4.
+  assert in_a_branch(true, 4) == 10
+  assert in_a_branch(false, 4) == 100
+  // 0 ..< 2: two iterations.
+  assert in_a_generic_function(7, 3) == 2
+}
+
+test "a range in the header of a par" {
+  // 1 ..< 4 makes the replicas i = 1, 2, 3.
+  let xs: [F32; 2] = [1.0, 2.0]
+
+  let o = in_a_par.render(in_a_par.Config {}, in_a_par.Params {}, xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 4.0
+  assert o.out[2][0] == 3.0
+  assert o.out[2][1] == 6.0
+}
+
+test "a range in a par over a constant" {
+  // 2 ..< N with N = 4 is 2 ..< 4: the replicas i = 2, 3.
+  let xs: [F32; 2] = [1.0, 2.0]
+
+  let o = in_a_par_over_a_const.render(in_a_par_over_a_const.Config {}, in_a_par_over_a_const.Params {}, xs, 8.0)
+  assert o.out[0][0] == 2.0
+  assert o.out[0][1] == 4.0
+  assert o.out[1][0] == 3.0
+  assert o.out[1][1] == 6.0
+}

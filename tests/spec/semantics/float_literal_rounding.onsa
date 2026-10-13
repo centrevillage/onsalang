@@ -191,10 +191,10 @@ test "a block in a block" {
 test "a generic function whose type is decided by the context" {
   let a: F32 = id(1.00000005960464477539062501)
   assert a.to_bits() == 0x3F800001
-  let b = id(1.00000017881393432617187499)
+  let b      = id(1.00000017881393432617187499)
   let c: F32 = b
   assert c.to_bits() == 0x3F800001
-  let d = id(9007199254740993.000000000000000000001)
+  let d      = id(9007199254740993.000000000000000000001)
   let e: F64 = d
   assert e.to_bits() == 0x4340000000000001
   assert bits32(id(7.00649232162408535461864792e-46)) == 0x00000001

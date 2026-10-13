@@ -31,7 +31,7 @@ pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
 
 fn sum_span(s: Span[F32]) -> F32 {
   var total: F32 = 0.0
-  for i in 0..<s.len() {
+  for i in 0 ..< s.len() {
     total = total + s[i]
   }
   total
@@ -58,7 +58,7 @@ fn sum_both(inp: pair.In) -> F32 {
 }
 
 fn copy_swapped(inp: pair.In, inout out: pair.Out) {
-  for i in 0..<inp.l.len() {
+  for i in 0 ..< inp.l.len() {
     out.l[i] = inp.r[i]
     out.r[i] = inp.l[i]
   }
@@ -128,9 +128,9 @@ test "a field of Out is the receiver of an inout method" {
 }
 
 test "a field that is an array of channels: the receiver and the index base take one more index" {
-  let c0: [F32; 3] = [1.0, 2.0, 3.0]
-  let c1: [F32; 3] = [4.0, 5.0, 6.0]
-  let m: [F32; 3] = [0.0; 3]
+  let c0: [F32; 3]       = [1.0, 2.0, 3.0]
+  let c1: [F32; 3]       = [4.0, 5.0, 6.0]
+  let m: [F32; 3]        = [0.0; 3]
   let ins: [[F32; 3]; 2] = [c0, c1]
   assert wide_lens(spread.In { x: ins, m: m }) == 333
   assert wide_read(spread.In { x: ins, m: m }, 1, 2) == 6.0

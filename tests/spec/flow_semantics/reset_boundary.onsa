@@ -133,9 +133,9 @@ pub flow guarded(x: F32 at sample, n: I32 at init) -> F32 at sample {
 }
 
 test "reset puts the running sum back to the init input" {
-  let xs: [F32; 3] = [1.0, 1.0, 1.0]
+  let xs: [F32; 3]  = [1.0, 1.0, 1.0]
   var out: [F32; 3] = [0.0; 3]
-  var st = counter.init(counter.Config { start: 10.0 }, 8.0)
+  var st            = counter.init(counter.Config { start: 10.0 }, 8.0)
   counter.process(inout st, counter.Params {}, xs, inout out)
   assert out[2] == 13.0
   counter.reset(inout st)
@@ -145,10 +145,10 @@ test "reset puts the running sum back to the init input" {
 }
 
 test "reset clears the delay line and its write position" {
-  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let ys: [F32; 4] = [5.0, 6.0, 7.0, 8.0]
+  let xs: [F32; 4]  = [1.0, 2.0, 3.0, 4.0]
+  let ys: [F32; 4]  = [5.0, 6.0, 7.0, 8.0]
   var out: [F32; 4] = [0.0; 4]
-  var st = tap.init(tap.Config {}, 8.0)
+  var st            = tap.init(tap.Config {}, 8.0)
   tap.process(inout st, tap.Params {}, xs, inout out)
   assert out[3] == 1.0
   tap.reset(inout st)
@@ -159,9 +159,9 @@ test "reset clears the delay line and its write position" {
 }
 
 test "reset reaches the sub-instance and keeps the value computed at init" {
-  let xs: [F32; 3] = [1.5, 2.5, 3.5]
+  let xs: [F32; 3]  = [1.5, 2.5, 3.5]
   var out: [F32; 3] = [0.0; 3]
-  var st = fragile.init(fragile.Config {}, 8.0)
+  var st            = fragile.init(fragile.Config {}, 8.0)
   fragile.process(inout st, fragile.Params {}, xs, inout out)
   fragile.process(inout st, fragile.Params {}, xs, inout out)
   assert out[0] == 5.0
@@ -169,7 +169,7 @@ test "reset reaches the sub-instance and keeps the value computed at init" {
   fragile.process(inout st, fragile.Params {}, xs, inout out)
   assert out[0] == 2.0
   assert out[2] == 6.0
-  var g = guarded.init(guarded.Config { n: 4 }, 8.0)
+  var g              = guarded.init(guarded.Config { n: 4 }, 8.0)
   let ones: [F32; 2] = [1.0, 1.0]
   var gout: [F32; 2] = [0.0; 2]
   guarded.process(inout g, guarded.Params {}, ones, inout gout)

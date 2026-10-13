@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§7", "§3.1", "§11.5", "§18.2"]
+
+// The heads of range_spaces_closed.onsa with the spaces round the range symbol written in every other way:
+// a space on one side only, two spaces, a tab (§2.5). The language reads all of them (`mode = "parse"`),
+// and `onsa fmt` writes one space on each side. The file is not canonical on purpose (`canonical = false`).
+
+use std.array
+
+const N: U32 = 3
+
+pub fn sum_to(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 1 ..=n {
+    t = t + i
+  }
+  t
+}
+
+pub fn sum_inside(lo: U32, hi: U32) -> U32 {
+  var t: U32 = 0
+  for i in lo + 1..= hi - 1 {
+    t = t + i
+  }
+  t
+}
+
+pub fn sum_scaled(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in n * 2  ..=  n * 2 + 3 {
+    t = t + i
+  }
+  t
+}
+
+pub fn count_pairs(n: U32) -> U32 {
+  var c: U32 = 0
+  for i in 0	..=	n {
+    for _ in 0 ..=  i {
+      c = c + 1
+    }
+  }
+  c
+}
+
+pub fn sum_signed() -> I32 {
+  var t: I32 = 0
+  for i in -2  ..= 2 {
+    t = t + i
+  }
+  t
+}
+
+pub fn mixed_with_half_open(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..=n {
+    for j in 0..< i + 1 {
+      t = t + j
+    }
+  }
+  t
+}
+
+pub fn in_an_anonymous_function() -> [U32; 4] {
+  array.from_fn(fn(i: U32) -> U32 {
+    var t: U32 = 0
+    for j in 0  ..=  i + 1 {
+      t = t + j
+    }
+    t
+  })
+}
+
+pub fn in_a_branch(c: Bool, n: U32) -> U32 {
+  var t: U32 = 0
+  if c {
+    for i in 1	..=	n - 1 {
+      t = t + i
+    }
+  } else {
+    t = 100
+  }
+  t
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..=  3 {
+    x * i.round_f32()
+  }
+}
+
+pub flow in_a_par_over_a_const(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 2  ..= N {
+    x * i.round_f32()
+  }
+}

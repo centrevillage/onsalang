@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§18.2"]
+
+// Only `let` and `var` lines are in a column of `=` (docs/onsa-tools.md §3.2, S-07, S-89): the closed list
+// of the rule has no `const`, so the `=` of consecutive `const` items keep one space on each side. The file
+// is canonical, so `onsa fmt` leaves it unchanged. Every value below is worked out by hand from the spec text.
+
+const RATE: U32 = 48000
+const A: U32 = 4
+pub const LONGER_NAME: F32 = 0.5
+const COUNT: U32 = 3
+
+fn total() -> U32 {
+  let two_rates = RATE * 2
+  let a_count   = A * COUNT
+  two_rates + a_count
+}
+
+test "constants in a row" {
+  assert total() == 96012
+  assert LONGER_NAME == 0.5
+}

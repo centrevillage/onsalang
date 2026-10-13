@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§4.7", "§18.2"]
+
+// The one spelling of a number that `onsa fmt` writes (docs/onsa-tools.md §3.2, S-62, S-126): the prefix
+// `0x` `0b` and the exponent `e` are in small letters, the exponent has no `+`, the digits of a hexadecimal
+// are in capitals, a `_` stands between two digits and only one at a time, and a float has no zeros in front
+// of its integer part except the digit itself. A spelling that is not changed stays: the zeros in front of an
+// exponent (`1e03`) and in front of a hexadecimal (`0x00FF`), the zeros at the end of a fraction (`1.500`),
+// the `e` that is a digit of a hexadecimal (`0x1E3` is 483, not a float). The file is canonical, so `onsa fmt`
+// leaves it unchanged; the same numbers in the other spellings are in lex/numeric_spellings.onsa,
+// lex/numeric_spellings_places.onsa and fmt/numeric_spellings_more.onsa. Every value below is worked out by hand
+// from the spec text.
+
+test "the integers in the spelling of fmt" {
+  let a: I32 = 0xFF
+  assert a == 255
+  let b: I32 = 0b1010
+  assert b == 10
+  let c: I32 = 1_000
+  assert c == 1000
+  let d: U32 = 0xDEAD_BEEF
+  assert d == 3735928559
+  let e: I32 = 1_0_0
+  assert e == 100
+  let f: I32 = 0x1_F
+  assert f == 31
+  let g: I32 = 0
+  assert g == 0
+  let h: I32 = 0x0
+  assert h == 0
+  let i: I32 = 0b0
+  assert i == 0
+}
+
+test "the e of a hexadecimal is a digit, in a capital" {
+  let a: I32 = 0x1E3
+  assert a == 483
+  let b: I32 = 0xE
+  assert b == 14
+  let c: I32 = 0xE + 1
+  assert c == 15
+  let d: I32 = 0xABCDEF
+  assert d == 11259375
+}
+
+test "the zeros that stay in front of a hexadecimal and a binary number" {
+  let a: I32 = 0x00FF
+  assert a == 255
+  let b: I32 = 0x0000_00FF
+  assert b == 255
+  let c: I32 = 0b0101
+  assert c == 5
+}
+
+test "the floats in the spelling of fmt" {
+  let a: F32 = 1e3
+  assert a == 1000.0
+  let b: F32 = 2.5e2
+  assert b == 250.0
+  let c: F32 = 2.5e0
+  assert c == 2.5
+  let d: F32 = 1e-3
+  assert d == 0.001
+  let e: F32 = 0e0
+  assert e == 0.0
+  let f: F32 = 1e2
+  assert f == 100.0
+  let g: F32 = 1.5
+  assert g == 1.5
+  let h: F32 = 10.0
+  assert h == 10.0
+  let i: F32 = 1_0.0_5
+  assert i == 10.05
+  let j: F32 = 1e1_0
+  assert j == 10000000000.0
+}
+
+test "the zeros that stay in a float" {
+  // The zeros in front of the exponent and at the end of the fraction are not part of the rule.
+  let a: F32 = 1e03
+  assert a == 1000.0
+  let b: F32 = 1e-03
+  assert b == 0.001
+  let c: F32 = 1.0e03
+  assert c == 1000.0
+  let d: F32 = 1.500
+  assert d == 1.5
+  let e: F32 = 0.50
+  assert e == 0.5
+  let f: F32 = 0.0
+  assert f == 0.0
+}
+
+test "a minus in front of a number" {
+  let a: I8 = -0x80
+  assert a == I8.MIN
+  let b: F32 = -1e3
+  assert b == -1000.0
+  let c: I32 = -1_0
+  assert c == -10
+}
+
+test "the numbers in the length of an array" {
+  let a: [F32; 0x4] = [0.0; 0b100]
+  let b: [U32; 1_0] = [0x1F; 1_0]
+  assert a[3] == 0.0
+  assert b[9] == 31
+}

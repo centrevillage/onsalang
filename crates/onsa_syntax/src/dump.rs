@@ -1,11 +1,13 @@
-//! Compact S-expression printer of the AST, for tests and `onsa dump --ast`.
+//! Compact S-expression printer of the AST, for tests and `onsa dump --ast`
+//! ([`dump`]), and for the comparison of `diff --ast` (the other functions,
+//! `docs/onsa-tools.md` §3.5), which writes a float literal by its value.
 
 use std::fmt::Write;
 
 use crate::ast::*;
 
 pub fn dump(ast: &Ast) -> String {
-    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    let mut d = Dumper { ast, out: String::new(), indent: 0, floats: Floats::Text };
     for &item in &ast.root {
         d.item(item);
         d.out.push('\n');
@@ -15,39 +17,55 @@ pub fn dump(ast: &Ast) -> String {
 
 /// One item, without a trailing newline (used by `diff --ast`).
 pub fn dump_item(ast: &Ast, id: ItemId) -> String {
-    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    let mut d = Dumper::compare(ast);
     d.item(id);
     d.out
 }
 
 /// One statement (used by `diff --ast` to locate the first change in a body).
 pub fn dump_stmt(ast: &Ast, id: StmtId) -> String {
-    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    let mut d = Dumper::compare(ast);
     d.stmt(id);
     d.out
 }
 
 /// One expression.
 pub fn dump_expr(ast: &Ast, id: ExprId) -> String {
-    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    let mut d = Dumper::compare(ast);
     d.expr(id);
     d.out
 }
 
 /// One type.
 pub fn dump_type(ast: &Ast, id: TypeId) -> String {
-    let mut d = Dumper { ast, out: String::new(), indent: 0 };
+    let mut d = Dumper::compare(ast);
     d.ty(id);
     d.out
+}
+
+/// How a dump writes a float literal: its text (`1.0e3`, the dump of the
+/// tests and of `onsa dump --ast`), or its exact value, one for every
+/// spelling of it (`docs/onsa-tools.md` §3.5, [`crate::literal::float_key`]).
+/// An integer is written by its value in both.
+#[derive(Clone, Copy)]
+enum Floats {
+    Text,
+    Value,
 }
 
 struct Dumper<'a> {
     ast: &'a Ast,
     out: String,
     indent: usize,
+    floats: Floats,
 }
 
-impl Dumper<'_> {
+impl<'a> Dumper<'a> {
+    /// The dump of the comparison of `diff --ast`.
+    fn compare(ast: &'a Ast) -> Self {
+        Dumper { ast, out: String::new(), indent: 0, floats: Floats::Value }
+    }
+
     fn line(&mut self) {
         self.out.push('\n');
         for _ in 0..self.indent {
@@ -468,7 +486,10 @@ impl Dumper<'_> {
             Lit::Int { value, .. } => {
                 let _ = write!(self.out, "{value}");
             }
-            Lit::Float { text } => self.out.push_str(text),
+            Lit::Float { text } => match self.floats {
+                Floats::Text => self.out.push_str(text),
+                Floats::Value => self.out.push_str(&crate::literal::float_key(text)),
+            },
             Lit::Char(c) => {
                 let _ = write!(self.out, "'{}'", c.escape_default());
             }

@@ -8,8 +8,78 @@
 use onsa_diag::FileId;
 
 use crate::literal::{
-    Base, FloatRange, FloatWidth, Form, Invalid, Point, float_value, int_value, number, point_after_int,
+    Base, FloatRange, FloatWidth, Form, Invalid, Point, canonical_number, float_key, float_value, int_value, number,
+    point_after_int,
 };
+
+#[test]
+fn the_canonical_spelling_of_each_number() {
+    // `docs/onsa-tools.md` §3.2 (S-62, S-126): each rule of the closed list, and what stays.
+    let cases = [
+        ("0X1f", "0x1F"),
+        ("0xff_ff", "0xFF_FF"),
+        ("0x_1F", "0x1F"),
+        ("0x001F", "0x001F"),
+        ("0B1__0_", "0b1_0"),
+        ("1__000", "1_000"),
+        ("1_", "1"),
+        ("0", "0"),
+        ("42", "42"),
+        ("1E3", "1e3"),
+        ("1e+3", "1e3"),
+        ("1E+0_3", "1e0_3"),
+        ("1e-03", "1e-03"),
+        ("1e_3", "1e3"),
+        ("01.5", "1.5"),
+        ("00.5", "0.5"),
+        ("0_0_1_000.0", "1_000.0"),
+        ("1.50", "1.50"),
+        ("1_.5_", "1.5"),
+        ("1.0_e_3", "1.0e3"),
+        ("0.0", "0.0"),
+    ];
+    for (text, want) in cases {
+        assert_eq!(canonical_number(text).as_deref(), Some(want), "{text}");
+        // Idempotent, and the same token.
+        assert_eq!(canonical_number(want).as_deref(), Some(want), "{want}");
+        assert_eq!(number(want).form, number(text).form, "{text}");
+    }
+    for text in ["0o17", "017", "1u8", "1.", "1.e3", "0x", "", "t", "1e3x"] {
+        assert_eq!(canonical_number(text), None, "{text}");
+    }
+}
+
+#[test]
+fn the_key_of_a_float_is_its_exact_value() {
+    // `docs/onsa-tools.md` §3.5: every spelling of a value has one key.
+    for text in ["1.0e3", "1000.0", "1_000.0", "10e2", "1E+3", "01000.000", "0.001e6", "1e0_3"] {
+        assert_eq!(float_key(text), "1e3", "{text}");
+    }
+    for (text, want) in [("0.0", "0e0"), ("00.000e-9", "0e0"), ("2.5e-7", "25e-8"), ("0.1", "1e-1"), ("120.0", "12e1")]
+    {
+        assert_eq!(float_key(text), want, "{text}");
+    }
+    // An exponent of any length: the spellings of one value have one key (no machine integer
+    // overflows), and two values two keys.
+    let big = "170141183460469231731687303715884105728"; // 2^127, one more than `i128::MAX`
+    assert_eq!(float_key(&format!("1e{big}")), float_key(&format!("1E+{big}")));
+    assert_eq!(float_key(&format!("1e{big}")), format!("1e{big}"));
+    assert_eq!(float_key(&format!("0.5E-{big}")), float_key("5e-170141183460469231731687303715884105729"));
+    assert_eq!(float_key(&format!("0.5E-{big}")), "5e-170141183460469231731687303715884105729");
+    assert_ne!(float_key(&format!("1e{big}")), float_key("1e170141183460469231731687303715884105729"));
+    assert_eq!(
+        float_key("10e99999999999999999999999999999999999999999"),
+        float_key("1e1_00000000000000000000000000000000000000000")
+    );
+    assert_eq!(float_key("100.0e-1"), "1e1");
+    assert_eq!(float_key("0.01e1"), "1e-1");
+    assert_eq!(float_key("1.5e-0"), "15e-1");
+    // A float whose power of ten is 0 is no integer: `1.0` is `1e0`, the integer `1` is `1`.
+    assert_eq!(float_key("1.0"), "1e0");
+    // Two values a rounding to `f64` would make one keep two keys.
+    assert_ne!(float_key("1.0"), float_key("1.00000000000000000001"));
+    assert_ne!(float_key("0.1"), float_key("0.1000000000000000055511151231257827"));
+}
 
 #[test]
 fn the_form_of_each_number() {

@@ -132,13 +132,6 @@ note = "関数値の呼び出し .( の例。構文は W3-20、写しは W3-13 �
 
 [[pending]]
 kind = "spec-example"
-target = "§5.1 837afdf0: let x: I32 = 1 // 不変"
-reasons = ["S-89"]
-until = "W3-13"
-note = "= の整列（型注釈で列を切らない）。写し values/bind.onsa は今の fmt の形"
-
-[[pending]]
-kind = "spec-example"
 target = "§6.2 b9d1a51c: use std.math.{sqrt}"
 reasons = ["S-45"]
 until = "W3-13"
@@ -146,10 +139,10 @@ note = "Point.norm の積和の括弧。写し fn/methods.onsa は括弧付き"
 
 [[pending]]
 kind = "spec-example"
-target = "§11.5 05f67d5d: use std.math.{sum}"
+target = "§11.5 d5cd462a: use std.math.{sum}"
 reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
-note = "std.math.sum、積和の括弧。写し flow/unison.onsa は std.dsp.sum（範囲は W3-18 で 0..<UNISON に書き換えた）"
+note = "std.math.sum、積和の括弧。写し flow/unison.onsa は std.dsp.sum（範囲は W3-18 で 0..<UNISON に、W3-11 で 0 ..< UNISON に書き換えた）"
 
 [[pending]]
 kind = "spec-example"
@@ -165,13 +158,6 @@ reasons = ["S-102", "S-44", "S-29", "S-45", "S-43"]
 until = "W9-06"
 note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 で写しの examples/voice.onsa と一致した。積和の括弧（W3-13）が解けた後に残る差は @mem(bulk) の let だけで、@mem の意味（W9-06）まで E0200（W3-08 の決定）"
 
-
-[[pending]]
-kind = "spec-example"
-target = "§17.4 51ad3151: use std.fs.{Fs, Path, IoError}"
-reasons = ["S-89"]
-until = "W3-13"
-note = "render_vowel の = の整列。写し examples/render_vowel.onsa は今の fmt の形"
 
 # --- 否定例が 3 件に届かない診断コード（K-13。照合は tools/diag_codes.py、W1-02）
 # 規則 1: コードの規則を作るか変える W の作業（複数なら最後に仕上げる作業）
@@ -1880,20 +1866,6 @@ target = "tests/spec/packages/interp_path_modules"
 reasons = ["S-90", "R-102"]
 until = "W4-04"
 note = "修飾した名前の穴 {cfg.N}、{kp.clock.TICKS} の解決（字句と構文は W3-04）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/lex/numeric_spellings.onsa"
-reasons = ["S-62", "R-73"]
-until = "W3-11"
-note = "canonical = false の正例。字句は W3-05 で通り、fmt が綴りを揃えるのは W3-11（今は fmt が何も変えず、器が canonical = false を誤りにする）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/lex/numeric_spellings_places.onsa"
-reasons = ["S-62", "R-73"]
-until = "W3-11"
-note = "canonical = false の正例。字句は W3-05 で通り、fmt が綴りを揃えるのは W3-11（今は fmt が何も変えず、器が canonical = false を誤りにする）"
 
 [[pending]]
 kind = "test-case"

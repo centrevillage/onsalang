@@ -4,8 +4,11 @@
 //! kept; everything else (spacing, indentation, trailing commas, alignment
 //! of `=` in `let` runs and of trailing comments) is normalized.
 
+mod align;
+
 use onsa_diag::Span;
 
+use self::align::LetMark;
 use crate::ast::*;
 use crate::lexer::BLANKS;
 use crate::parser::Parsed;
@@ -36,9 +39,10 @@ pub fn format(parsed: &Parsed, text: &str) -> Option<String> {
         line_idx: 0,
         let_marks: Vec::new(),
         comment_marks: Vec::new(),
+        one_line_block: false,
     };
     f.file();
-    Some(f.finish())
+    Some(align::finish(f.out, f.let_marks, f.comment_marks))
 }
 
 /// One element of a delimited list: its source span and how to print it.
@@ -54,10 +58,14 @@ struct Fmt<'a> {
     indent: usize,
     /// Number of `\n` written so far (index of the current output line).
     line_idx: usize,
-    /// `(line, column of ` = `)` for single-line `let` / `var` without annotation (S-07).
-    let_marks: Vec<(usize, usize)>,
+    /// The ` = ` of the single-line `let` and `var` statements (S-07, S-89).
+    let_marks: Vec<LetMark>,
     /// `(line, comment text, author's column)` for trailing comments (S-07).
     comment_marks: Vec<(usize, String, usize)>,
+    /// Whether the statements being printed are in a one-line block
+    /// (`{ let a = 1 }`): a `let` there is on the line of the head and in no
+    /// column of `=` (S-509).
+    one_line_block: bool,
 }
 
 impl<'a> Fmt<'a> {
@@ -833,6 +841,8 @@ impl<'a> Fmt<'a> {
             return;
         }
         if self.line_of(open) == self.line_of(close) {
+            // Every block inside is on this line too, so the flag holds until the `}`.
+            let outer = std::mem::replace(&mut self.one_line_block, true);
             self.push("{ ");
             for &s in &stmts {
                 self.stmt(s);
@@ -844,6 +854,7 @@ impl<'a> Fmt<'a> {
             }
             self.trim_line_end();
             self.push(" }");
+            self.one_line_block = outer;
             return;
         }
         self.push("{");
@@ -881,6 +892,16 @@ impl<'a> Fmt<'a> {
         self.push("}");
     }
 
+    /// Record the ` = ` at `col` of a `let` or `var` that started on `line`,
+    /// when the statement ended on that line in a multi-line block (S-07,
+    /// S-89, S-509): the `=` of a multi-line statement is not aligned, as the
+    /// columns of its continuation lines are already set.
+    fn let_mark(&mut self, line: usize, col: usize) {
+        if !self.one_line_block && self.line_idx == line {
+            self.let_marks.push(LetMark { line, col });
+        }
+    }
+
     fn trim_line_end(&mut self) {
         while self.out.ends_with(' ') {
             self.out.pop();
@@ -907,8 +928,8 @@ impl<'a> Fmt<'a> {
                 self.push(" = ");
                 self.expr(*init);
                 // A `let` with an attribute cuts the column of the `=` (`docs/onsa-tools.md` §3.2).
-                if ty.is_none() && attrs.is_empty() && self.line_idx == line {
-                    self.let_marks.push((line, col));
+                if attrs.is_empty() {
+                    self.let_mark(line, col);
                 }
             }
             StmtKind::Var { name, ty, init } => {
@@ -922,9 +943,7 @@ impl<'a> Fmt<'a> {
                 let col = self.cur_col();
                 self.push(" = ");
                 self.expr(*init);
-                if ty.is_none() && self.line_idx == line {
-                    self.let_marks.push((line, col));
-                }
+                self.let_mark(line, col);
             }
             StmtKind::Assign { target, value } => {
                 self.expr(*target);
@@ -971,7 +990,7 @@ impl<'a> Fmt<'a> {
         let e = self.ast.expr(id);
         match &e.kind {
             ExprKind::Lit(l) => match l {
-                Lit::Int { text, .. } | Lit::Float { text } => self.push(text),
+                Lit::Int { text, .. } | Lit::Float { text } => self.number(text, e.span),
                 Lit::Bool(b) => self.push(if *b { "true" } else { "false" }),
                 Lit::Char(_) => self.push(self.src(e.span)),
                 Lit::Str(s) => self.push(self.src(s.span)),
@@ -1200,14 +1219,23 @@ impl<'a> Fmt<'a> {
         }
     }
 
-    /// A range: the canonical form of the spec's examples, with no space
-    /// around the symbol (`0..<n + 1`, §3.1).
-    // SPEC-GAP(S-334): the spec and onsa-tools.md §3.2 do not say the spaces
-    // around the symbol, nor a break after it.
+    /// A range, with one space on each side of the symbol (`0 ..< n + 1`,
+    /// `docs/onsa-tools.md` §3.2, S-334).
     fn range(&mut self, r: &RangeHead) {
         self.expr(r.lo);
+        self.push(" ");
         self.push(r.end.symbol());
+        self.push(" ");
         self.expr(r.hi);
+    }
+
+    /// A number token in its canonical spelling (`docs/onsa-tools.md` §3.2,
+    /// S-62, S-126): only its text changes, not the tree.
+    fn number(&mut self, text: &str, span: Span) {
+        match crate::literal::canonical_number(text) {
+            Some(canonical) => self.push(&canonical),
+            None => onsa_diag::internal::bug(Some(span), "fmt met a number a syntax error left unread"),
+        }
     }
 
     /// A method chain continued on the next line with a leading `.` (§2.5).
@@ -1253,13 +1281,19 @@ impl<'a> Fmt<'a> {
         match &p.kind {
             PatKind::Wild => self.push("_"),
             PatKind::Bind(id) => self.push(&id.name),
+            PatKind::Lit(Lit::Int { .. } | Lit::Float { .. }) => self.number(self.src(p.span), p.span),
             PatKind::Lit(_) => self.push(self.src(p.span)),
             // `-1`, `-(1)`: the parentheses are kept and the spaces between the tokens dropped,
             // as for the same expression (S-185). A comment inside is emitted once by the
             // comment points, like a comment inside the expression `-( // c` `1)`.
             PatKind::Neg(_) => {
                 let packed = code_only(self.src(p.span));
-                self.push(&packed);
+                // The number, between the `-` and the parentheses around it.
+                let start = packed.find(|c: char| c.is_ascii_digit()).unwrap_or(packed.len());
+                let end = packed[start..].find(')').map_or(packed.len(), |i| start + i);
+                self.push(&packed[..start]);
+                self.number(&packed[start..end], p.span);
+                self.push(&packed[end..]);
             }
             PatKind::Path(path) => self.path(path),
             PatKind::TupleStruct { path, elems } => {
@@ -1308,73 +1342,6 @@ impl<'a> Fmt<'a> {
                 }
             }
         }
-    }
-
-    // ------------------------------------------------------------ alignment (S-07)
-
-    fn finish(mut self) -> String {
-        while self.out.ends_with(' ') || self.out.ends_with('\n') {
-            self.out.pop();
-        }
-        let mut lines: Vec<String> = self.out.split('\n').map(|l| l.trim_end_matches(BLANKS).to_string()).collect();
-
-        // Align ` = ` in runs of consecutive single-line `let` / `var`.
-        self.let_marks.sort();
-        let mut i = 0;
-        while i < self.let_marks.len() {
-            let mut j = i;
-            while j + 1 < self.let_marks.len() && self.let_marks[j + 1].0 == self.let_marks[j].0 + 1 {
-                j += 1;
-            }
-            // Every run is aligned (gofmt style, S-07): the canonical form does not depend
-            // on what the author wrote.
-            let max = self.let_marks[i..=j].iter().map(|m| m.1).max().unwrap_or(0);
-            for &(line, col) in &self.let_marks[i..=j] {
-                if col < max {
-                    let l = &lines[line];
-                    let byte = l.char_indices().nth(col).map(|(b, _)| b).unwrap_or(l.len());
-                    let mut s = l[..byte].to_string();
-                    s.extend(std::iter::repeat_n(' ', max - col));
-                    s.push_str(&l[byte..]);
-                    lines[line] = s;
-                }
-            }
-            i = j + 1;
-        }
-
-        // Align trailing comments in runs of consecutive lines: exactly one space after the
-        // longest code of the run (gofmt style, S-07).
-        self.comment_marks.sort_by_key(|m| m.0);
-        let mut i = 0;
-        while i < self.comment_marks.len() {
-            let mut j = i;
-            while j + 1 < self.comment_marks.len() && self.comment_marks[j + 1].0 == self.comment_marks[j].0 + 1 {
-                j += 1;
-            }
-            let run = &self.comment_marks[i..=j];
-            let code_of = |lines: &[String], m: &(usize, String, usize)| -> String {
-                let l = &lines[m.0];
-                l[..l.len() - m.1.len()].trim_end_matches(BLANKS).to_string()
-            };
-            let longest = run.iter().map(|m| code_of(&lines, m).chars().count()).max().unwrap_or(0);
-            let col = longest + 1;
-            for m in run {
-                let code = code_of(&lines, m);
-                let width = code.chars().count();
-                let mut s = code;
-                s.extend(std::iter::repeat_n(' ', col - width));
-                s.push_str(&m.1);
-                lines[m.0] = s;
-            }
-            i = j + 1;
-        }
-
-        let mut out = lines.join("\n");
-        if out.is_empty() {
-            return out;
-        }
-        out.push('\n');
-        out
     }
 }
 
@@ -1572,10 +1539,44 @@ mod tests {
         );
         // Canonical regardless of the author's spacing (S-07).
         assert_eq!(fmt("fn f() {\n  let st = 1\n  let t = 2\n}"), "fn f() {\n  let st = 1\n  let t  = 2\n}\n");
-        // Annotated bindings and other statements break a run.
+        // Annotated bindings, patterns and `var` are in the run (S-89); a line of comments
+        // does not cut it (S-122).
         assert_eq!(
-            fmt("fn f() {\n  let r  = 1\n  let x: I32 = 2\n  let y1 = 3\n}"),
-            "fn f() {\n  let r = 1\n  let x: I32 = 2\n  let y1 = 3\n}\n"
+            fmt("fn f(t: (I32, I32)) {\n  let r  = 1\n  let x: I32 = 2\n  // c\n  var y1 = 3\n  let (a, b) = t\n}"),
+            "fn f(t: (I32, I32)) {\n  let r      = 1\n  let x: I32 = 2\n  // c\n  var y1     = 3\n  let (a, b) = t\n}\n"
+        );
+        // A blank line, another statement, a multi-line statement and a `let` with an
+        // attribute cut it (S-122).
+        let cut = "fn f() {\n  let a = 1\n\n  let bb = 2\n  g()\n  let ccc = 3\n  let d = h(1,\n            2)\n  let eeee = 4\n  @mem(bulk) let ff = 5\n  let g = 6\n}\n";
+        assert_eq!(fmt(cut), cut);
+        // The statements of other blocks are in no run with these.
+        let blocks = "fn f(c: Bool) {\n  let a = 1\n  if c { let bbb = 2 }\n  let cc = {\n    let dddd = 3\n    dddd\n  }\n}\nfn g() { let eeeee = 4 }\nfn h() { let f = 5 }\n";
+        assert_eq!(fmt(blocks), blocks);
+        // A run aligns again to the same text (idempotence).
+        let once = fmt("fn f() {\n  let a: I32 = 1\n  // c\n  let bb = 2\n}");
+        assert_eq!(once, "fn f() {\n  let a: I32 = 1\n  // c\n  let bb     = 2\n}\n");
+        assert_eq!(fmt(&once), once);
+    }
+
+    #[test]
+    fn ranges_have_a_space_on_each_side() {
+        assert_eq!(
+            fmt("fn f(n: I32) {\n  for i in 0..<n+1 {}\n  par j in n-1..=n { g() }\n}"),
+            "fn f(n: I32) {\n  for i in 0 ..< n + 1 {}\n  par j in n - 1 ..= n { g() }\n}\n"
+        );
+    }
+
+    #[test]
+    fn numbers_take_their_canonical_spelling() {
+        assert_eq!(
+            fmt("fn f() {\n  let a = 0X1f_ + 0B1__0 + 1__000_\n  let b = 01.50E+03 + 1e_0_3 + 2.5E-0_7\n  t.0\n}"),
+            "fn f() {\n  let a = 0x1F + 0b1_0 + 1_000\n  let b = 1.50e03 + 1e0_3 + 2.5e-0_7\n  t.0\n}\n"
+        );
+        assert_eq!(
+            fmt(
+                "fn f(x: I32) -> I32 {\n  match x {\n    0X1f => 1,\n    (1_) => 2,\n    -( 0b1_ ) => 3,\n    -1__0 => 4,\n    _ => 0,\n  }\n}"
+            ),
+            "fn f(x: I32) -> I32 {\n  match x {\n    0x1F => 1,\n    (1) => 2,\n    -(0b1) => 3,\n    -1_0 => 4,\n    _ => 0,\n  }\n}\n"
         );
     }
 

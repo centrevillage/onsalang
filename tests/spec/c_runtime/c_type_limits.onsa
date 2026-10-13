@@ -474,7 +474,7 @@ pub fn lim_i64(x: I64) -> U32 {
 }
 
 pub fn lim_wide_u8(x: U8) -> U32 {
-  let w = x as I32
+  let w      = x as I32
   var m: U32 = 0
   if w >= 0 {
     m = m + 1
@@ -492,7 +492,7 @@ pub fn lim_wide_u8(x: U8) -> U32 {
 }
 
 pub fn lim_wide_u16(x: U16) -> U32 {
-  let w = x as I32
+  let w      = x as I32
   var m: U32 = 0
   if w >= 0 {
     m = m + 1
@@ -510,7 +510,7 @@ pub fn lim_wide_u16(x: U16) -> U32 {
 }
 
 pub fn lim_wide_u32(x: U32) -> U32 {
-  let w = x as I64
+  let w      = x as I64
   var m: U32 = 0
   if w >= 0 {
     m = m + 1
@@ -528,7 +528,7 @@ pub fn lim_wide_u32(x: U32) -> U32 {
 }
 
 pub fn lim_wide_i8(x: I8) -> U32 {
-  let w = x as I32
+  let w      = x as I32
   var m: U32 = 0
   if w >= -128 {
     m = m + 1
@@ -546,7 +546,7 @@ pub fn lim_wide_i8(x: I8) -> U32 {
 }
 
 pub fn lim_wide_i16(x: I16) -> U32 {
-  let w = x as I32
+  let w      = x as I32
   var m: U32 = 0
   if w >= -32768 {
     m = m + 1
@@ -564,7 +564,7 @@ pub fn lim_wide_i16(x: I16) -> U32 {
 }
 
 pub fn lim_wide_i32(x: I32) -> U32 {
-  let w = x as I64
+  let w      = x as I64
   var m: U32 = 0
   if w >= -2147483648 {
     m = m + 1

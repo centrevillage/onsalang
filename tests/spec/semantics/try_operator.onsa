@@ -148,16 +148,16 @@ test "? leaves the loop and the function at the first Err" {
 }
 
 test "? on Option returns None early" {
-  var calls: U32 = 0
-  let a = quarter_counted(inout calls, 12)
+  var calls: U32          = 0
+  let a                   = quarter_counted(inout calls, 12)
   let want_a: Option[I32] = Some(3)
   assert a == want_a
   assert calls == 2
-  let b = quarter_counted(inout calls, 7)
+  let b                   = quarter_counted(inout calls, 7)
   let want_b: Option[I32] = None
   assert b == want_b
   assert calls == 3
-  let c = quarter(6)
+  let c                   = quarter(6)
   let want_c: Option[I32] = None
   assert c == want_c
 }
@@ -169,7 +169,7 @@ fn tabulate(base: U32) -> [U32; 4] {
 }
 
 test "a closure captures an outer value by copy" {
-  let k: F32 = 2.0
+  let k: F32       = 2.0
   let xs: [F32; 4] = array.from_fn(fn(i) { k * i.round_f32() })
   assert xs[0] == 0.0
   assert xs[1] == 2.0
@@ -178,8 +178,8 @@ test "a closure captures an outer value by copy" {
 }
 
 test "a closure may capture several values and fields" {
-  let p = Pos { row: 3, col: 5 }
-  let off: U32 = 10
+  let p            = Pos { row: 3, col: 5 }
+  let off: U32     = 10
   let xs: [U32; 3] = array.from_fn(fn(i) { p.row + p.col + off + i })
   assert xs[0] == 18
   assert xs[1] == 19
@@ -194,7 +194,7 @@ test "a closure inside a function captures that function's parameter" {
 
 test "a closure built in a loop captures the loop variable" {
   var total: U32 = 0
-  for n in 1..<4 {
+  for n in 1 ..< 4 {
     let xs: [U32; 3] = array.from_fn(fn(i) { n + i })
     total = total + xs[2]
   }

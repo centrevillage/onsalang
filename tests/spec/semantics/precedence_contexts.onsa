@@ -146,7 +146,7 @@ test "a closure" {
   assert a[1] == 2
   assert a[2] == 5
   assert a[3] == 10
-  let k: U32 = 3
+  let k: U32      = 3
   let b: [U32; 4] = array.from_fn(fn(i) { (i + k) % 2 })
   assert b[0] == 1
   assert b[1] == 0
@@ -167,9 +167,9 @@ test "the guard of a match arm" {
 }
 
 test "the condition of an if and of a while" {
-  let a: I32 = 3
-  let b: I32 = 4
-  let r: I32 = 5
+  let a: I32    = 3
+  let b: I32    = 4
+  let r: I32    = 5
   let on_circle = if a * a + b * b == r * r { 1 } else { 0 }
   assert on_circle == 1
   let inside = if a * a + b * b < r * r - 1 { 1 } else { 2 }
@@ -180,20 +180,20 @@ test "the condition of an if and of a while" {
 
 test "the ends of a for range" {
   var count: U32 = 0
-  let n: U32 = 3
-  for _ in 0..<n * 2 + 1 {
+  let n: U32     = 3
+  for _ in 0 ..< n * 2 + 1 {
     count = count + 1
   }
   assert count == 7
   var sum: U32 = 0
-  let lo: U32 = 2
-  let hi: U32 = 6
-  for i in lo + 1..<hi {
+  let lo: U32  = 2
+  let hi: U32  = 6
+  for i in lo + 1 ..< hi {
     sum = sum + i
   }
   assert sum == 12 // 3 + 4 + 5
   var steps: U32 = 0
-  for i in hi % 4..<hi + 1 {
+  for i in hi % 4 ..< hi + 1 {
     steps = steps + i
   }
   assert steps == 20 // 2 + 3 + 4 + 5 + 6
@@ -209,14 +209,14 @@ test "a struct literal, a tuple, an array and an index" {
   let xs: [I32; 2] = [2 * 3 + 1, 4 - 2 * 1]
   assert xs[0] + xs[1] * 2 == 11 // 7 + 4
   let ys: [I32; 5] = [10, 20, 30, 40, 50]
-  let i: U32 = 1
+  let i: U32       = 1
   assert ys[i * 2 + 1] == 40
   assert ys[i * 3 - 1] == 30
 }
 
 test "an if in parentheses as an operand" {
   let x: I32 = 3
-  let r = (if x > 2 { 10 } else { 20 }) * 2 + 1
+  let r      = (if x > 2 { 10 } else { 20 }) * 2 + 1
   assert r == 21
   let s = 1 + (if x > 5 { 10 } else { 20 }) * 2
   assert s == 41

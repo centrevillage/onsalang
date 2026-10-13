@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.4", "§7", "§18.2"]
+
+// The spelling of fmt (fmt/numeric_canonical.onsa) in the patterns of a `match`: a literal, a literal with a
+// minus, the literals of a choice and a literal inside an enumerator (docs/onsa-tools.md §3.2, S-62, S-126).
+// The file is canonical, so `onsa fmt` leaves it unchanged. Only the syntax is read here (`mode = "parse"`):
+// a `match` on a literal is not lowered in this version (E0200), so the file cannot run in a mode that
+// checks. The same patterns in the other spellings are in fmt/numeric_spellings_patterns.onsa.
+
+pub fn classify(v: I32) -> I32 {
+  match v {
+    0x1F => 1,
+    -0x10 => 2,
+    1_000 => 3,
+    0xA | 0xB => 4,
+    0b101 => 5,
+    _ => 0,
+  }
+}
+
+pub fn in_an_enumerator(o: Option[U32]) -> U32 {
+  match o {
+    Some(0xFF) => 1,
+    Some(1_0) => 2,
+    Some(_) => 3,
+    None => 0,
+  }
+}
+
+pub fn in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (0x1F, -1_0) => 1,
+    (_, 0b11) => 2,
+    _ => 0,
+  }
+}

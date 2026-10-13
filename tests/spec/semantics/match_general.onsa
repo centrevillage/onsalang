@@ -199,7 +199,7 @@ fn tick(inout log: U32, d: U32) -> U32 {
 
 test "guards run in arm order and only for arms whose pattern matched" {
   var log: U32 = 0
-  let n: I32 = 5
+  let n: I32   = 5
   let r = match n {
     0 if probe(inout log, 1, true) => 10,
     5 if probe(inout log, 2, false) => 20,
@@ -213,7 +213,7 @@ test "guards run in arm order and only for arms whose pattern matched" {
 
 test "only the taken arm body is evaluated" {
   var log: U32 = 0
-  let n: U32 = 5
+  let n: U32   = 5
   let r = match n {
     1 => tick(inout log, 1),
     5 => tick(inout log, 2),

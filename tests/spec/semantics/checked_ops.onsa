@@ -33,8 +33,8 @@ test "checked_neg is None only for the minimum" {
 }
 
 test "checked_rem is None for a zero divisor and Some(0) for MIN % -1" {
-  let imax: I64 = I64.MAX
-  let imin: I64 = I64.MIN
+  let imax: I64      = I64.MAX
+  let imin: I64      = I64.MIN
   let minus_one: I64 = -1
   assert val(imin.checked_rem(minus_one), 7) == 0
   assert is_none(imax.checked_rem(0))
@@ -45,7 +45,7 @@ test "checked_rem is None for a zero divisor and Some(0) for MIN % -1" {
 }
 
 test "checked_div_euclid and checked_rem_euclid" {
-  let imin: I64 = I64.MIN
+  let imin: I64      = I64.MIN
   let minus_one: I64 = -1
   assert is_none(imin.checked_div_euclid(minus_one))
   assert val(imin.checked_rem_euclid(minus_one), 7) == 0
@@ -57,7 +57,7 @@ test "checked_div_euclid and checked_rem_euclid" {
 }
 
 test "checked_shl and checked_shr return None for an amount of 64 or more" {
-  let one: U64 = 1
+  let one: U64  = 1
   let umax: U64 = U64.MAX
   let imin: I64 = I64.MIN
   assert is_none(one.checked_shl(64))

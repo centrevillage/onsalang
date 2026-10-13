@@ -76,7 +76,7 @@ pub flow in_places(p: F32 at block, q: F32 at block, k: U32 at block, c: Bool at
   } else {
     q at sample
   }
-  let i = par j in 0..<4 {
+  let i = par j in 0 ..< 4 {
     saw~(p at block)
   }
   a

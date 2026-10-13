@@ -30,8 +30,8 @@ fn clear_channel(inout xs: [Span[F32]; 2], k: U32) {
 }
 
 fn ramp_all(inout xs: [Span[F32]; 2]) {
-  for k in 0..<2 {
-    for i in 0..<xs[k].len() {
+  for k in 0 ..< 2 {
+    for i in 0 ..< xs[k].len() {
       xs[k][i] = ((k * 10) + i).round_f32()
     }
   }
@@ -102,7 +102,7 @@ test "nested loops over inout [a, b] write each channel up to its own length" {
 }
 
 test "a part of a buffer is one channel of inout [a, b]" {
-  var a: [F32; 3] = [0.0; 3]
+  var a: [F32; 3]    = [0.0; 3]
   var long: [F32; 6] = [0.0; 6]
   fill_channel(inout [a, long.slice(2, 4)], 1, 4.0)
   assert long[1] == 0.0

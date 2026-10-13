@@ -42,7 +42,7 @@ impl Bounds {
 // A range in a generic function: the end is a const parameter, the start has a side effect.
 fn count_from[const N: U32](xs: [F32; N], inout log: U32, d: U32) -> U32 {
   var n: U32 = 0
-  for _ in tick(inout log, d)..<N {
+  for _ in tick(inout log, d) ..< N {
     n = n + 1
   }
   n
@@ -50,8 +50,8 @@ fn count_from[const N: U32](xs: [F32; N], inout log: U32, d: U32) -> U32 {
 
 test "the start is evaluated before the end, both once, before the first iteration" {
   var log: U32 = 0
-  var n: U32 = 0
-  for _ in tick(inout log, 1)..<tick(inout log, 4) {
+  var n: U32   = 0
+  for _ in tick(inout log, 1) ..< tick(inout log, 4) {
     n = n + 1
   }
   assert n == 3
@@ -59,9 +59,9 @@ test "the start is evaluated before the end, both once, before the first iterati
 }
 
 test "the ends are not evaluated again by later iterations" {
-  var log: U32 = 0
+  var log: U32  = 0
   var seen: U32 = 0
-  for i in tick(inout log, 1)..<tick(inout log, 3) {
+  for i in tick(inout log, 1) ..< tick(inout log, 3) {
     seen = (seen * 10) + i
   }
   // i runs over 1 and 2 only; the log has no third digit.
@@ -70,10 +70,10 @@ test "the ends are not evaluated again by later iterations" {
 }
 
 test "the start decides before the end: a start taken first leaves one iteration" {
-  var k: U32 = 0
-  var n: U32 = 0
+  var k: U32     = 0
+  var n: U32     = 0
   var first: U32 = 99
-  for i in next(inout k)..<next(inout k) {
+  for i in next(inout k) ..< next(inout k) {
     if n == 0 {
       first = i
     }
@@ -90,7 +90,7 @@ test "the start is read first even when the end changes what the start reads" {
   var c: U32 = 1
   var n: U32 = 0
   // the start reads c (1) before the end sets it to 4
-  for _ in c..<tick(inout c, 4) {
+  for _ in c ..< tick(inout c, 4) {
     n = n + 1
   }
   assert n == 3
@@ -99,8 +99,8 @@ test "the start is read first even when the end changes what the start reads" {
 
 test "a changed end variable does not change the number of iterations" {
   var hi: U32 = 3
-  var n: U32 = 0
-  for _ in 0..<hi {
+  var n: U32  = 0
+  for _ in 0 ..< hi {
     hi = hi + 1
     n = n + 1
   }
@@ -110,8 +110,8 @@ test "a changed end variable does not change the number of iterations" {
 
 test "an end lowered in the body does not stop the loop early" {
   var hi: U32 = 4
-  var n: U32 = 0
-  for _ in 0..<hi {
+  var n: U32  = 0
+  for _ in 0 ..< hi {
     hi = 1
     n = n + 1
   }
@@ -120,9 +120,9 @@ test "an end lowered in the body does not stop the loop early" {
 }
 
 test "a changed start variable does not change the iterations" {
-  var lo: U32 = 0
+  var lo: U32  = 0
   var sum: U32 = 0
-  for i in lo..<3 {
+  for i in lo ..< 3 {
     lo = 2
     sum = sum + i
   }
@@ -133,13 +133,13 @@ test "a changed start variable does not change the iterations" {
 
 test "an empty range still evaluates both ends, in order" {
   var log: U32 = 0
-  var n: U32 = 0
-  for _ in tick(inout log, 3)..<tick(inout log, 3) {
+  var n: U32   = 0
+  for _ in tick(inout log, 3) ..< tick(inout log, 3) {
     n = n + 1
   }
   assert n == 0
   assert log == 33
-  for _ in tick(inout log, 1)..<tick(inout log, 1) {
+  for _ in tick(inout log, 1) ..< tick(inout log, 1) {
     n = n + 1
   }
   assert log == 3311
@@ -148,9 +148,9 @@ test "an empty range still evaluates both ends, in order" {
 
 test "each execution of a loop evaluates its own ends once: nested loops" {
   var log: U32 = 0
-  var n: U32 = 0
-  for _ in 0..<2 {
-    for _ in tick(inout log, 1)..<tick(inout log, 2) {
+  var n: U32   = 0
+  for _ in 0 ..< 2 {
+    for _ in tick(inout log, 1) ..< tick(inout log, 2) {
       n = n + 1
     }
   }
@@ -161,9 +161,9 @@ test "each execution of a loop evaluates its own ends once: nested loops" {
 
 test "an outer range is evaluated before the inner header runs" {
   var log: U32 = 0
-  var n: U32 = 0
-  for _ in tick(inout log, 1)..<tick(inout log, 3) {
-    for _ in tick(inout log, 4)..<tick(inout log, 5) {
+  var n: U32   = 0
+  for _ in tick(inout log, 1) ..< tick(inout log, 3) {
+    for _ in tick(inout log, 4) ..< tick(inout log, 5) {
       n = n + 1
     }
   }
@@ -176,7 +176,7 @@ test "the ends of a range are evaluated once in a loop that is skipped by a bran
   var log: U32 = 0
   let go: Bool = false
   if go {
-    for _ in tick(inout log, 1)..<tick(inout log, 2) {
+    for _ in tick(inout log, 1) ..< tick(inout log, 2) {
       log = log + 100
     }
   }
@@ -186,9 +186,9 @@ test "the ends of a range are evaluated once in a loop that is skipped by a bran
 
 test "receivers and arguments inside an end follow the order of the expression" {
   var log: U32 = 0
-  let b = Bounds { lo: 2, hi: 5 }
-  var n: U32 = 0
-  for _ in tick(inout log, 1)..<b.width(inout log, 2) {
+  let b        = Bounds { lo: 2, hi: 5 }
+  var n: U32   = 0
+  for _ in tick(inout log, 1) ..< b.width(inout log, 2) {
     n = n + 1
   }
   // start is 1, end is 3 (5 - 2): two iterations. start ran first.
@@ -197,9 +197,9 @@ test "receivers and arguments inside an end follow the order of the expression" 
 }
 
 test "the ends can be signed" {
-  var log: U32 = 0
+  var log: U32  = 0
   var seen: I32 = 0
-  for i in tick_i(inout log, 1, -2)..<tick_i(inout log, 2, 2) {
+  for i in tick_i(inout log, 1, -2) ..< tick_i(inout log, 2, 2) {
     seen = seen + i
   }
   // -2, -1, 0, 1
@@ -209,8 +209,8 @@ test "the ends can be signed" {
 
 test "a loop variable of an outer loop is read by an inner end after it changed" {
   var n: U32 = 0
-  for i in 1..<4 {
-    for _ in 0..<i {
+  for i in 1 ..< 4 {
+    for _ in 0 ..< i {
       n = n + 1
     }
   }
@@ -220,7 +220,7 @@ test "a loop variable of an outer loop is read by an inner end after it changed"
 
 test "a generic function evaluates the start once and the const end" {
   var log: U32 = 0
-  let n = count_from([0.0; 5], inout log, 2)
+  let n        = count_from([0.0; 5], inout log, 2)
   assert n == 3
   assert log == 2
 }

@@ -17,7 +17,7 @@ pub flow scrutinee_with_state(k: U32 at sample) -> F32 at sample {
 test "the scrutinee of a match may hold state" {
   // k = 0 1 0 0.  prev~(k) = 0 0 1 0.
   let ks: [U32; 4] = [0, 1, 0, 0]
-  let o = scrutinee_with_state.render(scrutinee_with_state.Config {}, scrutinee_with_state.Params {}, ks, 8.0)
+  let o            = scrutinee_with_state.render(scrutinee_with_state.Config {}, scrutinee_with_state.Params {}, ks, 8.0)
   assert o.out[0] == 10.0
   assert o.out[1] == 10.0
   assert o.out[2] == 20.0

@@ -61,7 +61,7 @@ pub flow mixed(x: F32 at sample) -> F32 at sample {
 
 // Variants built in each copy of a `par`, then read by an `rt fn`.
 pub flow par_modes(x: F32 at sample) -> F32 at sample {
-  let ms = par i in 0..<3 {
+  let ms = par i in 0 ..< 3 {
     if i == 1 { Mode.Off } else { Mode.Gain((i + 1).round_f32()) }
   }
   amount(ms[0], x) + amount(ms[1], x) + amount(ms[2], x)
@@ -84,7 +84,7 @@ pub flow unit_variant(x: F32 at sample) -> F32 at sample {
 
 test "a variant chosen by a branch on the signal and built from a block input" {
   let xs: [F32; 3] = [1.0, -1.0, 2.0]
-  let o = pick.render(pick.Config {}, pick.Params { g: 3.0 }, xs, 8.0)
+  let o            = pick.render(pick.Config {}, pick.Params { g: 3.0 }, xs, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 0.0
   assert o.out[2] == 6.0
@@ -92,7 +92,7 @@ test "a variant chosen by a branch on the signal and built from a block input" {
 
 test "Some(x) and None built from a block input" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let open = gate.render(gate.Config {}, gate.Params { open: true }, xs, 8.0)
+  let open         = gate.render(gate.Config {}, gate.Params { open: true }, xs, 8.0)
   assert open.out[0] == 1.0
   assert open.out[2] == 3.0
   let shut = gate.render(gate.Config {}, gate.Params { open: false }, xs, 8.0)
@@ -102,7 +102,7 @@ test "Some(x) and None built from a block input" {
 
 test "a variant with two payloads" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = mixed.render(mixed.Config {}, mixed.Params {}, xs, 8.0)
+  let o            = mixed.render(mixed.Config {}, mixed.Params {}, xs, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 5.0
   assert o.out[2] == 7.0
@@ -111,14 +111,14 @@ test "a variant with two payloads" {
 test "variants built in the copies of a par" {
   // ms = [Gain(1), Off, Gain(3)]: the output is 1 * x + 0 + 3 * x.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = par_modes.render(par_modes.Config {}, par_modes.Params {}, xs, 8.0)
+  let o            = par_modes.render(par_modes.Config {}, par_modes.Params {}, xs, 8.0)
   assert o.out[0] == 4.0
   assert o.out[1] == 8.0
 }
 
 test "a stateful instance inside a built value advances every sample" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let o = wrapped_state.render(wrapped_state.Config {}, wrapped_state.Params {}, xs, 8.0)
+  let o            = wrapped_state.render(wrapped_state.Config {}, wrapped_state.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 3.0
   assert o.out[2] == 6.0
@@ -127,7 +127,7 @@ test "a stateful instance inside a built value advances every sample" {
 
 test "the unit variant is a value" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = unit_variant.render(unit_variant.Config {}, unit_variant.Params {}, xs, 8.0)
+  let o            = unit_variant.render(unit_variant.Config {}, unit_variant.Params {}, xs, 8.0)
   assert o.out[0] == 10.0
   assert o.out[1] == 0.0
 }

@@ -27,7 +27,7 @@ test "d may change every sample" {
   //   n5: d 2.5 -> 0.5 * x[3] + 0.5 * x[2] = 0.5 * 4 + 0.5 * 3 = 3.5
   let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
   let ds: [F32; 6] = [1.0, 2.0, 3.0, 1.5, 4.0, 2.5]
-  let o = vd_var.render(vd_var.Config {}, vd_var.Params {}, vd_var.In { x: xs, d: ds }, 8.0)
+  let o            = vd_var.render(vd_var.Config {}, vd_var.Params {}, vd_var.In { x: xs, d: ds }, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 0.0

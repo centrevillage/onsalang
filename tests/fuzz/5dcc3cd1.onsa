@@ -1,0 +1,2 @@
+fn d(b:I){
+#[repr(C)]struct

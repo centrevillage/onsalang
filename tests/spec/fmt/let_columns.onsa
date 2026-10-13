@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.1", "§18.2"]
+
+// The column of `=` (docs/onsa-tools.md §3.2, S-07, S-89, S-122): the `=` of consecutive one-line `let` and
+// `var` lines are in one column, with one space after the longest left side. A `let` with a type, a `var`
+// and a `let` that takes a tuple apart are in the column. The column is cut by a blank line, by a statement
+// of more than one line and by any other statement, and it goes on over a line that holds only a comment.
+// The groups of a nested block are their own. The file is canonical, so `onsa fmt` leaves it unchanged;
+// the same lines written without the column are in let_columns_loose.onsa. Every value below is worked
+// out by hand from the spec text.
+
+use std.array
+
+fn plain_group(a: U32) -> U32 {
+  let x     = a + 1
+  let width = x * 2
+  let y     = width - 1
+  y
+}
+
+fn mixed(p: (U32, U32)) -> U32 {
+  let gain: U32  = 3
+  let bias       = 1
+  var total: U32 = 0
+  let (lo, hi)   = p
+  let same       = lo == hi
+  total = total + gain + bias + lo + hi
+  if same {
+    0
+  } else {
+    total
+  }
+}
+
+fn across_a_comment(a: U32) -> U32 {
+  let first           = a + 1
+  // A line of a comment does not cut the column.
+  let b               = first * 2
+  // Two lines
+  // of comments do not either.
+  let third_long_name = b + 1
+  third_long_name
+}
+
+fn cut_by_a_blank_line(a: U32) -> U32 {
+  let first  = a + 1
+  let second = first + 1
+
+  let c  = second + 1
+  let dd = c + 1
+  dd
+}
+
+fn cut_by_a_multi_line_statement(a: U32) -> U32 {
+  let first       = a + 1
+  let second_long = first + 1
+  let picked = if a > 0 {
+    first
+  } else {
+    second_long
+  }
+  let n       = picked + 1
+  let nn_long = n + 1
+  nn_long
+}
+
+fn cut_by_another_statement(a: U32) -> U32 {
+  var t: U32   = a
+  let big_name = 2
+  t = t + big_name
+  let u  = t
+  let uu = u + 1
+  uu
+}
+
+fn nested(c: Bool, a: U32) -> U32 {
+  let outer  = a
+  let o      = a + 1
+  var t: U32 = 0
+  if c {
+    let inner_long_name = o
+    let i               = inner_long_name + 1
+    t = i
+  }
+  let after = t + outer
+  let a2    = after + 1
+  a2
+}
+
+fn in_an_anonymous_function() -> [U32; 3] {
+  array.from_fn(fn(i: U32) -> U32 {
+    let twice    = i * 2
+    let plus_one = twice + 1
+    plus_one
+  })
+}
+
+test "the lines of a column mean what they say" {
+  assert plain_group(1) == 3
+  // gain 3 + bias 1 + lo 2 + hi 5.
+  assert mixed((2, 5)) == 11
+  assert mixed((4, 4)) == 0
+  // first = 2, b = 4, third_long_name = 5.
+  assert across_a_comment(1) == 5
+  assert cut_by_a_blank_line(1) == 5
+  // first = 2, second_long = 3, picked = first = 2, n = 3, nn_long = 4.
+  assert cut_by_a_multi_line_statement(1) == 4
+  // t = 1, big_name = 2, t = 3, u = 3, uu = 4.
+  assert cut_by_another_statement(1) == 4
+}
+
+test "the column of a nested block is its own" {
+  // outer = 1, o = 2, inner_long_name = 2, i = 3, t = 3, after = 4, a2 = 5.
+  assert nested(true, 1) == 5
+  // t stays 0: after = 1, a2 = 2.
+  assert nested(false, 1) == 2
+  let a = in_an_anonymous_function()
+  assert a[0] == 1
+  assert a[1] == 3
+  assert a[2] == 5
+}
+
+test "a column in a test block" {
+  let x      = nested(true, 1)
+  let y_long = nested(false, 1)
+  assert x == 5
+  assert y_long == 2
+}

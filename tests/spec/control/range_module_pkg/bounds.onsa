@@ -12,7 +12,7 @@ pub struct Window {
 impl Window {
   pub fn total(self) -> U32 {
     var t: U32 = 0
-    for i in self.lo..<self.hi {
+    for i in self.lo ..< self.hi {
       t = t + i
     }
     t
@@ -21,7 +21,7 @@ impl Window {
 
 pub fn count(lo: U32, hi: U32) -> U32 {
   var n: U32 = 0
-  for _ in lo..<hi {
+  for _ in lo ..< hi {
     n = n + 1
   }
   n
@@ -29,7 +29,7 @@ pub fn count(lo: U32, hi: U32) -> U32 {
 
 pub fn size_sum() -> U32 {
   var t: U32 = 0
-  for i in 0..<SIZE {
+  for i in 0 ..< SIZE {
     t = t + i
   }
   t

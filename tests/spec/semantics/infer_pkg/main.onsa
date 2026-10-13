@@ -27,13 +27,13 @@ fn forward[const N: U32](xs: [U32; N]) -> U32 {
 test "a literal decides the parameter of a function in another module" {
   assert or_default(Some(3), 9) == 3
   assert or_default(None, 9) == 9
-  let a = id(200)
+  let a     = id(200)
   let b: U8 = a
   assert b == 200
 }
 
 test "a later statement decides the parameter of a function in another module" {
-  let v = none()
+  let v             = none()
   let w: Option[U8] = v
   assert is_none_u8(w)
   let u = none()

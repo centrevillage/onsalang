@@ -13,7 +13,7 @@ use bounds.{SIZE, HOLD, Window, count}
 
 fn through_size() -> U32 {
   var t: U32 = 0
-  for i in 0..<SIZE + 1 {
+  for i in 0 ..< SIZE + 1 {
     t = t + i
   }
   t
@@ -21,7 +21,7 @@ fn through_size() -> U32 {
 
 fn from_hold() -> U32 {
   var seen: U32 = 0
-  for i in HOLD..<SIZE {
+  for i in HOLD ..< SIZE {
     let shifted = seen * 10
     seen = shifted + i
   }
@@ -30,7 +30,7 @@ fn from_hold() -> U32 {
 
 fn qualified() -> U32 {
   var n: U32 = 0
-  for _ in 0..<bounds.SIZE * 2 {
+  for _ in 0 ..< bounds.SIZE * 2 {
     n = n + 1
   }
   n
@@ -38,7 +38,7 @@ fn qualified() -> U32 {
 
 fn qualified_both() -> U32 {
   var t: U32 = 0
-  for i in bounds.HOLD..<bounds.SIZE + 2 {
+  for i in bounds.HOLD ..< bounds.SIZE + 2 {
     t = t + i
   }
   t
@@ -46,7 +46,7 @@ fn qualified_both() -> U32 {
 
 fn counted_end(lo: U32) -> U32 {
   var t: U32 = 0
-  for i in lo..<lo + count(HOLD, SIZE) {
+  for i in lo ..< lo + count(HOLD, SIZE) {
     t = t + i
   }
   t

@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.4", "§7", "§18.2"]
+
+// The patterns of fmt/numeric_canonical_patterns.onsa with the numbers in the other accepted spellings
+// (spec §2.4; S-62, S-126): a capital prefix, hexadecimal digits in small letters, a `_` that is not between
+// two digits, a plus and zeros in front, in the literal of a pattern, in the literal with a minus, in the
+// literals of a choice and inside an enumerator and a tuple. `onsa fmt` writes the spelling of the other
+// file. The file is not canonical on purpose (`canonical = false`). Only the syntax is read here
+// (`mode = "parse"`), as in the other file.
+
+pub fn classify(v: I32) -> I32 {
+  match v {
+    0X1f => 1,
+    -0X_10 => 2,
+    1__000 => 3,
+    0xa | 0Xb => 4,
+    0B_101 => 5,
+    _ => 0,
+  }
+}
+
+pub fn in_an_enumerator(o: Option[U32]) -> U32 {
+  match o {
+    Some(0xff) => 1,
+    Some(1_0_) => 2,
+    Some(_) => 3,
+    None => 0,
+  }
+}
+
+pub fn in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (0x1f, -1__0) => 1,
+    (_, 0B11) => 2,
+    _ => 0,
+  }
+}

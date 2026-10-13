@@ -24,9 +24,9 @@ test "the formula is two multiplications: 0 * inf is NaN" {
   //   n1: a = inf, b = 0                -> 1 * inf + 0 * 0   = inf
   //   n2: a = 1, b = inf                -> 1 * 1 + 0 * inf   = NaN
   //   n3: a = 2, b = 1                  -> 2
-  let inf: F32 = F32.INFINITY
+  let inf: F32     = F32.INFINITY
   let xs: [F32; 4] = [inf, 1.0, 2.0, 3.0]
-  let o = vd.render(vd.Config {}, vd.Params { d: 1.0 }, xs, 8.0)
+  let o            = vd.render(vd.Config {}, vd.Params { d: 1.0 }, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == inf
   assert is_nan(o.out[2])
@@ -38,9 +38,9 @@ pub flow one(x: F32 at sample) -> F32 at sample {
 }
 
 test "a NaN passes through prev~ one sample later" {
-  let nan: F32 = F32.NAN
+  let nan: F32     = F32.NAN
   let xs: [F32; 3] = [1.0, nan, 3.0]
-  let o = one.render(one.Config {}, one.Params {}, xs, 8.0)
+  let o            = one.render(one.Config {}, one.Params {}, xs, 8.0)
   assert o.out[1] == 1.0
   assert is_nan(o.out[2])
 }

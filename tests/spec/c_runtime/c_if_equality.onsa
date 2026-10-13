@@ -97,7 +97,7 @@ pub fn pick_eq_i64(a: I64, b: I64) -> I64 {
 }
 
 pub fn steps_to_zero_i32(x: I32) -> U32 {
-  var v = x
+  var v      = x
   var n: U32 = 0
   while v != 0 {
     if v == 1 {

@@ -94,7 +94,7 @@ test "a function value is stored in a struct and in an array" {
   assert f.(10) == 11
   assert op.id == 7
   let ops: [fn(I32) -> I32; 3] = [inc, inc, dec]
-  var acc: I32 = 0
+  var acc: I32                 = 0
   for g in ops {
     acc = g.(acc)
   }
@@ -105,7 +105,7 @@ test "a generic higher-order function" {
   let five: I32 = 5
   assert apply_twice(inc, five) == 7
   let half_units: F32 = 0.5
-  let r = apply_twice(fn(x: F32) -> F32 { x * 2.0 }, half_units)
+  let r               = apply_twice(fn(x: F32) -> F32 { x * 2.0 }, half_units)
   assert r == 2.0
 }
 
@@ -125,7 +125,7 @@ test "a move parameter of a Copy type copies" {
     x + 1
   }
   var a: I32 = 4
-  let b = succ.(move a)
+  let b      = succ.(move a)
   assert b == 5
   assert a == 4
 }
@@ -144,7 +144,7 @@ test "a function value in an array element is called with .( on the element" {
   let ops: [fn(I32) -> I32; 3] = [inc, dec, inc]
   assert ops[0].(10) == 11
   assert ops[1].(10) == 9
-  var i: U32 = 0
+  var i: U32   = 0
   var acc: I32 = 0
   while i < 3 {
     acc = ops[i].(acc)
@@ -188,7 +188,7 @@ test "a function value is called inside the body of an anonymous function" {
 
 test "the arguments of .( are ordinary expressions" {
   var log: I32 = 0
-  let f = fn(a: I32, b: I32) -> I32 { a - b }
+  let f        = fn(a: I32, b: I32) -> I32 { a - b }
   assert f.(inc(log), inc(inc(log))) == -1
   log = 5
   assert f.(log + 1, log) == 1

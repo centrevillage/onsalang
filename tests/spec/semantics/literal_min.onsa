@@ -24,7 +24,7 @@ fn id[T](x: T) -> T {
 }
 
 test "the minimum of each signed type" {
-  let a: I8 = -128
+  let a: I8  = -128
   let b: I16 = -32768
   let c: I32 = -2147483648
   let d: I64 = -9223372036854775808
@@ -35,7 +35,7 @@ test "the minimum of each signed type" {
 }
 
 test "parentheses between the minus and the literal are not seen" {
-  let a: I8 = -(128)
+  let a: I8  = -(128)
   let b: I64 = -(9223372036854775808)
   let c: I32 = -((2147483648))
   assert a == I8.MIN
@@ -81,16 +81,16 @@ test "the default type I32 takes the minimum too" {
 }
 
 test "a minimum that a later statement decides" {
-  let a = id(-128)
+  let a     = id(-128)
   let b: I8 = a
   assert b == I8.MIN
-  let c = id(-(32768))
+  let c      = id(-(32768))
   let d: I16 = c
   assert d == I16.MIN
 }
 
 test "the minimum in a branch and in an arm" {
-  let flag = true
+  let flag  = true
   let x: I8 = if flag { -128 } else { 0 }
   assert x == I8.MIN
   let o: Option[I8] = Some(-128)

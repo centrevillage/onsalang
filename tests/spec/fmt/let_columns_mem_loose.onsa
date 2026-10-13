@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§12.4", "§18.2"]
+
+// The lines of let_columns_mem.onsa with the `=` of every plain `let` at a place of its own (after one space, or
+// after three more than the line needs, by turns). The language reads them; `onsa fmt` puts the `=` of the
+// consecutive plain `let` lines in one column and the `=` of a `let` with `@mem(bulk)` after one space
+// (docs/onsa-tools.md §3.2, S-122). The file is not canonical on purpose (`canonical = false`). Only the
+// syntax is read (`mode = "parse"`), as in let_columns_mem.onsa.
+
+pub flow around_a_bulk_let(x: F32 at sample) -> F32 at sample {
+  let g = x * 0.5
+  let gain_two    = g * 2.0
+  @mem(bulk) let d = delay~(g, 4800)
+  let h = d + g
+  let h_long    = h * 2.0
+  h_long + gain_two
+}
+
+pub flow the_attributed_let_is_first(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) let line_long_name = delay~(x, 4800)
+  let a = line_long_name
+  let abc    = a + x
+  abc
+}
+
+pub flow the_attributed_let_is_last(x: F32 at sample) -> F32 at sample {
+  let p = x
+  let pq    = p
+  @mem(bulk) let tail = delay~(pq, 64)
+  tail
+}
+
+pub flow the_attributed_let_has_a_type(x: F32 at sample) -> F32 at sample {
+  let a = x
+  @mem(bulk) let d: F32 = delay~(a, 4800)
+  let bc    = d
+  let b = bc + a
+  b
+}
+
+pub flow in_a_nested_block(c: Bool at block, x: F32 at sample) -> F32 at sample {
+  if c {
+    let one    = x
+    @mem(bulk) let line = delay~(one, 4800)
+    let t = line
+    let tt    = t + one
+    tt
+  } else {
+    x
+  }
+}
+
+pub fn in_a_fn(x: F32) -> F32 {
+  let a = x
+  let abcd    = a + x
+  @mem(bulk) let b = abcd
+  let c = b
+  let cc    = c + a
+  cc
+}

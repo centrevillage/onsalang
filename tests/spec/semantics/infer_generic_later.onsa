@@ -70,7 +70,7 @@ test "or_default with a literal: T is I32 (the example of §4.5)" {
 
 test "the default I32 is applied at the end of the function, not at the call" {
   // The literal 200 is still open when `a` is passed on, so `b: U8` decides it.
-  let a = id(200)
+  let a     = id(200)
   let b: U8 = a
   assert b == 200
 }
@@ -83,7 +83,7 @@ test "a literal that meets another literal stays open until the end" {
 }
 
 test "a float literal is decided by the annotation that follows" {
-  let z = id(1.5)
+  let z      = id(1.5)
   let s: F32 = 0.5 + z
   assert s == 2.0
 }
@@ -91,7 +91,7 @@ test "a float literal is decided by the annotation that follows" {
 // ------------------------------------------------- a later statement decides T (§4.5)
 
 test "a later annotation decides the parameter of a call" {
-  let v = none()
+  let v             = none()
   let w: Option[U8] = v
   assert is_none_u8(w)
 }
@@ -114,7 +114,7 @@ fn later_return() -> Option[F32] {
 }
 
 test "a later return decides the parameter" {
-  let r = later_return()
+  let r      = later_return()
   let d: F32 = 1.5
   assert or_default(r, d) == 1.5
 }
@@ -157,7 +157,7 @@ test "the arms of a match decide each other" {
 
 fn in_loop() -> I32 {
   var total = 0
-  for i in 0..<3 {
+  for i in 0 ..< 3 {
     // `o` is open here; the literal 10 given to `or_default` is the only thing that
     // touches it, so it is an integer literal variable until the function ends.
     let o = none()
@@ -172,7 +172,7 @@ test "a generic call in a loop body" {
 
 fn from_closure() -> [U32; 3] {
   array.from_fn(fn(i) {
-    let o = none()
+    let o              = none()
     let p: Option[U32] = o
     or_default(p, i + 10)
   })
@@ -187,7 +187,7 @@ test "a generic call decided by a later statement inside a closure" {
 
 fn gen_later[T](x: T) -> T {
   // T of the outer function is a fixed type here; the open parameter of `none` meets it.
-  let o = none()
+  let o            = none()
   let p: Option[T] = o
   or_default(p, x)
 }
@@ -210,7 +210,7 @@ fn pinned_by_argument() -> U8 {
 }
 
 fn pinned_by_annotation() -> U8 {
-  let v = make()
+  let v     = make()
   let w: U8 = v
   w
 }
@@ -277,8 +277,8 @@ test "a match on a None that is decided later" {
 }
 
 test "an empty array literal is a subject before its element type is known" {
-  let e = []
-  let n = e.len()
+  let e           = []
+  let n           = e.len()
   let f: [F32; 0] = e
   assert n == 0
   assert take_f32s(f) == 0
@@ -368,7 +368,7 @@ test "the enumerators of a user enum unify with the subject" {
 test "a literal pattern in a loop and a closure" {
   let o     = None
   var total = 0
-  for i in 0..<2 {
+  for i in 0 ..< 2 {
     total = total + match o {
       Some(3) => 10,
       _ => 1,

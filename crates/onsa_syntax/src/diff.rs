@@ -216,6 +216,18 @@ mod tests {
     }
 
     #[test]
+    fn numbers_compare_by_value() {
+        // `docs/onsa-tools.md` §3.5: the spelling of a number is no difference.
+        let old = "fn f() -> F64 {\n  let a = 0xff + 1_000\n  1.0e3 + 1E3\n}\n";
+        let new = "fn f() -> F64 {\n  let a = 0xFF + 1000\n  1000.0 + 1e3\n}\n";
+        assert!(d(old, new).is_empty());
+        let old = "fn f(x: F64) -> I32 {\n  match x {\n    -1_0 => 1,\n    _ => 0,\n  }\n}\n";
+        assert!(d(old, &old.replace("-1_0", "-10")).is_empty());
+        // Two floats an `f64` cannot tell apart are two values.
+        assert_eq!(d("fn f() -> F64 { 1.0 }\n", "fn f() -> F64 { 1.00000000000000000001 }\n").len(), 1);
+    }
+
+    #[test]
     fn duplicate_keys_are_numbered() {
         let old = "impl A { fn f(self) {} }\nimpl A { fn g(self) {} }\n";
         let new = "impl A { fn f(self) {} }\nimpl A { fn h(self) {} }\n";

@@ -8,7 +8,7 @@
 // nested `if`s are expressions, not statements.
 
 pub flow deep_if(x: F32 at sample) -> [F32; 2] at sample {
-  par i in 0..<2 { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { x } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } }
+  par i in 0 ..< 2 { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { if x > i.round_f32() { x } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } } else { 0.0 } }
 }
 
 pub flow wide_sum(x: F32 at sample) -> F32 at sample {
@@ -18,7 +18,7 @@ pub flow wide_sum(x: F32 at sample) -> F32 at sample {
 test "deep if in par" {
   // Replica i yields x when x > i, else 0 (all the nested conditions are the same).
   let xs: [F32; 3] = [0.5, 1.5, 2.5]
-  let o = deep_if.render(deep_if.Config {}, deep_if.Params {}, xs, 8.0)
+  let o            = deep_if.render(deep_if.Config {}, deep_if.Params {}, xs, 8.0)
   assert o.out[0][0] == 0.5
   assert o.out[0][1] == 1.5
   assert o.out[0][2] == 2.5
@@ -29,7 +29,7 @@ test "deep if in par" {
 
 test "long sum in a flow" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = wide_sum.render(wide_sum.Config {}, wide_sum.Params {}, xs, 8.0)
+  let o            = wide_sum.render(wide_sum.Config {}, wide_sum.Params {}, xs, 8.0)
   assert o.out[0] == 100.0
   assert o.out[1] == 200.0
 }

@@ -37,7 +37,7 @@ pub fn branches_in_a_fn(x: F32, c: Bool) -> F32 {
 }
 
 pub fn par_in_a_fn(x: F32) -> F32 {
-  let a = par i in 0..<4 {
+  let a = par i in 0 ..< 4 {
     x
   }
   a[0]

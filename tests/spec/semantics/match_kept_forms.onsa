@@ -139,7 +139,7 @@ fn on_char(inout x: I32, c: Char) {
 }
 
 fn in_loop(inout x: I32, n: I32) -> I32 {
-  for i in 0..<n {
+  for i in 0 ..< n {
     match i {
       1 => {
         continue
@@ -218,7 +218,7 @@ test "a statement match on integer and Char literals" {
 
 test "arms of a statement match that continue and return" {
   var x: I32 = 0
-  let r = in_loop(inout x, 4)
+  let r      = in_loop(inout x, 4)
   assert r == 20
   assert x == 20
 }

@@ -44,13 +44,13 @@ test "an element by a later argument" {
 }
 
 test "an element by a later index" {
-  let b = Buf.zeroed(2)
+  let b            = Buf.zeroed(2)
   let x: (U8, F32) = b[1]
   assert x.0 == 0
 }
 
 test "a Copy struct and an array as the element" {
-  let p: Buf[Pair] = Buf.zeroed(2)
+  let p: Buf[Pair]     = Buf.zeroed(2)
   let q: Buf[[I32; 3]] = Buf.zeroed(2)
   assert count(p) == 2
   assert count(q) == 2

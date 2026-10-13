@@ -120,7 +120,7 @@ test "match move binds the payload of an owned value" {
 
 test "a generic function matching on its type parameter" {
   let three: I32 = 3
-  let nine: I32 = 9
+  let nine: I32  = 9
   assert or_default(Some(three), nine) == 3
   assert or_default(None, nine) == 9
   let p = or_default(Some(Point { x: 1, y: 2 }), Point { x: 8, y: 8 })

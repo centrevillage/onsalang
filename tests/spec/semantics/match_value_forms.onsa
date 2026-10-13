@@ -119,7 +119,7 @@ test "a guard on a wildcard arm that comes first" {
 
 test "the scrutinee is evaluated once when two guards fail" {
   var log: U32 = 0
-  let a = classify_once(inout log, 5)
+  let a        = classify_once(inout log, 5)
   assert a == 1
   assert log == 1
   let b = classify_once(inout log, 2)
@@ -423,7 +423,7 @@ test "a match arm that would panic is not evaluated when it is not taken" {
 
 fn sum_from_one(n: I32) -> I32 {
   var total: I32 = 0
-  for i in 0..<n {
+  for i in 0 ..< n {
     let add = match i {
       0 => {
         continue
@@ -440,7 +440,7 @@ fn sum_from_one(n: I32) -> I32 {
 
 fn last_below(n: I32) -> I32 {
   var last: I32 = -1
-  for i in 0..<n {
+  for i in 0 ..< n {
     let v = match i {
       k if (k * k) > 20 => {
         break

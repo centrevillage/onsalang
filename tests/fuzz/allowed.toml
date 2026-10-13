@@ -252,3 +252,17 @@ left = "`…` (U+#D) cannot be written outside comments and strings: a name is w
 input = "tests/fuzz/1a9bd535.onsa"
 reasons = ["S-236", "R-219"]
 note = "the `」` against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm, the form of 44fc0733 with another character)"
+
+[[allowed]]
+class = "fix|E0020|write it against its operand|E0002"
+left = "expected newline after the declaration, found `…`"
+input = "tests/fuzz/468c2b1f.onsa"
+reasons = ["S-236", "R-222"]
+note = "a `?` alone on the line after an item: the candidate puts it after the `}` of the body, which is no operand (low harm)"
+
+[[allowed]]
+class = "fix|E0020|write the attribute with `…`|E0005"
+left = "`…` cannot be attached to a statement other than `…`; it goes on a struct"
+input = "tests/fuzz/5dcc3cd1.onsa"
+reasons = ["S-236", "R-223"]
+note = "a `#[repr(C)]struct` cut at the end of the file in a body: the place is read as a statement; the whole struct gets the E0002 without a candidate (low harm)"

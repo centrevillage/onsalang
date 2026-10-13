@@ -40,7 +40,7 @@ pub flow with_inits(x: F32 at sample) -> F32 at sample {
 
 test "an inner delay behind a call is read before its store" {
   let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
-  let o = through_a_call.render(through_a_call.Config {}, through_a_call.Params {}, xs, 8.0)
+  let o            = through_a_call.render(through_a_call.Config {}, through_a_call.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 1.0
@@ -50,7 +50,7 @@ test "an inner delay behind a call is read before its store" {
 
 test "an inner delay behind an index is read before its store" {
   let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
-  let o = through_an_array.render(through_an_array.Config {}, through_an_array.Params {}, xs, 8.0)
+  let o            = through_an_array.render(through_an_array.Config {}, through_an_array.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 1.0
@@ -60,7 +60,7 @@ test "an inner delay behind an index is read before its store" {
 
 test "a variable delay of a delay is three samples at d = 2" {
   let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
-  let o = in_a_variable_delay.render(in_a_variable_delay.Config {}, in_a_variable_delay.Params {}, xs, 8.0)
+  let o            = in_a_variable_delay.render(in_a_variable_delay.Config {}, in_a_variable_delay.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 0.0
@@ -70,7 +70,7 @@ test "a variable delay of a delay is three samples at d = 2" {
 
 test "a delay line of two nested delays is four samples" {
   let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-  let o = in_a_delay_line.render(in_a_delay_line.Config {}, in_a_delay_line.Params {}, xs, 8.0)
+  let o            = in_a_delay_line.render(in_a_delay_line.Config {}, in_a_delay_line.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 0.0
@@ -81,7 +81,7 @@ test "a delay line of two nested delays is four samples" {
 
 test "the inits of nested delays are the values before the first sample" {
   let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
-  let o = with_inits.render(with_inits.Config {}, with_inits.Params {}, xs, 8.0)
+  let o            = with_inits.render(with_inits.Config {}, with_inits.Params {}, xs, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 2.5
   assert o.out[2] == 1.5

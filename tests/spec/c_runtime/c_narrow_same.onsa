@@ -192,7 +192,7 @@ pub fn narrow_i64_to_i32(x: I64) -> I64 {
 }
 
 pub fn narrow_u64_to_u16(xh: U32, xl: U32) -> I64 {
-  let x = join(xh, xl)
+  let x      = join(xh, xl)
   var r: I64 = I64.MIN
   match x.narrow_u16() {
     Some(v) => {
@@ -208,7 +208,7 @@ pub fn narrow_u64_to_u16(xh: U32, xl: U32) -> I64 {
 pub fn count_fits_i64_i32(base: I64, n: U32) -> U32 {
   var x: I64 = base
   var c: U32 = 0
-  for _ in 0..<n {
+  for _ in 0 ..< n {
     match x.narrow_i32() {
       Some(_) => {
         c = c + 1
@@ -225,7 +225,7 @@ pub fn count_fits_i64_i32(base: I64, n: U32) -> U32 {
 pub fn flags_in_closure_u64_u16(bh: U32, bl: U32) -> U32 {
   let b = join(bh, bl)
   let ys: [U32; 3] = array.from_fn(fn(i) {
-    let x = b +% (i as U64)
+    let x      = b +% (i as U64)
     var r: U32 = 0
     match x.narrow_u16() {
       Some(_) => {

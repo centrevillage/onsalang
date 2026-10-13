@@ -62,7 +62,7 @@ fn on_binding(x: I32) -> I32 {
 
 fn on_typed_binding(x: I32) -> I32 {
   let g: fn(I32) -> I32 = inc
-  var h = dec
+  var h                 = dec
   h = inc
   g.(x) + h.(x)
 }

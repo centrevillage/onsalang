@@ -16,9 +16,9 @@ pub flow echo(x: F32 at sample, time: F32 at block, feedback: F32 at block) -> F
 }
 
 test "echo repeats the impulse after the delay" {
-  let o = echo.render(echo.Config {}, echo.Params { time: 0.5, feedback: 0.5 }, impulse(48000), 48000.0)
+  let o          = echo.render(echo.Config {}, echo.Params { time: 0.5, feedback: 0.5 }, impulse(48000), 48000.0)
   let first: U32 = 0
-  let half: U32 = 24000
+  let half: U32  = 24000
   assert o.out[first] == 1.0
   assert energy(o.out, 1, 24000) == 0.0
   assert o.out[half] == 0.5
@@ -31,7 +31,7 @@ pub flow counter(x: F32 at sample) -> F32 at sample {
 }
 
 test "delay shifts by N samples" {
-  let o = counter.render(counter.Config {}, counter.Params {}, impulse(8), 48000.0)
+  let o      = counter.render(counter.Config {}, counter.Params {}, impulse(8), 48000.0)
   let a: U32 = 2
   let b: U32 = 3
   assert o.out[a] == 0.0
@@ -50,7 +50,7 @@ pub flow chain(x: F32 at sample) -> F32 at sample {
 }
 
 test "sub-instances are wired" {
-  let o = chain.render(chain.Config {}, chain.Params {}, impulse(4), 48000.0)
+  let o      = chain.render(chain.Config {}, chain.Params {}, impulse(4), 48000.0)
   let z: U32 = 0
   assert o.out[z] == 0.25
 }

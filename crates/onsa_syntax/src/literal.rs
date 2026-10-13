@@ -242,6 +242,10 @@ pub(crate) struct Number {
     pub(crate) float_suffix: bool,
     /// Where the E0001 of an [`Form::Invalid`] is.
     pub(crate) error: (usize, usize),
+    /// The offset of the point of a decimal float (`1.5`, `1.e3`).
+    pub(crate) point: Option<usize>,
+    /// The offset of the `e` or `E` of the exponent of a decimal float.
+    pub(crate) exponent: Option<usize>,
 }
 
 impl Number {
@@ -337,6 +341,8 @@ pub(crate) fn number(rest: &str) -> Number {
             float: false,
             float_suffix: false,
             error: (0, 0),
+            point: None,
+            exponent: None,
         };
     }
     let base = match (at(0), at(1)) {
@@ -345,7 +351,17 @@ pub(crate) fn number(rest: &str) -> Number {
         (Some(b'0'), Some(b'o' | b'O')) => Base::Oct,
         _ => Base::Dec,
     };
-    let mut n = Number { len: 0, body: 0, form: Form::Int, base, float: false, float_suffix: false, error: (0, 0) };
+    let mut n = Number {
+        len: 0,
+        body: 0,
+        form: Form::Int,
+        base,
+        float: false,
+        float_suffix: false,
+        error: (0, 0),
+        point: None,
+        exponent: None,
+    };
     let mut i;
     let mut dot_exponent = false;
     match base {
@@ -354,10 +370,12 @@ pub(crate) fn number(rest: &str) -> Number {
             if at(i) == Some(b'.') {
                 match point_after_int(&rest[i..]) {
                     Point::Fraction => {
+                        n.point = Some(i);
                         i = run(b, i + 1, |x| x.is_ascii_digit() || x == b'_');
                         n.float = true;
                     }
                     Point::Exponent => {
+                        n.point = Some(i);
                         i += 1;
                         dot_exponent = true;
                     }
@@ -374,6 +392,7 @@ pub(crate) fn number(rest: &str) -> Number {
                 let sign = usize::from(matches!(at(i + 1), Some(b'+' | b'-')));
                 let end = run(b, i + 1 + sign, |x| x.is_ascii_digit() || x == b'_');
                 if b[i + 1 + sign..end].iter().any(u8::is_ascii_digit) {
+                    n.exponent = Some(i);
                     i = end;
                     n.float = true;
                 }
@@ -460,6 +479,134 @@ pub(crate) fn int_value(text: &str) -> Option<u64> {
         _ => return digits.parse::<u64>().ok(),
     };
     u64::from_str_radix(&digits[2..], radix).ok()
+}
+
+/// The canonical spelling of the number token `text` (`docs/onsa-tools.md`
+/// §3.2, §2.4, S-62, S-126), or `None` when it is no integer or float of
+/// Onsa: the prefix and the `e` in lower case, no `+` in the exponent, the
+/// hexadecimal digits in upper case, one `_` between digits only, and no
+/// extra `0` at the head of the integer part of a float. The `0` at the
+/// head of an exponent or of hexadecimal digits and at the end of a
+/// fraction stay. The parts are those [`number`] read.
+pub(crate) fn canonical_number(text: &str) -> Option<String> {
+    if !text.starts_with(|c: char| c.is_ascii_digit()) {
+        return None;
+    }
+    let n = number(text);
+    if !matches!(n.form, Form::Int | Form::Float) || n.len != text.len() {
+        return None;
+    }
+    let prefix = match n.base {
+        Base::Hex => "0x",
+        Base::Bin => "0b",
+        _ => "",
+    };
+    if !prefix.is_empty() {
+        return Some(format!("{prefix}{}", digit_groups(&text[2..]).to_ascii_uppercase()));
+    }
+    let mantissa_end = n.exponent.unwrap_or(text.len());
+    let mut out = digit_groups(&text[..n.point.unwrap_or(mantissa_end)]);
+    if n.float {
+        let digits = out.trim_start_matches(['0', '_']);
+        out = if digits.is_empty() { "0".to_string() } else { digits.to_string() };
+    }
+    if let Some(p) = n.point {
+        out.push('.');
+        out.push_str(&digit_groups(&text[p + 1..mantissa_end]));
+    }
+    if let Some(e) = n.exponent {
+        out.push('e');
+        let after = &text[e + 1..];
+        if after.starts_with('-') {
+            out.push('-');
+        }
+        out.push_str(&digit_groups(after.trim_start_matches(['+', '-'])));
+    }
+    Some(out)
+}
+
+/// The digits of `text` with one `_` between two runs of digits and no
+/// other `_` (`1__000_` is `1_000`).
+fn digit_groups(text: &str) -> String {
+    text.split('_').filter(|g| !g.is_empty()).collect::<Vec<_>>().join("_")
+}
+
+/// The exact decimal value of the float token `text` as a key, for the
+/// comparison of `docs/onsa-tools.md` §3.5 (numbers by value, not by
+/// spelling): the digits without the `0` at their head and end, and the
+/// power of ten (`1.0e3`, `1000.0`, `1_000.0` and `10e2` are `1e3`; zero is
+/// `0e0`). The spellings of one value have one key, and two values have two
+/// keys however near they are (no rounding to a type hides a change of a
+/// digit), whatever the length of the exponent. The text itself when it is
+/// no float of Onsa. The parts are those [`number`] read.
+pub(crate) fn float_key(text: &str) -> String {
+    if !text.starts_with(|c: char| c.is_ascii_digit()) {
+        return text.to_string();
+    }
+    let n = number(text);
+    if n.form != Form::Float || n.len != text.len() {
+        return text.to_string();
+    }
+    let mantissa_end = n.exponent.unwrap_or(text.len());
+    let fraction = n.point.map_or("", |p| &text[p + 1..mantissa_end]);
+    let int = &text[..n.point.unwrap_or(mantissa_end)];
+    let digits: String = int.chars().chain(fraction.chars()).filter(|&c| c != '_').collect();
+    let head = digits.trim_start_matches('0');
+    let significant = head.trim_end_matches('0');
+    if significant.is_empty() {
+        return "0e0".to_string();
+    }
+    let fraction_len = fraction.bytes().filter(|&x| x != b'_').count() as i64;
+    let zeros = (head.len() - significant.len()) as i64;
+    let exponent = n.exponent.map_or("", |e| &text[e + 1..]);
+    format!("{significant}e{}", shifted_exponent(exponent, zeros - fraction_len))
+}
+
+/// The exponent `exponent` (its text after the `e`: a sign or none, digits
+/// and `_`; empty for none) plus `shift`, as a decimal integer with no `+`
+/// and no `0` at its head. Exact for an exponent of any length: the digits
+/// are added as digits, not as a machine integer.
+fn shifted_exponent(exponent: &str, shift: i64) -> String {
+    // The digits of a magnitude, the least significant first, without the zeros at the head.
+    fn magnitude(text: &str) -> Vec<u8> {
+        let mut m: Vec<u8> = text.bytes().filter(u8::is_ascii_digit).map(|x| x - b'0').rev().collect();
+        while m.last() == Some(&0) {
+            m.pop();
+        }
+        m
+    }
+    // `a + b` when `sign` is 1, `a - b` (with `a >= b`) when it is -1.
+    fn combine(a: &[u8], b: &[u8], sign: i8) -> Vec<u8> {
+        let mut out = Vec::with_capacity(a.len() + 1);
+        let mut carry = 0i8;
+        for i in 0..a.len().max(b.len()) {
+            let d = *a.get(i).unwrap_or(&0) as i8 + sign * *b.get(i).unwrap_or(&0) as i8 + carry;
+            carry = d.div_euclid(10);
+            out.push(d.rem_euclid(10) as u8);
+        }
+        if carry > 0 {
+            out.push(carry as u8);
+        }
+        while out.last() == Some(&0) {
+            out.pop();
+        }
+        out
+    }
+    let (a, a_negative) = (magnitude(exponent), exponent.starts_with('-'));
+    let (b, b_negative) = (magnitude(&shift.unsigned_abs().to_string()), shift < 0);
+    let a_larger = a.len().cmp(&b.len()).then_with(|| a.iter().rev().cmp(b.iter().rev())).is_ge();
+    let (sum, negative) = if a_negative == b_negative {
+        (combine(&a, &b, 1), a_negative)
+    } else if a_larger {
+        (combine(&a, &b, -1), a_negative)
+    } else {
+        (combine(&b, &a, -1), b_negative)
+    };
+    if sum.is_empty() {
+        return "0".to_string();
+    }
+    let digits: String = sum.iter().rev().map(|&d| char::from(b'0' + d)).collect();
+    if negative { format!("-{digits}") } else { digits }
 }
 
 /// The width of a float type, for [`float_value`] (`onsa_syntax` knows no

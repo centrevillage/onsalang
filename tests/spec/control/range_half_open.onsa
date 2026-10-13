@@ -18,7 +18,7 @@ use std.array
 
 fn sum_below(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0..<n {
+  for i in 0 ..< n {
     t = t + i
   }
   t
@@ -27,7 +27,7 @@ fn sum_below(n: U32) -> U32 {
 // The last value the loop variable took; 99 when the loop did not run.
 fn last_below(n: U32) -> U32 {
   var last: U32 = 99
-  for i in 0..<n {
+  for i in 0 ..< n {
     last = i
   }
   last
@@ -36,7 +36,7 @@ fn last_below(n: U32) -> U32 {
 // The values read as decimal digits, in the order of the iterations.
 fn digits(lo: U32, hi: U32) -> U32 {
   var seen: U32 = 0
-  for i in lo..<hi {
+  for i in lo ..< hi {
     let shifted = seen * 10
     seen = shifted + i
   }
@@ -45,7 +45,7 @@ fn digits(lo: U32, hi: U32) -> U32 {
 
 fn count(n: U32) -> U32 {
   var c: U32 = 0
-  for _ in 0..<n {
+  for _ in 0 ..< n {
     c = c + 1
   }
   c
@@ -71,7 +71,7 @@ test "a range with equal ends is empty" {
 
 fn reversed_literal() -> U32 {
   var c: U32 = 0
-  for _ in 5..<2 {
+  for _ in 5 ..< 2 {
     c = c + 1
   }
   c
@@ -79,7 +79,7 @@ fn reversed_literal() -> U32 {
 
 fn reversed_signed(lo: I32, hi: I32) -> I32 {
   var c: I32 = 0
-  for _ in lo..<hi {
+  for _ in lo ..< hi {
     c = c + 1
   }
   c
@@ -108,7 +108,7 @@ test "a loop with an unused variable runs the end minus the start times" {
 
 fn sum_through(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0..<n + 1 {
+  for i in 0 ..< n + 1 {
     t = t + i
   }
   t
@@ -116,7 +116,7 @@ fn sum_through(n: U32) -> U32 {
 
 fn middle(lo: U32, hi: U32) -> U32 {
   var seen: U32 = 0
-  for i in lo + 1..<hi - 1 {
+  for i in lo + 1 ..< hi - 1 {
     let shifted = seen * 10
     seen = shifted + i
   }
@@ -125,7 +125,7 @@ fn middle(lo: U32, hi: U32) -> U32 {
 
 fn twice(n: U32) -> U32 {
   var c: U32 = 0
-  for _ in 0..<n * 2 {
+  for _ in 0 ..< n * 2 {
     c = c + 1
   }
   c
@@ -133,7 +133,7 @@ fn twice(n: U32) -> U32 {
 
 fn product(n: U32, m: U32) -> U32 {
   var c: U32 = 0
-  for _ in 0..<n * m {
+  for _ in 0 ..< n * m {
     c = c + 1
   }
   c
@@ -141,7 +141,7 @@ fn product(n: U32, m: U32) -> U32 {
 
 fn remainder_end(n: U32) -> U32 {
   var c: U32 = 0
-  for _ in 0..<n % 4 {
+  for _ in 0 ..< n % 4 {
     c = c + 1
   }
   c
@@ -149,7 +149,7 @@ fn remainder_end(n: U32) -> U32 {
 
 fn signed_sum(lo: I32, hi: I32) -> I32 {
   var t: I32 = 0
-  for i in lo..<hi {
+  for i in lo ..< hi {
     t = t + i
   }
   t
@@ -157,7 +157,7 @@ fn signed_sum(lo: I32, hi: I32) -> I32 {
 
 fn negated_start(n: I32) -> I32 {
   var t: I32 = 0
-  for i in -n..<n {
+  for i in -n ..< n {
     t = t + i
   }
   t
@@ -165,7 +165,7 @@ fn negated_start(n: I32) -> I32 {
 
 fn negative_literals() -> I32 {
   var t: I32 = 0
-  for i in -2..<2 {
+  for i in -2 ..< 2 {
     t = t + i
   }
   t
@@ -173,7 +173,7 @@ fn negative_literals() -> I32 {
 
 fn widened(n: I32) -> I64 {
   var t: I64 = 0
-  for i in 0..<(n as I64) {
+  for i in 0 ..< (n as I64) {
     t = t + i
   }
   t
@@ -231,7 +231,7 @@ pub struct Window {
 impl Window {
   pub fn total(self) -> U32 {
     var t: U32 = 0
-    for i in self.lo..<self.hi {
+    for i in self.lo ..< self.hi {
       t = t + i
     }
     t
@@ -240,7 +240,7 @@ impl Window {
 
 fn hex_ends() -> U32 {
   var t: U32 = 0
-  for i in 0x10..<0x14 {
+  for i in 0x10 ..< 0x14 {
     t = t + i
   }
   t
@@ -248,7 +248,7 @@ fn hex_ends() -> U32 {
 
 fn separated_ends() -> U32 {
   var t: U32 = 0
-  for i in 1_000..<1_003 {
+  for i in 1_000 ..< 1_003 {
     t = t + i
   }
   t
@@ -256,7 +256,7 @@ fn separated_ends() -> U32 {
 
 fn over_fields(w: Window) -> U32 {
   var t: U32 = 0
-  for i in w.lo..<w.hi {
+  for i in w.lo ..< w.hi {
     t = t + i
   }
   t
@@ -266,7 +266,7 @@ fn over_fields(w: Window) -> U32 {
 // starts the range symbol (§4).
 fn over_tuple_fields(t: (U32, U32)) -> U32 {
   var s: U32 = 0
-  for i in t.0..<t.1 {
+  for i in t.0 ..< t.1 {
     s = s + i
   }
   s
@@ -274,7 +274,7 @@ fn over_tuple_fields(t: (U32, U32)) -> U32 {
 
 fn over_elements(xs: [U32; 2]) -> U32 {
   var t: U32 = 0
-  for i in xs[0]..<xs[1] + 1 {
+  for i in xs[0] ..< xs[1] + 1 {
     t = t + i
   }
   t
@@ -282,14 +282,14 @@ fn over_elements(xs: [U32; 2]) -> U32 {
 
 fn length_of(xs: [F32; 3]) -> U32 {
   var c: U32 = 0
-  for _ in 0..<xs.len() {
+  for _ in 0 ..< xs.len() {
     c = c + 1
   }
   c
 }
 
 fn double_all(inout xs: [F32; 3]) {
-  for i in 0..<xs.len() {
+  for i in 0 ..< xs.len() {
     xs[i] = xs[i] * 2.0
   }
 }
@@ -322,7 +322,7 @@ test "a loop over the indices of an array writes its elements" {
 
 fn count_u8() -> U32 {
   var n: U32 = 0
-  for _ in 0..<U8.MAX {
+  for _ in 0 ..< U8.MAX {
     n = n + 1
   }
   n
@@ -330,7 +330,7 @@ fn count_u8() -> U32 {
 
 fn last_u8() -> U8 {
   var last: U8 = 0
-  for i in 250..<U8.MAX {
+  for i in 250 ..< U8.MAX {
     last = i
   }
   last
@@ -338,7 +338,7 @@ fn last_u8() -> U8 {
 
 fn near_the_top_i64() -> I64 {
   var last: I64 = 0
-  for i in I64.MAX - 2..<I64.MAX {
+  for i in I64.MAX - 2 ..< I64.MAX {
     last = i
   }
   last
@@ -346,7 +346,7 @@ fn near_the_top_i64() -> I64 {
 
 fn near_the_top_count() -> U32 {
   var n: U32 = 0
-  for _ in I64.MAX - 2..<I64.MAX {
+  for _ in I64.MAX - 2 ..< I64.MAX {
     n = n + 1
   }
   n
@@ -354,7 +354,7 @@ fn near_the_top_count() -> U32 {
 
 fn u8_sum(n: U8) -> U8 {
   var t: U8 = 0
-  for i in 0..<n {
+  for i in 0 ..< n {
     t = t + i
   }
   t
@@ -381,7 +381,7 @@ test "the loop variable has the type of the ends" {
 
 fn until_four(n: U32) -> U32 {
   var c: U32 = 0
-  for i in 0..<n {
+  for i in 0 ..< n {
     if i == 4 {
       break
     }
@@ -392,7 +392,7 @@ fn until_four(n: U32) -> U32 {
 
 fn evens(n: U32) -> U32 {
   var c: U32 = 0
-  for i in 0..<n {
+  for i in 0 ..< n {
     let r = i % 2
     if r == 1 {
       continue
@@ -403,7 +403,7 @@ fn evens(n: U32) -> U32 {
 }
 
 fn first_square_over(limit: U32) -> U32 {
-  for i in 0..<100 {
+  for i in 0 ..< 100 {
     let square = i * i
     if square > limit {
       return i
@@ -438,16 +438,16 @@ fn next(inout k: U32) -> U32 {
 
 test "an end changed by the body does not change the number of iterations" {
   var hi: U32 = 3
-  var n: U32 = 0
-  for _ in 0..<hi {
+  var n: U32  = 0
+  for _ in 0 ..< hi {
     hi = hi + 1
     n = n + 1
   }
   assert n == 3
   assert hi == 6
-  var lo: U32 = 0
+  var lo: U32  = 0
   var sum: U32 = 0
-  for i in lo..<3 {
+  for i in lo ..< 3 {
     lo = 2
     sum = sum + i
   }
@@ -459,7 +459,7 @@ test "an end that is a sum is evaluated once" {
   var k: U32 = 0
   var n: U32 = 0
   // next gives 1, so the end is 1 + 1; had the end run again, k would not stay 1.
-  for _ in 0..<next(inout k) + 1 {
+  for _ in 0 ..< next(inout k) + 1 {
     n = n + 1
   }
   assert n == 2
@@ -468,9 +468,9 @@ test "an end that is a sum is evaluated once" {
 
 test "the operands of the ends run in the order of the expression: the start, then the end left to right" {
   var log: U32 = 0
-  var n: U32 = 0
+  var n: U32   = 0
   // start 1; end 2 + 3 = 5; the range is 1..<5.
-  for _ in tick(inout log, 1)..<tick(inout log, 2) + tick(inout log, 3) {
+  for _ in tick(inout log, 1) ..< tick(inout log, 2) + tick(inout log, 3) {
     n = n + 1
   }
   assert log == 123
@@ -481,7 +481,7 @@ test "the start is read before the end changes what it reads" {
   var c: U32 = 1
   var n: U32 = 0
   // start 1 (c before the end runs); the end sets c to 14 and is 4 + 1; the range is 1..<5.
-  for _ in c..<tick(inout c, 4) + 1 {
+  for _ in c ..< tick(inout c, 4) + 1 {
     n = n + 1
   }
   assert n == 4
@@ -490,10 +490,10 @@ test "the start is read before the end changes what it reads" {
 
 test "each execution of an inner header evaluates its own ends once" {
   var log: U32 = 0
-  var n: U32 = 0
-  for _ in 0..<2 {
+  var n: U32   = 0
+  for _ in 0 ..< 2 {
     // 1..<2 + 1 is 1..<3: two iterations; the header runs once for each outer iteration.
-    for _ in tick(inout log, 1)..<tick(inout log, 2) + 1 {
+    for _ in tick(inout log, 1) ..< tick(inout log, 2) + 1 {
       n = n + 1
     }
   }
@@ -503,9 +503,9 @@ test "each execution of an inner header evaluates its own ends once" {
 
 test "the ends of a loop in a branch that is not taken are not evaluated" {
   var log: U32 = 0
-  let go = false
+  let go       = false
   if go {
-    for _ in tick(inout log, 1)..<tick(inout log, 2) {
+    for _ in tick(inout log, 1) ..< tick(inout log, 2) {
       log = log + 100
     }
   }
@@ -516,8 +516,8 @@ test "the ends of a loop in a branch that is not taken are not evaluated" {
 
 fn triangle(n: U32) -> U32 {
   var c: U32 = 0
-  for i in 0..<n {
-    for _ in 0..<i + 1 {
+  for i in 0 ..< n {
+    for _ in 0 ..< i + 1 {
       c = c + 1
     }
   }
@@ -526,8 +526,8 @@ fn triangle(n: U32) -> U32 {
 
 fn grid(n: U32, m: U32) -> U32 {
   var c: U32 = 0
-  for _ in 0..<n {
-    for _ in 0..<m {
+  for _ in 0 ..< n {
+    for _ in 0 ..< m {
       c = c + 1
     }
   }
@@ -537,11 +537,11 @@ fn grid(n: U32, m: U32) -> U32 {
 fn by_kind(k: U32, n: U32) -> U32 {
   var t: U32 = 0
   if k == 0 {
-    for _ in 0..<n {
+    for _ in 0 ..< n {
       t = t + 1
     }
   } else if k == 1 {
-    for i in 0..<n {
+    for i in 0 ..< n {
       t = t + i
     }
   } else {
@@ -554,7 +554,7 @@ fn sum_option(o: Option[U32]) -> U32 {
   match o {
     Some(n) => {
       var t: U32 = 0
-      for i in 0..<n {
+      for i in 0 ..< n {
         t = t + i
       }
       t
@@ -565,7 +565,7 @@ fn sum_option(o: Option[U32]) -> U32 {
 
 fn count_with[T](x: T, n: U32) -> U32 {
   var c: U32 = 0
-  for _ in 0..<n {
+  for _ in 0 ..< n {
     c = c + 1
   }
   c
@@ -573,7 +573,7 @@ fn count_with[T](x: T, n: U32) -> U32 {
 
 fn width[const N: U32](xs: [F32; N]) -> U32 {
   var n: U32 = 0
-  for _ in 0..<N {
+  for _ in 0 ..< N {
     n = n + 1
   }
   n
@@ -581,7 +581,7 @@ fn width[const N: U32](xs: [F32; N]) -> U32 {
 
 fn width_plus_one[const N: U32](xs: [F32; N]) -> U32 {
   var n: U32 = 0
-  for _ in 0..<N + 1 {
+  for _ in 0 ..< N + 1 {
     n = n + 1
   }
   n
@@ -590,7 +590,7 @@ fn width_plus_one[const N: U32](xs: [F32; N]) -> U32 {
 fn triangles() -> [U32; 4] {
   array.from_fn(fn(i: U32) -> U32 {
     var t: U32 = 0
-    for j in 0..<i + 1 {
+    for j in 0 ..< i + 1 {
       t = t + j
     }
     t
@@ -600,7 +600,7 @@ fn triangles() -> [U32; 4] {
 fn remaining(k: U32) -> [U32; 4] {
   array.from_fn(fn(i: U32) -> U32 {
     var c: U32 = 0
-    for _ in i..<k {
+    for _ in i ..< k {
       c = c + 1
     }
     c

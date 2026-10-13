@@ -212,7 +212,7 @@ test "? in an anonymous function that is passed an Option-returning function" {
       return None
     }
     let doubled = Some(m * 2)
-    let d = doubled?
+    let d       = doubled?
     Some(d + 1)
   }
   assert val(apply_opt(step, 4)) == 9

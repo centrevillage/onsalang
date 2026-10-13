@@ -18,26 +18,26 @@ pub flow field(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow method(x: F32 at sample) -> F32 at sample {
-  let a = prev~(^b.abs())
+  let a      = prev~(^b.abs())
   let b: F32 = x - 1.0
   a + b
 }
 
 pub flow index(x: F32 at sample) -> F32 at sample {
-  let a = prev~(^b[0])
+  let a           = prev~(^b[0])
   let b: [F32; 2] = [x, x * 2.0]
   a + b[1]
 }
 
 pub flow tuple(x: F32 at sample) -> F32 at sample {
-  let a = prev~(^c)
+  let a                  = prev~(^c)
   let (c, d): (F32, F32) = (x, x * 2.0)
   a + d
 }
 
 test "an annotated later let types the feedback reference" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = field.render(field.Config {}, field.Params {}, xs, 8.0)
+  let o            = field.render(field.Config {}, field.Params {}, xs, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 5.0
   let m = method.render(method.Config {}, method.Params {}, xs, 8.0)

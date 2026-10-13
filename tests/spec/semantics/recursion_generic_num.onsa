@@ -43,7 +43,7 @@ fn up_b[T: Int](n: U32, acc: T) -> T {
 
 test "a recursion that counts at three integer types" {
   let a: I64 = 100
-  let b: U8 = 5
+  let b: U8  = 5
   let c: I32 = -20
   assert count_up(40, a) == 140
   assert count_up(40, b) == 45

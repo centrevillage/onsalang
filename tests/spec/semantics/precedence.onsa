@@ -25,7 +25,7 @@ test "multiplicative binds tighter than additive" {
   let x: I32 = 2
   let y: I32 = 3
   let z: I32 = 4
-  let a = x + y * z
+  let a      = x + y * z
   assert a == 14
   let b = x * y + z
   assert b == 10
@@ -39,7 +39,7 @@ test "a chain of one group is left-associative" {
   let a: I32 = 100
   let b: I32 = 10
   let c: I32 = 5
-  let d = a / b / c
+  let d      = a / b / c
   assert d == 2
   let e = a / c * b
   assert e == 200
@@ -52,7 +52,7 @@ test "a chain of one group is left-associative" {
 test "comparison binds looser than arithmetic" {
   let a: I32 = 3
   let b: I32 = 3
-  let lt = a + 1 < b * 2
+  let lt     = a + 1 < b * 2
   assert lt
   let eq = a * 2 == b + 3
   assert eq
@@ -74,13 +74,13 @@ test "remainder binds tighter than comparison" {
 test "comparison binds tighter than && and ||" {
   let lo: I32 = 1
   let hi: I32 = 10
-  let x: I32 = 5
-  let inside = lo <= x && x < hi
+  let x: I32  = 5
+  let inside  = lo <= x && x < hi
   assert inside
   let outside = x < lo || hi <= x
   assert !outside
   let y: I32 = 11
-  let past = lo <= y && y < hi
+  let past   = lo <= y && y < hi
   assert !past
 }
 
@@ -88,42 +88,42 @@ test "arithmetic, comparison and && together" {
   let a: I32 = 2
   let b: I32 = 3
   let c: I32 = 4
-  let r = a * b < c + 3 && b + c > a * 3
+  let r      = a * b < c + 3 && b + c > a * 3
   assert r
 }
 
 test "a chain of && or of || and a chain of the same bit operator" {
   let t: Bool = true
   let f: Bool = false
-  let r1 = t && t && f
+  let r1      = t && t && f
   assert !r1
   let r2 = f || f || t
   assert r2
   let a: U32 = 1
   let b: U32 = 2
   let c: U32 = 4
-  let o = a | b | c
+  let o      = a | b | c
   assert o == 7
   let mask: U32 = 6
-  let n = o & mask & 3
+  let n         = o & mask & 3
   assert n == 2
   let one: U32 = 1
-  let s = one << 2 << 3
+  let s        = one << 2 << 3
   assert s == 32
 }
 
 test "prefix operators and as bind tighter than binary operators" {
   let x: I32 = 5
-  let a = -x * 2
+  let a      = -x * 2
   assert a == -10
   let xs: [I32; 3] = [1, 2, 3]
-  let b = -xs[1] + 10
+  let b            = -xs[1] + 10
   assert b == 8
   let c = -x as I64
   assert c == -5
   let flag: Bool = false
-  let ok: Bool = true
-  let d = !flag && ok
+  let ok: Bool   = true
+  let d          = !flag && ok
   assert d
 }
 
@@ -131,12 +131,12 @@ test "wrapping and saturating operators sit in the groups of + and *" {
   let a: U8 = 250
   let b: U8 = 2
   let c: U8 = 3
-  let w = a +% b * c
+  let w     = a +% b * c
   assert w == 0
   let v = a +% 10 -% 5
   assert v == 255
   let big: U8 = 200
-  let m = big *% 2 / 3
+  let m       = big *% 2 / 3
   assert m == 48
   let s = a +| b * 4
   assert s == 255
@@ -144,7 +144,7 @@ test "wrapping and saturating operators sit in the groups of + and *" {
 
 test "precedence does not change the order of evaluation" {
   var log: U32 = 0
-  let r = bump(inout log, 1) + bump(inout log, 2) * bump(inout log, 3)
+  let r        = bump(inout log, 1) + bump(inout log, 2) * bump(inout log, 3)
   assert r == 7
   assert log == 123
 }

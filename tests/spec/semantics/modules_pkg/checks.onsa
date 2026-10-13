@@ -71,7 +71,7 @@ test "? skips the rest of the function at the first error" {
 
 test "the order of calls to an imported function is left to right" {
   var log: U32 = 0
-  let v = tick(inout log, 1) + tick(inout log, 2) + tick(inout log, 3)
+  let v        = tick(inout log, 1) + tick(inout log, 2) + tick(inout log, 3)
   assert v == 6
   assert log == 123
 }

@@ -25,7 +25,7 @@ pub flow shifted(x: F32 at sample) -> F32 at sample {
 
 // The call is inside each replica; the literal is typed by x in every replica.
 pub flow replicated(x: F32 at sample) -> F32 at sample {
-  let rows = par i in 0..<2 { x + second(x, 0.25) }
+  let rows = par i in 0 ..< 2 { x + second(x, 0.25) }
   rows[0] + rows[1]
 }
 
@@ -38,7 +38,7 @@ pub flow chained(x: F32 at sample) -> F32 at sample {
 test "a literal takes the type of the sample that decides T" {
   // x + 0.5 for x = 1, 2.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = shifted.render(shifted.Config {}, shifted.Params {}, xs, 8.0)
+  let o            = shifted.render(shifted.Config {}, shifted.Params {}, xs, 8.0)
   assert o.out[0] == 1.5
   assert o.out[1] == 2.5
 }
@@ -46,7 +46,7 @@ test "a literal takes the type of the sample that decides T" {
 test "the same inside par" {
   // (x + 0.25) twice: 2x + 0.5 for x = 1, 2.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = replicated.render(replicated.Config {}, replicated.Params {}, xs, 8.0)
+  let o            = replicated.render(replicated.Config {}, replicated.Params {}, xs, 8.0)
   assert o.out[0] == 2.5
   assert o.out[1] == 4.5
 }
@@ -54,7 +54,7 @@ test "the same inside par" {
 test "a parameter decided by a later statement" {
   // first(0.5, 0.25) is 0.5; the sum with x decides the literals as F32: 0.5 + x.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = chained.render(chained.Config {}, chained.Params {}, xs, 8.0)
+  let o            = chained.render(chained.Config {}, chained.Params {}, xs, 8.0)
   assert o.out[0] == 1.5
   assert o.out[1] == 2.5
 }

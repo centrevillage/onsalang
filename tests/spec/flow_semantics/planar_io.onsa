@@ -34,7 +34,7 @@ pub flow pair_sum(x: F32 at sample) -> F32 at sample {
 
 test "a planar input and output with one delayed channel" {
   let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
-  let o = chan.render(chan.Config {}, chan.Params {}, ins, 8.0)
+  let o                  = chan.render(chan.Config {}, chan.Params {}, ins, 8.0)
   assert o.out[0][0] == 0.0
   assert o.out[0][1] == 1.0
   assert o.out[0][2] == 2.0
@@ -46,9 +46,9 @@ test "a planar input and output with one delayed channel" {
 }
 
 test "process writes planar output buffers" {
-  let ins: [[F32; 4]; 2] = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
+  let ins: [[F32; 4]; 2]  = [[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]
   var outs: [[F32; 4]; 2] = [[0.0; 4]; 2]
-  var st = chan.init(chan.Config {}, 8.0)
+  var st                  = chan.init(chan.Config {}, 8.0)
   chan.process(inout st, chan.Params {}, ins, inout outs)
   assert outs[0][0] == 0.0
   assert outs[0][3] == 3.0
@@ -58,14 +58,14 @@ test "process writes planar output buffers" {
 
 test "two channels in, one out" {
   let ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
-  let o = mono.render(mono.Config {}, mono.Params {}, ins, 8.0)
+  let o                  = mono.render(mono.Config {}, mono.Params {}, ins, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 3.0
 }
 
 test "one channel in, two out" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = widen.render(widen.Config {}, widen.Params {}, xs, 8.0)
+  let o            = widen.render(widen.Config {}, widen.Params {}, xs, 8.0)
   assert o.out[0][0] == 1.0
   assert o.out[0][1] == 2.0
   assert o.out[0][2] == 3.0
@@ -77,7 +77,7 @@ test "one channel in, two out" {
 test "process_inplace reads the old input of a delayed flow" {
   // x + prev~(x) with x = 1 2 3 4 is 1 3 5 7 (the delay holds the input, not the output).
   var buf: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  var st = pair_sum.init(pair_sum.Config {}, 8.0)
+  var st            = pair_sum.init(pair_sum.Config {}, 8.0)
   pair_sum.process_inplace(inout st, pair_sum.Params {}, inout buf)
   assert buf[0] == 1.0
   assert buf[1] == 3.0

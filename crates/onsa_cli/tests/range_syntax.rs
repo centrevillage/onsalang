@@ -12,10 +12,8 @@
 //! `xs.slice(from, to)`, that `fmt` and `diff --ast` stop at the errors of the syntax stage (§18.2),
 //! what `fmt` does with the operators in the ends, and that `diff --ast` sees the symbol and the ends.
 //!
-//! What is not here: the spaces around the range symbol and a line break after it. The spec does not
-//! say how `fmt` writes them (§2.5, `docs/onsa-tools.md` §3.2 do not name the range symbols), so no
-//! expected text of a file with `0 ..< n` or with the symbol at the end of a line is written (a gap
-//! in the report of W3-18/t).
+//! What is not here: the spaces around the range symbol (one on each side, `docs/onsa-tools.md` §3.2,
+//! S-334; `fmt_spellings_columns_ranges.rs` and `tests/spec/fmt/` pin them) and a line break after it.
 //!
 //! Every test uses only the binary (`onsa check`, `onsa fmt`, `onsa diff --ast`, `onsa test`).
 //! Expected texts are written from the spec; none is taken from the output of the compiler.
@@ -478,8 +476,8 @@ fn fmt_and_diff_stop_at_a_wrong_range_symbol() {
 // ---- fmt: the operators in the ends, and what it does not change -----------------------------------
 
 /// (what the case says, the header as written, the strings that must be in the header after `fmt`).
-/// §3.2: a space on both sides of a binary operator. What `fmt` writes around the range symbol is not
-/// in the spec, so only the operators inside the ends are named, and the symbol itself.
+/// §3.2: a space on both sides of a binary operator. Only the operators inside the ends are named,
+/// and the symbol itself (the spaces around it are pinned in `fmt_spellings_columns_ranges.rs`).
 const ENDS_AS_WRITTEN: &[(&str, &str, &[&str])] = &[
     ("a sum as the end", "0..<n+1", &["..<", "n + 1"]),
     ("sums in both ends", "lo+1..<hi*2", &["..<", "lo + 1", "hi * 2"]),
@@ -608,7 +606,7 @@ fn a_closed_range_is_not_a_syntax_error_for_fmt() {
     // the unit it touches (§18.1), and it leaves this E0200. So a file with a closed range header is
     // formatted (it is a program of the language).
     let d = Dir::new("closed_fmt");
-    let text = loop_with("0..=n");
+    let text = loop_with("0 ..= n");
     let path = d.file("a.onsa", &text);
     let out = onsa(&["fmt", "--check", &path]);
     assert_eq!(code(&out), 0, "{out:?}");

@@ -18,8 +18,8 @@ fn make[T]() -> T {
 }
 
 test "== on an Option whose parameter is decided later" {
-  let o = None
-  let e = o == None
+  let o              = None
+  let e              = o == None
   let p: Option[F32] = o
   assert e
   assert p == None
@@ -36,29 +36,29 @@ test "!= and a comparison with a value that comes later" {
 
 // These are type checked only (`make` is never called).
 fn arithmetic_waits() -> F32 {
-  let z = make()
-  let s = z + z
+  let z      = make()
+  let s      = z + z
   let w: F32 = z
   s
 }
 
 fn negation_waits() -> I32 {
-  let z = make()
-  let n = -z
+  let z      = make()
+  let n      = -z
   let w: I32 = z
   n
 }
 
 fn comparison_waits() -> Bool {
-  let z = make()
-  let c = z < z
+  let z     = make()
+  let c     = z < z
   let w: U8 = z
   c
 }
 
 fn bit_operator_waits() -> U32 {
-  let z = make()
-  let b = z & z
+  let z      = make()
+  let b      = z & z
   let w: U32 = z
   b
 }

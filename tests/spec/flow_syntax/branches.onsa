@@ -60,7 +60,7 @@ pub flow in_places(x: F32 at sample, c: Bool at sample, d: Bool at sample) -> F3
   let a = if~ c { lp~(x) } else { x }
   let b = if~ d { hp~(x) } else { 0.5 }
   let e = mix(if~ c { lp~(x) } else { x }, x)
-  let f = par i in 0..<4 {
+  let f = par i in 0 ..< 4 {
     if~ c { saw~(1.0) } else { 0.5 }
   }
   let g = if~ c {

@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§2.4", "§4.7", "§18.2"]
+
+// More spellings of numbers than lex/numeric_spellings.onsa has (spec §2.4; S-62, S-126), each accepted and
+// meaning what it says, for `onsa fmt` to write in the spelling of fmt/numeric_canonical.onsa: the `e` of a
+// hexadecimal is a digit and not an exponent, the exponent in a capital with a `+` and with zeros in front,
+// a float with several zeros in front of the integer part, a `_` after the fraction, hexadecimal digits in
+// both cases with zeros in front, a minus in front of a spelling, and the places of the numbers that need a
+// value (the length of an array, the ends of a range). The file is not canonical on purpose
+// (`canonical = false`). Every value below is worked out by hand from the spec text.
+
+test "the e of a hexadecimal is a digit" {
+  let a: I32 = 0x1e3
+  assert a == 483
+  let b: I32 = 0xe
+  assert b == 14
+  let c: I32 = 0X1E3
+  assert c == 483
+  // `0x1e + 3` is the sum of `0x1e` (30) and 3.
+  let d: I32 = 0x1e + 3
+  assert d == 33
+  let e: I32 = 0xabcdef
+  assert e == 11259375
+  let f: I32 = 0XaBcDeF
+  assert f == 11259375
+}
+
+test "the exponent in a capital, with a plus, with zeros in front" {
+  let a: F32 = 1.5E3
+  assert a == 1500.0
+  let b: F32 = 1.5E+3
+  assert b == 1500.0
+  let c: F32 = 2.5E-3
+  assert c == 0.0025
+  let d: F32 = 1e+03
+  assert d == 1000.0
+  let e: F32 = 1E+03
+  assert e == 1000.0
+  let f: F32 = 1.0e+03
+  assert f == 1000.0
+  let g: F32 = 1E-03
+  assert g == 0.001
+  let h: F32 = 1e+0
+  assert h == 1.0
+}
+
+test "the zeros in front of the integer part of a float, and a _ after the fraction" {
+  let a: F32 = 000.0
+  assert a == 0.0
+  let b: F32 = 0001.5
+  assert b == 1.5
+  let c: F32 = 001e2
+  assert c == 100.0
+  let d: F32 = 0.5_
+  assert d == 0.5
+  let e: F32 = 1_0.5_
+  assert e == 10.5
+  let f: F32 = 01_0.5
+  assert f == 10.5
+  let g: F32 = 0010.0
+  assert g == 10.0
+}
+
+test "the zeros in front of a hexadecimal, in both cases of the digits" {
+  let a: I32 = 0x00ff
+  assert a == 255
+  let b: I32 = 0X0F_ff
+  assert b == 4095
+  let c: I32 = 0x0000_00Ff
+  assert c == 255
+  let d: I32 = 0B0000_0101
+  assert d == 5
+}
+
+test "a minus in front of a spelling" {
+  let a: I8 = -0X80
+  assert a == I8.MIN
+  let b: F32 = -1E+3
+  assert b == -1000.0
+  let c: I32 = -0x_1F
+  assert c == -31
+  let d: F32 = -01.5
+  assert d == -1.5
+  let e: I16 = -0B_1000_0000_0000_0000
+  assert e == I16.MIN
+}
+
+test "the numbers in the length of an array" {
+  let a: [F32; 0X4] = [0.0; 0B100]
+  assert a[3] == 0.0
+  let b: [U32; 1__0] = [0X1F; 1_0_]
+  assert b[9] == 31
+}
+
+test "the numbers in the ends of a range" {
+  var s: I32 = 0
+  for i in 0X1..<0x4 {
+    s = s + i
+  }
+  assert s == 6
+  var t: I32 = 0
+  for i in 1_0..<1__3 {
+    t = t + i
+  }
+  assert t == 33
+  var u: I32 = 0
+  for i in 0B0..<0x_3 + 1 {
+    u = u + i
+  }
+  assert u == 6
+}

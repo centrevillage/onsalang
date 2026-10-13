@@ -128,7 +128,7 @@ pub flow mac_x_after(
 
 test "mac_x rounds the product before the sum" {
   let xs: [F32; 4] = [1.0001220703125, 1.0, 2.0, 0.5]
-  let o = mac_x.render(mac_x.Config {}, mac_x.Params { a: 1.0001220703125, b: -1.000244140625 }, xs, 48000.0)
+  let o            = mac_x.render(mac_x.Config {}, mac_x.Params { a: 1.0001220703125, b: -1.000244140625 }, xs, 48000.0)
   assert o.out[0] == 0.0
   assert o.out[1] == -0.0001220703125
   assert o.out[2] == 1.0
@@ -137,7 +137,7 @@ test "mac_x rounds the product before the sum" {
 
 test "ema rounds the product before the sum" {
   let xs: [F32; 5] = [1.0001220703125, -1.000244140625, 0.0, 0.0, 0.0]
-  let o = ema.render(ema.Config {}, ema.Params { k: 1.0001220703125 }, xs, 48000.0)
+  let o            = ema.render(ema.Config {}, ema.Params { k: 1.0001220703125 }, xs, 48000.0)
   assert o.out[0] == 1.0001220703125
   assert o.out[1] == 0.0
   assert o.out[2] == 0.0
@@ -147,7 +147,7 @@ test "ema rounds the product before the sum" {
 
 test "rel_mac with values that do not depend on the fusion" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let o = rel_mac.render(rel_mac.Config {}, rel_mac.Params { a: 2.0, b: 1.0 }, xs, 48000.0)
+  let o            = rel_mac.render(rel_mac.Config {}, rel_mac.Params { a: 2.0, b: 1.0 }, xs, 48000.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 5.0
   assert o.out[2] == 7.0
@@ -156,7 +156,7 @@ test "rel_mac with values that do not depend on the fusion" {
 
 test "mac_x_after rounds the product before the sum" {
   let xs: [F32; 4] = [1.0001220703125, 1.0, 2.0, 0.5]
-  let o = mac_x_after.render(mac_x_after.Config {}, mac_x_after.Params { a: 1.0001220703125, b: -1.000244140625 }, xs, 48000.0)
+  let o            = mac_x_after.render(mac_x_after.Config {}, mac_x_after.Params { a: 1.0001220703125, b: -1.000244140625 }, xs, 48000.0)
   assert o.out[0] == 0.0
   assert o.out[1] == -0.0001220703125
   assert o.out[2] == 1.0

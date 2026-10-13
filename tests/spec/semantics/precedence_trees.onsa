@@ -109,7 +109,7 @@ test "comparison is stronger than && and ||" {
 
 test "the right operand of && and || is evaluated only if needed, by the tree" {
   var log: U32 = 0
-  let r1 = bump(inout log, 1) < 0 && bump(inout log, 2) > 0
+  let r1       = bump(inout log, 1) < 0 && bump(inout log, 2) > 0
   assert !r1
   assert log == 1 // the second operand was not evaluated
   let r2 = bump(inout log, 2) > 0 || bump(inout log, 3) > 0
@@ -125,18 +125,18 @@ test "the same bit operator chains from the left" {
   let b: U32 = 2
   let c: U32 = 4
   let d: U32 = 8
-  let o = a | b | c | d
+  let o      = a | b | c | d
   assert o == 15
   let m: U32 = 0xFF
-  let n = m & 0x0F & 0x3C & 0xFF
+  let n      = m & 0x0F & 0x3C & 0xFF
   assert n == 12 // 0x0C
   let x = a ^ b ^ c ^ b ^ a
   assert x == 4
   let e: U32 = 256
-  let s = e >> 2 >> 1 // (256 >> 2) >> 1 = 32; from the right 256 >> 1 = 128
+  let s      = e >> 2 >> 1 // (256 >> 2) >> 1 = 32; from the right 256 >> 1 = 128
   assert s == 32
   let one: U32 = 1
-  let t = one << 1 << 2 << 3 // ((1 << 1) << 2) << 3 = 64
+  let t        = one << 1 << 2 << 3 // ((1 << 1) << 2) << 3 = 64
   assert t == 64
 }
 
@@ -158,7 +158,7 @@ test "prefix and postfix operators bind tighter than every group" {
   assert xs[0] + xs[1] * xs[2] == 7
   assert id(xs[2]) * id(2) + id(1) == 7
   let flag: Bool = false
-  let ok: Bool = true
+  let ok: Bool   = true
   assert !flag && ok
   assert !flag == ok
   let n: I32 = 5

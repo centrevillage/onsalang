@@ -58,15 +58,15 @@ fn take_bf(b: Bx[F32]) -> Bool {
 }
 
 fn bound_in_a_generic[U: Float](x: U) -> Bool {
-  let o = None
-  let a = need_f(o)
+  let o            = None
+  let a            = need_f(o)
   let p: Option[U] = o
   a
 }
 
 test "a bound met by a later annotation" {
-  let o = None
-  let a = need_f(o)
+  let o              = None
+  let a              = need_f(o)
   let p: Option[F32] = o
   assert !a
   assert !need_f(p)
@@ -101,8 +101,8 @@ fn decided_by_the_return() -> Option[F32] {
 }
 
 test "a bound of a method met by a later statement" {
-  let b = Bx { o: None }
-  let h = b.has()
+  let b          = Bx { o: None }
+  let h          = b.has()
   let c: Bx[F32] = b
   assert !h
   assert !c.has()
@@ -116,8 +116,8 @@ test "a bound of a method met by a later argument" {
 }
 
 test "a float literal decided by an annotation satisfies the bound" {
-  let v = 3.0
-  let a = need_fl(v)
+  let v      = 3.0
+  let a      = need_fl(v)
   let w: F64 = v
   assert a
   assert w == 3.0
@@ -137,14 +137,14 @@ test "a bound of a generic parameter is met by the bound of the function" {
 }
 
 test "the implicit Dup is met by a Copy type that comes later" {
-  let o = None
-  let a = hold(o)
+  let o             = None
+  let a             = hold(o)
   let p: Option[U8] = o
   assert !a
 }
 
 test "the element of a repetition is Dup when a later statement decides it" {
-  let xs = [None; 2]
+  let xs                  = [None; 2]
   let ys: [Option[U8]; 2] = xs
   assert !hold(ys[0])
 }
@@ -160,7 +160,7 @@ test "a waiting bound in a branch and a loop" {
       n = n + 1
     }
   }
-  for i in 0..<2 {
+  for i in 0 ..< 2 {
     if !need_f(o) {
       n = n + 10
     }
@@ -172,8 +172,8 @@ test "a waiting bound in a branch and a loop" {
 
 test "a waiting bound inside a closure" {
   let xs: [U32; 2] = array.from_fn(fn(i) {
-    let o = None
-    let a = need_f(o)
+    let o              = None
+    let a              = need_f(o)
     let p: Option[F64] = o
     if a { 100 } else { i + 1 }
   })

@@ -37,14 +37,14 @@ pub flow guarded(x: F32 at sample, g: F32 at block) -> F32 at sample {
 
 test "Some(Mode.Gain(g)) is matched with a nested pattern" {
   let xs: [F32; 2] = [1.0, 4.0]
-  let o = nested.render(nested.Config {}, nested.Params { g: 0.5 }, xs, 8.0)
+  let o            = nested.render(nested.Config {}, nested.Params { g: 0.5 }, xs, 8.0)
   assert o.out[0] == 0.5
   assert o.out[1] == 2.0
 }
 
 test "a guard on the payload of a built value" {
   let xs: [F32; 2] = [2.0, 3.0]
-  let big = guarded.render(guarded.Config {}, guarded.Params { g: 2.0 }, xs, 8.0)
+  let big          = guarded.render(guarded.Config {}, guarded.Params { g: 2.0 }, xs, 8.0)
   assert big.out[0] == 4.0
   assert big.out[1] == 6.0
   let small = guarded.render(guarded.Config {}, guarded.Params { g: 0.5 }, xs, 8.0)

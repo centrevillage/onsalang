@@ -7,10 +7,10 @@
 
 pub fn fine(n: U32) -> U32 {
   var t: U32 = 0
-  for i in 0..<n {
+  for i in 0 ..< n {
     t = t + i
   }
-  for j in 1..=n {
+  for j in 1 ..= n {
     t = t + j
   }
   t
