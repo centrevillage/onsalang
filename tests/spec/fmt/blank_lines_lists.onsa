@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§7", "§18.2"]
+
+// The blank lines between the elements of a list (docs/onsa-tools.md §3.2, S-499, S-510): a blank line
+// between two elements stays whatever the list and whatever its form, and so does the absence of one. The
+// lists are the fields of a struct, the variants of an enum, the arms of a `match`, the arguments of a
+// call and of a declaration, the elements of an array, the elements of an enum variant, the arguments of
+// an attribute, the names of a `use` list and the types of a type list. A blank line over a line of a
+// comment in a list stays too. The blank lines at the start and at the end of a list, and the ones inside
+// an element, go (that is in the tests of the command). The file is canonical, so `onsa fmt` leaves it
+// unchanged.
+
+use std.math.{
+  sin,
+
+  cos,
+  tan,
+}
+
+// The fields and the variants.
+pub struct Voice {
+  freq: F32,
+  phase: F32,
+
+  gain: F32,
+
+  // The envelope is last.
+  env: F32,
+}
+
+pub enum Shape {
+  Circle(F32),
+
+  Rect(
+    F32,
+
+    F32,
+  ),
+  Empty,
+
+  // The last variant.
+  Line(F32),
+}
+
+// The arms of a `match`.
+pub fn area(s: Shape) -> F32 {
+  match s {
+    Shape.Circle(r) => r * r,
+
+    Shape.Rect(w, h) => w * h,
+    Shape.Line(l) => l,
+
+    Shape.Empty => 0.0,
+  }
+}
+
+// The arguments of a call, the parameters of a declaration and the elements of an array.
+fn sum4(a: I32, b: I32, c: I32, d: I32) -> I32 {
+  a + b + c + d
+}
+
+pub fn calls(a: I32, b: I32) -> I32 {
+  let x = sum4(
+    a,
+
+    b,
+    a,
+
+    b,
+  )
+  let y = [
+    a,
+    b,
+
+    a,
+  ]
+  let z = sum4(a,
+               b,
+
+               a,
+               b)
+  x + y[0] + z
+}
+
+pub fn parameters(
+  a: I32,
+
+  b: I32,
+  c: I32,
+) -> I32 {
+  a + b + c
+}
+
+// The arguments of an attribute and the types of a type list.
+pub flow filter(
+  x: F32 at sample,
+  @param(
+    min: 20.0,
+
+    max: 20000.0,
+    default: 1000.0,
+  )
+  cutoff: F32 at block,
+) -> F32 at sample {
+  x * cutoff
+}
+
+pub fn types(
+  r: Result[
+    I32,
+
+    Bool,
+  ],
+  t: (
+    I32,
+
+    F32,
+  ),
+) -> I32 {
+  t.0
+}

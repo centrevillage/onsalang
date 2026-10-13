@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.2"]
+
+// The line breaks of a continuation stay (docs/onsa-tools.md §3.2, R-143, S-335, S-498): `onsa fmt` does not
+// join a line to the next one at a place where the language goes on (§2.5), and does not break a line
+// anywhere else. The places are the end of a line that ends with a binary operator, a range symbol, `=` or
+// `->`, an attribute alone on its line, and the start of a line with `.` or `uses`. A continued line is one
+// level deeper than the line the statement or the item starts on, and it is that deep however many
+// continuations follow. The file is canonical, so `onsa fmt` leaves it unchanged. The same places inside a
+// pair of brackets are in lines_kept_brackets.onsa, and the levels of the continued lines of every
+// shape are in indent_continuation.onsa.
+
+use std.array
+
+// A line that ends with a binary operator.
+pub fn operators(a: I32, b: I32) -> I32 {
+  let s = a +
+    b
+  let t = a *
+    b +
+    s
+  let c = a ==
+    b
+  let both = c &&
+    true
+  if both {
+    s
+  } else {
+    t
+  }
+}
+
+// A line that ends with a range symbol: the `{` of the head stays on the last line of the head.
+pub fn ranges(n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..<
+    n {
+    total = total + i
+  }
+  for j in 1 ..< n +
+    1 {
+    total = total + j
+  }
+  total
+}
+
+// A line that ends with `=`.
+const LIMIT: I32 =
+  8
+
+type Gain =
+  F32
+
+pub fn after_equals(a: I32) -> I32 {
+  let x =
+    a + LIMIT
+  var y: I32 =
+    x
+  y = y +
+    1
+  y
+}
+
+// A line that ends with `->`: in the head of a function, in a type alias and in a function type.
+pub fn scale(x: Gain, k: Gain) ->
+  Gain {
+  x * k
+}
+
+type Op =
+  fn(I32) ->
+  I32
+
+pub fn take(h: Op, x: I32) -> I32 {
+  x
+}
+
+// An attribute alone on its line does not end the item, and the item stays under it.
+@repr(c)
+pub struct Frame {
+  left: F32,
+  right: F32,
+}
+
+impl Frame {
+  @fp(relaxed)
+  pub fn sum(self) -> F32 {
+    self.left + self.right
+  }
+}
+
+// A line that starts with `.` or with `uses`.
+pub fn chain(a: I32, b: I32) -> I32 {
+  let m = a
+    .max(b)
+    .min(100)
+  m
+}
+
+pub fn effect_line(n: U32) -> U32
+  uses {Alloc} {
+  n + 1
+}
+
+pub fn effect_line_after_arrow(n: U32, m: U32) ->
+  U32
+  uses {Alloc} {
+  n + m
+}

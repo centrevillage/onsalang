@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.4", "§4.5", "§18.2"]
+
+// The three forms of the lists of the types (docs/onsa-tools.md §3.2, S-328, S-510): the type parameters of
+// a declaration (with bounds), the type arguments of a type (`Result[I32, Bool]`), the elements of a tuple
+// type and the arguments of a function type. The type arguments of an expression are in
+// lists_types_expression_args.onsa. Each is on one line, in the block form (a line break right after the opening bracket, one element
+// a line with a `,` after every element, the closing bracket on a line of its own) or as a continuation
+// (the others under the first element, no `,` after the last, the closing bracket after the last element),
+// as the writer breaks the lines; `onsa fmt` keeps the form and does not put the list on one line. A pair
+// of parentheses around one type, `(I32)`, is a grouping and not a tuple type, so its block form has no
+// `,`. The file is canonical, so `onsa fmt` leaves it unchanged.
+
+// The type parameters.
+pub fn params_one_line[T: Num, U: Copy](x: T, y: U) -> T {
+  x
+}
+
+pub fn params_block[
+  T: Num,
+  U: Copy,
+](x: T, y: U) -> T {
+  x
+}
+
+pub fn params_continuation[T: Num,
+                           U: Copy](x: T, y: U) -> T {
+  x
+}
+
+pub fn params_bounds_block[
+  T: Num + Copy,
+  U: ?Dup,
+  V,
+](x: T, y: U, z: V) -> T {
+  x
+}
+
+pub struct Pair[T, U] {
+  first: T,
+  second: U,
+}
+
+pub struct Triple[
+  T,
+  U,
+  V,
+] {
+  first: T,
+  second: U,
+  third: V,
+}
+
+// The type arguments of a type.
+pub fn types_one_line(r: Result[I32, Bool]) -> I32 {
+  match r {
+    Ok(v) => v,
+    Err(_) => 0,
+  }
+}
+
+pub fn types_block() -> I32 {
+  let r: Result[
+    I32,
+    Bool,
+  ] = Ok(1)
+  let s: Pair[
+    I32,
+    F32,
+  ] = Pair { first: 2, second: 3.0 }
+  match r {
+    Ok(v) => v + s.first,
+    Err(_) => 0,
+  }
+}
+
+pub fn types_continuation() -> I32 {
+  let r: Result[I32,
+                Bool] = Ok(1)
+  let s: Pair[I32,
+              F32] = Pair { first: 2, second: 3.0 }
+  match r {
+    Ok(v) => v + s.first,
+    Err(_) => 0,
+  }
+}
+
+// The elements of a tuple type.
+pub fn tuples() -> I32 {
+  let one: (I32, F32) = (1, 2.0)
+  let two: (
+    I32,
+    F32,
+  ) = (3, 4.0)
+  let three: (I32,
+              F32) = (5, 6.0)
+  one.0 + two.0 + three.0
+}
+
+pub fn grouping() -> I32 {
+  let one: (I32) = 1
+  let two: (
+    I32
+  ) = 2
+  one + two
+}
+
+// The arguments of a function type.
+pub fn functions_one_line(f: fn(I32, F32) -> I32) -> I32 {
+  f(1, 2.0)
+}
+
+pub fn functions_block(
+  f: fn(
+    I32,
+    F32,
+  ) -> I32,
+  n: I32,
+) -> I32 {
+  f(n, 2.0)
+}
+
+pub fn functions_continuation(
+  g: fn(I32,
+        F32) -> I32,
+  n: I32,
+) -> I32 {
+  g(n, 3.0)
+}

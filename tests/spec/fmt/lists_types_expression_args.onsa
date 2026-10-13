@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.5", "§18.2"]
+
+// The three forms of the type arguments of an expression, `::[…]` (docs/onsa-tools.md §3.2, S-328, S-510):
+// on one line, in the block form (a line break right after `::[`, one type a line with a `,` after every
+// type, the closing `]` on a line of its own, and the call after it) and as a continuation (the others
+// under the first type, no `,` after the last). There is no space before or after `::[`, and the type
+// arguments of an expression are written like the type arguments of a type (lists_types_generics.onsa).
+// `onsa fmt` keeps the form the writer's line breaks give and does not put the list on one line. This
+// version does not instantiate an item with type arguments written in an expression (E0200 of `onsa
+// check`), so the file is read by the syntax stage only (`mode = "parse"`).
+
+pub fn pair[T, U](a: T, b: U) -> (T, U) {
+  (a, b)
+}
+
+pub fn function_forms() -> I32 {
+  let one = pair::[I32, F32](1, 2.0)
+  let two = pair::[
+    I32,
+    F32,
+  ](3, 4.0)
+  let three = pair::[I32,
+                     F32](5, 6.0)
+  one.0 + two.0 + three.0
+}
+
+pub fn one_argument() -> I32 {
+  let one = id::[I32](1)
+  let two = id::[
+    I32,
+  ](2)
+  one + two
+}
+
+pub fn method_and_type_forms(buf: Buf[F32]) -> U32 {
+  let one = buf.push_with::[F32, U8](1.0, 2)
+  let two = buf.push_with::[
+    F32,
+    U8,
+  ](1.0, 2)
+  let three = buf.push_with::[F32,
+                              U8](1.0, 2)
+  let four = Buf::[F32].zeroed(4)
+  let five = Buf::[
+    F32,
+  ].zeroed(4)
+  1
+}
+
+pub fn deeper(c: Bool) -> I32 {
+  if c {
+    let one = pair::[
+      I32,
+      F32,
+    ](1, 2.0)
+    one.0
+  } else {
+    let two = pair::[I32,
+                     F32](3, 4.0)
+    two.0
+  }
+}

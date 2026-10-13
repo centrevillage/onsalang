@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§7", "§18.2"]
+
+// A line that ends with the closed range symbol `..=` goes on, as a line that ends with `..<` does
+// (docs/onsa-tools.md §3.2, S-335, S-498): `onsa fmt` keeps the line break, the next line is one level
+// deeper than the line the `for` or `par` starts on, and the `{` of the head stays on the last line of the
+// head. The body is on the level of the continued line, and the content of an enclosure on the continued
+// line is one level under it. This version does not lower a range with its end in a head (E0200 of
+// `onsa check`), so the file is read by the syntax stage only (`mode = "parse"`). The cases of `..<` are
+// in lines_kept_continuation.onsa and indent_enclosures.onsa. The file is canonical, so `onsa fmt`
+// leaves it unchanged.
+
+pub fn sum_to(n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..=
+    n {
+    total = total + i
+  }
+  for j in 1 ..= n -
+    1 {
+    total = total + j
+  }
+  total
+}
+
+pub fn with_a_call(n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..=
+    bound(
+      1,
+      n,
+    ) {
+    total = total + i
+  }
+  total
+}
+
+pub fn bound(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..=
+    3 {
+    x * i.round_f32()
+  }
+}

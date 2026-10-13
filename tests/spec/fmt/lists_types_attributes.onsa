@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§8.1", "§11.7", "§15.1", "§18.2"]
+
+// The three forms of three lists that are not the lists of the values of an expression (docs/onsa-tools.md
+// §3.2, S-510): the arguments of an attribute, the elements of an enum variant and the effects of an effect
+// row. Each is on one line, in the block form (a line break right after the opening bracket, one element a
+// line with a `,` after every element, the closing bracket on a line of its own) or as a continuation (the
+// others under the first element, no `,` after the last), as the writer breaks the lines. `onsa fmt` keeps
+// the form; it does not put the list on one line. The block form of an effect row is `uses {` and a line
+// to a line for each effect, and the closing `}` goes on the line of the item (`} {`); the effect row on
+// one line has no space inside its `{ }`. The file is canonical, so `onsa fmt` leaves it unchanged. The
+// lists of the types (type parameters, type arguments, tuple types, function types) are in
+// lists_types_generics.onsa, and the `use` lists are in list_forms_use.onsa.
+
+// The arguments of an attribute: of an item, and of an input of a flow.
+@fp(relaxed)
+pub fn fast_one_line(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(
+  relaxed,
+)
+pub fn fast_block(x: F32) -> F32 {
+  x * 3.0
+}
+
+@repr(
+  c,
+)
+pub struct Frame {
+  left: F32,
+  right: F32,
+}
+
+pub flow filter(
+  x: F32 at sample,
+  @param(min: 20.0, max: 20000.0, default: 1000.0)
+  cutoff: F32 at block,
+  @param(
+    min: 0.1,
+    max: 10.0,
+    default: 0.7,
+  )
+  q: F32 at block,
+  @param(min: -60.0,
+         max: 12.0,
+         default: 0.0,
+         unit: "dB")
+  gain: F32 at block,
+) -> F32 at sample {
+  x * cutoff * q * gain
+}
+
+// The input of a flow in a list of one line or in a continuation keeps its attribute on the line of the input.
+pub flow in_one_line(x: F32 at sample, @param(min: 0.0, max: 1.0) level: F32 at block) -> F32 at sample {
+  x * level
+}
+
+pub flow in_a_continuation(x: F32 at sample,
+                           @param(min: 0.0, max: 1.0) level: F32 at block) -> F32 at sample {
+  x * level
+}
+
+// The elements of an enum variant.
+pub enum Shape {
+  Circle(F32),
+  Rect(F32, F32),
+  Quad(
+    F32,
+    F32,
+    F32,
+    F32,
+  ),
+  Tri(F32,
+      F32,
+      F32),
+  Solo(
+    F32,
+  ),
+}
+
+pub fn corners(s: Shape) -> U32 {
+  match s {
+    Shape.Circle(r) => 0,
+    Shape.Rect(w, h) => 4,
+    Shape.Quad(a, b, c, d) => 4,
+    Shape.Tri(a, b, c) => 3,
+    Shape.Solo(r) => 1,
+  }
+}
+
+// The effects of an effect row: of a function and of a function type.
+pub fn row_one_line(n: U32) -> U32 uses {Alloc} {
+  n + 1
+}
+
+pub fn row_block(n: U32) -> U32 uses {
+  Alloc,
+} {
+  n + 2
+}
+
+pub fn row_effects_one_line[e](f: fn(U32) -> U32 uses {e}) -> U32 uses {Alloc, e} {
+  f(1)
+}
+
+pub fn row_effects_block[e](f: fn(U32) -> U32 uses {e}) -> U32 uses {
+  Alloc,
+  e,
+} {
+  f(2)
+}
+
+pub fn row_effects_continuation[e](f: fn(U32) -> U32 uses {e}) -> U32 uses {Alloc,
+                                                                            e} {
+  f(3)
+}
+
+pub fn row_in_a_function_type[e](
+  f: fn(U32) -> U32 uses {
+    e,
+  },
+  n: U32,
+) -> U32 uses {Alloc, e} {
+  f(n)
+}

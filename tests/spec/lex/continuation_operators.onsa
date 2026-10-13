@@ -76,16 +76,16 @@ pub struct Pt {
 pub fn in_brackets(a: I32, b: I32, k: U32, xs: [I32; 4]) -> I32 {
   let c = two(a +
     1, b *
-    2)
+      2)
   let arr = [a +
     1, b -
-    1]
+      1]
   let (u, v) = (a *
     2, b +
-    3)
+      3)
   let p = Pt { x: a +
     1, y: b *
-    2 }
+      2 }
   c + arr[0] + u + v + p.x + p.y + xs[k -
     1]
 }
@@ -122,8 +122,8 @@ pub fn in_closure() -> [U32; 3] {
 pub fn nested(a: I32, b: I32) -> I32 {
   two(two(a +
     1, b *
-    2), two(b -
-    1, a))
+      2), two(b -
+        1, a))
 }
 
 // The heads: the operator ends the line, and the `{` is on the last line of the head.

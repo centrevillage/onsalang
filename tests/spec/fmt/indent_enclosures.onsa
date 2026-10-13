@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.2"]
+
+// The level of what an enclosure opened on a continued line holds (docs/onsa-tools.md §3.2, S-498): the
+// content of an enclosure is one level deeper than its base line and the closing bracket is on the base
+// line. The base line of a `(` or `[` list is the line of the opening bracket, and the base line of a `{`
+// enclosure (a block, a list of `match` arms, a struct literal) is the line the form that holds it starts
+// on. When the bracket is on a continued line, the base is that continued line, so the content is two
+// levels under the statement and the closing bracket is one level under it (the closing bracket is never
+// shallower than the line it closes). The file is canonical, so `onsa fmt` leaves it unchanged.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+fn foo() -> I32 {
+  1
+}
+
+fn bar(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+fn sum_to(a: I32, b: I32) -> U32 {
+  3
+}
+
+// A call in the block form that starts on a continued line.
+pub fn calls(t: Bool) -> I32 {
+  let x = foo() +
+    bar(
+      1,
+      2,
+    )
+  let y = foo() +
+    bar(1,
+        2)
+  let z = foo() +
+    if t {
+      1
+    } else {
+      2
+    }
+  x + y + z
+}
+
+// A method call in the block form after a chain: the `(` of `.max(` is on a continued line.
+pub fn chains(a: I32, b: I32) -> I32 {
+  let y = a
+    .max(
+      b,
+    )
+    .min(
+      100,
+    )
+  y
+}
+
+// After an `=` that ends the line: a literal in the block form, an array, a closure.
+pub fn after_equals() -> I32 {
+  let p =
+    Pt {
+      x: 1,
+      y: 2,
+    }
+  let arr =
+    [
+      1,
+      2,
+    ]
+  let f =
+    fn(a: I32) -> I32 {
+      a + 1
+    }
+  p.x + arr[0] + f.(3)
+}
+
+// After a range symbol: a call in the block form, then the body of the `for` on the level of the call's
+// closing bracket.
+pub fn ranges(n: I32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..<
+    sum_to(
+      1,
+      n,
+    ) {
+    t = t + i
+  }
+  t
+}
+
+// A head that continues and a `match` on a head that continues: the body is one level under the line the
+// form starts on.
+pub fn heads(a: Bool, b: Bool, n: I32) -> I32 {
+  if a &&
+    b {
+    return 1
+  }
+  match n +
+    1 {
+    1 => 10,
+    _ => 20,
+  }
+}
+
+// The same in a block of a deeper level.
+pub fn deeper(t: Bool) -> I32 {
+  if t {
+    let x = foo() +
+      bar(
+        1,
+        2,
+      )
+    let y = foo() +
+      if t {
+        1
+      } else {
+        2
+      }
+    x + y
+  } else {
+    0
+  }
+}

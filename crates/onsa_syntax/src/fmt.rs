@@ -5,6 +5,13 @@
 //! of `=` in `let` runs and of trailing comments) is normalized.
 
 mod align;
+// The printer that walks the tokens of the CST (W3-11 unit U3a), and its plan; `format` reads them from unit U3b on.
+#[cfg_attr(not(test), allow(dead_code))]
+mod plan;
+#[cfg_attr(not(test), allow(dead_code))]
+mod print;
+#[cfg(test)]
+mod print_tests;
 // The tables of the spaces and of the lists, which the printer reads from W3-11 unit U3 on.
 #[cfg_attr(not(test), allow(dead_code))]
 mod shape;

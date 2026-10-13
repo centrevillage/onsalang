@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.2"]
+
+// The level of a continued line (docs/onsa-tools.md §3.2, S-498, S-335): a line that continues the line
+// before it is one level (two spaces) deeper than the line the statement or the item starts on, and it
+// stays at that level however many continued lines follow (`let x =` and then `a +` and then `b` are on one
+// level, not on three). The base is the line of the statement or of the item, not the line before: in a
+// block of a deeper level the continued lines are deeper too. An attribute alone on its line adds no level
+// to the line after it, and a head that continues puts its body one level under the line of the head's
+// start, so the body is on the level of the continued lines of the head. The file is canonical, so `onsa fmt`
+// leaves it unchanged. The enclosures opened on a continued line are in indent_enclosures.onsa and the
+// elements of lists in indent_elements.onsa.
+
+// After `=`, and after an operator: two or three lines on one level.
+pub fn after_equals(a: I32, b: I32) -> I32 {
+  let x =
+    a +
+    b
+  let y = a +
+    b +
+    x
+  var z: I32 =
+    y *
+    2
+  z = z +
+    1 +
+    b
+  z
+}
+
+// A function type and a type alias that go on after `->` stay on one level.
+type Op =
+  fn(I32) ->
+  I32
+
+type Binary =
+  fn(I32,
+     I32) ->
+  I32
+
+// A chain of calls: the lines that start with `.` are on one level, with or without an `=` before them.
+pub fn chains(a: I32, b: I32) -> I32 {
+  let y =
+    a
+    .max(b)
+    .min(100)
+  let z = a
+    .max(b)
+    .min(100)
+  y + z
+}
+
+// The same in a block of a deeper level: the base is the line of the statement.
+pub fn deeper(a: I32, b: I32, c: Bool) -> I32 {
+  if c {
+    let x =
+      a +
+      b
+    let y = a +
+      b +
+      x
+    for i in 0 ..<
+      y {
+      if i >
+        a {
+        return i +
+          x
+      }
+    }
+    x
+  } else {
+    a
+  }
+}
+
+// A head that continues: the body is one level under the line the head starts on, so it is on the level of
+// the continued lines of the head, and the closing `}` is on the level of the head.
+pub fn heads(a: Bool, b: Bool, n: I32) -> I32 {
+  var t = 0
+  if a &&
+    b {
+    t = t + 1
+  }
+  while t < n &&
+    a {
+    t = t + 1
+  }
+  if t >
+    n ||
+    b {
+    t = 0
+  } else if a &&
+    b {
+    t = 1
+  } else {
+    t = 2
+  }
+  match t +
+    1 {
+    1 => 10,
+    _ => 20,
+  }
+}
+
+// The members of an `impl` are one level deeper, and so are their continued lines.
+@repr(c)
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+impl Pair {
+  @fp(relaxed)
+  pub fn scaled(self, k: F32) ->
+    F32
+    uses {Alloc} {
+    self.a * k +
+      self.b
+  }
+
+  pub fn total(self) -> F32 {
+    let t =
+      self.a +
+      self.b
+    t
+  }
+}
+
+// An item that goes on after its attribute and after `=`: the attribute is on the level of the item.
+@repr(c)
+pub struct Plain {
+  count: I32,
+}
+
+const LIMIT: I32 =
+  8
+
+const TABLE: [I32; 3] =
+  [1, 2, 3]

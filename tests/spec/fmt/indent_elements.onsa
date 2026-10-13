@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.2"]
+
+// The line breaks inside an element of a list (docs/onsa-tools.md §3.2, S-497, S-498): a break stays where
+// the language goes on (after a binary operator, before a `.`; §2.5) and the next line is one level
+// deeper than the line the element starts on, however the list is written. The element of a list in the
+// block form starts on its own line, the element of a continuation starts under the first one (on the
+// line of its own), and the element of a list on one line starts on the line of the opening bracket.
+// The levels do not pile up (`a +` and then `b +` and then `c` are on one level). The closing bracket of
+// a block is on the line of the opening bracket. The file is canonical, so `onsa fmt` leaves it unchanged.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+fn sum3(a: I32, b: I32, c: I32) -> I32 {
+  a + b + c
+}
+
+fn two(a: I32, b: I32) -> I32 {
+  a - b
+}
+
+fn id(a: I32) -> I32 {
+  a
+}
+
+// The block form: the element starts on a line of its own, and the lines of the element go one level in.
+pub fn block_form(a: I32, b: I32) -> I32 {
+  let x = sum3(
+    a +
+      b +
+      1,
+    b *
+      2,
+    a,
+  )
+  let y = two(
+    a
+      .max(b),
+    b,
+  )
+  x + y
+}
+
+// A continuation: the elements are under the first one, and the lines of an element go one level in from
+// the line the element starts on.
+pub fn continuation(a: I32, b: I32) -> I32 {
+  let x = sum3(a,
+               b +
+                 1,
+               a *
+                 b +
+                 2)
+  x
+}
+
+// A list on one line, with a break in its only element: the element starts on the line of the bracket.
+pub fn one_line(a: I32, b: I32) -> I32 {
+  let x = id(a +
+    b +
+    1)
+  let y = [a *
+    2]
+  x + y[0]
+}
+
+// A list whose second element starts on a later line, with no line break between the elements: the line
+// the element starts on is the base of its own continued lines (the table of S-498:
+// `two(a +` and then `1, b *` and then `2)` are on the levels 2, 4, 6 from the statement).
+pub fn later_lines(a: I32, b: I32) -> I32 {
+  let x = two(a +
+    1, b *
+      2)
+  x
+}
+
+// The fields of a literal and the arms of a `match`.
+pub fn fields_and_arms(a: I32, b: I32) -> I32 {
+  let p = Pt {
+    x: a +
+      b,
+    y: a *
+      b +
+      1,
+  }
+  match p.x {
+    0 => a +
+      b,
+    1 => a *
+      b +
+      2,
+    _ => 3,
+  }
+}
+
+// The lists one level deeper keep the rule, and a list in the element of another list goes one level in
+// from the line its own bracket is on.
+pub fn deeper(a: I32, b: I32, c: Bool) -> I32 {
+  if c {
+    let x = sum3(
+      a +
+        b,
+      two(
+        a *
+          b,
+        1,
+      ),
+      a,
+    )
+    x
+  } else {
+    0
+  }
+}

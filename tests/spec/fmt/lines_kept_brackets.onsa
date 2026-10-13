@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.2"]
+
+// The line breaks inside and around the pairs of brackets stay (docs/onsa-tools.md §3.2, R-143, S-497,
+// S-498): a line break right after the opening bracket and between the elements decides the form of the
+// list (one line, block form, continuation), and a line break inside an element stays where it is a place
+// of continuation (§2.5: after a binary operator, before a `.`, after `->`). The lists below stand in the
+// elements of other lists and in the places of continuation outside any bracket; each keeps its own form.
+// The file is canonical, so `onsa fmt` leaves it unchanged. The levels of the lines are in
+// indent_elements.onsa and indent_enclosures.onsa.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub struct Wrap {
+  inner: I32,
+  tag: I32,
+}
+
+fn sum3(a: I32, b: I32, c: I32) -> I32 {
+  a + b + c
+}
+
+fn pt_sum(p: Pt, k: I32) -> I32 {
+  p.x + p.y + k
+}
+
+fn id(a: I32) -> I32 {
+  a
+}
+
+// A list in the element of another list: a block in a block, a continuation in a block, a block in a
+// continuation and a one-line list in each of them.
+pub fn nested_lists(a: I32, b: I32) -> I32 {
+  let r1 = pt_sum(
+    Pt {
+      x: a,
+      y: b,
+    },
+    1,
+  )
+  let r2 = pt_sum(
+    Pt { x: a,
+         y: b },
+    2,
+  )
+  let r3 = sum3(a,
+                sum3(
+                  a,
+                  b,
+                  1,
+                ),
+                sum3(a, b, 2))
+  let r4 = sum3(a,
+                sum3(a,
+                     b,
+                     1),
+                b)
+  r1 + r2 + r3 + r4
+}
+
+// A break inside a pair of brackets, at the end of the line of a binary operator, in a list of one element
+// and in a list of the block form.
+pub fn breaks_in_brackets(a: I32, b: I32) -> I32 {
+  let u = id(a +
+    1)
+  let v = [a *
+    2]
+  let w = sum3(
+    a +
+      1,
+    b *
+      2,
+    a,
+  )
+  u + v[0] + w
+}
+
+// A line that starts with `.` inside a pair of brackets.
+pub fn chains_in_brackets(a: I32, b: I32) -> I32 {
+  let m = id(a
+    .max(b))
+  let n = sum3(
+    a
+      .max(b),
+    b
+      .min(a),
+    1,
+  )
+  m + n
+}
+
+// A line that ends with `->` inside the parameters of a function.
+pub fn take(
+  h: fn(I32) ->
+    I32,
+  x: I32,
+) -> I32 {
+  x
+}
+
+// The attribute of an input in a list of one line: the break after the attribute stays.
+pub flow gain(@param(min: 0.0, max: 1.0)
+  level: F32 at block) -> F32 at sample {
+  level
+}
+
+// A struct pattern in the block form between lines of one `let`: the `=` of the lines around it are in
+// columns of their own, because a statement of more than one line cuts the column.
+pub fn wrap_pattern(w: Wrap, x: I32) -> I32 {
+  let a   = x + 1
+  let bcd = a + 2
+  let Wrap {
+    inner: q,
+    tag: t,
+  } = w
+  let e    = q + t
+  let ffff = e + bcd
+  ffff
+}

@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§5.1", "§18.2"]
+
+// The blank lines between items and between statements (docs/onsa-tools.md §3.2, S-122, S-499, S-502): a
+// blank line between two items or two statements stays, and so does the absence of one (two or more blank
+// lines become one; that is in the tests of the command). The blank lines at the start and at the end of
+// a block are the ones before its first content and after its last content, where a line of a comment is
+// content: so a blank line under a comment at the start of a block stays, and a blank line over a comment
+// at the end of a block stays. A blank line cuts the column of the `=` of consecutive `let` lines
+// (let_columns.onsa), and a line of a comment does not. The file is canonical, so `onsa fmt` leaves it
+// unchanged. The blank lines inside the lists are in blank_lines_lists.onsa.
+
+use std.array
+use std.math.{max, min}
+
+use std.math.{sin}
+use std.dsp.{db_to_amp}
+pub struct Alpha { x: I32 }
+pub struct Beta { y: I32 }
+
+pub struct Gamma { z: I32 }
+
+pub fn adjacent_one(a: I32) -> I32 {
+  a
+}
+pub fn adjacent_two(a: I32) -> I32 {
+  a + 1
+}
+
+pub fn blank_between(a: I32) -> I32 {
+  a + 2
+}
+
+// The members of an `impl`: with and without a blank line between them.
+impl Alpha {
+  pub fn first(self) -> I32 {
+    self.x
+  }
+  pub fn second(self) -> I32 {
+    self.x + 1
+  }
+
+  pub fn third(self) -> I32 {
+    self.x + 2
+  }
+}
+
+// The statements of a block: with and without a blank line between them, in groups.
+pub fn statements(a: I32) -> I32 {
+  let b = a + 1
+  let c = b + 1
+
+  let d = c + 1
+  var e = d
+  e = e + 1
+
+  e = e + a
+  e
+}
+
+// A comment at the start of a block, with a blank line under it: the blank line stays.
+pub fn comment_then_blank(a: I32) -> I32 {
+  // The first statement is under this comment.
+
+  let b = a + 1
+  b
+}
+
+pub fn comment_then_code(a: I32) -> I32 {
+  // The first statement is right under this comment.
+  let b = a + 1
+  b
+}
+
+// A comment at the end of a block, with a blank line over it.
+pub fn blank_then_comment(a: I32) -> I32 {
+  let b = a + 1
+  b
+
+  // The block ends under this comment.
+}
+
+// The same in a nested block, a branch and a loop.
+pub fn nested(a: I32, c: Bool) -> I32 {
+  var t = a
+  if c {
+    // Count up.
+
+    t = t + 1
+
+    t = t + 2
+  } else {
+    t = 0
+  }
+  for i in 0 ..< 3 {
+    // The index is added.
+
+    t = t + i
+  }
+  t
+}
+
+// A blank line cuts the column of the `=`; a line of a comment does not.
+pub fn columns(a: I32) -> I32 {
+  let first  = a + 1
+  let second = first + 1
+
+  let c   = second + 1
+  let dd  = c + 1
+  // A comment does not cut.
+  let eee = dd + 1
+  eee
+}

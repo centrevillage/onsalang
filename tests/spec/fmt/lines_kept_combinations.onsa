@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§7", "§11.7", "§12.1", "§18.2"]
+
+// The line breaks and the levels of lines_kept_continuation.onsa, lines_kept_brackets.onsa and the
+// indent_*.onsa cases, together, in the places where they meet (docs/onsa-tools.md §3.2, R-143, S-497,
+// S-498): a `par` and a `for` whose head goes on after a range symbol, a closure in the element of a list in
+// the block form, a call through a module path, a generic function whose head goes on after `->`, a flow,
+// and all of them in a branch and a loop. The file is canonical, so `onsa fmt` leaves it unchanged.
+
+use std.array
+use std.math.{max, min}
+
+// A `par` and a `for` with a head that goes on.
+pub flow fine_par(x: F32 at sample) -> [F32; 4] at sample {
+  par i in 0 ..<
+    4 {
+    x * i.round_f32()
+  }
+}
+
+pub fn loops(n: U32) -> U32 {
+  var total: U32 = 0
+  for i in 0 ..<
+    n {
+    for j in i ..<
+      n {
+      total = total +
+        i *
+        j
+    }
+  }
+  total
+}
+
+// A closure in the element of a list in the block form, and in a continuation.
+pub fn closure_in_a_block() -> [U32; 3] {
+  array.from_fn(
+    fn(i) {
+      i *
+        2 +
+        1
+    },
+  )
+}
+
+pub fn closure_in_a_call() -> [U32; 3] {
+  array.from_fn(fn(i) {
+    i *
+      2 +
+      1
+  })
+}
+
+// A call through a module path with an element that goes on, a generic function whose head goes on.
+pub fn through_a_path(a: I32, b: I32) -> I32 {
+  let m = std.math.max(
+    a +
+      1,
+    b,
+  )
+  let n = max(a,
+              b *
+                2)
+  m + n
+}
+
+pub fn pick[T: Num](a: T, b: T) ->
+  T {
+  min(a, b)
+}
+
+// A flow: a statement that goes on and a branch whose head goes on, one level deeper.
+pub flow mixes(x: F32 at sample, y: F32 at sample, c: Bool at block) -> F32 at sample {
+  let both = x +
+    y
+  if c &&
+    true {
+    both *
+      0.5
+  } else {
+    x
+  }
+}
+
+// A branch in a loop in a branch.
+pub fn deep(n: U32, c: Bool) -> U32 {
+  var total: U32 = 0
+  if c {
+    for i in 0 ..<
+      n {
+      if i >
+        1 {
+        total = total +
+          max(
+            i,
+            2,
+          )
+      }
+    }
+  }
+  total
+}

@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§6.3", "§8.1", "§8.3", "§14.1", "§18.2"]
+
+// The body of an item whose members are not separated by `,` (docs/onsa-tools.md §3.2, S-506): the members
+// of a `trait`, an `effect`, a `handler`, an `extern` block and an `impl`. A body with one member whose
+// braces are on one line stays on one line (`{ fn ping() -> I32 }`, with a space inside the braces); any
+// other body has a line for each member, one level deeper, and the closing brace on a line of its own.
+// `onsa fmt` does not put the members of a body on one line. This version does not run a `trait`, an
+// `effect`, a `handler` and an `extern` block (E0200 of `onsa check`), so the file is
+// read by the syntax stage only (`mode = "parse"`). The file is canonical, so `onsa fmt` leaves it
+// unchanged.
+
+pub trait Area { fn area(self) -> F32 }
+
+pub trait Shape {
+  fn width(self) -> F32
+  fn height(self) -> F32
+}
+
+pub effect Ping { fn ping() -> I32 }
+
+pub effect Ask {
+  fn ask() -> I32
+}
+
+pub effect Both {
+  fn one() -> I32
+  fn two() -> I32
+}
+
+handler mem: Ping { fn ping() -> I32 { 1 } }
+
+handler fixed: Ask {
+  fn ask() -> I32 { 2 }
+}
+
+extern "C" lib "m" { fn sin(x: F64) -> F64 }
+
+extern "C" lib "fastconv" {
+  fn fc_free(h: Ptr[F32])
+}
+
+extern "C" lib "more" {
+  fn fc_new(block: U32) -> Ptr[F32]
+  fn fc_drop(h: Ptr[F32])
+}
+
+pub struct Conv { h: Ptr[F32] }
+
+impl Conv { pub fn raw(self) -> Ptr[F32] { self.h } }
+
+impl Area for Conv { fn area(self) -> F32 { 1.0 } }
+
+impl Shape for Conv {
+  fn width(self) -> F32 { 1.0 }
+  fn height(self) -> F32 { 2.0 }
+}

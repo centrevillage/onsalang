@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§7", "§18.2"]
+
+// The three forms of the body of a declaration and of a `match` (docs/onsa-tools.md §3.2, S-506, S-507):
+// `struct`, `enum` and `match` are lists like the lists in parentheses. A body on one line has a space
+// inside its braces and the closing brace after the last element (`struct P { x: F32, y: F32 }`); the
+// block form has a line break right after the `{`, one element a line with a `,` after every element, and
+// the `}` on a line of its own; a continuation has the others under the first element, no `,` after the
+// last, and the closing brace after the last element. The body of an `impl` is like a block: one member
+// whose braces are on one line stays on one line, any other body has a line for each member. The writer's
+// line breaks decide the form, and `onsa fmt` does not put a body on one line. The file is canonical, so
+// `onsa fmt` leaves it unchanged. (The block form of a body is in most of the other cases; the lists in
+// parentheses are in list_forms.onsa.)
+
+pub struct OneLine { x: F32, y: F32 }
+
+pub struct Block {
+  x: F32,
+  y: F32,
+}
+
+pub struct Continuation { x: F32,
+                          y: F32 }
+
+pub struct OneField { x: F32 }
+
+pub struct OneFieldBlock {
+  x: F32,
+}
+
+pub enum Shape { Circle(F32), Rect(F32, F32), Empty }
+
+pub enum Mode {
+  Fast,
+  Slow,
+  Off,
+}
+
+pub enum Pick { Left,
+                Right,
+                None }
+
+pub enum OneVariant { Only }
+
+// A member whose braces are on one line, and a body with a line for each member.
+impl OneLine {
+  pub fn gx(self) -> F32 { self.x }
+}
+
+impl OneField { pub fn gx(self) -> F32 { self.x } }
+
+impl Block {
+  pub fn gx(self) -> F32 { self.x }
+  pub fn gy(self) -> F32 { self.y }
+}
+
+impl Continuation {
+  pub fn gx(self) -> F32 {
+    self.x
+  }
+
+  pub fn gy(self) -> F32 {
+    self.y
+  }
+}
+
+// The arms of a `match`.
+pub fn one_line(s: Shape) -> F32 {
+  match s { Shape.Circle(r) => r, Shape.Rect(w, h) => w * h, Shape.Empty => 0.0 }
+}
+
+pub fn block(s: Shape) -> F32 {
+  match s {
+    Shape.Circle(r) => r,
+    Shape.Rect(w, h) => w * h,
+    Shape.Empty => 0.0,
+  }
+}
+
+pub fn continuation(s: Shape) -> F32 {
+  match s { Shape.Circle(r) => r,
+            Shape.Rect(w, h) => w * h,
+            Shape.Empty => 0.0 }
+}
+
+pub fn one_arm(m: Mode) -> I32 {
+  match m { Mode.Fast => 1, Mode.Slow => 2, Mode.Off => 0 }
+}
+
+pub fn as_a_value(s: Shape) -> F32 {
+  let a = match s { Shape.Circle(r) => r, Shape.Rect(w, h) => w, Shape.Empty => 0.0 }
+  let b = match s {
+    Shape.Circle(r) => r,
+    Shape.Rect(w, h) => h,
+    Shape.Empty => 0.0,
+  }
+  let c = match s { Shape.Circle(r) => r,
+                    Shape.Rect(w, h) => w + h,
+                    Shape.Empty => 0.0 }
+  a + b + c
+}
+
+// The same lists one level deeper.
+pub fn deeper(s: Shape, t: Bool) -> F32 {
+  if t {
+    match s { Shape.Circle(r) => r, Shape.Rect(w, h) => w, Shape.Empty => 0.0 }
+  } else {
+    match s { Shape.Circle(r) => r,
+              Shape.Rect(w, h) => h,
+              Shape.Empty => 0.0 }
+  }
+}

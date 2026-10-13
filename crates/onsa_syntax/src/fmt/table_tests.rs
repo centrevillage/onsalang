@@ -16,14 +16,17 @@
 //!   (block: a `,` after every element and the closing bracket on a line of
 //!   its own; one line and continuation: no `,` after the last element;
 //!   continuation: an element that starts a line starts at the column of the
-//!   first), and a folded list is on one line. The `..` of a struct pattern
+//!   first). The `..` of a struct pattern
 //!   is last and has no `,` after it (S-500).
 //! - Every row of both tables is met, and no row that says one space meets a
 //!   row that says none, except at `{}` and at a `{` right inside a round or
 //!   square bracket (`f({ a })`), where none is meant to win.
 //! - In every file of the repository that the syntax stage reads without a
 //!   diagnostic, every node with a bracket among its tokens is in the table
-//!   of the lists, with the brackets of its row (`Pairs`).
+//!   of the lists, with the brackets of its row (`Pairs`), and the parent of
+//!   every block is a form whose body it is (`shape::BLOCK_HOLDERS`) or a
+//!   kind that holds a block expression ([`EXPRESSION_BLOCK_HOLDERS`]): a new
+//!   form with a body fails here instead of being read as a block expression.
 
 use std::path::Path as FsPath;
 use std::time::{Duration, Instant};
@@ -38,11 +41,17 @@ use crate::token::TokenKind;
 /// Canonical sources for what no file has: a struct pattern with `..` in the
 /// block form (S-500; the syntax stage reads the `..`, a later stage reports
 /// it, S-366).
-const EXTRA: &[(&str, &str)] = &[(
+pub(super) const EXTRA: &[(&str, &str)] = &[(
     "EXTRA[0]",
     "fn f(p: P) -> I32 {\n  match p {\n    P {\n      x: 1,\n      ..\n    } => 1,\n    P { x: 2, .. } => 2,\n    \
      P { .. } => 3,\n  }\n}\n",
 )];
+
+/// The kinds of the parents of the blocks that are block expressions (a form of their own,
+/// `shape::Base::Body`), met in the files of the repository. A kind met anew goes here when the
+/// block is an operand there, and in `shape::BLOCK_HOLDERS` when it is the body of the form.
+const EXPRESSION_BLOCK_HOLDERS: &[NodeKind] =
+    &[NodeKind::Arg, NodeKind::ExprStmt, NodeKind::LetStmt, NodeKind::MatchArm];
 
 /// The time the test may take in a debug build (it took about 4 s on 2026-10-13).
 const BUDGET: Duration = Duration::from_secs(30);
@@ -98,7 +107,7 @@ fn not_canonical(text: &str) -> bool {
 /// canonical (`onsa_tests::run`): under `tests/spec`, no marker, and the
 /// settings of its case (the fragment of the file, or of the package that
 /// holds it, the nearest directory with `onsa.toml`) do not say otherwise.
-fn canonical_by_case(name: &str, text: &str, files: &[(String, String)], root: &FsPath) -> bool {
+pub(super) fn canonical_by_case(name: &str, text: &str, files: &[(String, String)], root: &FsPath) -> bool {
     if name.starts_with("std/") || name.starts_with("EXTRA") {
         return true;
     }
@@ -199,7 +208,7 @@ fn last_before(cst: &Cst, to: usize, comments: bool) -> Option<TokenKind> {
         .find(|k| *k != TokenKind::Whitespace && !(comments && k.is_comment()))
 }
 
-fn check_list(name: &str, text: &str, cst: &Cst, n: NodeId, fold: bool, tally: &mut Tally) {
+fn check_list(name: &str, text: &str, cst: &Cst, n: NodeId, tally: &mut Tally) {
     let form = shape::form(cst, n).expect("a list has a form");
     let (_, close) = shape::brackets(cst, n).expect("a list has brackets");
     let elems = shape::elements(cst, n);
@@ -209,9 +218,6 @@ fn check_list(name: &str, text: &str, cst: &Cst, n: NodeId, fold: bool, tally: &
     let mut fail = |what: &str| {
         tally.errors.push(format!("{name}:{line}:{col}: {} in the {form:?} form: {what}", cst.kind(n).name()))
     };
-    if fold && form != Form::OneLine {
-        fail("a folded list is not on one line");
-    }
     if let Some(r) = &rest
         && next_code(cst, r.end.index()) != Some(cst.token(close).kind)
     {
@@ -262,6 +268,17 @@ fn check_coverage(name: &str, cst: &Cst, tally: &mut Tally) {
             },
             None => kinds.is_empty(),
         };
+        if cst.kind(n) == NodeKind::Block
+            && let Some(p) = cst.parent(n)
+            && !shape::BLOCK_HOLDERS.contains(&cst.kind(p))
+            && !EXPRESSION_BLOCK_HOLDERS.contains(&cst.kind(p))
+        {
+            tally.errors.push(format!(
+                "{name}: a block at {:?} in a {}, in neither shape::BLOCK_HOLDERS nor EXPRESSION_BLOCK_HOLDERS",
+                cst.span(n),
+                cst.kind(p).name()
+            ));
+        }
         if !fits {
             tally.errors.push(format!(
                 "{name}: a {} at {:?} holds the brackets {kinds:?}, its row of the lists says otherwise",
@@ -281,8 +298,8 @@ fn check_shapes(name: &str, text: &str, cst: &Cst, tally: &mut Tally) {
             continue; // `-1`: check_coverage holds that only a row of `Pairs::Nested` may lack them
         }
         tally.shape_rows[shape::TABLE.iter().position(|b| b.node == row.node).unwrap()] = true;
-        if let Shape::List { fold } = row.shape {
-            check_list(name, text, cst, n, fold, tally);
+        if row.shape == Shape::List {
+            check_list(name, text, cst, n, tally);
         }
     }
 }
@@ -336,6 +353,9 @@ fn the_tables_of_the_spaces_and_of_the_lists_agree_with_every_canonical_file() {
 
 #[test]
 fn the_kinds_of_the_brackets_in_the_table_of_the_spaces_are_those_of_the_table_of_the_lists() {
+    for k in EXPRESSION_BLOCK_HOLDERS {
+        assert!(!shape::BLOCK_HOLDERS.contains(k), "{} holds a body and a block expression", k.name());
+    }
     let open_of = |kind: NodeKind| shape::shape(kind).map(|b| b.open);
     for &k in space::ATTACHED_PAREN {
         assert_eq!(open_of(k), Some(TokenKind::LParen), "{}", k.name());
