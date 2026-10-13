@@ -7160,6 +7160,10 @@ pub flow g(x: F32 at sample) -> F32 at sample {
 ]
 
 # ---- FAUST の書き方（§18.1 の表）-----------------------------------------------------------------------
+# 対象外（2026-10-13、`docs/agent-rules.md` 7 章 32）: FAUST の文法の形は対象にしない。この節の FAUST の行
+# （`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`、`faust_compose`）は、
+# 支障が無い限り残す。新しい決定とぶつかる、gate を落とす、直しが要る、のどれかになったら、直さずに事例ごと消す。
+# C 系の前置の `~`（`faust_bit_not`）は対象。
 
 [[form]]
 id = "faust_feedback"

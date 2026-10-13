@@ -4,6 +4,12 @@
 //! negation, which the rows of `if~` / `match~` read too. The FAUST `x'` is a
 //! literal right against a name (the row `string_prefix`, S-466), whose note
 //! [`prime_note`] gives.
+//!
+//! Out of support (`docs/agent-rules.md` 7.32, 2026-10-13): the forms of
+//! FAUST are not diagnosed by rows of their own any more. The rows here stay
+//! while they are no trouble; one that conflicts with a new decision, fails
+//! the gate or needs a fix is removed with its cases, not fixed. The prefix
+//! `~` of C ([`bit_not`]) stays in support.
 
 use super::*;
 use crate::literal::int_value;
@@ -38,7 +44,7 @@ pub(super) fn faust_feedback(c: &Cursor) -> Option<(RowId, Hit)> {
 /// of one name in the body of a flow, with no `par` or anonymous function
 /// between them.
 fn feedback_name<'c>(c: &Cursor<'c>) -> Option<&'c str> {
-    // SPEC-GAP(S-479): where the `let` name is not plain (`let y = ~ _`,
+    // Out of support (S-479, FAUST): where the `let` name is not plain (`let y = ~ _`,
     // `let _`, a tuple, a `fn`, a `par`), no name: no candidate.
     let op = c.sig_before(c.at)?;
     let left = c.sig_before(op)?;
@@ -79,7 +85,7 @@ fn in_flow(c: &Cursor) -> bool {
 /// range is the `@` and the length.
 pub(super) fn faust_delay(c: &Cursor) -> Option<(RowId, Hit)> {
     use TokenKind::*;
-    // SPEC-GAP(S-478): the other forms (`x@0`, `x@1.5`, `x @ 2`, `p.x@2`,
+    // Out of support (S-478, FAUST): the other forms (`x@0`, `x@1.5`, `x @ 2`, `p.x@2`,
     // `x@N+1`, in a `fn`) are none of the list: the general E0002.
     let (at, len) = (c.at, c.at + 1);
     if c.kind(at) != At
@@ -141,7 +147,7 @@ pub(super) fn faust_delay(c: &Cursor) -> Option<(RowId, Hit)> {
 /// candidate (E0002 with the note). The range is the operator.
 pub(super) fn faust_compose(c: &Cursor) -> Option<Hit> {
     use TokenKind::*;
-    // SPEC-GAP(S-485): read only in the value of a `let` and an expression
+    // Out of support (S-485, FAUST): read only in the value of a `let` and an expression
     // that stands as a statement (the last one too) of the body of a flow or
     // of a branch, out of brackets and heads ([`stands_as_statement`]); a
     // blank before the `:` forms and an operand after them on the line; a
@@ -190,6 +196,7 @@ fn stands_as_statement(c: &Cursor) -> bool {
 
 /// The note of the row `string_prefix` for a literal whose delimiter is `'`
 /// right after a name (S-466): the FAUST `x'`, a delay of one sample.
+/// Out of support (FAUST, see the module).
 pub(super) fn prime_note(text: &str, range: Span) -> Option<&'static str> {
     let form = &text[range.start as usize..range.end as usize];
     let name = form.find(['\'', '"'])?;
@@ -222,7 +229,7 @@ pub(super) fn bit_not(c: &Cursor) -> Option<Vec<Fix>> {
     if c.kind(c.at) != TokenKind::Tilde || c.gap_after(c.at).is_some() || c.kind(c.at + 1) == TokenKind::Underscore {
         return None;
     }
-    // SPEC-GAP(S-486): a `_` in the parentheses of `~(…)` (out of nested
+    // Out of support (S-486, FAUST): a `_` in the parentheses of `~(…)` (out of nested
     // brackets) is the feedback of FAUST (`x + ~(_ * 0.5)`), which `!` would
     // leave a typed hole: no reading of the row (the general E0002).
     if c.kind(c.at + 1) == TokenKind::LParen && holds_wild(c, c.at + 1) {

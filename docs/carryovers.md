@@ -236,9 +236,6 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
   - `tests/spec/fixes/` のパッケージの事例（6 個のディレクトリ）は辿らず、数だけを出す。
   - 「一手以上辿った歩みが 0 本なら失敗」は全体で一つだけの判定で、大半の入力が歩けなくなっても気付かない（割合の下限の案）。`tests/` の別の場所が読めないと `case::collect` の誤りでこの項目も失敗する（二重の失敗）。
   - CLI の分岐なしの歩みには期限が無い（上限は 2 × トークンの数 + 8）。`--fix-same-place` の内部エラーは位置を落とす。`fix_loop` の内部エラーの位置（L-3）を直接確かめるテストが無い。
-- **W3-23 の残り（20 回目、W3-23/b の再確認）:** `foreign/faust.rs` の `bit_not` の `holds_wild` は `~(` の直後の括弧だけを見るので、前置の積み重ねの中の `_`（`~-(_)`、`~!(_)`）に候補 `!(-(_))` が出る（S-486 と同じ理由で候補なしにする）。括弧が閉じないときは走査が行を越え、後ろの文の `_` を拾う（安全側の誤り）。
-  - リファクタリングの候補: `at_failure` が `StringPrefix` の行を名指して note を足す分かれ（`Hit` に note の欄を持たせる）、`faust_bit_not` と `faust_feedback` に重なる `branch` の条件。W3 の終わりの RF と同じ回。
-  - 再現は 20 回目の scratchpad の `w323b/p/tp5/`（`w_hole_in_minus.onsa`、`w_unclosed_then_hole_later.onsa`）。
 - **W3 の終わり（プロセスの整理、2026-10-10、利用者）:** 決定を書く場所が分散している件（仕様、変更点 §4、計画 §2、rework の行、空白の資料）の整理と、保留中のプロセスの改善（事例の器に一つのファイルを受ける形、空白の資料のディレクトリ分けと参照の直し、正規形でない正例を書く器の形の見直し、R-208 の事例の器の修正候補の約束の検査が候補の数に対して指数的に遅くなる件）をまとめて検討する作業を挟む。
   - 同じ作業の候補（2026-10-10、利用者の提案）: 文書の管理の担当を `.claude/agents/` に足す（名前の案は `onsa-docs`）。
     - 目的（利用者）は、文書の間の整合を保つこと、文書を構造化して他の担当の認知の負荷を減らすこと、文書を目的（読むのは人か担当か両方か、誰がいつ読むか）に合わせて整理すること。
@@ -279,11 +276,12 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
           `foreign.rs` の 162 行目の rustdoc の未解決のリンク（親から子の非公開の項目へのリンクは rustdoc が解決しない）。
         - B-1: `body.rs` の `subst_pub` は `subst` を包むだけ。`body/types.rs` は 18 行。
         - W3-22/b の S-1: 表示の順が二つある（`onsa_diag` の非公開の `sorted` と `Diagnostic::order_in_file`）。`per_unit` の出力の順は段の順で、表示の順と違う（`fix_loop` は `order_in_file` で並べ直す）。一つにする（報告は 19 回目の scratchpad の `w322b/handback_b.md`）。
-      - RF-11 Onsa の旧版の行と文の整理（2026-10-13、21 回目、利用者: 旧版は正式なリリースまで対象にしない。`agent-rules.md` 7 章 32）:
+      - RF-11 旧版と FAUST の行と文の整理（2026-10-13、21 回目、利用者: 旧版は正式なリリースまで、FAUST の文法の形はこれから対象にしない。`agent-rules.md` 7 章 32）:
         - `docs/foreign-forms.toml` の出自が旧版の行。dev の 10 行（`proc`、`item_dot_call`、`rate_as_type`、`caret_visible`（FAUST と旧版）、`derive_attribute`、`relaxed_attribute`、`bulk_attribute`、`mem_fast`、`clock_on_binding`、`clock_in_type`）と W3-08 の 3 行（`old_attribute_no_candidate`、`export_c`、`field_pub_crate`（Rust と旧版））。
         - 行ごとに、消すか、一覧の言語の形として出自を改めて残すかを決める（`caret_visible` は FAUST、`field_pub_crate` は Rust の形でもある。`@derive(…)` は Rust の書き手が混ぜうる形かを見る）。消した形は一般の規則のコード（一覧に無い属性の E0005 など）になる。
         - 仕様と決定の文: §6.4・§6.5 の旧形の E0020、§18.1 の「既存言語と旧版の形」「旧版の `export "C" fn h`」と書き方の一覧、計画 §5 の E0020 の行（旧形の属性、S-133）、S-34・S-133・S-464（`export_c`）・S-483 の (2)、R-36 の表。
         - 事例（`tests/spec/` の旧版の形、`attributes_no_candidate.onsa`、`crates/onsa_cli/tests/declaration_headings.rs` の `export_c` など）と、W3-08 の直し A で寄せなかった `old_attribute` の引数の判定。
+        - FAUST: 対象外の行（`faust_feedback`、`faust_feedback_unnamed`、`faust_delay`、`faust_delay_variable`、`faust_compose`、`x'` の note の `prime_note`）は、支障が無い限り残す（コメントで対象外と示した）。FAUST が説明にだけ出る Onsa 自身の規則の行（`space_before_tilde`、`space_after_caret`、`caret_visible`）は出自を改めて残す。`faust_bit_not`（C 系の前置の `~`）は対象で、名前を改めるかを見る。W3-23 の残り（`holds_wild` が前置の積み重ねの中の `_` を見ない件、`at_failure` の `StringPrefix` の分かれ、`faust_bit_not` と `faust_feedback` に重なる `branch` の条件）は対象外として持ち越しから消した。
       - 同じ回に R-210（複合代入の候補が間のコメントを消す、S-251）を直す。
       - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
   - トークン効率化対策（2026-10-12、14 回目、利用者）: 週の使用量の上限（全モデルで共通。`/usage` に出るのは session・weekly・Fable だけ）が 4〜5 日で尽きる件。
