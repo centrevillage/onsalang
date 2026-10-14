@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.1", "§2.5", "§18.2"]
+
+// Where `onsa fmt` leaves the comments (docs/onsa-tools.md §3.4, R-70, R-199, R-201, R-212, S-58, S-497,
+// S-502, S-507): a comment stays on the line it was written on, a comment at the end of a line after the
+// element of its line (after the `,` of the block form), a line of a comment before the next element or
+// before the closing bracket. The comments at the end of consecutive lines are in one column, one space
+// after the longest code. A pair of braces that holds a comment is not put on one line, and a line break
+// after a comment stays. The file is canonical, so `onsa fmt` leaves it unchanged. What `fmt` makes of the
+// comments that are not in this form is in crates/onsa_cli/tests/fmt_comments.rs.
+
+/// The fields have a doc and a comment at the end of the line.
+pub struct Voice {
+  /// the pitch
+  pitch: F32, // in hertz
+  gain: F32,  // from 0 to 1
+  // the last field
+  pan: F32,
+}
+
+pub enum Mode {
+  /// silent
+  Off, // nothing
+  On,  // sound
+  // more later
+}
+
+pub struct Marker {
+  // no fields yet
+}
+
+impl Marker {
+  // the first comment of the body
+
+  pub fn a(self) -> F32 { 1.0 }
+  // the last comment of the body
+}
+
+fn todo() { // later
+  // nothing
+}
+
+fn arguments(a: F32, b: F32) -> F32 {
+  let x = mix( // the arguments
+    a,
+    b, // the second
+  )
+  x
+}
+
+fn closing(a: F32, b: F32) -> F32 {
+  let x = mix(a, b // the last
+  )
+  let y = mix(a, // first
+              b) // second
+  x + y
+}
+
+fn continuation(a: F32, b: F32) -> F32 {
+  let y = a + // the first term
+    b
+  let z = a * b // the product
+    .abs()      // the magnitude
+  y + z
+}
+
+fn chain(a: F32) -> F32 {
+  a        // first
+    .abs() // second
+    .max(1.0)
+}
+
+fn arms(x: I32) -> I32 {
+  match x {
+    0 => // zero
+      1,
+    _ => 2, // other
+  }
+}
+
+@fp(relaxed) // fast math
+// the gain stage
+pub fn gain(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub flow level(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0)
+  // the knob
+  amount: F32 at block, // from the host
+) -> F32 at sample {
+  x * amount
+}

@@ -4,9 +4,9 @@
 // spec = ["§2.1", "§2.5", "§18.2"]
 
 // End-of-line comments and comment-only lines inside every kind of bracket and between
-// tokens: parameter and argument lists, arrays, struct literals, `match` arms, `use` and `uses` lists.
-// Until W3-11 (R-70: fmt moves the comments there), no comment stands inside a continued line, inside the
-// brackets of an index or inside an empty pair of parentheses: the file is an input of tools/fmt_props.py.
+// tokens: parameter and argument lists, arrays, struct literals, `match` arms, `use` and `uses` lists,
+// the lines of a continuation, the brackets of an index and an empty pair of parentheses. fmt keeps every
+// comment on its line (docs/onsa-tools.md §3.4); the file is an input of tools/fmt_props.py.
 
 use std.math.{ // c1
   exp, // c2
@@ -22,13 +22,11 @@ pub fn f( // c5
   I32 // c10
   uses {Alloc} { // c11
   // c12
-  // c13
-  let x = a +
-    b
-    .abs() // c14
-  // c15
-  // c16
-  // c17
+  let x = // c13
+    a + // c14
+    b // c15
+    // c16
+    .abs() // c17
   if x > 0 { // c18
     x // c19
   } else { // c20
@@ -59,9 +57,9 @@ pub fn f( // c5
   ) // c41
   [ // c42
   ] // c43
-  () // c44
-  // c45
-  // c46
+  ( // c44
+    // c45
+  ) // c46
   fn(i) { // c47
     i // c48
   } // c49
@@ -69,9 +67,9 @@ pub fn f( // c5
     a, // c51
     b // c52
   )
-  xs[0] // c53
-  // c54
-  // c55
+  xs[ // c53
+    0 // c54
+  ] // c55
   f //c56
   (x) //c57
   a // c58

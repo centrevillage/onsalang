@@ -2441,6 +2441,71 @@ class FmtProps(TempRepo):
         joined = fmt_props.comment_problems("fn f() {\n  for i in r {\n  } // c\n}\n", "fn f() {\n  for i in r {} // c\n}\n")
         self.assertEqual(joined, [])
 
+    def test_comment_problems_of_a_line_of_brackets_alone(self):
+        def body(text):
+            return "fn f() -> I32 {\n" + text + "}\n"
+
+        # a line of a bracket, `return` or `move` alone has a counterpart (the pairing keeps them)
+        kept = [
+            ("  g(\n    a,\n  ) // c\n", None),
+            ("  h(\n  ) // c\n", "  h() // c\n"),
+            ("  g(\n    a,\n    // c\n  )\n", None),
+            ("  let x = {\n    // c\n    return\n  }\n  x\n", None),
+            ("  let t =\n    ( // c\n      a,\n    )\n", None),
+        ]
+        for before, after in kept:
+            self.assertEqual(fmt_props.comment_problems(body(before), body(after or before)), [], before)
+        attribute = "@fp(relaxed\n)  // c\nfn f() -> F32 {\n  1.0\n}\n"
+        self.assertEqual(fmt_props.comment_problems(attribute, attribute.replace("relaxed\n)  ", "relaxed) ")), [])
+        # a comment moved away from such a line is still caught
+        moved = [
+            ("  g(\n    a,\n  ) // c\n", "  g(\n    a, // c\n  )\n", "should be at the end of line 4 `)`"),
+            ("  g(\n    a,\n    // c\n  )\n", "  g(\n    a, // c\n  )\n", "was on its own line, now at a line end"),
+            ("  g(\n    a,\n    // c\n  )\n", "  g(\n    a,\n  )\n  // c\n", "should be before line 4 `)`"),
+            ("  let x = {\n    // c\n    return\n  }\n  x\n", "  let x = {\n    return\n    // c\n  }\n  x\n",
+             "should be before line 3 `return`"),
+            ("  h( // c\n    a,\n  )\n", "  h(\n    a, // c\n  )\n", "should be at the end of line 2 `h (`"),
+        ]
+        for before, after, want in moved:
+            problems = fmt_props.comment_problems(body(before), body(after))
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn(want, problems[0])
+
+    def test_comment_problems_of_s528_and_s529(self):
+        def body(text):
+            return "fn f() -> I32 {\n" + text + "}\n"
+
+        # S-528: a comment after a closing bracket that fmt moves to a line of its own goes with it, `)` as `]`
+        # and `}`; S-529: the comment of a line of a `,` alone stays as a line of a comment in its place
+        kept = [
+            ("  g(\n    a,\n    b)  // c\n  x\n", "  g(\n    a,\n    b,\n  ) // c\n  x\n"),
+            ("  [\n    1,\n    2]  // c\n", "  [\n    1,\n    2,\n  ] // c\n"),
+            ("  if c {\n    a\n    b }  // c\n  x\n", "  if c {\n    a\n    b\n  } // c\n  x\n"),
+            ("  g(\n    1\n    , // c2\n    2\n  )\n", "  g(\n    1,\n    // c2\n    2,\n  )\n"),
+            ("  g(\n    1 // c1\n    , // c2\n    2\n  )\n", "  g(\n    1, // c1\n    // c2\n    2,\n  )\n"),
+            ("  g(\n    1 // c38\n    // c\n    , // c39\n    2\n  )\n",
+             "  g(\n    1, // c38\n    // c\n    // c39\n    2,\n  )\n"),
+            ("  [\n    1\n    , // c\n  ]\n", "  [\n    1,\n    // c\n  ]\n"),
+            ("  let xs = [1 // c1\n  , // c2\n  2]\n  1\n", "  let xs = [1, // c1\n            // c2\n            2]\n  1\n"),
+        ]
+        for before, after in kept:
+            self.assertEqual(fmt_props.comment_problems(body(before), body(after)), [], before)
+        # a comment moved away from those places is still caught
+        moved = [
+            ("  g(\n    a,\n    b)  // c\n  x\n", "  g(\n    a,\n    b,\n  )\n  x // c\n", "should be at the end of line 5 `)`"),
+            ("  g(\n    a,\n    b)  // c\n  x\n", "  g(\n    a,\n    b,\n  )\n  // c\n  x\n", "was at a line end"),
+            ("  g(\n    a,\n    b)  // c\n  x\n", "  g(\n    a, // c\n    b,\n  )\n  x\n", "should be at the end of line 5 `)`"),
+            ("  let xs = [1 // c1\n  , // c2\n  2]\n  1\n", "  let xs = [1, // c1\n            2] // c2\n  1\n",
+             "was on its own line, now at a line end"),
+            ("  let xs = [1 // c1\n  , // c2\n  2]\n  1\n", "  // c2\n  let xs = [1, // c1\n            2]\n  1\n",
+             "should be before line 4 `2 ]`"),
+            ("  [\n    1\n    , // c\n  ]\n", "  [\n    1,\n  ]\n  // c\n", "should be before line 4 `]`"),
+        ]
+        for before, after, want in moved:
+            problems = fmt_props.comment_problems(body(before), body(after))
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn(want, problems[0])
+
     def test_run(self):
         self.repo.write("tests/spec/a.onsa", "fn f() {\n  let x = g(a, b) // c\n  x\n}\n")
         code, text = self.go()

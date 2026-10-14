@@ -135,7 +135,7 @@
 | `parent/r120.onsa` | R-120 |
 | `parent/r61.onsa` | R-61（計算で決まる定数を長さに使う） |
 | `parent/r62.onsa` | R-62（括弧・腕の中の `else` と `{` の位置）。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |
-| `parent/r70/` | R-70（コメントの位置の 17 の形。どれも正規形で書いてあり、fmt で変わらないのが期待値。S-58） |
+| `parent/r70/` | R-70（コメントの位置の 17 の形。どれも正規形で書いてあり、fmt で変わらないのが期待値。S-58）。W3-11/t（U4）で期待値付きのテストへ移した: `crates/onsa_cli/tests/fmt_comments.rs` の `the_seventeen_forms_of_r70_are_not_changed_by_fmt`（17 の形を一つずつ全文で写し、fmt で変わらないことを確かめる）と、コメントの置き場所の正規形の事例 `tests/spec/fmt/comments_places.onsa` |
 | `parent/r71/` | R-71（回復と診断の単位の 6 つの形。S-59）。W3-03 で期待値付きのテストへ移して消した: `tests/spec/negative/unit_members.onsa`（`a_impl`）、`unit_failed_visible.onsa`（`b_body`、`d_sig`、`f_struct`）、`unit_unclosed_brace.onsa`（`c_brace`）、`unit_syntax_hides_later.onsa` と `unit_stage_order.onsa`（`g_naming_then_syntax`） |
 | `parent/r72.onsa` | R-72、R-123（S-60、S-61）。W3-07 で期待値付きのテストへ移した: `tests/spec/fixes/e0010_candidates.onsa`・`e0010_candidates_groups.onsa`・`e0010_candidates_contexts.onsa`・`e0010_layout.onsa`・`e0010_nesting_boundary.onsa`（E0010 の修正候補）、`tests/spec/ops/groups.onsa`・`tests/spec/semantics/precedence_trees.onsa`（ビットの群の同じ演算子の連鎖）、`crates/onsa_cli/tests/operator_groups.rs` の `the_candidates_of_e0010_are_the_readings_in_the_order_of_the_rule` ほか（候補の順と文面） |
 | `parent/r73.onsa` | R-73、R-124（数値リテラル。期待値は各関数の上のコメント。S-62、S-63） |

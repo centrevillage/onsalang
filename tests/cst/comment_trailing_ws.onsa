@@ -3,15 +3,15 @@
 // mode = "none"
 // spec = ["§2.1", "§2.5"]
 
-// Comments that end in a tab, in spaces, or in both, of every comment form. The last line is a stray `)`
-// so that onsa fmt refuses the file (fmt-props compares comment text up to trailing spaces only).
+// Comments that end in a tab, in spaces, or in both, of every comment form (fmt-props compares the
+// texts of the comments without their trailing blanks). The `//!` stands at the head of the file (S-434).
 
+//!	
 // c	
 // c 	
 // c	 
 //	
 ///	
-//!	
 ////	
 const A: U32 = 1 // end	
 const B: U32 = 2 // end 	 	
@@ -19,5 +19,4 @@ fn f(
   a: I32, // arg	
   // alone	
 ) {}
-)
 // last, ends in a tab	

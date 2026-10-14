@@ -90,16 +90,20 @@ The properties (`--property`):
                  one line whose element had a line break (S-525), so they have
                  no such property here.
               Every run ends in 0, 1 or 2 (an internal error or a signal fails).
-    comments  (`fmt-comments`, pending until W3-11, R-70) for `x` and every `p`:
+    comments  (`fmt-comments`, R-70, W3-11) for `x` and every `p`:
               every comment (the markers and the source's own) stays on the
               line of the same element: a comment at a line end at the end of
               the same line, a comment on a line of its own on its own line
               before the same next line (or at the end). The lines of the input
               and of the output are paired by their order and their tokens
-              (`pair_lines`; what the rewrites of fmt remove does not count:
-              `return`, `move`, parentheses, `-> ()`, `uses {}`, `,`, the
-              spelling of numbers). And the normal form with the comments:
-              `fmt(p) == fmt(x)` for space and blank; `fmt(p)` without the
+              (`pair_lines`: a token fmt drops, a `return` or a parenthesis,
+              is a deletion of the sequence; `,`, `-> ()`, `uses {}` and the
+              spelling of numbers do not count; a line of brackets alone is
+              paired by its brackets, so a comment after a closing bracket
+              goes with it, `)` as `]` and `}`, S-528; a line of a `,` alone
+              is no code line, and its comment counts as a line of a comment,
+              S-529). And the normal form with the
+              comments: `fmt(p) == fmt(x)` for space and blank; `fmt(p)` without the
               markers, formatted again, equals `fmt(x)` for comment and mixed.
     cst       (`fmt-cst`, R-86, W3-01) for `x` and every `p`, with or without
               syntax errors: `onsa dump --cst <file>` prints the file byte for
@@ -626,30 +630,36 @@ def unperturb(text):
 
 
 def line_key(line_toks):
-    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.3): without `-> ()`, `uses {}`,
-    parentheses, `return`, `move` and `,`, numbers as `#`. Used to pair the
-    lines of a text with the lines of its fmt output."""
+    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.2, §3.3): without `-> ()`, `uses {}`
+    and `,` (which fmt moves to the element before it, adds and drops),
+    numbers as `#`. Used to pair the lines of a text with the lines of its
+    fmt output. The tokens fmt drops (`return`, `move`, parentheses) stay: they
+    are deletions for the pairing, and a line of brackets, `return` or `move`
+    alone keeps a counterpart (`g(` / `a,` / `) // c`)."""
     code = []
     for t in (t.text for t in line_toks if t.kind == "code"):
         code.append(t)
         if code[-3:] in (["->", "(", ")"], ["uses", "{", "}"]):
             del code[-3:]
-    return tuple("#" if NUMBER.fullmatch(t) else t for t in code if t not in ("(", ")", "return", "move", ","))
+    return tuple("#" if NUMBER.fullmatch(t) else t for t in code if t != ",")
 
 
 def code_lines(text):
-    """(the lines of `text`, the indices of its lines with code)."""
+    """(the lines of `text`, the indices of its lines with code). A line whose
+    code is `,` alone is none: fmt moves that `,` to the element before it,
+    and the comment at the end of the line stays in its place as a line of a
+    comment (`docs/onsa-tools.md` §3.2, §3.4, S-529)."""
     lines = lines_of(text, tokenize(text))
-    return lines, [i for i, line in enumerate(lines) if line.code]
+    return lines, [i for i, line in enumerate(lines) if any(t.text != "," for t in line.code)]
 
 
 def pair_lines(before, after):
     """({code line of `before`: the code line of `after` that holds its first
     token}, {...: that holds its last token}), the code lines counted among the
     code lines. The tokens of the two texts are paired by their order and
-    their content (`line_key`, so what the rewrites of fmt remove does not
-    count), which also follows lines that fmt joined (an empty body `{` / `}`
-    becomes `{}`)."""
+    their content (`line_key`: what the rewrites of fmt remove is a deletion
+    and pairs nothing), which also follows lines that fmt joined (an empty
+    body `{` / `}` becomes `{}`, `@fp(relaxed` / `)` becomes `@fp(relaxed)`)."""
     def tokens(text):
         lines, code = code_lines(text)
         return [(key, n) for n, i in enumerate(code) for key in line_key(lines[i].toks)]
@@ -670,7 +680,8 @@ def comment_places(text):
     its text (without trailing spaces) and how many comments of the same text
     come before it; `where` is `end` with the number of its line among the
     code lines, or `own` with the number of the next code line (None at the
-    end of the text)."""
+    end of the text). A comment at the end of a line of a `,` alone is `own`
+    ([`code_lines`])."""
     lines, code = code_lines(text)
     ordinal = {i: n for n, i in enumerate(code)}
     out, seen = {}, {}
@@ -681,7 +692,7 @@ def comment_places(text):
         body = c.text.rstrip(" \t")
         key = (body, seen.get(body, 0))
         seen[body] = key[1] + 1
-        if line.code:
+        if i in ordinal:
             out[key] = ("end", ordinal[i])
         else:
             out[key] = ("own", next((ordinal[j] for j in code if j > i), None))

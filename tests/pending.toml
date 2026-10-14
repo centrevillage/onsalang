@@ -809,13 +809,6 @@ until = "W10-04"
 note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
 
 [[pending]]
-kind = "gate"
-target = "fmt-comments"
-reasons = ["R-70"]
-until = "W3-11"
-note = "fmt がコメントを同じ要素の行に残さない（行末から単独の行へ、並びの中から閉じ括弧の後や本体へ）。移動に伴い、ブロックの先頭の空行が残り、無かった空行が入る"
-
-[[pending]]
 kind = "test-case"
 target = "tests/vectors/fixture/checked"
 reasons = ["R-79", "S-69"]
