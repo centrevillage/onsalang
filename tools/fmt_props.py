@@ -33,14 +33,26 @@ Perturbations (C-118: only where whitespace means nothing). The kinds:
              `while` too: the `{` stays on the head's last line, S-202), after
              the `=` of `let` / `var` / `const` / `type`, after a `->`, before
              `uses` and before the `.` of a method call after `)`.
+    inside   a line break inside an element, which fmt removes (S-497), 2 in
+             10 of them a blank line (`inside_sites`): in a gap that
+             `break_places` counts `removable`, only before and after `as`,
+             `at`, `:`, `=>` and `;` (S-374, S-505: the `:` of a parameter, a
+             type parameter and a field, the arrow of an arm, the `;` of
+             `[e; N]` and of an array type), and after `if`, `match`,
+             `with`, `move` and `inout` followed by a blank (§2.5: a keyword
+             in an expression and its operand); never before a `{`.
     mixed    comment, then blank, then space.
 
 Never touched: the gaps of no whitespace other than the ones named above
 (so no space before a postfix `(` / `[`, around `~`, `!`, `^` and the
 prefix `-`, or next to `.`); no line break other than the ones named above
 (the newlines that end statements, and the place of `{`, `else` and
-`with`, stay); the inside of comments, strings and characters. Only spaces
-are used: the spec does not name another whitespace character (a tab).
+`with`, stay; none goes before a binary operator, a range symbol, the `|`
+of a pattern, `->`, `=`, `?` or a postfix `(` / `[`, after a `.` or a
+prefix `-`, `!`, `^`, between a name and `~`, `!` or `::`, between `else`
+and `if`, `fn` and `(`, `@` and its name, §2.5); the inside of comments,
+strings and characters. Only spaces are used: the spec does not name
+another whitespace character (a tab).
 
 The properties (`--property`):
 
@@ -73,9 +85,10 @@ The properties (`--property`):
               7. the normal form of the code: for space and blank, `fmt(p)` and
                  `fmt(x)`, each without its comments and formatted again, are
                  the same. Where the comments go is the item `fmt-comments`;
-                 break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2), and
-                 comment and mixed move comments, so they have no such property
-                 here.
+                 break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2),
+                 comment and mixed move comments, and inside opens a body of
+                 one line whose element had a line break (S-525), so they have
+                 no such property here.
               Every run ends in 0, 1 or 2 (an internal error or a signal fails).
     comments  (`fmt-comments`, pending until W3-11, R-70) for `x` and every `p`:
               every comment (the markers and the source's own) stays on the
@@ -136,7 +149,7 @@ PER_KIND = 2
 TIMEOUT = 20  # seconds per run
 TIME_BUDGET = 300  # seconds for the whole run
 PROPERTIES = ("core", "comments", "cst")
-KINDS = ("space", "blank", "comment", "break", "continue", "mixed")
+KINDS = ("space", "blank", "comment", "break", "continue", "inside", "mixed")
 # The kinds whose fmt output is the normal form of the source, as it is or
 # with the markers removed.
 CONVERGES = ("space", "blank")
@@ -480,6 +493,49 @@ def perturb_continue(rng, text):
     return apply(text, edits)
 
 
+# The tokens of `inside` (spec §2.5): `as` and `at` have no rule of place, and
+# inside a bracket a line break before or after them is whitespace, as before
+# and after `:`, `=>` and `;` (S-374, S-505); so is one between a keyword in
+# an expression and its operand (`if`, `match`, `else if`, `with`, `move`,
+# `inout`). The `if` of a guard and the `inout` of a parameter are taken too:
+# inside the brackets a line break is whitespace, and the rules of place,
+# a closed list, name neither (§2.5).
+INSIDE_SYMBOLS = frozenset(("as", "at", ":", "=>", ";"))
+INSIDE_KEYWORDS = frozenset(("if", "match", "with", "move", "inout"))
+
+
+def inside_sites(text):
+    """[(a, b)]: the pairs of code tokens between which `inside` may put a
+    line break. The gap is one `break_places` counts `removable` (inside a
+    bracket of a list, in an element, no line break and no comment there; not
+    after a `,` or a `return`, which it does not count), and it is listed:
+    before or after a token of INSIDE_SYMBOLS, or after a keyword of
+    INSIDE_KEYWORDS followed by a blank (not the `~` of `if~`). Never before a
+    `{` (§2.5: it stays on the line of its form), and never after a `.` nor
+    after a keyword that follows one: there it is a name (§2.2, `xs.at(0)`),
+    and no line break goes after a `.` or before a postfix `(` (§2.5)."""
+    code, places = gap_places(text)
+    sites = []
+    for j, place, nl, _, comment, _ in places:
+        a, b = code[j - 1], code[j]
+        if place != "removable" or nl or comment or a.text in (",", "return", ".") or b.text == "{":
+            continue
+        name = j >= 2 and code[j - 2].text == "."
+        word = a.text in INSIDE_SYMBOLS or (a.text in INSIDE_KEYWORDS and a.end < b.start)
+        if b.text in INSIDE_SYMBOLS or (word and not name):
+            sites.append((a, b))
+    return sites
+
+
+def perturb_inside(rng, text):
+    """Line breaks inside an element, which fmt removes (S-497), at the
+    places of `inside_sites`; 2 in 10 of them a blank line (`docs/onsa-tools.md`
+    §3.2 removes it too). The blanks round the place go."""
+    edits = [(a.end, b.start - a.end, "\n\n" if rng.random() < 0.2 else "\n")
+             for a, b in pick(rng, inside_sites(text), 0.3)]
+    return apply(text, edits)
+
+
 def perturb(kind, rng, text):
     if kind == "space":
         return perturb_space(rng, text)
@@ -491,6 +547,8 @@ def perturb(kind, rng, text):
         return perturb_break(rng, text)
     if kind == "continue":
         return perturb_continue(rng, text)
+    if kind == "inside":
+        return perturb_inside(rng, text)
     if kind == "mixed":
         return perturb_space(rng, perturb_blank(rng, perturb_comment(rng, text)))
     raise ValueError(kind)
@@ -791,6 +849,14 @@ def break_places(text):
                    before `.` and `uses`;
         removable  any other gap inside an element: fmt removes the line
                    break (S-497, S-505)."""
+    code, places = gap_places(text)
+    return [("#" if NUMBER.fullmatch(code[j].text) else code[j].text, *rest) for j, *rest in places]
+
+
+def gap_places(text):
+    """(the code tokens of `text`, [(index of the token, place, line break,
+    blank line, comment, line)]): [`break_places`] with the index of each
+    token in place of its key."""
     toks = tokenize(text)
     code = [t for t in toks if t.kind == "code"]
     # The gap before each code token: line breaks, blank lines, comments.
@@ -835,14 +901,13 @@ def break_places(text):
                     place = "continue"
                 else:
                     place = "removable"
-                key = "#" if NUMBER.fullmatch(t.text) else t.text
-                out.append((key, place, merged[0], merged[1], merged[2], line_of[j]))
+                out.append((j, place, merged[0], merged[1], merged[2], line_of[j]))
             a, merged = j, None
         if t.text in OPENERS:
             stack.append(j)
         elif t.text in CLOSERS and stack:
             stack.pop()
-    return out
+    return code, out
 
 
 def break_problems(before, after):

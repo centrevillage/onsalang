@@ -2325,6 +2325,9 @@ class FmtProps(TempRepo):
         before = self.gaps(self.SOURCE)
         comments = [t.text for t in fmt_props.tokenize(self.SOURCE) if t.kind == "comment"]
         inputs = fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 20, "t")[1:]
+        # The gaps (by the index of the token after them) that `break_places` counts inside an element.
+        removable = {j for j, place, *_ in fmt_props.gap_places(self.SOURCE)[1] if place == "removable"}
+        inside = fmt_props.INSIDE_SYMBOLS | fmt_props.INSIDE_KEYWORDS
         # The blanks are the space and the tab, and a line ends with LF or CR LF (§2.5, S-201): the
         # perturbations use both, and never a CR alone.
         self.assertTrue(any("\t" in p for _, _, p in inputs) and any("\r\n" in p for _, _, p in inputs))
@@ -2332,15 +2335,19 @@ class FmtProps(TempRepo):
             with self.subTest(label=label):
                 after = self.gaps(p)
                 self.assertEqual([(a, b) for a, _, b in after], [(a, b) for a, _, b in before])
-                for (a, g0, b), (_, g1, _) in zip(before, after):
+                for i, ((a, g0, b), (_, g1, _)) in enumerate(zip(before, after)):
                     if g0 == "newline":
                         self.assertEqual(g1, "newline", (a, b))
                     if g1 == "newline" and g0 != "newline":
-                        self.assertIn(kind, ("break", "continue", "mixed"))
+                        self.assertIn(kind, ("break", "continue", "inside", "mixed"))
                         self.assertNotIn(b, ("{", "else", "with"))
-                        if b in ("(", "["):
-                            self.assertIn(a, ("(", "[", ","))
-                        self.assertTrue(a in ("(", "[", ",", "=") or a in fmt_props.continuing() or b == ".", (a, b))
+                        if b in ("(", "["):  # not a postfix one: after a list's opening or `,`, or a type after `:`
+                            self.assertIn(a, ("(", "[", ",") if kind != "inside" else inside)
+                        if kind == "inside":  # inside an element, before or after a token of §2.5's list
+                            self.assertIn(i + 1, removable, (a, b))
+                            self.assertTrue(a in inside or b in fmt_props.INSIDE_SYMBOLS, (a, b))
+                        else:
+                            self.assertTrue(a in ("(", "[", ",", "=") or a in fmt_props.continuing() or b == ".", (a, b))
                     if g0 == "none" and g1 == "space":
                         self.assertTrue(a in ("(", "[", ",") or b in (")", "]", ",", ":"), (a, b))
                 self.assertNotRegex(p, r"\r(?!\n)")
@@ -2348,6 +2355,54 @@ class FmtProps(TempRepo):
                 self.assertIn('"a // not a comment, (x) [y]"', p)
                 kept = [t.text for t in fmt_props.tokenize(p) if t.kind == "comment" and "fmtprop" not in t.text]
                 self.assertEqual(kept, comments)
+
+    def test_the_line_breaks_inside_an_element(self):
+        # `inside` (S-497, S-505): only in a gap that `break_places` counts `removable`, before and after `as`
+        # `at` `:` `=>` `;`, and after a keyword of an expression followed by a blank (§2.5).
+        text = (
+            "struct P { @param(min: 0.0) x: F32, y: F32 }\n"
+            "fn f[T: Num](x: T, ys: [T; 2]) -> T {\n"
+            "  g(x as I64, saw~(a.b, -x)?, if c { 1 } else if d { 2 } else { 3 }, match v { 0 | 1 => 1, _ => 2 })\n"
+            "  h(a + b, xs[0], f::[I32](x), fn(y: I32) -> I32 { y }, move m, inout n, if~ c { 1 } else { 2 },\n"
+            "    s at clock, S { f: 1 }, !z, 0..<n, xs.at(0), t.as)\n"
+            "}\n"
+        )
+        sites = [(a.text, b.text) for a, b in fmt_props.inside_sites(text)]
+        self.assertEqual(sites, [
+            ("min", ":"), (":", "0.0"), ("x", ":"), (":", "F32"), ("y", ":"), (":", "F32"),
+            ("T", ":"), (":", "Num"), ("x", ":"), (":", "T"), ("ys", ":"), (":", "["), ("T", ";"), (";", "2"),
+            ("x", "as"), ("as", "I64"), ("if", "c"), ("if", "d"), ("match", "v"),
+            ("1", "=>"), ("=>", "1"), ("_", "=>"), ("=>", "2"),
+            ("y", ":"), (":", "I32"), ("move", "m"), ("inout", "n"), ("s", "at"), ("at", "clock"), ("f", ":"), (":", "1"),
+        ])
+        # Never where §2.5 keeps a token on the line of its neighbour, though the gap is inside an element: a binary
+        # operator, a range symbol, the `|` of a pattern, `->`, `?`, a postfix `(` / `[`, `~`, `::`, after `.` and a
+        # prefix `!`, `else`, between `else` and `if`, `{`, `fn(`, `@name`, `if~`; and round a keyword after a `.`,
+        # which is a name there (§2.2: `xs.at(0)`, `t.as`).
+        code, places = fmt_props.gap_places(text)
+        removable = {(code[j - 1].text, code[j].text) for j, place, *_ in places if place == "removable"}
+        for pair in (("a", "+"), ("0", "..<"), ("0", "|"), (")", "->"), (")", "?"), ("xs", "["), ("]", "("),
+                     ("saw", "~"), ("f", "::"), ("::", "["), (".", "b"), ("!", "z"), ("}", "else"), ("else", "if"),
+                     ("c", "{"), ("fn", "("), ("@", "param"), ("if", "~"), (".", "at"), ("at", "("), (".", "as")):
+            with self.subTest(pair=pair):
+                self.assertIn(pair, removable)
+                self.assertNotIn(pair, sites)
+        # The inputs: line breaks (some of them blank lines) at the sites only; `breaks` finds those that stay, and
+        # none in the source, where fmt has removed them all.
+        inputs = [p for _, kind, p in fmt_props.inputs_of("tests/spec/a.onsa", text, 10, "t") if kind == "inside"]
+        self.assertEqual(len(inputs), 10)
+        self.assertTrue(any("\n\n" in p for p in inputs))
+        old = {(a, b) for a, gap, b in self.gaps(text) if gap == "newline"}
+        for p in inputs:
+            with self.subTest(p=p):
+                added = {(a, b) for a, gap, b in self.gaps(p) if gap == "newline"} - old
+                self.assertTrue(added and added <= set(sites), added)
+                problems = fmt_props.break_problems(p, p)
+                self.assertTrue(problems and all(x.endswith("the line break inside an element stays") for x in problems))
+                self.assertEqual(fmt_props.break_problems(p, text), [])
+        # No site: no input.
+        kinds = {k for _, k, _ in fmt_props.inputs_of("tests/spec/a.onsa", "fn f() {\n  g(a, b)\n}\n", 3, "t")}
+        self.assertNotIn("inside", kinds)
 
     def test_inputs_are_the_same_for_the_same_tree(self):
         a = fmt_props.inputs_of("tests/spec/a.onsa", self.SOURCE, 2, "1")
