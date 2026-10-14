@@ -410,6 +410,10 @@ fn the_form_of_a_list_is_read_from_the_line_breaks_after_its_opening_bracket_and
     assert_eq!(pat("P {\n      x: 1,\n      ..\n    }"), (Some(Form::Block), 1));
     assert_eq!(pat("P { x: 1,\n        .. }"), (Some(Form::Continuation), 1));
     assert_eq!(pat("P { .. }"), (Some(Form::OneLine), 0));
-    // An enclosure has no form.
-    assert_eq!(form_of("fn f() {\n  (1)\n}\n", NodeKind::ParenExpr), (None, 0));
+    // An enclosure has the form of a list of one element, with no element to which a `,` goes (S-522,
+    // §3.2: `(I32)`); a container has none.
+    assert_eq!(form_of("fn f() {\n  (1)\n}\n", NodeKind::ParenExpr), (Some(Form::OneLine), 0));
+    assert_eq!(form_of("fn f() {\n  (1\n  )\n}\n", NodeKind::ParenExpr), (Some(Form::OneLine), 0));
+    assert_eq!(form_of("type T = (\n  I32)\n", NodeKind::ParenType), (Some(Form::Block), 0));
+    assert_eq!(form_of("fn f() {\n  (1)\n}\n", NodeKind::Block), (None, 0));
 }

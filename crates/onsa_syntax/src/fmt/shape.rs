@@ -6,8 +6,9 @@
 //! body of items: statements or items between line breaks), another
 //! enclosure (brackets round something that is no list: a group, an index)
 //! or neither; the table [`TABLE`] has the brackets of each. [`brackets`] finds
-//! the two tokens in a node, [`elements`] the elements of a list and
-//! [`form`] the form the writer gave it.
+//! the two tokens in a node ([`pairs`] each pair of a node with nested
+//! pairs), [`elements`] the elements of a list and [`forms`] the form the
+//! writer gave each pair.
 //!
 //! The form (§3.2) is read from the line breaks of the source:
 //! - **block:** a line break right after the opening bracket (a comment at
@@ -17,6 +18,10 @@
 //! - **one line:** otherwise. Line breaks only inside the elements keep the
 //!   list on one line (`two(a +` newline `1, b)`). So does a list without
 //!   elements (`()`, `{}`; a comment in it is §3.4's).
+//!
+//! An enclosure has the form of a list of one element (S-522): the block form
+//! or one line. So has each pair inside the outermost of a node with nested
+//! pairs (`-(` newline `(2))`).
 //!
 //! Every list keeps the writer's form: none is folded onto one line (S-510,
 //! S-328).
@@ -81,7 +86,8 @@ pub(crate) struct Brackets {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pairs {
     One,
-    /// None or more, one inside the other (`-1`, `-(1)`, `-((1))`): [`brackets`] gives the outermost.
+    /// None or more, one inside the other (`-1`, `-(1)`, `-((1))`): [`brackets`] gives the outermost,
+    /// [`pairs`] each.
     Nested,
 }
 
@@ -144,13 +150,22 @@ pub(crate) fn shape(kind: NodeKind) -> Option<&'static Brackets> {
     TABLE.iter().find(|b| b.node == kind)
 }
 
-/// The opening and the closing bracket of `n` (children of `n`); `None` for a
-/// node without brackets.
+/// The opening and the closing bracket of `n` (children of `n`), of the
+/// outermost pair; `None` for a node without brackets.
 pub(crate) fn brackets(cst: &Cst, n: NodeId) -> Option<(TokenIdx, TokenIdx)> {
-    let b = shape(cst.kind(n))?;
-    let open = cst.child_tokens(n).find(|&t| cst.token(t).kind == b.open)?;
-    let close = cst.child_tokens(n).filter(|&t| cst.token(t).kind == b.close).last()?;
-    Some((open, close))
+    pairs(cst, n).first().copied()
+}
+
+/// The pairs of brackets of `n` (children of `n`), the outermost first: one,
+/// or for a row of [`Pairs::Nested`] each with the next inside it. Empty for
+/// a node without brackets.
+pub(crate) fn pairs(cst: &Cst, n: NodeId) -> Vec<(TokenIdx, TokenIdx)> {
+    let Some(b) = shape(cst.kind(n)) else { return Vec::new() };
+    let of = |kind: TokenKind| cst.child_tokens(n).filter(move |&t| cst.token(t).kind == kind);
+    match b.pairs {
+        Pairs::One => of(b.open).next().zip(of(b.close).last()).into_iter().collect(),
+        Pairs::Nested => of(b.open).zip(of(b.close).collect::<Vec<_>>().into_iter().rev()).collect(),
+    }
 }
 
 /// A part of a list between its brackets and its `,`: the range of its code
@@ -208,22 +223,34 @@ fn breaks(cst: &Cst, from: TokenIdx, to: TokenIdx) -> bool {
     cst.tokens()[from.index()..to.index()].iter().any(|t| t.kind == TokenKind::Newline)
 }
 
-/// The form the writer gave the list `n` (the module documentation); `None`
-/// for a node that is no list.
-pub(crate) fn form(cst: &Cst, n: NodeId) -> Option<Form> {
-    let Shape::List = shape(cst.kind(n))?.shape else { return None };
-    let (open, _) = brackets(cst, n)?;
+/// The form the writer gave the list `n` (the module documentation), or the
+/// enclosure `n`: as a list of one element (S-522), in the block form or on
+/// one line. Each pair of [`pairs`] with its form; empty for a container and
+/// a node without brackets.
+pub(crate) fn forms(cst: &Cst, n: NodeId) -> Vec<((TokenIdx, TokenIdx), Form)> {
+    if shape(cst.kind(n)).is_none_or(|b| b.shape == Shape::Container) {
+        return Vec::new();
+    }
     let parts = parts(cst, n);
-    if parts.is_empty() {
-        return Some(Form::OneLine);
-    }
-    let mut after_open =
-        cst.tokens()[open.index() + 1..].iter().filter(|t| t.kind != T::Whitespace && !t.kind.is_comment());
-    if after_open.next().is_some_and(|t| t.kind == T::Newline) {
-        return Some(Form::Block);
-    }
-    let between = parts.windows(2).any(|w| breaks(cst, w[0].tokens.end, w[1].tokens.start));
-    Some(if between { Form::Continuation } else { Form::OneLine })
+    let form = |(open, close): (TokenIdx, TokenIdx)| {
+        if cst.tokens()[open.index() + 1..close.index()].iter().all(|t| t.kind.is_trivia()) {
+            return Form::OneLine;
+        }
+        let mut after_open =
+            cst.tokens()[open.index() + 1..].iter().filter(|t| t.kind != T::Whitespace && !t.kind.is_comment());
+        if after_open.next().is_some_and(|t| t.kind == T::Newline) {
+            return Form::Block;
+        }
+        let between = parts.windows(2).any(|w| breaks(cst, w[0].tokens.end, w[1].tokens.start));
+        if between { Form::Continuation } else { Form::OneLine }
+    };
+    pairs(cst, n).into_iter().map(|pair| (pair, form(pair))).collect()
+}
+
+/// The form of the outermost pair of `n` ([`forms`]).
+#[cfg(test)]
+pub(crate) fn form(cst: &Cst, n: NodeId) -> Option<Form> {
+    forms(cst, n).first().map(|&(_, form)| form)
 }
 
 /// The kinds whose `Block` is a body that the head of the form leads to

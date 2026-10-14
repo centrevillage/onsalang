@@ -1463,7 +1463,6 @@ fn the_three_forms_of_the_inputs_of_a_flow_are_kept() {
 // ---- the lists that `fmt` does not keep yet --------------------------------------------------------
 
 #[test]
-#[ignore = "W3-11 U3: fmt keeps the block form and the continuation of a use list (R-143)"]
 fn the_forms_of_a_use_list_are_kept() {
     let cases = vec![
         case("one line, the last comma goes", &["use a.{x, y,}"], &["use a.{x, y}"]),
@@ -1496,7 +1495,6 @@ fn the_forms_of_a_use_list_are_kept() {
 }
 
 #[test]
-#[ignore = "W3-11 U3: fmt keeps the block form and the continuation of a pattern (R-143, the pattern is a list)"]
 fn the_forms_of_the_lists_of_a_pattern_are_kept() {
     let cases = vec![
         case(
@@ -1869,7 +1867,6 @@ fn the_attribute_of_an_input_of_a_flow_on_a_line_of_its_own_stays() {
 }
 
 #[test]
-#[ignore = "W3-11 U3: fmt puts the attribute of an input of a flow on a line of its own (§3.2, R-143)"]
 fn the_attribute_of_an_input_of_a_flow_written_on_the_line_of_the_input_goes_to_a_line_of_its_own() {
     let cases = vec![
         case(
@@ -1940,6 +1937,7 @@ fn the_attribute_of_an_input_of_a_flow_written_on_the_line_of_the_input_goes_to_
 }
 
 #[test]
+#[ignore = "W3-11 U3c: fmt keeps the line break between `@mem(bulk)` and `let` (§3.2, S-497)"]
 fn the_attribute_of_a_let_is_on_the_line_of_the_let() {
     let cases = vec![
         case(

@@ -2,10 +2,6 @@
 // [test]
 // mode = "test"
 // spec = ["§2.5", "§6.5"]
-// canonical = false
-
-// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
-// decided in W3-11); the case is about what the parser accepts.
 
 // The continuation rule of §2.5 holds at the top level as it does in a block (S-47, S-121, R-58): a line
 // goes on after `=`, after `->`, after an attribute, and when the next line starts with `uses`. Each item

@@ -1,6 +1,8 @@
 //! The printer of `onsa fmt` (`docs/onsa-tools.md` §3.2, §3.4; W3-11 unit
 //! U3a): it walks the tokens of the CST and writes the code tokens and the
-//! comments in their order, deciding only what goes between two of them.
+//! comments in their order, deciding only what goes between two of them. The
+//! plan (`fmt/plan.rs`, W3-11 unit U3b) says which code tokens it leaves out,
+//! respells or follows with a `,`.
 //!
 //! The walk does not recurse (as in `cst.rs`); it keeps a stack of the nodes
 //! it is in ([`Frame`]). Between two code tokens the gap is read from the
@@ -9,7 +11,8 @@
 //!
 //! - **No line break:** the space of the table (`space::space`, S-496).
 //! - **Line breaks:** every line break of the writer is kept (R-143), as
-//!   `\n` (S-201). Where the deepest node holds statements or items, or the
+//!   `\n` (S-201), but for those the plan removes; the plan adds others
+//!   (`fmt/plan.rs`, read at the head of [`Printer::token`]). Where the deepest node holds statements or items, or the
 //!   gap lies between the elements of a list, the gap separates two parts and
 //!   keeps one blank line of the writer's (S-122, S-499); not before the first
 //!   or after the last line of content (a code or comment line; the comment
@@ -50,7 +53,7 @@ const STEP: usize = 2;
 /// The source written in the canonical form of the printer (see the module
 /// documentation). `cst` is the tree of `src`, without a syntax error.
 pub(super) fn print(cst: &Cst, src: &str) -> String {
-    let plan = Plan::new(cst);
+    let plan = Plan::new(cst, src);
     let mut p = Printer {
         cst,
         src,
@@ -91,11 +94,28 @@ struct Frame {
 
 /// The brackets of a node in the table of `fmt/shape.rs`.
 struct Brackets {
+    /// The pairs, the outermost first (`shape::pairs`: more than one only
+    /// in an enclosure with nested pairs, `-((1))`).
+    pairs: Vec<Pair>,
+    what: What,
+}
+
+struct Pair {
     open: TokenIdx,
     close: TokenIdx,
     /// The indentation of the base line, once the opening bracket is written.
     base: Option<usize>,
-    what: What,
+}
+
+impl Brackets {
+    fn outermost(&self) -> &Pair {
+        &self.pairs[0]
+    }
+
+    /// The pair whose opening bracket is `prev` or whose closing bracket is `t`, else the outermost.
+    fn pair_round(&self, prev: Option<TokenIdx>, t: TokenIdx) -> &Pair {
+        self.pairs.iter().find(|p| prev == Some(p.open) || t == p.close).unwrap_or(self.outermost())
+    }
 }
 
 enum What {
@@ -150,7 +170,7 @@ struct Printer<'a> {
     /// The first code token of the output line.
     line_head: Option<TokenIdx>,
     let_marks: Vec<LetMark>,
-    comment_marks: Vec<(usize, String, usize)>,
+    comment_marks: Vec<(usize, String)>,
     /// The mark of a single-line `let` that ended the line, if the next gap breaks it.
     pending_let: Option<LetMark>,
     /// The attributes on a line that one starts: their last token, the line and its indentation.
@@ -184,19 +204,21 @@ impl<'a> Printer<'a> {
     fn enter(&mut self, n: NodeId) {
         let cst = self.cst;
         let kind = cst.kind(n);
-        let brackets = shape::shape(kind).zip(shape::brackets(cst, n)).map(|(row, (open, close))| {
+        let pairs: Vec<Pair> =
+            shape::pairs(cst, n).into_iter().map(|(open, close)| Pair { open, close, base: None }).collect();
+        let brackets = shape::shape(kind).filter(|_| !pairs.is_empty()).map(|row| {
             let what = match row.shape {
                 Shape::Container => What::Container,
                 Shape::List => {
                     let mut starts: Vec<TokenIdx> =
                         shape::elements(cst, n).into_iter().chain(shape::rest(cst, n)).map(|e| e.start).collect();
                     starts.sort();
-                    let form = shape::form(cst, n).expect("a list has a form");
+                    let form = self.plan.form(pairs[0].open).expect("the plan has the form of a list");
                     What::List { form, starts, element: None, first_col: None }
                 }
                 Shape::Enclosure => What::Enclosure { content: None },
             };
-            Brackets { open, close, base: None, what }
+            Brackets { pairs, what }
         });
         let aligns = matches!(kind, NodeKind::LetStmt | NodeKind::VarStmt)
             && !cst.child_nodes(n).any(|c| cst.kind(c) == NodeKind::Attr);
@@ -228,7 +250,13 @@ impl<'a> Printer<'a> {
         let cst = self.cst;
         // The deepest node that holds both tokens; the nodes above it start at `t`.
         let deepest = self.begun.max(1) - 1;
-        let gap = self.gap(prev, t);
+        let mut gap = self.gap(prev, t);
+        // The line breaks of the plan, before the mark of a `let` reads them.
+        if self.plan.joins(t) && gap.trailing.is_none() && gap.lines.is_empty() {
+            (gap.breaks, gap.blanks) = (false, 0);
+        } else if self.plan.breaks_before(t) {
+            gap.breaks = true;
+        }
         if let Some(m) = self.pending_let.take()
             && gap.breaks
         {
@@ -252,7 +280,7 @@ impl<'a> Printer<'a> {
             if let Some(c) = gap.trailing {
                 self.write(" ");
                 let text = self.comment(c);
-                self.comment_marks.push((self.line, text.to_string(), 0));
+                self.comment_marks.push((self.line, text.to_string()));
                 self.write(text);
             }
             let mut content_before = !place.head;
@@ -275,6 +303,9 @@ impl<'a> Printer<'a> {
         let plan: &'a Plan = self.plan;
         self.write(plan.text(t).unwrap_or(&self.src[span.start as usize..span.end as usize]));
         self.started(deepest, prev, t, col, heads_line);
+        if plan.comma_after(t) {
+            self.write(",");
+        }
     }
 
     /// Record what the token `t`, written at `col`, starts.
@@ -286,6 +317,7 @@ impl<'a> Printer<'a> {
         }
         self.begun = self.frames.len();
         if let Some(b) = &mut self.frames[deepest].brackets {
+            let outermost = b.pairs[0].open;
             match &mut b.what {
                 What::List { starts, element, first_col, .. } if starts.binary_search(&t).is_ok() => {
                     *element = Some(indent);
@@ -293,45 +325,61 @@ impl<'a> Printer<'a> {
                         *first_col = Some(col);
                     }
                 }
-                What::Enclosure { content } if prev == Some(b.open) => *content = Some(indent),
+                What::Enclosure { content } if prev == Some(outermost) => *content = Some(indent),
                 _ => {}
             }
         }
+        // The opening bracket of a pair of the node on the top (an inner pair of `-((1))` too).
         let top = self.frames.len() - 1;
-        let Some(b) = &self.frames[top].brackets else { return };
-        if b.open != t {
+        let Some(pair) = self.frames[top].brackets.as_ref().and_then(|b| b.pairs.iter().position(|p| p.open == t))
+        else {
             return;
-        }
+        };
         let base = match shape::holder(self.cst, self.frames[top].node) {
             None => indent,
             Some(h) => {
                 self.frames.iter().rev().find(|f| f.node == h).and_then(|f| f.start).expect("the holder has begun")
             }
         };
-        self.frames[top].brackets.as_mut().expect("brackets").base = Some(base);
+        self.frames[top].brackets.as_mut().expect("brackets").pairs[pair].base = Some(base);
     }
 
-    /// The trivia between `prev` (none at the head of the file) and `t`.
+    /// The trivia between `prev` (none at the head of the file) and `t`,
+    /// two code tokens the printer writes one after the other.
+    ///
+    /// A blank line is a line of the source with nothing on it: a code token
+    /// the plan leaves out between the two (a `,` at the head of a line that
+    /// moves to the element before it, a rewrite of §3.3) is something on its
+    /// line, so the line breaks before and after it make no blank line (§3.2,
+    /// S-499: only the blank lines of the writer are kept). The line breaks
+    /// still count as a line break of the writer's.
     fn gap(&self, prev: Option<TokenIdx>, t: TokenIdx) -> Gap {
         let from = prev.map_or(0, |p| p.index() + 1);
         let mut gap = Gap { trailing: None, lines: Vec::new(), blanks: 0, breaks: false };
-        let mut breaks = 0;
+        // The line breaks after the last thing on a line, and the blank lines before that thing.
+        let (mut breaks, mut blanks) = (0, 0);
         for (i, tok) in self.cst.tokens()[from..t.index()].iter().enumerate() {
             let c = TokenIdx((from + i) as u32);
             if tok.kind == TokenKind::Newline {
                 breaks += 1;
                 gap.breaks = true;
-            } else if tok.kind.is_comment() {
-                gap.breaks = true;
-                if breaks == 0 && prev.is_some() {
+                continue;
+            }
+            if !tok.kind.is_comment() && !tok.kind.is_code() {
+                continue;
+            }
+            blanks += breaks.max(1) - 1;
+            breaks = 0;
+            if tok.kind.is_comment() {
+                if !gap.breaks && prev.is_some() {
                     gap.trailing = Some(c);
                 } else {
-                    gap.lines.push((breaks.max(1) - 1, c));
+                    gap.lines.push((blanks, c));
                 }
-                breaks = 0;
+                (gap.breaks, blanks) = (true, 0);
             }
         }
-        gap.blanks = breaks.max(1) - 1;
+        gap.blanks = blanks + breaks.max(1) - 1;
         gap
     }
 
@@ -341,7 +389,7 @@ impl<'a> Printer<'a> {
         let cst = self.cst;
         let f = &self.frames[deepest];
         if shape::holds_statements(cst.kind(f.node)) {
-            let (head, tail, base, inner) = match &f.brackets {
+            let (head, tail, base, inner) = match f.brackets.as_ref().map(Brackets::outermost) {
                 Some(b) => {
                     let base = b.base.expect("the opening bracket is written");
                     (prev == Some(b.open), t == b.close, base, base + STEP)
@@ -350,7 +398,8 @@ impl<'a> Printer<'a> {
             };
             return Place { indent: if tail { base } else { inner }, comments: inner, separates: true, head, tail };
         }
-        if let Some(Brackets { open, close, base: Some(base), what }) = &f.brackets {
+        let pair = f.brackets.as_ref().map(|b| (b.pair_round(prev, t), &b.what));
+        if let Some((Pair { open, close, base: Some(base) }, what)) = pair {
             let (head, tail) = (prev == Some(*open), t == *close);
             let inner = base + STEP;
             let at = |inner: usize, separates| Place {

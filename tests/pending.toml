@@ -1869,111 +1869,6 @@ note = "修飾した名前の穴 {cfg.N}、{kp.clock.TICKS} の解決（字句�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/lex/doc_comment_attribute_then_comment.onsa"
-reasons = ["R-212"]
-until = "W3-11"
-note = "fmt が属性と宣言の間の // を本体の先頭へ動かす（docs/onsa-tools.md §3.4 に反する）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/list_forms_use.onsa"
-reasons = ["R-143", "S-122"]
-until = "W3-11"
-note = "use の並びのブロック形・継続形。今の fmt は 1 行にまとめる"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/list_forms_patterns.onsa"
-reasons = ["R-143", "S-122"]
-until = "W3-11"
-note = "パターン（タプル・struct・列挙子の中身）のブロック形・継続形。今の fmt は 1 行にまとめる"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lines_kept_continuation.onsa"
-reasons = ["R-143", "S-335"]
-until = "W3-11"
-note = "`=`・`->`・`..<`・`uses` の行の後の改行を今の fmt が 1 行に継ぐ（`=` の列が揃ってしまう）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lines_kept_range_closed.onsa"
-reasons = ["R-143", "S-335"]
-until = "W3-11"
-note = "`..=` の後の改行を今の fmt が継ぐ"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lines_kept_brackets.onsa"
-reasons = ["R-143", "S-497", "S-498", "S-501"]
-until = "W3-11"
-note = "継続形の中のブロック形の字下げ、括弧の中の `->` の改行、入力の属性の後の改行、構造体のパターンのブロック形を今の fmt が崩す"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lines_kept_combinations.onsa"
-reasons = ["R-143", "S-335", "S-498"]
-until = "W3-11"
-note = "`par`・`for` の見出しの継続を今の fmt が継ぐ。継続形の要素の中の継続と、継続の行で開いた呼び出しの字下げが違う"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/indent_continuation.onsa"
-reasons = ["R-143", "S-498"]
-until = "W3-11"
-note = "`=`・`->`・範囲の記号・`uses` の継続を今の fmt が継ぐ"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/indent_enclosures.onsa"
-reasons = ["R-143", "S-498"]
-until = "W3-11"
-note = "継続の行で開いた囲みの中身と閉じ括弧の字下げ（今は構造の深さ）、`=` の後の改行"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/indent_elements.onsa"
-reasons = ["S-498"]
-until = "W3-11"
-note = "継続形の要素の中の継続と、要素が後の行で始まる形（S-517）の字下げが、今は 1 段浅い"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/blank_lines_lists.onsa"
-reasons = ["S-499", "S-510"]
-until = "W3-11"
-note = "並びの要素の間の空行を今の fmt が除く。`use`・列挙子の要素・`@param`・型の並びを 1 行に畳む"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lists_types_attributes.onsa"
-reasons = ["S-510", "S-328", "S-501"]
-until = "W3-11"
-note = "属性の引数・列挙子の要素・効果行のブロック形と継続形を今の fmt が 1 行に畳む"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lists_types_generics.onsa"
-reasons = ["S-510", "S-328"]
-until = "W3-11"
-note = "型パラメータ・型引数・タプル型・関数型の引数のブロック形と継続形を今の fmt が 1 行に畳む（`=` の列も揃う）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fmt/lists_types_expression_args.onsa"
-reasons = ["S-510", "S-328"]
-until = "W3-11"
-note = "式の中の `::[…]` のブロック形と継続形を今の fmt が 1 行に畳む"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/lex/continuation_operators.onsa"
-reasons = ["S-498"]
-until = "W3-11"
-note = "S-498 の字下げに書き換えた（79・82・85・88・125・126 行）。今の fmt（古い印字器）は前の字下げに戻す。U3b のつなぎ替えで外す"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/float_literal_rounding_fn_values.onsa"
 reasons = ["R-08", "R-20", "S-211"]
 until = "W8-09"
@@ -2022,3 +1917,10 @@ target = "tests/spec/packages/visibility"
 reasons = ["S-36"]
 until = "W4-03"
 note = "priv の構文（W3-08）と無指定をパッケージ内にする意味（W4-03）（t1）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/lex/with_handler_in_brackets.onsa"
+reasons = ["S-497", "S-414"]
+until = "W3-11"
+note = "U3c: 括弧の中の `with` の後の改行を、新しい印字器（U3b）はまだ残す（式の中のキーワードの後の改行の除去は U3c）。`canonical = false` のまま、fmt が書き換えない"

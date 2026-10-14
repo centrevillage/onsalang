@@ -4,24 +4,28 @@
 //!
 //! - (i) The printer writes every canonical file as it is.
 //! - (ii) In every file of the repository that the syntax stage reads without
-//!   a diagnostic, the output reads without one, with the same code tokens
-//!   (kind and text) and the same comments (their text without blanks at the
-//!   end) in the same order: in unit U3a the printer drops and adds no token.
+//!   a diagnostic, the output reads without one, with the code tokens (kind
+//!   and text) that the plan (`fmt/plan.rs`) keeps, respells and adds, and the
+//!   same comments (their text without blanks at the end), in the same order.
+//!   Without the `,` and the `return` (the only tokens the plan drops or
+//!   adds), the kinds of the code tokens are those of the file.
 //! - (iii) Printing the output again gives the output.
 //! - (iv) The printer gives every canonical file back from copies of it
 //!   whose layout is changed with a fixed seed ([`jitter`]): the indentation,
 //!   the spaces between tokens and before comments, blanks at the ends of
 //!   lines, more blank lines where there are some and at the heads and tails
 //!   of the file and of the brackets, and CR LF. The line breaks stay where
-//!   they are (in unit U3a the printer neither drops nor adds one).
+//!   they are, but a `,` at the end of a line may move to a line of its own
+//!   (the plan moves it back, and the line breaks round it make no blank line).
 
 use std::time::{Duration, Instant};
 
 use onsa_diag::FileId;
 
+use super::plan::Plan;
 use super::print::print;
 use super::table_tests::{EXTRA, canonical_by_case};
-use crate::cst::Cst;
+use crate::cst::{Cst, TokenIdx};
 use crate::lexer::BLANKS;
 use crate::token::TokenKind;
 
@@ -31,18 +35,28 @@ const BUDGET: Duration = Duration::from_secs(60);
 /// The copies of each canonical file with a changed layout ((iv)).
 const JITTERED_COPIES: usize = 3;
 
-/// The code tokens of `cst` (kind and text) and its comments (text), in order.
-fn tokens(cst: &Cst, text: &str) -> (Vec<(TokenKind, String)>, Vec<String>) {
+/// The code tokens of `cst` (kind and text) and its comments (text), in
+/// order; with `plan`, those the printer writes by the plan.
+fn tokens(cst: &Cst, text: &str, plan: Option<&Plan>) -> (Vec<(TokenKind, String)>, Vec<String>) {
     let (mut code, mut comments) = (Vec::new(), Vec::new());
-    for t in cst.tokens() {
+    for (i, t) in cst.tokens().iter().enumerate() {
         let s = &text[t.span.start as usize..t.span.end as usize];
+        let at = TokenIdx(i as u32);
         if t.kind.is_comment() {
             comments.push(s.trim_end_matches(BLANKS).to_string());
-        } else if !t.kind.is_trivia() {
-            code.push((t.kind, s.to_string()));
+        } else if !t.kind.is_trivia() && plan.is_none_or(|p| p.kept(at)) {
+            code.push((t.kind, plan.and_then(|p| p.text(at)).unwrap_or(s).to_string()));
+            if plan.is_some_and(|p| p.comma_after(at)) {
+                code.push((TokenKind::Comma, ",".to_string()));
+            }
         }
     }
     (code, comments)
+}
+
+/// The kinds of the code tokens without `,` and `return`.
+fn kinds(code: &[(TokenKind, String)]) -> Vec<TokenKind> {
+    code.iter().map(|(k, _)| *k).filter(|k| !matches!(k, TokenKind::Comma | TokenKind::KwReturn)).collect()
 }
 
 /// A generator with a fixed seed (xorshift64).
@@ -106,6 +120,11 @@ fn jitter(cst: &Cst, text: &str, rng: &mut Rng) -> String {
                 }
             }
             T::Eof => out.push_str(&"\n".repeat(rng.below(3) as usize)),
+            T::Comma if not_blank(i, 1) == Some(T::Newline) && rng.below(2) == 0 => {
+                out.push('\n');
+                out.push_str(&rng.indentation());
+                out.push(',');
+            }
             k => {
                 out.push_str(&text[t.span.start as usize..t.span.end as usize]);
                 let next = kind(i + 1).filter(|n| n.is_code());
@@ -138,6 +157,8 @@ fn first_difference(a: &str, b: &str) -> String {
 struct Tally {
     canonical: usize,
     jittered: usize,
+    /// The `,` the copies have on lines of their own.
+    lone_commas: usize,
     read: usize,
     skipped: usize,
     errors: Vec<String>,
@@ -168,6 +189,7 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
                 for copy in 0..JITTERED_COPIES {
                     let jittered = jitter(&parsed.cst, text, &mut rng);
                     tally.jittered += 1;
+                    tally.lone_commas += jittered.lines().filter(|l| l.trim_start().starts_with(',')).count();
                     let parsed = crate::parse(FileId(0), &jittered);
                     if parsed.syntax_errors() {
                         tally
@@ -184,8 +206,13 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
                 tally.errors.push(format!("(ii) {name}: the output has a syntax error: {:?}", again.diagnostics));
                 continue;
             }
-            if tokens(&parsed.cst, text) != tokens(&again.cst, &out) {
-                tally.errors.push(format!("(ii) {name}: the tokens or the comments changed"));
+            let (planned, comments) = tokens(&parsed.cst, text, Some(&Plan::new(&parsed.cst, text)));
+            let (written, written_comments) = tokens(&again.cst, &out, None);
+            if planned != written || comments != written_comments {
+                tally.errors.push(format!("(ii) {name}: the tokens or the comments are not those of the plan"));
+            }
+            if kinds(&tokens(&parsed.cst, text, None).0) != kinds(&written) {
+                tally.errors.push(format!("(ii) {name}: a token other than `,` and `return` was dropped or added"));
             }
             let twice = print(&again.cst, &out);
             if twice != out {
@@ -196,11 +223,13 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
     });
     let elapsed = started.elapsed();
     eprintln!(
-        "{} canonical files ({} copies with a changed layout) of {} read ({} with a syntax error not read), {elapsed:?}",
-        tally.canonical, tally.jittered, tally.read, tally.skipped
+        "{} canonical files ({} copies with a changed layout, {} `,` on lines of their own) of {} read ({} with a \
+         syntax error not read), {elapsed:?}",
+        tally.canonical, tally.jittered, tally.lone_commas, tally.read, tally.skipped
     );
     assert!(tally.canonical > 250, "only {} canonical files", tally.canonical);
     assert!(tally.read > 800, "only {} files read", tally.read);
+    assert!(tally.lone_commas > 1000, "only {} `,` moved to lines of their own", tally.lone_commas);
     assert!(tally.errors.is_empty(), "{} failures:\n{}", tally.errors.len(), tally.errors.join("\n"));
     assert!(elapsed < BUDGET, "the self-test took {elapsed:?}");
 }
@@ -317,16 +346,57 @@ fn closures_use_lists_and_enclosures_take_their_base_lines() {
 }
 
 /// The `=` of a `let` is in a column only when the `let` starts its line and the line ends after it
-/// (S-122): here `let bbb` would otherwise share a column with `let a`.
+/// (S-122). The line breaks the plan adds after the `{` and before the `}` of a block over more than
+/// one line (§3.2) put the `let` there alone on its line; a `let` in a block on one line is in no column.
 #[test]
 fn the_column_of_the_equals_holds_only_the_lets_alone_on_their_lines() {
-    let rows: &[&str] = &[
-        "fn f() { let a = 1\n  let bbb = 2\n}\n",
-        "fn f() {\n  let a = 1\n  let bbb = 2 }\n",
-        "fn f() {\n  let a = 1\n  let bbb = 2\n}\n",
-    ];
-    for src in &rows[..2] {
-        assert_eq!(printed(src), *src);
+    let aligned = "fn f() {\n  let a   = 1\n  let bbb = 2\n}\n";
+    for src in ["fn f() { let a = 1\n  let bbb = 2\n}\n", "fn f() {\n  let a = 1\n  let bbb = 2 }\n", aligned] {
+        assert_eq!(printed(src), aligned, "{src:?}");
     }
-    assert_eq!(printed(rows[2]), "fn f() {\n  let a   = 1\n  let bbb = 2\n}\n");
+    let one_line = "fn f(c: Bool) {\n  let a = 1\n  if c { let bbb = 2 }\n}\n";
+    assert_eq!(printed(one_line), one_line);
+}
+
+/// A `,` on a line of its own moves to the element before it (§3.2), and the line breaks before and
+/// after it make no blank line: only the blank lines of the writer are kept (S-499), in every form and
+/// before a comment (W3-11/b U3b, finding 1).
+#[test]
+fn a_comma_on_a_line_of_its_own_leaves_no_blank_line() {
+    let body = |lines: &[&str]| format!("fn f() {{\n{}\n}}\n", lines.join("\n"));
+    let rows: &[(&[&str], &[&str])] = &[
+        (&["g(", "a", ",", "b", ")"], &["  g(", "    a,", "    b,", "  )"]),
+        (&["g(a", ",", "b)"], &["  g(a,", "    b)"]),
+        (&["g(a", ",", "// c", "b)"], &["  g(a,", "    // c", "    b)"]),
+        (&["g(a // c", ",", "b)"], &["  g(a, // c", "    b)"]),
+        (&["g(a", ", // c", "b)"], &["  g(a,", "    // c", "    b)"]),
+        (&["g(", "a,", "b", ",", "// c", ")"], &["  g(", "    a,", "    b,", "    // c", "  )"]),
+        (&["g(a, b", ",", "// d", ")"], &["  g(a, b", "    // d", "  )"]),
+        // The blank lines of the writer, on either side of the `,`, stay (one).
+        (&["g(a", "", ",", "b)"], &["  g(a,", "", "    b)"]),
+        (&["g(a", ",", "", "b)"], &["  g(a,", "", "    b)"]),
+        (&["g(a", "", ",", "", "b)"], &["  g(a,", "", "    b)"]),
+    ];
+    for (input, output) in rows {
+        assert_eq!(printed(&body(input)), body(output), "{input:?}");
+    }
+}
+
+/// Each pair of the nested brackets of a negative literal pattern has the form of an enclosure (S-522):
+/// on one line its closing bracket follows its content (S-507), in the block form it is on its own
+/// line at the base line of the pair (W3-11/b U3b, finding 2).
+#[test]
+fn the_nested_pairs_of_a_negative_literal_pattern_take_their_forms() {
+    let arms =
+        |lines: &[&str]| format!("fn f(x: I32) -> I32 {{\n  match x {{\n{}\n    _ => 0,\n  }}\n}}\n", lines.join("\n"));
+    let rows: &[(&[&str], &[&str])] = &[
+        (&["-(", "(2", ")) => 1,"], &["    -(", "      (2)", "    ) => 1,"]),
+        (&["-((", "4)) => 3,"], &["    -((", "      4", "    )) => 3,"]),
+        (&["-((5)", ") => 4,"], &["    -((5)) => 4,"]),
+        (&["-(", "(", "6", ")", ") => 5,"], &["    -(", "      (", "        6", "      )", "    ) => 5,"]),
+        (&["-(((", "7) // c", ")) => 6,"], &["    -(((", "      7", "    ) // c", "    )) => 6,"]),
+    ];
+    for (input, output) in rows {
+        assert_eq!(printed(&arms(input)), arms(output), "{input:?}");
+    }
 }

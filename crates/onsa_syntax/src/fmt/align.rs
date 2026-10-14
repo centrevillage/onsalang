@@ -15,12 +15,8 @@ pub(super) struct LetMark {
 }
 
 /// The printed text `out` with its alignment done, ending in one line break
-/// (or empty). `comment_marks` are `(line, comment text, author's column)`.
-pub(super) fn finish(
-    mut out: String,
-    mut let_marks: Vec<LetMark>,
-    mut comment_marks: Vec<(usize, String, usize)>,
-) -> String {
+/// (or empty). `comment_marks` are `(line, comment text)`.
+pub(super) fn finish(mut out: String, mut let_marks: Vec<LetMark>, mut comment_marks: Vec<(usize, String)>) -> String {
     while out.ends_with(' ') || out.ends_with('\n') {
         out.pop();
     }
@@ -64,7 +60,7 @@ pub(super) fn finish(
             j += 1;
         }
         let run = &comment_marks[i..=j];
-        let code_of = |lines: &[String], m: &(usize, String, usize)| -> String {
+        let code_of = |lines: &[String], m: &(usize, String)| -> String {
             let l = &lines[m.0];
             l[..l.len() - m.1.len()].trim_end_matches(BLANKS).to_string()
         };

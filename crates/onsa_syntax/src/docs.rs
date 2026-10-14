@@ -412,7 +412,8 @@ mod tests {
         assert_eq!(crate::format(&p, src).as_deref(), Some(src));
         let src = "struct S { f1: Buf[\n// k\nI32\n],\n/// d2\nf2: I32,\n}\n";
         let out = crate::format(&parse(src), src).unwrap();
-        assert_eq!(out, "struct S { f1: Buf[I32], // k\n           /// d2\n           f2: I32 }\n");
+        // The block form of `Buf[` stays, with `// k` on its line (§3.2, S-498, S-510, §3.4).
+        assert_eq!(out, "struct S { f1: Buf[\n  // k\n  I32,\n],\n           /// d2\n           f2: I32 }\n");
         assert!(parse(&out).diagnostics.is_empty());
     }
 
