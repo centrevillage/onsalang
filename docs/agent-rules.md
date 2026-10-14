@@ -74,6 +74,7 @@ gate の各項目は全てのコアを使い、1 回に数分かかる。検証�
 - `tests/pending.toml` の項目（`[[pending]]` の表）は、テストの担当は編集しない。実装の担当も、並行の作業があるときは編集しない。載せる項目は報告に並べ、親が足す（4 章の、仮に入れて回し、回した後に戻す確かめは除く）。
 - テストの ignore の付け外しと理由の改めは `tools/ignores.py`（`list`・`passing`・`remove`・`set`）で、実装待ちの一覧の項目の付け外しは `tools/pending.py` の `list`・`remove`・`add` で行い、使い捨ての置換を書かない。
   通るようになった ignore は `ignores.py passing -p <crate> --reason <理由>` で探す。
+  ignore の理由は、そのテストを通すことになる作業の ID で始める（`W3-11 U3c: …`）。gate の `ignores` が、済んだ作業か表に無い ID の ignore を落とす。
 - 文書（`docs/`、仕様）を編集するとき（i）:
   - 先に `docs/` とリポジトリの直下に、vim のスワップファイル（`.<name>.swp`）が無いことを確かめる。確かめは、編集と別のコマンドで行う（利用者が vim で開いて回答を書いていることがある）。
   - Python の一意一致置換で編集する。
