@@ -71,6 +71,21 @@ This module is the only place that validates the list (the Rust reader in
 
 Exit 0 if the list is valid (and, with --stage-end, nothing of that stage is
 left), 1 otherwise, 2 on a usage error.
+
+It also lists and edits the list (the command comes first):
+
+    tools/pending.py list [--until W3-11|W3] [--reason S-497] [--kind test-case]
+    tools/pending.py remove <target>...
+    tools/pending.py add --kind K --target T --reasons S-497,S-414 --until W3-11 --note N
+
+`list` prints `until<TAB>reasons<TAB>kind<TAB>target` (`--until` takes a work
+or a stage). `remove` takes off every entry whose target is exactly one of the
+targets, with the blank lines before it; `add` appends an entry written like
+the others after a blank line, only when the check above finds no new problem
+with it. Both write only when every target is found (or the entry passes), keep
+the rest of the file byte for byte, and stop on a table that is not one
+`[[pending]]` line followed by its `key = value` lines. Each also takes
+`--root` and `--pending`.
 """
 import argparse
 import posixpath
@@ -183,10 +198,10 @@ def load_docs(root=ROOT):
     return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=set(s) | set(r), sections=sections)
 
 
-def load(path):
-    """Read the list. Returns (entries, errors); entries are the well-formed ones."""
+def load(path, text=None):
+    """Read the list (or `text`, as the list at `path`). Returns (entries, errors); entries are the well-formed ones."""
     try:
-        data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+        data = tomllib.loads(Path(path).read_text(encoding="utf-8") if text is None else text)
     except FileNotFoundError:
         return [], [f"{path}: not found"]
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
@@ -443,7 +458,120 @@ def show_path(path, root):
         return str(path)
 
 
+# ---------------------------------------------------------------- listing and editing
+
+EDIT_COMMANDS = ("list", "remove", "add")
+KEY_LINE = re.compile(r"[a-z]+ = \S")
+
+
+def blocks(text):
+    """The spans of the tables: from the `[[pending]]` line to the end of its last `key = value` line.
+    Raises DocsError on any other shape (a value over several lines, a key after a blank line)."""
+    spans, start, end, pos = [], None, None, 0
+    for line in text.splitlines(keepends=True):
+        bare = line.rstrip("\n")
+        if bare == "[[pending]]":
+            if start is not None:
+                spans.append((start, end))
+            start, end = pos, pos + len(line)
+        elif start is not None and KEY_LINE.match(bare) and end == pos:
+            end = pos + len(line)
+        elif start is not None and bare.strip() and not bare.startswith("#"):
+            raise DocsError(f"line {text.count(chr(10), 0, pos) + 1}: not a `key = value` line of the table above")
+        pos += len(line)
+    if start is not None:
+        spans.append((start, end))
+    whole = tomllib.loads(text).get("pending", [])
+    if [tomllib.loads(text[a:b]).get("pending", [None])[0] for a, b in spans] != whole:
+        raise DocsError("the tables are not read the same one by one as in the whole file")
+    return spans
+
+
+def _write_checked(path, text, expect):
+    """Write `text` when its entries are `expect` (as TOML tables) and it reads as tables; else say why."""
+    try:
+        if tomllib.loads(text).get("pending", []) != expect:
+            raise DocsError("the edited list does not hold the expected entries")
+        blocks(text)
+    except (DocsError, tomllib.TOMLDecodeError) as e:
+        print(f"{e}; nothing written")
+        return False
+    Path(path).write_text(text, encoding="utf-8")
+    return True
+
+
+def edit_main(argv):
+    ap = argparse.ArgumentParser(prog="pending.py", description="List and edit tests/pending.toml.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p_list, p_rm, p_add = (sub.add_parser(c) for c in EDIT_COMMANDS)
+    for p in (p_list, p_rm, p_add):
+        p.add_argument("--root", type=Path, default=ROOT)
+        p.add_argument("--pending", type=Path, default=None)
+    p_list.add_argument("--until")
+    p_list.add_argument("--reason")
+    p_list.add_argument("--kind")
+    p_rm.add_argument("targets", nargs="+")
+    for k in ("kind", "target", "reasons", "until", "note"):
+        p_add.add_argument(f"--{k}", required=True)
+    args = ap.parse_args(argv)
+    path = args.pending or args.root / PENDING
+    text = Path(path).read_text(encoding="utf-8")
+    entries, errors = load(path, text)
+    try:
+        spans = blocks(text)
+    except (DocsError, tomllib.TOMLDecodeError) as e:
+        errors.append(f"{show_path(path, args.root)}: {e}")
+    if errors:
+        print("\n".join(errors + ["the list is not read; nothing done"]))
+        return 1
+    whole = tomllib.loads(text).get("pending", [])
+    if args.cmd == "list":
+        for e in entries:
+            if args.until in (None, e.until, stage_of(e.until)) and args.reason in (None, *e.reasons) and args.kind in (None, e.kind):
+                print(f"{e.until}\t{', '.join(e.reasons)}\t{e.kind}\t{e.target}")
+        return 0
+    if args.cmd == "remove":
+        missing = [t for t in args.targets if not any(e.target == t for e in entries)]
+        if missing:
+            print("\n".join(f"no entry of target `{t}`" for t in missing) + "\nnothing written")
+            return 1
+        out, gone = text, [i for i, e in enumerate(entries) if e.target in args.targets]
+        for i in reversed(gone):
+            a, b = spans[i]
+            if a >= 2 and out[a - 2:a] == "\n\n":
+                while a >= 2 and out[a - 2:a] == "\n\n":
+                    a -= 1
+            else:
+                while out[b:b + 1] == "\n":
+                    b += 1
+            out = out[:a] + out[b:]
+        if not _write_checked(path, out, [w for i, w in enumerate(whole) if i not in gone]):
+            return 1
+        print(f"{len(gone)} entr{'y' if len(gone) == 1 else 'ies'} removed")
+        return 0
+    q = spec_blocks.toml_string
+    reasons = [r.strip() for r in args.reasons.split(",") if r.strip()]
+    fields = (("kind", q(args.kind)), ("target", q(args.target)), ("reasons", f"[{', '.join(map(q, reasons))}]"),
+              ("until", q(args.until)), ("note", q(args.note)))
+    out = text + ("" if text.endswith("\n") or not text else "\n") + ("\n" if text else "")
+    out += "[[pending]]\n" + "".join(f"{k} = {v}\n" for k, v in fields)
+    docs = load_docs(args.root)
+    new_entries, new_errors = load(path, out)
+    before = set(validate(entries, docs, args.root))
+    new = new_errors + [m for m in validate(new_entries, docs, args.root) if m not in before]
+    if new or len(new_entries) != len(entries) + 1:
+        print("\n".join(new + ["the entry is not added"]))
+        return 1
+    if not _write_checked(path, out, whole + [tomllib.loads(out[out.rindex("[[pending]]"):])["pending"][0]]):
+        return 1
+    print(f"added: {new_entries[-1].label()}")
+    return 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] and argv[0] in EDIT_COMMANDS:
+        return edit_main(argv)
     ap = argparse.ArgumentParser(description="Validate tests/pending.toml.")
     ap.add_argument("--root", type=Path, default=ROOT)
     ap.add_argument("--pending", type=Path, default=None)

@@ -2498,5 +2498,383 @@ class Keywords(unittest.TestCase):
         self.assertEqual(len(problems), 2)
 
 
+import signal  # noqa: E402
+
+import bg  # noqa: E402
+import ignores  # noqa: E402
+import take  # noqa: E402
+
+RUST = '''\
+//! A comment that names `#[ignore]` and `#[ignore = "x"]`.
+const S: &str = "#[ignore] in a string";
+
+macro_rules! out {
+    ($($t:tt)*) => { println!($($t)*) };
+}
+
+#[test]
+#[ignore = "W3-11 U3c: a \\"quoted\\" reason"]
+fn direct_with_reason() {}
+
+#[test]
+/// A doc comment.
+#[ignore]
+fn direct_bare() {}
+
+#[test]
+fn not_ignored() {}
+
+macro_rules! one {
+    ($name:ident, $v:expr) => {
+        #[test]
+        fn $name() {}
+    };
+    ($name:ident, $v:expr, $why:literal) => {
+        #[test]
+        #[ignore = $why]
+        fn $name() {}
+    };
+}
+
+one!(one_plain, 1);
+one!(
+    one_multi,
+    2,
+    "W4-02"
+);
+one!(
+    one_multi_plain,
+    3
+);
+
+macro_rules! two {
+    ($a:ident, $b:ident) => {
+        #[test]
+        fn $a() {}
+        #[test]
+        fn $b() {}
+    };
+    ($a:ident, $b:ident, second: $w:expr) => {
+        #[test]
+        fn $a() {}
+        #[test]
+        #[ignore = $w]
+        fn $b() {}
+    };
+    ($a:ident, $b:ident, $w:expr) => {
+        #[test]
+        #[ignore = $w]
+        fn $a() {}
+        #[test]
+        #[ignore = $w]
+        fn $b() {}
+    };
+}
+
+two!(both_a, both_b, "W3-04");
+'''
+
+
+class Ignores(unittest.TestCase):
+    """tools/ignores.py: the ignored tests of the Rust sources, and taking the marks off and on."""
+
+    def marks(self, text):
+        tests, problems = ignores.scan(text)
+        self.assertEqual(problems, [])
+        return {t.name: (t.ignored, t.reason) for t in tests}
+
+    def test_list(self):
+        tests, problems = ignores.scan(RUST)
+        self.assertEqual(problems, [])
+        got = [(t.name, t.line, t.reason) for t in tests if t.ignored]
+        line = RUST.splitlines().index
+        self.assertEqual(sorted(got), sorted([
+            ("direct_with_reason", line("fn direct_with_reason() {}") + 1, 'W3-11 U3c: a "quoted" reason'),
+            ("direct_bare", line("fn direct_bare() {}") + 1, None), ("one_multi", line("    one_multi,") + 1, "W4-02"),
+            ("both_a", line('two!(both_a, both_b, "W3-04");') + 1, "W3-04"),
+            ("both_b", line('two!(both_a, both_b, "W3-04");') + 1, "W3-04"),
+        ]))
+        self.assertEqual({t.name for t in tests if not t.ignored}, {"not_ignored", "one_plain", "one_multi_plain"})
+
+    def test_forms_not_read_are_named(self):
+        cases = {
+            "#[ignore]\nfn helper() {}\n": "1: an `#[ignore`",
+            "#[test]\n#[ignore = \"a\"] // why\nfn t() {}\n": "2: an `#[ignore`",
+            RUST + "const W: &str = \"x\";\none!(by_const, 4, W);\n": "the reason `W` is not a string literal",
+            RUST + "two!(x, y, z, w);\n": "no arm of `two!` fits",
+            "macro_rules! r {\n    ($($n:ident),*) => { $(#[test] #[ignore] fn $n() {})* };\n}\n": "the macro `r`",
+        }
+        for text, needle in cases.items():
+            problems = ignores.scan(text)[1]
+            self.assertTrue(any(needle in p for p in problems), (text, problems))
+
+    def test_direct_edits_keep_the_rest(self):
+        out = ignores.edit(RUST, "direct_bare", False)
+        self.assertEqual(out, RUST.replace("/// A doc comment.\n#[ignore]\n", "/// A doc comment.\n"))
+        out = ignores.edit(out, "not_ignored", True, "W5-08")
+        self.assertIn('#[test]\n#[ignore = "W5-08"]\nfn not_ignored()', out)
+        out = ignores.edit(out, "direct_with_reason", True, 'new "one"')
+        self.assertIn('#[ignore = "new \\"one\\""]\nfn direct_with_reason()', out)
+        self.assertEqual(self.marks(out)["direct_with_reason"], (True, 'new "one"'))
+        self.assertEqual(ignores.edit(out, "direct_with_reason", True, 'new "one"'), out)
+
+    def test_macro_edits(self):
+        out = ignores.edit(RUST, "one_multi", False)
+        self.assertEqual(out, RUST.replace('    2,\n    "W4-02"\n);', "    2\n);"))
+        out = ignores.edit(out, "one_multi_plain", True, "W9-01")
+        self.assertIn('    one_multi_plain,\n    3,\n    "W9-01"\n);', out)
+        out = ignores.edit(out, "one_plain", True, "W9-02")
+        self.assertIn('one!(one_plain, 1, "W9-02");', out)
+        out = ignores.edit(out, "both_a", False)
+        self.assertIn('two!(both_a, both_b, second: "W3-04");', out)
+        self.assertEqual(self.marks(out)["both_b"], (True, "W3-04"))
+        out = ignores.edit(out, "both_b", False)
+        self.assertIn("two!(both_a, both_b);", out)
+        with self.assertRaises(ignores.Unreadable):  # no arm ignores only the first test
+            ignores.edit(out, "both_a", True, "W1-01")
+
+    def test_cli_writes_all_or_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "t.rs"
+            f.write_text(RUST, encoding="utf-8")
+            self.assertEqual(quiet(ignores.main, ["remove", str(f), "direct_bare", "no_such_test"]), 1)
+            self.assertEqual(f.read_text(encoding="utf-8"), RUST)
+            self.assertEqual(quiet(ignores.main, ["remove", str(f), "direct_bare", "both_a", "both_b"]), 0)
+            self.assertEqual({n for n, (i, _) in self.marks(f.read_text(encoding="utf-8")).items() if i},
+                             {"direct_with_reason", "one_multi"})
+            (Path(tmp) / "bad.rs").write_text("#[ignore]\nfn helper() {}\n", encoding="utf-8")
+            self.assertEqual(quiet(ignores.main, ["list", tmp, "--reason", "W3-11"]), 1)
+
+    def test_passing_against_cargo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "crates" / "c" / "tests").mkdir(parents=True)
+            (Path(tmp) / "crates" / "c" / "tests" / "t.rs").write_text(RUST, encoding="utf-8")
+            out = "\n".join([
+                "     Running tests/t.rs (target/debug/deps/t-0)", "test direct_with_reason ... ok",
+                "test direct_bare ... FAILED", "test both_a ... ok", "test stray ... ok",
+            ])
+            done = subprocess.CompletedProcess([], 101, stdout=out)
+            with mock.patch.object(ignores, "ROOT", Path(tmp)), mock.patch.object(ignores.subprocess, "run",
+                                                                                   return_value=done) as run:
+                buf = io.StringIO()
+                with mock.patch.object(sys, "stdout", buf):
+                    code = ignores.main(["passing", "-p", "c", "--reason", "W"])
+            self.assertIn("--ignored", run.call_args.args[0])
+            self.assertEqual(run.call_args.kwargs["timeout"], 540)
+            lines = buf.getvalue().splitlines()
+            self.assertEqual(code, 1)  # `stray` ran but the files do not show it
+            self.assertTrue(any(x.startswith("pass\t") and "direct_with_reason" in x for x in lines), lines)
+            self.assertTrue(any(x.startswith("not run\t") and "\tboth_b\t" in x for x in lines), lines)
+            self.assertFalse(any("direct_bare" in x for x in lines), lines)  # no reason, so `--reason` leaves it out
+            self.assertTrue(any("`stray`" in x for x in lines), lines)
+
+
+class PendingEdit(TempRepo):
+    """tools/pending.py list / remove / add: the other entries stay byte for byte, the list stays valid."""
+
+    def setUp(self):
+        super().setUp()
+        self.text = ("# head\n\n" + entry("test-case", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
+                     + "# group\n" + entry("diag-code", "E0812", ("R-23",), "W5-07")
+                     + entry("gate", "c-header/x", ("S-34",), "T5-8").rstrip("\n") + "\n")
+        self.repo.write("tests/pending.toml", self.text)
+
+    def cmd(self, *args):
+        return quiet(pending.main, [*args, "--root", str(self.repo.root)])
+
+    def test_list(self):
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdout", buf):
+            self.assertEqual(pending.main(["list", "--until", "W5", "--root", str(self.repo.root)]), 0)
+        self.assertEqual(buf.getvalue(), "W5-07\tR-23\tdiag-code\tE0812\n")
+
+    def test_remove(self):
+        self.assertEqual(self.cmd("remove", "E0812", "c-header/x"), 0)
+        self.assertEqual(self.repo.pending.read_text(encoding="utf-8"),
+                         "# head\n\n" + entry("test-case", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08") + "# group\n")
+        self.assertEqual(self.repo.validate(), [])
+        self.assertEqual(self.cmd("remove", "tests/spec/ops/groups.onsa", "nothing"), 1)
+        self.assertIn("tests/spec/ops/groups.onsa", self.repo.pending.read_text(encoding="utf-8"))
+
+    def test_add(self):
+        self.assertEqual(self.cmd("add", "--kind", "diag-code", "--target", "E0601", "--reasons", "S-45, R-23",
+                                  "--until", "W3-07", "--note", 'a "note"'), 0)
+        added = '\n[[pending]]\nkind = "diag-code"\ntarget = "E0601"\nreasons = ["S-45", "R-23"]\nuntil = "W3-07"\nnote = "a \\"note\\""\n'
+        self.assertEqual(self.repo.pending.read_text(encoding="utf-8"), self.text + added)
+        self.assertEqual(self.repo.validate(), [])
+        self.assertEqual(self.cmd("add", "--kind", "diag-code", "--target", "E0602", "--reasons", "S-9",
+                                  "--until", "W3-07", "--note", "n"), 1)
+        self.assertEqual(self.cmd("add", "--kind", "diag-code", "--target", "E0601", "--reasons", "S-45",
+                                  "--until", "W3-07", "--note", "n"), 1)  # the same target twice
+        self.assertEqual(self.repo.pending.read_text(encoding="utf-8"), self.text + added)
+
+    def test_a_table_of_another_shape_stops(self):
+        odd = self.text.replace('reasons = ["R-23"]', 'reasons = [\n  "R-23",\n]')
+        self.repo.write("tests/pending.toml", odd)
+        self.assertEqual(self.cmd("remove", "c-header/x"), 1)
+        self.assertEqual(self.repo.pending.read_text(encoding="utf-8"), odd)
+
+    def test_the_check_is_unchanged(self):
+        self.assertEqual(quiet(pending.main, ["--root", str(self.repo.root), "--gate-steps", "c-header"]), 0)
+
+
+def git_in(tree, *args):
+    return subprocess.run(["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@t",
+                           "-c", "commit.gpgsign=false", *args], capture_output=True, text=True, check=True).stdout
+
+
+class Take(unittest.TestCase):
+    """tools/take.py: a patch of a worktree with a WIP commit, changes and new files, applied to a busy tree."""
+
+    LINES = "".join(f"{i}\n" for i in range(1, 10))
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        t = Path(self.tmp.name)
+        self.main, self.wt, self.patch = t / "main", t / "wt", t / "p.patch"
+        self.main.mkdir()
+        git_in(self.main, "init", "-q")
+        for name in ("a.txt", "b.txt", "c.txt"):
+            (self.main / name).write_text(self.LINES)
+        git_in(self.main, "add", "-A")
+        git_in(self.main, "commit", "-qm", "base")
+        self.base = git_in(self.main, "rev-parse", "HEAD").strip()
+        git_in(self.main, "worktree", "add", "-q", "-b", "work", str(self.wt))
+        (self.wt / "a.txt").write_text(self.LINES.replace("2\n", "two\n"))
+        git_in(self.wt, "commit", "-qam", "WIP")
+        (self.wt / "b.txt").write_text(self.LINES.replace("2\n", "two\n"))
+        (self.wt / "n.rs").write_text("fn n() {}\n")
+        (self.wt / "tests").mkdir()
+        (self.wt / "tests" / "x.rs").write_text("a\nb\n")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def take(self, *args):
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdout", buf):
+            code = take.main(list(map(str, args)))
+        return code, buf.getvalue()
+
+    def make_patch(self):
+        code, out = self.take("patch", self.wt, self.base, self.patch, "--main", self.main)
+        self.assertEqual(code, 0, out)
+        return out
+
+    def test_patch(self):
+        out = self.make_patch()
+        self.assertEqual(git_in(self.wt, "diff", "--cached", "--name-only"), "")
+        self.assertIn("4 file(s), +5 -2; without the tests and the data: +1 -0", out)
+        self.assertIn("n.rs  (new)", out)
+        text = self.patch.read_text()
+        self.assertIn("+two", text)
+        self.assertIn("b/tests/x.rs", text)
+        self.assertTrue(take.is_code("tools/take.py"))
+        self.assertFalse(any(map(take.is_code, ("tools/test_gate.py", "crates/a/tests/t.rs", "crates/a/src/tests.rs",
+                                                "crates/a/src/cst_tests.rs", "tests/pending.toml", "docs/x.md"))))
+        other = git_in(self.main, "commit-tree", "-m", "x", git_in(self.main, "write-tree").strip()).strip()
+        self.assertEqual(self.take("patch", self.wt, other, self.patch, "--main", self.main)[0], 1)
+
+    def test_plain_with_a_change_in_the_same_file(self):
+        self.make_patch()
+        (self.main / "b.txt").write_text(self.LINES.replace("8\n", "eight\n"))
+        (self.main / "c.txt").write_text("other\n")
+        code, out = self.take("check", self.patch, "--to", self.main)
+        self.assertEqual(code, 0, out)
+        self.assertIn("applies: plain", out)
+        self.assertIn("b.txt: uncommitted change (M)", out)
+        self.assertNotIn("c.txt", out)
+        code, out = self.take("apply", self.patch, "--to", self.main)
+        self.assertEqual(code, 0, out)
+        self.assertEqual((self.main / "b.txt").read_text(), self.LINES.replace("2\n", "two\n").replace("8\n", "eight\n"))
+        self.assertEqual(git_in(self.main, "diff", "--cached", "--name-only"), "")
+        code, out = self.take("apply", self.patch, "--to", self.main)  # a second time: nothing to do
+        self.assertEqual((code, out.splitlines()[0]), (0, f"applies: {take.ALREADY}"))
+
+    def test_three_way_after_the_main_tree_moved(self):
+        (self.main / "a.txt").write_text(self.LINES.replace("5\n", "five\n"))
+        git_in(self.main, "commit", "-qam", "moved")
+        (self.main / "c.txt").write_text("other\n")
+        out = self.make_patch()
+        self.assertIn("of the patch: a.txt", out)
+        code, out = self.take("apply", self.patch, "--to", self.main)
+        self.assertEqual(code, 0, out)
+        self.assertIn("applies: 3way", out)
+        self.assertEqual((self.main / "a.txt").read_text(), self.LINES.replace("2\n", "two\n").replace("5\n", "five\n"))
+        self.assertEqual(git_in(self.main, "diff", "--cached", "--name-only"), "")
+        self.assertEqual((self.main / "c.txt").read_text(), "other\n")
+        self.assertIn("?? n.rs", git_in(self.main, "status", "--porcelain"))
+
+    def test_an_untracked_file_in_the_way(self):
+        self.make_patch()
+        (self.main / "n.rs").write_text("mine\n")
+        code, out = self.take("apply", self.patch, "--to", self.main)
+        self.assertEqual(code, 1)
+        self.assertIn("n.rs: untracked, already there", out)
+        self.assertEqual((self.main / "n.rs").read_text(), "mine\n")
+        self.assertEqual((self.main / "b.txt").read_text(), self.LINES)
+
+
+class Bg(unittest.TestCase):
+    """tools/bg.py: a command in the background, waited for by its pid; nothing is left running."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dirs = []
+
+    def tearDown(self):
+        for d in self.dirs:
+            quiet(bg.stop, d)
+            pid = bg.read(d, "pid")
+            self.assertFalse(pid and bg.alive(int(pid)), f"{d}: left running")
+        self.tmp.cleanup()
+
+    def bg(self, *args):
+        r = subprocess.run([sys.executable, "-B", str(Path(bg.__file__)), *map(str, args)], capture_output=True,
+                           text=True, timeout=60)
+        return r.returncode, r.stdout
+
+    def run_(self, name, *cmd):
+        d = Path(self.tmp.name) / name
+        self.dirs.append(d)
+        self.assertEqual(self.bg("run", d, "--", *cmd)[0], 0)
+        return d
+
+    def test_exit_and_output(self):
+        d = self.run_("short", "sh", "-c", "echo out; echo err >&2; exit 3")
+        code, out = self.bg("wait", d, "--timeout", "30")
+        self.assertEqual(code, 3, out)
+        self.assertIn("exit 3", out)
+        self.assertIn("| out\n  | err", out)
+        self.assertIn("finished, exit 3", self.bg("status", d)[1])
+
+    def test_timeout_stop_and_status(self):
+        d = self.run_("long", "sleep", "30")
+        self.assertEqual(self.bg("run", d, "--", "true")[0], 1)  # still running
+        code, out = self.bg("wait", d, "--timeout", "0.3")
+        self.assertEqual(code, bg.TIMEOUT_EXIT, out)
+        self.assertIn("still running", out)
+        self.assertIn(": running", self.bg("status", d)[1])
+        self.assertEqual(self.bg("stop", d)[0], 0)
+        self.assertIn("finished, exit SIGTERM", self.bg("status", d)[1])
+        self.assertEqual(self.bg("wait", d)[0], 128 + signal.SIGTERM)
+        self.assertEqual(self.bg("run", d, "--", "true")[0], 0)  # finished: the directory is free again
+        self.assertEqual(self.bg("wait", d, "--timeout", "30")[0], 0)
+
+    def test_a_lost_watcher(self):
+        d = self.run_("lost", "sleep", "30")
+        watcher, pid = int(bg.read(d, "watcher")), int(bg.read(d, "pid"))
+        os.kill(watcher, signal.SIGKILL)
+        deadline = time.monotonic() + 10
+        while bg.alive(watcher) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        code, out = self.bg("wait", d, "--timeout", "5")
+        self.assertEqual(code, bg.LOST_EXIT, out)
+        self.assertIn("lost", out)
+        self.assertIn(": lost", self.bg("status", d)[1])
+        self.assertEqual(self.bg("run", d, "--", "true")[0], 1)  # its command still runs
+        self.assertEqual(self.bg("stop", d)[0], 0)
+        self.assertFalse(bg.alive(pid))
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
