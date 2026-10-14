@@ -23,12 +23,15 @@
 //!   list (S-520, S-521).
 //! - **Removed line breaks:** before the closing bracket of a list on one
 //!   line or in the continuation form (S-507), and between brackets with
-//!   nothing in them (S-496). The printer keeps them when a comment is
-//!   between (§3.4, S-497).
+//!   nothing in them (S-496); inside an element of a list or an enclosure,
+//!   but at a place of a continuation (S-497, S-505); between the attribute
+//!   of a `let` and the `let` (§3.2). The printer keeps them when a comment
+//!   is between (§3.4, S-497).
 
 use super::rewrites::REWRITES;
 use super::shape::{self, Form, Shape};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
+use crate::layout::continues;
 use crate::literal;
 use crate::token::TokenKind;
 
@@ -77,6 +80,7 @@ impl Plan {
         plan.forms.sort_unstable_by_key(|&(open, _)| open);
         // After the line breaks round the attributes, which can make a body one of more than one line.
         nodes.iter().for_each(|&n| plan.brackets(cst, n));
+        plan.inside_elements(cst, &nodes);
         plan
     }
 
@@ -218,6 +222,95 @@ impl Plan {
         let last = self.previous(cst, close).expect("a body has its opening bracket");
         if !on_another_line(cst, last, close) {
             self.set(close, BREAK_BEFORE);
+        }
+    }
+
+    /// The line breaks of the writer that go (§3.2, S-497, S-505): the
+    /// line breaks inside an element of a list or inside an enclosure, but
+    /// those at a place of a continuation (§2.5), and the line breaks between
+    /// the attributes of a `let` and the `let`. A `JOIN` goes on the code
+    /// token after them, which the printer reads only when no comment is
+    /// between (S-497 (β), §3.4).
+    ///
+    /// One walk over the tokens with the stack of the pairs of brackets the
+    /// token is in (of the nodes of `nodes`, [`shape::pairs`]). A line break
+    /// between `prev` and `t`, two code tokens written one after the other,
+    /// is inside an element when the innermost pair round it is that of a
+    /// list or an enclosure (not a block or a body of items, and none at the
+    /// top of the file: there the line breaks end statements and items) and
+    /// it is neither right after the opening bracket nor right before the
+    /// closing one (the form of the list, [`Plan::list`]) nor before the first
+    /// token of an element (between two elements). A place of a continuation
+    /// is the one judgement [`continues`] on the last two code tokens before
+    /// the line break and the first after it, and the end of an attribute
+    /// (§2.5: an attribute ends no line, which the tokens do not show).
+    fn inside_elements(&mut self, cst: &Cst, nodes: &[NodeId]) {
+        const STARTS_ELEMENT: u8 = 1;
+        const ENDS_ATTRIBUTE: u8 = 2;
+        const ENDS_LET_ATTRIBUTE: u8 = 4;
+        let tokens = cst.tokens();
+        let mut marks = vec![0u8; tokens.len()];
+        // (opening, closing, whether the pair holds statements or items), in the order of the tokens.
+        let mut pairs = Vec::new();
+        for &n in nodes {
+            match cst.kind(n) {
+                NodeKind::Attr => {
+                    let let_attribute = cst.parent(n).is_some_and(|p| cst.kind(p) == NodeKind::LetStmt);
+                    if let Some((_, last)) = cst.significant_tokens(n) {
+                        marks[last.index()] |= if let_attribute { ENDS_LET_ATTRIBUTE } else { ENDS_ATTRIBUTE };
+                    }
+                }
+                kind => {
+                    let Some(row) = shape::shape(kind) else { continue };
+                    let container = row.shape == Shape::Container;
+                    pairs.extend(shape::pairs(cst, n).into_iter().map(|(open, close)| (open, close, container)));
+                    if row.shape == Shape::List {
+                        shape::part_starts(cst, n).into_iter().for_each(|t| marks[t.index()] |= STARTS_ELEMENT);
+                    }
+                }
+            }
+        }
+        pairs.sort_unstable_by_key(|&(open, _, _)| open);
+        let mut pairs = pairs.into_iter().peekable();
+        let mut stack: Vec<(TokenIdx, TokenIdx, bool)> = Vec::new();
+        // The last two code tokens of the source (the written ones or not, as `continues` reads them).
+        let (mut before, mut last) = (None, None);
+        // The last code token written, and whether a line break follows it.
+        let (mut prev, mut breaks): (Option<TokenIdx>, bool) = (None, false);
+        for (i, tok) in tokens.iter().enumerate() {
+            let t = TokenIdx(i as u32);
+            if tok.kind == TokenKind::Newline {
+                breaks = true;
+            }
+            if !tok.kind.is_code() {
+                continue;
+            }
+            if let (Some(p), true, true) = (prev, breaks, self.kept(t)) {
+                let joins = match marks[p.index()] {
+                    m if m & ENDS_LET_ATTRIBUTE != 0 => true,
+                    m if m & ENDS_ATTRIBUTE != 0 => false,
+                    _ => stack.last().is_some_and(|&(open, close, container)| {
+                        !container
+                            && p != open
+                            && t != close
+                            && marks[i] & STARTS_ELEMENT == 0
+                            && last.is_none_or(|l| !continues(before, l, tok.kind))
+                    }),
+                };
+                if joins {
+                    self.set(t, JOIN);
+                }
+            }
+            if stack.last().is_some_and(|&(_, close, _)| close == t) {
+                stack.pop();
+            }
+            while let Some(pair) = pairs.next_if(|&(open, _, _)| open == t) {
+                stack.push(pair);
+            }
+            (before, last) = (last, Some(tok.kind));
+            if self.kept(t) {
+                (prev, breaks) = (Some(t), false);
+            }
         }
     }
 

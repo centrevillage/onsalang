@@ -1937,7 +1937,6 @@ fn the_attribute_of_an_input_of_a_flow_written_on_the_line_of_the_input_goes_to_
 }
 
 #[test]
-#[ignore = "W3-11 U3c: fmt keeps the line break between `@mem(bulk)` and `let` (§3.2, S-497)"]
 fn the_attribute_of_a_let_is_on_the_line_of_the_let() {
     let cases = vec![
         case(

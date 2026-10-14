@@ -338,7 +338,8 @@ fn closures_use_lists_and_enclosures_take_their_base_lines() {
              let y = (\n    a +\n      b\n  )\n  let z = xs[\n    a +\n      b\n  ]\n  let w = [\n    a +\n      b; 4\n  \
              ]\n  x\n}\n",
         ),
-        ("type A = [\nI32;\n4\n]\n", "type A = [\n  I32;\n    4\n]\n"),
+        // The line break after the `;` is inside the element and goes (§3.2, S-374, S-497).
+        ("type A = [\nI32;\n4\n]\n", "type A = [\n  I32; 4\n]\n"),
     ];
     for (input, output) in rows {
         assert_eq!(printed(input), *output, "{input:?}");
@@ -398,5 +399,96 @@ fn the_nested_pairs_of_a_negative_literal_pattern_take_their_forms() {
     ];
     for (input, output) in rows {
         assert_eq!(printed(&arms(input)), arms(output), "{input:?}");
+    }
+}
+
+/// The code tokens before which the plan removes a line break of the writer (a `JOIN` on a token with a
+/// line break before it).
+fn joined(src: &str) -> Vec<String> {
+    let parsed = crate::parse(FileId(0), src);
+    assert!(!parsed.syntax_errors(), "{src}: {:?}", parsed.diagnostics);
+    let (cst, plan) = (&parsed.cst, Plan::new(&parsed.cst, src));
+    let mut out = Vec::new();
+    let mut breaks = false;
+    for (i, tok) in cst.tokens().iter().enumerate() {
+        let t = TokenIdx(i as u32);
+        breaks |= tok.kind == TokenKind::Newline;
+        if tok.kind.is_trivia() || !plan.kept(t) {
+            continue;
+        }
+        if breaks && plan.joins(t) {
+            out.push(src[tok.span.start as usize..tok.span.end as usize].to_string());
+        }
+        breaks = false;
+    }
+    out
+}
+
+/// The line breaks inside an element of a list or an enclosure go, but those at a place of a
+/// continuation (§2.5: after a binary operator, `->`, the `|` of a pattern, before `.` and `uses`,
+/// after an attribute; a range is not written in brackets), after the opening bracket, between the elements, in a block and
+/// between statements (§3.2, S-497, S-505). The line breaks between the attribute of a `let` and the
+/// `let` go too (§3.2). The `JOIN` goes on the code token after the line break (W3-11 U3c).
+#[test]
+fn the_plan_removes_the_line_breaks_inside_an_element_but_at_a_place_of_a_continuation() {
+    let body = |lines: &[&str]| format!("fn f() {{\n{}\n}}\n", lines.join("\n"));
+    let flow = |lines: &[&str]| format!("flow g(x: F32 at sample) -> F32 at sample {{\n{}\n}}\n", lines.join("\n"));
+    let rows: &[(String, &[&str])] = &[
+        // Removed: round `as`, after a keyword, after `=>` and `:`, before `:` (S-505), after `;`.
+        (body(&["g(x", "as", "F64, b)"]), &["as", "F64"]),
+        (body(&["two(if", "a { 1 } else { 2 }, 3)"]), &["a"]),
+        (body(&["take(move", "b)"]), &["b"]),
+        (body(&["match a {", "0 =>", "1,", "_ => 2,", "}"]), &["1"]),
+        (body(&["let s = S { f", ": a }", "s"]), &[":"]),
+        (body(&["g([b;", "4])"]), &["4"]),
+        ("fn h(x\n: I32) -> I32 {\n  x\n}\n".to_string(), &[":"]),
+        // Removed with a comment between: the printer keeps it (S-497 (β)), the plan marks it alike.
+        (body(&["take(move // c", "b)"]), &["b"]),
+        // The closing bracket of a list on one line (S-507, U3b), with a `,` the plan drops between.
+        (body(&["g(x", "as F64", ",", ")"]), &["as", ")"]),
+        // Kept: the places of a continuation.
+        (body(&["two(a +", "b, c)"]), &[]),
+        (body(&["two(1 -", "b, c)"]), &[]),
+        (body(&["two(a ^", "b, c)"]), &[]),
+        (body(&["g(a", ".abs())"]), &[]),
+        (body(&["match a {", "0 |", "1 => 1,", "_ => 2,", "}"]), &[]),
+        ("fn k(f: fn(I32) ->\nI32) -> I32 {\n  1\n}\n".to_string(), &[]),
+        (body(&["h(1, fn(x: I32) -> I32", "uses {Alloc} {", "x", "})"]), &[]),
+        // Kept: after the opening bracket, between the elements, in a block, between statements.
+        (body(&["two(", "a,", "b", ")"]), &[]),
+        (body(&["two(a,", "b)"]), &[]),
+        (body(&["two(a", ", b)"]), &[]),
+        (body(&["two(if a {", "1", "} else {", "2", "}, 3)"]), &[]),
+        (body(&["let a = 1", "a"]), &[]),
+        // After an attribute: kept but after that of a `let`.
+        (
+            "flow g(@param(min: 0.0, max: 1.0, default: 0.5)\nlevel: F32 at block, x: F32 at sample) -> F32 at \
+             sample {\n  x\n}\n"
+                .to_string(),
+            &[],
+        ),
+        ("@repr(c)\nstruct P {\n  x: F32,\n}\n".to_string(), &[]),
+        (flow(&["@mem(bulk)", "let d = delay~(x, 4800)", "d"]), &["let"]),
+    ];
+    for (src, want) in rows {
+        assert_eq!(joined(src), *want, "{src}");
+    }
+}
+
+/// Where a removed line break and a token the plan drops meet, the line breaks round the dropped
+/// token are one (`Printer::gap`, U3b) and the removed one leaves no blank line; a line break of the
+/// writer between two elements stays with its blank line (S-499).
+#[test]
+fn a_removed_line_break_and_a_dropped_comma_leave_no_line_and_no_blank_line() {
+    let body = |lines: &[&str]| format!("fn f() {{\n{}\n}}\n", lines.join("\n"));
+    let rows: &[(&[&str], &[&str])] = &[
+        (&["g(x", "as F64", ",", "b)"], &["  g(x as F64,", "    b)"]),
+        (&["g(x", "", "as F64", ",", "", "b)"], &["  g(x as F64,", "", "    b)"]),
+        (&["g(x", "as F64", ",", "", ")"], &["  g(x as F64)"]),
+        (&["g(", "x", "as F64", ",", "b", ")"], &["  g(", "    x as F64,", "    b,", "  )"]),
+        (&["match a {", "0 =>", "", "1", ",", "_ => 2,", "}"], &["  match a {", "    0 => 1,", "    _ => 2,", "  }"]),
+    ];
+    for (input, output) in rows {
+        assert_eq!(printed(&body(input)), body(output), "{input:?}");
     }
 }

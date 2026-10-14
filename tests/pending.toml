@@ -1918,9 +1918,3 @@ reasons = ["S-36"]
 until = "W4-03"
 note = "priv の構文（W3-08）と無指定をパッケージ内にする意味（W4-03）（t1）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/lex/with_handler_in_brackets.onsa"
-reasons = ["S-497", "S-414"]
-until = "W3-11"
-note = "U3c: 括弧の中の `with` の後の改行を、新しい印字器（U3b）はまだ残す（式の中のキーワードの後の改行の除去は U3c）。`canonical = false` のまま、fmt が書き換えない"

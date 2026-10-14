@@ -61,7 +61,16 @@ The properties (`--property`):
                  rewrites take parentheses and `return` away, never add a
                  level): the levels of each item, `onsa dump --levels`, of
                  `fmt(p)` are at most those of `p` (W3-14);
-              6. the normal form of the code: for space and blank, `fmt(p)` and
+              6. the line breaks of the writer (`docs/onsa-tools.md` §3.2,
+                 R-143, S-497): fmt keeps the line breaks after the opening
+                 bracket of a list, between its elements (and a blank line
+                 there, S-499), between statements and items, at a place of
+                 a continuation (§2.5) and after a comment, adds none there,
+                 and removes those inside an element (`break_problems`, on
+                 the text alone; the line breaks fmt adds or removes by the
+                 form of a list or a block and round attributes, and the
+                 gaps of what the rewrites of §3.3 drop, are not counted);
+              7. the normal form of the code: for space and blank, `fmt(p)` and
                  `fmt(x)`, each without its comments and formatted again, are
                  the same. Where the comments go is the item `fmt-comments`;
                  break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2), and
@@ -90,7 +99,7 @@ gives the same inputs on every machine. The failing inputs that are shown
 writes nothing under `tests/`; its work directory is
 `target/fmt_props/work-<pid>`); `--minimize` shrinks them first (lines, then
 characters, `fuzz.ddmin`) where the property holds on its own: rejected,
-internal, ast, idempotence, comment-text, docs, items.
+internal, ast, idempotence, comment-text, docs, items, depth, breaks.
 
     tools/fmt_props.py [--property core|comments|cst] [--per-kind N]
                        [--version V] [--jobs N] [--binary PATH]
@@ -101,6 +110,7 @@ the compiler or the list of cases cannot be had).
 """
 import argparse
 import difflib
+import functools
 import os
 import re
 import shutil
@@ -191,7 +201,14 @@ class Tok:
 def tokenize(text):
     """The tokens of `text`: code tokens, comments (to the end of the line)
     and newlines. A string or a character is one token (they do not span
-    lines, §2.4); an unknown character is a token of its own."""
+    lines, §2.4); an unknown character is a token of its own. A tuple, kept
+    for the texts read last (each input and its output are read by several
+    properties), per set of symbols ([`load_symbols`])."""
+    return _tokenize(text, _LONG)
+
+
+@functools.lru_cache(maxsize=64)
+def _tokenize(text, symbols):
     out, i, n = [], 0, len(text)
     while i < n:
         c = text[i]
@@ -221,7 +238,7 @@ def tokenize(text):
             j = i + next((len(op) for op in long_symbols() if text.startswith(op, i)), 1)
         out.append(Tok("comment" if text.startswith("//", i) else "code", i, j, text[i:j]))
         i = j
-    return out
+    return tuple(out)
 
 
 @dataclass
@@ -696,13 +713,180 @@ def sequence_problem(what, want, got):
     return f"{what}: {len(got) - len(want)} more, from {got[len(want)]!r}"
 
 
+# The places of the line breaks of `break_places`: fmt keeps the writer's
+# line break there or not, and adds none (`docs/onsa-tools.md` §3.2).
+KEPT_PLACES = ("open", "line", "element", "comment", "continue")
+
+
+def attribute_ends(code):
+    """The indices in `code` (the code tokens) of the last token of each
+    attribute: the name of `@name`, the `)` of `@name(...)`."""
+    ends = set()
+    for j, t in enumerate(code[:-1]):
+        if t.text != "@" or not IDENT.fullmatch(code[j + 1].text):
+            continue
+        k = j + 1
+        if k + 1 < len(code) and code[k + 1].text == "(" and code[k + 1].start == code[k].end:
+            level = 0
+            for k in range(k + 1, len(code)):
+                level += code[k].text == "("
+                level -= code[k].text == ")"
+                if level == 0:
+                    break
+        ends.add(k)
+    return ends
+
+
+def brace_lists(code):
+    """{index of a `{` in `code`: whether it opens a list (§3.2) rather than a
+    block or a body of items}, read from the text alone: a `,` or a `=>`
+    directly inside it (the elements, the arms), a `uses` or a `.` before it
+    (an effect row, a `use` list), or a name and a `:` or a `..` first inside
+    it (a field: no statement starts so). A `{` of one element without a `:`
+    (`S { x }`, `E { A }`) reads as a block: its line breaks are those of its
+    brackets."""
+    match, stack = {}, []
+    for j, t in enumerate(code):
+        if t.text in OPENERS:
+            stack.append(j)
+        elif t.text in CLOSERS and stack:
+            match[stack.pop()] = j
+    out = {}
+    for j, t in enumerate(code):
+        if t.text != "{" or j not in match:
+            continue
+        close, k, direct = match[j], j + 1, []
+        while k < close:
+            direct.append(code[k].text)
+            k = match.get(k, k) + 1
+        first = code[j + 1:j + 3]
+        out[j] = (
+            "," in direct or "=>" in direct
+            or (j > 0 and code[j - 1].text in ("uses", "."))
+            or (len(first) == 2 and IDENT.fullmatch(first[0].text) is not None and first[1].text == ":")
+            or (bool(first) and first[0].text == "..")
+        )
+    return out
+
+
+def break_places(text):
+    """[(key, place, line break, blank line, comment, line)]: the gap before
+    each code token of `text` but the `,` and the `return` (the tokens fmt
+    drops or moves, §3.2, §3.3: their gaps join the gap after them), keyed by
+    the token (a number as `#`, its spelling may change). The place is one of
+    KEPT_PLACES, `removable` or None (fmt may add or remove a line break there):
+
+        None       before a closing bracket (the form, §3.2), after the `{`
+                   of a block or a body (fmt adds the line break of a block
+                   over more than one line), after an attribute (fmt adds the
+                   line break of an item and of an input in the block form,
+                   and removes that of a `let`), before an attribute in a list
+                   (the block form, S-501);
+        open       after an opening bracket of a list or an enclosure (the form);
+        line       outside every bracket or in a block or a body (the line
+                   breaks that end statements and items, and continuations);
+        element    between two elements of a list (a `,` between);
+        comment    a comment in the gap (§3.4: the line break after it stays);
+        continue   a continuation (§2.5): after a symbol of `continuing()`,
+                   before `.` and `uses`;
+        removable  any other gap inside an element: fmt removes the line
+                   break (S-497, S-505)."""
+    toks = tokenize(text)
+    code = [t for t in toks if t.kind == "code"]
+    # The gap before each code token: line breaks, blank lines, comments.
+    gaps, nl, run, blank, comment, line, line_of = [], 0, 0, False, False, 1, []
+    for t in toks:
+        if t.kind == "nl":
+            nl, run, line = nl + 1, run + 1, line + 1
+            blank = blank or run >= 2
+        elif t.kind == "comment":
+            comment, run = True, 0
+        else:
+            gaps.append((nl > 0, blank, comment))
+            line_of.append(line)
+            nl, run, blank, comment = 0, 0, False, False
+    ends, lists = attribute_ends(code), brace_lists(code)
+    out, stack, merged, a = [], [], None, None
+    for j, t in enumerate(code):
+        g = gaps[j]
+        merged = g if merged is None else (merged[0] or g[0], merged[1] or g[1], merged[2] or g[2])
+        comma = a is not None and any(code[k].text == "," for k in range(a + 1, j))
+        if t.text in (",", "return"):
+            pass
+        else:
+            if a is not None:
+                top = stack[-1] if stack else None
+                block = top is not None and code[top].text == "{" and not lists.get(top, False)
+                if t.text in CLOSERS:
+                    place = None
+                elif a == top:
+                    place = None if block else "open"
+                elif a in ends:
+                    place = None
+                elif top is None or block:
+                    place = "line"
+                elif t.text == "@":
+                    place = None
+                elif comma:
+                    place = "element"
+                elif merged[2]:
+                    place = "comment"
+                elif code[a].text in continuing() or t.text in (".", "uses"):
+                    place = "continue"
+                else:
+                    place = "removable"
+                key = "#" if NUMBER.fullmatch(t.text) else t.text
+                out.append((key, place, merged[0], merged[1], merged[2], line_of[j]))
+            a, merged = j, None
+        if t.text in OPENERS:
+            stack.append(j)
+        elif t.text in CLOSERS and stack:
+            stack.pop()
+    return out
+
+
+def break_problems(before, after):
+    """The places where `after` (fmt of `before`) does not keep the line
+    breaks of the writer (`docs/onsa-tools.md` §3.2): a line break at a place
+    of KEPT_PLACES that is gone or added, a line break inside an element
+    (`removable`) that stays or is added, and a blank line between two
+    elements of a list that is gone or added (S-499). Without the CST: the
+    text, its tokens and its brackets (`break_places`), so the check shares
+    no judgement with the formatter. The gaps are paired by their tokens (a
+    difference in the tokens, which the rewrites of §3.3 that `break_places`
+    leaves out do not make, is a problem too); a gap whose comment moved (the
+    item `fmt-comments`) is not judged."""
+    want, got = break_places(before), break_places(after)
+    keys = [w[0] for w in want], [g[0] for g in got]
+    problems = []
+    if keys[0] == keys[1]:  # the same tokens (the common case): no matching to do
+        blocks = [(0, 0, len(want))]
+    else:
+        # A rewrite that `break_places` does not leave out: the gaps round it are not judged, so say so.
+        problems.append(sequence_problem("token (but `,` and `return`)", *keys))
+        blocks = difflib.SequenceMatcher(None, *keys, autojunk=False).get_matching_blocks()
+    for i, j, size in blocks:
+        for k in range(1 if i or j else 0, size):
+            (key, place, nl, blank, comment, line), (_, _, out_nl, out_blank, out_comment, _) = want[i + k], got[j + k]
+            if place is None or comment != out_comment:
+                continue
+            where = f"line {line}, before `{key}` ({place})"
+            if place == "removable" and out_nl:
+                problems.append(f"{where}: the line break inside an element stays")
+            elif place in KEPT_PLACES and nl != out_nl:
+                problems.append(f"{where}: the line break of the writer is {'gone' if nl else 'added'}")
+            elif place == "element" and nl and blank != out_blank:
+                problems.append(f"{where}: the blank line between the elements is {'gone' if blank else 'added'}")
+    return problems
+
+
 # --------------------------------------------------------------- running
 
 
 @dataclass(frozen=True)
 class Failure:
     # unread, perturbation, rejected, internal, ast, idempotence, comment-text,
-    # docs, items, depth, convergence, comments, cst
+    # docs, items, depth, breaks, convergence, comments, cst
     prop: str
     case: str
     label: str
@@ -835,6 +1019,10 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
         problem = sequence_problem(what, want, got)
         if problem:
             fail(prop_name, problem)
+    problems = break_problems(text, formatted)
+    if problems:
+        more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
+        fail("breaks", problems[0] + more)
     problem = depth_problem(onsa, a, d / "b" / name, bool(item_heads(text)))
     if problem:
         fail(*problem)
@@ -1017,7 +1205,7 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
 
 
 # The properties `shrink` keeps on a smaller input (the others need the source).
-SHRINKABLE = ("rejected", "internal", "ast", "idempotence", "comment-text", "docs", "items", "depth")
+SHRINKABLE = ("rejected", "internal", "ast", "idempotence", "comment-text", "docs", "items", "depth", "breaks")
 ERROR_CODE = re.compile(r"error\[(E\d{4})\]")
 
 

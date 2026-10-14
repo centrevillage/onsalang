@@ -2219,6 +2219,10 @@ def norm(t):
         lines = [re.sub(r" *// lose.*", "", l) for l in lines]
     if "LOSE_DOC" in t:
         lines = [l for l in lines if not l.startswith("///")]
+    for i in range(len(lines) - 1):  # the line break after it is lost (once: the joined line ends otherwise)
+        if lines[i].endswith("JOIN_KEPT = 1"):
+            lines[i:i + 2] = [lines[i] + " " + lines[i + 1]]
+            break
     return "\n".join(l for l in lines if l).strip("\n") + "\n"
 def code(t):
     return re.findall(r"\w+|[^\s\w]", re.sub(r"//[^\n]*", "", t))
@@ -2397,6 +2401,12 @@ class FmtProps(TempRepo):
             ("let x = g(a, b) // lose LOSE_COMMENT", "FAIL comment-text: tests/spec/a.onsa [source]: comment: 1 lost"),
             ("/// d LOSE_DOC\n  let x = 1", "FAIL docs: tests/spec/a.onsa [source]: doc comment: 1 lost"),
             ("let DEEPER = g(a, b)", "FAIL depth: tests/spec/a.onsa [source]: item 1: 1 levels before fmt, 2 after"),
+            # A line break between two statements, and a blank line between two elements, that fmt lost.
+            ("let JOIN_KEPT = 1",
+             "FAIL breaks: tests/spec/a.onsa [source]: line 3, before `x` (line): the line break of the writer is gone"),
+            ("let y = g(a,\n\n    b)",
+             "FAIL breaks: tests/spec/a.onsa [source]: line 4, before `b` (element): the blank line between the elements "
+             "is gone"),
         ):
             with self.subTest(marker=marker):
                 self.repo.write("tests/spec/a.onsa", f"fn f() {{\n  {marker}\n  x\n}}\n")
@@ -2476,6 +2486,58 @@ class FmtProps(TempRepo):
         cmd = (sys.executable, "-B", "-c", "print('[]')")
         paths = [s.path for s in fmt_props.sources(self.repo.root, cmd)]
         self.assertEqual(paths, ["std/core/m.onsa", "examples/e/x.onsa"])
+
+    def test_the_places_of_the_line_breaks(self):
+        # Read on the text: the brackets, the elements, the attributes, the comments (`docs/onsa-tools.md` §3.2).
+        text = ("@repr(c)\nstruct P { x: F32 }\nfn f() {\n  two(a, // c\n    b +\n    g(x\n    as F64))\n"
+                "  match a {\n    0 =>\n      1,\n  }\n}\n")
+        places = [(key, place, nl) for key, place, nl, _, _, _ in fmt_props.break_places(text)]
+        self.assertEqual(places, [
+            ("repr", "line", False), ("(", "line", False), ("c", "open", False), (")", None, False),
+            ("struct", None, True), ("P", "line", False), ("{", "line", False), ("x", "open", False),
+            (":", "removable", False), ("F32", "removable", False), ("}", None, False),
+            ("fn", "line", True), ("f", "line", False), ("(", "line", False), (")", None, False), ("{", "line", False),
+            ("two", None, True), ("(", "line", False), ("a", "open", False), ("b", "element", True),
+            ("+", "removable", False), ("g", "continue", True), ("(", "removable", False), ("x", "open", False),
+            ("as", "removable", True), ("F64", "removable", False), (")", None, False), (")", None, False),
+            ("match", "line", True), ("a", "line", False), ("{", "line", False), ("#", "open", True),
+            ("=>", "removable", False), ("#", "removable", True), ("}", None, True), ("}", None, True),
+        ])
+
+    def test_break_problems(self):
+        body = lambda *lines: "fn f() {\n" + "".join(f"  {line}\n" for line in lines) + "}\n"
+        for before, after, want in (
+            # Kept: between statements, between elements (and the blank line there), after the opening bracket,
+            # at a continuation; added there: a failure too.
+            (body("let a = 1", "a"), body("let a = 1 a"), ["line 3, before `a` (line): the line break of the "
+                                                           "writer is gone"]),
+            (body("two(a,", "    b)"), body("two(a, b)"), ["line 3, before `b` (element): the line break of the "
+                                                         "writer is gone"]),
+            (body("two(a, b)"), body("two(a,", "    b)"), ["line 2, before `b` (element): the line break of the "
+                                                          "writer is added"]),
+            (body("two(a,", "", "    b)"), body("two(a,", "    b)"), ["line 4, before `b` (element): the blank line "
+                                                                     "between the elements is gone"]),
+            (body("two(", "    a, b,", "  )"), body("two(a, b)"), ["line 3, before `a` (open): the line break of the "
+                                                                   "writer is gone"]),
+            (body("two(a +", "    b, c)"), body("two(a + b, c)"), ["line 3, before `b` (continue): the line break of "
+                                                                   "the writer is gone"]),
+            # Removed: inside an element (S-497, S-505); one that stays is a failure.
+            (body("g(x", "    as F64)"), body("g(x as F64)"), []),
+            (body("g(x", "    as F64)"), body("g(x", "    as F64)"), ["line 3, before `as` (removable): the line "
+                                                                       "break inside an element stays"]),
+            (body("let s = S { f", "    : a }"), body("let s = S { f: a }"), []),
+            # Not counted: what fmt adds or removes by the form, round attributes and the rewrites of §3.3.
+            ("@repr(c) struct P { x: F32 }\n", "@repr(c)\nstruct P { x: F32 }\n", []),
+            ("flow g() {\n  @mem(bulk)\n  let d = 1\n}\n", "flow g() {\n  @mem(bulk) let d = 1\n}\n", []),
+            ("fn h() { g(a, b\n) }\n", "fn h() {\n  g(a, b)\n}\n", []),
+            (body("two(a", "    , b)"), body("two(a,", "    b)"), []),
+            (body("two(a // c", "    , b)"), body("two(a, // c", "    b)"), []),
+            ("fn f() -> I32 {\n  return 1\n}\n", "fn f() -> I32 {\n  1\n}\n", []),
+            # Another token changed: said, and the gaps round it are not judged.
+            (body("g(x", "    as F64)"), body("g(y", "    as F64)"), ["token (but `,` and `return`) #7: 'x' became 'y'"]),
+        ):
+            with self.subTest(before=before, after=after):
+                self.assertEqual(fmt_props.break_problems(before, after), want)
 
 
 

@@ -210,9 +210,7 @@ impl<'a> Printer<'a> {
             let what = match row.shape {
                 Shape::Container => What::Container,
                 Shape::List => {
-                    let mut starts: Vec<TokenIdx> =
-                        shape::elements(cst, n).into_iter().chain(shape::rest(cst, n)).map(|e| e.start).collect();
-                    starts.sort();
+                    let starts = shape::part_starts(cst, n);
                     let form = self.plan.form(pairs[0].open).expect("the plan has the form of a list");
                     What::List { form, starts, element: None, first_col: None }
                 }

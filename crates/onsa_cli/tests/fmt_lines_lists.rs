@@ -863,7 +863,6 @@ fn a_line_that_starts_with_a_binary_symbol_inside_a_list_is_refused_and_the_file
 // ---- the line breaks inside an element (S-497, S-505) ------------------------------------------------
 
 #[test]
-#[ignore = "W3-11 U3c: fmt keeps the line break after `=>` and `:` inside an element (S-497)"]
 fn a_line_break_after_an_arrow_or_a_colon_inside_a_list_is_one_space() {
     let cases = vec![
         body(
@@ -901,7 +900,6 @@ fn a_line_break_after_an_arrow_or_a_colon_inside_a_list_is_one_space() {
 }
 
 #[test]
-#[ignore = "W3-11 U3c: fmt keeps the line break before `=>` and `:` inside an element (S-505, S-497)"]
 fn a_line_break_before_an_arrow_or_a_colon_inside_a_list_is_one_space() {
     // S-505: the arrow and the colon at the start of a line, inside the brackets.
     let cases = vec![
@@ -930,7 +928,6 @@ fn a_line_break_before_an_arrow_or_a_colon_inside_a_list_is_one_space() {
 }
 
 #[test]
-#[ignore = "W3-11 U3c: fmt keeps the line break round `as` and `at` inside an element (S-497)"]
 fn a_line_break_round_as_and_at_inside_a_list_is_one_space() {
     let cases = vec![
         body("before `as`", &["  g(x", "    as F64)"], &["  g(x as F64)"]),
@@ -953,7 +950,6 @@ fn a_line_break_round_as_and_at_inside_a_list_is_one_space() {
 }
 
 #[test]
-#[ignore = "W3-11 U3c: fmt keeps the line break after a keyword in an expression inside an element (S-497)"]
 fn a_line_break_after_a_keyword_in_an_expression_inside_a_list_is_one_space() {
     let cases = vec![
         body("after `if`", &["  two(if", "    a < b { 1 } else { 2 }, 3)"], &["  two(if a < b { 1 } else { 2 }, 3)"]),
@@ -971,6 +967,27 @@ fn a_line_break_after_a_keyword_in_an_expression_inside_a_list_is_one_space() {
         ),
     ];
     expect_fmt("break_after_keyword", &cases);
+}
+
+/// S-525: a body of one member is on one line when the writer has its `{` and its `}` on one line; the
+/// line breaks of the writer inside an element go (S-497), but a body that fits on one line after that
+/// stays over more than one line.
+#[test]
+fn a_body_that_fits_on_one_line_after_the_line_breaks_inside_an_element_go_stays_over_lines() {
+    let cases = vec![
+        case(
+            "a line break before `as`",
+            &["fn h() -> F64 { g(x", "  as F64) }"],
+            &["fn h() -> F64 {", "  g(x as F64)", "}"],
+        ),
+        case(
+            "a line break before the closing bracket",
+            &["fn h() -> I32 { h(a, b", ") }"],
+            &["fn h() -> I32 {", "  h(a, b)", "}"],
+        ),
+        case("on one line", &["fn h() -> I32 { two(a, b) }"], &["fn h() -> I32 { two(a, b) }"]),
+    ];
+    expect_fmt("body_one_line_s525", &cases);
 }
 
 #[test]
@@ -1659,7 +1676,6 @@ fn lists_in_a_closure_a_generic_call_a_loop_and_a_par() {
 }
 
 #[test]
-#[ignore = "W3-11 U3c: fmt keeps the line break after the `=>` of an arm (S-497); the rest of the output is as expected"]
 fn the_lists_of_the_items_of_a_module_are_written_in_their_forms() {
     let input = [
         "use std.math.{sin,",

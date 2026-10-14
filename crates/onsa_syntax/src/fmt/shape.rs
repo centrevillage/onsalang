@@ -218,6 +218,13 @@ pub(crate) fn rest(cst: &Cst, n: NodeId) -> Option<Range<TokenIdx>> {
     parts(cst, n).into_iter().find(|p| p.rest).map(|p| p.tokens)
 }
 
+/// The first code token of each part of the list `n`, in order: its
+/// elements and the `..` of a struct pattern ([`elements`], [`rest`]), read
+/// once. Empty for a node that is no list.
+pub(crate) fn part_starts(cst: &Cst, n: NodeId) -> Vec<TokenIdx> {
+    parts(cst, n).into_iter().map(|p| p.tokens.start).collect()
+}
+
 /// A line break among the tokens from `from` to before `to`.
 fn breaks(cst: &Cst, from: TokenIdx, to: TokenIdx) -> bool {
     cst.tokens()[from.index()..to.index()].iter().any(|t| t.kind == TokenKind::Newline)
