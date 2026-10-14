@@ -5,6 +5,7 @@
     tools/ignores.py remove <file> <test>...
     tools/ignores.py set <file> <test> <reason>
     tools/ignores.py passing -p <crate> [--test <binary>] [--reason TEXT] [--list] [--timeout S]
+    tools/ignores.py stale [<path>...] [--stage-end STAGE] [--root DIR]
 
 `list` prints `file:line<TAB>name<TAB>reason` for every ignored test of the
 files (a directory is searched for `.rs` files, build outputs left out);
@@ -15,6 +16,15 @@ one file and write it only when every named test is found and can be changed
 each ignored test of `crates/<crate>`, `pass`, `fail` or `not run`; with
 `--list` it runs `-- --ignored --list` instead and only compares the names.
 Both report a test cargo ran that the files do not show. It writes nothing.
+
+`stale` (the gate item `ignores`, R-224) reads the ignored tests of the paths
+(default `<root>/crates`) as `list` does, and fails on each whose reason starts
+with a work ID (`W3-11`, `T5-8`) that the tables of `tools/pending.py` mark done
+(take the ignore off: `passing` tells whether it passes now) or do not have (a
+typo). With `--stage-end W3` (as `tools/pending.py`), it also fails on each
+whose work is of that stage, done or not. A reason that does not start with a
+work ID is only counted. It also fails on a form not read, a path that does not
+exist, and when it finds no `.rs` file.
 
 The forms read:
 - a test function: `#[test]`, then (on lines of their own, in any order, doc
@@ -32,7 +42,7 @@ an invocation no arm fits, a reason that is not a string literal, …) is
 printed as a form this tool does not read, and the command fails.
 
 Exit 0 on success, 1 when something is not found, cannot be read or changed,
-or cargo fails; 2 on a usage error.
+or is stale, or cargo fails; 2 on a usage error.
 """
 import argparse
 import re
@@ -43,6 +53,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pending  # noqa: E402
 import repo  # noqa: E402
 
 ROOT = repo.ROOT
@@ -56,6 +67,8 @@ IDENT = re.compile(r"[A-Za-z_]\w*")
 CLOSE = {"(": ")", "[": "]", "{": "}"}
 RAW_STR = re.compile(r'b?r(#*)"')
 CHAR = re.compile(r"b?'(?:\\[^']+|[^\\'\n])'")
+# A reason that names the work it waits for starts with its ID (`W3-11 U3c: …`).
+WORK_AT_START = re.compile(rf"(?:{pending.WORK.pattern})(?!\d)")
 
 
 class Unreadable(Exception):
@@ -421,6 +434,44 @@ def passing(args):
     return 1 if unknown or problems else 0
 
 
+def stale(args):
+    root = Path(args.root)
+    paths = [Path(p) for p in args.paths] or [root / "crates"]
+    try:
+        docs = pending.load_docs(root)
+    except pending.DocsError as e:
+        print(f"the document tables are not found: {e}")
+        return 1
+    if args.stage_end is not None and (problem := pending.stage_problem(args.stage_end, docs)):
+        print(problem, file=sys.stderr)
+        return 2
+    missing = [p for p in paths if not p.exists()]
+    files = list(rs_files(p for p in paths if p.exists()))
+    found, problems = collect(files)
+    problems += [f"{p}: no such file or directory" for p in missing]
+    if not files:
+        problems.append("no `.rs` file found in " + ", ".join(map(str, paths)))
+    failures, others = [], 0
+    for f, t in found:
+        work = WORK_AT_START.match(t.reason or "")
+        if not work:
+            others += 1
+            continue
+        w, end = work.group(0), args.stage_end
+        why = ("is no work of the tables" if w not in docs.works
+               else "is done: take the ignore off (`passing` tells whether the test passes)" if w in docs.done
+               else f"is of {end}, which ends here" if end and pending.left_at_end(w, end)
+               else None)  # fmt: skip
+        if why:
+            failures.append(f"{show(pending.show_path(f, root), t)}\n    the work {w} {why}")
+    for line in failures + problems:
+        print(line)
+    counts = f"{len(found) - others} by a work, {others} for another reason"
+    bad = f"; {len(failures)} failing, {len(problems)} problem(s)" if failures or problems else ""
+    print(f"{len(found)} ignored test(s) in {len(files)} file(s): {counts}{bad}")
+    return 1 if failures or problems else 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -440,9 +491,15 @@ def main(argv=None):
     p.add_argument("--reason")
     p.add_argument("--list", action="store_true")
     p.add_argument("--timeout", type=float, default=540)
+    p = sub.add_parser("stale")
+    p.add_argument("paths", nargs="*")
+    p.add_argument("--stage-end", metavar="STAGE")
+    p.add_argument("--root", default=ROOT)
     args = ap.parse_args(argv)
     if args.cmd == "passing":
         return passing(args)
+    if args.cmd == "stale":
+        return stale(args)
     if args.cmd == "list":
         found, problems = collect(args.paths, args.reason)
         for f, t in found:

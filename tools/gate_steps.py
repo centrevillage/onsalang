@@ -71,6 +71,8 @@ STEPS = [
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),
+    # The ignores of the Rust tests whose reason names a work that is done or not in the tables (R-224).
+    Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True),
     Step("diag-registry", (*PY, str(TOOLS / "diag_codes.py"), "--registry")),
     Step("diag-negatives", (*PY, str(TOOLS / "diag_codes.py"), "--negatives")),
     Step("gap-marks", (*PY, str(TOOLS / "gap_marks.py"))),

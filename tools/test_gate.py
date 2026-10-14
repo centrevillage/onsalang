@@ -926,7 +926,7 @@ class RealSteps(unittest.TestCase):
         required = (
             "fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden",
             "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files", "fuzz",
-            "fmt-props", "vectors",
+            "fmt-props", "vectors", "ignores",
         )  # fmt: skip
         for r in required + ("spec-coverage",):
             self.assertIn(r, names)
@@ -937,6 +937,8 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["fix-loop"].info and not by_name["fix-loop"].pendable)
         self.assertFalse(by_name["spec-sections"].info)
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
+        # the ignores of the Rust tests: light, so also in `--quick`, and failing at a stage end like the list (R-224)
+        self.assertTrue(by_name["ignores"].stage_args and not by_name["ignores"].pendable)
         self.assertFalse(by_name["fmt-props"].pendable)
         # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
         slow = ["fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
@@ -2875,6 +2877,91 @@ class Bg(unittest.TestCase):
         self.assertEqual(self.bg("run", d, "--", "true")[0], 1)  # its command still runs
         self.assertEqual(self.bg("stop", d)[0], 0)
         self.assertFalse(bg.alive(pid))
+
+
+class IgnoresStale(TempRepo):
+    """tools/ignores.py stale (the gate item `ignores`, R-224): an ignore whose reason names a work done or unknown."""
+
+    def stale(self, *argv):
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdout", buf), mock.patch.object(sys, "stderr", buf):
+            code = ignores.main(["stale", "--root", str(self.repo.root), *argv])
+        return code, buf.getvalue()
+
+    def ignored(self, reason):
+        return f'#[test]\n#[ignore = "{reason}"]\nfn t() {{}}\n'
+
+    def check(self, reason, *argv):
+        self.repo.write("crates/a/tests/t.rs", self.ignored(reason))
+        return self.stale(*argv)
+
+    def test_a_done_work_fails(self):
+        for reason in ("W1-01", "W1-01 U2: why", "T1-1 (S-45)"):
+            code, out = self.check(reason)
+            self.assertEqual(code, 1, out)
+            self.assertIn(f"crates/a/tests/t.rs:3\tt\t{reason}\n    the work {reason.split()[0]} is done", out)
+
+    def test_a_work_not_done_passes(self):
+        for reason in ("W3-07", "W3-08 U1: why", "T5-8", "W5-07"):
+            code, out = self.check(reason)
+            self.assertEqual(code, 0, out)
+            self.assertIn("1 ignored test(s) in 1 file(s): 1 by a work, 0 for another reason", out)
+
+    def test_an_id_not_in_the_tables_fails(self):
+        # W9-99 is outside the table of §3; W3-071 is not W3-07
+        for reason in ("W9-99", "W3-071: a typo", "T9-3"):
+            code, out = self.check(reason)
+            self.assertEqual(code, 1, out)
+            self.assertIn("is no work of the tables", out)
+
+    def test_the_works_of_a_stage_fail_at_its_end(self):
+        self.repo.write("crates/a/tests/t.rs", self.ignored("W3-07 U1") + self.ignored("W5-07").replace("t()", "u()"))
+        code, out = self.stale("--stage-end", "W3")
+        self.assertEqual(code, 1, out)
+        self.assertIn("the work W3-07 is of W3, which ends here", out)
+        self.assertNotIn("W5-07", out)
+        self.assertEqual(self.stale("--stage-end", "W5")[0], 1)
+        self.assertEqual(self.stale("--stage-end", "W1")[0], 0)
+        self.assertEqual(self.stale("--stage-end", "M9")[1].count("which ends here"), 2)  # the end of the first phase
+        code, out = self.stale("--stage-end", "W99")
+        self.assertEqual(code, 2, out)
+        self.assertIn("unknown stage", out)
+
+    def test_a_reason_without_an_id_passes_and_is_counted(self):
+        self.repo.write("crates/a/tests/t.rs", RUST.replace("W3-11 U3c", "slow").replace("W4-02", "flaky")
+                        .replace('"W3-04"', '"see W1-01"'))  # fmt: skip
+        code, out = self.stale()
+        self.assertEqual(code, 0, out)
+        self.assertIn("5 ignored test(s) in 1 file(s): 0 by a work, 5 for another reason", out)
+
+    def test_nothing_to_read_fails(self):
+        code, out = self.stale()  # no crates directory
+        self.assertEqual(code, 1, out)
+        self.assertIn("no such file or directory", out)
+        self.repo.write("crates/a/README.md", "")
+        code, out = self.stale()
+        self.assertEqual(code, 1, out)
+        self.assertIn("no `.rs` file found", out)
+        self.repo.write("crates/a/src/lib.rs", "")
+        self.assertEqual(self.stale(), (0, "0 ignored test(s) in 1 file(s): 0 by a work, 0 for another reason\n"))
+
+    def test_a_form_not_read_fails(self):
+        self.repo.write("crates/a/src/lib.rs", "#[ignore]\nfn helper() {}\n")
+        code, out = self.stale()
+        self.assertEqual(code, 1, out)
+        self.assertIn("an `#[ignore` of a form this tool does not read", out)
+
+    def test_the_paths_and_a_reason_through_a_macro(self):
+        # the reason argument of a macro arm, as `stop_case!` of syntax_units.rs (the ignores of R-224)
+        f = self.repo.write("crates/a/tests/m.rs", RUST.replace('"W3-04"', '"W1-01"'))
+        self.repo.write("crates/b/tests/t.rs", self.ignored("W1-01"))
+        code, out = self.stale(str(f))
+        self.assertEqual(code, 1, out)
+        self.assertEqual(out.count("the work W1-01 is done"), 2)  # both_a and both_b
+        self.assertIn("\tboth_a\t", out)
+        self.assertNotIn("crates/b", out)
+        self.assertIn("is no work of the tables", self.stale(str(f))[1])  # W3-11 and W4-02 are not in the tables
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

@@ -441,13 +441,16 @@ def stage_problem(stage, docs):
     return None
 
 
+def left_at_end(until, stage):
+    """Whether something waiting for `until` (a work, or `P2`) may not be left at
+    the end of `stage`: a work of that stage; at the end of the first phase
+    (`PHASE1_END`), anything but the second phase. Also used by `tools/ignores.py stale`."""
+    return until != PHASE2 if stage == PHASE1_END else stage_of(until) == stage
+
+
 def stage_end_errors(entries, stage):
-    """The entries left at the end of `stage`. At the end of the first phase
-    (`PHASE1_END`), every entry but those of the second phase."""
-    if stage == PHASE1_END:
-        left = [e for e in entries if e.until != PHASE2]
-    else:
-        left = [e for e in entries if stage_of(e.until) == stage]
+    """The entries left at the end of `stage` (`left_at_end`)."""
+    left = [e for e in entries if left_at_end(e.until, stage)]
     return [f"{e.label()}: still pending at the end of {stage} (until {e.until}): {e.note}" for e in left]
 
 
