@@ -5,9 +5,10 @@
 use std::fmt::Write;
 
 use crate::ast::*;
+use crate::lexer::comment_text;
 
 pub fn dump(ast: &Ast) -> String {
-    let mut d = Dumper { ast, out: String::new(), indent: 0, floats: Floats::Text };
+    let mut d = Dumper { ast, text: None, out: String::new(), indent: 0, floats: Floats::Text };
     for &item in &ast.root {
         d.item(item);
         d.out.push('\n');
@@ -15,9 +16,12 @@ pub fn dump(ast: &Ast) -> String {
     d.out
 }
 
-/// One item, without a trailing newline (used by `diff --ast`).
-pub fn dump_item(ast: &Ast, id: ItemId) -> String {
+/// One item, without a trailing newline, with the text of its doc comments
+/// (`text` is the source of `ast`): the comparison of `diff --ast` and of the
+/// check of `onsa fmt` (`docs/onsa-tools.md` §3.5).
+pub fn dump_item(ast: &Ast, text: &str, id: ItemId) -> String {
     let mut d = Dumper::compare(ast);
+    d.text = Some(text);
     d.item(id);
     d.out
 }
@@ -55,6 +59,9 @@ enum Floats {
 
 struct Dumper<'a> {
     ast: &'a Ast,
+    /// The source, to write the text of the doc comments (§3.5); without
+    /// it, their number of lines.
+    text: Option<&'a str>,
     out: String,
     indent: usize,
     floats: Floats,
@@ -63,7 +70,7 @@ struct Dumper<'a> {
 impl<'a> Dumper<'a> {
     /// The dump of the comparison of `diff --ast`.
     fn compare(ast: &'a Ast) -> Self {
-        Dumper { ast, out: String::new(), indent: 0, floats: Floats::Value }
+        Dumper { ast, text: None, out: String::new(), indent: 0, floats: Floats::Value }
     }
 
     fn line(&mut self) {
@@ -345,10 +352,19 @@ impl<'a> Dumper<'a> {
         self.out.push(']');
     }
 
-    /// `doc:N ` for the `N` lines of the doc comments of a declaration (§2.1).
+    /// `doc:N ` for the `N` lines of the doc comments of a declaration (§2.1),
+    /// or with the source their text without the blanks at the end of each
+    /// line, which fmt removes (`docs/onsa-tools.md` §3.5).
     fn doc(&mut self, doc: &[onsa_diag::Span]) {
-        if !doc.is_empty() {
-            let _ = write!(self.out, "doc:{} ", doc.len());
+        match (self.text, doc.is_empty()) {
+            (_, true) => {}
+            (None, false) => {
+                let _ = write!(self.out, "doc:{} ", doc.len());
+            }
+            (Some(text), false) => {
+                let lines: Vec<&str> = doc.iter().map(|&s| comment_text(text, s)).collect();
+                let _ = write!(self.out, "doc:{lines:?} ");
+            }
         }
     }
 

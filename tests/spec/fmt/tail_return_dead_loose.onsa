@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§6.1", "§18.2"]
+
+// Bodies of functions that end in more than one `return` (the ones before the last are dead code, which the
+// language takes) (W3-11, unit U5, W3-11/b 1). `onsa fmt` drops the `return` of the last statement only
+// (docs/onsa-tools.md §3.3), and its check before writing (§3.5) takes the output for the same program, so fmt
+// writes it and does not stop with an internal error. The file is not canonical on purpose (`canonical = false`).
+
+pub struct Pair {
+  a: I32,
+}
+
+pub fn two() -> I32 {
+  return 1
+  return 2
+}
+
+pub fn three() -> I32 {
+  return 1
+  return 2
+  return 3
+}
+
+pub fn with_comment() -> I32 {
+  return 1
+  return 2 // the value
+}
+
+pub fn with_a_comment_line() -> I32 {
+  return 1
+  return 2
+  // after the last statement
+}
+
+pub fn after_an_early_return(c: Bool) -> I32 {
+  if c {
+    return 1
+  }
+  return 2
+  return 3
+}
+
+impl Pair {
+  pub fn first(self) -> I32 {
+    return 0
+    return self.a
+  }
+}

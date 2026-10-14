@@ -334,11 +334,24 @@ pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, Inter
         let parsed = parse_file(file, text);
         // A panic names the file (S-67).
         let _scope = onsa_diag::internal::item_scope(Span::new(file, 0, 0));
-        match onsa_syntax::format(&parsed, text) {
-            Some(out) => Formatted::Text(out),
-            None => Formatted::Syntax(reduce::syntax_report(&parsed, file)),
-        }
-    })
+        formatted(&parsed, file, onsa_syntax::format(&parsed, text))
+    })?
+}
+
+/// What `onsa fmt` makes of the formatter's result: an output that is not
+/// the program of the input is an internal error at the first difference,
+/// without a diagnostic code (`docs/onsa-tools.md` §3.5).
+fn formatted(
+    parsed: &onsa_syntax::Parsed,
+    file: FileId,
+    result: Result<String, onsa_syntax::fmt::FormatError>,
+) -> Result<Formatted, InternalError> {
+    use onsa_syntax::fmt::FormatError;
+    match result {
+        Ok(out) => Ok(Formatted::Text(out)),
+        Err(FormatError::Syntax) => Ok(Formatted::Syntax(reduce::syntax_report(parsed, file))),
+        Err(FormatError::Unverified(d)) => Err(InternalError::unverified(&d)),
+    }
 }
 
 /// The CST of a file (`onsa dump --cst`, R-86): the text of its leaves
@@ -387,7 +400,8 @@ pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff
                 parsed.iter().zip(files).take(n).flat_map(|(p, file)| reduce::syntax_report(p, file)).collect(),
             );
         }
-        AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], &parsed[1]))
+        let text = |file: FileId| sources.file(file).text();
+        AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], text(old), &parsed[1], text(new)))
     })
 }
 
@@ -567,6 +581,28 @@ fn package_text(pkg: &Package, file: FileId) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// R-204: an output of fmt that is not the program of its input is an
+    /// internal error (101) that names the first difference and its place in
+    /// the input, without a diagnostic code (`docs/onsa-tools.md` §3.5). A
+    /// correct fmt does not make one, so the output is a false one.
+    #[test]
+    fn an_unverified_output_is_an_internal_error_at_the_place_in_the_input() {
+        let mut sources = SourceMap::default();
+        let file = sources.add("m.onsa", "fn f() -> I32 {\n  let a = 1\n  a // keep\n}\n");
+        let text = sources.file(file).text();
+        let parsed = onsa_syntax::parse(file, text);
+        let fake = "fn f() -> I32 {\n  let a = 1\n  a\n}\n";
+        let result = onsa_syntax::fmt::verify(&parsed, text, fake).map(|()| fake.to_string());
+        let e = formatted(&parsed, file, result).unwrap_err();
+        assert_eq!(e.origin, internal::Origin::Unverified);
+        let shown = e.render(&sources);
+        assert!(shown.starts_with("internal error: the output of fmt is not the same program: comment 1"), "{shown}");
+        assert!(shown.contains("  --> m.onsa:3:5\n"), "{shown}");
+        assert!(!shown.contains("error["), "{shown}");
+        // The real formatter gives the text.
+        assert_eq!(format_file(&sources, file), Ok(Formatted::Text(text.to_string())));
+    }
 
     #[test]
     fn std_parses_and_analyzes_cleanly() {

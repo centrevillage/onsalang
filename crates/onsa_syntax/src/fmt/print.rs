@@ -44,7 +44,6 @@ use super::plan::Plan;
 use super::shape::{self, Form, Shape};
 use super::space::{self, Space};
 use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
-use crate::lexer::BLANKS;
 use crate::token::TokenKind;
 
 /// One level of indentation.
@@ -444,8 +443,7 @@ impl<'a> Printer<'a> {
 
     /// The text of the comment `c`, without blanks at its end.
     fn comment(&self, c: TokenIdx) -> &'a str {
-        let span = self.cst.token(c).span;
-        self.src[span.start as usize..span.end as usize].trim_end_matches(BLANKS)
+        crate::lexer::comment_text(self.src, self.cst.token(c).span)
     }
 
     /// End the output line (and add a blank line when `blank`), and indent the next.

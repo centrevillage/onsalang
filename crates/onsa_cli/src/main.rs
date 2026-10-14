@@ -297,6 +297,10 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
                 failed = true;
                 continue;
             }
+            // SPEC-GAP(S-533): an internal error (the check before writing
+            // failed, §3.5) stops at once: the files before it stay written,
+            // the files after it are not taken, and the syntax diagnostics of
+            // the files before it are not printed.
             Err(e) => return internal(&sources, &e),
         };
         if out == text {

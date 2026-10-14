@@ -24,7 +24,7 @@ id!(TypeId);
 id!(PatId);
 
 /// One parsed file.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Ast {
     pub items: Vec<Item>,
     pub exprs: Vec<Expr>,

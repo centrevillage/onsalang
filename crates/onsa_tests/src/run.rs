@@ -804,12 +804,26 @@ fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers:
 /// that: fmt takes it, its output parses with no diagnostic and is taken
 /// again unchanged, and fmt changes one of the files of the case at least
 /// (else the setting is to go; the caller judges it from the result: whether
-/// fmt changed this file). Whether the output means the same is R-204's (W3-11).
+/// fmt changed this file). That the output is the program of the input is
+/// checked by `onsa_syntax::format` itself (R-204, `docs/onsa-tools.md`
+/// §3.5); a failed check is a problem of the case.
 fn canonical(run: &mut CaseRun, name: &str, text: &str, normal: bool) -> bool {
+    // `of` names the input of the format that failed: the file, or fmt's own output.
+    let unverified = |of: &str, text: &str, d: &onsa_syntax::diff::Difference| {
+        let line = text[..d.at.start as usize].matches('\n').count() + 1;
+        Problem::Failed(format!("{name}: fmt changes the program of {of}: {} (line {line})", d.place))
+    };
     let parsed = onsa_syntax::parse(FileId(0), text);
-    let Some(out) = onsa_syntax::format(&parsed, text) else {
-        run.problems.push(Problem::Failed(format!("{name}: fmt refused it (diagnostics)")));
-        return false;
+    let out = match onsa_syntax::format(&parsed, text) {
+        Ok(out) => out,
+        Err(onsa_syntax::fmt::FormatError::Syntax) => {
+            run.problems.push(Problem::Failed(format!("{name}: fmt refused it (diagnostics)")));
+            return false;
+        }
+        Err(onsa_syntax::fmt::FormatError::Unverified(d)) => {
+            run.problems.push(unverified("the file", text, &d));
+            return true;
+        }
     };
     if normal && out != text {
         run.problems.push(Problem::Failed(format!("{name}: fmt changes it\n{}", first_diff(text, &out))));
@@ -820,8 +834,10 @@ fn canonical(run: &mut CaseRun, name: &str, text: &str, normal: bool) -> bool {
         run.problems.push(Problem::Failed(format!("{name}: the output of fmt does not parse\n{out}")));
         return true;
     }
-    if onsa_syntax::format(&again, &out).as_deref() != Some(out.as_str()) {
-        run.problems.push(Problem::Failed(format!("{name}: fmt is not idempotent on it")));
+    match onsa_syntax::format(&again, &out) {
+        Ok(twice) if twice == out => {}
+        Err(onsa_syntax::fmt::FormatError::Unverified(d)) => run.problems.push(unverified("its own output", &out, &d)),
+        _ => run.problems.push(Problem::Failed(format!("{name}: fmt is not idempotent on it"))),
     }
     out != text
 }

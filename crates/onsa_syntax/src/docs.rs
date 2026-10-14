@@ -409,7 +409,7 @@ mod tests {
         assert_eq!(fields[1].doc.len(), 1);
         // fmt keeps it on its own line (W3-04/b 2), also after a comment that
         // the element before holds (W3-04/b 6).
-        assert_eq!(crate::format(&p, src).as_deref(), Some(src));
+        assert_eq!(crate::format(&p, src).as_deref(), Ok(src));
         let src = "struct S { f1: Buf[\n// k\nI32\n],\n/// d2\nf2: I32,\n}\n";
         let out = crate::format(&parse(src), src).unwrap();
         // The block form of `Buf[` stays, with `// k` on its line (§3.2, S-498, S-510, §3.4).

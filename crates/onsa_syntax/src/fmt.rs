@@ -12,22 +12,56 @@ mod plan;
 mod print;
 #[cfg(test)]
 mod print_tests;
-mod rewrites;
+pub(crate) mod rewrites;
 mod shape;
 mod space;
 #[cfg(test)]
 mod table_tests;
 
+use crate::diff::{Difference, Place, same_program};
 use crate::parser::Parsed;
 
-/// Format a parsed file. Returns `None` if the lexer or the parser reported a
-/// diagnostic (`Parsed::syntax_errors()`, R-146, S-214); the diagnostics of later
+/// Why [`format`] gives no text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FormatError {
+    /// The lexer or the parser reported a diagnostic (`Parsed::syntax_errors()`,
+    /// R-146, S-214): the file is not formatted (§18.2).
+    Syntax,
+    /// The output is not the program of the input (`docs/onsa-tools.md`
+    /// §3.5): a bug of fmt, an internal error (§18.2).
+    Unverified(Difference),
+}
+
+/// Format a parsed file (`text` is its source). The diagnostics of later
 /// stages (E0320 of the names stage) do not block formatting (§18.2, S-120).
-pub fn format(parsed: &Parsed, text: &str) -> Option<String> {
+/// The output is parsed again and compared with the input before it is given
+/// ([`verify`]), whoever calls it.
+pub fn format(parsed: &Parsed, text: &str) -> Result<String, FormatError> {
     if parsed.syntax_errors() {
-        return None;
+        return Err(FormatError::Syntax);
     }
-    Some(print::print(&parsed.cst, text))
+    let out = print::print(&parsed.cst, text);
+    verify(parsed, text, &out)?;
+    Ok(out)
+}
+
+/// The check before writing (`docs/onsa-tools.md` §3.5): `out`, parsed
+/// again, has no diagnostic of the syntax stage (checked first: the
+/// comparison takes trees without one) and is the program of `parsed`
+/// ([`same_program`]). `parsed` has no diagnostic of the syntax stage.
+pub fn verify(parsed: &Parsed, text: &str, out: &str) -> Result<(), FormatError> {
+    let eof = parsed.cst.tokens().last().expect("a file ends with its Eof token").span;
+    let again = crate::parse(eof.file, out);
+    if let Some(first) = again.first_syntax_error() {
+        let line = out[..first.span.start as usize].matches('\n').count() + 1;
+        let what = format!("{} on line {line} of the output: {}", first.code.as_str(), first.message);
+        let at = onsa_diag::Span::empty(eof.file, 0);
+        return Err(FormatError::Unverified(Difference { place: Place::Unparsed(what), at }));
+    }
+    match same_program(parsed, text, &again, out) {
+        Some(d) => Err(FormatError::Unverified(d)),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -101,7 +135,7 @@ mod tests {
             assert_eq!(out, src);
             let (old, new) = (crate::parse(FileId(0), src), crate::parse(FileId(0), &out));
             assert!(new.diagnostics.is_empty(), "{out}: {:?}", new.diagnostics);
-            assert!(crate::diff::diff(&old, &new).is_empty(), "{out}");
+            assert!(crate::diff::diff(&old, src, &new, &out).is_empty(), "{out}");
         }
     }
 
@@ -253,10 +287,57 @@ mod tests {
     fn refuses_files_with_syntax_errors() {
         let src = "fn f() {\n  let a = x + y % z\n}\n";
         let parsed = crate::parse(FileId(0), src);
-        assert!(crate::format(&parsed, src).is_none());
+        assert_eq!(crate::format(&parsed, src), Err(crate::fmt::FormatError::Syntax));
         // Naming errors do not block formatting.
         let src = "fn Bad() {}\n";
         let parsed = crate::parse(FileId(0), src);
-        assert_eq!(crate::format(&parsed, src), Some("fn Bad() {}\n".to_string()));
+        assert_eq!(crate::format(&parsed, src), Ok("fn Bad() {}\n".to_string()));
+    }
+
+    /// R-204: the check before writing refuses an output that is not the
+    /// program of the input (`docs/onsa-tools.md` §3.5). A correct fmt does
+    /// not make one, so the outputs are false ones.
+    #[test]
+    fn the_check_refuses_an_output_of_another_program() {
+        use crate::diff::Place;
+        use crate::fmt::FormatError;
+        let src = "fn f() -> I32 {\n  let a = 1 // one\n  let b = 2\n  return a\n}\n";
+        let parsed = crate::parse(FileId(0), src);
+        let check = |out: &str| match crate::fmt::verify(&parsed, src, out) {
+            Ok(()) => None,
+            Err(FormatError::Unverified(d)) => {
+                Some((d.place, src[d.at.start as usize..].lines().next().unwrap_or("").to_string()))
+            }
+            Err(e) => panic!("{e:?}"),
+        };
+        let good = "fn f() -> I32 {\n  let a = 1 // one\n  let b = 2\n  a\n}\n";
+        assert_eq!(crate::format(&parsed, src).as_deref(), Ok(good));
+        assert_eq!(check(good), None);
+        // A comment lost, a comment of another text.
+        assert_eq!(check(&good.replace(" // one", "")), Some((Place::Comment(1), "// one".into())));
+        assert_eq!(check(&good.replace("// one", "// on")), Some((Place::Comment(1), "// one".into())));
+        // A statement lost.
+        assert_eq!(check(&good.replace("  let b = 2\n", "")), Some((Place::Item("fn f".into()), "let b = 2".into())));
+        // An output that does not parse.
+        // An output with a syntax error is `Unparsed` before any comparison
+        // (W3-11/b2 A: the comparison takes no broken tree): a body not
+        // closed, an error in the middle of the body, extra tokens.
+        let unparsed = |out: &str| {
+            let got = check(out);
+            assert!(
+                matches!(&got, Some((Place::Unparsed(w), at)) if w.starts_with("E0") && at.starts_with("fn f")),
+                "{got:?}"
+            );
+        };
+        unparsed("fn f() -> I32 {\n  let a = 1 // one\n  let b = 2\n  a\n");
+        unparsed("fn f() -> I32 {\n  let a = 1 // one\n  let = 2\n  a\n}\n");
+        unparsed(&format!("{good}fn g() {{}} )\n"));
+        unparsed(&good.replace("  a\n}\n", "  a\n}\n)\n"));
+        // The `return` of the input, which the comparison rewrites, with an
+        // output not closed (W3-11/b2 A).
+        let src = "fn f() -> I32 {\n  return 1\n}\n";
+        let parsed = crate::parse(FileId(0), src);
+        let got = crate::fmt::verify(&parsed, src, "fn f() -> I32 {\n  1\n");
+        assert!(matches!(&got, Err(FormatError::Unverified(d)) if matches!(d.place, Place::Unparsed(_))), "{got:?}");
     }
 }

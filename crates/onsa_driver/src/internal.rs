@@ -8,6 +8,7 @@
 //!   in `onsa_core::lower`).
 //! - The Core verifier rejecting the output of a stage ([`VerifyFailure`], R-82).
 //! - The C compiler rejecting the C the compiler generated.
+//! - `onsa fmt` finding that its output is not the program of its input.
 //!
 //! The command stops; the exit code is 101 and there is no diagnostic code
 //! (spec §18.1, §18.2): the repair loop must not try to fix the program.
@@ -34,6 +35,9 @@ pub enum Origin {
     Verify(VerifyFailure),
     /// The C compiler rejected the generated C.
     GeneratedC,
+    /// The output of `onsa fmt` is not the program of its input
+    /// (`docs/onsa-tools.md` §3.5, R-204).
+    Unverified,
 }
 
 /// An internal error (S-67): a bug of the compiler, exit code 101.
@@ -48,6 +52,13 @@ pub struct InternalError {
 impl InternalError {
     pub fn lowering(span: Span, message: String) -> InternalError {
         InternalError { origin: Origin::Lowering, span: Some(span), message }
+    }
+
+    /// `onsa fmt` checked its output and found `d`; the position is in the
+    /// input.
+    pub fn unverified(d: &onsa_syntax::diff::Difference) -> InternalError {
+        let message = format!("the output of fmt is not the same program: {}", d.place);
+        InternalError { origin: Origin::Unverified, span: Some(d.at), message }
     }
 
     pub fn generated_c(message: String) -> InternalError {

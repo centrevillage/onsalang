@@ -95,7 +95,13 @@ impl Parsed {
     /// it. The one place of that decision (`fmt`, `diff --ast`, the test
     /// tools); what they report is `onsa_driver::reduce::syntax_report`.
     pub fn syntax_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.stage == Stage::Syntax)
+        self.first_syntax_error().is_some()
+    }
+
+    /// The first diagnostic of the syntax stage ([`Parsed::syntax_errors`]):
+    /// what the check of `onsa fmt` names when its output has one.
+    pub fn first_syntax_error(&self) -> Option<&Diagnostic> {
+        self.diagnostics.iter().find(|d| d.stage == Stage::Syntax)
     }
 }
 
