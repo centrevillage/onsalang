@@ -20,8 +20,7 @@
 //!   line, column, ... .
 //!
 //! Tests that need a later work are `#[ignore = "<work>"]` (the reason is the work that makes them
-//! pass): W3-03 for the unit rules and the streams, W3-04 for the reserved word's E0200, W3-14
-//! for E0006. Not written here: the depth limit's own cases (W3-14), the E0020 rule table
+//! pass; none is left). Not written here: the depth limit's own cases (W3-14), the E0020 rule table
 //! (W3-15), the top-level shape of `--json` (W3-16; the readers below accept an array and an
 //! object with `diagnostics`).
 
@@ -283,8 +282,7 @@ stop_case!(
     fmt_reports_a_reserved_word,
     "pub fn f(a: I32) -> I32 {\n  let clock = a\n  clock\n}\n",
     2,
-    "E0200",
-    "W3-04"
+    "E0200"
 );
 
 /// R-69, R-146: the E0320 of `badName` comes before the E0002 of the same function, and `fmt` once

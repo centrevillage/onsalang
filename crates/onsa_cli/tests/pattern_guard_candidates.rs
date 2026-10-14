@@ -1356,7 +1356,6 @@ fn a_negated_negative_literal_in_a_pattern_is_e0002_and_the_message_is_not_about
 // ---- A range with one end in the header of a loop (S-278) -----------------------------------------------
 
 #[test]
-#[ignore = "W3-09: the cases of `par` declare a flow, whose inputs are written with `at`"]
 fn a_range_with_one_end_in_a_header_is_e0002_with_a_note_and_no_candidate() {
     // §7 (S-278): `for i in 0.. {` and `for i in ..<n {` are E0002 and a note shows the two-ended
     // spelling; no candidate (what the missing end is, nothing says). The same in the header of a
@@ -1450,7 +1449,6 @@ fn fmt_formats_a_file_with_the_rest_of_a_struct_pattern_and_keeps_it() {
 // ---- A `{` at the start of an expression in a header is the body (S-338) -------------------------------
 
 #[test]
-#[ignore = "W3-09: the cases of `par` declare a flow, whose inputs are written with `at`"]
 fn a_block_at_the_start_of_an_expression_in_a_header_is_e0002_with_a_note_and_no_candidate() {
     // §3.1, §4.4 (S-338, decided 2026-10-09): in the header of an `if`, `while`, `match`, `for` or
     // `par`, a `{` at the start of an expression outside parentheses starts the body, so a block

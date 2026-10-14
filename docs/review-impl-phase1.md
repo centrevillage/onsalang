@@ -2450,6 +2450,14 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 経緯: W3-05/b の単位 1 が範囲の外として報告した（2026-10-13）。W3-05 の前からある。
 - 決定（2026-10-13、親）: 直す。時期は W7 か W10 の `@param` の作業を見て決める。
 
+#### R-224 終わった作業を理由にした ignore が残り、通るテストを黙らせていた
+- 中・直す・観点 2｜テスト（`crates/onsa_cli/tests/syntax_units.rs`・`pattern_guard_candidates.rs` の ignore）と gate（テストの ignore の理由を確かめない）｜`docs/leader-rules.md` 4.2（黙らせた項目は後退を隠す）
+- 内容: W3-04 を理由にした `fmt_stops_for_a_reserved_word`・`fmt_reports_a_reserved_word`（`stop_case!` の理由の引数）と、W3-09 を理由にした `a_range_with_one_end_in_a_header_is_e0002_with_a_note_and_no_candidate`・`a_block_at_the_start_of_an_expression_in_a_header_is_e0002_with_a_note_and_no_candidate` が、その作業の後も ignore のままで、今は通る。
+  外れていない間、この 4 件の後退を gate が見逃す。gate は実装待ちの一覧の項目の段（`until`）は確かめるが、テストの ignore の理由は確かめない。
+- 経緯: 親が `tools/ignores.py passing -p onsa_cli --reason W3-0` で見つけた（dev の `c886907`、2026-10-14）。
+- 決定（2026-10-14、利用者）: 直す。4 件の ignore を外し、`syntax_units.rs` の先頭のコメントを事実に合わせた。
+  再発を防ぐため、ignore の理由が済んだ作業の ID で始まるものを gate で失敗にする（`tools/ignores.py` に下位のコマンドを足して gate の項目にする。道具の小さな票）。
+
 #### R-223 名前の無い `#[repr(C)]struct` で切れた関数の本体の、属性を `@` に書く候補が E0005 を残す
 - 低・直さない・観点 1｜syntax（Rust の属性の E0020 の候補）｜§18.1（S-236）
 - 内容: `fn d(b:I){` 改行 `#[repr(C)]struct`（ファイルの終わりで切れた形）の E0020「write the attribute with `@`」を当てると、同じ位置に E0005「`@repr` cannot be attached to a statement other than `let`; it goes on a struct」が残る。
@@ -2791,6 +2799,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-221 | 直さない（実害が低い）。前置の演算子の重ねを括弧で囲む E0012 の候補の後に、隠れていた前置の `-` の後の改行の E0020 が見える。候補は正しい（ファズ `2695c80d`）。W3-24/i の gate が見つけた | `tests/fuzz/allowed.toml` に載せた |
 | R-222 | 直さない（実害が低い）。項目の後の行頭の `?` を前の行へ寄せる E0020 の候補が、宣言の後の E0002 を作る（ファズ `468c2b1f`）。W3-11 の U1 の gate が見つけた | `tests/fuzz/allowed.toml` に載せた |
 | R-223 | 直さない（実害が低い）。名前の無い `#[repr(C)]struct` で切れた関数の本体で、属性を `@` に書く E0020 の候補が E0005 を残す（ファズ `5dcc3cd1`）。W3-11 の U1 の gate が見つけた | `tests/fuzz/allowed.toml` に載せた |
+| R-224 | 直す（利用者）。終わった作業（W3-04、W3-09）を理由にした ignore が 4 件残り、通るテストを黙らせていた。親が `tools/ignores.py passing` で見つけた | 4 件は外した。gate の確かめ（理由が済んだ作業の ID の ignore を失敗にする）は道具の小さな票 |
 | R-208 | 直す（親）。事例の器の修正候補の約束の検査が、候補を当てた後に別の段の誤りが残る単位の数に対して指数的に遅くなる（N=7 で 2.4 秒、8 で 22 秒）。RF/t が見つけた | 実装は W3 の終わりの器の改善か、それより前に要るとき（`crates/onsa_tests/src/fix_contract.rs`） |
 | R-207 | 直す（親）。fuzz の修正候補の網に、仕様が約束の外とした類（二段の直し、誤りが二つある入力）を既知として示す形が無く、事例を足すたびに新しい類として gate を落とす。W3-06/i の単位 2 の gate が見つけた | 実装は W3-06 の単位 2（`tests/fuzz/allowed.toml` と `tools/fuzz.py`） |
 | R-206 | 直す（親）。規則の表の二つの行が一つの失敗に当たり、内部エラー 101 になる（`--..<3` の `IncrementUnfixable` と `RangePattern`、`1u8..<3` の `LiteralSuffix` と `RangePattern`）。W3-06/b が見つけた。再現の入力は本文の二つの一行（`tests/` に置かない） | 実装は W3-06 の後の `foreign.rs` の深いリファクタリング（行の優先順位を表に置く） |
