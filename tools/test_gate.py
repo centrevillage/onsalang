@@ -2959,6 +2959,38 @@ class Take(unittest.TestCase):
         other = git_in(self.main, "commit-tree", "-m", "x", git_in(self.main, "write-tree").strip()).strip()
         self.assertEqual(self.take("patch", self.wt, other, self.patch, "--main", self.main)[0], 1)
 
+    RUST = "\n".join([
+        "fn a() {}",
+        "",
+        "#[cfg(test)]",
+        "#[allow(unused)]",
+        "mod tests {",
+        "    fn t<'a>(x: &'a str) {",
+        '        let s = "fn f() {";',
+        '        let r = r#"}"#;',
+        "        let (c, d) = ('{', b\"}\");",
+        "        /* } /* } */ } */ // }",
+        "        assert_eq!(s.len(), 8);",
+        "    }",
+        "}",
+        "",
+    ])
+
+    def test_the_test_modules_inside_a_rust_file_are_tests(self):
+        # The braces in the strings, the character, the comments and the lifetime are not the block's.
+        self.assertEqual(take.test_lines(self.RUST), set(range(3, 14)))
+        (self.wt / "m.rs").write_text(self.RUST)
+        git_in(self.wt, "add", "m.rs")
+        git_in(self.wt, "commit", "-qm", "m")
+        base = git_in(self.wt, "rev-parse", "HEAD").strip()
+        (self.wt / "m.rs").write_text(self.RUST.replace("fn a() {}", "fn a() { b() }\nfn b() {}")
+                                      .replace("s.len(), 8);", "s.len(), 9);\n        let e = \"{{\";")
+                                      + "fn after() {}\n")
+        code, out = self.take("patch", self.wt, base, self.patch, "--main", self.main)
+        self.assertEqual(code, 0, out)
+        # m.rs: +3 -1 of code (fn a, fn b, fn after) and +2 -1 in its test module; n.rs: +1.
+        self.assertIn("without the tests and the data: +4 -1 (the test modules inside 1 file(s), +2 -1, left out)", out)
+
     def test_plain_with_a_change_in_the_same_file(self):
         self.make_patch()
         (self.main / "b.txt").write_text(self.LINES.replace("8\n", "eight\n"))

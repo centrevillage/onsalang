@@ -15,7 +15,9 @@ the patch from the base still applies). It prints the lines added and removed
 per file, the new files, the totals, and the totals without the tests and
 the data (`is_code`: the files ending in `CODE_SUFFIXES` that are not under
 `tests/` or `crates/*/tests/`, not `tests.rs` nor `*_tests.rs`, and not
-`tools/test_*.py` nor `tools/*/test_*.py`).
+`tools/test_*.py` nor `tools/*/test_*.py`; in a Rust file of the code, the
+lines of a `#[cfg(test)] mod … { … }` block are tests too, on the new side for
+the added lines and on the old side for the removed ones: `test_lines`).
 
 `check` (`--to`, default this repository) says whether `git apply --check`
 passes, else whether `git apply --check -3` does (and whether with
@@ -29,6 +31,7 @@ Exit 0 on success, 1 when a step fails or the patch does not apply, 2 on a
 usage error.
 """
 import argparse
+import re
 import subprocess
 import sys
 from fnmatch import fnmatch
@@ -52,6 +55,109 @@ def is_code(path):
     return path.endswith(CODE_SUFFIXES) and not any(fnmatch(path, p) for p in NOT_CODE)
 
 
+# The pieces of Rust source that may hold a brace that is not one (`test_lines`).
+RAW_STRING = re.compile(r'b?r(#*)"')
+CHAR = re.compile(r"'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|.)|[^\\'\n])'")
+TEST_MOD = re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{")
+HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def block_end(text, i):
+    """The offset of the `}` that closes the first `{` from `i` in Rust source, skipping
+    comments, strings, raw strings and character literals (a test holds the source of
+    other languages in strings, with braces that do not pair); the end of the text if none."""
+    depth, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        ident = i > 0 and (text[i - 1].isalnum() or text[i - 1] == "_")
+        if text.startswith("//", i):
+            i = text.find("\n", i)
+            i = n if i < 0 else i
+            continue
+        if text.startswith("/*", i):
+            nest, i = 1, i + 2
+            while i < n and nest:
+                if text.startswith("/*", i):
+                    nest, i = nest + 1, i + 2
+                elif text.startswith("*/", i):
+                    nest, i = nest - 1, i + 2
+                else:
+                    i += 1
+            continue
+        raw = None if ident else RAW_STRING.match(text, i)
+        if raw:
+            close = '"' + raw.group(1)
+            j = text.find(close, raw.end())
+            i = n if j < 0 else j + len(close)
+            continue
+        if c == '"' or (c == "b" and not ident and text.startswith('b"', i)):
+            i += 2 if c == "b" else 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+            continue
+        if c == "'":
+            ch = CHAR.match(text, i)
+            i = ch.end() if ch else i + 1  # else a lifetime
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
+
+
+def test_lines(text):
+    """The numbers (from 1) of the lines of the `#[cfg(test)] mod … { … }` blocks of a
+    Rust source: from the attribute to the closing brace."""
+    lines, out = text.split("\n"), set()
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line) + 1)
+    i = 0
+    while i < len(lines):
+        j = i + 1
+        while j < len(lines) and lines[j].lstrip().startswith(("#[", "//")):
+            j += 1
+        if lines[i].strip() != "#[cfg(test)]" or j == len(lines) or not TEST_MOD.match(lines[j]):
+            i += 1
+            continue
+        end = block_end(text, starts[j])
+        last = next(k for k in range(j, len(lines)) if starts[k + 1] > end)
+        out.update(range(i + 1, last + 2))
+        i = last + 1
+    return out
+
+
+def in_file_tests(tree, base, paths):
+    """{path: [added, removed]}: the lines of the diff of the index of `tree` from `base`
+    in the files `paths` that are in a test module of the file (`test_lines`)."""
+    out = {}
+    if not paths:
+        return out
+    show = lambda rev: git(tree, "show", rev).stdout.decode(errors="replace")  # noqa: E731
+    old = counts = None
+    old_tests = new_tests = set()
+    for line in git(tree, "diff", "--cached", "-U0", base, "--", *paths).stdout.decode(errors="replace").split("\n"):
+        if line.startswith("--- "):
+            old = line[6:] if line.startswith("--- a/") else None
+        elif line.startswith("+++ "):
+            new = line[6:] if line.startswith("+++ b/") else None
+            old_tests = test_lines(show(f"{base}:{old}")) if old else set()
+            new_tests = test_lines(show(f":{new}")) if new else set()
+            counts = out.setdefault(new or old, [0, 0])
+        elif line.startswith("@@ ") and counts is not None:
+            m = HUNK.match(line)
+            a, b = int(m[1]), int(m[2]) if m[2] is not None else 1
+            c, d = int(m[3]), int(m[4]) if m[4] is not None else 1
+            counts[0] += sum(k in new_tests for k in range(c, c + d))
+            counts[1] += sum(k in old_tests for k in range(a, a + b))
+    return out
+
+
 def git(tree, *args, ok=(0,)):
     r = subprocess.run(["git", "-C", str(tree), *args], capture_output=True)
     if r.returncode not in ok:
@@ -73,14 +179,19 @@ def numstat(tree, *args):
     return out
 
 
-def summary(stats, new):
+def summary(stats, new, inner=None):
+    """Print the lines per file and the totals; `inner` is `in_file_tests` of the code files."""
     total, code = [0, 0], [0, 0]
     for add, rm, path in stats:
         print(f"  {add:>6} {rm:>6}  {path}{'  (new)' if path in new else ''}")
         for acc in (total, code) if is_code(path) else (total,):
             acc[0] += int(add) if add != "-" else 0
             acc[1] += int(rm) if rm != "-" else 0
-    print(f"  {len(stats)} file(s), +{total[0]} -{total[1]}; without the tests and the data: +{code[0]} -{code[1]}")
+    left = [sum(v[k] for v in (inner or {}).values()) for k in (0, 1)]
+    files = sum(1 for v in (inner or {}).values() if any(v))
+    note = f" (the test modules inside {files} file(s), +{left[0]} -{left[1]}, left out)" if files else ""
+    print(f"  {len(stats)} file(s), +{total[0]} -{total[1]}; "
+          f"without the tests and the data: +{code[0] - left[0]} -{code[1] - left[1]}{note}")
 
 
 def patch(args):
@@ -92,11 +203,12 @@ def patch(args):
         diff = git(wt, "diff", "--cached", "--binary", base).stdout
         stats = numstat(wt, "diff", "--cached", base)
         new = set(git(wt, "diff", "--cached", "--name-only", "--diff-filter=A", "-z", base).stdout.decode().split("\0"))
+        inner = in_file_tests(wt, base, [p for _, _, p in stats if p.endswith(".rs") and is_code(p)])
     finally:
         git(wt, "reset", "-q")
     Path(args.out).write_bytes(diff)
     print(f"{args.out}: the patch of {wt} from {base}")
-    summary(stats, new)
+    summary(stats, new, inner)
     head = git(args.main, "rev-parse", "HEAD").stdout.decode().strip()
     if git(args.main, "rev-parse", base).stdout.decode().strip() != head:
         moved = set(git(args.main, "diff", "--name-only", "-z", base, head).stdout.decode().split("\0")) - {""}
