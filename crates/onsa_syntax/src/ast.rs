@@ -33,9 +33,6 @@ pub struct Ast {
     pub pats: Vec<Pat>,
     /// Top-level items in source order.
     pub root: Vec<ItemId>,
-    /// The spans of the `//!` lines at the head of the file, the
-    /// documentation of the module (§2.1).
-    pub module_doc: Vec<Span>,
 }
 
 impl Ast {
@@ -101,6 +98,24 @@ impl Ast {
         }
         match &self.expr(cur).kind {
             ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. }) => Some(cur),
+            _ => None,
+        }
+    }
+
+    /// The name at the root of the place `e` (§5.1, §5.2): a name alone (`a`,
+    /// `self`), or a field, an element or a tuple element of a place, through
+    /// parentheses (`a.f`, `a[i]`, `a.0`, `(a).f`); `None` for any other
+    /// expression (a call, the result of a method, a literal, a path of more
+    /// than one name). The one definition of the form of a place (`check`'s
+    /// E0711 of `move` and the target of an assignment): whether the name is a
+    /// local the names stage decides.
+    pub fn place_root(&self, e: ExprId) -> Option<&str> {
+        match &self.expr(e).kind {
+            ExprKind::Path(p) if p.segments.len() == 1 => Some(p.segments[0].name.as_str()),
+            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
+                self.place_root(*base)
+            }
+            ExprKind::Paren(inner) => self.place_root(*inner),
             _ => None,
         }
     }
@@ -185,8 +200,6 @@ pub enum Vis {
 #[derive(Debug, Clone)]
 pub struct Item {
     pub span: Span,
-    /// Spans of the `///` lines directly before the item.
-    pub doc: Vec<Span>,
     pub attrs: Vec<Attr>,
     pub vis: Vis,
     pub kind: ItemKind,
@@ -318,9 +331,6 @@ pub struct Bound {
 
 #[derive(Debug, Clone)]
 pub struct Param {
-    /// Spans of the `///` lines directly before the parameter: an input of
-    /// a flow only (§2.1).
-    pub doc: Vec<Span>,
     pub attrs: Vec<Attr>,
     pub mode: Mode,
     pub name: ParamName,
@@ -404,8 +414,6 @@ pub enum Repr {
 
 #[derive(Debug, Clone)]
 pub struct Field {
-    /// Spans of the `///` lines directly before the field (§2.1).
-    pub doc: Vec<Span>,
     pub vis: Vis,
     pub name: Ident,
     pub ty: TypeId,
@@ -423,8 +431,6 @@ pub struct EnumDecl {
 
 #[derive(Debug, Clone)]
 pub struct Variant {
-    /// Spans of the `///` lines directly before the variant (§2.1).
-    pub doc: Vec<Span>,
     pub name: Ident,
     /// Empty for unit variants.
     pub fields: Vec<TypeId>,

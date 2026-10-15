@@ -248,12 +248,13 @@ fn r_or_neg(r: Result[I32, I32]) -> I32 {
 }
 
 fn early(o: Option[I32]) -> I32 {
-  match o {
+  let n = match o {
     Some(v) => v,
     None => {
       return 77
     },
   }
+  n
 }
 
 // A plain switch whose arm holds a statement `match` with literals and a guard.

@@ -28,7 +28,7 @@ fn returning_one_of_two_locals_copies() {
             path: "pick.onsa".into(),
             text: r#"
 pub flow v(x: F32 at sample) -> F32 at sample {
-  delay~(x, 16, 0.0)
+  delay~(x, 16)
 }
 
 pub fn pick(c: Bool) -> v.State {

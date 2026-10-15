@@ -61,14 +61,16 @@ The properties (`--property`):
               1. `onsa fmt` accepts `p` (exit 0; exit 2 would mean the
                  perturbation hit a place where whitespace means something);
               2. same program: `onsa diff --ast p fmt(p)` finds no difference
-                 (today's `diff --ast`; W3-12 makes it the comparison of S-56);
+                 (the comparison of S-56, `docs/onsa-tools.md` §3.5: both
+                 trees with the rewrites of §3.3);
               3. idempotence: `onsa fmt --check fmt(p)` changes nothing;
               4. the comments keep their texts in their order (none lost, none
                  changed, none swapped); the texts of the doc comments (`///`,
                  `//!`) and the heads of the items (`item_heads`) are the same
                  in `p` and `fmt(p)` (`docs/onsa-tools.md` §3.5: the AST and the doc comments
-                 agree; this makes up for `diff --ast` until W3-12 compares
-                 the docs, S-56);
+                 agree, and the texts of the comments are in the same order;
+                 `diff --ast` compares the structure alone, not the comments
+                 nor the doc comments, S-534);
               5. the depth: `fmt` makes no declaration deeper (spec §2.5: the
                  rewrites take parentheses and `return` away, never add a
                  level): the levels of each item, `onsa dump --levels`, of
@@ -88,7 +90,13 @@ The properties (`--property`):
                  break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2),
                  comment and mixed move comments, and inside opens a body of
                  one line whose element had a line break (S-525), so they have
-                 no such property here.
+                 no such property here;
+              8. the meaning: when `fmt(p)` is not `p`, `onsa check` ends with
+                 the same exit code on both and reports the same codes in the
+                 same order (spec §18.2: no rewrite of fmt changes the verdict
+                 of a stage; `docs/onsa-tools.md` §3.3). The texts and the
+                 places of the diagnostics are not compared (a rewrite may
+                 change the text alone, W3-12/b2 6).
               Every run ends in 0, 1 or 2 (an internal error or a signal fails).
     comments  (`fmt-comments`, R-70, W3-11) for `x` and every `p`:
               every comment (the markers and the source's own) stays on the
@@ -97,8 +105,8 @@ The properties (`--property`):
               before the same next line (or at the end). The lines of the input
               and of the output are paired by their order and their tokens
               (`pair_lines`: a token fmt drops, a `return` or a parenthesis,
-              is a deletion of the sequence; `,`, `-> ()`, `uses {}` and the
-              spelling of numbers do not count; a line of brackets alone is
+              is a deletion of the sequence; `,` and the spelling of numbers
+              do not count; a line of brackets alone is
               paired by its brackets, so a comment after a closing bracket
               goes with it, `)` as `]` and `}`, S-528; a line of a `,` alone
               is no code line, and its comment counts as a line of a comment,
@@ -116,7 +124,8 @@ gives the same inputs on every machine. The failing inputs that are shown
 writes nothing under `tests/`; its work directory is
 `target/fmt_props/work-<pid>`); `--minimize` shrinks them first (lines, then
 characters, `fuzz.ddmin`) where the property holds on its own: rejected,
-internal, ast, idempotence, comment-text, docs, items, depth, breaks.
+internal, ast, idempotence, comment-text, docs, items, depth, breaks,
+meaning.
 
     tools/fmt_props.py [--property core|comments|cst] [--per-kind N]
                        [--version V] [--jobs N] [--binary PATH]
@@ -630,17 +639,11 @@ def unperturb(text):
 
 
 def line_key(line_toks):
-    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.2, §3.3): without `-> ()`, `uses {}`
-    and `,` (which fmt moves to the element before it, adds and drops),
-    numbers as `#`. Used to pair the lines of a text with the lines of its
-    fmt output. The tokens fmt drops (`return`, `move`, parentheses) stay: they
-    are deletions for the pairing, and a line of brackets, `return` or `move`
-    alone keeps a counterpart (`g(` / `a,` / `) // c`)."""
-    code = []
-    for t in (t.text for t in line_toks if t.kind == "code"):
-        code.append(t)
-        if code[-3:] in (["->", "(", ")"], ["uses", "{", "}"]):
-            del code[-3:]
+    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.2, §3.3): without `,` (which fmt moves
+    to the element before it, adds and drops), numbers as `#`. Used to pair the lines of a text with the
+    lines of its fmt output. The tokens fmt drops (`return`, parentheses) stay: they are deletions for
+    the pairing, and a line of brackets or `return` alone keeps a counterpart (`g(` / `a,` / `) // c`)."""
+    code = (t.text for t in line_toks if t.kind == "code")
     return tuple("#" if NUMBER.fullmatch(t) else t for t in code if t != ",")
 
 
@@ -962,7 +965,7 @@ def break_problems(before, after):
 @dataclass(frozen=True)
 class Failure:
     # unread, perturbation, rejected, internal, ast, idempotence, comment-text,
-    # docs, items, depth, breaks, convergence, comments, cst
+    # docs, items, depth, breaks, meaning, convergence, comments, cst
     prop: str
     case: str
     label: str
@@ -1084,8 +1087,8 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
     elif code != 0:
         fail("idempotence", f"fmt --check exit {code} on fmt(p)")
     # `docs/onsa-tools.md` §3.5: the comments keep their texts in their order, and the doc comments
-    # and the items stay. Until W3-12 makes `diff --ast` the comparison of S-56
-    # (the docs included), these sequences make up for it.
+    # and the items stay. `diff --ast` compares the structure alone, not the comments nor the doc
+    # comments (S-534): these sequences check those, and the items once more.
     (plain, docs), (f_plain, f_docs) = comment_texts(text), comment_texts(formatted)
     for what, want, got, prop_name in (
         ("comment", plain, f_plain, "comment-text"),
@@ -1102,6 +1105,10 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
     problem = depth_problem(onsa, a, d / "b" / name, bool(item_heads(text)))
     if problem:
         fail(*problem)
+    if formatted != text:
+        problem = meaning_problem(onsa, a, d / "b" / name)
+        if problem:
+            fail(*problem)
     code_only, problem = fmt_text(onsa, d / "c" / name, strip_comments(formatted))
     if problem:
         fail(problem[0], "on fmt(p) without the comments: " + problem[1])
@@ -1139,6 +1146,42 @@ def depth_problem(onsa, before, after, has_items):
         if g > w:
             return "depth", f"item {i + 1}: {w} levels before fmt, {g} after"
     return None
+
+
+# A diagnostic of `onsa check` in the text form: `<path>:<line>:<column>: error[E0401]: ...`.
+DIAGNOSTIC = re.compile(r"^\S.*?:\d+:\d+: (?:error|warning)\[([A-Z]\d{4})\]", re.M)
+
+
+def verdict(onsa, path):
+    """`onsa check path` as (its exit code, the codes of its diagnostics in order), or the failure
+    as (prop, detail)."""
+    code, out, err = onsa.run("check", path)
+    crash = onsa.crash(("check",), code, err)
+    if crash:
+        return None, ("internal", crash)
+    codes = DIAGNOSTIC.findall(fuzz.decode(out) + "\n" + err)
+    if code == 1 and not codes:
+        return None, ("meaning", "onsa check ended with 1 and printed no diagnostic this item reads")
+    return (code, codes), None
+
+
+def meaning_problem(onsa, before, after):
+    """The failure when `onsa check` judges `after` (fmt of `before`) otherwise than `before`: its
+    exit code or the codes of its diagnostics in their order (not their texts nor their places), or
+    None (spec §18.2)."""
+    want, problem = verdict(onsa, before)
+    if problem:
+        return problem
+    got, problem = verdict(onsa, after)
+    if problem:
+        return problem
+    if want == got:
+        return None
+
+    def show(v):
+        return f"exit {v[0]}, " + (" ".join(v[1]) or "no diagnostic")
+
+    return "meaning", f"onsa check before fmt: {show(want)}; after fmt: {show(got)}"
 
 
 def first_difference(want, got):
@@ -1281,7 +1324,9 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
 
 
 # The properties `shrink` keeps on a smaller input (the others need the source).
-SHRINKABLE = ("rejected", "internal", "ast", "idempotence", "comment-text", "docs", "items", "depth", "breaks")
+SHRINKABLE = (
+    "rejected", "internal", "ast", "idempotence", "comment-text", "docs", "items", "depth", "breaks", "meaning",
+)
 ERROR_CODE = re.compile(r"error\[(E\d{4})\]")
 
 

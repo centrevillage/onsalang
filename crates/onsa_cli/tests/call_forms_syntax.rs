@@ -631,12 +631,11 @@ fn a_move_on_the_last_expression_of_a_block_is_read_by_the_syntax_stage() {
 }
 
 #[test]
-#[ignore = "W3-12 (S-56): `diff --ast` compares the trees before the rewrites of fmt, and fmt removes the `return` at the end today"]
 fn fmt_keeps_a_move_in_a_consuming_position_and_does_not_fail_on_a_returned_one() {
     // §5.2: `let y = if c { move a } else { move b }` is the form E0711 asks for, so fmt keeps it.
-    // The `move` of a returned value is extra information that fmt removes; that removal is W3-12's
-    // (the text after fmt is not asserted here), but fmt must read the file (exit code 0) and the
-    // program must be the same under the rewrite list of docs/onsa-tools.md §3.3.
+    // The `move` of a returned value stays too (W3-12 took back its removal; the text after fmt is not
+    // asserted here), and fmt must read the file (exit code 0) and the program must be the same under
+    // the rewrite list of docs/onsa-tools.md §3.3.
     let consuming = "fn f(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {\n  let y = if c { move a } else { move b }\n  y\n}\n";
     let returned = "fn f(move a: Buf[F32]) -> Buf[F32] {\n  return move a\n}\n";
     let d = Dir::new("move_tail_fmt");

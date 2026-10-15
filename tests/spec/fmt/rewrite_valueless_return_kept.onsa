@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§6.1", "§18.2"]
+
+// The `return`s without a value that `onsa fmt` keeps (W3-12, unit U1; plan S-547; spec §6.1: "`onsa fmt` は
+// 取り除かない"; docs/onsa-tools.md §3.3). Taking one off can change what `onsa check` says (§18.2): after a
+// `return a` in a function of `I32`, the `return` is E0401, and without it `return a` would be the last
+// statement, which fmt takes off, and the program would pass. These are dead code after a `return`, a loop
+// that does not end, or a statement, with and without a comment at the end of the line (W3-12/b2 1 and 2:
+// fmt took them off, or stopped with an internal error). The file is canonical: the cases harness does not
+// ask fmt about a file with markers, so `crates/onsa_cli/tests/fmt_rewrites.rs`
+// (`the_files_of_the_returns_without_a_value_are_canonical`) runs `onsa fmt --check` on it.
+
+pub fn g() -> I32 {
+  1
+}
+
+pub fn after_a_value(a: I32) -> I32 {
+  return a
+  return //~ E0401
+}
+
+pub fn after_a_value_with_a_comment(a: I32) -> I32 {
+  return a
+  return //~ E0401
+  return // d
+}
+
+pub fn after_a_call() {
+  return g() //~ E0401
+  return     // c
+}
+
+pub fn after_an_if(c: Bool) -> I32 {
+  return if c { 1 } else { 2 }
+  return //~ E0401
+}
+
+pub fn in_a_branch(a: I32, c: Bool) -> I32 {
+  if c {
+    return a
+    return //~ E0401
+  } else {
+    2
+  }
+}
+
+pub fn a_run_after_a_value() -> I32 {
+  return 1
+  return //~ E0401
+  return
+}
+
+pub fn after_a_line_of_comment(a: I32) -> I32 {
+  return a
+  // note
+  return //~ E0401
+}
+
+pub fn after_branches_that_return(c: Bool) -> I32 {
+  if c { return 1 } else { return 2 }
+  return //~ E0401
+}
+
+pub fn after_a_let() -> I32 {
+  return 1
+  let x = 2
+  return //~ E0401
+}
+
+pub fn after_an_assignment() -> I32 {
+  return 1
+  var x = 2
+  x = 3
+  return //~ E0401
+}
+
+pub fn a_run() {
+  return
+  return
+}
+
+pub fn after_a_loop_that_does_not_end() {
+  while true {}
+  return
+}
+
+pub fn after_a_statement(inout x: I32) {
+  x = 1
+  return
+}
+
+pub fn at_the_end_of_branches(c: Bool, inout x: I32) {
+  if c {
+    x = 1
+    return
+  } else {
+    x = 2
+    return // two
+  }
+}

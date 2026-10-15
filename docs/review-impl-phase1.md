@@ -2450,6 +2450,14 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 経緯: W3-05/b の単位 1 が範囲の外として報告した（2026-10-13）。W3-05 の前からある。
 - 決定（2026-10-13、親）: 直す。時期は W7 か W10 の `@param` の作業を見て決める。
 
+#### R-225 呼べるメソッドの無い `x.prev~(…)` の、`~` を除く候補が E0413 を作る
+- 中・直す・観点 1｜sema（flow の段の E0812 の候補）｜§18.1（S-236）、§2.6
+- 内容: `x.prev~(0.5)`（`x: F32`）の E0812「`x.prev` is not a flow」の候補「remove `~`」を当てると、`x.prev(0.5)` の E0413「`F32` has no method `prev`」が出る。候補は、`~` を除いた形が呼べる（関数かメソッドがある）かを見ずに出る。
+  組込みの遅延をメソッドの形で書く `x.prev~(…)` は書き手が書きうる形で、候補が新しい誤りへ導く。親が dev の `e6a8fa0` で確かめた（2026-10-15）。
+  同じ族の項目: `fix|E0812|remove …|E0401`（`2abf12eb`、W7-04）と `fix|E0812|remove …|E0302`（W4-06）。
+- 経緯: W3-12 の単位 U1b の gate の fuzz が見つけた（ファズ `8be605b6`、種は `tests/spec/fmt/rewrite_heads_lines_loose.onsa`、2026-10-15）。事例を足して変異体がずれたもので、U1b の担当が e6a8fa0 のバイナリで同じ類が出ることを確かめた。
+- 決定（2026-10-15、親。`leader-rules.md` 4.5 の実害の基準）: 直す。`~` を除いた形が呼べるときだけ候補を出す。W4-12（`~` の有無の E0811・E0812 と E0821）で直す。入力を `tests/pending.toml` の `fuzz-input` に載せた。
+
 #### R-224 終わった作業を理由にした ignore が残り、通るテストを黙らせていた
 - 中・直す・観点 2｜テスト（`crates/onsa_cli/tests/syntax_units.rs`・`pattern_guard_candidates.rs` の ignore）と gate（テストの ignore の理由を確かめない）｜`docs/leader-rules.md` 4.2（黙らせた項目は後退を隠す）
 - 内容: W3-04 を理由にした `fmt_stops_for_a_reserved_word`・`fmt_reports_a_reserved_word`（`stop_case!` の理由の引数）と、W3-09 を理由にした `a_range_with_one_end_in_a_header_is_e0002_with_a_note_and_no_candidate`・`a_block_at_the_start_of_an_expression_in_a_header_is_e0002_with_a_note_and_no_candidate` が、その作業の後も ignore のままで、今は通る。
@@ -2488,6 +2496,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 内容: `} else` 改行 `ifから//` の E0003「move `if` to the end of the line before」を当てると、`if` に接する `か`（U+304B）の E0001 が出る。`か` は元の入力にあり、隠れていた。候補は正しい。
 - 経緯: W3-08 の直し A の gate の fuzz が見つけた（ファズ `44fc0733`、2026-10-13）。直しの前のバイナリでも同じ。
 - 同じ形（2026-10-13、W3-24/i の直し 1 の gate の fuzz）: `if」も//`（ファズ `1a9bd535`、種は `tests/spec/fixes/e0003_else_if_line.onsa`）。接する字が違い、類の `left` に符号位置の 16 進の末尾の字（`U+#D`）が残るので別の項目になる。dev の `88407eb` でも同じ。入力を `tests/fuzz/allowed.toml` に載せた。
+- 同じ形（2026-10-15、W3-12 の U1b の gate の fuzz）: `if` に接する制御文字 U+0091（ファズ `1559d8c8`、種は同じ）。文面が字を引かず符号位置だけを書くので、類の `left` が別になる。e6a8fa0 でも同じ。入力を `tests/fuzz/allowed.toml` に載せた。
 - 決定（2026-10-13、利用者）: 直さない。実害が低い。入力を `tests/fuzz/allowed.toml` に載せた。
 
 #### R-218 データのファイルの `copy_bound` の例が、正しい境界 `[T: Copy]` を拒む
@@ -2800,6 +2809,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 | R-222 | 直さない（実害が低い）。項目の後の行頭の `?` を前の行へ寄せる E0020 の候補が、宣言の後の E0002 を作る（ファズ `468c2b1f`）。W3-11 の U1 の gate が見つけた | `tests/fuzz/allowed.toml` に載せた |
 | R-223 | 直さない（実害が低い）。名前の無い `#[repr(C)]struct` で切れた関数の本体で、属性を `@` に書く E0020 の候補が E0005 を残す（ファズ `5dcc3cd1`）。W3-11 の U1 の gate が見つけた | `tests/fuzz/allowed.toml` に載せた |
 | R-224 | 直す（利用者）。終わった作業（W3-04、W3-09）を理由にした ignore が 4 件残り、通るテストを黙らせていた。親が `tools/ignores.py passing` で見つけた | 4 件は外した。gate の確かめ（理由が済んだ作業の ID の ignore を失敗にする）は道具の小さな票 |
+| R-225 | 直す（親）。呼べるメソッドの無い `x.prev~(…)` の E0812 の候補（`~` を除く）が E0413 を作る（ファズ `8be605b6`）。W3-12 の U1b の gate が見つけた。前からある | W4-12 で直す。入力を実装待ちの一覧の `fuzz-input` に載せた |
 | R-208 | 直す（親）。事例の器の修正候補の約束の検査が、候補を当てた後に別の段の誤りが残る単位の数に対して指数的に遅くなる（N=7 で 2.4 秒、8 で 22 秒）。RF/t が見つけた | 実装は W3 の終わりの器の改善か、それより前に要るとき（`crates/onsa_tests/src/fix_contract.rs`） |
 | R-207 | 直す（親）。fuzz の修正候補の網に、仕様が約束の外とした類（二段の直し、誤りが二つある入力）を既知として示す形が無く、事例を足すたびに新しい類として gate を落とす。W3-06/i の単位 2 の gate が見つけた | 実装は W3-06 の単位 2（`tests/fuzz/allowed.toml` と `tools/fuzz.py`） |
 | R-206 | 直す（親）。規則の表の二つの行が一つの失敗に当たり、内部エラー 101 になる（`--..<3` の `IncrementUnfixable` と `RangePattern`、`1u8..<3` の `LiteralSuffix` と `RangePattern`）。W3-06/b が見つけた。再現の入力は本文の二つの一行（`tests/` に置かない） | 実装は W3-06 の後の `foreign.rs` の深いリファクタリング（行の優先順位を表に置く） |

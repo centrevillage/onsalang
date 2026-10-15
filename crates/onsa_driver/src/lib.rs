@@ -400,8 +400,7 @@ pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff
                 parsed.iter().zip(files).take(n).flat_map(|(p, file)| reduce::syntax_report(p, file)).collect(),
             );
         }
-        let text = |file: FileId| sources.file(file).text();
-        AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], text(old), &parsed[1], text(new)))
+        AstDiff::Items(onsa_syntax::diff::diff(&parsed[0], &parsed[1]))
     })
 }
 

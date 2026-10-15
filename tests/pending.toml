@@ -1911,3 +1911,12 @@ reasons = ["S-36"]
 until = "W4-03"
 note = "priv の構文（W3-08）と無指定をパッケージ内にする意味（W4-03）（t1）"
 
+# --- W3-12/i U1b: 事例を足して変異が変わり、ファズが見つけた修正候補の型（2026-10-15。e6a8fa0 でも出る）
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/8be605b6.onsa"
+reasons = ["R-225", "S-236"]
+until = "W4-12"
+note = "fix-same-place: fix|E0812|remove `…`|E0413。メソッドの無い a.pv~(n0) の E0812 の候補（~ を除く）が、a.pv(n0) の E0413（fn() has no method）を作る。~ を除いた形が呼べるときだけ候補を出す"
+

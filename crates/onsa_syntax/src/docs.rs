@@ -21,6 +21,9 @@
 //! One diagnostic for a run of doc comments of one kind with nothing but
 //! blank lines and plain comments between them (one error, the lines meant
 //! for one declaration), with one candidate that edits each line.
+//!
+//! The AST holds no doc comment (D-02): [`doc_comments`] and [`documented`]
+//! read them where the parser attached them, on the CST.
 
 // A run of doc comments that document nothing is one E0004, with one candidate (S-442).
 // SPEC-GAP(S-433): a `///` before an element of a variant is in no `Docs`: E0004 (there is no tuple struct, S-39).
@@ -119,16 +122,58 @@ pub(crate) fn in_a_heading(kind: NodeKind) -> bool {
     matches!(kind, NodeKind::Item | NodeKind::Param)
 }
 
+/// Whether a node of `kind` is a declaration that can hold a `Docs` node:
+/// an item, a field, a variant or a parameter. The nodes [`takes_doc`]
+/// judges and [`documented`] numbers.
+fn may_take_doc(kind: NodeKind) -> bool {
+    matches!(kind, NodeKind::Item | NodeKind::Field | NodeKind::Variant | NodeKind::Param)
+}
+
 /// Whether the declaration of the node `owner` takes a doc comment (§2.1).
 fn takes_doc(cst: &Cst, owner: NodeId) -> bool {
     let around = |n: NodeId| cst.parent(n).map(|p| cst.kind(p));
     match cst.kind(owner) {
+        kind if !may_take_doc(kind) => false,
         NodeKind::Item => crate::units::declaration(cst, owner).is_none_or(|d| declaration_takes_doc(cst.kind(d))),
-        NodeKind::Field | NodeKind::Variant | NodeKind::Param => {
-            cst.parent(owner).is_some_and(|list| around(list).is_some_and(|a| elements_take_docs(cst.kind(list), a)))
-        }
-        _ => false,
+        // A field, a variant or a parameter: an element of a list.
+        _ => cst.parent(owner).is_some_and(|list| around(list).is_some_and(|a| elements_take_docs(cst.kind(list), a))),
     }
+}
+
+/// The doc comments of the declaration of the node `n` (an `Item`, a
+/// `Field`, a `Variant` or a `Param`: the `///` of its `Docs`), or of the
+/// module when `n` is the root (the `//!` of its `ModuleDocs`), in order.
+pub(crate) fn doc_comments(cst: &Cst, n: NodeId) -> Vec<TokenIdx> {
+    let (holder, kind) = match n == cst.root() {
+        true => (NodeKind::ModuleDocs, TokenKind::ModuleDoc),
+        false => (NodeKind::Docs, TokenKind::DocComment),
+    };
+    let holders = cst.child_nodes(n).filter(|&c| cst.kind(c) == holder);
+    let tokens = holders.flat_map(|c| cst.children(c)).filter_map(|e| match *e {
+        Elem::Token(t) if cst.token(t).kind == kind => Some(t),
+        _ => None,
+    });
+    tokens.collect()
+}
+
+/// The doc comments of the declarations in the node `n` and below, in the
+/// order of the source, each with the declaration it documents: its number
+/// among the declarations there (the nodes of [`may_take_doc`], in the order
+/// of the source). The check of `onsa fmt` compares them (a doc comment that
+/// moves to another declaration documents another one, `docs/onsa-tools.md`
+/// §3.5).
+pub(crate) fn documented(cst: &Cst, n: NodeId) -> Vec<(usize, TokenIdx)> {
+    let (mut out, mut stack, mut number) = (Vec::new(), vec![n], 0);
+    while let Some(d) = stack.pop() {
+        if may_take_doc(cst.kind(d)) {
+            out.extend(doc_comments(cst, d).into_iter().map(|t| (number, t)));
+            number += 1;
+        }
+        let at = stack.len();
+        stack.extend(cst.child_nodes(d));
+        stack[at..].reverse();
+    }
+    out
 }
 
 /// The edits that move the run of `///` from `first` to `last` before the
@@ -245,8 +290,21 @@ fn report(
 mod tests {
     use onsa_diag::{Code, FileId};
 
+    use crate::cst::NodeKind;
+
     fn parse(src: &str) -> crate::Parsed {
         crate::parse(FileId(0), src)
+    }
+
+    /// The texts of the doc comments ([`super::doc_comments`]) of each node of `kind` of `p` (the
+    /// tree of `src`), the nodes in the order of the walk of the tree.
+    fn docs_of(p: &crate::Parsed, src: &str, kind: NodeKind) -> Vec<Vec<String>> {
+        let nodes = crate::fmt::rewrites::all_nodes(&p.cst).into_iter().filter(|&n| p.cst.kind(n) == kind);
+        let text = |t| {
+            let s = p.cst.token(t).span;
+            src[s.start as usize..s.end as usize].to_string()
+        };
+        nodes.map(|n| super::doc_comments(&p.cst, n).into_iter().map(text).collect()).collect()
     }
 
     /// The E0004 of `src`: their texts, and the text after their candidate (if any).
@@ -277,19 +335,20 @@ mod tests {
                    flow f(\n  /// x\n  x: F32 at sample,\n) -> F32 at sample {\n  x\n}\n";
         let p = parse(src);
         assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
-        let text = |s: &onsa_diag::Span| &src[s.start as usize..s.end as usize];
-        assert_eq!(p.ast.module_doc.iter().map(text).collect::<Vec<_>>(), ["//! m", "//! n"]);
-        use crate::ast::ItemKind;
-        let items: Vec<&crate::ast::Item> = p.ast.root.iter().map(|&i| p.ast.item(i)).collect();
-        assert_eq!(items[0].doc.iter().map(text).collect::<Vec<_>>(), ["/// s"]);
-        let ItemKind::Struct(s) = &items[0].kind else { panic!("{:?}", items[0].kind) };
-        let fields = &s.fields;
-        assert_eq!(fields[0].doc.iter().map(text).collect::<Vec<_>>(), ["/// a"]);
-        assert!(fields[1].doc.is_empty());
-        let ItemKind::Enum(e) = &items[1].kind else { panic!("{:?}", items[1].kind) };
-        assert_eq!(e.variants[0].doc.iter().map(text).collect::<Vec<_>>(), ["/// A"]);
-        let ItemKind::Flow(f) = &items[2].kind else { panic!("{:?}", items[2].kind) };
-        assert_eq!(f.params[0].doc.iter().map(text).collect::<Vec<_>>(), ["/// x"]);
+        // Read on the CST, where the parser attached them (D-02: the AST has none).
+        let root = super::doc_comments(&p.cst, p.cst.root());
+        let module: Vec<&str> =
+            root.iter().map(|&t| p.cst.token(t).span).map(|s| &src[s.start as usize..s.end as usize]).collect();
+        assert_eq!(module, ["//! m", "//! n"]);
+        let none = Vec::<String>::new;
+        assert_eq!(docs_of(&p, src, NodeKind::Item), [vec!["/// s".to_string()], none(), none()]);
+        assert_eq!(docs_of(&p, src, NodeKind::Field), [vec!["/// a".to_string()], none()]);
+        assert_eq!(docs_of(&p, src, NodeKind::Variant), [vec!["/// A".to_string()]]);
+        assert_eq!(docs_of(&p, src, NodeKind::Param), [vec!["/// x".to_string()]]);
+        // With the declaration each documents, by its number in the item (the struct, `a`, `b`).
+        let item = p.map.items[p.ast.root[0].index()];
+        let numbers: Vec<usize> = super::documented(&p.cst, item).into_iter().map(|(d, _)| d).collect();
+        assert_eq!(numbers, [0, 1]);
     }
 
     #[test]
@@ -404,9 +463,7 @@ mod tests {
         let src = "struct S { a: I32,\n           /// d\n           b: I32 }\n";
         let p = parse(src);
         assert!(p.diagnostics.is_empty(), "{:?}", p.diagnostics);
-        let crate::ast::ItemKind::Struct(s) = &p.ast.item(p.ast.root[0]).kind else { panic!("not a struct") };
-        let fields = &s.fields;
-        assert_eq!(fields[1].doc.len(), 1);
+        assert_eq!(docs_of(&p, src, NodeKind::Field), [vec![], vec!["/// d".to_string()]]);
         // fmt keeps it on its own line (W3-04/b 2), also after a comment that
         // the element before holds (W3-04/b 6).
         assert_eq!(crate::format(&p, src).as_deref(), Ok(src));
@@ -445,8 +502,8 @@ mod tests {
         // (W3-01/b M-1): after a failed field, the unit has its error first,
         // and the next item keeps its own.
         let p = parse("struct S {\n  a: ,\n  /// b\n  b: I32,\n}\n/// g\nfn g() {\n}\n");
-        let g = p.ast.root.iter().map(|&i| p.ast.item(i)).find(|i| i.failed.is_none()).unwrap();
-        assert_eq!(g.doc.len(), 1);
+        let g = p.ast.root.iter().find(|&&i| p.ast.item(i).failed.is_none()).unwrap();
+        assert_eq!(super::doc_comments(&p.cst, p.map.items[g.index()]).len(), 1);
         assert_eq!(p.diagnostics[0].code, Code::E0002);
     }
 }

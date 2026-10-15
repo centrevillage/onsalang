@@ -7,8 +7,9 @@
 //!   a diagnostic, the output reads without one, with the code tokens (kind
 //!   and text) that the plan (`fmt/plan.rs`) keeps, respells and adds, and the
 //!   same comments (their text without blanks at the end), in the same order.
-//!   Without the `,` and the `return` (the only tokens the plan drops or
-//!   adds), the kinds of the code tokens are those of the file.
+//!   Without the `,` (which the plan moves, drops and adds) and the tokens
+//!   the rewrites of §3.3 drop (`fmt/rewrites.rs`), the kinds of the code
+//!   tokens are those of the file.
 //! - (iii) Printing the output again gives the output.
 //! - (iv) The printer gives every canonical file back from copies of it
 //!   whose layout is changed with a fixed seed ([`jitter`]): the indentation,
@@ -24,6 +25,7 @@ use onsa_diag::FileId;
 
 use super::plan::Plan;
 use super::print::print;
+use super::rewrites;
 use super::table_tests::{EXTRA, canonical_by_case};
 use crate::cst::{Cst, TokenIdx};
 use crate::lexer::BLANKS;
@@ -54,9 +56,12 @@ fn tokens(cst: &Cst, text: &str, plan: Option<&Plan>) -> (Vec<(TokenKind, String
     (code, comments)
 }
 
-/// The kinds of the code tokens without `,` and `return`.
-fn kinds(code: &[(TokenKind, String)]) -> Vec<TokenKind> {
-    code.iter().map(|(k, _)| *k).filter(|k| !matches!(k, TokenKind::Comma | TokenKind::KwReturn)).collect()
+/// The kinds of the code tokens of `cst` without `,` and, with `dropped` (by the index of the token), without
+/// the tokens the rewrites of §3.3 drop.
+fn kinds(cst: &Cst, dropped: Option<&[bool]>) -> Vec<TokenKind> {
+    let tokens = cst.tokens().iter().enumerate();
+    let kept = tokens.filter(|&(i, t)| !t.kind.is_trivia() && dropped.is_none_or(|d| !d[i]));
+    kept.map(|(_, t)| t.kind).filter(|&k| k != TokenKind::Comma).collect()
 }
 
 /// A generator with a fixed seed (xorshift64).
@@ -211,8 +216,11 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
             if planned != written || comments != written_comments {
                 tally.errors.push(format!("(ii) {name}: the tokens or the comments are not those of the plan"));
             }
-            if kinds(&tokens(&parsed.cst, text, None).0) != kinds(&written) {
-                tally.errors.push(format!("(ii) {name}: a token other than `,` and `return` was dropped or added"));
+            let dropped = rewrites::choose(&parsed.cst, &rewrites::all_nodes(&parsed.cst)).dropped;
+            if kinds(&parsed.cst, Some(&dropped)) != kinds(&again.cst, None) {
+                tally.errors.push(format!(
+                    "(ii) {name}: a token other than `,` and those the rewrites of §3.3 drop was dropped or added"
+                ));
             }
             let twice = print(&again.cst, &out);
             if twice != out {

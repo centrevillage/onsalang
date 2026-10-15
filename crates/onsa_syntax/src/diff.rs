@@ -1,10 +1,12 @@
 //! `onsa diff --ast` (spec §18.2, T1-10) and the check of `onsa fmt` before
 //! it writes ([`same_program`]): the one comparison of two files of
-//! `docs/onsa-tools.md` §3.5. Both compare the dumps of the items, with the
-//! text of their doc comments, after the rewrites of §3.3 on both trees
-//! ([`crate::fmt::rewrites`]). `diff --ast` matches the items by kind and
-//! name and ignores the comments and the whitespace; the check also wants the
-//! items in the same order and the same comments in the same order.
+//! `docs/onsa-tools.md` §3.5. Both compare the dumps of the items after the
+//! rewrites of §3.3 on both trees ([`crate::fmt::rewrites`]): the structure
+//! alone, without the comments (S-534: the AST has no doc comments either,
+//! D-02). `diff --ast` matches the items by kind and name; the check also
+//! wants the items in the same order, the doc comments on the same
+//! declarations ([`crate::docs::documented`]) and every comment (`///` and
+//! `//!` too) in the same order.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -103,11 +105,27 @@ fn keyed(ast: &Ast) -> Vec<(String, ItemId)> {
         .collect()
 }
 
-fn body(ast: &Ast, id: ItemId) -> Option<&Block> {
-    let expr = match &ast.item(id).kind {
+/// The members of an item that holds some: the functions and constants of
+/// an `impl`, a trait, a handler or an `extern` block, the operations of an
+/// effect, through a `target`.
+fn members(kind: &ItemKind) -> Option<&[ItemId]> {
+    match kind {
+        ItemKind::Impl(i) => Some(&i.items),
+        ItemKind::Trait(t) => Some(&t.items),
+        ItemKind::Handler(h) => Some(&h.items),
+        ItemKind::Effect(e) => Some(&e.ops),
+        ItemKind::Extern(e) => Some(&e.items),
+        ItemKind::Target(inner) => members(inner),
+        _ => None,
+    }
+}
+
+fn body<'a>(ast: &'a Ast, kind: &ItemKind) -> Option<&'a Block> {
+    let expr = match kind {
         ItemKind::Fn(f) => f.body?,
         ItemKind::Flow(f) => f.body,
         ItemKind::Test { body, .. } => *body,
+        ItemKind::Target(inner) => return body(ast, inner),
         _ => return None,
     };
     match &ast.expr(expr).kind {
@@ -116,9 +134,25 @@ fn body(ast: &Ast, id: ItemId) -> Option<&Block> {
     }
 }
 
-/// First statement (or tail) of the new body whose dump differs from the old one.
-fn first_difference(old: &Ast, old_id: ItemId, new: &Ast, new_id: ItemId) -> Option<Span> {
-    let (ob, nb) = (body(old, old_id)?, body(new, new_id)?);
+/// Where the item `new_id` of `new` first differs from `old_id` of `old`:
+/// the first member whose dump differs, and in it (or in the item) the
+/// first statement (or the value) of the body whose dump differs. `None`
+/// when no member or statement does (the head of the item differs).
+fn first_difference(old: &Side, old_id: ItemId, new: &Side, new_id: ItemId) -> Option<Span> {
+    let (ok, nk) = (&old.ast.item(old_id).kind, &new.ast.item(new_id).kind);
+    if let (Some(om), Some(nm)) = (members(ok), members(nk)) {
+        for (i, &n) in nm.iter().enumerate() {
+            match om.get(i) {
+                Some(&o) if old.dump(o) == new.dump(n) => continue,
+                Some(&o) => return first_difference(old, o, new, n).or(Some(new.ast.item(n).span)),
+                None => return Some(new.ast.item(n).span),
+            }
+        }
+        // Members were removed: the last member of the new item.
+        return nm.last().filter(|_| om.len() > nm.len()).map(|&n| new.ast.item(n).span);
+    }
+    let (old, new) = (&old.ast, &new.ast);
+    let (ob, nb) = (body(old, ok)?, body(new, nk)?);
     for (i, &ns) in nb.stmts.iter().enumerate() {
         match ob.stmts.get(i) {
             Some(&os) if dump_stmt(old, os) == dump_stmt(new, ns) => continue,
@@ -137,32 +171,40 @@ fn first_difference(old: &Ast, old_id: ItemId, new: &Ast, new_id: ItemId) -> Opt
 }
 
 /// A file as the comparison reads it: its AST after the rewrites of §3.3,
-/// its source and its items by key.
+/// its tree and its items by key.
 struct Side<'a> {
     ast: Ast,
-    text: &'a str,
+    parsed: &'a Parsed,
     items: Vec<(String, ItemId)>,
 }
 
 impl<'a> Side<'a> {
     /// `parsed` has no diagnostic of the syntax stage (`normalize`).
-    fn new(parsed: &Parsed, text: &'a str) -> Side<'a> {
+    fn new(parsed: &'a Parsed) -> Side<'a> {
         let ast = crate::fmt::rewrites::normalize(parsed);
         let items = keyed(&ast);
-        Side { ast, text, items }
+        Side { ast, parsed, items }
     }
 
     fn dump(&self, id: ItemId) -> String {
-        dump_item(&self.ast, self.text, id)
+        dump_item(&self.ast, id)
+    }
+
+    /// The declaration that each doc comment of the item `id` and of the
+    /// declarations in it documents ([`crate::docs::documented`]): their
+    /// texts are compared with the other comments ([`same_program`]).
+    fn docs(&self, id: ItemId) -> Vec<usize> {
+        let docs = crate::docs::documented(&self.parsed.cst, self.parsed.map.items[id.index()]);
+        docs.into_iter().map(|(d, _)| d).collect()
     }
 }
 
-/// Compare two parsed files (`old_text` and `new_text` are their sources),
-/// without a diagnostic of the syntax stage (one is an internal error,
-/// [`crate::fmt::rewrites::normalize`]). Items keep the new file's order;
+/// Compare two parsed files without a diagnostic of the syntax stage (one is
+/// an internal error, [`crate::fmt::rewrites::normalize`]): their structure
+/// alone, not their comments (S-534). Items keep the new file's order;
 /// removed items come last.
-pub fn diff(old: &Parsed, old_text: &str, new: &Parsed, new_text: &str) -> Vec<ItemDiff> {
-    let (old, new) = (Side::new(old, old_text), Side::new(new, new_text));
+pub fn diff(old: &Parsed, new: &Parsed) -> Vec<ItemDiff> {
+    let (old, new) = (Side::new(old), Side::new(new));
     let (old_items, new_items) = (&old.items, &new.items);
     let old_map: HashMap<&str, ItemId> = old_items.iter().map(|(k, id)| (k.as_str(), *id)).collect();
     let new_map: HashMap<&str, ItemId> = new_items.iter().map(|(k, id)| (k.as_str(), *id)).collect();
@@ -179,7 +221,7 @@ pub fn diff(old: &Parsed, old_text: &str, new: &Parsed, new_text: &str) -> Vec<I
             }),
             Some(&oid) => {
                 if old.dump(oid) != new.dump(*nid) {
-                    let first = first_difference(&old.ast, oid, &new.ast, *nid).unwrap_or(new_span);
+                    let first = first_difference(&old, oid, &new, *nid).unwrap_or(new_span);
                     out.push(ItemDiff {
                         change: Change::Changed,
                         key: k.clone(),
@@ -251,20 +293,25 @@ impl fmt::Display for Place {
 /// Whether `new` (`new_text`) is the program of `old` (`old_text`), the
 /// check of `onsa fmt` before it writes (`docs/onsa-tools.md` §3.5): the
 /// items in the same order, each with the same dump as [`diff`] compares (the
-/// rewrites of §3.3 applied, numbers by value, the text of the doc comments),
-/// then the text of every comment, in order, without the blanks at the end of
-/// the line. `None` if it is; else the first difference. Neither file has a
+/// rewrites of §3.3 applied, numbers by value) and its doc comments on the
+/// same declarations ([`Side::docs`]), then the text of every comment (`///`
+/// and `//!` too), in order, without the blanks at the end of the line. `None` if it is; else
+/// the first difference. Neither file has a
 /// diagnostic of the syntax stage (one is an internal error, as for [`diff`]):
 /// `crate::fmt::verify` looks at the output's first.
 pub fn same_program(old: &Parsed, old_text: &str, new: &Parsed, new_text: &str) -> Option<Difference> {
     let eof = old.cst.tokens().last().expect("a file ends with its Eof token").span;
-    let (o, n) = (Side::new(old, old_text), Side::new(new, new_text));
+    let (o, n) = (Side::new(old), Side::new(new));
     for i in 0..o.items.len().max(n.items.len()) {
         let (place, at) = match (o.items.get(i), n.items.get(i)) {
-            (Some((ok, oid)), Some((nk, nid))) if ok == nk && o.dump(*oid) == n.dump(*nid) => continue,
+            (Some((ok, oid)), Some((nk, nid)))
+                if ok == nk && o.dump(*oid) == n.dump(*nid) && o.docs(*oid) == n.docs(*nid) =>
+            {
+                continue;
+            }
             (Some((ok, oid)), next) => {
                 let same_key = next.filter(|(nk, _)| nk == ok);
-                let inner = same_key.and_then(|(_, nid)| first_difference(&n.ast, *nid, &o.ast, *oid));
+                let inner = same_key.and_then(|(_, nid)| first_difference(&n, *nid, &o, *oid));
                 (Place::Item(ok.clone()), inner.unwrap_or(o.ast.item(*oid).span))
             }
             (None, Some((nk, _))) => (Place::ExtraItem(nk.clone()), eof),
@@ -295,7 +342,7 @@ mod tests {
 
     fn d(a: &str, b: &str) -> Vec<(Change, String)> {
         let (pa, pb) = (crate::parse(FileId(0), a), crate::parse(FileId(1), b));
-        diff(&pa, a, &pb, b).into_iter().map(|x| (x.change, x.key)).collect()
+        diff(&pa, &pb).into_iter().map(|x| (x.change, x.key)).collect()
     }
 
     #[test]
@@ -322,7 +369,7 @@ mod tests {
         let old = "fn f() -> I32 {\n  let a = 1\n  let b = 2\n  a\n}\n";
         let new = "fn f() -> I32 {\n  let a = 1\n  let b = 3\n  a\n}\n";
         let (pa, pb) = (crate::parse(FileId(0), old), crate::parse(FileId(1), new));
-        let out = diff(&pa, old, &pb, new);
+        let out = diff(&pa, &pb);
         let first = out[0].first.unwrap();
         assert_eq!(&new[first.start as usize..first.end as usize], "let b = 3");
     }
@@ -376,9 +423,14 @@ mod tests {
     #[test]
     fn same_program_reads_the_text_of_the_doc_comments_and_their_declaration() {
         let item = |k: &str, text: &str| Some((Place::Item(k.into()), text.to_string()));
+        // S-534, D-02: the dump of the AST has no doc comment; their texts are
+        // compared with the other comments, a `///` of a member too.
         let a = "/// adds\nfn f() {}\nfn g() {}\n";
-        let first = same(a, &a.replace("adds", "add"));
-        assert!(matches!(&first, Some((Place::Item(k), _)) if k == "fn f"), "{first:?}");
+        assert_eq!(same(a, &a.replace("adds", "add")), Some((Place::Comment(1), "/// adds".into())));
+        let m = "impl S {\n  fn f(self) {} // c\n  /// g\n  fn g(self) {}\n}\n";
+        assert_eq!(same(m, &m.replace("/// g", "/// h")), Some((Place::Comment(2), "/// g".into())));
+        // A doc comment lost is a declaration without its doc comment.
+        assert_eq!(same(m, &m.replace("  /// g\n", "")), item("impl S", "impl S {"));
         // The same comments in the same order, on the next declaration.
         assert_eq!(same(a, "fn f() {}\n/// adds\nfn g() {}\n").map(|d| d.0), Some(Place::Item("fn f".into())));
         let s = "struct S {\n  /// d\n  a: I32,\n  b: I32,\n}\n";
@@ -401,10 +453,72 @@ mod tests {
         assert_eq!(same("fn f() -> I32 { 0x1f + 1_000 }\n", "fn f() -> I32 { 31 + 1000 }\n"), None);
         assert_eq!(same("/// d \t\nfn f() {} // c\t \n", "/// d\nfn f() {} // c\n"), None);
         assert_eq!(same("fn f( a:I32 ,b:I32 ){ g(a,\n b,) }\n", "fn f(a: I32, b: I32) { g(a, b) }\n"), None);
-        // Only that `return`: one in a branch, and one without a value, stay.
+        // Every `return e` in the tail position (§6.1: the branches at the
+        // end too) goes; an early `return` and one without a value (S-547) stay.
+        let branches = "fn f(c: Bool) -> I32 {\n  if c {\n    return 1\n  } else {\n    return 2\n  }\n}\n";
+        assert_eq!(same(branches, &branches.replace("return ", "")), None);
+        assert_eq!(same("fn f(move a: B) -> B {\n  return move a\n}\n", "fn f(move a: B) -> B {\n  move a\n}\n"), None);
+        // The returned `move` is no rewrite (W3-12): it stays and is compared.
+        assert!(same("fn f(move a: B) -> B {\n  move a\n}\n", "fn f(move a: B) -> B {\n  a\n}\n").is_some());
         let early = "fn f(c: Bool) -> I32 {\n  if c {\n    return 1\n  }\n  2\n}\n";
         assert!(same(early, &early.replace("return 1", "1")).is_some());
         assert!(same("fn f() {\n  return\n}\n", "fn f() {\n}\n").is_some());
+    }
+
+    /// S-534 (a3): `diff --ast` compares the structure alone, not the doc
+    /// comments (`///` and `//!`, their texts and their declarations) nor the
+    /// ordinary comments; a parenthesis of the same group is a difference
+    /// (S-534 (b1)).
+    #[test]
+    fn diff_ast_compares_the_structure_alone() {
+        let a = "//! m\n/// adds\nfn f() {}\nstruct S {\n  /// x\n  a: I32,\n  b: I32,\n}\n";
+        for b in [
+            a.replace("/// adds", "/// add"),
+            a.replace("//! m", "//! n"),
+            a.replace("/// adds\n", ""),
+            a.replace("  /// x\n  a: I32,\n  b: I32,", "  a: I32,\n  /// x\n  b: I32,"),
+            a.replace("fn f() {}", "fn f() {} // c"),
+        ] {
+            assert!(d(a, &b).is_empty(), "{b}");
+        }
+        let p = "fn f(a: I32, b: I32, c: I32) -> I32 {\n  (a + b) + c\n}\n";
+        assert_eq!(d(p, &p.replace("(a + b) + c", "a + b + c")), vec![(Change::Changed, "fn f".into())]);
+    }
+
+    /// W3-12/b 1: §8.1 and §11.4 put a `uses` and a clock after the result of
+    /// a function on that function, so the dump writes a function type there
+    /// between `<` and `>`: `fn() -> I32 uses {} uses {Alloc}` and `fn() ->
+    /// I32 uses {Alloc}` as the result are two programs.
+    #[test]
+    fn the_uses_after_a_function_type_in_the_result_is_told_apart() {
+        let differ = |a: &str, b: &str| !d(a, b).is_empty();
+        assert!(differ("fn f() -> fn() uses {} uses {Alloc} {}\n", "fn f() -> fn() uses {Alloc} {}\n"));
+        assert!(differ("type M = fn() -> fn() -> I32 uses {Alloc}\n", "type M = fn() -> (fn() -> I32) uses {Alloc}\n"));
+        assert!(differ("fn f() -> fn() -> I32 uses {} uses {A} {}\n", "fn f() -> fn() -> I32 uses {A} {}\n"));
+        assert!(!differ("fn f() -> fn() uses {Alloc} {}\n", "fn f()  ->  fn()  uses {Alloc} {}\n"));
+    }
+
+    /// S-56: the first difference goes down to the first member that differs
+    /// of an item that holds some, and into the body of that member; the
+    /// key of the item stays the one of the item.
+    #[test]
+    fn the_first_difference_goes_down_to_a_member_and_its_body() {
+        let item = |text: &str| Some((Place::Item("impl S".into()), text.to_string()));
+        let a = "impl S {\n  fn f(self) -> I32 { 1 }\n  fn g(self) -> I32 {\n    let x = 1\n    x\n  }\n}\n";
+        assert_eq!(same(a, &a.replace("let x = 1", "let x = 2")), item("let x = 1"));
+        assert_eq!(same(a, &a.replace("fn g(self) -> I32", "fn g(self) -> I64")), item("fn g(self) -> I32 {"));
+        assert_eq!(same(a, &a.replace("impl S", "impl[T] S")).map(|d| d.0), Some(Place::Item("impl S".into())));
+        let e = "effect Beep {\n  fn beep() -> I32\n  fn bop() -> I32\n}\n";
+        let got = same(e, &e.replace("bop() -> I32", "bop() -> I64"));
+        assert_eq!(got, Some((Place::Item("effect Beep".into()), "fn bop() -> I32".into())));
+        let h = "handler quiet: Beep {\n  fn beep(level: I32) -> I32 {\n    let a = level\n    a\n  }\n}\n";
+        let got = same(h, &h.replace("let a = level", "let a = 0"));
+        assert_eq!(got, Some((Place::Item("handler quiet".into()), "let a = level".into())));
+        // `diff --ast` points into the new file.
+        let (pa, pb) = (crate::parse(FileId(0), a), crate::parse(FileId(1), &a.replace("let x = 1", "let x = 3")));
+        let b = a.replace("let x = 1", "let x = 3");
+        let first = diff(&pa, &pb)[0].first.unwrap();
+        assert_eq!(&b[first.start as usize..first.end as usize], "let x = 3");
     }
 
     /// W3-11/b2 A: the comparison takes trees without a syntax error; one

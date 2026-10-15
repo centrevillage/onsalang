@@ -263,26 +263,24 @@ fn e0806_forms() {
 
 #[test]
 fn e0807_e0808_delay_lengths() {
-    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, 1, 0.0)\n}\n";
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, 1)\n}\n";
     let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0807);
-    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev~(x, 0.0)");
-    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, 0, 0.0)\n}\n"), vec![Code::E0808]);
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "prev~(x)");
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, 0)\n}\n"), vec![Code::E0808]);
     // Not a constant: E0417 (§11.4).
     assert_eq!(
-        codes("pub flow f(x: F32 at sample, n: U32 at init) -> F32 at sample {\n  delay~(x, n, 0.0)\n}\n"),
+        codes("pub flow f(x: F32 at sample, n: U32 at init) -> F32 at sample {\n  delay~(x, n)\n}\n"),
         vec![Code::E0417]
     );
-    assert_eq!(
-        codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  vdelay~(x, 2.0, 0, 0.0)\n}\n"),
-        vec![Code::E0808]
-    );
+    assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  vdelay~(x, 2.0, 0)\n}\n"), vec![Code::E0808]);
     assert_eq!(
         codes("pub flow f(x: F32 at sample) -> [F32; 0] at sample {\n  par i in 2..<2 { x }\n}\n"),
         vec![Code::E0808]
     );
+    // An `init` written as the default value is accepted too (S-539 (c3a)).
     ok(
-        "const N: U32 = 8\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N, 0.0) + vdelay~(x, 2.0, N, 0.0)\n}\n",
+        "const N: U32 = 8\npub flow f(x: F32 at sample) -> F32 at sample {\n  prev~(x, 0.0) + delay~(x, N, 0.0) + vdelay~(x, 2.0, N, 0.0)\n}\n",
     );
 }
 
@@ -312,7 +310,7 @@ fn par_ranges() {
     assert_eq!(par("[F32; 2]", "0..<n + 1"), vec![Code::E0417]);
     let computed = "const N: U32 = 2\nconst M: U32 = N * 2\npub flow f(x: F32 at sample) -> [F32; 4] at sample {\n  par i in 0..<M { x }\n}\n";
     assert_eq!(codes(computed), vec![Code::E0200]);
-    let delay = "const N: U32 = 4\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1, 0.0)\n}\n";
+    let delay = "const N: U32 = 4\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1)\n}\n";
     assert_eq!(codes(delay), vec![Code::E0200]);
     // The names of the leaves are resolved first (§18.1): a name that is not
     // declared is E0302, a function is no constant (E0417), and a constant
@@ -324,10 +322,10 @@ fn par_ranges() {
     assert_eq!(par("[F32; 2]", "0..<n + zzz"), vec![Code::E0302]);
     assert_eq!(par("[F32; 32]", "0..<I32.BITS"), vec![Code::E0200]);
     assert_eq!(par("[F32; 2]", "0..<F32.PI"), vec![Code::E0401]);
-    let bits = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, I32.BITS, 0.0)\n}\n";
+    let bits = "pub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, I32.BITS)\n}\n";
     assert_eq!(codes(bits), vec![Code::E0200]);
     // A float literal among the operands is a type error (E0401).
-    let float = "const N: U32 = 2\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1.5, 0.0)\n}\n";
+    let float = "const N: U32 = 2\npub flow f(x: F32 at sample) -> F32 at sample {\n  delay~(x, N + 1.5)\n}\n";
     assert_eq!(codes(float), vec![Code::E0401]);
     assert_eq!(par("[F32; 2]", "-1.5..<3"), vec![Code::E0401]);
     // A literal that no `U32` holds is E0408 in a computed expression too.
@@ -353,7 +351,7 @@ fn e0811_e0812_marks() {
     assert_eq!(a.diagnostics[0].code, Code::E0812);
     assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "h(x)");
     // A delay is written `prev~(` (S-44); `prev(` is E0811 with the candidate `~`.
-    ok("pub flow f(x: F32 at sample) -> F32 at sample {\n  prev~(x, 0.0)\n}\n");
+    ok("pub flow f(x: F32 at sample) -> F32 at sample {\n  prev~(x)\n}\n");
     let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  prev(x)\n}\n";
     let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0811);
@@ -381,7 +379,7 @@ fn e0813_e0815_delay_argument_rates() {
 fn e0815_argument_rate_too_high() {
     assert_eq!(
         codes(
-            "pub flow g(c: F32 at block) -> F32 at sample { prev~(x, 0.0) }\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x)\n}\n"
+            "pub flow g(c: F32 at block) -> F32 at sample { prev~(x) }\npub flow f(x: F32 at sample) -> F32 at sample {\n  g~(x)\n}\n"
         )
         .iter()
         .filter(|&&c| c == Code::E0815)

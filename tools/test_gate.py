@@ -2243,6 +2243,16 @@ if args[0] == "fmt":
 elif args[0] == "diff":
     a, b = (read(p) for p in args[-2:])
     sys.exit(0 if code(a) == code(b) else 1)
+elif args[0] == "check":
+    # An E0401 for each `VERDICT` followed by two spaces or more (fmt makes it one: the verdict changes),
+    # and for each line with `PLACE` (fmt moves the line: the place changes, not the code).
+    t = read(args[-1])
+    lines = t.split("\n")
+    found = [(1, "the verdict") for _ in re.findall(r"VERDICT {2,}", t)]
+    found += [(i + 1, f"at line {i + 1}") for i, l in enumerate(lines) if "PLACE" in l]
+    for line, what in found:
+        sys.stdout.write(f"{args[-1]}:{line}:1: error[E0401]: {what}\n")
+    sys.exit(1 if found or "SILENT" in t else 0)
 elif args[0] == "dump" and args[1] == "--levels":
     # one item; the output of fmt (written under b/) is deeper when the source says DEEPER
     t = read(args[-1])
@@ -2521,6 +2531,13 @@ class FmtProps(TempRepo):
             ("let x = g(a, b) // lose LOSE_COMMENT", "FAIL comment-text: tests/spec/a.onsa [source]: comment: 1 lost"),
             ("/// d LOSE_DOC\n  let x = 1", "FAIL docs: tests/spec/a.onsa [source]: doc comment: 1 lost"),
             ("let DEEPER = g(a, b)", "FAIL depth: tests/spec/a.onsa [source]: item 1: 1 levels before fmt, 2 after"),
+            # A rewrite that changes what `onsa check` says (spec §18.2, W3-12/b2 3).
+            ("let VERDICT  = g(a, b)",
+             "FAIL meaning: tests/spec/a.onsa [source]: onsa check before fmt: exit 1, E0401; after fmt: exit 0, "
+             "no diagnostic"),
+            # A verdict of 1 with no diagnostic the item reads (another form of the output) fails, not passes.
+            ("let SILENT = g(a, b)",
+             "FAIL meaning: tests/spec/a.onsa [source]: onsa check ended with 1 and printed no diagnostic"),
             # A line break between two statements, and a blank line between two elements, that fmt lost.
             ("let JOIN_KEPT = 1",
              "FAIL breaks: tests/spec/a.onsa [source]: line 3, before `x` (line): the line break of the writer is gone"),
@@ -2534,6 +2551,14 @@ class FmtProps(TempRepo):
                 self.assertEqual(code, 1, text)
                 self.assertIn(failure, text)
         self.assertFalse((self.repo.root / "tests" / "spec" / "a.onsa").read_text().count("fmtprop"))
+
+    def test_the_meaning_compares_the_exit_code_and_the_codes_alone(self):
+        # fmt moves the line of the diagnostic (it drops the blank lines): its place and its text change,
+        # its code does not, so the meaning holds. The fake `check` of a file fmt does not change is not asked.
+        self.repo.write("tests/spec/a.onsa", "fn f() {\n\n\n  let PLACE = 1\n  x\n}\n")
+        code, text = self.go()
+        self.assertNotIn("FAIL meaning", text)
+        self.assertIn("inputs from 1 sources", text)
 
     def test_the_continuing_symbols_are_read_once_and_checked(self):
         # Read on the main thread from the injected command, before any

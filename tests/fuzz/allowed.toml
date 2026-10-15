@@ -261,6 +261,13 @@ reasons = ["S-236", "R-219"]
 note = "the `」` against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm, the form of 44fc0733 with another character)"
 
 [[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "U+# cannot be written outside comments and strings: a name is written with the A"
+input = "tests/fuzz/1559d8c8.onsa"
+reasons = ["S-236", "R-219"]
+note = "the U+0091 (a control character, shown by its number) against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm, the form of 44fc0733)"
+
+[[allowed]]
 class = "fix|E0020|write it against its operand|E0002"
 left = "expected newline after the declaration, found `…`"
 input = "tests/fuzz/468c2b1f.onsa"

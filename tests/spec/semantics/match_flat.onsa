@@ -69,12 +69,13 @@ test "enum variants bind their payloads" {
 }
 
 fn early(o: Option[I32]) -> I32 {
-  match o {
+  let n = match o {
     Some(v) => v + 1,
     None => {
       return 500
     },
   }
+  n
 }
 
 test "return from an arm leaves the function" {

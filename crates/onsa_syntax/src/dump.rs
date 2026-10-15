@@ -1,14 +1,14 @@
 //! Compact S-expression printer of the AST, for tests and `onsa dump --ast`
 //! ([`dump`]), and for the comparison of `diff --ast` (the other functions,
 //! `docs/onsa-tools.md` §3.5), which writes a float literal by its value.
+//! The AST has no comments, the doc comments neither (D-02).
 
 use std::fmt::Write;
 
 use crate::ast::*;
-use crate::lexer::comment_text;
 
 pub fn dump(ast: &Ast) -> String {
-    let mut d = Dumper { ast, text: None, out: String::new(), indent: 0, floats: Floats::Text };
+    let mut d = Dumper { ast, out: String::new(), indent: 0, floats: Floats::Text };
     for &item in &ast.root {
         d.item(item);
         d.out.push('\n');
@@ -16,12 +16,10 @@ pub fn dump(ast: &Ast) -> String {
     d.out
 }
 
-/// One item, without a trailing newline, with the text of its doc comments
-/// (`text` is the source of `ast`): the comparison of `diff --ast` and of the
-/// check of `onsa fmt` (`docs/onsa-tools.md` §3.5).
-pub fn dump_item(ast: &Ast, text: &str, id: ItemId) -> String {
+/// One item, without a trailing newline: the comparison of `diff --ast` and
+/// of the check of `onsa fmt` (`docs/onsa-tools.md` §3.5).
+pub fn dump_item(ast: &Ast, id: ItemId) -> String {
     let mut d = Dumper::compare(ast);
-    d.text = Some(text);
     d.item(id);
     d.out
 }
@@ -59,9 +57,6 @@ enum Floats {
 
 struct Dumper<'a> {
     ast: &'a Ast,
-    /// The source, to write the text of the doc comments (§3.5); without
-    /// it, their number of lines.
-    text: Option<&'a str>,
     out: String,
     indent: usize,
     floats: Floats,
@@ -70,7 +65,7 @@ struct Dumper<'a> {
 impl<'a> Dumper<'a> {
     /// The dump of the comparison of `diff --ast`.
     fn compare(ast: &'a Ast) -> Self {
-        Dumper { ast, text: None, out: String::new(), indent: 0, floats: Floats::Value }
+        Dumper { ast, out: String::new(), indent: 0, floats: Floats::Value }
     }
 
     fn line(&mut self) {
@@ -109,7 +104,6 @@ impl<'a> Dumper<'a> {
             Some(Failed::Heading) => self.out.push_str("failed:heading "),
             None => {}
         }
-        self.doc(&item.doc);
         for a in &item.attrs {
             self.attr(a);
             self.out.push(' ');
@@ -159,8 +153,7 @@ impl<'a> Dumper<'a> {
             ItemKind::Flow(f) => {
                 let _ = write!(self.out, "flow {}", f.name.name);
                 self.params(&f.params);
-                self.out.push_str(" -> ");
-                self.ty(f.ret);
+                self.result(f.ret);
                 self.clock(&f.ret_clock);
                 self.nested(|d| d.expr(f.body));
             }
@@ -175,7 +168,6 @@ impl<'a> Dumper<'a> {
                 }
                 for f in &s.fields {
                     self.nested(|d| {
-                        d.doc(&f.doc);
                         d.vis(f.vis);
                         let _ = write!(d.out, "{}: ", f.name.name);
                         d.ty(f.ty);
@@ -188,7 +180,6 @@ impl<'a> Dumper<'a> {
                 self.derives(&e.derives);
                 for v in &e.variants {
                     self.nested(|d| {
-                        d.doc(&v.doc);
                         d.out.push_str(&v.name.name);
                         if !v.fields.is_empty() {
                             d.out.push('(');
@@ -290,8 +281,7 @@ impl<'a> Dumper<'a> {
         self.generics(&f.generics);
         self.params(&f.params);
         if let Some(r) = f.ret {
-            self.out.push_str(" -> ");
-            self.ty(r);
+            self.result(r);
         }
         self.clock(&f.ret_clock);
         if let Some(e) = &f.effects {
@@ -352,29 +342,12 @@ impl<'a> Dumper<'a> {
         self.out.push(']');
     }
 
-    /// `doc:N ` for the `N` lines of the doc comments of a declaration (§2.1),
-    /// or with the source their text without the blanks at the end of each
-    /// line, which fmt removes (`docs/onsa-tools.md` §3.5).
-    fn doc(&mut self, doc: &[onsa_diag::Span]) {
-        match (self.text, doc.is_empty()) {
-            (_, true) => {}
-            (None, false) => {
-                let _ = write!(self.out, "doc:{} ", doc.len());
-            }
-            (Some(text), false) => {
-                let lines: Vec<&str> = doc.iter().map(|&s| comment_text(text, s)).collect();
-                let _ = write!(self.out, "doc:{lines:?} ");
-            }
-        }
-    }
-
     fn params(&mut self, ps: &[Param]) {
         self.out.push('(');
         for (i, p) in ps.iter().enumerate() {
             if i > 0 {
                 self.out.push_str(", ");
             }
-            self.doc(&p.doc);
             for a in &p.attrs {
                 self.attr(a);
                 self.out.push(' ');
@@ -415,6 +388,20 @@ impl<'a> Dumper<'a> {
                 self.out.push_str(", ");
             }
             f(self, x);
+        }
+    }
+
+    /// ` -> T`, the result of a function, with a function type there between
+    /// `<` and `>`: the `uses` and the clock after it are then seen to be of
+    /// the function whose result it is, not of the function type (§8.1,
+    /// §11.4; `fn() -> I32 uses {} uses {Alloc}` is `<fn() -> I32 uses {}>
+    /// uses {Alloc}`), as the comparison of §3.5 must see them.
+    fn result(&mut self, r: TypeId) {
+        let f = matches!(self.ast.ty(r).kind, TypeKind::Fn { .. });
+        self.out.push_str(if f { " -> <" } else { " -> " });
+        self.ty(r);
+        if f {
+            self.out.push('>');
         }
     }
 
@@ -462,8 +449,7 @@ impl<'a> Dumper<'a> {
                 });
                 self.out.push(')');
                 if let Some(r) = ret {
-                    self.out.push_str(" -> ");
-                    self.ty(*r);
+                    self.result(*r);
                 }
                 if let Some(e) = effects {
                     self.effects(e);
@@ -690,8 +676,7 @@ impl<'a> Dumper<'a> {
                 self.out.push_str("(fn");
                 self.params(params);
                 if let Some(r) = ret {
-                    self.out.push_str(" -> ");
-                    self.ty(*r);
+                    self.result(*r);
                 }
                 self.clock(ret_clock);
                 if let Some(e) = effects {

@@ -15,10 +15,6 @@ const TWO: U32 = 2
 // ---------------------------------------------------------------- E0401: delay~
 
 pub flow delay_negative(x: F32 at sample) -> F32 at sample {
-  delay~(x, -1, 0.0)            //~ E0401
-}
-
-pub flow delay_negative_no_init(x: F32 at sample) -> F32 at sample {
   delay~(x, -1)                 //~ E0401
 }
 

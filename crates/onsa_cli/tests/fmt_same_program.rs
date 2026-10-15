@@ -12,8 +12,8 @@
 //!
 //! What `fmt` changes without changing the program (§3.3, §3.2, §3.4):
 //! - the `return` of the last statement of the body of a function, with the value (§3.3, §6.1) -- the
-//!   only place that `fmt` of this version takes off (the other places of the tail position, the
-//!   anonymous functions and the rewrites of §3.3 other than this one are W3-12; no test here);
+//!   other places of the tail position, the anonymous functions and the other rewrites of §3.3 are
+//!   tested in `fmt_rewrites.rs` (W3-12), not here;
 //! - the spelling of a number (§2.4, §3.2): the case of the prefix, the exponent and the hexadecimal
 //!   digits, the `+` of an exponent, the `_`, the zeros in front of the integer part of a float;
 //! - the white space, the line breaks, the indentation, the blank lines, and the `,` at the end of the
@@ -31,10 +31,12 @@
 //! places of the comments (`fmt_comments.rs`, `tests/spec/fmt/comments_places.onsa`), the lists
 //! (`fmt_lines_lists.rs`) and the many files (`fmt_many_files.rs`) are not repeated.
 //!
-//! `onsa diff --ast` uses the same comparison, so it reports no difference between a file and what `fmt`
-//! made of it (§3.5), and a difference in the text of a doc comment is a difference (§3.5: "doc コメント
-//! が一致し"). The form of the report is not fixed by the spec (`docs/onsa-tools.md` §3.5 shows the
-//! exit code and the item that differs): the tests look at the exit code and at the name of the
+//! `onsa diff --ast` uses the same comparison of the trees, so it reports no difference between a file and
+//! what `fmt` made of it (§3.5). It compares the structure alone (S-534 (a3), the user's decision of
+//! 2026-10-15; the AST has no doc comments, D-02): a difference in a doc comment, its text or the
+//! declaration it stands on, is no difference for it (changed by W3-12/i, the second U1 fix; the tests of
+//! W3-11/t had it reported). The form of the report is not fixed by the spec (`docs/onsa-tools.md` §3.5
+//! shows the exit code and the item that differs): the tests look at the exit code and at the name of the
 //! declaration in the output.
 //!
 //! Every test has the whole text of the input and of the expected output. The expected texts are worked
@@ -50,7 +52,7 @@
 //!   expected; the trailing white space of a line is not compared. What matters for the check is that
 //!   either way `fmt` writes the file;
 //! - the difference of two files that differ only in an ordinary comment: whether `diff --ast` reports
-//!   it is W3-12.
+//!   it is a gap of the spec (S-534).
 //!
 //! Every test uses only the binary.
 
@@ -1031,29 +1033,36 @@ fn a_return_that_is_not_the_last_statement_or_has_another_value_is_a_difference(
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Doc comments (§3.5: "doc コメントが一致し"): a different text is a difference, a different place too.
+// Doc comments: `diff --ast` compares the structure alone (S-534 (a3)), so a different text of a doc
+// comment is no difference, a different place neither.
 // ---------------------------------------------------------------------------------------------------
 
-/// Two files that differ in the text of a doc comment only: `diff --ast` reports the declaration.
-fn expect_doc_difference(tag: &str, name: &str, a: &str, b: &str) {
+/// Two files that differ in a doc comment only: `diff --ast` reports no difference (the declaration
+/// `name` is not named).
+fn expect_no_doc_difference(tag: &str, name: &str, a: &str, b: &str) {
     let d = Dir::new(tag);
     for (k, (x, y)) in [(a, b), (b, a)].into_iter().enumerate() {
         let (rc, report) = diff_of(&d, &format!("d{k}"), x, y);
-        assert_eq!(rc, 1, "{tag} (order {k}): the text of a doc comment differs: {report}\n{x}\n{y}");
-        assert!(report.contains(name), "{tag} (order {k}): the declaration `{name}` is named: {report}");
+        assert_eq!(rc, 0, "{tag} (order {k}): only a doc comment differs: {report}\n{x}\n{y}");
+        assert!(!report.contains(name), "{tag} (order {k}): the declaration `{name}` is not named: {report}");
     }
 }
 
 const DOC_ITEM: &str = "fn gain_curve() -> I32 {\n  1\n}\n";
 
 #[test]
-fn a_doc_comment_of_another_text_on_an_item_is_a_difference() {
-    expect_doc_difference("doc_item", "gain_curve", &format!("/// One.\n{DOC_ITEM}"), &format!("/// Two.\n{DOC_ITEM}"));
+fn a_doc_comment_of_another_text_on_an_item_is_no_difference() {
+    expect_no_doc_difference(
+        "doc_item",
+        "gain_curve",
+        &format!("/// One.\n{DOC_ITEM}"),
+        &format!("/// Two.\n{DOC_ITEM}"),
+    );
 }
 
 #[test]
-fn a_doc_comment_of_another_text_on_a_field_is_a_difference() {
-    expect_doc_difference(
+fn a_doc_comment_of_another_text_on_a_field_is_no_difference() {
+    expect_no_doc_difference(
         "doc_field",
         "Zeta",
         "struct Zeta {\n  /// One.\n  x: F32,\n}\n",
@@ -1062,8 +1071,8 @@ fn a_doc_comment_of_another_text_on_a_field_is_a_difference() {
 }
 
 #[test]
-fn a_doc_comment_of_another_text_on_a_variant_is_a_difference() {
-    expect_doc_difference(
+fn a_doc_comment_of_another_text_on_a_variant_is_no_difference() {
+    expect_no_doc_difference(
         "doc_variant",
         "Omega",
         "enum Omega {\n  /// One.\n  A,\n  B,\n}\n",
@@ -1072,8 +1081,8 @@ fn a_doc_comment_of_another_text_on_a_variant_is_a_difference() {
 }
 
 #[test]
-fn a_doc_comment_of_another_text_on_a_flow_input_is_a_difference() {
-    expect_doc_difference(
+fn a_doc_comment_of_another_text_on_a_flow_input_is_no_difference() {
+    expect_no_doc_difference(
         "doc_input",
         "mixer",
         "flow mixer(\n  /// One.\n  x: F32 at sample,\n) -> F32 at sample {\n  x\n}\n",
@@ -1082,8 +1091,8 @@ fn a_doc_comment_of_another_text_on_a_flow_input_is_a_difference() {
 }
 
 #[test]
-fn a_doc_comment_of_another_text_on_a_member_of_an_impl_is_a_difference() {
-    expect_doc_difference(
+fn a_doc_comment_of_another_text_on_a_member_of_an_impl_is_no_difference() {
+    expect_no_doc_difference(
         "doc_member",
         "Sigma",
         "struct Sigma {\n  x: F32,\n}\n\nimpl Sigma {\n  /// One.\n  pub fn get(self) -> F32 {\n    self.x\n  }\n}\n",
@@ -1092,8 +1101,8 @@ fn a_doc_comment_of_another_text_on_a_member_of_an_impl_is_a_difference() {
 }
 
 #[test]
-fn a_doc_comment_of_a_few_lines_that_loses_a_line_is_a_difference() {
-    expect_doc_difference(
+fn a_doc_comment_of_a_few_lines_that_loses_a_line_is_no_difference() {
+    expect_no_doc_difference(
         "doc_lines",
         "gain_curve",
         &format!("/// One.\n/// Two.\n{DOC_ITEM}"),
@@ -1101,23 +1110,21 @@ fn a_doc_comment_of_a_few_lines_that_loses_a_line_is_a_difference() {
     );
 }
 
-/// A doc comment on one file and none on the other is a difference, and so is a doc comment that stands
-/// before the next declaration (the declaration it belongs to is another one).
+/// A doc comment on one file and none on the other is no difference for `diff --ast`, and neither is a
+/// doc comment that stands before the next declaration (S-534 (a3); the check of `onsa fmt` before it
+/// writes still sees them, `docs/onsa-tools.md` §3.5).
 #[test]
-fn a_doc_comment_that_is_added_or_moved_to_another_declaration_is_a_difference() {
+fn a_doc_comment_that_is_added_or_moved_to_another_declaration_is_no_difference() {
     let d = Dir::new("doc_moved");
     let two = |doc_on_first: bool| {
         let (a, b) = if doc_on_first { ("/// Doc.\n", "") } else { ("", "/// Doc.\n") };
         format!("{a}fn first_one() -> I32 {{\n  1\n}}\n\n{b}fn second_one() -> I32 {{\n  2\n}}\n")
     };
     let (rc, report) = diff_of(&d, "moved", &two(true), &two(false));
-    assert_eq!(rc, 1, "the doc comment belongs to the other function: {report}");
-    assert!(report.contains("first_one") && report.contains("second_one"), "both declarations are named: {report}");
+    assert_eq!(rc, 0, "the doc comment belongs to the other function: {report}");
     let bare = "fn first_one() -> I32 {\n  1\n}\n\nfn second_one() -> I32 {\n  2\n}\n";
     let (rc, report) = diff_of(&d, "added", &two(true), bare);
-    assert_eq!(rc, 1, "a doc comment is added: {report}");
-    assert!(report.contains("first_one"), "the declaration is named: {report}");
-    assert!(!report.contains("second_one"), "only the declaration that differs is named: {report}");
+    assert_eq!(rc, 0, "a doc comment is added: {report}");
 }
 
 /// The same doc comment with other blank lines or other white space round it is one program: a blank line

@@ -17,6 +17,7 @@ mod shape;
 mod space;
 #[cfg(test)]
 mod table_tests;
+mod tail;
 
 use crate::diff::{Difference, Place, same_program};
 use crate::parser::Parsed;
@@ -135,7 +136,7 @@ mod tests {
             assert_eq!(out, src);
             let (old, new) = (crate::parse(FileId(0), src), crate::parse(FileId(0), &out));
             assert!(new.diagnostics.is_empty(), "{out}: {:?}", new.diagnostics);
-            assert!(crate::diff::diff(&old, src, &new, &out).is_empty(), "{out}");
+            assert!(crate::diff::diff(&old, &new).is_empty(), "{out}");
         }
     }
 

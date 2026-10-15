@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§11.4", "§18.2"]
+
+// The `init` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §11.4): every one (S-539:
+// the syntax alone does not show that an `init` equal to the default value can go, so `prev~(x)` and
+// `prev~(x, 0.0)` are both taken as they are written). Here: a value that is not the default (`1.0`, `0.5`,
+// `1`), `-0.0`, a name (an input of the clock `init`, a constant that happens to be `0.0`), the argument of
+// a flow of the user, and the default value itself (`0.0`, `0`). The file is canonical, so `onsa fmt`
+// leaves it unchanged.
+
+const ZERO: F32 = 0.0
+
+pub flow k1(x: F32 at sample) -> F32 at sample {
+  prev~(x, 1.0)
+}
+
+pub flow k2(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  prev~(x, start)
+}
+
+pub flow k3(x: F32 at sample) -> F32 at sample {
+  prev~(x, -0.0)
+}
+
+pub flow k4(x: F32 at sample) -> F32 at sample {
+  prev~(x, ZERO)
+}
+
+pub flow k5(x: F32 at sample) -> F32 at sample {
+  delay~(x, 4, 0.5)
+}
+
+pub flow k6(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 8, -0.0)
+}
+
+pub flow k7(n: I32 at sample) -> I32 at sample {
+  prev~(n, 1)
+}
+
+pub flow k8(b: Bool at sample) -> Bool at sample {
+  prev~(b, true)
+}
+
+pub flow k9(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  delay~(x, 4, start)
+}
+
+pub flow lag(x: F32 at sample, start: F32 at init) -> F32 at sample {
+  prev~(x, start)
+}
+
+pub flow use_lag(x: F32 at sample) -> F32 at sample {
+  lag~(x, 0.0)
+}
+
+pub flow zero(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  let m = delay~(n, 4, 0)
+  prev~(x, 0.0)
+}

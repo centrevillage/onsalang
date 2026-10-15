@@ -167,7 +167,7 @@ use std.dsp.test.{impulse, energy}
 const UNISON: U32 = 4
 
 pub flow saw(f0: F32 at block) -> F32 at sample {
-  let phase = wrap01(prev~(^phase, 0.0) + (f0 / sample_rate()))
+  let phase = wrap01(prev~(^phase) + (f0 / sample_rate()))
   (2.0 * phase) - 1.0
 }
 
@@ -191,8 +191,8 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
   let w  = (2.0 * F32.PI * fc) / sample_rate()
   let b1 = 2.0 * r * cos(w)
   let b2 = r * r
-  let y1 = prev~(^y, 0.0)
-  let y2 = prev~(y1, 0.0)
+  let y1 = prev~(^y)
+  let y2 = prev~(y1)
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)
   y
 }

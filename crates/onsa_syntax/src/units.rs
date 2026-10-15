@@ -228,7 +228,7 @@ impl Builder<'_> {
 
     /// Tokens of no item: one unit for a run of them up to the next item,
     /// over lines.
-    // SPEC-GAP(S-259): a run of tokens of no item over several lines is one
+    // Plan S-259: a run of tokens of no item over several lines is one
     // unit, and so is trivia with a diagnostic of the lexer among them (a
     // block comment between items).
     fn stray(&mut self, span: Span, parent: Option<usize>, last: &mut Option<(usize, bool)>) {

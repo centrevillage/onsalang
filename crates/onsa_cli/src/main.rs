@@ -309,7 +309,7 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
         changed = true;
         if check {
             outln!("would reformat {}", path.display());
-        } else if let Err(e) = std::fs::write(path, out) {
+        } else if let Err(e) = write_replacing(path, &out) {
             eprintln!("onsa: cannot write {}: {e}", path.display());
             failed = true;
         }
@@ -322,6 +322,70 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
         Outcome::Ok
     };
     if report.is_empty() { then } else { print_diagnostics(Form::Text, &sources, &report, then) }
+}
+
+/// The bytes of the name of the file that the name of the temporary file of
+/// [`write_replacing`] keeps (with the process, a number and the rest, well
+/// below the 255 bytes of `NAME_MAX`).
+const TEMPORARY_NAME_BYTES: usize = 64;
+
+/// Write `text` as the new text of the file `path` (plan S-56): to a
+/// temporary file in its directory, then renamed over it, so that the file
+/// is the old text or the new one, never half written. A link is followed
+/// (the file it names is replaced, the link stays); a file that cannot be
+/// written is not replaced; the mode bits of the file are kept, its owner
+/// and extended attributes are not; another name of the file (a hard link)
+/// keeps the old text. The temporary file is removed whatever step fails.
+/// It has the mode of the file before the text is written (made with no
+/// rights for others first), and its name keeps the first bytes of the name
+/// of the file only, so that it is a name the system takes (`NAME_MAX`).
+// `docs/onsa-tools.md` §3.6: the link is followed, a read-only file and a
+// directory where no temporary file can be made are errors of input and
+// output (exit code 2), a hard link keeps the old text.
+fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let target = std::fs::canonicalize(path)?;
+    // Opened to write without truncating, and closed: the permissions (and an ACL) let it be written.
+    std::fs::OpenOptions::new().write(true).open(&target)?;
+    let mode = std::fs::metadata(&target)?.permissions();
+    let (Some(dir), Some(name)) = (target.parent(), target.file_name()) else {
+        return Err(std::io::Error::other("not a file in a directory"));
+    };
+    let name = name.to_string_lossy();
+    let cut = (0..=name.len().min(TEMPORARY_NAME_BYTES)).rev().find(|&i| name.is_char_boundary(i)).unwrap_or(0);
+    let name = &name[..cut];
+    let mut made = None;
+    for n in 0..100 {
+        let tmp = dir.join(format!(".{name}.onsa-fmt-{}-{n}.tmp", std::process::id()));
+        let mut open = std::fs::OpenOptions::new();
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+        match open.write(true).create_new(true).open(&tmp) {
+            Ok(file) => {
+                made = Some((tmp, file));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    let Some((tmp, mut file)) = made else {
+        return Err(std::io::Error::other("no free name for a temporary file"));
+    };
+    let written = std::fs::set_permissions(&tmp, mode)
+        .and_then(|()| file.write_all(text.as_bytes()))
+        .and_then(|()| file.sync_all())
+        .and_then(|()| std::fs::rename(&tmp, &target));
+    drop(file);
+    match written {
+        Ok(()) => Ok(()),
+        Err(e) => match std::fs::remove_file(&tmp) {
+            Ok(()) => Err(e),
+            Err(left) => {
+                Err(std::io::Error::other(format!("{e} (the temporary file {} is left: {left})", tmp.display())))
+            }
+        },
+    }
 }
 
 fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {

@@ -95,9 +95,8 @@ impl<'a> Checker<'a> {
     }
 
     /// After a statement: check the items whose type has no variable left.
-    // SPEC-GAP(S-255): §4.5 / §4.7 check these "in the statement in which the type has no
-    // variable left" and do not order them against the other errors of that statement, nor
-    // against each other. Here an error found while the statement is checked comes first
+    // §4.7 (plan S-255): these are checked "in the statement in which the type has no
+    // variable left". An error found while the statement is checked comes first
     // (the checking stops there, §18.1), and the items of one point (a statement, the end of
     // the body) are reported in the order they were made; the same order puts the inner
     // literal of `-(-1)` before the outer negation also when a later statement decides the type.

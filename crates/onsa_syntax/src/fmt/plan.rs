@@ -28,7 +28,7 @@
 //!   of a `let` and the `let` (§3.2). The printer keeps them when a comment
 //!   is between (§3.4, S-497).
 
-use super::rewrites::{REWRITES, all_nodes};
+use super::rewrites::{self, all_nodes};
 use super::shape::{self, Form, Shape};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
 use crate::layout::continues;
@@ -58,11 +58,9 @@ impl Plan {
     pub(super) fn new(cst: &Cst, src: &str) -> Plan {
         let mut plan = Plan { flags: vec![0; cst.tokens().len()], texts: Vec::new(), forms: Vec::new() };
         let nodes = all_nodes(cst);
-        let mut dropped = Vec::new();
-        for &n in &nodes {
-            REWRITES.iter().for_each(|rewrite| (rewrite.cst)(cst, n, &mut dropped));
-        }
-        dropped.into_iter().for_each(|t| plan.set(t, DROP));
+        let choices = rewrites::choose(cst, &nodes);
+        let dropped = choices.dropped.iter().enumerate().filter(|&(_, &d)| d);
+        dropped.for_each(|(i, _)| plan.set(TokenIdx(i as u32), DROP));
         plan.numbers(cst, src);
         for &n in &nodes {
             let forms = shape::forms(cst, n);

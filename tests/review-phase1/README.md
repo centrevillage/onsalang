@@ -143,7 +143,7 @@
 | `parent/r75/` | R-75（`onsa interface` の大きさと状態のフィールド。仕様の構文で書いたパッケージで、期待値は `dsp.onsa` の先頭のコメント。S-65） |
 | `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。期待値は先頭のコメント。S-66） |
 | `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67）。W1-04 で期待値付きの事例へ移した: `tests/spec/negative/lower_unsupported.onsa`、`names_reserved_inputs.onsa`（W7-03 の実装待ち） |
-| `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68） |
+| `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68）。W3-12 で期待値付きのテストへ移した: `crates/onsa_cli/tests/fmt_rewrites.rs` の `r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say`（九つの関数の入力と期待する全文。`pick` の腕は `{ v }`・`{ 0 }` で、ブロックの波括弧は残る。`-> ()` と `uses {}` の除去が第 2 期へ回ったので、今は ignore）。書き換えごとの形は同じファイルの他のテストと `tests/spec/fmt/rewrite_*.onsa` |
 | `parent/r79/` | R-79（std の `target` 宣言を変換先が与えないとき。期待値は `m.onsa` の各項目の上のコメント。S-69） |
 | `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |
 | `parent/r80/` | R-80（NRVO の判定の食い違い。`onsa build --target host .` の生成コードで確かめる。期待値は `m.onsa` の先頭のコメント） |
@@ -168,7 +168,7 @@
 | `parent/r122/` | R-122（パッケージの `tests/` の役割。`onsa check` と `onsa test` で確かめる。`tests/api.onsa` はルート直下の `tests/`、`dsp/tests/n.onsa` はルート直下でない `tests/`。期待値と今の出力は各ファイルの先頭のコメント。S-96） |
 | `parent/r125.onsa` | R-125（std のテスト用の補助を呼べる場所。`onsa check` と `onsa test` で確かめる。期待値と今の出力は各項目の上のコメント。S-97） |
 | `parent/r126.onsa` | R-126（組込みのメソッドの一覧。`onsa check` で確かめる。期待値と今の出力は各項目の上のコメント。S-98） |
-| `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100）。構文は W3-20 で期待値付きのテストへ移した: `tests/spec/values/move_tail_syntax.onsa`、`crates/onsa_cli/tests/call_forms_syntax.rs`（返り値の位置の `move`）。検査（E0711、E0703、E0704）は W4-09 |
+| `parent/p7.onsa` | `impl-review-0.3.md` の P-7（ブロックの末尾の式の `move`。期待値と今の出力は各関数の上のコメント。S-100）。構文は W3-20 で期待値付きのテストへ移した: `tests/spec/values/move_tail_syntax.onsa`、`crates/onsa_cli/tests/call_forms_syntax.rs`（返り値の位置の `move`）。fmt の部分（返り値の位置の `move` の除去）は W3-12 で移した: `crates/onsa_cli/tests/fmt_rewrites.rs` の `p7_the_return_of_p7_onsa_is_taken_off_and_every_move_stays`（返り値の位置の `move` の除去は撤回され、`ret_move` は `move a` になる。末尾の `return` は外す）。検査（E0711、E0703、E0704）は W4-09 |
 | `parent/t5.onsa` | `impl-review-0.3.md` の T-5（flow だけの構文を flow の外に書いたときの診断。期待値と今の出力は各関数の上のコメント。S-101。レート型の部分は S-102） |
 | `parent/t8.onsa` | `impl-review-0.3.md` の T-8 と R-105 の残り（診断コードの流用。期待値と今の出力は各項目の上のコメント。S-103） |
 | `parent/param_id/` | `impl-review-0.3.md` の §11.7 `id`（パラメータの ID の作り方。パッケージで、`onsa build --target host` の生成した C の表で確かめる。期待値と今の出力は `m.onsa` の先頭のコメント。S-104） |

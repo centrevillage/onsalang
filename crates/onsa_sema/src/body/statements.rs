@@ -168,19 +168,11 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A place expression (§5.1): a local, or a field / element / tuple element of a place.
+    /// A place expression (§5.1): a local, or a field / element / tuple element of a place
+    /// ([`onsa_syntax::ast::Ast::place_root`], the one definition of the form).
     pub(super) fn is_place(&mut self, e: ExprId) -> bool {
-        match &self.expr(e).kind {
-            ExprKind::Path(p) => {
-                p.segments.len() == 1
-                    && (p.segments[0].name == "self" || self.lookup_local(&p.segments[0].name).is_some())
-            }
-            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
-                self.is_place(*base)
-            }
-            ExprKind::Paren(inner) => self.is_place(*inner),
-            _ => false,
-        }
+        let ast = self.ast;
+        ast.place_root(e).is_some_and(|name| name == "self" || self.lookup_local(name).is_some())
     }
 
     /// §5.4: `let y = x`, `x.f`, `x[i]` where `x` is a borrowed parameter or a

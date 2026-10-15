@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§6.1", "§8.1", "§18.2"]
+
+// The forms until the second phase takes them off: the `-> ()` and the empty `uses {}` that `onsa fmt` keeps
+// today (W3-12, unit U1; the user left their rewrite of docs/onsa-tools.md §3.3 to the second phase on
+// 2026-10-15). When the second phase takes them off, this file is no longer canonical: its forms go to the
+// tests of the rewrite. The forms that stay for good are in `rewrite_unit_uses_kept.onsa`.
+// Every place of them: a function, a method of an `impl`, a member of a `trait` (with and without a body),
+// an operation of an `effect`, a function of a `handler`, a declaration of an `extern` block, an `rt fn`, a
+// `pub fn`, a function type in a parameter, a result, a `let` and a `type`, and an empty `uses {}` before
+// another `uses`. The trait, the effect, the handler and the extern block are E0200 for `onsa check`
+// today, so the file is read by the syntax stage only (`mode = "parse"`), which is what fmt reads.
+
+struct S {
+  v: I32,
+}
+
+trait T {
+  fn a(self) -> () uses {}
+  fn b(self) -> ()
+  fn c(self) uses {}
+  fn d(self) -> () uses {} {}
+}
+
+impl S {
+  fn a(self) -> () uses {} {}
+  fn b(self) -> () {}
+  fn c(self) uses {} {}
+}
+
+effect E {
+  fn op(x: I32) -> () uses {}
+}
+
+handler h: E {
+  fn op(x: I32) -> () uses {} {
+    return
+  }
+}
+
+extern "C" lib "m" {
+  fn op(x: I32) -> () uses {}
+}
+
+fn value(a: I32) -> I32 uses {} {
+  a
+}
+
+fn two_uses() -> fn() -> () uses {} uses {} {
+  unit
+}
+
+fn unit() -> () {}
+
+fn types(x: fn() -> () uses {}, y: fn() uses {}) -> () uses {} {}
+
+pub rt fn in_rt(x: Span[F32]) -> () uses {} {}
+
+pub fn public() -> () {}
+
+fn a_let() {
+  let a: fn() -> () uses {} = unit
+}
+
+type F = fn(F32) -> () uses {}

@@ -177,10 +177,10 @@ fn trivia_between_items_belong_to_the_file_and_doc_comments_to_the_item() {
     assert_eq!(kinds_of(&p.cst, item), ["Docs", "Newline", "Fn"]);
     let docs = find(&p.cst, NodeKind::Docs)[0];
     assert_eq!(kinds_of(&p.cst, docs), ["DocComment", "Newline", "Newline", "Comment", "Newline", "DocComment"]);
-    // The AST span of the item starts at `fn`; its doc lines are the two `///`.
+    // The AST span of the item starts at `fn`; its doc comments (on the CST, D-02) are the two `///`.
     let ast_item = p.ast.item(p.ast.root[0]);
     assert_eq!(&src[ast_item.span.start as usize..ast_item.span.end as usize], "fn f() {}");
-    assert_eq!(ast_item.doc.len(), 2);
+    assert_eq!(crate::docs::doc_comments(&p.cst, item).len(), 2);
 }
 
 #[test]
@@ -380,20 +380,15 @@ fn doc_comments_after_a_failed_item_belong_to_the_next_item() {
             .root
             .iter()
             .filter(|&&i| p.ast.item(i).failed.is_none())
-            .map(|&i| p.ast.item(i).doc.iter().map(|d| &src[d.start as usize..d.end as usize]).collect())
+            .map(|&i| crate::docs::doc_comments(&p.cst, p.map.items[i.index()]))
+            .map(|ds| ds.iter().map(|&d| p.cst.token(d).span).map(|d| &src[d.start as usize..d.end as usize]).collect())
             .collect();
         let want: Vec<Vec<&str>> = want.iter().map(|d| d.to_vec()).collect();
         assert_eq!(got, want, "{src:?}");
-        // Every doc comment the AST holds is in the `Docs` node of a complete item.
+        // Every doc comment is in the `Docs` node of a complete item.
         for docs in find(&p.cst, NodeKind::Docs) {
             let item = p.cst.parent(docs).unwrap();
             assert_eq!(p.cst.kind(item), NodeKind::Item);
-        }
-        for &i in &p.ast.root {
-            for d in &p.ast.item(i).doc {
-                let t = p.cst.token_at(d.start);
-                assert_eq!(p.cst.kind(p.cst.token_parent(t)), NodeKind::Docs, "{src:?}");
-            }
         }
         assert_round_trip(src);
     }

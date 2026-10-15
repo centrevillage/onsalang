@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§5.2", "§18.2"]
+
+// The `move` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §5.2). `fmt` takes off no
+// `move` (the user took back the one in the returned position on 2026-10-15: `move K` of a constant is
+// E0711, and the syntax does not show whether a name is a local). A `move` where a value is consumed is
+// the mark that E0711 asks for, so it stays: the
+// initializer of a `let` and of a `var` (also in the arms of an `if` and a `match` that are there), an
+// assignment, an argument, an element of a struct literal, the subject of a `match`, the source of a
+// `for`. A function that returns `Holder { buf: move a }` has the `move` in the element of the literal,
+// which is a consuming position, not the returned one. The file is canonical, so `onsa fmt` leaves it
+// unchanged; functions with a returned `move` are in crates/onsa_cli/tests/fmt_rewrites.rs.
+// Only the syntax is checked here (`mode = "parse"`): the modes of the values are the check of W4-09.
+
+pub struct Holder {
+  buf: Buf[F32],
+}
+
+fn take(move t: Buf[F32]) -> U32 uses {Alloc} {
+  t.len()
+}
+
+fn let_if(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = if c { move a } else { move b }
+  y
+}
+
+fn let_match(k: I32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  let y = match k {
+    0 => move a,
+    _ => move b,
+  }
+  y
+}
+
+fn argument(move a: Buf[F32]) -> U32 uses {Alloc} {
+  take(move a)
+}
+
+fn assigned(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var y = move a
+  y = move b
+  y
+}
+
+fn wrapped(move a: Buf[F32]) -> Holder uses {Alloc} {
+  Holder { buf: move a }
+}
+
+fn scrutinee(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match move o {
+    Some(b) => { b.len() },
+    None => 0,
+  }
+}
+
+fn consumed_loop(move xs: [Buf[F32]; 2]) -> U32 uses {Alloc} {
+  var n = 0
+  for s in move xs {
+    n = n + s.len()
+  }
+  n
+}

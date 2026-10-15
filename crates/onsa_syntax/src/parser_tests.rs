@@ -261,7 +261,7 @@ fn items() {
     let src = "/// doc\n@repr(c)\npub struct Key[T: PartialOrd + Eq, const N: U32, e]: PartialEq + Eq {\n  id: U32,\n  xs: [T; N],\n}\n";
     assert_eq!(
         dump(&parse(src).ast),
-        "(doc:1 @repr(c) pub struct Key[T: PartialOrd + Eq, const N: U32, effect e]: PartialEq + Eq repr(c)\n  id: U32\n  xs: [T; N])\n"
+        "(@repr(c) pub struct Key[T: PartialOrd + Eq, const N: U32, effect e]: PartialEq + Eq repr(c)\n  id: U32\n  xs: [T; N])\n"
     );
     let src = "pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Alloc, e} { xs }";
     assert_eq!(

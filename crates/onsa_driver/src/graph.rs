@@ -363,8 +363,8 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
   let w  = (2.0 * F32.PI * fc) / sample_rate()\n\
   let b1 = 2.0 * r * cos(w)\n\
   let b2 = r * r\n\
-  let y1 = prev~(^y, 0.0)\n\
-  let y2 = prev~(y1, 0.0)\n\
+  let y1 = prev~(^y)\n\
+  let y2 = prev~(y1)\n\
   let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)\n\
   y\n\
 }\n";

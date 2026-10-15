@@ -589,7 +589,7 @@ const SHAPES_SRC: &str = "\npub struct Stereo {\n  a: F32,\n  b: F32,\n}\n\n\
 pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {\n  Stereo { a: r, b: l }\n}\n\n\
 pub flow mirror(x: [F32; 2] at sample) -> [F32; 2] at sample {\n  [x[1], x[0]]\n}\n\n\
 pub flow gate(x: I16 at sample, on: Bool at init) -> I16 at sample {\n  if on { x } else { 0 }\n}\n\n\
-pub flow acc(x: F32 at sample) -> F32 at sample {\n  let y = x + prev~(^y, 0.0)\n  y\n}\n\n\
+pub flow acc(x: F32 at sample) -> F32 at sample {\n  let y = x + prev~(^y)\n  y\n}\n\n\
 pub flow lin(x: F32 at sample, a: F32 at init, b: F32 at init) -> F32 at sample {\n  (x * a) + b\n}\n\n\
 pub flow gain(\n  x: F32 at sample,\n  @param(min: 0.0, max: 10.0, default: 1.0)\n  g: F32 at block,\n  \
 @param(min: 0.0, max: 10.0, default: 0.0)\n  o: F32 at block,\n) -> F32 at sample {\n  (x * g) + o\n}\n\n\
