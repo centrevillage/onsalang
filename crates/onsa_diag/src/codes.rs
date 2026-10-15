@@ -234,6 +234,8 @@ codes! {
         "`as` / `at` expression used as an operand, or chained, without parentheses";
     E0012 = 12, Syntax, [Syntax], Optional, Optional,
         "prefix operators stacked without parentheses";
+    E0013 = 13, Syntax, [Syntax], Optional, Optional,
+        "block-like expression used as an operand without parentheses";
     E0020 = 20, Syntax, [Syntax, Names, Types, Flow], Required, Rule,
         "syntax from another language; see the suggested Onsa form";
     E0200 = 200, Unsupported, [Syntax, Names, Types, Flow, Modes, Effects, Build, Manifest], Optional, Optional,

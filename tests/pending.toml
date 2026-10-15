@@ -164,6 +164,13 @@ note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 �
 
 [[pending]]
 kind = "diag-code"
+target = "E0013"
+reasons = ["S-537"]
+until = "W3-13"
+note = "ブロックに似た式を括弧なしで被演算子にする形。仕様の文と登録は W3-13 の始めに揃え、検出は W3-13 の単位 1"
+
+[[pending]]
+kind = "diag-code"
 target = "E0303"
 reasons = ["S-35", "S-36", "S-144", "S-165"]
 until = "W10-01"
