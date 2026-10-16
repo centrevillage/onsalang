@@ -2357,7 +2357,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 #### R-205 `clock_in_type` の候補が、差し込んだ ` at a` を後ろの名前とつなげる
 - 低・直す・観点 1｜syntax（`foreign.rs` の `clock_in_type` の候補）｜§18.1（編集の範囲の外の字句の読みを変える候補は作らない、S-302）
 - 内容: 型の中のクロック（`flow m(x:(((F at a)))e`）の E0020 の候補「write the clock after the type」は、` at a` を除いて `)))` の直後に差し込む。後ろに空白なしで名前 `e` が続くので、差し込んだ `a` と `e` が一つの名前 `ae` になり、範囲の外の字句の読みが変わる。保存した入力 `tests/fuzz/f60b27e5.onsa`。
-- 経緯: W3-06/t1 の gate のファズが見つけた（2026-10-10、新しい型 `fix-same-place: fix|E0020|write the clock after the type|reading`）。種は既存の `tests/spec/negative/flow_clock_names.onsa` で、事例を足したので変異体の選び方がずれ、W3-09 からの弱点が見えた（leader-rules 4.5）。親が dev（`1277c24`）で候補の編集を確かめた。
+- 経緯: W3-06/t1 の gate のファズが見つけた（2026-10-10、新しい型 `fix-same-place: fix|E0020|write the clock after the type|reading`）。種は既存の `tests/spec/negative/flow_clock_names.onsa` で、事例を足したので変異体の選び方がずれ、W3-09 からの弱点が見えた（rules/leader.md 4.5）。親が dev（`1277c24`）で候補の編集を確かめた。
 - 決定（2026-10-10、親）: 直す。W3-06 の単位 1b で、差し込む候補が前後のトークンとつながらない形（必要なら空白を足す）を共通の部品にし、この行にも使う。
 
 #### R-206 規則の表の二つの行が一つの失敗に当たり、内部エラー（終了コード 101）になる
@@ -2455,20 +2455,20 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 内容: `fn b(x:U){x&=1^`（`^` の右の被演算子が無く、`{` が閉じない）の複合代入の E0020 の候補「write the assignment out」は `x = x & (1^)` を作り、`^` の右の被演算子の欠けの E0002 が括弧の中に残る。
   入力には、複合代入、欠けた被演算子、閉じない括弧の三つの誤りが初めからあり、候補は隠れていた誤りを見せるだけである。
 - 経緯: W3-13 のコミットの前の gate の fuzz が見つけた（ファズ `1eb16a95`、種は `tests/spec/fixes/e0020_compound_assign.onsa`、2026-10-16）。事例を足して変異体がずれたもので、dev のバイナリでも同じ。
-- 決定（2026-10-16、親。`leader-rules.md` 4.5）: 直さない。入力を `tests/fuzz/allowed.toml` に載せる。
+- 決定（2026-10-16、親。`rules/leader.md` 4.5）: 直さない。入力を `tests/fuzz/allowed.toml` に載せる。
 
 #### R-235 候補の挿入と置き換えが、隣のトークンとつながるかを見ない
 - 低〜中・直す（W3 の終わり、R-228 と同じ回）・観点 1｜syntax（`foreign/guard.rs` の守りの挿入、`foreign/faust.rs` の `~` の置き換え、`move_token_down`）｜§18.1（S-236）
 - 内容: `0.5 if(c) => 1,` の E0020 の候補「compare in a guard」は `if` の直後に `v == 0.5 && ` を足し、`ifv` という名前を作る（E0002 が残る。`if!c`、`if-g`、`if[c][0]`、`if'c'` も同じ）。`(~= 1)` の「write `!`」は `!=` を作る。行末の `.` を次の行へ動かす候補は、`.` を次の行の頭の数（`0x1`）に付けて添字に読ませる。
   「つながるか」の判断（W3-13 の `foreign/edits.rs` の `joining`）を通るのは、削除、メンバの `.` の空白、時計の挿入だけで、他の挿入と置き換えは隣を見ない。C の癖の `if(` と浮動小数のパターンの組は、書き手が書きうる。
 - 経緯: W3-13/b の直し 2 の再確認が、字句解析器で §18.1 を突き合わせる道具（31 回目の scratchpad の `w313b4/oracle.py`）で見つけた（再現は `w313b4/repro/`、2026-10-16）。dev のバイナリでも同じで、前からある。gate のファズの近似は端に接する挿入を見ないので、捕まえていなかった。キーワードの直後の `.5` と `1.E+.3` は R-228 の形。
-- 決定（2026-10-16、親。`leader-rules.md` 4.5）: 直す。R-228 と同じ回（W3 の終わり）に、候補の編集に `joining` をかける形を見る。道具をファズに入れる（4.9）。
+- 決定（2026-10-16、親。`rules/leader.md` 4.5）: 直す。R-228 と同じ回（W3 の終わり）に、候補の編集に `joining` をかける形を見る。道具をファズに入れる（4.9）。
 
 #### R-234 `&mut` の型を `inout` に書く候補の後に、型の位置の浮動小数の E0002 が残る
 - 低・直さない・観点 1｜syntax（`&mut T` の E0020 の候補）｜§18.1（S-236）
 - 内容: `fn r(v:&mut 0.7`（括弧が閉じない）の `&mut` の E0020 の候補（`inout` を名前の前に書く）を当てると、型の位置の浮動小数の E0002 が残る。入力には、`&mut`、型の位置の浮動小数、閉じない括弧の三つの誤りが初めからある。
 - 経緯: W3-13/i の 2 回目の直しの gate の fuzz が見つけた（ファズ `b4850c81`、2026-10-16）。事例を足して変異体がずれたもので、dev のバイナリでも同じ。
-- 決定（2026-10-16、親。`leader-rules.md` 4.5）: 直さない。入力を `tests/fuzz/allowed.toml` に載せる。
+- 決定（2026-10-16、親。`rules/leader.md` 4.5）: 直さない。入力を `tests/fuzz/allowed.toml` に載せる。
 
 #### R-233 呼び出しの形の候補の入れ子の確かめが、上限に近い単位ごとにファイルの全体を読む
 - 低・直さない・観点 2｜syntax（`foreign/calls.rs` からの `groups::nests_too_deep`、`Within::file`）｜§18.1、§2.5（入れ子の上限）
@@ -2481,7 +2481,7 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 低・直さない・観点 1｜syntax（E0004 の候補）｜§18.1（S-236）
 - 内容: `@fp(relaxed)` 改行 `///` と NUL 改行 `fn e(x: F) -> F {}` の E0004 の候補（doc コメントを属性の前へ移す）を当てると、doc コメントの中の NUL の E0001 が別の位置に残る。入力には、E0004 と NUL の二つの誤りが初めからある。
 - 経緯: W3-13/i の直しの gate の fuzz が見つけた（ファズ `c6671c23`、2026-10-16）。事例を足して変異体がずれたもので、前のバイナリでも同じ。
-- 決定（2026-10-16、親。`leader-rules.md` 4.5）: 直さない。入力を `tests/fuzz/allowed.toml` に載せる（W3-13 のコミットで）。
+- 決定（2026-10-16、親。`rules/leader.md` 4.5）: 直さない。入力を `tests/fuzz/allowed.toml` に載せる（W3-13 のコミットで）。
 
 #### R-231 空白と空の括弧が重なる形で、空白を除く候補の後に空の括弧の E0002 が残る
 - 低・直さない・観点 1｜syntax（空白の置き場所の候補）｜§18.1（S-236）、§2.5
@@ -2507,21 +2507,21 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 内容: `assert.0 true` の「add the `0` before the point」の候補が `assert0.0` を作り、E0002 が残る。`if.01 c {…}` も `if0.01` を作る。
   候補は、前のトークンが名前やキーワードのとき、`0` を足すと前のトークンとつながることを見ていない。キーワードの直後に空白なしで `.0` を書く形は、書き手が書きにくい。
 - 経緯: W3-13/b の単位 U2 が見つけた（再現 `P30/w313b2/b4/k1.onsa`・`k2.onsa`、2026-10-15）。dev のバイナリでも `assert0.0` は同じで、U2 の前からある。
-- 決定（2026-10-15、親。`leader-rules.md` 4.5 の実害の基準）: 直す。前のトークンとつながるときは候補を出さない。W3 の終わりの整理で、他の言語の浮動小数の行を直す（持ち越し）。
+- 決定（2026-10-15、親。`rules/leader.md` 4.5 の実害の基準）: 直す。前のトークンとつながるときは候補を出さない。W3 の終わりの整理で、他の言語の浮動小数の行を直す（持ち越し）。
 
 #### R-227 行頭の `->` を前の行へ移す候補の後に、`->` の後の型の抜けが残る
 - 低・直さない・観点 1｜syntax（行頭の `->` の E0020 の候補）｜§18.1（S-236）
 - 内容: `fn t(a: fn()` 改行 `-> ;` の行頭の `->` の E0020 の候補（前の行の末尾へ移す）を当てると、`->` の後の型の抜け（`;`、E0002）が同じ所に残る。
   入力には、行頭の `->` と型の抜けの二つの誤りが初めからある。候補が新しい誤りを作るのでなく、隠れていた誤りが見えるだけである。
 - 経緯: W3-13/i の単位 U2 の gate の fuzz が見つけた（ファズ `c2f67890`、種は `tests/spec/fixes/e0020_leading_arrow_decls.onsa`、2026-10-15）。事例を足して変異体がずれたもので、U2 の担当が dev のバイナリでも同じ類が出ることを確かめた。
-- 決定（2026-10-15、親。`leader-rules.md` 4.5 の実害の基準）: 直さない。入力を `tests/fuzz/allowed.toml` に載せた。
+- 決定（2026-10-15、親。`rules/leader.md` 4.5 の実害の基準）: 直さない。入力を `tests/fuzz/allowed.toml` に載せた。
 
 #### R-226 `else` を前の行へ移す候補の後に、`else` の後ろの ASCII でない文字の E0001 が残る
 - 低・直さない・観点 1｜syntax（`else` の置き場所の E0003 の候補）｜§18.1（S-236）
 - 内容: `if~ c {}` 改行 `elseは…` の E0003 の候補（`else` を前の行の末尾へ移す）を当てると、`else` に続く `は`（U+306F）の E0001 が同じ所に残る。
   入力には、`else` の行と ASCII でない文字の二つの誤りが初めからある。候補が新しい誤りを作るのでなく、隠れていた誤りが見えるだけである。
 - 経緯: W3-13/i の単位 U2 の gate の fuzz が見つけた（ファズ `d7fb6498`、種は `tests/spec/fixes/e0003_if_tilde_else_line.onsa`、2026-10-15）。事例を足して変異体がずれたもので、U2 の担当が dev のバイナリでも同じ類が出ることを確かめた。
-- 決定（2026-10-15、親。`leader-rules.md` 4.5 の実害の基準）: 直さない。入力を `tests/fuzz/allowed.toml` に載せた。
+- 決定（2026-10-15、親。`rules/leader.md` 4.5 の実害の基準）: 直さない。入力を `tests/fuzz/allowed.toml` に載せた。
 
 #### R-225 呼べるメソッドの無い `x.prev~(…)` の、`~` を除く候補が E0413 を作る
 - 中・直す・観点 1｜sema（flow の段の E0812 の候補）｜§18.1（S-236）、§2.6
@@ -2529,10 +2529,10 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
   組込みの遅延をメソッドの形で書く `x.prev~(…)` は書き手が書きうる形で、候補が新しい誤りへ導く。親が dev の `e6a8fa0` で確かめた（2026-10-15）。
   同じ族の項目: `fix|E0812|remove …|E0401`（`2abf12eb`、W7-04）と `fix|E0812|remove …|E0302`（W4-06）。
 - 経緯: W3-12 の単位 U1b の gate の fuzz が見つけた（ファズ `8be605b6`、種は `tests/spec/fmt/rewrite_heads_lines_loose.onsa`、2026-10-15）。事例を足して変異体がずれたもので、U1b の担当が e6a8fa0 のバイナリで同じ類が出ることを確かめた。
-- 決定（2026-10-15、親。`leader-rules.md` 4.5 の実害の基準）: 直す。`~` を除いた形が呼べるときだけ候補を出す。W4-12（`~` の有無の E0811・E0812 と E0821）で直す。入力を `tests/pending.toml` の `fuzz-input` に載せた。
+- 決定（2026-10-15、親。`rules/leader.md` 4.5 の実害の基準）: 直す。`~` を除いた形が呼べるときだけ候補を出す。W4-12（`~` の有無の E0811・E0812 と E0821）で直す。入力を `tests/pending.toml` の `fuzz-input` に載せた。
 
 #### R-224 終わった作業を理由にした ignore が残り、通るテストを黙らせていた
-- 中・直す・観点 2｜テスト（`crates/onsa_cli/tests/syntax_units.rs`・`pattern_guard_candidates.rs` の ignore）と gate（テストの ignore の理由を確かめない）｜`docs/leader-rules.md` 4.2（黙らせた項目は後退を隠す）
+- 中・直す・観点 2｜テスト（`crates/onsa_cli/tests/syntax_units.rs`・`pattern_guard_candidates.rs` の ignore）と gate（テストの ignore の理由を確かめない）｜`rules/leader.md` 4.2（黙らせた項目は後退を隠す）
 - 内容: W3-04 を理由にした `fmt_stops_for_a_reserved_word`・`fmt_reports_a_reserved_word`（`stop_case!` の理由の引数）と、W3-09 を理由にした `a_range_with_one_end_in_a_header_is_e0002_with_a_note_and_no_candidate`・`a_block_at_the_start_of_an_expression_in_a_header_is_e0002_with_a_note_and_no_candidate` が、その作業の後も ignore のままで、今は通る。
   外れていない間、この 4 件の後退を gate が見逃す。gate は実装待ちの一覧の項目の段（`until`）は確かめるが、テストの ignore の理由は確かめない。
 - 経緯: 親が `tools/ignores.py passing -p onsa_cli --reason W3-0` で見つけた（dev の `c886907`、2026-10-14）。
@@ -2544,13 +2544,13 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 - 内容: `fn d(b:I){` 改行 `#[repr(C)]struct`（ファイルの終わりで切れた形）の E0020「write the attribute with `@`」を当てると、同じ位置に E0005「`@repr` cannot be attached to a statement other than `let`; it goes on a struct」が残る。
   名前と本体まで書いた `#[repr(C)] struct P { … }` を関数の本体に置いた形は、候補の無い E0002 で、約束の違反にならない。切れた形だけが場所を struct と読み違える。
 - 経緯: W3-11 の単位 U1 の gate の fuzz が見つけた（ファズ `5dcc3cd1`、種は `tests/vectors/fixture/checked/ops.onsa`、2026-10-13）。事例を足して変異体がずれたもので、親が dev の `a17c86e` のバイナリで同じことを確かめた。
-- 決定（2026-10-13、親。`leader-rules.md` 4.5 の実害の基準）: 直さない。実害が低い（入力の途中で切れた形にだけ出て、残る E0005 の文面は正しい置き場所を示す）。入力を `tests/fuzz/allowed.toml` に載せた。
+- 決定（2026-10-13、親。`rules/leader.md` 4.5 の実害の基準）: 直さない。実害が低い（入力の途中で切れた形にだけ出て、残る E0005 の文面は正しい置き場所を示す）。入力を `tests/fuzz/allowed.toml` に載せた。
 
 #### R-222 項目の後の行頭の `?` を前の行へ寄せる候補が、宣言の後の E0002 を作る
 - 低・直さない・観点 1｜syntax（行頭の後置の記号の E0020 の候補）｜§18.1（S-236）、§2.5
 - 内容: `fn k(n:U)->f uses{}{}` 改行 `?` の E0020「write it against its operand」を当てると、`?` が関数の本体の `}` に付き、E0002「expected newline after the declaration, found `?`」が出る。前の行が式でなく項目で終わるので、`?` を付ける被演算子が無い。
 - 経緯: W3-11 の単位 U1 の gate の fuzz が見つけた（ファズ `468c2b1f`、種は `tests/review-phase1/parent/r83.onsa`、2026-10-13）。事例を足して変異体がずれたもので、親が dev の `a17c86e` のバイナリで同じことを確かめた。
-- 決定（2026-10-13、親。`leader-rules.md` 4.5 の実害の基準）: 直さない。実害が低い（項目の後に `?` だけの行を書く形は、実際の書き手が書く形でない）。入力を `tests/fuzz/allowed.toml` に載せた。
+- 決定（2026-10-13、親。`rules/leader.md` 4.5 の実害の基準）: 直さない。実害が低い（項目の後に `?` だけの行を書く形は、実際の書き手が書く形でない）。入力を `tests/fuzz/allowed.toml` に載せた。
 
 #### R-221 前置の演算子の重ねを括弧で囲む候補の後に、隠れていた前置の記号の後の改行が見える
 - 低・直さない・観点 1｜syntax（前置の演算子の重ねの E0012 の候補）｜§18.1（S-236）
@@ -2713,8 +2713,8 @@ clippy の警告は無く、`todo!` / `unimplemented!` / `TODO` も無い。
 
 0. **点検と落とし込み**（実装の作業の前。利用者の方針、2026-10-06）。2026-10-07 に終えた。
    - 点検: [`consistency-check-phase1.md`](consistency-check-phase1.md)（決定の間の矛盾と抜け、C-01〜C-122）。
-   - 落とし込み: [`rework-phase1.md`](rework-phase1.md)（段と作業、K-01〜K-11）。作業票は計画 §8.1 の形で、進め方は計画 §8.6。判断の置き場所の表は計画 §3.6。
-1. **W1〜W10**: テストの基盤 → 根に触れない直し（W3 と並行）→ CST・診断の基盤・構文・fmt → パッケージ・名前・所有 → 組込みの表・trait・型の規則 → 効果 → flow の計画 → Core → 定数の評価とターゲットの pass → export の計画・C の API・ビルド。各段の終わりに、全テストと、このレビューの再現の入力を回帰テストとして通す（計画 §8.6 の段の終わり）。
+   - 落とし込み: [`rework-phase1.md`](rework-phase1.md)（段と作業、K-01〜K-11）。作業票は `rules/process.md` 8.1 の形で、進め方は `rules/process.md` 8.6。判断の置き場所の表は計画 §3.6。
+1. **W1〜W10**: テストの基盤 → 根に触れない直し（W3 と並行）→ CST・診断の基盤・構文・fmt → パッケージ・名前・所有 → 組込みの表・trait・型の規則 → 効果 → flow の計画 → Core → 定数の評価とターゲットの pass → export の計画・C の API・ビルド。各段の終わりに、全テストと、このレビューの再現の入力を回帰テストとして通す（`rules/process.md` 8.6 の段の終わり）。
 2. **M5**（計画 §4）。以後 M6〜M9。
 
 第 2 期へ持ち越す暫定の作り（R-127、R-129 など）は、計画 [`implementation-plan.md`](implementation-plan.md) §5 の「第 1 期から持ち越す作業」に載せ、第 2 期の各作業の着手時に確かめる。
