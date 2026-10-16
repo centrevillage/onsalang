@@ -92,11 +92,13 @@ PLAN = "docs/implementation-tasks.md"
 
 
 class Tree(unittest.TestCase):
+    TREE, KIND = TREE, "S"
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        for rel, text in TREE.items():
+        for rel, text in self.TREE.items():
             self.write(rel, text)
 
     def write(self, rel, text):
@@ -105,8 +107,8 @@ class Tree(unittest.TestCase):
         p.write_text(text, encoding="utf-8")
         return p
 
-    def run_tool(self, cmd, overrides=None):
-        argv = [cmd, "--kind", "S", "--root", str(self.root)]
+    def run_tool(self, cmd, overrides=None, kind=None):
+        argv = [cmd, "--kind", kind or self.KIND, "--root", str(self.root)]
         if overrides is not None:
             argv += ["--overrides", str(self.write("over.toml", overrides))]
         out, err = io.StringIO(), io.StringIO()
@@ -280,7 +282,9 @@ class Apply(Tree):
         self.assert_nothing_written(*self.run_tool("apply"))
 
 
-class Verify(Tree):
+class Before(Tree):
+    """A copy of the tree before, and `verify` against it."""
+
     def setUp(self):
         super().setUp()
         tmp = tempfile.TemporaryDirectory()
@@ -288,8 +292,8 @@ class Verify(Tree):
         self.before = Path(tmp.name) / "before"
         shutil.copytree(self.root, self.before)
 
-    def verify(self, before=None):
-        argv = ["verify", "--kind", "S", "--root", str(self.root), "--before", str(before or self.before)]
+    def verify(self, before=None, kind=None):
+        argv = ["verify", "--kind", kind or self.KIND, "--root", str(self.root), "--before", str(before or self.before)]
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             code = mt.main(argv)
@@ -301,6 +305,8 @@ class Verify(Tree):
         self.assertEqual(text.count(old), 1, (rel, old))
         p.write_text(text.replace(old, new), encoding="utf-8")
 
+
+class Verify(Before):
     def test_round_trip(self):
         self.assertEqual(self.run_tool("apply")[0], 0)
         code, out = self.verify()
@@ -361,6 +367,261 @@ class Verify(Tree):
         code, out = self.verify("HEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(self.verify("no-such-rev")[0], 2)
+
+
+# ---------------------------------------------------------------- D, K, Q and A (U5)
+
+PLAN_D_HEAD = "# 計画\n\n---\n\n## 1. 実装の判断（D）\n\n全て 2026-10-01 に案の通り決定。\n"
+PLAN_D_TAIL = "\n---\n\n## 2. 仕様の空白（S）\n\n`decisions/S/` に移した。\n"
+D_UNITS = """
+### D-01 手書きの解析器
+
+- 案: 手書き（§2.3）。
+- 理由: (1) 文脈。
+  (2) 続きの行。
+
+### D-02 アリーナ
+
+- 案: ID で指す。
+
+```text
+### D-09 コードの中
+```
+
+- 代替: 無し。
+
+### D-16 テストの基盤
+
+- 決定（2026-10-06、利用者）。層:
+  1. 仕様から。
+"""
+REWORK_K = """\
+# rework
+
+## 1. 判断した点
+
+前書き。
+
+### K-01 段の構成
+
+- 論点: 段。
+- 決定: 推奨のとおり（2026-10-07）。
+
+### K-02 写し
+
+- 決定（2026-10-08、親）: (a)。
+  続き。
+
+### K-03 日付の無い決定
+
+- 決定: 案のとおり。
+  続き。
+- 経緯: 2026-10-09 に確かめた。
+
+## 2. 段の一覧
+
+## 3. 段ごとの作業
+
+| ID | 作業 | 内容 | 実現する決定 | 依存 | 規模 | 役割・印 |
+|---|---|---|---|---|---|---|
+| W1-01 ✅ | a | b | D-02、K-01、Q-01 | — | S | 基盤 |
+| W1-02 | c | d | K-01、Q-01（一部）、A-01 | W1-01 | M | メモ |
+
+## 4. 残り
+"""
+PROCESS_HEAD = "# 再発防止\n\n---\n\n## 2. 提案\n\n### A. 期待値（原因 a）\n\n前書き（Q-01〜Q-02）。\n"
+Q_UNITS = """
+#### Q-01 別の担当
+- 案:
+  - 分ける。
+- 推奨: 採る。
+
+#### Q-02 参照を二つ
+- 推奨: 採る。
+"""
+PROCESS_MID = "\n### B. 安全網\n"
+Q_UNIT3 = "\n#### Q-03 網\n- 推奨: 採る。\n"
+PROCESS_TAIL = "\n---\n\n## 3. 順序\n\n本文。\n\n## 4. 決定の記録\n\n| ID | 決定 | 日付 |\n|---|---|---|\n"
+Q_ROWS = ["| Q-01 | 採る。`a \\| b` の形 | 2026-10-06 |", "| Q-02 | 採る。" + "文。" * 130 + " | 2026-10-05 |"]
+Q_KEPT_ROWS = ["| 雛形 | まとめる | 2026-10-06 |", "| Q-04 | 見出しの無い行 | 2026-10-06 |"]
+PROCESS_END = "\nQ-01〜Q-03 は決定した。\n\n## 5. 点検表\n"
+API_HEAD = "# 組込み API の候補\n\n前書き。\n\n## 候補\n\n| ID | 候補 | 状態 | 実例・理由 |\n|---|---|---|---|\n"
+A_ROWS = [
+    "| A-01 | `is_some` | 不採用（2026-10-03） | 使われていない（W1-02） |",
+    "| A-03 | `Str` の検索 | 保留（第 2 期） | 用途 `a \\| b` |",
+    "| A-04 | メソッド形 | 採用（2026-10-04、利用者） | 理由 |",
+    "| A-05 | 何か | 検討中 | 新しい語 |",
+]
+API_TAIL = "\n後書き。\n"
+PROCESS = PROCESS_HEAD + Q_UNITS + PROCESS_MID + Q_UNIT3 + PROCESS_TAIL
+PROCESS += "\n".join([Q_ROWS[0], Q_KEPT_ROWS[0], Q_ROWS[1], Q_KEPT_ROWS[1]]) + "\n" + PROCESS_END
+TREE_DKQA = {
+    "onsa-lang-spec-0.3.md": TREE["onsa-lang-spec-0.3.md"],
+    "docs/onsa-tools.md": TREE["docs/onsa-tools.md"],
+    PLAN: PLAN_D_HEAD + D_UNITS + PLAN_D_TAIL,
+    "docs/rework-phase1.md": REWORK_K,
+    "docs/process-improvement-phase1.md": PROCESS,
+    "docs/api-candidates.md": API_HEAD + "\n".join(A_ROWS) + "\n" + API_TAIL,
+    "decisions/README.md": README_FIELDS,
+    "decisions/D/README.md": "# D\n",
+    "decisions/K/README.md": "# K\n",
+    "decisions/Q/README.md": "# Q\n",
+}
+# placed just before `apply --kind A`: `decisions/A/` and the rows of A both there is an error of `repo.Layout`
+A_README = ("decisions/A/README.md", "# A\n\n## 本文のラベル\n\n- `候補`: 候補の欄。\n- `決定`: 状態の欄。\n- `理由`: 実例・理由の欄。\n")
+DOCS = {"D": PLAN, "K": "docs/rework-phase1.md", "Q": "docs/process-improvement-phase1.md", "A": "docs/api-candidates.md"}
+A_OVER = '[A-05]\nstatus = "OPEN"\n'
+
+
+class DKQA(Tree):
+    TREE = TREE_DKQA
+
+    def read(self, rel):
+        return (self.root / rel).read_text(encoding="utf-8")
+
+    def ids(self, kind):
+        return sorted(p.stem for p in (self.root / "decisions" / kind).glob(f"{kind}-*.md"))
+
+    def apply(self, kind):
+        if kind == "A":
+            self.write(*A_README)
+        code, out = self.run_tool("apply", A_OVER if kind == "A" else None, kind=kind)
+        self.assertEqual(code, 0, out)
+
+    def test_plan(self):
+        want = {
+            "D": ("docs/implementation-tasks.md: 3 ranges: 3 headings -> 3 files", {("D-16", "decided", "decided")}),
+            "K": ("docs/rework-phase1.md: 3 ranges: 3 headings", {("K-03", "decided", "decided")}),
+            "Q": ("docs/process-improvement-phase1.md: 5 ranges: 3 headings",
+                  {("雛形", "other-row", ""), ("Q-04", "no-heading", ""), ("Q-03", "no-row", "")}),
+            "A": ("docs/api-candidates.md:7-12: 4 rows -> 4 files in decisions/A/", {("A-05", "status", "status,decided")}),
+        }  # fmt: skip
+        for kind, (head, items) in want.items():
+            with self.subTest(kind=kind):
+                code, out = self.run_tool("plan", kind=kind)
+                self.assertEqual(code, 0, out)
+                self.assertIn(head, out)
+                self.assertEqual(self.items(out), items)
+
+    def test_status_of(self):
+        code, out = self.run_tool("plan", '[status_of]\n"検討中" = "OPEN"\n"保留" = "DROPPED"\n', kind="A")
+        self.assertEqual((code, self.items(out)), (0, set()), out)
+        self.assertIn("status DECIDED 2, DROPPED 1, OPEN 1", out)
+        for over, kind in (('[status_of]\n"保留" = "DONE"\n', "A"), ('[status_of]\n"保留" = "OPEN"\n', "D"), ("status_of = 1\n", "A")):
+            with self.subTest(over=over, kind=kind):
+                self.assertEqual(self.run_tool("plan", over, kind=kind)[0], 1)
+
+    def test_broken(self):
+        for rel, old, new in [
+            (PLAN, "### D-02 アリーナ\n", "### D-02 アリーナ\n\n"),  # a blank line more under the heading
+            (PLAN, "### D-16 テストの基盤", "### D-01 テストの基盤"),  # an ID twice
+            ("docs/process-improvement-phase1.md", "#### Q-01 別の担当\n", "#### Q-01 別の担当\n\n"),  # Q has none
+            ("docs/process-improvement-phase1.md", "| ID | 決定 | 日付 |", "| ID | 決定 |"),  # not the header
+            ("docs/process-improvement-phase1.md", "| 2026-10-05 |", "|"),  # a row of two cells
+        ]:  # fmt: skip
+            with self.subTest(old=old):
+                self.setUp()
+                self.write(rel, self.read(rel).replace(old, new, 1))
+                self.assertEqual(self.run_tool("plan", kind="Q" if "process" in rel else "D")[0], 2)
+
+    def test_apply(self):
+        for kind in "DKQA":
+            self.apply(kind)
+        self.assertEqual(self.read(PLAN), PLAN_D_HEAD + PLAN_D_TAIL)
+        self.assertEqual(self.read(DOCS["Q"]), PROCESS_HEAD + PROCESS_MID + PROCESS_TAIL + "\n".join(Q_KEPT_ROWS) + "\n" + PROCESS_END)
+        self.assertEqual(self.read(DOCS["A"]), "# 組込み API の候補\n\n前書き。\n\n## 候補\n\n" + API_TAIL)
+        self.assertNotIn("### K-", self.read(DOCS["K"]))
+        self.assertIn("## 1. 判断した点\n\n前書き。\n\n## 2. 段の一覧", self.read(DOCS["K"]))
+        self.assertEqual([self.ids(k) for k in "DKQA"], [["D-01", "D-02", "D-16"], ["K-01", "K-02", "K-03"],
+                                                          ["Q-01", "Q-02", "Q-03"], ["A-01", "A-03", "A-04", "A-05"]])  # fmt: skip
+        self.assertEqual(self.read("decisions/D/D-01.md"), '+++\nstatus = "DECIDED"\ndecided = 2026-10-01\n+++\n'
+                         "# D-01 手書きの解析器\n\n- 案: 手書き（§2.3）。\n- 理由: (1) 文脈。\n  (2) 続きの行。\n")  # fmt: skip
+        self.assertIn("```text\n### D-09 コードの中\n```\n\n- 代替: 無し。\n", self.read("decisions/D/D-02.md"))
+        self.assertIn('tasks = ["W1-01"]', self.read("decisions/D/D-02.md"))
+        self.assertIn("decided = 2026-10-08", self.read("decisions/K/K-02.md"))
+        self.assertNotIn("decided", self.read("decisions/K/K-03.md"))  # the date is not of the item `- 決定`
+        self.assertEqual(self.read("decisions/Q/Q-01.md"), '+++\nstatus = "DECIDED"\ntasks = ["W1-01", "W1-02"]\ndecided = 2026-10-06\n'
+                         "+++\n# Q-01 別の担当\n\n- 案:\n  - 分ける。\n- 推奨: 採る。\n- 決定: 採る。`a | b` の形\n")  # fmt: skip
+        q2 = self.read("decisions/Q/Q-02.md").split("\n")
+        self.assertTrue(q2[-3].startswith("- 決定: 採る。文。") and q2[-2].startswith("  文。"), q2[-4:])  # fmt_text
+        self.assertTrue(self.read("decisions/Q/Q-03.md").endswith("# Q-03 網\n\n- 推奨: 採る。\n"))
+        self.assertEqual(self.read("decisions/A/A-03.md"), '+++\nstatus = "OPEN"\n+++\n# A-03\n\n- 候補: `Str` の検索\n'
+                         "- 決定: 保留（第 2 期）\n- 理由: 用途 `a | b`\n")  # fmt: skip
+        self.assertIn('status = "DECIDED"\ntasks = ["W1-02"]\ndecided = 2026-10-03\n', self.read("decisions/A/A-01.md"))
+        with contextlib.redirect_stdout(io.StringIO()) as check:
+            self.assertEqual(docs.main(["check", "--root", str(self.root)]), 0, check.getvalue())
+
+    def test_status_required(self):
+        self.write(*A_README)
+        code, out = self.run_tool("apply", kind="A")  # A-05: no status
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self.ids("A"), [])
+
+    def test_labels(self):
+        self.write("decisions/A/README.md", "# A\n")
+        self.assertEqual(self.run_tool("apply", A_OVER, kind="A")[0], 1)
+        shutil.rmtree(self.root / "decisions/A")
+        self.apply("D")  # the README of D lists no label
+
+    def test_readme_of_a_before_its_rows_go(self):
+        self.write(*A_README)
+        self.assertEqual(self.run_tool("apply", kind="D")[0], 2)  # `repo.Layout`: A in both
+
+
+class VerifyDKQA(Before):
+    TREE = TREE_DKQA
+    apply = DKQA.apply
+
+    CHANGES = {
+        "D": [("decisions/D/D-01.md", "(2) 続きの行。", "(2) 続きの行"),  # a character of the text
+              ("decisions/D/D-01.md", "# D-01 手書きの解析器", "# D-01 手書き"),  # the title
+              ("decisions/D/D-02.md", "# D-02 アリーナ\n\n", "# D-02 アリーナ\n"),  # no blank line after the heading
+              ("decisions/D/D-02.md", 'tasks = ["W1-01"]\n', ""),  # `tasks` not the rework's
+              ("decisions/D/D-16.md", None, None),  # the file removed
+              (PLAN, "全て 2026-10-01", "全て 2026-10-02")],  # outside the units
+        "K": [("decisions/K/K-02.md", "  続き。", "  続き"), ("decisions/K/K-03.md", "\n  続き。", "\n続き。")],
+        "Q": [("decisions/Q/Q-01.md", "- 決定: 採る。`a | b` の形", "- 決定: 採る。`a | c` の形"),  # the cell of the row
+              ("decisions/Q/Q-01.md", "decided = 2026-10-06", "decided = 2026-10-07"),  # the date of the row
+              ("decisions/Q/Q-01.md", "- 決定: 採る。`a | b` の形\n", ""),  # the row
+              ("decisions/Q/Q-03.md", "- 推奨: 採る。\n", "- 推奨: 採る。\n- 決定: x\n"),  # a row it had not
+              ("decisions/Q/Q-02.md", "\n  文。", "\n文。"),  # a broken line not going on
+              (DOCS["Q"], "| 雛形 | まとめる | 2026-10-06 |\n", "")],  # a row that stays
+        "A": [("decisions/A/A-04.md", "- 理由: 理由", "- 理由: 理"), ("decisions/A/A-04.md", "- 理由: 理由\n", ""),
+              (DOCS["A"], "後書き。", "後書き")],
+    }  # fmt: skip
+
+    def test_round_trip(self):
+        for kind in "DKQA":
+            self.apply(kind)
+            code, out = self.verify(kind=kind)
+            with self.subTest(kind=kind):
+                self.assertEqual(code, 0, out)
+                self.assertIn("verify: the same", out)
+        self.assertIn("round trip: 5 headings and rows, 3 files read back; IDs 3; `tasks` of 1 Q from the rework", self.verify(kind="Q")[1])
+
+    def test_escaped_bar_is_normalized(self):
+        self.apply("A")
+        self.edit("decisions/A/A-03.md", "`a | b`", "`a \\| b`")
+        self.assertEqual(self.verify(kind="A")[0], 0)
+
+    def test_a_change_is_found(self):
+        for kind, changes in self.CHANGES.items():
+            for rel, old, new in changes:
+                with self.subTest(kind=kind, rel=rel, old=old):
+                    self.setUp()
+                    self.apply(kind)
+                    if old is None:
+                        (self.root / rel).unlink()
+                    else:
+                        self.edit(rel, old, new)
+                    code, out = self.verify(kind=kind)
+                    self.assertEqual(code, 1, out)
+                    self.assertIn("difference(s)", out)
+
+    def test_no_rows_before(self):
+        self.apply("D")
+        (self.before / PLAN).write_text(PLAN_D_HEAD + PLAN_D_TAIL, encoding="utf-8")
+        self.assertEqual(self.verify(kind="D")[0], 1)
 
 
 if __name__ == "__main__":
