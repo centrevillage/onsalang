@@ -274,7 +274,7 @@ test \"an empty effect row is a pure function\" {
 
 #[test]
 fn the_harmless_redundant_forms_are_accepted_and_keep_their_value() {
-    // P2 (§0.2) and §6.1: redundant parentheses, a `return` in the last position, `-> ()`, an empty
+    // P2 (§0.2, §0.5.1) and §6.1: redundant parentheses, a `return` in the last position, `-> ()`, an empty
     // `uses {}` are accepted with no diagnostic (`onsa fmt` takes them away); the values are the
     // ones of the forms without the extras. These are not E0020, which is for the harmful extras.
     let d = Dir::new("harmless");

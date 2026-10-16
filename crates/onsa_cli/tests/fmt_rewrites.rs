@@ -1,5 +1,5 @@
 //! The rewrites of `onsa fmt` that change the program's tree, and the way it writes (W3-12/t, unit U1;
-//! `spec/tools.md` §3.1, §3.3, §3.4 and §3.5; spec §0.2 (P2), §5.2, §6.1, §8.1, §11.4 and §18.2;
+//! `spec/tools.md` §3.1, §3.3, §3.4 and §3.5; spec §0.2 (P2), §0.5.1, §5.2, §6.1, §8.1, §11.4 and §18.2;
 //! plan S-29, S-56, S-68 and S-100; the reviews R-78 and P-7).
 //!
 //! `spec/tools.md` §3.3 closes the list of the rewrites that change the AST. W3-12 does the first of
