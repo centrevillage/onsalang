@@ -135,17 +135,17 @@ def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
     args = ap.parse_args(argv)
     try:
         registry = registry_codes(root, cmd)
-        plan = repo.read(root, repo.DOC_PLAN)
+        table, doc = repo.diag_text(root)
         if args.registry:
-            spec = spec_codes(repo.read(root, repo.SPEC))
-            retired = repo.retired_codes(plan)
+            spec = spec_codes(repo.spec_text(root))
+            retired = repo.retired_codes(table, doc)
             problems = check_registry(registry, spec, retired)
             summary = (
                 f"{len(registry)} codes in the registry; the spec names {len(spec)}, "
                 f"{len(retired)} retired ({', '.join(sorted(retired))})"
             )
         else:
-            phase2 = repo.phase2_codes(plan)
+            phase2 = repo.phase2_codes(table, doc)
             entries, load_errors = pending.load(root / repo.PENDING)
             if load_errors:
                 raise CheckError("\n".join(load_errors))

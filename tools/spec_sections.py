@@ -163,10 +163,10 @@ def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
     args = ap.parse_args(argv)
     try:
         cases = load_cases(root, cmd)
+        headings = spec_blocks.headings(repo.spec_text(root))
     except (repo.RepoError, OSError, json.JSONDecodeError) as e:
         print(f"cannot list the cases: {e}")
         return 1
-    headings = spec_blocks.headings((root / SPEC).read_text(encoding="utf-8"))
     if args.check:
         bad = unknown(cases, headings)
         for path, s in bad:

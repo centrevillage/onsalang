@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
-TOOLS_DOC = Path("docs") / "onsa-tools.md"
+TOOLS_DOC = repo.DOC_TOOLS  # the current spec of the tools (`repo.tools_doc` reads it or spec/tools.md)
 FILE_DIRS = ("examples", "std")
 
 
@@ -51,11 +51,13 @@ class Source:
 def sources(root):
     """(sources, counts, problems)."""
     out, counts, problems = [], {}, []
-    for doc in (repo.SPEC, TOOLS_DOC):
-        blocks, errors = spec_blocks.scan(repo.read(root, doc))
-        problems += [f"{doc}:{line}  {m}" for line, m in errors]
-        out += [Source(f"{doc}", b.code, b.line) for b in blocks]
-        counts[f"{doc} blocks"] = len(blocks)
+    for doc in (repo.spec_doc(root), repo.tools_doc(root)):
+        blocks, errors = spec_blocks.scan(doc.text)
+        problems += [f"{doc.where(line)}  {m}" for line, m in errors]
+        for b in blocks:
+            rel, first = doc.locate(b.line)
+            out.append(Source(Path(rel).as_posix(), b.code, first))
+        counts[f"{_name(doc)} blocks"] = len(blocks)
     for d in FILE_DIRS:
         files = [
             p
@@ -64,10 +66,15 @@ def sources(root):
         ]
         out += [Source(p.relative_to(root).as_posix(), repo.read(root, p.relative_to(root)), whole=True) for p in files]
         counts[f"{d} files"] = len(files)
-    for what in (f"{repo.SPEC} blocks", *(f"{d} files" for d in FILE_DIRS)):
+    for what in (next(iter(counts)), *(f"{d} files" for d in FILE_DIRS)):  # the spec's blocks first
         if counts[what] == 0:
             problems.append(f"no {what} to read; the check would pass reading nothing")
     return out, counts, problems
+
+
+def _name(doc):
+    """A document in the counts: its file, or `spec/` when it is joined from the chapters."""
+    return Path(doc.parts[0][0]).as_posix() if len(doc.parts) == 1 else f"{repo.SPEC_DIR}/"
 
 
 def check(root=repo.ROOT, cmd=repo.CASES_CMD):

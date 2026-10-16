@@ -29,6 +29,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
+import docs as docs_tool  # noqa: E402
 import gate_steps  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
@@ -90,11 +91,8 @@ def find_marks(root, dirs=SCANNED):
 
 
 def api_ids(root):
-    """The A numbers of the table of `docs/api-candidates.md`."""
-    rows = repo.rows(repo.read(root, DOC_API), r"A-\d+")
-    if not rows:
-        raise repo.RepoError(f"{DOC_API}: no table rows of A numbers found")
-    return set(rows)
+    """The A numbers: the files of `decisions/A/`, or the table of `docs/api-candidates.md` (`repo.Layout`)."""
+    return docs_tool.Index.of(root).ids("A")
 
 
 def check(marks, known):

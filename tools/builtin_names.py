@@ -561,7 +561,7 @@ def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
     try:
         std = repo.cases_json(root, cmd, "--std-names")
         members = repo.cases_json(root, cmd, "--builtin-members")
-        names = builtin_names(repo.read(root, SPEC), std, members)
+        names = builtin_names(repo.spec_text(root), std, members)
         found = scan(root, names)
         if args.print:
             lists, notes = load_allow(root / ALLOW) if (root / ALLOW).is_file() else (None, None)

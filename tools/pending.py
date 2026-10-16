@@ -97,6 +97,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import docs as docs_tool  # noqa: E402
 import gate_steps  # noqa: E402
 import repo  # noqa: E402
 import spec_blocks  # noqa: E402
@@ -161,7 +162,7 @@ class Entry:
 @dataclass
 class Docs:
     works: set  # W and T IDs
-    done: set  # the works marked done (✅)
+    done: set  # the works done (✅, or `status = "DONE"` in the new layout)
     reasons: set  # S and R IDs
     sections: set = frozenset()  # the numbered headings of the spec ("20", "11.4")
 
@@ -176,26 +177,22 @@ def stage_of(work):
     return m.group(1) if m.group(1) else f"M{m.group(2)}"
 
 
-def _table(doc, text, start, end, id_pattern, what):
-    rows = repo.rows(repo.section(text, start, end, doc) if start else text, id_pattern)
-    if not rows:
-        raise DocsError(f"{doc}: no table rows of {what} found" + (f" in `{start}`" if start else ""))
-    return rows
-
-
 def load_docs(root=ROOT):
-    """The IDs of the tables. Raises DocsError when a table is not found."""
-
-    rework, plan, review = (repo.read(root, d) for d in (repo.DOC_REWORK, repo.DOC_PLAN, repo.DOC_REVIEW))
-    w = _table(repo.DOC_REWORK, rework, "## 3.", "## 4.", r"W\d+-\d+", "W works")
-    t = _table(repo.DOC_PLAN, plan, "## 4.", "## 5.", r"T\d+-\d+", "T works")
-    s = _table(repo.DOC_PLAN, plan, "## 2.", "## 3.", r"S-\d+", "S numbers")
-    r = _table(repo.DOC_REVIEW, review, None, None, r"R-\d+", "R numbers")
-    works = {**w, **t}
-    sections = set(spec_blocks.headings(repo.read(root, repo.SPEC)))
+    """The IDs of the documents, each kind where `repo.Layout` reads it: the files of the new layout
+    (a work is done when its `status` is DONE) or the current tables (✅). Raises DocsError when a
+    table is not found or a directory has no file of an ID."""
+    index = docs_tool.Index.of(root)
+    lay, works = index.layout, dict(index.work_done())
+    if not works:
+        raise DocsError(f"{repo.KIND['W'].dir}/: no file of an ID")
+    # the T works only while the plan §4 is there (the history keeps them after the migration)
+    works |= lay.old_rows("T") if lay.source("W") == "old" else lay.peek_rows("T")
+    reasons = index.ids("S") | index.ids("R")
+    spec = repo.spec_doc(root, lay)
+    sections = set(spec_blocks.headings(spec.text))
     if not sections:
-        raise DocsError(f"{repo.SPEC}: no numbered heading found")
-    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=set(s) | set(r), sections=sections)
+        raise DocsError(f"{spec.parts[0][0]}: no numbered heading found")
+    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=reasons, sections=sections)
 
 
 def load(path, text=None):

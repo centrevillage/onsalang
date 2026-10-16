@@ -468,7 +468,7 @@ def keywords():
     """The keywords of the spec (§2.2, read as `tools/builtin_names.py` reads them)."""
     global _KEYWORDS
     if _KEYWORDS is None:
-        _KEYWORDS = frozenset(builtin_names.keywords(repo.read(ROOT, repo.SPEC)))
+        _KEYWORDS = frozenset(builtin_names.keywords(repo.spec_text(ROOT)))
     return _KEYWORDS
 
 

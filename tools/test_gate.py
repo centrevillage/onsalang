@@ -8,6 +8,7 @@ items that stand in for cargo.
     python3 -B tools/test_gate.py
 """
 import argparse
+import datetime
 import io
 import json
 import os
@@ -4225,15 +4226,19 @@ class DocsTool(unittest.TestCase):
             "docs/a.md:26: the row has 1 cells, the header 2",
             "docs/a.md:28: table rows with no header and delimiter row before them",
             "docs/a.md:30: table rows with no header and delimiter row before them",
-            "docs check: 6 problem(s) (tables 6)",
+            "heads, refs, relations: no directory of the new layout",
+            "docs check: 6 problem(s) (tables 6, heads 0, refs 0, relations 0, links 0)",
         ])  # fmt: skip
 
     def test_check_passes_and_fails_on_an_open_fence(self):
         self.write("docs/a.md", "| a | b |\n|---|---|\n| 1 | 2 |\n")
-        self.assertEqual(self.main("check"), (0, "docs check: no problem in 1 document(s) (tables)\n"))
+        none = "heads, refs, relations: no directory of the new layout\n"
+        self.assertEqual(self.main("check"), (0, none + "docs check: no problem in 1 document(s) "
+                                                        "(tables, heads, refs, relations, links)\n"))  # fmt: skip
         self.write("docs/b.md", "x\n````\n| a |\n```\n")
-        self.assertEqual(self.main("check"), (1, "== tables\ndocs/b.md:2: the code fence is not closed\n"
-                                                 "docs check: 1 problem(s) (tables 1)\n"))  # fmt: skip
+        self.assertEqual(self.main("check"), (1, "== tables\ndocs/b.md:2: the code fence is not closed\n" + none +
+                                                 "docs check: 1 problem(s) (tables 1, heads 0, refs 0, relations 0, "
+                                                 "links 0)\n"))  # fmt: skip
 
     def test_check_with_no_document_is_an_error(self):
         self.write("history/a.md", "| a |\n| 1 | 2 |\n")
@@ -4260,6 +4265,469 @@ class DocsTool(unittest.TestCase):
                          sorted(current[:3] + new[:3] + new[5:]))  # fmt: skip
         out = self.main("check")[1]
         self.assertEqual(re.findall(r"^(\S+):3:", out, re.M), sorted(current + new))
+
+
+
+FIELDS_HEADER = "| キー | 形 | 値 | 要る | 意味 |\n|---|---|---|---|---|\n"
+# A made-up repository in the new layout (X-2 DS-1): it passes `docs check`.
+NEW_LAYOUT = {
+    "decisions/README.md": "# 決定\n\n## 頭の欄\n\n" + FIELDS_HEADER + """\
+| `status` | 閉じた値 | `OPEN` / `DECIDED` / `DROPPED` | はい | 状態 |
+| `spec` | 節の並び | — | いいえ | 仕様の節 |
+| `tasks` | ID の並び（W、T、P2） | — | いいえ | 担う作業 |
+| `amends` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた前の決定 |
+| `amended_by` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた後の決定 |
+| `found_by` | 文字列 | — | いいえ | 見つけた票 |
+| `before` | ID（W） | — | いいえ | 期限の作業 |
+| `group` | 整数 | — | いいえ | 組 |
+| `decided` | 日付 | — | いいえ | 決めた日 |
+""",
+    "decisions/S/S-1.md": """\
++++
+status = "DECIDED"
+spec = ["§2.1"]
+tasks = ["W1-01"]
+amended_by = ["S-2"]
+decided = 2026-10-15
++++
+# S-1 字句
+
+- 決定: W1-02 で §3 と §2 を見る（計画 §8.6・§9、`docs/x.md` §5、`tools.md §1`）。
+- 経緯: C-40 と T5-8 と D-15 は確かめない。`decisions/S/S-2.md` も指す。
+
+```onsa
+S-77 §7
+```
+""",
+    "decisions/S/S-2.md": """\
++++
+status = "OPEN"
+tasks = ["W1-02", "P2"]
+amends = ["S-1"]
+found_by = "W1-01/t"
++++
+# S-2
+- 空白: R-1 と A-1。
+""",
+    "decisions/S/S-2.draft.md": "+++\ngroup = \n+++\n# S-3 S-999 §99\n",  # a draft is not checked
+    "decisions/A/A-1.md": '+++\nstatus = "DECIDED"\n+++\n# A-1 is_some\n',
+    "tasks/W/README.md": "# 作業\n\n## 頭の欄\n\n" + FIELDS_HEADER + """\
+| `status` | 閉じた値 | `PLAN` / `PENDING` / `DOING` / `DONE` | はい | 状態 |
+| `size` | 閉じた値 | `S` / `M` / `L` | いいえ | 大きさ |
+| `depends` | ID の並び（W） | — | いいえ | 依存 |
+| `marks` | 閉じた値の並び | `基盤` / `メモ` | いいえ | 印 |
+| `doing` | 文字列の並び | — | いいえ | 出ている票 |
+| `commit` | 文字列 | — | いいえ | コミット |
+""",
+    "tasks/W/W1-01.md": '+++\nstatus = "DONE"\ncommit = "abc"\n+++\n# W1-01 gate\n',
+    "tasks/W/W1-02.md": """\
++++
+status = "DOING"
+size = "M"
+depends = ["W1-01"]
+marks = ["基盤"]
+doing = ["U2/i"]
++++
+# W1-02 式
+""",
+    "tasks/diag-codes.md": "# 診断コード\n\n| コード | 内容 | 段 | M |\n|---|---|---|---|\n"
+                           "| E0612〜E0613 | x | — | 第 2 期 |\n\n欠番: E0611（S-1 でまとめた）。\n",
+    "issues/R/README.md": "# 問題\n\n## 頭の欄\n\n" + FIELDS_HEADER + """\
+| `status` | 閉じた値 | `OPEN` / `WONTFIX` / `DONE` | はい | 状態 |
+| `severity` | 閉じた値 | 高 / 中 / 低 | いいえ | 重さ |
+| `aspect` | 閉じた値 | 1 / 2 / 3 | いいえ | 観点 |
+| `spec` | 節の並び | — | いいえ | 仕様の節 |
+| `decisions` | ID の並び（S） | — | いいえ | 決定 |
+| `fix` | ID の並び（W） | — | いいえ | 直す作業 |
+| `found_by` | 文字列 | — | いいえ | 見つけた票 |
+""",
+    "issues/R/R-1.md": """\
++++
+status = "OPEN"
+severity = "中"
+aspect = 1
+decisions = ["S-2"]
+fix = ["W1-02"]
+found_by = "W1-02/b"
++++
+# R-1 候補
+""",
+    "spec/README.md": "# Spec\n\n## 0. 目的\n\n### 0.1 原則\n\n---\n\n## 1. 全体\n\n---\n\n## 章の一覧\n\n"
+                      "| § | ファイル |\n|---|---|\n| 2 | [字句](02-a.md) |\n| 3 | [演算子](03-b.md) |\n",
+    "spec/02-a.md": "## 2. 字句\n\n### 2.1 文字\n\n```\n## 9. not a heading\n```\n\n### 2.2 キーワード\n\n```\nfn let\n```\n\n---\n\n",
+    "spec/03-b.md": "## 3. 演算子\n\n### 3.1 群\n\n```onsa\nlet a = x + y - z\n```\n",
+    "spec/tools.md": "# tools\n\n## 1. graph\n\n```onsa\nprev~(x)\n```\n",
+    "rules/README.md": "# 規則\n\n- [共通](common.md)\n- [`x`](../README.md)\n",
+    "rules/common.md": "# 共通\n",
+    "README.md": '# Onsa\n\n[仕様](spec/README.md)、[決定](decisions/ "題")、[外](https://example.com/x)、[節](#a)、`[コード](none.md)`\n',
+    "tests/pending.toml": "",
+}
+# The same IDs in the current layout (a T work only here).
+OLD_LAYOUT = {
+    "docs/rework-phase1.md": "## 3. 作業\n| ID | 作業 |\n|---|---|\n| W1-01 ✅ | gate |\n| W1-02 | 式 |\n## 4. 残り\n",
+    "docs/implementation-tasks.md": "## 2. S\n| ID | 項目 |\n|---|---|\n| S-1 ✅ | 字句 |\n| S-2 | b |\n## 3. 設計\n"
+                                    "## 4. 作業\n| ID | 作業 |\n|---|---|\n| T1-1 | t |\n## 5. 診断コード\n"
+                                    "| コード | 内容 | 段 | M |\n|---|---|---|---|\n| E0612〜E0613 | x | — | 第 2 期 |\n\n"
+                                    "欠番: E0611（S-1 でまとめた）。\n## 6. 例\n",
+    "docs/review-impl-phase1.md": "| ID | 内容 |\n|---|---|\n| R-1 | 候補 |\n",
+    "docs/api-candidates.md": "| ID | 候補 |\n|---|---|\n| A-1 | is_some |\n",
+    "docs/onsa-tools.md": NEW_LAYOUT["spec/tools.md"],
+    "tests/pending.toml": "",
+}
+
+
+def split_spec(text, root):
+    """Cut a spec of one file into `spec/` as the migration does: the README is the text before
+    `## 2.` and the list of the chapters, a chapter starts at its `## N.` (not in a code block)."""
+    lines = text.split("\n")
+    kinds = docs_tool.line_kinds(lines)[0]
+    starts = [i for i, line in enumerate(lines) if kinds[i] == docs_tool.TEXT and re.match(r"## ([2-9]|\d\d+)\. ", line)]
+    root = Path(root)
+    (root / "spec").mkdir(parents=True, exist_ok=True)
+    head = "\n".join(lines[: starts[0]]) + "\n"
+    (root / repo.SPEC_README).write_bytes((head + repo.SPEC_INDEX_HEAD + "\n\n| § | ファイル |\n").encode())
+    for a, b in zip(starts, [*starts[1:], len(lines)]):
+        n = int(re.match(r"## (\d+)", lines[a]).group(1))
+        part = "\n".join(lines[a:b]) + ("\n" if b < len(lines) else "")
+        (root / "spec" / f"{n:02d}-c.md").write_bytes(part.encode())
+
+
+class DocsLayout(unittest.TestCase):
+    """X-2 U2: the IDs and their paths, `repo.Layout`, the spec as one text, the head fields, the field
+    tables of the READMEs, `docs check` (a), (b), (c), (e), and the readers switched to the new layout."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        return p
+
+    def layout(self, files=NEW_LAYOUT):
+        for rel, text in files.items():
+            self.write(rel, text)
+
+    def edit(self, rel, old, new):
+        p = self.root / rel
+        text = p.read_text(encoding="utf-8")
+        self.assertEqual(text.count(old), 1, old)
+        p.write_text(text.replace(old, new), encoding="utf-8")
+
+    def check(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", out):
+            code = docs_tool.main(["check", "--root", str(self.root)])
+        lines = [x for x in out.getvalue().splitlines() if not x.startswith(("== ", "docs check: "))]
+        return code, lines
+
+    def assertOne(self, rel, old, new, finding):
+        """Broken by one edit, `docs check` finds exactly `finding`; the edit undone, nothing."""
+        self.edit(rel, old, new)
+        self.assertEqual(self.check(), (1, [finding]), (rel, new))
+        self.edit(rel, new, old)
+
+    # ------------------------------------------------ the IDs and their paths
+
+    def test_the_kinds_and_the_paths(self):
+        self.assertEqual([repo.kind_of(i).name for i in ("RF-3", "R-3", "W3-13", "T5-8", "P2", "C-40", "S-01")],
+                         ["RF", "R", "W", "T", "P2", "C", "S"])  # fmt: skip
+        self.assertIsNone(repo.kind_of("S-1a"))
+        self.assertEqual(repo.ID_RE.findall("UTF-8 RF-3 _S-1 S-2 W3-13/t S-345a P2 T5-8 xR-9 `S-6`"),
+                         ["RF-3", "S-2", "W3-13", "S-345", "T5-8", "S-6"])  # fmt: skip
+        self.assertEqual(repo.path_of("S-537"), Path("decisions/S/S-537.md"))
+        self.assertEqual(repo.path_of("S-537", draft=True), Path("decisions/S/S-537.draft.md"))
+        self.assertEqual(repo.path_of("W3-13"), Path("tasks/W/W3-13.md"))
+        for bad, draft in (("W3-13", True), ("C-40", False), ("P2", False), ("x", False)):
+            with self.assertRaises(repo.RepoError):
+                repo.path_of(bad, draft)
+        with self.assertRaisesRegex(repo.RepoError, "not split"):
+            repo.section_path(self.root, "§2.1")
+        self.layout()
+        self.assertEqual([repo.section_path(self.root, s).as_posix() for s in ("§2.1", "§3", "§0.1", "§1", "tools.md §1")],
+                         ["spec/02-a.md", "spec/03-b.md", "spec/README.md", "spec/README.md", "spec/tools.md"])  # fmt: skip
+        for bad in ("§7", "6.1", "§"):
+            with self.assertRaises(repo.RepoError):
+                repo.section_path(self.root, bad)
+
+    # ------------------------------------------------ Layout
+
+    def test_the_layout_new_old_and_both(self):
+        self.layout(OLD_LAYOUT)
+        self.write(repo.SPEC, "# s\n\n## 2. a\n")
+        names = ("S", "W", "R", "A", "spec", "tools", "diag")
+        self.assertEqual([repo.Layout(self.root).source(n) for n in names], ["old"] * 7)
+        self.assertEqual([repo.Layout(self.root).source(n) for n in ("D", "RF", "C", "P2", "T")], [None] * 4 + ["old"])
+        new = {"S": "decisions/S/S-1.md", "W": "tasks/W/W1-01.md", "R": "issues/R/R-1.md", "A": "decisions/A/A-1.md",
+               "spec": "spec/README.md", "tools": "spec/tools.md", "diag": "tasks/diag-codes.md"}  # fmt: skip
+        for name, rel in new.items():
+            self.write(rel, NEW_LAYOUT[rel])
+            with self.assertRaisesRegex(repo.RepoError, f"^{name} is in both .*DS-5"):
+                repo.Layout(self.root).source(name)
+        self.assertEqual(self.check(), (2, ["docs.py check: S is in both decisions/S/ and the S numbers of "
+                                            "docs/implementation-tasks.md `## 2.`; the migration keeps no copy of what it moved (DS-5)"]))
+        # the current tables taken out: the new layout alone
+        self.layout(dict.fromkeys(OLD_LAYOUT, "# moved\n"))
+        (self.root / repo.SPEC).unlink()
+        (self.root / repo.DOC_TOOLS).unlink()
+        self.assertEqual([repo.Layout(self.root).source(n) for n in names], ["new"] * 7)
+        self.write(repo.DOC_PLAN, "## 2. S\nno rows\n## 3. x\n")  # a section with no row is not a table
+        self.assertEqual(repo.Layout(self.root).source("S"), "new")
+        self.layout()
+        self.assertEqual(self.check(), (0, []))
+
+    def test_the_layout_reads_only_what_it_needs(self):
+        self.layout(OLD_LAYOUT)
+        (self.root / repo.DOC_PLAN).write_bytes(b"\xff")
+        lay = repo.Layout(self.root)
+        self.assertEqual((lay.source("S"), lay.source("diag")), ("old", "old"))  # the plan is not read
+        self.assertEqual(lay.old_rows("W"), {"W1-01": True, "W1-02": False})
+        self.write("decisions/S/S-1.md", "")
+        with self.assertRaisesRegex(repo.RepoError, "implementation-tasks.md"):
+            repo.Layout(self.root).source("S")  # the new layout is there: the plan is looked at
+
+    # ------------------------------------------------ the spec as one text
+
+    def test_the_spec_joined_from_its_chapters(self):
+        self.layout()
+        doc = repo.spec_doc(self.root)
+        readme = NEW_LAYOUT["spec/README.md"]
+        one = readme[: readme.index(repo.SPEC_INDEX_HEAD)] + NEW_LAYOUT["spec/02-a.md"] + NEW_LAYOUT["spec/03-b.md"]
+        self.assertEqual(doc.text, one)
+        self.assertEqual(repo.spec_text(self.root), one)
+        line = one.split("\n").index("### 3.1 群") + 1
+        self.assertEqual((doc.where(1), doc.where(line), doc.where(13)), ("spec/README.md:1", "spec/03-b.md:3", "spec/02-a.md:1"))
+        self.assertEqual(spec_blocks.headings(doc.text), ["0", "0.1", "1", "2", "2.1", "2.2", "3", "3.1"])
+        # the round trip: a spec of one file cut into chapters is joined back to the same text
+        other = Path(self.tmp.name) / "cut"
+        split_spec(one, other)
+        self.assertEqual(repo.spec_text(other), one)
+        self.assertEqual(repo.tools_text(self.root), NEW_LAYOUT["spec/tools.md"])
+
+    def test_the_real_spec_joins_back(self):
+        text = repo.spec_text(repo.ROOT)
+        split_spec(text, self.root)
+        self.assertGreater(len(repo.chapters(self.root)), 10)
+        self.assertEqual(repo.spec_text(self.root), text)
+
+    def test_the_spec_that_cannot_be_joined(self):
+        self.layout()
+        readme = NEW_LAYOUT["spec/README.md"]
+        for rel, text, error in (
+            ("spec/README.md", readme.replace(repo.SPEC_INDEX_HEAD, "## 章"), "expected one line .*found 0"),
+            ("spec/README.md", readme + repo.SPEC_INDEX_HEAD + "\n", "found 2"),
+            ("spec/03-b.md", "## 4. 演算子\n", "spec/03-b.md:1: a chapter file starts with its heading `## 3. `"),
+            ("spec/02-a.md", NEW_LAYOUT["spec/02-a.md"].rstrip("\n"), "spec/02-a.md: does not end with a line end"),
+            ("spec/notes.md", "x\n", "spec/notes.md: not a chapter file"),
+            ("spec/02-b.md", "## 2. x\n", "the chapter 2 is also spec/02-a.md"),
+            (str(repo.SPEC), "# s\n", "spec is in both spec/README.md and onsa-lang-spec-0.3.md"),
+        ):
+            before = (self.root / rel).read_text(encoding="utf-8") if (self.root / rel).exists() else None
+            self.write(rel, text)
+            with self.assertRaisesRegex(repo.RepoError, error):
+                repo.spec_text(self.root)
+            if before is None:
+                (self.root / rel).unlink()
+            else:
+                self.write(rel, before)
+        self.assertEqual(repo.spec_text(self.root)[:6], "# Spec")
+        for rel in ("spec/02-a.md", "spec/03-b.md"):
+            (self.root / rel).unlink()
+        with self.assertRaisesRegex(repo.RepoError, "spec/: no chapter file"):
+            repo.spec_text(self.root)
+
+    # ------------------------------------------------ the head fields
+
+    def test_read_the_head_fields(self):
+        head = docs_tool.read_head(NEW_LAYOUT["decisions/S/S-1.md"])
+        self.assertEqual(head.values, {"status": "DECIDED", "spec": ["§2.1"], "tasks": ["W1-01"], "amended_by": ["S-2"],
+                                       "decided": datetime.date(2026, 10, 15)})  # fmt: skip
+        self.assertEqual((head.key_lines["decided"], head.heading), (6, (8, "# S-1 字句")))
+        self.assertEqual(docs_tool.read_head(NEW_LAYOUT["issues/R/R-1.md"]).values["aspect"], 1)
+        for text, error, line in (("# S-1\n", docs_tool.NO_HEAD, 1), ("+++\nstatus = 1\n", docs_tool.NOT_CLOSED, 1),
+                                  ("+++\n", docs_tool.NOT_CLOSED, 1), ('+++\na = "x"\nb = OPEN\n+++\n', "Invalid value", 3),
+                                  ('+++\na = "x"\na = "y"\n+++\n', "Cannot overwrite a value", 4)):  # where tomllib stops  # fmt: skip
+            head = docs_tool.read_head(text)
+            self.assertEqual((head.values, head.error, head.error_line), (None, error, line), text)
+
+    def test_write_the_head_fields_in_the_normal_form(self):
+        self.layout()
+        order = docs_tool.field_table(docs_tool.Tree(self.root, []), repo.KIND["S"]).order
+        body = "# S-3 x\n\n本文 `+++` と\n+++\n末尾\n"
+        p = self.write("decisions/S/S-3.md", "+++\ndecided=2026-10-15\n  status  =  'OPEN'\ntasks=['W1-01','W1-02']\n+++\n" + body)
+        values = docs_tool.read_head(p.read_text(encoding="utf-8")).values
+        docs_tool.write_head(self.root, "decisions/S/S-3.md", values, order)
+        self.assertEqual(p.read_bytes().decode(), '+++\nstatus = "OPEN"\ntasks = ["W1-01", "W1-02"]\ndecided = 2026-10-15\n+++\n' + body)
+        new = docs_tool.head_update(self.root, "decisions/S/S-3.md", {**values, "decided": None, "group": 3}, order)
+        self.assertEqual(new, '+++\nstatus = "OPEN"\ntasks = ["W1-01", "W1-02"]\ngroup = 3\n+++\n' + body)
+        # a file with no head fields gets them; the closing line with no line end gets one
+        self.write("decisions/S/S-4.md", "# S-4\n")
+        self.assertEqual(docs_tool.head_update(self.root, "decisions/S/S-4.md", {"status": "OPEN"}, order),
+                         '+++\nstatus = "OPEN"\n+++\n# S-4\n')  # fmt: skip
+        self.write("decisions/S/S-5.md", '+++\nstatus = "OPEN"\n+++')
+        self.assertEqual(docs_tool.head_update(self.root, "decisions/S/S-5.md", {"status": "DROPPED"}, order),
+                         '+++\nstatus = "DROPPED"\n+++\n')  # fmt: skip
+        # nothing is written: a key not in the table, a value TOML has but the form not, a swap file,
+        # head fields that cannot be read, CR line ends
+        before = p.read_bytes()
+        for values, error in (({"color": "x"}, "`color` is not a field"), ({"status": True}, "cannot write True")):
+            with self.assertRaisesRegex(docs_tool.DocsError, error):
+                docs_tool.write_head(self.root, "decisions/S/S-3.md", values, order)
+        self.write("decisions/S/.S-3.md.swp", "")
+        with self.assertRaisesRegex(docs_tool.DocsError, "swap file"):
+            docs_tool.write_head(self.root, "decisions/S/S-3.md", {"status": "OPEN"}, order)
+        self.assertEqual(p.read_bytes(), before)
+        self.write("decisions/S/S-6.md", "+++\nstatus = OPEN\n+++\n# S-6\n")
+        with self.assertRaisesRegex(docs_tool.DocsError, "S-6.md:2: Invalid value; fix the head fields by hand"):
+            docs_tool.head_update(self.root, "decisions/S/S-6.md", {"status": "OPEN"}, order)
+        (self.root / "decisions/S/S-7.md").write_bytes(b'+++\r\nstatus = "OPEN"\r\n+++\r\n')
+        with self.assertRaisesRegex(docs_tool.DocsError, "CR line ends"):
+            docs_tool.head_update(self.root, "decisions/S/S-7.md", {"status": "OPEN"}, order)
+
+    # ------------------------------------------------ docs check
+
+    def test_check_passes_on_the_new_layout(self):
+        self.layout()
+        code, lines = self.check()
+        self.assertEqual((code, lines), (0, []))
+
+    def test_check_heads(self):
+        self.layout()
+        s1, w2, r1, a1 = "decisions/S/S-1.md", "tasks/W/W1-02.md", "issues/R/R-1.md", "decisions/A/A-1.md"
+        self.assertOne(s1, 'status = "DECIDED"', "status = DECIDED", f"{s1}:2: Invalid value")
+        self.assertOne(s1, "+++\n#", "#", f"{s1}:1: {docs_tool.NOT_CLOSED}")
+        self.assertOne(a1, '+++\nstatus = "DECIDED"\n+++\n', "<!-- x -->\n", f"{a1}:1: {docs_tool.NO_HEAD}")
+        self.assertOne(a1, '"DECIDED"', '"DECIDED"\ncolor = "red"', f"{a1}:3: `color` is not a field of decisions/README.md")
+        self.assertOne(a1, 'status = "DECIDED"', 'group = 1', f"{a1}:1: the field `status` is required (decisions/README.md)")
+        self.assertOne(a1, '"DECIDED"', '"DONE"', f"{a1}:2: `status` has \"DONE\", not one of OPEN / DECIDED / DROPPED")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = "W1-01"', f"{s1}:4: `tasks` is not an array; its form is ID の並び（W、T、P2）")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = ["S-2"]', f"{s1}:4: `tasks` has \"S-2\", not an ID of W、T、P2")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "S-2"', f"{s1}:4: `before` has \"S-2\", not an ID of W")
+        self.assertOne(s1, '["§2.1"]', '["2.1"]', f"{s1}:3: `spec` has \"2.1\", not a section (`§6.1`, `tools.md §3.2`)")
+        self.assertOne(s1, "2026-10-15", '"2026-10-15"', f"{s1}:6: `decided` has \"2026-10-15\", not a date")
+        self.assertOne(r1, "aspect = 1", 'aspect = "1"', f"{r1}:4: `aspect` has \"1\", not one of 1 / 2 / 3")
+        self.assertOne(w2, '["基盤"]', '["基盤", "危険"]', f"{w2}:5: `marks` has \"危険\", not one of 基盤 / メモ")
+        self.assertOne(a1, "# A-1 is_some", "# A-2 is_some", f"{a1}:4: the first line after the head fields is not `# A-1 <title>`")
+        self.assertOne(a1, "# A-1 is_some", "A-1", f"{a1}:4: the first line after the head fields is not `# A-1 <title>`")
+        self.write("decisions/S/S1.md", "x")
+        self.write("decisions/S/R-1.md", "x")
+        code, lines = self.check()
+        self.assertEqual(lines, ["decisions/S/R-1.md:1: the name is not an ID of S (decisions/S/<ID>.md)",
+                                 "decisions/S/S1.md:1: the name is not an ID of S (decisions/S/<ID>.md)"])  # fmt: skip
+        (self.root / "decisions/S/S1.md").unlink()
+        (self.root / "decisions/S/R-1.md").unlink()
+        (self.root / "decisions/K").mkdir()
+        self.assertEqual(self.check(), (1, ["decisions/K: no file of an ID; the checks would pass reading nothing"]))
+
+    def test_check_a_broken_field_table_is_one_finding(self):
+        self.layout()
+        readme = "tasks/W/README.md"
+        # the files of the directory are not checked (W1-02 is broken too); the others still are
+        self.edit("tasks/W/W1-02.md", 'size = "M"', 'size = "XL"')
+        for old, new, what in (
+            ("| `size` | 閉じた値 | `S` / `M` / `L` | いいえ | 大きさ |", "| `size` | 閉じた値 | `S` / `M` / `L` | いいえ |", "8: the field table: 4 cells, not 5"),
+            ("| `depends` | ID の並び（W） |", "| `depends` | ID の列（W） |", "9: the field table: the form `ID の列（W）` is not known"),
+            ("| `depends` | ID の並び（W） |", "| `depends` | ID の並び（W、Z） |", "9: the field table: the form `ID の並び（W、Z）` names a kind"),
+            ("`S` / `M` / `L`", "`S` /  / `L`", "8: the field table: the values `S` /  / `L`"),
+            ("`S` / `M` / `L`", "`S` / `S`", "8: the field table: the values `S` / `S`"),
+            ("| `commit` | 文字列 | — |", "| `commit` | 文字列 | x |", "12: the field table: the values x of the form 文字列"),
+            ("| コミット |", "| コミット |\n| `Commit` | 文字列 | — | いいえ | x |", "13: the field table: the key `Commit`"),
+            ("| コミット |", "| コミット |\n| `size` | 文字列 | — | いいえ | x |", "13: the field table: the key `size` is given twice"),
+            ("| `size` | 閉じた値 | `S` / `M` / `L` | いいえ |", "| `size` | 閉じた値 | `S` / `M` / `L` | yes |", "8: the field table: 要る is `yes`"),
+            ("| キー | 形 | 値 | 要る | 意味 |", "| キー | 型 | 値 | 要る | 意味 |", "5: the field table: the header is not"),
+            ("## 頭の欄\n\n", "## 頭の欄\n\n## 次\n\n", "3: the field table: no table under the heading"),
+            ("# 作業\n", "# 作業\n\n## 頭の欄\n", "5: the field table: a second `## 頭の欄`"),
+        ):
+            self.edit(readme, old, new)
+            code, lines = self.check()
+            if "cells" in what:  # the check of the tables (d) finds the row too
+                self.assertEqual(lines.pop(0), f"{readme}:8: the row has 4 cells, the header 5")
+            self.assertEqual(len(lines), 1, (what, lines))
+            self.assertTrue(lines[0].startswith(f"{readme}:{what}"), (what, lines))
+            self.edit(readme, new, old)
+        (self.root / readme).unlink()
+        self.assertEqual(self.check()[1], ["tasks/W/README.md: no field table (`## 頭の欄` in tasks/W/README.md or tasks/README.md)"])
+
+    def test_check_refs(self):
+        self.layout()
+        s1, s2, w2 = "decisions/S/S-1.md", "decisions/S/S-2.md", "tasks/W/W1-02.md"
+        self.assertOne(s2, '["W1-02", "P2"]', '["W1-09", "P2", "T9-9"]', f"{s2}:3: tasks: W1-09 is not found (tasks/W/)")
+        self.assertOne(s2, "found_by = \"W1-01/t\"", "found_by = \"W1-08/t\"", f"{s2}:5: found_by: W1-08 is not found (tasks/W/)")
+        self.assertOne(s2, "R-1 と A-1", "R-1 と A-1、R-1、A-2、A-2", f"{s2}:8: A-2 is not found (decisions/A/)")
+        self.assertOne(w2, '["W1-01"]', '["W1-08"]', f"{w2}:4: depends: W1-08 is not found (tasks/W/)")
+        self.assertOne(s1, '["§2.1"]', '["§2.1", "§9.9"]', f"{s1}:3: spec: §9.9 is not a numbered heading of the spec")
+        self.assertOne(s1, "§3 と §2", "§3 と §2、§7", f"{s1}:10: §7 is not a numbered heading of the spec")
+        self.assertOne(s1, "`tools.md §1`", "`tools.md §1・§2`", f"{s1}:10: tools.md §2 is not a numbered heading of the spec of the tools")
+        # a kind still in the current table: read there
+        for rel in ("issues/R/R-1.md", "issues/R/README.md"):
+            (self.root / rel).unlink()
+        (self.root / "issues/R").rmdir()
+        self.write(repo.DOC_REVIEW, OLD_LAYOUT["docs/review-impl-phase1.md"])
+        self.assertEqual(self.check(), (0, []))
+        self.assertOne(s2, "R-1 と", "R-5 と", f"{s2}:8: R-5 is not found (the R numbers of docs/review-impl-phase1.md)")
+
+    def test_check_relations(self):
+        self.layout()
+        s1, s2, r1, w1 = "decisions/S/S-1.md", "decisions/S/S-2.md", "issues/R/R-1.md", "tasks/W/W1-01.md"
+        self.assertOne(s2, '["W1-02", "P2"]', '["W1-01"]', f"{s2}:2: OPEN, but every work of `tasks` is DONE (W1-01)")
+        self.assertOne(s1, 'amended_by = ["S-2"]\n', "group = 1\n", f"{s2}:4: `amends` has S-1, but S-1 has no S-2 in `amended_by`")
+        self.assertOne(s2, 'amends = ["S-1"]\n', "group = 1\n", f"{s1}:5: `amended_by` has S-2, but S-2 has no S-1 in `amends`")
+        self.assertOne(r1, 'fix = ["W1-02"]', 'fix = ["W1-01"]', f"{r1}:2: OPEN, but every work of `fix` is DONE (W1-01)")
+        self.assertOne(w1, 'commit = "abc"', 'doing = ["U1/i"]', f"{w1}:3: `doing` on a work that is DONE, not DOING")
+
+    def test_check_links(self):
+        self.layout()
+        self.assertOne("README.md", "[仕様](spec/README.md)", "[仕様](spec/README.md)、[無い](docs/none.md#x)", "README.md:3: the link docs/none.md#x is not found")
+        self.assertOne("rules/README.md", "(common.md)", "(commons.md)", "rules/README.md:3: the link commons.md is not found")
+
+    # ------------------------------------------------ the readers of the current tools
+
+    def test_load_docs_reads_both_layouts_alike(self):
+        self.layout()
+        new = pending.load_docs(self.root)
+        old_root = Path(self.tmp.name) / "old"
+        for rel, text in {**OLD_LAYOUT, str(repo.SPEC): repo.spec_text(self.root)}.items():
+            (old_root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (old_root / rel).write_text(text, encoding="utf-8")
+        old = pending.load_docs(old_root)
+        self.assertEqual((new.works, new.done, new.reasons), ({"W1-01", "W1-02"}, {"W1-01"}, {"S-1", "S-2", "R-1"}))
+        self.assertEqual((old.works - {"T1-1"}, old.done, old.reasons, old.sections), (new.works, new.done, new.reasons, new.sections))
+        self.assertEqual(gap_marks.api_ids(self.root), gap_marks.api_ids(old_root))
+        for root in (self.root, old_root):
+            text, doc = repo.diag_text(root)
+            self.assertEqual((repo.retired_codes(text, doc), repo.phase2_codes(text, doc)), ({"E0611"}, {"E0612", "E0613"}))
+        self.assertEqual(repo.diag_text(self.root)[1], repo.DIAG_CODES)
+        with self.assertRaisesRegex(repo.RepoError, "tasks/diag-codes.md: no row of the table is `第 2 期`"):
+            repo.phase2_codes("| E0001 | x |\n", repo.DIAG_CODES)
+        # a directory with no file of an ID is an error, not an empty table
+        for rel in ("tasks/W/W1-01.md", "tasks/W/W1-02.md"):
+            (self.root / rel).unlink()
+        with self.assertRaisesRegex(pending.DocsError, "tasks/W/: no file of an ID"):
+            pending.load_docs(self.root)
+
+    def test_the_readers_of_the_spec_in_the_new_layout(self):
+        self.layout()
+        # spec_sections: a section only the chapters have
+        cases = [{"path": "tests/a.onsa", "spec": ["§3.1"]}, {"path": "tests/b.onsa", "spec": ["§9.9"]}]
+        with mock.patch.object(repo, "cases_json", return_value=cases):
+            out = io.StringIO()
+            with mock.patch.object(sys, "stdout", out):
+                code = spec_sections.main(["--check"], root=self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("tests/b.onsa: [test] spec names §9.9", out.getvalue())
+        self.assertNotIn("§3.1", out.getvalue())
+        # keywords: §2.2 of the chapter 2
+        with mock.patch.object(repo, "cases_json", return_value=["fn", "let"]):
+            self.assertEqual(quiet(keywords.main, ["--root", str(self.root)]), 0)
+        # default_inits: the lines of the blocks in their files
+        srcs = default_inits.sources(self.root)[0]
+        self.assertEqual([(s.shown, s.first) for s in srcs], [("spec/03-b.md", 6), ("spec/tools.md", 6)])
+        # check_spec_examples: the lines of the blocks in their files
+        problems, _ = cse.check(repo.spec_doc(self.root), self.root / "tests" / "spec", self.root / repo.PENDING, self.root)
+        self.assertEqual([p.split("  ")[0] for p in problems], ["spec/03-b.md:6"])
 
 
 if __name__ == "__main__":

@@ -71,7 +71,7 @@ def main(argv=None, cmd=repo.CASES_CMD):
     root = args.root
     try:
         lexer = repo.cases_json(root, cmd, "--keywords")
-        spec = spec_keywords((root / repo.SPEC).read_text(encoding="utf-8"))
+        spec = spec_keywords(repo.spec_text(root))
     except (repo.RepoError, OSError, ValueError) as e:
         print(f"cannot read the keywords: {e}")
         return 1

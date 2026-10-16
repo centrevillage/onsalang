@@ -42,27 +42,29 @@ def contains_lines(body, block):
     return any(body[i] == first and body[i : i + n] == block for i in range(len(body) - n + 1))
 
 
-def check(spec_path, tests_dir, pending_path, root=ROOT):
-    """Return (problems, notes). A problem fails the check."""
-    spec_text = Path(spec_path).read_text(encoding="utf-8")
+def check(spec, tests_dir, pending_path, root=ROOT):
+    """Return (problems, notes). A problem fails the check. `spec`: a path, or the spec as
+    `repo.spec_doc` joins it (the lines are shown in the files it was joined from)."""
+    if not isinstance(spec, repo.Joined):
+        spec = repo.Joined(Path(spec).read_text(encoding="utf-8"), ((Path(spec).name, 1),))
+    spec_text, spec_name = spec.text, spec_shown(spec)
     corpus = {
         p: spec_blocks.normalize(p.read_text(encoding="utf-8")).split("\n")
         for p in sorted(Path(tests_dir).rglob("*.onsa"))
     }
     entries, load_errors = pending.load(pending_path)
     listed = {e.target: e for e in pending.of_kind(entries, "spec-example")}
-    spec_name = Path(spec_path).name
     shown_list = pending.show_path(pending_path, root)
     problems = [f"{shown_list}: {m}" for m in load_errors]
     notes = []
     blocks, fence_errors = spec_blocks.scan(spec_text)
-    problems += [f"{spec_name}:{line}  {m} (not silenced by the list)" for line, m in fence_errors]
+    problems += [f"{spec.where(line)}  {m} (not silenced by the list)" for line, m in fence_errors]
     seen = set()
     all_ids = []
     for b in blocks:
         sid = spec_blocks.spec_id(b.section, b.code)
         all_ids.append((b.line, sid))
-        where = f"{spec_name}:{b.line}"
+        where = spec.where(b.line)
         norm = spec_blocks.normalize(b.code)
         if not norm:
             problems.append(f"{where}  the ```onsa block is empty (not silenced by the list)")
@@ -92,9 +94,14 @@ def check(spec_path, tests_dir, pending_path, root=ROOT):
         msg = f"{entry.label()}: names no ```onsa block of {spec_name} (the block changed or was removed)"
         hints = _hints(sid, all_ids)
         if hints:
-            msg += "\n" + "\n".join(f"      now {spec_name}:{line}: {cur}" for line, cur in hints)
+            msg += "\n" + "\n".join(f"      now {spec.where(line)}: {cur}" for line, cur in hints)
         problems.append(msg)
     return problems, notes
+
+
+def spec_shown(spec):
+    """The name of the spec in messages: its file, or `spec/` when it is joined from the chapters."""
+    return Path(spec.parts[0][0]).name if len(spec.parts) == 1 else f"{repo.SPEC_DIR}/"
 
 
 def _hints(sid, all_ids):
@@ -112,17 +119,19 @@ def _hints(sid, all_ids):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Check the spec's ```onsa blocks against tests/spec.")
-    ap.add_argument("spec", nargs="?", type=Path, default=ROOT / repo.SPEC)
+    ap.add_argument("spec", nargs="?", type=Path, help="default: the spec (`repo.spec_doc`)")
     ap.add_argument("tests", nargs="?", type=Path, default=ROOT / "tests" / "spec")
     ap.add_argument("--pending", type=Path, default=ROOT / repo.PENDING)
     args = ap.parse_args(argv)
-    problems, notes = check(args.spec, args.tests, args.pending)
+    spec = args.spec or repo.spec_doc(ROOT)
+    problems, notes = check(spec, args.tests, args.pending)
     for n in notes:
         print(n)
     for p in problems:
         print(p)
     if problems:
-        print(f"{len(problems)} problem(s) between {args.spec.name} and {pending.show_path(args.tests, ROOT)}")
+        name = args.spec.name if args.spec else spec_shown(spec)
+        print(f"{len(problems)} problem(s) between {name} and {pending.show_path(args.tests, ROOT)}")
         return 1
     print(f"all spec examples are covered by {pending.show_path(args.tests, ROOT)} ({len(notes)} pending)")
     return 0

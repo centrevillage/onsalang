@@ -4,13 +4,17 @@
 - reading a document, a section of it, and the IDs of its table rows;
 - running `onsa_cases` (the test runner's and the compiler's lists) and
   reading its JSON;
-- reading the plan §5: the retired codes and the codes of the second phase;
+- reading the plan §5 (`tasks/diag-codes.md`): the retired codes and the codes of the second phase;
 - the Markdown documents the document tools read (`doc_files`, X-2 DT-7);
+- the kinds of the IDs and their paths (`KINDS`, X-2 DT-1), where each kind and the spec are read
+  from (`Layout`: the new layout or the current tables, X-2 DT-7), and the spec as one text
+  (`spec_doc`, `tools_doc`);
 - the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`).
 """
 import json
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +38,14 @@ class RepoError(Exception):
 def read(root, rel):
     try:
         return (Path(root) / rel).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise RepoError(f"{rel}: {e}") from e
+
+
+def read_exact(root, rel):
+    """The text of a file with its line ends as they are (no newline translation)."""
+    try:
+        return (Path(root) / rel).read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError) as e:
         raise RepoError(f"{rel}: {e}") from e
 
@@ -84,28 +96,40 @@ PHASE2_CELL = "第 2 期"
 CODE_RANGE_CELL = re.compile(r"E(\d{4})\s*〜\s*E(\d{4})")
 
 
-def _plan_section5(plan_text):
-    return section(plan_text, "## 5.", "## 6.", DOC_PLAN)
+def _codes_table(text, doc):
+    """(the text of the table of the codes, its name in messages): the plan §5, or the whole
+    `tasks/diag-codes.md` (X-2 DF-6)."""
+    if Path(doc) == DOC_PLAN:
+        return section(text, "## 5.", "## 6.", DOC_PLAN), f"{DOC_PLAN} §5"
+    return text, str(doc)
 
 
-def retired_codes(plan_text):
+def diag_text(root):
+    """(the text, the document) of the table of the codes, as `Layout` reads it."""
+    doc = DIAG_CODES if Layout(root).source("diag") == "new" else DOC_PLAN
+    return read(root, doc), doc
+
+
+def retired_codes(text, doc=DOC_PLAN):
     """The retired codes: the line of §5 that starts with "欠番:". Codes in
     parentheses and after its first sentence are not retired."""
-    lines = [line for line in _plan_section5(plan_text).split("\n") if line.startswith(RETIRED_HEAD)]
+    body, name = _codes_table(text, doc)
+    lines = [line for line in body.split("\n") if line.startswith(RETIRED_HEAD)]
     if len(lines) != 1:
-        raise RepoError(f"{DOC_PLAN} §5: expected one line starting with `{RETIRED_HEAD}`, found {len(lines)}")
+        raise RepoError(f"{name}: expected one line starting with `{RETIRED_HEAD}`, found {len(lines)}")
     body = re.sub(r"（[^）]*）|\([^)]*\)", "", lines[0][len(RETIRED_HEAD) :]).split("。", 1)[0]
     codes = set(CODE.findall(body))
     if not codes:
-        raise RepoError(f"{DOC_PLAN} §5: the `{RETIRED_HEAD}` line names no code")
+        raise RepoError(f"{name}: the `{RETIRED_HEAD}` line names no code")
     return codes
 
 
-def phase2_codes(plan_text):
+def phase2_codes(text, doc=DOC_PLAN):
     """The codes of the rows of the §5 table whose last cell is "第 2 期".
     Ranges in the first cell (`E0612〜E0614`) are expanded."""
     codes = set()
-    for line in _plan_section5(plan_text).split("\n"):
+    body, name = _codes_table(text, doc)
+    for line in body.split("\n"):
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -115,11 +139,11 @@ def phase2_codes(plan_text):
         for m in CODE_RANGE_CELL.finditer(first):
             lo, hi = int(m.group(1)), int(m.group(2))
             if hi < lo:
-                raise RepoError(f"{DOC_PLAN} §5: the range `{m.group(0)}` goes down")
+                raise RepoError(f"{name}: the range `{m.group(0)}` goes down")
             codes |= {f"E{n:04d}" for n in range(lo, hi + 1)}
         codes |= set(CODE.findall(CODE_RANGE_CELL.sub("", first)))
     if not codes:
-        raise RepoError(f"{DOC_PLAN} §5: no row of the table is `{PHASE2_CELL}`")
+        raise RepoError(f"{name}: no row of the table is `{PHASE2_CELL}`")
     return codes
 
 
@@ -150,6 +174,233 @@ def is_spec_doc(rel):
     """`rel` (relative to the root) is the spec: a file of `spec/`, the spec file, the spec of the tools."""
     rel = Path(rel)
     return rel.parts[:1] == (SPEC_DIR,) or rel in (SPEC, DOC_TOOLS)
+
+
+
+# ---------------------------------------------------------------- the IDs and their paths (X-2 DT-1, DS-1)
+
+
+@dataclass(frozen=True)
+class Kind:
+    name: str
+    pattern: str  # the spelling of an ID: the file name and the bare ID in the text
+    dir: str = None  # the directory of the new layout; None: no file to check (the history, P2)
+    draft: bool = False  # has drafts `S-xxx.draft.md`
+    old: tuple = None  # the current table: (document, first heading, next heading, what); None: no reader
+    bare: bool = True  # looked for as a bare ID in the text
+
+
+KINDS = (
+    Kind("S", r"S-\d+", "decisions/S", True, (DOC_PLAN, "## 2.", "## 3.", "S numbers")),
+    Kind("D", r"D-\d+", "decisions/D"),
+    Kind("K", r"K-\d+", "decisions/K"),
+    Kind("Q", r"Q-\d+", "decisions/Q"),
+    Kind("A", r"A-\d+", "decisions/A", old=(DOC_API, None, None, "A numbers")),
+    Kind("R", r"R-\d+", "issues/R", old=(DOC_REVIEW, None, None, "R numbers")),
+    Kind("RF", r"RF-\d+", "issues/RF"),
+    Kind("X", r"X-\d+", "issues/X"),
+    Kind("W", r"W\d+-\d+", "tasks/W", old=(DOC_REWORK, "## 3.", "## 4.", "W works")),
+    # the kinds whose files are in the history: their IDs are not checked (X-2 DF-6 `refs`)
+    Kind("C", r"C-\d+"),
+    Kind("T", r"T\d+-\d+", old=(DOC_PLAN, "## 4.", "## 5.", "T works")),  # read while the plan §4 is there
+    Kind("P2", r"P2", bare=False),  # the second phase in `tasks` (X-2 DF-4); not an ID in the text
+)
+KIND = {k.name: k for k in KINDS}
+# A bare ID: not after a letter, a digit, `_` or `-`, not before a digit (no `F-8` in `UTF-8`).
+ID_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:"
+    + "|".join(k.pattern for k in sorted(KINDS, key=lambda k: -len(k.name)) if k.bare)
+    + r")(?![0-9])"
+)
+SECTION_RE = re.compile(r"(?:(?P<tools>tools\.md) )?§(?P<num>\d+(?:\.\d+)*)")
+
+
+def kind_of(id_):
+    """The Kind whose spelling is the whole of `id_`, or None."""
+    return next((k for k in KINDS if re.fullmatch(k.pattern, id_)), None)
+
+
+def path_of(id_, draft=False):
+    """`S-537` -> `decisions/S/S-537.md` (`.draft.md` with `draft`)."""
+    kind = kind_of(id_)
+    if kind is None or kind.dir is None or (draft and not kind.draft):
+        raise RepoError(f"{id_}: no {'draft' if draft else 'file'} of the new layout for it")
+    return Path(kind.dir) / f"{id_}{'.draft' if draft else ''}.md"
+
+
+def section_path(root, sec):
+    """`§6.1` -> `spec/06-<name>.md` (the chapter), `§0` and `§1` -> `spec/README.md`,
+    `tools.md §3.2` -> `spec/tools.md`. Only in the new layout."""
+    m = SECTION_RE.fullmatch(sec)
+    if m is None:
+        raise RepoError(f"{sec}: not a section (`§6.1` or `tools.md §3.2`)")
+    if not (Path(root) / SPEC_README).is_file():
+        raise RepoError(f"{sec}: the spec is not split into {SPEC_DIR}/ (no {SPEC_README})")
+    if m.group("tools"):
+        return SPEC_TOOLS
+    n = int(m.group("num").split(".")[0])
+    path = SPEC_README if n <= 1 else chapters(root).get(n)
+    if path is None:
+        raise RepoError(f"{sec}: no chapter file {SPEC_DIR}/{n:02d}-*.md")
+    return path
+
+
+# ---------------------------------------------------------------- where each kind is read from (X-2 DT-7)
+
+SPEC_README = Path(SPEC_DIR) / "README.md"
+SPEC_TOOLS = Path(SPEC_DIR) / "tools.md"
+DIAG_CODES = Path("tasks") / "diag-codes.md"
+# the documents that are not kinds of IDs: (the new file, the current file; None: the plan §5)
+FILES = {"spec": (SPEC_README, SPEC), "tools": (SPEC_TOOLS, DOC_TOOLS), "diag": (DIAG_CODES, None)}
+
+
+class Layout:
+    """Where each kind of ID, the spec, the spec of the tools and the table of the codes are read
+    from: the new layout when its directory (file) is there, else the current table (DT-C). Both
+    are an error (the migration keeps no copy, DS-5); the current table is looked at for that only
+    when the new one is there. Nothing is read before it is asked; each document is read once."""
+
+    def __init__(self, root):
+        self.root, self._texts, self._source = Path(root), {}, {}
+
+    def text(self, rel):
+        if rel not in self._texts:
+            self._texts[rel] = read(self.root, rel)
+        return self._texts[rel]
+
+    def source(self, name):
+        """"new", "old", or None (no reader of the current documents: D, K, Q, RF, X, C, P2)."""
+        if name not in self._source:
+            if name in FILES:
+                new, has_old = (self.root / FILES[name][0]).is_file(), True
+            else:
+                kind = KIND[name]
+                new, has_old = kind.dir is not None and (self.root / kind.dir).is_dir(), kind.old is not None
+            if new and self._old_there(name):
+                where = FILES[name][0] if name in FILES else f"{KIND[name].dir}/"
+                raise RepoError(f"{name} is in both {where} and {self.old_name(name)}; "
+                                "the migration keeps no copy of what it moved (DS-5)")  # fmt: skip
+            self._source[name] = "new" if new else "old" if has_old else None
+        return self._source[name]
+
+    def old_name(self, name):
+        """The current table of a kind (or document), for messages."""
+        if name == "diag":
+            return f"{DOC_PLAN} §5"
+        if name in FILES:
+            return str(FILES[name][1])
+        doc, start, _, what = KIND[name].old
+        return f"the {what} of {doc}" + (f" `{start}`" if start else "")
+
+    def _old_there(self, name):
+        if name == "diag":
+            return (self.root / DOC_PLAN).is_file() and any(
+                line.startswith("## 5.") for line in self.text(DOC_PLAN).split("\n")
+            )  # fmt: skip
+        if name in FILES:
+            return (self.root / FILES[name][1]).is_file()
+        return bool(KIND[name].old and self.peek_rows(name))
+
+    def old_rows(self, name):
+        """{id: done} of the current table; RepoError when it is not found (as the tools always said)."""
+        doc, start, end, what = KIND[name].old
+        text = self.text(doc)
+        found = rows(section(text, start, end, doc) if start else text, KIND[name].pattern)
+        if not found:
+            raise RepoError(f"{doc}: no table rows of {what} found" + (f" in `{start}`" if start else ""))
+        return found
+
+    def peek_rows(self, name):
+        """{id: done} of the current table, or {} when its document or its section is not there."""
+        doc, start, end, _ = KIND[name].old
+        if not (self.root / doc).is_file():
+            return {}
+        text = self.text(doc)
+        if start and not any(line.startswith(start) for line in text.split("\n")):
+            return {}
+        return rows(section(text, start, end, doc) if start else text, KIND[name].pattern)
+
+
+# ---------------------------------------------------------------- the spec as one text (X-2 DS-4, DF-2)
+
+# The heading of `spec/README.md` that starts its list of the chapters: what is before it is the head
+# of the spec (its H1 to the end of §1); it and what follows are not part of the spec's text.
+SPEC_INDEX_HEAD = "## 章の一覧"
+CHAPTER_FILE = re.compile(r"(\d{2})-[a-z0-9-]+\.md")
+
+
+@dataclass(frozen=True)
+class Joined:
+    """A text joined from files: `parts` are (file, the line of the text where it starts)."""
+
+    text: str
+    parts: tuple
+
+    def locate(self, line):
+        """(file, line in it) of a line (from 1) of the text."""
+        rel, start = next(p for p in reversed(self.parts) if p[1] <= line)
+        return rel, line - start + 1
+
+    def where(self, line):
+        rel, n = self.locate(line)
+        return f"{Path(rel).as_posix()}:{n}"
+
+
+def chapters(root):
+    """{number: path} of the chapter files of `spec/`. Raises RepoError on another file or a number
+    given twice (a file put in the wrong place is never skipped)."""
+    out = {}
+    for p in sorted((Path(root) / SPEC_DIR).glob("*.md")):
+        if p.name in (SPEC_README.name, SPEC_TOOLS.name):
+            continue
+        m = CHAPTER_FILE.fullmatch(p.name)
+        if m is None:
+            raise RepoError(f"{SPEC_DIR}/{p.name}: not a chapter file (`NN-<name>.md`), the README or tools.md")
+        n = int(m.group(1))
+        if n in out:
+            raise RepoError(f"{SPEC_DIR}/{p.name}: the chapter {n} is also {out[n].as_posix()}")
+        out[n] = Path(SPEC_DIR) / p.name
+    return out
+
+
+def spec_doc(root, layout=None):
+    """The spec as one text: the head of `spec/README.md` (before SPEC_INDEX_HEAD) and the chapters in
+    the order of their numbers, joined as they are (each chapter keeps the `---` that ends it); or
+    the current spec file."""
+    if (layout or Layout(root)).source("spec") == "old":
+        return Joined(read_exact(root, SPEC), ((SPEC, 1),))
+    lines = read_exact(root, SPEC_README).split("\n")
+    at = [i for i, line in enumerate(lines) if line == SPEC_INDEX_HEAD]
+    if len(at) != 1:
+        raise RepoError(f"{SPEC_README}: expected one line `{SPEC_INDEX_HEAD}`, found {len(at)}")
+    parts, texts, line = [(SPEC_README, 1)], ["\n".join(lines[: at[0]]) + "\n"], at[0] + 1
+    found = chapters(root)
+    if not found:
+        raise RepoError(f"{SPEC_DIR}/: no chapter file (`NN-<name>.md`)")
+    for n, rel in sorted(found.items()):
+        text = read_exact(root, rel)
+        if not text.startswith(f"## {n}. "):
+            raise RepoError(f"{rel.as_posix()}:1: a chapter file starts with its heading `## {n}. `")
+        if not texts[-1].endswith("\n"):
+            raise RepoError(f"{Path(parts[-1][0]).as_posix()}: does not end with a line end")
+        parts.append((rel, line))
+        texts.append(text)
+        line += text.count("\n")
+    return Joined("".join(texts), tuple(parts))
+
+
+def spec_text(root):
+    return spec_doc(root).text
+
+
+def tools_doc(root):
+    """The spec of the tools: `spec/tools.md` or the current `docs/onsa-tools.md`."""
+    rel = SPEC_TOOLS if Layout(root).source("tools") == "new" else DOC_TOOLS
+    return Joined(read_exact(root, rel), ((rel, 1),))
+
+
+def tools_text(root):
+    return tools_doc(root).text
 
 
 # ---------------------------------------------------------------- build outputs
