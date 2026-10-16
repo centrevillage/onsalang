@@ -41,6 +41,11 @@ def headings(spec_text):
     return _walk(spec_text)[2]
 
 
+def heading_line(spec_text, section):
+    """The line (from 1) of the first heading of the section ("4.1"), or None."""
+    return _walk(spec_text)[3].get(section, {}).get("line")
+
+
 def section_lines(spec_text, section):
     """The lines of the section ("4.1") outside fences, without its heading and
     its subsections, or None when the spec has no such heading."""
@@ -68,7 +73,7 @@ def _walk(spec_text):
             if h:
                 section = h.group(1)
                 sections.append(section)
-                content.setdefault(section, {"lines": [], "fences": []})
+                content.setdefault(section, {"lines": [], "fences": []}).setdefault("line", i + 1)
             else:
                 content[section]["lines"].append(lines[i])
             i += 1

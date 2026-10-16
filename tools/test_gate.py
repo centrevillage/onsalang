@@ -4392,9 +4392,8 @@ def split_spec(text, root):
         (root / "spec" / f"{n:02d}-c.md").write_bytes(part.encode())
 
 
-class DocsLayout(unittest.TestCase):
-    """X-2 U2: the IDs and their paths, `repo.Layout`, the spec as one text, the head fields, the field
-    tables of the READMEs, `docs check` (a), (b), (c), (e), and the readers switched to the new layout."""
+class DocsTree(unittest.TestCase):
+    """A made-up tree of documents in a temporary directory (the base of DocsLayout and DocsCommands)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -4416,6 +4415,11 @@ class DocsLayout(unittest.TestCase):
         text = p.read_text(encoding="utf-8")
         self.assertEqual(text.count(old), 1, old)
         p.write_text(text.replace(old, new), encoding="utf-8")
+
+
+class DocsLayout(DocsTree):
+    """X-2 U2: the IDs and their paths, `repo.Layout`, the spec as one text, the head fields, the field
+    tables of the READMEs, `docs check` (a), (b), (c), (e), and the readers switched to the new layout."""
 
     def check(self):
         out = io.StringIO()
@@ -4728,6 +4732,339 @@ class DocsLayout(unittest.TestCase):
         # check_spec_examples: the lines of the blocks in their files
         problems, _ = cse.check(repo.spec_doc(self.root), self.root / "tests" / "spec", self.root / repo.PENDING, self.root)
         self.assertEqual([p.split("  ")[0] for p in problems], ["spec/03-b.md:6"])
+
+
+class DocsCommands(DocsTree):
+    """X-2 U3: the commands of `docs.py` that read (path, back, refs; show, list, changes, ticket) and
+    write (set, note, new, draft, amend), on NEW_LAYOUT and OLD_LAYOUT."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(docs_tool, "today", return_value=datetime.date(2026, 10, 16))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_(self, *argv):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", out):
+            code = docs_tool.main([*argv, "--root", str(self.root)])
+        return code, out.getvalue().splitlines()
+
+    def read(self, rel):
+        return (self.root / rel).read_text(encoding="utf-8")
+
+    def old_layout(self):
+        readme = NEW_LAYOUT["spec/README.md"]
+        spec = readme[: readme.index(repo.SPEC_INDEX_HEAD)] + NEW_LAYOUT["spec/02-a.md"] + NEW_LAYOUT["spec/03-b.md"]
+        self.layout({**OLD_LAYOUT, str(repo.SPEC): spec})
+
+    def assertRefused(self, argv, lines, unchanged=()):
+        """`docs.py <argv>` writes nothing, prints `lines`, and exits 1."""
+        before = {rel: self.read(rel) for rel in unchanged}
+        code, out = self.run_(*argv)
+        self.assertEqual((code, out), (1, [*lines, f"docs {argv[0]}: nothing is written"]), argv)
+        self.assertEqual({rel: self.read(rel) for rel in unchanged}, before)
+
+    # ------------------------------------------------ path, back, refs
+
+    def test_path(self):
+        self.layout()
+        self.assertEqual(self.run_("path", "S-1", "W1-02", "R-1", "A-1", "§2.1", "§0.1", "§3", "tools.md §1"), (0, [
+            "decisions/S/S-1.md", "tasks/W/W1-02.md", "issues/R/R-1.md", "decisions/A/A-1.md", "spec/02-a.md:3",
+            "spec/README.md:5", "spec/03-b.md:1", "spec/tools.md:3"]))  # fmt: skip
+        self.assertEqual(self.run_("path", "S-9", "S-2", "§9.9", "tools.md §2", "C-40", "D-1"), (1, [
+            "S-9: not found (decisions/S/)", "decisions/S/S-2.md", "§9.9: not found (not a numbered heading of the spec)",
+            "tools.md §2: not found (not a numbered heading of the spec of the tools)",
+            "C-40: not found (a kind with no file: the history or the second phase)", "D-1: not found (no decisions/D/)"]))  # fmt: skip
+        self.assertEqual(self.run_("path", "--abs", "S-1"), (0, [(self.root / "decisions/S/S-1.md").resolve().as_posix()]))
+        code, out = self.run_("path", "S-1", "x")
+        self.assertEqual((code, out[-1]), (2, "docs.py path: x: not an ID or a section (`S-537`, `§6.1`, `tools.md §3.2`)"))
+
+    def test_path_back_refs_in_the_current_layout(self):
+        self.old_layout()
+        self.assertEqual(self.run_("path", "S-1", "W1-02", "R-1", "A-1", "T1-1", "§2.1", "tools.md §1"), (0, [
+            "docs/implementation-tasks.md:4", "docs/rework-phase1.md:5", "docs/review-impl-phase1.md:3",
+            "docs/api-candidates.md:3", "docs/implementation-tasks.md:10", "onsa-lang-spec-0.3.md:15",
+            "docs/onsa-tools.md:3"]))  # fmt: skip
+        self.assertEqual(self.run_("path", "S-9"), (1, ["S-9: not found (the S numbers of docs/implementation-tasks.md `## 2.`)"]))
+        # back: the row of the ID itself is not a mention
+        self.assertEqual(self.run_("back", "S-1"), (0, [
+            "== text", "docs/implementation-tasks.md:16: 欠番: E0611（S-1 でまとめた）。",
+            "docs back: S-1: 0 key(s), 1 line(s) of text in 1 file(s)"]))  # fmt: skip
+        self.write("docs/carry.md", "# 持ち越し\n\nS-1 と W1-02、R-1、A-1、T1-1、S-9、S-1。\n")
+        self.assertEqual(self.run_("refs", "docs/carry.md"), (0, [
+            "S-1\t✅\tdocs/implementation-tasks.md:4\t-", "W1-02\t-\tdocs/rework-phase1.md:5\t-",
+            "R-1\t-\tdocs/review-impl-phase1.md:3\t-", "A-1\t-\tdocs/api-candidates.md:3\t-",
+            "T1-1\t-\tdocs/implementation-tasks.md:10\t-",
+            "S-9\t-\tnot found (the S numbers of docs/implementation-tasks.md `## 2.`)\t-",
+            "docs refs: docs/carry.md: 6 ID(s), 1 not found"]))  # fmt: skip
+        # the refs of an ID of a current table: its row
+        self.assertEqual(self.run_("refs", "S-2"), (0, ["docs refs: docs/implementation-tasks.md:5: 0 ID(s), 0 not found"]))
+
+    def test_back(self):
+        self.layout()
+        self.write("history/old.md", "S-2 と S-22\n")
+        long = "あ" * 100 + "S-2" + "い" * 100
+        self.write("rules/common.md", f"# 共通\n\n{long}\n")
+        self.assertEqual(self.run_("back", "S-2"), (0, [
+            "== keys", "decisions/S/S-1.md:5: amended_by", "issues/R/R-1.md:5: decisions",
+            "== text", "decisions/S/S-1.md:11: - 経緯: C-40 と T5-8 と D-15 は確かめない。`decisions/S/S-2.md` も指す。",
+            "rules/common.md:3: …" + "あ" * 60 + "S-2" + "い" * 60 + "…",
+            "docs back: S-2: 2 key(s), 2 line(s) of text in 3 file(s)"]))  # fmt: skip
+        code, out = self.run_("back", "S-2", "--history")
+        self.assertEqual(out[-2:], ["history/old.md:1: S-2 と S-22", "docs back: S-2: 2 key(s), 3 line(s) of text in 4 file(s)"])
+        # a key of the head fields: in a string (`found_by`) too; a work in the second phase
+        self.assertEqual(self.run_("back", "W1-01")[1][:3], ["== keys", "decisions/S/S-1.md:4: tasks", "decisions/S/S-2.md:5: found_by"])
+        self.assertEqual(self.run_("back", "P2")[1], ["== keys", "decisions/S/S-2.md:3: tasks", "docs back: P2: 1 key(s), 0 line(s) of text in 1 file(s)"])
+        self.assertEqual(self.run_("back", "S-99")[1], ["docs back: S-99: 0 key(s), 0 line(s) of text in 0 file(s)"])
+        self.assertEqual(self.run_("back", "x")[0], 2)
+
+    def test_refs(self):
+        self.layout()
+        rows = [
+            "W1-01\tDONE\ttasks/W/W1-01.md\tgate", "S-2\tOPEN\tdecisions/S/S-2.md\tR-1 と A-1。", "W1-02\tDOING\ttasks/W/W1-02.md\t式",
+            "C-40\t-\tnot found (a kind with no file: the history or the second phase)\t-",
+            "T5-8\t-\tnot found (a kind with no file: the history or the second phase)\t-",
+            "D-15\t-\tnot found (no decisions/D/)\t-", "S-77\t-\tnot found (decisions/S/)\t-",
+            "docs refs: decisions/S/S-1.md: 7 ID(s), 4 not found",
+        ]  # fmt: skip
+        self.assertEqual(self.run_("refs", "decisions/S/S-1.md"), (0, rows))
+        self.assertEqual(self.run_("refs", "S-1"), (0, rows))
+        self.assertEqual(self.run_("refs", str(self.root / "decisions/S/S-1.md")), (0, rows))
+        # head fields that cannot be read are read as text; the draft is not its S
+        self.assertEqual(self.run_("refs", "decisions/S/S-2.draft.md")[1][:2], ["S-3\t-\tnot found (decisions/S/)\t-", "S-999\t-\tnot found (decisions/S/)\t-"])
+        self.assertEqual(self.run_("refs", "docs/none.md"), (1, ["docs/none.md: not found"]))
+        self.assertEqual(self.run_("refs", "S-9"), (1, ["S-9: not found (decisions/S/)"]))
+        self.assertEqual(self.run_("refs", "/elsewhere/a.md")[0], 2)
+
+    # ------------------------------------------------ show, list, changes, ticket
+
+    def test_show(self):
+        self.layout()
+        self.write("tests/pending.toml", entry("spec-example", "§2.1 0123abcd: x", reasons=("S-2", "R-1")) + entry("gate", "g", reasons=("S-1",)))
+        code, out = self.run_("show", "S-2")
+        self.assertEqual((code, out), (0, [
+            "== decisions/S/S-2.md", *NEW_LAYOUT["decisions/S/S-2.md"].splitlines()[:7], "== relations",
+            "tasks\tW1-02\tDOING\t式\t-", "tasks\tP2\t-\t-\t-", "amends\tS-1\tDECIDED\t字句\t§2.1", "issue\tR-1\tOPEN\t候補\t-",
+            "pending\tspec-example\t§2.1 0123abcd: x\tuntil W3-07", "== body", "- 空白: R-1 と A-1。"]))  # fmt: skip
+        self.assertEqual(self.run_("show", "W1-02", "--relations")[1][-4:], [
+            "== relations", "decision\tS-2\tOPEN\tR-1 と A-1。\t-", "fixes\tR-1\tOPEN\t候補\t-", "waiting\tS-2\tOPEN\tR-1 と A-1。\t-"])  # fmt: skip
+        self.assertEqual(self.run_("show", "W1-01")[1][-3:], ["== relations", "decision\tS-1\tDECIDED\t字句\t§2.1", "depended_by\tW1-02\tDOING\t式\t-"])
+        self.assertEqual(self.run_("show", "R-1")[1][-3:], ["== relations", "fix\tW1-02\tDOING\t式\t-", "decisions\tS-2\tOPEN\tR-1 と A-1。\t-"])
+        # a work waits for a decision due before it, too
+        self.edit("decisions/S/S-2.md", 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1-01"')
+        self.assertEqual(self.run_("show", "W1-01")[1][-1], "waiting\tS-2\tOPEN\tR-1 と A-1。\t-")
+        self.write("tests/pending.toml", "x = 1\n")
+        self.assertEqual(self.run_("show", "S-2", "--relations")[1][-1], "pending\ttests/pending.toml: 1 error(s); `pending.py` shows them")
+        self.assertEqual(self.run_("show", "S-9"), (1, ["S-9: not found (decisions/S/)"]))
+        self.assertEqual(self.run_("show", "D-1"), (2, ["docs.py show: D: not in the new layout (no decisions/D/)"]))
+        self.assertEqual(self.run_("show", "C-1")[0], 2)
+
+    def test_list(self):
+        self.layout()
+        s1, s2 = "S-1\tDECIDED\ttasks=W1-01 spec=§2.1\t字句", "S-2\tOPEN\ttasks=W1-02,P2\tR-1 と A-1。"
+        self.assertEqual(self.run_("list", "S"), (0, [s1, s2, "docs list: 2 of 2 S"]))
+        self.assertEqual(self.run_("list", "S", "--status", "OPEN"), (0, [s2, "docs list: 1 of 2 S"]))
+        self.assertEqual(self.run_("list", "S", "--count"), (0, ["S\tOPEN 1, DECIDED 1 (2)", "docs list: 2 of 2 S"]))
+        self.assertEqual(self.run_("list", "W", "--count"), (0, ["W1\tDOING 1, DONE 1 (2)", "docs list: 2 of 2 W"]))
+        w2 = "W1-02\tDOING\tsize=M depends=W1-01 doing=U2/i\t式"
+        self.assertEqual(self.run_("list", "W", "--waiting"), (0, [w2, "docs list: 1 of 2 W"]))
+        self.assertEqual(self.run_("list", "W", "--stage", "W2")[1], ["docs list: 0 of 2 W"])
+        self.assertEqual(self.run_("list", "S", "--stage", "W1")[1][-1], "docs list: 2 of 2 S")
+        self.assertEqual(self.run_("list", "R", "--no-fix")[1], ["docs list: 0 of 1 R"])
+        self.assertEqual(self.run_("list", "R")[1][0], "R-1\tOPEN\tseverity=中 fix=W1-02 decisions=S-2\t候補")
+        # `before` this work or an earlier one; the group
+        self.edit("decisions/S/S-2.md", 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1-02"\ngroup = 3')
+        s2 = "S-2\tOPEN\ttasks=W1-02,P2 before=W1-02 group=3\tR-1 と A-1。"
+        for before, rows in (("W1-02", [s2]), ("W2-01", [s2]), ("W1-01", [])):
+            self.assertEqual(self.run_("list", "S", "--before", before)[1][:-1], rows, before)
+        self.assertEqual(self.run_("list", "S", "--group", "3")[1], [s2, "docs list: 1 of 2 S"])
+        # the title of an S with none: the head of its 空白
+        self.edit("decisions/S/S-2.md", "- 空白: R-1 と A-1。", "- 空白: " + "あ" * 50)
+        self.assertEqual(self.run_("list", "S", "--status", "OPEN")[1][0].split("\t")[-1], "あ" * 40)
+        for argv, error in ((("S", "--waiting"), "--waiting is for W, not S"), (("W", "--group", "1"), "--group is for S, D"),
+                            (("S", "--status", "DONE"), "--status DONE: not one of OPEN / DECIDED / DROPPED"),
+                            (("S", "--stage", "4"), "4: not a stage"), (("S", "--before", "S-1"), "--before S-1: not a work"),
+                            (("D",), "D: not in the new layout"), (("Z",), "Z: not an ID or a kind of S, D")):  # fmt: skip
+            code, out = self.run_("list", *argv)
+            self.assertEqual(code, 2, argv)
+            self.assertIn(error, out[-1])
+
+    def test_changes(self):
+        self.layout()
+        self.write("decisions/S/S-3.md", '+++\nstatus = "DECIDED"\nspec = ["§3.1"]\ndecided = 2026-10-16\n+++\n# S-3 群\n')
+        s1, s3 = "S-1\t2026-10-15\t§2.1\t字句", "S-3\t2026-10-16\t§3.1\t群"
+        note = "note: A-1 is DECIDED with no `decided`"
+        self.assertEqual(self.run_("changes"), (0, [s3, s1, note, "docs changes: 2 decision(s); 1 DECIDED with no `decided`"]))
+        self.assertEqual(self.run_("changes", "--since", "2026-10-16")[1][:2], [s3, note])
+        self.assertEqual(self.run_("changes", "--section", "§2")[1][:1], [s1])
+        self.assertEqual(self.run_("changes", "--section", "§3.1")[1][:1], [s3])
+        self.assertEqual(self.run_("changes", "--stage", "W1")[1], [s1, "docs changes: 1 decision(s); 0 DECIDED with no `decided`"])
+        self.assertEqual(self.run_("changes", "--section", "3")[0], 2)
+        with self.assertRaises(SystemExit):  # argparse: a date
+            self.run_("changes", "--since", "16 Oct")
+
+    def test_ticket(self):
+        self.layout()
+        self.edit("decisions/S/S-2.md", 'status = "OPEN"', 'status = "OPEN"\nspec = ["§3.1", "§2.2"]')
+        self.edit("issues/R/R-1.md", 'aspect = 1', 'aspect = 1\nspec = ["§3.1", "tools.md §1"]')
+        self.write("tasks/W/W1-02.md", self.read("tasks/W/W1-02.md") + "\n- 持ち越し:\n  - W1-01/b の報告: x\n")
+        expected = [
+            "# 作業 W1-02 U2/i: 式", "", "- 作業のファイル: tasks/W/W1-02.md（`docs.py show W1-02`）", "- 状態: DOING（doing: U2/i）",
+            "- 規模: M", "- 依存: W1-01（DONE）", "- 実現する決定:", "  - S-2 OPEN R-1 と A-1。（§3.1, §2.2）",
+            "- 直す R:", "  - R-1 OPEN 候補（§3.1, tools.md §1）", "- 仕様の節: §2.2、§3.1、tools.md §1",
+            "- 持ち越し: 作業のファイルの `持ち越し` を読む", "- 役割と単位: U2/i",
+            *(f"- {f}:" for f in docs_tool.TICKET_FIELDS),
+        ]  # fmt: skip
+        self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (0, expected))
+        out = self.root / "t.md"
+        self.assertEqual(self.run_("ticket", "W1-02", "U2/i", "--out", str(out)), (0, [str(out)]))
+        self.assertEqual(out.read_text(encoding="utf-8"), "\n".join(expected) + "\n")
+        self.assertRefused(("ticket", "W1-02", "U2/b", "--out", str(out)), [f"{out}: there already"], ["t.md"])
+        self.assertEqual(self.run_("ticket", "W1-01", "U1/t")[1][4:8], ["- 規模: -", "- 依存: なし", "- 実現する決定:", "  - S-1 DECIDED 字句（§2.1）"])
+        self.assertEqual(self.run_("ticket", "W1-02", "U2")[0], 2)
+        self.assertEqual(self.run_("ticket", "S-1", "U2/i")[0], 2)
+        self.assertEqual(self.run_("ticket", "W1-09", "U2/i"), (1, ["W1-09: not found (tasks/W/)"]))
+
+    def test_the_commands_of_the_new_layout_in_the_current_one(self):
+        self.old_layout()
+        for argv in (("show", "S-1"), ("list", "S"), ("changes",), ("ticket", "W1-01", "U1/i"), ("set", "S-1", "status=OPEN"),
+                     ("note", "S-1", "補い", "x"), ("new", "S"), ("draft", "S-1", "--group", "1"), ("amend", "S-2", "S-1")):  # fmt: skip
+            code, out = self.run_(*argv)
+            self.assertEqual(code, 2, argv)
+            self.assertIn("not in the new layout", out[-1], argv)
+        self.assertEqual(self.read(repo.DOC_PLAN), OLD_LAYOUT["docs/implementation-tasks.md"])
+
+    # ------------------------------------------------ set, note, new, draft, amend
+
+    def test_set(self):
+        self.layout()
+        w2 = "tasks/W/W1-02.md"
+        self.assertEqual(self.run_("set", "W1-02", "size=L", "doing="), (0, [f'{w2}: size = "L"; doing removed']))
+        self.assertEqual(self.read(w2), '+++\nstatus = "DOING"\nsize = "L"\ndepends = ["W1-01"]\nmarks = ["基盤"]\n+++\n# W1-02 式\n')
+        self.assertEqual(self.run_("set", "W1-02", "doing=U2/i, U2/b")[1], [f'{w2}: doing = ["U2/i", "U2/b"]'])
+        self.assertEqual(self.run_("set", "S-1", "decided=2026-10-17", "group=4")[0], 0)
+        self.assertIn("group = 4\ndecided = 2026-10-17\n+++", self.read("decisions/S/S-1.md"))
+        # the values do not fit the field table
+        self.assertRefused(("set", "W1-02", "size=XL", "marks=基盤,,メモ", "color=red", "size=M", "depends=S-1"), [
+            '`size` has "XL", not one of S / M / L', "`marks` has an empty item: 基盤,,メモ",
+            "`color` is not a field of tasks/W/README.md (status, size, depends, marks, doing, commit)", "`size` is given twice",
+            '`depends` has "S-1", not an ID of W'], [w2])  # fmt: skip
+        self.assertRefused(("set", "S-1", "decided=17 Oct"), ['`decided` has "17 Oct", not a date'], ["decisions/S/S-1.md"])
+        # after the write, the file or a partner breaks a relation, or a required field is gone
+        self.assertRefused(("set", "W1-02", "status=DONE"), [
+            "issues/R/R-1.md:2: OPEN, but every work of `fix` is DONE (W1-02)",
+            "tasks/W/W1-02.md:6: `doing` on a work that is DONE, not DOING"], [w2, "issues/R/R-1.md"])  # fmt: skip
+        self.assertRefused(("set", "W1-02", "status=DONE", "doing="), ["issues/R/R-1.md:2: OPEN, but every work of `fix` is DONE (W1-02)"], [w2])
+        self.assertRefused(("set", "W1-02", "status=", "doing="), ["tasks/W/W1-02.md:1: the field `status` is required (tasks/W/README.md)"], [w2])
+        self.assertRefused(("set", "S-2", "amends="), ["decisions/S/S-1.md:5: `amended_by` has S-2, but S-2 has no S-1 in `amends`"], ["decisions/S/S-2.md"])
+        # in order, both are written
+        self.assertEqual(self.run_("set", "R-1", "status=DONE")[0], 0)
+        self.assertEqual(self.run_("set", "W1-02", "status=DONE", "doing=")[0], 0)
+        self.assertEqual(self.run_("check")[0], 0)
+        # a file open in vim; not an ID's file; not KEY=VALUE
+        self.write("tasks/W/.W1-02.md.swp", "")
+        self.assertRefused(("set", "W1-02", "size=S"), [f"{w2}: the swap file .W1-02.md.swp (open in vim?)"], [w2])
+        self.assertEqual(self.run_("set", "W1-09", "size=S"), (1, ["W1-09: not found (tasks/W/)"]))
+        self.assertEqual(self.run_("set", "W1-01", "size")[0], 2)
+
+    def test_note(self):
+        self.layout()
+        r1 = "issues/R/R-1.md"
+        self.assertEqual(self.run_("note", "R-1", "判断", "直す。"), (0, [f"{r1}: - 判断（2026-10-16、親）: 直す。"]))
+        self.assertEqual(self.run_("note", "R-1", "判断", "直さない。", "--by", "利用者")[0], 0)
+        self.assertEqual(self.read(r1), NEW_LAYOUT[r1] + "- 判断（2026-10-16、親）: 直す。\n- 判断（2026-10-16、利用者）: 直さない。\n")
+        self.write("decisions/A/A-1.md", NEW_LAYOUT["decisions/A/A-1.md"].rstrip("\n"))
+        self.assertEqual(self.run_("note", "A-1", "補い", "x")[0], 0)
+        self.assertEqual(self.read("decisions/A/A-1.md"), NEW_LAYOUT["decisions/A/A-1.md"] + "- 補い（2026-10-16、親）: x\n")
+        self.assertRefused(("note", "R-1", "判断", "a\nb"), ["the label, the text and the writer are each one line, not empty"], [r1])
+        self.assertRefused(("note", "R-1", "", "x"), ["the label, the text and the writer are each one line, not empty"], [r1])
+        self.write("issues/R/.R-1.md.swo", "")
+        self.assertRefused(("note", "R-1", "判断", "x"), [f"{r1}: the swap file .R-1.md.swo (open in vim?)"], [r1])
+        self.assertEqual(self.run_("note", "R-9", "判断", "x"), (1, ["R-9: not found (issues/R/)"]))
+
+    def test_new(self):
+        self.layout()
+        # the next number counts the drafts (S-2.draft.md); the head fields in the normal form
+        self.assertEqual(self.run_("new", "S", "--title", "新しい", "tasks=W1-02", "spec=§3.1"), (0, ["decisions/S/S-3.md"]))
+        self.assertEqual(self.read("decisions/S/S-3.md"), '+++\nstatus = "OPEN"\nspec = ["§3.1"]\ntasks = ["W1-02"]\n+++\n# S-3 新しい\n')
+        self.write("decisions/S/S-7.draft.md", "")
+        # the labels of the body from the README
+        self.edit("decisions/README.md", "# 決定\n", "# 決定\n\n## 本文のラベル\n\n- `空白`: 論点\n- `決定`: 決めたこと\n  - 字下げは読まない\n")
+        self.assertEqual(self.run_("new", "S")[1], ["decisions/S/S-8.md"])
+        self.assertEqual(self.read("decisions/S/S-8.md"), '+++\nstatus = "OPEN"\n+++\n# S-8\n\n- 空白:\n- 決定:\n')
+        self.assertEqual(self.run_("new", "W", "--stage", "W1", "--title", "次")[1], ["tasks/W/W1-03.md"])
+        self.assertEqual(self.read("tasks/W/W1-03.md"), '+++\nstatus = "PLAN"\n+++\n# W1-03 次\n')
+        self.assertEqual(self.run_("new", "W", "--stage", "W12")[1], ["tasks/W/W12-01.md"])
+        self.assertEqual(self.run_("check")[0], 0)
+        # nothing is written: a field required, a value, a relation, the title, a swap file
+        self.edit("issues/R/README.md", "高 / 中 / 低 | いいえ", "高 / 中 / 低 | はい")
+        self.assertRefused(("new", "R"), ["the field `severity` is required (issues/R/README.md)"])
+        self.assertRefused(("new", "S", "status=MAYBE"), ['`status` has "MAYBE", not one of OPEN / DECIDED / DROPPED'])
+        self.assertRefused(("new", "S", "tasks=W1-01"), ["decisions/S/S-9.md:2: OPEN, but every work of `tasks` is DONE (W1-01)"])
+        self.assertRefused(("new", "S", "--title", "a\nb"), ["the title is one line, not empty"])
+        self.write("decisions/S/.S-9.md.swp", "")
+        self.assertRefused(("new", "S"), ["decisions/S/S-9.md: the swap file .S-9.md.swp (open in vim?)"])
+        self.assertFalse((self.root / "decisions/S/S-9.md").exists() or (self.root / "issues/R/R-2.md").exists())
+        self.assertEqual(self.run_("new", "R", "severity=中")[1], ["issues/R/R-2.md"])
+        # usage: the stage of W; in a git worktree, the parent gives the numbers
+        for argv in (("new", "W"), ("new", "S", "--stage", "W1"), ("new", "W", "--stage", "4")):
+            self.assertEqual(self.run_(*argv)[0], 2, argv)
+        with mock.patch.object(repo, "tree_kind", return_value="worktree"):
+            self.assertEqual(self.run_("new", "S"), (2, ["docs.py new: the numbers are given in the main tree only "
+                                                         "(this is a git worktree; write NEW)"]))  # fmt: skip
+
+    def test_draft(self):
+        self.layout()
+        self.assertEqual(self.run_("draft", "S-1", "S-2", "--group", "3"), (0, [
+            "decisions/S/S-2.draft.md: there already; not written", "decisions/S/S-1.draft.md"]))  # fmt: skip
+        self.assertEqual(self.read("decisions/S/S-1.draft.md"), "+++\ngroup = 3\ndrafted = 2026-10-16\n+++\n# S-1 字句\n\n" +
+                         "".join(f"- {label}:\n" for label in docs_tool.DRAFT_LABELS))  # fmt: skip
+        self.assertEqual(self.read("decisions/S/S-2.draft.md"), NEW_LAYOUT["decisions/S/S-2.draft.md"])
+        self.write("decisions/S/S-3.md", '+++\nstatus = "OPEN"\n+++\n# S-3\n')
+        self.write("decisions/S/S-4.md", '+++\nstatus = "OPEN"\n+++\n# S-4\n')
+        self.assertRefused(("draft", "S-3", "S-9", "--group", "4"), ["S-9: not found (decisions/S/)"])
+        self.write("decisions/S/.S-4.draft.md.swp", "")
+        self.assertRefused(("draft", "S-3", "S-4", "--group", "4"), ["decisions/S/S-4.draft.md: the swap file .S-4.draft.md.swp (open in vim?)"])
+        self.assertFalse((self.root / "decisions/S/S-3.draft.md").exists())
+        self.assertEqual(self.run_("draft", "S-3", "--group", "4"), (0, ["decisions/S/S-3.draft.md"]))
+        self.assertTrue(self.read("decisions/S/S-3.draft.md").endswith("+++\n# S-3\n\n- 決定済みで戻さないもの:\n" + "".join(f"- {x}:\n" for x in docs_tool.DRAFT_LABELS[1:])))
+        self.assertEqual(self.run_("draft", "W1-01", "--group", "1")[0], 2)
+        with self.assertRaises(SystemExit):  # argparse: --group is required
+            self.run_("draft", "S-3")
+
+    def test_amend(self):
+        self.layout()
+        s1, s3 = "decisions/S/S-1.md", "decisions/S/S-3.md"
+        self.write(s3, '+++\nstatus = "DECIDED"\n+++\n# S-3 後\n')
+        self.assertEqual(self.run_("amend", "S-3", "S-1"), (0, [f"{s1}: written", f"{s3}: written"]))
+        self.assertIn('amended_by = ["S-2", "S-3"]\n', self.read(s1))
+        self.assertEqual(self.read(s3), '+++\nstatus = "DECIDED"\namends = ["S-1"]\n+++\n# S-3 後\n')
+        self.assertEqual(self.run_("check")[0], 0)
+        self.assertEqual(self.run_("amend", "S-3", "S-1"), (0, ["docs amend: S-3 amends S-1 already"]))
+        self.assertRefused(("amend", "S-1", "S-1"), ["S-1 cannot amend itself"])
+        self.assertRefused(("amend", "S-9", "S-1"), ["S-9: not found (decisions/S/)"], [s1])
+        self.assertEqual(self.run_("amend", "W1-01", "S-1")[0], 2)
+        self.write("decisions/S/.S-3.md.swp", "")
+        self.assertRefused(("amend", "S-3", "S-2"), [f"{s3}: the swap file .S-3.md.swp (open in vim?)"], [s3, "decisions/S/S-2.md"])
+        (self.root / "decisions/S/.S-3.md.swp").unlink()
+        # the second write fails: the first is put back
+        self.write("decisions/S/S-4.md", '+++\nstatus = "DECIDED"\n+++\n# S-4\n')
+        before = {rel: self.read(rel) for rel in (s1, "decisions/S/S-4.md")}
+        real, calls = docs_tool.write_atomic, []
+
+        def fail_second(path, text):
+            calls.append(path)
+            if len(calls) == 2:
+                raise OSError("no space left")
+            real(path, text)
+
+        with mock.patch.object(docs_tool, "write_atomic", side_effect=fail_second):
+            code, out = self.run_("amend", "S-4", "S-1")
+        self.assertEqual(code, 2)
+        self.assertEqual(out[-1], f"docs.py amend: decisions/S/S-4.md: no space left; {s1} put back")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual({rel: self.read(rel) for rel in before}, before)
 
 
 if __name__ == "__main__":

@@ -50,12 +50,14 @@ def read_exact(root, rel):
         raise RepoError(f"{rel}: {e}") from e
 
 
+def row_re(id_pattern):
+    """A table row whose first cell is an ID (`| S-45 |`, `| W1-01 ✅ |`): the ID, the mark of done."""
+    return re.compile(rf"^\| ({id_pattern})( ✅)?[ |]", re.M)
+
+
 def rows(text, id_pattern):
-    """{id: done} of the table rows whose first cell is an ID (`| S-45 |`, `| W1-01 ✅ |`)."""
-    out = {}
-    for m in re.finditer(rf"^\| ({id_pattern})( ✅)?[ |]", text, re.M):
-        out[m.group(1)] = bool(m.group(2))
-    return out
+    """{id: done} of the table rows whose first cell is an ID."""
+    return {m.group(1): bool(m.group(2)) for m in row_re(id_pattern).finditer(text)}
 
 
 def section(text, start, end, doc):
@@ -319,6 +321,25 @@ class Layout:
         if start and not any(line.startswith(start) for line in text.split("\n")):
             return {}
         return rows(section(text, start, end, doc) if start else text, KIND[name].pattern)
+
+    def old_lines(self, name):
+        """{id: line} of the rows of the current table (an ID's first row), or {} when its document or
+        its section is not there (as `peek_rows`; the lines of `section`)."""
+        doc, start, end, _ = KIND[name].old
+        if not (self.root / doc).is_file():
+            return {}
+        lines = self.text(doc).split("\n")
+        lo, hi = 0, len(lines)
+        if start:
+            lo = next((i for i, line in enumerate(lines) if line.startswith(start)), None)
+            if lo is None:
+                return {}
+            hi = next((i for i in range(lo + 1, len(lines)) if lines[i].startswith(end)), hi)
+        row, out = row_re(KIND[name].pattern), {}
+        for i in range(lo, hi):
+            if m := row.match(lines[i]):
+                out.setdefault(m.group(1), i + 1)
+        return out
 
 
 # ---------------------------------------------------------------- the spec as one text (X-2 DS-4, DF-2)
