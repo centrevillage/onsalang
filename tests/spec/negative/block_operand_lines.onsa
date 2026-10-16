@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+
+// E0013 with a block-like expression on more than one line (spec §3.1, S-537). The main position of an E0013
+// is the first token of the first block-like operand that has no parentheses (the `if`, the `match`, the `{`, the `fn`),
+// so the marker is on the line where that operand starts, whichever line the operator or the second operand is
+// on. An operand in parentheses is no error, so the first one without them is the main position. A line that starts
+// with `.` goes on with the line before it (§2.5), so a block-like expression that ends a line and is followed by a
+// line of `.name` or `.(` is the receiver of it. One error in each declaration unit.
+
+pub fn if_then_operator_after_the_block(c: Bool) -> I32 {
+  let a = if c {                                    //~ E0013
+    1
+  } else {
+    2
+  } + 10
+  a
+}
+
+pub fn match_then_operator_after_the_block(o: Option[I32]) -> I32 {
+  let a = match o {                                 //~ E0013
+    Some(n) => n,
+    None => 0,
+  } * 2
+  a
+}
+
+pub fn block_then_operator_after_the_block(n: I32) -> I32 {
+  let a = {                                         //~ E0013
+    n
+  } - 10
+  a
+}
+
+pub fn anonymous_function_called_after_the_block() -> I32 {
+  let a = fn(y: I32) -> I32 {                       //~ E0013
+    y
+  }.(3)
+  a
+}
+
+pub fn the_operand_on_the_right(c: Bool) -> I32 {
+  let a = 10 + if c {                               //~ E0013
+    1
+  } else {
+    2
+  }
+  a
+}
+
+pub fn method_on_the_next_line(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> U32 {
+  if c { xs } else { ys }                           //~ E0013
+    .len()
+}
+
+pub fn field_on_the_next_line(c: Bool, p: P, q: P) -> I32 {
+  match c { true => p, false => q }                 //~ E0013
+    .x
+}
+
+pub fn two_operands_on_two_lines(c: Bool, o: Option[I32]) -> I32 {
+  let a = if c { 1 } else { 2 } +                   //~ E0013
+    match o { Some(n) => n, None => 0 }
+  a
+}
+
+pub fn the_first_in_parentheses(c: Bool, d: Bool) -> I32 {
+  let a = (if c { 1 } else { 2 }) +
+    if d { 3 } else { 4 } * 2                       //~ E0013
+  a
+}
+
+pub fn the_second_on_a_later_line(c: Bool, d: Bool, e: Bool) -> I32 {
+  let a = (if c { 1 } else { 2 }) + (if d { 1 } else { 2 }) +
+    if e {                                          //~ E0013
+      3
+    } else {
+      4
+    } * 2
+  a
+}
+
+pub fn in_an_argument_on_lines(c: Bool) -> I32 {
+  add(
+    if c {                                          //~ E0013
+      1
+    } else {
+      2
+    } + 10,
+    3,
+  )
+}
+
+pub struct P {
+  x: I32,
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+// ---------------------------------------------------------------- fine
+
+pub fn fine(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  let a = (if c {
+    1
+  } else {
+    2
+  }) + 10
+  let n = (if c { xs } else { ys })
+    .len()
+  a
+}

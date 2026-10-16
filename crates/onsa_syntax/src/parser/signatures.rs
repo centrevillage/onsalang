@@ -74,7 +74,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_generics_opt(&mut self) -> PResult<()> {
-        if !self.touches(TokenKind::LBracket, true, false) {
+        if !self.touches_bare(TokenKind::LBracket)? {
             return Ok(());
         }
         let m = self.start(NodeKind::GenericParams)?;

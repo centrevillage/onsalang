@@ -1,0 +1,19 @@
+// The module that main.onsa imports: it has empty brackets of its own, and each module reports its own
+// errors, one in each declaration unit.
+
+pub enum Mode {
+  Idle(),                                           //~ E0002
+  Run(I32),
+}
+
+pub fn scale[](x: I32) -> I32 {                     //~ E0002
+  x * 2
+}
+
+pub struct Gain[] {                                 //~ E0002
+  n: I32,
+}
+
+pub fn base() -> I32 {
+  1
+}

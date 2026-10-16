@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "56:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["56:9 E0020"]
+//
+// [[test.fix]]
+// at = "60:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["60:7 E0020"]
+
+// E0020 for a blank before or after the member `.` of a tuple index that follows another tuple index
+// (spec §2.5): `t.0 .1`, `t.0 . 1`, `t.0. 1`. The digits right after a `.` are a tuple index, so
+// `t.0.1` reads as two indexes, and the one candidate takes the blanks out: the reading of the text
+// outside the edit does not change (§18.1). A chain with two blanks (`t.0 .1 .2`) has an error at
+// each `.`, and the candidate of the first leaves the second. An index with a leading `0` after the
+// blank (`t.0 .00`) is an error of its own (§2.4, fixes/tuple_index_leading_zero.onsa), which the
+// candidate of the blank leaves. One error per function.
+
+pub fn blank_before(t: ((I32, I32), I32)) -> I32 {
+  t.0.1                    //~ E0020
+}
+
+pub fn blanks_on_both_sides(t: ((I32, I32), I32)) -> I32 {
+  t.0.1                   //~ E0020
+}
+
+pub fn blank_after(t: ((I32, I32), I32)) -> I32 {
+  t.0.1                    //~ E0020
+}
+
+pub fn index_zero(t: ((I32, I32), I32)) -> I32 {
+  t.0.0                    //~ E0020
+}
+
+pub fn after_two_indexes(t: (((I32, I32), I32), I32)) -> I32 {
+  t.0.0.1                  //~ E0020
+}
+
+pub fn as_an_operand(t: ((I32, I32), I32)) -> I32 {
+  t.0.1 + t.1              //~ E0020
+}
+
+pub fn on_a_let(t: ((F32, F32), F32)) -> F32 {
+  let a = t.0.1            //~ E0020
+  a
+}
+
+pub fn two_blanks(t: ((I32, (I32, I32)), I32)) -> I32 {
+  t.0.1 .0                 //~ E0020
+}
+
+pub fn a_leading_zero_after(t: ((I32, I32), I32)) -> I32 {
+  t.0.00                   //~ E0020
+}
+
+// The indexes written without blanks are no error.
+pub fn fine(t: ((I32, I32), I32)) -> I32 {
+  t.0.1 + t.0.0 + t.1
+}

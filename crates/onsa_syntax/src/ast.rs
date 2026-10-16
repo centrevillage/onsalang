@@ -84,6 +84,15 @@ impl Ast {
         }
     }
 
+    /// `e` without the parentheses around it (`((x))` is `x`; §3.1: a
+    /// parenthesis only groups). The one walk through them on the tree.
+    pub fn without_parens(&self, mut e: ExprId) -> ExprId {
+        while let ExprKind::Paren(inner) = self.expr(e).kind {
+            e = inner;
+        }
+        e
+    }
+
     /// The literal of a negative literal (spec §4.7, S-184, S-227): `e` is a prefix
     /// `-` whose operand, without its parentheses, is a numeric literal itself
     /// (`-1`, `-(128)`, `-((1.5))`). The `-` is then a part of the literal's
@@ -92,10 +101,7 @@ impl Ast {
     /// form in their grammar (`NegLitPat`).
     pub fn negated_literal(&self, e: ExprId) -> Option<ExprId> {
         let ExprKind::Unary { op: UnOp::Neg, expr } = &self.expr(e).kind else { return None };
-        let mut cur = *expr;
-        while let ExprKind::Paren(inner) = &self.expr(cur).kind {
-            cur = *inner;
-        }
+        let cur = self.without_parens(*expr);
         match &self.expr(cur).kind {
             ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. }) => Some(cur),
             _ => None,

@@ -3,7 +3,8 @@
 //! of an item whose unit failed in the syntax stage, `fmt` and `diff --ast`
 //! report one diagnostic per unit, the driver chooses one per unit and keeps
 //! the table for the tests, D-15). The choice of the diagnostic of a unit is
-//! `onsa_driver::reduce`'s alone.
+//! [`Units::choose`] alone: `onsa_driver::reduce` reports with it, and
+//! `crate::operands` completes the candidates of what it chooses.
 //!
 //! A unit is:
 //!
@@ -15,14 +16,15 @@
 //! - a run of tokens that belong to no item, up to the next item, over lines
 //!   (S-259).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 
-use onsa_diag::{Diagnostic, Span, Stage};
+use onsa_diag::{Diagnostic, Edit, FileId, Span, Stage};
 
 use crate::ast::{Ast, Failed, ItemId};
 use crate::cst::{Cst, Elem, NodeId, NodeKind};
 use crate::lower::AstMap;
+use crate::parser::ItemCtx;
 use crate::token::TokenKind;
 
 /// One unit of the diagnostics.
@@ -45,6 +47,12 @@ pub struct Unit {
     /// The unit has a diagnostic of the syntax stage (its own, not one of a
     /// member's).
     pub syntax_failed: bool,
+    /// The list it is read in: the top level, or the members of its parent
+    /// ([`ItemCtx::of_members`]).
+    pub(crate) list: ItemCtx,
+    /// Its height in levels (spec §2.5) as the parser read it (none for
+    /// tokens of no item).
+    pub(crate) height: u32,
 }
 
 impl Unit {
@@ -90,39 +98,189 @@ impl Units {
             _ => Some(u),
         }
     }
+
+    /// For each of `diagnostics` (of the file of these units, among any
+    /// others), its unit and whether a check reports it there (spec §18.1,
+    /// S-59, S-214, S-281): the one choice of a unit's diagnostic. A
+    /// diagnostic of a member goes to the unit of its `impl` (`trait`, ...)
+    /// when the heading of the item has one (a heading with an error makes
+    /// the whole item one unit). In a unit, the diagnostic of the earliest
+    /// check stage is reported, and among those the first in the order of the
+    /// diagnostics (start, end, code, message), then of `diagnostics`. A
+    /// diagnostic of no check stage or outside every unit has none.
+    pub fn choose(&self, diagnostics: &[&Diagnostic]) -> Vec<(Option<usize>, bool)> {
+        let mut assigned: Vec<Option<usize>> = diagnostics
+            .iter()
+            .map(|d| {
+                d.stage.check_rank()?;
+                self.of(d.span)
+            })
+            .collect();
+        let mut heading_error = vec![false; self.list.len()];
+        for (d, a) in diagnostics.iter().zip(&assigned) {
+            if let Some(u) = *a
+                && self.list[u].heading_holds(d.span.start)
+            {
+                heading_error[u] = true;
+            }
+        }
+        for a in assigned.iter_mut() {
+            if let Some(u) = *a
+                && let Some(p) = self.list[u].parent
+                && heading_error[p]
+            {
+                *a = Some(p);
+            }
+        }
+        // Both the E0020 of a form and the E0002 of its place may be found at
+        // one token (`1.` among the items): the order chooses, here alone.
+        let key = |i: usize| {
+            let d = diagnostics[i];
+            (d.stage.check_rank().unwrap_or(usize::MAX), d.order_in_file(), i)
+        };
+        let mut best: Vec<Option<usize>> = vec![None; self.list.len()];
+        for (i, a) in assigned.iter().enumerate() {
+            if let Some(u) = *a
+                && best[u].is_none_or(|b| key(i) < key(b))
+            {
+                best[u] = Some(i);
+            }
+        }
+        assigned.iter().enumerate().map(|(i, &a)| (a, a.is_some_and(|u| best[u] == Some(i)))).collect()
+    }
+
+    /// What a check reads again for the edits at `spans` (§18.1, S-537): the
+    /// units of one list that they touch (overlap, or meet at an end), from
+    /// the first to the last with the text between them and the blanks and
+    /// comments the spans reach round them, in that list. The spans go to
+    /// the members of an item when they are inside its braces and touch
+    /// members only. `None` when a span touches no unit, when they are of two
+    /// lists, and when a unit between the first and the last is not touched:
+    /// the reading is no longer than the units touched and the text between
+    /// and round them that the spans reach.
+    pub(crate) fn reading(&self, spans: &[Span]) -> Option<Within> {
+        let (first, last) = self.run(self.top.len(), |k| self.top[k], spans)?;
+        let unit = &self.list[first];
+        let inside = |s: &Span| unit.heading.is_some_and(|h| h.end <= s.start);
+        let members = unit.members.clone();
+        let (first, last) = match first == last && spans.iter().all(inside) {
+            true => self.run(members.len(), |k| members.start + k, spans).unwrap_or((first, last)),
+            false => (first, last),
+        };
+        let (a, b) = (&self.list[first], &self.list[last]);
+        // The blanks and comments that a span takes out round them too.
+        let start = spans.iter().map(|s| s.start).fold(a.span.start, u32::min);
+        let end = spans.iter().map(|s| s.end).fold(b.span.end, u32::max);
+        Some(Within {
+            span: Span::new(a.span.file, start, end),
+            ctx: a.list,
+            height: self.list[first..=last].iter().map(|u| u.height).max().unwrap_or(0),
+        })
+    }
+
+    /// The first and the last of the units of a list (its `n` units, the
+    /// `k`th of which is `unit(k)`, in the order of the text) that `spans`
+    /// touch, when they touch a run of them.
+    fn run(&self, n: usize, unit: impl Fn(usize) -> usize, spans: &[Span]) -> Option<(usize, usize)> {
+        let span = |k: usize| self.list[unit(k)].span;
+        // The first `k` where `before` no longer holds (it holds up to there).
+        let point = |before: &dyn Fn(Span) -> bool| {
+            let (mut lo, mut hi) = (0, n);
+            while lo < hi {
+                let mid = (lo + hi) / 2;
+                if before(span(mid)) { lo = mid + 1 } else { hi = mid }
+            }
+            lo
+        };
+        let mut touched = BTreeSet::new();
+        for s in spans {
+            let a = point(&|u| u.end < s.start);
+            let b = point(&|u| u.start <= s.end);
+            if a >= b || (a..b).any(|k| span(k).file != s.file) {
+                return None;
+            }
+            touched.extend(a..b);
+        }
+        let (&first, &last) = (touched.first()?, touched.last()?);
+        (last - first + 1 == touched.len()).then(|| (unit(first), unit(last)))
+    }
 }
 
-/// The units of the file of `cst` (`text` is its source), the syntax
-/// diagnostics among `diagnostics` marked on them, and the items of the
-/// units that failed marked in `ast` ([`crate::ast::Item::failed`]).
-pub(crate) fn build(cst: &Cst, map: &AstMap, text: &str, diagnostics: &[Diagnostic], ast: &mut Ast) -> Units {
+/// A text that a check reads again as the declarations of a list (a unit,
+/// a run of units, or the whole file): its span in the file, the list, and
+/// the height (§2.5) the parser read of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Within {
+    pub span: Span,
+    pub ctx: ItemCtx,
+    pub height: u32,
+}
+
+impl Within {
+    /// The whole of `text`, at the top level, `height` levels high.
+    pub(crate) fn file(file: FileId, text: &str, height: u32) -> Within {
+        Within { span: Span::new(file, 0, text.len() as u32), ctx: ItemCtx::Top, height }
+    }
+
+    /// Its part of the text of the file.
+    pub(crate) fn of<'t>(&self, text: &'t str) -> &'t str {
+        &text[self.span.start as usize..self.span.end as usize]
+    }
+
+    /// The edit `e` of the file as one of its text (from its start), and
+    /// back ([`Within::global`]).
+    pub(crate) fn local(&self, e: &Edit) -> Edit {
+        let s = Span::new(e.span.file, e.span.start - self.span.start, e.span.end - self.span.start);
+        Edit::replace(s, e.replace.clone())
+    }
+
+    pub(crate) fn global(&self, e: &Edit) -> Edit {
+        let s = Span::new(e.span.file, e.span.start + self.span.start, e.span.end + self.span.start);
+        Edit::replace(s, e.replace.clone())
+    }
+}
+
+/// The units of the file of `cst` (`text` is its source; `heights` the
+/// height of each item node by its start, `ParseOutput::items`). A run of
+/// tokens of no item takes the trivia with a diagnostic of the syntax stage
+/// in `diagnostics` (S-259): those of the lexer and of the doc comments,
+/// which are reported before the units are made; the later checks report
+/// on code.
+pub(crate) fn build(cst: &Cst, map: &AstMap, text: &str, heights: &[(u32, u32)], diagnostics: &[Diagnostic]) -> Units {
     let item_of: HashMap<NodeId, ItemId> = map.items.iter().enumerate().map(|(i, &n)| (n, ItemId(i as u32))).collect();
     let mut starts: Vec<u32> = diagnostics.iter().filter(|d| d.stage == Stage::Syntax).map(|d| d.span.start).collect();
     starts.sort_unstable();
-    let mut b = Builder { cst, text, item_of, starts, list: Vec::new() };
+    let heights = heights.iter().copied().collect();
+    let mut b = Builder { cst, text, item_of, heights, starts, ctx: ItemCtx::Top, list: Vec::new() };
     b.list(cst.root(), None);
     let list = b.list;
     let top = (0..list.len()).filter(|&u| list[u].parent.is_none()).collect();
-    let mut units = Units { list, top, end: text.len() as u32 };
-    let mut heading_failed = vec![false; units.list.len()];
-    for d in diagnostics.iter().filter(|d| d.stage == Stage::Syntax) {
-        if let Some(u) = units.of(d.span) {
-            units.list[u].syntax_failed = true;
-            if units.list[u].heading_holds(d.span.start) {
-                heading_failed[u] = true;
+    Units { list, top, end: text.len() as u32 }
+}
+
+impl Units {
+    /// The syntax diagnostics among `diagnostics` marked on the units, and
+    /// the items of the units that failed marked in `ast`
+    /// ([`crate::ast::Item::failed`]).
+    pub(crate) fn mark_failed(&mut self, diagnostics: &[Diagnostic], ast: &mut Ast) {
+        let mut heading_failed = vec![false; self.list.len()];
+        for d in diagnostics.iter().filter(|d| d.stage == Stage::Syntax) {
+            if let Some(u) = self.of(d.span) {
+                self.list[u].syntax_failed = true;
+                if self.list[u].heading_holds(d.span.start) {
+                    heading_failed[u] = true;
+                }
+            }
+        }
+        // A unit with a syntax error: the later stages do not check its body. The
+        // members of an item whose heading failed are in its unit (§18.1).
+        for unit in &self.list {
+            let failed = unit.syntax_failed || unit.parent.is_some_and(|p| heading_failed[p]);
+            if failed && let Some(item) = unit.item {
+                ast.items[item.index()].failed.get_or_insert(Failed::Unit);
             }
         }
     }
-    // A unit with a syntax error: the later stages do not check its body. The
-    // members of an item whose heading failed are in its unit (§18.1).
-    for u in 0..units.list.len() {
-        let unit = &units.list[u];
-        let failed = unit.syntax_failed || unit.parent.is_some_and(|p| heading_failed[p]);
-        if failed && let Some(item) = unit.item {
-            ast.items[item.index()].failed.get_or_insert(Failed::Unit);
-        }
-    }
-    units
 }
 
 /// The declaration node of the `Item` node `n`; `None` when the parser
@@ -136,8 +294,12 @@ struct Builder<'a> {
     cst: &'a Cst,
     text: &'a str,
     item_of: HashMap<NodeId, ItemId>,
+    /// The height of each item node, by its start.
+    heights: HashMap<u32, u32>,
     /// Where the syntax diagnostics start, in order.
     starts: Vec<u32>,
+    /// The list whose units are made ([`Unit::list`]).
+    ctx: ItemCtx,
     list: Vec<Unit>,
 }
 
@@ -153,12 +315,11 @@ impl Builder<'_> {
                 Elem::Node(n) if self.cst.kind(n) == NodeKind::Item => match declaration(self.cst, n) {
                     Some(decl) => {
                         let u = self.push(self.item_span(n), self.item_of.get(&n).copied(), parent);
+                        self.list[u].height = self.heights.get(&self.cst.span(n).start).copied().unwrap_or(0);
                         last = Some((u, false));
-                        if matches!(
-                            self.cst.kind(decl),
-                            NodeKind::Impl | NodeKind::Trait | NodeKind::Effect | NodeKind::Handler | NodeKind::Extern
-                        ) && let Some(members) =
-                            self.cst.child_nodes(decl).find(|&c| self.cst.kind(c) == NodeKind::ItemList)
+                        if let Some(inner) = ItemCtx::of_members(self.cst.kind(decl))
+                            && let Some(members) =
+                                self.cst.child_nodes(decl).find(|&c| self.cst.kind(c) == NodeKind::ItemList)
                         {
                             let start = self.list[u].span.start;
                             let brace =
@@ -168,7 +329,9 @@ impl Builder<'_> {
                             let end = brace.map_or(self.list[u].span.end, |t| self.cst.token(t).span.start);
                             self.list[u].heading = Some(Span::new(self.list[u].span.file, start, end));
                             let first = self.list.len();
+                            let outer = std::mem::replace(&mut self.ctx, inner);
                             self.list(members, Some(u));
+                            self.ctx = outer;
                             self.list[u].members = first..self.list.len();
                         }
                     }
@@ -207,7 +370,8 @@ impl Builder<'_> {
 
     fn push(&mut self, span: Span, item: Option<ItemId>, parent: Option<usize>) -> usize {
         let u = self.list.len();
-        self.list.push(Unit { span, item, parent, members: u + 1..u + 1, heading: None, syntax_failed: false });
+        let (members, list) = (u + 1..u + 1, self.ctx);
+        self.list.push(Unit { span, item, parent, members, heading: None, syntax_failed: false, list, height: 0 });
         u
     }
 

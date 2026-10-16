@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§4.5", "§6.1", "§11.2"]
+
+// Empty brackets that mean something are written (spec §2.5, S-513): the arguments of a call
+// `f()`, a call of a flow `k~()`, a method `x.m()`, a call of a function value `g.()`, the
+// arguments of a function, a flow, an anonymous function and a function type (`fn() -> I32`),
+// and the unit type and value `()`. The brackets that hold something are read as before: the
+// elements of a variant (`A(I32)`), the type parameters of a declaration (`[T]`). The empty
+// brackets that are errors (`A()`, `fn f[]()`, `Some()`, `None()`, `with h()`) are in
+// fixes/empty_brackets_decls.onsa, fixes/empty_brackets_uses.onsa and
+// effects/empty_brackets_valid.onsa has the forms of effects and handlers. The file is written the
+// way `onsa fmt` writes it.
+
+pub struct Counter {
+  n: I32,
+}
+
+impl Counter {
+  pub fn new() -> Counter {
+    Counter { n: 0 }
+  }
+
+  pub fn value(self) -> I32 {
+    self.n
+  }
+
+  pub fn reset(inout self) {
+    self.n = 0
+  }
+}
+
+pub enum Shape {
+  Dot,
+  Circle(I32),
+  Rect(I32, I32),
+}
+
+pub enum Maybe[T] {
+  Just(T),
+  Nothing,
+}
+
+pub struct Holder[T] {
+  value: T,
+}
+
+pub fn zero() -> I32 {
+  0
+}
+
+pub fn takes_unit(u: ()) -> I32 {
+  1
+}
+
+pub fn takes_fn(f: fn() -> I32) -> I32 {
+  f.()
+}
+
+pub fn takes_two_fns(f: fn() -> I32, g: fn(I32) -> I32) -> I32 {
+  g.(f.())
+}
+
+pub fn returns_a_fn() -> fn() -> I32 {
+  zero
+}
+
+pub fn generic_call[T](x: T) -> T {
+  x
+}
+
+pub flow k() -> F32 at sample {
+  0.5
+}
+
+pub flow user() -> F32 at sample {
+  k~() * 2.0
+}
+
+pub flow twice() -> F32 at sample {
+  k~() + k~()
+}
+
+pub fn calls() -> I32 {
+  let c     = Counter.new()
+  let g     = fn() -> I32 { 7 }
+  let u: () = ()
+  let a     = zero() + c.value() + g.() + takes_unit(()) + takes_unit(u)
+  a + takes_fn(zero) + takes_fn(fn() -> I32 { 2 })
+}
+
+pub fn nested_calls() -> I32 {
+  let c = Counter.new()
+  zero() + generic_call(c.value()) + takes_two_fns(zero, fn(x: I32) -> I32 { x + 1 })
+}
+
+pub fn a_method_that_takes_inout() -> I32 {
+  var c = Counter.new()
+  c.reset!()
+  c.value()
+}
+
+pub fn a_function_value_in_a_branch(c: Bool) -> I32 {
+  let f = if c { zero } else { returns_a_fn() }
+  f.()
+}
+
+pub fn patterns(s: Shape, m: Maybe[I32], o: Option[I32]) -> I32 {
+  let a = match s {
+    Shape.Dot => 0,
+    Shape.Circle(r) => r,
+    Shape.Rect(w, h) => w * h,
+  }
+  let b = match m {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0,
+  }
+  let c = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  a + b + c
+}
+
+pub fn constructors() -> I32 {
+  let h              = Holder { value: Maybe.Just(1) }
+  let s              = Shape.Rect(1, 2)
+  let n: Option[I32] = None
+  match h.value {
+    Maybe.Just(x) => x,
+    Maybe.Nothing => 0,
+  }
+}

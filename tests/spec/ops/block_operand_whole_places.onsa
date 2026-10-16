@@ -1,0 +1,241 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§0.2", "§3.1", "§7", "§11.5"]
+
+// A block-like expression (`if`, `if~`, `match`, `match~`, a block expression, an anonymous function,
+// `unsafe`, `handle`, `par`) written with no parentheses where it is the whole of the place and no operand
+// of an operator (W3-13, S-537; spec §3.1): a statement, the value of a `let` and of an assignment, an
+// argument, an element, the value of a field, the value of an arm, the value of a `return`, the whole of a
+// heading, an end of a range. Each of them is the form `onsa fmt` writes, so it has no parentheses, and none
+// of them is E0013, which needs an operator (or a postfix symbol, `as`, `at`) to be applied to the expression.
+// The values follow from the code by hand. The forms in parentheses, that make the expression an operand,
+// are in block_operand_parenthesized.onsa; the forms that stop at the syntax stage are in
+// block_operand_syntax_only.onsa.
+
+use std.array
+
+pub struct P {
+  x: I32,
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+fn statement_block(n: I32) -> I32 {
+  var k = 0
+  { k = n }
+  k
+}
+
+fn statement_if(c: Bool) -> I32 {
+  var n = 0
+  if c { n = 1 } else { n = 2 }
+  n
+}
+
+fn tail_if(c: Bool) -> I32 {
+  if c { 1 } else { 2 }
+}
+
+fn tail_match(o: Option[I32]) -> I32 {
+  match o { Some(n) => n, None => 7 }
+}
+
+fn let_right(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 }
+  a
+}
+
+fn assign_right(o: Option[I32]) -> I32 {
+  var n = 0
+  n = match o { Some(k) => k, None => 7 }
+  n
+}
+
+fn argument(c: Bool) -> I32 {
+  add(if c { 1 } else { 2 }, 10)
+}
+
+fn second_argument(o: Option[I32]) -> I32 {
+  add(10, match o { Some(k) => k, None => 2 })
+}
+
+fn element(c: Bool) -> [I32; 2] {
+  [if c { 1 } else { 2 }, 10]
+}
+
+fn tuple_element(c: Bool) -> (I32, I32) {
+  (if c { 1 } else { 2 }, 10)
+}
+
+fn field_value(c: Bool) -> P {
+  P { x: if c { 1 } else { 2 } }
+}
+
+fn arm_value(o: Option[I32], c: Bool) -> I32 {
+  match o {
+    Some(k) => if c { k } else { 2 },
+    None => { 3 },
+  }
+}
+
+fn return_value(c: Bool) -> I32 {
+  if c {
+    return if c { 1 } else { 2 }
+  }
+  0
+}
+
+fn heading_if(d: Bool, c: Bool) -> I32 {
+  if if c { d } else { false } {
+    1
+  } else {
+    2
+  }
+}
+
+fn heading_match(c: Bool, a: Option[I32], b: Option[I32]) -> I32 {
+  match if c { a } else { b } {
+    Some(k) => k,
+    None => 20,
+  }
+}
+
+fn range_ends(c: Bool) -> I32 {
+  var t = 0
+  for i in if c { 1 } else { 2 } ..< if c { 4 } else { 8 } {
+    t = t + i
+  }
+  t
+}
+
+fn range_end_alone(c: Bool) -> I32 {
+  var t = 0
+  for i in 0 ..< if c { 3 } else { 4 } {
+    t = t + i
+  }
+  t
+}
+
+fn closure_body() -> [U32; 3] {
+  array.from_fn(fn(i) { if i > 1 { i } else { 0 } })
+}
+
+fn branch_of_a_branch(c: Bool, d: Bool) -> I32 {
+  if c { if d { 1 } else { 2 } } else { 3 }
+}
+
+fn generic_tail[T: Num](c: Bool, a: T, b: T) -> T {
+  if c { a } else { b }
+}
+
+pub flow tail_if_in_a_flow(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x } else { 0.0 }
+}
+
+pub flow let_par(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0 ..< 2 { x * (i + 1).round_f32() }
+  a[0] + a[1]
+}
+
+test "a statement" {
+  assert statement_block(5) == 5
+  assert statement_if(true) == 1
+  assert statement_if(false) == 2
+}
+
+test "the end of a body" {
+  assert tail_if(true) == 1
+  assert tail_if(false) == 2
+  assert tail_match(Some(4)) == 4
+  assert tail_match(None) == 7
+}
+
+test "the value of a let and of an assignment" {
+  assert let_right(true) == 1
+  assert let_right(false) == 2
+  assert assign_right(Some(3)) == 3
+  assert assign_right(None) == 7
+}
+
+test "an argument" {
+  assert argument(true) == 11
+  assert argument(false) == 12
+  assert second_argument(Some(1)) == 11
+  assert second_argument(None) == 12
+}
+
+test "an element of an array and of a tuple" {
+  let a = element(true)
+  assert a[0] == 1
+  assert a[1] == 10
+  let b = element(false)
+  assert b[0] == 2
+  let t = tuple_element(true)
+  assert t.0 == 1
+  assert t.1 == 10
+  let u = tuple_element(false)
+  assert u.0 == 2
+}
+
+test "the value of a field" {
+  let p = field_value(true)
+  assert p.x == 1
+  let q = field_value(false)
+  assert q.x == 2
+}
+
+test "the value of an arm and of a return" {
+  assert arm_value(Some(1), true) == 1
+  assert arm_value(Some(1), false) == 2
+  assert arm_value(None, true) == 3
+  assert return_value(true) == 1
+  assert return_value(false) == 0
+}
+
+test "the whole of a heading" {
+  assert heading_if(true, true) == 1
+  assert heading_if(false, true) == 2
+  assert heading_if(true, false) == 2
+  assert heading_match(true, Some(10), None) == 10
+  assert heading_match(true, None, Some(10)) == 20
+  assert heading_match(false, Some(10), Some(11)) == 11
+}
+
+test "the ends of a range" {
+  // 1 + 2 + 3 for the true branch; 2 + 3 + 4 + 5 + 6 + 7 for the false one.
+  assert range_ends(true) == 6
+  assert range_ends(false) == 27
+  // 0 + 1 + 2, and 0 + 1 + 2 + 3.
+  assert range_end_alone(true) == 3
+  assert range_end_alone(false) == 6
+}
+
+test "a closure body, a nested branch and a generic function" {
+  let xs = closure_body()
+  assert xs[1] == 0
+  assert xs[2] == 2
+  assert branch_of_a_branch(true, true) == 1
+  assert branch_of_a_branch(true, false) == 2
+  assert branch_of_a_branch(false, true) == 3
+  assert generic_tail(true, 8, 9) == 8
+  assert generic_tail(false, 8, 9) == 9
+}
+
+test "the end of a flow" {
+  // x = 1, -2, 3: the end is max(x, 0).
+  let xs: [F32; 3] = [1.0, -2.0, 3.0]
+  let t            = tail_if_in_a_flow.render(tail_if_in_a_flow.Config {}, tail_if_in_a_flow.Params {}, xs, 8.0)
+  assert t.out[0] == 1.0
+  assert t.out[1] == 0.0
+  assert t.out[2] == 3.0
+}
+test "a par as a let value" {
+  // x * 1 + x * 2 = 3 x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let p            = let_par.render(let_par.Config {}, let_par.Params {}, xs, 8.0)
+  assert p.out[0] == 3.0
+  assert p.out[1] == 6.0
+}

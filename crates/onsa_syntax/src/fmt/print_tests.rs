@@ -261,9 +261,10 @@ fn the_indentation_is_one_level_deeper_than_the_line_where_the_owner_starts() {
         (&["let y =", "a", ".max(b)"], &["  let y =", "    a", "    .max(b)"]),
         (&["let x = foo() +", "bar(", "1,", ")"], &["  let x = foo() +", "    bar(", "      1,", "    )"]),
         (&["a", ".max(", "b,", ")"], &["  a", "    .max(", "      b,", "    )"]),
+        // A block-like operand is in parentheses (E0013, S-537).
         (
-            &["let x = foo() +", "if t {", "1", "} else {", "2", "}"],
-            &["  let x = foo() +", "    if t {", "      1", "    } else {", "      2", "    }"],
+            &["let x = foo() +", "(if t {", "1", "} else {", "2", "})"],
+            &["  let x = foo() +", "    (if t {", "      1", "    } else {", "      2", "    })"],
         ),
         (
             &["for i in 0 ..<", "bar(", "1,", ") {", "g(i)", "}"],

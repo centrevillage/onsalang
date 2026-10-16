@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// The empty brackets of an attribute are not the empty brackets of S-513 (spec §2.5: the empty
+// brackets of an attribute, `@fp()`, follow the rule of each attribute's value). The value of
+// `@repr` and `@fp` is one of a closed list (§6.5), so an attribute with no value is an error of
+// its value, E0005, and the one candidate writes the value of the list (`@repr(c)`,
+// `@fp(relaxed)`), and not an E0002 that takes the brackets out. One error per declaration unit.
+
+@repr()                                             //~ E0005
+pub struct S {
+  n: I32,
+}
+
+@repr( )                                            //~ E0005
+pub struct T {
+  n: I32,
+}
+
+@fp()                                               //~ E0005
+pub fn f() -> I32 {
+  1
+}
+
+@fp( )                                              //~ E0005
+pub fn g() -> I32 {
+  1
+}
+
+@fp()                                               //~ E0005
+pub flow h(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn fine() -> I32 {
+  f() + g()
+}

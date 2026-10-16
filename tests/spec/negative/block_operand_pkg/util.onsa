@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§15.1", "§18.1"]
+
+// E0013 in a module of a package (spec §3.1, §15.1, §18.1, S-537): the declaration with the error is still a
+// name for the modules that use it (§18.1: a declaration with an error that can be read as far as its name is
+// a name to the name resolution, and the use of it gets no diagnostic), so `app.onsa`, that imports `pick` and
+// `Wrapper`, gets no E0302. A unit that fails with an E0013 is one unit: the other declarations of the
+// module are checked, and the case lists the error of each.
+
+pub fn pick(c: Bool) -> I32 {
+  if c { 1 } else { 2 } + 10                        //~ E0013
+}
+
+pub struct Wrapper {
+  v: I32,
+}
+
+impl Wrapper {
+  pub fn get(self, c: Bool) -> I32 {
+    -if c { self.v } else { 0 }                     //~ E0013
+  }
+}
+
+pub fn fine(c: Bool) -> I32 {
+  (if c { 1 } else { 2 }) + 10
+}

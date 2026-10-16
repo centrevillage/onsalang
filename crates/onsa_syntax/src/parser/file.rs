@@ -6,9 +6,20 @@ use super::*;
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ file
 
-    pub(crate) fn parse_file(mut self) -> ParseOutput {
+    #[cfg(test)]
+    pub(crate) fn parse_file(self) -> ParseOutput {
+        self.parse_units(ItemCtx::Top)
+    }
+
+    /// The declarations of the text read as those of a list of `ctx` (the
+    /// top level of a file, or the members of an `impl`, a `trait`, ...),
+    /// under a `SourceFile` node: a file, or the text of one unit read again
+    /// in the context of its list (`crate::operands`).
+    pub(crate) fn parse_units(mut self, ctx: ItemCtx) -> ParseOutput {
         let root = self.enter_unit(NodeKind::SourceFile, 0);
-        self.module_docs();
+        if ctx == ItemCtx::Top {
+            self.module_docs();
+        }
         loop {
             let doc = self.collect_docs();
             if self.at(TokenKind::Eof) {
@@ -17,7 +28,7 @@ impl<'a> Parser<'a> {
             let start = self.peek().span.start;
             let depth = self.open.len();
             let m = self.start_item(doc);
-            match self.parse_item(ItemCtx::Top, m) {
+            match self.parse_item(ctx, m) {
                 Ok(item) => {
                     self.levels.push(item.height);
                     // Terminator: newline or end of file.
@@ -47,7 +58,9 @@ impl<'a> Parser<'a> {
             diagnostics: self.diagnostics,
             levels: self.levels,
             literals: self.literals,
+            #[cfg(test)]
             height: self.height,
+            items: self.items,
         }
     }
 

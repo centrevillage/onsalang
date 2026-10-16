@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§0.2", "§3.1", "§6.1", "§8.3", "§11.5", "§18.1"]
+
+// E0013: a block-like expression written with no parentheses as an operand of an operator (spec §3.1, S-537).
+// The nine forms of §3.1, each as the left operand of a binary operator or as the receiver of a postfix
+// symbol, so that each of them is read as the start of a longer expression: `if`, `if~`, `match`, `match~`,
+// a block expression `{ … }`, an anonymous function, `unsafe`, `handle` (with a named handler, with a handler
+// that takes arguments, and in place) and `par`. `if~`, `match~` and `par` are in a `flow`, as they are
+// only written there. The expression is on one line, so the marker is on its line (§3.1 does not say where
+// the main position of an E0013 is, so no case here puts the expression on more than one line). The case
+// stops at the syntax stage: the names that are not declared (`h`, `load`, `fc_new`) and the types that do not
+// fit are not looked up, since a unit with an error of the syntax stage goes no further (§18.1). The same
+// forms in parentheses are in tests/spec/ops/block_operand_parenthesized.onsa and block_operand_syntax_only.onsa,
+// the candidates are in tests/spec/fixes/block_operand_candidates.onsa. One error in each declaration unit.
+
+pub fn if_expression(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 } + 10                //~ E0013
+  a
+}
+
+pub fn if_with_an_else_if(a: Bool, b: Bool) -> I32 {
+  let r = if a { 1 } else if b { 2 } else { 3 } + 10  //~ E0013
+  r
+}
+
+pub fn match_expression(o: Option[I32]) -> I32 {
+  let a = match o { Some(n) => n, None => 0 } + 10  //~ E0013
+  a
+}
+
+pub fn block_expression(n: I32) -> I32 {
+  let a = { n } + 10                                //~ E0013
+  a
+}
+
+pub fn anonymous_function() -> I32 {
+  let a = fn(y: I32) -> I32 { y } + 1               //~ E0013
+  a
+}
+
+pub fn unsafe_block() -> I32 {
+  let a = unsafe { fc_new(1) } + 10                 //~ E0013
+  a
+}
+
+pub fn handle_with_a_named_handler() -> I32 {
+  let a = handle { load() } with h + 10             //~ E0013
+  a
+}
+
+pub fn handle_with_arguments() -> I32 {
+  let a = handle { load() } with arena(inout scratch) + 10  //~ E0013
+  a
+}
+
+pub fn handle_in_place() -> I32 {
+  let a = handle { load() } with Ask { fn ask() -> I32 { 5 } } + 10  //~ E0013
+  a
+}
+
+pub flow if_tilde(x: F32 at sample) -> F32 at sample {
+  let y = if~ x > 0.0 { prev~(x) } else { x } * 2.0  //~ E0013
+  y
+}
+
+pub flow match_tilde(x: F32 at sample) -> F32 at sample {
+  let y = match~ x > 0.0 { true => prev~(x), false => x } * 2.0  //~ E0013
+  y
+}
+
+pub flow parallel(x: F32 at sample) -> F32 at sample {
+  let y = par i in 0 ..< 2 { x }[0] + 1.0           //~ E0013
+  y
+}
+
+// The forms that are the receiver of a postfix symbol (`handle` has none: the name after `with` ends it).
+// The other positions of an operand are in tests/spec/negative/block_operand_positions.onsa.
+
+pub fn block_expression_indexed(xs: [I32; 2]) -> I32 {
+  { xs }[1]                                         //~ E0013
+}
+
+pub fn anonymous_function_called() -> I32 {
+  fn(y: I32) -> I32 { y }.(3)                       //~ E0013
+}
+
+pub fn unsafe_block_indexed() -> I32 {
+  unsafe { fc_all(1) }[1]                           //~ E0013
+}
+
+pub flow if_tilde_indexed(x: [F32; 2] at sample) -> F32 at sample {
+  if~ x[0] > 0.0 { x } else { x }[1]                //~ E0013
+}
+
+pub flow match_tilde_indexed(x: [F32; 2] at sample) -> F32 at sample {
+  match~ x[0] > 0.0 { true => x, false => x }[1]    //~ E0013
+}
+
+// ---------------------------------------------------------------- fine: the same forms as the whole of a place
+
+pub fn fine_if(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 }
+  a
+}
+
+pub fn fine_match(o: Option[I32]) -> I32 {
+  match o { Some(n) => n, None => 0 }
+}
+
+pub fn fine_block(n: I32) -> I32 {
+  let a = { n }
+  a
+}
+
+pub flow fine_flow(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { x } else { 0.0 }
+  y
+}

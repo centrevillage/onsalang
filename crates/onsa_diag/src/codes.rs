@@ -98,6 +98,17 @@ pub enum FixRule {
     Optional,
 }
 
+impl Code {
+    /// The code of a diagnostic of this code that is left without a
+    /// candidate: the general E0002 when every diagnostic of the code carries
+    /// one (S-48, §18.1), else the code itself. The one judgment of it (the
+    /// table of the forms of other languages, and the candidates that the
+    /// syntax stage drops after it made them).
+    pub fn without_fixes(self) -> Code {
+        if self.fix_rule() == FixRule::Required { Code::E0002 } else { self }
+    }
+}
+
 /// Whether every diagnostic of a code carries a note with the correct rule
 /// (E0020, S-114, spec §18.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

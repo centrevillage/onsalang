@@ -33,6 +33,13 @@ pub struct AstMap {
     pub pats: Vec<NodeId>,
 }
 
+impl AstMap {
+    /// The kind of the CST node the expression `e` was made from.
+    pub(crate) fn expr_kind(&self, cst: &Cst, e: crate::ast::ExprId) -> NodeKind {
+        cst.kind(self.exprs[e.0 as usize])
+    }
+}
+
 /// Make the AST of `cst` (the source is `text`, the facts of its literals
 /// `literals`, the lexer's).
 pub(crate) fn lower(cst: &Cst, text: &str, literals: &Literals) -> (Ast, AstMap) {

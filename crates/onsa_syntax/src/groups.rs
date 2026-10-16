@@ -13,11 +13,14 @@ use std::collections::{BTreeMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
 use crate::ast::{Ast, BinOp, Chain, ExprId, ExprKind, Lit, OpGroup, Side, StrSeg, UnOp};
+use crate::cst::NodeKind;
+use crate::units::{Units, Within};
 
-/// The checks of this module on the AST of one file. `deepest` is the
-/// deepest unit of the file in levels (spec §2.5), for the candidates that
-/// add parentheses.
-pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<Diagnostic>) {
+/// The checks of this module on the AST of one file. `kind_of` is the kind
+/// of the CST node of an expression; `limit` the file and its units, for the
+/// candidates that add parentheses (§2.5).
+pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limit, diagnostics: &mut Vec<Diagnostic>) {
+    let text = limit.text;
     let src = |s: Span| &text[s.start as usize..s.end as usize];
     // A stack of prefix operators is one form (S-248, S-297): the operators
     // inside the outermost one of a stack are not reported again.
@@ -78,9 +81,9 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     )
                     .with_found(src(first));
                     let span = ast.expr(id).span;
-                    diagnostics.push(parenthesized(d, text, span, deepest, "parenthesize it", edits));
+                    diagnostics.push(parenthesized(d, limit, span, "parenthesize it", edits));
                 }
-                if let Some(d) = chain.check(deepest) {
+                if let Some(d) = chain.check(limit) {
                     diagnostics.push(d);
                 }
             }
@@ -105,7 +108,7 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                         "`as` and `at` are written in parentheses when they are an end of a range (§3.1)",
                     )
                     .with_found(src(first));
-                    diagnostics.push(parenthesized(d, text, expr.span, deepest, "parenthesize it", edits));
+                    diagnostics.push(parenthesized(d, limit, expr.span, "parenthesize it", edits));
                 }
             }
             ExprKind::Cast { .. } | ExprKind::At { .. }
@@ -129,7 +132,7 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     "`as` and `at` are not chained; parenthesize the inner one (§3.1)",
                 )
                 .with_found(src(expr.span));
-                diagnostics.push(parenthesized(d, text, expr.span, deepest, "parenthesize the inner one", edits));
+                diagnostics.push(parenthesized(d, limit, expr.span, "parenthesize the inner one", edits));
             }
             ExprKind::Unary { .. } if stacked(id) && !inner_of_a_stack.contains(&id) => {
                 // The operators of the stack, outermost first: each but the
@@ -169,10 +172,101 @@ pub(crate) fn check(ast: &Ast, text: &str, deepest: u32, diagnostics: &mut Vec<D
                     "prefix operators are not stacked; parenthesize the inner operator (§3.1)",
                 )
                 .with_found(src(expr.span));
-                diagnostics.push(parenthesized(d, text, expr.span, deepest, "parenthesize the inner operator", edits));
+                diagnostics.push(parenthesized(d, limit, expr.span, "parenthesize the inner operator", edits));
             }
             _ => {}
         }
+    }
+    block_like_errors(ast, kind_of, limit, diagnostics);
+}
+
+/// The operands of `e` as an operator (§3.1, S-537): both sides of a binary
+/// operator, the operand of a prefix, `as` and `at`, and the receiver of a
+/// postfix (the callee of a call, the base of `.`, `::[`, `[` and `?`).
+/// The arguments, the index and the parts of the other forms are no operands
+/// (they are whole expressions).
+fn operands(kind: &ExprKind) -> [Option<ExprId>; 2] {
+    use ExprKind::*;
+    match *kind {
+        Binary { lhs, rhs, .. } => [Some(lhs), Some(rhs)],
+        Unary { expr, .. } | Cast { expr, .. } | At { expr, .. } | Call { callee: expr, .. } => [Some(expr), None],
+        Field { base, .. } | TypeArgs { base, .. } | TupleIndex { base, .. } | Index { base, .. } | Try(base) => {
+            [Some(base), None]
+        }
+        Lit(_)
+        | Path(_)
+        | Hole
+        | Error
+        | Paren(_)
+        | Tuple(_)
+        | Array(_)
+        | Repeat { .. }
+        | Struct { .. }
+        | Block(_)
+        | If { .. }
+        | Match { .. }
+        | Closure { .. }
+        | Handle { .. }
+        | Unsafe(_)
+        | Par { .. }
+        | Feedback(_)
+        | Move(_)
+        | Range(_) => [None, None],
+    }
+}
+
+/// The block-like operands of each expression that has some (§3.1, S-537):
+/// the span of the expression (the operators joined by their operands, as
+/// far as parentheses and whole positions; its root is the operand of no
+/// other) and the spans of its block-like operands ([`NodeKind::block_like`],
+/// `kind_of` the kind of the CST node of an expression), the first in the
+/// text first. The one judgment of the form: E0013 here, and the
+/// parentheses that the other candidates need (`crate::operands`).
+pub(crate) fn block_like_operands(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind) -> Vec<(Span, Vec<Span>)> {
+    let under: HashSet<ExprId> = ast.exprs.iter().flat_map(|e| operands(&e.kind)).flatten().collect();
+    let mut out = Vec::new();
+    for (i, expr) in ast.exprs.iter().enumerate() {
+        if under.contains(&ExprId(i as u32)) {
+            continue;
+        }
+        // Without recursion (a chain is up to 256 levels high).
+        let mut found = Vec::new();
+        let mut todo: Vec<ExprId> = operands(&expr.kind).into_iter().flatten().collect();
+        while let Some(o) = todo.pop() {
+            if kind_of(o).block_like() {
+                found.push(ast.expr(o).span);
+            } else {
+                todo.extend(operands(&ast.expr(o).kind).into_iter().flatten());
+            }
+        }
+        if !found.is_empty() {
+            found.sort_by_key(|s| s.start);
+            out.push((expr.span, found));
+        }
+    }
+    out
+}
+
+/// The parentheses round `operands` (insertions, S-251).
+pub(crate) fn parenthesizing(operands: &[Span]) -> impl Iterator<Item = Edit> + '_ {
+    operands.iter().flat_map(|s| [Edit::insert(s.file, s.start, "("), Edit::insert(s.file, s.end, ")")])
+}
+
+/// E0013 (§3.1, S-537): a block-like expression is parenthesized as an
+/// operand. Those of one expression are one form, and the candidate
+/// parenthesizes them all (S-236); the main span is the first (J-4).
+fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limit, diagnostics: &mut Vec<Diagnostic>) {
+    let text = limit.text;
+    for (span, found) in block_like_operands(ast, kind_of) {
+        let at = found[0];
+        let d = Diagnostic::new(
+            Stage::Syntax,
+            Code::E0013,
+            at,
+            "a block-like expression (`if`, `match`, a block, an anonymous function, `unsafe`, `handle`, `par`) is written in parentheses when it is an operand (§3.1)",
+        )
+        .with_found(&text[at.start as usize..at.end as usize]);
+        diagnostics.push(parenthesized(d, limit, span, "parenthesize it", parenthesizing(&found).collect()));
     }
 }
 
@@ -366,9 +460,9 @@ type Inserts = BTreeMap<u32, String>;
 /// form at `span` (E0011, E0012), when it does not take the unit over the
 /// nesting limit; else with the note that names the way out (§18.1: no
 /// candidate goes over the limit, §2.5).
-fn parenthesized(d: Diagnostic, text: &str, span: Span, deepest: u32, title: &str, edits: Vec<Edit>) -> Diagnostic {
+fn parenthesized(d: Diagnostic, limit: Limit, span: Span, title: &str, edits: Vec<Edit>) -> Diagnostic {
     let added = edits.iter().map(|e| e.replace.matches('(').count() as u32).sum();
-    if nests_too_deep(text, span, &edits, added, deepest) {
+    if limit.exceeded(span, &edits, added) {
         return d.with_rule(TOO_DEEP_RULE);
     }
     d.with_fix(Fix::new(title, edits))
@@ -377,25 +471,49 @@ fn parenthesized(d: Diagnostic, text: &str, span: Span, deepest: u32, title: &st
 pub(crate) const TOO_DEEP_RULE: &str =
     "bind a part of it with `let`: parenthesizing it nests deeper than the limit (§2.5)";
 
-/// Whether the candidate `edits` of the form at `span`, which add up to
-/// `added` levels, may take its unit over the nesting limit (§2.5; §18.1: no
-/// such candidate is made). The parser counts it, on the text with the
-/// candidate, when `deepest` (a level the unit reaches at least, the deepest
-/// unit of the file or the level the parser read to) and `added` are over
-/// the limit. The one check of the candidates of the syntax stage.
-pub(crate) fn nests_too_deep(text: &str, span: Span, edits: &[Edit], added: u32, deepest: u32) -> bool {
-    if deepest + added <= crate::parser::NESTING_LIMIT {
+/// What the check that a candidate stays in the nesting limit reads (§2.5):
+/// the file and its units.
+#[derive(Clone, Copy)]
+pub(crate) struct Limit<'a> {
+    pub text: &'a str,
+    pub units: &'a Units,
+}
+
+impl Limit<'_> {
+    /// [`nests_too_deep`] for the candidate `edits` of the form at `span`,
+    /// on the unit of the form (the whole file for a form in no unit).
+    pub(crate) fn exceeded(&self, span: Span, edits: &[Edit], added: u32) -> bool {
+        let spans: Vec<Span> = edits.iter().map(|e| e.span).chain([span]).collect();
+        let within = self.units.reading(&spans).unwrap_or_else(|| {
+            Within::file(span.file, self.text, self.units.list.iter().map(|u| u.height).max().unwrap_or(0))
+        });
+        nests_too_deep(self.text, within, span, edits, added)
+    }
+}
+
+/// Whether the candidate `edits` of the form at `span` (in the file `text`;
+/// both in `within`), which add up to `added` levels, take the text `within`
+/// over the nesting limit (§2.5; §18.1: no such candidate is made). The
+/// parser counts it, on that text with the candidate, when its height (a
+/// level it reaches at least) and `added` are over the limit: only a unit
+/// near the limit is read again, and only that unit. The one judgment of
+/// it, for the candidates of the syntax stage and the parentheses they take
+/// (`crate::operands`).
+pub(crate) fn nests_too_deep(text: &str, within: Within, span: Span, edits: &[Edit], added: u32) -> bool {
+    if within.height + added <= crate::parser::NESTING_LIMIT {
         return false;
     }
     let Some(_counting) = Counting::start() else { return false };
-    let refs: Vec<&Edit> = edits.iter().collect();
-    let Ok(after) = onsa_diag::apply_text(text, &refs) else { return true };
-    let longer = after.len().saturating_sub(text.len()) as u32;
+    let own = within.of(text);
+    let local: Vec<Edit> = edits.iter().map(|e| within.local(e)).collect();
+    let Ok(after) = onsa_diag::apply_text(own, &local.iter().collect::<Vec<_>>()) else { return true };
+    #[cfg(test)]
+    READ.set(READ.get() + after.len());
+    let longer = after.len().saturating_sub(own.len()) as u32;
+    let (start, end) = (span.start - within.span.start, span.end - within.span.start + longer);
     let file = span.file;
-    let out = crate::parser::Parser::new(file, &after, crate::lex(file, &after)).parse_file();
-    out.diagnostics
-        .iter()
-        .any(|d| d.code == Code::E0006 && span.start <= d.span.start && d.span.start < span.end + longer)
+    let out = crate::parser::Parser::new(file, &after, crate::lex(file, &after)).parse_units(within.ctx);
+    out.diagnostics.iter().any(|d| d.code == Code::E0006 && start <= d.span.start && d.span.start < end)
 }
 
 thread_local! {
@@ -405,6 +523,10 @@ thread_local! {
     /// see that a file of many units parses again only where a unit is deep.
     #[cfg(test)]
     pub(crate) static PARSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The bytes those parses read: the tests bound them with what the
+    /// completion of the candidates reads ([`crate::CandidateReads`]).
+    #[cfg(test)]
+    pub(crate) static READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// A parse of [`nests_too_deep`] running on this thread: it only counts the
@@ -452,7 +574,7 @@ impl Flat<'_> {
     // SPEC-GAP(S-344): groups without a strength between them that are not
     // next to each other in the tree (`a % b == c + d`) pass: the judgment
     // is on the edges of the tree.
-    fn check(&self, deepest: u32) -> Option<Diagnostic> {
+    fn check(&self, limit: Limit) -> Option<Diagnostic> {
         let actual = self.read(&Order::of_the_spec(), &mut None);
         let mut parts: Vec<String> = Vec::new();
         let mut said = HashSet::new();
@@ -502,7 +624,7 @@ impl Flat<'_> {
                     candidates.clear();
                     break;
                 }
-                Ok(ins) if self.nests_too_deep(&ins, deepest) => {
+                Ok(ins) if self.nests_too_deep(&ins, limit) => {
                     rule = Some(TOO_DEEP_RULE);
                 }
                 Ok(ins) => candidates.push(ins),
@@ -615,14 +737,12 @@ impl Flat<'_> {
     }
 
     /// Whether the candidate nests over the limit (spec §2.5; §18.1: such a
-    /// candidate is not made). The parser counts it, on the file with the
-    /// candidate, when the deepest unit and the levels the candidate may
-    /// add are over the limit.
-    fn nests_too_deep(&self, ins: &Inserts, deepest: u32) -> bool {
+    /// candidate is not made), with the levels the candidate may add.
+    fn nests_too_deep(&self, ins: &Inserts, limit: Limit) -> bool {
         let added = ins.values().map(|s| s.matches(['(', '&']).count() as u32).sum::<u32>() + self.ops.len() as u32;
         let file = self.span.file;
         let edits: Vec<Edit> = ins.iter().map(|(&at, s)| Edit::insert(file, at, s.clone())).collect();
-        nests_too_deep(self.text, self.span, &edits, added, deepest)
+        limit.exceeded(self.span, &edits, added)
     }
 }
 #[cfg(test)]
@@ -838,5 +958,65 @@ mod tests {
         assert!(check("-x.abs()").is_empty());
         // `--x` without a space is an increment of another language (S-250).
         assert_eq!(check("--x"), vec![(Code::E0002, None)]);
+    }
+
+    /// E0013 (§3.1, S-537): a block-like expression as an operand.
+    #[test]
+    fn block_like_operands() {
+        let e = |src: &str, fixed: &str| assert_eq!(check(src), vec![(Code::E0013, Some(fixed.into()))], "{src}");
+        // The sides of a binary operator, a prefix, the receivers, `as` and `at`.
+        e("if c { 1 } else { 2 } + 10", "(if c { 1 } else { 2 }) + 10");
+        e("10 + if c { 1 } else { 2 }", "10 + (if c { 1 } else { 2 })");
+        e("-if c { 1 } else { 2 }", "-(if c { 1 } else { 2 })");
+        e("!{ b }", "!({ b })");
+        e("if c { xs } else { ys }[1]", "(if c { xs } else { ys })[1]");
+        e("{ n }.abs()", "({ n }).abs()");
+        e("{ t }.0", "({ t }).0");
+        e("{ r }?", "({ r })?");
+        e("{ v }.push!(1)", "({ v }).push!(1)");
+        e("fn(x: I32) -> I32 { x }.(3)", "(fn(x: I32) -> I32 { x }).(3)");
+        e("{ n } as F64", "({ n }) as F64");
+        e("{ n } at sample", "({ n }) at sample");
+        // The nine forms.
+        e("if~ c { x } else { 0.0 } + x", "(if~ c { x } else { 0.0 }) + x");
+        e("match o { _ => 1 } + 1", "(match o { _ => 1 }) + 1");
+        e("match~ o { _ => x } + 1", "(match~ o { _ => x }) + 1");
+        e("unsafe { n } + 10", "(unsafe { n }) + 10");
+        e("handle { 1 } with h + 10", "(handle { 1 } with h) + 10");
+        e("par i in 0..<2 { x } + x", "(par i in 0..<2 { x }) + x");
+        // One expression is one form: all its block-like operands, in one candidate.
+        e("if a { 1 } else { 2 } + match o { _ => 1 }", "(if a { 1 } else { 2 }) + (match o { _ => 1 })");
+        e("-{ n } * 2 + { m }.abs()", "-({ n }) * 2 + ({ m }).abs()");
+        e("10 + if c { 1 } else { 2 } + 100", "10 + (if c { 1 } else { 2 }) + 100");
+        // Parentheses close an expression: inside them is another one.
+        let d = check("(a + { 1 }) * { 2 }");
+        assert_eq!(d.len(), 2, "{d:?}");
+        assert!(d.contains(&(Code::E0013, Some("(a + ({ 1 })) * { 2 }".into()))), "{d:?}");
+        assert!(d.contains(&(Code::E0013, Some("(a + { 1 }) * ({ 2 })".into()))), "{d:?}");
+        // With E0011 on the same expression, each is an error of its own.
+        let d = check("if c { n } else { 2 } as F64 * 2.0");
+        assert_eq!(d.len(), 2, "{d:?}");
+        assert!(d.contains(&(Code::E0013, Some("(if c { n } else { 2 }) as F64 * 2.0".into()))), "{d:?}");
+        // E0013 is the one reported (its span ends first), so the candidate
+        // of E0011 is not completed with the parentheses (`crate::operands`).
+        assert!(d.contains(&(Code::E0011, Some("(if c { n } else { 2 } as F64) * 2.0".into()))), "{d:?}");
+        // The whole positions, the parenthesized operands, and a struct literal.
+        for src in [
+            "if c { 1 } else { 2 }",
+            "(if c { 1 } else { 2 }) + 10",
+            "-(match o { _ => 1 })",
+            "(fn(x: I32) -> I32 { x }).(3)",
+            "two(if c { 1 } else { 2 }, { n })",
+            "[{ 1 }, if c { 1 } else { 2 }]",
+            "(if c { 1 } else { 2 }, { n })",
+            "P { x: if c { 1 } else { 2 } }",
+            "xs[if c { 0 } else { 1 }]",
+            "match o { _ => if c { 1 } else { 2 } }",
+            "{ if c { 1 } else { 2 } }",
+            "P { x: 1 }.x",
+            "fn(x: I32) -> I32 { x }",
+        ] {
+            assert!(check(src).is_empty(), "{src}: {:?}", check(src));
+        }
     }
 }

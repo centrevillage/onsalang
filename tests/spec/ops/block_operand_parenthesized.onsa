@@ -1,0 +1,241 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.1", "§6.1", "§7", "§11.3", "§11.5"]
+
+// A block-like expression (`if`, `match`, a block expression, `par`) that is an operand of an operator is
+// written in parentheses (W3-13, S-537; spec §3.1): the left and the right of a binary operator, the operand
+// of a prefix `-` and `!`, the receiver of an index, of a field, of a method call, of a tuple index and of
+// `?`, the left of `as` and `at`. The parentheses are not redundant, so `onsa fmt` keeps them (docs/
+// onsa-tools.md §3.3) and the file is canonical. Each value follows from the code by hand. A struct literal
+// is not block-like: `P { x: 1 }.x` needs no parentheses, since a `{` after the name of a type reads one
+// way. The forms in parentheses that this version does not run (an anonymous function called with `.(`,
+// `unsafe`, `handle`, `if~` and `match~`) are in block_operand_syntax_only.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+fn left(c: Bool) -> I32 {
+  (if c { 1 } else { 2 }) + 10
+}
+
+fn right(c: Bool) -> I32 {
+  10 + (if c { 1 } else { 2 })
+}
+
+fn right_of_a_product(c: Bool) -> I32 {
+  10 + (if c { 1 } else { 2 }) * 3
+}
+
+fn both(c: Bool, o: Option[I32]) -> I32 {
+  (if c { 1 } else { 2 }) + (match o { Some(n) => n, None => 0 })
+}
+
+fn three_in_a_chain(a: Bool, b: Bool, c: Bool) -> I32 {
+  (if a { 1 } else { 2 }) + (if b { 10 } else { 20 }) + (if c { 100 } else { 200 })
+}
+
+fn else_if_chain(a: Bool, b: Bool) -> I32 {
+  (if a { 1 } else if b { 2 } else { 3 }) + 10
+}
+
+fn match_left(o: Option[I32]) -> I32 {
+  (match o { Some(n) => n, None => 0 }) * 2
+}
+
+fn comparison(c: Bool) -> Bool {
+  (if c { 1 } else { 2 }) == 1
+}
+
+fn logical(d: Bool, c: Bool) -> Bool {
+  d && (if c { true } else { false })
+}
+
+fn block_left(n: I32) -> I32 {
+  ({ n }) - 10
+}
+
+fn prefix_minus(o: Option[I32]) -> I32 {
+  -(match o { Some(n) => n, None => 0 })
+}
+
+fn prefix_not(c: Bool) -> Bool {
+  !(if c { true } else { false })
+}
+
+fn prefix_not_of_a_match(o: Option[Bool]) -> Bool {
+  !(match o { Some(b) => b, None => false })
+}
+
+fn receiver_index(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  (if c { xs } else { ys })[1]
+}
+
+fn receiver_field(c: Bool, p: P, q: P) -> I32 {
+  (if c { p } else { q }).x
+}
+
+fn receiver_method(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> U32 {
+  (if c { xs } else { ys }).len()
+}
+
+fn receiver_tuple(c: Bool, t: (I32, I32), u: (I32, I32)) -> I32 {
+  (if c { t } else { u }).0
+}
+
+fn receiver_try(c: Bool, a: Option[I32], b: Option[I32]) -> Option[I32] {
+  let v = (if c { a } else { b })?
+  Some(v + 1)
+}
+
+fn cast_left(c: Bool, a: I32, b: I32) -> F64 {
+  (if c { a } else { b }) as F64
+}
+
+fn nested(c: Bool, d: Bool) -> I32 {
+  (if c { (if d { 1 } else { 2 }) + 1 } else { 3 }) + 4
+}
+
+fn in_an_argument(c: Bool) -> I32 {
+  add((if c { 1 } else { 2 }) + 1, 10)
+}
+
+fn in_a_heading(d: Bool, c: Bool) -> I32 {
+  if d && (if c { true } else { false }) {
+    1
+  } else {
+    2
+  }
+}
+
+fn in_a_range_end(c: Bool) -> I32 {
+  var t = 0
+  for i in 0 ..< (if c { 4 } else { 8 }) + 1 {
+    t = t + i
+  }
+  t
+}
+
+fn in_a_generic_function[T: Num](c: Bool, a: T, b: T) -> T {
+  (if c { a } else { b }) + a
+}
+
+fn struct_literal_receiver() -> I32 {
+  P { x: 1 }.x
+}
+
+fn struct_literal_operands() -> I32 {
+  P { x: 1 }.x + P { x: 2 }.x
+}
+
+pub flow par_index(x: F32 at sample) -> F32 at sample {
+  (par i in 0 ..< 2 { x * (i + 1).round_f32() })[1]
+}
+
+pub flow par_in_a_sum(x: F32 at sample) -> F32 at sample {
+  let a = (par i in 0 ..< 2 { x * (i + 1).round_f32() })[0] + 1.0
+  a
+}
+
+pub flow at_operand(x: F32 at sample) -> F32 at sample {
+  (if x > 0.0 { x } else { 0.0 }) at sample
+}
+
+test "the operands of a binary operator" {
+  assert left(true) == 11
+  assert left(false) == 12
+  assert right(true) == 11
+  assert right(false) == 12
+  // 10 + (1 * 3), 10 + (2 * 3): the product binds the parenthesized value.
+  assert right_of_a_product(true) == 13
+  assert right_of_a_product(false) == 16
+  assert both(true, Some(5)) == 6
+  assert both(false, None) == 2
+  assert three_in_a_chain(true, true, true) == 111
+  assert three_in_a_chain(false, false, false) == 222
+  assert three_in_a_chain(true, false, true) == 121
+  assert else_if_chain(true, false) == 11
+  assert else_if_chain(false, true) == 12
+  assert else_if_chain(false, false) == 13
+  assert match_left(Some(3)) == 6
+  assert match_left(None) == 0
+  assert comparison(true)
+  assert !comparison(false)
+  assert logical(true, true)
+  assert !logical(true, false)
+  assert !logical(false, true)
+  assert block_left(15) == 5
+}
+
+test "the operand of a prefix operator" {
+  assert prefix_minus(Some(4)) == -4
+  assert prefix_minus(None) == 0
+  assert !prefix_not(true)
+  assert prefix_not(false)
+  assert prefix_not_of_a_match(Some(false))
+  assert !prefix_not_of_a_match(Some(true))
+  assert prefix_not_of_a_match(None)
+}
+
+test "the receiver of a postfix symbol" {
+  assert receiver_index(true, [1, 2], [3, 4]) == 2
+  assert receiver_index(false, [1, 2], [3, 4]) == 4
+  assert receiver_field(true, P { x: 5 }, P { x: 6 }) == 5
+  assert receiver_field(false, P { x: 5 }, P { x: 6 }) == 6
+  assert receiver_method(true, [1, 2], [3, 4]) == 2
+  assert receiver_tuple(true, (1, 2), (3, 4)) == 1
+  assert receiver_tuple(false, (1, 2), (3, 4)) == 3
+  assert receiver_try(true, Some(1), None) == Some(2)
+  assert receiver_try(false, Some(1), None) == None
+  assert receiver_try(false, Some(1), Some(7)) == Some(8)
+}
+
+test "the left of as" {
+  assert cast_left(true, 3, 4) == 3.0
+  assert cast_left(false, 3, 4) == 4.0
+}
+
+test "in the places of an expression" {
+  // c, d true: (1 + 1) + 4; c true, d false: (2 + 1) + 4; c false: 3 + 4.
+  assert nested(true, true) == 6
+  assert nested(true, false) == 7
+  assert nested(false, true) == 7
+  // (1 + 1) + 10 for c true.
+  assert in_an_argument(true) == 12
+  assert in_an_argument(false) == 13
+  assert in_a_heading(true, true) == 1
+  assert in_a_heading(true, false) == 2
+  assert in_a_heading(false, true) == 2
+  // 0 ..< 5 is 0 + 1 + 2 + 3 + 4; 0 ..< 9 is 0 + 1 + ... + 8.
+  assert in_a_range_end(true) == 10
+  assert in_a_range_end(false) == 36
+  assert in_a_generic_function(true, 5, 6) == 10
+  assert in_a_generic_function(false, 5, 6) == 11
+}
+
+test "a struct literal needs no parentheses" {
+  assert struct_literal_receiver() == 1
+  assert struct_literal_operands() == 3
+}
+
+test "par and at as operands in a flow" {
+  // The second replica is x * 2: the output is 2 x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a            = par_index.render(par_index.Config {}, par_index.Params {}, xs, 8.0)
+  assert a.out[0] == 2.0
+  assert a.out[1] == 4.0
+  // The first replica is x * 1: the output is x + 1.
+  let b = par_in_a_sum.render(par_in_a_sum.Config {}, par_in_a_sum.Params {}, xs, 8.0)
+  assert b.out[0] == 2.0
+  assert b.out[1] == 3.0
+  // x = 1, -2: max(x, 0) promoted to the clock sample (the value is the same).
+  let ys: [F32; 2] = [1.0, -2.0]
+  let c            = at_operand.render(at_operand.Config {}, at_operand.Params {}, ys, 8.0)
+  assert c.out[0] == 1.0
+  assert c.out[1] == 0.0
+}

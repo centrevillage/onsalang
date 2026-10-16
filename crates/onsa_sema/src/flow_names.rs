@@ -50,13 +50,13 @@ impl Delay {
         }
     }
 
-    pub(crate) fn named(name: &str) -> Option<Delay> {
+    pub fn named(name: &str) -> Option<Delay> {
         Delay::ALL.into_iter().find(|d| d.name() == name)
     }
 
     /// The position of the optional `init`, which is the last argument
     /// (`prev~(e, init)`, `delay~(e, N, init)`, `vdelay~(e, d, MAX, init)`).
-    pub(crate) fn init_index(self) -> usize {
+    pub fn init_index(self) -> usize {
         match self {
             Delay::Prev => 1,
             Delay::Fixed => 2,

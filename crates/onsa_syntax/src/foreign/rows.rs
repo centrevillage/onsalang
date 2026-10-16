@@ -10,7 +10,7 @@ use super::decls::{
     priv_use, proc, tuple_struct, visibility_form,
 };
 use super::faust::{faust_bit_not, faust_compose, faust_delay, faust_feedback};
-use super::literals::{foreign_literal, leading_point, string_delimiter};
+use super::literals::{foreign_literal, leading_point, string_delimiter, tuple_index_zero};
 use super::modes::{mut_self, reference};
 use super::paths::{angle_brackets, path_separator, space_in_type_args_mark, type_args_call, type_position_path};
 use super::ranges::{range_dots, range_header_one_sided, range_outside_header};
@@ -406,6 +406,15 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "a decimal integer does not start with 0; C, Go and Java read it as octal and Rust as decimal",
         rule: "a decimal integer other than `0` itself does not start with `0`: `017` is 15 in C, Go and Java and 17 in Rust (§2.4)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::TupleIndexLeadingZero,
+        name: "tuple_index_leading_zero",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a tuple index does not start with 0",
+        rule: "a tuple index is written in decimal digits, and only `0` itself starts with `0`: `t.1`, not `t.01` (§2.4)",
         detect: Detect::Syntax,
     },
     Row {
@@ -1038,6 +1047,7 @@ pub static MATCHERS: &[Matcher] = &[
         foreign_literal,
     ),
     Matcher::one(&[RowId::FloatLeadingDot], leading_point),
+    Matcher::one(&[RowId::TupleIndexLeadingZero], tuple_index_zero),
     Matcher::one(&[RowId::StringDelimiter], string_delimiter),
     Matcher::many(
         &[

@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.4", "§4.5", "§18.1"]
+// fixes = 1
+
+// E0002 for empty brackets in a declaration (spec §2.5, S-513): the elements of a variant and the
+// type parameters of a declaration are written with brackets only when there is one, so `A()`,
+// `fn f[]()`, `struct S[]`, `enum E[]`, `impl[] S` and a method with `[]` are errors. The one
+// candidate takes out the brackets from the opening one to the closing one (`A`, `fn f()`,
+// `impl S`, ...), with the spaces between them, and leaves the comment after the closing bracket
+// where it is. Brackets that hold something (`A(I32)`, `fn f[T]`) are read as before. The
+// candidate leaves no error of the syntax stage, and nothing else changes. One error per
+// declaration unit: an enum, a struct, a function, an `impl` with the error in its head (its
+// members are not checked), a method. The trait forms (`trait T[]`, `impl[] T for S`, a trait
+// method) and the extern function are in crates/onsa_cli/tests/empty_brackets.rs: trait
+// definitions and extern blocks are not in this version (E0200, a later stage), so a file that
+// holds them has errors that this one does not mark.
+
+pub struct Target {
+  n: I32,
+}
+
+pub enum Kept {
+  A(I32),
+  B(I32, I32),
+  C,
+}
+
+pub enum VariantFirst {
+  A(),                                              //~ E0002
+  B,
+}
+
+pub enum VariantLast {
+  A,
+  B(),                                              //~ E0002
+}
+
+pub enum VariantAmongOthers {
+  A(I32),
+  B(),                                              //~ E0002
+  C(I32, I32),
+}
+
+pub enum VariantBeforeTheEnd {
+  A,
+  B(),                                              //~ E0002
+}
+
+pub enum VariantWithASpace {
+  A( ),                                             //~ E0002
+  B,
+}
+
+pub enum VariantOfAGenericEnum[T] {
+  A(T),
+  B(),                                              //~ E0002
+}
+
+pub fn no_parameters[]() -> I32 {                   //~ E0002
+  1
+}
+
+pub fn with_parameters[](x: I32) -> I32 {           //~ E0002
+  x
+}
+
+pub fn with_a_space[ ](x: I32) -> I32 {             //~ E0002
+  x
+}
+
+pub rt fn realtime[](x: I32) -> I32 {               //~ E0002
+  x
+}
+
+pub struct StructWithEmptyBrackets[] {              //~ E0002
+  n: I32,
+}
+
+pub enum EnumWithEmptyBrackets[] {                  //~ E0002
+  A,
+  B,
+}
+
+impl[] Target {                                     //~ E0002
+  pub fn get(self) -> I32 {
+    self.n
+  }
+}
+
+impl Target {
+  pub fn method[](self) -> I32 {                    //~ E0002
+    self.n
+  }
+
+  pub fn other_method(self) -> I32 {
+    self.n + 1
+  }
+
+  pub fn assoc[]() -> Target {                      //~ E0002
+    Target { n: 0 }
+  }
+}
+
+// What holds something is read as before, and the units around an error are checked on their own.
+pub fn fine[T](x: T) -> T {
+  x
+}
+
+pub fn calls() -> I32 {
+  fine(1) + no_parameters() + with_parameters(2)
+}

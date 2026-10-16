@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§8.1", "§8.3", "§18.1"]
+
+// The brackets of effects and handlers that are written (spec §2.5, S-513): the arguments of an
+// effect operation (`fn ask() -> I32` and `Ask.ask()`, which is a call), a handler with no
+// arguments with no brackets (`handler h: Ask`, `with h`), and a handler that takes arguments with
+// them (`handler fixed(g: F32): Cfg`, `with fixed(1.0)`, `with arena(64)`). This file is read by the
+// syntax stage only (mode = "parse"): effects and handlers are not in this version (E0200), so no
+// name here is resolved and no handler is checked. The empty brackets that are errors
+// (`handler h(): Ask`, `with h()`) are in fixes/empty_brackets_uses.onsa.
+
+pub effect Ask {
+  fn ask() -> I32
+}
+
+pub effect Cfg {
+  fn gain() -> F32
+  fn scale(x: F32) -> F32
+}
+
+handler h: Ask {
+  fn ask() -> I32 { 1 }
+}
+
+pub handler fixed(g: F32): Cfg {
+  fn gain() -> F32 { g }
+  fn scale(x: F32) -> F32 { x * g }
+}
+
+pub fn without_arguments() -> I32 {
+  handle { Ask.ask() } with h
+}
+
+pub fn with_arguments() -> F32 {
+  handle { Cfg.gain() } with fixed(1.0)
+}
+
+pub fn with_a_size() -> I32 {
+  handle { Ask.ask() } with arena(64)
+}
+
+pub fn with_a_qualified_name() -> I32 {
+  handle { Ask.ask() } with fx.h
+}
+
+pub fn with_a_qualified_name_and_arguments() -> F32 {
+  handle { Cfg.gain() } with fx.fixed(0.5)
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c { handle { Ask.ask() } with h } else { 2 }
+}
+
+pub fn nested() -> F32 {
+  handle { handle { Cfg.scale(2.0) } with fixed(1.5) } with fixed(2.0)
+}

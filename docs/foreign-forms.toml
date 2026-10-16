@@ -2020,6 +2020,66 @@ pub fn f() -> I32 {
 ''',
 ]
 
+# タプルの添字は 10 進の数字だけで書き、`0` そのもの以外は 0 で始めない（S-508）。`t.01` を Rust はフィールド名の
+# 誤りとし、Swift は 1 と読む。8 進と読む言語は無いので、候補は頭の 0 を外した一つ（`t.00` は `t.0`）。
+# 添字は数値リテラルの文法で読まないので、`t.0x1`・`t.1_` は別の形で、候補なしの E0002（§2.4）。
+[[form]]
+id = "tuple_index_leading_zero"
+kind = "foreign"
+origin = "Rust と Swift"
+stage = "syntax"
+code = "E0020"
+spec = ["2.4", "18.1"]
+rule = "タプルの添字は 10 進の数字だけで書き、`0` そのもの以外は 0 で始めない（`t.01` は `t.1`）"
+
+[[form.example]]
+source = '''
+pub fn f(t: (I32, I32)) -> I32 {
+  t.01
+}
+'''
+fixed = ['''
+pub fn f(t: (I32, I32)) -> I32 {
+  t.1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (I32, I32)) -> I32 {
+  t.00
+}
+'''
+fixed = ['''
+pub fn f(t: (I32, I32)) -> I32 {
+  t.0
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(t: (I32, (I32, I32))) -> I32 {
+  t.01.1
+}
+'''
+fixed = ['''
+pub fn f(t: (I32, (I32, I32))) -> I32 {
+  t.1.1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout t: (I32, I32)) {
+  t.01 = 5
+}
+'''
+fixed = ['''
+pub fn f(inout t: (I32, I32)) {
+  t.1 = 5
+}
+''']
+
 [[form]]
 id = "float_trailing_dot"
 kind = "foreign"

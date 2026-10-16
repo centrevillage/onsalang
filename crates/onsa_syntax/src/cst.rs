@@ -336,6 +336,31 @@ impl NodeKind {
         }
     }
 
+    /// Whether an expression of this kind is block-like (§3.1, S-537): `if`
+    /// and `if~`, `match` and `match~`, a block, an anonymous function,
+    /// `unsafe`, `handle` and `par`. One is parenthesized as an operand of
+    /// an operator (E0013, `groups.rs`), and a candidate that joins a line to
+    /// the one before parenthesizes one that ends it (§2.5). A struct literal
+    /// is none. The one judgment of the form: a new kind is decided here.
+    pub(crate) fn block_like(self) -> bool {
+        use NodeKind::*;
+        match self {
+            Block | IfExpr | MatchExpr | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr => true,
+            Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | MoveExpr | BinaryExpr
+            | RangeExpr | CastExpr | AtExpr | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr
+            | TypeArgsExpr | IndexExpr | TryExpr | StructLit => false,
+            PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType | WildPat | LitPat
+            | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat | OrPat => false,
+            SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | Fn | Flow
+            | Struct | FieldList | Field | Derives | Enum | VariantList | Variant | VariantFields | TypeAlias
+            | OpaqueType | Trait | Impl | Effect | Handler | Const | Use | UseTree | UseNames | Extern | Target
+            | Test | ItemList | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param
+            | EffectRow | Path | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt
+            | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => false,
+        }
+    }
+
     pub fn name(self) -> &'static str {
         use NodeKind::*;
         match self {

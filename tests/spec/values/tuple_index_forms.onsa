@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§5.1", "§6.1"]
+
+// The index of a tuple is written with decimal digits and no leading `0` unless the index is `0`
+// itself (spec §2.4, S-508): `t.0`, `t.1` and `t.10` are read, and `t.10` is the eleventh element,
+// not the second (the digits `10` are one index). The spellings that are not read (`t.01`, `t.00`,
+// `t.0x1`, `t.1_`) are in fixes/tuple_index_leading_zero.onsa and
+// negative/tuple_index_not_decimal.onsa. Every value below is worked out by hand from the spec text.
+
+use std.array
+
+type Eleven = (I32, I32, I32, I32, I32, I32, I32, I32, I32, I32, I32)
+
+pub struct Wrap {
+  pair: (I32, I32),
+  many: Eleven,
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+fn first(t: (I32, I32)) -> I32 {
+  t.0
+}
+
+fn second(t: (I32, I32)) -> I32 {
+  t.1
+}
+
+fn eleventh(t: Eleven) -> I32 {
+  t.10
+}
+
+fn tenth(t: Eleven) -> I32 {
+  t.9
+}
+
+fn nested(t: ((I32, I32), I32)) -> I32 {
+  t.0.1 * 100 + t.0.0 * 10 + t.1
+}
+
+fn through_a_field(w: Wrap) -> I32 {
+  w.pair.1 * 100 + w.many.10
+}
+
+fn as_arguments(t: (I32, I32)) -> I32 {
+  add(t.1, t.0 * 10)
+}
+
+fn as_operands(t: (I32, I32)) -> I32 {
+  t.0 + t.1 * t.0
+}
+
+fn in_a_branch(c: Bool, t: (I32, I32)) -> I32 {
+  if c { t.0 } else { t.1 }
+}
+
+fn in_a_condition(t: (I32, I32)) -> I32 {
+  if t.0 == 0 { t.1 } else { t.0 }
+}
+
+fn in_a_closure(t: (I32, I32)) -> [I32; 2] {
+  array.from_fn(fn(i: U32) -> I32 { t.1 - t.0 })
+}
+
+fn in_a_generic_function[T](t: (T, T)) -> T {
+  t.1
+}
+
+fn set_first(inout t: (I32, I32)) {
+  t.0 = 7
+}
+
+fn set_the_last(inout t: Eleven) {
+  t.10 = 70
+}
+
+test "the digits of an index are one index" {
+  let t: Eleven = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+  assert eleventh(t) == 10
+  assert tenth(t) == 9
+  assert t.1 == 1
+  assert t.0 == 0
+}
+
+test "an index of a pair" {
+  let p = (3, 4)
+  assert first(p) == 3
+  assert second(p) == 4
+  assert as_arguments(p) == 34
+  assert as_operands(p) == 15
+}
+
+test "nested and through a field" {
+  let n = ((1, 2), 3)
+  assert nested(n) == 213
+  let t: Eleven = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+  let w         = Wrap { pair: (5, 6), many: t }
+  assert through_a_field(w) == 610
+}
+
+test "in a branch, a condition, a closure and a generic function" {
+  let p = (3, 4)
+  assert in_a_branch(true, p) == 3
+  assert in_a_branch(false, p) == 4
+  assert in_a_condition(p) == 3
+  assert in_a_condition((0, 9)) == 9
+  let c = in_a_closure(p)
+  assert c[0] == 1
+  assert c[1] == 1
+  assert in_a_generic_function(p) == 4
+}
+
+test "an index on the left of an assignment" {
+  var p = (1, 2)
+  set_first(inout p)
+  assert p.0 == 7
+  assert p.1 == 2
+  var t: Eleven = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+  set_the_last(inout t)
+  assert t.10 == 70
+  assert t.1 == 1
+}

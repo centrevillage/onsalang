@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1"]
+
+pub struct Shaper {
+  gain: F32,
+  curve: fn(F32) -> F32, // 関数型のフィールド
+}
+
+fn soft_clip(x: F32) -> F32 {
+  x / (1.0 + x * x)
+}
+
+fn twice(f: fn(F32) -> F32, x: F32) -> F32 {
+  f.(f.(x)) // 引数の関数値は `.(` で呼ぶ
+}
+
+fn shape(s: Shaper, x: F32) -> F32 {
+  s.curve.(x) * s.gain // フィールドの関数値も `.(` で呼ぶ
+}
+
+fn demo(x: F32) -> F32 {
+  let s = Shaper { gain: 0.5, curve: soft_clip } // 項目を値として置く
+  shape(s, twice(soft_clip, soft_clip(x)))       // 項目そのものは `f(x)` で呼ぶ
+}

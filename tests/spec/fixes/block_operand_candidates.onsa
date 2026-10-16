@@ -1,0 +1,264 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 1
+
+// E0013: the candidate puts in parentheses every block-like expression that has no parentheses and is an
+// operand in the expression: one candidate for the whole expression, so an expression with two or three of
+// them is one error with one candidate (spec §3.1, S-537). The parentheses go around the expression from its first
+// token to its last (the `if` to the `}` that closes the last branch, the `handle` to the handler, with its
+// arguments, or to the `}` of the handler written in place, the `par` to its `}`), and nothing else is edited.
+// The main position is the first token of the first such operand, so the marker is on the line where it
+// starts. Applied alone, the candidate leaves no error of the syntax stage in the unit (§18.1; checked by the
+// runner), so an operand that is the receiver of a call, the left of `as` or `at`, or the operand of a prefix
+// symbol is in parentheses and nothing is left. The nine forms come first, then the positions. One error in
+// each declaration unit.
+
+pub struct P {
+  x: I32,
+}
+
+// ---------------------------------------------------------------- the nine forms
+
+pub fn if_expression(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 } + 10                //~ E0013
+  a
+}
+
+pub fn if_with_an_else_if(a: Bool, b: Bool) -> I32 {
+  let r = if a { 1 } else if b { 2 } else { 3 } + 10  //~ E0013
+  r
+}
+
+pub fn match_expression(o: Option[I32]) -> I32 {
+  let a = match o { Some(n) => n, None => 0 } + 10  //~ E0013
+  a
+}
+
+pub fn block_expression(n: I32) -> I32 {
+  let a = { n } + 10                                //~ E0013
+  a
+}
+
+pub fn anonymous_function() -> I32 {
+  let a = fn(y: I32) -> I32 { y } + 1               //~ E0013
+  a
+}
+
+pub fn unsafe_block() -> I32 {
+  let a = unsafe { fc_new(1) } + 10                 //~ E0013
+  a
+}
+
+pub fn handle_with_a_named_handler() -> I32 {
+  let a = handle { load() } with h + 10             //~ E0013
+  a
+}
+
+pub fn handle_with_arguments() -> I32 {
+  let a = handle { load() } with arena(inout scratch) + 10  //~ E0013
+  a
+}
+
+pub fn handle_in_place() -> I32 {
+  let a = handle { load() } with Ask { fn ask() -> I32 { 5 } } + 10  //~ E0013
+  a
+}
+
+pub flow if_tilde(x: F32 at sample) -> F32 at sample {
+  let y = if~ x > 0.0 { prev~(x) } else { x } * 2.0  //~ E0013
+  y
+}
+
+pub flow match_tilde(x: F32 at sample) -> F32 at sample {
+  let y = match~ x > 0.0 { true => prev~(x), false => x } * 2.0  //~ E0013
+  y
+}
+
+pub flow parallel(x: F32 at sample) -> F32 at sample {
+  let y = par i in 0 ..< 2 { x }[0] + 1.0           //~ E0013
+  y
+}
+
+// ---------------------------------------------------------------- the operands of a binary operator
+
+pub fn binary_right(c: Bool) -> I32 {
+  let a = 10 + if c { 1 } else { 2 }                //~ E0013
+  a
+}
+
+pub fn binary_right_of_a_product(c: Bool) -> I32 {
+  let a = 10 + if c { 1 } else { 2 } * 3            //~ E0013
+  a
+}
+
+pub fn binary_middle_of_a_chain(c: Bool, n: I32) -> I32 {
+  let a = n + if c { 1 } else { 2 } + n             //~ E0013
+  a
+}
+
+pub fn binary_both(c: Bool, o: Option[I32]) -> I32 {
+  let a = if c { 1 } else { 2 } + match o { Some(n) => n, None => 0 }  //~ E0013
+  a
+}
+
+pub fn binary_both_blocks(n: I32) -> I32 {
+  let a = { n } + { 2 }                             //~ E0013
+  a
+}
+
+pub fn three_in_a_chain(a: Bool, b: Bool, c: Bool) -> I32 {
+  if a { 1 } else { 2 } + if b { 10 } else { 20 } + if c { 100 } else { 200 }  //~ E0013
+}
+
+pub fn the_second_has_parentheses(a: Bool, b: Bool) -> I32 {
+  if a { 1 } else { 2 } + (if b { 10 } else { 20 })  //~ E0013
+}
+
+pub fn the_first_has_parentheses(a: Bool, b: Bool) -> I32 {
+  (if a { 1 } else { 2 }) + if b { 10 } else { 20 }  //~ E0013
+}
+
+pub fn in_a_comparison(a: Bool, b: Bool) -> Bool {
+  if a { 1 } else { 2 } == if b { 1 } else { 2 }    //~ E0013
+}
+
+// ---------------------------------------------------------------- a prefix operator, a postfix symbol, as and at
+
+pub fn prefix_minus_of_an_if(c: Bool) -> I32 {
+  -if c { 1 } else { 2 }                            //~ E0013
+}
+
+pub fn prefix_minus_of_a_match(o: Option[I32]) -> I32 {
+  let a = -match o { Some(n) => n, None => 0 }      //~ E0013
+  a
+}
+
+pub fn prefix_not_of_an_if(c: Bool) -> Bool {
+  !if c { true } else { false }                     //~ E0013
+}
+
+pub fn prefix_not_of_a_block(b: Bool) -> Bool {
+  let a = !{ b }                                    //~ E0013
+  a
+}
+
+pub fn prefix_and_a_sum(c: Bool) -> I32 {
+  let a = -if c { 1 } else { 2 } + 1                //~ E0013
+  a
+}
+
+pub fn prefix_and_a_right_operand(a: Bool, b: Bool) -> I32 {
+  let r = -if a { 1 } else { 2 } + if b { 3 } else { 4 }  //~ E0013
+  r
+}
+
+pub fn receiver_call_of_an_anonymous_function() -> I32 {
+  fn(y: I32) -> I32 { y }.(3)                       //~ E0013
+}
+
+pub fn receiver_call_of_a_choice_of_functions(c: Bool, f: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {
+  if c { f } else { g }.(3)                         //~ E0013
+}
+
+pub fn receiver_field(c: Bool, p: P, q: P) -> I32 {
+  if c { p } else { q }.x                           //~ E0013
+}
+
+pub fn receiver_method(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> U32 {
+  if c { xs } else { ys }.len()                     //~ E0013
+}
+
+pub fn receiver_tuple_index(c: Bool, t: (I32, I32), u: (I32, I32)) -> I32 {
+  if c { t } else { u }.0                           //~ E0013
+}
+
+pub fn receiver_index(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  if c { xs } else { ys }[1]                        //~ E0013
+}
+
+pub fn receiver_try(c: Bool, a: Option[I32], b: Option[I32]) -> Option[I32] {
+  let v = if c { a } else { b }?                    //~ E0013
+  Some(v)
+}
+
+pub fn receiver_and_a_right_operand(c: Bool, d: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  if c { xs } else { ys }[0] + if d { 1 } else { 2 }  //~ E0013
+}
+
+pub fn as_left_of_an_if(c: Bool, a: I32, b: I32) -> F64 {
+  let r = if c { a } else { b } as F64              //~ E0013
+  r
+}
+
+pub fn as_left_of_a_match(o: Option[I32]) -> F64 {
+  let r = match o { Some(n) => n, None => 0 } as F64  //~ E0013
+  r
+}
+
+pub flow at_left_of_an_if(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { x } else { 0.0 } at sample   //~ E0013
+  y
+}
+
+// ---------------------------------------------------------------- places and more than one line
+
+pub fn statement_head(c: Bool) -> I32 {
+  if c { 1 } else { 2 } + 10                        //~ E0013
+  5
+}
+
+pub fn in_an_argument(c: Bool) -> I32 {
+  add(if c { 1 } else { 2 } + 10, 3)                //~ E0013
+}
+
+pub fn in_a_range_end(c: Bool) -> I32 {
+  var t = 0
+  for i in 0 ..< if c { 4 } else { 8 } + 1 {        //~ E0013
+    t = t + i
+  }
+  t
+}
+
+pub fn in_an_arm_value(o: Option[I32], c: Bool) -> I32 {
+  match o {
+    Some(k) => if c { k } else { 2 } + 10,          //~ E0013
+    None => 3,
+  }
+}
+
+pub fn nested_in_a_branch(c: Bool, d: Bool) -> I32 {
+  if c { if d { 1 } else { 2 } + 1 } else { 3 }     //~ E0013
+}
+
+pub fn if_on_lines(c: Bool) -> I32 {
+  let a = if c {                                    //~ E0013
+    1
+  } else {
+    2
+  } + 10
+  a
+}
+
+pub fn match_on_lines(o: Option[I32]) -> I32 {
+  let a = match o {                                 //~ E0013
+    Some(n) => n,
+    None => 0,
+  } * 2
+  a
+}
+
+pub fn two_operands_on_two_lines(c: Bool, o: Option[I32]) -> I32 {
+  let a = if c { 1 } else { 2 } +                   //~ E0013
+    match o { Some(n) => n, None => 0 }
+  a
+}
+
+pub fn method_on_the_next_line(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> U32 {
+  if c { xs } else { ys }                           //~ E0013
+    .len()
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}

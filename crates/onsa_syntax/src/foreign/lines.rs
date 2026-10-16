@@ -12,7 +12,6 @@ use super::edits::{move_token_down, move_token_up};
 use super::lists::comma_before_sign;
 use super::*;
 use crate::scan::arm_ahead;
-use crate::starts::ends_operand;
 
 /// A line break after a member `.` (`s.` and `f` on the next line, also in
 /// a list; S-353): the `.` moves to the head of the next line, before a
@@ -58,13 +57,11 @@ pub(super) fn newline_after_prefix(c: &Cursor) -> Option<Hit> {
 }
 
 /// A line break before a postfix `?` (`two(o` and `?, 1)` on the next line;
-/// `let v = o` and `?`; S-369): the `?` moves up to its operand.
+/// `let v = o` and `?`; S-369): the `?` moves up to its operand, where the
+/// chain of an expression would read it ([`Cursor::question_detached`],
+/// R-214).
 pub(super) fn newline_before_question(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::Question || !c.at_line_head(c.at) {
-        return None;
-    }
-    let operand = c.sig_before(c.at).is_some_and(|p| ends_operand(c.kind(p)));
-    if !operand {
+    if !c.question_detached() || !c.at_line_head(c.at) {
         return None;
     }
     hit(c.span(c.at), move_token_up(c, "write it against its operand", c.at).into_iter().collect())

@@ -183,7 +183,7 @@ impl<'a> Parser<'a> {
             TokenKind::Ident | TokenKind::KwSelfType => {
                 let m = self.start(NodeKind::PathPat)?;
                 let path = self.parse_path("a pattern")?;
-                if self.touches(TokenKind::LParen, true, false) {
+                if self.touches_bare(TokenKind::LParen)? {
                     self.reshape(NodeKind::TupleStructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {

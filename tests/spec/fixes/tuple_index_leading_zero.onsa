@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for a tuple index that starts with `0` and is not `0` itself (spec §2.4, S-508): `t.01`,
+// `t.00`, `t.010`. The index is read in decimal digits only, and no language reads it in octal, so
+// the one candidate takes the leading `0`s off (`t.1`, `t.0`, `t.10`); an index of `0` is the one
+// that has a leading `0` and stays. The error is in the syntax stage wherever the index stands: the
+// right of a `let`, an argument, an operand, a nested index, a field path, the left of an assignment,
+// a branch, a closure, a generic function, a `par` body. One error per function (P-01); the rest of
+// the function is not checked, so the indexes that would not fit the tuple are not reported.
+
+use std.array
+
+type Eleven = (I32, I32, I32, I32, I32, I32, I32, I32, I32, I32, I32)
+
+pub struct Wrap {
+  pair: (I32, I32),
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn on_a_let(t: (I32, I32)) -> I32 {
+  let a = t.01                                      //~ E0020
+  a
+}
+
+pub fn two_zeros(t: (I32, I32)) -> I32 {
+  t.00                                              //~ E0020
+}
+
+pub fn three_zeros(t: (I32, I32)) -> I32 {
+  t.000                                             //~ E0020
+}
+
+pub fn zero_then_digits(t: Eleven) -> I32 {
+  t.010                                             //~ E0020
+}
+
+pub fn two_zeros_then_a_digit(t: Eleven) -> I32 {
+  t.007                                             //~ E0020
+}
+
+pub fn as_an_argument(t: (I32, I32)) -> I32 {
+  add(t.01, 1)                                      //~ E0020
+}
+
+pub fn as_the_second_argument(t: (I32, I32)) -> I32 {
+  add(1, t.01)                                      //~ E0020
+}
+
+pub fn as_the_left_operand(t: (I32, I32)) -> I32 {
+  t.01 + 1                                          //~ E0020
+}
+
+pub fn as_the_right_operand(t: (I32, I32)) -> I32 {
+  1 + t.01                                          //~ E0020
+}
+
+pub fn nested_outer(t: (I32, (I32, I32))) -> I32 {
+  t.01.1                                            //~ E0020
+}
+
+pub fn nested_inner(t: ((I32, I32), I32)) -> I32 {
+  t.0.01                                            //~ E0020
+}
+
+pub fn through_a_field(w: Wrap) -> I32 {
+  w.pair.01                                         //~ E0020
+}
+
+pub fn on_the_left_of_an_assignment(inout t: (I32, I32)) {
+  t.01 = 5                                          //~ E0020
+}
+
+pub fn in_a_condition(c: Bool, t: (I32, I32)) -> I32 {
+  if c { t.01 } else { 0 }                          //~ E0020
+}
+
+pub fn in_an_else_branch(c: Bool, t: (I32, I32)) -> I32 {
+  if c { 0 } else { t.01 }                          //~ E0020
+}
+
+pub fn in_a_scrutinee(t: (I32, I32)) -> I32 {
+  match t.01 > 0 {                                  //~ E0020
+    true => 1,
+    false => 0,
+  }
+}
+
+pub fn in_a_closure(t: (I32, I32)) -> [I32; 2] {
+  array.from_fn(fn(i: U32) -> I32 { t.01 })         //~ E0020
+}
+
+pub fn in_a_generic_function[T](t: (T, T)) -> T {
+  t.00                                              //~ E0020
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let t: (F32, F32) = (0.25, 0.5)
+  let rows = par i in 0 ..< 2 { x * t.01 }          //~ E0020
+  rows[0] + rows[1]
+}
+
+// An index of `0` and an index with no leading `0` are not errors, and an error in one function does
+// not touch them.
+pub fn fine(t: (I32, I32)) -> I32 {
+  t.0 + t.1
+}

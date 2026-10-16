@@ -681,6 +681,16 @@ pub(crate) fn tuple_index_value(text: &str) -> Option<u32> {
     text.parse::<u32>().ok()
 }
 
+/// The digits of a tuple index written with a leading `0` without it (`01`
+/// is `1`, `00` is `0`; §2.4, S-508), or `None` when it has none.
+pub(crate) fn tuple_index_unpadded(text: &str) -> Option<&str> {
+    if text.len() < 2 || !text.starts_with('0') {
+        return None;
+    }
+    let digits = text.trim_start_matches('0');
+    Some(if digits.is_empty() { &text[text.len() - 1..] } else { digits })
+}
+
 /// The character of a char literal (`'a'`, `'\n'`).
 pub(crate) fn char_value(text: &str) -> char {
     let inner = &text[1..];

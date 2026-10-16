@@ -1,0 +1,19 @@
+use util.{pick, fine, Wrapper}
+
+pub fn uses_pick() -> I32 {
+  pick(true) + fine(false)
+}
+
+pub fn uses_get(w: Wrapper) -> I32 {
+  w.get(true)
+}
+
+// A real error of this module is still reported, and the unit of it only.
+pub fn own_error(c: Bool, o: Option[I32]) -> I64 {
+  let a = match o { Some(n) => n, None => 0 } as I64  //~ E0013
+  a
+}
+
+pub fn fine_here(c: Bool, o: Option[I32]) -> I32 {
+  (match o { Some(n) => n, None => 0 }) + pick(c)
+}

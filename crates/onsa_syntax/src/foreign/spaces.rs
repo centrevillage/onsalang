@@ -6,7 +6,7 @@ use onsa_diag::{Diagnostic, Edit, Fix, Span};
 
 use super::{Cursor, Hit, RowId, Want, closed_expr, closing, found, hit};
 use crate::cst::NodeKind;
-use crate::literal::{Base, Literals, Point, point_after_int};
+use crate::literal::Literals;
 use crate::token::{Gap, TokenKind};
 
 /// A blank before a postfix opener that the parser did not read on
@@ -118,48 +118,36 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
     if after == Gap::Newline || (before != Gap::Space && after != Gap::Space) {
         return None;
     }
-    // `t. 0.5` would become the indexes `t.0.5`, `1 . 5` the number `1.5`
-    // and `1 .e3` the float `1.e3` (S-452): no candidate keeps their reading.
-    // `1 .(2)` and `1 .abs()` become an integer and its member (S-350): the
-    // `.` after a decimal integer reads as [`point_after_int`] says.
-    let number_before =
-        c.at.checked_sub(1)
-            .filter(|&b| b.checked_sub(1).is_none_or(|d| c.kind(d) != TokenKind::Dot))
-            .filter(|&b| matches!(c.kind(b), TokenKind::Int | TokenKind::Float));
     let next = c.kind(c.at + 1);
-    let joined: String = c.text[c.span(c.at + 1).start as usize..].chars().take(3).collect();
-    let joins = |b: usize| {
-        next == TokenKind::Int
-            || (c.kind(b) == TokenKind::Int
-                && crate::literal::number(c.src(b)).base == Base::Dec
-                && point_after_int(&format!(".{joined}")) == Point::Exponent)
-    };
-    if !(matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen) || next.is_keyword())
-        || number_before.is_some_and(joins)
-    {
+    if !(matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen) || next.is_keyword()) {
         return None;
     }
-    let mut edits = Vec::new();
+    let mut blanks = Vec::new();
     if before == Gap::Space {
-        edits.extend(c.space_before(c.at).map(Edit::delete));
+        blanks.extend(c.space_before(c.at));
     }
     if after == Gap::Space {
-        edits.extend(c.space_after(c.at).map(Edit::delete));
+        blanks.extend(c.space_after(c.at));
     }
-    hit(c.span(c.at), vec![Fix::new("remove the space", edits)])
+    // `1 . 5` would become the number `1.5` and `1 .e3` the float `1.e3`
+    // (S-452): no candidate keeps their reading. `1 .(2)`, `1 .abs()` and
+    // `t.0 .1` keep it (S-350): an integer and its member, two indexes.
+    let fix = super::edits::take_out_blanks("remove the space", blanks);
+    if super::edits::joining(c.file, c.text, c.all, fix.edits()).iter().any(|j| j.any()) {
+        return None;
+    }
+    hit(c.span(c.at), vec![fix])
 }
 
 /// A blank before a postfix `?` (`o ?`, S-203): `x ?` reads as the start of
-/// the conditional operator of C. The candidate takes the blank out.
+/// the conditional operator of C. The candidate takes the blank out, where
+/// the chain of an expression would read the `?` ([`Cursor::question_detached`],
+/// R-214).
 pub(super) fn space_before_question(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::Question || c.gap(c.at) != Gap::Space {
+    if !c.question_detached() || c.gap(c.at) != Gap::Space {
         return None;
     }
-    let prev = c.before(c.at)?;
-    if !crate::starts::ends_operand(c.kind(prev)) {
-        return None;
-    }
-    hit(c.span(c.at), vec![Fix::delete("remove the space", c.space_before(c.at)?)])
+    hit(c.span(c.at), vec![super::edits::take_out_blanks("remove the space", vec![c.space_before(c.at)?])])
 }
 
 /// A blank after a prefix `-` / `!` (`- x`, `! done`, also of a negative

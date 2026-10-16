@@ -693,13 +693,66 @@ fn no_candidate_moves_a_symbol_after_what_ends_no_operand() {
     assert_eq!(d[0].code, Code::E0002);
     check(&body("  while a > b {\n  }\n  +2"), Code::E0020, "+", &[&body("  while a > b {\n  }\n  2")]);
     assert_eq!(codes("fn f() {\n}\n+ 1\n"), [Code::E0002]);
-    // After an `if` expression the line goes on (an operand).
+    // After an `if` expression the line goes on (an operand), which is then
+    // parenthesized (§2.5, E0013, S-537).
     check(
         &body("  if a > 0 { 1 } else { 2 }\n  + 1"),
         Code::E0020,
         "+",
-        &[&body("  if a > 0 { 1 } else { 2 } +\n  1")],
+        &[&body("  (if a > 0 { 1 } else { 2 }) +\n  1")],
     );
+}
+
+#[test]
+fn a_joined_line_parenthesizes_the_block_like_expression_that_ends_the_line_before() {
+    // §2.5, S-537: the joined line makes it an operand (E0013 else, S-236).
+    let m = "match a { _ => 1 }";
+    check(
+        &body(&format!("  let c = {m}\n  * 2\n  c")),
+        Code::E0020,
+        "*",
+        &[&body(&format!("  let c = ({m}) *\n  2\n  c"))],
+    );
+    check(&body("  return { a }\n  + 1"), Code::E0020, "+", &[&body("  return ({ a }) +\n  1")]);
+    check(
+        &body("  let c = if a > 0 { 1 } else { 2 }\n  - b\n  c"),
+        Code::E0020,
+        "-",
+        &[
+            &body("  let c = if a > 0 { 1 } else { 2 }\n  -b\n  c"),
+            &body("  let c = (if a > 0 { 1 } else { 2 }) - b\n  c"),
+        ],
+    );
+    // In brackets the expression closed there is the one.
+    check(
+        &body("  two(if a > 0 { 1 } else { 2 }\n    + 1, b)"),
+        Code::E0020,
+        "+",
+        &[&body("  two((if a > 0 { 1 } else { 2 }) +\n    1, b)")],
+    );
+    check(
+        &body("  match a {\n    _ => { 1 }\n      * 2,\n  }"),
+        Code::E0020,
+        "*",
+        &[&body("  match a {\n    _ => ({ 1 }) *\n      2,\n  }")],
+    );
+    // An expression whose end is block-like but is no operand of the joined
+    // operator is not parenthesized: an operator closed there.
+    check(
+        &body("  let c = (if a > 0 { 1 } else { 2 })\n  + 1\n  c"),
+        Code::E0020,
+        "+",
+        &[&body("  let c = (if a > 0 { 1 } else { 2 }) +\n  1\n  c")],
+    );
+}
+
+#[test]
+fn e0013_is_at_the_first_block_like_operand() {
+    // The whole operand, as the first cast of E0011 (§3.1, S-537 J-4).
+    let (d, _) = one(&body("  a + match a { _ => 1 } + if a > 0 { 1 } else { 2 }"));
+    assert_eq!((d.code, d.found.as_deref()), (Code::E0013, Some("match a { _ => 1 }")), "{d:?}");
+    let (d, _) = one(&body("  -handle { a } with h"));
+    assert_eq!((d.code, d.found.as_deref()), (Code::E0013, Some("handle { a } with h")), "{d:?}");
 }
 
 #[test]
@@ -972,4 +1025,92 @@ fn a_line_goes_on_across_a_block_comment() {
             (0..tokens.len()).filter(|&i| tokens[i].kind == TokenKind::Newline).map(|i| lines.goes_on(i)).collect();
         assert!(newlines.iter().all(|&g| g), "{src:?}: {newlines:?}");
     }
+}
+
+/// The makers of the candidates that leave a block-like expression as an
+/// operand (S-537; the table of the design of W3-13 U1): one place
+/// (`crate::operands`) parenthesizes it in each, and the candidate leaves no
+/// diagnostic of the syntax stage (`check`).
+#[test]
+fn every_maker_of_a_candidate_that_leaves_a_block_like_operand_parenthesizes_it() {
+    let i = "if a > 0 { 1 } else { 2 }";
+    let p = "(if a > 0 { 1 } else { 2 })";
+    // The binary operator at the head of a line, moved up (`leading_operator`).
+    check(
+        &body(&format!("  let c = {i}\n  + 1\n  c")),
+        Code::E0020,
+        "+",
+        &[&body(&format!("  let c = {p} +\n  1\n  c"))],
+    );
+    // `- b` at the head of a line, joined (`leading_minus`, the second candidate).
+    check(
+        &body(&format!("  let c = {i}\n  - b\n  c")),
+        Code::E0020,
+        "-",
+        &[&body(&format!("  let c = {i}\n  -b\n  c")), &body(&format!("  let c = {p} - b\n  c"))],
+    );
+    // The `.(` of a callee that is no path of names (S-191).
+    let (d, fixed) = one(&body("  if a > 0 { h } else { h }(1)"));
+    assert_eq!(d.code, Code::E0020, "{d:?}");
+    assert_eq!(fixed, [body("  (if a > 0 { h } else { h }).(1)")]);
+    assert!(parse(&fixed[0]).diagnostics.is_empty(), "{:?}", parse(&fixed[0]).diagnostics);
+    // The blank after a prefix symbol taken out (`space_after_prefix`).
+    check(&body(&format!("  let c = - {i}\n  c")), Code::E0020, "-", &[&body(&format!("  let c = -{p}\n  c"))]);
+    // The prefix symbol at the end of a line, written against its operand (`newline_after_prefix`).
+    check(
+        &body(&format!("  let c = -\n    {i}\n  c")),
+        Code::E0020,
+        "-",
+        &[&body(&format!("  let c =\n    -{p}\n  c"))],
+    );
+    // Blanks on both sides of a binary operator (`asymmetric_binary_space`).
+    check(&body(&format!("  let c = {i} -1\n  c")), Code::E0020, "-", &[&body(&format!("  let c = {p} - 1\n  c"))]);
+    // The member `.` at the end of a line, moved to the next (`newline_after_dot`).
+    check(
+        &body("  let c = { xs }.\n    len()\n  c"),
+        Code::E0020,
+        ".",
+        &[&body("  let c = ({ xs })\n    .len()\n  c")],
+    );
+    // The prefix `+` taken out (`prefix_plus`).
+    check(&body("  let c = -+{ 1 }\n  c"), Code::E0020, "+", &[&body("  let c = -({ 1 })\n  c")]);
+    // The compound assignment written out.
+    check(
+        &body(&format!("  var x = 0\n  x += {i}\n  x")),
+        Code::E0020,
+        "+=",
+        &[&body(&format!("  var x = 0\n  x = x + {p}\n  x"))],
+    );
+    // A blank before a postfix symbol taken out, in a list too: below.
+}
+
+/// A blank before a postfix symbol after a block-like expression (S-537,
+/// R-214): one E0020 (the unit stops at it, so no E0013), whose one
+/// candidate takes the blank out and parenthesizes the expression
+/// (`foreign::edits::take_out_blanks`).
+#[test]
+fn a_blank_before_a_postfix_symbol_after_a_block_like_expression() {
+    let i = "if a > 0 { xs } else { xs }";
+    let p = "(if a > 0 { xs } else { xs })";
+    for (src, want) in [
+        (format!("  let o = {i} ?\n  0"), format!("  let o = {p}?\n  0")),
+        (format!("  let o = {i} . len()\n  0"), format!("  let o = {p}.len()\n  0")),
+        (format!("  let o = {i} .len()\n  0"), format!("  let o = {p}.len()\n  0")),
+        (format!("  {i} [1]"), format!("  {p}[1]")),
+        ("  let o = { xs } ?\n  0".to_string(), "  let o = ({ xs })?\n  0".to_string()),
+    ] {
+        let src = body(&src);
+        let d = parse(&src).diagnostics;
+        assert_eq!(d.iter().map(|d| d.code).collect::<Vec<_>>(), [Code::E0020], "{src}: {d:?}");
+        let (_, fixed) = one(&src);
+        assert_eq!(fixed, [body(&want)], "{src}");
+        assert!(parse(&fixed[0]).diagnostics.is_empty(), "{}: {:?}", fixed[0], parse(&fixed[0]).diagnostics);
+    }
+    // In a list, the second candidate (S-384): `,` or the blank out.
+    check(
+        &body("  let o = [{ xs } [0]]\n  0"),
+        Code::E0002,
+        "[",
+        &[&body("  let o = [{ xs }, [0]]\n  0"), &body("  let o = [({ xs })[0]]\n  0")],
+    );
 }

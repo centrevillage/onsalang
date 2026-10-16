@@ -102,6 +102,7 @@ use crate::token::{Gap, Token, TokenKind};
 mod flow;
 mod spaces;
 
+pub(crate) use edits::{Insertions, apart, lexed};
 pub(crate) use flow::clocks;
 pub(crate) use spaces::held_errors;
 
@@ -177,6 +178,9 @@ pub enum Want {
     /// node's kind (`Parser::close_list`, §2.5): the general E0002 of the
     /// failure is the missing `,` ([`super::lists::list_fixes`], S-384).
     Separator(NodeKind),
+    /// A tuple index after its `.` that starts with a `0` and is not `0`
+    /// itself (`t.01`, §2.4, S-508): the parser judged its digits.
+    TupleIndex,
 }
 
 /// What the parser gives the table at a failure.
@@ -226,10 +230,11 @@ pub struct Cursor<'a> {
     pub declaration: Option<usize>,
 }
 
-/// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) that the
-/// parser did not read on, because a blank or a line break is before it
-/// (§2.5, S-89): the grammar fails where it fails, and the table reads this
-/// at that failure.
+/// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) or a
+/// postfix `?` that the parser did not read on, because a blank or a line
+/// break is before it (§2.5, S-89; a `?` where the chain of an expression
+/// would read it, R-214): the grammar fails where it fails, and the table
+/// reads this at that failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Detached {
     /// The opener, an index of the parser's tokens.
@@ -256,8 +261,8 @@ impl Detached {
         match tokens[self.at].kind {
             TokenKind::LParen | TokenKind::Bang | TokenKind::Tilde => self.by_name,
             TokenKind::LBracket => {
-                let Some((close, comma, semi)) = crate::scan::bracket_contents(tokens, self.at) else { return false };
-                close > self.at + 1 && !semi && !(self.expr && comma)
+                let Some((_, comma, semi)) = crate::scan::bracket_contents(tokens, self.at) else { return false };
+                crate::scan::empty_brackets(tokens, self.at).is_none() && !semi && !(self.expr && comma)
             }
             _ => false,
         }
@@ -456,6 +461,7 @@ pub enum RowId {
     LeadingVert,
     PatternDoubleVert,
     PrefixPlus,
+    TupleIndexLeadingZero,
     CalleeExpression,
     SpaceAfterBranchKeyword,
     ElseIfTilde,
@@ -499,7 +505,7 @@ pub fn report(id: RowId, text: &str, span: Span, fixes: Vec<Fix>) -> Diagnostic 
 
 fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
     let row = row(id);
-    let code = if hit.fixes.is_empty() { Code::E0002 } else { row.code };
+    let code = if hit.fixes.is_empty() { row.code.without_fixes() } else { row.code };
     let mut d = Diagnostic::new(row.phase.stage(), code, hit.span, row.message);
     let found = &text[hit.span.start as usize..hit.span.end as usize];
     if !found.trim().is_empty() {
@@ -706,6 +712,14 @@ impl Cursor<'_> {
     /// Whether `tokens[i]` is at the head of its line ([`crate::layout::Lines::at_line_head`]).
     pub(crate) fn at_line_head(&self, i: usize) -> bool {
         self.lines.at_line_head(self.clamp(i))
+    }
+
+    /// Whether the token at the failure is a postfix `?` after a gap that
+    /// the chain of an expression stopped before (`Parser::parse_postfix`,
+    /// [`Detached`]): only there does a candidate write it against the
+    /// chain (§2.5, R-214).
+    pub(crate) fn question_detached(&self) -> bool {
+        self.kind(self.at) == TokenKind::Question && self.detached.is_some_and(|d| d.at == self.at)
     }
 
     /// The whitespace token right after `tokens[i]`, if any.

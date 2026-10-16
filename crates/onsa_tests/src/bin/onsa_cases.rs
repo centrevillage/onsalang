@@ -102,7 +102,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "onsa_cases [--run] [ROOT] | --c ITEM [ROOT] | --vectors interp|c [ROOT] | --c-items | --codes | --keywords | --continuing | --symbols | \
-     --std-names | --builtin-members | --fix-same-place FILE... | --fix-loop [--json] [--branches] [--pick first|last] \
+     --std-names | --builtin-members | --fix-same-place FILE... | --default-inits FILE... | --fix-loop [--json] [--branches] [--pick first|last] \
      [--steps N] [--states N] [--diverge N] FILE... | --fix-loop-gate [ROOT]";
 
 fn main() -> ExitCode {
@@ -118,7 +118,7 @@ fn main() -> ExitCode {
     let too_many = match mode {
         "" | "--run" | "--fix-loop-gate" => rest.len() > 1,
         "--c" | "--vectors" => rest.is_empty() || rest.len() > 2,
-        "--fix-same-place" | "--fix-loop" => rest.is_empty(),
+        "--fix-same-place" | "--fix-loop" | "--default-inits" => rest.is_empty(),
         _ => !rest.is_empty(),
     };
     if too_many {
@@ -157,6 +157,10 @@ fn main() -> ExitCode {
         }
         "--fix-same-place" => {
             print(&serde_json::json!(fix_same_place(rest)));
+            ExitCode::SUCCESS
+        }
+        "--default-inits" => {
+            print(&serde_json::json!(default_inits(rest)));
             ExitCode::SUCCESS
         }
         "--fix-loop" => match fix_loop_args(rest) {
@@ -240,6 +244,27 @@ fn files(c: &onsa_tests::case::Case, s: &onsa_tests::case::Setup) -> serde_json:
         })
         .collect();
     serde_json::json!(files)
+}
+
+/// `--default-inits`: the delay calls of each file and those whose `init`
+/// equals the default (S-539, `tools/default_inits.py`), each file on a thread
+/// with the stack of a command; an unreadable file or an internal error is
+/// reported, never skipped.
+fn default_inits(files: &[String]) -> Vec<serde_json::Value> {
+    onsa_tests::single_files::on_stacks(files.len(), |i| {
+        let path = &files[i];
+        match onsa_tests::single_files::read_input(path) {
+            Err(e) => serde_json::json!({"file": path, "unreadable": e}),
+            Ok(text) => match onsa_driver::guard(|| onsa_tests::default_inits::find(&text)) {
+                Ok(found) => {
+                    let mut v = serde_json::json!(found);
+                    v["file"] = serde_json::json!(path);
+                    v
+                }
+                Err(e) => serde_json::json!({"file": path, "internal": e.message}),
+            },
+        }
+    })
 }
 
 /// `--fix-same-place`: each file on a thread with the stack of a command, in parallel.

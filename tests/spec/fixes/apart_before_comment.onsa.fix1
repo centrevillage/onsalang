@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§5.2", "§18.1"]
+// fixes = 1
+
+// E0020 for a `&` written as a reference after a binary `/` (spec §5.2): the one candidate takes the
+// `&` out. Where the `/` would then touch a line comment after it, the text taken out leaves one space,
+// so that `/ //` does not read as the doc comment `///` (§2.1) and the reading of the text outside the
+// edit does not change (§18.1). One error per function.
+
+pub fn a_comment_after_a_blank(g: I32) -> I32 {
+  let a = g / // the divisor is on the next line  //~ E0020
+    2
+  a
+}
+
+pub fn a_comment_right_after(g: I32) -> I32 {
+  let a = g / // the divisor is on the next line   //~ E0020
+    2
+  a
+}

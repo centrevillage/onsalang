@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020: a line that starts with `-` in brackets, after a line that ends with a block-like expression (spec §2.5,
+// §3.1, S-537). In brackets the line is the continuation of the line before as a binary operator, or a new element
+// whose `,` is missing, so there are two candidates, in this order (§2.5): the `-` moved to the end of the line
+// before, and a `,` inserted there. The moved `-` makes the block-like expression the left operand of
+// it, so the candidate puts the expression in parentheses (§3.1: the E0013 that it must not leave); the inserted
+// `,` ends the element, and the expression is a whole element, so it has none. The main position is the `-`,
+// so the marker is on its line. One error in each declaration unit.
+
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn in_a_call(c: Bool, b: I32) -> I32 {
+  two((if c { 1 } else { 2 }) -
+    b, 1)                                           //~ E0020
+}
+
+pub fn in_an_array(o: Option[I32], b: I32) -> [I32; 2] {
+  [(match o { Some(n) => n, None => 0 }) -
+    b, 1]                                           //~ E0020
+}
+
+pub fn in_a_tuple(c: Bool, b: I32) -> (I32, I32) {
+  ((if c { 1 } else { 2 }) -
+    b, 1)                                           //~ E0020
+}

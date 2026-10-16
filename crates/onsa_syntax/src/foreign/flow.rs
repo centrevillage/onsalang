@@ -7,7 +7,7 @@ use onsa_diag::{Diagnostic, Edit, Fix, Span};
 use super::{Cursor, Hit, RowId, Want, bit_not, diagnostic, hit};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
 // The clock written after a type is apart from the token after it (R-205).
-use super::edits::insert_apart;
+use super::edits::{Insertions, insert_apart};
 use crate::cst::Class;
 use crate::token::{Gap, TokenKind};
 
@@ -130,9 +130,10 @@ pub(super) fn else_if_tilde(c: &Cursor) -> Option<Hit> {
 /// a declaration that is no input or output (`clock_in_type`, S-356). Each
 /// clock is an error of its own (one type may hold several). A clock whose
 /// node, or the node its candidate reads, a syntax error left unfinished is
-/// not reported: that error is the unit's. `deepest` is the deepest unit of
-/// the file in levels (spec §2.5): no candidate goes over the limit.
-pub(crate) fn clocks(cst: &Cst, text: &str, deepest: u32, out: &mut Vec<Diagnostic>) {
+/// not reported: that error is the unit's. No candidate goes over the
+/// nesting limit (spec §2.5, `limit` the file and its units).
+pub(crate) fn clocks(cst: &Cst, limit: crate::groups::Limit, out: &mut Vec<Diagnostic>, marks: &mut Insertions) {
+    let text = limit.text;
     for (i, t) in cst.tokens().iter().enumerate() {
         if t.kind != TokenKind::KwAt {
             continue;
@@ -145,9 +146,9 @@ pub(crate) fn clocks(cst: &Cst, text: &str, deepest: u32, out: &mut Vec<Diagnost
         let found = match cst.kind(parent) {
             NodeKind::AtExpr | NodeKind::Param | NodeKind::Fn | NodeKind::Flow | NodeKind::ClosureExpr => None,
             NodeKind::LetStmt | NodeKind::VarStmt => {
-                to_value(cst, text, clock, parent).map(|fixes| (RowId::ClockOnBinding, fixes))
+                to_value(cst, text, clock, parent, marks).map(|fixes| (RowId::ClockOnBinding, fixes))
             }
-            _ => in_type(cst, text, clock).map(|fixes| (RowId::ClockInType, fixes)),
+            _ => in_type(cst, text, clock, marks).map(|fixes| (RowId::ClockInType, fixes)),
         };
         let Some((id, fixes)) = found else { continue };
         // A candidate that would nest deeper than the limit is not made
@@ -156,7 +157,7 @@ pub(crate) fn clocks(cst: &Cst, text: &str, deepest: u32, out: &mut Vec<Diagnost
             cst.ancestors(clock).find(|&a| cst.kind(a) == NodeKind::Item).map_or(cst.span(clock), |a| cst.span(a));
         let too_deep = fixes.iter().any(|f| {
             let added = f.edits().iter().map(|e| e.replace.matches('(').count() as u32).sum::<u32>() + 1;
-            crate::groups::nests_too_deep(text, span, f.edits(), added, deepest)
+            limit.exceeded(span, f.edits(), added)
         });
         let fixes = if too_deep { Vec::new() } else { fixes };
         let d = diagnostic(text, id, Hit { span: cst.span(clock), fixes, misplaced: false, resume: None, note: None });
@@ -233,7 +234,7 @@ fn take_out(cst: &Cst, clock: NodeId) -> Option<Out> {
 /// another: the candidate takes the clock out (S-356). `None` when the
 /// statement was not read whole; no candidate when the value is `move x`
 /// or the clock holds a comment.
-fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fix>> {
+fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Insertions) -> Option<Vec<Fix>> {
     if !cst.is_complete(stmt) {
         return None;
     }
@@ -268,9 +269,9 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fi
         // the spec gives no other place for it: no candidate.
         NodeKind::MoveExpr => return Some(Vec::new()),
         _ if !super::operand(&kinds).bare_before_as_at() => {
-            edits.extend([Edit::insert(s.file, s.start, "("), insert_apart(s.file, text, s.end, &format!("){at}"))]);
+            edits.extend([Edit::insert(s.file, s.start, "("), insert_apart(s.file, s.end, &format!("){at}"), marks)]);
         }
-        _ => edits.push(insert_apart(s.file, text, s.end, &at)),
+        _ => edits.push(insert_apart(s.file, s.end, &at, marks)),
     }
     Some(vec![Fix::new("write the clock on the value", edits)])
 }
@@ -281,7 +282,7 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId) -> Option<Vec<Fi
 /// around it was not read whole (`Option[F32 at sample at block]`: the
 /// second `at` is the E0002 of the unit, as at the type of an input); no
 /// candidate when the clock holds a comment.
-fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
+fn in_type(cst: &Cst, text: &str, clock: NodeId, marks: &mut Insertions) -> Option<Vec<Fix>> {
     let typeish = |n: NodeId| {
         cst.kind(n).class() == Class::Type || matches!(cst.kind(n), NodeKind::TypeArgs | NodeKind::FnTypeParams)
     };
@@ -315,7 +316,7 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
         let at = clock_text(cst, text, clock);
         let edits = if !open(ty) {
             let mut e = out.edits("");
-            e.push(insert_apart(s.file, text, s.end, &at));
+            e.push(insert_apart(s.file, s.end, &at, marks));
             e
         } else if out.clock.end == s.end {
             // The clock was the end of the function type: the `)` goes where
@@ -326,14 +327,14 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId) -> Option<Vec<Fix>> {
         } else {
             let mut e = vec![Edit::insert(s.file, s.start, "(")];
             e.extend(out.edits(""));
-            e.push(insert_apart(s.file, text, s.end, &format!("){at}")));
+            e.push(insert_apart(s.file, s.end, &format!("){at}"), marks));
             e
         };
         return Some(vec![Fix::new("write the clock after the type", edits)]);
     }
     if matches!(cst.kind(place), NodeKind::LetStmt | NodeKind::VarStmt)
         && !has_clock(place)
-        && let Some(fixes) = to_value(cst, text, clock, place)
+        && let Some(fixes) = to_value(cst, text, clock, place, marks)
         && !fixes.is_empty()
     {
         return Some(fixes);

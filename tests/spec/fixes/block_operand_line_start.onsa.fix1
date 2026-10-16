@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// E0020: a binary operator at the start of a line, after a line that ends with a block-like expression (spec
+// §2.5, §3.1, S-537). The writer meant the line before to go on, and the candidate moves the operator to its end
+// (the E0020 of tests/spec/fixes/e0020_leading_operator.onsa). When the line before ends with an `if`, a `match`,
+// a block expression, an anonymous function, an `unsafe` or a `handle` that has no parentheses, the moved operator
+// would make it an operand with no parentheses, which is an E0013 of the same stage, so the candidate puts
+// that expression in parentheses (`if a > 0 { 1 } else { 2 }` and `+ 1` are `(if a > 0 { 1 } else { 2 }) +` and `1`).
+// An expression that has the parentheses already, and one that is not block-like (a struct literal, a call),
+// gets none, and a range symbol at the start of a line gets none either, since an end of a range is no operand
+// (§3.1). The marker is on the line of the operator, the main position of an E0020. In parentheses the
+// operator at the start of a line is also moved (`two(a` and `+ b, 1)`). The lines that start with `-` and `^`
+// are in block_operand_line_start_minus.onsa. One error in each declaration unit.
+
+pub struct P {
+  x: I32,
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn tail_plus(a: I32) -> I32 {
+  (if a > 0 { 1 } else { 2 }) +
+  1                                                 //~ E0020
+}
+
+pub fn let_times(c: Bool) -> I32 {
+  let r = (if c { 1 } else { 2 }) *
+    3                                               //~ E0020
+  r
+}
+
+pub fn match_on_lines(o: Option[I32]) -> I32 {
+  let r = (match o {
+    Some(n) => n,
+    None => 0,
+  }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn if_on_lines(c: Bool) -> I32 {
+  let r = (if c {
+    1
+  } else {
+    2
+  }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn else_if_chain(a: Bool, b: Bool) -> I32 {
+  let r = (if a { 1 } else if b { 2 } else { 3 }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn block_expression(n: I32) -> I32 {
+  let r = ({ n }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn anonymous_function() -> I32 {
+  let r = (fn(y: I32) -> I32 { y }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn unsafe_block() -> I32 {
+  let r = (unsafe { fc_new(1) }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn handle_named() -> I32 {
+  let r = (handle { load() } with h) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn handle_with_arguments() -> I32 {
+  let r = (handle { load() } with arena(inout scratch)) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn comparison(c: Bool, n: I32) -> Bool {
+  (if c { 1 } else { 2 }) ==
+  n                                                 //~ E0020
+}
+
+pub fn logical_and(d: Bool, c: Bool) -> Bool {
+  (if c { true } else { false }) &&
+  d                                                 //~ E0020
+}
+
+pub fn logical_or(d: Bool, c: Bool) -> Bool {
+  (match c { true => true, false => d }) ||
+  d                                                 //~ E0020
+}
+
+pub fn remainder(c: Bool, n: U32) -> U32 {
+  let r = (if c { 4 } else { 8 }) %
+  n                                                 //~ E0020
+  r
+}
+
+pub fn comment_after_the_block(c: Bool) -> I32 {
+  let r = (if c { 1 } else { 2 }) + // the first operand
+  1                                                 //~ E0020
+  r
+}
+
+pub fn comment_line_between(c: Bool) -> I32 {
+  let r = (if c { 1 } else { 2 }) +
+  // the second operand
+  1                                                 //~ E0020
+  r
+}
+
+pub fn in_an_argument(c: Bool, b: I32) -> I32 {
+  two((if c { 1 } else { 2 }) +
+    b, 1)                                           //~ E0020
+}
+
+pub fn in_a_tuple(c: Bool, b: I32) -> (I32, I32) {
+  ((if c { 1 } else { 2 }) *
+    b, 1)                                           //~ E0020
+}
+
+pub fn generic_function[T: Num](c: Bool, a: T) -> T {
+  let r = (if c { a } else { a }) +
+  a                                                 //~ E0020
+  r
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = (if x > 0.0 { x } else { 0.0 }) *
+  2.0                                               //~ E0020
+  y
+}
+
+pub flow in_a_flow_with_par(x: F32 at sample) -> F32 at sample {
+  let y = (par i in 0 ..< 2 { x }) +
+  1.0                                               //~ E0020
+  y
+}
+
+pub fn has_parentheses(c: Bool) -> I32 {
+  let r = (if c { 1 } else { 2 }) +
+  1                                                 //~ E0020
+  r
+}
+
+pub fn struct_literal(a: P, b: P) -> Bool {
+  P { x: 1 } ==
+  b                                                 //~ E0020
+}
+
+pub fn call(c: Bool) -> I32 {
+  two(1, 2) +
+  1                                                 //~ E0020
+}
+
+pub fn range_start_is_no_operand(c: Bool, n: I32) -> I32 {
+  var t = 0
+  for i in if c { 0 } else { 1 } ..<
+    n {                                             //~ E0020
+    t = t + i
+  }
+  t
+}

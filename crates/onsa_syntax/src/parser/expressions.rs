@@ -244,6 +244,11 @@ impl<'a> Parser<'a> {
                             chain = chain.map(|_| name);
                         }
                         TokenKind::Int => {
+                            if crate::literal::tuple_index_value(self.token_text(n)).is_some()
+                                && crate::literal::tuple_index_unpadded(self.token_text(n)).is_some()
+                            {
+                                return Err(self.fail(Want::TupleIndex, "a tuple index without a leading `0`"));
+                            }
                             self.bump();
                             if crate::literal::tuple_index_value(self.token_text(n)).is_none() {
                                 return Err(self.error(Code::E0408, n.span, "tuple index is too large"));
@@ -318,6 +323,14 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
             callee = callee.then(expr.kind);
+        }
+        // A postfix `?` after a blank or a line break, where the chain would
+        // read it: the grammar fails at it, and the table's candidate writes
+        // it against the chain (§2.5, R-214); elsewhere a `?` has none.
+        let next = (self.pos..self.tokens.len())
+            .find(|&k| self.tokens[k].kind != TokenKind::Newline && !self.tokens[k].kind.is_comment());
+        if let Some(at) = next.filter(|&k| self.tokens[k].kind == TokenKind::Question && self.gap(k).is_some()) {
+            self.detached = Some(Detached { at, by_name: false, expr: true, required: false });
         }
         Ok(expr)
     }
@@ -513,7 +526,7 @@ impl<'a> Parser<'a> {
                     self.parse_item_body(ItemCtx::InlineHandler)?;
                 // S-412: the `(` after the handler of `with` follows the rule of
                 // the postfix `(` (a blank before it is E0020).
-                } else if self.touches(TokenKind::LParen, true, false) {
+                } else if self.touches_bare(TokenKind::LParen)? {
                     self.parse_arg_list()?;
                 }
                 return Ok(self.complete(m, NodeKind::HandleExpr));

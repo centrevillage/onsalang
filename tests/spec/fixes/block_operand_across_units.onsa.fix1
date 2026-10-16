@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§6.6", "§18.1"]
+// fixes = 1
+
+// E0020: a binary operator at the start of the line after a constant whose value ends with a block-like
+// expression (spec §2.5, §3.1, S-537). The line of the operator is a unit of its own (tokens of no
+// declaration, §18.1), so the candidate that moves the operator to the end of the line before edits two
+// units, the constant and that line. The moved operator would make the block-like expression an operand
+// without parentheses (E0013, the same stage), so the candidate puts it in parentheses, as it does in one
+// unit (fixes/block_operand_line_start.onsa): `if true { 1 } else { 2 }` and `+ 1` are
+// `(if true { 1 } else { 2 }) +` and `1`, and a block and `- 1` on the next line are joined as
+// `({ 3 }) - 1`. The same holds for a constant that is a member of an `impl`. The constant of a trait is
+// in crate onsa_syntax (`operands_tests`): trait definitions are not in this version (E0200).
+
+pub struct S {
+  v: I32,
+}
+
+const A: I32 = (if true { 1 } else { 2 }) +
+1                                                 //~ E0020
+
+const B: I32 = ({ 3 }) - 1
+//~ E0020
+
+const C: I32 = ({
+  4
+}) *
+2                                                 //~ E0020
+
+impl S {
+  const K: I32 = (if true { 1 } else { 2 }) +
+  1                                               //~ E0020
+}

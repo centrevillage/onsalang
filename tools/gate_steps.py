@@ -70,6 +70,9 @@ STEPS = [
          info=True, slow=True),  # fmt: skip
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
+    # The documents write the `init` of a delay in the omitted form (S-539 (c3a)): the ```onsa blocks of the spec
+    # and of docs/onsa-tools.md, and the files of examples/ and std/.
+    Step("default-inits", (*PY, str(TOOLS / "default_inits.py"))),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),
     # The ignores of the Rust tests whose reason names a work that is done or not in the tables (R-224).
     Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True),

@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a tuple index that is written as something else than decimal digits (spec §2.4, S-508):
+// the index is read in decimal digits only and not as a number literal, so a prefix (`0x1`, `0b1`),
+// a separator (`1_`, `0_1`) and an exponent (`1e3`) do not belong to it. No reading gives the writer
+// one index to put in their place, so there is no candidate (the leading `0` of `t.01`, which has
+// one, is in fixes/tuple_index_leading_zero.onsa). The marker is the line only. One error per
+// function (P-01).
+
+pub fn hexadecimal(t: (I32, I32)) -> I32 {
+  t.0x1                                             //~ E0002
+}
+
+pub fn hexadecimal_with_letters(t: (I32, I32)) -> I32 {
+  t.0xFF                                            //~ E0002
+}
+
+pub fn binary(t: (I32, I32)) -> I32 {
+  t.0b1                                             //~ E0002
+}
+
+pub fn trailing_separator(t: (I32, I32)) -> I32 {
+  t.1_                                              //~ E0002
+}
+
+pub fn inner_separator(t: (I32, I32)) -> I32 {
+  t.0_1                                             //~ E0002
+}
+
+pub fn exponent(t: (I32, I32)) -> I32 {
+  t.1e3                                             //~ E0002
+}
+
+pub fn in_an_argument(t: (I32, I32)) -> I32 {
+  two(t.0x1, 1)                                     //~ E0002
+}
+
+pub fn on_the_left_of_an_assignment(inout t: (I32, I32)) {
+  t.0x1 = 5                                         //~ E0002
+}
+
+pub fn nested(t: ((I32, I32), I32)) -> I32 {
+  t.0.0b1                                           //~ E0002
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+// The decimal forms are read.
+pub fn fine(t: ((I32, I32), I32)) -> I32 {
+  t.0.1 + t.1
+}

@@ -1,0 +1,230 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§6.1", "§6.6", "§7", "§11.5", "§18.1"]
+
+// E0013 in the places where an expression can stand (spec §3.1, S-537): the head of a statement and the end
+// of a body (a form that other languages split into a statement and a second expression), the value of a
+// `let`, a `var` and an assignment, a `return`, the heading of an `if`, a `while` and a `match`, an end of
+// a range, an argument, an element, the value of a field, an index, an arm and the guard of an arm, a
+// closure body, a generic function, a method, a `const`, an `assert`, a flow, a `par` body, and the
+// block-like expressions inside one another. Each place is the place of the whole expression that holds the
+// operand, so the place itself is written with no parentheses and the E0013 is of the operator. The
+// expression is on one line, so the marker is on its line (§3.1 does not say where the main position is).
+// One error in each declaration unit (§18.1).
+
+use std.array
+
+pub struct P {
+  x: I32,
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+// ---------------------------------------------------------------- statements
+
+pub fn statement_head(c: Bool) -> I32 {
+  if c { 1 } else { 2 } + 10                        //~ E0013
+  5
+}
+
+pub fn statement_head_block(n: I32) -> I32 {
+  { n } - 10                                        //~ E0013
+  5
+}
+
+pub fn statement_head_match(o: Option[I32]) -> I32 {
+  match o { Some(n) => n, None => 0 } + 10          //~ E0013
+  5
+}
+
+pub fn tail_expression(c: Bool) -> I32 {
+  if c { 1 } else { 2 } + 10                        //~ E0013
+}
+
+pub fn tail_block(n: I32) -> I32 {
+  { n } - 10                                        //~ E0013
+}
+
+pub fn let_right(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 } + 10                //~ E0013
+  a
+}
+
+pub fn var_initializer(c: Bool) -> I32 {
+  var n = if c { 1 } else { 2 } + 10                //~ E0013
+  n = n + 1
+  n
+}
+
+pub fn assignment_right(c: Bool) -> I32 {
+  var n = 0
+  n = if c { 1 } else { 2 } + 10                    //~ E0013
+  n
+}
+
+pub fn return_value(c: Bool) -> I32 {
+  if c {
+    return if c { 1 } else { 2 } + 10               //~ E0013
+  }
+  0
+}
+
+// ---------------------------------------------------------------- headings and ranges
+
+pub fn in_an_if_heading(d: Bool, c: Bool) -> I32 {
+  if d && if c { true } else { false } {            //~ E0013
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_while_heading(c: Bool, n: I32) -> I32 {
+  var t = 0
+  while n < if c { 3 } else { 5 } {                 //~ E0013
+    t = t + 1
+    break
+  }
+  t
+}
+
+pub fn in_a_match_heading(c: Bool, n: I32) -> I32 {
+  match if c { 1 } else { 2 } + n {                 //~ E0013
+    _ => 1,
+  }
+}
+
+pub fn in_a_range_end(c: Bool) -> I32 {
+  var t = 0
+  for i in 0 ..< if c { 4 } else { 8 } + 1 {        //~ E0013
+    t = t + i
+  }
+  t
+}
+
+pub fn in_a_range_start(c: Bool) -> I32 {
+  var t = 0
+  for i in if c { 0 } else { 1 } + 1 ..< 4 {        //~ E0013
+    t = t + i
+  }
+  t
+}
+
+pub fn in_a_closed_range_end(c: Bool) -> I32 {
+  var t = 0
+  for i in 0 ..= if c { 4 } else { 8 } * 2 {        //~ E0013
+    t = t + i
+  }
+  t
+}
+
+// ---------------------------------------------------------------- arguments, elements, fields, indexes and arms
+
+pub fn in_an_argument(c: Bool) -> I32 {
+  add(if c { 1 } else { 2 } + 10, 3)                //~ E0013
+}
+
+pub fn in_a_second_argument(c: Bool) -> I32 {
+  add(3, 10 + if c { 1 } else { 2 })                //~ E0013
+}
+
+pub fn in_an_array_element(c: Bool) -> [I32; 2] {
+  [if c { 1 } else { 2 } + 10, 3]                   //~ E0013
+}
+
+pub fn in_a_tuple_element(c: Bool) -> (I32, I32) {
+  (3, if c { 1 } else { 2 } + 10)                   //~ E0013
+}
+
+pub fn in_a_field_value(c: Bool) -> P {
+  P { x: if c { 1 } else { 2 } + 10 }               //~ E0013
+}
+
+pub fn in_an_index(c: Bool, xs: [I32; 4]) -> I32 {
+  xs[if c { 0 } else { 1 } + 1]                     //~ E0013
+}
+
+pub fn in_an_arm_value(o: Option[I32], c: Bool) -> I32 {
+  match o {
+    Some(k) => if c { k } else { 2 } + 10,          //~ E0013
+    None => 3,
+  }
+}
+
+pub fn in_an_arm_guard(o: Option[I32], c: Bool) -> I32 {
+  match o {
+    Some(k) if if c { k } else { 2 } > 1 => 1,      //~ E0013
+    _ => 3,
+  }
+}
+
+pub fn in_a_closure_body() -> [U32; 3] {
+  array.from_fn(fn(i) { if i > 1 { i } else { 0 } + 1 })  //~ E0013
+}
+
+// ---------------------------------------------------------------- generic functions, methods, constants, tests and flows
+
+pub fn in_a_generic_function[T: Num](c: Bool, a: T, b: T) -> T {
+  if c { a } else { b } + a                         //~ E0013
+}
+
+impl P {
+  pub fn pick(self, c: Bool) -> I32 {
+    if c { self.x } else { 0 } + 1                  //~ E0013
+  }
+}
+
+const BASE: I32 = if true { 1 } else { 2 } + 10     //~ E0013
+
+test "the operand of an assert" {
+  assert if true { 1 } else { 2 } + 10 == 11        //~ E0013
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x } else { 0.0 } * 2.0               //~ E0013
+}
+
+pub flow in_the_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(if x > 0.0 { x } else { 0.0 } + 1.0)        //~ E0013
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0 ..< 2 { if x > 0.0 { x } else { 0.0 } + 1.0 }  //~ E0013
+  a[0]
+}
+
+pub flow in_a_par_heading(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0 ..< if true { 2 } else { 3 } + 1 { x }  //~ E0013
+  a[0]
+}
+
+// ---------------------------------------------------------------- inside one another
+
+pub fn nested_in_a_branch(c: Bool, d: Bool) -> I32 {
+  if c { if d { 1 } else { 2 } + 1 } else { 3 }     //~ E0013
+}
+
+pub fn nested_in_a_parenthesized_operand(c: Bool, d: Bool) -> I32 {
+  (if c { if d { 1 } else { 2 } + 1 } else { 3 }) + 4  //~ E0013
+}
+
+pub fn inside_parentheses(c: Bool) -> I32 {
+  (if c { 1 } else { 2 } + 10)                      //~ E0013
+}
+
+pub fn block_in_a_closure_body() -> [U32; 2] {
+  array.from_fn(fn(i) { { i } + 1 })                //~ E0013
+}
+
+// ---------------------------------------------------------------- fine: a place is not an operand
+
+pub fn fine(c: Bool, xs: [I32; 4]) -> I32 {
+  let a = if c { 1 } else { 2 }
+  var t = 0
+  for i in 0 ..< if c { 4 } else { 8 } {
+    t = t + i
+  }
+  add(if c { 1 } else { 2 }, xs[if c { 0 } else { 1 }]) + a + t
+}

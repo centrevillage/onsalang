@@ -58,6 +58,17 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
     Some((row, Hit { span, fixes, misplaced: !matches!(c.want, Want::Expr | Want::Pattern), resume: None, note: None }))
 }
 
+/// A tuple index with a leading `0` (`t.01`, `t.00`; §2.4, S-508), where the
+/// parser failed at it ([`Want::TupleIndex`]): the one candidate takes the
+/// leading `0`s out (no language reads a tuple index as octal).
+pub(super) fn tuple_index_zero(c: &Cursor) -> Option<Hit> {
+    if c.want != Want::TupleIndex {
+        return None;
+    }
+    let digits = crate::literal::tuple_index_unpadded(c.src(c.at))?;
+    hit(c.span(c.at), vec![Fix::replace("remove the leading zero", c.span(c.at), digits)])
+}
+
 /// The parts of the number written as in other languages at token `i` (a
 /// `ForeignLit`), as the lexer read them.
 fn number_at(c: &Cursor, i: usize) -> Number {

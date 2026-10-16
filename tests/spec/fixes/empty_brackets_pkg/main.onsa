@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0002 for empty brackets in the main module of a package that imports a module that has them too
+// (spec §2.5, S-513; util.onsa). Each module reports its own errors, each candidate takes out the
+// brackets in its own file, and a name imported from the other module is checked as it is written
+// there.
+
+use util.base
+
+pub enum Local {
+  A(),                                              //~ E0002
+  B,
+}
+
+pub fn twice[](x: I32) -> I32 {                     //~ E0002
+  x * 2
+}
+
+pub fn none_in_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    None() => base(),                               //~ E0002
+    Some(n) => n,
+  }
+}
+
+pub fn with_empty() -> I32 {
+  handle { base() } with h()                        //~ E0002
+}
+
+pub fn run() -> I32 {
+  base() + 1
+}

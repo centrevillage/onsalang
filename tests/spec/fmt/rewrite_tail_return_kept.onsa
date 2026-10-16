@@ -47,7 +47,7 @@ fn in_a_let(c: Bool) -> I32 {
 }
 
 fn in_a_condition(c: Bool, d: Bool) -> I32 {
-  if d && if c { return 1 } else { true } {
+  if d && (if c { return 1 } else { true }) {
     2
   } else {
     3

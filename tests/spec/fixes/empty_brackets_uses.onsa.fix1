@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§8.3", "§18.1"]
+// fixes = 1
+
+// E0002 for empty brackets in a handler and in a pattern (spec §2.5, S-513): a handler that takes
+// no arguments is declared and used with no brackets (`handler h: Ask`, `with h`), and a unit
+// variant or `None` in a pattern is written with none (`E.A`, `None`). The one candidate takes the
+// brackets out, from the opening one to the closing one. A pattern `Some()` of a variant that has
+// an element and a handler that takes arguments are errors in the same place, and the candidate
+// is the same; what is left after it is a count that does not fit (E0412, a later stage, which
+// crates/onsa_cli/tests/empty_brackets.rs checks). Effects and handlers are not in this version
+// (E0200, a stage after this one), so the names here are not declared and nothing is checked
+// beyond the syntax. One error per declaration unit.
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+pub enum Pairs {
+  P(E, I32),
+  Q,
+}
+
+handler named: Ask {                              //~ E0002
+  fn ask() -> I32 { 1 }
+}
+
+pub handler with_a_space: Ask {                  //~ E0002
+  fn ask() -> I32 { 1 }
+}
+
+pub fn with_empty() -> I32 {
+  handle { 1 } with h                             //~ E0002
+}
+
+pub fn with_empty_in_a_let() -> I32 {
+  let r = handle { 1 } with h                    //~ E0002
+  r
+}
+
+pub fn with_a_handler_that_takes_arguments() -> I32 {
+  handle { 1 } with arena                         //~ E0002
+}
+
+pub fn with_in_a_nested_handle() -> I32 {
+  handle { handle { 1 } with h } with g           //~ E0002
+}
+
+pub fn with_in_a_branch(c: Bool) -> I32 {
+  if c { handle { 1 } with h } else { 2 }         //~ E0002
+}
+
+pub fn with_in_a_closure() -> I32 {
+  let f = fn() -> I32 { handle { 1 } with h }     //~ E0002
+  f.()
+}
+
+pub fn unit_variant_in_a_pattern(e: E) -> I32 {
+  match e {
+    E.A => 1,                                     //~ E0002
+    E.B(n) => n,
+  }
+}
+
+pub fn unit_variant_with_a_space(e: E) -> I32 {
+  match e {
+    E.A => 1,                                    //~ E0002
+    E.B(n) => n,
+  }
+}
+
+pub fn none_in_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    None => 0,                                    //~ E0002
+    Some(n) => n,
+  }
+}
+
+pub fn variant_with_an_element(e: E) -> I32 {
+  match e {
+    E.A => 0,
+    E.B => 1,                                     //~ E0002
+  }
+}
+
+pub fn some_with_no_element(o: Option[I32]) -> I32 {
+  match o {
+    Some => 1,                                    //~ E0002
+    None => 0,
+  }
+}
+
+pub fn inside_some(o: Option[E]) -> I32 {
+  match o {
+    Some(E.A) => 1,                               //~ E0002
+    Some(E.B(n)) => n,
+    None => 0,
+  }
+}
+
+pub fn inside_a_tuple(e: E, n: I32) -> I32 {
+  match (e, n) {
+    (E.A, 0) => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn inside_an_alternative(e: E) -> I32 {
+  match e {
+    E.A | E.B(_) => 1,                            //~ E0002
+  }
+}
+
+pub fn inside_a_variant_of_a_variant(p: Pairs) -> I32 {
+  match p {
+    Pairs.P(E.A, n) => n,                         //~ E0002
+    Pairs.P(E.B(m), n) => m + n,
+    Pairs.Q => 0,
+  }
+}
+
+pub fn with_a_guard(e: E, n: I32) -> I32 {
+  match e {
+    E.A if n > 0 => 1,                            //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn in_a_generic_function[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(x) => x,
+    None => d,                                    //~ E0002
+  }
+}
+
+// What is written with no brackets is read as before.
+pub fn fine(e: E, o: Option[I32]) -> I32 {
+  match e {
+    E.A => 0,
+    E.B(n) => n,
+  }
+}

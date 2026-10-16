@@ -28,6 +28,22 @@ pub(crate) fn bracket_contents(tokens: &[Token], open: usize) -> Option<(usize, 
     None
 }
 
+/// The bracket that closes the `(` or `[` at `open` when nothing but line
+/// breaks and comments is between them (the code tokens): the empty
+/// brackets of §2.5 (S-513). The one judgment of an empty list, for the
+/// parser ([`crate::parser`]'s `refuse_empty`) and the table of the forms of
+/// other languages (`Detached::joins`).
+pub(crate) fn empty_brackets(tokens: &[Token], open: usize) -> Option<usize> {
+    let close = match tokens.get(open)?.kind {
+        TokenKind::LParen => TokenKind::RParen,
+        TokenKind::LBracket => TokenKind::RBracket,
+        _ => return None,
+    };
+    (open + 1..tokens.len())
+        .find(|&k| tokens[k].kind != TokenKind::Newline && !tokens[k].kind.is_comment())
+        .filter(|&k| tokens[k].kind == close)
+}
+
 /// The bracket that closes the one at `open`: the closer of its kind, the
 /// brackets in it paired by kind too (§2.5). None when `open` is no opening
 /// bracket, when a closer of another kind comes first (`pub(crate]` closes

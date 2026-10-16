@@ -421,7 +421,7 @@ impl<'a> Parser<'a> {
                 p.parse_name("variant name")?;
                 // S-412: the `(` of the fields of a variant follows the
                 // rule of the postfix `(` (a blank before it is E0020).
-                if p.touches(TokenKind::LParen, true, false) {
+                if p.touches_bare(TokenKind::LParen)? {
                     let f = p.start(NodeKind::VariantFields)?;
                     p.bump();
                     while !p.at(TokenKind::RParen) {
@@ -478,7 +478,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwTrait)?;
         self.parse_name("trait name")?;
         self.parse_generics_opt()?;
-        self.parse_item_body(ItemCtx::Trait)?;
+        self.parse_members(NodeKind::Trait)?;
         self.complete(m, NodeKind::Trait);
         Ok(())
     }
@@ -504,7 +504,7 @@ impl<'a> Parser<'a> {
             }
             self.parse_type()?;
         }
-        self.parse_item_body(ItemCtx::Impl)?;
+        self.parse_members(NodeKind::Impl)?;
         self.complete(m, NodeKind::Impl);
         Ok(())
     }
@@ -514,7 +514,7 @@ impl<'a> Parser<'a> {
         self.eat(TokenKind::KwBlocking);
         self.expect(TokenKind::KwEffect)?;
         self.parse_name("effect name")?;
-        self.parse_item_body(ItemCtx::Effect)?;
+        self.parse_members(NodeKind::Effect)?;
         self.complete(m, NodeKind::Effect);
         Ok(())
     }
@@ -524,11 +524,12 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwHandler)?;
         self.parse_name("handler name")?;
         if self.at(TokenKind::LParen) {
+            self.refuse_empty(TokenKind::LParen)?;
             self.parse_params(true, NodeKind::Handler)?;
         }
         self.expect(TokenKind::Colon)?;
         self.parse_path("effect name")?;
-        self.parse_item_body(ItemCtx::Handler)?;
+        self.parse_members(NodeKind::Handler)?;
         self.complete(m, NodeKind::Handler);
         Ok(())
     }
@@ -604,7 +605,7 @@ impl<'a> Parser<'a> {
         }
         self.bump();
         self.expect(TokenKind::Str)?;
-        self.parse_item_body(ItemCtx::Extern)?;
+        self.parse_members(NodeKind::Extern)?;
         self.complete(m, NodeKind::Extern);
         Ok(())
     }
@@ -687,6 +688,15 @@ impl<'a> Parser<'a> {
             .with_found(self.src(t.span).to_string())
             .with_rule(crate::test_name::RULE);
         self.report(d);
+    }
+
+    /// The members of a declaration of `kind`, in the list of
+    /// [`ItemCtx::of_members`].
+    fn parse_members(&mut self, kind: NodeKind) -> PResult<()> {
+        let Some(ctx) = ItemCtx::of_members(kind) else {
+            onsa_diag::internal::bug(Some(self.peek().span), format!("a {kind:?} has no members"));
+        };
+        self.parse_item_body(ctx)
     }
 
     /// `{ item NL item NL ... }` for trait / impl / effect / handler / extern bodies.

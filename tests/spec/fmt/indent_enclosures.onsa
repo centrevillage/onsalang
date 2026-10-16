@@ -38,11 +38,11 @@ pub fn calls(t: Bool) -> I32 {
     bar(1,
         2)
   let z = foo() +
-    if t {
+    (if t {
       1
     } else {
       2
-    }
+    })
   x + y + z
 }
 
@@ -114,11 +114,11 @@ pub fn deeper(t: Bool) -> I32 {
         2,
       )
     let y = foo() +
-      if t {
+      (if t {
         1
       } else {
         2
-      }
+      })
     x + y
   } else {
     0

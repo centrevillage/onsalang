@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// E0020: a line that starts with `-` or `^` and a space (`- b`, `^ b`) after a line that ends with a block-like
+// expression, outside brackets (spec §2.5, §3.1, S-537). The candidates are the space removed (`-b`: a new
+// statement with a prefix operator, which a later stage reports as a value that is not used) and the line
+// joined to the line before it (`a - b`). The joined candidate puts the block-like expression at the end of
+// the line before in parentheses, since it is the left operand of the `-` or the `^` then (an E0013 of the same
+// stage that the candidate must not leave, §3.1: `(if a > 0 { 1 } else { 2 }) - b`). The joined line takes the code of the
+// line up to its comment, and the line of the marker keeps the comment. The order of the two candidates is the
+// one of tests/spec/fixes/e0020_leading_minus.onsa (the spec says "前の行とつないだ形も並べる" and does not number
+// them). The main position is the `-` or the `^`, so the marker is on its line. One error in each declaration unit.
+
+pub fn id(x: I32) -> I32 {
+  x
+}
+
+pub fn tail_minus(a: I32, b: I32) -> I32 {
+  if a > 0 { 1 } else { 2 }
+  -b                                                //~ E0020
+}
+
+pub fn let_minus(c: Bool, b: I32) -> I32 {
+  let r = if c { 1 } else { 2 }
+    -b                                              //~ E0020
+  r
+}
+
+pub fn match_minus(o: Option[I32], b: I32) -> I32 {
+  let r = match o { Some(n) => n, None => 0 }
+  -b                                                //~ E0020
+  r
+}
+
+pub fn match_on_lines(o: Option[I32], b: I32) -> I32 {
+  let r = match o {
+    Some(n) => n,
+    None => 0,
+  }
+  -b                                                //~ E0020
+  r
+}
+
+pub fn block_minus(n: I32, b: I32) -> I32 {
+  let r = { n }
+  -b                                                //~ E0020
+  r
+}
+
+pub fn unsafe_minus(b: I32) -> I32 {
+  let r = unsafe { fc_new(1) }
+  -b                                                //~ E0020
+  r
+}
+
+pub fn handle_minus(b: I32) -> I32 {
+  let r = handle { load() } with h
+  -b                                                //~ E0020
+  r
+}
+
+pub fn caret_after_an_if(c: Bool, b: U32) -> U32 {
+  let r = if c { 1 } else { 2 }
+  ^b                                                //~ E0020
+  r
+}
+
+pub fn caret_in_the_tail(o: Option[U32], b: U32) -> U32 {
+  match o { Some(n) => n, None => 0 }
+  ^b                                                //~ E0020
+}
+
+pub fn caret_after_a_block(n: U32, b: U32) -> U32 {
+  let r = { n }
+  ^b                                                //~ E0020
+  r
+}
+
+pub flow minus_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { x } else { 0.0 }
+  -1.0                                              //~ E0020
+  y
+}
+
+pub fn parenthesized(c: Bool, b: I32) -> I32 {
+  let r = (if c { 1 } else { 2 })
+  -b                                                //~ E0020
+  r
+}
+
+pub fn a_call(a: I32, b: I32) -> I32 {
+  let r = id(a)
+  -b                                                //~ E0020
+  r
+}

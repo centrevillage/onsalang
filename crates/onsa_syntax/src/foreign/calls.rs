@@ -95,7 +95,8 @@ pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
     // takes the unit over the limit, where the check after it would report
     // the E0006 of the same stage (S-236, R-200).
     let added = u32::from(edits.len() == 1);
-    if crate::groups::nests_too_deep(c.text, span, &edits, added, c.reach) {
+    let within = crate::units::Within::file(c.file, c.text, c.reach);
+    if crate::groups::nests_too_deep(c.text, within, span, &edits, added) {
         return hit(span, Vec::new());
     }
     hit(span, vec![Fix::new("call the function value with `.(`", edits)])

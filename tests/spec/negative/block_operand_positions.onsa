@@ -1,0 +1,213 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.3", "§6.1", "§11.3", "§18.1"]
+
+// E0013: the positions of an operand (spec §3.1, S-537): the left, the right and both sides of a binary
+// operator, a chain of binary operators, the operand of a prefix `-` and `!`, and the receiver of a postfix
+// symbol (the call of a function value `.(`, a field, a method call, a tuple index, an index, `?`), the left
+// of `as` and the left of `at`. `at` is only written in a flow. An expression with more than one block-like
+// operand is one error (§3.1: `if a { 1 } else { 2 } + match o { … }` is one error that has one candidate with
+// both in parentheses), so each of those functions has one marker. The expression is on one line, so the
+// marker is on its line (§3.1 does not say where the main position is). The forms that put an
+// `as` expression as an operand as well (E0011) are not here. One error in each declaration unit.
+
+pub struct P {
+  x: I32,
+}
+
+// ---------------------------------------------------------------- the operands of a binary operator
+
+pub fn binary_left(c: Bool) -> I32 {
+  let a = if c { 1 } else { 2 } + 10                //~ E0013
+  a
+}
+
+pub fn binary_right(c: Bool) -> I32 {
+  let a = 10 + if c { 1 } else { 2 }                //~ E0013
+  a
+}
+
+pub fn binary_right_of_a_product(c: Bool) -> I32 {
+  let a = 10 + if c { 1 } else { 2 } * 3            //~ E0013
+  a
+}
+
+pub fn binary_middle_of_a_chain(c: Bool, n: I32) -> I32 {
+  let a = n + if c { 1 } else { 2 } + n             //~ E0013
+  a
+}
+
+pub fn binary_both(c: Bool, o: Option[I32]) -> I32 {
+  let a = if c { 1 } else { 2 } + match o { Some(n) => n, None => 0 }  //~ E0013
+  a
+}
+
+pub fn binary_both_in_a_comparison(a: Bool, b: Bool) -> Bool {
+  if a { 1 } else { 2 } == if b { 1 } else { 2 }    //~ E0013
+}
+
+pub fn binary_both_blocks(n: I32) -> I32 {
+  let a = { n } + { 2 }                             //~ E0013
+  a
+}
+
+pub fn three_in_a_chain(a: Bool, b: Bool, c: Bool) -> I32 {
+  if a { 1 } else { 2 } + if b { 10 } else { 20 } + if c { 100 } else { 200 }  //~ E0013
+}
+
+pub fn the_operators(c: Bool, n: I32) -> I32 {
+  let a = n * if c { 1 } else { 2 }                 //~ E0013
+  a
+}
+
+pub fn remainder(c: Bool, n: U32) -> U32 {
+  let a = n % if c { 4 } else { 8 }                 //~ E0013
+  a
+}
+
+pub fn comparison(c: Bool, n: I32) -> Bool {
+  n < if c { 4 } else { 8 }                         //~ E0013
+}
+
+pub fn logical_and(d: Bool, c: Bool) -> Bool {
+  d && if c { true } else { false }                 //~ E0013
+}
+
+pub fn logical_or(d: Bool, c: Bool) -> Bool {
+  if c { true } else { false } || d                 //~ E0013
+}
+
+pub fn bit_and(c: Bool, n: U32) -> U32 {
+  let a = n & if c { 1 } else { 3 }                 //~ E0013
+  a
+}
+
+pub fn shift(c: Bool, n: U32) -> U32 {
+  let a = n << if c { 1 } else { 3 }                //~ E0013
+  a
+}
+
+pub fn wrapping_add(c: Bool, n: U8) -> U8 {
+  let a = n +% if c { 1 } else { 3 }                //~ E0013
+  a
+}
+
+// ---------------------------------------------------------------- the operand of a prefix operator
+
+pub fn prefix_minus_of_an_if(c: Bool) -> I32 {
+  -if c { 1 } else { 2 }                            //~ E0013
+}
+
+pub fn prefix_minus_of_a_match(o: Option[I32]) -> I32 {
+  let a = -match o { Some(n) => n, None => 0 }      //~ E0013
+  a
+}
+
+pub fn prefix_not_of_an_if(c: Bool) -> Bool {
+  !if c { true } else { false }                     //~ E0013
+}
+
+pub fn prefix_not_of_a_block(b: Bool) -> Bool {
+  let a = !{ b }                                    //~ E0013
+  a
+}
+
+pub fn prefix_and_a_sum(c: Bool) -> I32 {
+  let a = -if c { 1 } else { 2 } + 1                //~ E0013
+  a
+}
+
+pub fn prefix_and_a_right_operand(a: Bool, b: Bool) -> I32 {
+  let r = -if a { 1 } else { 2 } + if b { 3 } else { 4 }  //~ E0013
+  r
+}
+
+// ---------------------------------------------------------------- the receiver of a postfix symbol
+
+pub fn receiver_call_of_an_anonymous_function() -> I32 {
+  fn(y: I32) -> I32 { y }.(3)                       //~ E0013
+}
+
+pub fn receiver_call_of_a_choice_of_functions(c: Bool, f: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {
+  if c { f } else { g }.(3)                         //~ E0013
+}
+
+pub fn receiver_field(c: Bool, p: P, q: P) -> I32 {
+  if c { p } else { q }.x                           //~ E0013
+}
+
+pub fn receiver_field_of_a_match(o: Option[P], q: P) -> I32 {
+  match o { Some(p) => p, None => q }.x             //~ E0013
+}
+
+pub fn receiver_method(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> U32 {
+  if c { xs } else { ys }.len()                     //~ E0013
+}
+
+pub fn receiver_tuple_index(c: Bool, t: (I32, I32), u: (I32, I32)) -> I32 {
+  if c { t } else { u }.0                           //~ E0013
+}
+
+pub fn receiver_index(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  if c { xs } else { ys }[1]                        //~ E0013
+}
+
+pub fn receiver_index_of_a_match(o: Option[I32], xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  match o { Some(_) => xs, None => ys }[0]          //~ E0013
+}
+
+pub fn receiver_try(c: Bool, a: Option[I32], b: Option[I32]) -> Option[I32] {
+  let v = if c { a } else { b }?                    //~ E0013
+  Some(v)
+}
+
+pub fn receiver_and_a_right_operand(c: Bool, d: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  if c { xs } else { ys }[0] + if d { 1 } else { 2 }  //~ E0013
+}
+
+// ---------------------------------------------------------------- the left of as and of at
+
+pub fn as_left_of_an_if(c: Bool, a: I32, b: I32) -> F64 {
+  let r = if c { a } else { b } as F64              //~ E0013
+  r
+}
+
+pub fn as_left_of_a_match(o: Option[I32]) -> F64 {
+  let r = match o { Some(n) => n, None => 0 } as F64  //~ E0013
+  r
+}
+
+pub fn as_left_of_a_block(n: I32) -> F64 {
+  let r = { n } as F64                              //~ E0013
+  r
+}
+
+pub flow at_left_of_an_if(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 { x } else { 0.0 } at sample   //~ E0013
+  y
+}
+
+pub flow at_left_of_a_match(x: F32 at sample) -> F32 at sample {
+  let y = match x > 0.0 { true => x, false => 0.0 } at sample  //~ E0013
+  y
+}
+
+pub flow at_left_of_an_if_tilde(x: F32 at sample) -> F32 at sample {
+  let y = if~ x > 0.0 { prev~(x) } else { x } at sample  //~ E0013
+  y
+}
+
+pub flow at_left_of_a_par(x: F32 at sample) -> F32 at sample {
+  let y = par i in 0 ..< 2 { x } at sample          //~ E0013
+  y
+}
+
+// ---------------------------------------------------------------- fine: the right forms of the same positions
+
+pub fn fine(c: Bool, d: Bool, o: Option[I32], xs: [I32; 2], ys: [I32; 2]) -> I32 {
+  let a = (if c { 1 } else { 2 }) + 10
+  let b = 10 + (if c { 1 } else { 2 })
+  let e = -(match o { Some(n) => n, None => 0 })
+  let f = (if d { xs } else { ys })[1]
+  a + b + e + f
+}

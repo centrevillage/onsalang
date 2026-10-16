@@ -125,31 +125,10 @@
 
 [[pending]]
 kind = "spec-example"
-target = "§6.1 8795a32e: pub struct Shaper {"
-reasons = ["S-191"]
-until = "W3-13"
-note = "関数値の呼び出し .( の例。構文は W3-20、写しは W3-13 で tests/spec に置く"
-
-[[pending]]
-kind = "spec-example"
-target = "§6.2 b9d1a51c: use std.math.{sqrt}"
-reasons = ["S-45"]
-until = "W3-13"
-note = "Point.norm の積和の括弧。写し fn/methods.onsa は括弧付き"
-
-[[pending]]
-kind = "spec-example"
 target = "§11.5 d5cd462a: use std.math.{sum}"
 reasons = ["R-23", "S-102", "S-45"]
 until = "W5-07"
 note = "std.math.sum、積和の括弧。写し flow/unison.onsa は std.dsp.sum（範囲は W3-18 で 0..<UNISON に、W3-11 で 0 ..< UNISON に書き換えた）"
-
-[[pending]]
-kind = "spec-example"
-target = "§11.8 4f9d65b0: use std.test.{check, gen}"
-reasons = ["S-45"]
-until = "W3-13"
-note = "比較と && の括弧。写し test/check.onsa は括弧付き"
 
 [[pending]]
 kind = "spec-example"
@@ -161,13 +140,6 @@ note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 �
 
 # --- 否定例が 3 件に届かない診断コード（K-13。照合は tools/diag_codes.py、W1-02）
 # 規則 1: コードの規則を作るか変える W の作業（複数なら最後に仕上げる作業）
-
-[[pending]]
-kind = "diag-code"
-target = "E0013"
-reasons = ["S-537"]
-until = "W3-13"
-note = "ブロックに似た式を括弧なしで被演算子にする形。仕様の文と登録は W3-13 の始めに揃え、検出は W3-13 の単位 1"
 
 [[pending]]
 kind = "diag-code"
@@ -1873,22 +1845,6 @@ target = "tests/spec/semantics/float_literal_rounding_fn_values.onsa"
 reasons = ["R-08", "R-20", "S-211"]
 until = "W8-09"
 note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則は W8-09 が入ってから見える"
-
-# --- W3-05 の gate のファズが見つけた入力（種の並びが変わって表に出た既存の不具合。dev のバイナリでも同じ違反）
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/9e06bb6a.onsa"
-reasons = ["R-214"]
-until = "W3-13"
-note = "fix-same-place: fix|E0020|remove the space|E0002。置き場所の行の空白を除く候補の後に同じ段の誤り（`?` の E0002）が残る"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/45c62d79.onsa"
-reasons = ["R-214"]
-until = "W3-13"
-note = "fix-same-place: fix|E0020|remove the space|E0001。置き場所の行の空白を除く候補の後に同じ段の誤り（U+000D の E0001）が残る"
 
 [[pending]]
 kind = "test-case"

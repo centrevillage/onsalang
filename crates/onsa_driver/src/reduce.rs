@@ -4,9 +4,10 @@
 //! - [`per_unit`]: the check stages (syntax, names, types, ...) report one
 //!   diagnostic for each unit (spec §18.1). The units are the declarations
 //!   (`onsa_syntax::units`, made once by the parse); this module puts the
-//!   units of the files of a package in one table and chooses in each unit
-//!   the diagnostic of the earliest stage of [`Stage::CHECK_ORDER`], then the
-//!   first in the order of the diagnostics (S-214, S-281).
+//!   units of the files of a package in one table, and the choice in each
+//!   unit is [`Units::choose`]'s (the diagnostic of the earliest stage of
+//!   [`Stage::CHECK_ORDER`], then the first in the order of the diagnostics,
+//!   S-214, S-281; the parse completes the candidates of the one it chooses).
 //! - [`syntax_report`]: what `fmt` and `diff --ast` report for a file the
 //!   syntax stage fails: the same choice, of which the syntax ones
 //!   (`docs/onsa-tools.md` §3.1).
@@ -53,73 +54,40 @@ pub fn exact(mut diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
 }
 
 /// One diagnostic for each unit of the files `files` (spec §18.1, S-59,
-/// S-214). A diagnostic of a member goes to the unit of its `impl` (`trait`,
-/// ...) when the heading of the item (up to the `{` of its members) has one: a
-/// heading with an error makes the whole item one unit. A diagnostic of the
-/// item outside its heading and its members (a `;` after its `}`, S-254) is
-/// the item's own and does not take its members. In a unit, the diagnostic of the earliest check stage
-/// is reported, and among those the first in the order of the diagnostics
-/// (start, end, code, message; §18.1, S-281). A diagnostic outside
-/// every unit (another file, `std`, no check stage) is reported as it is.
+/// S-214): the choice of [`Units::choose`] in each file (a heading with an
+/// error makes the whole item one unit; in a unit, the earliest check stage,
+/// then the first in the order of the diagnostics). A diagnostic of the item
+/// outside its heading and its members (a `;` after its `}`, S-254) is the
+/// item's own and does not take its members. A diagnostic outside every unit
+/// (another file, `std`, no check stage) is reported as it is.
 pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagnostics: Vec<Diagnostic>) -> Reduced {
     let mut units: Vec<Unit> = Vec::new();
-    let mut tables: Vec<&onsa_syntax::units::Unit> = Vec::new();
     let mut of_file: HashMap<FileId, (usize, &Units)> = HashMap::new();
     for (file, table) in files {
         let offset = units.len();
         units.extend(table.list.iter().map(|u| Unit { span: u.span, parent: u.parent.map(|p| p + offset) }));
-        tables.extend(table.list.iter());
         of_file.insert(file, (offset, table));
     }
-    let mut assigned: Vec<Option<usize>> = diagnostics
-        .iter()
-        .map(|d| {
-            d.stage.check_rank()?;
-            let (offset, table) = of_file.get(&d.span.file)?;
-            table.of(d.span).map(|u| u + offset)
-        })
-        .collect();
-    // A diagnostic of the heading of an item with members (from its start to
-    // the `{` of its members): the whole item is then one unit (§18.1).
-    let mut heading_error = vec![false; units.len()];
-    for (d, a) in diagnostics.iter().zip(&assigned) {
-        if let Some(u) = *a
-            && tables[u].heading_holds(d.span.start)
-        {
-            heading_error[u] = true;
+    let mut by_file: HashMap<FileId, Vec<usize>> = HashMap::new();
+    for (i, d) in diagnostics.iter().enumerate() {
+        if of_file.contains_key(&d.span.file) {
+            by_file.entry(d.span.file).or_default().push(i);
         }
     }
-    for a in assigned.iter_mut() {
-        if let Some(u) = *a
-            && let Some(p) = units[u].parent
-            && heading_error[p]
-        {
-            *a = Some(p);
+    // For each diagnostic, its unit and whether it is reported.
+    let mut verdicts: Vec<(Option<usize>, bool)> = vec![(None, true); diagnostics.len()];
+    for (file, indices) in by_file {
+        let (offset, table) = of_file[&file];
+        let of_this: Vec<&Diagnostic> = indices.iter().map(|&i| &diagnostics[i]).collect();
+        for (&i, (unit, chosen)) in indices.iter().zip(table.choose(&of_this)) {
+            verdicts[i] = (unit.map(|u| u + offset), unit.is_none() || chosen);
         }
     }
-    // The earliest stage, then the first in the order of the diagnostics
-    // (§18.1, S-281: start, end, code, message; one unit is in one file, so
-    // the offsets order as the lines and columns do). Both the E0020 of a
-    // form and the E0002 of its place may be found at one token (`1.` among
-    // the items): the order chooses, here alone.
-    let key = |i: usize| {
-        let d = &diagnostics[i];
-        (d.stage.check_rank().unwrap_or(usize::MAX), d.order_in_file(), i)
-    };
-    let mut best: Vec<Option<usize>> = vec![None; units.len()];
-    for (i, a) in assigned.iter().enumerate() {
-        if let Some(u) = *a
-            && best[u].is_none_or(|b| key(i) < key(b))
-        {
-            best[u] = Some(i);
-        }
-    }
-    let chosen: HashSet<usize> = best.iter().flatten().copied().collect();
     let mut out = Reduced { units, ..Reduced::default() };
-    for (i, d) in diagnostics.into_iter().enumerate() {
-        if assigned[i].is_none() || chosen.contains(&i) {
+    for (d, (unit, reported)) in diagnostics.into_iter().zip(verdicts) {
+        if reported {
             out.diagnostics.push(d);
-            out.diagnostic_units.push(assigned[i]);
+            out.diagnostic_units.push(unit);
         }
     }
     out

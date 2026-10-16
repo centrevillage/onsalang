@@ -26,6 +26,9 @@ mod literal;
 mod literal_tests;
 mod lower;
 mod naming;
+mod operands;
+#[cfg(test)]
+mod operands_tests;
 pub mod parser;
 #[cfg(test)]
 mod parser_tests;
@@ -44,6 +47,7 @@ pub use layout::continues;
 pub use lexer::{Lexed, lex};
 pub use literal::{FloatRange, FloatWidth, float_shown, float_value};
 pub use lower::AstMap;
+pub use operands::CandidateReads;
 pub use parser::Parsed;
 pub use token::{Token, TokenKind};
 
@@ -82,24 +86,61 @@ pub fn diagnostic_contract(sources: &onsa_diag::SourceMap, diagnostics: &[onsa_d
 /// read (S-59). A broken CST (a bug) is an internal error
 /// (`onsa_diag::internal::bug`), checked on every parse (R-82).
 pub fn parse(file: FileId, text: &str) -> Parsed {
+    // What the judgment of whether two tokens join lexes for the file
+    // (`CandidateReads::lexed`): the rows' and the candidates' reported.
+    let lexed = foreign::lexed();
+    let Read { mut ast, cst, map, mut diagnostics, levels, mut units, apart } = read(file, text, parser::ItemCtx::Top);
+    naming::check(&ast, &mut diagnostics);
+    units.mark_failed(&diagnostics, &mut ast);
+    // The candidates that make a block-like expression an operand take its
+    // parentheses (§3.1, S-537): the one place, after every check of the
+    // syntax stage. It reads units again with `read` only.
+    let mut candidate_reads = operands::complete(text, &cst, &units, &apart, &mut diagnostics);
+    candidate_reads.lexed = foreign::lexed() - lexed;
+    Parsed { ast, cst, map, diagnostics, units, levels, candidate_reads }
+}
+
+/// What [`read`] makes of a text.
+pub(crate) struct Read {
+    pub ast: ast::Ast,
+    pub cst: Cst,
+    pub map: AstMap,
+    pub diagnostics: Vec<onsa_diag::Diagnostic>,
+    pub levels: Vec<u32>,
+    /// The units of the text, not yet marked with the diagnostics
+    /// ([`units::Units::mark_failed`]).
+    pub units: units::Units,
+    /// The insertions of the candidates that go apart from the tokens round
+    /// them ([`foreign::apart`]).
+    pub apart: foreign::Insertions,
+}
+
+/// The text lexed and parsed as the declarations of a list of `ctx` (a
+/// file at the top level), its CST and AST, and the checks of the syntax
+/// stage on its tree. [`parse`] reads a file with it, and
+/// [`operands::complete`] the text of one unit with a candidate applied: it
+/// never completes candidates itself, so that reading goes one level deep.
+pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     let lexed = lex(file, text);
-    let out = parser::Parser::new(file, text, lexed).parse_file();
-    let deepest = out.height;
+    let out = parser::Parser::new(file, text, lexed).parse_units(ctx);
     let cst = cst::build(out.tokens, out.events);
     if let Err(e) = cst.validate(text) {
         onsa_diag::internal::bug(Some(e.span), format!("the CST is broken: {}", e.message));
     }
-    let (mut ast, map) = lower::lower(&cst, text, &out.literals);
+    let (ast, map) = lower::lower(&cst, text, &out.literals);
     let mut diagnostics = out.diagnostics;
+    // The doc comments are checked before the units are made: a run of
+    // tokens of no item takes trivia with a diagnostic (S-259).
+    docs::check(&cst, text, &mut diagnostics);
+    let units = units::build(&cst, &map, text, &out.items, &diagnostics);
+    let limit = groups::Limit { text, units: &units };
     // The operator groups (E0010) are checked on the AST, so an E0010 in the
     // part of a failed body that has no AST is not found, and the parse error
     // after it is the unit's syntax error: §18.1 ("the first in the text")
     // may not hold there until the recovery by statement (M7, T7-1) lowers
     // the statements before the error (accepted, 2026-10-08).
-    groups::check(&ast, text, deepest, &mut diagnostics);
-    foreign::clocks(&cst, text, deepest, &mut diagnostics);
-    docs::check(&cst, text, &mut diagnostics);
-    naming::check(&ast, &mut diagnostics);
-    let units = units::build(&cst, &map, text, &diagnostics, &mut ast);
-    Parsed { ast, cst, map, diagnostics, units, levels: out.levels }
+    groups::check(&ast, &|e| map.expr_kind(&cst, e), limit, &mut diagnostics);
+    let mut apart = foreign::Insertions::default();
+    foreign::clocks(&cst, limit, &mut diagnostics, &mut apart);
+    Read { ast, cst, map, diagnostics, levels: out.levels, units, apart }
 }

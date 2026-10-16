@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020: a call `(…)` of a block-like expression that has no parentheses (spec §6.1, §3.1, S-537). A callee
+// that is not a path (`(s.f)(x)`, `pick(true)(5)`) cannot be an item, so the form is of the syntax stage, and the
+// candidate calls the value with `.(` (§6.1). The callee here is an `if`, a `match`, a block expression, an
+// anonymous function or an `unsafe`, and a function value is called through the call of a function value, whose
+// receiver is an operand (§3.1), so the candidate also puts the expression in parentheses, and the E0013 that the
+// `.(` would give is not left (`if c { h } else { g }(1)` is `(if c { h } else { g }).(1)`). The call `(` is not a
+// postfix symbol of the list of §3.1 (`.(` is), so the original is one E0020 and no E0013. The marker is on the line
+// of the expression. One error in each declaration unit.
+
+pub fn call_of_an_if(c: Bool, h: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {
+  (if c { h } else { g }).(1)                       //~ E0020
+}
+
+pub fn call_of_an_if_with_two_arguments(c: Bool, h: fn(I32, I32) -> I32, g: fn(I32, I32) -> I32) -> I32 {
+  (if c { h } else { g }).(1, 2)                    //~ E0020
+}
+
+pub fn call_of_a_let_value(c: Bool, h: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {
+  let r = (if c { h } else { g }).(1)               //~ E0020
+  r
+}
+
+pub fn call_of_a_match(o: Option[fn(I32) -> I32], g: fn(I32) -> I32) -> I32 {
+  (match o { Some(f) => f, None => g }).(1)         //~ E0020
+}
+
+pub fn call_of_a_block(f: fn(I32) -> I32) -> I32 {
+  ({ f }).(1)                                       //~ E0020
+}
+
+pub fn call_of_an_anonymous_function() -> I32 {
+  (fn(y: I32) -> I32 { y }).(3)                     //~ E0020
+}
+
+pub fn call_of_an_unsafe(b: I32) -> I32 {
+  (unsafe { fc_new(1) }).(b)                        //~ E0020
+}
+
+pub fn call_in_a_sum(c: Bool, h: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {
+  (if c { h } else { g }).(1) + 10                  //~ E0020
+}
+
+pub fn call_in_an_argument(c: Bool, h: fn(I32) -> I32, g: fn(I32) -> I32) -> I32 {
+  add((if c { h } else { g }).(1), 2)               //~ E0020
+}
+
+fn add(a: I32, b: I32) -> I32 {
+  a + b
+}

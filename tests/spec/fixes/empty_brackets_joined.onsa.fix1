@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0002 for empty brackets written right against the token after them (spec §2.5, S-513): the one
+// candidate takes the brackets out, and where the token before them and the token after them would
+// join into one token (`impl[]S` would read as the name `implS`, `None()if` as the name `Noneif`),
+// one space is left between them, so that the reading of the text outside the edit does not change
+// (§18.1). Brackets with a space or a line break after them are taken out as in
+// fixes/empty_brackets_decls.onsa and fixes/empty_brackets_uses.onsa. The pattern `Some()` of a
+// variant that has an element leaves a count that does not fit (E0412, a later stage). The forms that
+// a case file cannot hold (`impl[]T for S` of a trait, `with h()else`) are in
+// crates/onsa_cli/tests/empty_brackets.rs. One error per declaration unit.
+
+pub struct S {
+  n: I32,
+}
+
+pub struct T {
+  n: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+impl S {                                           //~ E0002
+  pub fn get(self) -> I32 {
+    self.n
+  }
+}
+
+impl T{}                                           //~ E0002
+
+pub fn none_and_a_guard(o: Option[I32], c: Bool) -> I32 {
+  match o {
+    None if c => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn some_and_a_guard(o: Option[I32]) -> I32 {
+  match o {
+    Some if true => 1,                             //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn unit_variant_and_a_guard(e: E, c: Bool) -> I32 {
+  match e {
+    E.A if c => 1,                                 //~ E0002
+    _ => 0,
+  }
+}

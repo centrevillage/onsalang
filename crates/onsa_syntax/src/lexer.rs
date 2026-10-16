@@ -93,6 +93,20 @@ pub(crate) fn line_break(rest: &[u8]) -> Option<usize> {
     }
 }
 
+/// The first token of the line of the token `i` of `tokens` (those of a
+/// file, all kinds): lexing anew from its start reads the tokens of the file
+/// from there on as they are (`a_line_lexed_anew_reads_its_tokens`). The
+/// lexer looks back at the token right before only (a tuple index after a
+/// `.`, a `#` after a `#`, a name right before a literal), and a line break
+/// is none of them; a token over lines goes back to the line it starts on.
+pub(crate) fn line_of(tokens: &[Token], i: usize) -> usize {
+    let mut k = i.min(tokens.len());
+    while k > 0 && tokens[k - 1].kind != TokenKind::Newline {
+        k -= 1;
+    }
+    k
+}
+
 /// What a character that may not be written is, for the message of its E0001.
 fn unwritable_kind(c: char) -> &'static str {
     match c {
@@ -1135,5 +1149,52 @@ mod tests {
             .map(|h| h.path.iter().flatten().map(|s| &"\"a{t.0}b{x}\""[s.start as usize..s.end as usize]).collect())
             .collect();
         assert_eq!(paths, vec![vec!["t", "0"], vec!["x"]]);
+    }
+
+    /// Each line of each file of the repository, and the lines of a tuple
+    /// index after a `.`, a `#` after a `#` and a name before a literal,
+    /// lexed anew from its first token ([`line_of`]) to its line break: the
+    /// tokens are those of the file. The same pairs over a line break too
+    /// (a `.`, a `#` or a name that ends a line, and a number, a `#"` or a
+    /// string that starts the next): the lexer does not look back over it.
+    #[test]
+    fn a_line_lexed_anew_reads_its_tokens() {
+        let mut files = crate::cst_tests::repo_files();
+        let own = [
+            "  t.0 .1\n  t.0.0 .1 .2\n",
+            "  ##\"a\"##\n x\n",
+            "  f\"{x}\"\n  \"a\"_s\n",
+            // Over a line break, the line after with and without its indentation.
+            "  t.\n  1.5\n  t.\n1.5\n  t .\n0x1F\n",
+            "  #\n#\"a\"#\n  #\n  ##\"b\"##\n",
+            "  f\n\"x\"\n  f\n  'c'\n  r\n\"{y}\"\n",
+        ];
+        for (k, src) in own.iter().enumerate() {
+            files.push((format!("own {k}"), src.to_string()));
+        }
+        let mut lines = 0;
+        for (name, text) in &files {
+            let tokens = lex(FileId(0), text).tokens;
+            let mut k = 0;
+            while k < tokens.len() {
+                assert_eq!(line_of(&tokens, k), k, "{name}");
+                let n = (k..tokens.len()).find(|&n| matches!(tokens[n].kind, Newline | Eof)).unwrap();
+                let (a, b) = (tokens[k].span.start, tokens[n].span.end);
+                let anew = lex(FileId(0), &text[a as usize..b as usize]).tokens;
+                let moved: Vec<(TokenKind, u32, u32)> =
+                    anew.iter().map(|t| (t.kind, t.span.start + a, t.span.end + a)).collect();
+                let own: Vec<(TokenKind, u32, u32)> =
+                    tokens[k..=n].iter().map(|t| (t.kind, t.span.start, t.span.end)).collect();
+                let len = own.len() - usize::from(tokens[n].kind == Eof);
+                assert_eq!(
+                    moved.iter().take(len).collect::<Vec<_>>(),
+                    own[..len].iter().collect::<Vec<_>>(),
+                    "{name}: the line at {a} read anew (left) and in the file"
+                );
+                lines += 1;
+                k = n + 1;
+            }
+        }
+        assert!(lines > 10_000, "only {lines} lines");
     }
 }

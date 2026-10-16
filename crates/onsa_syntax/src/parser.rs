@@ -86,6 +86,8 @@ pub struct Parsed {
     /// the order of the file (`onsa dump --levels`; the fmt properties check
     /// that `fmt` makes no item deeper, `tools/fmt_props.py`).
     pub levels: Vec<u32>,
+    /// What the completion of the candidates read again (`crate::operands`).
+    pub candidate_reads: crate::operands::CandidateReads,
 }
 
 impl Parsed {
@@ -117,8 +119,15 @@ pub(crate) struct ParseOutput {
     pub literals: Literals,
     /// The height of the tree in levels (spec §2.5), as the parser counted
     /// it (`Parser::height`): the deepest declaration unit. The tests compare
-    /// it with the tree; the candidates of E0010 that add levels read it.
+    /// it with the tree.
+    #[cfg(test)]
     pub height: u32,
+    /// The height in levels of each item node the parser closed (a member
+    /// too, also one that failed: what it read of it), by the start of the
+    /// node: the units take theirs from it (`crate::units`), and a check
+    /// that a candidate stays in the nesting limit reads again only a unit
+    /// near it (`groups::nests_too_deep`).
+    pub items: Vec<(u32, u32)>,
 }
 
 /// Marker for "a diagnostic was reported; abandon this item".
@@ -130,7 +139,7 @@ pub(crate) type PResult<T> = Result<T, ParseError>;
 /// What kind of declaration list we are inside; decides whether `fn` bodies
 /// are required / allowed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ItemCtx {
+pub(crate) enum ItemCtx {
     Top,
     Trait,
     Impl,
@@ -138,6 +147,37 @@ enum ItemCtx {
     Handler,
     Extern,
     InlineHandler,
+}
+
+impl ItemCtx {
+    /// The list the members of a declaration of `kind` are read in, `None`
+    /// for a declaration without members: the one table of it. The parser
+    /// reads the member lists with it ([`Parser::parse_members`]), and the
+    /// units of the members are made from it and read again in it
+    /// (`crate::units`, §18.1). No wildcard: a new kind decides it here.
+    pub(crate) fn of_members(kind: NodeKind) -> Option<ItemCtx> {
+        use NodeKind::*;
+        match kind {
+            Trait => Some(ItemCtx::Trait),
+            Impl => Some(ItemCtx::Impl),
+            Effect => Some(ItemCtx::Effect),
+            Handler => Some(ItemCtx::Handler),
+            Extern => Some(ItemCtx::Extern),
+            Fn | Flow | Struct | Enum | TypeAlias | OpaqueType | Const | Use | Target | Test => None,
+            SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | FieldList
+            | Field | Derives | VariantList | Variant | VariantFields | UseTree | UseNames | ItemList
+            | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow | Path
+            | TypeArgs | FnTypeParams | LetStmt | VarStmt | ForStmt | WhileStmt | BreakStmt | ContinueStmt
+            | ReturnStmt | AssertStmt | AssignStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock => None,
+            Literal | HoleExpr | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr
+            | MatchExpr | ClosureExpr | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr
+            | CastExpr | AtExpr | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr
+            | IndexExpr | TryExpr | StructLit | PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType
+            | FnType | WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat
+            | StructPat | OrPat => None,
+        }
+    }
 }
 
 /// An open node. It is closed by [`Parser::complete`]; a syntax error leaves
@@ -182,6 +222,9 @@ struct Open {
 
 /// The rule of a `^` with no name right after it (§2.6, S-358).
 const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right before the name of a `let` of the flow (`prev~(^y)`), and no operator; the binary `^` is the exclusive or (§2.6)";
+
+/// The rule of the empty brackets (§2.5, S-513, [`Parser::empty_brackets`]).
+const EMPTY_BRACKETS_RULE: &str = "a variant with no fields, a declaration with no type parameters and a handler with no parameters are written without brackets, and so are their uses in `with` and in a pattern: `A`, `fn f()`, `handler h: Ask`, `with h`, `E.A` (§2.5)";
 
 /// The rule of an `if~` with no `else` (§11.5, S-355).
 const IF_TILDE_ELSE_RULE: &str =
@@ -243,6 +286,8 @@ pub(crate) struct Parser<'a> {
     literals: Literals,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
+    /// The height of each item node closed ([`ParseOutput::items`]).
+    items: Vec<(u32, u32)>,
     /// How many trial readings ([`Parser::snapshot`]) are open: a reading
     /// that is tried inside another one does not try the brackets of a
     /// call's type arguments again, so trials nest at most once per level.
@@ -321,6 +366,7 @@ impl<'a> Parser<'a> {
             diagnostics,
             literals,
             levels: Vec::new(),
+            items: Vec::new(),
             trials: 0,
             detached: None,
             ends: Vec::new(),
@@ -541,6 +587,9 @@ impl<'a> Parser<'a> {
             _ => NodeKind::Error,
         };
         let h = Self::height(kind, top.children);
+        if kind == NodeKind::Item {
+            self.items.push((top.start, h));
+        }
         match self.open.last_mut() {
             Some(parent) => parent.children = parent.children.max(h),
             None => self.height = h,
@@ -746,6 +795,45 @@ impl<'a> Parser<'a> {
             d.required = true;
         }
         Err(self.unexpected(open.describe()))
+    }
+
+    /// [`Parser::touches`] for the list that `open` opens at a place that
+    /// writes no empty list (§2.5, S-513: the fields of a variant, the type
+    /// parameters of a declaration, the arguments of `with h(…)`, the
+    /// elements of a pattern `E.A(…)`), after [`Parser::refuse_empty`].
+    fn touches_bare(&mut self, open: TokenKind) -> PResult<bool> {
+        self.refuse_empty(open)?;
+        Ok(self.touches(open, true, false))
+    }
+
+    /// The E0002 of [`Parser::empty_brackets`] for the empty brackets
+    /// ([`crate::scan::empty_brackets`]) that `open` opens right after the
+    /// token before it, at a place that writes no empty list (§2.5, S-513;
+    /// also the parameters of a handler). Empty brackets after a gap are the
+    /// gap's E0020 first ([`Parser::touches`]; two errors, §18.1).
+    fn refuse_empty(&mut self, open: TokenKind) -> PResult<()> {
+        let at = self.peek_index();
+        match crate::scan::empty_brackets(&self.tokens, at) {
+            Some(close) if self.tokens[at].kind == open && !self.gap(at).is_some() => {
+                Err(self.empty_brackets(at, close))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// The E0002 of the empty brackets from token `open` to token `close`
+    /// (§2.5, S-513): the candidate takes them out, and with a comment
+    /// between them there is none, the note giving the rule.
+    fn empty_brackets(&mut self, open: usize, close: usize) -> ParseError {
+        let span = Span::new(self.file, self.tokens[open].span.start, self.tokens[close].span.end);
+        let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, span, "empty brackets are not written here")
+            .with_found(self.src(span).to_string())
+            .with_rule(EMPTY_BRACKETS_RULE);
+        if !(open + 1..close).any(|k| self.tokens[k].kind.is_comment()) {
+            d = d.with_fix(Fix::delete("remove the empty brackets", span));
+        }
+        self.report(d);
+        ParseError
     }
 
     /// The closing bracket `close` of a list of `list` after its elements:

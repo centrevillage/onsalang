@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§0.2", "§3.1", "§6.1", "§8.3", "§11.3", "§11.5"]
+
+// The block-like expressions that the later stages of this version do not run (an anonymous function called
+// with `.(`, `unsafe`, `handle`, `if~`, `match~`: E0200 or E0806), read by the syntax stage only
+// (W3-13, S-537; spec §3.1). Parenthesized, each is an operand of an operator without an error; with no
+// operator, each is the whole of its place without an error. The names (`h`, `fc_new`) are not declared: the
+// case reads the syntax and no name is looked up. The runnable forms are in block_operand_parenthesized.onsa
+// and block_operand_whole_places.onsa, and the same forms with no parentheses, which are E0013, are in
+// tests/spec/negative/block_operand_*.onsa.
+
+// ---------------------------------------------------------------- an anonymous function
+
+pub fn closure_called() -> I32 {
+  (fn(y: I32) -> I32 { y + 1 }).(3)
+}
+
+pub fn closure_called_in_a_sum() -> I32 {
+  (fn(y: I32) -> I32 { y + 1 }).(3) + 10
+}
+
+pub fn closure_as_a_value() -> I32 {
+  let f = fn(y: I32) -> I32 { y + 1 }
+  f.(3)
+}
+
+pub fn closure_as_an_argument() -> I32 {
+  apply(fn(y: I32) -> I32 { y + 1 }, 3)
+}
+
+pub fn closure_in_an_array() -> I32 {
+  let fs = [fn(y: I32) -> I32 { y + 1 }, fn(y: I32) -> I32 { y + 2 }]
+  fs[1].(3)
+}
+
+// ---------------------------------------------------------------- unsafe
+
+pub fn unsafe_in_a_sum() -> I32 {
+  (unsafe { fc_new(1) }) + 2
+}
+
+pub fn unsafe_on_the_right() -> I32 {
+  2 + (unsafe { fc_new(1) })
+}
+
+pub fn unsafe_negated() -> I32 {
+  -(unsafe { fc_new(1) })
+}
+
+pub fn unsafe_as_a_value() -> I32 {
+  let h = unsafe { fc_new(1) }
+  h
+}
+
+pub fn unsafe_as_an_argument() -> I32 {
+  apply2(unsafe { fc_new(1) }, 3)
+}
+
+pub fn unsafe_as_the_end() -> I32 {
+  unsafe { fc_new(1) }
+}
+
+// ---------------------------------------------------------------- handle
+
+pub fn handle_in_a_sum() -> I32 {
+  (handle { load() } with h) + 10
+}
+
+pub fn handle_with_an_argument() -> I32 {
+  (handle { load() } with arena(inout scratch)) + 10
+}
+
+pub fn handle_on_the_right() -> I32 {
+  10 + (handle { load() } with h)
+}
+
+pub fn handle_negated() -> I32 {
+  -(handle { load() } with h)
+}
+
+pub fn handle_indexed() -> I32 {
+  (handle { load_all() } with h)[1]
+}
+
+pub fn handle_in_place_in_a_sum() -> I32 {
+  (handle { load() } with Ask { fn ask() -> I32 { 5 } }) + 10
+}
+
+pub fn handle_as_a_value() -> I32 {
+  let r = handle { load() } with h
+  r
+}
+
+pub fn handle_as_an_argument() -> I32 {
+  apply2(handle { load() } with h, 3)
+}
+
+pub fn handle_in_place_as_the_end() -> I32 {
+  handle { load() } with Ask { fn ask() -> I32 { 5 } }
+}
+
+// ---------------------------------------------------------------- if~, match~ and par in a flow
+
+pub flow if_tilde_in_a_product(x: F32 at sample) -> F32 at sample {
+  (if~ x > 0.0 { prev~(x) } else { x }) * 2.0
+}
+
+pub flow if_tilde_as_a_value(x: F32 at sample) -> F32 at sample {
+  let y = if~ x > 0.0 { prev~(x) } else { x }
+  y
+}
+
+pub flow if_tilde_with_an_else_if(x: F32 at sample) -> F32 at sample {
+  (if~ x > 1.0 { prev~(x) } else if x > 0.0 { x } else { 0.0 }) + 1.0
+}
+
+pub flow match_tilde_in_a_sum(x: F32 at sample) -> F32 at sample {
+  (match~ x > 0.0 { true => prev~(x), false => x }) + 1.0
+}
+
+pub flow match_tilde_as_a_value(x: F32 at sample) -> F32 at sample {
+  let y = match~ x > 0.0 { true => prev~(x), false => x }
+  y
+}
+
+pub flow if_tilde_at(x: F32 at sample) -> F32 at sample {
+  (if~ x > 0.0 { prev~(x) } else { x }) at sample
+}
+
+pub flow if_tilde_on_the_right(x: F32 at sample) -> F32 at sample {
+  1.0 + (if~ x > 0.0 { prev~(x) } else { x })
+}
+
+pub flow par_in_a_sum(x: F32 at sample) -> F32 at sample {
+  (par i in 0 ..< 2 { x * (i + 1).round_f32() })[0] + 1.0
+}
+
+pub flow par_as_a_value(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0 ..< 2 { x * (i + 1).round_f32() }
+  a[1]
+}
+
+pub flow par_with_if_tilde_inside(x: F32 at sample) -> F32 at sample {
+  let a = par i in 0 ..< 2 { (if~ x > 0.0 { prev~(x) } else { x }) * (i + 1).round_f32() }
+  a[1]
+}
