@@ -268,8 +268,10 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
         - debug の `onsa` は 20.7 MB、`onsa_cases` は 24.8 MB、release の `onsa` は 5.3 MB（デバッグ情報を `line-tables-only` にする前の測り）。
         - `crates/onsa_cli/tests/` の結合テストが 37 ファイルあり、それぞれが全体をリンクした約 20 MB の実行ファイルになる（`onsa_tests` に 9 ファイル。一からのビルドで実行ファイルが 63 個）。結合テストを少数のバイナリにまとめると、ディスクとリンクの時間が減る見込み。
         - release の 5.3 MB の内訳（埋め込んだ `std` のソース、表、総称の単相化など）は調べていない。調べるなら `cargo bloat` のような道具か、`size` と節ごとの内訳から。
-        - `target/debug` の内訳（32 回目、一からのビルドの後に 2〜3 回のビルドが重なった 4.2 GB）: 差分ビルドのキャッシュ（`incremental/`）2,670 MB（64%）、実行ファイル 691 MB（61 種類、1 個 12〜25 MB、一からの 1 回分で約 350 MB）、`.rlib` 637 MB。差分ビルドのキャッシュもビルドのたびに増え、自動では減らない（主のツリーの gate の 8 GB の警告で `cargo clean --profile dev`）。`incremental = false` は担当の直すたびのビルドを遅くし、スタックの使い方にも響きうるので入れていない。
-        - デバッグ情報を軽くする案（`[profile.dev] debug = "line-tables-only"` で一からのビルドが 1.6 GB → 1.3 GB、`debug = 0` で 1.0 GB）は、`onsa_diag` の `stack::tests::with_stack_left_leaves_about_that_much` を落とした（8 MB を求めて約 3 KB 少ない）ので入れていない。debug ビルドのスタックの使い方がデバッグ情報の量で変わり、呼び出しの深さの上限（`onsa_interp::MAX_CALL_DEPTH`、`Cargo.toml` の `onsa_interp` の注）も debug ビルドの測りに頼っている。入れるなら、先にスタックの測りがプロファイルに左右されない形にする。
+        - `target/debug` の内訳（32 回目、一からのビルドの後に 2〜3 回のビルドが重なった 4.2 GB）: 差分ビルドのキャッシュ（`incremental/`）2,670 MB（64%）、実行ファイル 691 MB（61 種類、1 個 12〜25 MB、一からの 1 回分で約 350 MB）、`.rlib` 637 MB。
+          差分ビルドのキャッシュもビルドのたびに増え、自動では減らない（主のツリーの gate の 8 GB の警告で `cargo clean --profile dev`）。`incremental = false` は担当の直すたびのビルドを遅くし、スタックの使い方にも響きうるので入れていない。
+        - デバッグ情報を軽くする案（`[profile.dev] debug = "line-tables-only"` で一からのビルドが 1.6 GB → 1.3 GB、`debug = 0` で 1.0 GB）は、`onsa_diag` の `stack::tests::with_stack_left_leaves_about_that_much` を落とした（8 MB を求めて約 3 KB 少ない）ので入れていない。
+          debug ビルドのスタックの使い方がデバッグ情報の量で変わり、呼び出しの深さの上限（`onsa_interp::MAX_CALL_DEPTH`、`Cargo.toml` の `onsa_interp` の注）も debug ビルドの測りに頼っている。入れるなら、先にスタックの測りがプロファイルに左右されない形にする。
       - 目的と条件は RF-1〜RF-4 と同じ（管理しやすさが第一、行数を目標にしない、性能を落とさない）。
     - (7) 親の規則の読み飛ばし（2026-10-13、22 回目、利用者: 読み飛ばしが多いので、後で対策を考える）。材料:
       - 担当の作業ツリーに `cd` した（`leader-rules.md` 3.1）。気付いてすぐ主のツリーに戻した。
@@ -300,7 +302,8 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
       - 表の列の数の確かめ: 文書の表を編集するたびに、その場のスクリプトで数えている。gate の項目か、編集の後に回す道具にする。
       - fmt の性質の集計（26 回目、`inside` の担当）: 摂動の種類ごとの入力の数と、性質ごとの失敗の種類別の数を、その場のスクリプトで数えた（26 回目の scratchpad の `inside/scripts/`）。`tools/fmt_props.py --verbose` の要約に出す。
       - fuzz の許可の一覧の項目: gate の出力から、正規化した文面（`` `…` ``、`#`）の入った `tests/fuzz/allowed.toml` の項目を出す。gate は実装待ちの一覧の項目の雛形は出すが、許可の一覧の雛形は出さない（24 回目は `U+#FC` を手で求めた）。
-      - 文脈の内訳: 24 回目の `ctx_breakdown.py`（会話の記録の文字数を、読んだ対象ごとに数える）を `tools/` に置く。32 回目の会話の記録から gate の要約を抜く道具（`docs/process_improvement_after_w3/x1/tools/` の `gate_runs.py`・`files_runs.py`。担当の種類ごとのキャッシュの書き直しは `cache_miss.py`）と、文書の参照・編集を数える道具（`docs/process_improvement_after_w3/x2/tools/doc_usage.py`）と一緒にする。
+      - 文脈の内訳: 24 回目の `ctx_breakdown.py`（会話の記録の文字数を、読んだ対象ごとに数える）を `tools/` に置く。
+        32 回目の会話の記録から gate の要約を抜く道具（`docs/process_improvement_after_w3/x1/tools/` の `gate_runs.py`・`files_runs.py`。担当の種類ごとのキャッシュの書き直しは `cache_miss.py`）と、文書の参照・編集を数える道具（`docs/process_improvement_after_w3/x2/tools/doc_usage.py`）と一緒にする。
       - 文書の整形: (10)。
       - 印のある事例の正規形: 事例の器は印のあるファイルに fmt をかけないので、正規形を CLI のテストで確かめている（29 回目、W3-12 の `rewrite_valueless_return_kept.onsa`）。`[test] canonical = true` のとき、印のあるファイルにも `fmt --check` をかける形にする。
       - 壊す側の道具の引き継ぎ: 壊す側が scratchpad に作る道具（生成・独立の確かめ・新旧の比べ）は、バイナリと根のパスを直書きしている。引き継ぐ担当が写してパスを書き換えている（25 回目、U3b の直しの担当が `lib.py` に `ONSA_NEW` を足した）。バイナリと根を環境変数か引数で受ける形を担当の規則に書くか、よく使う道具（括弧の対だけで確かめる `oracle2.py`、新旧の比べ）を `tools/` に置く。
@@ -342,7 +345,8 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
     字句解析器で §18.1 を突き合わせる道具（31 回目の scratchpad の `w313b4/oracle.py`・`gensoup.py`。字句解析は `w313b4/tok/`）をファズに入れる（`leader-rules.md` 4.9。`tools/fuzz.py` の `same_place` は端に接する挿入を見ない）。
   - 資料の確かめ（`default-inits`）に、返り値の位置の `move` を足すか決める。U3 の見積もりは Rust 40〜50 行で、末尾の位置の判断（`onsa_syntax::fmt::tail` の `is_tail_expr` の公開）と、S-100 の「そこに置いたブロックの腕」の範囲の判断が要る。30 回目の scratchpad の `w313u3i/handback_u3i.md`。
   - リファクタリングの候補（RF-15）: 括弧を外す走査を `Ast::without_parens`（W3-13 の U3 で置いた）の一つにする。残りは `onsa_sema` の `modes.rs` の `strip` と `onsa_syntax` の `groups.rs` の同じ走査。
-  - ツール化の候補: 前後のバイナリの `check --json` を候補の編集まで比べる道具（30 回目の scratchpad の `w313f1/cmp2.py`）と、前後の時間を交互の順で測る道具（`w313u1i2/measure.py`、`w313f1/timeit.py`。`tools/speed.py` の順の偏りの代わり）、候補を一つずつ当てて構文の診断が残るかを数える道具とリポジトリの `.onsa` への変異（31 回目の scratchpad の `w313b3/contract3.py`・`mut3.py`）、字句解析器で候補の前後の読みを突き合わせる道具（`w313b4/oracle.py`）。(11) の一覧と同じ回に扱う。
+  - ツール化の候補: 前後のバイナリの `check --json` を候補の編集まで比べる道具（30 回目の scratchpad の `w313f1/cmp2.py`）と、前後の時間を交互の順で測る道具（`w313u1i2/measure.py`、`w313f1/timeit.py`。`tools/speed.py` の順の偏りの代わり）、候補を一つずつ当てて構文の診断が残るかを数える道具とリポジトリの `.onsa` への変異（31 回目の scratchpad の `w313b3/contract3.py`・`mut3.py`）、字句解析器で候補の前後の読みを突き合わせる道具（`w313b4/oracle.py`）。
+    (11) の一覧と同じ回に扱う。
 - **W3 の後、W4 の前（次の段の準備、2026-10-10、12 回目、利用者）:** W4 を始める前に、次の三つを行う作業を挟む（上の「W3 の終わり」のプロセスの整理と同じ区切り）。
   - (1) W4 で行う作業（`docs/rework-phase1.md` §3 の W4 の行と、W4 に回した持ち越し・実装待ちの項目）の作業量を、始める前に見積もる。
   - (2) 見積もった量から、W4 の範囲に入れるものと外すもの（後の段や第 2 期へ回すもの）を、始める前に決める。
