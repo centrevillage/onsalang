@@ -51,8 +51,9 @@ def read_exact(root, rel):
 
 
 def row_re(id_pattern):
-    """A table row whose first cell is an ID (`| S-45 |`, `| W1-01 ✅ |`): the ID, the mark of done."""
-    return re.compile(rf"^\| ({id_pattern})( ✅)?[ |]", re.M)
+    """A table row whose first cell is an ID (`| S-45 |`, `| W1-01 ✅ |`, `| R-96（一部） |`): the ID, the
+    mark of done."""
+    return re.compile(rf"^\| ({id_pattern})( ✅)?[ |（]", re.M)
 
 
 def rows(text, id_pattern):
@@ -61,12 +62,12 @@ def rows(text, id_pattern):
 
 
 def section(text, start, end, doc):
-    """The text from the heading line `start` up to the heading line `end`."""
+    """The text from the heading line `start` up to the heading line `end` (None: to the end)."""
     out, inside = [], False
     for line in text.split("\n"):
         if line.startswith(start):
             inside = True
-        elif inside and line.startswith(end):
+        elif inside and end is not None and line.startswith(end):
             break
         if inside:
             out.append(line)
@@ -189,7 +190,7 @@ class Kind:
     pattern: str  # the spelling of an ID: the file name and the bare ID in the text
     dir: str = None  # the directory of the new layout; None: no file to check (the history, P2)
     draft: bool = False  # has drafts `S-xxx.draft.md`
-    old: tuple = None  # the current table: (document, first heading, next heading, what); None: no reader
+    old: tuple = None  # the current table: (document, first heading, next heading or None: the end, what); None: no reader
     bare: bool = True  # looked for as a bare ID in the text
 
 
@@ -199,7 +200,7 @@ KINDS = (
     Kind("K", r"K-\d+", "decisions/K"),
     Kind("Q", r"Q-\d+", "decisions/Q"),
     Kind("A", r"A-\d+", "decisions/A", old=(DOC_API, None, None, "A numbers")),
-    Kind("R", r"R-\d+", "issues/R", old=(DOC_REVIEW, None, None, "R numbers")),
+    Kind("R", r"R-\d+", "issues/R", old=(DOC_REVIEW, "## 8.", None, "R numbers")),  # §8 (its last); §6 lists R too
     Kind("RF", r"RF-\d+", "issues/RF"),
     Kind("X", r"X-\d+", "issues/X"),
     Kind("W", r"W\d+-\d+", "tasks/W", old=(DOC_REWORK, "## 3.", "## 4.", "W works")),
@@ -341,7 +342,7 @@ class Layout:
             lo = next((i for i, line in enumerate(lines) if line.startswith(start)), None)
             if lo is None:
                 return {}
-            hi = next((i for i in range(lo + 1, len(lines)) if lines[i].startswith(end)), hi)
+            hi = next((i for i in range(lo + 1, len(lines)) if end is not None and lines[i].startswith(end)), hi)
         row, out = row_re(KIND[name].pattern), {}
         for i in range(lo, hi):
             if m := row.match(lines[i]):

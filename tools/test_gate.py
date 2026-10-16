@@ -4369,7 +4369,7 @@ OLD_LAYOUT = {
                                     "## 4. 作業\n| ID | 作業 |\n|---|---|\n| T1-1 | t |\n## 5. 診断コード\n"
                                     "| コード | 内容 | 段 | M |\n|---|---|---|---|\n| E0612〜E0613 | x | — | 第 2 期 |\n\n"
                                     "欠番: E0611（S-1 でまとめた）。\n## 6. 例\n",
-    "docs/review-impl-phase1.md": "| ID | 内容 |\n|---|---|\n| R-1 | 候補 |\n",
+    "docs/review-impl-phase1.md": "## 8. 決定の記録\n| ID | 内容 |\n|---|---|\n| R-1 | 候補 |\n",  # §8 is the last section
     "docs/api-candidates.md": "| ID | 候補 |\n|---|---|\n| A-1 | is_some |\n",
     "docs/onsa-tools.md": NEW_LAYOUT["spec/tools.md"],
     "tests/pending.toml": "",
@@ -4480,6 +4480,14 @@ class DocsLayout(DocsTree):
         self.assertEqual([repo.Layout(self.root).source(n) for n in names], ["new"] * 7)
         self.write(repo.DOC_PLAN, "## 2. S\nno rows\n## 3. x\n")  # a section with no row is not a table
         self.assertEqual(repo.Layout(self.root).source("S"), "new")
+        # the rows of R outside §8 (the review's last section) are not its table
+        self.write(repo.DOC_REVIEW, "## 6. 一覧\n| R-1 | 行 |\n## 8. 決定の記録\n| ID | 決定 | 反映 |\n|---|---|---|\n")
+        self.assertEqual(repo.Layout(self.root).source("R"), "new")
+        self.write(repo.DOC_REVIEW, "## 6. 一覧\n## 8. 決定の記録\n| R-1（一部） | 決定 | 反映 |\n")  # a word after the ID
+        with self.assertRaisesRegex(repo.RepoError, "^R is in both .*`## 8.`"):
+            repo.Layout(self.root).source("R")
+        self.assertEqual(repo.Layout(self.root).old_lines("R"), {"R-1": 3})
+        self.write(repo.DOC_REVIEW, "# moved\n")
         self.layout()
         self.assertEqual(self.check(), (0, []))
 
@@ -4704,7 +4712,7 @@ class DocsLayout(DocsTree):
         (self.root / "issues/R").rmdir()
         self.write(repo.DOC_REVIEW, OLD_LAYOUT["docs/review-impl-phase1.md"])
         self.assertEqual(self.check(), (0, []))
-        self.assertOne(s2, "R-1 と", "R-5 と", f"{s2}:8: R-5 is not found (the R numbers of docs/review-impl-phase1.md)")
+        self.assertOne(s2, "R-1 と", "R-5 と", f"{s2}:8: R-5 is not found (the R numbers of docs/review-impl-phase1.md `## 8.`)")
 
     def test_check_relations(self):
         self.layout()
@@ -4816,7 +4824,7 @@ class DocsCommands(DocsTree):
     def test_path_back_refs_in_the_current_layout(self):
         self.old_layout()
         self.assertEqual(self.run_("path", "S-1", "W1-02", "R-1", "A-1", "T1-1", "§2.1", "tools.md §1"), (0, [
-            "docs/implementation-tasks.md:4", "docs/rework-phase1.md:5", "docs/review-impl-phase1.md:3",
+            "docs/implementation-tasks.md:4", "docs/rework-phase1.md:5", "docs/review-impl-phase1.md:4",
             "docs/api-candidates.md:3", "docs/implementation-tasks.md:10", "onsa-lang-spec-0.3.md:15",
             "docs/onsa-tools.md:3"]))  # fmt: skip
         self.assertEqual(self.run_("path", "S-9"), (1, ["S-9: not found (the S numbers of docs/implementation-tasks.md `## 2.`)"]))
@@ -4827,7 +4835,7 @@ class DocsCommands(DocsTree):
         self.write("docs/carry.md", "# 持ち越し\n\nS-1 と W1-02、R-1、A-1、T1-1、S-9、S-1。\n")
         self.assertEqual(self.run_("refs", "docs/carry.md"), (0, [
             "S-1\t✅\tdocs/implementation-tasks.md:4\t-", "W1-02\t-\tdocs/rework-phase1.md:5\t-",
-            "R-1\t-\tdocs/review-impl-phase1.md:3\t-", "A-1\t-\tdocs/api-candidates.md:3\t-",
+            "R-1\t-\tdocs/review-impl-phase1.md:4\t-", "A-1\t-\tdocs/api-candidates.md:3\t-",
             "T1-1\t-\tdocs/implementation-tasks.md:10\t-",
             "S-9\t-\tnot found (the S numbers of docs/implementation-tasks.md `## 2.`)\t-",
             "docs refs: docs/carry.md: 6 ID(s), 1 not found"]))  # fmt: skip

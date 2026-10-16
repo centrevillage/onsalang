@@ -465,7 +465,7 @@ TREE_DKQA = {
     "decisions/README.md": README_FIELDS,
     "decisions/D/README.md": "# D\n",
     "decisions/K/README.md": "# K\n",
-    "decisions/Q/README.md": "# Q\n",
+    "decisions/Q/README.md": "# Q\n\n## 本文のラベル\n\n- `決定`: 決めたこと（§4 の行から）。\n",  # the label the tool writes
 }
 # placed just before `apply --kind A`: `decisions/A/` and the rows of A both there is an error of `repo.Layout`
 A_README = ("decisions/A/README.md", "# A\n\n## 本文のラベル\n\n- `候補`: 候補の欄。\n- `決定`: 状態の欄。\n- `理由`: 実例・理由の欄。\n")
@@ -622,6 +622,195 @@ class VerifyDKQA(Before):
         self.apply("D")
         (self.before / PLAN).write_text(PLAN_D_HEAD + PLAN_D_TAIL, encoding="utf-8")
         self.assertEqual(self.verify(kind="D")[0], 1)
+
+
+# ---------------------------------------------------------------- R (U5b)
+
+REVIEW = "docs/review-impl-phase1.md"
+REVIEW_HEAD = "# レビュー\n\n## 1. 仕様とのずれ（観点 1）\n\n### 1.1 落ちる\n"
+R_UNITS1 = """
+#### R-08 無名関数の `?`
+- 高・直す・観点 1 / 3｜`body.rs`｜§2.3｜再現（親）
+- 原因: 展開する。
+- 判断（R-08）: 出口を作るか。
+
+@centrevillage
+作る。
+
+#### R-10 検査付きの演算
+- 中・直す・観点 1｜`ops.rs`｜§2.3、§9.9、S-01｜x
+- 決定（2026-10-02）: 正確に。
+"""
+R_UNITS3 = """
+#### R-90 bulk
+- 低〜中・要判断・観点 2 / 3｜`layout.rs`
+- 内容: 分ける。
+  続きの行。
+
+---
+
+#### R-113 テスト
+- 中・直す・観点 9｜`tests/`｜`impl-review` S-1、S-02
+- 内容: 弱い。
+
+#### R-120 直さない
+- 極・直さない・観点 1｜x｜§6.2
+- 内容: 記録。
+"""
+REVIEW_MID = "\n## 3. 仕様に無い前提（観点 3）\n"
+REVIEW_6 = "\n---\n\n## 6. 一覧\n\n| ID | 論点 |\n|---|---|\n| R-90 (i) | bulk をどこで表すか |\n\n---\n\n## 8. 決定の記録\n\n前書き。\n\n"
+R_TABLE1 = ["| ID | 決定（2026-10-02） | 反映 |", "|---|---|---|"]
+R_ROWS1 = ["| R-08 | 出口を作る | W1-01（E0200）、W1-02（実装） |", "| R-10 | 正確に | 実装（W1-01。audit は T9-2） |",
+           "| R-08 補足 | 再検討する | W1-02 |"]  # fmt: skip
+R_TABLE2 = ["", "途中の変更:", "", "| ID | 決定 | きっかけ | 反映 |", "|---|---|---|---|", "| S-29 | 省略できる | R-13 | 仕様 |",
+            "", "後の項目。", "", "| ID | 決定 | 反映 |", "|---|---|---|"]  # fmt: skip
+R_ROWS3 = ["| R-90 (i) | 明示する | W1-02 |", "| R-90（整合） | 決定済み。`a \\| b` | 計画に反映 |",
+           "| R-113 / Q-01〜Q-08 | 基盤を決めた | W1-01 |", "| R-113 | 進め方 | 議論の段で |",
+           "| R-190 | 直す。" + "文。" * 130 + " | W1-01 で直した |"]  # fmt: skip
+R_KEPT = ["| T-8 | S-103 | 仕様 |"]
+REVIEW_BEFORE = (REVIEW_HEAD + R_UNITS1 + REVIEW_MID + R_UNITS3 + REVIEW_6
+                 + "\n".join(R_TABLE1 + R_ROWS1 + R_TABLE2 + R_ROWS3[:2] + R_KEPT + R_ROWS3[2:]) + "\n")  # fmt: skip
+REVIEW_AFTER = REVIEW_HEAD + REVIEW_MID + "\n---\n" + REVIEW_6 + "\n".join(R_TABLE1 + R_TABLE2 + R_KEPT) + "\n"
+R_README = README_FIELDS.replace("# 決定", "# 問題（R）").split("| `status`")[0] + """\
+| `status` | 閉じた値 | `OPEN` / `WONTFIX` / `DONE` | はい | 状態 |
+| `severity` | 閉じた値 | `高` / `中〜高` / `中` / `低〜中` / `低` | はい | 重さ |
+| `aspect` | 閉じた値の並び | `1` / `2` / `3` | いいえ | 観点 |
+| `spec` | 節の並び | — | いいえ | 仕様の節 |
+| `decisions` | ID の並び（S） | — | いいえ | 決定 |
+| `fix` | ID の並び（W） | — | いいえ | 直す作業 |
+
+## 本文のラベル
+
+- `判断`: 決めたこと。
+- `反映`: 反映した先。
+"""
+TREE_R = {
+    "onsa-lang-spec-0.3.md": TREE["onsa-lang-spec-0.3.md"],
+    "docs/onsa-tools.md": TREE["docs/onsa-tools.md"],
+    PLAN: "# 計画\n\n## 2. 仕様の空白（S）\n\n| ID | 項目 |\n|---|---|\n| S-01 | a |\n| S-02 | b |\n\n## 3. 設計\n",
+    "docs/rework-phase1.md": "## 3. 段ごとの作業\n\n| ID | 作業 | 実現する決定 |\n|---|---|---|\n"
+                             "| W1-01 ✅ | a | R-08、R-113 |\n| W1-02 | b | R-90 (i)、R-10 |\n\n## 4. 残り\n",
+    REVIEW: REVIEW_BEFORE,
+    "issues/R/README.md": R_README,
+}
+R_OVER = '[R-10]\nstatus = "DONE"\n[R-120]\nstatus = "WONTFIX"\nseverity = "低"\n[R-190]\nseverity = "中"\n'
+
+
+class R(Tree):
+    TREE, KIND = TREE_R, "R"
+
+    def read(self, rel):
+        return (self.root / rel).read_text(encoding="utf-8")
+
+    def apply(self):
+        code, out = self.run_tool("apply", R_OVER)
+        self.assertEqual(code, 0, out)
+        return out
+
+    def test_plan(self):
+        code, out = self.run_tool("plan")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"{REVIEW}: 13 ranges: 5 headings and 1 of rows alone -> 6 files in issues/R/", out)  # R-190
+        self.assertEqual(self.items(out), {
+            ("R-10", "spec", "spec"), ("R-113", "aspect", "aspect"), ("R-113", "decisions", "decisions"),
+            ("R-120", "severity", "severity"), ("R-190", "severity", "severity"),
+            ("R-10", "status-t", "status"), ("R-120", "status-no-fix", "status"),
+            ("R-10", "rework-not-fix", ""), ("R-10", "fix-not-rework", ""), ("R-08", "fix-not-rework", ""),
+            ("R-190", "fix-not-rework", ""), ("S-29", "other-row", ""), ("T-8", "other-row", ""),
+        })  # fmt: skip
+        self.assertIn("R-10\trework-not-fix\t\t-\tW1-02", out)
+        self.assertIn("status OPEN 2, None 2, DONE 2", out)  # R-08, R-90; R-10, R-120; R-113, R-190
+
+    def test_a_word_not_the_rules(self):
+        self.write(REVIEW, REVIEW_BEFORE.replace("| T-8 |", "| R-120 x | 表に無い | W1-02 |\n| T-8 |"))
+        code, out = self.run_tool("plan")
+        self.assertIn("R-120\tid-cell\t\t-\t| R-120 x |", out)
+        self.assertNotIn("fix-not-rework\t\t-\tW1-02", out.split("R-120\t")[0][-200:])  # its row is not R-120's
+        code, out = self.run_tool("apply", R_OVER)  # the row stays: R in both places
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.read(REVIEW), REVIEW_BEFORE.replace("| T-8 |", "| R-120 x | 表に無い | W1-02 |\n| T-8 |"))
+        self.assertEqual(list((self.root / "issues/R").glob("R-*.md")), [])
+
+    def test_broken(self):
+        for old, new in [("| S-29 | 省略できる |", "| R-08 | 省略できる |"),  # a row of R in a table of 4 cells
+                         ("| R-08 補足 | 再検討する | W1-02 |", "| R-08 補足 | 再検討する |"),  # 2 cells
+                         ("#### R-10 検査付きの演算\n", "#### R-10 検査付きの演算\n\n")]:  # fmt: skip
+            with self.subTest(old=old):
+                self.write(REVIEW, REVIEW_BEFORE.replace(old, new, 1))
+                self.assertEqual(self.run_tool("plan")[0], 2)
+
+    def test_apply(self):
+        out = self.apply()
+        self.assertIn("== body-ref", out)
+        self.assertEqual(self.read(REVIEW), REVIEW_AFTER)
+        self.assertEqual(sorted(p.stem for p in (self.root / "issues/R").glob("R-*.md")),
+                         ["R-08", "R-10", "R-113", "R-120", "R-190", "R-90"])  # fmt: skip
+        self.assertEqual(self.read("issues/R/R-08.md"), '+++\nstatus = "OPEN"\nseverity = "高"\naspect = [1, 3]\nspec = ["§2.3"]\n'
+                         'fix = ["W1-01", "W1-02"]\n+++\n# R-08 無名関数の `?`\n\n- 高・直す・観点 1 / 3｜`body.rs`｜§2.3｜再現（親）\n'
+                         "- 原因: 展開する。\n- 判断（R-08）: 出口を作るか。\n\n@centrevillage\n作る。\n"
+                         "- 判断（2026-10-02）: 出口を作る\n- 反映: W1-01（E0200）、W1-02（実装）\n"
+                         "- 判断（補足、2026-10-02）: 再検討する\n- 反映: W1-02\n")  # fmt: skip
+        self.assertTrue(self.read("issues/R/R-90.md").endswith(
+            "  続きの行。\n- 判断（i）: 明示する\n- 反映: W1-02\n- 判断（整合）: 決定済み。`a | b`\n- 反映: 計画に反映\n"))
+        self.assertIn('status = "DONE"\nseverity = "中"\ndecisions = ["S-02"]\nfix = ["W1-01"]\n+++', self.read("issues/R/R-113.md"))  # no aspect: 観点 9 listed; S-1 listed
+        self.assertTrue(self.read("issues/R/R-113.md").endswith(
+            "- 判断（Q-01〜Q-08 と共に）: 基盤を決めた\n- 反映: W1-01\n- 判断: 進め方\n- 反映: 議論の段で\n"))
+        r190 = self.read("issues/R/R-190.md").split("\n")
+        self.assertEqual(r190[:7], ["+++", 'status = "DONE"', 'severity = "中"', 'fix = ["W1-01"]', "+++", "# R-190", ""])
+        self.assertTrue(r190[7].startswith("- 判断: 直す。文。") and r190[8].startswith("  文。") and r190[-2] == "- 反映: W1-01 で直した", r190)
+        self.assertIn('status = "WONTFIX"\nseverity = "低"\naspect = [1]\nspec = ["§6.2"]\n+++\n', self.read("issues/R/R-120.md"))
+        with contextlib.redirect_stdout(io.StringIO()) as check:
+            docs.main(["check", "--root", str(self.root)])
+        self.assertIn("(tables 0, heads 0, refs ", check.getvalue())  # the text's refs only (S-1, §9.9)
+        self.assertIn(", relations 0, links 0)", check.getvalue())
+
+    def test_status_and_severity_required(self):
+        code, out = self.run_tool("apply")
+        self.assertEqual(code, 1, out)
+        self.assertIn("issues/R/R-190.md:1: the field `severity` is required", out)
+        self.assertEqual(self.read(REVIEW), REVIEW_BEFORE)
+
+
+class VerifyR(Before):
+    TREE, KIND = TREE_R, "R"
+    apply = R.apply
+
+    def test_round_trip(self):
+        self.apply()
+        code, out = self.verify()
+        self.assertEqual(code, 0, out)
+        self.assertIn("round trip: 13 headings and rows, 6 files read back; IDs 6; `fix` of 5 R from §8", out)
+
+    CHANGES = [
+        ("issues/R/R-08.md", "- 判断（2026-10-02）: 出口を作る\n", "- 判断（2026-10-02）: 出口を作れ\n"),  # a character of an item
+        ("issues/R/R-08.md", "- 判断（補足、2026-10-02）:", "- 判断（2026-10-02）:"),  # the word of the bracket
+        ("issues/R/R-90.md", "- 判断（i）:", "- 判断:"),  # the word taken out
+        ("issues/R/R-10.md", "- 判断（2026-10-02）:", "- 判断:"),  # the date: the other table
+        ("issues/R/R-08.md", "- 反映: W1-01（E0200）、W1-02（実装）", "- 反映: W1-01（E0200）、W1-03（実装）"),  # a W of `反映`
+        ("issues/R/R-08.md", 'fix = ["W1-01", "W1-02"]', 'fix = ["W1-01"]'),  # `fix` not the rows'
+        ("issues/R/R-08.md", "- 原因: 展開する。", "- 原因: 展開した。"),  # a character of the text
+        ("issues/R/R-08.md", "- 反映: W1-02\n", "- 反映: W1-02\n- 判断（i）: 明示する\n- 反映: W1-02\n"),  # R-90's pair in R-08
+        ("issues/R/R-113.md", "- 判断: 進め方\n- 反映: 議論の段で\n", "- 反映: 議論の段で\n- 判断: 進め方\n"),  # a pair turned round
+        ("issues/R/R-190.md", "# R-190\n", "# R-190 題\n"),  # a title for the rows alone
+        ("issues/R/R-190.md", "# R-190\n\n", "# R-190\n\n- 内容: x\n"),  # a text for the rows alone
+        ("issues/R/R-190.md", "\n  文。", "\n文。"),  # a broken line not going on
+        ("issues/R/R-190.md", None, None),  # the file removed
+        (REVIEW, "| R-90 (i) | bulk をどこで表すか |", "| R-90 (i) | bulk |"),  # a row of §6, which stays
+        (REVIEW, "| T-8 | S-103 | 仕様 |\n", ""),  # a row of §8 that stays
+    ]
+
+    def test_a_change_is_found(self):
+        for rel, old, new in self.CHANGES:
+            with self.subTest(rel=rel, old=old):
+                self.setUp()
+                self.apply()
+                if old is None:
+                    (self.root / rel).unlink()
+                else:
+                    self.edit(rel, old, new)
+                code, out = self.verify()
+                self.assertEqual(code, 1, out)
+                self.assertIn("difference(s)", out)
 
 
 if __name__ == "__main__":
