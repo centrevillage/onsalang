@@ -305,6 +305,7 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
       - 文脈の内訳: 24 回目の `ctx_breakdown.py`（会話の記録の文字数を、読んだ対象ごとに数える）を `tools/` に置く。
         32 回目の会話の記録から gate の要約を抜く道具（`docs/process_improvement_after_w3/x1/tools/` の `gate_runs.py`・`files_runs.py`。担当の種類ごとのキャッシュの書き直しは `cache_miss.py`）と、文書の参照・編集を数える道具（`docs/process_improvement_after_w3/x2/tools/doc_usage.py`）と一緒にする。
       - 文書の整形: (10)。
+      - 新しい配置の作り物の木を書き出す道具: `tools/test_gate.py` の `NEW_LAYOUT` を scratchpad に書き出し、壊す側と次の担当が道具の出力を試せるようにする（33 回目、X-2/U2・U3 の担当がその場のスクリプトで作った）。
       - 印のある事例の正規形: 事例の器は印のあるファイルに fmt をかけないので、正規形を CLI のテストで確かめている（29 回目、W3-12 の `rewrite_valueless_return_kept.onsa`）。`[test] canonical = true` のとき、印のあるファイルにも `fmt --check` をかける形にする。
       - 壊す側の道具の引き継ぎ: 壊す側が scratchpad に作る道具（生成・独立の確かめ・新旧の比べ）は、バイナリと根のパスを直書きしている。引き継ぐ担当が写してパスを書き換えている（25 回目、U3b の直しの担当が `lib.py` に `ONSA_NEW` を足した）。バイナリと根を環境変数か引数で受ける形を担当の規則に書くか、よく使う道具（括弧の対だけで確かめる `oracle2.py`、新旧の比べ）を `tools/` に置く。
   - トークン効率化対策（2026-10-12、14 回目、利用者）: 週の使用量の上限（全モデルで共通。`/usage` に出るのは session・weekly・Fable だけ）が 4〜5 日で尽きる件。
@@ -365,6 +366,10 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
     `repo.rows`・`repo.section` と、`tools/test_gate.py` の今の配置の作り物を消す（DT-7）。
   - 移行の最後の段か区切りのリファクタリング: ID の形の重複（`pending.WORK`、`gap_marks.ID`）を `repo.KINDS` に寄せる。素朴な `split("|")`（`repo.phase2_codes`、`builtin_names.table_column`）を `docs.table_cells` に寄せる。
   - 新旧の両方がある配置の誤りで終了コード 2 になるのは `docs.py` だけで、他の道具は今の扱い（文を出して 1）のまま。揃えるかは移行の後に決める。
+  - `docs.py` の `set`・`new` の書く前の確かめ（`check_write`）は頭の欄と関係だけを見るので、無い ID を名指す値（`set W1-02 depends=W9-99`）は書けて、gate の `docs` の参照の確かめで後から落ちる。
+    書く前の確かめに頭の欄の ID の存在を足すか（数行、33 回目の X-2/U3 の報告）。
+  - `repo.Layout.source("T")` は計画 §4 が無くなった後も `"old"` を返し、`docs.Index.known` と `docs.Ids._find` がそれぞれ吸収している。上の M9 と同じ回に T の扱いを一か所にそろえる。
+    `docs.py` の `show` が関数の中で `pending` を読む循環（`pending.load` を `repo` に移せば消える）も同じ回に見る。
   - 今の表の本文の `§` のうち、前置きの規則（`docs.py` の `SEC_QUALIFIERS`）でも仕様の見出しに無いもの 9 個（`C# の仕様 §`、`§1.1`、`空白の流れ（§8.6）` など）は、
     頭の欄付きのファイルに移したときに `docs check` の参照の確かめで落ちる。移行の段で親が見る。
 - **E0200 の `found`（12 回目、W3-06/i の単位 2）:** `tests/spec/negative/range_continuation_closed_e0200.onsa` の E0200 の `found` が、改行とコメントを含む複数行の字面になる（`'0..=  //~ E0200\n    n'`）。E0200 を出す後の段の範囲の作り方の問題。その E0200 を外す作業か、診断の `found` を揃える作業の作業票に入れる。
