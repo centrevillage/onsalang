@@ -11,7 +11,7 @@
 #            title (quoted text `…`, numbers `#`)
 #   input    the saved input that shows them, `tests/fuzz/<name>.onsa` (not listed in tests/pending.toml;
 #            one entry each)
-#   reasons  the S numbers of plan §2 that put it outside the contract, or the R numbers of the review
+#   reasons  the S numbers (`decisions/S/`) that put it outside the contract, or the R numbers (`issues/R/`)
 #            that record it as a low harm left as it is (one or more)
 #   note     a short note
 

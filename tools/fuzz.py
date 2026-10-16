@@ -63,8 +63,8 @@ mutants cut short at the end of a file often are. Every field is required:
 listed), `input` (a saved input `tests/fuzz/<name>.onsa`, not listed in
 `tests/pending.toml`; one entry each), `left` (the message of the
 diagnostic left after the candidate, as the class writes the title: quoted
-text `…`, numbers `#`), `reasons` (S numbers of plan §2, or R numbers of
-the review for a low harm recorded there) and `note`. A mutant is known
+text `…`, numbers `#`), `reasons` (S numbers of `decisions/S/`, or R numbers of
+`issues/R/` for a low harm recorded there) and `note`. A mutant is known
 when it shows the class with that message (the class alone is too coarse a
 net); the input must show them on every run (when it no longer does, the
 entry goes), and nothing else. The net gets

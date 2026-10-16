@@ -7,8 +7,8 @@ marks the place:
     // SPEC-GAP(S-123): <what the spec does not say>     (Rust, C, Onsa)
     # SPEC-GAP(R-45): <...>                               (Python, shell, TOML)
 
-The ID is a registered number: S (plan §2), R (review §8) or A
-(`docs/api-candidates.md`). This check scans `SCANNED` and fails on a mark
+The ID is a registered number: S (`decisions/S/`), R (`issues/R/`) or A
+(`decisions/A/`). This check scans `SCANNED` and fails on a mark
 without an ID or of another form, on an ID no table has, and on `NEW` (the
 parent registers the gap and writes its number before the commit).
 

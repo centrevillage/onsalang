@@ -7,7 +7,7 @@
 #   kind     種類: "spec-example" | "diag-code" | "gate" | "test-case" | "fuzz-input" | "fix-contract" |
 #            "foreign-form"
 #   target   対象の識別子（形は種類ごと。下）
-#   reasons  理由の S / R 番号の配列（一つ以上。計画 §2 の S、レビュー §8 の R）。until = "P2" の項目に
+#   reasons  理由の S / R 番号の配列（一つ以上。`decisions/S/` の S、`issues/R/` の R）。until = "P2" の項目に
 #            限り、仕様の節（"§20" の形。仕様の番号付きの見出しにあるもの）も書ける。第 1 期の範囲は
 #            仕様 §20 が定めるため
 #   until    外す予定の作業 ID（docs/rework-phase1.md §3 の W の ID か、計画 §4 の T の ID）。
