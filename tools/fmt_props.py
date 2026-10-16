@@ -130,6 +130,13 @@ meaning.
     tools/fmt_props.py [--property core|comments|cst] [--per-kind N]
                        [--version V] [--jobs N] [--binary PATH]
                        [--time-budget S] [--minimize] [--show N] [--verbose]
+                       [--changed-since REV|auto] [--code-cap N]
+                       [--sample F --salt ID] [--shard I/K]
+
+The options of `tools/narrowing.py` pick the sources (X-1); a narrowed run
+(`--changed-since`, `--sample`) always has the cases under `tests/spec/fmt`
+(`ALWAYS`), a shard does not. Each source's inputs come from that source
+alone, so a narrowed run checks a part of the whole run's inputs.
 
 Exit 0 when every property holds, 1 otherwise, 2 on a usage error (or when
 the compiler or the list of cases cannot be had).
@@ -152,6 +159,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import builtin_names  # noqa: E402
 import fuzz  # noqa: E402
+import narrowing  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
 
@@ -170,6 +178,8 @@ CONVERGES_STRIPPED = ("comment", "mixed")
 MARKER = "fmtprop-"
 # Sources besides the cases (from the root; their `.onsa` files, build outputs aside).
 OTHER_SOURCES = ("std", "examples")
+# The sources a narrowed run always has (X-1): the cases of fmt.
+ALWAYS = ("tests/spec/fmt",)
 MARKER_LINE = re.compile(r"^[ ]*// " + MARKER + r"(\d+)[ ]*$")
 MARKER_END = re.compile(r"[ ]*// " + MARKER + r"(\d+)[ ]*$")
 
@@ -1235,8 +1245,9 @@ def sources(root, cmd):
 
 
 def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_dir=None,
-        time_budget=TIME_BUDGET, minimize=False, show=20, verbose=False):
-    """The gate item. Returns the exit code."""
+        time_budget=TIME_BUDGET, minimize=False, show=20, verbose=False, selection=None):
+    """The gate item. `selection` (`narrowing.Selection`, None for the whole run)
+    picks the sources. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fmt_props"
     tmp = work / f"work-{os.getpid()}"  # one per process: two runs do not share it
@@ -1248,6 +1259,17 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
     except (repo.RepoError, KeyError, OSError) as e:
         out(f"fmt-props: cannot list the sources: {e}")
         return 2
+    total = len(files)
+    picked = None
+    if selection:
+        # Each source's inputs depend on that source alone (`inputs_of`): the sources narrow after the list.
+        try:
+            picked = narrowing.pick([(s.path, s.text) for s in files], selection, root,
+                                    () if selection.shard else ALWAYS)
+        except narrowing.NarrowError as e:
+            out(f"fmt-props: cannot narrow the sources: {e}")
+            return 2
+        files = [s for s in files if s.path in picked.paths]
     try:
         load_symbols(root, cases_cmd)
     except repo.RepoError as e:
@@ -1299,7 +1321,8 @@ def run(root, argv, prop, per_kind, version, jobs, cases_cmd, out=print, target_
         by_prop.setdefault(f.prop, []).append(f)
     out(
         f"fmt-props ({prop}): {ran} inputs from {ran_sources} sources "
-        f"({len(skipped)} that fmt may not read, skipped); "
+        f"({len(skipped)} that fmt may not read, skipped"
+        + (f"; picked {picked.describe(total, 'sources')}" if picked else "") + "); "
         + (", ".join(f"{k} {len(v)}" for k, v in sorted(by_prop.items())) or "no failure")
         + f"; {time.time() - start:.1f} s"
     )
@@ -1373,7 +1396,8 @@ def main(argv=None):
     ap.add_argument("--minimize", action="store_true", help="shrink the failing inputs that are shown")
     ap.add_argument("--show", type=int, default=20, help="failures to show (-1: all)")
     ap.add_argument("--verbose", action="store_true", help="also list the sources skipped")
-    args = ap.parse_args(argv)
+    narrowing.add_arguments(ap)
+    args, selection = narrowing.parse(ap, argv)
     if args.per_kind < 0 or args.jobs < 1 or args.time_budget <= 0:
         ap.error("--per-kind must be 0 or more, --jobs 1 or more and --time-budget more than 0")
     target = fuzz.target_directory(args.root)
@@ -1389,7 +1413,7 @@ def main(argv=None):
     return run(
         args.root, [str(binary)], args.property, args.per_kind, args.version, args.jobs, repo.CASES_CMD,
         target_dir=target, time_budget=args.time_budget, minimize=args.minimize, show=args.show,
-        verbose=args.verbose,
+        verbose=args.verbose, selection=selection,
     )
 
 

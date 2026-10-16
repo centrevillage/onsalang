@@ -7,6 +7,7 @@ items that stand in for cargo.
 
     python3 -B tools/test_gate.py
 """
+import argparse
 import io
 import json
 import os
@@ -32,9 +33,11 @@ import fmt_props  # noqa: E402
 import fuzz  # noqa: E402
 import gap_marks  # noqa: E402
 import gate  # noqa: E402
+import gate_runs  # noqa: E402
 import gate_steps  # noqa: E402
 import ignored_files  # noqa: E402
 import keywords  # noqa: E402
+import narrowing  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
 import spec_blocks  # noqa: E402
@@ -699,7 +702,9 @@ def fake(name, code=0, **kw):
     return gate_steps.Step(name, (sys.executable, "-B", "-c", script), **kw)
 
 
-class GateWiring(TempRepo):
+class GateRun(TempRepo):
+    """Runs `gate.main` on the made-up root."""
+
     def run_main(self, argv, steps, env=None):
         out = io.StringIO()
         with mock.patch.dict(os.environ, env or {}, clear=False):
@@ -714,6 +719,9 @@ class GateWiring(TempRepo):
 
     def argv_of(self, name):
         return (self.repo.root / f"argv-{name}").read_text().split("\n")
+
+
+class GateWiring(GateRun):
 
     def test_exit_codes(self):
         self.assertEqual(self.run_main([], [fake("a"), fake("b")])[0], 0)
@@ -903,6 +911,361 @@ class GateWiring(TempRepo):
         self.assertIn("  pending: none", lines)
 
 
+def sleeper(name, seconds, **kw):
+    """A gate item that sleeps for `seconds` and passes."""
+    return gate_steps.Step(name, (sys.executable, "-B", "-c", f"import time; time.sleep({seconds})"), **kw)
+
+
+class GateForms(GateRun):
+    """The forms of a run (X-1 U2): the work check, `--only`, the sweep, the history, the warning."""
+
+    def setUp(self):
+        super().setUp()
+        self.root = self.repo.root.resolve()  # git names /private/var
+        self.repo.root = self.root
+        self.repo.write(".gitignore", "target/\nargv-*\n")
+        git_in(self.root, "init", "-q")
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "base")
+        git_in(self.root, "branch", "dev")
+
+    def ran(self, name):
+        return (self.root / f"argv-{name}").exists()
+
+    def forget(self):
+        for p in self.root.glob("argv-*"):
+            p.unlink()
+
+    def history(self, root=None):
+        return gate_runs.read_history(root or self.root)[0]
+
+    def elsewhere(self):
+        """A directory outside the made-up root, removed after the test."""
+        other = tempfile.TemporaryDirectory()
+        self.addCleanup(other.cleanup)
+        return Path(other.name).resolve()
+
+    def worktree(self):
+        wt = self.elsewhere() / "wt"
+        git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
+        return wt
+
+    def test_the_work_check_narrows_the_heavy_items(self):
+        steps = [fake("fz", narrows=("tools/fuzz.py", "tools/narrowing.py")), fake("st", touches=("tools/",)),
+                 fake("plain")]  # fmt: skip
+        self.repo.write("crates/x.rs", "fn x() {}\n")
+        code, out = self.run_main(["--work", "W3-07", "--work", "W3-08"], steps)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.argv_of("fz"), ["--changed-since", "auto", "--sample", "0.1", "--salt", "W3-07"])
+        self.assertIn("narrowed (sample 0.1, salt W3-07)", out)
+        self.assertFalse(self.ran("st"))
+        self.assertIn("SKIPPED st", out)
+        self.assertIn("the diff does not touch tools/", out)
+        self.assertTrue(self.ran("plain"))
+        # a diff on the tool of an item runs it whole; any diff in tools/ runs the self-test
+        self.forget()
+        self.repo.write("tools/narrowing.py", "x = 1\n")
+        code, out = self.run_main(["--work", "W3-07"], steps)
+        self.assertEqual(self.argv_of("fz"), [""])
+        self.assertIn("whole: the diff touches tools/narrowing.py", out)
+        self.assertTrue(self.ran("st"))
+        (self.root / "tools/narrowing.py").unlink()
+        self.repo.write("tools/other.py", "x = 1\n")
+        self.forget()
+        self.run_main(["--work", "W3-07"], steps)
+        self.assertEqual(self.argv_of("fz")[:2], ["--changed-since", "auto"])
+        self.assertTrue(self.ran("st"))
+        # the whole and the stage end: as before
+        (self.root / "tools/other.py").unlink()
+        for argv in ([], ["--stage-end", "W3"], ["--stage-end", "W3", "--work", "W3-07"]):
+            with self.subTest(argv=argv):
+                self.forget()
+                self.assertEqual(self.run_main(argv, steps)[0], 0)
+                self.assertEqual(self.argv_of("fz"), [""])
+                self.assertTrue(self.ran("st"))
+
+    def test_a_diff_that_cannot_be_read_runs_whole(self):
+        git_in(self.root, "branch", "-D", "dev")
+        steps = [fake("fz", narrows=("tools/fuzz.py",)), fake("st", touches=("tools/",))]
+        code, out = self.run_main(["--work", "W3-07"], steps)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.argv_of("fz"), [""])
+        self.assertIn("whole: the diff is not known", out)
+        self.assertTrue(self.ran("st"))
+        self.assertIn("diff: cannot read it (git merge-base HEAD dev", out)
+        self.assertEqual(out.splitlines()[-1], "gate: PASS")
+
+    def test_only(self):
+        steps = [fake("a"), fake("b", static=True), fake("c", static=True), fake("bad", 1),
+                 fake("fz", narrows=("tools/fuzz.py",)), fake("st", touches=("tools/",)),
+                 fake("sv", sweep=True, sweep_only=True)]  # fmt: skip
+        code, out = self.run_main(["--only", "a"], steps)
+        self.assertEqual((code, out.splitlines()[-1]), (0, "gate (only): PASS"))
+        self.assertEqual([p.name for p in self.root.glob("argv-*")], ["argv-a"])
+        self.assertNotIn(" b ", out)
+        self.forget()
+        code, out = self.run_main(["--only", "static,bad"], steps)
+        self.assertEqual((code, out.splitlines()[-1]), (1, "gate (only): FAIL (bad)"))
+        self.assertEqual(sorted(p.name for p in self.root.glob("argv-*")), ["argv-b", "argv-bad", "argv-c"])
+        # in the form of the other options; an item named runs whatever the diff touches
+        self.forget()
+        self.run_main(["--only", "fz,st", "--work", "W3-07"], steps)
+        self.assertEqual(self.argv_of("fz")[:2], ["--changed-since", "auto"])
+        self.assertTrue(self.ran("st"))
+        self.forget()
+        self.run_main(["--only", "fz"], steps)
+        self.assertEqual(self.argv_of("fz"), [""])
+        for argv in (["--only", "sv"], ["--only", "nope"], ["--only", ""], ["--only", "a", "--quick"]):
+            with self.subTest(argv=argv):
+                self.forget()
+                self.assertEqual(self.run_main(argv, steps)[0], 2)
+                self.assertEqual(list(self.root.glob("argv-*")), [])
+
+    def test_the_sweep(self):
+        steps = [fake("sv", sweep=True, sweep_only=True), fake("plain"), fake("b", static=True),
+                 fake("fz", narrows=("tools/fuzz.py",)), fake("st", touches=("tools/",), sweep=True)]  # fmt: skip
+        head = git_in(self.root, "rev-parse", "HEAD").strip()
+        code, out = self.run_main(["--sweep"], steps)
+        self.assertEqual((code, out.splitlines()[-1]), (0, "gate (sweep 0/2): PASS"))
+        self.assertEqual(sorted(p.name for p in self.root.glob("argv-*")), ["argv-b", "argv-fz", "argv-st", "argv-sv"])
+        self.assertLess(out.index("=== sv"), out.index("=== b"))
+        self.assertEqual(self.argv_of("fz"), ["--shard", "0/2"])
+        self.assertNotIn("plain", out)
+        self.assertIn(f"sweep: next 1/2 (0/2 last at {head[:7]}, 0 commits ago; 1/2 never)", out)
+        self.assertEqual(self.history()[-1]["form"], "sweep 0/2")
+        self.run_main(["--sweep"], steps)
+        self.assertEqual(self.argv_of("fz"), ["--shard", "1/2"])
+        git_in(self.root, "commit", "-q", "--allow-empty", "-m", "next")
+        with open(self.root / gate_runs.HISTORY, "a") as f:
+            f.write("not json\n")
+        code, out = self.run_main(["--sweep"], [fake("fz", 1, narrows=("tools/fuzz.py",))])
+        self.assertEqual((code, out.splitlines()[-1]), (1, "gate (sweep 0/2): FAIL (fz)"))
+        self.assertIn(f"sweep: next 1/2 (0/2 last at", out)
+        self.assertIn(f"1/2 last at {head[:7]}, 1 commit ago); 1 unreadable line", out)
+        self.run_main(["--sweep"], steps)  # a failed sweep counts: the next shard
+        self.assertEqual(self.argv_of("fz"), ["--shard", "1/2"])
+        # another K starts again
+        with mock.patch.object(gate_steps, "SHARDS", 3):
+            self.run_main(["--sweep"], steps)
+            self.assertEqual(self.argv_of("fz"), ["--shard", "0/3"])
+        # alone, and in the main tree only
+        for argv in (["--sweep", "--work", "W3-07"], ["--sweep", "--quick"], ["--sweep", "--only", "b"]):
+            self.assertEqual(self.run_main(argv, steps)[0], 2)
+        wt = self.worktree()
+        out = io.StringIO()
+        with mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self.assertEqual(gate.main(["--sweep"], steps=steps, root=wt, out=out), 2)
+        self.assertIn("a worktree", err.getvalue())
+        with mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self.assertEqual(gate.main(["--sweep"], steps=steps, root=self.root / "tests", out=out), 2)
+        self.assertIn("not a git work tree", err.getvalue())
+
+    def test_the_history(self):
+        steps = [fake("a"), fake("p", gate_steps.PARENT, parent=True)]
+        head = git_in(self.root, "rev-parse", "HEAD").strip()
+        for argv, form in ((["--work", "W3-07"], "work W3-07"), ([], "whole"), (["--stage-end", "W3"], "stage-end W3"),
+                           (["--only", "a"], "only a"), (["--quick"], None), (["--work", "W9-99"], None)):  # fmt: skip
+            with self.subTest(argv=argv):
+                before = len(self.history())
+                self.run_main(argv, steps)
+                rows = self.history()
+                if form is None:
+                    self.assertEqual(len(rows), before)
+                    continue
+                self.assertEqual(len(rows), before + 1)
+                row = rows[-1]
+                self.assertEqual((row["form"], row["commit"], row["dirty"], row["verdict"]), (form, head, False, "PASS"))
+                self.assertEqual(row["items"]["a"][0], "PASS")
+                self.assertEqual(row["works"], ["W3-07"] if "--work" in argv else [])
+        self.assertEqual(self.history()[0]["items"]["p"][0], "PARENT")
+        self.repo.write("crates/x.rs", "x\n")  # untracked: dirty
+        self.run_main([], steps)
+        self.assertTrue(self.history()[-1]["dirty"])
+        # a worktree keeps none
+        wt = self.worktree()
+        before = len(self.history())
+        quiet(gate.main, [], steps=steps, root=wt, out=io.StringIO())
+        self.assertEqual(len(self.history()), before)
+        self.assertFalse((wt / gate_runs.HISTORY).exists())
+        # a history that cannot be written does not fail the gate
+        (self.root / gate_runs.HISTORY).unlink()
+        (self.root / gate_runs.HISTORY).mkdir()
+        code, out = self.run_main([], steps)
+        self.assertEqual(code, 0)
+        self.assertIn("  history: cannot write it (", out)
+        self.assertIn("  history: cannot read it (", out)
+        with mock.patch.object(sys, "stderr", io.StringIO()) as err:
+            self.assertEqual(gate.main(["--sweep"], steps=steps, root=self.root, out=io.StringIO()), 2)
+        self.assertIn("cannot read the history", err.getvalue())
+
+    def test_the_warning_of_the_time(self):
+        steps = [sleeper("s3", 0.3), sleeper("s2", 0.2), sleeper("s1", 0.1), fake("s0")]
+        with mock.patch.object(gate_steps, "BUDGET_WORK", 0.4):
+            code, out = self.run_main(["--work", "W3-07"], steps)
+            lines = out.splitlines()
+            self.assertEqual((code, lines[-1]), (0, "gate: PASS"))
+            self.assertRegex(lines[-2], r"^warning: the work check took \d+s, \d+s over its 0.4s; "
+                                        r"the longest: s3 0\.\ds, s2 0\.\ds, s1 0\.\ds$")  # fmt: skip
+            for argv in ([], ["--only", "s3,s2,s1", "--work", "W3-07"]):
+                self.assertNotIn("warning", self.run_main(argv, steps)[1])
+        with mock.patch.object(gate_steps, "BUDGET_SWEEP", 0):
+            out = self.run_main(["--sweep"], [fake("b", static=True)])[1]
+            self.assertTrue(out.splitlines()[-2].startswith("warning: the sweep took"))
+        # the wait for the lock does not count
+        with mock.patch.object(gate_steps, "BUDGET_WORK", 0.5), open(gate.lock_path(self.root), "a+") as held:
+            gate.fcntl.flock(held, gate.fcntl.LOCK_EX)
+            out = io.StringIO()
+            other = threading.Thread(target=lambda: gate.main(["--work", "W3-07"], steps=[fake("a")], root=self.root,
+                                                              out=out))  # fmt: skip
+            other.start()
+            time.sleep(1.0)
+            gate.fcntl.flock(held, gate.fcntl.LOCK_UN)
+            other.join(10)
+        self.assertIn("waited", out.getvalue())
+        self.assertNotIn("warning", out.getvalue())
+
+    def test_parent(self):
+        results = gate.run_steps([fake("gm", gate_steps.PARENT, parent=True), fake("x", gate_steps.PARENT)], {},
+                                 cwd=self.root, out=io.StringIO())  # fmt: skip
+        self.assertEqual([r.status for r in results], ["PARENT", "FAIL"])
+        self.assertIn("waits for the parent", results[0].describe())
+        code, out = self.run_main([], [fake("gm", gate_steps.PARENT, parent=True)])
+        self.assertEqual((code, out.splitlines()[-1]), (0, "gate: PASS"))
+        self.assertIn("PARENT  gm", out)
+
+    def test_gap_marks_in_the_three_trees(self):
+        def run(root):
+            out = io.StringIO()
+            with mock.patch.object(sys, "stdout", out):
+                return gap_marks.main(["--root", str(root)]), out.getvalue()
+
+        wt = self.worktree()
+        for text, main_code, wt_code in (("// SPEC-GAP(S-45): x\n", 0, 0), ("// SPEC-GAP(NEW): x\n", 1, gate_steps.PARENT),
+                                         ("// SPEC-GAP(S-99): x\n", 1, gate_steps.PARENT),
+                                         ("// SPEC-GAP(NEW): x\n// SPEC-GAP: y\n", 1, 1),
+                                         ("// SPEC-GAP(Q-10): x\n", 1, 1)):  # fmt: skip
+            with self.subTest(text=text):
+                for root in (self.root, wt):
+                    (root / "crates/a/src").mkdir(parents=True, exist_ok=True)
+                    (root / "crates/a/src/lib.rs").write_text(text)
+                code, out = run(self.root)
+                self.assertEqual(code, main_code, out)
+                self.assertNotIn("parent:", out)
+                code, out = run(wt)
+                self.assertEqual(code, wt_code, out)
+                if wt_code == gate_steps.PARENT:
+                    self.assertIn("parent: crates/a/src/lib.rs:1:", out)
+                    self.assertIn("1 for the parent to register", out)
+        # not a git root (the made-up roots): fails as in the main tree
+        plain = Repo(self.elsewhere())
+        plain.write("crates/a/src/lib.rs", "// SPEC-GAP(NEW): x\n")
+        self.assertEqual(run(plain.root)[0], 1)
+
+
+class SaveBase(unittest.TestCase):
+    """`tools/gate.sh --save-base` (X-1 U2, M-3): the binaries of HEAD for `narrowing.resolve_base`."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve() / "main"
+        self.target = Path(self.tmp.name).resolve() / "cargo-target"
+        for rel, text in {".gitignore": "target/\n", "crates/c.rs": "fn c() {}\n", "docs/d.md": "d\n",
+                          "Cargo.toml": "[workspace]\n"}.items():  # fmt: skip
+            self.write(rel, text)
+        git_in(self.root, "init", "-q")
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "base")
+        git_in(self.root, "branch", "dev")
+        self.built = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def build(self, root, cases=False):
+        self.built.append(cases)
+        name = "onsa_cases" if cases else "onsa"
+        (self.target / "debug").mkdir(parents=True, exist_ok=True)
+        (self.target / "debug" / name).write_text(f"#!/bin/sh\necho {name} {len(self.built)}\n")
+        (self.target / "debug" / name).chmod(0o755)
+        return True
+
+    def save(self, root=None, keep=2, build=None):
+        lines = []
+        code = gate_runs.save_base(root or self.root, keep, out=lines.append, build=build or self.build,
+                                   target_directory=lambda r: self.target)  # fmt: skip
+        return code, "\n".join(lines)
+
+    def head(self):
+        return git_in(self.root, "rev-parse", "HEAD").strip()
+
+    def test_saves_what_the_reader_finds(self):
+        code, out = self.save()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.built, [False, True])
+        d = self.root / "target" / "base" / self.head()[:7]
+        self.assertEqual((d / "COMMIT").read_text(), self.head() + "\n")
+        # the base of HEAD itself tells nothing apart (it would show the new classes too)
+        self.assertIn("same as HEAD", narrowing.resolve_base(self.root, "auto"))
+        saved = narrowing.Base(self.head()[:7], (str(d / "onsa"),), (str(d / "onsa_cases"),))
+        self.write("crates/c.rs", "fn c() { 1 }\n")  # a change of the code: the base of HEAD differs
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), saved)
+        self.write("crates/c.rs", "fn c() {}\n")
+        self.write("docs/d.md", "changed\n")  # not the code
+        self.assertIn("same as HEAD", narrowing.resolve_base(self.root, "auto"))
+        git_in(self.root, "commit", "-qam", "next")  # a work on top of dev
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), saved)
+        git_in(self.root, "reset", "-q", "--hard", "HEAD~1")
+        self.assertEqual(sorted(p.name for p in (self.root / "target" / "base").iterdir()), [self.head()[:7]])
+        # again on the same commit: replaced
+        self.assertEqual(self.save()[0], 0)
+        self.assertIn("onsa 3", (d / "onsa").read_text())
+
+    def test_refuses_changes_of_what_builds_them(self):
+        for rel in ("crates/c.rs", "Cargo.toml"):
+            with self.subTest(rel=rel):
+                self.write(rel, "changed\n")
+                code, out = self.save()
+                self.assertEqual(code, 1)
+                self.assertIn(f"refused: the tracked files have changes not committed: {rel}", out)
+                git_in(self.root, "checkout", "--", rel)
+        self.assertFalse((self.root / "target" / "base").exists())
+        self.assertEqual(self.built, [])
+        # untracked files and the documents do not refuse
+        self.write("crates/new.rs", "x\n")
+        self.write("docs/d.md", "changed\n")
+        self.assertEqual(self.save()[0], 0)
+
+    def test_keeps_the_last(self):
+        base = self.root / "target" / "base"
+        (base / "notes").mkdir(parents=True)
+        (base / "abcdef0").mkdir()  # no COMMIT: not a saved base
+        saved = []
+        for i in range(3):
+            git_in(self.root, "commit", "-q", "--allow-empty", "-m", f"c{i}")
+            self.assertEqual(self.save(keep=2)[0], 0)
+            saved.append(self.head()[:7])
+            os.utime(base / saved[-1] / "COMMIT", (1000 + i, 1000 + i))
+        self.assertEqual(self.save(keep=2)[0], 0)  # the newest again: keeps its place
+        self.assertEqual(sorted(p.name for p in base.iterdir()), sorted(["notes", "abcdef0"] + saved[1:]))
+
+    def test_main_tree_only_and_failures(self):
+        wt = Path(self.tmp.name).resolve() / "wt"
+        git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
+        self.assertEqual(self.save(wt)[0], 2)
+        self.assertEqual(self.save(Path(self.tmp.name))[0], 2)
+        self.assertEqual(self.save(build=lambda root, cases=False: False)[0], 1)
+        self.assertEqual(self.built, [])
+        self.assertFalse((self.root / "target" / "base").exists() and any((self.root / "target" / "base").iterdir()))
+        # alone
+        with mock.patch.object(sys, "stderr", io.StringIO()):
+            self.assertEqual(gate.main(["--save-base", "--work", "W3-07"], root=self.root, out=io.StringIO()), 2)
+
+
 class RealSteps(unittest.TestCase):
     _c_items = None
 
@@ -942,7 +1305,7 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["ignores"].stage_args and not by_name["ignores"].pendable)
         self.assertFalse(by_name["fmt-props"].pendable)
         # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
-        slow = ["fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
+        slow = ["save-base", "fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-comments", "fmt-cst"]
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the deep fuzzing runs only at a stage end (W3-03)
         self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])
@@ -958,6 +1321,30 @@ class RealSteps(unittest.TestCase):
         for n in names:
             self.assertRegex(n, pending.TARGET_FORMS["gate"])
             self.assertNotIn("/", n)
+
+    def test_the_forms_of_the_items(self):
+        # X-1 U2: the attributes behind the work check, the sweep and `--only`
+        steps = gate_steps.STEPS
+        self.assertEqual(sorted(gate_steps.static_names()), sorted(
+            ["pending", "ignores", "gap-marks", "diag-registry", "diag-negatives", "builtin-names", "spec-examples",
+             "spec-sections", "default-inits"]))  # fmt: skip
+        self.assertEqual({s.name: s.narrows for s in steps if s.narrows},
+                         {"fuzz": ("tools/fuzz.py", "tools/narrowing.py"),
+                          **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-comments", "fmt-cst")}})  # fmt: skip
+        for s in steps:
+            for p in s.narrows:
+                self.assertTrue((gate.ROOT / p).is_file(), p)
+        self.assertEqual({s.name: s.touches for s in steps if s.touches}, {"gate-selftest": ("tools/",)})
+        self.assertEqual([s.name for s in steps if s.parent], ["gap-marks"])
+        sweep = [s.name for s in steps if gate._in_form(s, gate.Form(sweep=(0, 2)), None)]
+        self.assertEqual(sweep[0], "save-base")
+        self.assertEqual(sorted(sweep), sorted(["save-base", "gate-selftest", "fuzz", "fmt-props", "fmt-comments",
+                                                "fmt-cst"] + gate_steps.static_names()))  # fmt: skip
+        for form in (gate.Form(), gate.Form(works=("W3-07",)), gate.Form(stage_end="W3"), gate.Form(quick=True)):
+            self.assertEqual([s.name for s in steps if not gate._in_form(s, form, None)], ["save-base"])
+        # the narrowed runs keep the cap of the tools: the gate holds no copy of it
+        self.assertFalse(hasattr(gate_steps, "CODE_CAP"))
+        self.assertEqual(gate_steps.PARENT, 3)
 
 
 class SpecSections(unittest.TestCase):
@@ -1276,7 +1663,8 @@ class SpecGap(TempRepo):
             self.repo.write(rel, text)
         marks = gap_marks.find_marks(self.repo.root)
         known = pending.load_docs(self.repo.root).reasons | gap_marks.api_ids(self.repo.root)
-        return marks, gap_marks.check(marks, known)
+        problems, for_parent = gap_marks.check(marks, known)
+        return marks, problems + for_parent
 
     def test_registered_marks_pass(self):
         marks, problems = self.marks(
@@ -2204,6 +2592,130 @@ class Fuzz(TempRepo):
         paths = [p for p, _ in fuzz.seeds(self.repo.root)]
         self.assertEqual(paths, ["tests/spec/ops/groups.onsa"])
 
+    # X-1: the narrowed runs and the base binaries.
+
+    def test_a_narrowed_plan_is_a_part_of_the_whole(self):
+        # the seeds, the corpus and the weights are the whole run's; the fix stage takes a mutant by its
+        # index in the whole run (the subset experiment of the advisor: narrowing the list first breaks it)
+        files = [(f"tests/spec/d{i % 4}/s{i}.onsa", f"pub fn f{i}(x: I32) -> I32 {{\n  x@{i} ~ 'a' + {i}\n}}\n")
+                 for i in range(24)]
+        only = {p for p, _ in files[3::5]}
+        whole = fuzz.plan(files, 6, "1", truncated=3, swept=True)
+        part = fuzz.plan(files, 6, "1", truncated=3, swept=True, only=only)
+        self.assertEqual(whole[3], [i for i in range(len(whole[0])) if i % fuzz.FIX_EVERY == 0])
+        mutants, cuts, swept, chosen = part
+        self.assertEqual(mutants, [m for m in whole[0] if m[0] in only])
+        self.assertEqual(cuts, [c for c in whole[1] if c[0] in only])
+        self.assertTrue({c[2] for c in swept} <= {c[2] for c in whole[2]}, swept)
+        self.assertEqual({c[0] for c in swept}, only)
+        self.assertEqual([mutants[i] for i in chosen], [whole[0][i] for i in whole[3] if whole[0][i][0] in only])
+        self.assertTrue(chosen and len(chosen) < len(whole[3]))
+
+    def go_narrowed(self, selection=None, base=None, per_seed=fuzz.FIX_EVERY):
+        lines = []
+        code = fuzz.run(self.repo.root, self.argv, self.fix_argv, per_seed, "t", 2, False, out=lines.append,
+                        selection=selection, base=base)
+        return code, "\n".join(lines)
+
+    def base_of(self, script=FAKE_CASES):
+        return narrowing.Base("abc1234", (), (sys.executable, "-B", str(self.repo.write("base_cases.py", script))))
+
+    SAMPLED = narrowing.Selection(sample=1.0, salt="W9-99")
+    SIG = "fix|E0010|parenthesize the `…` of #|E0010"
+
+    def test_a_class_the_base_shows_does_not_fail_a_narrowed_run(self):
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
+        code, text = self.go_narrowed(self.SAMPLED, self.base_of())
+        self.assertEqual(code, 0, text)
+        self.assertIn(f"\npre-existing (the base abc1234 shows it): fix-same-place: {self.SIG} (seed ", text)
+        self.assertIn("from 2 of 2 seeds (sample 2) (4 each)", text)
+        self.assertIn("; base abc1234: 1 pre-existing;", text)
+        self.assertNotIn("FAIL", text)
+        new = list((self.repo.root / "target" / "fuzz" / "new").glob("*.onsa"))
+        self.assertTrue(new and new[0].read_text() == "BADCANDIDATE", new)  # written for the parent to register
+
+    def test_a_class_the_base_does_not_show_fails(self):
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
+        for name, script in (("no violation", FAKE_CASES.replace('"BADCANDIDATE" in text', "False")),
+                             ("another message left", FAKE_CASES.replace('"message": "m"', '"message": "other"')),
+                             ("another code left", FAKE_CASES.replace('"left": "E0010"', '"left": "E0011"'))):
+            with self.subTest(name):
+                code, text = self.go_narrowed(self.SAMPLED, self.base_of(script))
+                self.assertEqual(code, 1, text)
+                self.assertIn(f"FAIL a new class of a broken fix candidate: fix-same-place: {self.SIG}", text)
+                self.assertIn("; base abc1234: 0 pre-existing;", text)
+        # the base's tool fails: it cannot tell, and the class fails
+        code, text = self.go_narrowed(self.SAMPLED, self.base_of("import sys\nsys.exit(3)\n"))
+        self.assertEqual(code, 1, text)
+        self.assertIn("(the base cannot tell: exit 3: no list of results)", text)
+
+    def test_a_crash_from_before_fails(self):
+        # an internal error fails even when the base would show it: the base does not run it
+        self.repo.write("tests/spec/x.onsa", "XXXXXXXXXXXXXXXXXXXX\n")
+        code, text = self.go_narrowed(self.SAMPLED, self.base_of(), per_seed=3)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL a new crash class: check: internal|crates/onsa_sema/src/body.rs", text)
+        self.assertNotIn("pre-existing", text.replace("0 pre-existing", ""))
+
+    def test_an_unknown_base_and_whole_runs_fail(self):
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
+        code, text = self.go_narrowed(self.SAMPLED, "no target/base/abc1234/COMMIT")
+        self.assertEqual(code, 1, text)
+        self.assertIn("; base unknown (no target/base/abc1234/COMMIT);", text)
+        self.assertIn(f"FAIL a new class of a broken fix candidate: fix-same-place: {self.SIG}", text)
+        code, text = self.go_narrowed(self.SAMPLED, None)
+        self.assertEqual(code, 1, text)
+        self.assertNotIn("; base", text)
+        # a whole run and a shard fail on a class from before, and mark it
+        for selection in (None, narrowing.Selection(shard=(0, 1))):
+            with self.subTest(selection=selection):
+                code, text = self.go_narrowed(selection, self.base_of())
+                self.assertEqual(code, 1, text)
+                self.assertRegex(text, rf"FAIL a new class of a broken fix candidate: fix-same-place: {re.escape(self.SIG)} "
+                                       r"\(seed [^)]*\) \(pre-existing: the base abc1234 shows it\)")
+        self.assertIn("from 2 of 2 seeds (shard 0/1)", text)
+
+    def test_a_narrowed_run_mutates_the_picked_seeds_only(self):
+        # the seed that is not picked (the sample takes one seed of the group tests/spec/q) gives no mutant;
+        # the replay is whole
+        for i in range(6):
+            self.repo.write(f"tests/spec/q/s{i}.onsa", "XXXXXXXXXXXXXXXXXXXX\n" if i else "ok\n")
+        self.repo.write("tests/fuzz/x.onsa", "X")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/x.onsa"))
+        selection = narrowing.Selection(sample=1e-9, salt="W9-99")
+        seeds = fuzz.seeds(self.repo.root)
+        picked = narrowing.pick(seeds, selection, self.repo.root)
+        self.assertEqual(len(picked.paths), 2)  # one of each group
+        code, text = self.go_narrowed(selection, per_seed=2)
+        self.assertEqual(code, 0, text)
+        self.assertIn("4 mutants from 2 of 7 seeds (sample 2) (2 each)", text)
+        self.assertIn("1 saved inputs replayed (1 listed", text)
+
+    def test_main_passes_the_narrowing(self):
+        calls = []
+
+        def run(*args, **kw):
+            calls.append(kw)
+            return 0
+
+        base = ["--root", str(self.repo.root), "--binary", "onsa", "--cases-binary", "onsa_cases"]
+        with mock.patch.object(fuzz, "run", run), \
+                mock.patch.object(fuzz, "target_directory", lambda root: self.repo.root / "target"):
+            self.assertEqual(fuzz.main(base + ["--sample", "0.1", "--salt", "W9-99", "--base", "none"]), 0)
+            self.assertEqual(calls[-1]["selection"], narrowing.Selection(sample=0.1, salt="W9-99"))
+            self.assertIsNone(calls[-1]["base"])
+            self.assertEqual(fuzz.main(base + ["--shard", "1/2"]), 0)
+            self.assertEqual(calls[-1]["selection"], narrowing.Selection(shard=(1, 2)))
+            self.assertIn("merge base", calls[-1]["base"])  # not a git work tree: unknown
+            self.assertEqual(fuzz.main(base), 0)
+            self.assertIsNone(calls[-1]["selection"])
+            for bad in (["--sample", "0.1"], ["--salt", "x"], ["--sample", "0", "--salt", "x"],
+                        ["--shard", "2/2"], ["--shard", "0/2", "--sample", "0.1", "--salt", "x"],
+                        ["--code-cap", "5"], ["--changed-since", "auto"]):
+                with self.subTest(bad=bad), self.assertRaises(SystemExit) as e:
+                    quiet(fuzz.main, base + bad)
+                self.assertEqual(e.exception.code, 2)
+
 
 FAKE_FMT = r"""
 import re, sys
@@ -2561,6 +3073,30 @@ class FmtProps(TempRepo):
         self.assertNotIn("FAIL meaning", text)
         self.assertIn("inputs from 1 sources", text)
 
+    def test_a_narrowed_run(self):
+        # X-1: the cases of fmt always, a sample of one source per group (the first 3 parts of the
+        # directory), each source's inputs as in the whole run (they depend on that source alone)
+        paths = ["tests/spec/fmt/f.onsa"] + [f"tests/spec/q/{i}.onsa" for i in range(4)] + ["tests/spec/r/r.onsa"]
+        for p in paths:
+            self.repo.write(p, self.SOURCE)
+        listed = [{"path": p, "kind": "file", "mode": "check", "files": [{"path": p, "syntax_errors": False}]}
+                  for p in paths]
+        whole = sum(len(fmt_props.inputs_of(p, self.SOURCE, 1, "t")) for p in paths)
+        self.assertEqual(fmt_props.inputs_of(paths[1], self.SOURCE, 1, "t"),
+                         fmt_props.inputs_of(paths[1], self.SOURCE, 1, "t"))
+        for selection, picked, want in ((narrowing.Selection(sample=1e-9, salt="s"), 3,
+                                         "picked 3 of 6 sources (always 1, sample 2)"),
+                                        (narrowing.Selection(shard=(0, 1)), 6, "picked 6 of 6 sources (shard 0/1)"),
+                                        (None, 6, "skipped); ")):
+            with self.subTest(selection=selection):
+                lines = []
+                code = fmt_props.run(self.repo.root, self.argv, "cst", 1, "t", 2, self.cases_cmd(listed),
+                                     out=lines.append, selection=selection)
+                text = "\n".join(lines)
+                self.assertEqual(code, 0, text)
+                self.assertIn(f"{whole * picked // 6} inputs from {picked} sources", text)
+                self.assertIn(want, text)
+
     def test_the_continuing_symbols_are_read_once_and_checked(self):
         # Read on the main thread from the injected command, before any
         # perturbation; none or an empty list is a usage error (exit 2).
@@ -2685,6 +3221,169 @@ class FmtProps(TempRepo):
             with self.subTest(before=before, after=after):
                 self.assertEqual(fmt_props.break_problems(before, after), want)
 
+
+
+class Narrowing(unittest.TestCase):
+    """tools/narrowing.py (X-1): the seeds of a narrowed run, the shards, the base binaries."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve() / "main"  # git names /private/var
+        self.root.mkdir()
+        git_in(self.root, "init", "-q")
+        for rel, text in {"tests/spec/a/x.onsa": "// E0013\n", "tests/spec/a/y.onsa": "y\n",
+                          "crates/c.rs": "// E0001\nfn c() {}\n", "docs/d.md": "d\n"}.items():
+            self.write(rel, text)
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "base")
+        git_in(self.root, "branch", "dev")
+        self.full = git_in(self.root, "rev-parse", "HEAD").strip()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        return p
+
+    def change(self):
+        """A WIP commit and changes on top of dev: what a worktree holds."""
+        self.write("crates/c2.rs", "// E0007\n")
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "WIP")
+        self.write("crates/c.rs", "// E0002\nfn c() {}\n")  # E0001 removed, E0002 added
+        self.write("docs/d.md", "E0003\n")  # docs/ and tests/ name no code
+        self.write("tests/spec/a/y.onsa", "y // E0004\n")
+        self.write("tests/spec/b/é.onsa", "// E0006\n")  # untracked, a name outside ASCII
+        self.write("crates/new.rs", "// E0005\n")  # untracked: its codes count
+        self.write("tools/test_t.py", "E0008\n")  # tools/: the self-tests write codes as data (X-1 U2)
+        (self.root / "crates/blob.bin").write_bytes(b"\xff\xfe")  # untracked, not text: no code
+
+    def test_changed_paths_and_codes(self):
+        self.change()
+        self.assertEqual(narrowing.merge_base(self.root), self.full)
+        self.assertEqual(narrowing.changed_paths(self.root, self.full),
+                         {"crates/c2.rs", "crates/c.rs", "docs/d.md", "tests/spec/a/y.onsa", "tests/spec/b/é.onsa",
+                          "crates/new.rs", "crates/blob.bin", "tools/test_t.py"})
+        self.assertEqual(narrowing.diff_codes(self.root, self.full), {"E0001", "E0002", "E0005", "E0007"})
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "tracked")
+        self.write("tools/test_t.py", "E0009\n")  # a tracked file of tools/: still no code
+        self.assertEqual(narrowing.diff_codes(self.root, self.full), {"E0001", "E0002", "E0005", "E0007"})
+        with self.assertRaises(narrowing.NarrowError):
+            narrowing.changed_paths(self.root, "no-such-commit")
+
+    def test_pick(self):
+        self.change()
+        self.write("crates/c.rs", "// E0002 E0005 E0007\n")
+        seeds = ([("tests/spec/a/y.onsa", "E0002"), ("tests/spec/b/é.onsa", "")]
+                 + [(f"tests/spec/c/{i}.onsa", "E0002" if i < 5 else "E0005" if i < 6 else "E0007 E0005")
+                    for i in range(8)]
+                 + [(f"tests/spec/fmt/{i}.onsa", "") for i in range(3)])
+        # the codes with the fewest seeds first: E0007 (2), E0005 (3 with E0007's), then E0002 (5 more,
+        # 8 in all) would pass the cap 6: it and the codes after it are left out (y.onsa is in the diff)
+        sel = narrowing.Selection(changed_since=self.full, code_cap=6)
+        picked = narrowing.pick(seeds, sel, self.root, always=("tests/spec/fmt",))
+        self.assertEqual(picked.counts, {"diff": 2, "codes": 3, "always": 3})
+        self.assertEqual(picked.note, "codes over the cap 6 left to the sample: E0002")
+        self.assertEqual(picked.describe(len(seeds)), "8 of 13 seeds (diff 2, codes 3, always 3; "
+                                                       "codes over the cap 6 left to the sample: E0002)")
+        # the cap holds them all: no note
+        picked = narrowing.pick(seeds, narrowing.Selection(changed_since=self.full, code_cap=8), self.root)
+        self.assertEqual((picked.counts, picked.note), ({"diff": 2, "codes": 8}, ""))
+        # the cap holds none: the codes left out are named
+        picked = narrowing.pick(seeds, narrowing.Selection(changed_since=self.full, code_cap=0), self.root)
+        self.assertEqual(picked.counts, {"diff": 2, "codes": 0})
+        self.assertIn("E0002 E0005 E0007", picked.note)
+        # a sample is added after the rest
+        picked = narrowing.pick(seeds, narrowing.Selection(changed_since=self.full, code_cap=0, sample=1.0,
+                                                           salt="s"), self.root)
+        self.assertEqual((picked.counts, len(picked.paths)), ({"diff": 2, "codes": 0, "sample": 11}, 13))
+
+    def test_sample(self):
+        paths = [f"tests/spec/{d}/{i}.onsa" for d in ("a", "b", "c") for i in range(200)] + ["tests/spec/d/x/1.onsa",
+                                                                                            "tests/spec/d/y/2.onsa"]
+        a = narrowing.sampled(paths, 0.1, "W4-01")
+        self.assertEqual(a, narrowing.sampled(list(reversed(paths)), 0.1, "W4-01"))  # the same salt: the same
+        self.assertNotEqual(a, narrowing.sampled(paths, 0.1, "W4-02"))
+        self.assertTrue(40 < len(a) < 90, len(a))
+        # at least one of each group (the first 3 parts of the directory): tests/spec/d/x and /y are one group
+        self.assertEqual(narrowing.group("tests/spec/d/x/1.onsa"), "tests/spec/d")
+        few = narrowing.sampled(paths, 1e-9, "W4-01")
+        self.assertEqual(sorted(narrowing.group(p) for p in few), [f"tests/spec/{d}" for d in "abcd"])
+        self.assertEqual(narrowing.sampled(paths, 1.0, "x"), set(paths))
+
+    def test_shards_partition_the_whole(self):
+        paths = [f"tests/spec/{i}.onsa" for i in range(300)]
+        for k in (1, 2, 3):
+            parts = [{p for p in paths if narrowing.in_shard(p, (i, k))} for i in range(k)]
+            self.assertEqual(set().union(*parts), set(paths))
+            self.assertEqual(sum(map(len, parts)), len(paths))
+            self.assertTrue(all(parts), parts)
+        picked = narrowing.pick([(p, "") for p in paths], narrowing.Selection(shard=(1, 3)), None,
+                                always=("tests",))  # a shard has no directory always in
+        self.assertEqual(picked.paths, {p for p in paths if narrowing.in_shard(p, (1, 3))})
+
+    def make_base(self, commit=None, tools=("onsa", "onsa_cases")):
+        d = self.root / "target" / "base" / self.full[:7]
+        d.mkdir(parents=True, exist_ok=True)
+        if commit is not None:
+            (d / "COMMIT").write_text(commit + "\n")
+        for t in tools:
+            (d / t).write_text("#!/bin/sh\nexit 0\n")
+            (d / t).chmod(0o755)
+        return d
+
+    def test_resolve_base(self):
+        self.assertIsNone(narrowing.resolve_base(self.root, "none"))
+        self.assertIn("COMMIT", narrowing.resolve_base(self.root, "auto"))
+        d = self.make_base(self.full)
+        self.change()
+        base = narrowing.resolve_base(self.root, "auto")
+        self.assertEqual(base, narrowing.Base(self.full[:7], (str(d / "onsa"),), (str(d / "onsa_cases"),)))
+        # a short COMMIT of 7 characters or more is a prefix of the merge base
+        self.make_base(self.full[:7])
+        self.assertIsInstance(narrowing.resolve_base(self.root, "auto"), narrowing.Base)
+        for wrong in (self.full[:6], "0" * 40):
+            self.make_base(wrong)
+            self.assertIn("not the merge base", narrowing.resolve_base(self.root, "auto"))
+        self.make_base(self.full)
+        (d / "onsa_cases").unlink()
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), f"no {d / 'onsa_cases'}")
+        self.make_base(self.full)
+        (d / "onsa").chmod(0o644)
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), f"no {d / 'onsa'}")
+        (d / "onsa").chmod(0o755)
+        # a directory named: its two tools, named by COMMIT
+        self.assertEqual(narrowing.resolve_base(self.root, str(d)).commit, self.full[:7])
+        # from a worktree: the main tree's target/base
+        wt = Path(self.tmp.name) / "wt"
+        git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
+        self.assertEqual(narrowing.resolve_base(wt, "auto"), base)
+        # no dev: unknown; not a git work tree: unknown
+        git_in(self.root, "branch", "-D", "dev")
+        self.assertIn("no merge base of HEAD and dev", narrowing.resolve_base(self.root, "auto"))
+        self.assertIn("no merge base", narrowing.resolve_base(Path(self.tmp.name), "auto"))
+
+    def test_selection(self):
+        def parse(*argv):
+            ap = argparse.ArgumentParser()
+            ap.add_argument("--root", type=Path, default=self.root)
+            narrowing.add_arguments(ap)
+            return quiet(narrowing.parse, ap, list(argv))[1]
+
+        self.assertIsNone(parse())
+        self.assertEqual(parse("--changed-since", "auto"), narrowing.Selection(changed_since=self.full))
+        self.assertEqual(parse("--changed-since", "HEAD", "--code-cap", "5", "--sample", "0.5", "--salt", "s"),
+                         narrowing.Selection(self.full, 5, 0.5, "s"))
+        self.assertTrue(parse("--sample", "0.5", "--salt", "s").narrowed)
+        self.assertFalse(parse("--shard", "0/2").narrowed)
+        for bad in (["--changed-since", "nope"], ["--code-cap", "-1", "--changed-since", "auto"]):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit) as e:
+                parse(*bad)
+            self.assertEqual(e.exception.code, 2)
 
 
 class Keywords(unittest.TestCase):

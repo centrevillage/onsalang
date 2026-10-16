@@ -25,6 +25,24 @@ the fmt properties) is left out by `--quick`, a check for the middle of a work t
 is not the gate's verdict (2026-10-08). An item with `stage_end_only=True`
 (the deep fuzzing) runs only with `--stage-end`, for the load on the machine
 (W3-03).
+
+The forms of a run (X-1; `tools/gate.py` builds the arguments):
+- the whole (no option) and the stage end (`--stage-end`) run every item, the
+  heavy ones whole;
+- the work check (`--work ID`) narrows the items with `narrows` (`--changed-since
+  auto --sample SAMPLE --salt <the first ID>`, `tools/narrowing.py`) unless the diff
+  touches their tools, and runs an item with `touches` only when the diff touches
+  those places (the self-test: `tools/`);
+- the sweep (`--sweep`, the main tree only) runs `save-base`, the `static` items,
+  the next of the SHARDS shards of the items with `narrows` (`--shard k/K`), and the
+  items with `sweep`;
+- `--only NAMES` runs the items named (`static`: the static items) in the form of
+  the other options.
+The work check warns past BUDGET_WORK seconds, a sweep past BUDGET_SWEEP. The
+narrowed runs keep the cap of the codes of the tools (`narrowing.CODE_CAP`): the
+gate passes none. An item with `parent=True` exits PARENT when what is left waits
+for the parent (in a worktree, the marks of `tools/gap_marks.py` to register): status PARENT,
+not a failure.
 """
 import sys
 from dataclasses import dataclass
@@ -32,6 +50,15 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
 PY = (sys.executable, "-B")
+SAMPLE = 0.1  # the fraction of the sample of the work check (X-1 M-1)
+SHARDS = 2  # the shards of the sweep, K (M-2): one sweep within BUDGET_SWEEP
+BUDGET_WORK = 300  # seconds of the items of a work check before the warning (M-8)
+BUDGET_SWEEP = 600  # seconds of the items of a sweep before the warning
+BASES_KEPT = 5  # the base binaries kept in target/base (M-3)
+PARENT = 3  # the exit of an item whose findings wait for the parent (M-5): not 1, not CANNOT_RUN
+# The tools of the narrowable items: a diff that touches them runs the item whole.
+FUZZ_TOOLS = ("tools/fuzz.py", "tools/narrowing.py")
+FMT_TOOLS = ("tools/fmt_props.py", "tools/narrowing.py")
 # The C checks (Q-07, W1-06): one item per row of `onsa_tests::c::ITEMS`.
 C_CHECK = ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--c")
 # The test vectors against an implementation (W2-02): `interp` or `c`.
@@ -51,14 +78,22 @@ class Step:
     counts_rows: bool = False  # its case entries must say `rows = N`, the failing rows they hold
     slow: bool = False  # left out by `--quick`
     stage_end_only: bool = False  # runs only at a stage end (`--stage-end`)
+    narrows: tuple = ()  # its tools: narrowed in a work check, a shard in a sweep (X-1)
+    touches: tuple = ()  # a work check runs it only when the diff touches one of these
+    static: bool = False  # a static check: in every sweep, `--only static`
+    sweep: bool = False  # in the sweep (the `static` and `narrows` items are, without it)
+    sweep_only: bool = False  # only in the sweep; the other forms do not list it
+    parent: bool = False  # its exit PARENT is the status PARENT
 
 
 STEPS = [
+    # The binaries of HEAD for the narrowed fuzzing of later works (X-1 M-3); first in a sweep.
+    Step("save-base", (*PY, str(TOOLS / "gate.py"), "--save-base"), slow=True, sweep=True, sweep_only=True),
     Step("fmt", ("cargo", "fmt", "--all", "--", "--check")),
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
     Step("test", ("cargo", "test", "--workspace")),
     # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
-    Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True),
+    Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True, narrows=FUZZ_TOOLS),
     # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine
     # (1 to 2.5 minutes on 10 cores), so only at a stage end (W3-03, 2026-10-08).
     Step("fuzz-deep", (*PY, str(TOOLS / "fuzz.py"), "--deep"), slow=True, stage_end_only=True),
@@ -68,18 +103,18 @@ STEPS = [
     # out of its time, or a walk ends in an internal error.
     Step("fix-loop", ("cargo", "run", "-q", "-p", "onsa_tests", "--bin", "onsa_cases", "--", "--fix-loop-gate"),
          info=True, slow=True),  # fmt: skip
-    Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py"))),
-    Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check")),
+    Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py")), static=True),
+    Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check"), static=True),
     # The documents write the `init` of a delay in the omitted form (S-539 (c3a)): the ```onsa blocks of the spec
     # and of docs/onsa-tools.md, and the files of examples/ and std/.
-    Step("default-inits", (*PY, str(TOOLS / "default_inits.py"))),
-    Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True),
+    Step("default-inits", (*PY, str(TOOLS / "default_inits.py")), static=True),
+    Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True, static=True),
     # The ignores of the Rust tests whose reason names a work that is done or not in the tables (R-224).
-    Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True),
-    Step("diag-registry", (*PY, str(TOOLS / "diag_codes.py"), "--registry")),
-    Step("diag-negatives", (*PY, str(TOOLS / "diag_codes.py"), "--negatives")),
-    Step("gap-marks", (*PY, str(TOOLS / "gap_marks.py"))),
-    Step("builtin-names", (*PY, str(TOOLS / "builtin_names.py"))),
+    Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True, static=True),
+    Step("diag-registry", (*PY, str(TOOLS / "diag_codes.py"), "--registry"), static=True),
+    Step("diag-negatives", (*PY, str(TOOLS / "diag_codes.py"), "--negatives"), static=True),
+    Step("gap-marks", (*PY, str(TOOLS / "gap_marks.py")), static=True, parent=True),
+    Step("builtin-names", (*PY, str(TOOLS / "builtin_names.py")), static=True),
     # The test vectors of 3.3 / 3.4 (W2-01): regenerated byte for byte, the registry against the spec, the
     # cross-check recorded for this data.
     Step("vectors", (*PY, str(TOOLS / "vectors" / "gen.py"), "--check")),
@@ -90,7 +125,7 @@ STEPS = [
     Step("ignored-files", (*PY, str(TOOLS / "ignored_files.py"))),
     # The keywords of the lexer against the list of §2.2 (W3-02): one case per word, `keywords/<word>`.
     Step("keywords", (*PY, str(TOOLS / "keywords.py")), pendable=True, by_case_only=True),
-    Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py")), slow=True),
+    Step("gate-selftest", (*PY, str(TOOLS / "test_gate.py")), slow=True, touches=("tools/",), sweep=True),
     Step("golden", (*PY, str(TOOLS / "gate.py"), "--golden"), info=True),
     Step("spec-coverage", (*PY, str(TOOLS / "spec_sections.py"), "--list"), info=True),
     # The generated C (Q-07, W1-06): Clang and gcc-15 with -Wall -Wextra -Werror -pedantic and
@@ -109,11 +144,12 @@ STEPS = [
     Step("vectors-c", (*VECTORS, "c"), pendable=True, by_case_only=True, counts_rows=True, slow=True),
     # The properties of `onsa fmt` on perturbed case sources (Q-03, W1-07): the
     # same program, idempotence, the normal form of the code.
-    Step("fmt-props", (*PY, str(TOOLS / "fmt_props.py")), slow=True),
+    Step("fmt-props", (*PY, str(TOOLS / "fmt_props.py")), slow=True, narrows=FMT_TOOLS),
     # Comments stay on the line of their element (R-70); listed until W3-11.
-    Step("fmt-comments", (*PY, str(TOOLS / "fmt_props.py"), "--property", "comments"), pendable=True, slow=True),
+    Step("fmt-comments", (*PY, str(TOOLS / "fmt_props.py"), "--property", "comments"), pendable=True, slow=True,
+         narrows=FMT_TOOLS),  # fmt: skip
     # The CST gives the source back byte for byte (R-86, W3-01).
-    Step("fmt-cst", (*PY, str(TOOLS / "fmt_props.py"), "--property", "cst"), slow=True),
+    Step("fmt-cst", (*PY, str(TOOLS / "fmt_props.py"), "--property", "cst"), slow=True, narrows=FMT_TOOLS),
 ]
 
 
@@ -134,3 +170,8 @@ def expect_internal(steps=None):
 def counts_rows(steps=None):
     """The pendable items whose case entries must say `rows = N`."""
     return [s.name for s in (STEPS if steps is None else steps) if s.pendable and not s.info and s.counts_rows]
+
+
+def static_names(steps=None):
+    """The static items (`--only static`)."""
+    return [s.name for s in (STEPS if steps is None else steps) if s.static]

@@ -14,7 +14,11 @@ parent registers the gap and writes its number before the commit).
 
     tools/gap_marks.py [--root DIR]
 
-Exit 0 when every mark is well formed and registered, 1 otherwise.
+Exit 0 when every mark is well formed and registered, 1 otherwise. In a git
+worktree of a worker (`repo.tree_kind`), `NEW` and an ID no table has wait for
+the parent, who registers the gap: when they are all that is left, they are
+listed as `parent: ...` and the exit is `gate_steps.PARENT` (3; the gate shows
+PARENT and does not fail). A malformed mark fails everywhere: the worker fixes it.
 """
 import argparse
 import os
@@ -25,6 +29,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
+import gate_steps  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
 
@@ -93,8 +98,9 @@ def api_ids(root):
 
 
 def check(marks, known):
-    """Problems of the marks against the known IDs."""
-    problems = []
+    """The marks against the known IDs: (problems, what waits for the parent: `NEW` and the
+    IDs no table has)."""
+    problems, for_parent = [], []
     for path, line, text in marks:
         where = f"{path}:{line}"
         leader = leader_of(path)
@@ -107,12 +113,12 @@ def check(marks, known):
             continue
         mid = m.group("id")
         if mid == "NEW":
-            problems.append(f"{where}: {TOKEN}(NEW): report it; the parent registers the gap and writes its number")
+            for_parent.append(f"{where}: {TOKEN}(NEW): report it; the parent registers the gap and writes its number")
         elif not ID.fullmatch(mid):
             problems.append(f"{where}: `{mid}` is not an S / R / A number")
         elif mid not in known:
-            problems.append(f"{where}: {mid} is not in the tables (plan §2 for S, review for R, {DOC_API} for A)")
-    return problems
+            for_parent.append(f"{where}: {mid} is not in the tables (plan §2 for S, review for R, {DOC_API} for A)")
+    return problems, for_parent
 
 
 def main(argv=None, root=ROOT):
@@ -126,11 +132,17 @@ def main(argv=None, root=ROOT):
         print(f"the document tables are not found: {e}")
         return 1
     marks = find_marks(root)
-    problems = check(marks, known)
+    problems, for_parent = check(marks, known)
+    if repo.tree_kind(root) != "worktree":  # the main tree and the made-up roots: the parent registers now
+        problems, for_parent = problems + for_parent, []
     for p in problems:
         print(p)
-    print(f"{len(marks)} {TOKEN} mark(s) in {', '.join(SCANNED)}; " + (f"{len(problems)} problem(s)" if problems else "all registered"))
-    return 1 if problems else 0
+    for p in for_parent:
+        print(f"parent: {p}")
+    left = [f"{len(problems)} problem(s)"] if problems else []
+    left += [f"{len(for_parent)} for the parent to register"] if for_parent else []
+    print(f"{len(marks)} {TOKEN} mark(s) in {', '.join(SCANNED)}; " + ("; ".join(left) or "all registered"))
+    return 1 if problems else gate_steps.PARENT if for_parent else 0
 
 
 if __name__ == "__main__":

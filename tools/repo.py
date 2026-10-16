@@ -4,7 +4,8 @@
 - reading a document, a section of it, and the IDs of its table rows;
 - running `onsa_cases` (the test runner's and the compiler's lists) and
   reading its JSON;
-- reading the plan §5: the retired codes and the codes of the second phase.
+- reading the plan §5: the retired codes and the codes of the second phase;
+- the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`).
 """
 import json
 import re
@@ -137,3 +138,39 @@ def is_build_output(root, rel):
             if i == 0 or any((parent / m).is_file() for m in BUILD_MANIFESTS):
                 return True
     return False
+
+
+# ---------------------------------------------------------------- git trees
+
+GIT_TIMEOUT = 60
+
+
+def git_dirs(root):
+    """(git directory, common git directory), absolute, when `root` is the top of a git work
+    tree; None otherwise (not git, git missing, a directory inside a tree: the self-tests'
+    made-up roots)."""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir"],
+            cwd=root, capture_output=True, text=True, timeout=GIT_TIMEOUT,
+        )  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    lines = r.stdout.splitlines()
+    if r.returncode != 0 or len(lines) != 3 or Path(lines[0]).resolve() != Path(root).resolve():
+        return None
+    return Path(lines[1]), Path(lines[2])
+
+
+def main_tree(root):
+    """The main tree of the repository of `root` (the parent of the common git directory), or None."""
+    dirs = git_dirs(root)
+    return dirs[1].parent if dirs else None
+
+
+def tree_kind(root):
+    """`"main"` (the main tree), `"worktree"` (a git worktree of it), or None (not the top of a git tree)."""
+    dirs = git_dirs(root)
+    if dirs is None:
+        return None
+    return "main" if dirs[0].resolve() == dirs[1].resolve() else "worktree"

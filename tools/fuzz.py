@@ -36,8 +36,8 @@ The gate item `fuzz` (this script without options) does three things:
    written to `target/fuzz/new/`, with the entry to add (the gate writes
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
 3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed
-   rule: the mutants whose index in the run is a multiple of it; never a
-   truncation), and every
+   rule: the mutants whose index in the whole run is a multiple of it; never
+   a truncation), and every
    saved input, go through the near "same place" of the contract of the fix
    candidates (spec §18.1): `onsa_cases --fix-same-place` applies the first
    candidate of each diagnostic alone, checks the file again, and reports a
@@ -71,12 +71,26 @@ entry goes), and nothing else. The net gets
 coarser for such a class: the contract on the cases (`onsa_tests::fix_contract`)
 is what holds it.
 
+**Narrowed runs** (X-1): the options of `tools/narrowing.py` (`--changed-since`,
+`--sample`, `--salt`, `--code-cap`, `--shard`) pick the seeds to mutate, truncate and
+sweep. The corpus, the tokens and the weights of the cuts still come from every seed,
+and the fix stage takes a mutant by its index in the whole run (`plan`): a narrowed
+run feeds the compiler a part of the whole run's inputs. The replay is always whole.
+In a narrowed run (`--changed-since`, `--sample`), a new class of the fix stage that
+the base binaries (`--base`, default `auto`: `narrowing.resolve_base`) show on the
+same minimized input, with the same message left, does not fail: it is listed on a
+line `pre-existing (the base <commit> shows it): ...`. A whole run and a shard fail
+on it and mark it. A crash, an internal error and a timeout fail even when they are
+from before (the base does not run them); so does every new class when the base is
+unknown.
+
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
 
     tools/fuzz.py [--per-seed N] [--truncations N] [--version V] [--jobs N]
                   [--binary PATH] [--cases-binary PATH] [--time-budget S]
-                  [--deep] [--save]
+                  [--deep] [--save] [--changed-since REV|auto] [--code-cap N]
+                  [--sample F --salt ID] [--shard I/K] [--base auto|none|DIR]
 
 `--deep` adds mutants that nest brackets or blocks thousands deep: the
 nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
@@ -122,6 +136,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import narrowing  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
 
@@ -440,12 +455,15 @@ def cut_at(text, place):
     return text[:place].rstrip(TRAILING_BLANKS)
 
 
-def sweep(seed_files):
+def sweep(seed_files, only=None):
     """[(seed path, label, text)]: each seed cut right after every place of each symbol of `RARE`
     (`cut_sites`, `cut_at`), one input for each text, in the order of the seeds and the places. No
-    generator: the same seeds give the same inputs whatever the version (FZ-1, `--deep`)."""
+    generator: the same seeds give the same inputs whatever the version (FZ-1, `--deep`). `only`:
+    the seeds to cut (all when None)."""
     out = {}
     for path, text in seed_files:
+        if only is not None and path not in only:
+            continue
         after, _ = cut_sites(text)
         for place, symbol in sorted((p, c) for c in RARE for p in after.get(c, ())):
             at = place - 1  # the symbol
@@ -455,17 +473,19 @@ def sweep(seed_files):
     return list(out.values())
 
 
-def truncations(seed_files, per_seed, version=VERSION):
-    """[(seed path, index, text)]: `per_seed` truncations of each seed, the
-    same for the same seeds. Their generator is not the mutants' (the
-    truncations change no mutant); the weights of the symbols come from the
-    whole corpus, as the tokens of the mutants do."""
+def truncations(seed_files, per_seed, version=VERSION, only=None):
+    """[(seed path, index, text)]: `per_seed` truncations of each seed (of
+    `only`, when not None), the same for the same seeds. Their generator is
+    not the mutants' (the truncations change no mutant); the weights of the
+    symbols come from the whole corpus, as the tokens of the mutants do."""
     sites = [cut_sites(text) for _, text in seed_files]
     counts = collections.Counter()
     for after, _ in sites:
         counts.update({c: len(places) for c, places in after.items()})
     out = []
     for (path, text), site in zip(seed_files, sites):
+        if only is not None and path not in only:
+            continue
         rng = seeded_random(version, "truncation", path, text)
         out += [(path, k, truncate(rng, text, site, counts)) for k in range(per_seed)]
     return out
@@ -479,16 +499,45 @@ def seeded_random(*parts):
     return random.Random(int.from_bytes(digest[:8], "big"))
 
 
-def mutants(seed_files, per_seed, version=VERSION, deep=False):
-    """[(seed path, index, text)], the same for the same seeds."""
+def mutants(seed_files, per_seed, version=VERSION, deep=False, only=None):
+    """[(seed path, index, text)], the same for the same seeds. With `only`,
+    the mutants of those seeds alone: the corpus and its tokens still come
+    from every seed, so they are the whole run's mutants of those seeds (X-1)."""
     corpus = [t for _, t in seed_files]
     tokens = sorted({t for text in corpus for t in TOKEN.findall(text)}) or ["x"]
     out = []
     for path, text in seed_files:
+        if only is not None and path not in only:
+            continue
         rng = seeded_random(version, path, text)
         for k in range(per_seed):
             out.append((path, k, mutate(rng, text, corpus, tokens, deep)))
     return out
+
+
+def plan(seed_files, per_seed, version=VERSION, deep=False, truncated=TRUNCATIONS, swept=False, only=None):
+    """What a run feeds the compiler: (mutants, truncations, swept cuts, the indices in the
+    mutants of the ones that go through the fix stage). With `only`, the part of the whole run's
+    that comes from those seeds: the fix stage takes a mutant by its index in the whole run, the
+    seed's place times `per_seed` plus the mutant's own index (X-1)."""
+    inputs = mutants(seed_files, per_seed, version, deep, only)
+    cuts = truncations(seed_files, truncated, version, only)
+    swept_cuts = sweep(seed_files, only) if swept else []
+    place = {path: i for i, (path, _) in enumerate(seed_files)}
+    chosen = [i for i, (path, k, _) in enumerate(inputs) if (place[path] * per_seed + k) % FIX_EVERY == 0]
+    return inputs, cuts, swept_cuts, chosen
+
+
+def base_shows(base, crash, text, seconds, work):
+    """(whether the base's fix stage shows the class of `crash` on `text`, with the same message
+    left; why it cannot tell, or None). A class of the fix stage only (X-1, M-3)."""
+    if seconds <= 0:
+        return False, "no time left"
+    try:
+        found = FixRunner(base.onsa_cases, work).violations([text], min(TIMEOUT, seconds))[0]
+    except RuntimeError as e:
+        return False, str(e)
+    return any(v.signature == crash.signature and v.left == crash.left for v in found), None
 
 
 def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS, left=None):
@@ -626,10 +675,13 @@ def entry_stub(target, crash):
 
 
 def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
-        deep=False, truncated=TRUNCATIONS, swept=False):
+        deep=False, truncated=TRUNCATIONS, swept=False, selection=None, base=None):
     """The gate item. `argv` runs the compiler, `fix_argv` the fix stage
     (`onsa_cases`); `truncated` truncations of each seed, and with `swept`
-    the cuts after every rare symbol (`sweep`). Returns the exit code."""
+    the cuts after every rare symbol (`sweep`). `selection`
+    (`narrowing.Selection`, None for the whole run) picks the seeds to
+    mutate; `base` (`narrowing.Base`, the reason it is unknown, or None)
+    tells a new class of the fix stage from one before. Returns the exit code."""
     root = Path(root)
     work = Path(target_dir or root / "target") / "fuzz"
     runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
@@ -683,11 +735,15 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
             failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {crashes[0].command}: "
                             f"{crashes[0].signature}")
 
-    # 2. Fuzz.
+    # 2. Fuzz: the seeds, the corpus and the weights are the whole run's; only the seeds to mutate narrow.
     seed_files = seeds(root)
-    inputs = mutants(seed_files, per_seed, version, deep)
-    cuts = truncations(seed_files, truncated, version)
-    swept_cuts = sweep(seed_files) if swept else []
+    try:
+        picked = narrowing.pick(seed_files, selection, root) if selection else None
+    except narrowing.NarrowError as e:
+        out(f"fuzz: cannot narrow the seeds: {e}")
+        return 2
+    inputs, cuts, swept_cuts, chosen = plan(seed_files, per_seed, version, deep, truncated, swept,
+                                            picked.paths if picked else None)
     if swept and not swept_cuts:
         failures.append(f"the sweep found no place after a rare symbol ({RARE}) in {len(seed_files)} seeds")
     # The mutants first: their indices are the fix stage's (3.). The cuts are looked at for a crash only.
@@ -704,8 +760,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     if skipped:
         failures.append(f"the time budget ({time_budget} s) ran out: {skipped} of {len(runs)} inputs "
                         f"({len(inputs)} mutants, {len(cuts)} truncations, {len(swept_cuts)} swept) did not run")
-    # 3. The fix stage, on one mutant in FIX_EVERY (W3-17).
-    chosen = [i for i in range(len(inputs)) if i % FIX_EVERY == 0]
+    # 3. The fix stage, on one mutant in FIX_EVERY of the whole run (W3-17, `plan`).
     fixes = {}
     fixer.unreadable = 0  # of the mutants only
     if time.monotonic() > deadline:
@@ -734,6 +789,8 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
             if c.signature not in known and c.signature not in new:
                 new[c.signature] = (seed, which, text, c)
     written = []
+    before = []  # the lines of the classes the base shows too, in a narrowed run
+    narrowed = bool(selection and selection.narrowed)
     for signature, (seed, which, text, c) in new.items():
         commands = tuple(cmd for cmd in COMMANDS if " ".join(cmd) == c.command)
         seconds = max(0.0, min(MINIMIZE_SECONDS, deadline - time.monotonic()))
@@ -748,22 +805,41 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         written.append((dest_dir / name, target, c, seed, which))
         if dest_dir != root / FUZZ_DIR:
             what = "a new class of a broken fix candidate" if c.command == FIX_COMMAND else "a new crash class"
-            failures.append(f"{what}: {c.command}: {signature} (seed {seed}, {which})")
+            line = f"{what}: {c.command}: {signature} (seed {seed}, {which})"
+            # A crash fails even when it is from before (GF-3): the base does not run it.
+            shown, why = False, None
+            if isinstance(base, narrowing.Base) and c.command == FIX_COMMAND:
+                shown, why = base_shows(base, c, small, deadline - time.monotonic(), runner.work / "base")
+            if shown and narrowed:
+                before.append(f"pre-existing (the base {base.commit} shows it): {c.command}: {signature} "
+                              f"(seed {seed}, {which})")
+            elif shown:
+                failures.append(f"{line} (pre-existing: the base {base.commit} shows it)")
+            else:
+                failures.append(line + (f" (the base cannot tell: {why})" if why else ""))
     shutil.rmtree(runner.work, ignore_errors=True)
 
+    if isinstance(base, narrowing.Base):
+        base_part = f"; base {base.commit}: {len(before)} pre-existing"
+    else:
+        base_part = f"; base unknown ({base})" if base else ""
     out(
-        f"fuzz: {len(inputs)} mutants from {len(seed_files)} seeds ({per_seed} each) and {len(cuts)} truncations "
+        f"fuzz: {len(inputs)} mutants from "
+        f"{picked.describe(len(seed_files)) if picked else f'{len(seed_files)} seeds'} ({per_seed} each) "
+        f"and {len(cuts)} truncations "
         f"({truncated} each, {cut_crashing} crashing), "
         + (f"{len(swept_cuts)} cuts swept after `{RARE}` ({swept_crashing} crashing), " if swept else "")
         + f"{crashing} crashing in all, "
         f"{len(new)} new classes; {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
-        f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed, {len(allowed)} allowed); "
-        f"{time.time() - start:.1f} s"
+        f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed, {len(allowed)} allowed)"
+        f"{base_part}; {time.time() - start:.1f} s"
     )
     for path, target, c, seed, which in written:
         shown = path.relative_to(root).as_posix() if root in path.parents else str(path)
         out(f"\n{shown}  ({c.command}; seed {seed}, {which})\n{c.detail}\nentry to add:\n"
             f"{entry_stub(target, c)}")
+    for line in before:
+        out(line)
     for f in failures:
         out(f"FAIL {f}")
     return 1 if failures else 0
@@ -805,7 +881,8 @@ def main(argv=None):
                     help="also nest thousands deep (S-183, W3-14) and sweep the rare symbols (FZ-1); "
                          "the gate item fuzz-deep, at a stage end only")
     ap.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
-    args = ap.parse_args(argv)
+    narrowing.add_arguments(ap, base=True)
+    args, selection = narrowing.parse(ap, argv)
     truncated = args.truncations if args.truncations is not None else 0 if args.deep else TRUNCATIONS
     if args.per_seed < 0 or truncated < 0 or args.jobs < 1 or args.time_budget <= 0:
         ap.error("--per-seed and --truncations must be 0 or more, --jobs 1 or more and --time-budget more than 0")
@@ -828,6 +905,7 @@ def main(argv=None):
     return run(
         args.root, [str(binary)], [str(cases)], args.per_seed, args.version, args.jobs, args.save,
         target_dir=target, time_budget=args.time_budget, deep=args.deep, truncated=truncated, swept=args.deep,
+        selection=selection, base=narrowing.resolve_base(args.root, args.base),
     )
 
 
