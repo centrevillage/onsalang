@@ -155,6 +155,7 @@ def phase2_codes(text, doc=DOC_PLAN):
 DOC_DIRS = ("decisions", "issues", "tasks", "spec", "rules")
 SPEC_DIR = "spec"
 DOC_TOOLS = Path("docs") / "onsa-tools.md"  # the spec of the tools (`spec/tools.md` after the migration)
+DOC_FOREIGN_FORMS = Path("docs") / "foreign-forms.toml"  # the foreign forms (`spec/foreign-forms.toml` after it)
 ROOT_DOCS = (Path("README.md"), Path("CLAUDE.md"))
 
 
@@ -252,8 +253,14 @@ def section_path(root, sec):
 SPEC_README = Path(SPEC_DIR) / "README.md"
 SPEC_TOOLS = Path(SPEC_DIR) / "tools.md"
 DIAG_CODES = Path("tasks") / "diag-codes.md"
+FOREIGN_FORMS = Path(SPEC_DIR) / "foreign-forms.toml"
 # the documents that are not kinds of IDs: (the new file, the current file; None: the plan §5)
-FILES = {"spec": (SPEC_README, SPEC), "tools": (SPEC_TOOLS, DOC_TOOLS), "diag": (DIAG_CODES, None)}
+FILES = {
+    "spec": (SPEC_README, SPEC),
+    "tools": (SPEC_TOOLS, DOC_TOOLS),
+    "diag": (DIAG_CODES, None),
+    "foreign": (FOREIGN_FORMS, DOC_FOREIGN_FORMS),
+}
 
 
 class Layout:
@@ -422,6 +429,12 @@ def tools_doc(root):
 
 def tools_text(root):
     return tools_doc(root).text
+
+
+def foreign_forms_path(root):
+    """The table of the foreign forms (§18.1), from the root: `spec/foreign-forms.toml` or the current
+    `docs/foreign-forms.toml`."""
+    return FOREIGN_FORMS if Layout(root).source("foreign") == "new" else DOC_FOREIGN_FORMS
 
 
 # ---------------------------------------------------------------- build outputs

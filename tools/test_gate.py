@@ -4493,6 +4493,16 @@ class DocsLayout(DocsTree):
         with self.assertRaisesRegex(repo.RepoError, "implementation-tasks.md"):
             repo.Layout(self.root).source("S")  # the new layout is there: the plan is looked at
 
+    def test_the_foreign_forms_where_they_are(self):
+        self.write(repo.DOC_FOREIGN_FORMS, '[[form]]\nid = "a"\n')
+        self.assertEqual((repo.foreign_forms_path(self.root), pending.foreign_form_ids(self.root)), (repo.DOC_FOREIGN_FORMS, {"a"}))
+        self.write(repo.FOREIGN_FORMS, '[[form]]\nid = "b"\n')
+        self.assertRegex(pending.foreign_form_ids(self.root), "^foreign is in both spec/foreign-forms.toml and docs/")
+        (self.root / repo.DOC_FOREIGN_FORMS).unlink()
+        self.assertEqual((repo.foreign_forms_path(self.root), pending.foreign_form_ids(self.root)), (repo.FOREIGN_FORMS, {"b"}))
+        (self.root / repo.FOREIGN_FORMS).unlink()
+        self.assertEqual(pending.foreign_form_ids(self.root), "`docs/foreign-forms.toml` does not exist")
+
     # ------------------------------------------------ the spec as one text
 
     def test_the_spec_joined_from_its_chapters(self):

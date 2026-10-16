@@ -25,7 +25,7 @@ class VectorsTools(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.copy = Path(cls.tmp.name) / "vectors"
         shutil.copytree(gen.DATA, cls.copy)
-        cls.spec = gen.SPEC.read_text(encoding="utf-8")
+        cls.spec = gen.spec_text()
 
     @classmethod
     def tearDownClass(cls):

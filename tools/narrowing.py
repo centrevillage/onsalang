@@ -40,7 +40,7 @@ CODE_CAP = 200
 SHORT = 7  # a fixed length, not `git rev-parse --short` (its length grows with the repository)
 GROUP_PARTS = 3  # the group of the sample's minimum: the first parts of the directory
 GIT_TIMEOUT = 60
-EXCLUDED_FROM_CODES = ("tests/", "docs/", "tools/")
+EXCLUDED_FROM_CODES = ("tests/", "docs/", "tools/", "rules/", "decisions/", "issues/", "tasks/", "history/")
 BASE_FILES = ("onsa", "onsa_cases")  # the base binaries, in `base_dir`
 # What the binaries are built from: a tracked change there makes them differ from HEAD's.
 BUILT_FROM = ("crates", "tools", "std", "runtime", ":(glob)Cargo.*")

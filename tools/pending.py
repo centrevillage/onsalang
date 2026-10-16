@@ -126,7 +126,6 @@ TARGET_FORMS = {
 }
 # The closed list of the forms of other languages (S-250): the rows a
 # `foreign-form` entry names.
-FOREIGN_FORMS = "docs/foreign-forms.toml"
 
 REASON = re.compile(r"[SR]-\d+")
 # A spec section as a reason, only of `until = "P2"` (the spec §20 sets what the first phase is).
@@ -345,15 +344,18 @@ def _whole_and_cases(entries):
 
 
 def foreign_form_ids(root):
-    """The `id`s of the rows of `docs/foreign-forms.toml` under `root`, or an
-    error message (the file is missing or not TOML)."""
-    path = Path(root) / FOREIGN_FORMS
+    """The `id`s of the rows of the table of the foreign forms under `root`
+    (`repo.foreign_forms_path`), or an error message (the file is missing or not TOML)."""
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        rel = repo.foreign_forms_path(root).as_posix()
+    except repo.RepoError as err:
+        return str(err)
+    try:
+        data = tomllib.loads((Path(root) / rel).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return f"`{FOREIGN_FORMS}` does not exist"
+        return f"`{rel}` does not exist"
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as err:
-        return f"`{FOREIGN_FORMS}` is not TOML: {err}"
+        return f"`{rel}` is not TOML: {err}"
     forms = data.get("form", [])
     return {f.get("id") for f in forms if isinstance(f, dict)} if isinstance(forms, list) else set()
 
@@ -366,7 +368,8 @@ def _check_target(e, root, pendable_steps):
         if isinstance(ids, str):
             return [ids]
         if e.target not in ids:
-            return [f"`{e.target}` is not the `id` of a row of `{FOREIGN_FORMS}` (remove the entry, or fix the id)"]
+            where = repo.foreign_forms_path(root).as_posix()
+            return [f"`{e.target}` is not the `id` of a row of `{where}` (remove the entry, or fix the id)"]
     if e.kind == "gate":
         item = e.target.split("/", 1)[0]
         if item not in pendable_steps:
