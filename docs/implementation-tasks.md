@@ -1204,7 +1204,6 @@ PatAlt     = "_" | Ident | Literal | Path [ "(" Pattern { "," Pattern } ")" ]
 | T3-11 ✅ | `onsa interface <mod>` | 公開シグネチャ、種、大きさ、効果、`rt`、`@param`、flow の生成 API（§11.6 の形で表示）。`--json`。S-65 で `--target`、bulk 無効での大きさ、状態のフィールドの型を足した | S |
 | T3-0 ✅ | S-21 / S-22 の反映 | 構文: `move` 式を消費位置に許す。型検査: 整数リテラルの `I32` 既定、`match move`。モード: Affine を `move` 無しで消費位置に置くと E0711 + 修正候補、`match x` は借用。既存の単体テストと否定例を規則に合わせる | S |
 | T3-12 ✅ | `onsa graph <flow>` | DOT。ノードは `let` とインスタンス（名前は S-06）、辺は参照、`prev` 系の辺は破線、レートで色分け。`--svg` は `dot` があれば呼ぶ。S-66 で描き方を `docs/onsa-tools.md` §1 に書き、`par` を枠にした | S |
-
 | T3-14 ✅ | 型の位置の const 引数（S-24） | 構文解析器で型引数に整数リテラルと定数名を許し（`TypeKind::Path` の引数に const 引数の形を足す）、シグネチャの解決で `const N` に束縛する。`fmt` / `dump` も対応 | S |
 | T3-13 ✅ | 効果行の整合（S-23） | E0601 を登録し、効果行に `Alloc` の無い関数（`test` の本体を除く）が `Alloc` を要する操作・関数を呼ぶと E0601。rt 関数は E0902 が先に出る | S |
 
