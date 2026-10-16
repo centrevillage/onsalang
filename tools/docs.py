@@ -6,7 +6,7 @@
     python3 -B tools/docs.py check [--root DIR]
     python3 -B tools/docs.py path ID|§... [--abs] | back ID [--history] | refs ID|PATH
     python3 -B tools/docs.py show ID [--relations] | list KIND [--status S] [--stage W4] [--group N]
-                             [--before W4-02] [--no-fix] [--waiting] [--count] | changes [--since DATE]
+                             [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE [--out FILE]
     python3 -B tools/docs.py set ID KEY=VALUE... | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
                              [--stage W4] [KEY=VALUE...] | draft S... --group N | amend LATER EARLIER
@@ -22,8 +22,8 @@ decided sections title` (`changes`).
 - `path`, `back`, `refs` work in both layouts (`Ids`: a file, or a row `doc:line` of a current table;
   a `§` is `file:line` of its heading). `show`, `list`, `changes`, `ticket` and the writes need the
   kind in the new layout. The writes check the swap files first, write through `write_atomic`, and
-  `set`, `new`, `amend` refuse a text whose head fields would break (a) of the file or (c) of it and
-  its partners (`check_write`).
+  `set`, `new`, `amend` refuse a text whose head fields would break (a) or (b) of the file or (c) of it
+  and its partners (`check_write`).
 
 - `fmt` (DT-4): breaks each line longer than LONG after a `。` at the depth 0 of the brackets
   （）()「」『』【】 and outside the code spans and the bold, packing the line to WIDTH characters
@@ -535,7 +535,9 @@ def write_head(root, rel, values, order):
 
 FIELDS_HEAD = "## 頭の欄"
 FIELD_COLUMNS = ["キー", "形", "値", "要る", "意味"]
-# `<base>` or `<base>の並び` (an array); the IDs name their kinds: `ID（S）`, `ID の並び（W、T、P2）`.
+# `<base>` or `<base>の並び` (an array); the IDs name their kinds: `ID（S）`, `ID の並び（W、T、P2）`, and
+# STAGE_KIND for a stage (`W4`, `ID（W、段、P2）`), which is not a kind of `repo.KINDS` (no file, not in the text).
+STAGE_KIND = "段"
 FORM = re.compile(
     r"(?P<base>文字列|閉じた値|節|日付|整数)(?P<many>の並び)?|(?P<id>ID)(?P<ids> の並び)?（(?P<kinds>[^）]+)）"
 )
@@ -558,6 +560,8 @@ class Field:
         if self.base == "閉じた値":
             return type(v) is type(self.values[0]) and v in self.values
         if self.base == "ID":
+            if STAGE_KIND in self.kinds and isinstance(v, str) and STAGE.fullmatch(v):
+                return True
             kind = repo.kind_of(v) if isinstance(v, str) else None
             return kind is not None and kind.name in self.kinds
         if self.base == "節":
@@ -649,8 +653,8 @@ def _parse_fields(rel, lines, kinds, at):
             return broken(j, f"the key `{key}` is given twice")
         if m is None:
             return broken(j, f"the form `{form}` is not known")
-        if any(k not in repo.KIND for k in kinds_):
-            return broken(j, f"the form `{form}` names a kind that is not one ({', '.join(repo.KIND)})")
+        if any(k not in repo.KIND and k != STAGE_KIND for k in kinds_):
+            return broken(j, f"the form `{form}` names a kind that is not one ({', '.join([*repo.KIND, STAGE_KIND])})")
         if m.group("base") == "閉じた値" and ("" in values or len(set(values)) != len(values)):
             return broken(j, f"the values {vals} (write `A / B`, none empty or twice)")
         if m.group("base") != "閉じた値" and vals not in ("", "—"):
@@ -801,12 +805,13 @@ def body_sections(line):
     return out
 
 
-def check_refs(tree):
+def check_refs(tree, only=None):
     """(b) The IDs of the head fields and of the text are there (the kinds as `repo.Layout` reads them;
-    the history and P2 are not checked), and the sections are numbered headings of the spec."""
+    the history and P2 are not checked; a stage has a work), and the sections are numbered headings of
+    the spec. Of the files `only` when it is given."""
     idx = tree.index
     for table, id_, rel, head in _id_files(tree):
-        if head.values is None:
+        if head.values is None or (only is not None and rel not in only):
             continue
         found = []  # (line, key or None, id or section, which)
         for key, value in head.values.items():
@@ -818,6 +823,8 @@ def check_refs(tree):
                     if m := repo.SECTION_RE.fullmatch(v):
                         which = "tools" if m.group("tools") else "spec"
                         found.append((head.key_lines.get(key, 1), key, m.group("num"), which))
+                elif field is not None and STAGE_KIND in field.kinds and STAGE.fullmatch(v):
+                    found.append((head.key_lines.get(key, 1), key, v, STAGE_KIND))
                 else:
                     found += [(head.key_lines.get(key, 1), key, m.group(0), None) for m in repo.ID_RE.finditer(v)]
         lines, kinds = tree.lines(rel), tree.kinds(rel)[0]
@@ -840,19 +847,24 @@ def check_refs(tree):
 
 
 def _missing(idx, ref, which):
-    """Why a reference is not found, or None."""
+    """Why a reference is not found, or None. A stage (`W4`) is found when it has a work."""
+    if which == STAGE_KIND:
+        known = idx.known("W")
+        if known is None or _in_stage(known, ref):
+            return None
+        return f"{ref}: no work of the stage ({_where(idx, 'W')})"
     if which:
         if ref in idx.headings(which):
             return None
         return f"{'tools.md ' if which == 'tools' else ''}§{ref} is not a numbered heading of the spec" + (
             " of the tools" if which == "tools" else ""
         )
-    kind = repo.kind_of(ref)
-    known = idx.known(kind.name)
-    if known is None or ref in known:
-        return None
-    where = f"{kind.dir}/" if idx.layout.source(kind.name) == "new" else idx.layout.old_name(kind.name)
-    return f"{ref} is not found ({where})"
+    known = idx.known(repo.kind_of(ref).name)
+    return None if known is None or ref in known else f"{ref} is not found ({_where(idx, repo.kind_of(ref).name)})"
+
+
+def _where(idx, name):
+    return f"{repo.KIND[name].dir}/" if idx.layout.source(name) == "new" else idx.layout.old_name(name)
 
 
 def check_relations(tree):
@@ -939,6 +951,7 @@ NONE = "-"
 GAP_LABEL = re.compile(r"\s*- 空白[:：]\s*(.*)")
 GAP_TITLE = 40  # the characters of `空白` shown for an S with no title (DT-3)
 STAGE = re.compile(r"W\d+")
+INF = float("inf")
 EXCERPT = 60  # the characters `back` shows around a mention
 
 
@@ -951,6 +964,18 @@ def id_key(id_):
     """The order of the IDs: the kinds as in `repo.KINDS`, then their numbers (`W3-9` before `W3-13`)."""
     kind = repo.kind_of(id_)
     return (repo.KINDS.index(kind) if kind else len(repo.KINDS), tuple(map(int, re.findall(r"\d+", id_))), id_)
+
+
+def due_key(due):
+    """The order of the deadlines of `before` (the one place to compare them), or None for another value:
+    a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `P2` (after every W)."""
+    if due == "P2":
+        return (INF,)
+    if isinstance(due, str) and STAGE.fullmatch(due):
+        return (int(due[1:]), INF)
+    if isinstance(due, str) and repo.kind_of(due) is repo.KIND["W"]:
+        return tuple(map(int, due[1:].split("-")))
+    return None
 
 
 def section_key(sec):
@@ -1208,11 +1233,13 @@ def show_args(p):
 
 
 def waiting(ids):
-    """{work: the decisions it waits for}: OPEN, and the work carries it or it is due `before` the work."""
+    """{work: the decisions it waits for}: OPEN, and the work carries it or it is due `before` the work.
+    A stage or P2 in `before` makes no work wait (which work of the stage needs it is not known)."""
     out = {}
     for i, _, v in sorted(ids.heads(DECISIONS), key=lambda r: id_key(r[0])):
         if v.get("status") == "OPEN":
-            for work in dict.fromkeys(_listed(v.get("tasks")) + _listed(v.get("before"))):
+            due = [b for b in _listed(v.get("before")) if repo.kind_of(b) is repo.KIND["W"]]
+            for work in dict.fromkeys(_listed(v.get("tasks")) + due):
                 out.setdefault(work, []).append(i)
     return out
 
@@ -1270,9 +1297,9 @@ def cmd_show(args):
 def list_args(p):
     p.add_argument("kind")
     p.add_argument("--status")
-    p.add_argument("--stage", help="W: the works of the stage; decisions: `tasks`; issues: `fix`")
+    p.add_argument("--stage", help="W: the works of the stage; decisions (P2 too): `tasks` or `before`; issues: `fix`")
     p.add_argument("--group", type=int, help="decisions")
-    p.add_argument("--before", help="decisions: `before` this work or an earlier one")
+    p.add_argument("--before", help="decisions: `before` this work or stage (its end) or an earlier one (`due_key`)")
     p.add_argument("--no-fix", action="store_true", help="issues with no `fix`")
     p.add_argument("--waiting", action="store_true", help="works waiting for a decision")
     p.add_argument("--count", action="store_true", help="the numbers of each status (W: per stage)")
@@ -1283,15 +1310,21 @@ DECISION_FIELDS = ("tasks", "spec", "before", "group")
 LIST_ONLY = {"group": DECISIONS, "before": DECISIONS, "no_fix": ISSUES, "waiting": ("W",)}
 
 
-def _stage_arg(stage):
-    if stage is not None and not STAGE.fullmatch(stage):
-        raise DocsError(f"{stage}: not a stage (`W4`)")
+def _stage_arg(stage, p2=False):
+    if stage is not None and not (STAGE.fullmatch(stage) or (p2 and stage == "P2")):
+        raise DocsError(f"{stage}: not a stage (`W4`{', `P2`' if p2 else ''})")
     return stage
 
 
-def _in_stage(kind, id_, values, stage):
-    works = [id_] if kind == "W" else _listed(values.get("tasks" if kind in DECISIONS else "fix"))
-    return any(w.startswith(stage + "-") for w in works)
+def _in_stage(works, stage):
+    """A work of the stage, or the stage (or P2) itself, in `works`."""
+    return any(w == stage or w.startswith(stage + "-") for w in works)
+
+
+def _stage_works(kind, id_, values):
+    if kind in DECISIONS:
+        return _listed(values.get("tasks")) + _listed(values.get("before"))
+    return [id_] if kind == "W" else _listed(values.get("fix"))
 
 
 def cmd_list(args):
@@ -1302,21 +1335,23 @@ def cmd_list(args):
             raise DocsError(f"--{opt.replace('_', '-')} is for {', '.join(kinds)}, not {kind}")
     if args.stage and kind == "X":
         raise DocsError("--stage is not for X")
-    _stage_arg(args.stage)
-    if args.before and repo.kind_of(args.before) is not repo.KIND["W"]:
-        raise DocsError(f"--before {args.before}: not a work (`W4-02`)")
+    _stage_arg(args.stage, kind in DECISIONS)
+    if args.before and (due_key(args.before) is None or args.before == "P2"):
+        raise DocsError(f"--before {args.before}: not a work or a stage (`W4-02`, `W4`)")
     status = ids.table(kind).fields.get("status")
     if args.status and (status is None or args.status not in status.values):
         raise DocsError(f"--status {args.status}: not one of {' / '.join(map(str, status.values if status else ()))}")
     rows, total, waits = [], 0, waiting(ids) if args.waiting else {}
     for id_, _, v in sorted(ids.heads([kind]), key=lambda r: id_key(r[0])):
         total += 1
-        if (args.status and v.get("status") != args.status) or (args.stage and not _in_stage(kind, id_, v, args.stage)):
+        if args.status and v.get("status") != args.status:
+            continue
+        if args.stage and not _in_stage(_stage_works(kind, id_, v), args.stage):
             continue
         if args.group is not None and v.get("group") != args.group:
             continue
-        before = v.get("before")
-        if args.before and not (isinstance(before, str) and id_key(before) <= id_key(args.before)):
+        due = due_key(v.get("before"))
+        if args.before and not (due is not None and due <= due_key(args.before)):
             continue
         if (args.no_fix and v.get("fix")) or (args.waiting and id_ not in waits):
             continue
@@ -1355,7 +1390,7 @@ def cmd_changes(args):
         raise DocsError(f"--section {args.section}: not a section (`§6`)")
     rows, undated = [], []
     for id_, _, v in ids.heads(names):
-        if v.get("status") != "DECIDED" or (args.stage and not _in_stage("S", id_, v, args.stage)):
+        if v.get("status") != "DECIDED" or (args.stage and not _in_stage(_listed(v.get("tasks")), args.stage)):
             continue
         if args.section and not any(s == args.section or s.startswith(args.section + ".") for s in _listed(v.get("spec"))):
             continue
@@ -1441,9 +1476,9 @@ def parse_fields(table, items):
 
 
 def check_write(root, texts, new=()):
-    """The findings, as if `texts` ({rel: text}) were written: (a) of those files, (c) of them and of
-    their partners (the files their head fields name, and the files whose head fields name them).
-    `new` are (kind, id, rel) of files not there yet."""
+    """The findings, as if `texts` ({rel: text}) were written: (a) and (b) of the head fields of those
+    files, (c) of them and of their partners (the files their head fields name, and the files whose
+    head fields name them). `new` are (kind, id, rel) of files not there yet."""
     tree = Tree(root, [])
     for rel, text in texts.items():
         tree._lines[Path(rel)] = text.split("\n")
@@ -1460,6 +1495,9 @@ def check_write(root, texts, new=()):
         elif named & own:
             partners.add(rel)
     found = [f for f in check_heads(tree) if f.path in written]
+    heads = {rel: tree.head(rel) for rel in written}
+    ends = {rel: len(tree.lines(rel)) - len(h.body.split("\n")) for rel, h in heads.items() if h.values is not None}
+    found += [f for f in check_refs(tree, written) if f.line <= ends.get(f.path, 0)]  # the head fields, not the text
     return found + [f for f in check_relations(tree) if f.path in written | partners]
 
 

@@ -4278,7 +4278,7 @@ NEW_LAYOUT = {
 | `amends` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた前の決定 |
 | `amended_by` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた後の決定 |
 | `found_by` | 文字列 | — | いいえ | 見つけた票 |
-| `before` | ID（W） | — | いいえ | 期限の作業 |
+| `before` | ID（W、段、P2） | — | いいえ | 期限の作業 |
 | `group` | 整数 | — | いいえ | 組 |
 | `decided` | 日付 | — | いいえ | 決めた日 |
 """,
@@ -4619,7 +4619,10 @@ class DocsLayout(DocsTree):
         self.assertOne(a1, '"DECIDED"', '"DONE"', f"{a1}:2: `status` has \"DONE\", not one of OPEN / DECIDED / DROPPED")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = "W1-01"', f"{s1}:4: `tasks` is not an array; its form is ID の並び（W、T、P2）")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = ["S-2"]', f"{s1}:4: `tasks` has \"S-2\", not an ID of W、T、P2")
-        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "S-2"', f"{s1}:4: `before` has \"S-2\", not an ID of W")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "S-2"', f"{s1}:4: `before` has \"S-2\", not an ID of W、段、P2")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "X4"', f"{s1}:4: `before` has \"X4\", not an ID of W、段、P2")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "W1-"', f"{s1}:4: `before` has \"W1-\", not an ID of W、段、P2")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = ["W1"]', f"{s1}:4: `tasks` has \"W1\", not an ID of W、T、P2")
         self.assertOne(s1, '["§2.1"]', '["2.1"]', f"{s1}:3: `spec` has \"2.1\", not a section (`§6.1`, `tools.md §3.2`)")
         self.assertOne(s1, "2026-10-15", '"2026-10-15"', f"{s1}:6: `decided` has \"2026-10-15\", not a date")
         self.assertOne(r1, "aspect = 1", 'aspect = "1"', f"{r1}:4: `aspect` has \"1\", not one of 1 / 2 / 3")
@@ -4675,6 +4678,26 @@ class DocsLayout(DocsTree):
         self.assertOne(s1, '["§2.1"]', '["§2.1", "§9.9"]', f"{s1}:3: spec: §9.9 is not a numbered heading of the spec")
         self.assertOne(s1, "§3 と §2", "§3 と §2、§7", f"{s1}:10: §7 is not a numbered heading of the spec")
         self.assertOne(s1, "`tools.md §1`", "`tools.md §1・§2`", f"{s1}:10: tools.md §2 is not a numbered heading of the spec of the tools")
+        # `before`: a stage is there when it has a work (W2 has none); P2 is not checked; `W2` in the text is not an ID
+        for due in ("W1", "P2", "W1-02"):
+            self.edit(s2, 'found_by = "W1-01/t"', f'found_by = "W1-01/t"\nbefore = "{due}"')
+            self.assertEqual(self.check(), (0, []), due)
+            self.edit(s2, f'found_by = "W1-01/t"\nbefore = "{due}"', 'found_by = "W1-01/t"')
+        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W2"', f"{s2}:6: before: W2: no work of the stage (tasks/W/)")
+        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W2-01"', f"{s2}:6: before: W2-01 is not found (tasks/W/)")
+        self.edit(s2, "R-1 と A-1", "R-1 と A-1、W2 まで")
+        self.assertEqual(self.check(), (0, []))
+        self.edit(s2, "R-1 と A-1、W2 まで", "R-1 と A-1")
+        # the stage in the current table of the works (rework §3)
+        for rel in ("tasks/W/W1-01.md", "tasks/W/W1-02.md", "tasks/W/README.md"):
+            (self.root / rel).unlink()
+        (self.root / "tasks/W").rmdir()
+        self.write(repo.DOC_REWORK, OLD_LAYOUT["docs/rework-phase1.md"])
+        self.edit(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1"')
+        self.assertEqual(self.check(), (0, []))
+        self.assertOne(s2, 'before = "W1"', 'before = "W3"', f"{s2}:6: before: W3: no work of the stage (the W works of docs/rework-phase1.md `## 3.`)")
+        self.layout()  # the new layout again
+        (self.root / repo.DOC_REWORK).unlink()
         # a kind still in the current table: read there
         for rel in ("issues/R/R-1.md", "issues/R/README.md"):
             (self.root / rel).unlink()
@@ -4894,11 +4917,65 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.run_("list", "S", "--status", "OPEN")[1][0].split("\t")[-1], "あ" * 40)
         for argv, error in ((("S", "--waiting"), "--waiting is for W, not S"), (("W", "--group", "1"), "--group is for S, D"),
                             (("S", "--status", "DONE"), "--status DONE: not one of OPEN / DECIDED / DROPPED"),
-                            (("S", "--stage", "4"), "4: not a stage"), (("S", "--before", "S-1"), "--before S-1: not a work"),
+                            (("S", "--stage", "4"), "4: not a stage"), (("S", "--before", "S-1"), "--before S-1: not a work or a stage"),
+                            (("S", "--before", "P2"), "--before P2: not a work or a stage"), (("W", "--stage", "P2"), "P2: not a stage (`W4`)"),
+                            (("R", "--stage", "P2"), "P2: not a stage (`W4`)"),
                             (("D",), "D: not in the new layout"), (("Z",), "Z: not an ID or a kind of S, D")):  # fmt: skip
             code, out = self.run_("list", *argv)
             self.assertEqual(code, 2, argv)
             self.assertIn(error, out[-1])
+
+    def test_the_order_of_before(self):
+        order = ["W1-02", "W1-10", "W1-99", "W1", "W2-01", "W2", "W10-01", "W10", "P2"]
+        keys = [docs_tool.due_key(d) for d in order]
+        self.assertEqual(keys, sorted(keys))
+        self.assertEqual(len(set(keys)), len(keys))
+        for other in ("S-1", "T1-1", "X4", "W", "W1-", None, 3):
+            self.assertIsNone(docs_tool.due_key(other), other)
+
+    def test_list_by_the_stage_and_before(self):
+        self.layout()
+        for n, due in ((3, "W1"), (4, "W2-01"), (5, "P2"), (6, "W2")):  # not checked by `list`: W2 has no work
+            self.write(f"decisions/S/S-{n}.md", f'+++\nstatus = "OPEN"\nbefore = "{due}"\n+++\n# S-{n} t\n')
+        self.edit("decisions/S/S-2.md", 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1-02"')
+
+        def ids(*argv):
+            code, out = self.run_("list", "S", *argv)
+            self.assertEqual(code, 0, argv)
+            return [line.split("\t")[0] for line in out[:-1]]
+
+        # `--before` a work: a stage is due at its end; P2 is after every W
+        for before, want in (("W1-01", []), ("W1-02", ["S-2"]), ("W1-99", ["S-2"]), ("W1", ["S-2", "S-3"]),
+                             ("W2-01", ["S-2", "S-3", "S-4"]), ("W2", ["S-2", "S-3", "S-4", "S-6"]),
+                             ("W3-01", ["S-2", "S-3", "S-4", "S-6"])):  # fmt: skip
+            self.assertEqual(ids("--before", before), want, before)
+        # `--stage`: `tasks` or `before` of the stage (a work of it, or the stage); P2 for the decisions
+        self.assertEqual(ids("--stage", "W1"), ["S-1", "S-2", "S-3"])
+        self.assertEqual(ids("--stage", "W2"), ["S-4", "S-6"])
+        self.assertEqual(ids("--stage", "P2"), ["S-2", "S-5"])
+        self.assertEqual(ids("--stage", "W10"), [])
+        self.assertEqual(self.run_("list", "S", "--stage", "P2")[1][1], "S-5\tOPEN\tbefore=P2\tt")
+        # `--waiting`: a stage or P2 in `before` makes no work wait; a work in `before` does
+        w2 = "W1-02\tDOING\tsize=M depends=W1-01 doing=U2/i\t式"
+        self.assertEqual(self.run_("list", "W", "--waiting")[1], [w2, "docs list: 1 of 2 W"])
+        self.assertNotIn("waiting", " ".join(self.run_("show", "W1-01", "--relations")[1]))
+        self.edit("decisions/S/S-3.md", 'before = "W1"', 'before = "W1-01"')
+        self.assertEqual(self.run_("show", "W1-01", "--relations")[1][-1], "waiting\tS-3\tOPEN\tt\t-")
+
+    def test_set_before(self):
+        self.layout()
+        s2 = "decisions/S/S-2.md"
+        for due in ("W1", "P2", "W1-02"):
+            self.assertEqual(self.run_("set", "S-2", f"before={due}"), (0, [f'{s2}: before = "{due}"']), due)
+            self.assertEqual(self.run_("check")[0], 0, due)
+        self.assertRefused(("set", "S-2", "before=W99"), [f"{s2}:6: before: W99: no work of the stage (tasks/W/)"], [s2])
+        self.assertRefused(("set", "S-2", "before=X4"), ['`before` has "X4", not an ID of W、段、P2'], [s2])
+        # a work that is not there is refused too (the head fields, (b))
+        self.assertRefused(("set", "S-2", "before=W1-09"), [f"{s2}:6: before: W1-09 is not found (tasks/W/)"], [s2])
+        self.assertRefused(("set", "S-2", "tasks=W1-02,W1-09"), [f"{s2}:3: tasks: W1-09 is not found (tasks/W/)"], [s2])
+        # the text is not looked at: a broken reference there does not stop a write of the head fields
+        self.edit(s2, "R-1 と A-1。", "R-1 と A-9。")
+        self.assertEqual(self.run_("set", "S-2", "before=W1")[0], 0)
 
     def test_changes(self):
         self.layout()
