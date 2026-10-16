@@ -820,7 +820,7 @@ W_ROWS1 = ["| W1-01 ✅ | 器 | 作る。`a \\| b` の形 | S-01、K-01（一部
            "| W1-02 | 網 | 広げる | — | W1-01 | M | 〔メモ〕〔危険〕 |",
            "| W1-03 ✅ | 枠 | 足す | R-08 | W1-01、W1-02 | M | |"]  # fmt: skip
 W_ROWS2 = ["| W2-01 | 仕上げ | 揃える | — | W1-01〜W1-03、W2-02 | S | テスト |",
-           "| W2-02 | 段の後 | 待つ | — | W1 | M | 基盤（U3） |",
+           "| W2-02 | 段の後 | 待つ | — | W1、W2-01 | M | 基盤（U3） |",
            "| W2-03 | 大 | " + "文。" * 130 + " | — | W1-02〜W1-09 | XL | |"]  # fmt: skip
 REWORK_HEAD = "# rework\n\n## 2. 段\n\n本文。\n\n## 3. 段ごとの作業\n\n前書き。\n\n### W1 基盤\n\n前書き 1。\n\n"
 REWORK_MID = "\n### W2 直し\n\n"
@@ -835,7 +835,7 @@ W_README = """\
 |---|---|---|---|---|
 | `status` | 閉じた値 | `PLAN` / `PENDING` / `DOING` / `DONE` | はい | 状態 |
 | `size` | 閉じた値 | `S` / `M` / `L` | いいえ | 大きさ |
-| `depends` | ID の並び（W） | — | いいえ | 依存 |
+| `depends` | ID の並び（W、段） | — | いいえ | 依存 |
 | `marks` | 閉じた値の並び | `危険` / `メモ` / `基盤` / `テスト` | いいえ | 印 |
 
 ## 本文のラベル
@@ -854,7 +854,7 @@ TREE_W = {
     "docs/rework-phase1.md": REWORK_W,
     "tasks/W/README.md": W_README,
 }
-W_OVER = '[W2-02]\ndepends = ["W1-01", "W1-02", "W1-03"]\nmarks = ["基盤"]\n'
+W_OVER = '[W2-02]\nmarks = ["基盤"]\n[W2-03]\ndepends = ["W1"]\n'
 W_DOC = "docs/rework-phase1.md"
 
 
@@ -871,16 +871,21 @@ class W(Tree):
         code, out = self.run_tool("plan")
         self.assertEqual(code, 0, out)
         self.assertIn(f"{W_DOC}: 2 ranges: 6 rows -> 6 files in tasks/W/", out)
-        self.assertEqual(self.items(out), {("W2-02", "depends", "depends"), ("W2-02", "marks", "marks"),
-                                           ("W2-03", "depends", "depends"), ("W2-03", "size", "size")})  # fmt: skip
+        self.assertEqual(self.items(out), {("W2-02", "marks", "marks"), ("W2-03", "depends", "depends"), ("W2-03", "size", "size")})
         self.assertIn("W2-03\tdepends\tdepends\t-\tW1-02〜W1-09", out)  # W1-09 is no row
         self.assertIn("status DONE 2, PLAN 4", out)
+        # a stage is a value when it has a row (U5e); a stage of none, or a W joined to it, is listed
+        for cell in ("W3", "W1-01・W1", "W1 の後", "W1〜W2"):
+            with self.subTest(cell=cell):
+                self.write(W_DOC, REWORK_W.replace("| W1、W2-01 |", f"| {cell} |"))
+                self.assertIn(f"W2-02\tdepends\tdepends\t-\t{cell}", self.run_tool("plan")[1])
 
     def test_overrides(self):
         code, out = self.run_tool("plan", W_OVER)
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.items(out), {("W2-03", "depends", "depends"), ("W2-03", "size", "size")})
-        for over in ['[W2-02]\ndepends = ["W1"]\n',  # a stage is not a W
+        self.assertEqual(self.items(out), {("W2-03", "size", "size")})
+        for over in ['[W2-02]\ndepends = ["W1"]\n',  # not in the list: the rule wrote it
+                     '[W2-03]\ndepends = ["W1-"]\n',  # not a W or a stage
                      '[W2-03]\nsize = "XL"\n',  # not a value of the README
                      '[W1-01]\nsize = "M"\n',  # not in the list
                      '[W2-02]\nmarks = ["基盤（U3）"]\n']:  # fmt: skip
@@ -907,12 +912,19 @@ class W(Tree):
         self.assertIn('status = "PLAN"\nsize = "M"\ndepends = ["W1-01"]\nmarks = ["メモ", "危険"]\n+++', self.read("tasks/W/W1-02.md"))
         self.assertIn('status = "DONE"\nsize = "M"\ndepends = ["W1-01", "W1-02"]\n+++\n# W1-03 枠\n', self.read("tasks/W/W1-03.md"))
         self.assertIn('depends = ["W1-01", "W1-02", "W1-03", "W2-02"]\n', self.read("tasks/W/W2-01.md"))  # the range opened
-        self.assertIn('status = "PLAN"\nsize = "M"\ndepends = ["W1-01", "W1-02", "W1-03"]\nmarks = ["基盤"]\n+++', self.read("tasks/W/W2-02.md"))
+        self.assertIn('status = "PLAN"\nsize = "M"\ndepends = ["W1", "W2-01"]\nmarks = ["基盤"]\n+++', self.read("tasks/W/W2-02.md"))
         w23 = self.read("tasks/W/W2-03.md").split("\n")
-        self.assertEqual(w23[:5], ["+++", 'status = "PLAN"', "+++", "# W2-03 大", ""])  # depends and size listed, not written
-        self.assertTrue(w23[5].startswith("- 内容: 文。") and w23[6].startswith("  文。") and w23[-2] == "- 実現する決定: —", w23)
+        self.assertEqual(w23[:6], ["+++", 'status = "PLAN"', 'depends = ["W1"]', "+++", "# W2-03 大", ""])  # size listed, not written
+        self.assertTrue(w23[6].startswith("- 内容: 文。") and w23[7].startswith("  文。") and w23[-2] == "- 実現する決定: —", w23)
         with contextlib.redirect_stdout(io.StringIO()) as check:
             self.assertEqual(docs.main(["check", "--root", str(self.root)]), 0, check.getvalue())
+
+    def test_a_stage_of_no_work_is_refused(self):
+        """The override's form fits `ID の並び（W、段）`; the stage of no row is found by the check before writing."""
+        code, out = self.run_tool("apply", W_OVER.replace('["W1"]', '["W9"]'))
+        self.assertEqual(code, 1, out)
+        self.assertIn("tasks/W/W2-03.md:3: depends: W9: no work of the stage (tasks/W/)", out)
+        self.assertEqual((self.read(W_DOC), self.ids()), (REWORK_W, []))
 
     def test_labels(self):
         self.write("tasks/W/README.md", W_README.replace("- `実現する決定`", "- `決定`"))
@@ -933,14 +945,14 @@ class VerifyW(Before):
         code, out = self.verify()
         self.assertEqual(code, 0, out)
         self.assertIn("W's `依存`: a range", out)
-        self.assertIn("round trip: 6 rows, 6 files read back; IDs 6; ✅ and status apart (the list's): 0; cells apart (the list's): 4", out)
-        self.assertIn("W2-02: `依存` W1 -> -\nW2-02: `役割・印` 基盤（U3） -> -\nW2-03: `依存` W1-02〜W1-09 -> -\nW2-03: `規模` XL -> -", out)
+        self.assertIn("round trip: 6 rows, 6 files read back; IDs 6; ✅ and status apart (the list's): 0; cells apart (the list's): 3", out)
+        self.assertIn("W2-02: `役割・印` 基盤（U3） -> -\nW2-03: `依存` W1-02〜W1-09 -> -\nW2-03: `規模` XL -> -", out)
 
     def test_overrides(self):
         self.apply(W_OVER)
         code, out = self.verify()
         self.assertEqual(code, 0, out)
-        self.assertIn("W2-02: `依存` W1 -> W1-01, W1-02, W1-03\nW2-02: `役割・印` 基盤（U3） -> 基盤", out)
+        self.assertIn("W2-02: `役割・印` 基盤（U3） -> 基盤\nW2-03: `依存` W1-02〜W1-09 -> W1", out)
 
     def test_escaped_bar_is_normalized(self):
         self.apply()
@@ -959,6 +971,9 @@ class VerifyW(Before):
         ("tasks/W/W1-01.md", 'size = "S"\n', 'size = "S"\ndepends = ["W1-02"]\n'),  # depends where `—`
         ("tasks/W/W2-01.md", '"W1-01", "W1-02", "W1-03", "W2-02"', '"W1-01", "W1-03", "W2-02"'),  # a W of the range
         ("tasks/W/W2-01.md", '"W1-01", "W1-02", "W1-03", "W2-02"', '"W2-02", "W1-01", "W1-02", "W1-03"'),  # the order
+        ("tasks/W/W2-02.md", '["W1", "W2-01"]', '["W1-01", "W2-01"]'),  # a stage turned into a work of it
+        ("tasks/W/W2-02.md", '["W1", "W2-01"]', '["W2-01", "W1"]'),  # a stage moved
+        ("tasks/W/W2-02.md", '["W1", "W2-01"]', '["W2", "W2-01"]'),  # another stage
         ("tasks/W/W1-02.md", 'marks = ["メモ", "危険"]', 'marks = ["危険", "メモ"]'),  # the order of marks
         ("tasks/W/W1-01.md", 'marks = ["基盤"]\n', ""),  # marks taken out
         ("tasks/W/W1-03.md", '+++\n# W1-03', 'marks = ["テスト"]\n+++\n# W1-03'),  # marks where empty

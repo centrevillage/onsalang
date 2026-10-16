@@ -1092,6 +1092,14 @@ class Ids:
         why = f"no {kind.dir}/" if kind.dir else "a kind with no file: the history or the second phase"
         return Where(id_, None, None, NONE, "", {}, why)
 
+    def state(self, ref):
+        """The status of an ID, or of a stage (`depends`, DF-6): DONE when every work of it is DONE, else
+        `残り N` (its works not DONE, `work_done`); `-` when it has none (`check` (b) says so)."""
+        if not STAGE.fullmatch(ref):
+            return self.where(ref).status
+        done = [d for w, d in self.index.work_done().items() if w.startswith(ref + "-")]
+        return NONE if not done else "DONE" if all(done) else f"残り {done.count(False)}"
+
     def row(self, id_):
         """`ID<TAB>status<TAB>title<TAB>sections` (the relations of `show`, the items of `ticket`)."""
         w = self.where(id_)
@@ -1254,7 +1262,9 @@ def relations(ids, kind, id_, values):
     if kind == "W":
         add("decision", ids.having(DECISIONS, "tasks", id_))
         add("fixes", ids.having(ISSUES, "fix", id_))
-        add("depended_by", ids.having(["W"], "depends", id_))
+        # its own `depends` and those that name its stage (`W4`: every work of W4)
+        by = {*ids.having(["W"], "depends", id_), *ids.having(["W"], "depends", id_.split("-")[0])} - {id_}
+        add("depended_by", sorted(by, key=id_key))
         add("waiting", waiting(ids).get(id_, []))
     elif kind in DECISIONS:
         for key in ("tasks", "amends", "amended_by"):
@@ -1735,7 +1745,7 @@ def cmd_ticket(args):
     v, head = w.values, ids.tree.head(w.rel)
     decisions, issues = ids.having(DECISIONS, "tasks", w.id), ids.having(ISSUES, "fix", w.id)
     secs = {s for i in decisions + issues for s in _listed(ids.where(i).values.get("spec"))}
-    depends = "、".join(f"{d}（{ids.where(d).status}）" for d in _listed(v.get("depends")))
+    depends = "、".join(f"{d}（{ids.state(d)}）" for d in _listed(v.get("depends")))
     doing = ", ".join(_listed(v.get("doing")))
 
     def item(i):

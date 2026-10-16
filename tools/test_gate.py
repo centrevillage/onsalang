@@ -4322,7 +4322,7 @@ found_by = "W1-01/t"
     "tasks/W/README.md": "# 作業\n\n## 頭の欄\n\n" + FIELDS_HEADER + """\
 | `status` | 閉じた値 | `PLAN` / `PENDING` / `DOING` / `DONE` | はい | 状態 |
 | `size` | 閉じた値 | `S` / `M` / `L` | いいえ | 大きさ |
-| `depends` | ID の並び（W） | — | いいえ | 依存 |
+| `depends` | ID の並び（W、段） | — | いいえ | 依存 |
 | `marks` | 閉じた値の並び | `基盤` / `メモ` | いいえ | 印 |
 | `doing` | 文字列の並び | — | いいえ | 出ている票 |
 | `commit` | 文字列 | — | いいえ | コミット |
@@ -4741,8 +4741,8 @@ class DocsLayout(DocsTree):
         self.edit("tasks/W/W1-02.md", 'size = "M"', 'size = "XL"')
         for old, new, what in (
             ("| `size` | 閉じた値 | `S` / `M` / `L` | いいえ | 大きさ |", "| `size` | 閉じた値 | `S` / `M` / `L` | いいえ |", "8: the field table: 4 cells, not 5"),
-            ("| `depends` | ID の並び（W） |", "| `depends` | ID の列（W） |", "9: the field table: the form `ID の列（W）` is not known"),
-            ("| `depends` | ID の並び（W） |", "| `depends` | ID の並び（W、Z） |", "9: the field table: the form `ID の並び（W、Z）` names a kind"),
+            ("| `depends` | ID の並び（W、段） |", "| `depends` | ID の列（W、段） |", "9: the field table: the form `ID の列（W、段）` is not known"),
+            ("| `depends` | ID の並び（W、段） |", "| `depends` | ID の並び（W、Z） |", "9: the field table: the form `ID の並び（W、Z）` names a kind"),
             ("`S` / `M` / `L`", "`S` /  / `L`", "8: the field table: the values `S` /  / `L`"),
             ("`S` / `M` / `L`", "`S` / `S`", "8: the field table: the values `S` / `S`"),
             ("| `commit` | 文字列 | — |", "| `commit` | 文字列 | x |", "12: the field table: the values x of the form 文字列"),
@@ -4770,6 +4770,13 @@ class DocsLayout(DocsTree):
         self.assertOne(s2, "found_by = \"W1-01/t\"", "found_by = \"W1-08/t\"", f"{s2}:5: found_by: W1-08 is not found (tasks/W/)")
         self.assertOne(s2, "R-1 と A-1", "R-1 と A-1、R-1、A-2、A-2", f"{s2}:8: A-2 is not found (decisions/A/)")
         self.assertOne(w2, '["W1-01"]', '["W1-08"]', f"{w2}:4: depends: W1-08 is not found (tasks/W/)")
+        # `depends` a stage (U5e): there when it has a work; the form `W<n>` only
+        self.edit(w2, '["W1-01"]', '["W1", "W1-01"]')
+        self.assertEqual(self.check(), (0, []))
+        self.edit(w2, '["W1", "W1-01"]', '["W1-01"]')
+        self.assertOne(w2, '["W1-01"]', '["W1-01", "W2"]', f"{w2}:4: depends: W2: no work of the stage (tasks/W/)")
+        for bad in ("W1-", "PH2", "W"):
+            self.assertOne(w2, '["W1-01"]', f'["{bad}"]', f'{w2}:4: `depends` has "{bad}", not an ID of W、段')
         self.assertOne(s1, '["§2.1"]', '["§2.1", "§9.9"]', f"{s1}:3: spec: §9.9 is not a numbered heading of the spec")
         self.assertOne(s1, "§3 と §2", "§3 と §2、§7", f"{s1}:10: §7 is not a numbered heading of the spec")
         self.assertOne(s1, "`tools.md §1`", "`tools.md §1・§2`", f"{s1}:10: tools.md §2 is not a numbered heading of the spec of the tools")
@@ -5108,6 +5115,27 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.run_("ticket", "S-1", "U2/i")[0], 2)
         self.assertEqual(self.run_("ticket", "W1-09", "U2/i"), (1, ["W1-09: not found (tasks/W/)"]))
 
+    def test_depends_a_stage(self):
+        """U5e: a stage in `depends` is every work of it: `ticket` shows its state, `show` the works that
+        depend on the stage of a work as `depended_by` too."""
+        self.layout()
+        self.write("tasks/W/W2-01.md", '+++\nstatus = "PLAN"\ndepends = ["W1", "W1-02"]\n+++\n# W2-01 後\n')
+        self.write("tasks/W/W2-02.md", '+++\nstatus = "PLAN"\ndepends = ["W2"]\n+++\n# W2-02 後の後\n')
+        self.assertEqual(self.run_("check")[0], 0)
+        self.assertEqual(self.run_("ticket", "W2-01", "U1/i")[1][5], "- 依存: W1（残り 1）、W1-02（DOING）")
+        self.assertEqual(self.run_("ticket", "W2-02", "U1/i")[1][5], "- 依存: W2（残り 2）")
+        self.edit("tasks/W/W1-02.md", 'status = "DOING"', 'status = "DONE"')
+        self.edit("tasks/W/W1-02.md", 'doing = ["U2/i"]\n', "")
+        self.assertEqual(self.run_("ticket", "W2-01", "U1/i")[1][5], "- 依存: W1（DONE）、W1-02（DONE）")
+        # once each, in order; a work is not its own (W2-02 names its stage W2)
+        self.assertEqual(self.run_("show", "W1-01", "--relations")[1][-2:], ["depended_by\tW1-02\tDONE\t式\t-", "depended_by\tW2-01\tPLAN\t後\t-"])
+        self.assertEqual(self.run_("show", "W1-02", "--relations")[1][-2:-1], ["depended_by\tW2-01\tPLAN\t後\t-"])
+        self.assertEqual(self.run_("show", "W2-01", "--relations")[1][-1:], ["depended_by\tW2-02\tPLAN\t後の後\t-"])
+        self.assertEqual(self.run_("show", "W2-02", "--relations")[1][-1:], ["== relations"])
+        # a stage of no work (check (b) finds it)
+        self.edit("tasks/W/W2-02.md", '["W2"]', '["W3"]')
+        self.assertEqual(self.run_("ticket", "W2-02", "U1/i")[1][5], "- 依存: W3（-）")
+
     def test_the_commands_of_the_new_layout_in_the_current_one(self):
         self.old_layout()
         for argv in (("show", "S-1"), ("list", "S"), ("changes",), ("ticket", "W1-01", "U1/i"), ("set", "S-1", "status=OPEN"),
@@ -5131,7 +5159,7 @@ class DocsCommands(DocsTree):
         self.assertRefused(("set", "W1-02", "size=XL", "marks=基盤,,メモ", "color=red", "size=M", "depends=S-1"), [
             '`size` has "XL", not one of S / M / L', "`marks` has an empty item: 基盤,,メモ",
             "`color` is not a field of tasks/W/README.md (status, size, depends, marks, doing, commit)", "`size` is given twice",
-            '`depends` has "S-1", not an ID of W'], [w2])  # fmt: skip
+            '`depends` has "S-1", not an ID of W、段'], [w2])  # fmt: skip
         self.assertRefused(("set", "S-1", "decided=17 Oct"), ['`decided` has "17 Oct", not a date'], ["decisions/S/S-1.md"])
         # after the write, the file or a partner breaks a relation, or a required field is gone
         self.assertRefused(("set", "W1-02", "status=DONE"), [

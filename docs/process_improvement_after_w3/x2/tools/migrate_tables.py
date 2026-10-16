@@ -1229,14 +1229,15 @@ def w_context(root):
 
 
 def w_open(cell, ids):
-    """The W of a cell `依存` (cut at `、`), a range opened to the IDs `ids` between its ends in their
-    order, once each; None when a part is not a W or a range of two of `ids` (a stage `W3`)."""
+    """The W and the stages of a cell `依存` (cut at `、`; a stage `W3` as it is, its works all of it,
+    DF-6), a range opened to the IDs `ids` between its ends in their order, once each; None when a part
+    is not a W, a stage of a work of `ids`, or a range of two of `ids`."""
     out = []
     for part in cell.split("、"):
         m = W_RANGE.fullmatch(part)
         if m and {m[1] + m[2], m[1] + m[3]} <= set(ids) and int(m[2]) < int(m[3]):
             out += [i for i in ids if i.startswith(m[1]) and int(m[2]) <= int(i[len(m[1]) :]) <= int(m[3])]
-        elif re.fullmatch(repo.KIND["W"].pattern, part):
+        elif re.fullmatch(repo.KIND["W"].pattern, part) or (docs.STAGE.fullmatch(part) and docs._in_stage(ids, part)):
             out.append(part)
         else:
             return None
