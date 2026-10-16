@@ -29,6 +29,7 @@ import builtin_names  # noqa: E402
 import check_spec_examples as cse  # noqa: E402
 import default_inits  # noqa: E402
 import diag_codes  # noqa: E402
+import docs as docs_tool  # noqa: E402
 import fmt_props  # noqa: E402
 import fuzz  # noqa: E402
 import gap_marks  # noqa: E402
@@ -1303,7 +1304,7 @@ class RealSteps(unittest.TestCase):
         required = (
             "fmt", "clippy", "test", "spec-examples", "spec-sections", "pending", "gate-selftest", "golden",
             "diag-registry", "diag-negatives", "gap-marks", "builtin-names", "ignored-files", "fuzz",
-            "fmt-props", "vectors", "ignores", "default-inits",
+            "fmt-props", "vectors", "ignores", "default-inits", "docs", "docs-fmt",
         )  # fmt: skip
         for r in required + ("spec-coverage",):
             self.assertIn(r, names)
@@ -1313,6 +1314,11 @@ class RealSteps(unittest.TestCase):
         # the convergence of the fix candidates shows its cycles and divergences, never listed (W3-22)
         self.assertTrue(by_name["fix-loop"].info and not by_name["fix-loop"].pendable)
         self.assertFalse(by_name["spec-sections"].info)
+        # the documents (X-2 DT-5): the checks fail the gate; the lines `fmt` would break are only shown (DT-4, DF-8)
+        self.assertTrue(by_name["docs"].static and not by_name["docs"].info)
+        self.assertEqual(by_name["docs"].argv[-2:], (str(gate_steps.TOOLS / "docs.py"), "check"))
+        self.assertTrue(by_name["docs-fmt"].info and by_name["docs-fmt"].static and not by_name["docs-fmt"].pendable)
+        self.assertEqual(by_name["docs-fmt"].argv[-3:], (str(gate_steps.TOOLS / "docs.py"), "fmt", "--list"))
         self.assertTrue(by_name["pending"].stage_args and by_name["pending"].gate_steps)
         # the ignores of the Rust tests: light, so also in `--quick`, and failing at a stage end like the list (R-224)
         self.assertTrue(by_name["ignores"].stage_args and not by_name["ignores"].pendable)
@@ -1340,7 +1346,7 @@ class RealSteps(unittest.TestCase):
         steps = gate_steps.STEPS
         self.assertEqual(sorted(gate_steps.static_names()), sorted(
             ["pending", "ignores", "gap-marks", "diag-registry", "diag-negatives", "builtin-names", "spec-examples",
-             "spec-sections", "default-inits"]))  # fmt: skip
+             "spec-sections", "default-inits", "docs", "docs-fmt"]))  # fmt: skip
         self.assertEqual({s.name: s.narrows for s in steps if s.narrows},
                          {"fuzz": ("tools/fuzz.py", "tools/narrowing.py"),
                           **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-comments", "fmt-cst")}})  # fmt: skip
@@ -4021,6 +4027,239 @@ class DefaultInits(unittest.TestCase):
         problems, summary = default_inits.check(self.root, REAL_CASES)
         self.assertEqual(problems, [])
         self.assertTrue(summary.endswith("; 2 delay calls"), summary)
+
+
+# A sentence of 100 characters, and others: a line of three is longer than docs.LONG.
+S = "あ" * 99 + "。"
+T = "い" * 99 + "。"
+LONG_SENTENCE = "う" * 299 + "。"
+
+
+class DocsTool(unittest.TestCase):
+    """tools/docs.py (X-2 U1): `fmt`, `swaps`, `check`, and the documents they read."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        return p
+
+    def main(self, *argv):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", out):
+            code = docs_tool.main([*argv, "--root", str(self.root)])
+        return code, out.getvalue()
+
+    def fmt(self, text):
+        new, wrapped, left = docs_tool.fmt_text(text)
+        # idempotent: a second run changes nothing; the round trip gives the text back
+        self.assertEqual(docs_tool.fmt_text(new)[:2], (new, []))
+        return new.split("\n"), wrapped, left
+
+    # ------------------------------------------------ fmt
+
+    def test_fmt_breaks_after_a_sentence_and_packs_to_the_width(self):
+        lines, wrapped, left = self.fmt("intro\n- " + S + S + T + "\nend")
+        self.assertEqual(lines, ["intro", "- " + S + S, "  " + T, "end"])
+        self.assertEqual((wrapped, left), ([2], []))
+
+    def test_fmt_goes_on_at_the_indentation_of_the_item(self):
+        cases = {
+            "> " + S * 3: "> ",  # a quote
+            "1. " + S * 3: "   ",  # a numbered item
+            "  - " + S * 3: "    ",  # a nested item
+            "    " + S * 3: "    ",  # a line that goes on an item
+            S * 3: "",  # a paragraph
+        }
+        for line, cont in cases.items():
+            lines, wrapped, _ = self.fmt(line)
+            self.assertEqual(lines, [line[: len(line) - 100], cont + S], line[:4])
+            self.assertEqual(wrapped, [1])
+
+    def test_fmt_leaves_the_blocks_and_the_kept_lines(self):
+        long = S * 3
+        text = "\n".join([
+            "+++", f'title = "{long}"', "+++",
+            "```", long, "```", "  ~~~~ x", long, "  ~~~", long, "~~~~",
+            f"| {long} |", f"# {long}", f"欠番: {long}", f"<!-- {long} -->", "<!--", long, "-->",
+        ])  # fmt: skip
+        new, wrapped, left = docs_tool.fmt_text(text)
+        self.assertEqual((new, wrapped, left), (text, [], []))
+        # a head field that does not close keeps the whole file (the check of the head fields reports it)
+        self.assertEqual(docs_tool.fmt_text("+++\n" + long)[0], "+++\n" + long)
+
+    def test_fmt_breaks_only_at_the_depth_0_outside_code_and_bold(self):
+        for inner in ("（" + S * 2 + "）", "`" + S * 2 + "`", "`` a`b " + S * 2 + " ``", "**" + S * 2 + "**", "「" + S * 2 + "」"):
+            lines, wrapped, left = self.fmt(inner + S)
+            self.assertEqual((wrapped, left), ([], [(1, len(inner) + 100)]), inner[:4])
+        # an escaped backtick opens no code span (the backtick after it has no partner); a closed bracket
+        # comes back to the depth 0
+        middle = "（あ。）" + "え" * 50 + "。"
+        tail = "お`" + "お" * 97 + "。"
+        lines, wrapped, _ = self.fmt("\\`" + S + middle + tail)
+        self.assertEqual(lines, ["\\`" + S + middle, tail])
+
+    def test_fmt_never_starts_a_line_like_a_block(self):
+        for start in ("- x", "* x", "+ x", "> x", "| x", "# x", "```x", "~~~x", "<b>", "=== x", "___", "12. x", "3) x", " x"):
+            piece = start + "え" * (99 - len(start)) + "。"
+            lines, wrapped, left = self.fmt(S * 2 + piece + T)
+            self.assertEqual(lines, [S, S + piece, T], start)
+            for line in lines[1:]:
+                self.assertIsNone(docs_tool.NO_START.match(line), line[:6])
+
+    def test_fmt_reports_the_lines_with_no_place_to_break(self):
+        lines, wrapped, left = self.fmt("x\n- " + LONG_SENTENCE)
+        self.assertEqual((wrapped, left), ([], [(2, 302)]))
+        lines, wrapped, left = self.fmt(S + LONG_SENTENCE)  # broken, but a piece is still long
+        self.assertEqual((lines, wrapped, left), ([S, LONG_SENTENCE], [1], [(1, 300)]))
+
+    def test_fmt_writes_checks_and_lists(self):
+        doc = self.write("docs/a.md", "# a\n\n- " + S * 3 + "\n")
+        self.write("docs/b.md", "short\n")
+        code, out = self.main("fmt", "--check")
+        self.assertEqual(code, 1)
+        self.assertIn("docs/a.md: 1 line(s) would be wrapped (lines 3)", out)
+        self.assertEqual(self.main("fmt", "--list")[0], 0)
+        self.assertEqual(doc.read_text(encoding="utf-8"), "# a\n\n- " + S * 3 + "\n")
+        code, out = self.main("fmt")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(doc.read_text(encoding="utf-8"), "# a\n\n- " + S * 2 + "\n  " + S + "\n")
+        self.assertEqual(self.main("fmt", "--check"), (0, "docs fmt: 0 line(s) in 0 file(s) would be wrapped; "
+                                                          "0 long line(s) have no place to break\n"))  # fmt: skip
+        # a long line with no place to break is shown, and is not a change
+        self.write("docs/c.md", LONG_SENTENCE)
+        code, out = self.main("fmt", "--check")
+        self.assertEqual(code, 0)
+        self.assertIn("docs/c.md:1: 300 characters left on one line (no place to break)", out)
+
+    def test_fmt_leaves_out_the_spec_unless_asked(self):
+        for rel in ("docs/a.md", "onsa-lang-spec-0.3.md", "docs/onsa-tools.md", "spec/02-lexical.md", "README.md"):
+            self.write(rel, S * 3)
+        out = self.main("fmt", "--check")[1]
+        self.assertEqual(sorted(re.findall(r"^(\S+): 1 line", out, re.M)), ["README.md", "docs/a.md"])
+        out = self.main("fmt", "--check", "--spec")[1]
+        self.assertEqual(len(re.findall(r"^\S+: 1 line", out, re.M)), 5)
+        code, out = self.main("fmt", str(self.root / "onsa-lang-spec-0.3.md"))
+        self.assertEqual(code, 0)
+        self.assertIn("onsa-lang-spec-0.3.md: skipped, the spec (pass --spec)", out)
+        self.assertEqual((self.root / "onsa-lang-spec-0.3.md").read_text(encoding="utf-8"), S * 3)
+        # a path given: only that document
+        self.assertEqual(self.main("fmt", str(self.root / "README.md"))[0], 0)
+        self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), S * 2 + "\n" + S)
+        self.assertEqual((self.root / "docs/a.md").read_text(encoding="utf-8"), S * 3)
+
+    def test_fmt_writes_nothing_when_the_round_trip_breaks(self):
+        a = self.write("docs/a.md", S * 3)
+        b = self.write("docs/b.md", T * 3)
+        real = docs_tool.wrap
+
+        def broken(line):  # breaks the round trip of the second file only
+            return ([line[:5], line[6:]], "") if line.startswith("い") else real(line)
+
+        with mock.patch.object(docs_tool, "wrap", side_effect=broken):
+            code, out = self.main("fmt")
+        self.assertEqual(code, 2)
+        self.assertIn("does not give the line back; nothing is written", out)
+        self.assertEqual((a.read_text(encoding="utf-8"), b.read_text(encoding="utf-8")), (S * 3, T * 3))
+
+    def test_fmt_does_not_write_a_file_open_in_vim(self):
+        a = self.write("docs/a.md", S * 3)
+        b = self.write("docs/b.md", T * 3)
+        self.write("docs/.a.md.swo", "")
+        code, out = self.main("fmt")
+        self.assertEqual(code, 1)
+        self.assertIn("docs/a.md: skipped, the swap file .a.md.swo", out)
+        self.assertEqual(a.read_text(encoding="utf-8"), S * 3)
+        self.assertEqual(b.read_text(encoding="utf-8"), T * 2 + "\n" + T)
+
+    def test_fmt_keeps_the_bytes_and_skips_cr(self):
+        a = self.write("docs/a.md", "x")
+        a.write_bytes((S * 3 + "\r\n").encode("utf-8"))
+        code, out = self.main("fmt")
+        self.assertEqual(code, 0)
+        self.assertIn("docs/a.md: skipped, it has CR line ends", out)
+        self.assertEqual(a.read_bytes(), (S * 3 + "\r\n").encode("utf-8"))
+        self.write("docs/b.md", "x").write_bytes(b"\xff")
+        self.assertEqual(self.main("fmt")[0], 2)
+
+    # ------------------------------------------------ swaps
+
+    def test_swaps(self):
+        for rel in ("docs/.a.md.swp", ".x.swo", "rules/.r.md.swn", "target/.t.swp", ".git/.g.swp",
+                    ".claude/worktrees/w/.w.md.swp", "crates/c/target/.c.swp", "docs/a.swp", "docs/.a.md.swpx"):
+            self.write(rel, "")
+        self.write("crates/c/Cargo.toml", "")
+        code, out = self.main("swaps")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, ".x.swo\ndocs/.a.md.swp\nrules/.r.md.swn\ndocs swaps: 3 swap file(s)\n")
+        self.assertEqual(docs_tool.swap_files_of(self.root / "docs/a.md"), [self.root / "docs/.a.md.swp"])
+        for rel in (".x.swo", "docs/.a.md.swp", "rules/.r.md.swn"):
+            (self.root / rel).unlink()
+        self.assertEqual(self.main("swaps"), (0, "docs swaps: 0 swap file(s)\n"))
+
+    # ------------------------------------------------ check and the documents
+
+    def test_check_counts_the_cells_of_the_tables(self):
+        self.write("docs/a.md", "\n".join([
+            "| a | b |", "|---|:-:|", "| 1 | 2 |", "| 1 | 2 | 3 |", "| 1 |", "| `x|y` | a \\| b |", "| ``a`|`b`` | c",
+            "", "| a | b |", "|---|---|---|", "| 1 | 2 |",
+            "", "```", "| a | b |", "|---|---|", "| 1 |", "```",
+            "<!--", "| a | b |", "|---|---|", "| 1 |", "-->",
+            "- item", "  | x | y |", "  |---|---|", "  | 1 |",
+            "", "| t | u |", "", "| 1 | 2 |",
+        ]))  # fmt: skip
+        code, out = self.main("check")
+        self.assertEqual(code, 1)
+        self.assertEqual(out.splitlines(), [
+            "== tables",
+            "docs/a.md:4: the row has 3 cells, the header 2",
+            "docs/a.md:5: the row has 1 cells, the header 2",
+            "docs/a.md:10: the delimiter row has 3 cells, the header 2",
+            "docs/a.md:26: the row has 1 cells, the header 2",
+            "docs/a.md:28: table rows with no header and delimiter row before them",
+            "docs/a.md:30: table rows with no header and delimiter row before them",
+            "docs check: 6 problem(s) (tables 6)",
+        ])  # fmt: skip
+
+    def test_check_passes_and_fails_on_an_open_fence(self):
+        self.write("docs/a.md", "| a | b |\n|---|---|\n| 1 | 2 |\n")
+        self.assertEqual(self.main("check"), (0, "docs check: no problem in 1 document(s) (tables)\n"))
+        self.write("docs/b.md", "x\n````\n| a |\n```\n")
+        self.assertEqual(self.main("check"), (1, "== tables\ndocs/b.md:2: the code fence is not closed\n"
+                                                 "docs check: 1 problem(s) (tables 1)\n"))  # fmt: skip
+
+    def test_check_with_no_document_is_an_error(self):
+        self.write("history/a.md", "| a |\n| 1 | 2 |\n")
+        code, out = self.main("check")
+        self.assertEqual(code, 2)
+        self.assertIn("no document found", out)
+        self.assertEqual(self.main("fmt", "--check")[0], 2)
+
+    def test_the_documents_by_the_layout(self):
+        current = ["CLAUDE.md", "README.md", "docs/a.md", "docs/onsa-tools.md", "onsa-lang-spec-0.3.md"]
+        for rel in current + ["onsa-lang-spec-0.2.md", "kumi-lang-spec.md", "docs/sub/x.md", "docs/f.toml", "history/h.md"]:
+            self.write(rel, "| a |\n|---|\n| 1 | 2 |\n")
+        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root)], current)
+        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root, spec=False)], current[:3])
+        out = self.main("check")[1]
+        self.assertEqual(re.findall(r"^(\S+):3:", out, re.M), current)
+        # the new layout: read where the files are; `history/` is never read
+        new = ["decisions/S/S-1.md", "issues/R/R-1.md", "rules/common.md", "spec/02-lexical.md", "spec/README.md",
+               "tasks/W/W1-01.md"]  # fmt: skip
+        for rel in new:
+            self.write(rel, "| a |\n|---|\n| 1 | 2 |\n")
+        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root)], sorted(current + new))
+        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root, spec=False)],
+                         sorted(current[:3] + new[:3] + new[5:]))  # fmt: skip
+        out = self.main("check")[1]
+        self.assertEqual(re.findall(r"^(\S+):3:", out, re.M), sorted(current + new))
 
 
 if __name__ == "__main__":

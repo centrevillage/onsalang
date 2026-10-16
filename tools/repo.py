@@ -5,6 +5,7 @@
 - running `onsa_cases` (the test runner's and the compiler's lists) and
   reading its JSON;
 - reading the plan §5: the retired codes and the codes of the second phase;
+- the Markdown documents the document tools read (`doc_files`, X-2 DT-7);
 - the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`).
 """
 import json
@@ -120,6 +121,35 @@ def phase2_codes(plan_text):
     if not codes:
         raise RepoError(f"{DOC_PLAN} §5: no row of the table is `{PHASE2_CELL}`")
     return codes
+
+
+# ---------------------------------------------------------------- the documents (X-2 DT-7)
+
+# The directories of the new layout (X-2 DS-1). `history/` is never read.
+DOC_DIRS = ("decisions", "issues", "tasks", "spec", "rules")
+SPEC_DIR = "spec"
+DOC_TOOLS = Path("docs") / "onsa-tools.md"  # the spec of the tools (`spec/tools.md` after the migration)
+ROOT_DOCS = (Path("README.md"), Path("CLAUDE.md"))
+
+
+def doc_files(root, spec=True):
+    """The Markdown documents the document tools read (`tools/docs.py`), relative to the root and
+    sorted: the files under the directories of the new layout, the current `docs/*.md`, and the
+    root's README.md and CLAUDE.md. Each is read where it is, so the union becomes the new layout
+    alone as the migration moves the current files (DS-5 keeps no copy); the older specs at the root
+    go to `history/` as they are and are not read. The spec (`spec/`, the spec file, the spec of the
+    tools) only with `spec`."""
+    root = Path(root)
+    found = [p.relative_to(root) for d in DOC_DIRS for p in (root / d).rglob("*.md") if p.is_file()]
+    found += [p.relative_to(root) for p in (root / "docs").glob("*.md") if p.is_file()]
+    found += [p for p in (*ROOT_DOCS, SPEC) if (root / p).is_file()]
+    return sorted({p for p in found if spec or not is_spec_doc(p)})
+
+
+def is_spec_doc(rel):
+    """`rel` (relative to the root) is the spec: a file of `spec/`, the spec file, the spec of the tools."""
+    rel = Path(rel)
+    return rel.parts[:1] == (SPEC_DIR,) or rel in (SPEC, DOC_TOOLS)
 
 
 # ---------------------------------------------------------------- build outputs

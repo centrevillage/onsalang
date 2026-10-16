@@ -111,6 +111,9 @@ STEPS = [
     # The documents write the `init` of a delay in the omitted form (S-539 (c3a)): the ```onsa blocks of the spec
     # and of docs/onsa-tools.md, and the files of examples/ and std/.
     Step("default-inits", (*PY, str(TOOLS / "default_inits.py")), static=True),
+    # The documents (X-2 DT-5): now the tables (d). The lines `fmt` would break are shown, never a failure (DT-4, DF-8).
+    Step("docs", (*PY, str(TOOLS / "docs.py"), "check"), static=True),
+    Step("docs-fmt", (*PY, str(TOOLS / "docs.py"), "fmt", "--list"), info=True, static=True),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True, static=True),
     # The ignores of the Rust tests whose reason names a work that is done or not in the tables (R-224).
     Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True, static=True),
