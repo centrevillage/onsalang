@@ -188,7 +188,7 @@ def is_spec_doc(rel):
 class Kind:
     name: str
     pattern: str  # the spelling of an ID: the file name and the bare ID in the text
-    dir: str = None  # the directory of the new layout; None: no file to check (the history, P2)
+    dir: str = None  # the directory of the new layout; None: no file to check (the history, PH2)
     draft: bool = False  # has drafts `S-xxx.draft.md`
     old: tuple = None  # the current table: (document, first heading, next heading or None: the end, what); None: no reader
     bare: bool = True  # looked for as a bare ID in the text
@@ -207,7 +207,7 @@ KINDS = (
     # the kinds whose files are in the history: their IDs are not checked (X-2 DF-6 `refs`)
     Kind("C", r"C-\d+"),
     Kind("T", r"T\d+-\d+", old=(DOC_PLAN, "## 4.", "## 5.", "T works")),  # read while the plan §4 is there
-    Kind("P2", r"P2", bare=False),  # the second phase in `tasks` (X-2 DF-4); not an ID in the text
+    Kind("PH2", r"PH2", bare=False),  # the second phase in `tasks` (X-2 DF-4); not an ID in the text
 )
 KIND = {k.name: k for k in KINDS}
 # A bare ID: not after a letter, a digit, `_` or `-`, not before a digit (no `F-8` in `UTF-8`).
@@ -279,7 +279,7 @@ class Layout:
         return self._texts[rel]
 
     def source(self, name):
-        """"new", "old", or None (no reader of the current documents: D, K, Q, RF, X, C, P2)."""
+        """"new", "old", or None (no reader of the current documents: D, K, Q, RF, X, C, PH2)."""
         if name not in self._source:
             if name in FILES:
                 new, has_old = (self.root / FILES[name][0]).is_file(), True

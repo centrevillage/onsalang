@@ -51,7 +51,7 @@ README_FIELDS = """\
 |---|---|---|---|---|
 | `status` | 閉じた値 | `OPEN` / `DECIDED` / `DROPPED` | はい | 状態 |
 | `spec` | 節の並び | — | いいえ | 仕様の節 |
-| `tasks` | ID の並び（W、T、P2） | — | いいえ | 担う作業 |
+| `tasks` | ID の並び（W、T、PH2） | — | いいえ | 担う作業 |
 | `amends` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた前の決定 |
 | `amended_by` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた後の決定 |
 | `before` | ID（W） | — | いいえ | 期限の作業 |

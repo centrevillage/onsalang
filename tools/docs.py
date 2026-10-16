@@ -535,8 +535,8 @@ def write_head(root, rel, values, order):
 
 FIELDS_HEAD = "## 頭の欄"
 FIELD_COLUMNS = ["キー", "形", "値", "要る", "意味"]
-# `<base>` or `<base>の並び` (an array); the IDs name their kinds: `ID（S）`, `ID の並び（W、T、P2）`, and
-# STAGE_KIND for a stage (`W4`, `ID（W、段、P2）`), which is not a kind of `repo.KINDS` (no file, not in the text).
+# `<base>` or `<base>の並び` (an array); the IDs name their kinds: `ID（S）`, `ID の並び（W、T、PH2）`, and
+# STAGE_KIND for a stage (`W4`, `ID（W、段、PH2）`), which is not a kind of `repo.KINDS` (no file, not in the text).
 STAGE_KIND = "段"
 FORM = re.compile(
     r"(?P<base>文字列|閉じた値|節|日付|整数)(?P<many>の並び)?|(?P<id>ID)(?P<ids> の並び)?（(?P<kinds>[^）]+)）"
@@ -711,7 +711,7 @@ class Index:
         return set(self.layout.old_rows(name))
 
     def known(self, name):
-        """The IDs of a kind there are, or None when they are not checked (the history, P2, no reader)."""
+        """The IDs of a kind there are, or None when they are not checked (the history, PH2, no reader)."""
         if repo.KIND[name].dir is None or self.layout.source(name) is None:
             return None
         return set(self.files[name]) if self.layout.source(name) == "new" else set(self.layout.old_rows(name))
@@ -807,7 +807,7 @@ def body_sections(line):
 
 def check_refs(tree, only=None):
     """(b) The IDs of the head fields and of the text are there (the kinds as `repo.Layout` reads them;
-    the history and P2 are not checked; a stage has a work), and the sections are numbered headings of
+    the history and PH2 are not checked; a stage has a work), and the sections are numbered headings of
     the spec. Of the files `only` when it is given."""
     idx = tree.index
     for table, id_, rel, head in _id_files(tree):
@@ -968,8 +968,8 @@ def id_key(id_):
 
 def due_key(due):
     """The order of the deadlines of `before` (the one place to compare them), or None for another value:
-    a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `P2` (after every W)."""
-    if due == "P2":
+    a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `PH2` (after every W)."""
+    if due == "PH2":
         return (INF,)
     if isinstance(due, str) and STAGE.fullmatch(due):
         return (int(due[1:]), INF)
@@ -1234,7 +1234,7 @@ def show_args(p):
 
 def waiting(ids):
     """{work: the decisions it waits for}: OPEN, and the work carries it or it is due `before` the work.
-    A stage or P2 in `before` makes no work wait (which work of the stage needs it is not known)."""
+    A stage or PH2 in `before` makes no work wait (which work of the stage needs it is not known)."""
     out = {}
     for i, _, v in sorted(ids.heads(DECISIONS), key=lambda r: id_key(r[0])):
         if v.get("status") == "OPEN":
@@ -1297,7 +1297,7 @@ def cmd_show(args):
 def list_args(p):
     p.add_argument("kind")
     p.add_argument("--status")
-    p.add_argument("--stage", help="W: the works of the stage; decisions (P2 too): `tasks` or `before`; issues: `fix`")
+    p.add_argument("--stage", help="W: the works of the stage; decisions (PH2 too): `tasks` or `before`; issues: `fix`")
     p.add_argument("--group", type=int, help="decisions")
     p.add_argument("--before", help="decisions: `before` this work or stage (its end) or an earlier one (`due_key`)")
     p.add_argument("--no-fix", action="store_true", help="issues with no `fix`")
@@ -1310,14 +1310,14 @@ DECISION_FIELDS = ("tasks", "spec", "before", "group")
 LIST_ONLY = {"group": DECISIONS, "before": DECISIONS, "no_fix": ISSUES, "waiting": ("W",)}
 
 
-def _stage_arg(stage, p2=False):
-    if stage is not None and not (STAGE.fullmatch(stage) or (p2 and stage == "P2")):
-        raise DocsError(f"{stage}: not a stage (`W4`{', `P2`' if p2 else ''})")
+def _stage_arg(stage, ph2=False):
+    if stage is not None and not (STAGE.fullmatch(stage) or (ph2 and stage == "PH2")):
+        raise DocsError(f"{stage}: not a stage (`W4`{', `PH2`' if ph2 else ''})")
     return stage
 
 
 def _in_stage(works, stage):
-    """A work of the stage, or the stage (or P2) itself, in `works`."""
+    """A work of the stage, or the stage (or PH2) itself, in `works`."""
     return any(w == stage or w.startswith(stage + "-") for w in works)
 
 
@@ -1336,7 +1336,7 @@ def cmd_list(args):
     if args.stage and kind == "X":
         raise DocsError("--stage is not for X")
     _stage_arg(args.stage, kind in DECISIONS)
-    if args.before and (due_key(args.before) is None or args.before == "P2"):
+    if args.before and (due_key(args.before) is None or args.before == "PH2"):
         raise DocsError(f"--before {args.before}: not a work or a stage (`W4-02`, `W4`)")
     status = ids.table(kind).fields.get("status")
     if args.status and (status is None or args.status not in status.values):

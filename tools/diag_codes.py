@@ -20,9 +20,9 @@ marker compared once per target counts once: markers are counted by (case,
 file, line, code).
 
 The `diag-code` entries: a code short of examples must be listed; a listed
-code with enough examples fails (remove the entry). `until = "P2"` (K-13
+code with enough examples fails (remove the entry). `until = "PH2"` (K-13
 rule 3) is for the codes of the second phase only, and a code of the second
-phase that is listed has `until = "P2"`.
+phase that is listed has `until = "PH2"`.
 
 Exit 0 when the check passes, 1 otherwise, 2 on a usage error.
 """

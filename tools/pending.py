@@ -55,14 +55,14 @@ case is expected to end in an internal error: another failure is an error of
 the entry, and a pass asks for the entry to be removed (the runner or the item
 checks it).
 
-`until = "P2"` names the second phase instead of a work (K-13 rule 3): a code
+`until = "PH2"` names the second phase instead of a work (K-13 rule 3): a code
 of the second phase waits for no work of the first. Only the kinds of
 `PHASE2_KINDS` may use it. Its reasons may also name a section of the spec
 ("§20", a numbered heading of `spec/`): the spec itself sets
-the scope of the first phase; other entries name S / R numbers only. The summary counts it as the stage `P2`, after the
-W and M stages. `--stage-end P2` is a usage error (the first phase never ends
+the scope of the first phase; other entries name S / R numbers only. The summary counts it as the stage `PH2`, after the
+W and M stages. `--stage-end PH2` is a usage error (the first phase never ends
 the second); `--stage-end M9`, the end of the first phase, fails on every
-entry left whose until is not P2 (K-13: what is left after M9 is only P2).
+entry left whose until is not PH2 (K-13: what is left after M9 is only PH2).
 
 This module is the only place that validates the list (the Rust reader in
 `onsa_tests::pending` only reads it). It runs on its own:
@@ -128,13 +128,13 @@ TARGET_FORMS = {
 # `foreign-form` entry names.
 
 REASON = re.compile(r"[SR]-\d+")
-# A spec section as a reason, only of `until = "P2"` (the spec §20 sets what the first phase is).
+# A spec section as a reason, only of `until = "PH2"` (the spec §20 sets what the first phase is).
 SECTION = re.compile(r"§\d+(?:\.\d+)*")
 WORK = re.compile(r"(W\d+)-\d+|T(\d+)-\d+")
 
 # The second phase as an `until` (K-13 rule 3), the kinds that may use it, and
 # the stage that ends the first phase (plan §4 M9).
-PHASE2 = "P2"
+PHASE2 = "PH2"
 PHASE2_KINDS = ("diag-code",)
 PHASE1_END = "M9"
 
@@ -167,7 +167,7 @@ class Docs:
 
 
 def stage_of(work):
-    """`W3-07` -> `W3`, `T5-8` -> `M5` (the milestone of a T ID), `P2` -> `P2`."""
+    """`W3-07` -> `W3`, `T5-8` -> `M5` (the milestone of a T ID), `PH2` -> `PH2`."""
     if work == PHASE2:
         return PHASE2
     m = WORK.fullmatch(work)
@@ -442,7 +442,7 @@ def stage_problem(stage, docs):
 
 
 def left_at_end(until, stage):
-    """Whether something waiting for `until` (a work, or `P2`) may not be left at
+    """Whether something waiting for `until` (a work, or `PH2`) may not be left at
     the end of `stage`: a work of that stage; at the end of the first phase
     (`PHASE1_END`), anything but the second phase. Also used by `tools/ignores.py stale`."""
     return until != PHASE2 if stage == PHASE1_END else stage_of(until) == stage

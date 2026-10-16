@@ -17,7 +17,7 @@
 //!   trait and a declaration of an `extern` block (and, reading §6.1 as a whole, an operation of an
 //!   effect and a function of a handler). `uses {Alloc}`, a `()` that is not the return type of a
 //!   function and those of an anonymous function (S-546) stay. The second phase: the tests that take them
-//!   off are ignored (`P2: …`), those that keep them run;
+//!   off are ignored (`PH2: …`), those that keep them run;
 //! - (S-539 takes this one back: the `init` of `prev~`, `delay~` and `vdelay~` that equals the default
 //!   value stays, and the tests of it say so;)
 //! - (the user takes back this one too: the `move` in the returned position (§5.2) stays, `return move a`,
@@ -1140,7 +1140,7 @@ fn the_returns_of_a_generic_function_and_of_a_closure_argument_are_taken_off() {
 // ---------------------------------------------------------------------------------------------------
 //
 // The user left the rewrite of `-> ()` and an empty `uses {}` to the second phase (2026-10-15): the tests
-// that take them off are ignored (`P2: …`) and keep their expected texts for then; those that keep them
+// that take them off are ignored (`PH2: …`) and keep their expected texts for then; those that keep them
 // run.
 
 fn u_declarations() -> Case {
@@ -1495,13 +1495,13 @@ fn u_trait_comment() -> Case {
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn unit_return_type_and_empty_uses_are_taken_off_the_head_of_a_function() {
     expect_fmt("unit_decl", &[u_declarations()]);
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn unit_return_type_and_empty_uses_are_taken_off_a_function_type() {
     expect_fmt("unit_types", &[u_function_types()]);
 }
@@ -1512,31 +1512,31 @@ fn unit_return_type_and_empty_uses_of_an_anonymous_function_stay() {
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn unit_return_type_and_empty_uses_are_taken_off_the_methods_of_an_impl() {
     expect_fmt("unit_methods", &[u_methods()]);
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn unit_return_type_is_taken_off_an_effect_operation_and_a_function_of_a_handler() {
     expect_fmt("unit_effect_handler", &[u_effect_and_handler()]);
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn unit_return_type_and_empty_uses_are_taken_off_trait_members_and_extern_declarations() {
     expect_fmt("unit_trait_extern", &[u_trait_and_extern()]);
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn uses_with_an_effect_and_a_unit_that_is_not_the_return_type_stay() {
     expect_fmt("unit_stays", &[u_stays_beside_the_removed()]);
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn a_comment_at_the_end_of_the_line_of_a_unit_return_type_that_goes_stays_after_the_last_code() {
     expect_fmt("unit_comments", &[u_comments(), u_trait_comment()]);
 }
@@ -2150,7 +2150,7 @@ fn x_module() -> Case {
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn rewrites_that_meet_in_one_function_are_all_done() {
     expect_fmt("combined", &[x_combinations()]);
 }
@@ -2337,13 +2337,13 @@ fn all_cases() -> Vec<Case> {
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn the_rewrites_in_a_module_with_a_use_and_public_items_are_all_done() {
     expect_fmt("module", &[x_module()]);
 }
 
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say() {
     expect_fmt("r78", &[r78()]);
 }
@@ -2632,7 +2632,7 @@ fn an_empty_uses_before_another_uses_stays() {
 
 /// W3-12/b 1: of two empty rows in a row, both go in one pass.
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn two_empty_uses_in_a_row_both_go() {
     expect_fmt(
         "uses_uses",
@@ -2649,7 +2649,7 @@ fn two_empty_uses_in_a_row_both_go() {
 /// in one pass (W3-12/b 2). A comment out of the range (after a line end, at the edge of a list) stays on
 /// its line and the tokens go.
 #[test]
-#[ignore = "P2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
+#[ignore = "PH2: 第 2 期、`-> ()` と `uses {}` の除去は W3-12 から外した（利用者の決定、2026-10-15）"]
 fn a_comment_in_the_range_of_a_rewrite_keeps_its_tokens_and_one_out_of_it_stays_on_its_line() {
     expect_fmt(
         "s536_range",
