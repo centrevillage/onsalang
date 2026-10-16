@@ -123,7 +123,7 @@ impl Describe for Point {
   比較を数の trait に絞らないのは、数でない型も比較を持ち、`clamp` のような関数を誤った境界に導くからである。絞れないとき（`T: Unsigned` の否定、`T: Float` のビット演算）は候補を出さない。符号なし整数の否定の E0401 には、2 の補数の否定の書き方（`0 -% u`、`T.ZERO -% x`）を note で示す。
   数の trait の境界を満たさない型を渡した E0416 は、その型が満たす数の trait を note で示す（`U32` なら `AnyNum`、`Int`、`Unsigned`）。
 - `Default` は関連関数 `default() -> Self` を持つ。具体的な型では `P.default()`、総称の関数では `T.default()`（`T: Default`）と呼ぶ（§6.6 の `T.ZERO` と同じ形）。
-- 組込み型が実装する標準 trait と演算子 trait は、次の表で全てである（閉じた一覧）。`PartialEq` と `PartialOrd` は演算子 trait でもあり、左の欄に書いた。足すときは、必要な実例を添えて議論する（[`docs/api-candidates.md`](../docs/api-candidates.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
+- 組込み型が実装する標準 trait と演算子 trait は、次の表で全てである（閉じた一覧）。`PartialEq` と `PartialOrd` は演算子 trait でもあり、左の欄に書いた。足すときは、必要な実例を添えて議論する（[`decisions/A/`](../decisions/A/README.md)）。`Copy` / `Dup` は種で決まる（§4.6）。
 
 | 型 | 実装する trait | 演算子 trait（`PartialEq` `PartialOrd` を除く） |
 |---|---|---|
@@ -195,7 +195,7 @@ const SINE: [F32; 1024] = make_sine_table()
 - 初期化式が、直接または他の定数を経由して自分自身を参照すると E0312（`const A: U32 = B` と `const B: U32 = A`）。
 - `impl` と `trait` の中にも同じ形で書ける（関連定数）: `impl Point { const ORIGIN: Point = Point { x: 0.0, y: 0.0 } }`、`trait AnyNum { const ZERO: Self }`。参照は `Point.ORIGIN`、`F32.PI`、型パラメータでは `T.ZERO`。
   組込み型の関連定数は std が宣言する（§6.3 の孤児規則）。字面は `UpperCamel.UPPER_SNAKE` で、関連関数や効果の操作（`Fs.read`）と区別できる。
-- 組込み型の関連定数は、次の表で全てである（閉じた一覧。足すときは、必要な実例を添えて議論する、[`docs/api-candidates.md`](../docs/api-candidates.md)）。
+- 組込み型の関連定数は、次の表で全てである（閉じた一覧。足すときは、必要な実例を添えて議論する、[`decisions/A/`](../decisions/A/README.md)）。
 
 | 型 | 関連定数 |
 |---|---|

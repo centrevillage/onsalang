@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builtin names written as strings in the compiler's Rust code (Q-14, plan §8.2 5).
 
-A decision about a builtin belongs in one place (plan §3.6); comparing a
+A decision about a builtin belongs in one place (`design/06-placement.md`); comparing a
 builtin name with a string elsewhere decides it again. This check finds the
 string literals of the Rust code that are builtin names, and compares their
 number per file and name with the list `tools/builtin_names.toml`:
@@ -39,7 +39,7 @@ What counts as a use of a name, in the code outside tests:
   a builtin name (`"narrow_{}"`).
 Escapes (`\\u{..}`) and names joined by `format!` or `concat!` are not followed.
 Not counted: comments, the test code (`tests/`, `*_tests.rs`, `tests.rs`, items
-under `#[cfg(test)]`), and the registry places of plan §3.6 (`REGISTRY`).
+under `#[cfg(test)]`), and the registry places of `design/06-placement.md` (`REGISTRY`).
 
     tools/builtin_names.py [--root DIR]    check against the list
     tools/builtin_names.py --print         print what is found, in the form of the list
@@ -63,7 +63,7 @@ ROOT = repo.ROOT
 SPEC = repo.SPEC
 ALLOW = Path("tools") / "builtin_names.toml"
 CRATES = "crates"
-# The places of plan §3.6 that hold the builtins' table and may name them.
+# The places of `design/06-placement.md` that hold the builtins' table and may name them.
 REGISTRY = ("crates/onsa_diag/",)
 # Calls whose string argument is a part of a name: (method, how the part is matched).
 AFFIX_METHODS = {
@@ -518,7 +518,7 @@ def compare(found, lists, root):
             if n > m:
                 problems.append(
                     f'{f}: "{text}" is written {n} time(s), the list allows {m}; decide it in the place of '
-                    "plan §3.6 instead of comparing the name here (or, if it only has the spelling of a builtin "
+                    "`design/06-placement.md` instead of comparing the name here (or, if it only has the spelling of a builtin "
                     "name, list it in [same_spelling] with its meaning)"
                 )
             elif n < m:

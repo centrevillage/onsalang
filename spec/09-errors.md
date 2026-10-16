@@ -17,7 +17,7 @@ pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
 
 `Option` と `Result` のメソッドは、両方の `unwrap`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。
 `map_err` は `pub fn map_err[F](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空）、`?` の前でエラーの型を関数の返り値の型へ変換するのに使う（`Fs.read(path).map_err(ConfigError.Io)?`）。
-値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`docs/api-candidates.md`](../docs/api-candidates.md)）。
+値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`decisions/A/`](../decisions/A/README.md)）。
 
 ### 9.2 panic（バグ）
 
