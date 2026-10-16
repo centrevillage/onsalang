@@ -164,6 +164,14 @@ def quiet(fn, *args, **kw):
         sys.stdout, sys.stderr = old
 
 
+def quiet_out(fn, *args, **kw):
+    """(what `fn` returns, the lines it printed to stdout and stderr)."""
+    out = io.StringIO()
+    with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", out):
+        code = fn(*args, **kw)
+    return code, out.getvalue().splitlines()
+
+
 class Repo:
     """A made-up repository root."""
 
@@ -4385,6 +4393,14 @@ def split_spec(text, root):
     root = Path(root)
     (root / "spec").mkdir(parents=True, exist_ok=True)
     head = "\n".join(lines[: starts[0]]) + "\n"
+    for sec, rel in repo.SPEC_PARTS.items():  # a part of the README: its heading to the next one after it
+        found = spec_blocks.heading_lines(head)
+        at = [i for i, (_, s) in enumerate(found) if s == sec or s.startswith(sec + ".")]
+        if at:
+            h = head.split("\n")
+            a, b = found[at[0]][0] - 1, (found[at[-1] + 1][0] - 1 if at[-1] + 1 < len(found) else len(h) - 1)
+            (root / rel).write_bytes("".join(x + "\n" for x in h[a:b]).encode())
+            head = "".join(x + "\n" for x in h[:a]) + "\n".join(h[b:])
     (root / repo.SPEC_README).write_bytes((head + repo.SPEC_INDEX_HEAD + "\n\n| § | ファイル |\n").encode())
     for a, b in zip(starts, [*starts[1:], len(lines)]):
         n = int(re.match(r"## (\d+)", lines[a]).group(1))
@@ -4560,6 +4576,77 @@ class DocsLayout(DocsTree):
             (self.root / rel).unlink()
         with self.assertRaisesRegex(repo.RepoError, "spec/: no chapter file"):
             repo.spec_text(self.root)
+
+    PART = "### 0.5 細則\n\n#### 0.5.1 P2（一意性）\n\n一文。\n\n```onsa\nlet a = 1\n```\n\n"
+
+    def with_part(self):
+        """NEW_LAYOUT with §0.2 and a block in §1 in the README, and §0.5 in a file of its own."""
+        self.layout()
+        self.edit("spec/README.md", "### 0.1 原則\n\n---\n\n## 1. 全体\n",
+                  "### 0.1 原則\n\n### 0.2 帰結\n\n---\n\n## 1. 全体\n\n```onsa\nlet b = 1\n```\n")  # fmt: skip
+        self.write("spec/00-principles.md", self.PART)
+
+    def test_a_part_of_the_spec_in_a_file_of_its_own(self):
+        self.with_part()
+        self.assertEqual(repo.SPEC_PARTS, {"0.5": Path("spec/00-principles.md")})
+        doc, readme = repo.spec_doc(self.root), self.read_("spec/README.md")
+        head = readme[: readme.index(repo.SPEC_INDEX_HEAD)]
+        cut = head.index("## 1. 全体")
+        one = head[:cut] + self.PART + head[cut:] + NEW_LAYOUT["spec/02-a.md"] + NEW_LAYOUT["spec/03-b.md"]
+        self.assertEqual(doc.text, one)
+        self.assertEqual(spec_blocks.headings(doc.text), ["0", "0.1", "0.2", "0.5", "0.5.1", "1", "2", "2.1", "2.2", "3", "3.1"])
+        self.assertEqual([doc.where(n) for n in (10, 11, 13, 20, 21, 24, 29)], [
+            "spec/README.md:10", "spec/00-principles.md:1", "spec/00-principles.md:3", "spec/00-principles.md:10",
+            "spec/README.md:11", "spec/README.md:14", "spec/02-a.md:1"])  # fmt: skip
+        self.assertEqual(sorted(repo.chapters(self.root)), [2, 3])  # the part is not the chapter 0
+        self.assertEqual([repo.section_path(self.root, s).as_posix() for s in ("§0.5", "§0.5.1", "§0.2", "§0", "§1")],
+                         ["spec/00-principles.md"] * 2 + ["spec/README.md"] * 3)  # fmt: skip
+        # the round trip with the part
+        other = Path(self.tmp.name) / "cut"
+        split_spec(one, other)
+        self.assertEqual(((other / "spec/00-principles.md").read_text(encoding="utf-8"), repo.spec_text(other)), (self.PART, one))
+        # the readers: docs path and check, spec_sections, check_spec_examples
+        code, out = quiet_out(docs_tool.main, ["path", "§0.5.1", "§0.5", "§0.2", "§1", "--root", str(self.root)])
+        self.assertEqual((code, out), (0, ["spec/00-principles.md:3", "spec/00-principles.md:1", "spec/README.md:7", "spec/README.md:11"]))
+        self.assertEqual(self.check(), (0, []))
+        s1 = "decisions/S/S-1.md"
+        self.edit(s1, '["§2.1"]', '["§2.1", "§0.5.1"]')
+        self.edit(s1, "§3 と §2", "§3 と §0.5.1")
+        self.assertEqual(self.check(), (0, []))
+        self.assertOne(s1, "§3 と §0.5.1", "§3 と §0.5.2", f"{s1}:10: §0.5.2 is not a numbered heading of the spec")
+        cases = [{"path": "tests/a.onsa", "spec": ["§0.5.1", "§0.2"]}, {"path": "tests/b.onsa", "spec": ["§0.5.2"]}]
+        with mock.patch.object(repo, "cases_json", return_value=cases):
+            code, out = quiet_out(spec_sections.main, ["--check"], root=self.root)
+        self.assertEqual((code, [x for x in out if "§" in x]), (1, ["tests/b.onsa: [test] spec names §0.5.2, which is not "
+                                                                   f"a numbered heading of {repo.SPEC}"]))  # fmt: skip
+        problems, _ = cse.check(repo.spec_doc(self.root), self.root / "tests" / "spec", self.root / repo.PENDING, self.root)
+        self.assertEqual([p.split("  ")[0] for p in problems], ["spec/00-principles.md:8", "spec/README.md:14", "spec/03-b.md:6"])
+
+    def test_a_part_of_the_spec_that_cannot_be_joined(self):
+        self.with_part()
+        for rel, old, new, error in (
+            ("spec/README.md", "### 0.2 帰結\n", "### 0.2 帰結\n\n### 0.5 古い\n",
+             r"^spec/README.md:9: the heading of §0.5 is not in its file spec/00-principles.md$"),
+            ("spec/README.md", "### 0.2 帰結\n", "### 0.2 帰結\n\n#### 0.5.3 古い\n", "^spec/README.md:9: the heading of §0.5.3"),
+            ("spec/00-principles.md", "一文。\n", "一文。\n\n### 0.6 外\n",
+             r"^spec/00-principles.md:7: the heading of §0.6 is not in its file spec/README.md$"),
+            ("spec/00-principles.md", "### 0.5 細則\n", "前置き\n\n### 0.5 細則\n",
+             r"^spec/00-principles.md:1: the file of §0.5 starts with its heading$"),
+            ("spec/00-principles.md", "let a = 1\n```\n\n", "let a = 1\n```", "^spec/00-principles.md: does not end with a line end$"),
+            ("spec/02-a.md", "### 2.2 キーワード", "### 3.2 キーワード", r"^spec/02-a.md:9: the heading of §3.2 is not in its file spec/03-b.md$"),
+            ("spec/02-a.md", "### 2.2 キーワード", "### 5.2 キーワード", r"^spec/02-a.md:9: the heading of §5.2 is not in its file \(no file"),
+        ):
+            self.edit(rel, old, new)
+            with self.assertRaisesRegex(repo.RepoError, error):
+                repo.spec_text(self.root)
+            self.edit(rel, new, old)
+        self.assertEqual(spec_blocks.headings(repo.spec_text(self.root))[3:5], ["0.5", "0.5.1"])
+        # without the file of the part, nothing is joined and §0.5 is in no file
+        (self.root / "spec/00-principles.md").unlink()
+        self.assertNotIn("0.5", spec_blocks.headings(repo.spec_text(self.root)))
+
+    def read_(self, rel):
+        return (self.root / rel).read_text(encoding="utf-8")
 
     # ------------------------------------------------ the head fields
 

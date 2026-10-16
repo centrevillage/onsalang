@@ -38,6 +38,11 @@ def scan(spec_text):
 def headings(spec_text):
     """The numbered sections of the spec ("11.4"), in order. A heading inside
     a fence is not one."""
+    return [section for _, section in _walk(spec_text)[2]]
+
+
+def heading_lines(spec_text):
+    """(line from 1, section) of every numbered heading, in order (as `headings`)."""
     return _walk(spec_text)[2]
 
 
@@ -72,7 +77,7 @@ def _walk(spec_text):
             h = HEADING.match(lines[i])
             if h:
                 section = h.group(1)
-                sections.append(section)
+                sections.append((i + 1, section))
                 content.setdefault(section, {"lines": [], "fences": []}).setdefault("line", i + 1)
             else:
                 content[section]["lines"].append(lines[i])

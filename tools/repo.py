@@ -17,6 +17,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import spec_blocks
+
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = Path("onsa-lang-spec-0.3.md")
 DOC_REWORK = Path("docs") / "rework-phase1.md"
@@ -233,8 +235,8 @@ def path_of(id_, draft=False):
 
 
 def section_path(root, sec):
-    """`§6.1` -> `spec/06-<name>.md` (the chapter), `§0` and `§1` -> `spec/README.md`,
-    `tools.md §3.2` -> `spec/tools.md`. Only in the new layout."""
+    """`§6.1` -> `spec/06-<name>.md` (the chapter), `§0` and `§1` -> `spec/README.md`, `§0.5.1` -> its
+    part (`SPEC_PARTS`), as `spec_file` says; `tools.md §3.2` -> `spec/tools.md`. Only in the new layout."""
     m = SECTION_RE.fullmatch(sec)
     if m is None:
         raise RepoError(f"{sec}: not a section (`§6.1` or `tools.md §3.2`)")
@@ -242,10 +244,9 @@ def section_path(root, sec):
         raise RepoError(f"{sec}: the spec is not split into {SPEC_DIR}/ (no {SPEC_README})")
     if m.group("tools"):
         return SPEC_TOOLS
-    n = int(m.group("num").split(".")[0])
-    path = SPEC_README if n <= 1 else chapters(root).get(n)
+    path = spec_file(m.group("num"), chapters(root))
     if path is None:
-        raise RepoError(f"{sec}: no chapter file {SPEC_DIR}/{n:02d}-*.md")
+        raise RepoError(f"{sec}: no chapter file {SPEC_DIR}/{int(m.group('num').split('.')[0]):02d}-*.md")
     return path
 
 
@@ -356,19 +357,32 @@ class Layout:
 # of the spec (its H1 to the end of §1); it and what follows are not part of the spec's text.
 SPEC_INDEX_HEAD = "## 章の一覧"
 CHAPTER_FILE = re.compile(r"(\d{2})-[a-z0-9-]+\.md")
+# The sections of the spec in a file of their own with their subsections, not in the file of their
+# chapter: {section: file}. Each is joined into the text of its chapter's file before the first numbered
+# heading after it there (`spec_doc`); a file that is not there joins nothing.
+SPEC_PARTS = {"0.5": Path(SPEC_DIR) / "00-principles.md"}
+
+
+def spec_file(num, found):
+    """The file of the spec that holds the section `num` ("6.1"), the one place that says it: its part
+    (SPEC_PARTS), else `spec/README.md` for §0 and §1, else its chapter in `found` (`chapters`) or None."""
+    part = next((rel for sec, rel in SPEC_PARTS.items() if num == sec or num.startswith(sec + ".")), None)
+    n = int(num.split(".")[0])
+    return part or (SPEC_README if n <= 1 else found.get(n))
 
 
 @dataclass(frozen=True)
 class Joined:
-    """A text joined from files: `parts` are (file, the line of the text where it starts)."""
+    """A text joined from files: `parts` are (file, the line of the text where it starts[, the line of
+    the file where the part starts; 1 when left out]). A file cut by a part (`SPEC_PARTS`) is two parts."""
 
     text: str
     parts: tuple
 
     def locate(self, line):
         """(file, line in it) of a line (from 1) of the text."""
-        rel, start = next(p for p in reversed(self.parts) if p[1] <= line)
-        return rel, line - start + 1
+        rel, start, *first = next(p for p in reversed(self.parts) if p[1] <= line)
+        return rel, line - start + (first[0] if first else 1)
 
     def where(self, line):
         rel, n = self.locate(line)
@@ -380,7 +394,7 @@ def chapters(root):
     given twice (a file put in the wrong place is never skipped)."""
     out = {}
     for p in sorted((Path(root) / SPEC_DIR).glob("*.md")):
-        if p.name in (SPEC_README.name, SPEC_TOOLS.name):
+        if p.name in (SPEC_README.name, SPEC_TOOLS.name) or Path(SPEC_DIR) / p.name in SPEC_PARTS.values():
             continue
         m = CHAPTER_FILE.fullmatch(p.name)
         if m is None:
@@ -394,15 +408,16 @@ def chapters(root):
 
 def spec_doc(root, layout=None):
     """The spec as one text: the head of `spec/README.md` (before SPEC_INDEX_HEAD) and the chapters in
-    the order of their numbers, joined as they are (each chapter keeps the `---` that ends it); or
-    the current spec file."""
+    the order of their numbers, joined as they are (each chapter keeps the `---` that ends it), with
+    the parts (`SPEC_PARTS`) put into their chapters; or the current spec file. Every numbered heading
+    must be in the file `spec_file` says (a section in two files is an error)."""
     if (layout or Layout(root)).source("spec") == "old":
         return Joined(read_exact(root, SPEC), ((SPEC, 1),))
     lines = read_exact(root, SPEC_README).split("\n")
     at = [i for i, line in enumerate(lines) if line == SPEC_INDEX_HEAD]
     if len(at) != 1:
         raise RepoError(f"{SPEC_README}: expected one line `{SPEC_INDEX_HEAD}`, found {len(at)}")
-    parts, texts, line = [(SPEC_README, 1)], ["\n".join(lines[: at[0]]) + "\n"], at[0] + 1
+    pieces = [(SPEC_README, "\n".join(lines[: at[0]]) + "\n", 1)]  # (file, text, its first line in the file)
     found = chapters(root)
     if not found:
         raise RepoError(f"{SPEC_DIR}/: no chapter file (`NN-<name>.md`)")
@@ -410,12 +425,43 @@ def spec_doc(root, layout=None):
         text = read_exact(root, rel)
         if not text.startswith(f"## {n}. "):
             raise RepoError(f"{rel.as_posix()}:1: a chapter file starts with its heading `## {n}. `")
-        if not texts[-1].endswith("\n"):
-            raise RepoError(f"{Path(parts[-1][0]).as_posix()}: does not end with a line end")
-        parts.append((rel, line))
-        texts.append(text)
+        pieces.append((rel, text, 1))
+    for sec, rel in SPEC_PARTS.items():
+        if (Path(root) / rel).is_file():
+            pieces = _with_part(pieces, sec, rel, read_exact(root, rel), found)
+    parts, line = [], 1
+    for i, (rel, text, first) in enumerate(pieces):
+        if i and not pieces[i - 1][1].endswith("\n"):
+            raise RepoError(f"{Path(pieces[i - 1][0]).as_posix()}: does not end with a line end")
+        parts.append((rel, line, first))
         line += text.count("\n")
-    return Joined("".join(texts), tuple(parts))
+    doc = Joined("".join(p[1] for p in pieces), tuple(parts))
+    for line, sec in spec_blocks.heading_lines(doc.text):
+        want, (rel, n) = spec_file(sec, found), doc.locate(line)
+        if want != Path(rel):
+            its = want.as_posix() if want else "(no file of its chapter)"
+            raise RepoError(f"{Path(rel).as_posix()}:{n}: the heading of §{sec} is not in its file {its}")
+    return doc
+
+
+def _with_part(pieces, sec, rel, text, found):
+    """`pieces` with the part `sec` (its file `rel`, its text) put into the piece of its chapter's file,
+    before the first numbered heading after `sec` there (at its end when there is none)."""
+    if spec_blocks.heading_lines(text)[:1] != [(1, sec)]:
+        raise RepoError(f"{rel.as_posix()}:1: the file of §{sec} starts with its heading")
+    key, host = tuple(map(int, sec.split("."))), spec_file(sec.split(".")[0], found)
+    i = next((i for i, p in enumerate(pieces) if p[0] == host), None)
+    if i is None:
+        raise RepoError(f"{rel.as_posix()}: no file of the chapter of §{sec}")
+    h_rel, h_text, h_first = pieces[i]
+    at = next((ln for ln, s in spec_blocks.heading_lines(h_text) if tuple(map(int, s.split("."))) > key), None)
+    if at is None:
+        before, after = h_text, ""
+    else:
+        h_lines = h_text.split("\n")
+        before, after = "".join(x + "\n" for x in h_lines[: at - 1]), "\n".join(h_lines[at - 1 :])
+    rest = [(h_rel, after, h_first + before.count("\n"))] if after else []
+    return [*pieces[:i], (h_rel, before, h_first), (rel, text, 1), *rest, *pieces[i + 1 :]]
 
 
 def spec_text(root):
