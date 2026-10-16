@@ -1,5 +1,5 @@
 //! The convergence of the fix candidates (`onsa_cases --fix-loop`; S-236,
-//! `docs/agent-rules.md` 7 章の 27; W3-22): a candidate of a reported
+//! `rules/criteria.md` 7.27; W3-22): a candidate of a reported
 //! diagnostic applied, the file checked again, and again, as a repair loop
 //! does, until the loop stops.
 //!

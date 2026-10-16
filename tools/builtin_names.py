@@ -113,7 +113,7 @@ LIST_ITEM = re.compile(r"(?:[-*+]|\d+\.)\s")
 def _logical_lines(lines):
     """The lines with each line that goes on a paragraph or an item joined to the line before it:
     a long text breaks at the ends of sentences and goes on at the indentation of its item
-    (docs/agent-rules.md 1), so a sentence is found whatever line it was broken onto."""
+    (rules/common.md 1), so a sentence is found whatever line it was broken onto."""
     out = []
     for line in lines:
         text = line.lstrip(" ")

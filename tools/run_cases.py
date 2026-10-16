@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run chosen cases of a tree alone (docs/agent-rules.md ch. 4, "running cases narrowly").
+"""Run chosen cases of a tree alone (rules/checks.md ch. 4, "running cases narrowly").
 
 The case runner `onsa_cases --run <root>` takes a root that holds `tests/`, not a file. This copies
 each `tests/<path>` of the tree (a file with its `.fixK` files, or a directory) under a work

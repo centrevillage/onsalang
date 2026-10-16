@@ -100,7 +100,7 @@ STEPS = [
     # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine
     # (1 to 2.5 minutes on 10 cores), so only at a stage end (W3-03, 2026-10-08).
     Step("fuzz-deep", (*PY, str(TOOLS / "fuzz.py"), "--deep"), slow=True, stage_end_only=True),
-    # The fix candidates applied again and again until the loop stops (S-236, docs/agent-rules.md 7 章の 27,
+    # The fix candidates applied again and again until the loop stops (S-236, rules/criteria.md 7.27,
     # W3-22): the cases of tests/spec/fixes and the saved inputs of the fuzzing. It shows the cycles and the
     # divergences (report only, until the known ones are sorted out) and fails when it walks nothing, runs
     # out of its time, or a walk ends in an internal error.

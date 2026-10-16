@@ -19,7 +19,7 @@
 //!                            (tools/fuzz.py, S-236, W3-17; `onsa_tests::fix_contract::same_place`)
 //! onsa_cases --fix-loop [--json] [--branches] [--pick first|last] [--steps N] [--states N] [--diverge N] FILE...
 //!                            the fix candidates applied again and again until the loop stops
-//!                            (S-236, docs/agent-rules.md 7 章の 27, W3-22; `onsa_tests::fix_loop`)
+//!                            (S-236, rules/criteria.md 7.27, W3-22; `onsa_tests::fix_loop`)
 //! onsa_cases --fix-loop-gate [ROOT]  the gate item fix-loop (`onsa_tests::fix_loop::gate`)
 //! ```
 //!

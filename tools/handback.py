@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The records of the agents of a session (docs/leader-rules.md 2.6, 2.9).
+"""The records of the agents of a session (rules/leader.md 2.6, 2.9).
 
     tools/handback.py save <agent jsonl> <output>
     tools/handback.py usage <session id> <agent id>...

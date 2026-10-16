@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the time of two or more `onsa` binaries (docs/agent-rules.md ch. 8: measure before and after).
+"""Compare the time of two or more `onsa` binaries (rules/refactoring.md ch. 8: measure before and after).
 
     tools/speed.py all  [--rounds N] [--long DIR] <binary>...
     tools/speed.py long [--rounds N] --long DIR <binary>...

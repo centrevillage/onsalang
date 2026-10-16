@@ -29,7 +29,7 @@
 // # 読まないので NULL でよく、重なりの検査もしない"): the pointers of the shapes that are not a plain
 // # mono signal. WARNING: the process of the implementation before W2-08 reads `x[0]` of a NULL
 // # planar input in its overlap check and dies with SIGSEGV (the machine shows a crash dialog,
-// # agent-rules.md 3), so this file must not be run before that is fixed: it is kept apart from
+// # rules/common.md 3), so this file must not be run before that is fixed: it is kept apart from
 // # export_zero_frames.onsa (the mono shapes) for that reason. The meaning of `null = ["input"]`
 // # for the shapes: all the pointers of the input are NULL, and, for a flow with named inputs or
 // # a struct output, also the pointer to the `In` / `Out` struct of the C API of spec §14.2

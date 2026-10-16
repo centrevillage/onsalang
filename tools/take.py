@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Take the work of a worktree into another tree as a patch (docs/leader-rules.md 3.2 to 3.5).
+"""Take the work of a worktree into another tree as a patch (rules/leader.md 3.2 to 3.5).
 
     tools/take.py patch <worktree> <base> <out.patch> [--main DIR]
     tools/take.py check <patch> [--to DIR]

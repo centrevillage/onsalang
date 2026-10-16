@@ -5,7 +5,7 @@
 //! literal right against a name (the row `string_prefix`, S-466), whose note
 //! [`prime_note`] gives.
 //!
-//! Out of support (`docs/agent-rules.md` 7.32): the forms of
+//! Out of support (`rules/criteria.md` 7.32): the forms of
 //! FAUST are not diagnosed by rows of their own any more. The rows here stay
 //! while they are no trouble; one that conflicts with a new decision, fails
 //! the gate or needs a fix is removed with its cases, not fixed. The prefix
