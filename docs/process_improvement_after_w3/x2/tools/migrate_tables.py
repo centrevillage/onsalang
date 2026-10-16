@@ -267,6 +267,21 @@ def check_before(root, kind, texts):
     return stop + [str(f) for f in refs if f.line <= end[f.path]], [f for f in refs if f.line > end[f.path]]
 
 
+def readme_labels(tree, kind):
+    """The labels ``- `<label>` …`` anywhere in the README of the kind's directory, else of the one up
+    (as `docs.body_labels`). The moved labels need not be under its `## 本文のラベル`, which is the
+    template of `docs.py new` (the new files keep their own labels)."""
+    d = Path(kind.dir)
+    for rel in (d / "README.md", d.parent / "README.md"):
+        if (tree.root / rel).is_file():
+            lines, kinds = tree.lines(rel), tree.kinds(rel)[0]
+            found = [m.group(1) for line, k in zip(lines, kinds)
+                     if k == docs.TEXT and (m := docs.LABEL_ITEM.match(line))]
+            if found:
+                return found
+    return []
+
+
 def cmd_apply(args, rule):
     root, kind = Path(args.root), repo.KIND[rule.kind]
     doc = kind.old[0]
@@ -274,10 +289,10 @@ def cmd_apply(args, rule):
     table, why = docs.field_table(tree, kind), []
     if not isinstance(table, docs.FieldTable):
         why.append(str(table))
-    labels = docs.body_labels(tree, kind)
+    labels = readme_labels(tree, kind)
     missing = [x for x in (*rule.labels.values(), *rule.extra) if x not in labels]
     if missing:
-        why.append(f"{kind.dir}: the labels {', '.join(missing)} are not under `{docs.LABELS_HEAD}` of its README")
+        why.append(f"{kind.dir}: the labels {', '.join(missing)} are not explained in its README (``- `<label>`: …``)")
     there = sorted(p.name for p in (root / kind.dir).glob("*.md") if re.fullmatch(kind.pattern, p.name[:-3]))
     if there:
         why.append(f"{kind.dir}/: files of IDs are there ({there[0]} …); apply to the tree before the stage")
