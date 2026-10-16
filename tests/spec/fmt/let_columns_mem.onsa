@@ -3,10 +3,10 @@
 // mode = "parse"
 // spec = ["§12.4", "§18.2"]
 
-// The column of `=` and the `let` with an attribute (docs/onsa-tools.md §3.2, S-122): a `let` with
+// The column of `=` and the `let` with an attribute (spec/tools.md §3.2, S-122): a `let` with
 // `@mem(bulk)` cuts the column, so the `let` lines before it, the `let` lines after it and the `let` itself
 // do not share a column, and a column does not take the `=` of the attributed line. The attribute is on the
-// line of the `let` (docs/onsa-tools.md §3.2). The file is canonical, so `onsa fmt` leaves it unchanged;
+// line of the `let` (spec/tools.md §3.2). The file is canonical, so `onsa fmt` leaves it unchanged;
 // the lines written without the column are in let_columns_mem_loose.onsa. Only the syntax is read here
 // (`mode = "parse"`): the meaning of `@mem(bulk)` is not in this version (E0200 until W9-06, as in
 // flow_syntax/mem_attribute.onsa).

@@ -4,7 +4,7 @@
 // spec = ["§2.5", "§7", "§18.2"]
 
 // A line that ends with the closed range symbol `..=` goes on, as a line that ends with `..<` does
-// (docs/onsa-tools.md §3.2, S-335, S-498): `onsa fmt` keeps the line break, the next line is one level
+// (spec/tools.md §3.2, S-335, S-498): `onsa fmt` keeps the line break, the next line is one level
 // deeper than the line the `for` or `par` starts on, and the `{` of the head stays on the last line of the
 // head. The body is on the level of the continued line, and the content of an enclosure on the continued
 // line is one level under it. This version does not lower a range with its end in a head (E0200 of

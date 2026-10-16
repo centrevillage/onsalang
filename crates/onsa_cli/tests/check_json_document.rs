@@ -1,5 +1,5 @@
 //! The document `onsa check --json` prints, and the order and the file names of the diagnostics
-//! in it, in JSON and in text (spec §18.1, `docs/onsa-tools.md` §4; S-213, S-215, S-234, W3-16).
+//! in it, in JSON and in text (spec §18.1, `spec/tools.md` §4; S-213, S-215, S-234, W3-16).
 //!
 //! What the spec fixes, and so what is checked here:
 //! - the standard output is one JSON object; the diagnostics are its `diagnostics` array, an empty

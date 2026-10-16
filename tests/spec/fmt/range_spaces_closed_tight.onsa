@@ -6,7 +6,7 @@
 
 // The heads of range_spaces_closed.onsa with the range symbol written close to its ends (`0..=n + 1`):
 // the language reads them (`mode = "parse"`, as there), and `onsa fmt` puts one space on each side
-// of the symbol (docs/onsa-tools.md §3.2, S-334). The file is not canonical on purpose (`canonical = false`).
+// of the symbol (spec/tools.md §3.2, S-334). The file is not canonical on purpose (`canonical = false`).
 
 use std.array
 

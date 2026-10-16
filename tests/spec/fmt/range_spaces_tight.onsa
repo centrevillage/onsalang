@@ -6,7 +6,7 @@
 
 // The programs of range_spaces.onsa with the range symbol written close to its ends, as the examples of the
 // spec do (`0..<n + 1`, §3.1, §7): the language reads them, and `onsa fmt` puts one space on each side of
-// `..<` (docs/onsa-tools.md §3.2, S-334). The file is not canonical on purpose (`canonical = false`). The
+// `..<` (spec/tools.md §3.2, S-334). The file is not canonical on purpose (`canonical = false`). The
 // ends keep the spaces of their own operators (`lo + 1..<hi - 1`). The values are those of range_spaces.onsa.
 
 use std.array

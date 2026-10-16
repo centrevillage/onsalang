@@ -1,0 +1,58 @@
+## 9. エラーと panic
+
+### 9.1 回復可能なエラー
+
+`Result[T, E]` と後置 `?`。
+
+```onsa
+pub fn line_count(path: Path) -> Result[U64, ConfigError] uses {Fs, Alloc} {
+  let text = Fs.read(path).map_err(ConfigError.Io)?
+  ...
+}
+```
+
+`?` は、それを含む最も内側の関数（無名関数を含む。`return` と同じ脱出先、§6.1）の返り値の `E` と **同じ型** のエラーにしか使えない（E0414）。注釈の無い無名関数では、`?` が返り値の型を `Result[_, E]` / `Option[_]` に決める。暗黙の変換（`From` 相当）は無い。変換は `map_err` で明示する。
+`Option` を返す関数の中では `Option` にも使える（`None` で早期に返る）。`Result` と `Option` の混在は不可。
+`?` の誤り（混在、エラーの型の違い、返り値が `Result` / `Option` でない関数の中の `?`、被演算子が `Result` / `Option` でない `x?`）は全て E0414 で、直し方（`?` の対象と関数の返り値を合わせる）は一つである。`match` か `map_err` かの違いは文面と note で示す。
+
+`Option` と `Result` のメソッドは、両方の `unwrap`（`None` / `Err` なら panic する、§9.2）と、`Result` の `map_err` だけである。
+`map_err` は `pub fn map_err[F](move self, f: fn(move E) -> F) -> Result[T, F]` で（`f` の効果行は空）、`?` の前でエラーの型を関数の返り値の型へ変換するのに使う（`Fs.read(path).map_err(ConfigError.Io)?`）。
+値の取り出しや有無の判定は `match`、`?`、`==` で書く（P2）。組込みの API の候補は、仕様に入れる前に必要性を議論する（[`docs/api-candidates.md`](../docs/api-candidates.md)）。
+
+### 9.2 panic（バグ）
+
+次の場合は panic する。
+
+- 整数の演算と変換で、§3.4 の整数の表の「panic する場合」の欄に当たるとき（オーバーフロー、`-a` の `MIN`、ゼロ除算、ビット幅以上のシフト、`div_euclid` の結果が収まらないとき。`%` の `MIN % -1` は 0 で、panic しない）と、§3.3 の `trunc_<型>()` の範囲外と NaN。正はそれらの表で、ここは索引である。ラップは `+%`、飽和は `+|` で明示する（§3.4）
+- 範囲外の添字アクセス `xs[i]` と `xs.slice(from, to)`（範囲外を許す取得は `xs.get(i)` で、`Option` を返す）
+- `Alloc` の handler の領域が尽きたとき
+- `unwrap`、`assert` の失敗、`panic(msg)`
+
+panic は効果行に現れない。
+
+`panic(msg)` は prelude の関数（§15.1）で、`msg` は補間を含まない文字列リテラルに限る（それ以外は E0417。組み立てた文字列は §19.1）。値を返さずに抜けるので、どの型の位置にも置ける（§7）。値の要る位置に置ける `assert` として、起こらないはずの分岐（網羅性を証明できない `match` の `_`、文脈上ありえない列挙子）に使う。範囲外の入力が実際に来うる場合（ホストから来るパラメータなど）は、panic ではなく既定値を書く。
+
+コンパイラは、成り立つことを証明できる検査（`for i in 0 ..< N` の中の `xs[i]`、`% N` の添字など）を取り除いてよい。意味は変わらない。`onsa audit` は、rt のコードに残る実行時の検査を列挙する。速さが要る箇所は、`+%` / `+|` や `xs.get(i)` で検査の要らない形に書き直せる。検査そのものを外す設定は、未決定である（§19.1）。
+
+| 文脈 | panic の挙動 |
+|---|---|
+| 通常の実行 | メッセージと位置を出力してプロセスを終了する（巻き戻しは無い） |
+| テスト | そのテストを失敗にする |
+| Onsa の中から呼ばれた関数（`rt` を含む） | 最も近い境界（export された flow・関数、または `main`）まで伝わる。`main` に達すれば通常の実行の規則に従う。 |
+| export された flow の `process` | その呼び出しを中断し、その呼び出しの出力を全て（全てのチャンネルと全てのフレーム。panic の前に計算したフレームも）ゼロで埋め、インスタンスを **poisoned** にする。以後の `process` は無音を出力し、`reset` まで復帰しない。C API は戻り値で通知する。 |
+| export された関数 | panic は FFI 境界を越えない。その呼び出しを中断し、状態の値 1 を返す（§14.2。結果は出力ポインタで受け取るので、panic した呼び出しの結果は書かれない）。 |
+| OS の無いターゲット | ターゲットの `panic` 設定に従う（下記）。`panic_messages = false` で、メッセージとファイル名の文字列を、生成した C とランタイムの補助関数のどちらからも除く（行番号は残す。§15.3）。 |
+
+poisoned の実現と、ターゲットの `panic` 設定:
+
+| `panic` | 挙動 | 既定 |
+|---|---|---|
+| `"poison"` | export の wrapper で `setjmp` し、panic で `longjmp` する。rt の境界では poisoned、`main` では終了。`jmp_buf` は export の wrapper のローカル（スタック）に置き、状態には入れない。`SIZE` / `ALIGN` は libc に依存しない（§12.4。wrapper のスタックは `audit --stack` に数える） | ホスト環境の既定。`setjmp` のある libc（newlib、picolibc）を持つ組込みでも選べる |
+| `"trap"` | 即座にトラップ命令。デバッガで止める用。poisoned にはならない | |
+| `"reset"` | ファームウェアが用意する `onsa_reset_hook()` を呼んで機器をリセットする（§14.2）。本番の組込み用 | OS の無いターゲットの既定 |
+| `"halt"` | 停止する | |
+
+WASM では panic はトラップになり、同梱の glue が捕まえて poisoned にする（`"poison"` と同じ意味）。`"trap"` / `"reset"` / `"halt"` では rt の中の panic も設定に従い、インスタンスは poisoned にならない。
+
+---
+

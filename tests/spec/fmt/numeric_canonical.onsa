@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§2.4", "§4.7", "§18.2"]
 
-// The one spelling of a number that `onsa fmt` writes (docs/onsa-tools.md §3.2, S-62, S-126): the prefix
+// The one spelling of a number that `onsa fmt` writes (spec/tools.md §3.2, S-62, S-126): the prefix
 // `0x` `0b` and the exponent `e` are in small letters, the exponent has no `+`, the digits of a hexadecimal
 // are in capitals, a `_` stands between two digits and only one at a time, and a float has no zeros in front
 // of its integer part except the digit itself. A spelling that is not changed stays: the zeros in front of an

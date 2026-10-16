@@ -340,7 +340,7 @@ pub fn format_file(sources: &SourceMap, file: FileId) -> Result<Formatted, Inter
 
 /// What `onsa fmt` makes of the formatter's result: an output that is not
 /// the program of the input is an internal error at the first difference,
-/// without a diagnostic code (`docs/onsa-tools.md` §3.5).
+/// without a diagnostic code (`spec/tools.md` §3.5).
 fn formatted(
     parsed: &onsa_syntax::Parsed,
     file: FileId,
@@ -393,7 +393,7 @@ pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff
         let parsed: Vec<onsa_syntax::Parsed> =
             files.iter().map(|&file| parse_file(file, sources.file(file).text())).collect();
         if parsed.iter().any(|p| p.syntax_errors()) {
-            // Both files are reported, not only the first with an error (`docs/onsa-tools.md` §3.1).
+            // Both files are reported, not only the first with an error (`spec/tools.md` §3.1).
             // A file on both sides is reported once.
             let n = if old == new { 1 } else { 2 };
             return AstDiff::Syntax(
@@ -583,7 +583,7 @@ mod tests {
 
     /// R-204: an output of fmt that is not the program of its input is an
     /// internal error (101) that names the first difference and its place in
-    /// the input, without a diagnostic code (`docs/onsa-tools.md` §3.5). A
+    /// the input, without a diagnostic code (`spec/tools.md` §3.5). A
     /// correct fmt does not make one, so the output is a false one.
     #[test]
     fn an_unverified_output_is_an_internal_error_at_the_place_in_the_input() {

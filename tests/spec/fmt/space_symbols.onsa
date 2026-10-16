@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§2.5", "§3.1", "§4.4", "§5.1", "§6.1", "§7", "§18.2"]
 
-// The spaces round the symbols that `docs/onsa-tools.md` §3.2 names (W3-11, unit U2). One space on
+// The spaces round the symbols that `spec/tools.md` §3.2 names (W3-11, unit U2). One space on
 // each side of a binary operator (one case for each group of §3.1, the wrapping and saturating
 // forms included), of `=` (`let`, `var`, an assignment, `const`, `type`), of `->` and of `=>` and
 // of `as`; none after a prefix symbol and none before a postfix one; one after `,` and `:` and

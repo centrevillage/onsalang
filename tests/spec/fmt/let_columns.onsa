@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§5.1", "§18.2"]
 
-// The column of `=` (docs/onsa-tools.md §3.2, S-07, S-89, S-122): the `=` of consecutive one-line `let` and
+// The column of `=` (spec/tools.md §3.2, S-07, S-89, S-122): the `=` of consecutive one-line `let` and
 // `var` lines are in one column, with one space after the longest left side. A `let` with a type, a `var`
 // and a `let` that takes a tuple apart are in the column. The column is cut by a blank line, by a statement
 // of more than one line and by any other statement, and it goes on over a line that holds only a comment.

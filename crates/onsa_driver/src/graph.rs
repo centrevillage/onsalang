@@ -4,7 +4,7 @@
 //! reads of each initializer. The look-back edges of `prev~` / `delay~` /
 //! `vdelay~` are dashed. A label is `name: type at clock` (no clock for a
 //! constant), and clocks colour the nodes (`init` and constants gray,
-//! `block` blue, `sample` black; `docs/onsa-tools.md` §1.1).
+//! `block` blue, `sample` black; `spec/tools.md` §1.1).
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -108,7 +108,7 @@ impl Graph<'_> {
     }
 
     fn node_label(&self, node: &Node, e: ExprId) -> String {
-        // `prev_0 = prev~`, `src = saw~` (docs/onsa-tools.md §1.1).
+        // `prev_0 = prev~`, `src = saw~` (spec/tools.md §1.1).
         let what = match (node, node.delay()) {
             (_, Some(d)) => format!("{}~", d.name()),
             (Node::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),

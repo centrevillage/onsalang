@@ -1,5 +1,5 @@
 //! How `onsa test` identifies a test, writes its name, selects it with `--filter`, and which names
-//! a `test` may carry (spec §11.8, §18.2; `docs/onsa-tools.md` §4; S-55, S-215, S-233, S-242,
+//! a `test` may carry (spec §11.8, §18.2; `spec/tools.md` §4; S-55, S-215, S-233, S-242,
 //! S-244; W2-10).
 //!
 //! What the spec fixes, and so what is checked here:
@@ -80,7 +80,7 @@ fn a_result_line_names_the_module_path() {
 }
 
 /// Spec §11.8: for a single file with no manifest the module path is the file name (`dsp` for
-/// `dsp.onsa`, wherever the file is), and the example line of `docs/onsa-tools.md` §4 shows the
+/// `dsp.onsa`, wherever the file is), and the example line of `spec/tools.md` §4 shows the
 /// file as `dsp.onsa:12`. The file in the line is the path as it was passed, with `/` (§18.1).
 #[test]
 fn a_single_file_is_a_module_of_its_file_name() {
@@ -326,7 +326,7 @@ fn an_empty_filter_on_a_package_without_tests_is_no_filter() {
 /// `(2 == 3)`), next to a failed one on one line.
 const MULTI_LINE: &str = "test \"multi\" {\n  assert (1 == 1) &&\n(2 == 3)\n}\n\ntest \"one\" {\n  assert 1 == 2\n}\n";
 
-/// `docs/onsa-tools.md` §4 and the answer to S-284 ((t3), 2026-10-08): the message of a failed test
+/// `spec/tools.md` §4 and the answer to S-284 ((t3), 2026-10-08): the message of a failed test
 /// that has several lines puts its first line on the `failed at` line of the test and each of the
 /// others on a line of its own that starts with a space, so the lines that start with `test` are
 /// the lines of the tests. The lines are split at the line breaks of §2.5 (LF and CR LF), and the

@@ -1,13 +1,13 @@
 //! `onsa fmt` with several files and the diagnostics `fmt` and `diff --ast`
-//! report for a file they do not take (`docs/onsa-tools.md` §3.1, W3-02/b 1 and 2).
+//! report for a file they do not take (`spec/tools.md` §3.1, W3-02/b 1 and 2).
 //!
-//! `docs/onsa-tools.md` §3.1: with several files, one file's error does not stop `fmt`: every
+//! `spec/tools.md` §3.1: with several files, one file's error does not stop `fmt`: every
 //! file is processed, only those without a syntax diagnostic are written, and
 //! every diagnostic is reported. A file `fmt` refuses for a syntax diagnostic
 //! reports it, even when a diagnostic of a later stage (E0320) comes first in
 //! the same item (S-214).
 //!
-//! W3-03/t: the diagnostics of `fmt` go to the standard output (`docs/onsa-tools.md` §4, S-232),
+//! W3-03/t: the diagnostics of `fmt` go to the standard output (`spec/tools.md` §4, S-232),
 //! not to the standard error as they did. Two tests that checked the standard error now check
 //! the standard output; `the_syntax_diagnostic_that_stops_fmt_is_reported` waits for W3-03 as a
 //! whole (`#[ignore]`), and the stream check of the first test is a test of its own. More cases of

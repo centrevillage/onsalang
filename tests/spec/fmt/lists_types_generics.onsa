@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§4.1", "§4.4", "§4.5", "§18.2"]
 
-// The three forms of the lists of the types (docs/onsa-tools.md §3.2, S-328, S-510): the type parameters of
+// The three forms of the lists of the types (spec/tools.md §3.2, S-328, S-510): the type parameters of
 // a declaration (with bounds), the type arguments of a type (`Result[I32, Bool]`), the elements of a tuple
 // type and the arguments of a function type. The type arguments of an expression are in
 // lists_types_expression_args.onsa. Each is on one line, in the block form (a line break right after the opening bracket, one element

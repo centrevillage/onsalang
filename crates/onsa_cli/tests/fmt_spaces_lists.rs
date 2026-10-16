@@ -1,5 +1,5 @@
 //! What `onsa fmt` writes for the spaces round the symbols and for the three forms of a list, and where it
-//! puts `else`, `with` and an attribute (W3-11/t, unit U2; `docs/onsa-tools.md` §3.2, spec §2.5, §18.2;
+//! puts `else`, `with` and an attribute (W3-11/t, unit U2; `spec/tools.md` §3.2, spec §2.5, §18.2;
 //! plan S-07, S-122, R-143).
 //!
 //! The case files in `tests/spec/fmt/` (`space_*`, `list_*`, `attr_else_with`) pin that the canonical
@@ -7,7 +7,7 @@
 //! by the whole text of the output, and that `fmt --check` ends with 0 and another `fmt` changes nothing
 //! (§18.2: a canonical file is not changed by another `fmt`).
 //!
-//! The rules, from `docs/onsa-tools.md` §3.2:
+//! The rules, from `spec/tools.md` §3.2:
 //! - one space on each side of a binary operator, `=`, `->`, `=>`, `as` and `at`;
 //! - no space after a prefix symbol, before a postfix one, round the marks of a name, round `::[` or inside
 //!   a type argument list of an expression's brackets (a space there is E0020 or E0003, which `fmt` does
@@ -123,7 +123,7 @@ fn expect_fmt(tag: &str, cases: &[Case]) {
 }
 
 /// Every input is refused: `onsa fmt` ends with 2, names `diag` in its output (diagnostics go to the
-/// standard output, `docs/onsa-tools.md` §3.1) and does not touch the file.
+/// standard output, `spec/tools.md` §3.1) and does not touch the file.
 fn expect_refused(tag: &str, diag: &str, inputs: &[(&'static str, String)]) {
     assert!(!inputs.is_empty(), "no case to run");
     let d = Dir::new(tag);
@@ -1135,7 +1135,7 @@ fn a_block_in_the_body_of_a_par() {
 #[test]
 fn the_form_is_the_writers_and_not_the_length_of_the_line() {
     // No line is folded and none is joined: a block of two short elements stays a block, and a long line
-    // stays one line (docs/onsa-tools.md §3.2: the writer's line breaks stay, nothing is wrapped).
+    // stays one line (spec/tools.md §3.2: the writer's line breaks stay, nothing is wrapped).
     let long_args = "a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b, a, b";
     let long_call = format!("  let r = f({long_args})");
     let short_block: Vec<&str> = vec!["fn g() -> I32 {", "  let r = f(", "    a,", "    b,", "  )", "  r", "}"];

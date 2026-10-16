@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§6.5", "§8.1", "§11.7", "§15.1", "§18.2"]
 
-// The three forms of three lists that are not the lists of the values of an expression (docs/onsa-tools.md
+// The three forms of three lists that are not the lists of the values of an expression (spec/tools.md
 // §3.2, S-510): the arguments of an attribute, the elements of an enum variant and the effects of an effect
 // row. Each is on one line, in the block form (a line break right after the opening bracket, one element a
 // line with a `,` after every element, the closing bracket on a line of its own) or as a continuation (the

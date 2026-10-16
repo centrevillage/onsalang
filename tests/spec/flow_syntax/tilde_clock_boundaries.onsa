@@ -8,7 +8,7 @@
 // fixes/e0020_prefix_tilde_contrast.onsa, negative/syntax_if_tilde_no_else.onsa,
 // negative/syntax_caret_not_a_name.onsa and negative/member_keyword_names.onsa). The syntax stage
 // reads them, so the file is read only (mode = "parse"); it is written the way `onsa fmt` writes it
-// (docs/onsa-tools.md §3.2).
+// (spec/tools.md §3.2).
 
 // `if~` and `match~`: the `~` right after the keyword, one `~` on the head of a chain, and an `else`
 // that ends it. A plain `if` after `else` has no `~`.

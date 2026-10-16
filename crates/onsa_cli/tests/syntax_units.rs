@@ -1,6 +1,6 @@
 //! The syntax-stage stop of `onsa fmt` and `onsa diff --ast`, the report they make, and where the
 //! commands write diagnostics (W3-03/t; spec §18.1 and §18.2, S-214, S-232, S-56, R-69, R-71;
-//! `docs/onsa-tools.md` §3.1 and §4).
+//! `spec/tools.md` §3.1 and §4).
 //!
 //! What the spec says, in short:
 //!
@@ -10,10 +10,10 @@
 //!   fit (§2.4), E0006. `diff --ast` compares nothing and exits with 2. A diagnostic of the
 //!   names stage or later (E0320, E0302, E0401, the E0020 of a call of a value written `f(x)`)
 //!   does not stop them.
-//! - `docs/onsa-tools.md` §3.1: the report is `check`'s choice (one diagnostic per unit, the
+//! - `spec/tools.md` §3.1: the report is `check`'s choice (one diagnostic per unit, the
 //!   syntax one first, no E0320 in a unit with a syntax error, §18.1); a diagnostic that is not
 //!   of the syntax stage is not reported by `fmt`; with several files all are processed.
-//! - `docs/onsa-tools.md` §4 (S-232): every command writes a diagnostic to the standard output,
+//! - `spec/tools.md` §4 (S-232): every command writes a diagnostic to the standard output,
 //!   `fmt` and `diff --ast` included, and a sentence that is not a diagnostic (usage, I/O,
 //!   internal error) to the standard error. A diagnostic starts with
 //!   `<file>:<line>:<col>: error[<code>]: <message>`, and diagnostics are ordered by file,
@@ -309,7 +309,7 @@ fn fmt_reports_the_e0002_of_the_failed_function_and_not_its_e0320() {
 
 // ---------------------------------------------------------------------------------------------
 // Diagnostics of the names stage or later do not stop `fmt` and `diff --ast`, and `fmt` does not
-// report them (docs/onsa-tools.md §3.1).
+// report them (spec/tools.md §3.1).
 // ---------------------------------------------------------------------------------------------
 
 fn assert_formats(src: &str, canonical: &str) {
@@ -509,11 +509,11 @@ fn text_and_json_give_the_same_position_and_code() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Several files (docs/onsa-tools.md §3.1) and the order of the diagnostics (§18.1, onsa-tools §4).
+// Several files (spec/tools.md §3.1) and the order of the diagnostics (§18.1, onsa-tools §4).
 // ---------------------------------------------------------------------------------------------
 
 // The body is broken after the `{` (W3-03/i: `fmt` keeps a one-line body on one line,
-// docs/onsa-tools.md §3.2; the expected text below is the block form).
+// spec/tools.md §3.2; the expected text below is the block form).
 const UGLY_OK: &str = "pub fn  ok( )->I32{\n 1\n}\n";
 const SYNTAX_A: &str = "pub fn a() -> I32 {\n  1 + 2 % 3\n}\n";
 const SYNTAX_B: &str = "pub fn b( {\n  1\n}\n";

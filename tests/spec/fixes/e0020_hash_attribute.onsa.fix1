@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for an attribute written as `#[name(…)]` in Rust, when `@name(…)` is accepted in that place (spec §6.5,
-// §18.1, S-463; the row `hash_attribute` of docs/foreign-forms.toml). The candidate writes the attribute with
+// §18.1, S-463; the row `hash_attribute` of spec/foreign-forms.toml). The candidate writes the attribute with
 // `@`; a difference of spelling alone is copied (`#[repr(C)]` is `@repr(c)`: the same concept written otherwise,
 // not a name taken from another language). The attributes whose replacement is not accepted have no
 // candidate (negative/attributes_no_candidate.onsa), and a derive is written in the head (fixes/e0020_derive_attribute.onsa).

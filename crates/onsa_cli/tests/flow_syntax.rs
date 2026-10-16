@@ -7,8 +7,8 @@
 //! and the line of each error (`negative/syntax_flow_at.onsa`, `negative/syntax_clock_operands.onsa`,
 //! `negative/syntax_flow_caret.onsa`, `negative/syntax_at_keyword.onsa`,
 //! `negative/syntax_flow_clock_binding.onsa`, `negative/nesting_boundary_clock.onsa`) and the round trip
-//! of the CST (`tests/cst/`); `docs/foreign-forms.toml` lists the forms of other languages. These tests
-//! say what those cannot: the normal form of the forms that `onsa fmt` writes (`docs/onsa-tools.md`
+//! of the CST (`tests/cst/`); `spec/foreign-forms.toml` lists the forms of other languages. These tests
+//! say what those cannot: the normal form of the forms that `onsa fmt` writes (`spec/tools.md`
 //! §3.2), that each part of the syntax is kept in the tree and not dropped (R-81: `diff --ast` sees it),
 //! the shape of the tree through the levels of `onsa dump --levels` (§2.5 counts the levels of every
 //! form, so the levels tell what `at`, `^name` and the postfix forms bind to), that fmt and
@@ -232,7 +232,7 @@ fn the_error_cases_give_the_file_back_through_the_cst() {
     }
 }
 
-// ---- fmt: the normal form (docs/onsa-tools.md §3.2) -----------------------------------------------
+// ---- fmt: the normal form (spec/tools.md §3.2) -----------------------------------------------
 
 /// (what the case says, the body as written, the body `onsa fmt` writes). §3.2: one space on both sides of
 /// `at` and of a binary operator, none inside brackets, none after a prefix mark or `^`; `,` followed by
@@ -595,7 +595,7 @@ fn syntax_errors() -> Vec<(&'static str, String, &'static str)> {
 fn fmt_and_diff_stop_at_an_error_of_the_syntax_stage_in_the_flow_syntax() {
     // §18.2: a file with a diagnostic of the syntax stage is not rewritten (exit code 2) and `diff --ast`
     // does not compare it (exit code 2); the diagnostic goes to the standard output
-    // (docs/onsa-tools.md §3.1, §4). E0011 is of the syntax stage as every E00xx is (§18.2), so it
+    // (spec/tools.md §3.1, §4). E0011 is of the syntax stage as every E00xx is (§18.2), so it
     // stops them too.
     let d = Dir::new("syntax_errors");
     let other = d.file("other.onsa", &in_a_flow("  x"));

@@ -6,7 +6,7 @@
 // End-of-line comments and comment-only lines inside every kind of bracket and between
 // tokens: parameter and argument lists, arrays, struct literals, `match` arms, `use` and `uses` lists,
 // the lines of a continuation, the brackets of an index and an empty pair of parentheses. fmt keeps every
-// comment on its line (docs/onsa-tools.md §3.4); the file is an input of tools/fmt_props.py.
+// comment on its line (spec/tools.md §3.4); the file is an input of tools/fmt_props.py.
 
 use std.math.{ // c1
   exp, // c2

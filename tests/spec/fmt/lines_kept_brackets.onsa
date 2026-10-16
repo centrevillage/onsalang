@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§7", "§18.2"]
 
-// The line breaks inside and around the pairs of brackets stay (docs/onsa-tools.md §3.2, R-143, S-497,
+// The line breaks inside and around the pairs of brackets stay (spec/tools.md §3.2, R-143, S-497,
 // S-498): a line break right after the opening bracket and between the elements decides the form of the
 // list (one line, block form, continuation), and a line break inside an element stays where it is a place
 // of continuation (§2.5: after a binary operator, before a `.`, after `->`). The lists below stand in the

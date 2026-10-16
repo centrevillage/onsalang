@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§2.5", "§6.5", "§8.3", "§11.5", "§11.7", "§12.4", "§18.2"]
 
-// Where `docs/onsa-tools.md` §3.2 puts `else`, `with` and an attribute (W3-11, unit U2), written as
+// Where `spec/tools.md` §3.2 puts `else`, `with` and an attribute (W3-11, unit U2), written as
 // `onsa fmt` writes it. `else` and `with` are on the line of the `}` before them (a line of their own is
 // E0003, §2.5, so a file that has one is not formatted). The attribute of an item or of an input of a
 // flow is on a line of its own; the attribute of a `let` (`@mem(bulk)`) is on the line of the `let`. The

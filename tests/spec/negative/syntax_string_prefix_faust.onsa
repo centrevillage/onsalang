@@ -4,7 +4,7 @@
 
 // The `'` of FAUST after a name (`x'`, a delay of one sample) is a `'` that touches a name, which starts a character
 // literal, so the form is the `string_prefix` E0002 of §2.4 with no candidate (S-466, S-400; the row `string_prefix` of
-// docs/foreign-forms.toml; there is no row `faust_prime`). The rule does not read the literal: it ends at the next `'`
+// spec/foreign-forms.toml; there is no row `faust_prime`). The rule does not read the literal: it ends at the next `'`
 // on the line when there is one, so `x' + y'` is the name `x` touching the literal `' + y'`, and the error stands over the
 // operator. The note is not compared (it adds that a delay of one sample is written `prev~(x)`). What does not touch a name is
 // not part of this rule: a `'` after `)` or after a space starts a character literal that is not closed, which is E0001 of

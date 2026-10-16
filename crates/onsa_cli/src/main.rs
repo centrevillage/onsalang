@@ -223,7 +223,7 @@ fn cannot_work(message: impl std::fmt::Display) -> Outcome {
 /// `onsa_diag` (§18.1, S-234).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Form {
-    /// The text of `docs/onsa-tools.md` §4.
+    /// The text of `spec/tools.md` §4.
     Text,
     /// The one JSON object of `--json` (§18.1, S-215).
     Json,
@@ -262,7 +262,7 @@ fn print_diagnostics(form: Form, sources: &SourceMap, diagnostics: &[onsa_diag::
 
 /// `onsa fmt [--check] <path...>`: every file is processed, also after one
 /// that cannot be read or has a syntax diagnostic; only the files without one
-/// are written (`docs/onsa-tools.md` §3.1). On the standard output: `would
+/// are written (`spec/tools.md` §3.1). On the standard output: `would
 /// reformat <path>` for each file `--check` would change, in the order of the
 /// files, then the syntax diagnostics of every file at once, in the order of
 /// the diagnostics (§4, S-232). The exit code is 2 if a file could not be
@@ -339,7 +339,7 @@ const TEMPORARY_NAME_BYTES: usize = 64;
 /// It has the mode of the file before the text is written (made with no
 /// rights for others first), and its name keeps the first bytes of the name
 /// of the file only, so that it is a name the system takes (`NAME_MAX`).
-// `docs/onsa-tools.md` §3.6: the link is followed, a read-only file and a
+// `spec/tools.md` §3.6: the link is followed, a read-only file and a
 // directory where no temporary file can be made are errors of input and
 // output (exit code 2), a hard link keeps the old text.
 fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
@@ -416,7 +416,7 @@ fn explain(code: &str) -> Outcome {
     Outcome::Ok
 }
 
-/// `onsa diff --ast old new`: items added / removed / changed, ignoring trivia (`docs/onsa-tools.md` §3.5).
+/// `onsa diff --ast old new`: items added / removed / changed, ignoring trivia (`spec/tools.md` §3.5).
 fn diff(ast: bool, old_path: &PathBuf, new_path: &PathBuf) -> Outcome {
     if !ast {
         return cannot_work("`diff` needs `--ast` (textual diff is what `git diff` is for)");

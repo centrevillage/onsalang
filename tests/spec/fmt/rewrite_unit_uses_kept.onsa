@@ -4,7 +4,7 @@
 // spec = ["§6.1", "§8.1", "§18.2"]
 
 // What `onsa fmt` keeps next to the `-> ()` and the empty `uses {}` that it is to take off (W3-12, unit U1;
-// docs/onsa-tools.md §3.3, spec §6.1 and §8.1; the user left that rewrite to the second phase on
+// spec/tools.md §3.3, spec §6.1 and §8.1; the user left that rewrite to the second phase on
 // 2026-10-15, so today `fmt` keeps them too). Only the `()` that is the return type of a function or of a
 // function type, and an empty effect row, are to go. Kept: an effect row that has an
 // effect (`uses {Alloc}`, also on a function type), a `()` that is a type argument (`Result[(), Str]`),

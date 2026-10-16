@@ -3,7 +3,7 @@
 // spec = ["§2.4", "§18.1"]
 
 // E0002 in the lexical stage for the delimiters of strings of other languages (spec §2.4, §18.1; S-406, the row
-// `string_delimiter` of docs/foreign-forms.toml): `$"…"` and `@"…"` and `$@"…"` of C#, `r#"…"#` of Rust,
+// `string_delimiter` of spec/foreign-forms.toml): `$"…"` and `@"…"` and `$@"…"` of C#, `r#"…"#` of Rust,
 // `#"…"#` of Swift, `"""…"""` of Python, Swift, Java and C#, `'''…'''` of Python and `` `…` `` of JavaScript.
 // Onsa has one string, `"…"` on one line; interpolation is `{name}` in it, and there is no raw string. The
 // error has no candidate: a candidate would have to guess whether the writer meant a plain, an interpolated

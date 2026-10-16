@@ -4,7 +4,7 @@
 // fixes = 1
 
 // The feedback `~ _` of FAUST in the places an expression stands (S-48, R-59; the rows `faust_feedback` and
-// `faust_feedback_unnamed` of docs/foreign-forms.toml, which tests/spec/fixes/e0020_faust.onsa gives the plain forms of).
+// `faust_feedback_unnamed` of spec/foreign-forms.toml, which tests/spec/fixes/e0020_faust.onsa gives the plain forms of).
 // After a `let` name it is E0020 with one candidate: `prev~(^y)` for the name `y` of the `let` whose initializer holds the
 // `~ _` (the nearest `let` name: the one in `let b = a + ~ _` is `b`, not `a`). The main position is the `~`. With no
 // `let` name (the last expression of the body) no candidate can be made, and it is E0002 with a note that shows the

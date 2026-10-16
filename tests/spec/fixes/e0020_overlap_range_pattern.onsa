@@ -117,7 +117,7 @@
 // candidate = 1
 // leaves = ["261:6 E0020"]
 
-// E0020 for a range pattern that starts with another form of the list (R-206; docs/foreign-forms.toml rows
+// E0020 for a range pattern that starts with another form of the list (R-206; spec/foreign-forms.toml rows
 // `literal_suffix`, `prefix_plus` and `range_pattern`). Two rows start at the same token, and a unit
 // reports one error (§18.1): the one that sorts first by the order of `diagnostics` (start, end, code,
 // message; S-281, tests/spec/negative/syntax_same_start.onsa). The range pattern is the whole range

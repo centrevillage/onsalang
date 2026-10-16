@@ -7,7 +7,7 @@
 // Programs of space_symbols.onsa with the spaces broken in the other direction (W3-11, unit U2): more
 // than one space or a tab round an operator, `=`, `->` and `=>`, a space before `,` and `:`, spaces
 // inside `( )` and `[ ]`, and none inside the braces of a struct literal and of a struct pattern. The
-// language reads all of them, and `onsa fmt` writes the forms of space_symbols.onsa (docs/onsa-tools.md
+// language reads all of them, and `onsa fmt` writes the forms of space_symbols.onsa (spec/tools.md
 // §3.2). The file is not canonical on purpose (`canonical = false`) and has tabs. The values
 // are those of space_symbols.onsa.
 

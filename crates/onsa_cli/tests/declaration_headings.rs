@@ -266,7 +266,7 @@ pub flow echo(x: F32 at sample) -> F32 at sample {
 fn the_right_forms_go_through_fmt_unchanged() {
     // `fmt --check` exits with 0 for a file that is in the canonical form already, so the heading with
     // `: trait + trait`, `priv`, the attributes, and `@mem(bulk)` in front of a `let` (on the line of the `let`,
-    // `docs/onsa-tools.md` §3.2) all pass the syntax stage and `fmt` does not move them.
+    // `spec/tools.md` §3.2) all pass the syntax stage and `fmt` does not move them.
     let d = Dir::new("fmt");
     let path = d.file("right.onsa", RIGHT_FORMS);
     let out = Command::new(ONSA).args(["fmt", "--check", &path]).output().expect("run onsa");

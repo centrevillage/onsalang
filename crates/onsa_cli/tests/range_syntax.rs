@@ -5,14 +5,14 @@
 //! The case files in `tests/spec/` pin the code and the line of each diagnostic and the text after
 //! each candidate (`fixes/e0020_range_dots.onsa`, `negative/range_outside_header.onsa`,
 //! `negative/range_types.onsa`, `negative/range_move.onsa`, `negative/range_inclusive_for_e0200.onsa`),
-//! and `docs/foreign-forms.toml` lists the forms of other languages (`range_dots`,
+//! and `spec/foreign-forms.toml` lists the forms of other languages (`range_dots`,
 //! `range_outside_header`). These tests say what those cannot: the main span of the E0020 (the range
 //! symbol and nothing else), that the edit of a candidate changes that token and no other (S-251), that
 //! the diagnostics have a note, that an error outside a header has no candidate and shows
 //! `xs.slice(from, to)`, that `fmt` and `diff --ast` stop at the errors of the syntax stage (§18.2),
 //! what `fmt` does with the operators in the ends, and that `diff --ast` sees the symbol and the ends.
 //!
-//! What is not here: the spaces around the range symbol (one on each side, `docs/onsa-tools.md` §3.2,
+//! What is not here: the spaces around the range symbol (one on each side, `spec/tools.md` §3.2,
 //! S-334; `fmt_spellings_columns_ranges.rs` and `tests/spec/fmt/` pin them) and a line break after it.
 //!
 //! Every test uses only the binary (`onsa check`, `onsa fmt`, `onsa diff --ast`, `onsa test`).

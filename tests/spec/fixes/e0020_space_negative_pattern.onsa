@@ -6,7 +6,7 @@
 // E0020 for a space after the `-` of a negative literal in a pattern (§2.5, §7, S-411): the rule of S-123 for
 // a prefix `-` and its operand does not depend on the place, and §7 treats the negative integer pattern
 // like the literal of an expression. The candidate removes the space (`-1`). It is the form
-// `space_after_prefix` of docs/foreign-forms.toml. One error per declaration unit (P-01).
+// `space_after_prefix` of spec/foreign-forms.toml. One error per declaration unit (P-01).
 
 pub fn an_arm(k: I32) -> I32 {
   match k {

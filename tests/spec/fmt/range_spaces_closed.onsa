@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§7", "§3.1", "§11.5", "§18.2"]
 
-// The canonical spaces round the closed range symbol `..=` (docs/onsa-tools.md §3.2, S-334): one space on
+// The canonical spaces round the closed range symbol `..=` (spec/tools.md §3.2, S-334): one space on
 // each side, and the ends keep the spaces of their own operators (`lo + 1 ..= hi - 1`). The file is
 // canonical, so `onsa fmt` leaves it unchanged. Only the syntax is read here (`mode = "parse"`): the
 // closed range in the head of a `for` or a `par` is not lowered in this version (E0200, S-257), so the

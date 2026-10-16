@@ -4,7 +4,7 @@
 // fixes = 1
 
 // A prefix `~` that touches a parenthesized operand is the bit negation of the languages of the C family too (R-202,
-// S-123, S-363; the row `faust_bit_not` of docs/foreign-forms.toml): `~(m)` is E0020 with the candidate `!(m)`, as `~m` is
+// S-123, S-363; the row `faust_bit_not` of spec/foreign-forms.toml): `~(m)` is E0020 with the candidate `!(m)`, as `~m` is
 // (tests/spec/fixes/e0020_prefix_tilde_contrast.onsa). The scope is a `~` that follows neither a name nor `if` / `match`
 // and touches its operand, and a `(` is an operand that it touches. A space between the `~` and the `(` (`~ (m)`) is a
 // form that is not in the list, which is E0002 with no candidate, as `~ m` is: removing the space would give the

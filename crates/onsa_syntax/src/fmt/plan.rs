@@ -2,7 +2,7 @@
 //! printer (`fmt/print.rs`) reads as it walks (W3-11).
 //!
 //! The plan is made once, before the walk, from the tree and the tables of
-//! `fmt/shape.rs`. Its decisions are those of `docs/onsa-tools.md` §3.2 and
+//! `fmt/shape.rs`. Its decisions are those of `spec/tools.md` §3.2 and
 //! §3.3 that drop, add or respell a token or add or remove a line break; the
 //! printer keeps every other line break of the writer's.
 //!

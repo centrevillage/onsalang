@@ -16,7 +16,7 @@
 //! - a blank before empty brackets (two errors: the blank's E0020 first), and a word right after the
 //!   brackets that stays a word of its own (§18.1);
 //! - `onsa fmt` does not write a file with empty brackets or a tuple index with a leading zero, and
-//!   exits with 2 (§18.2), with `--check` too, and the file next to it is written (docs/onsa-tools.md §3.1).
+//!   exits with 2 (§18.2), with `--check` too, and the file next to it is written (spec/tools.md §3.1).
 //!
 //! Every test uses only the binary. Expected texts are written from the spec; none is taken from the
 //! output of the compiler. The tests were written before the syntax of W3-13: those that fail until it
@@ -406,7 +406,7 @@ fn a_unit_variant_and_none_leave_nothing_after_the_candidate() {
 
 /// (what the case says, the file as written, the code of the diagnostic that stops `fmt`). A file with a
 /// diagnostic of the syntax stage is not written, and `fmt` exits with 2 (§18.2); the diagnostic is on the
-/// standard output (docs/onsa-tools.md §3.1, §4).
+/// standard output (spec/tools.md §3.1, §4).
 const STOPS_FMT: &[(&str, &str, &str)] = &[
     ("a variant with empty brackets", "pub enum E {\n  A(),\n  B,\n}\n", "E0002"),
     ("type parameters that are empty", "pub fn f[]() -> I32 {\n  1\n}\n", "E0002"),
@@ -452,7 +452,7 @@ fn fmt_does_not_write_a_file_with_empty_brackets_or_a_leading_zero_and_exits_wit
 
 #[test]
 fn fmt_writes_the_files_next_to_a_file_that_it_does_not_write() {
-    // docs/onsa-tools.md §3.1: one file with an error of the syntax stage does not stop the others.
+    // spec/tools.md §3.1: one file with an error of the syntax stage does not stop the others.
     let d = Dir::new("fmt_many");
     let bad = "pub fn f(t: (I32, I32)) -> I32 {\n  t.01\n}\n";
     let bad2 = "pub enum E {\n  A(),\n  B,\n}\n";

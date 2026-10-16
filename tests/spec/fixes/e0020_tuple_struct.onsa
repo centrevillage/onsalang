@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for a struct written with a tuple of one element (`struct Hz(F32)`, a newtype; spec §4.4, §18.1, S-39,
-// R-51; the row `tuple_struct` of docs/foreign-forms.toml). There is no tuple struct in Onsa: a type that is to
+// R-51; the row `tuple_struct` of spec/foreign-forms.toml). There is no tuple struct in Onsa: a type that is to
 // be told from its content is a struct with one named field (`pub struct Q { priv value: F32 }`, made by
 // `Q.new(x)`, §15.1). The candidate is a struct with one field named `value`, `priv` as in that form, but in a
 // `priv struct`, where `priv` is redundant (§15.1, S-494); the visibility word and the type parameters stay where

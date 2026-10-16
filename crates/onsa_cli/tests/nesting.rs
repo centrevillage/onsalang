@@ -241,7 +241,7 @@ fn fmt_leaves_a_deep_file_alone() {
         let deep = d.file("deep.onsa", &deep_src);
         let ok = d.file("ok.onsa", "pub fn f() -> I32 {\n  1\n}\n");
         // The author's newline after `{` makes the block multi-line; fmt keeps the
-        // author's newlines (docs/onsa-tools.md §3.2).
+        // author's newlines (spec/tools.md §3.2).
         let ugly = d.file("ugly.onsa", "pub fn g()->I32{\n1\n}\n");
 
         let out = onsa(&["fmt", &deep]);

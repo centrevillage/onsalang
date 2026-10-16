@@ -5,7 +5,7 @@
 
 // E0020 for a derive written as an attribute, in the form of the old version (`@derive(…)`) and of Rust
 // (`#[derive(…)]`), on the line of the declaration (spec §6.4, §6.5, S-34, S-463; the rows `derive_attribute` and
-// `hash_attribute` of docs/foreign-forms.toml). The candidate takes the attribute out and writes the names at
+// `hash_attribute` of spec/foreign-forms.toml). The candidate takes the attribute out and writes the names at
 // the head of the declaration, `: name + name`, after the name and the type parameters: the names are copied
 // as they are, and only the kinds `Copy` and `Dup` (§4.6) are left out. When every name is left out, the
 // attribute goes and no `:` is added. When the head has a `:` already, the names come after its list with a `+`,

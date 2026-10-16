@@ -3,9 +3,9 @@
 //!
 //! The case files in `tests/spec/` pin the diagnostics (`negative/syntax_type_args.onsa` for E0002,
 //! `fixes/e0020_type_args_*.onsa` for E0020 and the text after each candidate) and the forms that are
-//! read (`types/type_args_syntax.onsa`, `mode = "parse"`); `docs/foreign-forms.toml` lists the forms of
+//! read (`types/type_args_syntax.onsa`, `mode = "parse"`); `spec/foreign-forms.toml` lists the forms of
 //! other languages. These tests say what those cannot: the normal form of the list that `onsa fmt`
-//! writes (`docs/onsa-tools.md` §3.2), that the list is kept in the tree and not dropped (R-81:
+//! writes (`spec/tools.md` §3.2), that the list is kept in the tree and not dropped (R-81:
 //! `diff --ast` sees it), that fmt and `diff --ast` stop at the errors of the syntax stage, how the
 //! edits of a candidate are cut (the tokens that change and no others, S-251) and that every E0020
 //! of these forms has a note that shows `name::[…]` (§18.1).
@@ -139,7 +139,7 @@ fn apply(text: &str, edits: &[Edit]) -> String {
     out
 }
 
-// ---- fmt: the normal form of the list (docs/onsa-tools.md §3.2) -------------------------------
+// ---- fmt: the normal form of the list (spec/tools.md §3.2) -------------------------------
 
 /// (what the case says, the body as written, the body `onsa fmt` writes). §3.2: no space around
 /// `::[`, the elements of the list as in a type position (`, ` between them, no space inside the
@@ -256,7 +256,7 @@ const SYNTAX_ERRORS: &[(&str, &str, &str)] = &[
 fn fmt_and_diff_stop_at_an_error_of_the_syntax_stage_around_the_mark() {
     // §18.2: a file with a diagnostic of the syntax stage is not rewritten (exit code 2) and
     // `diff --ast` does not compare it (exit code 2); the diagnostic goes to the standard output
-    // (docs/onsa-tools.md §3.1, §4). A file that is the same in the normal form is the other side.
+    // (spec/tools.md §3.1, §4). A file that is the same in the normal form is the other side.
     let d = Dir::new("syntax_errors");
     let other = d.file("other.onsa", "pub fn f() -> U8 {\n  250\n}\n");
     for (what, text, _) in SYNTAX_ERRORS {
@@ -377,7 +377,7 @@ fn candidate(text: &str, k: usize) -> (usize, String, Value) {
 }
 
 /// (written, [what the candidates make]) for the body of a function. The order of the candidates is
-/// that of the rows of docs/foreign-forms.toml (S-315): the Onsa form first.
+/// that of the rows of spec/foreign-forms.toml (S-315): the Onsa form first.
 const CANDIDATES: &[(&str, &[&str])] = &[
     ("  id<U8>(250)", &["  id::[U8](250)", "  id < U8 && U8 > (250)"]),
     ("  pair<U8, F32>(1, 2.0)", &["  pair::[U8, F32](1, 2.0)"]),

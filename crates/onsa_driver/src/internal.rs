@@ -36,7 +36,7 @@ pub enum Origin {
     /// The C compiler rejected the generated C.
     GeneratedC,
     /// The output of `onsa fmt` is not the program of its input
-    /// (`docs/onsa-tools.md` §3.5, R-204).
+    /// (`spec/tools.md` §3.5, R-204).
     Unverified,
 }
 

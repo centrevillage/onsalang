@@ -10,7 +10,7 @@
 // (§2.5: "前置か二項かは、直前のトークンが同じ式の被演算子かどうかで決まる"). The syntax stage reads
 // `^name` wherever an expression may stand; where it may be used (the first argument of a delay,
 // E0801) and in what kind of body (E0821) are judged by the names stage, so the file is read
-// only (mode = "parse"). It is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+// only (mode = "parse"). It is written the way `onsa fmt` writes it (spec/tools.md §3.2).
 
 // The feedback of §11.2.
 pub flow one_pole(x: F32 at sample, p: F32 at block) -> F32 at sample {

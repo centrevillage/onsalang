@@ -9,7 +9,7 @@
 // block, elements of a block that are not one level deeper than the line of the opening bracket, elements
 // of a continuation that are not under the first, a `,` after the last element of a continuation. The
 // language reads all of them. `onsa fmt` writes the form each list is written in, as list_forms.onsa has
-// it (docs/onsa-tools.md §3.2). The file is not canonical on purpose (`canonical = false`).
+// it (spec/tools.md §3.2). The file is not canonical on purpose (`canonical = false`).
 
 use std.math.{sqrt, sum,}
 use std.array.{

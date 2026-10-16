@@ -11,7 +11,7 @@
 // has a syntax error, so the body of the function is not checked: `zz` raises no E0302, and the
 // function is a name of the module. An attribute changes neither the type nor the head
 // of a function (§6.5), so nothing about the function is unknown. One error in each unit.
-// (The candidate and its text are the rows' business: docs/foreign-forms.toml.)
+// (The candidate and its text are the rows' business: spec/foreign-forms.toml.)
 
 #[inline] fn same_line(a: I32) -> I32 {             //~ E0002
   a

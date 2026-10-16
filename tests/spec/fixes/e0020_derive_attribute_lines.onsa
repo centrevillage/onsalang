@@ -3,12 +3,12 @@
 // spec = ["§6.4", "§6.5", "§18.1"]
 
 // E0020 for a derive written as an attribute on a line of its own (spec §6.4, §6.5, S-34, S-463; the rows
-// `derive_attribute` and `hash_attribute` of docs/foreign-forms.toml). The candidate takes the attribute out and
+// `derive_attribute` and `hash_attribute` of spec/foreign-forms.toml). The candidate takes the attribute out and
 // writes the names at the head of the declaration, `: name + name`; the kinds `Copy` and `Dup` are left out
 // (§4.6). The marker comment of the attribute line stays where it is, on a line of its own, because a candidate
 // does not carry a comment into the code or the code into a comment (§18.1), so the candidates are
 // checked by the contract of §18.1 (nothing is left in the units they touch), and the text after them is in the
-// rows of docs/foreign-forms.toml and in e0020_derive_attribute.onsa. The same forms on the line of the
+// rows of spec/foreign-forms.toml and in e0020_derive_attribute.onsa. The same forms on the line of the
 // declaration are in e0020_derive_attribute.onsa. The main position is the attribute (`@` or `#`). One error in
 // each declaration unit (P-01).
 

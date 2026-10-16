@@ -9,7 +9,7 @@ a syntax code (the runner's judgement, which `onsa_cases` lists), and a
 fragment of `mode = "none"`; such a file is skipped when fmt refuses it.
 Any other refusal fails, and so does a run where no source ran. Each source
 `x` gives, besides itself, perturbed inputs `p`: the spec says the
-perturbation changes no program (§2.5, `docs/onsa-tools.md` §3.2).
+perturbation changes no program (§2.5, `spec/tools.md` §3.2).
 
 Perturbations (C-118: only where whitespace means nothing). The kinds:
 
@@ -61,13 +61,13 @@ The properties (`--property`):
               1. `onsa fmt` accepts `p` (exit 0; exit 2 would mean the
                  perturbation hit a place where whitespace means something);
               2. same program: `onsa diff --ast p fmt(p)` finds no difference
-                 (the comparison of S-56, `docs/onsa-tools.md` §3.5: both
+                 (the comparison of S-56, `spec/tools.md` §3.5: both
                  trees with the rewrites of §3.3);
               3. idempotence: `onsa fmt --check fmt(p)` changes nothing;
               4. the comments keep their texts in their order (none lost, none
                  changed, none swapped); the texts of the doc comments (`///`,
                  `//!`) and the heads of the items (`item_heads`) are the same
-                 in `p` and `fmt(p)` (`docs/onsa-tools.md` §3.5: the AST and the doc comments
+                 in `p` and `fmt(p)` (`spec/tools.md` §3.5: the AST and the doc comments
                  agree, and the texts of the comments are in the same order;
                  `diff --ast` compares the structure alone, not the comments
                  nor the doc comments, S-534);
@@ -75,7 +75,7 @@ The properties (`--property`):
                  rewrites take parentheses and `return` away, never add a
                  level): the levels of each item, `onsa dump --levels`, of
                  `fmt(p)` are at most those of `p` (W3-14);
-              6. the line breaks of the writer (`docs/onsa-tools.md` §3.2,
+              6. the line breaks of the writer (`spec/tools.md` §3.2,
                  R-143, S-497): fmt keeps the line breaks after the opening
                  bracket of a list, between its elements (and a blank line
                  there, S-499), between statements and items, at a place of
@@ -87,14 +87,14 @@ The properties (`--property`):
               7. the normal form of the code: for space and blank, `fmt(p)` and
                  `fmt(x)`, each without its comments and formatted again, are
                  the same. Where the comments go is the item `fmt-comments`;
-                 break and continue keep the author's line breaks (`docs/onsa-tools.md` §3.2),
+                 break and continue keep the author's line breaks (`spec/tools.md` §3.2),
                  comment and mixed move comments, and inside opens a body of
                  one line whose element had a line break (S-525), so they have
                  no such property here;
               8. the meaning: when `fmt(p)` is not `p`, `onsa check` ends with
                  the same exit code on both and reports the same codes in the
                  same order (spec §18.2: no rewrite of fmt changes the verdict
-                 of a stage; `docs/onsa-tools.md` §3.3). The texts and the
+                 of a stage; `spec/tools.md` §3.3). The texts and the
                  places of the diagnostics are not compared (a rewrite may
                  change the text alone, W3-12/b2 6).
               Every run ends in 0, 1 or 2 (an internal error or a signal fails).
@@ -552,7 +552,7 @@ def inside_sites(text):
 
 def perturb_inside(rng, text):
     """Line breaks inside an element, which fmt removes (S-497), at the
-    places of `inside_sites`; 2 in 10 of them a blank line (`docs/onsa-tools.md`
+    places of `inside_sites`; 2 in 10 of them a blank line (`spec/tools.md`
     §3.2 removes it too). The blanks round the place go."""
     edits = [(a.end, b.start - a.end, "\n\n" if rng.random() < 0.2 else "\n")
              for a, b in pick(rng, inside_sites(text), 0.3)]
@@ -649,7 +649,7 @@ def unperturb(text):
 
 
 def line_key(line_toks):
-    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.2, §3.3): without `,` (which fmt moves
+    """A code line as fmt may rewrite it (`spec/tools.md` §3.2, §3.3): without `,` (which fmt moves
     to the element before it, adds and drops), numbers as `#`. Used to pair the lines of a text with the
     lines of its fmt output. The tokens fmt drops (`return`, parentheses) stay: they are deletions for
     the pairing, and a line of brackets or `return` alone keeps a counterpart (`g(` / `a,` / `) // c`)."""
@@ -661,7 +661,7 @@ def code_lines(text):
     """(the lines of `text`, the indices of its lines with code). A line whose
     code is `,` alone is none: fmt moves that `,` to the element before it,
     and the comment at the end of the line stays in its place as a line of a
-    comment (`docs/onsa-tools.md` §3.2, §3.4, S-529)."""
+    comment (`spec/tools.md` §3.2, §3.4, S-529)."""
     lines = lines_of(text, tokenize(text))
     return lines, [i for i, line in enumerate(lines) if any(t.text != "," for t in line.code)]
 
@@ -714,7 +714,7 @@ def comment_places(text):
 
 def comment_problems(before, after):
     """The comments of `before` that `fmt` (giving `after`) did not keep on the
-    line of the same element (R-70, `docs/onsa-tools.md` §3.4): a comment at a line end stays at the
+    line of the same element (R-70, `spec/tools.md` §3.4): a comment at a line end stays at the
     end of the same line; a comment on a line of its own stays on its own line,
     before the same next line (or at the end). The lines are paired by
     `pair_lines`, so a rewrite of fmt (a `return`, a parenthesis) moves nothing.
@@ -796,7 +796,7 @@ def sequence_problem(what, want, got):
 
 
 # The places of the line breaks of `break_places`: fmt keeps the writer's
-# line break there or not, and adds none (`docs/onsa-tools.md` §3.2).
+# line break there or not, and adds none (`spec/tools.md` §3.2).
 KEPT_PLACES = ("open", "line", "element", "comment", "continue")
 
 
@@ -936,7 +936,7 @@ def gap_places(text):
 
 def break_problems(before, after):
     """The places where `after` (fmt of `before`) does not keep the line
-    breaks of the writer (`docs/onsa-tools.md` §3.2): a line break at a place
+    breaks of the writer (`spec/tools.md` §3.2): a line break at a place
     of KEPT_PLACES that is gone or added, a line break inside an element
     (`removable`) that stays or is added, and a blank line between two
     elements of a list that is gone or added (S-499). Without the CST: the
@@ -1096,7 +1096,7 @@ def check_input(onsa, d, name, case, label, kind, text, base, prop):
         fail("internal", crash)
     elif code != 0:
         fail("idempotence", f"fmt --check exit {code} on fmt(p)")
-    # `docs/onsa-tools.md` §3.5: the comments keep their texts in their order, and the doc comments
+    # `spec/tools.md` §3.5: the comments keep their texts in their order, and the doc comments
     # and the items stay. `diff --ast` compares the structure alone, not the comments nor the doc
     # comments (S-534): these sequences check those, and the items once more.
     (plain, docs), (f_plain, f_docs) = comment_texts(text), comment_texts(formatted)

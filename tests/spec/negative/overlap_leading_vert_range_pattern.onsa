@@ -3,7 +3,7 @@
 // spec = ["§2.5", "§7", "§18.1"]
 
 // E0002 for a choice of range patterns (or of float literals) whose `|` is at the start of a line (R-206
-// family; docs/foreign-forms.toml rows `range_pattern`, `float_pattern_choice` and `leading_vert`). Two rows
+// family; spec/foreign-forms.toml rows `range_pattern`, `float_pattern_choice` and `leading_vert`). Two rows
 // are in the pattern: the range as a pattern (§7) and the `|` that goes at the end of the line, not at the
 // start of the next one (§2.5). A unit reports one error, the one that sorts first by the order of
 // `diagnostics` (start, end, code, message; S-281): the range starts on the line before the `|`, so it is

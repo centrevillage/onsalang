@@ -4,7 +4,7 @@
 // fixes = 1
 
 // The delay `x@N` of FAUST in the places an expression stands (S-48, R-59; the row `faust_delay` of
-// docs/foreign-forms.toml, which tests/spec/fixes/e0020_faust.onsa gives the plain `let` forms of). The name `x`, `@`
+// spec/foreign-forms.toml, which tests/spec/fixes/e0020_faust.onsa gives the plain `let` forms of). The name `x`, `@`
 // and the number or name that follows are the form, and the rest of the expression is not part of it. E0020 with one
 // candidate: `prev~(x)` for 1, `delay~(x, N)` for an integer literal of 2 or more and for an UPPER_SNAKE name (the
 // syntax stage does not know the value of a name; a constant with the value 1 is left to the later check E0807, which

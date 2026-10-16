@@ -51,7 +51,7 @@
 // candidate = 2
 // leaves = ["101:5 E0020"]
 
-// E0020 for a range pattern that starts with a numeric literal of another language (R-206; docs/foreign-forms.toml
+// E0020 for a range pattern that starts with a numeric literal of another language (R-206; spec/foreign-forms.toml
 // rows `octal_prefix`, `leading_zero`, `float_leading_dot`, `literal_suffix` and `range_pattern`; §2.4, §7). It is the
 // case of tests/spec/fixes/e0020_overlap_range_pattern.onsa for the literal forms that W3-05 makes into
 // rows of the syntax (the compiler of W3-03 reads `0o17` as a suffix and does not report `017`): the literal

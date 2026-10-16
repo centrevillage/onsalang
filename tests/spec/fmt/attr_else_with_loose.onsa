@@ -8,7 +8,7 @@
 // put them but `onsa fmt` does not (W3-11, unit U2): the attribute of an item on the line of the item, the
 // attribute of an input of a flow on the line of the input, the attribute of a `let` on a line of its own,
 // and more than one space round `else` and `with`. `onsa fmt` writes the forms of attr_else_with.onsa
-// (docs/onsa-tools.md §3.2). The file is not canonical on purpose (`canonical = false`). An `else` or a
+// (spec/tools.md §3.2). The file is not canonical on purpose (`canonical = false`). An `else` or a
 // `with` on a line of its own is E0003, so it is not here.
 
 @repr(c) pub struct Frame {

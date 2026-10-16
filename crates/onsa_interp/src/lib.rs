@@ -1593,7 +1593,7 @@ impl<'m> Interp<'m> {
 /// that is not finite and at least 0 (`-0.0` is 0) fails before `a` and `b`
 /// are compared; a NaN fails. A failure is a panic at the call. The messages
 /// are the ones the doc comment of `std/dsp/test.onsa` writes, with the values
-/// in the `Show` form of §6.3 (`docs/onsa-tools.md` §4).
+/// in the `Show` form of §6.3 (`spec/tools.md` §4).
 fn assert_near(a: f64, b: f64, tol: f64, span: Span) -> R<Value> {
     let show = |x: f64| value::show(&Value::F64(x));
     if !(tol.is_finite() && tol >= 0.0) {
@@ -1666,7 +1666,7 @@ fn trunc_to_int(x: f64, from: FloatKind, to: IntKind, sat: bool, span: Span) -> 
         return if sat {
             Ok(if t < lo as f64 { lo } else { hi })
         } else {
-            // The value in the `Show` form of its own type (`docs/onsa-tools.md` §4):
+            // The value in the `Show` form of its own type (`spec/tools.md` §4):
             // an `F32` widened to `f64` is exact, and goes back exactly.
             let shown = value::show(&match from {
                 FloatKind::F32 => Value::F32(x as f32),

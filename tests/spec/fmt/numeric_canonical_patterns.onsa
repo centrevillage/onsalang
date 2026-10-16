@@ -4,7 +4,7 @@
 // spec = ["§2.4", "§7", "§18.2"]
 
 // The spelling of fmt (fmt/numeric_canonical.onsa) in the patterns of a `match`: a literal, a literal with a
-// minus, the literals of a choice and a literal inside an enumerator (docs/onsa-tools.md §3.2, S-62, S-126).
+// minus, the literals of a choice and a literal inside an enumerator (spec/tools.md §3.2, S-62, S-126).
 // The file is canonical, so `onsa fmt` leaves it unchanged. Only the syntax is read here (`mode = "parse"`):
 // a `match` on a literal is not lowered in this version (E0200), so the file cannot run in a mode that
 // checks. The same patterns in the other spellings are in fmt/numeric_spellings_patterns.onsa.

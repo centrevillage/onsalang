@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§2.5", "§2.6", "§3.1", "§4.5", "§6.1", "§8.1", "§11.2", "§11.3", "§18.2"]
 
-// The places where `docs/onsa-tools.md` §3.2 puts no space (W3-11, unit U2): after a prefix symbol
+// The places where `spec/tools.md` §3.2 puts no space (W3-11, unit U2): after a prefix symbol
 // (`-x`, `!x`, `^y`), before a postfix one (`f(x)`, `v.(x)`, `xs[i]`, `.f`, `?`), round the marks of a
 // name (`f~(x)`, `f!(x)`), and in a type argument list of an expression (`f::[T](x)`, before and after
 // `::[` and inside the list). Also the places where it puts one: after `,` and `:`, round `as`, `at`,

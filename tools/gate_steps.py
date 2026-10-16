@@ -109,7 +109,7 @@ STEPS = [
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py")), static=True),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check"), static=True),
     # The documents write the `init` of a delay in the omitted form (S-539 (c3a)): the ```onsa blocks of the spec
-    # and of docs/onsa-tools.md, and the files of examples/ and std/.
+    # and of spec/tools.md, and the files of examples/ and std/.
     Step("default-inits", (*PY, str(TOOLS / "default_inits.py")), static=True),
     # The documents (X-2 DT-5): now the tables (d). The lines `fmt` would break are shown, never a failure (DT-4, DF-8).
     Step("docs", (*PY, str(TOOLS / "docs.py"), "check"), static=True),

@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§2.1", "§2.5", "§18.2"]
 
-// Where `onsa fmt` leaves the comments (docs/onsa-tools.md §3.4, R-70, R-199, R-201, R-212, S-58, S-497,
+// Where `onsa fmt` leaves the comments (spec/tools.md §3.4, R-70, R-199, R-201, R-212, S-58, S-497,
 // S-502, S-507): a comment stays on the line it was written on, a comment at the end of a line after the
 // element of its line (after the `,` of the block form), a line of a comment before the next element or
 // before the closing bracket. The comments at the end of consecutive lines are in one column, one space

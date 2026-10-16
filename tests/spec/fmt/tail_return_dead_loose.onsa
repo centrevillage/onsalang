@@ -6,7 +6,7 @@
 
 // Bodies of functions that end in more than one `return` (the ones before the last are dead code, which the
 // language takes) (W3-11, unit U5, W3-11/b 1). `onsa fmt` drops the `return` of the last statement only
-// (docs/onsa-tools.md §3.3), and its check before writing (§3.5) takes the output for the same program, so fmt
+// (spec/tools.md §3.3), and its check before writing (§3.5) takes the output for the same program, so fmt
 // writes it and does not stop with an internal error. The file is not canonical on purpose (`canonical = false`).
 
 pub struct Pair {

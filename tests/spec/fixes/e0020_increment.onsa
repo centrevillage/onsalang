@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for `++x`, `x++`, `--x` and `x--` in a statement position, with a name or a field path
-// as the operand (S-250; docs/foreign-forms.toml row `increment`). A `--` or `++` with no space
+// as the operand (S-250; spec/foreign-forms.toml row `increment`). A `--` or `++` with no space
 // is read as an increment (a space between two `-` is two prefix operators, E0012, §3.1). The
 // candidate is `x = x + 1` or `x = x - 1`.
 

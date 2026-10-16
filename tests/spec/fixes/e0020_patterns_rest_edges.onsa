@@ -8,7 +8,7 @@
 // candidate of each diagnostic and checks that it leaves no error of the syntax stage, §18.1):
 // - a struct pattern that already spells every field: nothing remains, and `..` is still E0020;
 // - the `..` of a tuple pattern and of an enum variant pattern is not in the closed list of §18.1
-//   (`docs/foreign-forms.toml` has the struct pattern only), so it is the general rule: E0002, a pattern
+//   (`spec/foreign-forms.toml` has the struct pattern only), so it is the general rule: E0002, a pattern
 //   that cannot be read, and no candidate.
 
 pub struct P3 {

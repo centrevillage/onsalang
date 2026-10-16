@@ -7,7 +7,7 @@
 // The lines of let_columns.onsa with the `=` of every line at a place of its own: after one space, or after
 // three more than the line needs, by turns. The language reads them (the spaces before `=` carry no meaning,
 // §2.5), and `onsa fmt` puts the `=` of the consecutive one-line `let` and `var` lines in one column
-// (docs/onsa-tools.md §3.2, S-07, S-89, S-122), cut where let_columns.onsa shows. The file is not canonical
+// (spec/tools.md §3.2, S-07, S-89, S-122), cut where let_columns.onsa shows. The file is not canonical
 // on purpose (`canonical = false`). The values are those of let_columns.onsa.
 
 use std.array

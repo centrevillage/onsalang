@@ -3,7 +3,7 @@
 // mode = "check"
 // spec = ["§11.4", "§18.2"]
 
-// The `init` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §11.4): every one (S-539:
+// The `init` that `onsa fmt` keeps (W3-12, unit U1; spec/tools.md §3.3, spec §11.4): every one (S-539:
 // the syntax alone does not show that an `init` equal to the default value can go, so `prev~(x)` and
 // `prev~(x, 0.0)` are both taken as they are written). Here: a value that is not the default (`1.0`, `0.5`,
 // `1`), `-0.0`, a name (an input of the clock `init`, a constant that happens to be `0.0`), the argument of

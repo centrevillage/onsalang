@@ -1,6 +1,6 @@
 //! `onsa diff --ast` (spec §18.2, T1-10) and the check of `onsa fmt` before
 //! it writes ([`same_program`]): the one comparison of two files of
-//! `docs/onsa-tools.md` §3.5. Both compare the dumps of the items after the
+//! `spec/tools.md` §3.5. Both compare the dumps of the items after the
 //! rewrites of §3.3 on both trees ([`crate::fmt::rewrites`]): the structure
 //! alone, without the comments (S-534: the AST has no doc comments either,
 //! D-02). `diff --ast` matches the items by kind and name; the check also
@@ -291,7 +291,7 @@ impl fmt::Display for Place {
 }
 
 /// Whether `new` (`new_text`) is the program of `old` (`old_text`), the
-/// check of `onsa fmt` before it writes (`docs/onsa-tools.md` §3.5): the
+/// check of `onsa fmt` before it writes (`spec/tools.md` §3.5): the
 /// items in the same order, each with the same dump as [`diff`] compares (the
 /// rewrites of §3.3 applied, numbers by value) and its doc comments on the
 /// same declarations ([`Side::docs`]), then the text of every comment (`///`
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn numbers_compare_by_value() {
-        // `docs/onsa-tools.md` §3.5: the spelling of a number is no difference.
+        // `spec/tools.md` §3.5: the spelling of a number is no difference.
         let old = "fn f() -> F64 {\n  let a = 0xff + 1_000\n  1.0e3 + 1E3\n}\n";
         let new = "fn f() -> F64 {\n  let a = 0xFF + 1000\n  1000.0 + 1e3\n}\n";
         assert!(d(old, new).is_empty());

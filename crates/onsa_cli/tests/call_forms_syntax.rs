@@ -9,7 +9,7 @@
 //! and `fn/value_calls_pkg/` (the forms that are read), `negative/syntax_move_operand.onsa` (R-42),
 //! `negative/syntax_one_tuple.onsa` and `semantics/paren_group.onsa` (R-43),
 //! `values/move_tail_syntax.onsa` (S-100). These tests say what those cannot: the normal form that
-//! `onsa fmt` writes for `.(` (`docs/onsa-tools.md` §3.2), that `.(` is in the tree (`diff --ast`
+//! `onsa fmt` writes for `.(` (`spec/tools.md` §3.2), that `.(` is in the tree (`diff --ast`
 //! sees it), that fmt and `diff --ast` stop at an error of the syntax stage, how the edits of a
 //! candidate are cut (the tokens that change and no others, §18.1), that every E0020 of the callee
 //! form has a note that shows `.(` (§18.1), and the forms that cannot be in a case file that has to be
@@ -156,7 +156,7 @@ fn apply(text: &str, edits: &[Edit]) -> String {
     out
 }
 
-// ---- fmt: the normal form of a call through a function value (docs/onsa-tools.md §3.2) ---------
+// ---- fmt: the normal form of a call through a function value (spec/tools.md §3.2) ---------
 
 /// (what the case says, the body as written, the body `onsa fmt` writes). §3.2: no space round the
 /// `.` of `.(` or inside the parentheses, `, ` between the arguments, a space on both sides of a
@@ -316,7 +316,7 @@ const SYNTAX_ERRORS: &[(&str, &str, &str)] = &[
 fn fmt_and_diff_stop_at_an_error_of_the_syntax_stage_of_these_forms() {
     // §18.2: a file with a diagnostic of the syntax stage is not rewritten (exit code 2) and
     // `diff --ast` does not compare it (exit code 2); the diagnostic goes to the standard output
-    // (docs/onsa-tools.md §3.1, §4). R-43 was `fmt` rewriting `(1,)` into `(1)`: another program.
+    // (spec/tools.md §3.1, §4). R-43 was `fmt` rewriting `(1,)` into `(1)`: another program.
     let d = Dir::new("syntax_errors");
     let other = d.file("other.onsa", "pub fn f() -> U8 {\n  250\n}\n");
     for (what, text, expected) in SYNTAX_ERRORS {
@@ -635,7 +635,7 @@ fn fmt_keeps_a_move_in_a_consuming_position_and_does_not_fail_on_a_returned_one(
     // §5.2: `let y = if c { move a } else { move b }` is the form E0711 asks for, so fmt keeps it.
     // The `move` of a returned value stays too (W3-12 took back its removal; the text after fmt is not
     // asserted here), and fmt must read the file (exit code 0) and the program must be the same under
-    // the rewrite list of docs/onsa-tools.md §3.3.
+    // the rewrite list of spec/tools.md §3.3.
     let consuming = "fn f(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {\n  let y = if c { move a } else { move b }\n  y\n}\n";
     let returned = "fn f(move a: Buf[F32]) -> Buf[F32] {\n  return move a\n}\n";
     let d = Dir::new("move_tail_fmt");

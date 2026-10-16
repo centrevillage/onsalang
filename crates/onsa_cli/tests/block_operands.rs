@@ -9,7 +9,7 @@
 //! other diagnostics (a line that starts with an operator, a call of a block-like expression) end with
 //! a clean program, that the arm list `{ 1 } - 1 =>` is an E0002 with no candidate and no E0013 (§2.5), and that
 //! `onsa fmt` writes no file that has an E0013 (exit code 2, §18.2) and keeps the parentheses of an operand
-//! (docs/onsa-tools.md §3.3).
+//! (spec/tools.md §3.3).
 //!
 //! The main position of an E0013 is the first token of the first block-like operand with no parentheses
 //! (§3.1), so the position is asserted where the expression is on one line. Every expected text is written from the
@@ -335,7 +335,7 @@ fn a_block_body_then_a_spaced_minus_and_an_arrow_is_an_e0002_with_no_candidate_a
     assert_eq!(span_start(diag).0, 3, "the diagnostic is on the line of the arm");
 }
 
-// ---- onsa fmt (§18.2, docs/onsa-tools.md §3.3) -----------------------------------------------------------
+// ---- onsa fmt (§18.2, spec/tools.md §3.3) -----------------------------------------------------------
 
 /// `f` has an E0013; `g` is fine and badly spaced.
 const E0013_FILE: &str = "\
@@ -398,7 +398,7 @@ pub fn h(c: Bool, xs: [I32; 2], ys: [I32; 2]) -> I32 {
 
 #[test]
 fn fmt_keeps_the_parentheses_of_a_block_like_operand() {
-    // docs/onsa-tools.md §3.3: the parentheses of `(if c { 1 } else { 2 }) + 1` are not redundant (E0013 without
+    // spec/tools.md §3.3: the parentheses of `(if c { 1 } else { 2 }) + 1` are not redundant (E0013 without
     // them), so `fmt` does not take them off.
     let d = Dir::new("fmt_keep");
     let path = d.file("a.onsa", MESSY);

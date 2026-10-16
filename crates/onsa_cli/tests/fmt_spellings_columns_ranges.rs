@@ -1,5 +1,5 @@
 //! What `onsa fmt` writes for the spelling of a number, the column of `=` and the spaces round a range
-//! symbol, and how `onsa diff --ast` compares the numbers (W3-11/t, unit U1; `docs/onsa-tools.md`
+//! symbol, and how `onsa diff --ast` compares the numbers (W3-11/t, unit U1; `spec/tools.md`
 //! §3.2, §3.5, spec §2.4, §18.2; plan S-334, S-62, S-126, S-07, S-89, S-122).
 //!
 //! The case files in `tests/spec/fmt/` pin that the canonical files are a fixed point of `fmt` and
@@ -7,7 +7,7 @@
 //! column, which spaces, by the whole text of the output, and that a second `fmt` and `fmt --check`
 //! leave it alone (§18.2: a canonical file is not changed by another `fmt`).
 //!
-//! The rules, from `docs/onsa-tools.md` §3.2:
+//! The rules, from `spec/tools.md` §3.2:
 //! - the spaces: one space on each side of `..<` and `..=`, and the ends keep the spaces of their own
 //!   operators (`lo + 1 ..< hi - 1`);
 //! - the numbers: the prefix (`0x` `0b`) and the exponent (`e`) in small letters, no `+` in an
@@ -261,7 +261,7 @@ fn a_float_is_written_from_its_digits_and_keeps_a_underscore_only_between_two_di
 #[test]
 fn a_spelling_that_is_not_in_the_rule_stays() {
     // The zeros in front of an exponent, at the end of a fraction and in front of a hexadecimal or a
-    // binary number are not changed (docs/onsa-tools.md §3.2 names the extra zeros of the integer part
+    // binary number are not changed (spec/tools.md §3.2 names the extra zeros of the integer part
     // only), and a canonical spelling stays.
     let table = [
         ("1e03", "1e03"),
@@ -543,7 +543,7 @@ fn a_range_in_a_nested_block_gets_the_spaces_too() {
 // ---- the column of `=` ----------------------------------------------------------------------------
 
 /// The lines `indent` + the left side padded to the longest + ` = ` + the right side: the column of
-/// `=` of docs/onsa-tools.md §3.2 (one space after the longest left side).
+/// `=` of spec/tools.md §3.2 (one space after the longest left side).
 fn col(indent: &str, rows: &[(&str, &str)]) -> Vec<String> {
     let w = rows.iter().map(|(l, _)| l.len()).max().unwrap();
     rows.iter().map(|(l, r)| format!("{indent}{l:<w$} = {r}")).collect()
@@ -923,7 +923,7 @@ fn the_equals_of_the_let_is_the_one_in_the_column_and_not_one_in_the_right_side(
 
 #[test]
 fn the_items_that_are_not_lets_are_not_in_a_column() {
-    // docs/onsa-tools.md §3.2 lists `let` and `var` only: the `=` of `const` items keeps one space on each side.
+    // spec/tools.md §3.2 lists `let` and `var` only: the `=` of `const` items keeps one space on each side.
     let consts = src(&["const A: U32 = 1", "const LONGER_NAME: U32 = 2", "pub const B: F32 = 0.5"]);
     expect_fmt("consts", &[("const items in a row", consts.clone(), consts)]);
 }
@@ -961,7 +961,7 @@ fn the_three_rules_work_together_and_a_second_fmt_changes_nothing() {
     expect_fmt("together", &[("all three", input, expected)]);
 }
 
-// ---- diff --ast compares the numbers by value (docs/onsa-tools.md §3.5) ---------------------------
+// ---- diff --ast compares the numbers by value (spec/tools.md §3.5) ---------------------------
 
 fn tail(expr: &str) -> String {
     src(&["fn f() -> F32 {", &format!("  {expr}"), "}"])
@@ -1107,7 +1107,7 @@ const BIG: &str = "170141183460469231731687303715884105728";
 
 #[test]
 fn a_float_with_an_exponent_of_any_length_is_compared_by_its_value() {
-    // docs/onsa-tools.md §3.5: the spellings of one value are no difference, whatever the length of
+    // spec/tools.md §3.5: the spellings of one value are no difference, whatever the length of
     // the exponent, and two values are a difference.
     let same = [
         (format!("1e{BIG}"), format!("1E+{BIG}")),

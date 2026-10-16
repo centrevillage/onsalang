@@ -1,5 +1,5 @@
 //! The table of the rows (§18.1, S-250): one `Row` per form of the data file
-//! `docs/foreign-forms.toml`, the rows a later work makes (`WAITING`), and the
+//! `spec/foreign-forms.toml`, the rows a later work makes (`WAITING`), and the
 //! rules (the notes) that several rows share.
 
 use super::assign::{binary_minus_prefix_minus, compound_assignment, increment};

@@ -1,7 +1,7 @@
 //! Tests of the table of the forms of other languages ([`crate::foreign`]):
 //! each form is found where the parser fails, with its code, and its first
 //! candidate gives the Onsa form. The examples of the data file
-//! `docs/foreign-forms.toml`, which run through the same entry as the cases
+//! `spec/foreign-forms.toml`, which run through the same entry as the cases
 //! and check every candidate against the contract of §18.1, are the tests of
 //! `onsa_tests` (D-15); these are the unit tests of the matchers.
 

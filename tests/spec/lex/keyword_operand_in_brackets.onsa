@@ -6,7 +6,7 @@
 // A keyword in an expression and its operand (spec §2.5, S-416): `if` and `match` before the condition or the subject, the `if` after
 // an `else` and its condition, `move` and `inout` before their operand. They have no rule of where the operand stands, as `as` and `at`
 // have none (tests/spec/lex/parens_as_at.onsa): in a pair of brackets a line break is a space there, so the operand may be on the next
-// line, and the syntax stage reports nothing. (`onsa fmt` joins the line, docs/onsa-tools.md §3.2: `canonical = false`; outside the
+// line, and the syntax stage reports nothing. (`onsa fmt` joins the line, spec/tools.md §3.2: `canonical = false`; outside the
 // brackets the keyword ends the line and the operand is missing: tests/spec/negative/s416_keyword_operand_outside_brackets.onsa.)
 // The `with` before the handler of a `handle` is the same, but this version has no handler declaration (E0200), so it is
 // only in the case of the E0002 outside the brackets.

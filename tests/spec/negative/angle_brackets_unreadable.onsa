@@ -3,7 +3,7 @@
 // spec = ["§4.5", "§18.1"]
 
 // `<…>` for type parameters and type arguments is E0020 with the candidate `[…]` (spec §4.5; the row `angle_brackets`
-// of docs/foreign-forms.toml), but the candidate is made only when the text between the brackets reads as a list
+// of spec/foreign-forms.toml), but the candidate is made only when the text between the brackets reads as a list
 // of type parameters or type arguments (R-193). When it does not read as one, the candidate would write the same
 // unreadable text in `[ ]`, and applying it would leave an error of the syntax stage (§18.1: a candidate leaves none
 // of the same or an earlier stage), so there is no E0020 and no candidate: it is the E0002 of the general rule. The

@@ -3,7 +3,7 @@
 // spec = ["§2.4", "§2.6", "§11.2", "§11.4", "§18.1"]
 // fixes = 1
 
-// The FAUST forms of the table in §18.1 (docs/foreign-forms.toml; S-48, R-59, S-466). E0020, with the Onsa form as the
+// The FAUST forms of the table in §18.1 (spec/foreign-forms.toml; S-48, R-59, S-466). E0020, with the Onsa form as the
 // one candidate, for: `~ _` after a `let` name (the candidate is `prev~(^y)` for the name `y`), a prefix `~` that touches its
 // operand (`!` for it), and `x@N` (`prev~(x)` for 1, `delay~(x, N)` for a literal of 2 or more and for an UPPER_SNAKE
 // name). E0002 with no candidate for: a `~ _` with no `let` name, `x@k` with a name that is not a constant, the FAUST

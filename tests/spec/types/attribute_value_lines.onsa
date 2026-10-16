@@ -7,7 +7,7 @@
 // (§2.5): a line break in them is a blank, a comment means nothing, and the list may end with a `,`. So
 // `@fp(` on one line and `relaxed` on the next is `@fp(relaxed)`, and `@repr(c,)` is `@repr(c)`. A value out of
 // the list stays E0005 however it is laid out (negative/attributes_table.onsa). `canonical = false`: `onsa fmt`
-// writes the arguments of each attribute in the form of its list (docs/onsa-tools.md §3.2, S-510): a `,` after
+// writes the arguments of each attribute in the form of its list (spec/tools.md §3.2, S-510): a `,` after
 // the last argument in the block form, none on one line, and the `)` of one line right after the argument.
 
 @fp(

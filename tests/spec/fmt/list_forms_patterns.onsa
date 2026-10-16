@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§2.5", "§7", "§18.2"]
 
-// The block form and the continuation of the lists of a pattern (docs/onsa-tools.md §3.2, W3-11 unit U2):
+// The block form and the continuation of the lists of a pattern (spec/tools.md §3.2, W3-11 unit U2):
 // the fields of a struct pattern, the elements of a tuple pattern and the payload of a variant pattern.
 // The one-line forms are in list_forms.onsa. A pattern is a list like any other, so the writer's line
 // breaks stay: `onsa fmt` does not put a pattern on one line. The block form has the closing bracket on a

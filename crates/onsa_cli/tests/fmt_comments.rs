@@ -1,5 +1,5 @@
 //! Where `onsa fmt` leaves the comments, by the whole text of the output (W3-11/t, unit U4;
-//! `docs/onsa-tools.md` §3.2 and §3.4, spec §2.1, §2.5 and §18.2; plan S-58, S-496, S-497, S-502, S-507,
+//! `spec/tools.md` §3.2 and §3.4, spec §2.1, §2.5 and §18.2; plan S-58, S-496, S-497, S-502, S-507,
 //! S-528, S-529, S-530 and the reviews R-70, R-199, R-201, R-212).
 //!
 //! The rule (§3.4): `fmt` leaves a comment on the line it was written on. A comment at the end of a line
@@ -169,7 +169,7 @@ fn expect_fmt(tag: &str, cases: &[Case]) {
 }
 
 /// Every input is refused: `onsa fmt` ends with 2, names `diag` in its output (diagnostics go to the
-/// standard output, `docs/onsa-tools.md` §3.1) and does not touch the file.
+/// standard output, `spec/tools.md` §3.1) and does not touch the file.
 fn expect_refused(tag: &str, diag: &str, inputs: &[(&str, String)]) {
     assert!(!inputs.is_empty(), "no case to run");
     let d = Dir::new(tag);
@@ -485,7 +485,7 @@ const K_ALL: &[&Kind] = &[
 
 /// The lines of the expected text may hold a TAB between the code and a comment at the end of a line: the
 /// comments of the consecutive lines that hold one are put in one column, one space after the longest code
-/// (docs/onsa-tools.md §3.2). The other lines stay as they are.
+/// (spec/tools.md §3.2). The other lines stay as they are.
 fn cols(lines: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut i = 0;

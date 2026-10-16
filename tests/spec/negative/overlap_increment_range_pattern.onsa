@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§7", "§18.1"]
 
-// E0002 for a `--` or a `++` in front of a range pattern (R-206; docs/foreign-forms.toml rows `increment`
+// E0002 for a `--` or a `++` in front of a range pattern (R-206; spec/foreign-forms.toml rows `increment`
 // and `range_pattern`). A pattern cannot start with `--` or `++`: the increment and decrement of C are not
 // Onsa (S-250), and in a pattern there is no statement for the row `increment` to give its candidate
 // `x = x - 1` (S-297: a decrement whose operand is not a name has no candidate, E0002). The range after

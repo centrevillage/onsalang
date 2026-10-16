@@ -7,7 +7,7 @@
 // their own, searched only after `at` (§11.3), and an ordinary name may be spelled the same
 // ("`sample` や `block` を変数の名前に使ってもよい"). `at` is a keyword (§2.2). The syntax stage
 // reads each of these forms; which name an identifier means is the names stage's. The file is
-// read only (mode = "parse") and written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+// read only (mode = "parse") and written the way `onsa fmt` writes it (spec/tools.md §3.2).
 
 pub struct Timing {
   init: F32,

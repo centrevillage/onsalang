@@ -1,4 +1,4 @@
-//! The rewrites of `onsa fmt` that change the tree (`docs/onsa-tools.md`
+//! The rewrites of `onsa fmt` that change the tree (`spec/tools.md`
 //! §3.3): the one closed list, in [`REWRITES`].
 //!
 //! A rewrite decides on the CST which nodes it rewrites: the nodes it drops

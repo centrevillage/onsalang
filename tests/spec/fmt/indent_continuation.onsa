@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§7", "§18.2"]
 
-// The level of a continued line (docs/onsa-tools.md §3.2, S-498, S-335): a line that continues the line
+// The level of a continued line (spec/tools.md §3.2, S-498, S-335): a line that continues the line
 // before it is one level (two spaces) deeper than the line the statement or the item starts on, and it
 // stays at that level however many continued lines follow (`let x =` and then `a +` and then `b` are on one
 // level, not on three). The base is the line of the statement or of the item, not the line before: in a

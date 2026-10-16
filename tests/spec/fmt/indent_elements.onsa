@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§7", "§18.2"]
 
-// The line breaks inside an element of a list (docs/onsa-tools.md §3.2, S-497, S-498): a break stays where
+// The line breaks inside an element of a list (spec/tools.md §3.2, S-497, S-498): a break stays where
 // the language goes on (after a binary operator, before a `.`; §2.5) and the next line is one level
 // deeper than the line the element starts on, however the list is written. The element of a list in the
 // block form starts on its own line, the element of a continuation starts under the first one (on the

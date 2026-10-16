@@ -1,6 +1,6 @@
 //! Shared by the `onsa test` integration tests (`test_identity.rs`, `test_json_document.rs`):
 //! a scratch package, one run of the built `onsa`, and readers of the document `onsa test --json`
-//! prints (spec §18.1) and of the result lines of the text output (`docs/onsa-tools.md` §4).
+//! prints (spec §18.1) and of the result lines of the text output (`spec/tools.md` §4).
 
 #![allow(dead_code)]
 

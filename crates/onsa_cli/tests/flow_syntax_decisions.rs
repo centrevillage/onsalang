@@ -312,7 +312,7 @@ fn a_tab_between_if_and_the_tilde_is_the_space_of_the_error() {
 #[test]
 fn if_with_the_tilde_glued_to_the_condition_is_read_and_fmt_spaces_it() {
     // S-354: `if~c` is accepted (the `~` is right after the keyword), and `onsa fmt` writes the condition after one
-    // space (docs/onsa-tools.md §3.2: `if~ c`).
+    // space (spec/tools.md §3.2: `if~ c`).
     let d = Dir::new("if_glued");
     let cases = [
         ("if~c", "  if~c { 1.0 } else { 2.0 }", "  if~ c { 1.0 } else { 2.0 }"),

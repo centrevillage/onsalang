@@ -58,7 +58,7 @@ pub const BLANKS: [char; 2] = [' ', '\t'];
 
 /// The text of the comment at `span` of `src` without the blanks at its end:
 /// what `onsa fmt` writes and what its check and `diff --ast` compare, for
-/// the comments and the doc comments alike (`docs/onsa-tools.md` §3.4, §3.5).
+/// the comments and the doc comments alike (`spec/tools.md` §3.4, §3.5).
 pub fn comment_text(src: &str, span: Span) -> &str {
     src[span.start as usize..span.end as usize].trim_end_matches(BLANKS)
 }

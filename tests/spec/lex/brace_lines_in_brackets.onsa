@@ -7,7 +7,7 @@
 // of an effect row is on the line of the name (or of the `uses`), and the fields, the sub-patterns and the effects may be on
 // lines of their own, with comments between, a blank line, and a `,` after the last one, in a pair of brackets, in a
 // list of arms and outside them. (`onsa fmt` writes a `,` after the last effect of an effect row in the block form,
-// docs/onsa-tools.md §3.2, so the case says `canonical = false`.)
+// spec/tools.md §3.2, so the case says `canonical = false`.)
 
 pub struct Pt {
   x: I32,

@@ -481,7 +481,7 @@ pub(crate) fn int_value(text: &str) -> Option<u64> {
     u64::from_str_radix(&digits[2..], radix).ok()
 }
 
-/// The canonical spelling of the number token `text` (`docs/onsa-tools.md`
+/// The canonical spelling of the number token `text` (`spec/tools.md`
 /// §3.2, §2.4, S-62, S-126), or `None` when it is no integer or float of
 /// Onsa: the prefix and the `e` in lower case, no `+` in the exponent, the
 /// hexadecimal digits in upper case, one `_` between digits only, and no
@@ -532,7 +532,7 @@ fn digit_groups(text: &str) -> String {
 }
 
 /// The exact decimal value of the float token `text` as a key, for the
-/// comparison of `docs/onsa-tools.md` §3.5 (numbers by value, not by
+/// comparison of `spec/tools.md` §3.5 (numbers by value, not by
 /// spelling): the digits without the `0` at their head and end, and the
 /// power of ten (`1.0e3`, `1000.0`, `1_000.0` and `10e2` are `1e3`; zero is
 /// `0e0`). The spellings of one value have one key, and two values have two

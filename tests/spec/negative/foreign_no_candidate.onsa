@@ -3,7 +3,7 @@
 // spec = ["§5.1", "§7", "§18.1"]
 
 // Forms of other languages with no candidate: E0002, and a note that shows the Onsa form (§18.1:
-// E0020 only when a candidate can be made). The rows are in docs/foreign-forms.toml with
+// E0020 only when a candidate can be made). The rows are in spec/foreign-forms.toml with
 // code = "E0002". That these have no candidate and have a note is checked in
 // crates/onsa_cli/tests/foreign_candidates.rs.
 

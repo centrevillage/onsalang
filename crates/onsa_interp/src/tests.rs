@@ -1052,7 +1052,7 @@ fn an_unimplemented_std_function_is_unsupported() {
 // ------------------------------------------------- W2-10: `onsa test`'s failures
 
 /// Spec §6.3: the `Show` string of a float, which the panic messages use
-/// (`docs/onsa-tools.md` §4): the shortest decimal that reads back, with a
+/// (`spec/tools.md` §4): the shortest decimal that reads back, with a
 /// point, in the exponent form at `1.0e21` and above and below `1.0e-7`.
 #[test]
 fn show_of_floats_is_the_form_of_spec_6_3() {

@@ -8,7 +8,7 @@
 // allowed where (E0810), what a value type may be (E0810), the `@param` rules (E0809) and
 // whether a name exists belong to the later stages, so no flow here is checked and the syntax
 // stage reports nothing for any declaration. The file is written the way `onsa fmt` writes it
-// (docs/onsa-tools.md §3.2). The clock is a name, read after `at` (§11.3); `at` is a keyword
+// (spec/tools.md §3.2). The clock is a name, read after `at` (§11.3); `at` is a keyword
 // (§2.2), so it cannot be mistaken for the end of the type.
 
 pub struct Stereo {

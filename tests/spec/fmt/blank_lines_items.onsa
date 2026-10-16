@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§5.1", "§18.2"]
 
-// The blank lines between items and between statements (docs/onsa-tools.md §3.2, S-122, S-499, S-502): a
+// The blank lines between items and between statements (spec/tools.md §3.2, S-122, S-499, S-502): a
 // blank line between two items or two statements stays, and so does the absence of one (two or more blank
 // lines become one; that is in the tests of the command). The blank lines at the start and at the end of
 // a block are the ones before its first content and after its last content, where a line of a comment is

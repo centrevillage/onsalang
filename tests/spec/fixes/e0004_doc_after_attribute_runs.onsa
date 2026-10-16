@@ -7,7 +7,7 @@
 // lines, and which lines it takes (§2.1, S-432, S-442). The candidate deletes each line of the doc
 // comment with its line break and inserts the same lines at the start of the line of the first
 // attribute, after the `///` lines that already stand there; the plain comments and the blank
-// lines are not moved (§3.4 of docs/onsa-tools.md; the same fineness as the edits per line of
+// lines are not moved (§3.4 of spec/tools.md; the same fineness as the edits per line of
 // S-442). A `///` before the attribute that is separated from the attribute by a plain comment or
 // a blank line keeps its place, and the moved lines come right before the attribute. Two `///`
 // lines after the attribute with a blank line or a plain comment between them are one error, and

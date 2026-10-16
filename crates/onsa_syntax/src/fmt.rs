@@ -1,4 +1,4 @@
-//! `onsa fmt` (`docs/onsa-tools.md` §3, S-07, T1-9): writes a file in the
+//! `onsa fmt` (`spec/tools.md` §3, S-07, T1-9): writes a file in the
 //! single canonical form. The printer (`fmt/print.rs`) walks the tokens of
 //! the CST and keeps the line structure the author chose (one-line and
 //! multi-line blocks, the form of each list, line breaks in chains, blank
@@ -28,7 +28,7 @@ pub enum FormatError {
     /// The lexer or the parser reported a diagnostic (`Parsed::syntax_errors()`,
     /// R-146, S-214): the file is not formatted (§18.2).
     Syntax,
-    /// The output is not the program of the input (`docs/onsa-tools.md`
+    /// The output is not the program of the input (`spec/tools.md`
     /// §3.5): a bug of fmt, an internal error (§18.2).
     Unverified(Difference),
 }
@@ -46,7 +46,7 @@ pub fn format(parsed: &Parsed, text: &str) -> Result<String, FormatError> {
     Ok(out)
 }
 
-/// The check before writing (`docs/onsa-tools.md` §3.5): `out`, parsed
+/// The check before writing (`spec/tools.md` §3.5): `out`, parsed
 /// again, has no diagnostic of the syntax stage (checked first: the
 /// comparison takes trees without one) and is the program of `parsed`
 /// ([`same_program`]). `parsed` has no diagnostic of the syntax stage.
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn negative_literal_patterns_keep_their_comments_once() {
         // The parentheses stay, the spaces go (S-185); a comment inside is kept once on its
-        // line with the line break after it (`docs/onsa-tools.md` §3.4, S-58; W2-06/b: the
+        // line with the line break after it (`spec/tools.md` §3.4, S-58; W2-06/b: the
         // comment was printed twice, `) = // c`), and the output parses again.
         let kept = |src: &'static str| (src, src);
         for (src, want) in [
@@ -119,7 +119,7 @@ mod tests {
         // was joined to its `.(` on one line (`1.(` read as the literal `1.` then, S-350). The
         // output is the same whatever the comment says, keeps the line break before a `.(`
         // that starts a line (as `.max(1)` does), and reads to the same tree. Each comment
-        // stays on its line (`docs/onsa-tools.md` §3.4, R-199, S-58): these are canonical.
+        // stays on its line (`spec/tools.md` §3.4, R-199, S-58): these are canonical.
         let cases = [
             // e3, e4: a comment with and without `.` and `(` between the callee and `.(`.
             "pub fn g(f: fn(I32) -> I32) -> I32 {\n  let a = f // a.b ()\n    .(1)\n  a\n}\n",
@@ -296,7 +296,7 @@ mod tests {
     }
 
     /// R-204: the check before writing refuses an output that is not the
-    /// program of the input (`docs/onsa-tools.md` §3.5). A correct fmt does
+    /// program of the input (`spec/tools.md` §3.5). A correct fmt does
     /// not make one, so the outputs are false ones.
     #[test]
     fn the_check_refuses_an_output_of_another_program() {

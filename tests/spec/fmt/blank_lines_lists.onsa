@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§6.5", "§7", "§18.2"]
 
-// The blank lines between the elements of a list (docs/onsa-tools.md §3.2, S-499, S-510): a blank line
+// The blank lines between the elements of a list (spec/tools.md §3.2, S-499, S-510): a blank line
 // between two elements stays whatever the list and whatever its form, and so does the absence of one. The
 // lists are the fields of a struct, the variants of an enum, the arms of a `match`, the arguments of a
 // call and of a declaration, the elements of an array, the elements of an enum variant, the arguments of

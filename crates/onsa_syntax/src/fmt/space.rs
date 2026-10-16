@@ -1,5 +1,5 @@
 //! The spaces of `onsa fmt` between two tokens on one line
-//! (`docs/onsa-tools.md` §3.2, the second item; spec §2.5, §2.6).
+//! (`spec/tools.md` §3.2, the second item; spec §2.5, §2.6).
 //!
 //! [`space`] says whether two code tokens that the printer puts on one line
 //! touch or have one space between them. It reads the two tokens and the

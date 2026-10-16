@@ -4,7 +4,7 @@
 
 // E0002, with no candidate, for the keyword of another language in front of a function that says the function
 // is for the C ABI (spec §14.1, §14.2, §18.1, S-464; the rows `extern_fn` and `export_c` of
-// docs/foreign-forms.toml): `extern "C" fn`, `extern fn`, and `export "C" fn` of the old version. A function
+// spec/foreign-forms.toml): `extern "C" fn`, `extern fn`, and `export "C" fn` of the old version. A function
 // that C calls is chosen by the manifest (`[export]`, §14.2), and a C function that Onsa calls is declared in
 // `extern "C" lib "…" { … }` (§14.1); neither is written in the head of a function, and the manifest is a file
 // that the writer does not edit (§15.4), so there is no candidate. The main position is the `extern` or the

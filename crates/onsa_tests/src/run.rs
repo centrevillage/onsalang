@@ -805,7 +805,7 @@ fn parser_markers(run: &mut CaseRun, sources: &SourceMap, file: FileId, markers:
 /// again unchanged, and fmt changes one of the files of the case at least
 /// (else the setting is to go; the caller judges it from the result: whether
 /// fmt changed this file). That the output is the program of the input is
-/// checked by `onsa_syntax::format` itself (R-204, `docs/onsa-tools.md`
+/// checked by `onsa_syntax::format` itself (R-204, `spec/tools.md`
 /// §3.5); a failed check is a problem of the case.
 fn canonical(run: &mut CaseRun, name: &str, text: &str, normal: bool) -> bool {
     // `of` names the input of the format that failed: the file, or fmt's own output.

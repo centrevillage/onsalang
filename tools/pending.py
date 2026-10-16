@@ -30,7 +30,7 @@ the form of `target`:
                   code at that place of a case's check (matched by the test
                   runner, `onsa_tests::run::reconcile`, W3-17)
     foreign-form  a row of the closed list of the forms of other languages,
-                  `docs/foreign-forms.toml` (S-250), whose examples do not pass
+                  `spec/foreign-forms.toml` (S-250), whose examples do not pass
                   yet: the row's `id`, "semicolon" (matched by
                   `onsa_tests::foreign_forms`, W3-15)
 
@@ -58,7 +58,7 @@ checks it).
 `until = "P2"` names the second phase instead of a work (K-13 rule 3): a code
 of the second phase waits for no work of the first. Only the kinds of
 `PHASE2_KINDS` may use it. Its reasons may also name a section of the spec
-("§20", a numbered heading of `onsa-lang-spec-0.3.md`): the spec itself sets
+("§20", a numbered heading of `spec/`): the spec itself sets
 the scope of the first phase; other entries name S / R numbers only. The summary counts it as the stage `P2`, after the
 W and M stages. `--stage-end P2` is a usage error (the first phase never ends
 the second); `--stage-end M9`, the end of the first phase, fails on every

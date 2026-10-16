@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§4.5", "§18.2"]
 
-// The three forms of the type arguments of an expression, `::[…]` (docs/onsa-tools.md §3.2, S-328, S-510):
+// The three forms of the type arguments of an expression, `::[…]` (spec/tools.md §3.2, S-328, S-510):
 // on one line, in the block form (a line break right after `::[`, one type a line with a `,` after every
 // type, the closing `]` on a line of its own, and the call after it) and as a continuation (the others
 // under the first type, no `,` after the last). There is no space before or after `::[`, and the type

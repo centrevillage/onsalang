@@ -10,7 +10,7 @@
 //!   S-214, S-281; the parse completes the candidates of the one it chooses).
 //! - [`syntax_report`]: what `fmt` and `diff --ast` report for a file the
 //!   syntax stage fails: the same choice, of which the syntax ones
-//!   (`docs/onsa-tools.md` §3.1).
+//!   (`spec/tools.md` §3.1).
 //! - [`exact`]: lowering and the build (code generation, layout, link) run
 //!   only on units that passed the checks, so their diagnostics do not
 //!   cascade: every one is reported, and only those with the same position,
@@ -95,7 +95,7 @@ pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagno
 
 /// What `fmt` and `diff --ast` report for a file with a diagnostic of the
 /// syntax stage: `check`'s choice of one diagnostic per unit, of which those of
-/// the syntax stage (`docs/onsa-tools.md` §3.1; a naming error E0320 does not
+/// the syntax stage (`spec/tools.md` §3.1; a naming error E0320 does not
 /// stop them, and is not reported).
 pub fn syntax_report(parsed: &onsa_syntax::Parsed, file: FileId) -> Vec<Diagnostic> {
     let reduced = per_unit([(file, &parsed.units)], parsed.diagnostics.clone());

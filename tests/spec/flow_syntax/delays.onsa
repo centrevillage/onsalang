@@ -9,7 +9,7 @@
 // The syntax stage reads the lists as lists of any length; the number of arguments, the types and
 // the clocks belong to the later stages, so the file is read only (mode = "parse"). No `init`
 // below is a default value of its type (`0`, `0.0`, `false`): `onsa fmt` takes such an `init` out
-// (§11.4), and the file is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+// (§11.4), and the file is written the way `onsa fmt` writes it (spec/tools.md §3.2).
 
 const N: U32 = 4
 const MAX: U32 = 64

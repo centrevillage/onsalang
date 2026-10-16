@@ -493,7 +493,7 @@ fn the_spaced_candidate_of_a_binary_minus_and_a_prefix_minus_leaves_no_diagnosti
 #[test]
 fn a_binary_operator_other_than_minus_followed_by_a_prefix_minus_is_not_the_form() {
     // S-320 is about `--`, one token. `a+-b`, `a*-b`, `a/-b` and `a - -b` are separate tokens and no
-    // form of the closed list of docs/foreign-forms.toml (§18.1: a form that is not in the list is not
+    // form of the closed list of spec/foreign-forms.toml (§18.1: a form that is not in the list is not
     // an E0020).
     let d = Dir::new("minus_other");
     for expr in ["a+-b", "a*-b", "a/-b", "a - -b", "a-b", "a-(-b)"] {

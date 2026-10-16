@@ -3,7 +3,7 @@
 // spec = ["§15.1", "§18.1"]
 
 // E0002, with no candidate, for the visibilities of other languages that limit a range (spec §15.1, S-417,
-// S-420; the rows `pub_restricted` and `field_pub_crate` of docs/foreign-forms.toml): `pub(super)`,
+// S-420; the rows `pub_restricted` and `field_pub_crate` of spec/foreign-forms.toml): `pub(super)`,
 // `pub(self)`, `pub(in a.b)`, `pub(in crate::a)`, and every other form where the word after `pub(` is not
 // `crate` or `pkg` (`pub()`, `pub(package)`, `pub(module)`). Onsa has no range that is the same, so there is
 // nothing to put in the place of it, and the note shows the three visibilities (`pub`, none, `priv`). A space

@@ -1,5 +1,5 @@
 //! What `onsa fmt` writes for a file that is not in the canonical form of the lines and the lists, by the
-//! whole text of the output (W3-11/t, unit U3b; `docs/onsa-tools.md` §3.2, §3.4, spec §2.5, §18.2; plan
+//! whole text of the output (W3-11/t, unit U3b; `spec/tools.md` §3.2, §3.4, spec §2.5, §18.2; plan
 //! S-122, S-201, S-328, S-496, S-497, S-499 to S-502, S-505, S-507, S-510).
 //!
 //! The case files in `tests/spec/fmt/` pin that the canonical files are a fixed point of `fmt`. These tests
@@ -9,7 +9,7 @@
 //! `onsa fmt` ends with 2, §18.2); every test checks it for the expected text (`fmt --check` does not end
 //! with 2) and for the input (`fmt` ends with 0).
 //!
-//! The rules, from `docs/onsa-tools.md` §3.2 and §3.4:
+//! The rules, from `spec/tools.md` §3.2 and §3.4:
 //! - a list is in one of three forms by the writer's line breaks, for every kind of list (S-510, S-328):
 //!   the arguments, the parameters of a declaration, the elements of an array and a tuple, the fields of a
 //!   struct literal, a struct, an enum and a pattern, the arms of a `match`, the inputs of a flow, and the
@@ -154,7 +154,7 @@ fn expect_fmt(tag: &str, cases: &[Case]) {
 }
 
 /// Every input is refused: `onsa fmt` ends with 2, names `diag` in its output (diagnostics go to the
-/// standard output, `docs/onsa-tools.md` §3.1) and does not touch the file.
+/// standard output, `spec/tools.md` §3.1) and does not touch the file.
 fn expect_refused(tag: &str, diag: &str, inputs: &[(&str, String)]) {
     assert!(!inputs.is_empty(), "no case to run");
     let d = Dir::new(tag);

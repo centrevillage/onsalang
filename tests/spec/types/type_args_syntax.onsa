@@ -10,7 +10,7 @@
 // reports nothing for any function. Each function is one place where the mark is read.
 //
 // The mark is `::[` with no space on either side: `id::[U8]`, never `id ::[U8]` (E0020, §2.5).
-// The file is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2). A list of type
+// The file is written the way `onsa fmt` writes it (spec/tools.md §3.2). A list of type
 // arguments over several lines, whose normal form the spec does not say yet (S-328), is only read:
 // tests/cst/trivia_type_args_lines.onsa.
 

@@ -5,7 +5,7 @@
 
 // The three forms of a list, as programs that run (W3-11, unit U2): the same list on one line, in the block
 // form and as a continuation means the same thing, and the file is a fixed point of `onsa fmt` (the layout
-// is docs/onsa-tools.md §3.2; list_forms.onsa has the forms of every kind of list, syntax only). The
+// is spec/tools.md §3.2; list_forms.onsa has the forms of every kind of list, syntax only). The
 // values are worked out by hand from the spec text.
 
 pub struct Point3 {

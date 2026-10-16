@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§7", "§3.1", "§11.5", "§18.2"]
 
-// The canonical spaces round a range symbol (docs/onsa-tools.md §3.2, S-334): one space on each side of
+// The canonical spaces round a range symbol (spec/tools.md §3.2, S-334): one space on each side of
 // `..<`, and the ends keep the spaces of their own operators. A range binds more weakly than every
 // binary operator (§3.1), so the spaces show what the ends are: `lo + 1 ..< hi - 1` ends at `hi - 1`.
 // The file is canonical, so `onsa fmt` leaves it unchanged; the same programs written without the

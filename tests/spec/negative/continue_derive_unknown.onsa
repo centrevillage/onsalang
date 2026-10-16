@@ -12,7 +12,7 @@
 // interpolation that needs `Show`. What does not depend on it is read and checked: the name, the
 // type parameters, the fields, the variants. A real error about the fields, the literal, the
 // arguments and the `match` is reported. One error in each unit.
-// (The candidate and its text are the rows' business: docs/foreign-forms.toml. The methods that
+// (The candidate and its text are the rows' business: spec/foreign-forms.toml. The methods that
 // a derive makes, and a derive and an `impl` that overlap, are in continue_derive_methods.onsa.)
 
 #[derive(PartialEq)]                                //~ E0020

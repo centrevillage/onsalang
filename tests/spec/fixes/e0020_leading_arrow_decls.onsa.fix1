@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020: a `->` at the start of a line, in the declarations that tests/spec/fixes/e0020_leading_arrow_assign.onsa does
-// not have (spec §2.5, S-374, S-216; docs/foreign-forms.toml row `leading_operator`): the method of a trait, the
+// not have (spec §2.5, S-374, S-216; spec/foreign-forms.toml row `leading_operator`): the method of a trait, the
 // operation of an effect, the method of an `impl` of a trait, the type of a field, a function type inside
 // type arguments and a function type that returns a function type. The continuing `->` goes at the end
 // of the line, as the binary operators do, and a line that starts with one is an error, in a pair of brackets and

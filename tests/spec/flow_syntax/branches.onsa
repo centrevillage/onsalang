@@ -7,7 +7,7 @@
 // `else if` chain. The syntax stage reads them as it reads `if` and `match` (and anywhere an
 // expression may stand); whether a branch holds a state (E0811, E0812), what a branch may hold
 // and the values of the branches belong to the later stages, so the file is read only
-// (mode = "parse"). It is written the way `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+// (mode = "parse"). It is written the way `onsa fmt` writes it (spec/tools.md §3.2).
 
 // `if~` and `match~`, one line and over several lines.
 pub flow if_tilde_one_line(x: F32 at sample, c: Bool at sample) -> F32 at sample {

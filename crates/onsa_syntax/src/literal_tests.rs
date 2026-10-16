@@ -14,7 +14,7 @@ use crate::literal::{
 
 #[test]
 fn the_canonical_spelling_of_each_number() {
-    // `docs/onsa-tools.md` §3.2 (S-62, S-126): each rule of the closed list, and what stays.
+    // `spec/tools.md` §3.2 (S-62, S-126): each rule of the closed list, and what stays.
     let cases = [
         ("0X1f", "0x1F"),
         ("0xff_ff", "0xFF_FF"),
@@ -51,7 +51,7 @@ fn the_canonical_spelling_of_each_number() {
 
 #[test]
 fn the_key_of_a_float_is_its_exact_value() {
-    // `docs/onsa-tools.md` §3.5: every spelling of a value has one key.
+    // `spec/tools.md` §3.5: every spelling of a value has one key.
     for text in ["1.0e3", "1000.0", "1_000.0", "10e2", "1E+3", "01000.000", "0.001e6", "1e0_3"] {
         assert_eq!(float_key(text), "1e3", "{text}");
     }

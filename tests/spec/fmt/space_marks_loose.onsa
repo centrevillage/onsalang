@@ -8,7 +8,7 @@
 // unit U2): inside `( )` and `[ ]` and the brackets of a type argument list, before `,` and `:`, none
 // or several after them, none inside the braces of a struct literal and of a struct pattern, and one
 // inside the braces of an effect row and of a `use` list. `onsa fmt` writes the forms of
-// space_marks.onsa (docs/onsa-tools.md §3.2): none inside `( )` and `[ ]`, one after `,` and `:` and
+// space_marks.onsa (spec/tools.md §3.2): none inside `( )` and `[ ]`, one after `,` and `:` and
 // none before, one inside the braces of a struct literal and of a struct pattern and none inside the
 // braces of an effect row and of a `use` list. The file is not canonical on purpose
 // (`canonical = false`); the places where a space is E0020 are not here (they are in the CLI tests).

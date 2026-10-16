@@ -3,7 +3,7 @@
 // spec = ["§5.1", "§18.1"]
 // fixes = 1
 
-// E0020 for a compound assignment (S-250; docs/foreign-forms.toml rows `compound_assign`). In a
+// E0020 for a compound assignment (S-250; spec/foreign-forms.toml rows `compound_assign`). In a
 // statement position, with a name or a field path on the left, the candidate is `x = x op rhs`
 // (the right side in parentheses when its precedence is lower than the operator's). Each of the
 // ten operators is a unit of its own here.

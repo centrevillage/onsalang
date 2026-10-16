@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for a visibility that is already there, in the field of a struct and in a `use` (spec §15.1, S-35, S-36;
-// the rows `field_pub`, `field_priv_in_priv_struct` and `priv_use` of docs/foreign-forms.toml). A field takes the
+// the rows `field_pub`, `field_priv_in_priv_struct` and `priv_use` of spec/foreign-forms.toml). A field takes the
 // visibility of its struct: there is no way to widen it, so `pub` on a field is a repeat; and the fields of
 // a `priv struct` are `priv` already, so `priv` on one is a repeat. The only visibility a field has of its own
 // is `priv`, in a struct that is `pub` or has none. A name that a `use` brings is for the module that has

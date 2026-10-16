@@ -1,4 +1,4 @@
-//! The alignment of `onsa fmt` (`docs/onsa-tools.md` §3.2, S-07, S-89,
+//! The alignment of `onsa fmt` (`spec/tools.md` §3.2, S-07, S-89,
 //! S-122): after the lines are printed, the `=` of the runs of single-line
 //! `let` and `var` statements and the trailing comments of consecutive
 //! lines are put in one column each. Only the columns of single-line

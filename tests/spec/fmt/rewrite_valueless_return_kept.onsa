@@ -4,7 +4,7 @@
 // spec = ["§6.1", "§18.2"]
 
 // The `return`s without a value that `onsa fmt` keeps (W3-12, unit U1; plan S-547; spec §6.1: "`onsa fmt` は
-// 取り除かない"; docs/onsa-tools.md §3.3). Taking one off can change what `onsa check` says (§18.2): after a
+// 取り除かない"; spec/tools.md §3.3). Taking one off can change what `onsa check` says (§18.2): after a
 // `return a` in a function of `I32`, the `return` is E0401, and without it `return a` would be the last
 // statement, which fmt takes off, and the program would pass. These are dead code after a `return`, a loop
 // that does not end, or a statement, with and without a comment at the end of the line (W3-12/b2 1 and 2:

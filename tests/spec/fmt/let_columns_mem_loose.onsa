@@ -7,7 +7,7 @@
 // The lines of let_columns_mem.onsa with the `=` of every plain `let` at a place of its own (after one space, or
 // after three more than the line needs, by turns). The language reads them; `onsa fmt` puts the `=` of the
 // consecutive plain `let` lines in one column and the `=` of a `let` with `@mem(bulk)` after one space
-// (docs/onsa-tools.md §3.2, S-122). The file is not canonical on purpose (`canonical = false`). Only the
+// (spec/tools.md §3.2, S-122). The file is not canonical on purpose (`canonical = false`). Only the
 // syntax is read (`mode = "parse"`), as in let_columns_mem.onsa.
 
 pub flow around_a_bulk_let(x: F32 at sample) -> F32 at sample {

@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for `char` and `str` (S-250): the lowercase names of the types `Char` and `Str`. They
-// are in the closed list of foreign type names (docs/foreign-forms.toml, row `lowercase_type`);
+// are in the closed list of foreign type names (spec/foreign-forms.toml, row `lowercase_type`);
 // `String`, `Vec`, `i128` and `u128` are not (negative/foreign_not_in_table.onsa, E0302).
 
 pub fn letter(c: Char) -> Char {                    //~ E0020

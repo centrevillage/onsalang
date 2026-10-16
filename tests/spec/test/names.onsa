@@ -8,7 +8,7 @@
 // bidirectional control in its value. Everything else is a name, and two names
 // are the same when their values are (the escapes of the literal are read
 // first, there is no Unicode normalization). These all pass and are all
-// different: no E0306. `docs/onsa-tools.md` §4 and the full name text of
+// different: no E0306. `spec/tools.md` §4 and the full name text of
 // §11.8 write them back with `\`, `"`, `{` and `}` escaped.
 
 test "plain words" {

@@ -4,7 +4,7 @@
 // spec = ["§6.1", "§8.1", "§18.2"]
 
 // The forms until the second phase takes them off: the `-> ()` and the empty `uses {}` that `onsa fmt` keeps
-// today (W3-12, unit U1; the user left their rewrite of docs/onsa-tools.md §3.3 to the second phase on
+// today (W3-12, unit U1; the user left their rewrite of spec/tools.md §3.3 to the second phase on
 // 2026-10-15). When the second phase takes them off, this file is no longer canonical: its forms go to the
 // tests of the rewrite. The forms that stay for good are in `rewrite_unit_uses_kept.onsa`.
 // Every place of them: a function, a method of an `impl`, a member of a `trait` (with and without a body),

@@ -4,7 +4,7 @@
 
 // A block expression in parentheses, the operand of an operator that §3.1 asks for (E0013), in the block
 // form: the content is one level deeper than the line of the `({`, and the `})` is on that line, as with
-// `(if t {` … `})` in indent_enclosures.onsa (docs/onsa-tools.md §3.2, S-498). The parentheses are not
+// `(if t {` … `})` in indent_enclosures.onsa (spec/tools.md §3.2, S-498). The parentheses are not
 // redundant, so `onsa fmt` keeps them. The file is canonical, so `onsa fmt` leaves it unchanged.
 
 fn left(n: I32) -> I32 {

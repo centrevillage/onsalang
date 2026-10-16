@@ -3,7 +3,7 @@
 // spec = ["§2.5", "§4.1"]
 // canonical = false
 
-// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (docs/onsa-tools.md §3.2,
+// `canonical = false`: `onsa fmt` is free to join or move the breaks of this file (spec/tools.md §3.2,
 // decided in W3-11); the case is about what the parser accepts.
 
 // A line that ends with `->` goes on, in a function head, in a function type, in a type alias and in the

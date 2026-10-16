@@ -546,7 +546,7 @@ fn json_diagnostics<'a>(sources: &'a SourceMap, diagnostics: &'a [Diagnostic]) -
 }
 
 /// Render diagnostics for a terminal: `file:line:col: error[E0010]: message`,
-/// in the order of the JSON ([`sorted`]; `docs/onsa-tools.md` §4).
+/// in the order of the JSON ([`sorted`]; `spec/tools.md` §4).
 pub fn to_text(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
     use std::fmt::Write;
     let mut out = String::new();

@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§7", "§18.2"]
 
-// The line breaks of a continuation stay (docs/onsa-tools.md §3.2, R-143, S-335, S-498): `onsa fmt` does not
+// The line breaks of a continuation stay (spec/tools.md §3.2, R-143, S-335, S-498): `onsa fmt` does not
 // join a line to the next one at a place where the language goes on (§2.5), and does not break a line
 // anywhere else. The places are the end of a line that ends with a binary operator, a range symbol, `=` or
 // `->`, an attribute alone on its line, and the start of a line with `.` or `uses`. A continued line is one

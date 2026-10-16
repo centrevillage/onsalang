@@ -1,8 +1,8 @@
 //! The rewrites of `onsa fmt` that change the program's tree, and the way it writes (W3-12/t, unit U1;
-//! `docs/onsa-tools.md` §3.1, §3.3, §3.4 and §3.5; spec §0.2 (P2), §5.2, §6.1, §8.1, §11.4 and §18.2;
+//! `spec/tools.md` §3.1, §3.3, §3.4 and §3.5; spec §0.2 (P2), §5.2, §6.1, §8.1, §11.4 and §18.2;
 //! plan S-29, S-56, S-68 and S-100; the reviews R-78 and P-7).
 //!
-//! `docs/onsa-tools.md` §3.3 closes the list of the rewrites that change the AST. W3-12 does the first of
+//! `spec/tools.md` §3.3 closes the list of the rewrites that change the AST. W3-12 does the first of
 //! them and the redundant parentheses (unit U2, not here: no input of this file has a parenthesis that fmt
 //! would take off); the user's decision of 2026-10-15 leaves `-> ()` and `uses {}` to the second phase and
 //! takes back the `init` and the `move` (changed by W3-12/i, the second U1 fix):
@@ -167,7 +167,7 @@ fn assert_valid(d: &Dir, name: &str, what: &str, which: &str, text: &str, level:
     }
 }
 
-/// The expected text is in the canonical form of `docs/onsa-tools.md` §3.2 (a check of the test itself).
+/// The expected text is in the canonical form of `spec/tools.md` §3.2 (a check of the test itself).
 fn assert_canonical(d: &Dir, name: &str, what: &str, text: &str) {
     let p = d.file(name, text);
     let out = onsa(&["fmt", "--check", &p]);

@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§2.5", "§7", "§18.2"]
 
-// The level of what an enclosure opened on a continued line holds (docs/onsa-tools.md §3.2, S-498): the
+// The level of what an enclosure opened on a continued line holds (spec/tools.md §3.2, S-498): the
 // content of an enclosure is one level deeper than its base line and the closing bracket is on the base
 // line. The base line of a `(` or `[` list is the line of the opening bracket, and the base line of a `{`
 // enclosure (a block, a list of `match` arms, a struct literal) is the line the form that holds it starts

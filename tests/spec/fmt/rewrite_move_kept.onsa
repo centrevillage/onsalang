@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§5.2", "§18.2"]
 
-// The `move` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §5.2). `fmt` takes off no
+// The `move` that `onsa fmt` keeps (W3-12, unit U1; spec/tools.md §3.3, spec §5.2). `fmt` takes off no
 // `move` (the user took back the one in the returned position on 2026-10-15: `move K` of a constant is
 // E0711, and the syntax does not show whether a name is a local). A `move` where a value is consumed is
 // the mark that E0711 asks for, so it stays: the

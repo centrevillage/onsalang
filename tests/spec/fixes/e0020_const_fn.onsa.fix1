@@ -3,7 +3,7 @@
 // spec = ["§6.6", "§18.1"]
 // fixes = 1
 
-// E0020 for `const fn` (spec §6.6, §18.1, S-464; the row `const_fn` of docs/foreign-forms.toml): a function does
+// E0020 for `const fn` (spec §6.6, §18.1, S-464; the row `const_fn` of spec/foreign-forms.toml): a function does
 // not need a mark to be called from the initializer of a `const` (a function whose effect row is empty or `{Alloc}` can
 // be, §6.6), so the candidate is `fn`, with the `const` taken out. The main position is the `const`. The form is
 // the same after a visibility word, with type parameters, and as a member of an `impl`. One error in each

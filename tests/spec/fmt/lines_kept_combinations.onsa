@@ -3,7 +3,7 @@
 // spec = ["§2.5", "§4.5", "§7", "§11.7", "§12.1", "§18.2"]
 
 // The line breaks and the levels of lines_kept_continuation.onsa, lines_kept_brackets.onsa and the
-// indent_*.onsa cases, together, in the places where they meet (docs/onsa-tools.md §3.2, R-143, S-497,
+// indent_*.onsa cases, together, in the places where they meet (spec/tools.md §3.2, R-143, S-497,
 // S-498): a `par` and a `for` whose head goes on after a range symbol, a closure in the element of a list in
 // the block form, a call through a module path, a generic function whose head goes on after `->`, a flow,
 // and all of them in a branch and a loop. The file is canonical, so `onsa fmt` leaves it unchanged.

@@ -3,7 +3,7 @@
 // mode = "check"
 // spec = ["§6.1", "§18.2"]
 
-// The `return`s that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §6.1). Only a `return e`
+// The `return`s that `onsa fmt` keeps (W3-12, unit U1; spec/tools.md §3.3, spec §6.1). Only a `return e`
 // with a value in the tail position is taken off: the end of the body of a function or of an anonymous
 // function, and the end of every branch of an `if` and every arm of a `match` that is there, down to the end.
 // The `return`s with a value below are early exits, and none of them is in the tail position: one in a loop

@@ -7,7 +7,7 @@
 // The programs of space_symbols.onsa with the symbols written close to their operands (W3-11, unit
 // U2): no space round a binary operator, `=`, `->` and `=>`, none after `,` and `:`. The language
 // reads them, and `onsa fmt` puts back one space on each side of an operator, of `=`, of `->` and
-// of `=>`, and one after `,` and `:` (docs/onsa-tools.md §3.2). The file is not canonical on purpose
+// of `=>`, and one after `,` and `:` (spec/tools.md §3.2). The file is not canonical on purpose
 // (`canonical = false`). `as` is a word and cannot touch its operands. The values are those of
 // space_symbols.onsa.
 

@@ -1,5 +1,5 @@
 //! The lists and the enclosures of `onsa fmt`, and the form of a list
-//! (`docs/onsa-tools.md` §3.2, the third item).
+//! (`spec/tools.md` §3.2, the third item).
 //!
 //! [`shape`] says whether a CST node is a list (its elements separated by
 //! `,` between an opening and a closing bracket), a container (a block or a

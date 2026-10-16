@@ -10,7 +10,7 @@
 // and in a pair of brackets a line break is a space there, so the syntax stage reports nothing. (Outside the brackets the
 // `with` ends the line: tests/spec/negative/s416_keyword_operand_outside_brackets.onsa.) This version has no handler
 // declaration (E0200, tests/spec/negative/unsupported.onsa), so the case reads the syntax only: `mode = "parse"`.
-// `onsa fmt` joins these lines (docs/onsa-tools.md §3.2): `canonical = false`.
+// `onsa fmt` joins these lines (spec/tools.md §3.2): `canonical = false`.
 
 pub fn two(a: I32, b: I32) -> I32 {
   a + b

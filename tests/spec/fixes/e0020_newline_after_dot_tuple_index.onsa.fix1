@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for a line break between the member `.` of a tuple index and the number (`t.` and `0`; §2.5, S-353;
-// docs/foreign-forms.toml row `newline_after_dot`), outside the pairs of brackets and with the places that
+// spec/foreign-forms.toml row `newline_after_dot`), outside the pairs of brackets and with the places that
 // tests/spec/fixes/e0020_newline_after_dot.onsa does not have: a `let`, a comment on the line of the `.`, a
 // comment line between, a path of fields, the result of a call, an element of an array, an arm. The `.`
 // has an operand before it, so it is the member `.`, not the start of a float literal: the candidate moves it to the

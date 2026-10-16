@@ -323,7 +323,7 @@ fn show_float(x: f64, exp: &str) -> String {
 }
 
 /// Human-readable form for panic messages and test reports. Numbers are in
-/// the `Show` form of spec §6.3 (`docs/onsa-tools.md` §4).
+/// the `Show` form of spec §6.3 (`spec/tools.md` §4).
 pub fn show(v: &Value) -> String {
     match v {
         Value::I8(x) => x.to_string(),

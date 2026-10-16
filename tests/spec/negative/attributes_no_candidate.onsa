@@ -4,7 +4,7 @@
 
 // E0002, with no candidate, for an attribute of Rust (`#[…]`) or of the old version whose replacement cannot be
 // written where the attribute stands (spec §6.5, §18.1, S-463; the rows `hash_attribute_no_candidate` and
-// `old_attribute_no_candidate` of docs/foreign-forms.toml). A candidate is made only when the table of attributes
+// `old_attribute_no_candidate` of spec/foreign-forms.toml). A candidate is made only when the table of attributes
 // (§6.5) takes the replacement in that place: `#[inline]` would become `@inline`, which is E0005; `#[repr(rust)]`
 // and `#[fp(fast)]` keep a value that is not in the list; `@derive(…)` or `#[derive(…)]` on a fn or a `const` has
 // no head of a type to write `: trait` in; `@relaxed` on a struct and `@bulk` on a fn name a place that

@@ -1,4 +1,4 @@
-//! The printer of `onsa fmt` (`docs/onsa-tools.md` §3.2, §3.4; W3-11 unit
+//! The printer of `onsa fmt` (`spec/tools.md` §3.2, §3.4; W3-11 unit
 //! U3a): it walks the tokens of the CST and writes the code tokens and the
 //! comments in their order, deciding only what goes between two of them. The
 //! plan (`fmt/plan.rs`, W3-11 unit U3b) says which code tokens it leaves out,

@@ -11,7 +11,7 @@
 // on from the keyword of the item (a `pub` before it stays a visibility): the function is a name
 // of the module, the callers get no E0302, and a real error of a call is reported. The unit has a
 // syntax error, so its body is not checked. One error in each unit. (The rows `extern_fn` and
-// `export_c` of docs/foreign-forms.toml give these errors a note; the code is E0002 either way.)
+// `export_c` of spec/foreign-forms.toml give these errors a note; the code is E0002 either way.)
 
 extern "C" fn c_abi(a: I32) -> I32 {                //~ E0002 @1
   a

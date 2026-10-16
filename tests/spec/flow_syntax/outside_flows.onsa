@@ -8,7 +8,7 @@
 // ("flow の外の flow だけの構文は E0821"; the names stage is after the syntax stage, §18.1), so
 // `onsa fmt` formats such a file and `onsa diff --ast` compares it. The file is read only
 // (mode = "parse"): nothing here is a program that checks. It is written the way `onsa fmt`
-// writes it (docs/onsa-tools.md §3.2).
+// writes it (spec/tools.md §3.2).
 
 pub fn instance_in_a_fn(x: F32) -> F32 {
   saw~(x)

@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020: the `|` of a pattern choice at the start of a line, in the places that tests/spec/fixes/e0020_leading_vert.onsa
-// does not have (spec §2.5, §7, S-380, S-216; docs/foreign-forms.toml row `leading_vert`): the arms of a `match~`
+// does not have (spec §2.5, §7, S-380, S-216; spec/foreign-forms.toml row `leading_vert`): the arms of a `match~`
 // and of a `match move`, the variants of an enum, a nested variant, the body of a closure, a flow, a choice
 // after a name pattern and a negative literal. The `|` that separates the alternatives of a choice goes at the
 // end of the line, as a binary operator does, and a line that starts with it is an error: the writer's reading

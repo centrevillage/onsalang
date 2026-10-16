@@ -160,7 +160,7 @@ pub(crate) fn doc_comments(cst: &Cst, n: NodeId) -> Vec<TokenIdx> {
 /// order of the source, each with the declaration it documents: its number
 /// among the declarations there (the nodes of [`may_take_doc`], in the order
 /// of the source). The check of `onsa fmt` compares them (a doc comment that
-/// moves to another declaration documents another one, `docs/onsa-tools.md`
+/// moves to another declaration documents another one, `spec/tools.md`
 /// §3.5).
 pub(crate) fn documented(cst: &Cst, n: NodeId) -> Vec<(usize, TokenIdx)> {
     let (mut out, mut stack, mut number) = (Vec::new(), vec![n], 0);

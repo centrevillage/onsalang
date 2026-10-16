@@ -1,5 +1,5 @@
 //! `onsa fmt` writes what it formats, and `onsa diff --ast` agrees that it is the same program
-//! (W3-11/t, unit U5; `docs/onsa-tools.md` §3.1, §3.2, §3.3, §3.4 and §3.5, spec §2.1, §2.4, §6.1 and §18.2;
+//! (W3-11/t, unit U5; `spec/tools.md` §3.1, §3.2, §3.3, §3.4 and §3.5, spec §2.1, §2.4, §6.1 and §18.2;
 //! plan S-56 and the review R-204).
 //!
 //! `onsa fmt` parses its output again before it writes, and compares it with the input: the AST with the
@@ -35,7 +35,7 @@
 //! what `fmt` made of it (§3.5). It compares the structure alone (S-534 (a3), the user's decision of
 //! 2026-10-15; the AST has no doc comments, D-02): a difference in a doc comment, its text or the
 //! declaration it stands on, is no difference for it (changed by W3-12/i, the second U1 fix; the tests of
-//! W3-11/t had it reported). The form of the report is not fixed by the spec (`docs/onsa-tools.md` §3.5
+//! W3-11/t had it reported). The form of the report is not fixed by the spec (`spec/tools.md` §3.5
 //! shows the exit code and the item that differs): the tests look at the exit code and at the name of the
 //! declaration in the output.
 //!
@@ -1112,7 +1112,7 @@ fn a_doc_comment_of_a_few_lines_that_loses_a_line_is_no_difference() {
 
 /// A doc comment on one file and none on the other is no difference for `diff --ast`, and neither is a
 /// doc comment that stands before the next declaration (S-534 (a3); the check of `onsa fmt` before it
-/// writes still sees them, `docs/onsa-tools.md` §3.5).
+/// writes still sees them, `spec/tools.md` §3.5).
 #[test]
 fn a_doc_comment_that_is_added_or_moved_to_another_declaration_is_no_difference() {
     let d = Dir::new("doc_moved");

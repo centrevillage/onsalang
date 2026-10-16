@@ -2,7 +2,7 @@
 //! in temporary directories only: a temporary file in the directory of the file the path names, renamed
 //! over it. A link is followed and stays a link, the mode bits stay, a read-only file and a directory where
 //! no temporary file can be made are errors of input and output (exit code 2, the other files are still
-//! processed, `docs/onsa-tools.md` §3.1), and no temporary file is left. The hard link is in
+//! processed, `spec/tools.md` §3.1), and no temporary file is left. The hard link is in
 //! `fmt_rewrites.rs` (`fmt_writes_a_new_file_and_leaves_the_old_one_whole`).
 
 use std::os::unix::fs::PermissionsExt;

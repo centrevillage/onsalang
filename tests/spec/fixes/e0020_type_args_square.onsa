@@ -6,7 +6,7 @@
 // E0020 for a `[…]` after a name that cannot be an index (§4.5, §18.1): it holds a `,` (an index is one
 // expression). Scala and Go write the type arguments of a call so. The syntax alone decides, so the
 // stage is the syntax stage; a `[…]` that can be an index (`id[U8](250)`) is read only once the name is
-// known (the name stage, docs/foreign-forms.toml `type_args_square`). The one candidate puts `::` in
+// known (the name stage, spec/foreign-forms.toml `type_args_square`). The one candidate puts `::` in
 // front of the `[`.
 
 pub fn show(x: U8) -> U8 {

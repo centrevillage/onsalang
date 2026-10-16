@@ -132,7 +132,7 @@ fn a_crlf_file_checks_clean_and_fmt_writes_lf() {
 
 #[test]
 fn diff_ast_does_not_see_crlf() {
-    // §18.2 and docs/onsa-tools.md §3.5: a rewrite of `fmt` is no difference of the programs.
+    // §18.2 and spec/tools.md §3.5: a rewrite of `fmt` is no difference of the programs.
     let d = Dir::new("crlf_diff");
     let lf = d.file("lf.onsa", LF_SOURCE.as_bytes());
     let crlf = d.file("crlf.onsa", LF_SOURCE.replace('\n', "\r\n").as_bytes());

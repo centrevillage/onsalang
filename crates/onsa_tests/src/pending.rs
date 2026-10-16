@@ -26,7 +26,7 @@ pub enum Kind {
     /// `"<file from the root>:<line>:<col> <code> fix<K>"` (W3-17,
     /// [`crate::fix_contract`]).
     FixContract,
-    /// A row of `docs/foreign-forms.toml` whose examples do not pass yet:
+    /// A row of `spec/foreign-forms.toml` whose examples do not pass yet:
     /// its `id` (S-250, W3-15, [`crate::foreign_forms`]).
     ForeignForm,
 }

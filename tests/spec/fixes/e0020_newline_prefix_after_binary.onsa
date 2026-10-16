@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for a line break between a prefix `-` / `!` and its operand when the prefix follows a binary operator
-// (§2.5, S-369; docs/foreign-forms.toml row `newline_after_prefix`). The prefix is written on the line of its
+// (§2.5, S-369; spec/foreign-forms.toml row `newline_after_prefix`). The prefix is written on the line of its
 // operand (a line goes on after a binary operator, not after a prefix), and
 // the candidate moves the mark to the head of the operand's line, where the line before it, which now
 // ends in the binary operator, goes on. The first `-` of `a - -` is the binary one (the token before it is an

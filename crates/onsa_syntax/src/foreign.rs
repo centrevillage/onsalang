@@ -4,7 +4,7 @@
 //! candidate can be made, else E0002 with the Onsa way in a note, S-48), the
 //! message, the correct rule (the note, S-114) and how the form is found.
 //!
-//! The rows are one to one with the data file `docs/foreign-forms.toml` (the
+//! The rows are one to one with the data file `spec/foreign-forms.toml` (the
 //! closed list of S-250, written from the spec by the tests' side): the same
 //! `id`, stage and code; the file's examples are the cases each row passes
 //! (`onsa_tests::foreign_forms` checks both, D-15). A row whose form no work
@@ -76,7 +76,7 @@
 //!
 //! 1. move the row from [`WAITING`] to [`ROWS`] in `foreign/rows.rs` (a
 //!    `RowId` here, the `id`, stage and code of its row in
-//!    `docs/foreign-forms.toml`, the message and the rule); a new form is
+//!    `spec/foreign-forms.toml`, the message and the rule); a new form is
 //!    added to the data file from its decision (an S row of the plan), not
 //!    to the text of the spec (§18.1 only names where the list is, S-250);
 //! 2. write its matcher in the module of its family (or a new one) and put
@@ -361,7 +361,7 @@ impl Matcher {
 }
 
 /// The rows the compiler finds. `name` is the row's `id` in
-/// `docs/foreign-forms.toml`.
+/// `spec/foreign-forms.toml`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RowId {
     Semicolon,

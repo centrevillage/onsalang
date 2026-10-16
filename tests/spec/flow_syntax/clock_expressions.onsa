@@ -9,7 +9,7 @@
 // cases are in negative/syntax_clock_operands.onsa). The file is read by the syntax stage only
 // (mode = "parse"); which clock is faster or slower than another (E0815), where `at` may be
 // written (E0821) and whether a name exists belong to the later stages. It is written the way
-// `onsa fmt` writes it (docs/onsa-tools.md §3.2).
+// `onsa fmt` writes it (spec/tools.md §3.2).
 
 pub struct Pair {
   a: F32,

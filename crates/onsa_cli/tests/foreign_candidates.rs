@@ -5,7 +5,7 @@
 //! (`clean`, `same_code`, `leaves`). These tests say what those cannot: how many edits and where
 //! (one edit for each foreign token), that a form with no candidate has none and has a note, the
 //! words of a doc block comment (`///` or `//`, not stripped), and that a program still has its
-//! value after a candidate. The data file `docs/foreign-forms.toml` lists every form.
+//! value after a candidate. The data file `spec/foreign-forms.toml` lists every form.
 //!
 //! Every test uses only the binary (`onsa check --json`, `onsa test`, `onsa fmt`).
 //!
@@ -391,7 +391,7 @@ fn the_candidate_for_angle_brackets_edits_the_brackets_only() {
 #[test]
 fn a_foreign_form_with_no_candidate_is_e0002_with_a_note_and_no_candidate() {
     // §18.1: E0020 only when a candidate can be made; otherwise E0002, and the Onsa form may be
-    // shown in a note. The rows are docs/foreign-forms.toml rows with code = "E0002" (S-250,
+    // shown in a note. The rows are spec/foreign-forms.toml rows with code = "E0002" (S-250,
     // S-247, S-249, S-297); the same sources are in tests/spec/negative/foreign_no_candidate.onsa
     // (which checks only the code and the line).
     let sources: [(&str, &str); 19] = [

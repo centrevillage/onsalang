@@ -1,4 +1,4 @@
-//! The closed list of the forms of other languages, `docs/foreign-forms.toml`
+//! The closed list of the forms of other languages, `spec/foreign-forms.toml`
 //! (S-250), against the table of the compiler, `onsa_syntax::foreign` (W3-15,
 //! D-15):
 //!
@@ -30,7 +30,7 @@ use crate::fix_contract::{self, TextCheck};
 use crate::pending::{Kind, Pending};
 
 /// The file, relative to the repository root.
-pub const PATH: &str = "docs/foreign-forms.toml";
+pub const PATH: &str = "spec/foreign-forms.toml";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

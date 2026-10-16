@@ -3,7 +3,7 @@
 // mode = "parse"
 // spec = ["§2.5", "§4.4", "§6.1", "§7", "§8.1", "§11.2", "§15.1", "§18.2"]
 
-// The three forms of a list (docs/onsa-tools.md §3.2, W3-11 unit U2), each written as `onsa fmt` writes it,
+// The three forms of a list (spec/tools.md §3.2, W3-11 unit U2), each written as `onsa fmt` writes it,
 // for each kind of list: the arguments of a call, the parameters of a declaration, the elements of an
 // array and of a tuple, the fields of a struct literal, the inputs of a flow. The lists of a pattern are
 // in list_forms_patterns.onsa and the `use` lists in list_forms_use.onsa.

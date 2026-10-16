@@ -3,7 +3,7 @@
 // spec = ["§2.4", "§18.1"]
 
 // E0002 for a prefix or a suffix on a string or character literal, whatever the literal holds (spec §2.4, §18.1;
-// S-400 as changed by S-406; the row `string_prefix` of docs/foreign-forms.toml). The name that touches a
+// S-400 as changed by S-406; the row `string_prefix` of spec/foreign-forms.toml). The name that touches a
 // literal (`f"{x}"`, `r"\d"`, `b'x'`, `x'ab'`) and the name that a literal touches (`"x"_s`) are one form of
 // other languages, and the rule does not read the literal: the error is this E0002 when the literal is not
 // closed on the line (`f"abc`), has an escape that is not in the closed list (`f"\q"`), a character literal of

@@ -5,7 +5,7 @@
 
 // E0020 for a visibility of Rust and of the old version, in front of an item, an `impl` member, a `use`, and the field
 // of a struct that has no visibility word or has `priv` (spec §15.1, S-35, S-36, S-412; the rows `pub_pkg` and
-// `pub_crate` of docs/foreign-forms.toml). The visibility is `pub`, none (the package) or `priv` (the module); the
+// `pub_crate` of spec/foreign-forms.toml). The visibility is `pub`, none (the package) or `priv` (the module); the
 // forms `pub(pkg)` and `pub(crate)` do not exist, and a space between `pub` and `(` is the same single error.
 // The candidate takes the whole visibility out: the item has then no visibility word (the package). The main
 // position is the `pub`. The `pub struct` field with `pub(crate)` or `pub(pkg)` has no candidate and is

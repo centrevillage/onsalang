@@ -161,9 +161,9 @@ W の作業のコミットなどタスクの切れ目が近いときは、6 割�
 
 ## 付録. 文書の地図
 
-- 仕様 `onsa-lang-spec-0.3.md`。変更の記録 `docs/onsa-0.3-changes.md` §4。
+- 仕様 `spec/`。変更の記録 `docs/onsa-0.3-changes.md` §4。
 - 計画 `docs/implementation-tasks.md`（§1 の D、§2 の S、§5 の診断コード）。作業の手順 `rules/process.md`。全体計画 `docs/implementation-plan.md`。
 - 反映の作業 `docs/rework-phase1.md`（K の決定は §1、W の表は §3、改めた文書の記録は §5）。作業の持ち越し `docs/carryovers.md`。
 - レビュー `docs/review-impl-phase1.md`（新しい R は §3 の末尾の本文と §8 の表）。再発防止 `docs/process-improvement-phase1.md`。
-- 仕様の空白の資料 `docs/spec-gaps-*.md`。表示の約束 `docs/onsa-tools.md`。組込み API の候補 `docs/api-candidates.md`。
+- 仕様の空白の資料 `docs/spec-gaps-*.md`。表示の約束 `spec/tools.md`。組込み API の候補 `docs/api-candidates.md`。
 - 担当の定義 `.claude/agents/`。共通の規則と読む順 `rules/`（`rules/README.md`）。実装待ちの一覧 `tests/pending.toml`（形はファイルの先頭のコメント）。検査 `tools/gate.sh`。

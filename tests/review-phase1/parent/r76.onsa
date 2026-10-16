@@ -1,4 +1,4 @@
-// R-76: `onsa graph` で、`par` の添字を読む箇所が実線の閉路になる（S-66、docs/onsa-tools.md §1）。
+// R-76: `onsa graph` で、`par` の添字を読む箇所が実線の閉路になる（S-66、spec/tools.md §1）。
 // 今の実装の構文で書いた。どちらの flow も `onsa check` と `onsa test` を通る（描画だけの問題）。
 //
 // unison（基本仕様 §11.5 の例と同じ形）:

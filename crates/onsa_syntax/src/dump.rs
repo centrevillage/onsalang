@@ -1,6 +1,6 @@
 //! Compact S-expression printer of the AST, for tests and `onsa dump --ast`
 //! ([`dump`]), and for the comparison of `diff --ast` (the other functions,
-//! `docs/onsa-tools.md` §3.5), which writes a float literal by its value.
+//! `spec/tools.md` §3.5), which writes a float literal by its value.
 //! The AST has no comments, the doc comments neither (D-02).
 
 use std::fmt::Write;
@@ -17,7 +17,7 @@ pub fn dump(ast: &Ast) -> String {
 }
 
 /// One item, without a trailing newline: the comparison of `diff --ast` and
-/// of the check of `onsa fmt` (`docs/onsa-tools.md` §3.5).
+/// of the check of `onsa fmt` (`spec/tools.md` §3.5).
 pub fn dump_item(ast: &Ast, id: ItemId) -> String {
     let mut d = Dumper::compare(ast);
     d.item(id);
@@ -47,7 +47,7 @@ pub fn dump_type(ast: &Ast, id: TypeId) -> String {
 
 /// How a dump writes a float literal: its text (`1.0e3`, the dump of the
 /// tests and of `onsa dump --ast`), or its exact value, one for every
-/// spelling of it (`docs/onsa-tools.md` §3.5, [`crate::literal::float_key`]).
+/// spelling of it (`spec/tools.md` §3.5, [`crate::literal::float_key`]).
 /// An integer is written by its value in both.
 #[derive(Clone, Copy)]
 enum Floats {

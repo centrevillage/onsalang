@@ -1,6 +1,6 @@
 //! `onsa test` (spec §11.8, §18.1, §18.2; T3-8, W2-10): which tests run,
 //! running them in the interpreter, and their results as the text of
-//! `docs/onsa-tools.md` §4 and the JSON document of §18.1.
+//! `spec/tools.md` §4 and the JSON document of §18.1.
 //!
 //! A test is a function of Core with a [`onsa_core::TestMark`]: its module
 //! path and name identify it (S-55, R-68). The order of the steps (§18.2,
@@ -85,7 +85,7 @@ impl TestReport {
         self.tests.len() - self.failed()
     }
 
-    /// The text (`docs/onsa-tools.md` §4): a line for each test, `test <full
+    /// The text (`spec/tools.md` §4): a line for each test, `test <full
     /// name text> ok` or `test <full name text> failed at <file>:<line>:
     /// <message>`, then a summary. The file and the line are those of the
     /// `span` of the JSON record. A message of several lines (an `assert` of
@@ -162,7 +162,7 @@ impl TestReport {
 }
 
 /// The indentation of the lines of a message after its first in the text
-/// (`docs/onsa-tools.md` §4 does not fix its width).
+/// (`spec/tools.md` §4 does not fix its width).
 const CONTINUATION: &str = "    ";
 
 /// The lines of `message`, split at the line breaks of spec §2.5 (LF, and CR
