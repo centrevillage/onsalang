@@ -366,8 +366,6 @@ W の作業の中で見つかり、後の作業の作業票に入れる事項。
     `repo.rows`・`repo.section` と、`tools/test_gate.py` の今の配置の作り物を消す（DT-7）。
   - 移行の最後の段か区切りのリファクタリング: ID の形の重複（`pending.WORK`、`gap_marks.ID`）を `repo.KINDS` に寄せる。素朴な `split("|")`（`repo.phase2_codes`、`builtin_names.table_column`）を `docs.table_cells` に寄せる。
   - 新旧の両方がある配置の誤りで終了コード 2 になるのは `docs.py` だけで、他の道具は今の扱い（文を出して 1）のまま。揃えるかは移行の後に決める。
-  - `docs.py` の `set`・`new` の書く前の確かめ（`check_write`）は頭の欄と関係だけを見るので、無い ID を名指す値（`set W1-02 depends=W9-99`）は書けて、gate の `docs` の参照の確かめで後から落ちる。
-    書く前の確かめに頭の欄の ID の存在を足すか（数行、33 回目の X-2/U3 の報告）。
   - `repo.Layout.source("T")` は計画 §4 が無くなった後も `"old"` を返し、`docs.Index.known` と `docs.Ids._find` がそれぞれ吸収している。上の M9 と同じ回に T の扱いを一か所にそろえる。
     `docs.py` の `show` が関数の中で `pending` を読む循環（`pending.load` を `repo` に移せば消える）も同じ回に見る。
   - 今の表の本文の `§` のうち、前置きの規則（`docs.py` の `SEC_QUALIFIERS`）でも仕様の見出しに無いもの 9 個（`C# の仕様 §`、`§1.1`、`空白の流れ（§8.6）` など。`空白の流れ（§8.6）` の S-229・S-231・S-245 は、規則の分割で `rules/process.md` 8.6 に直した）は、
