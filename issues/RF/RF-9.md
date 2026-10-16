@@ -1,0 +1,13 @@
++++
+status = "OPEN"
++++
+# RF-9 W3-05 の壊す側の候補
+
+- 内容:
+  - `literal::Form` の二つの役割の混在、`literal.rs` と `lexer.rs` の循環（`is_ident_start`）、`ConstValue::FloatText` を持つ理由を doc に。
+  - `Found` と `Literals` の `strings: Vec<(Span, Span)>`・`numbers: Vec<(Span, Number)>` に名前の付いた型を。
+  - `foreign::at_failure` の `RowId::StringPrefix` だけの分かれを、`Hit` の「報告した範囲」の欄に（他の行が同じ手段を要したときに分かれを増やさない）。
+  - 「空白を除くと別の数の読みになるか」の判定が `spaces.rs` の `space_around_dot` と `literals.rs` の `foreign_literal` の二か所（`joins`）。`spaces.rs` の `chars().take(3)` の決め打ち。
+  - 「整数か浮動小数か」で負のパターンに入るかを、パーサの `foreign_integer` でなく表の側の一か所で決める。今は `-(017)`・`-(0o17)`・`-(1u8)` と `-0b11f32` のパターンが「expected a pattern, found `-`」の一般の E0002 のまま（式の `-(017)` は E0020）。
+  - 字句解析器の接する形を、名前の側とリテラルの側の二つにする（S-473 の決定しだい）。
+- 経緯: 単位 1・単位 2・直しの往復 1 の再確認。報告は 17 回目の scratchpad の `w305b1/`・`w305b2/`・`w305b3/handback_b.md`
