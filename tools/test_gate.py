@@ -1853,7 +1853,7 @@ class BuiltinNames(unittest.TestCase):
 
     def test_baselines(self):
         # N2: a place that stops giving a name of its baseline fails
-        real = repo.read(repo.ROOT, repo.SPEC)
+        real = repo.spec_text(repo.ROOT)
         baselines = {
             "attributes (§6.5)": {"repr", "fp", "param", "mem"},
             "clocks (§11.3)": {"init", "block", "sample"},
@@ -1874,7 +1874,7 @@ class BuiltinNames(unittest.TestCase):
     def test_real_baselines_hold(self):
         # the baselines of the module hold for the spec of the repository
         with mock.patch.object(builtin_names, "BASELINES", BUILTIN_BASELINES):
-            builtin_names.builtin_names(repo.read(repo.ROOT, repo.SPEC), [])
+            builtin_names.builtin_names(repo.spec_text(repo.ROOT), [])
 
     def test_build_outputs_only_are_skipped(self):
         # N1: a `target` directory that is not a build output is scanned
