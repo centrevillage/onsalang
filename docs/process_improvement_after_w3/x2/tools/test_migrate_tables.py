@@ -813,5 +813,177 @@ class VerifyR(Before):
                 self.assertIn("difference(s)", out)
 
 
+# ---------------------------------------------------------------- W (U5d)
+
+W_HEADER = ["| ID | 作業 | 内容 | 実現する決定 | 依存 | 規模 | 役割・印 |", "|---|---|---|---|---|---|---|"]
+W_ROWS1 = ["| W1-01 ✅ | 器 | 作る。`a \\| b` の形 | S-01、K-01（一部） | — | S | 基盤 |",
+           "| W1-02 | 網 | 広げる | — | W1-01 | M | 〔メモ〕〔危険〕 |",
+           "| W1-03 ✅ | 枠 | 足す | R-08 | W1-01、W1-02 | M | |"]  # fmt: skip
+W_ROWS2 = ["| W2-01 | 仕上げ | 揃える | — | W1-01〜W1-03、W2-02 | S | テスト |",
+           "| W2-02 | 段の後 | 待つ | — | W1 | M | 基盤（U3） |",
+           "| W2-03 | 大 | " + "文。" * 130 + " | — | W1-02〜W1-09 | XL | |"]  # fmt: skip
+REWORK_HEAD = "# rework\n\n## 2. 段\n\n本文。\n\n## 3. 段ごとの作業\n\n前書き。\n\n### W1 基盤\n\n前書き 1。\n\n"
+REWORK_MID = "\n### W2 直し\n\n"
+REWORK_TAIL = "\n---\n\n## 4. 残り\n"
+REWORK_W = REWORK_HEAD + "\n".join(W_HEADER + W_ROWS1) + "\n" + REWORK_MID + "\n".join(W_HEADER + W_ROWS2) + "\n" + REWORK_TAIL
+W_README = """\
+# 作業（W）
+
+## 頭の欄
+
+| キー | 形 | 値 | 要る | 意味 |
+|---|---|---|---|---|
+| `status` | 閉じた値 | `PLAN` / `PENDING` / `DOING` / `DONE` | はい | 状態 |
+| `size` | 閉じた値 | `S` / `M` / `L` | いいえ | 大きさ |
+| `depends` | ID の並び（W） | — | いいえ | 依存 |
+| `marks` | 閉じた値の並び | `危険` / `メモ` / `基盤` / `テスト` | いいえ | 印 |
+
+## 本文のラベル
+
+- `内容`: 内容の欄。
+
+## 反映の作業の表から移した W
+
+- `実現する決定`: 実現する決定の欄。
+"""
+TREE_W = {
+    "onsa-lang-spec-0.3.md": TREE["onsa-lang-spec-0.3.md"],
+    "docs/onsa-tools.md": TREE["docs/onsa-tools.md"],
+    PLAN: TREE_R[PLAN],
+    REVIEW: "# レビュー\n\n## 8. 決定の記録\n\n| ID | 決定 | 反映 |\n|---|---|---|\n| R-08 | 直す | W1-03 |\n",
+    "docs/rework-phase1.md": REWORK_W,
+    "tasks/W/README.md": W_README,
+}
+W_OVER = '[W2-02]\ndepends = ["W1-01", "W1-02", "W1-03"]\nmarks = ["基盤"]\n'
+W_DOC = "docs/rework-phase1.md"
+
+
+class W(Tree):
+    TREE, KIND = TREE_W, "W"
+
+    def read(self, rel):
+        return (self.root / rel).read_text(encoding="utf-8")
+
+    def ids(self):
+        return sorted(p.stem for p in (self.root / "tasks/W").glob("W*.md"))
+
+    def test_plan(self):
+        code, out = self.run_tool("plan")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"{W_DOC}: 2 ranges: 6 rows -> 6 files in tasks/W/", out)
+        self.assertEqual(self.items(out), {("W2-02", "depends", "depends"), ("W2-02", "marks", "marks"),
+                                           ("W2-03", "depends", "depends"), ("W2-03", "size", "size")})  # fmt: skip
+        self.assertIn("W2-03\tdepends\tdepends\t-\tW1-02〜W1-09", out)  # W1-09 is no row
+        self.assertIn("status DONE 2, PLAN 4", out)
+
+    def test_overrides(self):
+        code, out = self.run_tool("plan", W_OVER)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.items(out), {("W2-03", "depends", "depends"), ("W2-03", "size", "size")})
+        for over in ['[W2-02]\ndepends = ["W1"]\n',  # a stage is not a W
+                     '[W2-03]\nsize = "XL"\n',  # not a value of the README
+                     '[W1-01]\nsize = "M"\n',  # not in the list
+                     '[W2-02]\nmarks = ["基盤（U3）"]\n']:  # fmt: skip
+            with self.subTest(over=over):
+                self.assertEqual(self.run_tool("plan", over)[0], 1)
+
+    def test_broken(self):
+        for old, new in [("### W2 直し\n\n| ID | 作業 |", "### W2 直し\n\n| ID | 作業名 |"),  # the header of the second table
+                         ("| W2-01 | 仕上げ | 揃える | — |", "| W2-01 | 仕上げ | 揃える |"),  # 6 cells
+                         ("| W2-02 | 段の後 |", "| W1-02 | 段の後 |"),  # an ID twice, in another table
+                         ("| M | |\n\n### W2", "| M | |\n\n| W1-04 | x | y | — | — | S | |\n\n### W2")]:  # no header
+            with self.subTest(old=old):
+                self.write(W_DOC, REWORK_W.replace(old, new, 1))
+                self.assertEqual(self.run_tool("plan")[0], 2)
+
+    def test_apply(self):
+        code, out = self.run_tool("apply", W_OVER)
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"took out {W_DOC}: 2 ranges (10 lines)", out)
+        self.assertEqual(self.read(W_DOC), REWORK_HEAD + REWORK_MID + REWORK_TAIL)
+        self.assertEqual(self.ids(), ["W1-01", "W1-02", "W1-03", "W2-01", "W2-02", "W2-03"])
+        self.assertEqual(self.read("tasks/W/W1-01.md"), '+++\nstatus = "DONE"\nsize = "S"\nmarks = ["基盤"]\n+++\n# W1-01 器\n\n'
+                         "- 内容: 作る。`a | b` の形\n- 実現する決定: S-01、K-01（一部）\n")  # fmt: skip
+        self.assertIn('status = "PLAN"\nsize = "M"\ndepends = ["W1-01"]\nmarks = ["メモ", "危険"]\n+++', self.read("tasks/W/W1-02.md"))
+        self.assertIn('status = "DONE"\nsize = "M"\ndepends = ["W1-01", "W1-02"]\n+++\n# W1-03 枠\n', self.read("tasks/W/W1-03.md"))
+        self.assertIn('depends = ["W1-01", "W1-02", "W1-03", "W2-02"]\n', self.read("tasks/W/W2-01.md"))  # the range opened
+        self.assertIn('status = "PLAN"\nsize = "M"\ndepends = ["W1-01", "W1-02", "W1-03"]\nmarks = ["基盤"]\n+++', self.read("tasks/W/W2-02.md"))
+        w23 = self.read("tasks/W/W2-03.md").split("\n")
+        self.assertEqual(w23[:5], ["+++", 'status = "PLAN"', "+++", "# W2-03 大", ""])  # depends and size listed, not written
+        self.assertTrue(w23[5].startswith("- 内容: 文。") and w23[6].startswith("  文。") and w23[-2] == "- 実現する決定: —", w23)
+        with contextlib.redirect_stdout(io.StringIO()) as check:
+            self.assertEqual(docs.main(["check", "--root", str(self.root)]), 0, check.getvalue())
+
+    def test_labels(self):
+        self.write("tasks/W/README.md", W_README.replace("- `実現する決定`", "- `決定`"))
+        self.assertEqual(self.run_tool("apply")[0], 1)
+        self.assertEqual(self.read(W_DOC), REWORK_W)
+        self.assertEqual(self.ids(), [])
+
+
+class VerifyW(Before):
+    TREE, KIND = TREE_W, "W"
+
+    def apply(self, over=None):
+        code, out = self.run_tool("apply", over)
+        self.assertEqual(code, 0, out)
+
+    def test_round_trip(self):
+        self.apply()
+        code, out = self.verify()
+        self.assertEqual(code, 0, out)
+        self.assertIn("W's `依存`: a range", out)
+        self.assertIn("round trip: 6 rows, 6 files read back; IDs 6; ✅ and status apart (the list's): 0; cells apart (the list's): 4", out)
+        self.assertIn("W2-02: `依存` W1 -> -\nW2-02: `役割・印` 基盤（U3） -> -\nW2-03: `依存` W1-02〜W1-09 -> -\nW2-03: `規模` XL -> -", out)
+
+    def test_overrides(self):
+        self.apply(W_OVER)
+        code, out = self.verify()
+        self.assertEqual(code, 0, out)
+        self.assertIn("W2-02: `依存` W1 -> W1-01, W1-02, W1-03\nW2-02: `役割・印` 基盤（U3） -> 基盤", out)
+
+    def test_escaped_bar_is_normalized(self):
+        self.apply()
+        self.edit("tasks/W/W1-01.md", "`a | b`", "`a \\| b`")
+        self.assertEqual(self.verify()[0], 0)
+
+    CHANGES = [
+        ("tasks/W/W1-01.md", "- 内容: 作る。", "- 内容: 作れ。"),  # a character of a cell
+        ("tasks/W/W1-01.md", "K-01（一部）", "K-01"),  # the cell `実現する決定`
+        ("tasks/W/W1-01.md", "# W1-01 器\n", "# W1-01 器具\n"),  # the title
+        ("tasks/W/W1-01.md", 'status = "DONE"', 'status = "PLAN"'),  # ✅
+        ("tasks/W/W1-02.md", 'status = "PLAN"', 'status = "DONE"'),  # no ✅
+        ("tasks/W/W1-02.md", 'size = "M"', 'size = "S"'),  # size
+        ("tasks/W/W1-01.md", 'size = "S"\n', ""),  # size taken out
+        ("tasks/W/W1-03.md", 'depends = ["W1-01", "W1-02"]', 'depends = ["W1-01"]'),  # depends
+        ("tasks/W/W1-01.md", 'size = "S"\n', 'size = "S"\ndepends = ["W1-02"]\n'),  # depends where `—`
+        ("tasks/W/W2-01.md", '"W1-01", "W1-02", "W1-03", "W2-02"', '"W1-01", "W1-03", "W2-02"'),  # a W of the range
+        ("tasks/W/W2-01.md", '"W1-01", "W1-02", "W1-03", "W2-02"', '"W2-02", "W1-01", "W1-02", "W1-03"'),  # the order
+        ("tasks/W/W1-02.md", 'marks = ["メモ", "危険"]', 'marks = ["危険", "メモ"]'),  # the order of marks
+        ("tasks/W/W1-01.md", 'marks = ["基盤"]\n', ""),  # marks taken out
+        ("tasks/W/W1-03.md", '+++\n# W1-03', 'marks = ["テスト"]\n+++\n# W1-03'),  # marks where empty
+        ("tasks/W/W2-01.md", "- 内容: 揃える", "- 内容: 揃えた"),  # a cell of the second table
+        ("tasks/W/W2-02.md", "- 内容: 待つ", "- 内容: 待て"),  # a cell of a row with cells apart
+        ("tasks/W/W2-03.md", "\n  文。", "\n文。"),  # a broken line not going on
+        ("tasks/W/W2-01.md", "- 実現する決定: —\n", "- 実現する決定: —\n- 単位: x\n"),  # a line more
+        ("tasks/W/W2-01.md", None, None),  # the file removed
+        (W_DOC, "前書き 1。", "前書き一。"),  # outside the tables
+        (W_DOC, "### W2 直し", "### W2 直す"),  # outside, between the tables
+    ]
+
+    def test_a_change_is_found(self):
+        for rel, old, new in self.CHANGES:
+            with self.subTest(rel=rel, old=old):
+                self.setUp()
+                self.apply()
+                if old is None:
+                    (self.root / rel).unlink()
+                else:
+                    self.edit(rel, old, new)
+                code, out = self.verify()
+                self.assertEqual(code, 1, out)
+                self.assertIn("difference(s)", out)
+
+
 if __name__ == "__main__":
     unittest.main()

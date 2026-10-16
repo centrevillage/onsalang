@@ -2,15 +2,16 @@
 """Move a table of IDs into one file per ID (X-2 step 6, MG-2). The rules of a kind are one value of
 `Rule` in RULES; the frame (`plan`, `apply`, the overrides) reads only them.
 
-    python3 -B migrate_tables.py plan  --kind S|D|K|Q|A|R [--root DIR] [--overrides TOML]
-    python3 -B migrate_tables.py apply --kind S|D|K|Q|A|R [--root DIR] [--overrides TOML]
-    python3 -B migrate_tables.py verify --kind S|D|K|Q|A|R [--root DIR] --before DIR|REV
+    python3 -B migrate_tables.py plan  --kind S|D|K|Q|A|R|W [--root DIR] [--overrides TOML]
+    python3 -B migrate_tables.py apply --kind S|D|K|Q|A|R|W [--root DIR] [--overrides TOML]
+    python3 -B migrate_tables.py verify --kind S|D|K|Q|A|R|W [--root DIR] --before DIR|REV
 
-A kind is a table (S, A: a row is a unit, a cell an item of the body) or headings (D, K, Q, R: a unit
-from its heading `### D-NN <title>` to the next heading as high or a line `---`; its text moved byte
-for byte, the blank line before the heading taken out with it). The rows of a section join the units
-as items after the text (`Rows`): Q's §4 (one row an ID), R's §8 (the rows of an ID in their order,
-two items a row; a row of no heading makes a file of its items alone).
+A kind is a table (S, A, W: a row is a unit, a cell an item of the body; W has a table a stage, its
+columns `作業` the title and `依存`, `規模`, `役割・印` head fields, `Rule.head`) or headings (D, K, Q,
+R: a unit from its heading `### D-NN <title>` to the next heading as high or a line `---`; its text
+moved byte for byte, the blank line before the heading taken out with it). The rows of a section
+join the units as items after the text (`Rows`): Q's §4 (one row an ID), R's §8 (the rows of an ID
+in their order, two items a row; a row of no heading makes a file of its items alone).
 
 Exit: 0 done; 1 refused (an override not in the list, a finding of the check before writing, a
 condition of `apply` not met; nothing is written); 2 an error of the tool (a document it cannot read,
@@ -30,7 +31,9 @@ a table whose header is not the rule's, an ID given twice).
   for the IDs of the `status` items of the list made from the rows before; the title one of the
   drafts' and the extra items the rule's; the document byte for byte outside the table, the header and
   delimiter rows rebuilt from the columns; the IDs of the rows and of the files; `reverse` against the
-  tree before (`tasks`: the rework; R's `fix`: the W of its rows of §8). Exit 1 on any difference.
+  tree before (`tasks`: the rework; R's `fix`: the W of its rows of §8; W: none). A cell of a head
+  field (`Rule.head`) of an ID the list of the rows before has an item of its key for is not compared
+  (printed with the value written). Exit 1 on any difference.
 - The overrides, `[S-276]` / `status = "DECIDED"`: only the (ID, key) the list of the same tree
   accepts (an item's keys for its ID and its partners), the value fitting the field table of the
   README or one of the item's choices; "" or [] is "not written". Anything else refuses them all.
@@ -130,6 +133,9 @@ class Rule:
     rows: Rows = None
     tail: tuple = None  # the patterns of the labels of a group of the items after the text (`extra`)
     status_of: dict = None  # the head word of a cell -> `status`; changed by `[status_of]`
+    head: dict = None  # a column written as a head field -> (key, fn(cell, ctx) -> the cell as the field gives it
+    # back (NORMALIZED), fn(value) -> the cell) (W); the other columns are the title and the items
+    titled: str = None  # the column written as the title (W)
 
 
 @dataclass(frozen=True)
@@ -162,33 +168,37 @@ def read_units(root, rule, text=None):
     """(units, [(first, last) line taken out], the lines of the document, the items of the reading)."""
     if rule.heading:
         return read_headings(root, rule, text)
-    units, span, lines = read_table(root, rule, text)
-    return units, [span], lines, []
+    units, spans, lines = read_table(root, rule, text)
+    return units, spans, lines, []
 
 
 def read_table(root, rule, text=None):
-    """(units, (first, last) line of the table, the lines of its document); `text`: the document's."""
+    """(units, [(first, last) line of each table], the lines of its document); `text`: the document's.
+    The rows next to each other are a table, each under the rule's header and a delimiter row (W: one
+    a stage)."""
     kind = repo.KIND[rule.kind]
     doc, start, end, what = source_of(rule)
     lines = (repo.read_exact(root, doc) if text is None else text).split("\n")
     lo, hi = bounds(lines, start, end, doc)
     row = repo.row_re(kind.pattern)
-    at = [i for i in range(lo, hi) if row.match(lines[i])]
+    at = {i for i in range(lo, hi) if row.match(lines[i])}
     if not at:
         raise Refused([f"{doc} `{start or ''}`: no row of the {what}"])
-    a = at[0] - 2
-    if a < lo or docs.table_cells(lines[a]) != list(rule.columns) or not docs.DELIMITER.fullmatch(lines[a + 1].strip()):
-        raise repo.RepoError(f"{doc}:{a + 1}: no header `| {' | '.join(rule.columns)} |` and delimiter row")
-    units, seen = [], set()
-    for i in range(at[0], at[-1] + 1):
-        m, cells = row.match(lines[i]), docs.table_cells(lines[i])
-        if m is None or len(cells) != len(rule.columns) or cells[0] != m.group(1) + (m.group(2) or ""):
-            raise repo.RepoError(f"{doc}:{i + 1}: not a row `| <ID>[ ✅] | … |` of {len(rule.columns)} cells")
-        if m.group(1) in seen:
-            raise repo.RepoError(f"{doc}:{i + 1}: {m.group(1)} is given twice")
-        seen.add(m.group(1))
-        units.append(Unit(m.group(1), bool(m.group(2)), tuple(cells[1:]), ((i + 1, lines[i]),)))
-    return units, (a + 1, at[-1] + 1), lines
+    units, seen, spans = [], set(), []
+    for first in sorted(i for i in at if i - 1 not in at):
+        a, last = first - 2, next(i for i in range(first, hi) if i + 1 not in at)
+        if a < lo or docs.table_cells(lines[a]) != list(rule.columns) or not docs.DELIMITER.fullmatch(lines[a + 1].strip()):
+            raise repo.RepoError(f"{doc}:{a + 1}: no header `| {' | '.join(rule.columns)} |` and delimiter row")
+        spans.append((a + 1, last + 1))
+        for i in range(first, last + 1):
+            m, cells = row.match(lines[i]), docs.table_cells(lines[i])
+            if len(cells) != len(rule.columns) or cells[0] != m.group(1) + (m.group(2) or ""):
+                raise repo.RepoError(f"{doc}:{i + 1}: not a row `| <ID>[ ✅] | … |` of {len(rule.columns)} cells")
+            if m.group(1) in seen:
+                raise repo.RepoError(f"{doc}:{i + 1}: {m.group(1)} is given twice")
+            seen.add(m.group(1))
+            units.append(Unit(m.group(1), bool(m.group(2)), tuple(cells[1:]), ((i + 1, lines[i]),)))
+    return units, spans, lines
 
 
 def read_headings(root, rule, text=None):
@@ -306,9 +316,10 @@ def read_overrides(path):
     return out, why, maps if isinstance(maps, dict) else {}
 
 
-def context(rule, root, maps=None):
-    """`rule.context(root)`, with `status_of`: the rule's table changed by `maps`."""
-    ctx = rule.context(root)
+def context(rule, root, maps=None, units=()):
+    """`rule.context(root)` and the IDs of the units read (`ids`), with `status_of`: the rule's table
+    changed by `maps`."""
+    ctx = {**rule.context(root), "ids": [u.id for u in units]}
     if rule.status_of is not None:
         ctx[STATUS_OF] = {**rule.status_of, **(maps or {})}
     return ctx
@@ -365,7 +376,7 @@ def evaluate(root, rule, overrides_path, table):
         bad = table.check_value("status", v) if isinstance(table, docs.FieldTable) else str(table)
         if bad:
             why.append(f"{STATUS_OF} {word}: {bad}")
-    ctx = context(rule, root, maps)
+    ctx = context(rule, root, maps, units)
     items = found + run(rule, units, ctx, {})[1]
     why += check_overrides(overrides, items, table)
     if why:
@@ -511,7 +522,9 @@ NORMALIZED = (
     "the order of the rows (compared as multisets)",
     "`\\|` read as `|` on both sides",
     "a line going on with two spaces (`docs.fmt_text`) joined to the line before",
+    "W's `依存`: a range `W3-03〜W3-12` opened to the IDs of the rows between them",
 )
+APART = "…"  # a cell of a head field the list of the rows before has an item of (`Rule.head`): not compared
 
 
 def before_reader(root, before):
@@ -595,20 +608,40 @@ def read_back_heading(rule, rel, text):
     return values, m.group(1), body, extra
 
 
-def want_pieces(rule, kind, u):
-    """The texts of the tree before that the unit's file gives back: its row (no ✅), or the lines of
-    its heading and its rows of `rule.rows` (each after the column of its header and a tab); `\\|` read
-    as `|` in a row."""
+def table_line(cells):
+    """`| a | b |`, an empty cell `| |`."""
+    return "|" + "".join(f" {c} |" if c else " |" for c in cells)
+
+
+def row_text(rule, id_, cell_of, apart=()):
+    """`| <ID> | … |` of the cells `cell_of(column)`, a cell of `rule.head` in `apart` `…`; `\\|` as `|`."""
+    head = rule.head or {}
+    cells = [APART if c in head and (id_, head[c][0]) in apart else cell_of(c) for c in rule.columns[1:]]
+    return table_line([id_, *cells]).replace("\\|", "|")
+
+
+def want_pieces(rule, kind, u, ctx=None, apart=()):
+    """The texts of the tree before that the unit's file gives back: its row (no ✅; of `rule.head`, the
+    row of its cells, those of the head fields as they give them back, when the line is that row), or
+    the lines of its heading and its rows of `rule.rows` (each after the column of its header and a
+    tab); `\\|` read as `|` in a row."""
     if rule.heading:
         return [u.text] * bool(u.lines) + [f"{r.column}\t{r.text}".replace("\\|", "|") for r in u.rows]
     line, m = u.lines[0][1], repo.row_re(kind.pattern).match(u.lines[0][1])
-    return [(line[: m.start(2)] + line[m.end(2) :] if m.group(2) else line).replace("\\|", "|")]
+    line = line[: m.start(2)] + line[m.end(2) :] if m.group(2) else line
+    cells = dict(zip(rule.columns[1:], u.cells))
+    if rule.head and line == table_line([u.id, *u.cells]):
+        return [row_text(rule, u.id, lambda c: rule.head[c][1](cells[c], ctx) if c in rule.head else cells[c], apart)]
+    return [line.replace("\\|", "|")]
 
 
-def got_pieces(rule, id_, values, title, cells, extra):
+def got_pieces(rule, id_, values, title, cells, extra, apart=()):
     """`want_pieces` rebuilt from a file read back (the rows by `rule.rows.unrow`)."""
+    if rule.head:
+        by = {**dict(zip(rule.labels, cells)), rule.titled: title or ""}
+        return [row_text(rule, id_, lambda c: rule.head[c][2](values.get(rule.head[c][0])) if c in rule.head else by[c], apart)]
     if not rule.heading:
-        return [("| " + " | ".join([id_, *cells]) + " |").replace("\\|", "|")]
+        return [table_line([id_, *cells]).replace("\\|", "|")]
     out = []
     if title is not None or cells:  # none: a unit of rows alone
         out.append("\n".join([f"{rule.heading} {id_}" + ("" if title is None else f" {title}"), *[""] * rule.gap, *cells]))
@@ -619,29 +652,34 @@ def cmd_verify(args, rule):
     root, kind = Path(args.root), repo.KIND[rule.kind]
     doc, read = source_of(rule)[0], before_reader(args.root, args.before)
     units, ranges, old, _ = read_units(root, rule, read(doc))
-    ctx, by = context(rule, root), {u.id: u for u in units}
-    allowed = {it.id for it in run(rule, units, ctx, {})[1] if it.cls == "status"}
-    key, reverse_of, origin = rule.reverse
+    ctx, by = context(rule, root, units=units), {u.id: u for u in units}
+    listed = run(rule, units, ctx, {})[1]
+    allowed = {it.id for it in listed if it.cls == "status"}
+    head = {k: c for c, (k, *_) in (rule.head or {}).items()}  # key -> column
+    apart = {(it.id, it.cls) for it in listed if it.cls in head}
+    key, reverse_of, origin = rule.reverse or (None, lambda read: {}, None)
     reverse = reverse_of(read)
     print("normalized: " + "; ".join(NORMALIZED) + ". ✅ is compared with `status` on its own")
     files = {p.stem: p.relative_to(root) for p in sorted((root / kind.dir).glob("*.md")) if re.fullmatch(kind.pattern, p.stem)}
-    bad, swapped, want, got, n_read = [], [], Counter(), Counter(), 0
+    bad, swapped, cut, want, got, n_read = [], [], [], Counter(), Counter(), 0
     what = "headings" if rule.heading else "rows"
     if set(files) != set(by):
         bad.append(f"IDs: {len(by)} {what}, {len(files)} files; no file: {sorted(set(by) - set(files))[:10]}, "
                    f"no unit: {sorted(set(files) - set(by))[:10]}")  # fmt: skip
     for u in units:
-        want.update(want_pieces(rule, kind, u))
+        want.update(want_pieces(rule, kind, u, ctx, apart))
     for id_, rel in files.items():
         back = (read_back_heading if rule.heading else read_back)(rule, rel, repo.read_exact(root, rel))
         if isinstance(back, str):
             bad.append(back)
             continue
         values, title, cells, extra = back
-        got.update(got_pieces(rule, id_, values, title, cells, extra))
+        got.update(got_pieces(rule, id_, values, title, cells, extra, apart))
         n_read += 1
         if (u := by.get(id_)) is None:
             continue
+        cells_of = dict(zip(rule.columns[1:], u.cells))
+        cut += [f"{id_}: `{head[k]}` {cells_of[head[k]]} -> {shown(values.get(k))}" for i, k in sorted(apart) if i == id_]
         if rule.done is not None and (values.get("status") == rule.done) != u.done:
             line = f"{id_}: {'✅' if u.done else 'no ✅'} -> {values.get('status')}"
             (swapped if id_ in allowed else bad).append(line + ("" if id_ in allowed else " (not a `status` item)"))
@@ -657,15 +695,16 @@ def cmd_verify(args, rule):
     if new != kept:
         at = next((i for i, (a, b) in enumerate(zip(new, kept)) if a != b), min(len(new), len(kept)))
         bad.append(f"{doc}:{at + 1}: outside the units, the document is not what it was")
-    a = ranges[0][0]
-    if not rule.heading and old[a - 1 : a + 1] != ["| " + " | ".join(rule.columns) + " |", "|" + "---|" * len(rule.columns)]:
-        bad.append(f"{doc}:{a}: the header and delimiter rows are not rebuilt from the columns")
+    for a, _ in [] if rule.heading else ranges:
+        if old[a - 1 : a + 1] != ["| " + " | ".join(rule.columns) + " |", "|" + "---|" * len(rule.columns)]:
+            bad.append(f"{doc}:{a}: the header and delimiter rows are not rebuilt from the columns")
     with_key = {i for i, rel in files.items() if i in by}
     if set(reverse) - with_key:
         bad.append(f"{key}: {origin} names {sorted(set(reverse) - with_key)[:10]}, which have no file")
     print(f"round trip: {sum(want.values())} {'rows' if not rule.heading else 'headings and rows' if rule.rows else 'headings'}, {n_read} files read back; "
-          f"IDs {len(files)}; `{key}` of {len(reverse)} {rule.kind} from {origin}; ✅ and status apart (the list's): {len(swapped)}")  # fmt: skip
-    for line in swapped + bad:
+          f"IDs {len(files)}" + (f"; `{key}` of {len(reverse)} {rule.kind} from {origin}" if rule.reverse else "")
+          + f"; ✅ and status apart (the list's): {len(swapped)}" + (f"; cells apart (the list's): {len(cut)}" if rule.head else ""))  # fmt: skip
+    for line in swapped + cut + bad:
         print(line)
     print(f"migrate_tables.py verify: {len(bad)} difference(s)" if bad else "migrate_tables.py verify: the same")
     return 1 if bad else 0
@@ -1166,7 +1205,88 @@ R_RULE = Rule(
     rows=R_ROWS,
     tail=(r"判断(?:（[^）]*）)?", "反映"),
 )
-RULES = {"S": S_RULE, "D": D_RULE, "K": K_RULE, "Q": Q_RULE, "A": A_RULE, "R": R_RULE}
+
+# ---------------------------------------------------------------- the rules of W (MG-4 (5b))
+
+W_COLUMNS = ("ID", "作業", "内容", "実現する決定", "依存", "規模", "役割・印")
+# the spellings of the column `役割・印` -> the values of `marks` (DF-6: the brackets taken off); the
+# values are checked by the README's field table
+W_MARKS = {"〔危険〕": "危険", "〔メモ〕": "メモ", "基盤": "基盤", "テスト": "テスト"}
+W_MARK = re.compile("|".join(map(re.escape, W_MARKS)))
+W_RANGE = re.compile(r"(W\d+-)(\d+)〜\1(\d+)")  # a range of a stage in `依存`
+NO_DEPENDS = "—"
+
+
+def w_cell(u, column):
+    return u.cells[W_COLUMNS.index(column) - 1]
+
+
+def w_context(root):
+    table = docs.field_table(docs.Tree(root, []), repo.KIND["W"])
+    if not isinstance(table, docs.FieldTable):
+        raise repo.RepoError(f"the values of `size` and `marks` are the README's: {table}")
+    return {"table": table}
+
+
+def w_open(cell, ids):
+    """The W of a cell `依存` (cut at `、`), a range opened to the IDs `ids` between its ends in their
+    order, once each; None when a part is not a W or a range of two of `ids` (a stage `W3`)."""
+    out = []
+    for part in cell.split("、"):
+        m = W_RANGE.fullmatch(part)
+        if m and {m[1] + m[2], m[1] + m[3]} <= set(ids) and int(m[2]) < int(m[3]):
+            out += [i for i in ids if i.startswith(m[1]) and int(m[2]) <= int(i[len(m[1]) :]) <= int(m[3])]
+        elif re.fullmatch(repo.KIND["W"].pattern, part):
+            out.append(part)
+        else:
+            return None
+    return list(dict.fromkeys(out))
+
+
+def w_status(u, ctx, values):
+    return ("DONE" if u.done else "PLAN"), []
+
+
+def w_size(u, ctx, values):
+    v = w_cell(u, "規模")
+    return (v, []) if ctx["table"].check_value("size", v) is None else (None, [Item(u.id, "size", ("size",), None, v)])
+
+
+def w_depends(u, ctx, values):
+    """`依存` as `w_open` reads it (`—`: not written; another form: listed)."""
+    cell = w_cell(u, "依存")
+    v = None if cell == NO_DEPENDS else w_open(cell, ctx["ids"])
+    return v, [] if v or cell == NO_DEPENDS else [Item(u.id, "depends", ("depends",), None, cell)]
+
+
+def w_marks(u, ctx, values):
+    """`役割・印` as spellings of W_MARKS one after another, in their order (empty: not written; another
+    form, `基盤（U3）`: listed)."""
+    cell = w_cell(u, "役割・印")
+    found = W_MARK.findall(cell)
+    v = [W_MARKS[x] for x in found] or None
+    if "".join(found) == cell and (v is None or ctx["table"].check_value("marks", v) is None):
+        return v, []
+    return None, [Item(u.id, "marks", ("marks",), None, cell)]
+
+
+W_SPELLING = {v: k for k, v in W_MARKS.items()}
+W_RULE = Rule(
+    kind="W",
+    columns=W_COLUMNS,
+    labels={"内容": "内容", "実現する決定": "実現する決定"},  # MG-G
+    extra=(),
+    done="DONE",
+    context=w_context,
+    fields=(("status", w_status), ("size", w_size), ("depends", w_depends), ("marks", w_marks)),
+    title=lambda u, ctx: (unbar(w_cell(u, "作業")) or None, {}, []),
+    notes=(),
+    head={"依存": ("depends", lambda c, ctx: "、".join(w_open(c, ctx["ids"]) or [c]), lambda v: "、".join(v) if v else NO_DEPENDS),
+          "規模": ("size", lambda c, ctx: c, lambda v: v or ""),
+          "役割・印": ("marks", lambda c, ctx: c, lambda v: "".join(W_SPELLING.get(x, x) for x in v or ()))},  # fmt: skip
+    titled="作業",
+)
+RULES = {"S": S_RULE, "D": D_RULE, "K": K_RULE, "Q": Q_RULE, "A": A_RULE, "R": R_RULE, "W": W_RULE}
 COMMANDS = {"plan": cmd_plan, "apply": cmd_apply, "verify": cmd_verify}
 
 
