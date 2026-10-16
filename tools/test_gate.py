@@ -1203,6 +1203,19 @@ class SaveBase(unittest.TestCase):
     def head(self):
         return git_in(self.root, "rev-parse", "HEAD").strip()
 
+    def test_warns_of_a_big_debug_directory(self):
+        (self.target / "debug" / "deps").mkdir(parents=True)
+        (self.target / "debug" / "deps" / "x.o").write_bytes(b"\0" * 65536)
+        self.assertIsNone(gate_runs.debug_dir_warning(self.target, 2**30))
+        warning = gate_runs.debug_dir_warning(self.target, 1024)
+        self.assertTrue(warning.startswith("warning: ") and "cargo clean --profile dev" in warning, warning)
+        lines = []
+        code = gate_runs.save_base(self.root, 2, out=lines.append, build=self.build,
+                                   target_directory=lambda r: self.target, debug_limit=1024)  # fmt: skip
+        self.assertEqual((code, lines[-1]), (0, gate_runs.debug_dir_warning(self.target, 1024)))
+        self.assertTrue(lines[-2].startswith("save-base: "), lines)
+        self.assertNotIn("warning", self.save()[1])  # no limit given, no warning
+
     def test_saves_what_the_reader_finds(self):
         code, out = self.save()
         self.assertEqual(code, 0, out)

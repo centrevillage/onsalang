@@ -55,6 +55,9 @@ SHARDS = 2  # the shards of the sweep, K (M-2): one sweep within BUDGET_SWEEP
 BUDGET_WORK = 300  # seconds of the items of a work check before the warning (M-8)
 BUDGET_SWEEP = 600  # seconds of the items of a sweep before the warning
 BASES_KEPT = 5  # the base binaries kept in target/base (M-3)
+# The size of the main tree's `target/debug` past which a run of the main tree warns: cargo keeps the
+# outputs of the builds before (about 5 times a build from nothing, 1.6 GB on 2026-10-16).
+DEBUG_DIR_LIMIT = 8 * 2**30
 PARENT = 3  # the exit of an item whose findings wait for the parent (M-5): not 1, not CANNOT_RUN
 # The tools of the narrowable items: a diff that touches them runs the item whole.
 FUZZ_TOOLS = ("tools/fuzz.py", "tools/narrowing.py")

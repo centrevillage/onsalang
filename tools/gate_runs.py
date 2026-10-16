@@ -104,7 +104,23 @@ def sweep_line(root, rows, bad, k):
     return f"sweep: next {next_shard(rows, k)}/{k} ({'; '.join(parts)}){tail}"
 
 
-def save_base(root, keep, out=print, build=None, target_directory=None):
+def debug_dir_warning(target, limit):
+    """The warning when `<target>/debug` takes more than `limit` bytes on the disk, else None. Cargo
+    does not remove the outputs of the builds before; `cargo clean --profile dev` does."""
+    debug = Path(target) / "debug"
+    size = 0
+    for dirpath, _, names in os.walk(debug):
+        for name in names:
+            try:
+                size += os.lstat(os.path.join(dirpath, name)).st_blocks * 512
+            except OSError:
+                continue  # removed meanwhile
+    if size <= limit:
+        return None
+    return f"warning: {debug} takes {size / 2**30:.1f} GB, over {limit / 2**30:.0f} GB: run `cargo clean --profile dev`"
+
+
+def save_base(root, keep, out=print, build=None, target_directory=None, debug_limit=None):
     """Copy the binaries of HEAD into `target/base/<SHA>`, keep the last `keep`. The exit:
     0 saved, 1 refused or failed, 2 not the main tree."""
     if build is None or target_directory is None:
@@ -145,6 +161,9 @@ def save_base(root, keep, out=print, build=None, target_directory=None):
         out(f"save-base: cannot copy the binaries: {e}")
         return 1
     out(f"save-base: {dest} ({full}); removed: {' '.join(removed) or 'none'}")
+    warning = debug_dir_warning(target, debug_limit) if debug_limit is not None else None
+    if warning:
+        out(warning)
     return 0
 
 

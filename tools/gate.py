@@ -392,7 +392,8 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         if others:
             print("--save-base goes alone", file=sys.stderr)
             return 2
-        return gate_runs.save_base(root, gate_steps.BASES_KEPT, out=lambda line: print(line, file=out))
+        return gate_runs.save_base(root, gate_steps.BASES_KEPT, out=lambda line: print(line, file=out),
+                                   debug_limit=gate_steps.DEBUG_DIR_LIMIT)
     if "UPDATE_GOLDEN" in os.environ:
         print("UPDATE_GOLDEN is set: the gate only checks and would rewrite the golden files; unset it", file=sys.stderr)
         return 2
@@ -450,7 +451,9 @@ def _history(root, form, results, failed):
         rows, bad = gate_runs.read_history(root)
     except OSError as e:
         return notes + [f"history: cannot read it ({e})"]
-    return notes + [gate_runs.sweep_line(root, rows, bad, gate_steps.SHARDS)]
+    notes.append(gate_runs.sweep_line(root, rows, bad, gate_steps.SHARDS))
+    warning = gate_runs.debug_dir_warning(Path(root) / "target", gate_steps.DEBUG_DIR_LIMIT)
+    return notes + ([warning] if warning else [])
 
 
 if __name__ == "__main__":
