@@ -2,6 +2,11 @@
 // [test]
 // spec = ["§2.3", "§15.1", "§18.1"]
 // fixes = 1
+// [[test.fix]]
+// at = "util.onsa:1:8"
+// code = "E0320"
+// candidate = 1
+// clean = true
 
 // E0320 in a package: the one candidate changes the declaration and every use in the package, in
 // every module, `use` lists included (§2.3, S-82). The declaration is in util.onsa.

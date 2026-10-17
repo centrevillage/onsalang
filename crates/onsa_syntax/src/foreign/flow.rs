@@ -320,10 +320,8 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId, marks: &mut Insertions) -> Opti
             e
         } else if out.clock.end == s.end {
             // The clock was the end of the function type: the `)` goes where
-            // the type ends without it.
-            let mut e = vec![Edit::insert(s.file, s.start, "(")];
-            e.extend(out.edits(&format!("){at}")));
-            e
+            // the type ends without it, and the clock stays (R-237, S-251).
+            vec![Edit::insert(s.file, s.start, "("), Edit::insert(s.file, out.before, ")")]
         } else {
             let mut e = vec![Edit::insert(s.file, s.start, "(")];
             e.extend(out.edits(""));

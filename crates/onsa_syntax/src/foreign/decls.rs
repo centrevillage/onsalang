@@ -221,7 +221,7 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
 /// `@mem(fast)` on a `let` goes (redundant). In a place that does not take
 /// the Onsa form, the row with no candidate.
 pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
-    use crate::attrs::{BULK, FAST, FP, MEM, Place, RELAXED};
+    use crate::attrs::{FAST, FP, MEM, Place, RELAXED};
     if c.kind(c.at) != TokenKind::At || c.kind(c.at + 1) != TokenKind::Ident {
         return None;
     }
@@ -241,15 +241,18 @@ pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
             }
         }
         "relaxed" | "bulk" if !args => {
-            let (row, onsa, places): (_, _, &[Place]) = if name == RELAXED {
-                (RowId::RelaxedAttribute, format!("{FP}({RELAXED})"), &[Place::Fn, Place::Flow])
+            let (row, outer, places): (_, _, &[Place]) = if name == RELAXED {
+                (RowId::RelaxedAttribute, FP, &[Place::Fn, Place::Flow])
             } else {
-                (RowId::BulkAttribute, format!("{MEM}({BULK})"), &[Place::Let])
+                (RowId::BulkAttribute, MEM, &[Place::Let])
             };
             if !places.contains(&place) {
                 return no_candidate();
             }
-            let fix = Fix::replace(format!("write `@{onsa}`"), c.span(c.at + 1), onsa);
+            // The name stays; the attribute is written around it (S-251).
+            let s = c.span(c.at + 1);
+            let edits = vec![Edit::insert(s.file, s.start, format!("{outer}(")), Edit::insert(s.file, s.end, ")")];
+            let fix = Fix::new(format!("write `@{outer}({name})`"), edits);
             found(row, span, vec![fix])
         }
         _ if name == MEM && place == Place::Let && last == c.at + 4 && c.is_ident(c.at + 3, FAST) => {
@@ -420,12 +423,23 @@ pub(super) fn tuple_struct(c: &Cursor) -> Option<(RowId, Hit)> {
         c.space_after(c.at).map_or(c.span(c.at).end, |s| s.end),
     );
     let comments = (last + 1..close).any(|i| c.comment(i));
-    let tail = if comments { c.span(close) } else { c.file_span(c.span(last).end, c.span(close).end) };
-    let comma = if comments && trailing { "" } else { "," };
-    let edits = vec![
-        Edit::replace(open, format!(" {{{eol}{indent}  {field}: ")),
-        Edit::replace(tail, format!("{comma}{eol}{indent}}}")),
-    ];
+    let mut edits = vec![Edit::replace(open, format!(" {{{eol}{indent}  {field}: "))];
+    match (comments, trailing, c.sig_before(close)) {
+        (true, _, _) => {
+            edits.push(Edit::replace(c.span(close), format!("{}{eol}{indent}}}", if trailing { "" } else { "," })))
+        }
+        // A `,` written stays (S-251): the blanks before it go, the edit of the `)` starts after it.
+        (false, true, Some(p)) => {
+            let gap = c.file_span(c.span(last).end, c.span(p).start);
+            if !gap.is_empty() {
+                edits.push(Edit::delete(gap));
+            }
+            edits.push(Edit::replace(c.file_span(c.span(p).end, c.span(close).end), format!("{eol}{indent}}}")));
+        }
+        (false, _, _) => {
+            edits.push(Edit::replace(c.file_span(c.span(last).end, c.span(close).end), format!(",{eol}{indent}}}")))
+        }
+    }
     found(RowId::TupleStruct, span, vec![Fix::new("write a struct with the field `value`", edits)])
 }
 

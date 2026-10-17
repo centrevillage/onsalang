@@ -1,0 +1,2 @@
+flow Sig
+pub flow k(a:Sig[F32])->g[o]{}

@@ -1199,10 +1199,12 @@ impl<'p> Sema<'p> {
                                 span,
                                 format!("`{name}` is a flow, not a type; its state type is `{name}.State` (§11.6)"),
                             )
+                            // The type arguments after the path, if any, are what
+                            // changes: `Sig[F32]` is `Sig.State` (§18.1, S-251).
                             .with_fix(Fix::replace(
                                 format!("write `{name}.State`"),
-                                span,
-                                format!("{name}.State"),
+                                Span { start: path.span.end, ..span },
+                                ".State",
                             )),
                         );
                         self.a.types.error()

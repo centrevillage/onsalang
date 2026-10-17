@@ -188,8 +188,9 @@ impl<'a> Checker<'a> {
                 )
                 .with_found(self.src(span));
                 if let Some(m) = builtin::cast_suggestion(&self.a.types, from, to) {
-                    let inner_src = self.src(self.expr(*inner).span);
-                    d = d.with_fix(Fix::replace(format!("call `{m}`"), span, format!("{inner_src}{m}")));
+                    // `as` and the type after the operand change, the operand stays (S-251).
+                    let rest = Span::new(span.file, self.expr(*inner).span.end, span.end);
+                    d = d.with_fix(Fix::replace(format!("call `{m}`"), rest, m));
                 }
                 Err(self.diag(d))
             }

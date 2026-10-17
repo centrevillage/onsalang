@@ -35,7 +35,14 @@ pub(super) fn faust_feedback(c: &Cursor) -> Option<(RowId, Hit)> {
     }
     let span = c.file_span(c.span(c.at).start, c.span(wild).end);
     let Some(name) = feedback_name(c) else { return found(RowId::FaustFeedbackUnnamed, span, Vec::new()) };
-    let fix = Fix::replace(format!("write `prev~(^{name})`"), span, format!("prev~(^{name})"));
+    // The `~` stays (S-251): the text is written around it, the `_` replaced.
+    let written = format!("prev~(^{name})");
+    let (before, after) = written.split_once('~').unwrap_or((&written, ""));
+    let edits = vec![
+        Edit::insert(span.file, span.start, before),
+        Edit::replace(c.file_span(c.span(c.at).end, c.span(wild).end), after),
+    ];
+    let fix = Fix::new(format!("write `{written}`"), edits);
     found(RowId::FaustFeedback, span, vec![fix])
 }
 

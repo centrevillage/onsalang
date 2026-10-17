@@ -351,7 +351,16 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
         let m = &c.text[c.span(open + 1).start as usize..c.span(close - 1).end as usize];
         fixes.push(Fix::new(
             "compare: both comparisons, joined with `&&`",
-            vec![Edit::replace(c.span(open), " < "), Edit::replace(c.span(close), format!(" && {m} > "))],
+            // The `<` and the `>` stay (S-251): blanks around them, the second operand before `>`.
+            {
+                let (o, e) = (c.span(open), c.span(close));
+                vec![
+                    Edit::insert(o.file, o.start, " "),
+                    Edit::insert(o.file, o.end, " "),
+                    Edit::insert(e.file, e.start, format!(" && {m} ")),
+                    Edit::insert(e.file, e.end, " "),
+                ]
+            },
         ));
     }
     found(row, span, fixes)

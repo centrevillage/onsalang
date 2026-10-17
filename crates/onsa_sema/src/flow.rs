@@ -44,7 +44,7 @@
 use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::{Feature, FlowForm};
-use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
     Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, Path, RangeEnd, RangeHead, StmtId,
     StmtKind, UnOp,
@@ -911,13 +911,22 @@ impl<'a> Checker<'a> {
                 let n_expr = args[1].expr;
                 let n = self.flow_const_u32(n_expr, "the length of `delay~`")?;
                 if n == 1 {
-                    let mut shown = vec![self.src(self.expr(args[0].expr).span)];
-                    shown.extend(init_expr.map(|i| self.src(self.expr(i).span)));
-                    let fix = format!("{}~({})", Delay::Prev.name(), shown.join(", "));
+                    // The name and the length change, the rest of the call stays (S-251):
+                    // the length goes with the `,` before it.
+                    let name = Span::new(span.file, span.start, span.start + Delay::Fixed.name().len() as u32);
+                    let length = Span::new(span.file, self.expr(args[0].expr).span.end, self.expr(n_expr).span.end);
+                    let edits = if self.src(name) == Delay::Fixed.name() {
+                        vec![Edit::replace(name, Delay::Prev.name()), Edit::delete(length)]
+                    } else {
+                        // Not written as the bare name: the whole call is written again.
+                        let mut shown = vec![self.src(self.expr(args[0].expr).span)];
+                        shown.extend(init_expr.map(|i| self.src(self.expr(i).span)));
+                        vec![Edit::replace(span, format!("{}~({})", Delay::Prev.name(), shown.join(", ")))]
+                    };
                     return Err(self.diag(
                         Diagnostic::new(Stage::Flow, Code::E0807, span, "a 1-sample delay is written `prev~` (§11.4)")
                             .with_found(self.src(span))
-                            .with_fix(Fix::replace("write `prev~`", span, fix)),
+                            .with_fix(Fix::new("write `prev~`", edits)),
                     ));
                 }
                 if n < 2 {

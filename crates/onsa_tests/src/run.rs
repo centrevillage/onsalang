@@ -121,6 +121,11 @@ pub enum Problem {
     /// a file outside the case, it cannot be applied, the check after it ends
     /// in an internal error, its stage is not a check): never pending.
     FixUnchecked(String),
+    /// A copy of the text after the candidates (`.fixK`, [`crate::fixes`];
+    /// Q-04) differs or is missing: never a failure of the contract, and no
+    /// entry silences it (`UPDATE_GOLDEN=1` rewrites it). A case listed as a
+    /// whole does not judge its copies ([`reconcile`]).
+    FixCopy(String),
 }
 
 impl Problem {
@@ -135,6 +140,7 @@ impl Problem {
             Problem::Harness(_) => "harness",
             Problem::FixContract { .. } => "fix-contract",
             Problem::FixUnchecked(_) => "fix-unchecked",
+            Problem::FixCopy(_) => "fix-copy",
         }
     }
 
@@ -148,6 +154,7 @@ impl Problem {
             Problem::Harness(m) => format!("the host steps cannot run: {m}"),
             Problem::FixContract { message, .. } => message.clone(),
             Problem::FixUnchecked(m) => format!("the contract of a fix candidate cannot be checked: {m}"),
+            Problem::FixCopy(m) => m.clone(),
         }
     }
 }
@@ -174,6 +181,13 @@ pub struct CaseRun {
     /// The fix candidates checked against the contract of §18.1, by their
     /// names in `tests/pending.toml` ([`crate::fix_contract`], W3-17).
     pub fix_targets: Vec<String>,
+    /// The edits of those candidates whose tokens the check of the minimal
+    /// edit compared ([`crate::fix_contract::Checked::edits_compared`]).
+    pub edits_compared: usize,
+    /// The copies `.fixK` compared, and those `UPDATE_GOLDEN=1` rewrote or
+    /// removed ([`crate::fixes::CopyCheck`]).
+    pub fix_copies: usize,
+    pub copies_rewritten: Vec<String>,
 }
 
 /// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
@@ -403,10 +417,15 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     // Every candidate, applied alone and checked again (§18.1, S-236, W3-17).
     let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
     run.fix_targets = contract.targets;
+    run.edits_compared = contract.edits_compared;
     run.problems.extend(contract.problems);
     if t.fixes > 0 {
         let files = disk_files(root, case, setup, &loaded);
-        run.problems.extend(crate::fixes::compare(&loaded.sources, &files, check, t.fixes));
+        let write = golden::updating() && write_golden;
+        let copies = crate::fixes::compare(&loaded.sources, &files, check, t.fixes, write);
+        run.problems.extend(copies.problems);
+        run.fix_copies = copies.copies;
+        run.copies_rewritten = copies.rewritten.iter().map(|p| case::rel_path(root, p)).collect();
     }
     // A `mode = "test"` case without targets that checks compares its markers
     // with what `onsa test` reports before the tests run ([`run_tests`]).
@@ -1054,8 +1073,20 @@ impl Report {
         let _ = write!(
             s,
             "\nfix candidates checked against the contract (§18.1): {checked}, {pending_fixes} pending, \
-             {breaking} failing"
+             {breaking} failing; edits compared for the minimal edit: {}",
+            self.cases.iter().map(|c| c.run.edits_compared).sum::<usize>()
         );
+        let copies: usize = self.cases.iter().map(|c| c.run.fix_copies).sum();
+        let rewritten: Vec<&String> = self.cases.iter().flat_map(|c| &c.run.copies_rewritten).collect();
+        let _ = write!(s, "\ncopies of the texts after the candidates (.fixK) compared: {copies}");
+        if !rewritten.is_empty() {
+            let _ = write!(
+                s,
+                "\ncopies rewritten or removed by UPDATE_GOLDEN=1 ({}): {}",
+                rewritten.len(),
+                rewritten.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ")
+            );
+        }
         for c in &self.cases {
             for n in &c.run.notes {
                 let _ = write!(s, "\n{}: {n}", c.run.path);
@@ -1128,6 +1159,9 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
         } else if let Some(e) = whole.first() {
             let expects_internal = e.expect == Some(pending::Expect::Internal);
             let internal = run.problems.iter().any(|p| matches!(p, Problem::Internal(_)));
+            // The copies of a pending case are not the output to keep: not
+            // judged, neither a failure nor a reason to wait (X-3).
+            run.problems.retain(|p| !matches!(p, Problem::FixCopy(_)));
             // Never silenced: the errors of the case and of the harness, an
             // internal error the entry does not expect, and the fix
             // candidates (each is listed on its own, W3-17).
@@ -1258,6 +1292,12 @@ pub fn run_all(root: &Path) -> Report {
         report.failures.push(
             "no fix candidate was checked against the contract of §18.1 (S-236, W3-17): the cases give none".into(),
         );
+    }
+    if report.cases.iter().all(|c| c.run.edits_compared == 0) {
+        report.failures.push("the check of the minimal edit (§18.1, S-251) compared no edit".into());
+    }
+    if report.cases.iter().all(|c| c.run.fix_copies == 0 && c.run.copies_rewritten.is_empty()) {
+        report.failures.push("no copy of the text after the candidates (.fixK) was compared".into());
     }
     report
 }
@@ -1577,13 +1617,50 @@ mod tests {
         assert!(case(&r, "tests/good.onsa").failures.is_empty(), "{:?}", case(&r, "tests/good.onsa").failures);
         let bad = &case(&r, "tests/bad.onsa").failures;
         assert!(
-            bad.iter().any(|f| f.contains("differs from bad.onsa.fix1: expected `1` (line 6), got `0`")),
+            bad.iter().any(|f| f.contains("differs from the copy bad.onsa.fix1: expected `1` (line 6), got `0`")),
             "{bad:?}"
         );
         let two = &case(&r, "tests/two.onsa").failures;
         assert!(two.iter().any(|f| f.contains("no diagnostic has a candidate 2")), "{two:?}");
         assert!(r.failures.iter().any(|f| f.contains("tests/stray.onsa.fix1: no case declares")), "{:?}", r.failures);
         assert!(r.failures.iter().any(|f| f.contains("tests/good.onsa.fix2: its case declares `fixes = 1`")));
+        assert_eq!(r.cases.iter().map(|c| c.run.fix_copies).sum::<usize>(), 3, "good, bad and two: the copies read");
+        assert!(!r.failures.iter().any(|f| f.contains("no copy")), "{:?}", r.failures);
+    }
+
+    /// The copies (Q-04, X-3) are a failure of their own: an entry of kind
+    /// `fix-contract` does not silence them, and a case listed as a whole does
+    /// not judge them (it passes when the copy alone differs). With no copy at
+    /// all, the run fails.
+    #[test]
+    fn copies_are_not_silenced_and_do_not_keep_a_case_pending() {
+        let src = "// onsa.toml\n// [test]\n// fixes = 1\n\npub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
+        let bad = src.replace("let mut n = 0 ", "var n = 1 ");
+        let files = [
+            ("tests/whole.onsa", src),
+            ("tests/whole.onsa.fix1", bad.as_str()),
+            ("tests/one.onsa", src),
+            ("tests/one.onsa.fix1", bad.as_str()),
+            ("tests/missing.onsa", src),
+        ];
+        let target = {
+            let r = Repo::new("copies_probe", &files).run();
+            case(&r, "tests/one.onsa").run.fix_targets[0].clone()
+        };
+        let pending = format!("{}{}", entry("tests/whole.onsa"), fix_entry(&target));
+        let mut with = files.to_vec();
+        with.push((pending::PATH, &pending));
+        let r = Repo::new("copies", &with).run();
+        let whole = &case(&r, "tests/whole.onsa").failures;
+        assert!(whole.len() == 1 && whole[0].contains("passes but is listed"), "{whole:?}");
+        let one = &case(&r, "tests/one.onsa").failures;
+        assert!(one.iter().any(|f| f.contains("differs from the copy one.onsa.fix1")), "{one:?}");
+        assert!(one.iter().any(|f| f.contains("keeps the contract but is listed")), "{one:?}");
+        let missing = &case(&r, "tests/missing.onsa").failures;
+        assert!(missing.iter().any(|f| f.contains("its copy missing.onsa.fix1 is missing")), "{missing:?}");
+        // No copy at all: the run fails.
+        let r = Repo::new("no_copies", &[("tests/missing.onsa", src)]).run();
+        assert!(r.failures.iter().any(|f| f.contains("no copy of the text after the candidates")), "{:?}", r.failures);
     }
 
     fn fix_entry(target: &str) -> String {

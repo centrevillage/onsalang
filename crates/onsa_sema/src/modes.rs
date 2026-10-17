@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use onsa_diag::unsupported::Feature;
-use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, Ast, Block, CallKind, ExprId, ExprKind, Lit, Mode, StmtId, StmtKind, StrSeg};
 
 use crate::body::{BodyInfo, LocalId, LocalKind, Target};
@@ -803,7 +803,7 @@ impl<'a> Walker<'a> {
                 };
                 let d = Diagnostic::new(Stage::Modes, Code::E0703, arg.span, msg)
                     .with_found(found)
-                    .with_fix(Fix::replace("write the mode of the parameter", arg.span, fix));
+                    .with_fix(Fix::new("write the mode of the parameter", vec![fix]));
                 self.report(d);
                 return;
             }
@@ -940,14 +940,15 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn mode_fix(&self, arg: &Arg, want: Mode) -> (String, String) {
+    fn mode_fix(&self, arg: &Arg, want: Mode) -> (String, Edit) {
         let found = self.src(arg.span);
-        let inner = self.src(self.span(arg.expr));
-        let fix = match want {
-            Mode::Inout => format!("inout {inner}"),
-            Mode::Move => format!("move {inner}"),
-            Mode::Borrow => inner,
+        // Only the mode before the expression changes (S-251).
+        let head = Span::new(arg.span.file, arg.span.start, self.span(arg.expr).start);
+        let mode = match want {
+            Mode::Inout => "inout ",
+            Mode::Move => "move ",
+            Mode::Borrow => "",
         };
-        (found, fix)
+        (found, Edit::replace(head, mode))
     }
 }

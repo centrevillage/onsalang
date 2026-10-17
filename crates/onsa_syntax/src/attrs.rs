@@ -168,7 +168,8 @@ pub fn check(file: FileId, text: &str, w: &Written, place: Place) -> Option<Diag
     for v in values {
         let edit = match (w.value, w.args) {
             (Some((span, _)), _) => Edit::replace(span, *v),
-            (None, Some(args)) => Edit::replace(args, format!("({v})")),
+            // The brackets stay (S-251): the value between them.
+            (None, Some(args)) => Edit::replace(Span::new(args.file, args.start + 1, args.end - 1), *v),
             (None, None) => Edit::insert(file, w.span.end, format!("({v})")),
         };
         d = d.with_fix(Fix::new(format!("write `@{}({v})`", w.name), vec![edit]));

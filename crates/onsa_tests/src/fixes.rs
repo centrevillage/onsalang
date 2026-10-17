@@ -6,9 +6,14 @@
 //! diagnostic without a K-th candidate changes nothing for K. A file that no
 //! K-th candidate edits has no `F.fixK` (an unchanged file is the original).
 //!
-//! The spec fixes the number and order of the candidates and the text they
-//! give (§18.1), not which tokens an edit covers, its title or the messages.
-//! So the expectation is the text after applying, compared token by token:
+//! The spec promises the number of the candidates (§18.1), not their text or
+//! order (X-3, X3-1a): the `.fixK` files are copies of the implementation's
+//! output (Q-04), change detectors, not the spec's expectation. A copy that
+//! differs or is missing is [`Problem::FixCopy`], never a failure of the
+//! contract and never pending; `UPDATE_GOLDEN=1` rewrites it (creates it,
+//! removes the copy of a file no candidate edits) and the parent reads the
+//! change. The number (`fixes = N`) is the test's and is never rewritten. A
+//! copy is compared token by token:
 //! **the width of whitespace is ignored; every token but whitespace (newlines
 //! and comments included) is compared by kind and text, in order, with the
 //! kind of the gap before it (nothing, spaces, a newline:
@@ -24,8 +29,8 @@
 //! 2. no diagnostic has more than N candidates (the count is the expectation's);
 //! 3. the K-th candidates of different diagnostics do not overlap (else split
 //!    the case: an error of the case);
-//! 4. the result matches `F.fixK` (or `F` when there is none, and a `F.fixK`
-//!    of a file no candidate edits fails);
+//! 4. the result matches the copy `F.fixK` (a file the candidates edit has
+//!    one; a file they do not edit has none): else a `FixCopy`;
 //!
 //! and over the repository ([`orphans`]):
 //! 5. a `.fixK` file that no case declares fails.
@@ -54,10 +59,28 @@ pub fn split_name(name: &str) -> Option<(&str, u32)> {
     Some((base, k.parse().ok()?))
 }
 
+/// What [`compare`] found of the copies.
+#[derive(Debug, Default)]
+pub struct CopyCheck {
+    pub problems: Vec<Problem>,
+    /// The copies read and compared (or rewritten).
+    pub copies: usize,
+    /// The copies written or removed (`UPDATE_GOLDEN=1`).
+    pub rewritten: Vec<PathBuf>,
+}
+
 /// Compare the candidates of `diagnostics` with the `.fixK` files. `files` are
-/// the source files of the case and where they are on disk.
-pub fn compare(sources: &SourceMap, files: &[(FileId, PathBuf)], diagnostics: &[Diagnostic], n: u32) -> Vec<Problem> {
-    let mut out = Vec::new();
+/// the source files of the case and where they are on disk. `write`: rewrite
+/// the copies that differ (`UPDATE_GOLDEN=1` and a case that is not pending).
+pub fn compare(
+    sources: &SourceMap,
+    files: &[(FileId, PathBuf)],
+    diagnostics: &[Diagnostic],
+    n: u32,
+    write: bool,
+) -> CopyCheck {
+    let mut done = CopyCheck::default();
+    let out = &mut done.problems;
     let at = |d: &Diagnostic| {
         let f = sources.file(d.span.file);
         let lc = f.line_col(d.span.start);
@@ -108,39 +131,47 @@ pub fn compare(sources: &SourceMap, files: &[(FileId, PathBuf)], diagnostics: &[
             }
         };
         for (file, disk) in files {
-            let original = sources.file(*file).text();
-            let expect_path = path(disk, k);
-            let name = expect_path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            let expected = match std::fs::read_to_string(&expect_path) {
-                Ok(t) => {
-                    if !texts.contains_key(file) {
-                        out.push(Problem::Failed(format!(
-                            "fixes: no candidate {k} edits {}; remove {name}",
-                            sources.file(*file).name()
-                        )));
-                        continue;
-                    }
-                    t
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => original.to_string(),
+            let copy = path(disk, k);
+            let name = copy.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let expected = match std::fs::read_to_string(&copy) {
+                Ok(t) => Some(t),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
                 Err(e) => {
                     out.push(Problem::Case(format!("fixes: cannot read {name}: {e}")));
                     continue;
                 }
             };
-            let actual = texts.get(file).map(String::as_str).unwrap_or(original);
-            if let Some(diff) = first_difference(&expected, actual) {
-                let what =
-                    if texts.contains_key(file) { "after the candidates" } else { "unchanged by the candidates" };
-                out.push(Problem::Failed(format!(
-                    "fixes: {} {what} {k} differs from {}: {diff}",
-                    sources.file(*file).name(),
-                    if expect_path.exists() { name } else { "the source (there is no fix file)".into() }
-                )));
+            let source = sources.file(*file).name();
+            let why = match (texts.get(file), &expected) {
+                (None, None) => continue,
+                (Some(actual), Some(expected)) => {
+                    done.copies += 1;
+                    match first_difference(expected, actual) {
+                        None => continue,
+                        Some(diff) => format!("{source} after the candidates {k} differs from the copy {name}: {diff}"),
+                    }
+                }
+                (Some(_), None) => format!("the candidates {k} edit {source}, but its copy {name} is missing"),
+                (None, Some(_)) => {
+                    done.copies += 1;
+                    format!("no candidate {k} edits {source}, but it has the copy {name}")
+                }
+            };
+            if !write {
+                out.push(Problem::FixCopy(format!("fixes: {why} (UPDATE_GOLDEN=1 rewrites the copy)")));
+                continue;
+            }
+            let written = match texts.get(file) {
+                Some(actual) => std::fs::write(&copy, actual),
+                None => std::fs::remove_file(&copy),
+            };
+            match written {
+                Ok(()) => done.rewritten.push(copy),
+                Err(e) => out.push(Problem::Case(format!("fixes: cannot rewrite {name}: {e}"))),
             }
         }
     }
-    out
+    done
 }
 
 /// One compared token: the gap before it (`None`: not compared), its kind
@@ -260,6 +291,67 @@ mod tests {
         assert_eq!(split_name("a.onsa.fix0"), None);
         assert_eq!(split_name("a.onsa.fixx"), None);
         assert_eq!(path(Path::new("t/a.onsa"), 2), PathBuf::from("t/a.onsa.fix2"));
+    }
+
+    /// The copies (Q-04, X-3): a copy that differs, is missing or is of a file
+    /// no candidate edits is a `FixCopy`; writing rewrites only the copies,
+    /// never the number.
+    #[test]
+    fn copies_are_rewritten_but_the_number_is_not() {
+        use onsa_diag::{Code, Fix, Span, Stage};
+        let dir = crate::c::scratch_dir("onsa_test", "fix_copies");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut sources = SourceMap::default();
+        let a = sources.add("a.onsa", "let mut n = 0\n");
+        let b = sources.add("b.onsa", "x\n");
+        let files = vec![(a, dir.join("a.onsa")), (b, dir.join("b.onsa"))];
+        let (copy_a, copy_b) = (dir.join("a.onsa.fix1"), dir.join("b.onsa.fix1"));
+        let d = Diagnostic::new(Stage::Syntax, Code::E0020, Span::new(a, 0, 7), "m").with_fix(Fix::replace(
+            "var",
+            Span::new(a, 0, 7),
+            "var",
+        ));
+        let run = |n: u32, write: bool| compare(&sources, &files, std::slice::from_ref(&d), n, write);
+        let copy = |r: &CopyCheck, text: &str| {
+            r.problems.len() == 1 && matches!(&r.problems[0], Problem::FixCopy(m) if m.contains(text))
+        };
+        // Missing; written, it is created, and then the same.
+        let r = run(1, false);
+        assert!(copy(&r, "its copy a.onsa.fix1 is missing"), "{r:?}");
+        let r = run(1, true);
+        assert!(r.problems.is_empty() && r.rewritten == [copy_a.clone()], "{r:?}");
+        assert_eq!(std::fs::read_to_string(&copy_a).unwrap(), "var n = 0\n");
+        let r = run(1, false);
+        assert!(r.problems.is_empty() && r.copies == 1, "{r:?}");
+        // The width of blanks is not a difference: nothing rewritten.
+        std::fs::write(&copy_a, "var  n = 0\n").unwrap();
+        assert!(run(1, true).rewritten.is_empty());
+        assert_eq!(std::fs::read_to_string(&copy_a).unwrap(), "var  n = 0\n");
+        // A copy that differs.
+        std::fs::write(&copy_a, "var n = 1\n").unwrap();
+        assert!(copy(&run(1, false), "a.onsa after the candidates 1 differs from the copy a.onsa.fix1"));
+        assert_eq!(run(1, true).rewritten, std::slice::from_ref(&copy_a));
+        assert_eq!(std::fs::read_to_string(&copy_a).unwrap(), "var n = 0\n");
+        // The copy of a file no candidate edits: removed when written.
+        std::fs::write(&copy_b, "y\n").unwrap();
+        assert!(copy(&run(1, false), "no candidate 1 edits b.onsa, but it has the copy b.onsa.fix1"));
+        assert_eq!(run(1, true).rewritten, std::slice::from_ref(&copy_b));
+        assert!(!copy_b.exists());
+        // The number is never rewritten: a candidate 2 that is not there, and
+        // more candidates than declared, fail when writing too.
+        let r = run(2, true);
+        assert!(
+            r.problems.iter().any(|p| matches!(p, Problem::Failed(m) if m.contains("no diagnostic has a candidate 2")))
+        );
+        assert!(!dir.join("a.onsa.fix2").exists());
+        let two = d.clone().with_fix(Fix::replace("val", Span::new(a, 0, 7), "let"));
+        let r = compare(&sources, &files, std::slice::from_ref(&two), 1, true);
+        assert!(
+            r.problems.iter().any(|p| matches!(p, Problem::Failed(m) if m.contains("more than `fixes = 1`"))),
+            "{r:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

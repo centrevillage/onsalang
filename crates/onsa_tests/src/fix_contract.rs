@@ -32,7 +32,19 @@
 //! 4. the tokens and comments outside the edits are read the same after it
 //!    (kind and range, moved by the edits before them; blanks are not
 //!    compared, and an insertion at an end of a token is not inside it,
-//!    [`reading_difference`]).
+//!    [`reading_difference`]);
+//! 5. every edit is minimal, as far as the tokens tell (§18.1: "the edits
+//!    replace only the tokens that change", S-251; X-3, X3-1g): the tokens
+//!    an edit's range falls in (it replaces a character of them or inserts
+//!    strictly inside them; an insertion at an end of a token is not inside
+//!    it) and those its replacement falls in after it, comments included and
+//!    blanks aside, compared by kind and text ([`not_minimal`]): a comment of
+//!    the range written again (the comment belongs outside the edit), the
+//!    same first or last token (the edit can be shrunk; an edit that changes
+//!    nothing too), or any token in both (the edit is two: `<T>` to `[T]` is
+//!    the edits of `<` and `>`). An edit too large in another way (it removes
+//!    a whole statement) is not seen here: the copies of the texts after the
+//!    candidates (`.fixK`, Q-04) and the parent's review see it.
 //!
 //! A `[[test.fix]]` entry may also promise more of one candidate: `clean`
 //! (the check after it reports nothing at all, S-253) and `same_code` (the
@@ -231,6 +243,9 @@ pub struct Checked {
     /// Every candidate checked again, by its name in `tests/pending.toml`.
     pub targets: Vec<String>,
     pub problems: Vec<Problem>,
+    /// The edits whose tokens the check 5 compared (both sides not empty):
+    /// the run fails when there is none at all (nothing passes vacuously).
+    pub edits_compared: usize,
 }
 
 /// The files of a case: their id, their name in the source map, and their
@@ -331,14 +346,19 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
             let spec = spec.map(|i| &specs[i]);
             let edits = moved(fix, &after.applied);
             for (file, text) in &after.applied.texts {
-                if let Some(diff) = reading_difference(loaded.sources.file(*file).text(), text, *file, &edits) {
+                let name = loaded.sources.file(*file).name();
+                let read = Readings::of(*file, loaded.sources.file(*file).text(), text);
+                let mut messages: Vec<String> = reading_difference_in(&read, *file, &edits)
+                    .map(|diff| format!("the reading outside its edits changed: in {name}, {diff}"))
+                    .into_iter()
+                    .collect();
+                let (shapes, compared) = not_minimal(&read, *file, &edits);
+                out.edits_compared += compared;
+                messages.extend(shapes.into_iter().map(|m| format!("in {name}, {m}")));
+                for m in messages {
                     out.problems.push(Problem::FixContract {
                         target: target.clone(),
-                        message: format!(
-                            "fix candidate {target} `{}`: the reading outside its edits changed: in {}, {diff}",
-                            fix.title(),
-                            loaded.sources.file(*file).name()
-                        ),
+                        message: format!("fix candidate {target} `{}`: {m}", fix.title()),
                     });
                 }
             }
@@ -529,28 +549,104 @@ fn touched(before: &[Unit], after: &[Unit], edits: &[Moved]) -> BTreeSet<usize> 
     (0..after.len()).filter(|a| !untouched.contains(a)).collect()
 }
 
+/// The lexical readings of one file before and after a candidate, read once
+/// for the checks 4 and 5.
+pub(crate) struct Readings<'a> {
+    before: &'a str,
+    after: &'a str,
+    old: Vec<Token>,
+    new: Vec<Token>,
+}
+
+impl<'a> Readings<'a> {
+    pub(crate) fn of(file: FileId, before: &'a str, after: &'a str) -> Readings<'a> {
+        let old = onsa_syntax::lex(file, before).tokens;
+        let new = onsa_syntax::lex(file, after).tokens;
+        Readings { before, after, old, new }
+    }
+}
+
+/// Whitespace, newlines and the end: what the checks 4 and 5 do not compare.
+fn blank(t: &Token) -> bool {
+    matches!(t.kind, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Eof)
+}
+
+/// The tokens of `tokens` (in the order of the text) that the range `r`
+/// falls in, but blanks: by kind and text.
+fn falling_in<'t>(tokens: &[Token], text: &'t str, r: Span) -> Vec<(TokenKind, &'t str)> {
+    // The tokens that end before the range cannot hold it.
+    let first = tokens.partition_point(|t| t.span.end < r.start);
+    tokens[first..]
+        .iter()
+        .take_while(|t| t.span.start <= r.end)
+        .filter(|t| !blank(t) && falls_in(r, t.span))
+        .map(|t| (t.kind, &text[t.span.start as usize..t.span.end as usize]))
+        .collect()
+}
+
+/// The edits of `file` that are not minimal (the module's documentation, 5;
+/// S-251), one message per edit (the first reason that holds), and how many
+/// edits it compared (both sides not empty).
+pub(crate) fn not_minimal(read: &Readings, file: FileId, edits: &[Moved]) -> (Vec<String>, usize) {
+    let mut out = Vec::new();
+    let mut compared = 0;
+    for (i, e) in edits.iter().enumerate().filter(|(_, e)| e.before.file == file) {
+        let old = falling_in(&read.old, read.before, e.before);
+        let new = falling_in(&read.new, read.after, e.after);
+        if old.is_empty() || new.is_empty() {
+            continue;
+        }
+        compared += 1;
+        let written: std::collections::HashSet<&(TokenKind, &str)> = new.iter().collect();
+        let why = if let Some(c) = old.iter().find(|o| o.0.is_comment() && written.contains(o)) {
+            format!("it holds the comment `{}` and writes it again (leave the comment outside the edit)", c.1)
+        } else if old[0] == new[0] {
+            format!("its first token `{}` stays (shrink the edit)", old[0].1)
+        } else if old.last() == new.last() {
+            format!("its last token `{}` stays (shrink the edit)", old[old.len() - 1].1)
+        } else if let Some(c) = old.iter().find(|o| written.contains(o)) {
+            format!("the token `{}` stays inside it (split it into two edits)", c.1)
+        } else {
+            continue;
+        };
+        let show = |v: &[(TokenKind, &str)]| v.iter().map(|t| t.1).collect::<Vec<_>>().join(" ");
+        out.push(format!(
+            "edit {} is not minimal (§18.1, S-251): {why}: it replaces `{}` with `{}`",
+            i + 1,
+            show(&old),
+            show(&new)
+        ));
+    }
+    (out, compared)
+}
+
 /// Where the lexical reading of the text outside the edits differs before
 /// and after a candidate (the module's documentation, 4; S-302): the tokens
 /// and comments no edit falls in, but blanks, with their kinds and ranges
 /// (those before moved by the edits before them), in the order of the text.
 fn reading_difference(before: &str, after: &str, file: FileId, edits: &[Moved]) -> Option<String> {
-    let blank = |t: &Token| matches!(t.kind, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Eof);
+    reading_difference_in(&Readings::of(file, before, after), file, edits)
+}
+
+/// [`reading_difference`] on the readings read already.
+fn reading_difference_in(read: &Readings, file: FileId, edits: &[Moved]) -> Option<String> {
     let mine: Vec<Moved> = edits.iter().copied().filter(|e| e.before.file == file).collect();
-    let old: Vec<(TokenKind, u32, u32)> = onsa_syntax::lex(file, before)
-        .tokens
+    let old: Vec<(TokenKind, u32, u32)> = read
+        .old
         .iter()
         .filter(|t| !blank(t) && !mine.iter().any(|e| falls_in(e.before, t.span)))
         .map(|t| (t.kind, shift(&mine, file, t.span.start, true), shift(&mine, file, t.span.end, false)))
         .collect();
     // The ranges of the replacements after the candidate.
     let new_ranges: Vec<Span> = mine.iter().map(|e| e.after).collect();
-    let new: Vec<(TokenKind, u32, u32)> = onsa_syntax::lex(file, after)
-        .tokens
+    let new: Vec<(TokenKind, u32, u32)> = read
+        .new
         .iter()
         .filter(|t| !blank(t) && !new_ranges.iter().any(|r| falls_in(*r, t.span)))
         .map(|t| (t.kind, t.span.start, t.span.end))
         .collect();
     let i = (0..old.len().max(new.len())).find(|&i| old.get(i) != new.get(i))?;
+    let after = read.after;
     let show = |text: &str, t: Option<&(TokenKind, u32, u32)>| {
         t.map_or("nothing".to_string(), |&(k, s, e)| format!("{k:?} `{}` at {s}..{e}", &text[s as usize..e as usize]))
     };
@@ -753,9 +849,11 @@ pub fn check_candidate(run: &TextCheck, d: &Diagnostic, fix: &Fix) -> Result<Can
     let files = Files { list: vec![(file, "m.onsa".into(), "m.onsa".into())], package: false };
     let edits = moved(fix, &applied);
     let mut problems = Vec::new();
-    if let Some(diff) = reading_difference(run.loaded.sources.file(file).text(), &text, file, &edits) {
+    let read = Readings::of(file, run.loaded.sources.file(file).text(), &text);
+    if let Some(diff) = reading_difference_in(&read, file, &edits) {
         problems.push(format!("the reading outside its edits changed: {diff}"));
     }
+    problems.extend(not_minimal(&read, file, &edits).0);
     let diagnostics = again.analyzed.diagnostics.clone();
     let after = After { loaded: again.loaded, analyzed: again.analyzed, applied };
     problems.extend(judge(&files, rank, &run.analyzed.units, &edits, &after, None));
@@ -1093,6 +1191,105 @@ mod tests {
         // reported (S-281), and it has no candidate.
         let stray = same_place("1.\n");
         assert_eq!(stray.candidates, 0, "{stray:?}");
+    }
+
+    /// `before` with the edits `(start, end, replacement)` (in order, apart)
+    /// applied, and where they went.
+    fn edited(before: &str, edits: &[(u32, u32, &str)]) -> (String, Vec<Moved>) {
+        let (mut after, mut moved, mut delta) = (String::new(), Vec::new(), 0i64);
+        let mut at = 0;
+        for &(s, e, r) in edits {
+            after.push_str(&before[at..s as usize]);
+            after.push_str(r);
+            let start = (s as i64 + delta) as u32;
+            moved.push(Moved {
+                before: Span::new(FileId(0), s, e),
+                after: Span::new(FileId(0), start, start + r.len() as u32),
+            });
+            delta += r.len() as i64 - (e - s) as i64;
+            at = e as usize;
+        }
+        after.push_str(&before[at..]);
+        (after, moved)
+    }
+
+    fn shapes(before: &str, edits: &[(u32, u32, &str)]) -> (Vec<String>, usize) {
+        let (after, moved) = edited(before, edits);
+        not_minimal(&Readings::of(FileId(0), before, &after), FileId(0), &moved)
+    }
+
+    /// The check 5 (S-251, X-3): an edit that keeps a token of its range.
+    #[test]
+    fn an_edit_that_keeps_a_token_or_a_comment_is_not_minimal() {
+        let one = |before: &str, edits: &[(u32, u32, &str)]| {
+            let (m, n) = shapes(before, edits);
+            assert_eq!(m.len(), 1, "{before:?} {edits:?}: {m:?}");
+            (m.into_iter().next().unwrap(), n)
+        };
+        // `<T>` to `[T]`: one edit keeps `F32` inside it; the two edits are minimal.
+        let (m, n) = one("x: Buf<F32>\n", &[(6, 11, "[F32]")]);
+        assert!(m.contains("the token `F32` stays inside it (split it"), "{m}");
+        assert_eq!(n, 1);
+        assert_eq!(shapes("x: Buf<F32>\n", &[(6, 7, "["), (10, 11, "]")]), (vec![], 2));
+        // R-237: ` at block` to `) at block` keeps the clock; the `)` alone is minimal.
+        let src = "g: fn(F32) -> F32 at block\n";
+        let (m, _) = one(src, &[(3, 3, "("), (17, 26, ") at block")]);
+        assert!(m.contains("edit 2 is not minimal") && m.contains("last token `block` stays"), "{m}");
+        assert_eq!(shapes(src, &[(3, 3, "("), (17, 17, ")")]), (vec![], 0));
+        // The first token kept, and an edit that changes nothing.
+        assert!(one("a + b\n", &[(0, 3, "a -")]).0.contains("first token `a` stays"));
+        assert!(one("a + b\n", &[(0, 1, "a")]).0.contains("first token `a` stays"));
+        // A comment of the range written again.
+        let (m, _) = one("a /* c */ + b\n", &[(2, 11, "/* c */ -")]);
+        assert!(m.contains("the comment `/* c */`"), "{m}");
+        // Insertions at the ends of tokens, deletions, blanks: nothing compared.
+        assert_eq!(shapes("ab\n", &[(2, 2, "c")]), (vec![], 0));
+        assert_eq!(shapes("a b\n", &[(1, 3, "")]), (vec![], 0));
+        assert_eq!(shapes("ab\n", &[(1, 1, " ")]), (vec![], 0));
+        // A token replaced by others that share none.
+        assert_eq!(shapes("i32\n", &[(0, 3, "I32")]), (vec![], 1));
+    }
+
+    /// R-237: the candidate of a clock at the end of a function type inserts
+    /// `(` and `)` (`tests/spec/fixes/e0020_clock_after_fn_type.onsa`, lines 14
+    /// and 18), and the check 5 catches the form before the fix.
+    #[test]
+    fn the_clock_after_a_function_type_inserts_the_parentheses_only() {
+        let path = crate::case::repo_root().join("tests/spec/fixes/e0020_clock_after_fn_type.onsa");
+        let text = std::fs::read_to_string(path).unwrap();
+        let run = check_text(&text).unwrap();
+        let sources = &run.loaded.sources;
+        for (line, clock) in [(14, " at block"), (18, " at sample")] {
+            let d =
+                run.analyzed.diagnostics.iter().find(|d| sources.file(d.span.file).line_col(d.span.start).line == line);
+            let d = d.unwrap_or_else(|| panic!("no diagnostic on line {line}"));
+            let fix = &d.fixes[0];
+            let edits: Vec<(bool, &str)> =
+                fix.edits().iter().map(|e| (e.span.is_empty(), e.replace.as_str())).collect();
+            assert_eq!(edits, [(true, "("), (true, ")")], "line {line}");
+            let now = check_candidate(&run, d, fix).unwrap();
+            assert!(now.problems.is_empty(), "line {line}: {:?}", now.problems);
+            // Before the fix: the clock replaced by `)` and itself.
+            let close = fix.edits()[1].span;
+            assert!(text[close.start as usize..].starts_with(clock), "line {line}");
+            let old = Fix::new(
+                fix.title(),
+                vec![
+                    fix.edits()[0].clone(),
+                    onsa_diag::Edit::replace(
+                        Span::new(close.file, close.start, close.start + clock.len() as u32),
+                        format!("){clock}"),
+                    ),
+                ],
+            );
+            let before = check_candidate(&run, d, &old).unwrap();
+            assert_eq!(before.text, now.text, "line {line}: the same text after it");
+            assert!(
+                before.problems.iter().any(|p| p.contains("edit 2 is not minimal") && p.contains("stays (shrink")),
+                "line {line}: {:?}",
+                before.problems
+            );
+        }
     }
 
     #[test]
