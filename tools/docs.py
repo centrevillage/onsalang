@@ -4,6 +4,7 @@
     python3 -B tools/docs.py fmt [PATH...] [--check | --list] [--spec] [--root DIR]
     python3 -B tools/docs.py swaps [--root DIR]
     python3 -B tools/docs.py check [--root DIR]
+    python3 -B tools/docs.py due [--stage-end STAGE] [--root DIR]
     python3 -B tools/docs.py path ID|§... [--abs] | back ID [--history] | refs ID|PATH
                              | graph ID|STAGE [--back] [--depth N (1 to 5)] [--typed]
     python3 -B tools/docs.py show ID [--relations] | list KIND [--status S] [--stage W4] [--group N]
@@ -39,6 +40,9 @@ depth 0 with `-` for the type and from).
   file is not written (exit 1).
 - `swaps`: the vim swap files (`.*.sw?`) of the tree, out of `.git`, the build outputs and
   `.claude/worktrees/`.
+- `due` (X-9 U1, the gate's `docs-due`): the documents of DUE_DOCS changed from the last commit with a
+  `Docs-Checked:` trailer (the parent's mark of a check of onsa-docs taken in) to the working tree, untracked
+  files too: none exits 0; some, or no mark, exit `gate_steps.PARENT` (3), and 1 with `--stage-end`.
 - `check` (DT-5, the gate's `docs`): the checks of CHECKS on one reading of the documents (`Tree`),
   `path:line: what` under a heading per check: (d) `tables`, and on the files of the IDs of the new
   layout (`Index`; `history/` and `tests/pending.toml` are not read) (a) `heads` (the field table of
@@ -56,6 +60,7 @@ import fnmatch
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -64,6 +69,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+import gate_steps
 import repo
 import spec_blocks
 
@@ -314,6 +320,67 @@ def cmd_swaps(args):
         print(p.as_posix())
     print(f"docs swaps: {len(found)} swap file(s)")
     return 1 if found else 0
+
+
+# ---------------------------------------------------------------- due (X-9 U1)
+
+DOCS_CHECKED = "Docs-Checked"  # the trailer of the commit that takes in a check of onsa-docs
+# The documents a change of which calls for a check of onsa-docs (git pathspecs): the rules, the spec, the
+# definitions of the agents, the root's README.md and CLAUDE.md, and the README.md (the field tables, the
+# forms) of the other directories of the documents and of their kinds; not `history/`.
+DUE_WHOLE = ("rules", repo.SPEC_DIR, ".claude/agents")
+DUE_DOCS = tuple(f"{d}/" for d in DUE_WHOLE) + tuple(p.as_posix() for p in repo.ROOT_DOCS) + tuple(
+    f":(glob){d}/{sub}README.md" for d in repo.DOC_DIRS if d not in DUE_WHOLE for sub in ("", "*/")
+)
+
+
+def git_lines(root, *args):
+    """The lines git prints in `root`; a DocsError when git fails."""
+    try:
+        r = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=repo.GIT_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise DocsError(f"git {args[0]}: {e}") from e
+    if r.returncode != 0:
+        raise DocsError(f"git {args[0]}: {r.stderr.strip() or f'exit {r.returncode}'}")
+    return r.stdout.splitlines()
+
+
+def last_docs_check(root):
+    """(commit, trailer value) of the first commit from HEAD with a `Docs-Checked:` trailer, or None."""
+    form = f"--format=%H%x09%(trailers:key={DOCS_CHECKED},valueonly,separator=%x3B%x20)"
+    for line in git_lines(root, "log", form, "HEAD"):
+        commit, _, value = line.partition("\t")
+        if value.strip():
+            return commit, value.strip()
+    return None
+
+
+def due_changes(root, commit):
+    """{path: how} of the documents of DUE_DOCS changed from `commit` to the working tree, untracked files too."""
+    changed = {p: "changed" for p in git_lines(root, "diff", "--name-only", "--no-renames", commit, "--", *DUE_DOCS)}
+    new = git_lines(root, "ls-files", "--others", "--exclude-standard", "--", *DUE_DOCS)
+    changed |= {p: "untracked" for p in new if not fnmatch.fnmatchcase(Path(p).name, SWAP)}  # not a vim swap file
+    return dict(sorted(changed.items()))
+
+
+def cmd_due(args):
+    if repo.git_dirs(args.root) is None:
+        raise DocsError(f"{args.root} is not the top of a git tree")
+    mark, lines = last_docs_check(args.root), []
+    if mark is None:
+        lines.append(f"no commit from HEAD has a `{DOCS_CHECKED}:` trailer")
+    else:
+        lines = [f"{p}: {how} after the docs check {mark[0][:7]}" for p, how in due_changes(args.root, mark[0]).items()]
+        print(f"docs due: the last docs check is {mark[0][:7]} ({DOCS_CHECKED}: {mark[1]})")
+    prefix = "" if args.stage_end else "parent: "
+    for line in lines:
+        print(prefix + line)
+    if not lines:
+        print("docs due: no document changed after the docs check")
+        return 0
+    print(f"docs due: run the check of onsa-docs and put `{DOCS_CHECKED}:` in the commit that takes it in"
+          + (f" (fails at the stage end {args.stage_end})" if args.stage_end else ""))  # fmt: skip
+    return 1 if args.stage_end else gate_steps.PARENT
 
 
 # ---------------------------------------------------------------- check
@@ -1843,6 +1910,7 @@ COMMANDS = {
     "fmt": (fmt_args, cmd_fmt),
     "swaps": (lambda p: None, cmd_swaps),
     "check": (lambda p: None, cmd_check),
+    "due": (lambda p: p.add_argument("--stage-end", metavar="STAGE"), cmd_due),
     "path": (path_args, cmd_path),
     "back": (back_args, cmd_back),
     "refs": (refs_args, cmd_refs),

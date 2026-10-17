@@ -1441,7 +1441,7 @@ class RealSteps(unittest.TestCase):
         steps = gate_steps.STEPS
         self.assertEqual(sorted(gate_steps.static_names()), sorted(
             ["pending", "ignores", "gap-marks", "diag-registry", "diag-negatives", "builtin-names", "spec-examples",
-             "spec-sections", "default-inits", "docs", "docs-fmt"]))  # fmt: skip
+             "spec-sections", "default-inits", "docs", "docs-fmt", "docs-due"]))  # fmt: skip
         self.assertEqual({s.name: s.narrows for s in steps if s.narrows},
                          {"fuzz": ("tools/fuzz.py", "tools/narrowing.py"),
                           **{n: ("tools/fmt_props.py", "tools/narrowing.py") for n in ("fmt-props", "fmt-comments", "fmt-cst")}})  # fmt: skip
@@ -1449,7 +1449,11 @@ class RealSteps(unittest.TestCase):
             for p in s.narrows:
                 self.assertTrue((gate.ROOT / p).is_file(), p)
         self.assertEqual({s.name: s.touches for s in steps if s.touches}, {"gate-selftest": ("tools/",)})
-        self.assertEqual([s.name for s in steps if s.parent], ["gap-marks"])
+        self.assertEqual([s.name for s in steps if s.parent], ["docs-due", "gap-marks"])
+        # the documents changed after the last docs check (X-9 U1): `--stage-end` makes it fail
+        due = next(s for s in steps if s.name == "docs-due")
+        self.assertEqual(due.argv[-2:], (str(gate_steps.TOOLS / "docs.py"), "due"))
+        self.assertTrue(due.stage_args and not due.pendable and not due.slow)
         sweep = [s.name for s in steps if gate._in_form(s, gate.Form(sweep=(0, 2)), None)]
         self.assertEqual(sweep[0], "save-base")
         self.assertEqual(sorted(sweep), sorted(["save-base", "gate-selftest", "fuzz", "fmt-props", "fmt-comments",
@@ -4484,6 +4488,105 @@ def split_spec(text, root):
         n = int(re.match(r"## (\d+)", lines[a]).group(1))
         part = "\n".join(lines[a:b]) + ("\n" if b < len(lines) else "")
         (root / "spec" / f"{n:02d}-c.md").write_bytes(part.encode())
+
+
+class DocsDue(unittest.TestCase):
+    """`docs.py due` (X-9 U1, the gate's `docs-due`) in a made-up git repository."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        git_in(self.root, "init", "-q")
+        for rel in ("rules/a.md", "crates/x.rs", "issues/X/X-1.md", "decisions/S/README.md", "history/h.md"):
+            self.write(rel, "a\n")
+        self.commit("base")
+
+    def write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def commit(self, message):
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-q", "--allow-empty", "-m", message)
+        return git_in(self.root, "rev-parse", "--short=7", "HEAD").strip()
+
+    def mark(self):
+        return self.commit("take in the docs check\n\nDocs-Checked: a..b (X-3, onsa-docs)")
+
+    def due(self, *argv):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", out):
+            code = docs_tool.main(["due", *argv, "--root", str(self.root)])
+        return code, out.getvalue().splitlines()
+
+    def test_the_documents_watched(self):
+        self.assertEqual(docs_tool.DUE_DOCS, (
+            "rules/", "spec/", ".claude/agents/", "README.md", "CLAUDE.md",
+            ":(glob)decisions/README.md", ":(glob)decisions/*/README.md", ":(glob)issues/README.md",
+            ":(glob)issues/*/README.md", ":(glob)tasks/README.md", ":(glob)tasks/*/README.md",
+            ":(glob)design/README.md", ":(glob)design/*/README.md"))  # fmt: skip
+        m = self.mark()
+        watched = ("rules/b/c.md", "spec/foreign-forms.toml", ".claude/agents/onsa-x.md", "README.md", "CLAUDE.md",
+                   "decisions/README.md", "issues/R/README.md", "tasks/W/README.md", "design/README.md")  # fmt: skip
+        for rel in watched + ("decisions/S/S-1.md", "decisions/S/x/README.md", "history/README.md", "x/README.md",
+                              "tools/README.md", "spec.md"):  # fmt: skip
+            self.write(rel, "b\n")
+        self.commit("change")
+        code, out = self.due()
+        self.assertEqual(code, gate_steps.PARENT, out)
+        self.assertEqual(out[1:-1], [f"parent: {p}: changed after the docs check {m}" for p in sorted(watched)])
+
+    def test_no_mark(self):
+        # a `Docs-Checked:` in the subject or a body line that is not a trailer is no mark
+        self.write("rules/a.md", "b\n")
+        self.commit("Docs-Checked: a..b (X-3, onsa-docs)\n\nDocs-Checked: inside\nthe body")
+        code, out = self.due()
+        self.assertEqual((code, out[0]), (gate_steps.PARENT, "parent: no commit from HEAD has a `Docs-Checked:` trailer"))
+        code, out = self.due("--stage-end", "W4")
+        self.assertEqual((code, out[0]), (1, "no commit from HEAD has a `Docs-Checked:` trailer"))
+        self.assertIn("(fails at the stage end W4)", out[-1])
+
+    def test_after_the_mark(self):
+        self.write("rules/a.md", "b\n")  # changed in the commit of the mark: checked
+        m = self.mark()
+        head = f"docs due: the last docs check is {m} (Docs-Checked: a..b (X-3, onsa-docs))"
+        self.assertEqual(self.due(), (0, [head, "docs due: no document changed after the docs check"]))
+        # only the code, the history and a file of an ID change: nothing is due
+        for rel in ("crates/x.rs", "history/h.md", "issues/X/X-1.md", "crates/new.rs"):
+            self.write(rel, "c\n")
+        self.commit("code")
+        self.write("crates/x.rs", "d\n")
+        self.assertEqual(self.due()[0], 0)
+        self.assertEqual(self.due("--stage-end", "W4")[0], 0)
+        # a rule changed in a commit, a field table not committed, a rule untracked, a rule removed
+        self.write("rules/a.md", "c\n")
+        self.commit("rules")
+        self.write("decisions/S/README.md", "c\n")
+        self.write("rules/new.md", "c\n")
+        self.write("rules/.a.md.swo", "c\n")  # a vim swap file: not a document
+        code, out = self.due()
+        self.assertEqual(code, gate_steps.PARENT, out)
+        self.assertEqual(out, [head, f"parent: decisions/S/README.md: changed after the docs check {m}",
+                               f"parent: rules/a.md: changed after the docs check {m}",
+                               f"parent: rules/new.md: untracked after the docs check {m}",
+                               "docs due: run the check of onsa-docs and put `Docs-Checked:` in the commit that "
+                               "takes it in"])  # fmt: skip
+        code, out = self.due("--stage-end", "W4")
+        self.assertEqual(code, 1)
+        self.assertEqual(out[1], f"decisions/S/README.md: changed after the docs check {m}")
+        self.assertFalse(any(x.startswith("parent:") for x in out))
+        # a newer mark: the changes before it are checked; a removed rule after it is due
+        m2 = self.mark()
+        self.assertEqual(self.due()[0], 0)
+        (self.root / "rules/a.md").unlink()
+        self.assertEqual(self.due()[1][1:-1], [f"parent: rules/a.md: changed after the docs check {m2}"])
+
+    def test_not_a_git_tree(self):
+        plain = Path(self.tmp.name) / "rules"  # inside the tree, not its top
+        code, out = quiet_out(docs_tool.main, ["due", "--root", str(plain)])
+        self.assertEqual((code, out), (2, [f"docs.py due: {plain} is not the top of a git tree"]))
 
 
 class DocsTree(unittest.TestCase):

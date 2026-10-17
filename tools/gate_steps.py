@@ -41,8 +41,8 @@ The forms of a run (X-1; `tools/gate.py` builds the arguments):
 The work check warns past BUDGET_WORK seconds, a sweep past BUDGET_SWEEP. The
 narrowed runs keep the cap of the codes of the tools (`narrowing.CODE_CAP`): the
 gate passes none. An item with `parent=True` exits PARENT when what is left waits
-for the parent (in a worktree, the marks of `tools/gap_marks.py` to register): status PARENT,
-not a failure.
+for the parent (in a worktree, the marks of `tools/gap_marks.py` to register; the documents changed
+after the last docs check, `docs.py due`): status PARENT, not a failure.
 """
 import sys
 from dataclasses import dataclass
@@ -114,6 +114,8 @@ STEPS = [
     # The documents (X-2 DT-5): now the tables (d). The lines `fmt` would break are shown, never a failure (DT-4, DF-8).
     Step("docs", (*PY, str(TOOLS / "docs.py"), "check"), static=True),
     Step("docs-fmt", (*PY, str(TOOLS / "docs.py"), "fmt", "--list"), info=True, static=True),
+    # The documents changed after the last check of onsa-docs taken in (the trailer `Docs-Checked:`, X-9 U1).
+    Step("docs-due", (*PY, str(TOOLS / "docs.py"), "due"), stage_args=True, static=True, parent=True),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True, static=True),
     # The ignores of the Rust tests whose reason names a work that is done or not in tasks/W/ (R-224).
     Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True, static=True),
