@@ -358,9 +358,6 @@ fn apply_text_mapped(text: &str, edits: &[&Edit]) -> Result<(String, Vec<(u32, u
     Ok((out, ranges))
 }
 
-/// The longest title of a fix candidate, in characters ([`contract`]).
-pub const TITLE_MAX: usize = 60;
-
 /// The rules every diagnostic follows, as messages (empty when it follows
 /// them; plan D-04, W3-02 D11). The tests run it on every diagnostic of every
 /// case, and the driver on every diagnostic it returns in debug builds.
@@ -370,8 +367,8 @@ pub const TITLE_MAX: usize = 60;
 /// - The stage is one the registry lists for the code.
 /// - A code whose fix is required has a candidate; a code whose rule note is
 ///   required (E0020, S-114) has a note without a position.
-/// - A candidate's title is one line of at most [`TITLE_MAX`] characters (it
-///   names the kind of the change; the edits carry the text).
+/// - A candidate's title is one line and not empty (S-345: its length is
+///   outside the contract).
 /// - A candidate has edits; they do not overlap, lie in their file on token
 ///   boundaries (R-86), and change the source.
 pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId, u32) -> bool) -> Vec<String> {
@@ -388,8 +385,8 @@ pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId
     }
     for f in &d.fixes {
         let title = f.title();
-        if title.trim().is_empty() || title.contains(['\n', '\r']) || title.chars().count() > TITLE_MAX {
-            out.push(format!("{code}: the title {title:?} is not one line of at most {TITLE_MAX} characters"));
+        if title.trim().is_empty() || title.contains(['\n', '\r']) {
+            out.push(format!("{code}: the title {title:?} is not one line that is not empty"));
         }
         if f.edits().is_empty() {
             out.push(format!("{code}: `{title}` has no edit"));

@@ -437,19 +437,15 @@ impl<'a> Flat<'a> {
     }
 }
 
-/// The longest chain, in characters, whose readings the message shows.
-const MESSAGE_READINGS_MAX: usize = 80;
+/// The longest chain, in characters, whose readings the message and the
+/// titles show (S-345: the implementation chooses it).
+const READINGS_MAX: usize = 80;
 
-/// The title of a candidate that shows its reading, around the reading.
-const TITLE_BEFORE: &str = "read it as `";
-const TITLE_AFTER: &str = "`";
-
-/// The title that shows `reading`, when it fits on one line of at most
-/// [`onsa_diag::TITLE_MAX`] characters.
-fn reading_title(reading: &str) -> Option<String> {
-    let room = onsa_diag::TITLE_MAX - TITLE_BEFORE.chars().count() - TITLE_AFTER.chars().count();
-    (reading.chars().count() <= room && !reading.contains(['\n', '\r']))
-        .then(|| format!("{TITLE_BEFORE}{reading}{TITLE_AFTER}"))
+/// Whether the message and the titles of the candidates show the readings of
+/// the chain written `found`: it is on one line and short (S-345, §18.1; the
+/// one decision for both).
+fn shows_readings(found: &str) -> bool {
+    found.chars().count() <= READINGS_MAX && !found.contains(['\n', '\r'])
 }
 
 /// Where a candidate inserts its text: offsets and what goes there (only
@@ -631,9 +627,10 @@ impl Flat<'_> {
             }
         }
         let texts: Vec<String> = candidates.iter().map(|ins| self.reading_text(ins)).collect();
-        // SPEC-GAP(S-345): a long chain, or one over lines, has its readings
-        // in the candidates only, not in the message or the titles.
-        if !texts.is_empty() && found.chars().count() <= MESSAGE_READINGS_MAX && !found.contains('\n') {
+        // A long chain, or one over lines, has its readings in the candidates
+        // only, not in the message or the titles (S-345).
+        let shown = shows_readings(found);
+        if !texts.is_empty() && shown {
             let texts: Vec<String> = texts.iter().map(|t| format!("`{t}`")).collect();
             if texts.len() == 1 {
                 message = format!("{message}; write {}", texts[0]);
@@ -648,7 +645,7 @@ impl Flat<'_> {
         }
         let n = candidates.len();
         for (i, (ins, text)) in candidates.into_iter().zip(texts).enumerate() {
-            let title = reading_title(&text).unwrap_or_else(|| format!("reading {} of {n}", i + 1));
+            let title = if shown { format!("read it as `{text}`") } else { format!("reading {} of {n}", i + 1) };
             let edits = ins.into_iter().map(|(at, s)| Edit::insert(self.span.file, at, s)).collect();
             d = d.with_fix(Fix::new(title, edits));
         }
@@ -901,25 +898,71 @@ mod tests {
         assert!(seen >= 6, "the examples were read: {seen}");
     }
 
+    /// The message, the titles and the candidates of the one E0010 of `src`.
+    fn shown(src: &str) -> (String, Vec<String>, Vec<String>) {
+        let text = format!("{BEFORE}{src}{AFTER}");
+        let p = crate::parse(FileId(0), &text);
+        assert_eq!(p.diagnostics.len(), 1, "{src}: {:?}", p.diagnostics);
+        let d = &p.diagnostics[0];
+        assert_eq!(d.code, Code::E0010, "{src}");
+        let titles = d.fixes.iter().map(|f| f.title().to_string()).collect();
+        (d.message.clone(), titles, candidates(src))
+    }
+
+    /// Whether the message and every title show every reading, or none does
+    /// (S-345: one decision for both).
+    fn shows_readings(src: &str) -> bool {
+        let (message, titles, readings) = shown(src);
+        assert_eq!(titles.len(), readings.len(), "{src}");
+        let in_message = readings.iter().filter(|r| message.contains(&format!("`{r}`"))).count();
+        let in_titles = titles.iter().zip(&readings).filter(|(t, r)| **t == format!("read it as `{r}`")).count();
+        let n = readings.len();
+        assert!(in_message == in_titles && (in_message == 0 || in_message == n), "{src}: {message:?} {titles:?}");
+        if in_titles == 0 {
+            let want: Vec<String> = (1..=n).map(|i| format!("reading {i} of {n}")).collect();
+            assert_eq!(titles, want, "{src}");
+        }
+        in_titles == n
+    }
+
     #[test]
-    fn a_title_shows_its_reading_when_it_fits() {
-        let room = onsa_diag::TITLE_MAX - super::TITLE_BEFORE.len() - super::TITLE_AFTER.len();
-        let fits = "x".repeat(room);
-        assert_eq!(super::reading_title(&fits).map(|t| t.chars().count()), Some(onsa_diag::TITLE_MAX));
-        assert_eq!(super::reading_title(&"x".repeat(room + 1)), None);
-        // Characters, not bytes.
-        assert!(super::reading_title(&"é".repeat(room)).is_some());
-        assert_eq!(super::reading_title("a\n+ b"), None);
-        // The title of each candidate of a chain one character too long for it.
-        let name = "w".repeat(room - "(".len() - " + 1) % n".len() + 1);
-        let text = format!("{BEFORE}{name} + 1 % n{AFTER}");
-        let p = crate::parse(FileId(0), &text);
-        let titles: Vec<&str> = p.diagnostics[0].fixes.iter().map(|f| f.title()).collect();
-        assert_eq!(titles, ["reading 1 of 2", "reading 2 of 2"]);
-        let name = "w".repeat(room - "(".len() - " + 1) % n".len());
-        let text = format!("{BEFORE}{name} + 1 % n{AFTER}");
-        let p = crate::parse(FileId(0), &text);
-        assert_eq!(p.diagnostics[0].fixes[0].title(), format!("read it as `({name} + 1) % n`"));
+    fn the_message_and_the_titles_show_the_readings_of_a_short_line() {
+        // 56 characters: over the 47 the titles once had room for.
+        let src = "alpha_value && beta_value || gamma_value && delta_value";
+        assert!(shows_readings(src));
+        let (message, titles, _) = shown(src);
+        assert_eq!(
+            titles,
+            [
+                "read it as `(alpha_value && beta_value) || (gamma_value && delta_value)`",
+                "read it as `alpha_value && (beta_value || gamma_value) && delta_value`",
+            ]
+        );
+        assert!(message.contains(&format!("`{src}` reads as")), "{message}");
+        // One reading: the message writes it.
+        assert!(shows_readings("a < b < c"));
+        // The threshold counts characters of the chain as written, and is
+        // `READINGS_MAX` itself.
+        let tail = " + 1 % n";
+        let at = "w".repeat(super::READINGS_MAX - tail.len()) + tail;
+        assert_eq!(at.chars().count(), super::READINGS_MAX);
+        assert!(shows_readings(&at));
+    }
+
+    #[test]
+    fn neither_shows_the_readings_of_a_long_line() {
+        let tail = " + 1 % n";
+        let over = "w".repeat(super::READINGS_MAX + 1 - tail.len()) + tail;
+        assert!(!shows_readings(&over));
+        let (message, _, _) = shown(&over);
+        assert!(!message.contains("reads as"), "{message}");
+    }
+
+    #[test]
+    fn neither_shows_the_readings_of_a_chain_over_lines() {
+        assert!(!shows_readings("a && b ||\n    c && d"));
+        assert!(!shows_readings("a < b <\n    c"));
+        assert!(!super::shows_readings("a\r+ b"));
     }
 
     #[test]
