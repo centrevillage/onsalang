@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The marks of spec gaps in the code (Q-10, plan §8.2 3).
+"""The marks of spec gaps in the code (Q-10, rules/process.md 8.2 3).
 
 A worker who meets a gap of the spec implements the most conservative form and
 marks the place:
@@ -36,7 +36,6 @@ import repo  # noqa: E402
 
 ROOT = repo.ROOT
 SCANNED = ("crates", "std", "runtime", "tools")
-DOC_API = repo.DOC_API
 
 TOKEN = "SPEC-GAP"
 # Any spelling of the token (`spec-gap`, `SPECGAP`, `Spec gap`, `SPEC_GAP`): a
@@ -91,13 +90,13 @@ def find_marks(root, dirs=SCANNED):
 
 
 def api_ids(root):
-    """The A numbers: the files of `decisions/A/`, or the table of `docs/api-candidates.md` (`repo.Layout`)."""
+    """The A numbers: the files of `decisions/A/` (`docs.Index`)."""
     return docs_tool.Index.of(root).ids("A")
 
 
-def check(marks, known):
-    """The marks against the known IDs: (problems, what waits for the parent: `NEW` and the
-    IDs no table has)."""
+def check(marks, known, known_at):
+    """The marks against the known IDs (`known_at`: where they are read, for messages): (problems, what
+    waits for the parent: `NEW` and the IDs that are not there)."""
     problems, for_parent = [], []
     for path, line, text in marks:
         where = f"{path}:{line}"
@@ -115,7 +114,7 @@ def check(marks, known):
         elif not ID.fullmatch(mid):
             problems.append(f"{where}: `{mid}` is not an S / R / A number")
         elif mid not in known:
-            for_parent.append(f"{where}: {mid} is not in the tables (plan §2 for S, review for R, {DOC_API} for A)")
+            for_parent.append(f"{where}: {mid} is not in {known_at}")
     return problems, for_parent
 
 
@@ -125,12 +124,13 @@ def main(argv=None, root=ROOT):
     args = ap.parse_args(argv)
     root = args.root or root
     try:
-        known = pending.load_docs(root).reasons | api_ids(root)
+        docs = pending.load_docs(root)
+        known, known_at = docs.reasons | api_ids(root), f"{docs.reasons_at}, {docs_tool.Index.of(root).place('A')}"
     except repo.RepoError as e:
-        print(f"the document tables are not found: {e}")
+        print(f"cannot read the IDs: {e}")
         return 1
     marks = find_marks(root)
-    problems, for_parent = check(marks, known)
+    problems, for_parent = check(marks, known, known_at)
     if repo.tree_kind(root) != "worktree":  # the main tree and the made-up roots: the parent registers now
         problems, for_parent = problems + for_parent, []
     for p in problems:

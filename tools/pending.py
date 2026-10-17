@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The list of things that are expected not to pass yet (plan D-16 7, Q-08, §8.6).
+"""The list of things that are expected not to pass yet (D-16 7, Q-08, rules/process.md 8.6).
 
 The list is `tests/pending.toml`, one `[[pending]]` table per entry. The
 meaning is the same for every kind: a listed target is expected to fail; when
@@ -143,11 +143,12 @@ load = repo.load_pending
 @dataclass
 class Docs:
     works: set  # W IDs
-    done: set  # the works done (✅, or `status = "DONE"` in the new layout)
+    done: set  # the works done (`status = "DONE"`)
     reasons: set  # S and R IDs
     stages: tuple  # in their order (`repo.Layout.stages`); the last ends the first phase
     works_at: str  # where the works are read, for messages (`docs.Index.place`)
     sections: set = frozenset()  # the numbered headings of the spec ("20", "11.4")
+    reasons_at: str = ""  # where the S and R IDs are read, for messages (`docs.Index.place`)
 
 
 def stage_of(work):
@@ -158,21 +159,20 @@ def stage_of(work):
 
 
 def load_docs(root=ROOT):
-    """The IDs of the documents, each kind where `repo.Layout` reads it: the files of the new layout
-    (a work is done when its `status` is DONE) or the current tables (✅). Raises DocsError when a
-    table is not found or a directory has no file of an ID."""
+    """The IDs of the documents, each kind from the files of its directory (`docs.Index`; a work is done
+    when its `status` is DONE). Raises DocsError when a directory is not there or has no file of an ID."""
     index = docs_tool.Index.of(root)
     lay, works = index.layout, dict(index.work_done())
     if not works:
         raise DocsError(f"{repo.KIND['W'].dir}/: no file of an ID")
     at = index.place("W")
     reasons = index.ids("S") | index.ids("R")
-    spec = repo.spec_doc(root, lay)
+    spec = repo.spec_doc(root)
     sections = set(spec_blocks.headings(spec.text))
     if not sections:
         raise DocsError(f"{spec.parts[0][0]}: no numbered heading found")
     return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=reasons, sections=sections,
-                stages=lay.stages(), works_at=at)  # fmt: skip
+                stages=lay.stages(), works_at=at, reasons_at=f"{index.place('S')}, {index.place('R')}")  # fmt: skip
 
 
 def validate(entries, docs, root=ROOT, pendable_steps=None):
@@ -212,11 +212,11 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
                 if e.until != PHASE2:
                     errors.append(f"{where}: reason `{r}`: a spec section is a reason only of `until = \"{PHASE2}\"`")
                 elif r[1:] not in docs.sections:
-                    errors.append(f"{where}: reason `{r}` is not a numbered heading of {repo.SPEC}")
+                    errors.append(f"{where}: reason `{r}` is not a numbered heading of {repo.SPEC_SHOWN}")
             elif not REASON.fullmatch(r):
                 errors.append(f"{where}: reason `{r}` is not an S / R number (`S-45`, `R-23`)")
             elif r not in docs.reasons:
-                errors.append(f"{where}: reason `{r}` is not in the tables (plan §2 for S, review for R)")
+                errors.append(f"{where}: reason `{r}` is not in {docs.reasons_at}")
         if len(set(e.reasons)) != len(e.reasons):
             errors.append(f"{where}: a reason is listed twice")
         if e.until == PHASE2:
@@ -264,11 +264,8 @@ def _whole_and_cases(entries):
 
 def foreign_form_ids(root):
     """The `id`s of the rows of the table of the foreign forms under `root`
-    (`repo.foreign_forms_path`), or an error message (the file is missing or not TOML)."""
-    try:
-        rel = repo.foreign_forms_path(root).as_posix()
-    except repo.RepoError as err:
-        return str(err)
+    (`repo.FOREIGN_FORMS`), or an error message (the file is missing or not TOML)."""
+    rel = repo.FOREIGN_FORMS.as_posix()
     try:
         data = tomllib.loads((Path(root) / rel).read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -287,8 +284,7 @@ def _check_target(e, root, pendable_steps):
         if isinstance(ids, str):
             return [ids]
         if e.target not in ids:
-            where = repo.foreign_forms_path(root).as_posix()
-            return [f"`{e.target}` is not the `id` of a row of `{where}` (remove the entry, or fix the id)"]
+            return [f"`{e.target}` is not the `id` of a row of `{repo.FOREIGN_FORMS.as_posix()}` (remove the entry, or fix the id)"]
     if e.kind == "gate":
         item = e.target.split("/", 1)[0]
         if item not in pendable_steps:
@@ -499,7 +495,7 @@ def main(argv=None):
     try:
         docs = load_docs(root)
     except DocsError as e:
-        print(f"the document tables are not found: {e}")
+        print(f"cannot read the IDs: {e}")
         return 1
     if args.stage_end is not None:
         problem = stage_problem(args.stage_end, docs)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builtin names written as strings in the compiler's Rust code (Q-14, plan §8.2 5).
+"""Builtin names written as strings in the compiler's Rust code (Q-14, rules/process.md 8.2 5).
 
 A decision about a builtin belongs in one place (`design/06-placement.md`); comparing a
 builtin name with a string elsewhere decides it again. This check finds the
@@ -60,7 +60,7 @@ import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
 ROOT = repo.ROOT
-SPEC = repo.SPEC
+SPEC = repo.SPEC_SHOWN
 ALLOW = Path("tools") / "builtin_names.toml"
 CRATES = "crates"
 # The places of `design/06-placement.md` that hold the builtins' table and may name them.

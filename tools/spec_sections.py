@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The spec sections the test cases name (`[test] spec`, Q-05, plan D-16 1).
+"""The spec sections the test cases name (`[test] spec`, Q-05, D-16 1).
 
     spec_sections.py --check   fail when a case names a section the spec has no heading for, or
                                a string of the compiler (a diagnostic's message or note,
@@ -25,7 +25,7 @@ import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
 ROOT = repo.ROOT
-SPEC = repo.SPEC
+SPEC = repo.SPEC_SHOWN
 
 
 def load_cases(root=ROOT, cmd=repo.CASES_CMD):

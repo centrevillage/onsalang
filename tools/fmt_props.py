@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The property tests of `onsa fmt` (Q-03, plan D-16 4, W1-07).
+"""The property tests of `onsa fmt` (Q-03, D-16 4, W1-07).
 
 The inputs are the source files of every case under `tests/` (the list of
 `onsa_cases`, `mode = "none"` included), then the `.onsa` files of `std/`

@@ -34,7 +34,7 @@ def spec_keywords(spec_text):
     """The words of the first code block of §2.2, in order."""
     fences = spec_blocks.section_fences(spec_text, SECTION)
     if not fences:
-        raise repo.RepoError(f"§{SECTION} of {repo.SPEC} has no code block with the keywords")
+        raise repo.RepoError(f"§{SECTION} of {repo.SPEC_SHOWN} has no code block with the keywords")
     return fences[0][1].split()
 
 

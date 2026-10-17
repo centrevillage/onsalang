@@ -10,7 +10,7 @@ integer `-0`, `+0.0`, `false`, also in parentheses; not `-0.0`).
 The documents are the ```onsa blocks of the spec and of `spec/tools.md`,
 and the `.onsa` files of `examples/` and `std/`. The text of the documents
 outside the blocks is not read: it names the written form on purpose (§11.4,
-`spec/tools.md` §3.3). The records (plan §2, the drafts of the gaps)
+`spec/tools.md` §3.3). The records (`decisions/S/`, the drafts of the gaps)
 are not documents.
 
 The calls and the values are the compiler's (`onsa_cases --default-inits`,
@@ -36,7 +36,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 
-TOOLS_DOC = repo.DOC_TOOLS  # the current spec of the tools (`repo.tools_doc` reads it or spec/tools.md)
 FILE_DIRS = ("examples", "std")
 
 

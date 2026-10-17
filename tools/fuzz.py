@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The short fuzzing of `onsa check` and `onsa fmt` (Q-06, plan D-16 6, W1-04).
+"""The short fuzzing of `onsa check` and `onsa fmt` (Q-06, D-16 6, W1-04).
 
 The properties: whatever the input, the compiler does not fail inside
 (S-67), and a fix candidate does not leave an error at its own place (the
@@ -611,9 +611,10 @@ def load_allowed(root, listed):
     if not isinstance(raw, list):
         return {}, errors + [f"{ALLOWED.as_posix()}: `allowed` must be an array of tables ([[allowed]])"]
     try:
-        numbers = pending.load_docs(root).reasons
+        docs = pending.load_docs(root)
+        numbers, numbers_at = docs.reasons, docs.reasons_at
     except pending.DocsError as e:
-        numbers = None
+        numbers, numbers_at = None, None
         errors.append(f"{ALLOWED.as_posix()}: the S / R numbers cannot be read: {e}")
     out = {}
     inputs = set()
@@ -650,8 +651,7 @@ def load_allowed(root, listed):
             elif len(set(reasons)) != len(reasons):
                 problems.append("a reason is listed twice")
             elif numbers is not None:
-                problems += [f"the reason `{r}` is not in the tables (plan §2 for S, review for R)"
-                             for r in reasons if r not in numbers]
+                problems += [f"the reason `{r}` is not in {numbers_at}" for r in reasons if r not in numbers]
             if not isinstance(note, str) or not note.strip():
                 problems.append("`note` must be a non-empty string")
         if problems:

@@ -9,7 +9,7 @@
                              [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE [--out FILE]
     python3 -B tools/docs.py set ID KEY=VALUE... | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
-                             [--stage W4] [KEY=VALUE...] | draft S... --group N | amend LATER EARLIER
+                             [--stage W4] [KEY=VALUE...] | draft S... --group N
 
 Exit: 0 nothing found, 1 found, 2 an error of the tool (a file it cannot read, no document, a
 broken round trip of `fmt`; argparse's usage errors too). The documents are `repo.doc_files`.
@@ -19,10 +19,9 @@ git worktree, a write that fails). Their lines are `\\t`-separated: `ID status p
 `label ID status title sections` (the relations of `show`), `ID status fields title` (`list`), `ID
 decided sections title` (`changes`).
 
-- `path`, `back`, `refs` work in both layouts (`Ids`: a file, or a row `doc:line` of a current table;
-  a `§` is `file:line` of its heading). `show`, `list`, `changes`, `ticket` and the writes need the
-  kind in the new layout. The writes check the swap files first, write through `write_atomic`, and
-  `set`, `new`, `amend` refuse a text whose head fields would break (a) or (b) of the file or (c) of it
+- `path`, `back`, `refs` read the files of the IDs (`Ids`; a `§` is `file:line` of its heading).
+  `show`, `list`, `changes`, `ticket` and the writes need the directory of the kind. The writes check the swap files first, write through `write_atomic`, and
+  `set`, `new` refuse a text whose head fields would break (a) or (b) of the file or (c) of it
   and its partners (`check_write`).
 
 - `fmt` (DT-4): breaks each line longer than LONG after a `。` at the depth 0 of the brackets
@@ -46,7 +45,7 @@ decided sections title` (`changes`).
   subcommand, add `name: (add_arguments, run)` to COMMANDS.
 
 The head fields (DF-1) are read by `read_head` and written in the normal form by `head_update` /
-`write_head` (U3's `set` and `amend`); the field table of a directory is `field_table`.
+`write_head` (U3's `set`); the field table of a directory is `field_table`.
 """
 import argparse
 import fnmatch
@@ -169,7 +168,7 @@ LONG = 250  # the lines longer than this are broken
 WIDTH = 200  # the characters of a line after its indentation
 OPEN = "（(「『【"
 CLOSE = "）)」』】"
-KEEP = ("|", "#", repo.RETIRED_HEAD)  # table rows, headings, the retired codes of the plan §5
+KEEP = ("|", "#", repo.RETIRED_HEAD)  # table rows, headings, the retired codes of tasks/diag-codes.md
 MARKER = re.compile(r"(\s*)((?:[-*+]|\d+\.)\s+|>\s?)?")
 # A line must not start with these: a block (an item, a quote, a table, a heading, a fence, HTML),
 # an underline or a rule, or a space that would change the indentation.
@@ -527,7 +526,7 @@ def head_update(root, rel, values, order):
 
 
 def write_head(root, rel, values, order):
-    """`head_update` and write it (U3's `set`; `amend` calls `head_update` on both files first)."""
+    """`head_update` and write it (U3's `set`)."""
     write_atomic(Path(root) / rel, head_update(root, rel, values, order))
 
 
@@ -676,13 +675,14 @@ def _parse_fields(rel, lines, kinds, at):
 
 
 class Index:
-    """The files of the IDs of the new layout over one Tree, the kinds read by `repo.Layout`."""
+    """The files of the IDs over one Tree: `files[kind]` for each kind whose directory is there (the
+    one place that says which kinds are read, X-2 DT-7; `docs/` and `history/` are not read)."""
 
     def __init__(self, tree):
         self.tree, self.layout = tree, repo.Layout(tree.root)
         self.files, self.misnamed, self._tables, self._done, self._headings = {}, {}, {}, None, {}
         for kind in repo.KINDS:
-            if kind.dir and self.layout.source(kind.name) == "new":
+            if kind.dir and (tree.root / kind.dir).is_dir():
                 ids, other = {}, []
                 for p in sorted((tree.root / kind.dir).glob("*.md")):
                     if p.is_file() and p.name != "README.md" and not p.name.endswith(".draft.md"):
@@ -702,40 +702,39 @@ class Index:
             self._tables[name] = field_table(self.tree, repo.KIND[name])
         return self._tables[name]
 
+    def _files(self, name):
+        """{id: rel} of a kind; RepoError when its directory is not there (never an empty set)."""
+        if name not in self.files:
+            raise repo.RepoError(f"{repo.KIND[name].dir or name}/: no directory")
+        return self.files[name]
+
     def ids(self, name):
-        """The IDs of a kind: the files (a draft is not one, DF-4), or the current table."""
-        if self.layout.source(name) == "new":
-            if not self.files[name]:
-                raise repo.RepoError(f"{repo.KIND[name].dir}/: no file of an ID")
-            return set(self.files[name])
-        return set(self.layout.old_rows(name))
+        """The IDs of a kind: its files (a draft is not one, DF-4). RepoError when its directory is not
+        there or has no file of an ID."""
+        if not self._files(name):
+            raise repo.RepoError(f"{repo.KIND[name].dir}/: no file of an ID")
+        return set(self.files[name])
 
     def known(self, name):
-        """The IDs of a kind there are, or None when they are not checked (`repo.Layout.source` is None:
-        the history, PH2, no reader)."""
-        source = self.layout.source(name)
-        if source is None:
-            return None
-        return set(self.files[name]) if source == "new" else set(self.layout.old_rows(name))
+        """The IDs of a kind there are, or None when they are not checked (no directory: the history,
+        PH2, a kind whose directory is not made)."""
+        return set(self.files[name]) if name in self.files else None
 
     def place(self, name):
-        """Where a kind is read, for messages: its directory or its current table."""
-        return f"{repo.KIND[name].dir}/" if self.layout.source(name) == "new" else self.layout.old_name(name)
+        """Where a kind is read, for messages: its directory."""
+        return f"{repo.KIND[name].dir}/"
 
     def work_done(self):
-        """{W: done}: `status = "DONE"` in the new layout, ✅ in the current table (one place, D-15)."""
+        """{W: done}: `status = "DONE"` of the files of `tasks/W/` (one place, D-15)."""
         if self._done is None:
-            if self.layout.source("W") == "new":
-                heads = {w: self.tree.head(rel).values or {} for w, rel in self.files["W"].items()}
-                self._done = {w: v.get("status") == "DONE" for w, v in heads.items()}
-            else:
-                self._done = self.layout.old_rows("W")
+            heads = {w: self.tree.head(rel).values or {} for w, rel in self._files("W").items()}
+            self._done = {w: v.get("status") == "DONE" for w, v in heads.items()}
         return self._done
 
     def headings(self, which):
         """The numbered headings of the spec (`spec`) or of the spec of the tools (`tools`)."""
         if which not in self._headings:
-            doc = repo.spec_doc(self.tree.root, self.layout) if which == "spec" else repo.tools_doc(self.tree.root)
+            doc = repo.spec_doc(self.tree.root) if which == "spec" else repo.tools_doc(self.tree.root)
             self._headings[which] = set(spec_blocks.headings(doc.text))
         return self._headings[which]
 
@@ -812,8 +811,8 @@ def body_sections(line):
 
 
 def check_refs(tree, only=None):
-    """(b) The IDs of the head fields and of the text are there (the kinds as `repo.Layout` reads them;
-    the history and PH2 are not checked; a stage has a work), and the sections are numbered headings of
+    """(b) The IDs of the head fields and of the text are there (the kinds whose directory is there,
+    `Index.known`; the history and PH2 are not checked; a stage has a work), and the sections are numbered headings of
     the spec. Of the files `only` when it is given."""
     idx = tree.index
     for table, id_, rel, head in _id_files(tree):
@@ -873,8 +872,8 @@ def _not_a_stage(layout, ref):
 
 def check_relations(tree):
     """(c) The relations the fields keep (the keys are named here, DT-1): a decision OPEN when every
-    work of `tasks` is DONE, an issue OPEN when every work of `fix` is DONE, `amends` and `amended_by`
-    on both sides, `doing` on a work that is not DOING. A missing ID is (b)'s."""
+    work of `tasks` is DONE, an issue OPEN when every work of `fix` is DONE, `doing` on a work that is
+    not DOING. A missing ID is (b)'s."""
     idx = tree.index
     for _, id_, rel, head in _id_files(tree):
         v = head.values
@@ -887,13 +886,6 @@ def check_relations(tree):
                 if all(idx.work_done().get(w) is True for w in works):
                     done = ", ".join(map(str, works))
                     yield Finding(rel, line("status", 1), f"OPEN, but every work of `{key}` is DONE ({done})")
-        for key, back in (("amends", "amended_by"), ("amended_by", "amends")):
-            for other in v.get(key) if isinstance(v.get(key), list) else []:
-                kind = repo.kind_of(other) if isinstance(other, str) else None
-                orel = idx.files.get(kind.name, {}).get(other) if kind else None
-                theirs = tree.head(orel).values if orel else None
-                if theirs is not None and id_ not in (theirs.get(back) if isinstance(theirs.get(back), list) else []):
-                    yield Finding(rel, line(key, 1), f"`{key}` has {other}, but {other} has no {id_} in `{back}`")
         if "doing" in v and v.get("status") != "DOING":
             yield Finding(rel, line("doing", 1), f"`doing` on a work that is {v.get('status')}, not DOING")
 
@@ -1013,14 +1005,14 @@ def title_of(id_, head):
 
 @dataclass(frozen=True)
 class Where:
-    """Where an ID is: a file of the new layout, or a row (`line`) of a current table (`repo.Layout`)."""
+    """Where an ID is (its file), or a `§` (`path`: the file and the line of its heading)."""
 
     id: str
     rel: Path  # None: not found, `reason` says where it was looked for
-    line: int  # the row of a current table; None for a file
-    status: str  # `status` of the head fields; ✅ or `-` in a current table
+    line: int  # the line of the heading of a `§`; None for a file
+    status: str  # `status` of the head fields
     title: str
-    values: dict  # the head fields ({} in a current table)
+    values: dict  # the head fields
     reason: str = None
 
     def place(self, root=None):
@@ -1035,16 +1027,17 @@ class Where:
 
 
 class Ids:
-    """What the commands know about the IDs, on one Tree: the files of the new layout (`Index`, their
-    head fields read once) or the rows of the current tables (`repo.Layout`)."""
+    """What the commands know about the IDs, on one Tree: the files of `Index` (their head fields read
+    once)."""
 
     def __init__(self, root, files=()):
         self.root = Path(root)
         self.tree = Tree(root, files)
-        self.index, self.layout, self._where, self._old = self.tree.index, self.tree.index.layout, {}, {}
+        self.index, self.layout, self._where = self.tree.index, self.tree.index.layout, {}
 
-    def is_new(self, name):
-        return self.layout.source(name) == "new"
+    def has(self, name):
+        """The directory of the kind is there (`Index.files`)."""
+        return name in self.index.files
 
     def require(self, id_or_kind, kinds=None):
         """The Kind of an ID (or a kind's name) that has its directory of the new layout; DocsError
@@ -1053,7 +1046,7 @@ class Ids:
         names = kinds or [k.name for k in repo.KINDS if k.dir]
         if kind is None or kind.name not in names:
             raise DocsError(f"{id_or_kind}: not an ID or a kind of {', '.join(names)}")
-        if not self.is_new(kind.name):
+        if not self.has(kind.name):
             raise DocsError(f"{kind.name}: not in the new layout (no {kind.dir}/)")
         return kind
 
@@ -1066,7 +1059,7 @@ class Ids:
     def heads(self, names):
         """(id, rel, head fields) of the files of the kinds in the new layout."""
         for name in names:
-            if self.is_new(name):
+            if self.has(name):
                 for id_, rel in self.index.files[name].items():
                     yield id_, rel, self.tree.head(rel).values or {}
 
@@ -1081,22 +1074,14 @@ class Ids:
 
     def _find(self, id_):
         kind = repo.kind_of(id_)
-        source = self.layout.source(kind.name)
-        if source == "new":
+        if self.has(kind.name):
             rel = self.index.files[kind.name].get(id_)
             if rel is None:
                 return Where(id_, None, None, NONE, "", {}, f"{kind.dir}/")
             head = self.tree.head(rel)
             values = head.values or {}
             return Where(id_, rel, None, str(values.get("status", NONE)), title_of(id_, head), values)
-        if source == "old":
-            if kind.name not in self._old:  # each table read once
-                self._old[kind.name] = (self.layout.old_lines(kind.name), self.layout.peek_rows(kind.name))
-            lines, done = self._old[kind.name]
-            if id_ in lines:
-                return Where(id_, Path(kind.old[0]), lines[id_], "✅" if done.get(id_) else NONE, "", {})
-            return Where(id_, None, None, NONE, "", {}, self.layout.old_name(kind.name))
-        # None: the history (C, and T after the plan §4) or the second phase
+        # no directory, or a kind with no file: the history (C, T) or the second phase (PH2)
         why = f"no {kind.dir}/" if kind.dir else "a kind with no file: the history or the second phase"
         return Where(id_, None, None, NONE, "", {}, why)
 
@@ -1141,7 +1126,7 @@ def excerpt(line, a, b):
     return ("…" if lo else "") + line[lo:hi].strip() + ("…" if hi < len(line) else "")
 
 
-# ---------------------------------------------------------------- path, back, refs (DT-2; also in the current layout)
+# ---------------------------------------------------------------- path, back, refs (DT-2)
 
 
 def path_args(p):
@@ -1153,7 +1138,7 @@ def cmd_path(args):
     ids, missing = Ids(args.root), 0
     for ref in args.refs:
         if m := repo.SECTION_RE.fullmatch(ref):
-            doc = repo.tools_doc(ids.root) if m.group("tools") else repo.spec_doc(ids.root, ids.layout)
+            doc = repo.tools_doc(ids.root) if m.group("tools") else repo.spec_doc(ids.root)
             line = spec_blocks.heading_line(doc.text, m.group("num"))
             if line is None:
                 spec = "the spec of the tools" if m.group("tools") else "the spec"
@@ -1185,7 +1170,7 @@ def cmd_back(args):
     ids = Ids(root, files)
     own, tree, keys, text, hit = ids.where(id_), ids.tree, [], [], set()
     for rel in files:
-        if rel == own.rel and own.line is None:
+        if rel == own.rel:
             continue  # the file of the ID itself
         lines, kinds = tree.lines(rel), tree.kinds(rel)[0]
         head = tree.head(rel) if HEAD in kinds else None
@@ -1194,8 +1179,8 @@ def cmd_back(args):
                 keys.append(f"{rel.as_posix()}:{head.key_lines.get(key, 1)}: {key}")
                 hit.add(rel)
         for i, line in enumerate(lines):
-            if (kinds[i] == HEAD and head.values is not None) or (rel == own.rel and i + 1 == own.line):
-                continue  # the head fields read above; the row of the ID itself
+            if kinds[i] == HEAD and head.values is not None:
+                continue  # the head fields read above
             if spans := _mentions(line, id_):
                 text.append(f"{rel.as_posix()}:{i + 1}: {excerpt(line, *spans[0])}")
                 hit.add(rel)
@@ -1217,27 +1202,23 @@ def cmd_refs(args):
         if w.rel is None:
             print(f"{target}: {w.place()}")
             return 1
-        rel, row, own = w.rel, w.line, target
+        rel, own = w.rel, target
     else:
-        rel, row = _rel_arg(ids.root, target), None
+        rel = _rel_arg(ids.root, target)
         own = rel.name[:-3] if rel.name.endswith(".md") and repo.kind_of(rel.name[:-3]) else None
         if not (ids.root / rel).is_file():
             print(f"{target}: not found")
             return 1
-    lines, found = ids.tree.lines(rel), []
-    if row is None:
-        head = ids.tree.head(rel)
-        found = [m for value in (head.values or {}).values() for v in _listed(value) for m in repo.ID_RE.findall(v)]
-        start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
-        found += [m for line in lines[start:] for m in repo.ID_RE.findall(line)]
-    else:
-        found = repo.ID_RE.findall(lines[row - 1])
+    lines, head = ids.tree.lines(rel), ids.tree.head(rel)
+    found = [m for value in (head.values or {}).values() for v in _listed(value) for m in repo.ID_RE.findall(v)]
+    start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
+    found += [m for line in lines[start:] for m in repo.ID_RE.findall(line)]
     found = [i for i in dict.fromkeys(found) if i != own]
     for id_ in found:
         w = ids.where(id_)
         print(f"{id_}\t{w.status}\t{w.place()}\t{w.title or NONE}")
     lost = sum(ids.where(i).rel is None for i in found)
-    print(f"docs refs: {Where(target, rel, row, '', '', {}).place()}: {len(found)} ID(s), {lost} not found")
+    print(f"docs refs: {rel.as_posix()}: {len(found)} ID(s), {lost} not found")
     return 0
 
 
@@ -1276,8 +1257,7 @@ def relations(ids, kind, id_, values):
         add("depended_by", sorted(by, key=id_key))
         add("waiting", waiting(ids).get(id_, []))
     elif kind in DECISIONS:
-        for key in ("tasks", "amends", "amended_by"):
-            add(key, _listed(values.get(key)))
+        add("tasks", _listed(values.get("tasks")))
         add("issue", ids.having(ISSUES, "decisions", id_))
         path = ids.root / repo.PENDING
         entries, errors = repo.load_pending(path) if path.is_file() else ([], [])
@@ -1401,7 +1381,7 @@ def changes_args(p):
 
 def cmd_changes(args):
     ids = Ids(args.root)
-    names = [n for n in DECISIONS if ids.is_new(n)]
+    names = [n for n in DECISIONS if ids.has(n)]
     if not names:
         raise DocsError("the decisions are not in the new layout (no decisions/S/ …)")
     _stage_arg(ids.layout, args.stage)
@@ -1426,7 +1406,7 @@ def cmd_changes(args):
     return 0
 
 
-# ---------------------------------------------------------------- set, note, new, draft, amend (DT-3; the new layout)
+# ---------------------------------------------------------------- set, note, new, draft (DT-3; the new layout)
 
 DEFAULT_STATUS = {"W": "PLAN"}  # the others start OPEN (decisions, issues)
 LABELS_HEAD = "## 本文のラベル"  # in a README: the labels of the body of a new file, ``- `空白`: …``
@@ -1685,51 +1665,6 @@ def cmd_draft(args):
     return 0
 
 
-def amend_args(p):
-    p.add_argument("later", help="the decision that amends")
-    p.add_argument("earlier", help="the decision it amends")
-
-
-def cmd_amend(args):
-    """`amends` on the later, `amended_by` on the earlier (DF-4). Both texts are made and checked before
-    anything is written; the earlier is written first, and put back when the later cannot be."""
-    ids = Ids(args.root)
-    for id_ in (args.later, args.earlier):
-        ids.require(_id_arg(id_), DECISIONS)
-    later, earlier = ids.where(args.later), ids.where(args.earlier)
-    if later.id == earlier.id:
-        return _refused("amend", [f"{later.id} cannot amend itself"])
-    missing = [f"{w.id}: {w.place()}" for w in (later, earlier) if w.rel is None]
-    if missing or (missing := _swapped(ids.root, [later.rel, earlier.rel])):
-        return _refused("amend", missing)
-    texts, why = {}, []
-    for w, key, other in ((earlier, "amended_by", later.id), (later, "amends", earlier.id)):
-        table, have = ids.table(repo.kind_of(w.id).name), _listed(w.values.get(key))
-        if other in have:
-            continue
-        if key not in table.fields:
-            why.append(f"`{key}` is not a field of {table.readme.as_posix()}")
-            continue
-        texts[w.rel] = head_update(ids.root, w.rel, {**w.values, key: [*have, other]}, table.order)
-    if why or (why := list(map(str, check_write(ids.root, texts)))):
-        return _refused("amend", why)
-    done = []
-    for rel, text in texts.items():  # the earlier first
-        try:
-            original = read_doc(ids.root, rel)
-            write_atomic(ids.root / rel, text)
-        except (OSError, DocsError) as e:
-            for back, old in done:
-                write_atomic(ids.root / back, old)
-            raise DocsError(f"{rel}: {e}; {', '.join(r.as_posix() for r, _ in done) or 'nothing'} put back") from e
-        done.append((rel, original))
-    for rel, _ in done:
-        print(f"{rel.as_posix()}: written")
-    if not texts:
-        print(f"docs amend: {later.id} amends {earlier.id} already")
-    return 0
-
-
 # ---------------------------------------------------------------- ticket (DT-6, DF-6)
 
 UNIT_ROLE = re.compile(r"[^/\s]+/[tib](?:-fix\d+)?")
@@ -1803,7 +1738,6 @@ COMMANDS = {
     "note": (note_args, cmd_note),
     "new": (new_args, cmd_new),
     "draft": (draft_args, cmd_draft),
-    "amend": (amend_args, cmd_amend),
     "ticket": (ticket_args, cmd_ticket),
 }
 

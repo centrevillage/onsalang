@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The one check command (Q-08, plan D-16 7). Run it as `tools/gate.sh`.
+"""The one check command (Q-08, D-16 7). Run it as `tools/gate.sh`.
 
 Runs every item of `gate_steps.STEPS`, even after a failure, and prints a
 summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
@@ -15,13 +15,13 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
                 the first ID, and runs the self-test only when the diff touches
                 `tools/` (`gate_steps`: the forms; X-1).
 --stage-end W3  also fails when `tests/pending.toml` still has entries whose
-                `until` is a work of W3 (plan §8.6, the end of a stage), and
+                `until` is a work of W3 (rules/process.md 8.6, the end of a stage), and
                 runs every item listed whole.
                 Without it, the summary shows what is left per stage.
 --quick         leaves out the slow items (`Step.slow`: the fuzzing, the
                 fix loop, the self-test, the C, the fmt properties) for a check in the middle
                 of a work. Its last line is `gate (quick): ...`: it is not the
-                gate's verdict (plan §8.3 8).
+                gate's verdict (rules/process.md 8.3 8).
 --sweep         the main tree only: saves the base binaries, runs the static
                 items, the self-test and the next shard of the heavy items (the
                 history, `gate_runs`). Its last line is `gate (sweep k/K): ...`.
@@ -413,7 +413,7 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
             if problem is None and unknown:
                 problem = f"--work needs a W ID of {docs.works_at}; unknown: " + ", ".join(unknown)
     except pending.DocsError as e:
-        problem = f"cannot check the stage or the work: the document tables are not found: {e}"
+        problem = f"cannot read the stages or the works: {e}"
     if problem:
         print(problem, file=sys.stderr)
         return 2

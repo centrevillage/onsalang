@@ -2,13 +2,13 @@
 """The diagnostic codes: the registry against the spec, and the negative examples.
 
     diag_codes.py --registry    the registry equals the codes the spec text names,
-                                minus the retired codes of the plan §5 (S-109, K-12)
+                                minus the retired codes of tasks/diag-codes.md (S-109, K-12)
     diag_codes.py --negatives   every code has NEGATIVE_MIN negative examples, or a
-                                `diag-code` entry in tests/pending.toml (plan §8.3 2, K-13)
+                                `diag-code` entry in tests/pending.toml (rules/process.md 8.3 2, K-13)
 
 The registry comes from the compiler (`onsa_cases --codes`), the runs of the
 cases from the test runner (`onsa_cases --run`); this module never reads Rust.
-The plan §5 is read in `repo.py`: the retired codes (its "欠番:" line) and the
+The table of the codes (`tasks/diag-codes.md`) is read in `repo.py`: the retired codes (its "欠番:" line) and the
 codes of the second phase (the rows of its table marked "第 2 期").
 
 A negative example is a `//~` marker that a run compared and a diagnostic
@@ -40,7 +40,7 @@ import repo  # noqa: E402
 
 ROOT = repo.ROOT
 
-# Negative examples each code needs (plan §8.3 2, Q-13). The one place of the number.
+# Negative examples each code needs (rules/process.md 8.3 2, Q-13). The one place of the number.
 NEGATIVE_MIN = 3
 
 CODE = repo.CODE
@@ -58,7 +58,7 @@ def spec_codes(text):
     ranges = [m.group(0) for m in CODE_RANGE.finditer(text)]
     if ranges:
         raise CheckError(
-            f"{repo.SPEC} writes a range of codes ({', '.join(ranges)}); write every code, "
+            f"{repo.SPEC_SHOWN} writes a range of codes ({', '.join(ranges)}); write every code, "
             "so that the registry can be checked against it"
         )
     return set(CODE.findall(text))
@@ -76,7 +76,7 @@ def check_registry(registry, spec, retired):
         problems.append(f"{c}: the spec names it, but the registry (crates/onsa_diag/src/codes.rs) does not have it")
     for c in sorted(registry - expected):
         if c in retired:
-            problems.append(f"{c}: a retired code (plan §5), but the registry still has it")
+            problems.append(f"{c}: a retired code ({repo.DIAG_CODES}), but the registry still has it")
         else:
             problems.append(f"{c}: in the registry, but the spec does not name it")
     return problems
@@ -112,14 +112,14 @@ def check_negatives(counts, registry, entries, phase2):
             problems.append(f"{code}: {n} negative examples, but {e.label()} still lists it (until {e.until}); remove the entry")
         elif e is not None and code in phase2 and e.until != pending.PHASE2:
             problems.append(
-                f'{e.label()}: a code of the second phase (plan §5), so its until is "{pending.PHASE2}", not {e.until}'
+                f'{e.label()}: a code of the second phase ({repo.DIAG_CODES}), so its until is "{pending.PHASE2}", not {e.until}'
             )
     for target, e in sorted(listed.items()):
         if target not in registry:
             problems.append(f"{e.label()}: not a code of the registry")
         elif e.until == pending.PHASE2 and target not in phase2:
             problems.append(
-                f'{e.label()}: until "{pending.PHASE2}", but the plan §5 does not put it in the second phase; '
+                f'{e.label()}: until "{pending.PHASE2}", but {repo.DIAG_CODES} does not put it in the second phase; '
                 "name the work of the first phase that adds its examples"
             )
     for code in sorted(set(counts) - registry):

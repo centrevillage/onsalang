@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Self-tests of the gate's own checks (the `gate-selftest` item of tools/gate_steps.py).
 
-Small made-up inputs: a spec, a `tests/spec`, a pending list and the document
-tables, in a temporary directory. The gate's wiring is tested with made-up
+Small made-up inputs: a spec, a `tests/spec`, a pending list and the files of
+the IDs, in a temporary directory. The gate's wiring is tested with made-up
 items that stand in for cargo.
 
     python3 -B tools/test_gate.py
@@ -49,34 +49,19 @@ import spec_sections  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent / "vectors"))
 from test_vectors import VectorsTools  # noqa: E402,F401  (the tests of the `vectors` item run here)
 
-REWORK = """\
-# rework
-## 3. 段ごとの作業
-| ID | 作業 |
-|---|---|
-| W1-01 ✅ | gate |
-| W3-07 | 式と演算子 |
-| W3-08 | 宣言と属性 |
-| W5-07 | sum |
-## 4. 第 1 期の残り
-| W9-99 | not a work (outside §3) |
-"""
+# The IDs of the made-up repository (`Repo`): {ID: (status, title)}. Only `status` and the heading are
+# written: `pending.load_docs` reads no field table.
+REPO_IDS = {
+    "W1-01": ("DONE", "gate"), "W3-07": ("PLAN", "式と演算子"), "W3-08": ("PLAN", "宣言と属性"), "W5-07": ("PLAN", "sum"),
+    "S-34": ("DECIDED", "derive"), "S-45": ("DECIDED", "群"), "S-15": ("DROPPED", "取り下げ"),
+    "R-23": ("OPEN", "sum"), "R-113": ("OPEN", "基盤"),
+    "A-01": ("OPEN", "is_some"),
+}
 
-PLAN = """\
-# plan
-## 2. 仕様の空白（S）
-| ID | 項目 |
-|---|---|
-| S-34 ✅ | derive |
-| S-45 ✅ | 群 |
-| S-15 | 取り下げ |
-## 3. 共通の設計
-| S-99 ✅ | not an S row (outside §2) |
-## 4. 作業
-| T1-1 ✅ | 字句解析器 |
-| T5-8 | 生成 |
-| T9-2 | 締め |
-## 5. 診断コード
+# the table of the codes (`tasks/diag-codes.md`)
+CODES = """\
+# 診断コード
+
 | コード | 内容 | 段 | M |
 |---|---|---|---|
 | E0601 | 効果 | 効果 | M3 |
@@ -84,7 +69,6 @@ PLAN = """\
 | E0904 / E0905 | rt と blocking | — | 第 2 期 |
 
 欠番: E0611（S-77 で E0601 にまとめた）、E0814（S-147 で E0815 にまとめた）。照合は E0999 を除かない。
-## 6. 仕様の例
 """
 
 # the table of the stages (X-2 U6): the stages and their order; the last ends the first phase
@@ -100,20 +84,6 @@ STAGES = """\
 | M9 | 締め | — | — |
 
 W5 の後は M5〜M9。
-"""
-
-API = """\
-# api
-| ID | 候補 |
-|---|---|
-| A-01 | is_some |
-"""
-
-REVIEW = """\
-# review
-## 8. 決定の記録
-| R-23 | sum |
-| R-113 / Q-01〜Q-08 | 基盤 |
 """
 
 SPEC = """\
@@ -193,18 +163,31 @@ class Repo:
 
     def __init__(self, tmp):
         self.root = Path(tmp)
+        for id_, (status, title) in REPO_IDS.items():
+            self.write_id(id_, status, title)
         for rel, text in {
-            "docs/rework-phase1.md": REWORK,
-            "docs/implementation-tasks.md": PLAN,
-            "docs/review-impl-phase1.md": REVIEW,
-            "docs/api-candidates.md": API,
+            str(repo.DIAG_CODES): CODES,
             "tasks/stages.md": STAGES,
             "spec.md": SPEC,
-            str(repo.SPEC): SPEC,
             "tests/spec/ops/groups.onsa": COPY_FIRST,
             "tests/pending.toml": "",
         }.items():
             self.write(rel, text)
+        self.write_spec(SPEC)
+
+    def write_id(self, id_, status, title=""):
+        """The file of an ID with its `status` and its heading."""
+        return self.write(repo.path_of(id_), f'+++\nstatus = "{status}"\n+++\n# {id_}{" " + title if title else ""}\n')
+
+    def write_spec(self, text):
+        """The spec in `spec/` (`split_spec`, in place of the one there); a text with no chapter heading is
+        the text of a chapter `## 2. x`."""
+        for p in (self.root / repo.SPEC_DIR).glob("*.md"):
+            if p.name != repo.SPEC_TOOLS.name:
+                p.unlink()
+        if not re.search(r"^## ([2-9]|\d\d+)\. ", text, re.M):
+            text = f"## 2. x\n\n{text}"
+        split_spec(text, self.root)
 
     def write(self, rel, text):
         p = self.root / rel
@@ -464,19 +447,19 @@ class PendingList(TempRepo):
         self.assertOneError(entry("spec-example", self.sid, reasons=("Q-08",)), "is not an S / R number")
 
     def test_reason_not_in_tables(self):
-        self.assertOneError(entry("spec-example", self.sid, reasons=("S-99",)), "not in the tables")
+        self.assertOneError(entry("spec-example", self.sid, reasons=("S-99",)), "reason `S-99` is not in decisions/S/, issues/R/")
 
     def test_work_not_in_tables(self):
         self.assertOneError(entry("spec-example", self.sid, until="W9-99"),
-                            "until `W9-99` is not a work of the W works of docs/rework-phase1.md `## 3.` (`W3-07`) or `PH2`")
+                            "until `W9-99` is not a work of tasks/W/ (`W3-07`) or `PH2`")
 
     def test_done_work_fails(self):
         self.assertOneError(entry("spec-example", self.sid, until="W1-01"), "marked done")
 
     def test_a_t_work_is_no_work(self):
-        # X-2 U6: the T works of the plan §4 are not works of the list (the history keeps them), done or not
+        # X-2 U6: the T works are not works of the list (the history keeps them)
         for t in ("T1-1", "T5-8"):
-            self.assertOneError(entry("spec-example", self.sid, until=t), f"until `{t}` is not a work of the W works")
+            self.assertOneError(entry("spec-example", self.sid, until=t), f"until `{t}` is not a work of tasks/W/")
         self.assertNotIn("T5-8", pending.load_docs(self.repo.root).works)
 
     def test_bad_work(self):
@@ -601,15 +584,15 @@ class PendingList(TempRepo):
         self.assertOneError(entry("fix-contract", "tests/spec/nope.onsa:1:1 E0010 fix1"), "does not exist")
 
     def test_foreign_form(self):
-        # a row of docs/foreign-forms.toml by its id (S-250, W3-15)
-        self.assertOneError(entry("foreign-form", "semicolon"), "`docs/foreign-forms.toml` does not exist")
-        self.repo.write("docs/foreign-forms.toml", '[[form]]\nid = "semicolon"\n\n[[form]]\nid = "let_mut"\n')
+        # a row of spec/foreign-forms.toml by its id (S-250, W3-15)
+        self.assertOneError(entry("foreign-form", "semicolon"), "`spec/foreign-forms.toml` does not exist")
+        self.repo.write("spec/foreign-forms.toml", '[[form]]\nid = "semicolon"\n\n[[form]]\nid = "let_mut"\n')
         self.assertEqual(self.errors_of(entry("foreign-form", "semicolon") + entry("foreign-form", "let_mut")), [])
-        self.assertOneError(entry("foreign-form", "loop"), "is not the `id` of a row of `docs/foreign-forms.toml`")
+        self.assertOneError(entry("foreign-form", "loop"), "is not the `id` of a row of `spec/foreign-forms.toml`")
         for bad in ("Semicolon", "semi colon", "semi-colon", "_semicolon", "semicolon_", "semi__colon", "1st"):
             with self.subTest(target=bad):
                 self.assertOneError(entry("foreign-form", bad), "not of the foreign-form form")
-        self.repo.write("docs/foreign-forms.toml", "[[form]\n")
+        self.repo.write("spec/foreign-forms.toml", "[[form]\n")
         self.assertOneError(entry("foreign-form", "semicolon"), "is not TOML")
 
     def test_fix_contract_form(self):
@@ -650,14 +633,25 @@ class PendingList(TempRepo):
     def test_toml_error(self):
         self.assertOneError("[[pending]\n", "pending.toml")
 
-    def test_docs_tables_missing(self):
-        self.repo.write("docs/rework-phase1.md", "# rework\nno tables\n")
-        with self.assertRaisesRegex(pending.DocsError, "## 3."):
-            pending.load_docs(self.repo.root)
-        self.repo.write("docs/rework-phase1.md", "## 3. works\nno rows\n## 4. rest\n")
-        with self.assertRaisesRegex(pending.DocsError, "no table rows of W works"):
-            pending.load_docs(self.repo.root)
-        self.assertEqual(quiet(pending.main, ["--root", str(self.repo.root)]), 1)
+    def test_a_directory_of_the_ids_missing(self):
+        # X-2 DT-7: each kind is read from its directory alone; with no directory, or no file of an ID in it,
+        # the tools stop (exit 1), never with no ID
+        for d in ("decisions/S", "issues/R", "decisions/A", "tasks/W"):
+            for why, make in (("no directory", False), ("no file of an ID", True)):
+                with self.subTest(d=d, why=why), tempfile.TemporaryDirectory() as tmp:
+                    r = Repo(tmp)
+                    shutil.rmtree(r.root / d)
+                    if make:
+                        (r.root / d).mkdir()
+                    said = f"cannot read the IDs: {d}/: {why}"
+                    self.assertEqual(quiet_out(gap_marks.main, ["--root", str(r.root)]), (1, [said]))
+                    if d == "decisions/A":  # read by gap_marks alone
+                        self.assertEqual(pending.load_docs(r.root).works, {"W1-01", "W3-07", "W3-08", "W5-07"})
+                        continue
+                    with self.assertRaisesRegex(pending.DocsError, f"^{d}/: {why}$"):
+                        pending.load_docs(r.root)
+                    self.assertEqual(quiet_out(pending.main, ["--root", str(r.root)]), (1, [said]))
+                    self.assertEqual(quiet_out(ignores.main, ["stale", "--root", str(r.root)]), (1, [said]))
 
     def test_stages(self):
         # X-2 U6: the stages and their order are the table of tasks/stages.md, not the IDs of the works
@@ -719,18 +713,15 @@ class PendingList(TempRepo):
                 self.assertIn(why, str(caught.exception))
                 self.assertRaises(repo.RepoError, pending.load_docs, self.repo.root)
                 code, out = quiet_out(pending.main, ["--root", str(self.repo.root)])
-                self.assertEqual((code, out), (1, [f"the document tables are not found: {caught.exception}"]))
+                self.assertEqual((code, out), (1, [f"cannot read the IDs: {caught.exception}"]))
                 code, out = quiet_out(ignores.main, ["stale", "--root", str(self.repo.root)])
-                self.assertEqual((code, out), (1, [f"the document tables are not found: {caught.exception}"]))
+                self.assertEqual((code, out), (1, [f"cannot read the IDs: {caught.exception}"]))
                 code, out = quiet_out(gate.main, [], steps=[], root=self.repo.root, out=io.StringIO())
                 self.assertEqual(code, 2)
                 self.assertIn(str(caught.exception), "\n".join(out))
 
-    def test_stage_end_m9_with_no_plan_4(self):
-        # X-2 U6: after the plan §4 goes to the history, M9 is still a stage (the table's), the T works are none
-        plan = (self.repo.root / repo.DOC_PLAN).read_text(encoding="utf-8")
-        self.repo.write(repo.DOC_PLAN, plan[: plan.index("## 4.")] + plan[plan.index("## 5."):])
-        self.assertIsNone(repo.Layout(self.repo.root).source("T"))
+    def test_stage_end_m9(self):
+        # X-2 U6: M9 is a stage (the table's), the T works are none
         self.repo.write("tests/pending.toml", entry("diag-code", "E0612", until="PH2"))
         base = ["--root", str(self.repo.root), "--gate-steps", ""]
         self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 0)
@@ -745,7 +736,7 @@ class PendingList(TempRepo):
         self.assertEqual(quiet(pending.main, base), 0)
         self.assertEqual(quiet(pending.main, base + ["--stage-end", "W1"]), 0)
         self.assertEqual(quiet(pending.main, base + ["--stage-end", "W3"]), 1)
-        self.assertEqual(quiet(pending.main, base + ["--stage-end", "W4"]), 2)  # no such stage in the tables
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "W4"]), 2)  # no such stage in the table
         self.assertEqual(quiet(pending.main, base + ["--stage-end", ""]), 2)
 
     def test_gate_steps_cli(self):
@@ -770,8 +761,8 @@ class PendingList(TempRepo):
         self.assertOneError(entry("diag-code", "E0612", reasons=("§3.",), until="PH2"), "not an S / R number")
         self.assertOneError(entry("diag-code", "E0612", reasons=("§3.1",)), 'only of `until = "PH2"`')
         self.assertOneError(entry("spec-example", self.sid, reasons=("§3.1",)), 'only of `until = "PH2"`')
-        (self.repo.root / repo.SPEC).unlink()
-        with self.assertRaisesRegex(pending.DocsError, "onsa-lang-spec"):
+        (self.repo.root / repo.SPEC_README).unlink()
+        with self.assertRaisesRegex(pending.DocsError, "spec/README.md"):
             pending.load_docs(self.repo.root)
 
     def test_phase2_stages(self):
@@ -1471,12 +1462,12 @@ class RealSteps(unittest.TestCase):
 
 
 class SpecSections(unittest.TestCase):
-    SPEC = "# 1. A\n## 1.1 B\n```onsa\n## 9.9 not a heading\n```\n### 1.1.2 C\n## 1.2 D\n# 2. E\n"
+    SPEC = "## 1. A\n### 1.1 B\n```onsa\n## 9.9 not a heading\n```\n#### 1.1.2 C\n### 1.2 D\n## 2. E\n"
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        (self.root / spec_sections.SPEC).write_text(self.SPEC, encoding="utf-8")
+        split_spec(self.SPEC, self.root)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -1637,20 +1628,19 @@ class DiagRegistry(TempRepo):
 
     def test_phase2_codes(self):
         # the rows whose last cell is 第 2 期, with the ranges expanded; not the M3 row
-        self.assertEqual(repo.phase2_codes(PLAN), {"E0612", "E0613", "E0614", "E0620", "E0904", "E0905"})
-        with self.assertRaisesRegex(repo.RepoError, "no row"):
-            repo.phase2_codes(PLAN.replace("| 第 2 期 |", "| M4 |"))
+        self.assertEqual(repo.phase2_codes(CODES), {"E0612", "E0613", "E0614", "E0620", "E0904", "E0905"})
+        with self.assertRaisesRegex(repo.RepoError, "^tasks/diag-codes.md: no row"):
+            repo.phase2_codes(CODES.replace("| 第 2 期 |", "| M4 |"))
         with self.assertRaisesRegex(repo.RepoError, "goes down"):
-            repo.phase2_codes(PLAN.replace("E0612〜E0614", "E0614〜E0612"))
+            repo.phase2_codes(CODES.replace("E0612〜E0614", "E0614〜E0612"))
 
     def test_retired_codes(self):
         # codes in parentheses and after the first sentence are not retired
-        self.assertEqual(repo.retired_codes(PLAN), {"E0611", "E0814"})
+        self.assertEqual(repo.retired_codes(CODES), {"E0611", "E0814"})
         for bad, needle in (
-            (PLAN.replace("欠番: ", "欠番は "), "found 0"),
-            (PLAN.replace("## 6.", "欠番: E0313。\n## 6."), "found 2"),
-            (PLAN.replace("欠番: E0611（S-77 で E0601 にまとめた）、E0814（S-147 で E0815 にまとめた）", "欠番: なし"), "names no code"),
-            (PLAN.replace("## 5.", "## 5x"), "## 5."),
+            (CODES.replace("欠番: ", "欠番は "), "tasks/diag-codes.md: expected one line starting with `欠番:`, found 0"),
+            (CODES + "欠番: E0313。\n", "found 2"),
+            (CODES.replace("欠番: E0611（S-77 で E0601 にまとめた）、E0814（S-147 で E0815 にまとめた）", "欠番: なし"), "names no code"),
         ):
             with self.subTest(needle=needle):
                 with self.assertRaisesRegex(diag_codes.CheckError, re.escape(needle)):
@@ -1672,7 +1662,7 @@ class DiagRegistry(TempRepo):
         return code, out.getvalue()
 
     def test_main(self):
-        self.repo.write(str(repo.SPEC), "E0001 と E0002。E0611 は欠番。")
+        self.repo.write_spec("E0001 と E0002。E0611 は欠番。")
         codes = [{"code": "E0001"}, {"code": "E0002"}]
         code, out = self.run_main("--registry", {"--codes": codes})
         self.assertEqual(code, 0, out)
@@ -1739,7 +1729,7 @@ class DiagNegatives(TempRepo):
         self.assertIn("E0997: markers name it", problems[2])
 
     def test_phase2(self):
-        # M1: PH2 only for the codes of the second phase (plan §5), and those listed have PH2
+        # M1: PH2 only for the codes of the second phase (tasks/diag-codes.md), and those listed have PH2
         registry, counts, phase2 = {"E0001", "E0612"}, {}, {"E0612"}
         ok = entry("diag-code", "E0001", until="W3-07") + entry("diag-code", "E0612", until="PH2")
         self.repo.write("tests/pending.toml", ok)
@@ -1750,20 +1740,20 @@ class DiagNegatives(TempRepo):
         entries, _ = pending.load(self.repo.pending)
         problems = diag_codes.check_negatives(counts, registry, entries, phase2)
         self.assertEqual(len(problems), 1, problems)
-        self.assertIn('"E0001": until "PH2", but the plan §5 does not put it in the second phase', problems[0])
+        self.assertIn('"E0001": until "PH2", but tasks/diag-codes.md does not put it in the second phase', problems[0])
         # a code of the second phase given a work of the first
         self.repo.write("tests/pending.toml", entry("diag-code", "E0001", until="W3-07") + entry("diag-code", "E0612", until="W3-07"))
         entries, _ = pending.load(self.repo.pending)
         problems = diag_codes.check_negatives(counts, registry, entries, phase2)
         self.assertEqual(len(problems), 1, problems)
-        self.assertIn('"E0612": a code of the second phase (plan §5), so its until is "PH2", not W3-07', problems[0])
+        self.assertIn('"E0612": a code of the second phase (tasks/diag-codes.md), so its until is "PH2", not W3-07', problems[0])
 
     def test_threshold_is_three(self):
         self.assertEqual(diag_codes.NEGATIVE_MIN, 3)
 
     def test_main(self):
         runs = {"cases": [run("tests/c.onsa", markers=[("tests/c.onsa", i, "E0001", True, None) for i in (1, 2, 3)])], "errors": []}
-        outputs = {"--codes": [{"code": "E0001"}, {"code": "E0002"}], "--run": runs}  # plan §5: E0612... are PH2
+        outputs = {"--codes": [{"code": "E0001"}, {"code": "E0002"}], "--run": runs}  # tasks/diag-codes.md: E0612... are PH2
         self.repo.write("tests/pending.toml", entry("diag-code", "E0002"))
         out = io.StringIO()
         with mock.patch("sys.stdout", out):
@@ -1786,7 +1776,7 @@ class SpecGap(TempRepo):
             self.repo.write(rel, text)
         marks = gap_marks.find_marks(self.repo.root)
         known = pending.load_docs(self.repo.root).reasons | gap_marks.api_ids(self.repo.root)
-        problems, for_parent = gap_marks.check(marks, known)
+        problems, for_parent = gap_marks.check(marks, known, "decisions/S/, issues/R/, decisions/A/")
         return marks, problems + for_parent
 
     def test_registered_marks_pass(self):
@@ -1819,8 +1809,8 @@ class SpecGap(TempRepo):
             "let s = \"SPEC-GAP\";": "malformed",
             "// SPEC-GAP(NEW): to register": "the parent registers",
             "// SPEC-GAP(Q-10): not S / R / A": "not an S / R / A number",
-            "// SPEC-GAP(S-99): outside §2": "not in the tables",
-            "// SPEC-GAP(A-02): no such row": "not in the tables",
+            "// SPEC-GAP(S-99): no such file": "S-99 is not in decisions/S/, issues/R/, decisions/A/",
+            "// SPEC-GAP(A-02): no such file": "A-02 is not in decisions/S/, issues/R/, decisions/A/",
         }
         for line, needle in cases.items():
             with self.subTest(line=line):
@@ -1870,8 +1860,12 @@ class SpecGap(TempRepo):
         self.assertEqual(quiet(gap_marks.main, ["--root", str(self.repo.root)]), 0)
         self.repo.write("crates/a/src/lib.rs", "// SPEC-GAP(NEW): x\n")
         self.assertEqual(quiet(gap_marks.main, ["--root", str(self.repo.root)]), 1)
-        (self.repo.root / "docs/api-candidates.md").unlink()
-        self.assertEqual(quiet(gap_marks.main, ["--root", str(self.repo.root)]), 1)
+        code, out = quiet_out(gap_marks.main, ["--root", str(self.repo.root)])
+        self.assertIn("lib.rs:1: SPEC-GAP(NEW)", "\n".join(out))
+        self.repo.write("crates/a/src/lib.rs", "// SPEC-GAP(S-99): x\n")  # the text names where the IDs are read
+        code, out = quiet_out(gap_marks.main, ["--root", str(self.repo.root)])
+        self.assertIn("S-99 is not in decisions/S/, issues/R/, decisions/A/", "\n".join(out))
+        self.assertEqual(code, 1)
 
 
 BUILTIN_BASELINES = dict(builtin_names.BASELINES)
@@ -2094,7 +2088,7 @@ fn f(n: &str) -> bool {
             self.assertEqual(builtin_names.is_test_file(rel), is_test, rel)
 
     def run_main(self, args=(), members=()):
-        self.write(builtin_names.SPEC, NAMES_SPEC)
+        split_spec(NAMES_SPEC, self.root)
         out = io.StringIO()
         cmd = json_cmd({"--std-names": ["zeroed"], "--builtin-members": list(members)})
         with mock.patch("sys.stdout", out):
@@ -2628,9 +2622,9 @@ class Fuzz(TempRepo):
             (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("W3-07",)), "one or more S / R numbers"),
             (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-45", "s-45")), "one or more S / R numbers"),
             (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-99999",)),
-             "the reason `S-99999` is not in the tables (plan §2 for S, review for R)"),
+             "the reason `S-99999` is not in decisions/S/, issues/R/"),
             (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("S-45", "R-1")),
-             "the reason `R-1` is not in the tables (plan §2 for S, review for R)"),
+             "the reason `R-1` is not in decisions/S/, issues/R/"),
             (allowed(self.BAD, "tests/fuzz/f.onsa", reasons=("R-23", "R-23")), "a reason is listed twice"),
             (allowed(self.BAD, "tests/fuzz/f.onsa", note=""), "`note` must be a non-empty string"),
             (good + good, f"the class `{self.BAD}` with `m` is listed twice"),
@@ -3355,7 +3349,7 @@ class Narrowing(unittest.TestCase):
         self.root.mkdir()
         git_in(self.root, "init", "-q")
         for rel, text in {"tests/spec/a/x.onsa": "// E0013\n", "tests/spec/a/y.onsa": "y\n",
-                          "crates/c.rs": "// E0001\nfn c() {}\n", "docs/d.md": "d\n"}.items():
+                          "crates/c.rs": "// E0001\nfn c() {}\n", "rules/d.md": "d\n"}.items():
             self.write(rel, text)
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "base")
@@ -3377,7 +3371,7 @@ class Narrowing(unittest.TestCase):
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "WIP")
         self.write("crates/c.rs", "// E0002\nfn c() {}\n")  # E0001 removed, E0002 added
-        self.write("docs/d.md", "E0003\n")  # docs/ and tests/ name no code
+        self.write("rules/d.md", "E0003\n")  # the documents and tests/ name no code
         self.write("tests/spec/a/y.onsa", "y // E0004\n")
         self.write("tests/spec/b/é.onsa", "// E0006\n")  # untracked, a name outside ASCII
         self.write("crates/new.rs", "// E0005\n")  # untracked: its codes count
@@ -3388,7 +3382,7 @@ class Narrowing(unittest.TestCase):
         self.change()
         self.assertEqual(narrowing.merge_base(self.root), self.full)
         self.assertEqual(narrowing.changed_paths(self.root, self.full),
-                         {"crates/c2.rs", "crates/c.rs", "docs/d.md", "tests/spec/a/y.onsa", "tests/spec/b/é.onsa",
+                         {"crates/c2.rs", "crates/c.rs", "rules/d.md", "tests/spec/a/y.onsa", "tests/spec/b/é.onsa",
                           "crates/new.rs", "crates/blob.bin", "tools/test_t.py"})
         self.assertEqual(narrowing.diff_codes(self.root, self.full), {"E0001", "E0002", "E0005", "E0007"})
         git_in(self.root, "add", "-A")
@@ -3970,11 +3964,11 @@ class IgnoresStale(TempRepo):
             self.assertIn("1 ignored test(s) in 1 file(s): 1 by a work, 0 for another reason", out)
 
     def test_an_id_not_in_the_tables_fails(self):
-        # W9-99 is outside the table of §3; W3-071 is not W3-07; a T of the plan §4 is no work (X-2 U6)
+        # W9-99 has no file; W3-071 is not W3-07; a T is no work (the history, X-2 U6)
         for reason in ("W9-99", "W3-071: a typo", "T9-3", "T1-1 (S-45)", "T5-8"):
             code, out = self.check(reason)
             self.assertEqual(code, 1, out)
-            self.assertIn("is no work of the tables", out)
+            self.assertIn("is no work of tasks/W/", out)
 
     def test_the_works_of_a_stage_fail_at_its_end(self):
         self.repo.write("crates/a/tests/t.rs", self.ignored("W3-07 U1") + self.ignored("W5-07").replace("t()", "u()"))
@@ -4022,7 +4016,7 @@ class IgnoresStale(TempRepo):
         self.assertEqual(out.count("the work W1-01 is done"), 2)  # both_a and both_b
         self.assertIn("\tboth_a\t", out)
         self.assertNotIn("crates/b", out)
-        self.assertIn("is no work of the tables", self.stale(str(f))[1])  # W3-11 and W4-02 are not in the tables
+        self.assertIn("is no work of tasks/W/", self.stale(str(f))[1])  # W3-11 and W4-02 have no file
 
 
 
@@ -4046,9 +4040,10 @@ class DefaultInits(unittest.TestCase):
         p.write_text(text, encoding="utf-8")
 
     def docs(self, spec, tools="", std=None, example=None):
-        """A spec of one block, the tools document, one file of `std/` and of `examples/`."""
-        self.write(repo.SPEC, f"# s\n## 11. flow\n### 11.4 遅延\n\n本文の `prev~(^y, 0)` は読まない。\n\n```onsa\n{spec}```\n")
-        self.write(default_inits.TOOLS_DOC, tools)
+        """A spec of one block (`spec/11-c.md`, its code from the line 7), `spec/tools.md`, one file of `std/`
+        and of `examples/`."""
+        split_spec(f"# s\n## 11. flow\n### 11.4 遅延\n\n本文の `prev~(^y, 0)` は読まない。\n\n```onsa\n{spec}```\n", self.root)
+        self.write(repo.SPEC_TOOLS, tools)
         self.write("std/a.onsa", std if std is not None else INIT_FLOW.format("prev~(x)"))
         self.write("examples/b.onsa", example if example is not None else INIT_FLOW.format("delay~(x, 4)"))
 
@@ -4066,7 +4061,7 @@ class DefaultInits(unittest.TestCase):
         shown = sorted(p.split("  ")[0] for p in problems)
         self.assertEqual(
             shown,
-            ["docs/onsa-tools.md:5", "examples/b.onsa:3", "examples/b.onsa:3", "onsa-lang-spec-0.3.md:9",
+            ["examples/b.onsa:3", "examples/b.onsa:3", "spec/11-c.md:8", "spec/tools.md:5",
              "std/a.onsa:2", "std/a.onsa:2"],
             problems,
         )  # fmt: skip
@@ -4079,13 +4074,14 @@ class DefaultInits(unittest.TestCase):
         # outside the blocks names `prev~(^y, 0)` on purpose
         self.docs(
             INIT_FLOW.format("prev~(x) + prev~(x, 1.0) + prev~(x, -0.0) + delay~(x, 4, s) + vdelay~(x, x, 8, 0.5)"),
-            tools="# t\n\n例の `prev~(^y, 0)`。\n",
+            tools="# t\n\n例の `prev~(^y, 0)`。\n\n```onsa\n" + INIT_FLOW.format("prev~(x, 2.0)") + "```\n",
             std=INIT_FLOW.format("delay~(b, 3, true)\n  x"),
         )
         problems, summary = default_inits.check(self.root, REAL_CASES)
         self.assertEqual(problems, [])
-        self.assertIn("1 onsa-lang-spec-0.3.md blocks, 0 docs/onsa-tools.md blocks, 1 examples files, 1 std files; "
-                      "7 delay calls", summary)  # fmt: skip
+        # a block of each document is read (X-2 U7a: `spec/` and `spec/tools.md`, never 0)
+        self.assertIn("1 spec/ blocks, 1 spec/tools.md blocks, 1 examples files, 1 std files; "
+                      "8 delay calls", summary)  # fmt: skip
         self.assertEqual(quiet(default_inits.main, [], self.root, REAL_CASES), 0)
 
     def test_reading_nothing_fails(self):
@@ -4107,14 +4103,14 @@ class DefaultInits(unittest.TestCase):
 
     def test_a_fence_that_cannot_be_trusted_fails(self):
         self.docs(INIT_FLOW.format("prev~(x)"), tools="# t\n\n```Onsa\nprev~(x, 0.0)\n```\n")
-        self.assertTrue(any(p.startswith("docs/onsa-tools.md:3") and "looks like onsa" in p for p in self.check()))
+        self.assertTrue(any(p.startswith("spec/tools.md:3") and "looks like onsa" in p for p in self.check()))
 
     def test_a_call_the_tree_does_not_hold_fails(self):
         # the item with a syntax error has no tree, nor has the spaced `prev ~(` (§2.6): the tokens count them
         broken = INIT_FLOW.format("let a = prev~(x, 0.0)\n  let b = )\n  a")
         self.docs(broken + INIT_FLOW.replace("flow f", "flow g").format("prev ~(x, 0.0)"))
         problems = self.check()
-        self.assertEqual(problems, ["onsa-lang-spec-0.3.md:8  2 of its 2 delay calls are not in the tree (an item with "
+        self.assertEqual(problems, ["spec/11-c.md:7  2 of its 2 delay calls are not in the tree (an item with "
                                     "a syntax error); their init is not checked"])  # fmt: skip
         # a file of std/ with a syntax error fails by itself too, also when the tree holds all its calls
         self.docs(INIT_FLOW.format("prev~(x)"), std=broken)
@@ -4225,11 +4221,11 @@ class DocsTool(unittest.TestCase):
         self.assertEqual((lines, wrapped, left), ([S, LONG_SENTENCE], [1], [(1, 300)]))
 
     def test_fmt_writes_checks_and_lists(self):
-        doc = self.write("docs/a.md", "# a\n\n- " + S * 3 + "\n")
-        self.write("docs/b.md", "short\n")
+        doc = self.write("rules/a.md", "# a\n\n- " + S * 3 + "\n")
+        self.write("rules/b.md", "short\n")
         code, out = self.main("fmt", "--check")
         self.assertEqual(code, 1)
-        self.assertIn("docs/a.md: 1 line(s) would be wrapped (lines 3)", out)
+        self.assertIn("rules/a.md: 1 line(s) would be wrapped (lines 3)", out)
         self.assertEqual(self.main("fmt", "--list")[0], 0)
         self.assertEqual(doc.read_text(encoding="utf-8"), "# a\n\n- " + S * 3 + "\n")
         code, out = self.main("fmt")
@@ -4238,30 +4234,30 @@ class DocsTool(unittest.TestCase):
         self.assertEqual(self.main("fmt", "--check"), (0, "docs fmt: 0 line(s) in 0 file(s) would be wrapped; "
                                                           "0 long line(s) have no place to break\n"))  # fmt: skip
         # a long line with no place to break is shown, and is not a change
-        self.write("docs/c.md", LONG_SENTENCE)
+        self.write("rules/c.md", LONG_SENTENCE)
         code, out = self.main("fmt", "--check")
         self.assertEqual(code, 0)
-        self.assertIn("docs/c.md:1: 300 characters left on one line (no place to break)", out)
+        self.assertIn("rules/c.md:1: 300 characters left on one line (no place to break)", out)
 
     def test_fmt_leaves_out_the_spec_unless_asked(self):
-        for rel in ("docs/a.md", "onsa-lang-spec-0.3.md", "docs/onsa-tools.md", "spec/02-lexical.md", "README.md"):
+        for rel in ("rules/a.md", "spec/03-ops.md", "spec/tools.md", "spec/02-lexical.md", "README.md"):
             self.write(rel, S * 3)
         out = self.main("fmt", "--check")[1]
-        self.assertEqual(sorted(re.findall(r"^(\S+): 1 line", out, re.M)), ["README.md", "docs/a.md"])
+        self.assertEqual(sorted(re.findall(r"^(\S+): 1 line", out, re.M)), ["README.md", "rules/a.md"])
         out = self.main("fmt", "--check", "--spec")[1]
         self.assertEqual(len(re.findall(r"^\S+: 1 line", out, re.M)), 5)
-        code, out = self.main("fmt", str(self.root / "onsa-lang-spec-0.3.md"))
+        code, out = self.main("fmt", str(self.root / "spec/03-ops.md"))
         self.assertEqual(code, 0)
-        self.assertIn("onsa-lang-spec-0.3.md: skipped, the spec (pass --spec)", out)
-        self.assertEqual((self.root / "onsa-lang-spec-0.3.md").read_text(encoding="utf-8"), S * 3)
+        self.assertIn("spec/03-ops.md: skipped, the spec (pass --spec)", out)
+        self.assertEqual((self.root / "spec/03-ops.md").read_text(encoding="utf-8"), S * 3)
         # a path given: only that document
         self.assertEqual(self.main("fmt", str(self.root / "README.md"))[0], 0)
         self.assertEqual((self.root / "README.md").read_text(encoding="utf-8"), S * 2 + "\n" + S)
-        self.assertEqual((self.root / "docs/a.md").read_text(encoding="utf-8"), S * 3)
+        self.assertEqual((self.root / "rules/a.md").read_text(encoding="utf-8"), S * 3)
 
     def test_fmt_writes_nothing_when_the_round_trip_breaks(self):
-        a = self.write("docs/a.md", S * 3)
-        b = self.write("docs/b.md", T * 3)
+        a = self.write("rules/a.md", S * 3)
+        b = self.write("rules/b.md", T * 3)
         real = docs_tool.wrap
 
         def broken(line):  # breaks the round trip of the second file only
@@ -4274,23 +4270,23 @@ class DocsTool(unittest.TestCase):
         self.assertEqual((a.read_text(encoding="utf-8"), b.read_text(encoding="utf-8")), (S * 3, T * 3))
 
     def test_fmt_does_not_write_a_file_open_in_vim(self):
-        a = self.write("docs/a.md", S * 3)
-        b = self.write("docs/b.md", T * 3)
-        self.write("docs/.a.md.swo", "")
+        a = self.write("rules/a.md", S * 3)
+        b = self.write("rules/b.md", T * 3)
+        self.write("rules/.a.md.swo", "")
         code, out = self.main("fmt")
         self.assertEqual(code, 1)
-        self.assertIn("docs/a.md: skipped, the swap file .a.md.swo", out)
+        self.assertIn("rules/a.md: skipped, the swap file .a.md.swo", out)
         self.assertEqual(a.read_text(encoding="utf-8"), S * 3)
         self.assertEqual(b.read_text(encoding="utf-8"), T * 2 + "\n" + T)
 
     def test_fmt_keeps_the_bytes_and_skips_cr(self):
-        a = self.write("docs/a.md", "x")
+        a = self.write("rules/a.md", "x")
         a.write_bytes((S * 3 + "\r\n").encode("utf-8"))
         code, out = self.main("fmt")
         self.assertEqual(code, 0)
-        self.assertIn("docs/a.md: skipped, it has CR line ends", out)
+        self.assertIn("rules/a.md: skipped, it has CR line ends", out)
         self.assertEqual(a.read_bytes(), (S * 3 + "\r\n").encode("utf-8"))
-        self.write("docs/b.md", "x").write_bytes(b"\xff")
+        self.write("rules/b.md", "x").write_bytes(b"\xff")
         self.assertEqual(self.main("fmt")[0], 2)
 
     # ------------------------------------------------ swaps
@@ -4311,7 +4307,7 @@ class DocsTool(unittest.TestCase):
     # ------------------------------------------------ check and the documents
 
     def test_check_counts_the_cells_of_the_tables(self):
-        self.write("docs/a.md", "\n".join([
+        self.write("rules/a.md", "\n".join([
             "| a | b |", "|---|:-:|", "| 1 | 2 |", "| 1 | 2 | 3 |", "| 1 |", "| `x|y` | a \\| b |", "| ``a`|`b`` | c",
             "", "| a | b |", "|---|---|---|", "| 1 | 2 |",
             "", "```", "| a | b |", "|---|---|", "| 1 |", "```",
@@ -4323,23 +4319,23 @@ class DocsTool(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(out.splitlines(), [
             "== tables",
-            "docs/a.md:4: the row has 3 cells, the header 2",
-            "docs/a.md:5: the row has 1 cells, the header 2",
-            "docs/a.md:10: the delimiter row has 3 cells, the header 2",
-            "docs/a.md:26: the row has 1 cells, the header 2",
-            "docs/a.md:28: table rows with no header and delimiter row before them",
-            "docs/a.md:30: table rows with no header and delimiter row before them",
+            "rules/a.md:4: the row has 3 cells, the header 2",
+            "rules/a.md:5: the row has 1 cells, the header 2",
+            "rules/a.md:10: the delimiter row has 3 cells, the header 2",
+            "rules/a.md:26: the row has 1 cells, the header 2",
+            "rules/a.md:28: table rows with no header and delimiter row before them",
+            "rules/a.md:30: table rows with no header and delimiter row before them",
             "heads, refs, relations: no directory of the new layout",
             "docs check: 6 problem(s) (tables 6, heads 0, refs 0, relations 0, links 0)",
         ])  # fmt: skip
 
     def test_check_passes_and_fails_on_an_open_fence(self):
-        self.write("docs/a.md", "| a | b |\n|---|---|\n| 1 | 2 |\n")
+        self.write("rules/a.md", "| a | b |\n|---|---|\n| 1 | 2 |\n")
         none = "heads, refs, relations: no directory of the new layout\n"
         self.assertEqual(self.main("check"), (0, none + "docs check: no problem in 1 document(s) "
                                                         "(tables, heads, refs, relations, links)\n"))  # fmt: skip
-        self.write("docs/b.md", "x\n````\n| a |\n```\n")
-        self.assertEqual(self.main("check"), (1, "== tables\ndocs/b.md:2: the code fence is not closed\n" + none +
+        self.write("rules/b.md", "x\n````\n| a |\n```\n")
+        self.assertEqual(self.main("check"), (1, "== tables\nrules/b.md:2: the code fence is not closed\n" + none +
                                                  "docs check: 1 problem(s) (tables 1, heads 0, refs 0, relations 0, "
                                                  "links 0)\n"))  # fmt: skip
 
@@ -4351,24 +4347,19 @@ class DocsTool(unittest.TestCase):
         self.assertEqual(self.main("fmt", "--check")[0], 2)
 
     def test_the_documents_by_the_layout(self):
-        current = ["CLAUDE.md", "README.md", "docs/a.md", "docs/onsa-tools.md", "onsa-lang-spec-0.3.md"]
-        for rel in current + ["onsa-lang-spec-0.2.md", "kumi-lang-spec.md", "docs/sub/x.md", "docs/f.toml", "history/h.md"]:
+        # X-2 DT-7: the files under the directories of DOC_DIRS and the root's README and CLAUDE; `docs/`, the
+        # older specs at the root, `history/` and the files that are not Markdown are never read
+        read = ["CLAUDE.md", "README.md", "decisions/S/S-1.md", "issues/R/R-1.md", "rules/common.md",
+                "spec/02-lexical.md", "spec/README.md", "spec/tools.md", "tasks/W/W1-01.md"]  # fmt: skip
+        unread = ["docs/a.md", "docs/onsa-tools.md", "onsa-lang-spec-0.3.md", "onsa-lang-spec-0.2.md", "kumi-lang-spec.md",
+                  "docs/sub/x.md", "docs/f.toml", "history/h.md", "rules/f.toml"]  # fmt: skip
+        for rel in read + unread:
             self.write(rel, "| a |\n|---|\n| 1 | 2 |\n")
-        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root)], current)
-        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root, spec=False)], current[:3])
-        out = self.main("check")[1]
-        self.assertEqual(re.findall(r"^(\S+):3:", out, re.M), current)
-        # the new layout: read where the files are; `history/` is never read
-        new = ["decisions/S/S-1.md", "issues/R/R-1.md", "rules/common.md", "spec/02-lexical.md", "spec/README.md",
-               "tasks/W/W1-01.md"]  # fmt: skip
-        for rel in new:
-            self.write(rel, "| a |\n|---|\n| 1 | 2 |\n")
-        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root)], sorted(current + new))
+        self.assertEqual([p.as_posix() for p in repo.doc_files(self.root)], read)
         self.assertEqual([p.as_posix() for p in repo.doc_files(self.root, spec=False)],
-                         sorted(current[:3] + new[:3] + new[5:]))  # fmt: skip
+                         [r for r in read if not r.startswith("spec/")])  # fmt: skip
         out = self.main("check")[1]
-        self.assertEqual(re.findall(r"^(\S+):3:", out, re.M), sorted(current + new))
-
+        self.assertEqual(re.findall(r"^(\S+):3:", out, re.M), read)
 
 
 FIELDS_HEADER = "| キー | 形 | 値 | 要る | 意味 |\n|---|---|---|---|---|\n"
@@ -4378,8 +4369,6 @@ NEW_LAYOUT = {
 | `status` | 閉じた値 | `OPEN` / `DECIDED` / `DROPPED` | はい | 状態 |
 | `spec` | 節の並び | — | いいえ | 仕様の節 |
 | `tasks` | ID の並び（W、T、PH2） | — | いいえ | 担う作業 |
-| `amends` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた前の決定 |
-| `amended_by` | ID の並び（S、D、K、Q、A） | — | いいえ | 改めた後の決定 |
 | `found_by` | 文字列 | — | いいえ | 見つけた票 |
 | `before` | ID（W、段、PH2） | — | いいえ | 期限の作業 |
 | `group` | 整数 | — | いいえ | 組 |
@@ -4390,7 +4379,6 @@ NEW_LAYOUT = {
 status = "DECIDED"
 spec = ["§2.1"]
 tasks = ["W1-01"]
-amended_by = ["S-2"]
 decided = 2026-10-15
 +++
 # S-1 字句
@@ -4406,7 +4394,6 @@ S-77 §7
 +++
 status = "OPEN"
 tasks = ["W1-02", "PH2"]
-amends = ["S-1"]
 found_by = "W1-01/t"
 +++
 # S-2
@@ -4466,19 +4453,6 @@ found_by = "W1-02/b"
     "README.md": '# Onsa\n\n[仕様](spec/README.md)、[決定](decisions/ "題")、[外](https://example.com/x)、[節](#a)、`[コード](none.md)`\n',
     "tests/pending.toml": "",
 }
-# The same IDs in the current layout (a T work only here).
-OLD_LAYOUT = {
-    "docs/rework-phase1.md": "## 3. 作業\n| ID | 作業 |\n|---|---|\n| W1-01 ✅ | gate |\n| W1-02 | 式 |\n## 4. 残り\n",
-    "docs/implementation-tasks.md": "## 2. S\n| ID | 項目 |\n|---|---|\n| S-1 ✅ | 字句 |\n| S-2 | b |\n## 3. 設計\n"
-                                    "## 4. 作業\n| ID | 作業 |\n|---|---|\n| T1-1 | t |\n## 5. 診断コード\n"
-                                    "| コード | 内容 | 段 | M |\n|---|---|---|---|\n| E0612〜E0613 | x | — | 第 2 期 |\n\n"
-                                    "欠番: E0611（S-1 でまとめた）。\n## 6. 例\n",
-    "docs/review-impl-phase1.md": "## 8. 決定の記録\n| ID | 内容 |\n|---|---|\n| R-1 | 候補 |\n",  # §8 is the last section
-    "docs/api-candidates.md": "| ID | 候補 |\n|---|---|\n| A-1 | is_some |\n",
-    "docs/onsa-tools.md": NEW_LAYOUT["spec/tools.md"],
-    "tasks/stages.md": NEW_LAYOUT["tasks/stages.md"],  # a file of tasks/ in both layouts
-    "tests/pending.toml": "",
-}
 
 
 def split_spec(text, root):
@@ -4531,8 +4505,8 @@ class DocsTree(unittest.TestCase):
 
 
 class DocsLayout(DocsTree):
-    """X-2 U2: the IDs and their paths, `repo.Layout`, the spec as one text, the head fields, the field
-    tables of the READMEs, `docs check` (a), (b), (c), (e), and the readers switched to the new layout."""
+    """X-2 U2: the IDs and their paths, the kinds read from their directories, the spec as one text, the head
+    fields, the field tables of the READMEs, `docs check` (a), (b), (c), (e), and the readers of the new layout."""
 
     def check(self):
         out = io.StringIO()
@@ -4570,84 +4544,23 @@ class DocsLayout(DocsTree):
             with self.assertRaises(repo.RepoError):
                 repo.section_path(self.root, bad)
 
-    # ------------------------------------------------ Layout
+    # ------------------------------------------------ the kinds read from their directories (X-2 DT-7)
 
-    def test_the_layout_new_old_and_both(self):
-        self.layout(OLD_LAYOUT)
-        self.write(repo.SPEC, "# s\n\n## 2. a\n")
-        names = ("S", "W", "R", "A", "spec", "tools", "diag")
-        self.assertEqual([repo.Layout(self.root).source(n) for n in names], ["old"] * 7)
-        self.assertEqual([repo.Layout(self.root).source(n) for n in ("D", "RF", "C", "PH2", "T")], [None] * 4 + ["old"])
-        new = {"S": "decisions/S/S-1.md", "W": "tasks/W/W1-01.md", "R": "issues/R/R-1.md", "A": "decisions/A/A-1.md",
-               "spec": "spec/README.md", "tools": "spec/tools.md", "diag": "tasks/diag-codes.md"}  # fmt: skip
-        for name, rel in new.items():
-            self.write(rel, NEW_LAYOUT[rel])
-            with self.assertRaisesRegex(repo.RepoError, f"^{name} is in both .*DS-5"):
-                repo.Layout(self.root).source(name)
-        self.assertEqual(self.check(), (2, ["docs.py check: S is in both decisions/S/ and the S numbers of "
-                                            "docs/implementation-tasks.md `## 2.`; the migration keeps no copy of what it moved (DS-5)"]))
-        # the current tables taken out: the new layout alone
-        self.layout(dict.fromkeys(OLD_LAYOUT, "# moved\n"))
-        (self.root / repo.SPEC).unlink()
-        (self.root / repo.DOC_TOOLS).unlink()
-        self.assertEqual([repo.Layout(self.root).source(n) for n in names], ["new"] * 7)
-        self.write(repo.DOC_PLAN, "## 2. S\nno rows\n## 3. x\n")  # a section with no row is not a table
-        self.assertEqual(repo.Layout(self.root).source("S"), "new")
-        # the rows of R outside §8 (the review's last section) are not its table
-        self.write(repo.DOC_REVIEW, "## 6. 一覧\n| R-1 | 行 |\n## 8. 決定の記録\n| ID | 決定 | 反映 |\n|---|---|---|\n")
-        self.assertEqual(repo.Layout(self.root).source("R"), "new")
-        self.write(repo.DOC_REVIEW, "## 6. 一覧\n## 8. 決定の記録\n| R-1（一部） | 決定 | 反映 |\n")  # a word after the ID
-        with self.assertRaisesRegex(repo.RepoError, "^R is in both .*`## 8.`"):
-            repo.Layout(self.root).source("R")
-        self.assertEqual(repo.Layout(self.root).old_lines("R"), {"R-1": 3})
-        self.write(repo.DOC_REVIEW, "# moved\n")
+    def test_t_is_never_read(self):
+        """T has no directory: the history keeps it. `known`, `where` and `check` read no T work, also with the
+        plan §4 of the old layout beside the files."""
         self.layout()
-        self.assertEqual(self.check(), (0, []))
-
-    def test_t_is_read_only_while_the_plan_4_is_there(self):
-        """X-2 U6: `source("T")` is the one place: "old" while the plan §4 has its rows, None (the history)
-        after; `known`, `where` and the pending list look at that value only."""
-        self.layout(OLD_LAYOUT)
-        self.assertEqual(repo.Layout(self.root).source("T"), "old")
-        self.assertEqual(docs_tool.Index.of(self.root).known("T"), {"T1-1"})
-        ids = docs_tool.Ids(self.root)
-        self.assertEqual(ids.where("T1-1").place(), "docs/implementation-tasks.md:10")
-        self.assertEqual(ids.where("T1-2").place(), "not found (the T works of docs/implementation-tasks.md `## 4.`)")
-        plan = OLD_LAYOUT["docs/implementation-tasks.md"]
-        self.write(repo.DOC_PLAN, plan[: plan.index("## 4.")] + plan[plan.index("## 5.") :])
-        self.assertIsNone(repo.Layout(self.root).source("T"))
+        self.write("docs/implementation-tasks.md", "# plan\n## 4. 作業\n| ID | 作業 |\n|---|---|\n| T1-1 | t |\n")
         self.assertIsNone(docs_tool.Index.of(self.root).known("T"))
         history = "not found (a kind with no file: the history or the second phase)"
         self.assertEqual(docs_tool.Ids(self.root).where("T1-1").place(), history)
-        # the new layout with no plan: the history; with the plan §4 beside it, the T IDs of the text are checked there
-        shutil.rmtree(self.root)
-        self.root.mkdir()
-        self.layout()
-        self.assertIsNone(repo.Layout(self.root).source("T"))
-        self.assertEqual(self.check(), (0, []))
-        self.write(repo.DOC_PLAN, "# plan\n## 4. 作業\n| ID | 作業 |\n|---|---|\n| T1-1 | t |\n")
-        self.assertEqual(repo.Layout(self.root).source("T"), "old")
-        self.assertEqual(self.check(), (1, ["decisions/S/S-1.md:11: T5-8 is not found (the T works of docs/implementation-tasks.md `## 4.`)"]))
-
-    def test_the_layout_reads_only_what_it_needs(self):
-        self.layout(OLD_LAYOUT)
-        (self.root / repo.DOC_PLAN).write_bytes(b"\xff")
-        lay = repo.Layout(self.root)
-        self.assertEqual((lay.source("S"), lay.source("diag")), ("old", "old"))  # the plan is not read
-        self.assertEqual(lay.old_rows("W"), {"W1-01": True, "W1-02": False})
-        self.write("decisions/S/S-1.md", "")
-        with self.assertRaisesRegex(repo.RepoError, "implementation-tasks.md"):
-            repo.Layout(self.root).source("S")  # the new layout is there: the plan is looked at
+        self.assertEqual(self.check(), (0, []))  # T5-8 of S-1 is not checked
 
     def test_the_foreign_forms_where_they_are(self):
-        self.write(repo.DOC_FOREIGN_FORMS, '[[form]]\nid = "a"\n')
-        self.assertEqual((repo.foreign_forms_path(self.root), pending.foreign_form_ids(self.root)), (repo.DOC_FOREIGN_FORMS, {"a"}))
+        self.write("docs/foreign-forms.toml", '[[form]]\nid = "a"\n')  # the old place is not read
+        self.assertEqual(pending.foreign_form_ids(self.root), "`spec/foreign-forms.toml` does not exist")
         self.write(repo.FOREIGN_FORMS, '[[form]]\nid = "b"\n')
-        self.assertRegex(pending.foreign_form_ids(self.root), "^foreign is in both spec/foreign-forms.toml and docs/")
-        (self.root / repo.DOC_FOREIGN_FORMS).unlink()
-        self.assertEqual((repo.foreign_forms_path(self.root), pending.foreign_form_ids(self.root)), (repo.FOREIGN_FORMS, {"b"}))
-        (self.root / repo.FOREIGN_FORMS).unlink()
-        self.assertEqual(pending.foreign_form_ids(self.root), "`docs/foreign-forms.toml` does not exist")
+        self.assertEqual(pending.foreign_form_ids(self.root), {"b"})
 
     # ------------------------------------------------ the spec as one text
 
@@ -4683,7 +4596,6 @@ class DocsLayout(DocsTree):
             ("spec/02-a.md", NEW_LAYOUT["spec/02-a.md"].rstrip("\n"), "spec/02-a.md: does not end with a line end"),
             ("spec/notes.md", "x\n", "spec/notes.md: not a chapter file"),
             ("spec/02-b.md", "## 2. x\n", "the chapter 2 is also spec/02-a.md"),
-            (str(repo.SPEC), "# s\n", "spec is in both spec/README.md and onsa-lang-spec-0.3.md"),
         ):
             before = (self.root / rel).read_text(encoding="utf-8") if (self.root / rel).exists() else None
             self.write(rel, text)
@@ -4735,12 +4647,12 @@ class DocsLayout(DocsTree):
         self.edit(s1, '["§2.1"]', '["§2.1", "§0.5.1"]')
         self.edit(s1, "§3 と §2", "§3 と §0.5.1")
         self.assertEqual(self.check(), (0, []))
-        self.assertOne(s1, "§3 と §0.5.1", "§3 と §0.5.2", f"{s1}:10: §0.5.2 is not a numbered heading of the spec")
+        self.assertOne(s1, "§3 と §0.5.1", "§3 と §0.5.2", f"{s1}:9: §0.5.2 is not a numbered heading of the spec")
         cases = [{"path": "tests/a.onsa", "spec": ["§0.5.1", "§0.2"]}, {"path": "tests/b.onsa", "spec": ["§0.5.2"]}]
         with mock.patch.object(repo, "cases_json", return_value=cases):
             code, out = quiet_out(spec_sections.main, ["--check"], root=self.root)
         self.assertEqual((code, [x for x in out if "§" in x]), (1, ["tests/b.onsa: [test] spec names §0.5.2, which is not "
-                                                                   f"a numbered heading of {repo.SPEC}"]))  # fmt: skip
+                                                                   f"a numbered heading of {repo.SPEC_SHOWN}"]))  # fmt: skip
         problems, _ = cse.check(repo.spec_doc(self.root), self.root / "tests" / "spec", self.root / repo.PENDING, self.root)
         self.assertEqual([p.split("  ")[0] for p in problems], ["spec/00-principles.md:8", "spec/README.md:14", "spec/03-b.md:6"])
 
@@ -4774,9 +4686,9 @@ class DocsLayout(DocsTree):
 
     def test_read_the_head_fields(self):
         head = docs_tool.read_head(NEW_LAYOUT["decisions/S/S-1.md"])
-        self.assertEqual(head.values, {"status": "DECIDED", "spec": ["§2.1"], "tasks": ["W1-01"], "amended_by": ["S-2"],
+        self.assertEqual(head.values, {"status": "DECIDED", "spec": ["§2.1"], "tasks": ["W1-01"],
                                        "decided": datetime.date(2026, 10, 15)})  # fmt: skip
-        self.assertEqual((head.key_lines["decided"], head.heading), (6, (8, "# S-1 字句")))
+        self.assertEqual((head.key_lines["decided"], head.heading), (5, (7, "# S-1 字句")))
         self.assertEqual(docs_tool.read_head(NEW_LAYOUT["issues/R/R-1.md"]).values["aspect"], 1)
         for text, error, line in (("# S-1\n", docs_tool.NO_HEAD, 1), ("+++\nstatus = 1\n", docs_tool.NOT_CLOSED, 1),
                                   ("+++\n", docs_tool.NOT_CLOSED, 1), ('+++\na = "x"\nb = OPEN\n+++\n', "Invalid value", 3),
@@ -4841,7 +4753,7 @@ class DocsLayout(DocsTree):
         self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "W1-"', f"{s1}:4: `before` has \"W1-\", not an ID of W、段、PH2")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = ["W1"]', f"{s1}:4: `tasks` has \"W1\", not an ID of W、T、PH2")
         self.assertOne(s1, '["§2.1"]', '["2.1"]', f"{s1}:3: `spec` has \"2.1\", not a section (`§6.1`, `tools.md §3.2`)")
-        self.assertOne(s1, "2026-10-15", '"2026-10-15"', f"{s1}:6: `decided` has \"2026-10-15\", not a date")
+        self.assertOne(s1, "2026-10-15", '"2026-10-15"', f"{s1}:5: `decided` has \"2026-10-15\", not a date")
         self.assertOne(r1, "aspect = 1", 'aspect = "1"', f"{r1}:4: `aspect` has \"1\", not one of 1 / 2 / 3")
         self.assertOne(w2, '["基盤"]', '["基盤", "危険"]', f"{w2}:5: `marks` has \"危険\", not one of 基盤 / メモ")
         self.assertOne(a1, "# A-1 is_some", "# A-2 is_some", f"{a1}:4: the first line after the head fields is not `# A-1 <title>`")
@@ -4889,8 +4801,8 @@ class DocsLayout(DocsTree):
         self.layout()
         s1, s2, w2 = "decisions/S/S-1.md", "decisions/S/S-2.md", "tasks/W/W1-02.md"
         self.assertOne(s2, '["W1-02", "PH2"]', '["W1-09", "PH2", "T9-9"]', f"{s2}:3: tasks: W1-09 is not found (tasks/W/)")
-        self.assertOne(s2, "found_by = \"W1-01/t\"", "found_by = \"W1-08/t\"", f"{s2}:5: found_by: W1-08 is not found (tasks/W/)")
-        self.assertOne(s2, "R-1 と A-1", "R-1 と A-1、R-1、A-2、A-2", f"{s2}:8: A-2 is not found (decisions/A/)")
+        self.assertOne(s2, "found_by = \"W1-01/t\"", "found_by = \"W1-08/t\"", f"{s2}:4: found_by: W1-08 is not found (tasks/W/)")
+        self.assertOne(s2, "R-1 と A-1", "R-1 と A-1、R-1、A-2、A-2", f"{s2}:7: A-2 is not found (decisions/A/)")
         self.assertOne(w2, '["W1-01"]', '["W1-08"]', f"{w2}:4: depends: W1-08 is not found (tasks/W/)")
         # `depends` a stage (U5e): there when the table of the stages has it (X-2 U6), with or without a work
         for stage in ("W1", "W2", "M5"):
@@ -4902,45 +4814,41 @@ class DocsLayout(DocsTree):
         for bad in ("W1-", "PH2", "W"):
             self.assertOne(w2, '["W1-01"]', f'["{bad}"]', f'{w2}:4: `depends` has "{bad}", not an ID of W、段')
         self.assertOne(s1, '["§2.1"]', '["§2.1", "§9.9"]', f"{s1}:3: spec: §9.9 is not a numbered heading of the spec")
-        self.assertOne(s1, "§3 と §2", "§3 と §2、§7", f"{s1}:10: §7 is not a numbered heading of the spec")
-        self.assertOne(s1, "`tools.md §1`", "`tools.md §1・§2`", f"{s1}:10: tools.md §2 is not a numbered heading of the spec of the tools")
+        self.assertOne(s1, "§3 と §2", "§3 と §2、§7", f"{s1}:9: §7 is not a numbered heading of the spec")
+        self.assertOne(s1, "`tools.md §1`", "`tools.md §1・§2`", f"{s1}:9: tools.md §2 is not a numbered heading of the spec of the tools")
         # `before`: a stage is there when the table has it (W2 and M5 have no work); PH2 is not checked; `W2` in the
         # text is not an ID
         for due in ("W1", "W2", "M5", "M9", "PH2", "W1-02"):
             self.edit(s2, 'found_by = "W1-01/t"', f'found_by = "W1-01/t"\nbefore = "{due}"')
             self.assertEqual(self.check(), (0, []), due)
             self.edit(s2, f'found_by = "W1-01/t"\nbefore = "{due}"', 'found_by = "W1-01/t"')
-        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W3"', f"{s2}:6: before: W3: not a stage of tasks/stages.md (W1, W2, M5, M9)")
-        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W2-01"', f"{s2}:6: before: W2-01 is not found (tasks/W/)")
+        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W3"', f"{s2}:5: before: W3: not a stage of tasks/stages.md (W1, W2, M5, M9)")
+        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W2-01"', f"{s2}:5: before: W2-01 is not found (tasks/W/)")
         self.edit(s2, "R-1 と A-1", "R-1 と A-1、W2 まで")
         self.assertEqual(self.check(), (0, []))
         self.edit(s2, "R-1 と A-1、W2 まで", "R-1 と A-1")
-        # the works in the current table (rework §3): the stages are still the table's
-        for rel in ("tasks/W/W1-01.md", "tasks/W/W1-02.md", "tasks/W/README.md"):
-            (self.root / rel).unlink()
-        (self.root / "tasks/W").rmdir()
-        self.write(repo.DOC_REWORK, OLD_LAYOUT["docs/rework-phase1.md"])
-        self.edit(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1"')
-        self.assertEqual(self.check(), (0, []))
-        self.assertOne(s2, 'before = "W1"', 'before = "W3"', f"{s2}:6: before: W3: not a stage of tasks/stages.md (W1, W2, M5, M9)")
-        self.layout()  # the new layout again
-        (self.root / repo.DOC_REWORK).unlink()
-        # a kind still in the current table: read there
+        # a kind whose directory is not there is not checked (as D, K, Q; `Index.known`): R-1 of S-2
         for rel in ("issues/R/R-1.md", "issues/R/README.md"):
             (self.root / rel).unlink()
         (self.root / "issues/R").rmdir()
-        self.write(repo.DOC_REVIEW, OLD_LAYOUT["docs/review-impl-phase1.md"])
         self.assertEqual(self.check(), (0, []))
-        self.assertOne(s2, "R-1 と", "R-5 と", f"{s2}:8: R-5 is not found (the R numbers of docs/review-impl-phase1.md `## 8.`)")
 
     def test_check_relations(self):
         self.layout()
         s1, s2, r1, w1 = "decisions/S/S-1.md", "decisions/S/S-2.md", "issues/R/R-1.md", "tasks/W/W1-01.md"
         self.assertOne(s2, '["W1-02", "PH2"]', '["W1-01"]', f"{s2}:2: OPEN, but every work of `tasks` is DONE (W1-01)")
-        self.assertOne(s1, 'amended_by = ["S-2"]\n', "group = 1\n", f"{s2}:4: `amends` has S-1, but S-1 has no S-2 in `amended_by`")
-        self.assertOne(s2, 'amends = ["S-1"]\n', "group = 1\n", f"{s1}:5: `amended_by` has S-2, but S-2 has no S-1 in `amends`")
         self.assertOne(r1, 'fix = ["W1-02"]', 'fix = ["W1-01"]', f"{r1}:2: OPEN, but every work of `fix` is DONE (W1-01)")
         self.assertOne(w1, 'commit = "abc"', 'doing = ["U1/i"]', f"{w1}:3: `doing` on a work that is DONE, not DOING")
+
+    def test_amends_is_no_field(self):
+        # X-2 U7a: `amends` and `amended_by` are out of the field table and of the tool; written, (a) finds them
+        self.layout()
+        s1, s2 = "decisions/S/S-1.md", "decisions/S/S-2.md"
+        self.assertOne(s2, 'found_by = "W1-01/t"', 'amends = ["S-1"]\nfound_by = "W1-01/t"',
+                       f"{s2}:4: `amends` is not a field of decisions/README.md")  # fmt: skip
+        self.assertOne(s1, "decided = 2026-10-15", 'amended_by = ["S-2"]\ndecided = 2026-10-15',
+                       f"{s1}:5: `amended_by` is not a field of decisions/README.md")  # fmt: skip
+        self.assertNotIn("amend", docs_tool.COMMANDS)
 
     def test_check_links(self):
         self.layout()
@@ -4949,20 +4857,15 @@ class DocsLayout(DocsTree):
 
     # ------------------------------------------------ the readers of the current tools
 
-    def test_load_docs_reads_both_layouts_alike(self):
+    def test_load_docs_reads_the_files_of_the_ids(self):
         self.layout()
         new = pending.load_docs(self.root)
-        old_root = Path(self.tmp.name) / "old"
-        for rel, text in {**OLD_LAYOUT, str(repo.SPEC): repo.spec_text(self.root)}.items():
-            (old_root / rel).parent.mkdir(parents=True, exist_ok=True)
-            (old_root / rel).write_text(text, encoding="utf-8")
-        old = pending.load_docs(old_root)
         self.assertEqual((new.works, new.done, new.reasons), ({"W1-01", "W1-02"}, {"W1-01"}, {"S-1", "S-2", "R-1"}))
-        self.assertEqual((old.works - {"T1-1"}, old.done, old.reasons, old.sections), (new.works, new.done, new.reasons, new.sections))
-        self.assertEqual(gap_marks.api_ids(self.root), gap_marks.api_ids(old_root))
-        for root in (self.root, old_root):
-            text, doc = repo.diag_text(root)
-            self.assertEqual((repo.retired_codes(text, doc), repo.phase2_codes(text, doc)), ({"E0611"}, {"E0612", "E0613"}))
+        self.assertEqual((new.works_at, new.reasons_at, new.sections), ("tasks/W/", "decisions/S/, issues/R/",
+                                                                         {"0", "0.1", "1", "2", "2.1", "2.2", "3", "3.1"}))
+        self.assertEqual(gap_marks.api_ids(self.root), {"A-1"})
+        text, doc = repo.diag_text(self.root)
+        self.assertEqual((repo.retired_codes(text, doc), repo.phase2_codes(text, doc)), ({"E0611"}, {"E0612", "E0613"}))
         self.assertEqual(repo.diag_text(self.root)[1], repo.DIAG_CODES)
         with self.assertRaisesRegex(repo.RepoError, "tasks/diag-codes.md: no row of the table is `第 2 期`"):
             repo.phase2_codes("| E0001 | x |\n", repo.DIAG_CODES)
@@ -4996,7 +4899,7 @@ class DocsLayout(DocsTree):
 
 class DocsCommands(DocsTree):
     """X-2 U3: the commands of `docs.py` that read (path, back, refs; show, list, changes, ticket) and
-    write (set, note, new, draft, amend), on NEW_LAYOUT and OLD_LAYOUT."""
+    write (set, note, new, draft), on NEW_LAYOUT."""
 
     def setUp(self):
         super().setUp()
@@ -5012,11 +4915,6 @@ class DocsCommands(DocsTree):
 
     def read(self, rel):
         return (self.root / rel).read_text(encoding="utf-8")
-
-    def old_layout(self):
-        readme = NEW_LAYOUT["spec/README.md"]
-        spec = readme[: readme.index(repo.SPEC_INDEX_HEAD)] + NEW_LAYOUT["spec/02-a.md"] + NEW_LAYOUT["spec/03-b.md"]
-        self.layout({**OLD_LAYOUT, str(repo.SPEC): spec})
 
     def assertRefused(self, argv, lines, unchanged=()):
         """`docs.py <argv>` writes nothing, prints `lines`, and exits 1."""
@@ -5040,41 +4938,20 @@ class DocsCommands(DocsTree):
         code, out = self.run_("path", "S-1", "x")
         self.assertEqual((code, out[-1]), (2, "docs.py path: x: not an ID or a section (`S-537`, `§6.1`, `tools.md §3.2`)"))
 
-    def test_path_back_refs_in_the_current_layout(self):
-        self.old_layout()
-        self.assertEqual(self.run_("path", "S-1", "W1-02", "R-1", "A-1", "T1-1", "§2.1", "tools.md §1"), (0, [
-            "docs/implementation-tasks.md:4", "docs/rework-phase1.md:5", "docs/review-impl-phase1.md:4",
-            "docs/api-candidates.md:3", "docs/implementation-tasks.md:10", "onsa-lang-spec-0.3.md:15",
-            "docs/onsa-tools.md:3"]))  # fmt: skip
-        self.assertEqual(self.run_("path", "S-9"), (1, ["S-9: not found (the S numbers of docs/implementation-tasks.md `## 2.`)"]))
-        # back: the row of the ID itself is not a mention
-        self.assertEqual(self.run_("back", "S-1"), (0, [
-            "== text", "docs/implementation-tasks.md:16: 欠番: E0611（S-1 でまとめた）。",
-            "docs back: S-1: 0 key(s), 1 line(s) of text in 1 file(s)"]))  # fmt: skip
-        self.write("docs/carry.md", "# 持ち越し\n\nS-1 と W1-02、R-1、A-1、T1-1、S-9、S-1。\n")
-        self.assertEqual(self.run_("refs", "docs/carry.md"), (0, [
-            "S-1\t✅\tdocs/implementation-tasks.md:4\t-", "W1-02\t-\tdocs/rework-phase1.md:5\t-",
-            "R-1\t-\tdocs/review-impl-phase1.md:4\t-", "A-1\t-\tdocs/api-candidates.md:3\t-",
-            "T1-1\t-\tdocs/implementation-tasks.md:10\t-",
-            "S-9\t-\tnot found (the S numbers of docs/implementation-tasks.md `## 2.`)\t-",
-            "docs refs: docs/carry.md: 6 ID(s), 1 not found"]))  # fmt: skip
-        # the refs of an ID of a current table: its row
-        self.assertEqual(self.run_("refs", "S-2"), (0, ["docs refs: docs/implementation-tasks.md:5: 0 ID(s), 0 not found"]))
-
     def test_back(self):
         self.layout()
         self.write("history/old.md", "S-2 と S-22\n")
         long = "あ" * 100 + "S-2" + "い" * 100
         self.write("rules/common.md", f"# 共通\n\n{long}\n")
         self.assertEqual(self.run_("back", "S-2"), (0, [
-            "== keys", "decisions/S/S-1.md:5: amended_by", "issues/R/R-1.md:5: decisions",
-            "== text", "decisions/S/S-1.md:11: - 経緯: C-40 と T5-8 と D-15 は確かめない。`decisions/S/S-2.md` も指す。",
+            "== keys", "issues/R/R-1.md:5: decisions",
+            "== text", "decisions/S/S-1.md:10: - 経緯: C-40 と T5-8 と D-15 は確かめない。`decisions/S/S-2.md` も指す。",
             "rules/common.md:3: …" + "あ" * 60 + "S-2" + "い" * 60 + "…",
-            "docs back: S-2: 2 key(s), 2 line(s) of text in 3 file(s)"]))  # fmt: skip
+            "docs back: S-2: 1 key(s), 2 line(s) of text in 3 file(s)"]))  # fmt: skip
         code, out = self.run_("back", "S-2", "--history")
-        self.assertEqual(out[-2:], ["history/old.md:1: S-2 と S-22", "docs back: S-2: 2 key(s), 3 line(s) of text in 4 file(s)"])
+        self.assertEqual(out[-2:], ["history/old.md:1: S-2 と S-22", "docs back: S-2: 1 key(s), 3 line(s) of text in 4 file(s)"])
         # a key of the head fields: in a string (`found_by`) too; a work in the second phase
-        self.assertEqual(self.run_("back", "W1-01")[1][:3], ["== keys", "decisions/S/S-1.md:4: tasks", "decisions/S/S-2.md:5: found_by"])
+        self.assertEqual(self.run_("back", "W1-01")[1][:3], ["== keys", "decisions/S/S-1.md:4: tasks", "decisions/S/S-2.md:4: found_by"])
         self.assertEqual(self.run_("back", "PH2")[1], ["== keys", "decisions/S/S-2.md:3: tasks", "docs back: PH2: 1 key(s), 0 line(s) of text in 1 file(s)"])
         self.assertEqual(self.run_("back", "S-99")[1], ["docs back: S-99: 0 key(s), 0 line(s) of text in 0 file(s)"])
         self.assertEqual(self.run_("back", "x")[0], 2)
@@ -5082,10 +4959,11 @@ class DocsCommands(DocsTree):
     def test_refs(self):
         self.layout()
         rows = [
-            "W1-01\tDONE\ttasks/W/W1-01.md\tgate", "S-2\tOPEN\tdecisions/S/S-2.md\tR-1 と A-1。", "W1-02\tDOING\ttasks/W/W1-02.md\t式",
+            "W1-01\tDONE\ttasks/W/W1-01.md\tgate", "W1-02\tDOING\ttasks/W/W1-02.md\t式",
             "C-40\t-\tnot found (a kind with no file: the history or the second phase)\t-",
             "T5-8\t-\tnot found (a kind with no file: the history or the second phase)\t-",
-            "D-15\t-\tnot found (no decisions/D/)\t-", "S-77\t-\tnot found (decisions/S/)\t-",
+            "D-15\t-\tnot found (no decisions/D/)\t-", "S-2\tOPEN\tdecisions/S/S-2.md\tR-1 と A-1。",
+            "S-77\t-\tnot found (decisions/S/)\t-",
             "docs refs: decisions/S/S-1.md: 7 ID(s), 4 not found",
         ]  # fmt: skip
         self.assertEqual(self.run_("refs", "decisions/S/S-1.md"), (0, rows))
@@ -5104,8 +4982,8 @@ class DocsCommands(DocsTree):
         self.write("tests/pending.toml", entry("spec-example", "§2.1 0123abcd: x", reasons=("S-2", "R-1")) + entry("gate", "g", reasons=("S-1",)))
         code, out = self.run_("show", "S-2")
         self.assertEqual((code, out), (0, [
-            "== decisions/S/S-2.md", *NEW_LAYOUT["decisions/S/S-2.md"].splitlines()[:7], "== relations",
-            "tasks\tW1-02\tDOING\t式\t-", "tasks\tPH2\t-\t-\t-", "amends\tS-1\tDECIDED\t字句\t§2.1", "issue\tR-1\tOPEN\t候補\t-",
+            "== decisions/S/S-2.md", *NEW_LAYOUT["decisions/S/S-2.md"].splitlines()[:6], "== relations",
+            "tasks\tW1-02\tDOING\t式\t-", "tasks\tPH2\t-\t-\t-", "issue\tR-1\tOPEN\t候補\t-",
             "pending\tspec-example\t§2.1 0123abcd: x\tuntil W3-07", "== body", "- 空白: R-1 と A-1。"]))  # fmt: skip
         self.assertEqual(self.run_("show", "W1-02", "--relations")[1][-4:], [
             "== relations", "decision\tS-2\tOPEN\tR-1 と A-1。\t-", "fixes\tR-1\tOPEN\t候補\t-", "waiting\tS-2\tOPEN\tR-1 と A-1。\t-"])  # fmt: skip
@@ -5200,10 +5078,10 @@ class DocsCommands(DocsTree):
         for due in ("W1", "PH2", "W1-02"):
             self.assertEqual(self.run_("set", "S-2", f"before={due}"), (0, [f'{s2}: before = "{due}"']), due)
             self.assertEqual(self.run_("check")[0], 0, due)
-        self.assertRefused(("set", "S-2", "before=W99"), [f"{s2}:6: before: W99: not a stage of tasks/stages.md (W1, W2, M5, M9)"], [s2])
+        self.assertRefused(("set", "S-2", "before=W99"), [f"{s2}:5: before: W99: not a stage of tasks/stages.md (W1, W2, M5, M9)"], [s2])
         self.assertRefused(("set", "S-2", "before=x4"), ['`before` has "x4", not an ID of W、段、PH2'], [s2])
         # a work that is not there is refused too (the head fields, (b))
-        self.assertRefused(("set", "S-2", "before=W1-09"), [f"{s2}:6: before: W1-09 is not found (tasks/W/)"], [s2])
+        self.assertRefused(("set", "S-2", "before=W1-09"), [f"{s2}:5: before: W1-09 is not found (tasks/W/)"], [s2])
         self.assertRefused(("set", "S-2", "tasks=W1-02,W1-09"), [f"{s2}:3: tasks: W1-09 is not found (tasks/W/)"], [s2])
         # the text is not looked at: a broken reference there does not stop a write of the head fields
         self.edit(s2, "R-1 と A-1。", "R-1 と A-9。")
@@ -5266,16 +5144,15 @@ class DocsCommands(DocsTree):
         self.edit("tasks/W/W2-02.md", '["W2"]', '["W3"]')
         self.assertEqual(self.run_("ticket", "W2-02", "U1/i")[1][5], "- 依存: W3（-）")
 
-    def test_the_commands_of_the_new_layout_in_the_current_one(self):
-        self.old_layout()
-        for argv in (("show", "S-1"), ("list", "S"), ("changes",), ("ticket", "W1-01", "U1/i"), ("set", "S-1", "status=OPEN"),
-                     ("note", "S-1", "補い", "x"), ("new", "S"), ("draft", "S-1", "--group", "1"), ("amend", "S-2", "S-1")):  # fmt: skip
+    def test_the_commands_need_the_directory_of_the_kind(self):
+        self.layout()
+        shutil.rmtree(self.root / "decisions" / "S")
+        for argv in (("show", "S-1"), ("list", "S"), ("set", "S-1", "status=OPEN"), ("note", "S-1", "補い", "x"), ("new", "S"),
+                     ("draft", "S-1", "--group", "1")):  # fmt: skip
             code, out = self.run_(*argv)
-            self.assertEqual(code, 2, argv)
-            self.assertIn("not in the new layout", out[-1], argv)
-        self.assertEqual(self.read(repo.DOC_PLAN), OLD_LAYOUT["docs/implementation-tasks.md"])
+            self.assertEqual((code, out[-1]), (2, f"docs.py {argv[0]}: S: not in the new layout (no decisions/S/)"), argv)
 
-    # ------------------------------------------------ set, note, new, draft, amend
+    # ------------------------------------------------ set, note, new, draft
 
     def test_set(self):
         self.layout()
@@ -5297,7 +5174,6 @@ class DocsCommands(DocsTree):
             "tasks/W/W1-02.md:6: `doing` on a work that is DONE, not DOING"], [w2, "issues/R/R-1.md"])  # fmt: skip
         self.assertRefused(("set", "W1-02", "status=DONE", "doing="), ["issues/R/R-1.md:2: OPEN, but every work of `fix` is DONE (W1-02)"], [w2])
         self.assertRefused(("set", "W1-02", "status=", "doing="), ["tasks/W/W1-02.md:1: the field `status` is required (tasks/W/README.md)"], [w2])
-        self.assertRefused(("set", "S-2", "amends="), ["decisions/S/S-1.md:5: `amended_by` has S-2, but S-2 has no S-1 in `amends`"], ["decisions/S/S-2.md"])
         # in order, both are written
         self.assertEqual(self.run_("set", "R-1", "status=DONE")[0], 0)
         self.assertEqual(self.run_("set", "W1-02", "status=DONE", "doing=")[0], 0)
@@ -5373,38 +5249,91 @@ class DocsCommands(DocsTree):
         with self.assertRaises(SystemExit):  # argparse: --group is required
             self.run_("draft", "S-3")
 
-    def test_amend(self):
+    # ------------------------------------------------ the old places are not read (X-2 DT-7, U7a)
+
+    # What the old layout had, made to change the results if it were read: the tables of the IDs (S-9, T1-1,
+    # W9-01, R-9, A-9), the codes, the spec of the tools, the foreign forms, a broken table, the spec file of
+    # the root, and the history.
+    BAIT = {
+        "docs/implementation-tasks.md": "# plan\n## 2. S\n| ID | 項目 |\n|---|---|\n| S-9 | x |\n## 3. x\n## 4. 作業\n"
+                                        "| ID | 作業 |\n|---|---|\n| T1-1 | t |\n## 5. 診断コード\n| コード | 内容 | 段 | M |\n"
+                                        "|---|---|---|---|\n| E0700 | x | — | 第 2 期 |\n\n欠番: E0701。\n## 6. 例\n",
+        "docs/rework-phase1.md": "## 3. 作業\n| ID | 作業 |\n|---|---|\n| W9-01 | x |\n## 4. 残り\n",
+        "docs/review-impl-phase1.md": "## 8. 決定の記録\n| ID | 内容 |\n|---|---|\n| R-9 | x |\n",
+        "docs/api-candidates.md": "| ID | 候補 |\n|---|---|\n| A-9 | x |\n",
+        "docs/onsa-tools.md": "# tools\n\n## 1. graph\n\n```onsa\nprev~(x, 0.0)\n```\n\n## 2. old\n",
+        "docs/foreign-forms.toml": '[[form]]\nid = "old"\n',
+        "docs/x.md": "| a |\n| 1 | 2 |\nS-1\n",
+        "onsa-lang-spec-0.3.md": "# s\n\n## 9. old\n\n```onsa\nprev~(x, 0)\n```\n",
+        "history/h.md": "| a |\n| 1 | 2 |\nS-1\n",
+    }
+
+    def results(self):
+        """What the tools read from the tree, and the files under it they opened."""
+        opened, real = [], io.open
+
+        def spy(file, *args, **kw):
+            if isinstance(file, (str, os.PathLike)):
+                opened.append(Path(file))
+            return real(file, *args, **kw)
+
+        with mock.patch("io.open", spy), mock.patch("builtins.open", spy):
+            docs = pending.load_docs(self.root)
+            inits = default_inits.sources(self.root)
+            out = {
+                "check": self.run_("check"),
+                "load_docs": (docs.works, docs.done, docs.reasons, docs.sections, docs.stages, docs.works_at, docs.reasons_at),
+                "api_ids": gap_marks.api_ids(self.root),
+                "diag": repo.diag_text(self.root),
+                "spec": (repo.spec_doc(self.root), repo.tools_doc(self.root)),
+                "foreign": pending.foreign_form_ids(self.root),
+                "inits": ([(s.shown, s.text, s.first) for s in inits[0]], inits[1:]),
+                "path": self.run_("path", "S-1", "S-9", "T1-1", "W9-01", "R-9", "A-9", "§9", "§2.1", "tools.md §1", "tools.md §2"),
+                "refs": [self.run_("refs", x) for x in ("S-1", "decisions/S/S-2.md")],
+                "back": [self.run_("back", x) for x in ("S-1", "S-9", "T1-1")],
+            }
+        root = self.root.resolve()
+        rels = {p.resolve().relative_to(root) for p in opened if p.resolve().is_relative_to(root)}
+        return out, sorted(r.as_posix() for r in rels if r.parts[0] in ("docs", "history") or len(r.parts) == 1 and r.suffix == ".md")
+
+    def test_the_old_places_are_never_read(self):
         self.layout()
-        s1, s3 = "decisions/S/S-1.md", "decisions/S/S-3.md"
-        self.write(s3, '+++\nstatus = "DECIDED"\n+++\n# S-3 後\n')
-        self.assertEqual(self.run_("amend", "S-3", "S-1"), (0, [f"{s1}: written", f"{s3}: written"]))
-        self.assertIn('amended_by = ["S-2", "S-3"]\n', self.read(s1))
-        self.assertEqual(self.read(s3), '+++\nstatus = "DECIDED"\namends = ["S-1"]\n+++\n# S-3 後\n')
-        self.assertEqual(self.run_("check")[0], 0)
-        self.assertEqual(self.run_("amend", "S-3", "S-1"), (0, ["docs amend: S-3 amends S-1 already"]))
-        self.assertRefused(("amend", "S-1", "S-1"), ["S-1 cannot amend itself"])
-        self.assertRefused(("amend", "S-9", "S-1"), ["S-9: not found (decisions/S/)"], [s1])
-        self.assertEqual(self.run_("amend", "W1-01", "S-1")[0], 2)
-        self.write("decisions/S/.S-3.md.swp", "")
-        self.assertRefused(("amend", "S-3", "S-2"), [f"{s3}: the swap file .S-3.md.swp (open in vim?)"], [s3, "decisions/S/S-2.md"])
-        (self.root / "decisions/S/.S-3.md.swp").unlink()
-        # the second write fails: the first is put back
-        self.write("decisions/S/S-4.md", '+++\nstatus = "DECIDED"\n+++\n# S-4\n')
-        before = {rel: self.read(rel) for rel in (s1, "decisions/S/S-4.md")}
-        real, calls = docs_tool.write_atomic, []
+        self.write(repo.FOREIGN_FORMS, '[[form]]\nid = "a"\n')
+        want, opened = self.results()
+        check = "docs check: no problem in 19 document(s) (tables, heads, refs, relations, links)"  # the .md of NEW_LAYOUT
+        self.assertEqual(want["check"], (0, [check]))
+        self.assertEqual((want["foreign"], want["path"][0]), ({"a"}, 1))  # S-9 and the others are not found
+        self.assertEqual(opened, ["README.md"])  # the root's README is a document
+        for rel, text in self.BAIT.items():
+            self.write(rel, text)
+        got, opened = self.results()
+        self.assertEqual(got, want)
+        self.assertEqual(opened, ["README.md"])
+        # only `back --history` reads the history, when it is asked
+        self.assertIn("history/h.md:3: S-1", self.run_("back", "S-1", "--history")[1])
 
-        def fail_second(path, text):
-            calls.append(path)
-            if len(calls) == 2:
-                raise OSError("no space left")
-            real(path, text)
-
-        with mock.patch.object(docs_tool, "write_atomic", side_effect=fail_second):
-            code, out = self.run_("amend", "S-4", "S-1")
-        self.assertEqual(code, 2)
-        self.assertEqual(out[-1], f"docs.py amend: decisions/S/S-4.md: no space left; {s1} put back")
-        self.assertEqual(len(calls), 3)
-        self.assertEqual({rel: self.read(rel) for rel in before}, before)
+    def test_no_tool_names_the_old_places(self):
+        """The tools (not their self-tests) name no `docs/`, and name `history/` only to read it when it is asked
+        (`back --history`) and to leave it out (`narrowing`). The comments are read too."""
+        tools = Path(__file__).resolve().parent
+        docs_dir = re.compile(r"""Path\(\s*["']docs["']\s*\)|["']docs/""")
+        history_dir = re.compile(r"""["']history["'/]""")
+        found_docs, found_history = [], []
+        for p in sorted(tools.rglob("*.py")):
+            if p.name.startswith("test_"):
+                continue
+            rel = p.relative_to(tools).as_posix()
+            for i, line in enumerate(p.read_text(encoding="utf-8").split("\n"), 1):
+                if docs_dir.search(line):
+                    found_docs.append(f"{rel}:{i}")
+                if history_dir.search(line):
+                    found_history.append((rel, line.strip()))
+        self.assertGreater(len(list(tools.rglob("*.py"))), 20)
+        self.assertEqual(found_docs, [])
+        self.assertEqual(found_history, [
+            ("docs.py", 'files += sorted(p.relative_to(root) for p in (root / "history").rglob("*.md") if p.is_file())'),
+            ("narrowing.py", 'EXCLUDED_FROM_CODES = ("tests/", "tools/", "rules/", "decisions/", "issues/", "tasks/", "history/")'),
+        ])  # fmt: skip
 
 
 if __name__ == "__main__":

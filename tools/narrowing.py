@@ -5,7 +5,7 @@
     --changed-since REV|auto   the seeds the diff since REV touches (and the untracked
                                ones), and the seeds whose text holds a code (`E0013`) that
                                the code diff names (its added and removed lines outside
-                               `tests/`, `docs/`, `tools/`), at most `--code-cap` of them: the codes
+                               `tests/`, `tools/`, the documents), at most `--code-cap` of them: the codes
                                with the fewest seeds first, up to the one that would pass the
                                cap (the codes left out are named). `auto`: `git merge-base HEAD dev`.
     --sample F --salt ID       besides, the seeds with sha256("<ID>|<path>") below F of the
@@ -40,7 +40,7 @@ CODE_CAP = 200
 SHORT = 7  # a fixed length, not `git rev-parse --short` (its length grows with the repository)
 GROUP_PARTS = 3  # the group of the sample's minimum: the first parts of the directory
 GIT_TIMEOUT = 60
-EXCLUDED_FROM_CODES = ("tests/", "docs/", "tools/", "rules/", "decisions/", "issues/", "tasks/", "history/")
+EXCLUDED_FROM_CODES = ("tests/", "tools/", "rules/", "decisions/", "issues/", "tasks/", "history/")
 BASE_FILES = ("onsa", "onsa_cases")  # the base binaries, in `base_dir`
 # What the binaries are built from: a tracked change there makes them differ from HEAD's.
 BUILT_FROM = ("crates", "tools", "std", "runtime", ":(glob)Cargo.*")

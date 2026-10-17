@@ -115,7 +115,7 @@ STEPS = [
     Step("docs", (*PY, str(TOOLS / "docs.py"), "check"), static=True),
     Step("docs-fmt", (*PY, str(TOOLS / "docs.py"), "fmt", "--list"), info=True, static=True),
     Step("pending", (*PY, str(TOOLS / "pending.py")), stage_args=True, gate_steps=True, static=True),
-    # The ignores of the Rust tests whose reason names a work that is done or not in the tables (R-224).
+    # The ignores of the Rust tests whose reason names a work that is done or not in tasks/W/ (R-224).
     Step("ignores", (*PY, str(TOOLS / "ignores.py"), "stale"), stage_args=True, static=True),
     Step("diag-registry", (*PY, str(TOOLS / "diag_codes.py"), "--registry"), static=True),
     Step("diag-negatives", (*PY, str(TOOLS / "diag_codes.py"), "--negatives"), static=True),

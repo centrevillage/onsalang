@@ -19,9 +19,9 @@ Both report a test cargo ran that the files do not show. It writes nothing.
 
 `stale` (the gate item `ignores`, R-224) reads the ignored tests of the paths
 (default `<root>/crates`) as `list` does, and fails on each whose reason starts
-with a work ID (`W3-11`) that the tables of `tools/pending.py` mark done
+with a work ID (`W3-11`) that the files of `tasks/W/` (`tools/pending.py`) mark done
 (take the ignore off: `passing` tells whether it passes now) or do not have (a
-typo, or a T of the plan §4, which is no work). With `--stage-end W3` (as `tools/pending.py`), it also fails on each
+typo, or a T (of the history), which is no work). With `--stage-end W3` (as `tools/pending.py`), it also fails on each
 whose work is of that stage, done or not. A reason that does not start with a
 work ID is only counted. It also fails on a form not read, a path that does not
 exist, and when it finds no `.rs` file.
@@ -68,7 +68,7 @@ CLOSE = {"(": ")", "[": "]", "{": "}"}
 RAW_STR = re.compile(r'b?r(#*)"')
 CHAR = re.compile(r"b?'(?:\\[^']+|[^\\'\n])'")
 # A reason that names the work it waits for starts with its ID (`W3-11 U3c: …`): the form of a work of a
-# stage, so that an ID of another form (a T of the plan §4, which is no work of the list) fails as no work.
+# stage, so that an ID of another form (a T of the history, which is no work of the list) fails as no work.
 WORK_AT_START = re.compile(rf"{repo.STAGE_NAME.pattern}-\d+(?!\d)")
 
 
@@ -441,7 +441,7 @@ def stale(args):
     try:
         docs = pending.load_docs(root)
     except pending.DocsError as e:
-        print(f"the document tables are not found: {e}")
+        print(f"cannot read the IDs: {e}")
         return 1
     if args.stage_end is not None and (problem := pending.stage_problem(args.stage_end, docs)):
         print(problem, file=sys.stderr)
@@ -459,7 +459,7 @@ def stale(args):
             others += 1
             continue
         w, end = work.group(0), args.stage_end
-        why = ("is no work of the tables" if w not in docs.works
+        why = (f"is no work of {docs.works_at}" if w not in docs.works
                else "is done: take the ignore off (`passing` tells whether the test passes)" if w in docs.done
                else f"is of {end}, which ends here" if end and pending.left_at_end(w, end, docs.stages)
                else None)  # fmt: skip
