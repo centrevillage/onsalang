@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020 for a call whose callee is a literal (§6.1): a literal is no path of names, so the callee can be
-// no item, and the syntax alone decides, as for `(s.f)(x)` (tests/spec/fixes/e0020_call_forms_syntax.onsa; docs/
+// no item, and the syntax alone decides, as for `(s.f)(x)` (tests/spec/fixes/e0020_call_forms_syntax.onsa; spec/
 // foreign-forms.toml row `callee_expression`). The one candidate inserts the `.` of `.(` before the `(`, so
 // the literal is called as a function value (a value of another type is a later error of the type stage:
 // the candidate removes the error of its own stage, §18.1). The main position is the first token of the callee (the

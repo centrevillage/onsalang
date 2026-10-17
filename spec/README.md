@@ -2,8 +2,8 @@
 
 > Onsa（音叉）: 誰が鳴らしても同じ高さで鳴る、基準の音。どの変換先でも同じ結果を出し、コンパイラが正しさの基準になる言語。
 
-本仕様は Onsa Draft 0.2（[`onsa-lang-spec-0.2.md`](../onsa-lang-spec-0.2.md)）を、レビュー（[`docs/review-draft-0.2.md`](../docs/review-draft-0.2.md)）での決定に従って改訂したもの。
-0.2 からの変更点は [`docs/onsa-0.3-changes.md`](../docs/onsa-0.3-changes.md) にまとめた。0.2 で Kumi 0.1 から変えた次の 3 点は、0.3 でも変わらない。
+本仕様は Onsa Draft 0.2（[`history/onsa-lang-spec-0.2.md`](../history/onsa-lang-spec-0.2.md)）を、レビュー（[`history/review-draft-0.2.md`](../history/review-draft-0.2.md)）での決定に従って改訂したもの。
+0.2 からの変更点は [`history/onsa-0.3-changes.md`](../history/onsa-0.3-changes.md) にまとめた。0.2 で Kumi 0.1 から変えた次の 3 点は、0.3 でも変わらない。
 
 1. **表面構文の原則を「既存コーパスに寄せる」から「同形同義・異義異形」に変えた。** `proc` → `flow`、`sink` → `move`、`virtual` → `target`、レート `Const` → `Init`（0.3 では、レートを型ではなく、クロック `init` / `block` / `sample` として `at` で書く形にした。§11.3）、flow の呼び出しは後置の `~`（`saw~(f0)`）、flow 本体は `let` で書く。
 2. **目的を「FAUST に代わる DSP 開発環境の基盤言語」と明記した。** パラメータのメタデータ、全言語へ変換できる「移植可能な核」、バックエンド間のビット一致、IDE 向けのツールを加えた。

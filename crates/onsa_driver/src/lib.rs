@@ -1,5 +1,5 @@
 //! Pipeline driver: loads a package (S-11), embeds `std` (D-07), and runs
-//! parse -> analyze. Each milestone adds a stage (`docs/implementation-tasks.md` §4).
+//! parse -> analyze. Each milestone adds a stage (`history/implementation-tasks.md` §4).
 //!
 //! Every public stage function runs in [`guard`]: a panic or another failure
 //! of the compiler comes back as an [`InternalError`] (S-67), never as a

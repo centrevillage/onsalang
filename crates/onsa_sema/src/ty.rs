@@ -1,4 +1,4 @@
-//! Types (spec §4, `docs/implementation-tasks.md` §3.3). Interned: a `TyId`
+//! Types (spec §4, `design/03-types.md`). Interned: a `TyId`
 //! identifies one structural type, so equality is `TyId` equality.
 
 use std::collections::HashMap;

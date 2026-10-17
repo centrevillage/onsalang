@@ -1,4 +1,4 @@
-//! Registry of diagnostic codes (spec §18.1, `docs/implementation-tasks.md` §5).
+//! Registry of diagnostic codes (spec §18.1, `tasks/diag-codes.md`).
 //!
 //! Every code of the spec is listed here, including the codes no stage emits
 //! yet (K-12): the gate checks that this list equals the codes the spec text

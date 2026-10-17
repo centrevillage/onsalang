@@ -1,4 +1,4 @@
-//! Onsa Core IR (docs/implementation-tasks.md §3.4, D-03): the checked,
+//! Onsa Core IR (`design/04-core.md`, D-03): the checked,
 //! typed, monomorphic, canonical form every backend consumes.
 //!
 //! - Every function is monomorphic; instances are named `clamp__F32`.

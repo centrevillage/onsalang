@@ -1,7 +1,7 @@
 //! Onsa Core IR: definitions, verifier, lowering from the typed AST,
 //! monomorphization and flow lowering (M3: T3-2 to T3-6).
 //!
-//! See `docs/implementation-tasks.md` §3.4 for the IR shape and §1 D-03 for
+//! See `design/04-core.md` for the IR shape and D-03 for
 //! how flows become `init` / `reset` / `ctl` / `tick` / `process`.
 
 pub mod dump;

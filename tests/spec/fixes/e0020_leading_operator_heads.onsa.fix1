@@ -4,7 +4,7 @@
 // fixes = 1
 
 // E0020: an operator that is used only as a binary operator, at the start of a line, in the heads and the
-// statements that tests/spec/fixes/e0020_leading_operator.onsa does not have (spec §2.5, S-124, S-370; docs/
+// statements that tests/spec/fixes/e0020_leading_operator.onsa does not have (spec §2.5, S-124, S-370; spec/
 // foreign-forms.toml row `leading_operator`): the head of a `match`, of an `if~` and a `match~`, the heads
 // of a `for` and a `par` with an operator that is no range symbol, the operand of an `assert`, a `return`
 // and a `const`, an `if` that is the value of a `let`, and the argument of a handler. A line ends where it ends,

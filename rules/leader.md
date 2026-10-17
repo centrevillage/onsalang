@@ -161,9 +161,4 @@ W の作業のコミットなどタスクの切れ目が近いときは、6 割�
 
 ## 付録. 文書の地図
 
-- 仕様 `spec/`。変更の記録 `docs/onsa-0.3-changes.md` §4。
-- 決定 `decisions/`（S・D・K・Q・A）。実装の共通の設計 `design/`。計画 `docs/implementation-tasks.md`。作業の手順 `rules/process.md`。全体計画 `docs/implementation-plan.md`。
-- 作業 `tasks/W/`、段の一覧と目的 `tasks/stages.md`、診断コードの表 `tasks/diag-codes.md`。元の反映の作業 `docs/rework-phase1.md`（改めた文書の記録は §5）。
-- 問題 `issues/R/`（R）、リファクタリング `issues/RF/`（RF）、改善の項目 `issues/X/`（X）。元のレビュー `docs/review-impl-phase1.md`。再発防止の原因の分析 `docs/process-improvement-phase1.md`。
-- 仕様の空白の資料 `docs/spec-gaps-*.md`。表示の約束 `spec/tools.md`。
-- 担当の定義 `.claude/agents/`。共通の規則と読む順 `rules/`（`rules/README.md`）。実装待ちの一覧 `tests/pending.toml`（形はファイルの先頭のコメント）。検査 `tools/gate.sh`。
+文書の地図は直下の [`README.md`](../README.md) にある。

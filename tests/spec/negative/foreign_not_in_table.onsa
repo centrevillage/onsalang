@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§4.1", "§18.1"]
 
-// Other-language type names that are not in the closed list of foreign forms (docs/foreign-
+// Other-language type names that are not in the closed list of foreign forms (spec/foreign-
 // forms.toml, S-250) are not E0020: the general rule reports them. A name that does not exist is
 // E0302. (`usize`, `isize`, `bool`, `char` and `str` are in the list: fixes/e0020_lowercase_*.)
 

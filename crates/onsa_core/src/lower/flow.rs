@@ -1,4 +1,4 @@
-//! Flow lowering (T3-5; docs/implementation-tasks.md §1 D-03 and §3.5; spec
+//! Flow lowering (T3-5; D-03 and `design/05-flow-lowering.md`; spec
 //! §11.4–§11.6, §12.4). A flow becomes a `State` struct and the functions
 //!
 //! | function | contents |

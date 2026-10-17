@@ -6,8 +6,8 @@
 // A block-like expression (`if`, `match`, a block expression, `par`) that is an operand of an operator is
 // written in parentheses (W3-13, S-537; spec §3.1): the left and the right of a binary operator, the operand
 // of a prefix `-` and `!`, the receiver of an index, of a field, of a method call, of a tuple index and of
-// `?`, the left of `as` and `at`. The parentheses are not redundant, so `onsa fmt` keeps them (docs/
-// spec/tools.md §3.3) and the file is canonical. Each value follows from the code by hand. A struct literal
+// `?`, the left of `as` and `at`. The parentheses are not redundant, so `onsa fmt` keeps them (spec/
+// tools.md §3.3) and the file is canonical. Each value follows from the code by hand. A struct literal
 // is not block-like: `P { x: 1 }.x` needs no parentheses, since a `{` after the name of a type reads one
 // way. The forms in parentheses that this version does not run (an anonymous function called with `.(`,
 // `unsafe`, `handle`, `if~` and `match~`) are in block_operand_syntax_only.onsa.

@@ -18,7 +18,7 @@
 | M8 | JavaScript への変換 | — | — |
 | M9 | 第 1 期の締め | — | — |
 
-W10 の後は M5〜M9（`docs/rework-phase1.md` §4）。
+W10 の後は M5〜M9（`history/rework-phase1.md` §4）。
 
 ## W1 テストの基盤
 

@@ -2,7 +2,7 @@
 //! wrappers; W2-09: the public and the internal runtime header, the flags). Pure: it turns a [`onsa_core::Module`] into strings, so it
 //! builds for `wasm32` and the driver does the file I/O and compiling (T4-5).
 //!
-//! Shape of the output (docs/implementation-tasks.md §1 D-10):
+//! Shape of the output (D-10):
 //!
 //! - one translation unit per package; every internal function is
 //!   `static inline` and named by its qualified name with `.` → `__`
