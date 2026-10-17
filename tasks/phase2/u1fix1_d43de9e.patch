@@ -1,0 +1,2208 @@
+diff --git a/crates/onsa_cli/src/main.rs b/crates/onsa_cli/src/main.rs
+index 637e9c8..2e23c99 100644
+--- a/crates/onsa_cli/src/main.rs
++++ b/crates/onsa_cli/src/main.rs
+@@ -324,6 +324,11 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
+     if report.is_empty() { then } else { print_diagnostics(Form::Text, &sources, &report, then) }
+ }
+ 
++/// The bytes of the name of the file that the name of the temporary file of
++/// [`write_replacing`] keeps (with the process, a number and the rest, well
++/// below the 255 bytes of `NAME_MAX`).
++const TEMPORARY_NAME_BYTES: usize = 64;
++
+ /// Write `text` as the new text of the file `path` (plan S-56): to a
+ /// temporary file in its directory, then renamed over it, so that the file
+ /// is the old text or the new one, never half written. A link is followed
+@@ -331,6 +336,9 @@ fn fmt(check: bool, paths: &[PathBuf]) -> Outcome {
+ /// written is not replaced; the mode bits of the file are kept, its owner
+ /// and extended attributes are not; another name of the file (a hard link)
+ /// keeps the old text. The temporary file is removed whatever step fails.
++/// It has the mode of the file before the text is written (made with no
++/// rights for others first), and its name keeps the first bytes of the name
++/// of the file only, so that it is a name the system takes (`NAME_MAX`).
+ // SPEC-GAP(S-535): the spec does not say how fmt writes. The reading (2),
+ // (2a), (2i) of the draft: the link is followed, a read-only file and a
+ // directory where no temporary file can be made are errors of input and
+@@ -345,10 +353,15 @@ fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+         return Err(std::io::Error::other("not a file in a directory"));
+     };
+     let name = name.to_string_lossy();
++    let cut = (0..=name.len().min(TEMPORARY_NAME_BYTES)).rev().find(|&i| name.is_char_boundary(i)).unwrap_or(0);
++    let name = &name[..cut];
+     let mut made = None;
+     for n in 0..100 {
+         let tmp = dir.join(format!(".{name}.onsa-fmt-{}-{n}.tmp", std::process::id()));
+-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
++        let mut open = std::fs::OpenOptions::new();
++        #[cfg(unix)]
++        std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
++        match open.write(true).create_new(true).open(&tmp) {
+             Ok(file) => {
+                 made = Some((tmp, file));
+                 break;
+@@ -360,10 +373,9 @@ fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+     let Some((tmp, mut file)) = made else {
+         return Err(std::io::Error::other("no free name for a temporary file"));
+     };
+-    let written = file
+-        .write_all(text.as_bytes())
++    let written = std::fs::set_permissions(&tmp, mode)
++        .and_then(|()| file.write_all(text.as_bytes()))
+         .and_then(|()| file.sync_all())
+-        .and_then(|()| std::fs::set_permissions(&tmp, mode))
+         .and_then(|()| std::fs::rename(&tmp, &target));
+     drop(file);
+     match written {
+diff --git a/crates/onsa_cli/tests/fmt_rewrites.rs b/crates/onsa_cli/tests/fmt_rewrites.rs
+index 9b97079..2154199 100644
+--- a/crates/onsa_cli/tests/fmt_rewrites.rs
++++ b/crates/onsa_cli/tests/fmt_rewrites.rs
+@@ -11,13 +11,12 @@
+ //!   to the end (a `return` without a value too). A `return` in a loop, a `return` that is not in the
+ //!   tail position (an early exit), and a `return` in the value of a `let` or in the condition of an
+ //!   `if` stay;
+-//! - `-> ()` and an empty `uses {}` (§6.1, §8.1) in a function, a method, an anonymous function, a function
+-//!   type, a member of a trait and a declaration of an `extern` block (and, reading §6.1 as a whole, an
+-//!   operation of an effect and a function of a handler). `uses {Alloc}` and a `()` that is not the
+-//!   return type of a function stay;
+-//! - the `init` of `prev~`, `delay~` and `vdelay~` that is a literal equal to the default value of the
+-//!   type (`0`, `0.0`, `false`; `-0.0` is not the default, §11.4). `1.0`, a name, and the argument of
+-//!   a flow of the user stay;
++//! - `-> ()` and an empty `uses {}` (§6.1, §8.1) in a function, a method, a function type, a member of a
++//!   trait and a declaration of an `extern` block (and, reading §6.1 as a whole, an operation of an
++//!   effect and a function of a handler). `uses {Alloc}`, a `()` that is not the return type of a
++//!   function and those of an anonymous function (S-546) stay;
++//! - (S-539 takes this one back: the `init` of `prev~`, `delay~` and `vdelay~` that equals the default
++//!   value stays, and the tests of it say so;)
+ //! - the `move` in the returned position (§5.2): `return move a`, `move a` at the end of a function and
+ //!   in the arms of a block that is there. A `move` in a position where a value is consumed (`let y =
+ //!   move a`, an argument, an element of a literal, `match move x`) stays.
+@@ -1278,9 +1277,13 @@ fn u_function_types() -> Case {
+     )
+ }
+ 
++/// S-546 (a decision of the user, 2026-10-15; changed by W3-12/i, the U1 fix): in an anonymous function,
++/// leaving out the result and the effects leaves them to the expected type or the body (§6.1, §8.1), so
++/// `-> ()` and `uses {}` are annotations of their own and stay (`take(fn(x: I32) -> () { x })` is E0401
++/// and stays so).
+ fn u_closures() -> Case {
+     case(
+-        "-> () and uses {} in an anonymous function",
++        "-> () and uses {} in an anonymous function stay",
+         &[
+             "fn closures() -> I32 {",
+             "  let a = fn(x: I32) -> () {}",
+@@ -1292,10 +1295,10 @@ fn u_closures() -> Case {
+         ],
+         &[
+             "fn closures() -> I32 {",
+-            "  let a = fn(x: I32) {}",
+-            "  let b = fn(x: I32) {}",
+-            "  let c = fn(x: I32) -> I32 { x }",
+-            "  let d = fn(x: I32) {}",
++            "  let a = fn(x: I32) -> () {}",
++            "  let b = fn(x: I32) -> () uses {} {}",
++            "  let c = fn(x: I32) -> I32 uses {} { x }",
++            "  let d = fn(x: I32) uses {} {}",
+             "  1",
+             "}",
+         ],
+@@ -1542,7 +1545,7 @@ fn unit_return_type_and_empty_uses_are_taken_off_a_function_type() {
+ }
+ 
+ #[test]
+-fn unit_return_type_and_empty_uses_are_taken_off_an_anonymous_function() {
++fn unit_return_type_and_empty_uses_of_an_anonymous_function_stay() {
+     expect_fmt("unit_closures", &[u_closures()]);
+ }
+ 
+@@ -1572,21 +1575,23 @@ fn a_comment_at_the_end_of_the_line_of_a_unit_return_type_that_goes_stays_after_
+ }
+ 
+ // ---------------------------------------------------------------------------------------------------
+-// The `init` of `prev~`, `delay~` and `vdelay~` that is the default value (§11.4, S-29)
++// The `init` of `prev~`, `delay~` and `vdelay~` that is the default value (§11.4): it stays (S-539)
+ // ---------------------------------------------------------------------------------------------------
++//
++// S-539 (a decision of the user, 2026-10-15; changed by W3-12/i, the U1 fix): `onsa fmt` does not take
++// off the `init` that equals the default value (S-29 is taken back). The syntax alone does not show that
++// it can go: in `let y = prev~(^y, 0)` the literal is what gives `y` its type (without it, E0406), and
++// the `0` of `prev~(x, 0)` for an `x: F32` is E0401, which taking it off would hide. Both `prev~(x)` and
++// `prev~(x, 0.0)` are taken as they are written.
+ 
+-fn i_removed() -> Case {
+-    case(
+-        "init that is 0, 0.0 or false in prev~, delay~ and vdelay~",
++fn i_default() -> Case {
++    same(
++        "init that is 0 or 0.0 in prev~, delay~ and vdelay~ stays",
+         &[
+             "pub flow lag1(x: F32 at sample) -> F32 at sample {",
+             "  prev~(x, 0.0)",
+             "}",
+             "",
+-            "pub flow lag_f64(x: F64 at sample) -> F64 at sample {",
+-            "  prev~(x, 0.0)",
+-            "}",
+-            "",
+             "pub flow lag_int(n: I32 at sample) -> I32 at sample {",
+             "  prev~(n, 0)",
+             "}",
+@@ -1595,10 +1600,6 @@ fn i_removed() -> Case {
+             "  delay~(x, 4, 0.0)",
+             "}",
+             "",
+-            "pub flow echo_int(n: I32 at sample) -> I32 at sample {",
+-            "  delay~(n, 4, 0)",
+-            "}",
+-            "",
+             "pub flow echo_var(x: F32 at sample, d: F32 at sample) -> F32 at sample {",
+             "  vdelay~(x, d, 8, 0.0)",
+             "}",
+@@ -1607,120 +1608,47 @@ fn i_removed() -> Case {
+             "  let y = x + prev~(^y, 0.0)",
+             "  y",
+             "}",
+-            "",
+-            "pub flow bank(x: F32 at sample) -> F32 at sample {",
+-            "  let v = par i in 0 ..< 4 {",
+-            "    prev~(x, 0.0)",
+-            "  }",
+-            "  v[0]",
+-            "}",
+-        ],
+-        &[
+-            "pub flow lag1(x: F32 at sample) -> F32 at sample {",
+-            "  prev~(x)",
+-            "}",
+-            "",
+-            "pub flow lag_f64(x: F64 at sample) -> F64 at sample {",
+-            "  prev~(x)",
+-            "}",
+-            "",
+-            "pub flow lag_int(n: I32 at sample) -> I32 at sample {",
+-            "  prev~(n)",
+-            "}",
+-            "",
+-            "pub flow echo(x: F32 at sample) -> F32 at sample {",
+-            "  delay~(x, 4)",
+-            "}",
+-            "",
+-            "pub flow echo_int(n: I32 at sample) -> I32 at sample {",
+-            "  delay~(n, 4)",
+-            "}",
+-            "",
+-            "pub flow echo_var(x: F32 at sample, d: F32 at sample) -> F32 at sample {",
+-            "  vdelay~(x, d, 8)",
+-            "}",
+-            "",
+-            "pub flow feedback(x: F32 at sample) -> F32 at sample {",
+-            "  let y = x + prev~(^y)",
+-            "  y",
+-            "}",
+-            "",
+-            "pub flow bank(x: F32 at sample) -> F32 at sample {",
+-            "  let v = par i in 0 ..< 4 {",
+-            "    prev~(x)",
+-            "  }",
+-            "  v[0]",
+-            "}",
+         ],
+     )
+ }
+ 
+-/// The same value in another spelling is "a literal that is equal to the default" (§11.4: "値が既定値と
+-/// 等しいリテラル"; §2.4: the spellings of a number do not change its value, and §3.5 compares the numbers by
+-/// value). The spelling `0_0` of an integer is E0020 (§2.4: a decimal integer does not start with 0), so
+-/// it is not written.
++/// Another spelling of zero stays too (only §3.2 respells a number: `00.00` is `0.00`).
+ fn i_spellings_of_zero() -> Case {
+     case(
+-        "init that is another spelling of zero",
++        "init that is another spelling of zero stays",
+         &[
+             "pub flow a1(x: F32 at sample) -> F32 at sample {",
+-            "  prev~(x, 0.00)",
+-            "}",
+-            "",
+-            "pub flow a2(x: F32 at sample) -> F32 at sample {",
+             "  prev~(x, 0e0)",
+             "}",
+             "",
+-            "pub flow a3(n: I32 at sample) -> I32 at sample {",
+-            "  prev~(n, 0x0)",
+-            "}",
+-            "",
+-            "pub flow a4(n: I32 at sample) -> I32 at sample {",
+-            "  prev~(n, 0b0)",
+-            "}",
+-            "",
+-            "pub flow a5(n: I32 at sample) -> I32 at sample {",
++            "pub flow a2(n: I32 at sample) -> I32 at sample {",
+             "  prev~(n, 0x0_0)",
+             "}",
+             "",
+-            "pub flow a6(x: F32 at sample) -> F32 at sample {",
++            "pub flow a3(x: F32 at sample) -> F32 at sample {",
+             "  prev~(x, 00.00)",
+             "}",
+         ],
+         &[
+             "pub flow a1(x: F32 at sample) -> F32 at sample {",
+-            "  prev~(x)",
++            "  prev~(x, 0e0)",
+             "}",
+             "",
+-            "pub flow a2(x: F32 at sample) -> F32 at sample {",
+-            "  prev~(x)",
++            "pub flow a2(n: I32 at sample) -> I32 at sample {",
++            "  prev~(n, 0x0_0)",
+             "}",
+             "",
+-            "pub flow a3(n: I32 at sample) -> I32 at sample {",
+-            "  prev~(n)",
+-            "}",
+-            "",
+-            "pub flow a4(n: I32 at sample) -> I32 at sample {",
+-            "  prev~(n)",
+-            "}",
+-            "",
+-            "pub flow a5(n: I32 at sample) -> I32 at sample {",
+-            "  prev~(n)",
+-            "}",
+-            "",
+-            "pub flow a6(x: F32 at sample) -> F32 at sample {",
+-            "  prev~(x)",
++            "pub flow a3(x: F32 at sample) -> F32 at sample {",
++            "  prev~(x, 0.00)",
+             "}",
+         ],
+     )
+ }
+ 
+-/// `false` is the default of a `Bool`. `onsa check` of today does not take the omitted `init` of a delay
+-/// of a `Bool` (E0200, "does not support the omitted `init` of a delay whose value type `Bool` is not a
+-/// number"), so the case is checked for the syntax stage only.
++/// `false`, the default of a `Bool`, stays.
+ fn i_bool() -> Case {
+-    case(
+-        "init that is false",
++    same(
++        "init that is false stays",
+         &[
+             "pub flow lag_flag(b: Bool at sample) -> Bool at sample {",
+             "  prev~(b, false)",
+@@ -1729,23 +1657,6 @@ fn i_bool() -> Case {
+             "pub flow echo_flag(b: Bool at sample) -> Bool at sample {",
+             "  delay~(b, 3, false)",
+             "}",
+-            "",
+-            "pub flow lag_true(b: Bool at sample) -> Bool at sample {",
+-            "  prev~(b, true)",
+-            "}",
+-        ],
+-        &[
+-            "pub flow lag_flag(b: Bool at sample) -> Bool at sample {",
+-            "  prev~(b)",
+-            "}",
+-            "",
+-            "pub flow echo_flag(b: Bool at sample) -> Bool at sample {",
+-            "  delay~(b, 3)",
+-            "}",
+-            "",
+-            "pub flow lag_true(b: Bool at sample) -> Bool at sample {",
+-            "  prev~(b, true)",
+-            "}",
+         ],
+     )
+     .syntax_only()
+@@ -1807,71 +1718,16 @@ fn i_kept() -> Case {
+     same("init that is not the default stays", &i_kept_lines())
+ }
+ 
+-/// The kept ones next to the ones that go, in one flow.
+-fn i_beside_kept() -> Case {
+-    let mut input = i_kept_lines();
+-    input.extend([
+-        "",
+-        "pub flow both(x: F32 at sample) -> F32 at sample {",
+-        "  prev~(x, 0.0) + prev~(x, 1.0)",
+-        "}",
+-        "",
+-        "pub flow both_neg(x: F32 at sample) -> F32 at sample {",
+-        "  prev~(x, -0.0) - prev~(x, 0.0)",
+-        "}",
+-    ]);
+-    let mut expected = i_kept_lines();
+-    expected.extend([
+-        "",
+-        "pub flow both(x: F32 at sample) -> F32 at sample {",
+-        "  prev~(x) + prev~(x, 1.0)",
+-        "}",
+-        "",
+-        "pub flow both_neg(x: F32 at sample) -> F32 at sample {",
+-        "  prev~(x, -0.0) - prev~(x)",
+-        "}",
+-    ]);
+-    case("the init that goes beside the ones that stay", &input, &expected)
+-}
+-
+-/// A flow with the `init` on its own line in the block form of the arguments: the line goes with the
+-/// element (the block form has a `,` after every element, §3.2).
++/// The `init` on its own line in the block form of the arguments stays, with its `,`.
+ fn i_block_form() -> Case {
+-    case(
+-        "init as an element of the block form",
++    same(
++        "init as an element of the block form stays",
+         &[
+             "pub flow block_args(x: F32 at sample) -> F32 at sample {",
+             "  let z = delay~(",
+             "    x,",
+             "    4,",
+-            "    0.0,",
+-            "  )",
+-            "  z",
+-            "}",
+-            "",
+-            "pub flow kept_args(x: F32 at sample) -> F32 at sample {",
+-            "  let z = delay~(",
+-            "    x,",
+-            "    4,",
+-            "    0.5,",
+-            "  )",
+-            "  z",
+-            "}",
+-        ],
+-        &[
+-            "pub flow block_args(x: F32 at sample) -> F32 at sample {",
+-            "  let z = delay~(",
+-            "    x,",
+-            "    4,",
+-            "  )",
+-            "  z",
+-            "}",
+-            "",
+-            "pub flow kept_args(x: F32 at sample) -> F32 at sample {",
+-            "  let z = delay~(",
+-            "    x,",
+-            "    4,",
+-            "    0.5,",
++            "    0.0, // silence",
+             "  )",
+             "  z",
+             "}",
+@@ -1879,10 +1735,10 @@ fn i_block_form() -> Case {
+     )
+ }
+ 
+-/// The comment of the line of an `init` that goes, when something of the line stays: after the last code.
++/// The comment of the line of an `init` stays where it is.
+ fn i_comment() -> Case {
+-    case(
+-        "the comment at the end of the line of an init that goes",
++    same(
++        "the comment at the end of the line of an init stays",
+         &[
+             "pub flow noted(x: F32 at sample) -> F32 at sample {",
+             "  // the previous sample",
+@@ -1890,33 +1746,25 @@ fn i_comment() -> Case {
+             "  y",
+             "}",
+         ],
+-        &[
+-            "pub flow noted(x: F32 at sample) -> F32 at sample {",
+-            "  // the previous sample",
+-            "  let y = prev~(x) // silence at first",
+-            "  y",
+-            "}",
+-        ],
+     )
+ }
+ 
+ fn init_cases() -> Vec<Case> {
+-    vec![i_removed(), i_bool(), i_spellings_of_zero(), i_kept(), i_beside_kept(), i_block_form(), i_comment()]
++    vec![i_default(), i_bool(), i_spellings_of_zero(), i_kept(), i_block_form(), i_comment()]
+ }
+ 
+ #[test]
+-fn init_that_is_the_default_value_is_taken_off_prev_delay_and_vdelay() {
+-    expect_fmt("init_removed", &[i_removed()]);
++fn init_that_is_the_default_value_stays_in_prev_delay_and_vdelay() {
++    expect_fmt("init_default", &[i_default()]);
+ }
+ 
+ #[test]
+-#[ignore = "W7-07: fmt keeps the init that is false until check takes the omitted init of a delay of a Bool (E0200 today; W3-12 U1b takes off the numbers of the value 0 only, S-29)"]
+-fn init_that_is_false_is_taken_off() {
++fn init_that_is_false_stays() {
+     expect_fmt("init_bool", &[i_bool()]);
+ }
+ 
+ #[test]
+-fn init_that_is_another_spelling_of_zero_is_taken_off() {
++fn init_that_is_another_spelling_of_zero_stays() {
+     expect_fmt("init_spellings", &[i_spellings_of_zero()]);
+ }
+ 
+@@ -1926,17 +1774,12 @@ fn init_that_is_not_the_default_value_stays() {
+ }
+ 
+ #[test]
+-fn the_init_that_goes_and_the_ones_that_stay_in_one_file() {
+-    expect_fmt("init_beside", &[i_beside_kept()]);
+-}
+-
+-#[test]
+-fn init_on_its_own_line_of_the_block_form_goes_with_its_line() {
++fn init_on_its_own_line_of_the_block_form_stays() {
+     expect_fmt("init_block", &[i_block_form()]);
+ }
+ 
+ #[test]
+-fn a_comment_at_the_end_of_the_line_of_an_init_that_goes_stays_after_the_last_code() {
++fn a_comment_at_the_end_of_the_line_of_an_init_stays() {
+     expect_fmt("init_comment", &[i_comment()]);
+ }
+ 
+@@ -2168,6 +2011,75 @@ fn move_in_a_consuming_position_stays_in_a_file_that_has_returned_moves() {
+     expect_fmt("move_beside", &[m_beside_kept()]);
+ }
+ 
++/// The `move` of a value that is not a place (§5.2: "`move` needs a place", E0711 of `onsa check`) stays in
++/// the returned position too: taking it off would hide the error (the user's decision on the rewrites of
++/// fmt, 2026-10-15: they change no judgement of a stage). A place is a name, or a field, an element or a
++/// tuple element of one (the form `check` reads, `Ast::place_root`); its `move` goes (W3-12/i, the U1 fix).
++#[test]
++fn move_of_a_value_that_is_not_a_place_stays() {
++    expect_fmt(
++        "move_not_a_place",
++        &[
++            same(
++                "the move of a call and of a field of a call",
++                &[
++                    "struct H { b: Buf[F32] }",
++                    "",
++                    "fn g() -> Buf[F32] uses {Alloc} {",
++                    "  Buf.zeroed(4)",
++                    "}",
++                    "",
++                    "fn h() -> H uses {Alloc} {",
++                    "  H { b: Buf.zeroed(4) }",
++                    "}",
++                    "",
++                    "fn f(c: Bool) -> Buf[F32] uses {Alloc} {",
++                    "  if c {",
++                    "    return move g()",
++                    "  }",
++                    "  move h().b",
++                    "}",
++                ],
++            )
++            .syntax_only(),
++            case(
++                "the move of a name, of its field and of its element",
++                &[
++                    "struct H { b: Buf[F32] }",
++                    "",
++                    "fn f(move a: Buf[F32]) -> Buf[F32] {",
++                    "  move a",
++                    "}",
++                    "",
++                    "fn g(move a: H) -> Buf[F32] {",
++                    "  move a.b",
++                    "}",
++                    "",
++                    "fn h(move a: [Buf[F32]; 2]) -> Buf[F32] {",
++                    "  move a[0]",
++                    "}",
++                ],
++                &[
++                    "struct H { b: Buf[F32] }",
++                    "",
++                    "fn f(move a: Buf[F32]) -> Buf[F32] {",
++                    "  a",
++                    "}",
++                    "",
++                    "fn g(move a: H) -> Buf[F32] {",
++                    "  a.b",
++                    "}",
++                    "",
++                    "fn h(move a: [Buf[F32]; 2]) -> Buf[F32] {",
++                    "  a[0]",
++                    "}",
++                ],
++            )
++            .syntax_only(),
++        ],
++    );
++}
++
+ // ---------------------------------------------------------------------------------------------------
+ // Several rewrites in one place
+ // ---------------------------------------------------------------------------------------------------
+@@ -2226,7 +2138,8 @@ fn x_combinations() -> Case {
+             "}",
+             "",
+             "fn with_a_closure() -> U32 {",
+-            "  let g = fn(i: U32) -> U32 { i * 2 }",
++            // S-546: the empty `uses {}` of an anonymous function stays (changed by W3-12/i, the U1 fix).
++            "  let g = fn(i: U32) -> U32 uses {} { i * 2 }",
+             "  g.(2)",
+             "}",
+             "",
+@@ -2495,11 +2408,7 @@ fn p7_a_returned_move_of_p7_onsa_is_taken_off_and_the_others_stay() {
+ fn diff_ast_sees_a_file_and_its_rewritten_form_as_the_same_program() {
+     let d = Dir::new("diff_same");
+     let mut wrong = Vec::new();
+-    // W7-07: `fmt` does not take off the `init` that is `false` yet (W3-12/i U1b takes off the numbers of the
+-    // value 0 only, as `check` does not take the omitted `init` of a delay of a `Bool`), so the case of
+-    // `false` is left out here until then (a change of W3-12/i U1b).
+-    let cases = all_cases().into_iter().filter(|c| c.what != i_bool().what);
+-    for (i, c) in cases.enumerate() {
++    for (i, c) in all_cases().into_iter().enumerate() {
+         for (k, (a, b)) in [(&c.input, &c.expected), (&c.expected, &c.input)].into_iter().enumerate() {
+             let (rc, report) = diff_of(&d, &format!("p{i}_{k}"), a, b);
+             if rc != 0 {
+@@ -2579,6 +2488,107 @@ fn diff_ast_tells_apart_what_the_rewrites_of_fmt_keep() {
+     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+ }
+ 
++// ---------------------------------------------------------------------------------------------------
++// W3-12/i U1 fix: an empty `uses {}` before another `uses` (W3-12/b 1), and the comments in and out of
++// the range of a rewrite (S-536 (1), W3-12/b 2)
++// ---------------------------------------------------------------------------------------------------
++
++/// W3-12/b 1: §8.1 and §11.4 put a `uses` after the result of a function type on that function type, so
++/// an empty `uses {}` before another `uses` is what keeps the second one on the function: without it,
++/// `take(make())` would be E0401. `fmt` leaves it, and `diff --ast` tells the two programs apart.
++#[test]
++fn an_empty_uses_before_another_uses_stays() {
++    expect_fmt(
++        "uses_before_uses",
++        &[
++            same(
++                "the result of a function",
++                &[
++                    "fn make() -> fn() -> I32 uses {} uses {Alloc} {",
++                    "  fn() -> I32 { 1 }",
++                    "}",
++                    "",
++                    "fn take(f: fn() -> I32) -> I32 {",
++                    "  f()",
++                    "}",
++                    "",
++                    "fn go() -> I32 uses {Alloc} {",
++                    "  take(make())",
++                    "}",
++                ],
++            ),
++            same(
++                "the result of an anonymous function",
++                &[
++                    "fn go() -> I32 uses {Alloc} {",
++                    "  let m = fn() -> fn() -> I32 uses {} uses {Alloc} {",
++                    "    fn() -> I32 { 1 }",
++                    "  }",
++                    "  let f = m()",
++                    "  f()",
++                    "}",
++                ],
++            ),
++            same("a type alias", &["type Maker = fn() -> fn() -> I32 uses {} uses {Alloc}"]),
++            case(
++                "two empty rows: both go in one pass",
++                &["type Maker = fn() -> fn() -> I32 uses {} uses {}"],
++                &["type Maker = fn() -> fn() -> I32"],
++            ),
++        ],
++    );
++    let d = Dir::new("uses_before_uses_diff");
++    let (rc, report) = diff_of(
++        &d,
++        "inner",
++        &src(&["fn f() -> fn() uses {} uses {Alloc} {}"]),
++        &src(&["fn f() -> fn() uses {Alloc} {}"]),
++    );
++    assert_eq!(rc, 1, "`diff --ast` sees the `uses {{Alloc}}` of the function and of its result as one: {report}");
++}
++
++/// S-536 (1): with a comment in the range of a rewrite (between its tokens, or in the gap of a line break
++/// that would go with them) its tokens stay; the `-> ()` and the `uses {}` that share such a gap both stay,
++/// in one pass (W3-12/b 2). A comment out of the range (after a line end, at the edge of a list) stays on
++/// its line and the tokens go.
++#[test]
++fn a_comment_in_the_range_of_a_rewrite_keeps_its_tokens_and_one_out_of_it_stays_on_its_line() {
++    expect_fmt(
++        "s536_range",
++        &[
++            same("a type alias", &["type T = fn(F32) -> () // c", "  uses {}"]),
++            same("a type alias, a line of a comment", &["type T = fn(F32) -> ()", "  // c", "  uses {}"]),
++            same("a head", &["fn h() -> () // c", "  uses {} {}"]),
++            same("a parameter", &["fn p(f: fn(F32) -> () // c", "  uses {}) {}"]),
++            same("a field", &["struct S {", "  a: fn(F32) -> () // c", "    uses {},", "}"]),
++            same("a member of a trait", &["trait T {", "  fn a(self) -> () // c", "    uses {}", "}"]).syntax_only(),
++            same(
++                "a member of an extern block",
++                &["extern \"C\" lib \"m\" {", "  fn e(x: F64) -> () // c", "    uses {}", "}"],
++            )
++            .syntax_only(),
++            same("an operation of an effect", &["effect E {", "  fn op(x: F32) -> () // c", "    uses {}", "}"])
++                .syntax_only(),
++            case(
++                "a comment between `->` and `()`: the `uses {}` after it goes",
++                &["type T = fn(F32) -> // c", "  () uses {}"],
++                &["type T = fn(F32) -> // c", "  ()"],
++            ),
++            case(
++                "a comment after the edge of a list",
++                &["struct S {", "  a: fn(F32) -> () // c", "}"],
++                &["struct S {", "  a: fn(F32), // c", "}"],
++            ),
++            case(
++                "a comment after a line end",
++                &["trait T {", "  fn a(self) -> () // c", "  fn b(self)", "}"],
++                &["trait T {", "  fn a(self) // c", "  fn b(self)", "}"],
++            )
++            .syntax_only(),
++        ],
++    );
++}
++
+ // ---------------------------------------------------------------------------------------------------
+ // What no reading of §3.4 can decide: the tests keep what holds in every reading
+ // ---------------------------------------------------------------------------------------------------
+diff --git a/crates/onsa_cli/tests/fmt_write.rs b/crates/onsa_cli/tests/fmt_write.rs
+index b68ad0a..11316b5 100644
+--- a/crates/onsa_cli/tests/fmt_write.rs
++++ b/crates/onsa_cli/tests/fmt_write.rs
+@@ -123,3 +123,24 @@ fn fmt_cannot_write_a_file_in_a_directory_where_no_temporary_file_can_be_made()
+     assert_eq!(text, ROUGH, "the file is not written in place");
+     assert_eq!(entries, ["x.onsa"]);
+ }
++
++/// W3-12/b 7: a file whose name is near the 255 bytes of `NAME_MAX` (one of ASCII letters, one of
++/// letters of three bytes) is written: the name of the temporary file keeps the first bytes of the name
++/// only. No temporary file is left, and the mode stays.
++#[test]
++fn fmt_writes_a_file_whose_name_is_long() {
++    let d = Dir::new("long_name");
++    let ascii = format!("{}.onsa", "a".repeat(245));
++    let wide = format!("{}.onsa", "\u{3042}".repeat(83));
++    assert_eq!((ascii.len(), wide.len()), (250, 254));
++    let paths = [d.file(&ascii, 0o644), d.file(&wide, 0o600)];
++    let out = fmt(&[&paths[0], &paths[1]]);
++    assert_eq!(code(&out), 0, "{out:?}");
++    for p in &paths {
++        assert_eq!(std::fs::read_to_string(p).unwrap(), ROUGH_OUT);
++    }
++    assert_eq!((mode(&paths[0]), mode(&paths[1])), (0o644, 0o600));
++    let mut want = vec![ascii, wide];
++    want.sort();
++    assert_eq!(names(&d.0), want);
++}
+diff --git a/crates/onsa_sema/src/body/statements.rs b/crates/onsa_sema/src/body/statements.rs
+index 7cf4dc3..4f0d41e 100644
+--- a/crates/onsa_sema/src/body/statements.rs
++++ b/crates/onsa_sema/src/body/statements.rs
+@@ -168,19 +168,11 @@ impl<'a> Checker<'a> {
+         }
+     }
+ 
+-    /// A place expression (§5.1): a local, or a field / element / tuple element of a place.
++    /// A place expression (§5.1): a local, or a field / element / tuple element of a place
++    /// ([`onsa_syntax::ast::Ast::place_root`], the one form that `onsa fmt` reads too).
+     pub(super) fn is_place(&mut self, e: ExprId) -> bool {
+-        match &self.expr(e).kind {
+-            ExprKind::Path(p) => {
+-                p.segments.len() == 1
+-                    && (p.segments[0].name == "self" || self.lookup_local(&p.segments[0].name).is_some())
+-            }
+-            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
+-                self.is_place(*base)
+-            }
+-            ExprKind::Paren(inner) => self.is_place(*inner),
+-            _ => false,
+-        }
++        let ast = self.ast;
++        ast.place_root(e).is_some_and(|name| name == "self" || self.lookup_local(name).is_some())
+     }
+ 
+     /// §5.4: `let y = x`, `x.f`, `x[i]` where `x` is a borrowed parameter or a
+diff --git a/crates/onsa_sema/src/flow_names.rs b/crates/onsa_sema/src/flow_names.rs
+index 365d84f..2e6cccb 100644
+--- a/crates/onsa_sema/src/flow_names.rs
++++ b/crates/onsa_sema/src/flow_names.rs
+@@ -28,5 +28,5 @@ pub(crate) fn clock_rate(c: &Clock) -> Result<Rate, Diagnostic> {
+ }
+ 
+ /// A built-in delay (§11.4): the one table of their names and arguments is
+-/// onsa_syntax's (`onsa fmt` reads it too).
++/// onsa_syntax's.
+ pub use onsa_syntax::delay::Delay;
+diff --git a/crates/onsa_syntax/src/ast.rs b/crates/onsa_syntax/src/ast.rs
+index 652b805..7ed9b0e 100644
+--- a/crates/onsa_syntax/src/ast.rs
++++ b/crates/onsa_syntax/src/ast.rs
+@@ -104,6 +104,24 @@ impl Ast {
+             _ => None,
+         }
+     }
++
++    /// The name at the root of the place `e` (§5.1, §5.2): a name alone (`a`,
++    /// `self`), or a field, an element or a tuple element of a place, through
++    /// parentheses (`a.f`, `a[i]`, `a.0`, `(a).f`); `None` for any other
++    /// expression (a call, the result of a method, a literal, a path of more
++    /// than one name). The one definition of the form of a place: whether the
++    /// name is a local the names stage decides (`check`'s E0711 of `move` and
++    /// the target of an assignment); `onsa fmt` reads the form alone (S-100).
++    pub fn place_root(&self, e: ExprId) -> Option<&str> {
++        match &self.expr(e).kind {
++            ExprKind::Path(p) if p.segments.len() == 1 => Some(p.segments[0].name.as_str()),
++            ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
++                self.place_root(*base)
++            }
++            ExprKind::Paren(inner) => self.place_root(*inner),
++            _ => None,
++        }
++    }
+ }
+ 
+ /// An identifier with its span. Names are not interned in M1.
+diff --git a/crates/onsa_syntax/src/delay.rs b/crates/onsa_syntax/src/delay.rs
+index 95b0036..59b8afa 100644
+--- a/crates/onsa_syntax/src/delay.rs
++++ b/crates/onsa_syntax/src/delay.rs
+@@ -1,8 +1,8 @@
+ //! The built-in delays `prev~` / `delay~` / `vdelay~` (§11.4): the one table
+ //! of their names and of the place of their `init` (plan D-15). The names
+ //! stage, the flow checks, the gate of the flow syntax outside a flow,
+-//! `onsa graph` and `onsa interface` read it through `onsa_sema::flow_names`;
+-//! `onsa fmt` reads it here (the `init` that is the default value, §11.4).
++//! `onsa graph` and `onsa interface` read it through `onsa_sema::flow_names`.
++//! It is in the syntax crate so that a stage before the names can read it.
+ 
+ /// A built-in delay (§11.4).
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+diff --git a/crates/onsa_syntax/src/diff.rs b/crates/onsa_syntax/src/diff.rs
+index 6a46ee4..1bc1e69 100644
+--- a/crates/onsa_syntax/src/diff.rs
++++ b/crates/onsa_syntax/src/diff.rs
+@@ -179,7 +179,7 @@ struct Side<'a> {
+ impl<'a> Side<'a> {
+     /// `parsed` has no diagnostic of the syntax stage (`normalize`).
+     fn new(parsed: &Parsed, text: &'a str) -> Side<'a> {
+-        let ast = crate::fmt::rewrites::normalize(parsed, text);
++        let ast = crate::fmt::rewrites::normalize(parsed);
+         let items = keyed(&ast);
+         Side { ast, text, items }
+     }
+diff --git a/crates/onsa_syntax/src/dump.rs b/crates/onsa_syntax/src/dump.rs
+index 9ff21a3..10df4d3 100644
+--- a/crates/onsa_syntax/src/dump.rs
++++ b/crates/onsa_syntax/src/dump.rs
+@@ -159,8 +159,7 @@ impl<'a> Dumper<'a> {
+             ItemKind::Flow(f) => {
+                 let _ = write!(self.out, "flow {}", f.name.name);
+                 self.params(&f.params);
+-                self.out.push_str(" -> ");
+-                self.ty(f.ret);
++                self.result(f.ret);
+                 self.clock(&f.ret_clock);
+                 self.nested(|d| d.expr(f.body));
+             }
+@@ -290,8 +289,7 @@ impl<'a> Dumper<'a> {
+         self.generics(&f.generics);
+         self.params(&f.params);
+         if let Some(r) = f.ret {
+-            self.out.push_str(" -> ");
+-            self.ty(r);
++            self.result(r);
+         }
+         self.clock(&f.ret_clock);
+         if let Some(e) = &f.effects {
+@@ -418,6 +416,20 @@ impl<'a> Dumper<'a> {
+         }
+     }
+ 
++    /// ` -> T`, the result of a function, with a function type there between
++    /// `<` and `>`: the `uses` and the clock after it are then seen to be of
++    /// the function whose result it is, not of the function type (§8.1,
++    /// §11.4; `fn() -> I32 uses {} uses {Alloc}` is `<fn() -> I32 uses {}>
++    /// uses {Alloc}`), as the comparison of §3.5 must see them.
++    fn result(&mut self, r: TypeId) {
++        let f = matches!(self.ast.ty(r).kind, TypeKind::Fn { .. });
++        self.out.push_str(if f { " -> <" } else { " -> " });
++        self.ty(r);
++        if f {
++            self.out.push('>');
++        }
++    }
++
+     /// A type with the parentheses written around it (§2.4, R-43).
+     fn ty(&mut self, id: TypeId) {
+         let n = self.ast.ty(id).parens as usize;
+@@ -462,8 +474,7 @@ impl<'a> Dumper<'a> {
+                 });
+                 self.out.push(')');
+                 if let Some(r) = ret {
+-                    self.out.push_str(" -> ");
+-                    self.ty(*r);
++                    self.result(*r);
+                 }
+                 if let Some(e) = effects {
+                     self.effects(e);
+@@ -690,8 +701,7 @@ impl<'a> Dumper<'a> {
+                 self.out.push_str("(fn");
+                 self.params(params);
+                 if let Some(r) = ret {
+-                    self.out.push_str(" -> ");
+-                    self.ty(*r);
++                    self.result(*r);
+                 }
+                 self.clock(ret_clock);
+                 if let Some(e) = effects {
+diff --git a/crates/onsa_syntax/src/fmt.rs b/crates/onsa_syntax/src/fmt.rs
+index 63b6b03..c7ce532 100644
+--- a/crates/onsa_syntax/src/fmt.rs
++++ b/crates/onsa_syntax/src/fmt.rs
+@@ -42,7 +42,7 @@ pub fn format(parsed: &Parsed, text: &str) -> Result<String, FormatError> {
+     if parsed.syntax_errors() {
+         return Err(FormatError::Syntax);
+     }
+-    let out = print::print(&parsed.cst, text);
++    let out = print::print(parsed, text);
+     verify(parsed, text, &out)?;
+     Ok(out)
+ }
+diff --git a/crates/onsa_syntax/src/fmt/breaks.rs b/crates/onsa_syntax/src/fmt/breaks.rs
+index ee63384..84c599c 100644
+--- a/crates/onsa_syntax/src/fmt/breaks.rs
++++ b/crates/onsa_syntax/src/fmt/breaks.rs
+@@ -1,33 +1,24 @@
+ //! The line breaks that go with the tokens a rewrite of §3.3 drops
+-//! (`docs/onsa-tools.md` §3.2, §3.4): the one judgement of the form after a
+-//! rewrite, which `fmt/rewrites.rs` asks for the tokens it drops from a node
+-//! (`fn f()` newline `uses {} {}` is `fn f() {}`).
++//! (`docs/onsa-tools.md` §3.2, §3.4, S-536): the one judgement of the form
++//! after a rewrite, which `fmt/rewrites.rs` asks for the tokens it drops from
++//! a node (`fn f()` newline `uses {} {}` is `fn f() {}`).
+ //!
+ //! A line break next to a dropped token goes with it, but a line end
+-//! (between two statements or items, §2.5), a line break at the edge of a
+-//! list (after its opening bracket or a `,`, before its closing bracket or a
+-//! `,`: it makes the form of the list, §3.2) and a line break in a gap that
+-//! holds a comment (after a comment at the end of a line, before a line of a
+-//! comment: no code and no comment moves over a comment). The form so
+-//! written must read as the same tree: a line break left between two written
+-//! code tokens ends a line where a line break it stands for ended one, and
+-//! only there (`fn f() // c` newline `{}` would be E0003). Nor may a line
+-//! break stay there only because a comment holds one that would go: without
+-//! the comment the form would be another (`fn f() // c` newline `uses {A}
+-//! {}` would keep its line break when the comment goes). Else nothing is
+-//! dropped.
++//! (between two statements or items, §2.5) and a line break at the edge of a
++//! list whose brackets stay (after its opening bracket or a `,`, before its
++//! closing bracket or a `,`: it makes the form of the list, §3.2). With a
++//! comment in the range, from the first dropped token to the last and the
++//! gaps of the line breaks that go with them, nothing is dropped
++//! (`fn f() -> () // c` newline `uses {A} {}` and `uses {` newline `// c`
++//! newline `}` stay); a comment outside it stays on its line (`fn a(self) ->
++//! () // c` is `fn a(self) // c`).
+ //!
+ //! The judgement reads the gaps between the written code token before the
+ //! first dropped one and the one after the last: what is between them (the
+ //! inside of a pair of brackets that goes, U2) is read again too.
+-// SPEC-GAP(S-536): §3.4 does not say what becomes of the line breaks and the
+-// comments next to the tokens a rewrite drops. The reading (2') of the draft:
+-// the line breaks next to them go but those above, no code or comment moves
+-// over a comment, and a form that would not read as the same tree is not
+-// written (an enclosure that holds only a comment stays: `rewrites.rs`). One
+-// more: a line break that stays only because a comment holds it keeps the
+-// tokens too (else the form after the comment goes is not that of the file
+-// without it, the property `comments` of `tools/fmt_props.py`).
++
++use std::cell::RefCell;
++use std::collections::HashMap;
+ 
+ use super::rewrites::Ctx;
+ use super::shape::{self, Shape};
+@@ -35,21 +26,30 @@ use crate::cst::{Cst, NodeId, TokenIdx};
+ use crate::layout::continues;
+ use crate::token::TokenKind;
+ 
++/// The pairs of brackets of the nodes ([`shape::pairs`]), each read once:
++/// [`round`] asks for those of every node above a gap, and a body of many
++/// members would be read again for each.
++#[derive(Default)]
++pub(super) struct Pairs(RefCell<HashMap<NodeId, Vec<(TokenIdx, TokenIdx)>>>);
++
++impl Pairs {
++    fn of(&self, cst: &Cst, n: NodeId) -> Vec<(TokenIdx, TokenIdx)> {
++        self.0.borrow_mut().entry(n).or_insert_with(|| shape::pairs(cst, n)).clone()
++    }
++}
++
+ /// The line breaks that go with `code`, the code tokens in their order that
+-/// a rewrite drops from a node, or `None` when the form after it does not
+-/// read as the same tree (the module documentation).
++/// a rewrite drops from a node, or `None` when a comment is in the range of
++/// the rewrite (the module documentation).
+ pub(super) fn with_breaks(cx: &Ctx, code: &[TokenIdx]) -> Option<Vec<TokenIdx>> {
+     let cst = cx.cst;
+     let ours = |t: TokenIdx| code.binary_search(&t).is_ok();
+     let gone = |t: TokenIdx| cx.is_dropped(t) || ours(t);
+     let source = |_: TokenIdx| false;
+-    let first = code_before(cst, *code.first()?, &gone)?;
+-    let last = code_after(cst, *code.last()?, &gone);
++    let (start, end) = (*code.first()?, *code.last()?);
++    let first = code_before(cst, start, &gone)?;
++    let last = code_after(cst, end, &gone);
+     let mut breaks = Vec::new();
+-    // The written code token before the gap of the output; whether a line
+-    // break stays in it for itself (`own`) or only because a comment holds
+-    // one that would go (`held`); whether one of those ended a line.
+-    let (mut written, mut own, mut held, mut ends) = (first, false, false, false);
+     let mut a = first;
+     for i in first.index() + 1..=last.index() {
+         let b = TokenIdx(i as u32);
+@@ -57,27 +57,17 @@ pub(super) fn with_breaks(cx: &Ctx, code: &[TokenIdx]) -> Option<Vec<TokenIdx>>
+             continue;
+         }
+         let gap = a.index() + 1..i;
++        let comment = cst.tokens()[gap.clone()].iter().any(|t| t.kind.is_comment());
+         let newline = |k: &usize| cst.tokens()[*k].kind == TokenKind::Newline && !cx.is_dropped(TokenIdx(*k as u32));
+-        let newlines = || gap.clone().filter(newline);
+-        if newlines().next().is_some() {
+-            let end = line_end(cst, code_before(cst, a, &source), a, b, &source);
+-            let comment = cst.tokens()[gap.clone()].iter().any(|t| t.kind.is_comment());
+-            if end || !(ours(a) || ours(b)) || list_edge(cst, a, b, &gone) {
+-                (own, ends) = (true, ends || end);
+-            } else if comment {
+-                held = true;
+-            } else {
+-                breaks.extend(newlines().map(|k| TokenIdx(k as u32)));
+-            }
++        let goes = (ours(a) || ours(b))
++            && gap.clone().any(|k| newline(&k))
++            && !line_end(cx, code_before(cst, a, &source), a, b, &source)
++            && !list_edge(cx, a, b, &gone);
++        if comment && (goes || (start <= a && b <= end)) {
++            return None;
+         }
+-        if !gone(b) {
+-            let stays = own || held;
+-            // A line break only a comment keeps would stay when the comment goes (`fn f() -> () // c` newline
+-            // `uses {A} {}`): the form would hang on the comment, so the tokens stay.
+-            if (held && !own) || (stays && line_end(cst, code_before(cst, written, &gone), written, b, &gone) != ends) {
+-                return None;
+-            }
+-            (written, own, held, ends) = (b, false, false, false);
++        if goes {
++            breaks.extend(gap.filter(newline).map(|k| TokenIdx(k as u32)));
+         }
+         a = b;
+     }
+@@ -98,10 +88,11 @@ fn code_after(cst: &Cst, t: TokenIdx, skip: &dyn Fn(TokenIdx) -> bool) -> TokenI
+ /// The innermost pair of brackets round the gap between the code tokens `a`
+ /// and `b` whose opening bracket is not `gone`, with its node; `None` at the
+ /// top of the file. It walks up from `a` through the nesting (§2.5).
+-fn round(cst: &Cst, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -> Option<(NodeId, TokenIdx, TokenIdx)> {
++fn round(cx: &Ctx, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -> Option<(NodeId, TokenIdx, TokenIdx)> {
++    let cst = cx.cst;
+     let mut n = Some(cst.token_parent(a));
+     while let Some(x) = n {
+-        let pairs = shape::pairs(cst, x);
++        let pairs = cx.pairs.of(cst, x);
+         if let Some(&(open, close)) = pairs.iter().rev().find(|&&(o, c)| o <= a && b <= c && !gone(o)) {
+             return Some((x, open, close));
+         }
+@@ -114,8 +105,9 @@ fn round(cst: &Cst, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -
+ /// one before `a`) ends a line (§2.5): in a block, a body of items or the
+ /// file, unless the line goes on ([`continues`]); the pairs whose opening
+ /// bracket is `gone` are not round it.
+-fn line_end(cst: &Cst, before: Option<TokenIdx>, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -> bool {
+-    let holds = round(cst, a, b, gone).is_none_or(|(n, _, _)| shape::holds_statements(cst.kind(n)));
++fn line_end(cx: &Ctx, before: Option<TokenIdx>, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -> bool {
++    let cst = cx.cst;
++    let holds = round(cx, a, b, gone).is_none_or(|(n, _, _)| shape::holds_statements(cst.kind(n)));
+     let kind = |t: TokenIdx| cst.token(t).kind;
+     holds && !continues(before.map(kind), kind(a), kind(b))
+ }
+@@ -123,8 +115,9 @@ fn line_end(cst: &Cst, before: Option<TokenIdx>, a: TokenIdx, b: TokenIdx, gone:
+ /// Whether a line break between the code tokens `a` and `b` is at the edge
+ /// of a list whose brackets stay: after its opening bracket or a `,`, before its closing
+ /// bracket or a `,` (the form of the list, §3.2).
+-fn list_edge(cst: &Cst, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -> bool {
+-    let Some((n, open, close)) = round(cst, a, b, gone) else { return false };
++fn list_edge(cx: &Ctx, a: TokenIdx, b: TokenIdx, gone: &dyn Fn(TokenIdx) -> bool) -> bool {
++    let cst = cx.cst;
++    let Some((n, open, close)) = round(cx, a, b, gone) else { return false };
+     let list = shape::shape(cst.kind(n)).is_some_and(|row| row.shape == Shape::List);
+     let comma = |t: TokenIdx| cst.token(t).kind == TokenKind::Comma;
+     list && (a == open || b == close || comma(a) || comma(b))
+diff --git a/crates/onsa_syntax/src/fmt/plan.rs b/crates/onsa_syntax/src/fmt/plan.rs
+index 2e7c943..95f031c 100644
+--- a/crates/onsa_syntax/src/fmt/plan.rs
++++ b/crates/onsa_syntax/src/fmt/plan.rs
+@@ -35,6 +35,7 @@ use super::shape::{self, Form, Shape};
+ use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
+ use crate::layout::continues;
+ use crate::literal;
++use crate::parser::Parsed;
+ use crate::token::TokenKind;
+ 
+ /// The printer leaves the token out.
+@@ -56,11 +57,12 @@ pub(super) struct Plan {
+ }
+ 
+ impl Plan {
+-    /// The plan of `cst`, the tree of `src` (without a syntax error).
+-    pub(super) fn new(cst: &Cst, src: &str) -> Plan {
++    /// The plan of `parsed`, the file `src` (without a syntax error).
++    pub(super) fn new(parsed: &Parsed, src: &str) -> Plan {
++        let cst = &parsed.cst;
+         let mut plan = Plan { flags: vec![0; cst.tokens().len()], texts: Vec::new(), forms: Vec::new() };
+         let nodes = all_nodes(cst);
+-        let choices = rewrites::choose(cst, src, &nodes);
++        let choices = rewrites::choose(parsed, &nodes);
+         let dropped = choices.dropped.iter().enumerate().filter(|&(_, &d)| d);
+         dropped.for_each(|(i, _)| plan.set(TokenIdx(i as u32), DROP));
+         plan.numbers(cst, src);
+@@ -161,7 +163,7 @@ impl Plan {
+         }
+         let element = shape::elements(cst, n).last().map(|e| TokenIdx(e.end.0 - 1));
+         let rest = shape::rest(cst, n).map(|r| r.start);
+-        // After the last token written of the element (a rewrite drops some: `0.0` of `prev~(x, 0.0)`).
++        // After the last token written of the element (a rewrite drops some: `-> ()` of `a: fn(F32) -> ()`).
+         if let Some(element) = element.filter(|&e| rest.is_none_or(|r| r < e))
+             && source_next(cst, element).is_none_or(|t| cst.token(t).kind != TokenKind::Comma)
+             && let Some(at) = self.previous(cst, TokenIdx(element.0 + 1)).filter(|&t| t > open)
+diff --git a/crates/onsa_syntax/src/fmt/print.rs b/crates/onsa_syntax/src/fmt/print.rs
+index 20c40f8..784e8ec 100644
+--- a/crates/onsa_syntax/src/fmt/print.rs
++++ b/crates/onsa_syntax/src/fmt/print.rs
+@@ -44,15 +44,17 @@ use super::plan::Plan;
+ use super::shape::{self, Form, Shape};
+ use super::space::{self, Space};
+ use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
++use crate::parser::Parsed;
+ use crate::token::TokenKind;
+ 
+ /// One level of indentation.
+ const STEP: usize = 2;
+ 
+ /// The source written in the canonical form of the printer (see the module
+-/// documentation). `cst` is the tree of `src`, without a syntax error.
+-pub(super) fn print(cst: &Cst, src: &str) -> String {
+-    let plan = Plan::new(cst, src);
++/// documentation). `parsed` is the file `src`, without a syntax error.
++pub(super) fn print(parsed: &Parsed, src: &str) -> String {
++    let cst = &parsed.cst;
++    let plan = Plan::new(parsed, src);
+     let mut p = Printer {
+         cst,
+         src,
+diff --git a/crates/onsa_syntax/src/fmt/print_tests.rs b/crates/onsa_syntax/src/fmt/print_tests.rs
+index 01e3920..c4f9904 100644
+--- a/crates/onsa_syntax/src/fmt/print_tests.rs
++++ b/crates/onsa_syntax/src/fmt/print_tests.rs
+@@ -7,8 +7,9 @@
+ //!   a diagnostic, the output reads without one, with the code tokens (kind
+ //!   and text) that the plan (`fmt/plan.rs`) keeps, respells and adds, and the
+ //!   same comments (their text without blanks at the end), in the same order.
+-//!   Without the `,` and the `return` (the only tokens the plan drops or
+-//!   adds), the kinds of the code tokens are those of the file.
++//!   Without the `,` (which the plan moves, drops and adds) and the tokens
++//!   the rewrites of §3.3 drop (`fmt/rewrites.rs`), the kinds of the code
++//!   tokens are those of the file.
+ //! - (iii) Printing the output again gives the output.
+ //! - (iv) The printer gives every canonical file back from copies of it
+ //!   whose layout is changed with a fixed seed ([`jitter`]): the indentation,
+@@ -24,6 +25,7 @@ use onsa_diag::FileId;
+ 
+ use super::plan::Plan;
+ use super::print::print;
++use super::rewrites;
+ use super::table_tests::{EXTRA, canonical_by_case};
+ use crate::cst::{Cst, TokenIdx};
+ use crate::lexer::BLANKS;
+@@ -54,14 +56,12 @@ fn tokens(cst: &Cst, text: &str, plan: Option<&Plan>) -> (Vec<(TokenKind, String
+     (code, comments)
+ }
+ 
+-/// The kinds of the code tokens without `,` and the kinds of the tokens the rewrites of §3.3 drop (`return`,
+-/// `move`, `-> ()`, `uses {}`, the number of an `init`).
+-fn kinds(code: &[(TokenKind, String)]) -> Vec<TokenKind> {
+-    use TokenKind::*;
+-    let dropped = |k: &TokenKind| {
+-        matches!(k, Comma | KwReturn | KwMove | Arrow | LParen | RParen | KwUses | LBrace | RBrace | Int | Float)
+-    };
+-    code.iter().map(|(k, _)| *k).filter(|k| !dropped(k)).collect()
++/// The kinds of the code tokens of `cst` without `,` and, with `dropped` (by the index of the token), without
++/// the tokens the rewrites of §3.3 drop.
++fn kinds(cst: &Cst, dropped: Option<&[bool]>) -> Vec<TokenKind> {
++    let tokens = cst.tokens().iter().enumerate();
++    let kept = tokens.filter(|&(i, t)| !t.kind.is_trivia() && dropped.is_none_or(|d| !d[i]));
++    kept.map(|(_, t)| t.kind).filter(|&k| k != TokenKind::Comma).collect()
+ }
+ 
+ /// A generator with a fixed seed (xorshift64).
+@@ -184,7 +184,7 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
+                 continue;
+             }
+             tally.read += 1;
+-            let out = print(&parsed.cst, text);
++            let out = print(&parsed, text);
+             if canonical_by_case(name, text, &files, &root) {
+                 tally.canonical += 1;
+                 if out != *text {
+@@ -200,8 +200,8 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
+                         tally
+                             .errors
+                             .push(format!("(iv) {name}, copy {copy}: a syntax error: {:?}", parsed.diagnostics));
+-                    } else if print(&parsed.cst, &jittered) != *text {
+-                        let back = print(&parsed.cst, &jittered);
++                    } else if print(&parsed, &jittered) != *text {
++                        let back = print(&parsed, &jittered);
+                         tally.errors.push(format!("(iv) {name}, copy {copy}: {}", first_difference(text, &back)));
+                     }
+                 }
+@@ -211,15 +211,18 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
+                 tally.errors.push(format!("(ii) {name}: the output has a syntax error: {:?}", again.diagnostics));
+                 continue;
+             }
+-            let (planned, comments) = tokens(&parsed.cst, text, Some(&Plan::new(&parsed.cst, text)));
++            let (planned, comments) = tokens(&parsed.cst, text, Some(&Plan::new(&parsed, text)));
+             let (written, written_comments) = tokens(&again.cst, &out, None);
+             if planned != written || comments != written_comments {
+                 tally.errors.push(format!("(ii) {name}: the tokens or the comments are not those of the plan"));
+             }
+-            if kinds(&tokens(&parsed.cst, text, None).0) != kinds(&written) {
+-                tally.errors.push(format!("(ii) {name}: a token other than `,` and `return` was dropped or added"));
++            let dropped = rewrites::choose(&parsed, &rewrites::all_nodes(&parsed.cst)).dropped;
++            if kinds(&parsed.cst, Some(&dropped)) != kinds(&again.cst, None) {
++                tally.errors.push(format!(
++                    "(ii) {name}: a token other than `,` and those the rewrites of §3.3 drop was dropped or added"
++                ));
+             }
+-            let twice = print(&again.cst, &out);
++            let twice = print(&again, &out);
+             if twice != out {
+                 tally.errors.push(format!("(iii) {name}: {}", first_difference(&out, &twice)));
+             }
+@@ -243,7 +246,7 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
+ fn printed(src: &str) -> String {
+     let parsed = crate::parse(FileId(0), src);
+     assert!(!parsed.syntax_errors(), "{src}: {:?}", parsed.diagnostics);
+-    print(&parsed.cst, src)
++    print(&parsed, src)
+ }
+ 
+ /// The rows of the table of S-498 in the 28th set of the gaps of W3 (the column of the
+@@ -412,7 +415,7 @@ fn the_nested_pairs_of_a_negative_literal_pattern_take_their_forms() {
+ fn joined(src: &str) -> Vec<String> {
+     let parsed = crate::parse(FileId(0), src);
+     assert!(!parsed.syntax_errors(), "{src}: {:?}", parsed.diagnostics);
+-    let (cst, plan) = (&parsed.cst, Plan::new(&parsed.cst, src));
++    let (cst, plan) = (&parsed.cst, Plan::new(&parsed, src));
+     let mut out = Vec::new();
+     let mut breaks = false;
+     for (i, tok) in cst.tokens().iter().enumerate() {
+diff --git a/crates/onsa_syntax/src/fmt/rewrites.rs b/crates/onsa_syntax/src/fmt/rewrites.rs
+index 394bd5d..124cbf6 100644
+--- a/crates/onsa_syntax/src/fmt/rewrites.rs
++++ b/crates/onsa_syntax/src/fmt/rewrites.rs
+@@ -12,19 +12,18 @@
+ //! side saw is an internal error.
+ //!
+ //! Here are the `return` in the tail position (§6.1) and the `move` in the
+-//! returned position (§5.2), whose places `fmt/tail.rs` decides, `-> ()` and
+-//! an empty `uses {}` (§6.1, §8.1), whose line breaks go with them as
+-//! `fmt/breaks.rs` decides, and the `init` that is the default value
+-//! (§11.4). The redundant parentheses (W3-12 U2) come in the same form and go
+-//! last (their AST side copies the node inside, which the others must have
+-//! rewritten before).
++//! returned position (§5.2), whose places `fmt/tail.rs` decides, and `-> ()`
++//! and an empty `uses {}` (§6.1, §8.1), whose line breaks go with them as
++//! `fmt/breaks.rs` decides. The `init` that equals the default value stays
++//! (S-539: the syntax alone does not show that it can go). The redundant
++//! parentheses (W3-12 U2) come in the same form and go last (their AST side
++//! copies the node inside, which the others must have rewritten before).
+ 
+ use std::collections::{BTreeMap, HashMap, HashSet};
+ 
+ use super::{breaks, tail};
+-use crate::ast::{Ast, Block, EffectRow, ExprKind, FnDecl, ItemKind, Lit, StmtKind, TypeId, TypeKind};
++use crate::ast::{Ast, Block, EffectRow, ExprId, ExprKind, FnDecl, ItemKind, StmtKind, TypeId, TypeKind};
+ use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
+-use crate::delay::Delay;
+ use crate::parser::Parsed;
+ use crate::token::TokenKind;
+ 
+@@ -47,19 +46,21 @@ const REWRITES: &[Rewrite] = &[
+     Rewrite { kinds: &[NodeKind::MoveExpr], cst: ret_move, ast: ret_move_ast },
+     Rewrite { kinds: HEADS, cst: unit_ret, ast: unit_ret_ast },
+     Rewrite { kinds: HEADS, cst: empty_uses, ast: empty_uses_ast },
+-    Rewrite { kinds: &[NodeKind::CallExpr], cst: init, ast: init_ast },
+ ];
+ 
+-/// What a rewrite sees as it chooses: the tree and its source, the tokens
++/// What a rewrite sees as it chooses: the tree and its AST, the `move`
++/// expressions of the AST by their CST node, the tokens
+ /// the rewrites before it dropped (by the index of the token: a line break
+ /// can be one), and the last statement of each block once its `return`s
+ /// without a value are gone (made once: a block can end in a long run of
+ /// them).
+ pub(super) struct Ctx<'a> {
+     pub(super) cst: &'a Cst,
+-    src: &'a str,
++    ast: &'a Ast,
++    moves: HashMap<NodeId, ExprId>,
+     dropped: Vec<bool>,
+     lasts: HashMap<NodeId, Option<NodeId>>,
++    pub(super) pairs: breaks::Pairs,
+ }
+ 
+ impl Ctx<'_> {
+@@ -93,12 +94,22 @@ pub(crate) fn all_nodes(cst: &Cst) -> Vec<NodeId> {
+     nodes
+ }
+ 
+-/// The rewrites of `cst`, the tree of `src` (`nodes` is [`all_nodes`]), the
+-/// one walk that the plan and [`normalize`] read.
+-pub(super) fn choose(cst: &Cst, src: &str, nodes: &[NodeId]) -> Choices {
++/// The rewrites of `parsed` (`nodes` is [`all_nodes`] of its CST), the one
++/// walk that the plan and [`normalize`] read.
++pub(super) fn choose(parsed: &Parsed, nodes: &[NodeId]) -> Choices {
++    let cst = &parsed.cst;
++    let moves = parsed.map.exprs.iter().enumerate().filter(|&(_, &n)| cst.kind(n) == NodeKind::MoveExpr);
++    let moves = moves.map(|(i, &n)| (n, ExprId(i as u32))).collect();
+     let blocks = nodes.iter().filter(|&&b| cst.kind(b) == NodeKind::Block);
+     let lasts = blocks.map(|&b| (b, tail::effective_last(cst, b))).collect();
+-    let mut cx = Ctx { cst, src, dropped: vec![false; cst.tokens().len()], lasts };
++    let mut cx = Ctx {
++        cst,
++        ast: &parsed.ast,
++        moves,
++        dropped: vec![false; cst.tokens().len()],
++        lasts,
++        pairs: breaks::Pairs::default(),
++    };
+     let mut chosen = Vec::with_capacity(REWRITES.len());
+     let mut out = Vec::new();
+     for rewrite in REWRITES {
+@@ -117,16 +128,15 @@ pub(super) fn choose(cst: &Cst, src: &str, nodes: &[NodeId]) -> Choices {
+     Choices { dropped: cx.dropped, chosen }
+ }
+ 
+-/// The AST of `parsed` (of the source `text`) with every rewrite of the
+-/// list (§3.5). `parsed` has no diagnostic of the syntax stage (the callers
++/// The AST of `parsed` with every rewrite of the list (§3.5). `parsed` has no diagnostic of the syntax stage (the callers
+ /// refuse such a file first): one is an internal error here, before a
+ /// rewrite meets a broken tree.
+-pub(crate) fn normalize(parsed: &Parsed, text: &str) -> Ast {
++pub(crate) fn normalize(parsed: &Parsed) -> Ast {
+     if let Some(d) = parsed.first_syntax_error() {
+         onsa_diag::internal::bug(Some(d.span), "the comparison of fmt and `diff --ast` got a tree with a syntax error");
+     }
+     let mut ast = parsed.ast.clone();
+-    let choices = choose(&parsed.cst, text, &all_nodes(&parsed.cst));
++    let choices = choose(parsed, &all_nodes(&parsed.cst));
+     for (rewrite, chosen) in REWRITES.iter().zip(&choices.chosen) {
+         (rewrite.ast)(&mut ast, parsed, chosen);
+     }
+@@ -206,9 +216,16 @@ fn tail_return_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
+     }
+ }
+ 
+-/// The `move` in the returned position (§5.2, S-100, `fmt/tail.rs`).
++/// The `move` in the returned position (§5.2, S-100, `fmt/tail.rs`), of a
++/// place ([`Ast::place_root`]): the `move` of any other expression is E0711
++/// (`move g()`), which taking it off would hide. Whether the name at the
++/// root is a local the syntax does not see.
+ fn ret_move(cx: &Ctx, n: NodeId, out: &mut Vec<TokenIdx>) -> bool {
+-    let goes = cx.cst.kind(n) == NodeKind::MoveExpr && tail::is_ret_expr(cx, n);
++    let place = |e: &ExprId| match &cx.ast.expr(*e).kind {
++        ExprKind::Move(inner) => cx.ast.place_root(*inner).is_some(),
++        _ => false,
++    };
++    let goes = cx.cst.kind(n) == NodeKind::MoveExpr && cx.moves.get(&n).is_some_and(place) && tail::is_ret_expr(cx, n);
+     if goes {
+         out.extend(keyword(cx.cst, n, TokenKind::KwMove));
+     }
+@@ -227,27 +244,27 @@ fn ret_move_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
+     }
+ }
+ 
+-/// The heads that can have `-> T` and `uses {…}` (S-68, S-540): a function
+-/// (a member of a trait, an extern block, an effect or a handler too), an
+-/// anonymous function and a function type. A flow has neither (its `-> T`
+-/// is required).
+-const HEADS: &[NodeKind] = &[NodeKind::Fn, NodeKind::ClosureExpr, NodeKind::FnType];
++/// The heads whose `-> ()` and `uses {}` go (S-68, S-540): a function (a
++/// member of a trait, an extern block, an effect or a handler too) and a
++/// function type. A flow has neither (its `-> T` is required). Not an
++/// anonymous function (S-546): there, leaving them out leaves the result and
++/// the effects to the expected type or the body (§6.1, §8.1), so `-> ()` and
++/// `uses {}` are annotations of their own (`take(fn(x: I32) -> () { x })` is
++/// E0401, and stays so).
++const HEADS: &[NodeKind] = &[NodeKind::Fn, NodeKind::FnType];
+ 
+-/// The code tokens of the node `n`, and whether a comment is among its tokens.
+-fn code_of(cst: &Cst, n: NodeId) -> (Vec<TokenIdx>, bool) {
+-    let tokens = cst.token_range(n).map(|i| TokenIdx(i as u32));
+-    let comment = tokens.clone().any(|t| cst.token(t).kind.is_comment());
+-    (tokens.filter(|&t| cst.token(t).kind.is_code()).collect(), comment)
++/// The code tokens of the node `n`.
++fn code_of(cst: &Cst, n: NodeId) -> Vec<TokenIdx> {
++    cst.token_range(n).map(|i| TokenIdx(i as u32)).filter(|&t| cst.token(t).kind.is_code()).collect()
+ }
+ 
+ /// Drop the code tokens `code` of a node with the line breaks that go with
+-/// them, when the form after it reads as the same tree (`fmt/breaks.rs`),
+-/// and not when the tokens are an enclosure that holds a comment (`uses {`
+-/// newline `// c` newline `}`): that stays whole (S-536). The node is
++/// them, but not with a comment in the range of the rewrite (`fmt/breaks.rs`,
++/// S-536: `uses {` newline `// c` newline `}` stays whole). The node is
+ /// rewritten either way.
+-fn take_off(cx: &Ctx, (mut code, comment): (Vec<TokenIdx>, bool), out: &mut Vec<TokenIdx>) -> bool {
++fn take_off(cx: &Ctx, mut code: Vec<TokenIdx>, out: &mut Vec<TokenIdx>) -> bool {
+     code.sort_unstable();
+-    if let (false, Some(lines)) = (comment, breaks::with_breaks(cx, &code)) {
++    if let Some(lines) = breaks::with_breaks(cx, &code) {
+         out.extend(code.into_iter().chain(lines));
+     }
+     true
+@@ -267,29 +284,39 @@ fn unit_ret(cx: &Ctx, n: NodeId, out: &mut Vec<TokenIdx>) -> bool {
+     while let (NodeKind::ParenType, Some(inner)) = (cst.kind(unit), cst.child_nodes(unit).next()) {
+         unit = inner;
+     }
+-    let (mut code, comment) = code_of(cst, ty);
++    let mut code = code_of(cst, ty);
+     code.push(arrow);
+-    cst.kind(unit) == NodeKind::UnitType && take_off(cx, (code, comment), out)
++    cst.kind(unit) == NodeKind::UnitType && take_off(cx, code, out)
+ }
+ 
+ /// An empty `uses {}` (§8.1, S-68, S-540) in a head of [`HEADS`]: `uses` and
+-/// its braces go.
++/// its braces go. Not before another `uses` or an `at` (`fn() -> I32 uses {}
++/// uses {Alloc}` as the result of a function): those would then be the
++/// function type's, another program (§8.1, §11.4). The heads outside are
++/// chosen first ([`all_nodes`]), so the next token is the one that stays.
+ fn empty_uses(cx: &Ctx, n: NodeId, out: &mut Vec<TokenIdx>) -> bool {
+     let cst = cx.cst;
+     let row = cst.child_nodes(n).find(|&c| cst.kind(c) == NodeKind::EffectRow);
+     let (Some(row), Some(uses), true) = (row, keyword(cst, n, TokenKind::KwUses), HEADS.contains(&cst.kind(n))) else {
+         return false;
+     };
+-    let (mut code, comment) = code_of(cst, row);
++    let mut code = code_of(cst, row);
++    let next = code.last().and_then(|&t| {
++        (t.index() + 1..cst.tokens().len())
++            .map(|i| TokenIdx(i as u32))
++            .find(|&c| cst.token(c).kind.is_code() && !cx.is_dropped(c))
++    });
++    if next.is_some_and(|t| matches!(cst.token(t).kind, TokenKind::KwUses | TokenKind::KwAt)) {
++        return false;
++    }
+     code.push(uses);
+-    code.len() == 3 && take_off(cx, (code, comment), out)
++    code.len() == 3 && take_off(cx, code, out)
+ }
+ 
+ /// The AST nodes of the chosen nodes of a rewrite, by the CST node they were
+ /// made from: their parents and grandparents too (the `Item` of a `Fn`).
+ struct Ix {
+     items: HashMap<NodeId, usize>,
+-    exprs: HashMap<NodeId, usize>,
+     types: HashMap<NodeId, usize>,
+ }
+ 
+@@ -299,11 +326,7 @@ impl Ix {
+         let wanted: HashSet<NodeId> =
+             chosen.iter().flat_map(|&n| [Some(n), up(n), up(n).and_then(up)]).flatten().collect();
+         let map = &parsed.map;
+-        Ix {
+-            items: index_of(&map.items, &wanted),
+-            exprs: index_of(&map.exprs, &wanted),
+-            types: index_of(&map.types, &wanted),
+-        }
++        Ix { items: index_of(&map.items, &wanted), types: index_of(&map.types, &wanted) }
+     }
+ }
+ 
+@@ -331,10 +354,6 @@ fn head_of<'a>(
+             let f = fn_decl(&mut ast.items[*ix.items.get(&item)?].kind)?;
+             Some((&mut f.ret, &mut f.effects))
+         }
+-        NodeKind::ClosureExpr => match &mut ast.exprs[*ix.exprs.get(&n)?].kind {
+-            ExprKind::Closure { ret, effects, .. } => Some((ret, effects)),
+-            _ => None,
+-        },
+         NodeKind::FnType => match &mut ast.types[*ix.types.get(&n)?].kind {
+             TypeKind::Fn { ret, effects, .. } => Some((ret, effects)),
+             _ => None,
+@@ -365,71 +384,6 @@ fn empty_uses_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
+     }
+ }
+ 
+-/// The `init` of a built-in delay that is a literal of the value 0 in any
+-/// spelling (§11.4, S-29, S-539): the argument goes, with the `,` after it,
+-/// else the one before it (the line of an element in the block form goes,
+-/// a comment on it stays, S-538). Read on the syntax alone: the type of the
+-/// delay and a local name that hides the delay are not seen. `-0` is a
+-/// prefix `-` and stays, as `-0.0` does. `false` stays too: `check` does not
+-/// take the `init` of a delay of a `Bool` left out yet (W7-07).
+-fn init(cx: &Ctx, n: NodeId, out: &mut Vec<TokenIdx>) -> bool {
+-    let cst = cx.cst;
+-    let text = |t: TokenIdx| &cx.src[cst.token(t).span.start as usize..cst.token(t).span.end as usize];
+-    if cst.kind(n) != NodeKind::CallExpr || keyword(cst, n, TokenKind::Tilde).is_none() {
+-        return false;
+-    }
+-    let mut parts = cst.child_nodes(n);
+-    let (Some(callee), Some(list)) = (parts.next(), parts.next()) else { return false };
+-    let name = cst.significant_tokens(callee).filter(|(a, b)| a == b && cst.kind(callee) == NodeKind::PathExpr);
+-    let Some(delay) = name.and_then(|(t, _)| Delay::named(text(t))) else { return false };
+-    let args: Vec<NodeId> = cst.child_nodes(list).collect();
+-    let Some(&arg) = args.get(delay.init_index()).filter(|_| args.len() == delay.init_index() + 1) else {
+-        return false;
+-    };
+-    // The argument is its expression alone (no mode before it).
+-    let (Some(mut value), Some((first, last))) = (cst.child_nodes(arg).next(), cst.significant_tokens(arg)) else {
+-        return false;
+-    };
+-    if cst.significant_tokens(value).map(|(f, _)| f) != Some(first) {
+-        return false;
+-    }
+-    while cst.kind(value) == NodeKind::ParenExpr {
+-        let Some(inner) = cst.child_nodes(value).next() else { return false };
+-        value = inner;
+-    }
+-    let literal = cst.significant_tokens(value).filter(|(a, b)| a == b && cst.kind(value) == NodeKind::Literal);
+-    if !literal.is_some_and(|(t, _)| crate::literal::is_zero(cst.token(t).kind, text(t))) {
+-        return false;
+-    }
+-    let comma = |t: Option<TokenIdx>| t.filter(|&t| cst.token(t).kind == TokenKind::Comma);
+-    let next =
+-        (last.index() + 1..cst.tokens().len()).map(|i| TokenIdx(i as u32)).find(|&t| cst.token(t).kind.is_code());
+-    let before = (0..first.index()).rev().map(|i| TokenIdx(i as u32)).find(|&t| cst.token(t).kind.is_code());
+-    let code = (first.index()..=last.index()).map(|i| TokenIdx(i as u32)).filter(|&t| cst.token(t).kind.is_code());
+-    out.extend(code.chain(comma(next).or(comma(before))));
+-    true
+-}
+-
+-/// [`init`] on the AST: the last argument of the call, a literal, goes.
+-fn init_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
+-    let expr_of = index_of(&parsed.map.exprs, &chosen.iter().copied().collect());
+-    for &n in chosen {
+-        let arg = match expr_of.get(&n).map(|&e| &mut ast.exprs[e].kind) {
+-            Some(ExprKind::Call { args, .. }) => args.pop(),
+-            _ => None,
+-        };
+-        let mut value = arg.map(|a| a.expr);
+-        while let Some(ExprKind::Paren(inner)) = value.map(|v| &ast.exprs[v.index()].kind) {
+-            value = Some(*inner);
+-        }
+-        if !value
+-            .is_some_and(|v| matches!(ast.exprs[v.index()].kind, ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. })))
+-        {
+-            onsa_diag::internal::bug(Some(parsed.cst.span(n)), "fmt's rewrite of the `init`: no literal argument")
+-        }
+-    }
+-}
+-
+ #[cfg(test)]
+ mod tests {
+     use onsa_diag::FileId;
+@@ -561,15 +515,15 @@ mod tests {
+         }
+     }
+ 
+-    /// S-536 (2'), provisional (`fmt/breaks.rs`): the line breaks next to a
+-    /// `-> ()` or a `uses {}` that goes go with it, but those of a gap with a
+-    /// comment, the line ends and the edges of a list. A form that would not
+-    /// read as the same tree (`fn c() // c` newline `{}` is E0003), a form
+-    /// whose line break only a comment keeps (`fn h() // c` newline `uses`)
+-    /// and an enclosure that holds only a comment stay; so does `-> () at
+-    /// sample`.
++    /// S-536 (`fmt/breaks.rs`): the line breaks next to a `-> ()` or a
++    /// `uses {}` that goes go with it, but the line ends and the edges of a
++    /// list. With a comment in the range of the rewrite (between its tokens,
++    /// or in the gap of a line break that would go: `fn c() // c` newline
++    /// `uses {} {}`, `fn h() -> () // h` newline `uses {Alloc} {}`, an
++    /// enclosure that holds only a comment) the tokens stay; so does `-> ()
++    /// at sample`.
+     #[test]
+-    fn line_breaks_next_to_a_head_that_goes_go_with_it_unless_the_form_after_reads_otherwise() {
++    fn line_breaks_next_to_a_head_that_goes_go_with_it_unless_a_comment_is_in_the_range() {
+         let cases = [
+             ("fn a()\n  uses {} {}\n", "fn a() {}\n"),
+             ("fn b() ->\n  () {}\n", "fn b() {}\n"),
+@@ -603,6 +557,94 @@ mod tests {
+         }
+     }
+ 
++    /// S-536 (1): a comment outside the range of the rewrite stays on its
++    /// line, after a line end or at the edge of a list (`fn a(self) -> () //
++    /// c` is `fn a(self) // c`); one in it keeps the tokens of that rewrite,
++    /// and the `-> ()` and the `uses {}` of a head that share the gap of a
++    /// comment both stay (W3-12/b 2: one pass reaches the fixed point, in a
++    /// head, a function type, a type alias, a field and the members of a
++    /// trait, an `extern` block and an effect).
++    #[test]
++    fn a_comment_out_of_the_range_stays_on_its_line_and_one_in_it_keeps_the_tokens() {
++        let cases = [
++            (
++                "trait T {\n  fn a(self) -> () // c\n  fn b(self)\n}\n",
++                "trait T {\n  fn a(self) // c\n  fn b(self)\n}\n",
++            ),
++            ("struct S {\n  a: fn(F32) -> () // c\n}\n", "struct S {\n  a: fn(F32), // c\n}\n"),
++            ("fn f() -> () uses {} { // c\n}\n", "fn f() { // c\n}\n"),
++            ("type T = fn(F32) -> () uses {} // c\nfn g() {}\n", "type T = fn(F32) // c\nfn g() {}\n"),
++            ("type T = fn(F32) -> // c\n  () uses {}\n", "type T = fn(F32) -> // c\n  ()\n"),
++            ("type T = fn(F32) -> () uses { // c\n}\n", "type T = fn(F32) uses { // c\n}\n"),
++        ];
++        for (src, want) in cases {
++            assert_eq!(formatted(src), want, "{src}");
++        }
++        for kept in [
++            "type T = fn(F32) -> () // c\n  uses {}\n",
++            "type T = fn(F32) -> ()\n  // c\n  uses {}\n",
++            "fn h() -> () // c\n  uses {} {}\n",
++            "fn p(f: fn(F32) -> () // c\n  uses {}) {}\n",
++            "struct S {\n  a: fn(F32) -> () // c\n    uses {},\n}\n",
++            "trait T {\n  fn a(self) -> () // c\n    uses {}\n}\n",
++            "extern \"C\" lib \"m\" {\n  fn e(x: F64) -> () // c\n    uses {}\n}\n",
++            "effect E {\n  fn op(x: F32) -> () // c\n    uses {}\n}\n",
++            "fn g() -> I32 uses { // c\n} {\n  1\n}\n",
++        ] {
++            assert_eq!(formatted(kept), kept);
++        }
++    }
++
++    /// W3-12/b 1: an empty `uses {}` before another `uses` or an `at` stays:
++    /// without it they would be the function type's (§8.1, §11.4), another
++    /// program. Of two empty ones the outer goes first, so the inner one goes
++    /// too in the same pass. The comparison of §3.5 tells the two apart.
++    #[test]
++    fn an_empty_uses_before_another_uses_stays() {
++        for kept in [
++            "fn make() -> fn() -> I32 uses {} uses {Alloc} {\n  fn() -> I32 { 1 }\n}\n",
++            "type Maker = fn() -> fn() -> I32 uses {} uses {Alloc}\n",
++            "fn go() uses {Alloc} {\n  let m = fn() -> fn() -> I32 uses {} uses {Alloc} { g }\n}\n",
++            "fn f() -> fn() uses {} uses {Alloc} {}\n",
++            "flow f(g: fn() -> I32 uses {} at sample) -> F32 at sample {\n  0.0\n}\n",
++        ] {
++            assert_eq!(formatted(kept), kept);
++        }
++        assert_eq!(formatted("type M = fn() -> fn() -> I32 uses {} uses {}\n"), "type M = fn() -> fn() -> I32\n");
++        assert_eq!(formatted("type M = fn() -> fn() -> () uses {Alloc}\n"), "type M = fn() -> fn() uses {Alloc}\n");
++        let differ = |a: &str, b: &str| {
++            let (pa, pb) = (crate::parse(FileId(0), a), crate::parse(FileId(0), b));
++            !crate::diff::diff(&pa, a, &pb, b).is_empty()
++        };
++        assert!(differ("fn f() -> fn() uses {} uses {Alloc} {}\n", "fn f() -> fn() uses {Alloc} {}\n"));
++        assert!(differ("type M = fn() -> fn() -> I32 uses {Alloc}\n", "type M = fn() -> (fn() -> I32) uses {Alloc}\n"));
++        assert!(differ("fn f() -> fn() -> I32 uses {} uses {A} {}\n", "fn f() -> fn() -> I32 uses {A} {}\n"));
++    }
++
++    /// S-546: the `-> ()` and the `uses {}` of an anonymous function stay
++    /// (there, leaving them out leaves the result and the effects to the
++    /// expected type or the body); those of a function type in it go. The
++    /// `move` of a value that is not a place stays (E0711); that of a place
++    /// goes.
++    #[test]
++    fn the_head_of_an_anonymous_function_and_the_move_of_a_value_stay() {
++        for kept in [
++            "fn f() {\n  take(fn(x: I32) -> () uses {} { x })\n}\n",
++            "fn f() -> B {\n  move g()\n}\n",
++            "fn f() -> B {\n  move g().b\n}\n",
++        ] {
++            assert_eq!(formatted(kept), kept);
++        }
++        assert_eq!(
++            formatted("fn f() {\n  let g = fn(h: fn() -> () uses {}) -> () { h() }\n}\n"),
++            "fn f() {\n  let g = fn(h: fn()) -> () { h() }\n}\n"
++        );
++        assert_eq!(
++            formatted("fn f(move a: B) -> B {\n  move a.b[0].0\n}\n"),
++            "fn f(move a: B) -> B {\n  a.b[0].0\n}\n"
++        );
++    }
++
+     /// S-545 with `-> ()`: the `return` after a call stays (the call would be
+     /// the value) and `-> ()` goes; after an assignment both go.
+     #[test]
+@@ -614,35 +656,27 @@ mod tests {
+         );
+     }
+ 
+-    /// S-29, S-539, S-538: the `init` of the value 0 goes in any spelling and
+-    /// through parentheses, with the `,` after it or else before it; a
+-    /// comment on its line stays; `-0`, `false`, `1.0`, a callee that is not
+-    /// the name alone and a call of a flow of the user stay.
++    /// S-539: the `init` that equals the default value stays, in any spelling,
++    /// with a comment, in the block and the continuation forms (the syntax
++    /// alone does not show that it can go: `let y = prev~(^y, 0)` takes its
++    /// type from it). Only the layout of §3.2 changes.
+     #[test]
+-    fn the_init_of_the_value_zero_goes_with_one_comma() {
++    fn the_init_of_the_value_zero_stays() {
+         let f = |body: &str| {
+             format!("pub flow f(x: F32 at sample, n: I32 at sample, b: Bool at sample) -> F32 at sample {{\n{body}}}\n")
+         };
+         let cases = [
+-            ("  prev~(x, 0.0,)\n", "  prev~(x)\n"),
+-            ("  prev~(x, (0.0e5))\n", "  prev~(x)\n"),
+-            ("  delay~(x, 4,\n    0.0)\n", "  delay~(x, 4)\n"),
+-            ("  delay~(x,\n    4, 0.0)\n", "  delay~(x,\n         4)\n"),
+-            ("  delay~(\n    x,\n    4,\n    0.0\n  )\n", "  delay~(\n    x,\n    4,\n  )\n"),
+-            ("  let y = prev~(x, // c\n    0.0) // d\n  y\n", "  let y = prev~(x // c\n  )               // d\n  y\n"),
+-            ("  vdelay~(x, x, 8, 0x0_0) + prev~(x, 00.00)\n", "  vdelay~(x, x, 8) + prev~(x)\n"),
++            ("  prev~(x, 00.00,)\n", "  prev~(x, 0.00)\n"),
++            ("  delay~(\n    x,\n    4,\n    0.0\n  )\n", "  delay~(\n    x,\n    4,\n    0.0,\n  )\n"),
++            (
++                "  let y = prev~(x, // c\n    0.0) // d\n  y\n",
++                "  let y = prev~(x,   // c\n                0.0) // d\n  y\n",
++            ),
+         ];
+         for (body, want) in cases {
+             assert_eq!(formatted(&f(body)), f(want), "{body}");
+         }
+-        for body in [
+-            "  prev~(n, -0)\n",
+-            "  prev~(b, false)\n",
+-            "  prev~(x, 1.0)\n",
+-            "  a.prev~(x, 0.0)\n",
+-            "  lag~(x, 0.0)\n",
+-            "  delay~(x, 0)\n",
+-        ] {
++        for body in ["  vdelay~(x, x, 8, 0x0_0) + prev~(x, (0.0e5))\n", "  prev~(n, 0)\n", "  prev~(b, false)\n"] {
+             assert_eq!(formatted(&f(body)), f(body));
+         }
+     }
+@@ -662,7 +696,6 @@ mod tests {
+             (super::unit_ret_ast, head, "no return type `()`"),
+             (super::empty_uses_ast, head, "no empty `uses`"),
+             (super::unit_ret_ast, ret, "no return type `()`"),
+-            (super::init_ast, ret, "no literal argument"),
+         ] {
+             let mut ast = parsed.ast.clone();
+             let caught =
+@@ -701,9 +734,7 @@ mod tests {
+                     let cst = &parsed.cst;
+                     let (map, n) = match cst.kind(n) {
+                         NodeKind::ReturnStmt => (&stmts, n),
+-                        NodeKind::MoveExpr | NodeKind::Block | NodeKind::ClosureExpr | NodeKind::CallExpr => {
+-                            (&exprs, n)
+-                        }
++                        NodeKind::MoveExpr | NodeKind::Block => (&exprs, n),
+                         NodeKind::FnType => (&types, n),
+                         // The item of a function, after `target` too (`super::head_of`).
+                         NodeKind::Fn => {
+@@ -721,9 +752,9 @@ mod tests {
+                     );
+                     nodes += 1;
+                 }
+-                let choices = super::choose(&parsed.cst, text, &super::all_nodes(&parsed.cst));
++                let choices = super::choose(&parsed, &super::all_nodes(&parsed.cst));
+                 chosen += choices.chosen.iter().flatten().count();
+-                super::normalize(&parsed, text);
++                super::normalize(&parsed);
+             }
+             assert!(nodes > 1000 && chosen > 0, "{nodes} nodes, {chosen} chosen");
+         });
+diff --git a/crates/onsa_syntax/src/fmt/shape.rs b/crates/onsa_syntax/src/fmt/shape.rs
+index f6d7637..16e7ef6 100644
+--- a/crates/onsa_syntax/src/fmt/shape.rs
++++ b/crates/onsa_syntax/src/fmt/shape.rs
+@@ -229,7 +229,7 @@ pub(crate) fn part_starts(cst: &Cst, n: NodeId) -> Vec<TokenIdx> {
+ /// enclosure `n`: as a list of one element (S-522), in the block form or on
+ /// one line. Each pair of [`pairs`] with its form; empty for a container and
+ /// a node without brackets. The tokens a rewrite of §3.3 drops (`gone`: the
+-/// `init` of `delay~(x,` newline `4, 0.0)`, the line breaks that go with
++/// `-> ()` of `a: fn(F32) ->` newline `()`, the line breaks that go with
+ /// them) are not read: the form is that of the list fmt writes.
+ pub(crate) fn forms(cst: &Cst, n: NodeId, gone: &dyn Fn(TokenIdx) -> bool) -> Vec<((TokenIdx, TokenIdx), Form)> {
+     if shape(cst.kind(n)).is_none_or(|b| b.shape == Shape::Container) {
+diff --git a/crates/onsa_syntax/src/literal.rs b/crates/onsa_syntax/src/literal.rs
+index a6eb3c9..635dc0c 100644
+--- a/crates/onsa_syntax/src/literal.rs
++++ b/crates/onsa_syntax/src/literal.rs
+@@ -665,18 +665,6 @@ pub fn float_value(text: &str, width: FloatWidth) -> Result<f64, FloatRange> {
+     Ok(value)
+ }
+ 
+-/// Whether the number token `text` of the kind `kind` (an integer or a float
+-/// of Onsa) is the value 0 in any spelling (`0x0`, `0.00`, `0e5`; not
+-/// `1e-400`, which only rounds to 0): `onsa fmt` compares an `init` with the
+-/// default value by value (§11.4, S-539; §3.5 compares the numbers so).
+-pub(crate) fn is_zero(kind: crate::token::TokenKind, text: &str) -> bool {
+-    match kind {
+-        crate::token::TokenKind::Int => int_value(text) == Some(0),
+-        crate::token::TokenKind::Float => matches!(float_value(text, FloatWidth::F64), Ok(v) if v == 0.0),
+-        _ => false,
+-    }
+-}
+-
+ /// The value `x` of a float type of `width` ([`float_value`]) as it is shown
+ /// (`onsa interface`): the shortest decimal that reads as the value in its
+ /// type, as an `f64` whose shortest decimal it is (`F32` 0.1 is shown `0.1`,
+diff --git a/tests/spec/fmt/rewrite_heads_comments.onsa b/tests/spec/fmt/rewrite_heads_comments.onsa
+new file mode 100644
+index 0000000..47837ca
+--- /dev/null
++++ b/tests/spec/fmt/rewrite_heads_comments.onsa
+@@ -0,0 +1,75 @@
++// onsa.toml
++// [test]
++// mode = "parse"
++// spec = ["§6.1", "§8.1", "§11.4", "§18.2"]
++
++// The `-> ()` and the empty `uses {}` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3 and
++// §3.4, S-536, S-540): with a comment in the range of the rewrite (between its tokens, or in the gap of a
++// line break that would go with them), and an empty `uses {}` before another `uses` or an `at` (without it
++// they would be the function type's, spec §8.1 and §11.4). They stand in a function, a parameter, a type
++// alias, a field, and the members of a trait, an `extern` block and an effect, with the line break after
++// the `-> ()`. The file is canonical, so `onsa fmt` leaves it unchanged; the gaps round these tokens are
++// where the comments and the line breaks that the property `fmt-props` of the gate puts in meet the rule.
++// This version does not run a `trait`, an `effect` and an `extern` block (E0200 of `onsa check`), so the
++// file is read by the syntax stage only (`mode = "parse"`).
++
++fn a() -> () // a
++  uses {} {}
++
++fn b() -> ()
++  // b
++  uses {} {}
++
++fn c() -> // c
++  () {}
++
++fn d() -> I32 uses {
++  // d
++} {
++  1
++}
++
++fn e(f: fn(F32) -> () // e
++  uses {}) {}
++
++type T = fn(F32) -> () // t
++  uses {}
++
++type U = fn(F32) -> ( // u
++)
++
++type Maker = fn() -> fn() -> I32 uses {} uses {Alloc}
++
++fn make() -> fn() -> I32 uses {} uses {Alloc} {
++  fn() -> I32 { 1 }
++}
++
++pub flow g(h: fn() -> I32 uses {} at sample) -> F32 at sample {
++  0.0
++}
++
++struct S {
++  a: fn(F32) -> () // s
++    uses {},
++  b: fn(F32) -> ()
++    // s2
++    uses {},
++}
++
++trait Sink {
++  fn put(inout self, x: F32) -> () // put
++    uses {}
++  fn size(self) -> U32
++}
++
++extern "C" lib "m" {
++  fn log_value(x: F64) -> () // log
++    uses {}
++  fn sin(x: F64) -> F64
++}
++
++effect Out {
++  fn emit(x: F32) -> () // emit
++    uses {}
++  fn flush()
++}
+diff --git a/tests/spec/fmt/rewrite_heads_lines_loose.onsa b/tests/spec/fmt/rewrite_heads_lines_loose.onsa
+index e8817f3..3b79c91 100644
+--- a/tests/spec/fmt/rewrite_heads_lines_loose.onsa
++++ b/tests/spec/fmt/rewrite_heads_lines_loose.onsa
+@@ -4,14 +4,13 @@
+ // canonical = false
+ // spec = ["§6.1", "§8.1", "§11.4", "§18.2"]
+ 
+-// The line breaks and the comments next to the `-> ()`, the empty `uses {}` and the `init` that `onsa fmt`
+-// takes off (W3-12, unit U1b; docs/onsa-tools.md §3.3 and §3.4; the provisional reading of S-536 and S-538).
++// The line breaks and the comments next to the `-> ()` and the empty `uses {}` that `onsa fmt`
++// takes off (W3-12, unit U1; docs/onsa-tools.md §3.3 and §3.4; S-536 and S-538).
+ // The line breaks next to them go with them (`fn a()` newline `uses {} {}` is `fn a() {}`), but a line
+-// break with a comment in its gap, a line end and the edge of a list. A form that would not read as the same
+-// tree stays whole (`fn c() // c` newline `{}` would be E0003), and so do a form whose line break only a
+-// comment would keep (`fn h() // h` newline `uses {Alloc} {}`), an enclosure that holds only a comment and
+-// `-> () at sample` (the clock alone is E0002). The `init` of the value 0 goes with the `,`
+-// after it, else the one before it, and a comment on its line stays. The file is not canonical on purpose
++// end and the edge of a list. With a comment in the range of the rewrite (between its tokens, or in the gap
++// of a line break that would go with them) the tokens stay (`fn c() // c` newline `uses {} {}`, `fn h() ->
++// () // h` newline `uses {Alloc} {}`, an enclosure that holds only a comment), and so does `-> () at sample`
++// (the clock alone is E0002). The file is not canonical on purpose
+ // (`canonical = false`): fmt takes it, changes it and keeps what it writes.
+ 
+ fn a()
+@@ -70,31 +69,3 @@ fn j() -> () {
+   k()
+   return
+ }
+-
+-pub flow init_a(x: F32 at sample) -> F32 at sample {
+-  prev~(x, 0.0,)
+-}
+-
+-pub flow init_b(x: F32 at sample) -> F32 at sample {
+-  let y = prev~(x, // the signal
+-    0.0) // silence
+-  y
+-}
+-
+-pub flow init_c(x: F32 at sample) -> F32 at sample {
+-  delay~(x,
+-    4, (0e0))
+-}
+-
+-pub flow init_d(x: F32 at sample) -> F32 at sample {
+-  delay~(
+-    x,
+-    4,
+-    0x0_0
+-  )
+-}
+-
+-pub flow init_e(n: I32 at sample, b: Bool at sample) -> I32 at sample {
+-  let f = prev~(b, false)
+-  prev~(n, -0) + a.prev~(n, 0)
+-}
+diff --git a/tests/spec/fmt/rewrite_init_kept.onsa b/tests/spec/fmt/rewrite_init_kept.onsa
+index d6a5798..0c9b175 100644
+--- a/tests/spec/fmt/rewrite_init_kept.onsa
++++ b/tests/spec/fmt/rewrite_init_kept.onsa
+@@ -3,13 +3,12 @@
+ // mode = "check"
+ // spec = ["§11.4", "§18.2"]
+ 
+-// The `init` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §11.4). Only a literal that
+-// is equal to the default value of the type (`0`, `0.0`, `false`) is taken off an `init` of `prev~`,
+-// `delay~` and `vdelay~`. Kept: a value that is not the default (`1.0`, `0.5`, `1`), `-0.0` (it is not the
+-// default, §11.4), a name (an input of the clock `init`, a constant that happens to be `0.0`), and the
+-// argument of a flow of the user (a function of the user has no default argument, so `lag~(x, 0.0)` is
+-// not `lag~(x)`). The file is canonical, so `onsa fmt` leaves it unchanged; the same flows with an `init`
+-// that goes are in crates/onsa_cli/tests/fmt_rewrites.rs.
++// The `init` that `onsa fmt` keeps (W3-12, unit U1; docs/onsa-tools.md §3.3, spec §11.4): every one (S-539:
++// the syntax alone does not show that an `init` equal to the default value can go, so `prev~(x)` and
++// `prev~(x, 0.0)` are both taken as they are written). Here: a value that is not the default (`1.0`, `0.5`,
++// `1`), `-0.0`, a name (an input of the clock `init`, a constant that happens to be `0.0`), the argument of
++// a flow of the user, and the default value itself (`0.0`, `0`). The file is canonical, so `onsa fmt`
++// leaves it unchanged.
+ 
+ const ZERO: F32 = 0.0
+ 
+@@ -56,3 +55,8 @@ pub flow lag(x: F32 at sample, start: F32 at init) -> F32 at sample {
+ pub flow use_lag(x: F32 at sample) -> F32 at sample {
+   lag~(x, 0.0)
+ }
++
++pub flow zero(x: F32 at sample, n: I32 at sample) -> F32 at sample {
++  let m = delay~(n, 4, 0)
++  prev~(x, 0.0)
++}
+diff --git a/tools/fmt_props.py b/tools/fmt_props.py
+index 12c7e1d..285edf8 100644
+--- a/tools/fmt_props.py
++++ b/tools/fmt_props.py
+@@ -630,31 +630,38 @@ def unperturb(text):
+     return "\n".join(out) + "\n"
+ 
+ 
+-def line_key(line_toks):
+-    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.2, §3.3): without `-> ()`, `uses {}`
+-    and `,` (which fmt moves to the element before it, adds and drops),
+-    numbers as `#`. Used to pair the lines of a text with the lines of its
+-    fmt output. The tokens fmt drops (`return`, `move`, parentheses) stay: they
+-    are deletions for the pairing, and a line of brackets, `return` or `move`
+-    alone keeps a counterpart (`g(` / `a,` / `) // c`)."""
+-    code = []
+-    for t in (t.text for t in line_toks if t.kind == "code"):
+-        code.append(t)
+-        if code[-3:] in (["->", "(", ")"], ["uses", "{", "}"]):
+-            del code[-3:]
+-    return tuple("#" if NUMBER.fullmatch(t) else t for t in code if t != ",")
++def dropped(text):
++    """The offsets of the code tokens of `text` that the rewrites of `docs/onsa-tools.md` §3.3 drop
++    ([`left_out`])."""
++    code, comments, seen = [], [], False
++    for t in tokenize(text):
++        if t.kind == "comment":
++            seen = True
++        elif t.kind == "code":
++            code.append(t)
++            comments.append(seen)
++            seen = False
++    return {code[j].start for j in left_out(code, comments)}
++
++
++def line_key(line_toks, gone):
++    """A code line as fmt may rewrite it (`docs/onsa-tools.md` §3.2, §3.3): without the tokens of `gone`
++    ([`dropped`]: `-> ()` and `uses {}` that go) and `,` (which fmt moves to the element before it, adds
++    and drops), numbers as `#`. Used to pair the lines of a text with the lines of its fmt output. The
++    other tokens fmt drops (`return`, `move`, parentheses) stay: they are deletions for the pairing, and a
++    line of brackets, `return` or `move` alone keeps a counterpart (`g(` / `a,` / `) // c`)."""
++    code = (t for t in line_toks if t.kind == "code" and t.text != "," and t.start not in gone)
++    return tuple("#" if NUMBER.fullmatch(t.text) else t.text for t in code)
+ 
+ 
+ def code_lines(text):
+     """(the lines of `text`, the indices of its lines with code). A line whose
+     code is `,` alone is none: fmt moves that `,` to the element before it,
+     and the comment at the end of the line stays in its place as a line of a
+-    comment (`docs/onsa-tools.md` §3.2, §3.4, S-529). So is a line of an
+-    `init` that fmt drops (`zero_inits`) and its `,` (S-538)."""
++    comment (`docs/onsa-tools.md` §3.2, §3.4, S-529)."""
+     toks = tokenize(text)
+-    lines, code = lines_of(text, toks), [t for t in toks if t.kind == "code"]
+-    gone = {code[j].start for j in zero_inits(code)}
+-    return lines, [i for i, line in enumerate(lines) if any(t.text != "," and t.start not in gone for t in line.code)]
++    lines = lines_of(text, toks)
++    return lines, [i for i, line in enumerate(lines) if any(t.text != "," for t in line.code)]
+ 
+ 
+ def pair_lines(before, after):
+@@ -665,8 +672,8 @@ def pair_lines(before, after):
+     and pairs nothing), which also follows lines that fmt joined (an empty
+     body `{` / `}` becomes `{}`, `@fp(relaxed` / `)` becomes `@fp(relaxed)`)."""
+     def tokens(text):
+-        lines, code = code_lines(text)
+-        return [(key, n) for n, i in enumerate(code) for key in line_key(lines[i].toks)]
++        (lines, code), gone = code_lines(text), dropped(text)
++        return [(key, n) for n, i in enumerate(code) for key in line_key(lines[i].toks, gone)]
+ 
+     tb, ta = tokens(before), tokens(after)
+     first, last = {}, {}
+@@ -810,64 +817,106 @@ def attribute_ends(code):
+     return ends
+ 
+ 
+-# The place of the `init` of each built-in delay (spec §11.4).
+-DELAY_INITS = {"prev": 1, "delay": 2, "vdelay": 3}
+-
+-
+-def is_zero(text):
+-    """The number `text` is 0 in any spelling (`0x0_0`, `0.00`, `0e5`; not `1e-400`)."""
+-    if text[:2] in ("0x", "0X", "0b", "0B"):
+-        return set(text[2:]) <= set("0_")
+-    return set(re.split("[eE]", text)[0]) <= set("0._")
+-
+-
+-def left_out(code):
+-    """The indices in `code` (the code tokens) of the tokens of `-> ()` (`-> (())` too), of `uses {}` and
+-    of the `init` of the value 0 of a built-in delay (`zero_inits`), read from the text alone: the
+-    rewrites of `docs/onsa-tools.md` §3.3 may drop them (W3-12; not with a comment or a clock next to
+-    them), and [`gap_places`] leaves them out of a text and of its fmt output alike."""
++def left_out(code, comments):
++    """The indices in `code` (the code tokens) of the tokens that the rewrites of `docs/onsa-tools.md` §3.3
++    drop, read from the text alone (`comments[j]`: a comment in the gap before `code[j]`), which
++    [`gap_places`] leaves out of a text and of its fmt output alike: `-> ()` (`-> (())` too) and `uses {}`
++    (W3-12) but
++    - those of an anonymous function (S-546): a `fn` and `(` with no name between, not after `->` (a
++      result type), whose head ([`closure_heads`]) a `{` follows;
++    - `-> ()` of a flow, and before an `at` (the clock of `()`);
++    - `uses {}` before another `uses` or an `at`, which would then be those of a function type before it
++      (§8.1, §11.4); of two such, the outer one goes first, so the inner one goes too;
++    - with a comment in the range of the rewrite (S-536): between its tokens, before them (the line
++      break before `uses` goes on, §2.5), or after them before a `uses` (a line break there goes too).
++      After them before another token the line break ends the line or is at the edge of a list, and
++      stays: the comment stays on its line."""
+     texts = [t.text for t in code]
+-    out = zero_inits(code)
++    out = set()
++    opening, stack = {}, []
++    for j, x in enumerate(texts):
++        if x in OPENERS:
++            stack.append(j)
++        elif x in CLOSERS and stack:
++            opening[j] = stack.pop()
++
++    def flow_head(j):  # the `->` at `j` is that of `flow name(...)`
++        o = opening.get(j - 1)
++        return o is not None and o >= 2 and texts[o - 2] == "flow"
++
++    def after(e):  # the code token after `code[e]` that stays (None at the end)
++        k = e + 1
++        while k in out:
++            k += 1
++        return texts[k] if k < len(code) else None
++
++    own = closure_heads(texts, opening)
++
++    def drop(s, e):  # the tokens `code[s..=e]` of a rewrite, unless a comment is in its range
++        next_uses = e + 1 < len(code) and texts[e + 1] == "uses" and comments[e + 1]
++        if s not in own and not next_uses and not any(comments[k] for k in range(s, e + 1)):
++            out.update(range(s, e + 1))
++
++    # The heads from the outside in: the `uses {}` of the result of a function type is the inner one.
++    for j in reversed(range(len(code) - 2)):
++        if texts[j:j + 3] == ["uses", "{", "}"] and after(j + 2) not in ("uses", "at"):
++            drop(j, j + 2)
+     for j in range(len(code) - 2):
+         k = j + 1
+         while k < len(code) and texts[k] == "(":
+             k += 1
+         n = k - j - 1
+-        if texts[j] == "->" and n and texts[k:k + n] == [")"] * n:
+-            out.update(range(j, k + n))
+-        if texts[j:j + 3] == ["uses", "{", "}"]:
+-            out.update((j, j + 1, j + 2))
++        if (texts[j] == "->" and n and texts[k:k + n] == [")"] * n and not flow_head(j)
++                and (k + n >= len(code) or texts[k + n] != "at")):
++            drop(j, k + n - 1)
+     return out
+ 
+ 
+-def zero_inits(code):
+-    """The indices in `code` of the tokens of the `init` of the value 0 of a built-in delay (`prev~(x,
+-    0.0)`, through parentheses), read from the text alone."""
+-    texts = [t.text for t in code]
++def closure_heads(texts, opening):
++    """The indices of the `->` and the `uses` of the heads of the anonymous functions in `texts` (the
++    code tokens; `opening`: {index of a closing bracket: index of its opening one}), read from the text
++    alone: a `fn` and `(` not after `->`, whose head (the parameters, `-> T` and `uses {...}`) a `{`
++    follows (a function type there would be the result of a function, after `->`)."""
++    closing = {o: c for c, o in opening.items()}
++    n = len(texts)
++
++    def at(k):
++        return texts[k] if k < n else None
++
++    def ty(k):  # the index after the type at `k`
++        k += at(k) == "rt"
++        if at(k) == "fn" and at(k + 1) == "(" and k + 1 in closing:
++            k = closing[k + 1] + 1
++            if at(k) == "->":
++                k = ty(k + 1)
++            if at(k) == "uses" and at(k + 1) == "{" and k + 1 in closing:
++                k = closing[k + 1] + 1
++            return k
++        if at(k) in ("(", "[") and k in closing:
++            k = closing[k] + 1
++        elif at(k) is not None and IDENT.fullmatch(at(k)):
++            k += 1
++            while at(k) == "." and at(k + 1) is not None and IDENT.fullmatch(at(k + 1)):
++                k += 2
++            if at(k) == "[" and k in closing:
++                k = closing[k] + 1
++        if at(k) == "at":
++            k += 2
++        return k
++
+     out = set()
+-    # The open brackets: for the `(` of a built-in delay, its place of `init` and the starts of its arguments.
+-    stack = []
+-    for j, x in enumerate(texts):
+-        if x in OPENERS:
+-            delay = j >= 2 and texts[j - 1] == "~" and texts[j - 2] in DELAY_INITS and (j < 3 or texts[j - 3] != ".")
+-            stack.append((DELAY_INITS[texts[j - 2]], [j + 1]) if delay and x == "(" else None)
+-        elif x == "," and stack and stack[-1]:
+-            stack[-1][1].append(j + 1)
+-        elif x in CLOSERS and stack:
+-            top = stack.pop()
+-            if not top:
+-                continue
+-            init, starts = top
+-            ends = [s - 1 for s in starts[1:]] + [j]
+-            args = [(a, b) for a, b in zip(starts, ends) if a < b]
+-            if len(args) != init + 1:
+-                continue
+-            a, b = args[init]
+-            inner = texts[a:b]
+-            while len(inner) > 2 and inner[0] == "(" and inner[-1] == ")":
+-                inner = inner[1:-1]
+-            if len(inner) == 1 and NUMBER.fullmatch(inner[0]) and is_zero(inner[0]):
+-                out.update(range(a, b))
++    for f in range(n - 1):
++        if texts[f] != "fn" or texts[f + 1] != "(" or (f and texts[f - 1] == "->") or f + 1 not in closing:
++            continue
++        k, mine = closing[f + 1] + 1, []
++        if at(k) == "->":
++            mine.append(k)
++            k = ty(k + 1)
++        if at(k) == "uses" and at(k + 1) == "{" and k + 1 in closing:
++            mine.append(k)
++            k = closing[k + 1] + 1
++        if at(k) == "{":
++            out.update(mine)
+     return out
+ 
+ 
+@@ -947,7 +996,7 @@ def gap_places(text):
+             gaps.append((nl > 0, blank, comment))
+             line_of.append(line)
+             nl, run, blank, comment = 0, 0, False, False
+-    ends, lists, rewritten = attribute_ends(code), brace_lists(code), left_out(code)
++    ends, lists, rewritten = attribute_ends(code), brace_lists(code), left_out(code, [g[2] for g in gaps])
+     out, stack, merged, a, crossed = [], [], None, None, False
+     for j, t in enumerate(code):
+         g = gaps[j]
+diff --git a/tools/test_gate.py b/tools/test_gate.py
+index 908bbf2..6952822 100644
+--- a/tools/test_gate.py
++++ b/tools/test_gate.py
+@@ -2506,6 +2506,43 @@ class FmtProps(TempRepo):
+             self.assertEqual(len(problems), 1, problems)
+             self.assertIn(want, problems[0])
+ 
++    def test_left_out_is_what_the_rewrites_drop(self):
++        def left(text):
++            toks = fmt_props.tokenize(text)
++            code, comments, seen = [t for t in toks if t.kind == "code"], [], False
++            for t in toks:
++                if t.kind == "comment":
++                    seen = True
++                elif t.kind == "code":
++                    comments.append(seen)
++                    seen = False
++            return " ".join(code[j].text for j in sorted(fmt_props.left_out(code, comments)))
++
++        cases = [
++            ("fn f() -> (()) uses {} {}\n", "-> ( ( ) ) uses { }"),
++            # the `init` stays (S-539), so do the `-> ()` and `uses {}` of an anonymous function (S-546)
++            ("pub flow f(x: F32 at sample) -> F32 at sample {\n  prev~(x, 0.0)\n}\n", ""),
++            ("fn f() {\n  let g = fn(x: I32) -> () uses {} { x }\n}\n", ""),
++            ("fn f() {\n  g(fn() -> fn() -> () uses {} { h })\n}\n", "-> ( ) uses { }"),
++            # a clock after the `()`, the head of a flow (W3-12/b 8)
++            ("fn f() -> () at sample {}\n", ""),
++            ("flow f(x: F32 at sample) ->\n  () {\n  x\n}\n", ""),
++            # an empty `uses {}` before another `uses` or an `at` (W3-12/b 1); two empty ones both go
++            ("type M = fn() -> fn() -> I32 uses {} uses {Alloc}\n", ""),
++            ("flow g(h: fn() -> I32 uses {} at sample) -> F32 at sample {\n  0.0\n}\n", ""),
++            ("type M = fn() -> fn() -> I32 uses {} uses {}\n", "uses { } uses { }"),
++            # a comment in the range of the rewrite (S-536): between its tokens, before a `uses`
++            ("type T = fn(F32) -> () // c\n  uses {}\n", ""),
++            ("fn c() // c\n  uses {} {}\n", ""),
++            ("type T = fn(F32) -> // c\n  () uses {}\n", "uses { }"),
++            ("fn d() -> I32 uses {\n  // d\n} {\n  1\n}\n", ""),
++            # one out of it: a line end, the edge of a list
++            ("trait T {\n  fn a(self) -> () // c\n  fn b(self)\n}\n", "-> ( )"),
++            ("struct S {\n  a: fn(F32) -> () // c\n}\n", "-> ( )"),
++        ]
++        for text, want in cases:
++            self.assertEqual(left(text), want, text)
++
+     def test_run(self):
+         self.repo.write("tests/spec/a.onsa", "fn f() {\n  let x = g(a, b) // c\n  x\n}\n")
+         code, text = self.go()

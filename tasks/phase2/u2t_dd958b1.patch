@@ -1,0 +1,2430 @@
+diff --git a/crates/onsa_cli/tests/fmt_parens.rs b/crates/onsa_cli/tests/fmt_parens.rs
+new file mode 100644
+index 0000000..fa407be
+--- /dev/null
++++ b/crates/onsa_cli/tests/fmt_parens.rs
+@@ -0,0 +1,1928 @@
++//! `onsa fmt` takes off the parentheses that are redundant, and no others (W3-12, unit U2;
++//! `docs/onsa-tools.md` §3.2, §3.3, §3.4 and §3.5, spec §0.2 (P2), §2.4, §2.5, §3.1, §4, §6.1, §7, §11.3 and
++//! §18.2; plan S-115, S-45, S-336, S-339, S-340 and S-497).
++//!
++//! The rule (`docs/onsa-tools.md` §3.3, S-339): a pair of parentheses is taken off when the tree is the same
++//! without it and the syntax stage finds no error in the result. The strength of the expression in the pair
++//! (postfix > prefix > `as` and `at` > the binary operators > the range symbols, spec §3.1) is compared with the
++//! strength that the place asks for. The binary operators are in groups with a partial order
++//! (multiplicative > additive > comparison > `&&` and `||`, remainder > comparison); a pair that would make a
++//! clash of groups (E0010) stays. A pair inside the same group stays as the writer's grouping (the only
++//! exception to the rule). The pairs that the tree needs (`(a + b) * c`, `(-x).max(1)`), and the pairs whose
++//! removal is an error of the syntax stage (E0010, E0011 and E0012, a struct literal or a block in the head of
++//! `if`, `while`, `match`, `for` or `par`), stay too. The whole of a statement, an argument, an element, a head
++//! and an end of a range (S-336) loses its pair; so do the pairs round a name, a literal, a postfix
++//! expression and a pair, and a type or a pattern that is only grouped (spec §2.4: `(e)` is grouping in an
++//! expression, a pattern and a type).
++//!
++//! What is here, in the order of the places (every test has the whole text of the input and of the expected
++//! output, worked out from the rules above and not taken from the output of `fmt`):
++//! - the pairs that go: a stronger group in a weaker one, every pair of the order (A); a prefix expression as
++//!   the operand of a binary operator, `as` and `at` (B); a name, a literal, a postfix expression and a pair
++//!   in a pair, and the nesting of pairs, which is gone in one pass (C); the whole of a statement, an
++//!   argument, an element, a field, an index, the tail of a block, an arm and a guard, an `assert` (D); the
++//!   heads of `if`, `while`, `match` and `for`, and the pair round a call that holds a struct literal (E);
++//!   the ends of a range (F); a type (G); a pattern (H); the pairs that go and stay in one expression (I);
++//!   the line breaks and the comments inside a pair (J);
++//! - the pairs that stay (K): the same group, the tree, the clash of groups, `as` and `at`, a stack of prefix
++//!   operators, the head with a struct literal or a block, a function type before `uses` and `at`, a comment
++//!   before `as`. They pass now (nothing is taken off) and keep a `fmt` that takes off too much honest; the
++//!   cases of the pairs that stay and are accepted by the syntax stage are also in
++//!   `tests/spec/fmt/parens_*.onsa`;
++//! - the files `fmt` does not write: `(s.f)(x)` and `for i in (0 ..< n)` (L, spec §6.1 and §7: errors of the
++//!   syntax stage; `fmt` ends with 2, writes nothing, takes nothing off elsewhere in the file either);
++//! - `onsa diff --ast` (M): two files that differ only in a redundant pair are not different (`(a * b) + c`
++//!   and `a * b + c`), and two files that differ in a pair that the tree needs are different.
++//!
++//! Every case is run by `onsa fmt` on a file in a temporary directory. The test checks the exit code 0, the
++//! whole text of the output, that the output is a fixed point (`fmt --check` ends with 0 and another `fmt`
++//! changes nothing), that `onsa diff --ast <copy of the input> <output>` finds no difference (exit code 0;
++//! `fmt` and `diff --ast` use the same comparison, spec `docs/onsa-tools.md` §3.5), and that the output
++//! passes `onsa check` as the input does. Before `fmt` runs, the input and the expected text are checked to
++//! have no error of the syntax stage (a file with one is not rewritten, `onsa fmt` would end with 2, §18.2)
++//! and to pass `onsa check`; a case that uses a form which `onsa check` of this version refuses in a later
++//! stage (E0200 of the clock of a computed expression, the closed range in a head) is marked as `syntax only`
++//! and is checked for the syntax stage only.
++//!
++//! What is not here, and why:
++//! - the rewrites of U1 (the `return` at the end, `-> ()`, `uses {}`, `init`, `move`): two cases combine a
++//!   `return (a + b)` at the end with the pair (U1 and U2 together);
++//! - the text of the diagnostics of the groups (`operator_groups.rs`) and of the ranges (`range_syntax.rs`);
++//! - whether `onsa diff --ast` reports a difference in an ordinary comment (S-534);
++//! - what is not decided by the spec (the report of the writer of this file lists them): the pair round a
++//!   same-group operand for `diff --ast`, a line break right after `(` or right before `)` of a pair that
++//!   goes, a line of a comment alone inside a pair that goes, and the strength of `if`, `match`, a closure
++//!   and the other forms that are not an operand of the order of §3.1 as the operand of an operator.
++//!
++//! A test that needs the removal of the pairs runs ignored until W3-12 (unit U2) lands; each ignore starts
++//! with the work.
++//!
++//! Every test uses only the binary.
++
++use std::path::PathBuf;
++use std::process::{Command, Output};
++use std::sync::atomic::{AtomicUsize, Ordering};
++
++const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
++
++struct Dir(PathBuf);
++
++impl Dir {
++    fn new(tag: &str) -> Dir {
++        // The counter makes the directory the test's own even when two tests use the same tag.
++        static NEXT: AtomicUsize = AtomicUsize::new(0);
++        let n = NEXT.fetch_add(1, Ordering::Relaxed);
++        let d = std::env::temp_dir().join(format!("onsa_fmt_parens_{}_{n}_{tag}", std::process::id()));
++        let _ = std::fs::remove_dir_all(&d);
++        std::fs::create_dir_all(&d).unwrap();
++        Dir(d)
++    }
++
++    fn file(&self, name: &str, text: &str) -> String {
++        let p = self.0.join(name);
++        std::fs::write(&p, text).unwrap();
++        p.to_string_lossy().into_owned()
++    }
++}
++
++impl Drop for Dir {
++    fn drop(&mut self) {
++        let _ = std::fs::remove_dir_all(&self.0);
++    }
++}
++
++fn onsa(args: &[&str]) -> Output {
++    Command::new(ONSA).args(args).output().expect("run onsa")
++}
++
++fn code(out: &Output) -> i32 {
++    out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
++}
++
++fn read(path: &str) -> String {
++    std::fs::read_to_string(path).unwrap()
++}
++
++/// Everything the command wrote, the standard output and the standard error.
++fn all_text(out: &Output) -> String {
++    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
++}
++
++/// The lines joined, with one line break at the end of the file.
++fn src(lines: &[&str]) -> String {
++    let mut s = lines.join("\n");
++    s.push('\n');
++    s
++}
++
++/// Several runs of lines as one text.
++fn src_cat(parts: &[&[&str]]) -> String {
++    let all: Vec<&str> = parts.iter().flat_map(|p| p.iter().copied()).collect();
++    src(&all)
++}
++
++/// A file before and after `onsa fmt`: the whole text of each.
++struct Case {
++    what: &'static str,
++    input: String,
++    expected: String,
++    /// `onsa check` of this version refuses the program in a stage after the syntax stage (a form that is
++    /// not lowered yet); the syntax stage finds nothing.
++    syntax_only: bool,
++}
++
++fn case(what: &'static str, input: &[&str], expected: &[&str]) -> Case {
++    Case { what, input: src(input), expected: src(expected), syntax_only: false }
++}
++
++/// A case whose input is already the output: nothing is to be taken off.
++fn kept(what: &'static str, lines: &[&str]) -> Case {
++    Case { what, input: src(lines), expected: src(lines), syntax_only: false }
++}
++
++impl Case {
++    fn syntax_only(mut self) -> Case {
++        self.syntax_only = true;
++        self
++    }
++}
++
++/// Items that the bodies of the cases use (canonical: `fmt` leaves them as they are).
++const PRELUDE: &[&str] = &[
++    "pub struct Pt {",
++    "  x: I32,",
++    "  y: I32,",
++    "}",
++    "",
++    "fn id(a: I32) -> I32 {",
++    "  a",
++    "}",
++    "",
++    "fn two(a: I32, b: I32) -> I32 {",
++    "  a + b",
++    "}",
++    "",
++    "fn make(a: I32) -> Pt {",
++    "  Pt { x: a, y: a }",
++    "}",
++    "",
++    "fn px(p: Pt) -> I32 {",
++    "  p.x",
++    "}",
++    "",
++];
++
++/// A case with the items of `PRELUDE` in front of the body.
++fn prel(what: &'static str, input: &[&str], expected: &[&str]) -> Case {
++    Case { what, input: src_cat(&[PRELUDE, input]), expected: src_cat(&[PRELUDE, expected]), syntax_only: false }
++}
++
++fn prel_kept(what: &'static str, lines: &[&str]) -> Case {
++    prel(what, lines, lines)
++}
++
++/// The text passes the syntax stage (`fmt --check` does not end with 2 or 101) and, unless the case is
++/// marked, `onsa check` (exit code 0).
++fn assert_valid(d: &Dir, name: &str, c: &Case, which: &str, text: &str) {
++    let p = d.file(name, text);
++    let out = onsa(&["fmt", "--check", &p]);
++    let k = code(&out);
++    assert!(k == 0 || k == 1, "{}: the {which} text has a diagnostic of the syntax stage: {out:?}\n{text}", c.what);
++    if which == "expected" {
++        // The expected text is the canonical form: the layout of it is one that `fmt` itself leaves alone.
++        assert_eq!(k, 0, "{}: the expected text is not canonical for `fmt --check`: {out:?}\n{text}", c.what);
++    }
++    if !c.syntax_only {
++        let out = onsa(&["check", &p]);
++        assert_eq!(code(&out), 0, "{}: `onsa check` finds a problem in the {which} text: {out:?}\n{text}", c.what);
++    }
++}
++
++/// Runs `onsa fmt` on every input (one command, so the files are written one after the other), expects
++/// the exit code 0, compares the whole text of each output, and checks that the output is a fixed point,
++/// that `onsa check` is still happy with it, and that `onsa diff --ast` finds no difference between the
++/// input and the output.
++fn expect_fmt(tag: &str, cases: &[Case]) {
++    assert!(!cases.is_empty(), "no case to run");
++    let d = Dir::new(tag);
++    for (i, c) in cases.iter().enumerate() {
++        assert_valid(&d, &format!("e{i}.onsa"), c, "expected", &c.expected);
++        assert_valid(&d, &format!("i{i}.onsa"), c, "input", &c.input);
++    }
++    let originals: Vec<String> =
++        cases.iter().enumerate().map(|(i, c)| d.file(&format!("o{i}.onsa"), &c.input)).collect();
++    let paths: Vec<String> = cases.iter().enumerate().map(|(i, c)| d.file(&format!("c{i}.onsa"), &c.input)).collect();
++    let mut args = vec!["fmt"];
++    args.extend(paths.iter().map(String::as_str));
++    let out = onsa(&args);
++    assert_eq!(code(&out), 0, "onsa fmt must write the files (101 is the check before writing): {out:?}");
++    let mut wrong = Vec::new();
++    for (c, path) in cases.iter().zip(&paths) {
++        let got = read(path);
++        if got != c.expected {
++            wrong.push(format!("{}\n--- input\n{}--- expected\n{}--- got\n{got}", c.what, c.input, c.expected));
++        }
++    }
++    assert!(wrong.is_empty(), "{} of {} files are not as expected:\n{}", wrong.len(), cases.len(), wrong.join("\n"));
++    for ((c, path), orig) in cases.iter().zip(&paths).zip(&originals) {
++        let written = read(path);
++        let out = onsa(&["fmt", "--check", path]);
++        assert_eq!(code(&out), 0, "{}: the output is not a fixed point of fmt --check: {out:?}", c.what);
++        let out = onsa(&["fmt", path]);
++        assert_eq!(code(&out), 0, "{}: {out:?}", c.what);
++        assert_eq!(read(path), written, "{}: a second fmt changes the output", c.what);
++        if !c.syntax_only {
++            let out = onsa(&["check", path]);
++            assert_eq!(code(&out), 0, "{}: the output does not pass `onsa check`: {out:?}", c.what);
++        }
++        let out = onsa(&["diff", "--ast", orig, path]);
++        assert_eq!(
++            code(&out),
++            0,
++            "{}: `diff --ast` reports the input and the output as different: {}",
++            c.what,
++            all_text(&out)
++        );
++    }
++}
++
++/// The exit code and the whole output of `onsa diff --ast` on two texts.
++fn diff_of(d: &Dir, tag: &str, a: &str, b: &str) -> (i32, String) {
++    let pa = d.file(&format!("{tag}_a.onsa"), a);
++    let pb = d.file(&format!("{tag}_b.onsa"), b);
++    for p in [&pa, &pb] {
++        let out = onsa(&["check", p]);
++        assert_eq!(code(&out), 0, "the text of the pair must pass `onsa check`: {out:?}\n{}", read(p));
++    }
++    let out = onsa(&["diff", "--ast", &pa, &pb]);
++    (code(&out), all_text(&out))
++}
++
++// ===================================================================================================
++// A. A stronger group in a weaker one (docs/onsa-tools.md §3.3, spec §3.1: S-45, S-115)
++// ===================================================================================================
++
++/// The strengths of §3.1 that can be written with types that check: multiplicative > additive
++/// (`(a * b) + c`), additive > comparison (`(a + 1) < n`), remainder > comparison (`(a % 2) == 0`),
++/// multiplicative > comparison (through the chain of the order), comparison > `&&` and `||`. Each is on
++/// the left and on the right. (Additive, multiplicative and remainder in `&&` and `||` are no `Bool`.)
++fn c_strong_groups() -> Vec<Case> {
++    vec![
++        case(
++            "multiplicative in additive, on both sides",
++            &[
++                "pub fn arithmetic(a: I32, b: I32, c: I32) -> I32 {",
++                "  let p = (a * b) + c",
++                "  let q = c + (a * b)",
++                "  let r = (a / b) - c",
++                "  let s = c - (a / b)",
++                "  let t = (a * b) + (c / a) + (b * c)",
++                "  p + q + r + s + t",
++                "}",
++            ],
++            &[
++                "pub fn arithmetic(a: I32, b: I32, c: I32) -> I32 {",
++                "  let p = a * b + c",
++                "  let q = c + a * b",
++                "  let r = a / b - c",
++                "  let s = c - a / b",
++                "  let t = a * b + c / a + b * c",
++                "  p + q + r + s + t",
++                "}",
++            ],
++        ),
++        case(
++            "wrapping and saturating forms follow their group",
++            &[
++                "pub fn wrapping(a: U8, b: U8, c: U8) -> U8 {",
++                "  let p = (a *% b) +% c",
++                "  let q = c -| (a *| b)",
++                "  let r = (a / b) +| c",
++                "  p +% q +% r",
++                "}",
++            ],
++            &[
++                "pub fn wrapping(a: U8, b: U8, c: U8) -> U8 {",
++                "  let p = a *% b +% c",
++                "  let q = c -| a *| b",
++                "  let r = a / b +| c",
++                "  p +% q +% r",
++                "}",
++            ],
++        ),
++        case(
++            "additive, remainder and multiplicative in comparison, on both sides",
++            &[
++                "pub fn comparisons(a: I32, b: I32, c: I32, n: I32) -> Bool {",
++                "  let p = (a + 1) < n",
++                "  let q = n >= (a + b)",
++                "  let r = (a % 2) == 0",
++                "  let s = c != (a % 2)",
++                "  let t = (a * b) <= c",
++                "  let u = c > (a * b)",
++                "  let v = (a - b) == (c + n)",
++                "  p && q && r && s && t && u && v",
++                "}",
++            ],
++            &[
++                "pub fn comparisons(a: I32, b: I32, c: I32, n: I32) -> Bool {",
++                "  let p = a + 1 < n",
++                "  let q = n >= a + b",
++                "  let r = a % 2 == 0",
++                "  let s = c != a % 2",
++                "  let t = a * b <= c",
++                "  let u = c > a * b",
++                "  let v = a - b == c + n",
++                "  p && q && r && s && t && u && v",
++                "}",
++            ],
++        ),
++        case(
++            "multiplicative, remainder and additive in && and || (through the chain of the order; no Bool, so the syntax stage only)",
++            &[
++                "pub fn through_the_chain(a: I32, b: I32, c: Bool) -> Bool {",
++                "  let p = (a * b) && c",
++                "  let q = c || (a * b)",
++                "  let r = (a + b) && c",
++                "  let s = c || (a + b)",
++                "  let t = (a % b) && c",
++                "  let u = c || (a % b)",
++                "  p && q && r && s && t && u",
++                "}",
++            ],
++            &[
++                "pub fn through_the_chain(a: I32, b: I32, c: Bool) -> Bool {",
++                "  let p = a * b && c",
++                "  let q = c || a * b",
++                "  let r = a + b && c",
++                "  let s = c || a + b",
++                "  let t = a % b && c",
++                "  let u = c || a % b",
++                "  p && q && r && s && t && u",
++                "}",
++            ],
++        )
++        .syntax_only(),
++        case(
++            "comparison in && and ||, on both sides",
++            &[
++                "pub fn logic(a: I32, b: I32, c: I32, d: I32) -> Bool {",
++                "  let p = (a < b) && (c < d)",
++                "  let q = (a == b) || (c != d)",
++                "  let r = (a <= b) && c > d",
++                "  let s = a >= b || (c == d)",
++                "  let t = (a + b < c) && (d * 2 == a)",
++                "  let u = (a % 2 == 0) || (b % 2 == 0)",
++                "  p && q && r && s && t && u",
++                "}",
++            ],
++            &[
++                "pub fn logic(a: I32, b: I32, c: I32, d: I32) -> Bool {",
++                "  let p = a < b && c < d",
++                "  let q = a == b || c != d",
++                "  let r = a <= b && c > d",
++                "  let s = a >= b || c == d",
++                "  let t = a + b < c && d * 2 == a",
++                "  let u = a % 2 == 0 || b % 2 == 0",
++                "  p && q && r && s && t && u",
++                "}",
++            ],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, a stronger group in a weaker group (S-115, S-45, S-339)"]
++fn a_stronger_group_in_a_weaker_group_loses_its_parentheses() {
++    expect_fmt("strong_groups", &c_strong_groups());
++}
++
++// ===================================================================================================
++// B. A prefix expression and the operands of `as` and `at`
++// ===================================================================================================
++
++fn c_prefix_operands() -> Vec<Case> {
++    vec![
++        case(
++            "a prefix minus as the operand of a binary operator, on both sides",
++            &[
++                "pub fn prefix_operands(x: I32, y: I32) -> I32 {",
++                "  let p = (-x) + y",
++                "  let q = y - (-x)",
++                "  let r = (-x) * (-y)",
++                "  let s = y % (-x)",
++                "  p + q + r + s",
++                "}",
++            ],
++            &[
++                "pub fn prefix_operands(x: I32, y: I32) -> I32 {",
++                "  let p = -x + y",
++                "  let q = y - -x",
++                "  let r = -x * -y",
++                "  let s = y % -x",
++                "  p + q + r + s",
++                "}",
++            ],
++        ),
++        case(
++            "a prefix not as the operand of && || and ==",
++            &[
++                "pub fn prefix_logic(c: Bool, d: Bool) -> Bool {",
++                "  let p = (!c) && d",
++                "  let q = c || (!d)",
++                "  let r = (!c) == d",
++                "  p && q && r",
++                "}",
++            ],
++            &[
++                "pub fn prefix_logic(c: Bool, d: Bool) -> Bool {",
++                "  let p = !c && d",
++                "  let q = c || !d",
++                "  let r = !c == d",
++                "  p && q && r",
++                "}",
++            ],
++        ),
++        prel(
++            "a name or a postfix expression as the operand of a prefix",
++            &[
++                "pub fn prefix_operand(x: I32, p: Pt, xs: [I32; 3], i: U32, flag: Bool) -> I32 {",
++                "  let a = -(x)",
++                "  let b = -(xs[i])",
++                "  let c = -(p.x)",
++                "  let d = -(id(x))",
++                "  let e = !(flag)",
++                "  if e {",
++                "    a + b + c + d",
++                "  } else {",
++                "    0",
++                "  }",
++                "}",
++            ],
++            &[
++                "pub fn prefix_operand(x: I32, p: Pt, xs: [I32; 3], i: U32, flag: Bool) -> I32 {",
++                "  let a = -x",
++                "  let b = -xs[i]",
++                "  let c = -p.x",
++                "  let d = -id(x)",
++                "  let e = !flag",
++                "  if e {",
++                "    a + b + c + d",
++                "  } else {",
++                "    0",
++                "  }",
++                "}",
++            ],
++        ),
++        prel(
++            "a prefix, a name and a postfix expression as the operand of as",
++            &[
++                "pub fn as_operands(x: I32, t: (I32, I32)) -> F64 {",
++                "  let a = (-x) as F64",
++                "  let b = (x) as F64",
++                "  let c = (t.0) as F64",
++                "  let d = (id(x)) as F64",
++                "  a + b + c + d",
++                "}",
++            ],
++            &[
++                "pub fn as_operands(x: I32, t: (I32, I32)) -> F64 {",
++                "  let a = -x as F64",
++                "  let b = x as F64",
++                "  let c = t.0 as F64",
++                "  let d = id(x) as F64",
++                "  a + b + c + d",
++                "}",
++            ],
++        ),
++        case(
++            "a name as the operand of at",
++            &["pub flow promote(p: F32 at block) -> F32 at sample {", "  let q = (p) at sample", "  q", "}"],
++            &["pub flow promote(p: F32 at block) -> F32 at sample {", "  let q = p at sample", "  q", "}"],
++        ),
++        case(
++            "a prefix as the operand of at",
++            &["pub flow promote(p: F32 at block) -> F32 at sample {", "  let q = (-p) at sample", "  q", "}"],
++            &["pub flow promote(p: F32 at block) -> F32 at sample {", "  let q = -p at sample", "  q", "}"],
++        )
++        .syntax_only(),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, a prefix expression as an operand (S-339)"]
++fn a_prefix_expression_as_an_operand_loses_its_parentheses() {
++    expect_fmt("prefix_operands", &c_prefix_operands());
++}
++
++// ===================================================================================================
++// C. A name, a literal, a postfix expression and a pair in a pair; the nesting
++// ===================================================================================================
++
++fn c_atoms() -> Vec<Case> {
++    vec![
++        prel(
++            "a name and a postfix expression in a pair, and a pair as the receiver of a postfix",
++            &[
++                "pub fn atoms(p: Pt, xs: [I32; 4], t: (I32, I32), i: U32) -> I32 {",
++                "  let a = (p.x)",
++                "  let b = (xs[i])",
++                "  let c = (t.0)",
++                "  let d = (make(a)).y",
++                "  let e = (p.x).max(1)",
++                "  let f = (xs)[0]",
++                "  let g = (t).1",
++                "  let h = (t.0).max(2)",
++                "  a + b + c + d + e + f + g + h",
++                "}",
++            ],
++            &[
++                "pub fn atoms(p: Pt, xs: [I32; 4], t: (I32, I32), i: U32) -> I32 {",
++                "  let a = p.x",
++                "  let b = xs[i]",
++                "  let c = t.0",
++                "  let d = make(a).y",
++                "  let e = p.x.max(1)",
++                "  let f = xs[0]",
++                "  let g = t.1",
++                "  let h = t.0.max(2)",
++                "  a + b + c + d + e + f + g + h",
++                "}",
++            ],
++        ),
++        case(
++            "a pair as the operand of the question mark and in the argument of a variant",
++            &["pub fn question(o: Option[I32]) -> Option[I32] {", "  let v = (o)?", "  Some((v) + 1)", "}"],
++            &["pub fn question(o: Option[I32]) -> Option[I32] {", "  let v = o?", "  Some(v + 1)", "}"],
++        ),
++        case(
++            "the literals of the integer, the float and the boolean in a pair",
++            &[
++                "pub fn ints(x: I32) -> I32 {",
++                "  (1) + (2) * (x)",
++                "}",
++                "",
++                "pub fn floats(y: F32) -> F32 {",
++                "  (0.5) * (y)",
++                "}",
++                "",
++                "pub fn bools(c: Bool) -> Bool {",
++                "  let p = (true) && (c)",
++                "  let q = (false) || (c)",
++                "  p || q",
++                "}",
++            ],
++            &[
++                "pub fn ints(x: I32) -> I32 {",
++                "  1 + 2 * x",
++                "}",
++                "",
++                "pub fn floats(y: F32) -> F32 {",
++                "  0.5 * y",
++                "}",
++                "",
++                "pub fn bools(c: Bool) -> Bool {",
++                "  let p = true && c",
++                "  let q = false || c",
++                "  p || q",
++                "}",
++            ],
++        ),
++        case(
++            "a literal as the receiver of a method (spec 2.4: `1.abs()` reads as a member)",
++            &["pub fn receivers(a: I32) -> I32 {", "  (1).abs() + (a).abs()", "}"],
++            &["pub fn receivers(a: I32) -> I32 {", "  1.abs() + a.abs()", "}"],
++        )
++        .syntax_only(),
++        case(
++            "the nesting of pairs goes in one pass",
++            &[
++                "pub fn nesting(a: I32, b: I32, c: I32, n: I32) -> I32 {",
++                "  let p = (((a)))",
++                "  let q = ((a + b)) * c",
++                "  let r = (((a * b))) + c",
++                "  let s = ((a * b) + c) + b",
++                "  let t = (((a + b)) * c)",
++                "  let u = -(((a)))",
++                "  let v = ((a * b) + c) < n",
++                "  if v {",
++                "    p + q + r + s + t + u",
++                "  } else {",
++                "    0",
++                "  }",
++                "}",
++            ],
++            &[
++                "pub fn nesting(a: I32, b: I32, c: I32, n: I32) -> I32 {",
++                "  let p = a",
++                "  let q = (a + b) * c",
++                "  let r = a * b + c",
++                "  let s = (a * b + c) + b",
++                "  let t = (a + b) * c",
++                "  let u = -a",
++                "  let v = a * b + c < n",
++                "  if v {",
++                "    p + q + r + s + t + u",
++                "  } else {",
++                "    0",
++                "  }",
++                "}",
++            ],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, a pair round a name, a literal, a postfix expression or a pair (S-115)"]
++fn the_pairs_round_atoms_and_postfix_expressions_and_the_nesting_of_pairs_go() {
++    expect_fmt("atoms", &c_atoms());
++}
++
++// ===================================================================================================
++// D. The whole of a statement, an argument, an element, a field, an index, a tail, an arm, a guard
++// ===================================================================================================
++
++fn c_whole() -> Vec<Case> {
++    vec![
++        prel(
++            "the whole of a let, a var, an assignment, an argument, an element, a field and an index",
++            &[
++                "pub fn positions(a: I32, b: I32, xs: [I32; 4], i: U32) -> I32 {",
++                "  let p = (a + b)",
++                "  var q = (a * b)",
++                "  q = (q - a)",
++                "  let r = id((a + b))",
++                "  let s = two((a), (b * 2))",
++                "  let t = [(a + b), (a * b), (a)]",
++                "  let u = ((a + b), (a))",
++                "  let v = Pt { x: (a + b), y: (b) }",
++                "  let w = xs[(i + 1)]",
++                "  p + q + r + s + t[0] + u.0 + v.x + w",
++                "}",
++            ],
++            &[
++                "pub fn positions(a: I32, b: I32, xs: [I32; 4], i: U32) -> I32 {",
++                "  let p = a + b",
++                "  var q = a * b",
++                "  q = q - a",
++                "  let r = id(a + b)",
++                "  let s = two(a, b * 2)",
++                "  let t = [a + b, a * b, a]",
++                "  let u = (a + b, a)",
++                "  let v = Pt { x: a + b, y: b }",
++                "  let w = xs[i + 1]",
++                "  p + q + r + s + t[0] + u.0 + v.x + w",
++                "}",
++            ],
++        ),
++        case(
++            "the tail of a block, the arms of a match and an early return",
++            &[
++                "pub fn tails(c: Bool, a: I32, b: I32, o: Option[I32]) -> I32 {",
++                "  let k = if c { (a + b) } else { (a * b) }",
++                "  let m = match o {",
++                "    Some(v) => (v + k),",
++                "    None => (k),",
++                "  }",
++                "  (m)",
++                "}",
++                "",
++                "pub fn early(a: I32) -> I32 {",
++                "  if a < 0 {",
++                "    return (0 - a)",
++                "  }",
++                "  (a)",
++                "}",
++            ],
++            &[
++                "pub fn tails(c: Bool, a: I32, b: I32, o: Option[I32]) -> I32 {",
++                "  let k = if c { a + b } else { a * b }",
++                "  let m = match o {",
++                "    Some(v) => v + k,",
++                "    None => k,",
++                "  }",
++                "  m",
++                "}",
++                "",
++                "pub fn early(a: I32) -> I32 {",
++                "  if a < 0 {",
++                "    return 0 - a",
++                "  }",
++                "  a",
++                "}",
++            ],
++        ),
++        case(
++            "the guard of an arm",
++            &[
++                "pub fn guards(o: Option[I32]) -> I32 {",
++                "  match o {",
++                "    Some(x) if (x > 0) => x,",
++                "    Some(_) => 0,",
++                "    None => -1,",
++                "  }",
++                "}",
++            ],
++            &[
++                "pub fn guards(o: Option[I32]) -> I32 {",
++                "  match o {",
++                "    Some(x) if x > 0 => x,",
++                "    Some(_) => 0,",
++                "    None => -1,",
++                "  }",
++                "}",
++            ],
++        ),
++        case(
++            "the condition of an assert",
++            &["fn one() -> I32 {", "  1", "}", "", "test \"one\" {", "  assert (one() == 1)", "}"],
++            &["fn one() -> I32 {", "  1", "}", "", "test \"one\" {", "  assert one() == 1", "}"],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, the whole of a statement, an argument or an element (S-115, S-339)"]
++fn the_pair_round_the_whole_of_a_statement_an_argument_an_element_or_an_arm_goes() {
++    expect_fmt("whole", &c_whole());
++}
++
++// ===================================================================================================
++// E. The heads of `if`, `while`, `match` and `for`
++// ===================================================================================================
++
++fn c_headings() -> Vec<Case> {
++    vec![
++        case(
++            "the whole of the head of if, else if, while, for and match",
++            &[
++                "pub fn headings(c: Bool, n: I32, o: Option[I32], xs: [I32; 3]) -> I32 {",
++                "  var total = 0",
++                "  if (c) {",
++                "    total = 1",
++                "  } else if (n > 2) {",
++                "    total = 2",
++                "  }",
++                "  while (total < n) {",
++                "    total = total + 1",
++                "  }",
++                "  for x in (xs) {",
++                "    total = total + x",
++                "  }",
++                "  let k = match (o) {",
++                "    Some(v) => v,",
++                "    None => 0,",
++                "  }",
++                "  total + k",
++                "}",
++            ],
++            &[
++                "pub fn headings(c: Bool, n: I32, o: Option[I32], xs: [I32; 3]) -> I32 {",
++                "  var total = 0",
++                "  if c {",
++                "    total = 1",
++                "  } else if n > 2 {",
++                "    total = 2",
++                "  }",
++                "  while total < n {",
++                "    total = total + 1",
++                "  }",
++                "  for x in xs {",
++                "    total = total + x",
++                "  }",
++                "  let k = match o {",
++                "    Some(v) => v,",
++                "    None => 0,",
++                "  }",
++                "  total + k",
++                "}",
++            ],
++        ),
++        prel(
++            "the operands in a head, and the pair round a call that holds a struct literal",
++            &[
++                "pub fn heading_operands(p: Pt, n: I32) -> I32 {",
++                "  var total = 0",
++                "  if (p.x == n) && (p.y < n) {",
++                "    total = 1",
++                "  }",
++                "  while (total + 1) < n {",
++                "    total = total + 1",
++                "  }",
++                "  if (px(Pt { x: 1, y: 2 }) == 2) {",
++                "    total = 2",
++                "  }",
++                "  let k = match (p).x {",
++                "    0 => 1,",
++                "    _ => 2,",
++                "  }",
++                "  total + k",
++                "}",
++            ],
++            &[
++                "pub fn heading_operands(p: Pt, n: I32) -> I32 {",
++                "  var total = 0",
++                "  if p.x == n && p.y < n {",
++                "    total = 1",
++                "  }",
++                "  while total + 1 < n {",
++                "    total = total + 1",
++                "  }",
++                "  if px(Pt { x: 1, y: 2 }) == 2 {",
++                "    total = 2",
++                "  }",
++                "  let k = match p.x {",
++                "    0 => 1,",
++                "    _ => 2,",
++                "  }",
++                "  total + k",
++                "}",
++            ],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, the whole of a head and the operands in it (S-115, S-339)"]
++fn the_pair_round_the_whole_of_a_head_goes() {
++    expect_fmt("headings", &c_headings());
++}
++
++// ===================================================================================================
++// F. The ends of a range (S-336)
++// ===================================================================================================
++
++fn c_ranges() -> Vec<Case> {
++    vec![
++        case(
++            "the whole of an end of a half-open range, on both sides, and the spacing round the symbol",
++            &[
++                "pub fn ranges(lo: U32, hi: U32, n: U32) -> U32 {",
++                "  var total: U32 = 0",
++                "  for i in 0 ..< (n + 1) {",
++                "    total = total + i",
++                "  }",
++                "  for i in (lo + 1)..<hi {",
++                "    total = total + i",
++                "  }",
++                "  for i in (lo) ..< (hi) {",
++                "    total = total + i",
++                "  }",
++                "  for i in (lo + 1) ..< (hi - 1) {",
++                "    total = total + i",
++                "  }",
++                "  for i in 0 ..< ((n + 1) % hi) {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++            &[
++                "pub fn ranges(lo: U32, hi: U32, n: U32) -> U32 {",
++                "  var total: U32 = 0",
++                "  for i in 0 ..< n + 1 {",
++                "    total = total + i",
++                "  }",
++                "  for i in lo + 1 ..< hi {",
++                "    total = total + i",
++                "  }",
++                "  for i in lo ..< hi {",
++                "    total = total + i",
++                "  }",
++                "  for i in lo + 1 ..< hi - 1 {",
++                "    total = total + i",
++                "  }",
++                "  for i in 0 ..< (n + 1) % hi {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++        ),
++        case(
++            "a prefix expression as the end of a range",
++            &[
++                "pub fn signed(n: I32) -> I32 {",
++                "  var total = 0",
++                "  for i in (-3) ..< (n) {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++            &[
++                "pub fn signed(n: I32) -> I32 {",
++                "  var total = 0",
++                "  for i in -3 ..< n {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++        ),
++        case(
++            "the ends of a closed range",
++            &[
++                "pub fn closed(lo: U32, hi: U32) -> U32 {",
++                "  var total: U32 = 0",
++                "  for i in (lo) ..= (hi - 1) {",
++                "    total = total + i",
++                "  }",
++                "  for i in (lo + 1) ..= hi {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++            &[
++                "pub fn closed(lo: U32, hi: U32) -> U32 {",
++                "  var total: U32 = 0",
++                "  for i in lo ..= hi - 1 {",
++                "    total = total + i",
++                "  }",
++                "  for i in lo + 1 ..= hi {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++        )
++        .syntax_only(),
++        case(
++            "the end of a par range",
++            &[
++                "const UNISON: U32 = 4",
++                "",
++                "pub flow unison(f0: F32 at block) -> F32 at sample {",
++                "  let saws = par i in 0 ..< (UNISON) {",
++                "    (f0)",
++                "  }",
++                "  saws",
++                "}",
++            ],
++            &[
++                "const UNISON: U32 = 4",
++                "",
++                "pub flow unison(f0: F32 at block) -> F32 at sample {",
++                "  let saws = par i in 0 ..< UNISON {",
++                "    f0",
++                "  }",
++                "  saws",
++                "}",
++            ],
++        )
++        .syntax_only(),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, the whole of an end of a range (S-336, S-115)"]
++fn the_pair_round_the_whole_of_an_end_of_a_range_goes() {
++    expect_fmt("ranges", &c_ranges());
++}
++
++// ===================================================================================================
++// G. A type
++// ===================================================================================================
++
++fn c_types() -> Vec<Case> {
++    vec![
++        prel(
++            "a type that is only grouped: a name, a tuple, an array, an argument, a function type",
++            &[
++                "type Pair = ((I32, F32))",
++                "",
++                "type Op = (fn(I32) -> I32)",
++                "",
++                "type Curried = fn(I32) -> (fn(I32) -> I32)",
++                "",
++                "pub fn types(a: (I32), b: [(I32); 3], c: Option[(I32)], d: ((I32, F32))) -> (I32) {",
++                "  let e: (I32) = a",
++                "  e",
++                "}",
++                "",
++                "fn run(f: (fn((I32)) -> (I32)), x: I32) -> I32 {",
++                "  f.(x)",
++                "}",
++                "",
++                "fn mk_c() -> (fn(I32) -> I32) {",
++                "  id",
++                "}",
++            ],
++            &[
++                "type Pair = (I32, F32)",
++                "",
++                "type Op = fn(I32) -> I32",
++                "",
++                "type Curried = fn(I32) -> fn(I32) -> I32",
++                "",
++                "pub fn types(a: I32, b: [I32; 3], c: Option[I32], d: (I32, F32)) -> I32 {",
++                "  let e: I32 = a",
++                "  e",
++                "}",
++                "",
++                "fn run(f: fn(I32) -> I32, x: I32) -> I32 {",
++                "  f.(x)",
++                "}",
++                "",
++                "fn mk_c() -> fn(I32) -> I32 {",
++                "  id",
++                "}",
++            ],
++        ),
++        case(
++            "the length of an array: a name, a sum under a product and the pair that the remainder needs (not lowered, so the syntax stage only)",
++            &[
++                "const N: U32 = 4",
++                "",
++                "pub fn lengths(a: [F32; (N)], b: [F32; (N * 2) + 1], c: [F32; (N + 1) % 2]) -> U32 {",
++                "  let d = [0.0; (N + 1)]",
++                "  1",
++                "}",
++            ],
++            &[
++                "const N: U32 = 4",
++                "",
++                "pub fn lengths(a: [F32; N], b: [F32; N * 2 + 1], c: [F32; (N + 1) % 2]) -> U32 {",
++                "  let d = [0.0; N + 1]",
++                "  1",
++                "}",
++            ],
++        )
++        .syntax_only(),
++        case(
++            "the pair round the result type goes when it holds a name and not a function type",
++            &["fn mk_b() -> (I32) uses {Alloc} {", "  1", "}"],
++            &["fn mk_b() -> I32 uses {Alloc} {", "  1", "}"],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, a type that is only grouped (S-339, spec 2.4)"]
++fn the_pair_round_a_type_that_is_only_grouped_goes() {
++    expect_fmt("types", &c_types());
++}
++
++// ===================================================================================================
++// H. A pattern
++// ===================================================================================================
++
++fn c_patterns() -> Vec<Case> {
++    vec![
++        case(
++            "a pattern that is only grouped in an arm: a literal, a choice, a wildcard, a variant",
++            &[
++                "pub fn arms(n: I32) -> I32 {",
++                "  match n {",
++                "    (1 | 2) => 10,",
++                "    (-1) => 20,",
++                "    ((3)) => 30,",
++                "    (_) => 0,",
++                "  }",
++                "}",
++                "",
++                "pub fn variants(o: Option[I32]) -> I32 {",
++                "  match o {",
++                "    Some((1 | 2)) => 1,",
++                "    Some((x)) => x,",
++                "    (None) => 0,",
++                "  }",
++                "}",
++            ],
++            &[
++                "pub fn arms(n: I32) -> I32 {",
++                "  match n {",
++                "    1 | 2 => 10,",
++                "    -1 => 20,",
++                "    3 => 30,",
++                "    _ => 0,",
++                "  }",
++                "}",
++                "",
++                "pub fn variants(o: Option[I32]) -> I32 {",
++                "  match o {",
++                "    Some(1 | 2) => 1,",
++                "    Some(x) => x,",
++                "    None => 0,",
++                "  }",
++                "}",
++            ],
++        ),
++        case(
++            "the columns of the `=` are those of the text after the pairs went (docs/onsa-tools.md 3.2)",
++            &["pub fn aligned(t: (I32, I32)) -> I32 {", "  let (a) = 1", "  let ((b, c)) = t", "  a + b + c", "}"],
++            &["pub fn aligned(t: (I32, I32)) -> I32 {", "  let a      = 1", "  let (b, c) = t", "  a + b + c", "}"],
++        ),
++        case(
++            "a pattern that is only grouped in a let: a name, a tuple",
++            &[
++                "pub fn single(a: I32) -> I32 {",
++                "  let (b) = a",
++                "  b",
++                "}",
++                "",
++                "pub fn tuple(t: (I32, I32)) -> I32 {",
++                "  let ((b, c)) = t",
++                "  b + c",
++                "}",
++            ],
++            &[
++                "pub fn single(a: I32) -> I32 {",
++                "  let b = a",
++                "  b",
++                "}",
++                "",
++                "pub fn tuple(t: (I32, I32)) -> I32 {",
++                "  let (b, c) = t",
++                "  b + c",
++                "}",
++            ],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, a pattern that is only grouped (S-339, spec 2.4)"]
++fn the_pair_round_a_pattern_that_is_only_grouped_goes() {
++    expect_fmt("patterns", &c_patterns());
++}
++
++// ===================================================================================================
++// I. The pairs that go and stay in one expression
++// ===================================================================================================
++
++fn c_mixed() -> Vec<Case> {
++    vec![
++        case(
++            "integers: a pair goes, the pair of a clash of groups and of the tree stays, next to each other",
++            &[
++                "pub fn mixed(a: I32, b: I32, c: I32, d: I32, n: I32) -> I32 {",
++                "  let p = (a * b) + (c % d)",
++                "  let q = (a % b) == (c % d)",
++                "  let r = ((a + b) * c) + ((d - a) * b)",
++                "  let s = ((a + b) % n) == 0",
++                "  let t = -(-(a))",
++                "  if q || s {",
++                "    p + r + t",
++                "  } else {",
++                "    0",
++                "  }",
++                "}",
++            ],
++            &[
++                "pub fn mixed(a: I32, b: I32, c: I32, d: I32, n: I32) -> I32 {",
++                "  let p = a * b + (c % d)",
++                "  let q = a % b == c % d",
++                "  let r = (a + b) * c + (d - a) * b",
++                "  let s = (a + b) % n == 0",
++                "  let t = -(-a)",
++                "  if q || s {",
++                "    p + r + t",
++                "  } else {",
++                "    0",
++                "  }",
++                "}",
++            ],
++        ),
++        case(
++            "floats: the pair of as stays, the pair round the product goes",
++            &[
++                "pub fn mixed_float(x: I32, y: F64) -> F64 {",
++                "  let a = ((x as F64) * 2.0) + y",
++                "  let b = y + ((x as F64) * 2.0)",
++                "  let c = (-(x as F64)) + y",
++                "  a + b + c",
++                "}",
++                "",
++                "pub fn mixed_chain(x: I16) -> I64 {",
++                "  ((x as I32) as I64)",
++                "}",
++            ],
++            &[
++                "pub fn mixed_float(x: I32, y: F64) -> F64 {",
++                "  let a = (x as F64) * 2.0 + y",
++                "  let b = y + (x as F64) * 2.0",
++                "  let c = -(x as F64) + y",
++                "  a + b + c",
++                "}",
++                "",
++                "pub fn mixed_chain(x: I16) -> I64 {",
++                "  (x as I32) as I64",
++                "}",
++            ],
++        ),
++        case(
++            "booleans: the pair of && under || stays, the pair of a comparison goes",
++            &[
++                "pub fn mixed_logic(a: I32, b: I32, p: Bool, q: Bool, r: Bool) -> Bool {",
++                "  let s = ((p && q) || r) || (a < b)",
++                "  let t = (p || (a == b)) && (q || (a != b))",
++                "  s && t",
++                "}",
++            ],
++            &[
++                "pub fn mixed_logic(a: I32, b: I32, p: Bool, q: Bool, r: Bool) -> Bool {",
++                "  let s = ((p && q) || r) || a < b",
++                "  let t = (p || a == b) && (q || a != b)",
++                "  s && t",
++                "}",
++            ],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, pairs that go and stay in one expression (S-339, S-115)"]
++fn pairs_that_go_and_pairs_that_stay_in_one_expression() {
++    expect_fmt("mixed", &c_mixed());
++}
++
++/// The programs in which the pair round a different thing is in a closure, a generic function, a method, a
++/// branch and a module; the combinations of the places with the other items of the language.
++fn c_combinations() -> Vec<Case> {
++    vec![
++        case(
++            "a closure, a generic function, a method and a branch",
++            &[
++                "pub struct V {",
++                "  x: F32,",
++                "  y: F32,",
++                "}",
++                "",
++                "impl V {",
++                "  pub fn dot(self, o: V) -> F32 {",
++                "    ((self.x * o.x) + (self.y * o.y))",
++                "  }",
++                "}",
++                "",
++                "pub fn pick[T](c: Bool, a: T, b: T) -> T {",
++                "  if (c) {",
++                "    (a)",
++                "  } else {",
++                "    (b)",
++                "  }",
++                "}",
++                "",
++                "pub fn closure(k: I32) -> I32 {",
++                "  let g = fn(x: I32) -> I32 { (x * 2) + (1) }",
++                "  g.((k + 1))",
++                "}",
++            ],
++            &[
++                "pub struct V {",
++                "  x: F32,",
++                "  y: F32,",
++                "}",
++                "",
++                "impl V {",
++                "  pub fn dot(self, o: V) -> F32 {",
++                "    self.x * o.x + self.y * o.y",
++                "  }",
++                "}",
++                "",
++                "pub fn pick[T](c: Bool, a: T, b: T) -> T {",
++                "  if c {",
++                "    a",
++                "  } else {",
++                "    b",
++                "  }",
++                "}",
++                "",
++                "pub fn closure(k: I32) -> I32 {",
++                "  let g = fn(x: I32) -> I32 { x * 2 + 1 }",
++                "  g.(k + 1)",
++                "}",
++            ],
++        ),
++        case(
++            "a const, a function of an array and a test",
++            &[
++                "const N: U32 = (2 * 3) + 1",
++                "",
++                "fn first(xs: [F64; 3]) -> F64 {",
++                "  xs[0]",
++                "}",
++                "",
++                "pub fn total(xs: [F64; 3]) -> F64 {",
++                "  (first(xs)) / ((2.0) + (1.0))",
++                "}",
++                "",
++                "test \"n\" {",
++                "  assert (N == 7)",
++                "}",
++            ],
++            &[
++                "const N: U32 = 2 * 3 + 1",
++                "",
++                "fn first(xs: [F64; 3]) -> F64 {",
++                "  xs[0]",
++                "}",
++                "",
++                "pub fn total(xs: [F64; 3]) -> F64 {",
++                "  first(xs) / (2.0 + 1.0)",
++                "}",
++                "",
++                "test \"n\" {",
++                "  assert N == 7",
++                "}",
++            ],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, pairs in a closure, a generic function, a method and a branch (S-339, S-115)"]
++fn pairs_go_in_a_closure_a_generic_function_a_method_a_branch_and_a_const() {
++    expect_fmt("combinations", &c_combinations());
++}
++
++#[test]
++#[ignore = "W3-12 U2: the pair goes after the return at the end is taken off; U1 and U2 are both needed (S-115, S-339)"]
++fn a_pair_round_the_value_of_the_last_return_goes_with_the_return_after_u1_and_u2() {
++    expect_fmt(
++        "tail_return",
++        &[
++            case(
++                "the last return of a function holds a pair",
++                &[
++                    "fn f(a: I32, b: I32) -> I32 {",
++                    "  return (a + b)",
++                    "}",
++                    "",
++                    "fn g(a: I32) -> I32 {",
++                    "  return (a)",
++                    "}",
++                ],
++                &["fn f(a: I32, b: I32) -> I32 {", "  a + b", "}", "", "fn g(a: I32) -> I32 {", "  a", "}"],
++            ),
++            case(
++                "an early return keeps the return and loses the pair",
++                &["fn f(a: I32) -> I32 {", "  if a < 0 {", "    return (0 - a)", "  }", "  (a * 2)", "}"],
++                &["fn f(a: I32) -> I32 {", "  if a < 0 {", "    return 0 - a", "  }", "  a * 2", "}"],
++            ),
++        ],
++    );
++}
++
++// ===================================================================================================
++// J. Line breaks and comments inside a pair
++// ===================================================================================================
++//
++// Inside a pair, `fmt` takes off the line breaks round `as` and `at` (docs/onsa-tools.md §3.2), and keeps the
++// line breaks of a place of continuation (after a binary operator, spec §2.5) and the line break after a
++// comment at the end of a line, in every place. The pair is taken off when the result is the same tree and
++// has no error of the syntax stage (S-339); the line breaks that are taken off first decide that. `fmt` is
++// to be a fixed point, so a pair that goes only after another run is no answer (spec §18.2).
++
++fn c_pair_lines() -> Vec<Case> {
++    vec![
++        case(
++            "a line break before or after as is taken off first, and then the pair goes",
++            &[
++                "pub fn before(x: I32) -> F64 {",
++                "  let y = (x",
++                "    as F64)",
++                "  y",
++                "}",
++                "",
++                "pub fn after(x: I32) -> F64 {",
++                "  let y = (x as",
++                "    F64)",
++                "  y",
++                "}",
++            ],
++            &[
++                "pub fn before(x: I32) -> F64 {",
++                "  let y = x as F64",
++                "  y",
++                "}",
++                "",
++                "pub fn after(x: I32) -> F64 {",
++                "  let y = x as F64",
++                "  y",
++                "}",
++            ],
++        ),
++        case(
++            "a line break after as is taken off, and the pair of the operand of * stays",
++            &["pub fn product(x: I32) -> F64 {", "  let y = (x as", "    F64) * 2.0", "  y", "}"],
++            &["pub fn product(x: I32) -> F64 {", "  let y = (x as F64) * 2.0", "  y", "}"],
++        ),
++        case(
++            "a continuation after a binary operator and a comment: the line break stays, the pair goes",
++            &["pub fn continued(a: I32, b: I32) -> I32 {", "  let y = (a + // c", "    b)", "  y", "}"],
++            &["pub fn continued(a: I32, b: I32) -> I32 {", "  let y = a + // c", "    b", "  y", "}"],
++        ),
++        case(
++            "a comment at the end of the line before the closing parenthesis: the pair goes, the comment stays",
++            &["pub fn closing(a: I32, b: I32) -> I32 {", "  let y = (a + b // c", "  )", "  y", "}"],
++            &["pub fn closing(a: I32, b: I32) -> I32 {", "  let y = a + b // c", "  y", "}"],
++        ),
++        case(
++            "the closing parenthesis on a line of its own, without a comment: the line break goes with it",
++            &["pub fn alone(a: I32, b: I32) -> I32 {", "  let y = (a + b", "  )", "  y", "}"],
++            &["pub fn alone(a: I32, b: I32) -> I32 {", "  let y = a + b", "  y", "}"],
++        ),
++        case(
++            "the head that goes on after && inside the pair keeps its line break and loses the pair",
++            &["pub fn head(a: Bool, b: Bool) -> I32 {", "  if (a &&", "    b) {", "    return 1", "  }", "  0", "}"],
++            &["pub fn head(a: Bool, b: Bool) -> I32 {", "  if a &&", "    b {", "    return 1", "  }", "  0", "}"],
++        ),
++    ]
++}
++
++#[test]
++#[ignore = "W3-12 U2: fmt takes no parenthesis off yet, the line breaks and the comments inside a pair that goes (S-339, S-497)"]
++fn the_pair_with_line_breaks_inside_goes_when_the_result_is_the_same_tree_and_has_no_error() {
++    expect_fmt("pair_lines", &c_pair_lines());
++}
++
++/// The tables are written by hand: the input and the expected text of a case may differ in the
++/// parentheses and in white space only (no other change is hidden in a case).
++#[test]
++fn the_expected_text_of_a_case_differs_from_the_input_in_parentheses_and_white_space_only() {
++    let groups: Vec<(&str, Vec<Case>)> = vec![
++        ("strong", c_strong_groups()),
++        ("prefix", c_prefix_operands()),
++        ("atoms", c_atoms()),
++        ("whole", c_whole()),
++        ("headings", c_headings()),
++        ("ranges", c_ranges()),
++        ("types", c_types()),
++        ("patterns", c_patterns()),
++        ("mixed", c_mixed()),
++        ("combinations", c_combinations()),
++        ("lines", c_pair_lines()),
++    ];
++    let strip = |t: &str| -> String { t.chars().filter(|c| !c.is_whitespace() && *c != '(' && *c != ')').collect() };
++    for (g, cases) in &groups {
++        for c in cases {
++            assert_eq!(
++                strip(&c.input),
++                strip(&c.expected),
++                "{g}: {}: the cases differ in more than parentheses",
++                c.what
++            );
++            assert_ne!(c.input, c.expected, "{g}: {}: nothing to take off", c.what);
++        }
++    }
++}
++
++// ===================================================================================================
++// K. The pairs that stay (they pass now and must keep passing)
++// ===================================================================================================
++
++fn k_same_group() -> Vec<Case> {
++    vec![kept(
++        "a pair inside the same group stays, on both sides (the only exception to the rule)",
++        &[
++            "pub fn same_group(a: I32, b: I32, c: I32) -> I32 {",
++            "  let p = (a + b) + c",
++            "  let q = a + (b + c)",
++            "  let r = (a - b) - c",
++            "  let s = a - (b - c)",
++            "  let t = (a * b) * c",
++            "  let u = a / (b / c)",
++            "  p + q + r + s + t + u",
++            "}",
++            "",
++            "pub fn same_group_logic(p: Bool, q: Bool, r: Bool) -> Bool {",
++            "  let a = (p && q) && r",
++            "  let b = p && (q && r)",
++            "  let c = (p || q) || r",
++            "  let d = p || (q || r)",
++            "  a && b && c && d",
++            "}",
++            "",
++            "pub fn same_group_bits(m: U32) -> U32 {",
++            "  let a = (m | 1) | 4",
++            "  let b = m | (1 | 4)",
++            "  let c = (m & 3) & 6",
++            "  let d = (m << 1) << 2",
++            "  let e = m << (1 << 2)",
++            "  a | b | c | d | e",
++            "}",
++            "",
++            "pub fn same_group_remainder(m: U32) -> U32 {",
++            "  let a = (m % 3) % 2",
++            "  let b = m % (3 % 2)",
++            "  a + b",
++            "}",
++            "",
++            "pub fn same_group_comparison(a: I32, b: I32, p: Bool) -> Bool {",
++            "  let q = p == (a < b)",
++            "  let r = (a < b) == p",
++            "  q && r",
++            "}",
++        ],
++    )]
++}
++
++fn k_tree_changes() -> Vec<Case> {
++    vec![kept(
++        "a pair that the tree needs stays",
++        &[
++            "pub fn tree_changes(a: I32, b: I32, c: I32) -> I32 {",
++            "  let r = (a + b) * c",
++            "  let s = a * (b + c)",
++            "  let t = (a - b) / (c + a)",
++            "  let u = -(a + b)",
++            "  let v = (-a).max(b)",
++            "  let w = (a + b).max(c)",
++            "  r + s + t + u + v + w",
++            "}",
++            "",
++            "pub fn tree_changes_logic(p: Bool, q: Bool) -> Bool {",
++            "  !(p && q)",
++            "}",
++            "",
++            "pub fn tree_changes_cast(x: I32) -> F64 {",
++            "  let a = -(x as F64)",
++            "  let b = (x + 1) as F64",
++            "  a + b",
++            "}",
++        ],
++    )]
++}
++
++fn k_no_strength() -> Vec<Case> {
++    vec![kept(
++        "a pair that would clash without it (E0010) stays: no strength between the groups",
++        &[
++            "pub fn no_strength(a: U32, b: U32, c: U32, n: U32) -> U32 {",
++            "  let p = (a % b) + c",
++            "  let q = a + (b % c)",
++            "  let r = (a * b) % c",
++            "  let s = a % (b * c)",
++            "  let t = (a + b) % n",
++            "  let u = a - (b % c)",
++            "  p + q + r + s + t + u",
++            "}",
++            "",
++            "pub fn no_strength_logic(p: Bool, q: Bool, r: Bool) -> Bool {",
++            "  let a = (p && q) || r",
++            "  let b = p && (q || r)",
++            "  let c = (p || q) && r",
++            "  a && b && c",
++            "}",
++            "",
++            "pub fn no_strength_bits(a: U32, b: U32, m: U32) -> Bool {",
++            "  let p = (a & m) == 0",
++            "  let q = (a + b) & m",
++            "  let r = a & (b | m)",
++            "  let s = (a << 1) | b",
++            "  let t = a | (b ^ m)",
++            "  p && (q | r | s | t) == 0",
++            "}",
++            "",
++            "pub fn no_strength_comparison(a: I32, b: I32, c: I32, d: I32) -> Bool {",
++            "  (a < b) == (c < d)",
++            "}",
++        ],
++    )]
++}
++
++fn k_as_and_at() -> Vec<Case> {
++    vec![
++        kept(
++            "a pair round an as expression as the operand of a binary operator (E0011) stays",
++            &[
++                "pub fn cast_operands(x: I32, acc: F64, y: F64) -> F64 {",
++                "  let p = acc + (x as F64)",
++                "  let q = (x as F64) * 2.0",
++                "  let r = y - (x as F64)",
++                "  p + q + r",
++                "}",
++                "",
++                "pub fn cast_chain(x: I16) -> I64 {",
++                "  (x as I32) as I64",
++                "}",
++                "",
++                "pub fn cast_compare(x: I32, y: F64) -> Bool {",
++                "  let a = (x as F64) < y",
++                "  let b = y < (x as F64)",
++                "  a && b",
++                "}",
++            ],
++        ),
++        kept(
++            "a pair round an as expression as the end of a range stays (S-340)",
++            &[
++                "pub fn cast_ends(n: U8, m: U16) -> U32 {",
++                "  var total: U32 = 0",
++                "  for i in 0 ..< (n as U32) {",
++                "    total = total + i",
++                "  }",
++                "  for i in (m as U32) ..< 9 {",
++                "    total = total + i",
++                "  }",
++                "  total",
++                "}",
++            ],
++        ),
++        kept(
++            "a pair round an at expression stays",
++            &["pub flow clocks(p: F32 at block) -> F32 at sample {", "  let q = (p at sample) * 2.0", "  q", "}"],
++        )
++        .syntax_only(),
++    ]
++}
++
++fn k_stack() -> Vec<Case> {
++    vec![kept(
++        "the pair of a stack of prefix operators (E0012) stays",
++        &["pub fn stacked(x: I32, c: Bool) -> Bool {", "  let a = -(-x)", "  let b = !(!c)", "  b && a == x", "}"],
++    )]
++}
++
++fn k_heads() -> Vec<Case> {
++    vec![prel_kept(
++        "a pair that holds a struct literal in a head stays (a struct literal is no head)",
++        &[
++            "pub fn heading_struct(n: I32) -> I32 {",
++            "  if (Pt { x: n, y: n }.x == 1) {",
++            "    return 1",
++            "  }",
++            "  let k = match (Pt { x: n, y: n }).x {",
++            "    1 => 10,",
++            "    _ => 20,",
++            "  }",
++            "  k",
++            "}",
++        ],
++    )]
++}
++
++fn k_block_head() -> Vec<Case> {
++    vec![kept(
++        "a pair that holds a block expression in a head stays",
++        &["pub fn heading_block(n: I32) -> I32 {", "  if ({ n } > 1) {", "    return 1", "  }", "  0", "}"],
++    )]
++}
++
++fn k_types() -> Vec<Case> {
++    vec![
++        kept(
++            "the pair round a function type before uses stays: without it uses goes to the inner type",
++            &[
++                "fn noop() {}",
++                "",
++                "fn mk_a() -> (fn()) uses {Alloc} {",
++                "  noop",
++                "}",
++                "",
++                "type Later = fn() -> (fn(I32) -> I32) uses {Alloc}",
++            ],
++        ),
++        kept(
++            "the pair round a function type before at stays",
++            &[
++                "pub flow gate(p: F32 at block, g: (fn(F32) -> F32) at block) -> F32 at sample {",
++                "  let q = p at sample",
++                "  q",
++                "}",
++            ],
++        )
++        .syntax_only(),
++    ]
++}
++
++fn k_comment() -> Vec<Case> {
++    vec![kept(
++        "a pair stays when the line break after the comment would put as at the start of a statement",
++        &["pub fn comment_before_as(x: I32) -> F64 {", "  let y = (x // c", "    as F64)", "  y", "}"],
++    )]
++}
++
++#[test]
++fn the_pairs_inside_the_same_group_stay() {
++    expect_fmt("k_same_group", &k_same_group());
++}
++
++#[test]
++fn the_pairs_that_the_tree_needs_stay() {
++    expect_fmt("k_tree", &k_tree_changes());
++}
++
++#[test]
++fn the_pairs_between_groups_without_a_strength_stay() {
++    expect_fmt("k_no_strength", &k_no_strength());
++}
++
++#[test]
++fn the_pairs_round_as_and_at_expressions_stay() {
++    expect_fmt("k_as_at", &k_as_and_at());
++}
++
++#[test]
++fn the_pair_of_a_stack_of_prefix_operators_stays() {
++    expect_fmt("k_stack", &k_stack());
++}
++
++#[test]
++fn the_pair_that_holds_a_struct_literal_or_a_block_in_a_head_stays() {
++    let mut v = k_heads();
++    v.extend(k_block_head());
++    expect_fmt("k_heads", &v);
++}
++
++#[test]
++fn the_pair_round_a_function_type_before_uses_or_at_stays() {
++    expect_fmt("k_types", &k_types());
++}
++
++#[test]
++fn the_pair_with_a_comment_before_as_stays() {
++    expect_fmt("k_comment", &k_comment());
++}
++
++// ===================================================================================================
++// L. The files `fmt` does not write
++// ===================================================================================================
++//
++// A pair that is an error of the syntax stage (`(s.f)(x)`, spec §6.1; the whole range of a head in a pair,
++// spec §7) stops `fmt` with 2 (§18.2): the file is not written, and the redundant pairs elsewhere in the file
++// are not taken off either. (The same for `--check`.)
++
++const BAD_CALLEE: &str = "\
++pub struct S {
++  f: fn(U8) -> U8,
++}
++
++pub fn first(a: I32, b: I32) -> I32 {
++  (a * b) + a
++}
++
++pub fn second(s: S) -> U8 {
++  (s.f)(1)
++}
++";
++
++const BAD_CALLEE_NAME: &str = "\
++fn id(a: I32) -> I32 {
++  a
++}
++
++pub fn first(a: I32, b: I32) -> I32 {
++  (a * b) + a
++}
++
++pub fn second(n: I32) -> I32 {
++  (id)(n)
++}
++";
++
++const BAD_RANGE_HEAD: &str = "\
++pub fn first(a: U32, b: U32) -> U32 {
++  (a * b) + a
++}
++
++pub fn second(n: U32) -> U32 {
++  var t: U32 = 0
++  for i in (0 ..< n) {
++    t = t + i
++  }
++  t
++}
++";
++
++#[test]
++fn a_file_with_a_callee_in_a_pair_or_a_range_head_in_a_pair_is_not_written_and_ends_with_2() {
++    for (what, text) in [
++        ("a field in a pair as the callee", BAD_CALLEE),
++        ("a name in a pair as the callee", BAD_CALLEE_NAME),
++        ("the whole range of a head in a pair", BAD_RANGE_HEAD),
++    ] {
++        let d = Dir::new("not_written");
++        let path = d.file("a.onsa", text);
++        for args in [vec!["fmt"], vec!["fmt", "--check"]] {
++            let mut a = args.clone();
++            a.push(&path);
++            let out = onsa(&a);
++            assert_eq!(code(&out), 2, "{what}: {args:?}: {out:?}");
++            assert_eq!(read(&path), text, "{what}: {args:?} wrote the file");
++        }
++        // `diff --ast` does not compare the file either (spec §18.2), and the code is 2.
++        let other = d.file("b.onsa", text);
++        let out = onsa(&["diff", "--ast", &path, &other]);
++        assert_eq!(code(&out), 2, "{what}: diff --ast: {out:?}");
++    }
++}
++
++#[test]
++#[ignore = "W3-12 U2: the other file of the call gets its redundant pairs taken off (S-115, S-339); the file with the error is not written"]
++fn with_two_files_the_one_with_the_error_stays_and_the_other_loses_its_pairs() {
++    let d = Dir::new("two_files");
++    let bad = d.file("bad.onsa", BAD_CALLEE);
++    let good = d.file("good.onsa", "pub fn f(a: I32, b: I32) -> I32 {\n  (a * b) + a\n}\n");
++    let out = onsa(&["fmt", &bad, &good]);
++    assert_eq!(code(&out), 2, "{out:?}");
++    assert_eq!(read(&bad), BAD_CALLEE, "the file with the error is not written");
++    assert_eq!(read(&good), "pub fn f(a: I32, b: I32) -> I32 {\n  a * b + a\n}\n", "the other file is written");
++}
++
++// ===================================================================================================
++// `fmt --check`
++// ===================================================================================================
++
++#[test]
++#[ignore = "W3-12 U2: fmt --check calls a file with a redundant pair formatted today (S-115, S-339)"]
++fn fmt_check_reports_a_file_with_a_redundant_pair_and_writes_nothing() {
++    let d = Dir::new("check");
++    let text = "pub fn f(a: I32, b: I32, c: I32) -> I32 {\n  (a * b) + c\n}\n";
++    let path = d.file("a.onsa", text);
++    let out = onsa(&["fmt", "--check", &path]);
++    assert_eq!(code(&out), 1, "a redundant pair is a difference of fmt --check: {out:?}");
++    assert_eq!(read(&path), text, "--check must not write");
++    let out = onsa(&["fmt", &path]);
++    assert_eq!(code(&out), 0, "{out:?}");
++    assert_eq!(read(&path), "pub fn f(a: I32, b: I32, c: I32) -> I32 {\n  a * b + c\n}\n");
++    let out = onsa(&["fmt", "--check", &path]);
++    assert_eq!(code(&out), 0, "{out:?}");
++}
++
++// ===================================================================================================
++// M. `onsa diff --ast`
++// ===================================================================================================
++
++fn in_fn(body: &str) -> String {
++    format!("pub fn f(a: I32, b: I32, c: I32, n: I32) -> I32 {{\n  {body}\n}}\n")
++}
++
++#[test]
++#[ignore = "W3-12 U2: diff --ast sees a redundant pair as a difference today (S-115, S-339, docs/onsa-tools.md 3.5)"]
++fn diff_ast_does_not_report_a_redundant_pair() {
++    let d = Dir::new("diff_same");
++    for (i, (a, b)) in [
++        ("(a * b) + c", "a * b + c"),
++        ("c + (a * b)", "c + a * b"),
++        ("(a)", "a"),
++        ("((a + b))", "(a + b)"),
++        ("(-a) + b", "-a + b"),
++        ("(a + b) * (c)", "(a + b) * c"),
++        ("-(a)", "-a"),
++        ("(a) as I32", "a as I32"),
++    ]
++    .iter()
++    .enumerate()
++    {
++        let (k, text) = diff_of(&d, &format!("p{i}"), &in_fn(a), &in_fn(b));
++        assert_eq!(k, 0, "`{a}` and `{b}` differ only in a redundant pair: {text}");
++        let (k, text) = diff_of(&d, &format!("q{i}"), &in_fn(b), &in_fn(a));
++        assert_eq!(k, 0, "(reversed) `{b}` and `{a}` differ only in a redundant pair: {text}");
++    }
++}
++
++#[test]
++#[ignore = "W3-12 U2: diff --ast sees the pair of a head, an end of a range and a type as a difference today (S-336, S-339)"]
++fn diff_ast_does_not_report_a_redundant_pair_in_a_head_a_range_a_type_or_a_pattern() {
++    let d = Dir::new("diff_places");
++    let pairs: [(&str, &str); 5] = [
++        (
++            "pub fn f(c: Bool) -> I32 {\n  if (c) {\n    return 1\n  }\n  0\n}\n",
++            "pub fn f(c: Bool) -> I32 {\n  if c {\n    return 1\n  }\n  0\n}\n",
++        ),
++        (
++            "pub fn f(n: U32) -> U32 {\n  var t: U32 = 0\n  for i in 0 ..< (n + 1) {\n    t = t + i\n  }\n  t\n}\n",
++            "pub fn f(n: U32) -> U32 {\n  var t: U32 = 0\n  for i in 0 ..< n + 1 {\n    t = t + i\n  }\n  t\n}\n",
++        ),
++        ("pub fn f(a: (I32)) -> (I32) {\n  a\n}\n", "pub fn f(a: I32) -> I32 {\n  a\n}\n"),
++        (
++            "pub fn f(n: I32) -> I32 {\n  match n {\n    (1) => 2,\n    _ => 0,\n  }\n}\n",
++            "pub fn f(n: I32) -> I32 {\n  match n {\n    1 => 2,\n    _ => 0,\n  }\n}\n",
++        ),
++        ("pub fn f(a: I32) -> I32 {\n  let (b) = a\n  b\n}\n", "pub fn f(a: I32) -> I32 {\n  let b = a\n  b\n}\n"),
++    ];
++    for (i, (a, b)) in pairs.iter().enumerate() {
++        let (k, text) = diff_of(&d, &format!("p{i}"), a, b);
++        assert_eq!(k, 0, "pair {i} differs only in a redundant pair: {text}\n{a}\n{b}");
++    }
++}
++
++#[test]
++fn diff_ast_reports_a_pair_that_the_tree_needs() {
++    let d = Dir::new("diff_needed");
++    for (i, (a, b)) in [
++        ("(a + b) * c", "a + b * c"),
++        ("a - (b - c)", "a - b - c"),
++        ("-(a + b)", "-a + b"),
++        ("(-a).max(b)", "-a.max(b)"),
++        ("a * (b + c)", "a * b + c"),
++    ]
++    .iter()
++    .enumerate()
++    {
++        let (k, text) = diff_of(&d, &format!("n{i}"), &in_fn(a), &in_fn(b));
++        assert_eq!(k, 1, "`{a}` and `{b}` are different programs (pair {i}): {text}");
++    }
++}
++
++#[test]
++fn diff_ast_reports_a_tree_that_moved_to_the_other_side_of_the_same_group() {
++    // `a + (b + c)` and `a + b + c` are different trees (the chain leans to the left), so the pair is
++    // not redundant, and that is not the exception of S-115 (which is about `(a + b) + c`).
++    let d = Dir::new("diff_side");
++    let (k, text) = diff_of(&d, "side", &in_fn("a + (b + c)"), &in_fn("a + b + c"));
++    assert_eq!(k, 1, "{text}");
++}
+diff --git a/tests/spec/fmt/parens_kept_at.onsa b/tests/spec/fmt/parens_kept_at.onsa
+new file mode 100644
+index 0000000..2387189
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_at.onsa
+@@ -0,0 +1,20 @@
++// onsa.toml
++// [test]
++// mode = "parse"
++// spec = ["§3.1", "§4.1", "§11.3", "§18.2"]
++
++// The parentheses that `onsa fmt` does not take off round an `at` expression in a binary operator, and
++// round a function type that is followed by `at` (docs/onsa-tools.md §3.3, S-339; spec §3.1 and §11.3:
++// `at` is as strong as `as`, and the clock of a function type goes to the return type without the pair).
++// The clocks are not lowered with the arguments in this version, so the file is read by the syntax stage
++// only (`mode = "parse"`). The file is canonical, so `onsa fmt` leaves it unchanged.
++
++pub flow clocks(p: F32 at block) -> F32 at sample {
++  let q = (p at sample) * 2.0
++  q
++}
++
++pub flow gate(p: F32 at block, g: (fn(F32) -> F32) at block) -> F32 at sample {
++  let q = p at sample
++  q
++}
+diff --git a/tests/spec/fmt/parens_kept_casts.onsa b/tests/spec/fmt/parens_kept_casts.onsa
+new file mode 100644
+index 0000000..68702a8
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_casts.onsa
+@@ -0,0 +1,94 @@
++// onsa.toml
++// [test]
++// mode = "test"
++// spec = ["§3.1", "§7", "§18.2"]
++
++// The parentheses that `onsa fmt` does not take off round the expressions of `as`, in a binary operator
++// and as the end of a range, and round a stack of prefix operators (docs/onsa-tools.md §3.3, S-339,
++// S-340): without them the expression is an error of the syntax stage (E0011 for `acc + x as F64`,
++// `(x as I32) as I64` and `0 ..< n as U32`, E0012 for `-(-x)` and `!(!c)`), or another tree
++// (`-(x as F64)` is not `-x as F64`). The pair round the end of a range that holds an operator without a
++// strength against the range's end operand (`(n + 1) % hi`) stays too: only the pair of the whole end
++// goes. The file is canonical, so `onsa fmt` leaves it unchanged. Every value below is worked out by hand
++// from the spec text.
++
++fn add_cast(acc: F64, x: I32) -> F64 {
++  acc + (x as F64)
++}
++
++fn double_cast(x: I32) -> F64 {
++  (x as F64) * 2.0
++}
++
++fn compare_cast(x: I32, y: F64) -> Bool {
++  (x as F64) < y
++}
++
++fn widen_twice(x: I16) -> I64 {
++  (x as I32) as I64
++}
++
++fn negate_cast(x: I32) -> F64 {
++  -(x as F64)
++}
++
++fn cast_of_sum(x: I32) -> F64 {
++  (x + 1) as F64
++}
++
++fn stacked_minus(x: I32) -> I32 {
++  -(-x)
++}
++
++fn stacked_not(c: Bool) -> Bool {
++  !(!c)
++}
++
++fn cast_end(n: U8) -> U32 {
++  var total: U32 = 0
++  for i in 0 ..< (n as U32) {
++    total = total + i
++  }
++  total
++}
++
++fn cast_start(m: U16) -> U32 {
++  var total: U32 = 0
++  for i in (m as U32) ..< 9 {
++    total = total + i
++  }
++  total
++}
++
++fn remainder_end(n: U32, hi: U32) -> U32 {
++  var total: U32 = 0
++  for i in 0 ..< (n + 1) % hi {
++    total = total + i
++  }
++  total
++}
++
++test "the pair round an as expression" {
++  // 1.5 + 2.0 = 3.5; 3.0 * 2.0 = 6.0; 2.0 < 2.5.
++  assert add_cast(1.5, 2) == 3.5
++  assert double_cast(3) == 6.0
++  assert compare_cast(2, 2.5)
++  assert widen_twice(7) == 7
++  // -(3 as F64) = -3.0; (2 + 1) as F64 = 3.0.
++  assert negate_cast(3) == -3.0
++  assert cast_of_sum(2) == 3.0
++}
++
++test "the pair of a stack of prefix operators" {
++  assert stacked_minus(5) == 5
++  assert stacked_minus(-5) == -5
++  assert stacked_not(true)
++  assert !stacked_not(false)
++}
++
++test "the pair round an end of a range" {
++  // 0 + 1 + 2 + 3 = 6; 7 + 8 = 15; (4 + 1) % 3 = 2, so 0 + 1 = 1.
++  assert cast_end(4) == 6
++  assert cast_start(7) == 15
++  assert remainder_end(4, 3) == 1
++}
+diff --git a/tests/spec/fmt/parens_kept_comments.onsa b/tests/spec/fmt/parens_kept_comments.onsa
+new file mode 100644
+index 0000000..aeebfc5
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_comments.onsa
+@@ -0,0 +1,21 @@
++// onsa.toml
++// [test]
++// spec = ["§2.5", "§3.1", "§18.2"]
++
++// A pair that has a comment before `as` stays (docs/onsa-tools.md §3.2, §3.3, §3.4, S-339, S-497). Inside a
++// pair `as` and `at` take no rule of place, so `fmt` takes the line break round them off; but the line break
++// after a comment at the end of a line stays in every place (a comment ends its line). Without the pair the
++// line after the comment would start with `as`, and that is a new statement and an error of the syntax
++// stage, so the pair is not redundant. The file is canonical, so `onsa fmt` leaves it unchanged.
++
++fn comment_before_as(x: I32) -> F64 {
++  let y = (x // the value
++    as F64)
++  y
++}
++
++fn comment_before_as_in_a_product(x: I32) -> F64 {
++  let y = (x // the value
++    as F64) * 2.0
++  y
++}
+diff --git a/tests/spec/fmt/parens_kept_groups.onsa b/tests/spec/fmt/parens_kept_groups.onsa
+new file mode 100644
+index 0000000..55ae366
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_groups.onsa
+@@ -0,0 +1,158 @@
++// onsa.toml
++// [test]
++// mode = "test"
++// spec = ["§3.1", "§18.2"]
++
++// The parentheses that `onsa fmt` does not take off when the groups of the binary operators are in them
++// (docs/onsa-tools.md §3.3, S-115, S-339). A pair inside the same group stays as the writer's grouping, a
++// pair that the tree needs stays (`(a + b) * c` is not `a + b * c`), and a pair between two groups without
++// a strength stays (without it the expression is an E0010: remainder against addition and multiplication,
++// `&&` against `||`, the bit operators against every other group). Each function has the pair on one side;
++// the value that a test checks is the one the pair gives, which differs from the value without it or the
++// expression is an error. The file is canonical, so `onsa fmt` leaves it unchanged. Every value below is
++// worked out by hand from the spec text.
++
++// ---- the same group ---------------------------------------------------------------------------------
++
++fn sum_left(a: I32, b: I32, c: I32) -> I32 {
++  (a + b) + c
++}
++
++fn sum_right(a: I32, b: I32, c: I32) -> I32 {
++  a + (b + c)
++}
++
++fn diff_left(a: I32, b: I32, c: I32) -> I32 {
++  (a - b) - c
++}
++
++fn diff_right(a: I32, b: I32, c: I32) -> I32 {
++  a - (b - c)
++}
++
++fn quotient_left(a: I32, b: I32, c: I32) -> I32 {
++  (a / b) / c
++}
++
++fn quotient_right(a: I32, b: I32, c: I32) -> I32 {
++  a / (b / c)
++}
++
++fn and_left(p: Bool, q: Bool, r: Bool) -> Bool {
++  (p && q) && r
++}
++
++fn or_right(p: Bool, q: Bool, r: Bool) -> Bool {
++  p || (q || r)
++}
++
++fn bits_left(m: U32) -> U32 {
++  (m | 1) | 4
++}
++
++fn shift_right(m: U32) -> U32 {
++  m << (1 << 2)
++}
++
++// ---- the tree needs the pair --------------------------------------------------------------------------
++
++fn product_of_sum(a: I32, b: I32, c: I32) -> I32 {
++  (a + b) * c
++}
++
++fn sum_in_product(a: I32, b: I32, c: I32) -> I32 {
++  a * (b + c)
++}
++
++fn negated_sum(a: I32, b: I32) -> I32 {
++  -(a + b)
++}
++
++fn denied_conjunction(p: Bool, q: Bool) -> Bool {
++  !(p && q)
++}
++
++// ---- no strength between the groups -------------------------------------------------------------------
++
++fn sum_then_remainder(a: U32, b: U32, n: U32) -> U32 {
++  (a + b) % n
++}
++
++fn remainder_in_sum(a: U32, b: U32, n: U32) -> U32 {
++  a + (b % n)
++}
++
++fn product_then_remainder(a: U32, b: U32, n: U32) -> U32 {
++  (a * b) % n
++}
++
++fn remainder_of_product(a: U32, b: U32, n: U32) -> U32 {
++  a % (b * n)
++}
++
++fn and_under_or(p: Bool, q: Bool, r: Bool) -> Bool {
++  (p && q) || r
++}
++
++fn or_under_and(p: Bool, q: Bool, r: Bool) -> Bool {
++  p && (q || r)
++}
++
++fn masked(a: U32, m: U32) -> Bool {
++  (a & m) == 0
++}
++
++fn summed_mask(a: U32, b: U32, m: U32) -> U32 {
++  (a + b) & m
++}
++
++fn compared_comparisons(a: I32, b: I32, c: I32, d: I32) -> Bool {
++  (a < b) == (c < d)
++}
++
++test "the same group: the pair is the writer's grouping and the value is the same, or the tree differs" {
++  // (1 + 2) + 3 = 1 + (2 + 3) = 6; the chain leans to the left, so `a - (b - c)` is another tree.
++  assert sum_left(1, 2, 3) == 6
++  assert sum_right(1, 2, 3) == 6
++  // (10 - 3) - 2 = 5, 10 - (3 - 2) = 9.
++  assert diff_left(10, 3, 2) == 5
++  assert diff_right(10, 3, 2) == 9
++  // (100 / 10) / 5 = 2, 100 / (10 / 5) = 50.
++  assert quotient_left(100, 10, 5) == 2
++  assert quotient_right(100, 10, 5) == 50
++  assert and_left(true, true, true)
++  assert !and_left(true, false, true)
++  assert or_right(false, false, true)
++  assert !or_right(false, false, false)
++  // (1 | 1) | 4 = 5; 1 << (1 << 2) = 1 << 4 = 16 (the left chain would give 1 << 1 << 2 = 4).
++  assert bits_left(1) == 5
++  assert shift_right(1) == 16
++}
++
++test "the pair that the tree needs" {
++  // (1 + 2) * 3 = 9 (without the pair 1 + 6 = 7); 2 * (1 + 3) = 8 (without it 2 + 3 = 5).
++  assert product_of_sum(1, 2, 3) == 9
++  assert sum_in_product(2, 1, 3) == 8
++  // -(1 + 2) = -3 (without the pair -1 + 2 = 1).
++  assert negated_sum(1, 2) == -3
++  // !(true && false) is true; !true && false would be false.
++  assert denied_conjunction(true, false)
++}
++
++test "the pair between groups without a strength" {
++  // (5 + 4) % 3 = 0, 5 + (4 % 3) = 6.
++  assert sum_then_remainder(5, 4, 3) == 0
++  assert remainder_in_sum(5, 4, 3) == 6
++  // (3 * 4) % 5 = 2, 17 % (3 * 2) = 5.
++  assert product_then_remainder(3, 4, 5) == 2
++  assert remainder_of_product(17, 3, 2) == 5
++  // (false && false) || true is true; false && (false || true) is false.
++  assert and_under_or(false, false, true)
++  assert !or_under_and(false, false, true)
++  // (0xF0 & 0x0F) == 0; (1 + 2) & 2 = 3 & 2 = 2.
++  assert masked(0xF0, 0x0F)
++  assert summed_mask(1, 2, 2) == 2
++  // (1 < 2) == (3 < 4) is true == true.
++  assert compared_comparisons(1, 2, 3, 4)
++  assert !compared_comparisons(1, 2, 4, 3)
++}
+diff --git a/tests/spec/fmt/parens_kept_heads.onsa b/tests/spec/fmt/parens_kept_heads.onsa
+new file mode 100644
+index 0000000..1a0b205
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_heads.onsa
+@@ -0,0 +1,68 @@
++// onsa.toml
++// [test]
++// mode = "test"
++// spec = ["§4.4", "§7", "§18.2"]
++
++// The parentheses that `onsa fmt` does not take off in the head of `if`, `while`, `match` and `for` when
++// the expression holds a struct literal or a block outside any other bracket (docs/onsa-tools.md §3.3,
++// S-339; spec §4.4: the head takes neither without a pair, as `{` would start the body). The pair round a
++// call that holds a struct literal inside its own brackets goes (it is in another file), because the
++// literal is then inside a bracket. The file is canonical, so `onsa fmt` leaves it unchanged. Every value
++// below is worked out by hand from the spec text.
++
++pub struct Pt {
++  x: I32,
++  y: I32,
++}
++
++pub enum Kind {
++  Low,
++  High,
++}
++
++pub struct Item {
++  kind: Kind,
++  n: I32,
++}
++
++fn struct_in_if(n: I32) -> I32 {
++  if (Pt { x: n, y: n }.x == 1) {
++    return 10
++  }
++  20
++}
++
++fn struct_in_match(n: I32) -> I32 {
++  match (Item { kind: Kind.Low, n: n }).kind {
++    Kind.Low => 10,
++    Kind.High => 20,
++  }
++}
++
++fn struct_in_while(n: I32) -> I32 {
++  var count = 0
++  while (Pt { x: count, y: n }.x < n) {
++    count = count + 1
++  }
++  count
++}
++
++fn block_in_if(n: I32) -> I32 {
++  if ({ n } > 1) {
++    return 10
++  }
++  20
++}
++
++test "the head with a struct literal" {
++  assert struct_in_if(1) == 10
++  assert struct_in_if(2) == 20
++  assert struct_in_match(1) == 10
++  // count goes 0, 1, 2 and stops at 3.
++  assert struct_in_while(3) == 3
++}
++
++test "the head with a block" {
++  assert block_in_if(2) == 10
++  assert block_in_if(1) == 20
++}
+diff --git a/tests/spec/fmt/parens_kept_mixed.onsa b/tests/spec/fmt/parens_kept_mixed.onsa
+new file mode 100644
+index 0000000..cdee89c
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_mixed.onsa
+@@ -0,0 +1,68 @@
++// onsa.toml
++// [test]
++// mode = "test"
++// spec = ["§3.1", "§18.2"]
++
++// The shapes that `onsa fmt` makes of an expression that has pairs to take off and pairs to keep side by
++// side (docs/onsa-tools.md §3.3, S-115, S-339): `(a * b) + (c % d)` is `a * b + (c % d)` (the product goes
++// under the sum, the remainder has no strength against the sum), `((a * b) + c) + b` is `(a * b + c) + b`
++// (the pair of the same group stays, the pair inside it goes), `-(-(a))` is `-(-a)`. This file is the
++// output: each expression is canonical, so `onsa fmt` leaves it unchanged. The inputs are in the CLI test
++// `fmt_parens.rs`. Every value below is worked out by hand from the spec text.
++
++fn product_and_remainder(a: I32, b: I32, c: I32, d: I32) -> I32 {
++  a * b + (c % d)
++}
++
++fn remainders_compared(a: I32, b: I32, c: I32, d: I32) -> Bool {
++  a % b == c % d
++}
++
++fn sums_in_products(a: I32, b: I32, c: I32, d: I32) -> I32 {
++  (a + b) * c + (d - a) * b
++}
++
++fn remainder_of_sum(a: I32, b: I32, n: I32) -> Bool {
++  (a + b) % n == 0
++}
++
++fn kept_group_pair(a: I32, b: I32, c: I32) -> I32 {
++  (a * b + c) + b
++}
++
++fn stacked_after_name(a: I32) -> I32 {
++  -(-a)
++}
++
++fn logic_pairs(a: I32, b: I32, p: Bool, q: Bool, r: Bool) -> Bool {
++  ((p && q) || r) || a < b
++}
++
++fn logic_in_pairs(a: I32, b: I32, p: Bool, q: Bool) -> Bool {
++  (p || a == b) && (q || a != b)
++}
++
++test "pairs that go and pairs that stay" {
++  // 2 * 3 + (7 % 4) = 6 + 3 = 9.
++  assert product_and_remainder(2, 3, 7, 4) == 9
++  // 7 % 3 = 1 and 9 % 4 = 1.
++  assert remainders_compared(7, 3, 9, 4)
++  assert !remainders_compared(7, 3, 8, 4)
++  // (1 + 2) * 3 + (4 - 1) * 2 = 9 + 6 = 15.
++  assert sums_in_products(1, 2, 3, 4) == 15
++  // (5 + 4) % 3 = 0; (5 + 5) % 3 = 1.
++  assert remainder_of_sum(5, 4, 3)
++  assert !remainder_of_sum(5, 5, 3)
++  // (2 * 3 + 1) + 3 = 10.
++  assert kept_group_pair(2, 3, 1) == 10
++  assert stacked_after_name(5) == 5
++}
++
++test "the pairs of the logic" {
++  // ((false && false) || false) || 1 < 2 is true; with 2 < 1 it is false.
++  assert logic_pairs(1, 2, false, false, false)
++  assert !logic_pairs(2, 1, false, false, false)
++  // (false || 1 == 1) && (true || 1 != 1) is true; (false || 1 == 1) && (false || 1 != 1) is false.
++  assert logic_in_pairs(1, 1, false, true)
++  assert !logic_in_pairs(1, 1, false, false)
++}
+diff --git a/tests/spec/fmt/parens_kept_types.onsa b/tests/spec/fmt/parens_kept_types.onsa
+new file mode 100644
+index 0000000..419bd86
+--- /dev/null
++++ b/tests/spec/fmt/parens_kept_types.onsa
+@@ -0,0 +1,25 @@
++// onsa.toml
++// [test]
++// spec = ["§4.1", "§6.1", "§8.1", "§18.2"]
++
++// The parentheses that `onsa fmt` does not take off round a function type that is followed by `uses`
++// (docs/onsa-tools.md §3.3, S-339, W3-20): without the pair the `uses` belongs to the function type in
++// it, and the type is another type (`fn a() -> (fn()) uses {Alloc}` is a function that allocates and
++// returns a function; without the pair, `fn a() -> fn() uses {Alloc}` returns a function that allocates). The same for a
++// function type that is the return type of another function type. The pair round a name (`(I32)`) goes
++// even before `uses`, because the `uses` is on the same type either way (it is in another file). The file
++// is canonical, so `onsa fmt` leaves it unchanged.
++
++fn noop() {}
++
++fn id(a: I32) -> I32 {
++  a
++}
++
++fn a() -> (fn()) uses {Alloc} {
++  noop
++}
++
++type Later = fn() -> (fn(I32) -> I32) uses {Alloc}
++
++type Lazy = fn() -> fn(I32) -> I32 uses {Alloc}
