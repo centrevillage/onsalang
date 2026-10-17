@@ -377,7 +377,7 @@ fn candidate(text: &str, k: usize) -> (usize, String, Value) {
 }
 
 /// (written, [what the candidates make]) for the body of a function. The order of the candidates is
-/// that of the rows of spec/foreign-forms.toml (S-315): the Onsa form first.
+/// the implementation's (§18.1 does not promise it, X-3): the Onsa form first.
 const CANDIDATES: &[(&str, &[&str])] = &[
     ("  id<U8>(250)", &["  id::[U8](250)", "  id < U8 && U8 > (250)"]),
     ("  pair<U8, F32>(1, 2.0)", &["  pair::[U8, F32](1, 2.0)"]),

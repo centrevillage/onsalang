@@ -407,12 +407,12 @@ impl<'a> Flat<'a> {
     }
 
     /// The readings of the chain, one per placement of strengths on the keys
-    /// that clash (S-60), in the order of §18.1: at each pair without a
+    /// that clash (S-60), in an order the implementation chose (§18.1 does
+    /// not promise one, X-3; S-347 was dropped): at each pair without a
     /// strength, met from the left, the key that appears first in the
     /// expression is taken as the stronger one first. Each pair decided one
     /// way or the other makes a different tree, so the readings differ;
     /// more than three are not all made.
-    // SPEC-GAP(S-347): the order of the readings of three groups or more.
     fn readings(&self) -> (Vec<Reading>, bool) {
         let mut first = [usize::MAX; KEYS];
         for (i, &op) in self.ops.iter().enumerate().rev() {

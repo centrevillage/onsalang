@@ -9,7 +9,7 @@
 // becomes `::[` and `>` becomes `]`, and the type arguments stay. The second is the reading of the
 // languages that read `f<T>(x)` as comparisons (§3.1), `f < T && T > (x)`, only where the middle is
 // a name (§18.1); a list with a `,` cannot be a chain of comparisons, so it has the first candidate
-// only. The order is that of the rows of spec/foreign-forms.toml (S-315).
+// only. The order is the implementation's (§18.1 does not promise it, X-3).
 
 pub fn id[T](x: T) -> T {
   x
