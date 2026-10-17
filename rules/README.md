@@ -24,3 +24,4 @@
 | [`criteria.md`](criteria.md)（7 章） | 推奨と独立の判断を出す前 |
 | [`refactoring.md`](refactoring.md)（8 章） | リファクタリングをする前と、その差分を確かめるとき |
 | [`process.md`](process.md) | 作業票を書くとき（8.1）、報告を書くとき（8.4）、仕様の空白の流れに関わるとき（8.6） |
+| [`budgets.md`](budgets.md) | 作業票を書くとき、担当を動かすとき、費用と大きさを見積もるとき |
