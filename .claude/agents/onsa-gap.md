@@ -10,8 +10,8 @@ tools: Read, Bash, Write, WebFetch, WebSearch
 
 ## 材料
 
-- 仕様 `spec/`、決定 `decisions/`（S の `提案` は親の仮の案で、うのみにしない）、作業 `tasks/W/`（段の目的は `tasks/stages.md`）。レビュー `issues/R/`。点検 `docs/consistency-check-phase1.md`。
-- 前の空白の資料 `docs/spec-gaps-*.md`。**項目の形と文体はこれにそろえる。**
+- 仕様 `spec/`、決定 `decisions/`（S の `提案` は親の仮の案で、うのみにしない）、作業 `tasks/W/`（段の目的は `tasks/stages.md`）。レビュー `issues/R/`。点検 `history/consistency-check-phase1.md`。
+- 前の空白の資料 `history/spec-gaps-*.md`。**項目の形と文体はこれにそろえる。**
 - 今の実装は、親が渡すバイナリで試す（主のツリーでは他の担当がビルドしているので、自分でビルドしない）。今の構文解析器が読む書き方は、親が渡す注意に従う（新しい構文は W3 で入る）。
 - 作業ツリー `.claude/worktrees/agent-*` の成果と `NOTES-*.md` は、読むだけ。
 
