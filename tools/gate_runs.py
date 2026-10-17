@@ -3,10 +3,13 @@
 The history, `target/gate/history.jsonl`: one JSON line per gate run in the main tree
 (`repo.tree_kind`; not `--quick`): `time`, `commit` (the full SHA of HEAD), `dirty` (`git
 status --porcelain` shows something), `form` (`whole`, `stage-end W3`, `work W3-13`, `sweep 0/2`,
-`only fuzz,static`), `works`, `verdict`, `seconds` (the sum of the items, without the wait for
-the lock) and `items` ({name: [status, seconds]}). The next shard of a sweep follows the last
+`only fuzz,static`, `quick`), `works`, `verdict`, `seconds` (the sum of the items, without the wait
+for the lock), `items` ({name: [status, seconds]}), `tree` (the git tree the items read,
+`repo.tree_hash`: the whole of a worktree, `narrowing.SWEPT` of the main tree; null when it changed
+while they ran or cannot be made) and `tree_changed`. The next shard of a sweep follows the last
 sweep of the same K (`next_shard`); a run that stopped half way writes no line, so its shard
-runs again. A worktree keeps no history: its runs go with it.
+runs again. A worktree keeps its own history, `--quick` too, for `tools/take.py patch` (X-1 U3);
+it goes with the worktree.
 
 The base binaries (`save_base`, `tools/gate.sh --save-base`, the first item of a sweep): the
 `onsa` and `onsa_cases` of HEAD, built, in `narrowing.base_dir` with `COMMIT`, for the narrowed
@@ -49,7 +52,7 @@ def read_history(root):
     return rows, bad
 
 
-def record(root, form, works, items, verdict, seconds):
+def record(root, form, works, items, verdict, seconds, tree=None, tree_changed=False):
     """Add the line of a run; the reason it cannot (a str), or None."""
     try:
         row = {
@@ -57,6 +60,7 @@ def record(root, form, works, items, verdict, seconds):
             "commit": narrowing.git(root, "rev-parse", "HEAD").strip(),
             "dirty": bool(narrowing.git(root, "status", "--porcelain").strip()),
             "form": form, "works": list(works), "verdict": verdict, "seconds": round(seconds, 1), "items": items,
+            "tree": None if tree_changed else tree, "tree_changed": tree_changed,
         }  # fmt: skip
         path = Path(root) / HISTORY
         path.parent.mkdir(parents=True, exist_ok=True)

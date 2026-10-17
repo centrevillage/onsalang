@@ -18,6 +18,9 @@ the data (`is_code`: the files ending in `CODE_SUFFIXES` that are not under
 `tools/test_*.py` nor `tools/*/test_*.py`; in a Rust file of the code, the
 lines of a `#[cfg(test)] mod … { … }` block are tests too, on the new side for
 the added lines and on the old side for the removed ones: `test_lines`).
+Its second line, `work check: …`, reads the last work check of the worktree (its
+`target/gate/history.jsonl`, `tools/gate.py`) and says whether the parent need run it
+again in the main tree (rules/process.md 8.5; `work_check_line`).
 
 `check` (`--to`, default this repository) says whether `git apply --check`
 passes, else whether `git apply --check -3` does (and whether with
@@ -39,6 +42,8 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gate_runs  # noqa: E402
+import narrowing  # noqa: E402
 import repo  # noqa: E402
 
 ROOT = repo.ROOT
@@ -208,6 +213,7 @@ def patch(args):
         git(wt, "reset", "-q")
     Path(args.out).write_bytes(diff)
     print(f"{args.out}: the patch of {wt} from {base}")
+    print(work_check_line(wt, args.main, base, args.out))
     summary(stats, new, inner)
     head = git(args.main, "rev-parse", "HEAD").stdout.decode().strip()
     if git(args.main, "rev-parse", base).stdout.decode().strip() != head:
@@ -216,6 +222,51 @@ def patch(args):
         print(f"the main tree ({head[:9]}) differs from {base} in {len(moved)} file(s); of the patch: "
               + (", ".join(both) if both else "none"))
     return 0
+
+
+def work_check_line(wt, main, base, patch_file):
+    """Whether the parent need run the work check again after the patch: the last `work` run of the
+    worktree passed on the tree of the patch, the patch applies plain to files with no change, and the
+    main tree moved from the base in no file of the code and the cases (`narrowing.SWEPT`)."""
+    try:
+        rows, tree = gate_runs.read_history(wt)[0], repo.tree_hash(wt)
+        head = git(main, "rev-parse", "HEAD").stdout.decode().strip()
+        base = git(main, "rev-parse", base).stdout.decode().strip()
+        moved = [p for p in git(main, "diff", "--name-only", "-z", base, head).stdout.decode().split("\0") if p]
+        code = [p for p in git(main, "diff", "--name-only", "-z", base, head, "--", *narrowing.SWEPT)
+                .stdout.decode().split("\0") if p]  # fmt: skip
+    except (OSError, repo.RepoError, Failed) as e:
+        return f"work check: run it again in the main tree: cannot tell ({e})"
+    works = [r for r in rows if str(r.get("form", "")).startswith("work ")]
+    missing, last = [], works[-1] if works else None
+    if last is None:
+        quick = any(r.get("form") == "quick" for r in rows)
+        missing.append("no work check in the worktree" + (" (only --quick)" if quick else ""))
+    else:
+        if last.get("verdict") != "PASS":
+            bad = [n for n, v in last.get("items", {}).items() if v[:1] == ["FAIL"]]
+            missing.append(f"the last work check failed ({last.get('form')}: {', '.join(bad)})")
+        if last.get("tree") is None:
+            missing.append("the tree changed during the check (or could not be read)")
+        elif last["tree"] != tree:
+            missing.append("the tree changed after the check")
+    if code:
+        missing.append(f"the main tree moved in the code or the cases after the base ({', '.join(code[:3])})")
+    try:
+        how, _, notes = check(patch_file, main)
+    except Failed:
+        how, notes = "not at all", []
+    if how != "plain":
+        missing.append(f"the patch applies {how}")
+    if notes:
+        missing.append("the main tree has uncommitted changes in the files of the patch")
+    if missing:
+        return "work check: run it again in the main tree: " + "; ".join(missing)
+    did = f"{last['form']} PASS at {last.get('time')} on the tree of the patch"
+    if not moved:
+        return f"work check: no need to run it again ({did}; base = the main tree's HEAD; applies plain)"
+    return (f"work check: no need to run the heavy items again; run tools/gate.sh --only static (the main tree "
+            f"moved in {len(moved)} file(s) outside the code and the cases after the base {base[:7]}; {did})")
 
 
 def paths_of(tree, patch_file):
@@ -243,14 +294,27 @@ def check(patch_file, to):
     return ("3way with conflicts" if "with conflicts" in err else "3way"), paths, notes
 
 
+PATCH_EPILOG = """\
+The second line compares the last work check of the worktree (tools/gate.sh --work, kept in
+its target/gate/history.jsonl) with the patch and the main tree:
+  work check: no need to run it again (...)            take the patch in without the gate
+  work check: no need to run the heavy items again; run tools/gate.sh --only static (...)
+                                                       the main tree moved outside the code and the cases
+  work check: run it again in the main tree: <what is missing>
+                                                       no work check, only --quick, a failure, the tree
+                                                       changed after it, the main tree moved in the code
+example: tools/take.py patch .claude/worktrees/x1 2ce980a /tmp/x1.patch"""
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("patch")
-    p.add_argument("worktree")
-    p.add_argument("base")
-    p.add_argument("out")
-    p.add_argument("--main", default=ROOT)
+    p = sub.add_parser("patch", description="Make the patch of a worktree from a base and show its lines.",
+                       epilog=PATCH_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
+    p.add_argument("worktree", help="the worktree whose work is taken")
+    p.add_argument("base", help="the commit the patch starts from (the base of the work)")
+    p.add_argument("out", help="the patch file to write")
+    p.add_argument("--main", default=ROOT, help="the main tree the patch goes to (default this repository)")
     for name in ("check", "apply"):
         p = sub.add_parser(name)
         p.add_argument("patch")

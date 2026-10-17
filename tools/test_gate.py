@@ -1046,6 +1046,55 @@ class GateForms(GateRun):
         git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
         return wt
 
+    def test_a_unit_of_an_item_of_x(self):
+        """`--work X-3/U1` (X-1 U3): the work check of a unit; no `until` names it; a typo stops."""
+        self.repo.write_id("X-3", "DOING")
+        self.repo.write("tests/pending.toml", entry("gate", "c-x", until="W3-07"))
+        steps = [fake("fz", narrows=("tools/fuzz.py",)), fake("c-x", 0, pendable=True)]
+        code, out = self.run_main(["--work", "X-3/U1c-1"], steps)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.argv_of("fz")[-2:], ["--salt", "X-3/U1c-1"])
+        self.assertIn("SKIPPED c-x", out)
+        self.assertEqual(self.history()[-1]["form"], "work X-3/U1c-1")
+        for bad in ("X-99/U1", "X-3", "X-3/1", "X-3/U", "W9-99"):
+            with self.subTest(bad=bad), mock.patch.object(sys, "stderr", io.StringIO()) as err:
+                self.forget()
+                self.assertEqual(gate.main(["--work", bad], steps=steps, root=self.root, out=io.StringIO()), 2)
+                self.assertEqual(list(self.root.glob("argv-*")), [])
+                self.assertIn("or a unit of an item of issues/X/ (X-3/U1); unknown: " + bad, err.getvalue())
+
+    def test_the_tree_of_a_run(self):
+        """A run keeps the tree its items read (X-1 U3): the whole of a worktree, `SWEPT` of the main tree."""
+        self.repo.write_id("X-3", "DOING")
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "x")
+        wt = self.worktree()
+        quiet(gate.main, ["--work", "X-3/U1"], steps=[fake("a")], root=wt, out=io.StringIO())
+        quiet(gate.main, ["--quick"], steps=[fake("a")], root=wt, out=io.StringIO())
+        rows = self.history(wt)
+        self.assertEqual([(r["form"], r["tree"], r["tree_changed"]) for r in rows],
+                         [("work X-3/U1", repo.tree_hash(wt), False), ("quick", repo.tree_hash(wt), False)])
+        writer = gate_steps.Step("w", (sys.executable, "-B", "-c", "open('crates/n.rs', 'w').write('x')"))
+        (wt / "crates").mkdir()
+        quiet(gate.main, ["--work", "X-3/U1"], steps=[writer], root=wt, out=io.StringIO())
+        self.assertEqual((self.history(wt)[-1]["tree"], self.history(wt)[-1]["tree_changed"]), (None, True))
+        self.assertEqual(git_in(wt, "status", "--porcelain"), "?? crates/\n")  # the real index is not touched
+        # the main tree: the code and the cases only (a document written meanwhile is no change)
+        doc = gate_steps.Step("d", (sys.executable, "-B", "-c", "open('notes.md', 'w').write('x')"))
+        self.run_main([], [doc])
+        row = self.history()[-1]
+        self.assertEqual((row["tree"], row["tree_changed"]), (repo.tree_hash(self.root, narrowing.SWEPT), False))
+        self.assertEqual(row["tree"], git_in(self.root, "rev-parse", "HEAD^{tree}").strip())
+
+    def test_the_help_of_work(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), self.assertRaises(SystemExit):
+            gate.main(["--help"], root=self.root)
+        text = " ".join(out.getvalue().split())
+        for part in ("a W ID of tasks/W/ (W3-11) or a unit of an item of issues/X/ (X-3/U1)",
+                     "tools/gate.sh --work X-1/U3", "`tools/take.py patch` reads the last work check"):
+            self.assertIn(part, text)
+
     def test_the_work_check_narrows_the_heavy_items(self):
         steps = [fake("fz", narrows=("tools/fuzz.py", "tools/narrowing.py")), fake("st", touches=("tools/",)),
                  fake("plain")]  # fmt: skip
@@ -1177,12 +1226,12 @@ class GateForms(GateRun):
         self.repo.write("crates/x.rs", "x\n")  # untracked: dirty
         self.run_main([], steps)
         self.assertTrue(self.history()[-1]["dirty"])
-        # a worktree keeps none
+        # a worktree keeps its own (X-1 U3)
         wt = self.worktree()
         before = len(self.history())
         quiet(gate.main, [], steps=steps, root=wt, out=io.StringIO())
         self.assertEqual(len(self.history()), before)
-        self.assertFalse((wt / gate_runs.HISTORY).exists())
+        self.assertEqual([r["form"] for r in self.history(wt)], ["whole"])
         # a history that cannot be written does not fail the gate
         (self.root / gate_runs.HISTORY).unlink()
         (self.root / gate_runs.HISTORY).mkdir()
@@ -3882,6 +3931,58 @@ class Take(unittest.TestCase):
         self.assertIn("n.rs: untracked, already there", out)
         self.assertEqual((self.main / "n.rs").read_text(), "mine\n")
         self.assertEqual((self.main / "b.txt").read_text(), self.LINES)
+
+    def ran(self, form, verdict="PASS", tree=True):
+        """A row of the worktree's history (`gate_runs.record`), on the tree as it is now."""
+        (self.main / ".git" / "info").mkdir(exist_ok=True)
+        (self.main / ".git" / "info" / "exclude").write_text("target/\n")
+        now = repo.tree_hash(self.wt) if tree else None
+        gate_runs.record(self.wt, form, [], {"fz": [verdict, 1.0]}, verdict, 1.0, now, not tree)
+
+    def check_line(self):
+        return self.make_patch().splitlines()[1]
+
+    def test_the_line_of_the_work_check(self):
+        """`take.py patch` says whether the parent need run the work check again (X-1 U3)."""
+        again = "work check: run it again in the main tree: "
+        self.assertEqual(self.check_line(), again + "no work check in the worktree")
+        self.ran("quick")
+        self.assertEqual(self.check_line(), again + "no work check in the worktree (only --quick)")
+        self.ran("work X-3/U1", "FAIL")
+        self.assertEqual(self.check_line(), again + "the last work check failed (work X-3/U1: fz)")
+        self.ran("work X-3/U1", tree=False)
+        self.assertEqual(self.check_line(), again + "the tree changed during the check (or could not be read)")
+        self.ran("work X-3/U1")
+        self.ran("quick")  # the same tree after the work check
+        self.assertRegex(self.check_line(), r"^work check: no need to run it again \(work X-3/U1 PASS at .* on the "
+                                            r"tree of the patch; base = the main tree's HEAD; applies plain\)$")  # fmt: skip
+        (self.wt / "c.txt").write_text("changed\n")
+        self.assertEqual(self.check_line(), again + "the tree changed after the check")
+        self.ran("work X-3/U1")
+        # the main tree moved after the base: in documents only, then in the code
+        (self.main / "d.md").write_text("d\n")
+        git_in(self.main, "add", "d.md")
+        git_in(self.main, "commit", "-qm", "doc")
+        self.assertRegex(self.check_line(), r"^work check: no need to run the heavy items again; run tools/gate.sh "
+                                            r"--only static \(the main tree moved in 1 file\(s\) outside the code and "
+                                            rf"the cases after the base {self.base[:7]}; work X-3/U1 PASS at ")  # fmt: skip
+        (self.main / "b.txt").write_text(self.LINES.replace("8\n", "eight\n"))  # it still applies plain
+        self.assertEqual(self.check_line(), again + "the main tree has uncommitted changes in the files of the patch")
+        git_in(self.main, "checkout", "--", "b.txt")
+        (self.main / "tests").mkdir()
+        (self.main / "tests" / "y.rs").write_text("y\n")
+        git_in(self.main, "add", "tests")
+        git_in(self.main, "commit", "-qm", "case")
+        self.assertEqual(self.check_line(), again + "the main tree moved in the code or the cases after the base (tests/y.rs)")
+
+    def test_the_help_of_patch(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), self.assertRaises(SystemExit):
+            take.main(["patch", "--help"])
+        text = " ".join(out.getvalue().split())
+        for part in ("work check: no need to run it again", "run tools/gate.sh --only static",
+                     "the worktree whose work is taken", "the patch file to write", "example: tools/take.py patch"):
+            self.assertIn(part, text)
 
 
 class Bg(unittest.TestCase):

@@ -44,6 +44,8 @@ EXCLUDED_FROM_CODES = ("tests/", "tools/", "rules/", "decisions/", "issues/", "t
 BASE_FILES = ("onsa", "onsa_cases")  # the base binaries, in `base_dir`
 # What the binaries are built from: a tracked change there makes them differ from HEAD's.
 BUILT_FROM = ("crates", "tools", "std", "runtime", ":(glob)Cargo.*")
+# What the heavy items read: the code and the cases (the tree a run of the main tree compares, X-1).
+SWEPT = (*BUILT_FROM, "tests")
 
 
 class NarrowError(Exception):

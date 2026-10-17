@@ -126,6 +126,8 @@ REASON = repo.id_form("S", "R")
 # A spec section as a reason, only of `until = "PH2"` (the spec §20 sets what the first phase is).
 SECTION = re.compile(r"§\d+(?:\.\d+)*")
 WORK = re.compile(repo.KIND["W"].pattern)
+# A unit of an item of `issues/X/` (`X-3/U1`, `X-3/U1c-1`): `--work` takes it besides a W ID (X-1 U3).
+UNIT = re.compile(r"(%s)/U\d+[a-z]*(?:-\d+)*" % repo.KIND["X"].pattern)
 
 # The second phase as an `until` (K-13 rule 3) and the kinds that may use it. The stage that ends the
 # first phase is the last of the table of the stages (`Docs.stages`).
@@ -149,6 +151,13 @@ class Docs:
     works_at: str  # where the works are read, for messages (`docs.Index.place`)
     sections: set = frozenset()  # the numbered headings of the spec ("20", "11.4")
     reasons_at: str = ""  # where the S and R IDs are read, for messages (`docs.Index.place`)
+    items: frozenset = frozenset()  # the X IDs (`issues/X/`; empty when it is not there)
+
+
+def work_known(work, docs):
+    """`--work` names a W of `docs.works` or a unit (`UNIT`) of an item of `docs.items`."""
+    m = UNIT.fullmatch(work)
+    return work in docs.works if m is None else m.group(1) in docs.items
 
 
 def stage_of(work):
@@ -172,7 +181,8 @@ def load_docs(root=ROOT):
     if not sections:
         raise DocsError(f"{spec.parts[0][0]}: no numbered heading found")
     return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=reasons, sections=sections,
-                stages=lay.stages(), works_at=at, reasons_at=f"{index.place('S')}, {index.place('R')}")  # fmt: skip
+                stages=lay.stages(), works_at=at, reasons_at=f"{index.place('S')}, {index.place('R')}",
+                items=frozenset(index.known("X") or ()))  # fmt: skip
 
 
 def validate(entries, docs, root=ROOT, pendable_steps=None):

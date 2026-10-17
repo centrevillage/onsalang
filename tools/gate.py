@@ -10,7 +10,9 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
     tools/gate.sh --save-base
 
 --work W3-11    the work check: also runs the items listed whole whose `until`
-                is W3-11 (may repeat; pass the ID of the work at hand), narrows
+                is W3-11 (may repeat; pass the ID of the work at hand: a W ID of
+                `tasks/W/`, or a unit of an item of `issues/X/`, `X-3/U1`, which no
+                `until` names), narrows
                 the heavy items to the seeds of the diff and a sample salted with
                 the first ID, and runs the self-test only when the diff touches
                 `tools/` (`gate_steps`: the forms; X-1).
@@ -33,7 +35,9 @@ summary. Exit 0 if every item passes, 1 if one fails, 2 on a usage error.
 The work check and the sweep warn, right before the last line, when the items
 took longer than `gate_steps.BUDGET_WORK` / `BUDGET_SWEEP` seconds (the wait for
 the lock does not count); the warning does not fail. A run in the main tree adds
-a line to `target/gate/history.jsonl` and shows the shards of the sweep.
+a line to `target/gate/history.jsonl` and shows the shards of the sweep; a run in
+a worktree adds one to its own (`--quick` too), with the git tree it checked, for
+`tools/take.py patch` to tell whether the parent need run it again (X-1 U3).
 
 An item marked `stage_end_only` (the deep fuzzing, `fuzz.py --deep`) runs only
 with `--stage-end` and is SKIPPED otherwise: it is heavy on the machine (W3-03).
@@ -99,6 +103,11 @@ class Form:
     diff_error: str = None  # why it could not
 
     @property
+    def w_works(self):
+        """The W IDs of `--work`: the only ones an `until` is matched with (a unit of X is none)."""
+        return tuple(w for w in self.works if pending.WORK.fullmatch(w))
+
+    @property
     def work(self):
         """A work check: the heavy items narrowed."""
         return bool(self.works) and self.stage_end is None and self.sweep is None
@@ -116,6 +125,8 @@ class Form:
             return "only " + ",".join(self.only)
         if self.stage_end is not None:
             return f"stage-end {self.stage_end}"
+        if self.quick:
+            return "quick"
         return "work " + ",".join(self.works) if self.works else "whole"
 
 
@@ -228,7 +239,7 @@ def _skipped(step, entry, form, named=None):
         return "left out by --quick"
     if step.stage_end_only and form.stage_end is None:
         return "runs only with --stage-end"
-    if entry is not None and form.stage_end is None and entry.until not in form.works:
+    if entry is not None and form.stage_end is None and entry.until not in form.w_works:
         return f"listed until {entry.until}: runs with --work {entry.until} or --stage-end"
     if step.touches and form.work and named is None and form.changed is not None:
         if not any(narrowing.under(p, step.touches) for p in form.changed):
@@ -332,6 +343,14 @@ def time_warning(results, form):
     return f"warning: {what} took {total:.0f}s, {total - budget:.0f}s over its {budget}s; the longest: {longest}"
 
 
+EPILOG = """\
+examples:
+  tools/gate.sh --work X-1/U3     the work check of the unit U3 of X-1, before its report
+  tools/gate.sh --quick           in the middle of a work (not the verdict)
+A worktree keeps its runs in its target/gate/history.jsonl: `tools/take.py patch` reads the last
+work check there and says whether the parent need run it again."""
+
+
 def golden_changes(root=ROOT):
     """Files under tests/golden that differ from HEAD: modified, added, deleted,
     untracked. Raises CalledProcessError / OSError when git fails."""
@@ -375,10 +394,13 @@ def _form_problem(args, steps, only, kind, root):
 
 
 def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
-    ap = argparse.ArgumentParser(description="Run every check (Q-08).")
+    ap = argparse.ArgumentParser(description="Run every check (Q-08).", epilog=EPILOG,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("--stage-end", metavar="STAGE", help="fail if tests/pending.toml has entries of STAGE (W3, M5)")
     ap.add_argument("--work", metavar="ID", action="append", default=[],
-                    help="also run the items listed whole until this work (W3-11; may repeat)")  # fmt: skip
+                    help="the work check of a work or a unit, once before the report: a W ID of tasks/W/ (W3-11) "
+                         "or a unit of an item of issues/X/ (X-3/U1); may repeat. Also runs the items listed "
+                         "whole until a W ID given")  # fmt: skip
     ap.add_argument("--quick", action="store_true", help="leave out the slow items (not the gate's verdict)")
     ap.add_argument("--sweep", action="store_true", help="the main tree only: the static items and the next shard")
     ap.add_argument("--only", metavar="NAMES", help=f"run only these items (a,b; {STATIC}: the static items)")
@@ -409,9 +431,10 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         if args.stage_end is not None or args.work:
             docs = pending.load_docs(root)
             problem = pending.stage_problem(args.stage_end, docs) if args.stage_end is not None else None
-            unknown = [w for w in args.work if w not in docs.works]
+            unknown = [w for w in args.work if not pending.work_known(w, docs)]
             if problem is None and unknown:
-                problem = f"--work needs a W ID of {docs.works_at}; unknown: " + ", ".join(unknown)
+                problem = f"--work needs a W ID of {docs.works_at} or a unit of an item of issues/X/ (X-3/U1); " \
+                          f"unknown: " + ", ".join(unknown)
     except pending.DocsError as e:
         problem = f"cannot read the stages or the works: {e}"
     if problem:
@@ -428,7 +451,9 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
                 print(f"--sweep cannot read the history to find its shard: {e}", file=sys.stderr)
                 return 2
         read_diff(steps, form, root)
+        before = _tree(root, kind)
         results = run_steps(steps, listed, cwd=root, out=out, form=form)
+        tree = (before, before is not None and _tree(root, kind) != before)
         try:
             golden = golden_changes(root)
         except (subprocess.CalledProcessError, OSError):
@@ -436,18 +461,35 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         failed = any(r.failed for r in results)
         notes = [f"diff: cannot read it ({form.diff_error}); the narrowable items run whole"] if form.diff_error else []
         if kind == "main" and not form.quick:
-            notes += _history(root, form, results, failed)
+            notes += _history(root, form, results, failed, tree)
+        elif kind == "worktree":
+            notes += _record(root, form, results, failed, tree)
         for line in summary(results, entries, golden, stages, args.stage_end, not load_errors, args.quick, form, notes):
             print(line, file=out)
     return 1 if failed else 0
 
 
-def _history(root, form, results, failed):
-    """Add the line of this run to the history of the main tree; the notes of the summary."""
+def _tree(root, kind):
+    """The git tree this run checks (`repo.tree_hash`): the whole of a worktree, `narrowing.SWEPT` of
+    the main tree (the parent's documents may change meanwhile); None when it cannot be made."""
+    try:
+        return repo.tree_hash(root, () if kind == "worktree" else narrowing.SWEPT) if kind else None
+    except repo.RepoError:
+        return None
+
+
+def _record(root, form, results, failed, tree):
+    """Add the line of this run to the history of the tree; the notes of the summary. `tree`: (the
+    tree before the items, whether it changed while they ran)."""
     items = {r.step.name: [r.status, round(r.seconds, 1)] for r in results}
     seconds = sum(r.seconds for r in results)
-    error = gate_runs.record(root, form.label(), form.works, items, "FAIL" if failed else "PASS", seconds)
-    notes = [f"history: cannot write it ({error})"] if error else []
+    error = gate_runs.record(root, form.label(), form.works, items, "FAIL" if failed else "PASS", seconds, *tree)
+    return [f"history: cannot write it ({error})"] if error else []
+
+
+def _history(root, form, results, failed, tree=(None, False)):
+    """Add the line of this run to the history of the main tree; the notes of the summary."""
+    notes = _record(root, form, results, failed, tree)
     try:
         rows, bad = gate_runs.read_history(root)
     except OSError as e:

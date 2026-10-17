@@ -13,8 +13,10 @@
 - reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it).
 """
 import json
+import os
 import re
 import subprocess
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -588,6 +590,27 @@ def main_tree(root):
     """The main tree of the repository of `root` (the parent of the common git directory), or None."""
     dirs = git_dirs(root)
     return dirs[1].parent if dirs else None
+
+
+def tree_hash(root, paths=()):
+    """The git tree of HEAD with `paths` (all, when empty) as they are in `root` now, untracked files
+    too (`add -A`), made in an index of its own: the real index is not touched (X-1 U3, U4; one place,
+    D-15). A path that is in neither HEAD nor the tree adds nothing. RepoError when git fails."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    with tempfile.TemporaryDirectory() as d:
+        env["GIT_INDEX_FILE"] = os.path.join(d, "index")
+        adds = [["add", "-A", "--", p] for p in paths] if paths else [["add", "-A"]]
+        out = ""
+        for args in (["read-tree", "HEAD"], *adds, ["write-tree"]):
+            try:
+                r = subprocess.run(["git", *args], cwd=root, env=env, capture_output=True, text=True,
+                                   timeout=GIT_TIMEOUT)  # fmt: skip
+            except (OSError, subprocess.TimeoutExpired) as e:
+                raise RepoError(f"git {args[0]}: {e}") from None
+            if r.returncode != 0 and not (args[0] == "add" and "did not match any files" in r.stderr):
+                raise RepoError(f"git {' '.join(args)}: {r.stderr.strip() or f'exit {r.returncode}'}")
+            out = r.stdout.strip()
+    return out
 
 
 def tree_kind(root):
