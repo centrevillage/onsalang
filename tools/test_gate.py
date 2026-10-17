@@ -4349,7 +4349,7 @@ class DocsTool(unittest.TestCase):
     def test_the_documents_by_the_layout(self):
         # X-2 DT-7: the files under the directories of DOC_DIRS and the root's README and CLAUDE; `docs/`, the
         # older specs at the root, `history/` and the files that are not Markdown are never read
-        read = ["CLAUDE.md", "README.md", "decisions/S/S-1.md", "issues/R/R-1.md", "rules/common.md",
+        read = ["CLAUDE.md", "README.md", "decisions/S/S-1.md", "design/03-types.md", "issues/R/R-1.md", "rules/common.md",
                 "spec/02-lexical.md", "spec/README.md", "spec/tools.md", "tasks/W/W1-01.md"]  # fmt: skip
         unread = ["docs/a.md", "docs/onsa-tools.md", "onsa-lang-spec-0.3.md", "onsa-lang-spec-0.2.md", "kumi-lang-spec.md",
                   "docs/sub/x.md", "docs/f.toml", "history/h.md", "rules/f.toml"]  # fmt: skip
@@ -4839,6 +4839,18 @@ class DocsLayout(DocsTree):
         self.assertOne(s2, '["W1-02", "PH2"]', '["W1-01"]', f"{s2}:2: OPEN, but every work of `tasks` is DONE (W1-01)")
         self.assertOne(r1, 'fix = ["W1-02"]', 'fix = ["W1-01"]', f"{r1}:2: OPEN, but every work of `fix` is DONE (W1-01)")
         self.assertOne(w1, 'commit = "abc"', 'doing = ["U1/i"]', f"{w1}:3: `doing` on a work that is DONE, not DOING")
+        # X-2 U7b: an ID field the README adds needs its direction in RESTS_ON (`graph`)
+        row = "| `found_by` | 文字列 | — | いいえ | 見つけた票 |\n"
+        self.assertOne("decisions/README.md", row, row + "| `see` | ID の並び（S） | — | いいえ | 見る |\n",
+                       "decisions/README.md:11: the ID field `see` has no direction in `docs.RESTS_ON` (`graph` needs it)")  # fmt: skip
+
+    def test_the_directions_are_the_id_fields_of_the_real_tree(self):
+        tree = docs_tool.Tree(repo.ROOT, [])
+        tables = [tree.index.table(name) for name in tree.index.files]
+        self.assertTrue(tables and all(isinstance(t, docs_tool.FieldTable) for t in tables))
+        fields = {key for t in tables for key, f in t.fields.items() if f.base == "ID"}
+        self.assertEqual(fields, set(docs_tool.RESTS_ON))
+        self.assertEqual(list(docs_tool.undirected(tree)), [])
 
     def test_amends_is_no_field(self):
         # X-2 U7a: `amends` and `amended_by` are out of the field table and of the tool; written, (a) finds them
@@ -4974,6 +4986,82 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.run_("refs", "docs/none.md"), (1, ["docs/none.md: not found"]))
         self.assertEqual(self.run_("refs", "S-9"), (1, ["S-9: not found (decisions/S/)"]))
         self.assertEqual(self.run_("refs", "/elsewhere/a.md")[0], 2)
+
+    # ------------------------------------------------ graph (X-2 U7b)
+
+    def graph_layout(self):
+        """NEW_LAYOUT with `before` (a work, a stage), S-1 and S-2 naming each other (S-2 itself too), a rule
+        naming S-1, W1-01 naming S-1 and S-2 naming W1-01 in the text too (the typed edge, then `text(key)`, is
+        shown), and W2-01 that depends on its own stage (the stage rests on its works: a cycle)."""
+        self.layout()
+        self.edit("tasks/W/W1-01.md", "# W1-01 gate\n", "# W1-01 gate\n\nS-1 の作業。\n")
+        self.edit("decisions/S/S-1.md", "decided = 2026-10-15", 'before = "W1-02"\ndecided = 2026-10-15')
+        self.edit("decisions/S/S-2.md", "- 空白: R-1 と A-1。\n", "- 空白: R-1 と A-1。\n- 経緯: S-1 と S-2 と W1-01（`found_by` の作業）。\n")
+        self.edit("decisions/A/A-1.md", 'status = "DECIDED"', 'status = "DECIDED"\nbefore = "W2"')
+        self.write("rules/common.md", "# 共通\n\nS-1 を見る。\n")
+        self.write("tasks/W/W2-01.md", '+++\nstatus = "PLAN"\ndepends = ["W2"]\n+++\n# W2-01 輪\n')
+
+    def test_graph_edges(self):
+        self.graph_layout()
+        edges = docs_tool.edges(docs_tool.Ids(self.root, repo.doc_files(self.root)))
+        # the ID fields turned by RESTS_ON and the stages: `on -> base`
+        self.assertEqual({e for e in edges if docs_tool.typed_edge(e[2])}, {
+            ("W1-01", "S-1", "tasks"), ("W1-02", "S-1", "before"), ("W1-02", "S-2", "tasks"), ("PH2", "S-2", "tasks"),
+            ("R-1", "S-2", "decisions"), ("W1-02", "R-1", "fix"), ("W1-02", "W1-01", "depends"), ("W2-01", "W2", "depends"),
+            ("W2", "A-1", "before"), ("W1", "W1-01", "stage"), ("W1", "W1-02", "stage"), ("W2", "W2-01", "stage")})  # fmt: skip
+        self.assertLessEqual({("S-2", "W1-01", "text(found_by)"), ("R-1", "W1-02", "text(found_by)"), ("S-1", "S-2", "text"),
+                              ("S-2", "S-1", "text"), ("W1-01", "S-1", "text"), (Path("rules/common.md"), "S-1", "text"),
+                              (Path("decisions/S/S-2.draft.md"), "S-3", "text")}, edges)  # fmt: skip
+        self.assertFalse([e for e in edges if e[0] == e[1] or isinstance(e[1], Path)])  # no edge to itself; a path is a leaf
+
+    def test_graph(self):
+        self.graph_layout()
+        start = "0\tS-2\t-\t-\tOPEN\tR-1 と A-1。"
+        one = ["1\tS-1\ttext\tS-2\tDECIDED\t字句", "1\tR-1\tdecisions\tS-2\tOPEN\t候補", "1\tW1-02\ttasks\tS-2\tDOING\t式",
+               "1\tPH2\ttasks\tS-2\t-\t-"]  # fmt: skip
+        two = ["2\tW1-01\ttasks\tS-1\tDONE\tgate", "2\tW1\tstage\tW1-02\t残り 1\t-", "2\trules/common.md\ttext\tS-1\t-\t-",
+               "2\ttasks/diag-codes.md\ttext\tS-1\t-\t-"]  # fmt: skip
+        self.assertEqual(self.run_("graph", "S-2", "--back"), (0, [
+            start, *one, "docs graph: S-2 --back: 4 node(s) at depth ≤ 1 (3 typed, 1 text); 4 more at depth 2"]))
+        self.assertEqual(self.run_("graph", "S-2", "--back", "--depth", "2"), (0, [
+            start, *one, *two, "docs graph: S-2 --back: 8 node(s) at depth ≤ 2 (5 typed, 3 text); 0 more at depth 3"]))
+        self.assertEqual(self.run_("graph", "S-2", "--back", "--depth", "5")[1][-1],
+                         "docs graph: S-2 --back: 8 node(s) at depth ≤ 5 (5 typed, 3 text); 0 more at depth 6")
+        # --typed: S-1 (named in the text only) and the paths are gone
+        self.assertEqual(self.run_("graph", "S-2", "--back", "--typed", "--depth", "2"), (0, [
+            start, *one[1:], "2\tW1\tstage\tW1-02\t残り 1\t-",
+            "docs graph: S-2 --back --typed: 4 node(s) at depth ≤ 2 (4 typed, 0 text); 0 more at depth 3"]))
+        # forward: S-1 and S-2 name each other (a cycle), each node once; `text(found_by)` is counted as text
+        self.assertEqual(self.run_("graph", "S-1", "--depth", "2")[1][1:], [
+            "1\tS-2\ttext\tS-1\tOPEN\tR-1 と A-1。", "1\tS-77\ttext\tS-1\t-\t-", "1\tD-15\ttext\tS-1\t-\t-",
+            "1\tW1-02\ttext\tS-1\tDOING\t式", "1\tC-40\ttext\tS-1\t-\t-", "1\tT5-8\ttext\tS-1\t-\t-",
+            "2\tA-1\ttext\tS-2\tDECIDED\tis_some", "2\tR-1\ttext\tS-2\tOPEN\t候補", "2\tW1-01\ttext(found_by)\tS-2\tDONE\tgate",
+            "docs graph: S-1: 9 node(s) at depth ≤ 2 (0 typed, 9 text); 0 more at depth 3"])  # fmt: skip
+        # the stage and `depends` make a cycle; the next depth counts only the new nodes
+        self.assertEqual(self.run_("graph", "W2-01", "--back", "--depth", "5")[1], [
+            "0\tW2-01\t-\t-\tPLAN\t輪", "1\tW2\tstage\tW2-01\t残り 1\t-",
+            "docs graph: W2-01 --back: 1 node(s) at depth ≤ 5 (1 typed, 0 text); 0 more at depth 6"])  # fmt: skip
+        self.assertEqual(self.run_("graph", "W2", "--depth", "5")[1], [
+            "0\tW2\t-\t-\t残り 1\t-", "1\tA-1\tbefore\tW2\tDECIDED\tis_some", "1\tW2-01\tstage\tW2\tPLAN\t輪",
+            "docs graph: W2: 2 node(s) at depth ≤ 5 (2 typed, 0 text); 0 more at depth 6"])  # fmt: skip
+        self.assertEqual(self.run_("graph", "W1-01", "--back")[1][1:], [
+            "1\tS-2\ttext(found_by)\tW1-01\tOPEN\tR-1 と A-1。", "1\tW1-02\tdepends\tW1-01\tDOING\t式",
+            "1\tW1\tstage\tW1-01\t残り 1\t-", "docs graph: W1-01 --back: 3 node(s) at depth ≤ 1 (2 typed, 1 text); 3 more at depth 2"])  # fmt: skip
+        # a start with no file: one line, and on; a stage with no work
+        self.assertEqual(self.run_("graph", "C-40", "--back"), (0, [
+            "C-40: not found (a kind with no file: the history or the second phase)", "1\tS-1\ttext\tC-40\tDECIDED\t字句",
+            "docs graph: C-40 --back: 1 node(s) at depth ≤ 1 (0 typed, 1 text); 5 more at depth 2"]))  # fmt: skip
+        self.assertEqual(self.run_("graph", "M5"), (0, ["0\tM5\t-\t-\t-\t-", "docs graph: M5: 0 node(s) at depth ≤ 1 (0 typed, 0 text); 0 more at depth 2"]))
+        # the errors of the use (exit 2)
+        for argv, why in ((("S-2", "--depth", "0"), "--depth 0: not 1 to 5"), (("S-2", "--depth", "6"), "--depth 6: not 1 to 5"),
+                          (("x",), "x: not an ID or a stage of tasks/stages.md"), (("W7",), "W7: not an ID or a stage of tasks/stages.md")):  # fmt: skip
+            self.assertEqual(self.run_("graph", *argv), (2, [f"docs.py graph: {why}"]), argv)
+        self.assertEqual(docs_tool.GRAPH_DEPTH_MAX, 5)
+        self.assertIn(f"--depth N (1 to {docs_tool.GRAPH_DEPTH_MAX})", docs_tool.__doc__)
+        # an ID field with no direction stops it
+        row = "| `found_by` | 文字列 | — | いいえ | 見つけた票 |\n"
+        self.edit("decisions/README.md", row, row + "| `see` | ID の並び（S） | — | いいえ | 見る |\n")
+        self.assertEqual(self.run_("graph", "S-2"), (2, ["docs.py graph: no direction in docs.RESTS_ON for the ID field(s) `see` of decisions/README.md"]))
 
     # ------------------------------------------------ show, list, changes, ticket
 
@@ -5291,6 +5379,7 @@ class DocsCommands(DocsTree):
                 "path": self.run_("path", "S-1", "S-9", "T1-1", "W9-01", "R-9", "A-9", "§9", "§2.1", "tools.md §1", "tools.md §2"),
                 "refs": [self.run_("refs", x) for x in ("S-1", "decisions/S/S-2.md")],
                 "back": [self.run_("back", x) for x in ("S-1", "S-9", "T1-1")],
+                "graph": [self.run_("graph", "S-1", "--back", "--depth", "2"), self.run_("graph", "S-9", "--back")],
             }
         root = self.root.resolve()
         rels = {p.resolve().relative_to(root) for p in opened if p.resolve().is_relative_to(root)}
@@ -5303,6 +5392,8 @@ class DocsCommands(DocsTree):
         check = "docs check: no problem in 19 document(s) (tables, heads, refs, relations, links)"  # the .md of NEW_LAYOUT
         self.assertEqual(want["check"], (0, [check]))
         self.assertEqual((want["foreign"], want["path"][0]), ({"a"}, 1))  # S-9 and the others are not found
+        self.assertIn("1\tW1-01\ttasks\tS-1\tDONE\tgate", want["graph"][0][1])
+        self.assertEqual(want["graph"][1][1][-1], "docs graph: S-9 --back: 0 node(s) at depth ≤ 1 (0 typed, 0 text); 0 more at depth 2")
         self.assertEqual(opened, ["README.md"])  # the root's README is a document
         for rel, text in self.BAIT.items():
             self.write(rel, text)

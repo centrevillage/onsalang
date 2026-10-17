@@ -203,7 +203,7 @@ def phase2_codes(text, doc=None):
 # ---------------------------------------------------------------- the documents (X-2 DT-7)
 
 # The directories of the new layout (X-2 DS-1). `history/` is never read.
-DOC_DIRS = ("decisions", "issues", "tasks", "spec", "rules")
+DOC_DIRS = ("decisions", "issues", "tasks", "spec", "rules", "design")
 SPEC_DIR = "spec"
 SPEC_SHOWN = f"{SPEC_DIR}/"  # the spec's name in messages
 ROOT_DOCS = (Path("README.md"), Path("CLAUDE.md"))
@@ -211,8 +211,9 @@ ROOT_DOCS = (Path("README.md"), Path("CLAUDE.md"))
 
 def doc_files(root, spec=True):
     """The Markdown documents the document tools read (`tools/docs.py`), relative to the root and
-    sorted: the files under DOC_DIRS and the root's README.md and CLAUDE.md (nothing else: not
-    `history/`). The spec (`spec/`) only with `spec`."""
+    sorted: the files under DOC_DIRS (the decisions, the issues, the tasks, the spec, the rules and the
+    design notes) and the root's README.md and CLAUDE.md (nothing else: not `history/`). The spec
+    (`spec/`) only with `spec`."""
     root = Path(root)
     found = [p.relative_to(root) for d in DOC_DIRS for p in (root / d).rglob("*.md") if p.is_file()]
     found += [p for p in ROOT_DOCS if (root / p).is_file()]

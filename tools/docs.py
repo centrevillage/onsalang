@@ -5,6 +5,7 @@
     python3 -B tools/docs.py swaps [--root DIR]
     python3 -B tools/docs.py check [--root DIR]
     python3 -B tools/docs.py path ID|§... [--abs] | back ID [--history] | refs ID|PATH
+                             | graph ID|STAGE [--back] [--depth N (1 to 5)] [--typed]
     python3 -B tools/docs.py show ID [--relations] | list KIND [--status S] [--stage W4] [--group N]
                              [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE [--out FILE]
@@ -17,9 +18,11 @@ The commands of the IDs (X-2 DT-2, DT-3, DT-6): 0 done, 1 not found or refused (
 written), 2 an error of the tool or of the use (not an ID, a kind not in the new layout, `new` in a
 git worktree, a write that fails). Their lines are `\\t`-separated: `ID status place title` (`refs`),
 `label ID status title sections` (the relations of `show`), `ID status fields title` (`list`), `ID
-decided sections title` (`changes`).
+decided sections title` (`changes`), `depth node type from status title` (`graph`; the start at the
+depth 0 with `-` for the type and from).
 
 - `path`, `back`, `refs` read the files of the IDs (`Ids`; a `§` is `file:line` of its heading).
+  `graph` shows the relations of the decisions as a graph made on the spot (`cmd_graph`).
   `show`, `list`, `changes`, `ticket` and the writes need the directory of the kind. The writes check the swap files first, write through `write_atomic`, and
   `set`, `new` refuse a text whose head fields would break (a) or (b) of the file or (c) of it
   and its partners (`check_write`).
@@ -40,7 +43,8 @@ decided sections title` (`changes`).
   `path:line: what` under a heading per check: (d) `tables`, and on the files of the IDs of the new
   layout (`Index`; `history/` and `tests/pending.toml` are not read) (a) `heads` (the field table of
   the directory's README, the head fields against it, the heading), (b) `refs` (the IDs and the `§`
-  are there), (c) `relations` (the keys named in `check_relations`), and (e) `links` (the relative
+  are there), (c) `relations` (the keys named in `check_relations`, and a direction in `RESTS_ON` for
+  each ID field of the field tables), and (e) `links` (the relative
   links of the READMEs). To add a check, add `(name, fn(tree) -> Findings)` to CHECKS; to add a
   subcommand, add `name: (add_arguments, run)` to COMMANDS.
 
@@ -55,6 +59,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
+from collections import deque
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -870,10 +875,33 @@ def _not_a_stage(layout, ref):
     return f"{ref}: not a stage of {repo.STAGES} ({', '.join(layout.stages())})"
 
 
+# The direction of each ID field of the field tables (`Field.base == "ID"`) for `graph`: True when the file
+# that writes the field rests on the IDs it names (`depends`: the work on the works before it), False when they
+# rest on it (`tasks`: the works on the decision; `before`: a deadline, not a dependence). Check (c) finds an
+# ID field of a README that has no row here.
+RESTS_ON = {"depends": True, "decisions": True, "tasks": False, "fix": False, "before": False}
+
+
+def undirected(tree):
+    """(README, line, key) of the ID fields of the field tables that have no direction in RESTS_ON."""
+    seen = set()
+    for name in tree.index.files:
+        table = tree.index.table(name)
+        if isinstance(table, FieldTable) and table.readme not in seen:
+            seen.add(table.readme)
+            lines = tree.lines(table.readme)
+            at = lines.index(FIELDS_HEAD)
+            rows = [(i + 1, table_cells(x)[:1]) for i, x in enumerate(lines) if i > at and x.startswith("|")]
+            for key in (k for k, f in table.fields.items() if f.base == "ID" and k not in RESTS_ON):
+                yield table.readme, next((i for i, first in rows if first in ([key], [f"`{key}`"])), None), key
+
+
 def check_relations(tree):
-    """(c) The relations the fields keep (the keys are named here, DT-1): a decision OPEN when every
-    work of `tasks` is DONE, an issue OPEN when every work of `fix` is DONE, `doing` on a work that is
-    not DOING. A missing ID is (b)'s."""
+    """(c) The relations the fields keep (the keys are named here, DT-1): each ID field has a direction
+    in RESTS_ON, a decision OPEN when every work of `tasks` is DONE, an issue OPEN when every work of
+    `fix` is DONE, `doing` on a work that is not DOING. A missing ID is (b)'s."""
+    for readme, line, key in undirected(tree):
+        yield Finding(readme, line, f"the ID field `{key}` has no direction in `docs.RESTS_ON` (`graph` needs it)")
     idx = tree.index
     for _, id_, rel, head in _id_files(tree):
         v = head.values
@@ -1121,6 +1149,18 @@ def _mentions(text_line, id_):
     return [m.span() for m in repo.ID_RE.finditer(text_line) if m.group(0) == id_]
 
 
+def named_ids(tree, rel, text=True):
+    """[(key or None, ID)] a file names, in order (`refs`, `graph`, `check_write`; one reading, D-15): the
+    bare IDs (`repo.ID_RE`; no stage, no PH2) of the strings of each head field (its key), then with
+    `text` of each line after the head fields (None; every line when they are not there or broken)."""
+    lines, head = tree.lines(rel), tree.head(rel)
+    found = [(key, m) for key, value in (head.values or {}).items() for v in _listed(value) for m in repo.ID_RE.findall(v)]
+    if text:
+        start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
+        found += [(None, m) for line in lines[start:] for m in repo.ID_RE.findall(line)]
+    return found
+
+
 def excerpt(line, a, b):
     lo, hi = max(0, a - EXCERPT), min(len(line), b + EXCERPT)
     return ("…" if lo else "") + line[lo:hi].strip() + ("…" if hi < len(line) else "")
@@ -1209,16 +1249,141 @@ def cmd_refs(args):
         if not (ids.root / rel).is_file():
             print(f"{target}: not found")
             return 1
-    lines, head = ids.tree.lines(rel), ids.tree.head(rel)
-    found = [m for value in (head.values or {}).values() for v in _listed(value) for m in repo.ID_RE.findall(v)]
-    start = 0 if head.values is None else len(lines) - len(head.body.split("\n"))
-    found += [m for line in lines[start:] for m in repo.ID_RE.findall(line)]
-    found = [i for i in dict.fromkeys(found) if i != own]
+    found = [i for i in dict.fromkeys(i for _, i in named_ids(ids.tree, rel)) if i != own]
     for id_ in found:
         w = ids.where(id_)
         print(f"{id_}\t{w.status}\t{w.place()}\t{w.title or NONE}")
     lost = sum(ids.where(i).rel is None for i in found)
     print(f"docs refs: {rel.as_posix()}: {len(found)} ID(s), {lost} not found")
+    return 0
+
+
+# ---------------------------------------------------------------- graph (X-2 U7b)
+
+GRAPH_DEPTH_MAX = 5  # the deepest `--depth` (tentative: tuned in use; no unbounded depth)
+MENTION, STAGE_EDGE = "text", "stage"  # the types of the edges that are not of an ID field
+
+
+def graph_args(p):
+    p.add_argument("start", metavar="ID|STAGE", help="an ID of a kind (`S-239`, `C-40`, `PH2`) or a stage (`W3`)")
+    p.add_argument("--back", action="store_true", help="what rests on START (what to look at again when it changes)")
+    p.add_argument("--depth", type=int, default=1, help=f"1 to {GRAPH_DEPTH_MAX} (default 1)")
+    p.add_argument("--typed", action="store_true", help="only the edges of the ID fields and of the stages")
+
+
+def typed_edge(type_):
+    return type_ in RESTS_ON or type_ == STAGE_EDGE
+
+
+def node_key(node):
+    """The order of the nodes: the IDs and the stages (`id_key`), then the paths."""
+    return (1, node.as_posix()) if isinstance(node, Path) else (0, id_key(node))
+
+
+def edges(ids):
+    """{(on, base, type)}: `on` rests on `base`. Each file names IDs (`named_ids`): `text` edges from it
+    (`text(key)` in a string field, `found_by = "W1-01/t"`). Its ID fields are typed edges, turned by
+    RESTS_ON (DocsError when a field has no direction). A stage rests on each of its works (`stage`). A
+    file of no ID (rules, the spec, the design notes, the table of the stages, a draft) is its path: only its edges to the
+    IDs it names. O(characters)."""
+    bad = [f"`{key}` of {readme.as_posix()}" for readme, _, key in undirected(ids.tree)]
+    if bad:
+        raise DocsError(f"no direction in docs.RESTS_ON for the ID field(s) {', '.join(bad)}")
+    id_of = {rel: i for files in ids.index.files.values() for i, rel in files.items()}
+    out = set()
+
+    def add(on, base, type_):
+        if on != base:  # an edge to itself (a file names its own ID) is dropped here, the one place
+            out.add((on, base, type_))
+
+    for rel in ids.tree.files:
+        node = id_of.get(rel, rel)
+        fields = ids.table(repo.kind_of(node).name).fields if rel in id_of else {}
+        typed = [key for key, f in fields.items() if f.base == "ID"]
+        for key, ref in named_ids(ids.tree, rel):
+            if key not in typed:
+                add(node, ref, MENTION if key is None else f"{MENTION}({key})")
+        values = ids.tree.head(rel).values or {}
+        for key in typed:
+            for v in _listed(values.get(key)):
+                if fields[key].fits(v):
+                    add(*((node, v) if RESTS_ON[key] else (v, node)), key)
+    for work in ids.index.files.get("W", {}):
+        add(work.split("-")[0], work, STAGE_EDGE)
+    return out
+
+
+def walk(near, start, depth):
+    """Breadth first from `start` over `near` ({node: [(next, type)]}) with a queue, no recursion: each
+    node enters the queue once (the set `seen`), so a cycle stops it; the new nodes at depth+1 are only
+    counted. (rows (depth, node, type, from) in the order of depth and `node_key`, the count): a node
+    by the first edge that reaches it, the edges of a node taken typed first, then `text(key)`, then
+    `text`, each in `node_key` and then the type (no order of a set is left). O(V+E), and the sorting."""
+
+    def order(edge):
+        return not typed_edge(edge[1]), edge[1] == MENTION, node_key(edge[0]), edge[1]
+
+    seen, queue, rows, more = {start}, deque([(start, 0)]), [], 0
+    while queue:
+        node, d = queue.popleft()
+        for nxt, type_ in sorted(near.get(node, ()), key=order):
+            if nxt not in seen:
+                seen.add(nxt)
+                if d == depth:
+                    more += 1
+                else:
+                    rows.append((d + 1, nxt, type_, node))
+                    queue.append((nxt, d + 1))
+    return sorted(rows, key=lambda r: (r[0], node_key(r[1]))), more
+
+
+def cmd_graph(args):
+    """The relations of the decisions, made on the spot from the text and the ID fields (`edges`), every
+    edge turned to `on -> base` (what rests on what). For "what to look at again when S-239 changes":
+
+    1. `graph S-239 --back`: what rests on it directly (some 20 in the real tree).
+    2. `graph S-239 --back --typed --depth 2`: the chain of the works and the issues. Through the stages
+       the chain goes on to the later stages (S-239 reaches 70 nodes and W1-01 103 with no bound), so read
+       the typed edges at the depth 1 or 2 too.
+    3. The mentions of the text spread to hundreds beyond the depth 2: read one depth at a time and decide.
+
+    `--depth` is 1 to GRAPH_DEPTH_MAX. Known: a draft (`S-1.draft.md`) is a path that rests on its S; a
+    work rests on its stage one depth below (`graph W3-05 --back` has the stage W3 at the depth 1, and the
+    works that depend on W3, the `depended_by` of `show`, at the depth 2: the same set one depth deeper)."""
+    if not 1 <= args.depth <= GRAPH_DEPTH_MAX:
+        raise DocsError(f"--depth {args.depth}: not 1 to {GRAPH_DEPTH_MAX}")
+    ids, start = Ids(args.root, repo.doc_files(args.root)), args.start
+    if repo.kind_of(start) is None and start not in ids.layout.stages():
+        raise DocsError(f"{start}: not an ID or a stage of {repo.STAGES.as_posix()}")
+    near = {}
+    for on, base, type_ in edges(ids):
+        if typed_edge(type_) or not args.typed:
+            a, b = (base, on) if args.back else (on, base)
+            near.setdefault(a, []).append((b, type_))
+    rows, more = walk(near, start, args.depth)
+
+    def shown(node):
+        """(the node, its status, its title): of its file, of the works of a stage (`state`), `-` for a path."""
+        if isinstance(node, Path):
+            return node.as_posix(), NONE, NONE
+        if STAGE.fullmatch(node):
+            return node, ids.state(node), NONE
+        w = ids.where(node)
+        return node, w.status, w.title or NONE
+
+    w = None if STAGE.fullmatch(start) else ids.where(start)
+    if w is not None and w.rel is None:
+        print(f"{start}: {w.place()}")
+    else:
+        name, status, title = shown(start)
+        print(f"0\t{name}\t{NONE}\t{NONE}\t{status}\t{title}")
+    for depth, node, type_, came in rows:
+        name, status, title = shown(node)
+        print(f"{depth}\t{name}\t{type_}\t{shown(came)[0]}\t{status}\t{title}")
+    typed, n = sum(typed_edge(r[2]) for r in rows), len(rows)
+    flags = "".join(f" --{f}" for f in ("back", "typed") if getattr(args, f))
+    print(f"docs graph: {start}{flags}: {n} node(s) at depth ≤ {args.depth} ({typed} typed, {n - typed} text);"
+          f" {more} more at depth {args.depth + 1}")  # fmt: skip
     return 0
 
 
@@ -1487,8 +1652,8 @@ def check_write(root, texts, new=()):
     rel_of = {i: r for files in tree.index.files.values() for i, r in files.items()}
     own = {i for i, r in rel_of.items() if r in written}
     partners = set()
-    for _, _, rel, head in _id_files(tree):
-        named = {m for value in (head.values or {}).values() for v in _listed(value) for m in repo.ID_RE.findall(v)}
+    for _, _, rel, _ in _id_files(tree):
+        named = {i for _, i in named_ids(tree, rel, text=False)}
         if rel in written:
             partners |= {rel_of[i] for i in named if i in rel_of}
         elif named & own:
@@ -1731,6 +1896,7 @@ COMMANDS = {
     "path": (path_args, cmd_path),
     "back": (back_args, cmd_back),
     "refs": (refs_args, cmd_refs),
+    "graph": (graph_args, cmd_graph),
     "show": (show_args, cmd_show),
     "list": (list_args, cmd_list),
     "changes": (changes_args, cmd_changes),
