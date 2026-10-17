@@ -1,0 +1,53 @@
+#### U32 with float init
+flow f(x: U32 at sample) -> U32 at sample {
+  prev~(x, 0.0)
+}
+#### F32 with int zero
+flow f(x: F32 at sample) -> F32 at sample {
+  prev~(x, 0)
+}
+#### Bool with int init
+flow f(x: Bool at sample) -> Bool at sample {
+  prev~(x, 0)
+}
+#### user flow named prev
+flow prev(x: F32 at sample, a: F32 at sample) -> F32 at sample {
+  x
+}
+flow g(x: F32 at sample) -> F32 at sample {
+  prev~(x, 0.0)
+}
+#### user fn named prev
+fn prev(x: F32, a: F32) -> F32 { x }
+flow g(x: F32 at sample) -> F32 at sample {
+  prev~(x, 0.0)
+}
+#### vdelay no max
+flow f(x: F32 at sample, n: U32 at sample) -> F32 at sample {
+  vdelay~(x, n, 0)
+}
+#### delay N is zero
+flow f(x: F32 at sample) -> F32 at sample {
+  delay~(x, 4, 0)
+}
+#### delay 2 args N zero
+flow f(x: F32 at sample) -> F32 at sample {
+  delay~(x, 0)
+}
+#### zero is the signal not the init
+flow f(x: F32 at sample) -> F32 at sample {
+  prev~(0.0, 0.0)
+}
+#### struct type
+struct P { a: F32 }
+flow f(x: P at sample) -> P at sample {
+  prev~(x, 0)
+}
+#### tuple type
+flow f(x: (F32, F32) at sample) -> (F32, F32) at sample {
+  prev~(x, 0)
+}
+#### I32 with float zero
+flow f(x: I32 at sample) -> I32 at sample {
+  prev~(x, 0.0)
+}

@@ -1,0 +1,21 @@
+#### closure ret unit explicit, body is value
+fn f() {
+  let g = fn(x: I32) -> () { x }
+  g(1)
+}
+#### closure ret unit explicit, expected I32
+fn take(h: fn(I32) -> I32) -> I32 { h(1) }
+fn f() -> I32 {
+  take(fn(x: I32) -> () { x })
+}
+#### closure uses empty explicit, expected alloc
+fn take(h: fn(I32) -> I32 uses {Alloc}) -> I32 uses {Alloc} { h(1) }
+fn f() -> I32 uses {Alloc} {
+  take(fn(x: I32) uses {} { x })
+}
+#### closure pure type vs inferred
+fn take(h: fn(I32) -> I32 uses {Alloc}) -> I32 uses {Alloc} { h(1) }
+fn f() -> I32 uses {Alloc} {
+  let a: fn(I32) -> I32 uses {Alloc} = fn(x: I32) -> I32 uses {} { x }
+  take(a)
+}

@@ -1,0 +1,30 @@
+#### uses attach: inner uses {} then outer uses {Alloc}
+fn make() -> fn() -> I32 uses {} uses {Alloc} {
+  fn() -> I32 { 1 }
+}
+fn take(f: fn() -> I32) -> I32 {
+  f()
+}
+fn go() -> I32 uses {Alloc} {
+  take(make())
+}
+#### closure form
+fn go() -> I32 uses {Alloc} {
+  let m = fn() -> fn() -> I32 uses {} uses {Alloc} {
+    fn() -> I32 { 1 }
+  }
+  let f = m()
+  f()
+}
+#### type alias form
+type Maker = fn() -> fn() -> I32 uses {} uses {Alloc}
+fn take(m: Maker) -> I32 uses {Alloc} {
+  let f = m()
+  f()
+}
+fn make() -> fn() -> I32 uses {} uses {Alloc} {
+  fn() -> I32 { 1 }
+}
+fn go() -> I32 uses {Alloc} {
+  take(make)
+}

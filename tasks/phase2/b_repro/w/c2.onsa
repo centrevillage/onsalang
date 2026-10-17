@@ -1,0 +1,5 @@
+fn take(h: fn(I32) -> I32 uses {Alloc}) -> I32 uses {Alloc} { h(1) }
+fn f() -> I32 uses {Alloc} {
+  let a: fn(I32) -> I32 uses {Alloc} = fn(x: I32) -> I32 uses {} { x }
+  take(a)
+}

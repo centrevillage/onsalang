@@ -1,0 +1,4 @@
+fn take(h: fn(I32) -> I32) -> I32 { h(1) }
+fn f() -> I32 {
+  take(fn(x: I32) -> () { x })
+}
