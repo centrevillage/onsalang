@@ -2,7 +2,7 @@
 //!
 //! Every code of the spec is listed here, including the codes no stage emits
 //! yet (K-12): the gate checks that this list equals the codes the spec text
-//! names, minus the retired codes of the plan §5 (S-109). The category follows
+//! names, minus the retired codes of `tasks/diag-codes.md` (S-109). The category follows
 //! the numeric range of the spec table; a test checks that each code lies in
 //! the range of its category. The category is the spec's grouping only: no
 //! decision reads it (R-87 (3)).

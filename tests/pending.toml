@@ -10,8 +10,8 @@
 #   reasons  理由の S / R 番号の配列（一つ以上。`decisions/S/` の S、`issues/R/` の R）。until = "PH2" の項目に
 #            限り、仕様の節（"§20" の形。仕様の番号付きの見出しにあるもの）も書ける。第 1 期の範囲は
 #            仕様 §20 が定めるため
-#   until    外す予定の作業 ID（docs/rework-phase1.md §3 の W の ID か、計画 §4 の T の ID）。
-#            第 2 期のコードは "PH2"（K-13 の規則 3。使えるのは diag-code だけ）。第 2 期のコードは計画 §5 の
+#   until    外す予定の作業 ID（`tasks/W/` の W の ID か、計画 §4 の T の ID）。
+#            第 2 期のコードは "PH2"（K-13 の規則 3。使えるのは diag-code だけ）。第 2 期のコードは `tasks/diag-codes.md` の
 #            表の M の欄が「第 2 期」の行で、それ以外のコードを PH2 にすると失敗し、第 2 期のコードを
 #            別の until で載せても失敗する（照合は tools/diag_codes.py）。
 #            要約では段 PH2 として W・M の段の後に数える。--stage-end PH2 は使い方の誤りで、

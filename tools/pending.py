@@ -38,7 +38,7 @@ Paths are in their canonical form: relative, `/`-separated, no `.` or `..`
 component, no empty component, no trailing `/`.
 
 Every entry has all of: kind, target, reasons (S / R numbers, one or more),
-until (the work that removes it: a W ID of `docs/rework-phase1.md` §3 or a T
+until (the work that removes it: a W ID of `tasks/W/` or a T
 ID of `docs/implementation-tasks.md` §4, not marked done), note.
 
 A case entry `<item>/<case>` of a gate item with `counts_rows` (the test
