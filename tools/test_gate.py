@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -84,6 +85,21 @@ PLAN = """\
 
 欠番: E0611（S-77 で E0601 にまとめた）、E0814（S-147 で E0815 にまとめた）。照合は E0999 を除かない。
 ## 6. 仕様の例
+"""
+
+# the table of the stages (X-2 U6): the stages and their order; the last ends the first phase
+STAGES = """\
+# 段
+
+| 段 | 名前 | 主な決定 | 前提 |
+|---|---|---|---|
+| W1 | 基盤 | — | なし |
+| W3 | 構文 | — | W1 |
+| W5 | 型 | — | W3 |
+| M5 | std | — | — |
+| M9 | 締め | — | — |
+
+W5 の後は M5〜M9。
 """
 
 API = """\
@@ -182,6 +198,7 @@ class Repo:
             "docs/implementation-tasks.md": PLAN,
             "docs/review-impl-phase1.md": REVIEW,
             "docs/api-candidates.md": API,
+            "tasks/stages.md": STAGES,
             "spec.md": SPEC,
             str(repo.SPEC): SPEC,
             "tests/spec/ops/groups.onsa": COPY_FIRST,
@@ -409,8 +426,8 @@ class PendingList(TempRepo):
         text = (
             entry("spec-example", self.sid)
             + entry("diag-code", "E0812", ("R-23",), "W5-07")
-            + entry("gate", "c-x", ("S-34",), "T5-8")
-            + entry("gate", "c-header/span_const", ("S-34",), "T5-8")
+            + entry("gate", "c-x", ("S-34",), "W5-07")
+            + entry("gate", "c-header/span_const", ("S-34",), "W5-07")
             + entry("test-case", "tests/spec/ops/groups.onsa::a test", ("S-45",), "W3-08")
             + entry("fuzz-input", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
             + entry("fix-contract", "tests/spec/ops/groups.onsa:12:3 E0010 fix2", ("S-45",), "W3-08")
@@ -450,14 +467,21 @@ class PendingList(TempRepo):
         self.assertOneError(entry("spec-example", self.sid, reasons=("S-99",)), "not in the tables")
 
     def test_work_not_in_tables(self):
-        self.assertOneError(entry("spec-example", self.sid, until="W9-99"), "until `W9-99` is not in the tables")
+        self.assertOneError(entry("spec-example", self.sid, until="W9-99"),
+                            "until `W9-99` is not a work of the W works of docs/rework-phase1.md `## 3.` (`W3-07`) or `PH2`")
 
     def test_done_work_fails(self):
-        self.assertOneError(entry("spec-example", self.sid, until="T1-1"), "marked done")
         self.assertOneError(entry("spec-example", self.sid, until="W1-01"), "marked done")
 
+    def test_a_t_work_is_no_work(self):
+        # X-2 U6: the T works of the plan §4 are not works of the list (the history keeps them), done or not
+        for t in ("T1-1", "T5-8"):
+            self.assertOneError(entry("spec-example", self.sid, until=t), f"until `{t}` is not a work of the W works")
+        self.assertNotIn("T5-8", pending.load_docs(self.repo.root).works)
+
     def test_bad_work(self):
-        self.assertOneError(entry("spec-example", self.sid, until="M3"), "is not a work ID")
+        self.assertOneError(entry("spec-example", self.sid, until="M3"), "is not a work of")
+        self.assertOneError(entry("spec-example", self.sid, until="M5"), "is not a work of")  # a stage is no work
 
     def test_duplicate(self):
         self.assertOneError(entry("spec-example", self.sid) * 2, "the same target as pending[0]")
@@ -636,14 +660,84 @@ class PendingList(TempRepo):
         self.assertEqual(quiet(pending.main, ["--root", str(self.repo.root)]), 1)
 
     def test_stages(self):
-        text = entry("spec-example", self.sid) + entry("diag-code", "E0812", until="W5-07") + entry("gate", "c-header", until="T5-8")
+        # X-2 U6: the stages and their order are the table of tasks/stages.md, not the IDs of the works
+        stages = repo.Layout(self.repo.root).stages()
+        self.assertEqual(stages, ("W1", "W3", "W5", "M5", "M9"))
+        self.assertEqual(pending.load_docs(self.repo.root).stages, stages)
+        text = entry("diag-code", "E0812", until="W5-07") + entry("spec-example", self.sid) + entry("gate", "c-header", until="W3-08")
         self.repo.write("tests/pending.toml", text)
         entries, errors = pending.load(self.repo.pending)
         self.assertEqual(errors, [])
-        self.assertEqual(pending.stage_counts(entries), {"W3": 1, "W5": 1, "M5": 1})
-        self.assertEqual(pending.stages_line(entries), "pending by stage: W3 1, W5 1, M5 1 (total 3)")
-        self.assertEqual(len(pending.stage_end_errors(entries, "W3")), 1)
-        self.assertEqual(pending.stage_end_errors(entries, "W1"), [])
+        self.assertEqual(pending.stage_counts(entries, stages), {"W3": 2, "W5": 1})
+        self.assertEqual(pending.stages_line(entries, stages), "pending by stage: W3 2, W5 1 (total 3)")
+        # the order is the table's, not the numbers'
+        self.assertEqual(pending.stages_line(entries, ("W5", "W3")), "pending by stage: W5 1, W3 2 (total 3)")
+        self.assertEqual(len(pending.stage_end_errors(entries, "W3", stages)), 2)
+        self.assertEqual(pending.stage_end_errors(entries, "W1", stages), [])
+        self.assertEqual([pending.stage_of(x) for x in ("W3-07", "M5", "PH2", "T5-8", "S-45")], ["W3", "M5", "PH2", None, None])
+
+    def test_the_last_stage_of_the_table_ends_the_first_phase(self):
+        self.repo.write("tests/pending.toml", entry("spec-example", self.sid))
+        base = ["--root", str(self.repo.root), "--gate-steps", ""]
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 1)  # the last: everything but PH2 is left
+        self.repo.write("tasks/stages.md", STAGES.replace("| M9 | 締め | — | — |\n", "| M9 | 締め | — | — |\n| M10 | 次 | — | — |\n"))
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 0)  # now a stage like the others
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "M10"]), 1)
+        docs = pending.load_docs(self.repo.root)
+        self.assertIn("the last stage is M10", pending.stage_problem("PH2", docs))
+        self.assertTrue(pending.left_at_end("W1-01", "M10", docs.stages))
+        self.assertFalse(pending.left_at_end("PH2", "M10", docs.stages))
+
+    def test_an_unknown_stage_names_the_stages_of_the_table(self):
+        docs = pending.load_docs(self.repo.root)
+        self.assertEqual(pending.stage_problem("W4", docs), "unknown stage `W4` (one of W1, W3, W5, M5, M9: tasks/stages.md)")
+        self.assertIsNone(pending.stage_problem("M5", docs))  # a stage with no work is a stage
+        code, out = quiet_out(pending.main, ["--root", str(self.repo.root), "--stage-end", "W4"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out, ["unknown stage `W4` (one of W1, W3, W5, M5, M9: tasks/stages.md)"])
+
+    def test_the_table_of_the_stages_broken(self):
+        # every tool stops on the same RepoError of `repo.Layout.stages`
+        head = "# 段\n\n| 段 | 名前 |\n"
+        for text, why in (
+            (None, "tasks/stages.md: [Errno 2]"),
+            ("# 段\nno table\n", "expected one table whose first column is `段`, found 0"),
+            (head + "|---|---|\n| W1 | a |\n\n" + head + "|---|---|\n", "found 2"),
+            (head + "| W1 | a |\n", "tasks/stages.md:4: no delimiter row"),
+            (head + "|---|---|\n\nW1\n", "tasks/stages.md:3: the table of the stages has no row"),
+            (head + "|---|---|\n| W1 | a |\n| PH2 | b |\n", "tasks/stages.md:6: `PH2` is not a stage"),
+            (head + "|---|---|\n| W1-01 | a |\n", "tasks/stages.md:5: `W1-01` is not a stage"),
+            (head + "|---|---|\n| W1 | a |\n| W1 | b |\n", "tasks/stages.md:6: `W1` is given twice"),
+        ):
+            with self.subTest(why=why):
+                if text is None:
+                    (self.repo.root / repo.STAGES).unlink(missing_ok=True)
+                else:
+                    self.repo.write("tasks/stages.md", text)
+                with self.assertRaises(repo.RepoError) as caught:
+                    repo.Layout(self.repo.root).stages()
+                self.assertIn(why, str(caught.exception))
+                self.assertRaises(repo.RepoError, pending.load_docs, self.repo.root)
+                code, out = quiet_out(pending.main, ["--root", str(self.repo.root)])
+                self.assertEqual((code, out), (1, [f"the document tables are not found: {caught.exception}"]))
+                code, out = quiet_out(ignores.main, ["stale", "--root", str(self.repo.root)])
+                self.assertEqual((code, out), (1, [f"the document tables are not found: {caught.exception}"]))
+                code, out = quiet_out(gate.main, [], steps=[], root=self.repo.root, out=io.StringIO())
+                self.assertEqual(code, 2)
+                self.assertIn(str(caught.exception), "\n".join(out))
+
+    def test_stage_end_m9_with_no_plan_4(self):
+        # X-2 U6: after the plan §4 goes to the history, M9 is still a stage (the table's), the T works are none
+        plan = (self.repo.root / repo.DOC_PLAN).read_text(encoding="utf-8")
+        self.repo.write(repo.DOC_PLAN, plan[: plan.index("## 4.")] + plan[plan.index("## 5."):])
+        self.assertIsNone(repo.Layout(self.repo.root).source("T"))
+        self.repo.write("tests/pending.toml", entry("diag-code", "E0612", until="PH2"))
+        base = ["--root", str(self.repo.root), "--gate-steps", ""]
+        self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 0)
+        self.repo.write("tests/pending.toml", entry("spec-example", self.sid))
+        code, out = quiet_out(pending.main, base + ["--stage-end", "M9"])
+        self.assertEqual(code, 1)
+        self.assertIn("still pending at the end of M9 (until W3-07)", "\n".join(out))
 
     def test_stage_end_cli(self):
         self.repo.write("tests/pending.toml", entry("spec-example", self.sid))
@@ -655,7 +749,7 @@ class PendingList(TempRepo):
         self.assertEqual(quiet(pending.main, base + ["--stage-end", ""]), 2)
 
     def test_gate_steps_cli(self):
-        self.repo.write("tests/pending.toml", entry("gate", "c-header", until="T5-8"))
+        self.repo.write("tests/pending.toml", entry("gate", "c-header", until="W5-07"))
         base = ["--root", str(self.repo.root)]
         self.assertEqual(quiet(pending.main, base + ["--gate-steps", "c-header"]), 0)
         self.assertEqual(quiet(pending.main, base + ["--gate-steps", ""]), 1)
@@ -665,8 +759,8 @@ class PendingList(TempRepo):
         self.assertEqual(self.errors_of(entry("diag-code", "E0612", until="PH2")), [])
         self.assertOneError(entry("spec-example", self.sid, until="PH2"), "only for diag-code")
         self.assertOneError(entry("test-case", "tests/spec/ops/groups.onsa", until="PH2"), "only for diag-code")
-        self.assertOneError(entry("diag-code", "E0612", until="P3"), "is not a work ID")
-        self.assertOneError(entry("diag-code", "E0612", until="p2"), "is not a work ID")
+        self.assertOneError(entry("diag-code", "E0612", until="P3"), "is not a work of")
+        self.assertOneError(entry("diag-code", "E0612", until="p2"), "is not a work of")
 
     def test_phase2_spec_sections(self):
         # a PH2 entry may give a numbered heading of the spec as a reason
@@ -681,25 +775,26 @@ class PendingList(TempRepo):
             pending.load_docs(self.repo.root)
 
     def test_phase2_stages(self):
-        text = entry("diag-code", "E0612", until="PH2") + entry("diag-code", "E0001", until="T9-2") + entry("spec-example", self.sid)
+        text = entry("diag-code", "E0612", until="PH2") + entry("diag-code", "E0001", until="W5-07") + entry("spec-example", self.sid)
         self.repo.write("tests/pending.toml", text)
         entries, errors = pending.load(self.repo.pending)
         self.assertEqual(errors, [])
+        stages = pending.load_docs(self.repo.root).stages
         self.assertEqual(pending.stage_of("PH2"), "PH2")
         # the second phase comes after every stage of the first
-        self.assertEqual(pending.stages_line(entries), "pending by stage: W3 1, M9 1, PH2 1 (total 3)")
+        self.assertEqual(pending.stages_line(entries, stages), "pending by stage: W3 1, W5 1, PH2 1 (total 3)")
         # the end of the first phase leaves only PH2
-        left = pending.stage_end_errors(entries, "M9")
+        left = pending.stage_end_errors(entries, "M9", stages)
         self.assertEqual(len(left), 2, left)
         self.assertFalse(any("E0612" in m for m in left), left)
-        self.assertEqual(len(pending.stage_end_errors(entries, "W3")), 1)
+        self.assertEqual(len(pending.stage_end_errors(entries, "W3", stages)), 1)
         base = ["--root", str(self.repo.root), "--gate-steps", ""]
         self.assertEqual(quiet(pending.main, base), 0)
         self.assertEqual(quiet(pending.main, base + ["--stage-end", "PH2"]), 2)
         self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 1)
         self.repo.write("tests/pending.toml", entry("diag-code", "E0612", until="PH2"))
         self.assertEqual(quiet(pending.main, base + ["--stage-end", "M9"]), 0)
-        self.assertIn("PH2", gate.summary([], pending.load(self.repo.pending)[0], [])[2])
+        self.assertIn("PH2", gate.summary([], pending.load(self.repo.pending)[0], [], stages)[2])
 
 
 def fake(name, code=0, **kw):
@@ -754,16 +849,16 @@ class GateWiring(GateRun):
         self.assertEqual(self.argv_of("p"), ["--gate-steps", "c-x"])
 
     def test_pending_items(self):
-        self.repo.write("tests/pending.toml", entry("gate", "c-x", until="T5-8") + entry("gate", "fmt", until="T5-8"))
-        code, out = self.run_main(["--work", "T5-8"], [fake("c-x", 1, pendable=True), fake("fmt", 1)])
+        self.repo.write("tests/pending.toml", entry("gate", "c-x", until="W5-07") + entry("gate", "fmt", until="W5-07"))
+        code, out = self.run_main(["--work", "W5-07"], [fake("c-x", 1, pendable=True), fake("fmt", 1)])
         self.assertEqual(code, 1)  # `fmt` is not pendable: listing it does not hide its failure
         self.assertIn("PENDING c-x", out)
         self.assertIn("FAIL    fmt", out)
-        code, out = self.run_main(["--work", "T5-8"], [fake("c-x", 0, pendable=True)])
+        code, out = self.run_main(["--work", "W5-07"], [fake("c-x", 0, pendable=True)])
         self.assertEqual(code, 1)
         self.assertIn("remove the entry", out)
         # an item that cannot run (exit 2) is not pending (W1-06)
-        code, out = self.run_main(["--work", "T5-8"], [fake("c-x", 2, pendable=True)])
+        code, out = self.run_main(["--work", "W5-07"], [fake("c-x", 2, pendable=True)])
         self.assertEqual(code, 1)
         self.assertIn("FAIL    c-x", out)
         self.assertIn("the item cannot run", out)
@@ -915,7 +1010,7 @@ class GateWiring(GateRun):
 
     def test_summary(self):
         results = gate.run_steps([fake("ok"), fake("bad", 2)], {}, cwd=self.repo.root, out=io.StringIO())
-        lines = gate.summary(results, [], ["M tests/golden/c/a.c"])
+        lines = gate.summary(results, [], ["M tests/golden/c/a.c"], ())
         self.assertEqual(lines[-1], "gate: FAIL (bad)")
         self.assertIn("    M tests/golden/c/a.c", lines)
         self.assertIn("  pending: none", lines)
@@ -3613,7 +3708,7 @@ class PendingEdit(TempRepo):
         super().setUp()
         self.text = ("# head\n\n" + entry("test-case", "tests/spec/ops/groups.onsa", ("S-45",), "W3-08")
                      + "# group\n" + entry("diag-code", "E0812", ("R-23",), "W5-07")
-                     + entry("gate", "c-header/x", ("S-34",), "T5-8").rstrip("\n") + "\n")
+                     + entry("gate", "c-header/x", ("S-34",), "W3-08").rstrip("\n") + "\n")
         self.repo.write("tests/pending.toml", self.text)
 
     def cmd(self, *args):
@@ -3863,20 +3958,20 @@ class IgnoresStale(TempRepo):
         return self.stale(*argv)
 
     def test_a_done_work_fails(self):
-        for reason in ("W1-01", "W1-01 U2: why", "T1-1 (S-45)"):
+        for reason in ("W1-01", "W1-01 U2: why"):
             code, out = self.check(reason)
             self.assertEqual(code, 1, out)
             self.assertIn(f"crates/a/tests/t.rs:3\tt\t{reason}\n    the work {reason.split()[0]} is done", out)
 
     def test_a_work_not_done_passes(self):
-        for reason in ("W3-07", "W3-08 U1: why", "T5-8", "W5-07"):
+        for reason in ("W3-07", "W3-08 U1: why", "W5-07"):
             code, out = self.check(reason)
             self.assertEqual(code, 0, out)
             self.assertIn("1 ignored test(s) in 1 file(s): 1 by a work, 0 for another reason", out)
 
     def test_an_id_not_in_the_tables_fails(self):
-        # W9-99 is outside the table of §3; W3-071 is not W3-07
-        for reason in ("W9-99", "W3-071: a typo", "T9-3"):
+        # W9-99 is outside the table of §3; W3-071 is not W3-07; a T of the plan §4 is no work (X-2 U6)
+        for reason in ("W9-99", "W3-071: a typo", "T9-3", "T1-1 (S-45)", "T5-8"):
             code, out = self.check(reason)
             self.assertEqual(code, 1, out)
             self.assertIn("is no work of the tables", out)
@@ -4338,6 +4433,7 @@ doing = ["U2/i"]
 +++
 # W1-02 式
 """,
+    "tasks/stages.md": "# 段\n\n| 段 | 名前 |\n|---|---|\n| W1 | 基盤 |\n| W2 | 直し |\n| M5 | std |\n| M9 | 締め |\n",
     "tasks/diag-codes.md": "# 診断コード\n\n| コード | 内容 | 段 | M |\n|---|---|---|---|\n"
                            "| E0612〜E0613 | x | — | 第 2 期 |\n\n欠番: E0611（S-1 でまとめた）。\n",
     "issues/R/README.md": "# 問題\n\n## 頭の欄\n\n" + FIELDS_HEADER + """\
@@ -4380,6 +4476,7 @@ OLD_LAYOUT = {
     "docs/review-impl-phase1.md": "## 8. 決定の記録\n| ID | 内容 |\n|---|---|\n| R-1 | 候補 |\n",  # §8 is the last section
     "docs/api-candidates.md": "| ID | 候補 |\n|---|---|\n| A-1 | is_some |\n",
     "docs/onsa-tools.md": NEW_LAYOUT["spec/tools.md"],
+    "tasks/stages.md": NEW_LAYOUT["tasks/stages.md"],  # a file of tasks/ in both layouts
     "tests/pending.toml": "",
 }
 
@@ -4506,6 +4603,31 @@ class DocsLayout(DocsTree):
         self.write(repo.DOC_REVIEW, "# moved\n")
         self.layout()
         self.assertEqual(self.check(), (0, []))
+
+    def test_t_is_read_only_while_the_plan_4_is_there(self):
+        """X-2 U6: `source("T")` is the one place: "old" while the plan §4 has its rows, None (the history)
+        after; `known`, `where` and the pending list look at that value only."""
+        self.layout(OLD_LAYOUT)
+        self.assertEqual(repo.Layout(self.root).source("T"), "old")
+        self.assertEqual(docs_tool.Index.of(self.root).known("T"), {"T1-1"})
+        ids = docs_tool.Ids(self.root)
+        self.assertEqual(ids.where("T1-1").place(), "docs/implementation-tasks.md:10")
+        self.assertEqual(ids.where("T1-2").place(), "not found (the T works of docs/implementation-tasks.md `## 4.`)")
+        plan = OLD_LAYOUT["docs/implementation-tasks.md"]
+        self.write(repo.DOC_PLAN, plan[: plan.index("## 4.")] + plan[plan.index("## 5.") :])
+        self.assertIsNone(repo.Layout(self.root).source("T"))
+        self.assertIsNone(docs_tool.Index.of(self.root).known("T"))
+        history = "not found (a kind with no file: the history or the second phase)"
+        self.assertEqual(docs_tool.Ids(self.root).where("T1-1").place(), history)
+        # the new layout with no plan: the history; with the plan §4 beside it, the T IDs of the text are checked there
+        shutil.rmtree(self.root)
+        self.root.mkdir()
+        self.layout()
+        self.assertIsNone(repo.Layout(self.root).source("T"))
+        self.assertEqual(self.check(), (0, []))
+        self.write(repo.DOC_PLAN, "# plan\n## 4. 作業\n| ID | 作業 |\n|---|---|\n| T1-1 | t |\n")
+        self.assertEqual(repo.Layout(self.root).source("T"), "old")
+        self.assertEqual(self.check(), (1, ["decisions/S/S-1.md:11: T5-8 is not found (the T works of docs/implementation-tasks.md `## 4.`)"]))
 
     def test_the_layout_reads_only_what_it_needs(self):
         self.layout(OLD_LAYOUT)
@@ -4715,7 +4837,7 @@ class DocsLayout(DocsTree):
         self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = "W1-01"', f"{s1}:4: `tasks` is not an array; its form is ID の並び（W、T、PH2）")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = ["S-2"]', f"{s1}:4: `tasks` has \"S-2\", not an ID of W、T、PH2")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "S-2"', f"{s1}:4: `before` has \"S-2\", not an ID of W、段、PH2")
-        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "X4"', f"{s1}:4: `before` has \"X4\", not an ID of W、段、PH2")
+        self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "x4"', f"{s1}:4: `before` has \"x4\", not an ID of W、段、PH2")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'before = "W1-"', f"{s1}:4: `before` has \"W1-\", not an ID of W、段、PH2")
         self.assertOne(s1, 'tasks = ["W1-01"]', 'tasks = ["W1"]', f"{s1}:4: `tasks` has \"W1\", not an ID of W、T、PH2")
         self.assertOne(s1, '["§2.1"]', '["2.1"]', f"{s1}:3: `spec` has \"2.1\", not a section (`§6.1`, `tools.md §3.2`)")
@@ -4770,34 +4892,37 @@ class DocsLayout(DocsTree):
         self.assertOne(s2, "found_by = \"W1-01/t\"", "found_by = \"W1-08/t\"", f"{s2}:5: found_by: W1-08 is not found (tasks/W/)")
         self.assertOne(s2, "R-1 と A-1", "R-1 と A-1、R-1、A-2、A-2", f"{s2}:8: A-2 is not found (decisions/A/)")
         self.assertOne(w2, '["W1-01"]', '["W1-08"]', f"{w2}:4: depends: W1-08 is not found (tasks/W/)")
-        # `depends` a stage (U5e): there when it has a work; the form `W<n>` only
-        self.edit(w2, '["W1-01"]', '["W1", "W1-01"]')
-        self.assertEqual(self.check(), (0, []))
-        self.edit(w2, '["W1", "W1-01"]', '["W1-01"]')
-        self.assertOne(w2, '["W1-01"]', '["W1-01", "W2"]', f"{w2}:4: depends: W2: no work of the stage (tasks/W/)")
+        # `depends` a stage (U5e): there when the table of the stages has it (X-2 U6), with or without a work
+        for stage in ("W1", "W2", "M5"):
+            self.edit(w2, '["W1-01"]', f'["{stage}", "W1-01"]')
+            self.assertEqual(self.check(), (0, []), stage)
+            self.edit(w2, f'["{stage}", "W1-01"]', '["W1-01"]')
+        self.assertOne(w2, '["W1-01"]', '["W1-01", "W3"]', f"{w2}:4: depends: W3: not a stage of tasks/stages.md (W1, W2, M5, M9)")
+        self.assertOne(w2, '["W1-01"]', '["X4"]', f"{w2}:4: depends: X4: not a stage of tasks/stages.md (W1, W2, M5, M9)")
         for bad in ("W1-", "PH2", "W"):
             self.assertOne(w2, '["W1-01"]', f'["{bad}"]', f'{w2}:4: `depends` has "{bad}", not an ID of W、段')
         self.assertOne(s1, '["§2.1"]', '["§2.1", "§9.9"]', f"{s1}:3: spec: §9.9 is not a numbered heading of the spec")
         self.assertOne(s1, "§3 と §2", "§3 と §2、§7", f"{s1}:10: §7 is not a numbered heading of the spec")
         self.assertOne(s1, "`tools.md §1`", "`tools.md §1・§2`", f"{s1}:10: tools.md §2 is not a numbered heading of the spec of the tools")
-        # `before`: a stage is there when it has a work (W2 has none); PH2 is not checked; `W2` in the text is not an ID
-        for due in ("W1", "PH2", "W1-02"):
+        # `before`: a stage is there when the table has it (W2 and M5 have no work); PH2 is not checked; `W2` in the
+        # text is not an ID
+        for due in ("W1", "W2", "M5", "M9", "PH2", "W1-02"):
             self.edit(s2, 'found_by = "W1-01/t"', f'found_by = "W1-01/t"\nbefore = "{due}"')
             self.assertEqual(self.check(), (0, []), due)
             self.edit(s2, f'found_by = "W1-01/t"\nbefore = "{due}"', 'found_by = "W1-01/t"')
-        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W2"', f"{s2}:6: before: W2: no work of the stage (tasks/W/)")
+        self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W3"', f"{s2}:6: before: W3: not a stage of tasks/stages.md (W1, W2, M5, M9)")
         self.assertOne(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W2-01"', f"{s2}:6: before: W2-01 is not found (tasks/W/)")
         self.edit(s2, "R-1 と A-1", "R-1 と A-1、W2 まで")
         self.assertEqual(self.check(), (0, []))
         self.edit(s2, "R-1 と A-1、W2 まで", "R-1 と A-1")
-        # the stage in the current table of the works (rework §3)
+        # the works in the current table (rework §3): the stages are still the table's
         for rel in ("tasks/W/W1-01.md", "tasks/W/W1-02.md", "tasks/W/README.md"):
             (self.root / rel).unlink()
         (self.root / "tasks/W").rmdir()
         self.write(repo.DOC_REWORK, OLD_LAYOUT["docs/rework-phase1.md"])
         self.edit(s2, 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1"')
         self.assertEqual(self.check(), (0, []))
-        self.assertOne(s2, 'before = "W1"', 'before = "W3"', f"{s2}:6: before: W3: no work of the stage (the W works of docs/rework-phase1.md `## 3.`)")
+        self.assertOne(s2, 'before = "W1"', 'before = "W3"', f"{s2}:6: before: W3: not a stage of tasks/stages.md (W1, W2, M5, M9)")
         self.layout()  # the new layout again
         (self.root / repo.DOC_REWORK).unlink()
         # a kind still in the current table: read there
@@ -5020,24 +5145,27 @@ class DocsCommands(DocsTree):
         for argv, error in ((("S", "--waiting"), "--waiting is for W, not S"), (("W", "--group", "1"), "--group is for S, D"),
                             (("S", "--status", "DONE"), "--status DONE: not one of OPEN / DECIDED / DROPPED"),
                             (("S", "--stage", "4"), "4: not a stage"), (("S", "--before", "S-1"), "--before S-1: not a work or a stage"),
-                            (("S", "--before", "PH2"), "--before PH2: not a work or a stage"), (("W", "--stage", "PH2"), "PH2: not a stage (`W4`)"),
-                            (("R", "--stage", "PH2"), "PH2: not a stage (`W4`)"),
+                            (("S", "--before", "PH2"), "--before PH2: not a work or a stage"), (("W", "--stage", "PH2"), "PH2: not a stage of tasks/stages.md (W1, W2, M5, M9)"),
+                            (("R", "--stage", "PH2"), "PH2: not a stage of tasks/stages.md (W1, W2, M5, M9)"), (("S", "--stage", "W3"), "W3: not a stage of tasks/stages.md (W1, W2, M5, M9), or PH2"),
                             (("D",), "D: not in the new layout"), (("Z",), "Z: not an ID or a kind of S, D")):  # fmt: skip
             code, out = self.run_("list", *argv)
             self.assertEqual(code, 2, argv)
             self.assertIn(error, out[-1])
 
     def test_the_order_of_before(self):
-        order = ["W1-02", "W1-10", "W1-99", "W1", "W2-01", "W2", "W10-01", "W10", "PH2"]
-        keys = [docs_tool.due_key(d) for d in order]
+        # the stages in the order of the table (X-2 U6), an M stage after the W ones, PH2 after every stage
+        stages = ("W1", "W2", "W10", "M5")
+        order = ["W1-02", "W1-10", "W1-99", "W1", "W2-01", "W2", "W10-01", "W10", "M5", "PH2"]
+        keys = [docs_tool.due_key(d, stages) for d in order]
         self.assertEqual(keys, sorted(keys))
         self.assertEqual(len(set(keys)), len(keys))
-        for other in ("S-1", "T1-1", "X4", "W", "W1-", None, 3):
-            self.assertIsNone(docs_tool.due_key(other), other)
+        self.assertLess(docs_tool.due_key("W2", ("W2", "W1")), docs_tool.due_key("W1-01", ("W2", "W1")))
+        for other in ("S-1", "T1-1", "X4", "W3", "W3-01", "M5-1", "W", "W1-", None, 3):
+            self.assertIsNone(docs_tool.due_key(other, stages), other)
 
     def test_list_by_the_stage_and_before(self):
         self.layout()
-        for n, due in ((3, "W1"), (4, "W2-01"), (5, "PH2"), (6, "W2")):  # not checked by `list`: W2 has no work
+        for n, due in ((3, "W1"), (4, "W2-01"), (5, "PH2"), (6, "W2"), (7, "M5")):  # W2 and M5 have no work
             self.write(f"decisions/S/S-{n}.md", f'+++\nstatus = "OPEN"\nbefore = "{due}"\n+++\n# S-{n} t\n')
         self.edit("decisions/S/S-2.md", 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "W1-02"')
 
@@ -5049,13 +5177,15 @@ class DocsCommands(DocsTree):
         # `--before` a work: a stage is due at its end; PH2 is after every W
         for before, want in (("W1-01", []), ("W1-02", ["S-2"]), ("W1-99", ["S-2"]), ("W1", ["S-2", "S-3"]),
                              ("W2-01", ["S-2", "S-3", "S-4"]), ("W2", ["S-2", "S-3", "S-4", "S-6"]),
-                             ("W3-01", ["S-2", "S-3", "S-4", "S-6"])):  # fmt: skip
+                             ("M5", ["S-2", "S-3", "S-4", "S-6", "S-7"]), ("M9", ["S-2", "S-3", "S-4", "S-6", "S-7"])):  # fmt: skip
             self.assertEqual(ids("--before", before), want, before)
         # `--stage`: `tasks` or `before` of the stage (a work of it, or the stage); PH2 for the decisions
         self.assertEqual(ids("--stage", "W1"), ["S-1", "S-2", "S-3"])
         self.assertEqual(ids("--stage", "W2"), ["S-4", "S-6"])
         self.assertEqual(ids("--stage", "PH2"), ["S-2", "S-5"])
-        self.assertEqual(ids("--stage", "W10"), [])
+        self.assertEqual(ids("--stage", "M5"), ["S-7"])
+        self.assertEqual(ids("--stage", "M9"), [])
+        self.assertEqual(self.run_("list", "S", "--before", "W3-01")[0], 2)  # its stage is not in the table
         self.assertEqual(self.run_("list", "S", "--stage", "PH2")[1][1], "S-5\tOPEN\tbefore=PH2\tt")
         # `--waiting`: a stage or PH2 in `before` makes no work wait; a work in `before` does
         w2 = "W1-02\tDOING\tsize=M depends=W1-01 doing=U2/i\t式"
@@ -5070,8 +5200,8 @@ class DocsCommands(DocsTree):
         for due in ("W1", "PH2", "W1-02"):
             self.assertEqual(self.run_("set", "S-2", f"before={due}"), (0, [f'{s2}: before = "{due}"']), due)
             self.assertEqual(self.run_("check")[0], 0, due)
-        self.assertRefused(("set", "S-2", "before=W99"), [f"{s2}:6: before: W99: no work of the stage (tasks/W/)"], [s2])
-        self.assertRefused(("set", "S-2", "before=X4"), ['`before` has "X4", not an ID of W、段、PH2'], [s2])
+        self.assertRefused(("set", "S-2", "before=W99"), [f"{s2}:6: before: W99: not a stage of tasks/stages.md (W1, W2, M5, M9)"], [s2])
+        self.assertRefused(("set", "S-2", "before=x4"), ['`before` has "x4", not an ID of W、段、PH2'], [s2])
         # a work that is not there is refused too (the head fields, (b))
         self.assertRefused(("set", "S-2", "before=W1-09"), [f"{s2}:6: before: W1-09 is not found (tasks/W/)"], [s2])
         self.assertRefused(("set", "S-2", "tasks=W1-02,W1-09"), [f"{s2}:3: tasks: W1-09 is not found (tasks/W/)"], [s2])

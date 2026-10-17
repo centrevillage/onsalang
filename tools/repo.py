@@ -9,11 +9,14 @@
 - the kinds of the IDs and their paths (`KINDS`, X-2 DT-1), where each kind and the spec are read
   from (`Layout`: the new layout or the current tables, X-2 DT-7), and the spec as one text
   (`spec_doc`, `tools_doc`);
-- the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`).
+- the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`);
+- the stages in their order (`Layout.stages`, the table of `tasks/stages.md`, X-2 U6);
+- reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it).
 """
 import json
 import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -91,6 +94,93 @@ def cases_json(root, cmd, *args):
         return json.loads(out.stdout)
     except json.JSONDecodeError as e:
         raise RepoError(f"`{' '.join(argv)}` printed no JSON: {e}") from e
+
+
+# ---------------------------------------------------------------- tests/pending.toml (read here, validated by tools/pending.py)
+
+PENDING_FIELDS = ("kind", "target", "reasons", "until", "note")
+# Optional fields: `expect` (only "internal": a whole test case, a case of an item with
+# `expect_internal`), `rows` and `digest` (both required on, and only on, a case of an item with
+# `counts_rows`).
+PENDING_OPTIONAL = ("expect", "rows", "digest")
+DIGEST = re.compile(r"[0-9a-f]{16}")
+EXPECTS = ("internal",)
+
+
+@dataclass(frozen=True)
+class PendingEntry:
+    index: int  # position in the file, for messages
+    kind: str
+    target: str
+    reasons: tuple
+    until: str
+    note: str
+    expect: str = None
+    rows: int = None
+    digest: str = None
+
+    def label(self):
+        return f'pending[{self.index}] {self.kind} "{self.target}"'
+
+
+def load_pending(path, text=None):
+    """Read the list (or `text`, as the list at `path`). Returns (entries, errors); entries are the well-formed ones."""
+    try:
+        data = tomllib.loads(Path(path).read_text(encoding="utf-8") if text is None else text)
+    except FileNotFoundError:
+        return [], [f"{path}: not found"]
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        return [], [f"{path}: {e}"]
+    errors = [f"{path}: unknown top-level key `{k}` (only [[pending]])" for k in data if k != "pending"]
+    raw = data.get("pending", [])
+    if not isinstance(raw, list):
+        return [], errors + [f"{path}: `pending` must be an array of tables ([[pending]])"]
+    entries = []
+    for i, item in enumerate(raw):
+        where = f"pending[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{where}: not a table")
+            continue
+        bad = False
+        for k in item:
+            if k not in PENDING_FIELDS and k not in PENDING_OPTIONAL:
+                errors.append(f"{where}: unknown field `{k}`")
+                bad = True
+        for k in PENDING_FIELDS:
+            if k not in item:
+                errors.append(f"{where}: missing field `{k}`")
+                bad = True
+        if bad:
+            continue
+        for k in ("kind", "target", "until", "note"):
+            if not isinstance(item[k], str) or not item[k].strip():
+                errors.append(f"{where}: `{k}` must be a non-empty string")
+                bad = True
+        reasons = item["reasons"]
+        if not isinstance(reasons, list) or not all(isinstance(r, str) for r in reasons):
+            errors.append(f"{where}: `reasons` must be an array of strings")
+            bad = True
+        elif not reasons:
+            errors.append(f"{where}: `reasons` needs at least one S / R number")
+            bad = True
+        expect = item.get("expect")
+        if expect is not None and expect not in EXPECTS:
+            errors.append(f"{where}: `expect` must be one of {', '.join(repr(x) for x in EXPECTS)}")
+            bad = True
+        rows = item.get("rows")
+        if rows is not None and (not isinstance(rows, int) or isinstance(rows, bool) or rows < 1):
+            errors.append(f"{where}: `rows` must be a positive integer (the failing rows the entry holds)")
+            bad = True
+        digest = item.get("digest")
+        if digest is not None and (not isinstance(digest, str) or not DIGEST.fullmatch(digest)):
+            errors.append(f"{where}: `digest` must be 16 lowercase hex digits (which rows fail, as the item prints it)")
+            bad = True
+        if bad:
+            continue
+        entries.append(
+            PendingEntry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"], expect, rows, digest)
+        )
+    return entries, errors
 
 
 # ---------------------------------------------------------------- plan §5
@@ -255,6 +345,11 @@ def section_path(root, sec):
 SPEC_README = Path(SPEC_DIR) / "README.md"
 SPEC_TOOLS = Path(SPEC_DIR) / "tools.md"
 DIAG_CODES = Path("tasks") / "diag-codes.md"
+# The table of the stages (X-2 U6): its first column `段` lists the stages in their order; the last ends
+# the first phase. A stage is `W4`, `M5`: one capital and digits (`PH2`, the second phase, is none).
+STAGES = Path("tasks") / "stages.md"
+STAGES_HEAD = "段"
+STAGE_NAME = re.compile(r"[A-Z]\d+")
 FOREIGN_FORMS = Path(SPEC_DIR) / "foreign-forms.toml"
 # the documents that are not kinds of IDs: (the new file, the current file; None: the plan §5)
 FILES = {
@@ -272,7 +367,7 @@ class Layout:
     when the new one is there. Nothing is read before it is asked; each document is read once."""
 
     def __init__(self, root):
-        self.root, self._texts, self._source = Path(root), {}, {}
+        self.root, self._texts, self._source, self._stages = Path(root), {}, {}, None
 
     def text(self, rel):
         if rel not in self._texts:
@@ -280,13 +375,16 @@ class Layout:
         return self._texts[rel]
 
     def source(self, name):
-        """"new", "old", or None (no reader of the current documents: D, K, Q, RF, X, C, PH2)."""
+        """"new", "old", or None (no reader of the current documents: D, K, Q, RF, X, C, PH2; and T when
+        the plan §4 is not there: a kind with no directory is read only while its table is there, after
+        it the history keeps it)."""
         if name not in self._source:
             if name in FILES:
                 new, has_old = (self.root / FILES[name][0]).is_file(), True
             else:
                 kind = KIND[name]
-                new, has_old = kind.dir is not None and (self.root / kind.dir).is_dir(), kind.old is not None
+                new = kind.dir is not None and (self.root / kind.dir).is_dir()
+                has_old = kind.old is not None and (kind.dir is not None or self._old_there(name))
             if new and self._old_there(name):
                 where = FILES[name][0] if name in FILES else f"{KIND[name].dir}/"
                 raise RepoError(f"{name} is in both {where} and {self.old_name(name)}; "
@@ -331,6 +429,29 @@ class Layout:
             return {}
         return rows(section(text, start, end, doc) if start else text, KIND[name].pattern)
 
+    def stages(self):
+        """The stages in their order: the first column of the table of STAGES (the one place, D-15).
+        RepoError when the file, its table or a stage is not there or not of the form."""
+        if self._stages is None:
+            lines = self.text(STAGES).split("\n")
+            at = [i for i, line in enumerate(lines) if _first_cell(line) == STAGES_HEAD]
+            if len(at) != 1:
+                raise RepoError(f"{STAGES}: expected one table whose first column is `{STAGES_HEAD}`, found {len(at)}")
+            if at[0] + 1 == len(lines) or not re.fullmatch(r"\|(?:\s*:?-+:?\s*\|)+", lines[at[0] + 1].strip()):
+                raise RepoError(f"{STAGES}:{at[0] + 2}: no delimiter row under the header of the stages")
+            names, i = [], at[0] + 2
+            while i < len(lines) and lines[i].startswith("|"):
+                cell = _first_cell(lines[i])
+                if not STAGE_NAME.fullmatch(cell) or cell in names:
+                    why = "given twice" if cell in names else "not a stage (`W4`, `M5`)"
+                    raise RepoError(f"{STAGES}:{i + 1}: `{cell}` is {why}")
+                names.append(cell)
+                i += 1
+            if not names:
+                raise RepoError(f"{STAGES}:{at[0] + 1}: the table of the stages has no row")
+            self._stages = tuple(names)
+        return self._stages
+
     def old_lines(self, name):
         """{id: line} of the rows of the current table (an ID's first row), or {} when its document or
         its section is not there (as `peek_rows`; the lines of `section`)."""
@@ -349,6 +470,11 @@ class Layout:
             if m := row.match(lines[i]):
                 out.setdefault(m.group(1), i + 1)
         return out
+
+
+def _first_cell(line):
+    """The first cell of a table row, stripped ("" for another line)."""
+    return line.split("|")[1].strip() if line.startswith("|") and line.count("|") > 1 else ""
 
 
 # ---------------------------------------------------------------- the spec as one text (X-2 DS-4, DF-2)

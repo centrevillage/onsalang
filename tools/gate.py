@@ -282,16 +282,16 @@ def _env():
     return env
 
 
-def summary(results, entries, golden_lines, stage_end=None, list_ok=True, quick=False, form=None, notes=()):
-    """The summary; `notes` come right before the warning of the time and the last line."""
+def summary(results, entries, golden_lines, stages, stage_end=None, list_ok=True, quick=False, form=None, notes=()):
+    """The summary (`stages`: `repo.Layout.stages`); `notes` come right before the warning of the time and the last line."""
     form = form or Form((), stage_end, quick)
     lines = ["", "=== summary"]
     width = max((len(r.step.name) for r in results), default=0)
     for r in results:
         lines.append(f"  {r.status:<7} {r.step.name:<{width}}  {r.seconds:6.1f}s  {r.describe()}".rstrip())
-    lines.append("  " + pending.stages_line(entries) + ("" if list_ok else " (the list has errors, see `pending`)"))
+    lines.append("  " + pending.stages_line(entries, stages) + ("" if list_ok else " (the list has errors, see `pending`)"))
     if stage_end is not None:
-        left = len(pending.stage_end_errors(entries, stage_end))
+        left = len(pending.stage_end_errors(entries, stage_end, stages))
         lines.append(f"  stage end {stage_end}: " + (f"{left} entr{'y' if left == 1 else 'ies'} left" if left else "nothing left"))
     if golden_lines is None:
         lines.append("  golden: cannot list (see `golden`)")
@@ -404,18 +404,19 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
     if problem:
         print(problem, file=sys.stderr)
         return 2
-    if args.stage_end is not None or args.work:
-        try:
+    try:  # the stages order the summary; the stage and the works are checked when given
+        stages = repo.Layout(root).stages()
+        if args.stage_end is not None or args.work:
             docs = pending.load_docs(root)
             problem = pending.stage_problem(args.stage_end, docs) if args.stage_end is not None else None
             unknown = [w for w in args.work if w not in docs.works]
             if problem is None and unknown:
-                problem = "--work needs a W or T ID of the tables; unknown: " + ", ".join(unknown)
-        except pending.DocsError as e:
-            problem = f"cannot check the stage or the work: the document tables are not found: {e}"
-        if problem:
-            print(problem, file=sys.stderr)
-            return 2
+                problem = f"--work needs a W ID of {docs.works_at}; unknown: " + ", ".join(unknown)
+    except pending.DocsError as e:
+        problem = f"cannot check the stage or the work: the document tables are not found: {e}"
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
     with one_gate(root, out):
         entries, load_errors = pending.load(root / pending.PENDING)
         listed = {e.target: e for e in pending.of_kind(entries, "gate") if "/" not in e.target}
@@ -436,7 +437,7 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         notes = [f"diff: cannot read it ({form.diff_error}); the narrowable items run whole"] if form.diff_error else []
         if kind == "main" and not form.quick:
             notes += _history(root, form, results, failed)
-        for line in summary(results, entries, golden, args.stage_end, not load_errors, args.quick, form, notes):
+        for line in summary(results, entries, golden, stages, args.stage_end, not load_errors, args.quick, form, notes):
             print(line, file=out)
     return 1 if failed else 0
 

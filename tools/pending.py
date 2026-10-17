@@ -38,8 +38,7 @@ Paths are in their canonical form: relative, `/`-separated, no `.` or `..`
 component, no empty component, no trailing `/`.
 
 Every entry has all of: kind, target, reasons (S / R numbers, one or more),
-until (the work that removes it: a W ID of `tasks/W/` or a T
-ID of `docs/implementation-tasks.md` §4, not marked done), note.
+until (the work that removes it: a W ID of `tasks/W/`, not marked done), note.
 
 A case entry `<item>/<case>` of a gate item with `counts_rows` (the test
 vectors) also has `rows = N`, how many rows fail, and `digest = "<16 hex>"`,
@@ -59,9 +58,10 @@ checks it).
 of the second phase waits for no work of the first. Only the kinds of
 `PHASE2_KINDS` may use it. Its reasons may also name a section of the spec
 ("§20", a numbered heading of `spec/`): the spec itself sets
-the scope of the first phase; other entries name S / R numbers only. The summary counts it as the stage `PH2`, after the
-W and M stages. `--stage-end PH2` is a usage error (the first phase never ends
-the second); `--stage-end M9`, the end of the first phase, fails on every
+the scope of the first phase; other entries name S / R numbers only. The summary counts it as the stage `PH2`, after
+every stage. The stages and their order are the table of `tasks/stages.md` (`repo.Layout.stages`); its last stage
+(M9) ends the first phase. `--stage-end PH2` is a usage error (the first phase never ends
+the second); `--stage-end` the last stage fails on every
 entry left whose until is not PH2 (K-13: what is left after M9 is only PH2).
 
 This module is the only place that validates the list (the Rust reader in
@@ -106,13 +106,8 @@ ROOT = repo.ROOT
 PENDING = repo.PENDING
 
 KINDS = ("spec-example", "diag-code", "gate", "test-case", "fuzz-input", "fix-contract", "foreign-form")
-FIELDS = ("kind", "target", "reasons", "until", "note")
-# Optional fields: `expect` (only "internal": a whole test case, a case of an item with
-# `expect_internal`), `rows` and `digest` (both required on, and only on, a case of an item with
-# `counts_rows`).
-OPTIONAL_FIELDS = ("expect", "rows", "digest")
-DIGEST = re.compile(r"[0-9a-f]{16}")
-EXPECTS = ("internal",)
+
+FIELDS = repo.PENDING_FIELDS
 
 # The form of `target` per kind. Paths are checked further in `_check_target`.
 TARGET_FORMS = {
@@ -130,50 +125,36 @@ TARGET_FORMS = {
 REASON = re.compile(r"[SR]-\d+")
 # A spec section as a reason, only of `until = "PH2"` (the spec §20 sets what the first phase is).
 SECTION = re.compile(r"§\d+(?:\.\d+)*")
-WORK = re.compile(r"(W\d+)-\d+|T(\d+)-\d+")
+WORK = re.compile(repo.KIND["W"].pattern)
 
-# The second phase as an `until` (K-13 rule 3), the kinds that may use it, and
-# the stage that ends the first phase (plan §4 M9).
+# The second phase as an `until` (K-13 rule 3) and the kinds that may use it. The stage that ends the
+# first phase is the last of the table of the stages (`Docs.stages`).
 PHASE2 = "PH2"
 PHASE2_KINDS = ("diag-code",)
-PHASE1_END = "M9"
 
 # The documents keep the IDs in table rows `| ID |`, `| ID ✅ |` (done).
 DocsError = repo.RepoError
 
 
-@dataclass(frozen=True)
-class Entry:
-    index: int  # position in the file, for messages
-    kind: str
-    target: str
-    reasons: tuple
-    until: str
-    note: str
-    expect: str = None
-    rows: int = None
-    digest: str = None
-
-    def label(self):
-        return f'pending[{self.index}] {self.kind} "{self.target}"'
+Entry = repo.PendingEntry
+load = repo.load_pending
 
 
 @dataclass
 class Docs:
-    works: set  # W and T IDs
+    works: set  # W IDs
     done: set  # the works done (✅, or `status = "DONE"` in the new layout)
     reasons: set  # S and R IDs
+    stages: tuple  # in their order (`repo.Layout.stages`); the last ends the first phase
+    works_at: str  # where the works are read, for messages (`docs.Index.place`)
     sections: set = frozenset()  # the numbered headings of the spec ("20", "11.4")
 
 
 def stage_of(work):
-    """`W3-07` -> `W3`, `T5-8` -> `M5` (the milestone of a T ID), `PH2` -> `PH2`."""
-    if work == PHASE2:
-        return PHASE2
-    m = WORK.fullmatch(work)
-    if not m:
-        return None
-    return m.group(1) if m.group(1) else f"M{m.group(2)}"
+    """`W3-07` -> `W3`, a stage (`M5`) -> itself, `PH2` -> `PH2`; None for anything else."""
+    if work == PHASE2 or repo.STAGE_NAME.fullmatch(work):
+        return work
+    return work.split("-")[0] if WORK.fullmatch(work) else None
 
 
 def load_docs(root=ROOT):
@@ -184,74 +165,14 @@ def load_docs(root=ROOT):
     lay, works = index.layout, dict(index.work_done())
     if not works:
         raise DocsError(f"{repo.KIND['W'].dir}/: no file of an ID")
-    # the T works only while the plan §4 is there (the history keeps them after the migration)
-    works |= lay.old_rows("T") if lay.source("W") == "old" else lay.peek_rows("T")
+    at = index.place("W")
     reasons = index.ids("S") | index.ids("R")
     spec = repo.spec_doc(root, lay)
     sections = set(spec_blocks.headings(spec.text))
     if not sections:
         raise DocsError(f"{spec.parts[0][0]}: no numbered heading found")
-    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=reasons, sections=sections)
-
-
-def load(path, text=None):
-    """Read the list (or `text`, as the list at `path`). Returns (entries, errors); entries are the well-formed ones."""
-    try:
-        data = tomllib.loads(Path(path).read_text(encoding="utf-8") if text is None else text)
-    except FileNotFoundError:
-        return [], [f"{path}: not found"]
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
-        return [], [f"{path}: {e}"]
-    errors = [f"{path}: unknown top-level key `{k}` (only [[pending]])" for k in data if k != "pending"]
-    raw = data.get("pending", [])
-    if not isinstance(raw, list):
-        return [], errors + [f"{path}: `pending` must be an array of tables ([[pending]])"]
-    entries = []
-    for i, item in enumerate(raw):
-        where = f"pending[{i}]"
-        if not isinstance(item, dict):
-            errors.append(f"{where}: not a table")
-            continue
-        bad = False
-        for k in item:
-            if k not in FIELDS and k not in OPTIONAL_FIELDS:
-                errors.append(f"{where}: unknown field `{k}`")
-                bad = True
-        for k in FIELDS:
-            if k not in item:
-                errors.append(f"{where}: missing field `{k}`")
-                bad = True
-        if bad:
-            continue
-        for k in ("kind", "target", "until", "note"):
-            if not isinstance(item[k], str) or not item[k].strip():
-                errors.append(f"{where}: `{k}` must be a non-empty string")
-                bad = True
-        reasons = item["reasons"]
-        if not isinstance(reasons, list) or not all(isinstance(r, str) for r in reasons):
-            errors.append(f"{where}: `reasons` must be an array of strings")
-            bad = True
-        elif not reasons:
-            errors.append(f"{where}: `reasons` needs at least one S / R number")
-            bad = True
-        expect = item.get("expect")
-        if expect is not None and expect not in EXPECTS:
-            errors.append(f"{where}: `expect` must be one of {', '.join(repr(x) for x in EXPECTS)}")
-            bad = True
-        rows = item.get("rows")
-        if rows is not None and (not isinstance(rows, int) or isinstance(rows, bool) or rows < 1):
-            errors.append(f"{where}: `rows` must be a positive integer (the failing rows the entry holds)")
-            bad = True
-        digest = item.get("digest")
-        if digest is not None and (not isinstance(digest, str) or not DIGEST.fullmatch(digest)):
-            errors.append(f"{where}: `digest` must be 16 lowercase hex digits (which rows fail, as the item prints it)")
-            bad = True
-        if bad:
-            continue
-        entries.append(
-            Entry(i, item["kind"], item["target"], tuple(reasons), item["until"], item["note"], expect, rows, digest)
-        )
-    return entries, errors
+    return Docs(works=set(works), done={k for k, d in works.items() if d}, reasons=reasons, sections=sections,
+                stages=lay.stages(), works_at=at)  # fmt: skip
 
 
 def validate(entries, docs, root=ROOT, pendable_steps=None):
@@ -301,10 +222,8 @@ def validate(entries, docs, root=ROOT, pendable_steps=None):
         if e.until == PHASE2:
             if e.kind not in PHASE2_KINDS:
                 errors.append(f"{where}: until `{PHASE2}` (the second phase) is only for {', '.join(PHASE2_KINDS)} entries")
-        elif not WORK.fullmatch(e.until):
-            errors.append(f"{where}: until `{e.until}` is not a work ID (`W3-07`, `T5-8`) or `{PHASE2}`")
         elif e.until not in docs.works:
-            errors.append(f"{where}: until `{e.until}` is not in the tables (rework §3 for W, plan §4 for T)")
+            errors.append(f"{where}: until `{e.until}` is not a work of {docs.works_at} (`W3-07`) or `{PHASE2}`")
         elif e.until in docs.done:
             errors.append(f"{where}: until `{e.until}` is a work marked done; remove the entry or change `until`")
         key = (e.kind, e.target)
@@ -401,32 +320,27 @@ def of_kind(entries, kind):
     return [e for e in entries if e.kind == kind]
 
 
-def stage_counts(entries):
+def stage_counts(entries, stages):
     counts = {}
     for e in entries:
         s = stage_of(e.until) or "?"
         counts[s] = counts.get(s, 0) + 1
-    return dict(sorted(counts.items(), key=lambda kv: stage_key(kv[0])))
+    return dict(sorted(counts.items(), key=lambda kv: stage_key(kv[0], stages)))
 
 
-def stage_key(stage):
-    """W stages, then M stages, then the second phase, then anything else."""
-    m = re.fullmatch(r"([WMP])(\d+)", stage)
-    if not m:
-        return (3, 99, stage)
-    return ("WMP".index(m.group(1)), int(m.group(2)), stage)
+def stage_key(stage, stages):
+    """The stages in the order of `stages` (the table), then the second phase, then anything else."""
+    if stage in stages:
+        return (0, stages.index(stage), stage)
+    return (1, 0, stage) if stage == PHASE2 else (2, 0, stage)
 
 
-def stages_line(entries):
-    counts = stage_counts(entries)
+def stages_line(entries, stages):
+    counts = stage_counts(entries, stages)
     if not counts:
         return "pending: none"
     body = ", ".join(f"{s} {n}" for s, n in counts.items())
     return f"pending by stage: {body} (total {len(entries)})"
-
-
-def known_stages(docs):
-    return {stage_of(w) for w in docs.works}
 
 
 def stage_problem(stage, docs):
@@ -434,23 +348,22 @@ def stage_problem(stage, docs):
     if not stage:
         return "--stage-end needs a stage (W3, M5)"
     if stage == PHASE2:
-        return f"`{PHASE2}` is the second phase, which the first phase does not end; the last stage is {PHASE1_END}"
-    if stage not in known_stages(docs):
-        known = ", ".join(sorted(known_stages(docs), key=stage_key))
-        return f"unknown stage `{stage}` (one of {known})"
+        return f"`{PHASE2}` is the second phase, which the first phase does not end; the last stage is {docs.stages[-1]}"
+    if stage not in docs.stages:
+        return f"unknown stage `{stage}` (one of {', '.join(docs.stages)}: {repo.STAGES})"
     return None
 
 
-def left_at_end(until, stage):
+def left_at_end(until, stage, stages):
     """Whether something waiting for `until` (a work, or `PH2`) may not be left at
     the end of `stage`: a work of that stage; at the end of the first phase
-    (`PHASE1_END`), anything but the second phase. Also used by `tools/ignores.py stale`."""
-    return until != PHASE2 if stage == PHASE1_END else stage_of(until) == stage
+    (the last of `stages`), anything but the second phase. Also used by `tools/ignores.py stale`."""
+    return until != PHASE2 if stage == stages[-1] else stage_of(until) == stage
 
 
-def stage_end_errors(entries, stage):
+def stage_end_errors(entries, stage, stages):
     """The entries left at the end of `stage` (`left_at_end`)."""
-    left = [e for e in entries if left_at_end(e.until, stage)]
+    left = [e for e in entries if left_at_end(e.until, stage, stages)]
     return [f"{e.label()}: still pending at the end of {stage} (until {e.until}): {e.note}" for e in left]
 
 
@@ -597,10 +510,10 @@ def main(argv=None):
     entries, errors = load(path)
     errors += validate(entries, docs, root, steps)
     if args.stage_end is not None:
-        errors += stage_end_errors(entries, args.stage_end)
+        errors += stage_end_errors(entries, args.stage_end, docs.stages)
     for m in errors:
         print(m)
-    print(stages_line(entries))
+    print(stages_line(entries, docs.stages))
     if errors:
         print(f"{len(errors)} problem(s) in {show_path(path, root)}")
         return 1

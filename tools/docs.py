@@ -711,10 +711,16 @@ class Index:
         return set(self.layout.old_rows(name))
 
     def known(self, name):
-        """The IDs of a kind there are, or None when they are not checked (the history, PH2, no reader)."""
-        if repo.KIND[name].dir is None or self.layout.source(name) is None:
+        """The IDs of a kind there are, or None when they are not checked (`repo.Layout.source` is None:
+        the history, PH2, no reader)."""
+        source = self.layout.source(name)
+        if source is None:
             return None
-        return set(self.files[name]) if self.layout.source(name) == "new" else set(self.layout.old_rows(name))
+        return set(self.files[name]) if source == "new" else set(self.layout.old_rows(name))
+
+    def place(self, name):
+        """Where a kind is read, for messages: its directory or its current table."""
+        return f"{repo.KIND[name].dir}/" if self.layout.source(name) == "new" else self.layout.old_name(name)
 
     def work_done(self):
         """{W: done}: `status = "DONE"` in the new layout, ✅ in the current table (one place, D-15)."""
@@ -847,12 +853,10 @@ def check_refs(tree, only=None):
 
 
 def _missing(idx, ref, which):
-    """Why a reference is not found, or None. A stage (`W4`) is found when it has a work."""
+    """Why a reference is not found, or None. A stage (`W4`, `M5`) is found when the table of the stages
+    has it (`repo.Layout.stages`), with or without a work."""
     if which == STAGE_KIND:
-        known = idx.known("W")
-        if known is None or _in_stage(known, ref):
-            return None
-        return f"{ref}: no work of the stage ({_where(idx, 'W')})"
+        return None if ref in idx.layout.stages() else _not_a_stage(idx.layout, ref)
     if which:
         if ref in idx.headings(which):
             return None
@@ -860,11 +864,11 @@ def _missing(idx, ref, which):
             " of the tools" if which == "tools" else ""
         )
     known = idx.known(repo.kind_of(ref).name)
-    return None if known is None or ref in known else f"{ref} is not found ({_where(idx, repo.kind_of(ref).name)})"
+    return None if known is None or ref in known else f"{ref} is not found ({idx.place(repo.kind_of(ref).name)})"
 
 
-def _where(idx, name):
-    return f"{repo.KIND[name].dir}/" if idx.layout.source(name) == "new" else idx.layout.old_name(name)
+def _not_a_stage(layout, ref):
+    return f"{ref}: not a stage of {repo.STAGES} ({', '.join(layout.stages())})"
 
 
 def check_relations(tree):
@@ -950,7 +954,7 @@ ISSUES = ("R", "RF")  # the kinds with `fix` and `decisions` (DF-5)
 NONE = "-"
 GAP_LABEL = re.compile(r"\s*- 空白[:：]\s*(.*)")
 GAP_TITLE = 40  # the characters of `空白` shown for an S with no title (DT-3)
-STAGE = re.compile(r"W\d+")
+STAGE = repo.STAGE_NAME  # the form of a stage; the stages are the table's (`repo.Layout.stages`)
 INF = float("inf")
 EXCERPT = 60  # the characters `back` shows around a mention
 
@@ -966,15 +970,19 @@ def id_key(id_):
     return (repo.KINDS.index(kind) if kind else len(repo.KINDS), tuple(map(int, re.findall(r"\d+", id_))), id_)
 
 
-def due_key(due):
+def due_key(due, stages):
     """The order of the deadlines of `before` (the one place to compare them), or None for another value:
-    a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `PH2` (after every W)."""
+    a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `M5` < `PH2` (after
+    every stage), the stages in the order of `stages` (the table)."""
     if due == "PH2":
         return (INF,)
-    if isinstance(due, str) and STAGE.fullmatch(due):
-        return (int(due[1:]), INF)
-    if isinstance(due, str) and repo.kind_of(due) is repo.KIND["W"]:
-        return tuple(map(int, due[1:].split("-")))
+    if not isinstance(due, str):
+        return None
+    if due in stages:
+        return (stages.index(due), INF)
+    stage = due.split("-")[0]
+    if repo.kind_of(due) is repo.KIND["W"] and stage in stages:
+        return (stages.index(stage), int(due.split("-")[1]))
     return None
 
 
@@ -1081,20 +1089,21 @@ class Ids:
             head = self.tree.head(rel)
             values = head.values or {}
             return Where(id_, rel, None, str(values.get("status", NONE)), title_of(id_, head), values)
-        if source == "old" and kind.name not in self._old:  # each table read once
-            self._old[kind.name] = (self.layout.old_lines(kind.name), self.layout.peek_rows(kind.name))
-        lines, done = self._old.get(kind.name, ({}, {}))
-        if id_ in lines:
-            return Where(id_, Path(kind.old[0]), lines[id_], "✅" if done.get(id_) else NONE, "", {})
-        if source == "old" and kind.dir:
+        if source == "old":
+            if kind.name not in self._old:  # each table read once
+                self._old[kind.name] = (self.layout.old_lines(kind.name), self.layout.peek_rows(kind.name))
+            lines, done = self._old[kind.name]
+            if id_ in lines:
+                return Where(id_, Path(kind.old[0]), lines[id_], "✅" if done.get(id_) else NONE, "", {})
             return Where(id_, None, None, NONE, "", {}, self.layout.old_name(kind.name))
-        # T while the plan §4 is there is read above; after it, the history (as C)
+        # None: the history (C, and T after the plan §4) or the second phase
         why = f"no {kind.dir}/" if kind.dir else "a kind with no file: the history or the second phase"
         return Where(id_, None, None, NONE, "", {}, why)
 
     def state(self, ref):
         """The status of an ID, or of a stage (`depends`, DF-6): DONE when every work of it is DONE, else
-        `残り N` (its works not DONE, `work_done`); `-` when it has none (`check` (b) says so)."""
+        `残り N` (its works not DONE, `work_done`); `-` when it has none (an M stage before its works are
+        made; a stage not in the table, which `check` (b) finds)."""
         if not STAGE.fullmatch(ref):
             return self.where(ref).status
         done = [d for w, d in self.index.work_done().items() if w.startswith(ref + "-")]
@@ -1270,10 +1279,8 @@ def relations(ids, kind, id_, values):
         for key in ("tasks", "amends", "amended_by"):
             add(key, _listed(values.get(key)))
         add("issue", ids.having(ISSUES, "decisions", id_))
-        import pending  # here: pending imports this module
-
         path = ids.root / repo.PENDING
-        entries, errors = pending.load(path) if path.is_file() else ([], [])
+        entries, errors = repo.load_pending(path) if path.is_file() else ([], [])
         out += [f"pending\t{e.kind}\t{e.target}\tuntil {e.until}" for e in entries if id_ in e.reasons]
         if errors:
             out.append(f"pending\t{repo.PENDING}: {len(errors)} error(s); `pending.py` shows them")
@@ -1320,9 +1327,10 @@ DECISION_FIELDS = ("tasks", "spec", "before", "group")
 LIST_ONLY = {"group": DECISIONS, "before": DECISIONS, "no_fix": ISSUES, "waiting": ("W",)}
 
 
-def _stage_arg(stage, ph2=False):
-    if stage is not None and not (STAGE.fullmatch(stage) or (ph2 and stage == "PH2")):
-        raise DocsError(f"{stage}: not a stage (`W4`{', `PH2`' if ph2 else ''})")
+def _stage_arg(layout, stage, ph2=False):
+    """`--stage`: a stage of the table (`repo.Layout.stages`), or PH2 with `ph2`."""
+    if stage is not None and not (stage in layout.stages() or (ph2 and stage == "PH2")):
+        raise DocsError(_not_a_stage(layout, stage) + (", or PH2" if ph2 else ""))
     return stage
 
 
@@ -1345,8 +1353,9 @@ def cmd_list(args):
             raise DocsError(f"--{opt.replace('_', '-')} is for {', '.join(kinds)}, not {kind}")
     if args.stage and kind == "X":
         raise DocsError("--stage is not for X")
-    _stage_arg(args.stage, kind in DECISIONS)
-    if args.before and (due_key(args.before) is None or args.before == "PH2"):
+    _stage_arg(ids.layout, args.stage, kind in DECISIONS)
+    stages = ids.layout.stages() if args.before else ()
+    if args.before and (due_key(args.before, stages) is None or args.before == "PH2"):
         raise DocsError(f"--before {args.before}: not a work or a stage (`W4-02`, `W4`)")
     status = ids.table(kind).fields.get("status")
     if args.status and (status is None or args.status not in status.values):
@@ -1360,8 +1369,8 @@ def cmd_list(args):
             continue
         if args.group is not None and v.get("group") != args.group:
             continue
-        due = due_key(v.get("before"))
-        if args.before and not (due is not None and due <= due_key(args.before)):
+        due = due_key(v.get("before"), stages)
+        if args.before and not (due is not None and due <= due_key(args.before, stages)):
             continue
         if (args.no_fix and v.get("fix")) or (args.waiting and id_ not in waits):
             continue
@@ -1395,7 +1404,7 @@ def cmd_changes(args):
     names = [n for n in DECISIONS if ids.is_new(n)]
     if not names:
         raise DocsError("the decisions are not in the new layout (no decisions/S/ …)")
-    _stage_arg(args.stage)
+    _stage_arg(ids.layout, args.stage)
     if args.section and not re.fullmatch(r"§\d+(?:\.\d+)*", args.section):
         raise DocsError(f"--section {args.section}: not a section (`§6`)")
     rows, undated = [], []
@@ -1589,7 +1598,9 @@ def next_id(root, kind, stage):
     """The next number of a kind: the largest of its files and drafts + 1 (W: in the stage)."""
     if (kind.name == "W") != bool(stage):
         raise DocsError("new W takes --stage (`W4`); the other kinds do not")
-    prefix = _stage_arg(stage) if stage else kind.name
+    if stage and not re.fullmatch(repo.KIND["W"].pattern, f"{stage}-1"):
+        raise DocsError(f"{stage}: not a stage of W (`W4`)")
+    prefix = stage or kind.name
     pattern = re.compile(re.escape(prefix) + r"-(\d+)(?:\.draft)?\.md")
     numbers = [int(m.group(1)) for p in (Path(root) / kind.dir).iterdir() if (m := pattern.fullmatch(p.name))]
     n = max(numbers, default=0) + 1
