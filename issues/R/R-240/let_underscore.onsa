@@ -1,0 +1,4 @@
+pub fn b(x: I64) -> I64 {
+  let _z = 5
+  x + _z
+}
