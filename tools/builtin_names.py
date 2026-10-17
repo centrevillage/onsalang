@@ -146,7 +146,7 @@ def table_column(spec_text, section, col):
         raise CheckError(f"{SPEC} §{section}: no table found")
     cells = []
     for row in rows[2:]:  # the header and the separator
-        parts = [c.strip() for c in row.strip().strip("|").split("|")]
+        parts = repo.table_cells(row)
         if len(parts) > col:
             cells.append(parts[col])
     return cells

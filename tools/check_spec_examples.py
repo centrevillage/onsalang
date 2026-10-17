@@ -47,7 +47,7 @@ def check(spec, tests_dir, pending_path, root=ROOT):
     `repo.spec_doc` joins it (the lines are shown in the files it was joined from)."""
     if not isinstance(spec, repo.Joined):
         spec = repo.Joined(Path(spec).read_text(encoding="utf-8"), ((Path(spec).name, 1),))
-    spec_text, spec_name = spec.text, spec_shown(spec)
+    spec_text, spec_name = spec.text, spec.shown
     corpus = {
         p: spec_blocks.normalize(p.read_text(encoding="utf-8")).split("\n")
         for p in sorted(Path(tests_dir).rglob("*.onsa"))
@@ -99,11 +99,6 @@ def check(spec, tests_dir, pending_path, root=ROOT):
     return problems, notes
 
 
-def spec_shown(spec):
-    """The name of the spec in messages: its file, or `spec/` when it is joined from the chapters."""
-    return Path(spec.parts[0][0]).name if len(spec.parts) == 1 else f"{repo.SPEC_DIR}/"
-
-
 def _hints(sid, all_ids):
     """Blocks that look like the one an outdated entry meant: same hash, or same section and first line."""
     old = spec_blocks.parse_id(sid)
@@ -130,7 +125,7 @@ def main(argv=None):
     for p in problems:
         print(p)
     if problems:
-        name = args.spec.name if args.spec else spec_shown(spec)
+        name = args.spec.name if args.spec else spec.shown
         print(f"{len(problems)} problem(s) between {name} and {pending.show_path(args.tests, ROOT)}")
         return 1
     print(f"all spec examples are covered by {pending.show_path(args.tests, ROOT)} ({len(notes)} pending)")

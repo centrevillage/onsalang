@@ -121,50 +121,8 @@ def line_kinds(lines):
     return kinds, (start if fence else None)
 
 
-def code_spans(text):
-    """The (start, end) of the code spans of a line: a run of backticks opens one only when a run
-    of the same length follows, which closes it (a run with no partner is plain text). Outside the
-    spans a backslash escapes the character after it."""
-    spans, i, n = [], 0, len(text)
-    while i < n:
-        if text[i] == "\\":
-            i += 2
-            continue
-        if text[i] != "`":
-            i += 1
-            continue
-        j = i
-        while j < n and text[j] == "`":
-            j += 1
-        k = j
-        while (k := text.find("`" * (j - i), k)) != -1:
-            end = k + j - i
-            if end == n or text[end] != "`":
-                break
-            while end < n and text[end] == "`":
-                end += 1
-            k = end
-        if k == -1:
-            i = j
-        else:
-            spans.append((i, k + j - i))
-            i = k + j - i
-    return spans
-
-
-def _plain(text):
-    """The indexes of the characters outside the code spans and not escaped, in order."""
-    code = set()
-    for a, b in code_spans(text):
-        code.update(range(a, b))
-    i = 0
-    while i < len(text):
-        if text[i] == "\\":
-            i += 2
-            continue
-        if i not in code:
-            yield i
-        i += 1
+# The code spans and the cells of a row are read in `repo` (its readers of the tables use them too, D-15).
+code_spans, _plain, table_cells = repo.code_spans, repo.plain, repo.table_cells
 
 
 # ---------------------------------------------------------------- fmt
@@ -602,18 +560,6 @@ def _shown(v):
         return f"a {type(v).__name__}"
 
 
-def table_cells(row):
-    """The cells of a table row, stripped: `\\|` and a `|` in a code span do not divide."""
-    s = row.strip()
-    bars = [i for i in _plain(s) if s[i] == "|"]
-    cells = [s[a + 1 : b] for a, b in zip([-1, *bars], [*bars, len(s)])]
-    if bars[:1] == [0]:
-        cells = cells[1:]
-    if len(s) > 1 and bars[-1:] == [len(s) - 1]:
-        cells = cells[:-1]
-    return [c.strip() for c in cells]
-
-
 def field_table(tree, kind):
     """The field table of a kind's directory: under FIELDS_HEAD in its README, else in the README one
     up (one table for S, D, K, Q and A). A Finding (one for the directory) when it is broken."""
@@ -784,6 +730,8 @@ def check_heads(tree):
         if not files:
             yield Finding(Path(kind.dir), None, "no file of an ID; the checks would pass reading nothing")
         for id_, rel in files.items():
+            if name == "W" and (why := _missing(idx, id_.split("-")[0], STAGE_KIND)):
+                yield Finding(rel, 1, f"{why}; the stage of {id_}")
             head = tree.head(rel)
             if head.values is None:
                 yield Finding(rel, head.error_line, head.error)
@@ -994,7 +942,7 @@ def due_key(due, stages):
     """The order of the deadlines of `before` (the one place to compare them), or None for another value:
     a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `M5` < `PH2` (after
     every stage), the stages in the order of `stages` (the table)."""
-    if due == "PH2":
+    if due == repo.PHASE2:
         return (INF,)
     if not isinstance(due, str):
         return None
@@ -1474,8 +1422,8 @@ LIST_ONLY = {"group": DECISIONS, "before": DECISIONS, "no_fix": ISSUES, "waiting
 
 def _stage_arg(layout, stage, ph2=False):
     """`--stage`: a stage of the table (`repo.Layout.stages`), or PH2 with `ph2`."""
-    if stage is not None and not (stage in layout.stages() or (ph2 and stage == "PH2")):
-        raise DocsError(_not_a_stage(layout, stage) + (", or PH2" if ph2 else ""))
+    if stage is not None and not (stage in layout.stages() or (ph2 and stage == repo.PHASE2)):
+        raise DocsError(_not_a_stage(layout, stage) + (f", or {repo.PHASE2}" if ph2 else ""))
     return stage
 
 
@@ -1500,7 +1448,7 @@ def cmd_list(args):
         raise DocsError("--stage is not for X")
     _stage_arg(ids.layout, args.stage, kind in DECISIONS)
     stages = ids.layout.stages() if args.before else ()
-    if args.before and (due_key(args.before, stages) is None or args.before == "PH2"):
+    if args.before and (due_key(args.before, stages) is None or args.before == repo.PHASE2):
         raise DocsError(f"--before {args.before}: not a work or a stage (`W4-02`, `W4`)")
     status = ids.table(kind).fields.get("status")
     if args.status and (status is None or args.status not in status.values):
@@ -1525,7 +1473,9 @@ def cmd_list(args):
         for id_, v in rows:
             groups.setdefault(id_.split("-")[0] if kind == "W" else kind, []).append(str(v.get("status", NONE)))
         known = [str(s) for s in (status.values if status else ())]
-        for group, found in sorted(groups.items(), key=lambda g: id_key(g[0] + "-0")):
+        order = ids.layout.stages() if kind == "W" else ()
+        at = {s: i for i, s in enumerate(order)}
+        for group, found in sorted(groups.items(), key=lambda g: (at.get(g[0], len(order)), id_key(g[0] + "-0"))):
             order = known + sorted(set(found) - set(known))
             counts = ", ".join(f"{s} {found.count(s)}" for s in order if s in found)
             print(f"{group}\t{counts} ({len(found)})")
@@ -1777,7 +1727,7 @@ def cmd_new(args):
     ids = Ids(root)
     kind = ids.require(args.kind)
     table = ids.table(kind.name)
-    id_ = next_id(root, kind, args.stage)
+    id_ = next_id(root, kind, _stage_arg(ids.layout, args.stage))
     values, why = parse_fields(table, args.fields)
     if args.title is not None and ("\n" in args.title or not args.title.strip()):
         why.append("the title is one line, not empty")

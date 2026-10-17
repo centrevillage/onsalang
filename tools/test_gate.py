@@ -1968,6 +1968,13 @@ class BuiltinNames(unittest.TestCase):
                 with self.assertRaisesRegex(builtin_names.CheckError, re.escape(needle)):
                     builtin_names.builtin_names(real.replace(old, new, 1), [], baselines=baselines)
 
+    def test_a_bar_in_a_code_span_does_not_divide_a_cell(self):
+        # X-2 U7c: the columns of the tables of the spec are read by repo.table_cells
+        row = "| 関数 | `fn(A) -> R uses {E}` | Copy |"
+        self.assertIn(row, NAMES_SPEC)
+        types = builtin_names.builtin_types(NAMES_SPEC.replace(row, "| `a | b` | `Pipe` | Copy |"))
+        self.assertIn("Pipe", types)
+
     def test_real_baselines_hold(self):
         # the baselines of the module hold for the spec of the repository
         with mock.patch.object(builtin_names, "BASELINES", BUILTIN_BASELINES):
@@ -4523,6 +4530,23 @@ class DocsLayout(DocsTree):
 
     # ------------------------------------------------ the IDs and their paths
 
+    def test_the_forms_of_the_ids_are_the_kinds(self):
+        # X-2 U7c: the reasons of tests/pending.toml and the IDs of the SPEC-GAP marks are spelled by repo.KINDS
+        for form, good, bad in ((pending.REASON, ("S-1", "R-22"), ("A-1", "RF-1", "S-1a", "S-", "W1-01", "xS-1")),
+                                (gap_marks.ID, ("S-1", "R-22", "A-3"), ("RF-1", "D-1", "S-1 ", "NEW"))):  # fmt: skip
+            self.assertEqual([x for x in good if form.fullmatch(x)], list(good))
+            self.assertEqual([x for x in bad if form.fullmatch(x)], [])
+        self.assertEqual(pending.REASON.pattern, repo.id_form("S", "R").pattern)
+        self.assertEqual((pending.PHASE2, repo.kind_of(repo.PHASE2).name), (repo.PHASE2, repo.PHASE2))
+
+    def test_the_cells_of_a_row(self):
+        # X-2 U7c: one way to read a row (repo.table_cells): `\|` and a `|` in a code span do not divide
+        self.assertEqual(repo.table_cells("| a | `b | c` | d \\| e |"), ["a", "`b | c`", "d \\| e"])
+        self.assertEqual(repo.table_cells("a | b"), ["a", "b"])
+        self.assertEqual([repo._first_cell(x) for x in ("| `W|1` | x |", "| W2", "W3 | x", "|")], ["`W|1`", "W2", "", ""])
+        text = "| コード | 内容 | M |\n|---|---|---|\n| E0700 | `a | b` | 第 2 期 |\n| E0705 | x | y \\| 第 2 期 |\n"
+        self.assertEqual(repo.phase2_codes(text), {"E0700"})
+
     def test_the_kinds_and_the_paths(self):
         self.assertEqual([repo.kind_of(i).name for i in ("RF-3", "R-3", "W3-13", "T5-8", "PH2", "C-40", "S-01")],
                          ["RF", "R", "W", "T", "PH2", "C", "S"])  # fmt: skip
@@ -4767,6 +4791,10 @@ class DocsLayout(DocsTree):
         (self.root / "decisions/S/R-1.md").unlink()
         (self.root / "decisions/K").mkdir()
         self.assertEqual(self.check(), (1, ["decisions/K: no file of an ID; the checks would pass reading nothing"]))
+        (self.root / "decisions/K").rmdir()
+        # X-2 U7c: the stage of a work (its ID) is a stage of the table of the stages
+        self.write("tasks/W/W3-01.md", '+++\nstatus = "PLAN"\n+++\n# W3-01 x\n')
+        self.assertEqual(self.check(), (1, ["tasks/W/W3-01.md:1: W3: not a stage of tasks/stages.md (W1, W2, M5, M9); the stage of W3-01"]))
 
     def test_check_a_broken_field_table_is_one_finding(self):
         self.layout()
@@ -4851,6 +4879,26 @@ class DocsLayout(DocsTree):
         fields = {key for t in tables for key, f in t.fields.items() if f.base == "ID"}
         self.assertEqual(fields, set(docs_tool.RESTS_ON))
         self.assertEqual(list(docs_tool.undirected(tree)), [])
+
+    def test_the_stages_of_the_works_and_the_carried_label_of_the_real_tree(self):
+        # X-2 U7c: (a) looks at the stage of every work of the real tree, and each is in the table
+        tree = docs_tool.Tree(repo.ROOT, [])
+        seen = []
+        real = docs_tool._missing
+
+        def spy(idx, ref, which):
+            seen.append((ref, which))
+            return real(idx, ref, which)
+
+        with mock.patch.object(docs_tool, "_missing", spy):
+            found = [str(f) for f in docs_tool.check_heads(tree) if "not a stage" in f.message]
+        stages = [ref for ref, which in seen if which == docs_tool.STAGE_KIND]
+        self.assertEqual(len(stages), len(tree.index.files["W"]))
+        self.assertGreater(len(stages), 0)
+        self.assertEqual(found, [])
+        # `ticket` looks for the label 持ち越し (CARRIED): it is a label of the body of tasks/W/README.md
+        labels = docs_tool.body_labels(tree, repo.KIND["W"])
+        self.assertEqual([x for x in labels if docs_tool.CARRIED.fullmatch(f"- {x}:")], ["持ち越し"], labels)
 
     def test_amends_is_no_field(self):
         # X-2 U7a: `amends` and `amended_by` are out of the field table and of the tool; written, (a) finds them
@@ -5093,6 +5141,15 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.run_("list", "S", "--status", "OPEN"), (0, [s2, "docs list: 1 of 2 S"]))
         self.assertEqual(self.run_("list", "S", "--count"), (0, ["S\tOPEN 1, DECIDED 1 (2)", "docs list: 2 of 2 S"]))
         self.assertEqual(self.run_("list", "W", "--count"), (0, ["W1\tDOING 1, DONE 1 (2)", "docs list: 2 of 2 W"]))
+        # X-2 U7c: the stages in the order of the table, then the ones not in it
+        for rel in ("tasks/W/W2-01.md", "tasks/W/W3-01.md", "tasks/W/W10-01.md"):
+            self.write(rel, '+++\nstatus = "PLAN"\n+++\n# x\n')
+        self.edit("tasks/stages.md", "| W1 | 基盤 |\n| W2 | 直し |\n", "| W2 | 直し |\n| W1 | 基盤 |\n")
+        self.assertEqual(self.run_("list", "W", "--count"), (0, ["W2\tPLAN 1 (1)", "W1\tDOING 1, DONE 1 (2)", "W3\tPLAN 1 (1)",
+                                                                  "W10\tPLAN 1 (1)", "docs list: 5 of 5 W"]))  # fmt: skip
+        self.edit("tasks/stages.md", "| W2 | 直し |\n| W1 | 基盤 |\n", "| W1 | 基盤 |\n| W2 | 直し |\n")
+        for rel in ("tasks/W/W2-01.md", "tasks/W/W3-01.md", "tasks/W/W10-01.md"):
+            (self.root / rel).unlink()
         w2 = "W1-02\tDOING\tsize=M depends=W1-01 doing=U2/i\t式"
         self.assertEqual(self.run_("list", "W", "--waiting"), (0, [w2, "docs list: 1 of 2 W"]))
         self.assertEqual(self.run_("list", "W", "--stage", "W2")[1], ["docs list: 0 of 2 W"])
@@ -5299,7 +5356,10 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.read("decisions/S/S-8.md"), '+++\nstatus = "OPEN"\n+++\n# S-8\n\n- 空白:\n- 決定:\n')
         self.assertEqual(self.run_("new", "W", "--stage", "W1", "--title", "次")[1], ["tasks/W/W1-03.md"])
         self.assertEqual(self.read("tasks/W/W1-03.md"), '+++\nstatus = "PLAN"\n+++\n# W1-03 次\n')
-        self.assertEqual(self.run_("new", "W", "--stage", "W12")[1], ["tasks/W/W12-01.md"])
+        # X-2 U7c: a stage not in the table of the stages is refused; so is a work of `depends` that is not there
+        self.assertEqual(self.run_("new", "W", "--stage", "W12"), (2, ["docs.py new: W12: not a stage of tasks/stages.md (W1, W2, M5, M9)"]))
+        self.assertRefused(("new", "W", "--stage", "W1", "depends=W1-09"), ["tasks/W/W1-04.md:3: depends: W1-09 is not found (tasks/W/)"])
+        self.assertFalse(any((self.root / "tasks/W").glob("W12-*")) or (self.root / "tasks/W/W1-04.md").exists())
         self.assertEqual(self.run_("check")[0], 0)
         # nothing is written: a field required, a value, a relation, the title, a swap file
         self.edit("issues/R/README.md", "高 / 中 / 低 | いいえ", "高 / 中 / 低 | はい")

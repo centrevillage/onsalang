@@ -44,7 +44,7 @@ SPELLING = re.compile(r"spec[\s_-]*gap", re.I)
 # The files that write the form as data (this check and its self-tests); they hold no mark.
 OWN = ("tools/gap_marks.py", "tools/test_gate.py")
 HASH_COMMENT = {".py", ".sh", ".toml"}  # `#` comments; every other file uses `//`
-ID = re.compile(r"[SRA]-\d+")
+ID = repo.id_form("S", "R", "A")
 
 
 def mark_form(leader):

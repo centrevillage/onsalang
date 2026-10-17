@@ -1,7 +1,7 @@
 """What the gate's tools share about the repository (D-15: each in one place).
 
 - the paths of the spec and of the documents with tables;
-- reading a document;
+- reading a document, and the cells of a row of a table (`table_cells`, with the code spans of a line);
 - running `onsa_cases` (the test runner's and the compiler's lists) and
   reading its JSON;
 - reading the table of the codes (`tasks/diag-codes.md`): the retired codes and the codes of the second phase;
@@ -62,6 +62,68 @@ def cases_json(root, cmd, *args):
         return json.loads(out.stdout)
     except json.JSONDecodeError as e:
         raise RepoError(f"`{' '.join(argv)}` printed no JSON: {e}") from e
+
+
+# ---------------------------------------------------------------- a line of Markdown: the code spans, the cells of a table
+
+
+def code_spans(text):
+    """The (start, end) of the code spans of a line: a run of backticks opens one only when a run
+    of the same length follows, which closes it (a run with no partner is plain text). Outside the
+    spans a backslash escapes the character after it."""
+    spans, i, n = [], 0, len(text)
+    while i < n:
+        if text[i] == "\\":
+            i += 2
+            continue
+        if text[i] != "`":
+            i += 1
+            continue
+        j = i
+        while j < n and text[j] == "`":
+            j += 1
+        k = j
+        while (k := text.find("`" * (j - i), k)) != -1:
+            end = k + j - i
+            if end == n or text[end] != "`":
+                break
+            while end < n and text[end] == "`":
+                end += 1
+            k = end
+        if k == -1:
+            i = j
+        else:
+            spans.append((i, k + j - i))
+            i = k + j - i
+    return spans
+
+
+def plain(text):
+    """The indexes of the characters outside the code spans and not escaped, in order."""
+    code = set()
+    for a, b in code_spans(text):
+        code.update(range(a, b))
+    i = 0
+    while i < len(text):
+        if text[i] == "\\":
+            i += 2
+            continue
+        if i not in code:
+            yield i
+        i += 1
+
+
+def table_cells(row):
+    """The cells of a table row, stripped: `\\|` and a `|` in a code span do not divide (the one way the
+    tools read a row, D-15)."""
+    s = row.strip()
+    bars = [i for i in plain(s) if s[i] == "|"]
+    cells = [s[a + 1 : b] for a, b in zip([-1, *bars], [*bars, len(s)])]
+    if bars[:1] == [0]:
+        cells = cells[1:]
+    if len(s) > 1 and bars[-1:] == [len(s) - 1]:
+        cells = cells[:-1]
+    return [c.strip() for c in cells]
 
 
 # ---------------------------------------------------------------- tests/pending.toml (read here, validated by tools/pending.py)
@@ -185,7 +247,7 @@ def phase2_codes(text, doc=None):
     for line in text.split("\n"):
         if not line.startswith("|"):
             continue
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        cells = table_cells(line)
         if len(cells) < 2 or cells[-1] != PHASE2_CELL:
             continue
         first = cells[0]
@@ -238,6 +300,7 @@ class Kind:
     bare: bool = True  # looked for as a bare ID in the text
 
 
+PHASE2 = "PH2"  # the second phase: in `tasks` and `before`, and an `until` of tests/pending.toml (K-13 rule 3)
 KINDS = (
     Kind("S", r"S-\d+", "decisions/S", True),
     Kind("D", r"D-\d+", "decisions/D"),
@@ -251,7 +314,7 @@ KINDS = (
     # the kinds whose files are in the history: their IDs are not checked (X-2 DF-6 `refs`)
     Kind("C", r"C-\d+"),
     Kind("T", r"T\d+-\d+"),
-    Kind("PH2", r"PH2", bare=False),  # the second phase in `tasks` (X-2 DF-4); not an ID in the text
+    Kind(PHASE2, re.escape(PHASE2), bare=False),  # the second phase in `tasks` (X-2 DF-4); not an ID in the text
 )
 KIND = {k.name: k for k in KINDS}
 # A bare ID: not after a letter, a digit, `_` or `-`, not before a digit (no `F-8` in `UTF-8`).
@@ -261,6 +324,12 @@ ID_RE = re.compile(
     + r")(?![0-9])"
 )
 SECTION_RE = re.compile(r"(?:(?P<tools>tools\.md) )?§(?P<num>\d+(?:\.\d+)*)")
+
+
+def id_form(*names):
+    """The spelling of an ID of one of the kinds `names` (`id_form("S", "R")`), to match the whole of a
+    string (`fullmatch`): the patterns of KINDS, not written again (D-15)."""
+    return re.compile("|".join(f"(?:{KIND[n].pattern})" for n in names))
 
 
 def kind_of(id_):
@@ -343,7 +412,7 @@ class Layout:
 
 def _first_cell(line):
     """The first cell of a table row, stripped ("" for another line)."""
-    return line.split("|")[1].strip() if line.startswith("|") and line.count("|") > 1 else ""
+    return table_cells(line)[0] if line.startswith("|") else ""
 
 
 # ---------------------------------------------------------------- the spec as one text (X-2 DS-4, DF-2)
@@ -373,6 +442,11 @@ class Joined:
 
     text: str
     parts: tuple
+
+    @property
+    def shown(self):
+        """Its name in messages: its file when it is of one, else the spec's (`spec/`, joined from the chapters)."""
+        return Path(self.parts[0][0]).as_posix() if len(self.parts) == 1 else SPEC_SHOWN
 
     def locate(self, line):
         """(file, line in it) of a line (from 1) of the text."""

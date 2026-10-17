@@ -122,14 +122,14 @@ TARGET_FORMS = {
 # The closed list of the forms of other languages (S-250): the rows a
 # `foreign-form` entry names.
 
-REASON = re.compile(r"[SR]-\d+")
+REASON = repo.id_form("S", "R")
 # A spec section as a reason, only of `until = "PH2"` (the spec §20 sets what the first phase is).
 SECTION = re.compile(r"§\d+(?:\.\d+)*")
 WORK = re.compile(repo.KIND["W"].pattern)
 
 # The second phase as an `until` (K-13 rule 3) and the kinds that may use it. The stage that ends the
 # first phase is the last of the table of the stages (`Docs.stages`).
-PHASE2 = "PH2"
+PHASE2 = repo.PHASE2
 PHASE2_KINDS = ("diag-code",)
 
 # The documents keep the IDs in table rows `| ID |`, `| ID ✅ |` (done).

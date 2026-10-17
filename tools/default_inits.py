@@ -56,7 +56,7 @@ def sources(root):
         for b in blocks:
             rel, first = doc.locate(b.line)
             out.append(Source(Path(rel).as_posix(), b.code, first))
-        counts[f"{_name(doc)} blocks"] = len(blocks)
+        counts[f"{doc.shown} blocks"] = len(blocks)
     for d in FILE_DIRS:
         files = [
             p
@@ -69,11 +69,6 @@ def sources(root):
         if counts[what] == 0:
             problems.append(f"no {what} to read; the check would pass reading nothing")
     return out, counts, problems
-
-
-def _name(doc):
-    """A document in the counts: its file, or `spec/` when it is joined from the chapters."""
-    return Path(doc.parts[0][0]).as_posix() if len(doc.parts) == 1 else f"{repo.SPEC_DIR}/"
 
 
 def check(root=repo.ROOT, cmd=repo.CASES_CMD):

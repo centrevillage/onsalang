@@ -1,4 +1,4 @@
-"""The cases the decisions and the plan name (W2-01 ticket): the generator forces them into
+"""The cases the decisions and the files of the works name (W2-01 ticket): the generator forces them into
 the `edge` sections with a note, and the gate checks they are in the data.
 
 Each entry is (operation id, args, note). The note is the decision or the spec section.
