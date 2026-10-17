@@ -10,9 +10,12 @@
 //! order (X-3, X3-1a): the `.fixK` files are copies of the implementation's
 //! output (Q-04), change detectors, not the spec's expectation. A copy that
 //! differs or is missing is [`Problem::FixCopy`], never a failure of the
-//! contract and never pending; `UPDATE_GOLDEN=1` rewrites it (creates it,
-//! removes the copy of a file no candidate edits) and the parent reads the
-//! change. The number (`fixes = N`) is the test's and is never rewritten. A
+//! contract: no entry of `tests/pending.toml` silences it, and a case listed
+//! as a whole does not judge, rewrite or count its copies
+//! ([`crate::run::reconcile`]). `UPDATE_GOLDEN=1` rewrites it (creates it,
+//! removes the copy of a file no candidate edits), unless the guard refuses
+//! changing or removing a copy ([`crate::copy_guard`]), and the parent reads
+//! the change. The number (`fixes = N`) is the test's and is never rewritten. A
 //! copy is compared token by token:
 //! **the width of whitespace is ignored; every token but whitespace (newlines
 //! and comments included) is compared by kind and text, in order, with the
@@ -30,17 +33,21 @@
 //! 3. the K-th candidates of different diagnostics do not overlap (else split
 //!    the case: an error of the case);
 //! 4. the result matches the copy `F.fixK` (a file the candidates edit has
-//!    one; a file they do not edit has none): else a `FixCopy`;
+//!    one; a file they do not edit has none): else a `FixCopy`; when
+//!    rewriting, a K that changes or removes a copy goes through the guard
+//!    first, and is written whole or not at all;
 //!
 //! and over the repository ([`orphans`]):
 //! 5. a `.fixK` file that no case declares fails.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use onsa_diag::{Diagnostic, FileId, SourceMap};
 use onsa_syntax::TokenKind;
 use onsa_syntax::token::{Gap, gap_before};
 
+use crate::golden::Update;
 use crate::run::Problem;
 
 /// The expectation of candidate `k` for the source file at `source`: `<source>.fix<k>`.
@@ -67,17 +74,29 @@ pub struct CopyCheck {
     pub copies: usize,
     /// The copies written or removed (`UPDATE_GOLDEN=1`).
     pub rewritten: Vec<PathBuf>,
+    /// Those of `rewritten` the guard refused and `UPDATE_GOLDEN=worse`
+    /// wrote, with the diagnostics only the new texts report.
+    pub forced: Vec<(PathBuf, String)>,
+    /// The candidates K whose copies went through the guard.
+    pub guarded: usize,
 }
 
+/// The guard of the copies of one K ([`crate::copy_guard::case`]): the
+/// texts of the copies and the texts after the candidates, each in place of
+/// its file; the diagnostics only the second reports, or why it cannot tell.
+pub type Guard<'a> = &'a dyn Fn(&BTreeMap<FileId, String>, &BTreeMap<FileId, String>) -> Result<Vec<String>, String>;
+
 /// Compare the candidates of `diagnostics` with the `.fixK` files. `files` are
-/// the source files of the case and where they are on disk. `write`: rewrite
-/// the copies that differ (`UPDATE_GOLDEN=1` and a case that is not pending).
+/// the source files of the case and where they are on disk. `update`: whether
+/// to rewrite the copies that differ (`Off` for a pending case), through
+/// `guard` when a copy changes or goes.
 pub fn compare(
     sources: &SourceMap,
     files: &[(FileId, PathBuf)],
     diagnostics: &[Diagnostic],
     n: u32,
-    write: bool,
+    update: Update,
+    guard: Guard<'_>,
 ) -> CopyCheck {
     let mut done = CopyCheck::default();
     let out = &mut done.problems;
@@ -130,6 +149,10 @@ pub fn compare(
                 continue;
             }
         };
+        // Every copy is read first: the old side of the guard holds them all.
+        let mut old: BTreeMap<FileId, String> = BTreeMap::new();
+        let mut plans: Vec<(PathBuf, Option<&String>, bool)> = Vec::new();
+        let mut unread = false;
         for (file, disk) in files {
             let copy = path(disk, k);
             let name = copy.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -138,36 +161,82 @@ pub fn compare(
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
                 Err(e) => {
                     out.push(Problem::Case(format!("fixes: cannot read {name}: {e}")));
+                    unread = true;
                     continue;
                 }
             };
             let source = sources.file(*file).name();
-            let why = match (texts.get(file), &expected) {
-                (None, None) => continue,
-                (Some(actual), Some(expected)) => {
-                    done.copies += 1;
-                    match first_difference(expected, actual) {
-                        None => continue,
-                        Some(diff) => format!("{source} after the candidates {k} differs from the copy {name}: {diff}"),
-                    }
-                }
-                (Some(_), None) => format!("the candidates {k} edit {source}, but its copy {name} is missing"),
-                (None, Some(_)) => {
-                    done.copies += 1;
-                    format!("no candidate {k} edits {source}, but it has the copy {name}")
-                }
+            let actual = texts.get(file);
+            let why = match (actual, &expected) {
+                (None, None) => None,
+                (Some(actual), Some(expected)) => first_difference(expected, actual)
+                    .map(|diff| format!("{source} after the candidates {k} differs from the copy {name}: {diff}")),
+                (Some(_), None) => Some(format!("the candidates {k} edit {source}, but its copy {name} is missing")),
+                (None, Some(_)) => Some(format!("no candidate {k} edits {source}, but it has the copy {name}")),
             };
-            if !write {
-                out.push(Problem::FixCopy(format!("fixes: {why} (UPDATE_GOLDEN=1 rewrites the copy)")));
-                continue;
+            let had = expected.is_some();
+            if let Some(t) = expected {
+                done.copies += 1;
+                old.insert(*file, t);
             }
-            let written = match texts.get(file) {
+            match why {
+                None => {}
+                Some(why) if !update.writes() => {
+                    out.push(Problem::FixCopy(format!("fixes: {why} (UPDATE_GOLDEN=1 rewrites the copy)")))
+                }
+                Some(_) => plans.push((copy, actual, had)),
+            }
+        }
+        if unread || plans.is_empty() {
+            continue;
+        }
+        // Changing or removing a copy goes through the guard; creating one does not.
+        let mut forced = None;
+        if plans.iter().any(|(_, _, had)| *had) {
+            done.guarded += 1;
+            let names = || {
+                plans
+                    .iter()
+                    .map(|(c, _, _)| c.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            match guard(&old, &texts) {
+                Ok(found) if found.is_empty() => {}
+                Ok(found) if update == Update::Worse => forced = Some(found.join(", ")),
+                Ok(found) => {
+                    out.push(Problem::FixCopy(format!(
+                        "fixes: {}",
+                        crate::copy_guard::refused(
+                            &format!("the copies of the candidates {k} ({})", names()),
+                            &found,
+                            "a property of `[[test.fix]]` (`clean`, `same_code`, `leaves`)"
+                        )
+                    )));
+                    continue;
+                }
+                Err(e) => {
+                    out.push(Problem::FixCopy(format!(
+                        "fixes: the copies of the candidates {k} ({}) are not rewritten: {e}",
+                        names()
+                    )));
+                    continue;
+                }
+            }
+        }
+        for (copy, actual, _) in plans {
+            let written = match actual {
                 Some(actual) => std::fs::write(&copy, actual),
                 None => std::fs::remove_file(&copy),
             };
             match written {
-                Ok(()) => done.rewritten.push(copy),
-                Err(e) => out.push(Problem::Case(format!("fixes: cannot rewrite {name}: {e}"))),
+                Ok(()) => {
+                    if let Some(found) = &forced {
+                        done.forced.push((copy.clone(), found.clone()));
+                    }
+                    done.rewritten.push(copy);
+                }
+                Err(e) => out.push(Problem::Case(format!("fixes: cannot rewrite {}: {e}", copy.display()))),
             }
         }
     }
@@ -312,7 +381,11 @@ mod tests {
             Span::new(a, 0, 7),
             "var",
         ));
-        let run = |n: u32, write: bool| compare(&sources, &files, std::slice::from_ref(&d), n, write);
+        let pass: Guard = &|_, _| Ok(Vec::new());
+        let run = |n: u32, write: bool| {
+            let update = if write { Update::Rewrite } else { Update::Off };
+            compare(&sources, &files, std::slice::from_ref(&d), n, update, pass)
+        };
         let copy = |r: &CopyCheck, text: &str| {
             r.problems.len() == 1 && matches!(&r.problems[0], Problem::FixCopy(m) if m.contains(text))
         };
@@ -346,11 +419,93 @@ mod tests {
         );
         assert!(!dir.join("a.onsa.fix2").exists());
         let two = d.clone().with_fix(Fix::replace("val", Span::new(a, 0, 7), "let"));
-        let r = compare(&sources, &files, std::slice::from_ref(&two), 1, true);
+        let r = compare(&sources, &files, std::slice::from_ref(&two), 1, Update::Rewrite, pass);
         assert!(
             r.problems.iter().any(|p| matches!(p, Problem::Failed(m) if m.contains("more than `fixes = 1`"))),
             "{r:?}"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The guard (X-3): changing or removing a copy asks it, creating one
+    /// does not; a refusal writes nothing of the K, `worse` writes it all and
+    /// records it, an error of the guard writes nothing even with `worse`.
+    /// The old side holds every copy of the K, the new side the texts after.
+    #[test]
+    fn the_guard_decides_a_rewriting_of_the_whole_candidate() {
+        use onsa_diag::{Code, Fix, Span, Stage};
+        use std::cell::RefCell;
+        let dir = crate::c::scratch_dir("onsa_test", "fix_guard");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut sources = SourceMap::default();
+        let a = sources.add("a.onsa", "let mut n = 0\n");
+        let b = sources.add("b.onsa", "x\n");
+        let files = vec![(a, dir.join("a.onsa")), (b, dir.join("b.onsa"))];
+        let (copy_a, copy_b) = (dir.join("a.onsa.fix1"), dir.join("b.onsa.fix1"));
+        let d = Diagnostic::new(Stage::Syntax, Code::E0020, Span::new(a, 0, 7), "m").with_fix(Fix::replace(
+            "var",
+            Span::new(a, 0, 7),
+            "var",
+        ));
+        type Texts = BTreeMap<FileId, String>;
+        let seen: RefCell<Vec<(Texts, Texts)>> = RefCell::new(Vec::new());
+        let answer: RefCell<Result<Vec<String>, String>> = RefCell::new(Ok(vec!["E0302 at b.onsa:1:1".into()]));
+        let guard: Guard = &|old, new| {
+            seen.borrow_mut().push((old.clone(), new.clone()));
+            answer.borrow().clone()
+        };
+        let run = |update| compare(&sources, &files, std::slice::from_ref(&d), 1, update, guard);
+        // Creating: the guard is not asked, even when it would refuse.
+        let r = run(Update::Rewrite);
+        assert!(r.problems.is_empty() && r.rewritten == [copy_a.clone()] && r.guarded == 0, "{r:?}");
+        assert!(seen.borrow().is_empty());
+        // Changing one copy and removing another: refused, nothing written.
+        std::fs::write(&copy_a, "var n = 1\n").unwrap();
+        std::fs::write(&copy_b, "y\n").unwrap();
+        let r = run(Update::Rewrite);
+        assert_eq!(r.guarded, 1);
+        assert!(r.rewritten.is_empty(), "{r:?}");
+        let refused = |m: &str| {
+            m.contains("does not rewrite the copies of the candidates 1 (a.onsa.fix1, b.onsa.fix1)")
+                && m.contains("reports E0302 at b.onsa:1:1")
+                && m.contains("`leaves`")
+        };
+        assert!(matches!(&r.problems[..], [Problem::FixCopy(m)] if refused(m)), "{r:?}");
+        assert_eq!(std::fs::read_to_string(&copy_a).unwrap(), "var n = 1\n");
+        assert!(copy_b.exists());
+        let (old, new) = seen.borrow()[0].clone();
+        assert_eq!(old, BTreeMap::from([(a, "var n = 1\n".to_string()), (b, "y\n".to_string())]));
+        assert_eq!(new, BTreeMap::from([(a, "var n = 0\n".to_string())]));
+        // An error of the guard: nothing written, even with `worse`.
+        *answer.borrow_mut() = Err("the check of the copies ends in an internal error: x".into());
+        let r = run(Update::Worse);
+        assert!(r.rewritten.is_empty() && r.forced.is_empty(), "{r:?}");
+        assert!(
+            matches!(&r.problems[..], [Problem::FixCopy(m)] if m.contains("are not rewritten: the check")),
+            "{r:?}"
+        );
+        // `worse`: written, and recorded.
+        *answer.borrow_mut() = Ok(vec!["E0302 at b.onsa:1:1".into()]);
+        let r = run(Update::Worse);
+        assert!(r.problems.is_empty(), "{r:?}");
+        assert_eq!(r.rewritten, [copy_a.clone(), copy_b.clone()]);
+        assert_eq!(
+            r.forced.iter().map(|(p, f)| (p.clone(), f.as_str())).collect::<Vec<_>>(),
+            [(copy_a.clone(), "E0302 at b.onsa:1:1"), (copy_b.clone(), "E0302 at b.onsa:1:1")]
+        );
+        assert_eq!(std::fs::read_to_string(&copy_a).unwrap(), "var n = 0\n");
+        assert!(!copy_b.exists());
+        // Nothing new after it: written.
+        std::fs::write(&copy_a, "var n = 1\n").unwrap();
+        *answer.borrow_mut() = Ok(Vec::new());
+        let r = run(Update::Rewrite);
+        assert!(r.problems.is_empty() && r.rewritten == [copy_a.clone()] && r.forced.is_empty(), "{r:?}");
+        // Comparing only: the guard is not asked.
+        let asked = seen.borrow().len();
+        std::fs::write(&copy_a, "var n = 1\n").unwrap();
+        assert_eq!(run(Update::Off).problems.len(), 1);
+        assert_eq!(seen.borrow().len(), asked);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

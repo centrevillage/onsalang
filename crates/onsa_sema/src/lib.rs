@@ -33,6 +33,9 @@ mod sig;
 mod structpat;
 #[cfg(test)]
 mod tests;
+mod unread;
+#[cfg(test)]
+mod unread_tests;
 
 /// For the unit tests: the text of the diagnostic's range in `text` after
 /// applying its candidate `k` (the candidates edit inside that range).

@@ -17,9 +17,13 @@
 //!
 //! The number of the `fixed` texts is the spec's (§18.1); their text is a copy
 //! of the implementation's output (Q-04, X-3): a text that differs is a
-//! failure of its own ([`Report::copy_failures`]), never pending (a listed
-//! row does not judge its copies), and `UPDATE_GOLDEN=1` rewrites it: only
-//! the body of each `'''…'''` literal changes, the comments and the other
+//! failure of its own ([`Report::copy_failures`]), which no entry silences.
+//! A listed row does not judge, rewrite or count its copies as a reason to
+//! wait (they are counted, [`Report::unjudged_copies`]). `UPDATE_GOLDEN=1`
+//! rewrites a text that differs, unless the guard refuses
+//! ([`crate::copy_guard::text`]; `UPDATE_GOLDEN=worse` rewrites it anyway,
+//! [`Report::forced`]): only the body of each `'''…'''` literal changes
+//! (its line ends as they were, LF or CR LF), the comments and the other
 //! fields stay, and the file read again must hold the same values but the
 //! texts rewritten ([`rewrite`]). The data file is the spec's (the tests'
 //! side writes it); this module changes nothing else in it.
@@ -33,7 +37,7 @@ use onsa_diag::Code;
 use onsa_syntax::foreign::{Phase, ROWS, WAITING};
 
 use crate::fix_contract::{self, TextCheck};
-use crate::golden;
+use crate::golden::Update;
 use crate::pending::{Kind, Pending};
 
 /// The file, relative to the repository root.
@@ -101,10 +105,16 @@ pub struct Report {
     /// The `fixed` texts compared with the text after their candidate.
     pub copies: usize,
     /// The `fixed` texts of rows not listed that differ (`UPDATE_GOLDEN=1`
-    /// rewrites them): never silenced, never a reason to wait.
+    /// rewrites them), or whose rewriting the guard refused: never silenced,
+    /// never a reason to wait.
     pub copy_failures: Vec<String>,
     /// The `fixed` texts `UPDATE_GOLDEN=1` rewrote: `<id> example <i> fixed <k>`.
     pub rewritten: Vec<String>,
+    /// Those of `rewritten` the guard refused and `UPDATE_GOLDEN=worse`
+    /// wrote: `<id> example <i> fixed <k> (<what only the new text reports>)`.
+    pub forced: Vec<String>,
+    /// The `fixed` texts of listed rows that differ, not judged.
+    pub unjudged_copies: usize,
 }
 
 /// A `fixed` text that differs from the text after its candidate.
@@ -112,7 +122,8 @@ struct CopyDiff {
     /// The example in its row, and the text in `fixed` (from 0).
     example: usize,
     k: usize,
-    /// The text after the candidate.
+    /// The copy, and the text after the candidate.
+    copy: String,
     actual: String,
     message: String,
 }
@@ -125,9 +136,19 @@ struct Outcome {
     compared: usize,
 }
 
+/// A `fixed` text to rewrite: the form, the example, the text in `fixed`
+/// (from 0), and the text after the candidate.
+struct Rewrite {
+    form: usize,
+    example: usize,
+    k: usize,
+    text: String,
+}
+
 /// Check the data file under `root` against the table, with the list of
-/// things pending.
-pub fn check(root: &Path) -> Report {
+/// things pending; `update` says whether the `fixed` texts that differ are
+/// rewritten.
+pub fn check(root: &Path, update: Update) -> Report {
     let mut report = Report::default();
     let text = match std::fs::read_to_string(root.join(PATH)) {
         Ok(t) => t,
@@ -156,8 +177,7 @@ pub fn check(root: &Path) -> Report {
         .map(|r| (r.name, Kind1 { phase: r.phase, code: r.code }))
         .chain(WAITING.iter().map(|w| (w.name, Kind1 { phase: w.phase, code: w.code })))
         .collect();
-    // The copies to rewrite: the form, the example, the text, and the text after.
-    let mut rewrite_to: Vec<(usize, usize, usize, String)> = Vec::new();
+    let mut rewrite_to: Vec<Rewrite> = Vec::new();
     for (f, form) in file.form.iter().enumerate() {
         let Some(row) = rows.get(form.id.as_str()) else { continue };
         report.rows += 1;
@@ -179,21 +199,33 @@ pub fn check(root: &Path) -> Report {
             copies.extend(done.copies);
         }
         let listed = pending.get(Kind::ForeignForm, &form.id);
-        // A listed row does not judge its copies (its output is not the one to keep).
-        if listed.is_none() {
-            for c in copies {
-                if golden::updating() {
-                    report.rewritten.push(format!("{} example {} fixed {}", form.id, c.example + 1, c.k + 1));
-                    rewrite_to.push((f, c.example, c.k, c.actual));
-                } else {
-                    report.copy_failures.push(format!(
-                        "{}: example {}: {} (UPDATE_GOLDEN=1 rewrites it)",
-                        form.id,
-                        c.example + 1,
-                        c.message
-                    ));
+        // A listed row does not judge its copies (its output is not the one to keep): counted only.
+        if listed.is_some() {
+            report.unjudged_copies += copies.len();
+        }
+        for c in copies.into_iter().filter(|_| listed.is_none()) {
+            let ex = format!("{}: example {}", form.id, c.example + 1);
+            if !update.writes() {
+                report.copy_failures.push(format!("{ex}: {} (UPDATE_GOLDEN=1 rewrites it)", c.message));
+                continue;
+            }
+            let at = format!("{} example {} fixed {}", form.id, c.example + 1, c.k + 1);
+            match crate::copy_guard::text(&c.copy, &c.actual) {
+                Ok(found) if found.is_empty() => {}
+                Ok(found) if update == Update::Worse => report.forced.push(format!("{at} ({})", found.join(", "))),
+                Ok(found) => {
+                    let what = format!("the copy `fixed` {}", c.k + 1);
+                    let to = "the example's `property` (`clean`, `same_code`)";
+                    report.copy_failures.push(format!("{ex}: {}", crate::copy_guard::refused(&what, &found, to)));
+                    continue;
+                }
+                Err(e) => {
+                    report.copy_failures.push(format!("{ex}: the copy `fixed` {} is not rewritten: {e}", c.k + 1));
+                    continue;
                 }
             }
+            report.rewritten.push(at);
+            rewrite_to.push(Rewrite { form: f, example: c.example, k: c.k, text: c.actual });
         }
         match (problems.is_empty(), listed) {
             (true, None) => {}
@@ -223,20 +255,21 @@ pub fn check(root: &Path) -> Report {
         {
             report.failures.push(e);
             report.rewritten.clear();
+            report.forced.clear();
         }
     }
     report
 }
 
 /// `text` (the data file, read as `file`) with the `fixed` texts of
-/// `rewrite_to` (form, example, text in `fixed`, the new text) written in
-/// their `'''…'''` literals; nothing else changes. `file` gets the new texts,
-/// and the new data file must read the same as it. `Err`: a text that no
-/// literal string can hold, a literal of another form, or a file that reads
-/// otherwise.
-fn rewrite(text: &str, file: &mut File, rewrite_to: &[(usize, usize, usize, String)]) -> Result<String, String> {
+/// `rewrite_to` written in their `'''…'''` literals; nothing else changes. A
+/// literal that holds a CR LF gets CR LF line ends. `file` gets the new
+/// texts, and the new data file must read the same as it. `Err`: a text that
+/// no literal string can hold, a literal of another form, or a file that
+/// reads otherwise.
+fn rewrite(text: &str, file: &mut File, rewrite_to: &[Rewrite]) -> Result<String, String> {
     let mut edits: Vec<(std::ops::Range<usize>, String)> = Vec::new();
-    for (f, e, k, actual) in rewrite_to {
+    for Rewrite { form: f, example: e, k, text: actual } in rewrite_to {
         let form = &mut file.form[*f];
         let at = format!("{}: example {} fixed {}", form.id, e + 1, k + 1);
         let Some(s) = form.example[*e].fixed.as_mut().and_then(|v| v.get_mut(*k)) else {
@@ -252,8 +285,11 @@ fn rewrite(text: &str, file: &mut File, rewrite_to: &[(usize, usize, usize, Stri
                 "{PATH}: {at}: a `'''` literal string cannot hold the text after it; write it by hand"
             ));
         }
-        *s.get_mut() = actual.clone();
-        edits.push((span, format!("'''\n{actual}'''")));
+        // The reader (`toml_edit`) reads a CR LF of a literal string as LF: the value is the LF form.
+        let value = actual.replace("\r\n", "\n");
+        let nl = if old.contains("\r\n") { "\r\n" } else { "\n" };
+        edits.push((span, format!("'''{nl}{}'''", value.replace('\n', nl))));
+        *s.get_mut() = value;
     }
     edits.sort_by_key(|(r, _)| std::cmp::Reverse(r.start));
     let mut out = text.to_string();
@@ -372,6 +408,7 @@ fn example(row: Kind1, ex: &Example) -> Outcome {
                 copies.push(CopyDiff {
                     example: 0,
                     k,
+                    copy: want.clone(),
                     actual: after.text.clone(),
                     message: format!("candidate {}: the text after it differs from the copy `fixed`: {diff}", k + 1),
                 });
@@ -494,7 +531,7 @@ property = ["clean"]
 
     #[test]
     fn rows_pass_fail_and_wait() {
-        let r = check(&root("plain", FORMS, ""));
+        let r = check(&root("plain", FORMS, ""), Update::Off);
         assert_eq!((r.rows, r.examples), (2, 2));
         // `let_mut`'s place is wrong: it fails, not listed.
         assert!(r.failures.iter().any(|f| f.starts_with("let_mut:") && f.contains("no E0020 at 2:4")), "{r:?}");
@@ -502,15 +539,15 @@ property = ["clean"]
         // The table has rows the file does not: one to one.
         assert!(r.failures.iter().any(|f| f.contains("has `loop`, which")), "{r:?}");
         // Listed, it waits.
-        let r = check(&root("listed", FORMS, LISTED));
+        let r = check(&root("listed", FORMS, LISTED), Update::Off);
         assert_eq!(r.pending, ["let_mut"]);
         // A listed row that passes.
         let fixed = FORMS.replace("at = \"2:4\"", "at = \"2:3\"");
-        let r = check(&root("passes", &fixed, LISTED));
+        let r = check(&root("passes", &fixed, LISTED), Update::Off);
         assert!(r.failures.iter().any(|f| f.contains("let_mut: the row passes but is listed")), "{r:?}");
         // A `fixed` that differs.
         let wrong = FORMS.replace("  let a = 1\n  a\n}\n''']", "  let a = 2\n  a\n}\n''']");
-        let r = check(&root("wrong", &wrong, ""));
+        let r = check(&root("wrong", &wrong, ""), Update::Off);
         assert!(!r.failures.iter().any(|f| f.starts_with("semicolon:")), "a copy is not a failure of the row: {r:?}");
         assert_eq!(r.copies, 1);
         assert!(
@@ -521,12 +558,12 @@ property = ["clean"]
         );
         // Listed, a row whose copy alone differs passes: the copy keeps no row waiting.
         let listed = LISTED.replace("let_mut", "semicolon");
-        let r = check(&root("wrong_listed", &wrong, &listed));
+        let r = check(&root("wrong_listed", &wrong, &listed), Update::Off);
         assert!(r.copy_failures.is_empty(), "{r:?}");
         assert!(r.failures.iter().any(|f| f.contains("semicolon: the row passes but is listed")), "{r:?}");
         // The number of `fixed` is the row's promise: compared, never a copy.
         let two = FORMS.replace("  a\n}\n''']", "  a\n}\n''', '''x''']");
-        let r = check(&root("two", &two, ""));
+        let r = check(&root("two", &two, ""), Update::Off);
         assert!(r.failures.iter().any(|f| f.contains("1 candidates, `fixed` has 2")), "{r:?}");
         assert!(r.copy_failures.is_empty() && r.copies == 0, "{r:?}");
     }
@@ -543,7 +580,8 @@ property = ["clean"]
         let read = |t: &str| toml::from_str::<File>(t).unwrap();
         let mut file = read(&text);
         let span = file.form[0].example[0].fixed.as_ref().unwrap()[0].span();
-        let new = rewrite(&text, &mut file, &[(0, 0, 0, "pub fn g() {}\n".into())]).unwrap();
+        let to = |k: usize, text: &str| Rewrite { form: 0, example: 0, k, text: text.into() };
+        let new = rewrite(&text, &mut file, &[to(0, "pub fn g() {}\n")]).unwrap();
         assert_eq!(&new[..span.start], &text[..span.start]);
         assert_eq!(&new[span.start..span.start + 21], "'''\npub fn g() {}\n'''");
         assert_eq!(&new[span.start + 21..], &text[span.end..]);
@@ -553,9 +591,64 @@ property = ["clean"]
         assert_eq!(read(&new), want);
         // A text a literal string cannot hold is written by hand.
         let mut file = read(&text);
-        let e = rewrite(&text, &mut file, &[(0, 0, 0, "x = '''\n".into())]).unwrap_err();
+        let e = rewrite(&text, &mut file, &[to(0, "x = '''\n")]).unwrap_err();
         assert!(e.contains("cannot hold"), "{e}");
-        let e = rewrite(&text, &mut read(&text), &[(0, 0, 1, "x\n".into())]).unwrap_err();
+        let e = rewrite(&text, &mut read(&text), &[to(1, "x\n")]).unwrap_err();
         assert!(e.contains("no such text"), "{e}");
+    }
+
+    /// A data file with CR LF line ends keeps them in the texts rewritten (L5).
+    #[test]
+    fn a_rewrite_keeps_the_line_ends() {
+        let text = FORMS.replace('\n', "\r\n");
+        let mut file: File = toml::from_str(&text).unwrap();
+        let span = file.form[0].example[0].fixed.as_ref().unwrap()[0].span();
+        let to = Rewrite { form: 0, example: 0, k: 0, text: "pub fn g() {}\nx\n".into() };
+        let new = rewrite(&text, &mut file, &[to]).unwrap();
+        assert_eq!(&new[span.start..span.start + 26], "'''\r\npub fn g() {}\r\nx\r\n'''");
+        assert!(!new.replace("\r\n", "").contains('\n'), "every line end is CR LF");
+    }
+
+    /// The guard (X-3) on the `fixed` texts: a copy that leaves nothing where
+    /// the text after the candidate holds a new error is not rewritten
+    /// (`UPDATE_GOLDEN=worse` rewrites it and lists it); a copy that holds an
+    /// error the output does not is rewritten; a listed row's copy is counted,
+    /// not judged.
+    #[test]
+    fn the_guard_keeps_a_copy_that_holds_a_rule() {
+        // The check reports the E0020 of the unit only; after the candidate, the E0302 of `b`.
+        let src = "pub fn f() -> I32 {\n  let a = 1;\n  b\n}\n";
+        let forms = FORMS.replace("pub fn f() -> I32 {\n  let a = 1;\n  a\n}\n'''", &format!("{src}'''"));
+        let read = |r: &Path| std::fs::read_to_string(r.join(PATH)).unwrap();
+        let r0 = root("guard", &forms, LISTED);
+        let r = check(&r0, Update::Rewrite);
+        assert!(r.rewritten.is_empty(), "{r:?}");
+        assert!(
+            matches!(&r.copy_failures[..], [m] if m.starts_with("semicolon: example 1: UPDATE_GOLDEN=1 does not rewrite \
+                the copy `fixed` 1") && m.contains("E0302 at m.onsa:3:3") && m.contains("`property`")),
+            "{r:?}"
+        );
+        assert_eq!(read(&r0), forms, "nothing written");
+        let r = check(&r0, Update::Worse);
+        assert!(r.copy_failures.is_empty(), "{r:?}");
+        assert_eq!(r.rewritten, ["semicolon example 1 fixed 1"]);
+        assert_eq!(r.forced, ["semicolon example 1 fixed 1 (E0302 at m.onsa:3:3)"]);
+        assert!(read(&r0).contains("  let a = 1\n  b\n}\n''']"), "{}", read(&r0));
+        // A copy that holds an error (`c`) the output does not: rewritten.
+        let wrong = FORMS.replace("  let a = 1\n  a\n}\n''']", "  let a = 1\n  c\n}\n''']");
+        let r1 = root("guard_wrong", &wrong, LISTED);
+        let r = check(&r1, Update::Rewrite);
+        assert!(r.copy_failures.is_empty() && r.forced.is_empty(), "{r:?}");
+        assert_eq!(r.rewritten, ["semicolon example 1 fixed 1"]);
+        assert_eq!(read(&r1), FORMS);
+        // Listed: not judged, not rewritten, counted.
+        let listed = LISTED.replace("let_mut", "semicolon");
+        let r2 = root("guard_listed", &wrong, &listed);
+        let r = check(&r2, Update::Rewrite);
+        assert!(r.copy_failures.is_empty() && r.rewritten.is_empty() && r.unjudged_copies == 1, "{r:?}");
+        assert_eq!(read(&r2), wrong);
+        for r in [r0, r1, r2] {
+            let _ = std::fs::remove_dir_all(r);
+        }
     }
 }

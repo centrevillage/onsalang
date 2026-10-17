@@ -22,7 +22,7 @@
 //! once, where they are rendered (`onsa_diag::to_json`, `onsa_diag::to_text`,
 //! S-234).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use onsa_diag::{Diagnostic, FileId, Span, Stage};
 use onsa_syntax::units::Units;
@@ -61,13 +61,7 @@ pub fn exact(mut diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
 /// item's own and does not take its members. A diagnostic outside every unit
 /// (another file, `std`, no check stage) is reported as it is.
 pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagnostics: Vec<Diagnostic>) -> Reduced {
-    let mut units: Vec<Unit> = Vec::new();
-    let mut of_file: HashMap<FileId, (usize, &Units)> = HashMap::new();
-    for (file, table) in files {
-        let offset = units.len();
-        units.extend(table.list.iter().map(|u| Unit { span: u.span, parent: u.parent.map(|p| p + offset) }));
-        of_file.insert(file, (offset, table));
-    }
+    let (units, of_file) = table(files);
     let mut by_file: HashMap<FileId, Vec<usize>> = HashMap::new();
     for (i, d) in diagnostics.iter().enumerate() {
         if of_file.contains_key(&d.span.file) {
@@ -91,6 +85,29 @@ pub fn per_unit<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, diagno
         }
     }
     out
+}
+
+/// The table of the units and the start of each file's units in it.
+type Table<'a> = (Vec<Unit>, HashMap<FileId, (usize, &'a Units)>);
+
+/// The units of the files `files` in one table, and where the units of each
+/// file start in it: the one table of [`per_unit`] and [`units_of`].
+fn table<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>) -> Table<'a> {
+    let mut units: Vec<Unit> = Vec::new();
+    let mut of_file = HashMap::new();
+    for (file, table) in files {
+        let offset = units.len();
+        units.extend(table.list.iter().map(|u| Unit { span: u.span, parent: u.parent.map(|p| p + offset) }));
+        of_file.insert(file, (offset, table));
+    }
+    (units, of_file)
+}
+
+/// The units of the table of [`per_unit`] (of the same `files`) that hold
+/// the starts of `spans` ([`Units::of`]); a span outside every unit has none.
+pub fn units_of<'a>(files: impl IntoIterator<Item = (FileId, &'a Units)>, spans: &[Span]) -> BTreeSet<usize> {
+    let (_, of_file) = table(files);
+    spans.iter().filter_map(|s| of_file.get(&s.file).and_then(|(offset, t)| t.of(*s).map(|u| u + offset))).collect()
 }
 
 /// What `fmt` and `diff --ast` report for a file with a diagnostic of the

@@ -9,7 +9,9 @@
 //! tests/golden/c/<case>.<target>.c / .h      the C of a target (headers joined)
 //! ```
 //!
-//! `UPDATE_GOLDEN=1` rewrites them; the parent approves the change.
+//! `UPDATE_GOLDEN=1` rewrites them; the parent approves the change. The
+//! variable is read at the entries only ([`Update::from_env`]: `run_all`,
+//! the test of the forms of other languages); the rest takes an [`Update`].
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -57,17 +59,40 @@ pub fn declared(case: &Case) -> Vec<String> {
     out
 }
 
-/// Whether `UPDATE_GOLDEN` is set.
-pub fn updating() -> bool {
-    std::env::var_os("UPDATE_GOLDEN").is_some()
+/// Whether the golden files and the copies are rewritten (`UPDATE_GOLDEN`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Update {
+    /// Compared only.
+    Off,
+    /// `UPDATE_GOLDEN` set (to anything but `worse`): rewritten, but a copy of
+    /// the text after the candidates whose rewriting the guard refuses
+    /// ([`crate::copy_guard`]).
+    Rewrite,
+    /// `UPDATE_GOLDEN=worse`: rewritten, those copies too (the summary lists them).
+    Worse,
 }
 
-/// Compare `actual` with the golden file `rel`, or rewrite it when updating
-/// and `write` (a pending case never rewrites). A problem message when it
-/// differs or is missing.
-pub fn compare(root: &Path, rel: &str, actual: &str, write: bool) -> Option<String> {
+impl Update {
+    /// From the environment: the one place that reads `UPDATE_GOLDEN`.
+    pub fn from_env() -> Update {
+        match std::env::var_os("UPDATE_GOLDEN") {
+            None => Update::Off,
+            Some(v) if v == "worse" => Update::Worse,
+            Some(_) => Update::Rewrite,
+        }
+    }
+
+    pub fn writes(self) -> bool {
+        self != Update::Off
+    }
+}
+
+/// Compare `actual` with the golden file `rel`, or rewrite it when `update`
+/// writes (a pending case runs with [`Update::Off`]). A problem message when
+/// it differs or is missing.
+pub fn compare(root: &Path, rel: &str, actual: &str, update: Update) -> Option<String> {
     let path = root.join(rel);
-    if updating() && write {
+    if update.writes() {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }

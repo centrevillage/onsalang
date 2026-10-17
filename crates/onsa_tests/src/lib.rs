@@ -37,6 +37,7 @@ pub mod capi;
 pub mod case;
 pub mod ccheck;
 pub mod conformance;
+pub mod copy_guard;
 pub mod default_inits;
 pub mod fix_contract;
 pub mod fix_loop;

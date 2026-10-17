@@ -227,7 +227,7 @@ fn the_runner_reports_the_failure_of_every_stage() {
         &FAILING,
         Path::new("/nonexistent"),
         &case,
-        RunOptions { write_golden: false, host_steps: HostSteps::Run },
+        RunOptions { golden: onsa_tests::golden::Update::Off, host_steps: HostSteps::Run },
     );
     assert!(run.ran, "{:?}", run.problems);
     let failed: Vec<&String> = run

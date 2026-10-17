@@ -438,6 +438,18 @@ pub struct Analyzed {
     pub units: Vec<reduce::Unit>,
 }
 
+impl Analyzed {
+    /// The units (of `units`) whose check depends on what the check did not
+    /// read ([`onsa_sema::Analysis::unread_users`]): fixing the cause can
+    /// show an error they held back. Computed when asked (the tests of the
+    /// fix candidates ask; no command does).
+    pub fn unread_units(&self) -> std::collections::BTreeSet<usize> {
+        let files: Vec<FileId> = self.pkg.modules.iter().map(|m| m.file).collect();
+        let spans = self.analysis.unread_users(&files);
+        reduce::units_of(self.pkg.modules.iter().map(|m| (m.file, &m.parsed.units)), &spans)
+    }
+}
+
 /// Parse and analyze a loaded package, keeping the analysis (`std` is
 /// appended to `sources`).
 pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {

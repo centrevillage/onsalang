@@ -294,3 +294,17 @@ left = "expected an expression, found `…`"
 input = "tests/fuzz/1eb16a95.onsa"
 reasons = ["R-236"]
 note = "an input with three errors: a compound assignment, no operand after its `^`, and no `}`; the candidate writes the assignment out and the missing operand shows in its parentheses"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "expected a declaration, found `…`"
+input = "tests/fuzz/e6aa2d76.onsa"
+reasons = ["R-241"]
+note = "a `^` at the head of the line after an attribute's line: the E0020 of a line that starts with a prefix, whose candidate joins it to the attribute's line and leaves the E0002 of the declaration's place"
+
+[[allowed]]
+class = "fix|E0811|add `…`|E0808"
+left = "`…` needs a length of at least # (§#.#)"
+input = "tests/fuzz/94445c8c.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: `delay` without its `~`, and a length of 0; the candidate adds the `~` and the E0808 of the length shows"

@@ -55,8 +55,9 @@ use onsa_driver::{Analyzed, BuildError, BuildOutput, Interface, InternalError, L
 
 use crate::case::{self, Case, Setup};
 use crate::fragment::{GoldenKind, Mode};
+use crate::golden::{self, Update};
 use crate::pending::{self, Pending};
-use crate::{Expected, golden, parse_markers};
+use crate::{Expected, parse_markers};
 
 /// The stage a marker was compared at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
@@ -122,9 +123,12 @@ pub enum Problem {
     /// in an internal error, its stage is not a check): never pending.
     FixUnchecked(String),
     /// A copy of the text after the candidates (`.fixK`, [`crate::fixes`];
-    /// Q-04) differs or is missing: never a failure of the contract, and no
-    /// entry silences it (`UPDATE_GOLDEN=1` rewrites it). A case listed as a
-    /// whole does not judge its copies ([`reconcile`]).
+    /// Q-04) differs or is missing, or the guard refused rewriting it
+    /// ([`crate::copy_guard`]): never a failure of the contract. A case listed
+    /// as a whole does not judge, rewrite or count its copies as a reason to
+    /// wait ([`reconcile`] drops them and counts them,
+    /// [`Report::unjudged_copies`]); no other entry silences it
+    /// (`UPDATE_GOLDEN=1` rewrites it).
     FixCopy(String),
 }
 
@@ -184,10 +188,18 @@ pub struct CaseRun {
     /// The edits of those candidates whose tokens the check of the minimal
     /// edit compared ([`crate::fix_contract::Checked::edits_compared`]).
     pub edits_compared: usize,
+    /// The units after those candidates that held no diagnostic before them
+    /// ([`crate::fix_contract::Checked::clean_units`]).
+    pub clean_units: usize,
     /// The copies `.fixK` compared, and those `UPDATE_GOLDEN=1` rewrote or
     /// removed ([`crate::fixes::CopyCheck`]).
     pub fix_copies: usize,
     pub copies_rewritten: Vec<String>,
+    /// Those of `copies_rewritten` the guard refused and `UPDATE_GOLDEN=worse`
+    /// wrote: `<path> (<what only the new texts report>)`.
+    pub copies_forced: Vec<String>,
+    /// The candidates K whose copies went through the guard.
+    pub copies_guarded: usize,
 }
 
 /// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
@@ -276,8 +288,8 @@ pub enum HostSteps {
 /// How a case runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunOptions {
-    /// `UPDATE_GOLDEN` may rewrite the case's golden files.
-    pub write_golden: bool,
+    /// Whether the case's golden files and copies are rewritten (`Off` for a pending case).
+    pub golden: Update,
     pub host_steps: HostSteps,
 }
 
@@ -288,7 +300,7 @@ pub fn run_case(root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
 
 /// [`run_case`] through `stages`.
 pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions) -> CaseRun {
-    let RunOptions { write_golden, host_steps } = opts;
+    let RunOptions { golden: update, host_steps } = opts;
     let hosts = host_steps == HostSteps::Run;
     let mut run = CaseRun { path: case.path.clone(), ..Default::default() };
     let setup = match &case.setup {
@@ -418,14 +430,17 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     let contract = crate::fix_contract::check(case, setup, &loaded, &analyzed);
     run.fix_targets = contract.targets;
     run.edits_compared = contract.edits_compared;
+    run.clean_units = contract.clean_units;
     run.problems.extend(contract.problems);
     if t.fixes > 0 {
         let files = disk_files(root, case, setup, &loaded);
-        let write = golden::updating() && write_golden;
-        let copies = crate::fixes::compare(&loaded.sources, &files, check, t.fixes, write);
+        let guard = |old: &_, new: &_| crate::copy_guard::case(setup, &loaded, old, new);
+        let copies = crate::fixes::compare(&loaded.sources, &files, check, t.fixes, update, &guard);
         run.problems.extend(copies.problems);
         run.fix_copies = copies.copies;
+        run.copies_guarded = copies.guarded;
         run.copies_rewritten = copies.rewritten.iter().map(|p| case::rel_path(root, p)).collect();
+        run.copies_forced = copies.forced.iter().map(|(p, f)| format!("{} ({f})", case::rel_path(root, p))).collect();
     }
     // A `mode = "test"` case without targets that checks compares its markers
     // with what `onsa test` reports before the tests run ([`run_tests`]).
@@ -464,7 +479,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         }
         for target in &targets {
             let ctx = BuildCtx { stages, root, case, setup, loaded: &loaded, analyzed: &analyzed, markers: &markers };
-            build_target(&ctx, target, write_golden, &mut run);
+            build_target(&ctx, target, update, &mut run);
         }
         if hosts {
             run_hosts(&mut run, &t.host);
@@ -485,7 +500,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         None
     };
     let gold = |run: &mut CaseRun, rel: String, actual: &str| {
-        if let Some(p) = golden::compare(root, &rel, actual, write_golden) {
+        if let Some(p) = golden::compare(root, &rel, actual, update) {
             run.problems.push(Problem::Failed(p));
         }
     };
@@ -606,7 +621,7 @@ struct BuildCtx<'a> {
 
 /// Build one target, compare its diagnostics with the markers that apply to
 /// it, and check what it produced.
-fn build_target(ctx: &BuildCtx<'_>, target: &str, write_golden: bool, run: &mut CaseRun) {
+fn build_target(ctx: &BuildCtx<'_>, target: &str, update: Update, run: &mut CaseRun) {
     let BuildCtx { stages, root, case, setup, loaded, analyzed, markers } = *ctx;
     let t = &setup.test;
     let expected: Vec<(FileId, Expected)> = markers
@@ -645,7 +660,7 @@ fn build_target(ctx: &BuildCtx<'_>, target: &str, write_golden: bool, run: &mut 
     if t.golden.contains(&GoldenKind::C) {
         let [c, h] = golden::c_paths(&case.name, target);
         for (rel, actual) in [(c, out.unit.source.clone()), (h, crate::c::join_headers(&out.unit))] {
-            if let Some(p) = golden::compare(root, &rel, &actual, write_golden) {
+            if let Some(p) = golden::compare(root, &rel, &actual, update) {
                 run.problems.push(Problem::Failed(p));
             }
         }
@@ -1002,6 +1017,9 @@ pub struct CaseReport {
 pub struct Report {
     pub cases: Vec<CaseReport>,
     pub failures: Vec<String>,
+    /// The problems of the copies (`FixCopy`) of the cases listed as a whole,
+    /// not judged ([`reconcile`]).
+    pub unjudged_copies: usize,
 }
 
 impl Report {
@@ -1073,18 +1091,35 @@ impl Report {
         let _ = write!(
             s,
             "\nfix candidates checked against the contract (§18.1): {checked}, {pending_fixes} pending, \
-             {breaking} failing; edits compared for the minimal edit: {}",
-            self.cases.iter().map(|c| c.run.edits_compared).sum::<usize>()
+             {breaking} failing; edits compared for the minimal edit: {}; units after them that held no \
+             diagnostic before them: {}",
+            self.cases.iter().map(|c| c.run.edits_compared).sum::<usize>(),
+            self.cases.iter().map(|c| c.run.clean_units).sum::<usize>()
         );
         let copies: usize = self.cases.iter().map(|c| c.run.fix_copies).sum();
         let rewritten: Vec<&String> = self.cases.iter().flat_map(|c| &c.run.copies_rewritten).collect();
-        let _ = write!(s, "\ncopies of the texts after the candidates (.fixK) compared: {copies}");
+        let _ = write!(
+            s,
+            "\ncopies of the texts after the candidates (.fixK) compared: {copies}; not judged (cases listed as a \
+             whole): {}",
+            self.unjudged_copies
+        );
+        let list = |v: &[&String]| v.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ");
         if !rewritten.is_empty() {
             let _ = write!(
                 s,
                 "\ncopies rewritten or removed by UPDATE_GOLDEN=1 ({}): {}",
                 rewritten.len(),
-                rewritten.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(", ")
+                list(&rewritten)
+            );
+        }
+        let forced: Vec<&String> = self.cases.iter().flat_map(|c| &c.run.copies_forced).collect();
+        if !forced.is_empty() {
+            let _ = write!(
+                s,
+                "\ncopies rewritten over the guard by UPDATE_GOLDEN=worse ({}): {}",
+                forced.len(),
+                list(&forced)
             );
         }
         for c in &self.cases {
@@ -1160,8 +1195,10 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
             let expects_internal = e.expect == Some(pending::Expect::Internal);
             let internal = run.problems.iter().any(|p| matches!(p, Problem::Internal(_)));
             // The copies of a pending case are not the output to keep: not
-            // judged, neither a failure nor a reason to wait (X-3).
+            // judged, neither a failure nor a reason to wait (X-3); counted.
+            let before = run.problems.len();
             run.problems.retain(|p| !matches!(p, Problem::FixCopy(_)));
+            report.unjudged_copies += before - run.problems.len();
             // Never silenced: the errors of the case and of the harness, an
             // internal error the entry does not expect, and the fix
             // candidates (each is listed on its own, W3-17).
@@ -1257,8 +1294,14 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
 // ------------------------------------------------------------ everything
 
 /// Collect every case under `root/tests`, run them (in parallel), apply the
-/// pending list and check the golden files (collisions, orphans).
+/// pending list and check the golden files (collisions, orphans), rewriting
+/// them as `UPDATE_GOLDEN` says ([`Update::from_env`]).
 pub fn run_all(root: &Path) -> Report {
+    run_all_with(root, Update::from_env())
+}
+
+/// [`run_all`], rewriting as `update` says (the cases listed as a whole never).
+pub fn run_all_with(root: &Path, update: Update) -> Report {
     let (cases, scan_errors) = case::collect(root);
     let (list, list_error) = match Pending::load(root) {
         Ok(l) => (l, None),
@@ -1275,7 +1318,8 @@ pub fn run_all(root: &Path) -> Report {
             }
         }
     }
-    let runs = run_each(root, &cases, |c| !listed_whole.contains(c.path.as_str()), HostSteps::Run);
+    let golden_of = |c: &Case| if listed_whole.contains(c.path.as_str()) { Update::Off } else { update };
+    let runs = run_each(root, &cases, golden_of, HostSteps::Run);
     let mut report = reconcile(runs, &list);
     if let Some(e) = list_error {
         report.failures.push(e);
@@ -1295,6 +1339,12 @@ pub fn run_all(root: &Path) -> Report {
     }
     if report.cases.iter().all(|c| c.run.edits_compared == 0) {
         report.failures.push("the check of the minimal edit (§18.1, S-251) compared no edit".into());
+    }
+    if report.cases.iter().all(|c| c.run.clean_units == 0) {
+        report.failures.push(
+            "the contract of the fix candidates looked at no unit that held no diagnostic before its candidate (X-3)"
+                .into(),
+        );
     }
     if report.cases.iter().all(|c| c.run.fix_copies == 0 && c.run.copies_rewritten.is_empty()) {
         report.failures.push("no copy of the text after the candidates (.fixK) was compared".into());
@@ -1319,15 +1369,15 @@ fn fix_sources(cases: &[Case]) -> Vec<(std::path::PathBuf, u32)> {
 }
 
 /// Run every case (in parallel), in the order of `cases`, without applying the
-/// pending list. `write_golden` tells whether `UPDATE_GOLDEN` may rewrite the
-/// golden files of a case; `host_steps`, whether the host sequences run.
+/// pending list. `golden` tells whether the golden files and copies of a case
+/// are rewritten; `host_steps`, whether the host sequences run.
 pub fn run_each(
     root: &Path,
     cases: &[Case],
-    write_golden: impl Fn(&Case) -> bool + Sync,
+    golden: impl Fn(&Case) -> Update + Sync,
     host_steps: HostSteps,
 ) -> Vec<CaseRun> {
-    run_parallel(cases, |c| run_case(root, c, RunOptions { write_golden: write_golden(c), host_steps }))
+    run_parallel(cases, |c| run_case(root, c, RunOptions { golden: golden(c), host_steps }))
 }
 
 /// The runs as JSON, for the gate's count of negative examples (K-13): what
@@ -1443,7 +1493,11 @@ mod tests {
         }
 
         fn run(&self) -> Report {
-            run_all(&self.0)
+            self.run_with(Update::Off)
+        }
+
+        fn run_with(&self, update: Update) -> Report {
+            run_all_with(&self.0, update)
         }
     }
 
@@ -1658,9 +1712,83 @@ mod tests {
         assert!(one.iter().any(|f| f.contains("keeps the contract but is listed")), "{one:?}");
         let missing = &case(&r, "tests/missing.onsa").failures;
         assert!(missing.iter().any(|f| f.contains("its copy missing.onsa.fix1 is missing")), "{missing:?}");
+        // The copy of the case listed as a whole is counted, not judged (X-3, M2).
+        assert_eq!(r.unjudged_copies, 1);
+        assert!(r.summary().contains("not judged (cases listed as a whole): 1"), "{}", r.summary());
         // No copy at all: the run fails.
         let r = Repo::new("no_copies", &[("tests/missing.onsa", src)]).run();
         assert!(r.failures.iter().any(|f| f.contains("no copy of the text after the candidates")), "{:?}", r.failures);
+    }
+
+    /// The guard on rewriting the copies (X-3), through the cases: the copies
+    /// of `tests/spec/fixes/pkg_rename` that held S-82 (every use renamed)
+    /// are not rewritten by an output that renames the declaration only; with
+    /// `worse` they are, and the summary lists them.
+    #[test]
+    fn the_guard_refuses_a_rewriting_that_loses_a_rule() {
+        let main = "// onsa.toml\n// [test]\n// fixes = 1\n\nuse util.{BadName, ok_name}\n\npub fn run() -> I32 {\n  \
+                    BadName() + ok_name()\n}\n";
+        let util = "pub fn BadName() -> I32 { //~ E0320\n  1\n}\n\npub fn ok_name() -> I32 {\n  2\n}\n";
+        let files = [
+            ("tests/p/onsa.toml", "[package]\nname = \"rename\"\nedition = \"2026\"\n"),
+            ("tests/p/main.onsa", main),
+            ("tests/p/util.onsa", util),
+            ("tests/p/util.onsa.fix1", &util.replace("BadName", "bad_name")),
+            ("tests/p/main.onsa.fix1", &main.replace("BadName", "bad_name")),
+        ];
+        let repo = Repo::new("guard", &files);
+        let copy = repo.0.join("tests/p/main.onsa.fix1");
+        let r = repo.run_with(Update::Rewrite);
+        let p = case(&r, "tests/p");
+        assert_eq!(p.run.copies_guarded, 1);
+        assert!(p.run.copies_rewritten.is_empty(), "{:?}", p.run.copies_rewritten);
+        let refused = |f: &String| {
+            f.contains("UPDATE_GOLDEN=1 does not rewrite the copies of the candidates 1 (main.onsa.fix1)")
+                && f.contains("reports E0302 at main.onsa:")
+        };
+        assert!(p.failures.iter().any(refused), "{:?}", p.failures);
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), main.replace("BadName", "bad_name"));
+        let r = repo.run_with(Update::Worse);
+        let p = case(&r, "tests/p");
+        assert!(!p.failures.iter().any(refused), "{:?}", p.failures);
+        assert_eq!(p.run.copies_rewritten, ["tests/p/main.onsa.fix1"]);
+        assert!(
+            matches!(&p.run.copies_forced[..], [f] if f.starts_with("tests/p/main.onsa.fix1 (E0302 at main.onsa:")),
+            "{:?}",
+            p.run.copies_forced
+        );
+        assert!(
+            r.summary().contains("copies rewritten over the guard by UPDATE_GOLDEN=worse (1): tests/p/main.onsa.fix1")
+        );
+        assert!(!copy.exists());
+    }
+
+    /// The guard lets through a copy that held an error the output does not,
+    /// and does not look at a copy created (the output's hidden error aside).
+    #[test]
+    fn the_guard_lets_a_better_output_through_and_does_not_guard_a_new_copy() {
+        let src = "// onsa.toml\n// [test]\n// fixes = 1\n\npub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
+        let hidden = src.replace("  n\n}", "  q\n}");
+        let repo = Repo::new(
+            "guard_better",
+            &[
+                ("tests/a.onsa", src),
+                ("tests/a.onsa.fix1", &src.replace("let mut n = 0 ", "var n = 0 ").replace("  n\n}", "  q\n}")),
+                ("tests/b.onsa", &hidden),
+            ],
+        );
+        let r = repo.run_with(Update::Rewrite);
+        let (a, b) = (case(&r, "tests/a.onsa"), case(&r, "tests/b.onsa"));
+        assert!(a.failures.is_empty() && a.run.copies_guarded == 1, "{:?}", a.failures);
+        assert_eq!(a.run.copies_rewritten, ["tests/a.onsa.fix1"]);
+        assert_eq!(
+            std::fs::read_to_string(repo.0.join("tests/a.onsa.fix1")).unwrap(),
+            src.replace("let mut n = 0 ", "var n = 0 ")
+        );
+        // Created: the check after it reports the E0302 of `q`, which no copy left; no guard.
+        assert!(b.failures.is_empty() && b.run.copies_guarded == 0, "{:?}", b.failures);
+        assert_eq!(b.run.copies_rewritten, ["tests/b.onsa.fix1"]);
+        assert!(r.cases.iter().all(|c| c.run.copies_forced.is_empty()));
     }
 
     fn fix_entry(target: &str) -> String {
@@ -1671,6 +1799,55 @@ mod tests {
 
     /// W3-17: every candidate is applied alone and the case checked again
     /// (§18.1, S-236); `[[test.fix]]` and the entries of kind `fix-contract`.
+    #[test]
+    fn fix_contract_of_the_units_clean_before() {
+        // X-3 (α): renaming the declaration alone leaves an E0302 in `user`, which it does not touch
+        // and which held no diagnostic before it; `leaves` writes it.
+        let rename = |leaves: &str| {
+            let entry = if leaves.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "// [[test.fix]]\n// at = \"9:8\"\n// code = \"E0320\"\n// candidate = 1\n// leaves = [{leaves}]\n"
+                )
+            };
+            format!(
+                "// onsa.toml\n// [test]\n{entry}\npub fn BadFn() -> I32 {{ //~ E0320\n  1\n}}\n\npub fn user() -> I32 {{\n  \
+                 BadFn()\n}}\n"
+            )
+        };
+        let repo = Repo::new(
+            "fix_contract_clean",
+            &[
+                ("tests/none.onsa", &rename("")),
+                ("tests/right.onsa", &rename("\"14:3 E0302\"")),
+                ("tests/wrong.onsa", &rename("\"14:4 E0302\"")),
+            ],
+        );
+        let r = repo.run();
+        let none = &case(&r, "tests/none.onsa").failures;
+        let message = "the units its edits touch hold none of its stage or an earlier one, and the units that held no \
+                       diagnostic before it hold";
+        assert!(none.iter().any(|f| f.contains(&format!("{message} 9:3 E0302 besides"))), "{none:?}");
+        assert!(case(&r, "tests/right.onsa").failures.is_empty(), "{:?}", case(&r, "tests/right.onsa").failures);
+        let wrong = &case(&r, "tests/wrong.onsa").failures;
+        assert!(
+            wrong.iter().any(|f| f.contains("14:3 E0302 besides (of any stage); expected 14:4 E0302")),
+            "{wrong:?}"
+        );
+        let vacuous = "looked at no unit that held no diagnostic before its candidate";
+        assert!(case(&r, "tests/right.onsa").run.clean_units > 0);
+        assert!(!r.failures.iter().any(|f| f.contains(vacuous)), "{:?}", r.failures);
+        // Nothing passes vacuously: a case of one unit has none.
+        let one = Repo::new(
+            "fix_contract_clean_none",
+            &[("tests/one.onsa", "pub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n")],
+        );
+        let r = one.run();
+        assert_eq!(case(&r, "tests/one.onsa").run.clean_units, 0);
+        assert!(r.failures.iter().any(|f| f.contains(vacuous)), "{:?}", r.failures);
+    }
+
     #[test]
     fn fix_contract() {
         // The candidate of the E0411 gives `x.narrow_i32()`, an `Option[I32]`: an E0401 is left
@@ -2003,7 +2180,7 @@ mod tests {
             ],
         );
         let (cases, errors) = case::collect(&repo.0);
-        let runs = run_each(&repo.0, &cases, |_| false, HostSteps::Skip);
+        let runs = run_each(&repo.0, &cases, |_| Update::Off, HostSteps::Skip);
         let json = runs_json(&runs, &errors);
         let case = |p: &str| json["cases"].as_array().unwrap().iter().find(|c| c["path"] == p).unwrap().clone();
         // a marker without targets is compared once per target

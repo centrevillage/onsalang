@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for an `at` right after the result of a function type (§11.3, S-367), with the blanks,
+// the line breaks and the comments a writer puts around it (R-237): the candidate inserts `(`
+// before the function type and `)` after its result, and changes nothing else (§18.1, S-251); the
+// clock stays where it is, with what is before it. One error per declaration unit. (The forms
+// themselves are e0020_clock_after_fn_type.onsa.)
+
+pub flow spaced(g: (fn(F32) -> F32)    at block) -> F32 at sample {  //~ E0020
+  0.5
+}
+
+pub flow comment_between(
+  g: (fn(F32) -> F32) // result
+    at block,                                                       //~ E0020
+) -> F32 at sample {
+  0.5
+}
+
+pub flow newline_before(
+  g: (fn(F32) -> F32)
+    at block,                                                       //~ E0020
+) -> F32 at sample {
+  0.5
+}

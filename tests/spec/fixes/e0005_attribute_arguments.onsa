@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// E0005 for an attribute of the table whose parentheses hold more than one argument (spec §6.5,
+// S-133): the value of `@repr` is `c` and that of `@fp` is `relaxed`, one name. When the value of
+// the list is among the arguments, the candidate removes the others and keeps it (§18.1: the edits
+// replace only the tokens that change, S-251, R-238): what is before it and what is after it in
+// the parentheses. One error in each declaration unit (P-01). (One value in the parentheses is
+// e0005_attribute_values.onsa.)
+
+@fp(relaxed, x)                                     //~ E0005
+pub fn relaxed_first(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(fast, relaxed)                                  //~ E0005
+pub fn relaxed_last(x: F32) -> F32 {
+  x * 3.0
+}
+
+@repr(c, packed)                                    //~ E0005
+pub struct CPacked {
+  x: I32,
+}
+
+@fp(fast, relaxed, x)                               //~ E0005
+pub fn relaxed_between(x: F32) -> F32 {
+  x * 4.0
+}

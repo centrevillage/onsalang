@@ -404,7 +404,7 @@ impl Repo {
     }
 
     fn run(&self) -> Report {
-        run::run_all(&self.0)
+        run::run_all_with(&self.0, crate::golden::Update::Off)
     }
 }
 

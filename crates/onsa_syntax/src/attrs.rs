@@ -134,6 +134,8 @@ pub struct Written<'a> {
     pub args: Option<Span>,
     /// The span and the text of the sole argument when it is one name.
     pub value: Option<(Span, &'a str)>,
+    /// The tokens of code in the parentheses (blanks and comments aside).
+    pub arguments: Vec<(Span, &'a str)>,
 }
 
 /// The rule of the table (the note of its E0005).
@@ -166,13 +168,21 @@ pub fn check(file: FileId, text: &str, w: &Written, place: Place) -> Option<Diag
     }
     let mut d = error(format!("the value of `@{}` is one of {}", w.name, quoted(values)));
     for v in values {
-        let edit = match (w.value, w.args) {
-            (Some((span, _)), _) => Edit::replace(span, *v),
-            // The brackets stay (S-251): the value between them.
-            (None, Some(args)) => Edit::replace(Span::new(args.file, args.start + 1, args.end - 1), *v),
-            (None, None) => Edit::insert(file, w.span.end, format!("({v})")),
+        let edits = match (w.value, w.args) {
+            (Some((span, _)), _) => vec![Edit::replace(span, *v)],
+            // The brackets stay, and so does the value among the arguments (S-251, R-238): what is
+            // before it and after it goes.
+            (None, Some(args)) => match w.arguments.iter().find(|(_, t)| t == v) {
+                Some((at, _)) => [(args.start + 1, at.start), (at.end, args.end - 1)]
+                    .into_iter()
+                    .filter(|(s, e)| s < e)
+                    .map(|(s, e)| Edit::delete(Span::new(args.file, s, e)))
+                    .collect(),
+                None => vec![Edit::replace(Span::new(args.file, args.start + 1, args.end - 1), *v)],
+            },
+            (None, None) => vec![Edit::insert(file, w.span.end, format!("({v})"))],
         };
-        d = d.with_fix(Fix::new(format!("write `@{}({v})`", w.name), vec![edit]));
+        d = d.with_fix(Fix::new(format!("write `@{}({v})`", w.name), edits));
     }
     Some(d)
 }

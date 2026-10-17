@@ -28,7 +28,17 @@
 //!    none by default (the reported diagnostic is the only error of its unit,
 //!    S-236; one syntactic form is one error, S-248), else the `leaves` of a
 //!    `[[test.fix]]` entry ([`FixSpec`]). A diagnostic outside every unit
-//!    counts when it meets a replacement. Later stages are not looked at;
+//!    counts when it meets a replacement. Later stages are not looked at
+//!    there; but the units after it that held no diagnostic before it (a
+//!    rule of the tests, X-3; not of §18.1) hold none of any stage, touched
+//!    or not, either ([`Before`], [`correspond`]): a unit after it holds none
+//!    before when every unit before it that it comes from (the same range
+//!    moved, or one that meets it at its level) is clean, and a new one
+//!    (an item the candidate inserts) is clean. A unit is not clean when it
+//!    or its item has a diagnostic, or when its check read what the check did
+//!    not (a fix of the cause can show an error it held back:
+//!    `onsa_driver::Analyzed::unread_units`). What they may hold is written
+//!    in `leaves` with the rest;
 //! 4. the tokens and comments outside the edits are read the same after it
 //!    (kind and range, moved by the edits before them; blanks are not
 //!    compared, and an insertion at an end of a token is not inside it,
@@ -65,7 +75,7 @@
 //! near "same place" of S-236 ([`same_place`], `onsa_cases --fix-same-place`,
 //! `tools/fuzz.py`).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Deserializer};
 
@@ -87,7 +97,7 @@ use crate::run::Problem;
 /// // at = "22:22"              # the original diagnostic ("src/a.onsa:22:22" in a package)
 /// // code = "E0020"
 /// // candidate = 1
-/// // leaves = ["22:30 E0020"]  # after the candidate, in the touched units (default: none)
+/// // leaves = ["22:30 E0020"]  # after the candidate, in the touched units and in those clean before it (default: none)
 /// // clean = true              # the check after it reports nothing at all (S-253)
 /// // same_code = true          # the tokens but comments and the line breaks between them stay (S-247)
 /// ```
@@ -246,6 +256,10 @@ pub struct Checked {
     /// The edits whose tokens the check 5 compared (both sides not empty):
     /// the run fails when there is none at all (nothing passes vacuously).
     pub edits_compared: usize,
+    /// The units after the candidates that held no diagnostic before them
+    /// (the module's documentation, 3), counted once per candidate: the run
+    /// fails when there is none at all.
+    pub clean_units: usize,
 }
 
 /// The files of a case: their id, their name in the source map, and their
@@ -303,6 +317,7 @@ fn target_name(file: &str, sources: &SourceMap, d: &Diagnostic, k: usize) -> Str
 /// module's documentation). `loaded` is the case as it ran.
 pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -> Checked {
     let files = Files::of(case, loaded);
+    let before = Before::of(analyzed);
     let mut out = Checked::default();
     let specs = &setup.test.fix;
     let mut used = vec![false; specs.len()];
@@ -348,13 +363,8 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
             for (file, text) in &after.applied.texts {
                 let name = loaded.sources.file(*file).name();
                 let read = Readings::of(*file, loaded.sources.file(*file).text(), text);
-                let mut messages: Vec<String> = reading_difference_in(&read, *file, &edits)
-                    .map(|diff| format!("the reading outside its edits changed: in {name}, {diff}"))
-                    .into_iter()
-                    .collect();
-                let (shapes, compared) = not_minimal(&read, *file, &edits);
+                let (messages, compared) = edit_problems(&read, *file, &edits, &format!("in {name}, "));
                 out.edits_compared += compared;
-                messages.extend(shapes.into_iter().map(|m| format!("in {name}, {m}")));
                 for m in messages {
                     out.problems.push(Problem::FixContract {
                         target: target.clone(),
@@ -362,7 +372,9 @@ pub fn check(case: &Case, setup: &Setup, loaded: &Loaded, analyzed: &Analyzed) -
                     });
                 }
             }
-            for message in judge(&files, rank, &analyzed.units, &edits, &after, spec) {
+            let (messages, clean) = judge(&files, rank, &before, &edits, &after, spec);
+            out.clean_units += clean;
+            for message in messages {
                 out.problems.push(Problem::FixContract {
                     target: target.clone(),
                     message: format!("fix candidate {target} `{}`: {message}", fix.title()),
@@ -453,23 +465,35 @@ fn recheck(setup: &Setup, loaded: &Loaded, files: &Files, fix: &Fix) -> Result<A
         return Err(format!("it edits {}, a file outside the case", loaded.sources.file(e.span.file).name()));
     }
     let applied = onsa_diag::apply_mapped(&loaded.sources, fix.edits()).map_err(|e| format!("cannot apply it: {e}"))?;
+    let (loaded, analyzed) =
+        check_texts(setup, loaded, &applied.texts).map_err(|e| format!("the check after it {e}"))?;
+    Ok(After { loaded, analyzed, applied })
+}
+
+/// The case `loaded` (as it ran from `setup`) with the files of `texts`
+/// replaced, checked through the case's own entry (`Loaded::from_input`,
+/// `analyze_loaded`); the other files stay. The one way of checking a case
+/// again ([`recheck`], [`crate::copy_guard`]). `Err`: why it cannot be
+/// checked, a phrase after "the check" ("ends in an internal error: …").
+pub(crate) fn check_texts(
+    setup: &Setup,
+    loaded: &Loaded,
+    texts: &BTreeMap<FileId, String>,
+) -> Result<(Loaded, Analyzed), String> {
     let mut input: PackageInput = setup.input.clone();
     for ((id, _), f) in loaded.modules.iter().zip(input.files.iter_mut()) {
-        if let Some(t) = applied.texts.get(id) {
+        if let Some(t) = texts.get(id) {
             f.text = t.clone();
         }
     }
     let mut again = Loaded::from_input(input);
     if again.modules.iter().map(|(f, _)| *f).ne(loaded.modules.iter().map(|(f, _)| *f)) {
-        return Err("the files of the case have other ids when loaded again".into());
+        return Err("gives the files of the case other ids when they are loaded again".into());
     }
     let analyzed = onsa_driver::analyze_loaded(&mut again).map_err(|e| {
-        format!(
-            "the check after it ends in an internal error: {}",
-            e.render(&again.sources).trim_end().replace('\n', "\n  ")
-        )
+        format!("ends in an internal error: {}", e.render(&again.sources).trim_end().replace('\n', "\n  "))
     })?;
-    Ok(After { loaded: again, analyzed, applied })
+    Ok((again, analyzed))
 }
 
 /// Whether `[a, b]` and `[c, d]` meet, both ends included.
@@ -520,10 +544,42 @@ fn falls_in(edit: Span, range: Span) -> bool {
         }
 }
 
-/// The units a candidate touches (the module's documentation, 2; S-302): the
-/// indexes of `after` but those of the untouched units of `before`.
-fn touched(before: &[Unit], after: &[Unit], edits: &[Moved]) -> BTreeSet<usize> {
+/// The units of the check before the candidates and which of them are not
+/// clean (the module's documentation, 3): computed once for a check.
+struct Before<'a> {
+    units: &'a [Unit],
+    /// For each unit: it or its item has a diagnostic, or its check read
+    /// what the check did not.
+    dirty: Vec<bool>,
+}
+
+impl<'a> Before<'a> {
+    fn of(analyzed: &'a Analyzed) -> Before<'a> {
+        let units = &analyzed.units[..];
+        let mut own = vec![false; units.len()];
+        for u in analyzed.diagnostic_units.iter().flatten().chain(&analyzed.unread_units()) {
+            own[*u] = true;
+        }
+        let dirty = units.iter().enumerate().map(|(u, unit)| own[u] || unit.parent.is_some_and(|p| own[p])).collect();
+        Before { units, dirty }
+    }
+}
+
+/// The units after a candidate and those before it ([`correspond`]).
+struct Correspondence {
+    /// The units after it that it touches (the module's documentation, 2).
+    touched: BTreeSet<usize>,
+    /// For each unit after it, the units before it that it comes from: the
+    /// untouched unit whose moved range it is, else every unit of its level
+    /// (top or member) whose moved range meets it; none for a new one.
+    origins: Vec<Vec<usize>>,
+}
+
+/// How the units `after` a candidate whose edits are `edits` come from the
+/// units `before` it. (before × after; no recursion.)
+fn correspond(before: &[Unit], after: &[Unit], edits: &[Moved]) -> Correspondence {
     let mut untouched = BTreeSet::new();
+    let mut origins = vec![Vec::new(); after.len()];
     for (u, unit) in before.iter().enumerate() {
         let members: Vec<Span> = before.iter().filter(|m| m.parent == Some(u)).map(|m| m.span).collect();
         // An edit inside a member touches the member, not the item.
@@ -537,16 +593,22 @@ fn touched(before: &[Unit], after: &[Unit], edits: &[Moved]) -> BTreeSet<usize> 
                     }
             })
         };
-        if edits.iter().any(|e| falls_in(e.before, unit.span) && !in_member(e.before)) {
-            continue;
-        }
         let s = unit.span;
         let moved = Span::new(s.file, shift(edits, s.file, s.start, true), shift(edits, s.file, s.end, false));
-        if let Some(a) = after.iter().position(|x| x.span == moved) {
+        if !edits.iter().any(|e| falls_in(e.before, unit.span) && !in_member(e.before))
+            && let Some(a) = after.iter().position(|x| x.span == moved)
+        {
             untouched.insert(a);
+            origins[a].push(u);
+            continue;
+        }
+        for (a, x) in after.iter().enumerate() {
+            if x.parent.is_none() == unit.parent.is_none() && meet(x.span, moved) {
+                origins[a].push(u);
+            }
         }
     }
-    (0..after.len()).filter(|a| !untouched.contains(a)).collect()
+    Correspondence { touched: (0..after.len()).filter(|a| !untouched.contains(a)).collect(), origins }
 }
 
 /// The lexical readings of one file before and after a candidate, read once
@@ -580,8 +642,25 @@ fn falling_in<'t>(tokens: &[Token], text: &'t str, r: Span) -> Vec<(TokenKind, &
         .iter()
         .take_while(|t| t.span.start <= r.end)
         .filter(|t| !blank(t) && falls_in(r, t.span))
-        .map(|t| (t.kind, &text[t.span.start as usize..t.span.end as usize]))
+        .map(|t| {
+            let s = &text[t.span.start as usize..t.span.end as usize];
+            // The blanks at the end of a comment are not compared.
+            (t.kind, if t.kind.is_comment() { s.trim_end() } else { s })
+        })
         .collect()
+}
+
+/// The checks 4 and 5 of one file (the module's documentation): their
+/// messages, each after `place` (`"in m.onsa, "` or none), and how many
+/// edits the check 5 compared.
+fn edit_problems(read: &Readings, file: FileId, edits: &[Moved], place: &str) -> (Vec<String>, usize) {
+    let mut out: Vec<String> = reading_difference_in(read, file, edits)
+        .map(|diff| format!("the reading outside its edits changed: {place}{diff}"))
+        .into_iter()
+        .collect();
+    let (shapes, compared) = not_minimal(read, file, edits);
+    out.extend(shapes.into_iter().map(|m| format!("{place}{m}")));
+    (out, compared)
 }
 
 /// The edits of `file` that are not minimal (the module's documentation, 5;
@@ -656,35 +735,47 @@ fn reading_difference_in(read: &Readings, file: FileId, edits: &[Moved]) -> Opti
     }))
 }
 
-/// What breaks the contract after one candidate (the module's documentation, 3).
+/// What breaks the contract after one candidate (the module's documentation,
+/// 3), and how many units after it held no diagnostic before it.
 fn judge(
     files: &Files,
     rank: usize,
-    before: &[Unit],
+    before: &Before,
     edits: &[Moved],
     after: &After,
     spec: Option<&FixSpec>,
-) -> Vec<String> {
+) -> (Vec<String>, usize) {
     let sources = &after.loaded.sources;
     let ranges = &after.applied.ranges;
-    let units = touched(before, &after.analyzed.units, edits);
-    let mut left: Vec<(Place, Code)> = Vec::new();
+    let c = correspond(before.units, &after.analyzed.units, edits);
+    let clean: Vec<bool> = c.origins.iter().map(|o| o.iter().all(|&u| !before.dirty[u])).collect();
+    // The diagnostics of the touched units (of its stage or an earlier one), and the others of
+    // the clean ones (of any stage).
+    let mut touched: Vec<(Place, Code)> = Vec::new();
+    let mut fresh: Vec<(Place, Code)> = Vec::new();
     let mut shown = Vec::new();
     for (d, unit) in after.analyzed.diagnostics.iter().zip(&after.analyzed.diagnostic_units) {
         // SPEC-GAP(S-267): where the flow checks sit in the order decides whether a candidate
         // of a flow code may leave a modes or effects diagnostic (`Stage::CHECK_ORDER`).
-        if d.stage.check_rank().is_none_or(|r| r > rank) {
+        let early = d.stage.check_rank().is_some_and(|r| r <= rank);
+        let hit = early
+            && match unit {
+                Some(u) => c.touched.contains(u),
+                None => files.has(d.span.file) && ranges.iter().any(|r| meet(*r, d.span)),
+            };
+        let left = (files.place(sources, d.span), d.code);
+        if hit {
+            touched.push(left);
+        } else if unit.is_some_and(|u| clean[u]) {
+            fresh.push(left);
+        } else {
             continue;
         }
-        let hit = match unit {
-            Some(u) => units.contains(u),
-            None => files.has(d.span.file) && ranges.iter().any(|r| meet(*r, d.span)),
-        };
-        if hit {
-            left.push((files.place(sources, d.span), d.code));
-            shown.push(d.clone());
-        }
+        shown.push(d.clone());
     }
+    touched.sort();
+    fresh.sort();
+    let mut left: Vec<(Place, Code)> = touched.iter().chain(&fresh).cloned().collect();
     left.sort();
     let mut out = Vec::new();
     let mut expected: Vec<(Place, Code)> = Vec::new();
@@ -704,9 +795,14 @@ fn judge(
         }
     };
     if left != expected {
+        let others = if fresh.is_empty() {
+            String::new()
+        } else {
+            format!(", and the units that held no diagnostic before it hold {} besides (of any stage)", show(&fresh))
+        };
         out.push(format!(
-            "after it, the units its edits touch hold {} of its stage or an earlier one; expected {}{}\n  {}",
-            show(&left),
+            "after it, the units its edits touch hold {} of its stage or an earlier one{others}; expected {}{}\n  {}",
+            show(&touched),
             show(&expected),
             if spec.is_some() { " (`leaves`)" } else { " (it is the only error of its unit)" },
             onsa_diag::to_text(sources, &shown).trim_end().replace('\n', "\n  ")
@@ -718,7 +814,7 @@ fn judge(
             describe(files, sources, &after.analyzed.diagnostics)
         ));
     }
-    out
+    (out, clean.iter().filter(|&&c| c).count())
 }
 
 /// The diagnostics, briefly: `E0020 at 3:5, E0401 at 7:1`, or `nothing`.
@@ -848,15 +944,11 @@ pub fn check_candidate(run: &TextCheck, d: &Diagnostic, fix: &Fix) -> Result<Can
     let again = check_text(&text)?;
     let files = Files { list: vec![(file, "m.onsa".into(), "m.onsa".into())], package: false };
     let edits = moved(fix, &applied);
-    let mut problems = Vec::new();
     let read = Readings::of(file, run.loaded.sources.file(file).text(), &text);
-    if let Some(diff) = reading_difference_in(&read, file, &edits) {
-        problems.push(format!("the reading outside its edits changed: {diff}"));
-    }
-    problems.extend(not_minimal(&read, file, &edits).0);
+    let mut problems = edit_problems(&read, file, &edits, "").0;
     let diagnostics = again.analyzed.diagnostics.clone();
     let after = After { loaded: again.loaded, analyzed: again.analyzed, applied };
-    problems.extend(judge(&files, rank, &run.analyzed.units, &edits, &after, None));
+    problems.extend(judge(&files, rank, &Before::of(&run.analyzed), &edits, &after, None).0);
     Ok(CandidateCheck { text, diagnostics, problems })
 }
 
@@ -1105,6 +1197,10 @@ mod tests {
         Moved { before: Span::new(FileId(0), s, e), after: Span::new(FileId(0), s, s + len) }
     }
 
+    fn touched(before: &[Unit], after: &[Unit], edits: &[Moved]) -> BTreeSet<usize> {
+        correspond(before, after, edits).touched
+    }
+
     #[test]
     fn touched_units_are_all_but_the_untouched_ones() {
         // S-302. 0: an item 0..10; 1: an impl 20..60 with members 2 (25..35) and 3 (40..50).
@@ -1290,6 +1386,71 @@ mod tests {
                 before.problems
             );
         }
+    }
+
+    /// The one diagnostic of `src` and its first candidate checked again.
+    fn first_candidate(src: &str) -> (TextCheck, CandidateCheck) {
+        let run = check_text(src).unwrap();
+        assert_eq!(run.analyzed.diagnostics.len(), 1, "{src}: {:?}", run.analyzed.diagnostics);
+        let d = &run.analyzed.diagnostics[0];
+        let now = check_candidate(&run, d, &d.fixes[0]).unwrap();
+        (run, now)
+    }
+
+    /// X-3 (α): a candidate that leaves a diagnostic in a unit it does not
+    /// touch, which held none before it, breaks the contract.
+    #[test]
+    fn a_candidate_that_breaks_a_unit_it_does_not_touch_breaks_the_contract() {
+        let src = "pub fn BadFn() -> I32 {\n  1\n}\n\npub fn user() -> I32 {\n  BadFn()\n}\n";
+        let (_, now) = first_candidate(src);
+        assert!(
+            matches!(&now.problems[..], [p] if p.contains("the units its edits touch hold none")
+                && p.contains("the units that held no diagnostic before it hold 6:3 E0302 besides")),
+            "{:?}",
+            now.problems
+        );
+        // A later stage too: the E0401 of `Bool` after a candidate of the syntax stage.
+        let src = "pub fn f(x: I32) -> I32 {\n  let mut n = x\n  n\n}\n\npub fn g() -> Bool {\n  1\n}\n";
+        let run = check_text(src).unwrap();
+        assert_eq!(run.analyzed.diagnostics.len(), 2, "{:?}", run.analyzed.diagnostics);
+        let (_, now) = first_candidate("pub fn f(x: I32) -> I32 {\n  let mut n = x\n  n\n}\n");
+        assert!(now.problems.is_empty(), "{:?}", now.problems);
+    }
+
+    /// X-3 (α): a candidate that shows an error the check held back (it read
+    /// what the check did not) keeps the contract: the derive list not read
+    /// (S-460), the fields a syntax error cut (S-260), and a parameter whose
+    /// type failed to resolve.
+    #[test]
+    fn a_candidate_that_shows_an_error_held_back_keeps_the_contract() {
+        let forms = [
+            (
+                "#[derive(PartialEq)]\npub struct Pt {\n  x: I32,\n}\n\nfn ordered(a: Pt, b: Pt) -> Bool {\n  a < b\n}\n",
+                Code::E0401,
+            ),
+            ("pub struct S {\n  x: I32,\n  y: I32;\n}\n\nfn f(s: S) -> I32 {\n  s.z\n}\n", Code::E0413),
+            ("fn h(p: i32) -> I32 {\n  1\n}\n\nfn caller() -> I32 {\n  h(true)\n}\n", Code::E0401),
+            // The rt recursion through a body the check did not finish (X-3/U1c/b, F1).
+            (
+                "pub rt fn a(x: I64) -> I64 {\n  b(x)\n}\n\npub rt fn b(x: I64) -> I64 {\n  a(x) + (1 & 1 | 1)\n}\n",
+                Code::E0903,
+            ),
+        ];
+        for (src, shown) in forms {
+            let (run, now) = first_candidate(src);
+            assert!(now.problems.is_empty(), "{src}: {:?}", now.problems);
+            assert!(now.diagnostics.iter().any(|d| d.code == shown), "{src}: {:?}", now.diagnostics);
+            // The unit of the user is the one the driver gives: the second.
+            assert_eq!(run.analyzed.unread_units().into_iter().collect::<Vec<_>>(), [0, 1], "{src}");
+        }
+    }
+
+    /// L2: a comment written again with other blanks at its end is the same comment.
+    #[test]
+    fn the_blanks_at_the_end_of_a_comment_are_not_compared() {
+        let (m, n) = shapes("a // c  \nb\n", &[(0, 8, "z // c")]);
+        assert!(matches!(&m[..], [p] if p.contains("the comment `// c`")), "{m:?}");
+        assert_eq!(n, 1);
     }
 
     #[test]

@@ -140,9 +140,13 @@ impl<'a> Parser<'a> {
         // The sole argument, when it is one name (`c`, `relaxed`, `bulk`).
         let value =
             args.and_then(|(open, close)| crate::attrs::sole_value(&self.tokens, open, close)).map(|i| self.tokens[i]);
+        // The tokens of code in the parentheses (the candidates of E0005 keep the value among them).
+        let arguments = args.map_or_else(Vec::new, |(open, close)| {
+            self.tokens[open + 1..close].iter().filter(|t| t.kind.is_code()).copied().collect()
+        });
         let args =
             args.map(|(open, close)| Span::new(self.file, self.tokens[open].span.start, self.tokens[close].span.end));
-        Ok(SeenAttr { at, finish: self.events.len() - 1, node: done, span: done.span, name, args, value })
+        Ok(SeenAttr { at, finish: self.events.len() - 1, node: done, span: done.span, name, args, value, arguments })
     }
 
     /// The name and the arguments of an attribute; the indices of the `(`
@@ -194,6 +198,7 @@ impl<'a> Parser<'a> {
                     name: self.token_text(a.name),
                     args: a.args,
                     value: a.value.map(|v| (v.span, self.token_text(v))),
+                    arguments: a.arguments.iter().map(|t| (t.span, self.token_text(*t))).collect(),
                 };
                 match crate::attrs::check(self.file, self.text, &w, place) {
                     Some(d) => {
@@ -771,6 +776,8 @@ pub(super) struct SeenAttr {
     args: Option<Span>,
     /// Its sole argument, when that is one name.
     value: Option<Token>,
+    /// The tokens of code in its parentheses.
+    arguments: Vec<Token>,
 }
 
 /// The visibility before a declaration or a field, as [`Parser::parse_vis`] read it.
