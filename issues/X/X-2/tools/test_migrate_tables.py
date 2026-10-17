@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The self-test of `migrate_tables.py` on a made-up tree (not a test of the gate, X-2 DT-8).
 
-    python3 -B docs/process_improvement_after_w3/x2/tools/test_migrate_tables.py
+    python3 -B issues/X/X-2/tools/test_migrate_tables.py
 """
 import contextlib
 import io

@@ -2,7 +2,7 @@
 
 **決定（2026-10-16、利用者）:** DF-A は親の案（TOML）。DF-C は「保留」の意味（DF-6）。DF-D は必要な場合だけ要点を絞って残す（DF-5）。DF-E は下の読み。DF-B は案 2（両側に書き、gate が対称を確かめる。小さな重複は道具で確かめられるので許容）。DF-1〜DF-10 の残りは異存なし。次は手順 4（道具）。
 
-手順は利用者の `docs/process_improvement_after_w3.md` の 2 章の 3。前提は手順 2 の構造（`docs/process_improvement_after_w3/x2/step2_structure.md`、DS-1〜DS-10、決定済み）。
+手順は利用者の `docs/process_improvement_after_w3.md` の 2 章の 3。前提は手順 2 の構造（`issues/X/X-2/step2_structure.md`、DS-1〜DS-10、決定済み）。
 第 2 版に advisor の独立のレビュー（`adv/step3_handback_stage1.md`・`step3_handback_stage2.md`）を、第 3 版に利用者の回答を取り入れた。変更は末尾の表。
 道具（手順 4）、管理の担当（手順 5）、移行（手順 6）は後で決める。ここでは形と、それらへの前提だけを決める。
 
