@@ -9,7 +9,7 @@ pub struct Diagnostic {
     pub message: String,            // 英語。登録簿のテンプレートに名前を埋めたもの
     pub span: Span,
     pub found: Option<String>,      // 問題の箇所のソース
-    pub fixes: Vec<Fix>,            // Fix { title: 1 行・60 文字以内, edits: Vec<Edit> }、Edit { span: Span, replace: String }
+    pub fixes: Vec<Fix>,            // Fix { title: 1 行で空でない（長さは約束の外、S-345）, edits: Vec<Edit> }、Edit { span: Span, replace: String }
     pub notes: Vec<Note>,           // Note { span: Option<Span>, message }（位置の無い note は規則を示す、S-114）
 }
 ```
