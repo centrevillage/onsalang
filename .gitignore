@@ -71,6 +71,9 @@ Testing/
 # Rust
 target/
 
+# Python bytecode (tools/ run without -B)
+__pycache__/
+
 # Example outputs
 examples/*/target/
 examples/*/out.wav
