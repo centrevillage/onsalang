@@ -2,7 +2,7 @@
   "permissions": {
     "ask": [
       "Bash(git push *)",
-      "Bash(rm *)",
+      "Bash(rm -rf *)",
       "Bash(sudo *)"
     ],
     "deny": [
