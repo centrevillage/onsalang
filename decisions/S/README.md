@@ -4,7 +4,7 @@
 作業の中で見つけた担当が報告し、親が登録する。決めなくても着手できるが、該当する作業の前に、仕様の空白の流れ（`rules/process.md`）で利用者が決める。
 
 - 一覧は `python3 -B tools/docs.py list S`。期限の作業の前に決める未決の S は `list S --status OPEN --before <作業>`。
-- 登録するときは、決定を要る作業を頭の欄の `before` に、見つけた票を `found_by` に書く。
+- 登録するときは、決定を要る作業を頭の欄の `before` に、見つけた票を `found_by` に、規則の族を `family` に書く（`rules/process.md` 8.6 の「仕様の空白の流れ」の 2）。
 - 空白の下書きは `S-<番号>.draft.md`（頭の欄は `group` と `drafted`）。状態は持たず、道具と gate は正本と見ない。
 
 ## 本文のラベル
