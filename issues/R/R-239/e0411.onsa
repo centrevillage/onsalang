@@ -1,0 +1,40 @@
+pub fn paren(a: I64, b: I64) -> I32 {
+  (a + b) as I32
+}
+
+pub fn neg(a: I64) -> I32 {
+  -a as I32
+}
+
+pub fn chain(a: I64) -> F32 {
+  a as I32 as F32
+}
+
+pub fn call(a: I64) -> I32 {
+  id(a) as I32
+}
+
+pub fn spaced(a: I64) -> I32 {
+  a  as   I32
+}
+
+pub fn comment(a: I64) -> I32 {
+  a // note
+    as I32
+}
+
+pub fn lit() -> U8 {
+  300 as U8
+}
+
+pub fn fl(a: F64) -> I32 {
+  a as I32 + 1
+}
+
+pub fn id(a: I64) -> I64 {
+  a
+}
+
+pub fn path(a: I64) -> I32 {
+  (a) as I32
+}

@@ -1,0 +1,34 @@
+@fp(relaxed, x)
+pub fn a(x: F32) -> F32 {
+  x
+}
+
+@fp( fast )
+pub fn b(x: F32) -> F32 {
+  x
+}
+
+@fp()
+pub fn c(x: F32) -> F32 {
+  x
+}
+
+@fp(fast, relaxed)
+pub fn d(x: F32) -> F32 {
+  x
+}
+
+@fp(mode: 1)
+pub fn e(x: F32) -> F32 {
+  x
+}
+
+@fp
+pub fn f(x: F32) -> F32 {
+  x
+}
+
+@fp("fast")
+pub fn g(x: F32) -> F32 {
+  x
+}
