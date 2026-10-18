@@ -21,7 +21,11 @@ the added lines and on the old side for the removed ones: `test_lines`).
 Its second line, `work check: …`, reads the last work check of the worktree (its
 `target/gate/history.jsonl`, `tools/gate.py`) and says whether the parent need run it
 again in the main tree (rules/process.md 8.5; `work_check_line`). Its third line is the auto
-sweep of the main tree (`gate_runs.auto_line`, `tools/after_commit.py`).
+sweep of the main tree (`gate_runs.auto_line`, `tools/after_commit.py`). Its fourth line,
+`fuzz inputs: …`, says which inputs the fuzzing of the worktree kept (`fuzz.new_inputs`:
+`<target>/fuzz/new/*.onsa`, named by the hash of the text) it copied into the main tree's,
+those of a name not there yet, so that they are not lost with the worktree (X-1 U8;
+`copy_fuzz_inputs`); a failure to copy does not fail the patch.
 
 `check` (`--to`, default this repository) says whether `git apply --check`
 passes, else whether `git apply --check -3` does (and whether with
@@ -36,6 +40,7 @@ usage error.
 """
 import argparse
 import re
+import shutil
 import subprocess
 import sys
 from fnmatch import fnmatch
@@ -43,6 +48,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fuzz  # noqa: E402
 import gate_runs  # noqa: E402
 import gate_steps  # noqa: E402
 import narrowing  # noqa: E402
@@ -220,6 +226,7 @@ def patch(args):
         print(gate_runs.auto_line(args.main, gate_runs.read_history(args.main)[0], gate_steps.SHARDS))
     except OSError as e:
         print(f"auto sweep: cannot read the history of the main tree ({e})")
+    print(copy_fuzz_inputs(wt, args.main))
     summary(stats, new, inner)
     head = git(args.main, "rev-parse", "HEAD").stdout.decode().strip()
     if git(args.main, "rev-parse", base).stdout.decode().strip() != head:
@@ -228,6 +235,29 @@ def patch(args):
         print(f"the main tree ({head[:9]}) differs from {base} in {len(moved)} file(s); of the patch: "
               + (", ".join(both) if both else "none"))
     return 0
+
+
+def copy_fuzz_inputs(wt, main):
+    """Copy the inputs the fuzzing of the worktree kept into the main tree's directory, those of a name
+    not there yet (a name is the hash of the text, so one there is the same input: never overwritten);
+    the line that says what it did."""
+    src, dest, done = fuzz.new_inputs(wt), fuzz.new_inputs(main), []
+    try:
+        names = sorted(p.name for p in src.glob("*.onsa"))
+        if names and src.resolve() == dest.resolve():
+            return f"fuzz inputs: {len(names)} in {dest}/, which the worktree shares with the main tree; none copied"
+        if not names:
+            return "fuzz inputs: none in the worktree"
+        dest.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            if not (dest / name).exists():
+                shutil.copyfile(src / name, dest / name)
+                done.append(name)
+    except OSError as e:
+        return f"fuzz inputs: {len(done)} copied into {dest}/, then the copy failed ({e})"
+    if not done:
+        return f"fuzz inputs: {len(names)} in the worktree, all in the main tree already"
+    return f"fuzz inputs: {len(done)} copied from the worktree into {dest}/: {', '.join(done)}"
 
 
 def work_check_line(wt, main, base, patch_file):
@@ -321,13 +351,25 @@ its target/gate/history.jsonl) with the patch and the main tree:
                                                        the main tree moved in the code
 The third line, `auto sweep: …`, is the sweep a commit of the main tree starts (tools/after_commit.py
 --help): read it before taking the patch in; FAILED points to the output of the sweep.
+The fourth line, `fuzz inputs: …`, copies the inputs the fuzzing of the worktree kept for its new
+classes (<target>/fuzz/new/*.onsa) into the main tree's, so that removing the worktree loses none:
+  fuzz inputs: 2 copied from the worktree into <main>/target/fuzz/new/: 1a2b3c4d.onsa, 5e6f7a8b.onsa
+  fuzz inputs: none in the worktree
+  fuzz inputs: 3 in the worktree, all in the main tree already
+                                                       nothing to copy (a name there is the same input)
+  fuzz inputs: 3 in <dir>/, which the worktree shares with the main tree; none copied
+                                                       one CARGO_TARGET_DIR for both
+  fuzz inputs: 1 copied into <dir>/, then the copy failed (...)
+                                                       the patch is made all the same
+The parent sorts them later; nothing is written under tests/fuzz/.
 example: tools/take.py patch .claude/worktrees/x1 2ce980a /tmp/x1.patch"""
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("patch", description="Make the patch of a worktree from a base and show its lines.",
+    p = sub.add_parser("patch", description="Make the patch of a worktree from a base, show its lines and copy the "
+                       "inputs its fuzzing kept into the main tree (before the worktree is removed).",
                        epilog=PATCH_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     p.add_argument("worktree", help="the worktree whose work is taken")
     p.add_argument("base", help="the commit the patch starts from (the base of the work)")

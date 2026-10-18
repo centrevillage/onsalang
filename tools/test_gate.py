@@ -4172,6 +4172,38 @@ class Take(unittest.TestCase):
                      "the worktree whose work is taken", "the patch file to write", "example: tools/take.py patch"):
             self.assertIn(part, text)
         self.assertEqual(self.make_patch().splitlines()[2], "auto sweep: no sweep yet")  # the main tree's
+        for part in ("fuzz inputs: none in the worktree", "copy the inputs its fuzzing kept into the main tree "
+                     "(before the worktree is removed)"):  # fmt: skip
+            self.assertIn(part, text)
+
+    def test_the_fuzz_inputs_of_the_worktree(self):
+        """X-1 U8: `patch` copies the inputs the worktree's fuzzing kept that the main tree has not, and
+        overwrites none; the patch does not take them (target/ is ignored)."""
+        (self.main / ".git" / "info").mkdir(exist_ok=True)
+        (self.main / ".git" / "info" / "exclude").write_text("target/\n")
+        line = lambda: self.make_patch().splitlines()[3]  # noqa: E731
+        self.assertEqual(line(), "fuzz inputs: none in the worktree")
+        src, dest = self.wt / "target" / "fuzz" / "new", self.main / "target" / "fuzz" / "new"
+        src.mkdir(parents=True)
+        dest.mkdir(parents=True)
+        for name in ("1a2b3c4d.onsa", "5e6f7a8b.onsa", "notes.txt"):
+            (src / name).write_text(f"fn {name[:4]}\n")
+        (dest / "1a2b3c4d.onsa").write_text("the main tree's\n")
+        self.assertEqual(line(), f"fuzz inputs: 1 copied from the worktree into {dest}/: 5e6f7a8b.onsa")
+        self.assertEqual((dest / "1a2b3c4d.onsa").read_text(), "the main tree's\n")
+        self.assertEqual((dest / "5e6f7a8b.onsa").read_text(), "fn 5e6f\n")
+        self.assertFalse((dest / "notes.txt").exists())
+        self.assertNotIn("target/", self.patch.read_text())
+        self.assertEqual(line(), "fuzz inputs: 2 in the worktree, all in the main tree already")
+        with mock.patch.object(take.fuzz, "target_directory", return_value=self.wt / "target"):  # one CARGO_TARGET_DIR
+            self.assertEqual(line(), f"fuzz inputs: 2 in {src}/, which the worktree shares with the main tree; "
+                                     "none copied")  # fmt: skip
+        (dest / "1a2b3c4d.onsa").unlink()
+        (dest / "5e6f7a8b.onsa").unlink()
+        dest.rmdir()
+        dest.write_text("not a directory\n")
+        self.assertRegex(line(), rf"^fuzz inputs: 0 copied into {re.escape(str(dest))}/, then the copy failed \(")
+        self.assertTrue(self.patch.read_text())  # the patch is made all the same
 
 
 import after_commit  # noqa: E402

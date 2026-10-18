@@ -35,6 +35,7 @@ The gate item `fuzz` (this script without options) does three things:
    A crash of a new class fails the gate: its first input is minimized and
    written to `target/fuzz/new/`, with the entry to add (the gate writes
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
+   Those of a worktree, `tools/take.py patch` copies into the main tree's.
 3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed
    rule: the mutants whose index in the whole run is a multiple of it; never
    a truncation), and every
@@ -146,6 +147,8 @@ import repo  # noqa: E402
 
 ROOT = repo.ROOT
 FUZZ_DIR = repo.FUZZ_DIR
+# The work directory under cargo's target directory, and its directory of the inputs of the new classes.
+WORK, NEW = "fuzz", "new"
 # The commands of Q-06; `fmt --check` reads and does not write.
 COMMANDS = (("check",), ("fmt", "--check"))
 TIMEOUT = 20  # seconds per run
@@ -687,7 +690,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     mutate; `base` (`narrowing.Base`, the reason it is unknown, or None)
     tells a new class of the fix stage from one before. Returns the exit code."""
     root = Path(root)
-    work = Path(target_dir or root / "target") / "fuzz"
+    work = Path(target_dir or root / "target") / WORK
     runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
     fixer = FixRunner(fix_argv, runner.work / "fix")
     failures = []
@@ -803,7 +806,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         name = f"{short_name(small)}.onsa"
         target = (FUZZ_DIR / name).as_posix()
         # A signal (a stack overflow) is never saved under tests/: replaying it would abort again.
-        dest_dir = root / FUZZ_DIR if save and not signature.startswith("signal ") else work / "new"
+        dest_dir = root / FUZZ_DIR if save and not signature.startswith("signal ") else work / NEW
         dest_dir.mkdir(parents=True, exist_ok=True)
         (dest_dir / name).write_bytes(encode(small))
         written.append((dest_dir / name, target, c, seed, which))
@@ -867,6 +870,11 @@ def target_directory(root):
         return Path(json.loads(r.stdout)["target_directory"])
     except (ValueError, KeyError):
         return None
+
+
+def new_inputs(root):
+    """The directory a run in `root` keeps the inputs of the new classes in (`run`), as `main` finds it."""
+    return Path(target_directory(root) or Path(root) / "target") / WORK / NEW
 
 
 def main(argv=None):
