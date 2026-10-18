@@ -2,18 +2,29 @@
   "permissions": {
     "ask": [
       "Bash(git push *)",
-      "Bash(sudo *)"
+      "Bash(sudo *)",
+      "Edit(/.claude/agents/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/CLAUDE.md)"
     ],
     "deny": [
       "Read(.env)",
       "Read(.env.*)",
       "Read(./secrets/**)",
       "Read(~/.ssh/**)",
-      "Read(~/.aws/**)"
+      "Read(~/.aws/**)",
+      "Bash(git stash)",
+      "Bash(git stash *)",
+      "Bash(git -C * stash)",
+      "Bash(git -C * stash *)",
+      "Bash(swift test)",
+      "Bash(swift test *)"
     ]
   },
   "worktree": {
     "baseRef": "head"
   },
-  "langage": "japanese"
+  "language": "japanese",
+  "env": { "PYTHONDONTWRITEBYTECODE": "1" }
 }
