@@ -47,6 +47,9 @@ import repo  # noqa: E402
 import spec_blocks  # noqa: E402
 import spec_sections  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "hooks"))
+import claude_hook  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).resolve().parent / "vectors"))
 from test_vectors import VectorsTools  # noqa: E402,F401  (the tests of the `vectors` item run here)
 
@@ -6290,6 +6293,190 @@ class ToolHelp(unittest.TestCase):
             with self.subTest(argv=argv), self.assertRaises(SystemExit) as e:
                 quiet_out(docs_tool.main, ["help", *argv])
             self.assertEqual(e.exception.code, 2)
+
+class ClaudeHook(unittest.TestCase):
+    """tools/hooks/claude_hook.py (X-9 U3): what each event stops, changes, writes and tells, and its help."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.scratch = Path(self.tmp.name) / "scratch"
+        self.scratch.mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def hook(self, event_name, event, stdin=None):
+        """(the JSON it printed or None, the other lines); the exit is always 0."""
+        text = json.dumps({"scratchpad_dir": str(self.scratch), **event}) if stdin is None else stdin
+        code, lines = quiet_out(claude_hook.main, [event_name], io.StringIO(text))
+        self.assertEqual(code, 0)
+        out = [x for x in lines if x.startswith("{")]
+        self.assertLessEqual(len(out), 1, lines)
+        return (json.loads(out[0])["hookSpecificOutput"] if out else None), [x for x in lines if not x.startswith("{")]
+
+    def pre(self, role, tool, **inp):
+        event = {"tool_name": tool, "tool_input": inp, "cwd": "/r"}
+        if role != "parent":
+            event["agent_type"] = repo.ROLES.get(role, role)
+        return self.hook("PreToolUse", event)[0]
+
+    def denied(self, role, tool, **inp):
+        out = self.pre(role, tool, **inp)
+        if out and out.get("permissionDecision") == "deny":
+            self.assertTrue(out["permissionDecisionReason"])
+            return True
+        self.assertNotIn("permissionDecision", out or {})  # only a stop decides the permission
+        return False
+
+    def test_stops(self):
+        bash = lambda c: ("Bash", {"command": c})  # noqa: E731
+        cases = [  # (role, (tool, input), stopped)
+            ("parent", bash("cd /r/.claude/worktrees/a && git log"), True),
+            ("parent", bash("(cd .claude/worktrees/a; ls)"), True),
+            ("parent", bash("git -C /r/.claude/worktrees/a log"), False),
+            ("parent", bash("echo 'cd .claude/worktrees/a'"), False),
+            ("parent", bash("cd /r/tools && ls"), False),
+            ("i", bash("cd /r/.claude/worktrees/a && git log"), False),
+            ("parent", ("Agent", {"subagent_type": "onsa-impl", "model": "sonnet", "prompt": "p"}), True),
+            ("parent", ("Agent", {"subagent_type": "onsa-impl", "prompt": "p"}), False),
+            ("parent", ("Agent", {"subagent_type": "general-purpose", "model": "sonnet"}), False),
+            ("parent", bash("python3 -B tools/fuzz.py --deep"), True),
+            ("i", bash("env X=1 python3 -B /r/tools/fuzz.py --seed 3 --deep"), True),
+            ("i", bash("python3 -B tools/fuzz.py --seed 3"), False),
+            ("t", bash("python3 -B tools/bg.py run /d -- tools/gate.sh --work X"), True),
+            ("t", bash("git log -- tools/gate.py; python3 -B tools/test_gate.py"), False),
+            ("advisor", bash("cargo -q test -p onsa_cli"), True),
+            ("gap", bash("ls && cargo build"), True),
+            ("advisor", bash("cargo metadata; ./target/debug/onsa check a.onsa"), False),
+            ("b", bash("cargo test -p onsa_cli"), False),
+            ("t", ("Read", {"file_path": "/r/crates/onsa_cli/src/main.rs"}), True),
+            ("t", ("Grep", {"pattern": "fn", "path": "crates/onsa_diag/src"}), True),
+            ("t", ("Glob", {"pattern": "crates/*/src/**/*.rs"}), True),
+            ("t", ("Grep", {"pattern": "fn", "path": "crates", "glob": "*/src/*.rs"}), True),  # the path and the glob
+            ("t", ("Glob", {"pattern": "*/src/**", "path": "/r/crates"}), True),
+            ("t", ("Grep", {"pattern": "fn", "path": "crates", "glob": "*/tests/*.rs"}), False),
+            ("t", ("Grep", {"pattern": "crates/onsa_cli/src/", "path": "tests"}), False),  # the text, not a path
+            ("t", ("Read", {"file_path": "/r/crates/onsa_cli/tests/cli.rs"}), False),
+            ("t", bash("cat crates/onsa_cli/src/main.rs"), False),
+            ("i", ("Read", {"file_path": "/r/crates/onsa_cli/src/main.rs"}), False),
+        ]  # fmt: skip
+        for role, (tool, inp), stopped in cases:
+            with self.subTest(role=role, input=inp):
+                self.assertEqual(self.denied(role, tool, **inp), stopped)
+        for role in repo.ROLES:  # the gate (X9-47) and the builds, by role
+            with self.subTest(role=role):
+                self.assertEqual(self.denied(role, "Bash", command="tools/gate.sh --work X-9/U3"),
+                                 role in ("t", "b", "advisor", "gap", "docs"))  # fmt: skip
+                self.assertEqual(self.denied(role, "Bash", command="cargo run -q -p onsa_cli"), role in ("advisor", "gap"))
+
+    def test_changes_and_tells(self):
+        out = self.pre("i", "Bash", command="tools/gate.sh --work X-9/U3", description="gate")
+        self.assertEqual(out, {"hookEventName": "PreToolUse",  # the whole input, no decision (X9-52)
+                               "updatedInput": {"command": "tools/gate.sh --work X-9/U3", "description": "gate",
+                                                "timeout": 600000}})  # fmt: skip
+        self.assertEqual(self.pre("parent", "Bash", command="python3 -B tools/bg.py wait /d", timeout=1000)["updatedInput"]
+                         ["timeout"], 600000)  # fmt: skip
+        for inp in ({"command": "tools/gate.sh", "timeout": 600000}, {"command": "python3 -B tools/bg.py run /d -- ls"}):
+            self.assertIsNone(self.pre("i", "Bash", **inp))
+        heredoc = self.pre("i", "Bash", command="python3 - a <<EOF\nprint(1)\nEOF")
+        self.assertEqual(list(heredoc), ["hookEventName", "additionalContext"])
+        self.assertIn("<<'EOF'", heredoc["additionalContext"])
+        for line in ("python3 - <<'EOF'\nx\nEOF", 'python3 - <<"EOF"\nx\nEOF', "cat <<EOF\nx\nEOF", "python3 x.py <<< a"):
+            with self.subTest(line=line):
+                self.assertIsNone(self.pre("i", "Bash", command=line))
+
+    def test_messages_and_crash_reports(self):
+        for to in ("main", "onsa-impl [3fa]"):
+            self.hook("PostToolUse", {"tool_name": "SendMessage", "tool_input": {"to": to, "message": "直して"}})
+        files = sorted(p.name for p in (self.scratch / "messages").iterdir())
+        self.assertEqual(files, ["001-main.md", "002-onsa-impl__3fa_.md"])
+        self.assertEqual((self.scratch / "messages" / files[1]).read_text(), "from: main\nto: onsa-impl [3fa]\n\n直して\n")
+        reports = Path(self.tmp.name) / "reports"
+        reports.mkdir()
+        (reports / "onsa-2026-10-01.ips").write_text("")
+        bash = {"tool_name": "Bash", "tool_input": {"command": "ls"}, "agent_type": "onsa-impl"}
+        with mock.patch.dict(os.environ, {"ONSA_CRASH_REPORTS": str(reports)}):
+            self.assertIsNone(self.hook("PostToolUse", bash)[0])  # the first time only keeps what is there
+            (reports / "onsa_cases-2026-10-18.ips").write_text("")
+            (reports / "Python-2026-10-18.ips").write_text("")
+            told = self.hook("PostToolUse", bash)[0]["additionalContext"]
+            self.assertIn("onsa_cases-2026-10-18.ips", told)
+            self.assertNotIn("onsa-2026-10-01", told)
+            self.assertNotIn("Python-", told)
+            self.assertIsNone(self.hook("PostToolUse", bash)[0])
+
+    def test_session_start(self):
+        root = Path(self.tmp.name) / "repo"
+        (root / ".claude" / "agents").mkdir(parents=True)
+        (root / ".claude" / "agents" / "onsa-x.md").write_text("x")
+        git_in(root.parent, "init", "-q", "-b", "dev", str(root))
+        git_in(root, "add", "-A")
+        git_in(root, "commit", "-q", "-m", "a " + "long subject " * 40)
+        git_in(root, "branch", "topic")
+        for i in range(40):
+            (root / f"new{i:02d}-{'x' * 60}.txt").write_text("")
+        for source in ("startup", "compact"):
+            out = self.hook("SessionStart", {"cwd": str(root), "source": source})[0]
+            text = out["additionalContext"]
+            self.assertEqual(out["hookEventName"], "SessionStart")
+            self.assertLessEqual(len(text), claude_hook.SUMMARY_MAX)
+            for part in ("git status --short: 40 件", "git worktree list: 1 件", "dev・main の外の枝: 1", "auto sweep: ",
+                         "core.hooksPath: (無し)", "担当の定義: onsa-x", "docs due の文書: 0",
+                         "parent: no commit from HEAD has a `Docs-Checked:` trailer"):
+                self.assertIn(part, text)
+            self.assertEqual(sum(x.startswith("?? new") for x in text.split("\n")), 10)
+
+    def record(self, *largest):
+        """A made-up record of an agent: one call per context size, a SubagentHandback after each."""
+        path = Path(self.tmp.name) / "agent-a1.jsonl"
+        with path.open("w") as f:
+            for i, n in enumerate(largest):
+                f.write(json.dumps({"message": {"id": f"m{i}", "model": "claude-opus-5-5", "usage": {"input_tokens": n}}})
+                        + "\n")  # fmt: skip
+                use = {"type": "tool_use", "name": "SubagentHandback", "input": {"message": f"報告 {i}"}}
+                f.write(json.dumps({"message": {"content": [use]}}) + "\n")
+        return path
+
+    def test_subagent_stop(self):
+        stop = lambda path: self.hook("SubagentStop", {"agent_type": "onsa-impl", "agent_id": "a1",  # noqa: E731
+                                                       "agent_transcript_path": str(path)})  # fmt: skip
+        self.assertEqual(stop(self.record(1000, 250000)), (None, []))
+        self.assertEqual(stop(self.record(1000, 310000)), (None, []))
+        saved = sorted((self.scratch / "handback").iterdir())
+        self.assertEqual([p.name for p in saved], ["onsa-impl-a1-001.md", "onsa-impl-a1-002.md"])
+        first, second = (p.read_text().split("\n") for p in saved)
+        self.assertEqual(first[0], "usage: calls 2, largest context 250,000, API-equivalent $1.0")
+        self.assertEqual(first[1:], ["", "報告 1", ""])
+        self.assertIn("largest context 310,000", second[0])
+        self.assertIn("新しい担当へ（rules/leader.md 2.6）", second[0])
+        self.hook("SubagentStop", {"agent_type": "", "agent_transcript_path": str(self.record(1))})
+        self.assertEqual(len(list((self.scratch / "handback").iterdir())), 2)  # Claude Code's own agents
+
+    def test_errors_do_nothing(self):
+        out, lines = self.hook("SubagentStop", {"agent_type": "onsa-impl", "agent_id": "a1",
+                                                "agent_transcript_path": str(Path(self.tmp.name) / "none.jsonl")})
+        self.assertEqual((out, lines), (None, []))
+        self.assertRegex((self.scratch / "hooks" / "errors.log").read_text(), r"^SubagentStop: FileNotFoundError: ")
+        out, lines = self.hook("PreToolUse", {}, stdin="not json")
+        self.assertIsNone(out)
+        self.assertRegex(lines[0], r"^PreToolUse: JSONDecodeError: ")
+
+    def test_help(self):
+        for name, c in claude_hook.COMMANDS.items():
+            with self.subTest(name=name):
+                self.assertIsInstance(c, repo.Command)
+                for text in (c.purpose, c.when, c.example):
+                    self.assertTrue(text.strip() and "\n" not in text, text)
+                self.assertEqual([r for r in c.roles if r not in repo.ROLES], [])
+                self.assertTrue(c.roles)
+                self.assertRegex(c.example, rf"\| python3 -B tools/hooks/claude_hook\.py {name}$")
+                code, lines = quiet_out(claude_hook.main, ["help", name])
+                self.assertIn(f"  例:   {c.example}", lines)
+        for role in repo.ROLES:
+            code, lines = quiet_out(claude_hook.main, ["help", "--role", role])
+            want = [n for n, c in claude_hook.COMMANDS.items() if role in c.roles]
+            self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want))
+        self.assertEqual([x.split()[0] for x in quiet_out(claude_hook.main, ["help"])[1][:4]], list(claude_hook.COMMANDS))
 
 
 if __name__ == "__main__":
