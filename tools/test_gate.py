@@ -1401,6 +1401,12 @@ class GateForms(GateRun):
         plain = Repo(self.elsewhere())
         plain.write("crates/a/src/lib.rs", "// SPEC-GAP(NEW): x\n")
         self.assertEqual(run(plain.root)[0], 1)
+        # X9-29: a mark that names a dropped S is told in every tree and fails none
+        for root in (self.root, wt, plain.root):
+            (root / "crates/a/src/lib.rs").write_text("// SPEC-GAP(S-15): x\n")
+            code, out = run(root)
+            self.assertEqual(code, gate_steps.PARENT, out)
+            self.assertIn("parent: crates/a/src/lib.rs:1: S-15 is DROPPED", out)
 
 
 class SaveBase(unittest.TestCase):
@@ -1615,6 +1621,8 @@ class RealSteps(unittest.TestCase):
             self.assertIn(r, names)
         by_name = {s.name: s for s in gate_steps.STEPS}
         self.assertTrue(by_name["golden"].info)
+        # every test binary runs, the ones after a failing one too (X9-70)
+        self.assertEqual(by_name["test"].argv, ("cargo", "test", "--workspace", "--no-fail-fast"))
         self.assertTrue(by_name["spec-coverage"].info)
         # the convergence of the fix candidates shows its cycles and divergences, never listed (W3-22)
         self.assertTrue(by_name["fix-loop"].info and not by_name["fix-loop"].pendable)
@@ -1803,6 +1811,72 @@ class Golden(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             gate.golden_changes(self.root)
         self.assertEqual(quiet(gate.golden_main, self.root), 1)
+
+    def commit(self):
+        self.git("add", ".")
+        self.git("-c", "commit.gpgsign=false", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--no-verify", "-q", "-m", "c")
+
+    def test_fix_copies(self):
+        # X9-27: the `.fix<K>` files under tests/ are listed as tests/golden is; other names are not
+        self.git("init", "-q")
+        for rel in ("tests/spec/a.onsa.fix1", "tests/spec/b.onsa.fix2", "tests/c.onsa.fix1", "tests/d.fix1.bak", "src/e.onsa.fix1"):
+            self.write(rel)
+        self.commit()
+        self.assertEqual(gate.golden_changes(self.root), [])
+        self.assertEqual(quiet_out(gate.golden_main, self.root), (0, ["no golden file differs from HEAD"]))
+        self.write("tests/spec/a.onsa.fix1", "changed\n")
+        (self.root / "tests/spec/b.onsa.fix2").unlink()
+        self.write("tests/spec/deep/n.onsa.fix12")
+        self.git("add", "tests/spec/deep/n.onsa.fix12")
+        self.write("tests/u.onsa.fix3")
+        for rel in ("tests/d.fix1.bak", "tests/f.onsa.fixed", "tests/g.onsa.fix", "src/e.onsa.fix1"):
+            self.write(rel, "not a copy\n")
+        self.assertEqual(
+            gate.golden_changes(self.root),
+            ["M tests/spec/a.onsa.fix1", "D tests/spec/b.onsa.fix2", "A tests/spec/deep/n.onsa.fix12", "? tests/u.onsa.fix3"],
+        )
+
+    def test_foreign_forms(self):
+        # X9-27: the `id` of each form whose `fixed` differs; a change of the other fields is not listed
+        def form(id_, *examples, origin="C"):
+            return f'[[form]]\nid = "{id_}"\norigin = "{origin}"\n' + "".join(
+                '[[form.example]]\nsource = "s"\n' + (f"fixed = {x}\n" if x is not None else "") for x in examples
+            )
+
+        self.git("init", "-q")
+        self.write("spec/foreign-forms.toml", "# head\n")  # in HEAD with no form
+        self.write("src/x", "x\n")
+        self.commit()
+        forms = form("semi", '["a"]') + form("two", '["b"]', '["c", "d"]') + form("e0002", None) + form("gone", '["g"]')
+        self.write("spec/foreign-forms.toml", forms)
+        self.assertEqual(
+            gate.golden_changes(self.root),
+            ["A spec/foreign-forms.toml: fixed of gone", "A spec/foreign-forms.toml: fixed of semi",
+             "A spec/foreign-forms.toml: fixed of two"],
+        )  # fmt: skip
+        self.commit()
+        self.assertEqual(gate.golden_changes(self.root), [])
+        changed = (form("semi", '["a2"]') + form("two", '["b"]', None, '["c", "d"]', origin="Rust")
+                   + form("e0002", None, None) + form("new", "['''\n''']"))  # fmt: skip
+        self.write("spec/foreign-forms.toml", "# the head changed\n" + changed)
+        self.assertEqual(
+            gate.golden_changes(self.root),
+            ["D spec/foreign-forms.toml: fixed of gone", "A spec/foreign-forms.toml: fixed of new",
+             "M spec/foreign-forms.toml: fixed of semi"],
+        )  # fmt: skip
+        self.write("spec/foreign-forms.toml", "[[form]\n")  # a toml that cannot be read
+        with self.assertRaises(ValueError):
+            gate.golden_changes(self.root)
+        code, out = quiet_out(gate.golden_main, self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("cannot list the golden files", out[0])
+
+    def test_summary_lines(self):
+        # the head of the line and its text when nothing differs stay as they were (read by the parent)
+        self.assertIn("  golden: no file differs from HEAD", gate.summary([], [], [], ()))
+        lines = gate.summary([], [], ["M spec/foreign-forms.toml: fixed of semi"], ())
+        self.assertIn("  golden: differs from HEAD (read and approve):", lines)
+        self.assertIn("    M spec/foreign-forms.toml: fixed of semi", lines)
 
 
 def json_cmd(outputs):
@@ -2080,6 +2154,24 @@ class SpecGap(TempRepo):
         code, out = quiet_out(gap_marks.main, ["--root", str(self.repo.root)])
         self.assertIn("S-99 is not in decisions/S/, issues/R/, decisions/A/", "\n".join(out))
         self.assertEqual(code, 1)
+
+    def test_dropped(self):
+        # X9-29: a mark that names a DROPPED S is told (PARENT), never failed; DECIDED, OPEN and a mention are not
+        self.repo.write_id("S-50", "OPEN")
+        self.assertEqual(gap_marks.dropped_ids(docs_tool.Index.of(self.repo.root)), {"S-15"})
+        text = "// SPEC-GAP(S-15): x\n// SPEC-GAP(S-45): y\n// SPEC-GAP(S-50): z\n// S-15 was dropped\n"
+        self.repo.write("crates/a/src/lib.rs", text)
+        code, out = quiet_out(gap_marks.main, ["--root", str(self.repo.root)])
+        said = "parent: crates/a/src/lib.rs:1: S-15 is DROPPED in decisions/S/; point the mark to the decision"
+        self.assertEqual(code, gate_steps.PARENT, out)
+        self.assertEqual([x for x in out if x.startswith("parent:")], [out[0]])
+        self.assertTrue(out[0].startswith(said), out)
+        self.assertEqual(out[-1], "3 SPEC-GAP mark(s) in crates, std, runtime, tools; 1 naming a dropped S")
+        # with a problem the exit is the problem's; the dropped S is still only told
+        self.repo.write("crates/a/src/lib.rs", text + "// SPEC-GAP(NEW): w\n")
+        code, out = quiet_out(gap_marks.main, ["--root", str(self.repo.root)])
+        self.assertEqual(code, 1, out)
+        self.assertTrue(any(x.startswith(said) for x in out), out)
 
 
 BUILTIN_BASELINES = dict(builtin_names.BASELINES)

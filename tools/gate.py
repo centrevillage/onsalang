@@ -57,18 +57,23 @@ whose it is and waits (2026-10-08). The items use every core, and gates that
 run side by side only slow each other down.
 
 Golden files (Q-04): the expectations that `UPDATE_GOLDEN=1` rewrites, and
-their inputs, live under `tests/golden/`. The summary lists every file there
-that differs from HEAD (modified, added, deleted, untracked) for the parent
-to read and approve; a difference does not fail the gate. The gate checks; it
+their inputs, live under `tests/golden/`; the copies of the fix candidates are
+the `.fix<K>` files under `tests/` and the `fixed` of `spec/foreign-forms.toml`.
+The summary lists every golden and `.fix<K>` file that differs from HEAD
+(modified, added, deleted, untracked) and the `id` of each form of
+`spec/foreign-forms.toml` whose `fixed` differs from HEAD, for the parent to
+read and approve; a difference does not fail the gate. The gate checks; it
 never rewrites, so it refuses to run with `UPDATE_GOLDEN` set.
 """
 import argparse
 import contextlib
 import fcntl
 import os
+import re
 import subprocess
 import sys
 import time
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -84,6 +89,9 @@ import repo  # noqa: E402
 
 ROOT = TOOLS.parent
 GOLDEN_DIR = "tests/golden"
+FIX_COPIES = ":(glob)tests/**/*.fix[0-9]*"  # the `.fix<K>` files; `FIX_COPY` keeps the exact form
+FIX_COPY = re.compile(r"\.fix\d+")
+FOREIGN_FORMS = "spec/foreign-forms.toml"
 # The exit code of an item that cannot run; the list never makes it pending.
 CANNOT_RUN = 2
 # The lock of the one gate that runs on the machine, in the common git directory.
@@ -357,14 +365,34 @@ last line (the verdict) come after them. A whole run saves the base binaries of 
 
 
 def golden_changes(root=ROOT):
-    """Files under tests/golden that differ from HEAD: modified, added, deleted,
-    untracked. Raises CalledProcessError / OSError when git fails."""
-    diff = _git(root, "diff", "HEAD", "--name-status", "--no-renames", "-z", "--", GOLDEN_DIR)
-    others = _git(root, "ls-files", "--others", "--exclude-standard", "-z", "--", GOLDEN_DIR)
+    """Files under tests/golden and the `.fix<K>` files that differ from HEAD: modified, added,
+    deleted, untracked; then the forms whose `fixed` differs (`fixed_changes`). Raises
+    CalledProcessError / OSError when git fails, ValueError when the toml cannot be read."""
+    diff = _git(root, "diff", "HEAD", "--name-status", "--no-renames", "-z", "--", GOLDEN_DIR, FIX_COPIES)
+    others = _git(root, "ls-files", "--others", "--exclude-standard", "-z", "--", GOLDEN_DIR, FIX_COPIES)
     fields = [f for f in diff.split("\0") if f]
     out = [f"{fields[i]} {fields[i + 1]}" for i in range(0, len(fields) - 1, 2)]
     out += [f"? {p}" for p in others.split("\0") if p]
-    return sorted(out, key=lambda s: s.split(" ", 1)[1])
+    out = [o for o in out if o.split(" ", 1)[1].startswith(GOLDEN_DIR + "/") or FIX_COPY.fullmatch(Path(o).suffix)]
+    return sorted(out, key=lambda s: s.split(" ", 1)[1]) + fixed_changes(root)
+
+
+def fixed_changes(root):
+    """`M|A|D spec/foreign-forms.toml: fixed of <id>` for each form whose `fixed` (those of its
+    examples, in order) differs between HEAD and the tree; a change of the other fields is not listed."""
+    in_head = _git(root, "ls-tree", "--name-only", "HEAD", "--", FOREIGN_FORMS).strip()
+    path = root / FOREIGN_FORMS
+    before = _fixed(_git(root, "show", f"HEAD:{FOREIGN_FORMS}") if in_head else "")
+    now = _fixed(path.read_text(encoding="utf-8") if path.is_file() else "")
+    status = {i: "A" if i not in before else "D" if i not in now else "M" for i in before.keys() | now.keys()}
+    return [f"{s} {FOREIGN_FORMS}: fixed of {i}" for i, s in sorted(status.items()) if before.get(i) != now.get(i)]
+
+
+def _fixed(text):
+    """{id: the `fixed` of its examples that have one} of the forms that have one."""
+    forms = tomllib.loads(text).get("form", [])
+    fixed = {str(f.get("id")): [e["fixed"] for e in f.get("example", []) if "fixed" in e] for f in forms}
+    return {i: x for i, x in fixed.items() if x}
 
 
 def _git(root, *args):
@@ -374,7 +402,7 @@ def _git(root, *args):
 def golden_main(root):
     try:
         changes = golden_changes(root)
-    except (subprocess.CalledProcessError, OSError) as e:
+    except (subprocess.CalledProcessError, OSError, ValueError) as e:
         err = getattr(e, "stderr", "") or ""
         print(f"cannot list the golden files: {e}\n{err}".rstrip())
         return 1
@@ -461,7 +489,7 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
         tree = (before, before is not None and _tree(root, kind) != before, start)
         try:
             golden = golden_changes(root)
-        except (subprocess.CalledProcessError, OSError):
+        except (subprocess.CalledProcessError, OSError, ValueError):
             golden = None
         failed = any(r.failed for r in results)
         notes = [f"diff: cannot read it ({form.diff_error}); the narrowable items run whole"] if form.diff_error else []

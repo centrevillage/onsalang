@@ -94,7 +94,8 @@ STEPS = [
     Step("save-base", (*PY, str(TOOLS / "gate.py"), "--save-base"), slow=True, sweep=True, sweep_only=True),
     Step("fmt", ("cargo", "fmt", "--all", "--", "--check")),
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
-    Step("test", ("cargo", "test", "--workspace")),
+    # Every test binary runs, the ones after a failing one too (X9-70).
+    Step("test", ("cargo", "test", "--workspace", "--no-fail-fast")),
     # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
     Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True, narrows=FUZZ_TOOLS),
     # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine
