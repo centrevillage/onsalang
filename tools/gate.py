@@ -37,7 +37,7 @@ took longer than `gate_steps.BUDGET_WORK` / `BUDGET_SWEEP` seconds (the wait for
 the lock does not count); the warning does not fail. A run in the main tree adds
 a line to `target/gate/history.jsonl` and shows the shards of the sweep; a run in
 a worktree adds one to its own (`--quick` too), with the git tree it checked, for
-`tools/take.py patch` to tell whether the parent need run it again (X-1 U3).
+`tools/work.py patch` to tell whether the parent need run it again (X-1 U3).
 
 An item marked `stage_end_only` (the deep fuzzing, `fuzz.py --deep`) runs only
 with `--stage-end` and is SKIPPED otherwise: it is heavy on the machine (W3-03).
@@ -348,7 +348,7 @@ EPILOG = """\
 examples:
   tools/gate.sh --work X-1/U3     the work check of the unit U3 of X-1, before its report
   tools/gate.sh --quick           in the middle of a work (not the verdict)
-A worktree keeps its runs in its target/gate/history.jsonl: `tools/take.py patch` reads the last
+A worktree keeps its runs in its target/gate/history.jsonl: `tools/work.py patch` reads the last
 work check there and says whether the parent need run it again.
 In the main tree, the summary shows `fuzz new: …` (the inputs in target/fuzz/new/ that tests/fuzz/
 has no file of the same name for: not sorted yet), `sweep: …` (the shards) and `auto sweep: …` (the
@@ -477,7 +477,7 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
 def _tree(root, kind):
     """The git trees this run checks (`repo.tree_hash`), as the fields of its row: `tree`, the whole of
     a worktree and `narrowing.SWEPT` of the main tree (the parent's documents may change meanwhile),
-    and in a worktree `code_tree`, its `SWEPT` (`take.py patch`, X-1 U5); None when they cannot be made."""
+    and in a worktree `code_tree`, its `SWEPT` (`work.py patch`, X-1 U5); None when they cannot be made."""
     try:
         if kind == "worktree":
             return {"tree": repo.tree_hash(root), "code_tree": repo.tree_hash(root, narrowing.SWEPT)}

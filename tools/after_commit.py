@@ -53,7 +53,7 @@ when to use it by hand:
             background (not while {gate_runs.HOLD} is there)
   stop it:  touch {gate_runs.HOLD} (commits still write the request); remove it, then --now
   see it:   the line `auto sweep: …` of the summary of tools/gate.sh (the main tree) and of
-            tools/take.py patch; the output of each sweep in {gate_runs.AUTO / 'runs'}/
+            tools/work.py patch; the output of each sweep in {gate_runs.AUTO / 'runs'}/
 the line `auto sweep:` says, when one applies:
   hook not set (…)             core.hooksPath of this clone does not name {gate_runs.HOOKS}: commits
                                start nothing (set it with the command in the line)

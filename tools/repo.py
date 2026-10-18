@@ -652,6 +652,12 @@ def parse_command(prog, description, commands, argv=None, common=lambda p: None)
     """The arguments of `prog <name> …` for `commands` ({name: Command}) and `help`; `args.run_` is the run.
     `common(p)` adds what every subcommand but `help` takes. argparse's errors exit 2 (an unknown role or
     command of `help` too)."""
+    return command_parsers(prog, description, commands, common)[0].parse_args(argv)
+
+
+def command_parsers(prog, description, commands, common=lambda p: None):
+    """(the parser of `prog`, {name: the parser of the subcommand}, `help` too): `parse_command`'s, and the
+    arguments `docs.py check`'s `tools` reads (X9-9)."""
     ap = argparse.ArgumentParser(prog=prog, description=description)
     sub = ap.add_subparsers(dest="cmd", required=True)
     parsers = {}
@@ -660,11 +666,11 @@ def parse_command(prog, description, commands, argv=None, common=lambda p: None)
         common(p)
         c.add_arguments(p)
         p.set_defaults(run_=c.run)
-    h = sub.add_parser("help", help="命令の目的・時機・役割・例を出す")
+    parsers["help"] = h = sub.add_parser("help", help="命令の目的・時機・役割・例を出す")
     h.add_argument("--role", choices=ROLES, help="この役割が使う命令だけを、時機と例とともに出す")
     h.add_argument("command", nargs="?", choices=commands, help="この命令の全てと引数の説明を出す")
     h.set_defaults(run_=lambda a: print(help_text(prog, commands, parsers, a.role, a.command), end="") or 0)
-    return ap.parse_args(argv)
+    return ap, parsers
 
 
 def help_text(prog, commands, parsers, role=None, name=None):

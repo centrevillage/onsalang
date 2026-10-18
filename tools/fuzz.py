@@ -35,7 +35,7 @@ The gate item `fuzz` (this script without options) does three things:
    A crash of a new class fails the gate: its first input is minimized and
    written to `target/fuzz/new/`, with the entry to add (the gate writes
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
-   Those of a worktree, `tools/take.py patch` copies into the main tree's;
+   Those of a worktree, `tools/work.py patch` copies into the main tree's;
    the summary of the main tree's gate lists those `tests/fuzz/` has no file
    of the same name for (`fuzz new: …`): the ones not sorted yet.
 3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed

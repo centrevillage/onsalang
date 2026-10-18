@@ -1149,7 +1149,7 @@ class GateForms(GateRun):
             gate.main(["--help"], root=self.root)
         text = " ".join(out.getvalue().split())
         for part in ("a W ID of tasks/W/ (W3-11) or a unit of an item of issues/X/ (X-3/U1)",
-                     "tools/gate.sh --work X-1/U3", "`tools/take.py patch` reads the last work check",
+                     "tools/gate.sh --work X-1/U3", "`tools/work.py patch` reads the last work check",
                      "only the warnings and the last line (the verdict) come after them"):
             self.assertIn(part, text)
 
@@ -4649,6 +4649,9 @@ class Work(unittest.TestCase):
                 self.assertEqual((code, got), (0, want or ["（役割"]))
         names = list(work.COMMANDS)
         self.assertEqual([x.split()[0] for x in quiet_out(work.main, ["help"])[1][: len(names)]], names)
+        # in the order of the work (X-9 U8): an agent's first command first
+        self.assertEqual(names, ["sync", "new", "take", "patch", "check", "apply", "commit", "done", "close", "remove"])
+        self.assertEqual(quiet_out(work.main, ["help", "--role", "i"])[1][0].split()[0], "sync")
 
 
 class WorkSync(unittest.TestCase):
@@ -5617,18 +5620,18 @@ class DocsTool(unittest.TestCase):
             "rules/a.md:28: table rows with no header and delimiter row before them",
             "rules/a.md:30: table rows with no header and delimiter row before them",
             "heads, refs, relations: no directory of the new layout",
-            "docs check: 6 problem(s) (tables 6, heads 0, refs 0, relations 0, links 0)",
+            "docs check: 6 problem(s) (tables 6, heads 0, refs 0, relations 0, links 0, tools 0)",
         ])  # fmt: skip
 
     def test_check_passes_and_fails_on_an_open_fence(self):
         self.write("rules/a.md", "| a | b |\n|---|---|\n| 1 | 2 |\n")
         none = "heads, refs, relations: no directory of the new layout\n"
         self.assertEqual(self.main("check"), (0, none + "docs check: no problem in 1 document(s) "
-                                                        "(tables, heads, refs, relations, links)\n"))  # fmt: skip
+                                                        "(tables, heads, refs, relations, links, tools)\n"))  # fmt: skip
         self.write("rules/b.md", "x\n````\n| a |\n```\n")
         self.assertEqual(self.main("check"), (1, "== tables\nrules/b.md:2: the code fence is not closed\n" + none +
                                                  "docs check: 1 problem(s) (tables 1, heads 0, refs 0, relations 0, "
-                                                 "links 0)\n"))  # fmt: skip
+                                                 "links 0, tools 0)\n"))  # fmt: skip
 
     def test_check_with_no_document_is_an_error(self):
         self.write("history/a.md", "| a |\n| 1 | 2 |\n")
@@ -6298,6 +6301,44 @@ class DocsLayout(DocsTree):
         self.assertOne("README.md", "[仕様](spec/README.md)", "[仕様](spec/README.md)、[無い](docs/none.md#x)", "README.md:3: the link docs/none.md#x is not found")
         self.assertOne("rules/README.md", "(common.md)", "(commons.md)", "rules/README.md:3: the link commons.md is not found")
 
+    def test_check_tools(self):
+        # X9-9: the tools, their commands and arguments named in a code span of the rules and the definitions
+        self.layout()
+        self.write("tools/cmd.py", "import repo\n\nC = repo.Command\nCOMMANDS = {\n"
+                   "    'run': C(lambda p: p.add_argument('--go', action='store_true'), None, ('i',), 'a', 'b', 'cmd.py run'),\n"
+                   "    'stop': C(lambda p: p.add_argument('--now'), None, ('i',), 'a', 'b', 'cmd.py stop'),\n}\n"
+                   "if __name__ == '__main__':\n    raise SystemExit(3)\n")  # fmt: skip
+        self.write("tools/hooks/plain.sh", "# plain.sh [--quick] run\n")
+        self.write("tools/tuple.py", "COMMANDS = (('check',),)  # not of repo.Command: its text\n# --fast\n")
+        self.write("tools/broken.py", "COMMANDS = {\n")
+        good = ("`cmd.py run --go`、`python3 -B tools/cmd.py stop --now=1`、`cmd.py`、`cmd.py <命令> --go`、`cmd.py --now`、"
+                "`cmd.py run --help`、`cmd.py help --role i`、`cmd.py stop … -h`、`tools/hooks/plain.sh --quick <ID>`、"
+                "`plain.sh nosuch [--quick]`、`tuple.py --fast`、`git log --oneline`、`onsa check --x`、`x.rs`、"
+                "`cmd.py run -- --other`、`python3 -B tools/cmd.py run 'a --b'`\n")  # fmt: skip
+        self.write("rules/x.md", f"# x\n\n{good}\n```sh\ncmd.py nosuch --bad\n```\n")
+        self.write(".claude/agents/onsa-x.md", "定義 `tools/cmd.py stop`\n")
+        self.write("CLAUDE.md", "`plain.sh`\n")
+        self.assertEqual(self.check(), (0, []))
+        for rel, old, new, found in (
+            ("rules/x.md", "`x.rs`", "`nosuch.py`", "no tool nosuch.py (tools/nosuch.py, tools/hooks/nosuch.py)"),
+            ("rules/x.md", "`cmd.py`、", "`cmd.py walk <ID>`、", "walk is not a command of cmd.py"),
+            ("rules/x.md", "stop --now=1", "stop --go", "--go is not an argument of tools/cmd.py stop"),
+            ("rules/x.md", "`cmd.py --now`", "`cmd.py --later`", "--later is not an argument of cmd.py"),
+            ("rules/x.md", "help --role i", "help --roles i", "--roles is not an argument of cmd.py help"),
+            ("rules/x.md", "plain.sh --quick <ID>", "plain.sh --qui <ID>", "--qui is not an argument of tools/hooks/plain.sh"),
+            ("rules/x.md", "`x.rs`", "`broken.py run`", "broken.py cannot be read: SyntaxError: '{' was never closed (…"),
+            (".claude/agents/onsa-x.md", "tools/cmd.py stop", "tools/hooks/cmd.py stop", "no tool tools/hooks/cmd.py (…"),
+            ("CLAUDE.md", "`plain.sh`", "`plain.sh -x`", "-x is not an argument of plain.sh"),
+        ):  # fmt: skip
+            with self.subTest(new=new):
+                self.edit(rel, old, new)
+                code, lines = self.check()
+                self.assertEqual((code, len(lines)), (1, 1), lines)
+                line = 3 if rel == "rules/x.md" else 1
+                self.assertTrue(lines[0].startswith(f"{rel}:{line}: `"), lines)
+                self.assertIn(found.split("(…")[0], lines[0])
+                self.edit(rel, new, old)
+
     # ------------------------------------------------ the readers of the current tools
 
     def test_load_docs_reads_the_files_of_the_ids(self):
@@ -6832,7 +6873,7 @@ class DocsCommands(DocsTree):
         self.layout()
         self.write(repo.FOREIGN_FORMS, '[[form]]\nid = "a"\n')
         want, opened = self.results()
-        check = "docs check: no problem in 19 document(s) (tables, heads, refs, relations, links)"  # the .md of NEW_LAYOUT
+        check = "docs check: no problem in 19 document(s) (tables, heads, refs, relations, links, tools)"  # the .md of NEW_LAYOUT
         self.assertEqual(want["check"], (0, [check]))
         self.assertEqual((want["foreign"], want["path"][0]), ({"a"}, 1))  # S-9 and the others are not found
         self.assertIn("1\tW1-01\ttasks\tS-1\tDONE\tgate", want["graph"][0][1])

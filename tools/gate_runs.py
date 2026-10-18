@@ -7,11 +7,11 @@ status --porcelain` shows something), `form` (`whole`, `stage-end W3`, `work W3-
 for the lock), `items` ({name: [status, seconds]}), `tree` (the git tree the items read,
 `repo.tree_hash`: the whole of a worktree, `narrowing.SWEPT` of the main tree; null when it changed
 while they ran or cannot be made), in a worktree `code_tree` (the hash of its `narrowing.SWEPT`,
-null with `tree`: `tools/take.py patch` tells a change of the documents after the check from one of
+null with `tree`: `tools/work.py patch` tells a change of the documents after the check from one of
 the code and the cases, X-1 U5) and `tree_changed`. The next shard of a sweep follows the last
 sweep of the same K (`next_shard`); a run that stopped half way writes no line, so its shard
 runs again. A whole run (`whole`, `stage-end …`) of a clean tree counts as every shard, and a run
-whose tree changed counts as none (`_sweeps`). A worktree keeps its own history, `--quick` too, for `tools/take.py patch` (X-1 U3);
+whose tree changed counts as none (`_sweeps`). A worktree keeps its own history, `--quick` too, for `tools/work.py patch` (X-1 U3);
 it goes with the worktree.
 
 The base binaries (`save_base`, `tools/gate.sh --save-base`, the first item of a sweep): the
@@ -26,7 +26,7 @@ commit of the code or the cases: `time`, `commit`, `now`), `state` (what the run
 by the runner while it lives), `request.lock` (short: every read and write of `request` and every
 try of `lock` are made under it, so a request is never left with no runner told), `job/` (bg.py)
 and `runs/` (the output of the last RUNS_KEPT sweeps). `target/gate/hold` stops it. `auto_line`
-is the line `auto sweep: …` of the gate's summary and of `take.py patch`; it starts with `hook not
+is the line `auto sweep: …` of the gate's summary and of `work.py patch`; it starts with `hook not
 set` when `core.hooksPath` does not name `HOOKS` (`hook_set`; the setting is the clone's, X-1 U5).
 """
 import contextlib

@@ -49,8 +49,10 @@ depth 0 with `-` for the type and from).
   layout (`Index`; `history/` and `tests/pending.toml` are not read) (a) `heads` (the field table of
   the directory's README, the head fields against it, the heading), (b) `refs` (the IDs and the `§`
   are there), (c) `relations` (the keys named in `check_relations`, and a direction in `RESTS_ON` for
-  each ID field of the field tables), and (e) `links` (the relative
-  links of the READMEs). To add a check, add `(name, fn(tree) -> Findings)` to CHECKS; to add a
+  each ID field of the field tables), (e) `links` (the relative
+  links of the READMEs), and (f) `tools` (X9-9: the tools, their commands and arguments that the rules, the
+  agents' definitions and the root's README.md and CLAUDE.md name in a code span are there; `check_tools`;
+  a tool is imported, never run). To add a check, add `(name, fn(tree) -> Findings)` to CHECKS; to add a
   subcommand, add `name: repo.Command(add_arguments, run, roles, purpose, when, example)` to COMMANDS
   (its help, X9-7; `docs.py help`).
 
@@ -58,8 +60,10 @@ The head fields (DF-1) are read by `read_head` and written in the normal form by
 `write_head` (U3's `set`); the field table of a directory is `field_table`.
 """
 import fnmatch
+import importlib.util
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -953,12 +957,98 @@ def check_links(tree):
                     yield Finding(rel, i + 1, f"the link {m.group(1)} is not found")
 
 
+TOOL_DOCS = ("rules/*.md", ".claude/agents/*.md", "README.md", "CLAUDE.md")  # the documents `tools` reads
+TOOL_DIRS = ("tools", "tools/hooks")  # where a tool named alone (`docs.py`) is looked for
+TOOL_REF = re.compile(r"(?:python3(?:\s+-B)?\s+)?((?:tools/(?:hooks/)?)?[\w-]+\.(?:py|sh))(?=\s|$)")
+HAS_COMMANDS = re.compile(r"^COMMANDS = \{", re.M)
+NO_COMMAND = ("<", "…", "...", "-", "[")  # a word after the tool that is not the name of a command
+ARG = re.compile(r"--?[A-Za-z][\w-]*")
+ALWAYS = ("-h", "--help")
+
+
+def tool_refs(tree):
+    """(path, line, the code span, the tool's name, the words after it up to a `--`) of each code span of
+    TOOL_DOCS outside the code blocks that starts with a tool (`python3` and `-B` before it skipped)."""
+    for rel in sorted({p.relative_to(tree.root) for g in TOOL_DOCS for p in tree.root.glob(g) if p.is_file()}):
+        lines, kinds = tree.lines(rel), tree.kinds(rel)[0]
+        for i, line in enumerate(lines):
+            for a, b in code_spans(line) if kinds[i] == TEXT else ():
+                span = line[a:b].strip("`").strip()
+                if m := TOOL_REF.match(span):
+                    try:
+                        words = shlex.split(span[m.end() :])
+                    except ValueError:  # a quote left open: the words as they are
+                        words = span[m.end() :].split()
+                    yield rel, i + 1, span, m.group(1), words[: words.index("--")] if "--" in words else words
+
+
+def tool_module(path):
+    """The module of the tool `path` (already imported, else imported from the file, never run)."""
+    for m in (sys.modules.get(path.stem), sys.modules.get("__main__")):
+        if getattr(m, "__file__", None) and Path(m.__file__).resolve() == path.resolve():
+            return m
+    name = "docs_tool_" + re.sub(r"\W", "_", str(path.resolve()))
+    spec = importlib.util.spec_from_file_location(name, path)
+    sys.modules[name] = module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def tool_arguments(path):
+    """{command: its option strings} of a tool with COMMANDS of `repo.Command` (`help` and COMMON too, as
+    `repo.command_parsers` makes them); None for another tool (its text is its arguments)."""
+    if not HAS_COMMANDS.search(path.read_text(encoding="utf-8")):
+        return None
+    module = tool_module(path)
+    commands = getattr(module, "COMMANDS", None)
+    if not isinstance(commands, dict) or not all(isinstance(c, repo.Command) for c in commands.values()):
+        return None
+    parsers = repo.command_parsers(path.name, "", commands, getattr(module, "COMMON", lambda p: None))[1]
+    return {name: set(p._option_string_actions) for name, p in parsers.items()}
+
+
+def check_tools(tree):
+    """(f) The tools named in a code span of TOOL_DOCS (X9-9): the file is there (a name alone under
+    TOOL_DIRS); a tool with COMMANDS has the command named right after it (none named passes); and each word
+    `-…` is an argument of that command (of any, with none named), or in the file of a tool without COMMANDS."""
+    tools = {}
+    for rel, line, span, name, words in tool_refs(tree):
+        places = [name] if "/" in name else [f"{d}/{name}" for d in TOOL_DIRS]
+        path = next((tree.root / p for p in places if (tree.root / p).is_file()), None)
+        if path is None:
+            yield Finding(rel, line, f"`{span}`: no tool {name} (" + ", ".join(places) + ")")
+            continue
+        if path not in tools:
+            try:
+                tools[path] = tool_arguments(path)
+            except Exception as e:  # a tool that cannot be imported: a finding, not a stop of the check
+                tools[path] = f"{name} cannot be read: {type(e).__name__}: {e}"
+        args = tools[path]
+        if isinstance(args, str):
+            yield Finding(rel, line, f"`{span}`: {args}")
+            continue
+        command = words[0] if words and not words[0].startswith(NO_COMMAND) else None
+        if args is not None and command is not None and command not in args:
+            yield Finding(rel, line, f"`{span}`: {command} is not a command of {name}")
+            continue
+        if args is None:
+            text = path.read_text(encoding="utf-8")
+            known = lambda w: re.search(rf"(?<![\w-]){re.escape(w)}(?![\w-])", text)  # noqa: E731
+        else:
+            known = (args[command] if command else set().union(*args.values())).__contains__
+        for w in (w.strip("[]").split("=")[0] for w in words):
+            if ARG.fullmatch(w) and w not in ALWAYS and not known(w):
+                of = f"{name} {command}" if command else name
+                yield Finding(rel, line, f"`{span}`: {w} is not an argument of {of}")
+
+
 CHECKS = [
     ("tables", check_tables),
     ("heads", check_heads),
     ("refs", check_refs),
     ("relations", check_relations),
     ("links", check_links),
+    ("tools", check_tools),
 ]
 
 
@@ -1940,9 +2030,9 @@ COMMANDS = {
                  "決定の変更点を見るとき（別に書かない）。下書きを確かめる段で、その節の決定を探すとき（`--section <§>`）",
                  "docs.py changes --section §6"),
     "set": C(set_args, cmd_set, EDITORS, "ID のファイルの頭の欄を書く（`KEY=` は欄を消す）",
-             "ID のファイルの頭の欄を書くとき（親は、作業のコミットと同じ回に `status=DONE`、決定の反映で "
-             "`status=DECIDED decided=<日付>`。点検の担当は、親が作業票に規則を書いたときだけ）",
-             "docs.py set W1-01 status=DONE"),
+             "ID のファイルの頭の欄を書くとき（親は、決定の反映で `status=DECIDED decided=<日付>`。作業の "
+             "`status=DONE` は、作業のコミットの `work.py commit --done <ID>` が書く。点検の担当は、親が作業票に規則を書いたときだけ）",
+             "docs.py set S-537 status=DECIDED decided=2026-10-18"),
     "note": C(note_args, cmd_note, EDITORS, "ID のファイルの本文に補いの項目を足す",
               "ID のファイルの本文に補いを書くとき（親は、決定の反映で、関係する R の `判断`・`反映`）",
               "docs.py note R-12 反映 \"W3-05 で直した\""),
@@ -1957,9 +2047,13 @@ COMMANDS = {
 }  # fmt: skip
 
 
+def COMMON(p):
+    """What every subcommand but `help` takes (`repo.parse_command`; `check_tools` reads it too)."""
+    p.add_argument("--root", type=Path, default=ROOT)
+
+
 def main(argv=None):
-    args = repo.parse_command("docs.py", __doc__.split("\n")[0], COMMANDS, argv,
-                              lambda p: p.add_argument("--root", type=Path, default=ROOT))  # fmt: skip
+    args = repo.parse_command("docs.py", __doc__.split("\n")[0], COMMANDS, argv, COMMON)
     try:
         return args.run_(args)
     except (DocsError, repo.RepoError) as e:

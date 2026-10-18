@@ -1178,6 +1178,10 @@ def failing(fn):
 
 C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
 COMMANDS = {
+    "sync": C(sync_args, failing(sync), ("t", "i", "docs"),
+              "作業ツリーに dev を取り込む（自分のコミットも変更も無ければ ff-only、あれば WIP を置いて merge、衝突ならファイルを並べて止める）。--apply で引き継ぎのパッチを当てて WIP を置く",
+              "作業ツリーで動く担当の始めと、親が dev の取り込みを指示したとき。主のツリーと merge の途中では何もせず終了 1",
+              "work.py sync --apply /tmp/x1.patch -m 'WIP: X-9 U6'"),
     "new": C(new_args, failing(run_new), ("parent",),
              "主のツリーの .claude/worktrees/<名前> に、dev から枝 worktree-<名前> の作業ツリーを作り、経路を最後の行に出す",
              "担当を作業ツリーで起こすとき（WorktreeCreate のフックが呼ぶ）。同じ名前の枝か経路があれば作らずに終了 1",
@@ -1196,8 +1200,12 @@ COMMANDS = {
                "work.py check /tmp/x1.patch --to .claude/worktrees/x2"),
     "apply": C(to_args, failing(run_apply), ("parent", "i"),
                "パッチを check の見つけた形で当て、3-way の後は索引から外し、当てたことを控える",
-               "check を読んだ後。担当は引き継ぎのパッチを自分の作業ツリーに当てる（rules/common.md 2.4）",
+               "check を読んだ後。担当の引き継ぎのパッチは、自分の作業ツリーで `work.py sync --apply <パッチ>` が当てて WIP を置く",
                "work.py apply /tmp/x1.patch --to .claude/worktrees/x2"),
+    "commit": C(commit_args, failing(commit), ("parent",),
+                "名指した経路の今の中身だけをコミットし（未追跡と削除も。他の変更と索引は残す）、--done で作業を DONE に、--docs-checked と --co-author で trailer を書く",
+                "親が主のツリーでコミットするとき。git の commit が失敗したら、索引と --done のファイルを元に戻す",
+                "work.py commit -m 'Add sync and commit to the work tool (X-9/U6)' tools/work.py --done X-9 --co-author 'Claude <noreply@anthropic.com>'"),
     "done": C(done_args, failing(done), ("parent",),
               "一つの作業ツリーに片付けの判定（生きている担当 → 変更なし → 写し済み → それ以外）を当て、消せるなら消し、消せなければ理由を出して終了 1",
               "担当の成果を写した後と、担当の仕事を捨てるとき（--discard でパッチを target/work/discarded/ に書いてから消す）",
@@ -1210,14 +1218,6 @@ COMMANDS = {
                 "一つの作業ツリーに同じ判定を当て、消せるなら消して終了 0、残すなら理由を stderr に書いて終了 1",
                 "WorktreeRemove のフックが呼ぶ（Claude Code は 0 でない終了で作業ツリーを残す）",
                 "work.py remove /Users/centrevillage/projects/onsalang/.claude/worktrees/agent-a1b2c3"),
-    "sync": C(sync_args, failing(sync), ("t", "i", "docs"),
-              "作業ツリーに dev を取り込む（自分のコミットも変更も無ければ ff-only、あれば WIP を置いて merge、衝突ならファイルを並べて止める）。--apply で引き継ぎのパッチを当てて WIP を置く",
-              "作業ツリーで動く担当の始めと、親が dev の取り込みを指示したとき。主のツリーと merge の途中では何もせず終了 1",
-              "work.py sync --apply /tmp/x1.patch -m 'WIP: X-9 U6'"),
-    "commit": C(commit_args, failing(commit), ("parent",),
-                "名指した経路の今の中身だけをコミットし（未追跡と削除も。他の変更と索引は残す）、--done で作業を DONE に、--docs-checked と --co-author で trailer を書く",
-                "親が主のツリーでコミットするとき。git の commit が失敗したら、索引と --done のファイルを元に戻す",
-                "work.py commit -m 'Add sync and commit to the work tool (X-9/U6)' tools/work.py --done X-9 --co-author 'Claude <noreply@anthropic.com>'"),
 }  # fmt: skip
 
 
