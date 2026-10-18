@@ -55,14 +55,25 @@ when to use it by hand:
   see it:   the line `auto sweep: …` of the summary of tools/gate.sh (the main tree) and of
             tools/take.py patch; the output of each sweep in {gate_runs.AUTO / 'runs'}/
 the line `auto sweep:` says, when one applies:
+  hook not set (…)             core.hooksPath of this clone does not name {gate_runs.HOOKS}: commits
+                               start nothing (set it with the command in the line)
   held since …                 {gate_runs.HOLD} is there
   waiting (quiet until …)      the runner waits {QUIET} s after the last commit
   waiting for a clean tree …   the code or the cases have changes not committed
   running at <commit> since …  the sweep runs
   skipped at <commit>: …       the tree stayed dirty {CLEAN_WAIT} s; commit or clean it, then --now
-  requested at …, no runner    the runner is gone (a restart, a failure: {gate_runs.AUTO / 'job' / 'out'}); --now
+  requested at …, no runner    the runner is gone (a restart, a failure: {gate_runs.AUTO / 'job' / 'out'}); --now.
+                               For a few seconds right after --now it says so too: the runner has
+                               not taken its lock yet
   gate exit N at <commit>      the gate could not run
 and then the outcome: FAILED at <commit>: <items> (<output>) / last PASS at <commit> / no sweep yet
+when it says FAILED:
+  read      the output the line points to (in {gate_runs.AUTO / 'runs'}/) and the inputs the fuzzing
+            made small, in target/fuzz/new/
+  it stays  a shard that fails on a class known before stays FAILED until the class is in
+            tests/fuzz/allowed.toml or in an R; the commit of that touches tests/, so it starts a
+            sweep. The line clears when that shard passes; a sweep runs the next shard, so it can
+            take {gate_steps.SHARDS} sweeps (more commits of the code or the cases, or --now)
 example: python3 -B tools/after_commit.py --now"""
 
 

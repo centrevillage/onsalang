@@ -6,7 +6,9 @@ status --porcelain` shows something), `form` (`whole`, `stage-end W3`, `work W3-
 `only fuzz,static`, `quick`), `works`, `verdict`, `seconds` (the sum of the items, without the wait
 for the lock), `items` ({name: [status, seconds]}), `tree` (the git tree the items read,
 `repo.tree_hash`: the whole of a worktree, `narrowing.SWEPT` of the main tree; null when it changed
-while they ran or cannot be made) and `tree_changed`. The next shard of a sweep follows the last
+while they ran or cannot be made), in a worktree `code_tree` (the hash of its `narrowing.SWEPT`,
+null with `tree`: `tools/take.py patch` tells a change of the documents after the check from one of
+the code and the cases, X-1 U5) and `tree_changed`. The next shard of a sweep follows the last
 sweep of the same K (`next_shard`); a run that stopped half way writes no line, so its shard
 runs again. A whole run (`whole`, `stage-end …`) of a clean tree counts as every shard, and a run
 whose tree changed counts as none (`_sweeps`). A worktree keeps its own history, `--quick` too, for `tools/take.py patch` (X-1 U3);
@@ -24,7 +26,8 @@ commit of the code or the cases: `time`, `commit`, `now`), `state` (what the run
 by the runner while it lives), `request.lock` (short: every read and write of `request` and every
 try of `lock` are made under it, so a request is never left with no runner told), `job/` (bg.py)
 and `runs/` (the output of the last RUNS_KEPT sweeps). `target/gate/hold` stops it. `auto_line`
-is the line `auto sweep: …` of the gate's summary and of `take.py patch`.
+is the line `auto sweep: …` of the gate's summary and of `take.py patch`; it starts with `hook not
+set` when `core.hooksPath` does not name `HOOKS` (`hook_set`; the setting is the clone's, X-1 U5).
 """
 import contextlib
 import datetime
@@ -42,6 +45,7 @@ import repo
 HISTORY = Path("target") / "gate" / "history.jsonl"
 AUTO = Path("target") / "gate" / "auto"
 HOLD = Path("target") / "gate" / "hold"
+HOOKS = Path("tools") / "hooks"
 RUNS_KEPT = 10
 BASE_NAME = re.compile(r"[0-9a-f]{%d}" % narrowing.SHORT)
 
@@ -75,9 +79,9 @@ def at_start(root):
             "dirty": bool(narrowing.git(root, "status", "--porcelain").strip())}  # fmt: skip
 
 
-def record(root, form, works, items, verdict, seconds, tree=None, tree_changed=False, start=None):
-    """Add the line of a run (`start`: `at_start` before the items; else taken now); the reason it
-    cannot (a str), or None."""
+def record(root, form, works, items, verdict, seconds, tree=None, tree_changed=False, start=None, code_tree=None):
+    """Add the line of a run (`start`: `at_start` before the items; else taken now; `code_tree` in a
+    worktree only); the reason it cannot (a str), or None."""
     try:
         row = {
             "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -85,6 +89,8 @@ def record(root, form, works, items, verdict, seconds, tree=None, tree_changed=F
             "form": form, "works": list(works), "verdict": verdict, "seconds": round(seconds, 1), "items": items,
             "tree": None if tree_changed else tree, "tree_changed": tree_changed,
         }  # fmt: skip
+        if code_tree is not None:
+            row["code_tree"] = None if tree_changed else code_tree
         path = Path(root) / HISTORY
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
@@ -201,11 +207,20 @@ def _clock(t):
     return time.strftime("%m-%d %H:%M:%S", time.localtime(t)) if isinstance(t, (int, float)) else "?"
 
 
+def hook_set(root):
+    """`core.hooksPath` names the tree's `HOOKS` (relative or not); False when git cannot read it."""
+    try:
+        path = narrowing.git(root, "config", "--get", "core.hooksPath").strip()
+    except narrowing.NarrowError:
+        return False
+    return bool(path) and (Path(root) / path).resolve() == (Path(root) / HOOKS).resolve()
+
+
 def auto_line(root, rows, k):
     """`auto sweep: <what the runner does>; <the outcome of the sweeps>` (X-1 U4): the part of now
     from the hold, the request, the runner's lock and its state; the outcome from the last row of
     each shard (`_sweeps`; one shard's failure stays until that shard passes)."""
-    root, live = Path(root), []
+    root, live = Path(root), [] if hook_set(root) else [f"hook not set (git config core.hooksPath {HOOKS})"]
     short = lambda c: str(c or "?")[:narrowing.SHORT]  # noqa: E731
     req, runner = None, None
     if (root / AUTO).is_dir():  # nothing written before the first commit of the code

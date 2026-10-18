@@ -1024,6 +1024,7 @@ class GateForms(GateRun):
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "base")
         git_in(self.root, "branch", "dev")
+        git_in(self.root, "config", "core.hooksPath", "tools/hooks")
         self.saved = []  # a whole run saves the base (X-1 U4): no cargo here
         saving = mock.patch.object(gate_runs, "save_base", lambda root, keep, **kw: self.saved.append(root) or 0)
         saving.start()
@@ -1078,16 +1079,18 @@ class GateForms(GateRun):
         rows = self.history(wt)
         self.assertEqual([(r["form"], r["tree"], r["tree_changed"]) for r in rows],
                          [("work X-3/U1", repo.tree_hash(wt), False), ("quick", repo.tree_hash(wt), False)])
+        self.assertEqual(rows[0]["code_tree"], repo.tree_hash(wt, narrowing.SWEPT))  # X-1 U5
         writer = gate_steps.Step("w", (sys.executable, "-B", "-c", "open('crates/n.rs', 'w').write('x')"))
         (wt / "crates").mkdir()
         quiet(gate.main, ["--work", "X-3/U1"], steps=[writer], root=wt, out=io.StringIO())
-        self.assertEqual((self.history(wt)[-1]["tree"], self.history(wt)[-1]["tree_changed"]), (None, True))
+        self.assertEqual([self.history(wt)[-1][f] for f in ("tree", "code_tree", "tree_changed")], [None, None, True])
         self.assertEqual(git_in(wt, "status", "--porcelain"), "?? crates/\n")  # the real index is not touched
         # the main tree: the code and the cases only (a document written meanwhile is no change)
         doc = gate_steps.Step("d", (sys.executable, "-B", "-c", "open('notes.md', 'w').write('x')"))
         self.run_main([], [doc])
         row = self.history()[-1]
         self.assertEqual((row["tree"], row["tree_changed"]), (repo.tree_hash(self.root, narrowing.SWEPT), False))
+        self.assertNotIn("code_tree", row)  # the main tree keeps `SWEPT` as its `tree` (X-1 U5)
         # a commit of the documents while it runs moves HEAD, not the code and the cases (X-1 U4)
         g = "['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false']"
         doc_commit = (f"import subprocess; open('notes.md', 'w').write('y'); subprocess.run({g} + ['add', 'notes.md'], "
@@ -1142,7 +1145,8 @@ class GateForms(GateRun):
             gate.main(["--help"], root=self.root)
         text = " ".join(out.getvalue().split())
         for part in ("a W ID of tasks/W/ (W3-11) or a unit of an item of issues/X/ (X-3/U1)",
-                     "tools/gate.sh --work X-1/U3", "`tools/take.py patch` reads the last work check"):
+                     "tools/gate.sh --work X-1/U3", "`tools/take.py patch` reads the last work check",
+                     "only the warnings and the last line (the verdict) come after them"):
             self.assertIn(part, text)
 
     def test_the_work_check_narrows_the_heavy_items(self):
@@ -3891,6 +3895,7 @@ class Take(unittest.TestCase):
         self.main, self.wt, self.patch = t / "main", t / "wt", t / "p.patch"
         self.main.mkdir()
         git_in(self.main, "init", "-q")
+        git_in(self.main, "config", "core.hooksPath", "tools/hooks")
         for name in ("a.txt", "b.txt", "c.txt"):
             (self.main / name).write_text(self.LINES)
         git_in(self.main, "add", "-A")
@@ -4003,12 +4008,14 @@ class Take(unittest.TestCase):
         self.assertEqual((self.main / "n.rs").read_text(), "mine\n")
         self.assertEqual((self.main / "b.txt").read_text(), self.LINES)
 
-    def ran(self, form, verdict="PASS", tree=True):
-        """A row of the worktree's history (`gate_runs.record`), on the tree as it is now."""
+    def ran(self, form, verdict="PASS", tree=True, code=True):
+        """A row of the worktree's history (`gate_runs.record`), on the tree as it is now (`code`: with
+        its `code_tree`, as the gate writes since X-1 U5)."""
         (self.main / ".git" / "info").mkdir(exist_ok=True)
         (self.main / ".git" / "info" / "exclude").write_text("target/\n")
         now = repo.tree_hash(self.wt) if tree else None
-        gate_runs.record(self.wt, form, [], {"fz": [verdict, 1.0]}, verdict, 1.0, now, not tree)
+        code_tree = repo.tree_hash(self.wt, narrowing.SWEPT) if code else None
+        gate_runs.record(self.wt, form, [], {"fz": [verdict, 1.0]}, verdict, 1.0, now, not tree, code_tree=code_tree)
 
     def check_line(self):
         return self.make_patch().splitlines()[1]
@@ -4027,7 +4034,7 @@ class Take(unittest.TestCase):
         self.ran("quick")  # the same tree after the work check
         self.assertRegex(self.check_line(), r"^work check: no need to run it again \(work X-3/U1 PASS at .* on the "
                                             r"tree of the patch; base = the main tree's HEAD; applies plain\)$")  # fmt: skip
-        (self.wt / "c.txt").write_text("changed\n")
+        (self.wt / "tests" / "x.rs").write_text("changed\n")  # the cases (outside them: the next test)
         self.assertEqual(self.check_line(), again + "the tree changed after the check")
         self.ran("work X-3/U1")
         # the main tree moved after the base: in documents only, then in the code
@@ -4046,12 +4053,37 @@ class Take(unittest.TestCase):
         git_in(self.main, "commit", "-qm", "case")
         self.assertEqual(self.check_line(), again + "the main tree moved in the code or the cases after the base (tests/y.rs)")
 
+    def test_the_worktree_changed_after_the_check(self):
+        """X-1 U5: after the check, a change outside the code and the cases asks for `--only static`; one
+        in them, or a row with no `code_tree` (before U5), for the whole check."""
+        again = "work check: run it again in the main tree: "
+        static = "work check: no need to run the heavy items again; "
+        self.ran("work X-3/U1")
+        (self.wt / "d.md").write_text("a decision\n")
+        self.assertRegex(self.check_line(), r"^" + re.escape(static) + r"run tools/gate.sh --only static \(the worktree "
+                         r"changed outside the code and the cases after the check; work X-3/U1 PASS at .* on its "
+                         r"code and cases\)$")  # fmt: skip
+        # with the main tree moved outside them too: both reasons
+        (self.main / "e.md").write_text("e\n")
+        git_in(self.main, "add", "e.md")
+        git_in(self.main, "commit", "-qm", "doc")
+        self.assertRegex(self.check_line(), r"\(the worktree changed outside the code and the cases after the check; "
+                         r"the main tree moved in 1 file\(s\) outside the code and the cases after the base "
+                         rf"{self.base[:7]}; work X-3/U1 PASS at .* on its code and cases\)$")  # fmt: skip
+        self.ran("work X-3/U1", code=False)  # a row from before U5
+        (self.wt / "d.md").write_text("changed again\n")
+        self.assertEqual(self.check_line(), again + "the tree changed after the check")
+        self.ran("work X-3/U1")
+        (self.wt / "tests" / "x.rs").write_text("changed\n")  # the cases
+        self.assertEqual(self.check_line(), again + "the tree changed after the check")
+
     def test_the_help_of_patch(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out), self.assertRaises(SystemExit):
             take.main(["patch", "--help"])
         text = " ".join(out.getvalue().split())
         for part in ("work check: no need to run it again", "run tools/gate.sh --only static",
+                     "or the worktree after the check", "the code or the cases of the worktree changed after it",
                      "the worktree whose work is taken", "the patch file to write", "example: tools/take.py patch"):
             self.assertIn(part, text)
         self.assertEqual(self.make_patch().splitlines()[2], "auto sweep: no sweep yet")  # the main tree's
@@ -4106,6 +4138,7 @@ class AutoSweep(unittest.TestCase):
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "base")
         git_in(self.root, "branch", "dev")
+        git_in(self.root, "config", "core.hooksPath", "tools/hooks")
         (self.root / "target").mkdir()
         self.started = []
         for name, value in (("QUIET", 0.3), ("NAP", 0.05), ("CLEAN_POLL", 0.05), ("CLEAN_WAIT", 0.3),
@@ -4312,6 +4345,24 @@ class AutoSweep(unittest.TestCase):
         gate_runs.record(self.root, "sweep 0/2", [], {"fuzz": ["PASS", 1.0]}, "PASS", 1.0)
         self.assertTrue(self.line().endswith(f"last PASS at {h[:7]} (0 commits ago)"), self.line())
 
+    def test_the_setting_of_the_hook(self):
+        """X-1 U5: the line starts with `hook not set` unless core.hooksPath names the tree's tools/hooks."""
+        unset = "auto sweep: hook not set (git config core.hooksPath tools/hooks); no sweep yet"
+        self.assertEqual(self.line(), "auto sweep: no sweep yet")
+        for value, ok in (("tools/hooks/", True), (str(self.root / "tools" / "hooks"), True), ("other/hooks", False),
+                          (str(self.root.parent / "tools" / "hooks"), False)):  # fmt: skip
+            with self.subTest(value=value):
+                git_in(self.root, "config", "core.hooksPath", value)
+                self.assertEqual(self.line(), "auto sweep: no sweep yet" if ok else unset)
+        git_in(self.root, "config", "--unset", "core.hooksPath")
+        if subprocess.run(["git", "-C", str(self.root), "config", "--get", "core.hooksPath"],
+                          capture_output=True).returncode == 1:  # no global setting either  # fmt: skip
+            self.assertEqual(self.line(), unset)
+        self.assertEqual(gate_runs.auto_line(self.root.parent, [], 2), unset)  # not a git tree: git cannot read it
+        gate_runs.record(self.root, "sweep 0/2", [], {"fuzz": ["PASS", 1.0]}, "PASS", 1.0)
+        self.assertTrue(self.line().startswith("auto sweep: hook not set (git config core.hooksPath tools/hooks); "
+                                               "last PASS at "), self.line())  # fmt: skip
+
     def test_the_help(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out), mock.patch.dict(os.environ), self.assertRaises(SystemExit):
@@ -4320,7 +4371,10 @@ class AutoSweep(unittest.TestCase):
         for part in ("The post-commit hook calls it; by hand, use --now.", "--now run the sweep of HEAD now",
                      "--drive be the runner (the hook starts it; not by hand)", "--root ROOT the main tree",
                      "after a restart of the machine", "stop it: touch target/gate/hold",
-                     "requested at …, no runner", "example: python3 -B tools/after_commit.py --now"):  # fmt: skip
+                     "requested at …, no runner", "example: python3 -B tools/after_commit.py --now",
+                     "hook not set (…) core.hooksPath of this clone does not name tools/hooks",
+                     "right after --now it says so too", "the inputs the fuzzing made small, in target/fuzz/new/",
+                     "until the class is in tests/fuzz/allowed.toml or in an R", "it can take 2 sweeps"):  # fmt: skip
             self.assertIn(part, text)
 
 

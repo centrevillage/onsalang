@@ -349,8 +349,9 @@ examples:
   tools/gate.sh --quick           in the middle of a work (not the verdict)
 A worktree keeps its runs in its target/gate/history.jsonl: `tools/take.py patch` reads the last
 work check there and says whether the parent need run it again.
-In the main tree, the summary ends with `sweep: …` (the shards) and `auto sweep: …` (the sweep a
-commit starts, tools/after_commit.py --help); a whole run saves the base binaries of a clean HEAD."""
+In the main tree, the summary shows `sweep: …` (the shards) and `auto sweep: …` (the sweep a
+commit starts, tools/after_commit.py --help) after the golden line; only the warnings and the last
+line (the verdict) come after them. A whole run saves the base binaries of a clean HEAD."""
 
 
 def golden_changes(root=ROOT):
@@ -472,10 +473,13 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
 
 
 def _tree(root, kind):
-    """The git tree this run checks (`repo.tree_hash`): the whole of a worktree, `narrowing.SWEPT` of
-    the main tree (the parent's documents may change meanwhile); None when it cannot be made."""
+    """The git trees this run checks (`repo.tree_hash`), as the fields of its row: `tree`, the whole of
+    a worktree and `narrowing.SWEPT` of the main tree (the parent's documents may change meanwhile),
+    and in a worktree `code_tree`, its `SWEPT` (`take.py patch`, X-1 U5); None when they cannot be made."""
     try:
-        return repo.tree_hash(root, () if kind == "worktree" else narrowing.SWEPT) if kind else None
+        if kind == "worktree":
+            return {"tree": repo.tree_hash(root), "code_tree": repo.tree_hash(root, narrowing.SWEPT)}
+        return {"tree": repo.tree_hash(root, narrowing.SWEPT)} if kind else None
     except repo.RepoError:
         return None
 
@@ -490,10 +494,13 @@ def _start(root, kind):
 
 def _record(root, form, results, failed, tree):
     """Add the line of this run to the history of the tree; the notes of the summary. `tree`: (the
-    tree before the items, whether it changed while they ran, `gate_runs.at_start` before them)."""
+    trees before the items (`_tree`), whether they changed while the items ran, `gate_runs.at_start`
+    before them)."""
     items = {r.step.name: [r.status, round(r.seconds, 1)] for r in results}
     seconds = sum(r.seconds for r in results)
-    error = gate_runs.record(root, form.label(), form.works, items, "FAIL" if failed else "PASS", seconds, *tree)
+    trees, changed, start = tree[0] or {}, tree[1], tree[2]
+    error = gate_runs.record(root, form.label(), form.works, items, "FAIL" if failed else "PASS", seconds,
+                             trees.get("tree"), changed, start, code_tree=trees.get("code_tree"))  # fmt: skip
     return [f"history: cannot write it ({error})"] if error else []
 
 

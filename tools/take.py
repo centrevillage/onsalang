@@ -233,9 +233,11 @@ def patch(args):
 def work_check_line(wt, main, base, patch_file):
     """Whether the parent need run the work check again after the patch: the last `work` run of the
     worktree passed on the tree of the patch, the patch applies plain to files with no change, and the
-    main tree moved from the base in no file of the code and the cases (`narrowing.SWEPT`)."""
+    main tree moved from the base in no file of the code and the cases (`narrowing.SWEPT`). When only
+    the files outside them moved, in the main tree or in the worktree after the check (its `code_tree`,
+    X-1 U5), `--only static` does."""
     try:
-        rows, tree = gate_runs.read_history(wt)[0], repo.tree_hash(wt)
+        rows, tree, code_tree = gate_runs.read_history(wt)[0], repo.tree_hash(wt), repo.tree_hash(wt, narrowing.SWEPT)
         head = git(main, "rev-parse", "HEAD").stdout.decode().strip()
         base = git(main, "rev-parse", base).stdout.decode().strip()
         moved = [p for p in git(main, "diff", "--name-only", "-z", base, head).stdout.decode().split("\0") if p]
@@ -244,7 +246,7 @@ def work_check_line(wt, main, base, patch_file):
     except (OSError, repo.RepoError, Failed) as e:
         return f"work check: run it again in the main tree: cannot tell ({e})"
     works = [r for r in rows if str(r.get("form", "")).startswith("work ")]
-    missing, last = [], works[-1] if works else None
+    missing, last, why = [], works[-1] if works else None, []
     if last is None:
         quick = any(r.get("form") == "quick" for r in rows)
         missing.append("no work check in the worktree" + (" (only --quick)" if quick else ""))
@@ -254,6 +256,8 @@ def work_check_line(wt, main, base, patch_file):
             missing.append(f"the last work check failed ({last.get('form')}: {', '.join(bad)})")
         if last.get("tree") is None:
             missing.append("the tree changed during the check (or could not be read)")
+        elif last["tree"] != tree and last.get("code_tree") == code_tree:
+            why.append("the worktree changed outside the code and the cases after the check")
         elif last["tree"] != tree:
             missing.append("the tree changed after the check")
     if code:
@@ -268,11 +272,14 @@ def work_check_line(wt, main, base, patch_file):
         missing.append("the main tree has uncommitted changes in the files of the patch")
     if missing:
         return "work check: run it again in the main tree: " + "; ".join(missing)
-    did = f"{last['form']} PASS at {last.get('time')} on the tree of the patch"
-    if not moved:
+    did = f"{last['form']} PASS at {last.get('time')} on " + ("its code and cases" if why else "the tree of the patch")
+    if moved:
+        why.append(f"the main tree moved in {len(moved)} file(s) outside the code and the cases after the base "
+                   f"{base[:7]}")  # fmt: skip
+    if not why:
         return f"work check: no need to run it again ({did}; base = the main tree's HEAD; applies plain)"
-    return (f"work check: no need to run the heavy items again; run tools/gate.sh --only static (the main tree "
-            f"moved in {len(moved)} file(s) outside the code and the cases after the base {base[:7]}; {did})")
+    return ("work check: no need to run the heavy items again; run tools/gate.sh --only static ("
+            + "; ".join([*why, did]) + ")")
 
 
 def paths_of(tree, patch_file):
@@ -306,9 +313,12 @@ its target/gate/history.jsonl) with the patch and the main tree:
   work check: no need to run it again (...)            take the patch in without the gate
   work check: no need to run the heavy items again; run tools/gate.sh --only static (...)
                                                        the main tree moved outside the code and the cases
+                                                       after the base, or the worktree after the check
   work check: run it again in the main tree: <what is missing>
-                                                       no work check, only --quick, a failure, the tree
-                                                       changed after it, the main tree moved in the code
+                                                       no work check, only --quick, a failure, the code or
+                                                       the cases of the worktree changed after it (or a
+                                                       check before X-1 U5, which kept the whole tree only),
+                                                       the main tree moved in the code
 The third line, `auto sweep: …`, is the sweep a commit of the main tree starts (tools/after_commit.py
 --help): read it before taking the patch in; FAILED points to the output of the sweep.
 example: tools/take.py patch .claude/worktrees/x1 2ce980a /tmp/x1.patch"""
