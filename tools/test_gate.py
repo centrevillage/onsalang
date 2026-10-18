@@ -3790,6 +3790,7 @@ import signal  # noqa: E402
 import bg  # noqa: E402
 import ignores  # noqa: E402
 import take  # noqa: E402
+import work  # noqa: E402
 
 RUST = '''\
 //! A comment that names `#[ignore]` and `#[ignore = "x"]`.
@@ -4011,7 +4012,7 @@ def git_in(tree, *args):
 
 
 class Take(unittest.TestCase):
-    """tools/take.py: a patch of a worktree with a WIP commit, changes and new files, applied to a busy tree."""
+    """tools/work.py (moved from take.py, X-9 U4): a patch of a worktree with a WIP commit, changes and new files, applied to a busy tree."""
 
     LINES = "".join(f"{i}\n" for i in range(1, 10))
 
@@ -4041,7 +4042,7 @@ class Take(unittest.TestCase):
     def take(self, *args):
         buf = io.StringIO()
         with mock.patch.object(sys, "stdout", buf):
-            code = take.main(list(map(str, args)))
+            code = work.main(list(map(str, args)))
         return code, buf.getvalue()
 
     def make_patch(self):
@@ -4057,8 +4058,8 @@ class Take(unittest.TestCase):
         text = self.patch.read_text()
         self.assertIn("+two", text)
         self.assertIn("b/tests/x.rs", text)
-        self.assertTrue(take.is_code("tools/take.py"))
-        self.assertFalse(any(map(take.is_code, ("tools/test_gate.py", "crates/a/tests/t.rs", "crates/a/src/tests.rs",
+        self.assertTrue(work.is_code("tools/take.py"))
+        self.assertFalse(any(map(work.is_code, ("tools/test_gate.py", "crates/a/tests/t.rs", "crates/a/src/tests.rs",
                                                 "crates/a/src/cst_tests.rs", "tests/pending.toml", "docs/x.md"))))
         other = git_in(self.main, "commit-tree", "-m", "x", git_in(self.main, "write-tree").strip()).strip()
         self.assertEqual(self.take("patch", self.wt, other, self.patch, "--main", self.main)[0], 1)
@@ -4082,7 +4083,7 @@ class Take(unittest.TestCase):
 
     def test_the_test_modules_inside_a_rust_file_are_tests(self):
         # The braces in the strings, the character, the comments and the lifetime are not the block's.
-        self.assertEqual(take.test_lines(self.RUST), set(range(3, 14)))
+        self.assertEqual(work.test_lines(self.RUST), set(range(3, 14)))
         (self.wt / "m.rs").write_text(self.RUST)
         git_in(self.wt, "add", "m.rs")
         git_in(self.wt, "commit", "-qm", "m")
@@ -4109,7 +4110,7 @@ class Take(unittest.TestCase):
         self.assertEqual((self.main / "b.txt").read_text(), self.LINES.replace("2\n", "two\n").replace("8\n", "eight\n"))
         self.assertEqual(git_in(self.main, "diff", "--cached", "--name-only"), "")
         code, out = self.take("apply", self.patch, "--to", self.main)  # a second time: nothing to do
-        self.assertEqual((code, out.splitlines()[0]), (0, f"applies: {take.ALREADY}"))
+        self.assertEqual((code, out.splitlines()[0]), (0, f"applies: {work.ALREADY}"))
 
     def test_three_way_after_the_main_tree_moved(self):
         (self.main / "a.txt").write_text(self.LINES.replace("5\n", "five\n"))
@@ -4206,15 +4207,14 @@ class Take(unittest.TestCase):
     def test_the_help_of_patch(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out), self.assertRaises(SystemExit):
-            take.main(["patch", "--help"])
+            work.main(["patch", "--help"])
         text = " ".join(out.getvalue().split())
         for part in ("work check: no need to run it again", "run tools/gate.sh --only static",
                      "or the worktree after the check", "the code or the cases of the worktree changed after it",
-                     "the worktree whose work is taken", "the patch file to write", "example: tools/take.py patch"):
+                     "the worktree whose work is taken", "the patch file to write", "example: tools/work.py patch"):
             self.assertIn(part, text)
         self.assertEqual(self.make_patch().splitlines()[2], "auto sweep: no sweep yet")  # the main tree's
-        for part in ("fuzz inputs: none in the worktree", "copy the inputs its fuzzing kept into the main tree "
-                     "(before the worktree is removed)"):  # fmt: skip
+        for part in ("fuzz inputs: none in the worktree", work.COMMANDS["patch"].purpose):
             self.assertIn(part, text)
 
     def test_the_fuzz_inputs_of_the_worktree(self):
@@ -4236,7 +4236,7 @@ class Take(unittest.TestCase):
         self.assertFalse((dest / "notes.txt").exists())
         self.assertNotIn("target/", self.patch.read_text())
         self.assertEqual(line(), "fuzz inputs: 2 in the worktree, all in the main tree already")
-        with mock.patch.object(take.fuzz, "target_directory", return_value=self.wt / "target"):  # one CARGO_TARGET_DIR
+        with mock.patch.object(work.fuzz, "target_directory", return_value=self.wt / "target"):  # one CARGO_TARGET_DIR
             self.assertEqual(line(), f"fuzz inputs: 2 in {src}/, which the worktree shares with the main tree; "
                                      "none copied")  # fmt: skip
         (dest / "1a2b3c4d.onsa").unlink()
@@ -4245,6 +4245,168 @@ class Take(unittest.TestCase):
         dest.write_text("not a directory\n")
         self.assertRegex(line(), rf"^fuzz inputs: 0 copied into {re.escape(str(dest))}/, then the copy failed \(")
         self.assertTrue(self.patch.read_text())  # the patch is made all the same
+
+
+class Work(unittest.TestCase):
+    """tools/work.py (X-9 U4): `new` from dev, `take` with its stops and `--go`, the record, take.py passing its
+    commands on, the hook WorktreeCreate, and the help."""
+
+    LINES = "".join(f"{i}\n" for i in range(1, 10))
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.main = Path(self.tmp.name).resolve() / "main"  # as git gives it (/private/var)
+        git_in(self.tmp.name, "init", "-q", "-b", "dev", str(self.main))
+        (self.main / ".git" / "info").mkdir(exist_ok=True)
+        (self.main / ".git" / "info" / "exclude").write_text("target/\n.claude/\n")
+        for rel in ("a.txt", *work.REGISTRIES):
+            (self.main / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.main / rel).write_text(self.LINES)
+        git_in(self.main, "add", "-A")
+        git_in(self.main, "commit", "-qm", "base")
+        self.dev = self.head(self.main)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def head(self, tree):
+        return git_in(tree, "rev-parse", "HEAD").strip()
+
+    def test_new(self):
+        code, lines = quiet_out(work.main, ["new", "a1", "--main", str(self.main)])
+        wt = self.main / ".claude" / "worktrees" / "a1"
+        self.assertEqual((code, lines[-1]), (0, str(wt)))
+        self.assertEqual((git_in(wt, "branch", "--show-current").strip(), self.head(wt)), ("worktree-a1", self.dev))
+        # from dev by name, not from the HEAD; from a worktree, in the main tree
+        git_in(self.main, "checkout", "-q", "-b", "other")
+        (self.main / "a.txt").write_text("other\n")
+        git_in(self.main, "commit", "-qam", "other")
+        self.assertEqual(work.new("a2", wt), self.main / ".claude" / "worktrees" / "a2")
+        self.assertEqual(self.head(self.main / ".claude" / "worktrees" / "a2"), self.dev)
+        # the same name stops: the branch and the path, the branch alone (the worktree removed), the path alone
+        git_in(self.main, "worktree", "remove", str(self.main / ".claude" / "worktrees" / "a2"))
+        (self.main / ".claude" / "worktrees" / "a3").mkdir()
+        for name, says in (("a1", "the branch worktree-a1 is there already"), ("a2", "the branch worktree-a2 is there"),
+                           ("a3", "/a3 is there already"), ("../x", "is not the name of a worktree")):  # fmt: skip
+            with self.subTest(name=name):
+                code, lines = quiet_out(work.main, ["new", name, "--main", str(self.main)])
+                self.assertEqual(code, 1)
+                self.assertIn(says, lines[-1])
+        self.assertFalse(git_in(self.main, "branch", "--list", "worktree-a3").strip())
+
+    def test_the_hook_worktree_create(self):
+        def hook(text):
+            out, err = io.StringIO(), io.StringIO()
+            with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+                code = claude_hook.main(["WorktreeCreate"], io.StringIO(text))
+            return code, out.getvalue().splitlines(), err.getvalue().splitlines()
+
+        event = json.dumps({"session_id": "s", "hook_event_name": "WorktreeCreate", "cwd": str(self.main), "name": "h1"})
+        self.assertEqual(hook(event), (0, [str(self.main / ".claude" / "worktrees" / "h1")], []))
+        code, out, err = hook(event)
+        self.assertEqual((code, out), (1, []))
+        self.assertRegex(err[0], r"^WorktreeCreate: Failed: the branch worktree-h1 is there already")
+        self.assertEqual(hook("{}")[::2], (1, ["WorktreeCreate: KeyError: 'name'"]))
+
+    def worktree(self):
+        """The worktree `w1`: a WIP commit, then a change of tests/pending.toml and 150 lines of code."""
+        wt = work.new("w1", self.main)
+        (wt / "a.txt").write_text(self.LINES.replace("2\n", "two\n"))
+        git_in(wt, "commit", "-qam", "WIP")
+        (wt / work.PENDING).write_text(self.LINES.replace("2\n", "[[pending]]\n"))
+        (wt / "c.py").write_text("x = 1\n" * 150)
+        return wt
+
+    def take(self, *argv):
+        return quiet_out(work.main, ["take", *map(str, argv), "--main", str(self.main)])
+
+    def reset(self):
+        git_in(self.main, "checkout", "--", ".")
+        (self.main / "c.py").unlink()
+
+    def test_take(self):
+        wt = self.worktree()
+        code, lines = self.take("w1", "--estimate", 50)  # by name, no work check in the worktree
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines[-2:], ["applies: plain", "take: not applied (the work check is to run again); read "
+                                      "the above, then apply it with --go"])  # fmt: skip
+        self.assertEqual((self.main / "a.txt").read_text(), self.LINES)
+        at = lines.index(f"the hunks of {work.PENDING}:")
+        self.assertEqual(lines[at + 1:at + 8], ["@@ -1,5 +1,5 @@", " 1", "-2", "+[[pending]]", " 3", " 4", " 5"])
+        self.assertNotIn("the hunks of tools/builtin_names.toml:", lines)
+        self.assertIn("estimate: +150 of the code (without the tests and the data) against 50: 3.00 times; within the "
+                      "size to refactor (rules/budgets.md: over 3 times and 100 lines more)", lines)  # fmt: skip
+        gate_runs.record(wt, "work X-9/U4", [], {"fz": ["PASS", 1.0]}, "PASS", 1.0, repo.tree_hash(wt),
+                         code_tree=repo.tree_hash(wt, narrowing.SWEPT))  # a work check on the tree: it applies
+        code, lines = self.take(wt, "--estimate", 40)  # by path
+        self.assertEqual(code, 0, lines)
+        self.assertRegex(lines[1], r"^work check: no need to run it again")
+        self.assertIn("3.75 times; over the size to refactor", "\n".join(lines))
+        self.assertEqual((self.main / "a.txt").read_text(), self.LINES.replace("2\n", "two\n"))
+        rows = [json.loads(x) for x in (self.main / work.TAKEN).read_text().splitlines()]
+        self.assertEqual([r["kind"] for r in rows], ["patch", "patch", "apply"])
+        p, a = rows[1], rows[2]
+        self.assertEqual({k: p[k] for k in ("worktree", "branch", "base", "tree")},
+                         {"worktree": str(wt.resolve()), "branch": "worktree-w1", "base": self.dev,
+                          "tree": repo.tree_hash(wt)})  # fmt: skip
+        self.assertEqual((Path(p["patch"]).parent, Path(rows[0]["patch"]).is_file()), ((self.main / "target/work").resolve(), True))
+        self.assertNotEqual(rows[0]["patch"], p["patch"])
+        self.assertEqual((a["patch"], a["to"], a["head"]), (p["patch"], str(self.main.resolve()), self.dev))
+        # an uncommitted change in a file of the patch: plain, but it stops; --go applies it
+        self.reset()
+        (self.main / "a.txt").write_text(self.LINES.replace("8\n", "eight\n"))
+        code, lines = self.take("w1")
+        self.assertEqual(code, 1, lines)
+        self.assertIn("  a.txt: uncommitted change (M)", lines)
+        self.assertRegex(lines[-1], r"^take: not applied \(the main tree has uncommitted changes in the files of the "
+                                    r"patch; the work check is to run again\)")  # fmt: skip
+        self.assertEqual(self.take("w1", "--go")[0], 0)
+        self.assertEqual((self.main / "a.txt").read_text(), self.LINES.replace("2\n", "two\n").replace("8\n", "eight\n"))
+        # dev moved in tests/pending.toml: 3-way, the line of rules/leader.md 3.4; --go applies it
+        self.reset()
+        (self.main / work.PENDING).write_text(self.LINES.replace("5\n", "five\n"))
+        git_in(self.main, "commit", "-qam", "dev moved")
+        code, lines = self.take("w1")
+        self.assertEqual(code, 1, lines)
+        self.assertIn("applies: 3way", lines)
+        self.assertIn(f"{work.PENDING} is in a patch that applies 3-way: rebuild it from dev's version "
+                      "(rules/leader.md 3.4)", lines)  # fmt: skip
+        self.assertRegex(lines[-1], r"^take: not applied \(it applies 3way; ")
+        self.assertEqual(self.take("w1", "--go")[0], 0)
+        self.assertEqual((self.main / work.PENDING).read_text(),
+                         self.LINES.replace("2\n", "[[pending]]\n").replace("5\n", "five\n"))  # fmt: skip
+        self.assertEqual(self.take("nosuch")[0], 1)
+
+    def test_take_py_passes_on(self):
+        wt, out = self.worktree(), Path(self.tmp.name) / "p.patch"
+        code, lines = quiet_out(take.main, ["patch", str(wt), self.dev, str(out), "--main", str(self.main)])
+        self.assertEqual((code, lines[0]), (0, f"{out}: the patch of {wt} from {self.dev}"))
+        self.assertEqual(quiet_out(take.main, ["check", str(out), "--to", str(self.main)]), (0, ["applies: plain"]))
+        self.assertEqual(quiet_out(take.main, ["apply", str(out), "--to", str(self.main)])[0], 0)
+        self.assertEqual((self.main / "c.py").read_text(), "x = 1\n" * 150)
+        self.assertEqual(quiet_out(take.main, ["new", "x"])[0], 2)
+
+    def test_help(self):
+        for name, c in work.COMMANDS.items():
+            with self.subTest(name=name):
+                self.assertIsInstance(c, repo.Command)
+                for text in (c.purpose, c.when, c.example):
+                    self.assertTrue(text.strip() and "\n" not in text, text)
+                self.assertTrue(c.roles)
+                self.assertEqual([r for r in c.roles if r not in repo.ROLES], [])
+                self.assertRegex(c.example, rf"^work\.py {name}( |$)")
+                code, lines = quiet_out(work.main, ["help", name])
+                self.assertEqual(code, 0)
+                self.assertIn(f"  例:   {c.example}", lines)
+        self.assertIn("work check: no need to run it again", "\n".join(quiet_out(work.main, ["help", "patch"])[1]))
+        for role in repo.ROLES:
+            with self.subTest(role=role):
+                code, lines = quiet_out(work.main, ["help", "--role", role])
+                want = [n for n, c in work.COMMANDS.items() if role in c.roles]
+                got = [x.split()[0] for x in lines if not x.startswith(" ")]
+                self.assertEqual((code, got), (0, want or ["（役割"]))
+        names = list(work.COMMANDS)
+        self.assertEqual([x.split()[0] for x in quiet_out(work.main, ["help"])[1][: len(names)]], names)
 
 
 import after_commit  # noqa: E402
@@ -6476,7 +6638,8 @@ class ClaudeHook(unittest.TestCase):
             code, lines = quiet_out(claude_hook.main, ["help", "--role", role])
             want = [n for n, c in claude_hook.COMMANDS.items() if role in c.roles]
             self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want))
-        self.assertEqual([x.split()[0] for x in quiet_out(claude_hook.main, ["help"])[1][:4]], list(claude_hook.COMMANDS))
+        names = list(claude_hook.COMMANDS)
+        self.assertEqual([x.split()[0] for x in quiet_out(claude_hook.main, ["help"])[1][: len(names)]], names)
 
 
 if __name__ == "__main__":

@@ -2,14 +2,17 @@
 """The hooks of Claude Code (X-9, X9-42 to X9-61): one tool, one subcommand per event.
 
     python3 -B tools/hooks/claude_hook.py PreToolUse | PostToolUse | SessionStart | SubagentStop  < the hook's JSON
+    python3 -B tools/hooks/claude_hook.py WorktreeCreate  < the hook's JSON
     python3 -B tools/hooks/claude_hook.py help [--role ROLE] [EVENT]
 
 The settings (`.claude/settings.json`, the user's) run each event's command; the hook's JSON comes on stdin, and
 what Claude Code reads (https://code.claude.com/docs/en/hooks) goes to stdout as one JSON object, or nothing.
 The role is `agent_type` looked up in `repo.ROLES` (no `agent_type`: the main session, the parent).
 Only a stop prints `permissionDecision` (`deny`); the other outputs leave the permission to the rules.
-The exit is always 0: an error does nothing for that event and writes one line to
+The exit is 0 but for WorktreeCreate: an error does nothing for that event and writes one line to
 `<scratchpad_dir>/hooks/errors.log` (stderr when the input has no `scratchpad_dir`).
+WorktreeCreate makes the worktree with `work.py new` and prints its path as the last line of stdout; when it
+fails, it exits 1 with the reason on stderr, so that the creation fails and no wrong path goes back.
 The files go under the session's `scratchpad_dir`: `messages/`, `handback/`, `hooks/`. The crash reports
 are read from $ONSA_CRASH_REPORTS (default ~/Library/Logs/DiagnosticReports; the self-tests change it).
 """
@@ -291,6 +294,20 @@ def subagent_stop(event):
     return None
 
 
+def worktree_create(args):
+    """X9-13: the worktree of the hook's `name` in the main tree of its `cwd` (`work.new`), its path the last line."""
+    import work
+
+    try:
+        event = json.loads(args.stdin.read() or "{}")
+        path = work.new(str(event["name"]), event.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    except Exception as e:  # noqa: BLE001 (any failure fails the creation: no path goes back)
+        sys.stderr.write(f"WorktreeCreate: {type(e).__name__}: {e}\n")
+        return 1
+    print(path)
+    return 0
+
+
 # ---------------------------------------------------------------- the subcommands
 
 
@@ -340,6 +357,11 @@ COMMANDS = {
                       "文脈の予算を超えたら引き継ぎの目安を添える",
                       "echo '{\"agent_type\":\"onsa-impl\",\"agent_id\":\"a1\",\"agent_transcript_path\":\"…/agent-a1.jsonl\","
                       "\"scratchpad_dir\":\"/tmp/s\"}' | python3 -B tools/hooks/claude_hook.py SubagentStop"),
+    "WorktreeCreate": C(lambda p: None, worktree_create, ("parent",),
+                        "担当や --worktree の作業ツリーを、Claude Code の git の作り方に代えて work.py new で dev から作り、経路を最後の行に出す",
+                        "設定の WorktreeCreate が呼ぶ。同じ名前の枝か経路があるときなど、作れなければ終了 1 で理由を stderr に書き、作成を失敗させる",
+                        "echo '{\"name\":\"agent-a1\",\"cwd\":\"/Users/centrevillage/projects/onsalang\"}' "
+                        "| python3 -B tools/hooks/claude_hook.py WorktreeCreate"),
 }  # fmt: skip
 
 
