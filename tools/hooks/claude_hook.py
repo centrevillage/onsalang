@@ -254,8 +254,8 @@ def stop_reason(event, role):
         return ("親は担当の作業ツリーに cd しない（rules/leader.md 3.1）。"
                 "`git -C <経路>` と絶対パスで読み、道具の作業ディレクトリは引数で渡す")  # fmt: skip
     if any(name(w[0]) == "fuzz.py" and "--deep" in w for w in cmds):
-        return ("fuzz の `--deep`（数千段の入れ子の変異体）はどの役割も回さない（この機械で落ちうる。rules/common.md 3.4）。"
-                "`--deep` を外して回す")  # fmt: skip
+        return ("fuzz の `--deep`（数千段の入れ子の変異体）は直接回さない（この機械で落ちうる。rules/common.md 3.1・3.4）。"
+                "段の終わりは gate の `fuzz-deep` が回す。`--deep` を外して回す")  # fmt: skip
     if role != "parent" and any(name(w[0]) == "work.py" and next((x for x in w[1:] if not x.startswith("-")), None)
                                 in CLEANING for w in cmds):  # fmt: skip
         return ("作業ツリーの片付け（work.py done・close・remove）は親が回す（X-9）。"

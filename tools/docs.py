@@ -383,7 +383,7 @@ def cmd_due(args):
     if not lines:
         print("docs due: no document changed after the docs check")
         return 0
-    print(f"docs due: run the check of onsa-docs and put `{DOCS_CHECKED}:` in the commit that takes it in"
+    print(f"docs due: run the check of onsa-docs and take it in with `work.py commit --docs-checked <range> <work>`"
           + (f" (fails at the stage end {args.stage_end})" if args.stage_end else ""))  # fmt: skip
     return 1 if args.stage_end else gate_steps.PARENT
 

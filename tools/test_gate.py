@@ -5854,8 +5854,8 @@ class DocsDue(unittest.TestCase):
         self.assertEqual(out, [head, f"parent: decisions/S/README.md: changed after the docs check {m}",
                                f"parent: rules/a.md: changed after the docs check {m}",
                                f"parent: rules/new.md: untracked after the docs check {m}",
-                               "docs due: run the check of onsa-docs and put `Docs-Checked:` in the commit that "
-                               "takes it in"])  # fmt: skip
+                               "docs due: run the check of onsa-docs and take it in with `work.py commit --docs-checked "
+                               "<range> <work>`"])  # fmt: skip
         code, out = self.due("--stage-end", "W4")
         self.assertEqual(code, 1)
         self.assertEqual(out[1], f"decisions/S/README.md: changed after the docs check {m}")
