@@ -12,6 +12,7 @@
 - the stages in their order (`Layout.stages`, the table of `tasks/stages.md`, X-2 U6);
 - reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it).
 """
+import hashlib
 import json
 import os
 import re
@@ -593,15 +594,18 @@ def main_tree(root):
 
 
 def tree_hash(root, paths=()):
-    """The git tree of HEAD with `paths` (all, when empty) as they are in `root` now, untracked files
-    too (`add -A`), made in an index of its own: the real index is not touched (X-1 U3, U4; one place,
-    D-15). A path that is in neither HEAD nor the tree adds nothing. RepoError when git fails."""
+    """What `root` holds now, untracked files too (`add -A` in an index of its own: the real index is
+    not touched; X-1 U3, U4; one place, D-15). With no `paths`, the git tree of the whole; with
+    `paths`, a hash of their entries alone (`ls-files -s`): the other paths of HEAD (a commit of the
+    documents) do not change it. A path that is in neither HEAD nor the tree adds nothing. RepoError
+    when git fails."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     with tempfile.TemporaryDirectory() as d:
         env["GIT_INDEX_FILE"] = os.path.join(d, "index")
         adds = [["add", "-A", "--", p] for p in paths] if paths else [["add", "-A"]]
         out = ""
-        for args in (["read-tree", "HEAD"], *adds, ["write-tree"]):
+        last = ["ls-files", "-s", "-z", "--", *paths] if paths else ["write-tree"]
+        for args in (["read-tree", "HEAD"], *adds, last):
             try:
                 r = subprocess.run(["git", *args], cwd=root, env=env, capture_output=True, text=True,
                                    timeout=GIT_TIMEOUT)  # fmt: skip
@@ -609,8 +613,8 @@ def tree_hash(root, paths=()):
                 raise RepoError(f"git {args[0]}: {e}") from None
             if r.returncode != 0 and not (args[0] == "add" and "did not match any files" in r.stderr):
                 raise RepoError(f"git {' '.join(args)}: {r.stderr.strip() or f'exit {r.returncode}'}")
-            out = r.stdout.strip()
-    return out
+            out = r.stdout if paths else r.stdout.strip()
+    return hashlib.sha256(out.encode("utf-8", "surrogateescape")).hexdigest()[:40] if paths else out
 
 
 def tree_kind(root):

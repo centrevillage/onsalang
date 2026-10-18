@@ -22,8 +22,10 @@ base shows too (`resolve_base`). A shard is a part of the whole run and fails as
 The base binaries (`--base auto` of the fuzzing): `<main tree>/target/base/<the first SHORT
 characters of the merge base>/{onsa,onsa_cases}`, with a file `COMMIT` that starts the full
 SHA of the merge base (7 characters or more). The main tree is `repo.main_tree`; the gate
-writes the base (`gate_runs.save_base`) into `base_dir`. A merge base that is HEAD, with no
-change of the code (`code_changes`), is not used: the binaries would be the tree's own.
+writes the base (`gate_runs.save_base`) into `base_dir`. A merge base with no base saved uses the
+base of its nearest first-parent ancestor (at most ANCESTORS back) whose `BUILT_FROM` is the same
+(a commit of the documents saves none: X-1 U4). A merge base that is HEAD, with no change of the
+code (`code_changes`), is not used: the binaries would be the tree's own.
 """
 import argparse
 import hashlib
@@ -43,7 +45,8 @@ GIT_TIMEOUT = 60
 EXCLUDED_FROM_CODES = ("tests/", "tools/", "rules/", "decisions/", "issues/", "tasks/", "history/")
 BASE_FILES = ("onsa", "onsa_cases")  # the base binaries, in `base_dir`
 # What the binaries are built from: a tracked change there makes them differ from HEAD's.
-BUILT_FROM = ("crates", "tools", "std", "runtime", ":(glob)Cargo.*")
+BUILT_FROM = ("crates", "tools", "std", "runtime", ":(glob)Cargo.*", "rust-toolchain.toml")
+ANCESTORS = 50  # the first-parent ancestors of the merge base whose base `resolve_base` may use
 # What the heavy items read: the code and the cases (the tree a run of the main tree compares, X-1).
 SWEPT = (*BUILT_FROM, "tests")
 
@@ -210,20 +213,33 @@ def resolve_base(root, spec):
     main = repo.main_tree(root)
     if main is None:
         return f"{root} is not the top of a git work tree"
-    d = base_dir(main, full)
+    d, used = base_dir(main, full), full
     try:
+        if not (d / "COMMIT").is_file():
+            used = _same_code_ancestor(root, main, full)
+            if used is None:
+                return f"no {d / 'COMMIT'}, nor of an ancestor with the same code ({ANCESTORS} first-parent commits)"
+            d = base_dir(main, used)
         commit = (d / "COMMIT").read_text(encoding="utf-8").strip()
-    except OSError:
-        return f"no {d / 'COMMIT'}"
-    if len(commit) < SHORT or not full.startswith(commit):
-        return f"{d / 'COMMIT'} names {commit!r}, not the merge base {full}"
+    except (OSError, NarrowError) as e:
+        return f"cannot read the base of {full[:SHORT]} ({e})"
+    if len(commit) < SHORT or not used.startswith(commit):
+        return f"{d / 'COMMIT'} names {commit!r}, not the merge base {used}"
     try:
         same = full == git(root, "rev-parse", "HEAD").strip() and not code_changes(root)
     except NarrowError as e:
         return f"cannot compare the base with HEAD ({e})"
     if same:  # the binaries of the tree itself: they would show every class, the new ones too
         return f"same as HEAD ({full[:SHORT]}, no change of the code): nothing to tell apart"
-    return _base_in(d, full[:SHORT])
+    return _base_in(d, used[:SHORT])
+
+
+def _same_code_ancestor(root, main, full):
+    """The nearest first-parent ancestor of `full` with a base saved and the same `BUILT_FROM`, or None."""
+    for a in git(root, "rev-list", "--first-parent", f"--max-count={ANCESTORS + 1}", full).split()[1:]:
+        if (base_dir(main, a) / "COMMIT").is_file() and not git(root, "diff", "--name-only", a, full, "--", *BUILT_FROM).strip():
+            return a
+    return None
 
 
 def code_changes(root):

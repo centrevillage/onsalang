@@ -1024,6 +1024,10 @@ class GateForms(GateRun):
         git_in(self.root, "add", "-A")
         git_in(self.root, "commit", "-qm", "base")
         git_in(self.root, "branch", "dev")
+        self.saved = []  # a whole run saves the base (X-1 U4): no cargo here
+        saving = mock.patch.object(gate_runs, "save_base", lambda root, keep, **kw: self.saved.append(root) or 0)
+        saving.start()
+        self.addCleanup(saving.stop)
 
     def ran(self, name):
         return (self.root / f"argv-{name}").exists()
@@ -1084,7 +1088,53 @@ class GateForms(GateRun):
         self.run_main([], [doc])
         row = self.history()[-1]
         self.assertEqual((row["tree"], row["tree_changed"]), (repo.tree_hash(self.root, narrowing.SWEPT), False))
-        self.assertEqual(row["tree"], git_in(self.root, "rev-parse", "HEAD^{tree}").strip())
+        # a commit of the documents while it runs moves HEAD, not the code and the cases (X-1 U4)
+        g = "['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false']"
+        doc_commit = (f"import subprocess; open('notes.md', 'w').write('y'); subprocess.run({g} + ['add', 'notes.md'], "
+                      f"check=True); subprocess.run({g} + ['commit', '-qm', 'doc'], check=True)")  # fmt: skip
+        head = git_in(self.root, "rev-parse", "HEAD").strip()
+        self.run_main([], [gate_steps.Step("dc", (sys.executable, "-B", "-c", doc_commit))])
+        self.assertNotEqual(git_in(self.root, "rev-parse", "HEAD").strip(), head)
+        self.assertEqual((self.history()[-1]["tree"], self.history()[-1]["tree_changed"]), (row["tree"], False))
+        case = "open('tests/spec/ops/groups.onsa', 'a').write('// x')"
+        self.run_main([], [gate_steps.Step("cs", (sys.executable, "-B", "-c", case))])
+        self.assertEqual((self.history()[-1]["tree"], self.history()[-1]["tree_changed"]), (None, True))
+
+    def test_a_whole_run_saves_the_base_and_counts_as_every_shard(self):
+        """X-1 U4: a whole run saves the base; it counts as every shard unless its tree was dirty or changed."""
+        steps = [fake("a")]
+        for argv, saves in (([], True), (["--stage-end", "W3"], True), (["--work", "W3-07"], False),
+                            (["--only", "a"], False), (["--sweep"], False)):  # fmt: skip
+            with self.subTest(argv=argv):
+                self.saved.clear()
+                self.run_main(argv, steps)
+                self.assertEqual(self.saved, [self.root] if saves else [])
+        h = git_in(self.root, "rev-parse", "HEAD").strip()[:7]
+        out = self.run_main([], steps)[1]
+        self.assertIn(f"sweep: next 0/2 (0/2 last at {h}, 0 commits ago; 1/2 last at {h}, 0 commits ago)", out)
+        self.assertIn(f"  auto sweep: last PASS at {h} (0 commits ago)", out)
+        (self.root / "crates").mkdir()
+        writer = gate_steps.Step("w", (sys.executable, "-B", "-c", "open('crates/x.rs', 'w').write('x')"), static=True)
+        out = self.run_main(["--sweep"], [writer])[1]
+        self.assertIn("tree changed during the run: the shard 0/2 is not counted", out)
+        self.assertEqual(gate_runs.next_shard(self.history(), 2), 0)
+        self.run_main([], steps)  # crates/x.rs is untracked: a dirty whole run counts as none
+        self.assertTrue(self.history()[-1]["dirty"])
+        self.assertFalse(gate_runs.whole_run(self.history()[-1]))
+        self.assertEqual(gate_runs.next_shard(self.history(), 2), 0)
+
+    def test_a_commit_while_it_runs(self):
+        """The row keeps the HEAD and the dirt of the start of the run, not a commit made meanwhile (X-1 U4)."""
+        head = git_in(self.root, "rev-parse", "HEAD").strip()
+        self.repo.write("crates/y.rs", "y\n")  # dirty at the start; the item commits it
+        script = ("import subprocess; g = ['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', "
+                  "'commit.gpgsign=false']; subprocess.run(g + ['add', '-A'], check=True); "
+                  "subprocess.run(g + ['commit', '-qm', 'meanwhile'], check=True)")  # fmt: skip
+        self.run_main([], [gate_steps.Step("c", (sys.executable, "-B", "-c", script))])
+        row = self.history()[-1]
+        self.assertNotEqual(git_in(self.root, "rev-parse", "HEAD").strip(), head)
+        self.assertEqual((row["commit"], row["dirty"]), (head, True))
+        self.assertFalse(gate_runs.whole_run(row))
 
     def test_the_help_of_work(self):
         out = io.StringIO()
@@ -1382,6 +1432,27 @@ class SaveBase(unittest.TestCase):
         # again on the same commit: replaced
         self.assertEqual(self.save()[0], 0)
         self.assertIn("onsa 3", (d / "onsa").read_text())
+
+    def test_the_base_of_an_ancestor_with_the_same_code(self):
+        """A merge base with no base saved uses its nearest first-parent ancestor's of the same code (X-1 U4)."""
+        self.save()
+        a = self.head()
+        d = self.root / "target" / "base" / a[:7]
+        saved = narrowing.Base(a[:7], (str(d / "onsa"),), (str(d / "onsa_cases"),))
+        self.write("docs/d.md", "doc\n")
+        git_in(self.root, "commit", "-qam", "doc")
+        git_in(self.root, "branch", "-f", "dev", "HEAD")
+        self.write("crates/c.rs", "fn c() { 1 }\n")  # a work on top of dev
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), saved)
+        git_in(self.root, "checkout", "--", "crates/c.rs")
+        self.write("rust-toolchain.toml", "[toolchain]\n")  # the toolchain makes other binaries
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "toolchain")
+        git_in(self.root, "branch", "-f", "dev", "HEAD")
+        self.write("crates/c.rs", "fn c() { 1 }\n")
+        self.assertIn("nor of an ancestor with the same code (50 first-parent commits)",
+                      narrowing.resolve_base(self.root, "auto"))
+        self.assertEqual((gate_steps.BASES_KEPT, "rust-toolchain.toml" in narrowing.BUILT_FROM), (8, True))
 
     def test_refuses_changes_of_what_builds_them(self):
         for rel in ("crates/c.rs", "Cargo.toml"):
@@ -3982,6 +4053,274 @@ class Take(unittest.TestCase):
         text = " ".join(out.getvalue().split())
         for part in ("work check: no need to run it again", "run tools/gate.sh --only static",
                      "the worktree whose work is taken", "the patch file to write", "example: tools/take.py patch"):
+            self.assertIn(part, text)
+        self.assertEqual(self.make_patch().splitlines()[2], "auto sweep: no sweep yet")  # the main tree's
+
+
+import after_commit  # noqa: E402
+
+START_RUNNER = after_commit.start_runner  # the real one, for `AutoSweep.test_now`
+
+# The gate of the made-up tree of `AutoSweep`: logs HEAD, writes a line of a sweep, exits with
+# `target/gate-code`; with `target/meanwhile`, commits and calls the hook while it runs.
+FAKE_GATE = """\
+import os, subprocess, sys
+sys.path.insert(0, os.environ["AUTO_TOOLS"])
+import gate_runs
+root = os.getcwd()
+def git(*a):
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *a],
+                          cwd=root, capture_output=True, text=True, check=True).stdout
+with open("target/gate-log", "a") as f:
+    f.write(git("rev-parse", "HEAD").strip() + "\\n")
+if os.path.exists("target/meanwhile"):
+    os.remove("target/meanwhile")
+    open("crates/m.rs", "a").write("x\\n")
+    git("add", "-A")
+    git("commit", "-qm", "meanwhile")
+    import after_commit
+    after_commit.main(["--root", root])
+code = int(open("target/gate-code").read()) if os.path.exists("target/gate-code") else 0
+shard = gate_runs.next_shard(gate_runs.read_history(root)[0], 2)
+verdict = "FAIL" if code else "PASS"
+gate_runs.record(root, f"sweep {shard}/2", [], {"fuzz": [verdict, 0.1]}, verdict, 0.1)
+sys.exit(code)
+"""
+
+
+class AutoSweep(unittest.TestCase):
+    """tools/after_commit.py (X-1 U4): the hook, the runner, the hold, `--now` and the line `auto sweep:`,
+    in a made-up main tree whose `tools/gate.sh` is FAKE_GATE. The runner runs in this process
+    (`drive`) with short waits; starting one (`start_runner`) is recorded, except in `test_now`."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve() / "main"
+        for rel, text in {".gitignore": "target/\n", "crates/c.rs": "fn c() {}\n", "docs/d.md": "d\n",
+                          "tests/t.onsa": "t\n", "tools/fake_gate.py": FAKE_GATE,
+                          "tools/gate.sh": '#!/bin/sh\nexec "$PYTHON" -B tools/fake_gate.py "$@"\n'}.items():  # fmt: skip
+            self.write(rel, text)
+        (self.root / "tools/gate.sh").chmod(0o755)
+        git_in(self.root, "init", "-q")
+        git_in(self.root, "add", "-A")
+        git_in(self.root, "commit", "-qm", "base")
+        git_in(self.root, "branch", "dev")
+        (self.root / "target").mkdir()
+        self.started = []
+        for name, value in (("QUIET", 0.3), ("NAP", 0.05), ("CLEAN_POLL", 0.05), ("CLEAN_WAIT", 0.3),
+                            ("start_runner", self.started.append)):  # fmt: skip
+            p = mock.patch.object(after_commit, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        env = mock.patch.dict(os.environ, {"AUTO_TOOLS": str(Path(after_commit.__file__).parent),
+                                           "PYTHON": sys.executable})  # fmt: skip
+        env.start()
+        self.addCleanup(env.stop)
+
+    def write(self, rel, text="x\n"):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def commit(self, rel, text="x\n", root=None):
+        p = (root or self.root) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        git_in(root or self.root, "add", "-A")
+        git_in(root or self.root, "commit", "-qm", rel)
+
+    def hook(self, *args, root=None):
+        with mock.patch.object(sys, "stdout", io.StringIO()) as out, mock.patch.object(sys, "stderr", io.StringIO()):
+            code = after_commit.main(["--root", str(root or self.root), *args])
+        return code, out.getvalue()
+
+    def head(self):
+        return git_in(self.root, "rev-parse", "HEAD").strip()
+
+    def request(self):
+        return gate_runs.read_json(self.root, "request")
+
+    def gate_log(self):
+        p = self.root / "target" / "gate-log"
+        return p.read_text().split() if p.exists() else []
+
+    def line(self):
+        return gate_runs.auto_line(self.root, gate_runs.read_history(self.root)[0], 2)
+
+    def test_the_hook(self):
+        self.commit("docs/e.md")  # documents only: nothing
+        self.assertEqual(self.hook(), (0, ""))
+        self.assertIsNone(self.request())
+        self.assertEqual(self.line(), "auto sweep: no sweep yet")
+        self.assertFalse((self.root / gate_runs.AUTO).exists())
+        for rel in ("crates/c.rs", "tests/u.onsa", "rust-toolchain.toml"):
+            self.commit(rel)
+            self.assertEqual(self.hook(), (0, "auto sweep: requested; the runner starts\n"))
+            self.assertEqual(self.request()["commit"], self.head())
+        self.assertEqual(self.started, [self.root] * 3)
+        self.assertRegex(self.line(), rf"^auto sweep: requested at {self.head()[:7]} .*, no runner \(")
+        # a worktree: nothing, in it nor in the main tree
+        wt = self.root.parent / "wt"
+        git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
+        before = self.request()
+        self.commit("crates/w.rs", root=wt)
+        self.assertEqual(self.hook(root=wt), (0, ""))
+        self.assertEqual(self.hook("--now", root=wt)[0], 2)
+        self.assertEqual((self.request(), len(self.started)), (before, 3))
+        self.assertFalse((wt / gate_runs.AUTO).exists())
+
+    def test_the_environment_of_the_hook(self):
+        """The hook's GIT_* go: with them, the git of the tool would read another tree or index."""
+        self.commit("crates/e.rs")
+        seen = []
+        env = {"GIT_DIR": str(self.root.parent / "nowhere"), "GIT_INDEX_FILE": ".git/index", "GIT_PREFIX": "sub/"}
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(after_commit, "start_runner", lambda root: seen.append([k for k in os.environ if k.startswith("GIT_")])):  # fmt: skip
+            self.assertEqual(self.hook()[0], 0)
+        self.assertEqual((seen, self.request()["commit"]), ([[]], self.head()))
+
+    def test_the_hook_file(self):
+        """tools/hooks/post-commit calls the tree's tools/after_commit.py from the top; without it, nothing."""
+        (self.root / "tools/hooks").mkdir()
+        shutil.copy2(Path(after_commit.__file__).parent / "hooks" / "post-commit", self.root / "tools/hooks/post-commit")
+        self.write("tools/after_commit.py", "import json, os\nopen('target/hook.json', 'w').write(json.dumps("
+                   "{'cwd': os.getcwd(), 'git': sorted(k for k in os.environ if k.startswith('GIT_'))}))\n")  # fmt: skip
+        git_in(self.root, "config", "core.hooksPath", "tools/hooks")
+        self.commit("docs/f.md")
+        got = json.loads((self.root / "target/hook.json").read_text())
+        self.assertEqual(got["cwd"], str(self.root))
+        self.assertIn("GIT_INDEX_FILE", got["git"])  # what `main` takes away
+        (self.root / "target/hook.json").unlink()
+        git_in(self.root, "rm", "-q", "tools/after_commit.py")
+        git_in(self.root, "commit", "-qm", "no tool")  # exits 0
+        self.assertFalse((self.root / "target/hook.json").exists())
+
+    def test_commits_in_a_row_run_once(self):
+        for i in range(3):
+            self.commit(f"crates/{i}.rs")
+            self.hook()
+        self.assertEqual(after_commit.drive(self.root), 0)
+        self.assertEqual(self.gate_log(), [self.head()])
+        self.assertIsNone(self.request())
+        self.assertEqual(self.line(), f"auto sweep: last PASS at {self.head()[:7]} (0 commits ago)")
+        self.assertEqual(len(list((self.root / gate_runs.AUTO / "runs").glob(f"*-{self.head()[:7]}.out"))), 1)
+
+    def test_a_commit_while_it_runs_runs_again(self):
+        self.write("target/meanwhile")
+        self.commit("crates/x.rs")
+        self.hook()
+        first = self.head()
+        after_commit.drive(self.root)
+        self.assertEqual(self.gate_log(), [first, self.head()])
+        self.assertNotEqual(first, self.head())
+        self.assertEqual(len(self.started), 1)  # the commit meanwhile found the runner on
+        self.assertIsNone(self.request())
+
+    def test_the_hold(self):
+        (self.root / gate_runs.HOLD).parent.mkdir(parents=True)
+        (self.root / gate_runs.HOLD).touch()
+        self.commit("crates/x.rs")
+        self.assertEqual(self.hook(), (0, "auto sweep: requested; held\n"))
+        self.assertEqual(self.started, [])
+        self.assertRegex(self.line(), rf"^auto sweep: held since .*, request at {self.head()[:7]} \(remove ")
+        after_commit.drive(self.root)
+        self.assertEqual((self.gate_log(), gate_runs.read_json(self.root, "state")["state"]), ([], "held"))
+        self.assertEqual(self.hook("--now")[0], 1)
+        (self.root / gate_runs.HOLD).unlink()
+        self.assertEqual(self.hook("--now")[0], 0)
+        self.assertEqual((len(self.started), self.request()["now"]), (1, True))
+
+    def test_a_dirty_tree_waits_then_skips(self):
+        self.commit("crates/x.rs")
+        self.hook()
+        self.write("crates/c.rs", "changed\n")
+        t0 = time.monotonic()
+        after_commit.drive(self.root)
+        self.assertGreaterEqual(time.monotonic() - t0, after_commit.CLEAN_WAIT)
+        self.assertEqual(self.gate_log(), [])
+        self.assertEqual(self.line(), f"auto sweep: skipped at {self.head()[:7]}: uncommitted crates/c.rs "
+                                      f"(tools/after_commit.py --now); no sweep yet")  # fmt: skip
+        git_in(self.root, "checkout", "--", "crates/c.rs")
+        self.write("docs/new.md")  # not the code: clean enough
+        self.hook("--now")
+        with mock.patch.object(after_commit, "QUIET", 1000):  # `--now` does not wait for the quiet
+            after_commit.drive(self.root)
+        self.assertEqual(self.gate_log(), [self.head()])
+
+    def test_now(self):
+        """`--now` with no request asks for HEAD; the runner it starts (bg.py) runs the sweep."""
+        with mock.patch.object(after_commit, "start_runner", START_RUNNER):
+            code, out = self.hook("--now")
+        self.assertEqual(code, 0, out)
+        self.assertIn("auto sweep: requested; the runner starts", out)
+        job = self.root / gate_runs.AUTO / "job"
+        with mock.patch.object(sys, "stdout", io.StringIO()):
+            self.assertEqual(bg.wait(job, 60, 0), 0, (job / "out").read_text())
+        self.assertEqual(self.gate_log(), [self.head()])
+        self.assertIsNone(self.request())
+        self.assertIn("nice -n 10", (job / "cmd").read_text())
+
+    def test_after_the_runner_died(self):
+        self.commit("crates/x.rs")
+        self.hook()
+        script = "import fcntl, sys, time\nf = open(sys.argv[1], 'a')\nfcntl.flock(f, fcntl.LOCK_EX)\nprint('on', flush=True)\ntime.sleep(60)\n"
+        child = subprocess.Popen([sys.executable, "-B", "-c", script, str(self.root / gate_runs.AUTO / "lock")],
+                                 stdout=subprocess.PIPE, text=True)  # fmt: skip
+        self.addCleanup(child.wait)
+        self.addCleanup(child.kill)
+        self.addCleanup(child.stdout.close)
+        self.assertEqual(child.stdout.readline(), "on\n")
+        self.assertEqual(self.line(), "auto sweep: the runner is on; no sweep yet")
+        self.assertEqual(self.hook(), (0, "auto sweep: requested; the runner is on\n"))
+        self.assertEqual(len(self.started), 1)
+        child.kill()  # SIGKILL: no crash report
+        child.wait()
+        self.assertRegex(self.line(), r"^auto sweep: requested at \w{7} .*, no runner \(target/gate/auto/job/out; ")
+        self.commit("crates/y.rs")
+        self.hook()
+        self.assertEqual(len(self.started), 2)
+
+    def test_a_whole_run_does_the_request(self):
+        self.commit("crates/x.rs")
+        self.hook()
+        time.sleep(1.1)  # the history keeps the time in seconds
+        gate_runs.record(self.root, "whole", [], {}, "PASS", 1.0, "t")
+        after_commit.drive(self.root)
+        self.assertEqual((self.gate_log(), self.request()), ([], None))
+
+    def test_the_line(self):
+        h = self.head()
+        with gate_runs.request_lock(self.root):
+            lock = gate_runs.try_runner(self.root)
+        for state, part in (({"state": "waiting", "until": 0}, "auto sweep: waiting (quiet until "),
+                            ({"state": "waiting-clean", "path": "crates/c.rs", "until": 0},
+                             "auto sweep: waiting for a clean tree (uncommitted crates/c.rs, until "),
+                            ({"state": "running", "commit": h}, f"auto sweep: running at {h[:7]} since ")):  # fmt: skip
+            gate_runs.write_json(self.root, "state", {"time": time.time(), **state})
+            self.assertTrue(self.line().startswith(part), self.line())
+        lock.close()
+        gate_runs.write_json(self.root, "state", {"time": time.time(), "state": "done", "commit": h, "code": 2, "out": "o"})
+        self.assertEqual(self.line(), f"auto sweep: gate exit 2 at {h[:7]} (o); no sweep yet")
+        # a failure stays until its shard passes
+        gate_runs.record(self.root, "sweep 0/2", [], {"fuzz": ["FAIL", 1.0], "a": ["PASS", 1.0]}, "FAIL", 1.0)
+        gate_runs.record(self.root, "sweep 1/2", [], {"fuzz": ["PASS", 1.0]}, "PASS", 1.0)
+        self.assertTrue(self.line().endswith(f"FAILED at {h[:7]}: fuzz (no output kept)"), self.line())
+        self.write(f"target/gate/auto/runs/20261018-000000-{h[:7]}.out")
+        self.assertTrue(self.line().endswith(f"(target/gate/auto/runs/20261018-000000-{h[:7]}.out)".replace(
+            "target", str(self.root / "target"), 1)), self.line())  # fmt: skip
+        gate_runs.record(self.root, "sweep 0/2", [], {"fuzz": ["PASS", 1.0]}, "PASS", 1.0)
+        self.assertTrue(self.line().endswith(f"last PASS at {h[:7]} (0 commits ago)"), self.line())
+
+    def test_the_help(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "stdout", out), mock.patch.dict(os.environ), self.assertRaises(SystemExit):
+            after_commit.main(["--help"])
+        text = " ".join(out.getvalue().split())
+        for part in ("The post-commit hook calls it; by hand, use --now.", "--now run the sweep of HEAD now",
+                     "--drive be the runner (the hook starts it; not by hand)", "--root ROOT the main tree",
+                     "after a restart of the machine", "stop it: touch target/gate/hold",
+                     "requested at …, no runner", "example: python3 -B tools/after_commit.py --now"):  # fmt: skip
             self.assertIn(part, text)
 
 

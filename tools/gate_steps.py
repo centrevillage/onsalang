@@ -54,7 +54,7 @@ SAMPLE = 0.1  # the fraction of the sample of the work check (X-1 M-1)
 SHARDS = 2  # the shards of the sweep, K (M-2): one sweep within BUDGET_SWEEP
 BUDGET_WORK = 300  # seconds of the items of a work check before the warning (M-8)
 BUDGET_SWEEP = 600  # seconds of the items of a sweep before the warning
-BASES_KEPT = 5  # the base binaries kept in target/base (M-3)
+BASES_KEPT = 8  # the base binaries kept in target/base (M-3; 8 for the narrowed fuzzing of the worktrees, X-1 U4)
 # The size of the main tree's `target/debug` past which a run of the main tree warns: cargo keeps the
 # outputs of the builds before (about 5 times a build from nothing, 1.6 GB on 2026-10-16).
 DEBUG_DIR_LIMIT = 8 * 2**30

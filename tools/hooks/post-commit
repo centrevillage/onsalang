@@ -1,0 +1,7 @@
+#!/bin/sh
+# git runs it after each commit once `git config core.hooksPath tools/hooks` is set; it ignores
+# the exit. A commit of the code or the cases in the main tree starts the sweep (X-1 U4):
+# tools/after_commit.py, which returns at once. A tree without it (a worktree of before) runs nothing.
+top=$(git rev-parse --show-toplevel) || exit 0
+[ -f "$top/tools/after_commit.py" ] || exit 0
+exec python3 -B "$top/tools/after_commit.py"

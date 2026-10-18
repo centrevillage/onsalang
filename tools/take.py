@@ -20,7 +20,8 @@ lines of a `#[cfg(test)] mod … { … }` block are tests too, on the new side f
 the added lines and on the old side for the removed ones: `test_lines`).
 Its second line, `work check: …`, reads the last work check of the worktree (its
 `target/gate/history.jsonl`, `tools/gate.py`) and says whether the parent need run it
-again in the main tree (rules/process.md 8.5; `work_check_line`).
+again in the main tree (rules/process.md 8.5; `work_check_line`). Its third line is the auto
+sweep of the main tree (`gate_runs.auto_line`, `tools/after_commit.py`).
 
 `check` (`--to`, default this repository) says whether `git apply --check`
 passes, else whether `git apply --check -3` does (and whether with
@@ -43,6 +44,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gate_runs  # noqa: E402
+import gate_steps  # noqa: E402
 import narrowing  # noqa: E402
 import repo  # noqa: E402
 
@@ -214,6 +216,10 @@ def patch(args):
     Path(args.out).write_bytes(diff)
     print(f"{args.out}: the patch of {wt} from {base}")
     print(work_check_line(wt, args.main, base, args.out))
+    try:
+        print(gate_runs.auto_line(args.main, gate_runs.read_history(args.main)[0], gate_steps.SHARDS))
+    except OSError as e:
+        print(f"auto sweep: cannot read the history of the main tree ({e})")
     summary(stats, new, inner)
     head = git(args.main, "rev-parse", "HEAD").stdout.decode().strip()
     if git(args.main, "rev-parse", base).stdout.decode().strip() != head:
@@ -303,6 +309,8 @@ its target/gate/history.jsonl) with the patch and the main tree:
   work check: run it again in the main tree: <what is missing>
                                                        no work check, only --quick, a failure, the tree
                                                        changed after it, the main tree moved in the code
+The third line, `auto sweep: …`, is the sweep a commit of the main tree starts (tools/after_commit.py
+--help): read it before taking the patch in; FAILED points to the output of the sweep.
 example: tools/take.py patch .claude/worktrees/x1 2ce980a /tmp/x1.patch"""
 
 

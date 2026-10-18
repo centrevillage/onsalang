@@ -348,7 +348,9 @@ examples:
   tools/gate.sh --work X-1/U3     the work check of the unit U3 of X-1, before its report
   tools/gate.sh --quick           in the middle of a work (not the verdict)
 A worktree keeps its runs in its target/gate/history.jsonl: `tools/take.py patch` reads the last
-work check there and says whether the parent need run it again."""
+work check there and says whether the parent need run it again.
+In the main tree, the summary ends with `sweep: …` (the shards) and `auto sweep: …` (the sweep a
+commit starts, tools/after_commit.py --help); a whole run saves the base binaries of a clean HEAD."""
 
 
 def golden_changes(root=ROOT):
@@ -451,9 +453,9 @@ def main(argv=None, steps=None, root=ROOT, out=sys.stdout):
                 print(f"--sweep cannot read the history to find its shard: {e}", file=sys.stderr)
                 return 2
         read_diff(steps, form, root)
-        before = _tree(root, kind)
+        before, start = _tree(root, kind), _start(root, kind)
         results = run_steps(steps, listed, cwd=root, out=out, form=form)
-        tree = (before, before is not None and _tree(root, kind) != before)
+        tree = (before, before is not None and _tree(root, kind) != before, start)
         try:
             golden = golden_changes(root)
         except (subprocess.CalledProcessError, OSError):
@@ -478,23 +480,38 @@ def _tree(root, kind):
         return None
 
 
+def _start(root, kind):
+    """`gate_runs.at_start` before the items (None: `record` takes them at the end, or says why not)."""
+    try:
+        return gate_runs.at_start(root) if kind else None
+    except narrowing.NarrowError:
+        return None
+
+
 def _record(root, form, results, failed, tree):
     """Add the line of this run to the history of the tree; the notes of the summary. `tree`: (the
-    tree before the items, whether it changed while they ran)."""
+    tree before the items, whether it changed while they ran, `gate_runs.at_start` before them)."""
     items = {r.step.name: [r.status, round(r.seconds, 1)] for r in results}
     seconds = sum(r.seconds for r in results)
     error = gate_runs.record(root, form.label(), form.works, items, "FAIL" if failed else "PASS", seconds, *tree)
     return [f"history: cannot write it ({error})"] if error else []
 
 
-def _history(root, form, results, failed, tree=(None, False)):
-    """Add the line of this run to the history of the main tree; the notes of the summary."""
+def _history(root, form, results, failed, tree=(None, False, None)):
+    """Add the line of this run to the history of the main tree; the notes of the summary. A whole run
+    saves the base binaries at its end (`save_base` refuses a tree with changes of the code; X-1 U4)."""
     notes = _record(root, form, results, failed, tree)
+    if tree[1] and form.sweep is not None:
+        notes.append(f"tree changed during the run: the shard {form.sweep[0]}/{form.sweep[1]} is not counted")
+    if gate_runs.whole_form(form.label()):
+        gate_runs.save_base(root, gate_steps.BASES_KEPT, out=lambda line: notes.append(f"base: {line}"),
+                            debug_limit=gate_steps.DEBUG_DIR_LIMIT)  # fmt: skip
     try:
         rows, bad = gate_runs.read_history(root)
     except OSError as e:
         return notes + [f"history: cannot read it ({e})"]
     notes.append(gate_runs.sweep_line(root, rows, bad, gate_steps.SHARDS))
+    notes.append(gate_runs.auto_line(root, rows, gate_steps.SHARDS))
     warning = gate_runs.debug_dir_warning(Path(root) / "target", gate_steps.DEBUG_DIR_LIMIT)
     return notes + ([warning] if warning else [])
 
