@@ -82,7 +82,9 @@ same minimized input, with the same message left, does not fail: it is listed on
 line `pre-existing (the base <commit> shows it): ...`. A whole run and a shard fail
 on it and mark it. A crash, an internal error and a timeout fail even when they are
 from before (the base does not run them); so does every new class when the base is
-unknown.
+unknown. A run of the tree at the merge base with no change of the code (a sweep, a
+whole run of the main tree) compares with the code before HEAD (X-1 U6), shown as
+`<commit> (the code before HEAD)`: what the base shows was there before HEAD's code.
 
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
@@ -811,16 +813,16 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
             if isinstance(base, narrowing.Base) and c.command == FIX_COMMAND:
                 shown, why = base_shows(base, c, small, deadline - time.monotonic(), runner.work / "base")
             if shown and narrowed:
-                before.append(f"pre-existing (the base {base.commit} shows it): {c.command}: {signature} "
+                before.append(f"pre-existing (the base {base.shown} shows it): {c.command}: {signature} "
                               f"(seed {seed}, {which})")
             elif shown:
-                failures.append(f"{line} (pre-existing: the base {base.commit} shows it)")
+                failures.append(f"{line} (pre-existing: the base {base.shown} shows it)")
             else:
                 failures.append(line + (f" (the base cannot tell: {why})" if why else ""))
     shutil.rmtree(runner.work, ignore_errors=True)
 
     if isinstance(base, narrowing.Base):
-        base_part = f"; base {base.commit}: {len(before)} pre-existing"
+        base_part = f"; base {base.shown}: {len(before)} pre-existing"
     else:
         base_part = f"; base unknown ({base})" if base else ""
     out(

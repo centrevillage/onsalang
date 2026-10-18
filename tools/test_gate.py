@@ -8,6 +8,7 @@ items that stand in for cargo.
     python3 -B tools/test_gate.py
 """
 import argparse
+import dataclasses
 import datetime
 import io
 import json
@@ -1457,6 +1458,38 @@ class SaveBase(unittest.TestCase):
         self.assertIn("nor of an ancestor with the same code (50 first-parent commits)",
                       narrowing.resolve_base(self.root, "auto"))
         self.assertEqual((gate_steps.BASES_KEPT, "rust-toolchain.toml" in narrowing.BUILT_FROM), (8, True))
+
+    def test_the_code_before_head(self):
+        """A run of the tree at HEAD with no change of the code compares with the code before HEAD (X-1 U6)."""
+        self.save()
+        c1 = self.head()
+        self.write("crates/c.rs", "fn c() { 1 }\n")
+        git_in(self.root, "commit", "-qam", "code")
+        self.save()
+        c2 = self.head()
+        self.write("docs/d.md", "doc\n")
+        git_in(self.root, "commit", "-qam", "doc")  # saves no base (X-1 U4)
+        git_in(self.root, "branch", "-f", "dev", "HEAD")
+
+        def base(c, before=True):
+            d = self.root / "target" / "base" / c[:7]
+            return narrowing.Base(c[:7], (str(d / "onsa"),), (str(d / "onsa_cases"),), before)
+
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c1))  # HEAD: the documents on c2
+        self.assertEqual(base(c1).shown, f"{c1[:7]} (the code before HEAD)")
+        self.write("docs/d.md", "changed\n")  # not the code: the same
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c1))
+        git_in(self.root, "checkout", "-q", "--", "docs/d.md")
+        self.write("crates/c.rs", "fn c() { 2 }\n")  # a change of the code: HEAD's base, as before
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c2, before=False))
+        git_in(self.root, "checkout", "-q", "--", "crates/c.rs")
+        git_in(self.root, "checkout", "-q", c2)  # HEAD at the code commit itself
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c1))
+        git_in(self.root, "checkout", "-q", "dev")
+        shutil.rmtree(self.root / "target" / "base" / c1[:7])  # no base of the code before
+        self.assertIn("same as HEAD", narrowing.resolve_base(self.root, "auto"))
+        self.assertIn("and no base of the code before it (50 first-parent commits)",
+                      narrowing.resolve_base(self.root, "auto"))
 
     def test_refuses_changes_of_what_builds_them(self):
         for rel in ("crates/c.rs", "Cargo.toml"):
@@ -2926,6 +2959,11 @@ class Fuzz(TempRepo):
                 self.assertRegex(text, rf"FAIL a new class of a broken fix candidate: fix-same-place: {re.escape(self.SIG)} "
                                        r"\(seed [^)]*\) \(pre-existing: the base abc1234 shows it\)")
         self.assertIn("from 2 of 2 seeds (shard 0/1)", text)
+        # the base of the code before HEAD (a run of the main tree, X-1 U6) says so
+        code, text = self.go_narrowed(None, dataclasses.replace(self.base_of(), before_head=True))
+        self.assertEqual(code, 1, text)
+        self.assertIn("(pre-existing: the base abc1234 (the code before HEAD) shows it)", text)
+        self.assertIn("; base abc1234 (the code before HEAD): 0 pre-existing;", text)
 
     def test_a_narrowed_run_mutates_the_picked_seeds_only(self):
         # the seed that is not picked (the sample takes one seed of the group tests/spec/q) gives no mutant;
@@ -3535,24 +3573,47 @@ class Narrowing(unittest.TestCase):
                     for i in range(8)]
                  + [(f"tests/spec/fmt/{i}.onsa", "") for i in range(3)])
         # the codes with the fewest seeds first: E0007 (2), E0005 (3 with E0007's), then E0002 (5 more,
-        # 8 in all) would pass the cap 6: it and the codes after it are left out (y.onsa is in the diff)
+        # 8 in all) would pass the cap 6: the rest of the cap (3) comes from its seeds by a hash (X-1 U7;
+        # y.onsa is in the diff)
         sel = narrowing.Selection(changed_since=self.full, code_cap=6)
         picked = narrowing.pick(seeds, sel, self.root, always=("tests/spec/fmt",))
-        self.assertEqual(picked.counts, {"diff": 2, "codes": 3, "always": 3})
-        self.assertEqual(picked.note, "codes over the cap 6 left to the sample: E0002")
-        self.assertEqual(picked.describe(len(seeds)), "8 of 13 seeds (diff 2, codes 3, always 3; "
-                                                       "codes over the cap 6 left to the sample: E0002)")
+        self.assertEqual(picked.counts, {"diff": 2, "codes": 6, "always": 3})
+        self.assertEqual(picked.note, "codes cut to the cap 6 by hash: E0002 (3 of 5)")
+        self.assertEqual(picked.describe(len(seeds)), "11 of 13 seeds (diff 2, codes 6, always 3; "
+                                                       "codes cut to the cap 6 by hash: E0002 (3 of 5))")
         # the cap holds them all: no note
         picked = narrowing.pick(seeds, narrowing.Selection(changed_since=self.full, code_cap=8), self.root)
         self.assertEqual((picked.counts, picked.note), ({"diff": 2, "codes": 8}, ""))
-        # the cap holds none: the codes left out are named
+        # the cap holds none: the codes left out are named, none taken
         picked = narrowing.pick(seeds, narrowing.Selection(changed_since=self.full, code_cap=0), self.root)
         self.assertEqual(picked.counts, {"diff": 2, "codes": 0})
-        self.assertIn("E0002 E0005 E0007", picked.note)
+        self.assertEqual(picked.note, "codes cut to the cap 0 by hash: E0002 (0 of 5), E0005 (0 of 3), E0007 (0 of 2)")
         # a sample is added after the rest
         picked = narrowing.pick(seeds, narrowing.Selection(changed_since=self.full, code_cap=0, sample=1.0,
                                                            salt="s"), self.root)
         self.assertEqual((picked.counts, len(picked.paths)), ({"diff": 2, "codes": 0, "sample": 11}, 13))
+
+    def test_pick_fills_the_cap_by_a_hash_of_its_own(self):
+        """The seeds of a code over the cap fill it (X-1 U7): the same salt takes the same, not the sample's."""
+        self.change()
+        seeds = [(f"tests/spec/c/{i}.onsa", "E0002") for i in range(100)]
+
+        def cut(salt, order=seeds):
+            sel = narrowing.Selection(changed_since=self.full, code_cap=20, salt=salt)
+            return narrowing.pick(order, sel, self.root)
+
+        picked = cut("W4-01")
+        self.assertEqual((picked.counts, picked.note), ({"diff": 0, "codes": 20},
+                                                        "codes cut to the cap 20 by hash: E0002 (20 of 100)"))
+        self.assertEqual(picked.paths, cut("W4-01", list(reversed(seeds))).paths)  # the same salt: the same
+        self.assertNotEqual(picked.paths, cut("W4-02").paths)
+        self.assertEqual(len(cut(None).paths), 20)  # no salt (no --sample): still one choice
+        self.assertEqual(cut(None).paths, cut(None).paths)
+        # not the 20 the sample's hash puts first: they would overlap the sample
+        paths = [p for p, _ in seeds]
+        first = sorted(paths, key=lambda p: narrowing._hash(f"W4-01|{p}"))[:20]
+        self.assertLess(len(picked.paths & set(first)), 10)
+        self.assertNotEqual(picked.paths, narrowing.sampled(paths, 0.2, "W4-01"))
 
     def test_sample(self):
         paths = [f"tests/spec/{d}/{i}.onsa" for d in ("a", "b", "c") for i in range(200)] + ["tests/spec/d/x/1.onsa",
@@ -3590,6 +3651,8 @@ class Narrowing(unittest.TestCase):
 
     def test_resolve_base(self):
         self.assertIsNone(narrowing.resolve_base(self.root, "none"))
+        self.assertIn("same as HEAD", narrowing.resolve_base(self.root, "auto"))  # no code before it (X-1 U6)
+        self.write("crates/c.rs", "fn c() { 1 }\n")
         self.assertIn("COMMIT", narrowing.resolve_base(self.root, "auto"))
         d = self.make_base(self.full)
         self.change()

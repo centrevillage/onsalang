@@ -7,7 +7,9 @@
                                the code diff names (its added and removed lines outside
                                `tests/`, `tools/`, the documents), at most `--code-cap` of them: the codes
                                with the fewest seeds first, up to the one that would pass the
-                               cap (the codes left out are named). `auto`: `git merge-base HEAD dev`.
+                               cap; the rest of the cap from the seeds of the codes left out, by
+                               sha256("<ID>|cap|<path>") (not the sample's), the codes named with
+                               how many of theirs it took. `auto`: `git merge-base HEAD dev`.
     --sample F --salt ID       besides, the seeds with sha256("<ID>|<path>") below F of the
                                range, and, for a group (the first 3 parts of the directory,
                                `tests/spec/ops`) none of them falls in, the one of the group
@@ -25,7 +27,9 @@ SHA of the merge base (7 characters or more). The main tree is `repo.main_tree`;
 writes the base (`gate_runs.save_base`) into `base_dir`. A merge base with no base saved uses the
 base of its nearest first-parent ancestor (at most ANCESTORS back) whose `BUILT_FROM` is the same
 (a commit of the documents saves none: X-1 U4). A merge base that is HEAD, with no change of the
-code (`code_changes`), is not used: the binaries would be the tree's own.
+code (`code_changes`), is not used (the binaries would be the tree's own; a sweep, a whole run
+of the main tree): the base is then the code before HEAD (X-1 U6), the nearest first-parent
+ancestor (at most ANCESTORS back) with a base saved whose `BUILT_FROM` differs from HEAD's.
 """
 import argparse
 import hashlib
@@ -86,6 +90,11 @@ class Base:
     commit: str  # what the output shows
     onsa: tuple  # the argv of each
     onsa_cases: tuple
+    before_head: bool = False  # the code before HEAD: the tree's own code is HEAD's (X-1 U6)
+
+    @property
+    def shown(self):
+        return f"{self.commit} (the code before HEAD)" if self.before_head else self.commit
 
 
 def git(root, *args):
@@ -187,9 +196,12 @@ def pick(seeds, sel, root, always=()):
                 left_out.append(c)
             else:
                 found |= by_code[c]
+        if left_out:  # the rest of the cap from the seeds of the codes left out, by a hash of its own
+            over = sorted(set().union(*(by_code[c] for c in left_out)) - found, key=lambda p: (_cap_hash(sel, p), p))
+            found |= set(over[:max(0, sel.code_cap - len(found))])
+            cut = ", ".join(f"{c} ({len(by_code[c] & found)} of {len(by_code[c])})" for c in sorted(left_out))
+            notes.append(f"codes cut to the cap {sel.code_cap} by hash: {cut}")
         add("codes", found)
-        if left_out:
-            notes.append(f"codes over the cap {sel.code_cap} left to the sample: {' '.join(sorted(left_out))}")
     if always:
         add("always", {p for p in paths if under(p, always)})
     if sel.sample is not None:
@@ -197,8 +209,15 @@ def pick(seeds, sel, root, always=()):
     return Picked(frozenset(taken), counts, "; ".join(notes))
 
 
+def _cap_hash(sel, path):
+    """The order the cap of the codes takes the seeds of the codes over it: not the sample's
+    (`sampled`), which would take the same seeds; no salt (no `--sample`) is the empty one."""
+    return _hash(f"{sel.salt or ''}|cap|{path}")
+
+
 def resolve_base(root, spec):
-    """The base binaries: a `Base`, the reason they are unknown (a str), or None for `none`."""
+    """The base binaries: a `Base`, the reason they are unknown (a str), or None for `none`.
+    A merge base that is HEAD with no change of the code gives the code before HEAD's (`before_head`)."""
     if spec == "none":
         return None
     if spec != "auto":
@@ -213,10 +232,20 @@ def resolve_base(root, spec):
     main = repo.main_tree(root)
     if main is None:
         return f"{root} is not the top of a git work tree"
+    try:
+        same = full == git(root, "rev-parse", "HEAD").strip() and not code_changes(root)
+    except NarrowError as e:
+        return f"cannot compare the base with HEAD ({e})"
     d, used = base_dir(main, full), full
     try:
-        if not (d / "COMMIT").is_file():
-            used = _same_code_ancestor(root, main, full)
+        if same:  # the binaries of the tree itself would show every class, the new ones too
+            used = _ancestor(root, main, full, same_code=False)
+            if used is None:
+                return (f"same as HEAD ({full[:SHORT]}, no change of the code), and no base of the code before it "
+                        f"({ANCESTORS} first-parent commits): nothing to tell apart")
+            d = base_dir(main, used)
+        elif not (d / "COMMIT").is_file():
+            used = _ancestor(root, main, full, same_code=True)
             if used is None:
                 return f"no {d / 'COMMIT'}, nor of an ancestor with the same code ({ANCESTORS} first-parent commits)"
             d = base_dir(main, used)
@@ -225,20 +254,16 @@ def resolve_base(root, spec):
         return f"cannot read the base of {full[:SHORT]} ({e})"
     if len(commit) < SHORT or not used.startswith(commit):
         return f"{d / 'COMMIT'} names {commit!r}, not the merge base {used}"
-    try:
-        same = full == git(root, "rev-parse", "HEAD").strip() and not code_changes(root)
-    except NarrowError as e:
-        return f"cannot compare the base with HEAD ({e})"
-    if same:  # the binaries of the tree itself: they would show every class, the new ones too
-        return f"same as HEAD ({full[:SHORT]}, no change of the code): nothing to tell apart"
-    return _base_in(d, used[:SHORT])
+    return _base_in(d, used[:SHORT], before_head=same)
 
 
-def _same_code_ancestor(root, main, full):
-    """The nearest first-parent ancestor of `full` with a base saved and the same `BUILT_FROM`, or None."""
+def _ancestor(root, main, full, same_code):
+    """The nearest first-parent ancestor of `full` with a base saved whose `BUILT_FROM` is the same
+    as `full`'s (`same_code`) or differs (the code before it), or None."""
     for a in git(root, "rev-list", "--first-parent", f"--max-count={ANCESTORS + 1}", full).split()[1:]:
-        if (base_dir(main, a) / "COMMIT").is_file() and not git(root, "diff", "--name-only", a, full, "--", *BUILT_FROM).strip():
-            return a
+        if (base_dir(main, a) / "COMMIT").is_file():
+            if same_code == (not git(root, "diff", "--name-only", a, full, "--", *BUILT_FROM).strip()):
+                return a
     return None
 
 
@@ -252,12 +277,12 @@ def base_dir(main, full):
     return Path(main) / "target" / "base" / full[:SHORT]
 
 
-def _base_in(d, commit):
+def _base_in(d, commit, before_head=False):
     tools = [d / f for f in BASE_FILES]
     for t in tools:
         if not (t.is_file() and os.access(t, os.X_OK)):
             return f"no {t}"
-    return Base(commit, (str(tools[0]),), (str(tools[1]),))
+    return Base(commit, (str(tools[0]),), (str(tools[1]),), before_head)
 
 
 def add_arguments(ap, base=False):

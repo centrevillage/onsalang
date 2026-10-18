@@ -70,6 +70,9 @@ and then the outcome: FAILED at <commit>: <items> (<output>) / last PASS at <com
 when it says FAILED:
   read      the output the line points to (in {gate_runs.AUTO / 'runs'}/) and the inputs the fuzzing
             made small, in target/fuzz/new/
+  marked    a class the fuzzing marks `(pre-existing: the base <commit> (the code before HEAD)
+            shows it)` was there at that commit, before the code of HEAD: not one the commit
+            brought (the fuzzing line says `base unknown` when no base tells them apart)
   it stays  a shard that fails on a class known before stays FAILED until the class is in
             tests/fuzz/allowed.toml or in an R; the commit of that touches tests/, so it starts a
             sweep. The line clears when that shard passes; a sweep runs the next shard, so it can

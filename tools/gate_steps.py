@@ -39,8 +39,8 @@ The forms of a run (X-1; `tools/gate.py` builds the arguments):
 - `--only NAMES` runs the items named (`static`: the static items) in the form of
   the other options.
 The work check warns past BUDGET_WORK seconds, a sweep past BUDGET_SWEEP. The
-narrowed runs keep the cap of the codes of the tools (`narrowing.CODE_CAP`): the
-gate passes none. An item with `parent=True` exits PARENT when what is left waits
+narrowed runs keep the cap of the codes of the tools (`narrowing.CODE_CAP`, filled
+by a hash from the codes over it): the gate passes none. An item with `parent=True` exits PARENT when what is left waits
 for the parent (in a worktree, the marks of `tools/gap_marks.py` to register; the documents changed
 after the last docs check, `docs.py due`): status PARENT, not a failure.
 """
