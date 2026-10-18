@@ -6239,5 +6239,58 @@ class DocsCommands(DocsTree):
         ])  # fmt: skip
 
 
+class ToolHelp(unittest.TestCase):
+    """The help by role (X9-7, X-9 U2): `repo.ROLES`, `repo.Command`, and `docs.py help [--role R] [COMMAND]`."""
+
+    def help(self, *argv):
+        code, lines = quiet_out(docs_tool.main, ["help", *argv])
+        self.assertEqual(code, 0, lines)
+        return lines
+
+    def test_every_command_has_its_help(self):
+        self.assertGreater(len(docs_tool.COMMANDS), 10)
+        for name, c in docs_tool.COMMANDS.items():
+            with self.subTest(name=name):
+                self.assertIsInstance(c, repo.Command)
+                for text in (c.purpose, c.when, c.example):
+                    self.assertTrue(text.strip() and "\n" not in text, text)
+                self.assertTrue(c.roles)
+                self.assertEqual([r for r in c.roles if r not in repo.ROLES], [])
+                self.assertRegex(c.example, rf"^docs\.py {re.escape(name)}( |$)")
+
+    def test_roles_are_the_definitions(self):
+        agents = Path(__file__).resolve().parent.parent / ".claude" / "agents"
+        self.assertEqual(sorted(d for d in repo.ROLES.values() if d), sorted(p.stem for p in agents.glob("onsa-*.md")))
+        self.assertEqual([r for r, d in repo.ROLES.items() if d is None], ["parent"])
+
+    def test_help_by_role(self):
+        names = list(docs_tool.COMMANDS)
+        self.assertEqual([x.split()[0] for x in self.help() if x[:1].isalpha()][: len(names)], names)
+        for role in repo.ROLES:
+            with self.subTest(role=role):
+                lines = self.help("--role", role)
+                want = [n for n, c in docs_tool.COMMANDS.items() if role in c.roles]
+                self.assertTrue(want)  # `show` is every role's
+                self.assertEqual([x.split()[0] for x in lines if not x.startswith(" ")], want)
+                self.assertEqual(sum(x.startswith("  時機: ") for x in lines), len(want))
+                self.assertEqual([x.split(maxsplit=2)[1] for x in lines if x.startswith("  例:")], ["docs.py"] * len(want))
+
+    def test_help_of_a_command(self):
+        for name, c in docs_tool.COMMANDS.items():
+            with self.subTest(name=name):
+                text = "\n".join(self.help(name))
+                for part in (c.purpose, c.when, " ".join(c.roles), c.example, f"usage: docs.py {name}"):
+                    self.assertIn(part, text)
+        self.assertIn("--relations  the head fields and the relations, no body", "\n".join(self.help("show")))
+        self.assertNotIn("使わない", "\n".join(self.help("--role", "i", "show")))
+        self.assertIn("  （役割 b はこの命令を使わない）", self.help("--role", "b", "ticket"))
+
+    def test_unknown_role_or_command(self):
+        for argv in (["--role", "impl"], ["nosuch"], ["--role", "i", "nosuch"], ["--role", "x", "show"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit) as e:
+                quiet_out(docs_tool.main, ["help", *argv])
+            self.assertEqual(e.exception.code, 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

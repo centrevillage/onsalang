@@ -10,8 +10,10 @@
   spec as one text (`spec_doc`, `tools_doc`);
 - the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`);
 - the stages in their order (`Layout.stages`, the table of `tasks/stages.md`, X-2 U6);
-- reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it).
+- reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it);
+- the roles and the subcommands of a tool with their help (`ROLES`, `Command`, `parse_command`, X9-7).
 """
+import argparse
 import hashlib
 import json
 import os
@@ -21,6 +23,7 @@ import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 import spec_blocks
 
@@ -623,3 +626,62 @@ def tree_kind(root):
     if dirs is None:
         return None
     return "main" if dirs[0].resolve() == dirs[1].resolve() else "worktree"
+
+
+# ---------------------------------------------------------------- the subcommands of a tool (X9-7)
+
+# The roles of the help: the name in the rules -> its agent definition (`.claude/agents/<name>.md`; None: the
+# parent, the main session). The help shows them in this order.
+ROLES = {"parent": None, "t": "onsa-test", "i": "onsa-impl", "b": "onsa-break", "advisor": "onsa-advisor",
+         "gap": "onsa-gap", "docs": "onsa-docs"}  # fmt: skip
+
+
+class Command(NamedTuple):
+    """A subcommand of a tool: its argparse arguments and its run, then its help in Japanese (X9-7): the roles
+    that use it in their work (ROLES), its purpose in one line, when to use it, and an example (`<tool> <name> …`)."""
+
+    add_arguments: Callable
+    run: Callable
+    roles: tuple
+    purpose: str
+    when: str
+    example: str
+
+
+def parse_command(prog, description, commands, argv=None, common=lambda p: None):
+    """The arguments of `prog <name> …` for `commands` ({name: Command}) and `help`; `args.run_` is the run.
+    `common(p)` adds what every subcommand but `help` takes. argparse's errors exit 2 (an unknown role or
+    command of `help` too)."""
+    ap = argparse.ArgumentParser(prog=prog, description=description)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    parsers = {}
+    for name, c in commands.items():
+        parsers[name] = p = sub.add_parser(name, help=c.purpose, description=c.purpose)
+        common(p)
+        c.add_arguments(p)
+        p.set_defaults(run_=c.run)
+    h = sub.add_parser("help", help="命令の目的・時機・役割・例を出す")
+    h.add_argument("--role", choices=ROLES, help="この役割が使う命令だけを、時機と例とともに出す")
+    h.add_argument("command", nargs="?", choices=commands, help="この命令の全てと引数の説明を出す")
+    h.set_defaults(run_=lambda a: print(help_text(prog, commands, parsers, a.role, a.command), end="") or 0)
+    return ap.parse_args(argv)
+
+
+def help_text(prog, commands, parsers, role=None, name=None):
+    """`help`: the names and the purposes; with `role`, its commands with when and an example; with `name`, all
+    of the command and its argparse help (with `role` too, a line when the role does not use it)."""
+    width = max(map(len, commands))
+    if name:
+        c = commands[name]
+        out = [f"{name}: {c.purpose}", f"  時機: {c.when}", f"  役割: {' '.join(c.roles)}", f"  例:   {c.example}"]
+        if role and role not in c.roles:
+            out.append(f"  （役割 {role} はこの命令を使わない）")
+        return "\n".join(out) + "\n\n" + parsers[name].format_help()
+    if role:
+        out = [f"{n:<{width}}  {c.purpose}\n  時機: {c.when}\n  例:   {c.example}\n"
+               for n, c in commands.items() if role in c.roles]  # fmt: skip
+        return "".join(out) or f"（役割 {role} が使う命令は無い）\n"
+    roles = "、".join(f"{r}（{d or '親'}）" for r, d in ROLES.items())
+    return "".join(f"{n:<{width}}  {c.purpose}\n" for n, c in commands.items()) + (
+        f"\n`{prog} help --role <役割>` はその役割の命令と時機と例を、`{prog} help <命令>` はその命令の全てを出す。\n"
+        f"役割: {roles}\n")

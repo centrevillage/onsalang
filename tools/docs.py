@@ -50,12 +50,12 @@ depth 0 with `-` for the type and from).
   are there), (c) `relations` (the keys named in `check_relations`, and a direction in `RESTS_ON` for
   each ID field of the field tables), and (e) `links` (the relative
   links of the READMEs). To add a check, add `(name, fn(tree) -> Findings)` to CHECKS; to add a
-  subcommand, add `name: (add_arguments, run)` to COMMANDS.
+  subcommand, add `name: repo.Command(add_arguments, run, roles, purpose, when, example)` to COMMANDS
+  (its help, X9-7; `docs.py help`).
 
 The head fields (DF-1) are read by `read_head` and written in the normal form by `head_update` /
 `write_head` (U3's `set`); the field table of a directory is `field_table`.
 """
-import argparse
 import fnmatch
 import os
 import re
@@ -1906,36 +1906,60 @@ def cmd_ticket(args):
 
 # ---------------------------------------------------------------- the subcommands
 
+EDITORS = ("parent", "i", "docs")  # the roles that edit the documents (the help of `fmt`, `swaps`, `check`, the writes)
+C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
 COMMANDS = {
-    "fmt": (fmt_args, cmd_fmt),
-    "swaps": (lambda p: None, cmd_swaps),
-    "check": (lambda p: None, cmd_check),
-    "due": (lambda p: p.add_argument("--stage-end", metavar="STAGE"), cmd_due),
-    "path": (path_args, cmd_path),
-    "back": (back_args, cmd_back),
-    "refs": (refs_args, cmd_refs),
-    "graph": (graph_args, cmd_graph),
-    "show": (show_args, cmd_show),
-    "list": (list_args, cmd_list),
-    "changes": (changes_args, cmd_changes),
-    "set": (set_args, cmd_set),
-    "note": (note_args, cmd_note),
-    "new": (new_args, cmd_new),
-    "draft": (draft_args, cmd_draft),
-    "ticket": (ticket_args, cmd_ticket),
-}
+    "fmt": C(fmt_args, cmd_fmt, EDITORS, "長い行を「。」の後で折る（`--check` は書かずに確かめる）",
+             "文書を編集した後に、`docs.py fmt <ファイル>` で行を整える", "docs.py fmt rules/process.md"),
+    "swaps": C(lambda p: None, cmd_swaps, EDITORS, "vim のスワップファイル（`.<name>.sw?`）を並べる",
+               "文書を編集する前に、スワップファイルが無いことを確かめる。確かめは、編集と別のコマンドで行う"
+               "（`.claude/agents/` は見ないので、定義を開いているかは利用者に聞く）", "docs.py swaps"),
+    "check": C(lambda p: None, cmd_check, EDITORS, "文書の表・頭の欄・ID と § の参照・関係・README のリンクを確かめる（gate の `docs`）",
+               "文書を編集した後に、`fmt` で行を整えてから通す。文書の点検の担当は始めに回し、落ちていれば、その出力を報告して止める",
+               "docs.py check"),
+    "due": C(lambda p: p.add_argument("--stage-end", metavar="STAGE"), cmd_due, ("parent",),
+             "最後の文書の点検（`Docs-Checked:` の行）から改めた文書を並べる（gate の `docs-due`）",
+             "規則・仕様・担当の定義・README を改めた後と段の終わりに、文書の点検（onsa-docs）を呼ぶかを見る"
+             "（gate の `docs-due` と同じ。段の終わりは `--stage-end`）", "docs.py due"),
+    "path": C(path_args, cmd_path, ("parent", "docs"), "ID のファイルか、§ の見出しの場所を出す",
+              "作業票に書く ID が登録済みかを確かめるとき（`docs.py path <ID>` で引ける）。ID や § の経路を引くとき",
+              "docs.py path S-537 §6.1 --abs"),
+    "back": C(back_args, cmd_back, ("parent", "docs"), "ID を名指す頭の欄と本文の行を逆引きする",
+              "ID を名指す所を逆引きするとき（`--history` で `history/` も）", "docs.py back S-537"),
+    "refs": C(refs_args, cmd_refs, ("parent", "docs"), "ID のファイルか文書が名指す ID を、状態・場所・題と並べる",
+              "ファイルが名指す ID の状態と場所を一度に見るとき", "docs.py refs W3-05"),
+    "graph": C(graph_args, cmd_graph, ("parent",), "決定の関係を、その場で作ったグラフで出す（`--back` はその上に立つもの）",
+               "下書きを確かめる段で、前の決定、付録、登録済みの R と重なる部分を探すとき（`--back`、その決定の上に立つもの）。"
+               "決定が変わったときに見直すものを探すとき", "docs.py graph S-239 --back --typed --depth 2"),
+    "show": C(show_args, cmd_show, tuple(repo.ROLES), "ID のファイルを読む（`--relations` は頭の欄と関係だけ）",
+              "ID のファイルを読むとき（作業票の「実現する決定」と「直す R」の原文など）", "docs.py show S-537 --relations"),
+    "list": C(list_args, cmd_list, ("parent",), "種類ごとの ID を、状態・段・組などで絞って並べる",
+              "決定の一覧を見るとき（別に書かない）。下書きの組の一覧は `list S --group <N>`", "docs.py list S --status OPEN --count"),
+    "changes": C(changes_args, cmd_changes, ("parent",), "決めた日・段・節で絞って、決定の変更点を並べる",
+                 "決定の変更点を見るとき（別に書かない）。下書きを確かめる段で、その節の決定を探すとき（`--section <§>`）",
+                 "docs.py changes --section §6"),
+    "set": C(set_args, cmd_set, EDITORS, "ID のファイルの頭の欄を書く（`KEY=` は欄を消す）",
+             "ID のファイルの頭の欄を書くとき（作業のコミットと同じ回に `status=DONE`、決定の反映で "
+             "`status=DECIDED decided=<日付>`）", "docs.py set W1-01 status=DONE"),
+    "note": C(note_args, cmd_note, EDITORS, "ID のファイルの本文に補いの項目を足す",
+              "ID のファイルの本文に補いを書くとき（決定の反映で、関係する R の `判断`・`反映`）",
+              "docs.py note R-12 反映 \"W3-05 で直した\""),
+    "new": C(new_args, cmd_new, ("parent",), "次の番号で ID のファイルを作る（主のツリーだけ）",
+             "S・R などの ID を登録するとき。S は、空白の報告を受け取った回に主のツリーで登録する"
+             "（期限の作業か段を `before`、見つけた票を `found_by`）",
+             "docs.py new S --title \"…\" before=W4 found_by=W3-05/t"),
+    "draft": C(draft_args, cmd_draft, ("parent",), "S の下書き（`S-<番号>.draft.md`、頭の欄 `group`・`drafted`）を作る",
+               "確かめた空白の組を下書きに置くとき", "docs.py draft S-537 S-538 --group 12"),
+    "ticket": C(ticket_args, cmd_ticket, ("parent",), "作業のファイルと決定から、作業票の骨組みを出す",
+                "作業票を書くとき（親は残りの欄を埋める）", "docs.py ticket W3-05 U2/i"),
+}  # fmt: skip
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="docs.py", description=__doc__.split("\n")[0])
-    sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, (add_arguments, _) in COMMANDS.items():
-        p = sub.add_parser(name)
-        p.add_argument("--root", type=Path, default=ROOT)
-        add_arguments(p)
-    args = ap.parse_args(argv)
+    args = repo.parse_command("docs.py", __doc__.split("\n")[0], COMMANDS, argv,
+                              lambda p: p.add_argument("--root", type=Path, default=ROOT))  # fmt: skip
     try:
-        return COMMANDS[args.cmd][1](args)
+        return args.run_(args)
     except (DocsError, repo.RepoError) as e:
         print(f"docs.py {args.cmd}: {e}", file=sys.stderr)
         return 2
