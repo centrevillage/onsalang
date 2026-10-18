@@ -13,6 +13,7 @@ The hook of SubagentStop (tools/hooks/claude_hook.py) uses both through `last_re
 The records are under ~/.claude/projects/<the repository's project directory>/<session id>/subagents/.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -21,6 +22,7 @@ PROJECT = Path.home() / ".claude" / "projects" / "-Users-centrevillage-projects-
 # The context of an agent above which its next unit or fix goes to a new agent (rules/budgets.md, the budget
 # of an agent's context; rules/leader.md 2.6). The hook of SubagentStop (tools/hooks/claude_hook.py) says so.
 CONTEXT_BUDGET = 300_000
+REPORTS = "handback"  # the directory of the saved reports in the session's scratchpad (`report_prefix`)
 # USD per million tokens: input, output, cache read. A cache write costs the input price times
 # 1.25 (5 minutes) or 2 (1 hour). Prices of the API, used only to compare agents.
 PRICES = {
@@ -28,6 +30,17 @@ PRICES = {
     "claude-sonnet-5-5": (2, 10, 0.20),
     "claude-fable-5-1": (10, 50, 0.25),
 }
+
+
+def safe(name) -> str:
+    """`name` as a piece of a file name: only letters, digits, `_`, `.` and `-` (no glob nor path)."""
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", name or "none")[:60]
+
+
+def report_prefix(agent_type, agent_id) -> str:
+    """The start of the names of an agent's saved reports in `<scratchpad>/REPORTS/` (the hook of SubagentStop
+    adds the number; `work.py` looks for them before removing the agent's worktree)."""
+    return f"{safe(agent_type)}-{safe(agent_id)}-"
 
 
 def records(path: Path):

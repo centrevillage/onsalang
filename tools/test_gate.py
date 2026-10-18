@@ -4386,6 +4386,248 @@ class Work(unittest.TestCase):
         self.assertEqual((self.main / "c.py").read_text(), "x = 1\n" * 150)
         self.assertEqual(quiet_out(take.main, ["new", "x"])[0], 2)
 
+    # The cleaning up (X-9 U5): a made-up directory of Claude Code's records (`work.RECORDS_ENV`).
+
+    def record(self, wt, session="s1", finished=False, agent=None):
+        d = Path(self.tmp.name) / "records" / session / "subagents"
+        d.mkdir(parents=True, exist_ok=True)
+        meta = {"agentType": "onsa-impl", "worktreePath": str(wt), "worktreeBranch": work.branch_of(wt.name),
+                **({"finished": True} if finished else {})}  # fmt: skip
+        (d / f"agent-{agent or wt.name}.meta.json").write_text(json.dumps(meta))
+
+    def clean(self, *argv):
+        (Path(self.tmp.name) / "records").mkdir(exist_ok=True)
+        with mock.patch.dict(os.environ, {work.RECORDS_ENV: str(Path(self.tmp.name) / "records")}):
+            return quiet_out(work.main, [*map(str, argv), "--main", str(self.main)])
+
+    def gone(self, wt):
+        """Whether the worktree and its branch are gone."""
+        return (wt.exists(), git_in(self.main, "branch", "--list", work.branch_of(wt.name)).strip()) == (False, "")
+
+    def test_done_live_and_unreadable(self):
+        wt = work.new("l1", self.main)
+        self.record(wt)
+        for argv in (["--session", "s1"], [], ["--session", "s1", "--discard"]):  # this session's, no session
+            with self.subTest(argv=argv):
+                code, lines = self.clean("done", "l1", *argv)
+                self.assertEqual((code, lines), (1, ["keep l1 (worktree-l1): the agent is running (onsa-impl l1)"]))
+        self.record(work.new("l2", self.main), session="s2")
+        bad = Path(self.tmp.name) / "records" / "s2" / "subagents" / "agent-x.meta.json"
+        bad.write_text("{")
+        code, lines = self.clean("done", "l2")
+        self.assertEqual(code, 1)
+        self.assertRegex(lines[0], r"^keep l2 \(worktree-l2\): the record .*agent-x\.meta\.json cannot be read")
+        bad.unlink()
+        code, lines = self.clean("done", "l1", "--session", "s2")  # another session's record: finished
+        self.assertEqual((code, lines[0]), (0, f"remove l1 (worktree-l1): no change (no commit after dev, the tree is "
+                                               "its HEAD's)"))  # fmt: skip
+        self.assertIn("  reports: not checked (no --scratchpad)", lines)
+        self.assertTrue(self.gone(wt))
+
+    def test_done_clean_locked_and_reports(self):
+        wt = work.new("c1", self.main)
+        (wt / "target" / "fuzz" / "new").mkdir(parents=True)  # ignored under target/: the tree is clean
+        (wt / "target" / "fuzz" / "new" / "f1.onsa").write_text("x\n")
+        git_in(self.main, "worktree", "lock", "--reason", "kept by hand", str(wt))
+        self.record(wt, finished=True)
+        scratch = Path(self.tmp.name) / "scratch"
+        code, lines = self.clean("done", wt, "--session", "s1", "--scratchpad", scratch)  # by path
+        self.assertEqual(code, 0, lines)
+        self.assertIn(f"  reports: none saved for onsa-impl c1 in {scratch}/handback/", lines)
+        self.assertRegex(lines[-1], r"^  removed the branch worktree-c1 \(in dev; its tip was [0-9a-f]{40}\)$")
+        self.assertTrue(self.gone(wt))
+        self.assertTrue((self.main / "target" / "fuzz" / "new" / "f1.onsa").is_file())
+        wt = work.new("c2", self.main)
+        self.record(wt, finished=True)
+        (scratch / "handback").mkdir(parents=True)
+        (scratch / "handback" / "onsa-impl-c2-001.md").write_text("report\n")
+        code, lines = self.clean("done", "c2", "--scratchpad", scratch)
+        self.assertEqual(code, 0, lines)
+        self.assertFalse([x for x in lines if "reports:" in x])
+
+    def test_done_live_by_the_lock_and_records_of_a_wrong_form(self):
+        wt = work.new("k1", self.main)
+        self.record(wt, finished=True)
+        git_in(self.main, "worktree", "lock", "--reason", "claude agent agent-k1 (pid 1)", str(wt))  # Claude Code's
+        self.assertEqual(self.clean("done", "k1", "--session", "s1"),
+                         (1, ["keep k1 (worktree-k1): the agent is running (locked: claude agent agent-k1 (pid 1))"]))
+        git_in(self.main, "worktree", "unlock", str(wt))
+        subagents = Path(self.tmp.name) / "records" / "s1" / "subagents"
+        for session, meta, says in (
+                ("nosuch", None, "no record of the session nosuch in "),
+                ("s1", {"agentType": "onsa-impl", "spawnedWithWorktree": True}, "names no worktree, though spawned"),
+                ("s1", {"agentType": "onsa-impl", "worktreePath": 5}, "is not of the form known"),
+                ("s1", {"worktreeBranch": ["x"], "finished": True}, "is not of the form known"),
+                ("s1", {"worktreePath": str(wt), "finished": "yes"}, "is not of the form known")):  # fmt: skip
+            with self.subTest(meta=meta, session=session):
+                if meta is not None:
+                    (subagents / "agent-x.meta.json").write_text(json.dumps(meta))
+                code, lines = self.clean("done", "k1", "--session", session)
+                self.assertEqual(code, 1, lines)
+                self.assertIn(says, lines[0])
+                self.assertTrue(wt.is_dir())
+        (subagents / "agent-x.meta.json").unlink()
+        self.assertEqual(self.clean("done", "k1", "--session", "s1")[0], 0)
+
+    def test_done_ignored_files_and_a_change_after_the_verdict(self):
+        (self.main / ".gitignore").write_text("*.log\ntarget/\n")
+        git_in(self.main, "add", ".gitignore")
+        git_in(self.main, "commit", "-qm", "ignore")
+        wt = work.new("i1", self.main)
+        (wt / "notes.log").write_text("a note\n")
+        (wt / "target").mkdir()
+        (wt / "target" / "x.log").write_text("build\n")  # under target/: it goes with the worktree
+        code, lines = self.clean("done", "i1")
+        self.assertEqual((code, lines), (1, ["keep i1 (worktree-i1): no change (no commit after dev, the tree is its "
+                                             "HEAD's); but 1 ignored file(s) outside target/ would go with it: "
+                                             "notes.log"]))  # fmt: skip
+        code, lines = self.clean("done", "i1", "--discard")
+        self.assertEqual(code, 0, lines)
+        self.assertIn("  the ignored files that go with it: notes.log", lines)
+        self.assertTrue(self.gone(wt))
+        # changed after the verdict (here while the fuzzing inputs are copied): nothing goes
+        wt = work.new("i2", self.main)
+        late = lambda wt, main, strict: (Path(wt) / "late.txt").write_text("x\n") and "fuzz inputs: none"  # noqa: E731
+        with mock.patch.object(work, "copy_fuzz_inputs", late):
+            code, lines = self.clean("done", "i2")
+        self.assertEqual((code, lines[-1]), (1, f"{wt} changed after the verdict; nothing removed"))
+        self.assertEqual(((wt / "late.txt").is_file(), self.gone(wt)), (True, False))
+
+    def test_done_clean_when_the_main_tree_is_not_on_dev(self):
+        (self.main / "a.txt").write_text("dev moved\n")
+        git_in(self.main, "commit", "-qam", "dev moved")
+        wt = work.new("g1", self.main)
+        git_in(self.main, "checkout", "-q", "-b", "old", "HEAD~1")  # `git branch -d` would ask `old`
+        code, lines = self.clean("done", "g1")
+        self.assertEqual(code, 0, lines)
+        self.assertRegex(lines[-1], r"^  removed the branch worktree-g1 \(in dev; its tip was ")
+        self.assertTrue(self.gone(wt))
+
+    def test_done_taken_by_the_record(self):
+        wt = self.worktree()
+        gate_runs.record(wt, "work X-9/U5", [], {"fz": ["PASS", 1.0]}, "PASS", 1.0, repo.tree_hash(wt),
+                         code_tree=repo.tree_hash(wt, narrowing.SWEPT))  # fmt: skip
+        tip = self.head(wt)
+        (self.main / work.TAKEN).parent.mkdir(parents=True)
+        with (self.main / work.TAKEN).open("a") as f:  # rows of a wrong form are passed over
+            f.write('{"kind": "patch", "patch": [1]}\n{"kind": "apply", "patch": "p", "to": 5}\n[1]\n')
+        self.assertEqual(self.take("w1")[0], 0)
+        patch = json.loads((self.main / work.TAKEN).read_text().splitlines()[-1])["patch"]
+        git_in(self.main, "add", "-A")
+        git_in(self.main, "commit", "-qm", "taken")
+        (self.main / "a.txt").write_text(self.LINES.replace("2\n", "TWO\n"))  # dev changes the same line after it
+        git_in(self.main, "commit", "-qam", "dev moved")
+        code, lines = self.clean("done", "w1")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], f"remove w1 (worktree-w1): taken (the patch {patch} of this tree and its apply to "
+                                   "the main tree are in target/work/taken.jsonl)")  # fmt: skip
+        self.assertEqual(lines[-1], f"  removed the branch worktree-w1 (-D; its tip was {tip})")
+        self.assertTrue(self.gone(wt))
+
+    def test_done_taken_in_reverse_and_an_apply_elsewhere(self):
+        wt = work.new("r1", self.main)
+        (wt / "a.txt").write_text(self.LINES.replace("3\n", "three\n"))
+        (self.main / "a.txt").write_text(self.LINES.replace("3\n", "three\n"))
+        git_in(self.main, "commit", "-qam", "the same change")
+        code, lines = self.clean("done", "r1")
+        self.assertEqual((code, lines[0]), (0, "remove r1 (worktree-r1): taken (its patch from the base applies in "
+                                               "reverse in the main tree)"))  # fmt: skip
+        self.assertTrue(self.gone(wt))
+        # applied to another worktree only: not taken
+        wt, other, out = work.new("r2", self.main), work.new("r3", self.main), Path(self.tmp.name) / "r2.patch"
+        (wt / "a.txt").write_text(self.LINES.replace("4\n", "four\n"))
+        self.assertEqual(quiet_out(work.main, ["patch", str(wt), self.head(self.main), str(out), "--main",
+                                               str(self.main)])[0], 0)  # fmt: skip
+        self.assertEqual(quiet_out(work.main, ["apply", str(out), "--to", str(other)])[0], 0)
+        self.assertEqual([json.loads(x)["kind"] for x in (self.main / work.TAKEN).read_text().splitlines()],
+                         ["patch", "apply"])  # fmt: skip
+        code, lines = self.clean("done", "r2")
+        self.assertEqual((code, lines), (1, ["keep r2 (worktree-r2): not taken: 1 file(s) changed from the base, "
+                                             "0 commit(s) after dev"]))  # fmt: skip
+
+    def test_done_changed_and_discard(self):
+        wt = work.new("u1", self.main)
+        (wt / "new.txt").write_text("untracked\n")  # an untracked file alone
+        code, lines = self.clean("done", "u1")
+        self.assertEqual((code, lines), (1, ["keep u1 (worktree-u1): not taken: 1 file(s) changed from the base, "
+                                             "0 commit(s) after dev"]))  # fmt: skip
+        self.assertTrue(wt.is_dir())
+        code, lines = self.clean("done", "u1", "--discard")
+        self.assertEqual(code, 0, lines)
+        saved = list((self.main / work.DISCARDED).glob("u1-*.patch"))
+        self.assertEqual(len(saved), 1, lines)
+        self.assertIn("+untracked", saved[0].read_text())
+        self.assertRegex(lines[-1], r"^  removed the branch worktree-u1 \(-D; its tip was ")
+        self.assertTrue(self.gone(wt))
+
+    def test_close_dry_run_prune_and_what_never_goes(self):
+        git_in(self.main, "branch", "main")
+        git_in(self.main, "branch", "other-x")
+        clean, kept, gone = work.new("k1", self.main), work.new("k2", self.main), work.new("k3", self.main)
+        (kept / "a.txt").write_text("changed\n")
+        git_in(kept, "commit", "-qam", "WIP")
+        shutil.rmtree(gone)  # the directory alone gone: its registration is pruned, its branch judged alone
+        feature = self.main / ".claude" / "worktrees" / "f1"
+        git_in(self.main, "worktree", "add", "-q", "-b", "feature", str(feature), "dev")
+        branches = lambda: sorted(git_in(self.main, "branch", "--format=%(refname:short)").split())  # noqa: E731
+        before = branches()
+        code, lines = self.clean("close", "--dry-run")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], f"the main tree {self.main}: 0 uncommitted change(s)")
+        self.assertEqual(sorted(lines[1:-1]), sorted([
+            "keep k2 (worktree-k2): not taken: 1 file(s) changed from the base, 1 commit(s) after dev",
+            "would remove f1 (feature): no change (no commit after dev, the tree is its HEAD's)",
+            "would remove k1 (worktree-k1): no change (no commit after dev, the tree is its HEAD's)",
+            "would remove worktree-k3: no change (no commit after dev, the tree is its HEAD's)",
+            *["  reports: not checked (no --scratchpad)"] * 3]))  # fmt: skip
+        self.assertEqual(lines[-1], "close: 3 to remove, 1 kept, 0 failed")
+        self.assertEqual((branches(), clean.is_dir(), feature.is_dir()), (before, True, True))
+        self.assertIn("k3", git_in(self.main, "worktree", "list"))
+        code, lines = self.clean("close")
+        self.assertEqual((code, lines[-1]), (0, "close: 3 removed, 1 kept, 0 failed"))
+        self.assertIn("  kept the branch feature (only worktree-… go)", lines)
+        self.assertEqual(branches(), ["dev", "feature", "main", "other-x", "worktree-k2"])
+        self.assertEqual((clean.exists(), kept.is_dir(), feature.exists()), (False, True, False))
+        self.assertNotIn("k3", git_in(self.main, "worktree", "list"))
+        self.assertEqual(self.clean("done", self.main)[0], 1)  # the main tree is never one
+        self.assertTrue(self.main.is_dir())
+
+    def test_the_hook_worktree_remove(self):
+        def hook(path, session="s1"):
+            out, err = io.StringIO(), io.StringIO()
+            event = {"session_id": session, "hook_event_name": "WorktreeRemove", "cwd": str(self.main),
+                     "worktree_path": str(path) if isinstance(path, Path) else path}  # fmt: skip
+            env = {work.RECORDS_ENV: str(Path(self.tmp.name) / "records")}
+            with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err), \
+                    mock.patch.dict(os.environ, env):  # fmt: skip
+                code = claude_hook.main(["WorktreeRemove"], io.StringIO(json.dumps(event)))
+            self.assertEqual(out.getvalue(), "")  # stdout is the hook's JSON or nothing
+            return code, err.getvalue().splitlines()
+
+        wt = work.new("h1", self.main)
+        self.record(Path("/elsewhere"), agent="other", finished=True)  # the session has a record
+        code, err = hook(wt)
+        self.assertEqual((code, err[0]), (0, "remove h1 (worktree-h1): no change (no commit after dev, the tree is "
+                                             "its HEAD's)"))  # fmt: skip
+        self.assertTrue(self.gone(wt))
+        self.assertEqual(hook(wt), (0, [f"nothing to remove: no worktree {wt} nor its branch worktree-h1"]))
+        wt = work.new("h2", self.main)
+        (wt / "a.txt").write_text("changed\n")
+        self.assertEqual(hook(wt), (1, ["keep h2 (worktree-h2): not taken: 1 file(s) changed from the base, "
+                                        "0 commit(s) after dev"]))  # fmt: skip
+        self.assertTrue(wt.is_dir())
+        code, err = hook(wt, session="a b")  # argparse refuses it: one line, exit 1
+        self.assertEqual((code, len(err)), (1, 1))
+        self.assertRegex(err[0], r"^WorktreeRemove: .*not the ID of a session: a b")
+        code, err = hook(Path(self.tmp.name) / "elsewhere")
+        self.assertNotEqual(code, 0)
+        self.assertRegex(err[-1], "is not a worktree under .claude/worktrees/")
+        for path in (None, ".claude/worktrees/h2", ""):  # not an absolute path: kept, one line
+            with self.subTest(path=path):
+                self.assertEqual(hook(path), (1, [f"WorktreeRemove: ValueError: worktree_path is not an absolute "
+                                                  f"path: {path!r}"]))  # fmt: skip
+        self.assertTrue(wt.is_dir())
+
     def test_help(self):
         for name, c in work.COMMANDS.items():
             with self.subTest(name=name):
@@ -6521,6 +6763,12 @@ class ClaudeHook(unittest.TestCase):
             ("t", ("Read", {"file_path": "/r/crates/onsa_cli/tests/cli.rs"}), False),
             ("t", bash("cat crates/onsa_cli/src/main.rs"), False),
             ("i", ("Read", {"file_path": "/r/crates/onsa_cli/src/main.rs"}), False),
+            ("i", bash("python3 -B tools/work.py close --dry-run"), True),  # the cleaning up is the parent's (X-9 U5)
+            ("b", bash("cd /r && python3 -B /r/tools/work.py done agent-a1 --main /r"), True),
+            ("onsa-other", bash("tools/work.py remove /r/.claude/worktrees/a"), True),
+            ("i", bash("python3 -B tools/work.py apply /tmp/p.patch --to /r/.claude/worktrees/a"), False),
+            ("i", bash("python3 -B tools/take.py apply /tmp/p.patch"), False),
+            ("parent", bash("python3 -B tools/work.py close"), False),
         ]  # fmt: skip
         for role, (tool, inp), stopped in cases:
             with self.subTest(role=role, input=inp):

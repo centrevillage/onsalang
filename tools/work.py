@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""The work of an agent's worktree (X-9, X9-13 to X9-17): make it, and take its work into the main tree.
+"""The work of an agent's worktree (X-9, X9-13 to X9-17): make it, take its work into the main tree, and clean it up.
 
     tools/work.py new <name> [--main DIR]
     tools/work.py take <worktree> [--base B] [--estimate N] [--go] [--out FILE] [--main DIR]
     tools/work.py patch <worktree> <base> <out.patch> [--main DIR]
     tools/work.py check <patch> [--to DIR]
     tools/work.py apply <patch> [--to DIR]
+    tools/work.py done <worktree> [--discard] [--session ID] [--scratchpad DIR] [--main DIR]
+    tools/work.py close [--dry-run] [--session ID] [--scratchpad DIR] [--main DIR]
+    tools/work.py remove <path> [--session ID] [--scratchpad DIR] [--main DIR]
     tools/work.py help [--role ROLE] [COMMAND]
 
 `new` makes the worktree `<main>/.claude/worktrees/<name>` (`WORKTREES`) of the main tree of DIR (default
@@ -59,12 +62,32 @@ or are untracked in the tree. `apply` applies the patch the way `check`
 found; after `-3` it runs `git restore --staged` on the files of the patch,
 so nothing of it stays in the index. It prints the applied files.
 
-But for the worktree `new` makes, nothing here commits, stashes, resets the tree or checks paths
-out. Exit 0 on success, 1 when a step fails, the patch does not apply or `take` stops before applying,
+`done` (one worktree), `close` (all the worktrees directly under WORKTREES and the BRANCH_PREFIX branches no
+worktree checks out) and `remove` (the hook WorktreeRemove) pass one verdict (`judge`), the first that holds:
+a live agent's stays (Claude Code's record `subagents/agent-<ID>.meta.json` names its path or branch and has no
+`finished`, or Claude Code's lock `LIVE_LOCK` is on it; with `--session`, only that session's records count,
+and a session with none keeps all; a record that cannot be read or is not of the form known keeps it); with no
+change it goes and its branch, checked to be in dev (no commit after dev, and what it holds, untracked files
+too, is its HEAD's tree); taken, it goes with `-D` (TAKEN has the patch of what it holds and then its apply to
+the main tree, or its patch from the base applies in reverse in the main tree); else it stays, with the files
+changed and the commits after dev. One that would go with ignored files outside `target/` stays too. Before a
+removal: the registrations of a directory gone are pruned, the saved reports of its agents looked for under
+`--scratchpad` (a line when none; not looked for without it), its fuzzing inputs copied (a failure keeps it),
+what it holds read again (changed after the verdict: it stays), its lock taken off. Only a BRANCH_PREFIX branch
+it checked out goes, with the hash of its tip printed; dev, main and the main tree never. `done --discard`
+removes a changed one too (or one with ignored files, listed), after writing its last patch from the base
+under `<main>/DISCARDED`. `close --dry-run` removes and prunes nothing. `done` and `remove` exit 1 when it stays
+(`remove` with the reason on stderr; 0 when neither the worktree nor its branch is there); `close` exits 1 when
+a removal failed. Claude Code's records are under `$ONSA_CLAUDE_RECORDS` (`RECORDS_ENV`), else
+`handback.PROJECT`.
+
+But for the worktree `new` makes and the removals above, nothing here commits, stashes, resets the tree or
+checks paths out. Exit 0 on success, 1 when a step fails, the patch does not apply or `take` stops before applying,
 2 on a usage error.
 """
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -72,12 +95,14 @@ import sys
 import time
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import NamedTuple
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fuzz  # noqa: E402
 import gate_runs  # noqa: E402
 import gate_steps  # noqa: E402
+import handback  # noqa: E402
 import narrowing  # noqa: E402
 import repo  # noqa: E402
 
@@ -87,6 +112,8 @@ WORKTREES = Path(".claude") / "worktrees"  # of the main tree; Claude Code's own
 BRANCH_PREFIX = "worktree-"  # Claude Code's own form, so that the cleaning up treats both alike
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")  # a slug of WorktreeCreate (`bold-oak-a3f2`, `agent-<ID>`)
 TAKEN = Path("target") / "work" / "taken.jsonl"  # the record of the patches and the applies, in the main tree
+DISCARDED = Path("target") / "work" / "discarded"  # the last patches of the worktrees `done --discard` removed
+RECORDS_ENV = "ONSA_CLAUDE_RECORDS"  # Claude Code's records of the sessions, if not handback.PROJECT (self-tests)
 REGISTRIES = ("tools/builtin_names.toml", "tests/pending.toml")  # the hunks `take` shows (rules/leader.md 4.1)
 PENDING = "tests/pending.toml"
 REFACTOR = (3, 100)  # the size to refactor (rules/budgets.md): over 3 times the estimate, and 100 lines more
@@ -207,8 +234,8 @@ def in_file_tests(tree, base, paths):
     return out
 
 
-def git(tree, *args, ok=(0,)):
-    r = subprocess.run(["git", "-C", str(tree), *args], capture_output=True)
+def git(tree, *args, ok=(0,), input=None):
+    r = subprocess.run(["git", "-C", str(tree), *args], capture_output=True, input=input)
     if r.returncode not in ok:
         raise Failed(f"git {' '.join(args)}: exit {r.returncode}: {r.stderr.decode(errors='replace').strip()}")
     return r
@@ -294,10 +321,10 @@ def record(tree, kind, fields):
         print(f"record: the {kind} is not in {TAKEN} ({e})")
 
 
-def copy_fuzz_inputs(wt, main):
+def copy_fuzz_inputs(wt, main, strict=False):
     """Copy the inputs the fuzzing of the worktree kept into the main tree's directory, those of a name
     not there yet (a name is the hash of the text, so one there is the same input: never overwritten);
-    the line that says what it did."""
+    the line that says what it did. `strict`: a failure to copy raises Failed (the worktree is not removed)."""
     src, dest, done = fuzz.new_inputs(wt), fuzz.new_inputs(main), []
     try:
         names = sorted(p.name for p in src.glob("*.onsa"))
@@ -311,7 +338,10 @@ def copy_fuzz_inputs(wt, main):
                 shutil.copyfile(src / name, dest / name)
                 done.append(name)
     except OSError as e:
-        return f"fuzz inputs: {len(done)} copied into {dest}/, then the copy failed ({e})"
+        line = f"fuzz inputs: {len(done)} copied into {dest}/, then the copy failed ({e})"
+        if strict:
+            raise Failed(f"{line}; the worktree is not removed") from None
+        return line
     if not done:
         return f"fuzz inputs: {len(names)} in the worktree, all in the main tree already"
     return f"fuzz inputs: {len(done)} copied from the worktree into {dest}/: {', '.join(done)}"
@@ -373,6 +403,11 @@ def paths_of(tree, patch_file):
     return [p for _, _, p in numstat(tree, "apply", str(Path(patch_file).resolve()))]
 
 
+def applies_in_reverse(to, *patch, input=None):
+    """Whether the patch (a file, or `input`) is in the tree `to` already: its reverse applies (`check`, `judge`)."""
+    return git(to, "apply", "--check", "-R", *patch, ok=(0, 1), input=input).returncode == 0
+
+
 def check(patch_file, to):
     """("plain" | ALREADY | "3way" | "3way with conflicts", the files of the patch, problems of the tree)."""
     p = str(Path(patch_file).resolve())
@@ -385,7 +420,7 @@ def check(patch_file, to):
         i += 2 if code[0] in "RC" else 1
     if git(to, "apply", "--check", p, ok=(0, 1)).returncode == 0:
         return "plain", paths, notes
-    if git(to, "apply", "--check", "-R", p, ok=(0, 1)).returncode == 0:
+    if applies_in_reverse(to, p):
         return ALREADY, paths, notes
     r = git(to, "apply", "--check", "-3", p, ok=(0, 1))
     err = r.stderr.decode(errors="replace")
@@ -489,19 +524,29 @@ def estimate_line(lines, estimate):
             + f" the size to refactor (rules/budgets.md: over {ratio} times and {diff} lines more)")
 
 
+def fresh(directory, name):
+    """`<directory>/<name>-<time>.patch`, with `~N` when there already (two in one second: the record keeps each)."""
+    stem, n = f"{name}-{time.strftime('%Y%m%d-%H%M%S')}", 1
+    out = directory / f"{stem}.patch"
+    while out.exists():
+        n += 1
+        out = out.with_name(f"{stem}~{n}.patch")
+    return out
+
+
+def place(main, worktree):
+    """The worktree `worktree` names: a path that is a directory, else a name under WORKTREES of the main tree."""
+    wt = Path(worktree)
+    return wt if wt.is_dir() else (repo.main_tree(main) or Path(main)) / WORKTREES / worktree
+
+
 def take(args):
     main = Path(args.main)
-    wt = Path(args.worktree)
-    if not wt.is_dir():
-        wt = (repo.main_tree(main) or main) / WORKTREES / args.worktree
+    wt = place(main, args.worktree)
     if not wt.is_dir():
         raise Failed(f"no worktree {args.worktree} (a path, or a name under {WORKTREES}/ of the main tree)")
     base = args.base or git(wt, "merge-base", DEV, "HEAD").stdout.decode().strip()
-    stem, n = f"{wt.name}-{time.strftime('%Y%m%d-%H%M%S')}", 1
-    out = Path(args.out) if args.out else main / "target" / "work" / f"{stem}.patch"
-    while not args.out and out.exists():  # two in one second: the record keeps each
-        n += 1
-        out = out.with_name(f"{stem}~{n}.patch")
+    out = Path(args.out) if args.out else fresh(main / "target" / "work", wt.name)
     out.parent.mkdir(parents=True, exist_ok=True)
     line, code = patch(wt, base, out, main)
     text = out.read_bytes().decode(errors="replace")
@@ -523,6 +568,290 @@ def take(args):
         print(f"take: not applied ({'; '.join(why)}); read the above, then apply it with --go")
         return 1
     return apply_patch(out, main, how, paths)
+
+
+# ---------------------------------------------------------------- the cleaning up (X9-16, U5)
+
+LIVE_LOCK = "claude agent"  # the start of the reason of Claude Code's lock while its agent runs (seen 2026-10-18)
+META_TEXT = ("agentType", "worktreePath", "worktreeBranch")  # the fields of a record that are strings when there
+TAKEN_TEXT = {"patch": ("patch", "worktree", "branch", "tree"), "apply": ("patch", "to")}  # the rows `take` writes
+BUILD = "target/"  # the build output: its fuzzing inputs are copied, the rest of it goes with the worktree
+
+
+class Unreadable(Exception):
+    pass
+
+
+class Entry(NamedTuple):
+    """A worktree to clean up (its path resolved, its branch, the reason of its lock: None when not locked), or a
+    branch alone (`path` None)."""
+
+    path: "Path | None"
+    branch: "str | None"
+    lock: "str | None" = None
+
+
+class Verdict(NamedTuple):
+    """What the cleaning up does with a worktree or a branch: `kind` (live, clean, taken, ignored, changed,
+    unknown), `why`, `flag` (`-d`: its branch goes when in dev; `-D`: it goes; None: it stays), `agents`
+    [(agent_type, agent_id)] of the records that name it (for the check of the saved reports), `state` (`state`
+    when judged: a removal reads it again and stops when it changed)."""
+
+    kind: str
+    why: str
+    flag: "str | None"
+    agents: tuple = ()
+    state: tuple = ()
+
+
+def agents_of(path, branch, session):
+    """[(agent_type, agent_id, live)] of Claude Code's records `<RECORDS_ENV or handback.PROJECT>/<session>/
+    subagents/agent-<ID>.meta.json` whose `worktreePath` is `path` or `worktreeBranch` is `branch`; live when it
+    has no `finished`. With `session`, that session's alone (another session's agents cannot be called again:
+    finished), and none of them is unreadable (a wrong ID would make every agent finished); without, all of them.
+    The form is not in Claude Code's documents (checked on 2026-10-18): a record that cannot be read, a field of
+    META_TEXT not a string, `finished` not a boolean, or one spawned with a worktree that names neither its path nor
+    its branch raises Unreadable, and the worktree stays."""
+    top = Path(os.environ.get(RECORDS_ENV) or handback.PROJECT)
+    if not top.is_dir():
+        raise Unreadable(f"no records of Claude Code in {top} (${RECORDS_ENV})")
+    metas, out = sorted(top.glob(f"{session or '*'}/subagents/agent-*.meta.json")), []
+    if session and not metas:
+        raise Unreadable(f"no record of the session {session} in {top}")
+    for meta in metas:
+        try:
+            d = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise Unreadable(f"the record {meta} cannot be read ({e})") from None
+        if not isinstance(d, dict) or not isinstance(d.get("finished", False), bool) or any(
+                k in d and not isinstance(d[k], str) for k in META_TEXT):  # fmt: skip
+            raise Unreadable(f"the record {meta} is not of the form known")
+        if d.get("spawnedWithWorktree") and not (d.get("worktreePath") or d.get("worktreeBranch")):
+            raise Unreadable(f"the record {meta} names no worktree, though spawned with one")
+        if (path and d.get("worktreePath") and Path(d["worktreePath"]).resolve() == path) or (
+                branch and d.get("worktreeBranch") == branch):  # fmt: skip
+            out.append((d.get("agentType"), meta.name[len("agent-"): -len(".meta.json")], not d.get("finished")))
+    return out
+
+
+def taken_trees(main):
+    """{(worktree, branch, tree): the patch} of the `patch` rows of TAKEN that an `apply` to the main tree follows
+    before the next patch to the same file (only an apply to the main tree is taken). A line that is not such a row
+    (TAKEN_TEXT not all strings), or a record that cannot be read, takes nothing: the worktree stays."""
+    last, out = {}, {}
+    try:
+        lines = (main / TAKEN).read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError):
+        return out
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        keys = TAKEN_TEXT.get(row.get("kind")) if isinstance(row, dict) else None
+        if keys is None or not all(isinstance(row.get(k), str) for k in keys):
+            continue
+        if row["kind"] == "patch":
+            last[row["patch"]] = row
+        elif row["to"] == str(main) and row["patch"] in last:
+            p = last.pop(row["patch"])
+            out[(p["worktree"], p["branch"], p["tree"])] = p["patch"]
+    return out
+
+
+def sha(main, rev):
+    return git(main, "rev-parse", "--verify", "--end-of-options", rev).stdout.decode().strip()
+
+
+def state(main, e):
+    """(HEAD, the git tree of what it holds: `repo.tree_hash`, untracked files too, the ignored files and
+    directories outside BUILD) of the worktree of `e`; of its branch alone, (its tip, its tree, ())."""
+    if e.path:
+        listed = git(e.path, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory").stdout.decode()
+        ignored = tuple(p for p in listed.split("\0") if p and not p.startswith(BUILD))
+        return git(e.path, "rev-parse", "HEAD").stdout.decode().strip(), repo.tree_hash(e.path), ignored
+    head = sha(main, f"refs/heads/{e.branch}")
+    return head, sha(main, f"{head}^{{tree}}"), ()
+
+
+def from_base(main, head, tree):
+    """(the base `git merge-base DEV <head>`, the patch from it to `tree`, untracked files and binaries too)."""
+    base = git(main, "merge-base", DEV, head).stdout.decode().strip()
+    return base, git(main, "diff", "--binary", base, tree).stdout
+
+
+def judge(main, e, session):
+    """The one verdict of `done`, `close` and `remove` on the worktree of `e` (or its branch alone, the directory
+    gone; no branch: detached), the first of: a live agent's (stays: a record not finished, or Claude Code's lock
+    LIVE_LOCK); no change: no commit after DEV and what it holds (`state`) is its HEAD's tree (goes, `-d`); taken:
+    TAKEN has the patch of what it holds and its apply to the main tree, or its patch from the base applies in
+    reverse in the main tree (goes, `-D`); else changed (stays, with the files and the commits). One that would go
+    with ignored files outside BUILD stays (`ignored`)."""
+    try:
+        agents = agents_of(e.path, e.branch, session)
+    except Unreadable as x:
+        return Verdict("unknown", str(x), None)
+    named = tuple((t, i) for t, i, _ in agents if t)
+    live = [f"{t or 'agent'} {i}" for t, i, alive in agents if alive]
+    if e.lock is not None and e.lock.startswith(LIVE_LOCK):
+        live.append(f"locked: {e.lock}")
+    if live:
+        return Verdict("live", f"the agent is running ({', '.join(live)})", None, named)
+    try:
+        now = head, tree, ignored = state(main, e)
+        ahead = int(git(main, "rev-list", "--count", f"{DEV}..{head}").stdout)
+        patch = next((p for (w, b, t), p in taken_trees(main).items()
+                      if (w == str(e.path) if e.path else b == e.branch) and t == tree), None)  # fmt: skip
+        if ahead == 0 and tree == sha(main, f"{head}^{{tree}}"):
+            v = ("clean", f"no change (no commit after {DEV}, the tree is its HEAD's)", "-d")
+        elif patch:
+            v = ("taken", f"taken (the patch {patch} of this tree and its apply to the main tree are in {TAKEN})", "-D")
+        else:
+            base, diff = from_base(main, head, tree)
+            if diff and applies_in_reverse(main, input=diff):
+                v = ("taken", "taken (its patch from the base applies in reverse in the main tree)", "-D")
+            else:
+                files = len(numstat(main, "diff", base, tree))
+                v = ("changed", f"not taken: {files} file(s) changed from the base, {ahead} commit(s) after {DEV}", None)
+    except (Failed, repo.RepoError, ValueError) as x:
+        return Verdict("unknown", f"cannot tell ({x})", None, named)
+    if ignored and v[2]:
+        shown = ", ".join(ignored[:3]) + (", …" if len(ignored) > 3 else "")
+        v = ("ignored", f"{v[1]}; but {len(ignored)} ignored file(s) outside {BUILD} would go with it: {shown}", None)
+    return Verdict(*v, named, now)
+
+
+def main_of(where):
+    main = repo.main_tree(where)
+    if main is None:
+        raise Failed(f"{where} is not the top of a git tree")
+    return main.resolve()
+
+
+def entries(main, dry):
+    """The worktrees directly under WORKTREES of the main tree, and the BRANCH_PREFIX branches no worktree checks
+    out. The registrations of a directory gone are pruned first (a lock taken off); with `dry`, nothing is, and
+    their branches count as free."""
+    def listed():
+        out = []
+        for block in git(main, "worktree", "list", "--porcelain", "-z").stdout.decode().split("\0\0"):
+            d = dict(line.partition(" ")[::2] for line in block.split("\0") if line)
+            if "worktree" in d:
+                branch = d["branch"].removeprefix("refs/heads/") if "branch" in d else None
+                out.append(Entry(Path(d["worktree"]).resolve(), branch, d.get("locked")))
+        return out
+
+    if not dry:
+        for e in listed():
+            if e.lock is not None and not e.path.is_dir() and e.path.parent == main / WORKTREES:
+                git(main, "worktree", "unlock", str(e.path))
+        git(main, "worktree", "prune")
+    trees = [e for e in listed() if e.path.is_dir()]
+    held = {e.branch for e in trees}
+    heads = git(main, "for-each-ref", "--format=%(refname)", "refs/heads/").stdout.decode().split("\n")
+    free = [h.removeprefix("refs/heads/") for h in heads if h.startswith(f"refs/heads/{BRANCH_PREFIX}")]
+    return [e for e in trees if e.path.parent == main / WORKTREES] + [Entry(None, b) for b in free if b not in held]
+
+
+def let_go(main, e, v, force):
+    """Remove the worktree of `e` and then its branch when BRANCH_PREFIX (never DEV nor `main`), its tip printed.
+    Before anything goes: a branch of `-d` is checked to be in DEV, the fuzzing inputs copied (a failure stops it),
+    and `state` read again (changed after the verdict: it stays); then the lock is taken off."""
+    branch = e.branch if e.branch and e.branch.startswith(BRANCH_PREFIX) and e.branch not in (DEV, "main") else None
+    if branch and v.flag == "-d" and git(main, "merge-base", "--is-ancestor", f"refs/heads/{branch}", DEV,
+                                         ok=(0, 1)).returncode:  # fmt: skip
+        raise Failed(f"the branch {branch} is not in {DEV} any more; nothing removed")
+    if e.path:
+        print("  " + copy_fuzz_inputs(e.path, main, strict=True))
+    if state(main, e) != v.state:
+        raise Failed(f"{e.path or e.branch} changed after the verdict; nothing removed")
+    if e.path:
+        if e.lock is not None:
+            git(main, "worktree", "unlock", str(e.path))
+        git(main, "worktree", "remove", *(["--force"] if force else []), str(e.path))
+        print(f"  removed {e.path}")
+    if branch:
+        tip = sha(main, f"refs/heads/{branch}")
+        git(main, "branch", "-q", "-D", branch)
+        print(f"  removed the branch {branch} ({'in ' + DEV if v.flag == '-d' else '-D'}; its tip was {tip})")
+    elif e.branch:
+        print(f"  kept the branch {e.branch} (only {BRANCH_PREFIX}… go)")
+
+
+def settle(main, e, args, discard=False, dry=False, err=False):
+    """Judge `e` (`judge`), say it, and remove it when the verdict lets it go (`discard`: when changed or with
+    ignored files too, after writing its patch from the base under DISCARDED and listing those files); whether it
+    went (with `dry`, would go). The line of a kept one goes to stderr with `err`."""
+    v = judge(main, e, args.session)
+    go = bool(v.flag) or (discard and v.kind in ("changed", "ignored"))
+    name = e.path.name if e.path else e.branch
+    line = f"{'would remove' if dry and go else 'remove' if go else 'keep'} {name}" + (
+        f" ({e.branch})" if e.path and e.branch else "") + f": {v.why}"  # fmt: skip
+    print(line, file=sys.stderr if err and not go else sys.stdout)
+    if not go:
+        return False
+    if args.scratchpad is None:
+        print("  reports: not checked (no --scratchpad)")
+    for kind, agent in v.agents if args.scratchpad else ():
+        if not any((Path(args.scratchpad) / handback.REPORTS).glob(handback.report_prefix(kind, agent) + "*.md")):
+            print(f"  reports: none saved for {kind} {agent} in {args.scratchpad}/{handback.REPORTS}/")
+    if dry:
+        return True
+    if not v.flag:  # discarded: its last patch first, and the ignored files that go with it
+        out = fresh(main / DISCARDED, name)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(from_base(main, *v.state[:2])[1])
+        print(f"  the patch from the base: {out}")
+        if v.state[2]:
+            print(f"  the ignored files that go with it: {', '.join(v.state[2])}")
+    let_go(main, e, v, force=v.kind != "clean")
+    return True
+
+
+def one(args, where, discard=False, err=False):
+    """`done` and `remove` (`err`): the worktree `where` (a path or a name), or its branch alone when its directory
+    is gone. For `remove`, a path with neither a worktree nor its branch has nothing to remove: exit 0."""
+    main = main_of(args.main)
+    path = place(main, where).resolve()
+    if path == main or path.parent != main / WORKTREES:
+        raise Failed(f"{path} is not a worktree under {WORKTREES}/ of the main tree {main}")
+    found = [e for e in entries(main, False) if e.path == path or (e.path is None and e.branch == branch_of(path.name))]
+    if not found and err and not path.exists():
+        print(f"nothing to remove: no worktree {path} nor its branch {branch_of(path.name)}", file=sys.stderr)
+        return 0
+    if not found:
+        raise Failed(f"no worktree {path} nor its branch {branch_of(path.name)} without one")
+    return 0 if settle(main, found[0], args, discard=discard, err=err) else 1
+
+
+def done(args):
+    return one(args, args.worktree, discard=args.discard)
+
+
+def remove(args):
+    try:
+        return one(args, args.path, err=True)
+    except Failed as e:  # the hook WorktreeRemove: the reason on stderr
+        print(e, file=sys.stderr)
+        return 1
+
+
+def close(args):
+    main = main_of(args.main)
+    status = git(main, "status", "--porcelain").stdout.decode().splitlines()
+    print(f"the main tree {main}: {len(status)} uncommitted change(s)")
+    went = kept = failed = 0
+    for e in entries(main, args.dry_run):
+        try:
+            if settle(main, e, args, dry=args.dry_run):
+                went += 1
+            else:
+                kept += 1
+        except Failed as x:
+            print(f"  failed: {x}")
+            failed += 1
+    print(f"close: {went} {'to remove' if args.dry_run else 'removed'}, {kept} kept, {failed} failed")
+    return 1 if failed else 0
 
 
 def positive(text):
@@ -552,6 +881,35 @@ def patch_args(p):
     p.add_argument("base", help="the commit the patch starts from (the base of the work)")
     p.add_argument("out", help="the patch file to write")
     p.add_argument("--main", default=ROOT, help="the main tree the patch goes to (default this repository)")
+
+
+def session_id(text):
+    if not NAME.fullmatch(text):
+        raise argparse.ArgumentTypeError(f"not the ID of a session: {text}")
+    return text
+
+
+def clean_args(*first):
+    def add(p):
+        for name, help_ in first:
+            p.add_argument(name, help=help_)
+        p.add_argument("--session", type=session_id, help="the session of the agents that may be running (the ID in "
+                       "its scratchpad's path; the hook's session_id); without it, any record not finished is live")
+        p.add_argument("--scratchpad", help="the session's scratchpad: whether the reports of the agents are saved")
+        p.add_argument("--main", default=ROOT, help="a tree of the repository (default this one); its main tree's")
+
+    return add
+
+
+def done_args(p):
+    clean_args(("worktree", "the worktree: a path, or a name under .claude/worktrees/ of the main tree"))(p)
+    p.add_argument("--discard", action="store_true", help="remove it also when changed and not taken, after writing "
+                   f"its last patch under {DISCARDED}/ (never a running agent's)")
+
+
+def close_args(p):
+    clean_args()(p)
+    p.add_argument("--dry-run", action="store_true", help="remove nothing (nor prune): the verdicts alone")
 
 
 def to_args(p):
@@ -613,6 +971,18 @@ COMMANDS = {
                "パッチを check の見つけた形で当て、3-way の後は索引から外し、当てたことを控える",
                "check を読んだ後。担当は引き継ぎのパッチを自分の作業ツリーに当てる（rules/common.md 2.4）",
                "work.py apply /tmp/x1.patch --to .claude/worktrees/x2"),
+    "done": C(done_args, failing(done), ("parent",),
+              "一つの作業ツリーに片付けの判定（生きている担当 → 変更なし → 写し済み → それ以外）を当て、消せるなら消し、消せなければ理由を出して終了 1",
+              "担当の成果を写した後と、担当の仕事を捨てるとき（--discard でパッチを target/work/discarded/ に書いてから消す）",
+              "work.py done agent-a1b2c3 --session <ID> --scratchpad <scratchpad>"),
+    "close": C(close_args, failing(close), ("parent",),
+               "全ての作業ツリー（.claude/worktrees/ の下）と worktree- の枝に同じ判定を当て、消せるものを消し、残すものを理由と並べる",
+               "区切りで。--dry-run は消さずに表だけを出す。主のツリーの未コミットの数も出す",
+               "work.py close --dry-run --session <ID> --scratchpad <scratchpad>"),
+    "remove": C(clean_args(("path", "the worktree's path (WorktreeRemove's worktree_path)")), remove, ("parent",),
+                "一つの作業ツリーに同じ判定を当て、消せるなら消して終了 0、残すなら理由を stderr に書いて終了 1",
+                "WorktreeRemove のフックが呼ぶ（Claude Code は 0 でない終了で作業ツリーを残す）",
+                "work.py remove /Users/centrevillage/projects/onsalang/.claude/worktrees/agent-a1b2c3"),
 }  # fmt: skip
 
 

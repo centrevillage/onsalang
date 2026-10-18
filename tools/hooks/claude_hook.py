@@ -2,17 +2,19 @@
 """The hooks of Claude Code (X-9, X9-42 to X9-61): one tool, one subcommand per event.
 
     python3 -B tools/hooks/claude_hook.py PreToolUse | PostToolUse | SessionStart | SubagentStop  < the hook's JSON
-    python3 -B tools/hooks/claude_hook.py WorktreeCreate  < the hook's JSON
+    python3 -B tools/hooks/claude_hook.py WorktreeCreate | WorktreeRemove  < the hook's JSON
     python3 -B tools/hooks/claude_hook.py help [--role ROLE] [EVENT]
 
 The settings (`.claude/settings.json`, the user's) run each event's command; the hook's JSON comes on stdin, and
 what Claude Code reads (https://code.claude.com/docs/en/hooks) goes to stdout as one JSON object, or nothing.
 The role is `agent_type` looked up in `repo.ROLES` (no `agent_type`: the main session, the parent).
 Only a stop prints `permissionDecision` (`deny`); the other outputs leave the permission to the rules.
-The exit is 0 but for WorktreeCreate: an error does nothing for that event and writes one line to
-`<scratchpad_dir>/hooks/errors.log` (stderr when the input has no `scratchpad_dir`).
+The exit is 0 but for WorktreeCreate and WorktreeRemove: an error does nothing for that event and writes one line
+to `<scratchpad_dir>/hooks/errors.log` (stderr when the input has no `scratchpad_dir`).
 WorktreeCreate makes the worktree with `work.py new` and prints its path as the last line of stdout; when it
 fails, it exits 1 with the reason on stderr, so that the creation fails and no wrong path goes back.
+WorktreeRemove runs `work.py remove` (the verdict of the cleaning up): exit 0 when it removed the worktree, else
+the reason on stderr and an exit not 0, so that Claude Code keeps it.
 The files go under the session's `scratchpad_dir`: `messages/`, `handback/`, `hooks/`. The crash reports
 are read from $ONSA_CRASH_REPORTS (default ~/Library/Logs/DiagnosticReports; the self-tests change it).
 """
@@ -27,10 +29,12 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 TOOLS = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(TOOLS))
+import handback  # noqa: E402
 import repo  # noqa: E402
 
 NO_GATE = ("t", "b", "advisor", "gap", "docs")  # rules/checks.md 4: the roles that never run the gate
 NO_BUILD = ("advisor", "gap")  # nor build, test, run (they use the parent's binaries)
+CLEANING = ("done", "close", "remove")  # the commands of tools/work.py that remove worktrees: the parent's alone
 LONG = 600000  # the Bash timeout of the gate and of `bg.py wait` (rules/checks.md 4.1, rules/common.md 1.8)
 CRATE_SRC = re.compile(r"(^|/)crates/[^/]+/src(/|$)")  # what the test role does not read (X9-46)
 PATHS = {"Read": ("file_path",), "Grep": ("path", "glob"), "Glob": ("path", "pattern")}  # the inputs that are paths
@@ -70,8 +74,7 @@ def new_file(d, prefix, suffix=""):
             continue
 
 
-def safe(name):
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", name or "none")[:60]
+safe = handback.safe
 
 
 # ---------------------------------------------------------------- the shell line
@@ -179,6 +182,10 @@ def stop_reason(event, role):
                 "`git -C <経路>` と絶対パスで読み、道具の作業ディレクトリは引数で渡す")  # fmt: skip
     if any(name(w[0]) == "fuzz.py" and "--deep" in w for w in cmds):
         return "fuzz の `--deep` はどの役割も回さない（rules/checks.md 4.2）。`--deep` を外して回す"
+    if role != "parent" and any(name(w[0]) == "work.py" and next((x for x in w[1:] if not x.startswith("-")), None)
+                                in CLEANING for w in cmds):  # fmt: skip
+        return ("作業ツリーの片付け（work.py done・close・remove）は親が回す（X-9）。"
+                "担当は自分の作業ツリーを残したまま報告する")  # fmt: skip
     if role in NO_GATE and runs_gate(cmds):
         return (f"役割 {role} は gate を回さない（rules/checks.md 4 章の表）。"
                 "表の「作業の途中」の確かめを使い、gate が要るときは報告に書いて親に頼む")  # fmt: skip
@@ -278,8 +285,6 @@ def session_start(event):
 def subagent_stop(event):
     """X9-59, X9-61: the report and the usage of the agent, in `handback/`. No output of SubagentStop reaches the
     parent (`additionalContext` and `decision: block` keep the subagent running), so the usage is the head line."""
-    import handback
-
     kind, record = event.get("agent_type"), event.get("agent_transcript_path")
     if not kind or not record or not event.get("scratchpad_dir"):
         return None  # Claude Code's own agents have no agent_type
@@ -289,7 +294,7 @@ def subagent_stop(event):
             + (f"; 担当の文脈の予算（{handback.CONTEXT_BUDGET:,}）を超えた: 次の単位か直しは新しい担当へ（rules/leader.md 2.6）"
                if s["largest"] > handback.CONTEXT_BUDGET else ""))  # fmt: skip
     body = report if report is not None else f"（SubagentHandback が無い。最後の文: {event.get('last_assistant_message')!r}）"
-    path = new_file(scratch(event, "handback"), f"{safe(kind)}-{safe(event.get('agent_id'))}-")
+    path = new_file(scratch(event, handback.REPORTS), handback.report_prefix(kind, event.get("agent_id")))
     path.write_text(f"{head}\n\n{body}\n", encoding="utf-8")
     return None
 
@@ -306,6 +311,39 @@ def worktree_create(args):
         return 1
     print(path)
     return 0
+
+
+def worktree_remove(args):
+    """X9-16: `work.py remove` on the hook's `worktree_path` with its `session_id` and `scratchpad_dir`; the main
+    tree is the path's, else its `cwd`'s. Its lines go to stderr, nothing to stdout. Exit 0 when removed (or nothing
+    was there); else not 0 (it stays), an error or a usage error in one line."""
+    import contextlib
+    import io
+
+    import work
+
+    buf = io.StringIO()
+    try:
+        event = json.loads(args.stdin.read() or "{}")
+        path = event["worktree_path"]
+        if not isinstance(path, str) or not os.path.isabs(path):
+            raise ValueError(f"worktree_path is not an absolute path: {path!r}")
+        tops = (path, event.get("cwd"), os.environ.get("CLAUDE_PROJECT_DIR"))
+        where = next((w for w in tops if w and repo.main_tree(w)), os.getcwd())
+        argv = ["remove", path, "--main", str(where)]
+        for flag, key in (("--session", "session_id"), ("--scratchpad", "scratchpad_dir")):
+            argv += [flag, str(event[key])] if event.get(key) else []
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            code = work.main(argv)
+    except SystemExit as e:  # argparse: its last line is the reason
+        last = buf.getvalue().strip().splitlines()[-1:] or [f"exit {e.code}"]
+        sys.stderr.write(f"WorktreeRemove: {last[0]}\n")
+        return 1
+    except Exception as e:  # noqa: BLE001 (any failure keeps the worktree)
+        sys.stderr.write(buf.getvalue() + f"WorktreeRemove: {type(e).__name__}: {e}\n")
+        return 1
+    sys.stderr.write(buf.getvalue())
+    return code
 
 
 # ---------------------------------------------------------------- the subcommands
@@ -338,7 +376,7 @@ EX = "echo '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"tools/gate.sh 
 C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
 COMMANDS = {
     "PreToolUse": C(lambda p: None, hook(pre_tool_use), EVERY,
-                    "道具の呼び出しの前に、止めるもの（担当の作業ツリーへの cd、担当の model、fuzz --deep、役割の gate とビルド、"
+                    "道具の呼び出しの前に、止めるもの（担当の作業ツリーへの cd、担当の model、fuzz --deep、役割の gate とビルド、担当の work.py の片付け、"
                     "テストの担当の crates/*/src）を止め、gate と bg.py wait の timeout を 600000 にし、引用符の無いヒアドキュメントを知らせる",
                     "設定の PreToolUse（matcher `Bash|Agent|Read|Grep|Glob`）が呼ぶ。止めた理由の文に代わりにすることがある",
                     EX + "tools/hooks/claude_hook.py PreToolUse"),
@@ -362,6 +400,11 @@ COMMANDS = {
                         "設定の WorktreeCreate が呼ぶ。同じ名前の枝か経路があるときなど、作れなければ終了 1 で理由を stderr に書き、作成を失敗させる",
                         "echo '{\"name\":\"agent-a1\",\"cwd\":\"/Users/centrevillage/projects/onsalang\"}' "
                         "| python3 -B tools/hooks/claude_hook.py WorktreeCreate"),
+    "WorktreeRemove": C(lambda p: None, worktree_remove, ("parent",),
+                        "Claude Code が作業ツリーを消すときに、work.py remove の片付けの判定を当て、消せるなら消して終了 0、残すなら理由を stderr に書いて 0 でない終了にする",
+                        "設定の WorktreeRemove が呼ぶ（--worktree のセッションの終わり、ExitWorktree など。担当の終わりには呼ばれない）",
+                        "echo '{\"worktree_path\":\"/Users/centrevillage/projects/onsalang/.claude/worktrees/agent-a1\",\"session_id\":\"s\"}' "
+                        "| python3 -B tools/hooks/claude_hook.py WorktreeRemove"),
 }  # fmt: skip
 
 
