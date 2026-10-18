@@ -59,7 +59,8 @@ The gate item `fuzz` (this script without options) does three things:
 
 **The classes the spec puts outside the contract** (R-207): `tests/fuzz/allowed.toml`
 lists, as `[[allowed]]` entries, classes of the fix stage that the spec
-decided are no broken candidate, with an input that shows each: a fix that
+decided are no broken candidate, or that an R records as a low harm left as
+it is (rules/leader.md 4.5), with an input that shows each: a fix that
 the spec makes in two steps (S-386: the `,`, then the `|` before the first
 alternative, S-383), and an input with two errors (S-384, S-413), which the
 mutants cut short at the end of a file often are. Every field is required:
@@ -187,7 +188,7 @@ FIX_EVERY = 4
 # The paths given to one run of `onsa_cases --fix-same-place`.
 FIX_BATCH = 400
 FIX_COMMAND = "fix-same-place"
-# The classes of the fix stage that the spec puts outside the contract (R-207).
+# The classes of the fix stage that the spec puts outside the contract, or that an R keeps (R-207).
 ALLOWED = FUZZ_DIR / "allowed.toml"
 ALLOWED_FIELDS = ("class", "left", "input", "reasons", "note")
 TIME_BUDGET = 600  # seconds for the whole run

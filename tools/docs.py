@@ -2130,7 +2130,7 @@ CARRIED = re.compile(r"- 持ち越し[:：]")
 # the fields of a ticket the parent fills (DF-6)
 TICKET_FIELDS = ("する", "しない", "書く場所", "読むもの", "期待値", "危険な経路", "進め方", "見積もり", "予算", "受け入れ条件",
                  "使う番号が登録済みか")  # fmt: skip
-# X9-67 d: the fields of a ticket of a handover (`U2/i-handover`) the parent fills, with their guides from rules/leader.md 2.10
+# X9-67 d: the fields of a ticket of a handover (`U2/i-handover`) the parent fills, with their guides (rules/leader.md 2.10 points here)
 HANDOVER_FIELDS = (
     ("読む順", "<作業票、設計メモ、親の返事、前の報告と、その「次の担当へ」の節>"),
     ("状態の基", "<前の担当の作業ツリーの枝と、その WIP のコミットと、親が `work.py patch` で作ったパッチ。"
@@ -2139,7 +2139,7 @@ HANDOVER_FIELDS = (
              "ファズの許可の一覧（`tests/fuzz/allowed.toml`）に項目と示す入力を足させるときは、"
              "ファズの近似（`onsa_cases --fix-same-place`）が第 1 候補しか当てないことも書く>"),
     ("前の gate の要約と知られた失敗", "<入力と違反の文字列>"),
-    ("古くなった注記とぶつかる事例", "<古くなった注記と、新しい決定とぶつかる既存の事例（親が `tests/` を検索して挙げる）>"),
+    ("古くなった注記とぶつかる事例", "<古くなった注記と、新しい決定とぶつかる既存の事例（`rules/leader.md` 6.5）>"),
     ("戻す事例と保留の事例", "<「期待値を変えずに通す」と書く前に、親が事例の全体（正しい形の並びを含む）を仕様と突き合わせる>"),
     ("引き継ぎの記録", "<報告の最後の「引き継ぎの記録」の節（文書だけでは足りず補ったこと、食い違い、"
                     "前の担当に聞きたかった問い、次に足すもの）>"),
