@@ -9,9 +9,10 @@
                              | graph ID|STAGE [--back] [--depth N (1 to 5)] [--typed]
     python3 -B tools/docs.py show ID [--relations] | list KIND [--status S] [--stage W4] [--group N]
                              [--before W4-02|W4] [--no-fix] [--waiting] [--count] | changes [--since DATE]
-                             [--stage W3] [--section §6] | ticket W UNIT/ROLE [--out FILE]
+                             [--stage W3] [--section §6] | ticket W UNIT/ROLE[-handover] [--out FILE]
     python3 -B tools/docs.py set ID KEY=VALUE... | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
                              [--stage W4] [KEY=VALUE...] | draft S... --group N
+    python3 -B tools/docs.py blind FILE...|--group N --out FILE | answers FILE...|--group N
     python3 -B tools/docs.py help [--role ROLE] [COMMAND]   (the purpose, the time, the roles, an example)
 
 Exit: 0 nothing found, 1 found, 2 an error of the tool (a file it cannot read, no document, a
@@ -25,9 +26,11 @@ depth 0 with `-` for the type and from).
 
 - `path`, `back`, `refs` read the files of the IDs (`Ids`; a `§` is `file:line` of its heading).
   `graph` shows the relations of the decisions as a graph made on the spot (`cmd_graph`).
-  `show`, `list`, `changes`, `ticket` and the writes need the directory of the kind. The writes check the swap files first, write through `write_atomic`, and
-  `set`, `new` refuse a text whose head fields would break (a) or (b) of the file or (c) of it
-  and its partners (`check_write`).
+  `show`, `list`, `changes`, `ticket` and the writes need the directory of the kind. The writes check the
+  swap files first, write through `write_atomic`, and `set`, `new` refuse a text whose head fields would
+  break (a) or (b) of the file or (c) of it and its partners (`check_write`). `new S` shows the S of the
+  same sections or family (X9-12, `akin`); `ticket` the lines of `tests/` that name its IDs (X9-67).
+  `blind` and `answers` (X9-65, X9-66) read the drafts of the gaps (the files given, or of a group).
 
 - `fmt` (DT-4): breaks each line longer than LONG after a `。` at the depth 0 of the brackets
   （）()「」『』【】 and outside the code spans and the bold, packing the line to WIDTH characters
@@ -1646,6 +1649,11 @@ def cmd_list(args):
     return 0
 
 
+def under(sec, top):
+    """`sec` is the section `top` or one under it (`§6.1` under `§6`; `changes --section`, `new S`)."""
+    return sec == top or sec.startswith(top + ".")
+
+
 def changes_args(p):
     p.add_argument("--since", type=date.fromisoformat, help="decided on this day or after (2026-10-01)")
     p.add_argument("--stage", help="a work of the stage in `tasks`")
@@ -1664,7 +1672,7 @@ def cmd_changes(args):
     for id_, _, v in ids.heads(names):
         if v.get("status") != "DECIDED" or (args.stage and not _in_stage(_listed(v.get("tasks")), args.stage)):
             continue
-        if args.section and not any(s == args.section or s.startswith(args.section + ".") for s in _listed(v.get("spec"))):
+        if args.section and not any(under(s, args.section) for s in _listed(v.get("spec"))):
             continue
         if type(v.get("decided")) is not date:
             undated.append(id_)
@@ -1907,7 +1915,35 @@ def cmd_new(args):
         return _refused("new", swapped)
     write_new(root / rel, text)
     print(rel.as_posix())
+    if kind.name == "S":
+        akin(ids, id_, values, args.title)
     return 0
+
+
+FAMILY_TITLE = "族: {}"  # the title of the S of a family's rule (rules/process.md 8.6, the flow of the gaps, 2)
+
+
+def akin(ids, id_, values, title):
+    """X9-12 (rules/leader.md 5.6): after `new S` with `spec` or `family`, the other S of a section of it or one
+    under it, or of the family (`ID status sections title by`), and a note when the family has another OPEN S
+    and no S `族: <family>`. It tells; nothing is stopped."""
+    secs, family = _listed(values.get("spec")), values.get("family")
+    if not secs and family is None:
+        return
+    rows, others, named = [], 0, (title or "").strip() == FAMILY_TITLE.format(family)
+    for i, _, v in sorted(ids.heads(["S"]), key=lambda x: id_key(x[0])):
+        w, kin = ids.where(i), family is not None and v.get("family") == family
+        named |= family is not None and w.title == FAMILY_TITLE.format(family)
+        by = [k for k, hit in (("spec", any(under(s, t) for s in _listed(v.get("spec")) for t in secs)), ("family", kin)) if hit]
+        if by and i != id_:
+            rows.append(f"{i}\t{w.status}\t{w.spec()}\t{w.title or NONE}\t{','.join(by)}")
+            others += kin and w.status == "OPEN"
+    print(f"== the other S of {'、'.join(secs) or NONE} (or under) or of the family {family or NONE}: {len(rows)}")
+    for row in rows:
+        print(row)
+    if others and not named:
+        print(f"note: the family {family} has {others} more OPEN S and no S `{FAMILY_TITLE.format(family)}`; "
+              "register it (rules/process.md 8.6, the flow of the gaps, 2)")
 
 
 def draft_args(p):
@@ -1938,13 +1974,204 @@ def cmd_draft(args):
     return 0
 
 
+# ---------------------------------------------------------------- blind, answers (X9-65, X9-66: the drafts of the gaps)
+
+BLIND_LABELS = ("推奨と理由", "独立のレビュー", "回答")  # the items of DRAFT_LABELS `blind` leaves out, with their lines
+BLIND_COLUMNS = ("推奨", "確度")  # the columns `blind` leaves out (the list of the items, `| ID | 論点 | 推奨 | 確度 |`)
+LEAK_WORDS = ("推奨", "確度")  # a kept line with one of them is shown: a recommendation may be left there
+ANSWER, ANSWER_BY = "回答", "@centrevillage"  # an answer: the item, or the paragraph of the user's line (leader.md 5.7)
+ID_HEADING = re.compile(r"(#{1,3} )|[-*+]\s+\*\*")  # before the ID of an item: `### S-<n> …`, `# S-<n> …` of a draft
+# of one S; `- **S-<n>** …` or `- **S-<n>（…）…` of a list of the items to confirm (the history)
+NEXT_BLOCK = re.compile(r"#|\s*(?:[-*+]|\d+\.)\s|---")  # where the paragraphs after an empty item `回答:` end
+
+
+def label_item(label):
+    """The line of an item `- **<label>:**`, `- **<label>**:` or `- <label>:` (onsa-gap's form, `draft`'s), and
+    `- <label>（<when, who>）:` (`note`'s form) or `<label>:` with no `- ` (the answers of the history)."""
+    return re.compile(rf"\s*(?:[-*+]\s+)?(?:\*\*)?{re.escape(label)}(?:（[^）]*）)?(?:\*\*)?[:：](?:\*\*)?\s*")
+
+
+def item_end(lines, i):
+    """The end of the item at the line i: the lines after it indented deeper (blank lines among them too)."""
+    depth, end = len(lines[i]) - len(lines[i].lstrip()), i + 1
+    for j in range(i + 1, len(lines)):
+        if lines[j].strip():
+            if len(lines[j]) - len(lines[j].lstrip()) <= depth:
+                break
+            end = j + 1
+    return end
+
+
+def label_end(lines, kinds, i, m):
+    """The end of the labelled item at the line i (`m` its `label_item` match): `item_end`; when the item has no
+    text, the paragraphs after it to the next heading or item (the answers of the history: `- 回答:`, a blank line,
+    the user's paragraph)."""
+    end = item_end(lines, i)
+    if lines[i][m.end() :].strip() or any(x.strip() for x in lines[i + 1 : end]):
+        return end
+    end = next((k for k in range(end, len(lines)) if kinds[k] == TEXT and NEXT_BLOCK.match(lines[k])), len(lines))
+    while end > i + 1 and not lines[end - 1].strip():
+        end -= 1  # the blank lines before the next block stay
+    return end
+
+
+def drafts_args(p):
+    p.add_argument("files", nargs="*", metavar="FILE", help="the drafts (`S-<番号>.draft.md`, or a file of the drafts of a group)")
+    p.add_argument("--group", type=int, help="every `decisions/S/S-*.draft.md` with `group = N`, in the order of the numbers")
+
+
+def draft_texts(args):
+    """[(the path shown, its lines)] of FILE... (as given) or of the drafts of `--group N` (under the root)."""
+    if bool(args.files) == (args.group is not None):
+        raise DocsError("give the drafts (FILE...) or --group N, one of the two")
+    if args.files:
+        return [(f, read_doc(".", f).split("\n")) for f in args.files]
+    d = repo.KIND["S"].dir
+    drafts = sorted((m.group(1), Path(d) / p.name) for p in (Path(args.root) / d).glob("S-*.draft.md")
+                    if (m := re.fullmatch(r"(S-\d+)\.draft\.md", p.name)))  # fmt: skip
+    out = [(rel.as_posix(), text.split("\n")) for _, rel in sorted(drafts, key=lambda x: id_key(x[0]))
+           if (read_head(text := read_doc(args.root, rel)).values or {}).get("group") == args.group]  # fmt: skip
+    if not out:
+        raise DocsError(f"--group {args.group}: no draft of the group in {d}/")
+    return out
+
+
+def blind_lines(lines):
+    """X9-65: ([(line, text)] kept, the items left out, the columns left out)."""
+    kinds, items = line_kinds(lines)[0], [label_item(x) for x in BLIND_LABELS]
+    kept, removed, columns, i = [], 0, 0, 0
+    table = [kinds[k] == TEXT and x.lstrip().startswith("|") for k, x in enumerate(lines)]
+    while i < len(lines):
+        if kinds[i] == TEXT and (m := next((m for r in items if (m := r.match(lines[i]))), None)):
+            i, removed = label_end(lines, kinds, i, m), removed + 1
+        elif table[i] and i + 1 < len(lines) and table[i + 1] and DELIMITER.fullmatch(lines[i + 1].strip()):
+            drop = [k for k, c in enumerate(table_cells(lines[i])) if c in BLIND_COLUMNS]
+            columns += len(drop)
+            while i < len(lines) and table[i]:
+                indent, cells = lines[i][: len(lines[i]) - len(lines[i].lstrip())], table_cells(lines[i])
+                row = indent + "| " + " | ".join(c for k, c in enumerate(cells) if k not in drop) + " |"
+                kept.append((i + 1, row if drop else lines[i]))
+                i += 1
+        else:
+            kept.append((i + 1, lines[i]))
+            i += 1
+    return kept, removed, columns
+
+
+def blind_args(p):
+    drafts_args(p)
+    p.add_argument("--out", required=True, help="the new file of the blinded drafts (not written over)")
+
+
+def cmd_blind(args):
+    drafts = draft_texts(args)
+    if Path(args.out).exists():
+        return _refused("blind", [f"{args.out}: there already"])
+    texts, removed, columns, leaks = [], 0, 0, 0
+    for shown, lines in drafts:
+        kept, n, c = blind_lines(lines)
+        texts.append("\n".join(x for _, x in kept).rstrip("\n") + "\n")
+        removed, columns = removed + n, columns + c
+        for at, x in kept:
+            if spans := [m.span() for m in re.finditer("|".join(LEAK_WORDS), x)]:
+                print(f"{shown}:{at}: {excerpt(x, *spans[0])}")
+                leaks += 1
+    write_new(Path(args.out), "\n".join(texts))
+    print(f"docs blind: {args.out}: {len(drafts)} file(s), {removed} item(s) and {columns} column(s) left out; "
+          f"{leaks} kept line(s) with {' or '.join(LEAK_WORDS)} (above)")
+    return 0
+
+
+def answers_of(lines):
+    """X9-66: ([(the S, the line of its heading, [(line, [texts])])], [(line, [texts]) under no S]). An answer is
+    the text of an item `回答:` with its lines; when that is empty, the paragraphs after it to the next heading or
+    item (the drafts of the history); or the paragraph of a line with `@centrevillage`."""
+    kinds, item = line_kinds(lines)[0], label_item(ANSWER)
+    items, loose, cur, i = [], [], None, 0
+    while i < len(lines):
+        line, end, texts, text = lines[i], i + 1, None, kinds[i] == TEXT
+        if text and (h := ID_HEADING.match(line)) and (m := repo.ID_RE.match(line, h.end())) and (
+                h.group(1) or line.startswith(("**", "（"), m.end())):
+            items.append(cur := (m.group(0), i + 1, []))
+        elif text and line.startswith("#") and not line.startswith("####"):
+            cur = None
+        elif text and (m := item.match(line)):
+            end = label_end(lines, kinds, i, m)
+            texts = [line[m.end() :], *lines[i + 1 : end]]
+        elif text and ANSWER_BY in line:
+            end = next((k for k in range(i + 1, len(lines)) if not lines[k].strip()), len(lines))
+            texts = [line.split(ANSWER_BY, 1)[1].lstrip(" :："), *lines[i + 1 : end]]
+        if texts and (texts := [x.strip() for x in texts if x.strip()]):
+            (cur[2] if cur else loose).append((i + 1, texts))
+        i = end
+    return items, loose
+
+
+def cmd_answers(args):
+    found_in, loose_n = [], 0  # whether each item has an answer; the answers under no item
+    for shown, lines in draft_texts(args):
+        items, loose = answers_of(lines)
+        found_in += [bool(x[2]) for x in items]
+        loose_n += len(loose)
+        for id_, at, found in [*items, *([(NONE, None, loose)] if loose else [])]:
+            if not found:
+                print(f"{id_}\t{shown}:{at}\t回答なし")
+            for line, texts in found:
+                print(f"{id_}\t{shown}:{line}\t{texts[0]}", *(f"  {x}" for x in texts[1:]), sep="\n")
+    print(f"docs answers: {sum(found_in)} item(s) with an answer, {found_in.count(False)} with none (回答なし); "
+          f"{loose_n} answer(s) under no item")
+    return 0
+
+
 # ---------------------------------------------------------------- ticket (DT-6, DF-6)
 
-UNIT_ROLE = re.compile(r"[^/\s]+/[tib](?:-fix\d+)?")
+UNIT_ROLE = re.compile(r"[^/\s]+/[tib](?:-fix\d+)?(?P<handover>-handover)?")
 CARRIED = re.compile(r"- 持ち越し[:：]")
 # the fields of a ticket the parent fills (DF-6)
 TICKET_FIELDS = ("する", "しない", "書く場所", "読むもの", "期待値", "危険な経路", "進め方", "見積もり", "予算", "受け入れ条件",
                  "使う番号が登録済みか")  # fmt: skip
+# X9-67 d: the fields of a ticket of a handover (`U2/i-handover`) the parent fills, with their guides from rules/leader.md 2.10
+HANDOVER_FIELDS = (
+    ("読む順", "<作業票、設計メモ、親の返事、前の報告と、その「次の担当へ」の節>"),
+    ("状態の基", "<前の担当の作業ツリーの枝と、その WIP のコミットと、親が `work.py patch` で作ったパッチ。"
+                "新しい担当は自分の作業ツリーで `work.py sync --apply <パッチ>` で当てる>"),
+    ("道具", "<`tools/` の道具（`run_cases.py`、`speed.py`、`handback.py`）と、前の担当が scratchpad に作った道具。"
+             "ファズの許可の一覧（`tests/fuzz/allowed.toml`）に項目と示す入力を足させるときは、"
+             "ファズの近似（`onsa_cases --fix-same-place`）が第 1 候補しか当てないことも書く>"),
+    ("前の gate の要約と知られた失敗", "<入力と違反の文字列>"),
+    ("古くなった注記とぶつかる事例", "<古くなった注記と、新しい決定とぶつかる既存の事例（親が `tests/` を検索して挙げる）>"),
+    ("戻す事例と保留の事例", "<「期待値を変えずに通す」と書く前に、親が事例の全体（正しい形の並びを含む）を仕様と突き合わせる>"),
+    ("引き継ぎの記録", "<報告の最後の「引き継ぎの記録」の節（文書だけでは足りず補ったこと、食い違い、"
+                    "前の担当に聞きたかった問い、次に足すもの）>"),
+)  # fmt: skip
+CASES_DIR, CASES_SHOWN = "tests", 5  # X9-67 b: the lines of the cases that name an ID; at most this many per ID
+
+
+def case_lines(root, ids):
+    """{ID: [`path:line`]} of the lines of the text files under `tests/` that name the ID as a word
+    (`_mentions`: `S-83` is not in `S-830`), the files and their lines in order; a file that is not UTF-8 or has
+    a NUL is not text. DocsError when `tests/` is not there or a file cannot be read."""
+    found, cases = {i: [] for i in ids}, Path(root) / CASES_DIR
+    if ids and not cases.is_dir():
+        raise DocsError(f"{CASES_DIR}/: no directory (the lines of the cases)")
+    for p in sorted(x for x in cases.rglob("*") if x.is_file()) if ids else ():
+        try:
+            data = p.read_bytes()
+            text = data.decode("utf-8") if b"\0" not in data else ""
+        except OSError as e:
+            raise DocsError(f"{p.relative_to(root).as_posix()}: {e}") from e
+        except UnicodeDecodeError:
+            continue  # not a text file
+        for n, line in enumerate(text.split("\n"), 1):
+            for i in [i for i in ids if i in line and _mentions(line, i)]:
+                found[i].append(f"{p.relative_to(root).as_posix()}:{n}")
+    return found
+
+
+def case_items(found):
+    """The items of `ぶつかりうる事例`: an ID with its lines (CASES_SHOWN at most, then `ほか N 件`)."""
+    return "".join(f"\n  - {i}: {'、'.join(at[:CASES_SHOWN])}" + (f" ほか {len(at) - CASES_SHOWN} 件" if len(at) > CASES_SHOWN else "")
+                   for i, at in found.items() if at)  # fmt: skip
 
 
 def ticket_args(p):
@@ -1956,8 +2183,8 @@ def ticket_args(p):
 def cmd_ticket(args):
     ids = Ids(args.root)
     ids.require(_id_arg(args.id), ["W"])
-    if not UNIT_ROLE.fullmatch(args.unit):
-        raise DocsError(f"{args.unit}: not UNIT/ROLE (`U2/i`; the roles t, i, b)")
+    if not (unit := UNIT_ROLE.fullmatch(args.unit)):
+        raise DocsError(f"{args.unit}: not UNIT/ROLE (`U2/i`, `U2/i-fix1`, `U2/i-handover`; the roles t, i, b)")
     w = _found(ids, args.id)
     if w.rel is None:
         return 1
@@ -1977,12 +2204,14 @@ def cmd_ticket(args):
         f"- 状態: {w.status}" + (f"（doing: {doing}）" if doing else ""),
         f"- 規模: {v.get('size', NONE)}",
         f"- 依存: {depends or 'なし'}",
-        "- 実現する決定:" + ("".join(map(item, decisions)) or " なし"),
+        f"- 実現する決定（{len(decisions)} 件）:" + "".join(map(item, decisions)) if decisions else "- 実現する決定: なし",
         "- 直す R:" + ("".join(map(item, issues)) or " なし"),
         f"- 仕様の節: {'、'.join(sorted(secs, key=section_key)) or 'なし'}",
         "- 持ち越し: " + ("作業のファイルの `持ち越し` を読む" if any(CARRIED.match(x) for x in head.body.split("\n")) else "なし"),
+        "- ぶつかりうる事例:" + (case_items(case_lines(ids.root, decisions + issues)) or " なし"),
         f"- 役割と単位: {args.unit}",
         *(f"- {f}:" for f in TICKET_FIELDS),
+        *(f"- {f}: {guide}" for f, guide in (HANDOVER_FIELDS if unit["handover"] else ())),
     ]  # fmt: skip
     text = "\n".join(out) + "\n"
     if args.out:
@@ -2038,12 +2267,23 @@ COMMANDS = {
               "docs.py note R-12 反映 \"W3-05 で直した\""),
     "new": C(new_args, cmd_new, ("parent",), "次の番号で ID のファイルを作る（主のツリーだけ）",
              "S・R などの ID を登録するとき。S は、空白の報告を受け取った回に主のツリーで登録する"
-             "（期限の作業か段を `before`、見つけた票を `found_by`）",
-             "docs.py new S --title \"…\" before=W4 found_by=W3-05/t"),
+             "（期限の作業か段を `before`、見つけた票を `found_by`、規則の族を `family`）。`spec` か `family` を書くと、"
+             "同じ節（その下の節も）か同じ族の S を状態とともに並べ、族の未決の S があって族の S（題「族: <族の名>」）が無ければ知らせる",
+             "docs.py new S --title \"…\" before=W4 found_by=W3-05/t spec=§2.5 family=行頭の記号"),
     "draft": C(draft_args, cmd_draft, ("parent",), "S の下書き（`S-<番号>.draft.md`、頭の欄 `group`・`drafted`）を作る",
                "確かめた空白の組を下書きに置くとき", "docs.py draft S-537 S-538 --group 12"),
-    "ticket": C(ticket_args, cmd_ticket, ("parent",), "作業のファイルと決定から、作業票の骨組みを出す",
-                "作業票を書くとき（親は残りの欄を埋める）", "docs.py ticket W3-05 U2/i"),
+    "blind": C(blind_args, cmd_blind, ("parent",), "下書きから推奨を伏せた版を作る（推奨・独立のレビュー・回答の箇条と、表の推奨・確度の列を除く）",
+               "確かめた空白の組を助言の担当に渡す前に、伏せた版を作る（`--group <N>` か下書きのファイル）。"
+               "残した行に推奨の語があれば元の `経路:行` を出すので、読んで伏せ漏れを直す",
+               "docs.py blind --group 12 --out blind12.md"),
+    "answers": C(drafts_args, cmd_answers, ("parent",), "下書きの回答（`回答:` の箇条と `@centrevillage` の段落）を S ごとに集める",
+                 "利用者が「書き終わった」と言った後に、回答をまとめて読む（回答の無い S は「回答なし」と出る）",
+                 "docs.py answers --group 12"),
+    "ticket": C(ticket_args, cmd_ticket, ("parent",),
+                "作業のファイルと決定から、作業票の骨組みを出す（実現する決定の件数、それと直す R を名指す `tests/` の行）",
+                "作業票を書くとき（親は残りの欄を埋める。「ぶつかりうる事例」の行を読み、ぶつかる事例を作業票に挙げる）。"
+                "引き継ぎの作業票は `<単位>/<役割>-handover` で、引き継ぎの欄が手引きとともに足される",
+                "docs.py ticket W3-05 U2/i-handover"),
 }  # fmt: skip
 
 

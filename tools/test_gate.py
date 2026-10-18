@@ -6702,9 +6702,9 @@ class DocsCommands(DocsTree):
         self.write("tasks/W/W1-02.md", self.read("tasks/W/W1-02.md") + "\n- 持ち越し:\n  - W1-01/b の報告: x\n")
         expected = [
             "# 作業 W1-02 U2/i: 式", "", "- 作業のファイル: tasks/W/W1-02.md（`docs.py show W1-02`）", "- 状態: DOING（doing: U2/i）",
-            "- 規模: M", "- 依存: W1-01（DONE）", "- 実現する決定:", "  - S-2 OPEN R-1 と A-1。（§3.1, §2.2）",
+            "- 規模: M", "- 依存: W1-01（DONE）", "- 実現する決定（1 件）:", "  - S-2 OPEN R-1 と A-1。（§3.1, §2.2）",
             "- 直す R:", "  - R-1 OPEN 候補（§3.1, tools.md §1）", "- 仕様の節: §2.2、§3.1、tools.md §1",
-            "- 持ち越し: 作業のファイルの `持ち越し` を読む", "- 役割と単位: U2/i",
+            "- 持ち越し: 作業のファイルの `持ち越し` を読む", "- ぶつかりうる事例: なし", "- 役割と単位: U2/i",
             *(f"- {f}:" for f in docs_tool.TICKET_FIELDS),
         ]  # fmt: skip
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (0, expected))
@@ -6712,10 +6712,41 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i", "--out", str(out)), (0, [str(out)]))
         self.assertEqual(out.read_text(encoding="utf-8"), "\n".join(expected) + "\n")
         self.assertRefused(("ticket", "W1-02", "U2/b", "--out", str(out)), [f"{out}: there already"], ["t.md"])
-        self.assertEqual(self.run_("ticket", "W1-01", "U1/t")[1][4:8], ["- 規模: -", "- 依存: なし", "- 実現する決定:", "  - S-1 DECIDED 字句（§2.1）"])
+        self.assertEqual(self.run_("ticket", "W1-01", "U1/t")[1][4:8], ["- 規模: -", "- 依存: なし", "- 実現する決定（1 件）:", "  - S-1 DECIDED 字句（§2.1）"])
+        self.assertEqual(self.run_("ticket", "W1-01", "U1/i-fix1")[1][-len(docs_tool.TICKET_FIELDS) - 1:],
+                         ["- 役割と単位: U1/i-fix1", *(f"- {f}:" for f in docs_tool.TICKET_FIELDS)])  # fmt: skip
+        self.edit("decisions/S/S-1.md", 'tasks = ["W1-01"]\n', "")
+        self.assertEqual(self.run_("ticket", "W1-01", "U1/t")[1][6:7], ["- 実現する決定: なし"])
         self.assertEqual(self.run_("ticket", "W1-02", "U2")[0], 2)
         self.assertEqual(self.run_("ticket", "S-1", "U2/i")[0], 2)
         self.assertEqual(self.run_("ticket", "W1-09", "U2/i"), (1, ["W1-09: not found (tasks/W/)"]))
+
+    def test_ticket_cases_and_handover(self):
+        """X9-67 b, d: the lines of `tests/` that name an ID of the ticket as a word, at most CASES_SHOWN per ID;
+        the fields of a handover with their guides."""
+        self.layout()
+        self.write("tests/spec/a.onsa", "// SPEC-GAP(S-2): x\nS-20 と S-200 と R-10\n")
+        self.write("tests/pending.toml", '[[item]]\nreasons = ["R-1"]\n')
+        self.write("tests/many.onsa", "R-1\n" * 7)
+        (self.root / "tests/b.bin").write_bytes(b"S-2\0")  # not text
+        (self.root / "tests/c.onsa").write_bytes("S-2 \udcff".encode("utf-8", "surrogatepass"))  # not UTF-8
+        shown = "、".join(f"tests/many.onsa:{n}" for n in range(1, 6))
+        cases = ["- ぶつかりうる事例:", "  - S-2: tests/spec/a.onsa:1", f"  - R-1: {shown} ほか 3 件"]
+        out = self.run_("ticket", "W1-02", "U2/i")[1]
+        self.assertEqual(out[12:15], cases)
+        self.assertEqual(out[15], "- 役割と単位: U2/i")
+        handover = self.run_("ticket", "W1-02", "U2/i-handover")[1]
+        self.assertEqual(handover[: len(out)], [out[0].replace("U2/i", "U2/i-handover"), *out[1:15], "- 役割と単位: U2/i-handover", *out[16:]])
+        self.assertEqual(handover[len(out) :], [f"- {f}: {g}" for f, g in docs_tool.HANDOVER_FIELDS])
+        self.assertEqual([x.split(":")[0] for x in handover[len(out) :]], [
+            "- 読む順", "- 状態の基", "- 道具", "- 前の gate の要約と知られた失敗", "- 古くなった注記とぶつかる事例",
+            "- 戻す事例と保留の事例", "- 引き継ぎの記録"])  # fmt: skip
+        self.assertIn("`work.py sync --apply <パッチ>`", handover[len(out) + 1])
+        self.assertEqual(self.run_("ticket", "W1-02", "U2/i-fix2-handover")[1][len(out) :], handover[len(out) :])
+        for unit in ("U2/i-handover-fix1", "U2/x-handover", "U2/i-hand"):
+            self.assertEqual(self.run_("ticket", "W1-02", unit)[0], 2, unit)
+        shutil.rmtree(self.root / "tests")  # not "なし" when there is nothing to read
+        self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (2, ["docs.py ticket: tests/: no directory (the lines of the cases)"]))
 
     def test_depends_a_stage(self):
         """U5e: a stage in `depends` is every work of it: `ticket` shows its state, `show` the works that
@@ -6796,7 +6827,8 @@ class DocsCommands(DocsTree):
     def test_new(self):
         self.layout()
         # the next number counts the drafts (S-2.draft.md); the head fields in the normal form
-        self.assertEqual(self.run_("new", "S", "--title", "新しい", "tasks=W1-02", "spec=§3.1"), (0, ["decisions/S/S-3.md"]))
+        self.assertEqual(self.run_("new", "S", "--title", "新しい", "tasks=W1-02", "spec=§3.1"), (0, [
+            "decisions/S/S-3.md", "== the other S of §3.1 (or under) or of the family -: 0"]))  # fmt: skip
         self.assertEqual(self.read("decisions/S/S-3.md"), '+++\nstatus = "OPEN"\nspec = ["§3.1"]\ntasks = ["W1-02"]\n+++\n# S-3 新しい\n')
         self.write("decisions/S/S-7.draft.md", "")
         # the labels of the body from the README
@@ -6827,6 +6859,29 @@ class DocsCommands(DocsTree):
             self.assertEqual(self.run_("new", "S"), (2, ["docs.py new: the numbers are given in the main tree only "
                                                          "(this is a git worktree; write NEW)"]))  # fmt: skip
 
+    def test_new_shows_the_akin(self):
+        """X9-12: `new S` with `spec` or `family` lists the other S of a section of it or one under it, or of the
+        family, and tells when the family has another OPEN S and no S `族: <family>`; it writes all the same."""
+        self.layout()
+        self.edit("decisions/README.md", "| `group` |", "| `family` | 文字列 | — | いいえ | 族 |\n| `group` |")
+        self.write("decisions/S/S-3.md", '+++\nstatus = "OPEN"\nspec = ["§2.2", "§3.1"]\nfamily = "行頭"\n+++\n# S-3 三\n')
+        self.write("decisions/S/S-4.md", '+++\nstatus = "OPEN"\nspec = ["§3"]\n+++\n# S-4 四\n')
+        head = "== the other S of {} (or under) or of the family {}: {}"
+        self.assertEqual(self.run_("new", "S", "spec=§2"), (0, [
+            "decisions/S/S-5.md", head.format("§2", "-", 2), "S-1\tDECIDED\t§2.1\t字句\tspec", "S-3\tOPEN\t§2.2, §3.1\t三\tspec"]))  # fmt: skip
+        note = "note: the family 行頭 has 1 more OPEN S and no S `族: 行頭`; register it (rules/process.md 8.6, the flow of the gaps, 2)"
+        self.assertEqual(self.run_("new", "S", "spec=§2.1", "family=行頭")[1], [
+            "decisions/S/S-6.md", head.format("§2.1", "行頭", 2), "S-1\tDECIDED\t§2.1\t字句\tspec", "S-3\tOPEN\t§2.2, §3.1\t三\tfamily", note])  # fmt: skip
+        self.assertTrue((self.root / "decisions/S/S-6.md").exists())
+        self.assertEqual(self.run_("new", "S", "family=他")[1], ["decisions/S/S-7.md", head.format("-", "他", 0)])
+        # the S of the family: the new one, or one there
+        self.assertEqual(self.run_("new", "S", "--title", "族: 行頭", "family=行頭")[1][-1], "S-6\tOPEN\t§2.1\t-\tfamily")
+        self.assertEqual(self.run_("new", "S", "family=行頭")[1][-1], "S-8\tOPEN\t-\t族: 行頭\tfamily")
+        self.assertEqual(self.run_("new", "S", "spec=§3.1", "--title", "x")[1], [
+            "decisions/S/S-10.md", head.format("§3.1", "-", 1), "S-3\tOPEN\t§2.2, §3.1\t三\tspec"])  # fmt: skip
+        self.assertEqual(self.run_("new", "S", "tasks=W1-02")[1], ["decisions/S/S-11.md"])
+        self.assertEqual(self.run_("new", "R", "spec=§2")[1], ["issues/R/R-2.md"])
+
     def test_draft(self):
         self.layout()
         self.assertEqual(self.run_("draft", "S-1", "S-2", "--group", "3"), (0, [
@@ -6845,6 +6900,74 @@ class DocsCommands(DocsTree):
         self.assertEqual(self.run_("draft", "W1-01", "--group", "1")[0], 2)
         with self.assertRaises(SystemExit):  # argparse: --group is required
             self.run_("draft", "S-3")
+
+    # ------------------------------------------------ blind, answers (X9-65, X9-66)
+
+    DRAFT_HEAD = "+++\ngroup = {}\ndrafted = 2026-10-16\n+++\n"
+    S3 = """\
+# S-3 題
+
+| ID | 論点 | 推奨 | 確度 |
+|---|---|---|---|
+| S-3 | a \\| b | (a) | 高 |
+
+- **論点:** x
+- **推奨と理由:** (a)。
+  - あわせて決めること
+
+    深い行
+- **影響:** 推奨なら W1-02。
+- 回答:
+
+(a) で。
+
+- 独立のレビュー: 一致
+"""
+    S4 = "# S-4\n\n- 推奨と理由: (b)\n- 回答（2026-10-16、利用者）: (b) で。\n  続き\n@centrevillage: (c) にする\n続きの行\n\n次の段落\n"
+
+    def drafts(self):
+        self.layout()
+        for n, group, body in ((3, 5, self.S3), (4, 5, self.S4), (10, 5, "# S-10 十\n\n- 論点: y\n- 回答:\n"), (5, 6, "# S-5\n")):
+            self.write(f"decisions/S/S-{n}.draft.md", self.DRAFT_HEAD.format(group) + body)
+
+    def test_blind(self):
+        self.drafts()
+        out = self.root / "blind.md"
+        self.assertEqual(set(docs_tool.BLIND_LABELS) - set(docs_tool.DRAFT_LABELS), set())
+        code, lines = self.run_("blind", "--group", "5", "--out", str(out))
+        self.assertEqual((code, lines), (0, [
+            "decisions/S/S-3.draft.md:16: - **影響:** 推奨なら W1-02。",
+            f"docs blind: {out}: 3 file(s), 6 item(s) and 2 column(s) left out; 1 kept line(s) with 推奨 or 確度 (above)"]))  # fmt: skip
+        head = self.DRAFT_HEAD.format(5)
+        self.assertEqual(out.read_text(encoding="utf-8"), "\n".join([
+            head + "# S-3 題\n\n| ID | 論点 |\n| --- | --- |\n| S-3 | a \\| b |\n\n- **論点:** x\n- **影響:** 推奨なら W1-02。\n",
+            head + "# S-4\n\n@centrevillage: (c) にする\n続きの行\n\n次の段落\n", head + "# S-10 十\n\n- 論点: y\n"]))  # fmt: skip
+        # not over a file; FILE... (as given) in the order given
+        self.assertRefused(("blind", "--group", "5", "--out", str(out)), [f"{out}: there already"], ["blind.md"])
+        s4 = str(self.root / "decisions/S/S-4.draft.md")
+        self.assertEqual(self.run_("blind", s4, "--out", str(b4 := self.root / "b4.md"))[1], [
+            f"docs blind: {b4}: 1 file(s), 2 item(s) and 0 column(s) left out; 0 kept line(s) with 推奨 or 確度 (above)"])  # fmt: skip
+        self.assertEqual(self.read("b4.md"), head + "# S-4\n\n@centrevillage: (c) にする\n続きの行\n\n次の段落\n")
+        # one of the two, a group with drafts, `--out`
+        for argv in (("blind", s4, "--group", "5", "--out", "x"), ("blind", "--out", "x"), ("blind", "--group", "7", "--out", "x")):
+            self.assertEqual(self.run_(*argv)[0], 2, argv)
+        with self.assertRaises(SystemExit):
+            self.run_("blind", "--group", "5")
+
+    def test_answers(self):
+        self.drafts()
+        self.assertEqual(self.run_("answers", "--group", "5"), (0, [
+            "S-3\tdecisions/S/S-3.draft.md:17\t(a) で。",
+            "S-4\tdecisions/S/S-4.draft.md:8\t(b) で。", "  続き",
+            "S-4\tdecisions/S/S-4.draft.md:10\t(c) にする", "  続きの行",
+            "S-10\tdecisions/S/S-10.draft.md:5\t回答なし",
+            "docs answers: 2 item(s) with an answer, 1 with none (回答なし); 0 answer(s) under no item"]))  # fmt: skip
+        # the items of a file of the history: `### <ID>`, `- **<ID>**`; an answer under no item
+        gaps = self.write("gaps.md", "# 組\n\n### S-7（確認だけ） 七\n- 回答:\n### 付録\n- 回答: 外\n- **S-8** 八\n  回答: 了承\n"
+                                     "- **S-9 の調べ:** x\n  - 回答:\n")  # fmt: skip
+        self.assertEqual(self.run_("answers", str(gaps))[1], [
+            f"S-7\t{gaps}:3\t回答なし", f"S-8\t{gaps}:8\t了承", f"-\t{gaps}:6\t外",
+            "docs answers: 1 item(s) with an answer, 1 with none (回答なし); 1 answer(s) under no item"])  # fmt: skip
 
     # ------------------------------------------------ the old places are not read (X-2 DT-7, U7a)
 
