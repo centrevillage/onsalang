@@ -1,4 +1,14 @@
 {
+  "hooks": {
+    "PreToolUse": [{"matcher": "Bash|Agent|Read|Grep|Glob",
+      "hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py PreToolUse"}]}],
+    "PostToolUse": [{"matcher": "Bash|SendMessage",
+      "hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py PostToolUse"}]}],
+    "SessionStart": [{"matcher": "startup|resume|compact",
+      "hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py SessionStart"}]}],
+    "SubagentStop": [{
+      "hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py SubagentStop"}]}]
+  },
   "permissions": {
     "ask": [
       "Bash(git push *)",
