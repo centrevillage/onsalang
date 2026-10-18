@@ -38,7 +38,9 @@ CLEANING = ("done", "close", "remove")  # the commands of tools/work.py that rem
 LONG = 600000  # the Bash timeout of the gate and of `bg.py wait` (rules/checks.md 4.1, rules/common.md 1.8)
 CRATE_SRC = re.compile(r"(^|/)crates/[^/]+/src(/|$)")  # what the test role does not read (X9-46)
 PATHS = {"Read": ("file_path",), "Grep": ("path", "glob"), "Glob": ("path", "pattern")}  # the inputs that are paths
-HEREDOC = re.compile(r"(?<!<)<<-?[ \t]*[A-Za-z_]")  # a heredoc whose word is not quoted (X9-49)
+# a heredoc's operator (not `<<<`): its `-` and its word, quoted in part or in whole
+DOC = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*((?:[^\s;&|()<>'\"\\`]|'[^']*'|\"(?:[^\"\\]|\\.)*\"|\\.)+)")
+HELP = (["--help"], ["-h"])  # the gate's help alone: no run of the gate (M-6)
 DUE_DOC = re.compile(r"^parent: \S+: .* after the docs check ")  # a document of `docs.py due` (counted, not listed)
 SUMMARY_MAX, LOG_WIDTH = 2000, 100  # the state of SessionStart (X9-56) and the width of a line of its log
 WRAPPERS = ("python3", "python", "sh", "bash", "zsh", "exec", "env", "time", "nohup", "command", "{", "!",
@@ -112,10 +114,81 @@ def split_line(line):
     return cmds + [words + ([cur] if cur is not None else [])]
 
 
+def commands_text(line):
+    """`line` without its heredocs' bodies, and whether an operator's word is unquoted (X9-49). The operators are
+    `<<WORD` and `<<-WORD` outside quotes and comments, more than one on a line too; a body runs from the next line
+    to the line of the word alone (`<<-`: after its tabs), else to the end. A body whose word is quoted (in whole or
+    in part, or with `\\`) gives nothing; an unquoted one gives the insides of its `$(…)` and backquotes, a line each.
+    No other shell syntax is followed; what is not read as a body stays commands."""
+    out, docs, unquoted, quote, i = [], [], False, None, 0
+    while i < len(line):
+        ch, start = line[i], i
+        m = None if quote else DOC.match(line, i)
+        if quote:
+            if ch == quote:
+                quote = None
+            elif ch == "\\" and quote == '"':
+                i += 1
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "\\":
+            i += 1
+        elif line.startswith("((", i):  # arithmetic (`$((1<<2))`) as it is, no operator in it
+            end = line.find("))", i)
+            i = (len(line) if end < 0 else end + 2) - 1
+        elif ch == "#" and (i == 0 or line[i - 1] in " \t\n;&|()"):
+            end = line.find("\n", i)
+            i = (len(line) if end < 0 else end) - 1  # the comment as it is, up to its newline
+        elif m:
+            quoted = any(c in m[2] for c in "'\"\\")
+            docs.append((m[1], "".join(sum(split_line(m[2]), [])), quoted))
+            unquoted, i = unquoted or not quoted, m.end() - 1
+        elif ch == "\n" and docs:
+            rows, out = line[i + 1 :].split("\n"), out + ["\n"]
+            for tabs, word, quoted in docs:
+                n = next((k for k, r in enumerate(rows) if (r.lstrip("\t") if tabs else r) == word), len(rows))
+                out += [] if quoted else [x + "\n" for x in substitutions("\n".join(rows[:n]))]
+                rows = rows[n + 1 :]
+            line, i, docs = "\n".join(rows), 0, []
+            continue
+        out.append(line[start : i + 1])
+        i += 1
+    return "".join(out), unquoted
+
+
+def substitutions(body):
+    """What the shell runs in an unquoted heredoc body: the insides of `$(…)` (to its `)`, quotes followed) and of
+    backquotes, `\\$` and `\\`` plain; one without its end runs to the end of the body."""
+    out, i = [], 0
+    while i < len(body):
+        if body[i] == "\\":
+            i += 1
+        elif body.startswith("$(", i):
+            depth, quote, i = 1, None, i + 2
+            start = i
+            while i < len(body) and depth:
+                if quote:
+                    quote = None if body[i] == quote else quote
+                elif body[i] in "'\"":
+                    quote = body[i]
+                else:
+                    depth += (body[i] == "(") - (body[i] == ")")
+                i += 1
+            out.append(body[start : i - (depth == 0)])
+            continue
+        elif body[i] == "`":
+            end = body.find("`", i + 1)
+            end = len(body) if end < 0 else end
+            out.append(body[i + 1 : end])
+            i = end
+        i += 1
+    return out
+
+
 def programs(line):
     """Each simple command of `line` from its program on: assignments, wrappers (`python3`, `env`, `then`, …)
     and the options right after a wrapper are dropped; `bg.py run DIR -- CMD…` gives CMD… as a command too."""
-    out, todo = [], split_line(line)
+    out, todo = [], split_line(commands_text(line)[0])
     while todo:
         w, i = todo.pop(0), 0
         while i < len(w) and (re.match(r"[A-Za-z_][A-Za-z0-9_]*=", w[i]) or w[i] in WRAPPERS):
@@ -186,7 +259,7 @@ def stop_reason(event, role):
                                 in CLEANING for w in cmds):  # fmt: skip
         return ("作業ツリーの片付け（work.py done・close・remove）は親が回す（X-9）。"
                 "担当は自分の作業ツリーを残したまま報告する")  # fmt: skip
-    if role in NO_GATE and runs_gate(cmds):
+    if role in NO_GATE and runs_gate([w for w in cmds if w[1:] not in HELP]):
         return (f"役割 {role} は gate を回さない（rules/checks.md 4 章の表）。"
                 "表の「作業の途中」の確かめを使い、gate が要るときは報告に書いて親に頼む")  # fmt: skip
     if role in NO_BUILD and runs_build(cmds):
@@ -207,7 +280,7 @@ def pre_tool_use(event):
     cmds = programs(line)
     if (runs_gate(cmds) or waits(cmds)) and not (isinstance(inp.get("timeout"), int) and inp["timeout"] >= LONG):
         out["updatedInput"] = {**inp, "timeout": LONG}  # the whole input (X9-52); no permissionDecision
-    if HEREDOC.search(line) and "python" in line:
+    if commands_text(line)[1] and "python" in line:
         out["additionalContext"] = ("引用符の無いヒアドキュメントは、本文のバッククォートと `$` をシェルで展開する。"
                                     "Python を渡すときは `<<'EOF'` と囲み、引数は sys.argv で渡す（rules/common.md 1.5）")
     return {"hookSpecificOutput": out} if len(out) > 1 else None

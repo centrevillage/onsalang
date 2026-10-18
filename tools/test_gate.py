@@ -7003,6 +7003,55 @@ class ClaudeHook(unittest.TestCase):
                                  role in ("t", "b", "advisor", "gap", "docs"))  # fmt: skip
                 self.assertEqual(self.denied(role, "Bash", command="cargo run -q -p onsa_cli"), role in ("advisor", "gap"))
 
+    def test_heredocs(self):
+        """X-9 U7: a heredoc's body is not commands but for what the shell runs in an unquoted one."""
+        cases = [  # (role, command, stopped)
+            ("advisor", "cat > /tmp/x.md <<'EOF2'\n- V-12 消すのは `work.py done`\nEOF2", False),  # the three of M-8
+            ("parent", "cat > /tmp/x.md <<'EOF2'\n- 4.2 `fuzz.py --deep` は回さない\nEOF2", False),
+            ("t", "cat > /tmp/x.md <<'EOF2'\n受ける形は `tools/gate.sh --help`\nEOF2", False),
+            ("advisor", "tools/work.py done x", True),  # the same words as commands
+            ("parent", "tools/fuzz.py --deep", True),
+            ("t", "tools/gate.sh --work X", True),
+            ("i", "grep -n 'fuzz.py --deep' rules/checks.md", False),
+            ("i", 'cat <<"E"F\n$(tools/fuzz.py --deep)\nEF', False),  # a word quoted in part
+            ("i", "cat <<\\EOF\n`tools/fuzz.py --deep`\nEOF", False),
+            ("i", "cat <<EOF\nfuzz.py --deep; tools/fuzz.py --deep\nEOF", False),  # the plain text of the body
+            ("i", "cat <<EOF\na $(tools/fuzz.py --deep) b\nEOF", True),  # what the shell runs in it
+            ("i", "cat <<EOF\na `python3 -B tools/fuzz.py --deep` b\nEOF", True),
+            ("i", "cat <<EOF\n$(echo ')' $(tools/fuzz.py --deep))\nEOF", True),
+            ("i", "cat <<EOF\n\\$(tools/fuzz.py --deep) \\`tools/fuzz.py --deep\\`\nEOF", False),
+            ("i", "cat <<EOF\n$(ls; tools/fuzz.py --deep", True),  # no end of the `$(`, no line of the word
+            ("i", "cat <<'A' > a; cat <<B > b\nfuzz.py --deep\nA\n$(tools/fuzz.py --deep)\nB", True),  # two on a line
+            ("i", "cat <<'A' > a; cat <<'B' > b\n$(tools/fuzz.py --deep)\nA\ntools/fuzz.py --deep\nB", False),
+            ("i", "cat <<-'EOF'\n\ttools/fuzz.py --deep\n\tEOF\ntools/fuzz.py --deep", True),  # the line after it
+            ("i", "cat <<-'EOF'\n\ttools/fuzz.py --deep\n\tEOF\nls", False),
+            ("i", "cat <<'EOF'\n\tEOF\ntools/fuzz.py --deep\nEOF", False),  # `<<`: the tab stays in the line
+            ("i", "cat <<'EOF'\nx\ntools/fuzz.py --deep", False),  # no line of the word: the rest is the body
+            ("i", "cat <<'EOF'\nx\n EOF\nEOF\ntools/fuzz.py --deep", True),
+            ("i", "echo '<<EOF'\ntools/fuzz.py --deep", True),  # not an operator
+            ("i", "ls # <<EOF\ntools/fuzz.py --deep", True),
+            ("i", "echo $((1<<2))\ntools/fuzz.py --deep", True),
+            ("i", "cat <<< x\ntools/fuzz.py --deep", True),
+            ("i", "cat <<\ntools/fuzz.py --deep", True),
+            ("i", "cat <<`x`\ntools/fuzz.py --deep", True),  # no word: no operator
+        ]  # fmt: skip
+        for role, command, stopped in cases:
+            with self.subTest(role=role, command=command):
+                self.assertEqual(self.denied(role, "Bash", command=command), stopped)
+        tells = lambda c: "additionalContext" in (self.pre("i", "Bash", command=c) or {})  # noqa: E731
+        self.assertFalse(tells("python3 - <<'EOF'\nx = '<<EOF'\ny = 1 <<E\nEOF"))  # M-7: `<<` in a body
+        self.assertTrue(tells("cat <<'A' > a; python3 - <<B\nx\nA\ny\nB"))
+        self.assertFalse(tells("python3 -c 'print(\"<<EOF\")'"))
+
+    def test_gate_help(self):
+        """X-9 U7 (M-6): the gate's help alone is no run of the gate."""
+        for command, stopped in (("tools/gate.sh --help", False), ("tools/gate.sh -h", False),
+                                 ("python3 -B tools/gate.py --help", False), ("tools/gate.sh --work X", True),
+                                 ("tools/gate.sh --help --work X", True), ("tools/gate.sh", True),
+                                 ("tools/gate.sh --help; tools/gate.sh --quick", True)):  # fmt: skip
+            with self.subTest(command=command):
+                self.assertEqual(self.denied("t", "Bash", command=command), stopped)
+
     def test_changes_and_tells(self):
         out = self.pre("i", "Bash", command="tools/gate.sh --work X-9/U3", description="gate")
         self.assertEqual(out, {"hookEventName": "PreToolUse",  # the whole input, no decision (X9-52)
