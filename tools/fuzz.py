@@ -82,9 +82,11 @@ same minimized input, with the same message left, does not fail: it is listed on
 line `pre-existing (the base <commit> shows it): ...`. A whole run and a shard fail
 on it and mark it. A crash, an internal error and a timeout fail even when they are
 from before (the base does not run them); so does every new class when the base is
-unknown. A run of the tree at the merge base with no change of the code (a sweep, a
-whole run of the main tree) compares with the code before HEAD (X-1 U6), shown as
-`<commit> (the code before HEAD)`: what the base shows was there before HEAD's code.
+unknown. A whole run or a shard of the tree at the merge base with no change of the code
+(a sweep, a whole run of the main tree) compares with the code before HEAD (X-1 U6), shown
+as `<commit> (the code before HEAD)`: what the base shows was there before HEAD's code. A
+narrowed run there compares with the merge base's own (X-1 U6b): with no code in the work,
+every class of the fix stage is from before it.
 
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
@@ -907,7 +909,8 @@ def main(argv=None):
     return run(
         args.root, [str(binary)], [str(cases)], args.per_seed, args.version, args.jobs, args.save,
         target_dir=target, time_budget=args.time_budget, deep=args.deep, truncated=truncated, swept=args.deep,
-        selection=selection, base=narrowing.resolve_base(args.root, args.base),
+        selection=selection,
+        base=narrowing.resolve_base(args.root, args.base, narrowed=bool(selection and selection.narrowed)),
     )
 
 

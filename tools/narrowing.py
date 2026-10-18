@@ -26,10 +26,13 @@ characters of the merge base>/{onsa,onsa_cases}`, with a file `COMMIT` that star
 SHA of the merge base (7 characters or more). The main tree is `repo.main_tree`; the gate
 writes the base (`gate_runs.save_base`) into `base_dir`. A merge base with no base saved uses the
 base of its nearest first-parent ancestor (at most ANCESTORS back) whose `BUILT_FROM` is the same
-(a commit of the documents saves none: X-1 U4). A merge base that is HEAD, with no change of the
-code (`code_changes`), is not used (the binaries would be the tree's own; a sweep, a whole run
-of the main tree): the base is then the code before HEAD (X-1 U6), the nearest first-parent
-ancestor (at most ANCESTORS back) with a base saved whose `BUILT_FROM` differs from HEAD's.
+(a commit of the documents saves none: X-1 U4). In a run that is not narrowed (a sweep, a whole
+run of the main tree), a merge base that is HEAD, with no change of the code (`code_changes`), is
+not used (the binaries would be the tree's own, and the question is whether HEAD's code brought the
+class): the base is then the code before HEAD (X-1 U6), the nearest first-parent ancestor (at most
+ANCESTORS back) with a base saved whose `BUILT_FROM` differs from HEAD's. A narrowed run asks
+whether the work (the diff since the merge base) brought it: with no change of the code it compares
+with the merge base's own (X-1 U6b), and every class of the fix stage is from before.
 """
 import argparse
 import hashlib
@@ -48,7 +51,7 @@ GROUP_PARTS = 3  # the group of the sample's minimum: the first parts of the dir
 GIT_TIMEOUT = 60
 EXCLUDED_FROM_CODES = ("tests/", "tools/", "rules/", "decisions/", "issues/", "tasks/", "history/")
 BASE_FILES = ("onsa", "onsa_cases")  # the base binaries, in `base_dir`
-# What the binaries are built from: a tracked change there makes them differ from HEAD's.
+# What the binaries are built from: a change there (or a new file) makes them differ from HEAD's.
 BUILT_FROM = ("crates", "tools", "std", "runtime", ":(glob)Cargo.*", "rust-toolchain.toml")
 ANCESTORS = 50  # the first-parent ancestors of the merge base whose base `resolve_base` may use
 # What the heavy items read: the code and the cases (the tree a run of the main tree compares, X-1).
@@ -215,9 +218,10 @@ def _cap_hash(sel, path):
     return _hash(f"{sel.salt or ''}|cap|{path}")
 
 
-def resolve_base(root, spec):
+def resolve_base(root, spec, narrowed=False):
     """The base binaries: a `Base`, the reason they are unknown (a str), or None for `none`.
-    A merge base that is HEAD with no change of the code gives the code before HEAD's (`before_head`)."""
+    A merge base that is HEAD with no change of the code gives the code before HEAD's (`before_head`),
+    unless the run is `narrowed` (`Selection.narrowed`): then the merge base's own, as with a change."""
     if spec == "none":
         return None
     if spec != "auto":
@@ -233,7 +237,7 @@ def resolve_base(root, spec):
     if main is None:
         return f"{root} is not the top of a git work tree"
     try:
-        same = full == git(root, "rev-parse", "HEAD").strip() and not code_changes(root)
+        same = not narrowed and full == git(root, "rev-parse", "HEAD").strip() and not code_changes(root)
     except NarrowError as e:
         return f"cannot compare the base with HEAD ({e})"
     d, used = base_dir(main, full), full
@@ -268,8 +272,11 @@ def _ancestor(root, main, full, same_code):
 
 
 def code_changes(root):
-    """The tracked files of `BUILT_FROM` with changes not committed (from the root)."""
-    return [p for p in git(root, "diff", "HEAD", "--name-only", "-z", "--", *BUILT_FROM).split("\0") if p]
+    """The files of `BUILT_FROM` with changes not committed (from the root): the tracked ones and
+    the untracked ones not ignored (a new file of a crate)."""
+    tracked = git(root, "diff", "HEAD", "--name-only", "-z", "--", *BUILT_FROM).split("\0")
+    untracked = git(root, "ls-files", "--others", "--exclude-standard", "-z", "--", *BUILT_FROM).split("\0")
+    return [p for p in tracked + untracked if p]
 
 
 def base_dir(main, full):

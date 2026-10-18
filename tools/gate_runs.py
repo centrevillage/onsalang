@@ -17,7 +17,7 @@ it goes with the worktree.
 The base binaries (`save_base`, `tools/gate.sh --save-base`, the first item of a sweep): the
 `onsa` and `onsa_cases` of HEAD, built, in `narrowing.base_dir` with `COMMIT`, for the narrowed
 fuzzing of the works after it and the runs of the code after it (`narrowing.resolve_base`, X-1 U6). Only in the main tree, and only when
-the tracked files of what builds them have no change (`narrowing.code_changes`); a whole run
+the files of what builds them have no change, nor a new file (`narrowing.code_changes`); a whole run
 of the main tree saves them at its end too (`tools/gate.py`).
 
 The auto sweep (`tools/after_commit.py`, X-1 U4) in `target/gate/auto/`: `request` (the last
@@ -297,7 +297,7 @@ def save_base(root, keep, out=print, build=None, target_directory=None, debug_li
         out(f"save-base: {e}")
         return 1
     if changed:
-        out(f"save-base: refused: the tracked files have changes not committed: {' '.join(changed)}")
+        out(f"save-base: refused: the files of the code have changes not committed: {' '.join(changed)}")
         return 1
     target = target_directory(root)
     if target is None or not build(root) or not build(root, cases=True):

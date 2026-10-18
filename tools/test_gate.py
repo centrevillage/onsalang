@@ -1477,14 +1477,23 @@ class SaveBase(unittest.TestCase):
 
         self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c1))  # HEAD: the documents on c2
         self.assertEqual(base(c1).shown, f"{c1[:7]} (the code before HEAD)")
+        # a narrowed run asks about the work, which has no code: the merge base's own, here of the same code (X-1 U6b)
+        self.assertEqual(narrowing.resolve_base(self.root, "auto", narrowed=True), base(c2, before=False))
         self.write("docs/d.md", "changed\n")  # not the code: the same
+        self.write("docs/new.md", "new\n")  # untracked, outside BUILT_FROM: not the code either
         self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c1))
         git_in(self.root, "checkout", "-q", "--", "docs/d.md")
+        (self.root / "docs" / "new.md").unlink()
         self.write("crates/c.rs", "fn c() { 2 }\n")  # a change of the code: HEAD's base, as before
         self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c2, before=False))
         git_in(self.root, "checkout", "-q", "--", "crates/c.rs")
+        self.write("crates/new.rs", "fn n() {}\n")  # an untracked file of the code is a change too
+        self.assertEqual(narrowing.code_changes(self.root), ["crates/new.rs"])
+        self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c2, before=False))
+        (self.root / "crates" / "new.rs").unlink()
         git_in(self.root, "checkout", "-q", c2)  # HEAD at the code commit itself
         self.assertEqual(narrowing.resolve_base(self.root, "auto"), base(c1))
+        self.assertEqual(narrowing.resolve_base(self.root, "auto", narrowed=True), base(c2, before=False))
         git_in(self.root, "checkout", "-q", "dev")
         shutil.rmtree(self.root / "target" / "base" / c1[:7])  # no base of the code before
         self.assertIn("same as HEAD", narrowing.resolve_base(self.root, "auto"))
@@ -1492,17 +1501,20 @@ class SaveBase(unittest.TestCase):
                       narrowing.resolve_base(self.root, "auto"))
 
     def test_refuses_changes_of_what_builds_them(self):
-        for rel in ("crates/c.rs", "Cargo.toml"):
+        for rel in ("crates/c.rs", "Cargo.toml", "crates/new.rs"):  # the last untracked (X-1 U6b)
             with self.subTest(rel=rel):
                 self.write(rel, "changed\n")
                 code, out = self.save()
                 self.assertEqual(code, 1)
-                self.assertIn(f"refused: the tracked files have changes not committed: {rel}", out)
-                git_in(self.root, "checkout", "--", rel)
+                self.assertIn(f"refused: the files of the code have changes not committed: {rel}", out)
+                if rel == "crates/new.rs":
+                    (self.root / rel).unlink()
+                else:
+                    git_in(self.root, "checkout", "--", rel)
         self.assertFalse((self.root / "target" / "base").exists())
         self.assertEqual(self.built, [])
-        # untracked files and the documents do not refuse
-        self.write("crates/new.rs", "x\n")
+        # the files outside the code, untracked or not, do not refuse
+        self.write("docs/new.md", "x\n")
         self.write("docs/d.md", "changed\n")
         self.assertEqual(self.save()[0], 0)
 
@@ -3005,6 +3017,14 @@ class Fuzz(TempRepo):
                 with self.subTest(bad=bad), self.assertRaises(SystemExit) as e:
                     quiet(fuzz.main, base + bad)
                 self.assertEqual(e.exception.code, 2)
+        asked = []  # which runs ask about the work (X-1 U6b): the sample's, not the shard's nor the whole's
+        with mock.patch.object(fuzz, "run", run), \
+                mock.patch.object(fuzz, "target_directory", lambda root: self.repo.root / "target"), \
+                mock.patch.object(narrowing, "resolve_base", lambda root, spec, narrowed=None: narrowed):
+            for extra in (["--sample", "0.1", "--salt", "W9-99"], ["--shard", "1/2"], []):
+                self.assertEqual(fuzz.main(base + extra), 0)
+                asked.append(calls[-1]["base"])
+        self.assertEqual(asked, [True, False, False])
 
 
 FAKE_FMT = r"""
@@ -3652,6 +3672,8 @@ class Narrowing(unittest.TestCase):
     def test_resolve_base(self):
         self.assertIsNone(narrowing.resolve_base(self.root, "none"))
         self.assertIn("same as HEAD", narrowing.resolve_base(self.root, "auto"))  # no code before it (X-1 U6)
+        self.assertIn(f"no {self.root / 'target' / 'base' / self.full[:7] / 'COMMIT'}",  # HEAD's own (X-1 U6b)
+                      narrowing.resolve_base(self.root, "auto", narrowed=True))
         self.write("crates/c.rs", "fn c() { 1 }\n")
         self.assertIn("COMMIT", narrowing.resolve_base(self.root, "auto"))
         d = self.make_base(self.full)
