@@ -31,7 +31,7 @@ ID ごとに一つのファイルを置く。頭の欄の値と本文のラベ�
 | R・RF・X | `issues/<種類>/<ID>.md` |
 | W | `tasks/W/<ID>.md` |
 
-一覧は `python3 -B tools/docs.py list <種類>`、一つの ID は `docs.py show <ID>`、経路は `docs.py path <ID>`。
+一覧は `python3 tools/docs.py list <種類>`、一つの ID は `docs.py show <ID>`、経路は `docs.py path <ID>`。
 
 ## 役割ごとの始めに読むもの
 

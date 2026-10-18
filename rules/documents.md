@@ -11,9 +11,9 @@
   ignore の理由は、そのテストを通すことになる作業の ID で始める（`W3-11 U3c: …`）。gate の `ignores` が、済んだ作業か表に無い ID の ignore を落とす。
 
 5.3 文書（`rules/`、`spec/`、`design/`、ID のファイル、README）を編集するとき（i、docs）:
-  - 先に、vim のスワップファイル（`.<name>.swp`）が無いことを `python3 -B tools/docs.py swaps` で確かめる（`.claude/agents/` は見ないので、定義を開いているかは利用者に聞く）。確かめは、編集と別のコマンドで行う（利用者が vim で開いて回答を書いていることがある）。
+  - 先に、編集と別のコマンドで `python3 tools/docs.py swaps` を回し、vim のスワップファイルが無いことを確かめる（利用者が vim で開いて回答を書いていることがある）。
   - ID のファイルは `docs.py show <ID>` で読む。頭の欄は `docs.py set`、本文の補いは `docs.py note` で書き、他は Edit か Python の一意一致置換で編集する。
-  - 編集した後に `docs.py fmt <ファイル>` で行を整え、`docs.py check` を通す（表の列の数も見る。セルの中の `||` は `\|\|`）。
+  - 編集した後に `docs.py fmt <ファイル>` で行を整え、`docs.py check` を通す（セルの中の `||` は `\|\|`）。
 
 ### 文書の点検と移行（docs）
 
