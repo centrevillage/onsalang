@@ -73,3 +73,5 @@ git commit（親、主のツリー）
 ### 確かめ方（W4 の初めの数に足す）
 
 - コード・事例のコミットの数に対する自動の網羅の検査の回数、skipped と hold の回数、「base unknown」の回数（0 に近いこと）、段の終わり以外に親が全体を回した回数、sweep の秒（担当のビルドとの重なり）。
+- 担当の側（X1-5、暫定）: 作業の検査（`--work`）と `--quick` の回数と秒。
+  数え方: 担当の記録（`~/.claude/projects/<プロジェクト>/<セッション>/subagents/agent-*.jsonl`）の `tool_use` の `command` で `gate.sh`・`gate.py`・`bg.py` を含むものと、その `tool_result` の `gate …` の行を数える（39 回目の道具は scratchpad の約 20 行で、消えうる）。
