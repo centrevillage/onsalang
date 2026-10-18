@@ -958,7 +958,7 @@ def unsorted_line(root):
         return f"fuzz new: cannot read {new}/ ({e})"
     if not names:
         return f"fuzz new: none outside {FUZZ_DIR}/"
-    return f"fuzz new: {len(names)} not under {FUZZ_DIR}/ (sort them, rules/leader.md 4.5): " + ", ".join(names)
+    return f"fuzz new: {len(names)} not under {FUZZ_DIR}/ (sort them: tools/fuzz.py sort, rules/leader.md 4.5): " + ", ".join(names)
 
 
 # The kinds of `sort` in the order of its table, and what it does with each (X9-23).

@@ -1317,7 +1317,7 @@ class GateForms(GateRun):
             self.repo.write("tests/fuzz/1a2b3c4d.onsa", "fn\n")
             code, out = lines()
             self.assertEqual(code, 0)
-            want = "  fuzz new: 2 not under tests/fuzz/ (sort them, rules/leader.md 4.5): 7f730c9d.onsa, 840a75a2.onsa"
+            want = "  fuzz new: 2 not under tests/fuzz/ (sort them: tools/fuzz.py sort, rules/leader.md 4.5): 7f730c9d.onsa, 840a75a2.onsa"
             got = out.splitlines()
             at = got.index(want)
             self.assertTrue(got[at - 1].startswith("  golden: "), got)
