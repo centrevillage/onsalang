@@ -124,7 +124,7 @@
   - 実装待ちの一覧に項目の全体で載る gate の項目は、`--work` がその until のときと段の終わりにだけ回る。作業がその項目の判定に関わると分かっているときは、親が作業票の受け入れ条件に `--work <その項目の until>` を足す（`--work` は重ねられる）。
   - 親は、`take.py patch` の `work check:` の行に従う（三つの答えと意味は `take.py patch --help`）。親がコードを直したときは、主のツリーで作業の検査を回す。
     写した後に登録（文書の表、`tests/pending.toml`、`tools/builtin_names.toml`）を変えたら `--only static` を回し、`tests/pending.toml` を dev の版から作り直したときは `cargo test -p onsa_tests` も回す。文書だけの決定のコミットは `--quick` で確かめる。
-  - 網羅の検査: 主のツリーのコードか事例のコミットが、post-commit フック（`tools/after_commit.py`）で網羅の検査と基のバイナリの保存を裏で起こす。親は区切りで、gate の要約と `take.py patch` の `auto sweep:` の行を見る。FAILED なら、行が指す出力を読み、`rules/leader.md` 4.5 の形で仕分ける。
+  - 網羅の検査: 主のツリーのコードか事例のコミットが、post-commit フック（`tools/after_commit.py`）で網羅の検査と基のバイナリの保存を裏で起こす。親は区切りで、gate の要約と `take.py patch` の `auto sweep:` の行を見る。FAILED なら、行が指す出力を読み、`rules/leader.md` 4.5 の形で仕分ける。gate の要約の `fuzz new:` の行に並ぶ入力（作業ツリーから写したものを含む）も、同じ形で仕分け、`tests/fuzz/` に保存しないものは `target/fuzz/new/` から消す。
     全体を自分で回す前と、続けて大きく変えるときは止める（止め方と起こし方は `tools/after_commit.py --help`）。
     段の終わりは `--stage-end` で全体を回す（8.6）。
   - `warning:` の行（時間の目安を超えた）は、続けて出たら、分割の数か抜き取りの割合（`tools/gate_steps.py`）を見直す。一度だけなら、他のビルドと重なっただけのことがある。
