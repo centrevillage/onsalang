@@ -4003,6 +4003,42 @@ class PendingEdit(TempRepo):
 
     def test_the_check_is_unchanged(self):
         self.assertEqual(quiet(pending.main, ["--root", str(self.repo.root), "--gate-steps", "c-header"]), 0)
+        # with no command, `check` (X-9 U9): the same exit and output by name
+        for steps in ("c-header", "c-gcc"):
+            calls = [quiet_out(pending.main, [*cmd, "--root", str(self.repo.root), "--gate-steps", steps])
+                     for cmd in ([], ["check"])]  # fmt: skip
+            self.assertEqual(calls[0], calls[1])
+            self.assertEqual(calls[0][0], 0 if steps == "c-header" else 1)
+
+    def test_help(self):
+        for name, c in pending.COMMANDS.items():
+            with self.subTest(name=name):
+                self.assertIsInstance(c, repo.Command)
+                for text in (c.purpose, c.when, c.example):
+                    self.assertTrue(text.strip() and "\n" not in text, text)
+                self.assertTrue(c.roles)
+                self.assertEqual([r for r in c.roles if r not in repo.ROLES], [])
+                self.assertRegex(c.example, rf"^pending\.py {name}( |$)")
+                code, lines = quiet_out(pending.main, ["help", name])
+                self.assertEqual(code, 0)
+                self.assertIn(f"  例:   {c.example}", lines)
+        for role in repo.ROLES:
+            with self.subTest(role=role):
+                code, lines = quiet_out(pending.main, ["help", "--role", role])
+                want = [n for n, c in pending.COMMANDS.items() if role in c.roles]
+                self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
+        names = list(pending.COMMANDS)
+        self.assertEqual([x.split()[0] for x in quiet_out(pending.main, ["help"])[1][: len(names)]], names)
+        self.assertEqual(names, ["check", "list", "add", "remove"])  # in the order of the work (X-9 U9)
+        for flag in ("-h", "--help"):  # the list of the commands, not `check --help` (rules/common.md 1.14)
+            with self.subTest(flag=flag), self.assertRaises(SystemExit) as e:
+                quiet_out(pending.main, [flag])
+            self.assertEqual(e.exception.code, 0)
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdout", buf), self.assertRaises(SystemExit):
+            pending.main(["--help"])
+        self.assertIn("{" + ",".join(names + ["help"]) + "}", buf.getvalue())
+        self.assertNotIn("--gate-steps", buf.getvalue())
 
 
 def git_in(tree, *args):

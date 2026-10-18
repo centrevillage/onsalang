@@ -65,29 +65,20 @@ the second); `--stage-end` the last stage fails on every
 entry left whose until is not PH2 (K-13: what is left after M9 is only PH2).
 
 This module is the only place that validates the list (the Rust reader in
-`onsa_tests::pending` only reads it). It runs on its own:
-
-    tools/pending.py [--pending FILE] [--root DIR] [--gate-steps a,b,...] [--stage-end W3]
-
-Exit 0 if the list is valid (and, with --stage-end, nothing of that stage is
-left), 1 otherwise, 2 on a usage error.
-
-It also lists and edits the list (the command comes first):
-
-    tools/pending.py list [--until W3-11|W3] [--reason S-497] [--kind test-case]
-    tools/pending.py remove <target>...
-    tools/pending.py add --kind K --target T --reasons S-497,S-414 --until W3-11 --note N
-
-`list` prints `until<TAB>reasons<TAB>kind<TAB>target` (`--until` takes a work
-or a stage). `remove` takes off every entry whose target is exactly one of the
-targets, with the blank lines before it; `add` appends an entry written like
-the others after a blank line, only when the check above finds no new problem
-with it. Both write only when every target is found (or the entry passes), keep
-the rest of the file byte for byte, and stop on a table that is not one
-`[[pending]]` line followed by its `key = value` lines. Each also takes
-`--root` and `--pending`.
+`onsa_tests::pending` only reads it). Its commands are `check`, `list`, `add`
+and `remove` (COMMANDS, rules/tools.md 9.1); `pending.py help` shows their
+purposes, times, roles and examples (`--help` lists them). A call with no
+command (no argument, or a first argument `-…` but `-h` and `--help`: the
+gate's `pending`) is `check`: exit 0 if the list is
+valid (and, with --stage-end, nothing of that stage is left), 1 otherwise, 2 on
+a usage error. `list` prints `until<TAB>reasons<TAB>kind<TAB>target`. `remove`
+takes off every entry whose target is exactly one of the targets, with the
+blank lines before it; `add` appends an entry written like the others after a
+blank line, only when `check` finds no new problem with it. Both write only when
+every target is found (or the entry passes), keep the rest of the file byte for
+byte, and stop on a table that is not one `[[pending]]` line followed by its
+`key = value` lines.
 """
-import argparse
 import posixpath
 import re
 import sys
@@ -382,7 +373,6 @@ def show_path(path, root):
 
 # ---------------------------------------------------------------- listing and editing
 
-EDIT_COMMANDS = ("list", "remove", "add")
 KEY_LINE = re.compile(r"[a-z]+ = \S")
 
 
@@ -422,20 +412,19 @@ def _write_checked(path, text, expect):
     return True
 
 
-def edit_main(argv):
-    ap = argparse.ArgumentParser(prog="pending.py", description="List and edit tests/pending.toml.")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-    p_list, p_rm, p_add = (sub.add_parser(c) for c in EDIT_COMMANDS)
-    for p in (p_list, p_rm, p_add):
-        p.add_argument("--root", type=Path, default=ROOT)
-        p.add_argument("--pending", type=Path, default=None)
-    p_list.add_argument("--until")
-    p_list.add_argument("--reason")
-    p_list.add_argument("--kind")
-    p_rm.add_argument("targets", nargs="+")
+def list_args(p):
+    p.add_argument("--until", help="a work or a stage (W3-11, W3)")
+    p.add_argument("--reason")
+    p.add_argument("--kind")
+
+
+def add_args(p):
     for k in ("kind", "target", "reasons", "until", "note"):
-        p_add.add_argument(f"--{k}", required=True)
-    args = ap.parse_args(argv)
+        p.add_argument(f"--{k}", required=True, help="comma separated S / R numbers (S-497,S-414)" if k == "reasons" else None)
+
+
+def edit(args):
+    """`list`, `remove` and `add` (`args.cmd`)."""
     path = args.pending or args.root / PENDING
     text = Path(path).read_text(encoding="utf-8")
     entries, errors = load(path, text)
@@ -490,16 +479,12 @@ def edit_main(argv):
     return 0
 
 
-def main(argv=None):
-    argv = sys.argv[1:] if argv is None else list(argv)
-    if argv[:1] and argv[0] in EDIT_COMMANDS:
-        return edit_main(argv)
-    ap = argparse.ArgumentParser(description="Validate tests/pending.toml.")
-    ap.add_argument("--root", type=Path, default=ROOT)
-    ap.add_argument("--pending", type=Path, default=None)
-    ap.add_argument("--gate-steps", default=None, help="comma separated pendable gate items (default: tools/gate_steps.py)")
-    ap.add_argument("--stage-end", default=None, metavar="STAGE", help="fail if entries of STAGE (W3, M5) remain")
-    args = ap.parse_args(argv)
+def check_args(p):
+    p.add_argument("--gate-steps", default=None, help="comma separated pendable gate items (default: tools/gate_steps.py)")
+    p.add_argument("--stage-end", default=None, metavar="STAGE", help="fail if entries of STAGE (W3, M5) remain")
+
+
+def check(args):
     root = args.root
     path = args.pending or root / PENDING
     try:
@@ -524,6 +509,42 @@ def main(argv=None):
         print(f"{len(errors)} problem(s) in {show_path(path, root)}")
         return 1
     return 0
+
+
+C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
+COMMANDS = {
+    "check": C(check_args, check, ("parent", "i"),
+               "一覧を、項目の形・文書の ID・済んだ作業と照らして確かめる（gate の `pending`）。`--stage-end` はその段の項目が残れば失敗にする",
+               "一覧を編集した後と、作業の状態を変えた後（gate の `pending` と同じ）。段の終わりは `--stage-end`",
+               "pending.py check --stage-end W3"),
+    "list": C(list_args, edit, ("parent", "t", "i", "b"),
+              "項目を `until<TAB>reasons<TAB>kind<TAB>target` で並べる（`--until` は作業か段。`--reason`・`--kind` でも絞る）",
+              "載っている項目を探すとき（実装の担当が外す前、テストの担当と壊す側が載る項目を確かめるとき）",
+              "pending.py list --until W3-11 --kind test-case"),
+    "add": C(add_args, edit, ("parent", "t", "i"),
+             "項目を一つ、他と同じ書き方で末尾に足す（`check` が新しい問題を見つけないときだけ書く）",
+             "載せる項目を足すとき（実装の担当は並行の作業が無いとき。テストの担当は仮に入れて回すときだけで、回した後に `remove` で戻す）",
+             "pending.py add --kind test-case --target tests/spec/ops/groups.onsa --reasons S-497 --until W3-11 --note '…'"),
+    "remove": C(lambda p: p.add_argument("targets", nargs="+"), edit, ("parent", "t", "i"),
+                "target がちょうど一致する項目を、前の空行とともに外す（全ての target が見つかったときだけ書く）",
+                "実装した作業が、通るようになった項目を外すとき（一覧にあるのに通るものは gate が失敗にする）。テストの担当が、仮に入れた項目を回した後に戻すとき",
+                "pending.py remove tests/spec/ops/groups.onsa E0812"),
+}  # fmt: skip
+
+
+def COMMON(p):
+    """What every subcommand but `help` takes (`repo.parse_command`; `docs.py check`'s `tools` reads it too)."""
+    p.add_argument("--root", type=Path, default=ROOT)
+    p.add_argument("--pending", type=Path, default=None, help=f"the list (default: <root>/{PENDING})")
+
+
+def main(argv=None):
+    """`pending.py <command> …`; with no command (no argument, or `-…` first but `-h` and `--help`: the gate's
+    `pending`), `check`."""
+    argv = sys.argv[1:] if argv is None else list(argv)
+    named = argv[:1] and (not argv[0].startswith("-") or argv[0] in ("-h", "--help"))
+    args = repo.parse_command("pending.py", __doc__.split("\n")[0], COMMANDS, argv if named else ["check", *argv], COMMON)
+    return args.run_(args)
 
 
 if __name__ == "__main__":
