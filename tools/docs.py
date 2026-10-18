@@ -12,6 +12,7 @@
                              [--stage W3] [--section §6] | ticket W UNIT/ROLE [--out FILE]
     python3 -B tools/docs.py set ID KEY=VALUE... | note ID LABEL TEXT [--by WHO] | new KIND [--title T]
                              [--stage W4] [KEY=VALUE...] | draft S... --group N
+    python3 -B tools/docs.py help [--role ROLE] [COMMAND]   (the purpose, the time, the roles, an example)
 
 Exit: 0 nothing found, 1 found, 2 an error of the tool (a file it cannot read, no document, a
 broken round trip of `fmt`; argparse's usage errors too). The documents are `repo.doc_files`.
@@ -1939,10 +1940,11 @@ COMMANDS = {
                  "決定の変更点を見るとき（別に書かない）。下書きを確かめる段で、その節の決定を探すとき（`--section <§>`）",
                  "docs.py changes --section §6"),
     "set": C(set_args, cmd_set, EDITORS, "ID のファイルの頭の欄を書く（`KEY=` は欄を消す）",
-             "ID のファイルの頭の欄を書くとき（作業のコミットと同じ回に `status=DONE`、決定の反映で "
-             "`status=DECIDED decided=<日付>`）", "docs.py set W1-01 status=DONE"),
+             "ID のファイルの頭の欄を書くとき（親は、作業のコミットと同じ回に `status=DONE`、決定の反映で "
+             "`status=DECIDED decided=<日付>`。点検の担当は、親が作業票に規則を書いたときだけ）",
+             "docs.py set W1-01 status=DONE"),
     "note": C(note_args, cmd_note, EDITORS, "ID のファイルの本文に補いの項目を足す",
-              "ID のファイルの本文に補いを書くとき（決定の反映で、関係する R の `判断`・`反映`）",
+              "ID のファイルの本文に補いを書くとき（親は、決定の反映で、関係する R の `判断`・`反映`）",
               "docs.py note R-12 反映 \"W3-05 で直した\""),
     "new": C(new_args, cmd_new, ("parent",), "次の番号で ID のファイルを作る（主のツリーだけ）",
              "S・R などの ID を登録するとき。S は、空白の報告を受け取った回に主のツリーで登録する"
