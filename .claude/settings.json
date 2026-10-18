@@ -1,5 +1,7 @@
 {
   "hooks": {
+    "WorktreeCreate": [{"hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py WorktreeCreate"}]}],
+    "WorktreeRemove": [{"hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py WorktreeRemove"}]}],
     "PreToolUse": [{"matcher": "Bash|Agent|Read|Grep|Glob",
       "hooks": [{"type": "command", "command": "python3 -B \"$CLAUDE_PROJECT_DIR\"/tools/hooks/claude_hook.py PreToolUse"}]}],
     "PostToolUse": [{"matcher": "Bash|SendMessage",
