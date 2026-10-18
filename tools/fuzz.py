@@ -37,7 +37,8 @@ The gate item `fuzz` (this script without options) does three things:
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
    Those of a worktree, `tools/work.py patch` copies into the main tree's;
    the summary of the main tree's gate lists those `tests/fuzz/` has no file
-   of the same name for (`fuzz new: …`): the ones not sorted yet.
+   of the same name for (`fuzz new: …`): the ones not sorted yet, which
+   `fuzz.py sort` sorts (below).
 3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed
    rule: the mutants whose index in the whole run is a multiple of it; never
    a truncation), and every
@@ -94,10 +95,29 @@ every class of the fix stage is from before it.
 Inputs are bytes: the seeds and the saved inputs are read and written as
 they are (a `\r` stays, invalid UTF-8 too).
 
-    tools/fuzz.py [--per-seed N] [--truncations N] [--version V] [--jobs N]
+    tools/fuzz.py [run] [--per-seed N] [--truncations N] [--version V] [--jobs N]
                   [--binary PATH] [--cases-binary PATH] [--time-budget S]
                   [--deep] [--save] [--changed-since REV|auto] [--code-cap N]
                   [--sample F --salt ID] [--shard I/K] [--base auto|none|DIR]
+    tools/fuzz.py sort [--go] [--jobs N] [--binary PATH] [--cases-binary PATH]
+    tools/fuzz.py help [--role R] [COMMAND]
+
+The commands are `run` and `sort` (COMMANDS, rules/tools.md 9.1); `fuzz.py help`
+shows their purposes, times, roles and examples (`--help` lists them). A call
+with no command (no argument, or a first argument `-…` but `-h` and `--help`:
+the gate's `fuzz` and `fuzz-deep`) is `run`, the gate item described above.
+
+**`sort`** (X9-23) runs each input of `target/fuzz/new/` through both commands
+and the fix stage with the binaries of the tree, and sorts it with the
+replay's known classes (`Replay.knows`, as the run does): an input `tests/fuzz/`
+has a file of the same name for, and one whose classes are all known, goes; one
+that shows nothing goes into `tests/fuzz/` as a regression input (not listed);
+one with an unknown crash, internal error or signal stays (it is fixed; never
+allowed, rules/leader.md 4.5), and one with unknown classes of the fix stage
+only stays, for the parent to decide. The entries to add go with what stays
+(`entry_stub`, and `allowed_stub` for a class of the fix stage, as the run
+prints them). It prints the table and moves nothing unless `--go`; its last
+line counts each kind.
 
 `--deep` adds mutants that nest brackets or blocks thousands deep: the
 nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
@@ -146,14 +166,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import narrowing  # noqa: E402
 import pending  # noqa: E402
 import repo  # noqa: E402
+import spec_blocks  # noqa: E402
 
 ROOT = repo.ROOT
 FUZZ_DIR = repo.FUZZ_DIR
 # The work directory under cargo's target directory, and its directory of the inputs of the new classes.
 WORK, NEW = "fuzz", "new"
 # The commands of Q-06; `fmt --check` reads and does not write.
-COMMANDS = (("check",), ("fmt", "--check"))
+ONSA_COMMANDS = (("check",), ("fmt", "--check"))
 TIMEOUT = 20  # seconds per run
+# The start of the class of a run ended by a signal: never saved under tests/ (a stack overflow aborts again).
+SIGNAL = "signal "
 PER_SEED = 10
 # Changing the version changes every mutant (a new set of inputs).
 VERSION = "2"
@@ -249,7 +272,7 @@ def classify(command, returncode, stderr, timed_out=False):
     if returncode < 0:
         # A stack overflow names no place in the compiler: the command does.
         last = message_head(raw or (lines[-1] if lines else ""))
-        return Crash(f"signal {-returncode}|{name}|{last}", name, "\n".join(lines[-3:]))
+        return Crash(f"{SIGNAL}{-returncode}|{name}|{last}", name, "\n".join(lines[-3:]))
     return Crash(f"exit {returncode}|{message_head(raw or '')}", name, "\n".join(lines[:4]))
 
 
@@ -261,7 +284,7 @@ class Runner:
         self.work = Path(work)
         self.work.mkdir(parents=True, exist_ok=True)
 
-    def crashes(self, text, commands=COMMANDS):
+    def crashes(self, text, commands=ONSA_COMMANDS):
         """The crashes of the commands on `text` (a str whose bytes are
         `encode(text)`)."""
         d = Path(tempfile.mkdtemp(dir=self.work))
@@ -549,7 +572,7 @@ def base_shows(base, crash, text, seconds, work):
     return any(v.signature == crash.signature and v.left == crash.left for v in found), None
 
 
-def minimize(runner, text, signature, commands=COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS, left=None):
+def minimize(runner, text, signature, commands=ONSA_COMMANDS, budget=MINIMIZE_RUNS, seconds=MINIMIZE_SECONDS, left=None):
     """A smaller input with the same crash class: lines, then characters
     (ddmin), within `budget` runs and `seconds` (a hang takes `TIMEOUT` a run).
     `runner` is a `Runner`, or a `FixRunner` for a class of the fix stage,
@@ -683,40 +706,64 @@ def entry_stub(target, crash):
     )
 
 
-def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
-        deep=False, truncated=TRUNCATIONS, swept=False, selection=None, base=None):
-    """The gate item. `argv` runs the compiler, `fix_argv` the fix stage
-    (`onsa_cases`); `truncated` truncations of each seed, and with `swept`
-    the cuts after every rare symbol (`sweep`). `selection`
-    (`narrowing.Selection`, None for the whole run) picks the seeds to
-    mutate; `base` (`narrowing.Base`, the reason it is unknown, or None)
-    tells a new class of the fix stage from one before. Returns the exit code."""
-    root = Path(root)
-    work = Path(target_dir or root / "target") / WORK
-    runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
-    fixer = FixRunner(fix_argv, runner.work / "fix")
-    failures = []
-    start = time.time()
-    deadline = time.monotonic() + time_budget
+def allowed_stub(target, crash):
+    """The entry of `tests/fuzz/allowed.toml` for a class of the fix stage (X9-24): the class and the message
+    left as `load_allowed` reads them; the parent writes the reasons and the note (rules/leader.md 4.5)."""
+    q = spec_blocks.toml_string
+    return (f"[[allowed]]\nclass = {q(crash.signature)}\nleft = {q(crash.left)}\ninput = {q(target)}\n"
+            'reasons = ["S-?"]  # the parent writes the S / R numbers\n'
+            'note = "?"  # the parent writes it\n')
 
-    # 1. Replay the saved inputs against the list.
+
+def stubs(target, crash):
+    """The entries to add for a new class: `entry_stub`, and `allowed_stub` too for a class of the fix stage."""
+    text = f"entry to add:\n{entry_stub(target, crash)}"
+    if crash.command == FIX_COMMAND:
+        text += (f"or, when the spec puts the class outside the contract, the entry of {ALLOWED.as_posix()}:\n"
+                 f"{allowed_stub(target, crash)}")
+    return text
+
+
+@dataclass
+class Replay:
+    """The saved inputs replayed against the lists (the run's 1.): what makes a class known."""
+
+    saved: list  # the paths of tests/fuzz/*.onsa
+    listed: set  # the inputs of tests/pending.toml (kind fuzz-input)
+    allowed: dict  # {(class, left): input} of tests/fuzz/allowed.toml
+    known: dict  # {class: a listed input that shows it}
+    errors: list  # the lists cannot be read, or the fix stage cannot run: the classes known are not all
+    failures: list  # a saved input disagrees with the lists
+
+    def knows(self, c):
+        """Whether the class of `c` is known: a listed input shows it, or the allowed list has it with its
+        message left (R-207)."""
+        return (c.signature, c.left) in self.allowed or c.signature in self.known
+
+
+def examine(runner, fixer, texts, jobs, seconds):
+    """(for each text, the crashes of both commands and the violations of the fix stage; why the fix stage
+    cannot run, or None: then the crashes alone)."""
+    with ThreadPoolExecutor(jobs) as ex:
+        crashes = list(ex.map(runner.crashes, texts))
+    try:
+        return [c + f for c, f in zip(crashes, fixer.violations(texts, seconds))], None
+    except RuntimeError as e:
+        return crashes, str(e)
+
+
+def replay_saved(root, runner, fixer, jobs, deadline):
+    """The `Replay` of the saved inputs (the fix stage too, W3-17), within the `deadline` (monotonic)."""
     entries, errors = pending.load(root / repo.PENDING)
-    failures += errors
     listed = {e.target for e in pending.of_kind(entries, "fuzz-input")}
-    allowed, errors = load_allowed(root, listed)
-    failures += errors
+    allowed, more = load_allowed(root, listed)
+    errors += more
     allowed_inputs = {inp: key for key, inp in allowed.items()}
     saved = sorted((root / FUZZ_DIR).glob("*.onsa")) if (root / FUZZ_DIR).is_dir() else []
-    known = {}
-    with ThreadPoolExecutor(jobs) as ex:
-        replayed = list(ex.map(lambda p: runner.crashes(read_input(p)), saved))
-    # The saved inputs go through the fix stage too (W3-17).
-    try:
-        broken = fixer.violations([read_input(p) for p in saved], max(1.0, deadline - time.monotonic()))
-    except RuntimeError as e:
-        failures.append(f"the fix stage cannot run on the saved inputs: {e}")
-        broken = [[] for _ in saved]
-    replayed = [crashes + fixes for crashes, fixes in zip(replayed, broken)]
+    replayed, why = examine(runner, fixer, [read_input(p) for p in saved], jobs, max(1.0, deadline - time.monotonic()))
+    if why:
+        errors.append(f"the fix stage cannot run on the saved inputs: {why}")
+    known, failures = {}, []
     for p, crashes in zip(saved, replayed):
         rel = p.relative_to(root).as_posix()
         if rel in listed:
@@ -743,6 +790,29 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
             what = "breaks the contract of a fix candidate" if crashes[0].command == FIX_COMMAND else "crashes"
             failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {crashes[0].command}: "
                             f"{crashes[0].signature}")
+    return Replay(saved, listed, allowed, known, errors, failures)
+
+
+def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
+        deep=False, truncated=TRUNCATIONS, swept=False, selection=None, base=None):
+    """The gate item. `argv` runs the compiler, `fix_argv` the fix stage
+    (`onsa_cases`); `truncated` truncations of each seed, and with `swept`
+    the cuts after every rare symbol (`sweep`). `selection`
+    (`narrowing.Selection`, None for the whole run) picks the seeds to
+    mutate; `base` (`narrowing.Base`, the reason it is unknown, or None)
+    tells a new class of the fix stage from one before. Returns the exit code."""
+    root = Path(root)
+    work = Path(target_dir or root / "target") / WORK
+    runner = Runner(argv, work / f"work-{os.getpid()}")  # one per process: two runs do not share it
+    fixer = FixRunner(fix_argv, runner.work / "fix")
+    failures = []
+    start = time.time()
+    deadline = time.monotonic() + time_budget
+
+    # 1. Replay the saved inputs against the list.
+    replay = replay_saved(root, runner, fixer, jobs, deadline)
+    failures += replay.errors + replay.failures
+    saved, listed, allowed = replay.saved, replay.listed, replay.allowed
 
     # 2. Fuzz: the seeds, the corpus and the weights are the whole run's; only the seeds to mutate narrow.
     seed_files = seeds(root)
@@ -793,22 +863,20 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         if fixes.get(i):
             breaking += 1
         for c in crashes + fixes.get(i, []):
-            if (c.signature, c.left) in allowed:
-                continue
-            if c.signature not in known and c.signature not in new:
+            if not replay.knows(c) and c.signature not in new:
                 new[c.signature] = (seed, which, text, c)
     written = []
     before = []  # the lines of the classes the base shows too, in a narrowed run
     narrowed = bool(selection and selection.narrowed)
     for signature, (seed, which, text, c) in new.items():
-        commands = tuple(cmd for cmd in COMMANDS if " ".join(cmd) == c.command)
+        commands = tuple(cmd for cmd in ONSA_COMMANDS if " ".join(cmd) == c.command)
         seconds = max(0.0, min(MINIMIZE_SECONDS, deadline - time.monotonic()))
         who = fixer if c.command == FIX_COMMAND else runner
         small = minimize(who, text, signature, commands, seconds=seconds, left=c.left or None) if seconds > 0 else text
         name = f"{short_name(small)}.onsa"
         target = (FUZZ_DIR / name).as_posix()
         # A signal (a stack overflow) is never saved under tests/: replaying it would abort again.
-        dest_dir = root / FUZZ_DIR if save and not signature.startswith("signal ") else work / NEW
+        dest_dir = root / FUZZ_DIR if save and not signature.startswith(SIGNAL) else work / NEW
         dest_dir.mkdir(parents=True, exist_ok=True)
         (dest_dir / name).write_bytes(encode(small))
         written.append((dest_dir / name, target, c, seed, which))
@@ -845,8 +913,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
     )
     for path, target, c, seed, which in written:
         shown = path.relative_to(root).as_posix() if root in path.parents else str(path)
-        out(f"\n{shown}  ({c.command}; seed {seed}, {which})\n{c.detail}\nentry to add:\n"
-            f"{entry_stub(target, c)}")
+        out(f"\n{shown}  ({c.command}; seed {seed}, {which})\n{c.detail}\n{stubs(target, c)}")
     for line in before:
         out(line)
     for f in failures:
@@ -894,49 +961,169 @@ def unsorted_line(root):
     return f"fuzz new: {len(names)} not under {FUZZ_DIR}/ (sort them, rules/leader.md 4.5): " + ", ".join(names)
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--root", type=Path, default=ROOT)
-    ap.add_argument("--per-seed", type=int, default=PER_SEED)
-    ap.add_argument("--truncations", type=int,
-                    help=f"truncations of each seed (default {TRUNCATIONS}; 0 with --deep, which would repeat them)")
-    ap.add_argument("--version", default=VERSION)
-    ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
-    ap.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
-    ap.add_argument("--cases-binary", type=Path,
-                    help="the fix stage's onsa_cases (default: build <target directory>/debug/onsa_cases)")
-    ap.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
-    ap.add_argument("--deep", action="store_true",
-                    help="also nest thousands deep (S-183, W3-14) and sweep the rare symbols (FZ-1); "
-                         "the gate item fuzz-deep, at a stage end only")
-    ap.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
-    narrowing.add_arguments(ap, base=True)
-    args, selection = narrowing.parse(ap, argv)
+# The kinds of `sort` in the order of its table, and what it does with each (X9-23).
+SORTED = {
+    "same name": "remove: tests/fuzz/ has a file of the same name",
+    "fixed": "place in tests/fuzz/: a regression input (not listed)",
+    "known": "remove: a listed input or an allowed entry shows its classes",
+    "crash": "keep: an internal error or a crash is fixed, never allowed (rules/leader.md 4.5)",
+    "new": "keep: a new class of the fix stage, for the parent to decide (rules/leader.md 4.5)",
+}
+GONE = ("same name", "fixed", "known")
+
+
+def sort_inputs(root, runner, fixer, jobs, new_dir, go, out=print):
+    """`sort` (X9-23): each input of `new_dir` (`new_inputs`) by `SORTED`, with the known classes of the run
+    (`replay_saved`, `Replay.knows`); with `go`, places and removes them. Moves nothing when the lists cannot be
+    read or the fix stage cannot run (exit 1)."""
+    root, new_dir = Path(root), Path(new_dir)
+    names = sorted(p.name for p in new_dir.glob("*.onsa")) if new_dir.is_dir() else []
+    rows = [(n, "same name", []) for n in names if (root / FUZZ_DIR / n).exists()]
+    rest = [n for n in names if not (root / FUZZ_DIR / n).exists()]
+    errors = []
+    if rest:  # the inputs to run: the replay gives the known classes
+        replay = replay_saved(root, runner, fixer, jobs, time.monotonic() + TIME_BUDGET)
+        found, why = examine(runner, fixer, [read_input(new_dir / n) for n in rest], jobs, TIME_BUDGET)
+        errors = replay.errors + ([f"the fix stage cannot run on the new inputs: {why}"] if why else [])
+        for f in replay.failures:
+            out(f"replay: {f}")
+        for n, classes in zip(rest, found):
+            unknown = [c for c in classes if not replay.knows(c)]
+            kind = ("fixed" if not classes else "known" if not unknown
+                    else "crash" if any(c.command != FIX_COMMAND for c in unknown) else "new")
+            rows.append((n, kind, classes if kind == "known" else unknown))
+    rows.sort(key=lambda r: (list(SORTED).index(r[1]), r[0]))
+    for n, kind, classes in rows:
+        out(f"{kind:<9}  {n}  {SORTED[kind]}" + "".join(f"\n           {c.command}: {c.signature}" for c in classes))
+    for n, kind, classes in rows:
+        if kind in GONE:
+            continue
+        c = next((c for c in classes if c.command != FIX_COMMAND), classes[0])
+        stub = ("a signal is never saved under tests/: the input stays until it is fixed\n"
+                if c.signature.startswith(SIGNAL) else stubs((FUZZ_DIR / n).as_posix(), c))
+        out(f"\n{n}  ({c.command})\n{c.detail}\n{stub}")
+    for e in errors:
+        out(f"FAIL {e}")
+    moved = go and not errors
+    if moved:
+        for n, kind, _ in rows:
+            if kind == "fixed":
+                (root / FUZZ_DIR).mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(new_dir / n, root / FUZZ_DIR / n)
+            if kind in GONE:
+                (new_dir / n).unlink()
+    counts = collections.Counter(kind for _, kind, _ in rows)
+    out(f"sort: {len(rows)} inputs in {new_dir}: " + ", ".join(f"{counts[k]} {k}" for k in SORTED) + "; "
+        + ("placed and removed" if moved else "nothing moved" + ("" if errors else " (--go places and removes them)")))
+    return 1 if errors else 0
+
+
+def run_args(p):
+    p.add_argument("--per-seed", type=int, default=PER_SEED)
+    p.add_argument("--truncations", type=int,
+                   help=f"truncations of each seed (default {TRUNCATIONS}; 0 with --deep, which would repeat them)")
+    p.add_argument("--version", default=VERSION)
+    p.add_argument("--time-budget", type=float, default=TIME_BUDGET, help="seconds for the whole run")
+    p.add_argument("--deep", action="store_true",
+                   help="also nest thousands deep (S-183, W3-14) and sweep the rare symbols (FZ-1); "
+                        "the gate item fuzz-deep, at a stage end only")
+    p.add_argument("--save", action="store_true", help="write the new minimized inputs into tests/fuzz/")
+    narrowing.add_arguments(p, base=True)
+
+
+def run_command(args):
+    ap = args.parser_
+    try:
+        selection = narrowing.selection(ap, args, args.root)
+    except narrowing.NarrowError as e:
+        ap.exit(2, f"{ap.prog}: cannot narrow the seeds: {e}\n")
     truncated = args.truncations if args.truncations is not None else 0 if args.deep else TRUNCATIONS
     if args.per_seed < 0 or truncated < 0 or args.jobs < 1 or args.time_budget <= 0:
         ap.error("--per-seed and --truncations must be 0 or more, --jobs 1 or more and --time-budget more than 0")
-    target = target_directory(args.root)
-    if target is None:
-        print("fuzz: cannot read cargo's target directory (cargo metadata)", file=sys.stderr)
+    tools = binaries(args)
+    if tools is None:
         return 2
-    binary = args.binary
-    if binary is None:
-        if not build(args.root):
-            print("fuzz: cannot build the compiler (cargo build -p onsa_cli)", file=sys.stderr)
-            return 2
-        binary = target / "debug" / "onsa"
-    cases = args.cases_binary
-    if cases is None:
-        if not build(args.root, cases=True):
-            print("fuzz: cannot build onsa_cases (cargo build -p onsa_tests --bin onsa_cases)", file=sys.stderr)
-            return 2
-        cases = target / "debug" / "onsa_cases"
+    target, binary, cases = tools
     return run(
         args.root, [str(binary)], [str(cases)], args.per_seed, args.version, args.jobs, args.save,
         target_dir=target, time_budget=args.time_budget, deep=args.deep, truncated=truncated, swept=args.deep,
         selection=selection,
         base=narrowing.resolve_base(args.root, args.base, narrowed=bool(selection and selection.narrowed)),
     )
+
+
+def sort_args(p):
+    p.add_argument("--go", action="store_true", help="place and remove them (without it, the table alone)")
+    p.epilog = ("手で保存するときは、入力を target/fuzz/new/ から tests/fuzz/ へ写し、並んだ雛形の項目を足す"
+                "（run の --save は、新しい類の入力を直に tests/fuzz/ に書く。signal は書かない）。"
+                "作業ツリーの入力は work.py patch が主のツリーの target/fuzz/new/ に写す。名は中身の hash なので、"
+                "消した入力も、同じ作業ツリーで patch をもう一度回すとまた写る（sort がまた消す）。")
+
+
+def sort_command(args):
+    if args.jobs < 1:
+        args.parser_.error("--jobs must be 1 or more")
+    tools = binaries(args)
+    if tools is None:
+        return 2
+    target, binary, cases = tools
+    with tempfile.TemporaryDirectory(prefix="onsa-fuzz-sort-") as work:
+        runner = Runner([str(binary)], work)
+        return sort_inputs(args.root, runner, FixRunner([str(cases)], runner.work / "fix"), args.jobs,
+                           target / WORK / NEW, args.go)
+
+
+def binaries(args):
+    """(cargo's target directory, the compiler, `onsa_cases`), built unless named; None (said) when it cannot."""
+    target = target_directory(args.root)
+    if target is None:
+        print("fuzz: cannot read cargo's target directory (cargo metadata)", file=sys.stderr)
+        return None
+    binary = args.binary
+    if binary is None:
+        if not build(args.root):
+            print("fuzz: cannot build the compiler (cargo build -p onsa_cli)", file=sys.stderr)
+            return None
+        binary = target / "debug" / "onsa"
+    cases = args.cases_binary
+    if cases is None:
+        if not build(args.root, cases=True):
+            print("fuzz: cannot build onsa_cases (cargo build -p onsa_tests --bin onsa_cases)", file=sys.stderr)
+            return None
+        cases = target / "debug" / "onsa_cases"
+    return target, binary, cases
+
+
+C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
+COMMANDS = {
+    "run": C(run_args, run_command, ("parent", "t", "i", "b"),
+             "保存済みの入力を一覧と照らし、変異と切り詰めを両方の命令と候補の段に通す（gate の `fuzz`。`--deep` は `fuzz-deep`）",
+             "gate が命令の名を付けずに呼ぶ。手で回すのは、作業がファズかその道具を扱うときだけ（rules/checks.md 4 章）",
+             "fuzz.py run --changed-since auto --sample 0.1 --salt X-9/U11"),
+    "sort": C(sort_args, sort_command, ("parent",),
+              "target/fuzz/new/ の入力を今のバイナリで回し、同名・直った・既知・異常終了・新しい類に分ける（`--go` で置く・消す）",
+              "区切りで、主のツリーの gate の要約の `fuzz new:` に入力が並んだとき。表を読んでから `--go`",
+              "fuzz.py sort --go"),
+}  # fmt: skip
+
+
+def COMMON(p):
+    """What every subcommand but `help` takes (`repo.parse_command`; `docs.py check`'s `tools` reads it too)."""
+    p.add_argument("--root", type=Path, default=ROOT)
+    p.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
+    p.add_argument("--binary", type=Path, help="the compiler (default: build <target directory>/debug/onsa)")
+    p.add_argument("--cases-binary", type=Path,
+                   help="the fix stage's onsa_cases (default: build <target directory>/debug/onsa_cases)")
+    p.set_defaults(parser_=p)
+
+
+def main(argv=None):
+    """`fuzz.py <command> …`; with no command (no argument, or `-…` first but `-h` and `--help`: the gate's
+    `fuzz` and `fuzz-deep`), `run`."""
+    argv = sys.argv[1:] if argv is None else list(argv)
+    named = argv[:1] and (not argv[0].startswith("-") or argv[0] in ("-h", "--help"))
+    args = repo.parse_command("fuzz.py", __doc__.split("\n")[0], COMMANDS, argv if named else ["run", *argv], COMMON)
+    return args.run_(args)
 
 
 if __name__ == "__main__":

@@ -3159,6 +3159,163 @@ class Fuzz(TempRepo):
                 asked.append(calls[-1]["base"])
         self.assertEqual(asked, [True, False, False])
 
+    # X9-23: `fuzz.py sort`, with the fake compiler and fix stage (a signal is a SIGKILL, rules/common.md 3.1).
+    def sort(self, go=False):
+        lines = []
+        runner = fuzz.Runner(self.argv, self.repo.root / "target" / "fuzz" / "work-sort")
+        fixer = fuzz.FixRunner(self.fix_argv, runner.work / "fix")
+        code = fuzz.sort_inputs(self.repo.root, runner, fixer, 2, self.new_dir, go, out=lines.append)
+        return code, "\n".join(lines)
+
+    @property
+    def new_dir(self):
+        return self.repo.root / "target" / "fuzz" / "new"
+
+    def test_sort_sorts_the_new_inputs(self):
+        self.repo.write("tests/fuzz/x.onsa", "X")
+        self.repo.write("tests/pending.toml", entry("fuzz-input", "tests/fuzz/x.onsa"))
+        self.repo.write("tests/fuzz/f.onsa", "BADCANDIDATE")
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/f.onsa"))
+        self.repo.write("tests/fuzz/same.onsa", "kept as it is")
+        inputs = {"same.onsa": "X", "ok.onsa": "ok", "kx.onsa": "aX", "kf.onsa": "BADCANDIDATE", "z.onsa": "Z",
+                  "at.onsa": "@", "mix.onsa": "BADCANDIDATE @"}
+        for name, text in inputs.items():
+            self.repo.write(f"target/fuzz/new/{name}", text)
+        code, text = self.sort()
+        self.assertEqual(code, 0, text)
+        rows = re.findall(r"^(same name|fixed|known|crash|new) +(\S+)  (?:keep|remove|place)", text, re.M)
+        self.assertEqual(rows, [("same name", "same.onsa"), ("fixed", "ok.onsa"), ("known", "kf.onsa"),
+                                ("known", "kx.onsa"), ("crash", "at.onsa"), ("crash", "mix.onsa"),
+                                ("crash", "z.onsa")], text)
+        self.assertIn("sort: 7 inputs in", text)
+        self.assertIn(": 1 same name, 1 fixed, 2 known, 3 crash, 0 new; nothing moved (--go places and removes them)",
+                      text)
+        self.assertIn('target = "tests/fuzz/at.onsa"', text)
+        self.assertIn('target = "tests/fuzz/mix.onsa"', text)  # the crash's entry, not the known class's
+        self.assertIn("z.onsa  (check)", text)
+        self.assertIn("a signal is never saved under tests/", text)
+        self.assertNotIn("[[allowed]]", text)  # a crash is never allowed
+        self.assertEqual(sorted(p.name for p in self.new_dir.iterdir()), sorted(inputs))  # nothing moved
+        self.assertFalse((self.repo.root / "tests/fuzz/ok.onsa").exists())
+        code, text = self.sort(go=True)
+        self.assertEqual(code, 0, text)
+        self.assertIn("; placed and removed", text)
+        self.assertEqual(sorted(p.name for p in self.new_dir.iterdir()), ["at.onsa", "mix.onsa", "z.onsa"])
+        self.assertEqual((self.repo.root / "tests/fuzz/ok.onsa").read_text(), "ok")
+        self.assertEqual((self.repo.root / "tests/fuzz/same.onsa").read_text(), "kept as it is")
+        self.assertEqual(self.go()[0], 0)  # the placed input is a regression input the run agrees with
+        # nothing to sort: no run of the compiler
+        shutil.rmtree(self.new_dir)
+        self.assertEqual(self.sort(), (0, f"sort: 0 inputs in {self.new_dir}: 0 same name, 0 fixed, 0 known, 0 crash, "
+                                          "0 new; nothing moved (--go places and removes them)"))
+
+    def test_sort_gives_the_allowed_entry_of_a_new_class(self):
+        # X9-24: a new class of the fix stage stays with both entries; the allowed one, its reasons written,
+        # is what the run reads (`load_allowed`)
+        self.repo.write("target/fuzz/new/nf.onsa", "BADCANDIDATE")
+        code, text = self.sort(go=True)
+        self.assertEqual(code, 0, text)
+        self.assertIn(": 0 same name, 0 fixed, 0 known, 0 crash, 1 new; placed and removed", text)
+        self.assertIn('kind = "fuzz-input"', text)
+        stub = text[text.index("[[allowed]]"):text.index("sort: ")]
+        self.assertTrue(self.new_dir.joinpath("nf.onsa").exists())
+        self.repo.write("tests/fuzz/nf.onsa", "BADCANDIDATE")
+        self.repo.write("tests/fuzz/allowed.toml", stub)
+        got, errors = fuzz.load_allowed(self.repo.root, set())
+        self.assertEqual((got, errors), ({}, ["tests/fuzz/allowed.toml: allowed[0]: `reasons` must be an array of one "
+                                              "or more S / R numbers (`S-386`, `R-219`)"]))
+        self.repo.write("tests/fuzz/allowed.toml", stub.replace('"S-?"', '"S-45"'))
+        self.assertEqual(fuzz.load_allowed(self.repo.root, set()),
+                         ({(self.BAD, "m"): "tests/fuzz/nf.onsa"}, []))
+        code, text = self.go()
+        self.assertEqual(code, 0, text)
+        self.assertIn("(0 listed, 1 allowed)", text)
+        # the text of a class and a message as they are, quotes and backslashes too
+        c = fuzz.Crash('fix|E0001|a "q" \\ `…`|E0002', fuzz.FIX_COMMAND, "", 'left "x" \\ #')
+        item = tomllib.loads(fuzz.allowed_stub("tests/fuzz/a.onsa", c))["allowed"][0]
+        self.assertEqual((item["class"], item["left"], item["input"]), (c.signature, c.left, "tests/fuzz/a.onsa"))
+
+    def test_sort_moves_nothing_when_it_cannot_tell(self):
+        self.repo.write("target/fuzz/new/ok.onsa", "ok")
+        self.repo.write("target/fuzz/new/bad.onsa", "CRASH_FIX")
+        code, text = self.sort(go=True)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL the fix stage cannot run on the new inputs: exit 3: boom", text)
+        self.assertIn("; nothing moved", text)
+        self.assertNotIn("--go places", text)
+        self.assertEqual(sorted(p.name for p in self.new_dir.iterdir()), ["bad.onsa", "ok.onsa"])
+        self.repo.write("target/fuzz/new/bad.onsa", "ok too")
+        self.repo.write("tests/fuzz/allowed.toml", "[x]\n")  # the lists cannot be read: the known classes neither
+        code, text = self.sort(go=True)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL tests/fuzz/allowed.toml: unknown top-level key `x`", text)
+        self.assertEqual(len(list(self.new_dir.iterdir())), 2)
+
+    def test_the_run_gives_the_allowed_entry(self):
+        # X9-24: the failure of a new class of the fix stage gives the allowed entry too; a crash's does not
+        self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 1, text)
+        self.assertIn(f'[[allowed]]\nclass = "{self.BAD}"\nleft = "m"\ninput = "tests/fuzz/', text)
+        self.repo.write("tests/spec/x.onsa", "XXXXXXXXXXXXXXXXXXXX\n")
+        code, text = self.go(per_seed=3)
+        self.assertEqual(code, 1, text)
+        self.assertIn('kind = "fuzz-input"', text)
+        self.assertNotIn("[[allowed]]", text)
+
+    def test_commands(self):
+        # X9-23, rules/tools.md 9.1: no command is `run` (the gate's call); `sort` finds the new inputs
+        calls = []
+        base = ["--root", str(self.repo.root), "--binary", "onsa", "--cases-binary", "onsa_cases"]
+        with mock.patch.object(fuzz, "run", lambda *a, **kw: calls.append((a, kw)) or 0), \
+                mock.patch.object(fuzz, "sort_inputs", lambda *a, **kw: calls.append(a) or 0), \
+                mock.patch.object(fuzz, "target_directory", lambda root: self.repo.root / "target"):
+            for extra in ([], ["--deep", "--shard", "0/2", "--base", "none"]):
+                with self.subTest(extra=extra):
+                    calls.clear()
+                    self.assertEqual((fuzz.main(base + extra), fuzz.main(["run", *base, *extra])), (0, 0))
+                    self.assertEqual(calls[0], calls[1])
+            calls.clear()
+            self.assertEqual(fuzz.main(["sort", *base, "--go", "--jobs", "3"]), 0)
+            (root, runner, fixer, jobs, new_dir, go), = calls
+            self.assertEqual((root, runner.argv, fixer.argv, jobs, new_dir, go),
+                             (self.repo.root, ["onsa"], ["onsa_cases"], 3, self.new_dir, True))
+            with self.assertRaises(SystemExit) as e:
+                quiet(fuzz.main, ["sort", *base, "--per-seed", "1"])
+            self.assertEqual(e.exception.code, 2)
+
+    def test_help(self):
+        # rules/tools.md 9.4, as `Work.test_help`
+        for name, c in fuzz.COMMANDS.items():
+            with self.subTest(name=name):
+                self.assertIsInstance(c, repo.Command)
+                for text in (c.purpose, c.when, c.example):
+                    self.assertTrue(text.strip() and "\n" not in text, text)
+                self.assertTrue(c.roles)
+                self.assertEqual([r for r in c.roles if r not in repo.ROLES], [])
+                self.assertRegex(c.example, rf"^fuzz\.py {name}( |$)")
+                code, lines = quiet_out(fuzz.main, ["help", name])
+                self.assertEqual(code, 0)
+                self.assertIn(f"  例:   {c.example}", lines)
+        for role in repo.ROLES:
+            with self.subTest(role=role):
+                code, lines = quiet_out(fuzz.main, ["help", "--role", role])
+                want = [n for n, c in fuzz.COMMANDS.items() if role in c.roles]
+                self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
+        names = list(fuzz.COMMANDS)
+        self.assertEqual([x.split()[0] for x in quiet_out(fuzz.main, ["help"])[1][: len(names)]], names)
+        self.assertEqual(names, ["run", "sort"])
+        sort_help = "\n".join(quiet_out(fuzz.main, ["help", "sort"])[1])
+        for part in ("--save", "work.py patch", "もう一度回すとまた写る"):  # saving by hand (X9-23)
+            self.assertIn(part, sort_help.replace("\n", ""))
+        for flag in ("-h", "--help"):  # the list of the commands, not `run --help` (rules/common.md 1.14)
+            buf = io.StringIO()
+            with self.subTest(flag=flag), mock.patch.object(sys, "stdout", buf), self.assertRaises(SystemExit) as e:
+                fuzz.main([flag])
+            self.assertEqual(e.exception.code, 0)
+            self.assertIn("{run,sort,help}", buf.getvalue())
+            self.assertNotIn("--per-seed", buf.getvalue())
+
 
 FAKE_FMT = r"""
 import re, sys
