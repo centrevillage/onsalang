@@ -75,6 +75,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
+import fuzz  # noqa: E402
 import gate_runs  # noqa: E402
 import gate_steps  # noqa: E402
 import narrowing  # noqa: E402
@@ -349,9 +350,10 @@ examples:
   tools/gate.sh --quick           in the middle of a work (not the verdict)
 A worktree keeps its runs in its target/gate/history.jsonl: `tools/take.py patch` reads the last
 work check there and says whether the parent need run it again.
-In the main tree, the summary shows `sweep: …` (the shards) and `auto sweep: …` (the sweep a
-commit starts, tools/after_commit.py --help) after the golden line; only the warnings and the last
-line (the verdict) come after them. A whole run saves the base binaries of a clean HEAD."""
+In the main tree, the summary shows `fuzz new: …` (the inputs in target/fuzz/new/ that tests/fuzz/
+has no file of the same name for: not sorted yet), `sweep: …` (the shards) and `auto sweep: …` (the
+sweep a commit starts, tools/after_commit.py --help) after the golden line; only the warnings and the
+last line (the verdict) come after them. A whole run saves the base binaries of a clean HEAD."""
 
 
 def golden_changes(root=ROOT):
@@ -513,6 +515,7 @@ def _history(root, form, results, failed, tree=(None, False, None)):
     if gate_runs.whole_form(form.label()):
         gate_runs.save_base(root, gate_steps.BASES_KEPT, out=lambda line: notes.append(f"base: {line}"),
                             debug_limit=gate_steps.DEBUG_DIR_LIMIT)  # fmt: skip
+    notes.append(fuzz.unsorted_line(root))
     try:
         rows, bad = gate_runs.read_history(root)
     except OSError as e:

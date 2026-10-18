@@ -35,7 +35,9 @@ The gate item `fuzz` (this script without options) does three things:
    A crash of a new class fails the gate: its first input is minimized and
    written to `target/fuzz/new/`, with the entry to add (the gate writes
    nothing under `tests/`; `--save` copies the inputs into `tests/fuzz/`).
-   Those of a worktree, `tools/take.py patch` copies into the main tree's.
+   Those of a worktree, `tools/take.py patch` copies into the main tree's;
+   the summary of the main tree's gate lists those `tests/fuzz/` has no file
+   of the same name for (`fuzz new: …`): the ones not sorted yet.
 3. **Fix candidates** (S-236, W3-17). One mutant in `FIX_EVERY` (a fixed
    rule: the mutants whose index in the whole run is a multiple of it; never
    a truncation), and every
@@ -875,6 +877,21 @@ def target_directory(root):
 def new_inputs(root):
     """The directory a run in `root` keeps the inputs of the new classes in (`run`), as `main` finds it."""
     return Path(target_directory(root) or Path(root) / "target") / WORK / NEW
+
+
+def unsorted_line(root):
+    """The line of the main tree's gate summary (X-1 U9): the inputs in `new_inputs` that `tests/fuzz/`
+    has no file of the same name for (`--save` keeps the name), for the parent to sort."""
+    new = new_inputs(root)
+    try:
+        names = sorted(n for n in os.listdir(new) if n.endswith(".onsa") and not (Path(root) / FUZZ_DIR / n).exists())
+    except FileNotFoundError:
+        names = []
+    except OSError as e:
+        return f"fuzz new: cannot read {new}/ ({e})"
+    if not names:
+        return f"fuzz new: none outside {FUZZ_DIR}/"
+    return f"fuzz new: {len(names)} not under {FUZZ_DIR}/ (sort them, rules/leader.md 4.5): " + ", ".join(names)
 
 
 def main(argv=None):

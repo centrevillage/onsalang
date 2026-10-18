@@ -1298,6 +1298,44 @@ class GateForms(GateRun):
             self.assertEqual(gate.main(["--sweep"], steps=steps, root=self.root, out=io.StringIO()), 2)
         self.assertIn("cannot read the history", err.getvalue())
 
+    def test_the_fuzz_inputs_not_sorted(self):
+        """X-1 U9: the main tree's summary lists the inputs in `fuzz.new_inputs` that tests/fuzz/ has no file
+        of the same name for, after the golden line and before `sweep:`; it does not fail the gate, and a
+        worktree's summary has no such line."""
+        new = self.root / "target" / "fuzz" / "new"
+        lines = lambda argv=(): self.run_main(list(argv), [fake("a")])  # noqa: E731
+        with mock.patch.object(fuzz, "target_directory", return_value=self.root / "target"):
+            code, out = lines()
+            self.assertEqual(code, 0)
+            self.assertIn("  fuzz new: none outside tests/fuzz/\n", out)  # no directory yet
+            new.mkdir(parents=True)
+            for name in ("840a75a2.onsa", "7f730c9d.onsa", "1a2b3c4d.onsa", "notes.txt"):
+                (new / name).write_text("fn\n")
+            self.repo.write("tests/fuzz/1a2b3c4d.onsa", "fn\n")
+            code, out = lines()
+            self.assertEqual(code, 0)
+            want = "  fuzz new: 2 not under tests/fuzz/ (sort them, rules/leader.md 4.5): 7f730c9d.onsa, 840a75a2.onsa"
+            got = out.splitlines()
+            at = got.index(want)
+            self.assertTrue(got[at - 1].startswith("  golden: "), got)
+            self.assertTrue(got[at + 1].startswith("  sweep: next "), got)
+            self.assertIn(want, lines(["--only", "a"])[1].splitlines())  # as `sweep:`
+            self.assertNotIn("fuzz new:", lines(["--quick"])[1])  # as `sweep:`
+            for name in ("840a75a2.onsa", "7f730c9d.onsa"):
+                self.repo.write(f"tests/fuzz/{name}", "fn\n")
+            self.assertIn("  fuzz new: none outside tests/fuzz/\n", lines()[1])
+            shutil.rmtree(new)
+            new.write_text("not a directory\n")
+            code, out = lines()
+            self.assertEqual(code, 0)
+            self.assertRegex(out, rf"\n  fuzz new: cannot read {re.escape(str(new))}/ \(.+\)\n")
+            wt = self.worktree()
+            (wt / "target" / "fuzz" / "new").mkdir(parents=True)
+            (wt / "target" / "fuzz" / "new" / "7f730c9d.onsa").write_text("fn\n")
+            out = io.StringIO()
+            quiet(gate.main, [], steps=[fake("a")], root=wt, out=out)
+            self.assertNotIn("fuzz new:", out.getvalue())
+
     def test_the_warning_of_the_time(self):
         steps = [sleeper("s3", 0.3), sleeper("s2", 0.2), sleeper("s1", 0.1), fake("s0")]
         with mock.patch.object(gate_steps, "BUDGET_WORK", 0.4):

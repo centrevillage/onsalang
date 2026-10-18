@@ -69,7 +69,7 @@ the line `auto sweep:` says, when one applies:
 and then the outcome: FAILED at <commit>: <items> (<output>) / last PASS at <commit> / no sweep yet
 when it says FAILED:
   read      the output the line points to (in {gate_runs.AUTO / 'runs'}/) and the inputs the fuzzing
-            made small, in target/fuzz/new/
+            made small, in target/fuzz/new/ (the gate's `fuzz new: …` lists those not sorted yet)
   marked    a class the fuzzing marks `(pre-existing: the base <commit> (the code before HEAD)
             shows it)` was there at that commit, before the code of HEAD: not one the commit
             brought (the fuzzing line says `base unknown` when no base tells them apart)
