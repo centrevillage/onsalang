@@ -46,7 +46,7 @@
 5. 算術・変換の意味に触れたら、テストベクトル（D-16）を作り直し、差分を報告する（承認は親）。
 6. SPEC-GAP の印が照合を通る（Q-10。gate の `gap-marks`）。
 7. 組込みの名前の直書きが増えていない（Q-14。gate の `builtin-names`。許可リストは `tools/builtin_names.toml`）。同じ判断を二か所に置いていない（D-15）。
-8. `tools/gate.sh --work <作業 ID>` が通る（Q-08。`--quick` は判定にならない。回し方は `rules/checks.md` 4 章）。
+8. `tools/gate.sh --work <作業か単位の ID>` が通る（受ける形は `tools/gate.sh --help`。Q-08。`--quick` は判定にならない。回し方は `rules/checks.md` 4 章）。
 9. 壊す側のレビューで、重大度が高の指摘が残っていない（Q-12）。
 10. 仕様、決定・R・作業のファイル（状態は `docs.py set`）、診断コードの表 `tasks/diag-codes.md` と、再現の入力の対応（`tests/review-phase1/README.md`。直した項目の再現の入力は、期待値付きのテストへ移す）を更新した（`docs.py check` が通る）。
 
@@ -122,9 +122,10 @@
   テストの票も同じ単位で分ける。設計メモの見積もりが目安を超える単位は、設計メモの中で分ける案を出す。
 - **検査の回し方（親）:** 担当の回し方（役割ごとの、作業の途中・報告の前・回さないもの）は `rules/checks.md` 4 章に定める。ここには親が決めることを書く。
   - 実装待ちの一覧に項目の全体で載る gate の項目は、`--work` がその until のときと段の終わりにだけ回る。作業がその項目の判定に関わると分かっているときは、親が作業票の受け入れ条件に `--work <その項目の until>` を足す（`--work` は重ねられる）。
-  - 親は、報告に付いた作業の検査の要約を読む。パッチの基が主のツリーの HEAD と同じで、`take.py check` が「そのまま」当たると言うときは、回し直さない（中身が同じ）。3-way で当てたとき、基の後に dev がコードで進んだとき、親がコードを直したときは、主のツリーで作業の検査を回す。
+  - 親は、`take.py patch` の `work check:` の行に従う。`no need to run it again` なら回し直さない。`--only static` を示したら、それだけを回す。`run it again` なら、並んだ理由を見て主のツリーで作業の検査を回す。親がコードを直したときも回す。
     写した後に登録（文書の表、`tests/pending.toml`、`tools/builtin_names.toml`）を変えたら `--only static` を回し、`tests/pending.toml` を dev の版から作り直したときは `cargo test -p onsa_tests` も回す。文書だけの決定のコミットは `--quick` で確かめる。
-  - 網羅の検査: 親は、作業のコミットの後に、主のツリーで `tools/bg.py run <dir> -- nice tools/gate.sh --sweep` を起こす（基のバイナリの保存、静的な項目、gate-selftest、重い項目の次の分割）。文書だけのコミットの後は `tools/gate.sh --save-base` だけでよい（次の担当の基になる）。
+  - 網羅の検査: 主のツリーのコードか事例のコミットが、post-commit フック（`tools/after_commit.py`）で網羅の検査と基のバイナリの保存を裏で起こす。親は区切りで、gate の要約と `take.py patch` の `auto sweep:` の行を見る。FAILED なら、行が指す出力を読み、`rules/leader.md` 4.5 の形で仕分ける。
+    全体を自分で回す前と、続けて大きく変えるときは止める（止め方と起こし方は `tools/after_commit.py --help`）。
     見つけたものは作業を止めず、区切りで `rules/leader.md` 4.5 の形で仕分ける。段の終わりは今のとおり `--stage-end` で全体を回す。
   - `warning:` の行（時間の目安を超えた）は、続けて出たら、分割の数か抜き取りの割合（`tools/gate_steps.py`）を見直す。一度だけなら、他のビルドと重なっただけのことがある。
   - 主のツリーの gate が `target/debug` の大きさの警告を出したら、担当が動いていない区切りで `cargo clean --profile dev` を回す（基のバイナリと履歴は `target/base`・`target/gate` にあり、消えない）。
