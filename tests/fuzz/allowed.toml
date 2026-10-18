@@ -315,3 +315,24 @@ left = "expected newline after the declaration, found `…`"
 input = "tests/fuzz/556aa7db.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a `;` after the body of a declaration, and a `}` that closes nothing after it; the candidate removes the `;` and the E0002 of the `}` shows"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0001"
+left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
+input = "tests/fuzz/c570745f.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a line that starts with `- `, and a `も` outside comments on it, which E0001 reports once the line is joined"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "a `…` that opens a list is written right after the token before it"
+input = "tests/fuzz/85e0f040.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: `else` on the next line, and a blank before a `(` on that line, which shows once `else` moves up; the brackets are never closed at the end of the file"
+
+[[allowed]]
+class = "fix|E0002|remove the empty brackets|E0002"
+left = "expected `…`, found newline"
+input = "tests/fuzz/232d7e85.onsa"
+reasons = ["S-384"]
+note = "an input cut short: `let c()` with no `=`, and the `{` of the test never closed; once the brackets go, the missing `=` is the next error"
