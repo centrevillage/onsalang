@@ -4651,6 +4651,230 @@ class Work(unittest.TestCase):
         self.assertEqual([x.split()[0] for x in quiet_out(work.main, ["help"])[1][: len(names)]], names)
 
 
+class WorkSync(unittest.TestCase):
+    """tools/work.py (X-9 U6): an agent's `sync` in its worktree and the parent's `commit` in the main tree."""
+
+    LINES = "".join(f"{i}\n" for i in range(1, 10))
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.main = Path(self.tmp.name).resolve() / "main"
+        git_in(self.tmp.name, "init", "-q", "-b", "dev", str(self.main))
+        for key, value in (("user.name", "t"), ("user.email", "t@t"), ("commit.gpgsign", "false")):
+            git_in(self.main, "config", key, value)  # the tool's own commits, in the worktrees too
+        (self.main / ".git" / "info" / "exclude").write_text("target/\n.claude/\n")
+        for name in ("a.txt", "b.txt", "c.txt"):
+            (self.main / name).write_text(self.LINES)
+        git_in(self.main, "add", "-A")
+        git_in(self.main, "commit", "-qm", "base")
+        self.base = self.head(self.main)
+
+    def head(self, tree, rev="HEAD"):
+        return git_in(tree, "rev-parse", rev).strip()
+
+    def on_dev(self, name, text):
+        (self.main / name).write_text(text)
+        git_in(self.main, "commit", "-qam", f"dev {name}")
+
+    def sync(self, tree, *argv):
+        return quiet_out(work.main, ["sync", *map(str, argv), "--tree", str(tree)])
+
+    def subjects(self, tree, n):
+        return git_in(tree, "log", f"-{n}", "--format=%s").split("\n")[:n]
+
+    def test_sync_stops_without_a_worktree_or_in_a_merge(self):
+        wt = work.new("w1", self.main)
+        self.on_dev("a.txt", "dev\n")
+        plain = Path(self.tmp.name) / "plain"
+        plain.mkdir()
+        git_in(wt, "checkout", "-q", "--detach")
+        for tree, says in ((self.main, "the main tree; sync is for a worktree"), (plain, "not the top of a git tree"),
+                           (wt, "HEAD is on no branch")):  # fmt: skip
+            with self.subTest(tree=tree):
+                self.assertEqual(self.sync(tree), (1, [f"sync: {tree}: {says}; nothing done"]))
+        self.assertEqual(self.head(wt), self.base)
+        git_in(wt, "checkout", "-q", "worktree-w1")
+        (wt / "a.txt").write_text("mine\n")  # a conflict: the merge stops in the middle
+        code, lines = self.sync(wt)
+        self.assertEqual(code, 1, lines)
+        wip = git_in(wt, "rev-parse", "--short", "HEAD").strip()
+        self.assertEqual(lines[:3], [f"sync: committed 'WIP: before sync with dev' ({wip})",
+                                     "sync: the merge of dev stopped with conflicts; resolve them and commit "
+                                     "(rules/common.md 2.2):", "  a.txt"])  # fmt: skip
+        self.assertRegex(lines[-1], r"^sync: worktree-w1, HEAD \w+, dev \w+; 1 commit\(s\) after dev, 0 commit\(s\) of "
+                                    r"dev taken in, \d+ uncommitted change\(s\)$")  # fmt: skip
+        self.assertEqual(git_in(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD").strip(), self.head(self.main))
+        self.assertEqual(self.sync(wt), (1, [f"sync: {wt}: in a merge (MERGE_HEAD): finish or abort it; nothing done"]))
+
+    def test_sync_forwards_or_merges(self):
+        wt = work.new("w1", self.main)
+        code, lines = self.sync(wt)  # dev has not moved
+        self.assertEqual((code, lines[0]), (0, "sync: dev is in HEAD already; nothing to take in"))
+        self.assertEqual(self.head(wt), self.base)
+        self.on_dev("a.txt", "dev 1\n")
+        code, lines = self.sync(wt)  # no commit, no change: fast-forward
+        self.assertEqual((code, lines[0], self.head(wt)), (0, "sync: fast-forwarded to dev", self.head(self.main)))
+        self.assertRegex(lines[-1], r"; 0 commit\(s\) after dev, 1 commit\(s\) of dev taken in, 0 uncommitted change")
+        self.on_dev("a.txt", "dev 2\n")
+        (wt / "n.txt").write_text("new\n")  # an untracked file alone: a WIP commit, then the merge
+        code, lines = self.sync(wt, "-m", "WIP: X-9 U6")
+        self.assertEqual((code, lines[1]), (0, "sync: merged dev"), lines)
+        self.assertEqual(self.subjects(wt, 2)[1], "WIP: X-9 U6")
+        self.assertEqual(len(git_in(wt, "log", "-1", "--format=%P").split()), 2)
+        self.assertRegex(lines[-1], r"; 2 commit\(s\) after dev, 1 commit\(s\) of dev taken in, 0 uncommitted change")
+        self.on_dev("b.txt", "dev 3\n")
+        code, lines = self.sync(wt)  # the commits of the branch alone: the merge, no WIP
+        self.assertEqual((code, lines[0]), (0, "sync: merged dev"))
+        self.assertEqual(self.head(wt, "HEAD^2"), self.head(self.main))
+        self.assertEqual((wt / "b.txt").read_text(), "dev 3\n")
+
+    def patch_of(self, name, new):
+        """A patch of `name` from the base to `new`, made in the main tree (put back after)."""
+        (self.main / name).write_text(new)
+        out = Path(self.tmp.name) / f"{name}.patch"
+        out.write_text(git_in(self.main, "diff", "--binary", "--", name))
+        git_in(self.main, "checkout", "-q", "--", name)
+        return out
+
+    def test_sync_apply(self):
+        wt = work.new("w1", self.main)
+        p = self.patch_of("a.txt", self.LINES.replace("2\n", "two\n"))
+        code, lines = self.sync(wt, "--apply", p)
+        self.assertEqual(code, 0, lines)
+        self.assertEqual((self.subjects(wt, 1), git_in(wt, "status", "--porcelain")), (["WIP: apply a.txt.patch"], ""))
+        self.assertIn("two\n", (wt / "a.txt").read_text())
+        rows = [json.loads(x) for x in (self.main / work.TAKEN).read_text().splitlines()]
+        self.assertEqual((rows[-1]["kind"], rows[-1]["to"]), ("apply", str(wt)))  # recorded as `apply` does
+        head = self.head(wt)
+        code, lines = self.sync(wt, "--apply", p)  # there already: nothing
+        self.assertEqual((code, self.head(wt)), (0, head))
+        self.assertIn(f"applies: {work.ALREADY}", lines)
+        # uncommitted changes in its files: not applied
+        q = self.patch_of("b.txt", self.LINES.replace("5\n", "five\n"))
+        (wt / "b.txt").write_text(self.LINES + "mine\n")
+        code, lines = self.sync(wt, "--apply", q)
+        self.assertEqual((code, self.head(wt)), (1, head))
+        self.assertIn("sync: not applied: the tree has uncommitted changes in the files of the patch", lines)
+        git_in(wt, "checkout", "--", "b.txt")
+        # 3-way with conflicts: not committed, the conflicts listed
+        (wt / "b.txt").write_text(self.LINES.replace("5\n", "FIVE\n"))
+        git_in(wt, "commit", "-qam", "WIP mine")
+        head = self.head(wt)
+        code, lines = self.sync(wt, "--apply", q)
+        self.assertEqual((code, self.head(wt)), (1, head), lines)
+        self.assertIn("sync: the patch did not apply cleanly; nothing committed; conflicts: b.txt", lines)
+        git_in(wt, "checkout", "--", "b.txt")
+        # one that applies neither way: the reason, nothing committed
+        r = Path(self.tmp.name) / "r.patch"  # a blob not in the repository: no 3-way either
+        r.write_text("diff --git a/c.txt b/c.txt\nindex 1234567..89abcde 100644\n--- a/c.txt\n+++ b/c.txt\n"
+                     "@@ -1,2 +1,2 @@\n x\n-y\n+z\n")  # fmt: skip
+        code, lines = self.sync(wt, "--apply", r)
+        self.assertEqual((code, self.head(wt)), (1, head))
+        self.assertIn("the patch does not apply, plain nor with -3:", "\n".join(lines))
+        self.assertRegex(lines[-1], r"^sync: worktree-w1, HEAD ")
+
+    # ------------------------------------------------ commit
+
+    def commit(self, *argv):
+        return quiet_out(work.main, ["commit", *map(str, argv), "--tree", str(self.main)])
+
+    def files_of(self, rev="HEAD"):
+        return sorted(git_in(self.main, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", rev).split())
+
+    def test_commit_the_paths_named_alone(self):
+        (self.main / "a.txt").write_text("changed\n")
+        (self.main / "c.txt").unlink()
+        (self.main / "d").mkdir()
+        (self.main / "d" / "n.txt").write_text("new\n")  # untracked, under a directory named
+        (self.main / "b.txt").write_text("staged\n")
+        git_in(self.main, "add", "b.txt")
+        (self.main / "e.txt").write_text("other\n")  # untracked, not named
+        code, lines = self.commit("-m", "subject", "-m", "a paragraph", "a.txt", "c.txt", "d", "nosuch.txt")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], "commit: no change in nosuch.txt")
+        self.assertRegex(lines[-1], r"^commit \w+ on dev: 3 file\(s\); 2 uncommitted change\(s\) not in it$")
+        self.assertEqual(self.files_of(), ["a.txt", "c.txt", "d/n.txt"])
+        self.assertEqual(git_in(self.main, "log", "-1", "--format=%B"), "subject\n\na paragraph\n\n")
+        self.assertEqual(sorted(git_in(self.main, "status", "--porcelain").splitlines()), ["?? e.txt", "M  b.txt"])
+        head = self.head(self.main)
+        code, lines = self.commit("-m", "x", "a.txt", "nosuch.txt")  # no change at all
+        self.assertEqual((code, self.head(self.main)), (1, head))
+        self.assertEqual(lines, ["commit: no change in a.txt, nosuch.txt",
+                                 "commit: none of the paths named has a change; nothing committed",
+                                 "commit: the index is as before"])  # fmt: skip
+
+    def test_commit_trailers(self):
+        (self.main / "a.txt").write_text("changed\n")
+        body = Path(self.tmp.name) / "body.txt"
+        body.write_text("from a file\n")
+        rng = f"{self.base[:7]}..HEAD"
+        code, lines = self.commit("-m", "take in the check", "-F", body, "a.txt", "--docs-checked", rng, "X-9",
+                                  "--co-author", "A B <a@b.c>")  # fmt: skip
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(len(lines), 1, lines)  # docs.last_docs_check reads it: no line
+        value = f"{rng} (X-9, onsa-docs)"
+        self.assertEqual(git_in(self.main, "log", "-1", "--format=%B"),
+                         f"take in the check\n\nfrom a file\n\nDocs-Checked: {value}\nCo-Authored-By: A B <a@b.c>\n\n")
+        self.assertEqual(docs_tool.last_docs_check(self.main), (self.head(self.main), value))
+        # the ends of the range are commits, else nothing is done
+        (self.main / "b.txt").write_text("changed\n")
+        head = self.head(self.main)
+        for bad in ("nosuch..HEAD", "HEAD", f"{self.base}...HEAD", "..HEAD", f"HEAD:a.txt..HEAD"):
+            with self.subTest(bad=bad):
+                code, lines = self.commit("-m", "x", "b.txt", "--docs-checked", bad, "X-9")
+                self.assertEqual((code, lines), (1, [f"commit: {bad} is not <A>..<B> of two commits of {self.main}; "
+                                                     "nothing done"]))  # fmt: skip
+        self.assertEqual(self.head(self.main), head)
+        with self.assertRaises(SystemExit) as e:
+            quiet_out(work.main, ["commit", "-m", "x", "b.txt", "--co-author", "no mail", "--tree", str(self.main)])
+        self.assertEqual(e.exception.code, 2)
+
+    def documents(self):
+        for rel, text in NEW_LAYOUT.items():
+            (self.main / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.main / rel).write_text(text, encoding="utf-8")
+        self.assertEqual(quiet(docs_tool.main, ["set", "W1-01", "status=DOING", "--root", str(self.main)]), 0)
+        git_in(self.main, "add", "-A")
+        git_in(self.main, "commit", "-qm", "documents")
+        return self.main / "tasks" / "W" / "W1-01.md"
+
+    def test_commit_done(self):
+        w1 = self.documents()
+        (self.main / "a.txt").write_text("changed\n")
+        code, lines = self.commit("-m", "the work", "a.txt", "--done", "W1-01")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(self.files_of(), ["a.txt", "tasks/W/W1-01.md"])
+        self.assertIn('status = "DONE"', git_in(self.main, "show", "HEAD:tasks/W/W1-01.md"))
+        self.assertEqual(git_in(self.main, "status", "--porcelain"), "")
+        self.assertIn('status = "DONE"', w1.read_text())
+        code, lines = self.commit("-m", "again", "--done", "W1-01")  # DONE already: no change
+        self.assertEqual(code, 1, lines)
+        self.assertIn("commit: no change in tasks/W/W1-01.md", lines)
+        code, lines = self.commit("-m", "x", "--done", "W9-99")
+        self.assertEqual(code, 1)
+        self.assertIn("commit: --done W9-99: no file of it; nothing done", lines)
+        self.assertEqual(self.commit("-m", "x"), (1, ["commit: name the paths to commit (or --done)"]))
+
+    def test_a_failed_commit_puts_the_tree_back(self):
+        w1 = self.documents()
+        held = w1.read_bytes()
+        hooks = Path(self.tmp.name) / "hooks"
+        hooks.mkdir()
+        (hooks / "pre-commit").write_text("#!/bin/sh\nexit 1\n")
+        (hooks / "pre-commit").chmod(0o755)
+        git_in(self.main, "config", "core.hooksPath", str(hooks))
+        (self.main / "n.txt").write_text("new\n")
+        (self.main / "b.txt").write_text("staged\n")
+        git_in(self.main, "add", "b.txt")
+        head, status = self.head(self.main), git_in(self.main, "status", "--porcelain")
+        code, lines = self.commit("-m", "x", "n.txt", "--done", "W1-01")
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(lines[-1], "commit: the index and the file of --done are as before")
+        self.assertEqual((self.head(self.main), git_in(self.main, "status", "--porcelain"), w1.read_bytes()),
+                         (head, status, held))  # fmt: skip
+
+
 import after_commit  # noqa: E402
 
 START_RUNNER = after_commit.start_runner  # the real one, for `AutoSweep.test_now`

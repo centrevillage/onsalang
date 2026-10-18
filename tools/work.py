@@ -9,6 +9,9 @@
     tools/work.py done <worktree> [--discard] [--session ID] [--scratchpad DIR] [--main DIR]
     tools/work.py close [--dry-run] [--session ID] [--scratchpad DIR] [--main DIR]
     tools/work.py remove <path> [--session ID] [--scratchpad DIR] [--main DIR]
+    tools/work.py sync [--apply PATCH] [-m SUBJECT] [--tree DIR]
+    tools/work.py commit -m SUBJECT [-m TEXT ...] [-F FILE] [PATH ...] [--done ID] [--docs-checked A..B WORK]
+                         [--co-author "NAME <MAIL>"] [--tree DIR]
     tools/work.py help [--role ROLE] [COMMAND]
 
 `new` makes the worktree `<main>/.claude/worktrees/<name>` (`WORKTREES`) of the main tree of DIR (default
@@ -81,9 +84,30 @@ under `<main>/DISCARDED`. `close --dry-run` removes and prunes nothing. `done` a
 a removal failed. Claude Code's records are under `$ONSA_CLAUDE_RECORDS` (`RECORDS_ENV`), else
 `handback.PROJECT`.
 
-But for the worktree `new` makes and the removals above, nothing here commits, stashes, resets the tree or
-checks paths out. Exit 0 on success, 1 when a step fails, the patch does not apply or `take` stops before applying,
-2 on a usage error.
+`sync` (an agent, in its worktree `--tree`, default the tree of this tool; X9-14) does nothing and exits 1 in
+the main tree, out of a git tree, on no branch or in a merge (MERGE_HEAD). Else: when DEV is in HEAD, nothing is
+to take in; when the branch has no commit after DEV and no uncommitted change (untracked files too), `git merge
+--ff-only dev`; else a WIP commit of all (`add -A`; the subject `-m`, default SYNC_WIP) when there are changes,
+then `git merge --no-edit dev`, which stops in the merge on a conflict, the files listed, exit 1 (the agent
+resolves them: rules/common.md 2.2). Then `--apply` checks and applies the patch the way `check` and `apply` do
+(recorded alike) and commits its files alone (`-m`, default APPLY_WIP); one already there does nothing; one with
+uncommitted changes in its files is not applied; one that does not apply, or applies 3-way with conflicts, is not
+committed (exit 1). Last, a line: the branch, HEAD and DEV, the commits after DEV, the commits of DEV taken in,
+the uncommitted changes. git runs inside the command (no shell chains: rules/common.md 1.7), no editor opened.
+
+`commit` (the parent, in the main tree `--tree`; X9-17) commits the named paths alone, as they are now (untracked
+files and removals too; `git commit --only`): the changes of the other paths and the index stay. A named path
+with no change is listed; with none at all, nothing is committed (exit 1). The message is the `-m` paragraphs and
+then `-F`'s. `--done ID` writes `status=DONE` the way `docs.py set` does (the swap files checked) and adds its
+file to the paths. `--docs-checked A..B WORK` (both ends commits of the tree) writes the trailer
+`<docs.DOCS_CHECKED>: A..B (WORK, onsa-docs)` and checks after the commit that `docs.last_docs_check` reads it,
+a line when not; `--co-author` writes `Co-Authored-By:` after it. When the commit fails, the untracked files
+it added to the index leave it and the file of `--done` gets back what it held. Last, a line: the commit, the
+branch, its files, the uncommitted changes not in it.
+
+But for the worktree `new` makes, the removals above, `sync` and `commit`, nothing here commits, stashes, resets
+the tree or checks paths out. Exit 0 on success, 1 when a step fails, the patch does not apply or `take` stops
+before applying, 2 on a usage error.
 """
 import argparse
 import json
@@ -99,6 +123,7 @@ from typing import NamedTuple
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import docs  # noqa: E402
 import fuzz  # noqa: E402
 import gate_runs  # noqa: E402
 import gate_steps  # noqa: E402
@@ -458,8 +483,10 @@ example: tools/work.py patch .claude/worktrees/x1 2ce980a /tmp/x1.patch"""
 
 
 def apply_patch(patch_file, to, how, paths):
-    """Apply the patch the way `check` found (`how`, not ALREADY), print what it did and record it; the exit."""
+    """Apply the patch the way `check` found (`how`, not ALREADY), print what it did and record it; (the exit,
+    the files with conflicts)."""
     r = git(to, "apply", *(["-3"] if how != "plain" else []), str(Path(patch_file).resolve()), ok=(0, 1))
+    conflicts = listed(to, "diff", "--name-only", "--diff-filter=U") if how != "plain" else []
     if how != "plain":
         git(to, "restore", "--staged", "--", *paths)
     print(r.stderr.decode(errors="replace").strip() or "applied")
@@ -468,7 +495,12 @@ def apply_patch(patch_file, to, how, paths):
     if r.returncode == 0:
         record(to, "apply", lambda: {"patch": str(Path(patch_file).resolve()), "to": str(Path(to).resolve()),
                                      "head": git(to, "rev-parse", "HEAD").stdout.decode().strip()})  # fmt: skip
-    return r.returncode
+    return r.returncode, conflicts
+
+
+def listed(tree, *args):
+    """The paths `git <command> -z <the rest>` prints (`-z` before a `--`)."""
+    return [p for p in git(tree, args[0], "-z", *args[1:]).stdout.decode().split("\0") if p]
 
 
 def checked(patch_file, to):
@@ -567,7 +599,7 @@ def take(args):
     if why and not args.go:
         print(f"take: not applied ({'; '.join(why)}); read the above, then apply it with --go")
         return 1
-    return apply_patch(out, main, how, paths)
+    return apply_patch(out, main, how, paths)[0]
 
 
 # ---------------------------------------------------------------- the cleaning up (X9-16, U5)
@@ -854,6 +886,201 @@ def close(args):
     return 1 if failed else 0
 
 
+# ---------------------------------------------------------------- an agent's sync, the parent's commit (U6)
+
+SYNC_WIP = "WIP: before sync with dev"  # the default subjects of the WIP commits of `sync`
+APPLY_WIP = "WIP: apply {}"
+DOCS_AGENT = "onsa-docs"  # named in the value of docs.DOCS_CHECKED, after the work
+CO_AUTHOR = "Co-Authored-By"
+CO_AUTHOR_FORM = re.compile(r"[^<>\n]*[^<>\s] <[^<>\s]+@[^<>\s]+>")
+
+
+def count(tree, revs):
+    return int(git(tree, "rev-list", "--count", revs).stdout)
+
+
+def uncommitted(tree):
+    """The lines of `git status --porcelain` (untracked files too)."""
+    return git(tree, "status", "--porcelain").stdout.decode(errors="replace").splitlines()
+
+
+def short(tree, rev="HEAD"):
+    return git(tree, "rev-parse", "--short", rev).stdout.decode().strip()
+
+
+def wip(tree, subject, paths=()):
+    """Commit what the tree holds (`add -A`), or the paths alone (`--only`), with `subject`."""
+    git(tree, "add", "-A", "--", *paths)
+    git(tree, "commit", "-q", "-m", subject, *(["--only", "--", *paths] if paths else []))
+    print(f"sync: committed {subject!r} ({short(tree)})")
+
+
+def hand_in(tree, patch_file, subject):
+    """`--apply`: the patch the way `check` and `apply` do, then its WIP commit of its files; the exit."""
+    how, paths, notes = checked(patch_file, tree)
+    if how == ALREADY:
+        return 0
+    if notes:
+        print("sync: not applied: the tree has uncommitted changes in the files of the patch")
+        return 1
+    code, conflicts = apply_patch(patch_file, tree, how, paths)
+    if code or conflicts:
+        print("sync: the patch did not apply cleanly; nothing committed"
+              + (f"; conflicts: {', '.join(conflicts)}" if conflicts else ""))  # fmt: skip
+        return 1
+    wip(tree, subject or APPLY_WIP.format(Path(patch_file).name), paths)
+    return 0
+
+
+def merge_dev(tree, subject):
+    """Steps 2 to 4 of `sync`; the exit."""
+    if count(tree, f"HEAD..{DEV}") == 0:
+        print(f"sync: {DEV} is in HEAD already; nothing to take in")
+        return 0
+    if count(tree, f"{DEV}..HEAD") == 0 and not uncommitted(tree):
+        git(tree, "merge", "-q", "--ff-only", DEV)
+        print(f"sync: fast-forwarded to {DEV}")
+        return 0
+    if uncommitted(tree):
+        wip(tree, subject or SYNC_WIP)
+    r = git(tree, "merge", "-q", "--no-edit", DEV, ok=(0, 1))
+    conflicts = listed(tree, "diff", "--name-only", "--diff-filter=U")
+    if r.returncode and not conflicts:
+        raise Failed(f"git merge {DEV}: {r.stderr.decode(errors='replace').strip()}")
+    if conflicts:
+        print(f"sync: the merge of {DEV} stopped with conflicts; resolve them and commit (rules/common.md 2.2):")
+        for path in conflicts:
+            print(f"  {path}")
+        return 1
+    print(f"sync: merged {DEV}")
+    return 0
+
+
+def sync(args):
+    tree = Path(args.tree)
+    kind = repo.tree_kind(tree)
+    branch = git(tree, "symbolic-ref", "-q", "--short", "HEAD", ok=(0, 1)).stdout.decode().strip() if kind else ""
+    merging = kind and git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD", ok=(0, 1)).returncode == 0
+    why = ("not the top of a git tree" if kind is None else "the main tree; sync is for a worktree" if kind == "main"
+           else "HEAD is on no branch" if not branch else "in a merge (MERGE_HEAD): finish or abort it" if merging
+           else None)  # fmt: skip
+    if why:
+        print(f"sync: {tree}: {why}; nothing done")
+        return 1
+    behind = count(tree, f"HEAD..{DEV}")
+    try:
+        code = merge_dev(tree, args.m)
+        if code == 0 and args.apply:
+            code = hand_in(tree, args.apply, args.m)
+    except Failed as e:
+        print(e)
+        code = 1
+    print(f"sync: {branch}, HEAD {short(tree)}, {DEV} {short(tree, DEV)}; {count(tree, f'{DEV}..HEAD')} commit(s) "
+          f"after {DEV}, {behind - count(tree, f'HEAD..{DEV}')} commit(s) of {DEV} taken in, "
+          f"{len(uncommitted(tree))} uncommitted change(s)")  # fmt: skip
+    return code
+
+
+def docs_value(tree, text, work_id):
+    """The value of docs.DOCS_CHECKED for `<A>..<B>`, both ends commits of `tree`."""
+    ends = text.split("..")
+    bad = lambda e: git(tree, "rev-parse", "-q", "--verify", f"{e}^{{commit}}", ok=(0, 1)).returncode  # noqa: E731
+    if len(ends) != 2 or not all(ends) or any(map(bad, ends)):
+        raise Failed(f"commit: {text} is not <A>..<B> of two commits of {tree}; nothing done")
+    return f"{text} ({work_id}, {DOCS_AGENT})"
+
+
+def mark_done(tree, id_):
+    """`docs.py set <id_> status=DONE` in `tree` (the swap files checked); (its file, what it held before)."""
+    try:
+        docs.Ids(tree).require(id_)
+        rel = docs.Ids(tree).where(id_).rel
+    except docs.DocsError as e:
+        raise Failed(f"commit: --done {id_}: {e}; nothing done") from None
+    if rel is None:
+        raise Failed(f"commit: --done {id_}: no file of it; nothing done")
+    held = (tree / rel).read_bytes()
+    if docs.main(["set", id_, "status=DONE", "--root", str(tree)]):
+        raise Failed(f"commit: --done {id_}: docs.py set wrote nothing; nothing done")
+    return rel, held
+
+
+def commit(args):
+    tree = Path(args.tree)
+    if repo.tree_kind(tree) is None:
+        raise Failed(f"commit: {tree} is not the top of a git tree")
+    try:
+        message = "\n\n".join([*args.m, *([Path(args.F).read_text(encoding="utf-8")] if args.F else [])]) + "\n"
+    except (OSError, ValueError) as e:
+        raise Failed(f"commit: -F {args.F}: {e}") from None
+    value = docs_value(tree, *args.docs_checked) if args.docs_checked else None
+    trailers = [*([f"{docs.DOCS_CHECKED}: {value}"] if value else []),
+                *([f"{CO_AUTHOR}: {args.co_author}"] if args.co_author else [])]  # fmt: skip
+    paths, done, added = list(args.paths), None, []
+    if not paths and not args.done:
+        raise Failed("commit: name the paths to commit (or --done)")
+    if args.done:
+        done = mark_done(tree, args.done)
+        paths.append(done[0].as_posix())
+    try:
+        idle = [p for p in paths if not listed(tree, "diff", "--name-only", "HEAD", "--", p)
+                and not listed(tree, "ls-files", "-o", "--exclude-standard", "--", p)]  # fmt: skip
+        if idle:
+            print(f"commit: no change in {', '.join(idle)}")
+        live = [p for p in paths if p not in idle]
+        if not live:
+            raise Failed("commit: none of the paths named has a change; nothing committed")
+        added = listed(tree, "ls-files", "-o", "--exclude-standard", "--", *live)
+        if added:
+            git(tree, "add", "--", *added)
+        git(tree, "commit", "-q", "--only", "--cleanup=whitespace", "-F", "-",
+            *(x for t in trailers for x in ("--trailer", t)), "--", *live, input=message.encode())  # fmt: skip
+    except Failed as e:
+        if added:
+            git(tree, "reset", "-q", "--", *added)
+        if done:
+            (tree / done[0]).write_bytes(done[1])
+        raise Failed(f"{e}\ncommit: the index{' and the file of --done are' if done else ' is'} as before") from None
+    head = git(tree, "rev-parse", "HEAD").stdout.decode().strip()
+    if value:
+        try:
+            read = docs.last_docs_check(tree)
+        except docs.DocsError as e:
+            read = f"nothing ({e})"
+        if read != (head, value):
+            print(f"commit: docs.py due does not read the {docs.DOCS_CHECKED}: of {head[:9]} (it reads {read})")
+    files = listed(tree, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "HEAD")
+    branch = git(tree, "branch", "--show-current").stdout.decode().strip() or "no branch"
+    print(f"commit {short(tree)} on {branch}: {len(files)} file(s); "
+          f"{len(uncommitted(tree))} uncommitted change(s) not in it")  # fmt: skip
+    return 0
+
+
+def sync_args(p):
+    p.add_argument("--apply", metavar="PATCH", help="then apply this patch (check, apply) and commit it as WIP")
+    p.add_argument("-m", metavar="SUBJECT", help=f"the subject of the WIP commits (default {SYNC_WIP!r}, "
+                   f"{APPLY_WIP.format('<the patch>')!r})")
+    p.add_argument("--tree", default=ROOT, help="the worktree (default the one of this tool)")
+
+
+def co_author(text):
+    if not CO_AUTHOR_FORM.fullmatch(text):
+        raise argparse.ArgumentTypeError(f"not \"<name> <mail>\": {text}")
+    return text
+
+
+def commit_args(p):
+    p.add_argument("paths", nargs="*", help="the paths to commit (from the top of the tree), as they are now "
+                   "(untracked, removed)")
+    p.add_argument("-m", action="append", required=True, metavar="TEXT", help="the subject, then a paragraph each")
+    p.add_argument("-F", metavar="FILE", help="paragraphs after those of -m")
+    p.add_argument("--done", metavar="ID", help="docs.py set ID status=DONE, and its file in the commit")
+    p.add_argument("--docs-checked", nargs=2, metavar=("A..B", "WORK"),
+                   help=f"the trailer `{docs.DOCS_CHECKED}: A..B (WORK, {DOCS_AGENT})` (docs.py due reads it)")
+    p.add_argument("--co-author", type=co_author, metavar='"NAME <MAIL>"', help=f"the trailer {CO_AUTHOR}:, last")
+    p.add_argument("--tree", default=ROOT, help="the tree (default the one of this tool)")
+
+
 def positive(text):
     n = int(text)
     if n <= 0:
@@ -935,7 +1162,7 @@ def run_check(args):
 
 def run_apply(args):
     how, paths, _ = checked(args.patch, args.to)
-    return 0 if how == ALREADY else apply_patch(args.patch, args.to, how, paths)
+    return 0 if how == ALREADY else apply_patch(args.patch, args.to, how, paths)[0]
 
 
 def failing(fn):
@@ -983,6 +1210,14 @@ COMMANDS = {
                 "一つの作業ツリーに同じ判定を当て、消せるなら消して終了 0、残すなら理由を stderr に書いて終了 1",
                 "WorktreeRemove のフックが呼ぶ（Claude Code は 0 でない終了で作業ツリーを残す）",
                 "work.py remove /Users/centrevillage/projects/onsalang/.claude/worktrees/agent-a1b2c3"),
+    "sync": C(sync_args, failing(sync), ("t", "i", "docs"),
+              "作業ツリーに dev を取り込む（自分のコミットも変更も無ければ ff-only、あれば WIP を置いて merge、衝突ならファイルを並べて止める）。--apply で引き継ぎのパッチを当てて WIP を置く",
+              "作業ツリーで動く担当の始めと、親が dev の取り込みを指示したとき。主のツリーと merge の途中では何もせず終了 1",
+              "work.py sync --apply /tmp/x1.patch -m 'WIP: X-9 U6'"),
+    "commit": C(commit_args, failing(commit), ("parent",),
+                "名指した経路の今の中身だけをコミットし（未追跡と削除も。他の変更と索引は残す）、--done で作業を DONE に、--docs-checked と --co-author で trailer を書く",
+                "親が主のツリーでコミットするとき。git の commit が失敗したら、索引と --done のファイルを元に戻す",
+                "work.py commit -m 'Add sync and commit to the work tool (X-9/U6)' tools/work.py --done X-9 --co-author 'Claude <noreply@anthropic.com>'"),
 }  # fmt: skip
 
 
