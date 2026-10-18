@@ -3789,7 +3789,6 @@ import signal  # noqa: E402
 
 import bg  # noqa: E402
 import ignores  # noqa: E402
-import take  # noqa: E402
 import work  # noqa: E402
 
 RUST = '''\
@@ -4058,7 +4057,7 @@ class Take(unittest.TestCase):
         text = self.patch.read_text()
         self.assertIn("+two", text)
         self.assertIn("b/tests/x.rs", text)
-        self.assertTrue(work.is_code("tools/take.py"))
+        self.assertTrue(work.is_code("tools/work.py"))
         self.assertFalse(any(map(work.is_code, ("tools/test_gate.py", "crates/a/tests/t.rs", "crates/a/src/tests.rs",
                                                 "crates/a/src/cst_tests.rs", "tests/pending.toml", "docs/x.md"))))
         other = git_in(self.main, "commit-tree", "-m", "x", git_in(self.main, "write-tree").strip()).strip()
@@ -4148,7 +4147,7 @@ class Take(unittest.TestCase):
         return self.make_patch().splitlines()[1]
 
     def test_the_line_of_the_work_check(self):
-        """`take.py patch` says whether the parent need run the work check again (X-1 U3)."""
+        """`work.py patch` says whether the parent need run the work check again (X-1 U3)."""
         again = "work check: run it again in the main tree: "
         self.assertEqual(self.check_line(), again + "no work check in the worktree")
         self.ran("quick")
@@ -4248,8 +4247,7 @@ class Take(unittest.TestCase):
 
 
 class Work(unittest.TestCase):
-    """tools/work.py (X-9 U4): `new` from dev, `take` with its stops and `--go`, the record, take.py passing its
-    commands on, the hook WorktreeCreate, and the help."""
+    """tools/work.py (X-9 U4): `new` from dev, `take` with its stops and `--go`, the record, the hook WorktreeCreate, and the help."""
 
     LINES = "".join(f"{i}\n" for i in range(1, 10))
 
@@ -4376,15 +4374,6 @@ class Work(unittest.TestCase):
         self.assertEqual((self.main / work.PENDING).read_text(),
                          self.LINES.replace("2\n", "[[pending]]\n").replace("5\n", "five\n"))  # fmt: skip
         self.assertEqual(self.take("nosuch")[0], 1)
-
-    def test_take_py_passes_on(self):
-        wt, out = self.worktree(), Path(self.tmp.name) / "p.patch"
-        code, lines = quiet_out(take.main, ["patch", str(wt), self.dev, str(out), "--main", str(self.main)])
-        self.assertEqual((code, lines[0]), (0, f"{out}: the patch of {wt} from {self.dev}"))
-        self.assertEqual(quiet_out(take.main, ["check", str(out), "--to", str(self.main)]), (0, ["applies: plain"]))
-        self.assertEqual(quiet_out(take.main, ["apply", str(out), "--to", str(self.main)])[0], 0)
-        self.assertEqual((self.main / "c.py").read_text(), "x = 1\n" * 150)
-        self.assertEqual(quiet_out(take.main, ["new", "x"])[0], 2)
 
     # The cleaning up (X-9 U5): a made-up directory of Claude Code's records (`work.RECORDS_ENV`).
 
@@ -7032,7 +7021,7 @@ class ClaudeHook(unittest.TestCase):
             ("b", bash("cd /r && python3 -B /r/tools/work.py done agent-a1 --main /r"), True),
             ("onsa-other", bash("tools/work.py remove /r/.claude/worktrees/a"), True),
             ("i", bash("python3 -B tools/work.py apply /tmp/p.patch --to /r/.claude/worktrees/a"), False),
-            ("i", bash("python3 -B tools/take.py apply /tmp/p.patch"), False),
+            ("i", bash("python3 -B tools/work.py apply /tmp/p.patch"), False),
             ("parent", bash("python3 -B tools/work.py close"), False),
         ]  # fmt: skip
         for role, (tool, inp), stopped in cases:
