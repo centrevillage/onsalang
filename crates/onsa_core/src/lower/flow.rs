@@ -46,11 +46,11 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
+use onsa_sema::DefId;
 use onsa_sema::def::{DefKind, Fields, FlowDef};
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
-use onsa_sema::{DefId, Target};
-use onsa_syntax::ast::{self, ExprId, ExprKind as AK};
+use onsa_syntax::ast::ExprId;
 
 use super::body::{FnCx, bind_irrefutable, coerce, field_by_name, index, lit, local_expr, lower_expr, stmt, u32_lit};
 use super::{Lowerer, R, core_mode, internal, unsupported};
@@ -235,19 +235,8 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     }
     let out_is_struct = matches!(out_val, Ty::Struct(_));
 
-    // Highest rate each local is read at (mirrors the checker's marking, S-05).
-    let mut reads: HashMap<u32, FlowRate> = HashMap::new();
-    {
-        let m = a.ast(lw.pkg, a.def(flow).module).ok_or_else(|| internal(span, "module source not found"))?;
-        let node_by_expr = flat_nodes(&info.nodes);
-        let mut w = ReadWalk { a, ast: &m.parsed.ast, info, node_by_expr: &node_by_expr, reads: &mut reads };
-        for l in &info.lets {
-            w.walk(l.init, l.rate);
-        }
-        if let Some(out) = info.output {
-            w.walk(out, FlowRate::Sig);
-        }
-    }
+    // The highest rate each local is read at is the checker's (S-05).
+    let reads = &info.read_at;
 
     // State fields in S-05 order.
     let mut state_locals: HashMap<u32, String> = HashMap::new();
@@ -258,7 +247,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     }
     for (l, input) in info.inputs.iter().zip(&fd.inputs) {
         let own = FlowRate::from_rate(input.rate);
-        if reads.get(&l.0).is_some_and(|&r| r > own) {
+        if reads.get(l).is_some_and(|&r| r > own) {
             state_locals.insert(l.0, input.name.clone());
             fields.push((input.name.clone(), lw.core_ty(input.ty, &[], input.span)?));
         }
@@ -268,7 +257,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     for (k, l) in info.lets.iter().enumerate() {
         if l.rate == FlowRate::Const {
             let mut phases: Vec<Phase> =
-                l.locals.iter().filter_map(|loc| reads.get(&loc.0)).map(|&r| Phase::of(r)).collect();
+                l.locals.iter().filter_map(|loc| reads.get(loc)).map(|&r| Phase::of(r)).collect();
             phases.sort_by_key(|p| *p as u8);
             phases.dedup();
             for p in phases {
@@ -278,8 +267,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         }
         for loc in &l.locals {
             let name = &info.body.locals[loc.0 as usize].name;
-            let above = reads.get(&loc.0).is_some_and(|&r| r > l.rate);
-            if l.state || above {
+            if l.state {
                 state_locals.insert(loc.0, name.clone());
                 let ty = lw.core_ty(info.body.locals[loc.0 as usize].ty, &[], l.span)?;
                 fields.push((name.clone(), ty));
@@ -479,116 +467,6 @@ fn node_fields(lw: &mut Lowerer, flow: DefId, n: &Node, fields: &mut Vec<(String
         }
     }
     Ok(())
-}
-
-// ---------------------------------------------------------------- read analysis
-
-struct ReadWalk<'x> {
-    a: &'x onsa_sema::Analysis,
-    ast: &'x ast::Ast,
-    info: &'x FlowInfo,
-    node_by_expr: &'x HashMap<ExprId, Node>,
-    reads: &'x mut HashMap<u32, FlowRate>,
-}
-
-impl ReadWalk<'_> {
-    fn note(&mut self, l: u32, ctx: FlowRate) {
-        let e = self.reads.entry(l).or_insert(ctx);
-        if ctx > *e {
-            *e = ctx;
-        }
-    }
-
-    /// Mirror of the checker's `mark` (S-05): instance arguments are read
-    /// at the callee input's rate, look-backs at `Sig`, `init`s at `Init`.
-    fn walk(&mut self, e: ExprId, ctx: FlowRate) {
-        let expr = self.ast.expr(e);
-        if let Some(Target::Local(l)) = self.info.body.targets.get(&e) {
-            self.note(l.0, ctx);
-            return;
-        }
-        if let Some(n) = self.node_by_expr.get(&e).cloned() {
-            match n {
-                Node::Prev { arg, init, .. } | Node::Delay { arg, init, .. } => {
-                    self.walk(arg, FlowRate::Sig);
-                    if let InitArg::Init(i) = init {
-                        self.walk(i, FlowRate::Init);
-                    }
-                }
-                Node::Vdelay { arg, d, init, .. } => {
-                    self.walk(arg, FlowRate::Sig);
-                    self.walk(d, FlowRate::Sig);
-                    if let InitArg::Init(i) = init {
-                        self.walk(i, FlowRate::Init);
-                    }
-                }
-                Node::Instance { callee, args, .. } => {
-                    let inputs = self.a.def(callee).as_flow().map(|f| f.inputs.clone()).unwrap_or_default();
-                    for (arg, input) in args.iter().zip(&inputs) {
-                        self.walk(*arg, FlowRate::from_rate(input.rate));
-                    }
-                }
-                Node::Par { body, .. } => self.walk(body, ctx),
-            }
-            return;
-        }
-        if self.info.sample_rate_calls.contains(&e) {
-            return;
-        }
-        match &expr.kind {
-            AK::Field { base, .. } => self.walk(*base, ctx),
-            AK::Call { callee, args, .. } => {
-                if let AK::Field { base, .. } = &self.ast.expr(*callee).kind
-                    && self.info.body.expr_types.contains_key(base)
-                {
-                    self.walk(*base, ctx);
-                }
-                for a in args {
-                    self.walk(a.expr, ctx);
-                }
-            }
-            _ => {
-                for c in children(expr) {
-                    self.walk(c, ctx);
-                }
-            }
-        }
-    }
-}
-
-fn children(expr: &ast::Expr) -> Vec<ExprId> {
-    match &expr.kind {
-        // Lowering runs only on a package without diagnostics (S-59).
-        AK::Error => onsa_diag::internal::bug(Some(expr.span), "lowering met a body a syntax error left unread"),
-        AK::Paren(x) | AK::Move(x) | AK::Try(x) | AK::Unsafe(x) => vec![*x],
-        AK::Cast { expr, .. } | AK::Unary { expr, .. } | AK::At { expr, .. } => vec![*expr],
-        // `^y` has the `Target::Local` of `y`, which the walk reads first.
-        AK::Feedback(_) => Vec::new(),
-        AK::Tuple(xs) | AK::Array(xs) => xs.clone(),
-        AK::Repeat { elem, .. } => vec![*elem],
-        AK::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
-        AK::Block(b) => b.tail.into_iter().collect(),
-        AK::If { cond, then, else_, .. } => {
-            let mut v = vec![*cond, *then];
-            v.extend(*else_);
-            v
-        }
-        AK::Match { scrutinee, arms, .. } => {
-            let mut v = vec![*scrutinee];
-            for arm in arms {
-                v.extend(arm.guard);
-                v.push(arm.body);
-            }
-            v
-        }
-        AK::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
-        AK::TupleIndex { base, .. } | AK::TypeArgs { base, .. } => vec![*base],
-        AK::Index { base, index } => vec![*base, *index],
-        AK::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
-        AK::Range(r) => vec![r.lo, r.hi],
-        AK::Par { body, .. } => vec![*body],
-        AK::Lit(_) | AK::Path(_) | AK::Hole | AK::Field { .. } | AK::Closure { .. } | AK::Handle { .. } => Vec::new(),
-    }
 }
 
 // ---------------------------------------------------------------- small helpers

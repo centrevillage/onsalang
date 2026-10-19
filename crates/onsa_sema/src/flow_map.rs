@@ -18,20 +18,21 @@
 //! argument a builtin evaluates on some paths only (S-110, W7-06).
 //!
 //! W7-02 also removes or rewrites, outside this file, what serves it:
-//! - `flow.rs`: the fields `delay_arg`, `par_depth` and `ats` of `FlowCx`
-//!   and their counting (`check_delay`, `check_par`); the save of `lookback`
-//!   around the arguments in `check_instance`; the arms of `At` and
-//!   `Feedback` in `check_flow_expr`, `rate`, `mark` and `children`; the
-//!   field `branch` of the rate pass and its counting in `rate` (`If`,
-//!   `Match`, `Binary`) and `rate_call`.
-//! - `sig.rs`: the rates of the inputs and the output from their clocks
-//!   (`lower_flow`); `Ty::Rate` is gone already.
+//! - `flow.rs`: the fields `delay_arg`, `par_depth` and `ats` of `FlowCx`.
+//!   `flow/check.rs`: their counting (`check_delay`, `check_par`), the save
+//!   of `lookback` around the arguments in `check_instance`, the arms of `At`
+//!   and `Feedback` in `check_flow_expr`. `flow/rate.rs`: those arms in
+//!   `rate`, the field `branch` of the rate pass and its counting in `rate`
+//!   (`If`, `Match`, `Binary`) and `rate_call`. `flow/reads.rs`: those arms
+//!   in `mark` and `children`.
+//! - `sig/flow_sig.rs`: the rates of the inputs and the output from their
+//!   clocks (`lower_flow`); `Ty::Rate` is gone already.
 //! - `body.rs`: the arms of `tilde` of `If` / `Match` (typed as plain in a
 //!   flow, E0200 outside).
 //! - `onsa_diag/src/unsupported.rs`: the features of the E0200 here and of
 //!   `NestedDelays` (the works named on each).
-//! - `modes.rs`, `onsa_core` (`lower/body.rs` `At`, `lower/flow.rs`
-//!   `children`) and `onsa_driver/graph.rs`: the arms of `At` / `Feedback`.
+//! - `modes.rs`, `onsa_core` (`lower/body.rs` `At`) and
+//!   `onsa_driver/graph.rs`: the arms of `At` / `Feedback`.
 //!
 //! The optional `init` of a delay (`NodeCall.init_expr`) stays: W7-07 gives
 //! the omitted one its value `T.default()`. The arguments a builtin evaluates
