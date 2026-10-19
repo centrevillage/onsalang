@@ -30,6 +30,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import builtin_names  # noqa: E402
 import check_spec_examples as cse  # noqa: E402
+import compare  # noqa: E402
 import default_inits  # noqa: E402
 import diag_codes  # noqa: E402
 import docs as docs_tool  # noqa: E402
@@ -4359,6 +4360,131 @@ class Handback(unittest.TestCase):
             with self.subTest(argv=argv), mock.patch.object(sys, "stdout", buf), mock.patch.object(sys, "stderr", buf), \
                     self.assertRaises(SystemExit) as e:  # fmt: skip
                 handback.main(argv)
+            self.assertEqual(e.exception.code, code)
+            self.assertIn("{" + ",".join(names + ["help"]) + "}", buf.getvalue())
+
+
+FAKE_DIAGS = """#!{exe}
+import json, os, signal, sys
+here, name = os.path.split(sys.argv[0])
+with open(os.path.join(here, "log"), "a") as f:
+    f.write(name + "\\n")
+spec = json.load(open(os.path.join(here, "spec.json"))).get(name, {{}})
+code, out = spec.get(sys.argv[-1], spec.get("*", [0, {{"diagnostics": []}}]))
+if code == "kill":
+    os.kill(os.getpid(), signal.SIGKILL)
+sys.stdout.write(out if isinstance(out, str) else json.dumps(out))
+sys.exit(code)
+"""
+
+
+class Compare(unittest.TestCase):
+    """tools/compare.py diags / speed (X-9 U15): the differences of the diagnostics, the cases of the fuzz's seeds, the
+    order of the binaries turned round every other round, and the help."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        for rel in ("a", "b", "c", "d", "fuzz/z", "p/x", "p/sub/y"):
+            (self.root / "tests" / f"{rel}.onsa").parent.mkdir(parents=True, exist_ok=True)
+            (self.root / "tests" / f"{rel}.onsa").write_text("pub fn f() {}\n")
+        (self.root / "tests/p/onsa.toml").write_text("[package]\n")
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+
+    def fakes(self, spec, *names):
+        """Made-up `onsa`s in bin/: each prints what `spec[its name][the case]` says ([exit code or "kill", stdout]),
+        or `spec[its name]["*"]`, or no diagnostics, and logs its name."""
+        (self.bin / "spec.json").write_text(json.dumps(spec))
+        for n in names:
+            (self.bin / n).write_text(FAKE_DIAGS.format(exe=sys.executable))
+            (self.bin / n).chmod(0o755)
+        return [str(self.bin / n) for n in names]
+
+    def diags(self, spec):
+        before, after = self.fakes(spec, "before", "after")
+        return quiet_out(compare.main, ["diags", before, after, "--root", str(self.root), "--jobs", "2"])
+
+    def test_cases(self):
+        # The fuzz's seeds (tests/fuzz goes), a package's files as its directory.
+        self.assertEqual(compare.cases(self.root),
+                         ["tests/a.onsa", "tests/b.onsa", "tests/c.onsa", "tests/d.onsa", "tests/p"])
+        with mock.patch.object(fuzz, "seeds", return_value=[("tests/q.onsa", "")]) as seeds:
+            self.assertEqual(compare.cases(self.root), ["tests/q.onsa"])
+        seeds.assert_called_once_with(self.root)
+
+    def test_diags(self):
+        span = {"file": "f", "line": 1, "col": 2, "end_line": 1, "end_col": 3}
+
+        def out(message="m", edits="x", notes=({"message": "opened here", "span": span},)):
+            fix = {"title": "t", "edits": [{"span": span, "replace": edits}]}
+            d = {"code": "E0001", "message": message, "span": span, "fixes": [fix], "notes": list(notes)}
+            return [1, {"diagnostics": [d]}]
+
+        same = {f"tests/{c}": out() for c in ("a.onsa", "b.onsa", "c.onsa", "d.onsa", "p")}
+        self.assertEqual(self.diags({"before": same, "after": same}),
+                         (0, ["5 cases, 0 differ, 0 fell in one binary only, 0 fell in both"]))
+        after = {**same, "tests/b.onsa": out(message="n"), "tests/c.onsa": out(edits="y"), "tests/d.onsa": ["kill", ""],
+                 "tests/p": out(notes=[{"message": "opened here"}])}  # the note's place only
+        self.assertEqual(self.diags({"before": same, "after": after}), (1, [
+            "tests/b.onsa", "  ~ E0001 f:1:2-1:3: message 'm' -> 'n'",
+            "tests/c.onsa", "  ~ E0001 f:1:2-1:3: fix edits",
+            "tests/d.onsa", "  before: 1 diagnostic(s)", "  after:  signal 9",
+            "tests/p", "  ~ E0001 f:1:2-1:3: notes",
+            "5 cases, 4 differ, 1 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        # A fall on both sides is listed; when every case fell, nothing was compared, which is no pass.
+        broken = {"*": [2, "no manifest"]}
+        code, lines = self.diags({"before": broken, "after": broken})
+        self.assertEqual((code, lines[:3], lines[-1]), (1, [
+            "tests/a.onsa", "  before: not JSON (exit 2): no manifest", "  after:  not JSON (exit 2): no manifest"],
+            "5 cases, 0 differ, 0 fell in one binary only, 5 fell in both"))  # fmt: skip
+
+    def test_speed_turns_round(self):
+        b1, b2 = self.fakes({}, "b1", "b2")
+        log = self.bin / "log"
+
+        def runs(*turns, per):  # the names the binaries logged, `per` runs of a binary in its turn of a round
+            want = [n for t in turns for n in [t] * per]
+            got = log.read_text().split()
+            log.unlink()
+            return got, want
+
+        argv = ["speed", "long", "--rounds", "3", "--long", str(self.root / "tests"), b1, b2]
+        code, lines = quiet_out(compare.main, argv)
+        self.assertEqual((code, lines[0]), (0, "4 long inputs, 3 rounds; minimum seconds"))
+        self.assertEqual(*runs("b1", "b2", "b2", "b1", "b1", "b2", per=4))
+        with mock.patch.object(compare, "ROOT", self.root):  # 7 files, `check` and `fmt --check`
+            code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "2", b1, b2])
+        self.assertEqual((code, lines[0]), (0, "7 files, 0 long inputs, 2 rounds; minimum seconds"))
+        self.assertEqual(*runs("b1", "b2", "b2", "b1", per=14))
+
+    def test_help(self):
+        # rules/tools.md 9.4, as `Work.test_help`
+        for name, c in compare.COMMANDS.items():
+            with self.subTest(name=name):
+                self.assertIsInstance(c, repo.Command)
+                for text in (c.purpose, c.when, c.example):
+                    self.assertTrue(text.strip() and "\n" not in text, text)
+                self.assertTrue(c.roles)
+                self.assertEqual([r for r in c.roles if r not in repo.ROLES], [])
+                self.assertRegex(c.example, rf"^compare\.py {name}( |$)")
+                code, lines = quiet_out(compare.main, ["help", name])
+                self.assertEqual(code, 0)
+                self.assertIn(f"  例:   {c.example}", lines)
+        for role in repo.ROLES:
+            with self.subTest(role=role):
+                code, lines = quiet_out(compare.main, ["help", "--role", role])
+                want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
+                self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
+        names = list(compare.COMMANDS)
+        self.assertEqual(names, ["diags", "speed"])
+        self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
+        for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
+            buf = io.StringIO()
+            with self.subTest(argv=argv), mock.patch.object(sys, "stdout", buf), mock.patch.object(sys, "stderr", buf), \
+                    self.assertRaises(SystemExit) as e:  # fmt: skip
+                compare.main(argv)
             self.assertEqual(e.exception.code, code)
             self.assertIn("{" + ",".join(names + ["help"]) + "}", buf.getvalue())
 

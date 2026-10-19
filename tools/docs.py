@@ -2135,7 +2135,7 @@ HANDOVER_FIELDS = (
     ("読む順", "<作業票、設計メモ、親の返事、前の報告と、その「次の担当へ」の節>"),
     ("状態の基", "<前の担当の作業ツリーの枝と、その WIP のコミットと、親が `work.py patch` で作ったパッチ。"
                 "新しい担当は自分の作業ツリーで `work.py sync --apply <パッチ>` で当てる>"),
-    ("道具", "<`tools/` の道具（`run_cases.py`、`speed.py`、`handback.py`）と、前の担当が scratchpad に作った道具。"
+    ("道具", "<`tools/` の道具（`run_cases.py`、`compare.py`、`handback.py`）と、前の担当が scratchpad に作った道具。"
              "ファズの許可の一覧（`tests/fuzz/allowed.toml`）に項目と示す入力を足させるときは、"
              "ファズの近似（`onsa_cases --fix-same-place`）が第 1 候補しか当てないことも書く>"),
     ("前の gate の要約と知られた失敗", "<入力と違反の文字列>"),

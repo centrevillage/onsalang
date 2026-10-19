@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Compare the time of two or more `onsa` binaries (rules/refactoring.md ch. 8: measure before and after).
 
+Moved to `tools/compare.py speed` (X-9 X9-19), which turns the order of the binaries round every other round.
+
     tools/speed.py all  [--rounds N] [--long DIR] <binary>...
     tools/speed.py long [--rounds N] --long DIR <binary>...
 
