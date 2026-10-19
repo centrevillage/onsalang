@@ -28,7 +28,8 @@
 
 - R-242（定数の率の `let` の相、W7-03）、R-243（スタックの量の表とテストの余裕）を登録した。
 - S1 の壊す側の低 2: `groups.rs` の `chain_nodes` と `Flat::new` が同じ鎖を二度平らにする（演算子の順の約束も二つ）。
-- S2 の壊す側の低: A29 の自己テスト（`many` の行を検出が実際に作るか。置き場所は `onsa_tests::foreign_forms` で、例の行の文面が出るかを見る形）が入っていない。A17 の後半（名前の後の `(`・`{`・`@`）はパーサと `PatReader` の二か所（パーサの側に副作用があるため一つにしていない）。A21 のパーサの `.` の腕（`parser/expressions.rs`）は述語を呼ばない。`foreign/flow.rs` の `to_value` の集合に名前が無い。
+- S2 の壊す側の低: A29 の自己テスト（`many` の行を検出が実際に作るか。置き場所は `onsa_tests::foreign_forms` で、例の行の文面が出るかを見る形）が入っていない。A17 の後半（名前の後の `(`・`{`・`@`）はパーサと `PatReader` の二か所（パーサの側に副作用があるため一つにしていない）。
+  A21 のパーサの `.` の腕（`parser/expressions.rs`）は述語を呼ばない。`foreign/flow.rs` の `to_value` の集合に名前が無い。
 - M2a の壊す側の低: 入力を状態に入れる判断と定数の `let` の相は core が `read_at` から出す（W7-03 の持ち越しに写した）。`read_at` の中身を固定する単体テストが無い（M2b で足す）。
 
 ## ツール化の案（`rules/tools.md` 9.2 で、区切りに利用者と決める）
@@ -41,7 +42,7 @@
 
 ## 規則の文の案（区切りに利用者に出す）
 
-- `rules/refactoring.md` 8.3: 診断を変えるつもりの無い直しの確かめに、`compare.py fmt`（fmt の出力）と `compare.py core`（降下の出力）も挙げる。
+- `rules/refactoring.md` 8.3: 診断を変えるつもりの無い直しの確かめに、`compare.py fmt`（fmt の出力）と `compare.py core`（降下の出力）も挙げる。反映済み（`c65d538`）。
 
 ## 次の回に続けるもの
 
