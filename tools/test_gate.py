@@ -8,6 +8,7 @@ items that stand in for cargo.
     python3 -B tools/test_gate.py
 """
 import argparse
+import ast
 import dataclasses
 import datetime
 import io
@@ -4371,10 +4372,20 @@ here, name = os.path.split(sys.argv[0])
 with open(os.path.join(here, "log"), "a") as f:
     f.write(name + "\\n")
 spec = json.load(open(os.path.join(here, "spec.json"))).get(name, {{}})
-code, out = spec.get(sys.argv[-1], spec.get("*", [0, {{"diagnostics": []}}]))
+code, out, *more = spec.get(sys.argv[-1], spec.get("*", [0, {{"diagnostics": []}}]))
 if code == "kill":
     os.kill(os.getpid(), signal.SIGKILL)
-sys.stdout.write(out if isinstance(out, str) else json.dumps(out))
+out = out if isinstance(out, str) or out is None else json.dumps(out)
+if sys.argv[1:-1] == ["fmt"]:  # `fmt <file>` writes the file (None removes it), then prints more[0], leaves more[1]
+    if out is None:
+        os.remove(sys.argv[-1])
+    else:
+        open(sys.argv[-1], "w").write(out)
+    sys.stdout.write(more[0] if more else "")
+    if more[1:]:
+        open(more[1], "w").close()
+else:
+    sys.stdout.write(out)
 sys.exit(code)
 """
 
@@ -4441,6 +4452,56 @@ class Compare(unittest.TestCase):
             "tests/a.onsa", "  before: not JSON (exit 2): no manifest", "  after:  not JSON (exit 2): no manifest"],
             "5 cases, 0 differ, 0 fell in one binary only, 5 fell in both"))  # fmt: skip
 
+    def test_fmt(self):
+        # A file at a time (a package's files too), each run in its own directory; the tree is not written. The exit
+        # code, the file written (gone is a fall), stdout and the names of the files left are compared.
+        before, after = self.fakes({"before": {"*": [0, "x\n"]}, "after": {
+            "*": [0, "x\n"], "tests/a.onsa": [0, "x\n", "", "x.tmp"], "tests/b.onsa": [0, "x\ny\n"],
+            "tests/c.onsa": [0, "x\n", "hi"], "tests/d.onsa": ["kill", ""], "tests/p/sub/y.onsa": [0, None],
+            "tests/p/x.onsa": [1, "x\n"]}}, "before", "after")  # fmt: skip
+        run = lambda b, a: quiet_out(compare.main, ["fmt", b, a, "--root", str(self.root), "--jobs", "2"])  # noqa: E731
+        self.assertEqual(run(before, before), (0, ["6 cases, 0 differ, 0 fell in one binary only, 0 fell in both"]))
+        self.assertEqual(run(before, after), (1, [
+            "tests/a.onsa", "  before: exit 0, 2 lines", "  after:  exit 0, 2 lines", "  files: +x.tmp",
+            "tests/b.onsa", "  before: exit 0, 2 lines", "  after:  exit 0, 3 lines", "  line 2: '' -> 'y'",
+            "tests/c.onsa", "  before: exit 0, 2 lines", "  after:  exit 0, 2 lines", "  stdout line 1: '' -> 'hi'",
+            "tests/d.onsa", "  before: exit 0", "  after:  signal 9",
+            "tests/p/sub/y.onsa", "  before: exit 0",
+            "  after:  exit 0, the file not readable: No such file or directory",
+            "tests/p/x.onsa", "  before: exit 0, 2 lines", "  after:  exit 1, 2 lines",
+            "6 cases, 6 differ, 2 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        self.assertEqual((self.root / "tests/b.onsa").read_text(), "pub fn f() {}\n")
+        # No file formatted to exit 0 on both sides is no pass.
+        before, after = self.fakes({"before": {"*": [2, "x\n"]}, "after": {"*": [2, "x\n"]}}, "before", "after")
+        self.assertEqual(run(before, after), (1, ["6 cases, 0 differ, 0 fell in one binary only, 0 fell in both",
+                                                  "fmt: no case ran to exit 0 in both binaries"]))
+
+    def test_core(self):
+        # The cases of `diags` but tests/review-phase1, then examples (std is not taken); the exit code tells.
+        for rel in ("tests/review-phase1/r.onsa", "tests/spec/s.onsa", "std/s.onsa", "examples/e/m.onsa",
+                    "examples/e/onsa.toml", "examples/f.onsa"):  # fmt: skip
+            (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text("")
+        want = ["tests/a.onsa", "tests/b.onsa", "tests/c.onsa", "tests/d.onsa", "tests/p", "tests/spec/s.onsa",
+                "examples/e", "examples/f.onsa"]  # fmt: skip
+        self.assertEqual(compare.core_cases(self.root), want)
+        out = {c: [0, "a\nb\n"] for c in want}
+        before, after = self.fakes({"before": out, "after": {**out, "examples/f.onsa": [0, "a\nc\n"]}}, "before", "after")
+        argv = ["core", before, after, "--root", str(self.root)]
+        self.assertEqual(quiet_out(compare.main, argv), (1, [
+            "examples/f.onsa", "  before: exit 0, 3 lines", "  after:  exit 0, 3 lines", "  line 2: 'b' -> 'c'",
+            "8 cases, 1 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        self.assertEqual(quiet_out(compare.main, ["core", before, before, "--root", str(self.root)])[0], 0)
+        # The same output, but no input reached exit 0: nothing of the Core was compared, which is no pass.
+        before, after = self.fakes({"before": {"*": [1, "error"]}, "after": {"*": [1, "error"]}}, "before", "after")
+        self.assertEqual(quiet_out(compare.main, ["core", before, after, "--root", str(self.root)]), (1, [
+            "8 cases, 0 differ, 0 fell in one binary only, 0 fell in both",
+            "core: no case ran to exit 0 in both binaries"]))  # fmt: skip
+        # No input at all names where the inputs come from.
+        (self.root / "empty").mkdir()
+        self.assertEqual(quiet_out(compare.main, ["core", before, after, "--root", str(self.root / "empty")]), (1, [
+            f"core: no case in tests (but tests/review-phase1) and examples of {self.root / 'empty'}"]))
+
     def test_speed_turns_round(self):
         b1, b2 = self.fakes({}, "b1", "b2")
         log = self.bin / "log"
@@ -4454,11 +4515,17 @@ class Compare(unittest.TestCase):
         argv = ["speed", "long", "--rounds", "3", "--long", str(self.root / "tests"), b1, b2]
         code, lines = quiet_out(compare.main, argv)
         self.assertEqual((code, lines[0]), (0, "4 long inputs, 3 rounds; minimum seconds"))
-        self.assertEqual(*runs("b1", "b2", "b2", "b1", "b1", "b2", per=4))
+        self.assertEqual(*runs("b1", "b2", "b2", "b1", "b1", "b2", per=8))  # `check` and `fmt --check`, shown apart
+        self.assertEqual([(x.split()[0], ast.literal_eval(x.split(" ", 1)[1]).keys()) for x in lines[1:3]],
+                         [("b1", {"check", "fmt"}), ("b2", {"check", "fmt"})])
         with mock.patch.object(compare, "ROOT", self.root):  # 7 files, `check` and `fmt --check`
             code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "2", b1, b2])
-        self.assertEqual((code, lines[0]), (0, "7 files, 0 long inputs, 2 rounds; minimum seconds"))
-        self.assertEqual(*runs("b1", "b2", "b2", "b1", per=14))
+            self.assertEqual((code, lines[0]), (0, "7 files, 0 long inputs, 2 rounds; minimum seconds"))
+            self.assertEqual(*runs("b1", "b2", "b2", "b1", per=14))
+            code, lines = quiet_out(compare.main, argv[:1] + ["all", "--rounds", "2"] + argv[4:])
+        self.assertEqual((code, lines[0]), (0, "7 files, 4 long inputs, 2 rounds; minimum seconds"))
+        self.assertEqual(*runs("b1", "b2", "b2", "b1", per=14 + 8))
+        self.assertEqual(ast.literal_eval(lines[1].split(" ", 1)[1]).keys(), {"check", "fmt", "long", "long fmt"})
 
     def test_help(self):
         # rules/tools.md 9.4, as `Work.test_help`
@@ -4479,7 +4546,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "speed"])
+        self.assertEqual(names, ["diags", "fmt", "core", "speed"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()
