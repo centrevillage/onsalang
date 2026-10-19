@@ -4975,6 +4975,68 @@ class Work(unittest.TestCase):
                                                   f"path: {path!r}"]))  # fmt: skip
         self.assertTrue(wt.is_dir())
 
+    def test_lines(self):
+        # X9-20 (U16): from take's base, the WIP commit, the uncommitted change and the untracked files counted; the
+        # tests, the data and the test module inside the Rust file left out; the same lines as take's
+        wt = work.new("w1", self.main)
+        (wt / "m.rs").write_text(Take.RUST)
+        git_in(wt, "add", "m.rs")
+        git_in(wt, "commit", "-qm", "WIP")
+        (wt / "m.rs").write_text(Take.RUST.replace("fn a() {}", "fn a() { b() }\nfn b() {}")
+                                 .replace("s.len(), 8);", "s.len(), 9);\n        let e = 1;"))  # fmt: skip
+        (wt / "c.py").write_text("x = 1\n" * 30)
+        (wt / "tests" / "x.rs").write_text("a\nb\n")
+        (wt / "a.txt").write_text("data\n")
+        code, lines = quiet_out(work.main, ["lines", "--estimate", "10", "--tree", str(wt)])
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], f"lines: {wt} from {self.dev[:9]} (git merge-base dev HEAD), uncommitted changes "
+                                   "and untracked files too")  # fmt: skip
+        # m.rs: 15 lines, 12 of them its test module (from the attribute to the brace); c.py 30
+        self.assertIn("  4 file(s), +48 -9; without the tests and the data: +33 -0 (the test modules inside 1 file(s), "
+                      "+12 -0, left out)", lines)  # fmt: skip
+        self.assertIn("      30      0  c.py  (new)", lines)
+        self.assertEqual(lines[-1], "estimate: +33 of the code (without the tests and the data) against 10: 3.30 times; "
+                                    "within the size to refactor (rules/budgets.md: over 3 times and 100 lines more)")
+        self.assertEqual(git_in(wt, "diff", "--cached", "--name-only"), "")  # the index left empty, as patch leaves it
+        self.assertIn("?? c.py", git_in(wt, "status", "--porcelain"))
+        code, taken = self.take("w1", "--estimate", 10)
+        self.assertEqual(code, 1, taken)  # no work check: not applied
+        self.assertEqual([x for x in taken if x.startswith(("  ", "estimate: "))], lines[1:])
+        # --base: from the WIP commit (of the unit before, rules/common.md 2.4), its m.rs (15 lines, new) not counted;
+        # m.rs: +2 -1 of code (fn a, fn b) and +2 -1 in its test module
+        code, lines = quiet_out(work.main, ["lines", "--base", "HEAD", "--tree", str(wt)])
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(lines[0], f"lines: {wt} from HEAD, uncommitted changes and untracked files too")
+        self.assertIn("  4 file(s), +37 -11; without the tests and the data: +32 -1 (the test modules inside 1 file(s), "
+                      "+2 -1, left out)", lines)  # fmt: skip
+        self.assertIn("       4      2  m.rs", lines)
+        other = git_in(wt, "commit-tree", "-m", "x", git_in(wt, "write-tree").strip()).strip()
+        self.assertEqual(quiet_out(work.main, ["lines", "--base", other, "--tree", str(wt)]),
+                         (1, [f"{other} is not an ancestor of the HEAD of {wt}"]))
+        plain = Path(self.tmp.name) / "plain"
+        plain.mkdir()
+        git_in(wt, "add", "-A")
+        git_in(wt, "commit", "-qm", "WIP 2")
+        (self.main / "a.txt").write_text("dev\n")
+        git_in(self.main, "commit", "-qam", "dev")
+        merge = subprocess.run(["git", "-C", str(wt), "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "dev"],
+                               capture_output=True)  # fmt: skip
+        self.assertEqual(merge.returncode, 1)  # stopped on the conflict in a.txt: `add -A` and `reset` would end it
+        for tree, says in ((self.main, "the main tree; lines is for a worktree"), (plain, "not the top of a git tree"),
+                           (wt, "in a merge (MERGE_HEAD): finish or abort it")):  # fmt: skip
+            with self.subTest(tree=tree):
+                self.assertEqual(quiet_out(work.main, ["lines", "--tree", str(tree)]),
+                                 (1, [f"lines: {tree}: {says}; nothing done"]))
+        # patch and take stop alike in the merge (their `add -A` and `reset` would end it), and write no patch
+        out = Path(self.tmp.name) / "m.patch"
+        stop = [f"patch: {wt}: in a merge (MERGE_HEAD): finish or abort it; nothing done"]
+        self.assertEqual(quiet_out(work.main, ["patch", str(wt), self.dev, str(out), "--main", str(self.main)]),
+                         (1, stop))
+        self.assertEqual(self.take("w1", "--out", out), (1, stop))
+        self.assertFalse(out.exists())
+        self.assertEqual(git_in(wt, "diff", "--name-only", "--diff-filter=U"), "a.txt\n")
+        self.assertTrue(git_in(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD").strip())
+
     def test_help(self):
         for name, c in work.COMMANDS.items():
             with self.subTest(name=name):
@@ -4997,7 +5059,8 @@ class Work(unittest.TestCase):
         names = list(work.COMMANDS)
         self.assertEqual([x.split()[0] for x in quiet_out(work.main, ["help"])[1][: len(names)]], names)
         # in the order of the work (X-9 U8): an agent's first command first
-        self.assertEqual(names, ["sync", "new", "take", "patch", "check", "apply", "commit", "done", "close", "remove"])
+        self.assertEqual(names, ["sync", "lines", "new", "take", "patch", "check", "apply", "commit", "done", "close",
+                                 "remove"])  # fmt: skip
         self.assertEqual(quiet_out(work.main, ["help", "--role", "i"])[1][0].split()[0], "sync")
 
 

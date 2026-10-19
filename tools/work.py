@@ -10,6 +10,7 @@
     tools/work.py close [--dry-run] [--session ID] [--scratchpad DIR] [--main DIR]
     tools/work.py remove <path> [--session ID] [--scratchpad DIR] [--main DIR]
     tools/work.py sync [--apply PATCH] [-m SUBJECT] [--tree DIR]
+    tools/work.py lines [--base B] [--estimate N] [--tree DIR]
     tools/work.py commit -m SUBJECT [-m TEXT ...] [-F FILE] [PATH ...] [--done ID] [--docs-checked A..B WORK]
                          [--co-author "NAME <MAIL>"] [--tree DIR]
     tools/work.py help [--role ROLE] [COMMAND]
@@ -94,6 +95,14 @@ resolves them: rules/common.md 2.2). Then `--apply` checks and applies the patch
 uncommitted changes in its files is not applied; one that does not apply, or applies 3-way with conflicts, is not
 committed (exit 1). Last, a line: the branch, HEAD and DEV, the commits after DEV, the commits of DEV taken in,
 the uncommitted changes. git runs inside the command (no shell chains: rules/common.md 1.7), no editor opened.
+
+`lines` (an agent, in its worktree `--tree`, default the tree of this tool; X9-20) prints the lines of what the
+worktree holds (uncommitted changes and untracked files too) from the base `take` takes (`--base`, by default
+`base_of`; an agent who took over a unit passes the WIP commit of the unit before: rules/common.md 2.4), counted as
+`patch` counts them (`staged_diff`, `summary`: the same lines, the index left empty alike), and with `--estimate N`
+the line `estimate: …` of `take`. As `sync`, it does nothing and exits 1 in the main tree, out of a git tree or in
+a merge (`in_merge`: the `add -A` and `reset` of `staged_diff` would end it); `patch` (and so `take`) stops alike
+in a worktree in a merge.
 
 `commit` (the parent, in the main tree `--tree`; X9-17) commits the named paths alone, as they are now (untracked
 files and removals too; `git commit --only`): the changes of the other paths and the index stay. A named path
@@ -297,10 +306,10 @@ def summary(stats, new, inner=None):
     return code[0] - left[0], code[1] - left[1]
 
 
-def patch(wt, base, out, main):
-    """Make the patch and print its lines (the command `patch`); (the line `work check: …`, the lines added and
-    removed without the tests and the data)."""
-    wt = Path(wt)
+def staged_diff(wt, base):
+    """(the binary diff, `numstat`, the new files, `in_file_tests` of the Rust code) of all `wt` holds from `base`
+    (`add -A`: untracked files too; the index is left empty): what `patch` writes and counts, and `lines` counts.
+    It stops when `base` is not an ancestor of the HEAD."""
     if git(wt, "merge-base", "--is-ancestor", base, "HEAD", ok=(0, 1)).returncode:
         raise Failed(f"{base} is not an ancestor of the HEAD of {wt}")
     git(wt, "add", "-A")
@@ -311,6 +320,17 @@ def patch(wt, base, out, main):
         inner = in_file_tests(wt, base, [p for _, _, p in stats if p.endswith(".rs") and is_code(p)])
     finally:
         git(wt, "reset", "-q")
+    return diff, stats, new, inner
+
+
+def patch(wt, base, out, main):
+    """Make the patch and print its lines (the command `patch`); (the line `work check: …`, the lines added and
+    removed without the tests and the data)."""
+    wt = Path(wt)
+    why = in_merge(wt)
+    if why:
+        raise Failed(f"patch: {wt}: {why}; nothing done")
+    diff, stats, new, inner = staged_diff(wt, base)
     Path(out).write_bytes(diff)
     print(f"{out}: the patch of {wt} from {base}")
     line = work_check_line(wt, main, base, out)
@@ -572,12 +592,17 @@ def place(main, worktree):
     return wt if wt.is_dir() else (repo.main_tree(main) or Path(main)) / WORKTREES / worktree
 
 
+def base_of(tree):
+    """The base of the work of a worktree: `git merge-base DEV HEAD` (`take`, `lines`)."""
+    return git(tree, "merge-base", DEV, "HEAD").stdout.decode().strip()
+
+
 def take(args):
     main = Path(args.main)
     wt = place(main, args.worktree)
     if not wt.is_dir():
         raise Failed(f"no worktree {args.worktree} (a path, or a name under {WORKTREES}/ of the main tree)")
-    base = args.base or git(wt, "merge-base", DEV, "HEAD").stdout.decode().strip()
+    base = args.base or base_of(wt)
     out = Path(args.out) if args.out else fresh(main / "target" / "work", wt.name)
     out.parent.mkdir(parents=True, exist_ok=True)
     line, code = patch(wt, base, out, main)
@@ -899,6 +924,12 @@ def count(tree, revs):
     return int(git(tree, "rev-list", "--count", revs).stdout)
 
 
+def in_merge(tree):
+    """Why `sync` and `lines` stop when the tree is in a merge (`add -A` and `reset` would end it), else None."""
+    merging = git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD", ok=(0, 1)).returncode == 0
+    return "in a merge (MERGE_HEAD): finish or abort it" if merging else None
+
+
 def uncommitted(tree):
     """The lines of `git status --porcelain` (untracked files too)."""
     return git(tree, "status", "--porcelain").stdout.decode(errors="replace").splitlines()
@@ -960,10 +991,8 @@ def sync(args):
     tree = Path(args.tree)
     kind = repo.tree_kind(tree)
     branch = git(tree, "symbolic-ref", "-q", "--short", "HEAD", ok=(0, 1)).stdout.decode().strip() if kind else ""
-    merging = kind and git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD", ok=(0, 1)).returncode == 0
     why = ("not the top of a git tree" if kind is None else "the main tree; sync is for a worktree" if kind == "main"
-           else "HEAD is on no branch" if not branch else "in a merge (MERGE_HEAD): finish or abort it" if merging
-           else None)  # fmt: skip
+           else "HEAD is on no branch" if not branch else in_merge(tree))  # fmt: skip
     if why:
         print(f"sync: {tree}: {why}; nothing done")
         return 1
@@ -979,6 +1008,24 @@ def sync(args):
           f"after {DEV}, {behind - count(tree, f'HEAD..{DEV}')} commit(s) of {DEV} taken in, "
           f"{len(uncommitted(tree))} uncommitted change(s)")  # fmt: skip
     return code
+
+
+def lines(args):
+    tree = Path(args.tree)
+    kind = repo.tree_kind(tree)
+    why = ("not the top of a git tree" if kind is None else "the main tree; lines is for a worktree" if kind == "main"
+           else in_merge(tree))  # fmt: skip
+    if why:
+        print(f"lines: {tree}: {why}; nothing done")
+        return 1
+    base = args.base or base_of(tree)
+    _, stats, new, inner = staged_diff(tree, base)
+    print(f"lines: {tree} from {args.base or f'{base[:9]} (git merge-base {DEV} HEAD)'}, uncommitted changes and "
+          "untracked files too")
+    code = summary(stats, new, inner)
+    if args.estimate:
+        print(estimate_line(code[0], args.estimate))
+    return 0
 
 
 def docs_value(tree, text, work_id):
@@ -1060,6 +1107,13 @@ def sync_args(p):
     p.add_argument("--apply", metavar="PATCH", help="then apply this patch (check, apply) and commit it as WIP")
     p.add_argument("-m", metavar="SUBJECT", help=f"the subject of the WIP commits (default {SYNC_WIP!r}, "
                    f"{APPLY_WIP.format('<the patch>')!r})")
+    p.add_argument("--tree", default=ROOT, help="the worktree (default the one of this tool)")
+
+
+def lines_args(p):
+    p.add_argument("--base", help="the commit to count from (default: git merge-base dev HEAD; after a unit taken "
+                   "over, its WIP commit)")
+    p.add_argument("--estimate", type=positive, help="the lines of the code estimated before the work")
     p.add_argument("--tree", default=ROOT, help="the worktree (default the one of this tool)")
 
 
@@ -1182,6 +1236,10 @@ COMMANDS = {
               "作業ツリーに dev を取り込む（自分のコミットも変更も無ければ ff-only、あれば WIP を置いて merge、衝突ならファイルを並べて止める）。--apply で引き継ぎのパッチを当てて WIP を置く",
               "作業ツリーで動く担当の始めと、親が dev の取り込みを指示したとき。主のツリーと merge の途中では何もせず終了 1",
               "work.py sync --apply /tmp/x1.patch -m 'WIP: X-9 U6'"),
+    "lines": C(lines_args, failing(lines), ("t", "i", "b", "parent"),
+               "作業ツリーの基（take と同じ git merge-base dev HEAD）からの差の行数を、未コミットと未追跡も含めて take・patch と同じ数え方（テストとデータ、Rust のテストのモジュールを除く）で出す。--estimate で take と同じ比の行",
+               "実装の担当が報告に見積もりと実際の行数を書く前。前の単位を引き継いだ担当は、その WIP のコミットを --base に渡す。主のツリー、git の外、merge の途中では何もせず終了 1",
+               "work.py lines --estimate 40"),
     "new": C(new_args, failing(run_new), ("parent",),
              "主のツリーの .claude/worktrees/<名前> に、dev から枝 worktree-<名前> の作業ツリーを作り、経路を最後の行に出す",
              "担当を作業ツリーで起こすとき（WorktreeCreate のフックが呼ぶ）。同じ名前の枝か経路があれば作らずに終了 1",
