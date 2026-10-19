@@ -9,7 +9,7 @@ the code, the place, the message, the titles or the edits of the fix candidates,
 places), and every case where a binary fell (exited other than 0, 1 and 2, ran out of time, or printed no JSON).
 It exits 1 when a case differs (a case where both fell the same way is listed, but does not differ) or when no
 case gave JSON on both sides.
-`speed` measures as `tools/speed.py` did, the order of the binaries turned round every other round.
+`speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round.
 """
 import json
 import os
