@@ -176,12 +176,12 @@ C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the hel
 COMMANDS = {
     "diags": C(diags_args, diags, ("parent", "i", "b"),
                "二つのバイナリの check --json を tests/ の事例（fuzz の種。パッケージはディレクトリで）に回し、診断（コード・位置・メッセージ・候補の題と編集・note）が違う事例と落ちた事例を並べる",
-               "リファクタリングや診断の文面の直しの前後で、診断と候補が変わっていないか（変わった所が意図どおりか）を見るとき",
-               "compare.py diags target/base/<基>/onsa target/debug/onsa"),
+               "リファクタリングや診断の文面の直しの前後で、診断と候補が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは主のツリーの target/base/<基>/ にある（基は作業ツリーの git merge-base dev HEAD の短い SHA）",
+               "compare.py diags <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "speed": C(speed_args, speed, ("parent", "i", "b"),
                "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小を並べる",
-               "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）",
-               "compare.py speed all target/base/<基>/onsa target/debug/onsa"),
+               "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",
+               "compare.py speed all <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
 }  # fmt: skip
 
 
