@@ -1,0 +1,6 @@
+const K: F32 = 0.5
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let a = K
+  let b = a
+  x * b
+}

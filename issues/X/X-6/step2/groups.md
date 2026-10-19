@@ -17,8 +17,8 @@
 | 0 | S0 構文の移すだけ | `parser.rs` の分割（A の B1）、`lower.rs` の分割（B2）、`nesting.rs`（A6 の移す部分）、crate の直下の `edits.rs`（A9）、`chars.rs`（RF-9 (a2)） | 約 160（移す約 2,600） | `moved_only.py`、`cargo test -p onsa_syntax`、`compare.py diags` |
 | 0 | M1 sema の署名 | `sig.rs` の分割、RF-10 B-1 | 約 100（移す約 1,150） | `moved_only.py`、`cargo test -p onsa_sema`、`diags` |
 | 0 | D1 テストの器 | `run.rs`・`fix_contract.rs` の分割（関数の分割は RF-19）、RF-10 S1 (a)〜(d) | 約 200（移す約 1,800） | `moved_only.py`、`cargo test -p onsa_tests`、器の出力の前後の比べ |
-| 1 | S1 構文解析器と AST | A1・A2（A5 のテスト）・A3・A6 の残り・A7・A8・A15・A22・A23・A28・A30・A31、RF-15 の `groups.rs` 側（A32） | 約 260 | `diags` |
-| 1 | S2 他言語の形の検出 | A16・A17・A21・A25・A27・A29、RF-9 (c)、W3-08 (4) | 約 220 | `diags` |
+| 1 | S1 構文解析器と AST | A1・A2（A5 のテスト）・A3・A8・A15・A22・A23・A28・A30・A31、RF-15 の `groups.rs` 側（A32） | 約 230 | `diags` |
+| 1 | S2 他言語の形の検出 | A6 の残り（`foreign/flow.rs` の `clocks`）・A7・A16・A17・A21・A25・A27・A29、RF-9 (c)、W3-08 (4) | 約 265 | `diags` |
 | 1 | S3 字句と fmt | RF-9 (a1)・(b)・(d2)、RF-12 (a)・(b)、RF-13、RF-14 | 約 210 | `diags`、T の fmt の比べ、`speed` |
 | 1 | M2 sema の flow と RF-8 | `onsa_sema/src/flow.rs` の分割 → RF-8 (B) → RF-8 (A)（単位を二つに分ける） | 約 370 | 〔危険〕`gate.sh --work`、T の core の比べ |
 | 1 | I インタプリタ | `onsa_interp/src/lib.rs` の分割（C2-2） | 約 170（移す約 1,500） | 〔危険〕`gate.sh --work`、スタックの表 |
@@ -30,3 +30,4 @@
 - 波 0 の 4 つは同時に始める。S0・M1・D1 は移すだけの確かめと `diags` で足り、T を待たない（決めたことの「道具は並列の流れの前」から一歩出る。利用者が了承）。
 - 波 1 は空いた枠から起こす。S1〜S3 は S0 の後、S3 と M2 は T の後。
 - 量: 手で書く行が約 2,200、移す行が約 10,000。実装の単位が約 13、壊す側が約 9、テストの票が 1。
+- 票を書くときに、A6 の残りと A7 を S1 から S2 へ移した（どちらも S2 が直す `foreign/flow.rs` の `clocks` などと同じ関数に触るため。`rules/leader.md` 2.3）。

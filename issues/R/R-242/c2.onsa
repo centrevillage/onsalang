@@ -1,0 +1,5 @@
+pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let c1: F32 = 0.5
+  let a = p * c1
+  x * a * c1
+}
