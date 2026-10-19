@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""The records of the agents of a session (rules/leader.md 2.6, 2.9).
+"""The records of the agents of a session and of the session itself (rules/leader.md 1.2, 2.6, 2.8, 2.9).
 
-    tools/handback.py save <agent jsonl> <output>
-    tools/handback.py usage <session id> <agent id>...
-
-save   writes the message of the agent's last SubagentHandback (its report) to <output>.
-usage  prints, for each agent of the session, the calls, the largest context, the tokens read from
-       and written to the prompt cache, and an API-equivalent cost. A call reads its whole context
-       again, so the largest context decides the cost of the next call (2.6: hand over above
-       300,000 tokens, CONTEXT_BUDGET).
-The hook of SubagentStop (tools/hooks/claude_hook.py) uses both through `last_report` and `stats`.
-The records are under ~/.claude/projects/<the repository's project directory>/<session id>/subagents/.
+Its commands are `save` and `usage` (COMMANDS, rules/tools.md 9.1); `handback.py help` shows them.
+`usage` prints, for each agent, the calls, the largest context, the tokens read from and written to the prompt
+cache, and an API-equivalent cost; with no agent, the same of the main session with its context now (the context
+of its last call). A call reads its whole context again, so the largest context decides the cost of the next call
+(2.6: hand over above 300,000 tokens, CONTEXT_BUDGET). The hook of SubagentStop (tools/hooks/claude_hook.py) uses
+`last_report` and `stats`. The records are ~/.claude/projects/<the repository's project directory>/<session id>.jsonl
+and, of its agents, <session id>/subagents/agent-<agent id>.jsonl.
 """
 import json
 import re
@@ -18,6 +15,8 @@ import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+import repo  # noqa: E402
+
 PROJECT = Path.home() / ".claude" / "projects" / "-Users-centrevillage-projects-onsalang"
 # The context of an agent above which its next unit or fix goes to a new agent (rules/budgets.md, the budget
 # of an agent's context; rules/leader.md 2.6). The hook of SubagentStop (tools/hooks/claude_hook.py) says so.
@@ -67,18 +66,20 @@ def last_report(path) -> "str | None":
 
 def stats(path) -> dict:
     """The calls of the agent's record, its largest context, the tokens read from and written to the prompt
-    cache, the output and the API-equivalent cost (`cost`, USD)."""
+    cache, the output, the API-equivalent cost (`cost`, USD) and the context of the last call (`last`; a call with
+    no context, as Claude Code's `<synthetic>` messages, does not count as the last)."""
     calls = {}
     for d in records(Path(path)):
         m = d.get("message")
         if isinstance(m, dict) and m.get("usage"):
             calls[m.get("id") or len(calls)] = (m.get("model"), m["usage"])
-    s = dict(calls=len(calls), largest=0, read=0, write=0, out=0, cost=0.0)
+    s = dict(calls=len(calls), largest=0, read=0, write=0, out=0, cost=0.0, last=0)
     for model, u in calls.values():
         cc = u.get("cache_creation") or {}
         w1h, w5m = cc.get("ephemeral_1h_input_tokens", 0), cc.get("ephemeral_5m_input_tokens", 0)
         context = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
         s["largest"] = max(s["largest"], context)
+        s["last"] = context or s["last"]
         s["read"] += u.get("cache_read_input_tokens", 0)
         s["write"] += w1h + w5m
         s["out"] += u.get("output_tokens", 0)
@@ -88,31 +89,57 @@ def stats(path) -> dict:
     return s
 
 
-def save(jsonl: str, output: str) -> int:
-    message = last_report(jsonl)
+def save(args) -> int:
+    message = last_report(args.jsonl)
     if message is None:
-        print("no SubagentHandback in", jsonl)
+        print("no SubagentHandback in", args.jsonl)
         return 1
-    Path(output).write_text(message, encoding="utf-8")
+    Path(args.output).write_text(message, encoding="utf-8")
     print(len(message), "characters")
     return 0
 
 
-def usage(session: str, agents: list) -> int:
-    for agent in agents:
-        s = stats(PROJECT / session / "subagents" / f"agent-{agent}.jsonl")
-        print(f"{agent}: calls {s['calls']}, largest context {s['largest']:,}, cache read {s['read']:,}, "
-              f"cache write {s['write']:,}, output {s['out']:,}, API-equivalent ${s['cost']:,.1f}")
+def usage_line(name, s, now=False) -> str:
+    """A line of `usage`; `now` adds the context of the last call (the main session's)."""
+    return (f"{name}: calls {s['calls']}, " + (f"context now {s['last']:,}, " if now else "")
+            + f"largest context {s['largest']:,}, cache read {s['read']:,}, "
+            f"cache write {s['write']:,}, output {s['out']:,}, API-equivalent ${s['cost']:,.1f}")
+
+
+def usage(args) -> int:
+    if not args.agents:
+        print(usage_line(args.session, stats(PROJECT / f"{args.session}.jsonl"), now=True))
+    for agent in args.agents:
+        print(usage_line(agent, stats(PROJECT / args.session / "subagents" / f"agent-{agent}.jsonl")))
     return 0
 
 
-def main() -> int:
-    if len(sys.argv) == 4 and sys.argv[1] == "save":
-        return save(sys.argv[2], sys.argv[3])
-    if len(sys.argv) >= 4 and sys.argv[1] == "usage":
-        return usage(sys.argv[2], sys.argv[3:])
-    print(__doc__)
-    return 2
+def save_args(p):
+    p.add_argument("jsonl", help="the record of the agent (<session id>/subagents/agent-<agent id>.jsonl)")
+    p.add_argument("output")
+
+
+def usage_args(p):
+    p.add_argument("session")
+    p.add_argument("agents", nargs="*", metavar="agent", help="agent ids (none: the main session itself)")
+
+
+C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
+COMMANDS = {
+    "save": C(save_args, save, ("parent",),
+              "担当の記録の最後の SubagentHandback（報告）を <output> に書く",
+              "フックが保存していない報告を取り出すとき（前のセッションの担当、`hooks/errors.log` に失敗があるとき）",
+              "handback.py save ~/.claude/projects/-Users-centrevillage-projects-onsalang/<セッション ID>/subagents/agent-<担当の ID>.jsonl r.md"),
+    "usage": C(usage_args, usage, ("parent",),
+               "担当ごとに呼び出しの数・文脈の最大・キャッシュの読み書き・出力・API 換算を一行で出す。担当の ID が無ければ主のセッションのもの（今の文脈も）",
+               "担当を新しい担当に引き継ぐかを決めるとき（動いている担当にも）、費用の目安を改めるとき、親の文脈が区切りを超えたかを見るとき",
+               "handback.py usage <セッション ID> <担当の ID>"),
+}  # fmt: skip
+
+
+def main(argv=None) -> int:
+    args = repo.parse_command("handback.py", __doc__.split("\n")[0], COMMANDS, argv)
+    return args.run_(args)
 
 
 if __name__ == "__main__":
