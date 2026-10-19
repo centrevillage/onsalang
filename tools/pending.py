@@ -155,16 +155,15 @@ def stage_of(work):
     """`W3-07` -> `W3`, a stage (`M5`) -> itself, `PH2` -> `PH2`; None for anything else."""
     if work == PHASE2 or repo.STAGE_NAME.fullmatch(work):
         return work
-    return work.split("-")[0] if WORK.fullmatch(work) else None
+    return (repo.split_work(work) or (None,))[0]
 
 
 def load_docs(root=ROOT):
     """The IDs of the documents, each kind from the files of its directory (`docs.Index`; a work is done
     when its `status` is DONE). Raises DocsError when a directory is not there or has no file of an ID."""
     index = docs_tool.Index.of(root)
-    lay, works = index.layout, dict(index.work_done())
-    if not works:
-        raise DocsError(f"{repo.KIND['W'].dir}/: no file of an ID")
+    index.ids("W")  # DocsError when tasks/W/ has no file of an ID
+    lay, works = index.layout, index.work_done()
     at = index.place("W")
     reasons = index.ids("S") | index.ids("R")
     spec = repo.spec_doc(root)
@@ -322,14 +321,7 @@ def stage_counts(entries, stages):
     for e in entries:
         s = stage_of(e.until) or "?"
         counts[s] = counts.get(s, 0) + 1
-    return dict(sorted(counts.items(), key=lambda kv: stage_key(kv[0], stages)))
-
-
-def stage_key(stage, stages):
-    """The stages in the order of `stages` (the table), then the second phase, then anything else."""
-    if stage in stages:
-        return (0, stages.index(stage), stage)
-    return (1, 0, stage) if stage == PHASE2 else (2, 0, stage)
+    return dict(sorted(counts.items(), key=lambda kv: repo.stage_key(kv[0], stages)))
 
 
 def stages_line(entries, stages):

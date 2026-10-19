@@ -677,6 +677,9 @@ class PendingList(TempRepo):
         self.assertEqual(len(pending.stage_end_errors(entries, "W3", stages)), 2)
         self.assertEqual(pending.stage_end_errors(entries, "W1", stages), [])
         self.assertEqual([pending.stage_of(x) for x in ("W3-07", "M5", "PH2", "T5-8", "S-45")], ["W3", "M5", "PH2", None, None])
+        # RF-18 (C2): the stages not in the table after PH2, by their numbers (`repo.stage_key`, as `docs.py list --count`)
+        untils = [types.SimpleNamespace(until=u) for u in ("W10-01", "W4-02", "PH2", "W1-01", "S-45")]
+        self.assertEqual(pending.stages_line(untils, stages), "pending by stage: W1 1, PH2 1, W4 1, W10 1, ? 1 (total 5)")
 
     def test_the_last_stage_of_the_table_ends_the_first_phase(self):
         self.repo.write("tests/pending.toml", entry("spec-example", self.sid))
@@ -7325,6 +7328,27 @@ class DocsCommands(DocsTree):
             code, out = self.run_("list", *argv)
             self.assertEqual(code, 2, argv)
             self.assertIn(error, out[-1])
+
+    def test_the_stage_of_a_work_and_the_order_of_the_stages(self):
+        # RF-18 (A), (C2): the one place that reads a stage out of a work's ID, and the one order of the stages
+        works = ("W3-05", "W10-1", "W3", "M5-1", "T5-8", "W3-", "W3-x", "PH2", "S-1", None, 3)
+        self.assertEqual([repo.split_work(x) for x in works], [("W3", 5), ("W10", 1)] + [None] * 9)
+        order = ("W2", "W1", "M5", "PH2", "M7", "W3", "W10", "?", "x")
+        self.assertEqual(sorted(reversed(order), key=lambda s: repo.stage_key(s, ("W2", "W1", "M5"))), list(order))
+        # two names of one number are two keys: the order does not follow the input's
+        for names in (["W11", "W011"], ["W011", "W11"]):
+            self.assertEqual(sorted(names, key=lambda s: repo.stage_key(s, ())), ["W011", "W11"])
+
+    def test_the_statuses_of_the_heads(self):
+        # RF-18 (C1): `Index.statuses` reads the `status` of the heads once; `work_done` is read from it
+        self.layout()
+        self.write("decisions/S/S-3.md", "+++\ngroup = 1\n+++\n# S-3 t\n")
+        index = docs_tool.Index.of(self.root)
+        self.assertEqual(index.statuses("S"), {"S-1": "DECIDED", "S-2": "OPEN", "S-3": None})
+        self.assertEqual(index.work_done(), {w: s == "DONE" for w, s in index.statuses("W").items()})
+        self.assertIn(True, index.work_done().values())
+        with self.assertRaisesRegex(repo.RepoError, "no directory"):
+            index.statuses("D")
 
     def test_the_order_of_before(self):
         # the stages in the order of the table (X-2 U6), an M stage after the W ones, PH2 after every stage

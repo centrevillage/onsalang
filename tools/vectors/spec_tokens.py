@@ -9,6 +9,7 @@ closed list with its reason; it is the only place that says so.
 import re
 
 import ops as O
+import repo  # tools/: on the path of the entry points (gen.py)
 
 # Spans of 3.3 / 3.4 that are not operations of the vectors.
 NOT_OPERATIONS = {
@@ -62,8 +63,9 @@ def spec_constants(spec):
     s = section(spec, "### 6.6 コンパイル時定数", "\n---")
     out = set()
     for line in s.splitlines():
-        if line.startswith(("| 整数 |", "| 浮動小数 |")):
-            out |= set(re.findall(r"`([A-Z_]+)`", line.split("|")[2]))
+        cells = repo.table_cells(line) if line.startswith("|") else []
+        if cells[:1] in (["整数"], ["浮動小数"]):
+            out |= {c for cell in cells[1:2] for c in re.findall(r"`([A-Z_]+)`", cell)}
     return out
 
 

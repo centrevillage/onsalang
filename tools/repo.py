@@ -6,10 +6,11 @@
   reading its JSON;
 - reading the table of the codes (`tasks/diag-codes.md`): the retired codes and the codes of the second phase;
 - the Markdown documents the document tools read (`doc_files`, X-2 DT-7);
-- the kinds of the IDs and their paths (`KINDS`, X-2 DT-1; each read from its directory, X-2 DT-7), and the
-  spec as one text (`spec_doc`, `tools_doc`);
+- the kinds of the IDs and their paths (`KINDS`, X-2 DT-1; each read from its directory, X-2 DT-7), the stage
+  and the number of a work (`split_work`), and the spec as one text (`spec_doc`, `tools_doc`);
 - the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`);
-- the stages in their order (`Layout.stages`, the table of `tasks/stages.md`, X-2 U6);
+- the stages in their order (`Layout.stages`, the table of `tasks/stages.md`, X-2 U6), and the one order of
+  the stages in and out of it (`stage_key`);
 - reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it);
 - the test files and the test modules of Rust source (`NOT_CODE`, `test_lines`; `rust_code`, its code outside
   the comments and the strings), X-9 U17;
@@ -357,6 +358,15 @@ def kind_of(id_):
     return next((k for k in KINDS if re.fullmatch(k.pattern, id_)), None)
 
 
+def split_work(id_):
+    """`W3-05` -> `("W3", 5)`: the stage and the number of a work; None when `id_` is not the ID of a work
+    (the one place that reads a stage out of a work's ID, D-15)."""
+    if not isinstance(id_, str) or not re.fullmatch(KIND["W"].pattern, id_):
+        return None
+    stage, number = id_.split("-")
+    return stage, int(number)
+
+
 def path_of(id_, draft=False):
     """`S-537` -> `decisions/S/S-537.md` (`.draft.md` with `draft`)."""
     kind = kind_of(id_)
@@ -392,6 +402,17 @@ STAGES = Path("tasks") / "stages.md"
 STAGES_HEAD = "段"
 STAGE_NAME = re.compile(r"[A-Z]\d+")
 FOREIGN_FORMS = Path(SPEC_DIR) / "foreign-forms.toml"
+
+
+def stage_key(stage, stages):
+    """The order of the stages (the one place, D-15): those of `stages` (the table) in its order, then the
+    second phase, then the other stages by letter and number (`W3` before `W10`; the name last, so that two
+    names are never one key: `W11`, `W011`), then any other string."""
+    if stage in stages:
+        return (0, stages.index(stage))
+    if stage == PHASE2:
+        return (1,)
+    return (2, stage[0], int(stage[1:]), stage) if STAGE_NAME.fullmatch(stage) else (3, stage)
 
 
 class Layout:

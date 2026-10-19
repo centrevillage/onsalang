@@ -706,7 +706,7 @@ class Index:
 
     def __init__(self, tree):
         self.tree, self.layout = tree, repo.Layout(tree.root)
-        self.files, self.misnamed, self._tables, self._done, self._headings = {}, {}, {}, None, {}
+        self.files, self.misnamed, self._tables, self._statuses, self._done, self._headings = {}, {}, {}, {}, None, {}
         for kind in repo.KINDS:
             if kind.dir and (tree.root / kind.dir).is_dir():
                 ids, other = {}, []
@@ -750,11 +750,18 @@ class Index:
         """Where a kind is read, for messages: its directory."""
         return f"{repo.KIND[name].dir}/"
 
+    def statuses(self, name):
+        """{ID: status} of the files of a kind, None for a file with no `status` or no head: read once per
+        kind and kept (`work_done` reads it). RepoError when its directory is not there."""
+        if name not in self._statuses:
+            heads = {i: self.tree.head(rel).values or {} for i, rel in self._files(name).items()}
+            self._statuses[name] = {i: v.get("status") for i, v in heads.items()}
+        return self._statuses[name]
+
     def work_done(self):
-        """{W: done}: `status = "DONE"` of the files of `tasks/W/` (one place, D-15)."""
+        """{W: done}: `status = "DONE"` of the files of `tasks/W/`."""
         if self._done is None:
-            heads = {w: self.tree.head(rel).values or {} for w, rel in self._files("W").items()}
-            self._done = {w: v.get("status") == "DONE" for w, v in heads.items()}
+            self._done = {w: s == "DONE" for w, s in self.statuses("W").items()}
         return self._done
 
     def headings(self, which):
@@ -805,7 +812,7 @@ def check_heads(tree):
         if not files:
             yield Finding(Path(kind.dir), None, "no file of an ID; the checks would pass reading nothing")
         for id_, rel in files.items():
-            if name == "W" and (why := _missing(idx, id_.split("-")[0], STAGE_KIND)):
+            if name == "W" and (why := _missing(idx, repo.split_work(id_)[0], STAGE_KIND)):
                 yield Finding(rel, 1, f"{why}; the stage of {id_}")
             head = tree.head(rel)
             if head.values is None:
@@ -1103,16 +1110,12 @@ def due_key(due, stages):
     """The order of the deadlines of `before` (the one place to compare them), or None for another value:
     a work `W4-02` < `W4-99` < its stage `W4` (the end of the stage) < `W5-01` < … < `M5` < `PH2` (after
     every stage), the stages in the order of `stages` (the table)."""
-    if due == repo.PHASE2:
-        return (INF,)
     if not isinstance(due, str):
         return None
-    if due in stages:
-        return (stages.index(due), INF)
-    stage = due.split("-")[0]
-    if repo.kind_of(due) is repo.KIND["W"] and stage in stages:
-        return (stages.index(stage), int(due.split("-")[1]))
-    return None
+    stage, number = repo.split_work(due) or (due, INF)
+    if stage not in stages and due != repo.PHASE2:
+        return None
+    return (repo.stage_key(stage, stages), number)
 
 
 def section_key(sec):
@@ -1418,7 +1421,7 @@ def edges(ids):
                 if fields[key].fits(v):
                     add(*((node, v) if RESTS_ON[key] else (v, node)), key)
     for work in ids.index.files.get("W", {}):
-        add(work.split("-")[0], work, STAGE_EDGE)
+        add(repo.split_work(work)[0], work, STAGE_EDGE)
     return out
 
 
@@ -1527,7 +1530,7 @@ def relations(ids, kind, id_, values):
         add("decision", ids.having(DECISIONS, "tasks", id_))
         add("fixes", ids.having(ISSUES, "fix", id_))
         # its own `depends` and those that name its stage (`W4`: every work of W4)
-        by = {*ids.having(["W"], "depends", id_), *ids.having(["W"], "depends", id_.split("-")[0])} - {id_}
+        by = {*ids.having(["W"], "depends", id_), *ids.having(["W"], "depends", repo.split_work(id_)[0])} - {id_}
         add("depended_by", sorted(by, key=id_key))
         add("waiting", waiting(ids).get(id_, []))
     elif kind in DECISIONS:
@@ -1632,11 +1635,10 @@ def cmd_list(args):
     if args.count:
         groups = {}
         for id_, v in rows:
-            groups.setdefault(id_.split("-")[0] if kind == "W" else kind, []).append(str(v.get("status", NONE)))
+            groups.setdefault(repo.split_work(id_)[0] if kind == "W" else kind, []).append(str(v.get("status", NONE)))
         known = [str(s) for s in (status.values if status else ())]
-        order = ids.layout.stages() if kind == "W" else ()
-        at = {s: i for i, s in enumerate(order)}
-        for group, found in sorted(groups.items(), key=lambda g: (at.get(g[0], len(order)), id_key(g[0] + "-0"))):
+        table = ids.layout.stages() if kind == "W" else ()
+        for group, found in sorted(groups.items(), key=lambda g: repo.stage_key(g[0], table)):
             order = known + sorted(set(found) - set(known))
             counts = ", ".join(f"{s} {found.count(s)}" for s in order if s in found)
             print(f"{group}\t{counts} ({len(found)})")

@@ -27,10 +27,10 @@ import model as M  # noqa: E402
 import named  # noqa: E402
 import ops as O  # noqa: E402
 import sets as S  # noqa: E402
-import spec_tokens  # noqa: E402
 
-sys.path.append(str(HERE.parent))  # tools/, after this directory's own modules
+sys.path.append(str(HERE.parent))  # tools/, after this directory's own modules; before spec_tokens, which reads repo
 import repo  # noqa: E402
+import spec_tokens  # noqa: E402
 
 ROOT = HERE.parent.parent
 DATA = ROOT / "tests" / "vectors"
