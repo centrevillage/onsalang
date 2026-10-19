@@ -57,7 +57,7 @@ use crate::case::{self, Case, Setup};
 use crate::fragment::{GoldenKind, Mode};
 use crate::golden::{self, Update};
 use crate::pending::{self, Pending};
-use crate::{Expected, parse_markers};
+use crate::{Expected, PanicMark, parse_markers};
 
 /// The stage a marker was compared at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
@@ -94,6 +94,8 @@ pub struct TestResult {
     pub message: Option<String>,
     /// Marked `//~ TESTFAIL`.
     pub testfail: bool,
+    /// Marked `//~ PANIC`.
+    pub panic: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -338,21 +340,26 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     let mut markers: Vec<(FileId, Expected)> = Vec::new();
     // `//~ TESTFAIL "name"` names a test of the module of its file (R-184).
     let mut testfails: Vec<(String, String)> = Vec::new();
+    // `//~ PANIC "name"` too, with the file of its line.
+    let mut panics: Vec<(String, FileId, PanicMark)> = Vec::new();
     for (file, module) in loaded.modules.clone() {
         let f = loaded.sources.file(file);
         match parse_markers(f.text()) {
             Ok(m) => {
                 markers.extend(m.expected.into_iter().map(|e| (file, e)));
                 testfails.extend(m.testfails.into_iter().map(|name| (module.clone(), name)));
+                panics.extend(m.panics.into_iter().map(|p| (module.clone(), file, p)));
             }
             Err(e) => run.problems.push(Problem::Case(format!("{}: bad markers: {e}", f.name()))),
         }
     }
-    if !testfails.is_empty() && t.mode != Mode::Test {
-        run.problems.push(Problem::Case(format!(
-            "`//~ TESTFAIL` needs `mode = \"test\"` (the case is {:?}); the test blocks do not run",
-            t.mode
-        )));
+    for (mark, used) in [("TESTFAIL", !testfails.is_empty()), ("PANIC", !panics.is_empty())] {
+        if used && t.mode != Mode::Test {
+            run.problems.push(Problem::Case(format!(
+                "`//~ {mark}` needs `mode = \"test\"` (the case is {:?}); the test blocks do not run",
+                t.mode
+            )));
+        }
     }
     if !run.problems.is_empty() || t.mode == Mode::None {
         return run;
@@ -539,7 +546,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         && let Some(m) = &module
     {
         let stage_markers: &[(FileId, Expected)] = if test_stage { &markers } else { &[] };
-        run_tests(&mut run, &case.path, &loaded.sources, m, stage_markers, &testfails);
+        run_tests(&mut run, &case.path, &loaded.sources, m, stage_markers, &testfails, &panics);
     }
     // One name space: an entry `<path>::<name>` names a test or a host sequence.
     for h in &t.host {
@@ -918,6 +925,7 @@ fn run_tests(
     module: &onsa_core::Module,
     markers: &[(FileId, Expected)],
     testfails: &[(String, String)],
+    panics: &[(String, FileId, PanicMark)],
 ) {
     let report = match onsa_driver::run_tests(sources, module, &onsa_driver::TestOptions::default()) {
         Ok(onsa_driver::TestRun::Ran(r)) => r,
@@ -942,13 +950,25 @@ fn run_tests(
     for t in &report.tests {
         let failed = t.status() == onsa_driver::TestStatus::Failed;
         let testfail = testfails.iter().any(|(m, n)| *m == t.module && *n == t.name);
-        match (failed, testfail) {
-            (true, false) => run.problems.push(Problem::TestFailed {
-                full: t.full_name(),
-                message: t.message().unwrap_or_default().to_string(),
-            }),
-            (false, true) => {
+        let panic = panics.iter().find(|(m, _, p)| *m == t.module && p.name == t.name);
+        match (&t.failure, testfail, panic) {
+            (_, true, Some(_)) => run
+                .problems
+                .push(Problem::Case(format!("test {} is marked both TESTFAIL and PANIC; keep one", t.full_name()))),
+            (Some(f), false, None) => {
+                run.problems.push(Problem::TestFailed { full: t.full_name(), message: f.message.clone() })
+            }
+            (None, true, _) => {
                 run.problems.push(Problem::Failed(format!("test {} passed but is marked TESTFAIL", t.full_name())))
+            }
+            (None, _, Some(_)) => {
+                run.problems.push(Problem::Failed(format!("test {} passed but is marked PANIC", t.full_name())))
+            }
+            (Some(f), _, Some((_, file, p))) => {
+                let col = p.col.map(|c| format!(" @{c}")).unwrap_or_default();
+                run.problems.extend(panic_mismatch(sources, f, *file, p).map(|e| {
+                    Problem::Failed(format!("test {} is marked PANIC at line {}{col}, but {e}", t.full_name(), p.line))
+                }))
             }
             _ => {}
         }
@@ -958,6 +978,7 @@ fn run_tests(
             failed,
             message: t.message().map(str::to_string),
             testfail,
+            panic: panic.is_some(),
         });
     }
     if report.tests.is_empty() {
@@ -968,6 +989,34 @@ fn run_tests(
             run.problems.push(Problem::Case(format!("TESTFAIL names an unknown test \"{name}\" of module `{module}`")));
         }
     }
+    for (i, (module, _, p)) in panics.iter().enumerate() {
+        let name = &p.name;
+        if !report.tests.iter().any(|t| t.module == *module && t.name == *name) {
+            run.problems.push(Problem::Case(format!("PANIC names an unknown test \"{name}\" of module `{module}`")));
+        } else if panics[..i].iter().any(|(m, _, q)| m == module && q.name == *name) {
+            run.problems.push(Problem::Case(format!("PANIC names the test \"{name}\" of module `{module}` twice")));
+        }
+    }
+}
+
+/// How the failure `f` differs from its `//~ PANIC` mark `p` in `file`, if
+/// it does (X9-36): it must be a panic, not a failed `assert`, at the mark's
+/// line (and column) as the body of the test sees it: the outermost of
+/// `calls`, or `span` when the panic is in the body (§18.1).
+fn panic_mismatch(sources: &SourceMap, f: &onsa_driver::TestFailure, file: FileId, p: &PanicMark) -> Option<String> {
+    // A failed `assert` has the message `assert <source>` (§18.1). The failure
+    // holds no other mark of it, so a `panic(msg)` whose `msg` begins the same
+    // way is taken for one: a stricter judgement, never a silent pass.
+    if f.message.starts_with("assert ") {
+        return Some(format!("it failed by an assert: {}", f.message));
+    }
+    let at = f.calls.last().copied().unwrap_or(f.span);
+    let src = sources.file(at.file);
+    let lc = src.line_col(at.start);
+    if at.file == file && lc.line == p.line && p.col.is_none_or(|c| c == lc.col) {
+        return None;
+    }
+    Some(format!("it panicked at {}:{}:{}: {}", src.name(), lc.line, lc.col, f.message))
 }
 
 // ------------------------------------------------------------ the pending list
@@ -1260,9 +1309,10 @@ pub fn reconcile(runs: Vec<CaseRun>, list: &Pending) -> Report {
                     }
                 };
                 let full = full_name(t);
-                if t.testfail {
+                if t.testfail || t.panic {
+                    let mark = if t.testfail { "TESTFAIL" } else { "PANIC" };
                     failures.push(format!(
-                        "the test \"{name}\" is both marked TESTFAIL and listed in tests/pending.toml; keep one"
+                        "the test \"{name}\" is both marked {mark} and listed in tests/pending.toml; keep one"
                     ));
                     continue;
                 }
@@ -2114,6 +2164,110 @@ mod tests {
         let c = case(&r, "tests/p");
         assert!(c.failures.iter().any(|f| f.contains("several modules")), "{:?}", c.failures);
         assert!(c.failures.iter().any(|f| f.contains(r#"test b "same" failed"#)), "{:?}", c.failures);
+    }
+
+    /// X9-36: `//~ PANIC` names the line (and column) where the body of the
+    /// test sees the panic, and a failed `assert` is not a panic.
+    #[test]
+    fn panic_marks() {
+        let head = "// onsa.toml\n// [test]\n// mode = \"test\"\n\n";
+        let marks = format!(
+            r#"{head}fn pick(xs: [I32; 2], i: U32) -> I32 {{
+  xs[i]
+}}
+
+test "at" {{
+  let xs = [1, 2]
+  let i = 2
+  let y = xs[0] + xs[i] //~ PANIC "at" @19
+  assert y == 0
+}}
+
+test "in an assert" {{
+  let xs = [1, 2]
+  let i = 2
+  assert xs[i] == 0 //~ PANIC "in an assert"
+}}
+
+test "call" {{
+  let xs = [1, 2]
+  let y = pick(xs, 5) //~ PANIC "call" @11
+  assert y == 0
+}}
+
+test "other line" {{
+  let xs = [1, 2]
+  let i = 4 //~ PANIC "other line"
+  assert xs[i] == 0
+}}
+
+test "other column" {{
+  let xs = [1, 2]
+  let i = 2
+  let y = xs[0] + xs[i] //~ PANIC "other column" @11
+  assert y == 0
+}}
+
+test "by assert" {{
+  assert 1 == 2 //~ PANIC "by assert"
+}}
+
+test "passes" {{ //~ PANIC "passes"
+  assert 1 == 1
+}}
+"#
+        );
+        let fails = "test \"x\" { //~ TESTFAIL \"x\" //~ PANIC \"x\"\n  assert [1][1] == 0\n}\n";
+        let listed = "test \"x\" {\n  assert [1][1] == 0 //~ PANIC \"x\"\n}\n";
+        let names = "test \"x\" {\n  assert [1][1] == 0 //~ PANIC \"x\" //~ PANIC \"x\"\n} //~ PANIC \"y\"\n";
+        let same = "test \"same\" {\n  assert [1][1] == 0 //~ PANIC \"same\"\n}\n";
+        let files = [
+            ("tests/marks.onsa", marks.clone()),
+            ("tests/both.onsa", format!("{head}{fails}")),
+            ("tests/listed.onsa", format!("{head}{listed}")),
+            ("tests/names.onsa", format!("{head}{names}")),
+            ("tests/check.onsa", listed.to_string()),
+            ("tests/p/onsa.toml", "[package]\nname = \"p\"\nedition = \"2026\"\n".into()),
+            ("tests/p/a.onsa", format!("{head}{same}")),
+            ("tests/p/b.onsa", "test \"same\" {\n  assert [1][2] == 0\n}\n".into()),
+            (pending::PATH, entry("tests/listed.onsa::x")),
+        ];
+        let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        let r = Repo::new("panic_marks", &files).run();
+        let line = |needle: &str| marks.lines().position(|l| l.contains(needle)).unwrap() + 1;
+        let expect = [
+            format!(
+                r#""other line" is marked PANIC at line {}, but it panicked at tests/marks.onsa:{}:10: index 4"#,
+                line("PANIC \"other line\""),
+                line("PANIC \"other line\"") + 1
+            ),
+            format!(
+                r#""other column" is marked PANIC at line {0} @11, but it panicked at tests/marks.onsa:{0}:19: index 2"#,
+                line("PANIC \"other column\"")
+            ),
+            format!(
+                r#""by assert" is marked PANIC at line {}, but it failed by an assert: assert 1 == 2"#,
+                line("PANIC \"by assert\"")
+            ),
+            r#"test marks "passes" passed but is marked PANIC"#.to_string(),
+        ];
+        let has = |p: &str, needles: &[&str]| {
+            let c = case(&r, p);
+            assert_eq!(c.failures.len(), needles.len(), "{p}: {:?}", c.failures);
+            for n in needles {
+                assert!(c.failures.iter().any(|f| f.contains(n)), "{p}: {n:?} in {:?}", c.failures);
+            }
+        };
+        has("tests/marks.onsa", &expect.iter().map(String::as_str).collect::<Vec<_>>());
+        has("tests/both.onsa", &["marked both TESTFAIL and PANIC; keep one"]);
+        has("tests/listed.onsa", &["\"x\" is both marked PANIC and listed in tests/pending.toml; keep one"]);
+        has(
+            "tests/names.onsa",
+            &["PANIC names the test \"x\" of module `names` twice", "PANIC names an unknown test \"y\""],
+        );
+        has("tests/check.onsa", &["`//~ PANIC` needs `mode = \"test\"`"]);
+        // The mark names the test of the module of its file (R-184).
+        has("tests/p", &[r#"test b "same" failed"#]);
     }
 
     /// W1-04: an internal error is not silenced by the list, unless the entry

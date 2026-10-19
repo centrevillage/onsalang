@@ -22,6 +22,17 @@
 //! test "overflow panics" {        //~ TESTFAIL "overflow panics"
 //! ```
 //!
+//! A stronger expectation names where the test fails: `//~ PANIC "name"` at
+//! the end of the line of the body where it panics, as the body sees it (the
+//! outermost of the failure's `calls`, or its `span` when the panic is in the
+//! body, §18.1), and `@<col>` the column where that position begins (§3.5).
+//! It must fail there, by a panic and not by a failed `assert` ([`run`]); a
+//! test has one mark.
+//!
+//! ```text
+//!   let y = xs[0] + xs[i]           //~ PANIC "out of range" @19
+//! ```
+//!
 //! Tests the implementation cannot pass yet are listed in `tests/pending.toml`
 //! instead (kind `test-case`, [`run::reconcile`]); the two marks are not mixed.
 //!
@@ -72,12 +83,22 @@ pub struct Markers {
     pub expected: Vec<Expected>,
     /// Names of `test` blocks expected to fail (`//~ TESTFAIL "name"`).
     pub testfails: Vec<String>,
+    pub panics: Vec<PanicMark>,
+}
+
+/// `//~ PANIC "name" [@<col>]`: the test `name` panics at this line (and column).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanicMark {
+    pub name: String,
+    pub line: u32,
+    pub col: Option<u32>,
 }
 
 /// Parse the `//~` markers of one file.
 pub fn parse_markers(text: &str) -> Result<Markers, String> {
     let mut expected = Vec::new();
     let mut testfails = Vec::new();
+    let mut panics = Vec::new();
     for (i, line) in text.lines().enumerate() {
         let lineno = i as u32 + 1;
         let Some(idx) = line.find("//~") else { continue };
@@ -96,6 +117,19 @@ pub fn parse_markers(text: &str) -> Result<Markers, String> {
                 testfails.push(name.to_string());
                 continue;
             }
+            if code_str == "PANIC" {
+                let rest = rest.trim();
+                let quoted = rest.strip_prefix('"').and_then(|r| r.rfind('"').map(|end| (&r[..end], &r[end + 1..])));
+                let Some((name, rest)) = quoted else {
+                    return Err(format!("line {lineno}: `PANIC` needs a quoted test name"));
+                };
+                let (col, targets) = marker_options(rest).map_err(|e| format!("line {lineno}: {e}"))?;
+                if targets.is_some() {
+                    return Err(format!("line {lineno}: `PANIC` takes no targets"));
+                }
+                panics.push(PanicMark { name: name.to_string(), line: lineno, col });
+                continue;
+            }
             let Some(code) = Code::parse(code_str) else {
                 return Err(format!("line {lineno}: unknown code `{code_str}` in marker"));
             };
@@ -104,7 +138,7 @@ pub fn parse_markers(text: &str) -> Result<Markers, String> {
         }
     }
     expected.sort();
-    Ok(Markers { expected, testfails })
+    Ok(Markers { expected, testfails, panics })
 }
 
 /// `[@<col>] [[t, ...]]` after the code of a marker.
@@ -179,5 +213,11 @@ mod tests {
         let m = parse_markers("test \"x\" { //~ TESTFAIL \"x\"\n").unwrap();
         assert_eq!(m.testfails, vec!["x".to_string()]);
         assert!(parse_markers("x //~ TESTFAIL x\n").is_err());
+        let m = parse_markers("a //~ PANIC \"x\"\nb //~ PANIC \"say \"y\"\" @3\n").unwrap();
+        let mark = |name: &str, line, col| PanicMark { name: name.into(), line, col };
+        assert_eq!(m.panics, [mark("x", 1, None), mark("say \"y\"", 2, Some(3))]);
+        for bad in ["x", "\"x", "\"x\" 3", "\"x\" @a", "\"x\" [a]", "\"x\" @3 [a]", "\"x\" more"] {
+            assert!(parse_markers(&format!("t //~ PANIC {bad}\n")).is_err(), "{bad}");
+        }
     }
 }
