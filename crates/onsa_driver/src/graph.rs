@@ -13,7 +13,7 @@ use onsa_sema::body::{LocalId, Target};
 use onsa_sema::def::DefKind;
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::{Analysis, DefId};
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, StmtKind};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
 use crate::Analyzed;
 
@@ -56,6 +56,10 @@ impl Graph<'_> {
     /// Reads inside `e` become edges into `target`. A stateful sub-node gets a
     /// node of its own (unless it IS the target's initializer) and its own edges.
     fn visit(&mut self, e: ExprId, target: &str, dashed: bool, nodes: &[Node]) {
+        // The graph is drawn only for a package without diagnostics (S-59).
+        if let ExprKind::Error = self.ast.expr(e).kind {
+            onsa_diag::internal::bug(Some(self.ast.expr(e).span), "the graph met a body a syntax error left unread")
+        }
         if let Some(&idx) = self.info.node_of_expr.get(&e)
             && let Some(node) = nodes.get(idx)
             && node.expr() == e
@@ -73,7 +77,7 @@ impl Graph<'_> {
             self.edge(&from, target, dashed);
             return;
         }
-        for child in children(self.ast, e) {
+        for child in self.ast.sub_exprs(e) {
             self.visit(child, target, dashed, nodes);
         }
     }
@@ -136,67 +140,6 @@ fn rate_color(r: FlowRate) -> &'static str {
         FlowRate::Ctl => "blue",
         FlowRate::Sig => "black",
     }
-}
-
-/// Direct sub-expressions of `e` (statements of blocks included).
-fn children(ast: &Ast, e: ExprId) -> Vec<ExprId> {
-    let mut out = Vec::new();
-    match &ast.expr(e).kind {
-        // The graph is drawn only for a package without diagnostics (S-59).
-        ExprKind::Error => {
-            onsa_diag::internal::bug(Some(ast.expr(e).span), "the graph met a body a syntax error left unread")
-        }
-        ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Hole => {}
-        // `^y` reads the local `y` (a `Target::Local`, an edge of `visit`).
-        ExprKind::Feedback(_) => {}
-        ExprKind::Paren(x)
-        | ExprKind::At { expr: x, .. }
-        | ExprKind::Unary { expr: x, .. }
-        | ExprKind::Cast { expr: x, .. }
-        | ExprKind::Try(x)
-        | ExprKind::Move(x)
-        | ExprKind::Field { base: x, .. }
-        | ExprKind::TupleIndex { base: x, .. }
-        | ExprKind::TypeArgs { base: x, .. }
-        | ExprKind::Unsafe(x) => out.push(*x),
-        ExprKind::Tuple(xs) | ExprKind::Array(xs) => out.extend(xs.iter().copied()),
-        ExprKind::Repeat { elem, len } => out.extend([*elem, *len]),
-        ExprKind::Struct { fields, .. } => out.extend(fields.iter().map(|(_, x)| *x)),
-        ExprKind::Block(b) => {
-            for &s in &b.stmts {
-                match &ast.stmt(s).kind {
-                    StmtKind::Let { init, .. } | StmtKind::Var { init, .. } => out.push(*init),
-                    StmtKind::Assign { target, value } => out.extend([*target, *value]),
-                    StmtKind::For { iter, body, .. } => out.extend([*iter, *body]),
-                    StmtKind::While { cond, body } => out.extend([*cond, *body]),
-                    StmtKind::Return(Some(x)) | StmtKind::Assert(x) | StmtKind::Expr(x) => out.push(*x),
-                    StmtKind::Return(None) | StmtKind::Break | StmtKind::Continue => {}
-                }
-            }
-            out.extend(b.tail);
-        }
-        ExprKind::If { cond, then, else_, .. } => {
-            out.extend([*cond, *then]);
-            out.extend(*else_);
-        }
-        ExprKind::Match { scrutinee, arms, .. } => {
-            out.push(*scrutinee);
-            for arm in arms {
-                out.extend(arm.guard);
-                out.push(arm.body);
-            }
-        }
-        ExprKind::Closure { body, .. } | ExprKind::Handle { body, .. } => out.push(*body),
-        ExprKind::Par { range, body, .. } => out.extend([range.lo, range.hi, *body]),
-        ExprKind::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
-        ExprKind::Call { callee, args, .. } => {
-            out.push(*callee);
-            out.extend(args.iter().map(|a| a.expr));
-        }
-        ExprKind::Index { base, index } => out.extend([*base, *index]),
-        ExprKind::Range(r) => out.extend([r.lo, r.hi]),
-    }
-    out
 }
 
 fn find_flow(analyzed: &Analyzed, name: &str) -> Result<DefId, String> {

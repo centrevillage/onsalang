@@ -125,6 +125,69 @@ impl Ast {
             _ => None,
         }
     }
+
+    /// The direct sub-expressions of `e` in source order: every one, the
+    /// expressions of the statements of a block, a callee, the base of a
+    /// field, the length of `[x; N]`, the bounds of a `par` and the body of a
+    /// closure or a `handle` included. The one plain enumeration of the
+    /// children of an expression (R-91 (1)); a walk that treats some of them
+    /// apart matches those in arms of its own before it calls this (the
+    /// state marking of a flow, `onsa graph`). `^y` has none (it reads the
+    /// local `y`), nor has `Error`: whether meeting one is a bug is the
+    /// caller's to decide.
+    pub fn sub_exprs(&self, e: ExprId) -> Vec<ExprId> {
+        let mut out = Vec::new();
+        match &self.expr(e).kind {
+            ExprKind::Error | ExprKind::Lit(_) | ExprKind::Path(_) | ExprKind::Hole | ExprKind::Feedback(_) => {}
+            ExprKind::Paren(x)
+            | ExprKind::At { expr: x, .. }
+            | ExprKind::Unary { expr: x, .. }
+            | ExprKind::Cast { expr: x, .. }
+            | ExprKind::Try(x)
+            | ExprKind::Move(x)
+            | ExprKind::Field { base: x, .. }
+            | ExprKind::TupleIndex { base: x, .. }
+            | ExprKind::TypeArgs { base: x, .. }
+            | ExprKind::Unsafe(x) => out.push(*x),
+            ExprKind::Tuple(xs) | ExprKind::Array(xs) => out.extend(xs.iter().copied()),
+            ExprKind::Repeat { elem, len } => out.extend([*elem, *len]),
+            ExprKind::Struct { fields, .. } => out.extend(fields.iter().map(|(_, x)| *x)),
+            ExprKind::Block(b) => {
+                for &s in &b.stmts {
+                    match &self.stmt(s).kind {
+                        StmtKind::Let { init, .. } | StmtKind::Var { init, .. } => out.push(*init),
+                        StmtKind::Assign { target, value } => out.extend([*target, *value]),
+                        StmtKind::For { iter, body, .. } => out.extend([*iter, *body]),
+                        StmtKind::While { cond, body } => out.extend([*cond, *body]),
+                        StmtKind::Return(Some(x)) | StmtKind::Assert(x) | StmtKind::Expr(x) => out.push(*x),
+                        StmtKind::Return(None) | StmtKind::Break | StmtKind::Continue => {}
+                    }
+                }
+                out.extend(b.tail);
+            }
+            ExprKind::If { cond, then, else_, .. } => {
+                out.extend([*cond, *then]);
+                out.extend(*else_);
+            }
+            ExprKind::Match { scrutinee, arms, .. } => {
+                out.push(*scrutinee);
+                for arm in arms {
+                    out.extend(arm.guard);
+                    out.push(arm.body);
+                }
+            }
+            ExprKind::Closure { body, .. } | ExprKind::Handle { body, .. } => out.push(*body),
+            ExprKind::Par { range, body, .. } => out.extend([range.lo, range.hi, *body]),
+            ExprKind::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
+            ExprKind::Call { callee, args, .. } => {
+                out.push(*callee);
+                out.extend(args.iter().map(|a| a.expr));
+            }
+            ExprKind::Index { base, index } => out.extend([*base, *index]),
+            ExprKind::Range(r) => out.extend([r.lo, r.hi]),
+        }
+        out
+    }
 }
 
 /// An identifier with its span. Names are not interned in M1.

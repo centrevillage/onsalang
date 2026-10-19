@@ -4,6 +4,7 @@ use std::path::Path;
 
 use onsa_diag::{Code, FileId};
 
+use crate::body::LocalId;
 use crate::flow::{FlowInfo, FlowRate, InitArg, Node};
 use crate::{Analysis, DefId, Module, Package, analyze};
 
@@ -213,6 +214,72 @@ fn non_rt_function_only_at_init() {
 fn constant_lets_are_never_state() {
     let a = ok("pub flow f(x: F32 at sample) -> F32 at sample {\n  let two = 2.0\n  x * two\n}\n");
     assert_eq!(let_rate(flow(&a, "f"), "two"), (FlowRate::Const, false));
+}
+
+// ---------------------------------------------------------------- reads
+
+/// The highest rate at which the one local named `name` is read
+/// (`FlowInfo::read_at`; `None`: never read).
+fn read_at(f: &FlowInfo, name: &str) -> Option<FlowRate> {
+    let ids: Vec<usize> = f.body.locals.iter().enumerate().filter(|(_, l)| l.name == name).map(|(i, _)| i).collect();
+    assert_eq!(ids.len(), 1, "locals named {name}");
+    f.read_at.get(&LocalId(ids[0] as u32)).copied()
+}
+
+#[test]
+fn read_at_inputs() {
+    let a = ok(
+        "pub flow f(x: F32 at sample, c: F32 at block, k: F32 at block, t: F32 at init, u: F32 at init) -> F32 at sample {\n  let a = c * k\n  let y = prev~(x, t)\n  (y * a) + c\n}\n",
+    );
+    let f = flow(&a, "f");
+    // The first argument of a delay at `Sig`, its `init` at `Init`.
+    assert_eq!(read_at(f, "x"), Some(FlowRate::Sig));
+    assert_eq!(read_at(f, "t"), Some(FlowRate::Init));
+    // `c` is read at `Ctl` in `a` and at `Sig` in the output: the faster.
+    assert_eq!(read_at(f, "c"), Some(FlowRate::Sig));
+    assert_eq!(read_at(f, "k"), Some(FlowRate::Ctl));
+    assert_eq!(read_at(f, "u"), None);
+}
+
+#[test]
+fn read_at_lets() {
+    let a = ok(
+        "pub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let a = c * 2.0\n  let b = a + 1.0\n  let s = g~(b)\n  let y = x + prev~(^y)\n  let e = a + x\n  let d = a * c\n  e + d + s\n}\n",
+    );
+    let f = flow(&a, "f");
+    // Read at `Ctl` in `b`, at `Sig` in `e` and at `Ctl` again in `d` after
+    // it: the fastest read, not the last, and so state (S-05).
+    assert_eq!(read_at(f, "a"), Some(FlowRate::Sig));
+    assert_eq!(let_rate(f, "a"), (FlowRate::Ctl, true));
+    // An instance argument is read at the rate of the callee's input.
+    assert_eq!(read_at(f, "b"), Some(FlowRate::Ctl));
+    assert_eq!(let_rate(f, "b"), (FlowRate::Ctl, false));
+    assert_eq!(read_at(f, "s"), Some(FlowRate::Sig));
+    // `y` is read only by `^y`, in the first argument of a delay, at `Sig`.
+    assert_eq!(read_at(f, "y"), Some(FlowRate::Sig));
+}
+
+#[test]
+fn read_at_par_variables() {
+    let a = ok(
+        "use std.dsp.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par i in 0..<2 { g~(c + i.round_f32()) }\n  let q = par j in 0..<2 { x * j.round_f32() }\n  sum(p) + sum(q)\n}\n",
+    );
+    let f = flow(&a, "f");
+    // `i` in an argument of an instance whose input is at `block`.
+    assert_eq!(read_at(f, "i"), Some(FlowRate::Ctl));
+    assert_eq!(read_at(f, "j"), Some(FlowRate::Sig));
+}
+
+#[test]
+fn read_at_match_bindings() {
+    let a = ok(
+        "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  let n = match Some(x) {\n    Some(w) => w * m,\n    None => 0.0,\n  }\n  n\n}\n",
+    );
+    let f = flow(&a, "f");
+    assert_eq!(read_at(f, "v"), Some(FlowRate::Ctl));
+    assert_eq!(read_at(f, "w"), Some(FlowRate::Sig));
+    assert_eq!(read_at(f, "m"), Some(FlowRate::Sig));
+    assert_eq!(let_rate(f, "m"), (FlowRate::Ctl, true));
 }
 
 // ---------------------------------------------------------------- diagnostics

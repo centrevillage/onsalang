@@ -74,49 +74,10 @@ impl<'a> Rater<'a> {
             }
             ExprKind::Par { body, .. } => self.mark(*body, ctx),
             _ => {
-                for child in children(expr) {
+                for child in self.ast.sub_exprs(e) {
                     self.mark(child, ctx);
                 }
             }
         }
-    }
-}
-
-/// Direct sub-expressions of an expression (for the marking walk).
-fn children(expr: &onsa_syntax::ast::Expr) -> Vec<ExprId> {
-    match &expr.kind {
-        ExprKind::Paren(x) | ExprKind::Move(x) | ExprKind::Try(x) | ExprKind::Unsafe(x) => vec![*x],
-        ExprKind::Cast { expr, .. } | ExprKind::Unary { expr, .. } | ExprKind::At { expr, .. } => vec![*expr],
-        ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.clone(),
-        ExprKind::Repeat { elem, .. } => vec![*elem],
-        ExprKind::Struct { fields, .. } => fields.iter().map(|(_, x)| *x).collect(),
-        ExprKind::Block(b) => b.tail.into_iter().collect(),
-        ExprKind::If { cond, then, else_, .. } => {
-            let mut v = vec![*cond, *then];
-            v.extend(*else_);
-            v
-        }
-        ExprKind::Match { scrutinee, arms, .. } => {
-            let mut v = vec![*scrutinee];
-            for arm in arms {
-                v.extend(arm.guard);
-                v.push(arm.body);
-            }
-            v
-        }
-        ExprKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
-        ExprKind::TupleIndex { base, .. } | ExprKind::TypeArgs { base, .. } => vec![*base],
-        ExprKind::Index { base, index } => vec![*base, *index],
-        ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
-        ExprKind::Range(r) => vec![r.lo, r.hi],
-        ExprKind::Par { body, .. } => vec![*body],
-        ExprKind::Lit(_)
-        | ExprKind::Path(_)
-        | ExprKind::Feedback(_)
-        | ExprKind::Hole
-        | ExprKind::Error
-        | ExprKind::Field { .. }
-        | ExprKind::Closure { .. }
-        | ExprKind::Handle { .. } => Vec::new(),
     }
 }
