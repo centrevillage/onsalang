@@ -15,16 +15,16 @@ use crate::token::TokenKind;
 /// The candidate that takes out the blank or the line break before the
 /// opener at `c.at` (S-89, S-399): a blank right after the token before it
 /// goes, and else its line moves up to that token
-/// ([`super::edits::move_up`], S-216). The one place of that candidate.
+/// ([`crate::edits::move_up`], S-216). The one place of that candidate.
 pub(super) fn join_fix(c: &Cursor) -> Option<Fix> {
     // Only the blank changes: what follows the opener on its line stays out
     // of the edit (§18.1, R-214).
     if c.before(c.at).is_some() {
-        return Some(super::edits::take_out_blanks("remove the space", vec![c.space_before(c.at)?]));
+        return Some(crate::edits::take_out_blanks("remove the space", vec![c.space_before(c.at)?]));
     }
     let prev = c.sig_before(c.at)?;
     let title = if c.at_line_head(c.at) { "remove the line break" } else { "remove the space" };
-    Some(super::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], ""))
+    Some(crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], ""))
 }
 
 /// The candidates of the general E0002 at the token after an element of a

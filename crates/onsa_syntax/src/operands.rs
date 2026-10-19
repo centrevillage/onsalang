@@ -9,7 +9,7 @@
 //! block-like operands of the expressions its edits share text with
 //! ([`groups::block_like_operands`], the judgment of E0013) are
 //! parenthesized in it. The candidate so completed is read once more, and it
-//! is dropped when it nests over the limit ([`groups::nests_too_deep`]) or
+//! is dropped when it nests over the limit ([`nesting::nests_too_deep`]) or
 //! leaves more than the candidate alone did, less the E0013 of those
 //! expressions (§18.1: a candidate that cannot keep the promise is not made;
 //! another error of the unit stays as it was).
@@ -25,12 +25,13 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
 use crate::cst::Cst;
 use crate::groups;
+use crate::nesting;
 use crate::units::Units;
 
 /// What the completion read again in a file: the text of the units (bytes,
 /// one count per reading), the text lexed in the file to judge whether two
-/// tokens join (`crate::foreign::lexed`: for the rows that take blanks out
-/// and for the candidates reported, [`crate::foreign::apart`]), the
+/// tokens join (`crate::edits::lexed`: for the rows that take blanks out
+/// and for the candidates reported, [`crate::edits::apart`]), the
 /// candidates dropped (a
 /// completed one that left more diagnostics of the syntax stage than the
 /// candidate alone did, less the E0013 it takes away) and those kept as they
@@ -47,7 +48,7 @@ pub struct CandidateReads {
 /// The candidates of the diagnostics of the syntax stage that a check
 /// reports among `diagnostics` (of the file `text` whose CST and units are
 /// those), with the parentheses they need and apart from the tokens around
-/// what they take out ([`crate::foreign::apart`]). E0013's own candidate is
+/// what they take out ([`crate::edits::apart`]). E0013's own candidate is
 /// those parentheses. A diagnostic left without a candidate takes the code
 /// of [`Code::without_fixes`]; E0002 orders before the other codes at its
 /// place, so it stays the one reported.
@@ -55,7 +56,7 @@ pub(crate) fn complete(
     text: &str,
     cst: &Cst,
     units: &Units,
-    apart: &crate::foreign::Insertions,
+    apart: &crate::edits::Insertions,
     diagnostics: &mut [Diagnostic],
 ) -> CandidateReads {
     let reported: Vec<bool> =
@@ -67,7 +68,7 @@ pub(crate) fn complete(
         }
         let file = d.span.file;
         let fixes: Vec<Fix> = (std::mem::take(&mut d.fixes).into_iter())
-            .map(|f| crate::foreign::apart(file, text, cst.tokens(), f, apart))
+            .map(|f| crate::edits::apart(file, text, cst.tokens(), f, apart))
             .collect();
         d.fixes = match d.code {
             Code::E0013 => fixes,
@@ -101,7 +102,7 @@ fn completed(text: &str, units: &Units, fix: Fix, reads: &mut CandidateReads) ->
     let operands: Vec<Span> = touched.iter().flat_map(|(_, o)| o.iter().copied()).collect();
     let local = composed(local, &regions, groups::parenthesizing(&operands).collect());
     let edits: Vec<Edit> = local.iter().map(|e| within.global(e)).collect();
-    let deep = groups::nests_too_deep(text, within, within.span, &edits, operands.len() as u32);
+    let deep = nesting::nests_too_deep(text, within, within.span, &edits, operands.len() as u32);
     let Some((again, regions)) = applied(own, &local).ok().filter(|_| !deep) else {
         reads.dropped += 1;
         return None;

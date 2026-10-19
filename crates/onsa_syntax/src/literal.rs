@@ -310,7 +310,7 @@ pub(crate) fn point_after_int(rest: &str) -> Point {
             Point::Exponent
         }
         // SPEC-GAP(S-453): `1.f`, the float suffix of C after a point, is the member `.f`.
-        Some(n) if crate::lexer::is_ident_start(n) || n == b'(' => Point::Member,
+        Some(n) if crate::chars::is_ident_start(n) || n == b'(' => Point::Member,
         _ => Point::TrailingDot,
     }
 }
@@ -332,7 +332,7 @@ pub(crate) fn number(rest: &str) -> Number {
     let at = |i: usize| b.get(i).copied();
     // The common number, digits alone (`42`, `0`): nothing else to read.
     let plain = run(b, 0, |x| x.is_ascii_digit());
-    if !at(plain).is_some_and(|x| x == b'.' || crate::lexer::is_ident_continue(x)) && (plain == 1 || b[0] != b'0') {
+    if !at(plain).is_some_and(|x| x == b'.' || crate::chars::is_ident_continue(x)) && (plain == 1 || b[0] != b'0') {
         return Number {
             len: plain,
             body: plain,
@@ -415,8 +415,8 @@ pub(crate) fn number(rest: &str) -> Number {
         }
     }
     n.body = i;
-    if at(i).is_some_and(crate::lexer::is_ident_start) {
-        let suffix = run(b, i, crate::lexer::is_ident_continue);
+    if at(i).is_some_and(crate::chars::is_ident_start) {
+        let suffix = run(b, i, crate::chars::is_ident_continue);
         n.len = suffix;
         // The `_` before the suffix goes with it (`1_000_u8` is `1_000`).
         n.body = i - rest[..i].bytes().rev().take_while(|&x| x == b'_').count();
@@ -770,7 +770,7 @@ pub(crate) fn escape(after: &str) -> (Option<char>, usize) {
     if simple.is_some() {
         return (simple, 1);
     }
-    if crate::lexer::line_break(after.as_bytes()).is_some() {
+    if crate::chars::line_break(after.as_bytes()).is_some() {
         return (None, 0);
     }
     let Some(body) = after.strip_prefix("u{") else { return (None, c.len_utf8()) };

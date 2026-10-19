@@ -13,10 +13,10 @@ use std::fmt;
 
 use onsa_diag::Span;
 
+use crate::Parsed;
 use crate::ast::{Ast, Block, ExprKind, ItemId, ItemKind};
 use crate::dump::{dump_item, dump_stmt, dump_type};
 use crate::lexer::comment_text;
-use crate::parser::Parsed;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Change {

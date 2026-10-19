@@ -5,10 +5,10 @@
 use onsa_diag::{Diagnostic, Edit, Fix, Span};
 
 use super::{Cursor, Hit, RowId, Want, bit_not, diagnostic, hit};
+use crate::cst::Class;
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
 // The clock written after a type is apart from the token after it (R-205).
-use super::edits::{Insertions, insert_apart};
-use crate::cst::Class;
+use crate::edits::{Insertions, insert_apart};
 use crate::token::{Gap, TokenKind};
 
 // ------------------------------------------------------------ `if~`, `match~`
@@ -132,7 +132,7 @@ pub(super) fn else_if_tilde(c: &Cursor) -> Option<Hit> {
 /// node, or the node its candidate reads, a syntax error left unfinished is
 /// not reported: that error is the unit's. No candidate goes over the
 /// nesting limit (spec §2.5, `limit` the file and its units).
-pub(crate) fn clocks(cst: &Cst, limit: crate::groups::Limit, out: &mut Vec<Diagnostic>, marks: &mut Insertions) {
+pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diagnostic>, marks: &mut Insertions) {
     let text = limit.text;
     for (i, t) in cst.tokens().iter().enumerate() {
         if t.kind != TokenKind::KwAt {
@@ -161,7 +161,7 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::groups::Limit, out: &mut Vec<Diagn
         });
         let fixes = if too_deep { Vec::new() } else { fixes };
         let d = diagnostic(text, id, Hit { span: cst.span(clock), fixes, misplaced: false, resume: None, note: None });
-        out.push(if too_deep { d.with_rule(crate::groups::TOO_DEEP_RULE) } else { d });
+        out.push(if too_deep { d.with_rule(crate::nesting::TOO_DEEP_RULE) } else { d });
     }
 }
 

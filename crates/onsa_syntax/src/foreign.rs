@@ -53,7 +53,7 @@
 //! and what the parser recorded ([`Cursor`], [`Detached`], [`End`]). It asks
 //! the parser nothing of its judgements; it reads the parser only to read a
 //! candidate's code again (`parser::reads_as_expr`, and
-//! `groups::nests_too_deep` from the level the parser read to, [`Cursor::reach`]), which a candidate
+//! `nesting::nests_too_deep` from the level the parser read to, [`Cursor::reach`]), which a candidate
 //! must keep readable (S-236).
 //!
 //! Where the code is: this module holds the types ([`Row`], [`RowId`],
@@ -102,7 +102,6 @@ use crate::token::{Gap, Token, TokenKind};
 mod flow;
 mod spaces;
 
-pub(crate) use edits::{Insertions, apart, lexed};
 pub(crate) use flow::clocks;
 pub(crate) use spaces::held_errors;
 
@@ -216,7 +215,7 @@ pub struct Cursor<'a> {
     pub ends: &'a [(usize, End)],
     /// The deepest level (§2.5) that the unit of the failure reaches in what
     /// the parser read of it: a candidate that adds levels where it read is
-    /// counted by [`crate::groups::nests_too_deep`] only when it may go over
+    /// counted by [`crate::nesting::nests_too_deep`] only when it may go over
     /// the limit from there.
     pub reach: u32,
     /// The place of the attribute at `at`, when the parser asks about an
@@ -918,7 +917,6 @@ mod semicolons;
 pub use guard::guard_name;
 use guard::guard_pattern;
 
-pub(crate) use edits::move_up;
 pub use paths::TYPE_NAMES;
 pub(crate) use paths::{type_list_ahead, type_name};
 pub use rows::{MATCHERS, READS, ROWS, WAITING};

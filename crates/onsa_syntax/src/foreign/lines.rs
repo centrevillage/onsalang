@@ -7,10 +7,10 @@
 //! `|` and `||` of a pattern out of their place (S-383, S-389), and the
 //! prefix `+` that Onsa has not (S-405).
 
-use super::edits::move_up;
 use super::edits::{move_token_down, move_token_up};
 use super::lists::comma_before_sign;
 use super::*;
+use crate::edits::move_up;
 use crate::scan::arm_ahead;
 
 /// A line break after a member `.` (`s.` and `f` on the next line, also in

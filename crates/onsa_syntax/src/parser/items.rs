@@ -1,5 +1,5 @@
 //! The declarations: their doc comments, attributes and visibility, the
-//! dispatch on [`DECLARATIONS`] and the parser of each declaration.
+//! dispatch on [`DECLARATIONS`](super::declarations::DECLARATIONS) and the parser of each declaration.
 
 use super::heading::Heading;
 use super::*;

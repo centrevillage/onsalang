@@ -48,7 +48,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
         // both gaps out (`saw ~ (f0)` is one form).
         let paren = c.tokens.iter().enumerate().skip(c.at + 1).find(|(_, t)| !t.kind.is_trivia()).map(|(k, _)| k)?;
         let after =
-            super::edits::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");
+            crate::edits::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");
         match c.gap(c.at) {
             Gap::None => fixes.push(after),
             Gap::Space => {
@@ -132,8 +132,8 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
     // `1 . 5` would become the number `1.5` and `1 .e3` the float `1.e3`
     // (S-452): no candidate keeps their reading. `1 .(2)`, `1 .abs()` and
     // `t.0 .1` keep it (S-350): an integer and its member, two indexes.
-    let fix = super::edits::take_out_blanks("remove the space", blanks);
-    if super::edits::joining(c.file, c.text, c.all, fix.edits()).iter().any(|j| j.any()) {
+    let fix = crate::edits::take_out_blanks("remove the space", blanks);
+    if crate::edits::joining(c.file, c.text, c.all, fix.edits()).iter().any(|j| j.any()) {
         return None;
     }
     hit(c.span(c.at), vec![fix])
@@ -147,7 +147,7 @@ pub(super) fn space_before_question(c: &Cursor) -> Option<Hit> {
     if !c.question_detached() || c.gap(c.at) != Gap::Space {
         return None;
     }
-    hit(c.span(c.at), vec![super::edits::take_out_blanks("remove the space", vec![c.space_before(c.at)?])])
+    hit(c.span(c.at), vec![crate::edits::take_out_blanks("remove the space", vec![c.space_before(c.at)?])])
 }
 
 /// A blank after a prefix `-` / `!` (`- x`, `! done`, also of a negative
@@ -183,7 +183,7 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<(RowId, Hit)> {
         && let Some((s, prev)) = c.head_symbol_after_operand().filter(|&(s, _)| s == c.at)
     {
         let title = "join it to the line before";
-        fixes.push(super::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
+        fixes.push(crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
         if kind == TokenKind::Minus {
             row = RowId::LeadingMinus;
         }

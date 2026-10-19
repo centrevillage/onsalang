@@ -10,6 +10,8 @@
 
 use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
+pub use crate::chars::{BLANKS, is_blank};
+use crate::chars::{is_ident_continue, is_ident_start, line_break};
 use crate::literal::{Form, Found, Hole, HoleError, Invalid, Literals, Touch};
 use crate::token::{Token, TokenKind};
 
@@ -51,21 +53,11 @@ pub(crate) fn unwritable(c: char) -> bool {
     matches!(c, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 
-/// The blanks (§2.5, S-201, S-441): the space and the tab. The one
-/// definition, for the lexer, fmt, the table of the forms of other languages
-/// and the `found` of a diagnostic (a range of blanks has none, §18.1).
-pub const BLANKS: [char; 2] = [' ', '\t'];
-
 /// The text of the comment at `span` of `src` without the blanks at its end:
 /// what `onsa fmt` writes and what its check and `diff --ast` compare, for
 /// the comments and the doc comments alike (`spec/tools.md` §3.4, §3.5).
 pub fn comment_text(src: &str, span: Span) -> &str {
     src[span.start as usize..span.end as usize].trim_end_matches(BLANKS)
-}
-
-/// Whether `c` is a blank ([`BLANKS`]).
-pub fn is_blank(c: char) -> bool {
-    BLANKS.contains(&c)
 }
 
 /// The offset where the line of `offset` in `text` starts.
@@ -79,18 +71,6 @@ pub(crate) fn line_start(text: &str, offset: u32) -> u32 {
 pub(crate) fn line_head(text: &str, offset: u32) -> Option<u32> {
     let start = line_start(text, offset);
     text[start as usize..offset as usize].chars().all(is_blank).then_some(start)
-}
-
-/// The length of the line break at the start of `rest`: 1 for a line feed,
-/// 2 for a carriage return and a line feed, `None` for anything else (a
-/// carriage return alone is no line break, §2.5). The one test of a line
-/// break, for the lexer and the escapes ([`crate::literal::escape`]).
-pub(crate) fn line_break(rest: &[u8]) -> Option<usize> {
-    match rest {
-        [b'\n', ..] => Some(1),
-        [b'\r', b'\n', ..] => Some(2),
-        _ => None,
-    }
 }
 
 /// The first token of the line of the token `i` of `tokens` (those of a
@@ -732,14 +712,6 @@ impl<'a> Lexer<'a> {
 /// name it looks for after a literal ([`Lexer::name_after`]).
 fn word_kind(word: &str) -> TokenKind {
     if word == "_" { TokenKind::Underscore } else { TokenKind::keyword(word).unwrap_or(TokenKind::Ident) }
-}
-
-pub(crate) fn is_ident_start(b: u8) -> bool {
-    b.is_ascii_alphabetic() || b == b'_'
-}
-
-pub(crate) fn is_ident_continue(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_'
 }
 
 /// The closing delimiter of a string of other languages ([`foreign_open`]):

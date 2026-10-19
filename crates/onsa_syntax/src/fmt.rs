@@ -19,8 +19,8 @@ mod space;
 mod table_tests;
 mod tail;
 
+use crate::Parsed;
 use crate::diff::{Difference, Place, same_program};
-use crate::parser::Parsed;
 
 /// Why [`format`] gives no text.
 #[derive(Debug, Clone, PartialEq, Eq)]

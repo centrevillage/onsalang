@@ -18,7 +18,7 @@ impl<'a> Parser<'a> {
     /// line break before it is the E0003 of §2.5 (S-47, S-202, R-62, S-413 to
     /// S-415): at the token (R-160), with the candidate that moves it and the
     /// rest of its line up to the end of the code before it, before the
-    /// comment there (S-216, [`crate::foreign::move_up`]); the reading goes on
+    /// comment there (S-216, [`crate::edits::move_up`]); the reading goes on
     /// past the line breaks, as if it were on the line.
     pub(super) fn e0003_unless_on_the_line(&mut self, kind: TokenKind) -> bool {
         let i = (self.pos..self.tokens.len()).find(|&k| !self.tokens[k].kind.is_trivia()).unwrap_or(self.pos);
@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
         if self.tokens[self.pos..i].iter().any(|t| t.kind == TokenKind::Newline) {
             let word = self.token_text(t).to_string();
             let title = format!("move `{word}` to the end of the line before");
-            let fix = crate::foreign::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
+            let fix = crate::edits::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
             let message = match kind {
                 TokenKind::KwElse | TokenKind::KwWith => {
                     format!("`{word}` must be on the same line as the closing `}}`")

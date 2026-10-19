@@ -21,9 +21,9 @@
 use std::collections::{HashMap, HashSet};
 
 use super::tail;
+use crate::Parsed;
 use crate::ast::{Ast, ExprKind, StmtKind};
 use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
-use crate::parser::Parsed;
 use crate::token::TokenKind;
 
 /// A rewrite of §3.3.
@@ -143,9 +143,9 @@ fn tail_return_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
 mod tests {
     use onsa_diag::FileId;
 
+    use crate::Parsed;
     use crate::ast::Ast;
     use crate::cst::{NodeId, NodeKind};
-    use crate::parser::Parsed;
 
     /// W3-11/b 1: a body that ends in more than one `return` (the ones before
     /// the last are dead code, which `check` takes) loses the `return` of the

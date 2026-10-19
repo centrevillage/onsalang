@@ -256,10 +256,10 @@ fn a_candidate_parses_again_only_for_a_unit_near_the_limit() {
     let src = |parens: usize| format!("fn f() -> I32 {{\n  {}5(2){}\n}}\n", "(".repeat(parens), ")".repeat(parens));
     let run = |parens: usize| {
         onsa_diag::stack::run(move || {
-            let before = crate::groups::PARSES.get();
+            let before = crate::nesting::PARSES.get();
             let p = crate::parse(FileId(0), &src(parens));
             let callee = p.diagnostics.iter().find(|d| d.found.as_deref() == Some("5(")).cloned();
-            (callee.map(|d| d.fixes.len()), crate::groups::PARSES.get() - before)
+            (callee.map(|d| d.fixes.len()), crate::nesting::PARSES.get() - before)
         })
     };
     assert_eq!(run(254), (Some(1), 0));
@@ -270,11 +270,11 @@ fn a_candidate_parses_again_only_for_a_unit_near_the_limit() {
     let three: String =
         (0..3).map(|i| format!("fn f{i}() -> I32 {{\n  {}5(2){}\n}}\n", "(".repeat(255), ")".repeat(255))).collect();
     let got = onsa_diag::stack::run(move || {
-        let before = crate::groups::PARSES.get();
+        let before = crate::nesting::PARSES.get();
         let p = crate::parse(FileId(0), &three);
         let fixes: Vec<usize> =
             p.diagnostics.iter().filter(|d| d.found.as_deref() == Some("5(")).map(|d| d.fixes.len()).collect();
-        (fixes, crate::groups::PARSES.get() - before)
+        (fixes, crate::nesting::PARSES.get() - before)
     });
     assert_eq!(got, (vec![0, 0, 0], 3));
 }
@@ -325,10 +325,10 @@ fn an_integer_and_its_member_call_have_candidates() {
     // units make no such parse (one per unit was quadratic in the units, and
     // a parse inside that parse exponential).
     let many: String = (0..24).map(|i| format!("fn f{i}() -> I32 {{\n  5(2)\n}}\n")).collect();
-    let before = crate::groups::PARSES.get();
+    let before = crate::nesting::PARSES.get();
     let p = crate::parse(FileId(0), &many);
     assert_eq!(p.diagnostics.iter().filter(|d| d.fixes.len() == 1).count(), 24, "{:?}", p.diagnostics);
-    assert_eq!(crate::groups::PARSES.get(), before);
+    assert_eq!(crate::nesting::PARSES.get(), before);
     // S-302: a candidate that would join the `.` after it has none; nor the
     // blanks around a `.` taken out where the integer and the `.` would read
     // as a float (`1.e3`, S-350, S-452).

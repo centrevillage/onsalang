@@ -9,11 +9,11 @@ use onsa_diag::{Code, FileId};
 use crate::CandidateReads;
 
 /// The number of diagnostics of `src`, what the completion read again, and
-/// the bytes that the check of the nesting limit read (`groups::READ`).
+/// the bytes that the check of the nesting limit read (`nesting::READ`).
 fn reads(src: &str) -> (usize, CandidateReads, usize) {
-    let before = crate::groups::READ.get();
+    let before = crate::nesting::READ.get();
     let p = crate::parse(FileId(0), src);
-    (p.diagnostics.len(), p.candidate_reads, crate::groups::READ.get() - before)
+    (p.diagnostics.len(), p.candidate_reads, crate::nesting::READ.get() - before)
 }
 
 /// The text read again is at most this many times the file: one diagnostic
@@ -130,11 +130,11 @@ fn a_unit_near_the_limit_is_read_alone_and_its_candidate_dropped() {
     let size = deep.len();
     let src = format!("{deep}fn f(b: I32) -> I32 {{\n  {{ 1 }} + {{ 2 }}\n}}\n");
     let (diagnostics, limit) = onsa_diag::stack::run(move || {
-        let before = crate::groups::READ.get();
+        let before = crate::nesting::READ.get();
         let p = crate::parse(FileId(0), &src);
         let found: Vec<(Code, usize, usize)> =
             p.diagnostics.iter().map(|d| (d.code, d.fixes.len(), d.notes.len())).collect();
-        (found, crate::groups::READ.get() - before)
+        (found, crate::nesting::READ.get() - before)
     });
     assert_eq!(diagnostics, [(Code::E0013, 0, 1), (Code::E0013, 1, 0)]);
     assert!(0 < limit && limit < size + 8, "read {limit} bytes, the deep unit is {size}");

@@ -1087,7 +1087,7 @@ fn every_maker_of_a_candidate_that_leaves_a_block_like_operand_parenthesizes_it(
 /// A blank before a postfix symbol after a block-like expression (S-537,
 /// R-214): one E0020 (the unit stops at it, so no E0013), whose one
 /// candidate takes the blank out and parenthesizes the expression
-/// (`foreign::edits::take_out_blanks`).
+/// (`edits::take_out_blanks`).
 #[test]
 fn a_blank_before_a_postfix_symbol_after_a_block_like_expression() {
     let i = "if a > 0 { xs } else { xs }";
