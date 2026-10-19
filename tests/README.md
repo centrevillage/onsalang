@@ -1,6 +1,6 @@
 # テストの事例
 
-期待値付きの事例の書き方の要約と、`tests/` の索引である（決定 [D-05](../decisions/D/D-05.md)）。
+期待値付きの事例の書き方の要約と、`tests/` の索引である（今の正本。経緯は決定 [D-05](../decisions/D/D-05.md)）。
 器（`onsa_tests`）は `tests/` の全体を走査して事例を集め、`review-phase1/` と `fuzz/` を除く。Rust に事例の表は無い。
 
 ## 事例の形
@@ -10,10 +10,10 @@
 - `[test]` のキー（閉じた表）:
   - `mode`: `"none"`（収録だけ）/ `"parse"`（構文解析だけ）/ `"check"`（check の診断を印と比べる。既定）/ `"test"`（check の後、`test` ブロックをインタプリタで走らせる）。
   - `spec`: 事例が確かめる仕様の節（`"§11.4"`）。
-  - `golden`: 比べる写しの種類（`"core"` / `"interface"` / `"c"`）で、写しは `golden/<種類>/<事例>.<ターゲット>.<拡張子>`。`golden_graph`: `onsa graph` を比べる flow の名前で、写しは `golden/graph/<事例>.<flow>.dot`。
+  - `golden`: 比べる写しの種類（`"core"` / `"interface"` / `"c"`）。写しは `golden/core/<事例>.core`、`golden/interface/<事例>.txt`、`golden/c/<事例>.<ターゲット>.c` と `.h`。`golden_graph`: `onsa graph` を比べる flow の名前で、写しは `golden/graph/<事例>.<flow>.dot`。
   - `conformance`: 全ての `pub flow` を export し、インタプリタと C を比べる（§13.4）。
   - `fixes`: 診断の修正候補の数。候補を当てた後の全文は、ファイルの隣の `.fix1`〜`.fix<N>`。
-  - `canonical = false`: 印の無いファイルで、`onsa fmt` が書き換えるもの（正規の形と比べない）。
+  - `canonical = false`: `mode` が `"none"` でなければ、印の無いファイルは `onsa fmt` の正規形でなければならない（`fmt` が変えず、冪等）。`fmt` が書き換える正例はこのキーを書く（正規の形と比べず、書き換えた結果が読めて冪等なことを確かめる）。
   - `[[test.fix]]`: 一つの候補が当てた後に残すものと、さらに約束する性質。細部は D-05 の W3-17 の項。
   - `[[test.host]]`: ターゲットの C の境界での呼び出しの手順と、各手順の期待値。細部は D-05 の K-14 と W1-11 の項。
 - ターゲットを持つ事例は、同じ断片に `[targets.*]` と `[export]` を書く。テスト専用の既定値は無く、ターゲットの欄は全て書く。
@@ -33,7 +33,7 @@
 ## 書く人
 
 `.fixK` は実装の回帰の写しで、テストの役割は書かない（[`rules/process.md`](../rules/process.md) 8.5）。
-まだ通らない事例は [`pending.toml`](pending.toml)（実装待ちの一覧）に載せる。テストの役割と、並行の作業があるときの実装の役割は一覧を編集せず、載せる項目を報告に並べ、親が足す（`rules/documents.md` 5.1、`rules/process.md` 8.6 の「新しい構文のテスト」）。一覧の項目と印は並べない。
+まだ通らない事例は [`pending.toml`](pending.toml)（実装待ちの一覧）に載せる。テストの役割と、並行の作業があるときの実装の役割は一覧を編集せず、載せる項目を報告に並べ、親が足す（`rules/documents.md` 5.1、`rules/process.md` 8.6 の「新しい構文のテスト」）。一覧に test 単位（`<パス>::<名前>`）で載せた test には、TESTFAIL と PANIC を付けない。
 
 ## ディレクトリ
 
