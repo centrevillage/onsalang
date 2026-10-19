@@ -135,6 +135,17 @@ def table_cells(row):
     return [c.strip() for c in cells]
 
 
+BUDGETS = "rules/budgets.md"  # the values the tools read are written there alone (X9-74)
+
+
+def budget_value(root, name):
+    """The cell 値 of the row `name` of rules/budgets.md (how to read its numbers is each tool's); RepoError why not."""
+    row = next((c for c in map(table_cells, read(root, BUDGETS).splitlines()) if c[:1] == [name]), None)
+    if row is None:
+        raise RepoError(f"{BUDGETS}: no row 「{name}」")
+    return row[1] if len(row) > 1 else ""
+
+
 # ---------------------------------------------------------------- tests/pending.toml (read here, validated by tools/pending.py)
 
 PENDING_FIELDS = ("kind", "target", "reasons", "until", "note")

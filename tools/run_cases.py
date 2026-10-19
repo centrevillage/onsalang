@@ -11,7 +11,7 @@ directory and runs the runner on it; it prints `ok` or `FAIL` and the problems o
 --bin   the case runner (default: <tree>/target/debug/onsa_cases)
 --work  a scratch directory of the caller; it is emptied first
 The runner does not read tests/pending.toml, so a case listed there fails here as it fails without the list.
-Exit 0 when every case passes, 1 otherwise.
+Exit 0 when every case passes, 1 otherwise (without the runner too: a line says which path is not there).
 """
 import argparse
 import glob
@@ -34,6 +34,9 @@ def main() -> int:
     a = ap.parse_args()
     tests = os.path.join(a.tree, "tests")
     runner = a.bin or os.path.join(a.tree, "target", "debug", "onsa_cases")
+    if shutil.which(runner) is None:
+        print(f"no case runner: {runner} (build it, or pass one with --bin)")
+        return 1
     shutil.rmtree(a.work, ignore_errors=True)
     for rel in a.paths:
         src = os.path.join(tests, rel)

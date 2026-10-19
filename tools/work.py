@@ -28,8 +28,10 @@ does. The worktree is a path or a name under `<main>/.claude/worktrees/`; the ba
 `git merge-base dev <its HEAD>`, and the patch `<main>/target/work/<name>-<time>.patch`. It adds to the
 summary the hunks of the patch in `REGISTRIES` as they are; with `--estimate N`, the ratio of the lines
 added to the code (without the tests and the data, as the summary counts them) to N and whether it is over
-the size to refactor (`REFACTOR`); and when the check is 3-way and the patch has `tests/pending.toml`, the
-line that says to rebuild it from dev's version (rules/leader.md 3.4).
+the size to refactor, read from the row `REFACTOR` of rules/budgets.md of the main tree (`lines`: of the worktree;
+without the row or its numbers, the line says why it is not judged, and nothing stops); and when the check is
+3-way and the patch has `tests/pending.toml`, the line that says to rebuild it from dev's version
+(rules/leader.md 3.4).
 
 `patch` and an `apply` that exits 0 each add a line to `<the main tree>/target/work/taken.jsonl` (`TAKEN`,
 `record`; the cleaning up reads it, X9-16): `{"time", "kind": "patch", "worktree", "branch", "base",
@@ -149,7 +151,8 @@ DISCARDED = Path("target") / "work" / "discarded"  # the last patches of the wor
 RECORDS_ENV = "ONSA_CLAUDE_RECORDS"  # Claude Code's records of the sessions, if not handback.PROJECT (self-tests)
 REGISTRIES = ("tools/builtin_names.toml", "tests/pending.toml")  # the hunks `take` shows (rules/leader.md 4.1)
 PENDING = "tests/pending.toml"
-REFACTOR = (3, 100)  # the size to refactor (rules/budgets.md): over 3 times the estimate, and 100 lines more
+REFACTOR = "リファクタリングに入る大きさ"  # the row of rules/budgets.md: 「… 見積もりの N 倍を超え、かつ差が M 行以上」
+REFACTOR_FORM = re.compile(r"(\d+)\s*倍を超え.*?差が\s*(\d+)\s*行以上")  # (ratio, lines): over ratio times and lines more
 AGAIN = "work check: run it again in the main tree"
 CODE_SUFFIXES = (".rs", ".py", ".sh", ".c", ".h", ".js")
 ALREADY = "already in the tree (its reverse applies); nothing to do"
@@ -492,12 +495,25 @@ def hunks_of(text, path):
     return out
 
 
-def estimate_line(lines, estimate):
-    ratio, diff = REFACTOR
+def refactor_size(root):
+    """(ratio, lines) of the row REFACTOR of rules/budgets.md in the tree `root`, or (a str) why not."""
+    try:
+        m = REFACTOR_FORM.search(repo.budget_value(root, REFACTOR))
+    except repo.RepoError as e:
+        return str(e)
+    return (int(m[1]), int(m[2])) if m else f"{repo.BUDGETS}: the row 「{REFACTOR}」 says no 「N 倍を超え、かつ差が M 行以上」"
+
+
+def estimate_line(lines, estimate, root):
+    head = (f"estimate: +{lines} of the code (without the tests and the data) against {estimate}: "
+            f"{lines / estimate:.2f} times; ")
+    size = refactor_size(root)
+    if isinstance(size, str):
+        return head + f"not judged against the size to refactor ({size})"
+    ratio, diff = size
     over = lines > ratio * estimate and lines - estimate >= diff
-    return (f"estimate: +{lines} of the code (without the tests and the data) against {estimate}: "
-            f"{lines / estimate:.2f} times; " + ("over" if over else "within")
-            + f" the size to refactor (rules/budgets.md: over {ratio} times and {diff} lines more)")
+    return (head + ("over" if over else "within")
+            + f" the size to refactor ({repo.BUDGETS}: over {ratio} times and {diff} lines more)")
 
 
 def fresh(directory, name):
@@ -536,7 +552,7 @@ def take(args):
         if hunks:
             print(f"the hunks of {path}:", *hunks, sep="\n")
     if args.estimate:
-        print(estimate_line(code[0], args.estimate))
+        print(estimate_line(code[0], args.estimate, main))
     how, paths, notes = checked(out, main)
     if how.startswith("3way") and PENDING in paths:
         print(f"{PENDING} is in a patch that applies 3-way: rebuild it from dev's version (rules/leader.md 3.4)")
@@ -948,7 +964,7 @@ def lines(args):
           "untracked files too")
     code = summary(stats, new, inner)
     if args.estimate:
-        print(estimate_line(code[0], args.estimate))
+        print(estimate_line(code[0], args.estimate, tree))
     return 0
 
 

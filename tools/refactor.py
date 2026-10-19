@@ -19,8 +19,8 @@ sys.dont_write_bytecode = True
 import repo  # noqa: E402
 
 ROOT = repo.ROOT
-BUDGETS = "rules/budgets.md"
-BUDGET = "リファクタリングの対象の大きさ"  # its value: 「… 関数は 100 行、ファイルは 1000 行を超えるもの …」
+BUDGETS = repo.BUDGETS
+BUDGET = "リファクタリングの対象の大きさ"  # its value: 「… 関数は N 行、ファイルは N 行を超えるもの …」
 LIMITS = {"fn": re.compile(r"関数は\s*(\d+)\s*行"), "file": re.compile(r"ファイルは\s*(\d+)\s*行")}
 FN = re.compile(r"fn\s+(?:r#)?(\w+)")
 
@@ -28,13 +28,10 @@ FN = re.compile(r"fn\s+(?:r#)?(\w+)")
 def limits(root):
     """{"fn": lines, "file": lines} of the row BUDGET of rules/budgets.md, or (a str) why not."""
     try:
-        text = repo.read(root, BUDGETS)
+        value = repo.budget_value(root, BUDGET)
     except repo.RepoError as e:
         return str(e)
-    row = next((c for c in map(repo.table_cells, text.splitlines()) if c[:1] == [BUDGET]), None)
-    if row is None:
-        return f"{BUDGETS}: no row 「{BUDGET}」"
-    found = {k: r.search(row[1] if len(row) > 1 else "") for k, r in LIMITS.items()}
+    found = {k: r.search(value) for k, r in LIMITS.items()}
     if not all(found.values()):
         return f"{BUDGETS}: the row 「{BUDGET}」 says no lines of a fn and of a file (「関数は N 行」「ファイルは N 行」)"
     return {k: int(m[1]) for k, m in found.items()}

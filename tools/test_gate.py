@@ -4824,6 +4824,7 @@ class Work(unittest.TestCase):
     """tools/work.py (X-9 U4): `new` from dev, `take` with its stops and `--go`, the record, the hook WorktreeCreate, and the help."""
 
     LINES = "".join(f"{i}\n" for i in range(1, 10))
+    BUDGET = "実際の行数が見積もりの 3 倍を超え、かつ差が 100 行以上"
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -4834,6 +4835,7 @@ class Work(unittest.TestCase):
         for rel in ("a.txt", *work.REGISTRIES):
             (self.main / rel).parent.mkdir(parents=True, exist_ok=True)
             (self.main / rel).write_text(self.LINES)
+        self.budget(self.BUDGET)
         git_in(self.main, "add", "-A")
         git_in(self.main, "commit", "-qm", "base")
         self.dev = self.head(self.main)
@@ -4841,8 +4843,40 @@ class Work(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def budget(self, value, name=work.REFACTOR):
+        (self.main / "rules").mkdir(exist_ok=True)
+        (self.main / repo.BUDGETS).write_text(f"| 名前 | 値 |\n|---|---|\n| 他 | 2 倍を超え、かつ差が 1 行以上 |\n"
+                                              f"| {name} | {value} |\n")  # fmt: skip
+
     def head(self, tree):
         return git_in(tree, "rev-parse", "HEAD").strip()
+
+    def test_estimate_from_budgets(self):
+        # X-9 U19: the ratio and the lines of the size to refactor are the row's of rules/budgets.md of the tree
+        def judged(lines):
+            return work.estimate_line(lines, 50, self.main).split("times; ")[1]
+
+        size = "the size to refactor (rules/budgets.md: over {} times and {} lines more)"
+        self.assertEqual((judged(150), judged(151)), (f"within {size.format(3, 100)}", f"over {size.format(3, 100)}"))
+        self.budget("見積もりの 2 倍を超え、かつ差が 50 行以上")
+        self.assertEqual((judged(100), judged(101)), (f"within {size.format(2, 50)}", f"over {size.format(2, 50)}"))
+        self.assertIsInstance(work.refactor_size(repo.ROOT), tuple)  # the row of this repository reads
+        for value, name, says in (("x", "他の行", "no row 「リファクタリングに入る大きさ」"),
+                                  ("3 倍を超えるもの", work.REFACTOR, "the row 「リファクタリングに入る大きさ」 says no")):  # fmt: skip
+            with self.subTest(says=says):
+                self.budget(value, name)
+                self.assertTrue(judged(150).startswith(f"not judged against the size to refactor (rules/budgets.md: "
+                                                       f"{says}"), judged(150))  # fmt: skip
+        # without rules/budgets.md in the main tree, take still applies, and the line says why it is not judged
+        wt = self.worktree()
+        gate_runs.record(wt, "work X-9/U19", [], {"fz": ["PASS", 1.0]}, "PASS", 1.0, repo.tree_hash(wt),
+                         code_tree=repo.tree_hash(wt, narrowing.SWEPT))  # fmt: skip
+        (self.main / repo.BUDGETS).unlink()
+        code, lines = self.take("w1", "--estimate", 50)
+        self.assertEqual(code, 0, lines)
+        self.assertIn("estimate: +150 of the code (without the tests and the data) against 50: 3.00 times; not judged "
+                      "against the size to refactor (rules/budgets.md: [Errno 2]", "\n".join(lines))  # fmt: skip
+        self.assertEqual((self.main / "a.txt").read_text(), self.LINES.replace("2\n", "two\n"))
 
     def test_new(self):
         code, lines = quiet_out(work.main, ["new", "a1", "--main", str(self.main)])
