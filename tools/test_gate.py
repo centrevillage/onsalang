@@ -5249,13 +5249,15 @@ class Work(unittest.TestCase):
             *["  reports: not checked (no --scratchpad)"] * 3]))  # fmt: skip
         self.assertEqual(lines[-1], "close: 3 to remove, 1 kept, 0 failed")
         self.assertEqual((branches(), clean.is_dir(), feature.is_dir()), (before, True, True))
-        self.assertIn("k3", git_in(self.main, "worktree", "list"))
+        # by the names of the trees: the temporary directory's own name may hold "k3"
+        trees = lambda: [Path(line.split()[0]).name for line in git_in(self.main, "worktree", "list").splitlines()]  # noqa: E731
+        self.assertIn("k3", trees())
         code, lines = self.clean("close")
         self.assertEqual((code, lines[-1]), (0, "close: 3 removed, 1 kept, 0 failed"))
         self.assertIn("  kept the branch feature (only worktree-… go)", lines)
         self.assertEqual(branches(), ["dev", "feature", "main", "other-x", "worktree-k2"])
         self.assertEqual((clean.exists(), kept.is_dir(), feature.exists()), (False, True, False))
-        self.assertNotIn("k3", git_in(self.main, "worktree", "list"))
+        self.assertNotIn("k3", trees())
         self.assertEqual(self.clean("done", self.main)[0], 1)  # the main tree is never one
         self.assertTrue(self.main.is_dir())
 
