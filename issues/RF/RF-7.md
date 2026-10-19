@@ -1,7 +1,9 @@
 +++
-status = "OPEN"
+status = "DONE"
 +++
 # RF-7 `Why::Differ` を理由の列挙型に、`list_fixes` の分岐を表に、`Parser::ends` を閉じた節から導く
 
 - 内容: `Why::Differ` を理由の列挙型に（W3-21/b の指摘 R6）、`list_fixes` の分岐を表に、`Parser::ends` を閉じた節から導く（(1) の候補の約束の論点の後）。
   - `many` の検出に行を足すときは、`ROWS`・`MATCHERS` の `rows`・検出の本体の三か所を直す（RF-7 と同じ回に見直す）。
+- 反映（2026-10-20、親）: X-6 で行った: `Why::Differ` を理由の列挙型に（A25、S2 `16e7185`）、`list_fixes` の分岐を表に（A27、S2）、`Parser::ends` を閉じた節から（A28、S1 `2704136`）、`many` の行の三か所（A29、S2 と S4 `1acbb2f` の自己テスト）、行ごとの note（A26、V `81f9f6b`。候補を作れない E0002 に理由の note を三つの文で、利用者が了承）。
+  残る低（V の壊す側）: 行を選ぶ判断が `Arm::read` の失敗の腕（`form.row()`）と `shape` の腕（`Why::row(head)`）の二か所にあり、同じコメントの理由で主文が割れる。タプルの `..`・フィールドの省略形など `Arm::read` が読めない形には理由の note が付かない（V-8 は三つの理由だけ）。
