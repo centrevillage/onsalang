@@ -337,3 +337,10 @@ left = "expected `…`, found newline"
 input = "tests/fuzz/232d7e85.onsa"
 reasons = ["S-384"]
 note = "an input cut short: `let c()` with no `=`, and the `{` of the test never closed; once the brackets go, the missing `=` is the next error"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected `…`, found `…`"
+input = "tests/fuzz/68d5e63c.onsa"
+reasons = ["R-244"]
+note = "a blank and a `.` after the name of a `let` with no `=` (`let y .0`): the E0020 of the blank around a member, whose candidate leaves the E0002 of the missing `=` at the same place"
