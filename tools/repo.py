@@ -11,6 +11,8 @@
 - the git directories of a root: the main tree or a worktree (`git_dirs`, `tree_kind`);
 - the stages in their order (`Layout.stages`, the table of `tasks/stages.md`, X-2 U6);
 - reading `tests/pending.toml` (`load_pending`; `tools/pending.py` validates it);
+- the test files and the test modules of Rust source (`NOT_CODE`, `test_lines`; `rust_code`, its code outside
+  the comments and the strings), X-9 U17;
 - the roles and the subcommands of a tool with their help (`ROLES`, `Command`, `parse_command`, X9-7).
 """
 import argparse
@@ -22,6 +24,7 @@ import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, NamedTuple
 
@@ -566,6 +569,97 @@ def is_build_output(root, rel):
             if i == 0 or any((parent / m).is_file() for m in BUILD_MANIFESTS):
                 return True
     return False
+
+
+# ---------------------------------------------------------------- the tests and the Rust source (work.py lines, refactor.py sizes)
+
+# The test files, by the path relative to the root (`fnmatch`, so `*` takes `/` too).
+NOT_CODE = ("tests/*", "crates/*/tests/*", "*/tests.rs", "*_tests.rs", "tools/test_*.py", "tools/*/test_*.py")
+# The pieces of Rust source that may hold a brace that is not one (`rust_code`).
+RAW_STRING = re.compile(r'b?r(#*)"')
+CHAR = re.compile(r"'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|.)|[^\\'\n])'")
+TEST_MOD = re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{")
+
+
+def is_test_file(rel):
+    return any(fnmatch(rel, p) for p in NOT_CODE)
+
+
+def rust_code(text, i=0):
+    """The offsets from `i` of the characters of Rust source outside the comments, the strings, the raw strings and
+    the character literals (a test holds the source of other languages in strings, with braces that do not pair)."""
+    n = len(text)
+    while i < n:
+        c = text[i]
+        ident = i > 0 and (text[i - 1].isalnum() or text[i - 1] == "_")
+        if text.startswith("//", i):
+            i = text.find("\n", i)
+            i = n if i < 0 else i
+            continue
+        if text.startswith("/*", i):
+            nest, i = 1, i + 2
+            while i < n and nest:
+                if text.startswith("/*", i):
+                    nest, i = nest + 1, i + 2
+                elif text.startswith("*/", i):
+                    nest, i = nest - 1, i + 2
+                else:
+                    i += 1
+            continue
+        raw = None if ident else RAW_STRING.match(text, i)
+        if raw:
+            close = '"' + raw.group(1)
+            j = text.find(close, raw.end())
+            i = n if j < 0 else j + len(close)
+            continue
+        if c == '"' or (c == "b" and not ident and text.startswith('b"', i)):
+            i += 2 if c == "b" else 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+            continue
+        if c == "'":
+            ch = CHAR.match(text, i)
+            i = ch.end() if ch else i + 1  # else a lifetime
+            continue
+        yield i
+        i += 1
+
+
+def block_end(text, i):
+    """The offset of the `}` that closes the first `{` from `i` in Rust source (`rust_code`); the end of the text
+    if none."""
+    depth = 0
+    for j in rust_code(text, i):
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return j
+    return len(text)
+
+
+def test_lines(text):
+    """The numbers (from 1) of the lines of the `#[cfg(test)] mod … { … }` blocks of a
+    Rust source: from the attribute to the closing brace."""
+    lines, out = text.split("\n"), set()
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line) + 1)
+    i = 0
+    while i < len(lines):
+        j = i + 1
+        while j < len(lines) and lines[j].lstrip().startswith(("#[", "//")):
+            j += 1
+        if lines[i].strip() != "#[cfg(test)]" or j == len(lines) or not TEST_MOD.match(lines[j]):
+            i += 1
+            continue
+        end = block_end(text, starts[j])
+        last = next(k for k in range(j, len(lines)) if starts[k + 1] > end)
+        out.update(range(i + 1, last + 2))
+        i = last + 1
+    return out
 
 
 # ---------------------------------------------------------------- git trees

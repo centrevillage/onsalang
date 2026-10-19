@@ -49,7 +49,7 @@ the data (`is_code`: the files ending in `CODE_SUFFIXES` that are not under
 `tests/` or `crates/*/tests/`, not `tests.rs` nor `*_tests.rs`, and not
 `tools/test_*.py` nor `tools/*/test_*.py`; in a Rust file of the code, the
 lines of a `#[cfg(test)] mod … { … }` block are tests too, on the new side for
-the added lines and on the old side for the removed ones: `test_lines`).
+the added lines and on the old side for the removed ones: `repo.test_lines`).
 Its second line, `work check: …`, reads the last work check of the worktree (its
 `target/gate/history.jsonl`, `tools/gate.py`) and says whether the parent need run it
 again in the main tree (rules/process.md 8.5; `work_check_line`). Its third line is the auto
@@ -126,7 +126,6 @@ import shutil
 import subprocess
 import sys
 import time
-from fnmatch import fnmatch
 from pathlib import Path
 from typing import NamedTuple
 
@@ -154,7 +153,6 @@ REFACTOR = (3, 100)  # the size to refactor (rules/budgets.md): over 3 times the
 AGAIN = "work check: run it again in the main tree"
 CODE_SUFFIXES = (".rs", ".py", ".sh", ".c", ".h", ".js")
 ALREADY = "already in the tree (its reverse applies); nothing to do"
-NOT_CODE = ("tests/*", "crates/*/tests/*", "*/tests.rs", "*_tests.rs", "tools/test_*.py", "tools/*/test_*.py")
 
 
 class Failed(Exception):
@@ -162,89 +160,15 @@ class Failed(Exception):
 
 
 def is_code(path):
-    return path.endswith(CODE_SUFFIXES) and not any(fnmatch(path, p) for p in NOT_CODE)
+    return path.endswith(CODE_SUFFIXES) and not repo.is_test_file(path)
 
 
-# The pieces of Rust source that may hold a brace that is not one (`test_lines`).
-RAW_STRING = re.compile(r'b?r(#*)"')
-CHAR = re.compile(r"'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|.)|[^\\'\n])'")
-TEST_MOD = re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{")
 HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
-
-
-def block_end(text, i):
-    """The offset of the `}` that closes the first `{` from `i` in Rust source, skipping
-    comments, strings, raw strings and character literals (a test holds the source of
-    other languages in strings, with braces that do not pair); the end of the text if none."""
-    depth, n = 0, len(text)
-    while i < n:
-        c = text[i]
-        ident = i > 0 and (text[i - 1].isalnum() or text[i - 1] == "_")
-        if text.startswith("//", i):
-            i = text.find("\n", i)
-            i = n if i < 0 else i
-            continue
-        if text.startswith("/*", i):
-            nest, i = 1, i + 2
-            while i < n and nest:
-                if text.startswith("/*", i):
-                    nest, i = nest + 1, i + 2
-                elif text.startswith("*/", i):
-                    nest, i = nest - 1, i + 2
-                else:
-                    i += 1
-            continue
-        raw = None if ident else RAW_STRING.match(text, i)
-        if raw:
-            close = '"' + raw.group(1)
-            j = text.find(close, raw.end())
-            i = n if j < 0 else j + len(close)
-            continue
-        if c == '"' or (c == "b" and not ident and text.startswith('b"', i)):
-            i += 2 if c == "b" else 1
-            while i < n and text[i] != '"':
-                i += 2 if text[i] == "\\" else 1
-            i += 1
-            continue
-        if c == "'":
-            ch = CHAR.match(text, i)
-            i = ch.end() if ch else i + 1  # else a lifetime
-            continue
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return i
-        i += 1
-    return n
-
-
-def test_lines(text):
-    """The numbers (from 1) of the lines of the `#[cfg(test)] mod … { … }` blocks of a
-    Rust source: from the attribute to the closing brace."""
-    lines, out = text.split("\n"), set()
-    starts = [0]
-    for line in lines:
-        starts.append(starts[-1] + len(line) + 1)
-    i = 0
-    while i < len(lines):
-        j = i + 1
-        while j < len(lines) and lines[j].lstrip().startswith(("#[", "//")):
-            j += 1
-        if lines[i].strip() != "#[cfg(test)]" or j == len(lines) or not TEST_MOD.match(lines[j]):
-            i += 1
-            continue
-        end = block_end(text, starts[j])
-        last = next(k for k in range(j, len(lines)) if starts[k + 1] > end)
-        out.update(range(i + 1, last + 2))
-        i = last + 1
-    return out
 
 
 def in_file_tests(tree, base, paths):
     """{path: [added, removed]}: the lines of the diff of the index of `tree` from `base`
-    in the files `paths` that are in a test module of the file (`test_lines`)."""
+    in the files `paths` that are in a test module of the file (`repo.test_lines`)."""
     out = {}
     if not paths:
         return out
@@ -256,8 +180,8 @@ def in_file_tests(tree, base, paths):
             old = line[6:] if line.startswith("--- a/") else None
         elif line.startswith("+++ "):
             new = line[6:] if line.startswith("+++ b/") else None
-            old_tests = test_lines(show(f"{base}:{old}")) if old else set()
-            new_tests = test_lines(show(f":{new}")) if new else set()
+            old_tests = repo.test_lines(show(f"{base}:{old}")) if old else set()
+            new_tests = repo.test_lines(show(f":{new}")) if new else set()
             counts = out.setdefault(new or old, [0, 0])
         elif line.startswith("@@ ") and counts is not None:
             m = HUNK.match(line)
