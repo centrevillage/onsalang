@@ -332,7 +332,9 @@ impl<'c, 'a> PatReader<'c, 'a> {
         // The alternative as the parser reads it: newlines are seen, comments not.
         let first = *self.toks.get(self.pos)?;
         let blocks = self.blocks;
-        let read = move |k: &TokenKind| (!k.is_trivia() && (blocks || *k != TokenKind::BlockComment)) || *k == TokenKind::Newline;
+        let read = move |k: &TokenKind| {
+            (!k.is_trivia() && (blocks || *k != TokenKind::BlockComment)) || *k == TokenKind::Newline
+        };
         let rest = self.c.tokens[first..].iter().map(|t| t.kind).filter(read);
         if let (end, Some(sym)) = crate::scan::pattern_alternative(rest) {
             return self.range(lo, lo + sym, lo + end);
