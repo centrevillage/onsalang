@@ -65,8 +65,10 @@ pub(crate) fn ends_operand(kind: TokenKind) -> bool {
 }
 
 /// Whether a token of `kind` after a member `.` is a member (§2.5): a name,
-/// a tuple index or the `(` of `.(`. The rows of a blank or a line break
-/// around the `.` read it (`foreign::spaces`, `foreign::lines`); the lexer
+/// a tuple index or the `(` of `.(`. The parser's postfix `.` reads it
+/// (`parser::expressions`, a keyword being a field name there), and so do the
+/// rows of a blank or a line break around the `.` (`foreign::spaces`,
+/// `foreign::lines`); the lexer
 /// reads the same at the bytes after a number's `.` (a name or a `(`, a digit
 /// being the fraction: `literal::point_after_int`).
 pub(crate) fn starts_member(kind: TokenKind) -> bool {

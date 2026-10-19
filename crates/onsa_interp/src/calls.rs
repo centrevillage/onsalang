@@ -206,8 +206,8 @@ impl<'m> Interp<'m> {
     }
 
     /// A call of a function without a body: lowering turns every call of a
-    /// `target fn` into a primitive or E0200 (`lower/body.rs`), so Core never
-    /// calls one (an internal error, S-67).
+    /// `target fn` into a primitive or E0200 (`lower/body/call.rs`
+    /// `lower_target_call`), so Core never calls one (an internal error, S-67).
     #[cold]
     #[inline(never)]
     fn no_body(&self, fn_: FnId) -> R<Value> {

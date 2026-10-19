@@ -239,11 +239,10 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Inse
     }
     // A value a syntax error cut on its line (`= 0..<3`: `0`, then `..<3`
     // left unread) is not the whole value: that error is the unit's (W3-09/b2).
-    // The token after the statement on its line, over the blanks and the
-    // comments `//` and `/* */` (not the doc comments); a line break stops it.
+    // The token after the statement on its line; a line break stops it.
     let next = cst.tokens()[cst.token_range(stmt).end..]
         .iter()
-        .position(|t| !matches!(t.kind, TokenKind::Whitespace | TokenKind::Comment | TokenKind::BlockComment))
+        .position(|t| !t.kind.is_blank_or_plain_comment())
         .map(|k| cst.token_range(stmt).end + k);
     if let Some(k) = next
         && cst.tokens()[k].kind != TokenKind::Newline

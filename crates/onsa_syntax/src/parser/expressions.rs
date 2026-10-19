@@ -245,10 +245,9 @@ impl<'a> Parser<'a> {
                     self.bump();
                     let n = self.peek();
                     match n.kind {
-                        k if k == TokenKind::Ident || k.is_keyword() => {
-                            let name = self.parse_name_after_dot("a field name")?;
-                            expr = self.complete(m, NodeKind::FieldExpr);
-                            chain = chain.map(|_| name);
+                        // A keyword is a field name here; `.(` is read above.
+                        k if !(crate::starts::starts_member(k) || k.is_keyword()) => {
+                            return Err(self.unexpected("a field name or tuple index after `.`"));
                         }
                         TokenKind::Int => {
                             if crate::literal::tuple_index_value(self.token_text(n)).is_some()
@@ -263,7 +262,11 @@ impl<'a> Parser<'a> {
                             expr = self.complete(m, NodeKind::TupleIndexExpr);
                             chain = None;
                         }
-                        _ => return Err(self.unexpected("a field name or tuple index after `.`")),
+                        _ => {
+                            let name = self.parse_name_after_dot("a field name")?;
+                            expr = self.complete(m, NodeKind::FieldExpr);
+                            chain = chain.map(|_| name);
+                        }
                     }
                 }
                 // Type arguments of other languages before a call, `f<T>(x)`

@@ -8,8 +8,9 @@ fn foreign_forms() {
     let update = onsa_tests::golden::Update::from_env();
     let report = onsa_tests::foreign_forms::check(&onsa_tests::case::repo_root(), update);
     println!(
-        "{} rows, {} examples, {} `fixed` texts compared; not judged (listed rows): {}; pending: {}",
+        "{} rows ({} by their message and rule), {} examples, {} `fixed` texts compared; not judged (listed rows): {}; pending: {}",
         report.rows,
+        report.chosen,
         report.examples,
         report.copies,
         report.unjudged_copies,

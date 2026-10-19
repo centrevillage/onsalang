@@ -11,6 +11,10 @@
 //!   with `property`, `clean` (the check after candidate 1 reports nothing)
 //!   and `same_code` (S-247) hold; and every candidate keeps the contract of
 //!   §18.1 (S-236, S-302: [`crate::fix_contract::check_candidate`]);
+//! - every example of a row that a matcher of several rows names
+//!   (`Matcher::many`) gives the diagnostic of that row, its message and its
+//!   rule (the first note): the code and the place alone do not tell it from
+//!   another row of the matcher ([`chosen_rows`]);
 //! - a row whose examples do not pass yet waits in `tests/pending.toml` (kind
 //!   `foreign-form`, the `id` as target): a listed row that passes, and a
 //!   row that fails and is not listed, are failures, as for the other kinds.
@@ -34,7 +38,7 @@ use std::path::Path;
 use serde::Deserialize;
 
 use onsa_diag::Code;
-use onsa_syntax::foreign::{Phase, ROWS, WAITING};
+use onsa_syntax::foreign::{MATCHERS, Phase, READS, ROWS, RowId, WAITING};
 
 use crate::fix_contract::{self, TextCheck};
 use crate::golden::Update;
@@ -84,11 +88,55 @@ struct Example {
     candidates: Option<usize>,
 }
 
-/// What the table says of a row: its stage and code.
+/// What the table says of a row: its stage and code, and its message and
+/// rule when a matcher of several rows names it ([`chosen_rows`]).
 #[derive(Clone, Copy)]
 struct Kind1 {
     phase: Phase,
     code: Code,
+    told: Option<Told>,
+}
+
+/// What tells a row from the other rows of its matcher: its message and its
+/// rule (the first note of its diagnostic, S-114).
+#[derive(Clone, Copy, PartialEq)]
+struct Told {
+    message: &'static str,
+    rule: &'static str,
+}
+
+impl Told {
+    fn of(id: RowId) -> Told {
+        let r = onsa_syntax::foreign::row(id);
+        Told { message: r.message, rule: r.rule }
+    }
+
+    fn is(self, d: &onsa_diag::Diagnostic) -> bool {
+        d.message == self.message && d.notes.first().is_some_and(|n| n.span.is_none() && n.message == self.rule)
+    }
+}
+
+/// The rows that a matcher of several rows chooses among
+/// (`Matcher::many`, of [`MATCHERS`] and [`READS`]): every example of such a
+/// row gives its diagnostic ([`Told`]), so that a matcher that names another
+/// of its rows fails. Two rows of one matcher that a diagnostic cannot tell
+/// apart are a failure (`Err`).
+fn chosen_rows() -> Result<Vec<RowId>, Vec<String>> {
+    let many = || MATCHERS.iter().chain(READS).filter(|m| m.rows.len() > 1);
+    let mut alike = Vec::new();
+    for m in many() {
+        for (i, &a) in m.rows.iter().enumerate() {
+            for &b in m.rows[i + 1..].iter().filter(|&&b| Told::of(b) == Told::of(a)) {
+                alike.push(format!(
+                    "{a:?} and {b:?} of one matcher have the same message and rule: no example tells them apart"
+                ));
+            }
+        }
+    }
+    if !alike.is_empty() {
+        return Err(alike);
+    }
+    Ok(many().flat_map(|m| m.rows.iter().copied()).collect())
 }
 
 /// What [`check`] found.
@@ -104,6 +152,8 @@ pub struct Report {
     pub failures: Vec<String>,
     /// The `fixed` texts compared with the text after their candidate.
     pub copies: usize,
+    /// The rows checked by their message and rule ([`chosen_rows`]).
+    pub chosen: usize,
     /// The `fixed` texts of rows not listed that differ (`UPDATE_GOLDEN=1`
     /// rewrites them), or whose rewriting the guard refused: never silenced,
     /// never a reason to wait.
@@ -172,16 +222,21 @@ pub fn check(root: &Path, update: Update) -> Report {
         }
     };
     report.failures.extend(one_to_one(&file.form));
+    let chosen = chosen_rows().unwrap_or_else(|alike| {
+        report.failures.extend(alike);
+        Vec::new()
+    });
     let rows: BTreeMap<&str, Kind1> = ROWS
         .iter()
-        .map(|r| (r.name, Kind1 { phase: r.phase, code: r.code }))
-        .chain(WAITING.iter().map(|w| (w.name, Kind1 { phase: w.phase, code: w.code })))
+        .map(|r| (r.name, Kind1 { phase: r.phase, code: r.code, told: chosen.contains(&r.id).then(|| Told::of(r.id)) }))
+        .chain(WAITING.iter().map(|w| (w.name, Kind1 { phase: w.phase, code: w.code, told: None })))
         .collect();
     let mut rewrite_to: Vec<Rewrite> = Vec::new();
     for (f, form) in file.form.iter().enumerate() {
         let Some(row) = rows.get(form.id.as_str()) else { continue };
         report.rows += 1;
         report.examples += form.example.len();
+        report.chosen += usize::from(row.told.is_some());
         let mut problems = Vec::new();
         if form.example.is_empty() {
             problems.push("no example".to_string());
@@ -240,8 +295,10 @@ pub fn check(root: &Path, update: Update) -> Report {
         }
     }
     // Nothing checked is a failure, not a pass.
-    if report.rows == 0 || report.examples == 0 || report.copies == 0 {
-        report.failures.push(format!("{PATH}: no row, no example or no `fixed` text was checked"));
+    if report.rows == 0 || report.examples == 0 || report.copies == 0 || report.chosen == 0 {
+        report
+            .failures
+            .push(format!("{PATH}: no row, no example, no `fixed` text or no row by its message was checked"));
     }
     for e in pending.of_kind(Kind::ForeignForm) {
         if !file.form.iter().any(|f| f.id == e.target) {
@@ -369,6 +426,17 @@ fn example(row: Kind1, ex: &Example) -> Outcome {
         out.push(format!("no {} at {where_}; the check reports {:?}", row.code.as_str(), reported));
         return Outcome { problems: out, ..Outcome::default() };
     };
+    if let Some(told) = row.told.filter(|t| !t.is(d)) {
+        let rule = d.notes.first().map(|n| n.message.as_str());
+        out.push(format!(
+            "{} at {where_} is not of the row (its matcher names several rows): the message {:?} and the rule {rule:?}, \
+             not {:?} and {:?}",
+            row.code.as_str(),
+            d.message,
+            told.message,
+            told.rule
+        ));
+    }
     if d.stage != row.phase.stage() {
         out.push(format!(
             "{} at {where_} of the {} stage, not {}",
@@ -569,6 +637,29 @@ property = ["clean"]
         let r = check(&root("two", &two, ""), Update::Off);
         assert!(r.failures.iter().any(|f| f.contains("1 candidates, `fixed` has 2")), "{r:?}");
         assert!(r.copy_failures.is_empty() && r.copies == 0, "{r:?}");
+    }
+
+    /// A row of a matcher of several rows is told by its diagnostic (A29): a
+    /// row `octal_prefix` whose example the lexer reads as `leading_zero`, of
+    /// the same code, stage and place, fails; the rows of one matcher differ.
+    #[test]
+    fn a_row_of_many_is_told_by_its_message() {
+        let form = |value: &str| {
+            format!(
+                "[[form]]\nid = \"octal_prefix\"\nkind = \"foreign\"\norigin = \"C\"\nstage = \"lexical\"\n\
+                 code = \"E0020\"\nspec = [\"2.4\"]\nrule = \"r\"\n\n[[form.example]]\nsource = '''\n\
+                 pub fn f() -> I32 {{\n  let n: I32 = {value}\n  n\n}}\n'''\nat = \"2:16\"\n"
+            )
+        };
+        assert!(chosen_rows().is_ok_and(|rows| !rows.is_empty()));
+        let r = check(&root("many_own", &form("0o17"), ""), Update::Off);
+        assert_eq!((r.rows, r.chosen), (1, 1), "{r:?}");
+        assert!(!r.failures.iter().any(|f| f.starts_with("octal_prefix:")), "{r:?}");
+        let r = check(&root("many_other", &form("017"), ""), Update::Off);
+        assert!(
+            r.failures.iter().any(|f| f.starts_with("octal_prefix:") && f.contains("E0020 at 2:16 is not of the row")),
+            "{r:?}"
+        );
     }
 
     /// `UPDATE_GOLDEN=1` writes the bodies of the `'''` literals only: the

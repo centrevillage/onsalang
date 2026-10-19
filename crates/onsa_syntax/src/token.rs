@@ -251,6 +251,15 @@ impl TokenKind {
         matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment)
     }
 
+    /// What lies on a line and is neither code nor a doc comment (§2.1):
+    /// blanks and the comments `//` and `/* */`. A line break is none: a look
+    /// along a line passes these to the next token on it (`foreign::flow`, the
+    /// token after a binding whose clock moves to its value).
+    #[inline]
+    pub fn is_blank_or_plain_comment(self) -> bool {
+        matches!(self, TokenKind::Whitespace | TokenKind::Comment | TokenKind::BlockComment)
+    }
+
     /// A doc comment, `///` or `//!` (§2.1): what the parser takes into a
     /// `Docs` or `ModuleDocs` node.
     #[inline]
