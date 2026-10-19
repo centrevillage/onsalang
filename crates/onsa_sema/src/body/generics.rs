@@ -34,7 +34,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Substitute `Ty::Param(i)` / `Len::Param(i)` with `args[i]` (variables or concrete).
-    pub(super) fn subst(&mut self, ty: TyId, args: &[TyId]) -> TyId {
+    pub(crate) fn subst(&mut self, ty: TyId, args: &[TyId]) -> TyId {
         if args.is_empty() {
             return ty;
         }

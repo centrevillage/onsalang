@@ -81,7 +81,7 @@ impl<'a> Checker<'a> {
                 return Err(self.pattern_err(stage, Code::E0410, field.span, msg));
             }
             seen.push(&field.name);
-            let ft = self.subst_pub(defs[i].ty, &args);
+            let ft = self.subst(defs[i].ty, &args);
             sub(self, *fp, ft, Some(i))?;
         }
         if failed {

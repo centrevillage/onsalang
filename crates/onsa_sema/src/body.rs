@@ -9,8 +9,8 @@
 //! scopes, the accessors that the later passes read, and `bound_name`. The
 //! rest of the checking is in a module per part, each an `impl` of
 //! `Checker`: `entry` (a function body, a `const`), `bounds`, `generics`,
-//! `names`, `expressions`, `calls`, `statements`, `patterns` and `types`
-//! (the types written in a body). The tests are `body_tests.rs`.
+//! `names`, `expressions`, `calls`, `statements` and `patterns`. The tests
+//! are `body_tests.rs`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -39,7 +39,6 @@ mod generics;
 mod names;
 mod patterns;
 mod statements;
-mod types;
 
 // ---------------------------------------------------------------- tables
 
@@ -602,8 +601,15 @@ impl<'a> Checker<'a> {
         self.info.targets.get(&e).cloned()
     }
 
-    pub(crate) fn subst_pub(&mut self, ty: TyId, args: &[TyId]) -> TyId {
-        self.subst(ty, args)
+    /// Lower a type written inside a body (annotations, casts, closure params).
+    pub(crate) fn lower_type_expr(&mut self, t: onsa_syntax::ast::TypeId) -> R<TyId> {
+        let generics = self.generics.clone();
+        let (ty, diags) =
+            crate::sig::lower_type_in_body(self.a, self.m, self.ast, self.text, &generics, self.self_ty, self.def, t);
+        if let Some(d) = diags.into_iter().next() {
+            return Err(self.diag(d));
+        }
+        Ok(ty)
     }
 }
 

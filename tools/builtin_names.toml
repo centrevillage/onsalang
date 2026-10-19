@@ -241,36 +241,41 @@
 
 [allow."crates/onsa_sema/src/sig.rs"]
 "Alloc" = 1
-"BULK_SIZE" = 2
-"Bool" = 1
-"Char" = 1
-"Config" = 2
 "Default" = 1
 "Eq" = 1
+"Hash" = 1
+"Ord" = 1
+"Ordinal" = 1
+"PartialEq" = 1
+"PartialOrd" = 1
+"Show" = 1
+"U32" = 1
+
+[allow."crates/onsa_sema/src/sig/collect.rs"]
+"Bool" = 1
+"Char" = 1
 "Err" = 1
 "F32" = 1
 "F64" = 1
-"Hash" = 1
 "I16" = 1
 "I32" = 1
 "I64" = 1
 "I8" = 1
 "None" = 1
 "Ok" = 1
-"Ord" = 1
-"Ordinal" = 1
-"Out" = 2
-"Params" = 2
-"PartialEq" = 1
-"PartialOrd" = 1
-"SIZE" = 2
-"Show" = 1
 "Some" = 1
-"State" = 2
 "U16" = 1
-"U32" = 2
+"U32" = 1
 "U64" = 1
 "U8" = 1
+
+[allow."crates/onsa_sema/src/sig/flow_sig.rs"]
+"BULK_SIZE" = 2
+"Config" = 2
+"Out" = 2
+"Params" = 2
+"SIZE" = 2
+"State" = 2
 "cfg" = 2
 "frames" = 1
 "init" = 2
@@ -281,6 +286,8 @@
 "render" = 2
 "reset" = 2
 "sample_rate" = 2
+
+[allow."crates/onsa_sema/src/sig/types.rs"]
 "std" = 1
 
 [allow."crates/onsa_sema/src/ty.rs"]
@@ -362,7 +369,7 @@
 [same_spelling."crates/onsa_sema/src/builtin.rs"]
 "u32" = { count = 1, note = "narrow_ / trunc_ の名前を作る型の接尾辞（std.test.gen の u32 と同じ綴り）" }
 
-[same_spelling."crates/onsa_sema/src/sig.rs"]
+[same_spelling."crates/onsa_sema/src/sig/flow_sig.rs"]
 "log" = { count = 1, note = "@param の scale の値（std.math.log と同じ綴り）" }
 "max" = { count = 2, note = "@param のキー（std.math.max と同じ綴り）" }
 "min" = { count = 2, note = "@param のキー（std.math.min と同じ綴り）" }
