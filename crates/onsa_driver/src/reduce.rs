@@ -19,8 +19,8 @@
 //!   grouped into a declaration's unit.
 //!
 //! None of them orders its output: the order of the diagnostics is decided
-//! once, where they are rendered (`onsa_diag::to_json`, `onsa_diag::to_text`,
-//! S-234).
+//! once, where they are rendered (`onsa_diag::printed_order`, which
+//! `onsa_diag::to_json` and `onsa_diag::to_text` use, S-234).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -39,6 +39,9 @@ pub struct Unit {
 /// The diagnostics a command reports and the units of the package.
 #[derive(Debug, Clone, Default)]
 pub struct Reduced {
+    /// In the order they came in (the order of the stages), not the printed
+    /// order: a reader that needs the printed order uses
+    /// `onsa_diag::printed_order`.
     pub diagnostics: Vec<Diagnostic>,
     /// For each of `diagnostics`, its unit in `units` (`None` for one outside
     /// every unit, reported as it is).

@@ -358,8 +358,11 @@ fn example(row: Kind1, ex: &Example) -> Outcome {
         let lc = sources.file(d.span.file).line_col(d.span.start);
         format!("{}:{}", lc.line, lc.col)
     };
-    let reported: Vec<String> =
-        run.analyzed.diagnostics.iter().map(|d| format!("{} at {}", d.code.as_str(), place(d))).collect();
+    let ds = &run.analyzed.diagnostics;
+    let reported: Vec<String> = onsa_diag::printed_order(sources, ds)
+        .into_iter()
+        .map(|i| format!("{} at {}", ds[i].code.as_str(), place(&ds[i])))
+        .collect();
     let at = |d: &onsa_diag::Diagnostic| ex.at.as_ref().is_none_or(|a| place(d) == *a);
     let where_ = ex.at.as_deref().unwrap_or("any place");
     let Some(d) = run.analyzed.diagnostics.iter().find(|d| d.code == row.code && at(d)) else {

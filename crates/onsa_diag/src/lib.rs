@@ -210,10 +210,11 @@ impl Diagnostic {
         Diagnostic { code, stage, message: message.into(), span, found: None, fixes: Vec::new(), notes: Vec::new() }
     }
 
-    /// The order of the diagnostics of one file (§18.1, S-281): start, end,
-    /// code, message. Of the diagnostics of one unit, the driver reports the
-    /// first in this order (`onsa_driver::reduce`), also when one failure of
-    /// the parser is read as more than one form.
+    /// The order of the diagnostics of one file: the part of [`printed_order`]
+    /// in one file (§18.1, S-234, S-281): start, end, code, message. Of the
+    /// diagnostics of one unit, the driver reports the first in this order
+    /// (`onsa_driver::reduce`), also when one failure of the parser is read as
+    /// more than one form.
     pub fn order_in_file(&self) -> (u32, u32, &str, &str) {
         (self.span.start, self.span.end, self.code.as_str(), self.message.as_str())
     }
@@ -478,26 +479,33 @@ pub fn json_span(sources: &SourceMap, span: Span) -> JsonSpan<'_> {
     JsonSpan { file: file.name(), line: start.line, col: start.col, end_line: end.line, end_col: end.col }
 }
 
-/// Diagnostics in the order they are rendered, in JSON and in text alike (the
-/// one place of it; §18.1, S-234): by the file name as printed (code points,
-/// so neither the order of reading nor the locale matters), then line,
-/// column, end line, end column, code and message. Equal keys keep the order
-/// they came in (the sort is stable).
+/// The order diagnostics are rendered in, in JSON and in text alike (the one
+/// place of it; §18.1, S-234), as the indices of `diagnostics`: by the file
+/// name as printed (code points, so neither the order of reading nor the
+/// locale matters), then [`Diagnostic::order_in_file`]. In one file that is
+/// the order of line, column, end line, end column, code and message:
+/// [`SourceFile::line_col`] is strictly increasing on the offsets of the file
+/// (on character boundaries, up to its length). Equal keys keep the order
+/// they came in (the sort is stable). It can differ from the order of lines
+/// and columns only for a range whose end lies past the end of its file, or
+/// between two files of the same printed name; no path of the driver makes
+/// either. Every reader that needs the printed order uses this.
+pub fn printed_order(sources: &SourceMap, diagnostics: &[Diagnostic]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..diagnostics.len()).collect();
+    order.sort_by_key(|&i| {
+        let d = &diagnostics[i];
+        (sources.file(d.span.file).name(), d.order_in_file())
+    });
+    order
+}
+
+/// The diagnostics in [`printed_order`].
 fn sorted<'a>(sources: &SourceMap, diagnostics: &'a [Diagnostic]) -> Vec<&'a Diagnostic> {
-    let mut keyed: Vec<_> = diagnostics
-        .iter()
-        .map(|d| {
-            let file = sources.file(d.span.file);
-            let (start, end) = (file.line_col(d.span.start), file.line_col(d.span.end));
-            ((file.name(), start.line, start.col, end.line, end.col, d.code.as_str(), d.message.as_str()), d)
-        })
-        .collect();
-    keyed.sort_by(|a, b| a.0.cmp(&b.0));
-    keyed.into_iter().map(|(_, d)| d).collect()
+    printed_order(sources, diagnostics).into_iter().map(|i| &diagnostics[i]).collect()
 }
 
 /// Render diagnostics as the JSON document of `--json` (spec §18.1, S-215):
-/// one object whose `diagnostics` array is in the order of [`sorted`].
+/// one object whose `diagnostics` array is in [`printed_order`].
 pub fn to_json(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
     #[derive(Serialize)]
     struct Nothing {}
@@ -543,7 +551,7 @@ fn json_diagnostics<'a>(sources: &'a SourceMap, diagnostics: &'a [Diagnostic]) -
 }
 
 /// Render diagnostics for a terminal: `file:line:col: error[E0010]: message`,
-/// in the order of the JSON ([`sorted`]; `spec/tools.md` §4).
+/// in the order of the JSON ([`printed_order`]; `spec/tools.md` §4).
 pub fn to_text(sources: &SourceMap, diagnostics: &[Diagnostic]) -> String {
     use std::fmt::Write;
     let mut out = String::new();
@@ -696,6 +704,39 @@ mod tests {
         let heads: Vec<&str> = text.lines().filter(|l| !l.starts_with(' ')).collect();
         assert_eq!(heads[0], "a.onsa:1:1: error[E0001]: z");
         assert_eq!(heads[5], "a/b.onsa:1:1: error[E0002]: m");
+    }
+
+    /// [`printed_order`] compares byte offsets in a file: the same order as
+    /// the lines and columns it prints (multibyte characters, CRLF, a lone
+    /// `\r`, the end of the file), and equal keys keep the input's order.
+    #[test]
+    fn the_printed_order_is_the_order_of_lines_and_columns() {
+        let mut sources = SourceMap::default();
+        let text = "aé\r\nüx\ty\r\n\r\n漢字 z\rq\n";
+        let f = sources.add("m.onsa", text);
+        let g = sources.add("l.onsa", "é\n");
+        let bounds: Vec<u32> = (0..=text.len() as u32).filter(|&o| text.is_char_boundary(o as usize)).collect();
+        let mut ds = Vec::new();
+        // Every range on character boundaries, from the last to the first, twice (with another
+        // message the second time), and some of another file.
+        for (k, &s) in bounds.iter().enumerate().rev() {
+            for &e in bounds[k..].iter().rev() {
+                ds.push(Diagnostic::new(Stage::Syntax, Code::E0001, Span::new(f, s, e), "m"));
+                ds.push(Diagnostic::new(Stage::Syntax, Code::E0001, Span::new(f, s, e), "m"));
+            }
+        }
+        ds.push(Diagnostic::new(Stage::Syntax, Code::E0001, Span::new(g, 2, 3), "m"));
+        ds.push(Diagnostic::new(Stage::Syntax, Code::E0001, Span::new(g, 0, 2), "m"));
+        let mut by_line_col: Vec<usize> = (0..ds.len()).collect();
+        by_line_col.sort_by_key(|&i| {
+            let file = sources.file(ds[i].span.file);
+            let (s, e) = (file.line_col(ds[i].span.start), file.line_col(ds[i].span.end));
+            (file.name(), s.line, s.col, e.line, e.col)
+        });
+        let got = printed_order(&sources, &ds);
+        assert!(ds.len() > 300, "{} diagnostics", ds.len());
+        assert_eq!(got, by_line_col);
+        assert_eq!(&got[..2], [ds.len() - 1, ds.len() - 2], "l.onsa first, by its offsets");
     }
 
     #[test]

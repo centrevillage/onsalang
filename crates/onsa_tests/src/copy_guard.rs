@@ -83,15 +83,16 @@ fn positions(sources: &SourceMap, a: &Analyzed) -> (BTreeMap<String, usize>, Vec
 }
 
 /// The diagnostics of `new` that `old` does not report, compared as
-/// multisets of [`Key`] (every stage): `E0302 at main.onsa:14:11`.
+/// multisets of [`Key`] (every stage), in the printed order
+/// ([`onsa_diag::printed_order`]): `E0302 at main.onsa:14:11`.
 pub(crate) fn new_only(old: (&SourceMap, &Analyzed), new: (&SourceMap, &Analyzed)) -> Vec<String> {
     let (old_count, old_pos) = positions(old.0, old.1);
     let (new_count, new_pos) = positions(new.0, new.1);
     let keys = |(sources, a): (&SourceMap, &Analyzed), pos: &[usize]| -> Vec<(Key, String)> {
-        a.diagnostics
-            .iter()
-            .zip(&a.diagnostic_units)
-            .map(|(d, unit)| {
+        onsa_diag::printed_order(sources, &a.diagnostics)
+            .into_iter()
+            .map(|i| {
+                let (d, unit) = (&a.diagnostics[i], a.diagnostic_units[i]);
                 let f = sources.file(d.span.file);
                 let name = f.name().to_string();
                 let same = old_count.get(&name) == new_count.get(&name);
@@ -142,5 +143,13 @@ mod tests {
         assert_eq!(check(&format!("{g}\n{f}"), &format!("{}\n{g}\n{f}", h("x"))).len(), 1);
         // Another code at the same place: new.
         assert_eq!(check(f, "pub fn f() -> I32 {\n  1.5\n}\n").len(), 1);
+    }
+
+    /// The new diagnostics are in the printed order (`onsa_diag::printed_order`),
+    /// not in the order of the stages the check gives them in.
+    #[test]
+    fn the_new_diagnostics_are_in_the_printed_order() {
+        let new = "fn f() -> I32 {\n  true\n}\n\nfn g() {\n  let = 1\n}\n";
+        assert_eq!(text("", new).unwrap(), ["E0401 at m.onsa:2:3", "E0002 at m.onsa:6:7"]);
     }
 }

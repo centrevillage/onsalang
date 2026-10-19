@@ -124,12 +124,11 @@ struct Walker<'a> {
 
 /// The diagnostic the steps from `checked` take: of those with candidates,
 /// the first or the last in the order the diagnostics are printed
-/// (`Diagnostic::order_in_file`, the order of one file, §18.1; a stable sort
-/// as the printing's).
+/// ([`onsa_diag::printed_order`], §18.1).
 fn pick(checked: &Checked, pick: Pick) -> Option<usize> {
     let ds = &checked.diagnostics;
-    let mut order: Vec<usize> = (0..ds.len()).filter(|&i| !ds[i].fixes.is_empty()).collect();
-    order.sort_by(|&a, &b| ds[a].order_in_file().cmp(&ds[b].order_in_file()));
+    let order: Vec<usize> =
+        onsa_diag::printed_order(&checked.sources, ds).into_iter().filter(|&i| !ds[i].fixes.is_empty()).collect();
     match pick {
         Pick::First => order.first().copied(),
         Pick::Last => order.last().copied(),
