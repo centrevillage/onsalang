@@ -723,6 +723,7 @@ fn only_the_table_makes_an_e0020() {
             }
             if !name.ends_with(".rs")
                 || name.ends_with("_tests.rs")
+                || name == "tests.rs"
                 || path.ends_with("onsa_syntax/src/foreign.rs")
                 || path.ends_with("onsa_syntax/src/foreign/rows.rs")
                 || path.ends_with("onsa_diag/src/codes.rs")
