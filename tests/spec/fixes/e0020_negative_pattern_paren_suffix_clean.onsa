@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.7", "§7", "§18.1"]
+//
+// [[test.fix]]
+// at = "17:7"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `-(1u8)` in a pattern (spec §2.4, §4.7, §7, §18.1; S-62, S-227) leaves nothing behind:
+// `-(1)` is a negative literal pattern that the check reads without a report (`clean` is about the whole
+// file, so this file has this one error).
+
+pub fn only_error(x: I32) -> I32 {
+  match x {
+    -(1u8) => 1,                                    //~ E0020 @7
+    _ => 0,
+  }
+}

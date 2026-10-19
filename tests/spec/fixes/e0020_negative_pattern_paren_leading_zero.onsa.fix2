@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§4.7", "§7", "§18.1"]
+// fixes = 2
+
+// E0020 for an integer that starts with 0 inside the parentheses of a negative literal pattern (spec §2.4,
+// §4.7, §7, §18.1; S-63, S-227). A pattern takes a negative integer, `-` once in front of an integer literal,
+// and the parentheses between the `-` and the literal are the same as in an expression (`-(17)` is the literal
+// `-17`; §4.7: `(e)` is always grouping). So the number inside is read as the number of any other place: `017`
+// is the octal 15 of C, Go and Java and the decimal 17 of Rust, the readings differ, and the error has two
+// candidates (decimal first, octal second); where they are the same (`00`) there is one. The main position is
+// the first digit of the literal, inside the parentheses (S-316), not the `-`. The candidates change only the
+// literal, so the `-(` and `)` stay, and `-(17)` and `-(15)` are patterns that are read. The same form with
+// the sign outside the parentheses is `e0020_numeric_leading_zero.onsa`, and `-(-1)` is no literal
+// (negative/pattern_neg_neg.onsa). One error in each declaration unit (P-01).
+// The candidates leave nothing behind (`clean`): the files that have one error say that
+// (`e0020_negative_pattern_paren_leading_zero_clean.onsa`), as `clean` is about the whole file.
+
+pub fn a_negative_pattern_in_parentheses(x: I32) -> I32 {
+  match x {
+    -(15) => 1,                                    //~ E0020 @7
+    _ => 0,
+  }
+}
+
+pub fn ten_or_eight(x: I32) -> I32 {
+  match x {
+    -(8) => 1,                                    //~ E0020 @7
+    _ => 0,
+  }
+}
+
+pub fn the_same_in_both_readings(x: I32) -> I32 {
+  match x {
+    -(00) => 1,                                     //~ E0020 @7
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(-(15)) => 1,                              //~ E0020 @12
+    _ => 0,
+  }
+}
+
+pub fn inside_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (-(15), n) => n,                               //~ E0020 @8
+    _ => 0,
+  }
+}
+
+pub fn in_a_choice(x: I32) -> I32 {
+  match x {
+    -(15) | 3 => 1,                                //~ E0020 @7
+    _ => 0,
+  }
+}
+
+pub fn with_a_guard(x: I32) -> I32 {
+  match x {
+    -(15) if x > 0 => 1,                           //~ E0020 @7
+    _ => 0,
+  }
+}
+
+pub fn spaces_inside_the_parentheses(x: I32) -> I32 {
+  match x {
+    -( 15 ) => 1,                                  //~ E0020 @8
+    _ => 0,
+  }
+}
+
+// The right forms: the decimal and the octal readings of the candidates, a zero alone, an underscore.
+pub fn fine(x: I32) -> I32 {
+  match x {
+    -(17) => 1,
+    -(15) => 2,
+    -(0) => 3,
+    -(1_0) => 4,
+    _ => 0,
+  }
+}

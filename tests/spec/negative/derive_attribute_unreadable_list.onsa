@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+
+// E0002, with no candidate, for a derive written as an attribute of Rust whose list of names cannot be carried
+// over to the head of the declaration (spec §6.4, §6.5, §18.1; S-435, W3-08; the row `hash_attribute_unfixable`
+// of spec/foreign-forms.toml). The candidate of a derive is the traits written at the head of the declaration
+// and the removal of the attribute, so a list that cannot be read as names (`,,`, a `,` first, no name), and a
+// comment in the parentheses (the candidate would take it away with the attribute, §18.1), are no candidate.
+// The `,` after the last name is the case that has one (`fixes/e0020_derive_attribute_trailing_comma.onsa`).
+// The report is on the attribute and the main position is the `#[`. One error in each declaration unit (P-01).
+
+#[derive(PartialEq,, Eq)]                           //~ E0002
+pub struct DoubleComma {
+  id: U32,
+}
+
+#[derive(,)]                                        //~ E0002
+pub struct OnlyAComma {
+  id: U32,
+}
+
+#[derive(,PartialEq)]                               //~ E0002
+pub struct LeadingComma {
+  id: U32,
+}
+
+#[derive(Debug, /* c */ Clone)]                     //~ E0002
+pub struct CommentBetweenNames {
+  id: U32,
+}
+
+#[derive(PartialEq, Eq, /* c */)]                   //~ E0002
+pub struct CommentAfterTheLastComma {
+  id: U32,
+}
+
+#[derive()]                                         //~ E0002
+pub struct NoNames {
+  id: U32,
+}
+
+#[derive(Eq(1))]                                    //~ E0002
+pub struct ANameWithArguments {
+  id: U32,
+}

@@ -371,6 +371,13 @@ fn a_hash_attribute_with_no_candidate_says_why() {
         ("#[inline]\npub fn h() -> I32 { 1 }\n", no_form),
         ("#[repr(C)]\npub fn h() -> I32 { 1 }\n", no_form),
         ("#[inline]\nfoo bar\n", no_form),
+        ("#[inline]\nlet x = 1\n", no_form),
+        // Another `#[…]` that fails after it begins no declaration.
+        ("#[inline]\n#[b]\n", no_form),
+        ("#[inline]\n#\n", no_form),
+        ("#[inline]\n#[b\n", no_form),
+        // Before a head that began and failed, the place is not known (W3-08).
+        ("#[repr(C)]\npub(crate struct P { x: I32 }\n", unfixable),
         ("#[derive(Eq Ord)]\npub struct P { x: I32 }\n", unfixable),
         ("#[derive(Eq)]\npub struct P: { x: I32 }\n", unfixable),
         ("#[repr(\nC)]\npub struct P { x: I32 }\n", unfixable),
@@ -421,6 +428,13 @@ fn the_derive_adds_after_the_list_of_its_head_only() {
             "#[derive(Eq)]\npub struct P: PartialEq +\n  Ord { x: I32 }\n",
             "pub struct P: PartialEq +\n  Ord + Eq { x: I32 }\n",
         ),
+        // A `,` after the last name (W3-08), of both attributes.
+        ("#[derive(PartialEq, Eq,)]\npub struct P { x: I32 }\n", "pub struct P: PartialEq + Eq { x: I32 }\n"),
+        ("@derive(Eq,)\npub struct P { x: I32 }\n", "pub struct P: Eq { x: I32 }\n"),
+        // A trait the head has is a name alone, not the last word of a path
+        // (S-488): `std.Eq` is no `Eq`.
+        ("#[derive(Eq)]\npub struct P: std.Eq { x: I32 }\n", "pub struct P: std.Eq + Eq { x: I32 }\n"),
+        ("#[derive(Eq)]\npub struct P: std.Eq + Eq { x: I32 }\n", "pub struct P: std.Eq + Eq { x: I32 }\n"),
     ] {
         assert_eq!(fixed(src), want, "{src}");
     }
@@ -500,6 +514,12 @@ fn literals() {
     assert_eq!(big.diagnostics.iter().map(|d| d.code).collect::<Vec<_>>(), [Code::E0408, Code::E0020]);
     // Where no literal goes, the place is an error too (S-281): both are reported.
     assert_eq!(codes("1.\n"), [Code::E0020, Code::E0002]);
+    // In the parentheses of a negative literal pattern, the number's row (§4.7, S-227).
+    let m = |pat: &str| format!("fn f(x: I32) -> I32 {{\n  match x {{\n    {pat} => 1,\n    _ => 0,\n  }}\n}}\n");
+    e0020(&m("-(017)"), &m("-(17)"));
+    assert_eq!(fixed_by(&m("-(017)"), 1), m("-(15)"));
+    e0020(&m("-((0o17))"), &m("-((15))"));
+    e0020(&m("-( 1u8 )"), &m("-( 1 )"));
 }
 
 #[test]
@@ -633,6 +653,51 @@ fn compound_assignments_and_increments() {
     // `---x` is `--` and `-x` (S-297); `- - x` stays E0012.
     e0002(&body("  ---x"));
     assert_eq!(codes(&body("  let y = - - x")), [Code::E0012]);
+    // A line break or a comment between the `=` and the right side stays
+    // (S-251, R-210); blanks alone are replaced.
+    e0020(&body("  x +=\n    1"), &body("  x = x +\n    1"));
+    e0020(&body("  x += // c\n    1"), &body("  x = x + // c\n    1"));
+    e0020(&body("  x -= // c\n    -y"), &body("  x = x - ( // c\n    -y)"));
+    assert_eq!(fixed(&body("  x -= /* c */ -y")), body("  x = x - ( /* c */ -y)"));
+    e0020(&body("  x +=1"), &body("  x = x + 1"));
+    e0020(&body("  x -=  -y"), &body("  x = x - (-y)"));
+}
+
+/// The pattern of other languages with no candidate says why after the
+/// row's rule (A26): a comment the candidate would lose, an end of a range
+/// that does not read, alternatives of other shapes; a form the message
+/// explains (`@` that is no comparison) has the rule alone.
+#[test]
+fn a_guard_form_with_no_candidate_says_why() {
+    let comment = "no candidate: a comment in the part the guard form would rewrite would be lost (§18.1); \
+                   move it out of the pattern, or write the guard by hand";
+    let end = "no candidate: an end of the range does not read as an expression a guard could copy; \
+               write the end as an expression, or write the guard by hand";
+    let shapes = "no candidate: once the forms are replaced the alternatives are not of one shape, and one \
+                  guard cannot tell which matched; split them into arms, or write the guard by hand";
+    let m = |ty: &str, arms: &str| format!("fn f(x: {ty}) -> I32 {{\n  match x {{\n{arms}\n    _ => 0,\n  }}\n}}\n");
+    for (src, why) in [
+        (m("F32", "    1.0 // one\n    | 2.0 => 1,"), Some(comment)),
+        (m("F32", "    1.0 /* one */ | 2.0 => 1,"), Some(comment)),
+        (m("I32", "    k @ // c\n    1 => k,"), Some(comment)),
+        (m("I32", "    k @ /* c */ 1 => k,"), Some(comment)),
+        (m("I32", "    1..<(3 + // c\n      1) => 1,"), Some(comment)),
+        (m("I32", "    1..< => 1,"), Some(end)),
+        (m("I32", "    1..<{ 8 } => 1,"), Some(end)),
+        (m("(F32, I32)", "    (0.5, 1) | (1.5, 2) => 1,"), Some(shapes)),
+        (m("Str", "    \"a{x}\" | \"b\" => 1,"), Some(shapes)),
+        (m("Option[I32]", "    s @ Some(_) => 1,"), None),
+        // A block comment the candidate would keep, or not the reason: no note.
+        (m("(F32, Option[I32])", "    (1.0, Some(/* c */ a)) => 1,"), None),
+        (m("Option[I32]", "    k @ Some(_) /* c */ => 1,"), None),
+    ] {
+        let p = parse(&src);
+        let d = &p.diagnostics[0];
+        assert_eq!((d.code, d.fixes.len()), (Code::E0002, 0), "{src}: {:?}", p.diagnostics);
+        let notes: Vec<&str> = d.notes.iter().map(|n| n.message.as_str()).collect();
+        assert_eq!(notes.len(), 1 + usize::from(why.is_some()), "{src}: {notes:?}");
+        assert_eq!(notes.get(1).copied(), why, "{src}");
+    }
 }
 
 /// The code of a Rust source without its comments and its test modules: a

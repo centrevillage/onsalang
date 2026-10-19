@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "22:2"
+// code = "E0020"
+// candidate = 1
+// clean = true
+// same_code = true
+
+// The candidate `///` of a doc block comment `/** … */` in front of a field of a struct whose doc block comment is on the line of the field (the candidate puts the comment on a line of its own, and the indent of the line is the one of the field) keeps the indent that is a tab
+// (spec §2.1, §2.5, §18.1; W3-08; the row `block_comment` of spec/foreign-forms.toml, RF-12). The code is indented with
+// tabs, a tab is one character and one column, and the main position is the `/**` at the column 2 (§18.1). The
+// candidate changes the comment only, so the check reads the text after it without a report and the tokens
+// that are not comments are the same (`clean`, `same_code`). The indent of the text after the candidate
+// is meant to stay the tab of the line (a case file cannot say so, as the width of a space is not compared).
+// This file has this one error, as `clean` is about the whole file.
+
+pub struct P {
+	pan: I32,
+	/** the gain */ gain: I32,                         //~ E0020 @2
+}

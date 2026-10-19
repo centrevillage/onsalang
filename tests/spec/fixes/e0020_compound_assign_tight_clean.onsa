@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§2.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "19:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `x +=1`, with no space between the operator and the right side and nothing else there,
+// leaves nothing behind (spec §5.1, §2.5, §18.1; S-251, R-210). Only a newline or a comment between the `=` and
+// the right side makes the candidate put the left side and the operator in after the `=`; spaces alone (or
+// nothing) are replaced. A text of `x = x +1` is not what the candidate is: a `+` with a space before and none
+// after is the error of the spaces around an operator (§2.5), a new error in the unit, and `clean` would not
+// hold. This file has this one error, as `clean` is about the whole file.
+
+pub fn only_error(inout x: I32) {
+  x +=1                                             //~ E0020 @5
+}

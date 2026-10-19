@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§18.1"]
+
+// E0020 for the doc block comments in front of the members of the declarations that are indented with tabs
+// (spec §2.1, §2.5, §18.1; W3-08; RF-12): a `struct`, an `enum`, an `impl`, a block in a method, and a line that
+// begins with spaces after a tab. The comment is on a line of its own or on the line of the member. The main
+// position is the `/**`, and the column counts a tab as one character. One error in each declaration unit (P-01).
+
+pub struct OwnLine {
+	/** the gain */                                    //~ E0020 @2
+	gain: I32,
+}
+
+pub struct SameLine {
+	/** the pan */ pan: I32,                           //~ E0020 @2
+}
+
+pub struct Mixed {
+	  /** mixed */ mix: I32,                           //~ E0020 @4
+}
+
+pub enum E {
+	/** one */ A,                                      //~ E0020 @2
+	B,
+}
+
+pub struct Q { v: I32 }
+
+impl Q {
+	/** the value */ pub fn get(self) -> I32 {         //~ E0020 @2
+		self.v
+	}
+}
+
+impl Q {
+	pub fn other(self) -> I32 {
+		/** inner */ self.v                               //~ E0020 @3
+	}
+}

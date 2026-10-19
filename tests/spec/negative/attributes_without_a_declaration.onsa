@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+
+// E0002, with no candidate, for an attribute of Rust (`#[…]`) where no declaration follows (spec §6.5, §18.1;
+// S-435, W3-08). `#[inline]` has no Onsa form in the place it stands: a `let` is no declaration that an
+// attribute goes in front of at the top level (an attribute is in front of the declaration it describes,
+// §6.5). The main position is the `#[` and there is no candidate. The main message says that the attribute has
+// no Onsa form in this place; the runner of the cases does not compare it (see
+// `attributes_before_a_failed_heading.onsa`, whose code and position are the same and whose text is another).
+
+#[inline]                                           //~ E0002
+let x = 1

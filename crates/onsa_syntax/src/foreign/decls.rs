@@ -69,6 +69,15 @@ pub(super) const HASH_ATTRIBUTE_ROWS: &[RowId] =
 /// At an input of a flow (the node opened at the `#`), the parser fails at
 /// it.
 pub(super) fn hash_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
+    hash_attribute_in(c, false)
+}
+
+/// [`hash_attribute`], `head_failed` when the parser asks about it after the
+/// head of a declaration that began and failed (`pub(crate struct`): no
+/// place is known, and the form cannot be written out as it stands. Where
+/// no declaration is (`#[inline]` before a `let`), the place has no Onsa
+/// form of it (W3-08).
+pub(super) fn hash_attribute_in(c: &Cursor, head_failed: bool) -> Option<(RowId, Hit)> {
     use crate::attrs::Place;
     if c.kind(c.at) != TokenKind::Hash || c.kind(c.at + 1) != TokenKind::LBracket {
         return None;
@@ -91,7 +100,7 @@ pub(super) fn hash_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
         let attribute_place = place.is_some() || opened_in(&[NodeKind::Attr, NodeKind::Item]);
         return if attribute_place { unfixable() } else { no_form() };
     };
-    let Some(place) = place else { return no_form() };
+    let Some(place) = place else { return if head_failed { unfixable() } else { no_form() } };
     if c.kind(c.at + 2) != TokenKind::Ident {
         return no_form();
     }
@@ -159,7 +168,8 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
     if c.kind(open) != TokenKind::LParen || c.kind(shut) != TokenKind::RParen {
         return None;
     }
-    // The traits: names separated with `,` in the parentheses.
+    // The traits: names separated with `,` in the parentheses, a `,` after
+    // the last one or not (W3-08).
     let mut traits = Vec::new();
     let mut i = open;
     loop {
@@ -170,6 +180,7 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
         traits.push(c.src(i));
         i += 1;
         match c.kind(i) {
+            TokenKind::Comma if i + 1 == shut => break,
             TokenKind::Comma => {}
             TokenKind::RParen if i == shut => break,
             _ => return None,
@@ -186,22 +197,28 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
     // The traits the head has, and the token after which more go: the list
     // after the `:` (names and paths joined by `+`, a line break after a
     // `+`, §6.4) ends at any other token (the `{` of the body, a line break).
-    // Sets, as the names may be many (linear in them).
+    // Sets, as the names may be many (linear in them). A trait the head has
+    // is a name alone: the words of a path (`std.Eq`) are none, as the
+    // derives are read after (one segment, S-488).
     let mut written: HashSet<&str> = HashSet::new();
     let mut after = head;
-    if c.kind(c.after(head)) == TokenKind::Colon {
+    let colon = c.kind(c.after(head)) == TokenKind::Colon;
+    if colon {
         after = c.after(head);
+        // The name last read, while no `.` follows it.
+        let mut name = None;
         loop {
             let next = if c.kind(after) == TokenKind::Plus { c.sig_after(after) } else { c.after(after) };
             match c.kind(next) {
-                TokenKind::Ident => {
-                    written.insert(c.src(next));
-                }
-                TokenKind::Plus | TokenKind::Dot => {}
+                TokenKind::Ident if c.kind(after) == TokenKind::Dot => {}
+                TokenKind::Ident => written.extend(name.replace(c.src(next))),
+                TokenKind::Dot => name = None,
+                TokenKind::Plus => written.extend(name.take()),
                 _ => break,
             }
             after = next;
         }
+        written.extend(name);
         if c.kind(after) != TokenKind::Ident {
             return None;
         }
@@ -217,8 +234,7 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
     }
     let mut edits = vec![remove_attribute(c, c.at, last)];
     if !add.is_empty() {
-        let text =
-            if written.is_empty() { format!(": {}", add.join(" + ")) } else { format!(" + {}", add.join(" + ")) };
+        let text = if colon { format!(" + {}", add.join(" + ")) } else { format!(": {}", add.join(" + ")) };
         edits.push(Edit::insert(c.file, c.span(after).end, text));
     }
     let fix = Fix::new("write the traits at the head of the declaration", edits);

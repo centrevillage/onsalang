@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§2.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "20:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `x +=` with a comment and a newline before the right side leaves nothing behind (spec §5.1,
+// §2.5, §18.1; S-251, R-210). The comment after the operator stays, and the operator that ends the line goes on
+// to the next line (`x = x + // c` and the right side below it, §2.5: a binary operator at the end of the line
+// goes on), so the check reads the text after the candidate without a report (`clean` is about the whole file,
+// so this file has this one error). The comment is the marker itself. The same form with a `(`, and with the
+// comment inside the parentheses of the right side, is in `e0020_compound_assign_line_comment_paren_clean.onsa`
+// and `e0020_compound_assign_comment_in_parentheses_clean.onsa`.
+
+pub fn only_error(inout x: I32) {
+  x += //~ E0020 @5
+    1
+}

@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+
+// E0002, with no candidate, for the edges of the detection of a derive and an attribute of Rust (spec §6.4,
+// §6.5, §18.1; S-435, W3-08; the rows `hash_attribute_no_candidate` and `hash_attribute_unfixable` of
+// spec/foreign-forms.toml). A candidate is made only where the declaration after the attribute reads as a
+// heading and the traits can be written at its head: a heading that is not the grammar of a heading (no name),
+// a `:` list that does not read (no trait, a `+` with none after it), and an attribute that stands before
+// a `}` (no declaration follows it at all) are none of these, and the report is on the attribute, with no
+// candidate. The main position is the `#[`. These forms are not touched by a candidate for a `,` after the last name
+// (`fixes/e0020_derive_attribute_trailing_comma.onsa`) or for a path in the list
+// (`fixes/e0020_derive_attribute_path_names.onsa`). One error in each declaration unit (P-01).
+
+#[derive(PartialEq)]                                //~ E0002
+pub struct {
+  id: U32,
+}
+
+#[derive(Eq)]                                       //~ E0002
+pub struct EmptyList: {
+  id: U32,
+}
+
+#[derive(Eq)]                                       //~ E0002
+pub struct PlusWithNoTrait: PartialEq + {
+  id: U32,
+}
+
+pub struct FieldAttribute {
+  id: U32,
+  #[serde(skip)]                                    //~ E0002
+}
+
+pub struct FieldDerive {
+  id: U32,
+  #[derive(Eq)]                                     //~ E0002
+}
+
+pub struct Empty {}
+
+impl Empty {
+  #[inline]                                         //~ E0002
+}
+
+pub fn body_end() {
+  #[inline]                                         //~ E0002
+}

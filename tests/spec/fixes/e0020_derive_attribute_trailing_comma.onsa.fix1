@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a derive written as an attribute of Rust with a `,` after the last name (spec §6.4, §6.5, §18.1;
+// W3-08). A `,` after the last name of a list is written in a list of Onsa, and it is the kind of mistake that
+// the candidate can mend: the traits are written at the head of the declaration, `: PartialEq + Eq`, and the
+// `,` is not carried over. The candidate has the title `write the traits at the head of the declaration`, the
+// same as the one of a derive with no `,` (`e0020_derive_attribute_names.onsa`), and the main position is
+// the `#[`. The names are copied as they are (`Debug` and `Clone` are not derived by Onsa, so the declaration
+// that the candidate makes has the E0416 of a later stage, as in `e0020_derive_attribute_names.onsa`, §6.4).
+// The attribute of the old version, `@derive(…,)`, is the same form with the same candidate (the last function).
+// A `,` that stands anywhere else in the list, a comment in the parentheses, and a list over lines are
+// the cases of `negative/derive_attribute_unreadable_list.onsa`, which have no candidate. One error in each
+// declaration unit (P-01).
+
+//~ E0020 @1
+pub struct Both: PartialEq + Eq {
+  id: U32,
+}
+
+//~ E0020 @1
+pub struct One: PartialEq {
+  id: U32,
+}
+
+//~ E0020 @1
+pub struct OtherLanguages: Debug + Clone {
+  id: U32,
+}
+
+//~ E0020 @1
+pub struct Already: PartialEq + Eq {
+  id: U32,
+}
+
+//~ E0020 @1
+pub enum Slot: PartialEq + Eq {
+  Empty,
+  Full(U32),
+}
+
+//~ E0020 @1
+pub struct OldForm: PartialEq + Eq {
+  id: U32,
+}

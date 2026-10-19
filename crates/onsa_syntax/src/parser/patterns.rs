@@ -21,27 +21,30 @@ impl<'a> Parser<'a> {
     /// After a `-` in a pattern: `(`s, an integer and as many `)`s (the negative
     /// literal `-(128)`, S-185). Comments and newlines inside are skipped.
     fn parenthesised_int_after_minus(&self) -> bool {
+        self.parenthesised_after_minus().is_some_and(|t| t.kind == TokenKind::Int)
+    }
+
+    /// After a `-` in a pattern: `(`s, one token and as many `)`s; that token
+    /// (`-(128)`, S-185; `-(017)`, whose number is its own row's, §18.1).
+    /// Comments and newlines inside are skipped.
+    fn parenthesised_after_minus(&self) -> Option<Token> {
         let mut i = self.peek2_index();
         let next = |i: &mut usize| loop {
             let t = self.tokens[*i];
             if t.kind != TokenKind::Eof {
                 *i += 1;
             }
-            match t.kind {
-                k if k == TokenKind::Newline || k.is_line_comment() => {}
-                k => return k,
+            if !(t.kind == TokenKind::Newline || t.kind.is_line_comment()) {
+                return t;
             }
         };
         let mut opens = 0;
-        let mut k = next(&mut i);
-        while k == TokenKind::LParen {
+        let mut inner = next(&mut i);
+        while inner.kind == TokenKind::LParen {
             opens += 1;
-            k = next(&mut i);
+            inner = next(&mut i);
         }
-        if opens == 0 || k != TokenKind::Int {
-            return false;
-        }
-        (0..opens).all(|_| next(&mut i) == TokenKind::RParen)
+        (opens > 0 && (0..opens).all(|_| next(&mut i).kind == TokenKind::RParen)).then_some(inner)
     }
 
     /// Whether `t` is a number written as in other languages that is an
@@ -111,14 +114,22 @@ impl<'a> Parser<'a> {
             {
                 return Err(self.fail(Want::Prefix, "a pattern"));
             }
-            // `-017`, `-1u8`: an integer written as in other languages, whose
-            // row the table names at the number, as in an expression (§2.4,
-            // §18.1); a float after the `-` is the float pattern's (S-248),
-            // and a blank after the `-` the general E0002, as before a name.
-            TokenKind::Minus if !self.gap_after(self.peek_index()).is_some() && self.foreign_integer(self.peek2()) => {
+            // `-017`, `-1u8`, `-(017)`: an integer written as in other
+            // languages, whose row the table names at the number, as in an
+            // expression (§2.4, §4.7, §18.1); a float after the `-` is the
+            // float pattern's (S-248), and a blank after the `-` the general
+            // E0002, as before a name.
+            TokenKind::Minus
+                if !self.gap_after(self.peek_index()).is_some()
+                    && (self.foreign_integer(self.peek2())
+                        || self.parenthesised_after_minus().is_some_and(|n| self.foreign_integer(n))) =>
+            {
                 let _negative = self.start(NodeKind::NegLitPat)?;
                 self.bump();
-                return Err(self.fail(Want::Pattern, "a pattern"));
+                return self.with_nl(false, |p| {
+                    while p.eat(TokenKind::LParen).is_some() {}
+                    Err(p.fail(Want::Pattern, "a pattern"))
+                });
             }
             TokenKind::Minus if self.peek2().kind == TokenKind::Int || self.parenthesised_int_after_minus() => {
                 let m = self.start(NodeKind::NegLitPat)?;

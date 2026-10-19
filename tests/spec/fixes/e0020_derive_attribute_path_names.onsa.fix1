@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a derive written as an attribute of Rust on a declaration whose head has a `:` list with a name
+// that is a path (spec §6.4, §6.5, §18.1; W3-08). The candidate writes the traits of the attribute at the
+// head of the declaration after the names that are there, and does not write a name twice. A name is
+// the same as another when the words are the same; a name that goes on with `.` is a path, and a path is
+// not counted as a single word: in `P: std.Eq` the word `Eq` is the end of a path, so `#[derive(Eq)]` is not a
+// name that is already there, and the candidate takes the attribute off and writes `Eq` after the path (`P: std.Eq + Eq`).
+// A name that is there as one word (`Q: Eq`) is not written again. The `std.Eq` of the path is the E0416
+// of a later stage (`std.Eq` cannot be derived, §6.4), before and after the candidate, and it is not
+// the concern of this file. The candidates are in `.fix1` of the implementation. The main position is
+// the `#[`. One error in each declaration unit (P-01).
+
+//~ E0020 @1
+pub struct PathName: std.Eq + Eq {
+  x: I32,
+}
+
+//~ E0020 @1
+pub struct PathAfterAWord: PartialEq + std.Eq + Eq {
+  x: I32,
+}
+
+//~ E0020 @1
+pub struct WordAfterAPath: std.PartialEq + Eq {
+  x: I32,
+}
+
+//~ E0020 @1
+pub struct SameWord: Eq {
+  x: I32,
+}

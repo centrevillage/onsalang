@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:1"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `#[derive(PartialEq, Eq,)]` leaves nothing behind (spec §6.4, §6.5, §18.1; W3-08): the
+// traits are written at the head of the declaration, `: PartialEq + Eq`, with the `,` not carried over, and the
+// check reads `pub struct Key: PartialEq + Eq` without a report (`clean` is about the whole file, so this file
+// has this one error). The main position is the `#[`.
+
+#[derive(PartialEq, Eq,)]                           //~ E0020 @1
+pub struct Key {
+  id: U32,
+}

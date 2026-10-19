@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+
+// E0002, with no candidate, for an attribute of Rust (`#[…]`) in front of a heading that does not read
+// (spec §6.5, §18.1; S-435, W3-08). The attribute would have a candidate in front of a declaration that reads
+// (`#[repr(C)]` is `@repr(c)`, `fixes/e0020_hash_attribute.onsa`), but the heading after it fails (`pub(crate`
+// with no `)` on the line is not read on, §18.1), so there is no declaration to say where the attribute goes, and
+// the report is on the attribute, in the place where it stands. The main position is the `#[`, and the candidate
+// is none. The main message says that the attribute cannot be written out as it stands (the runner of the cases
+// does not compare the text of a message, so the text is not in this file). The attribute with no
+// declaration in its place at all (`#[inline]` and then a `let`) is the same code and position and another text
+// (`attributes_without_a_declaration.onsa`). A heading that does not read goes on to the end of the file here,
+// so this file has this one error.
+
+#[repr(C)]                                          //~ E0002
+pub(crate struct P { x: I32 }

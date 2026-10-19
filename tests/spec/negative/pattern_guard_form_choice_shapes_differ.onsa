@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0002, with no candidate, for a string with an interpolation and a constant with a `-` in a choice whose
+// alternatives are not of one shape after the replacement (spec §7, §18.1; S-317, S-319; the rows
+// `interpolated_string_pattern` and `negated_constant_pattern` of spec/foreign-forms.toml). The rows of these two
+// forms have no row for the choice that does not merge, as the float and the range have, so the report has the
+// main message of the E0020 row of the form (a string with an interpolation cannot be a pattern; a constant with
+// `-` cannot be a pattern) with the code E0002, because there is no candidate. The note says that the alternatives
+// of other shapes are split into arms or written in a guard (its text is the implementation's, and the runner of
+// the cases does not compare it). The main position is the start of the first such pattern. One error in each
+// declaration unit (P-01).
+
+const LIMIT: I32 = 4
+
+pub fn a_string_and_a_plain_string(s: Str, n: I32) -> I32 uses {Alloc} {
+  match s {
+    "a{n}" | "b" => 1,                              //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn tuples_of_different_shapes(t: (Str, I32), n: I32) -> I32 uses {Alloc} {
+  match t {
+    ("a{n}", 1) | ("b", -LIMIT) => 1,               //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_string_in_one_and_a_wildcard_in_the_other(t: (Str, I32), n: I32) -> I32 uses {Alloc} {
+  match t {
+    ("a{n}", 1) | (_, -LIMIT) => 1,                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_negated_constant_and_a_literal(x: I32) -> I32 {
+  match x {
+    -LIMIT | 7 => 1,                                //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_negated_constant_and_none(o: Option[I32]) -> I32 {
+  match o {
+    Some(-LIMIT) | None => 1,                       //~ E0002
+    _ => 0,
+  }
+}

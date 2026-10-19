@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§2.5", "§18.1"]
+// fixes = 1
+
+// The candidate of a compound assignment (spec §5.1, §18.1; S-251, R-210): a newline or a comment between the `=` and the right side makes the candidate put
+// ` {left} {op}` (and ` (` when the right side needs parentheses) in just after the `=` and keep what was
+// between; spaces alone (or nothing) are replaced as before (`x = x + 1`, `x = x - (-y)`). The comment is the marker
+// itself. The text after the candidate is in the `.fix1` (by hand, from the decision, not from the implementation).
+
+pub fn comment_then_newline(inout x: I32) {
+  x += //~ E0020 @5
+    1
+}
+
+pub fn comment_then_a_negated_side(inout x: I32, y: I32) {
+  x -= //~ E0020 @5
+    -y
+}
+
+pub fn comment_inside_the_parentheses(inout x: I32, y: I32) {
+  x -= ( //~ E0020 @5
+    y + 1)
+}
+
+pub fn tight(inout x: I32) {
+  x +=1                                             //~ E0020 @5
+}
+
+pub fn spaced(inout x: I32) {
+  x += 1                                            //~ E0020 @5
+}
+
+pub fn spaced_negated(inout x: I32, y: I32) {
+  x -= -y                                           //~ E0020 @5
+}

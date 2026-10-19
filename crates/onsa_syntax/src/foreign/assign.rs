@@ -93,13 +93,17 @@ pub(super) fn compound_assignment(c: &Cursor) -> Option<(RowId, Hit)> {
     }
     let lhs = &c.text[c.span(lhs_first).start as usize..c.span(op - 1).end as usize];
     let parens = needs_parens(c, c.kind(op), rhs_first, rhs_last);
-    let mut edits = vec![
-        Edit::delete(c.span(op)),
-        Edit::replace(
-            c.file_span(c.span(c.at).end, c.span(rhs_first).start),
-            format!(" {lhs} {} {}", c.src(op), if parens { "(" } else { "" }),
-        ),
-    ];
+    let head = format!(" {lhs} {}", c.src(op));
+    // A line break or a comment between the `=` and the right side stays
+    // (S-251, R-210): the left side and the operator go in after the `=`
+    // (`x = x + // c`). Blanks alone are replaced (`x +=1` is `x = x + 1`).
+    let between = if rhs_first > c.at + 1 {
+        Edit::insert(c.file, c.span(c.at).end, format!("{head}{}", if parens { " (" } else { "" }))
+    } else {
+        let blanks = c.file_span(c.span(c.at).end, c.span(rhs_first).start);
+        Edit::replace(blanks, format!("{head}{}", if parens { " (" } else { " " }))
+    };
+    let mut edits = vec![Edit::delete(c.span(op)), between];
     if parens {
         edits.push(Edit::insert(c.file, c.span(rhs_last).end, ")"));
     }

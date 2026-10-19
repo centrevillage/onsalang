@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "44:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["44:13 E0020"]
+//
+// [[test.fix]]
+// at = "48:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["48:11 E0020"]
+//
+// [[test.fix]]
+// at = "52:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["52:13 E0020"]
+//
+// [[test.fix]]
+// at = "56:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["56:12 E0020"]
+
+// The candidate of a compound assignment keeps what is between the `=` and the right side (spec §5.1, §18.1;
+// S-251, R-210). The edits change only the tokens they change: the `op=` becomes `=`, the left side and the
+// operator are put in just after that `=` (`x +=` is `x = x +`), and a `(` is put in with a `)` after the right
+// side when the right side needs the parentheses. What was between the `=` and the right side (spaces, a newline,
+// a comment) stays where it was, and it is out of every range of the edits (S-251: the comments are not in a
+// range). The spaces alone are the other case, and the candidate replaces them (`x += 1` is `x = x + 1`;
+// `fixes/e0020_compound_assign_between.onsa`).
+// The comments here are block comments, which Onsa does not have (E0020, §2.1), so the comment that stays is
+// reported by the check after the candidate: that is what each `[[test.fix]]` says (`leaves`, the position of
+// the `/*` in the text after the candidate; the error of the comment is in the same unit as the error of the
+// compound assignment, so the file does not use the default of one error in a unit). A candidate that takes the
+// comment away leaves no such error. The candidate of the comment itself is the case of
+// `fixes/e0020_block_comment_*.onsa`. One compound assignment in each declaration unit.
+
+pub fn comment_then_a_negated_side(inout x: I32, y: I32) {
+  x -= /* c */ -y                                   //~ E0020 @5
+}
+
+pub fn comment_then_a_name(inout x: I32, y: I32) {
+  x += /* c */ y                                    //~ E0020 @5
+}
+
+pub fn comment_then_a_low_precedence_side(inout x: I32, y: I32) {
+  x *= /* c */ y + 1                                //~ E0020 @5
+}
+
+pub fn comment_at_the_end_of_the_line(inout x: I32, y: I32) {
+  x +=  /* c */                                     //~ E0020 @5
+    y
+}

@@ -109,12 +109,16 @@ struct PatReader<'c, 'a> {
     pos: usize,
     depth: u32,
     limit: u32,
+    /// Whether the block comments of `c` are among `toks` (they are tokens
+    /// the reader does not take), or left out as the line comments are.
+    blocks: bool,
 }
 
 impl<'c, 'a> PatReader<'c, 'a> {
-    /// A reader of `toks`, significant tokens of `c` (indexes of `tokens`).
-    fn new(c: &'c Cursor<'a>, toks: Vec<usize>, limit: u32) -> PatReader<'c, 'a> {
-        PatReader { c, toks, pos: 0, depth: 0, limit }
+    /// A reader of `toks`, significant tokens of `c` (indexes of `tokens`),
+    /// the block comments among them when `blocks`.
+    fn new(c: &'c Cursor<'a>, toks: Vec<usize>, limit: u32, blocks: bool) -> PatReader<'c, 'a> {
+        PatReader { c, toks, pos: 0, depth: 0, limit, blocks }
     }
 
     fn peek(&self) -> Option<TokenKind> {
@@ -327,7 +331,9 @@ impl<'c, 'a> PatReader<'c, 'a> {
         let lo = self.pos;
         // The alternative as the parser reads it: newlines are seen, comments not.
         let first = *self.toks.get(self.pos)?;
-        let rest = self.c.tokens[first..].iter().map(|t| t.kind).filter(|k| !k.is_trivia() || *k == TokenKind::Newline);
+        let blocks = self.blocks;
+        let read = move |k: &TokenKind| (!k.is_trivia() && (blocks || *k != TokenKind::BlockComment)) || *k == TokenKind::Newline;
+        let rest = self.c.tokens[first..].iter().map(|t| t.kind).filter(read);
         if let (end, Some(sym)) = crate::scan::pattern_alternative(rest) {
             return self.range(lo, lo + sym, lo + end);
         }
@@ -496,8 +502,9 @@ struct Shape<'a> {
     edits: Vec<Edit>,
 }
 
-/// Why a pattern has no candidate. The reasons but [`Why::Bad`] name the row
-/// of the alternatives ([`Form::choice_row`]) alike ([`guard_pattern`]).
+/// Why a pattern has no candidate ([`guard_pattern`]): its row
+/// ([`Why::row`]) and the note that says why ([`Why::note`]).
+#[derive(Clone, Copy)]
 enum Why {
     /// The alternatives differ once the forms are replaced (S-317).
     Skeletons,
@@ -511,6 +518,44 @@ enum Why {
     /// A form makes none (a range whose end is no expression, the right of
     /// `@` that is no literal, constant or range).
     Bad(Form),
+    /// A range with a comment in it, which the copy of its ends into the
+    /// guard would lose (S-251): the row of the form, as [`Why::Bad`].
+    EndComment,
+}
+
+impl Why {
+    /// The row of a pattern with no candidate whose first form is `head`:
+    /// that of the alternatives but where a form makes none (S-48, S-317).
+    fn row(&self, head: Form) -> RowId {
+        match self {
+            Why::Bad(Form::At) => Form::At.choice_row(),
+            Why::Bad(_) | Why::EndComment => head.row(),
+            Why::Skeletons | Why::Comment | Why::NoForm | Why::GuardEnd => head.choice_row(),
+        }
+    }
+
+    /// The note after the row's rule that says why no candidate is made
+    /// (A26): a comment the candidate would lose, an end of a range that
+    /// does not read, alternatives of other shapes. None for the others,
+    /// whose message says it (`@` that is no comparison) or that no input
+    /// the reader takes makes.
+    fn note(&self) -> Option<&'static str> {
+        match self {
+            Why::Comment | Why::EndComment => Some(
+                "no candidate: a comment in the part the guard form would rewrite would be lost (§18.1); \
+                 move it out of the pattern, or write the guard by hand",
+            ),
+            Why::Bad(Form::Range) => Some(
+                "no candidate: an end of the range does not read as an expression a guard could copy; \
+                 write the end as an expression, or write the guard by hand",
+            ),
+            Why::Skeletons => Some(
+                "no candidate: once the forms are replaced the alternatives are not of one shape, and one \
+                 guard cannot tell which matched; split them into arms, or write the guard by hand",
+            ),
+            Why::Bad(_) | Why::NoForm | Why::GuardEnd => None,
+        }
+    }
 }
 
 /// The shape of `p` (S-317): the alternatives of a pattern with holes are
@@ -539,6 +584,7 @@ fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Result<Shape<'a>, Wh
                 edits: Vec::new(),
             })
         }
+        PatKind::Bad(Form::Range) if comment(p.lo, p.hi) => Err(Why::EndComment),
         PatKind::Bad(f) => Err(Why::Bad(*f)),
         PatKind::Leaf(_) => Ok(Shape { skel: (p.lo..=p.hi).map(tok).collect(), ..empty() }),
         PatKind::Paren(inner) => shape(c, toks, inner),
@@ -637,7 +683,7 @@ fn forms(p: &Pat, out: &mut Vec<(Form, usize, usize)>) {
 fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     let start = if c.kind(c.at) == TokenKind::At { c.sig_before(c.at)? } else { c.at };
     let toks = (start..c.tokens.len()).filter(|&i| !c.kind(i).is_trivia()).collect();
-    let mut reader = PatReader::new(c, toks, crate::parser::NESTING_LIMIT);
+    let mut reader = PatReader::new(c, toks, crate::parser::NESTING_LIMIT, true);
     let p = reader.one()?;
     let mut found = Vec::new();
     forms(&p, &mut found);
@@ -678,8 +724,9 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     let Some(&(NodeKind::MatchArm, arm_start)) = owner else {
         return found(form.row(), alone, Vec::new());
     };
-    let Some(arm) = Arm::read(c, arm_start, crate::parser::NESTING_LIMIT) else {
-        return found(form.row(), alone, Vec::new());
+    let arm = match Arm::read(c, arm_start, crate::parser::NESTING_LIMIT) {
+        Ok(arm) => arm,
+        Err(why) => return Some((form.row(), Hit::new(alone, Vec::new()).with_note(why.and_then(|w| w.note())))),
     };
     let mut in_arm = Vec::new();
     forms(&arm.pat, &mut in_arm);
@@ -689,8 +736,7 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     let span = c.file_span(c.span(arm.toks[a]).start, c.span(arm.toks[b]).end);
     match arm.candidates(c) {
         Ok(fixes) => found(head.row(), span, fixes),
-        Err(Why::Bad(bad)) => found(if bad == Form::At { Form::At.choice_row() } else { head.row() }, span, Vec::new()),
-        Err(Why::Skeletons | Why::Comment | Why::NoForm | Why::GuardEnd) => found(head.choice_row(), span, Vec::new()),
+        Err(why) => Some((why.row(head), Hit::new(span, Vec::new()).with_note(why.note()))),
     }
 }
 
@@ -719,8 +765,24 @@ struct Arm {
 impl Arm {
     /// The arm that starts at `arm_start`: the pattern runs to `if` or `=>`
     /// outside brackets, the guard to `=>`; its patterns nest `limit` deep
-    /// at most ([`PatReader`]).
-    fn read(c: &Cursor, arm_start: u32, limit: u32) -> Option<Arm> {
+    /// at most ([`PatReader`]). When it does not read, why, if a reason the
+    /// note says ([`Why::note`]): the reader takes no block comment, and one
+    /// in what the candidate rewrites would be lost, as the shape tests a
+    /// comment ([`shape`]: [`Why::Comment`], [`Why::EndComment`]); read
+    /// without the block comments to see where they are.
+    fn read(c: &Cursor, arm_start: u32, limit: u32) -> Result<Arm, Option<Why>> {
+        Arm::read_tokens(c, arm_start, limit, false).map_err(|commented| {
+            let arm = commented.then(|| Arm::read_tokens(c, arm_start, limit, true).ok()).flatten()?;
+            match shape(c, &arm.toks, &arm.pat) {
+                Err(why @ (Why::Comment | Why::EndComment)) => Some(why),
+                _ => None,
+            }
+        })
+    }
+
+    /// [`Arm::read`], without the block comments when `skip_blocks`; when it
+    /// does not read, whether a block comment is among the pattern's tokens.
+    fn read_tokens(c: &Cursor, arm_start: u32, limit: u32, skip_blocks: bool) -> Result<Arm, bool> {
         let first = c.index_at(arm_start);
         let mut depth = 0i32;
         let mut toks = Vec::new();
@@ -733,31 +795,33 @@ impl Arm {
                     let mut j = i + 1;
                     while c.kind(j) != TokenKind::FatArrow {
                         if matches!(c.kind(j), TokenKind::Eof | TokenKind::RBrace) {
-                            return None;
+                            return Err(false);
                         }
                         j += 1;
                     }
                     break (Some(i), j);
                 }
                 TokenKind::FatArrow if depth == 0 => break (None, i),
-                TokenKind::Eof => return None,
+                TokenKind::Eof => return Err(false),
                 _ => {}
             }
             if depth < 0 {
-                return None;
+                return Err(false);
             }
-            if !c.kind(i).is_trivia() {
+            let skipped = c.kind(i).is_trivia() || (skip_blocks && c.kind(i) == TokenKind::BlockComment);
+            if !skipped {
                 toks.push(i);
             }
             i += 1;
         };
-        let last_pat = *toks.last()?;
-        let mut reader = PatReader::new(c, toks, limit);
-        let pat = reader.or()?;
+        let last_pat = *toks.last().ok_or(false)?;
+        let commented = toks.iter().any(|&t| c.kind(t) == TokenKind::BlockComment);
+        let mut reader = PatReader::new(c, toks, limit, !skip_blocks);
+        let pat = reader.or().ok_or(commented)?;
         if reader.pos != reader.toks.len() {
-            return None;
+            return Err(commented);
         }
-        Some(Arm { toks: reader.toks, pat, if_tok, arrow, last_pat })
+        Ok(Arm { toks: reader.toks, pat, if_tok, arrow, last_pat })
     }
 
     /// The candidates: one, or two when a range is written `..` or `...`
@@ -857,7 +921,7 @@ mod tests {
             declaration: None,
         };
         let start = src.find("((").unwrap_or_default() as u32;
-        Arm::read(&c, start, limit).is_some()
+        Arm::read(&c, start, limit).is_ok()
     }
 
     #[test]

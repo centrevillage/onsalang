@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7", "§2.4"]
+
+// The negative integer of a pattern: one `-` in front of an integer literal, with parentheses between them
+// or not (spec §7, §4.7; S-227). `-(17)` is the literal `-17` (`(e)` is always grouping), so it is a
+// pattern that is read and compared like `-17`; these are the forms that the candidates of the E0020 cases
+// of `fixes/e0020_negative_pattern_paren_*.onsa` leave, and the forms that need no candidate. The range of
+// the value is checked on the literal (`-(128)` is an `I8`).
+
+pub fn classify(x: I32) -> I32 {
+  match x {
+    -(17) => 1,
+    -(15) => 2,
+    -(0) => 3,
+    -(1_0) => 4,
+    -9 => 5,
+    _ => 0,
+  }
+}
+
+pub fn small(x: I8) -> I32 {
+  match x {
+    -(128) => 1,
+    _ => 0,
+  }
+}
+
+pub fn nested(o: Option[I32], t: (I32, I32)) -> I32 {
+  let a = match o {
+    Some(-(17)) => 1,
+    Some(-(15) | -(9)) => 2,
+    _ => 0,
+  }
+  let b = match t {
+    (-(17), n) => n,
+    _ => 0,
+  }
+  a + b
+}

@@ -651,8 +651,10 @@ pub(crate) fn at_read(c: &Cursor) -> Vec<Diagnostic> {
 /// the head (`c.place` and `c.declaration`; none when the head failed): the
 /// row of [`decls::hash_attribute`], as at a failure, at the place the
 /// parser knows (§6.5), as the attributes of Onsa are checked there.
-pub(crate) fn at_heading_hash(c: &Cursor) -> Option<Diagnostic> {
-    let (row, hit) = decls::hash_attribute(c)?;
+/// `failed`: the head of a declaration began and failed, so the place is not
+/// known ([`decls::hash_attribute_in`]).
+pub(crate) fn at_heading_hash(c: &Cursor, failed: bool) -> Option<Diagnostic> {
+    let (row, hit) = decls::hash_attribute_in(c, failed)?;
     Some(diagnostic(c.text, row, hit))
 }
 

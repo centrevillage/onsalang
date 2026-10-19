@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+
+// E0002, with no candidate, for an attribute of Rust whose brackets do not close on the line it starts (spec
+// §6.4, §6.5, §18.1; S-435, W3-08; the row `hash_attribute_unfixable` of spec/foreign-forms.toml). The range of
+// the attribute is not known, so the heading after it is not read on, no declaration is known to carry the
+// traits, and the report is on the `#[` alone, with no candidate. This file is the parenthesis that is not closed on the line.
+// A heading that is not read goes on to the end of the file, so each form is in a file of its own
+// (`attribute_detection_unclosed_*.onsa`) with this one error.
+
+#[derive(PartialEq, Eq                              //~ E0002
+pub struct P {
+  id: U32,
+}

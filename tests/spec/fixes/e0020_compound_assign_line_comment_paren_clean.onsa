@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§2.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "19:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `x -=` with a comment and a newline before a right side that needs parentheses leaves
+// nothing behind (spec §5.1, §2.5, §18.1; S-251, R-210). The `(` is put in after the operator and before what
+// was between the `=` and the right side, so the comment and the newline are inside the parentheses
+// (`x = x - ( // c` and `-y)` below it), and the check reads that without a report (`clean` is about the whole
+// file, so this file has this one error). The comment is the marker itself. A negated name is the right side
+// that needs the parentheses (`x - -y` is `x - (-y)`, §3.1).
+
+pub fn only_error(inout x: I32, y: I32) {
+  x -= //~ E0020 @5
+    -y
+}

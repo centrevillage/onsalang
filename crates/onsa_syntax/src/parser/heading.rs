@@ -26,6 +26,24 @@ pub(super) struct Heading {
     pub declaration: &'static Declaration,
 }
 
+/// Why the head of a declaration did not read ([`Parser::read_heading`]):
+/// where it fails, an attribute of another language read on before it has
+/// no place the parser knows ([`foreign::at_heading_hash`]).
+enum Unread {
+    /// A form of the head failed (an attribute of Onsa, a visibility, a
+    /// keyword before a keyword): a declaration was begun.
+    Failed,
+    /// No declaration where the head looks for its keyword (`let`, a name,
+    /// a `#[…]` that fails after it: the end of the list or of the file).
+    NoDeclaration,
+}
+
+impl From<ParseError> for Unread {
+    fn from(_: ParseError) -> Self {
+        Unread::Failed
+    }
+}
+
 impl<'a> Parser<'a> {
     /// The head of the item in the node open, up to the keyword of its
     /// declaration: the attributes read whole, the index of the visibility
@@ -47,20 +65,21 @@ impl<'a> Parser<'a> {
         let read = self.read_heading(&mut hashes);
         let place = read.as_ref().ok().map(|h| crate::attrs::place_of_declaration(h.keyword.kind));
         let keyword = read.is_ok().then(|| self.peek_index());
+        let failed = matches!(read, Err(Unread::Failed));
         for at in hashes {
             let mut cursor = self.cursor(at, Want::Other);
             (cursor.place, cursor.declaration) = (place, keyword);
-            let d = foreign::at_heading_hash(&cursor).unwrap_or_else(|| {
+            let d = foreign::at_heading_hash(&cursor, failed).unwrap_or_else(|| {
                 onsa_diag::internal::bug(Some(self.tokens[at].span), "a `#[` read on that the table does not name")
             });
             self.report(d);
         }
-        read
+        read.map_err(|_| ParseError)
     }
 
     /// The head of [`Parser::parse_heading`]; the `#` of each attribute of
     /// another language read on go to `hashes`.
-    fn read_heading(&mut self, hashes: &mut Vec<usize>) -> PResult<Heading> {
+    fn read_heading(&mut self, hashes: &mut Vec<usize>) -> Result<Heading, Unread> {
         let mut attrs = Vec::new();
         let mut vis = None;
         loop {
@@ -84,10 +103,13 @@ impl<'a> Parser<'a> {
                 }
                 return Ok(Heading { attrs, vis, keyword: t, declaration });
             }
-            if self.foreign_attribute(hashes)? || self.words_before_head() {
+            // Another attribute that fails (not closed on its line, or no
+            // declaration after it): no declaration was begun.
+            if self.foreign_attribute(hashes).map_err(|_| Unread::NoDeclaration)? || self.words_before_head() {
                 continue;
             }
-            return Err(self.unexpected("a declaration"));
+            self.unexpected("a declaration");
+            return Err(Unread::NoDeclaration);
         }
     }
 

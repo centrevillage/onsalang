@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§2.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "18:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `x -=` with a right side that is in parentheses already and has a comment and a newline
+// inside leaves nothing behind (spec §5.1, §2.5, §18.1; S-251, R-210). There is only a space between the `=`
+// and the `(`, so the candidate is the replacement of the spaces, and the comment inside the parentheses is
+// not touched: `x = x - ( // c` and `y + 1)` below it. The check reads that without a report (`clean` is about
+// the whole file, so this file has this one error). The comment is the marker itself.
+
+pub fn only_error(inout x: I32, y: I32) {
+  x -= ( //~ E0020 @5
+    y + 1)
+}
