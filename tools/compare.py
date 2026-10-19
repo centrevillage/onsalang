@@ -16,10 +16,14 @@ left in the directory differ. `core` runs `dump --core` of both on the cases of 
 lists those whose exit code or output differ. Both list the falls and exit 1 as `diags` does, and when no case ran to
 exit 0 in both binaries.
 `speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round;
-the long inputs get `check` and `fmt --check`, shown apart.
+the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` the first binary lowers
+(exit 0) get `dump --core`. Each binary is named by its place in the arguments and the path past the directories they
+share; each run shows the wall seconds and the cpu seconds (user + sys of the children). The cpu seconds swing under
+load too (about 55% in an A/A of one binary, 2026-10-20): judge on a quiet machine.
 """
 import json
 import os
+import resource
 import shutil
 import subprocess
 import sys
@@ -215,11 +219,13 @@ def core(args) -> int:
     return compared(args, units, run, texts, ok, f"tests (but {REVIEW}) and examples")
 
 
-def timed(binary: str, args: list, files: list) -> float:
-    t = time.perf_counter()
+def timed(binary: str, args: list, files: list) -> tuple:
+    """(wall seconds, CPU seconds: user + sys of the children) of `binary <args> <file>` on each of `files`."""
+    t, r = time.perf_counter(), resource.getrusage(resource.RUSAGE_CHILDREN)
     for f in files:
         subprocess.run([binary, *args, str(f)], capture_output=True, timeout=120)
-    return time.perf_counter() - t
+    u = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return time.perf_counter() - t, u.ru_utime - r.ru_utime + u.ru_stime - r.ru_stime
 
 
 def turn(binaries, r) -> list:
@@ -227,40 +233,65 @@ def turn(binaries, r) -> list:
     return binaries if r % 2 == 0 else binaries[::-1]
 
 
+def labels(binaries) -> list:
+    """The names of the binaries in the lines of `speed`: the place in the arguments and the path past the leading
+    directories they share, as `target/base/<base>/onsa` and `target/debug/onsa` (X-6 T2)."""
+    paths = [os.path.abspath(b) for b in binaries]
+    n = len(Path(os.path.commonpath(paths)).parts)
+    return [f"{i}:" + "/".join(p[min(n, len(p) - 1):]) for i, p in enumerate((Path(x).parts for x in paths), 1)]
+
+
+def least(best, times) -> tuple:
+    """The (wall, cpu) minima of the rounds so far, each kept apart."""
+    return tuple(map(min, best, times))
+
+
+def shown(times: dict, digits: int) -> dict:
+    """The wall seconds of a run under its name, the cpu seconds under `<name> cpu`."""
+    return {f"{k}{s}": round(t[i], digits) for k, t in times.items() for i, s in ((0, ""), (1, " cpu"))}
+
+
 def speed(a) -> int:
     long = sorted(Path(a.long).glob("*.onsa")) if a.long else []
+    order, names = list(enumerate(a.binaries)), labels(a.binaries)  # a binary given twice is measured twice, apart
+    unit = "minimum seconds, wall and cpu (user + sys of the children)"
     if a.mode == "all":
         rounds = a.rounds or 3
         files = sorted(p for d in ("tests", "std", "examples") for p in (ROOT / d).rglob("*.onsa"))
-        runs = {"check": (["check"], files), "fmt": (["fmt", "--check"], files)}
+        # The inputs of `compare.py core` the first binary lowers (exit 0), chosen once: the column times lowering,
+        # not inputs that stop at `check`.
+        first = a.binaries[0]
+        lowered = [ROOT / c for c in core_cases(ROOT) if outcome([first, "dump", "--core", c], ROOT)[0] == 0]
+        runs = {"check": (["check"], files), "fmt": (["fmt", "--check"], files), "core": (["dump", "--core"], lowered)}
         if long:
             runs.update({"long": (["check"], long), "long fmt": (["fmt", "--check"], long)})
-        best = {b: dict.fromkeys(runs, 1e9) for b in a.binaries}
+        best = [dict.fromkeys(runs, (1e9, 1e9)) for _ in order]
         for r in range(rounds):
-            for b in turn(a.binaries, r):
+            for i, b in turn(order, r):
                 for k, (argv, fs) in runs.items():
-                    best[b][k] = min(best[b][k], timed(b, argv, fs))
-        print(f"{len(files)} files, {len(long)} long inputs, {rounds} rounds; minimum seconds")
-        for b in a.binaries:
-            print(os.path.basename(b), {k: round(v, 2) for k, v in best[b].items()})
+                    best[i][k] = least(best[i][k], timed(b, argv, fs))
+        print(f"{len(files)} files ({len(lowered)} for core), {len(long)} long inputs, {rounds} rounds; {unit}")
+        for name, times in zip(names, best):
+            print(name, shown(times, 2))
         return 0
     if not long:
         print("long: give --long DIR with the long inputs")
         return 1
     rounds = a.rounds or 10
     kinds = {"check": ["check"], "fmt": ["fmt", "--check"]}  # shown apart (RF-13 may move check, RF-14 fmt)
-    best = {b: {(k, f): 1e9 for k in kinds for f in long} for b in a.binaries}
+    best = [{(k, f): (1e9, 1e9) for k in kinds for f in long} for _ in order]
     for r in range(rounds):
-        for b in turn(a.binaries, r):
+        for i, b in turn(order, r):
             for f in long:
                 for k, argv in kinds.items():
-                    best[b][k, f] = min(best[b][k, f], timed(b, argv, [f]))
-    print(f"{len(long)} long inputs, {rounds} rounds; minimum seconds")
-    for b in a.binaries:
-        print(os.path.basename(b), {k: round(sum(best[b][k, f] for f in long), 3) for k in kinds})
-    first, last = a.binaries[0], a.binaries[-1]
-    for k, f in sorted(best[first], key=lambda kf: best[last][kf] / best[first][kf])[-5:]:
-        print(f.name, k, round(best[first][k, f], 4), round(best[last][k, f], 4))
+                    best[i][k, f] = least(best[i][k, f], timed(b, argv, [f]))
+    print(f"{len(long)} long inputs, {rounds} rounds; {unit}")
+    for name, times in zip(names, best):
+        print(name, shown({k: [sum(times[k, f][i] for f in long) for i in (0, 1)] for k in kinds}, 3))
+    first, last = best[0], best[-1]
+    print(f"the five grown most in cpu, {names[0]} -> {names[-1]}: input, command, cpu, wall")
+    for k, f in sorted(first, key=lambda kf: last[kf][1] / max(first[kf][1], 1e-6))[-5:]:
+        print(f.name, k, *(f"{first[k, f][i]:.4f} -> {last[k, f][i]:.4f}" for i in (1, 0)))
     return 0
 
 
@@ -274,9 +305,12 @@ def diags_args(p):
 
 def speed_args(p):
     p.add_argument("mode", choices=["all", "long"],
-                   help="all: check と fmt --check を tests・std・examples の全ての .onsa に（1 ファイル 1 プロセス）、"
+                   help="all: check と fmt --check を tests・std・examples の全ての .onsa に、"
+                        "dump --core を core の入力のうち最初のバイナリで終了コード 0 になるものに（1 ファイル 1 プロセス）、"
                         "--long があればその長い入力に check と fmt --check も（別の欄に）。"
-                        "long: 長い入力ごとの check と fmt --check、それぞれの合計と、最も遅くなった五つ（入力と命令）")
+                        "long: 長い入力ごとの check と fmt --check、それぞれの合計と、cpu の時間で最も遅くなった五つ（入力と命令）。"
+                        "各欄は壁時計と cpu（子プロセスの user + sys）。cpu も負荷の下では揺れる"
+                        "（同じバイナリの A/A で約 55%%、2026-10-20）ので、判定は静かな機械で測る")
     p.add_argument("--rounds", type=int, help="回の数（既定 all 3、long 10）。回ごとの最小を残す")
     p.add_argument("--long", help="長い入力（数万行の .onsa）のディレクトリ。リポジトリには置かない")
     p.add_argument("binaries", nargs="+", metavar="binary")
@@ -297,7 +331,7 @@ COMMANDS = {
               "意味解析・降下のリファクタリングの前後で、Core IR が変わっていないかを見るとき（check を回す diags では降下を確かめられない）。前のバイナリは diags と同じ",
               "compare.py core <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "speed": C(speed_args, speed, ("parent", "i", "b"),
-               "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小を並べる",
+               "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小（壁時計と cpu）を、引数の順の番号と経路の違う部分の名前で並べる",
                "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",
                "compare.py speed all <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
 }  # fmt: skip

@@ -4509,26 +4509,60 @@ class Compare(unittest.TestCase):
         b1, b2 = self.fakes({}, "b1", "b2")
         log = self.bin / "log"
 
-        def runs(*turns, per):  # the names the binaries logged, `per` runs of a binary in its turn of a round
-            want = [n for t in turns for n in [t] * per]
+        def runs(*turns, per, chosen=0):  # the names the binaries logged: `chosen` runs of the first choosing the
+            # inputs of `core`, then `per` runs of a binary in its turn of a round
+            want = ["b1"] * chosen + [n for t in turns for n in [t] * per]
             got = log.read_text().split()
             log.unlink()
             return got, want
 
+        unit = "minimum seconds, wall and cpu (user + sys of the children)"
         argv = ["speed", "long", "--rounds", "3", "--long", str(self.root / "tests"), b1, b2]
         code, lines = quiet_out(compare.main, argv)
-        self.assertEqual((code, lines[0]), (0, "4 long inputs, 3 rounds; minimum seconds"))
+        self.assertEqual((code, lines[0]), (0, f"4 long inputs, 3 rounds; {unit}"))
         self.assertEqual(*runs("b1", "b2", "b2", "b1", "b1", "b2", per=8))  # `check` and `fmt --check`, shown apart
         self.assertEqual([(x.split()[0], ast.literal_eval(x.split(" ", 1)[1]).keys()) for x in lines[1:3]],
-                         [("b1", {"check", "fmt"}), ("b2", {"check", "fmt"})])
-        with mock.patch.object(compare, "ROOT", self.root):  # 7 files, `check` and `fmt --check`
+                         [(n, {"check", "check cpu", "fmt", "fmt cpu"}) for n in ("1:b1", "2:b2")])
+        # The five grown most in cpu, before -> after in the order of the arguments.
+        self.assertEqual(lines[3], "the five grown most in cpu, 1:b1 -> 2:b2: input, command, cpu, wall")
+        self.assertEqual(len(lines), 9)
+        self.assertRegex(lines[4], r"^\w\.onsa (check|fmt) [\d.]+ -> [\d.]+ [\d.]+ -> [\d.]+$")
+        with mock.patch.object(compare, "ROOT", self.root):  # 7 files `check` and `fmt --check`, 5 inputs `dump --core`
             code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "2", b1, b2])
-            self.assertEqual((code, lines[0]), (0, "7 files, 0 long inputs, 2 rounds; minimum seconds"))
-            self.assertEqual(*runs("b1", "b2", "b2", "b1", per=14))
+            self.assertEqual((code, lines[0]), (0, f"7 files (5 for core), 0 long inputs, 2 rounds; {unit}"))
+            self.assertEqual(*runs("b1", "b2", "b2", "b1", per=19, chosen=5))
             code, lines = quiet_out(compare.main, argv[:1] + ["all", "--rounds", "2"] + argv[4:])
-        self.assertEqual((code, lines[0]), (0, "7 files, 4 long inputs, 2 rounds; minimum seconds"))
-        self.assertEqual(*runs("b1", "b2", "b2", "b1", per=14 + 8))
-        self.assertEqual(ast.literal_eval(lines[1].split(" ", 1)[1]).keys(), {"check", "fmt", "long", "long fmt"})
+        self.assertEqual((code, lines[0]), (0, f"7 files (5 for core), 4 long inputs, 2 rounds; {unit}"))
+        self.assertEqual(*runs("b1", "b2", "b2", "b1", per=19 + 8, chosen=5))
+        times = ast.literal_eval(lines[1].split(" ", 1)[1])
+        kinds = ("check", "fmt", "core", "long", "long fmt")
+        self.assertEqual(list(times), [f"{k}{s}" for k in kinds for s in ("", " cpu")])
+        self.assertTrue(all(t > 0 for t in times.values()), times)  # the cpu of the children is counted
+
+    def test_speed_names(self):
+        # Two binaries of the same base name are told apart by the path past the directories they share, and the same
+        # binary given twice by its place; each is measured on its own.
+        for d in ("base/b5ddcf3", "debug"):
+            (self.bin / d).mkdir(parents=True)
+            (self.bin / d / "spec.json").write_text("{}")
+            (self.bin / d / "onsa").write_text(FAKE_DIAGS.format(exe=sys.executable))
+            (self.bin / d / "onsa").chmod(0o755)
+        before, after = str(self.bin / "base/b5ddcf3/onsa"), str(self.bin / "debug/onsa")
+        self.assertEqual(compare.labels([before, after]), ["1:base/b5ddcf3/onsa", "2:debug/onsa"])
+        self.assertEqual(compare.labels([after, os.path.relpath(after)]), ["1:onsa", "2:onsa"])
+        self.assertEqual(compare.labels([after]), ["1:onsa"])
+        with mock.patch.object(compare, "ROOT", self.root):
+            code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "1", after, after])
+        self.assertEqual((code, [x.split()[0] for x in lines[1:]]), (0, ["1:onsa", "2:onsa"]))
+        self.assertEqual((self.bin / "debug/log").read_text().split(), ["onsa"] * (5 + 19 * 2))
+
+    def test_speed_core_lowers(self):
+        # `core` times the inputs of `compare.py core` the first binary lowers (exit 0), chosen once before the rounds.
+        b1, b2 = self.fakes({"b1": {"tests/a.onsa": [1, "error"], "tests/p": [2, "no manifest"]}}, "b1", "b2")
+        with mock.patch.object(compare, "ROOT", self.root):
+            code, lines = quiet_out(compare.main, ["speed", "all", "--rounds", "1", b1, b2])
+        self.assertEqual((code, lines[0].split(";")[0]), (0, "7 files (3 for core), 0 long inputs, 1 rounds"))
+        self.assertEqual((self.bin / "log").read_text().split(), ["b1"] * (5 + 17) + ["b2"] * 17)
 
     def test_help(self):
         # rules/tools.md 9.4, as `Work.test_help`
@@ -4558,6 +4592,56 @@ class Compare(unittest.TestCase):
                 compare.main(argv)
             self.assertEqual(e.exception.code, code)
             self.assertIn("{" + ",".join(names + ["help"]) + "}", buf.getvalue())
+
+
+FAKE_RUNNER = """#!{exe}
+import json, os, sys
+root = sys.argv[2]
+paths = sorted(os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(root) for f in fs)
+print(json.dumps({{"cases": [{{"path": p, "problems": []}} for p in paths]}}))
+"""
+
+
+class RunCases(unittest.TestCase):
+    """tools/run_cases.py (X-6 T2): `--work` is emptied only when it is an absolute path outside the tree and the
+    repository; a relative one, one in the tree or holding it, and one in the repository are refused, nothing removed."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.top = Path(self.tmp.name).resolve()
+        self.tree = self.top / "tree"
+        (self.tree / "tests").mkdir(parents=True)
+        (self.tree / "tests/a.onsa").write_text("")
+        (self.tree / "tests/a.onsa.fix1").write_text("")
+        self.runner = self.top / "runner"
+        self.runner.write_text(FAKE_RUNNER.format(exe=sys.executable))
+        self.runner.chmod(0o755)
+
+    def run_cases(self, work, cwd=None):
+        argv = ["--tree", str(self.tree), "--bin", str(self.runner), "--work", str(work), "a.onsa"]
+        r = subprocess.run([sys.executable, "-B", str(repo.ROOT / "tools/run_cases.py"), *argv], cwd=cwd or self.top,
+                           capture_output=True, text=True, timeout=60)  # fmt: skip
+        return r.returncode, r.stdout.splitlines()
+
+    def test_refused(self):
+        tail = "; give an absolute path outside the tree and the repository (nothing removed)"
+        (self.tree / "w").mkdir()
+        (self.tree / "w/keep").write_text("")
+        for work, why in (("tree/w", "not an absolute path"), (self.tree / "w", f"in {self.tree}"),
+                          (self.tree, f"in {self.tree}"), (self.top, f"holds {self.tree}"),
+                          (repo.ROOT / "x-6-t2-none", f"in {repo.ROOT}")):  # fmt: skip
+            with self.subTest(work=work):
+                self.assertEqual(self.run_cases(work), (1, [f"--work {work}: {why}{tail}"]))
+        self.assertTrue((self.tree / "w/keep").exists())
+        self.assertFalse((repo.ROOT / "x-6-t2-none").exists())
+
+    def test_outside(self):
+        work = self.top / "out"
+        work.mkdir()
+        (work / "stale").write_text("")
+        self.assertEqual(self.run_cases(work), (0, ["ok   tests/a.onsa", "ok   tests/a.onsa.fix1"]))
+        self.assertFalse((work / "stale").exists())
 
 
 class Refactor(unittest.TestCase):

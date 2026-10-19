@@ -9,7 +9,9 @@ directory and runs the runner on it; it prints `ok` or `FAIL` and the problems o
 
 --tree  the tree whose cases are run (default: this repository)
 --bin   the case runner (default: <tree>/target/debug/onsa_cases)
---work  a scratch directory of the caller; it is emptied first
+--work  a scratch directory of the caller, emptied first: an absolute path outside the tree and this repository
+        (and its main tree, run from a work tree), neither in them nor holding them; any other is refused with
+        exit 1, nothing removed
 The runner does not read tests/pending.toml, so a case listed there fails here as it fails without the list.
 Exit 0 when every case passes, 1 otherwise (without the runner too: a line says which path is not there).
 """
@@ -23,15 +25,32 @@ import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+import repo  # noqa: E402
 
 
-def main() -> int:
+def refused(work, trees):
+    """Why `--work` is not emptied, or None: not absolute (it would be read from the current directory), or in one
+    of `trees` or holding one (X-6 S3 left a copy in the root of its work tree)."""
+    if not os.path.isabs(work):
+        return "not an absolute path"
+    w = Path(work).resolve()
+    for t in (Path(t).resolve() for t in trees if t):
+        if w == t or t in w.parents or w in t.parents:
+            return f"{'holds' if w in t.parents else 'in'} {t}"
+    return None
+
+
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tree", default=str(Path(__file__).resolve().parent.parent))
     ap.add_argument("--bin")
     ap.add_argument("--work", required=True)
     ap.add_argument("paths", nargs="+")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
+    why = refused(a.work, [a.tree, repo.ROOT, repo.main_tree(repo.ROOT)])
+    if why:
+        print(f"--work {a.work}: {why}; give an absolute path outside the tree and the repository (nothing removed)")
+        return 1
     tests = os.path.join(a.tree, "tests")
     runner = a.bin or os.path.join(a.tree, "target", "debug", "onsa_cases")
     if shutil.which(runner) is None:
