@@ -29,7 +29,7 @@ use std::rc::Rc;
 use onsa_core::prim::{CheckedOp, MathFn, NAN_BITS_F32, NAN_BITS_F64, Prim};
 use onsa_core::{
     Arg, BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
-    MsgId, Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
+    MsgId, Overflow, PanicOrigin, Place, Stmt, StmtKind, Ty, TypeDefKind, UnOp,
 };
 use onsa_diag::{Diagnostic, Span};
 
@@ -49,6 +49,9 @@ pub struct Panic {
     /// the read itself has no position: the form until W9-03 makes a panic
     /// of an initializer the E0419 of §6.6.
     pub calls: Vec<CallSite>,
+    /// A failed `assert` (of Core, or of `std.dsp.test.assert_near`) or
+    /// another panic: what the message cannot tell (X9-36).
+    pub origin: PanicOrigin,
 }
 
 /// A call a panic went out of ([`Panic::calls`]).
@@ -120,7 +123,11 @@ enum Signal {
 type R<T> = Result<T, Signal>;
 
 fn panic<T>(span: Span, msg: impl Into<String>) -> R<T> {
-    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span, calls: Vec::new() })))
+    panic_from(PanicOrigin::Panic, span, msg)
+}
+
+fn panic_from<T>(origin: PanicOrigin, span: Span, msg: impl Into<String>) -> R<T> {
+    Err(Signal::Fail(Failure::Panic(Panic { message: msg.into(), span, calls: Vec::new(), origin })))
 }
 
 /// The interpreter found a state it cannot be in at `span`: an internal
@@ -956,7 +963,7 @@ impl<'m> Interp<'m> {
             ExprKind::IfExpr { cond, then, else_ } => self.eval_if(f, cond, then, else_),
             ExprKind::Switch { scrutinee, arms, default } => self.eval_switch(f, scrutinee, arms, default, e),
             ExprKind::Block(b) => self.exec_block(f, b),
-            ExprKind::Panic(msg) => self.eval_panic(*msg, span),
+            ExprKind::Panic { msg, origin } => self.eval_panic(*msg, *origin, span),
         }
     }
 
@@ -1008,8 +1015,8 @@ impl<'m> Interp<'m> {
 
     #[cold]
     #[inline(never)]
-    fn eval_panic(&self, msg: MsgId, span: Span) -> R<Value> {
-        panic(span, self.m.messages[msg.0 as usize].clone())
+    fn eval_panic(&self, msg: MsgId, origin: PanicOrigin, span: Span) -> R<Value> {
+        panic_from(origin, span, self.m.messages[msg.0 as usize].clone())
     }
 
     #[inline(never)]
@@ -1593,16 +1600,22 @@ impl<'m> Interp<'m> {
 /// that is not finite and at least 0 (`-0.0` is 0) fails before `a` and `b`
 /// are compared; a NaN fails. A failure is a panic at the call. The messages
 /// are the ones the doc comment of `std/dsp/test.onsa` writes, with the values
-/// in the `Show` form of §6.3 (`spec/tools.md` §4).
+/// in the `Show` form of §6.3 (`spec/tools.md` §4). Both failures are those of
+/// an assertion ([`PanicOrigin::Assert`]), a bad `tol` too.
 fn assert_near(a: f64, b: f64, tol: f64, span: Span) -> R<Value> {
     let show = |x: f64| value::show(&Value::F64(x));
     if !(tol.is_finite() && tol >= 0.0) {
-        return panic(span, format!("assert_near: the tolerance {} is not a finite number at least 0", show(tol)));
+        return panic_from(
+            PanicOrigin::Assert,
+            span,
+            format!("assert_near: the tolerance {} is not a finite number at least 0", show(tol)),
+        );
     }
     if a == b || (a - b).abs() <= tol {
         return Ok(Value::Unit);
     }
-    panic(
+    panic_from(
+        PanicOrigin::Assert,
         span,
         format!(
             "assert_near failed: {} and {} differ by {}, more than {}",

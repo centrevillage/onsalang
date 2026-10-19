@@ -571,7 +571,7 @@ impl<'a> Dumper<'a> {
                 self.out.push('}');
             }
             ExprKind::Block(b) => self.block(b),
-            ExprKind::Panic(id) => match self.m.messages.get(id.0 as usize) {
+            ExprKind::Panic { msg: id, .. } => match self.m.messages.get(id.0 as usize) {
                 Some(text) => {
                     let _ = write!(self.out, "panic({text:?})");
                 }

@@ -1000,14 +1000,13 @@ fn run_tests(
 }
 
 /// How the failure `f` differs from its `//~ PANIC` mark `p` in `file`, if
-/// it does (X9-36): it must be a panic, not a failed `assert`, at the mark's
-/// line (and column) as the body of the test sees it: the outermost of
-/// `calls`, or `span` when the panic is in the body (§18.1).
+/// it does (X9-36): it must be a panic at the mark's line (and column) as the
+/// body of the test sees it: the outermost of `calls`, or `span` when the
+/// panic is in the body (§18.1). A failed assertion of the body itself (an
+/// `assert`, a call of `assert_near`: `calls` is empty) is not a panic; one
+/// inside a called function is that call's failure, matched by its position.
 fn panic_mismatch(sources: &SourceMap, f: &onsa_driver::TestFailure, file: FileId, p: &PanicMark) -> Option<String> {
-    // A failed `assert` has the message `assert <source>` (§18.1). The failure
-    // holds no other mark of it, so a `panic(msg)` whose `msg` begins the same
-    // way is taken for one: a stricter judgement, never a silent pass.
-    if f.message.starts_with("assert ") {
+    if f.calls.is_empty() && f.origin == onsa_core::PanicOrigin::Assert {
         return Some(format!("it failed by an assert: {}", f.message));
     }
     let at = f.calls.last().copied().unwrap_or(f.span);
@@ -2172,8 +2171,31 @@ mod tests {
     fn panic_marks() {
         let head = "// onsa.toml\n// [test]\n// mode = \"test\"\n\n";
         let marks = format!(
-            r#"{head}fn pick(xs: [I32; 2], i: U32) -> I32 {{
+            r#"{head}use std.dsp.test.{{assert_near}}
+
+fn pick(xs: [I32; 2], i: U32) -> I32 {{
   xs[i]
+}}
+
+fn check(x: I32) {{
+  assert x == 0
+}}
+
+test "near" {{
+  assert_near(1.0, 2.0, 0.5) //~ PANIC "near"
+}}
+
+test "near tol" {{
+  assert_near(1.0, 1.0, -1.0) //~ PANIC "near tol"
+}}
+
+test "callee" {{
+  check(1) //~ PANIC "callee"
+}}
+
+test "callee line" {{
+  let x = 1 //~ PANIC "callee line"
+  check(x)
 }}
 
 test "at" {{
@@ -2250,6 +2272,22 @@ test "passes" {{ //~ PANIC "passes"
                 line("PANIC \"by assert\"")
             ),
             r#"test marks "passes" passed but is marked PANIC"#.to_string(),
+            // A failed assertion of the body is not a panic, `assert_near` too
+            // (its message does not begin with `assert `).
+            format!(
+                r#""near" is marked PANIC at line {}, but it failed by an assert: assert_near failed: 1.0 and 2.0"#,
+                line("PANIC \"near\"")
+            ),
+            format!(
+                r#""near tol" is marked PANIC at line {}, but it failed by an assert: assert_near: the tolerance"#,
+                line("PANIC \"near tol\"")
+            ),
+            // One in a called function is the call's: "callee" matches.
+            format!(
+                r#""callee line" is marked PANIC at line {}, but it panicked at tests/marks.onsa:{}:3: assert x == 0"#,
+                line("PANIC \"callee line\""),
+                line("PANIC \"callee line\"") + 1
+            ),
         ];
         let has = |p: &str, needles: &[&str]| {
             let c = case(&r, p);

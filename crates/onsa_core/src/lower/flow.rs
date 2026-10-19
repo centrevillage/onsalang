@@ -1307,7 +1307,10 @@ fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, 
     for other in lens {
         let bad = cmp(CmpOp::Ne, other, len.clone());
         let panic = Block {
-            stmts: vec![stmt(span, StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic(msg))))],
+            stmts: vec![stmt(
+                span,
+                StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic { msg, origin: PanicOrigin::Panic })),
+            )],
             value: None,
         };
         g.stmts.push(stmt(span, StmtKind::If(bad, panic, Block::default())));

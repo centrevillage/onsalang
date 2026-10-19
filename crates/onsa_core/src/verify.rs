@@ -500,7 +500,7 @@ impl<'a> V<'a> {
                 }
             }
             ExprKind::Block(b) => self.value_block(b, &ty, "block")?,
-            ExprKind::Panic(id) => {
+            ExprKind::Panic { msg: id, .. } => {
                 if id.0 as usize >= self.m.messages.len() {
                     return Err(self.err("panic message out of range"));
                 }

@@ -215,7 +215,7 @@ fn yields_place(b: &Block) -> bool {
 /// Direct child expressions (one level).
 fn collect_children<'e>(e: &'e Expr, out: &mut Vec<&'e Expr>) {
     match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic(_) => {}
+        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic { .. } => {}
         ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => out.push(x),
         ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } | ExprKind::Logic { lhs, rhs, .. } => {
             out.push(lhs);

@@ -50,6 +50,9 @@ pub struct TestFailure {
     /// The positions of the calls from the panic back to the body of the
     /// test, innermost first; empty when `span` is in the body of the test.
     pub calls: Vec<Span>,
+    /// A failed `assert` or another panic (X9-36); neither the text output
+    /// nor `--json` shows it.
+    pub origin: onsa_core::PanicOrigin,
 }
 
 impl TestOutcome {
@@ -258,7 +261,7 @@ fn run_selected(module: &onsa_core::Module, tests: &[(onsa_core::FnId, &onsa_cor
 /// panic's as it is: an `assert` lowers to the panic with the message §11.8
 /// gives it (`assert <source>`, `onsa_core` lowering, R-183).
 fn failure_of(module: &onsa_core::Module, test: onsa_core::FnId, p: onsa_interp::Panic) -> TestFailure {
-    TestFailure { message: p.message, span: p.span, calls: source_calls(module, test, &p.calls) }
+    TestFailure { message: p.message, span: p.span, calls: source_calls(module, test, &p.calls), origin: p.origin }
 }
 
 /// The positions of the calls of `calls` (innermost first, the outermost

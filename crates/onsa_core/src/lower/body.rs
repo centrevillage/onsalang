@@ -345,7 +345,10 @@ fn lower_stmt(lw: &mut Lowerer, cx: &mut FnCx, s: StmtId, out: &mut Vec<Stmt>) -
             let msg = lw.msg(&format!("assert {src}"));
             let not = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(c)));
             let then = Block {
-                stmts: vec![stmt(span, StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic(msg))))],
+                stmts: vec![stmt(
+                    span,
+                    StmtKind::Expr(Expr::new(Ty::Unit, span, ExprKind::Panic { msg, origin: PanicOrigin::Assert })),
+                )],
                 value: None,
             };
             out.push(stmt(span, StmtKind::If(not, then, Block::default())));
@@ -1588,8 +1591,10 @@ fn lower_enum_method(
         "unwrap" => {
             let msg = lw.msg(if is_option { "called `unwrap()` on `None`" } else { "called `unwrap()` on `Err`" });
             let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), good, 0)?)) };
-            let bad_block =
-                Block { stmts: Vec::new(), value: Some(Box::new(Expr::new(ty.clone(), span, ExprKind::Panic(msg)))) };
+            let bad_block = Block {
+                stmts: Vec::new(),
+                value: Some(Box::new(Expr::new(ty.clone(), span, ExprKind::Panic { msg, origin: PanicOrigin::Panic }))),
+            };
             let mut arms = vec![(good, good_block), (bad, bad_block)];
             arms.sort_by_key(|(t, _)| *t);
             ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None }

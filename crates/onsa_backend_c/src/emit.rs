@@ -1287,7 +1287,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 self.close("}");
                 Ok(())
             }
-            ExprKind::Panic(m) => {
+            ExprKind::Panic { msg: m, .. } => {
                 self.panic_stmt(*m, e.span);
                 Ok(())
             }
@@ -1393,7 +1393,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 }
                 Ok(())
             }
-            ExprKind::Panic(m) => {
+            ExprKind::Panic { msg: m, .. } => {
                 self.panic_stmt(*m, e.span);
                 Ok(())
             }
@@ -1709,7 +1709,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                     _ => Ok("((onsa_unit){0})".into()),
                 }
             }
-            ExprKind::Panic(m) => {
+            ExprKind::Panic { msg: m, .. } => {
                 self.panic_stmt(*m, e.span);
                 if let Some(z) = zero_scalar(&e.ty) {
                     return Ok(z);
@@ -2010,7 +2010,7 @@ fn needs_construction(e: &Expr) -> bool {
         | ExprKind::IfExpr { .. }
         | ExprKind::Switch { .. }
         | ExprKind::Block(_)
-        | ExprKind::Panic(_) => true,
+        | ExprKind::Panic { .. } => true,
         ExprKind::Repeat { n, .. } => *n > 8,
         _ => false,
     }

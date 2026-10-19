@@ -1120,6 +1120,40 @@ fn assert_near_follows_spec_11_8() {
                 "{tol}"
             );
         }
+        // Both failures are those of an assertion (X9-36).
+        let origin = |a: f64, b: f64, tol: f64| near(a, b, tol).expect_err("a failure").origin;
+        assert_eq!(origin(1.0, 2.0, 0.5), PanicOrigin::Assert);
+        assert_eq!(origin(1.0, 1.0, -1.0), PanicOrigin::Assert);
+    })
+}
+
+/// X9-36: a panic of Core keeps its origin; a check of the interpreter is a
+/// panic.
+#[test]
+fn a_panic_carries_its_origin() {
+    on_stack(|| {
+        for origin in [PanicOrigin::Assert, PanicOrigin::Panic] {
+            let mut m = Module { messages: vec!["boom".into()], ..Default::default() };
+            m.fns.push(FnDef {
+                name: "f".into(),
+                params: Vec::new(),
+                ret: Ty::Unit,
+                sret: false,
+                rt: false,
+                locals: Vec::new(),
+                body: Some(Block {
+                    stmts: Vec::new(),
+                    value: Some(Box::new(Expr::new(Ty::Unit, sp(), ExprKind::Panic { msg: MsgId(0), origin }))),
+                }),
+                span: sp(),
+                fp_relaxed: false,
+                test: None,
+            });
+            let p = panic_of(Interp::new(&m).call(FnId(0), Vec::new()).unwrap_err());
+            assert_eq!((p.message.as_str(), p.origin), ("boom", origin));
+        }
+        let overflow = bin(BinOp::Add, Overflow::Checked, int(IntKind::I32, i32::MAX as i128), int(IntKind::I32, 1));
+        assert_eq!(eval(overflow).unwrap_err().origin, PanicOrigin::Panic);
     })
 }
 

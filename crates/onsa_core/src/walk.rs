@@ -56,7 +56,7 @@ pub fn walk_place(p: &Place, f: &mut dyn FnMut(&Expr)) {
 pub fn walk_expr(e: &Expr, f: &mut dyn FnMut(&Expr)) {
     f(e);
     match &e.kind {
-        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic(_) => {}
+        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed | ExprKind::Panic { .. } => {}
         ExprKind::Unary(_, x) | ExprKind::Cast(x) | ExprKind::SpanOf(x) | ExprKind::Tag(x) => walk_expr(x, f),
         ExprKind::Binary { lhs, rhs, .. } | ExprKind::Cmp { lhs, rhs, .. } | ExprKind::Logic { lhs, rhs, .. } => {
             walk_expr(lhs, f);

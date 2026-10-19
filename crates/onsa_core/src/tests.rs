@@ -692,3 +692,27 @@ fn reach_follows_calls_closures_and_const_chains_only_from_the_roots() {
     // No root: nothing.
     assert_eq!(crate::reach(&m, &[]), crate::Reach::default());
 }
+
+/// X9-36: a panic of Core says whether a failed `assert` raised it; the
+/// message cannot.
+#[test]
+fn a_panic_holds_its_origin() {
+    let m = core("pub fn f(o: Option[I32], x: I32) -> I32 {\n  assert x == 0\n  o.unwrap()\n}\n");
+    let mut got = Vec::new();
+    for f in &m.fns {
+        let Some(body) = &f.body else { continue };
+        crate::walk::walk_block(body, &mut |e| {
+            if let ExprKind::Panic { msg, origin } = &e.kind {
+                got.push((m.messages[msg.0 as usize].clone(), *origin));
+            }
+        });
+    }
+    got.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        got,
+        [
+            ("assert x == 0".to_string(), PanicOrigin::Assert),
+            ("called `unwrap()` on `None`".to_string(), PanicOrigin::Panic)
+        ]
+    );
+}

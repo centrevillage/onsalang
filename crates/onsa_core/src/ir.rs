@@ -26,6 +26,15 @@ pub struct LocalId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MsgId(pub u32);
 
+/// Where a [`ExprKind::Panic`] comes from: a failed `assert` or another
+/// panic. The message cannot tell them apart (§18.1 promises `assert
+/// <source>` and the `msg` of `panic(msg)`, and messages are shared by text).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PanicOrigin {
+    Assert,
+    Panic,
+}
+
 /// A concrete type. Structs and enums refer to `Module::types`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty {
@@ -434,7 +443,10 @@ pub enum ExprKind {
     },
     Block(Block),
     /// Abort (§9.2); has whatever type the context needs.
-    Panic(MsgId),
+    Panic {
+        msg: MsgId,
+        origin: PanicOrigin,
+    },
 }
 
 impl Expr {

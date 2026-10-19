@@ -1,0 +1,55 @@
+# テストの事例
+
+期待値付きの事例の書き方の要約と、`tests/` の索引である（決定 [D-05](../decisions/D/D-05.md)）。
+器（`onsa_tests`）は `tests/` の全体を走査して事例を集め、`review-phase1/` と `fuzz/` を除く。Rust に事例の表は無い。
+
+## 事例の形
+
+- 事例は、一つの `.onsa` のファイルか、`onsa.toml` を持つディレクトリ（パッケージ）である。パッケージは、中の高々一つのファイルに `[test]` だけの断片を置く。
+- 設定は、ファイルの 1 行目がちょうど `// onsa.toml` の行から、空行かコメントでない行までのコメントに書く断片である。マニフェストと同じ形で読み、断片だけが `[test]` の表を持てる。`[test]` だけの断片はマニフェストの無い単一のファイルのパッケージで、他の表を持つ断片は `[package]` が要る。
+- `[test]` のキー（閉じた表）:
+  - `mode`: `"none"`（収録だけ）/ `"parse"`（構文解析だけ）/ `"check"`（check の診断を印と比べる。既定）/ `"test"`（check の後、`test` ブロックをインタプリタで走らせる）。
+  - `spec`: 事例が確かめる仕様の節（`"§11.4"`）。
+  - `golden`: 比べる写しの種類（`"core"` / `"interface"` / `"c"`）で、写しは `golden/<種類>/<事例>.<ターゲット>.<拡張子>`。`golden_graph`: `onsa graph` を比べる flow の名前で、写しは `golden/graph/<事例>.<flow>.dot`。
+  - `conformance`: 全ての `pub flow` を export し、インタプリタと C を比べる（§13.4）。
+  - `fixes`: 診断の修正候補の数。候補を当てた後の全文は、ファイルの隣の `.fix1`〜`.fix<N>`。
+  - `canonical = false`: 印の無いファイルで、`onsa fmt` が書き換えるもの（正規の形と比べない）。
+  - `[[test.fix]]`: 一つの候補が当てた後に残すものと、さらに約束する性質。細部は D-05 の W3-17 の項。
+  - `[[test.host]]`: ターゲットの C の境界での呼び出しの手順と、各手順の期待値。細部は D-05 の K-14 と W1-11 の項。
+- ターゲットを持つ事例は、同じ断片に `[targets.*]` と `[export]` を書く。テスト専用の既定値は無く、ターゲットの欄は全て書く。
+
+## 印
+
+印は行の末尾のコメントである。
+
+- `//~ E0010`: この行に診断 E0010 を期待する。`//~ E0010 @13` は列（1 から）も指す。`//~ E0809 [trap, poison]` は、そのターゲットのビルドの診断だけに当てる。
+  標的の無い印は check に当て、check が何も報告しなければ全てのターゲットのビルドにも当てる。印の無いファイルは診断 0 件を期待する。
+- `//~ TESTFAIL "名前"`（`mode = "test"`）: その `test` が失敗することを期待する（仕様が失敗を求めるもの）。印の無い `test` は全て通らなければならない。
+- `//~ PANIC "名前" [@列]`（`mode = "test"`）: その `test` がこの行で panic することを期待する。行は本体から見た位置（失敗の `calls` の最も外、本体の中の panic なら `span`。§18.1）の始まりの行で、`@列` はその位置の始まりの列（§3.5）。
+  - 本体の断定の失敗（`assert`、`assert_near` の呼び出し）は panic でなく、退ける。呼んだ関数の中の `assert` で落ちたときは、本体から見た呼び出しの位置の失敗として照合する。
+  - 同じ行に panic しうる式が二つあれば `@列` を書く。後置の鎖（`xs[i][j]`、`xs[i].get(j)`、`o.unwrap().unwrap()`）の内と外の panic は始まりの列が同じで、印で分けられない（CLI のテスト `crates/onsa_cli/tests/test_failure_positions.rs` で確かめる）。
+  - 一つの `test` に印は一つで、TESTFAIL と並べない。新しい事例は、panic を期待するとき PANIC を使う。今の TESTFAIL の事例は直さない。
+
+## 書く人
+
+`.fixK` は実装の回帰の写しで、テストの役割は書かない（[`rules/process.md`](../rules/process.md) 8.5）。
+まだ通らない事例は [`pending.toml`](pending.toml)（実装待ちの一覧）に載せる。テストの役割と、並行の作業があるときの実装の役割は一覧を編集せず、載せる項目を報告に並べ、親が足す（`rules/documents.md` 5.1、`rules/process.md` 8.6 の「新しい構文のテスト」）。一覧の項目と印は並べない。
+
+## ディレクトリ
+
+| ディレクトリ | 中身 |
+|---|---|
+| `spec/` | 仕様の節ごとの事例（正例と否定例） |
+| `cst/` | 字句と構文の端の形（ファイルの途中の終わり、文字、trivia）の事例。W3-01 の CST で足した |
+| `conformance/` | インタプリタと C を比べる事例（`conformance = true`） |
+| `host/` | `[[test.host]]` の手順の事例 |
+| `pipeline/` | export とターゲットを持ち、ビルドの全体を通す事例 |
+| `golden/` | 写し（`core`・`interface`・`c`・`graph`）。事例が宣言しない写しは失敗 |
+| `vectors/` | テストベクトルの表（形式は [`vectors/FORMAT.md`](vectors/FORMAT.md)） |
+| `fuzz/` | ファズが保存した入力（事例ではない。`tools/fuzz.py` と `fix-loop` が読む） |
+| `review-phase1/` | レビューの再現の入力（事例ではない。[`review-phase1/README.md`](review-phase1/README.md)） |
+| `pending.toml` | 実装待ちの一覧（形はファイルの頭のコメント） |
+
+## 絞った確かめ
+
+一部の事例だけを走らせるには `tools/run_cases.py` を使う（[`rules/checks.md`](../rules/checks.md) 4.7）。

@@ -1,47 +1,19 @@
-//! The test cases of the repository (plan D-05, R-80 (5), R-89 (3)).
+//! The test cases of the repository (plan D-05, R-80 (5), R-89 (3)). How a
+//! case is written (its fragment, the markers `//~ E…`, `TESTFAIL` and
+//! `PANIC`, the directories) is in `tests/README.md`; this says where each
+//! part is implemented.
 //!
-//! A case is one `.onsa` file, or a package directory with `onsa.toml`, found
-//! by scanning `tests/` ([`case::collect`]); Rust holds no table of cases.
-//! The settings of a case are an `onsa.toml` fragment at the head of a file
-//! ([`fragment`]); the expected diagnostics are inline markers at the end of a
-//! line:
-//!
-//! ```text
-//! let c = x + y % z   //~ E0010
-//! let c = x + y % z   //~ E0010 @13            (column, 1-based)
-//! @param(...) k: F32 at block,  //~ E0809 [trap]    (only for the build of target `trap`)
-//! @param(...) k: F32 at block,  //~ E0809 @3 [trap, poison]
-//! ```
-//!
-//! A file without markers expects zero diagnostics. A marker without targets
-//! applies to the check and, when the check reports nothing, to the build of
-//! every target ([`run`]). In `mode = "test"` every `test` block must pass
-//! unless a marker names it as an expected failure the spec requires:
-//!
-//! ```text
-//! test "overflow panics" {        //~ TESTFAIL "overflow panics"
-//! ```
-//!
-//! A stronger expectation names where the test fails: `//~ PANIC "name"` at
-//! the end of the line of the body where it panics, as the body sees it (the
-//! outermost of the failure's `calls`, or its `span` when the panic is in the
-//! body, §18.1), and `@<col>` the column where that position begins (§3.5).
-//! It must fail there, by a panic and not by a failed `assert` ([`run`]); a
-//! test has one mark.
-//!
-//! ```text
-//!   let y = xs[0] + xs[i]           //~ PANIC "out of range" @19
-//! ```
-//!
-//! Tests the implementation cannot pass yet are listed in `tests/pending.toml`
-//! instead (kind `test-case`, [`run::reconcile`]); the two marks are not mixed.
-//!
-//! The calls at the C boundary of a target, with the values each must give,
-//! are sequences in the fragment's `[[test.host]]` ([`host`], K-14).
-//!
-//! Every fix candidate of a case is applied alone and the case checked again
-//! against the contract of §18.1; what one candidate may leave, or promises
-//! more, is in the fragment's `[[test.fix]]` ([`fix_contract`], W3-17).
+//! - The cases are found by scanning `tests/` ([`case::collect`]); Rust holds
+//!   no table of cases. The fragment is read by [`fragment`], the markers by
+//!   [`parse_markers`].
+//! - The markers are matched by [`run`]: the diagnostics of the check and of
+//!   the build of each target, the `test` blocks of `mode = "test"`, and a
+//!   `PANIC` mark against the origin of the failure (a failed assertion of the
+//!   body is `onsa_core::PanicOrigin::Assert` with no `calls`, X9-36).
+//! - The pending list `tests/pending.toml` is matched by [`run::reconcile`]
+//!   (kind `test-case` for a case).
+//! - `[[test.host]]` runs in [`host`] (K-14), `[[test.fix]]` and the contract
+//!   of the fix candidates (§18.1) in [`fix_contract`] (W3-17).
 
 pub mod c;
 pub mod capi;

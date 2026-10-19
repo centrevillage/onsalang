@@ -5,7 +5,9 @@
 
 use std::path::Path;
 
-use onsa_core::{Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, Stmt, StmtKind, Ty, TypeId, VerifyError};
+use onsa_core::{
+    Block, ConstId, Expr, ExprKind, FnId, Lit, LocalId, MsgId, PanicOrigin, Stmt, StmtKind, Ty, TypeId, VerifyError,
+};
 use onsa_driver::{BuildError, CoreStage, LowerError, VerifyFailure};
 use onsa_tests::case::{Case, CaseKind, Setup};
 use onsa_tests::run::{HostSteps, Problem, RunOptions, StageFailure, Stages, run_case_with, stage_problem};
@@ -116,7 +118,8 @@ fn the_dump_marks_ids_out_of_range() {
         unit(ExprKind::Variant { ty: TypeId(997), tag: 0, fields: Vec::new() }),
         unit(ExprKind::Zeroed),
     ];
-    let value = Expr::new(Ty::Struct(TypeId(996)), span, ExprKind::Panic(MsgId(999)));
+    let value =
+        Expr::new(Ty::Struct(TypeId(996)), span, ExprKind::Panic { msg: MsgId(999), origin: PanicOrigin::Panic });
     set_body(&mut m, stmts, value);
     let text = onsa_core::dump_item(&m, "t.f");
     for part in [
