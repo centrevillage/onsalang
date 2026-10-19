@@ -3,6 +3,14 @@
 
 use super::*;
 
+/// A parsed path: its node, the number of segments and the first and last segment.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct PathInfo {
+    pub(super) segments: usize,
+    pub(super) first: Token,
+    pub(super) last: Token,
+}
+
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ signatures
 

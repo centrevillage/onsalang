@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
             LetStmt | VarStmt | BreakStmt | ContinueStmt | ReturnStmt | AssertStmt | AssignStmt | ExprStmt => 0,
             ForStmt | WhileStmt | Block => 1,
             // Expressions. A binary chain is flat in the tree: its height is
-            // the one of the tree of §3.1, one level per operator ([`Chain`]).
+            // the one of the tree of §3.1, one level per operator ([`ChainHeight`]).
             // A `::[…]` counts at its `[` (the `TypeArgs`), as a type with arguments.
             Literal | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg | StructLitFields
             | StructLitField | TypeArgsExpr | FeedbackExpr => 0,
@@ -228,12 +228,32 @@ impl<'a> Parser<'a> {
         (top.event, h)
     }
 
-    /// Close the innermost open node `m` as `kind`.
+    /// Close the innermost open node `m` as `kind`; a statement or a
+    /// declaration records what it ends with ([`End::of`], [`Parser::ends`]).
     pub(super) fn complete(&mut self, m: Marker, kind: NodeKind) -> Completed {
         debug_assert_eq!(self.open.last().map(|o| o.event), Some(m.event), "nodes close in order");
+        if let Some(end) = End::of(kind) {
+            self.end_with(end);
+        }
         let (event, height) = self.finish(Some(kind), true);
         self.closed.push((kind, m.start));
         Completed { kind, event, start: m.start, span: self.span_from(m.start), height }
+    }
+
+    /// The last token read, its last code token (not a comment), ends a
+    /// statement or a declaration with `end` ([`Parser::ends`]).
+    fn end_with(&mut self, end: End) {
+        if let Some(last) = (0..self.pos).rev().find(|&k| self.tokens[k].kind.is_code()) {
+            // In order (the table searches them): a statement ends after the
+            // ones before it, and a declaration after its own statements.
+            debug_assert!(self.ends.last().is_none_or(|e| e.0 <= last), "the ends out of order");
+            if self.ends.last().is_some_and(|e| e.0 == last) {
+                // A declaration ends where its last statement did (`fn f() { for … { } }`
+                // does not end there): the outer one says what follows.
+                self.ends.pop();
+            }
+            self.ends.push((last, end));
+        }
     }
 
     /// Open a node that wraps the closed node `c` (a postfix, a chain, a

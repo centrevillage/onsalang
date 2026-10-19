@@ -324,7 +324,7 @@ fn members_are_a_closed_list() {
 fn chain_heights_follow_the_strengths() {
     use crate::ast::OpGroup::*;
     let height = |first: u32, rest: &[(crate::ast::OpGroup, u32)]| {
-        let mut c = crate::parser::Chain::new(first);
+        let mut c = crate::parser::ChainHeight::new(first);
         for &(g, h) in rest {
             c.operator(g);
             c.operand(h);

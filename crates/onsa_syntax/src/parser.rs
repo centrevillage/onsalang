@@ -31,7 +31,7 @@
 //!
 //! Where the code is: this module holds the types (`Parser`, the markers
 //! of the nodes), the construction of the parser, and the helpers that
-//! several parts read (the brackets, `binop`). The parser is in a module
+//! several parts read (the brackets). The parser is in a module
 //! per part, each an `impl` of `Parser`: `nodes` (the trial readings, the
 //! nodes and their levels), `cursor` (the reading of the tokens),
 //! `failure` (the diagnostics and the questions to the table of the forms
@@ -40,8 +40,8 @@
 //! units and the recovery), `heading` (the head of a declaration before its
 //! keyword), `items` (the declarations), `signatures`, `types`,
 //! `statements` (the blocks and the statements), `expressions` (with
-//! `reads_as_expr`) and `patterns`; `chain` is `Chain`, the height of a
-//! binary chain. The tests are `parser_tests.rs`.
+//! `reads_as_expr`) and `patterns`; `chain` is `ChainHeight`, the height
+//! of a binary chain. The tests are `parser_tests.rs`.
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 
@@ -69,11 +69,13 @@ mod signatures;
 mod statements;
 mod types;
 
-pub(crate) use chain::Chain;
+pub(crate) use chain::ChainHeight;
 pub(crate) use declarations::declaration_node;
 use declarations::{Declaration, declaration, is_declaration_keyword, starts_heading};
 pub(crate) use expressions::reads_as_expr;
 use failure::Own;
+use statements::MoveAs;
+use types::ClockAfter;
 pub(crate) use types::{reads_as_type, reads_as_type_list};
 
 /// What the parser gives the later stages of [`crate::parse`].
@@ -189,24 +191,9 @@ struct Open {
     level: u32,
 }
 
-/// The rule of a `^` with no name right after it (§2.6, S-358).
-const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right before the name of a `let` of the flow (`prev~(^y)`), and no operator; the binary `^` is the exclusive or (§2.6)";
-
-/// The rule of an `if~` with no `else` (§11.5, S-355).
-const IF_TILDE_ELSE_RULE: &str =
-    "`if~` evaluates every branch and takes one, so its chain ends with an `else` block (§11.5)";
-
 /// The deepest nesting of the syntax (spec §2.5, S-183, S-221): a form at a
 /// level above it is E0006 ([`Parser::too_deep`]).
 pub const NESTING_LIMIT: u32 = 256;
-
-/// A parsed path: its node, the number of segments and the first and last segment.
-#[derive(Debug, Clone, Copy)]
-struct PathInfo {
-    segments: usize,
-    first: Token,
-    last: Token,
-}
 
 pub(crate) struct Parser<'a> {
     file: FileId,
@@ -269,6 +256,8 @@ pub(crate) struct Parser<'a> {
     /// (`let`, `var`, an assignment), in order: a symbol at the head of the
     /// next line does not go on with the first, and a `=` not with the second
     /// (S-124, S-374, S-236; the table reads them, [`foreign::Cursor::ends`]).
+    /// [`Parser::complete`] records them from the kinds of the nodes
+    /// ([`End::of`]).
     ends: Vec<(usize, End)>,
     /// The ranges of the literals right against a name whose form the row
     /// `string_prefix` reported ([`foreign::Failure::prefixed`]), kept and
@@ -339,10 +328,6 @@ impl<'a> Parser<'a> {
             prefixed: Vec::new(),
         }
     }
-}
-
-fn binop(kind: TokenKind) -> bool {
-    kind.binop().is_some()
 }
 
 /// A bracket that opens: `(`, `[`, `{`.

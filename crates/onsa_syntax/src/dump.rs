@@ -405,12 +405,18 @@ impl<'a> Dumper<'a> {
         }
     }
 
-    /// A type with the parentheses written around it (§2.4, R-43).
-    fn ty(&mut self, id: TypeId) {
-        let n = self.ast.ty(id).parens as usize;
+    /// What `f` writes inside the `parens` parentheses written around a type
+    /// or a pattern (§2.4, R-43).
+    fn wrapped(&mut self, parens: u32, f: impl FnOnce(&mut Self)) {
+        let n = parens as usize;
         self.out.push_str(&"(".repeat(n));
-        self.ty_kind(id);
+        f(self);
         self.out.push_str(&")".repeat(n));
+    }
+
+    /// A type with the parentheses written around it.
+    fn ty(&mut self, id: TypeId) {
+        self.wrapped(self.ast.ty(id).parens, |d| d.ty_kind(id));
     }
 
     fn ty_kind(&mut self, id: TypeId) {
@@ -802,12 +808,9 @@ impl<'a> Dumper<'a> {
         }
     }
 
-    /// A pattern with the parentheses written around it (§2.4, R-43).
+    /// A pattern with the parentheses written around it.
     fn pat(&mut self, id: PatId) {
-        let n = self.ast.pat(id).parens as usize;
-        self.out.push_str(&"(".repeat(n));
-        self.pat_kind(id);
-        self.out.push_str(&")".repeat(n));
+        self.wrapped(self.ast.pat(id).parens, |d| d.pat_kind(id));
     }
 
     fn pat_kind(&mut self, id: PatId) {

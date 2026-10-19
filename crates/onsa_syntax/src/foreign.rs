@@ -175,7 +175,7 @@ pub enum Want {
     Prefix,
     /// The `,` or the closing bracket after an element of a list of the
     /// node's kind (`Parser::close_list`, §2.5): the general E0002 of the
-    /// failure is the missing `,` ([`super::lists::list_fixes`], S-384).
+    /// failure is the missing `,` (`lists::list_fixes`, S-384).
     Separator(NodeKind),
     /// A tuple index after its `.` that starts with a `0` and is not `0`
     /// itself (`t.01`, §2.4, S-508): the parser judged its digits.
@@ -278,6 +278,34 @@ pub enum End {
     /// The value of a `let`, a `var`, an assignment, a `return` or an
     /// `assert`: an operator goes on with it, a `=` does not.
     Bound,
+}
+
+impl End {
+    /// What a node of `kind` that the parser closed ends with: the one table
+    /// of it (`Parser::complete` records it at the node's last token). A
+    /// constant ends with an expression and a type alias or an opaque type
+    /// with a type, which a symbol on the next line may go on with. No
+    /// wildcard: a new kind decides it here.
+    pub(crate) fn of(kind: NodeKind) -> Option<End> {
+        use NodeKind::*;
+        match kind {
+            LetStmt | VarStmt | AssignStmt | ReturnStmt | AssertStmt => Some(End::Bound),
+            ForStmt | WhileStmt | Fn | Flow | Struct | Enum | Trait | Impl | Effect | Handler | Use | Extern
+            | Target | Test => Some(End::NoOperand),
+            Const | TypeAlias | OpaqueType => None,
+            SourceFile | Error | Name | Item | Docs | ModuleDocs | Attr | AttrArgs | AttrNamedArg | Vis | FieldList
+            | Field | Derives | VariantList | Variant | VariantFields | UseTree | UseNames | ItemList
+            | GenericParams | TypeParam | ConstParam | EffectParam | Bound | ParamList | Param | EffectRow | Path
+            | TypeArgs | FnTypeParams | BreakStmt | ContinueStmt | ExprStmt | MatchArms | MatchArm | ArgList | Arg
+            | StructLitFields | StructLitField | StructPatField | StructPatRest | Clock | Literal | HoleExpr
+            | PathExpr | ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | Block | IfExpr | MatchExpr | ClosureExpr
+            | HandleExpr | UnsafeExpr | ParExpr | MoveExpr | BinaryExpr | RangeExpr | CastExpr | AtExpr
+            | FeedbackExpr | PrefixExpr | CallExpr | FieldExpr | TupleIndexExpr | TypeArgsExpr | IndexExpr
+            | TryExpr | StructLit | PathType | ConstArg | UnitType | TupleType | ParenType | ArrayType | FnType
+            | WildPat | LitPat | NegLitPat | TuplePat | ParenPat | BindPat | PathPat | TupleStructPat | StructPat
+            | OrPat => None,
+        }
+    }
 }
 
 /// A form a row found: its span (the main position), its candidates (none:

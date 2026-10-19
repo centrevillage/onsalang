@@ -2,32 +2,41 @@
 
 use super::*;
 
+/// Whether the clock written after a type is read with it
+/// ([`Parser::parse_type_with`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ClockAfter {
+    /// `F32 at sample` (§11.3): at every type position but the type of `as`.
+    Read,
+    /// The type of `as`, whose `at` is the clock of the cast (E0011, §3.1).
+    Skip,
+}
+
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ types
 
-    /// A type and the clock written after it (`F32 at sample`, §11.3): the
-    /// clock is read at every type position but the type of `as`
-    /// ([`Parser::parse_bare_type`]); after the result of a function type it
-    /// is the result's (S-367). Where it goes (the input or output of a
-    /// flow or a function) and where it does not (a binding, a type: E0020)
-    /// is decided on the tree after parsing (`crate::foreign`, S-356).
+    /// A type and the clock written after it ([`ClockAfter::Read`]).
     pub(super) fn parse_type(&mut self) -> PResult<Completed> {
-        let c = self.parse_type_ex()?.0;
-        self.parse_clock_opt()?;
-        Ok(c)
+        Ok(self.parse_type_with(ClockAfter::Read)?.0)
     }
 
-    /// A type with no clock after it: the type of `as`, whose `at` is the
-    /// clock of the cast (E0011, §3.1).
+    /// A type with no clock after it ([`ClockAfter::Skip`]).
     pub(super) fn parse_bare_type(&mut self) -> PResult<Completed> {
-        Ok(self.parse_type_ex()?.0)
+        Ok(self.parse_type_with(ClockAfter::Skip)?.0)
     }
 
-    pub(super) fn parse_clock_opt(&mut self) -> PResult<()> {
-        if self.at(TokenKind::KwAt) {
+    /// A type, the clock after it when `clock` reads it, and the number of
+    /// its type arguments when it is a path type. After the result of a
+    /// function type the clock is the result's (S-367). Where a clock goes
+    /// (the input or output of a flow or a function) and where it does not
+    /// (a binding, a type: E0020) is decided on the tree after parsing
+    /// (`crate::foreign`, S-356).
+    pub(super) fn parse_type_with(&mut self, clock: ClockAfter) -> PResult<(Completed, usize)> {
+        let read = self.parse_type_and_args()?;
+        if clock == ClockAfter::Read && self.at(TokenKind::KwAt) {
             self.parse_clock()?;
         }
-        Ok(())
+        Ok(read)
     }
 
     /// `at name`: a clock (§11.3). The name is read as it is; which names
@@ -42,7 +51,7 @@ impl<'a> Parser<'a> {
     }
 
     /// A type, and the number of its type arguments when it is a path type.
-    pub(super) fn parse_type_ex(&mut self) -> PResult<(Completed, usize)> {
+    fn parse_type_and_args(&mut self) -> PResult<(Completed, usize)> {
         let mut nargs = 0;
         let c = match self.peek_kind() {
             TokenKind::LParen => {
@@ -229,7 +238,7 @@ impl<'a> Parser<'a> {
 /// written right after it (a type argument, [`Parser::parse_type_arg`]).
 fn continues_an_expression(kind: TokenKind, gap: Gap) -> bool {
     use TokenKind::*;
-    binop(kind)
+    kind.binop().is_some()
         || !kind.range_readings().is_empty()
         || matches!(kind, KwAs | Dot | Question)
         || (matches!(kind, LParen | LBracket | Bang | Tilde) && gap == Gap::None)

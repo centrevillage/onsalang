@@ -196,26 +196,6 @@ impl<'a> Parser<'a> {
             && self.indent(t.span.start) <= self.indent(self.tokens[brace].span.start)
     }
 
-    /// The last token read ends a statement or a declaration that is no
-    /// operand ([`Parser::ends`]).
-    pub(super) fn end_no_operand(&mut self) {
-        self.end_with(End::NoOperand);
-    }
-
-    pub(super) fn end_with(&mut self, end: End) {
-        if let Some(last) = (0..self.pos).rev().find(|&k| !self.tokens[k].kind.is_trivia()) {
-            // In order (the table searches them): a statement ends after the
-            // ones before it, and a declaration after its own statements.
-            debug_assert!(self.ends.last().is_none_or(|e| e.0 <= last), "the ends out of order");
-            if self.ends.last().is_some_and(|e| e.0 == last) {
-                // A declaration ends where its last statement did (`fn f() { for … { } }`
-                // does not end there): the outer one says what follows.
-                self.ends.pop();
-            }
-            self.ends.push((last, end));
-        }
-    }
-
     /// Whether the next token is `kind` written at the end of a line, not at
     /// the head of the next one (`->`, the `|` of a pattern, §2.5, S-374,
     /// S-380): the one at the head is not read, and the table names it.

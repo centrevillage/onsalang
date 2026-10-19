@@ -263,11 +263,6 @@ impl<'a> Parser<'a> {
             self.read_form(word, None, None);
         }
         parse(self, ctx)?;
-        // A constant ends with an expression and a type alias with a
-        // type, which a symbol on the next line may go on with.
-        if !matches!(t.kind, TokenKind::KwConst | TokenKind::KwType) {
-            self.end_no_operand();
-        }
         Ok(self.complete(m, NodeKind::Item))
     }
 
@@ -501,8 +496,7 @@ impl<'a> Parser<'a> {
         {
             return Err(self.unexpected("a type"));
         }
-        let (first, args) = self.parse_type_ex()?;
-        self.parse_clock_opt()?;
+        let (first, args) = self.parse_type_with(ClockAfter::Read)?;
         if self.eat(TokenKind::KwFor).is_some() {
             if !(first.kind == NodeKind::PathType && args == 0) {
                 return Err(self.error(Code::E0002, first.span, "expected a trait name before `for`"));

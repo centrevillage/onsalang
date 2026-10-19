@@ -396,19 +396,19 @@ fn doc_comments_after_a_failed_item_belong_to_the_next_item() {
 
 /// The levels of the subtree of `n` (spec §2.5), counted again on the
 /// finished tree with the parser's one function (`Parser::height`) and its
-/// reading of a binary chain (`Chain`): what the parser counted while it read.
+/// reading of a binary chain (`ChainHeight`): what the parser counted while it read.
 fn levels(cst: &Cst, src: &str, n: NodeId) -> u32 {
-    use crate::parser::{Chain, Parser};
+    use crate::parser::{ChainHeight, Parser};
     let kind = cst.kind(n);
     if kind == NodeKind::BinaryExpr {
-        let mut chain: Option<Chain> = None;
+        let mut chain: Option<ChainHeight> = None;
         for e in cst.children(n) {
             match *e {
                 Elem::Node(c) => {
                     let h = levels(cst, src, c);
                     match &mut chain {
                         Some(ch) => ch.operand(h),
-                        None => chain = Some(Chain::new(h)),
+                        None => chain = Some(ChainHeight::new(h)),
                     }
                 }
                 Elem::Token(t) => {
@@ -559,6 +559,99 @@ fn over_the_limit_is_e0006_at_its_token() {
             assert_eq!(got.len(), 2, "case {k}: {got:?}");
             assert_eq!(got[1].0, onsa_diag::Code::E0002, "case {k}: {got:?}");
         }
+    });
+}
+
+/// For each binary chain of `p`, the height of its tree in the AST
+/// (`crate::lower`) and the height the parser counts from the CST
+/// (`ChainHeight`), each operand given its place from the left as its height
+/// (so that a different tree gives a different height). Returns the number of
+/// chains.
+fn chain_heights(p: &crate::Parsed, name: &str) -> usize {
+    use crate::parser::ChainHeight;
+    let ast = &p.ast;
+    let binary = |e: ExprId| matches!(ast.expr(e).kind, ExprKind::Binary { .. });
+    let mut under = vec![false; ast.exprs.len()];
+    for e in &ast.exprs {
+        if let ExprKind::Binary { lhs, rhs, .. } = e.kind {
+            for c in [lhs, rhs].into_iter().filter(|&c| binary(c)) {
+                under[c.0 as usize] = true;
+            }
+        }
+    }
+    let roots: Vec<ExprId> =
+        (0..ast.exprs.len() as u32).map(ExprId).filter(|&e| binary(e) && !under[e.0 as usize]).collect();
+    for &root in &roots {
+        let node = p.map.exprs[root.0 as usize];
+        let mut parser: Option<ChainHeight> = None;
+        let mut operands = 0;
+        for e in p.cst.children(node) {
+            match *e {
+                Elem::Node(_) => {
+                    match &mut parser {
+                        Some(ch) => ch.operand(operands),
+                        None => parser = Some(ChainHeight::new(operands)),
+                    }
+                    operands += 1;
+                }
+                Elem::Token(t) => {
+                    if let Some(op) = p.cst.token(t).kind.binop() {
+                        parser.as_mut().expect("an operand first").operator(op.group());
+                    }
+                }
+            }
+        }
+        // The AST's tree after its operands, without recursion.
+        let (mut heights, mut leaves) = (Vec::new(), 0);
+        let mut todo = vec![(root, false)];
+        while let Some((e, after)) = todo.pop() {
+            match ast.expr(e).kind {
+                ExprKind::Binary { lhs, rhs, .. } if !after => todo.extend([(e, true), (rhs, false), (lhs, false)]),
+                ExprKind::Binary { .. } => {
+                    let (r, l): (u32, u32) = (heights.pop().unwrap(), heights.pop().unwrap());
+                    heights.push(l.max(r) + 1);
+                }
+                _ => {
+                    heights.push(leaves);
+                    leaves += 1;
+                }
+            }
+        }
+        let span = ast.expr(root).span;
+        assert_eq!(leaves, operands, "{name}: the operands of the chain at {span:?}");
+        assert_eq!(heights, [parser.expect("a chain").height()], "{name}: the chain at {span:?}");
+    }
+    roots.len()
+}
+
+/// The parser's height of a chain (spec §2.5) is the height of its tree in
+/// the AST, which the checks of the groups read (E0010, `crate::groups`):
+/// one reading of §3.1 ([`crate::ast::Chain`]).
+#[test]
+fn the_parser_and_the_ast_read_a_chain_alike() {
+    let body = |e: &str| format!("fn f() {{\n  let v = {e}\n}}\n");
+    // Each case and its number of chains.
+    let cases = [
+        ("a + b * c - d / e % f", 1),
+        ("a * b + c * d == e && f || g", 1),
+        ("lo <= x && x < hi || a == b", 1),
+        ("a & b | c ^ d << e >> f", 1),
+        ("a == b == c", 1),
+        ("a % b + c", 1),
+        ("a + b % c", 1),
+        ("a && b || c && d", 1),
+        ("a +% b *| c - d", 1),
+        ("(a + b) * c - -d", 2),
+    ];
+    onsa_diag::stack::run(|| {
+        for (src, n) in cases {
+            assert_eq!(chain_heights(&parse(&body(src)), src), n, "{src}");
+        }
+        let mut chains = 0;
+        for (name, text) in &repo_files() {
+            chains += chain_heights(&parse(text), name);
+        }
+        assert!(chains > 1000, "only {chains} chains in the repository");
     });
 }
 

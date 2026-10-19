@@ -3,6 +3,13 @@
 
 use super::*;
 
+/// The rule of a `^` with no name right after it (§2.6, S-358).
+const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right before the name of a `let` of the flow (`prev~(^y)`), and no operator; the binary `^` is the exclusive or (§2.6)";
+
+/// The rule of an `if~` with no `else` (§11.5, S-355).
+const IF_TILDE_ELSE_RULE: &str =
+    "`if~` evaluates every branch and takes one, so its chain ends with an `else` block (§11.5)";
+
 /// The note of a handler written in place with no body (§8.3, S-421).
 const HANDLER_BODY_RULE: &str = "after the name of an effect, the body `{ ... }` of a handler written in place follows on its line (§8.3); a named handler is a `snake_case` name (§2.3)";
 
@@ -15,14 +22,14 @@ impl<'a> Parser<'a> {
 
     /// Binary chain, flat in the CST (§3.1: the AST reads it as a tree,
     /// `lower.rs`; the groups are checked in `groups.rs`).
-    /// Its height is the one of the tree of §3.1 ([`Chain`]).
+    /// Its height is the one of the tree of §3.1 ([`ChainHeight`]).
     pub(super) fn parse_expr_inner(&mut self, allow_range: bool) -> PResult<Completed> {
         let first = self.parse_cast()?;
         let mut expr = first;
         if self.binary_here() {
             let m = self.precede(first, NodeKind::BinaryExpr)?;
             let base = self.level();
-            let mut chain = Chain::new(first.height);
+            let mut chain = ChainHeight::new(first.height);
             while let Some(op) = self.peek_kind().binop().filter(|_| self.binary_here()) {
                 let (pending, left) = chain.operator(op.group());
                 self.chain_operator(base, pending, left)?;
@@ -53,7 +60,7 @@ impl<'a> Parser<'a> {
             && self.gap(i) == Gap::Space
             && self.gap_after(i) == Gap::None
             && starts_operand(self.tokens[i + 1].kind);
-        binop(self.tokens[i].kind) && !asymmetric && !self.lines.at_line_head(i)
+        self.tokens[i].kind.binop().is_some() && !asymmetric && !self.lines.at_line_head(i)
     }
 
     /// The rest of a head whose start `expr` is read: a range when a range
@@ -84,7 +91,7 @@ impl<'a> Parser<'a> {
     /// The next operator of a chain whose node is at the level `base`: in the
     /// tree of §3.1 it is under `pending - 1` operators that wait for their
     /// right operand, and its left operand is `left` high (one level per
-    /// operator, [`Chain`]). E0006 at the operator when that is over the limit,
+    /// operator, [`ChainHeight`]). E0006 at the operator when that is over the limit,
     /// before the chain is read on (spec §2.5); else its right operand is read
     /// at its level.
     fn chain_operator(&mut self, base: u32, pending: u32, left: u32) -> PResult<()> {
@@ -345,8 +352,7 @@ impl<'a> Parser<'a> {
                 let a = p.start(NodeKind::Arg)?;
                 if p.at(TokenKind::KwMove) {
                     // `f(move x)`: `move x` is the form `move` (§5.2).
-                    let mv = p.bump();
-                    p.without_node(NodeKind::MoveExpr, mv.span, |p| p.parse_marked(mv))?;
+                    p.parse_move(MoveAs::Level, |p, mv| p.parse_marked(mv))?;
                 } else if p.at(TokenKind::KwInout) {
                     let mark = p.bump();
                     p.parse_marked(mark)?;
@@ -452,13 +458,12 @@ impl<'a> Parser<'a> {
                 self.branch_tilde()?;
                 if self.at(TokenKind::KwMove) {
                     // `match move x` consumes the value (§7, S-21).
-                    let mv = self.start(NodeKind::MoveExpr)?;
-                    let mark = self.bump();
-                    let saved = std::mem::replace(&mut self.no_struct_lit, true);
-                    let inner = self.parse_marked(mark);
-                    self.no_struct_lit = saved;
-                    inner?;
-                    self.complete(mv, NodeKind::MoveExpr);
+                    self.parse_move(MoveAs::Node, |p, mv| {
+                        let saved = std::mem::replace(&mut p.no_struct_lit, true);
+                        let inner = p.parse_marked(mv);
+                        p.no_struct_lit = saved;
+                        inner
+                    })?;
                 } else {
                     self.parse_head_expr(false)?;
                 }

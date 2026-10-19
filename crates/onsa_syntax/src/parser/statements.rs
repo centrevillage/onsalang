@@ -2,6 +2,17 @@
 
 use super::*;
 
+/// How the form `move` is in the tree ([`Parser::parse_move`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum MoveAs {
+    /// A `MoveExpr` node: an expression in a consuming position, the
+    /// scrutinee of `match move x`.
+    Node,
+    /// No node: only the level is counted ([`Parser::without_node`]): an
+    /// argument (`f(move x)`) and the iterated value of `for`.
+    Level,
+}
+
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ blocks and statements
 
@@ -82,7 +93,6 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::Eq)?;
         self.parse_consumed()?;
-        self.end_with(End::Bound);
         Ok(self.complete(m, NodeKind::LetStmt))
     }
 
@@ -132,8 +142,7 @@ impl<'a> Parser<'a> {
                     // expression as any operand of `move` (§5.2).
                     // SPEC-GAP(S-362): `move lo + 1..<hi` is the E0002 of
                     // §5.2, which §7's E0703 for a range does not settle.
-                    let mv = self.bump();
-                    self.without_node(NodeKind::MoveExpr, mv.span, |p| {
+                    self.parse_move(MoveAs::Level, |p, mv| {
                         let saved = std::mem::replace(&mut p.no_struct_lit, true);
                         let r = p.parse_marked(mv).and_then(|start| p.parse_range_rest(start));
                         p.no_struct_lit = saved;
@@ -143,7 +152,6 @@ impl<'a> Parser<'a> {
                     self.parse_head_expr(true)?;
                 }
                 self.parse_body()?;
-                self.end_no_operand();
                 Ok(self.complete(m, NodeKind::ForStmt))
             }
             TokenKind::KwWhile => {
@@ -151,7 +159,6 @@ impl<'a> Parser<'a> {
                 self.bump();
                 self.parse_head_expr(false)?;
                 self.parse_body()?;
-                self.end_no_operand();
                 Ok(self.complete(m, NodeKind::WhileStmt))
             }
             TokenKind::KwBreak => {
@@ -170,7 +177,6 @@ impl<'a> Parser<'a> {
                 if !matches!(self.peek_kind(), TokenKind::Newline | TokenKind::RBrace | TokenKind::Eof) {
                     self.parse_consumed()?;
                 }
-                self.end_with(End::Bound);
                 Ok(self.complete(m, NodeKind::ReturnStmt))
             }
             // `move a` on the last expression of a block (§5.2, S-100): where
@@ -191,7 +197,6 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::AssertStmt)?;
                 self.bump();
                 self.parse_expr()?;
-                self.end_with(End::Bound);
                 Ok(self.complete(m, NodeKind::AssertStmt))
             }
             _ => {
@@ -200,7 +205,6 @@ impl<'a> Parser<'a> {
                     let m = self.precede(expr, NodeKind::AssignStmt)?;
                     self.bump();
                     self.parse_consumed()?;
-                    self.end_with(End::Bound);
                     return Ok(self.complete(m, NodeKind::AssignStmt));
                 }
                 let m = self.precede(expr, NodeKind::ExprStmt)?;
@@ -216,7 +220,6 @@ impl<'a> Parser<'a> {
         }
         self.expect(TokenKind::Eq)?;
         self.parse_consumed()?;
-        self.end_with(End::Bound);
         Ok(self.complete(m, NodeKind::VarStmt))
     }
 
@@ -226,10 +229,29 @@ impl<'a> Parser<'a> {
         if !self.at(TokenKind::KwMove) {
             return self.parse_expr();
         }
-        let m = self.start(NodeKind::MoveExpr)?;
-        let mv = self.bump();
-        self.parse_marked(mv)?;
-        Ok(self.complete(m, NodeKind::MoveExpr))
+        self.parse_move(MoveAs::Node, |p, mv| p.parse_marked(mv))
+    }
+
+    /// The form `move` at the next token (§5.2): the `move`, then `rest`
+    /// reads its operand (given the `move`). It is a `MoveExpr` node or
+    /// a level without one ([`MoveAs`]). The one reading of the form.
+    pub(super) fn parse_move(
+        &mut self,
+        node: MoveAs,
+        rest: impl FnOnce(&mut Self, Token) -> PResult<Completed>,
+    ) -> PResult<Completed> {
+        match node {
+            MoveAs::Node => {
+                let m = self.start(NodeKind::MoveExpr)?;
+                let mv = self.bump();
+                rest(self, mv)?;
+                Ok(self.complete(m, NodeKind::MoveExpr))
+            }
+            MoveAs::Level => {
+                let mv = self.bump();
+                self.without_node(NodeKind::MoveExpr, mv.span, |p| rest(p, mv))
+            }
+        }
     }
 
     /// The operand of the mark `move` or `inout` (§5.2, R-42): a postfix
@@ -240,7 +262,7 @@ impl<'a> Parser<'a> {
         let operand = if prefix { None } else { Some(self.parse_postfix()?) };
         let t = self.peek();
         match operand {
-            Some(e) if !binop(t.kind) && !matches!(t.kind, TokenKind::KwAs | TokenKind::KwAt) => Ok(e),
+            Some(e) if t.kind.binop().is_none() && !matches!(t.kind, TokenKind::KwAs | TokenKind::KwAt) => Ok(e),
             _ => {
                 let (mark, op) = (self.token_text(mark), self.token_text(t));
                 let what = if prefix { "a prefix" } else { "the operand of" };

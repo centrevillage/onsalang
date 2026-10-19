@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
-use crate::ast::{Ast, BinOp, Chain, ExprId, ExprKind, Lit, OpGroup, Side, StrSeg, UnOp};
+use crate::ast::{Ast, BinOp, Chain, ExprId, ExprKind, Lit, OpGroup, Side, StrSeg};
 use crate::cst::NodeKind;
 use crate::nesting::{Limit, TOO_DEEP_RULE, parenthesized};
 
@@ -57,13 +57,12 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                 if inner.contains(&id) {
                     continue;
                 }
-                let chain = Flat::new(ast, text, id);
+                let (ops, operands) = chain_nodes(ast, id);
                 // E0011: a cast or a clock is parenthesized as an operand of
                 // a chain.
                 // SPEC-GAP(S-348): those of one chain are one form,
                 // parenthesized whole.
-                let casts: Vec<Span> = chain
-                    .operands
+                let casts: Vec<Span> = operands
                     .iter()
                     .filter(|&&o| ast.as_or_at_operand(o).is_some())
                     .map(|&o| ast.expr(o).span)
@@ -83,8 +82,9 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                     let span = ast.expr(id).span;
                     diagnostics.push(parenthesized(d, limit, span, "parenthesize it", edits));
                 }
-                if let Some(d) = chain.check(limit) {
-                    diagnostics.push(d);
+                let parts = clashes(ast, &ops);
+                if !parts.is_empty() {
+                    diagnostics.push(Flat::new(ast, text, id).e0010(parts, limit));
                 }
             }
             // E0011: a cast or a clock is parenthesized as an end of a range
@@ -270,32 +270,93 @@ fn block_like_errors(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Lim
     }
 }
 
-/// The keys of strength: the groups, the bitwise group one key per operator
-/// (§18.1: its operators clash as groups of their own; one operator chains
-/// with itself, S-61).
-const KEYS: usize = 11;
-
-fn key(op: BinOp) -> usize {
-    match op.group() {
-        OpGroup::Additive => 0,
-        OpGroup::Multiplicative => 1,
-        OpGroup::Remainder => 2,
-        OpGroup::Comparison => 3,
-        OpGroup::And => 4,
-        OpGroup::Or => 5,
-        OpGroup::Bitwise => match op {
-            BinOp::BitAnd => 6,
-            BinOp::BitOr => 7,
-            BinOp::BitXor => 8,
-            BinOp::Shl => 9,
-            _ => 10,
-        },
+/// The operators of the chain whose root is `root` (its `Binary` nodes, in
+/// the order the AST made them: the order of the joins of [`Chain`]) and
+/// its operands, from the left.
+fn chain_nodes(ast: &Ast, root: ExprId) -> (Vec<ExprId>, Vec<ExprId>) {
+    let (mut ops, mut operands) = (Vec::new(), Vec::new());
+    // Without recursion (a chain is up to 256 levels high); the left side
+    // first.
+    let mut todo = vec![root];
+    while let Some(e) = todo.pop() {
+        match ast.expr(e).kind {
+            ExprKind::Binary { lhs, rhs, .. } => {
+                ops.push(e);
+                todo.extend([rhs, lhs]);
+            }
+            _ => operands.push(e),
+        }
     }
+    // The ascending ids are the order of the joins: `lower::chain` reads the
+    // chain with [`Chain`] and adds each `Binary` node (`add_expr`) at its
+    // join, after its operands. The parts of the E0010 message follow it
+    // (the test `the_parts_of_e0010_follow_the_joins`).
+    ops.sort_unstable();
+    (ops, operands)
 }
 
-/// The group of a key that is not a bitwise operator.
+/// The judgment of E0010 on the edges of the tree of a chain (the AST,
+/// `ops` from [`chain_nodes`]): each operator with an operator operand the
+/// strengths of §3.1 do not allow ([`BinOp::takes`]), said once per pair
+/// of keys, in the order of `ops`. Empty when the chain is allowed.
+// SPEC-GAP(S-344): groups without a strength between them that are not
+// next to each other in the tree (`a % b == c + d`) pass: the judgment
+// is on the edges of the tree.
+fn clashes(ast: &Ast, ops: &[ExprId]) -> Vec<String> {
+    let binary = |e: ExprId| match ast.expr(e).kind {
+        ExprKind::Binary { op, op_span, .. } => Some((op, op_span)),
+        _ => None,
+    };
+    let mut parts = Vec::new();
+    let mut said = HashSet::new();
+    for &e in ops {
+        let ExprKind::Binary { op, op_span, lhs, rhs } = ast.expr(e).kind else { continue };
+        for (side, c) in [(Side::Left, lhs), (Side::Right, rhs)] {
+            let Some((child, child_span)) = binary(c) else { continue };
+            if op.takes(side, child) {
+                continue;
+            }
+            let (k, kc) = (key(op, op_span), key(child, child_span));
+            let part = if k == kc {
+                format!("`{}` cannot be chained", op.symbol())
+            } else {
+                let (a, b) = if child_span.start < op_span.start { (child, op) } else { (op, child) };
+                format!("`{}` and `{}` have no strength between them", a.symbol(), b.symbol())
+            };
+            if said.insert((k.min(kc), k.max(kc))) {
+                parts.push(part);
+            }
+        }
+    }
+    parts
+}
+
+/// The groups that are one key of strength each: every group of §3.1 but
+/// the bitwise one. A key below `GROUPS.len()` is the group at its index.
 const GROUPS: [OpGroup; 6] =
     [OpGroup::Additive, OpGroup::Multiplicative, OpGroup::Remainder, OpGroup::Comparison, OpGroup::And, OpGroup::Or];
+
+/// The operators of the bitwise group, one key each (§18.1: its operators
+/// clash as groups of their own; one operator chains with itself, S-61),
+/// after the keys of [`GROUPS`].
+const BITWISE: [BinOp; 5] = [BinOp::BitAnd, BinOp::BitOr, BinOp::BitXor, BinOp::Shl, BinOp::Shr];
+
+/// The number of keys of strength.
+const KEYS: usize = GROUPS.len() + BITWISE.len();
+
+/// The key of strength of `op` ([`GROUPS`], [`BITWISE`]), written at `at`.
+fn key(op: BinOp, at: Span) -> usize {
+    key_of(op)
+        .unwrap_or_else(|| onsa_diag::internal::bug(Some(at), format!("`{}` has no key of strength", op.symbol())))
+}
+
+/// [`key`], `None` for an operator in neither table.
+fn key_of(op: BinOp) -> Option<usize> {
+    match op.group() {
+        OpGroup::Bitwise => BITWISE.iter().position(|&b| b == op).map(|k| GROUPS.len() + k),
+        group => GROUPS.iter().position(|&g| g == group),
+    }
+}
 
 /// Strengths between keys: those of §3.1 ([`OpGroup::stronger`]) and the
 /// temporary ones of a reading, closed under transitivity.
@@ -360,26 +421,29 @@ struct Flat<'a> {
     span: Span,
     operands: Vec<ExprId>,
     ops: Vec<BinOp>,
+    /// The key of strength of each of `ops` ([`key`]).
+    keys: Vec<usize>,
 }
 
 impl<'a> Flat<'a> {
     fn new(ast: &'a Ast, text: &'a str, root: ExprId) -> Flat<'a> {
-        let (mut operands, mut ops) = (Vec::new(), Vec::new());
+        let (mut operands, mut ops, mut keys) = (Vec::new(), Vec::new(), Vec::new());
         // In order, without recursion (a chain is up to 256 levels high).
         let mut right = Vec::new();
         let mut e = root;
         loop {
-            if let ExprKind::Binary { op, lhs, rhs, .. } = ast.expr(e).kind {
-                right.push((op, rhs));
+            if let ExprKind::Binary { op, op_span, lhs, rhs } = ast.expr(e).kind {
+                right.push((op, op_span, rhs));
                 e = lhs;
                 continue;
             }
             operands.push(e);
-            let Some((op, rhs)) = right.pop() else { break };
+            let Some((op, op_span, rhs)) = right.pop() else { break };
             ops.push(op);
+            keys.push(key(op, op_span));
             e = rhs;
         }
-        Flat { ast, text, span: ast.expr(root).span, operands, ops }
+        Flat { ast, text, span: ast.expr(root).span, operands, ops, keys }
     }
 
     fn src(&self, e: ExprId) -> &'a str {
@@ -399,7 +463,7 @@ impl<'a> Flat<'a> {
         let join = |l, o, r| push(Node::Op(o, l, r));
         let mut chain = Chain::new(0);
         for o in 0..self.ops.len() {
-            chain.operator(o, |o: usize, w: usize| order.tighter(key(self.ops[o]), key(self.ops[w]), undecided), join);
+            chain.operator(o, |o: usize, w: usize| order.tighter(self.keys[o], self.keys[w], undecided), join);
             chain.operand(push(Node::Operand(o + 1)));
         }
         chain.finish(join);
@@ -415,8 +479,8 @@ impl<'a> Flat<'a> {
     /// more than three are not all made.
     fn readings(&self) -> (Vec<Reading>, bool) {
         let mut first = [usize::MAX; KEYS];
-        for (i, &op) in self.ops.iter().enumerate().rev() {
-            first[key(op)] = i;
+        for (i, &k) in self.keys.iter().enumerate().rev() {
+            first[k] = i;
         }
         let mut readings = Vec::new();
         let mut todo = vec![Order::of_the_spec()];
@@ -466,38 +530,10 @@ fn inserted(text: &str, start: u32, ins: &Inserts) -> String {
 }
 
 impl Flat<'_> {
-    /// E0010 for the chain, when one of its operators has an operand the
-    /// strengths of §3.1 do not allow ([`BinOp::takes`]): one diagnostic
-    /// for the chain (one form), with a candidate per reading (S-60).
-    // SPEC-GAP(S-344): groups without a strength between them that are not
-    // next to each other in the tree (`a % b == c + d`) pass: the judgment
-    // is on the edges of the tree.
-    fn check(&self, limit: Limit) -> Option<Diagnostic> {
-        let actual = self.read(&Order::of_the_spec(), &mut None);
-        let mut parts: Vec<String> = Vec::new();
-        let mut said = HashSet::new();
-        for &n in &actual.0 {
-            let Node::Op(o, l, r) = n else { continue };
-            for (side, c) in [(Side::Left, l), (Side::Right, r)] {
-                let Node::Op(co, ..) = actual.0[c] else { continue };
-                let (op, child) = (self.ops[o], self.ops[co]);
-                if op.takes(side, child) {
-                    continue;
-                }
-                let part = if key(op) == key(child) {
-                    format!("`{}` cannot be chained", op.symbol())
-                } else {
-                    let (a, b) = if co < o { (child, op) } else { (op, child) };
-                    format!("`{}` and `{}` have no strength between them", a.symbol(), b.symbol())
-                };
-                if said.insert((key(op).min(key(child)), key(op).max(key(child)))) {
-                    parts.push(part);
-                }
-            }
-        }
-        if parts.is_empty() {
-            return None;
-        }
+    /// The E0010 of the chain, whose clashes are `parts` ([`clashes`]): one
+    /// diagnostic for the chain (one form), with a candidate per reading
+    /// (S-60).
+    fn e0010(&self, parts: Vec<String>, limit: Limit) -> Diagnostic {
         let found = &self.text[self.span.start as usize..self.span.end as usize];
         let mut message = parts.join("; ");
         let (readings, more) = self.readings();
@@ -551,7 +587,7 @@ impl Flat<'_> {
             let edits = ins.into_iter().map(|(at, s)| Edit::insert(self.span.file, at, s)).collect();
             d = d.with_fix(Fix::new(title, edits));
         }
-        Some(d)
+        d
     }
 
     /// The candidate of a reading: the parentheses its edges need under the
@@ -615,13 +651,7 @@ impl Flat<'_> {
             ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => {
                 matches!(self.ast.expr(*base).kind, ExprKind::Path(_)) || self.field_path(*base)
             }
-            ExprKind::Unary { op: UnOp::Neg, expr } => {
-                let mut e = *expr;
-                while let ExprKind::Paren(inner) = self.ast.expr(e).kind {
-                    e = inner;
-                }
-                matches!(self.ast.expr(e).kind, ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. }))
-            }
+            ExprKind::Unary { .. } => self.ast.negated_literal(e).is_some(),
             _ => false,
         }
     }
@@ -710,6 +740,86 @@ mod tests {
         assert!(!s(Remainder, Additive) && !s(Additive, Remainder) && !s(Remainder, Multiplicative));
         assert!(!s(Multiplicative, Remainder) && !s(And, Or) && !s(Or, And));
         assert!(all.iter().all(|&g| !s(Bitwise, g) && !s(g, Bitwise)));
+    }
+
+    /// Every value of `BinOp`: each names the next in an exhaustive `match`,
+    /// so that a new operator does not compile until it is in the list.
+    fn every_binop() -> Vec<crate::ast::BinOp> {
+        use crate::ast::BinOp::{self, *};
+        fn next(op: Option<BinOp>) -> Option<BinOp> {
+            match op {
+                None => Some(Add),
+                Some(Add) => Some(Sub),
+                Some(Sub) => Some(Mul),
+                Some(Mul) => Some(Div),
+                Some(Div) => Some(Rem),
+                Some(Rem) => Some(WrapAdd),
+                Some(WrapAdd) => Some(WrapSub),
+                Some(WrapSub) => Some(WrapMul),
+                Some(WrapMul) => Some(SatAdd),
+                Some(SatAdd) => Some(SatSub),
+                Some(SatSub) => Some(SatMul),
+                Some(SatMul) => Some(Eq),
+                Some(Eq) => Some(Ne),
+                Some(Ne) => Some(Lt),
+                Some(Lt) => Some(Le),
+                Some(Le) => Some(Gt),
+                Some(Gt) => Some(Ge),
+                Some(Ge) => Some(And),
+                Some(And) => Some(Or),
+                Some(Or) => Some(BitAnd),
+                Some(BitAnd) => Some(BitOr),
+                Some(BitOr) => Some(BitXor),
+                Some(BitXor) => Some(Shl),
+                Some(Shl) => Some(Shr),
+                Some(Shr) => None,
+            }
+        }
+        std::iter::successors(next(None), |&op| next(Some(op))).collect()
+    }
+
+    /// Every binary operator has a key of strength: an operator of the
+    /// bitwise group one of its own, any other the one of its group (§18.1,
+    /// S-61), and every key is some operator's.
+    #[test]
+    fn every_operator_has_its_key() {
+        use super::{KEYS, key_of};
+        use crate::ast::OpGroup;
+        let ops = every_binop();
+        // The list is whole: the operators of the tokens are in it, once each.
+        let distinct: std::collections::HashSet<_> = ops.iter().collect();
+        assert_eq!(distinct.len(), ops.len(), "{ops:?}");
+        for op in crate::token::TokenKind::ALL.iter().filter_map(|k| k.binop()) {
+            assert!(ops.contains(&op), "{op:?}");
+        }
+        let key = |op| key_of(op).unwrap_or_else(|| panic!("{op:?} has no key"));
+        for &a in &ops {
+            assert!(key(a) < KEYS, "{a:?}");
+            for &b in &ops {
+                let same = if a.group() == OpGroup::Bitwise { a == b } else { a.group() == b.group() };
+                assert_eq!(key(a) == key(b), same, "{a:?} {b:?}");
+            }
+        }
+        let used: std::collections::HashSet<usize> = ops.iter().map(|&o| key(o)).collect();
+        assert_eq!(used.len(), KEYS);
+    }
+
+    /// The parts of the E0010 message are in the order of the joins of the
+    /// chain (`chain_nodes`): `a & b | c ^ d << a >> b` reads left to right
+    /// (no two of the operators have a strength between them).
+    #[test]
+    fn the_parts_of_e0010_follow_the_joins() {
+        let text = format!("{BEFORE}a & b | c ^ d << a >> b{AFTER}");
+        let p = crate::parse(FileId(0), &text);
+        let messages: Vec<(Code, &str)> = p.diagnostics.iter().map(|d| (d.code, d.message.as_str())).collect();
+        assert_eq!(
+            messages,
+            [(
+                Code::E0010,
+                "`&` and `|` have no strength between them; `|` and `^` have no strength between them; `^` and \
+                 `<<` have no strength between them; `<<` and `>>` have no strength between them (§3.1)"
+            )]
+        );
     }
 
     #[test]
