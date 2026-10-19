@@ -30,6 +30,12 @@ all = "warn"
 [profile.release]
 opt-level = 3
 
+# One codegen unit for the interpreter: split into modules, its small helpers
+# were no longer inlined across units (X-6, 2026-10-19: `onsa test` 4-5% slower,
+# 599 -> 719 bytes of stack a call); with one unit both are back or better.
+[profile.release.package.onsa_interp]
+codegen-units = 1
+
 # The interpreter is optimized a little in the dev profile too, for the
 # stack: `onsa test` and the compile-time evaluation have one call depth
 # limit (spec §12.5, S-222) in every build, and it must come before the
