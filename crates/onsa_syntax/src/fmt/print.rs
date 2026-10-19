@@ -41,6 +41,7 @@
 
 use super::align::{self, LetMark};
 use super::plan::Plan;
+use super::rewrites::Choices;
 use super::shape::{self, Form, Shape};
 use super::space::{self, Space};
 use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
@@ -50,9 +51,10 @@ use crate::token::TokenKind;
 const STEP: usize = 2;
 
 /// The source written in the canonical form of the printer (see the module
-/// documentation). `cst` is the tree of `src`, without a syntax error.
-pub(super) fn print(cst: &Cst, src: &str) -> String {
-    let plan = Plan::new(cst, src);
+/// documentation). `cst` is the tree of `src`, without a syntax error, and
+/// `choices` its rewrites.
+pub(super) fn print(cst: &Cst, src: &str, choices: &Choices) -> String {
+    let plan = Plan::new(cst, src, choices);
     let mut p = Printer {
         cst,
         src,

@@ -2,13 +2,15 @@
 //! §3.3): the one closed list, in [`REWRITES`].
 //!
 //! A rewrite decides on the CST which nodes it rewrites: the nodes it drops
-//! code tokens from. [`choose`] runs them once, in the order of the list and
-//! from the root down; the plan (`fmt/plan.rs`) reads the dropped tokens and
-//! the comparison of the check before writing and of `diff --ast` (§3.5,
-//! [`crate::diff::same_program`]) reads the chosen nodes ([`normalize`]): the
-//! AST side does not decide again, it rewrites the AST nodes made from the
-//! chosen CST nodes (`Parsed::map`), and a chosen node whose AST is not of
-//! the form the CST side saw is an internal error.
+//! code tokens from. [`choose`] runs them in one walk of a tree, in the order
+//! of the list and from the root down; the plan (`fmt/plan.rs`) reads the
+//! dropped tokens and the comparison of the check before writing and of
+//! `diff --ast` (§3.5, [`crate::diff::same_program`]) reads the chosen nodes
+//! ([`normalize`]). `crate::fmt::format` chooses once on its input for both
+//! ([`Choices`]); `verify`, `diff --ast` and the output read again choose on
+//! their own trees. The AST side does not decide again, it rewrites the AST
+//! nodes made from the chosen CST nodes (`Parsed::map`), and a chosen node
+//! whose AST is not of the form the CST side saw is an internal error.
 //!
 //! Here is the `return e` in the tail position (§6.1), whose places
 //! `fmt/tail.rs` decides; a `return` without a value stays (S-547). The
@@ -40,12 +42,28 @@ struct Rewrite {
 /// The closed list of §3.3, in the order they are chosen and done.
 const REWRITES: &[Rewrite] = &[Rewrite { kinds: &[NodeKind::ReturnStmt], cst: tail_return, ast: tail_return_ast }];
 
-/// The choice of every rewrite of a tree ([`choose`]).
-pub(super) struct Choices {
+/// The choice of every rewrite of a tree ([`choose`]), made once by
+/// `crate::fmt::format` for the plan and for the comparison of its input.
+pub(crate) struct Choices<'a> {
+    /// The tree it was made from ([`Choices::of`]).
+    cst: &'a Cst,
+    /// Every node of the tree, the root first ([`all_nodes`]).
+    pub(super) nodes: Vec<NodeId>,
     /// Whether each token (by its index) is dropped.
     pub(super) dropped: Vec<bool>,
     /// The nodes each rewrite of [`REWRITES`] chose, in its order.
     chosen: Vec<Vec<NodeId>>,
+}
+
+impl Choices<'_> {
+    /// The choices, which must have been made from `cst`: from another
+    /// tree, they are an internal error.
+    pub(crate) fn of(&self, cst: &Cst) -> &Self {
+        if !std::ptr::eq(self.cst, cst) {
+            onsa_diag::internal::bug(Some(cst.span(cst.root())), "fmt's rewrites were chosen on another tree");
+        }
+        self
+    }
 }
 
 /// Every node of the tree, the root first (without recursion).
@@ -59,15 +77,15 @@ pub(crate) fn all_nodes(cst: &Cst) -> Vec<NodeId> {
     nodes
 }
 
-/// The rewrites of `cst` (`nodes` is [`all_nodes`]), the one walk that the
-/// plan and [`normalize`] read.
-pub(super) fn choose(cst: &Cst, nodes: &[NodeId]) -> Choices {
+/// The rewrites of `cst`, the one walk that the plan and [`normalize`] read.
+pub(crate) fn choose(cst: &Cst) -> Choices<'_> {
+    let nodes = all_nodes(cst);
     let mut dropped = vec![false; cst.tokens().len()];
     let mut chosen = Vec::with_capacity(REWRITES.len());
     let mut out = Vec::new();
     for rewrite in REWRITES {
         let mut these = Vec::new();
-        for &n in nodes {
+        for &n in &nodes {
             (rewrite.cst)(cst, n, &mut out);
             if out.is_empty() {
                 continue;
@@ -80,18 +98,26 @@ pub(super) fn choose(cst: &Cst, nodes: &[NodeId]) -> Choices {
         }
         chosen.push(these);
     }
-    Choices { dropped, chosen }
+    Choices { cst, nodes, dropped, chosen }
 }
 
-/// The AST of `parsed` with every rewrite of the list (§3.5). `parsed` has
-/// no diagnostic of the syntax stage (the callers refuse such a file first):
+/// The AST of `parsed` with every rewrite of the list (§3.5), as `choices`
+/// chose them on its tree (chosen here when `None`). `parsed` has no
+/// diagnostic of the syntax stage (the callers refuse such a file first):
 /// one is an internal error here, before a rewrite meets a broken tree.
-pub(crate) fn normalize(parsed: &Parsed) -> Ast {
+pub(crate) fn normalize(parsed: &Parsed, choices: Option<&Choices>) -> Ast {
     if let Some(d) = parsed.first_syntax_error() {
         onsa_diag::internal::bug(Some(d.span), "the comparison of fmt and `diff --ast` got a tree with a syntax error");
     }
     let mut ast = parsed.ast.clone();
-    let choices = choose(&parsed.cst, &all_nodes(&parsed.cst));
+    let own;
+    let choices = match choices {
+        Some(c) => c.of(&parsed.cst),
+        None => {
+            own = choose(&parsed.cst);
+            &own
+        }
+    };
     for (rewrite, chosen) in REWRITES.iter().zip(&choices.chosen) {
         (rewrite.ast)(&mut ast, parsed, chosen);
     }
@@ -361,6 +387,26 @@ mod tests {
         }
     }
 
+    /// RF-14: the choices of one tree given with another (one of the same
+    /// text too) are an internal error, in the plan and in the comparison.
+    #[test]
+    fn the_choices_of_another_tree_are_an_internal_error() {
+        let src = "fn f() -> I32 {\n  return 1\n}\n";
+        let (one, two) = (crate::parse(FileId(0), src), crate::parse(FileId(0), src));
+        let choices = super::choose(&one.cst);
+        assert!(choices.dropped.iter().any(|&d| d), "the `return` is dropped");
+        super::normalize(&one, Some(&choices));
+        let uses: [&dyn Fn(); 2] = [&|| drop(super::normalize(&two, Some(&choices))), &|| {
+            drop(crate::fmt::print::print(&two.cst, src, &choices))
+        }];
+        for using in uses {
+            let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(using));
+            let payload = caught.expect_err("an internal error");
+            let bug = payload.downcast_ref::<onsa_diag::internal::InternalBug>().expect("a bug of the compiler");
+            assert!(bug.message.contains("chosen on another tree"), "{}", bug.message);
+        }
+    }
+
     /// Every node of `tests/spec` (the files without a syntax error) that a
     /// rewrite here can choose, and the block of a `return`, is made into one
     /// AST node of the kind the AST side reads (W3-11/b2 `mapcheck`:
@@ -399,9 +445,9 @@ mod tests {
                     );
                     nodes += 1;
                 }
-                let choices = super::choose(&parsed.cst, &super::all_nodes(&parsed.cst));
+                let choices = super::choose(&parsed.cst);
                 chosen += choices.chosen.iter().flatten().count();
-                super::normalize(&parsed);
+                super::normalize(&parsed, Some(&choices));
             }
             assert!(nodes > 1000 && chosen > 0, "{nodes} nodes, {chosen} chosen");
         });

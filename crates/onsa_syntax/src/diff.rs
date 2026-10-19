@@ -16,6 +16,7 @@ use onsa_diag::Span;
 use crate::Parsed;
 use crate::ast::{Ast, Block, ExprKind, ItemId, ItemKind};
 use crate::dump::{dump_item, dump_stmt, dump_type};
+use crate::fmt::rewrites::Choices;
 use crate::lexer::comment_text;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,9 +180,10 @@ struct Side<'a> {
 }
 
 impl<'a> Side<'a> {
-    /// `parsed` has no diagnostic of the syntax stage (`normalize`).
-    fn new(parsed: &'a Parsed) -> Side<'a> {
-        let ast = crate::fmt::rewrites::normalize(parsed);
+    /// `parsed` has no diagnostic of the syntax stage (`normalize`, which
+    /// chooses the rewrites unless `choices` has them).
+    fn new(parsed: &'a Parsed, choices: Option<&Choices>) -> Side<'a> {
+        let ast = crate::fmt::rewrites::normalize(parsed, choices);
         let items = keyed(&ast);
         Side { ast, parsed, items }
     }
@@ -204,7 +206,7 @@ impl<'a> Side<'a> {
 /// alone, not their comments (S-534). Items keep the new file's order;
 /// removed items come last.
 pub fn diff(old: &Parsed, new: &Parsed) -> Vec<ItemDiff> {
-    let (old, new) = (Side::new(old), Side::new(new));
+    let (old, new) = (Side::new(old, None), Side::new(new, None));
     let (old_items, new_items) = (&old.items, &new.items);
     let old_map: HashMap<&str, ItemId> = old_items.iter().map(|(k, id)| (k.as_str(), *id)).collect();
     let new_map: HashMap<&str, ItemId> = new_items.iter().map(|(k, id)| (k.as_str(), *id)).collect();
@@ -300,8 +302,20 @@ impl fmt::Display for Place {
 /// diagnostic of the syntax stage (one is an internal error, as for [`diff`]):
 /// `crate::fmt::verify` looks at the output's first.
 pub fn same_program(old: &Parsed, old_text: &str, new: &Parsed, new_text: &str) -> Option<Difference> {
+    same_program_chosen(old, None, old_text, new, new_text)
+}
+
+/// [`same_program`], with the rewrites of `old` when they are chosen
+/// already (`crate::fmt::format` chose them for the printer).
+pub(crate) fn same_program_chosen(
+    old: &Parsed,
+    old_choices: Option<&Choices>,
+    old_text: &str,
+    new: &Parsed,
+    new_text: &str,
+) -> Option<Difference> {
     let eof = old.cst.tokens().last().expect("a file ends with its Eof token").span;
-    let (o, n) = (Side::new(old), Side::new(new));
+    let (o, n) = (Side::new(old, old_choices), Side::new(new, None));
     for i in 0..o.items.len().max(n.items.len()) {
         let (place, at) = match (o.items.get(i), n.items.get(i)) {
             (Some((ok, oid)), Some((nk, nid)))

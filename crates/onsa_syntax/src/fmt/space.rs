@@ -16,6 +16,12 @@
 //! should not (`fmt/table_tests.rs`). A row that says none needs no order
 //! against the others, and a decision of the spec changes one row.
 //!
+//! [`space`] reads the rows that say none through an index by the kind of
+//! the left token, which it makes from [`ROWS`] once ([`by_left`]): the rows
+//! whose left side may be a token of that kind (a row of any token on the
+//! left is under every kind). It is no second table: a row changed in
+//! [`ROWS`] changes it too, and the self-tests check it against every row.
+//!
 //! **A pair no row names has one space.** This is the general rule of §3.2
 //! (S-496): one space before and after a keyword and a contextual word, and
 //! every other pair of tokens on a line that §3.2 does not name. Its
@@ -23,6 +29,8 @@
 //! member `.`, the `(`, `[` and `~` that §2.5 and §2.6 write right after a
 //! keyword (`fn(`, `impl[`, `if~`, `match~`), and the symbols next to a value
 //! word (`self.x`, `!true`).
+
+use std::sync::OnceLock;
 
 use crate::cst::{Cst, NodeKind, TokenIdx};
 use crate::token::TokenKind;
@@ -141,15 +149,21 @@ const ROWS: &[Row] = &[
     row(k(&[T::LBrace]), k(&[T::RBrace]), NO),
 ];
 
-impl Side {
-    fn matches(&self, cst: &Cst, t: TokenIdx) -> bool {
-        let kind = cst.token(t).kind;
-        let tok = match self.tok {
+impl Tok {
+    /// Whether a token of `kind` is one of these.
+    fn admits(self, kind: TokenKind) -> bool {
+        match self {
             Tok::Any => true,
             Tok::Kinds(kinds) => kinds.contains(&kind),
             Tok::BinOp => kind.binop().is_some(),
-        };
-        tok && (self.within.is_empty() || self.within.contains(&cst.kind(cst.token_parent(t))))
+        }
+    }
+}
+
+impl Side {
+    fn matches(&self, cst: &Cst, t: TokenIdx) -> bool {
+        self.tok.admits(cst.token(t).kind)
+            && (self.within.is_empty() || self.within.contains(&cst.kind(cst.token_parent(t))))
     }
 }
 
@@ -170,9 +184,55 @@ pub(super) fn rows(cst: &Cst, left: TokenIdx, right: TokenIdx) -> impl Iterator<
 #[cfg(test)]
 pub(super) const ROW_COUNT: usize = ROWS.len();
 
+/// The rows of [`ROWS`] that say none, by the kind of the left token (its
+/// discriminant, the index of the kind in [`TokenKind::ALL`]): those whose
+/// left side admits a token of the kind (their indices in [`ROWS`]). Made
+/// from [`ROWS`] at the first call.
+fn by_left() -> &'static [Vec<usize>] {
+    static INDEX: OnceLock<Vec<Vec<usize>>> = OnceLock::new();
+    INDEX.get_or_init(|| {
+        let none = || ROWS.iter().enumerate().filter(|(_, r)| r.space == NO);
+        let of = |kind| none().filter(|(_, r)| r.left.tok.admits(kind)).map(|(i, _)| i).collect();
+        TokenKind::ALL.iter().map(|&kind| of(kind)).collect()
+    })
+}
+
 /// The space between the code tokens `left` and `right`, printed on one
 /// line with `left` first: none when a row of [`ROWS`] that matches says
 /// none, one otherwise (the module documentation).
 pub(crate) fn space(cst: &Cst, left: TokenIdx, right: TokenIdx) -> Space {
-    if ROWS.iter().any(|r| r.space == NO && r.matches(cst, left, right)) { NO } else { ONE }
+    let rows = &by_left()[cst.token(left).kind as usize];
+    if rows.iter().any(|&r| ROWS[r].matches(cst, left, right)) { NO } else { ONE }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NO, ROWS, Tok, TokenKind, by_left};
+
+    /// RF-14: the index of [`by_left`] holds, under each kind of token, the
+    /// rows that say none and whose left side may be a token of that kind
+    /// (any token, one of the kinds named, a binary operator), and no other.
+    /// `fmt/table_tests.rs` checks its answers against every row.
+    #[test]
+    fn the_index_by_the_left_token_holds_the_rows_that_say_none_and_may_match_it() {
+        let index = by_left();
+        assert_eq!(index.len(), TokenKind::ALL.len());
+        let (mut binops, mut named) = (0, 0);
+        for (i, &kind) in TokenKind::ALL.iter().enumerate() {
+            assert_eq!(kind as usize, i, "{kind:?}");
+            let got = &index[i];
+            let want: Vec<usize> = (0..ROWS.len())
+                .filter(|&r| ROWS[r].space == NO)
+                .filter(|&r| match ROWS[r].left.tok {
+                    Tok::Any => true,
+                    Tok::Kinds(kinds) => kinds.contains(&kind),
+                    Tok::BinOp => kind.binop().is_some(),
+                })
+                .collect();
+            assert_eq!(*got, want, "{kind:?}");
+            binops += usize::from(kind.binop().is_some());
+            named += usize::from(want.iter().any(|&r| matches!(ROWS[r].left.tok, Tok::Kinds(_))));
+        }
+        assert!(binops > 10 && named > 5, "{binops} binary operators, {named} kinds named on the left");
+    }
 }

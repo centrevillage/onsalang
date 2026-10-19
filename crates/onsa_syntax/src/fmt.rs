@@ -20,7 +20,8 @@ mod table_tests;
 mod tail;
 
 use crate::Parsed;
-use crate::diff::{Difference, Place, same_program};
+use crate::diff::{Difference, Place, same_program_chosen};
+use rewrites::Choices;
 
 /// Why [`format`] gives no text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,21 +37,28 @@ pub enum FormatError {
 /// Format a parsed file (`text` is its source). The diagnostics of later
 /// stages (E0320 of the names stage) do not block formatting (§18.2, S-120).
 /// The output is parsed again and compared with the input before it is given
-/// ([`verify`]), whoever calls it.
+/// ([`verify`]), whoever calls it. The rewrites of the input are chosen once,
+/// for the printer and for the check.
 pub fn format(parsed: &Parsed, text: &str) -> Result<String, FormatError> {
     if parsed.syntax_errors() {
         return Err(FormatError::Syntax);
     }
-    let out = print::print(&parsed.cst, text);
-    verify(parsed, text, &out)?;
+    let choices = rewrites::choose(&parsed.cst);
+    let out = print::print(&parsed.cst, text, &choices);
+    check(parsed, Some(&choices), text, &out)?;
     Ok(out)
 }
 
 /// The check before writing (`spec/tools.md` §3.5): `out`, parsed
 /// again, has no diagnostic of the syntax stage (checked first: the
 /// comparison takes trees without one) and is the program of `parsed`
-/// ([`same_program`]). `parsed` has no diagnostic of the syntax stage.
+/// ([`crate::diff::same_program`]). `parsed` has no diagnostic of the syntax stage.
 pub fn verify(parsed: &Parsed, text: &str, out: &str) -> Result<(), FormatError> {
+    check(parsed, None, text, out)
+}
+
+/// [`verify`], with the rewrites of `parsed` when they are chosen already.
+fn check(parsed: &Parsed, choices: Option<&Choices>, text: &str, out: &str) -> Result<(), FormatError> {
     let eof = parsed.cst.tokens().last().expect("a file ends with its Eof token").span;
     let again = crate::parse(eof.file, out);
     if let Some(first) = again.first_syntax_error() {
@@ -59,7 +67,7 @@ pub fn verify(parsed: &Parsed, text: &str, out: &str) -> Result<(), FormatError>
         let at = onsa_diag::Span::empty(eof.file, 0);
         return Err(FormatError::Unverified(Difference { place: Place::Unparsed(what), at }));
     }
-    match same_program(parsed, text, &again, out) {
+    match same_program_chosen(parsed, choices, text, &again, out) {
         Some(d) => Err(FormatError::Unverified(d)),
         None => Ok(()),
     }

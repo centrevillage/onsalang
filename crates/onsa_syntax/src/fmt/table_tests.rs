@@ -352,6 +352,35 @@ fn the_tables_of_the_spaces_and_of_the_lists_agree_with_every_canonical_file() {
     assert!(elapsed < BUDGET, "the self-test took {elapsed:?}");
 }
 
+/// RF-14: `space::space`, which reads the rows through the index by the
+/// left token, gives the answer of every row of the table (none when a
+/// matching row says none) for every two code tokens one after the other
+/// (trivia between them or not) in every file of the repository and of
+/// [`EXTRA`], those with a syntax error too.
+#[test]
+fn the_index_of_the_spaces_gives_the_answer_of_every_row() {
+    let (files, pairs, none) = onsa_diag::stack::run(|| {
+        let mut files = crate::cst_tests::repo_files();
+        files.extend(EXTRA.iter().map(|(name, text)| (name.to_string(), text.to_string())));
+        let (mut pairs, mut none) = (0, 0);
+        for (name, text) in &files {
+            let cst = crate::parse(FileId(0), text).cst;
+            let code = (0..cst.tokens().len()).map(|i| TokenIdx(i as u32)).filter(|&t| !cst.token(t).kind.is_trivia());
+            let code: Vec<TokenIdx> = code.collect();
+            for w in code.windows(2) {
+                let every =
+                    if space::rows(&cst, w[0], w[1]).any(|(_, s)| s == Space::None) { Space::None } else { Space::One };
+                let got = space::space(&cst, w[0], w[1]);
+                assert_eq!(got, every, "{name}: between {} and {}", describe(&cst, w[0]), describe(&cst, w[1]));
+                (pairs, none) = (pairs + 1, none + usize::from(got == Space::None));
+            }
+        }
+        (files.len(), pairs, none)
+    });
+    eprintln!("{files} files, {pairs} pairs of code tokens, {none} with no space");
+    assert!(files > 1000 && pairs > 100_000 && none > 10_000, "{files} files, {pairs} pairs, {none} with none");
+}
+
 #[test]
 fn the_kinds_of_the_brackets_in_the_table_of_the_spaces_are_those_of_the_table_of_the_lists() {
     for k in EXPRESSION_BLOCK_HOLDERS {

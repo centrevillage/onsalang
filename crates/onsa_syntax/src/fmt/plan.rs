@@ -28,7 +28,7 @@
 //!   of a `let` and the `let` (§3.2). The printer keeps them when a comment
 //!   is between (§3.4, S-497).
 
-use super::rewrites::{self, all_nodes};
+use super::rewrites::Choices;
 use super::shape::{self, Form, Shape};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
 use crate::literal;
@@ -53,15 +53,15 @@ pub(super) struct Plan {
 }
 
 impl Plan {
-    /// The plan of `cst`, the tree of `src` (without a syntax error).
-    pub(super) fn new(cst: &Cst, src: &str) -> Plan {
+    /// The plan of `cst`, the tree of `src` (without a syntax error), whose rewrites are `choices`.
+    pub(super) fn new(cst: &Cst, src: &str, choices: &Choices) -> Plan {
         let mut plan = Plan { flags: vec![0; cst.tokens().len()], texts: Vec::new(), forms: Vec::new() };
-        let nodes = all_nodes(cst);
-        let choices = rewrites::choose(cst, &nodes);
+        let choices = choices.of(cst);
+        let nodes = choices.nodes.as_slice();
         let dropped = choices.dropped.iter().enumerate().filter(|&(_, &d)| d);
         dropped.for_each(|(i, _)| plan.set(TokenIdx(i as u32), DROP));
         plan.numbers(cst, src);
-        for &n in &nodes {
+        for &n in nodes {
             let forms = shape::forms(cst, n);
             for &(pair, form) in &forms {
                 plan.list(cst, n, pair, form);
@@ -72,7 +72,7 @@ impl Plan {
         plan.forms.sort_unstable_by_key(|&(open, _)| open);
         // After the line breaks round the attributes, which can make a body one of more than one line.
         nodes.iter().for_each(|&n| plan.brackets(cst, n));
-        plan.inside_elements(cst, &nodes);
+        plan.inside_elements(cst, nodes);
         plan
     }
 

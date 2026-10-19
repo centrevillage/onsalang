@@ -24,7 +24,6 @@ use std::time::{Duration, Instant};
 use onsa_diag::FileId;
 
 use super::plan::Plan;
-use super::print::print;
 use super::rewrites;
 use super::table_tests::{EXTRA, canonical_by_case};
 use crate::cst::{Cst, TokenIdx};
@@ -36,6 +35,16 @@ const BUDGET: Duration = Duration::from_secs(60);
 
 /// The copies of each canonical file with a changed layout ((iv)).
 const JITTERED_COPIES: usize = 3;
+
+/// The printer on `cst`, with the rewrites chosen on it.
+fn print(cst: &Cst, src: &str) -> String {
+    super::print::print(cst, src, &rewrites::choose(cst))
+}
+
+/// The plan of `cst`, with the rewrites chosen on it.
+fn plan(cst: &Cst, src: &str) -> Plan {
+    Plan::new(cst, src, &rewrites::choose(cst))
+}
 
 /// The code tokens of `cst` (kind and text) and its comments (text), in
 /// order; with `plan`, those the printer writes by the plan.
@@ -211,12 +220,12 @@ fn the_printer_writes_the_canonical_files_as_they_are_and_keeps_the_tokens_of_ev
                 tally.errors.push(format!("(ii) {name}: the output has a syntax error: {:?}", again.diagnostics));
                 continue;
             }
-            let (planned, comments) = tokens(&parsed.cst, text, Some(&Plan::new(&parsed.cst, text)));
+            let (planned, comments) = tokens(&parsed.cst, text, Some(&plan(&parsed.cst, text)));
             let (written, written_comments) = tokens(&again.cst, &out, None);
             if planned != written || comments != written_comments {
                 tally.errors.push(format!("(ii) {name}: the tokens or the comments are not those of the plan"));
             }
-            let dropped = rewrites::choose(&parsed.cst, &rewrites::all_nodes(&parsed.cst)).dropped;
+            let dropped = rewrites::choose(&parsed.cst).dropped;
             if kinds(&parsed.cst, Some(&dropped)) != kinds(&again.cst, None) {
                 tally.errors.push(format!(
                     "(ii) {name}: a token other than `,` and those the rewrites of §3.3 drop was dropped or added"
@@ -416,7 +425,7 @@ fn the_nested_pairs_of_a_negative_literal_pattern_take_their_forms() {
 fn joined(src: &str) -> Vec<String> {
     let parsed = crate::parse(FileId(0), src);
     assert!(!parsed.syntax_errors(), "{src}: {:?}", parsed.diagnostics);
-    let (cst, plan) = (&parsed.cst, Plan::new(&parsed.cst, src));
+    let (cst, plan) = (&parsed.cst, plan(&parsed.cst, src));
     let mut out = Vec::new();
     let mut breaks = false;
     for (i, tok) in cst.tokens().iter().enumerate() {
