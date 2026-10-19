@@ -166,7 +166,7 @@ pub(crate) struct Read {
 pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     let lexed = lex(file, text);
     let out = parser::Parser::new(file, text, lexed).parse_units(ctx);
-    let cst = cst::build(out.tokens, out.events);
+    let cst = cst::build(out.tokens, out.goes_on, out.events);
     if let Err(e) = cst.validate(text) {
         onsa_diag::internal::bug(Some(e.span), format!("the CST is broken: {}", e.message));
     }

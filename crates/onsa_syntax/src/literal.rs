@@ -49,20 +49,40 @@ pub(crate) struct Touch {
     pub(crate) held: Vec<Diagnostic>,
 }
 
+/// A number written as in other languages (a token `ForeignLit`), as the
+/// lexer read it ([`number`]). Its form, the row of the table, is
+/// [`Number::foreign`] of `number`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ForeignNumber {
+    /// The token.
+    pub(crate) token: Span,
+    /// Its parts.
+    pub(crate) number: Number,
+}
+
+/// A string written with a delimiter of other languages (a token
+/// `ForeignStr`, S-406), as the lexer read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ForeignString {
+    /// The token.
+    pub(crate) token: Span,
+    /// The range of its form: the token, or its opening delimiter when the
+    /// line has no closing one.
+    pub(crate) range: Span,
+}
+
 /// The facts of the literals that the lexer read, each in the order of the
 /// file: the holes of the strings (also of a form an interpolation may not
 /// have, `{a + 1}`), the spans of the lexer's errors (the held ones too), the
-/// numbers written as in other languages (the tokens `ForeignLit`,
-/// [`Number`]), the strings written with a delimiter of other languages (the
-/// tokens `ForeignStr` and the range of their form, S-406), the literals
-/// right against a name ([`Touch`]) and the string and character literals
-/// that do not close on their line.
+/// numbers and the strings written as in other languages ([`ForeignNumber`],
+/// [`ForeignString`]), the literals right against a name ([`Touch`]) and the
+/// string and character literals that do not close on their line.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Literals {
     holes: Vec<Hole>,
     errors: Vec<Span>,
-    numbers: Vec<(Span, Number)>,
-    strings: Vec<(Span, Span)>,
+    numbers: Vec<ForeignNumber>,
+    strings: Vec<ForeignString>,
     touches: Vec<Touch>,
     unclosed: Vec<Span>,
 }
@@ -72,10 +92,47 @@ pub(crate) struct Literals {
 #[derive(Debug, Default)]
 pub(crate) struct Found {
     pub(crate) holes: Vec<Hole>,
-    pub(crate) numbers: Vec<(Span, Number)>,
-    pub(crate) strings: Vec<(Span, Span)>,
+    pub(crate) numbers: Vec<ForeignNumber>,
+    pub(crate) strings: Vec<ForeignString>,
     pub(crate) touches: Vec<Touch>,
     pub(crate) unclosed: Vec<Span>,
+}
+
+/// A fact of [`Literals`] at a place of the file, by which its list is
+/// ordered and searched.
+trait Placed {
+    fn span(&self) -> Span;
+}
+
+impl Placed for Span {
+    fn span(&self) -> Span {
+        *self
+    }
+}
+
+impl Placed for Hole {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl Placed for ForeignNumber {
+    fn span(&self) -> Span {
+        self.token
+    }
+}
+
+impl Placed for ForeignString {
+    fn span(&self) -> Span {
+        self.token
+    }
+}
+
+/// A touch is ordered by its literal.
+impl Placed for Touch {
+    fn span(&self) -> Span {
+        self.literal
+    }
 }
 
 impl Literals {
@@ -93,29 +150,23 @@ impl Literals {
     /// read on its own (`parser::reads_as_expr`): its holes and the errors of
     /// the lexer in it, so that a literal reads there as it does in the file.
     pub(crate) fn within(&self, from: u32, to: u32) -> Literals {
-        let first = self.holes.partition_point(|h| h.span.start < from);
-        let last = self.holes.partition_point(|h| h.span.start <= to);
-        let holes = self.holes[first..last].iter().filter(|h| h.span.end <= to).cloned().collect();
-        let first = self.numbers.partition_point(|n| n.0.start < from);
-        let last = self.numbers.partition_point(|n| n.0.start <= to);
-        let numbers = self.numbers[first..last].iter().filter(|n| n.0.end <= to).copied().collect();
-        let first = self.strings.partition_point(|s| s.0.start < from);
-        let last = self.strings.partition_point(|s| s.0.start <= to);
-        let strings = self.strings[first..last].iter().filter(|s| s.0.end <= to).copied().collect();
-        let first = self.touches.partition_point(|t| t.literal.start < from);
-        let last = self.touches.partition_point(|t| t.literal.start <= to);
-        let inner = |t: &&Touch| t.range.start >= from && t.range.end <= to;
-        let touches = self.touches[first..last].iter().filter(inner).cloned().collect();
-        let unclosed = inside(&self.unclosed, from, to);
-        Literals { holes, errors: inside(&self.errors, from, to), numbers, strings, touches, unclosed }
+        // A touch is in when its whole form is.
+        let touches = inside_where(&self.touches, from, to, |t| t.range.start >= from && t.range.end <= to);
+        Literals {
+            holes: inside(&self.holes, from, to),
+            errors: inside(&self.errors, from, to),
+            numbers: inside(&self.numbers, from, to),
+            strings: inside(&self.strings, from, to),
+            touches,
+            unclosed: inside(&self.unclosed, from, to),
+        }
     }
 
     /// The range of the form of the string written with a delimiter of
     /// other languages at `span` (a token `ForeignStr`), found by a binary
     /// search.
     pub(crate) fn foreign_string(&self, span: Span) -> Option<Span> {
-        let i = self.strings.partition_point(|s| s.0.start < span.start);
-        self.strings.get(i).filter(|s| s.0 == span).map(|s| s.1)
+        at(&self.strings, span).map(|s| s.range)
     }
 
     /// The literal right against a name of which the token at `span` is the
@@ -139,9 +190,8 @@ impl Literals {
 
     /// The number written as in other languages at `span` (a token
     /// `ForeignLit`), found by a binary search.
-    pub(crate) fn number(&self, span: Span) -> Option<&Number> {
-        let i = self.numbers.partition_point(|n| n.0.start < span.start);
-        self.numbers.get(i).filter(|n| n.0 == span).map(|n| &n.1)
+    pub(crate) fn number(&self, span: Span) -> Option<&ForeignNumber> {
+        at(&self.numbers, span)
     }
 
     /// Every hole, in the order of the file.
@@ -172,12 +222,24 @@ impl Literals {
     }
 }
 
-/// The spans of `spans` (ordered by their start) that lie between `from`
+/// The facts of `items` (ordered by their start) that lie between `from`
 /// and `to`, found by a binary search.
-fn inside(spans: &[Span], from: u32, to: u32) -> Vec<Span> {
-    let first = spans.partition_point(|s| s.start < from);
-    let last = spans.partition_point(|s| s.start <= to);
-    spans[first..last].iter().copied().filter(|s| s.end <= to).collect()
+fn inside<T: Placed + Clone>(items: &[T], from: u32, to: u32) -> Vec<T> {
+    inside_where(items, from, to, |x| x.span().end <= to)
+}
+
+/// The facts of `items` (ordered by their start) that start between `from`
+/// and `to` and that `keep` takes, found by a binary search.
+fn inside_where<T: Placed + Clone>(items: &[T], from: u32, to: u32, keep: impl Fn(&T) -> bool) -> Vec<T> {
+    let first = items.partition_point(|x| x.span().start < from);
+    let last = items.partition_point(|x| x.span().start <= to);
+    items[first..last].iter().filter(|x| keep(x)).cloned().collect()
+}
+
+/// The fact of `items` (ordered by their start) at `span`, found by a binary search.
+fn at<T: Placed>(items: &[T], span: Span) -> Option<&T> {
+    let i = items.partition_point(|x| x.span().start < span.start);
+    items.get(i).filter(|x| x.span() == span)
 }
 
 /// The base of a number (§2.4): its prefix, `0x` / `0X`, `0b` / `0B`, the
@@ -191,14 +253,33 @@ pub(crate) enum Base {
 }
 
 /// What a number is written as (§2.4, §18.1): the one decision of its form,
-/// made by [`number`]. A number has one form; one with two (`0o17u8`) has
+/// made by [`number`], in three layers: a number of Onsa, one written as in
+/// other languages (the token `ForeignLit`, a row of the table) or no number
+/// (the lexer's E0001). A number has one form; one with two (`0o17u8`) has
 /// the outer one, its suffix, and the other is found after the candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Form {
-    /// An integer of Onsa (the token `Int`).
+    /// A number of Onsa (the tokens `Int` and `Float`).
+    Onsa(Kind),
+    /// A number written as in other languages (the token `ForeignLit`).
+    Foreign(Foreign),
+    /// No number of Onsa nor of the rows: the lexer's E0001.
+    Invalid(Invalid),
+}
+
+/// The kind of a number of Onsa ([`Form::Onsa`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Kind {
+    /// An integer (the token `Int`).
     Int,
-    /// A float of Onsa (the token `Float`).
+    /// A float (the token `Float`).
     Float,
+}
+
+/// The form of a number written as in other languages ([`Form::Foreign`]):
+/// the row of the table that reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Foreign {
     /// A type suffix of the closed list (`1u8`, `2.5f`): the row `literal_suffix`.
     Suffix,
     /// The octal prefix of other languages (`0o17`): the row `octal_prefix`.
@@ -209,8 +290,6 @@ pub(crate) enum Form {
     TrailingDot,
     /// No digit between the point and the exponent (`1.e3`): the row `float_dot_exponent`.
     DotExponent,
-    /// No number of Onsa nor of the rows: the lexer's E0001.
-    Invalid(Invalid),
 }
 
 /// Why a number is no number (the lexer's E0001, §18.1), at
@@ -253,7 +332,16 @@ impl Number {
     /// written as one (a point, an exponent; `1.`), or its suffix is of a
     /// float type (`1f32`). Its candidates keep that. The one test.
     pub(crate) fn is_float(&self) -> bool {
-        self.float || self.float_suffix || self.form == Form::TrailingDot
+        self.float || self.float_suffix || self.foreign() == Some(Foreign::TrailingDot)
+    }
+
+    /// The form of the number when it is written as in other languages (the
+    /// token `ForeignLit`): the row of the table that reports it.
+    pub(crate) fn foreign(&self) -> Option<Foreign> {
+        match self.form {
+            Form::Foreign(f) => Some(f),
+            Form::Onsa(_) | Form::Invalid(_) => None,
+        }
     }
 
     /// The body of the number of the token `text` when it is an integer
@@ -336,7 +424,7 @@ pub(crate) fn number(rest: &str) -> Number {
         return Number {
             len: plain,
             body: plain,
-            form: Form::Int,
+            form: Form::Onsa(Kind::Int),
             base: Base::Dec,
             float: false,
             float_suffix: false,
@@ -354,7 +442,7 @@ pub(crate) fn number(rest: &str) -> Number {
     let mut n = Number {
         len: 0,
         body: 0,
-        form: Form::Int,
+        form: Form::Onsa(Kind::Int),
         base,
         float: false,
         float_suffix: false,
@@ -383,7 +471,7 @@ pub(crate) fn number(rest: &str) -> Number {
                     Point::TrailingDot => {
                         n.len = i + 1;
                         n.body = i + 1;
-                        n.form = Form::TrailingDot;
+                        n.form = Form::Foreign(Foreign::TrailingDot);
                         return n;
                     }
                 }
@@ -424,7 +512,7 @@ pub(crate) fn number(rest: &str) -> Number {
             _ if matches!(n.form, Form::Invalid(_)) => {}
             Some(float) => {
                 n.float_suffix = float;
-                n.form = Form::Suffix;
+                n.form = Form::Foreign(Foreign::Suffix);
             }
             None => {
                 n.form = Form::Invalid(Invalid::Suffix);
@@ -440,21 +528,21 @@ pub(crate) fn number(rest: &str) -> Number {
         }
         return n;
     }
-    if n.form == Form::Suffix {
+    if n.form == Form::Foreign(Foreign::Suffix) {
         return n;
     }
     let digits = || rest[..n.body].bytes().filter(|&x| x != b'_');
     n.form = if base == Base::Oct {
-        Form::Octal
+        Form::Foreign(Foreign::Octal)
     } else if dot_exponent {
         n.float = true;
-        Form::DotExponent
+        Form::Foreign(Foreign::DotExponent)
     } else if n.float {
-        Form::Float
+        Form::Onsa(Kind::Float)
     } else if base == Base::Dec && rest.starts_with('0') && digits().count() > 1 {
-        Form::LeadingZero
+        Form::Foreign(Foreign::LeadingZero)
     } else {
-        Form::Int
+        Form::Onsa(Kind::Int)
     };
     n
 }
@@ -493,7 +581,7 @@ pub(crate) fn canonical_number(text: &str) -> Option<String> {
         return None;
     }
     let n = number(text);
-    if !matches!(n.form, Form::Int | Form::Float) || n.len != text.len() {
+    if !matches!(n.form, Form::Onsa(_)) || n.len != text.len() {
         return None;
     }
     let prefix = match n.base {
@@ -544,7 +632,7 @@ pub(crate) fn float_key(text: &str) -> String {
         return text.to_string();
     }
     let n = number(text);
-    if n.form != Form::Float || n.len != text.len() {
+    if n.form != Form::Onsa(Kind::Float) || n.len != text.len() {
         return text.to_string();
     }
     let mantissa_end = n.exponent.unwrap_or(text.len());

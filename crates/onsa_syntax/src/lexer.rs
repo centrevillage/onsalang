@@ -12,7 +12,7 @@ use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
 pub use crate::chars::{BLANKS, is_blank};
 use crate::chars::{is_ident_continue, is_ident_start, line_break};
-use crate::literal::{Form, Found, Hole, HoleError, Invalid, Literals, Touch};
+use crate::literal::{ForeignNumber, ForeignString, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Touch};
 use crate::token::{Token, TokenKind};
 
 /// Result of lexing one file.
@@ -71,6 +71,13 @@ pub(crate) fn line_start(text: &str, offset: u32) -> u32 {
 pub(crate) fn line_head(text: &str, offset: u32) -> Option<u32> {
     let start = line_start(text, offset);
     text[start as usize..offset as usize].chars().all(is_blank).then_some(start)
+}
+
+/// The blanks that start the line of `offset` in `text`: its indentation.
+/// The one reading of it, for the recovery and the candidates.
+pub(crate) fn indent(text: &str, offset: u32) -> &str {
+    let rest = &text[line_start(text, offset) as usize..];
+    &rest[..rest.len() - rest.trim_start_matches(BLANKS).len()]
 }
 
 /// The first token of the line of the token `i` of `tokens` (those of a
@@ -346,8 +353,8 @@ impl<'a> Lexer<'a> {
         let n = crate::literal::number(&self.text[start..]);
         self.pos = start + n.len;
         let kind = match n.form {
-            Form::Int => TokenKind::Int,
-            Form::Float => TokenKind::Float,
+            Form::Onsa(Kind::Int) => TokenKind::Int,
+            Form::Onsa(Kind::Float) => TokenKind::Float,
             Form::Invalid(why) => {
                 let message = match why {
                     Invalid::NoDigits => "number prefix without digits",
@@ -359,8 +366,8 @@ impl<'a> Lexer<'a> {
                 self.error(Code::E0001, span, message);
                 if n.float { TokenKind::Float } else { TokenKind::Int }
             }
-            _ => {
-                self.found.numbers.push((self.span(start), n));
+            Form::Foreign(_) => {
+                self.found.numbers.push(ForeignNumber { token: self.span(start), number: n });
                 TokenKind::ForeignLit
             }
         };
@@ -455,7 +462,7 @@ impl<'a> Lexer<'a> {
         };
         let token = self.span(start);
         let range = if closed { token } else { Span::new(self.file, start as u32, (start + open) as u32) };
-        self.found.strings.push((token, range));
+        self.found.strings.push(ForeignString { token, range });
         self.push(TokenKind::ForeignStr, start);
     }
 

@@ -504,6 +504,9 @@ pub struct Cst {
     nodes: Vec<NodeData>,
     children: Vec<Elem>,
     token_parent: Vec<NodeId>,
+    /// For each token, whether it is a newline that goes on with its line,
+    /// as the parser's line facts judged it ([`Cst::goes_on`]).
+    goes_on: Vec<bool>,
 }
 
 /// A broken invariant of the tree ([`Cst::validate`]): where (the first
@@ -530,7 +533,8 @@ pub(crate) enum Event {
 }
 
 /// Build the tree from the events of the parser. The events open the root
-/// (`SourceFile`) first and close it last.
+/// (`SourceFile`) first and close it last. `goes_on` says of each token
+/// whether it is a newline that goes on with its line ([`Cst::goes_on`]).
 ///
 /// The rule for the tokens the parser did not consume (trivia, and nothing
 /// else): a node that opens takes its place in the tree only when its first
@@ -541,7 +545,7 @@ pub(crate) enum Event {
 /// open at that event: what belongs to a node is decided by the parser alone
 /// (a doc comment the parser takes for an item is in the item's `Docs`).
 /// Every token not consumed by the end goes to the root.
-pub(crate) fn build(tokens: Vec<Token>, mut events: Vec<Event>) -> Cst {
+pub(crate) fn build(tokens: Vec<Token>, goes_on: Vec<bool>, mut events: Vec<Event>) -> Cst {
     let mut b = Builder {
         nodes: Vec::new(),
         children: Vec::new(),
@@ -594,8 +598,11 @@ pub(crate) fn build(tokens: Vec<Token>, mut events: Vec<Event>) -> Cst {
     if !b.stack.is_empty() || !b.waiting.is_empty() {
         b.bug(None, "the events leave nodes open".to_string());
     }
+    if goes_on.len() != tokens.len() {
+        b.bug(None, "the line facts are not of the tokens".to_string());
+    }
     let (nodes, children, token_parent) = (b.nodes, b.children, b.token_parent);
-    Cst { tokens, nodes, children, token_parent }
+    Cst { tokens, nodes, children, token_parent, goes_on }
 }
 
 struct Builder<'t> {
@@ -695,6 +702,13 @@ impl TokenIdx {
 impl Cst {
     pub fn root(&self) -> NodeId {
         NodeId(0)
+    }
+
+    /// Whether the token `t` is a newline that goes on with its line (§2.5):
+    /// the one judgement of the parser ([`crate::layout::continues`]), kept
+    /// for the later stages, which do not judge it again.
+    pub fn goes_on(&self, t: TokenIdx) -> bool {
+        self.goes_on[t.index()]
     }
 
     /// All tokens of the lexer, in source order.

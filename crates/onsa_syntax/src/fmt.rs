@@ -82,6 +82,16 @@ mod tests {
         assert_eq!(fmt(src), src);
     }
 
+    #[test]
+    fn a_continuation_in_the_value_of_a_tail_return_stays() {
+        // RF-13: the line break after a binary operator and before a `.` inside an element of a
+        // list stays (§2.5, `spec/tools.md` §3.2, S-497), in the value of a `return` that fmt
+        // drops (§3.3) and of one it keeps; the line break is judged on the source's tokens.
+        let src = "fn f(a: I32) -> I32 {\n  return g(a +\n    1, 2)\n}\n\nfn h(a: I32, c: Bool) -> I32 {\n  if c {\n    return g(a, [a *\n      2, a][0])\n  }\n  return g(a\n    .max(1), 0)\n}\n";
+        let want = "fn f(a: I32) -> I32 {\n  g(a +\n    1, 2)\n}\n\nfn h(a: I32, c: Bool) -> I32 {\n  if c {\n    return g(a, [a *\n      2, a][0])\n  }\n  g(a\n    .max(1), 0)\n}\n";
+        assert_eq!(fmt(src), want);
+    }
+
     fn fmt(src: &str) -> String {
         let parsed = crate::parse(FileId(0), src);
         assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);

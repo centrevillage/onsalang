@@ -813,9 +813,7 @@ impl Cursor<'_> {
 
     /// The blanks that start the line of `offset`.
     fn indent(&self, offset: u32) -> &str {
-        let start = self.line_start(offset) as usize;
-        let rest = &self.text[start..];
-        &rest[..rest.len() - rest.trim_start_matches(crate::lexer::BLANKS).len()]
+        crate::lexer::indent(self.text, offset)
     }
 
     /// The line break that ends the line of `offset` (`\r\n` where the

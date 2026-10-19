@@ -31,7 +31,6 @@
 use super::rewrites::{self, all_nodes};
 use super::shape::{self, Form, Shape};
 use crate::cst::{Cst, NodeId, NodeKind, TokenIdx};
-use crate::layout::continues;
 use crate::literal;
 use crate::token::TokenKind;
 
@@ -234,9 +233,10 @@ impl Plan {
     /// it is neither right after the opening bracket nor right before the
     /// closing one (the form of the list, [`Plan::list`]) nor before the first
     /// token of an element (between two elements). A place of a continuation
-    /// is the one judgement [`continues`] on the last two code tokens before
-    /// the line break and the first after it, and the end of an attribute
-    /// (§2.5: an attribute ends no line, which the tokens do not show).
+    /// is the last line break before `t` when it goes on with its line, as
+    /// the parser judged it on the tokens of the source, those left out too
+    /// ([`Cst::goes_on`]), and the end of an attribute (§2.5: an attribute
+    /// ends no line, which the tokens do not show).
     fn inside_elements(&mut self, cst: &Cst, nodes: &[NodeId]) {
         const STARTS_ELEMENT: u8 = 1;
         const ENDS_ATTRIBUTE: u8 = 2;
@@ -266,28 +266,22 @@ impl Plan {
         pairs.sort_unstable_by_key(|&(open, _, _)| open);
         let mut pairs = pairs.into_iter().peekable();
         let mut stack: Vec<(TokenIdx, TokenIdx, bool)> = Vec::new();
-        // The last two code tokens of the source (the written ones or not, as `continues` reads them).
-        let (mut before, mut last) = (None, None);
-        // The last code token written, and whether a line break follows it.
-        let (mut prev, mut breaks): (Option<TokenIdx>, bool) = (None, false);
+        // The last code token written, and the last line break after it.
+        let (mut prev, mut newline): (Option<TokenIdx>, Option<TokenIdx>) = (None, None);
         for (i, tok) in tokens.iter().enumerate() {
             let t = TokenIdx(i as u32);
             if tok.kind == TokenKind::Newline {
-                breaks = true;
+                newline = Some(t);
             }
             if !tok.kind.is_code() {
                 continue;
             }
-            if let (Some(p), true, true) = (prev, breaks, self.kept(t)) {
+            if let (Some(p), Some(newline), true) = (prev, newline, self.kept(t)) {
                 let joins = match marks[p.index()] {
                     m if m & ENDS_LET_ATTRIBUTE != 0 => true,
                     m if m & ENDS_ATTRIBUTE != 0 => false,
                     _ => stack.last().is_some_and(|&(open, close, container)| {
-                        !container
-                            && p != open
-                            && t != close
-                            && marks[i] & STARTS_ELEMENT == 0
-                            && last.is_none_or(|l| !continues(before, l, tok.kind))
+                        !container && p != open && t != close && marks[i] & STARTS_ELEMENT == 0 && !cst.goes_on(newline)
                     }),
                 };
                 if joins {
@@ -300,9 +294,8 @@ impl Plan {
             while let Some(pair) = pairs.next_if(|&(open, _, _)| open == t) {
                 stack.push(pair);
             }
-            (before, last) = (last, Some(tok.kind));
             if self.kept(t) {
-                (prev, breaks) = (Some(t), false);
+                (prev, newline) = (Some(t), None);
             }
         }
     }

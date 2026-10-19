@@ -81,6 +81,9 @@ pub(crate) use types::{reads_as_type, reads_as_type_list};
 /// What the parser gives the later stages of [`crate::parse`].
 pub(crate) struct ParseOutput {
     pub tokens: Vec<Token>,
+    /// For each of `tokens`, whether it is a newline that goes on with its
+    /// line ([`Lines::goes_on`]), for the tree ([`crate::cst::Cst::goes_on`]).
+    pub goes_on: Vec<bool>,
     pub events: Vec<Event>,
     pub diagnostics: Vec<Diagnostic>,
     /// The levels of each top-level item that parsed ([`crate::Parsed::levels`]).

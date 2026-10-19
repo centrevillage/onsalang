@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.5", "§6.1", "§18.2"]
+
+// Places of a continuation (§2.5) inside an element of a list, in the value of a `return` in the tail
+// position (X-6, RF-13). `onsa fmt` drops that `return` (spec/tools.md §3.3) and keeps the line break after
+// the binary operator and before the `.` (§3.2, S-497): the line break is judged on the tokens of the source,
+// the `return` that goes among them. A `return` that is not in the tail position stays. The file is not
+// canonical on purpose (`canonical = false`).
+
+fn g(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+fn operator(a: I32) -> I32 {
+  return g(a +
+    1, 2)
+}
+
+fn member(a: I32) -> I32 {
+  return g(a
+    .max(1), 0)
+}
+
+fn kept_and_dropped(a: I32, c: Bool) -> I32 {
+  if c {
+    return g(a, [a *
+      2, a][0])
+  }
+  return g([a -
+    1][0], a)
+}

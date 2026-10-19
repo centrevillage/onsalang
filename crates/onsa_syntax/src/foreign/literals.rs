@@ -3,7 +3,7 @@
 //! other languages (`$"…"`, `"""…"""`; §2.4, §18.1).
 
 use super::*;
-use crate::literal::{Base, Form, Number, Point, int_value, point_after_int};
+use crate::literal::{Base, Foreign, Number, int_value};
 
 /// The rows [`foreign_literal`] names ([`super::Matcher::many`]).
 pub(super) const FOREIGN_LITERAL_ROWS: &[RowId] =
@@ -20,44 +20,39 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
     }
     let span = c.span(c.at);
     let text = c.src(c.at);
-    let n = number_at(c, c.at);
+    let (n, form) = number_at(c, c.at);
     // In a pattern a float is a float pattern, one form with it (S-248): no
     // form of its own, whatever the float pattern's row finds (a decided
     // reading, outside the order of the diagnostics of S-281, which would
     // choose the suffix). A bound of a range is no float pattern
     // ([`bounds_range`]).
-    if c.want == Want::Pattern && !bounds_range(c, c.at) && float_spelling(text, &n).is_some() {
+    if c.want == Want::Pattern && !bounds_range(c, c.at) && float_spelling(text, &n, form).is_some() {
         return None;
     }
-    let (row, titles): (RowId, &[&str]) = match n.form {
-        Form::Suffix => (RowId::LiteralSuffix, &["remove the type suffix"]),
-        Form::Octal => (RowId::OctalPrefix, &["write the number in decimal"]),
-        Form::LeadingZero => (RowId::LeadingZero, &["read it as decimal", "read it as octal"]),
-        Form::TrailingDot => (RowId::FloatTrailingDot, &["add the `0` after the point"]),
-        Form::DotExponent => (RowId::FloatDotExponent, &["add the `0` after the point"]),
-        Form::Int | Form::Float | Form::Invalid(_) => {
-            onsa_diag::internal::bug(Some(span), "a `ForeignLit` of no form of other languages")
-        }
+    let (row, titles): (RowId, &[&str]) = match form {
+        Foreign::Suffix => (RowId::LiteralSuffix, &["remove the type suffix"]),
+        Foreign::Octal => (RowId::OctalPrefix, &["write the number in decimal"]),
+        Foreign::LeadingZero => (RowId::LeadingZero, &["read it as decimal", "read it as octal"]),
+        Foreign::TrailingDot => (RowId::FloatTrailingDot, &["add the `0` after the point"]),
+        Foreign::DotExponent => (RowId::FloatDotExponent, &["add the `0` after the point"]),
     };
-    // A decimal integer written in the place of the token reads with a `.`
-    // after it when the `.` would read as the point of a float (`1u8.5`
-    // would be `1.5`, `1u8.)` would be `1.)`), S-302: no such candidate.
-    // `0u32..n`, `1u8.abs()` and `1i32.(x)` read the same (S-350).
-    let rest = &c.text[span.end as usize..];
-    let joins = |s: &str| {
-        rest.starts_with('.')
-            && s.bytes().all(|b| b.is_ascii_digit() || b == b'_')
-            && !matches!(point_after_int(rest), Point::Range | Point::Member)
-    };
+    // A spelling that joins the token after it (`1u8.5` would be the float
+    // `1.5`, `1u8.)` would be `1.)`) is no candidate, S-302: the lexer reads
+    // the text after it ([`crate::edits::joining`]). `0u32..n`, `1u8.abs()`
+    // and `1i32.(x)` read the same (S-350). A token after a gap is joined to
+    // nothing, and the line is not lexed for it.
+    let touching = c.gap_after(c.at) == Gap::None;
+    let joins =
+        |fix: &Fix| touching && crate::edits::joining(c.file, c.text, c.all, fix.edits()).iter().any(|j| j.after);
     // A number called (`017(2)`) is a callee too, the row
     // `callee_expression` at the same failure ([`called_number`]): the
     // number's row comes first (S-281) and its candidate leaves the callee's
     // E0020, a second error (S-457).
-    let fixes = spellings(text, &n)
+    let fixes = spellings(text, &n, form)
         .into_iter()
         .zip(titles)
-        .filter(|(s, _)| !joins(s))
         .map(|(s, title)| Fix::replace(*title, span, s))
+        .filter(|fix| !joins(fix))
         .collect();
     Some((row, Hit::new(span, fixes).misplaced_if(!matches!(c.want, Want::Expr | Want::Pattern))))
 }
@@ -74,11 +69,12 @@ pub(super) fn tuple_index_zero(c: &Cursor) -> Option<Hit> {
 }
 
 /// The parts of the number written as in other languages at token `i` (a
-/// `ForeignLit`), as the lexer read them.
-fn number_at(c: &Cursor, i: usize) -> Number {
+/// `ForeignLit`), as the lexer read them, and its form ([`Number::foreign`]).
+fn number_at(c: &Cursor, i: usize) -> (Number, Foreign) {
     let span = c.span(i);
-    *c.literals
+    c.literals
         .number(span)
+        .and_then(|n| Some((n.number, n.number.foreign()?)))
         .unwrap_or_else(|| onsa_diag::internal::bug(Some(span), "a `ForeignLit` the lexer did not read"))
 }
 
@@ -89,19 +85,19 @@ fn number_at(c: &Cursor, i: usize) -> Number {
 /// a hexadecimal or binary one has none, S-456);
 /// `0o17` is `15`; `017` is `17` and `15` (one when the readings agree or
 /// it is no octal number: `00` is `0`, `09` is `9`, S-63); `1.` is `1.0`
-/// and `1.e3` is `1.0e3`.
-pub(super) fn spellings(text: &str, n: &Number) -> Vec<String> {
+/// and `1.e3` is `1.0e3`. `form` is the number's ([`number_at`]).
+pub(super) fn spellings(text: &str, n: &Number, form: Foreign) -> Vec<String> {
     let body = &text[..n.body];
-    match n.form {
+    match form {
         // SPEC-GAP(S-456): a float suffix on a hexadecimal, binary or octal integer (`0b11f32`) has no candidate.
         // A float whose body is written as an integer.
-        Form::Suffix if n.is_float() && !n.float => match n.base {
+        Foreign::Suffix if n.is_float() && !n.float => match n.base {
             Base::Dec => vec![format!("{body}.0")],
             _ => Vec::new(),
         },
-        Form::Suffix => vec![body.to_string()],
-        Form::Octal => int_value(body).map(|v| v.to_string()).into_iter().collect(),
-        Form::LeadingZero => {
+        Foreign::Suffix => vec![body.to_string()],
+        Foreign::Octal => int_value(body).map(|v| v.to_string()).into_iter().collect(),
+        Foreign::LeadingZero => {
             let decimal = body.trim_start_matches(['0', '_']);
             let mut out = vec![if decimal.is_empty() { "0".to_string() } else { decimal.to_string() }];
             // As `0o…` reads (a digit 8 or 9 makes no octal number).
@@ -112,28 +108,28 @@ pub(super) fn spellings(text: &str, n: &Number) -> Vec<String> {
             }
             out
         }
-        Form::TrailingDot => vec![format!("{text}0")],
-        Form::DotExponent => {
+        Foreign::TrailingDot => vec![format!("{text}0")],
+        Foreign::DotExponent => {
             let (int, after) = text.split_once('.').unwrap_or((text, ""));
             vec![format!("{int}.0{after}")]
         }
-        Form::Int | Form::Float | Form::Invalid(_) => Vec::new(),
     }
 }
 
 /// The Onsa spelling of a number written as in other languages that is a
 /// float in Onsa (§2.4): `1.` is `1.0`, `1.e3` is `1.0e3`, `0.5f32` is
 /// `0.5`, `1f32` is `1.0`; `None` for an integer (`1u8`, `0o17`, `017`).
-pub(super) fn float_spelling(text: &str, n: &Number) -> Option<String> {
+pub(super) fn float_spelling(text: &str, n: &Number, form: Foreign) -> Option<String> {
     if !n.is_float() {
         return None;
     }
-    spellings(text, n).into_iter().next()
+    spellings(text, n, form).into_iter().next()
 }
 
 /// [`float_spelling`] of the token `i`, a `ForeignLit`.
 pub(super) fn float_spelling_at(c: &Cursor, i: usize) -> Option<String> {
-    float_spelling(c.src(i), &number_at(c, i))
+    let (n, form) = number_at(c, i);
+    float_spelling(c.src(i), &n, form)
 }
 
 /// Whether a range symbol follows the literal that ends at token `last`

@@ -52,7 +52,12 @@ impl<'a> Parser<'a> {
         }
         self.complete(root, NodeKind::SourceFile);
         self.release_held();
+        let mut goes_on = vec![false; self.all.len()];
+        for (k, &f) in self.full.iter().enumerate() {
+            goes_on[f as usize] = self.lines.goes_on(k);
+        }
         ParseOutput {
+            goes_on,
             tokens: self.all,
             events: self.events,
             diagnostics: self.diagnostics,
@@ -213,8 +218,7 @@ impl<'a> Parser<'a> {
 
     /// The number of blanks before the first token of the line of `at`.
     fn indent(&self, at: u32) -> usize {
-        let line = self.text[..at as usize].rfind('\n').map_or(0, |i| i + 1);
-        self.text[line..].chars().take_while(|c| *c == ' ' || *c == '\t').count()
+        crate::lexer::indent(self.text, at).len()
     }
 
     /// E0002 at the bracket (token `b`) that the unit starting at `unit_start`

@@ -47,7 +47,7 @@ impl<'a> Parser<'a> {
     /// Whether `t` is a number written as in other languages that is an
     /// integer in Onsa (`017`, `1u8`, `0o17`; [`crate::literal::Number::is_float`]).
     fn foreign_integer(&self, t: Token) -> bool {
-        t.kind == TokenKind::ForeignLit && self.literals.number(t.span).is_some_and(|n| !n.is_float())
+        t.kind == TokenKind::ForeignLit && self.literals.number(t.span).is_some_and(|n| !n.number.is_float())
     }
 
     /// After a `-` in a pattern: `(`s and a `-` (`-(-1)`, S-227).

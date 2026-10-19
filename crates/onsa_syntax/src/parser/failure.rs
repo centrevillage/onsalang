@@ -68,7 +68,7 @@ impl<'a> Parser<'a> {
         // errors of one token, of which the driver reports one.
         if t.kind == TokenKind::ForeignLit
             && let Some(n) = self.literals.number(t.span)
-            && let Some(number) = n.int_body(self.token_text(t))
+            && let Some(number) = n.number.int_body(self.token_text(t))
             && crate::literal::int_value(number).is_none()
         {
             self.report(Diagnostic::new(

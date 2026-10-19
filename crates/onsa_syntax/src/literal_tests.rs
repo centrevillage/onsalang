@@ -8,8 +8,8 @@
 use onsa_diag::FileId;
 
 use crate::literal::{
-    Base, FloatRange, FloatWidth, Form, Invalid, Point, canonical_number, float_key, float_value, int_value, number,
-    point_after_int,
+    Base, FloatRange, FloatWidth, Foreign, Form, Invalid, Kind, Point, canonical_number, float_key, float_value,
+    int_value, number, point_after_int,
 };
 
 #[test]
@@ -83,56 +83,57 @@ fn the_key_of_a_float_is_its_exact_value() {
 
 #[test]
 fn the_form_of_each_number() {
-    use Form::*;
+    use Foreign::*;
+    let (int, float, f) = (Form::Onsa(Kind::Int), Form::Onsa(Kind::Float), Form::Foreign);
     let cases: &[(&str, Form, &str)] = &[
-        ("42", Int, "42"),
-        ("0", Int, "0"),
-        ("0_", Int, "0_"),
-        ("1__000", Int, "1__000"),
-        ("0X1f", Int, "0X1f"),
-        ("0B101", Int, "0B101"),
-        ("0x_1F", Int, "0x_1F"),
-        ("1.5", Float, "1.5"),
-        ("48e3", Float, "48e3"),
-        ("1E+3", Float, "1E+3"),
-        ("1e_3", Float, "1e_3"),
-        ("1e3_", Float, "1e3_"),
-        ("01.5", Float, "01.5"),
-        ("017e3", Float, "017e3"),
-        ("1u8", Suffix, "1"),
-        ("1_000_u32", Suffix, "1_000"),
-        ("0x1F_u8", Suffix, "0x1F"),
-        ("100ul", Suffix, "100"),
-        ("1ULL", Suffix, "1"),
-        ("1f32", Suffix, "1"),
-        ("2.5f", Suffix, "2.5"),
-        ("1e3F", Suffix, "1e3"),
-        ("0o17u8", Suffix, "0o17"),
-        ("017u8", Suffix, "017"),
-        ("1.e3f", Suffix, "1.e3"),
-        ("0o17", Octal, "0o17"),
-        ("0O1_7", Octal, "0O1_7"),
-        ("017", LeadingZero, "017"),
-        ("00", LeadingZero, "00"),
-        ("0_7", LeadingZero, "0_7"),
-        ("08", LeadingZero, "08"),
-        ("089", LeadingZero, "089"),
-        ("0_17", LeadingZero, "0_17"),
-        ("2.5_e1", Float, "2.5_e1"),
-        ("1_e3", Float, "1_e3"),
-        ("0b11f32", Suffix, "0b11"),
-        ("1.", TrailingDot, "1."),
-        ("1.e3", DotExponent, "1.e3"),
-        ("1.E3", DotExponent, "1.E3"),
-        ("1.e-3", DotExponent, "1.e-3"),
-        ("1.e+3", DotExponent, "1.e+3"),
+        ("42", int, "42"),
+        ("0", int, "0"),
+        ("0_", int, "0_"),
+        ("1__000", int, "1__000"),
+        ("0X1f", int, "0X1f"),
+        ("0B101", int, "0B101"),
+        ("0x_1F", int, "0x_1F"),
+        ("1.5", float, "1.5"),
+        ("48e3", float, "48e3"),
+        ("1E+3", float, "1E+3"),
+        ("1e_3", float, "1e_3"),
+        ("1e3_", float, "1e3_"),
+        ("01.5", float, "01.5"),
+        ("017e3", float, "017e3"),
+        ("1u8", f(Suffix), "1"),
+        ("1_000_u32", f(Suffix), "1_000"),
+        ("0x1F_u8", f(Suffix), "0x1F"),
+        ("100ul", f(Suffix), "100"),
+        ("1ULL", f(Suffix), "1"),
+        ("1f32", f(Suffix), "1"),
+        ("2.5f", f(Suffix), "2.5"),
+        ("1e3F", f(Suffix), "1e3"),
+        ("0o17u8", f(Suffix), "0o17"),
+        ("017u8", f(Suffix), "017"),
+        ("1.e3f", f(Suffix), "1.e3"),
+        ("0o17", f(Octal), "0o17"),
+        ("0O1_7", f(Octal), "0O1_7"),
+        ("017", f(LeadingZero), "017"),
+        ("00", f(LeadingZero), "00"),
+        ("0_7", f(LeadingZero), "0_7"),
+        ("08", f(LeadingZero), "08"),
+        ("089", f(LeadingZero), "089"),
+        ("0_17", f(LeadingZero), "0_17"),
+        ("2.5_e1", float, "2.5_e1"),
+        ("1_e3", float, "1_e3"),
+        ("0b11f32", f(Suffix), "0b11"),
+        ("1.", f(TrailingDot), "1."),
+        ("1.e3", f(DotExponent), "1.e3"),
+        ("1.E3", f(DotExponent), "1.E3"),
+        ("1.e-3", f(DotExponent), "1.e-3"),
+        ("1.e+3", f(DotExponent), "1.e+3"),
     ];
     for &(text, form, body) in cases {
         let n = number(text);
         assert_eq!((n.form, &text[..n.body], n.len), (form, body, text.len()), "{text}");
     }
     // The 16 digits of hexadecimal take `f`: `0x1f32` is an integer.
-    assert_eq!(number("0x1f32").form, Int);
+    assert_eq!(number("0x1f32").form, int);
     assert_eq!(number("0x1F").base, Base::Hex);
     // The number ends before a `.` that is no point (S-350), and a
     // hexadecimal or binary one before any `.`.

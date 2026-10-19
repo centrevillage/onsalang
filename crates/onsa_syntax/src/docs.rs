@@ -221,7 +221,8 @@ fn before_the_attributes(cst: &Cst, text: &str, first: usize, last: usize) -> Op
         Some(head) => Edit::insert(file, head, moved),
         None => {
             let line_break = &text[tokens[first + 1].span.start as usize..tokens[first + 1].span.end as usize];
-            let indent = &text[line_head(text, tokens[first].span.start)? as usize..tokens[first].span.start as usize];
+            line_head(text, tokens[first].span.start)?;
+            let indent = crate::lexer::indent(text, tokens[first].span.start);
             let from = if tokens[at - 1].kind == TokenKind::Whitespace { at - 1 } else { at };
             let gap = Span::new(file, tokens[from].span.start, tokens[at].span.start);
             Edit::replace(gap, format!("{line_break}{moved}{indent}"))

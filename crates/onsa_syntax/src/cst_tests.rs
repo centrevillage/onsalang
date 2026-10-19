@@ -67,6 +67,7 @@ fn round_trip_of_every_repository_file() {
                     assert_eq!(p.cst.text(text), *text, "{name}: the CST does not give the source back");
                     p.cst.validate(text).unwrap_or_else(|e| panic!("{name}: {e:?}"));
                     check_spans(&p, name);
+                    check_goes_on(&p, name);
                     ran += 1;
                 }
                 // No file makes the lexer or the parser panic (R-01, W3-04).
@@ -260,6 +261,34 @@ fn validate_finds_a_broken_tree() {
     // A source longer than the tokens.
     assert!(p.cst.validate("fn f() {}\nx").is_err());
     assert!(p.cst.validate(src).is_ok());
+}
+
+/// The newlines that go on with their line, as the tree keeps them
+/// ([`Cst::goes_on`]), are those of the line facts of its tokens
+/// ([`crate::layout::code_tokens`]), and no other token goes on.
+fn check_goes_on(p: &crate::Parsed, name: &str) {
+    let (_, full, lines) = crate::layout::code_tokens(p.cst.tokens());
+    let mut want = vec![false; p.cst.tokens().len()];
+    for (k, &f) in full.iter().enumerate() {
+        want[f as usize] = lines.goes_on(k);
+    }
+    for (i, &w) in want.iter().enumerate() {
+        assert_eq!(p.cst.goes_on(crate::cst::TokenIdx(i as u32)), w, "{name}: token {i}");
+    }
+}
+
+#[test]
+fn the_tree_keeps_the_newlines_that_go_on() {
+    let src = "fn f() {\n  let a = x +\n    y\n  a\n    .b\n}\n";
+    let p = parse(src);
+    let on: Vec<u32> = (0..p.cst.tokens().len() as u32)
+        .map(crate::cst::TokenIdx)
+        .filter(|&t| p.cst.goes_on(t))
+        .map(|t| p.cst.token(t).span.start)
+        .collect();
+    // After `+`, and before `.b`.
+    assert_eq!(on, [src.find("+\n").unwrap() as u32 + 1, src.find("a\n").unwrap() as u32 + 1]);
+    check_goes_on(&p, "src");
 }
 
 // ---------------------------------------------------------------- positions
