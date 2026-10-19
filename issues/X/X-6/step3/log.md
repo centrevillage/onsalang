@@ -48,4 +48,6 @@
 - M2b（RF-8 (A)）: 新しい担当で。`issues/X/X-6/step1/C1.md` の RF-8 (A)、`read_at` の単体テストを足す、`flow_map.rs` の先頭の doc の `flow/reads.rs` の行。`gate.sh --work X-6/U3` などの形。
 - S3（字句と fmt）、D2（道具）、M3（core の降下、M2b の後）、V（変えるの流れ）。票の形は 44 回目の S1・S2・M2 の票と同じ。
 - S2 の残りの小さい直し（上の「範囲の外」の S2 の低）を、D2 か V の前の小さな単位で行うかを決める。
+- 写すたびに、主のツリーで `cargo test --workspace` を回す（D1 の見落としは、触った crate の外のテストが落ちた形だった。担当のマージの前の確かめは触った crate だけ）。
+- 実装の票の共通の部分は `ticket_common_i.md`（44 回目の写し。基のバイナリは `0c22312` と、後の単位は `479d2f6` も使える）。
 - 終わりに、自動の掃引を戻し（`target/gate/hold` を外して `tools/after_commit.py --now`）、全体の gate を回し、静かな機械で `compare.py speed` を測り、手順 8 の評価をまとめる。
