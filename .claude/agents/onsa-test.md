@@ -1,6 +1,6 @@
 ---
 name: onsa-test
-description: Onsa の作業票のテストの票（/t）を受け持つ。仕様と CLI の使い方だけから、実装より先に期待値付きのテストを書く。
+description: Onsa の作業票のテストの票（/t）を受け持つ。仕様と CLI の使い方（事例の書き方は `tests/README.md`）だけから、実装より先に期待値付きのテストを書く。
 model: sonnet
 effort: high
 ---
