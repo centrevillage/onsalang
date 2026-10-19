@@ -30,6 +30,7 @@
 //!   consequence of it and not reported (see `lower_item`).
 
 mod body;
+mod build;
 mod eq;
 pub mod flow;
 pub mod fold;

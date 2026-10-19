@@ -21,15 +21,8 @@
 "Bool" = 1
 "Char" = 1
 
-[allow."crates/onsa_core/src/lower/body.rs"]
-"BITS" = 1
-"EPSILON" = 2
-"INFINITY" = 2
-"MAX" = 3
-"MIN" = 3
-"NAN" = 2
-"None" = 2
-"PI" = 2
+[allow."crates/onsa_core/src/lower/body/call.rs"]
+"None" = 1
 "_sat" = 2
 "abs" = 1
 "add_from" = 2
@@ -66,27 +59,52 @@
 "unwrap_or" = 1
 "zeroed" = 2
 
-[allow."crates/onsa_core/src/lower/flow.rs"]
+[allow."crates/onsa_core/src/lower/body/expr.rs"]
+"BITS" = 1
+"EPSILON" = 2
+"INFINITY" = 2
+"MAX" = 3
+"MIN" = 3
+"NAN" = 2
+"None" = 1
+"PI" = 2
+
+[allow."crates/onsa_core/src/lower/flow/boundary.rs"]
+"cfg" = 1
+"frames" = 1
+"len" = 1
+"params" = 3
+"process" = 2
+"process_inplace" = 1
+"render" = 1
+"sample_rate" = 1
+
+[allow."crates/onsa_core/src/lower/flow/generated.rs"]
+"sample_rate" = 1
+
+[allow."crates/onsa_core/src/lower/flow/mod.rs"]
 "BULK_SIZE" = 1
 "Config" = 1
 "Out" = 1
 "Params" = 1
 "SIZE" = 1
 "State" = 1
-"cfg" = 2
-"delay" = 1
-"frames" = 1
 "init" = 1
-"len" = 1
-"params" = 3
 "params_default" = 1
-"prev" = 1
-"process" = 3
-"process_inplace" = 2
-"render" = 2
+"process" = 1
+"process_inplace" = 1
+"render" = 1
 "reset" = 1
-"sample_rate" = 5
+"sample_rate" = 1
+
+[allow."crates/onsa_core/src/lower/flow/nodes.rs"]
+"delay" = 1
+"prev" = 1
 "vdelay" = 1
+
+[allow."crates/onsa_core/src/lower/flow/phases.rs"]
+"cfg" = 1
+"sample_rate" = 2
 
 [allow."crates/onsa_core/src/lower/mod.rs"]
 "Bool" = 1
