@@ -16,6 +16,9 @@ use crate::literal::int_value;
 use crate::naming::is_constant_name;
 use crate::starts::starts_operand;
 
+/// The rows [`faust_feedback`] names ([`super::Matcher::many`]).
+pub(super) const FAUST_FEEDBACK_ROWS: &[RowId] = &[RowId::FaustFeedback, RowId::FaustFeedbackUnnamed];
+
 /// The feedback `~ _` of FAUST where an operand stands (S-48): `prev~(^y)`,
 /// for the name `y` of the `let` it is the value of ([`feedback_name`]); with
 /// no such name, no candidate (the row `faust_feedback_unnamed`, the E0002
@@ -83,6 +86,9 @@ fn in_flow(c: &Cursor) -> bool {
     let function = |k: NodeKind| matches!(k, NodeKind::Fn | NodeKind::Flow | NodeKind::ClosureExpr);
     c.open.iter().rev().find(|o| function(o.0)).is_some_and(|o| o.0 == NodeKind::Flow)
 }
+
+/// The rows [`faust_delay`] names ([`super::Matcher::many`]).
+pub(super) const FAUST_DELAY_ROWS: &[RowId] = &[RowId::FaustDelay, RowId::FaustDelayVariable];
 
 /// The delay `x@N` of FAUST in a flow (S-48): `prev~(x)` for 1,
 /// `delay~(x, N)` for an integer literal of 2 or more and for a constant's

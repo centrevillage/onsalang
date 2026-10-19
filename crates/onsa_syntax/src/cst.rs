@@ -336,6 +336,16 @@ impl NodeKind {
         }
     }
 
+    /// Whether a node of this kind is a part of a type as written: a type, or
+    /// the type arguments (of a type, or of an expression, `f::[T]`) or the
+    /// parameters of a function type. The node that holds a clock in a type
+    /// is the first above it that is none (S-356, `foreign::clocks`). The
+    /// parser's `in_type` reads the types only, as an expression in the type
+    /// arguments of an expression is in no type.
+    pub(crate) fn type_part(self) -> bool {
+        self.class() == Class::Type || matches!(self, NodeKind::TypeArgs | NodeKind::FnTypeParams)
+    }
+
     /// Whether an expression of this kind is block-like (§3.1, S-537): `if`
     /// and `if~`, `match` and `match~`, a block, an anonymous function,
     /// `unsafe`, `handle` and `par`. One is parenthesized as an operand of

@@ -9,6 +9,10 @@ use crate::cst::NodeKind;
 use crate::literal::Literals;
 use crate::token::{Gap, TokenKind};
 
+/// The rows [`space_before_open`] names ([`super::Matcher::many`]).
+pub(super) const SPACE_BEFORE_OPEN_ROWS: &[RowId] =
+    &[RowId::SpaceBeforeParen, RowId::SpaceBeforeBracket, RowId::SpaceBeforeBang, RowId::SpaceBeforeTilde];
+
 /// A blank before a postfix opener that the parser did not read on
 /// (`square (x)`, `xs [0]`, `fn f (x: I32)`, `p.scale !(2)`, `lp ~(x)`;
 /// [`super::Detached`], S-89, S-123): E0020, and the candidate takes
@@ -93,7 +97,9 @@ pub(super) fn string_prefix(c: &Cursor) -> Option<Hit> {
     if !matches!(c.kind(c.at), TokenKind::Str | TokenKind::Char | TokenKind::Ident) {
         return None;
     }
-    hit(c.literals.touch(c.span(c.at))?.range, Vec::new())
+    let range = c.literals.touch(c.span(c.at))?.range;
+    // A `'` after the name may be the delay of FAUST, `x'` (its note).
+    Some(Hit::new(range, Vec::new()).holding(range).with_note(super::faust::prime_note(c.text, range)))
 }
 
 /// The lexer's errors held in the literals right against a name
@@ -119,7 +125,8 @@ pub(super) fn space_around_dot(c: &Cursor) -> Option<Hit> {
         return None;
     }
     let next = c.kind(c.at + 1);
-    if !(matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen) || next.is_keyword()) {
+    // A keyword too, unlike after a line break (`lines::newline_after_dot`).
+    if !(crate::starts::starts_member(next) || next.is_keyword()) {
         return None;
     }
     let mut blanks = Vec::new();
@@ -149,6 +156,10 @@ pub(super) fn space_before_question(c: &Cursor) -> Option<Hit> {
     }
     hit(c.span(c.at), vec![crate::edits::take_out_blanks("remove the space", vec![c.space_before(c.at)?])])
 }
+
+/// The rows [`space_after_prefix`] names ([`super::Matcher::many`]).
+pub(super) const SPACE_AFTER_PREFIX_ROWS: &[RowId] =
+    &[RowId::SpaceAfterPrefix, RowId::SpaceAfterCaret, RowId::LeadingMinus];
 
 /// A blank after a prefix `-` / `!` (`- x`, `! done`, also of a negative
 /// literal pattern `- 1`; S-123, S-411) or after the `^` of a name (`^ y`):

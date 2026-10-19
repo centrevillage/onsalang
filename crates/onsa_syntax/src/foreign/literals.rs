@@ -5,6 +5,10 @@
 use super::*;
 use crate::literal::{Base, Form, Number, Point, int_value, point_after_int};
 
+/// The rows [`foreign_literal`] names ([`super::Matcher::many`]).
+pub(super) const FOREIGN_LITERAL_ROWS: &[RowId] =
+    &[RowId::FloatTrailingDot, RowId::FloatDotExponent, RowId::OctalPrefix, RowId::LeadingZero, RowId::LiteralSuffix];
+
 /// A number written as in other languages (the token `ForeignLit`): the row
 /// of the form the lexer found ([`crate::literal::number`]), and its
 /// candidates, which keep the value and whether it is an integer or a float
@@ -55,7 +59,7 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
         .filter(|(s, _)| !joins(s))
         .map(|(s, title)| Fix::replace(*title, span, s))
         .collect();
-    Some((row, Hit { span, fixes, misplaced: !matches!(c.want, Want::Expr | Want::Pattern), resume: None, note: None }))
+    Some((row, Hit::new(span, fixes).misplaced_if(!matches!(c.want, Want::Expr | Want::Pattern))))
 }
 
 /// A tuple index with a leading `0` (`t.01`, `t.00`; §2.4, S-508), where the

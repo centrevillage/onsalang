@@ -226,6 +226,11 @@ impl TokenKind {
         self.range_readings().len() > 1
     }
 
+    /// What the parser reads over (§2.1, §2.5): blanks, line breaks and the
+    /// line comments. A block comment is none: it is a form of other
+    /// languages, the parser fails at it and its row reports it
+    /// (`foreign::comments`). Where code is looked for, it is a comment all
+    /// the same ([`TokenKind::is_comment`], [`TokenKind::is_code`]).
     pub fn is_trivia(self) -> bool {
         matches!(self, TokenKind::Whitespace | TokenKind::Newline) || self.is_line_comment()
     }
@@ -235,6 +240,15 @@ impl TokenKind {
     #[inline]
     pub fn is_line_comment(self) -> bool {
         matches!(self, TokenKind::Comment | TokenKind::DocComment | TokenKind::ModuleDoc)
+    }
+
+    /// What lies between the doc comments of one item, and before them
+    /// (§2.1): blanks, line breaks and plain line comments `//`. Code and a
+    /// block comment end a run of doc comments (`Parser::collect_docs`,
+    /// `Parser::module_docs`, `crate::docs`).
+    #[inline]
+    pub fn is_between_docs(self) -> bool {
+        matches!(self, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment)
     }
 
     /// A doc comment, `///` or `//!` (§2.1): what the parser takes into a

@@ -152,7 +152,7 @@ impl<'a> Parser<'a> {
             }
             // A string with an interpolation makes a value: no pattern (§7, S-225).
             TokenKind::Str if self.has_holes(t) => return Err(self.fail(Want::Pattern, "a pattern")),
-            TokenKind::Char | TokenKind::Str | TokenKind::KwTrue | TokenKind::KwFalse => NodeKind::LitPat,
+            k if crate::starts::literal_pattern(k) => NodeKind::LitPat,
             // `()`, `(p)` (a group, §2.4, R-43) or `(p, q, ...)`.
             TokenKind::LParen => {
                 let m = self.start(NodeKind::TuplePat)?;

@@ -81,7 +81,8 @@
 //!    to the text of the spec (§18.1 only names where the list is, S-250);
 //! 2. write its matcher in the module of its family (or a new one) and put
 //!    it in [`MATCHERS`] with the rows it names ([`Matcher::one`],
-//!    [`Matcher::many`]; the row's `detect` is [`Detect::Syntax`]), or call
+//!    [`Matcher::many`], whose rows are a constant next to the matcher; the
+//!    row's `detect` is [`Detect::Syntax`]), or call
 //!    [`report`] from its stage ([`Detect::Reported`]); a candidate edits only
 //!    the tokens it changes (S-251), one form is one diagnostic with one
 //!    candidate that fixes all of it (S-248), and a form for which no
@@ -321,8 +322,43 @@ pub struct Hit {
     /// there (§18.1, S-435; `Parser::fail_at`).
     pub resume: Option<usize>,
     /// A note after the row's rule, on what the candidates leave out (the
-    /// kinds `Copy` and `Dup` a derive does not take, S-463).
+    /// kinds `Copy` and `Dup` a derive does not take, S-463), or on another
+    /// reading of the form (the delay `x'` of FAUST, `faust::prime_note`).
     pub note: Option<&'static str>,
+    /// The range of a literal right against a name whose form this hit
+    /// reports, so that the lexer's errors held in it are not reported (the
+    /// row `string_prefix`, S-466; `Failure::prefixed`).
+    pub held: Option<Span>,
+}
+
+impl Hit {
+    /// The form at `span` with `fixes`: in a place of its kind, the parser not
+    /// reading on after it, with no note and no literal held. The methods
+    /// below set the other fields, so that a field added is written only
+    /// where it is set.
+    pub(crate) fn new(span: Span, fixes: Vec<Fix>) -> Hit {
+        Hit { span, fixes, misplaced: false, resume: None, note: None, held: None }
+    }
+
+    /// The hit with the field `misplaced`: whether the place is wrong too.
+    pub(crate) fn misplaced_if(self, misplaced: bool) -> Hit {
+        Hit { misplaced, ..self }
+    }
+
+    /// The hit with the field `resume`: the parser reads on at token `at`.
+    pub(crate) fn reading_on(self, at: usize) -> Hit {
+        Hit { resume: Some(at), ..self }
+    }
+
+    /// The hit with the field `note`.
+    pub(crate) fn with_note(self, note: Option<&'static str>) -> Hit {
+        Hit { note, ..self }
+    }
+
+    /// The hit with the field `held`: the literal at `range`.
+    pub(crate) fn holding(self, range: Span) -> Hit {
+        Hit { held: Some(range), ..self }
+    }
 }
 
 /// How a row's form is found.
@@ -348,8 +384,9 @@ pub enum Detect {
 /// A matcher of the syntax stage: a plain function of the cursor that
 /// recognises a form at the failure, and the rows it may name. A matcher of
 /// one row gives the hit ([`Matcher::one`]); a matcher of several gives the
-/// row with it ([`Matcher::many`]). The registry of [`MATCHERS`] says which
-/// rows each finds.
+/// row with it ([`Matcher::many`]), and its module lists those rows next to
+/// it (`<NAME>_ROWS`), so that a row it comes to name is listed where it is
+/// found. The registry of [`MATCHERS`] says which rows each finds.
 pub struct Matcher {
     /// The rows the matcher may name.
     pub rows: &'static [RowId],
@@ -527,7 +564,7 @@ pub fn row(id: RowId) -> &'static Row {
 /// stage after the syntax (names, types, flow): the code, the stage, the
 /// message and the note are the row's. No candidate makes it E0002 (S-48).
 pub fn report(id: RowId, text: &str, span: Span, fixes: Vec<Fix>) -> Diagnostic {
-    diagnostic(text, id, Hit { span, fixes, misplaced: false, resume: None, note: None })
+    diagnostic(text, id, Hit::new(span, fixes))
 }
 
 fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
@@ -556,9 +593,10 @@ fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
 pub(crate) struct Failure {
     pub rows: Vec<Diagnostic>,
     pub general: Option<Vec<Fix>>,
-    /// The range of the literal right against a name whose form the row
-    /// `string_prefix` reported: the parser keeps it with its diagnostics,
-    /// and its held errors are not reported ([`spaces::held_errors`]).
+    /// The range of the literal right against a name whose form a row
+    /// reported ([`Hit::held`]: the row `string_prefix`): the parser keeps it
+    /// with its diagnostics, and its held errors are not reported
+    /// ([`spaces::held_errors`]).
     pub prefixed: Option<Span>,
     /// Where the form a row found ends on its line ([`Hit::resume`]).
     pub resume: Option<usize>,
@@ -587,17 +625,9 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
     for m in MATCHERS {
         if let Some((row, hit)) = m.find(c) {
             misplaced |= hit.misplaced;
-            let mut note = None;
-            if row == RowId::StringPrefix {
-                prefixed = Some(hit.span);
-                note = faust::prime_note(c.text, hit.span);
-            }
+            prefixed = prefixed.or(hit.held);
             resume = resume.or(hit.resume);
-            let d = diagnostic(c.text, row, hit);
-            rows.push(match note {
-                Some(n) => d.with_rule(n),
-                None => d,
-            });
+            rows.push(diagnostic(c.text, row, hit));
         }
     }
     // After an element of a list, the general error is the missing `,`;
@@ -841,18 +871,18 @@ impl Cursor<'_> {
 
 /// The hit of a matcher of one row ([`Matcher::one`]).
 fn hit(span: Span, fixes: Vec<Fix>) -> Option<Hit> {
-    Some(Hit { span, fixes, misplaced: false, resume: None, note: None })
+    Some(Hit::new(span, fixes))
 }
 
 /// The row and the hit of a matcher of several rows ([`Matcher::many`]).
 fn found(row: RowId, span: Span, fixes: Vec<Fix>) -> Option<(RowId, Hit)> {
-    Some((row, Hit { span, fixes, misplaced: false, resume: None, note: None }))
+    Some((row, Hit::new(span, fixes)))
 }
 
 /// [`found`] for a form that ends on its line, before token `resume`
 /// ([`Hit::resume`]).
 fn found_reading_on(row: RowId, span: Span, fixes: Vec<Fix>, resume: usize) -> Option<(RowId, Hit)> {
-    Some((row, Hit { span, fixes, misplaced: false, resume: Some(resume), note: None }))
+    Some((row, Hit::new(span, fixes).reading_on(resume)))
 }
 
 /// A name or a path of names and tuple indexes: `x`, `self.a.b`, `t.0.1`

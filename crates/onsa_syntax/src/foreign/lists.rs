@@ -30,18 +30,18 @@ pub(super) fn join_fix(c: &Cursor) -> Option<Fix> {
 /// The candidates of the general E0002 at the token after an element of a
 /// list of `list`, where a `,` or the closing bracket goes (§2.5), in the
 /// order of the decisions (out of a list, `None`: only the opener after a
-/// line break has its candidate, S-89):
+/// line break has its candidate, S-89), the cases of [`CASES`]:
 ///
-/// - two string literals next to each other (S-388): the `,`, and the one
-///   literal they make;
-/// - an opener after a line break (S-89, S-373), or after a blank when the
-///   token before is no path of names (S-399): the `,` when the opener
-///   starts an element, and the gap taken out when that reads;
-/// - else the `,` when the token starts an element (S-384, S-387), whatever
-///   is between the elements;
 /// - in the arms of a `match`, a `-`, `|` or `+` that a `=>` follows starts
 ///   the next arm (S-386): the `,`, which takes a `+` out (S-405); a `- 1`
-///   has none, as its blank is an error of its own.
+///   has none, as its blank is an error of its own; nothing else;
+/// - the `,` when the token starts an element (S-384, S-387), whatever is
+///   between the elements;
+/// - two string literals next to each other (S-388): the one literal they
+///   make, after the `,`;
+/// - else an opener after a line break (S-89, S-373), or after a blank when
+///   the token before is no path of names (S-399): the gap taken out when
+///   that reads, after the `,` when the opener starts an element.
 ///
 /// The two candidates of an opener after a line break are only those that
 /// the scan of the tokens reads (S-419): in the arms, the `,` when a `=>`
@@ -52,30 +52,108 @@ pub(super) fn join_fix(c: &Cursor) -> Option<Fix> {
 /// comment of its line.
 pub(super) fn list_fixes(c: &Cursor, list: Option<NodeKind>) -> Vec<Fix> {
     let Some(prev) = c.sig_before(c.at) else { return Vec::new() };
-    let kind = c.kind(c.at);
-    let arms = list == Some(NodeKind::MatchArms);
-    if arms && matches!(kind, TokenKind::Minus | TokenKind::Pipe | TokenKind::Plus) && arm_ahead(c.tokens, c.at) {
-        let spaced = kind == TokenKind::Minus && c.gap_after(c.at).is_some();
-        return if spaced { Vec::new() } else { vec![comma_before_sign(c, prev, c.at)] };
-    }
+    let a = After {
+        c,
+        list,
+        prev,
+        kind: c.kind(c.at),
+        arms: list == Some(NodeKind::MatchArms),
+        joins: c.detached.is_some_and(|d| d.at == c.at && d.joins(c.tokens)),
+    };
     let mut fixes = Vec::new();
-    let declaration = declares_a_function(kind, c.kind(c.sig_after(c.at)));
-    let joins = c.detached.is_some_and(|d| d.at == c.at && d.joins(c.tokens));
-    let types = matches!(list, Some(NodeKind::VariantFields | NodeKind::TupleType | NodeKind::FnTypeParams));
-    let array =
-        (kind != TokenKind::LBracket || !types || bracket_contents(c.tokens, c.at).is_some_and(|(_, _, semi)| semi))
-            && !(list == Some(NodeKind::ArrayExpr) && array_repeats(c));
-    let comma = !(arms && joins && !arm_ahead(c.tokens, c.at));
-    if list.is_some_and(|l| starts_element(l, kind)) && !declaration && array && comma {
-        fixes.push(Fix::new("write the `,` between the elements", vec![Edit::insert(c.file, c.span(prev).end, ",")]));
-    }
-    let strings = kind == TokenKind::Str && c.kind(prev) == TokenKind::Str;
-    if strings && list.is_some() {
-        fixes.extend(merge_strings(c, prev));
-    } else if joins && !(arms && arm_ahead(c.tokens, c.at)) {
-        fixes.extend(join_fix(c));
+    for case in CASES {
+        if (case.holds)(&a) {
+            fixes.extend((case.makes)(&a));
+            if case.last {
+                break;
+            }
+        }
     }
     fixes
+}
+
+/// The failure after an element of a list that [`list_fixes`] reads.
+struct After<'c, 'a> {
+    c: &'c Cursor<'a>,
+    list: Option<NodeKind>,
+    /// The last token of the element.
+    prev: usize,
+    /// The token of the failure, `c.at`.
+    kind: TokenKind,
+    /// The list is the arms of a `match`.
+    arms: bool,
+    /// The token is an opener that a gap keeps from the token before, and
+    /// that reads as the postfix with the gap taken out ([`super::Detached::joins`]).
+    joins: bool,
+}
+
+/// A case of the candidates of [`list_fixes`]: when it holds, the
+/// candidates it makes, and whether the cases after it are read then.
+struct Case {
+    holds: fn(&After) -> bool,
+    makes: fn(&After) -> Option<Fix>,
+    last: bool,
+}
+
+/// The cases of [`list_fixes`], in the order of the decisions and of their
+/// candidates.
+const CASES: [Case; 4] = [
+    Case { holds: arm_sign, makes: sign_comma, last: true },
+    Case { holds: comma_goes, makes: comma_fix, last: false },
+    Case { holds: two_strings, makes: one_string, last: true },
+    Case { holds: rejoins, makes: joined, last: true },
+];
+
+/// A `-`, `|` or `+` that starts the next arm of a `match` (S-386).
+fn arm_sign(a: &After) -> bool {
+    a.arms && matches!(a.kind, TokenKind::Minus | TokenKind::Pipe | TokenKind::Plus) && arm_ahead(a.c.tokens, a.c.at)
+}
+
+/// The `,` before the sign; none before a `-` with a blank after it,
+/// which is an error of its own.
+fn sign_comma(a: &After) -> Option<Fix> {
+    let spaced = a.kind == TokenKind::Minus && a.c.gap_after(a.c.at).is_some();
+    (!spaced).then(|| comma_before_sign(a.c, a.prev, a.c.at))
+}
+
+/// Whether a `,` goes before the token (S-384, S-387): it starts an
+/// element of the list, and is not `fn name`, which no expression is;
+/// in a list of types, a `[` holds a `;` (S-419); not in the repetition
+/// of an array; in the arms, not before an opener that joins the token
+/// before when no `=>` follows.
+fn comma_goes(a: &After) -> bool {
+    let c = a.c;
+    let declaration = declares_a_function(a.kind, c.kind(c.sig_after(c.at)));
+    let types = matches!(a.list, Some(NodeKind::VariantFields | NodeKind::TupleType | NodeKind::FnTypeParams));
+    let array =
+        (a.kind != TokenKind::LBracket || !types || bracket_contents(c.tokens, c.at).is_some_and(|(_, _, semi)| semi))
+            && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
+    let comma = !(a.arms && a.joins && !arm_ahead(c.tokens, c.at));
+    a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma
+}
+
+fn comma_fix(a: &After) -> Option<Fix> {
+    let edit = Edit::insert(a.c.file, a.c.span(a.prev).end, ",");
+    Some(Fix::new("write the `,` between the elements", vec![edit]))
+}
+
+/// Two string literals next to each other in a list (S-388).
+fn two_strings(a: &After) -> bool {
+    a.kind == TokenKind::Str && a.c.kind(a.prev) == TokenKind::Str && a.list.is_some()
+}
+
+fn one_string(a: &After) -> Option<Fix> {
+    merge_strings(a.c, a.prev)
+}
+
+/// An opener after a gap that reads joined (S-89, S-373, S-399); in the
+/// arms, none that a `=>` follows.
+fn rejoins(a: &After) -> bool {
+    a.joins && !(a.arms && arm_ahead(a.c.tokens, a.c.at))
+}
+
+fn joined(a: &After) -> Option<Fix> {
+    join_fix(a.c)
 }
 
 /// The two string literals `prev` and `c.at` as one (S-388): the text of the

@@ -66,6 +66,9 @@ fn needs_parens(c: &Cursor, op: TokenKind, first: usize, last: usize) -> bool {
     op.binop().is_none_or(|op| !op.bare(crate::ast::Side::Right, operand))
 }
 
+/// The rows [`compound_assignment`] names ([`super::Matcher::many`]).
+pub(super) const COMPOUND_ASSIGNMENT_ROWS: &[RowId] = &[RowId::CompoundAssign, RowId::CompoundAssignUnfixable];
+
 /// `x += 1` (and the other operators): `x = x + 1` when it is a statement
 /// whose left side is a name or a path of fields (S-250). A left side that
 /// would be read twice (`a[i] += 1`) and an expression (`let y = x += 1`) are
@@ -131,6 +134,9 @@ fn binary_minus_minus(c: &Cursor) -> bool {
         && !matches!(next, TokenKind::Minus | TokenKind::Bang)
         && crate::starts::starts_operand(next)
 }
+
+/// The rows [`increment`] names ([`super::Matcher::many`]).
+pub(super) const INCREMENT_ROWS: &[RowId] = &[RowId::Increment, RowId::IncrementUnfixable];
 
 /// `++x`, `x++`, `--x`, `x--` (S-250, S-297): `x = x + 1` as a statement
 /// whose operand is a name or a path of fields; else E0002 with the note.

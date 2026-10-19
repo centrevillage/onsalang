@@ -18,7 +18,7 @@ impl<'a> Parser<'a> {
         loop {
             let t = self.tokens[self.pos];
             match t.kind {
-                TokenKind::Newline | TokenKind::Comment => self.pos += 1,
+                k if k.is_between_docs() => self.pos += 1,
                 // SPEC-GAP(S-444): a doc comment after code on its line
                 // documents nothing (its E0004, [`crate::docs`]).
                 TokenKind::DocComment | TokenKind::ModuleDoc if !self.starts_its_line(self.pos) => self.pos += 1,
@@ -72,7 +72,7 @@ impl<'a> Parser<'a> {
         let mut k = self.pos;
         loop {
             match self.tokens[k].kind {
-                TokenKind::Newline | TokenKind::Comment => {}
+                k if k.is_between_docs() => {}
                 TokenKind::ModuleDoc => docs = Some((docs.map_or(k, |(f, _)| f), k)),
                 _ => break,
             }

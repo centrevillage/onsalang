@@ -24,7 +24,7 @@ pub(super) fn newline_after_dot(c: &Cursor) -> Option<Hit> {
     let next = c.kind(c.sig_after(c.at));
     // A name, a tuple index or the `(` of `.(` (§2.5); a keyword starts the
     // next statement (`let c = s.` and `let d = 1`), which the `.` would join.
-    let member = matches!(next, TokenKind::Ident | TokenKind::Int | TokenKind::LParen);
+    let member = crate::starts::starts_member(next);
     let fixes = if member {
         move_token_down(c, "move the `.` to the next line", c.at).into_iter().collect()
     } else {
@@ -78,6 +78,9 @@ fn in_pattern(c: &Cursor) -> bool {
         || innermost.is_some_and(|n| n.0.class() == Class::Pat)
         || matches!(c.want, Want::Separator(NodeKind::TuplePat | NodeKind::TupleStructPat | NodeKind::StructPat))
 }
+
+/// The rows [`leading_symbol`] names ([`super::Matcher::many`]).
+pub(super) const LEADING_SYMBOL_ROWS: &[RowId] = &[RowId::LeadingOperator, RowId::LeadingMinus];
 
 /// A symbol at the head of a line that goes at the end of the line before
 /// (§2.5): an operator only binary (`leading_operator`, S-124, S-370), the

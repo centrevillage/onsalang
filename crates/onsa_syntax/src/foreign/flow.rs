@@ -155,12 +155,11 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
         // (§18.1): the note says how to split the form.
         let span =
             cst.ancestors(clock).find(|&a| cst.kind(a) == NodeKind::Item).map_or(cst.span(clock), |a| cst.span(a));
-        let too_deep = fixes.iter().any(|f| {
-            let added = f.edits().iter().map(|e| e.replace.matches('(').count() as u32).sum::<u32>() + 1;
-            limit.exceeded(span, f.edits(), added)
-        });
+        // One level more than the parentheses: a clock moved onto a value
+        // is an `at` node over it.
+        let too_deep = crate::nesting::too_deep(limit, span, &fixes, 1);
         let fixes = if too_deep { Vec::new() } else { fixes };
-        let d = diagnostic(text, id, Hit { span: cst.span(clock), fixes, misplaced: false, resume: None, note: None });
+        let d = diagnostic(text, id, Hit::new(cst.span(clock), fixes));
         out.push(if too_deep { d.with_rule(crate::nesting::TOO_DEEP_RULE) } else { d });
     }
 }
@@ -240,6 +239,8 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Inse
     }
     // A value a syntax error cut on its line (`= 0..<3`: `0`, then `..<3`
     // left unread) is not the whole value: that error is the unit's (W3-09/b2).
+    // The token after the statement on its line, over the blanks and the
+    // comments `//` and `/* */` (not the doc comments); a line break stops it.
     let next = cst.tokens()[cst.token_range(stmt).end..]
         .iter()
         .position(|t| !matches!(t.kind, TokenKind::Whitespace | TokenKind::Comment | TokenKind::BlockComment))
@@ -283,13 +284,10 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, marks: &mut Inse
 /// second `at` is the E0002 of the unit, as at the type of an input); no
 /// candidate when the clock holds a comment.
 fn in_type(cst: &Cst, text: &str, clock: NodeId, marks: &mut Insertions) -> Option<Vec<Fix>> {
-    let typeish = |n: NodeId| {
-        cst.kind(n).class() == Class::Type || matches!(cst.kind(n), NodeKind::TypeArgs | NodeKind::FnTypeParams)
-    };
     let mut place = clock;
     while let Some(p) = cst.parent(place) {
         place = p;
-        if !typeish(p) {
+        if !cst.kind(p).type_part() {
             break;
         }
         if !cst.is_complete(p) {

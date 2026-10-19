@@ -97,10 +97,12 @@ enum PatKind {
 }
 
 /// A reader of the tokens `toks` (indexes of `tokens`, without newlines and
-/// comments) of a pattern. It reads what `Parser::parse_pattern` reads, and
-/// the guard forms; anything else makes no candidate. It reads patterns
-/// nested `limit` deep at most (the parser counts the levels only up to its
-/// failure, §2.5; the tree and the walks over it are as deep).
+/// comments) of a pattern. It reads what `Parser::parse_pattern` reads (the
+/// literals of [`crate::starts::literal_pattern`], `_`, a group or a tuple,
+/// a path and after it the fields in a `(` that touches it or in a `{` after
+/// a type name), and the guard forms; anything else makes no candidate. It
+/// reads patterns nested `limit` deep at most (the parser counts the levels
+/// only up to its failure, §2.5; the tree and the walks over it are as deep).
 struct PatReader<'c, 'a> {
     c: &'c Cursor<'a>,
     toks: Vec<usize>,
@@ -342,7 +344,8 @@ impl<'c, 'a> PatReader<'c, 'a> {
                 };
                 Some(self.pat(lo, kind))
             }
-            TokenKind::Char | TokenKind::KwTrue | TokenKind::KwFalse => {
+            // A string is read above.
+            k if crate::starts::literal_pattern(k) => {
                 self.bump();
                 Some(self.pat(lo, PatKind::Leaf(Leaf::Lit)))
             }
@@ -493,11 +496,18 @@ struct Shape<'a> {
     edits: Vec<Edit>,
 }
 
-/// Why a pattern has no candidate.
+/// Why a pattern has no candidate. The reasons but [`Why::Bad`] name the row
+/// of the alternatives ([`Form::choice_row`]) alike ([`guard_pattern`]).
 enum Why {
-    /// The alternatives differ once the forms are replaced, or a comment
-    /// lies in what the candidate removes (S-317, S-251).
-    Differ,
+    /// The alternatives differ once the forms are replaced (S-317).
+    Skeletons,
+    /// A comment lies in a form or in what the candidate removes (S-251):
+    /// the alternatives after the first, the right of `@`.
+    Comment,
+    /// The pattern has no form to write in a guard.
+    NoForm,
+    /// The arm's own guard has no last token before its `=>`.
+    GuardEnd,
     /// A form makes none (a range whose end is no expression, the right of
     /// `@` that is no literal, constant or range).
     Bad(Form),
@@ -520,7 +530,7 @@ fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Result<Shape<'a>, Wh
                 return Err(Why::Bad(*form));
             }
             if comment(p.lo, p.hi) {
-                return Err(Why::Differ);
+                return Err(Why::Comment);
             }
             Ok(Shape {
                 skel: vec![Skel::Hole],
@@ -536,7 +546,7 @@ fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Result<Shape<'a>, Wh
             let name = c.src(toks[p.lo]);
             let cond = at_cond(c, toks, name, rhs).filter(|_| !unread(rhs.lo, rhs.hi)).ok_or(Why::Bad(Form::At))?;
             if comment(p.lo, p.hi) {
-                return Err(Why::Differ);
+                return Err(Why::Comment);
             }
             // ` @ rhs` goes: the name stays the binding.
             let removed = c.file_span(c.span(toks[p.lo]).end, c.span(toks[p.hi]).end);
@@ -572,15 +582,18 @@ fn shape<'a>(c: &'a Cursor<'_>, toks: &[usize], p: &Pat) -> Result<Shape<'a>, Wh
                 return Ok(Shape { skel: (p.lo..=p.hi).map(tok).collect(), ..empty() });
             }
             if shapes.iter().any(|s| s.skel != shapes[0].skel) {
-                return Err(Why::Differ);
+                return Err(Why::Skeletons);
             }
             // Remove ` | A_2 | ...`, which must hold no comment.
             let (from, to) = (toks[alts[0].hi], toks[p.hi]);
             if (from..=to).any(|i| c.comment(i)) {
-                return Err(Why::Differ);
+                return Err(Why::Comment);
             }
             let mut shapes = shapes.into_iter();
-            let Some(mut out) = shapes.next() else { return Err(Why::Differ) };
+            // No alternative has no shape: an empty list returned above.
+            let Some(mut out) = shapes.next() else {
+                onsa_diag::internal::bug(Some(c.span(toks[p.lo])), "alternatives with no shape")
+            };
             let conds = std::iter::once(out.cond).chain(shapes.map(|s| s.cond)).collect();
             out.cond = Cond::Or(conds);
             out.edits.push(Edit::delete(c.file_span(c.span(from).end, c.span(to).end)));
@@ -632,6 +645,18 @@ fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     (reader.toks[a] == c.at).then(|| (form, reader.toks[a], reader.toks[b]))
 }
 
+/// The rows [`guard_pattern`] names ([`super::Matcher::many`]).
+pub(super) const GUARD_PATTERN_ROWS: &[RowId] = &[
+    RowId::FloatPattern,
+    RowId::FloatPatternChoice,
+    RowId::InterpolatedStringPattern,
+    RowId::NegatedConstantPattern,
+    RowId::AtBinding,
+    RowId::AtBindingComplex,
+    RowId::RangePattern,
+    RowId::RangePatternChoice,
+];
+
 /// A guard form in a pattern (§7, §18.1; S-109, S-186, S-225, S-249, S-278,
 /// S-317, S-319, S-341, S-352): E0020 in the syntax stage. In an arm of
 /// `match`, the candidate is the guard form, for all the forms of the arm's
@@ -664,8 +689,8 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     let span = c.file_span(c.span(arm.toks[a]).start, c.span(arm.toks[b]).end);
     match arm.candidates(c) {
         Ok(fixes) => found(head.row(), span, fixes),
-        Err(Why::Differ) => found(head.choice_row(), span, Vec::new()),
         Err(Why::Bad(bad)) => found(if bad == Form::At { Form::At.choice_row() } else { head.row() }, span, Vec::new()),
+        Err(Why::Skeletons | Why::Comment | Why::NoForm | Why::GuardEnd) => found(head.choice_row(), span, Vec::new()),
     }
 }
 
@@ -740,7 +765,7 @@ impl Arm {
     fn candidates(&self, c: &Cursor) -> Result<Vec<Fix>, Why> {
         let shape = shape(c, &self.toks, &self.pat)?;
         if shape.holes.is_empty() && matches!(shape.cond, Cond::True) {
-            return Err(Why::Differ);
+            return Err(Why::NoForm);
         }
         // New names: none that the file has (S-253), the names in the holes
         // of the string literals too (S-319): a new name that a misspelt
@@ -786,7 +811,7 @@ impl Arm {
                 Some(t) => {
                     // The arm's own guard follows with `&&` (§7).
                     let g_first = c.sig_after(t);
-                    let g_last = c.sig_before(self.arrow).ok_or(Why::Differ)?;
+                    let g_last = c.sig_before(self.arrow).ok_or(Why::GuardEnd)?;
                     let g = operand(&(g_first..=g_last).map(|i| c.kind(i)).collect::<Vec<_>>());
                     let cond = if BinOp::And.bare(Side::Left, top) { cond } else { format!("({cond})") };
                     if BinOp::And.bare(Side::Left, g) {

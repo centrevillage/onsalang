@@ -64,6 +64,14 @@ fn documents(c: &Cursor) -> bool {
     }
 }
 
+/// The rows [`block_comment`] names ([`super::Matcher::many`]).
+pub(super) const BLOCK_COMMENT_ROWS: &[RowId] = &[
+    RowId::BlockComment,
+    RowId::BlockCommentUnclosed,
+    RowId::BlockCommentNested,
+    RowId::BlockCommentMultilineCodeAfter,
+];
+
 /// A block comment (§2.1, S-247, S-302, R-174). A closed one is E0020: the
 /// candidate keeps its words in line comments and changes neither the
 /// tokens outside it nor the line breaks between them. When nothing but

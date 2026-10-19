@@ -3,6 +3,17 @@
 
 use super::*;
 
+/// The rows [`reference`] names ([`super::Matcher::many`]).
+pub(super) const REFERENCE_ROWS: &[RowId] = &[
+    RowId::RefMutParam,
+    RowId::RefMutSelf,
+    RowId::RefSelf,
+    RowId::RefType,
+    RowId::RefExpr,
+    RowId::RefMutArg,
+    RowId::RefMutOther,
+];
+
 /// `&` and `&mut` of Rust (§5.2, S-250, R-173): before a parameter's name
 /// (`&mut self`, `&self`), in a parameter's type (`v: &mut T` is `inout v:
 /// T`, `v: &T` is `v: T`), in another type (`&T` is `T`; `&mut T` has no

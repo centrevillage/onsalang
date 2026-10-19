@@ -1,6 +1,8 @@
 //! The rows of the declarations, statements and attributes of other languages
 //! (`let mut`, `loop`, `proc`, `#[…]` and `#[derive]`, `pub(crate)`).
 
+use std::collections::HashSet;
+
 use super::*;
 
 /// `let mut x` of Rust: `var x` (§5.1).
@@ -49,6 +51,10 @@ pub(super) fn proc(c: &Cursor) -> Option<Hit> {
 /// or an enum ([`derive`]).
 const DERIVE: &str = "derive";
 
+/// The rows [`hash_attribute`] names ([`super::Matcher::many`]).
+pub(super) const HASH_ATTRIBUTE_ROWS: &[RowId] =
+    &[RowId::HashAttribute, RowId::HashAttributeNoCandidate, RowId::HashAttributeUnfixable];
+
 /// `#[name(...)]` of Rust: `@name(...)` (§6.5), when the attribute of Onsa
 /// that it spells goes in its place (the table of the attributes,
 /// [`crate::attrs::accepts`]; `#[repr(C)]` is `@repr(c)`, the same value
@@ -70,7 +76,7 @@ pub(super) fn hash_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
     let close = crate::scan::closing_on_line(c.tokens, c.at + 1);
     let end = close.map_or(c.span(c.at + 1).end, |e| c.span(e).end);
     let span = c.file_span(c.span(c.at).start, end);
-    let found = |row, fixes, note| Some((row, Hit { span, fixes, misplaced: false, resume: None, note }));
+    let found = |row, fixes, note| Some((row, Hit::new(span, fixes).with_note(note)));
     let no_form = || found(RowId::HashAttributeNoCandidate, Vec::new(), None);
     let unfixable = || found(RowId::HashAttributeUnfixable, Vec::new(), None);
     let unread = c.open_at(0).is_some_and(|o| o.1 == c.span(c.at).start);
@@ -180,14 +186,17 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
     // The traits the head has, and the token after which more go: the list
     // after the `:` (names and paths joined by `+`, a line break after a
     // `+`, §6.4) ends at any other token (the `{` of the body, a line break).
-    let mut written: Vec<&str> = Vec::new();
+    // Sets, as the names may be many (linear in them).
+    let mut written: HashSet<&str> = HashSet::new();
     let mut after = head;
     if c.kind(c.after(head)) == TokenKind::Colon {
         after = c.after(head);
         loop {
             let next = if c.kind(after) == TokenKind::Plus { c.sig_after(after) } else { c.after(after) };
             match c.kind(next) {
-                TokenKind::Ident => written.push(c.src(next)),
+                TokenKind::Ident => {
+                    written.insert(c.src(next));
+                }
                 TokenKind::Plus | TokenKind::Dot => {}
                 _ => break,
             }
@@ -198,9 +207,11 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
         }
     }
     let left_out = traits.iter().any(|t| KIND_CONSTRAINTS.contains(t));
+    // In the order they are written, each once.
     let mut add: Vec<&str> = Vec::new();
+    let mut added = HashSet::new();
     for t in traits {
-        if !KIND_CONSTRAINTS.contains(&t) && !written.contains(&t) && !add.contains(&t) {
+        if !KIND_CONSTRAINTS.contains(&t) && !written.contains(t) && added.insert(t) {
             add.push(t);
         }
     }
@@ -213,6 +224,15 @@ fn derive(c: &Cursor, decl: usize, open: usize, shut: usize, last: usize) -> Opt
     let fix = Fix::new("write the traits at the head of the declaration", edits);
     Some((fix, left_out.then_some(row(RowId::CopyBound).rule)))
 }
+
+/// The rows [`old_attribute`] names ([`super::Matcher::many`]).
+pub(super) const OLD_ATTRIBUTE_ROWS: &[RowId] = &[
+    RowId::DeriveAttribute,
+    RowId::RelaxedAttribute,
+    RowId::BulkAttribute,
+    RowId::MemFast,
+    RowId::OldAttributeNoCandidate,
+];
 
 /// The old attributes (§6.5, S-34, S-43, S-57), asked where the parser read
 /// one (`c.at` its `@`, `c.place` its place): `@derive(…)` before a struct
@@ -234,9 +254,7 @@ pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
     match name {
         DERIVE if args => {
             match c.declaration.filter(|&d| derives(c, d)).and_then(|d| derive(c, d, c.at + 2, last, last)) {
-                Some((fix, note)) => {
-                    Some((RowId::DeriveAttribute, Hit { span, fixes: vec![fix], misplaced: false, resume: None, note }))
-                }
+                Some((fix, note)) => Some((RowId::DeriveAttribute, Hit::new(span, vec![fix]).with_note(note))),
                 None => no_candidate(),
             }
         }
@@ -261,6 +279,10 @@ pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
         _ => None,
     }
 }
+
+/// The rows [`visibility_form`] names ([`super::Matcher::many`]).
+pub(super) const VISIBILITY_FORM_ROWS: &[RowId] =
+    &[RowId::PubCrate, RowId::PubPkg, RowId::PubRestricted, RowId::FieldPubCrate];
 
 /// A visibility of another language, `pub(…)`, the `(` on the line of the
 /// `pub` with blanks or none between (§15.1, S-36, S-412, S-417, S-420): the
@@ -308,6 +330,9 @@ fn remove_word(c: &Cursor, i: usize, title: &str) -> Fix {
     let end = c.space_after(i).map_or(c.span(i).end, |s| s.end);
     Fix::delete(title, c.file_span(c.span(i).start, end))
 }
+
+/// The rows [`field_visibility`] names ([`super::Matcher::many`]).
+pub(super) const FIELD_VISIBILITY_ROWS: &[RowId] = &[RowId::FieldPub, RowId::FieldPrivInPrivStruct];
 
 /// The visibility word of a field, read at `c.at` (§15.1): a field inherits
 /// the visibility of its struct, so `pub` on it, and `priv` on a field of a
@@ -373,6 +398,9 @@ pub(super) fn export_c(c: &Cursor) -> Option<Hit> {
     }
     hit(c.file_span(c.span(c.at).start, c.span(s).end), Vec::new())
 }
+
+/// The rows [`tuple_struct`] names ([`super::Matcher::many`]).
+pub(super) const TUPLE_STRUCT_ROWS: &[RowId] = &[RowId::TupleStruct, RowId::TupleStructMany];
 
 /// A tuple struct, `struct Hz(F32)` (S-39, R-51): the parser fails at its
 /// `(` (the `FieldList` opened there). One element is a struct with the

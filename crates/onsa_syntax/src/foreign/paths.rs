@@ -34,11 +34,7 @@ pub(crate) fn type_name(text: &str, t: Token) -> Option<Diagnostic> {
     let name = &text[t.span.start as usize..t.span.end as usize];
     let (_, fix) = TYPE_NAMES.iter().find(|(from, _)| *from == name)?;
     let fix = Fix::replace("write the built-in type name", t.span, *fix);
-    Some(diagnostic(
-        text,
-        RowId::LowercaseType,
-        Hit { span: t.span, fixes: vec![fix], misplaced: false, resume: None, note: None },
-    ))
+    Some(diagnostic(text, RowId::LowercaseType, Hit::new(t.span, vec![fix])))
 }
 
 pub(super) fn is_segment(kind: TokenKind) -> bool {
@@ -236,7 +232,6 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
             | TokenKind::Underscore
             | TokenKind::LParen
             | TokenKind::RParen
-            | TokenKind::Newline
             | TokenKind::Comma
             | TokenKind::Colon
             | TokenKind::Plus
@@ -246,11 +241,8 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
             | TokenKind::Minus
             | TokenKind::LBracket
             | TokenKind::RBracket
-            | TokenKind::Semi
-            | TokenKind::Comment
-            | TokenKind::DocComment
-            | TokenKind::ModuleDoc
-            | TokenKind::BlockComment => {}
+            | TokenKind::Semi => {}
+            _ if blank => {}
             _ => return None,
         }
         if depth == 0 {
@@ -289,6 +281,10 @@ pub(crate) fn type_list_ahead(tokens: &[Token], lines: &crate::layout::Lines, i:
 fn bracket_with_comma(tokens: &[Token], open: usize) -> Option<usize> {
     crate::scan::bracket_contents(tokens, open).filter(|b| b.1).map(|b| b.0)
 }
+
+/// The rows [`type_args_call`] names ([`super::Matcher::many`]).
+pub(super) const TYPE_ARGS_CALL_ROWS: &[RowId] =
+    &[RowId::TypeArgsTurbofish, RowId::TypeArgsAngle, RowId::TypeArgsSquareComma, RowId::TypeArgsOnExpression];
 
 /// Type arguments of another language before a call (§4.5, S-239, S-256,
 /// S-277): `f::<T>(x)` (Rust; the parser fails at the `::`), and `f<T>(x)`

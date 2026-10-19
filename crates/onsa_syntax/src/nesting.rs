@@ -10,11 +10,23 @@ use crate::units::{Units, Within};
 /// nesting limit; else with the note that names the way out (§18.1: no
 /// candidate goes over the limit, §2.5).
 pub(crate) fn parenthesized(d: Diagnostic, limit: Limit, span: Span, title: &str, edits: Vec<Edit>) -> Diagnostic {
-    let added = edits.iter().map(|e| e.replace.matches('(').count() as u32).sum();
-    if limit.exceeded(span, &edits, added) {
+    let fix = Fix::new(title, edits);
+    if too_deep(limit, span, std::slice::from_ref(&fix), 0) {
         return d.with_rule(TOO_DEEP_RULE);
     }
-    d.with_fix(Fix::new(title, edits))
+    d.with_fix(fix)
+}
+
+/// Whether one of the candidates `fixes` of the form at `span` takes the
+/// unit over the nesting limit (§2.5; §18.1: then none is made, and the
+/// diagnostic has [`TOO_DEEP_RULE`]). A candidate adds a level for each `(`
+/// it writes, and `more` (the levels it adds otherwise). The one judgment
+/// of it, for [`parenthesized`] and the clocks (`foreign::clocks`).
+pub(crate) fn too_deep(limit: Limit, span: Span, fixes: &[Fix], more: u32) -> bool {
+    fixes.iter().any(|f| {
+        let added = f.edits().iter().map(|e| e.replace.matches('(').count() as u32).sum::<u32>() + more;
+        limit.exceeded(span, f.edits(), added)
+    })
 }
 
 pub(crate) const TOO_DEEP_RULE: &str =

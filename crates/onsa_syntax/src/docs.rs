@@ -71,7 +71,7 @@ pub(crate) fn check(cst: &Cst, text: &str, out: &mut Vec<Diagnostic>) {
                     run = Some((t.kind, place, i, i));
                 }
             }
-        } else if !(matches!(t.kind, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Comment)) {
+        } else if !t.kind.is_between_docs() {
             if let Some(r) = run.take() {
                 report(cst, text, r, out);
             }

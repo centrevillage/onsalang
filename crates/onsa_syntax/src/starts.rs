@@ -64,6 +64,15 @@ pub(crate) fn ends_operand(kind: TokenKind) -> bool {
     )
 }
 
+/// Whether a token of `kind` after a member `.` is a member (§2.5): a name,
+/// a tuple index or the `(` of `.(`. The rows of a blank or a line break
+/// around the `.` read it (`foreign::spaces`, `foreign::lines`); the lexer
+/// reads the same at the bytes after a number's `.` (a name or a `(`, a digit
+/// being the fraction: `literal::point_after_int`).
+pub(crate) fn starts_member(kind: TokenKind) -> bool {
+    matches!(kind, TokenKind::Ident | TokenKind::Int | TokenKind::LParen)
+}
+
 /// Whether the tokens `first` and `second` declare a function (`fn name`),
 /// which no expression is (§6.1): the one test, for the parser and the
 /// missing `,` of a list (`foreign::lists::list_fixes`).
@@ -102,7 +111,17 @@ fn starts_type(kind: TokenKind) -> bool {
 /// Whether a token of `kind` may start a pattern in a list.
 fn starts_pattern(kind: TokenKind) -> bool {
     use TokenKind::*;
-    matches!(kind, Underscore | Minus | Int | Float | Char | Str | KwTrue | KwFalse | LParen | Ident | KwSelfType)
+    literal_pattern(kind) || matches!(kind, Underscore | Minus | Int | Float | LParen | Ident | KwSelfType)
+}
+
+/// Whether a token of `kind` is a literal that is a pattern alone (§7): a
+/// character, a string (one with no interpolation, S-225), `true` or
+/// `false`. An integer is read with its `-` (`-1`), and a float is the guard
+/// form (S-248). The one set for the parser (`Parser::parse_pattern_alt`) and
+/// the reader of the guard forms (`foreign::guard`).
+pub(crate) fn literal_pattern(kind: TokenKind) -> bool {
+    use TokenKind::*;
+    matches!(kind, Char | Str | KwTrue | KwFalse)
 }
 
 /// Whether a token of `kind` may start an element of a list of `list`: the
