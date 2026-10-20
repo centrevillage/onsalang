@@ -53,7 +53,7 @@
   - sanitizer は、abort や trap でなく終了コードで止まる設定にする。
   - 作ってしまったら報告に書く。
 
-3.2 既知の落ちる入力（2026-10-08）: `tests/review-phase1/types/` の `constcyc.onsa`・`constcyc2.onsa`・`constcyc3.onsa`・`rec.onsa`・`rec2.onsa` は、降下に進む命令（`onsa interface`・`dump --core`・`build` など）でコンパイラのスタックが溢れ、SIGABRT で終わる（W4-05 で直す）。`check` は落ちない。
+3.2 既知の落ちる入力（2026-10-20）: `tests/review-phase1/types/` の `constcyc.onsa`・`constcyc2.onsa`・`constcyc3.onsa`・`rec.onsa`・`rec2.onsa` は、降下に進む命令（`onsa interface`・`dump --core`・`build` など）でコンパイラのスタックが溢れ、SIGABRT で終わる（W4-05 で直す）。`check` は落ちない。
   - `tests/review-phase1/` や `tests/fuzz/` を一括で道具にかけるときは、降下に進む命令を使わないか、これらを除く。
   - 新しい道具を一括で回す前に、少数のファイルで終わり方（終了コードが 0・1・2・101 のどれか）を確かめる。
 
