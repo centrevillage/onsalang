@@ -41,7 +41,7 @@ def refused(work, trees):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", default=str(Path(__file__).resolve().parent.parent))
     ap.add_argument("--bin")
     ap.add_argument("--work", required=True)
