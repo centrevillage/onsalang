@@ -8075,7 +8075,7 @@ pub fn f() -> F32 {
 ''']
 
 # タプル形の struct で要素が一つのもの。候補は、フィールドの名前を `value` にした名前付きのフィールドの struct。
-# フィールドは `priv`（§4.1 の `pub struct Q { priv value: F32 }`）。`priv struct` では冗長なので付けない（§15.1、S-494）。
+# フィールドは `priv`（§4.4 の `pub struct Q { priv value: F32 }`）。`priv struct` では冗長なので付けない（§15.1、S-494）。
 # 主の位置は書かない（仕様が決めない）。要素が二つ以上か、要素が型として読めないか、要素が無いときは候補が無く、
 # `tuple_struct_many` の行（E0002）。
 [[form]]
