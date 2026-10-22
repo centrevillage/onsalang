@@ -31,7 +31,7 @@
   値を `x(...)` の形で呼ぶと、型によらず E0020（関数値は `x.(...)`、§6.1）。`.(` で呼んだ値の型が関数でない場合（`x: F32` の `x.(1.0)`）は型の誤りで E0401。
 - モジュール間の循環 import は禁止（E0310）。依存は `use` だけで決まるので、この検査は `use` の一覧で閉じる。
 - 暗黙の prelude は、`Option Result Some None Ok Err panic Alloc`、§6.3 の演算子 trait と標準 trait（数の trait と `Ordinal` を含む）、種の制約 `Copy` と `Dup`（§4.6）、組込み型だけである。
-  クロックの名前（`init` `block` `sample`）は prelude ではなく、クロックの名前空間にある（§11.3）。`panic`、種の制約、組込み型はコンパイラが与え、`Option` と `Result`（とその列挙子）、`Alloc`、trait は std の宣言である。
+  クロックの名前（`init` `block` `sample` `event`）は prelude ではなく、クロックの名前空間にある（§11.3）。`panic`、種の制約、組込み型はコンパイラが与え、`Option` と `Result`（とその列挙子）、`Alloc`、trait は std の宣言である。
   prelude の名前は隠せないので（§5.1）、同じ名前の型や trait を宣言すると E0304 になる。他の標準の効果と std の項目は `use` で取り込む。
 
 ### 15.2 target 宣言（条件コンパイルの代替）
