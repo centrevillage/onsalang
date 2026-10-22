@@ -40,6 +40,7 @@ W10 の後は M5〜M9（`history/rework-phase1.md` §4）。M10 は X-7 で足�
 ## W5 組込みの表・trait・型の規則
 
 組込みを std の宣言に移し、コンパイラが知るものを `Prim` の表と lang item に絞る。
+W5-11（字句・構文・fmt の残りの空白）は `onsa_syntax` と fmt だけを触り、W5 の他の作業と並行に進める（K-10 と同じ形）。
 
 ## W6 効果
 
