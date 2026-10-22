@@ -27,7 +27,8 @@
 
 ### (A) 頭の欄: TOML（`+++`）か、決まった名前の箇条（`- 状態: 決定`）か
 
-確かめた事実（Python 3.14.5 の `tomllib`）: `status = "DECIDED"`、`spec = ["§3.1", "§2.5"]`、`decided = 2026-10-15`、`severity = "低〜中"` は読める。`status = DECIDED`（引用符なし）、同じキーの重複、日本語のキー（`状態 = "決定"`）は誤りになる。文字列の中の `\`（`"\|"`）も誤りになる。`tomllib` を使う道具は 4 つ（`builtin_names.py`・`fuzz.py`・`pending.py`・`test_gate.py`）で親の記述のとおり。
+確かめた事実（Python 3.14.5 の `tomllib`）: `status = "DECIDED"`、`spec = ["§3.1", "§2.5"]`、`decided = 2026-10-15`、`severity = "低〜中"` は読める。`status = DECIDED`（引用符なし）、同じキーの重複、日本語のキー（`状態 = "決定"`）は誤りになる。
+文字列の中の `\`（`"\|"`）も誤りになる。`tomllib` を使う道具は 4 つ（`builtin_names.py`・`fuzz.py`・`pending.py`・`test_gate.py`）で親の記述のとおり。
 
 | | TOML（親） | 箇条（第 1 段） |
 |---|---|---|

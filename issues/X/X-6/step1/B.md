@@ -156,7 +156,8 @@ RF-11 の本文は、W3-23 の残りの「`at_failure` の `StringPrefix` の分
   - `w311u5i/handback_i3.md`: 書き換えの CST の側で「親の最後の子か」を子の数に比例する形で書くと長い本体で 2 乗になる（`last_node` のように末尾から引く）。RF-14 (b) で `normalize` を触るときの注意。
   - `w311u5b/handback_b.md` の「速さ」: 項目・コメント・文・doc・`return` など 10 の形で 40 万行まで線形、比 1.6〜2.1 倍。道具は同じ所の `scale.py`・`scale2.py`。
   - 長い入力の作り方 `w311u5i/long.py` と入力 `w311u5i/long/long0〜2.onsa` は今もある。
-- W3-08/b3（`fdbb2778-…/scratchpad/w308b3/handback_b.md`）: 指摘 1〜4 の原因（`decls.rs` の `let Some(place) = place else { return no_form() }`、`derive()` が `,` の後に `Ident` を求める、`written` が経路の最後の語、`add.contains`・`written.contains` の線形探索）。断片の道具は同じ所の `pr.py`（`W/h1.txt`・`h2.txt`・`d1.txt`）。
+- W3-08/b3（`fdbb2778-…/scratchpad/w308b3/handback_b.md`）: 指摘 1〜4 の原因（`decls.rs` の `let Some(place) = place else { return no_form() }`、`derive()` が `,` の後に `Ident` を求める、`written` が経路の最後の語、`add.contains`・`written.contains` の線形探索）。
+  断片の道具は同じ所の `pr.py`（`W/h1.txt`・`h2.txt`・`d1.txt`）。
 - RF の単位 1 の差の一覧（`747db489-…/scratchpad/rfi/`）: ディレクトリだけで、ファイルが一つも無い（`dif_*.txt`・`check_diffs.json` も無い）。`issues/X/X-6.md` の「差の一覧は … `rfi/dif_*.txt`・`rfi/check_diffs.json`」は今は辿れない。
 
 ### 持ち越しの仕分け: `foreign.rs` の深いリファクタリング

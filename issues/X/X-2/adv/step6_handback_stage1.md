@@ -1,6 +1,7 @@
 ## X-2 手順 6（文書の移行）第 1 段: 独立の案
 
-読んだもの: 作業票、`rules/README.md`・`common.md`・`criteria.md`・`documents.md`、`docs/process_improvement_after_w3.md` 2 章、`step2_structure.md`〜`step5_manager.md`、U3 の報告、`docs/carryovers.md` の「X-2 の移行」の行、`tools/repo.py`（`KINDS`・`Layout`・`spec_doc`）、`tools/docs.py`（`read_head`・`render_head`・`head_update`、`SEC_QUALIFIERS`）、`tools/test_gate.py` の `Repo`・`NEW_LAYOUT`・`OLD_LAYOUT` の位置、段 (2) の `split.py`・`rewrite.py` の頭。大きな文書は見出しと行数と標本の行だけを引いた。
+読んだもの: 作業票、`rules/README.md`・`common.md`・`criteria.md`・`documents.md`、`docs/process_improvement_after_w3.md` 2 章、`step2_structure.md`〜`step5_manager.md`、U3 の報告、`docs/carryovers.md` の「X-2 の移行」の行、`tools/repo.py`（`KINDS`・`Layout`・`spec_doc`）、`tools/docs.py`（`read_head`・`render_head`・`head_update`、`SEC_QUALIFIERS`）、`tools/test_gate.py` の `Repo`・`NEW_LAYOUT`・`OLD_LAYOUT` の位置、段 (2) の `split.py`・`rewrite.py` の頭。
+大きな文書は見出しと行数と標本の行だけを引いた。
 
 ### 数えた事実（案の根拠。2026-10-16 の dev `0adb450`）
 
@@ -11,7 +12,8 @@
 - D 16（計画 §1）、K 23（rework §1）、Q 15〜16（`process-improvement-phase1.md` §2）、A 14（表）、RF 16（持ち越しに ID あり）。計画 §3 は 3.1〜3.6 の 6 節、約 2.7 万バイト。
 - 空白の資料: `### S-nnn 題` の見出し 153（DF-4 の 152 とほぼ一致）。各組に `## 一覧`（ID・論点・推奨・確度・待つ作業・Fable・状態）の表があり、「状態」は 回答待ち・決定・反映済み。
 - 持ち越し: 最上位の箕条 69。頭が `**W<段>-<番号>` のもの 41、`**W<段> の…`（段だけ）6、`**M6` 1、`**S-nnn の下書き` 2、`**リファクタリングの候補` 3、残り約 16。
-- 経路の参照（`crates`・`tests`・`tools`・`std`、`test_gate.py` を除く）: `onsa-tools.md` 196、`foreign-forms.toml` 102（うち `crates/onsa_tests/src/foreign_forms.rs:33` の `pub const PATH = "docs/foreign-forms.toml"` は実行時に読む経路）、`implementation-tasks.md` 13、`onsa-lang-spec-0.3.md` 3、`rework-phase1.md` 3、`api-candidates.md` 3、`review-impl-phase1.md` 2、`consistency-check` 1。`rules/` には leader 10、process 8、criteria 4、documents 2、common 1。担当の定義 5 ファイルに 7 行。`tests/pending.toml` のコメント 3 行。
+- 経路の参照（`crates`・`tests`・`tools`・`std`、`test_gate.py` を除く）: `onsa-tools.md` 196、`foreign-forms.toml` 102（うち `crates/onsa_tests/src/foreign_forms.rs:33` の `pub const PATH = "docs/foreign-forms.toml"` は実行時に読む経路）、`implementation-tasks.md` 13、`onsa-lang-spec-0.3.md` 3、`rework-phase1.md` 3、`api-candidates.md` 3、`review-impl-phase1.md` 2、`consistency-check` 1。`rules/` には leader 10、process 8、criteria 4、documents 2、common 1。
+  担当の定義 5 ファイルに 7 行。`tests/pending.toml` のコメント 3 行。
 - 仕様: H1 と前書きの後に `---`、各章の前に `---` と空行。章の大きさは §11 が約 4.8 万バイト、§2 4.2 万、§18 3.4 万、§6 3.0 万、§4 2.7 万（DS-7 の「全ての章が 2.5 万字に収まる」はバイトでは外れる。目安で gate は落とさないので支障なし。確信 低〜中、字数で数え直していない）。
 - `test_gate.py`: 今の配置の作り物 `Repo`（167 行〜）は `Repo(` が 3 か所、`DOC_*` と今の文書名の参照が 20 か所。`OLD_LAYOUT`（4366 行）と `NEW_LAYOUT`（4273 行）が並ぶ。
 
@@ -28,7 +30,8 @@
   - S の `tasks` は rework §3 の「実現する決定」の逆引きから作る（表は読むだけで動かさない）。R の `fix` も §8 を読むが、R は (5)。
   - gate: `Layout.source("S")`・`("A")` が `decisions/S/`・`decisions/A/` の存在で切り替わる。`decisions/README.md` の頭の欄の表（`## 頭の欄`）が無いと `check` が「no field table」で落ちるので、README は親が段の前に用意する（M3）。
   - コミット: 2 つ。(a) 決定のファイル + 計画 §1〜§3 と API の表と rework §1 と PI §2 の削除 + 経路の直し、(b) 担当の定義（`onsa-gap` 9・13 行、`onsa-impl` 15、`onsa-advisor` 13・16、`onsa-break` 15。親が文を提案し利用者が直す。持ち越しの行のとおり）。
-- (5) 問題と作業: W 105（rework §3）、R 235〜236（本文 + §8）、RF 16、X 2（`process_improvement_after_w3.md` の 1・2 章）と `issues/X/X-1/`・`X-2/`（今の `docs/process_improvement_after_w3/`）、`tasks/README.md`（rework §2 の段の表、「作業の数」の欄を除く）、`tasks/diag-codes.md`（計画 §5）、持ち越し 69 項目の解体。約 370 ファイル。
+- (5) 問題と作業: W 105（rework §3）、R 235〜236（本文 + §8）、RF 16、X 2（`process_improvement_after_w3.md` の 1・2 章）と `issues/X/X-1/`・`X-2/`（今の `docs/process_improvement_after_w3/`）、`tasks/README.md`（rework §2 の段の表、「作業の数」の欄を除く）、`tasks/diag-codes.md`（計画 §5）、持ち越し 69 項目の解体。
+  約 370 ファイル。
   - gate: `Layout.source("W")`・`("R")`・`("diag")`。`pending.load_docs` の W の読みは `layout` 経由（U2）。持ち越しの行の「`pending.PHASE1_END = "M9"` と `stage_of`」は (5) で計画 §4 が残る間は壊れないが、(6) の前に段の一覧の読み先を決める（M4・M5）。
   - コミット: 2 つ。(a) 文書の移動 + 経路（`tests/pending.toml` 13 行のコメントを含む）、(b) `rules/leader.md` 6.2「揃えて更新する文書」と 6.3（計画 §5 → `tasks/diag-codes.md`）の文（DS-9 は「同時に書き換える」。規則の文なので利用者の了承の後、同じ区切りの別のコミット）。
 - (6) 履歴と索引: 残りを `history/` に `git mv`（0.2・kumi・ori の仕様、`review-draft-*`、`impl-review-0.3`、`implementation-plan`、`onsa-0.2-changes`、`onsa-0.3-changes`、`comparison-ori-kumi`、`kumi-vs-rust`、`consistency-check-phase1`、`spec-gaps-*` 3 つ、PI の残り、レビューの §0〜§7、計画の §0・§4・§6・§7、rework の §4・§5）、`docs/` を消す、直下の `README.md` を索引にする（`rules/leader.md` の付録の地図を移す）、各ディレクトリの README。
@@ -43,25 +46,32 @@
 
 ### M2 移行の道具
 
-置き場所は `docs/process_improvement_after_w3/x2/tools/`（(5) で `issues/X/X-2/tools/` に動く）。全て Python、標準ライブラリ、`tools/repo.py`・`tools/docs.py` を import する。各道具は「読み → 出力ディレクトリ（scratchpad）に書く → 往復を確かめる → 一覧を出す」の一方向で、主のツリーに書くのは往復が通ったときだけ（`--apply`）。どれも入力の大きさに線形、固定点も再帰も無く、一度の走査で止まる。
+置き場所は `docs/process_improvement_after_w3/x2/tools/`（(5) で `issues/X/X-2/tools/` に動く）。全て Python、標準ライブラリ、`tools/repo.py`・`tools/docs.py` を import する。
+各道具は「読み → 出力ディレクトリ（scratchpad）に書く → 往復を確かめる → 一覧を出す」の一方向で、主のツリーに書くのは往復が通ったときだけ（`--apply`）。どれも入力の大きさに線形、固定点も再帰も無く、一度の走査で止まる。
 
-1. `split_spec.py <repo> <out>`: 仕様を `spec/README.md` と章に切る。章の切れ目は `## N. ` の見出しの前の `---` と空行の扱いを `repo.spec_doc` の約束（章は末尾の `---` を持ち、`## N. ` で始まる）に合わせる。章のファイル名と一行の要約は親が表（`chapters.tsv`）で渡す。往復: `repo.spec_doc(out).text == read_exact(repo, SPEC)` をバイトで比べる（本番の読み手が逆関数なので、別の結合を書かない。D-15）。出力: ファイルと大きさの一覧、不一致なら最初の差の行。
-2. `rewrite_paths.py <repo> <map.tsv> <log>`: 段 (2) の `rewrite.py` の一般化。対応表（旧の経路 → 新。長い鍵から当てる）を `crates`・`tests`・`tools`・`std`・`rules`・残る `docs`・`README.md`・`CLAUDE.md` に当て、変えた行を全て記録に出す。`.claude/agents/` と `history/` は対象外。前に grep で数えた件数と置き換えの数が一致しなければ止める。冪等（二度目は 0 件）。
+1. `split_spec.py <repo> <out>`: 仕様を `spec/README.md` と章に切る。章の切れ目は `## N. ` の見出しの前の `---` と空行の扱いを `repo.spec_doc` の約束（章は末尾の `---` を持ち、`## N. ` で始まる）に合わせる。章のファイル名と一行の要約は親が表（`chapters.tsv`）で渡す。
+   往復: `repo.spec_doc(out).text == read_exact(repo, SPEC)` をバイトで比べる（本番の読み手が逆関数なので、別の結合を書かない。D-15）。出力: ファイルと大きさの一覧、不一致なら最初の差の行。
+2. `rewrite_paths.py <repo> <map.tsv> <log>`: 段 (2) の `rewrite.py` の一般化。
+   対応表（旧の経路 → 新。長い鍵から当てる）を `crates`・`tests`・`tools`・`std`・`rules`・残る `docs`・`README.md`・`CLAUDE.md` に当て、変えた行を全て記録に出す。`.claude/agents/` と `history/` は対象外。前に grep で数えた件数と置き換えの数が一致しなければ止める。冪等（二度目は 0 件）。
 3. `split_tables.py <repo> <out> --kind S|D|K|Q|A|W|R [--overrides map.toml]`: 表の行と見出しの節を ID ごとのファイルにする。
    - 本文は全ての欄を元の欄名のラベルで `- <欄名>: <セル>` として移す（`\|` は `|` に戻す。コードスパンの中の `|` は `docs.table_cells` の切り方）。見出し形式（D・K・Q・R の本文）は見出しの下の箕条をそのまま。
    - 頭の欄は固定の規則で導く（M4 の表）。規則に当たらない値は書かず、`judgments.tsv`（ID、キー、元の字、当たらなかった規則）に出す。親は `overrides.toml`（ID → キー = 値）を書いて再実行する。一覧に無い ID・キーの override は拒む（一覧が単調に減る）。
    - 往復: 新しいファイルの本文のラベルから元の表の行（と見出しの節）を作り直し、元の節とバイトで比べる。頭の欄は表には無いので往復の対象外で、代わりに `docs.py check` と、逆引きの一致（S の `tasks` の和集合 == W のセルの ID の集合、R の `fix` == §8 の反映の欄の W の集合）を別に出す。
    - 書き手は `docs.render_head`・`head_update` の正規形を使う（書き方を二つにしない、DT-8）。
-4. `split_carryovers.py <repo> <out> [--map map.toml]`: 最上位の箕条ごとに宛先を決め、作業のファイルの `- 持ち越し:` の下に出所付きで足す。規則: 頭の太字が `W<段>-<番号>` で始まれば（複数なら各 ID に写す）その作業へ。それ以外は親の対応表（宛先: W の ID、`R`、`RF-n`、`X-n`、`rules`、`history`）。対応表に無い項目は書かず一覧に出す。往復: 動かした項目を元の順で連結し、元の文書の本文とバイトで比べる。
+4. `split_carryovers.py <repo> <out> [--map map.toml]`: 最上位の箕条ごとに宛先を決め、作業のファイルの `- 持ち越し:` の下に出所付きで足す。規則: 頭の太字が `W<段>-<番号>` で始まれば（複数なら各 ID に写す）その作業へ。
+   それ以外は親の対応表（宛先: W の ID、`R`、`RF-n`、`X-n`、`rules`、`history`）。対応表に無い項目は書かず一覧に出す。往復: 動かした項目を元の順で連結し、元の文書の本文とバイトで比べる。
 5. `move_history.py <repo> <map.tsv>`: `git mv` の列と README のリンクの確かめ。往復は `git diff -M --stat` の 100% の改名と、`tools/moved_only.py` の考え方で「移すだけ」を確かめる。
 
 親に出す一覧（段ごと）: 書いたファイルの数（種類ごと）、往復の結果、`judgments.tsv`、経路の置き換えの記録、`docs.py check` の出力、grep の ID の総数の前後比較（S 551、R 235、W 105、D 16、K 23、Q 15〜16、A 14、RF 16。履歴を除いて前後で同じ数）。
 
 ### M3 誰が書き、誰が回すか
 
-- 移行の道具は `onsa-impl` が書く（`onsa-docs` はコードを書かない。`rules/documents.md` 5.6 の外枠）。親が書く案は、段 (2) の 330 行の前例があるが、(4)(5) の道具は逆引き・判断の一覧・override の再実行を持ち、親の文脈に 500 行を入れる費用の方が高い。単位は 2 つ: U4（`split_spec`・`rewrite_paths`・`move_history`。約 150〜200 行）、U5（`split_tables`・`split_carryovers`。約 350〜450 行）。設計メモは短くてよい（表の欄 → ラベルと頭の欄の規則の表が設計メモそのもの）。自己テストは「本番の文書に対する往復が一致する」ことと、小さな作り物での判断の一覧。壊す側は置かない（一度きりの道具で、出力は往復・`check`・gate・親の一覧で確かめる。検証の深さの釣り合い）。確信 中。
+- 移行の道具は `onsa-impl` が書く（`onsa-docs` はコードを書かない。`rules/documents.md` 5.6 の外枠）。親が書く案は、段 (2) の 330 行の前例があるが、(4)(5) の道具は逆引き・判断の一覧・override の再実行を持ち、親の文脈に 500 行を入れる費用の方が高い。
+  単位は 2 つ: U4（`split_spec`・`rewrite_paths`・`move_history`。約 150〜200 行）、U5（`split_tables`・`split_carryovers`。約 350〜450 行）。設計メモは短くてよい（表の欄 → ラベルと頭の欄の規則の表が設計メモそのもの）。
+  自己テストは「本番の文書に対する往復が一致する」ことと、小さな作り物での判断の一覧。壊す側は置かない（一度きりの道具で、出力は往復・`check`・gate・親の一覧で確かめる。検証の深さの釣り合い）。確信 中。
 - U5 は U4 と並行して作業ツリーで書ける（触るファイルが違う）。(3) を主のツリーで回す間に U5 を書ける（主のツリーを触るのは一度に一つ）。
-- 段の実作業は `onsa-docs` が主のツリーで行う（DM-7、決定済み）。ただし判断の一覧が要る段は二票にする: (A) 乾いた実行（出力は scratchpad、一覧と、持ち越しの宛先の案を報告。作業ツリーでよい）、(B) 親の対応表を当てて主のツリーに書き、`check` と gate を回し、報告。(3) と (6) は (B) だけ。(4) は一覧が機械的（✅ の食い違い、§、日付）なので親が乾いた実行を自分で一コマンド回し、(B) だけ担当に出すのが安い。(5) は持ち越しの約 28 項目の宛先の案に担当の読みが要るので (A)(B)。確信 中。
+- 段の実作業は `onsa-docs` が主のツリーで行う（DM-7、決定済み）。ただし判断の一覧が要る段は二票にする: (A) 乾いた実行（出力は scratchpad、一覧と、持ち越しの宛先の案を報告。作業ツリーでよい）、(B) 親の対応表を当てて主のツリーに書き、`check` と gate を回し、報告。(3) と (6) は (B) だけ。
+  (4) は一覧が機械的（✅ の食い違い、§、日付）なので親が乾いた実行を自分で一コマンド回し、(B) だけ担当に出すのが安い。(5) は持ち越しの約 28 項目の宛先の案に担当の読みが要るので (A)(B)。確信 中。
 - 親が段の前に用意するもの（親の字として票に添える）: 各ディレクトリの README（頭の欄の表は `test_gate.NEW_LAYOUT` の形がそのまま使える。本文のラベルの箕条は `new` が読む）、`spec/README.md` の章の表の一行の要約、章のファイル名の表、design の 6 ファイル名、A の状態の対応表、持ち越しの対応表。
 - 親のレビューの読み方: ファイルを開いて読まない。読むのは (a) `git diff --stat` と改名の割合、(b) 往復の出力、(c) 判断の一覧と当てた override、(d) `check` と gate の出力、(e) 種類ごとに 3〜5 ファイルの標本（最大の行、複数行の R-90、✅ の無い S、印の修飾のある W）、(f) 経路の置き換えの記録の全行（数百行）。
 - 単位の大きさ: docs の一票は道具の出力と一覧が主で、10〜15 万トークンの見込み（未測。DM-1 の見込みと同じ）。(5) の (A) は持ち越し 8 万バイトを読むので上限に近い。
@@ -70,7 +80,8 @@
 
 (3)
 - 章のファイル名 20、要約 20 行: 親。
-- `foreign-forms.toml` の置き場所: 親が提案し利用者に一言で出す（DS-1 で「移行で決める」）。私の案は `spec/foreign-forms.toml`。理由: §18.1 と S-250 が指す閉じた一覧で、人が読まない規範の表（`criteria.md` 7.10）。`repo.chapters` は `*.md` だけを見るので支障なし。代替は `tools/`（`builtin_names.toml` の隣だが、あちらは仕様から作る道具のデータで性質が違う）。確信 中。
+- `foreign-forms.toml` の置き場所: 親が提案し利用者に一言で出す（DS-1 で「移行で決める」）。私の案は `spec/foreign-forms.toml`。理由: §18.1 と S-250 が指す閉じた一覧で、人が読まない規範の表（`criteria.md` 7.10）。`repo.chapters` は `*.md` だけを見るので支障なし。
+  代替は `tools/`（`builtin_names.toml` の隣だが、あちらは仕様から作る道具のデータで性質が違う）。確信 中。
 - `---` の帰属（章の末尾か頭か）: 機械（`spec_doc` の約束に従う）。
 
 (4) S
@@ -112,18 +123,23 @@
 
 ### M5 道具とコードとテストの経路
 
-- 置き換えは対象が動く段で行う: (3) `docs/onsa-tools.md`→`spec/tools.md`（196）、`docs/foreign-forms.toml`→`spec/foreign-forms.toml`（102。`foreign_forms.rs` の `PATH` は実行時の経路なので同じコミットでないとテストが落ちる）、`onsa-lang-spec-0.3.md`（3。章の経路でなく `spec/` と書く）。(4) `implementation-tasks.md` の §1〜§3 を指すもの（13 の一部。`§3.6` は `decisions/design/`）。(5) `rework-phase1.md`（3）、`review-impl-phase1.md`（2）、計画 §5 を指すもの（`tasks/diag-codes.md`）、`tests/pending.toml` のコメント 3 行。(6) 残り（`api-candidates.md` 3 は (4) で `decisions/A/`、`consistency-check` 1 は履歴）。
-- gate の読み先: S・A・W・R・diag・spec・tools は `Layout` の存在の判定（U2）。T は (6) で `None`。`pending.load_docs` の呼び出し元 5 つは変えない。計画 §5 の「欠番:」と「第 2 期」の読み（`repo.retired_codes`・`phase2_codes`）は `tasks/diag-codes.md` へ（`FILES["diag"]` あり）。`rules/leader.md` 6.3 の文は (5) で直す。
+- 置き換えは対象が動く段で行う: (3) `docs/onsa-tools.md`→`spec/tools.md`（196）、`docs/foreign-forms.toml`→`spec/foreign-forms.toml`（102。`foreign_forms.rs` の `PATH` は実行時の経路なので同じコミットでないとテストが落ちる）、`onsa-lang-spec-0.3.md`（3。章の経路でなく `spec/` と書く）。
+  (4) `implementation-tasks.md` の §1〜§3 を指すもの（13 の一部。`§3.6` は `decisions/design/`）。(5) `rework-phase1.md`（3）、`review-impl-phase1.md`（2）、計画 §5 を指すもの（`tasks/diag-codes.md`）、`tests/pending.toml` のコメント 3 行。
+  (6) 残り（`api-candidates.md` 3 は (4) で `decisions/A/`、`consistency-check` 1 は履歴）。
+- gate の読み先: S・A・W・R・diag・spec・tools は `Layout` の存在の判定（U2）。T は (6) で `None`。`pending.load_docs` の呼び出し元 5 つは変えない。
+  計画 §5 の「欠番:」と「第 2 期」の読み（`repo.retired_codes`・`phase2_codes`）は `tasks/diag-codes.md` へ（`FILES["diag"]` あり）。`rules/leader.md` 6.3 の文は (5) で直す。
 - 最後の段の掃除（(6) の (b) のコミット、impl か親）: 持ち越しの行の全項目。加えて U3 の「範囲の外」1（`check_write` に ID の存在の確かめ）は数行なので同じ回に入れてよい（`criteria.md` 7.12）。`pending.load` を `repo` へ移す循環の解消は任意。
 
 ### M6 進め方とリスク
 
 - 段の前提: 主のツリーが clean で、担当が動いていない。票に基のコミットを書く。
 - 戻し方: 段の中はコミットしないので、失敗したら `git restore --staged --worktree :/` と、新しいディレクトリに限った `git clean -fd -- spec decisions issues tasks history` で基に戻る（`git stash` は使わない。1.4）。段の間でセッションが切れても、状態は「段 k まで済み」のコミットで一意。道具は基の状態に対して冪等なので再実行でよい。
-- W4 を止める期間の見当（未測。gate の全体は主のツリーで約 19 分、31 回目）: (3) 約 1 時間（gate 1 回 + golden の確かめ）、(4) 1〜1.5 時間（乾いた実行 + 判断 + 本番 + gate）、(5) 2 時間（(A)(B) の二票 + 規則 6.2 の了承）、(6) 1 時間 + 掃除の道具。合計 1〜1.5 日分のセッション。U4・U5 の実装は W4 の前なので W4 を止めない。(7) の規則の文は W4 と並べて進められるが、8.1 の票の雛形の変更は W4 の最初の票の前に済ませたい。
+- W4 を止める期間の見当（未測。gate の全体は主のツリーで約 19 分、31 回目）: (3) 約 1 時間（gate 1 回 + golden の確かめ）、(4) 1〜1.5 時間（乾いた実行 + 判断 + 本番 + gate）、(5) 2 時間（(A)(B) の二票 + 規則 6.2 の了承）、(6) 1 時間 + 掃除の道具。合計 1〜1.5 日分のセッション。
+  U4・U5 の実装は W4 の前なので W4 を止めない。(7) の規則の文は W4 と並べて進められるが、8.1 の票の雛形の変更は W4 の最初の票の前に済ませたい。
 - 費用の見当（未測。`leader.md` 2.8 の実測から）: impl 2 単位 × 20〜50 万、docs 6 票 × 10〜15 万、親のレビューは一覧と標本だけなので段ごとに数万。
 - 情報が欠けないことの確かめ（利用者の「事前のチェックツール」）: (i) 切り出しはバイトの往復、(ii) 移すだけは `git` の改名 100% と `moved_only.py` の考え、(iii) ID の数の前後比較（履歴を除く）、(iv) `docs.py check` 0 件、(v) 頭の欄の逆引きの一致。この確かめが見ないもの: 頭の欄の値の意味（✅ → DECIDED の読み替えなど）。そこは判断の一覧と親の標本で見る。
-- リスク: (3) の経路の置き換えが `tests/cst/*.onsa`（2 件）と `tests/spec/**/*.onsa`（約 80 件）のコメントを変え、CST の golden（コメントの字とバイト位置）と `//~` の列が動きうる。(3) は `--quick` でなく全体の gate を回し、golden の更新は同じコミットに入れる。代替は test の入力の経路は書き換えないこと（古い経路のコメントが残るが無害）。私は書き換えて gate で確かめる方を推す。確信 中。
+- リスク: (3) の経路の置き換えが `tests/cst/*.onsa`（2 件）と `tests/spec/**/*.onsa`（約 80 件）のコメントを変え、CST の golden（コメントの字とバイト位置）と `//~` の列が動きうる。(3) は `--quick` でなく全体の gate を回し、golden の更新は同じコミットに入れる。
+  代替は test の入力の経路は書き換えないこと（古い経路のコメントが残るが無害）。私は書き換えて gate で確かめる方を推す。確信 中。
 - リスク: `docs check` (b) が、頭の欄付きのファイルに移った本文の無い ID（`R-2` のような報告の中の番号、U3 の報告の not found 27 の一部）と § 9 個で落ちる。乾いた実行の `check` で一覧にし、親が字を直す。
 - リスク: README の頭の欄の表が無いと `check` がそのディレクトリ全体を一件で止める（DT-1）。段の前に親が置く。
 - リスク: 持ち越しの解体で宛先の W が DONE のもの（済んだ作業への持ち越し）は、作業のファイルに残してよい（DF-6「DONE になっても消さない」）。

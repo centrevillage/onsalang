@@ -1,6 +1,7 @@
 # X-2 手順 2: 第 2 段（親の案 DS-1〜DS-9 と第 1 段の突き合わせ）
 
-読んだもの: `/private/tmp/claude-501/-Users-centrevillage-projects-onsalang/0ed8f9b9-db30-4d49-bb2b-cb3f68df27e6/scratchpad/x2/step2_structure.md`。加えて、親の前提を確かめるために計画 §6（`docs/implementation-tasks.md` 1371 行〜）、`tests/pending.toml` の T の ID、コミット `afbfd25`、`tools/*.py` が §6 を読むか、を見た。
+読んだもの: `/private/tmp/claude-501/-Users-centrevillage-projects-onsalang/0ed8f9b9-db30-4d49-bb2b-cb3f68df27e6/scratchpad/x2/step2_structure.md`。
+加えて、親の前提を確かめるために計画 §6（`docs/implementation-tasks.md` 1371 行〜）、`tests/pending.toml` の T の ID、コミット `afbfd25`、`tools/*.py` が §6 を読むか、を見た。
 
 Q の数の訂正は受け入れる（第 1 段の「Q 32」は `#### Q-` と `| Q-` の行数で、ID は Q-01〜Q-15 の 15 件）。
 

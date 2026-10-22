@@ -26,7 +26,10 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 - `@ <演算> <段>`: 節の始まり。以後の行は、次の節までこの演算の行。
 - 行: `<引数> TAB <期待> [TAB <注釈>]`。引数は空白で区切る。引数が無いとき（定数）は `()`。注釈は、行の由来の印で、読み手は無視する: 仕様の決定に由来する行は `S-189`、`S-106` など、`held-*` の行は空白の番号 `S-207` など（複数は `,` で区切る）。
 
-演算は `<型>.<名前>`（型は小文字）。名前は、メソッド・関数の名前（§3.3、§3.4 の表）、演算子を脱糖した trait の名前（`add sub mul div rem neg not and or xor shl shr wadd wsub wmul sadd ssub smul eq ne lt le gt ge`）、式の名前（`expr_muladd` `expr_mulsub` `expr_add3_l` `expr_add3_r` `expr_interp` `vdelay_k` `vdelay_f`）、定数（`MIN` など）。変換は `<元の型>.<書き方>`: `as_<型>`（同じ型への `as_<元の型>` を含む。値を変えない。§3.3、S-210）、`narrow_<型>`、`trunc_<型>`、`trunc_<型>_sat`、`round_f32` / `round_f64`、`to_bits`、`from_bits`（型は浮動小数）。型の組と書き方の一対一は `OPS.tsv` と `tools/vectors/ops.py` の `conv_forms` が §3.3 の表から導く。
+演算は `<型>.<名前>`（型は小文字）。
+名前は、メソッド・関数の名前（§3.3、§3.4 の表）、演算子を脱糖した trait の名前（`add sub mul div rem neg not and or xor shl shr wadd wsub wmul sadd ssub smul eq ne lt le gt ge`）、式の名前（`expr_muladd` `expr_mulsub` `expr_add3_l` `expr_add3_r` `expr_interp` `vdelay_k` `vdelay_f`）、定数（`MIN` など）。
+変換は `<元の型>.<書き方>`: `as_<型>`（同じ型への `as_<元の型>` を含む。値を変えない。§3.3、S-210）、`narrow_<型>`、`trunc_<型>`、`trunc_<型>_sat`、`round_f32` / `round_f64`、`to_bits`、`from_bits`（型は浮動小数）。
+型の組と書き方の一対一は `OPS.tsv` と `tools/vectors/ops.py` の `conv_forms` が §3.3 の表から導く。
 
 **段**: `edge`（境界値の全組合せ）、`rand`（決まった種の乱数）、`held-<S 番号>`（下。期待を書かない）。
 
@@ -55,11 +58,14 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 
 期待を決められない行は、段を `held-<S 番号>` にして、期待を `?` にする（`rules/process.md` 8.5）。決定の後は、`tools/vectors/model.py` の該当の保留（`Ctx.hold`）を外して生成し直す。行はそのまま `edge` / `rand` の行になる。
 
-今は保留の節が無い。S-207（結果が 0 のときの符号）、S-208（`abs(-0.0)` は `+0.0`）、S-209（有限の数 `%` 無限大は `a`）は 2026-10-08 に決まり、仕様 §3.4 に規則が書かれたので、W2-12 で保留を外した（外した行は 1376。`held-S207` が 1268、`held-S208` が 4、`held-S209` が 104）。この三つの決定の行には、注釈に `S-207` `S-208` `S-209` を付けた事例が `edge` の節にある（`tools/vectors/named.py`。他の行と同じ節に混ざる）。
+今は保留の節が無い。S-207（結果が 0 のときの符号）、S-208（`abs(-0.0)` は `+0.0`）、S-209（有限の数 `%` 無限大は `a`）は 2026-10-08 に決まり、仕様 §3.4 に規則が書かれたので、W2-12 で保留を外した（外した行は 1376。`held-S207` が 1268、`held-S208` が 4、`held-S209` が 104）。
+この三つの決定の行には、注釈に `S-207` `S-208` `S-209` を付けた事例が `edge` の節にある（`tools/vectors/named.py`。他の行と同じ節に混ざる）。
 
 ## 乱数と入力の選び方
 
-乱数は splitmix64（`state` は 64 ビット。次の値は `state += 0x9E3779B97F4A7C15`、`z = state`、`z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`、`z = (z ^ (z >> 27)) * 0x94D049BB133111EB`、`z ^ (z >> 31)`。全て 2^64 を法とする）。演算の鍵（`i32.add.a` など）ごとに、`state = 0x4F4E5341 xor FNV-1a-64(鍵の UTF-8)` で始める。演算を足しても他の演算の乱数は変わらない。入力の集合は型の関数として `tools/vectors/sets.py` が定める（手で並べた値は無い）: 整数の core（`0..3`、`MAX` と近傍、`isqrt(MAX)`、`2^(n/2)` の前後、符号付きは `MIN` と近傍、負）、浮動小数の core（`±0`、`±inf`、NaN の符号・quiet / signaling・ペイロード、最大の有限値、最小の正規化数、非正規化数、`1 ± eps`、`2^(p-1)` と `2^p`）、変換は目標の型の端と丸めの端（二重丸めの罠、引き分け）、式は縮約・再結合で結果が変わる入力を決まった探索で選ぶ。
+乱数は splitmix64（`state` は 64 ビット。次の値は `state += 0x9E3779B97F4A7C15`、`z = state`、`z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9`、`z = (z ^ (z >> 27)) * 0x94D049BB133111EB`、`z ^ (z >> 31)`。全て 2^64 を法とする）。
+演算の鍵（`i32.add.a` など）ごとに、`state = 0x4F4E5341 xor FNV-1a-64(鍵の UTF-8)` で始める。演算を足しても他の演算の乱数は変わらない。
+入力の集合は型の関数として `tools/vectors/sets.py` が定める（手で並べた値は無い）: 整数の core（`0..3`、`MAX` と近傍、`isqrt(MAX)`、`2^(n/2)` の前後、符号付きは `MIN` と近傍、負）、浮動小数の core（`±0`、`±inf`、NaN の符号・quiet / signaling・ペイロード、最大の有限値、最小の正規化数、非正規化数、`1 ± eps`、`2^(p-1)` と `2^p`）、変換は目標の型の端と丸めの端（二重丸めの罠、引き分け）、式は縮約・再結合で結果が変わる入力を決まった探索で選ぶ。
 
 ## 登録簿 `OPS.tsv`
 
@@ -67,7 +73,9 @@ LF で区切る ASCII の行。読み手は次の 3 種類だけを区別する�
 
 ## fixture
 
-`fixture/<パッケージ>/` は、`OPS.tsv` から生成した Onsa のパッケージ（`onsa.toml` と `ops.onsa`）。演算ごとに `pub fn <fn>(a, b, c)` があり、`[export] fns` に全てを並べる。`Option` を返す演算は `<fn>_some`（`Bool`）と `<fn>_val`（値。`None` のときは読まない）の 2 つ。定数は引数の無い関数 `const_<型>_<名前>`。export の境界は panic で状態の値 1 を返す（§14.2）ので、読み手は `panic:*` を 1 として照らす。
+`fixture/<パッケージ>/` は、`OPS.tsv` から生成した Onsa のパッケージ（`onsa.toml` と `ops.onsa`）。
+演算ごとに `pub fn <fn>(a, b, c)` があり、`[export] fns` に全てを並べる。`Option` を返す演算は `<fn>_some`（`Bool`）と `<fn>_val`（値。`None` のときは読まない）の 2 つ。定数は引数の無い関数 `const_<型>_<名前>`。
+export の境界は panic で状態の値 1 を返す（§14.2）ので、読み手は `panic:*` を 1 として照らす。
 
 パッケージ `scalar` は今の実装が `onsa check` で受理する演算の全て。それ以外のパッケージは、まだ受理されない演算を原因ごとに分けたもので、原因の作業が終わったら `tools/vectors/ops.py` の `PENDING_PACKAGES` の規則を消し、生成し直す（関数の名前は変わらない）。
 

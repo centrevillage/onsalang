@@ -270,10 +270,12 @@ modes に触れるので〔危険〕。ただし同じ値を返す関数の置�
 
 出所は `44 回目の scratchpad の x6/materials/` の下。読んだのはリファクタリングの候補の節と、指摘の該当の番号だけ。
 - `w307b/handback.md`「リファクタリングの候補」: A1〜A6 の元。今も効くのは、`Flat::new` の読み直し（A2）、鍵の位置の対応（A3）、`parser::Chain` の名の重なり（A1）、AST の高さのテスト（A5）、`groups.rs` の分け方（A6）。閾値のリテラル（80・48・60−13）は `READINGS_MAX`（`groups.rs:442`）になり済み。`children` は C1。
-- `w309b/report.md`「S-1」の 6・8 と「リファクタリングの候補」: 6 は A15 のまま。8 の「位置の判断」は今は `clocks` の一つの `match` で済み（A16）。S-1 の 4 は A11 に含めた。S-1 の 5 は A38。S-1 の 7（`fail_with` の `pop`）は今の `fail_with` に無く済み。S-1 の 1〜3（遅延の名前の表、形の表示名、関門と到達しない腕の置き場所）は sema と core の側で、C1・C2 が見る材料（確かめていない）。
+- `w309b/report.md`「S-1」の 6・8 と「リファクタリングの候補」: 6 は A15 のまま。8 の「位置の判断」は今は `clocks` の一つの `match` で済み（A16）。S-1 の 4 は A11 に含めた。S-1 の 5 は A38。S-1 の 7（`fail_with` の `pop`）は今の `fail_with` に無く済み。
+  S-1 の 1〜3（遅延の名前の表、形の表示名、関門と到達しない腕の置き場所）は sema と core の側で、C1・C2 が見る材料（確かめていない）。
 - `w321b/report.md`「12」と「リファクタリングの候補」R-1〜R-8: R-2 は A11、R-3 は A12、R-4 は A13、R-6 と指摘 12 は A25・A26。R-1 と R-7 は済み（A17）。R-5・R-8（`structpat.rs`、sema）は領域 A の外で、確かめていない。
 - `w319b/handback.md`「リファクタリングの候補」1〜10: 2・6・8・9 は済み（A20、`const_arg_ahead` は無く、型引数の塊は `foreign/paths.rs`、`is_type_args_mark` は `Cursor` を取る）。4 は A37（W4-13）。5・7 は C1。1・3（`angle_chain` と `turbofish`、`square_comma`）は `foreign/` の検出で領域 B。
-- `w315b/handback.md`「リファクタリングの候補」1〜5: 1（`foreign.rs` を分ける）は RF-1〜RF-4 で済み。3 の `PatReader` を消す案は A17 に記録した（範囲に入れない）。2・3 の残り（行の識別子の重複、`statement_end`（`foreign.rs:848`）、`block_shape`（`foreign/comments.rs:7`）、`holds_lines`（`foreign/semicolons.rs:6`）、`TYPE_NAMES`）は領域 B。5（`fix_contract.rs`）は領域 D。
+- `w315b/handback.md`「リファクタリングの候補」1〜5: 1（`foreign.rs` を分ける）は RF-1〜RF-4 で済み。3 の `PatReader` を消す案は A17 に記録した（範囲に入れない）。
+  2・3 の残り（行の識別子の重複、`statement_end`（`foreign.rs:848`）、`block_shape`（`foreign/comments.rs:7`）、`holds_lines`（`foreign/semicolons.rs:6`）、`TYPE_NAMES`）は領域 B。5（`fix_contract.rs`）は領域 D。
 - `w320b/handback.md`「リファクタリングの候補」1〜7: 1 は A20、2 は A21、5 は A22、6 は A23、7 は A24。3 は A36（新しく足した）。4（`.` の位置を AST が持たない）は `CallKind::Value { dot }`（`ast.rs:883`）で済み。
 - `w306b2/handback.md`「14. 整理」と「新しい指摘」B: `Parser::ends` が `Snapshot` に入ったこと（A28）。B（「`&` の次が `mut`」の二か所）は A33 で済み。RF-7 の (1) の出所は `issues/X/X-3.md:25`（A28）。
 

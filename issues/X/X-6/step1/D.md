@@ -55,7 +55,8 @@
 - `docs.py:808` → `split_work(id_)[0]`（`files["W"]` の ID は綴りに合うものだけなので必ず値がある）。`:1112-1114` の `due_key` → `w = repo.split_work(due)` があり `w[0] in stages` なら `(stages.index(w[0]), w[1])`。`:1421`・`:1530`・`:1635` → `split_work(...)[0]`。
 - `pending.stage_of` は `PH2` と段の名をそのまま返す分岐を残し、作業の分岐を `(repo.split_work(work) or (None,))[0]` にする（`WORK` の再コンパイルも `repo.id_form("W")` に寄せられる）。
 - 呼ぶ所はどれも、作業の ID か綴りを確かめた値だけを渡すので、出力は変わらない。
-- 確かめ: `python3 -B tools/test_gate.py`（gate-selftest。`stage_of` の 678・781 行、`due_key` の 7266 行、`list --count` の 7226 行の自己テスト）に `split_work` の自己テストを足す。前後で `docs.py check`、`docs.py list W --count`、`docs.py graph W3`、`docs.py show W3-05 --relations`、`docs.py list S --before W4`、`pending.py check`、`pending.py list` の出力を比べて同じ。
+- 確かめ: `python3 -B tools/test_gate.py`（gate-selftest。`stage_of` の 678・781 行、`due_key` の 7266 行、`list --count` の 7226 行の自己テスト）に `split_work` の自己テストを足す。
+  前後で `docs.py check`、`docs.py list W --count`、`docs.py graph W3`、`docs.py show W3-05 --relations`、`docs.py list S --before W4`、`pending.py check`、`pending.py list` の出力を比べて同じ。
 
 ### RF-18 (B) `spec_tokens.py` の §6.6 の表の読み（保つ）
 
@@ -98,7 +99,8 @@
 
 ### `crates/onsa_tests/src/run.rs`（1505 行、テスト込み 2433）
 
-- 分ける（8.1 の観点）: 一つのファイルに、(1) 結果の型（`Problem`・`CaseRun` など、`ccheck`・`fix_contract`・`fixes` も使う）、(2) 一つの事例を回す処理、(3) 目印と fmt の比べ、(4) ビルドと host の列、(5) `test` ブロック、(6) 保留の一覧を当てる判断（`reconcile`）と要約、(7) 全ての事例を回す外枠と JSON が入っている。保留の一覧の規則を変える人（`reconcile`）が事例の回し方を読む必要が無く、名前が役割を表すように分けられる。
+- 分ける（8.1 の観点）: 一つのファイルに、(1) 結果の型（`Problem`・`CaseRun` など、`ccheck`・`fix_contract`・`fixes` も使う）、(2) 一つの事例を回す処理、(3) 目印と fmt の比べ、(4) ビルドと host の列、(5) `test` ブロック、(6) 保留の一覧を当てる判断（`reconcile`）と要約、(7) 全ての事例を回す外枠と JSON が入っている。
+  保留の一覧の規則を変える人（`reconcile`）が事例の回し方を読む必要が無く、名前が役割を表すように分けられる。
 - 単位（`run/` のディレクトリのモジュール。公開の名前は `run/mod.rs` で `pub use` し、`crate::run::…` の道は変えない）:
   - `run/mod.rs`（約 450）: モジュールの doc、結果の型（`Stage`・`CheckedMarker`・`TestResult`・`Problem`・`CaseRun`・`Built`・`Stages`・`StageFailure`・`stage_problem`・`internal_problem`・`HostSteps`・`RunOptions`）、`run_case`、`run_case_with`。
   - `run/markers.rs`（約 200）: `compare`・`syntax_only`・`parser_markers`・`canonical`・`first_diff`・`negative_rules`・`lacks_found`。
@@ -108,14 +110,16 @@
   - `run/all.rs`（約 160）: `run_all`・`run_all_with`・`fix_sources`・`run_each`・`runs_json`・`run_parallel`。
   - テスト（928 行）は `run/mod.rs` の `#[cfg(test)] mod tests;` から `run/tests.rs` に移す（テストの名前 `run::tests::…` は変わらない。`rg "run::tests"` で名指す所は無い）。
 - 関数を分ける（移した後の別のコミット）:
-  - `run_case_with`（259 行）を段ごとに: `setup_problems`（316-334 行の事例の形の誤り）、`read_markers`（338-363 行。`Markers { expected, testfails, panics }` を返す）、`marker_targets`（368-381 行）、`fmt_and_parser`（383-414 行）、`check_outputs`（437-490 行の候補の契約・`.fixK`・目印の比べ）、`analysis_outputs`（492-545 行の golden と `test`）。本体は約 60 行の並びにする。
+  - `run_case_with`（259 行）を段ごとに: `setup_problems`（316-334 行の事例の形の誤り）、`read_markers`（338-363 行。`Markers { expected, testfails, panics }` を返す）、`marker_targets`（368-381 行）、`fmt_and_parser`（383-414 行）、`check_outputs`（437-490 行の候補の契約・`.fixK`・目印の比べ）、`analysis_outputs`（492-545 行の golden と `test`）。
+    本体は約 60 行の並びにする。
   - `reconcile`（159 行）を: `unknown_entries`（事例も候補も名指さない項目）、`fix_entries_of(run)`（`fix-contract` の項目）、`whole_entry`（事例の全体の項目）、`named_entries`（`<path>::<name>` の test と host の列）に分ける。
 - 上の項目と同じ所: 無い（S1 は `run.rs` に触らない。`parser_markers` の `per_unit` は行とコードを自分で並べるので S1 の外）。
 - 確かめ: 移すコミットは `python3 -B tools/moved_only.py`（行を移しただけか）。関数を分けるコミットは `cargo test -p onsa_tests` と、`onsa_cases` の要約（`Report::summary`）と失敗の文を前後で比べて同じ。`refactor.py sizes` で前後を並べる。
 
 ### `crates/onsa_tests/src/fix_contract.rs`（1131 行、テスト込み 1500）
 
-- 分ける（8.1 の観点）: 利用者が三つある。事例の実行器（`check`・`unchecked*`・`FixSpec` の読み）、fix_loop と fuzz の入口（`check_text`・`check_candidate`・`apply_alone`・`same_place`）、`.fixK` の写しと守り（`Moved`・`moved`・`shift`）。§18.1 の契約の 5 つの点（単位の対応、読みの比べ、最小の編集）がそれぞれ独立の判断で、doc の番号と同じ単位に分けられる。
+- 分ける（8.1 の観点）: 利用者が三つある。事例の実行器（`check`・`unchecked*`・`FixSpec` の読み）、fix_loop と fuzz の入口（`check_text`・`check_candidate`・`apply_alone`・`same_place`）、`.fixK` の写しと守り（`Moved`・`moved`・`shift`）。
+  §18.1 の契約の 5 つの点（単位の対応、読みの比べ、最小の編集）がそれぞれ独立の判断で、doc の番号と同じ単位に分けられる。
 - 単位（`fix_contract/`。公開の名前は `mod.rs` で `pub use`、`pub(crate)` の道も保つ）:
   - `fix_contract/mod.rs`（約 400）: モジュールの doc、`Checked`・`Files`・`target_name`・`check`・`unchecked_stage`・`unchecked`・`unchecked_in_parse`・`After`・`recheck`・`check_texts`・`judge`・`describe`。
   - `fix_contract/spec.rs`（約 150）: `[[test.fix]]` の項目（`FixSpec`・`RawSpec`・`de_specs`・`locate`・`Place`・`parse_leaf`・`check_specs`。`fragment.rs` が読む）。
@@ -144,7 +148,8 @@
 ## 5. 材料の要点
 
 - 指定の W3-22/b の報告（`094e8e7f…/scratchpad/w322b/handback_b.md`）は無かった。同じディレクトリに `notes.md`（8 行）だけがある。S1 の方針は RF-10 の本文と今のコードで判断した。
-- 親が取り戻した報告（`44 回目の scratchpad の x6/materials/w322b/handback.md`）は W3-22/b の再確認（直しの往復 1）で、RF-10 の S1（表示の順が二つ）の節は無い（その中の「S1」は偽の検査の入力の番号、「S-2〜S-7」は前の指摘の番号）。S1 の方針に効く点は無く、方針は変えない。分けた後の確かめに使える点だけ: 「(1) の `--fix-same-place` の出力が旧バイナリと同じ（233 件）」「(2) `fix_contract::shift` の偽陽性は N-3（削除の点を囲む置き換え）だけ」。`shift` は `fix_contract/units.rs` へ移すだけで意味を変えない。
+- 親が取り戻した報告（`44 回目の scratchpad の x6/materials/w322b/handback.md`）は W3-22/b の再確認（直しの往復 1）で、RF-10 の S1（表示の順が二つ）の節は無い（その中の「S1」は偽の検査の入力の番号、「S-2〜S-7」は前の指摘の番号）。S1 の方針に効く点は無く、方針は変えない。
+  分けた後の確かめに使える点だけ: 「(1) の `--fix-same-place` の出力が旧バイナリと同じ（233 件）」「(2) `fix_contract::shift` の偽陽性は N-3（削除の点を囲む置き換え）だけ」。`shift` は `fix_contract/units.rs` へ移すだけで意味を変えない。
 - `w322b/notes.md` の 1 行目: 「`order_check.py`: 候補を持つ最初・最後の診断が fix-loop の 1 歩目と一致（`tests/fuzz` と `tests/spec/fixes` で 466 回、外れ 0、誤りの数は `onsa check` と同じ）」。S1 (b) の確かめに同じ観点が使える。
 - 同 2 行目: 「`cmp_sp.py`: `--fix-same-place` の前後が 233 + 320 ファイルで同じ」。`fix_contract.rs` を分けた後の確かめに同じ観点が使える。
 - `w322i2/handback_fix2.md` の「判断の重複（D-15）」の行: 印をずらす処理は `fix_contract::shift` の一か所（fix_loop が使う）。分けた後も `shift` を一か所に保つ（`units.rs`）。

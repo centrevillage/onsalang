@@ -33,7 +33,8 @@ decided = 2026-10-15
 - 決定: …
 ```
 
-- **頭の欄は TOML**（`+++` の行で囲む。Hugo・Zola と同じ区切り）。道具は Python の標準の `tomllib` で読める（YAML は標準のライブラリに無い。今の `tools/` は標準のライブラリだけを使い、`tomllib` を 4 つの道具が既に使っている）。このリポジトリは既にデータを TOML で持っている（`tests/pending.toml`、`tests/fuzz/allowed.toml`、`tools/builtin_names.toml`）。
+- **頭の欄は TOML**（`+++` の行で囲む。Hugo・Zola と同じ区切り）。道具は Python の標準の `tomllib` で読める（YAML は標準のライブラリに無い。今の `tools/` は標準のライブラリだけを使い、`tomllib` を 4 つの道具が既に使っている）。
+  このリポジトリは既にデータを TOML で持っている（`tests/pending.toml`、`tests/fuzz/allowed.toml`、`tools/builtin_names.toml`）。
   - キーは英小文字（TOML の裸のキーは日本語を書けない）。意味は各ディレクトリの README に日本語で書く。
   - 日付は TOML の日付（`2026-10-15`）、ID と節は文字列の配列。
   - 状態は大文字の英語の閉じた値（利用者の例 PLAN / PENDING / DOING / DONE に揃える）。

@@ -6,16 +6,19 @@
 - 今の `docs/*.md` + 仕様の ID の言及は 16,233 回・1,129 種、`§` の言及は 6,486 回、文字数は約 4.29 MB、行数 21,403。
 - 200 字を超える行は、表の外（コードブロックの外）で 1,041 行、表の行で 1,114 行。24 回目の整形は「250 字を超える行」を 200 字に詰めたので、200 字ちょうどで落とす gate を今入れると 1,041 行が落ちる（T4 の前提）。
 - 実験（scratchpad `x2/adv4/bench/`）: 959 個の `+++` 付きファイル（本文約 3 KB、ID の言及 25 個ずつ）を `tomllib` で読み、本文の ID の存在を確かめるのに 0.043 秒。DF-8 の「1 秒未満」は余裕で成り立つ。
-- `pending.load_docs` を読んでいる道具は `pending.py` 自身、`gap_marks.py`（`known`）、`ignores.py stale`（`docs.done`）、`fuzz.py`（`reasons`）、`gate.py`。`repo.read(root, repo.SPEC)` の呼び出し元は `default_inits`・`diag_codes`・`builtin_names`・`keywords`・`spec_sections`・`check_spec_examples`・`fmt_props`・`pending` の 8 つ。これが T7 の切り替え点。
+- `pending.load_docs` を読んでいる道具は `pending.py` 自身、`gap_marks.py`（`known`）、`ignores.py stale`（`docs.done`）、`fuzz.py`（`reasons`）、`gate.py`。`repo.read(root, repo.SPEC)` の呼び出し元は `default_inits`・`diag_codes`・`builtin_names`・`keywords`・`spec_sections`・`check_spec_examples`・`fmt_props`・`pending` の 8 つ。
+  これが T7 の切り替え点。
 
 ## T1 道具の分け方と名前（確信: 中〜高）
 
 **案**: 三つに分け、ID に関わるものは一つの道具にまとめる。
-1. `tools/repo.py` を広げる（新規でなく拡張）: 配置の規約だけ。`id_path(id)`（`S-537` → `decisions/S/S-537.md`、`.draft.md` も）、`id_kind(id)`、ディレクトリの一覧、`spec_text(root)`（`spec/` があれば README の §0・§1 と章を番号順につないで一本の仕様を返し、無ければ今のファイルを返す）、`layout(root)`（新旧の判定、T7）。D-15 の「共有する事実は一か所」が `repo.py` の役目で、今も経路と表の読みを持つ。
+1. `tools/repo.py` を広げる（新規でなく拡張）: 配置の規約だけ。`id_path(id)`（`S-537` → `decisions/S/S-537.md`、`.draft.md` も）、`id_kind(id)`、ディレクトリの一覧、`spec_text(root)`（`spec/` があれば README の §0・§1 と章を番号順につないで一本の仕様を返し、無ければ今のファイルを返す）、`layout(root)`（新旧の判定、T7）。
+   D-15 の「共有する事実は一か所」が `repo.py` の役目で、今も経路と表の読みを持つ。
 2. `tools/docs.py`（新規）: 頭の欄を読む・書く・索引を作る唯一の場所と、その CLI。下位のコマンドは `show`・`where`・`refs`・`list`・`set`・`new`・`draft`・`amend`・`ticket`・`changes`・`check`（T2〜T6）。
 3. `tools/wrap.py`（新規）: 行の整形（T4）。頭の欄の無い文書（`spec/`、`rules/`、README）にもかけるので ID の道具と分ける。
 - 名前は決め手にならない（`docs/` は無くなるが「文書の道具」として読める。`ids.py` でもよい）。
-- **一つの道具に下位のコマンド**を選ぶ理由: どのコマンドも「全ファイルの頭の欄を一度読んだ索引」の上で動く（逆向きの関係、閉じた値の確かめ、番号の採番、票の骨組み）。役割ごとに分けると索引と配置の規約の写しが増え、D-15 に反する。今の `pending.py`（確かめは引数なし、編集は `list`・`remove`・`add`）、`ignores.py`（`list`・`passing`・`remove`・`set`・`stale`）と同じ流儀で、担当の一行の呼び出し（`python3 -B tools/docs.py show W3-13`）に収まる。
+- **一つの道具に下位のコマンド**を選ぶ理由: どのコマンドも「全ファイルの頭の欄を一度読んだ索引」の上で動く（逆向きの関係、閉じた値の確かめ、番号の採番、票の骨組み）。役割ごとに分けると索引と配置の規約の写しが増え、D-15 に反する。
+  今の `pending.py`（確かめは引数なし、編集は `list`・`remove`・`add`）、`ignores.py`（`list`・`passing`・`remove`・`set`・`stale`）と同じ流儀で、担当の一行の呼び出し（`python3 -B tools/docs.py show W3-13`）に収まる。
 - **既存の道具との関係**: `pending.load_docs`・`Docs` は新しい配置では `docs.py` の索引の薄い包みにする（`works`・`done`・`reasons`・`sections` の意味を保ち、呼び出し元の 5 つを変えない）。`gap_marks.api_ids` も同じ。`repo.rows`・`section`・`retired_codes`・`phase2_codes` は移行の (5)(6) で読み先が無くなった時点で消す（両形を長く残さない。T7）。
 - 作る量の見当: `repo.py` +80〜120 行、`docs.py` 600〜800 行（TOML の書き出し約 30 行を含む。`tomllib` は読みだけ）、`wrap.py` 200〜250 行、自己テスト 500〜700 行。
 - 副作用: `test_gate.py` の `Repo`（旧表の作り物）に、新しい配置の作り物 `NewRepo` を足す必要がある。移行の途中は両方の fixture が要る。
@@ -45,12 +48,15 @@
 ## T3 状態の管理（確信: 中〜高）
 
 **案**:
-- `docs.py list W --status PLAN --stage W4`、`list S --status OPEN --before W4-02`、`list R --status OPEN --fix none`（宛先なし）、`list W --waiting`（担う決定が OPEN の作業）、`list S --group 33`、`list W --count`（段ごとの数。`tasks/README.md` の欄の代わり、DF-6）。出力は 1 行 1 件: `ID<TAB>status<TAB>主な欄<TAB>題`。
+- `docs.py list W --status PLAN --stage W4`、`list S --status OPEN --before W4-02`、`list R --status OPEN --fix none`（宛先なし）、`list W --waiting`（担う決定が OPEN の作業）、`list S --group 33`、`list W --count`（段ごとの数。`tasks/README.md` の欄の代わり、DF-6）。
+  出力は 1 行 1 件: `ID<TAB>status<TAB>主な欄<TAB>題`。
 - `docs.py set W3-13 status=DOING doing=U2/i,U2/b` → 頭の欄だけを書き換える。`doing=` で欄を消す。README に無いキー、閉じた値でない値、`check` が落ちる状態（DOING でないのに `doing` がある等）になるときは書かずに理由を出す（`pending.py add` の `_write_checked` と同じ流儀）。
-- `docs.py new S --title "…" [--spec §3.1] [--found-by W3-12/t] [--before W4-02]` → 番号は `decisions/S/` の `S-*.md` と `S-*.draft.md` の最大 + 1、`status = "OPEN"` の雛形（本文のラベルは DF-4 の一覧を空で並べる）を作り、経路を出す。`new R`、`new RF`、`new W --stage W4`（`W4-14` の形）も同じ。採番は親だけが行う（担当は今も `NEW` の印で親に委ねる。gap-marks の規約のまま）。
+- `docs.py new S --title "…" [--spec §3.1] [--found-by W3-12/t] [--before W4-02]` → 番号は `decisions/S/` の `S-*.md` と `S-*.draft.md` の最大 + 1、`status = "OPEN"` の雛形（本文のラベルは DF-4 の一覧を空で並べる）を作り、経路を出す。`new R`、`new RF`、`new W --stage W4`（`W4-14` の形）も同じ。
+  採番は親だけが行う（担当は今も `NEW` の印で親に委ねる。gap-marks の規約のまま）。
 - `docs.py draft S-540 --group 33` → `S-540.draft.md` の雛形（`group`・`drafted`、DF-4 のラベル）。組を一度に: `draft S-540 S-541 --group 33`。
 - `docs.py amend S-547 --amends S-545` → 後の側に `amends`、前の側に `amended_by` を一度に。二つのファイルのスワップと値を全て確かめてから両方を書く（片方だけ書かない）。
-- **利用者の vim とぶつからないこと**: 書く前に同じディレクトリの `.<name>.sw?` を見て、あれば何も書かず終了コード 1 と「vim で開いている」を出す。確かめと書き込みは一つの道具の中で続けて行うが、道具自身が結果を読んで止まるので `leader-rules.md` 7.1 の意図（確かめた結果を読んでから変える）は満たす（親が Edit ツールで直すときの別コマンドの確かめは今のまま）。書き換えは頭の欄の `+++` の間だけで、本文はバイト単位で保ち、書いた後に読み直して「頭の欄が意図の値で、本文が同一」を確かめる（違えば元に戻す）。
+- **利用者の vim とぶつからないこと**: 書く前に同じディレクトリの `.<name>.sw?` を見て、あれば何も書かず終了コード 1 と「vim で開いている」を出す。
+  確かめと書き込みは一つの道具の中で続けて行うが、道具自身が結果を読んで止まるので `leader-rules.md` 7.1 の意図（確かめた結果を読んでから変える）は満たす（親が Edit ツールで直すときの別コマンドの確かめは今のまま）。書き換えは頭の欄の `+++` の間だけで、本文はバイト単位で保ち、書いた後に読み直して「頭の欄が意図の値で、本文が同一」を確かめる（違えば元に戻す）。
 - 頭の欄の書き出しは**正規形**（キーの順は README の表の順、文字列は `"…"`、配列は 1 行）。手で書いた順や空白は `set` のときに揃う。これが DF-1 の「頭の欄にコメントを書かない」の理由と対になる。
 - 根拠: 手順 1 の親の 620 回のヒアドキュメント置換の多くは状態と関係の欄の書き換え（決定ごとのスクリプト 36 個）。小さなファイルなら Edit で済む本文に対し、閉じた値と対称の関係を持つ頭の欄は道具で書く方が gate で落ちる回数が減る。担当は複雑なシェルを拒まれるので、`set`・`list` の一行が要る。
 - 計算量と停止: `set`・`amend` は 1〜2 ファイルの読み書き + 確かめのための索引 1 回 O(N)。`new` はディレクトリ 1 つの一覧 O(その種類の数)。
@@ -63,7 +69,9 @@
 - 触らないもの: 頭の欄（先頭の `+++` 〜 `+++`）、見出し、表の行、コードブロックの中、「欠番:」で始まる行（`repo.py` が 1 行として読む）、HTML コメント。
 - **分けるだけで、つながない**。短い続きの行を元に戻す処理を持たないので、冪等は自明（1 回目で切れる行は 200 字以下か切れない行になり、2 回目は何もしない）。往復（改行と字下げを除くと元の行に戻る）は、道具が各ファイルの処理の後に必ず確かめ、違えば書かずに落とす。
 - 切れない行（200 字の内に深さ 0 の `。` が無い）は `--check` でも落とさず、`note:` で件数と場所を出す（文を分けるのは人の作業）。
-- **gate の項目か編集の後か（(10) の問い）: 両方**。編集した人（親、impl）が `wrap.py <file>` を回すのが本来だが、手順 1 は「誰も回し直さない」側の証拠（145 回の個別の確かめ）なので、`wrap.py --check` を gate の `static` の項目にし、`cargo fmt --check` と同じく「道具をかけると変わる行がある」ときだけ落とす（切れない行では落とさない）。導入の前に一度 `wrap.py` を全体にかけるコミットが要る（今 200 字超が 1,041 行。文書だけのコミットにし、仕様の章の分割（移行の (3)）より前に行えば、分割の往復の確かめとぶつからない）。
+- **gate の項目か編集の後か（(10) の問い）: 両方**。
+  編集した人（親、impl）が `wrap.py <file>` を回すのが本来だが、手順 1 は「誰も回し直さない」側の証拠（145 回の個別の確かめ）なので、`wrap.py --check` を gate の `static` の項目にし、`cargo fmt --check` と同じく「道具をかけると変わる行がある」ときだけ落とす（切れない行では落とさない）。
+  導入の前に一度 `wrap.py` を全体にかけるコミットが要る（今 200 字超が 1,041 行。文書だけのコミットにし、仕様の章の分割（移行の (3)）より前に行えば、分割の往復の確かめとぶつからない）。
 - **表の列の数の確かめ（(11)）**: 整形でなく `docs.py check` に入れる（T5）。全ての表で、各行のセル数が頭の行と同じ（`\|` とコードスパンの中の `|` を数えない）。48 回のその場のスクリプトがこれで消える。表の自動の直しは作らない（列の抜けはどこを埋めるか人が決める）。
 - 計算量と停止: 行ごとに左から 1 回の走査で、切る位置は単調に進む。O(総字数)。約 4 MB で 1 秒未満の見込み（24 回目の `wrap_docs.py` が同じ量を扱った）。
 - 副作用: 利用者が vim で書いた長い行も gate が「変わる」と言う（親が `wrap.py` を回せば済み、意味は変わらない）。段落の途中の改行は Markdown の表示では空白になるが、この文書群は端末・vim・Read ツールで読まれ、10-14 の整形で既に受け入れた形。
@@ -79,7 +87,8 @@
 - `wrap`（`wrap.py --check`、T4）: 行の長さ。別の項目にするのは、頭の欄の無い文書も対象で、落ち方の意味（直し方が機械的）が違うため。
 - 作業の検査（`--work`）でも回す（`static` は差分に関わらず回る今の規則のまま。どちらも 1 秒未満）。
 - 時間の見込み: 実測 0.043 秒（959 ファイルの頭 + 本文の ID）、`§` の見出しは `spec_blocks.headings` を結合した仕様に 1 回（今も `pending.py` が毎回しており数十 ms）。両項目で 1 秒未満。Python の起動を含めても 2 秒以内。
-- 自己テスト: `test_gate.py` に `NewRepo`（`decisions/S/S-1.md`、`tasks/W/W1-01.md`、`issues/R/R-1.md`、`spec/README.md` と章 2 つ、`rules/README.md`）を足し、`DocsCheck`（落とすもの 1 件ずつ 10〜12 件、通る形 1 件）、`DocsEdit`（`set`・`new`・`amend`・スワップで止まる・本文が同一）、`DocsShow`（逆向きの表示）、`Wrap`（冪等・往復・触らないもの）。gate-selftest は `tools/` に触れたときだけ回る今の規則で足りる。
+- 自己テスト: `test_gate.py` に `NewRepo`（`decisions/S/S-1.md`、`tasks/W/W1-01.md`、`issues/R/R-1.md`、`spec/README.md` と章 2 つ、`rules/README.md`）を足し、`DocsCheck`（落とすもの 1 件ずつ 10〜12 件、通る形 1 件）、`DocsEdit`（`set`・`new`・`amend`・スワップで止まる・本文が同一）、`DocsShow`（逆向きの表示）、`Wrap`（冪等・往復・触らないもの）。
+  gate-selftest は `tools/` に触れたときだけ回る今の規則で足りる。
 - 計算量と停止: 全て 1 回の走査と集合の照合。O(N + 総字数)。
 
 ## T6 道具が出す一覧（確信: 中〜高）
@@ -100,7 +109,9 @@
 - `repo.layout(root)` は種類ごとにディレクトリの存在で読み先を決める: `decisions/S/` があれば S はファイル、無ければ計画 §2 の表。W は `tasks/W/`、R は `issues/R/`、A は `decisions/A/`、仕様は `spec/`、診断コードの表は `tasks/diag-codes.md`。判定は存在だけで、両方あるときは誤り（gate が落とす。移行の途中で元の表の写しを残さない DS-5 と合う）。
 - `pending.load_docs` → `Docs(works, done, reasons, sections)` を保ち、中で `repo.layout` に従って読む。呼び出し元の 5 つは変えない。`done` は W の `status == "DONE"`、`works` は W の ID（T は履歴へ行くので外す。`pending.toml` に T が無いことが前提、DS-5）。
 - 仕様の 8 つの呼び出し元を `repo.read(root, repo.SPEC)` から `repo.spec_text(root)` に変える（移行の (1) で先に変えておけば (3) の分割はつなぐ処理を足すだけ）。`spec_blocks.headings` と例の ID（`§<節> <hash>`）は節の文が同じなら変わらない。
-- DS-9 の順との関係: (1) で `repo.py` の `id_path`・`layout`・`spec_text` と `docs.py`（読み・`check`・`set`・`new`・`amend`・`show`）と `wrap.py` を作り、自己テストは `NewRepo` で先に通す。(2) 規則の分割は頭の欄が無いので `wrap` と README のリンクだけが関わる。(3) で `spec_text` が結合を始める。(4) で S・D・K・Q・A の読み先が切り替わり `rows` の S の読みが不要になる。(5) で W・R と `retired_codes`・`phase2_codes` の読み先が切り替わり、`repo.rows`・`section` は消す。(6) の後、旧表の fixture（`REWORK`・`PLAN`・`REVIEW` の作り物）も消す。
+- DS-9 の順との関係: (1) で `repo.py` の `id_path`・`layout`・`spec_text` と `docs.py`（読み・`check`・`set`・`new`・`amend`・`show`）と `wrap.py` を作り、自己テストは `NewRepo` で先に通す。(2) 規則の分割は頭の欄が無いので `wrap` と README のリンクだけが関わる。
+  (3) で `spec_text` が結合を始める。(4) で S・D・K・Q・A の読み先が切り替わり `rows` の S の読みが不要になる。(5) で W・R と `retired_codes`・`phase2_codes` の読み先が切り替わり、`repo.rows`・`section` は消す。
+  (6) の後、旧表の fixture（`REWORK`・`PLAN`・`REVIEW` の作り物）も消す。
 - 両方を読む期間は (3)〜(5) の間だけ、しかも種類が違うものを別の先から読むだけ。同じ種類の二重読みは往復の確かめ（新 → 旧の再生成が一致）の意味を曖昧にするので入れない。
 - 副作用: 移行の各段で `test_gate.py` の fixture が二つ並ぶ期間がある。作業ツリーの担当は自分のツリーのコミットの道具を使うので、段の切り替えは「担当が動いていない区切り」で行う（DS-9 のとおり）。
 - 作る量: 切り替えの差分は `repo.py` と `pending.load_docs` に集中し、呼び出し元の変更は 8 行 + 5 行程度。
@@ -112,7 +123,9 @@
 - `repo.spec_text` の結合（分割後の仕様が今の一本と一字も違わないことの確かめは `spec_text(root) == 旧ファイル` の比較一つ）。
 - `docs.py check` の全項目（各段の終わりで gate が通る条件、DS-9）。
 - `wrap.py` は移行の前に一度かける（T4）。
-**手順 6 に送るもの**: 一回だけ使うもの。表の切り出し（計画 §2 の 4 列 → S のファイル、rework §3 → W、レビュー §8 → R、`carryovers.md` の振り分け）、旧表の再生成による往復の確かめ、✅ と `status` の食い違いの一覧、`marks` の修飾の落ちる値の一覧、コードとテストのコメントの経路 197 か所の置換、`leader-rules.md` 6.2 の同時の書き換え。置き場所は `issues/X/X-2/tools/`（DS-10 の規約。`tools/` に入れない、gate の自己テストの対象にしない）。
+**手順 6 に送るもの**: 一回だけ使うもの。
+表の切り出し（計画 §2 の 4 列 → S のファイル、rework §3 → W、レビュー §8 → R、`carryovers.md` の振り分け）、旧表の再生成による往復の確かめ、✅ と `status` の食い違いの一覧、`marks` の修飾の落ちる値の一覧、コードとテストのコメントの経路 197 か所の置換、`leader-rules.md` 6.2 の同時の書き換え。
+置き場所は `issues/X/X-2/tools/`（DS-10 の規約。`tools/` に入れない、gate の自己テストの対象にしない）。
 - 境の理由: `tools/` に残るのは繰り返し使い gate が守るもの、一度きりのものは材料の横（今の `x1/tools/`・`x2/tools/` と同じ扱い）。
 
 ## T9 作らないもの・後に回すもの・異論・リスク（確信: 中）
@@ -135,6 +148,7 @@
 
 ## 確信の度合いのまとめ
 
-- T1 分け方（`repo.py` 拡張 + `docs.py` + `wrap.py`）: 中〜高。T2 参照: 高。T3 状態（`set`・`new`・`amend`、スワップで止まる、正規形）: 中〜高。T4 整形（分けるだけ、gate で `--check`、切れない行は落とさない）: 中（gate に入れるかは利用者の重さの判断）。T5 gate（`docs` と `wrap` の二項目、1 秒未満）: 高。T6 一覧（`show` に含める、`changes`、`list --waiting`、`ticket`）: 中〜高。T7 切り替え（種類ごとに正本一つ、存在で判定、`spec_text`）: 中〜高。T8 境（土台はここ、一回きりは手順 6 で `issues/X/X-2/tools/`）: 中〜高。T9: 中。
+- T1 分け方（`repo.py` 拡張 + `docs.py` + `wrap.py`）: 中〜高。T2 参照: 高。T3 状態（`set`・`new`・`amend`、スワップで止まる、正規形）: 中〜高。T4 整形（分けるだけ、gate で `--check`、切れない行は落とさない）: 中（gate に入れるかは利用者の重さの判断）。
+  T5 gate（`docs` と `wrap` の二項目、1 秒未満）: 高。T6 一覧（`show` に含める、`changes`、`list --waiting`、`ticket`）: 中〜高。T7 切り替え（種類ごとに正本一つ、存在で判定、`spec_text`）: 中〜高。T8 境（土台はここ、一回きりは手順 6 で `issues/X/X-2/tools/`）: 中〜高。T9: 中。
 
 第 1 段の終わり

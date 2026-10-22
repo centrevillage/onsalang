@@ -30,4 +30,6 @@ status = "OPEN"
       - `MoveExpr` の節を作る場所が 4 つ、
       - `dump.rs` と `fmt.rs` の `parens` の書き方の重複、
       - `parser.rs` の `in_type()` が `lower::class` に依存する（層の向き）。
-- 判断（2026-10-19、親）: X-6 の手順 1（44 回目）: (D) の `token_kinds!` は直さない（外部の crate を足さずに、列挙と `ALL` を一つの並びから出す保証を保つ書き方が無い）。R2 の `operand()` は X-6 に入れない（読めない入力では字句の読みが残り判断が一つにならず、出力が変わりうる）。`PatReader` を消す案（W3-15/b）は出力が変わりうる候補として残す。新しい候補: `lower.rs` の `failed_kind` と `item_kind` の二通りの読み、括弧の対の判断が 4 か所（`parser.rs`・`scan.rs`・`foreign/guard.rs`・`foreign/assign.rs`）。済んだ項目と X-6 で行う項目は `issues/X/X-6/step1/A.md`
+- 判断（2026-10-19、親）: X-6 の手順 1（44 回目）: (D) の `token_kinds!` は直さない（外部の crate を足さずに、列挙と `ALL` を一つの並びから出す保証を保つ書き方が無い）。
+  R2 の `operand()` は X-6 に入れない（読めない入力では字句の読みが残り判断が一つにならず、出力が変わりうる）。`PatReader` を消す案（W3-15/b）は出力が変わりうる候補として残す。
+  新しい候補: `lower.rs` の `failed_kind` と `item_kind` の二通りの読み、括弧の対の判断が 4 か所（`parser.rs`・`scan.rs`・`foreign/guard.rs`・`foreign/assign.rs`）。済んだ項目と X-6 で行う項目は `issues/X/X-6/step1/A.md`

@@ -1,6 +1,7 @@
 # 第 2 段: 親の案（`/private/tmp/claude-501/-Users-centrevillage-projects-onsalang/f3304e2a-2a9b-46a8-aa46-9310ccd7ac34/scratchpad/x2/step5_manager.md`、DM-0〜DM-10）との突き合わせ
 
-確かめたこと: DM-1 の S-537 の引用（「仕様の文と登録簿・計画 §5・実装待ちの一覧は、実装の作業（W3-13）で揃える」）は `docs/implementation-tasks.md` 334 行にそのとおりある。DM-3 の「第 2 組〜第 32 組の 31 回」は `docs/spec-gaps-w2-w3.md`・`spec-gaps-w3b.md` の `## 第 n 組` の見出しの数（31）と合う。「5 つ」の直書きは親の数え（3 か所）が正しく、第 1 段の私の「4 か所」は `agent-rules.md` 6 行目を誤って数えた。
+確かめたこと: DM-1 の S-537 の引用（「仕様の文と登録簿・計画 §5・実装待ちの一覧は、実装の作業（W3-13）で揃える」）は `docs/implementation-tasks.md` 334 行にそのとおりある。
+DM-3 の「第 2 組〜第 32 組の 31 回」は `docs/spec-gaps-w2-w3.md`・`spec-gaps-w3b.md` の `## 第 n 組` の見出しの数（31）と合う。「5 つ」の直書きは親の数え（3 か所）が正しく、第 1 段の私の「4 か所」は `agent-rules.md` 6 行目を誤って数えた。
 
 ## 親の案の誤り・ずれ（事実、数、内側の食い違い）
 
