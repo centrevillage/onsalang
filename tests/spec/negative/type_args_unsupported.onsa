@@ -3,12 +3,12 @@
 // spec = ["§4.5", "§18.1"]
 
 // E0200 for a type argument written in an expression (`name::[…]`, §4.5), from W3-19 (the syntax) to
-// W4-13 (the name and type stages). The syntax stage reads the list into the tree. Until the later
+// W5-10 (the name and type stages). The syntax stage reads the list into the tree. Until the later
 // stages instantiate the item, the stage that meets a name with a list says E0200 (§18.1): the
 // compiler neither drops the list nor accepts the program as if it were not there (R-81).
 //
-// W4-13 removes this file: after it the same programs check, and their errors (E0412, E0308, E0406,
-// E0416) are in the cases of W4-13.
+// W5-10 removes this file: after it the same programs check, and their errors (E0412, E0308, E0406,
+// E0416) are in the cases of W5-10.
 
 pub fn id[T](x: T) -> T {
   x

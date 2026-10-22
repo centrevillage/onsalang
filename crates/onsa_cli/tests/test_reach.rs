@@ -25,7 +25,7 @@
 //! `tests/spec/packages/reach_modules`, and the build side (`onsa build`), which has its own
 //! entries (the exports). An empty `--filter` is the same as no filter (S-286 (e2); a package
 //! with no tests then succeeds), which `test_identity.rs` checks. A file of the package given to
-//! `onsa test` (S-286 (a), W4-02) is not written.
+//! `onsa test` (S-286 (a), W4-15) is not written.
 //!
 //! Tests that the implementation does not pass yet carry `#[ignore = "<work>"]` naming the work
 //! that fixes their cause.

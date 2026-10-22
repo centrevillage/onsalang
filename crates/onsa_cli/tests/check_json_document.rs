@@ -501,7 +501,7 @@ fn without_a_manifest_the_edits_and_the_notes_use_the_passed_path_too() {
 }
 
 #[test]
-#[ignore = "W4-02"]
+#[ignore = "W4-14"]
 fn a_file_inside_a_package_is_named_by_the_root_path_and_only_its_diagnostics_are_printed() {
     // §15.1: the root is found above the file; the whole package is gathered and resolved, and
     // only the diagnostics of the given file are printed (R-47 fixes this in W4-02).

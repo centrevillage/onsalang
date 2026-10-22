@@ -148,7 +148,7 @@ features! {
     Closures: Language, "anonymous functions anywhere but as the argument of `array.from_fn`", None;
     FnValues: Language, "function values", None;
     /// S-239: the syntax reads `name::[…]` (W3-19); the name and type stages
-    /// give the list to the item from W4-13.
+    /// give the list to the item from W5-10.
     TypeArgsInExpressions: Language, "instantiating an item with type arguments written in an expression (`name::[…]`)", None;
     /// S-224, S-257: the `for` loop over `a..=b` that ends when `b` is the
     /// type's maximum (W8-03); never lowered as `..<` (R-81).

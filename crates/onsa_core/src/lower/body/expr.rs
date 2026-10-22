@@ -71,7 +71,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         },
         AK::Path(_) => return Err(internal(span, "unresolved path")),
         AK::Hole => return Err(internal(span, "typed hole")),
-        // The names stage stops a `::[…]` with E0200 until W4-13.
+        // The names stage stops a `::[…]` with E0200 until W5-10.
         AK::TypeArgs { .. } => return Err(internal(span, "type arguments in an expression")),
         // Lowering runs only on a package without diagnostics, and a failed
         // item has a syntax diagnostic (S-59).

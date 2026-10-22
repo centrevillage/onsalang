@@ -10,7 +10,7 @@
 //! callee is written by name ([`Callee::by_name`]: the `(` and the `[`), and
 //! whether the last link names a path ([`Link::names_a_path`]: `::[`, the
 //! marks, the type arguments of other languages). Whether the two are to be
-//! one is W4-12's and W4-13's to decide. The table's reading of a callee in
+//! one is W4-12's and W5-10's to decide. The table's reading of a callee in
 //! parentheses from its tokens (`foreign/calls.rs`, `is_postfix_chain`) reads
 //! the same links in the text.
 

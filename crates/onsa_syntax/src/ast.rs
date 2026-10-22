@@ -1083,7 +1083,7 @@ pub enum ExprKind {
     },
     /// `e::[T, …]`: type arguments written after a path of names in an
     /// expression (§4.5, S-239). The later stages give them to the item the
-    /// path names (W4-13).
+    /// path names (W5-10).
     TypeArgs {
         base: ExprId,
         args: TypeArgList,

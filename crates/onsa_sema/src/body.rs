@@ -333,7 +333,7 @@ impl<'a> Checker<'a> {
 
     /// E0200 for a type argument written in an expression (`name::[…]`, §4.5)
     /// at the list `span`: the names stage gives the list to its item from
-    /// W4-13; until then the list is neither dropped nor read (R-81).
+    /// W5-10; until then the list is neither dropped nor read (R-81).
     pub(crate) fn type_args_unsupported(&mut self, span: Span) -> Stop {
         self.unsupported_in(Stage::Names, span, Feature::TypeArgsInExpressions, &[])
     }

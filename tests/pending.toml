@@ -243,7 +243,7 @@ kind = "diag-code"
 target = "E0422"
 reasons = ["S-264"]
 until = "W4-05"
-note = "検査が作る型の深さ 256 と大きさ 4096 の上限（S-264）。別名と書いた型は W4-05、推論した型は W4-05 の作業票で決める W5 の作業"
+note = "検査が作る型の深さ 256 と大きさ 4096 の上限（S-264）。別名と書いた型は W4-05（この項目は W4-05 で E0422 が入ると外れる）、推論した型の事例は W5-08 の票で足す（X-8）"
 
 [[pending]]
 kind = "diag-code"
@@ -1690,7 +1690,7 @@ note = "書けない型の定数のパターン（型の段）"
 kind = "foreign-form"
 target = "type_args_square"
 reasons = ["S-239", "S-256"]
-until = "W4-13"
+until = "W5-10"
 note = "名前の経路に付けた [...] の型引数（名前の段）"
 
 [[pending]]

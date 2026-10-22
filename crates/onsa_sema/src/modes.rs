@@ -435,7 +435,7 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            // A `::[…]` names an item (W4-13; E0200 until then), not a local.
+            // A `::[…]` names an item (W5-10; E0200 until then), not a local.
             ExprKind::Lit(_) | ExprKind::Hole | ExprKind::Error | ExprKind::TypeArgs { .. } => {}
             // The ends are read once, before the first iteration (§3.5).
             ExprKind::Range(r) => {
