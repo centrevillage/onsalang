@@ -5,19 +5,23 @@
 
 // 型
 voice.State        // 状態。Affine、固定サイズ、ヒープを使わない。遅延線も含む
-voice.Config       // init の入力をフィールドに持つ struct（Copy）
-voice.Params       // block の入力をフィールドに持つ struct（Copy）
+voice.Config       // init の入力をフィールドに持つ struct（Copy）。init の入力のある flow だけ
+voice.Params       // block の入力をフィールドに持つ struct（Copy）。block の入力のある flow だけ
+voice.Event        // イベントの入力の値と位置を持つ、中身を見せない Copy の型。イベントの入力のある flow だけ
 voice.In           // sample の入力が 2 つ以上のときだけ。sample の入力ごとの Span をフィールドに持つ
 voice.Out          // 出力が struct のときだけ。出力のフィールドごとの Span を持つ
-voice.Rendered     // render の結果。出力チャンネルごとの Buf
+voice.Rendered     // render の結果。出力チャンネルごとの Buf（イベントの出力は位置と値の Buf）
 
 // 関数
 fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
+                                            // cfg は init の入力のある flow だけ（下の数の規則）
 rt fn voice.reset(inout s: voice.State)
-rt fn voice.process(inout s: voice.State, params: voice.Params, <入力>, <出力>)
-rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, <入出力>)
-                                            // sample の入力と出力の数と型が順に一致する flow にだけ生成される
-fn voice.render(cfg: voice.Config, params: voice.Params, <入力>,
+rt fn voice.process(inout s: voice.State, params: voice.Params, events: Span[voice.Event], <入力>, <出力>)
+rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, events: Span[voice.Event], <入出力>)
+                                            // sample の入力と出力の数と型が順に一致し、イベントを出さない flow にだけ生成される
+fn voice.render(cfg: voice.Config, params: voice.Params, events: Span[voice.Event], <入力>,
                 frames: U32, sample_rate: F32) -> voice.Rendered uses {Alloc}
                                             // frames は sample の入力の無い flow にだけある
-fn voice.params_default() -> voice.Params   // 全ての block の入力に @param がある場合
+fn voice.params_default() -> voice.Params   // block の入力のある flow で、その全てに @param か @host がある場合
+fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベントの入力ごと
+rt fn voice.latency(s: voice.State) -> U32  // 遅れ（下記）

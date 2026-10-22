@@ -76,8 +76,7 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
 }
 
 test "resonator decays" {
-  let o = resonator.render(resonator.Config {},
-                           resonator.Params { fc: 500.0, bw: 100.0 },
+  let o = resonator.render(resonator.Params { fc: 500.0, bw: 100.0 },
                            impulse(48000), 48000.0)
   assert energy(o.out, 47000, 48000) < 1.0e-12
 }
@@ -159,7 +158,7 @@ use std.audio.wav
 
 pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
   let sr: F32       = 48000.0
-  var st            = voice.init(voice.Config {}, sr)
+  var st            = voice.init(sr)
   var out: Buf[F32] = Buf.zeroed(48000)
   voice.process(inout st, voice.params_default(), inout out)
   wav.write(path, out, sr)
@@ -181,7 +180,7 @@ static vc_voice_params params;
 
 void setup(void) {
   voice = (vc_voice*)voice_mem;
-  if (vc_voice_init(voice, NULL, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0、Config が空なので NULL */
+  if (vc_voice_init(voice, NULL, 48000.0f) != 0) {   /* BULK_SIZE が 0 なので NULL。init の入力が無いので cfg は取らない */
     return;                                          /* init が失敗した（1: panic、2: 引数の誤り）。使い始めない */
   }
   vc_voice_params_default(&params);
@@ -222,7 +221,7 @@ pub rt fn midi_to_hz(note: U8) -> F32 {
 impl Poly {
   pub fn new(sample_rate: F32) -> Poly {
     Poly {
-      voices: array.from_fn(fn(_) { voice.init(voice.Config {}, sample_rate) }),
+      voices: array.from_fn(fn(_) { voice.init(sample_rate) }),
       params: [voice.params_default(); MAX_VOICES],
       notes: [None; MAX_VOICES],
       next: 0,
@@ -258,10 +257,12 @@ impl Poly {
 }
 ```
 
+- `Poly` は Onsa のプログラムの中で使う形である。struct と関数は export できないので、プラグインの入口にはならない（プラグインでは、ボイスの割り当てを入口の flow のイベントの段に書く。下の最後の項、§14.3）。
 - `Poly.new` は効果を持たない。`Poly` は固定サイズの値で、その大きさは `onsa interface` に出る。
 - `self.voices[i]`（`inout`）と `self.params[i]`（借用）は異なるフィールドなので重ならない（§5.2）。
 - `array.from_fn` に渡す無名関数は `sample_rate` をコピーで捕捉する。引数の位置だけで使うので、ヒープを使わない（§5.3）。
-- `voice` に `@mem(bulk)` の遅延線があるとき、`memory.bulk = true` のターゲットでは、この `Poly` の書き方はできない（E0819、§12.4）。ボイスの列を flow の `par` で書き、発音の割り当ては、その flow の `Params` を書き換える形にする。ボイスごとの頭出しは、`voice.reset` を外から呼ぶ代わりに、ゲートの入力として `voice` の中で受ける。
+- `voice` に `@mem(bulk)` の遅延線があるとき、`memory.bulk = true` のターゲットでは、この `Poly` の書き方はできない（E0819、§12.4）。ボイスの列を flow の `par` で書き、発音の割り当ては、その flow のイベントの入力（`midi.Message at event`、§11.11）の段で書く。
+  ボイスごとの頭出しは、`voice.reset` を外から呼ぶ代わりに、ゲートの入力として `voice` の中で受けるか、`reset_if~`（§11.10）で書く。
 
 ---
 

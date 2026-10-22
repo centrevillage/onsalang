@@ -131,11 +131,16 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 | `[targets.<名前>.memory]` | `bulk` | 真偽値。既定は `false`（§12.4） |
 | | `fast_budget`、`bulk_budget` | バイト数。任意 |
 | `[targets.<名前>.bind]` | `"<モジュール>"` | 実装モジュールの経路（§15.2） |
+| `[[plugin]]` | `flow` | 必須。プラグインにする flow の経路で、`[export]` の `flows` にあること（§14.3） |
+| | `id`、`name`、`vendor` | 必須。文字列。同じ `id` の重複は誤り |
+| | `version` | 必須。`major.minor.patch`（AU は各 255 以下） |
+| | `category` | 必須。`instrument`・`effect`・`note-effect` |
+| | `au` | AU のターゲットで必須。`{ subtype, manufacturer }` |
 
 - `main` または export される関数の効果行に、`provides` に無い効果が含まれていれば E0610。
 - `[export]` の flow と関数は、`staticlib`・プラグイン・`wasm-worklet`・`source` のターゲットに出力される。
-- ビルドはハーメティック（ネットワークも環境変数も読まない）で、`onsa.lock` が同じなら、Onsa が生成するファイル（C のソースとヘッダ、WASM など）は同一である。`staticlib` の `.a` と実行ファイルは外部の C ツールチェーンの出力で、この約束の外にある。
-  ホストの `platform` では PATH の `cc` と `ar` を使う（環境変数を読む唯一の例外）。クロスの `platform` で外部のツールチェーンを要する `kind`（`staticlib` など）は、この版ではそのターゲットのビルドで E0200 になる（note で `kind = "source"` と `lang = "c"` を示す）。
+- ビルドはハーメティック（ネットワークも環境変数も読まない）で、`onsa.lock` が同じなら、Onsa が生成するファイル（C のソースとヘッダ、WASM など）は同一である。`staticlib` の `.a`、実行ファイル、プラグインの束（§14.3）は外部の C ツールチェーンの出力で、この約束の外にある。
+  ホストの `platform` では PATH の `cc` と `ar` を使う（環境変数を読む唯一の例外）。クロスの `platform` で外部のツールチェーンを要する `kind`（`staticlib`、プラグインなど）は、この版ではそのターゲットのビルドで E0200 になる（note で `kind = "source"` と `lang = "c"` を示す）。
   ツールチェーンを指定する形は §19.1。
 - `std` は、どのパッケージにも暗黙の依存で、`[dependencies]` に書かなくてもキー `std` で使える（単一ファイルのパッケージも同じ）。std はコンパイラに埋め込まれている。`std = "x.y.z"` と書くと版の固定になり、埋め込みの std の版と一致しなければ E1103 になる。埋め込みの std の版は `onsa --version` で表示する。std 以外の依存の取得元、版の解決、`onsa.lock` の形は未決定（§19.1）。
 

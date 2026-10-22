@@ -206,22 +206,26 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
 ```onsa
 // 型
 voice.State        // 状態。Affine、固定サイズ、ヒープを使わない。遅延線も含む
-voice.Config       // init の入力をフィールドに持つ struct（Copy）
-voice.Params       // block の入力をフィールドに持つ struct（Copy）
+voice.Config       // init の入力をフィールドに持つ struct（Copy）。init の入力のある flow だけ
+voice.Params       // block の入力をフィールドに持つ struct（Copy）。block の入力のある flow だけ
+voice.Event        // イベントの入力の値と位置を持つ、中身を見せない Copy の型。イベントの入力のある flow だけ
 voice.In           // sample の入力が 2 つ以上のときだけ。sample の入力ごとの Span をフィールドに持つ
 voice.Out          // 出力が struct のときだけ。出力のフィールドごとの Span を持つ
-voice.Rendered     // render の結果。出力チャンネルごとの Buf
+voice.Rendered     // render の結果。出力チャンネルごとの Buf（イベントの出力は位置と値の Buf）
 
 // 関数
 fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
+                                            // cfg は init の入力のある flow だけ（下の数の規則）
 rt fn voice.reset(inout s: voice.State)
-rt fn voice.process(inout s: voice.State, params: voice.Params, <入力>, <出力>)
-rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, <入出力>)
-                                            // sample の入力と出力の数と型が順に一致する flow にだけ生成される
-fn voice.render(cfg: voice.Config, params: voice.Params, <入力>,
+rt fn voice.process(inout s: voice.State, params: voice.Params, events: Span[voice.Event], <入力>, <出力>)
+rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, events: Span[voice.Event], <入出力>)
+                                            // sample の入力と出力の数と型が順に一致し、イベントを出さない flow にだけ生成される
+fn voice.render(cfg: voice.Config, params: voice.Params, events: Span[voice.Event], <入力>,
                 frames: U32, sample_rate: F32) -> voice.Rendered uses {Alloc}
                                             // frames は sample の入力の無い flow にだけある
-fn voice.params_default() -> voice.Params   // 全ての block の入力に @param がある場合
+fn voice.params_default() -> voice.Params   // block の入力のある flow で、その全てに @param か @host がある場合
+fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベントの入力ごと
+rt fn voice.latency(s: voice.State) -> U32  // 遅れ（下記）
 ```
 
 - 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。名前空間と中の全ての項目は、flow の可視性（`pub` / 無指定 / `priv`）を継ぐ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
@@ -231,22 +235,33 @@ fn voice.params_default() -> voice.Params   // 全ての block の入力に @par
 - `process` の `<入力>` と `<出力>` は、数で形が決まる。
   - 入力: `sample` の入力が無ければ引数は無い。1 つなら `input: Span[T]`（値型が `[T; N]` なら `input: [Span[T]; N]`、チャンネルごとのバッファ、§5.3）。2 つ以上なら `input: voice.In`。`In` は `sample` の入力の名前をフィールドに持ち、各フィールドは `Span[T]` か `[Span[T]; N]`。
   - 出力: 単一の値なら `inout output: Span[T]`、`[T; N]` なら `inout output: [Span[T]; N]`、struct なら `inout output: voice.Out`。`Out` は出力の struct と同じフィールド名を持ち、各フィールドは `Span[T]` か `[Span[T]; N]`。
-  - 引数の名前は `s`、`params`、`input`、`output` に固定する。利用者の名前（`sample` の入力の名前、出力の struct のフィールド名）は `In` / `Out` のフィールドにだけ現れるので、生成 API の引数の名前と衝突しない。
+    イベントの出力（§11.11）は `inout output: Span[(U32, E)]`（長さが容量）で受け、`process` は出した数を返す（`-> U32`）。`sample` の入力が無くイベントを出す flow の `process` は `frames: U32` を取る（`render` と同じ）。
+  - イベント: イベントの入力のある flow の `process` は、`params`（あれば）の後、`sample` の入力の前に `events: Span[voice.Event]` を取る。列は入力の印の付いた一つの列で、入力をまたいだ順は列の順だけで決まる。要素は入力ごとの作る関数 `voice.Event.<入力の名前>(pos: U32, v: T)` で作る。
+  - 引数は flow のシグネチャにある入力と出力だけである（この数の規則を、`sample` の入出力、イベントの入出力、`block` の入力、`init` の入力の全てに当てる）。`block` の入力の無い flow は `params` の引数と `Params`・`params_default` を持たず、`init` の入力の無い flow は `cfg` の引数と `Config` を持たない（`process`・`process_inplace`・`render`・`init` で同じ）。
+    シグネチャと違う呼び出しは型の誤りになる。
+  - 引数の名前は `s`、`params`、`events`、`input`、`output` に固定する。利用者の名前（`sample` の入力の名前、出力の struct のフィールド名）は `In` / `Out` のフィールドにだけ現れるので、生成 API の引数の名前と衝突しない。
   - `In` と `Out` は `Span` を持つので、`Span` と同じく引数の位置にだけ現れる（§5.3）。引数の位置に struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する（`inout [a, b]` と同じ）。
     例: `swap.process(inout st, p, swap.In { l: a, r: b }, inout swap.Out { l: x, r: y })`。入出力が複数あるときは名前で対応が見えるので、左右の取り違えが見た目に出る。よく使う形（入力が 0 か 1、出力が単一の値か配列）は、struct を作らずに `Span` をそのまま渡す。
-  - 全ての `Span` の長さは等しくなければならず、違えば panic（poisoned）する。長さは呼び出しの最初に、どの状態も進める前に一度だけ比べる。サンプルループの中の入出力の `Span` への添字には検査を置かない（最初の比較が、それらの添字が範囲内であることを保証する。§11.3 の巻き上げと同じく、性能の約束である。サンプルの段から呼ぶ関数の中の添字は §9.2 のとおり検査する）。
+  - `sample` の入出力の全ての `Span` の長さは等しくなければならず（イベントの列とイベントの出力は含まない）、違えば panic（poisoned）する。長さは呼び出しの最初に、どの状態も進める前に一度だけ比べる。サンプルループの中の入出力の `Span` への添字には検査を置かない（最初の比較が、それらの添字が範囲内であることを保証する。§11.3 の巻き上げと同じく、性能の約束である。サンプルの段から呼ぶ関数の中の添字は §9.2 のとおり検査する）。
   - 長さが 0 の呼び出し（ホストが 0 フレームで呼ぶ場合）も正しい呼び出しで、`block` の段は他の呼び出しと同じく 1 回評価し、`sample` の段は評価しない。
+  - イベントの列の前提: `pos < frames`（`frames` は `sample` の入出力の長さ）、列の順に `pos` が減らない。破れば呼び出しの最初に panic する（poisoned。`Span` の長さの不一致と同じ）。`frames` が 0 の呼び出しはイベントを持てない（あれば同じ扱い）。出力のイベントの容量が上限（§14.2）に足りないときも、呼び出しの最初に panic する（黙って捨てない）。
+    呼び出しを位置 k で分けると、`pos >= k` のイベントは次の呼び出しの `pos - k` に移り、出力は分けない呼び出しとビットで同じである（`params` が同じとき。`block` は状態を持たず、位相のカウンタはホストの区切りに依らない。`@host` の値はラッパーが分けた位置で進めるので、`@host` を読む flow の出力は最後の桁が変わりうる）。
+    呼び出しのイベントの段は、その呼び出しの `params` を読む（同じ位置のパラメータの変化とイベントの順は言語が約束しない。ラッパーは位置 p のパラメータの変化の直前で呼び出しを分け、p のイベントは新しい値を見る）。
 - `sample` の入出力の値型は、スカラ、`[スカラ; N]`、または（出力のみ）それらをフィールドに持つ struct。入れ子の配列は境界に出せない（E0810）。
 - `process` のサンプルループは、各サンプルで **全ての `sample` の入力を読んでから、全ての出力を書く**。過去の値は状態から読み、入力バッファの他の位置は読まない。この不変条件により、入力と出力が完全に同じバッファでも結果は変わらない。
 - `process_inplace` は、`sample` の入力と出力を位置で対にし、`inout output` 一つ（出力と同じ形）にまとめたもの。入力と出力の数と型を比べるとき、struct の出力はフィールドを順に展開して数える（`swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample` にも生成する）。
-  `process` の排他性（§5.2）を保ったまま、一本のバッファにエフェクトを掛けられる。本体は `process` と同じで、C バックエンドでは同じポインタで内部の関数を呼ぶだけなのでコードは増えない。
+  イベントを出す flow には生成しない（`sample` の入出力が共に無く、数の比べが空で一致してしまうため）。`process` の排他性（§5.2）を保ったまま、一本のバッファにエフェクトを掛けられる。本体は `process` と同じで、C バックエンドでは同じポインタで内部の関数を呼ぶだけなのでコードは増えない。
 - `reset` は、`prev` / `delay` / `vdelay` の状態を `init` 値に戻し、書き込み位置を 0 にし、サブインスタンスを再帰的に `reset` し、poisoned を解く。
   止まる部品の保持した出力（§11.10）と、遅いクロックの値を速い段で読む欄（§11.3、§11.11）も戻し、位相のカウンタ（§11.9）を 0 にする。`init` のクロックの値は保つ（`init` の再実行は非 rt になりうる）。
   export の境界では、`init` が panic して完了しなかったインスタンス（`initialized` が偽）に対する `reset` は何もしない（§14.2）。
 - `init` は効果を持たず、ヒープを使わない。返り値は呼び出し側の領域に直接構築される（§12.7。コピーしないことを保証する）。
 - `render` はテストと一括処理用。全体を 1 回の `process` として処理するので、`block` の入力は全区間で一定。ブロックごとにパラメータを変えるテストは `process` を自分で繰り返す。`sample` の入力がある flow では `frames` を取らず、`Span` の長さを使う。
-- `Rendered` は、出力を `Buf` で持つ struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`。各フィールドは `Buf[T]` か `[Buf[T]; N]`）。`render` の `<入力>` は `process` と同じ形。
+  イベントの入力のある flow の `render` は、`process` と同じ位置に同じ形のイベントの列を取り、位置は `render` の頭から数える（`frames` が 0 の `render` はイベントを持てない）。
+- `Rendered` は、出力を `Buf` で持つ struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`。各フィールドは `Buf[T]` か `[Buf[T]; N]`）、イベントの出力は `o.out: Buf[(U32, E)]`。`render` の `<入力>` は `process` と同じ形。
 - 状態の所有者は呼び出し側。サンプルレートを変えるときは、`init` を呼び直す。
+- `latency` は flow の遅れのサンプル数を返す（`init` の後の値。未初期化なら 0。C は `<p>_latency`、§14.2）。値は一番外の flow の宣言 `@latency(e)`（`e` は `init` のクロックの式）で、宣言が無ければ 0 である（子の宣言は合成しない）。
+  コンパイラは報告する値を本体から数えない（フィルタの群遅延は周波数と係数に依り、遅いレートで動く検出の経路の遅れは音の遅れでないので、機械では正しく決まらない）。構造から決まる遅れ（集めて配る N と子の宣言の、経路ごとの値）は解析の道具（`onsa audit`）が出し、形は S-586 で決める。
+  `block` のクロックの式は E0815。値は状態の隠れた欄に置き、`reset` は保つ。std の `fir_up2`・`fir_down2` は `@latency` を持つ。
 - 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。`let` の値がインスタンス・遅延・`par` の呼び出しそのものなら（`let c = prev~(b)`、`let src = saw~(f0)`）、そのノードは `let` の名前で呼ぶ（`c`、`src`）。
   名前の無い状態のノード（式の中に直接書いたインスタンスと `prev~` / `delay~` / `vdelay~`、`par`）は、それを含む `let` の名前に `.` で続けて、種類と番号で呼ぶ（`let a = prev~(lp~(x)) + prev~(x, 1.0)` の `a.prev_0`、`a.lp_0`、`a.prev_1`）。
   種類は、組込みの遅延の名前、修飾を除いた flow の名前、`par` である。番号は `let` ごと・種類ごとに、呼び出しの名前が字面に現れる順に 0 から振る（`lp~(lp~(x))` は外側が先）。出力の式の中のノードは修飾しない（`lp_0`）。分解する `let` は、パターンの中で最初に束縛する名前で修飾する。
@@ -283,7 +298,11 @@ pub flow gain(
 - 値の制約（違反は E0809）: 数値は有限（NaN と無限大は不可）。両方あれば `min < max`。`default` は範囲の中。`step > 0`。`scale: "log"` は `min > 0` を要する。`Bool` の入力に書けるのは `default`（`true` / `false`）、`unit`、`label`、`id` だけである。
   制約が無ければ `min` / `max` / `step` を書かない（`step` が無ければ、浮動小数は連続、整数は全ての整数の値）。`onsa interface` も、書かれていないキーを出さない。
 - 用途: IDE の自動 UI、プラグイン（CLAP / VST3 / AU）のパラメータ情報、`params_default()`、C API のメタデータ表。
-- export する flow（§15.3）の `block` の入力には `@param` が必須（E0809）。
+- export する flow（§15.3）の `block` の入力には `@param` か `@host`（下記）が必須（E0809）。
+- ホストの情報: `block` の入力に `@host(<種類>)` を付けると、export でも `@param` が要らず、ラッパーがその呼び出しの最初のサンプルの時点の値を書く（呼び出しを分けた位置では進めた値、§14.3）。
+  種類は `tempo`（`F64`、BPM、既定 120.0）・`beat`（`F64`、四分音符の数の位置、0.0）・`bar_start`（`F64`、今の小節の頭の位置、0.0）・`sig_num`・`sig_den`（`U16`、4・4）の閉じた一覧（再生の状態は `transport.Event` で受ける、§11.11）。種類の誤りは E0005、型の違いと `@param` との重なりは E0809。
+  `@host` は export しない flow の入力にも付けられ、意味は export でだけ持つ（`@param` と同じ）。`params_default()` は `@host` の欄を既定の値にし（§11.6）、`onsa test --flows` は `@host` の入力に既定の値を与える（§18.2）。C の表は §14.2。
+- プラグイン（§14.3）に出す flow の数値の `@param` は `min`・`max` を要する（無ければそのターゲットのビルドで E0809）。整数は `(max − min) / step ≤ 2^24`（E0809）。AU のターゲットでは `F64` の `@param` は E0200。VST3 の正規化は `scale` で写す。ラッパーが値を格子に寄せて範囲に収めることは §14.3（下の飽和させない約束とは別の層）。
 - `id` はパラメータの文字列の ID で、ホストが保存する自動化とプリセットが参照する。省略すると入力の名前（`cutoff`）になる。空でなく、ASCII の英字・数字・`_`・`.` からなり、同じ flow の中で重複してはならない（E0809）。入力の名前を変えても保存した自動化とプリセットを保つには、元の名前を `id` に書く（`id: "cutoff"`）。`onsa.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
 - 数値の ID は、文字列の ID から決まる 32 ビットの整数である。CLAP / VST3 / AU のホストはパラメータを整数で識別するので、プラグインのラッパーと C の API（§14.2 の `number` と `_param_index`）はこれを使う。
   作り方は、`id` のバイト列に FNV-1a（32 ビット、オフセット基底 `0x811C9DC5`、素数 `0x01000193`）を適用し、下位 31 ビットを取る（`h & 0x7FFFFFFF`）。
@@ -302,6 +321,8 @@ UI の宣言を DSP の式の中に書く FAUST（`hslider(...)`）と違い、�
 - `magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32`（F64 の Goertzel で計算し、結果を F32 に丸める）
 - `energy(xs: Span[F32], from: U32, to: U32) -> F64`（半開区間 `[from, to)` の二乗和）
 - `assert_near(a: F64, b: F64, tol: F64)`（`a == b || abs(a - b) <= tol` を §3.4 の F64 の演算で計算し、真なら通る。`tol` は有限で負でない値に限り（`-0.0` は 0）、そうでなければ `a` と `b` を比べずに失敗する。NaN は `a` と `b` のどちらにあっても失敗する。失敗は呼び出しの位置の panic で、文面は約束しない）
+
+イベントの入力のある flow のテストは補助を足さず、配列のリテラルと作る関数（`voice.Event.<入力の名前>`、§11.6）でイベントの列を書き、`render` か `process` に渡す（入力をまたいだ順は列の順に書く）。
 
 `test` の名前は、空でない、補間を含まない文字列リテラルで、その値（エスケープで書いた文字を含む）に制御文字（U+0000〜U+001F と U+007F〜U+009F。改行とタブを含む）、U+2028 / U+2029、双方向の制御文字（§2.5 の一覧）を含めない。違反は構文の段の E0002 で、修正候補は出さず、規則を note で示す。
 名前は、同じモジュールの中で重複できない（E0306）。同じ名前かは値（コードポイントの並び）で比べ、Unicode の正規化はしない（`"a"` と `"\u{61}"` は同じ名前、`"é"` と `"e\u{301}"` は別の名前）。
@@ -413,6 +434,14 @@ test "wrap01 stays in [0, 1)" {
   出す位置は出した刻みの位置で、出したイベントの刻みは出した刻みの直後に並ぶ（受け手は名前の順で作り手より下にあり、その位置の受け手の段の前に届く）。呼び出しの出力のイベントのクロックは、呼び出しごとに別のクロックである。struct の出力にイベントを含めない（E0810）。
   `.up~`・`.down~` の部品の中から出るイベントの位置は、内側の刻みが属する呼び出し側の位置で、同じ位置には内側の刻みの順に並ぶ（細かい時刻が要るときは値に入れる）。`when~` で止まっている間は、周期のクロックの式の出力は出さず、入力のイベントごとの出力は出る。
 - std: イベントと信号の変換（イベントのあった位置で真の脈の flow、`genv~`、`detect_zero~` など）は std の flow で書き、flow の組込み名にしない（§11.4）。イベントの型は prelude に入れず、std のモジュールに置く（後から prelude に足すと、prelude の名前は隠せないので利用者の同名の型が壊れる）。
+- 境界の型: export（`[export]` の項目と C の API）の境界のイベントの入出力に出せる型は、§11.7 の `@param` と同じスカラ（`F32 F64 I8 I16 I32 U8 U16 U32 Bool`。JavaScript で 64 ビットの整数を境界に出さないため、§13.5）、`()`、std のイベントの型だけで、それ以外は E0810 である。
+  flow の中と、Onsa のコードから呼ぶ生成する API（`process`・`render`）では、利用者の型も含めて自由である（外の境界ではないので、ラッパーと ABI に由来する制限は要らない）。
+  `std.midi` の `midi.Message` は、MIDI 1.0 の短いメッセージを `U32` に詰めた中身を見せない型である（bit 16〜23 がステータス、8〜15 がデータ 1、0〜7 がデータ 2、24〜31 は 0。UMP の MIDI 1.0 の語の下位 24 ビット、Cmajor の `std::midi::Message` と同じ並び）。C では `uint32_t`。
+  判定と取り出しと作る関数を std に置く。SysEx は持たず、MIDI 2.0 は後で別の型として足す。
+  `std.transport` の `transport.Event` は、Start / Stop / Continue の中身を見せない型で、C では種類の番号の `uint32_t`。作る側は関連定数 `transport.Event.START`・`STOP`・`CONTINUE`（`continue` は予約語なので関数にしない）、判定は `transport.is_start` など。
+  テンポと位置は `block` の入力で渡す（export では `@host`、§11.7）。
+  `Default` は、`midi.Message` が 0 の語、`transport.Event` が Stop。値の正しさ（未知の種類、上位のビット）は検査せず、std の判定の関数が偽を返す。
+  イベントのあった位置で真の脈の flow は `std.dsp` に置き、名前は std の一覧（M5）で決める（S-563 の例の `pulse` は仮の名前で、候補に `trig`）。
 
 ---
 

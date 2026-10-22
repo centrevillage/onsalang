@@ -14,7 +14,7 @@ use std.audio.device
 use std.sync.{Swap}
 
 pub fn main() -> Result[(), device.Error] {
-  let st     = voice.init(voice.Config {}, 48000.0)
+  let st     = voice.init(48000.0)
   var params = Swap.new(voice.params_default()) // 固定サイズの値。main のフレームに置かれる
   device.run(move st, inout params, move on_audio, move on_control)
 }
@@ -41,7 +41,7 @@ target fn run[S: ?Dup, P: Copy](
 - `audio` と `control` は `move` の関数型の引数なので、捕捉を持たない関数値（名前付き関数か、捕捉しない無名関数）だけを受ける（§5.2）。`run` は関数を文脈に登録して持ち続けるからである。状態は `move` で文脈へ渡り、登録した後はその文脈にしか無い（Affine）。
 - `run` が戻らないので、`inout params` の借用は呼び出しの中に収まる。参照は第二級のまま（§5.3）で、ライフタイムは要らない。同じ同期型を二つの文脈に渡すのは `run` だけで、文脈の中からの同時アクセスは同期型のメソッドが原子的に扱う。
 - 同期型は固定サイズの値なので、`main` のフレーム（`main_frame = "static"`、§12.5）や struct のフィールドに置ける。ヒープは要らない。
-- プラグイン（`clap` / `vst3` / `au`）と `staticlib` では `main` が無く、状態と同期型はホストが持つ。C API（§14.2）はそのまま使う。
+- プラグイン（`clap` / `vst3` / `au`）と `staticlib` では `main` が無く、状態はホストが持つ。C API（§14.2）はそのまま使い、プラグインではラッパーが呼ぶ（§14.3。UI の文脈との受け渡しも §14.3 で、言語の同期型は使わない）。
 - 割り込みとメインループを持つファームウェアも同じ形で、`target` モジュールが「オーディオ割り込み」と「メインループ」の二つの文脈を提供する。
 
 ### 16.2 同期型（`std.sync`）

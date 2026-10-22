@@ -1924,3 +1924,31 @@ target = "tests/spec/fixes/e0320_rename.onsa:45:7 E0320 fix1"
 reasons = ["S-82", "R-87"]
 until = "W4-04"
 note = "E0320 の候補が定数の宣言だけを改名し、触れない単位の使用に E0302 が残る（S-82、R-87 (5)。X-3 の器の強化 α が捕まえる）"
+
+[[pending]]
+kind = "spec-example"
+target = "§16.1 48cb6232: use std.audio.device"
+reasons = ["S-112", "S-570"]
+until = "W7-03"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.3 c0649aa1: use std.math.{exp, cos}"
+reasons = ["S-112", "S-570"]
+until = "W7-03"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.4 e7b0091f: use std.fs.{Fs, Path, IoError}"
+reasons = ["S-112", "S-570"]
+until = "W7-03"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.6 5925c9b1: use std.array"
+reasons = ["S-112", "S-570"]
+until = "W7-03"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
