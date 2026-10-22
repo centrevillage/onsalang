@@ -381,6 +381,7 @@
 "block" = { count = 1, note = "検証器のメッセージの文脈の名前（クロックの block と同じ綴り）" }
 
 [same_spelling."crates/onsa_driver/src/build.rs"]
+"host" = { count = 1, note = "マニフェストの platform の値 \"host\"（§15.3。属性 @host とは別）" }
 "none" = { count = 1, note = "ターゲットの三つ組の OS の部分（contains で is_none の一部と同じ綴り）" }
 "reset" = { count = 1, note = "マニフェストの panic の値（生成される API の reset と同じ綴り）" }
 
