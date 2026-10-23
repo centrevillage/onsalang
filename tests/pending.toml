@@ -1934,10 +1934,10 @@ note = "E0320 の候補が定数の宣言だけを改名し、触れない単位
 
 [[pending]]
 kind = "spec-example"
-target = "§16.1 48cb6232: use std.audio.device"
-reasons = ["S-112", "S-570"]
+target = "§16.1 fd401c4c: use std.audio.device"
+reasons = ["S-112", "S-570", "S-609"]
 until = "W7-03"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した（写しの 12 行は W4-11 で直す）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
