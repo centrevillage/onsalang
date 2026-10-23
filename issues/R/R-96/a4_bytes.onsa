@@ -1,0 +1,3 @@
+pub rt fn b1() -> U32 {
+  "gain".as_bytes().len()
+}

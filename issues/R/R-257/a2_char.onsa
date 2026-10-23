@@ -1,0 +1,3 @@
+pub rt fn c1() -> U8 {
+  'g' as U8
+}
