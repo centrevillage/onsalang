@@ -11,7 +11,7 @@ extern "C" lib "fastconv" {
 }
 
 pub struct Conv {
-  h: Ptr[FcRaw],
+  priv h: Ptr[FcRaw],
 }
 
 impl Drop for Conv {

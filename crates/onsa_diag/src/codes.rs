@@ -273,6 +273,8 @@ codes! {
         "the type contains itself as a value";
     E0312 = 312, Names, [Names], Optional, Optional,
         "the initializer of a `const` refers to itself";
+    E0314 = 314, Names, [Names], Optional, Optional,
+        "the alternatives of an or-pattern bind different names";
     E0320 = 320, Names, [Names], Required, Optional,
         "name does not follow the naming rule for its kind";
     E0401 = 401, Types, [Types, Flow], Optional, Optional,

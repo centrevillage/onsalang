@@ -14,4 +14,9 @@
 - **第 2 期（プラグインの VST3・AU。53 回目、2026-10-23、X-7）:** `kind = "vst3"`・`"au"`（AUv2）のラッパーを作る（S-580 の (t2)。形は S-580〜S-583）。CLAP の段（M10）の形式ごとの固定の C とつなぎの作りに足す。
   VST3・AU の作業で決めるもの（VST3 のクラスの ID の関数の中身、隠したパラメータの ID の式と上限、AU の SDK の探し方）は、仕様のプラグインの出力の項の「VST3・AU の作業で決めるもの」。
 - **trait の定義（X-8、2026-10-23、54 回目）:** 利用者が宣言した trait（`trait` の宣言、それの `impl`、それを境界に使うこと）は第 2 期（`history/implementation-plan.md` §2.3 の「ユーザ定義 trait は第 2 期」、S-72）。今は E0200（`onsa_diag::unsupported` の `TraitDefinitions`・`TraitImpls`・`TraitBounds`）。
-  - 実装するときに、W3-03 で `tests/spec/negative/unit_members.onsa` から外した trait のメンバの単位の事例を足す。形: `pub trait Measure {` の中に、既定の本体を持つ `fn width(self) -> I32 { let = 1 //~ E0002 … }`、`fn height` も同じ E0002、`fn depth(self) -> I32 { let bad: Bool = 1 //~ E0401 … }`、署名だけの `fn signature_only(self) -> I32`。三つのメンバの誤りが別々の単位として全て報告されることを確かめる。
+  - 実装するときに、W3-03 で `tests/spec/negative/unit_members.onsa` から外した trait のメンバの単位の事例を足す。
+    形: `pub trait Measure {` の中に、既定の本体を持つ `fn width(self) -> I32 { let = 1 //~ E0002 … }`、`fn height` も同じ E0002、`fn depth(self) -> I32 { let bad: Bool = 1 //~ E0401 … }`、署名だけの `fn signature_only(self) -> I32`。
+    三つのメンバの誤りが別々の単位として全て報告されることを確かめる。
+- **正確な循環の検査（55 回目、2026-10-23、S-594）:** E0310 の辺を、本体の経路が実際に指すモジュールで張る形にする。今はモジュール（パッケージを含む）を取り込む `use` を、そのモジュールと下の全てのモジュールへの辺として数え、偽の循環は取り込む経路を狭めて直す。
+  正確な辺は今の辺の一部なので、緩める向きで壊れない。入れるときに §15.1 の「この検査は `use` の一覧で閉じる」を改める。
+- **Windows の junction（55 回目、2026-10-23、S-592）:** パッケージの木の中の Windows の junction を、シンボリックリンクと同じに辿らないか（Rust の `FileType::is_symlink` が junction を含むかは未確認）を、Windows で動かす作業で確かめる。

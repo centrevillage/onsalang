@@ -163,6 +163,13 @@ note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 �
 
 [[pending]]
 kind = "diag-code"
+target = "E0314"
+reasons = ["S-318"]
+until = "W4-04"
+note = "選択のパターンの枝の束縛の集合の違い。仕様の文と登録は決定の回に揃え、検出は W4-04 の名前の段のパターンの束縛"
+
+[[pending]]
+kind = "diag-code"
 target = "E0303"
 reasons = ["S-35", "S-36", "S-144", "S-165"]
 until = "W10-01"
