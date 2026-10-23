@@ -1,0 +1,6 @@
+rt fn id(x: Str) -> Str { x }
+rt fn f(x: Str) -> U32 {
+  match id(x) {
+    s => s.len(),
+  }
+}

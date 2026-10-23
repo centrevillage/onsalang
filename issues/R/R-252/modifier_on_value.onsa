@@ -1,0 +1,1 @@
+pub flow a(x: F32 at sample, c: Bool at sample) -> F32 at sample { x.when~(c) }

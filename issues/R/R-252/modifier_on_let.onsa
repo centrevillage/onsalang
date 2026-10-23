@@ -1,0 +1,5 @@
+pub flow lp(x: F32 at sample) -> F32 at sample { x + 0.5 * prev~(x) }
+pub flow a(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let s = lp~(x)
+  s.when~(c)
+}

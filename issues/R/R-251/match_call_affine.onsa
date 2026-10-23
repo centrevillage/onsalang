@@ -1,0 +1,8 @@
+fn mko() -> Option[Buf[F32]] { None }
+fn take(move b: Buf[F32]) uses {Alloc} {}
+fn f() uses {Alloc} {
+  match mko() {
+    Some(z) => take(move z),
+    None => {},
+  }
+}

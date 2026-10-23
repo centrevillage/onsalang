@@ -1,0 +1,4 @@
+use kp.inner
+use main.inner.{g}
+
+pub fn k() -> I32 { g() }

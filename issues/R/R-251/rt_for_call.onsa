@@ -1,0 +1,8 @@
+rt fn id(xs: [Str; 2]) -> [Str; 2] { xs }
+rt fn f(xs: [Str; 2]) -> U32 {
+  var n: U32 = 0
+  for s in id(xs) {
+    n = n + s.len()
+  }
+  n
+}

@@ -1,0 +1,3 @@
+use main.inner.{h}
+
+pub fn m() -> I32 { h() }
