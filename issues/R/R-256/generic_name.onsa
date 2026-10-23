@@ -1,0 +1,4 @@
+pub rt fn f[T](move v: T, s: Str) -> U32 {
+  let p = (s, v)
+  p.0.len()
+}

@@ -1,0 +1,10 @@
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn f(v: F32) -> Param {
+  var p = Param { name: "gain", value: 0.0 }
+  p.value = v
+  p
+}

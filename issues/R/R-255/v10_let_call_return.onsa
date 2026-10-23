@@ -1,0 +1,23 @@
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+rt fn mk(v: F32) -> Param {
+  Param { name: "gain", value: v }
+}
+
+pub rt fn f(v: F32) -> Param {
+  let p = mk(v)
+  p
+}
+
+pub rt fn g(v: F32) -> Param {
+  let p = Param { name: "gain", value: v }
+  p
+}
+
+pub rt fn h(v: F32) -> Buf[F32] {
+  var b = Buf.zeroed(4)
+  b
+}

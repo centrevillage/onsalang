@@ -15,6 +15,7 @@
   VST3・AU の作業で決めるもの（VST3 のクラスの ID の関数の中身、隠したパラメータの ID の式と上限、AU の SDK の探し方）は、仕様のプラグインの出力の項の「VST3・AU の作業で決めるもの」。
 - **trait の定義（X-8、2026-10-23、54 回目）:** 利用者が宣言した trait（`trait` の宣言、それの `impl`、それを境界に使うこと）は第 2 期（`history/implementation-plan.md` §2.3 の「ユーザ定義 trait は第 2 期」、S-72）。今は E0200（`onsa_diag::unsupported` の `TraitDefinitions`・`TraitImpls`・`TraitBounds`）。
   - 実装するときに、W3-03 で `tests/spec/negative/unit_members.onsa` から外した trait のメンバの単位の事例を足す。
+  - `impl Drop` を入れるときに、`Drop` を実装する型のリテラル（`G { id: 1 }`、`G { id: v }`）が静的な値にも破棄の要らないリテラルにもならず所有の行になる事例を足す（S-610・S-613 の補い F7、§5.4）。
     形: `pub trait Measure {` の中に、既定の本体を持つ `fn width(self) -> I32 { let = 1 //~ E0002 … }`、`fn height` も同じ E0002、`fn depth(self) -> I32 { let bad: Bool = 1 //~ E0401 … }`、署名だけの `fn signature_only(self) -> I32`。
     三つのメンバの誤りが別々の単位として全て報告されることを確かめる。
 - **正確な循環の検査（55 回目、2026-10-23、S-594）:** E0310 の辺を、本体の経路が実際に指すモジュールで張る形にする。今はモジュール（パッケージを含む）を取り込む `use` を、そのモジュールと下の全てのモジュールへの辺として数え、偽の循環は取り込む経路を狭めて直す。
