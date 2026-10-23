@@ -1,0 +1,12 @@
+rt fn hb(move b: Buf[F32]) -> Buf[F32] {
+  b
+}
+
+rt fn hs(move s: Str) -> Str {
+  s
+}
+
+// S-609: a Shared value goes to a `move` parameter without `move` (today E0703 until W4-09).
+rt fn pass(move s: Str) -> Str {
+  hs(s)
+}

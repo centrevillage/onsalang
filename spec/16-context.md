@@ -7,7 +7,7 @@ Onsa は **スレッドを作らない**。プログラムが走る文脈（オ�
 
 ### 16.1 文脈の登録
 
-ターゲットは `target` 宣言（§15.2）で文脈を提供する。登録は「状態を `move`、同期型を `inout`、捕捉の無い関数を `move` で渡す」呼び出しで、**その呼び出しはプログラムが終わるまで戻らない**。
+ターゲットは `target` 宣言（§15.2）で文脈を提供する。登録は「状態を `move`、同期型を `inout` で渡し、捕捉の無い関数を `move` の引数に渡す」呼び出しで、**その呼び出しはプログラムが終わるまで戻らない**。
 
 ```onsa
 use std.audio.device
@@ -16,7 +16,7 @@ use std.sync.{Swap}
 pub fn main() -> Result[(), device.Error] {
   let st     = voice.init(48000.0)
   var params = Swap.new(voice.params_default()) // 固定サイズの値。main のフレームに置かれる
-  device.run(move st, inout params, move on_audio, move on_control)
+  device.run(move st, inout params, on_audio, on_control)
 }
 
 rt fn on_audio(inout st: voice.State, params: Swap[voice.Params], inout out: Span[F32]) {

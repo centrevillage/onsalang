@@ -1,0 +1,4 @@
+// R-253: `v` is a borrowed `T: ?Dup` (possibly Affine), so `put(move v)` should be E0711
+// without a candidate (§4.5, §5.2, S-609). dev 2ebd664 passes it.
+fn put[T: ?Dup](move x: T) {}
+fn g2[T: ?Dup](v: T) { put(move v) }
