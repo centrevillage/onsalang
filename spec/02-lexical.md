@@ -33,11 +33,11 @@ fn rt flow par struct enum trait impl effect blocking handler handle with uses
 let var if else match for in while break continue return
 pub priv use extern unsafe target test assert
 const type as at inout move self Self true false
-clock when reset_if ser
+clock when reset_if ser static
 ```
 
-`clock`、`when`、`reset_if`、`ser` は予約している。宣言の名前には使えない。`when`・`reset_if` はインスタンスの修飾子の名前で、`.when~(c)` の形でだけ使う（修飾子の名前は別の名前空間にある、§11.10）。
-後置の節（`saw~(f0) when c`）は構文の段の誤りで、note で連鎖の形を示す。`clock` は導くクロックの宣言に使わなくなった（§11.9）が、語の予約は残す。`ser` は flow の直列の複製（§19.1）のために予約している。`clock` と `ser` は構文として受け付けない（現れた位置で E0200、機能名を添える）。
+`clock`、`when`、`reset_if`、`ser`、`static` は予約している。宣言の名前には使えない。`when`・`reset_if` はインスタンスの修飾子の名前で、`.when~(c)` の形でだけ使う（修飾子の名前は別の名前空間にある、§11.10）。
+後置の節（`saw~(f0) when c`）は構文の段の誤りで、note で連鎖の形を示す。`clock` は導くクロックの宣言に使わなくなった（§11.9）が、語の予約は残す。`ser` は flow の直列の複製（§19.1）のために、`static` は静的なものだけを指す印（§19.1）のために予約している。`clock`・`ser`・`static` は構文として受け付けない（現れた位置で E0200、機能名を添える。項目の見出しの前の `static`（`static fn`）は、§18.1 の他の言語の修飾の語の読み方のまま E0002）。
 パスの `.` の直後と `use` の経路の頭は、他のキーワードと同じく名前として読む（`s.clock` は後の段の E0413、`clock.onsa` のモジュールは `kp.clock.tick()` で使える）。ただし `use` で取り込む名前（並びの要素と、並びの無い経路の最後の要素）は、現れた位置で E0200 である（`use kp.clock`、§15.1）。後から予約すると、その語を名前に使っていたプログラムが壊れるので、先に予約した。
 
 `prev` `delay` `vdelay`（組込みの遅延の flow）と `sample_rate`・`sample_tick` は、flow の中で予約された組込み名（§11.4）。flow の本体から見える束縛（モジュールの項目、`use` で取り込む名前、flow の入力、本体の `let` とパターン）に使えない（E0304、§5.1）。

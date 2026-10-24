@@ -1339,6 +1339,13 @@ note = "~ の挿入と除去の候補"
 # --- 字句解析器のキーワードと仕様 §2.2 の一覧の差（gate の項目 keywords、tools/keywords.py。W3-02/b 12）
 
 [[pending]]
+kind = "gate"
+target = "keywords/static"
+reasons = ["S-615"]
+until = "W5-11"
+note = "静的なものだけを指す印のために予約したキーワード。字句解析器はまだ知らない"
+
+[[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/recursion_fn_values.onsa"
 reasons = ["R-08", "S-191"]
