@@ -1765,7 +1765,7 @@ note = "for i in move 0..<n は E0703（§7）。今は型の段の E0401。28 �
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/names_clock_in_fn_head.onsa"
-reasons = ["S-356", "S-101"]
+reasons = ["S-356", "S-101", "S-267"]
 until = "W4-12"
 note = "fn の入出力の型の後ろの at は名前の段の E0821。構文の段が at を読む（W3-09）のが前提"
 

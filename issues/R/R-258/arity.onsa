@@ -1,0 +1,11 @@
+pub struct P {
+  x: I32
+}
+
+pub fn f(p: P[I32]) -> I32 {
+  1
+}
+
+pub fn h(o: Option[I32, F32]) -> I32 {
+  1
+}
