@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§15.3", "§19.1"]
+
+// Every module of a package reaches the same `std` (§15.3, §19.1): the declarations of std are
+// the same ones whichever module names them. `source` makes an `Option[I32]` and `sink` takes
+// one, `shapes` derives the std trait `PartialEq` for its struct and `eq` bounds a function by
+// it, and `main` joins them. Every module of the package uses `std.math` too, so std is reached
+// by the root module, by two siblings and by a module in a directory (a diamond: each of them
+// reaches std, and `main` reaches all of them). Every test passes.
+use source.{pick}
+use sink.{or_zero}
+use shapes.{Pair}
+use eq.{same}
+use deep.inner.{twice_clamped}
+
+test "an Option made in one module is taken by another" {
+  assert or_zero(pick(3)) == 3
+  assert or_zero(pick(-3)) == 0
+}
+
+test "a std trait derived in one module is a bound in another" {
+  assert same(Pair { x: 1, y: 2 }, Pair { x: 1, y: 2 }) == true
+  assert same(Pair { x: 1, y: 2 }, Pair { x: 1, y: 3 }) == false
+}
+
+test "the std Option satisfies the std trait named in another module" {
+  assert same(pick(1), pick(1)) == true
+  assert same(pick(1), pick(-1)) == false
+}
+
+test "a module in a directory reaches the same std" {
+  assert twice_clamped(or_zero(pick(4))) == 8
+  assert twice_clamped(-5) == 0
+}

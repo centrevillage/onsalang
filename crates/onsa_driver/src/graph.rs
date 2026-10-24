@@ -144,13 +144,15 @@ fn rate_color(r: FlowRate) -> &'static str {
 
 fn find_flow(analyzed: &Analyzed, name: &str) -> Result<DefId, String> {
     let a = &analyzed.analysis;
-    let user_pkg = a.modules.names.iter().position(|n| *n == analyzed.pkg.name);
+    // The user's package is the last of `flatten` (its ID), not the one of its
+    // name: a dependency may have the same name (R-88).
+    let user_pkg = onsa_sema::flatten(&analyzed.pkg).len() - 1;
     let mut hits: Vec<DefId> = a
         .defs
         .iter()
         .enumerate()
         .filter(|(_, d)| matches!(d.kind, DefKind::Flow(_)))
-        .filter(|(_, d)| user_pkg.is_none_or(|p| a.modules.pkg_of(d.module) == p))
+        .filter(|(_, d)| a.modules.pkg_of(d.module) == user_pkg)
         .map(|(i, _)| DefId(i as u32))
         .filter(|&id| a.def(id).name == name || a.qualified_name(id) == name)
         .collect();
@@ -329,5 +331,19 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
         assert!(dot.contains("\"y1\" [label=\"y1 = prev~: F32 at sample\""), "{dot}");
         assert!(dot.contains("  \"x\" -> \"y\"\n"), "{dot}");
         assert!(dot.contains("  \"y\" -> \"out\"\n"), "{dot}");
+    }
+
+    /// R-88: the flows are looked for in the user's package, the last of
+    /// `flatten`, even when it has the name of a dependency (`std`).
+    #[test]
+    fn the_flow_is_found_in_the_users_package_named_like_a_dependency() {
+        let mut sources = SourceMap::default();
+        let file = sources.add("res.onsa", RESONATOR);
+        let analyzed = crate::analyze_package(&mut sources, crate::STD_PACKAGE, &[(file, "res".to_string())])
+            .expect("no internal error");
+        assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analyzed.diagnostics));
+        assert_eq!(analyzed.analysis.modules.names, [crate::STD_PACKAGE, crate::STD_PACKAGE]);
+        let dot = super::graph(&analyzed, "resonator").unwrap();
+        assert!(dot.contains("\"y\" -> \"out\""), "{dot}");
     }
 }

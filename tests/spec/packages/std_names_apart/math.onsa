@@ -1,0 +1,4 @@
+// Not std.math: a module at the root of this package.
+pub fn sqrt(x: F32) -> F32 {
+  x
+}

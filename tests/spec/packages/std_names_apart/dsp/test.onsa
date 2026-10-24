@@ -1,0 +1,4 @@
+// Not std.dsp.test: a child module of the package's own `dsp`.
+pub fn marker() -> I32 {
+  7
+}

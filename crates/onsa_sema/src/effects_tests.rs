@@ -7,7 +7,7 @@ use crate::{Analysis, Module, Package, analyze};
 fn check(src: &str) -> Analysis {
     let m =
         Module { path: "main".into(), file: FileId(0), text: src.into(), parsed: onsa_syntax::parse(FileId(0), src) };
-    analyze(&Package { name: "t".into(), modules: vec![m], deps: Vec::new(), is_std: false })
+    analyze(&Package::new("t", vec![m], Vec::new()))
 }
 
 fn codes(a: &Analysis) -> Vec<Code> {

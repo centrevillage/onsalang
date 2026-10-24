@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§15.3"]
+
+// `std` is a dependency of every package without an entry in `[dependencies]`
+// (§15.3), and the modules of the standard library have the paths of their
+// files under `std/` (§15.1): `std/math.onsa` is `std.math`, `std/dsp.onsa` is
+// `std.dsp` and `std/dsp/test.onsa` is `std.dsp.test`. This package has no
+// `[dependencies]` table, and modules at the root and in a directory take the
+// names of std with `use`. Every test passes.
+use std.math.{sqrt, max}
+use std.dsp.{db_to_amp}
+use std.dsp.test.{assert_near}
+use dsp.filter.{root_of}
+use util.{larger}
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}
+
+test "a std function is used with no entry in the manifest" {
+  assert root(4.0) == 2.0
+  assert max(3, 7) == 7
+}
+
+test "a module of std in a directory is found by the path of its file" {
+  assert_near(db_to_amp(0.0) as F64, 1.0, 1.0e-6)
+}
+
+test "the modules of the package use std in the same way" {
+  assert root_of(9.0) == 3.0
+  assert larger(2, 5) == 5
+}

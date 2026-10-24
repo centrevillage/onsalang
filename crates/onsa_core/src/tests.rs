@@ -6,29 +6,25 @@ use onsa_sema::{Module as SModule, Package};
 use crate::ir::*;
 use crate::{dump, lower, verify};
 
-const STD: &[(&str, &str)] = &[
-    ("math", include_str!("../../../std/math.onsa")),
-    ("dsp", include_str!("../../../std/dsp.onsa")),
-    ("dsp.test", include_str!("../../../std/dsp/test.onsa")),
-    ("array", include_str!("../../../std/array.onsa")),
-    ("test", include_str!("../../../std/test.onsa")),
-    ("test.gen", include_str!("../../../std/test/gen.onsa")),
-];
-
 fn package(src: &str) -> (SourceMap, Package) {
     let mut sources = SourceMap::default();
-    let std_mods: Vec<SModule> = STD
+    let std_mods: Vec<SModule> = onsa_sema::std_modules()
         .iter()
-        .map(|(path, text)| {
-            let file = sources.add(format!("std/{path}.onsa"), *text);
-            SModule { path: path.to_string(), file, text: text.to_string(), parsed: onsa_syntax::parse(file, text) }
+        .map(|m| {
+            let file = sources.add(format!("std/{}", m.file), m.text);
+            SModule {
+                path: m.path.to_string(),
+                file,
+                text: m.text.to_string(),
+                parsed: onsa_syntax::parse(file, m.text),
+            }
         })
         .collect();
-    let std = Package { name: "std".into(), modules: std_mods, deps: Vec::new(), is_std: true };
+    let std = std::sync::Arc::new(Package::std(std_mods));
     let file = sources.add("t.onsa", src);
     let parsed = onsa_syntax::parse(file, src);
     let user = SModule { path: "t".into(), file, text: src.to_string(), parsed };
-    (sources, Package { name: "t".into(), modules: vec![user], deps: vec![std], is_std: false })
+    (sources, Package::new("t", vec![user], vec![std]))
 }
 
 /// Lower a one-module package; panics on check or lowering diagnostics.

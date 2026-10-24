@@ -19,27 +19,14 @@ pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, Te
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use onsa_diag::{Diagnostic, FileId, SourceMap, Span};
 use onsa_sema::{Module, Package};
 
-/// The standard library, embedded so that `wasm32` builds need no file I/O.
-const STD: &[(&str, &str)] = &[
-    ("math", include_str!("../../../std/math.onsa")),
-    ("dsp", include_str!("../../../std/dsp.onsa")),
-    ("dsp.test", include_str!("../../../std/dsp/test.onsa")),
-    ("array", include_str!("../../../std/array.onsa")),
-    ("test", include_str!("../../../std/test.onsa")),
-    ("test.gen", include_str!("../../../std/test/gen.onsa")),
-];
-
-/// The name of the embedded standard library's package.
-pub const STD_PACKAGE: &str = "std";
-
-/// The embedded std modules: (module path under `std`, source text).
-pub fn std_modules() -> &'static [(&'static str, &'static str)] {
-    STD
-}
+/// The embedded standard library: its package name, version and modules
+/// (generated from `std/`, R-80 (4)).
+pub use onsa_sema::{STD_PACKAGE, STD_VERSION, StdModule, std_modules};
 
 /// Result of `onsa check`: diagnostics only (no artifacts).
 #[derive(Debug, Default)]
@@ -290,14 +277,24 @@ pub fn read_sources(root: &Path) -> Result<Vec<SourceFile>, String> {
 }
 
 fn std_package(sources: &mut SourceMap) -> Package {
-    let modules = STD
+    let modules = std_modules()
         .iter()
-        .map(|(path, text)| {
-            let file = sources.add(format!("std/{}.onsa", path.replace('.', "/")), *text);
-            Module { path: path.to_string(), file, text: text.to_string(), parsed: parse_file(file, text) }
+        .map(|m| {
+            let file = sources.add(format!("{STD_PACKAGE}/{}", m.file), m.text);
+            Module { path: m.path.to_string(), file, text: m.text.to_string(), parsed: parse_file(file, m.text) }
         })
         .collect();
-    Package { name: STD_PACKAGE.into(), modules, deps: Vec::new(), is_std: true }
+    Package::std(modules)
+}
+
+/// The dependency graph of a package, made once (R-88 (1), design 3.3): the
+/// user's package with the embedded std as its implicit dependency (§15.3).
+/// The std is one shared value however many packages depend on it.
+/// `[dependencies]` is not read here (the pin of std and the other
+/// dependencies are the manifest check's, W4-02).
+fn package_graph(sources: &mut SourceMap, name: &str, modules: Vec<Module>) -> Package {
+    let std = Arc::new(std_package(sources));
+    Package::new(name, modules, vec![std])
 }
 
 /// Parse one file; a panic names the file (S-67).
@@ -472,8 +469,7 @@ pub fn analyze_package(
                 Module { path: path.clone(), file: *file, text, parsed }
             })
             .collect();
-        let std = std_package(sources);
-        let pkg = Package { name: name.to_string(), modules: user_modules, deps: vec![std], is_std: false };
+        let pkg = package_graph(sources, name, user_modules);
         let analysis = onsa_sema::analyze(&pkg);
         let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
         all.extend(analysis.diagnostics.iter().cloned());
@@ -582,11 +578,7 @@ fn fill_found_with<'t>(diagnostics: &mut [Diagnostic], text_of: impl Fn(FileId) 
 
 /// The text of `file` among the modules of `pkg` and its dependencies.
 fn package_text(pkg: &Package, file: FileId) -> Option<&str> {
-    pkg.modules
-        .iter()
-        .find(|m| m.file == file)
-        .map(|m| m.text.as_str())
-        .or_else(|| pkg.deps.iter().find_map(|d| package_text(d, file)))
+    onsa_sema::flatten(pkg).into_iter().flat_map(|p| &p.modules).find(|m| m.file == file).map(|m| m.text.as_str())
 }
 
 #[cfg(test)]
@@ -622,9 +614,49 @@ mod tests {
         for m in &std.modules {
             assert!(m.parsed.diagnostics.is_empty(), "std/{}: {:?}", m.path, m.parsed.diagnostics);
         }
-        let pkg = Package { name: "empty".into(), modules: Vec::new(), deps: vec![std], is_std: false };
+        let pkg = Package::new("empty", Vec::new(), vec![Arc::new(std)]);
         let analysis = onsa_sema::analyze(&pkg);
         assert!(analysis.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analysis.diagnostics));
+    }
+
+    /// R-80 (4), D-15: the std table that `onsa_sema/build.rs` generates is
+    /// the package that the driver's own reading of `std/` gives (§15.1): the
+    /// same files, in the same order, with the same module paths and texts.
+    #[test]
+    fn the_generated_std_table_is_the_package_read_from_the_std_directory() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std");
+        let read = read_sources(&root).expect("std/ reads");
+        assert!(!read.is_empty());
+        let from_dir: Vec<(String, String, String)> =
+            read.iter().map(|f| (module_path(Path::new(&f.path)), f.path.clone(), f.text.clone())).collect();
+        let table: Vec<(String, String, String)> =
+            std_modules().iter().map(|m| (m.path.to_string(), m.file.to_string(), m.text.to_string())).collect();
+        assert_eq!(table, from_dir);
+    }
+
+    /// R-88 (1): a package that two packages of the graph depend on is one
+    /// value, analyzed once. Here std is a dependency of the user's package
+    /// and of `mid`, which the user's package depends on too: this version
+    /// takes no dependency other than std (§19.1), so no case can write this.
+    #[test]
+    fn a_package_shared_in_the_graph_is_analyzed_once() {
+        let mut sources = SourceMap::default();
+        let std = Arc::new(std_package(&mut sources));
+        let std_modules_count = std.modules.len();
+        let src = "use std.math.{sqrt}\n\npub fn half(x: F32) -> F32 {\n  sqrt(x) * 0.5\n}\n";
+        let file = sources.add("mid/m.onsa", src);
+        let module = Module { path: "m".into(), file, text: src.to_string(), parsed: parse_file(file, src) };
+        let mid = Arc::new(Package::new("mid", vec![module], vec![std.clone()]));
+        let pkg = Package::new("user", Vec::new(), vec![std, mid]);
+        let flat = onsa_sema::flatten(&pkg);
+        assert_eq!(flat.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), [STD_PACKAGE, "mid", "user"]);
+        let analysis = onsa_sema::analyze(&pkg);
+        assert!(analysis.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analysis.diagnostics));
+        assert_eq!(analysis.modules.names, [STD_PACKAGE, "mid", "user"]);
+        let std_files = analysis.modules.mods.iter().filter(|m| m.pkg == 0 && m.file.is_some()).count();
+        assert_eq!(std_files, std_modules_count);
+        let sqrt = analysis.defs.iter().filter(|d| d.name == "sqrt" && analysis.modules.pkg_of(d.module) == 0).count();
+        assert_eq!(sqrt, 1);
     }
 
     /// A deserializer that only records the fields a struct asks for.

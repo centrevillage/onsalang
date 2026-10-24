@@ -11,7 +11,7 @@ fn check(src: &str) -> Analysis {
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),
     }];
-    analyze(&Package { name: "t".into(), modules, deps: Vec::new(), is_std: false })
+    analyze(&Package::new("t", modules, Vec::new()))
 }
 
 fn codes(src: &str) -> Vec<Code> {

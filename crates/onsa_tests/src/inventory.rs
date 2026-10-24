@@ -33,7 +33,7 @@ pub fn codes() -> serde_json::Value {
 /// variant and struct field. Fails when a std module does not parse.
 pub fn std_names() -> Result<Vec<String>, String> {
     let mut names = vec![onsa_driver::STD_PACKAGE.to_string()];
-    for (path, text) in onsa_driver::std_modules() {
+    for &onsa_driver::StdModule { path, text, .. } in onsa_driver::std_modules() {
         names.extend(path.split('.').map(str::to_string));
         let parsed = onsa_syntax::parse(FileId(0), text);
         if !parsed.diagnostics.is_empty() {

@@ -1,6 +1,7 @@
 //! Unit tests for flow body checking (T3-1): rates, nodes, and E08xx.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use onsa_diag::{Code, FileId};
 
@@ -8,21 +9,23 @@ use crate::body::LocalId;
 use crate::flow::{FlowInfo, FlowRate, InitArg, Node};
 use crate::{Analysis, DefId, Module, Package, analyze};
 
-/// The standard library from the repository's `std/` directory (D-07), so that
-/// the spec examples (`use std.math.{exp, cos}`) check here as they do in the driver.
-fn std_package() -> Package {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std");
-    let files = [("math", "math.onsa"), ("dsp", "dsp.onsa"), ("dsp.test", "dsp/test.onsa"), ("array", "array.onsa")];
-    let modules = files
+/// The embedded standard library (D-07, R-80 (4)), so that the spec examples
+/// (`use std.math.{exp, cos}`) check here as they do in the driver.
+fn std_package() -> Arc<Package> {
+    let modules = crate::std_modules()
         .iter()
         .enumerate()
-        .map(|(i, (path, file))| {
-            let text = std::fs::read_to_string(root.join(file)).unwrap();
+        .map(|(i, m)| {
             let id = FileId(100 + i as u32);
-            Module { path: path.to_string(), file: id, text: text.clone(), parsed: onsa_syntax::parse(id, &text) }
+            Module {
+                path: m.path.to_string(),
+                file: id,
+                text: m.text.to_string(),
+                parsed: onsa_syntax::parse(id, m.text),
+            }
         })
         .collect();
-    Package { name: "std".into(), modules, deps: Vec::new(), is_std: true }
+    Arc::new(Package::std(modules))
 }
 
 fn check(src: &str) -> Analysis {
@@ -32,7 +35,7 @@ fn check(src: &str) -> Analysis {
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),
     }];
-    analyze(&Package { name: "t".into(), modules, deps: vec![std_package()], is_std: false })
+    analyze(&Package::new("t", modules, vec![std_package()]))
 }
 
 fn codes(src: &str) -> Vec<Code> {

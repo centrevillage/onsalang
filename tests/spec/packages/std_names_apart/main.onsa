@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§15.3"]
+
+// The head of a `use` path is a module at the root of the package or the name of a dependency
+// (§15.1), so the package's own `math`, `dsp` and `dsp/test` are not the `std.math`, `std.dsp`
+// and `std.dsp.test` that this package also takes with `use std...`. The own modules are plain
+// modules of the package, and std is the same std for them (a root module named `math` is not
+// `std`, §15.1). Every test passes.
+use std.math.{sqrt}
+use std.dsp.{db_to_amp}
+use std.dsp.test.{assert_near}
+use mine.{own_sqrt, own_gain, own_marker}
+
+test "std.math is std and math is the module of the package" {
+  let nine: F32 = 9.0
+  assert sqrt(nine) == 3.0
+  assert own_sqrt(nine) == 9.0
+}
+
+test "std.dsp is std and dsp is the module of the package" {
+  assert_near(db_to_amp(0.0) as F64, 1.0, 1.0e-6)
+  assert own_gain(0.0) == 100.0
+}
+
+test "std.dsp.test is std and dsp.test is the module of the package" {
+  assert own_marker() == 7
+}

@@ -1,0 +1,3 @@
+pub fn same[T: PartialEq](a: T, b: T) -> Bool {
+  a == b
+}

@@ -1,0 +1,4 @@
+// Not std.dsp: a module at the root of this package.
+pub fn db_to_amp(db: F32) -> F32 {
+  db + 100.0
+}

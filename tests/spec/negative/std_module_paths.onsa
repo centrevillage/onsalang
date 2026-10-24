@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§15.3"]
+
+// The modules of std are the files under `std/` (§15.1) and `std` is a dependency of every
+// package, a single file included (§15.3). The paths of the files are modules, and a path
+// that is not one is a name that is not found (E0302): a module that has no file, a child of a
+// module that has no such file, an item the module does not have, and a head that is not a
+// module at the root or a dependency. The first three lines are the modules `std/math.onsa`,
+// `std/dsp.onsa` and `std/dsp/test.onsa`, which are found.
+use std.math.{sqrt}
+use std.dsp.{db_to_amp}
+use std.dsp.test.{impulse, energy}
+
+use std.math.{nosuch}        //~ E0302
+use std.nosuch.{sqrt}        //~ E0302
+use std.dsp.nosuch.{impulse} //~ E0302
+use std.math.nosuch.{sqrt}   //~ E0302
+use std.dsp.test.{nosuch}    //~ E0302
+use nosuch.{sqrt}            //~ E0302

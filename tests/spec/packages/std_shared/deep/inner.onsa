@@ -1,0 +1,5 @@
+use std.math.{max}
+
+pub fn twice_clamped(x: I32) -> I32 {
+  max(x, 0) * 2
+}

@@ -1,0 +1,3 @@
+[package]
+name = "std_shared"
+edition = "2026"

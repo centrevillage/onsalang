@@ -1,0 +1,4 @@
+pub struct Pair: PartialEq {
+  x: I32,
+  y: I32,
+}

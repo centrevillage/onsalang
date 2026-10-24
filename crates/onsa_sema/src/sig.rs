@@ -79,7 +79,7 @@ impl<'p> Sema<'p> {
     }
 
     fn is_std(&self, m: ModId) -> bool {
-        self.flat[self.a.modules.pkg_of(m)].is_std
+        self.flat[self.a.modules.pkg_of(m)].is_std()
     }
 
     // ------------------------------------------------------------ diagnostics

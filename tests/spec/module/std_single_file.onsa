@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.3"]
+
+// `std` is a dependency of every package, a single file with no manifest included (§15.3), and
+// the file is used by a `use` with the path of the std module, the same as in a package with a
+// manifest. Every test passes.
+use std.math.{sqrt, min}
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}
+
+test "std is used by a single file" {
+  assert root(16.0) == 4.0
+  assert min(3, 2) == 2
+}

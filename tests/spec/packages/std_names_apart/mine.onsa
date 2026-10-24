@@ -1,0 +1,15 @@
+use math.{sqrt}
+use dsp.{db_to_amp}
+use dsp.test.{marker}
+
+pub fn own_sqrt(x: F32) -> F32 {
+  sqrt(x)
+}
+
+pub fn own_gain(db: F32) -> F32 {
+  db_to_amp(db)
+}
+
+pub fn own_marker() -> I32 {
+  marker()
+}

@@ -144,7 +144,7 @@ mod tests {
             text: src.to_string(),
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
-        let a = analyze(&Package { name: "t".into(), modules, deps: Vec::new(), is_std: false });
+        let a = analyze(&Package::new("t", modules, Vec::new()));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let d = &a.diagnostics[0];
         let (from, to) = (d.span.start as usize, d.span.end as usize);
@@ -189,7 +189,7 @@ mod tests {
             text: src.to_string(),
             parsed: onsa_syntax::parse(FileId(0), src),
         }];
-        let a = analyze(&Package { name: "t".into(), modules, deps: Vec::new(), is_std: false });
+        let a = analyze(&Package::new("t", modules, Vec::new()));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let fix = &a.diagnostics[0].fixes[0];
         let s = fix.edits()[0].span;

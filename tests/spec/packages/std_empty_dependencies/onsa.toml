@@ -1,0 +1,5 @@
+[package]
+name = "std_empty_dependencies"
+edition = "2026"
+
+[dependencies]

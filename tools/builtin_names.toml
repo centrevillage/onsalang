@@ -153,12 +153,6 @@
 "SIZE" = 1
 "State" = 3
 
-[allow."crates/onsa_driver/src/lib.rs"]
-"array" = 1
-"dsp" = 1
-"math" = 1
-"std" = 1
-
 [allow."crates/onsa_sema/src/body.rs"]
 "Default" = 1
 "Eq" = 1
@@ -253,6 +247,9 @@
 
 [allow."crates/onsa_sema/src/kind.rs"]
 "Copy" = 1
+
+[allow."crates/onsa_sema/src/lib.rs"]
+"std" = 1
 
 [allow."crates/onsa_sema/src/rt.rs"]
 "zeroed" = 1

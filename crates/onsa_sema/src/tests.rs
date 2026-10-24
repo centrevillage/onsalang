@@ -17,7 +17,7 @@ fn pkg(files: &[(&str, &str)]) -> Package {
             parsed: onsa_syntax::parse(FileId(i as u32), text),
         })
         .collect();
-    Package { name: "t".into(), modules, deps: Vec::new(), is_std: false }
+    Package::new("t", modules, Vec::new())
 }
 
 fn check(src: &str) -> Analysis {
@@ -210,4 +210,40 @@ fn impl_registers_associated_items() {
     assert_eq!(norm.self_mode, Some(onsa_syntax::ast::Mode::Borrow));
     assert!(norm.rt);
     assert!(matches!(a.def(assoc["ZERO"]).kind, DefKind::Const(_)));
+}
+
+/// R-88 (1): `flatten` lists the dependencies first, depth-first, the package
+/// last, and a package that several packages depend on (the same value) once,
+/// where it is first reached.
+#[test]
+fn flatten_lists_a_shared_package_once() {
+    use std::sync::Arc;
+    let leaf = |name: &str| Arc::new(Package::new(name, Vec::new(), Vec::new()));
+    let s = leaf("s");
+    let x = leaf("x");
+    let a = Arc::new(Package::new("a", Vec::new(), vec![s.clone(), x.clone()]));
+    let b = Arc::new(Package::new("b", Vec::new(), vec![x.clone(), s.clone()]));
+    let root = Package::new("t", Vec::new(), vec![a, s.clone(), b]);
+    let names: Vec<&str> = crate::flatten(&root).iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["s", "x", "a", "b", "t"]);
+}
+
+/// R-88 (1): packages are the same when they are the same value, not when
+/// their names are: two values named alike are two packages.
+#[test]
+fn flatten_tells_packages_apart_by_value_not_by_name() {
+    use std::sync::Arc;
+    let one = Arc::new(Package::new("s", Vec::new(), Vec::new()));
+    let other = Arc::new(Package::new("s", Vec::new(), Vec::new()));
+    let root = Package::new("t", Vec::new(), vec![one.clone(), other, one]);
+    let flat = crate::flatten(&root);
+    assert_eq!(flat.len(), 3);
+    assert!(!std::ptr::eq(flat[0], flat[1]));
+}
+
+/// The role, not the name, marks the embedded std (R-88 (1)).
+#[test]
+fn the_role_marks_std() {
+    assert!(Package::std(Vec::new()).is_std());
+    assert!(!Package::new(crate::STD_PACKAGE, Vec::new(), Vec::new()).is_std());
 }

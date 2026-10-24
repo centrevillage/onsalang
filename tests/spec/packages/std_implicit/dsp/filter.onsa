@@ -1,0 +1,5 @@
+use std.math.{sqrt}
+
+pub fn root_of(x: F32) -> F32 {
+  sqrt(x)
+}

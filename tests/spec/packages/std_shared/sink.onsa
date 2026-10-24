@@ -1,0 +1,8 @@
+use std.math.{max}
+
+pub fn or_zero(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => max(v, 0),
+    None => 0,
+  }
+}
