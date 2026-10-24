@@ -1,0 +1,3 @@
+use _util
+use onsa_util
+pub fn g() -> I32 { _util.f() + onsa_util.f() }
