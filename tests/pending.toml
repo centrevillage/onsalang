@@ -152,10 +152,17 @@ note = "std.math.sum、積和の括弧。写し flow/unison.onsa は std.dsp.sum
 
 [[pending]]
 kind = "spec-example"
-target = "§17.4 6d30430b: const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒"
-reasons = ["S-102", "S-44", "S-29", "S-45", "S-43"]
+target = "§17.4 e4686e7e: // §17.3 と同じモジュール（resonator を参照する）"
+reasons = ["S-639"]
+until = "W4-02"
+note = "61 回目の S-639 で、export する flow voice に @export を付けた（§14.2・§17.5 がこの flow を export する）。@export は W4-02 で入るまで E0005 なので、写し tests/spec/examples/voice.onsa は今の形のまま残し、W4-02 の事例の書き換えで写しを直して外す"
+
+[[pending]]
+kind = "spec-example"
+target = "§17.4 b074d26b: const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒"
+reasons = ["S-102", "S-44", "S-29", "S-45", "S-43", "S-639"]
 until = "W9-06"
-note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 で写しの examples/voice.onsa と一致した。積和の括弧（W3-13）が解けた後に残る差は @mem(bulk) の let だけで、@mem の意味（W9-06）まで E0200（W3-08 の決定）"
+note = "echo。at のクロック、vdelay~(^y, ...)、init の省略は W3-10 で写しの examples/voice.onsa と一致した。積和の括弧（W3-13）が解けた後に残る差は @mem(bulk) の let だけで、@mem の意味（W9-06）まで E0200（W3-08 の決定）。61 回目の S-639 で flow に @export を付けた（E0005 は W4-02 で解ける）"
 
 
 # --- 否定例が 3 件に届かない診断コード（K-13。照合は tools/diag_codes.py、W1-02）

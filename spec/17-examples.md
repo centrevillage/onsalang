@@ -110,6 +110,7 @@ pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
   y
 }
 
+@export
 pub flow voice(
   @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
   f0: F32 at block,
@@ -134,6 +135,7 @@ flow の中で、`~` の付いた `saw` `resonator` `smooth` は状態を持つ�
 ```onsa
 const MAX_ECHO: U32 = 96000 // 48 kHz で 2 秒、96 kHz で 1 秒
 
+@export
 pub flow echo(
   x: F32 at sample,
   @param(min: 0.01, max: 1.0, default: 0.3, unit: "s")
