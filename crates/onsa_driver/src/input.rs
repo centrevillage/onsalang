@@ -143,14 +143,11 @@ impl Loaded {
     /// module path, and the E0200 of each file of the root's `tests/`, at the
     /// head of a file. Without a manifest only the name of the one file is a
     /// module name (the directories of the path given are outside the
-    /// package). A directory's is at the head of its first module file in
-    /// the order of the diagnostics (the file strings, §18.1, S-313).
-    /// The files of the root's `tests/` are not modules: their names are not
-    /// checked.
-    // SPEC-GAP(S-644): a single file passed as `.hid/ok.onsa` has no E0320
-    // for `.hid` (its module path is its file name only).
-    // SPEC-GAP(S-643): every `.onsa` under the root's `tests/`, at any
-    // depth, is an E0200, and its names are not checked (not a module).
+    /// package; `.hid/ok.onsa` has no E0320 for `.hid`, S-644). A directory's
+    /// is at the head of its first module file in the order of the
+    /// diagnostics (the file strings, §18.1, S-313). Every `.onsa` under the
+    /// root's `tests/`, at any depth, is an E0200 and not a module: its names
+    /// are not checked (S-643).
     // SPEC-GAP(S-645): a directory's E0320 is at its first file, so `check`
     // narrowed to another file under it (`Bad-Dir/b.onsa`) does not show it.
     pub fn input_diagnostics(&self) -> Vec<Diagnostic> {

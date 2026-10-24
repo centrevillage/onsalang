@@ -8,7 +8,8 @@
 // diagnostics (the file strings in code point order), with no candidate. The mark is on that file;
 // the other files below the same directory carry none (`Bad-Dir/b.onsa`, `Bad-Dir/sub/c.onsa`).
 // A directory with only deeper files is in the path of those files too (`Deep-Dir/inner/x.onsa`).
-// `match/` and `test/` are keywords, which follow the rule (spec 2.2).
+// `match/` and `test/` are keywords, which follow the rule (spec 2.2). A leading `_` (`_lead/`) breaks it,
+// a `_` at the end (`trail_/`) does not.
 
 pub fn f() -> I32 {
   1

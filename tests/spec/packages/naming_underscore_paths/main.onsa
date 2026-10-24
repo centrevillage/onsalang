@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§11.6", "§15.1"]
+// fixes = 0
+
+// R-261: the C name of an item is made of the names of its module path joined with `__`, so a `_` at
+// the start or the end of a name would make two items one name (`voice._f` and `voice_.f` are both
+// `voice___f`; `_util.f` and `onsa_util.f` are both `onsa_util__f`, as the C backend prefixes `onsa`).
+// Spec 2.3 makes that impossible: a name does not start with `_` in any shape, so `pub fn _f` is E0320
+// and the file `_util.onsa` is E0320 (at its top, with no candidate), while a `_` at the end is fine
+// (`voice_.onsa`). The program is refused by `onsa check`, and `onsa build` stops there with the same
+// diagnostics (crates/onsa_cli/tests/naming_shapes.rs), not with an internal error of the C compiler.
+
+use voice
+use voice_
+use _util
+use onsa_util
+
+pub fn g() -> I32 {
+  voice._f() + voice_.f() + _util.f() + onsa_util.f()
+}

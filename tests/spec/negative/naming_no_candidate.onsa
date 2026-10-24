@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+// fixes = 0
+
+// E0320 with no candidate (spec 2.3): when the name in the shape of its kind is not an identifier, there
+// is nothing to write, so the diagnostic has no candidate (`_0` without its `_` is `0`, `__` made one `_`
+// is `_`, the hole). The candidates of the other names are in fixes/e0320_leading_underscore. The runner
+// does not check that a diagnostic has no candidate; crates/onsa_cli/tests/naming_shapes.rs does. R-262.
+
+pub struct _0 { //~ E0320
+  x: I32,
+}
+
+pub enum C {
+  _0, //~ E0320
+  D,
+}
+
+pub const _1: I32 = 1 //~ E0320
+
+pub struct __ { //~ E0320
+  x: I32,
+}
+
+pub fn _2() -> I32 { //~ E0320
+  1
+}

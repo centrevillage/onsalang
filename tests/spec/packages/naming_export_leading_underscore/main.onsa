@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§14.2"]
+// fixes = 0
+
+// R-263: an exported function whose name starts with `_` would get the C name `t_onsa_g`, not the
+// `prefix` joined with its last name (`t__g`, spec 14.2). Spec 2.3 writes no name with a leading `_`, so
+// `@export pub fn _g` is E0320 at the declaration, which `onsa check` reports whatever the target is
+// (spec 14.2). The mark is on the line of the name. The function below it is exported with an ordinary name
+// and has no diagnostic.
+
+@export
+pub fn _g() -> I32 {                                       //~ E0320
+  1
+}
+
+@export
+pub fn h() -> I32 {
+  2
+}

@@ -211,7 +211,7 @@ impl<'a> Parser<'a> {
                 }
                 // The `{` of a struct pattern is on the line of its name, in
                 // brackets and in a `let` alike (E0003, S-413).
-                if crate::naming::is_type_name(self.token_text(path.last))
+                if crate::naming::reads_uppercase(self.token_text(path.last))
                     && self.e0003_unless_on_the_line(TokenKind::LBrace)
                 {
                     self.reshape(NodeKind::StructPat)?;
@@ -245,7 +245,7 @@ impl<'a> Parser<'a> {
                     let after = self.pattern_end();
                     return Err(self.fail(Want::Pattern, after));
                 }
-                let bind = path.segments == 1 && crate::naming::is_binding_name(self.token_text(path.first));
+                let bind = path.segments == 1 && crate::naming::reads_lowercase(self.token_text(path.first));
                 return Ok(self.complete(m, if bind { NodeKind::BindPat } else { NodeKind::PathPat }));
             }
             _ => return Err(self.fail(Want::Pattern, "a pattern")),

@@ -248,3 +248,35 @@ fn without_a_manifest_the_tests_dir_is_an_ordinary_directory() {
     assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
     assert!(diagnostics(&doc).is_empty(), "{doc}");
 }
+
+// ---- the naming rule is not applied below the root `tests/` (S-643) --------------------------------
+
+/// §15.1, §2.3, S-643: the files below the root `tests/` are not modules, so the naming rule is not applied
+/// to their names or to the names of the directories above them: `tests/My-File.onsa` and
+/// `tests/Bad-Dir/x.onsa` are E0200 and nothing else, and so is `tests/tests/x.onsa` (a `tests/` below the
+/// root `tests/`). A name that starts with `.` is not gathered, so `tests/.x.onsa` is not reported for the
+/// package, and passed by its path it is E0200 only (no E0320 for the leading `.`).
+#[test]
+fn the_names_below_the_root_tests_dir_are_not_checked_by_the_naming_rule() {
+    let d = Dir::pkg("root_tests_names");
+    d.write("m.onsa", OK_FN);
+    for file in
+        ["tests/My-File.onsa", "tests/Bad-Dir/x.onsa", "tests/tests/x.onsa", "tests/.x.onsa", "tests/.hid/y.onsa"]
+    {
+        d.write(file, OK_FN);
+    }
+    let (out, doc) = check_json(d.root(), &[]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(
+        places(&doc),
+        [e0200_at("tests/Bad-Dir/x.onsa"), e0200_at("tests/My-File.onsa"), e0200_at("tests/tests/x.onsa")],
+        "{doc}"
+    );
+    for file in
+        ["tests/My-File.onsa", "tests/Bad-Dir/x.onsa", "tests/tests/x.onsa", "tests/.x.onsa", "tests/.hid/y.onsa"]
+    {
+        let (out, doc) = check_json(d.root(), &[file]);
+        assert_eq!(out.code, 1, "{file}: {}{}", out.stdout, out.stderr);
+        assert_eq!(places(&doc), [e0200_at(file)], "{file}: {doc}");
+    }
+}

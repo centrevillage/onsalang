@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§7", "§18.1"]
+// fixes = 1
+
+// R-168 and R-240: `let _z = 5` is a binding whose name starts with `_`, which is E0320 at the name
+// (spec 2.3, "the kind is read from the first letter after the `_`": a binding, candidate without the
+// `_`). It is not an E0302 "cannot find `_z`" at the binding. A type after the name does not change it,
+// and the same goes for `var`, a parameter and a name in a pattern. The candidate renames the binding and
+// its uses, so the unit is clean after it. A `_` at the end (`z_`) is fine.
+
+pub fn b(x: I64) -> I64 {
+  let z = 5 //~ E0320
+  x + _z
+}
+
+pub fn typed(x: I64) -> I64 {
+  let z: I64 = 5 //~ E0320
+  x + _z
+}
+
+pub fn mutable(x: I64) -> I64 {
+  var total = x //~ E0320
+  _total = _total + 1
+  _total
+}
+
+pub fn param(x: I64) -> I64 { //~ E0320
+  _x
+}
+
+pub fn in_pattern(o: Option[I64]) -> I64 {
+  match o {
+    Some(v) => _v, //~ E0320
+    None => 0,
+  }
+}
+
+pub fn tuple(p: (I64, I64)) -> I64 {
+  let (a, b) = p //~ E0320
+  _a + b
+}
+
+pub fn trailing(x: I64) -> I64 {
+  let z_ = 5
+  x + z_
+}
+
+pub fn trailing_param(z_: I64) -> I64 {
+  z_
+}

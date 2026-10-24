@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§19.1", "§2.3"]
+
+// A `.onsa` file below the root `tests/` is E0200 whatever its name is, and only that (spec 15.1, S-643):
+// it is not a module, so the naming rule of 2.3 is not applied to it or to the directories above it.
+// `tests/My-File.onsa` and `tests/Bad-Dir/x.onsa` have names that would be E0320 in a module and they
+// carry no E0320. A `tests/` inside `tests/` (`tests/tests/x.onsa`) is E0200 as well (it is below the
+// root `tests/`, spec 15.1). The file `tests/.x.onsa` starts with `.`, so it is not gathered; passed by
+// its path it is E0200 only (crates/onsa_cli/tests/package_tests_dir.rs).
+
+pub fn f() -> I32 {
+  1
+}

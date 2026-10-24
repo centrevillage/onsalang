@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.3", "§7"]
+
+// A name in a pattern that is both `UpperCamel` and `UPPER_SNAKE` (`OK`, `N`) is resolved, not bound, so it
+// is the constant here and the value is compared with `==` (spec 7, 2.3, S-375). `MAX_` (a `_` at the end)
+// is a constant by its shape too, and a `snake_case` name after them (`other`) binds. The enum variants
+// and the bindings with a `_` at the end are in naming_pattern_shapes.
+
+const OK: I32 = 1
+const N: I32 = 2
+const MAX_: I32 = 9
+
+pub fn code(x: I32) -> I32 {
+  match x {
+    OK => 10,
+    N => 20,
+    MAX_ => 90,
+    other => other,
+  }
+}
+
+test "a constant of both shapes is compared, not bound" {
+  assert code(1) == 10
+  assert code(2) == 20
+  assert code(9) == 90
+  assert code(5) == 5
+}

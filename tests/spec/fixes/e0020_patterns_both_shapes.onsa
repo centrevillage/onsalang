@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7", "§18.1"]
+
+// A name that is both `UpperCamel` and `UPPER_SNAKE` (`OK`, `N`, `A`) is read as a constant where the
+// spelling decides (spec 2.3, S-375): after a `-` in a pattern and at the right of an `@`, where the last
+// name of a path is a constant by its spelling (§7). So `k @ OK`, `k @ Level.OK` and `-OK` are E0020 with
+// the guard form as the candidate, as for `LIMIT`; `Level.OK` is a variant, but its spelling says
+// constant. A name that is only `UpperCamel` (`Level.Low`) is not: `k @ Level.Low` is E0002 with a note
+// (§7). The text after the candidate is in the cases of e0020_patterns_at_forms; the runner checks here that
+// the unit has no error of this stage after it. One error per function.
+
+const LIMIT: I32 = 4
+const OK: I32 = 1
+const N: I32 = 2
+
+pub enum Level {
+  OK,
+  Low,
+}
+
+pub fn at_limit(n: I32) -> I32 {
+  match n {
+    k @ LIMIT => k, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_ok(n: I32) -> I32 {
+  match n {
+    k @ OK => k, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_n(n: I32) -> I32 {
+  match n {
+    k @ N => k, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn negative_ok(n: I32) -> I32 {
+  match n {
+    -OK => 1, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn negative_n_in_a_tuple(t: (I32, I32)) -> I32 {
+  match t {
+    (-N, m) => m, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_variant_ok(l: Level) -> I32 {
+  match l {
+    k @ Level.OK => 1, //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn at_variant_low(l: Level) -> I32 {
+  match l {
+    k @ Level.Low => 1, //~ E0002
+    _ => 0,
+  }
+}

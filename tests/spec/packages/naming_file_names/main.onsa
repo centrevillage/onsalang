@@ -9,6 +9,8 @@
 // is a text edit, and renaming a file is not one. The other files of this directory carry the mark
 // on their first line. A name that is a keyword (`match.onsa`) follows the rule and is written in a
 // path as it is (spec 2.2); `wrap01.onsa` is an ordinary name.
+// A leading `_` is written in no shape (`_hidden.onsa`, spec 2.3: it would make `voice._f` and `voice_.f`
+// the same C name), and a `_` at the end is fine (`trail_.onsa`).
 
 pub fn f() -> I32 {
   1

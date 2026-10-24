@@ -5,66 +5,77 @@ use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 
 use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind};
 
+/// The three shapes of names (§2.3, S-650): a core starting with a letter
+/// and one optional trailing `_` (the spelling that avoids a reserved word,
+/// S-243). A leading `_` is in no shape, nor is `__` (S-149: the C names
+/// map `.` to `__`, §11.6). Every kind of name takes one.
 #[derive(Clone, Copy)]
 enum Shape {
-    /// `snake_case`: values, functions, flows, modules, fields, parameters.
+    /// `snake_case`: values, functions, flows, modules, fields, parameters,
+    /// effect-row variables; the core is `[a-z][a-z0-9_]*`.
     Snake,
-    /// `UpperCamel`: types, traits, effects, variants.
+    /// `UpperCamel`: types, traits, effects, variants, type parameters; the
+    /// core is `[A-Z][A-Za-z0-9]*`.
     UpperCamel,
-    /// One `UpperCamel` word: type parameters.
-    // SPEC-GAP(S-642): a capital after a lowercase letter starts a second
-    // word (`ItemKey`); a run of capitals (`IO`, `IOKey`) and a digit
-    // (`T2`) do not. A name of more than one word has no candidate.
-    UpperCamelWord,
-    /// `UPPER_SNAKE`: constants.
+    /// `UPPER_SNAKE`: constants; the core is `[A-Z][A-Z0-9_]*`.
     UpperSnake,
-    /// One `snake_case` word: effect-row variables.
-    SnakeWord,
 }
 
-/// Whether `name` has the shape of a constant (`UPPER_SNAKE`, §2.3): the
-/// last name of a path that names a constant by its spelling alone (§7: a
-/// `-` before it, the right side of `@`; S-319, S-352).
-// SPEC-GAP(S-375): a name of one letter or of capitals only (`Mode.A`,
-// `Status.OK`) has the shape of a variant too; it is read as a constant.
-pub(crate) fn is_constant_name(name: &str) -> bool {
-    Shape::UpperSnake.matches(name)
+/// The part of a name read where its spelling decides its kind (§2.3,
+/// S-648): what follows a leading `_`, so `_x` is read as `x` and the naming
+/// rule reports the `_` (E0320) as a name of the kind read. Only the kind
+/// is read: the rules of `__` and of the trailing `_` are the declaration's
+/// E0320 (a name used is read as written, §2.3).
+fn spelled(name: &str) -> &str {
+    name.trim_start_matches('_')
 }
 
-/// Whether a name in a pattern binds (§7, §2.3): one whose first letter is
-/// lowercase does (a `snake_case` name; the naming rule checks the rest);
-/// others are resolved.
-pub(crate) fn is_binding_name(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_lowercase())
+/// Whether `name` has a leading `_`, the part [`spelled`] skips.
+fn has_leading_underscore(name: &str) -> bool {
+    spelled(name).len() != name.len()
 }
 
-/// Whether a path whose last name is `name` names a type, whose `{` opens a
-/// struct pattern or literal (§4.4: an `UpperCamel` name).
-pub(crate) fn is_type_name(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_uppercase())
+/// Whether a name read by its spelling is of a `snake_case` kind (§2.3): a
+/// binding in a pattern (§7), an effect-row variable in `[...]` (§8.1).
+// SPEC-GAP(S-656): a name with no letter after its leading `_` (`_0`, `__`)
+// has no case to read; it is read as a name whose first letter is not lowercase
+// (resolved in a pattern, a type parameter in `[...]`).
+pub(crate) fn reads_lowercase(name: &str) -> bool {
+    spelled(name).starts_with(|c: char| c.is_ascii_lowercase())
+}
+
+/// Whether a name read by its spelling is of an `UpperCamel` kind (§2.3): a
+/// type whose `{` opens a struct pattern or literal (§4.4), an effect after
+/// `with` (S-421).
+pub(crate) fn reads_uppercase(name: &str) -> bool {
+    spelled(name).starts_with(|c: char| c.is_ascii_uppercase())
+}
+
+/// Whether a name read by its spelling is a constant's (`UPPER_SNAKE`,
+/// §2.3, §7): the last name of a path after `-` or on the right of `@`
+/// (S-319, S-352), and FAUST's `x@N`. A name of both `UpperCamel` and
+/// `UPPER_SNAKE` (`A`, `OK`) is a constant's here (S-375).
+pub(crate) fn reads_constant(name: &str) -> bool {
+    let s = spelled(name);
+    s.starts_with(|c: char| c.is_ascii_uppercase())
+        && s.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 impl Shape {
     fn matches(self, s: &str) -> bool {
-        let mut chars = s.chars();
-        let Some(first) = chars.next() else { return false };
+        if s.contains("__") {
+            return false;
+        }
+        let core = s.strip_suffix('_').unwrap_or(s);
+        let mut rest = core.chars();
+        let Some(first) = rest.next() else { return false };
         match self {
             Shape::Snake => {
-                (first.is_ascii_lowercase() || first == '_')
-                    && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                first.is_ascii_lowercase() && rest.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
             }
-            Shape::SnakeWord => {
-                first.is_ascii_lowercase() && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-            }
-            Shape::UpperCamel => first.is_ascii_uppercase() && s.chars().all(|c| c.is_ascii_alphanumeric()),
-            Shape::UpperCamelWord => {
-                let b = s.as_bytes();
-                Shape::UpperCamel.matches(s)
-                    && !b.windows(2).any(|w| w[0].is_ascii_lowercase() && w[1].is_ascii_uppercase())
-            }
+            Shape::UpperCamel => first.is_ascii_uppercase() && rest.all(|c| c.is_ascii_alphanumeric()),
             Shape::UpperSnake => {
-                first.is_ascii_uppercase()
-                    && s.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                first.is_ascii_uppercase() && rest.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
             }
         }
     }
@@ -72,28 +83,32 @@ impl Shape {
     fn describe(self) -> &'static str {
         match self {
             Shape::Snake => "snake_case",
-            Shape::SnakeWord => "one snake_case word",
             Shape::UpperCamel => "UpperCamel",
-            Shape::UpperCamelWord => "one UpperCamel word",
             Shape::UpperSnake => "UPPER_SNAKE",
         }
     }
 
-    /// Best-effort conversion for the fix.
+    /// Best-effort conversion for the fix: the words of the name in the
+    /// shape (the boundaries of [`split_words`] are not in the spec, S-651).
     fn convert(self, s: &str) -> String {
         let words = split_words(s);
         match self {
             Shape::Snake => words.join("_"),
-            Shape::SnakeWord => words.concat(),
             Shape::UpperCamel => words.iter().map(|w| capitalized(w)).collect(),
-            // More than one word has no one-word name: the name stays, and
-            // the caller makes no candidate of it.
-            Shape::UpperCamelWord => match words.as_slice() {
-                [w] => capitalized(w),
-                _ => s.to_string(),
-            },
             Shape::UpperSnake => words.iter().map(|w| w.to_ascii_uppercase()).collect::<Vec<_>>().join("_"),
         }
+    }
+
+    /// The candidate of the E0320 of `name` (§2.3, §18.1): the name by the
+    /// rule, with a `_` at its end when that is a reserved word (`match_`,
+    /// S-243). None when it is not of the shape (`_0` gives no identifier,
+    /// S-651) or is the name itself (R-260, R-262).
+    fn candidate(self, name: &str) -> Option<String> {
+        let mut to = self.convert(name);
+        if crate::token::TokenKind::keyword(&to).is_some() {
+            to.push('_');
+        }
+        (self.matches(&to) && to != name).then_some(to)
     }
 }
 
@@ -102,11 +117,12 @@ fn capitalized(w: &str) -> String {
     c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
 }
 
-/// Whether `name` is a module name (§2.3): a `snake_case` identifier, so
-/// not `_` alone, without `__`, and of ASCII letters, digits and `_` that
-/// does not start with a digit (S-325). A keyword is one (`match.onsa`).
+/// Whether `name` is a module name (§2.3): a `snake_case` identifier, so of
+/// ASCII letters, digits and `_`, starting with a letter (not `_` alone, no
+/// digit first, S-325; no leading `_`, S-650) and without `__`. A keyword is
+/// one (`match.onsa`).
 pub fn is_module_name(name: &str) -> bool {
-    Shape::Snake.matches(name) && name != "_" && !name.contains("__")
+    Shape::Snake.matches(name)
 }
 
 /// What part of a module path a name is (§2.3, S-300, S-313).
@@ -138,7 +154,7 @@ pub fn path_name_error(span: Span, part: PathPart, name: &str) -> Option<Diagnos
     )
     .with_rule(format!(
         "rename the {what} so that its name{} is snake_case: lowercase ASCII letters, digits and `_`, \
-         not starting with a digit, not `_` alone, and without two `_` in a row",
+         starting with a letter, and without two `_` in a row",
         if part == PathPart::File { " before `.onsa`" } else { "" }
     ));
     Some(d)
@@ -178,24 +194,22 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         if ident.name == "_" || shape.matches(&ident.name) {
             return;
         }
-        let mut to = shape.convert(&ident.name);
-        // A name by the rule that is a keyword or a reserved word (`match`,
-        // `clock`) takes a `_` at its end (§2.3, R-211).
-        if crate::token::TokenKind::keyword(&to).is_some() {
-            to.push('_');
-        }
-        // S-82 (W4-04): the candidate also renames every use in the package.
-        let d = Diagnostic::new(
+        let mut d = Diagnostic::new(
             Stage::Names,
             Code::E0320,
             ident.span,
             format!("{what} names are {} (§2.3)", shape.describe()),
         )
         .with_found(ident.name.clone());
-        // A candidate that is still not of the shape is none (§18.1, S-642:
-        // `ItemKey` has no one-word name).
-        let shaped = !matches!(shape, Shape::UpperCamelWord) || shape.matches(&to);
-        out.push(if shaped { d.with_fix(Fix::replace("rename by the naming rule", ident.span, to)) } else { d });
+        // S-82 (W4-04): the candidate also renames every use in the package.
+        if let Some(to) = shape.candidate(&ident.name) {
+            // `_type`: the leading `_` avoided a reserved word (§2.3, S-648).
+            if has_leading_underscore(&ident.name) && to.ends_with('_') {
+                d = d.with_rule("a name that is a reserved word takes a `_` at its end, not at its head");
+            }
+            d = d.with_fix(Fix::replace("rename by the naming rule", ident.span, to));
+        }
+        out.push(d);
     };
     let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Shape, &str)| {
         for p in params {
@@ -207,9 +221,9 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     let generics = |gs: &[GenericParam], check: &mut dyn FnMut(&Ident, Shape, &str)| {
         for g in gs {
             match g {
-                GenericParam::Type { name, .. } => check(name, Shape::UpperCamelWord, "type parameter"),
+                GenericParam::Type { name, .. } => check(name, Shape::UpperCamel, "type parameter"),
                 GenericParam::Const { name, .. } => check(name, Shape::UpperSnake, "const parameter"),
-                GenericParam::Effect { name } => check(name, Shape::SnakeWord, "effect-row variable"),
+                GenericParam::Effect { name } => check(name, Shape::Snake, "effect-row variable"),
             }
         }
     };
@@ -283,17 +297,39 @@ mod tests {
 
     #[test]
     fn shapes() {
-        assert!(Shape::Snake.matches("wrap01"));
-        assert!(Shape::Snake.matches("_unused"));
-        assert!(!Shape::Snake.matches("wrapAll"));
-        assert!(Shape::UpperCamel.matches("Buf"));
-        assert!(Shape::UpperCamel.matches("F32"));
-        assert!(!Shape::UpperCamel.matches("my_type"));
-        assert!(Shape::UpperSnake.matches("MAX_VOICES"));
-        assert!(Shape::UpperSnake.matches("PI"));
-        assert!(!Shape::UpperSnake.matches("MaxVoices"));
-        assert!(Shape::SnakeWord.matches("e"));
-        assert!(!Shape::SnakeWord.matches("eff_row"));
+        // §2.3, S-650: a core starting with a letter and one trailing `_`.
+        for ok in ["wrap01", "e", "eff_row", "match_", "g_", "item_key"] {
+            assert!(Shape::Snake.matches(ok), "{ok}");
+        }
+        for bad in ["_unused", "_", "wrapAll", "2x", "", "Wrap", "a__b", "g__"] {
+            assert!(!Shape::Snake.matches(bad), "{bad}");
+        }
+        for ok in ["Buf", "F32", "T", "IO", "ItemKey", "T2D", "Self_", "Point_"] {
+            assert!(Shape::UpperCamel.matches(ok), "{ok}");
+        }
+        for bad in ["my_type", "_Point", "Item_Key", "Point__", "_0", ""] {
+            assert!(!Shape::UpperCamel.matches(bad), "{bad}");
+        }
+        for ok in ["MAX_VOICES", "PI", "MAX_", "A", "OK"] {
+            assert!(Shape::UpperSnake.matches(ok), "{ok}");
+        }
+        for bad in ["MaxVoices", "_MAX", "_1", "", "A__B", "MAX__"] {
+            assert!(!Shape::UpperSnake.matches(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_kind_by_the_spelling_skips_a_leading_underscore() {
+        // §2.3, S-648: `[_e]` is an effect-row variable, `_x` binds, `_T {`
+        // is a struct; S-375: `OK` is a constant's.
+        assert!(reads_lowercase("_e") && reads_lowercase("x") && !reads_lowercase("_T"));
+        assert!(reads_uppercase("_P") && reads_uppercase("Point") && !reads_uppercase("_h"));
+        assert!(reads_constant("_MAX") && reads_constant("OK") && reads_constant("N") && !reads_constant("Max"));
+        // Only the kind is read: `MAX__` and `MAX_` are constants' (their
+        // E0320 is at the declaration).
+        assert!(reads_constant("MAX__") && reads_constant("MAX_") && reads_constant("_A__B"));
+        assert!(reads_lowercase("x__") && reads_uppercase("P__"));
+        assert!(!reads_lowercase("_0") && !reads_uppercase("_0"));
     }
 
     #[test]
@@ -327,33 +363,116 @@ mod tests {
         assert_eq!(fixes, vec!["foo", "Point", "x", "MAX", "bad_param", "bad_name"]);
     }
 
-    #[test]
-    fn a_type_parameter_is_one_upper_camel_word() {
-        // R-46: `ItemKey` is two words; the candidate is one.
-        assert!(Shape::UpperCamelWord.matches("T"));
-        assert!(Shape::UpperCamelWord.matches("Item2"));
-        assert!(Shape::UpperCamelWord.matches("IO"));
-        assert!(Shape::UpperCamelWord.matches("IOKey"));
-        assert!(!Shape::UpperCamelWord.matches("ItemKey"));
-        assert!(!Shape::UpperCamelWord.matches("Item_Key"));
-        let src = "pub struct S[ItemKey] { a: ItemKey }\nfn f[T, IO, T_](x: T) -> T { x }\n";
+    /// The E0320s of `src` as (found, candidates, notes without a span).
+    fn e0320s(src: &str) -> Vec<(String, Vec<String>, usize)> {
         let parsed = crate::parse(onsa_diag::FileId(0), src);
-        let got: Vec<_> = parsed
+        parsed
             .diagnostics
             .iter()
-            .map(|d| (d.found.clone().unwrap(), d.fixes.iter().map(|f| f.edits()[0].replace.clone()).collect()))
-            .collect();
-        let want: Vec<(String, Vec<String>)> = vec![("ItemKey".into(), vec![]), ("T_".into(), vec!["T".into()])];
+            .filter(|d| d.code == Code::E0320)
+            .map(|d| {
+                let fixes = d.fixes.iter().map(|f| f.edits()[0].replace.clone()).collect();
+                (d.found.clone().unwrap(), fixes, d.notes.iter().filter(|n| n.span.is_none()).count())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn type_parameters_and_effect_row_variables_take_the_shapes_of_their_kinds() {
+        // S-642: no one-word rule; R-46: `Item_Key` is no `UpperCamel`.
+        let src = "pub struct S[ItemKey] { a: ItemKey }\nfn f[T, IO, T_, T2D, Item_Key, item_key, itemKey, inout_](x: T) -> T { x }\n";
+        let want = vec![
+            ("Item_Key".to_string(), vec!["ItemKey".to_string()], 0),
+            ("itemKey".into(), vec!["item_key".into()], 0),
+        ];
+        assert_eq!(e0320s(src), want);
+    }
+
+    #[test]
+    fn a_leading_underscore_is_reported_as_the_kind_read() {
+        // §2.3, S-648, R-168, R-240: `[_e]` is an effect-row variable, `_x`
+        // binds; `_type` takes `type_` and a note.
+        let src = "fn _g[_T, _e](_p: I32) { let _x = 1\nlet _type = 2\n}\nstruct _P {}\nconst _MAX: I32 = 1\n";
+        let got: Vec<_> = e0320s(src).into_iter().map(|(f, c, n)| (f, c.join(","), n)).collect();
+        let want: Vec<(String, String, usize)> = [
+            ("_g", "g", 0),
+            ("_T", "T", 0),
+            ("_e", "e", 0),
+            ("_p", "p", 0),
+            ("_P", "P", 0),
+            ("_MAX", "MAX", 0),
+            ("_x", "x", 0),
+            ("_type", "type_", 1),
+        ]
+        .iter()
+        .map(|&(f, c, n)| (f.to_string(), c.to_string(), n))
+        .collect();
         assert_eq!(got, want);
     }
 
     #[test]
+    fn a_candidate_is_an_identifier_of_the_shape_other_than_the_name() {
+        // §2.3, §18.1, R-260, R-262: every candidate is of the shape, has no
+        // `__`, is no reserved word and is not the name; `_0`, `__` and `_1`
+        // have none. And a sample of each shape that has a candidate gets one.
+        let samples = [
+            "_0",
+            "_1",
+            "__",
+            "_",
+            "_x",
+            "_type",
+            "Self",
+            "self",
+            "fooBar",
+            "FooBar",
+            "foo_bar",
+            "FOO_BAR",
+            "Match",
+            "match",
+            "T",
+            "t",
+            "IO",
+            "io",
+            "Item_Key",
+            "x_",
+            "X_",
+            "_X_",
+            "a2b",
+            "A2B",
+            "HTTPServer",
+            "e",
+            "Point_",
+            "a__b",
+            "A__B",
+        ];
+        for shape in [Shape::Snake, Shape::UpperCamel, Shape::UpperSnake] {
+            for name in samples {
+                let Some(to) = shape.candidate(name) else {
+                    let none = ["_0", "_1", "__", "_"].contains(&name) || shape.matches(name);
+                    assert!(none, "{} `{name}` has no candidate", shape.describe());
+                    continue;
+                };
+                assert!(shape.matches(&to) && !to.contains("__") && to != name, "`{name}` -> `{to}`");
+                assert!(crate::token::TokenKind::keyword(&to).is_none(), "`{name}` -> `{to}`");
+            }
+        }
+        // S-149: `__` takes the name by the rule.
+        assert_eq!(Shape::Snake.candidate("a__b").as_deref(), Some("a_b"));
+        assert_eq!(Shape::UpperSnake.candidate("A__B").as_deref(), Some("A_B"));
+        assert_eq!(Shape::Snake.candidate("g__").as_deref(), Some("g"));
+        let src = "struct _0 {}\nenum C { _0 }\nconst _1: I32 = 1\n";
+        assert!(e0320s(src).iter().all(|(_, c, _)| c.is_empty()), "{:?}", e0320s(src));
+    }
+
+    #[test]
     fn module_names_are_snake_case_identifiers() {
-        // §2.3, S-300, S-325: keywords are names; `_`, a digit first, ASCII only.
-        for ok in ["main", "dsp2", "_util", "match", "test", "a_b"] {
+        // §2.3, S-300, S-325, S-650: keywords are names; `_`, a leading `_`,
+        // a digit first, ASCII only.
+        for ok in ["main", "dsp2", "match", "test", "a_b", "util_"] {
             assert!(is_module_name(ok), "{ok}");
         }
-        for bad in ["", "_", "My-File", "a.b", "a b", "a__b", "2x", "caf\u{e9}", ".hid", "Mod"] {
+        for bad in ["", "_", "_util", "My-File", "a.b", "a b", "a__b", "2x", "caf\u{e9}", ".hid", "Mod"] {
             assert!(!is_module_name(bad), "{bad}");
         }
         let d = path_name_error(Span::empty(onsa_diag::FileId(0), 0), PathPart::Directory, "My-Dir").unwrap();

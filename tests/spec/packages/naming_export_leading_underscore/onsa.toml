@@ -1,0 +1,11 @@
+[package]
+name = "naming_export_leading_underscore"
+edition = "2026"
+
+[export]
+prefix = "t_"
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+provides = []

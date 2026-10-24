@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§7", "§8.1"]
+
+// E0320: a leading `_` is written in no shape (spec 2.3: `_x`, `_MAX`), so a name that starts with
+// `_` is E0320 for every kind of name. The kind comes from the position of the name (a function, a
+// parameter, a field, a flow, a member) or, where the spelling decides, from the first letter after
+// the `_` (`_P {` is a struct, `_k` a binding, `_T` a type parameter, `_e` an effect-row variable).
+// Each declaration below holds one name, and the mark is on the line of that name. Traits, effects
+// and handlers are E0200 in this version, so they are not here. A trailing `_` is fine
+// (types/naming_shapes_fine). The candidates are in fixes/e0320_leading_underscore.
+
+pub fn _g() -> I32 { //~ E0320
+  1
+}
+
+pub flow _lp(x: F32 at sample) -> F32 at sample { //~ E0320
+  x
+}
+
+pub struct _P { //~ E0320
+  x: I32,
+}
+
+pub struct Q {
+  _x: I32, //~ E0320
+}
+
+pub enum _E { //~ E0320
+  A,
+}
+
+pub enum F {
+  _A, //~ E0320
+  B,
+}
+
+pub fn p(_a: I32) -> I32 { //~ E0320
+  1
+}
+
+pub fn l() -> I32 {
+  let _x = 1 //~ E0320
+  1
+}
+
+pub fn v() -> I32 {
+  var _y = 0 //~ E0320
+  1
+}
+
+pub fn m(o: Option[I32]) -> I32 {
+  match o {
+    Some(_k) => 1, //~ E0320
+    None => 0,
+  }
+}
+
+const _MAX: U32 = 8 //~ E0320
+
+type _Alias = I32 //~ E0320
+
+impl Q {
+  pub fn _get(self) -> I32 { //~ E0320
+    1
+  }
+}
+
+pub fn id1[_T](x: _T) -> _T { //~ E0320
+  x
+}
+
+pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} { //~ E0320
+  f(x)
+}
+
+pub fn lit() -> I32 {
+  let a = _P { x: 1 }
+  a.x
+}
+
+pub fn pat(q: _P) -> I32 {
+  match q {
+    _P { x: n } => n,
+  }
+}

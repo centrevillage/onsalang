@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.3", "§7"]
+
+// The name in a pattern is read by its shape (spec 7, 2.3): a `snake_case` name is a binding (a `_` at the
+// end too, `v_`), and any other name is resolved, as a constant or a variant (`Level.A`). The constants
+// are in naming_pattern_constants.
+
+pub enum Level {
+  A,
+  B,
+}
+
+pub fn bound_with_trailing(o: Option[I32]) -> I32 {
+  match o {
+    Some(v_) => v_ + 100,
+    None => 0,
+  }
+}
+
+pub fn level(l: Level) -> I32 {
+  match l {
+    Level.A => 1,
+    Level.B => 2,
+  }
+}
+
+test "a name with a trailing underscore is a binding" {
+  assert bound_with_trailing(Some(3)) == 103
+  assert bound_with_trailing(None) == 0
+}
+
+test "variants of both shapes" {
+  assert level(Level.A) == 1
+  assert level(Level.B) == 2
+}

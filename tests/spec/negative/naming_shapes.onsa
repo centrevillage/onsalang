@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3"]
+
+// E0320: a name that is not in the shape of its kind (spec 2.3). Each shape is a core that starts with
+// a letter, and at most one `_` at the end. A `snake_case` core is lowercase letters, digits and `_`,
+// an `UpperCamel` core is letters and digits, an `UPPER_SNAKE` core is capitals, digits and `_`. Two
+// `_` in a row (`__`) are never fine, at the end either (`a__`). Each declaration holds one name, and
+// the mark is on its line. Names that are fine are in types/naming_shapes_fine.
+
+pub fn a__() -> I32 { //~ E0320
+  1
+}
+
+pub fn Item_Key() -> I32 { //~ E0320
+  1
+}
+
+pub fn takes(x__y: I32) -> I32 { //~ E0320
+  1
+}
+
+pub struct Item_Key2 { //~ E0320
+  a: I32,
+}
+
+pub struct Point__ { //~ E0320
+  a: I32,
+}
+
+pub struct pointX { //~ E0320
+  a: I32,
+}
+
+pub struct Named {
+  Name: I32, //~ E0320
+}
+
+pub enum Color {
+  Red_Blue, //~ E0320
+  Green,
+}
+
+pub enum Shade {
+  dark, //~ E0320
+  Light,
+}
+
+const Max_Voices: U32 = 8 //~ E0320
+
+const MAX__VOICES: U32 = 8 //~ E0320
+
+const Pi: F32 = 3.0 //~ E0320
+
+pub flow Lp(x: F32 at sample) -> F32 at sample { //~ E0320
+  x
+}
+
+pub fn local() -> I32 {
+  var Total = 0 //~ E0320
+  1
+}
+
+pub fn local2() -> I32 {
+  let total__ = 1 //~ E0320
+  1
+}

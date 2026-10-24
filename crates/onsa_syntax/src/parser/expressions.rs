@@ -342,7 +342,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::LBrace
                     if !self.no_struct_lit
-                        && chain.is_some_and(|c| self.token_text(c).starts_with(|c: char| c.is_ascii_uppercase())) =>
+                        && chain.is_some_and(|c| crate::naming::reads_uppercase(self.token_text(c))) =>
                 {
                     // In brackets the `{` is on the line of the name (E0003, S-413).
                     self.e0003_unless_on_the_line(TokenKind::LBrace);
@@ -560,7 +560,7 @@ impl<'a> Parser<'a> {
                 // the name in brackets and out of them (E0003 else); with no
                 // `{` there is no body (E0002). A named handler (`snake_case`)
                 // is read as before (S-480).
-                if crate::naming::is_type_name(self.token_text(path.last)) {
+                if crate::naming::reads_uppercase(self.token_text(path.last)) {
                     if !self.e0003_unless_on_the_line(TokenKind::LBrace) {
                         let found = self.peek();
                         let expected = "the body `{ ... }` of the handler";

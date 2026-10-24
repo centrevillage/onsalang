@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.3", "§2.2"]
+
+// The names that are in the shape of their kind (spec 2.3), no diagnostic. A shape is a core that starts
+// with a letter, and at most one `_` at the end, which is how a keyword is avoided (`match_`, `type_`,
+// `Self_`, `inout_`) and is fine in every shape. `UpperCamel` counts no words (`HTTPServer`, `IO`,
+// `T2D`). A name that is both `UpperCamel` and `UPPER_SNAKE` (`OK`, `N`, `LIMIT`) stands where either
+// is asked: a struct, an enum variant, a constant, a type parameter. R-260 had `struct Self_` and an
+// effect-row variable `inout_` give a candidate that changed nothing (an internal error in the debug
+// build); they are fine.
+
+pub fn g_() -> I32 {
+  1
+}
+
+pub fn match_(a_: I32) -> I32 {
+  let b_ = a_ + 1
+  b_
+}
+
+pub fn type_() -> I32 {
+  let self_ = 3
+  self_
+}
+
+pub struct Point_ {
+  x_: I32,
+  y: I32,
+}
+
+pub struct Self_ {
+  x: I32,
+}
+
+pub enum Kind_ {
+  Red_,
+  Blue,
+}
+
+pub struct HTTPServer {
+  port: I32,
+}
+
+pub struct IO {
+  fd: I32,
+}
+
+pub struct T2D {
+  x: I32,
+}
+
+pub struct OK {
+  v: I32,
+}
+
+pub enum Level {
+  OK,
+  BAD,
+  A,
+}
+
+const MAX_: I32 = 8
+const N: I32 = 4
+const LIMIT: I32 = 3
+const MAX_VOICES_: I32 = 16
+const T2: I32 = 2
+
+pub fn mk_ok() -> OK {
+  OK { v: 1 }
+}
+
+pub fn mk_self() -> Self_ {
+  Self_ { x: 2 }
+}
+
+pub fn mk_point() -> Point_ {
+  Point_ { x_: 5, y: 6 }
+}
+
+pub fn pick[T_, ItemKey, HTTP2, T2D2](x: T_, y: ItemKey, z: HTTP2, w: T2D2) -> T_ {
+  x
+}
+
+pub fn run_inout[T, inout_](f: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {
+  f(x)
+}
+
+pub fn run_words[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} {
+  f(x)
+}
+
+pub fn level_code(l: Level) -> I32 {
+  match l {
+    Level.OK => 1,
+    Level.BAD => 2,
+    Level.A => 3,
+  }
+}
+
+test "trailing underscore names are ordinary names" {
+  assert g_() == 1
+  assert match_(1) == 2
+  assert type_() == 3
+  assert mk_self().x == 2
+  assert mk_point().x_ == 5
+  assert mk_ok().v == 1
+}
+
+test "names of both shapes" {
+  assert MAX_ + N + LIMIT + MAX_VOICES_ + T2 == 33
+  assert level_code(Level.OK) == 1
+  assert level_code(Level.A) == 3
+  assert pick(1, 2, 3, 4) == 1
+}

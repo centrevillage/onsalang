@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+// fixes = 1
+
+// E0320 for names that are not in the shape of their kind (spec 2.3), with a candidate: one candidate
+// that changes the declaration and every use. How the words of a name are split into a new spelling
+// (`Get_Value`, `itemKey`) is not fixed by the spec, so this file does not keep the text after the
+// candidate; the runner checks that the unit is clean after it (§18.1). A type parameter and an
+// effect-row variable are in the list too: the candidate changes the uses in the same declaration.
+
+pub fn get_value() -> I32 { //~ E0320
+  1
+}
+
+pub fn calls_get_value() -> I32 {
+  Get_Value() + Get_Value()
+}
+
+pub struct ItemKey2 { //~ E0320
+  a: I32,
+}
+
+pub fn read_key(p: Item_Key2) -> I32 {
+  p.a
+}
+
+const MAX_VOICES: U32 = 8 //~ E0320
+
+pub fn voices() -> U32 {
+  Max_Voices * 2
+}
+
+pub struct Pair[ItemKey3] { //~ E0320
+  a: Item_Key3,
+  b: Item_Key3,
+}
+
+pub fn run_camel[T, item_key](f: fn(T) -> T uses {itemKey}, x: T) -> T uses {itemKey} { //~ E0320
+  f(x)
+}
+
+pub fn run_double[T, item_key](f: fn(T) -> T uses {item__key}, x: T) -> T uses {item__key} { //~ E0320
+  f(x)
+}
+
+pub fn double_ended() -> I32 { //~ E0320
+  1
+}
+
+pub fn calls_double() -> I32 {
+  double__ended()
+}

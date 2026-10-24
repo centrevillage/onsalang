@@ -24,7 +24,7 @@
 //! child module of its name (W4-03), the type parameters (cases under `tests/spec`), the form of
 //! the arguments of `graph` and the like (U4, `command_paths.rs`).
 //!
-//! Every test here runs (W4-14 U2 took the last ignores out).
+//! Every test here runs (W4-14 U3 took the last ignore out).
 
 mod test_support;
 
@@ -363,4 +363,57 @@ fn a_name_with_a_dot_that_was_passed_gets_e0320() {
         assert_eq!(places(&doc), [e0320_at(file)], "{file}: {doc}");
         assert_no_candidate_with_note(&diagnostics(&doc)[0], file == ".q.onsa");
     }
+}
+
+// ---- a single file under a directory with any name (S-644) -----------------------------------------
+
+/// §15.1, §2.3, S-644: a file with no manifest above it is a package of one module; the directory it is in
+/// is not an element of the module path, so its name is not checked: `.hid/ok.onsa`, `Bad-Dir/ok.onsa`,
+/// `_dir/ok.onsa` and `.hid/Bad-Dir/ok.onsa` have no diagnostic. The name of the file still follows the rule,
+/// so `.hid/My-File.onsa` is one E0320 for the file, at its top, named by the path as it was passed.
+#[test]
+fn a_single_file_under_a_directory_with_any_name_has_no_directory_diagnostic() {
+    for file in [".hid/ok.onsa", "Bad-Dir/ok.onsa", "_dir/ok.onsa", ".hid/Bad-Dir/ok.onsa", "9dir/ok.onsa"] {
+        let d = Dir::bare("single_dir");
+        d.write(file, OK_FN);
+        let (out, doc) = check_json(d.root(), &[file]);
+        assert_eq!(out.code, 0, "{file}: {}{}", out.stdout, out.stderr);
+        assert!(diagnostics(&doc).is_empty(), "{file}: {doc}");
+    }
+    let d = Dir::bare("single_dir_bad_file");
+    d.write(".hid/My-File.onsa", OK_FN);
+    let (out, doc) = check_json(d.root(), &[".hid/My-File.onsa"]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(places(&doc), [e0320_at(".hid/My-File.onsa")], "{doc}");
+}
+
+// ---- a leading or a trailing `_` in a file or a directory name (S-650) -----------------------------
+
+/// §2.3: a leading `_` is written in no shape, so a file `_hidden.onsa` and a directory `_lead/` are E0320 in a
+/// package (at the top of the file, one per directory, with no candidate); a `_` at the end (`trail_.onsa`,
+/// `trail_/`) is fine.
+#[test]
+fn a_leading_underscore_in_a_file_or_directory_name_is_e0320_and_a_trailing_one_is_fine() {
+    let d = Dir::pkg("pkg_underscore");
+    d.write("_hidden.onsa", OK_FN);
+    d.write("_lead/q.onsa", OK_FN);
+    d.write("trail_.onsa", OK_FN);
+    d.write("trail_/q.onsa", OK_FN);
+    d.write("ok.onsa", OK_FN);
+    let (out, doc) = check_json(d.root(), &[]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(places(&doc), [e0320_at("_hidden.onsa"), e0320_at("_lead/q.onsa")], "{doc}");
+    for dg in diagnostics(&doc) {
+        assert_no_candidate_with_note(dg, false);
+    }
+    let d = Dir::bare("single_underscore");
+    d.write("_hidden.onsa", OK_FN);
+    let (out, doc) = check_json(d.root(), &["_hidden.onsa"]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(places(&doc), [e0320_at("_hidden.onsa")], "{doc}");
+    let d = Dir::bare("single_trailing");
+    d.write("trail_.onsa", OK_FN);
+    let (out, doc) = check_json(d.root(), &["trail_.onsa"]);
+    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert!(diagnostics(&doc).is_empty(), "{doc}");
 }

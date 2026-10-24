@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+// fixes = 1
+
+// E0320 for a leading `_` (spec 2.3): the one candidate writes the name without the `_` and changes the
+// declaration and every use of the name in the package, so no unit is left with an E0302 (the runner
+// applies each candidate alone and checks the units). The kind of the name is the position, or the
+// first letter after the `_` in a `[…]` list (`_T` is a type parameter, `_e` an effect-row variable).
+// The new spelling of a name is not fixed here, only that it is one name, and that the candidate leaves
+// nothing of the same stage behind.
+
+pub fn g() -> I32 { //~ E0320
+  1
+}
+
+pub fn calls_g() -> I32 {
+  _g() + _g()
+}
+
+pub struct P { //~ E0320
+  x: I32,
+}
+
+pub fn read_p(p: _P) -> I32 {
+  p.x
+}
+
+pub fn pass_p(p: _P) -> _P {
+  p
+}
+
+pub struct Q {
+  x: I32, //~ E0320
+}
+
+pub fn read_q(q: Q) -> I32 {
+  q._x
+}
+
+pub enum F {
+  A, //~ E0320
+  B,
+}
+
+pub fn make_f() -> F {
+  F._A
+}
+
+pub fn param(a: I32) -> I32 { //~ E0320
+  _a + 1
+}
+
+const MAX: U32 = 8 //~ E0320
+
+pub fn twice_max() -> U32 {
+  _MAX * 2
+}
+
+type Alias = I32 //~ E0320
+
+pub fn alias(x: _Alias) -> _Alias {
+  x
+}
+
+pub fn id1[T](x: _T) -> _T { //~ E0320
+  x
+}
+
+pub fn ap[T, e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} { //~ E0320
+  f(x)
+}
+
+impl Q {
+  pub fn get(self) -> I32 { //~ E0320
+    self._x
+  }
+}
+
+pub fn call_get(q: Q) -> I32 {
+  q._get()
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample { //~ E0320
+  x
+}

@@ -1,0 +1,3 @@
+[package]
+name = "root_tests_names"
+edition = "2026"

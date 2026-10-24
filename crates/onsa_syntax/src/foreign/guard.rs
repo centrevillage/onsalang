@@ -208,7 +208,7 @@ impl<'c, 'a> PatReader<'c, 'a> {
             }
             self.bump();
         }
-        Some(crate::naming::is_constant_name(self.c.src(self.toks[self.pos - 1])))
+        Some(crate::naming::reads_constant(self.c.src(self.toks[self.pos - 1])))
     }
 
     /// The literal or the constant after a `-`, `(`s and as many `)`s.
@@ -380,14 +380,14 @@ impl<'c, 'a> PatReader<'c, 'a> {
                         let (inner, _) = self.list(TokenKind::RParen, false)?;
                         Some(self.pat(lo, PatKind::Node(inner)))
                     }
-                    Some(TokenKind::LBrace) if crate::naming::is_type_name(last) => {
+                    Some(TokenKind::LBrace) if crate::naming::reads_uppercase(last) => {
                         self.bump();
                         let (inner, _) = self.list(TokenKind::RBrace, true)?;
                         Some(self.pat(lo, PatKind::Node(inner)))
                     }
                     // `n @ p`: the left side is a binding (§7).
                     Some(TokenKind::At) => {
-                        let binding = self.pos == lo + 1 && crate::naming::is_binding_name(last);
+                        let binding = self.pos == lo + 1 && crate::naming::reads_lowercase(last);
                         if !binding {
                             return None;
                         }

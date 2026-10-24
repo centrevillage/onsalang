@@ -1218,13 +1218,6 @@ until = "W4-04"
 note = "使われない束縛の E0309 の候補"
 
 [[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0320_rename.onsa"
-reasons = ["S-82", "R-87"]
-until = "W4-04"
-note = "E0320 の候補が宣言と全ての使用箇所を直す（R-87 (5)）"
-
-[[pending]]
 kind = "fix-contract"
 target = "tests/spec/fixes/pkg_rename/util.onsa:1:8 E0320 fix1"
 reasons = ["S-82", "R-87"]
@@ -1987,3 +1980,290 @@ target = "§17.6 e7b876ad: use std.array"
 reasons = ["S-112", "S-570", "S-625"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/naming_export_leading_underscore"
+reasons = ["R-263", "S-639"]
+until = "W4-02"
+note = "`@export` の属性が今は E0005（`@export` の読みは W4-02）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/semantics/naming_pattern_constants.onsa"
+reasons = ["S-185"]
+until = "W5-09"
+note = "定数のパターン `OK =>` が E0302「is not a variant」（定数のパターンは W5-09）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:13:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:21:12 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:34:3 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:42:3 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:50:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:54:7 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:60:6 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:66:12 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:70:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore.onsa:75:10 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore_keyword.onsa:11:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore_keyword.onsa:20:7 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore_keyword.onsa:24:12 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_leading_underscore_keyword.onsa:32:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_let_underscore.onsa:13:7 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_let_underscore.onsa:18:7 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_let_underscore.onsa:28:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_let_underscore.onsa:34:10 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_let_underscore.onsa:40:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:12:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:20:12 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:28:7 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:34:17 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:39:21 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:43:22 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_shape_rename.onsa:47:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_leading_underscore.onsa:21:12 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_leading_underscore.onsa:69:12 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_leading_underscore.onsa:73:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:13:17 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:18:17 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:23:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:27:14 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:35:6 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:42:15 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:47:21 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/negative/naming_type_params.onsa:51:22 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/packages/naming_underscore_paths/voice.onsa:1:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0320_rename.onsa:61:8 E0320 fix1"
+reasons = ["S-82"]
+until = "W4-04"
+note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"

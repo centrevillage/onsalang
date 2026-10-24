@@ -110,7 +110,8 @@
 | `syntax/moveargs.onsa`、`syntax/paren_move.onsa` | R-42。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_move_operand.onsa` |
 | `syntax/nested*.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した（`types/implitems.onsa` の行と同じ事例） |
 | `syntax/bigfloat.onsa` | R-45 |
-| `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/naming.onsa`、`syntax/modpkg/` | R-46 |
+| `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/modpkg/` | R-46 |
+| `syntax/naming.onsa` | R-46。W4-14 U3/t で期待値付きのテストへ移して消した: 型パラメータの `ItemKey` は仕様の反映（S-642。「1 語」の規則を外した）で通る形になり `tests/spec/types/naming_type_params_fine.onsa`、`HTTPServer` は `tests/spec/types/naming_shapes_fine.onsa`、`const Pi: F32`（`UPPER_SNAKE` に合わない）は `tests/spec/negative/naming_shapes.onsa` |
 | `syntax/arrow.onsa` | R-58。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/lex/continuation_function_types.onsa`（全部）と `continuation_top_level.onsa`（トップレベルの行末の `->` の継続） |
 | `syntax/faust.onsa` | R-59。W3-23/t で期待値付きのテストへ移した: `acc` の `~ _` は `tests/spec/fixes/e0020_faust.onsa` の `feedback_without_a_name` と `e0020_faust_feedback.onsa`、`eqn` の flow の本体の代入は既存の `tests/spec/fixes/e0806_assign.onsa`、`usize_fix` の `+=` は既存の `tests/spec/fixes/e0020_compound_assign.onsa` |
 | `syntax/else_paren.onsa` | R-62。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0003_else_line.onsa`（`in_a_call`、`in_an_arm`）と `e0003_brace_line.onsa`（`if_in_a_call`、`closure_head`） |

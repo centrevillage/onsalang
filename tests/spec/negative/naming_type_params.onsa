@@ -1,28 +1,30 @@
 // onsa.toml
 // [test]
-// spec = ["§2.3"]
+// spec = ["§2.3", "§8.1"]
 
-// E0320: a type parameter is `UpperCamel` of one word (spec 2.3, table). `ItemKey` is two words,
-// `Item_Key` is not `UpperCamel`. The rule is the same on every declaration that has
-// type parameters: struct, enum, fn, impl and a method of an impl (a trait definition is E0200 in
-// this version). The mark is on the line of the declaration. A one-word `UpperCamel` name (`T`,
-// `Item`) is fine (types/naming_type_params_fine).
+// E0320: a type parameter is `UpperCamel` and an effect-row variable is `snake_case`, with no limit on
+// the number of words (spec 2.3, table; `ItemKey` and `item_key` are fine, types/naming_type_params_fine).
+// In a `[…]` list the first letter tells the kind: a capital is a type parameter, a lowercase letter an
+// effect-row variable. So `Item_Key` breaks `UpperCamel` (a `_` inside), `itemKey` breaks `snake_case`
+// (a capital inside), and `T__` and `item__key` have `__`. The rule is the same on every declaration that
+// has type parameters: struct, enum, fn, impl and a method of an impl (a trait definition is E0200 in
+// this version). The mark is on the line of the declaration.
 
-pub struct Pair[ItemKey] {                          //~ E0320
-  a: ItemKey,
-  b: ItemKey,
+pub struct Pair[Item_Key] { //~ E0320
+  a: Item_Key,
+  b: Item_Key,
 }
 
-pub enum Choice[ItemKey] {                          //~ E0320
-  One(ItemKey),
+pub enum Choice[Item_Key] { //~ E0320
+  One(Item_Key),
   Nothing,
 }
 
-pub fn first[ItemKey](x: ItemKey) -> ItemKey {      //~ E0320
+pub fn first[Item_Key](x: Item_Key) -> Item_Key { //~ E0320
   x
 }
 
-pub fn snake[Item_Key](x: Item_Key) -> Item_Key {   //~ E0320
+pub fn snake[T__](x: T__) -> T__ { //~ E0320
   x
 }
 
@@ -30,14 +32,22 @@ pub struct Holder[T] {
   a: T,
 }
 
-impl[ItemKey] Holder[ItemKey] {                     //~ E0320
-  pub fn get(self) -> ItemKey {
+impl[Item_Key] Holder[Item_Key] { //~ E0320
+  pub fn get(self) -> Item_Key {
     self.a
   }
 }
 
 impl[T] Holder[T] {
-  pub fn pick[OutKey](self, y: OutKey) -> OutKey {  //~ E0320
+  pub fn pick[Out_Key](self, y: Out_Key) -> Out_Key { //~ E0320
     y
   }
+}
+
+pub fn run_camel[T, itemKey](f: fn(T) -> T uses {itemKey}, x: T) -> T uses {itemKey} { //~ E0320
+  f(x)
+}
+
+pub fn run_double[T, item__key](f: fn(T) -> T uses {item__key}, x: T) -> T uses {item__key} { //~ E0320
+  f(x)
 }

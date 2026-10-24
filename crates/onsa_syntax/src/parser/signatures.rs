@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
                 self.complete(m, NodeKind::ConstParam);
             } else {
                 let name = self.parse_name("type parameter")?;
-                if self.token_text(name).starts_with(|c: char| c.is_ascii_lowercase()) {
+                if crate::naming::reads_lowercase(self.token_text(name)) {
                     self.complete(m, NodeKind::EffectParam);
                 } else {
                     if self.eat(TokenKind::Colon).is_some() {

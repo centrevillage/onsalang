@@ -13,7 +13,7 @@
 
 use super::*;
 use crate::literal::int_value;
-use crate::naming::is_constant_name;
+use crate::naming::reads_constant;
 use crate::starts::starts_operand;
 
 /// The rows [`faust_feedback`] names ([`super::Matcher::many`]).
@@ -132,7 +132,7 @@ pub(super) fn faust_delay(c: &Cursor) -> Option<(RowId, Hit)> {
             0 => return None,
             n => n == 1,
         },
-        Ident if is_constant_name(c.src(len)) => false,
+        Ident if reads_constant(c.src(len)) => false,
         Ident => return found(RowId::FaustDelayVariable, span, Vec::new()),
         _ => return None,
     };

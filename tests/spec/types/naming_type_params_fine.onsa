@@ -1,9 +1,11 @@
 // onsa.toml
 // [test]
-// spec = ["§2.3"]
+// spec = ["§2.3", "§8.1"]
 
-// A type parameter of one `UpperCamel` word is fine on every declaration that has type parameters
-// (spec 2.3, table): a single letter, a word, a word with a short ending (`Fx`).
+// A type parameter is `UpperCamel` and an effect-row variable is `snake_case`, with no limit on the
+// number of words (spec 2.3, table): a single letter, a word, several words (`ItemKey`), capitals
+// in a row (`IO`, `HTTP`), a digit in the name (`T2`, `T2D`), a `_` at the end (`T_`). The rule is the
+// same on every declaration that has type parameters.
 
 pub struct Pair[A, B] {
   a: A,
@@ -35,4 +37,35 @@ impl[Sample] Holder[Sample] {
   pub fn pick[Out](self, y: Out) -> Out {
     y
   }
+}
+
+pub struct Keyed[ItemKey] {
+  a: ItemKey,
+}
+
+pub enum Maybe[HTTP] {
+  Has(HTTP),
+  Lacks,
+}
+
+pub fn pair_of[IO, T2, T2D](x: IO, y: T2, z: T2D) -> T2D {
+  z
+}
+
+impl[OutKey] Keyed[OutKey] {
+  pub fn pick[ItemKey2, T_](self, y: ItemKey2, z: T_) -> T_ {
+    z
+  }
+}
+
+pub fn run[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {
+  f(x)
+}
+
+pub fn run_words[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} {
+  f(x)
+}
+
+pub fn run_trailing[T, inout_](f: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {
+  f(x)
 }
