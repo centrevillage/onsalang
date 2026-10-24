@@ -19,6 +19,17 @@ struct Cli {
     command: Command,
 }
 
+/// The path of a command that reads a package (§15.1, §18.2, S-323): the
+/// last argument, which may be omitted. One place for its form; the count
+/// is [`one_path`]'s, so that two paths are refused in the words of §15.1.
+#[derive(clap::Args)]
+struct PackagePath {
+    /// One path: a `.onsa` file, a package directory or `onsa.toml` (the
+    /// package above the working directory when omitted, §15.1)
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Check types, effects, rt, flow and policy
@@ -26,9 +37,8 @@ enum Command {
         /// Print diagnostics as JSON (spec §18.1)
         #[arg(long)]
         json: bool,
-        /// One path: a `.onsa` file, a package directory or `onsa.toml` (the
-        /// package above the working directory when omitted, §15.1)
-        paths: Vec<PathBuf>,
+        #[command(flatten)]
+        path: PackagePath,
     },
     /// Normalize files to the canonical form (spec §18.2)
     Fmt {
@@ -62,7 +72,8 @@ enum Command {
         /// The levels of the syntax (spec §2.5) of each declaration of one file, a line each
         #[arg(long, conflicts_with_all = ["core", "cst"])]
         levels: bool,
-        #[arg(required = true)]
+        /// `--core`: the path of a package, as `check` takes it; `--cst` and `--levels`: one file
+        #[arg(value_name = "PATH")]
         paths: Vec<PathBuf>,
     },
     /// Run `test` blocks in the interpreter (spec §18.2)
@@ -73,27 +84,26 @@ enum Command {
         /// Run only the tests whose full name (`dsp.voice "decays"`) contains this text
         #[arg(long)]
         filter: Option<String>,
-        /// One path: a `.onsa` file, a package directory or `onsa.toml` (the
-        /// package above the working directory when omitted, §15.1)
-        paths: Vec<PathBuf>,
+        #[command(flatten)]
+        path: PackagePath,
     },
     /// Public signatures, kinds, sizes, @param and flow APIs (spec §18.2)
     Interface {
         /// Emit JSON
         #[arg(long)]
         json: bool,
-        /// `.onsa` file, package directory, or `onsa.toml`
-        path: PathBuf,
+        #[command(flatten)]
+        path: PackagePath,
     },
     /// Signal graph of a flow as DOT (spec §18.2)
     Graph {
         /// Render to SVG with Graphviz `dot`
         #[arg(long)]
         svg: bool,
-        /// `.onsa` file, package directory, or `onsa.toml`
-        path: PathBuf,
         /// Flow name (`voice` or `dsp.voice`)
         flow: String,
+        #[command(flatten)]
+        path: PackagePath,
     },
     /// Build a target of the manifest: C sources, headers, and a static library on the host (spec §15.3)
     Build {
@@ -103,8 +113,10 @@ enum Command {
         /// Output directory (default `target/<name>/` next to the manifest)
         #[arg(long)]
         out: Option<PathBuf>,
-        /// Package directory or `onsa.toml` (default `.`)
-        path: Option<PathBuf>,
+        /// One path: a package directory or `onsa.toml` (the package above
+        /// the working directory when omitted, §15.1); not a file
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
     },
     /// Explain a diagnostic code
     Explain {
@@ -193,7 +205,7 @@ fn main() -> ExitCode {
 
 fn run(command: Command) -> Outcome {
     match command {
-        Command::Check { json, paths } => check(json, &paths),
+        Command::Check { json, path } => check(json, &path.paths),
         Command::Fmt { check, paths } => fmt(check, &paths),
         Command::Diff { ast, old, new } => diff(ast, &old, &new),
         Command::Dump { core, cst, tree, levels, paths } => {
@@ -205,10 +217,10 @@ fn run(command: Command) -> Outcome {
                 dump(core, &paths)
             }
         }
-        Command::Test { json, filter, paths } => test(json, filter, &paths),
-        Command::Interface { json, path } => interface(json, &path),
-        Command::Graph { svg, path, flow } => graph(svg, &path, &flow),
-        Command::Build { target, out, path } => build(&target, out, path),
+        Command::Test { json, filter, path } => test(json, filter, &path.paths),
+        Command::Interface { json, path } => interface(json, &path.paths),
+        Command::Graph { svg, flow, path } => graph(svg, &flow, &path.paths),
+        Command::Build { target, out, paths } => build(&target, out, &paths),
         Command::Explain { code } => explain(&code),
     }
 }
@@ -394,22 +406,24 @@ fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     }
 }
 
-/// Load the package of the one path a command that reads a package takes
-/// (§15.1, §18.2; S-312): two or more is a usage error (a run handles one
-/// package), none is the working directory.
+/// The one path a command that reads a package takes (§15.1, §18.2; S-312):
+/// two or more is a usage error (a run handles one package), none is the
+/// working directory (`None`).
+fn one_path(paths: &[PathBuf]) -> Result<Option<&std::path::Path>, Outcome> {
+    match paths {
+        [] => Ok(None),
+        [p] => Ok(Some(p.as_path())),
+        _ => Err(cannot_work(format!(
+            "a command that reads a package takes one path (a `.onsa` file, a package directory or \
+             `onsa.toml`), not {}: a run handles one package",
+            paths.len()
+        ))),
+    }
+}
+
+/// Load the package of the one path of `paths` ([`one_path`]).
 fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
-    let path = match paths {
-        [] => None,
-        [p] => Some(p.as_path()),
-        _ => {
-            return Err(cannot_work(format!(
-                "a command that reads a package takes one path (a `.onsa` file, a package directory or \
-                 `onsa.toml`), not {}: a run handles one package",
-                paths.len()
-            )));
-        }
-    };
-    onsa_driver::load(path).map_err(cannot_work)
+    onsa_driver::load(one_path(paths)?).map_err(cannot_work)
 }
 
 fn check(json: bool, paths: &[PathBuf]) -> Outcome {
@@ -548,7 +562,10 @@ fn dump_levels(paths: &[PathBuf]) -> Outcome {
     }
 }
 
-/// `onsa dump --core`: the Core IR of a package (after `check` passes).
+/// `onsa dump --core`: the Core IR of a package (after `check` passes). The
+/// path is that of `check`; a file inside a package does not narrow the
+/// Core, which is the whole program after monomorphization (`dump` is an
+/// internal tool, outside the table of §18.2).
 fn dump(core: bool, paths: &[PathBuf]) -> Outcome {
     if !core {
         return cannot_work("`dump` needs `--core`");
@@ -566,14 +583,27 @@ fn dump(core: bool, paths: &[PathBuf]) -> Outcome {
     }
 }
 
-/// `onsa interface <path> [--json]` (T3-11). With `--json`, diagnostics are
-/// the document of `check --json` (§18.1).
-fn interface(json: bool, path: &PathBuf) -> Outcome {
-    let (loaded, analyzed) = match analyzed(Form::json(json), std::slice::from_ref(path)) {
+/// `onsa interface [--json] [<path>]` (T3-11). With `--json`, diagnostics
+/// are the document of `check --json` (§18.1). A file inside a package
+/// narrows the output to its module (§15.1); the diagnostics that stop the
+/// command are not narrowed (only `check` narrows its diagnostics).
+// SPEC-GAP(S-657): with a file passed inside a package, the diagnostics
+// that stop `interface` and `graph` are all those of the package (exit 1),
+// also those of the other modules; only the results are narrowed.
+fn interface(json: bool, paths: &[PathBuf]) -> Outcome {
+    let (loaded, analyzed) = match analyzed(Form::json(json), paths) {
         Ok(x) => x,
         Err(o) => return o,
     };
-    let iface = match onsa_driver::interface(&analyzed) {
+    let narrowed = onsa_driver::interface(&analyzed).and_then(|mut iface| {
+        onsa_driver::guard(|| {
+            if let Some(module) = loaded.focus_module() {
+                iface.narrow(module);
+            }
+            iface
+        })
+    });
+    let iface = match narrowed {
         Ok(i) => i,
         Err(e) => return internal(&loaded.sources, &e),
     };
@@ -585,13 +615,19 @@ fn interface(json: bool, path: &PathBuf) -> Outcome {
     Outcome::Ok
 }
 
-/// `onsa graph <path> <flow> [--svg]` (T3-12).
-fn graph(svg: bool, path: &PathBuf, flow: &str) -> Outcome {
-    let (loaded, analyzed) = match analyzed(Form::Text, std::slice::from_ref(path)) {
+/// `onsa graph [--svg] <flow> [<path>]` (T3-12, §18.2): the flow is named in
+/// the module of a file passed inside a package, else in the package.
+// SPEC-GAP(S-657): the diagnostics that stop it are not narrowed, as for `interface`.
+fn graph(svg: bool, flow: &str, paths: &[PathBuf]) -> Outcome {
+    let (loaded, analyzed) = match analyzed(Form::Text, paths) {
         Ok(x) => x,
         Err(o) => return o,
     };
-    let dot = match onsa_driver::graph(&analyzed, flow) {
+    let scope = match onsa_driver::guard(|| loaded.focus_module().map(str::to_string)) {
+        Ok(scope) => scope,
+        Err(e) => return internal(&loaded.sources, &e),
+    };
+    let dot = match onsa_driver::graph(&analyzed, flow, scope.as_deref()) {
         Ok(d) => d,
         Err(onsa_driver::GraphError::Usage(e)) => return cannot_work(e),
         Err(onsa_driver::GraphError::Internal(e)) => return internal(&loaded.sources, &e),
@@ -650,11 +686,14 @@ fn test(json: bool, filter: Option<String>, paths: &[PathBuf]) -> Outcome {
     if report.failed() == 0 { Outcome::Ok } else { Outcome::Problems }
 }
 
-/// `onsa build --target <name> [--out <dir>] [path]` (T4-5).
-fn build(target: &str, out: Option<PathBuf>, path: Option<PathBuf>) -> Outcome {
-    let path = path.unwrap_or_else(|| PathBuf::from("."));
+/// `onsa build --target <name> [--out <dir>] [<path>]` (T4-5, §18.2).
+fn build(target: &str, out: Option<PathBuf>, paths: &[PathBuf]) -> Outcome {
+    let path = match one_path(paths) {
+        Ok(p) => p,
+        Err(o) => return o,
+    };
     let opts = onsa_driver::BuildOptions { target: target.to_string(), out };
-    match onsa_driver::build(&path, &opts) {
+    match onsa_driver::build(path, &opts) {
         Ok(r) => {
             outln!("built `{}` for {} ({}) in {}", r.target, r.platform, r.kind, r.out_dir.display());
             for f in &r.files {

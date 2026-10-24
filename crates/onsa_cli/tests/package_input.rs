@@ -20,7 +20,7 @@
 //!
 //! Not written here: the tree that is gathered (`package_tree.rs`), links and special files
 //! (`package_links.rs`), the names of the files (E0320) and the `tests/` of the root (U2), the form
-//! of the arguments of `graph`, `build` and the others (U3), `audit`, `play` and `probe` (not in
+//! of the arguments of `graph`, `build` and the others (U4, `command_paths.rs`), `audit`, `play` and `probe` (not in
 //! this version of the CLI), the range of `onsa test` (W4-15), the
 //! content of the manifest (W4-02), and `use` (W4-03).
 //!
@@ -386,7 +386,7 @@ fn a_file_below_the_target_directory_of_the_root_is_a_usage_error() {
 // ---- one path, one package (S-312, S-286, R-189) --------------------------------------------------
 
 /// §15.1, §18.2: two or more paths are a usage error for every command that reads a package
-/// (`audit`, `play` and `probe` are not in this version of the CLI, and `graph` is for U3).
+/// (`audit`, `play` and `probe` are not in this version of the CLI, and `graph` is in `command_paths.rs`, U4).
 #[test]
 fn two_files_are_a_usage_error_for_every_command_that_reads_a_package() {
     let d = Dir::bare("many_files");

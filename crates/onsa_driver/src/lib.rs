@@ -16,14 +16,13 @@ mod testing;
 pub mod verify;
 
 pub use input::{
-    Loaded, ManifestSource, PackageInput, SourceFile, load, manifest_dir, module_path, read_input, read_manifest,
-    read_root_tests, read_sources, slash_path,
+    Loaded, ManifestSource, PackageInput, SourceFile, load, module_path, read_input, read_package_input, read_sources,
+    slash_path,
 };
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use onsa_diag::{Diagnostic, FileId, SourceMap, Span};
@@ -251,20 +250,6 @@ pub fn diff_ast(sources: &SourceMap, old: FileId, new: FileId) -> Result<AstDiff
     })
 }
 
-/// Check the files already in `sources` as one package whose modules are
-/// named after the file stems. `std` is appended to `sources`.
-pub fn check(sources: &mut SourceMap) -> Result<CheckResult, InternalError> {
-    let modules: Vec<(FileId, String)> = sources
-        .files()
-        .map(|(id, f)| {
-            let stem = Path::new(f.name()).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            (id, stem)
-        })
-        .collect();
-    let name = modules.first().map(|(_, s)| s.clone()).unwrap_or_default();
-    check_package(sources, &name, &modules)
-}
-
 /// Check a loaded package. `std` is appended to `sources`. With a file passed
 /// inside the package (`focus`), the whole package is checked and only the
 /// diagnostics of that file are kept (§15.1: `check` and the LSP; S-159).
@@ -311,14 +296,6 @@ pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
     let name = loaded.name.clone();
     let paths = guard(|| loaded.input_diagnostics())?;
     analyze(&mut loaded.sources, &name, &modules, paths)
-}
-
-pub fn analyze_package(
-    sources: &mut SourceMap,
-    name: &str,
-    modules: &[(FileId, String)],
-) -> Result<Analyzed, InternalError> {
-    analyze(sources, name, modules, Vec::new())
 }
 
 /// The analysis of a package. `paths`, the diagnostics of the input's paths,
@@ -393,16 +370,6 @@ pub use build::{
     build, build_analyzed, build_resolved, host_triple, platform, resolve_target,
 };
 
-/// `check` is the analysis without keeping it (one path for `check`,
-/// `test` and the builds, D-15).
-pub fn check_package(
-    sources: &mut SourceMap,
-    name: &str,
-    modules: &[(FileId, String)],
-) -> Result<CheckResult, InternalError> {
-    Ok(CheckResult { diagnostics: analyze_package(sources, name, modules)?.diagnostics })
-}
-
 /// In debug builds (the tests, the fuzzing), a diagnostic that breaks its
 /// rules (a required fix or note missing, edits that overlap or cut a token,
 /// plan D-04) is an internal error: the stage that made it is wrong (W3-02 D11).
@@ -455,6 +422,8 @@ fn package_text(pkg: &Package, file: FileId) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     /// R-204: an output of fmt that is not the program of its input is an

@@ -142,27 +142,46 @@ fn rate_color(r: FlowRate) -> &'static str {
     }
 }
 
-fn find_flow(analyzed: &Analyzed, name: &str) -> Result<DefId, String> {
+/// The flow `name` names in `scope` (§18.2): the module of the file passed,
+/// or the whole package (`None`). A name with `.` is a module-qualified one
+/// (`dsp.voice`), which must name a flow of `scope`; another name must be
+/// one flow's name in `scope`, else the candidates are listed.
+// SPEC-GAP(S-658): only the flows a module declares are in its scope: a
+// flow the module of the file passed takes in by `use`, and a name that is
+// not a flow (a `fn`), are not found (exit 2). A name with no flow in the
+// scope lists no candidates, even when other modules have a flow of that name.
+fn find_flow(analyzed: &Analyzed, name: &str, scope: Option<&str>) -> Result<DefId, String> {
     let a = &analyzed.analysis;
     // The user's package is the last of `flatten` (its ID), not the one of its
     // name: a dependency may have the same name (R-88).
     let user_pkg = onsa_sema::flatten(&analyzed.pkg).len() - 1;
-    let mut hits: Vec<DefId> = a
+    let module_of = |id: DefId| a.modules.get(a.def(id).module).path.as_str();
+    let mut flows = a
         .defs
         .iter()
         .enumerate()
-        .filter(|(_, d)| matches!(d.kind, DefKind::Flow(_)))
-        .filter(|(_, d)| a.modules.pkg_of(d.module) == user_pkg)
-        .map(|(i, _)| DefId(i as u32))
-        .filter(|&id| a.def(id).name == name || a.qualified_name(id) == name)
-        .collect();
-    hits.sort();
-    hits.dedup();
+        .filter(|(_, d)| matches!(d.kind, DefKind::Flow(_)) && a.modules.pkg_of(d.module) == user_pkg)
+        .map(|(i, _)| DefId(i as u32));
+    let place = match scope {
+        Some(m) => format!("module `{m}`, the module of the file passed"),
+        None => format!("package `{}`", analyzed.pkg.name),
+    };
+    if name.contains('.') {
+        let Some(id) = flows.find(|&id| a.qualified_name(id) == name) else {
+            return Err(format!("no flow named `{name}` in package `{}`", analyzed.pkg.name));
+        };
+        return match scope {
+            Some(m) if module_of(id) != m => Err(format!("`{name}` is not in {place}")),
+            _ => Ok(id),
+        };
+    }
+    let hits: Vec<DefId> =
+        flows.filter(|&id| a.def(id).name == name && scope.is_none_or(|m| module_of(id) == m)).collect();
     match hits.as_slice() {
         [one] => Ok(*one),
-        [] => Err(format!("no flow named `{name}` in package `{}`", analyzed.pkg.name)),
+        [] => Err(format!("no flow named `{name}` in {place}")),
         many => Err(format!(
-            "`{name}` is ambiguous; use the module path: {}",
+            "`{name}` names more than one flow in {place}; use the module path: {}",
             many.iter().map(|&d| a.qualified_name(d)).collect::<Vec<_>>().join(", ")
         )),
     }
@@ -176,14 +195,16 @@ pub enum GraphError {
     Internal(crate::InternalError),
 }
 
-/// DOT source of the signal graph of `flow` (a short or module-qualified name).
-pub fn graph(analyzed: &Analyzed, flow: &str) -> Result<String, GraphError> {
-    crate::guard(|| graph_of(analyzed, flow)).map_err(GraphError::Internal)?.map_err(GraphError::Usage)
+/// DOT source of the signal graph of `flow` (a short or module-qualified
+/// name) in `scope`: the module of the file passed
+/// ([`crate::Loaded::focus_module`]), or the whole package (`None`).
+pub fn graph(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, GraphError> {
+    crate::guard(|| graph_of(analyzed, flow, scope)).map_err(GraphError::Internal)?.map_err(GraphError::Usage)
 }
 
-fn graph_of(analyzed: &Analyzed, flow: &str) -> Result<String, String> {
+fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, String> {
     let a = &analyzed.analysis;
-    let def_id = find_flow(analyzed, flow)?;
+    let def_id = find_flow(analyzed, flow, scope)?;
     let def = a.def(def_id);
     let Some(info) = a.flows.get(&def_id) else {
         return Err(format!("flow `{}` was not checked (it has diagnostics)", def.name));
@@ -300,7 +321,7 @@ pub fn to_svg(dot: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use onsa_diag::SourceMap;
+    use crate::{Analyzed, Loaded, ManifestSource, PackageInput, SourceFile};
 
     const RESONATOR: &str = "use std.math.{exp, cos}\n\
 pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {\n\
@@ -314,14 +335,31 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
   y\n\
 }\n";
 
+    /// The analysis of `input`, which checks.
+    fn analyzed(input: PackageInput) -> Analyzed {
+        let mut loaded = Loaded::from_input(input).expect("the input loads");
+        let analyzed = crate::analyze_loaded(&mut loaded).expect("no internal error");
+        assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
+        analyzed
+    }
+
+    /// A package `name` of the files `files` (path, text).
+    fn package(name: &str, files: &[(&str, &str)]) -> PackageInput {
+        let text = format!("[package]\nname = \"{name}\"\nedition = \"2026\"\n");
+        PackageInput {
+            manifest: Some(ManifestSource { path: "onsa.toml".into(), text }),
+            files: files
+                .iter()
+                .map(|(path, text)| SourceFile { path: path.to_string(), text: text.to_string() })
+                .collect(),
+            ..PackageInput::default()
+        }
+    }
+
     #[test]
     fn resonator_graph() {
-        let mut sources = SourceMap::default();
-        let file = sources.add("res.onsa", RESONATOR);
-        let analyzed =
-            crate::analyze_package(&mut sources, "res", &[(file, "res".to_string())]).expect("no internal error");
-        assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analyzed.diagnostics));
-        let dot = super::graph(&analyzed, "resonator").unwrap();
+        let analyzed = analyzed(PackageInput::single_file("res.onsa", RESONATOR));
+        let dot = super::graph(&analyzed, "resonator", None).unwrap();
         let node_lines = dot.lines().filter(|l| l.contains("[label=")).count();
         // 3 inputs + 7 lets + out
         assert_eq!(node_lines, 11, "{dot}");
@@ -337,13 +375,29 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
     /// `flatten`, even when it has the name of a dependency (`std`).
     #[test]
     fn the_flow_is_found_in_the_users_package_named_like_a_dependency() {
-        let mut sources = SourceMap::default();
-        let file = sources.add("res.onsa", RESONATOR);
-        let analyzed = crate::analyze_package(&mut sources, crate::STD_PACKAGE, &[(file, "res".to_string())])
-            .expect("no internal error");
-        assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&sources, &analyzed.diagnostics));
+        let analyzed = analyzed(package(crate::STD_PACKAGE, &[("res.onsa", RESONATOR)]));
         assert_eq!(analyzed.analysis.modules.names, [crate::STD_PACKAGE, crate::STD_PACKAGE]);
-        let dot = super::graph(&analyzed, "resonator").unwrap();
+        let dot = super::graph(&analyzed, "resonator", None).unwrap();
         assert!(dot.contains("\"y\" -> \"out\""), "{dot}");
+    }
+
+    /// §18.2 (S-323): a name is the one flow of that name in the scope (the
+    /// module of the file passed, or the package), else the candidates are
+    /// listed; a module-qualified name must be in the scope.
+    #[test]
+    fn the_flow_is_named_in_its_scope() {
+        let analyzed = analyzed(package("p", &[("a.onsa", RESONATOR), ("b.onsa", RESONATOR)]));
+        let usage = |flow: &str, scope: Option<&str>| match super::graph(&analyzed, flow, scope) {
+            Err(super::GraphError::Usage(e)) => e,
+            other => panic!("{flow} in {scope:?}: {other:?}"),
+        };
+        let many = usage("resonator", None);
+        assert!(many.contains("a.resonator, b.resonator"), "{many}");
+        for (flow, scope) in [("resonator", Some("a")), ("a.resonator", None), ("a.resonator", Some("a"))] {
+            assert!(super::graph(&analyzed, flow, scope).is_ok(), "{flow} in {scope:?}");
+        }
+        assert!(usage("b.resonator", Some("a")).contains("not in module `a`"));
+        assert!(usage("lowpass", Some("a")).contains("no flow named `lowpass` in module `a`"));
+        assert!(usage("c.resonator", None).contains("no flow named `c.resonator`"));
     }
 }

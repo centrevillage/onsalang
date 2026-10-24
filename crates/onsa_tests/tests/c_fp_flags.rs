@@ -91,7 +91,7 @@ impl Built {
 fn build_dir(work: &Path, target: &str) -> Built {
     let out = work.join("out");
     let opts = onsa_driver::BuildOptions { target: target.into(), out: Some(out.clone()) };
-    let report = match onsa_driver::build(work, &opts) {
+    let report = match onsa_driver::build(Some(work), &opts) {
         Ok(r) => r,
         Err(onsa_driver::BuildError::Usage(m)) => panic!("build: {m}"),
         Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
@@ -140,7 +140,7 @@ fn case_package(tag: &str, rel: &str, target: &str) -> Built {
     if path.is_dir() {
         let out = c::scratch_dir("onsa_test", tag).join("out");
         let opts = onsa_driver::BuildOptions { target: target.into(), out: Some(out.clone()) };
-        let report = match onsa_driver::build(&path, &opts) {
+        let report = match onsa_driver::build(Some(&path), &opts) {
             Ok(r) => r,
             Err(onsa_driver::BuildError::Diagnostics { sources, diagnostics }) => {
                 panic!("build: {}", onsa_diag::to_text(&sources, &diagnostics))

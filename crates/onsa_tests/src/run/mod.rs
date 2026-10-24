@@ -565,7 +565,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
         }
     }
     for flow in &t.golden_graph {
-        match onsa_driver::graph(&analyzed, flow) {
+        match onsa_driver::graph(&analyzed, flow, None) {
             Ok(dot) => gold(&mut run, golden::graph_path(&case.name, flow), &dot),
             Err(onsa_driver::GraphError::Usage(e)) => {
                 run.problems.push(Problem::Failed(format!("graph `{flow}`: {e}")))

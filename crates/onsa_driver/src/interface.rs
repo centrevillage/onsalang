@@ -48,6 +48,14 @@ pub struct Interface {
     pub modules: Vec<ModuleIface>,
 }
 
+impl Interface {
+    /// Keep the module `path` only: the interface of a file passed inside
+    /// the package is the declarations of its module (§15.1).
+    pub fn narrow(&mut self, path: &str) {
+        self.modules.retain(|m| m.path == path);
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct ModuleIface {
     pub path: String,

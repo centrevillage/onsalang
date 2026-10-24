@@ -123,6 +123,21 @@ impl Loaded {
         Ok(Loaded { sources, name, root: input.root, modules, manifest, focus, root_tests })
     }
 
+    /// The module of the file passed inside the package (§15.1): `interface`
+    /// and `graph` narrow their results to it. `None`: no file was passed
+    /// inside a package. A file that is not a module (under the root's
+    /// `tests/`) is an E0200, which stops these commands before they ask.
+    pub fn focus_module(&self) -> Option<&str> {
+        let focus = self.focus?;
+        match self.modules.iter().find(|(file, _)| *file == focus) {
+            Some((_, path)) => Some(path),
+            None => onsa_diag::internal::bug(
+                Some(Span::empty(focus, 0)),
+                "the file passed is not a module, and its diagnostic did not stop the command",
+            ),
+        }
+    }
+
     /// The diagnostics of the input's paths (§2.3, §15.1), outside every
     /// unit: the E0320 of each file name and of each directory name of a
     /// module path, and the E0200 of each file of the root's `tests/`, at the
@@ -202,6 +217,25 @@ fn stem(path: &str) -> String {
 ///
 /// Every item is looked at before it is opened, so a FIFO does not block.
 pub fn read_input(path: Option<&Path>) -> Result<PackageInput, String> {
+    read_input_as(path, Takes::AnyPath)
+}
+
+/// The input of a command whose result is the whole package (`build`,
+/// §15.1): [`read_input`] where a `.onsa` file is a usage error.
+pub fn read_package_input(path: Option<&Path>) -> Result<PackageInput, String> {
+    read_input_as(path, Takes::Package)
+}
+
+/// The paths a command takes (§15.1, §18.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Takes {
+    /// A `.onsa` file, a package directory or `onsa.toml`.
+    AnyPath,
+    /// A package directory or `onsa.toml`: the result is the whole package.
+    Package,
+}
+
+fn read_input_as(path: Option<&Path>, takes: Takes) -> Result<PackageInput, String> {
     let Some(path) = path else {
         let cwd = std::env::current_dir()
             .and_then(|d| d.canonicalize())
@@ -228,6 +262,13 @@ pub fn read_input(path: Option<&Path>) -> Result<PackageInput, String> {
     if !name.as_encoded_bytes().ends_with(SUFFIX.as_bytes()) {
         return Err(format!("{}: not a `.onsa` file or onsa.toml", path.display()));
     }
+    if takes == Takes::Package {
+        return Err(format!(
+            "{}: the result of this command is the whole package: pass the package directory or its onsa.toml, \
+             not a file",
+            path.display()
+        ));
+    }
     // SPEC-GAP(S-635): a passed `.onsa` that is not a regular file (a FIFO,
     // a link to one) is looked at before it is opened and is a usage error (2).
     if !meta.is_file() {
@@ -250,7 +291,7 @@ pub fn read_input(path: Option<&Path>) -> Result<PackageInput, String> {
 }
 
 /// The directory of the manifest at `manifest` (`.` for a bare `onsa.toml`, R-178).
-pub fn manifest_dir(manifest: &Path) -> &Path {
+fn manifest_dir(manifest: &Path) -> &Path {
     manifest.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."))
 }
 
@@ -289,15 +330,9 @@ fn read_package(root: &Path, focus: Option<&Path>) -> Result<PackageInput, Strin
     Ok(PackageInput { manifest: Some(manifest), files, root: Some(root.to_path_buf()), focus, root_tests })
 }
 
-/// The files of the root's `tests/` of the package at `root`
-/// ([`PackageInput::root_tests`]).
-pub fn read_root_tests(root: &Path) -> Result<Vec<SourceFile>, String> {
-    read_files(root, &package_tree::root_tests_files(root)?)
-}
-
 /// The manifest of the package root `dir`. A link is followed; what it
 /// names must be a regular file (looked at before it is opened).
-pub fn read_manifest(dir: &Path) -> Result<ManifestSource, String> {
+fn read_manifest(dir: &Path) -> Result<ManifestSource, String> {
     let path = dir.join(MANIFEST);
     let meta = std::fs::metadata(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     if !meta.is_file() {

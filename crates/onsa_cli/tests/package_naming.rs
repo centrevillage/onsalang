@@ -22,7 +22,7 @@
 //! Not written here: the tree that is gathered (`package_tree.rs`, `package_input.rs`), the
 //! `tests/` of the root (`package_tests_dir.rs`), two files for one module path and an item with a
 //! child module of its name (W4-03), the type parameters (cases under `tests/spec`), the form of
-//! the arguments of `graph` and the like (U3).
+//! the arguments of `graph` and the like (U4, `command_paths.rs`).
 //!
 //! Every test here runs (W4-14 U2 took the last ignores out).
 

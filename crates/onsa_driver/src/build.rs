@@ -6,7 +6,6 @@
 //! the sources and the intended flags (`onsa_build.json`).
 
 use std::collections::BTreeSet;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -16,13 +15,13 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::def::DefKind;
-use onsa_sema::package_tree::{BUILD_DIR, MANIFEST, has_manifest};
+use onsa_sema::package_tree::{BUILD_DIR, MANIFEST};
 use onsa_sema::ty::Rate;
 use onsa_syntax::ast::Vis;
 
 use crate::{
-    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, PackageInput,
-    guard, read_manifest, read_root_tests, read_sources,
+    Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, guard,
+    read_package_input,
 };
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
@@ -287,36 +286,25 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
     Ok(BuildOutput { module, settings: settings.clone(), export: export.clone(), unit, files })
 }
 
-/// Build the package at `path` (a directory or its `onsa.toml`) for `target`.
-/// A path named `onsa.toml` is the directory where it is (S-622), as in
-/// `read_input`; another file is a usage error (§15.1: the result of `build`
-/// is the whole package).
-pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
-    let (root, manifest_path) = if path.file_name() == Some(OsStr::new(MANIFEST)) {
-        (crate::manifest_dir(path).to_path_buf(), path.to_path_buf())
-    } else {
-        let meta =
-            std::fs::metadata(path).map_err(|e| BuildError::Usage(format!("cannot read {}: {e}", path.display())))?;
-        if !meta.is_dir() {
-            return Err(BuildError::Usage(format!(
-                "{}: `build` takes a package directory or its onsa.toml, not a file (§15.1)",
-                path.display()
-            )));
-        }
-        let manifest_path = path.join(MANIFEST);
-        if !has_manifest(path).map_err(BuildError::Usage)? {
-            return Err(BuildError::Usage(format!("{}: no onsa.toml", manifest_path.display())));
-        }
-        (path.to_path_buf(), manifest_path)
-    };
-    // The order of the errors: the manifest, the target, the sources.
-    let source = read_manifest(&root).map_err(BuildError::Usage)?;
-    let manifest = crate::input::parse_manifest(&source, Some(&root)).map_err(BuildError::Usage)?;
-    let resolved = resolve_target(&manifest, &manifest_path.display().to_string(), &opts.target)?;
-    let files = read_sources(&root).map_err(BuildError::Usage)?;
-    let root_tests = read_root_tests(&root).map_err(BuildError::Usage)?;
-    let input = PackageInput { manifest: Some(source), files, root: Some(root.clone()), focus: None, root_tests };
+/// Build the package at `path` for `target`: a package directory or its
+/// `onsa.toml`; `None` is the package above the working directory (§15.1,
+/// [`read_package_input`]). A `.onsa` file is a usage error: the result of
+/// `build` is the whole package.
+pub fn build(path: Option<&Path>, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
+    let input = read_package_input(path).map_err(BuildError::Usage)?;
     let mut loaded = Loaded::from_input(input).map_err(BuildError::Usage)?;
+    let root = guard(|| match &loaded.root {
+        Some(root) => root.clone(),
+        None => onsa_diag::internal::bug(None, "a package read from a path has no root"),
+    });
+    let root = match root {
+        Ok(root) => root,
+        Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
+    };
+    let Some(manifest) = &loaded.manifest else {
+        return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
+    };
+    let resolved = resolve_target(manifest, &root.join(MANIFEST).display().to_string(), &opts.target)?;
     let analyzed = match crate::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
@@ -679,6 +667,7 @@ pub fn value_to_expr(m: &Module, v: &Value, ty: &Ty, span: onsa_diag::Span) -> O
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PackageInput;
 
     /// S-242, W2-13: the build-time evaluation evaluates the `const`s that the
     /// entries reach (one reaches `READ` through `get`), and no other
