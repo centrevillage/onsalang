@@ -9090,9 +9090,9 @@ pub fn f() -> I32 {
 }
 ''']
 
-# `extern "C" fn`、`extern fn`。C の ABI で定義する関数はマニフェストの `[export]`（§14.2）、外の C の関数を呼ぶ宣言は
-# `extern "C" lib "…" { … }`（§14.1）で、どちらも関数の宣言の頭には書けない。マニフェストは書き手が編集しない
-# ファイルなので（§15.4）、候補は作らない。note は §14.1 と §14.2 を示す。主の位置は `extern`。
+# `extern "C" fn`、`extern fn`。C の ABI に出す関数は宣言の `@export`（§14.2）、外の C の関数を呼ぶ宣言は
+# `extern "C" lib "…" { … }`（§14.1）で、どちらも関数の宣言の頭に `extern` を書かない。どちらの意味かは書き手の
+# 意図で決まるので、候補は作らない。note は §14.1 と §14.2 を示す。主の位置は `extern`。
 [[form]]
 id = "extern_fn"
 kind = "foreign"
@@ -9100,7 +9100,7 @@ origin = "Rust と C"
 stage = "syntax"
 code = "E0002"
 spec = ["14.1", "14.2", "18.1"]
-rule = "C の ABI に出す関数はマニフェストの `[export]` で選ぶ。外の C の関数は `extern \"C\" lib \"…\" { … }` で宣言する"
+rule = "C の ABI に出す関数は宣言に `@export` を付ける。外の C の関数は `extern \"C\" lib \"…\" { … }` で宣言する"
 
 [[form.example]]
 source = '''
@@ -9140,8 +9140,8 @@ pub fn f() -> I32 {
 '''
 at = "1:1"
 
-# `export "C" fn`（Onsa 0.2 の書き方）。C の ABI に出す関数はマニフェストの `[export]`（§14.2）で選ぶ。候補は作らない。
-# 主の位置は `export`。
+# `export "C" fn`（Onsa 0.2 の書き方）。C の ABI に出す関数は宣言の `@export`（§14.2）で選ぶ。候補は作らない（`export` の
+# 読みが言語で割れ、JavaScript・TypeScript ではモジュールの公開である）。主の位置は `export`。
 [[form]]
 id = "export_c"
 kind = "foreign"
@@ -9149,7 +9149,7 @@ origin = "旧版 0.2"
 stage = "syntax"
 code = "E0002"
 spec = ["14.2", "18.1"]
-rule = "C の ABI に出す関数はマニフェストの `[export]` で選ぶ。関数の宣言に `export` は書かない"
+rule = "C の ABI に出す関数は宣言に `@export` を付けて選ぶ。関数の宣言に `export` は書かない"
 
 [[form.example]]
 source = '''

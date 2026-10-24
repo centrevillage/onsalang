@@ -250,7 +250,7 @@ BASELINES = {
     "flow builtins (§2.2)": {"prev", "delay", "vdelay", "sample_rate"},
     "generated API (§11.6, §12.4)": {
         "State", "Config", "Params", "Out", "init", "reset", "process", "process_inplace", "render",
-        "params_default", "SIZE", "BULK_SIZE",
+        "SIZE", "BULK_SIZE",
     },
     "attributes (§6.5)": {"repr", "fp", "param", "mem"},
     "clocks (§11.3)": {"init", "block", "sample"},

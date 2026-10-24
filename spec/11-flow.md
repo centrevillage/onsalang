@@ -225,13 +225,13 @@ rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, events: 
 fn voice.render(cfg: voice.Config, params: voice.Params, events: Span[voice.Event], <入力>,
                 frames: U32, sample_rate: F32) -> voice.Rendered uses {Alloc}
                                             // frames は sample の入力の無い flow にだけある
-fn voice.params_default() -> voice.Params   // block の入力のある flow で、その全てに @param か @host がある場合
 fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベントの入力ごと
-rt fn voice.latency(s: voice.State) -> U32  // 遅れ（下記）
 ```
 
 - 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。名前空間と中の全ての項目は、flow の可視性（`pub` / 無指定 / `priv`）を継ぐ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
 - 状態の大きさ（fast / bulk 領域のバイト数）は名前空間に無い。ターゲットの設定とポインタの幅で変わるので、C のヘッダ（§14.2）と `onsa interface --target <名前>` にだけ出す（§12.4）。Onsa のコードの意味はターゲットに依存しない。
+- 属性の値（`@param` の `default`、`@latency` の遅れ）も名前空間に無く、C の `<p>_params_default`・`<p>_latency`（§14.2）と道具が読む（§6.5）。
+  Onsa のコードで既定のパラメータを使うときは、`Params` のリテラルに値を書く（`voice.Params { f0: 110.0, … }`。値を一か所に置くには、同じ `const` を `@param` の値とリテラルの両方で使う、§11.7）。
 - 生成された型は flow を宣言したモジュールで定義されたものとして扱うので、同じモジュールに `impl voice.State { ... }` で補助メソッドを書ける（孤児規則 §6.3 の通り）。
 - Core IR と生成コードでも名前は `voice.State` の形を保つ（C ではモジュールの経路を含めて `dsp__voice__State` のように `__` でつなぐ。export は `prefix` + `voice`）。生成コードとデバッガで同じ名前が見える。
 - `process` の `<入力>` と `<出力>` は、数で形が決まる。
@@ -239,7 +239,7 @@ rt fn voice.latency(s: voice.State) -> U32  // 遅れ（下記）
   - 出力: 単一の値なら `inout output: Span[T]`、`[T; N]` なら `inout output: [Span[T]; N]`、struct なら `inout output: voice.Out`。`Out` は出力の struct と同じフィールド名を持ち、各フィールドは `Span[T]` か `[Span[T]; N]`。
     イベントの出力（§11.11）は `inout output: Span[(U32, E)]`（長さが容量）で受け、`process` は出した数を返す（`-> U32`）。`sample` の入力が無くイベントを出す flow の `process` は `frames: U32` を取る（`render` と同じ）。
   - イベント: イベントの入力のある flow の `process` は、`params`（あれば）の後、`sample` の入力の前に `events: Span[voice.Event]` を取る。列は入力の印の付いた一つの列で、入力をまたいだ順は列の順だけで決まる。要素は入力ごとの作る関数 `voice.Event.<入力の名前>(pos: U32, v: T)` で作る。
-  - 引数は flow のシグネチャにある入力と出力だけである（この数の規則を、`sample` の入出力、イベントの入出力、`block` の入力、`init` の入力の全てに当てる）。`block` の入力の無い flow は `params` の引数と `Params`・`params_default` を持たず、`init` の入力の無い flow は `cfg` の引数と `Config` を持たない（`process`・`process_inplace`・`render`・`init` で同じ）。
+  - 引数は flow のシグネチャにある入力と出力だけである（この数の規則を、`sample` の入出力、イベントの入出力、`block` の入力、`init` の入力の全てに当てる）。`block` の入力の無い flow は `params` の引数と `Params` を持たず、`init` の入力の無い flow は `cfg` の引数と `Config` を持たない（`process`・`process_inplace`・`render`・`init` で同じ）。
     シグネチャと違う呼び出しは型の誤りになる。
   - 引数の名前は `s`、`params`、`events`、`input`、`output` に固定する。利用者の名前（`sample` の入力の名前、出力の struct のフィールド名）は `In` / `Out` のフィールドにだけ現れるので、生成 API の引数の名前と衝突しない。
   - `In` と `Out` は第二級で、引数の位置にだけ現れる（§5.3）。引数の位置に struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する（`inout [a, b]` と同じ）。
@@ -261,9 +261,13 @@ rt fn voice.latency(s: voice.State) -> U32  // 遅れ（下記）
   イベントの入力のある flow の `render` は、`process` と同じ位置に同じ形のイベントの列を取り、位置は `render` の頭から数える（`frames` が 0 の `render` はイベントを持てない）。
 - `Rendered` は、出力を `Buf` で持つ struct。スカラ出力は `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名（`o.l`、`o.r`。各フィールドは `Buf[T]` か `[Buf[T]; N]`）、イベントの出力は `o.out: Buf[(U32, E)]`。`render` の `<入力>` は `process` と同じ形。
 - 状態の所有者は呼び出し側。サンプルレートを変えるときは、`init` を呼び直す。
-- `latency` は flow の遅れのサンプル数を返す（`init` の後の値。未初期化なら 0。C は `<p>_latency`、§14.2）。値は一番外の flow の宣言 `@latency(e)`（`e` は `init` のクロックの式）で、宣言が無ければ 0 である（子の宣言は合成しない）。
+- 遅れの宣言 `@latency(samples: n, seconds: t)` は、一番外の flow の遅れ（入力から出力までのサンプル数）をホストに報告するための情報で、C の `<p>_latency`（§14.2）とプラグインのラッパー（§14.3）が読む。宣言が無ければ遅れは 0 で、子の flow の宣言は合成しない。
+  項は `samples`（`U32`）と `seconds`（`F32`）の閉じた一覧で、同じ項は一度だけ書け、どちらか一方だけでもよい（`@latency(samples: 64)`、`@latency(seconds: 0.005)`）。
+  項の値はコンパイル時の定数で、`@param` の値と同じく `const` の初期化式の規則で書き、評価する（§6.6、§11.7。型の合わない値は E0401、評価の panic は E0419）。`seconds` は有限で 0 以上でなければならず、項の無い `@latency()` も誤りである（E0809）。`init` の入力に依る遅れは書けない。
+  報告する値は、サンプルレート `sample_rate`（`F32`）での `samples +| (seconds * sample_rate).trunc_u32_sat()` である（積は `F32` で計算し、ゼロ方向に切り捨て、和は `U32` に飽和する）。どの変換先もこの式とビットで同じ値を出す。本体が自分の遅延の長さを同じ式で計算すれば、報告と実際が揃う。
+  C の `_init` は、本体の `init` の後にこの値を計算して状態の隠れた欄（§12.4）に書き、`reset` は保つ。Onsa の `init`（インタプリタと `onsa test`）はこの欄に触れない。
   コンパイラは報告する値を本体から数えない（フィルタの群遅延は周波数と係数に依り、遅いレートで動く検出の経路の遅れは音の遅れでないので、機械では正しく決まらない）。構造から決まる遅れ（集めて配る N と子の宣言の、経路ごとの値）は解析の道具（`onsa audit`）が出す（形は未決定、§19.1）。
-  `block` のクロックの式は E0815。値は状態の隠れた欄に置き、`reset` は保つ。std の `fir_up2`・`fir_down2` は `@latency` を持つ。
+  std の `fir_up2`・`fir_down2` は `@latency` を持つ。
 - 状態のフィールドは `let` の名前を保つ（`onsa interface`、トランスパイル結果、デバッガ、プローブで同じ名前が見える）。`let` の値がインスタンス・遅延・`par` の呼び出しそのものなら（`let c = prev~(b)`、`let src = saw~(f0)`）、そのノードは `let` の名前で呼ぶ（`c`、`src`）。
   名前の無い状態のノード（式の中に直接書いたインスタンスと `prev~` / `delay~` / `vdelay~`、`par`）は、それを含む `let` の名前に `.` で続けて、種類と番号で呼ぶ（`let a = prev~(lp~(x)) + prev~(x, 1.0)` の `a.prev_0`、`a.lp_0`、`a.prev_1`）。
   種類は、組込みの遅延の名前、修飾を除いた flow の名前、`par` である。番号は `let` ごと・種類ごとに、呼び出しの名前が字面に現れる順に 0 から振る（`lp~(lp~(x))` は外側が先）。出力の式の中のノードは修飾しない（`lp_0`）。分解する `let` は、パターンの中で最初に束縛する名前で修飾する。
@@ -299,11 +303,12 @@ pub flow gain(
   範囲を本体でも守るとき（下記）は、同じ定数を使える。型の合わない値は E0401（暗黙の変換は無い、§3.3。`F32` の入力の `min: 0` は修正候補 `0.0`、整数の入力の `min: 2.0` は修正候補 `2` で、`2.5` には候補が無い）。`scale` は `"linear"`（既定）か `"log"`。
 - 値の制約（違反は E0809）: 数値は有限（NaN と無限大は不可）。両方あれば `min < max`。`default` は範囲の中。`step > 0`。`scale: "log"` は `min > 0` を要する。`Bool` の入力に書けるのは `default`（`true` / `false`）、`unit`、`label`、`id` だけである。
   制約が無ければ `min` / `max` / `step` を書かない（`step` が無ければ、浮動小数は連続、整数は全ての整数の値）。`onsa interface` も、書かれていないキーを出さない。
-- 用途: IDE の自動 UI、プラグイン（CLAP / VST3 / AU）のパラメータ情報、`params_default()`、C API のメタデータ表。
-- export する flow（§15.3）の `block` の入力には `@param` か `@host`（下記）が必須（E0809）。
+- 用途: IDE の自動 UI、プラグイン（CLAP / VST3 / AU）のパラメータ情報、C の `<p>_params_default` とメタデータ表（§14.2）。Onsa のコードは値を読めない（§6.5）。
+- export する flow（`@export`、§14.2）の `block` の入力には `@param` か `@host`（下記）が必須（E0809）。`@param`・`@host` の誤りとこの必須はターゲットに依らないので、`onsa check` が出す（プラグインの条件は下記のとおりそのターゲットのビルド）。
 - ホストの情報: `block` の入力に `@host(<種類>)` を付けると、export でも `@param` が要らず、ラッパーがその呼び出しの最初のサンプルの時点の値を書く（呼び出しを分けた位置では進めた値、§14.3）。
-  種類は `tempo`（`F64`、BPM、既定 120.0）・`beat`（`F64`、四分音符の数の位置、0.0）・`bar_start`（`F64`、今の小節の頭の位置、0.0）・`sig_num`・`sig_den`（`U16`、4・4）の閉じた一覧（再生の状態は `transport.Event` で受ける、§11.11）。種類の誤りは E0005、型の違いと `@param` との重なりは E0809。
-  `@host` は export しない flow の入力にも付けられ、意味は export でだけ持つ（`@param` と同じ）。`params_default()` は `@host` の欄を既定の値にし（§11.6）、`onsa test --flows` は `@host` の入力に既定の値を与える（§18.2）。C の表は §14.2。
+  種類は `tempo`（`F64`、BPM、既定 120.0）・`beat`（`F64`、四分音符の数の位置、0.0）・`bar_start`（`F64`、今の小節の頭の位置、0.0）・`sig_num`・`sig_den`（`U16`、4・4）の閉じた一覧（再生の状態は `transport.Event` で受ける、§11.11）。
+  種類の誤りは E0005、型の違いと `@param` との重なりは E0809。`block` でない入力（`sample`・`init`・イベント）の `@host` と、同じ種類の `@host` を二つの入力に付けること（二つ目の入力で。note で一つ目を指す）も E0809 である。
+  `@host` は export しない flow の入力にも付けられ、意味は export でだけ持つ（`@param` と同じ）。C の `<p>_params_default` は `@host` の欄を既定の値にし（§14.2）、`onsa test --flows` は `@host` の入力に既定の値を与える（§18.2）。C の表は §14.2。
 - プラグイン（§14.3）に出す flow の数値の `@param` は `min`・`max` を要する（無ければそのターゲットのビルドで E0809）。整数は `(max − min) / step ≤ 2^24`（E0809）。AU のターゲットでは `F64` の `@param` は E0200。VST3 の正規化は `scale` で写す。ラッパーが値を格子に寄せて範囲に収めることは §14.3（下の飽和させない約束とは別の層）。
 - `id` はパラメータの文字列の ID で、ホストが保存する自動化とプリセットが参照する。省略すると入力の名前（`cutoff`）になる。空でなく、ASCII の英字・数字・`_`・`.` からなり、同じ flow の中で重複してはならない（E0809）。入力の名前を変えても保存した自動化とプリセットを保つには、元の名前を `id` に書く（`id: "cutoff"`）。`onsa.policy` で凍結したインタフェースでは、ID の変更もエラーになる（§15.4）。
 - 数値の ID は、文字列の ID から決まる 32 ビットの整数である。CLAP / VST3 / AU のホストはパラメータを整数で識別するので、プラグインのラッパーと C の API（§14.2 の `number` と `_param_index`）はこれを使う。
@@ -367,7 +372,7 @@ test "wrap01 stays in [0, 1)" {
 - 位相のカウンタ: 時間を作るもの（一番外のインスタンスの本体と `when~`）がカウンタを持ち、`init` と生成する `reset` でだけ 0 になる（`reset_if~` は状態を初期化するが、カウンタには触れない）。`when~` の中の時間は動いた刻みで数える。誰が欄を持つかは実装の選択。
   `sample / N` の刻みはカウンタが N の倍数の刻みで、最初の刻みで動く。ホストの区切りに依らない（§13.4。ホストのブロックの長さを 2^N に揃える必要は無い）。`block` のクロックは状態を持てないので、ホストの区切りの長さは状態に漏れない。状態を持つ制御の信号は `.down~(N)` で書く。パラメータは `block` の入力のままで、ラッパーは変化の位置で呼び出しを分けてよい。
 - 境界（一番外の flow の入出力）: 入出力のクロックは `init`・`block`・`sample`・イベントだけで、`sample / N`・`sample * N` は E0810 である（プラグインのホストは全てのポートに一つのフレームの数を渡し、§14.2 も一つの `frames` を使う）。
-  誤りの位置は、その flow の `process`・`process_inplace`・`render` を使う所と `[export]` の項目で、`init`・`reset`・`State` は使える（変換の flow を `.down~(N)` で中に置くため）。E0810 の note で、中の部品を `.down~(N)`・`.up~(N)` で包み、一番外を `sample` にする書き方を示す。
+  誤りの位置は、その flow の `process`・`process_inplace`・`render` を使う所と `@export` の印で、`init`・`reset`・`State` は使える（変換の flow を `.down~(N)` で中に置くため）。E0810 の note で、中の部品を `.down~(N)`・`.up~(N)` で包み、一番外を `sample` にする書き方を示す。
   後で `sample * N` を開いても、今のプログラムは壊れない。
 - std の変換の flow: std は、2 倍のオーバーサンプリングの `fir_up2`・`fir_down2`（`std.dsp`。線形位相のハーフバンドの FIR、型は `F32` だけ）を置く。4 倍以上は入れ子で書く。
   名前は、方式の名前、`up`・`down`、比の順で、番号を付けるときは方式の名前の後ろ（`fir2_up2`）。IIR の版（`iir_up2`・`iir_down2`）は要ると分かったときに足す（std は prelude の外なので、足しても利用者のコードは壊れない、§15.1）。
@@ -436,7 +441,7 @@ test "wrap01 stays in [0, 1)" {
   出す位置は出した刻みの位置で、出したイベントの刻みは出した刻みの直後に並ぶ（受け手は名前の順で作り手より下にあり、その位置の受け手の段の前に届く）。呼び出しの出力のイベントのクロックは、呼び出しごとに別のクロックである。struct の出力にイベントを含めない（E0810）。
   `.up~`・`.down~` の部品の中から出るイベントの位置は、内側の刻みが属する呼び出し側の位置で、同じ位置には内側の刻みの順に並ぶ（細かい時刻が要るときは値に入れる）。`when~` で止まっている間は、周期のクロックの式の出力は出さず、入力のイベントごとの出力は出る。
 - std: イベントと信号の変換（イベントのあった位置で真の脈の flow、`genv~`、`detect_zero~` など）は std の flow で書き、flow の組込み名にしない（§11.4）。イベントの型は prelude に入れず、std のモジュールに置く（後から prelude に足すと、prelude の名前は隠せないので利用者の同名の型が壊れる）。
-- 境界の型: export（`[export]` の項目と C の API）の境界のイベントの入出力に出せる型は、§11.7 の `@param` と同じスカラ（`F32 F64 I8 I16 I32 U8 U16 U32 Bool`。JavaScript で 64 ビットの整数を境界に出さないため、§13.5）、`()`、std のイベントの型だけで、それ以外は E0810 である。
+- 境界の型: export（`@export` の項目と C の API）の境界のイベントの入出力に出せる型は、§11.7 の `@param` と同じスカラ（`F32 F64 I8 I16 I32 U8 U16 U32 Bool`。JavaScript で 64 ビットの整数を境界に出さないため、§13.5）、`()`、std のイベントの型だけで、それ以外は E0810 である。
   flow の中と、Onsa のコードから呼ぶ生成する API（`process`・`render`）では、利用者の型も含めて自由である（外の境界ではないので、ラッパーと ABI に由来する制限は要らない）。
   `std.midi` の `midi.Message` は、MIDI 1.0 の短いメッセージを `U32` に詰めた中身を見せない型である（bit 16〜23 がステータス、8〜15 がデータ 1、0〜7 がデータ 2、24〜31 は 0。UMP の MIDI 1.0 の語の下位 24 ビット、Cmajor の `std::midi::Message` と同じ並び）。C では `uint32_t`。
   判定と取り出しと作る関数を std に置く。SysEx は持たず、MIDI 2.0 は後で別の型として足す。

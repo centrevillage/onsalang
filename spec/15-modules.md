@@ -85,9 +85,7 @@ name = "voice"
 edition = "2026"
 
 [export]
-prefix = "vc_"          # 必須。C の名前は prefix + 名前の最後の要素（§14.2）
-flows = ["dsp.voice", "dsp.echo"]
-fns = ["util.version"]
+prefix = "vc_"          # @export の項目を出すビルドで必須。C の名前は prefix + 名前の最後の要素（§14.2）
 
 [targets.cli]
 kind = "exe"
@@ -141,8 +139,7 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 | `[package]` | `name` | 必須。`snake_case` の識別子（`use` の経路の頭に書くので、モジュールの名前と同じ規則、§2.3）。`std` は書けない |
 | | `edition` | 必須。この版で書けるのは `"2026"` だけ。版が意味を変えるときに、暗黙の既定でどちらの意味かが分からなくならないよう、省略できない |
 | `[dependencies]` | `<パッケージ名>` | 版の文字列。この版で書けるのは `std` だけ（下記） |
-| `[export]` | `prefix` | flow か関数を export するなら必須（§14.2） |
-| | `flows`、`fns` | 項目（flow と関数）の経路の配列（`dsp.voice` はモジュール `dsp` の flow `voice`）。既定は空。見つからない経路は E0302、`pub` でない項目は E0303、種類の違う項目（`fns` に flow を書くなど）は E0308、同じ項目を二度書くと E1103（`span` は `onsa.toml` の中） |
+| `[export]` | `prefix` | `@export` の項目（§14.2）を出すターゲットのビルドで必須（無ければ E1104） |
 | `[targets.<名前>]` | `kind` | 必須。`exe` `clap` `vst3` `au` `wasm-worklet` `staticlib` `source` |
 | | `platform` | ターゲットのトリプルか `"host"`。C かネイティブのコードを出すターゲット（`exe`、プラグイン、`staticlib`、`lang = "c"` の `source`）で必須で、無ければそのターゲットのビルドで E1104（生成物がポインタの幅などで変わるため）。トリプルの OS の欄が `none` のもの（`thumbv7em-none-eabihf`）を OS の無いプラットフォームとし、`panic` の既定（§9.2）と `ONSA_NO_TLS`（§14.2）が変わる |
 | | `lang` | `kind = "source"` で必須。変換先の言語（`"c"`、`"js"`、§13） |
@@ -154,14 +151,14 @@ fast_budget = 262144    # 任意。export する flow の fast 領域がこれ�
 | `[targets.<名前>.memory]` | `bulk` | 真偽値。既定は `false`（§12.4） |
 | | `fast_budget`、`bulk_budget` | バイト数。任意 |
 | `[targets.<名前>.bind]` | `"<モジュール>"` | 実装モジュールの経路（§15.2） |
-| `[[plugin]]` | `flow` | 必須。プラグインにする flow の経路で、`[export]` の `flows` にあること（§14.3） |
+| `[[plugin]]` | `flow` | 必須。プラグインにする flow の経路で、`@export` を付けた flow でなければ E1103（§14.3） |
 | | `id`、`name`、`vendor` | 必須。文字列。同じ `id` の重複は誤り |
 | | `version` | 必須。`major.minor.patch`（AU は各 255 以下） |
 | | `category` | 必須。`instrument`・`effect`・`note-effect` |
 | | `au` | AU のターゲットで必須。`{ subtype, manufacturer }` |
 
 - `main` または export される関数の効果行に、`provides` に無い効果が含まれていれば E0610。
-- `[export]` の flow と関数は、`staticlib`・プラグイン・`wasm-worklet`・`source` のターゲットに出力される。
+- `@export` の flow と関数は、`staticlib`・プラグイン・`wasm-worklet`・`source` のターゲットに出力される（依存のパッケージの `@export` は出さない、§14.2）。
 - ビルドはハーメティック（ネットワークも環境変数も読まない）で、`onsa.lock` が同じなら、Onsa が生成するファイル（C のソースとヘッダ、WASM など）は同一である。`staticlib` の `.a`、実行ファイル、プラグインの束（§14.3）は外部の C ツールチェーンの出力で、この約束の外にある。
   ホストの `platform` では PATH の `cc` と `ar` を使う（環境変数を読む唯一の例外）。クロスの `platform` で外部のツールチェーンを要する `kind`（`staticlib`、プラグインなど）は、この版ではそのターゲットのビルドで E0200 になる（note で `kind = "source"` と `lang = "c"` を示す）。
   ツールチェーンを指定する形は §19.1。
@@ -182,7 +179,7 @@ packages = ["daisy_hal"]           # unsafe / extern を書けるパッケージ
 frozen = ["voice"]                 # 公開シグネチャとパラメータ ID の変更は E0630
 ```
 
-`onsa check` はポリシーへの違反をエラーにする。`onsa audit` はポリシーと unsafe・extern の差分を表示する。運用では、エージェントにこのファイルの書き込み権限を与えない。
+凍結の対象の候補には、export の集合（どの項目に `@export` があるか、§14.2）も入れる。`onsa check` はポリシーへの違反をエラーにする。`onsa audit` はポリシーと unsafe・extern の差分を表示する。運用では、エージェントにこのファイルの書き込み権限を与えない。
 
 ### 15.5 浮動小数のプロファイル
 

@@ -1948,10 +1948,17 @@ note = "E0320 の候補が定数の宣言だけを改名し、触れない単位
 
 [[pending]]
 kind = "spec-example"
-target = "§16.1 fd401c4c: use std.audio.device"
-reasons = ["S-112", "S-570", "S-609"]
+target = "§14.2 07eddee7: // util.onsa"
+reasons = ["S-639"]
+until = "W4-02"
+note = "61 回目の S-639 で、export する関数に @export を付けた（マニフェストの [export] の fns を外した）。@export は W4-02 で入るまで E0005 なので、写し tests/spec/ffi/export_fn.onsa は今の形のまま残し、W4-02 で写しを直して外す"
+
+[[pending]]
+kind = "spec-example"
+target = "§16.1 d350081e: use std.audio.device"
+reasons = ["S-112", "S-570", "S-609", "S-625"]
 until = "W7-03"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した（写しの 12 行は W4-11 で直す）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した（写しの 12 行は W4-11 で直す）。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
@@ -1962,14 +1969,14 @@ note = "52 回目の S-112 の改め（init の入力の無い flow は Config �
 
 [[pending]]
 kind = "spec-example"
-target = "§17.4 e7b0091f: use std.fs.{Fs, Path, IoError}"
-reasons = ["S-112", "S-570"]
+target = "§17.4 ff1dd5a3: use std.fs.{Fs, Path, IoError}"
+reasons = ["S-112", "S-570", "S-625"]
 until = "W7-03"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
-target = "§17.6 5925c9b1: use std.array"
-reasons = ["S-112", "S-570"]
+target = "§17.6 e7b876ad: use std.array"
+reasons = ["S-112", "S-570", "S-625"]
 until = "W7-03"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
+note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"

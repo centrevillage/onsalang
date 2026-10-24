@@ -15,7 +15,8 @@ use std.sync.{Swap}
 
 pub fn main() -> Result[(), device.Error] {
   let st     = voice.init(48000.0)
-  var params = Swap.new(voice.params_default()) // 固定サイズの値。main のフレームに置かれる
+  let p0     = voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }
+  var params = Swap.new(p0) // 固定サイズの値。main のフレームに置かれる
   device.run(move st, inout params, on_audio, on_control)
 }
 

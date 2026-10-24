@@ -46,21 +46,24 @@ impl Conv {
 
 ### 14.2 export
 
-関数と flow は、ソースではなくマニフェストの `[export]`（§15.3）で C の ABI に出す。export する場所を一つにし、エージェントに書き込み権限を与えないファイルで管理するためである。ソースに export の印は無い。
+関数と flow は、宣言に `@export` を付けて C の ABI に出す（§6.5）。export する場所を宣言の一か所にし、export の検査を宣言だけで閉じるためである。C の名前の `prefix` はマニフェストの `[export]`（§15.3）に書く。
+export するのはビルドするパッケージの項目だけで、依存のパッケージの `@export` は出さない（宣言の検査はどちらも同じ）。公開の ABI の中身（export の有無、シグネチャ、パラメータの ID）を人の判断に留める仕組みは、ポリシー（§15.4）である。
 
 ```onsa
 // util.onsa
+@export
 pub fn version() -> U32 { 2 }
 ```
 
 ```toml
 [export]
 prefix = "vc_"
-fns = ["util.version"]
 ```
 
-export される flow と関数は `pub` で（でなければ E0303）、関数の引数と返り値は FFI で `unsafe` を要しない型（§14.1）に限る。効果行は、そのターゲットの `provides` にある効果しか持てない（E0610）。ヘッダはパッケージに 1 つで、名前は `<prefix><package>.h`。export する全ての flow と関数を宣言する。
-次はパッケージ `voice`（§15.3、`prefix = "vc_"`）の例で、`voice` は §17.4 の flow、数値は例である。
+export される flow と関数は `pub` で（でなければ E0303）、関数の引数と返り値は FFI で `unsafe` を要しない型（§14.1）に限る。効果行は、そのターゲットの `provides` にある効果しか持てない（E0610）。
+`@export` の宣言の検査（`pub`、境界の型、関数のシグネチャ、§11.7 の `@param` か `@host`）はターゲットに依らないので、`onsa check` が宣言の位置で出す。ターゲットで決まる検査（効果行の E0610、容量の E0820、C の名前の E1011、プラグインの条件）は、そのターゲットのビルドで出す。
+ヘッダはパッケージに 1 つで、名前は `<prefix><package>.h`。export する全ての flow と関数を宣言する。
+次はパッケージ `voice`（§15.3、`prefix = "vc_"`）の例で、`voice` は §17.4 の flow（`@export` を付けたもの）、数値は例である。
 
 ```c
 /* vc_voice.h（onsa build が生成する） */
@@ -106,7 +109,7 @@ void      vc_voice_free(vc_voice* s);        /* 状態と bulk の領域を解�
 
 /* dsp.echo（§17.4）も同じ形で VC_ECHO_SIZE、vc_echo_init などを宣言する（ここでは省略） */
 
-/* export した関数（[export] の fns） */
+/* export した関数（@export の fn） */
 int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 
 #ifdef __cplusplus
@@ -166,7 +169,8 @@ int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
   どちらも、要るのに NULL なら `_init` は 2 を返し、状態をゼロで埋めて未初期化の印を付ける（`_new` は NULL を返す）。2 は `_process` の 2 と同じく呼び出し側の引数の誤りで、`init` の中の panic（1）と区別できる。
   Config にフィールドを足すと、構造体を組み立てるホストのコードはそのまま通り、新しいフィールドは 0 になるので、ホストのコードを見直す。
 - `_new` は状態と bulk の領域（`<P>_BULK_ALIGN` に揃える）を確保して `_init` を呼び、`_free` は両方を解放する。`BULK_SIZE` が 0 なら `BULK_ALIGN` は 1 である。
-- `prefix` は、`[export]` に flow か関数があれば必須で、既定は無い（書かなければ E1104 で、`<package>_` が下の規則を満たすときは、修正候補は `prefix = "<package>_"` の挿入）。C の名前は、ホストが依存した後は変えられない公開の ABI なので、export を決める場所で選ぶ。別々にビルドしたパッケージを一つのバイナリにリンクするとき、名前の重なりは `prefix` を変えて避ける（パッケージ名を変える必要は無い）。
+- `prefix` は、`@export` の項目を出すターゲット（§15.3）のビルドで必須で、既定は無い（書かなければそのビルドで E1104 で、`<package>_` が下の規則を満たすときは、修正候補は `prefix = "<package>_"` の挿入）。`@export` の項目が無いパッケージでは要らず、書いても誤りにしない。
+  C の名前は、ホストが依存した後は変えられない公開の ABI である。別々にビルドしたパッケージを一つのバイナリにリンクするとき、名前の重なりは `prefix` を変えて避ける（パッケージ名を変える必要は無い）。
 - `prefix` の値は、小文字の英字・数字・`_` からなり、英字で始まって `_` で終わる（`vc_`、`my_synth_`）。空は書けない（C の名前が libc や他のライブラリの名前と重なり、ヘッダの名前が `onsa.h` や標準のヘッダを隠す）。`__` を含むもの（C++ では予約の名前）と、`onsa_` で始まるものも書けない。いずれも E1103 である。
 - ランタイムは `onsa_` と `ONSA_` で始まる名前を全て持つ（公開の名前は `onsa.h` の型と列挙子、`ONSA_ABI_VERSION`、下の表。内部の記号は `onsa__` / `ONSA__` で始まる）。`prefix` は `onsa_` で始まれないので、生成する名前とランタイムの名前は重ならない。ランタイムに名前を足しても、既存のパッケージの名前とは重ならない。
 - 生成するファイルの名前は `<prefix><package>` を幹にする: ヘッダ `<prefix><package>.h`、C のソース `<prefix><package>.c`、静的ライブラリ `lib<prefix><package>.a`。ランタイムのヘッダは固定の名前 `onsa.h` と `onsa__runtime.h` で、`prefix` の規則からパッケージのファイルとは重ならない。
@@ -203,7 +207,7 @@ typedef struct onsa_param_info {
 
 - `double` と `int64_t` は、§11.7 の全ての型の値を正確に表す。書かれていない `min` / `max` / `step` は、制約が無いことを表す値で埋める（浮動小数は `-INFINITY` / `INFINITY` / `0`、整数は型の範囲の両端と `1`）。`@param` の値は有限で `step > 0` なので、書かれていないことも見分けられる。
 - `onsa_host_info`（`onsa.h`）は、`@host` の入力（§11.7）の名前、種類（列挙 `onsa_host_kind`）、`Params` の中の位置 `uint32_t offset` を持つ。`@host` の入力は `_param_info` に入れない。`onsa_event_in_info` は、イベントの入力の名前と種類（`onsa_event_kind`）を持つ。
-- `uint32_t <p>_latency(const <p>* s)` は、§11.6 の `latency` と同じ値（`@latency` の値。未初期化なら 0）を返す。
+- `uint32_t <p>_latency(const <p>* s)` は、`_init` が §11.6 の式で計算して状態に書いた遅れのサンプル数（`@latency` が無ければ 0。未初期化なら 0）を返す。
 - ホストやファームウェアが定義するマクロと関数は、次の表で全てである。
 
 | 名前 | 定義する者 | 意味 |
@@ -223,7 +227,8 @@ typedef struct onsa_param_info {
   ラッパーは、形式ごとの固定の C（ランタイムと同じくコンパイラに埋め込む）と、flow ごとに生成する公開しないつなぎ（`onsa__` で始める名前。一様な入口と表）で作る（つなぎ自体は公開の ABI を増やさない。ラッパーが使う C の API の名前は §14.2 の表にある）。
   CLAP のヘッダ（MIT）と VST3 の `vst3_c_api.h`（MIT に基づく使用許諾）を埋め込み、使用許諾の文を出力に置く。AU は macOS の SDK を使う。AUv3 は後で別の `kind` の値として足す。
 - マニフェスト: パッケージの表 `[[plugin]]`（§15.3）に `flow`・`id`・`name`・`vendor`・`version`・`category` を書き（全て必須、閉じた一覧）、AU では `au = { subtype, manufacturer }` も書く。プラグインの種類のターゲットは、全ての `[[plugin]]` を一つの束に入れる。
-  `flow` は `[export]` の `flows` に要り、同じ `id` の重複は誤り。`version` は `major.minor.patch`（AU は各 255 以下）。`category` は `instrument`・`effect`・`note-effect` で、AU の型（`aumu`・`aufx`・`aumf`・`aumi`）は `category` と MIDI の入力の有無から決まる。VST3 のクラスの ID は `id` から決まった関数で作る。
+  `flow` は `@export` を付けた flow でなければならず（E1103）、同じ `id` の重複は誤り。`version` は `major.minor.patch`（AU は各 255 以下）。`category` は `instrument`・`effect`・`note-effect` で、AU の型（`aumu`・`aufx`・`aumf`・`aumi`）は `category` と MIDI の入力の有無から決まる。
+  VST3 のクラスの ID は `id` から決まった関数で作る。
 - パラメータ: ラッパーは、`step` があれば（整数の型は無くても 1）値を `min + k × step` の格子に寄せ、`[min, max]` に収めてから `Params` に書く（C の API の外の層で、C の API が値を飽和させない約束（§11.7）とは別）。変化はラッパーが変化の位置で呼び出しを分けて届ける（§11.6）。数値の `@param` の条件は §11.7。
   変調（受けるか）と表示の文字列の形（Onsa が決まった形を持つか、ラッパーごとに定めるか）は未決定（§19.1）。UI の文脈との受け渡しは、ラッパーが C のパラメータごとの原子的な変数で持ち、言語の同期型（§16.2）は使わない。
 - ホストの情報（`@host`、§11.7）: ラッパーは種類ごとにホストの値を確かめ、`tempo` が有限で 0 より大きい、`beat`・`bar_start` が有限（負はよい）、`sig_num`・`sig_den` が `U16` に収まる 1 以上の整数、を満たさない値の代わりに、与えられないときと同じ既定の値を書く（C の API の外の層。C の API と `render`・`onsa test` は値をそのまま渡す）。

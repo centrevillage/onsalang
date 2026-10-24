@@ -90,7 +90,6 @@
 "SIZE" = 1
 "State" = 1
 "init" = 1
-"params_default" = 1
 "process" = 1
 "process_inplace" = 1
 "render" = 1
@@ -295,7 +294,6 @@
 "frames" = 1
 "init" = 2
 "params" = 3
-"params_default" = 2
 "process" = 2
 "process_inplace" = 2
 "render" = 2
@@ -382,6 +380,9 @@
 "none" = { count = 1, note = "ターゲットの三つ組の OS の部分（contains で is_none の一部と同じ綴り）" }
 "reset" = { count = 1, note = "マニフェストの panic の値（生成される API の reset と同じ綴り）" }
 
+[same_spelling."crates/onsa_driver/src/lib.rs"]
+"export" = { count = 1, note = "マニフェストの表の名前 [export]（§15.3。属性 @export とは別）" }
+
 [same_spelling."crates/onsa_sema/src/builtin.rs"]
 "u32" = { count = 1, note = "narrow_ / trunc_ の名前を作る型の接尾辞（std.test.gen の u32 と同じ綴り）" }
 
@@ -392,6 +393,9 @@
 
 [same_spelling."crates/onsa_syntax/src/cst.rs"]
 "Clock" = { count = 1, note = "CST のノードの種類の名前（`at` とクロックの名前の節、§11.3）" }
+
+[same_spelling."crates/onsa_syntax/src/foreign/decls.rs"]
+"export" = { count = 1, note = "他の言語の修飾の語 export（§18.1 の E0002。属性 @export とは別）" }
 
 [same_spelling."crates/onsa_syntax/src/foreign/paths.rs"]
 "f32" = { count = 1, note = "Rust の型名（E0020 の既存言語の書き方の表）" }

@@ -22,6 +22,4 @@ rt fn voice.process_inplace(inout s: voice.State, params: voice.Params, events: 
 fn voice.render(cfg: voice.Config, params: voice.Params, events: Span[voice.Event], <入力>,
                 frames: U32, sample_rate: F32) -> voice.Rendered uses {Alloc}
                                             // frames は sample の入力の無い flow にだけある
-fn voice.params_default() -> voice.Params   // block の入力のある flow で、その全てに @param か @host がある場合
 fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベントの入力ごと
-rt fn voice.latency(s: voice.State) -> U32  // 遅れ（下記）

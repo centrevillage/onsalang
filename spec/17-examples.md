@@ -160,12 +160,13 @@ pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
   let sr: F32       = 48000.0
   var st            = voice.init(sr)
   var out: Buf[F32] = Buf.zeroed(48000)
-  voice.process(inout st, voice.params_default(), inout out)
+  let p             = voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }
+  voice.process(inout st, p, inout out)
   wav.write(path, out, sr)
 }
 ```
 
-`out` は `Buf` で、本体の終わりで破棄されるので `Alloc` が要る。`st` は固定サイズの値で、ヒープを使わない。
+`out` は `Buf` で、本体の終わりで破棄されるので `Alloc` が要る。`st` は固定サイズの値で、ヒープを使わない。パラメータは `@param` の `default` と同じ値をリテラルで書く（Onsa のコードは属性の値を読まない、§6.5）。
 
 ### 17.5 組込み: C のホストから使う
 
@@ -222,7 +223,7 @@ impl Poly {
   pub fn new(sample_rate: F32) -> Poly {
     Poly {
       voices: array.from_fn(fn(_) { voice.init(sample_rate) }),
-      params: [voice.params_default(); MAX_VOICES],
+      params: [voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }; MAX_VOICES],
       notes: [None; MAX_VOICES],
       next: 0,
     }
