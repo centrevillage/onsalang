@@ -1,0 +1,7 @@
+pub flow f(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn g(p: f.Params, c: f.Config) -> I32 {
+  1
+}
