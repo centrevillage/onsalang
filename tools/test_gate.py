@@ -2280,7 +2280,7 @@ class BuiltinNames(unittest.TestCase):
         }
         self.assertTrue(builtin_names.builtin_names(real, [], baselines=baselines))
         for old, new, needle in (
-            ("、`@mem(...)`（§12.4）。これ以外", "。これ以外", "attributes (§6.5) no longer gives mem"),
+            ("、`@mem(...)`（§12.4）、`@export`", "、`@export`", "attributes (§6.5) no longer gives mem"),
             ("| `sample` | サンプルごとの値 |", "| `samples` | サンプルごとの値 |", "clocks (§11.3) no longer gives sample"),
             ("rt fn voice.process(inout", "rt fn voice.run(inout", "no longer gives process"),
             ("ヘッダの `SIZE` / `ALIGN`", "ヘッダの `ALIGN`", "no longer gives SIZE"),
