@@ -119,6 +119,10 @@ pub struct Modules {
     pub roots: Vec<ModId>,
     /// Package names (`std`, the user package), by package index.
     pub names: Vec<String>,
+    /// The heads of the paths of `use` (§15.1, S-37), by package index: the
+    /// modules under the package's root and the roots of the packages it
+    /// depends on, by name.
+    pub heads: Vec<HashMap<String, ModId>>,
     /// Associated items of user types: `impl` methods and consts (§6.2, §6.6).
     pub assoc: HashMap<DefId, HashMap<String, DefId>>,
     /// Associated items of builtin types (`impl F32 { const PI }` in std),
@@ -158,6 +162,13 @@ impl Modules {
     /// The root module of the package containing `m`.
     pub fn root_of(&self, m: ModId) -> ModId {
         self.roots[self.pkg_of(m)]
+    }
+
+    /// The module the head `name` of the path of a `use` written in `from`
+    /// names (§15.1, S-37): a module under the package's root or the root
+    /// of a package it depends on; never an item or a name a `use` bound.
+    pub fn head(&self, from: ModId, name: &str) -> Option<ModId> {
+        self.heads[self.pkg_of(from)].get(name).copied()
     }
 
     /// Resolve the first segment of a path from inside `from` (§15.1):

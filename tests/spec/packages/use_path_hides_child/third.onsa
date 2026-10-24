@@ -1,0 +1,9 @@
+use main.{inner}
+
+pub fn n() -> I32 {
+  inner.h()
+}
+
+test "the end of the path in a list is the child module" {
+  assert n() == 3
+}

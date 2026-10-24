@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// E0302: the head of the path of a `use` is not a name that this module has taken or defined (§15.1:
+// "a `use` cannot start from an item of the module or a name taken by a `use`"). The heads here are
+// an imported item (`double`), an imported child module (`counter`), an imported module of std
+// (`math`) and an item of this module (`local`). None of them is a module at the root of the package
+// or a dependency. The names of the failed `use` are not used below, so no other diagnostic is
+// expected (the candidates are not checked here).
+use util.{double}
+use util.counter
+use std.math
+
+fn local() -> I32 {
+  1
+}
+
+use double.{x}           //~ E0302
+use counter.{next}       //~ E0302
+use math.{sin}           //~ E0302
+use local.{x}            //~ E0302

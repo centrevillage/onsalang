@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// `review-phase1/types/useorder2.onsa` as it was reproduced: `f` calls `sin`, the name of the failed
+// `use`, which is no diagnostic of its own (§18.1). This waits for that rule (S-462, W4-03 U3b); the
+// same two lines without the call are in `use_binding_before.onsa`.
+
+use std.math
+use math.{sin}                                      //~ E0302
+
+pub rt fn f(x: F32) -> F32 {
+  sin(x)
+}

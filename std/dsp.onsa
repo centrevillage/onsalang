@@ -1,6 +1,6 @@
 //! DSP helpers (spec §11.5, §11.7, S-10).
 
-use std.math.{pow}
+use math.{pow}
 
 /// Sum of a fixed-length array, folded from `xs[0]` left to right so that the
 /// order of operations, and therefore the result, is the same on every target.

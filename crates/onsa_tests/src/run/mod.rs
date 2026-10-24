@@ -358,7 +358,8 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     let mut testfails: Vec<(String, String)> = Vec::new();
     // `//~ PANIC "name"` too, with the file of its line.
     let mut panics: Vec<(String, FileId, PanicMark)> = Vec::new();
-    for (file, module) in loaded.modules.clone() {
+    for (file, segments) in loaded.modules.clone() {
+        let module = segments.join(".");
         let f = loaded.sources.file(file);
         match parse_markers(f.text()) {
             Ok(m) => {

@@ -1,0 +1,2 @@
+use match
+fn g() -> I32 { 1 }

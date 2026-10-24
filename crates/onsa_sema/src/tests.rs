@@ -11,7 +11,7 @@ fn pkg(files: &[(&str, &str)]) -> Package {
         .iter()
         .enumerate()
         .map(|(i, (path, text))| Module {
-            path: path.to_string(),
+            segments: path.split('.').map(str::to_string).collect(),
             file: FileId(i as u32),
             text: text.to_string(),
             parsed: onsa_syntax::parse(FileId(i as u32), text),
@@ -246,4 +246,18 @@ fn flatten_tells_packages_apart_by_value_not_by_name() {
 fn the_role_marks_std() {
     assert!(Package::std(Vec::new()).is_std());
     assert!(!Package::new(crate::STD_PACKAGE, Vec::new(), Vec::new()).is_std());
+}
+
+/// S-666 (until it is decided): a `use` takes the module of a directory with
+/// no file of its own (`a` and `a.b` of `a/b/c.onsa` alone) like a module with
+/// no items, and a path through it takes what is under it.
+#[test]
+fn a_use_takes_the_module_of_a_directory_only_and_goes_through_it() {
+    let c = ("a.b.c", "pub fn f() -> I32 {\n  1\n}\n");
+    for head in ["use a\n", "use a.{b}\n", "use a.b\n"] {
+        let a = analyze(&pkg(&[c, ("main", head)]));
+        assert_eq!(codes(&a), [], "{head}: {:?}", a.diagnostics);
+    }
+    let a = analyze(&pkg(&[c, ("main", "use a.b.c.{f}\n\npub fn g() -> I32 {\n  f()\n}\n")]));
+    assert_eq!(codes(&a), [], "{:?}", a.diagnostics);
 }

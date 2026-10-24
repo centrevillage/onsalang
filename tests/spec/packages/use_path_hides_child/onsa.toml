@@ -1,0 +1,3 @@
+[package]
+name = "use_path_hides_child"
+edition = "2026"

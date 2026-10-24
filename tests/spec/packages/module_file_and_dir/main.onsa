@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// A file and a directory of the same name (`a.onsa` and `a/`) are a module and its child (§15.1):
+// `a.onsa` is the module `a`, and `a/b.onsa` is `a.b`, the child module `b` of `a`. The path of the
+// child is written from the root (`use a.b.{g}`) or through the parent (`use a.{b}`). Every test
+// passes.
+use a.{f}
+use a.b.{g}
+use a.{b}
+
+test "the module and the items of the module" {
+  assert f() == 1
+}
+
+test "the child module, by its path and through its parent" {
+  assert g() == 2
+  assert b.g() == 2
+}

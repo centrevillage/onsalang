@@ -1,0 +1,3 @@
+[package]
+name = "use_head_not_shadowed"
+edition = "2026"

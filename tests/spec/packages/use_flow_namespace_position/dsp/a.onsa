@@ -1,0 +1,7 @@
+pub flow first_voice(x: F32 at sample, gain: F32 at block) -> F32 at sample {
+  x * gain
+}
+
+pub fn helper_a() -> I32 {
+  1
+}

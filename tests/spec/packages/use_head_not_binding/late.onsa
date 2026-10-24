@@ -1,0 +1,10 @@
+// The same heads as in main.onsa, with the `use` that makes the binding written after the `use` that
+// starts from it: each `use` is decided by itself, wherever it is written and whatever the other `use`
+// lines are (§15.1), so the result is the same.
+use math.{sin}           //~ E0302
+use counter.{next}       //~ E0302
+use double.{x}           //~ E0302
+
+use std.math
+use util.counter
+use util.{double}

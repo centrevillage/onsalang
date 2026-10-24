@@ -1,0 +1,3 @@
+[package]
+name = "use_path_binding_only"
+edition = "2026"

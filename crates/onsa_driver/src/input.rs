@@ -69,7 +69,8 @@ pub struct Loaded {
     pub sources: SourceMap,
     pub name: String,
     pub root: Option<PathBuf>,
-    pub modules: Vec<(FileId, String)>,
+    /// Each module's file and path, a name for each part ([`module_path`]).
+    pub modules: Vec<(FileId, Vec<String>)>,
     /// The manifest; `None` for a single file without `onsa.toml` (spec §15.1).
     pub manifest: Option<Manifest>,
     /// The file passed inside a package ([`PackageInput::focus`]).
@@ -111,7 +112,7 @@ impl Loaded {
             file
         };
         for f in input.files {
-            let module = if manifest.is_some() { module_path(Path::new(&f.path)) } else { stem(&f.path) };
+            let module = if manifest.is_some() { module_path(Path::new(&f.path)) } else { vec![stem(&f.path)] };
             modules.push((add(&mut sources, f), module));
         }
         let root_tests = input.root_tests.into_iter().map(|f| add(&mut sources, f)).collect();
@@ -127,10 +128,10 @@ impl Loaded {
     /// and `graph` narrow their results to it. `None`: no file was passed
     /// inside a package. A file that is not a module (under the root's
     /// `tests/`) is an E0200, which stops these commands before they ask.
-    pub fn focus_module(&self) -> Option<&str> {
+    pub fn focus_module(&self) -> Option<String> {
         let focus = self.focus?;
         match self.modules.iter().find(|(file, _)| *file == focus) {
-            Some((_, path)) => Some(path),
+            Some((_, path)) => Some(path.join(".")),
             None => onsa_diag::internal::bug(
                 Some(Span::empty(focus, 0)),
                 "the file passed is not a module, and its diagnostic did not stop the command",
@@ -359,10 +360,11 @@ fn rel_string(rel: &Path) -> Result<String, String> {
     parts.map(|p| p.join("/")).ok_or_else(|| format!("{}: the name is not UTF-8", rel.display()))
 }
 
-/// Module path of a file relative to the package root: `dsp/voice.onsa` -> `dsp.voice`.
-pub fn module_path(rel: &Path) -> String {
+/// Module path of a file relative to the package root, a name for each part
+/// (S-313): `dsp/voice.onsa` -> `["dsp", "voice"]`, `a.b.onsa` -> `["a.b"]`.
+pub fn module_path(rel: &Path) -> Vec<String> {
     let no_ext = rel.with_extension("");
-    no_ext.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join(".")
+    no_ext.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect()
 }
 
 /// The name of a source file in diagnostics (§18.1, S-234): the path with

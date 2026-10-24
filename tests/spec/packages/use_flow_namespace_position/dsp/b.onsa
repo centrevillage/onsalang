@@ -1,0 +1,7 @@
+pub fn helper_b() -> I32 {
+  2
+}
+
+pub flow last_voice(x: F32 at sample, gain: F32 at block) -> F32 at sample {
+  x * gain
+}

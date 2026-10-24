@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.1"]
+
+// The names that `use` takes from another module are names like any other: an imported function is a
+// function value (`apply(double, 3)`) and is called inside a closure (`fn(i) { double(i) + k }`, which
+// captures `k`), and an imported generic function is called with two types. Only the names stage and
+// the types stage are checked here (function values and closures are not lowered in this version).
+use util.{double, pick, apply}
+use util.counter.{next}
+
+pub fn through_a_value() -> I32 {
+  apply(double, 3)
+}
+
+pub fn through_a_closure(k: I32) -> I32 {
+  apply(fn(i) { double(i) + next(k) }, 3)
+}
+
+pub fn through_a_generic(first: Bool, a: F32, b: F32) -> F32 {
+  let n = pick(first, 1, 2)
+  pick(first, a * 2.0, b)
+}

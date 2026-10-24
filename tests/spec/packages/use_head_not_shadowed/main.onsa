@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// The head of the path of a `use` is looked up among the modules at the root and the names of the
+// dependencies only (§15.1), so a name of the module does not take the head: the binding `std` that
+// `use util.{std}` makes does not hide the dependency `std` for `use std.math.{abs}`, and the items
+// `util` and `dsp` of this module do not hide the root modules `util` and `dsp` (the two names are in
+// different spaces, so they do not clash either). Every test passes.
+use util.{std}
+use std.math.{abs}
+use dsp.synth.{gain}
+
+fn dsp() -> I32 {
+  1
+}
+
+fn util() -> I32 {
+  3
+}
+
+test "a binding named like a dependency does not hide the dependency" {
+  assert std() == 7
+  let x: F32 = -1.0
+  assert abs(x) == 1.0
+}
+
+test "an item named like a root module does not take the head" {
+  assert util() == 3
+  assert dsp() == 1
+  assert gain(2.0) == 1.0
+}

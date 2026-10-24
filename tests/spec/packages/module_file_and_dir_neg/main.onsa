@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// `a.onsa` and `a/b.onsa` are two modules, `a` and its child `a.b` (§15.1), so the item of one is not
+// found in the other: `g` is in `a.b`, `f` is in `a`.
+use a.{f}
+use a.b.{g}
+
+use a.{g}                                           //~ E0302
+use a.b.{f}                                         //~ E0302
+use a.{nosuch}                                      //~ E0302

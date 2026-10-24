@@ -589,7 +589,7 @@ fn interface_of(analyzed: &Analyzed, core: Option<onsa_core::Module>) -> Interfa
         core.map(|m| m.flows.into_iter().map(|f| (f.name, f.layout)).collect()).unwrap_or_default();
     let b = Builder { a, layouts };
     let mut modules: Vec<(String, ModId)> =
-        analyzed.pkg.modules.iter().filter_map(|m| a.module_of_file(m.file).map(|id| (m.path.clone(), id))).collect();
+        analyzed.pkg.modules.iter().filter_map(|m| a.module_of_file(m.file).map(|id| (m.path(), id))).collect();
     modules.sort();
     Interface {
         package: analyzed.pkg.name.clone(),

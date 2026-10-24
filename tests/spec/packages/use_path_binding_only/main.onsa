@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-250, S-611: the path of a `use` in another module is looked up in the definitions of the module
+// (its items and its child modules), not in the names it took with a `use` (§15.1: "a name that only a
+// `use` has is E0302"). `main` takes `inner` (a module) and `l` (an item) from `kp`, and has no child
+// module `inner` or `leaf`; `main.k` is its own item. Neither a name taken nor a module taken is a
+// definition of `main`. The names of the failed `use` are not used.
+use kp.inner
+use kp.leaf.{l}
+
+pub fn k() -> I32 {
+  1
+}

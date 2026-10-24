@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// The head of the path of a `use` is a module at the root of the package or the name of a dependency
+// (§15.1): `util` is the module `util.onsa`, `util.counter` its child `util/counter.onsa`, `dsp.synth`
+// the module `dsp/synth.onsa` under a directory that has no `dsp.onsa`, and `std` the implicit
+// dependency. A `use` takes a module (`use util`, then `util.double(5)`), an item (`double`) or a
+// child module. A taken generic function is called with two types. Every test passes.
+use util
+use util.{double, pick}
+use util.counter.{next}
+use dsp.synth.{gain}
+use std.math.{abs}
+
+test "the root module and its items" {
+  assert double(4) == 8
+  assert util.double(5) == 10
+}
+
+test "a child module of a root module" {
+  assert next(1) == 2
+}
+
+test "a module that is only a directory" {
+  assert gain(4.0) == 2.0
+}
+
+test "std is a dependency" {
+  let x: F32 = -3.0
+  assert abs(x) == 3.0
+}
+
+test "a generic function of another module" {
+  let a: F32 = 1.5
+  let b: F32 = 2.5
+  assert pick(true, 1, 2) == 1
+  assert pick(false, a, b) == 2.5
+}

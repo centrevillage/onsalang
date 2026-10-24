@@ -1,0 +1,3 @@
+[package]
+name = "use_head_std_child"
+edition = "2026"

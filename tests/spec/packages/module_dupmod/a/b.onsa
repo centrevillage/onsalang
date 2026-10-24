@@ -1,0 +1,7 @@
+pub fn two() -> I32 {
+  2
+}
+
+pub fn broken() -> I32 {
+  zzz                                               //~ E0302
+}

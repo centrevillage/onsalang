@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1"]
+
+// `use dsp.a.{first_voice}` takes the namespace of a flow (§11.6, §15.1), wherever the flow is
+// declared in its module: first (`dsp/a.onsa`), last (`dsp/b.onsa`) or between functions
+// (`dsp/c.onsa`, whose `use` is after the flow that needs it). Taking the namespace is no E0302 in any
+// of them, and the functions of the same modules are taken as usual. The items generated for the flow
+// are not taken here (`use_flow_generated_items`).
+use dsp.c.{mid_voice, helper_c}
+use dsp.b.{last_voice, helper_b}
+use dsp.a.{first_voice, helper_a}
+
+test "the modules with a flow in each position" {
+  assert helper_a() + helper_b() + helper_c() == 6
+}

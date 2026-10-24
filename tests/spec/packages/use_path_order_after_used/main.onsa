@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// `issues/R/R-250/order_after` as it was reproduced: `k` calls the name `g` of the failed `use`. The
+// name of a failed `use` is no error where it is used (§18.1), so the only diagnostic is the E0302 of
+// the `use`. This waits for that rule (S-462, W4-03 U3b); the same two lines without the call are in
+// `use_path_order_after`.
+use kp.inner
+use main.inner.{g}                                  //~ E0302
+
+pub fn k() -> I32 {
+  g()
+}

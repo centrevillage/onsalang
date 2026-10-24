@@ -1,0 +1,6 @@
+use main.{k}
+use main.{inner}                                    //~ E0302
+use main.{l}                                        //~ E0302
+use main.inner.{g}                                  //~ E0302
+use main.leaf.{l}                                   //~ E0302
+use main.inner                                      //~ E0302

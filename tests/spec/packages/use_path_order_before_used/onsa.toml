@@ -1,0 +1,3 @@
+[package]
+name = "use_path_order_before_used"
+edition = "2026"

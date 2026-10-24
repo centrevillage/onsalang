@@ -1,0 +1,3 @@
+[package]
+name = "module_file_and_dir"
+edition = "2026"

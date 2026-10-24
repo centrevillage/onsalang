@@ -1,0 +1,3 @@
+[package]
+name = "use_flow_generated_items"
+edition = "2026"

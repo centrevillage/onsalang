@@ -13,7 +13,7 @@ fn package(src: &str) -> (SourceMap, Package) {
         .map(|m| {
             let file = sources.add(format!("std/{}", m.file), m.text);
             SModule {
-                path: m.path.to_string(),
+                segments: m.segments.iter().map(|s| s.to_string()).collect(),
                 file,
                 text: m.text.to_string(),
                 parsed: onsa_syntax::parse(file, m.text),
@@ -23,7 +23,7 @@ fn package(src: &str) -> (SourceMap, Package) {
     let std = std::sync::Arc::new(Package::std(std_mods));
     let file = sources.add("t.onsa", src);
     let parsed = onsa_syntax::parse(file, src);
-    let user = SModule { path: "t".into(), file, text: src.to_string(), parsed };
+    let user = SModule { segments: vec!["t".into()], file, text: src.to_string(), parsed };
     (sources, Package::new("t", vec![user], vec![std]))
 }
 

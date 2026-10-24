@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// The two `use` lines of `use_path_order_after` in the other order (R-250): the result is the same,
+// E0302 at `use main.inner.{g}` (§15.1: each `use` is decided by itself, wherever it is written).
+use main.inner.{g}                                  //~ E0302
+use kp.inner
+
+pub fn k() -> I32 {
+  1
+}

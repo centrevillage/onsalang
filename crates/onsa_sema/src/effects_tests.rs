@@ -5,8 +5,12 @@ use onsa_diag::{Code, FileId};
 use crate::{Analysis, Module, Package, analyze};
 
 fn check(src: &str) -> Analysis {
-    let m =
-        Module { path: "main".into(), file: FileId(0), text: src.into(), parsed: onsa_syntax::parse(FileId(0), src) };
+    let m = Module {
+        segments: vec!["main".into()],
+        file: FileId(0),
+        text: src.into(),
+        parsed: onsa_syntax::parse(FileId(0), src),
+    };
     analyze(&Package::new("t", vec![m], Vec::new()))
 }
 

@@ -129,7 +129,8 @@ fn std_package(sources: &mut SourceMap) -> Package {
         .iter()
         .map(|m| {
             let file = sources.add(format!("{STD_PACKAGE}/{}", m.file), m.text);
-            Module { path: m.path.to_string(), file, text: m.text.to_string(), parsed: parse_file(file, m.text) }
+            let segments = m.segments.iter().map(|s| s.to_string()).collect();
+            Module { segments, file, text: m.text.to_string(), parsed: parse_file(file, m.text) }
         })
         .collect();
     Package::std(modules)
@@ -303,7 +304,7 @@ pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
 fn analyze(
     sources: &mut SourceMap,
     name: &str,
-    modules: &[(FileId, String)],
+    modules: &[(FileId, Vec<String>)],
     paths: Vec<Diagnostic>,
 ) -> Result<Analyzed, InternalError> {
     guard(|| {
@@ -312,7 +313,7 @@ fn analyze(
             .map(|(file, path)| {
                 let text = sources.file(*file).text().to_string();
                 let parsed = parse_file(*file, &text);
-                Module { path: path.clone(), file: *file, text, parsed }
+                Module { segments: path.clone(), file: *file, text, parsed }
             })
             .collect();
         let std = Arc::new(std_package(sources));
@@ -453,7 +454,7 @@ mod tests {
         let mut sources = SourceMap::default();
         let std = std_package(&mut sources);
         for m in &std.modules {
-            assert!(m.parsed.diagnostics.is_empty(), "std/{}: {:?}", m.path, m.parsed.diagnostics);
+            assert!(m.parsed.diagnostics.is_empty(), "std/{}: {:?}", m.path(), m.parsed.diagnostics);
         }
         let pkg = Package::new("empty", Vec::new(), vec![Arc::new(std)]);
         let analysis = onsa_sema::analyze(&pkg);
@@ -468,10 +469,12 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std");
         let read = read_sources(&root).expect("std/ reads");
         assert!(!read.is_empty());
-        let from_dir: Vec<(String, String, String)> =
+        let from_dir: Vec<(Vec<String>, String, String)> =
             read.iter().map(|f| (module_path(Path::new(&f.path)), f.path.clone(), f.text.clone())).collect();
-        let table: Vec<(String, String, String)> =
-            std_modules().iter().map(|m| (m.path.to_string(), m.file.to_string(), m.text.to_string())).collect();
+        let table: Vec<(Vec<String>, String, String)> = std_modules()
+            .iter()
+            .map(|m| (m.segments.iter().map(|s| s.to_string()).collect(), m.file.to_string(), m.text.to_string()))
+            .collect();
         assert_eq!(table, from_dir);
     }
 
@@ -486,7 +489,7 @@ mod tests {
         let std_modules_count = std.modules.len();
         let src = "use std.math.{sqrt}\n\npub fn half(x: F32) -> F32 {\n  sqrt(x) * 0.5\n}\n";
         let file = sources.add("mid/m.onsa", src);
-        let module = Module { path: "m".into(), file, text: src.to_string(), parsed: parse_file(file, src) };
+        let module = Module { segments: vec!["m".into()], file, text: src.to_string(), parsed: parse_file(file, src) };
         let mid = Arc::new(Package::new("mid", vec![module], vec![std.clone()]));
         let pkg = Package::new("user", Vec::new(), vec![std, mid]);
         let flat = onsa_sema::flatten(&pkg);
@@ -538,7 +541,8 @@ mod tests {
 
     #[test]
     fn module_paths() {
-        assert_eq!(module_path(Path::new("dsp/voice.onsa")), "dsp.voice");
-        assert_eq!(module_path(Path::new("util.onsa")), "util");
+        assert_eq!(module_path(Path::new("dsp/voice.onsa")), ["dsp", "voice"]);
+        assert_eq!(module_path(Path::new("util.onsa")), ["util"]);
+        assert_eq!(module_path(Path::new("a.b.onsa")), ["a.b"]);
     }
 }

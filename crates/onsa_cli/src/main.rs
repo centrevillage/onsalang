@@ -598,7 +598,7 @@ fn interface(json: bool, paths: &[PathBuf]) -> Outcome {
     let narrowed = onsa_driver::interface(&analyzed).and_then(|mut iface| {
         onsa_driver::guard(|| {
             if let Some(module) = loaded.focus_module() {
-                iface.narrow(module);
+                iface.narrow(&module);
             }
             iface
         })
@@ -623,7 +623,7 @@ fn graph(svg: bool, flow: &str, paths: &[PathBuf]) -> Outcome {
         Ok(x) => x,
         Err(o) => return o,
     };
-    let scope = match onsa_driver::guard(|| loaded.focus_module().map(str::to_string)) {
+    let scope = match onsa_driver::guard(|| loaded.focus_module()) {
         Ok(scope) => scope,
         Err(e) => return internal(&loaded.sources, &e),
     };

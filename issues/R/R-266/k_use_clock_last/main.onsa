@@ -1,0 +1,2 @@
+use kp.clock
+fn g() -> I32 { 1 }

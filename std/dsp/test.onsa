@@ -1,7 +1,7 @@
 //! Test helpers for flows (spec §11.8, S-10). `impulse` allocates a `Buf`, so
 //! it needs `Alloc`; in phase 1 the interpreter provides it (D-08).
 
-use std.math.{cos, sqrt}
+use math.{cos, sqrt}
 
 /// A unit impulse of `n` samples: `1.0` followed by `n - 1` zeros.
 pub fn impulse(n: U32) -> Buf[F32] uses {Alloc} {

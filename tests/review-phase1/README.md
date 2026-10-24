@@ -91,9 +91,9 @@
 | `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39 |
 | `types/dups.onsa` | R-40 |
 | `types/implitems.onsa`、`types/flowimpl.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/item_contexts.onsa`・`item_contexts_units.onsa`、`tests/spec/types/flow_impl.onsa` |
-| `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46 |
+| `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46。`types/dupmod/` は W4-03 U2a/t で期待値付きのテストへ写した: `tests/spec/packages/module_dupmod/`（`a.b.onsa` と `a/b.onsa` は別のモジュールで、どちらも検査される）、`crates/onsa_cli/tests/use_paths.rs`。W4-03 の実装が通すまで元の入力は残す |
 | `types/single/`、`types/pkguse/`（推定） | R-47 |
-| `types/flowimp/`、`types/useorder*.onsa`（推定） | R-50 |
+| `types/flowimp/`、`types/useorder*.onsa`（推定） | R-50。W4-03 U2a/t で期待値付きのテストへ写した: `types/flowimp/` は `tests/spec/packages/use_flow_generated_items/`（最終の構文。生成項目の取り込みは U3b）、`types/useorder.onsa`・`useorder2.onsa` は `tests/spec/module/use_binding_after.onsa`・`use_binding_before.onsa`（失敗した名前を使う形は `*_used.onsa`、S-462）、`tests/spec/packages/use_head_not_binding/`、`crates/onsa_cli/tests/use_paths.rs`。W4-03 の実装が通すまで元の入力は残す |
 | `types/tzero.onsa` | R-56 |
 | `types/qlen/`、`types/constlen.onsa` | R-57、R-61 |
 | `types/testmod/`（推定） | R-68。W2-10 で期待値付きのテストへ移した: `tests/spec/packages/test_module_named_test/`（モジュール `test` の関数はテストとして走らない）、`crates/onsa_cli/tests/test_identity.rs`（モジュールの経路と名前での識別） |

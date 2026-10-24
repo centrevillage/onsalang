@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-250: the middle of the path of a `use` is a child module or an item of the module, never a name
+// that the module took with a `use` (§15.1). `main` has no child `inner` (the module `inner` is
+// `kp/inner.onsa`), so `use main.inner.{g}` is E0302 even though `use kp.inner` before it makes the
+// binding `inner` in `main`. The same two lines in the other order are in `use_path_order_before`:
+// each `use` is decided by itself, so the result is the same. The name `g` is not used.
+use kp.inner
+use main.inner.{g}                                  //~ E0302
+
+pub fn k() -> I32 {
+  1
+}

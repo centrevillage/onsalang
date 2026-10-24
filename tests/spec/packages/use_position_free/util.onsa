@@ -1,0 +1,8 @@
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+pub fn double(x: I32) -> I32 {
+  x * 2
+}

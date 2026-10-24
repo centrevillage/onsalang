@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+
+// The reproduction of R-50 in the final syntax (the types generated for a flow, taken from its
+// namespace with a `use`): `use dsp.synth.{voice}` takes the namespace, and
+// `use dsp.synth.voice.{State, Params}` takes items of it (§11.6, §15.1). The generated names are
+// also written through the namespace (`voice.Params`). No diagnostic. This is the taking of the
+// generated items (W4-03 U3b); the case is kept apart from `use_flow_namespace_position` for it.
+use dsp.synth.{voice}
+use dsp.synth.voice.{State, Params}
+
+pub fn mk() -> Params {
+  Params { gain: 1.0 }
+}
+
+pub fn mk2() -> voice.Params {
+  voice.Params { gain: 1.0 }
+}
+
+pub fn start() -> State {
+  voice.init(48000.0)
+}

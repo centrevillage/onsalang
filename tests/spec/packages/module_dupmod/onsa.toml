@@ -1,0 +1,3 @@
+[package]
+name = "module_dupmod"
+edition = "2026"

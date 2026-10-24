@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.1"]
+
+// R-46: the files `a.b.onsa` and `a/b.onsa` are two modules, because the path of a module is the
+// sequence of the elements of its file (S-312): `a.b.onsa` is one element, `a.b` (a name with a `.`,
+// so the E0320 at the top of the file, §2.3), and `a/b.onsa` is the module `b` under `a`, the module
+// that `use a.b.{...}` means. Both are read and checked, and neither hides the other: the error
+// inside each file is reported, and `one`, which only `a.b.onsa` has, is not found in the module
+// `a.b` that `use` reaches (E0302). The names of the failed `use` are not used.
+use a.b.{two}
+use a.b.{one}                                       //~ E0302
+
+pub fn x() -> I32 {
+  two()
+}

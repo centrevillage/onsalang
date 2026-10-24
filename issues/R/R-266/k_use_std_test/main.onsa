@@ -1,0 +1,2 @@
+use std.test
+fn g() -> I32 { 1 }

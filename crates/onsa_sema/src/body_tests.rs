@@ -9,7 +9,7 @@ use crate::{Analysis, Module, Package, analyze};
 
 fn check(src: &str) -> Analysis {
     let modules = vec![Module {
-        path: "main".into(),
+        segments: vec!["main".into()],
         file: FileId(0),
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),

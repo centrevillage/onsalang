@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// The same two `use` lines as `use_binding_after.onsa` in the other order (R-46, R-50,
+// `review-phase1/types/useorder2.onsa`): the result is the same, E0302 at `use math.{sin}`.
+
+use std.math
+use math.{sin}                                      //~ E0302
+
+pub rt fn f(x: F32) -> F32 {
+  math.sqrt(x)
+}

@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// The path of a module is the path of its file from the root of the package (§15.1), so `a/b/c.onsa`
+// is the module `a.b.c` though `a` and `a/b` are directories with no `a.onsa` and `a/b.onsa`: a
+// `use` passes through them. The modules inside the directories take each other by the paths from the
+// root as well (`a.b.c` takes `a.b.d`, which takes `a.e`), not by a path from their own directory.
+// Every test passes.
+use a.b.c.{f}
+use a.b.c
+use a.b.d.{h}
+use a.e.{j}
+
+test "a module two directories down" {
+  assert f() == 5
+  assert c.f() == 5
+}
+
+test "its sibling and the module in the directory above" {
+  assert h() == 6
+  assert j() == 7
+}

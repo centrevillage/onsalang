@@ -250,22 +250,7 @@
 [allow."crates/onsa_sema/src/lib.rs"]
 "std" = 1
 
-[allow."crates/onsa_sema/src/rt.rs"]
-"zeroed" = 1
-
-[allow."crates/onsa_sema/src/sig.rs"]
-"Alloc" = 1
-"Default" = 1
-"Eq" = 1
-"Hash" = 1
-"Ord" = 1
-"Ordinal" = 1
-"PartialEq" = 1
-"PartialOrd" = 1
-"Show" = 1
-"U32" = 1
-
-[allow."crates/onsa_sema/src/sig/collect.rs"]
+[allow."crates/onsa_sema/src/names/prelude.rs"]
 "Bool" = 1
 "Char" = 1
 "Err" = 1
@@ -282,6 +267,21 @@
 "U32" = 1
 "U64" = 1
 "U8" = 1
+
+[allow."crates/onsa_sema/src/rt.rs"]
+"zeroed" = 1
+
+[allow."crates/onsa_sema/src/sig.rs"]
+"Alloc" = 1
+"Default" = 1
+"Eq" = 1
+"Hash" = 1
+"Ord" = 1
+"Ordinal" = 1
+"PartialEq" = 1
+"PartialOrd" = 1
+"Show" = 1
+"U32" = 1
 
 [allow."crates/onsa_sema/src/sig/flow_sig.rs"]
 "BULK_SIZE" = 2

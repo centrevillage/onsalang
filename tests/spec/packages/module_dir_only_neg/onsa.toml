@@ -1,0 +1,3 @@
+[package]
+name = "module_dir_only_neg"
+edition = "2026"

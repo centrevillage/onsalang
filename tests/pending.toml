@@ -2267,3 +2267,46 @@ target = "tests/spec/fixes/e0320_rename.onsa:61:8 E0320 fix1"
 reasons = ["S-82"]
 until = "W4-04"
 note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残る（S-82、W4-14 U3 の事例）"
+
+# --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/use_binding_after_used.onsa"
+reasons = ["S-462", "R-50"]
+until = "W4-03"
+note = "失敗した use の名前 sin を使う所に偽の E0302 が出る（U3b）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/use_binding_before_used.onsa"
+reasons = ["S-37", "S-462", "R-50"]
+until = "W4-03"
+note = "use の頭の E0302 は U2a で出る。失敗した名前 sin を使う所の偽の E0302 を U3b が黙らせる"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_flow_generated_items"
+reasons = ["R-50"]
+until = "W4-03"
+note = "flow の生成項目（State、Params）を use で取り込めない（U3b）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_path_order_after_used"
+reasons = ["R-250", "S-462"]
+until = "W4-03"
+note = "use の E0302 は U2a で出る。失敗した名前 g を使う所の偽の E0302 を U3b が黙らせる"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/use_path_order_before_used"
+reasons = ["R-250", "S-462"]
+until = "W4-03"
+note = "失敗した use の名前 g を使う所に偽の E0302 が出る（U3b）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow/generated_before_flow.onsa"
+reasons = ["R-50"]
+until = "W4-03"
+note = "flow より前に書いた const と fn の型の g.Params が E0302（生成項目を作る段。U3b か U5）"

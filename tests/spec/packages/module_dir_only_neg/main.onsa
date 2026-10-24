@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// The path of a module is the path of its file (§15.1): `a/b/c.onsa` is `a.b.c`, and nothing else
+// is found by a path that is not that. The item `f` is in `a.b.c`, not in `a.b`, and `c` is under
+// `a/b`, not under `a`; `b` is a directory under `a`, not a module at the root of the package.
+use a.b.c.{f}
+
+use a.b.{f}                                         //~ E0302
+use a.c.{f}                                         //~ E0302
+use a.b.nosuch.{f}                                  //~ E0302
+use b.c.{f}                                         //~ E0302

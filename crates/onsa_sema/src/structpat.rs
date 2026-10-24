@@ -139,7 +139,7 @@ mod tests {
     /// The code, the text and the start of the one diagnostic of `src`.
     fn first(src: &str) -> (Code, String, usize) {
         let modules = vec![Module {
-            path: "main".into(),
+            segments: vec!["main".into()],
             file: FileId(0),
             text: src.to_string(),
             parsed: onsa_syntax::parse(FileId(0), src),
@@ -184,7 +184,7 @@ mod tests {
     /// The title and the removed text of the candidate of the one diagnostic of `src`.
     fn removal(src: &str) -> (String, String) {
         let modules = vec![Module {
-            path: "main".into(),
+            segments: vec!["main".into()],
             file: FileId(0),
             text: src.to_string(),
             parsed: onsa_syntax::parse(FileId(0), src),

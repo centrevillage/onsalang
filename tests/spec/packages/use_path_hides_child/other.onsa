@@ -1,0 +1,9 @@
+use main.inner.{h}
+
+pub fn m() -> I32 {
+  h()
+}
+
+test "the middle of the path is the child module" {
+  assert m() == 3
+}

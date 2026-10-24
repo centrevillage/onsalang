@@ -1,0 +1,7 @@
+pub fn double(x: I32) -> I32 {
+  x * 2
+}
+
+pub fn pick[T](first: Bool, a: T, b: T) -> T {
+  if first { a } else { b }
+}

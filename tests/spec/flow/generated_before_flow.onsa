@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1"]
+
+// R-50 (`issues/R/R-50/flow_type_before_flow.onsa`): the items generated for a flow (§11.6) are found
+// wherever the flow is declared in its module. `g.Params` is written in the type of a `const` and in
+// the result type of a function above the flow, as the other items of a module are (§15.1: the items of
+// a module are found in any order). Every test passes. (This is the name stage of the generated items;
+// the taking of them with a `use` is `packages/use_flow_generated_items`.)
+const P: g.Params = g.Params { a: 0.5 }
+
+fn mk() -> g.Params {
+  g.Params { a: 0.25 }
+}
+
+pub flow g(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  a: F32 at block,
+) -> F32 at sample {
+  x * a
+}
+
+test "the generated type above the flow" {
+  assert P.a == 0.5
+  assert mk().a == 0.25
+}

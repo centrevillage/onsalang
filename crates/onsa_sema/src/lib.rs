@@ -27,6 +27,7 @@ pub mod layout;
 mod modes;
 #[cfg(test)]
 mod modes_tests;
+mod names;
 /// The files of a package tree (§15.1): the driver reads packages with it, and
 /// `build.rs` includes the same file to generate the std table.
 pub mod package_tree;
@@ -72,11 +73,21 @@ pub use ty::{Ty, TyId, Types};
 /// One parsed source file (spec §15.1: one file = one module).
 #[derive(Debug)]
 pub struct Module {
-    /// Module path from the package root: `dsp.voice`.
-    pub path: String,
+    /// Module path from the package root, a name for each part (S-313):
+    /// `["dsp", "voice"]` for `dsp/voice.onsa`. A part is the name of a
+    /// directory or the file's name without `.onsa`, not split at a `.`
+    /// (`a.b.onsa` is `["a.b"]`, another module than `a/b.onsa`, R-46).
+    pub segments: Vec<String>,
     pub file: FileId,
     pub text: String,
     pub parsed: Parsed,
+}
+
+impl Module {
+    /// The module path as diagnostics show it: `dsp.voice`.
+    pub fn path(&self) -> String {
+        self.segments.join(".")
+    }
 }
 
 /// Which package the driver loaded: the embedded std or an ordinary one
@@ -131,8 +142,8 @@ pub const STD_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// One module of the embedded std.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StdModule {
-    /// The module path under `std`: `dsp.test`.
-    pub path: &'static str,
+    /// The module path under `std`, a name for each part: `["dsp", "test"]`.
+    pub segments: &'static [&'static str],
     /// The file under `std/`, `/` between the parts: `dsp/test.onsa`.
     pub file: &'static str,
     pub text: &'static str,

@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-46, R-50 (`review-phase1/types/useorder.onsa`): `use math.{sin}` starts from `math`, which is
+// not a module at the root of the package or a dependency (§15.1), so it is E0302 whether the
+// `use std.math` that makes the binding `math` is before it or after it (`use_binding_before.onsa`).
+// The name `sin` is not used.
+
+use math.{sin}                                      //~ E0302
+use std.math
+
+pub rt fn f(x: F32) -> F32 {
+  math.sqrt(x)
+}

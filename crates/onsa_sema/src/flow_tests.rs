@@ -18,7 +18,7 @@ fn std_package() -> Arc<Package> {
         .map(|(i, m)| {
             let id = FileId(100 + i as u32);
             Module {
-                path: m.path.to_string(),
+                segments: m.segments.iter().map(|s| s.to_string()).collect(),
                 file: id,
                 text: m.text.to_string(),
                 parsed: onsa_syntax::parse(id, m.text),
@@ -30,7 +30,7 @@ fn std_package() -> Arc<Package> {
 
 fn check(src: &str) -> Analysis {
     let modules = vec![Module {
-        path: "main".into(),
+        segments: vec!["main".into()],
         file: FileId(0),
         text: src.to_string(),
         parsed: onsa_syntax::parse(FileId(0), src),

@@ -1,0 +1,9 @@
+pub fn helper_c() -> I32 {
+  3
+}
+
+pub flow mid_voice(x: F32 at sample, gain: F32 at block) -> F32 at sample {
+  abs(x) * gain
+}
+
+use std.math.{abs}

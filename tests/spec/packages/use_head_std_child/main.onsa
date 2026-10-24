@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// A module of the package named like a dependency, but not at the root (`kp/std.onsa` is the module
+// `kp.std`), is a plain module. `use kp.std` binds the name `std` in this module, and that does not
+// hide the dependency for the head of `use std.math.{abs}`: the head is looked up among the modules
+// at the root and the dependencies, never among the names of the module. The root has only the
+// directory `kp/`, which holds the module. Every test passes.
+use kp.std
+use std.math.{abs}
+
+test "the binding std is the module of the package" {
+  assert std.marker() == 9
+}
+
+test "the head std is the dependency" {
+  let x: F32 = -2.0
+  assert abs(x) == 2.0
+}

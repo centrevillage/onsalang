@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// R-250, S-611: a `use` binding is a name of the module alone, so it does not hide a child module from
+// the other modules. `main` takes `kp.inner` as `inner`, and `main/inner.onsa` is the child module
+// `main.inner` (the two do not clash: they are in different spaces). Inside `main`, `inner` is the
+// binding, so `inner.g()` is `kp/inner.onsa`; another module that writes `main.inner` (in the middle
+// of the path or at the end, `use main.inner.{h}`, `use main.{inner}`, `use main.inner`) gets the child
+// module `main/inner.onsa`. No diagnostic; the tests tell which module each name is.
+use kp.inner
+
+pub fn k() -> I32 {
+  inner.g()
+}
+
+test "inside main, inner is the binding of kp.inner" {
+  assert k() == 2
+}

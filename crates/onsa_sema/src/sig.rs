@@ -1,34 +1,34 @@
-//! Collection of definitions and lowering of signatures (T2-2, T2-3): module
-//! tree, item defs and scopes, imports, then every item's signature.
+//! Lowering of signatures (T2-3), after the names stage (`crate::names`:
+//! the module tree, the item defs and scopes, the imports): every item's
+//! signature.
 //!
-//! The parts are in a module each, an `impl` of `Sema`: `collect` (T2-2),
-//! `types` (the types, also those written in a body) and `flow_sig` (the
-//! signatures of flows). The rest of the lowering of signatures is here.
+//! The parts are in a module each, an `impl` of `Sema`: `types` (the types,
+//! also those written in a body) and `flow_sig` (the signatures of flows).
+//! The rest of the lowering of signatures is here.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, Ident, ItemId, ItemKind, Lit, Mode, Param,
-    ParamName, TypeId, TypeKind, UnOp, Vis,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, ItemKind, Lit, Mode, Param, ParamName, TypeId,
+    TypeKind, UnOp, Vis,
 };
 use onsa_syntax::foreign::{self, RowId};
 
 use crate::def::*;
-use crate::resolve::{Binding, Builtin, Entity, Import, ModInfo};
+use crate::resolve::{Builtin, Entity};
 use crate::ty::*;
 use crate::{Analysis, Module, Package, flatten};
-mod collect;
 mod flow_sig;
 mod types;
 
 pub(crate) use types::lower_type_in_body;
 
-struct Sema<'p> {
-    a: Analysis,
-    flat: Vec<&'p Package>,
+pub(crate) struct Sema<'p> {
+    pub(crate) a: Analysis,
+    pub(crate) flat: Vec<&'p Package>,
     /// Defs that already have a diagnostic (P-01: first error per item).
     reported: HashSet<DefId>,
     /// Aliases being expanded (cycle guard).
@@ -60,48 +60,41 @@ pub(crate) fn collect_and_lower(pkg: &Package) -> Analysis {
         expanding: HashSet::new(),
         kind_heads: Vec::new(),
     };
-    s.build_module_tree();
-    s.build_prelude();
-    s.collect_items();
-    let (cycle_diags, order) = s.a.modules.check_cycles();
-    s.a.diagnostics.extend(cycle_diags);
-    for m in order {
-        s.resolve_imports(m);
-    }
+    crate::names::collect_names(&mut s);
     s.lower_all();
     s.a
 }
 
 impl<'p> Sema<'p> {
-    fn module(&self, m: ModId) -> Option<&'p Module> {
+    pub(crate) fn module(&self, m: ModId) -> Option<&'p Module> {
         let info = self.a.modules.get(m);
         self.flat.get(info.pkg).and_then(|p| info.module.and_then(|i| p.modules.get(i)))
     }
 
-    fn is_std(&self, m: ModId) -> bool {
+    pub(crate) fn is_std(&self, m: ModId) -> bool {
         self.flat[self.a.modules.pkg_of(m)].is_std()
     }
 
     // ------------------------------------------------------------ diagnostics
 
-    fn report(&mut self, def: DefId, d: Diagnostic) {
+    pub(crate) fn report(&mut self, def: DefId, d: Diagnostic) {
         if self.reported.insert(def) {
             self.a.diagnostics.push(d);
         }
     }
 
-    fn report_mod(&mut self, d: Diagnostic) {
+    pub(crate) fn report_mod(&mut self, d: Diagnostic) {
         self.a.diagnostics.push(d);
     }
 
     /// E0200 for `feature` (S-224), with the details its phrase takes.
-    fn unsupported(&mut self, def: DefId, span: Span, feature: Feature, details: &[&str]) {
+    pub(crate) fn unsupported(&mut self, def: DefId, span: Span, feature: Feature, details: &[&str]) {
         self.report(def, feature.diagnostic(Stage::Names, span, details));
     }
 
     // ------------------------------------------------------------ collection
 
-    fn add_def(&mut self, def: Def) -> DefId {
+    pub(crate) fn add_def(&mut self, def: Def) -> DefId {
         let module = def.item.and_then(|i| self.module(def.module).map(|m| (i, m)));
         let failed = module.and_then(|(i, m)| m.parsed.ast.item(i).failed);
         // The flow syntax outside a flow body (E0821 from W4-12): E0200, and

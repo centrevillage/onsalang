@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// A `use` can be written anywhere among the items of the top level (§15.1), and what it takes is
+// the same wherever it is: the names are used above it (`Pair` in the signature of `total`), below
+// it, and after a `test` (`gain`). Every test passes.
+fn total(p: Pair) -> I32 {
+  p.a + p.b
+}
+
+use util.{Pair, double}
+
+pub fn twice_total(p: Pair) -> I32 {
+  double(total(p)) + next(0)
+}
+
+use util.counter.{next}
+
+test "a use after the items that use it" {
+  assert twice_total(Pair { a: 1, b: 2 }) == 7
+}
+
+use dsp.synth.{gain}
+
+test "a use after a test" {
+  assert gain(2.0) == 1.0
+}
