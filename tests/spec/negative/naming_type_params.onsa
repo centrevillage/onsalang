@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3"]
+
+// E0320: a type parameter is `UpperCamel` of one word (spec 2.3, table). `ItemKey` is two words,
+// `Item_Key` is not `UpperCamel`. The rule is the same on every declaration that has
+// type parameters: struct, enum, fn, impl and a method of an impl (a trait definition is E0200 in
+// this version). The mark is on the line of the declaration. A one-word `UpperCamel` name (`T`,
+// `Item`) is fine (types/naming_type_params_fine).
+
+pub struct Pair[ItemKey] {                          //~ E0320
+  a: ItemKey,
+  b: ItemKey,
+}
+
+pub enum Choice[ItemKey] {                          //~ E0320
+  One(ItemKey),
+  Nothing,
+}
+
+pub fn first[ItemKey](x: ItemKey) -> ItemKey {      //~ E0320
+  x
+}
+
+pub fn snake[Item_Key](x: Item_Key) -> Item_Key {   //~ E0320
+  x
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[ItemKey] Holder[ItemKey] {                     //~ E0320
+  pub fn get(self) -> ItemKey {
+    self.a
+  }
+}
+
+impl[T] Holder[T] {
+  pub fn pick[OutKey](self, y: OutKey) -> OutKey {  //~ E0320
+    y
+  }
+}

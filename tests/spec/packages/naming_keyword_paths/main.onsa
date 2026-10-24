@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§2.3", "§15.1"]
+
+// A file and a directory named by a keyword (`match.onsa`, `match/x.onsa`, `test/y.onsa`) follow the
+// rule of a module name, so there is no E0320, and the elements before the imported name are read as
+// module names (spec 2.2), so the paths below resolve.
+
+use match.{fm}
+use match.x.{fx}
+use test.y.{fy}
+
+pub fn total() -> I32 {
+  fm() + fx() + fy()
+}
+
+test "keyword paths" {
+  assert total() == 6
+}

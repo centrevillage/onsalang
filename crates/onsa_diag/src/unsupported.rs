@@ -181,6 +181,10 @@ features! {
     ConditionalInstances: Language, "running an instance on a condition (the reserved word `when`)", None;
     ResetInstances: Language, "resetting an instance to its initial state (the reserved word `reset_if`)", None;
     SerialFlows: Language, "the serial copies of a flow (the reserved word `ser`)", None;
+    /// S-96, R-122: the role of the root's `tests/` is the second phase's
+    /// (§15.1, §19.1); each `.onsa` file there is one, at its head.
+    PackageTests: Language, "the `tests/` directory of the package root (its `.onsa` files are not modules)",
+        Some("put the file in a directory of another name, where it is a module of the package (the role of the root's `tests/` comes in a later version, §19.1)");
 
     // ----------------------------------------------------------- the C backend
     Buf: CBackend, "`Buf` (heap buffers)", None;

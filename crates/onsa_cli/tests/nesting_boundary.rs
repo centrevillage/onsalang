@@ -297,8 +297,13 @@ fn chain(ops: usize) -> String {
     format!("pub fn f() -> I32 {{ 1{} }}\n", rep(" + 1", ops))
 }
 
+/// The file of an input: its name is a module name (§2.3, S-325: `300 closed` starts with a digit).
+fn file_of(d: &Dir, i: &Input) -> String {
+    d.file(&format!("case_{}.onsa", i.name.replace(' ', "_")), &i.src)
+}
+
 fn run_ok(d: &Dir, i: &Input) -> Result<(), String> {
-    let f = d.file(&format!("{}.onsa", i.name.replace(' ', "_")), &i.src);
+    let f = file_of(d, i);
     let out = onsa(&["check", "--json", &f]);
     ensure!(code(&out) == 0, "{}: an accepted input exits {} (want 0): {}", i.name, code(&out), text(&out));
     let diags = diagnostics(&out)?;
@@ -308,7 +313,7 @@ fn run_ok(d: &Dir, i: &Input) -> Result<(), String> {
 
 fn run_over(d: &Dir, i: &Input) -> Result<(), String> {
     let (line, col, token) = i.primary.unwrap();
-    let f = d.file(&format!("{}.onsa", i.name.replace(' ', "_")), &i.src);
+    let f = file_of(d, i);
     let out = onsa(&["check", "--json", &f]);
     ensure!(code(&out) == 1, "{}: exits {} (want 1): {}", i.name, code(&out), text(&out));
     let diags = diagnostics(&out)?;

@@ -1,0 +1,7 @@
+pub fn nf() -> I32 {
+  2
+}
+
+test "nested" {
+  assert nf() == 2
+}

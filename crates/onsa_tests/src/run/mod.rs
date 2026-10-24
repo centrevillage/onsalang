@@ -369,6 +369,21 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             Err(e) => run.problems.push(Problem::Case(format!("{}: bad markers: {e}", f.name()))),
         }
     }
+    // The files of the root's `tests/` are not modules (their E0200, §15.1):
+    // their diagnostic markers are read; they hold no test to name.
+    for &file in &loaded.root_tests {
+        let f = loaded.sources.file(file);
+        match parse_markers(f.text()) {
+            Ok(m) if m.testfails.is_empty() && m.panics.is_empty() => {
+                markers.extend(m.expected.into_iter().map(|e| (file, e)));
+            }
+            Ok(_) => run.problems.push(Problem::Case(format!(
+                "{}: `//~ TESTFAIL` and `//~ PANIC` name tests, and a file of the root's tests/ is not a module",
+                f.name()
+            ))),
+            Err(e) => run.problems.push(Problem::Case(format!("{}: bad markers: {e}", f.name()))),
+        }
+    }
     for (mark, used) in [("TESTFAIL", !testfails.is_empty()), ("PANIC", !panics.is_empty())] {
         if used && t.mode != Mode::Test {
             run.problems.push(Problem::Case(format!(

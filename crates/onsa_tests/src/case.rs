@@ -169,6 +169,7 @@ fn read_package(root: &Path, dir: &Path) -> Case {
     let name = dir.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let setup = (|| {
         let input = onsa_driver::read_input(Some(dir))?;
+        unread_markers(dir, &input)?;
         let mut test = None;
         for f in &input.files {
             let Some(frag) = fragment::parse(&f.text).map_err(|e| format!("{}: {e}", f.path))? else { continue };
@@ -186,6 +187,38 @@ fn read_package(root: &Path, dir: &Path) -> Case {
         Setup::new(input, test.unwrap_or_default())
     })();
     Case { path, kind: CaseKind::Package, name, setup }
+}
+
+/// A `.onsa` file under the case directory `dir` that holds markers (`//~`)
+/// but is not a file of `input` (a module or a file of the root's `tests/`)
+/// is an error of the case: its markers would never be compared, so a
+/// compiler that drops the file silently would pass. The walk is the case
+/// reader's own (every name, links not followed), not the compiler's tree.
+fn unread_markers(dir: &Path, input: &PackageInput) -> Result<(), String> {
+    let read: std::collections::HashSet<&str> =
+        input.files.iter().chain(&input.root_tests).map(|f| f.path.as_str()).collect();
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(d) = dirs.pop() {
+        for e in std::fs::read_dir(&d).map_err(|e| format!("{}: cannot read the directory: {e}", d.display()))? {
+            let e = e.map_err(|e| format!("{}: cannot read an entry: {e}", d.display()))?;
+            let p = e.path();
+            let ty = e.file_type().map_err(|e| format!("{}: {e}", p.display()))?;
+            if ty.is_dir() {
+                dirs.push(p);
+            } else if ty.is_file() && p.extension().is_some_and(|x| x == "onsa") {
+                let rel = rel_path(dir, &p);
+                let text = std::fs::read(&p).map_err(|e| format!("{rel}: cannot read: {e}"))?;
+                // Markers as the runner reads them: a `//~` it does not read
+                // as one (prose, a malformed marker) holds none.
+                let marked = crate::parse_markers(&String::from_utf8_lossy(&text))
+                    .is_ok_and(|m| !m.expected.is_empty() || !m.testfails.is_empty() || !m.panics.is_empty());
+                if marked && !read.contains(rel.as_str()) {
+                    return Err(format!("{rel}: holds markers, but the package does not read it"));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The repository root, from this crate.

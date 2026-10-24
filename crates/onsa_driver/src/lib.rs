@@ -17,7 +17,7 @@ pub mod verify;
 
 pub use input::{
     Loaded, ManifestSource, PackageInput, SourceFile, load, manifest_dir, module_path, read_input, read_manifest,
-    read_sources, slash_path,
+    read_root_tests, read_sources, slash_path,
 };
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
@@ -269,9 +269,7 @@ pub fn check(sources: &mut SourceMap) -> Result<CheckResult, InternalError> {
 /// inside the package (`focus`), the whole package is checked and only the
 /// diagnostics of that file are kept (§15.1: `check` and the LSP; S-159).
 pub fn check_loaded(loaded: &mut Loaded) -> Result<CheckResult, InternalError> {
-    let modules = loaded.modules.clone();
-    let name = loaded.name.clone();
-    let mut result = check_package(&mut loaded.sources, &name, &modules)?;
+    let mut result = CheckResult { diagnostics: analyze_loaded(loaded)?.diagnostics };
     // SPEC-GAP(S-636): the outcome is that of the kept diagnostics: none in
     // the passed file is exit 0, whatever the other files have.
     if let Some(focus) = loaded.focus {
@@ -306,17 +304,30 @@ impl Analyzed {
 }
 
 /// Parse and analyze a loaded package, keeping the analysis (`std` is
-/// appended to `sources`).
+/// appended to `sources`), with the diagnostics of its paths
+/// ([`Loaded::input_diagnostics`]).
 pub fn analyze_loaded(loaded: &mut Loaded) -> Result<Analyzed, InternalError> {
     let modules = loaded.modules.clone();
     let name = loaded.name.clone();
-    analyze_package(&mut loaded.sources, &name, &modules)
+    let paths = guard(|| loaded.input_diagnostics())?;
+    analyze(&mut loaded.sources, &name, &modules, paths)
 }
 
 pub fn analyze_package(
     sources: &mut SourceMap,
     name: &str,
     modules: &[(FileId, String)],
+) -> Result<Analyzed, InternalError> {
+    analyze(sources, name, modules, Vec::new())
+}
+
+/// The analysis of a package. `paths`, the diagnostics of the input's paths,
+/// are outside every unit: each is reported (§2.3).
+fn analyze(
+    sources: &mut SourceMap,
+    name: &str,
+    modules: &[(FileId, String)],
+    paths: Vec<Diagnostic>,
 ) -> Result<Analyzed, InternalError> {
     guard(|| {
         let user_modules: Vec<Module> = modules
@@ -333,7 +344,9 @@ pub fn analyze_package(
         let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
         all.extend(analysis.diagnostics.iter().cloned());
         let files = pkg.modules.iter().map(|m| (m.file, &m.parsed.units));
-        let reduce::Reduced { mut diagnostics, diagnostic_units, units } = reduce::per_unit(files, all);
+        let reduce::Reduced { mut diagnostics, mut diagnostic_units, units } = reduce::per_unit(files, all);
+        diagnostic_units.extend(paths.iter().map(|_| None));
+        diagnostics.extend(paths);
         fill_found(sources, &mut diagnostics);
         debug_contract(sources, &diagnostics);
         Analyzed { pkg, analysis, diagnostics, diagnostic_units, units }

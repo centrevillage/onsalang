@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.1"]
+// fixes = 0
+
+// A directory in the path of a module follows the rule of a module name too (spec 2.3). A directory
+// that breaks it gets one E0320, at the top of the first `.onsa` file below it in the order of the
+// diagnostics (the file strings in code point order), with no candidate. The mark is on that file;
+// the other files below the same directory carry none (`Bad-Dir/b.onsa`, `Bad-Dir/sub/c.onsa`).
+// A directory with only deeper files is in the path of those files too (`Deep-Dir/inner/x.onsa`).
+// `match/` and `test/` are keywords, which follow the rule (spec 2.2).
+
+pub fn f() -> I32 {
+  1
+}

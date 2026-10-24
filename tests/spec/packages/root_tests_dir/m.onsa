@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§19.1"]
+
+// The directory `tests/` directly under the package root has no role in this version (spec 19.1): a
+// `.onsa` file below it is E0200 at the top of the file, one per file, and is not dropped without a
+// word. That is `tests/api.onsa` and the two files deeper in `tests/helpers/`, which are not read as
+// modules either. A file that is not `.onsa` (`tests/notes.md`, `tests/data/sample.txt`) is not read.
+// A `tests/` deeper than the root is an ordinary directory of modules (`dsp/tests/n.onsa`, the module
+// `dsp.tests.n`), which has no diagnostic.
+
+pub fn twice(x: I32) -> I32 {
+  x * 2
+}
+
+test "inline" {
+  assert twice(2) == 4
+}

@@ -43,8 +43,45 @@ pub fn has_manifest(dir: &Path) -> Result<bool, String> {
 /// A work list, not a recursion: no link is followed, so every directory is
 /// opened once, and the stack does not grow with the depth of the tree.
 pub fn onsa_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    collect(root, root.to_path_buf())
+}
+
+/// The `.onsa` files under the root's `tests/` (§15.1: each is an E0200,
+/// S-96), relative to `root` and sorted as [`onsa_files`], walked by the same
+/// rule. None when `tests` is not there, is not a directory (a link is not
+/// followed) or is a nested package (it has an `onsa.toml`).
+// SPEC-GAP(S-646): §15.1 does not open the directories it leaves out by name,
+// and the root's `tests/` is one, but its files are E0200: it is opened, and
+// what cannot be read in it is an error (exit 2), as in the modules' tree.
+// SPEC-GAP(S-638): the directory is the entry of the root whose name is
+// `tests` byte for byte, as [`onsa_files`] leaves it out: on a file system
+// that ignores case, `Tests/` is not looked up by `root/tests` (that would
+// read its files twice, as modules and as these).
+pub fn root_tests_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(root).map_err(|e| format!("cannot read {}: {e}", root.display()))?;
+    for e in entries {
+        let e = e.map_err(|e| format!("cannot read {}: {e}", root.display()))?;
+        if e.file_name() != OsStr::new(TESTS_DIR) {
+            continue;
+        }
+        let dir = e.path();
+        let ty = e.file_type().map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+        return if ty.is_dir() && !has_manifest(&dir)? { collect(root, dir) } else { Ok(Vec::new()) };
+    }
+    Ok(Vec::new())
+}
+
+/// Whether the file at `rel` (relative to a package root) is under the
+/// root's `tests/`, the files of [`root_tests_files`].
+pub fn in_root_tests(rel: &Path) -> bool {
+    rel.starts_with(TESTS_DIR)
+}
+
+/// The `.onsa` files under `start`, relative to `root`: the walk of
+/// [`onsa_files`] (the names left out at the root are those of `root`).
+fn collect(root: &Path, start: PathBuf) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
-    let mut dirs = vec![root.to_path_buf()];
+    let mut dirs = vec![start];
     while let Some(dir) = dirs.pop() {
         let entries = std::fs::read_dir(&dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
         for e in entries {
@@ -83,7 +120,7 @@ pub fn onsa_files(root: &Path) -> Result<Vec<PathBuf>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::onsa_files;
+    use super::{onsa_files, root_tests_files};
     use std::path::{Path, PathBuf};
 
     /// A scratch directory of its own, removed at the end.
@@ -149,6 +186,33 @@ mod tests {
         }
         let got = rel(onsa_files(&s.0).unwrap());
         assert_eq!(got, ["deep/target/k.onsa", "deep/tests/k.onsa", "m.onsa"]);
+    }
+
+    #[test]
+    fn the_files_of_the_roots_tests_are_walked_by_the_same_rule() {
+        let s = Scratch::new("root_tests");
+        for f in ["m.onsa", "tests/a.onsa", "tests/sub/b.onsa", "tests/.hid.onsa", "tests/target/c.onsa", "tests/x.md"]
+        {
+            s.file(f);
+        }
+        assert_eq!(rel(root_tests_files(&s.0).unwrap()), ["tests/a.onsa", "tests/sub/b.onsa", "tests/target/c.onsa"]);
+        s.file("tests/onsa.toml");
+        assert!(root_tests_files(&s.0).unwrap().is_empty());
+        let none = Scratch::new("no_root_tests");
+        none.file("m.onsa");
+        assert!(root_tests_files(&none.0).unwrap().is_empty());
+    }
+
+    /// S-638 (provisional): only the name `tests` byte for byte. Where the
+    /// file system ignores case, `Tests/` is still a directory of modules
+    /// only, so no file is read under two names.
+    #[test]
+    fn a_tests_directory_in_another_case_is_a_directory_of_modules() {
+        let s = Scratch::new("case_tests");
+        s.file("m.onsa");
+        s.file("Tests/a.onsa");
+        assert!(root_tests_files(&s.0).unwrap().is_empty());
+        assert_eq!(rel(onsa_files(&s.0).unwrap()), ["Tests/a.onsa", "m.onsa"]);
     }
 
     #[cfg(unix)]

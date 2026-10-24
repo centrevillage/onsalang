@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§15.1"]
+// fixes = 0
+
+// The name of a file is the name of its module, so it follows the rule of a module name (spec 2.3):
+// `snake_case`, and an identifier (ASCII letters, digits and `_`, no leading digit, no `__`). A file
+// that breaks it gets E0320 at the top of the file (line 1, column 1), with no candidate: a candidate
+// is a text edit, and renaming a file is not one. The other files of this directory carry the mark
+// on their first line. A name that is a keyword (`match.onsa`) follows the rule and is written in a
+// path as it is (spec 2.2); `wrap01.onsa` is an ordinary name.
+
+pub fn f() -> I32 {
+  1
+}

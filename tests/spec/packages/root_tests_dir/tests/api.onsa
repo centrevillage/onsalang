@@ -1,0 +1,7 @@
+//~ E0200 @1
+
+use m.{twice}
+
+test "from tests dir" {
+  assert twice(2) == 5
+}

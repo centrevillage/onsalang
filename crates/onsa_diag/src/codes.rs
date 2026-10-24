@@ -90,8 +90,8 @@ impl Stage {
 /// Whether every diagnostic of a code carries a fix candidate (D-04).
 ///
 /// `Required` only where the spec text says the code always shows a candidate:
-/// E0003, E0020, E0320, E0713, E0714, E0811, E0812 (W3-02, D5; E0004 is
-/// not, S-430).
+/// E0003, E0020, E0713, E0714, E0811, E0812 (W3-02, D5; E0004 is
+/// not, S-430; E0320 is not: a file or directory name has none, §2.3, S-300).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FixRule {
     Required,
@@ -275,7 +275,7 @@ codes! {
         "the initializer of a `const` refers to itself";
     E0314 = 314, Names, [Names], Optional, Optional,
         "the alternatives of an or-pattern bind different names";
-    E0320 = 320, Names, [Names], Required, Optional,
+    E0320 = 320, Names, [Names], Optional, Optional,
         "name does not follow the naming rule for its kind";
     E0401 = 401, Types, [Types, Flow], Optional, Optional,
         "type mismatch";
@@ -466,7 +466,7 @@ mod tests {
         // W3-02 D5: the spec text says these always show a candidate.
         let required: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Required).map(|c| c.as_str()).collect();
-        assert_eq!(required, ["E0003", "E0020", "E0320", "E0713", "E0714", "E0811", "E0812"]);
+        assert_eq!(required, ["E0003", "E0020", "E0713", "E0714", "E0811", "E0812"]);
         let rule: Vec<&str> =
             Code::ALL.iter().filter(|c| c.note_rule() == NoteRule::Rule).map(|c| c.as_str()).collect();
         assert_eq!(rule, ["E0020"]);

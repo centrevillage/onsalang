@@ -22,7 +22,7 @@ use onsa_syntax::ast::Vis;
 
 use crate::{
     Analyzed, CoreStage, InternalError, Loaded, LowerError, Manifest, ManifestExport, ManifestTarget, PackageInput,
-    guard, read_manifest, read_sources,
+    guard, read_manifest, read_root_tests, read_sources,
 };
 
 /// A build platform (spec §15.3 item 1, §13.4): pointer width and the
@@ -314,7 +314,8 @@ pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError
     let manifest = crate::input::parse_manifest(&source, Some(&root)).map_err(BuildError::Usage)?;
     let resolved = resolve_target(&manifest, &manifest_path.display().to_string(), &opts.target)?;
     let files = read_sources(&root).map_err(BuildError::Usage)?;
-    let input = PackageInput { manifest: Some(source), files, root: Some(root.clone()), focus: None };
+    let root_tests = read_root_tests(&root).map_err(BuildError::Usage)?;
+    let input = PackageInput { manifest: Some(source), files, root: Some(root.clone()), focus: None, root_tests };
     let mut loaded = Loaded::from_input(input).map_err(BuildError::Usage)?;
     let analyzed = match crate::analyze_loaded(&mut loaded) {
         Ok(a) => a,

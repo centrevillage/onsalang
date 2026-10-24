@@ -1,7 +1,7 @@
 //! Naming rules (spec §2.3), E0320 (S-01). Runs after parsing over the arenas:
 //! every declared name is checked against the shape its kind requires.
 
-use onsa_diag::{Code, Diagnostic, Fix, Stage};
+use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 
 use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName, PatKind, StmtKind};
 
@@ -9,8 +9,13 @@ use crate::ast::{Ast, ExprKind, GenericParam, Ident, ItemKind, Param, ParamName,
 enum Shape {
     /// `snake_case`: values, functions, flows, modules, fields, parameters.
     Snake,
-    /// `UpperCamel`: types, traits, effects, variants, type parameters.
+    /// `UpperCamel`: types, traits, effects, variants.
     UpperCamel,
+    /// One `UpperCamel` word: type parameters.
+    // SPEC-GAP(S-642): a capital after a lowercase letter starts a second
+    // word (`ItemKey`); a run of capitals (`IO`, `IOKey`) and a digit
+    // (`T2`) do not. A name of more than one word has no candidate.
+    UpperCamelWord,
     /// `UPPER_SNAKE`: constants.
     UpperSnake,
     /// One `snake_case` word: effect-row variables.
@@ -52,6 +57,11 @@ impl Shape {
                 first.is_ascii_lowercase() && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
             }
             Shape::UpperCamel => first.is_ascii_uppercase() && s.chars().all(|c| c.is_ascii_alphanumeric()),
+            Shape::UpperCamelWord => {
+                let b = s.as_bytes();
+                Shape::UpperCamel.matches(s)
+                    && !b.windows(2).any(|w| w[0].is_ascii_lowercase() && w[1].is_ascii_uppercase())
+            }
             Shape::UpperSnake => {
                 first.is_ascii_uppercase()
                     && s.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
@@ -64,6 +74,7 @@ impl Shape {
             Shape::Snake => "snake_case",
             Shape::SnakeWord => "one snake_case word",
             Shape::UpperCamel => "UpperCamel",
+            Shape::UpperCamelWord => "one UpperCamel word",
             Shape::UpperSnake => "UPPER_SNAKE",
         }
     }
@@ -74,16 +85,63 @@ impl Shape {
         match self {
             Shape::Snake => words.join("_"),
             Shape::SnakeWord => words.concat(),
-            Shape::UpperCamel => words
-                .iter()
-                .map(|w| {
-                    let mut c = w.chars();
-                    c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
-                })
-                .collect(),
+            Shape::UpperCamel => words.iter().map(|w| capitalized(w)).collect(),
+            // More than one word has no one-word name: the name stays, and
+            // the caller makes no candidate of it.
+            Shape::UpperCamelWord => match words.as_slice() {
+                [w] => capitalized(w),
+                _ => s.to_string(),
+            },
             Shape::UpperSnake => words.iter().map(|w| w.to_ascii_uppercase()).collect::<Vec<_>>().join("_"),
         }
     }
+}
+
+fn capitalized(w: &str) -> String {
+    let mut c = w.chars();
+    c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+}
+
+/// Whether `name` is a module name (§2.3): a `snake_case` identifier, so
+/// not `_` alone, without `__`, and of ASCII letters, digits and `_` that
+/// does not start with a digit (S-325). A keyword is one (`match.onsa`).
+pub fn is_module_name(name: &str) -> bool {
+    Shape::Snake.matches(name) && name != "_" && !name.contains("__")
+}
+
+/// What part of a module path a name is (§2.3, S-300, S-313).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathPart {
+    /// The name of a file, without `.onsa`.
+    File,
+    Directory,
+}
+
+/// The E0320 of a file name or a directory name of a module path that is not
+/// a module name ([`is_module_name`]), at `span` (the head of a file, §2.3):
+/// no candidate, since a rename of a file is not an edit of a text (§18.1);
+/// a note shows the rule. The span is empty, so there is no `found`: the
+/// message names the name.
+pub fn path_name_error(span: Span, part: PathPart, name: &str) -> Option<Diagnostic> {
+    if is_module_name(name) {
+        return None;
+    }
+    let what = match part {
+        PathPart::File => "file",
+        PathPart::Directory => "directory",
+    };
+    let d = Diagnostic::new(
+        Stage::Names,
+        Code::E0320,
+        span,
+        format!("the {what} name `{name}` is not a module name, which is snake_case (§2.3)"),
+    )
+    .with_rule(format!(
+        "rename the {what} so that its name{} is snake_case: lowercase ASCII letters, digits and `_`, \
+         not starting with a digit, not `_` alone, and without two `_` in a row",
+        if part == PathPart::File { " before `.onsa`" } else { "" }
+    ));
+    Some(d)
 }
 
 /// `fooBar`, `FooBar`, `foo_bar`, `FOO_BAR` -> `["foo", "bar"]`
@@ -133,9 +191,11 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
             ident.span,
             format!("{what} names are {} (§2.3)", shape.describe()),
         )
-        .with_found(ident.name.clone())
-        .with_fix(Fix::replace("rename by the naming rule", ident.span, to));
-        out.push(d);
+        .with_found(ident.name.clone());
+        // A candidate that is still not of the shape is none (§18.1, S-642:
+        // `ItemKey` has no one-word name).
+        let shaped = !matches!(shape, Shape::UpperCamelWord) || shape.matches(&to);
+        out.push(if shaped { d.with_fix(Fix::replace("rename by the naming rule", ident.span, to)) } else { d });
     };
     let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Shape, &str)| {
         for p in params {
@@ -147,7 +207,7 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     let generics = |gs: &[GenericParam], check: &mut dyn FnMut(&Ident, Shape, &str)| {
         for g in gs {
             match g {
-                GenericParam::Type { name, .. } => check(name, Shape::UpperCamel, "type parameter"),
+                GenericParam::Type { name, .. } => check(name, Shape::UpperCamelWord, "type parameter"),
                 GenericParam::Const { name, .. } => check(name, Shape::UpperSnake, "const parameter"),
                 GenericParam::Effect { name } => check(name, Shape::SnakeWord, "effect-row variable"),
             }
@@ -265,6 +325,41 @@ mod tests {
         );
         let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
         assert_eq!(fixes, vec!["foo", "Point", "x", "MAX", "bad_param", "bad_name"]);
+    }
+
+    #[test]
+    fn a_type_parameter_is_one_upper_camel_word() {
+        // R-46: `ItemKey` is two words; the candidate is one.
+        assert!(Shape::UpperCamelWord.matches("T"));
+        assert!(Shape::UpperCamelWord.matches("Item2"));
+        assert!(Shape::UpperCamelWord.matches("IO"));
+        assert!(Shape::UpperCamelWord.matches("IOKey"));
+        assert!(!Shape::UpperCamelWord.matches("ItemKey"));
+        assert!(!Shape::UpperCamelWord.matches("Item_Key"));
+        let src = "pub struct S[ItemKey] { a: ItemKey }\nfn f[T, IO, T_](x: T) -> T { x }\n";
+        let parsed = crate::parse(onsa_diag::FileId(0), src);
+        let got: Vec<_> = parsed
+            .diagnostics
+            .iter()
+            .map(|d| (d.found.clone().unwrap(), d.fixes.iter().map(|f| f.edits()[0].replace.clone()).collect()))
+            .collect();
+        let want: Vec<(String, Vec<String>)> = vec![("ItemKey".into(), vec![]), ("T_".into(), vec!["T".into()])];
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn module_names_are_snake_case_identifiers() {
+        // §2.3, S-300, S-325: keywords are names; `_`, a digit first, ASCII only.
+        for ok in ["main", "dsp2", "_util", "match", "test", "a_b"] {
+            assert!(is_module_name(ok), "{ok}");
+        }
+        for bad in ["", "_", "My-File", "a.b", "a b", "a__b", "2x", "caf\u{e9}", ".hid", "Mod"] {
+            assert!(!is_module_name(bad), "{bad}");
+        }
+        let d = path_name_error(Span::empty(onsa_diag::FileId(0), 0), PathPart::Directory, "My-Dir").unwrap();
+        assert_eq!((d.code, d.found.as_deref(), d.fixes.len()), (Code::E0320, None, 0));
+        assert!(d.message.contains("`My-Dir`"), "{}", d.message);
+        assert!(d.notes.iter().any(|n| n.span.is_none()));
     }
 
     #[test]

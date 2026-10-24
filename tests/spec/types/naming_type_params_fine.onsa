@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3"]
+
+// A type parameter of one `UpperCamel` word is fine on every declaration that has type parameters
+// (spec 2.3, table): a single letter, a word, a word with a short ending (`Fx`).
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub enum Choice[Item] {
+  One(Item),
+  Nothing,
+}
+
+pub fn first[T](x: T) -> T {
+  x
+}
+
+pub fn second[Item, Fx](x: Item, y: Fx) -> Fx {
+  y
+}
+
+pub struct Holder[T] {
+  a: T,
+}
+
+impl[Sample] Holder[Sample] {
+  pub fn get(self) -> Sample {
+    self.a
+  }
+
+  pub fn pick[Out](self, y: Out) -> Out {
+    y
+  }
+}
