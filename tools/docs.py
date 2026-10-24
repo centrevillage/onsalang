@@ -44,9 +44,12 @@ depth 0 with `-` for the type and from).
   file is not written (exit 1).
 - `swaps`: the vim swap files (`.*.sw?`) of the tree, out of `.git`, the build outputs and
   `.claude/worktrees/`.
-- `due` (X-9 U1, the gate's `docs-due`): the documents of DUE_DOCS changed from the last commit with a
+- `due` (X-9 U1, the gate's `docs-due`): the documents of DUE_DOCS changed from the last commit T with a
   `Docs-Checked:` trailer (the parent's mark of a check of onsa-docs taken in) to the working tree, untracked
-  files too: none exits 0; some, or no mark, exit `gate_steps.PARENT` (3), and 1 with `--stage-end`.
+  files too, and (X-12) those changed before T in the commits no end B of its values `A..B` reaches (out of
+  the ranges checked; T itself is checked): none exits 0; some, or no mark, exit `gate_steps.PARENT` (3), and
+  1 with `--stage-end`. A value whose first word is not `A..B` of two commits with B the parent of T or an
+  ancestor of it is not counted as a check (a line says so), and a T with no value read is passed over.
 - `check` (DT-5, the gate's `docs`): the checks of CHECKS on one reading of the documents (`Tree`),
   `path:line: what` under a heading per check: (d) `tables`, and on the files of the IDs of the new
   layout (`Index`; `history/` and `tests/pending.toml` are not read) (a) `heads` (the field table of
@@ -342,25 +345,76 @@ DUE_DOCS = tuple(f"{d}/" for d in DUE_WHOLE) + tuple(p.as_posix() for p in repo.
 )
 
 
-def git_lines(root, *args):
-    """The lines git prints in `root`; a DocsError when git fails."""
+def git_run(root, *args):
+    """git's CompletedProcess in `root`; a DocsError when git does not run."""
     try:
-        r = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=repo.GIT_TIMEOUT)
+        return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=repo.GIT_TIMEOUT)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise DocsError(f"git {args[0]}: {e}") from e
+
+
+def git_lines(root, *args):
+    """The lines git prints in `root`; a DocsError when git fails."""
+    r = git_run(root, *args)
     if r.returncode != 0:
         raise DocsError(f"git {args[0]}: {r.stderr.strip() or f'exit {r.returncode}'}")
     return r.stdout.splitlines()
 
 
-def last_docs_check(root):
-    """(commit, trailer value) of the first commit from HEAD with a `Docs-Checked:` trailer, or None."""
+def docs_marks(root):
+    """(commit, trailer value) of each commit from HEAD with a `Docs-Checked:` trailer, the newest first (the
+    values of the trailers of one commit joined by `; `)."""
     form = f"--format=%H%x09%(trailers:key={DOCS_CHECKED},valueonly,separator=%x3B%x20)"
     for line in git_lines(root, "log", form, "HEAD"):
         commit, _, value = line.partition("\t")
         if value.strip():
-            return commit, value.strip()
-    return None
+            yield commit, value.strip()
+
+
+def last_docs_check(root):
+    """(commit, trailer value) of the first commit from HEAD with a `Docs-Checked:` trailer, or None."""
+    return next(docs_marks(root), None)
+
+
+def checked_ends(root, mark, value):
+    """([B], [values not read]) of the `Docs-Checked:` value of the commit `mark`: each value (`; ` between) reads
+    when its first word is `A..B` of two commits, B the parent of `mark` or an ancestor of it."""
+    ends, bad = [], []
+    for v in value.split("; "):
+        a, sep, b = (v.split() or [""])[0].partition("..")
+        sha = [git_run(root, "rev-parse", "-q", "--verify", f"{e}^{{commit}}") for e in (a, b)] if a and b else []
+        b = sha[1].stdout.strip() if sep and sha and all(r.returncode == 0 for r in sha) else ""
+        if b and git_run(root, "merge-base", "--is-ancestor", b, f"{mark}^").returncode == 0:
+            ends.append(b)
+        else:
+            bad.append(v)
+    return ends, bad
+
+
+def find_check(root):
+    """((commit, value, [B]) of the newest commit from HEAD whose `Docs-Checked:` reads, or None; [notes]). A
+    value that does not read is not counted as a check (a note), and a commit with no value read is passed over."""
+    notes = []
+    for commit, value in docs_marks(root):
+        ends, bad = checked_ends(root, commit, value)
+        notes += [f"docs due: {commit[:7]} has `{DOCS_CHECKED}: {v}`, not <A>..<B> of two commits with B its parent "
+                  "or an ancestor of it; not counted as a check" for v in bad]  # fmt: skip
+        if ends:
+            return (commit, value, ends), notes
+    return None, notes
+
+
+def out_of_range(root, mark, ends):
+    """{path: [commit]} of the documents of DUE_DOCS changed in the commits before `mark` that no end of `ends`
+    reaches (out of the ranges of the check `mark` takes in), the oldest commit first."""
+    found, commit = {}, None
+    log = ("log", "--reverse", "--format=%x00%H", "--name-only", "--no-renames", f"{mark}^", *(f"^{b}" for b in ends))
+    for line in git_lines(root, *log, "--", *DUE_DOCS):
+        if line.startswith("\0"):
+            commit = line[1:]
+        elif line:
+            found.setdefault(line, []).append(commit)
+    return found
 
 
 def due_changes(root, commit):
@@ -371,15 +425,28 @@ def due_changes(root, commit):
     return dict(sorted(changed.items()))
 
 
+def due_lines(root, mark):
+    """`path: how` of the documents due after the check `mark` (commit, value, [B]): changed after the commit, or
+    in a commit before it out of its ranges (the commit itself is checked)."""
+    commit, _, ends = mark
+    of = " ".join(f"..{b[:7]}" for b in ends)
+    due = {p: f"changed in {' '.join(c[:7] for c in cs)} after the docs check of {of} (out of its range, before "
+              f"{commit[:7]})" for p, cs in out_of_range(root, commit, ends).items()}  # fmt: skip
+    due |= {p: f"{how} after the docs check {commit[:7]}" for p, how in due_changes(root, commit).items()}
+    return [f"{p}: {how}" for p, how in sorted(due.items())]
+
+
 def cmd_due(args):
     if repo.git_dirs(args.root) is None:
         raise DocsError(f"{args.root} is not the top of a git tree")
-    mark, lines = last_docs_check(args.root), []
+    mark, notes = find_check(args.root)
+    for note in notes:
+        print(note)
     if mark is None:
-        lines.append(f"no commit from HEAD has a `{DOCS_CHECKED}:` trailer")
+        lines = [f"no commit from HEAD has a `{DOCS_CHECKED}:` trailer" + (" that reads" if notes else "")]
     else:
-        lines = [f"{p}: {how} after the docs check {mark[0][:7]}" for p, how in due_changes(args.root, mark[0]).items()]
         print(f"docs due: the last docs check is {mark[0][:7]} ({DOCS_CHECKED}: {mark[1]})")
+        lines = due_lines(args.root, mark)
     prefix = "" if args.stage_end else "parent: "
     for line in lines:
         print(prefix + line)

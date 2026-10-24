@@ -158,6 +158,15 @@ def quiet(fn, *args, **kw):
         sys.stdout, sys.stderr = old
 
 
+def handback_line(text, kind="assistant"):
+    """A line of an agent's record with a SubagentHandback of `text`, made now (its `timestamp`, as Claude Code's);
+    `kind` "api-request-blob" is Claude Code's copy of an earlier one in a later call, with no timestamp (X-11)."""
+    use = {"type": "tool_use", "name": "SubagentHandback", "input": {"message": text}}
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    line = {"type": kind, "message": {"role": "assistant", "content": [use]}}
+    return json.dumps({**line, "timestamp": now} if kind == "assistant" else line, ensure_ascii=False) + "\n"
+
+
 def quiet_out(fn, *args, **kw):
     """(what `fn` returns, the lines it printed to stdout and stderr)."""
     out = io.StringIO()
@@ -4335,8 +4344,7 @@ class Handback(unittest.TestCase):
         path = self.write("a.jsonl", [])
         out = self.project / "r.md"
         self.assertEqual(quiet_out(handback.main, ["save", str(path), str(out)]), (1, [f"no SubagentHandback in {path}"]))
-        use = {"type": "tool_use", "name": "SubagentHandback", "input": {"message": "報告"}}
-        path.write_text(json.dumps({"message": {"content": [use]}}) + "\n")
+        path.write_text(handback_line("報告") + handback_line("前の報告", "api-request-blob"))  # a copy (X-11)
         self.assertEqual(quiet_out(handback.main, ["save", str(path), str(out)]), (0, ["2 characters"]))
         self.assertEqual(out.read_text(), "報告")
 
@@ -5627,12 +5635,15 @@ class WorkSync(unittest.TestCase):
         (self.main / "a.txt").write_text("changed\n")
         body = Path(self.tmp.name) / "body.txt"
         body.write_text("from a file\n")
-        rng = f"{self.base[:7]}..HEAD"
+        short = lambda rev: git_in(self.main, "rev-parse", "--short", rev).strip()  # noqa: E731
+        # a long hash and a name (HEAD, a branch) are written as short hashes: HEAD would read as another commit later
+        rng, written = f"{self.base}..HEAD", f"{short(self.base)}..{short('HEAD')}"
+        self.assertNotEqual(rng, written)
         code, lines = self.commit("-m", "take in the check", "-F", body, "a.txt", "--docs-checked", rng, "X-9",
                                   "--co-author", "A B <a@b.c>")  # fmt: skip
         self.assertEqual(code, 0, lines)
         self.assertEqual(len(lines), 1, lines)  # docs.last_docs_check reads it: no line
-        value = f"{rng} (X-9, onsa-docs)"
+        value = f"{written} (X-9, onsa-docs)"
         self.assertEqual(git_in(self.main, "log", "-1", "--format=%B"),
                          f"take in the check\n\nfrom a file\n\nDocs-Checked: {value}\nCo-Authored-By: A B <a@b.c>\n\n")
         self.assertEqual(docs_tool.last_docs_check(self.main), (self.head(self.main), value))
@@ -5645,6 +5656,10 @@ class WorkSync(unittest.TestCase):
                 self.assertEqual((code, lines), (1, [f"commit: {bad} is not <A>..<B> of two commits of {self.main}; "
                                                      "nothing done"]))  # fmt: skip
         self.assertEqual(self.head(self.main), head)
+        branch = git_in(self.main, "branch", "--show-current").strip()
+        code, lines = self.commit("-m", "x", "b.txt", "--docs-checked", f"HEAD~1..{branch}", "X-9")
+        self.assertEqual(code, 0, lines)
+        self.assertEqual(docs_tool.last_docs_check(self.main)[1], f"{short('HEAD~2')}..{short('HEAD~1')} (X-9, onsa-docs)")
         with self.assertRaises(SystemExit) as e:
             quiet_out(work.main, ["commit", "-m", "x", "b.txt", "--co-author", "no mail", "--tree", str(self.main)])
         self.assertEqual(e.exception.code, 2)
@@ -6611,8 +6626,12 @@ class DocsDue(unittest.TestCase):
         git_in(self.root, "commit", "-q", "--allow-empty", "-m", message)
         return git_in(self.root, "rev-parse", "--short=7", "HEAD").strip()
 
-    def mark(self):
-        return self.commit("take in the docs check\n\nDocs-Checked: a..b (X-3, onsa-docs)")
+    def mark(self, *values):
+        """A commit taking in checks of `values` (default: `P..P (X-3, onsa-docs)` of its parent P, the check of
+        the uncommitted changes) as `Docs-Checked:` trailers."""
+        parent = git_in(self.root, "rev-parse", "--short=7", "HEAD").strip()
+        values = values or (f"{parent}..{parent} (X-3, onsa-docs)",)
+        return self.commit("take in the docs check\n\n" + "\n".join(f"Docs-Checked: {v}" for v in values))
 
     def due(self, *argv):
         out = io.StringIO()
@@ -6649,8 +6668,11 @@ class DocsDue(unittest.TestCase):
 
     def test_after_the_mark(self):
         self.write("rules/a.md", "b\n")  # changed in the commit of the mark: checked
+        self.commit("rules before the check")  # in the range P..P that ends at the parent of the mark: checked
+        self.write("rules/a.md", "b2\n")
+        parent = git_in(self.root, "rev-parse", "--short=7", "HEAD").strip()
         m = self.mark()
-        head = f"docs due: the last docs check is {m} (Docs-Checked: a..b (X-3, onsa-docs))"
+        head = f"docs due: the last docs check is {m} (Docs-Checked: {parent}..{parent} (X-3, onsa-docs))"
         self.assertEqual(self.due(), (0, [head, "docs due: no document changed after the docs check"]))
         # only the code, the history and a file of an ID change: nothing is due
         for rel in ("crates/x.rs", "history/h.md", "issues/X/X-1.md", "crates/new.rs"):
@@ -6681,6 +6703,99 @@ class DocsDue(unittest.TestCase):
         self.assertEqual(self.due()[0], 0)
         (self.root / "rules/a.md").unlink()
         self.assertEqual(self.due()[1][1:-1], [f"parent: rules/a.md: changed after the docs check {m2}"])
+
+    def test_out_of_the_range(self):
+        # X-12: a check of A..B taken in by T; the documents changed between B and T are due, T's own are not
+        a = git_in(self.root, "rev-parse", "--short=7", "HEAD").strip()
+        self.write("rules/a.md", "in the range\n")
+        b = self.commit("checked")
+        self.write("rules/b.md", "out\n")
+        self.write("spec/s.md", "out\n")
+        c1 = self.commit("out of the range")
+        self.write("crates/x.rs", "code\n")
+        self.commit("code only")
+        self.write("rules/b.md", "out again\n")
+        c2 = self.commit("out of the range again")
+        self.write("rules/c.md", "the fix of the check\n")
+        t = self.mark(f"{a}..{b} (X-3, onsa-docs)")
+        out_of = f"after the docs check of ..{b} (out of its range, before {t})"
+        tail = "docs due: run the check of onsa-docs and take it in with `work.py commit --docs-checked <range> <work>`"
+        code, out = self.due()
+        self.assertEqual((code, out), (gate_steps.PARENT, [
+            f"docs due: the last docs check is {t} (Docs-Checked: {a}..{b} (X-3, onsa-docs))",
+            f"parent: rules/b.md: changed in {c1} {c2} {out_of}", f"parent: spec/s.md: changed in {c1} {out_of}", tail]))
+        # the hook of the session start counts them as documents of `docs.py due`
+        self.assertTrue(all(claude_hook.DUE_DOC.match(x) for x in out[1:-1]))
+        # --stage-end: the exit code and the last line as before
+        code, out = self.due("--stage-end", "W4")
+        self.assertEqual((code, out[1], out[-1]), (1, f"rules/b.md: changed in {c1} {c2} {out_of}",
+                                                   tail + " (fails at the stage end W4)"))  # fmt: skip
+        # a change after T of a path out of the range shows as after T; a new path after T joins
+        self.write("rules/b.md", "after\n")
+        self.write("rules/d.md", "new\n")
+        self.assertEqual(self.due()[1][1:-1], [f"parent: rules/b.md: changed after the docs check {t}",
+                                               f"parent: rules/d.md: untracked after the docs check {t}",
+                                               f"parent: spec/s.md: changed in {c1} {out_of}"])  # fmt: skip
+
+    def test_several_values(self):
+        # two trailers in one commit: a commit that an end of either reaches is checked
+        a = git_in(self.root, "rev-parse", "--short=7", "HEAD").strip()
+        self.write("rules/a.md", "1\n")
+        b1 = self.commit("first half")
+        self.write("rules/b.md", "2\n")
+        b2 = self.commit("second half")
+        self.write("rules/c.md", "3\n")
+        c = self.commit("out of both")
+        t = self.mark(f"{a}..{b1} (X-3, onsa-docs)", f"{b1}..{b2} (X-3, onsa-docs)")
+        value = f"{a}..{b1} (X-3, onsa-docs); {b1}..{b2} (X-3, onsa-docs)"
+        self.assertEqual(self.due()[1], [
+            f"docs due: the last docs check is {t} (Docs-Checked: {value})",
+            f"parent: rules/c.md: changed in {c} after the docs check of ..{b1} ..{b2} (out of its range, before {t})",
+            "docs due: run the check of onsa-docs and take it in with `work.py commit --docs-checked <range> <work>`"])
+        self.assertEqual(docs_tool.last_docs_check(self.root)[1], value)  # what work.py commit compares
+
+    def test_values_not_read(self):
+        # a value not read is not counted as a check: a line says so, the readable values of the commit count
+        self.write("rules/a.md", "1\n")
+        first = self.mark()
+        self.write("crates/x.rs", "2\n")
+        p = self.commit("code")
+        git_in(self.root, "checkout", "-q", "-b", "side")
+        self.write("rules/a.md", "side\n")
+        side = self.commit("a commit out of the history of HEAD")
+        git_in(self.root, "checkout", "-q", "-")
+        bad = ["a..b (X-3, onsa-docs)", f"{p} (X-3, onsa-docs)", f"{first}...{p} (X-3, onsa-docs)", f"..{p}",
+               f"{first}..{side} (X-3, onsa-docs)", f"{p}..HEAD (X-3, onsa-docs)", f"-q..{p}", f"{p}:x.md..{p}"]
+        note = "docs due: {} has `Docs-Checked: {}`, not <A>..<B> of two commits with B its parent or an ancestor of it; " \
+               "not counted as a check"  # fmt: skip
+        self.write("rules/b.md", "the fix of the check\n")
+        t = self.mark(*bad, f"{p}..{p} (X-3, onsa-docs)")
+        code, out = self.due()
+        self.assertEqual(out[:len(bad)], [note.format(t, v) for v in bad])
+        self.assertEqual((code, out[len(bad):]), (0, [
+            f"docs due: the last docs check is {t} (Docs-Checked: {'; '.join(bad)}; {p}..{p} (X-3, onsa-docs))",
+            "docs due: no document changed after the docs check"]))  # fmt: skip
+        # no value read: the commit is passed over for the check before it, and its own changes are due
+        self.write("rules/c.md", "the fix of a check not read\n")
+        t2 = self.mark("a..b (X-3, onsa-docs)", f"{p}..HEAD")
+        code, out = self.due()
+        n = 2 + len(bad)  # the notes of t2, then of t again
+        self.assertEqual((code, out[:n]), (gate_steps.PARENT, [
+            note.format(t2, "a..b (X-3, onsa-docs)"), note.format(t2, f"{p}..HEAD"), *[note.format(t, v) for v in bad]]))
+        self.assertEqual(out[n:-1], [
+            f"docs due: the last docs check is {t} (Docs-Checked: {'; '.join(bad)}; {p}..{p} (X-3, onsa-docs))",
+            f"parent: rules/c.md: changed after the docs check {t}"])
+
+    def test_no_value_read(self):
+        # no commit with a value read: as no mark, the notes first
+        self.write("rules/a.md", "b\n")
+        t = self.mark("a..b (X-3, onsa-docs)")
+        code, out = self.due("--stage-end", "W4")
+        self.assertEqual((code, out[:2]), (1, [
+            f"docs due: {t} has `Docs-Checked: a..b (X-3, onsa-docs)`, not <A>..<B> of two commits with B its parent "
+            "or an ancestor of it; not counted as a check",
+            "no commit from HEAD has a `Docs-Checked:` trailer that reads"]))  # fmt: skip
+        self.assertIn("(fails at the stage end W4)", out[-1])
 
     def test_not_a_git_tree(self):
         plain = Path(self.tmp.name) / "rules"  # inside the tree, not its top
@@ -8115,17 +8230,39 @@ class ClaudeHook(unittest.TestCase):
         path = Path(self.tmp.name) / "agent-a1.jsonl"
         with path.open("w") as f:
             for i, n in enumerate(largest):
-                f.write(json.dumps({"message": {"id": f"m{i}", "model": "claude-opus-5-5", "usage": {"input_tokens": n}}})
-                        + "\n")  # fmt: skip
-                use = {"type": "tool_use", "name": "SubagentHandback", "input": {"message": f"報告 {i}"}}
-                f.write(json.dumps({"message": {"content": [use]}}) + "\n")
+                f.write(json.dumps({"type": "assistant", "message": {"id": f"m{i}", "model": "claude-opus-5-5",
+                                                                     "usage": {"input_tokens": n}}}) + "\n")  # fmt: skip
+                f.write(handback_line(f"報告 {i}"))
         return path
 
+    def stop(self, path, later=(), delay=0.3):
+        """SubagentStop of onsa-impl a1 on `path`, while a thread appends the chunks of `later` to it, one each
+        `delay` seconds after the hook starts (X-11: the report reaches the record after the hook starts);
+        (the hook's outputs, the seconds it took, the text of the file it saved or None)."""
+        before = set((self.scratch / "handback").glob("*")) if (self.scratch / "handback").exists() else set()
+
+        def append():
+            for chunk in later:
+                time.sleep(delay)
+                with path.open("a") as f:
+                    f.write(chunk)
+
+        thread, start = threading.Thread(target=append), time.monotonic()
+        thread.start()
+        try:
+            out = self.hook("SubagentStop", {"agent_type": "onsa-impl", "agent_id": "a1",
+                                             "agent_transcript_path": str(path)})  # fmt: skip
+        finally:
+            took = time.monotonic() - start
+            thread.join()
+            time.sleep(0.01)  # the next call's lines are made later than this stop (timestamps in milliseconds)
+        new = sorted(set((self.scratch / "handback").glob("*")) - before) if (self.scratch / "handback").exists() else []
+        self.assertLessEqual(len(new), 1)
+        return out, took, (new[0].read_text() if new else None)
+
     def test_subagent_stop(self):
-        stop = lambda path: self.hook("SubagentStop", {"agent_type": "onsa-impl", "agent_id": "a1",  # noqa: E731
-                                                       "agent_transcript_path": str(path)})  # fmt: skip
-        self.assertEqual(stop(self.record(1000, 250000)), (None, []))
-        self.assertEqual(stop(self.record(1000, 310000)), (None, []))
+        self.assertEqual(self.stop(self.record(1000, 250000))[0], (None, []))
+        self.assertEqual(self.stop(self.record(1000, 2000, 310000))[0], (None, []))
         saved = sorted((self.scratch / "handback").iterdir())
         self.assertEqual([p.name for p in saved], ["onsa-impl-a1-001.md", "onsa-impl-a1-002.md"])
         first, second = (p.read_text().split("\n") for p in saved)
@@ -8133,8 +8270,59 @@ class ClaudeHook(unittest.TestCase):
         self.assertEqual(first[1:], ["", "報告 1", ""])
         self.assertIn("largest context 310,000", second[0])
         self.assertIn("新しい担当へ（rules/leader.md 2.6）", second[0])
+        self.assertEqual(second[1:], ["", "報告 2", ""])
         self.hook("SubagentStop", {"agent_type": "", "agent_transcript_path": str(self.record(1))})
         self.assertEqual(len(list((self.scratch / "handback").iterdir())), 2)  # Claude Code's own agents
+
+    def test_subagent_stop_late_report(self):
+        """X-11 (1): the report written after the hook starts, a line in two pieces, is saved with its call."""
+        path = self.record()
+        path.write_text(json.dumps({"type": "user", "message": {"content": "作業票"}}) + "\n")
+        line = handback_line("遅れた報告")
+        out, took, text = self.stop(path, [line[:20], line[20:]])
+        self.assertEqual(out, (None, []))
+        self.assertEqual(text.split("\n")[1:], ["", "遅れた報告", ""])
+        self.assertLess(took, claude_hook.WAIT)  # it stops waiting when the report comes
+
+    def test_subagent_stop_calls_again(self):
+        """X-11 (2): the n-th call of an agent saves the n-th report, not the one before nor its copy in an
+        `api-request-blob` line; (3): with no report within WAIT, the body says so and how to take it out."""
+        path = self.record(1000)
+        self.assertEqual(self.stop(path)[2].split("\n")[1:], ["", "報告 0", ""])
+        prompt = json.dumps({"type": "user", "message": {"content": "段 2"}}) + "\n"
+        copy = handback_line("報告 0", "api-request-blob")
+        text = self.stop(path, [prompt + copy, handback_line("報告 1")])[2]
+        self.assertEqual(text.split("\n")[1:], ["", "報告 1", ""])
+        late = handback_line("報告 2")  # made before the stop, written after the hook gave up
+        with mock.patch.object(claude_hook, "WAIT", 0.5):
+            out, took, text = self.stop(path, [prompt + handback_line("報告 1", "api-request-blob")], delay=0.1)
+        self.assertEqual(out, (None, []))
+        self.assertGreaterEqual(took, 0.5)
+        self.assertLess(took, 2)
+        saved = sorted((self.scratch / "handback").iterdir())[-1]
+        self.assertEqual(text.split("\n")[1:], [
+            "", "（本文なし: 今の呼び出しの SubagentHandback が、0.5 秒待っても記録に無い。最後の文: None）",
+            f"取り出し直す: python3 -B tools/handback.py save {path} {saved}", ""])  # fmt: skip
+        with path.open("a") as f:
+            f.write(late)
+        self.assertEqual(quiet_out(handback.main, ["save", str(path), str(saved)]), (0, ["4 characters"]))
+        self.assertEqual(saved.read_text(), "報告 2")  # the command in the body takes it out
+        now = handback_line("報告 3")  # the next call: its stop waits for its own report, not the late one
+        self.assertEqual(self.stop(path, [prompt + now])[2].split("\n")[1:], ["", "報告 3", ""])
+
+    def test_subagent_stop_bad_records(self):
+        """X-11 (4): a record that is not there, not a file, or not lines of the record: no exception out of the hook."""
+        with mock.patch.object(claude_hook, "WAIT", 0.2):
+            path = Path(self.tmp.name) / "agent-a1.jsonl"
+            path.write_bytes(b"not json\n\xff\xfe\n[1]\n{\"type\": \"assistant\", \"message\": \"x\"}\n"
+                             b"{\"type\": \"assistant\", \"message\": {\"content\": [1, {\"type\": \"text\"}]}}\n")
+            out, took, text = self.stop(path)
+            self.assertEqual(out, (None, []))
+            self.assertIn("（本文なし: ", text)
+            self.assertLess(took, 2)
+            out, took, text = self.stop(Path(self.tmp.name))  # a directory
+            self.assertEqual((out, text), ((None, []), None))
+        self.assertRegex((self.scratch / "hooks" / "errors.log").read_text(), r"^SubagentStop: IsADirectoryError: ")
 
     def test_errors_do_nothing(self):
         out, lines = self.hook("SubagentStop", {"agent_type": "onsa-impl", "agent_id": "a1",

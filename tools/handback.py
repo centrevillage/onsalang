@@ -6,7 +6,7 @@ Its commands are `save` and `usage` (COMMANDS, rules/tools.md 9.1); `handback.py
 cache, and an API-equivalent cost; with no agent, the same of the main session with its context now (the context
 of its last call). A call reads its whole context again, so the largest context decides the cost of the next call
 (2.6: hand over above 300,000 tokens, CONTEXT_BUDGET). The hook of SubagentStop (tools/hooks/claude_hook.py) uses
-`last_report` and `stats`. The records are ~/.claude/projects/<the repository's project directory>/<session id>.jsonl
+`report_in` and `stats`. The records are ~/.claude/projects/<the repository's project directory>/<session id>.jsonl
 and, of its agents, <session id>/subagents/agent-<agent id>.jsonl.
 """
 import json
@@ -43,24 +43,34 @@ def report_prefix(agent_type, agent_id) -> str:
 
 
 def records(path: Path):
-    with path.open(encoding="utf-8") as f:
+    """The lines of a record that are JSON objects (the hook of SubagentStop reads it: no line stops it)."""
+    with path.open(encoding="utf-8", errors="replace") as f:
         for line in f:
             try:
-                yield json.loads(line)
+                d = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if isinstance(d, dict):
+                yield d
+
+
+def report_in(d) -> "str | None":
+    """The report of a line of a record: the message of its last SubagentHandback, else None. Only the agent's own
+    lines (`type: "assistant"`) count: an `api-request-blob` line copies an earlier report into a later call (X-11)."""
+    m = d.get("message") if isinstance(d, dict) and d.get("type") == "assistant" else None
+    content = m.get("content") if isinstance(m, dict) else None
+    message = None
+    for block in content if isinstance(content, list) else ():
+        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "SubagentHandback":
+            message = block["input"].get("message") or json.dumps(block["input"], ensure_ascii=False)
+    return message
 
 
 def last_report(path) -> "str | None":
     """The message of the last SubagentHandback in the agent's record (its report), or None."""
     message = None
     for d in records(Path(path)):
-        content = (d.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if block.get("type") == "tool_use" and block.get("name") == "SubagentHandback":
-                message = block["input"].get("message") or json.dumps(block["input"], ensure_ascii=False)
+        message = report_in(d) or message
     return message
 
 

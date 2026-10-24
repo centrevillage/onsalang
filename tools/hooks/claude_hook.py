@@ -18,11 +18,14 @@ the reason on stderr and an exit not 0, so that Claude Code keeps it.
 The files go under the session's `scratchpad_dir`: `messages/`, `handback/`, `hooks/`. The crash reports
 are read from $ONSA_CRASH_REPORTS (default ~/Library/Logs/DiagnosticReports; the self-tests change it).
 """
+import datetime
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -45,6 +48,7 @@ DUE_DOC = re.compile(r"^parent: \S+: .* after the docs check ")  # a document of
 SUMMARY_MAX, LOG_WIDTH = 2000, 100  # the state of SessionStart (X9-56) and the width of a line of its log
 WRAPPERS = ("python3", "python", "sh", "bash", "zsh", "exec", "env", "time", "nohup", "command", "{", "!",
             "then", "do", "else", "elif", "if", "while")  # fmt: skip
+WAIT, POLL = 10.0, 0.1  # SubagentStop: the seconds it waits at most for this call's report, and between its reads
 
 
 def role_of(event):
@@ -356,19 +360,67 @@ def session_start(event):
     return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": state(cwd)}}
 
 
+def made_after(d, since):
+    """Whether the line `d` of a record was made after the time `since` (seconds; None: always), by its
+    `timestamp` (made, not written); a line without one is not."""
+    if since is None:
+        return True
+    try:
+        return datetime.datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp() > since
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return False
+
+
+def report_since(record, since):
+    """(the last report in the record made after `since`, or None; the seconds waited): the record read on as it
+    grows, whole lines only, until such a report is there or WAIT seconds have gone. The report reaches the record
+    after the hook starts (X-11: not yet there 0.3 to 2.4 seconds after the SubagentHandback in session 58)."""
+    found, rest, start = None, b"", time.monotonic()
+    with Path(record).open("rb") as f:
+        while True:
+            *lines, rest = (rest + f.read()).split(b"\n")
+            for line in lines:
+                try:
+                    d = json.loads(line)
+                except ValueError:  # not JSON, not UTF-8
+                    continue
+                r = handback.report_in(d)
+                found = r if r is not None and made_after(d, since) else found
+            waited = time.monotonic() - start
+            if found is not None or waited >= WAIT:
+                return found, waited
+            time.sleep(POLL)
+
+
 def subagent_stop(event):
-    """X9-59, X9-61: the report and the usage of the agent, in `handback/`. No output of SubagentStop reaches the
-    parent (`additionalContext` and `decision: block` keep the subagent running), so the usage is the head line."""
+    """X9-59, X9-61, X-11: the report of this call and the usage of the agent, in `handback/`. No output of
+    SubagentStop reaches the parent (`additionalContext` and `decision: block` keep the subagent running), so the
+    usage is the head line. This call's report is the last one made after the agent's last stop (its time in
+    `hooks/<prefix>stopped`): a report of the call before, written late, is not taken. When none comes within WAIT
+    seconds, the body says so with the command that takes the report out later."""
+    start = time.time()
     kind, record = event.get("agent_type"), event.get("agent_transcript_path")
     if not kind or not record or not event.get("scratchpad_dir"):
         return None  # Claude Code's own agents have no agent_type
-    record = Path(record).expanduser()
-    report, s = handback.last_report(record), handback.stats(record)
+    record, prefix = Path(record).expanduser(), handback.report_prefix(kind, event.get("agent_id"))
+    stopped = scratch(event, "hooks") / f"{prefix}stopped"
+    try:
+        since = float(stopped.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        since = None
+    report, waited = report_since(record, since)
+    stopped.write_text(repr(start), encoding="utf-8")
+    s = handback.stats(record)
     head = (f"usage: calls {s['calls']}, largest context {s['largest']:,}, API-equivalent ${s['cost']:,.1f}"
             + (f"; 担当の文脈の予算（{handback.CONTEXT_BUDGET:,}）を超えた: 次の単位か直しは新しい担当へ（rules/leader.md 2.6）"
                if s["largest"] > handback.CONTEXT_BUDGET else ""))  # fmt: skip
-    body = report if report is not None else f"（SubagentHandback が無い。最後の文: {event.get('last_assistant_message')!r}）"
-    path = new_file(scratch(event, handback.REPORTS), handback.report_prefix(kind, event.get("agent_id")))
+    path = new_file(scratch(event, handback.REPORTS), prefix)
+    if report is not None:
+        body = report
+    else:
+        body = (f"（本文なし: 今の呼び出しの SubagentHandback が、{waited:.1f} 秒待っても記録に無い。"
+                f"最後の文: {event.get('last_assistant_message')!r}）\n取り出し直す: python3 -B tools/handback.py save "
+                f"{shlex.quote(str(record))} {shlex.quote(str(path))}")  # fmt: skip
     path.write_text(f"{head}\n\n{body}\n", encoding="utf-8")
     return None
 
@@ -464,7 +516,8 @@ COMMANDS = {
                       "設定の SessionStart（matcher `startup|resume|compact`）が呼ぶ。2,000 字以内",
                       "echo '{\"cwd\":\"/Users/centrevillage/projects/onsalang\"}' | python3 -B tools/hooks/claude_hook.py SessionStart"),
     "SubagentStop": C(lambda p: None, hook(subagent_stop), ("parent",),
-                      "担当が止まるたびに、報告（最後の SubagentHandback）と呼び出しの数・文脈の最大・API 換算を scratchpad の handback/ に保存する",
+                      f"担当が止まるたびに、今の呼び出しの報告（その SubagentHandback が記録に届くまで {WAIT:g} 秒まで待つ。届かなければ本文なしと取り出し直す命令）と"
+                      "呼び出しの数・文脈の最大・API 換算を scratchpad の handback/ に保存する",
                       "設定の SubagentStop が呼ぶ。`<scratchpad>/handback/<agent_type>-<agent_id>-<連番>.md` の頭の行が使用量で、"
                       "文脈の予算を超えたら引き継ぎの目安を添える",
                       "echo '{\"agent_type\":\"onsa-impl\",\"agent_id\":\"a1\",\"agent_transcript_path\":\"…/agent-a1.jsonl\","

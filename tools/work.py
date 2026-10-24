@@ -111,7 +111,7 @@ files and removals too; `git commit --only`): the changes of the other paths and
 with no change is listed; with none at all, nothing is committed (exit 1). The message is the `-m` paragraphs and
 then `-F`'s. `--done ID` writes `status=DONE` the way `docs.py set` does (the swap files checked) and adds its
 file to the paths. `--docs-checked A..B WORK` (both ends commits of the tree) writes the trailer
-`<docs.DOCS_CHECKED>: A..B (WORK, onsa-docs)` and checks after the commit that `docs.last_docs_check` reads it,
+`<docs.DOCS_CHECKED>: A..B (WORK, onsa-docs)`, the ends as short hashes (X-12), and checks after the commit that `docs.last_docs_check` reads it,
 a line when not; `--co-author` writes `Co-Authored-By:` after it. When the commit fails, the untracked files
 it added to the index leave it and the file of `--done` gets back what it held. Last, a line: the commit, the
 branch, its files, the uncommitted changes not in it.
@@ -969,12 +969,13 @@ def lines(args):
 
 
 def docs_value(tree, text, work_id):
-    """The value of docs.DOCS_CHECKED for `<A>..<B>`, both ends commits of `tree`."""
+    """The value of docs.DOCS_CHECKED for `<A>..<B>`, both ends commits of `tree`, written as their short hashes
+    (a name such as HEAD or a branch would read as another commit later, X-12)."""
     ends = text.split("..")
-    bad = lambda e: git(tree, "rev-parse", "-q", "--verify", f"{e}^{{commit}}", ok=(0, 1)).returncode  # noqa: E731
-    if len(ends) != 2 or not all(ends) or any(map(bad, ends)):
+    sha = [git(tree, "rev-parse", "-q", "--verify", "--short", f"{e}^{{commit}}", ok=(0, 1)) for e in ends if e]
+    if len(ends) != 2 or len(sha) != 2 or any(r.returncode for r in sha):
         raise Failed(f"commit: {text} is not <A>..<B> of two commits of {tree}; nothing done")
-    return f"{text} ({work_id}, {DOCS_AGENT})"
+    return f"{'..'.join(r.stdout.decode().strip() for r in sha)} ({work_id}, {DOCS_AGENT})"
 
 
 def mark_done(tree, id_):
