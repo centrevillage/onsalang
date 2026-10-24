@@ -57,3 +57,7 @@ Core の正規形と移動・破棄・結果の置き場所を一か所で決め
 Core の段を「降下 → 正規化 → 定数の評価 → ターゲットの pass → export の計画」にする（計画 D-03 の追記）。
 
 ## W10 export の計画・C の API・ビルド
+
+## M7 IDE の核
+
+M7 の作業は、着手のときに仕様の LSP の文と T7-1（`history/implementation-tasks.md`）から作る。W の作業で CLI の側だけを実装した決定（例: S-96 と R-122）の LSP の側も、この形で拾う。
