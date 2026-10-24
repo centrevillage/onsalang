@@ -63,7 +63,7 @@ pub struct Fixture {
 /// Load and check the fixture package `pkg` (no diagnostics).
 pub fn load_fixture(root: &Path, pkg: &str) -> Result<Fixture, BuildFailure> {
     let dir = root.join(package_path(pkg));
-    let mut loaded = onsa_driver::load(&[dir]).map_err(BuildFailure::of)?;
+    let mut loaded = onsa_driver::load(Some(&dir)).map_err(BuildFailure::of)?;
     let analyzed = match onsa_driver::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(e) => return Err(BuildFailure::internal(&loaded.sources, &e)),

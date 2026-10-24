@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// The tree of a package (spec §15.1): the `.onsa` files below the root are the modules, except what
+// starts with `.`, which is not even read (each of those files has an error and a failing test,
+// which would show if it was gathered). A file that does not end in `.onsa` is not read either.
+// `tests/` deeper than the root is an ordinary directory of modules (`sub.tests.n`). The directory
+// `target/` is not written in this case (the repository ignores it); the Rust test
+// `dot_names_the_target_of_the_root_and_other_files_are_not_gathered` covers it.
+
+use sub.tests.n.{nf}
+
+pub fn mf() -> I32 {
+  nf() + 1
+}
+
+test "tree" {
+  assert mf() == 3
+}

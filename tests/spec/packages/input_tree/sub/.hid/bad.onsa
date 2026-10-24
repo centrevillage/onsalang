@@ -1,0 +1,7 @@
+pub fn bf() -> I32 {
+  zzz
+}
+
+test "bad" {
+  assert 1 == 2
+}

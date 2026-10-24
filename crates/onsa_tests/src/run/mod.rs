@@ -343,7 +343,13 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             )));
         }
     }
-    let mut loaded = Loaded::from_input(setup.input.clone());
+    let mut loaded = match Loaded::from_input(setup.input.clone()) {
+        Ok(l) => l,
+        Err(e) => {
+            run.problems.push(Problem::Case(e));
+            return run;
+        }
+    };
 
     // Markers of every file of the case (line numbers are per file); read in
     // every mode, so a case that does not run cannot hold a broken marker.

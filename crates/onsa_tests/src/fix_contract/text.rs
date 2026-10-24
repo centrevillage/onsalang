@@ -1,7 +1,7 @@
 //! The entries for one text: the fuzzing and the closed list of the forms of other languages.
 
 use onsa_diag::{Applied, Diagnostic, FileId, Fix, SourceMap};
-use onsa_driver::{Analyzed, Loaded, PackageInput, SourceFile};
+use onsa_driver::{Analyzed, Loaded, PackageInput};
 
 use super::reading::{Readings, code_difference, edit_problems};
 use super::units::{Before, moved};
@@ -17,13 +17,9 @@ pub struct TextCheck {
     pub analyzed: Analyzed,
 }
 
-fn single_file(text: String) -> PackageInput {
-    PackageInput { manifest: None, files: vec![SourceFile { path: "m.onsa".into(), text }], root: None }
-}
-
 /// Check `text` as a single-file package. `Err`: the internal error.
 pub fn check_text(text: &str) -> Result<TextCheck, String> {
-    let mut loaded = Loaded::from_input(single_file(text.to_string()));
+    let mut loaded = Loaded::from_input(PackageInput::single_file("m.onsa", text))?;
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).map_err(|e| e.render(&loaded.sources))?;
     Ok(TextCheck { loaded, analyzed })
 }

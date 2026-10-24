@@ -107,8 +107,18 @@ impl TestSettings {
 /// A parsed fragment.
 #[derive(Debug, Clone, Default)]
 pub struct Fragment {
-    pub manifest: Option<Manifest>,
+    /// The manifest as its TOML text, read once here so that its errors are
+    /// the fragment's. The text keeps the lines and the columns of the file
+    /// (and holds the `[test]` table too).
+    pub manifest: Option<String>,
     pub test: TestSettings,
+}
+
+impl Fragment {
+    /// The manifest of the case file `path`, which the text points into.
+    pub fn manifest_source(&self, path: &str) -> Option<onsa_driver::ManifestSource> {
+        self.manifest.as_ref().map(|text| onsa_driver::ManifestSource { path: path.to_string(), text: text.clone() })
+    }
 }
 
 /// Read the fragment of a file: `Ok(None)` when the file has none.
@@ -174,7 +184,8 @@ pub fn parse(text: &str) -> Result<Option<Fragment>, String> {
     let manifest = if table.keys().all(|k| k == "test") {
         None
     } else {
-        Some(Manifest::parse(&toml_text, &[]).map_err(|e| format!("fragment: {e}"))?.0)
+        Manifest::parse(&toml_text, &[]).map_err(|e| format!("fragment: {e}"))?;
+        Some(toml_text.clone())
     };
     // `[test]` read from the text too, so its errors keep their position.
     #[derive(Deserialize)]
@@ -313,7 +324,7 @@ mod tests {
     fn with_manifest() {
         let text = "// onsa.toml\n// [package]\n// name = \"echo\"\n// edition = \"2026\"\n//\n// [targets.t]\n// kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n//\n// [test]\n// golden = [\"c\"]\n";
         let f = parse(text).unwrap().unwrap();
-        let m = f.manifest.unwrap();
+        let (m, _) = Manifest::parse(&f.manifest.unwrap(), &[]).unwrap();
         assert_eq!(m.package.name, "echo");
         assert!(m.targets.contains_key("t"));
         assert_eq!(f.test.golden, vec![GoldenKind::C]);

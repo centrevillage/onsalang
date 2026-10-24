@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// A directory with an `onsa.toml` is a nested package (spec §15.1): the package around it does not
+// gather below it, so the item `b` here and the file `a/b.onsa` do not clash as an item and a child
+// module (that would be E0304); and the name of `Inner-Pkg/` is not a module path of this package
+// (that would be E0320). `inner/` is a package of its own, read through its own root.
+
+pub fn b() -> I32 {
+  1
+}
+
+test "outer" {
+  assert b() == 1
+}

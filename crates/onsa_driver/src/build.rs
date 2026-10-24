@@ -6,6 +6,7 @@
 //! the sources and the intended flags (`onsa_build.json`).
 
 use std::collections::BTreeSet;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -15,6 +16,7 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, SourceMap, Stage};
 use onsa_interp::{ArrayData, Interp, Value};
 use onsa_sema::def::DefKind;
+use onsa_sema::package_tree::{BUILD_DIR, MANIFEST, has_manifest};
 use onsa_sema::ty::Rate;
 use onsa_syntax::ast::Vis;
 
@@ -214,7 +216,7 @@ pub fn build_analyzed(loaded: &Loaded, analyzed: &Analyzed, target: &str) -> Res
     let Some(manifest) = &loaded.manifest else {
         return Err(BuildError::Usage("no onsa.toml: a build needs the manifest's targets".into()));
     };
-    let resolved = resolve_target(manifest, "onsa.toml", target)?;
+    let resolved = resolve_target(manifest, MANIFEST, target)?;
     build_resolved(loaded, analyzed, &resolved)
 }
 
@@ -286,17 +288,34 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
 }
 
 /// Build the package at `path` (a directory or its `onsa.toml`) for `target`.
+/// A path named `onsa.toml` is the directory where it is (S-622), as in
+/// `read_input`; another file is a usage error (§15.1: the result of `build`
+/// is the whole package).
 pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError> {
-    let manifest_path = if path.is_dir() { path.join("onsa.toml") } else { path.to_path_buf() };
-    if !manifest_path.exists() {
-        return Err(BuildError::Usage(format!("{}: no onsa.toml", manifest_path.display())));
-    }
+    let (root, manifest_path) = if path.file_name() == Some(OsStr::new(MANIFEST)) {
+        (crate::manifest_dir(path).to_path_buf(), path.to_path_buf())
+    } else {
+        let meta =
+            std::fs::metadata(path).map_err(|e| BuildError::Usage(format!("cannot read {}: {e}", path.display())))?;
+        if !meta.is_dir() {
+            return Err(BuildError::Usage(format!(
+                "{}: `build` takes a package directory or its onsa.toml, not a file (§15.1)",
+                path.display()
+            )));
+        }
+        let manifest_path = path.join(MANIFEST);
+        if !has_manifest(path).map_err(BuildError::Usage)? {
+            return Err(BuildError::Usage(format!("{}: no onsa.toml", manifest_path.display())));
+        }
+        (path.to_path_buf(), manifest_path)
+    };
     // The order of the errors: the manifest, the target, the sources.
-    let (manifest, root) = read_manifest(&manifest_path).map_err(BuildError::Usage)?;
+    let source = read_manifest(&root).map_err(BuildError::Usage)?;
+    let manifest = crate::input::parse_manifest(&source, Some(&root)).map_err(BuildError::Usage)?;
     let resolved = resolve_target(&manifest, &manifest_path.display().to_string(), &opts.target)?;
     let files = read_sources(&root).map_err(BuildError::Usage)?;
-    let input = PackageInput { manifest: Some(manifest), files, root: Some(root.clone()) };
-    let mut loaded = Loaded::from_input(input);
+    let input = PackageInput { manifest: Some(source), files, root: Some(root.clone()), focus: None };
+    let mut loaded = Loaded::from_input(input).map_err(BuildError::Usage)?;
     let analyzed = match crate::analyze_loaded(&mut loaded) {
         Ok(a) => a,
         Err(error) => return Err(BuildError::Internal { sources: loaded.sources, error: Box::new(error) }),
@@ -305,7 +324,7 @@ pub fn build(path: &Path, opts: &BuildOptions) -> Result<BuildReport, BuildError
     let settings = &output.settings;
 
     // Write.
-    let out_dir = opts.out.clone().unwrap_or_else(|| root.join("target").join(&opts.target));
+    let out_dir = opts.out.clone().unwrap_or_else(|| root.join(BUILD_DIR).join(&opts.target));
     std::fs::create_dir_all(&out_dir)
         .map_err(|e| BuildError::Usage(format!("cannot create {}: {e}", out_dir.display())))?;
     let mut files = Vec::new();
@@ -667,12 +686,7 @@ mod tests {
     #[test]
     fn the_const_stage_evaluates_only_the_reached_consts() {
         let src = "fn three() -> U32 {\n  3\n}\n\nfn four() -> U32 {\n  4\n}\n\nconst READ: U32 = three()\n\nconst UNREAD: U32 = four()\n\npub fn get() -> U32 {\n  READ\n}\n";
-        let input = PackageInput {
-            manifest: None,
-            files: vec![crate::SourceFile { path: "t.onsa".into(), text: src.into() }],
-            root: None,
-        };
-        let mut loaded = Loaded::from_input(input);
+        let mut loaded = Loaded::from_input(PackageInput::single_file("t.onsa", src)).unwrap();
         let analyzed = crate::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
         assert!(analyzed.diagnostics.is_empty());
         let module = crate::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));

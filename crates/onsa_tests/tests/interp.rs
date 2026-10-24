@@ -7,12 +7,7 @@ use onsa_interp::{Interp, Value};
 
 /// A one-module package `t` (no manifest, spec §15.1), as the CLI loads one.
 fn load(src: &str) -> (onsa_driver::Loaded, onsa_driver::Analyzed) {
-    let input = onsa_driver::PackageInput {
-        manifest: None,
-        files: vec![onsa_driver::SourceFile { path: "t.onsa".into(), text: src.into() }],
-        root: None,
-    };
-    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let mut loaded = onsa_driver::Loaded::from_input(onsa_driver::PackageInput::single_file("t.onsa", src)).unwrap();
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     (loaded, analyzed)
 }

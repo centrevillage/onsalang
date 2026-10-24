@@ -1,0 +1,3 @@
+[package]
+name = "input_tree"
+edition = "2026"

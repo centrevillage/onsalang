@@ -1,0 +1,3 @@
+[package]
+name = "input_nested"
+edition = "2026"

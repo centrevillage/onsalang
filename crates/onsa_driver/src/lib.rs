@@ -8,17 +8,22 @@
 
 pub mod build;
 pub mod graph;
+mod input;
 pub mod interface;
 pub mod internal;
 pub mod reduce;
 mod testing;
 pub mod verify;
 
+pub use input::{
+    Loaded, ManifestSource, PackageInput, SourceFile, load, manifest_dir, module_path, read_input, read_manifest,
+    read_sources, slash_path,
+};
 pub use internal::{InternalError, Origin, guard, guard_on_stack};
 pub use testing::{TestFailure, TestOptions, TestOutcome, TestReport, TestRun, TestStatus, run_tests};
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use onsa_diag::{Diagnostic, FileId, SourceMap, Span};
@@ -32,39 +37,6 @@ pub use onsa_sema::{STD_PACKAGE, STD_VERSION, StdModule, std_modules};
 #[derive(Debug, Default)]
 pub struct CheckResult {
     pub diagnostics: Vec<Diagnostic>,
-}
-
-/// Files of one package, loaded into a `SourceMap` with their module paths.
-#[derive(Debug)]
-pub struct Loaded {
-    pub sources: SourceMap,
-    pub name: String,
-    pub root: Option<PathBuf>,
-    pub modules: Vec<(FileId, String)>,
-    /// The manifest; `None` for a single file without `onsa.toml` (spec §15.1).
-    pub manifest: Option<Manifest>,
-}
-
-/// One source file of a package input: its path (relative to the package
-/// root with a manifest; as given without one; `/` between the parts either
-/// way, [`slash_path`]) and its text.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SourceFile {
-    pub path: String,
-    pub text: String,
-}
-
-/// What a build reads, without the file system (R-80 (5), plan D-05): the
-/// manifest value and the list of sources. `onsa_driver::read_input` makes
-/// one from files; the tests and `onsa_web` make one from their own data.
-#[derive(Debug, Clone, Default)]
-pub struct PackageInput {
-    /// `None`: no `onsa.toml`; every file is a module named after its stem
-    /// (one file is a one-module package, spec §15.1).
-    pub manifest: Option<Manifest>,
-    pub files: Vec<SourceFile>,
-    /// The package root on disk, when there is one (the default output directory of `build`).
-    pub root: Option<PathBuf>,
 }
 
 /// The manifest `onsa.toml` (spec §15.3). `[export]` and `[targets.*]` are
@@ -153,129 +125,6 @@ impl Manifest {
     }
 }
 
-/// Module path of a file relative to the package root: `dsp/voice.onsa` -> `dsp.voice`.
-pub fn module_path(rel: &Path) -> String {
-    let no_ext = rel.with_extension("");
-    no_ext.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join(".")
-}
-
-/// The name of a source file in diagnostics (§18.1, S-234): the path with
-/// `/` between its parts. Nothing else changes: `./` and `..` stay as they
-/// were passed. Only the `\` of Windows is a separator to turn; elsewhere it is
-/// a character of the name.
-pub fn slash_path(path: &Path) -> String {
-    let text = path.to_string_lossy();
-    if std::path::MAIN_SEPARATOR == '/' { text.into_owned() } else { text.replace(std::path::MAIN_SEPARATOR, "/") }
-}
-
-/// Load a package from `paths` (S-11): one `onsa.toml` or a directory is a
-/// package; otherwise every `.onsa` file is a module named after its stem
-/// (one file is a one-module package).
-pub fn load(paths: &[PathBuf]) -> Result<Loaded, String> {
-    Ok(Loaded::from_input(read_input(paths)?))
-}
-
-impl Loaded {
-    /// The sources of `input` in a `SourceMap` with their module paths. Reads
-    /// no file: this is where the CLI, the tests and `onsa_web` meet.
-    pub fn from_input(input: PackageInput) -> Loaded {
-        let mut loaded = Loaded {
-            sources: SourceMap::default(),
-            name: String::new(),
-            root: input.root,
-            modules: Vec::new(),
-            manifest: None,
-        };
-        if let Some(m) = &input.manifest {
-            loaded.name = m.package.name.clone();
-        }
-        for f in input.files {
-            let module = if input.manifest.is_some() {
-                module_path(Path::new(&f.path))
-            } else {
-                Path::new(&f.path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
-            };
-            if loaded.name.is_empty() {
-                loaded.name = module.clone();
-            }
-            let id = loaded.sources.add(f.path, f.text);
-            loaded.modules.push((id, module));
-        }
-        loaded.manifest = input.manifest;
-        loaded
-    }
-}
-
-/// Read the package input at `paths` from the file system (S-11): one
-/// `onsa.toml` or a directory is a package; otherwise the files themselves.
-pub fn read_input(paths: &[PathBuf]) -> Result<PackageInput, String> {
-    if paths.len() == 1 {
-        let p = &paths[0];
-        let manifest = if p.is_dir() {
-            let m = p.join("onsa.toml");
-            m.exists().then_some(m)
-        } else if p.file_name().is_some_and(|n| n == "onsa.toml") {
-            Some(p.clone())
-        } else {
-            None
-        };
-        if let Some(manifest) = manifest {
-            let (m, root) = read_manifest(&manifest)?;
-            let files = read_sources(&root)?;
-            return Ok(PackageInput { manifest: Some(m), files, root: Some(root) });
-        }
-        if p.is_dir() {
-            return Err(format!("{} has no onsa.toml", p.display()));
-        }
-    }
-    let mut input = PackageInput::default();
-    for p in paths {
-        let text = std::fs::read_to_string(p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
-        input.files.push(SourceFile { path: slash_path(p), text });
-    }
-    Ok(input)
-}
-
-/// Read `onsa.toml`: the manifest and the package root (its directory; `.`
-/// for a bare `onsa.toml`, whose parent is the empty path, R-178).
-pub fn read_manifest(manifest: &Path) -> Result<(Manifest, PathBuf), String> {
-    let text = std::fs::read_to_string(manifest).map_err(|e| format!("cannot read {}: {e}", manifest.display()))?;
-    let (m, _) = Manifest::parse(&text, &[]).map_err(|e| format!("{}: {e}", manifest.display()))?;
-    let root = manifest.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    Ok((m, root.to_path_buf()))
-}
-
-/// The `.onsa` files of the package at `root` (spec §15.1: recursively,
-/// except the root's `tests/` and `target/`), sorted, with paths relative to it
-/// and `/` between their parts ([`slash_path`]).
-pub fn read_sources(root: &Path) -> Result<Vec<SourceFile>, String> {
-    let mut files = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let entries = std::fs::read_dir(&d).map_err(|e| format!("cannot read {}: {e}", d.display()))?;
-        for e in entries.flatten() {
-            let p = e.path();
-            let name = e.file_name().to_string_lossy().into_owned();
-            if p.is_dir() {
-                if d == root && (name == "tests" || name == "target") {
-                    continue;
-                }
-                stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "onsa") {
-                files.push(p);
-            }
-        }
-    }
-    files.sort();
-    let mut out = Vec::new();
-    for p in files {
-        let text = std::fs::read_to_string(&p).map_err(|e| format!("cannot read {}: {e}", p.display()))?;
-        let rel = p.strip_prefix(root).unwrap_or(&p).to_path_buf();
-        out.push(SourceFile { path: slash_path(&rel), text });
-    }
-    Ok(out)
-}
-
 fn std_package(sources: &mut SourceMap) -> Package {
     let modules = std_modules()
         .iter()
@@ -291,10 +140,11 @@ fn std_package(sources: &mut SourceMap) -> Package {
 /// user's package with the embedded std as its implicit dependency (§15.3).
 /// The std is one shared value however many packages depend on it.
 /// `[dependencies]` is not read here (the pin of std and the other
-/// dependencies are the manifest check's, W4-02).
-fn package_graph(sources: &mut SourceMap, name: &str, modules: Vec<Module>) -> Package {
-    let std = Arc::new(std_package(sources));
-    Package::new(name, modules, vec![std])
+/// dependencies are the manifest check's, W4-02). The caller makes `std`
+/// once and passes it to every package of the graph, so that `flatten`
+/// lists it once (it compares the `Arc`s).
+fn package_graph(name: &str, modules: Vec<Module>, std: &Arc<Package>) -> Package {
+    Package::new(name, modules, vec![std.clone()])
 }
 
 /// Parse one file; a panic names the file (S-67).
@@ -415,11 +265,19 @@ pub fn check(sources: &mut SourceMap) -> Result<CheckResult, InternalError> {
     check_package(sources, &name, &modules)
 }
 
-/// Check a loaded package. `std` is appended to `sources`.
+/// Check a loaded package. `std` is appended to `sources`. With a file passed
+/// inside the package (`focus`), the whole package is checked and only the
+/// diagnostics of that file are kept (§15.1: `check` and the LSP; S-159).
 pub fn check_loaded(loaded: &mut Loaded) -> Result<CheckResult, InternalError> {
     let modules = loaded.modules.clone();
     let name = loaded.name.clone();
-    check_package(&mut loaded.sources, &name, &modules)
+    let mut result = check_package(&mut loaded.sources, &name, &modules)?;
+    // SPEC-GAP(S-636): the outcome is that of the kept diagnostics: none in
+    // the passed file is exit 0, whatever the other files have.
+    if let Some(focus) = loaded.focus {
+        result.diagnostics.retain(|d| d.span.file == focus);
+    }
+    Ok(result)
 }
 
 /// A checked package with its analysis, for the stages after `check`
@@ -469,7 +327,8 @@ pub fn analyze_package(
                 Module { path: path.clone(), file: *file, text, parsed }
             })
             .collect();
-        let pkg = package_graph(sources, name, user_modules);
+        let std = Arc::new(std_package(sources));
+        let pkg = package_graph(name, user_modules, &std);
         let analysis = onsa_sema::analyze(&pkg);
         let mut all: Vec<Diagnostic> = pkg.modules.iter().flat_map(|m| m.parsed.diagnostics.iter().cloned()).collect();
         all.extend(analysis.diagnostics.iter().cloned());

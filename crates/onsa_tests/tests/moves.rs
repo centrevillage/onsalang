@@ -15,7 +15,7 @@ fn lower(mut loaded: onsa_driver::Loaded) -> onsa_core::Module {
 #[test]
 fn poly_new_builds_states_in_place() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let module = lower(onsa_driver::load(&[root.join("tests/spec/examples/voice.onsa")]).unwrap());
+    let module = lower(onsa_driver::load(Some(&root.join("tests/spec/examples/voice.onsa"))).unwrap());
     let big: Vec<_> = module.moves.iter().filter(|m| m.fn_name.ends_with("Poly.new") && m.bytes >= 48).collect();
     assert!(big.is_empty(), "unexpected copies in Poly.new: {big:?}");
 }
@@ -44,9 +44,9 @@ pub fn keep() -> v.State {
 "#
             .into(),
         }],
-        root: None,
+        ..Default::default()
     };
-    let module = lower(onsa_driver::Loaded::from_input(input));
+    let module = lower(onsa_driver::Loaded::from_input(input).unwrap());
     let pick: Vec<_> = module.moves.iter().filter(|m| m.fn_name.ends_with("pick")).collect();
     assert_eq!(pick.len(), 1, "{pick:?}");
     assert_eq!(pick[0].kind, MoveKind::Branch);

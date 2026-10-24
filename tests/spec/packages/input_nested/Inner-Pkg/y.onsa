@@ -1,0 +1,3 @@
+test "y" {
+  assert 1 == 1
+}

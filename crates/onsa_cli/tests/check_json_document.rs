@@ -15,7 +15,8 @@
 //! - `diagnostics` are ordered by the `file` string (code points), line, column, end line, end
 //!   column, code and message, and the text output lists the diagnostics in the same order
 //!   (S-234). The package is gathered by the root, so the order does not depend on the working
-//!   directory, the order of the arguments or the locale.
+//!   directory or the locale. (One run reads one package through one path, so the order of several
+//!   paths does not exist: two or more are a usage error, S-312, `package_input.rs`.)
 //!
 //! Not written here: `onsa test --json` (W2-10), the layout of the lines after the first line of
 //! a diagnostic in the text output (not fixed), the shape of fix candidates (diagnostics_json.rs).
@@ -225,11 +226,12 @@ fn the_flag_may_come_after_the_paths() {
 
 #[test]
 fn with_diagnostics_in_several_files_the_output_is_still_one_object() {
-    let d = Dir::bare("one_object");
+    // S-312: one run reads one package, so the several files are the files of a package.
+    let d = Dir::pkg("one_object");
     d.write("a.onsa", &unresolved("f", "zzz"));
     d.write("b.onsa", &unresolved("g", "yyy"));
     d.write("c.onsa", &unresolved("h", "xxx"));
-    let out = run(d.root(), &["check", "--json", "a.onsa", "b.onsa", "c.onsa"]);
+    let out = run(d.root(), &["check", "--json", "."]);
     assert_eq!(out.code, 1, "{}", out.stderr);
     let doc = doc_of(&out); // fails for an array, and for an object per line or per file
     let ds = diagnostics(&doc);
@@ -501,10 +503,9 @@ fn without_a_manifest_the_edits_and_the_notes_use_the_passed_path_too() {
 }
 
 #[test]
-#[ignore = "W4-14"]
 fn a_file_inside_a_package_is_named_by_the_root_path_and_only_its_diagnostics_are_printed() {
     // §15.1: the root is found above the file; the whole package is gathered and resolved, and
-    // only the diagnostics of the given file are printed (R-47 fixes this in W4-02).
+    // only the diagnostics of the given file are printed (R-47 fixes this in W4-14).
     let d = Dir::pkg("inside");
     d.write("a.onsa", "pub fn ga() -> I32 {\n  1\n}\n\npub fn bad_a() -> I32 {\n  zzz\n}\n");
     d.write("sub/b.onsa", "use a.{ga}\n\npub fn f() -> I32 {\n  ga() + yyy\n}\n");
@@ -581,38 +582,27 @@ fn the_order_does_not_depend_on_the_locale() {
 }
 
 #[test]
-fn files_passed_in_another_order_give_the_same_document() {
-    // No manifest: the files are passed one by one. The order of the arguments does not matter;
-    // the order is that of the file strings as they are printed.
-    let d = Dir::bare("arg_order");
-    d.write("a.onsa", &unresolved("f1", "zzz"));
-    d.write("sub/b.onsa", &unresolved("f2", "yyy"));
-    d.write("sub.onsa", &unresolved("f3", "xxx"));
-    d.write("sub_c.onsa", &unresolved("f4", "www"));
-    // `sub.onsa` < `sub/b.onsa` < `sub_c.onsa`, all after `a.onsa`
-    let want = ["a.onsa", "sub.onsa", "sub/b.onsa", "sub_c.onsa"];
-    for args in [
-        ["a.onsa", "sub.onsa", "sub/b.onsa", "sub_c.onsa"],
-        ["sub_c.onsa", "sub/b.onsa", "sub.onsa", "a.onsa"],
-        ["sub/b.onsa", "a.onsa", "sub_c.onsa", "sub.onsa"],
-    ] {
-        let (code, doc) = check_json(d.root(), &args);
-        assert_eq!(code, 1, "{args:?}");
-        assert_eq!(files(diagnostics(&doc)), want, "{args:?}");
-    }
+fn files_made_in_another_order_give_the_same_document() {
+    // Moved from the test that passed the files in another order (S-312: one path per run). What
+    // is left to vary is the order in which the package was made on the disk; the order of the
+    // document is that of the file strings (§18.1, S-234).
+    let forward = order_package("made_forward");
+    let backward = Dir::pkg("made_backward");
+    backward.write("clean.onsa", "pub fn ok() -> I32 {\n  1\n}\n");
+    backward.write("a_c.onsa", &unresolved("f4", "rrr"));
+    backward.write("a1.onsa", &unresolved("f3", "ppp"));
+    backward.write("a/b.onsa", &unresolved("f2", "qqq"));
+    backward.write("a.onsa", &format!("{}\n{}", unresolved("f1", "zzz"), unresolved("g1", "yyy")));
+    let (c1, d1) = check_json(forward.root(), &["."]);
+    let (c2, d2) = check_json(backward.root(), &["."]);
+    assert_eq!((c1, c2), (1, 1));
+    assert_eq!(d1["diagnostics"], d2["diagnostics"]);
+    assert_eq!(files(diagnostics(&d2)), ORDER_FILES, "{d2}");
 }
 
-#[test]
-fn the_file_strings_are_compared_as_printed_so_dot_slash_comes_first() {
-    let d = Dir::bare("dot_slash");
-    d.write("a.onsa", &unresolved("f1", "zzz"));
-    d.write("b.onsa", &unresolved("f2", "yyy"));
-    d.write("c.onsa", &unresolved("f3", "xxx"));
-    // `./b.onsa` < `a.onsa` < `c.onsa` ('.' is 2E, 'a' is 61)
-    let (code, doc) = check_json(d.root(), &["c.onsa", "a.onsa", "./b.onsa"]);
-    assert_eq!(code, 1);
-    assert_eq!(files(diagnostics(&doc)), ["./b.onsa", "a.onsa", "c.onsa"], "{doc}");
-}
+// The test that compared the file strings as printed (`./b.onsa` before `a.onsa`) is gone: with one
+// path per run the strings of a package are all paths from the root, and the string of a single
+// file is the one path, so no document has two strings that differ in a leading `./`.
 
 #[test]
 fn inside_a_file_the_order_is_by_position_and_not_by_stage_or_code() {
@@ -638,8 +628,8 @@ fn inside_a_file_the_order_is_by_position_and_not_by_stage_or_code() {
 #[test]
 fn the_diagnostics_are_in_the_documented_order_for_a_mixed_package() {
     // Whatever the files are, the list is non-decreasing in the key of §18.1, up to the
-    // code point order of the file string. (The order of the file strings is in the ignored
-    // tests above; this one holds for a package whose paths do not differ by `.`, `/`, `_`.)
+    // code point order of the file string. (The order of the file strings is in the tests
+    // above; this one holds for a package whose paths do not differ by `.`, `/`, `_`.)
     let d = Dir::pkg("sorted_mixed");
     d.write("b.onsa", &format!("{}\n{}", unresolved("f1", "zzz"), "pub fn g() -> I32 {\n  1 $ 2\n}\n"));
     d.write("a.onsa", &unresolved("f2", "yyy"));

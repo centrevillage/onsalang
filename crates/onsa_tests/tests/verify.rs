@@ -16,12 +16,7 @@ const SRC: &str = "const K: I32 = 3\n\npub fn f(x: I32) -> I32 {\n  x + K\n}\n";
 
 /// The lowered Core of [`SRC`]; `lower_core` verifies it.
 fn core() -> (onsa_driver::Loaded, onsa_core::Module) {
-    let input = onsa_driver::PackageInput {
-        manifest: None,
-        files: vec![onsa_driver::SourceFile { path: "t.onsa".into(), text: SRC.into() }],
-        root: None,
-    };
-    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let mut loaded = onsa_driver::Loaded::from_input(onsa_driver::PackageInput::single_file("t.onsa", SRC)).unwrap();
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
     let module = onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
@@ -216,15 +211,15 @@ test \"f\" {
 fn the_runner_reports_the_failure_of_every_stage() {
     let frag = onsa_tests::fragment::parse(CASE).expect("fragment").expect("a fragment");
     let input = onsa_driver::PackageInput {
-        manifest: frag.manifest,
+        manifest: frag.manifest_source("m.onsa"),
         files: vec![onsa_driver::SourceFile { path: "m.onsa".into(), text: CASE.into() }],
-        root: None,
+        ..Default::default()
     };
     let case = Case {
         path: "tests/verify/m.onsa".into(),
         kind: CaseKind::File,
         name: "m".into(),
-        setup: Ok(Setup { input, test: frag.test }),
+        setup: Setup::new(input, frag.test),
     };
     let run = run_case_with(
         &FAILING,

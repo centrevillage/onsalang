@@ -554,14 +554,17 @@ fn fmt_check_with_several_files_reports_the_syntax_errors_and_names_the_unformat
 
 #[test]
 fn check_orders_the_diagnostics_of_several_files_by_file() {
+    // S-312: one run reads one package through one path, so the several files are the files of a
+    // package given by its directory. The package is made with `b.onsa` first; the diagnostics are
+    // ordered by the file string (the path from the root, §18.1), not by the order on the disk.
     let d = Dir::new("check_order");
-    let b = d.file("b.onsa", "pub fn b() -> I32 {\n  missing_b\n}\n");
-    let a = d.file("a.onsa", "pub fn a() -> I32 {\n  let x: Bool = 1\n  1\n}\n");
-    let out = onsa(&["check", &b, &a]);
+    d.file("onsa.toml", "[package]\nname = \"demo\"\nedition = \"2026\"\n");
+    d.file("b.onsa", "pub fn b() -> I32 {\n  missing_b\n}\n");
+    d.file("a.onsa", "pub fn a() -> I32 {\n  let x: Bool = 1\n  1\n}\n");
+    let out = onsa(&["check", &d.path(".")]);
     assert_eq!(code(&out), 1, "{out:?}");
     let hs = headers(&stdout(&out));
-    assert_eq!(hs.len(), 2, "{out:?}");
-    assert!(hs[0].file < hs[1].file, "ordered by the file string, not by the command line: {hs:?}");
+    assert_eq!(hs.iter().map(|h| h.file.as_str()).collect::<Vec<_>>(), ["a.onsa", "b.onsa"], "{out:?}");
 }
 
 #[test]

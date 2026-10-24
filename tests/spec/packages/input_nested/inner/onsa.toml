@@ -1,0 +1,3 @@
+[package]
+name = "inner"
+edition = "2026"

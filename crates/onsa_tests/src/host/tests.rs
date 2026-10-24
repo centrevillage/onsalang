@@ -213,11 +213,11 @@ fn plans(hosts: &str) -> (onsa_driver::BuildOutput, Vec<Result<SeqPlan, String>>
     let text = case(hosts);
     let frag = fragment::parse(&text).unwrap().unwrap();
     let input = onsa_driver::PackageInput {
-        manifest: frag.manifest,
+        manifest: frag.manifest_source("m.onsa"),
         files: vec![onsa_driver::SourceFile { path: "m.onsa".into(), text }],
-        root: None,
+        ..Default::default()
     };
-    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let mut loaded = onsa_driver::Loaded::from_input(input).unwrap();
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap();
     assert!(analyzed.diagnostics.is_empty(), "{:?}", analyzed.diagnostics);
     let out = onsa_driver::build_analyzed(&loaded, &analyzed, "t").unwrap_or_else(|_| panic!("the build failed"));
@@ -604,11 +604,11 @@ fn shapes(hosts: &str) -> String {
 fn build_and_plan(text: &str) -> (onsa_driver::BuildOutput, Vec<SeqPlan>) {
     let frag = fragment::parse(text).unwrap().unwrap();
     let input = onsa_driver::PackageInput {
-        manifest: frag.manifest,
+        manifest: frag.manifest_source("s.onsa"),
         files: vec![onsa_driver::SourceFile { path: "s.onsa".into(), text: text.into() }],
-        root: None,
+        ..Default::default()
     };
-    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let mut loaded = onsa_driver::Loaded::from_input(input).unwrap();
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap();
     assert!(analyzed.diagnostics.is_empty(), "{:?}", analyzed.diagnostics);
     let out = onsa_driver::build_analyzed(&loaded, &analyzed, "t").unwrap_or_else(|_| panic!("the build failed"));

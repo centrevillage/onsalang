@@ -26,8 +26,8 @@ enum Command {
         /// Print diagnostics as JSON (spec §18.1)
         #[arg(long)]
         json: bool,
-        /// `.onsa` files (one package), or a package directory / `onsa.toml`
-        #[arg(required = true)]
+        /// One path: a `.onsa` file, a package directory or `onsa.toml` (the
+        /// package above the working directory when omitted, §15.1)
         paths: Vec<PathBuf>,
     },
     /// Normalize files to the canonical form (spec §18.2)
@@ -73,8 +73,8 @@ enum Command {
         /// Run only the tests whose full name (`dsp.voice "decays"`) contains this text
         #[arg(long)]
         filter: Option<String>,
-        /// `.onsa` files (one package), or a package directory / `onsa.toml`
-        #[arg(required = true)]
+        /// One path: a `.onsa` file, a package directory or `onsa.toml` (the
+        /// package above the working directory when omitted, §15.1)
         paths: Vec<PathBuf>,
     },
     /// Public signatures, kinds, sizes, @param and flow APIs (spec §18.2)
@@ -394,8 +394,22 @@ fn write_replacing(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     }
 }
 
+/// Load the package of the one path a command that reads a package takes
+/// (§15.1, §18.2; S-312): two or more is a usage error (a run handles one
+/// package), none is the working directory.
 fn load(paths: &[PathBuf]) -> Result<onsa_driver::Loaded, Outcome> {
-    onsa_driver::load(paths).map_err(cannot_work)
+    let path = match paths {
+        [] => None,
+        [p] => Some(p.as_path()),
+        _ => {
+            return Err(cannot_work(format!(
+                "a command that reads a package takes one path (a `.onsa` file, a package directory or \
+                 `onsa.toml`), not {}: a run handles one package",
+                paths.len()
+            )));
+        }
+    };
+    onsa_driver::load(path).map_err(cannot_work)
 }
 
 fn check(json: bool, paths: &[PathBuf]) -> Outcome {

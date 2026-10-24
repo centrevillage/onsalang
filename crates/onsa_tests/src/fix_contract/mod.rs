@@ -339,7 +339,7 @@ pub(crate) fn check_texts(
             f.text = t.clone();
         }
     }
-    let mut again = Loaded::from_input(input);
+    let mut again = Loaded::from_input(input).map_err(|e| format!("cannot load the case again: {e}"))?;
     if again.modules.iter().map(|(f, _)| *f).ne(loaded.modules.iter().map(|(f, _)| *f)) {
         return Err("gives the files of the case other ids when they are loaded again".into());
     }

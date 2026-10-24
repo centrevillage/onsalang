@@ -49,15 +49,29 @@ pub struct Case {
 pub struct Setup {
     pub input: PackageInput,
     pub test: TestSettings,
+    /// Target names of the manifest, sorted.
+    targets: Vec<String>,
 }
 
 impl Setup {
+    /// The setup of `input`; its manifest is read for the target names.
+    pub fn new(input: PackageInput, test: TestSettings) -> Result<Setup, String> {
+        let mut targets: Vec<String> = match &input.manifest {
+            Some(m) => onsa_driver::Manifest::parse(&m.text, &[])
+                .map_err(|e| format!("{}: {e}", m.path))?
+                .0
+                .targets
+                .into_keys()
+                .collect(),
+            None => Vec::new(),
+        };
+        targets.sort();
+        Ok(Setup { input, test, targets })
+    }
+
     /// Target names of the manifest, sorted.
     pub fn targets(&self) -> Vec<String> {
-        let mut t: Vec<String> =
-            self.input.manifest.as_ref().map(|m| m.targets.keys().cloned().collect()).unwrap_or_default();
-        t.sort();
-        t
+        self.targets.clone()
     }
 }
 
@@ -142,9 +156,10 @@ fn read_file(root: &Path, p: &Path) -> Case {
         } else {
             path.clone()
         };
+        let manifest = frag.manifest_source(&file_path);
         let input =
-            PackageInput { manifest: frag.manifest, files: vec![SourceFile { path: file_path, text }], root: None };
-        Ok(Setup { input, test: frag.test })
+            PackageInput { manifest, files: vec![SourceFile { path: file_path, text }], ..PackageInput::default() };
+        Setup::new(input, frag.test)
     })();
     Case { path, kind: CaseKind::File, name, setup }
 }
@@ -153,7 +168,7 @@ fn read_package(root: &Path, dir: &Path) -> Case {
     let path = rel_path(root, dir);
     let name = dir.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let setup = (|| {
-        let input = onsa_driver::read_input(&[dir.to_path_buf()])?;
+        let input = onsa_driver::read_input(Some(dir))?;
         let mut test = None;
         for f in &input.files {
             let Some(frag) = fragment::parse(&f.text).map_err(|e| format!("{}: {e}", f.path))? else { continue };
@@ -168,7 +183,7 @@ fn read_package(root: &Path, dir: &Path) -> Case {
             }
             test = Some(frag.test);
         }
-        Ok(Setup { input, test: test.unwrap_or_default() })
+        Setup::new(input, test.unwrap_or_default())
     })();
     Case { path, kind: CaseKind::Package, name, setup }
 }

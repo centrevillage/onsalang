@@ -712,13 +712,12 @@ mod tests {
              [targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"trap\"\nprovides = []\n",
             flows.iter().map(|f| format!("\"m.{f}\"")).collect::<Vec<_>>().join(", ")
         );
-        let (manifest, _) = onsa_driver::Manifest::parse(&manifest, &[]).unwrap();
         let input = onsa_driver::PackageInput {
-            manifest: Some(manifest),
+            manifest: Some(onsa_driver::ManifestSource { path: "onsa.toml".into(), text: manifest }),
             files: vec![onsa_driver::SourceFile { path: "m.onsa".into(), text: src.into() }],
-            root: None,
+            ..Default::default()
         };
-        let mut loaded = onsa_driver::Loaded::from_input(input);
+        let mut loaded = onsa_driver::Loaded::from_input(input).unwrap();
         let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap();
         assert!(analyzed.diagnostics.is_empty(), "{:?}", analyzed.diagnostics);
         onsa_driver::build_analyzed(&loaded, &analyzed, "host").unwrap_or_else(|_| panic!("the build failed"))

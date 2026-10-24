@@ -27,12 +27,12 @@ pub mod layout;
 mod modes;
 #[cfg(test)]
 mod modes_tests;
+/// The files of a package tree (§15.1): the driver reads packages with it, and
+/// `build.rs` includes the same file to generate the std table.
+pub mod package_tree;
 pub mod resolve;
 mod rt;
 mod sig;
-/// Compiled into the crate for its unit tests only; `build.rs` uses it.
-#[cfg(test)]
-mod std_tree;
 mod structpat;
 #[cfg(test)]
 mod tests;

@@ -67,6 +67,39 @@ pub fn run(cwd: &Path, args: &[&str]) -> Out {
     }
 }
 
+/// One run of `onsa <args>` in `cwd` that is killed (and fails the test) when it has not ended in
+/// `secs` seconds. For inputs that could make a command wait for ever, such as a FIFO in a tree.
+pub fn run_limited(cwd: &Path, args: &[&str], secs: u64) -> Out {
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let mut child = Command::new(ONSA)
+        .args(args)
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run onsa");
+    let start = Instant::now();
+    loop {
+        if child.try_wait().expect("wait for onsa").is_some() {
+            break;
+        }
+        if start.elapsed() > Duration::from_secs(secs) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("onsa {args:?} did not end in {secs} seconds (killed)");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let out = child.wait_with_output().expect("collect the output of onsa");
+    Out {
+        code: out.status.code().unwrap_or_else(|| panic!("onsa {args:?} ended by a signal: {out:?}")),
+        stdout: String::from_utf8(out.stdout).expect("utf-8 standard output"),
+        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+    }
+}
+
 /// The whole standard output is one JSON value, and it is an object (§18.1).
 pub fn doc_of(out: &Out) -> Value {
     let v: Value = serde_json::from_str(&out.stdout)

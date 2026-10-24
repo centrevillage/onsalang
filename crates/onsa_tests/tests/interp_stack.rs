@@ -24,12 +24,7 @@ fn tests_of(module: &onsa_core::Module) -> onsa_driver::TestReport {
 }
 
 fn lower_here(src: &str) -> onsa_core::Module {
-    let input = onsa_driver::PackageInput {
-        manifest: None,
-        files: vec![onsa_driver::SourceFile { path: "t.onsa".into(), text: src.into() }],
-        root: None,
-    };
-    let mut loaded = onsa_driver::Loaded::from_input(input);
+    let mut loaded = onsa_driver::Loaded::from_input(onsa_driver::PackageInput::single_file("t.onsa", src)).unwrap();
     let analyzed = onsa_driver::analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
     assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
     onsa_driver::lower_core(&analyzed).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)))
