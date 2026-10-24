@@ -110,7 +110,8 @@ in a worktree in a merge.
 files and removals too; `git commit --only`): the changes of the other paths and the index stay. A named path
 with no change is listed; with none at all, nothing is committed (exit 1). The message is the `-m` paragraphs and
 then `-F`'s. `--done ID` writes `status=DONE` the way `docs.py set` does (the swap files checked) and adds its
-file to the paths. `--docs-checked A..B WORK` (both ends commits of the tree) writes the trailer
+file to the paths. `--docs-checked A..B WORK` (both ends commits of the tree: the range checked, the HEAD of then at both ends
+for an uncommitted diff) writes the trailer
 `<docs.DOCS_CHECKED>: A..B (WORK, onsa-docs)`, the ends as short hashes (X-12), and checks after the commit that `docs.last_docs_check` reads it,
 a line when not; `--co-author` writes `Co-Authored-By:` after it. When the commit fails, the untracked files
 it added to the index leave it and the file of `--done` gets back what it held. Last, a line: the commit, the
@@ -1071,7 +1072,8 @@ def commit_args(p):
     p.add_argument("-F", metavar="FILE", help="paragraphs after those of -m")
     p.add_argument("--done", metavar="ID", help="docs.py set ID status=DONE, and its file in the commit")
     p.add_argument("--docs-checked", nargs=2, metavar=("A..B", "WORK"),
-                   help=f"the trailer `{docs.DOCS_CHECKED}: A..B (WORK, {DOCS_AGENT})` (docs.py due reads it)")
+                   help=f"the trailer `{docs.DOCS_CHECKED}: A..B (WORK, {DOCS_AGENT})` (docs.py due reads it): A..B is "
+                   "the range checked, the HEAD of then at both ends for an uncommitted diff")
     p.add_argument("--co-author", type=co_author, metavar='"NAME <MAIL>"', help=f"the trailer {CO_AUTHOR}:, last")
     p.add_argument("--tree", default=ROOT, help="the tree (default the one of this tool)")
 

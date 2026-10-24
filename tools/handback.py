@@ -138,7 +138,7 @@ C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the hel
 COMMANDS = {
     "save": C(save_args, save, ("parent",),
               "担当の記録の最後の SubagentHandback（報告）を <output> に書く",
-              "フックが保存していない報告を取り出すとき（前のセッションの担当、`hooks/errors.log` に失敗があるとき）",
+              "フックが保存していない報告を取り出すとき（前のセッションの担当、`hooks/errors.log` に失敗があるとき）と、控えが「本文なし」のとき",
               "handback.py save ~/.claude/projects/-Users-centrevillage-projects-onsalang/<セッション ID>/subagents/agent-<担当の ID>.jsonl r.md"),
     "usage": C(usage_args, usage, ("parent",),
                "担当ごとに呼び出しの数・文脈の最大・キャッシュの読み書き・出力・API 換算を一行で出す。担当の ID が無ければ主のセッションのもの（今の文脈も）",
