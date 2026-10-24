@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0302 with a candidate that adds a `use` (R-39, §15.1: a path with no `use` such as
+// `std.math.sqrt(x)` is E0302, and the candidate adds the `use`). One path with no `use` in each
+// module: the package `std` here, a module at the root in from_root.onsa and a child module in
+// from_child.onsa. The form of the `use` that the candidate adds is not fixed by the spec, so the
+// fixed texts are the copies of the implementation; what is promised is that there is a candidate
+// and that it is safe (§18.1), and crates/onsa_cli/tests/body_paths.rs checks that applying it
+// leaves no diagnostic.
+
+pub fn root(x: F32) -> F32 {
+  std.math.sqrt(x)                                  //~ E0302
+}

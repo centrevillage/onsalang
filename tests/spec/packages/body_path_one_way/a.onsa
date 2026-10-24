@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-39: `a` takes `b` with a `use`, and `b` names `a` in its body with no `use`. The only dependency is
+// `a` on `b`, so there is no cycle (E0310 needs a `use` from `b` to `a`). The one wrong path is the
+// one in b.onsa (E0302); `a` is right.
+use b
+
+pub fn f() -> I32 {
+  b.g()
+}

@@ -1,0 +1,5 @@
+use util
+
+test "after use util, util is the module at the root" {
+  assert util.double(2) == 4
+}

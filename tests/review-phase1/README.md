@@ -88,7 +88,7 @@
 | `types/attrs.onsa` | R-36。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/attributes_table.onsa`（E0005）、`attributes_no_candidate.onsa`（S-483）、`tests/spec/fixes/e0005_attribute_values.onsa`。derive の検査（`NoEq` 越し）は W5-06 |
 | `types/bounds.onsa`、`types/bufelem.onsa`、`types/span*.onsa`、`types/nestrate.onsa`、`types/ratefn.onsa`、`types/tyb*.onsa`（推定） | R-37 |
 | `types/fieldvis/` | R-38 |
-| `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39 |
+| `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39。`types/cyc2/` は W4-03 U2b/t で期待値付きのテストへ写した: `tests/spec/packages/body_path_mutual/`（`use` を書かない相互参照は、それぞれの経路が E0302 で、E0310 にならない）、`crates/onsa_cli/tests/body_paths.rs`。W4-03 の実装が通すまで元の入力は残す。`types/cyc3/`（自分のパッケージ名で相互に取り込む）と `types/reexp/`（`pub use` の連鎖）は U3a・U3b の範囲 |
 | `types/dups.onsa` | R-40 |
 | `types/implitems.onsa`、`types/flowimpl.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/item_contexts.onsa`・`item_contexts_units.onsa`、`tests/spec/types/flow_impl.onsa` |
 | `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46。`types/dupmod/` は W4-03 U2a/t で期待値付きのテストへ写した: `tests/spec/packages/module_dupmod/`（`a.b.onsa` と `a/b.onsa` は別のモジュールで、どちらも検査される）、`crates/onsa_cli/tests/use_paths.rs`。W4-03 の実装が通すまで元の入力は残す |

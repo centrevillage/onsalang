@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// R-39, R-88, S-611: another module and a package are named in a body by the name that a `use` took
+// (§15.1: "`use std.math` and then `math.sqrt(x)`"). The path starts from the taken name and goes on
+// down: `use std` takes the package, `use util` takes the module at the root and reaches its items
+// and its child modules, `use util.sub` takes the child, `use dsp.synth` takes a module under a
+// directory that has no file. Every test passes. The same calls with the `use` lines taken away are
+// the E0302 of body_path_forms and body_path_taken_names.
+use std
+use std.math
+use util
+use util.sub
+use dsp.synth
+
+test "a function of std through the package name" {
+  let x: F32 = -3.0
+  assert std.math.abs(x) == 3.0
+}
+
+test "a function of std through the module taken" {
+  assert math.max(2, 7) == 7
+  assert math.min(2, 7) == 2
+}
+
+test "a function of a module at the root" {
+  assert util.double(2) == 4
+}
+
+test "a child module through the root module" {
+  assert util.sub.h() == 3
+}
+
+test "a child module taken by itself" {
+  assert sub.h() == 3
+}
+
+test "a module under a directory with no file" {
+  assert synth.gain(4.0) == 2.0
+}
+
+test "a constant, a struct and an enum through the path" {
+  assert util.SIZE == 4
+  let p = util.Pair { a: 1, b: 2 }
+  assert p.a + p.b == 3
+  let s = util.Shape.Square
+  let n = match s {
+    util.Shape.Circle(r) => 1,
+    util.Shape.Square => 2,
+  }
+  assert n == 2
+}
+
+fn pair_sum(p: util.Pair) -> I32 {
+  p.a + p.b
+}
+
+test "a type through the path in a signature" {
+  assert pair_sum(util.Pair { a: 4, b: 5 }) == 9
+}
+
+test "a path in a branch, a closure and a loop" {
+  let c = true
+  let a = if c { util.double(1) } else { util.double(2) }
+  assert a == 2
+  let xs: [I32; 3] = std.array.from_fn(fn(i: U32) -> I32 { util.double(2) + sub.h() })
+  assert xs[2] == 7
+  var t: I32 = 0
+  for i in 0 ..< 3 {
+    t = t + util.double(i)
+  }
+  assert t == 6
+}
+
+fn generic[T: Num](x: T) -> T {
+  math.abs(x)
+}
+
+test "a path in a generic function" {
+  let x: F32 = -2.0
+  assert generic(x) == 2.0
+}
+
+// A path in a flow, and in the body of a `par` (the flows are checked; no test runs them).
+pub flow gain_of(x: F32 at sample) -> F32 at sample {
+  std.math.abs(x)
+}
+
+pub flow gains_of(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0 ..< 2 {
+    math.abs(x)
+  }
+}

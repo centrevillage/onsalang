@@ -1,12 +1,14 @@
 //! The names stage (spec §15.1): the module tree of every package, the
-//! prelude, the defs and scopes of the items, and the imports. The
+//! prelude, the defs and the tables of the items, and the imports. The
 //! signatures are lowered after it (`crate::sig`).
 //!
 //! The parts are in a module each: `collect` (the tree and the items),
-//! `prelude` (the names in scope everywhere) and `imports` (each `use`).
+//! `prelude` (the names in scope everywhere), `imports` (each `use`) and
+//! `lookup` (the lookups of a path, for a `use` and outside one).
 
 mod collect;
 mod imports;
+mod lookup;
 mod prelude;
 
 use crate::def::ModId;

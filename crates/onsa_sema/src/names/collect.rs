@@ -1,14 +1,14 @@
 //! The module tree of every package (spec §15.1, S-312, S-313) and the defs
-//! and scopes of the items of every module.
+//! and the tables of the items of every module.
 
 use std::collections::HashMap;
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit, Vis};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit};
 
 use crate::def::*;
-use crate::resolve::{Binding, Entity, Import, ModInfo};
+use crate::resolve::{Import, ModInfo, UseAt};
 use crate::sig::Sema;
 use crate::ty::EffectSet;
 
@@ -74,7 +74,7 @@ impl<'p> Sema<'p> {
     }
 
     /// The defs of the items of every module, in the order of the modules
-    /// and of the items, with the module's scope of their names and its
+    /// and of the items, with the module's table of their names and its
     /// list of `use` (resolved by [`Sema::resolve_imports`]).
     pub(crate) fn collect_items(&mut self) {
         // The placeholders until the signatures are lowered.
@@ -84,6 +84,7 @@ impl<'p> Sema<'p> {
             let m = ModId(i as u32);
             let Some(module) = self.module(m) else { continue };
             let ast = &module.parsed.ast;
+            self.a.modules.get_mut(m).use_at = use_at(&module.parsed);
             let mut tests: HashMap<String, DefId> = HashMap::new();
             for &id in &ast.root {
                 let item = ast.item(id);
@@ -146,7 +147,7 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The def of an item with a name, in the scope of its module.
+    /// The def of an item with a name, in the items of its module.
     fn collect_named(&mut self, at: &Place<'_>, kind: &ItemKind) -> Option<DefId> {
         let item = at.item;
         let (name, kind, feature) = match kind {
@@ -171,25 +172,25 @@ impl<'p> Sema<'p> {
             _ => return None,
         };
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));
-        self.declare(at.m, name, d, item.vis);
+        self.declare(at.m, name, d);
         if let Some(f) = feature {
             self.unsupported(d, item.span, f, &[]);
         }
         Some(d)
     }
 
-    /// `name` in the scope of `m` for the def `d`: E0304 when the module
+    /// `name` in the items of `m` for the def `d`: E0304 when the module
     /// declares the name already, E0305 when one of the two is a flow, whose
     /// namespace takes the name (§11.2); the first keeps it.
-    fn declare(&mut self, m: ModId, name: &Ident, d: DefId, vis: Vis) {
-        let scope = &mut self.a.modules.get_mut(m).scope;
-        let Some(prev) = scope.get(&name.name) else {
-            scope.insert(name.name.clone(), Binding { entity: Entity::Def(d), vis, span: name.span, import: false });
+    fn declare(&mut self, m: ModId, name: &Ident, d: DefId) {
+        let items = &mut self.a.modules.get_mut(m).items;
+        let Some(&prev) = items.get(&name.name) else {
+            items.insert(name.name.clone(), d);
             return;
         };
-        let (first, prev) = (prev.span, prev.entity);
-        let is_flow = |e: Entity| matches!(e, Entity::Def(x) if self.a.def(x).as_flow().is_some());
-        let (code, msg) = if is_flow(prev) || is_flow(Entity::Def(d)) {
+        let first = self.a.def(prev).name_span;
+        let is_flow = |x: DefId| self.a.def(x).as_flow().is_some();
+        let (code, msg) = if is_flow(prev) || is_flow(d) {
             (
                 Code::E0305,
                 format!("`{}` is declared twice in this module; a flow and its namespace take the name", name.name),
@@ -295,7 +296,23 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         file: None,
         parent,
         children: HashMap::new(),
-        scope: HashMap::new(),
+        items: HashMap::new(),
+        uses: HashMap::new(),
         imports: Vec::new(),
+        use_at: None,
+    }
+}
+
+/// Where a candidate adds a `use` in a file ([`UseAt`]): after the last `use`
+/// of the top level whose unit has no syntax error (a `use` cut in its list
+/// would read the new line in it), or else before the first unit.
+fn use_at(parsed: &onsa_syntax::Parsed) -> Option<UseAt> {
+    let top = || parsed.units.list.iter().filter(|u| u.parent.is_none());
+    let is_use = |u: &&onsa_syntax::units::Unit| {
+        !u.syntax_failed && u.item.is_some_and(|id| matches!(parsed.ast.item(id).kind, ItemKind::Use(_)))
+    };
+    match top().rfind(is_use) {
+        Some(u) => Some(UseAt::After(u.span.end)),
+        None => top().next().map(|u| UseAt::Before(u.span.start)),
     }
 }

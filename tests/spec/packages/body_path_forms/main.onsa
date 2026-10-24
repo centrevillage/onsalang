@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// R-39, R-88: another module or a package is named in a body only through a name that a `use` took
+// (§15.1). Nothing is taken in this module, so every path that starts from the package `std`, a module
+// at the root (`util`) or a directory at the root (`dsp`) is E0302, wherever it stands: in a call, as
+// a value, as a constant, in a struct literal, in a variant, in a type, in a branch, in a closure, in
+// a loop, in a generic function, in a method, in a test, in a constant, in a flow and in the body of a
+// `par`. The items that the paths name exist (util.onsa, util/sub.onsa, dsp/synth.onsa), so it is
+// the missing `use` that is wrong. One error in each unit, and the units are independent (§18.1).
+
+pub fn in_a_call() -> I32 {
+  util.double(1)                                    //~ E0302
+}
+
+pub fn in_a_value() -> I32 {
+  let f = util.double                               //~ E0302
+  f.(2)
+}
+
+pub fn in_a_constant() -> U32 {
+  util.SIZE                                         //~ E0302
+}
+
+pub fn in_a_struct_literal() -> I32 {
+  let p = util.Pair { a: 1, b: 2 }                  //~ E0302
+  p.a
+}
+
+pub fn in_a_variant() -> I32 {
+  let _ = util.Shape.Square                         //~ E0302
+  1
+}
+
+pub fn in_a_type(p: util.Pair) -> I32 {             //~ E0302
+  p.a
+}
+
+pub fn in_a_child_module() -> I32 {
+  util.sub.h()                                      //~ E0302
+}
+
+pub fn in_a_directory_module() -> F32 {
+  dsp.synth.gain(1.0)                               //~ E0302
+}
+
+pub fn in_the_package_std(x: F32) -> F32 {
+  std.math.sqrt(x)                                  //~ E0302
+}
+
+pub fn in_a_branch(c: Bool) -> I32 {
+  if c {
+    util.double(1)                                  //~ E0302
+  } else {
+    2
+  }
+}
+
+pub fn in_a_match_arm(x: I32) -> I32 {
+  match x {
+    0 => util.double(1),                            //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure() -> [I32; 3] {
+  std.array.from_fn(fn(i: U32) -> I32 { util.double(2) })  //~ E0302
+}
+
+pub fn in_a_loop() -> I32 {
+  var t: I32 = 0
+  for i in 0 ..< 3 {
+    t = t + util.double(1)                          //~ E0302
+  }
+  t
+}
+
+pub fn in_a_generic[T: Num](x: T) -> T {
+  std.math.abs(x)                                   //~ E0302
+}
+
+pub struct Local {
+  x: F32,
+}
+
+impl Local {
+  pub fn norm(self) -> F32 {
+    std.math.abs(self.x)                            //~ E0302
+  }
+}
+
+test "in a test" {
+  let x: F32 = -1.0
+  assert std.math.abs(x) == 1.0                     //~ E0302
+}
+
+const ROOT_TWO: F32 = std.math.sqrt(2.0)            //~ E0302
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x + std.math.abs(x)                               //~ E0302
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par i in 0 ..< 2 {
+    std.math.abs(x)                                 //~ E0302
+  }
+}
+
+// The right form in the same module: the item of this module, the prelude and the built-in types are
+// visible without a `use`, and a name that a `use` took is the head of a path (the other cases).
+pub fn visible_without_a_use(x: I32) -> Option[I32] {
+  let n = in_a_call() + x
+  Some(n)
+}

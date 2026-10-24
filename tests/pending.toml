@@ -2285,6 +2285,13 @@ note = "use の頭の E0302 は U2a で出る。失敗した名前 sin を使う
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/packages/body_path_member_missing"
+reasons = ["S-611", "R-254"]
+until = "W4-04"
+note = "取り込んだモジュールに無い名前の E0302 が今は E0401（R-254）。他のモジュールの経路が use の束縛を引く誤りは W4-03"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/packages/use_flow_generated_items"
 reasons = ["R-50"]
 until = "W4-03"

@@ -1,0 +1,3 @@
+[package]
+name = "pkg_body_path_use"
+edition = "2026"

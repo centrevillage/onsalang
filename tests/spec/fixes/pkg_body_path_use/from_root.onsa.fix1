@@ -1,0 +1,4 @@
+use util
+pub fn twice() -> I32 {
+  util.double(2)                                    //~ E0302
+}

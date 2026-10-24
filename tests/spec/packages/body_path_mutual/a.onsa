@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-39 (tests/review-phase1/types/cyc2): two modules that name each other in their bodies with no
+// `use`. A dependency is made by a `use` alone (§15.1: "what a module depends on is known from the list
+// of its `use`"), so these two modules do not depend on each other and there is no cycle (no E0310).
+// What is wrong is each path: another module is named without a `use` (E0302), in each module.
+pub fn f() -> I32 {
+  b.g()                                             //~ E0302
+}

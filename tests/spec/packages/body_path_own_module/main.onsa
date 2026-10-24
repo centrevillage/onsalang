@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// R-39: the name of a module is not visible in its own body without a `use` (the only names visible
+// without one are the items of the module, the prelude and the built-in types), and a module may take
+// itself: `use main` here (a `use` of the module itself is left out of the dependencies, so it is not
+// a cycle, E0310). Every test passes.
+use main
+
+pub fn k() -> I32 {
+  1
+}
+
+test "a module that took itself names its items through its own name" {
+  assert main.k() == 1
+}

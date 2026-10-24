@@ -1,0 +1,15 @@
+pub const SIZE: U32 = 4
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+pub enum Shape {
+  Circle(F32),
+  Square,
+}
+
+pub fn double(x: I32) -> I32 {
+  x * 2
+}

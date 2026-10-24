@@ -1,0 +1,20 @@
+use main
+
+// What `main` took with a `use` is not an item of `main`.
+pub fn a_name_that_main_took() -> I32 {
+  main.l()                                          //~ E0302
+}
+
+// `main.inner` is the child module `main/inner.onsa`, which has `h`; `g` is in `kp/inner.onsa`, the
+// module that `main` took as `inner`, and the path does not go through that.
+pub fn an_item_of_the_module_that_main_took() -> I32 {
+  main.inner.g()                                    //~ E0302
+}
+
+pub fn the_binding_of_main_is_not_a_child_of_main() -> I32 {
+  main.leaf.l()                                     //~ E0302
+}
+
+pub fn the_item_and_the_child_are_found() -> I32 {
+  main.k() + main.inner.h()
+}

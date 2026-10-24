@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// S-611, R-84: a name has a place in each of three spaces, and a name is in conflict (E0304) only
+// with another name of the same space (§15.1). The body of a module has its items, the names of
+// its `use` lines, the prelude and the built-in types. The names that another module's path goes
+// through (`main.X`) are the items and the child modules of that module. The names that a path
+// starts from are the modules at the root and the packages that are dependencies. A name of one
+// space does not conflict with the same name in another, and each path is read in its own space.
+//
+// Here `util` is, at once: a module at the root (util.onsa), the name that main's `use kp.util`
+// took into the body, a child module of `main` (main/util.onsa), and in items.onsa an item of the
+// module. No diagnostic; each test tells which `util` is meant.
+use kp.util
+
+pub fn k() -> I32 {
+  util.double(2)
+}
+
+test "in the body of main, util is what the use took" {
+  assert k() == 20
+}

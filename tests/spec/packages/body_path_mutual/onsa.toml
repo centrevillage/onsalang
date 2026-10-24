@@ -1,0 +1,3 @@
+[package]
+name = "body_path_mutual"
+edition = "2026"

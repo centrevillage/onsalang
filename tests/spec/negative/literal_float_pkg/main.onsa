@@ -8,6 +8,7 @@
 // declared. The items of the module with a literal that loses its value are in lib.onsa. One error per
 // declaration (P-01).
 
+use lib
 use lib.{Cell, FINE, FINE_64, id, takes_f32, takes_f64}
 
 pub fn imported_argument() -> F32 {

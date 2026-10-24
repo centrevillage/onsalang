@@ -1,0 +1,9 @@
+use main
+
+test "an item of another module through the module taken" {
+  assert main.k() == 1
+}
+
+test "the middle of the path is the child module of main" {
+  assert main.inner.h() == 3
+}

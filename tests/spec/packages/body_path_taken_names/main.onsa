@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-39: a path in a body starts from a name that a `use` took in this module, and only from that name
+// (§15.1: "other modules and packages can only be named by the names a `use` took"). What a `use` takes
+// is the last name of its path, or each name of its list: `use std.math.{sqrt}` takes `sqrt` and not
+// `math` or `std`, `use std.dsp` takes `dsp` and not `std`, `use util.{double}` takes `double` and
+// not `util`, `use util.sub` takes `sub` and not `util`. A path that starts from a name that the
+// module did not take is E0302, whatever the other `use` lines take. The functions that start from
+// the taken names carry no mark and give nothing.
+use std.math.{sqrt}
+use std.dsp
+use util.{double}
+use util.sub
+
+pub fn from_a_taken_item(x: F32) -> F32 {
+  sqrt(x)
+}
+
+pub fn from_a_taken_module() -> F32 {
+  dsp.db_to_amp(0.0)
+}
+
+pub fn from_a_taken_function() -> I32 {
+  double(2)
+}
+
+pub fn from_a_taken_child() -> I32 {
+  sub.h()
+}
+
+pub fn through_the_module_of_a_taken_item(x: F32) -> F32 {
+  math.abs(x)                                       //~ E0302
+}
+
+pub fn through_the_package_of_a_taken_module() -> F32 {
+  std.dsp.db_to_amp(0.0)                            //~ E0302
+}
+
+pub fn through_the_package_of_a_taken_item(x: F32) -> F32 {
+  std.math.sqrt(x)                                  //~ E0302
+}
+
+pub fn through_the_module_of_a_taken_function() -> I32 {
+  util.double(2)                                    //~ E0302
+}
+
+pub fn through_the_parent_of_a_taken_child() -> I32 {
+  util.sub.h()                                      //~ E0302
+}
+
+pub fn through_an_item_of_the_taken_module(x: F32) -> F32 {
+  sub.magnitude(x)
+}

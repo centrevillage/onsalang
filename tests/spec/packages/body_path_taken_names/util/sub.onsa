@@ -1,0 +1,9 @@
+use std.math.{abs}
+
+pub fn h() -> I32 {
+  3
+}
+
+pub fn magnitude(x: F32) -> F32 {
+  abs(x)
+}

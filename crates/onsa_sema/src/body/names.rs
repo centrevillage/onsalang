@@ -77,6 +77,16 @@ impl<'a> Checker<'a> {
                             break;
                         }
                     }
+                    // A head with no `use`: the error of the whole chain, whose
+                    // candidate needs the member after the head (R-39).
+                    let err = match err {
+                        e @ ResolveError::NeedsUse { .. } if n > 1 => {
+                            let whole =
+                                Path { segments: chain.iter().map(|(_, i)| i.clone()).collect(), span: path.span };
+                            self.a.resolve_path(self.m, &whole).err().unwrap_or(e)
+                        }
+                        e => e,
+                    };
                     return Err(self.resolve_error(&path, err));
                 }
             };

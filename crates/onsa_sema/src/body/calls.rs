@@ -58,6 +58,9 @@ impl<'a> Checker<'a> {
                         self.failed = true;
                         return Err(Stop);
                     }
+                    // `util.f()` with no `use util` (R-39): the error of the
+                    // whole path, with its candidate.
+                    Err(err @ ResolveError::NeedsUse { .. }) => return Err(self.resolve_error(&path, err)),
                     Err(_) => {
                         // `Buf.zeroed`, `F32.from_bits`: builtin associated functions.
                         let prefix = Path {

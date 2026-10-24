@@ -9,6 +9,7 @@
 // the spec text (1 + 2^-24 is the middle of 1.0 and 1 + 2^-23 in F32; a string just above it is the upper
 // neighbour 0x3F800001, and the double rounding F64 -> F32 would give 0x3F800000).
 
+use lib
 use lib.{ABOVE_HALF_OF_LEAST, ABOVE_TIE, ABOVE_TIE_64, below_overflow_middle, id, make_cell, take}
 
 test "a const of another module" {

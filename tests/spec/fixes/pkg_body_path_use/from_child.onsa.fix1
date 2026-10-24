@@ -1,0 +1,4 @@
+use util
+pub fn three() -> I32 {
+  util.sub.h()                                      //~ E0302
+}

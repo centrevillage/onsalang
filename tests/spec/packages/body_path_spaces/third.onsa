@@ -1,0 +1,5 @@
+use main.util
+
+test "after use main.util, util is the child module of main" {
+  assert util.double(2) == 200
+}

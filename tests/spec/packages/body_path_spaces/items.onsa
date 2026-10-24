@@ -1,0 +1,7 @@
+fn util() -> I32 {
+  5
+}
+
+test "an item named like a module at the root is the name of the body" {
+  assert util() == 5
+}

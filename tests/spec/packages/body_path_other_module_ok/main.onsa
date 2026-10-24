@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// S-611: the names of a module live in different spaces. In the body of `main`, `inner` is what its
+// `use kp.inner` took (`kp/inner.onsa`), and `main/inner.onsa`, the child module, is not a name of the
+// body: its items are used by a `use main.inner.{h}`. In the body of another module that took `main`,
+// `main.inner` is the child module (`main/inner.onsa`), and `main.k` an item. No diagnostic. Every
+// test passes; the tests tell which module each name is.
+use kp.inner
+use kp.leaf.{l}
+use main.inner.{h}
+
+pub fn k() -> I32 {
+  1
+}
+
+test "in the body of main, inner is what the use took" {
+  assert inner.g() == 2
+}
+
+test "a child module of main is reached by a use of its path" {
+  assert h() == 3
+}
+
+test "an item taken from another module" {
+  assert l() == 4
+}

@@ -1,0 +1,3 @@
+[package]
+name = "body_path_own_module"
+edition = "2026"

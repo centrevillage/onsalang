@@ -8,6 +8,7 @@
 // the block form, a call through a module path, a generic function whose head goes on after `->`, a flow,
 // and all of them in a branch and a loop. The file is canonical, so `onsa fmt` leaves it unchanged.
 
+use std
 use std.array
 use std.math.{max, min}
 

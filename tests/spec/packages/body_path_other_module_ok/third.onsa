@@ -1,0 +1,5 @@
+use main.inner
+
+test "the child module of main taken by its path" {
+  assert inner.h() == 3
+}

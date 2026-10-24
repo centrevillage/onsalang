@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§15.3"]
+
+// R-88, R-39: the names that a body can start a path from are the names that the module took with a
+// `use`, and a `use` starts from a module at the root or a package that is a dependency (`[dependencies]`
+// and the implicit `std`, §15.1, §15.3). This package, `fx`, declares nothing, so `std` is its only
+// package. A path that starts from the own name of the package (`fx`), from the name of a package
+// that nobody declared (`serde`), from the name of a module (`main`, this module itself) that was not
+// taken, or from a name that is nothing, is E0302. The packages and the modules are not looked up by
+// a name in the whole program: even after `use std` and `use util`, `std.serde` and `fx.util` are not
+// found.
+use std
+use util
+
+pub fn the_own_name_of_the_package() -> I32 {
+  fx.util.helper()                                  //~ E0302
+}
+
+pub fn the_own_name_of_the_package_deeper() -> I32 {
+  fx.util.sub.h()                                   //~ E0302
+}
+
+pub fn a_package_that_nobody_declared() -> I32 {
+  serde.decode(1)                                   //~ E0302
+}
+
+pub fn a_package_that_nobody_declared_with_a_path() -> I32 {
+  serde.json.decode(1)                              //~ E0302
+}
+
+pub fn a_module_of_the_package_that_std_does_not_have() -> I32 {
+  std.serde.decode(1)                               //~ E0302
+}
+
+pub fn this_module_by_its_name() -> I32 {
+  main.other()                                      //~ E0302
+}
+
+pub fn other() -> I32 {
+  1
+}
+
+pub fn the_right_forms() -> I32 {
+  util.helper() + util.sub.h()
+}

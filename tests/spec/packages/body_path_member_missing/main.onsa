@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-611, R-254: a path in a body goes into another module through its items and its child modules
+// alone, and a name that only a `use` of that module took is not one of them. `main` takes `kp.inner`
+// as `inner` and `l` from `kp.leaf`, and has the child module `main/inner.onsa` (which has `h`, and no
+// `g`). In the body of `main`, `inner` is what the `use` took, so `inner.h()` (the child's item) is
+// not found in `kp/inner.onsa`. A name that is not found is E0302, in the name stage (a module that
+// exists and has no such name is E0302, not a type error, R-254).
+use kp.inner
+use kp.leaf.{l}
+
+pub fn k() -> I32 {
+  1
+}
+
+pub fn the_child_is_not_a_name_of_the_body() -> I32 {
+  inner.h()                                         //~ E0302
+}

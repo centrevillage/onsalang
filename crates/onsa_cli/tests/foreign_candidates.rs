@@ -459,7 +459,7 @@ fn one_syntactic_form_has_one_candidate_that_edits_every_token_of_the_form() {
     let cases: [(&str, &str, &str, &str, usize); 3] = [
         ("repeated_semicolons", "pub fn f() -> I32 {\n  let a = 1;;\n  a\n}\n", ";", "", 2),
         ("three_semicolons", "pub fn f() -> I32 {\n  let a = 1;;;\n  a\n}\n", ";", "", 3),
-        ("path", "pub fn f() -> F32 {\n  std::math::sqrt(2.0)\n}\n", "::", ".", 2),
+        ("path", "use std\n\npub fn f() -> F32 {\n  std::math::sqrt(2.0)\n}\n", "::", ".", 2),
     ];
     let d = Dir::new("tokens");
     for (name, src, old, new, edits_expected) in cases {
