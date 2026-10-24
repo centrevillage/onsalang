@@ -228,7 +228,8 @@ fn voice.render(cfg: voice.Config, params: voice.Params, events: Span[voice.Even
 fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベントの入力ごと
 ```
 
-- 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。名前空間と中の全ての項目は、flow の可視性（`pub` / 無指定 / `priv`）を継ぐ。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
+- 名前空間はモジュールと同じ扱いで、関数は `voice.process(inout st, ...)` のように前置で呼ぶ（`fs.read(p)` と同じ形）。`use dsp.synth.{voice}` で名前空間を、`use dsp.synth.voice.{State, Params}` で中の項目を取り込める。
+  名前空間と中の全ての項目は、flow の可視性（`pub` / 無指定 / `priv`）を継ぐ。見出しに書いた名前の可視性の規則（§15.1 の E0303）は flow の見出しで一度だけ検査し、生成項目では重ねて出さない。中の項目の名前は上の一覧に固定され、利用者の項目は入らない。
 - 状態の大きさ（fast / bulk 領域のバイト数）は名前空間に無い。ターゲットの設定とポインタの幅で変わるので、C のヘッダ（§14.2）と `onsa interface --target <名前>` にだけ出す（§12.4）。Onsa のコードの意味はターゲットに依存しない。
 - 属性の値（`@param` の `default`、`@latency` の遅れ）も名前空間に無く、C の `<p>_params_default`・`<p>_latency`（§14.2）と道具が読む（§6.5）。
   Onsa のコードで既定のパラメータを使うときは、`Params` のリテラルに値を書く（`voice.Params { f0: 110.0, … }`。値を一か所に置くには、同じ `const` を `@param` の値とリテラルの両方で使う、§11.7）。
