@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§4.1", "§6.1"]
+
+// The calls that end with a tuple index are written with `.(` (§6.1, S-342, S-606): a tuple element,
+// a field that is a tuple, an element of an array of tuples, the result of a call and a tuple inside
+// a tuple. The values are the values of the function that is called. The same calls without the `.`
+// are the errors of tests/spec/fixes/e0020_callee_tuple_index.onsa. A method after a tuple index
+// is in tuple_index_method_calls.onsa.
+
+pub struct Pair {
+  t: (fn(I32) -> I32, I32),
+}
+
+fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+fn dec(x: I32) -> I32 {
+  x - 1
+}
+
+fn make() -> (fn(I32) -> I32, I32) {
+  (inc, 10)
+}
+
+test "a tuple element is called with .(" {
+  let t = (inc, 10)
+  assert t.0.(41) == 42
+  assert t.0.(t.1) == 11
+}
+
+test "the second element is the one that is called when it is the function" {
+  let t = (10, dec)
+  assert t.1.(t.0) == 9
+}
+
+test "a field that is a tuple" {
+  let p = Pair { t: (dec, 5) }
+  assert p.t.0.(p.t.1) == 4
+}
+
+test "an element of an array of tuples" {
+  let ts = [(inc, 1), (dec, 2)]
+  assert ts[0].0.(ts[0].1) == 2
+  assert ts[1].0.(ts[1].1) == 1
+}
+
+test "the result of a call" {
+  assert make().0.(1) == 2
+  assert make().0.(make().1) == 11
+}
+
+test "a tuple inside a tuple" {
+  let n = ((inc, 3), 4)
+  assert n.0.0.(n.0.1) == 4
+  assert n.0.0.(n.1) == 5
+}
+
+test "a tuple element inside an operand and an argument" {
+  let t = (inc, 10)
+  assert t.0.(1) * 2 - t.0.(t.0.(0)) == 2
+  assert -t.0.(1) == -2
+}

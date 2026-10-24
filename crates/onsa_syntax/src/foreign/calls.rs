@@ -18,7 +18,18 @@ pub(super) fn value_call(c: &Cursor, callee: (NodeKind, u32), first: usize, last
         edits.push(Edit::delete(c.span(open)));
         edits.push(Edit::delete(c.span(before)));
     }
-    Some(Fix::new("call the function value with `.(`", edits))
+    let span = c.file_span(callee.1, c.span(last + 1).end);
+    (!too_deep(c, span, &edits)).then(|| Fix::new("call the function value with `.(`", edits))
+}
+
+/// Whether the candidate `edits` of `.(` for the call at `span` (from the
+/// callee to its `(`) take the unit over the nesting limit (§2.5): the call
+/// takes the callee one level down unless parentheses go, and the check
+/// after it would report the E0006 of the same stage (S-236, R-200).
+fn too_deep(c: &Cursor, span: Span, edits: &[Edit]) -> bool {
+    let added = u32::from(edits.len() == 1);
+    let within = crate::units::Within::file(c.file, c.text, c.reach);
+    crate::nesting::nests_too_deep(c.text, within, span, edits, added)
 }
 
 /// The `(` of the callee `callee` that closes at `close`, when the
@@ -91,12 +102,7 @@ pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
     // From the callee to its `(`: the arguments, not read yet, may hold
     // errors of their own.
     let span = c.file_span(start, c.span(paren).end);
-    // The call takes the callee one level down (§2.5): no candidate that
-    // takes the unit over the limit, where the check after it would report
-    // the E0006 of the same stage (S-236, R-200).
-    let added = u32::from(edits.len() == 1);
-    let within = crate::units::Within::file(c.file, c.text, c.reach);
-    if crate::nesting::nests_too_deep(c.text, within, span, &edits, added) {
+    if too_deep(c, span, &edits) {
         return hit(span, Vec::new());
     }
     hit(span, vec![Fix::new("call the function value with `.(`", edits)])

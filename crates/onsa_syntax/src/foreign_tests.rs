@@ -152,7 +152,8 @@ fn type_args_in_an_expression() {
     assert_eq!(fixed(&body("  std::conv::parse::<I32>(s)")), body("  std.conv.parse::<I32>(s)"));
     // Turbofish: the nested brackets, the `>>` one edit (S-248).
     e0020(&body("  id::<Option<U8>>(None)"), &body("  id::[Option[U8]](None)"));
-    e0020(&body("  t.0::<U8>(1)"), &body("  t.0::[U8](1)"));
+    // A tuple index is no name: the call of the value (§4.5, S-606).
+    e0020(&body("  t.0::<U8>(1)"), &body("  t.0.(1)"));
     // After an expression that is no path: the call of the value (`.(` is W3-20's).
     assert_eq!(fixed(&body("  (s.f)::<U8>(1)")), body("  s.f.(1)"));
     assert_eq!(fixed(&body("  g(x)::<U8>(1)")), body("  g(x).(1)"));
@@ -207,7 +208,7 @@ fn type_args_before_a_call_whatever_follows() {
         ("  2 * f<I32>(s)", "  2 * f::[I32](s)"),
         ("  f<A<B<C>>>(x)", "  f::[A[B[C]]](x)"),
         ("  show(pair<U8, F32>(1, 2.0))", "  show(pair::[U8, F32](1, 2.0))"),
-        ("  t.0<U8>(1)", "  t.0::[U8](1)"),
+        ("  t.0<U8>(1)", "  t.0.(1)"),
     ] {
         e0020(&body(src), &body(want));
     }
@@ -861,4 +862,90 @@ fn a_hole_in_the_parentheses_of_a_prefix_tilde() {
 fn a_delay_is_no_length_of_an_array_type() {
     let delay = "a delay is written `prev~(x)` or `delay~(x, N)`";
     assert!(!messages(&flow("  let y: [I32; N@2] = z\n  y\n}\n")).iter().any(|m| m == delay));
+}
+
+/// A tuple index is no name (§2.3), so a callee that ends with one is a value
+/// whatever is before it (§6.1, S-606): its `(` is the E0020 of `.(`, and a
+/// mark `!` / `~` or a `::[` after it is the E0002 of its place with a note and
+/// no candidate (§2.6, §4.5), as is a `(` or a mark after a blank (§2.5, as
+/// `mk2().0 (1)`). In a list, a line break before the mark is the missing
+/// `,` only where the mark starts an element (`!(`), never taken out.
+#[test]
+fn a_tuple_index_ends_a_callee_as_a_value() {
+    for (callee, value) in [("t.0(x)", "t.0.(x)"), ("s.t.0(x)", "s.t.0.(x)"), ("mk2().0(x)", "mk2().0.(x)")] {
+        e0020(&body(&format!("  let v = {callee}")), &body(&format!("  let v = {value}")));
+    }
+    e0020(&body("  let v = t.0<I32>(x)"), &body("  let v = t.0.(x)"));
+    for e in [
+        "t.0!(x)",
+        "t.0~(x)",
+        "s.t.0!(x)",
+        "mk2().0~(x)",
+        "t.0.1!(x)",
+        "t.0! (x)",
+        "t.0~ (x)",
+        "t.0::[I32](x)",
+        "mk2().0::[I32](x)",
+        "t.0 (x)",
+        "t.0 ~(x)",
+        "t.0 !(x)",
+        "t.0 ~ (x)",
+        "mk2().0 !(x)",
+    ] {
+        e0002(&body(&format!("  let v = {e}")));
+    }
+    for (src, commas) in [("two(t.0\n  ~(1), 2)", 0), ("two(t.0\n  !(1), 2)", 1), ("[t.0 ~(1), 2]", 0)] {
+        let src = body(&format!("  let v = {src}"));
+        let p = parse(&src);
+        assert_eq!(codes(&src), [Code::E0002], "{src}: {:?}", p.diagnostics);
+        let fixes = &p.diagnostics[0].fixes;
+        assert_eq!(fixes.len(), commas, "{src}: {fixes:?}");
+        assert!(fixes.iter().all(|f| f.title().contains("`,`")), "{src}: {fixes:?}");
+    }
+    // After a name or a method, the marks and `::[` stay (`u.0.scale!(2.0)`).
+    for e in ["u.0.scale!(2.0)", "t.0.m::[I32](x)", "t.0.(x)", "t.0.m(x)"] {
+        assert!(parse(&body(&format!("  let v = {e}"))).diagnostics.is_empty(), "{e}");
+    }
+}
+
+/// After a value that ends with no tuple index, a `!(` that touches it is
+/// read as before (W4-12): in a list, the missing `,` before `!(x)`. In the
+/// arms of a `match`, an opener after a gap that no `=>` follows has the gap
+/// taken out as its one candidate, and none when that does not read (§2.5).
+#[test]
+fn a_bang_after_another_value_and_an_opener_in_the_arms() {
+    for src in ["two(inc(1)!(2), 1)", "[(t)!(x)]", "(x?!(y), 1)"] {
+        let src = body(&format!("  let v = {src}"));
+        let p = parse(&src);
+        assert_eq!(codes(&src), [Code::E0002], "{src}: {:?}", p.diagnostics);
+        let fixes = &p.diagnostics[0].fixes;
+        assert!(fixes.len() == 1 && fixes[0].title().contains("`,`"), "{src}: {fixes:?}");
+    }
+    for arm in ["t.0 (x)", "t.0\n  (x)", "mk2() (x)"] {
+        let src = body(&format!("  let v = match x {{ 0 => {arm}, _ => 1 }}"));
+        let p = parse(&src);
+        assert_eq!(codes(&src), [Code::E0002], "{src}: {:?}", p.diagnostics);
+        assert!(p.diagnostics[0].fixes.is_empty(), "{src}: {:?}", p.diagnostics);
+    }
+    let src = body("  let v = match x { 0 => xs\n  [0], _ => 1 }");
+    assert_eq!(fixed(&src), body("  let v = match x { 0 => xs[0], _ => 1 }"));
+}
+
+/// The call of a value with `.(` in place of type arguments of another
+/// language takes the callee one level down: no candidate that takes the
+/// unit over the nesting limit (§2.5, §18.1), as for `t.0(x)`.
+#[test]
+fn the_call_of_a_value_for_type_arguments_keeps_within_the_limit() {
+    let limit = crate::parser::NESTING_LIMIT as usize;
+    onsa_diag::stack::run(|| {
+        for (n, fixes) in [(limit - 3, 1), (limit - 2, 0)] {
+            let src = body(&format!("  let v = {}t.0<I32>(x){}", "(".repeat(n), ")".repeat(n)));
+            let p = parse(&src);
+            assert_eq!(p.diagnostics.len(), 1, "{n}: {:?}", p.diagnostics);
+            assert_eq!(p.diagnostics[0].fixes.len(), fixes, "{n}: {:?}", p.diagnostics);
+            if fixes == 1 {
+                assert!(parse(&fixed(&src)).diagnostics.is_empty(), "{n}");
+            }
+        }
+    });
 }

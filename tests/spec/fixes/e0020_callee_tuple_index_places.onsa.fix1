@@ -1,0 +1,165 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§6.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a call whose callee ends with a tuple index, in every place a call can stand (§6.1,
+// S-342, S-606): an argument, a method call, an operand, a prefix, a condition, an arm, a closure
+// body, a field value, an array, a tuple, a `return`, a conversion, a generic function, a method, an
+// `rt fn`, a `flow` and the body of a `par`. The form is decided by the syntax alone, so the place does
+// not change the error or the one candidate (`.(`, as in e0020_callee_tuple_index.onsa). Each
+// function has one error (P-01).
+
+pub struct Pair {
+  t: (fn(I32) -> I32, I32),
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn halve(x: F32) -> F32 {
+  x / 2.0
+}
+
+pub fn inc_u(x: U32) -> U32 {
+  x + 1
+}
+
+pub fn as_an_argument(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  add(t.0.(x), 1)                                    //~ E0020
+}
+
+pub fn as_the_second_argument(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  add(1, t.0.(x))                                    //~ E0020
+}
+
+pub fn as_an_argument_of_a_call_through_a_value(f: fn(I32) -> I32, t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  f.(t.0.(x))                                        //~ E0020
+}
+
+pub fn with_an_argument_that_is_a_tuple_element(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  t.0.(t.1)                                          //~ E0020
+}
+
+pub fn as_a_receiver(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  t.0.(x).abs()                                      //~ E0020
+}
+
+pub fn as_an_operand(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  t.0.(x) * 2 - 1                                    //~ E0020
+}
+
+pub fn after_a_prefix(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  -t.0.(x)                                           //~ E0020
+}
+
+pub fn in_a_condition(t: (fn(I32) -> Bool, I32), x: I32) -> I32 {
+  if t.0.(x) { 1 } else { 2 }                        //~ E0020
+}
+
+pub fn in_a_loop_condition(t: (fn(I32) -> Bool, I32)) -> I32 {
+  var i = 0
+  while t.0.(i) {                                    //~ E0020
+    i = i + 1
+  }
+  i
+}
+
+pub fn in_an_arm(t: (fn(I32) -> I32, I32), o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => t.0.(v),                              //~ E0020
+    None => 0,
+  }
+}
+
+pub fn in_a_closure_body(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  let g = fn(u: (fn(I32) -> I32, I32), y: I32) -> I32 { u.0.(y) }  //~ E0020
+  g.(t, x)
+}
+
+pub fn in_a_nested_closure(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  let outer = fn(u: (fn(I32) -> I32, I32), a: I32) -> I32 {
+    let inner = fn(v: (fn(I32) -> I32, I32), b: I32) -> I32 { v.0.(b) }  //~ E0020
+    inner.(u, a)
+  }
+  outer.(t, x)
+}
+
+pub fn in_a_field_value(t: (fn(I32) -> I32, I32), x: I32) -> Pair {
+  Pair { t: (inc, t.0.(x)) }                         //~ E0020
+}
+
+pub fn in_an_array(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  let v = [t.0.(x), 2]                               //~ E0020
+  v[0]
+}
+
+pub fn in_a_tuple(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  let u = (t.0.(x), 2)                               //~ E0020
+  u.0
+}
+
+pub fn after_return(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  if x < 0 {
+    return t.0.(x)                                   //~ E0020
+  }
+  x
+}
+
+pub fn before_a_conversion(t: (fn(I32) -> I32, I32), x: I32) -> I64 {
+  t.0.(x) as I64                                     //~ E0020
+}
+
+pub fn before_try(t: (fn(I32) -> Option[I32], I32), x: I32) -> Option[I32] {
+  let y = t.0.(x)?                                   //~ E0020
+  Some(y + 1)
+}
+
+pub fn in_a_generic_function[T](t: (fn(T) -> T, T), x: T) -> T {
+  t.0.(x)                                            //~ E0020
+}
+
+pub fn in_a_generic_function_with_a_bound[T: Num](t: (fn(T) -> T, T), x: T) -> T {
+  t.0.(x) + x                                        //~ E0020
+}
+
+pub struct Holder[T] {
+  t: (fn(T) -> T, T),
+}
+
+impl[T] Holder[T] {
+  pub fn call(self, x: T) -> T {
+    self.t.0.(x)                                     //~ E0020
+  }
+
+  pub fn call_the_field_of_another(self, other: Holder[T], x: T) -> T {
+    other.t.0.(x)                                    //~ E0020
+  }
+}
+
+pub rt fn in_an_rt_fn(t: (rt fn(F32) -> F32, F32), x: F32) -> F32 {
+  t.0.(x)                                            //~ E0020
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let k: F32 = 2.0
+  let t = (halve, k)
+  t.0.(x)                                            //~ E0020
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let t = (inc_u, 1)
+  let ys = par i in 0..<4 {
+    t.0.(i)                                          //~ E0020
+  }
+  x
+}
+
+pub fn fine(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  add(t.0.(x), t.0.(t.1)) + -t.0.(x)
+}

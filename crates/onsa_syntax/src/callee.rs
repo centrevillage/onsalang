@@ -23,14 +23,14 @@ pub(crate) enum Link {
     Name,
     /// A field or a method (`x.f`).
     Field,
-    /// A tuple index (`t.0`).
-    TupleIndex,
     /// Type arguments (`f::[T]`).
     TypeArgs,
     /// An index (`xs[i]`, or the type arguments of a method of other
     /// languages, which the type stage tells apart).
     Index,
-    /// A value that is no path (`(e)`, `g(x)`, `x?`).
+    /// A value that is no path (`(e)`, `g(x)`, `x?`), and a tuple index
+    /// (`t.0`): a tuple index is no name (§2.3), so it names no item, method
+    /// or flow whatever is before it (S-606).
     Value,
     /// Anything else (a literal, a block, an operator).
     Other,
@@ -42,19 +42,18 @@ impl Link {
         match kind {
             NodeKind::PathExpr => Link::Name,
             NodeKind::FieldExpr => Link::Field,
-            NodeKind::TupleIndexExpr => Link::TupleIndex,
             NodeKind::TypeArgsExpr => Link::TypeArgs,
             NodeKind::IndexExpr => Link::Index,
-            NodeKind::ParenExpr | NodeKind::CallExpr | NodeKind::TryExpr => Link::Value,
+            NodeKind::ParenExpr | NodeKind::CallExpr | NodeKind::TryExpr | NodeKind::TupleIndexExpr => Link::Value,
             _ => Link::Other,
         }
     }
 
-    /// Whether the link names a path (a path of names, a method, a tuple
-    /// index): what a `::[…]` may follow, and the callees whose type
-    /// arguments of another language become `::[…]`.
+    /// Whether the link names a path (a path of names, a method): what a
+    /// `::[…]` may follow, and the callees whose type arguments of another
+    /// language become `::[…]`.
     pub(crate) fn names_a_path(self) -> bool {
-        matches!(self, Link::Name | Link::Field | Link::TupleIndex)
+        matches!(self, Link::Name | Link::Field)
     }
 
     /// Whether a mark `!` or `~` before a `(` may follow the link: a link
@@ -64,14 +63,16 @@ impl Link {
     }
 
     /// Whether the link is a value and no path (`(e)`, `g(x)`, `xs[i]`,
-    /// `x?`): no `::[` can be written after it, and it is called with `.(`.
+    /// `x?`, `t.0`): no `::[` can be written after it, and it is called with
+    /// `.(`.
     pub(crate) fn is_value(self) -> bool {
         matches!(self, Link::Value | Link::Index)
     }
 }
 
-/// How a postfix chain has been read so far: a path of names (§2.4: names
-/// and the fields, tuple indexes and `::[…]` after them), that path with
+/// How a postfix chain has been read so far: a path of names (names and
+/// the fields and `::[…]` after them; a tuple index ends a path of names of
+/// §2.4 but makes it a value, S-606), that path with
 /// `[…]`s after it, a field of anything else (a method, `g(x).m`), one `[…]`
 /// after such a field (`g(x).m[I32]`), or anything else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,17 +102,18 @@ impl Callee {
     /// a path of names (`ops[i].m[T](x)` is a method's, of the type stage,
     /// S-256); after anything else it is a member, and one `[…]` after it is
     /// a method's type arguments or an index of a field, which the type stage
-    /// tells apart (`g(x).m[I32](y)`, §4.5); a tuple index ends a path of
-    /// names only after names.
+    /// tells apart (`g(x).m[I32](y)`, §4.5); a tuple index makes any chain a
+    /// value (`t.0`, `s.t.0`, `mk2().0`, S-606).
     pub(crate) fn then(self, kind: NodeKind) -> Callee {
         use Chain::*;
         let last = Link::of(kind);
         let chain = match (self.chain, last) {
             (c @ (Names | Indexed), Link::Field | Link::TypeArgs) => c,
             (_, Link::Field) => Member,
-            (Names, Link::TupleIndex) => Names,
             (Names | Indexed, Link::Index) => Indexed,
             (Member, Link::Index) => MemberIndexed,
+            // SPEC-GAP(S-630): `[…]` after a tuple index (`t.0[1](x)`) is read as after any value
+            // (`mk().0[1](x)`): no callee by name, the E0020 of the syntax stage with `.(`.
             _ => Value,
         };
         Callee { chain, last }
@@ -123,17 +125,17 @@ impl Callee {
     }
 
     /// Whether a call of the chain is written by name, so that a later stage
-    /// decides the call (§6.1, S-191, S-256): a path of names (`f`, `s.f`;
-    /// `t.0`, S-342), a method (`x.f`, `g(x).f`), `::[…]` after one
-    /// (`f::[T]`), a path of names with `[…]` after it (`ops[i]`), or a field
-    /// of anything else with one `[…]` after it (`g(x).m[I32]`, §4.5). Any
-    /// other callee (`(s.f)`, `pick(true)`, `ts[0].0`, `mk2().0`) is no item:
+    /// decides the call (§6.1, S-191, S-256): a path of names (`f`, `s.f`),
+    /// a method (`x.f`, `g(x).f`), `::[…]` after one (`f::[T]`), a path of
+    /// names with `[…]` after it (`ops[i]`), or a field of anything else with
+    /// one `[…]` after it (`g(x).m[I32]`, §4.5). Any other callee (`(s.f)`,
+    /// `pick(true)`, and a tuple index after anything, `t.0`, `ts[0].0`,
+    /// `mk2().0`, S-342, S-606) is no item:
     /// the parser fails at the `(` (`Want::Callee`), and the row
     /// `callee_expression` gives `.(`.
     pub(crate) fn by_name(self) -> bool {
         match self.last {
             Link::Name | Link::Field | Link::TypeArgs => true,
-            Link::TupleIndex => self.chain == Chain::Names,
             Link::Index => matches!(self.chain, Chain::Indexed | Chain::MemberIndexed),
             Link::Value | Link::Other => false,
         }

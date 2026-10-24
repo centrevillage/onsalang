@@ -1,21 +1,34 @@
 // onsa.toml
 // [test]
-// spec = ["§2.4", "§6.1", "§18.1"]
+// spec = ["§2.3", "§2.4", "§6.1", "§18.1"]
 // fixes = 1
 
-// E0020 for a call whose callee ends with a tuple index after something that is no path of names
-// (§6.1; W3-20/b): `ts[0].0`, `mk2().0`, `(t).0`, `(f, 1).0`, `[t][0].0` and a field of a struct
-// literal are no path of names (§2.4), so the syntax alone decides, as for `(s.f)(x)`
-// (e0020_call_forms_syntax.onsa). The one candidate inserts the `.` of `.(` before the `(`. A
-// tuple index at the end of a path of names (`t.0(x)`, `s.t.0(x)`) waits for S-342 and is read
-// as now (the function `fine`). So is an index after something that is neither a path of names nor
-// a field (`fns()[0](x)`); one after a field (`g(1).m[I32](2)`) is a method's type arguments or an
-// index of a field, which the type stage tells apart (§4.5; tests/spec/negative/callee_member_index.onsa).
+// E0020 for a call whose callee ends with a tuple index (§6.1, S-342, S-606): a tuple index is
+// no name (§2.3), so such a callee is a value whatever stands before it, and the syntax alone
+// decides, as for `(s.f)(x)` (e0020_call_forms_syntax.onsa). This holds after something that is
+// no path of names (`ts[0].0`, `mk2().0`, `(t).0`, `(f, 1).0`, `[t][0].0` and a field of a struct
+// literal) and after a path of names (`t.0`, `p.t.0`, `r.p.t.0`, `self.t.0`, `n.0.1`). The one
+// candidate inserts the `.` of `.(` before the `(`, so the call is written `t.0.(x)`. The same
+// form with a name at the end is another case: `p.f(x)` is a method call of the type stage
+// (§6.2), `p.t.0.m(x)` ends with the name `m`. A callee that ends with an index (`fns()[0](x)`,
+// after something that is no path of names) is a value too, so it is the same error with the same
+// candidate; one after a field (`g(1).m[I32](2)`) is a method's type arguments or an index of a
+// field, which the type stage tells apart (§4.5; tests/spec/negative/callee_member_index.onsa).
 // One error per function (P-01).
 
 pub struct Pair {
   f: fn(I32) -> I32,
   t: (fn(I32) -> I32, I32),
+}
+
+pub struct Rig {
+  p: Pair,
+}
+
+impl Rig {
+  pub fn run(self, x: I32) -> I32 {
+    self.p.t.0.(x)                                   //~ E0020
+  }
 }
 
 pub fn inc(x: I32) -> I32 {
@@ -58,6 +71,31 @@ pub fn an_index_of_the_result_of_a_call(x: I32) -> I32 {
   fns()[0].(x)                                       //~ E0020
 }
 
+pub fn after_a_name(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  t.0.(x)                                            //~ E0020
+}
+
+pub fn after_a_field(p: Pair, x: I32) -> I32 {
+  p.t.0.(x)                                          //~ E0020
+}
+
+pub fn after_two_fields(r: Rig, x: I32) -> I32 {
+  r.p.t.0.(x)                                        //~ E0020
+}
+
+pub fn after_two_tuple_indexes(n: ((I32, fn(I32) -> I32), I32), x: I32) -> I32 {
+  n.0.1.(x)                                          //~ E0020
+}
+
+pub fn after_a_tuple_index_of_a_tuple_index(p: Pair, x: I32) -> I32 {
+  let q = (p.t, 1)
+  q.0.0.(x)                                          //~ E0020
+}
+
+pub fn after_a_name_in_an_operand(t: (fn(I32) -> I32, I32), x: I32) -> I32 {
+  1 + t.0.(x) * 2                                    //~ E0020
+}
+
 pub fn fine(p: Pair, t: (fn(I32) -> I32, I32), x: I32) -> I32 {
-  t.0(x) + p.t.0(x)
+  t.0.(x) + p.t.0.(x)
 }

@@ -49,7 +49,11 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
     let mark = matches!(row, RowId::SpaceBeforeBang | RowId::SpaceBeforeTilde);
     if mark && c.gap_after(c.at).is_some() {
         // A gap between the mark and its `(` (S-412): the one candidate takes
-        // both gaps out (`saw ~ (f0)` is one form).
+        // both gaps out (`saw ~ (f0)` is one form), after a path of names
+        // (`t.0 ~ (x)` takes no mark, S-606).
+        if !d.by_name {
+            return found(row, c.span(c.at), fixes);
+        }
         let paren = c.tokens.iter().enumerate().skip(c.at + 1).find(|(_, t)| !t.kind.is_trivia()).map(|(k, _)| k)?;
         let after =
             crate::edits::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");

@@ -119,8 +119,9 @@ fn sign_comma(a: &After) -> Option<Fix> {
 /// Whether a `,` goes before the token (S-384, S-387): it starts an
 /// element of the list, and is not `fn name`, which no expression is;
 /// in a list of types, a `[` holds a `;` (S-419); not in the repetition
-/// of an array; in the arms, not before an opener that joins the token
-/// before when no `=>` follows.
+/// of an array; in the arms, not before an opener after a gap when no `=>`
+/// follows (the gap taken out is then the one candidate, when it reads,
+/// §2.5: `0 => t.0 (x), _ => 1` has none).
 fn comma_goes(a: &After) -> bool {
     let c = a.c;
     let declaration = declares_a_function(a.kind, c.kind(c.sig_after(c.at)));
@@ -128,7 +129,8 @@ fn comma_goes(a: &After) -> bool {
     let array =
         (a.kind != TokenKind::LBracket || !types || bracket_contents(c.tokens, c.at).is_some_and(|(_, _, semi)| semi))
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
-    let comma = !(a.arms && a.joins && !arm_ahead(c.tokens, c.at));
+    let gap = c.detached.is_some_and(|d| d.at == c.at);
+    let comma = !(a.arms && gap && !arm_ahead(c.tokens, c.at));
     a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma
 }
 

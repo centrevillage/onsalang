@@ -6,6 +6,14 @@ use super::*;
 /// The rule of a `^` with no name right after it (§2.6, S-358).
 const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right before the name of a `let` of the flow (`prev~(^y)`), and no operator; the binary `^` is the exclusive or (§2.6)";
 
+/// The rule of a mark `!` or `~` after what names no item, method or flow
+/// (`t.0!(x)`, `mk2().0~(x)`, §2.6, S-606).
+const MARK_RULE: &str = "the marks `!` and `~` are written right after the name of an item, a method or a flow, before its `(` (`buf.push!(x)`, `saw~(f0)`); a tuple index is no name, and a value is called with `.(` (§2.6, §6.1)";
+
+/// The rule of a `::[` after what names no path (`(e)::[T](x)`,
+/// `t.0::[T](x)`, §4.5, S-606).
+const TYPE_ARGS_RULE: &str = "type arguments in an expression, `::[…]`, are written right after the path of names of a generic item or method (`parse::[U32](\"1\")`); a tuple index or another value takes none, and is called with `.(` (§4.5, §6.1)";
+
 /// The rule of an `if~` with no `else` (§11.5, S-355).
 const IF_TILDE_ELSE_RULE: &str =
     "`if~` evaluates every branch and takes one, so its chain ends with an `else` block (§11.5)";
@@ -187,18 +195,37 @@ impl<'a> Parser<'a> {
                     chain = None;
                 }
                 TokenKind::Tilde | TokenKind::Bang
-                    if self.tokens[self.next_code(self.peek_index())].kind == TokenKind::LParen
-                        && callee.last().takes_a_mark() =>
+                    if self.tokens[self.next_code(self.peek_index())].kind == TokenKind::LParen =>
                 {
                     // The mark touches the name and the `(` touches the mark
                     // (S-123, S-412): a gap after the mark makes the call's
-                    // list the required one of `Parser::opens`.
+                    // list the required one of `Parser::opens`. After what
+                    // names no item, method or flow (`t.0`, `g(x)`), a mark
+                    // that touches it is the E0002 of its place, and one
+                    // after a gap is not read on, as a `(` there (§2.5,
+                    // §2.6, S-606).
                     let mark = self.peek_index();
+                    let by_name = callee.last().takes_a_mark();
+                    // After another value, a `!(` that touches it is not read
+                    // on (W4-12): in a list, the missing `,` before `!(x)`.
+                    if !by_name && t.kind == TokenKind::Bang && expr.kind != NodeKind::TupleIndexExpr {
+                        break;
+                    }
+                    // SPEC-GAP(S-631): in a list, `t.0!(x)` has no candidate,
+                    // and `t.0 !(x)` and a line break before `!(` the `,`.
+                    if !by_name && self.gap(mark) == Gap::None {
+                        return Err(self.fail_noting(
+                            Want::Other,
+                            "an operator or the end of the expression",
+                            t,
+                            MARK_RULE,
+                        ));
+                    }
                     let after = self.gap_after(mark);
-                    if !self.touches(t.kind, true, true) || after.is_some() {
+                    if !self.touches(t.kind, by_name, true) || after.is_some() {
                         if after.is_some() {
                             let kept = self.detached.filter(|d| d.at == mark);
-                            let d = kept.unwrap_or(Detached { at: mark, by_name: true, expr: true, required: false });
+                            let d = kept.unwrap_or(Detached { at: mark, by_name, expr: true, required: false });
                             self.detached = Some(Detached { required: true, ..d });
                         }
                         break;
@@ -227,6 +254,16 @@ impl<'a> Parser<'a> {
                     // The name before the list stays the last name of a chain
                     // (`Pr::[U8] { a: 1 }`).
                     expr = self.complete(m, NodeKind::TypeArgsExpr);
+                }
+                // `::[` after what names no path (`(e)::[T](x)`, `t.0::[T](x)`,
+                // §4.5, S-606): the E0002 of its place.
+                TokenKind::ColonColon if self.lines.type_args_mark(&self.tokens, self.peek_index()) => {
+                    return Err(self.fail_noting(
+                        Want::Other,
+                        "an operator or the end of the expression",
+                        t,
+                        TYPE_ARGS_RULE,
+                    ));
                 }
                 // The member `.` takes no space on either side inside a line (§2.5, S-203).
                 TokenKind::Dot if self.dot_apart() => {

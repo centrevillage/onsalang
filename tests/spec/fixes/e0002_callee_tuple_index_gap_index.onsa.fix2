@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§6.1", "§18.1"]
+// fixes = 2
+
+// E0002 for a space or a line break between a tuple index and a `[`, inside a list (§2.5, S-606): a
+// path that ends with a tuple index (`t.0`) is not a path that can be a callee, so the `[` after the
+// gap starts a second element, as after `)` (`[h(x) [0]]`): a `,` is missing. The two candidates
+// are the `,` inserted after the tuple index and the gap removed (`t.0[1]` reads as an index of the
+// tuple element, unlike `t.0(x)`, which reads as no call: e0002_callee_tuple_index_gap.onsa). The
+// error is the same after a name, a field, a call and an element. One error per function (P-01).
+
+pub struct Pair {
+  t: ([I32; 2], I32),
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn mk() -> ([I32; 2], I32) {
+  ([1, 2], 3)
+}
+
+pub fn a_space_after_a_name(t: ([I32; 2], I32)) -> I32 {
+  let v = [t.0[1], 2]                              //~ E0002
+  v[0]
+}
+
+pub fn a_space_after_a_field(p: Pair) -> I32 {
+  let v = [p.t.0[1], 2]                            //~ E0002
+  v[0]
+}
+
+pub fn a_space_after_the_result_of_a_call() -> I32 {
+  let v = [mk().0[1], 2]                           //~ E0002
+  v[0]
+}
+
+pub fn a_space_after_an_element(ts: [([I32; 2], I32); 2]) -> I32 {
+  let v = [ts[0].0[1], 2]                          //~ E0002
+  v[0]
+}
+
+pub fn a_space_in_an_argument(t: ([I32; 2], I32)) -> I32 {
+  two(t.0[1], 2)                                   //~ E0002
+}
+
+pub fn a_line_break(t: ([I32; 2], I32)) -> I32 {
+  let v = [t.0[1], 2]
+    //~ E0002
+  v[0]
+}
+
+pub fn fine(t: ([I32; 2], I32)) -> I32 {
+  two(t.0[1], t.1)
+}

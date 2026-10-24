@@ -1,0 +1,3 @@
+[package]
+name = "callee_tuple_index_pkg"
+edition = "2026"

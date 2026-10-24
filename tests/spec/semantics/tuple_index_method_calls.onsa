@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4", "§5.2", "§6.1", "§6.2"]
+
+// A tuple index in the middle of a path is not a callee (§6.1, S-606): `t.0.scale(4)` ends with the
+// name of a method and `t.0.bump!(2)` with the name of a method that changes its receiver, so both
+// are calls of items and are written as before; the tuple index only reaches the receiver. Only a
+// callee that ends with the tuple index itself is a value call (`t.0.(x)`, callee_tuple_index_calls.onsa;
+// `t.0(x)` is E0020, tests/spec/fixes/e0020_callee_tuple_index.onsa).
+
+pub struct Acc {
+  n: I32,
+}
+
+impl Acc {
+  pub fn scale(self, k: I32) -> I32 {
+    self.n * k
+  }
+
+  pub fn bump(inout self, k: I32) -> I32 {
+    self.n = self.n + k
+    self.n
+  }
+}
+
+pub struct Rack {
+  pair: (Acc, I32),
+}
+
+fn make() -> (Acc, I32) {
+  (Acc { n: 2 }, 7)
+}
+
+test "a method after a tuple index" {
+  let t = (Acc { n: 3 }, 1)
+  assert t.0.scale(4) == 12
+}
+
+test "a method after a tuple index of a field" {
+  let r = Rack { pair: (Acc { n: 3 }, 1) }
+  assert r.pair.0.scale(5) == 15
+}
+
+test "a method after a tuple index of the result of a call" {
+  assert make().0.scale(10) == 20
+}
+
+test "a method after two tuple indexes" {
+  let n = ((Acc { n: 4 }, 1), 2)
+  assert n.0.0.scale(2) == 8
+}
+
+test "a method that changes the receiver after a tuple index" {
+  var t = (Acc { n: 3 }, 1)
+  let r = t.0.bump!(2)
+  assert r == 5
+  assert t.0.n == 5
+}
+
+test "a method that changes the receiver after a tuple index of a field" {
+  var rack = Rack { pair: (Acc { n: 1 }, 1) }
+
+  let r = rack.pair.0.bump!(3)
+  assert r == 4
+  assert rack.pair.0.n == 4
+}

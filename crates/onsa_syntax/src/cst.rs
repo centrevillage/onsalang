@@ -262,7 +262,7 @@ pub enum NodeKind {
     FieldExpr,
     /// `Expr . Int`
     TupleIndexExpr,
-    /// `(PathExpr | FieldExpr | TupleIndexExpr) :: TypeArgs` (§4.5)
+    /// `(PathExpr | FieldExpr) :: TypeArgs` (§4.5; after a tuple index, E0002, S-606)
     TypeArgsExpr,
     /// `Expr [ Expr ]`
     IndexExpr,

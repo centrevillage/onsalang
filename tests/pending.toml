@@ -604,6 +604,13 @@ note = "関数値と関数値の呼び出しが E0200（§4.1、§5.3、§6.1）
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/semantics/callee_tuple_index_calls.onsa"
+reasons = ["R-08"]
+until = "W8-09"
+note = "タプルの要素の関数値の .( の呼び出しが E0200（§4.1、§6.1）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/semantics/try_in_closure.onsa"
 reasons = ["R-08", "S-192", "S-191"]
 until = "W8-09"
