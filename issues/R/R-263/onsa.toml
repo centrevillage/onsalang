@@ -1,0 +1,12 @@
+[package]
+name = "ce"
+edition = "2026"
+
+[export]
+prefix = "t_"
+fns = ["main._g", "main.h_"]
+
+[targets.host]
+kind = "staticlib"
+platform = "host"
+provides = []
