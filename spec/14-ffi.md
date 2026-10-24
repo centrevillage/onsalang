@@ -158,7 +158,7 @@ int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 | | `<P>_HOST_COUNT`、`<P>_EVENT_IN_COUNT`、`<P>_EVENT_OUT_KIND`、`<P>_OUT_EVENTS_PER_FRAME` | `@host` とイベントの入出力 |
 | | `<P>_EV_<入力の名前の大文字>` | イベントの入力の番号（イベントの入力ごと） |
 
-パッケージのヘッダは、二重の取り込みを `#pragma once` で防ぎ、インクルードガードのマクロを置かない（パッケージ名は末尾に `_` を書けるので、`<PREFIX><PACKAGE>_H` の形は `__` を含む名前を作りうる）。`onsa.h` と `onsa__runtime.h` はマクロのインクルードガードを使う（写しが二つあっても一つだけを読み、版を確かめるため、下記）。
+パッケージのヘッダは、二重の取り込みを `#pragma once` で防ぎ、インクルードガードのマクロを置かない（パッケージ名は末尾に `_` を書けるので、`<PREFIX><PACKAGE>_H` の形は `__` を含む名前を作りうる）。`onsa.h` と `onsa__runtime.h` はマクロのインクルードガードのままにする（`onsa.h` は、写しが二つあっても一つだけを読み、版を確かめるため、下記）。
 パッケージの中で、この表から作る全ての名前と export した関数の名前のどれかが重なると、ビルドで E1011（両方の出どころを示す）。
 別のモジュールの同名の flow や関数、flow どうしの生成する名前（flow `voice` の `vc_voice_params` と flow `voice_params` の `vc_voice_params`）、flow の生成する名前と関数の名前（flow `voice` の `vc_voice_init` と関数 `voice_init`）の重なりも含む。
 - 関数は flow のシグネチャにある入力と出力だけを引数に取る（§11.6 の数の規則を、`sample` の入出力、イベントの入出力、`block` の入力、`init` の入力の全てに当てる）。シグネチャと違う呼び出しは C のコンパイルの誤りになる。

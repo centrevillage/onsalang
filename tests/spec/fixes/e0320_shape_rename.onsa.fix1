@@ -5,8 +5,8 @@
 
 // E0320 for names that are not in the shape of their kind (spec 2.3), with a candidate: one candidate
 // that changes the declaration and every use. How the words of a name are split into a new spelling
-// (`Get_Value`, `itemKey`) is not fixed by the spec, so this file does not keep the text after the
-// candidate; the runner checks that the unit is clean after it (§18.1). A type parameter and an
+// (`Get_Value`, `itemKey`) is not fixed by the spec: the `.fix1` is a regression copy, and the spec
+// promises one candidate and a clean unit after it (§18.1). A type parameter and an
 // effect-row variable are in the list too: the candidate changes the uses in the same declaration.
 
 pub fn get_value() -> I32 { //~ E0320
