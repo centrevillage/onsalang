@@ -1,0 +1,54 @@
+struct Inner {
+  x: I32,
+}
+
+impl Inner {
+  pub fn new() -> Inner {
+    Inner { x: 1 }
+  }
+
+  pub fn get(self) -> I32 {
+    self.x
+  }
+
+  fn plain(self) -> I32 {
+    self.x
+  }
+}
+
+priv struct Hidden {
+  y: I32,
+}
+
+impl Hidden {
+  pub fn make() -> Hidden {
+    Hidden { y: 2 }
+  }
+}
+
+pub fn make_inner() -> Inner {
+  Inner.new()
+}
+
+pub struct Point {
+  x: F32,
+  priv tag: U32,
+}
+
+impl Point {
+  pub fn origin() -> Point {
+    Point { x: 0.0, tag: 0 }
+  }
+
+  fn helper(self) -> F32 {
+    self.x
+  }
+}
+
+fn pkg_fn() -> I32 {
+  1
+}
+
+const K: I32 = 3
+
+type Alias = Inner
