@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 1
+
+pub fn u0(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u1(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u2(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u3(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u4(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u5(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u6(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
+pub fn u7(x: I32) -> I32 {
+  "a"(x)    //~ E0020
+}
+
