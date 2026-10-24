@@ -70,7 +70,7 @@
 `@fp(relaxed)` に到達する flow は、この二つの判定から外す（並べ替えの誤差には上限が無く、固定の許容誤差では判定できない）。
 代わりに緩和を効かせた変換先で動かし、出力が有限で panic しないことを確かめ（合否）、`strict` の参照（インタプリタ）との差を、最大の絶対誤差と信号対誤差比（dB）で表示する（合否に使わない。緩和の影響を許せるかはアルゴリズムしだいで、書き手が判断する）。flow ごとに許容の値を指定する形は §19.1。
 `std.math` の関数は `Float` でジェネリック（`exp[T: Float](x: T) -> T`。`abs` は `Num`、`min` / `max` は `AnyNum`。`is_nan[T: Float](x: T) -> Bool` と `is_finite` は NaN と有限の判定）で、各変換先のプリミティブに対応付ける。
-`abs` / `min` / `max` は、std に比較と否定で書いた本体（`abs(x)` は `if x < T.ZERO { -x } else { x }`、`min(a, b)` は `if b < a { b } else { a }`、`max(a, b)` は `if a < b { b } else { a }`）を持ち、利用者の数の型ではこの本体で計算する。
+`abs` / `min` / `max` は、std の `target fn` の `else` に比較と否定で書いた本体（`abs(x)` は `if x < T.ZERO { -x } else { x }`、`min(a, b)` は `if b < a { b } else { a }`、`max(a, b)` は `if a < b { b } else { a }`）を持ち、利用者の数の型ではこの本体で計算する。
 組込み型では本体の代わりにプリミティブを使い、浮動小数の 0 の符号と NaN は §3.4 の規則（`abs` は符号のビットを 0 にし、`min` / `max` は上記）に従い、整数の `abs(MIN)` は panic する（§15.2）。
 インタプリタ（`const` の評価と `onsa test` を含む）と WASM は、Onsa で書いた実装（musl の移植）に対応付けるので、結果はビルドや実行をする機械に依らない。
 `std.math.sum[T: AnyNum, const N: U32](xs: [T; N]) -> T` は Onsa で書いた関数で、`N = 0` なら `T.ZERO`（空の和は加法の単位元）、それ以外は `xs[0]` から順に左へ畳む（演算順を固定し、ビット一致させる）。
