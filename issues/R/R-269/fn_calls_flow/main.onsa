@@ -1,0 +1,11 @@
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn k() -> I32 {
+  lp()
+}
+
+pub flow h(x: F32 at sample) -> F32 at sample {
+  lp(x)
+}
