@@ -2196,9 +2196,13 @@ def cmd_answers(args):
 
 UNIT_ROLE = re.compile(r"[^/\s]+/[tib](?:-fix\d+)?(?P<handover>-handover)?")
 CARRIED = re.compile(r"- 持ち越し[:：]")
-# the fields of a ticket the parent fills (DF-6)
-TICKET_FIELDS = ("する", "しない", "書く場所", "読むもの", "期待値", "危険な経路", "進め方", "見積もり", "予算", "受け入れ条件",
-                 "使う番号が登録済みか")  # fmt: skip
+# the fields of a ticket the parent fills (DF-6), with their guides (none for most)
+TICKET_FIELDS = (
+    ("する", ""), ("しない", ""),
+    ("後の単位の構造に頼る決定", "<実現する決定ごとに、後の単位が作る段や表の形に頼るか。頼るものは、その単位へ移すか単位の順を入れ替える案を出す>"),
+    ("書く場所", ""), ("読むもの", ""), ("期待値", ""), ("危険な経路", ""), ("進め方", ""), ("見積もり", ""), ("予算", ""),
+    ("受け入れ条件", ""), ("使う番号が登録済みか", ""),
+)  # fmt: skip
 # X9-67 d: the fields of a ticket of a handover (`U2/i-handover`) the parent fills, with their guides (rules/leader.md 2.10 points here)
 HANDOVER_FIELDS = (
     ("読む順", "<作業票、設計メモ、親の返事、前の報告と、その「次の担当へ」の節>"),
@@ -2279,8 +2283,7 @@ def cmd_ticket(args):
         "- 持ち越し: " + ("作業のファイルの `持ち越し` を読む" if any(CARRIED.match(x) for x in head.body.split("\n")) else "なし"),
         "- ぶつかりうる事例:" + (case_items(case_lines(ids.root, decisions + issues)) or " なし"),
         f"- 役割と単位: {args.unit}",
-        *(f"- {f}:" for f in TICKET_FIELDS),
-        *(f"- {f}: {guide}" for f, guide in (HANDOVER_FIELDS if unit["handover"] else ())),
+        *(f"- {f}: {guide}".rstrip() for f, guide in TICKET_FIELDS + (HANDOVER_FIELDS if unit["handover"] else ())),
     ]  # fmt: skip
     text = "\n".join(out) + "\n"
     if args.out:

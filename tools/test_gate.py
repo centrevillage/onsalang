@@ -7659,21 +7659,23 @@ class DocsCommands(DocsTree):
         self.edit("decisions/S/S-2.md", 'status = "OPEN"', 'status = "OPEN"\nspec = ["§3.1", "§2.2"]')
         self.edit("issues/R/R-1.md", 'aspect = 1', 'aspect = 1\nspec = ["§3.1", "tools.md §1"]')
         self.write("tasks/W/W1-02.md", self.read("tasks/W/W1-02.md") + "\n- 持ち越し:\n  - W1-01/b の報告: x\n")
+        fields = [f"- {f}: {g}".rstrip() for f, g in docs_tool.TICKET_FIELDS]
         expected = [
             "# 作業 W1-02 U2/i: 式", "", "- 作業のファイル: tasks/W/W1-02.md（`docs.py show W1-02`）", "- 状態: DOING（doing: U2/i）",
             "- 規模: M", "- 依存: W1-01（DONE）", "- 実現する決定（1 件）:", "  - S-2 OPEN R-1 と A-1。（§3.1, §2.2）",
             "- 直す R:", "  - R-1 OPEN 候補（§3.1, tools.md §1）", "- 仕様の節: §2.2、§3.1、tools.md §1",
             "- 持ち越し: 作業のファイルの `持ち越し` を読む", "- ぶつかりうる事例: なし", "- 役割と単位: U2/i",
-            *(f"- {f}:" for f in docs_tool.TICKET_FIELDS),
+            *fields,
         ]  # fmt: skip
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i"), (0, expected))
+        self.assertEqual([fields[1], fields[2].split(": <")[0]], ["- しない:", "- 後の単位の構造に頼る決定"])
         out = self.root / "t.md"
         self.assertEqual(self.run_("ticket", "W1-02", "U2/i", "--out", str(out)), (0, [str(out)]))
         self.assertEqual(out.read_text(encoding="utf-8"), "\n".join(expected) + "\n")
         self.assertRefused(("ticket", "W1-02", "U2/b", "--out", str(out)), [f"{out}: there already"], ["t.md"])
         self.assertEqual(self.run_("ticket", "W1-01", "U1/t")[1][4:8], ["- 規模: -", "- 依存: なし", "- 実現する決定（1 件）:", "  - S-1 DECIDED 字句（§2.1）"])
         self.assertEqual(self.run_("ticket", "W1-01", "U1/i-fix1")[1][-len(docs_tool.TICKET_FIELDS) - 1:],
-                         ["- 役割と単位: U1/i-fix1", *(f"- {f}:" for f in docs_tool.TICKET_FIELDS)])  # fmt: skip
+                         ["- 役割と単位: U1/i-fix1", *fields])  # fmt: skip
         self.edit("decisions/S/S-1.md", 'tasks = ["W1-01"]\n', "")
         self.assertEqual(self.run_("ticket", "W1-01", "U1/t")[1][6:7], ["- 実現する決定: なし"])
         self.assertEqual(self.run_("ticket", "W1-02", "U2")[0], 2)
