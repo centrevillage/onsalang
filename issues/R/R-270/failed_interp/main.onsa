@@ -1,0 +1,9 @@
+use std.math.{KK, gone}
+
+pub fn f() -> Str {
+  "{KK}"
+}
+
+pub fn g() -> Str {
+  "{gone}"
+}
