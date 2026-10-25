@@ -25,3 +25,9 @@ pub fn s() -> I32 {
   let s = A { a: 1 }
   1
 }
+
+pub fn t(x: A) -> I32 {
+  match x {
+    (p, q) => p,
+  }
+}
