@@ -1,0 +1,2 @@
+use util.{Point}
+pub fn b() -> [F32; Point.N] { [0.0; Point.N] }
