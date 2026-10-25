@@ -4,6 +4,8 @@
 
 #![allow(dead_code)]
 
+pub mod sweep;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
