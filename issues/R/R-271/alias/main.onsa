@@ -1,0 +1,15 @@
+use kp.{Gone}
+
+pub type A = Gone
+
+pub fn f() -> A {
+  None
+}
+
+pub fn g() -> A {
+  []
+}
+
+pub fn h(o: A) -> I32 {
+  o()
+}

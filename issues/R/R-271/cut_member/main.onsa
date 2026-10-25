@@ -1,0 +1,7 @@
+pub enum E {
+  A,
+  B(
+
+pub fn f() -> E.Zed {
+  None
+}
