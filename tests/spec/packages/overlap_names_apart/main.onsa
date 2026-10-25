@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.2", "§15.1"]
+
+// Names that look like they would clash and do not (§15.1: E0304 is only between two names of one
+// space; §2.2: the built-in flow names are free for the names of module files, fields, methods and
+// the bindings of a `fn`). No diagnostic, and every test passes.
+//
+// - The names of the modules at the root (`delay.onsa`, `prev.onsa`, `panic.onsa`) are in the space of
+//   the heads of paths, so they are not the prelude's `panic` or the built-in flows `delay` and
+//   `prev`; a `use` of one of their items (`use delay.{twice}`) takes the item, not the module name.
+// - A child module can be named after a built-in flow (`lib/sample_tick.onsa`, `lib/vdelay.onsa`).
+// - In a `fn`, a parameter or a `let` may use a built-in flow name, and a struct may have a field and
+//   an `impl` a method of such a name.
+use delay.{twice}
+use prev.{once}
+use panic.{thrice}
+use lib.sample_tick.{quad}
+use lib.vdelay.{quint}
+
+struct Voice {
+  delay: I32,
+  prev: I32,
+}
+
+impl Voice {
+  fn sample_rate(self) -> I32 {
+    self.delay + self.prev
+  }
+}
+
+fn local_names(sample_tick: I32) -> I32 {
+  let vdelay = sample_tick + 1
+  vdelay
+}
+
+test "the items of the modules named after built-in flows and the prelude" {
+  assert twice(1) == 2
+  assert once(1) == 1
+  assert thrice(1) == 3
+  assert quad(1) == 4
+  assert quint(1) == 5
+}
+
+test "a field, a method and the bindings of a fn may use the built-in names" {
+  let v = Voice { delay: 2, prev: 3 }
+  assert v.sample_rate() == 5
+  assert local_names(4) == 5
+}

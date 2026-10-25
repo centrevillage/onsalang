@@ -1,0 +1,11 @@
+pub fn q() -> I32 { //~ E0304
+  1
+}
+
+pub fn empty() -> I32 {
+  2
+}
+
+pub fn pp() -> I32 {
+  q() + empty()
+}

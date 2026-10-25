@@ -3,7 +3,6 @@
 //! from what another `use` bound. So a `use` means the same wherever it is
 //! written and whatever the other `use` of the package are (R-50).
 
-use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_syntax::ast::Ident;
 
 use crate::Analysis;
@@ -50,31 +49,21 @@ impl<'p> Sema<'p> {
                 Some(e) => step(&self.a, e, name, m),
             };
             match entity {
-                // SPEC-GAP(S-666): a module of a directory with no file of its
-                // own (`a` of `a/b/c.onsa` alone) is taken like a module with
-                // no items, as before, until it is decided.
+                // A module of a directory with no file of its own (`a` of
+                // `a/b/c.onsa` alone) is a module with no items (S-666).
                 Ok(e) => self.bind(m, name, e),
                 Err(e) => self.report_mod(e.into_diagnostic()),
             }
         }
     }
 
-    /// `name` bound by a `use` in the body of `m`: E0304 when the body has
-    /// it already (an item of the module, or the name of another `use`).
+    /// `name` bound by a `use` in the body of `m`: the first of a name is in
+    /// the table, and the clashes are E0304 after every `use`
+    /// (`crate::names::clash`).
     fn bind(&mut self, m: ModId, name: &Ident, entity: Entity) {
-        let info = self.a.modules.get(m);
-        let first = match (info.items.get(&name.name), info.uses.get(&name.name)) {
-            (Some(&d), _) => self.a.def(d).name_span,
-            (None, Some(u)) => u.span,
-            (None, None) => {
-                let binding = UseBinding { entity, span: name.span };
-                self.a.modules.get_mut(m).uses.insert(name.name.clone(), binding);
-                return;
-            }
-        };
-        let msg = format!("`{}` is already in scope; a name is bound once per module (§15.1)", name.name);
-        let d = Diagnostic::new(Stage::Names, Code::E0304, name.span, msg).with_found(name.name.clone());
-        self.report_mod(d.with_note(first, "first bound here"));
+        let info = self.a.modules.get_mut(m);
+        info.bound.push((name.name.clone(), name.span));
+        info.uses.entry(name.name.clone()).or_insert(UseBinding::Bound { entity, span: name.span });
     }
 }
 

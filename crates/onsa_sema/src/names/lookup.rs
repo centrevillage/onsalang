@@ -25,7 +25,7 @@ impl Modules {
         if let Some(&d) = info.items.get(name) {
             return Some(Entity::Def(d));
         }
-        info.uses.get(name).map(|u| u.entity)
+        info.uses.get(name).and_then(|u| u.entity())
     }
 
     /// The head of `path` in the body of `from` that is not in its body:
@@ -33,10 +33,15 @@ impl Modules {
     /// path with no `use`, and when a member follows the head (`std.math.abs`,
     /// `util.f`) its candidate adds `use head` unless the `use` closes a
     /// cycle; a module or a package alone at the place of a value or a type
-    /// (`let x = util`, `x: std`) is not fixed by the `use`, and has none.
+    /// (`let x = util`, `x: std`) is not fixed by the `use`, and has none. Nor
+    /// has a head a `use` cannot bind ([`super::clash::unbindable`]).
     fn not_in_body(&self, from: ModId, path: &Path) -> ResolveError {
         let head = &path.segments[0];
         let (name, span) = (head.name.clone(), head.span);
+        // SPEC-GAP(S-673): the head of the package's own name or of the
+        // module's own (`fx.util.helper()`, `main.other()`) is taken as any
+        // other head: `use main` for a module under the root, none for the
+        // package (not a head of a `use`); a head alone has none.
         if self.head(from, &head.name).is_none() {
             return ResolveError::NotFound { name, span };
         }
@@ -44,6 +49,9 @@ impl Modules {
         let head_path = Path { segments: vec![head.clone()], span };
         let fix = match (info.file, info.use_at) {
             _ if path.segments.len() < 2 || self.closes_cycle(from, &head_path) => None,
+            // SPEC-GAP(S-674): a head that is a reserved word (`static.tick()`)
+            // is this E0302, and has no candidate, as a head no `use` binds.
+            _ if super::clash::unbindable(&name).is_some() => None,
             (Some(file), Some(at)) => {
                 let title = format!("add `use {name}`");
                 Some(match at {
@@ -81,7 +89,12 @@ impl Modules {
     ) -> Result<Entity, ResolveError> {
         match entity {
             Entity::Module(m) => {
+                // SPEC-GAP(S-677): a child module before an item of its name,
+                // which is an E0304 (§15.1, `crate::names::clash`).
                 let info = self.get(m);
+                if let Some(&c) = info.children.get(&name.name) {
+                    return Ok(Entity::Module(c));
+                }
                 if let Some(&d) = info.items.get(&name.name) {
                     let def = &defs[d.0 as usize];
                     if self.visible(def.vis, m, from) {
@@ -93,10 +106,7 @@ impl Modules {
                         defined: def.name_span,
                     });
                 }
-                match info.children.get(&name.name) {
-                    Some(&c) => Ok(Entity::Module(c)),
-                    None => Err(ResolveError::NotFound { name: name.name.clone(), span: name.span }),
-                }
+                Err(ResolveError::NotFound { name: name.name.clone(), span: name.span })
             }
             Entity::Def(d) => {
                 let def = &defs[d.0 as usize];

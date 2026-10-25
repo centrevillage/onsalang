@@ -298,6 +298,7 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         children: HashMap::new(),
         items: HashMap::new(),
         uses: HashMap::new(),
+        bound: Vec::new(),
         imports: Vec::new(),
         use_at: None,
     }

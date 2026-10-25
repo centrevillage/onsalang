@@ -70,7 +70,7 @@ use crate::{Analysis, DefId, Kind, Module};
 
 #[path = "flow_map.rs"]
 pub(crate) mod map;
-use crate::flow_names::Delay;
+use crate::flow_names::{Delay, SAMPLE_RATE};
 mod check;
 mod consts;
 mod rate;
@@ -256,7 +256,3 @@ pub(crate) struct FlowCx {
     float_checks: Vec<(Span, ExprId)>,
     output: Option<ExprId>,
 }
-
-/// The builtin of a flow that is no delay (§11.4); the delays are
-/// [`Delay`].
-const SAMPLE_RATE: &str = "sample_rate";

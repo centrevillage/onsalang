@@ -1,0 +1,8 @@
+// A flow with the name of a prelude function: the kind of the item does not matter (§15.1).
+pub flow panic(x: F32 at sample) -> F32 at sample { //~ E0304
+  x
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  x
+}

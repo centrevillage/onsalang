@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1"]
+
+// The prelude function `panic` cannot be hidden (§5.1), so an item or a `use` binding of its name is
+// E0304 (§15.1, S-611, R-103). Here the `use` lines: the module `panic` (`panic.onsa`) taken whole by
+// `use panic`, and the item `panic` of the module `kp` (`kp.onsa`) taken by `use kp.{panic}`. The
+// item `panic` of `kp.onsa` is E0304 in `kp.onsa`, and the `use` that takes it is another one in this
+// file. The items are in `fns.onsa` and `flows.onsa`. The other names of the prelude are in
+// `overlap_prelude_names`.
+use panic //~ E0304
+use kp.{panic} //~ E0304
+
+pub fn fine() -> I32 {
+  1
+}

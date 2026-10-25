@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§5.1", "§11.4"]
+// fixes = 0
+
+// The built-in flow names (`prev`, `delay`, `vdelay`, `sample_rate`, `sample_tick`, §2.2) cannot be the
+// name of an item or of a `use` binding (E0304, S-542), and the diagnostic has no candidate. Here the
+// `use` lines: a module taken whole (`use dsp.delay`, the module `dsp/delay.onsa`) and a child module
+// taken by a list (`use dsp.{vdelay}`, `use dsp.{sample_tick}`). The items are in `items.onsa`.
+use dsp.delay //~ E0304
+use dsp.{vdelay} //~ E0304
+use dsp.{sample_tick} //~ E0304
+
+pub fn fine() -> I32 {
+  1
+}

@@ -1240,6 +1240,20 @@ note = "use の頭が取り込んだ名前の E0302（候補は絶対経路）"
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/packages/overlap_prelude_panic"
+reasons = ["S-611", "R-103"]
+until = "W4-03"
+note = "prelude の panic と同じ名前の項目と use の E0304。panic が prelude の表に入るのは U5（他の名前は U3a1 で E0304）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/overlap_prelude_traits_effects"
+reasons = ["S-611", "R-103"]
+until = "W4-03"
+note = "prelude の trait と種の制約の名前の E0304。trait が prelude の表に入るのは U5"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/fixes/e0307_alias_impl.onsa"
 reasons = ["S-91"]
 until = "W4-04"

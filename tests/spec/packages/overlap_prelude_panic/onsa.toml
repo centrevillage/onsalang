@@ -1,0 +1,3 @@
+[package]
+name = "overlap_prelude_panic"
+edition = "2026"

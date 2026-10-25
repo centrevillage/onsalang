@@ -1,0 +1,3 @@
+[package]
+name = "overlap_item_child_module"
+edition = "2026"

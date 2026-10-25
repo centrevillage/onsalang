@@ -1,0 +1,11 @@
+pub fn double(x: I32) -> I32 {
+  x * 2
+}
+
+pub fn triple(x: I32) -> I32 {
+  x * 3
+}
+
+pub fn quad() -> I32 {
+  4
+}

@@ -91,7 +91,7 @@
 | `types/cyc2/`、`types/cyc3/`、`types/reexp/` | R-39。`types/cyc2/` は W4-03 U2b/t で期待値付きのテストへ写した: `tests/spec/packages/body_path_mutual/`（`use` を書かない相互参照は、それぞれの経路が E0302 で、E0310 にならない）、`crates/onsa_cli/tests/body_paths.rs`。W4-03 の実装が通すまで元の入力は残す。`types/cyc3/`（自分のパッケージ名で相互に取り込む）と `types/reexp/`（`pub use` の連鎖）は U3a・U3b の範囲 |
 | `types/dups.onsa` | R-40 |
 | `types/implitems.onsa`、`types/flowimpl.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した: `tests/spec/negative/item_contexts.onsa`・`item_contexts_units.onsa`、`tests/spec/types/flow_impl.onsa` |
-| `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46。`types/dupmod/` は W4-03 U2a/t で期待値付きのテストへ写した: `tests/spec/packages/module_dupmod/`（`a.b.onsa` と `a/b.onsa` は別のモジュールで、どちらも検査される）、`crates/onsa_cli/tests/use_paths.rs`。W4-03 の実装が通すまで元の入力は残す |
+| `types/dupmod/`、`types/itemmod/`、`types/stdname/`、`types/stdmod/`、`types/upname/`（推定） | R-46。`types/dupmod/` は W4-03 U2a/t で期待値付きのテストへ写した: `tests/spec/packages/module_dupmod/`（`a.b.onsa` と `a/b.onsa` は別のモジュールで、どちらも検査される）、`crates/onsa_cli/tests/use_paths.rs`。`types/itemmod/` と `types/stdmod/` は W4-03 U3a1/t で期待値付きのテストへ写した: `tests/spec/packages/overlap_item_child_module/`・`overlap_item_dir_only_child/`（モジュールの項目と同じ名前の子モジュールは E0304、R-177・S-666）、`crates/onsa_cli/tests/name_overlaps.rs`（ルート直下の `std.onsa` と `std/` が依存のパッケージ名と重なる E0304、S-37・S-246）。`types/stdname/`（自分のパッケージ名 `std`、マニフェストの E1103・E1102、`std.main.h()`）と `types/upname/`（マニフェストの `name`）は U3a1 の範囲の外（前者の経路の頭は U3a2、マニフェストは W4-03 の範囲の外）。W4-03 の実装が通すまで元の入力は残す |
 | `types/single/`、`types/pkguse/`（推定） | R-47 |
 | `types/flowimp/`、`types/useorder*.onsa`（推定） | R-50。W4-03 U2a/t で期待値付きのテストへ写した: `types/flowimp/` は `tests/spec/packages/use_flow_generated_items/`（最終の構文。生成項目の取り込みは U3b）、`types/useorder.onsa`・`useorder2.onsa` は `tests/spec/module/use_binding_after.onsa`・`use_binding_before.onsa`（失敗した名前を使う形は `*_used.onsa`、S-462）、`tests/spec/packages/use_head_not_binding/`、`crates/onsa_cli/tests/use_paths.rs`。W4-03 の実装が通すまで元の入力は残す |
 | `types/tzero.onsa` | R-56 |
@@ -110,7 +110,7 @@
 | `syntax/moveargs.onsa`、`syntax/paren_move.onsa` | R-42。W3-20 で期待値付きのテストへ移した: `tests/spec/negative/syntax_move_operand.onsa` |
 | `syntax/nested*.onsa` | R-44。W3-08/t1 で期待値付きのテストへ移した（`types/implitems.onsa` の行と同じ事例） |
 | `syntax/bigfloat.onsa` | R-45 |
-| `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/modpkg/` | R-46 |
+| `syntax/my-mod.onsa`、`syntax/MyMod.onsa`、`syntax/modpkg/` | R-46（`syntax/modpkg/` は今の木に無い。W4-03 U3a1/t で確かめた） |
 | `syntax/naming.onsa` | R-46。W4-14 U3/t で期待値付きのテストへ移して消した: 型パラメータの `ItemKey` は仕様の反映（S-642。「1 語」の規則を外した）で通る形になり `tests/spec/types/naming_type_params_fine.onsa`、`HTTPServer` は `tests/spec/types/naming_shapes_fine.onsa`、`const Pi: F32`（`UPPER_SNAKE` に合わない）は `tests/spec/negative/naming_shapes.onsa` |
 | `syntax/arrow.onsa` | R-58。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/lex/continuation_function_types.onsa`（全部）と `continuation_top_level.onsa`（トップレベルの行末の `->` の継続） |
 | `syntax/faust.onsa` | R-59。W3-23/t で期待値付きのテストへ移した: `acc` の `~ _` は `tests/spec/fixes/e0020_faust.onsa` の `feedback_without_a_name` と `e0020_faust_feedback.onsa`、`eqn` の flow の本体の代入は既存の `tests/spec/fixes/e0806_assign.onsa`、`usize_fix` の `+=` は既存の `tests/spec/fixes/e0020_compound_assign.onsa` |
@@ -151,7 +151,7 @@
 | `parent/r79_enum.onsa` | R-79、R-53（Option / Result と利用者の総称の enum の推論の食い違い。期待値は先頭のコメント。S-71） |
 | `parent/r80/` | R-80（NRVO の判定の食い違い。`onsa build --target host .` の生成コードで確かめる。期待値は `m.onsa` の先頭のコメント） |
 | `parent/r83.onsa` | R-83（効果の使用の診断。期待値と今の出力は各関数の上のコメント。S-77） |
-| `parent/r84.onsa`、`parent/r84_type.onsa` | R-84、R-103（名前の段と名前の隠蔽。期待値と今の出力は各項目の上のコメント。S-78、S-79） |
+| `parent/r84.onsa`、`parent/r84_type.onsa` | R-84、R-103（名前の段と名前の隠蔽。期待値と今の出力は各項目の上のコメント。S-78、S-79）。`parent/r84_type.onsa`（利用者の型が組込み型・prelude と同じ名前）は W4-03 U3a1/t で期待値付きのテストへ写した: `tests/spec/packages/overlap_prelude_names/types.onsa`、`crates/onsa_cli/tests/name_overlaps.rs`。`parent/r84.onsa` のローカルの隠蔽は W4-04。W4-03 の実装が通すまで元の入力は残す |
 | `parent/r85.onsa` | R-85（束縛の状態。期待値と今の出力は各関数の上のコメント。S-80） |
 | `parent/r87.onsa` | R-87（修正候補の形と診断を置く位置。`onsa check --json` で確かめる。期待値と今の出力は各関数の上のコメント。S-81、S-82）。候補の形（S-81、R-87 (1)(2)）は W3-02 で直した。残りの E0320 の全ての使用箇所は W4-04、E0601 の位置は W6-03 で、期待値は `tests/spec/fixes/e0320_rename.onsa`・`pkg_rename/`・`e0601_alloc_row.onsa`（実装待ち） |
 | `parent/r88/` | R-88（std の版の固定。期待値は `onsa.toml` の先頭のコメント。S-83） |

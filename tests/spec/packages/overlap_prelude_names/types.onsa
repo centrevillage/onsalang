@@ -1,0 +1,25 @@
+// Types with the names of the built-in types and of the prelude (§15.1, §5.1): a struct `F32` and an
+// enum `Option` (R-103, r84_type), a struct with the name of an enumerator of the prelude (`Err`),
+// a type alias `Str`, and an enum `Map`. Each is E0304 and the diagnostics do not spread: `half` is
+// written with the built-in `F32` (the user's struct does not hide it), so it has none.
+pub struct F32 { //~ E0304
+  v: I32,
+}
+
+pub enum Option { //~ E0304
+  Nothing,
+}
+
+pub struct Err { //~ E0304
+  code: I32,
+}
+
+pub type Str = I32 //~ E0304
+
+pub enum Map { //~ E0304
+  Entry,
+}
+
+pub fn half(x: F32) -> F32 {
+  x * 0.5
+}

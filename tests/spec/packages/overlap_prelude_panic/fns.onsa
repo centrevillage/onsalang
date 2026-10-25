@@ -1,0 +1,8 @@
+// A function with the name of a prelude function (§15.1).
+pub fn panic() -> I32 { //~ E0304
+  3
+}
+
+pub fn fine() -> I32 {
+  4
+}

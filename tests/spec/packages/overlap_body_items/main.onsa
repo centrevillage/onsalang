@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§5.1"]
+
+// Two items of one module with one name are E0304 (§5.1, §15.1): the later declaration gets the
+// diagnostic, whatever the kinds of the two (a struct and an enum, a struct and a type alias, an
+// enum and a struct) and whatever the visibility (`priv fn quad` and then `pub fn quad`). The other
+// items of the module, and the uses of the name by a function whose type the two declarations agree
+// on (`twice` returns `I32` in both), have no diagnostic of their own.
+pub fn twice() -> I32 {
+  1
+}
+
+pub fn twice() -> I32 { //~ E0304
+  2
+}
+
+pub fn twice_twice() -> I32 {
+  twice() + twice()
+}
+
+priv fn quad() -> I32 {
+  4
+}
+
+pub fn quad() -> I32 { //~ E0304
+  5
+}
+
+pub struct Pt {
+  x: I32,
+}
+
+pub enum Pt { //~ E0304
+  A,
+}
+
+pub struct Gain {
+  v: F32,
+}
+
+pub type Gain = F32 //~ E0304
+
+pub enum Wave {
+  Sine,
+}
+
+pub struct Wave { //~ E0304
+  w: I32,
+}
+
+pub fn fine() -> I32 {
+  3
+}

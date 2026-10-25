@@ -236,12 +236,11 @@
 "Ok" = 1
 "Some" = 1
 
-[allow."crates/onsa_sema/src/flow.rs"]
-"sample_rate" = 1
-
 [allow."crates/onsa_sema/src/flow_names.rs"]
 "delay" = 1
 "prev" = 1
+"sample_rate" = 1
+"sample_tick" = 1
 "vdelay" = 1
 
 [allow."crates/onsa_sema/src/kind.rs"]

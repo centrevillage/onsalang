@@ -323,6 +323,7 @@ fn analyze(
         all.extend(analysis.diagnostics.iter().cloned());
         let files = pkg.modules.iter().map(|m| (m.file, &m.parsed.units));
         let reduce::Reduced { mut diagnostics, mut diagnostic_units, units } = reduce::per_unit(files, all);
+        let paths: Vec<Diagnostic> = paths.into_iter().chain(analysis.path_diagnostics.iter().cloned()).collect();
         diagnostic_units.extend(paths.iter().map(|_| None));
         diagnostics.extend(paths);
         fill_found(sources, &mut diagnostics);

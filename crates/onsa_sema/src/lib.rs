@@ -198,6 +198,10 @@ pub struct Analysis {
     /// diagnostic (R-71, S-260).
     pub failed: HashMap<DefId, onsa_syntax::ast::Failed>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The diagnostics of the paths of the modules, outside every unit (the
+    /// E0304 of a module under the root of the name of a package, §15.1):
+    /// each is reported, as those of the input's paths.
+    pub path_diagnostics: Vec<Diagnostic>,
 }
 
 impl Analysis {

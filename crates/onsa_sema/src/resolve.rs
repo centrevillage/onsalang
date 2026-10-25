@@ -40,12 +40,34 @@ pub enum Entity {
 }
 
 /// A name a `use` bound in its module (§15.1): of the module's body only,
-/// never of the namespace other modules read (S-611).
-#[derive(Debug, Clone)]
-pub struct UseBinding {
-    pub entity: Entity,
-    /// The name in the `use`.
-    pub span: Span,
+/// never of the namespace other modules read (S-611). `span` is the name in
+/// the `use`.
+#[derive(Debug, Clone, Copy)]
+pub enum UseBinding {
+    Bound {
+        entity: Entity,
+        span: Span,
+    },
+    /// A binding that failed (§18.1): the E0304 of a `use` of the name of an
+    /// item of the module (`crate::names::clash`).
+    Failed {
+        span: Span,
+    },
+}
+
+impl UseBinding {
+    pub fn entity(&self) -> Option<Entity> {
+        match *self {
+            UseBinding::Bound { entity, .. } => Some(entity),
+            UseBinding::Failed { .. } => None,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match *self {
+            UseBinding::Bound { span, .. } | UseBinding::Failed { span } => span,
+        }
+    }
 }
 
 /// Where a fix candidate adds a `use` in the file of a module (spec §15.1,
@@ -83,8 +105,12 @@ pub struct ModInfo {
     pub children: HashMap<String, ModId>,
     /// The items of the module, by name: of its body and of its namespace.
     pub items: HashMap<String, DefId>,
-    /// The names its `use` bound: of its body only (S-611).
+    /// The names its `use` bound: of its body only (S-611). The first of a
+    /// name is in the table.
     pub uses: HashMap<String, UseBinding>,
+    /// Every name its `use` bound, in the order written (E0304,
+    /// `crate::names::clash`).
+    pub bound: Vec<(String, Span)>,
     pub imports: Vec<Import>,
     /// Where a candidate adds a `use`; `None` for a module with no file.
     pub use_at: Option<UseAt>,

@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§6.3"]
+
+// The prelude also holds the operator traits and the standard traits (§6.3) and the kind constraints
+// `Copy` and `Dup` (§15.1), and they cannot be hidden either: a type of the same name is E0304.
+// (Their names are the prelude's by the work of U5 of W4-03; this case waits for it. The effect
+// `Alloc` is not written: an `effect` declaration is E0200 in this version.)
+pub struct Add { //~ E0304
+  v: I32,
+}
+
+pub struct Show { //~ E0304
+  v: I32,
+}
+
+pub enum Ordinal { //~ E0304
+  A,
+}
+
+pub struct Copy { //~ E0304
+  v: I32,
+}
+
+pub struct Dup { //~ E0304
+  v: I32,
+}
+
+pub fn fine() -> I32 {
+  1
+}

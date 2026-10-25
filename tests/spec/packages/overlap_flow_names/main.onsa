@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§15.1"]
+
+// A flow makes a namespace of its name in its module (§11.2), so a second declaration of the name in
+// the same module is E0305, not E0304: the later declaration gets it, whatever the kind of the two
+// (two flows, a function after a flow, a flow after a function). A `use` that takes the name of a
+// flow of the module is E0304 (the flow is written first here, so the `use` is the later one).
+// The other flows and functions have no diagnostic.
+pub flow gain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow gain(x: F32 at sample) -> F32 at sample { //~ E0305
+  x
+}
+
+pub flow mix(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn mix() -> F32 { //~ E0305
+  1.0
+}
+
+pub fn pan() -> F32 {
+  1.0
+}
+
+pub flow pan(x: F32 at sample) -> F32 at sample { //~ E0305
+  x
+}
+
+pub flow wide(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+use util.{wide} //~ E0304
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  x
+}

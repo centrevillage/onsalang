@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// A child module that is only a directory (no file of its name, with `.onsa` files below it) clashes
+// with an item of the same name too (§15.1, S-666): the item `q` of `p.onsa` and the directory
+// `p/q/`, and the item `f` of `d/e.onsa` and the directory `d/e/f/` (the module `d.e.f`, below the
+// module `d.e` that has a file, in a directory `d/` that has no file of its own). The diagnostic is
+// on the item. A directory that holds no `.onsa` file is not a module (`p/empty/` and the item
+// `empty` of `p.onsa`), so it clashes with nothing.
+use p.{pp}
+use d.e.{ee}
+
+pub fn k() -> I32 {
+  pp() + ee()
+}

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// The names that the `use` lines bind are in one space with the items of the module (§15.1), so a
+// second binding of a name is E0304 (the same item twice, another item of the same name, a module
+// and a module of the same name) and so is a `use` that takes the name of an item written before it.
+// The `use` is the one that gets the diagnostic here, since it is the later declaration in every
+// case. The first binding of a name is the real one: `double` and `triple` below are called without
+// a diagnostic of their own.
+use util.{double}
+use util.{triple}
+use std.math
+use util.{double} //~ E0304
+use other.{triple} //~ E0304
+use kp.math //~ E0304
+
+pub fn quad() -> I32 {
+  double(2) + triple(1)
+}
+
+use util.{quad} //~ E0304

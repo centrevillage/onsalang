@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.4", "§15.1"]
+// fixes = 0
+
+// The example of §5.1: `use util.{prev}` takes a name that a flow cannot see (the built-in flow
+// `prev`). The item `prev` of `util.onsa` is E0304 in its own module (an item with the name of a
+// built-in flow), and the `use` that takes it is E0304 here: a declaration with an error in it is
+// still read as a name (§18.1), so the `use` finds the item and binds it, and the binding is the
+// error. No candidate.
+use util.{prev} //~ E0304
+
+pub fn fine() -> I32 {
+  1
+}

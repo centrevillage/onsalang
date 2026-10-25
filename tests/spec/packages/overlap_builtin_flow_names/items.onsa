@@ -1,0 +1,35 @@
+// Items with the names of the built-in flows: a function, a flow, a flow with an input, a function with
+// a name that is also a field name in `Voice` (the field and the method are free, §2.2).
+pub fn delay() -> I32 { //~ E0304
+  1
+}
+
+pub flow prev(x: F32 at sample) -> F32 at sample { //~ E0304
+  x
+}
+
+pub fn vdelay() -> I32 { //~ E0304
+  2
+}
+
+pub flow sample_rate(x: F32 at sample) -> F32 at sample { //~ E0304
+  x
+}
+
+pub fn sample_tick() -> I32 { //~ E0304
+  3
+}
+
+pub struct Voice {
+  delay: I32,
+}
+
+impl Voice {
+  fn prev(self) -> I32 {
+    self.delay
+  }
+}
+
+pub fn fine() -> I32 {
+  4
+}

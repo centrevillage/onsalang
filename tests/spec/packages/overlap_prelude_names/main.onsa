@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§15.1"]
+
+// The names of the prelude and of the built-in types cannot be hidden (§5.1), so an item of one of
+// them is E0304 (§15.1, S-611, R-103). The items are in `types.onsa`. The name `panic` of the
+// prelude is in `overlap_prelude_panic`.
+
+pub fn fine() -> I32 {
+  1
+}

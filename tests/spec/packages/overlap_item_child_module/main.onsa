@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// An item of a module and a child module of the same name are E0304 (§15.1, R-177): the item `b` of
+// `a.onsa` and `a/b.onsa`, a flow `f` of `e.onsa` and `e/f.onsa`, a `priv fn m` of `h.onsa` and
+// `h/m.onsa`, and the item `g` of `a/b.onsa` with the child `a/b/g.onsa` below it. The diagnostic is
+// on the item (the file of the child has none), whatever the visibility of the item, and the other
+// items of the module go on working: `c` and `n` below use the item of the same module.
+//
+// What does not clash: a grandchild (`p/r/q.onsa` is `p.r.q`, a child of `p.r`, and the item `q` of
+// `p.onsa` is an item of `p`), and a child of another module (`u/t.onsa` is `u.t`, and the item `t` of
+// `s.onsa` is an item of `s`).
+use a.{c}
+use h.{n}
+use s.{t}
+use p.r.q.{w}
+use u.t.{y}
+
+pub fn k() -> I32 {
+  c() + n() + t() + w() + y()
+}
