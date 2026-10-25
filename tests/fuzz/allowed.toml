@@ -386,3 +386,10 @@ left = "expected `…` or `…`, found `…`"
 input = "tests/fuzz/cc29ca46.onsa"
 reasons = ["S-384"]
 note = "an input cut short with two errors: a `;` between the arguments of an attribute, and a `}` where the `)` closes them, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected module path, found `…`"
+input = "tests/fuzz/332a8990.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a blank after the `.` of a `use` path, and a `(` where the next name of the path goes"
