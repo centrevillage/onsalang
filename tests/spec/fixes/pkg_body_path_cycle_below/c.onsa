@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0302 for a path with no `use`, with no candidate when the candidate would close a cycle through a
+// module below (R-39, §15.1, §18.1). The candidate adds `use d`, which is a dependency on `d` and on every
+// module below `d` (§15.1), and `d.inner` takes `c`: the cycle is `c`, `d.inner`, `c`, although the
+// module `d` itself has no `use` of `c` and the path names an item of `d`. So the candidate would leave
+// E0310 and is not given. The package has no cycle as written.
+
+pub fn f() -> I32 {
+  d.h()                                             //~ E0302
+}

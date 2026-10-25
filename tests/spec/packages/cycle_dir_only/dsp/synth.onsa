@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// E0310: the directory `dsp/` has no file of its own and is a module with no items (§15.1, S-666).
+// `use dsp` in `main.onsa` takes it, a dependency on `dsp.synth` and `dsp.util` below it, and
+// `dsp.synth` takes an item of `main`; the child `dsp.synth` and the parent's `use` of `main` are in
+// the cycle too. The spec fixes neither the number nor the place of the E0310 of one cycle; the mark is
+// where the compiler puts it (one per cycle, on the first `use` of the cycle in the order of the
+// diagnostics: `dsp/synth.onsa` is before `main.onsa`).
+use main.{k}                     //~ E0310
+
+pub fn voice() -> I32 {
+  k()
+}

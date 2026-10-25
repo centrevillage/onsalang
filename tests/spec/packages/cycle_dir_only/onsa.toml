@@ -1,0 +1,3 @@
+[package]
+name = "cycle_dir_only"
+edition = "2026"

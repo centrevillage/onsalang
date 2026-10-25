@@ -318,20 +318,27 @@ fn a_package_that_is_not_a_dependency_and_the_own_package_name_are_not_found() {
 }
 
 /// §15.1: the name of a module is not visible in its own body (the items of the module, the prelude and
-/// the built-in types are), so `main.k()` in `main.onsa` is E0302; the module that takes itself with
-/// `use main` names its items through its own name, and that `use` is not a cycle.
+/// the built-in types are), so `main.k()` in `main.onsa` is E0302, and its candidate takes `main.` off
+/// (S-673); the module does not take itself either: `use main` is E0302 with no candidate (S-679).
 #[test]
-fn a_module_names_itself_only_after_taking_itself() {
+fn a_module_does_not_name_itself() {
     let d = Dir::pkg("itself");
     d.write("main.onsa", "pub fn k() -> I32 {\n  1\n}\n\npub fn j() -> I32 {\n  main.k()\n}\n");
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
     assert_eq!(places(&doc), set(&[("E0302", "main.onsa", 6)]), "{doc}");
-
-    d.write("main.onsa", "use main\n\npub fn k() -> I32 {\n  1\n}\n\npub fn j() -> I32 {\n  main.k()\n}\n");
+    let fixes = fixes_of(&diagnostics(&doc)[0]).clone();
+    assert_eq!(fixes.len(), 1, "{doc}");
+    apply(&d, &fixes[0]);
     let (out, doc) = check_json(d.root(), &["."]);
-    assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
+    assert_eq!(out.code, 0, "after the candidate: {}{}", out.stdout, out.stderr);
     assert!(diagnostics(&doc).is_empty(), "{doc}");
+
+    d.write("main.onsa", "use main\n\npub fn k() -> I32 {\n  1\n}\n");
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(places(&doc), set(&[("E0302", "main.onsa", 1)]), "{doc}");
+    assert!(fixes_of(&diagnostics(&doc)[0]).is_empty(), "{doc}");
 }
 
 // ---- the spaces of the names of a module (S-611) -----------------------------------------------------

@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0302 for a path with no `use` in a child module, with no candidate when the candidate would close a
+// cycle through its parent (R-39, §15.1, §18.1). `f` takes `e` with `use e`, which is a dependency on `e`
+// and on `e.sub`. The candidate adds `use f` to `e.sub`, so `e.sub` depends on `f` and `f` on `e.sub`:
+// the cycle (E0310) would be left, and the candidate is not given. The package has no cycle as written.
+
+pub fn fb() -> I32 {
+  2
+}

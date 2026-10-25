@@ -300,6 +300,7 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         uses: HashMap::new(),
         bound: Vec::new(),
         imports: Vec::new(),
+        deps: Vec::new(),
         use_at: None,
     }
 }

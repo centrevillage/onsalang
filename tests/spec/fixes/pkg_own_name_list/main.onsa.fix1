@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0302 in the package `fx`: a `use` that starts with the package's own name, where the name is followed
+// by a list (§15.1, S-663). The candidate is one `use` per element of the list, so `use fx.{util}` becomes
+// `use util`, and `use fx.{one, two}` (in list.onsa) becomes `use one` and `use two`, two lines.
+// `use fx.one` (in whole.onsa) takes the package name off. Each file has one such `use`, and the
+// candidate is the only one.
+
+use util                                       //~ E0302
+
+pub fn run() -> I32 {
+  1
+}

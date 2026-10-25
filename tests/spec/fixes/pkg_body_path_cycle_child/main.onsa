@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0302 for a path of the module's own name with no `use`: `main.inner.g()` in the body of `main`, where
+// the child module `main.inner` takes an item of `main` (`use main.{k}`). Taking `main` with `use main`
+// would be a dependency of `main` on every module below it (self excluded, §15.1), `main.inner`, and
+// `main.inner` depends on `main`, so the candidate would close a cycle (E0310). The candidate is not
+// safe when it leaves the cycle (§18.1), so what this case promises is that applying a candidate, if
+// there is one, does not leave E0310 (the contract of the case runner). Whether the diagnostic has a
+// candidate at all is the open question S-673 (the candidate of a path that starts from the name of the
+// module itself), so the number is not fixed here.
+
+pub fn k() -> I32 {
+  1
+}
+
+pub fn j() -> I32 {
+  main.inner.g()                                    //~ E0302
+}

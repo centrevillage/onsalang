@@ -124,6 +124,8 @@ impl<'p> Sema<'p> {
     /// it depends on (§15.1, S-246): at the head of the module, outside every
     /// unit. The heads of `use` name the package
     /// ([`crate::resolve::Modules::heads`]).
+    // SPEC-GAP(S-645): at the head of one file (`Sema::module_head`), outside
+    // every unit.
     fn head_clashes(&mut self) {
         for (pkg, p) in self.flat.clone().into_iter().enumerate() {
             let root = self.a.modules.roots[pkg];
@@ -148,23 +150,23 @@ impl<'p> Sema<'p> {
     /// (a directory), the head of the first `.onsa` under it in the order of
     /// the diagnostics (the paths of the files, as the E0320 of a directory,
     /// S-313, S-666).
+    // SPEC-GAP(S-645): the E0304 of a directory is on its first file alone, so
+    // a `check` of another file under it does not show it.
     fn module_head(&self, m: ModId) -> Span {
         if let Some(file) = self.a.modules.get(m).file {
             return Span::empty(file, 0);
         }
         let mut first: Option<(String, Span)> = None;
-        let mut stack = vec![(m, String::new())];
-        while let Some((at, path)) = stack.pop() {
+        let mut stack = vec![m];
+        while let Some(at) = stack.pop() {
             let info = self.a.modules.get(at);
             if let Some(file) = info.file {
-                let key = format!("{path}.onsa");
+                let key = self.file_key(at);
                 if first.as_ref().is_none_or(|(k, _)| key < *k) {
                     first = Some((key, Span::empty(file, 0)));
                 }
             }
-            for (name, &c) in &info.children {
-                stack.push((c, if at == m { name.clone() } else { format!("{path}/{name}") }));
-            }
+            stack.extend(info.children.values().copied());
         }
         match first {
             Some((_, span)) => span,

@@ -1,3 +1,3 @@
-use a.{f}                        //~ E0310
+use a.{f}
 
 pub fn g() -> I32 { f() }

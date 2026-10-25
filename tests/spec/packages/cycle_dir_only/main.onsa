@@ -1,0 +1,5 @@
+use dsp
+
+pub fn k() -> I32 {
+  1
+}

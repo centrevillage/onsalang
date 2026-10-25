@@ -200,7 +200,10 @@ pub struct Analysis {
     pub diagnostics: Vec<Diagnostic>,
     /// The diagnostics of the paths of the modules, outside every unit (the
     /// E0304 of a module under the root of the name of a package, §15.1):
-    /// each is reported, as those of the input's paths.
+    /// each is reported, as those of the input's paths. Those the driver
+    /// makes from the paths of the files (`Loaded::input_diagnostics`)
+    /// meet these at one place, `onsa_driver::analyze`: two paths, as they
+    /// are made at two stages (the files read, the table of the heads).
     pub path_diagnostics: Vec<Diagnostic>,
 }
 

@@ -1,0 +1,7 @@
+use std.math
+
+use std.math.{sin}                                      //~ E0302
+
+pub fn run_math() -> I32 {
+  1
+}

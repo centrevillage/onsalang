@@ -4,11 +4,13 @@
 //!
 //! The parts are in a module each: `collect` (the tree and the items),
 //! `prelude` (the names in scope everywhere), `imports` (each `use`),
-//! `clash` (the E0304 of two names of one space) and `lookup` (the lookups
-//! of a path, for a `use` and outside one).
+//! `clash` (the E0304 of two names of one space), `cycles` (the E0310 of
+//! the dependencies of the `use`) and `lookup` (the lookups of a path, for a
+//! `use` and outside one).
 
 mod clash;
 mod collect;
+mod cycles;
 mod imports;
 mod lookup;
 mod prelude;
@@ -16,19 +18,22 @@ mod prelude;
 use crate::def::ModId;
 use crate::sig::Sema;
 
-/// The names stage, in its order: the tree, the prelude, the items, the
-/// cycles of the imports, each `use`, then the clashes of the names. A `use`
+pub(crate) use cycles::ImportGraph;
+
+/// The names stage, in its order: the tree, the prelude, the items, each
+/// `use`, the cycles of their dependencies, the `use` whose head is no head
+/// (their candidates read the graph), then the clashes of the names. A `use`
 /// reads the tables of the first three, never another `use` (§15.1), so the
 /// modules are resolved in any order.
 pub(crate) fn collect_names(s: &mut Sema<'_>) {
     s.build_module_tree();
     prelude::build(&mut s.a);
     s.collect_items();
-    let (cycles, _) = s.a.modules.check_cycles();
-    s.a.diagnostics.extend(cycles);
     for m in 0..s.a.modules.mods.len() {
         s.resolve_imports(ModId(m as u32));
     }
+    s.check_cycles();
+    s.report_use_heads();
     // Before the signatures for now; after the generated items of the flows
     // that are absent from W4-03 U3b, whose `use` fail (S-462).
     s.check_clashes();

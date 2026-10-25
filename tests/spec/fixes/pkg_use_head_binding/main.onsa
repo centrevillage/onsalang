@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// E0302 with one candidate: the head of a `use` is a name that a `use` of this module took (§15.1, S-37).
+// The candidate is the path of the binding in front of the rest: `util.counter` was taken as `counter`,
+// so `use counter.{next}` becomes `use util.counter.{next}`. The package `std` was taken as the module
+// `std.math`, so `use math.{sin}` is `use std.math.{sin}` (via_std.onsa) and the whole list stays in the
+// candidate (`use math.{sin, cos}` in via_std_list.onsa). The `use` lines that took the names are not changed.
+
+use util.counter
+
+use counter.{next}                                  //~ E0302
+
+pub fn run() -> I32 {
+  1
+}

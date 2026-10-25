@@ -1,7 +1,7 @@
 //! Modules, their tables of names, imports and cycles (spec §15.1, S-11,
 //! S-17, S-20, S-611). The lookups of a path are in `crate::names::lookup`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
@@ -90,6 +90,31 @@ pub struct Import {
     pub item: ItemId,
 }
 
+/// What a dependency of a `use` reaches (§15.1, S-594): the module of an
+/// item taken, or a module taken and every module below it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DepTarget {
+    At(ModId),
+    Below(ModId),
+}
+
+impl DepTarget {
+    /// The module the dependency is on, with what is below it or not.
+    pub fn module(self) -> ModId {
+        let (DepTarget::At(t) | DepTarget::Below(t)) = self;
+        t
+    }
+}
+
+/// A dependency of a `use`: `name` is the name it takes (or the last
+/// element read), `span` the `use`.
+#[derive(Debug, Clone, Copy)]
+pub struct Dep {
+    pub target: DepTarget,
+    pub name: Span,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModInfo {
     /// `dsp.voice`; empty for a package root.
@@ -112,6 +137,8 @@ pub struct ModInfo {
     /// `crate::names::clash`).
     pub bound: Vec<(String, Span)>,
     pub imports: Vec<Import>,
+    /// The dependencies its `use` make (§15.1, S-594), in the order written.
+    pub deps: Vec<Dep>,
     /// Where a candidate adds a `use`; `None` for a module with no file.
     pub use_at: Option<UseAt>,
 }
@@ -133,12 +160,15 @@ pub enum ResolveError {
         span: Span,
     },
     /// The head of a path outside a `use` names a module or a package with
-    /// no `use` of it (§15.1, R-39): the candidate adds the `use`, unless
-    /// the `use` would close a cycle of imports.
+    /// no `use` of it (§15.1, R-39), or names the own package or module
+    /// (`own`, S-673): the candidate of `crate::names::lookup`, or a rule
+    /// that shows the form.
     NeedsUse {
         name: String,
         span: Span,
+        own: bool,
         fix: Option<Fix>,
+        rule: Option<String>,
     },
 }
 
@@ -159,13 +189,20 @@ impl ResolveError {
             ResolveError::NotANamespace { name, span } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, format!("`{name}` has no members")).with_found(name)
             }
-            ResolveError::NeedsUse { name, span, fix } => {
-                let msg = format!("cannot find `{name}`: another module or a package is named only through a `use`");
-                let d = Diagnostic::new(Stage::Names, Code::E0302, span, msg).with_found(name);
-                match fix {
-                    Some(fix) => d.with_fix(fix),
-                    None => d,
+            ResolveError::NeedsUse { name, span, own, fix, rule } => {
+                let msg = if own {
+                    format!("cannot find `{name}`: a path does not name its own package or module (§15.1)")
+                } else {
+                    format!("cannot find `{name}`: another module or a package is named only through a `use`")
+                };
+                let mut d = Diagnostic::new(Stage::Names, Code::E0302, span, msg).with_found(name);
+                if let Some(fix) = fix {
+                    d = d.with_fix(fix);
                 }
+                if let Some(rule) = rule {
+                    d = d.with_rule(rule);
+                }
+                d
             }
         }
     }
@@ -189,9 +226,9 @@ pub struct Modules {
     /// keyed by the scalar's `TyId`, or by `Builtin(b, [])` for generic
     /// builtins (`Buf.zeroed`).
     pub assoc_builtin: HashMap<TyId, HashMap<String, DefId>>,
-    /// The edges of the graph of the imports ([`Modules::import_edges`]),
-    /// made once, when first read: after every `use` is listed.
-    edges: std::sync::OnceLock<Vec<Vec<(ModId, Span)>>>,
+    /// The graph of the dependencies of the `use` (E0310), made once every
+    /// `use` is resolved (`crate::names::cycles`).
+    pub(crate) graph: Option<crate::names::ImportGraph>,
 }
 
 impl Modules {
@@ -234,100 +271,12 @@ impl Modules {
         self.heads[self.pkg_of(from)].get(name).copied()
     }
 
-    /// Module import graph edges (same package only), for E0310.
-    fn import_target(&self, from: ModId, path: &Path) -> Option<ModId> {
-        let root = self.root_of(from);
-        let mut cur = *self.get(root).children.get(&path.segments[0].name)?;
-        for seg in &path.segments[1..] {
-            match self.get(cur).children.get(&seg.name) {
-                Some(&c) => cur = c,
-                None => break,
-            }
-        }
-        (cur != from).then_some(cur)
-    }
-
-    /// The edges of the graph of the imports, by module: the module each
-    /// `use` imports, and the span of the `use`.
-    /// Read after the names stage listed every `use` (`crate::names`).
-    fn import_edges(&self) -> &[Vec<(ModId, Span)>] {
-        self.edges.get_or_init(|| {
-            let edge = |m: ModId, imp: &Import| self.import_target(m, &imp.path).map(|t| (t, imp.span));
-            (0..self.mods.len())
-                .map(|i| {
-                    self.get(ModId(i as u32)).imports.iter().filter_map(|imp| edge(ModId(i as u32), imp)).collect()
-                })
-                .collect()
-        })
-    }
-
-    /// A `use` of `path` added in `from` would close a cycle of the imports
-    /// (E0310): the module it imports reaches `from` by the edges of
-    /// [`Modules::check_cycles`].
-    pub(crate) fn closes_cycle(&self, from: ModId, path: &Path) -> bool {
-        let Some(start) = self.import_target(from, path) else { return false };
-        let edges = self.import_edges();
-        let mut seen = vec![false; self.mods.len()];
-        let mut stack = vec![start];
-        while let Some(m) = stack.pop() {
-            if m == from {
-                return true;
-            }
-            if !std::mem::replace(&mut seen[m.0 as usize], true) {
-                stack.extend(edges[m.0 as usize].iter().map(|&(t, _)| t));
-            }
-        }
-        false
-    }
-
-    /// Detect cyclic imports (§15.1, E0310). Returns one diagnostic per cycle
-    /// and the modules in dependency order (imports first) for resolution.
-    pub fn check_cycles(&self) -> (Vec<Diagnostic>, Vec<ModId>) {
-        let n = self.mods.len();
-        let edges = self.import_edges();
-        let mut state = vec![0u8; n]; // 0 new, 1 visiting, 2 done
-        let mut order = Vec::new();
-        let mut diags = Vec::new();
-        let mut reported: HashSet<(usize, usize)> = HashSet::new();
-        fn dfs(
-            i: usize,
-            edges: &[Vec<(ModId, Span)>],
-            state: &mut [u8],
-            order: &mut Vec<ModId>,
-            diags: &mut Vec<Diagnostic>,
-            reported: &mut HashSet<(usize, usize)>,
-            mods: &Modules,
-        ) {
-            state[i] = 1;
-            for &(t, span) in &edges[i] {
-                let j = t.0 as usize;
-                match state[j] {
-                    0 => dfs(j, edges, state, order, diags, reported, mods),
-                    1 => {
-                        if reported.insert((i, j)) {
-                            diags.push(Diagnostic::new(
-                                Stage::Names,
-                                Code::E0310,
-                                span,
-                                format!(
-                                    "`{}` and `{}` import each other (cyclic module import)",
-                                    mods.get(ModId(i as u32)).path,
-                                    mods.get(t).path
-                                ),
-                            ));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            state[i] = 2;
-            order.push(ModId(i as u32));
-        }
-        for i in 0..n {
-            if state[i] == 0 {
-                dfs(i, edges, &mut state, &mut order, &mut diags, &mut reported, self);
-            }
-        }
-        (diags, order)
+    /// The path of `m` in a `use` written in `from` (§15.1): from the root of
+    /// its package, after the name of the package when it is another one
+    /// (`std.math`; `std` for its root). O(its length).
+    pub fn abs_path(&self, from: ModId, m: ModId) -> Vec<String> {
+        let info = self.get(m);
+        let package = (info.pkg != self.pkg_of(from)).then(|| self.names[info.pkg].clone());
+        package.into_iter().chain(info.path.split('.').filter(|s| !s.is_empty()).map(String::from)).collect()
     }
 }

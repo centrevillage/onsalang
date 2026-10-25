@@ -308,7 +308,8 @@ fn a_body_names_modules_and_packages_through_a_use_alone() {
 }
 
 /// R-39: the candidate that adds `use X` is for a path with no `use`, where a
-/// member follows the head (`util.f()`, `util.SIZE`, `util.nosuch`). A module
+/// member follows the head (`util.f()`, `util.SIZE`), and not when the rest is
+/// not found (`util.nosuch`, R-268: applying it would leave an E0302). A module
 /// or a package alone at the place of a type, a value, a callee, the type of
 /// an `impl` or an array length is not fixed by the `use`: E0302 with none
 /// (W4-03 U2b/b: `j_type_std`, `j_value_util`, `j_call_std`, `j_impl_util`,
@@ -323,7 +324,7 @@ fn the_candidate_of_a_use_needs_a_member_after_the_head() {
         ("impl util {\n}\n", 0),
         ("pub fn k(a: [I32; util]) -> I32 {\n  1\n}\n", 0),
         ("pub fn k() -> I32 {\n  main(1)\n}\n", 0),
-        ("pub fn k() -> I32 {\n  util.nosuch\n}\n", 1),
+        ("pub fn k() -> I32 {\n  util.nosuch\n}\n", 0),
         ("pub fn k() -> I32 {\n  util.double(2)\n}\n", 1),
         ("pub fn k() -> U32 {\n  util.SIZE\n}\n", 1),
         ("pub fn k(a: [I32; util.SIZE]) -> I32 {\n  1\n}\n", 1),

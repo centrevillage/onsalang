@@ -2,7 +2,9 @@
 // [test]
 // spec = ["§15.1"]
 
-// E0310: `a` and `b` import each other (§15.1). Reported on the import that closes the cycle.
-use b.{g}
+// E0310: `a` and `b` take items of each other (§15.1). The spec fixes neither the number nor the place
+// of the E0310 of one cycle; the mark is where the compiler puts it (one per cycle, on the first `use`
+// of the cycle in the order of the diagnostics).
+use b.{g}                        //~ E0310
 
 pub fn f() -> I32 { g() }

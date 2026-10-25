@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0302 in the package `fx`: `use fx` takes the package itself by its own name. The way to repair it also
+// reaches the paths in the bodies, so there is no candidate (§15.1, S-663); the note shows how to take a
+// module directly. crates/onsa_cli/tests/use_cycles.rs checks that the note is there.
+
+use fx                                              //~ E0302
+
+pub fn run() -> I32 {
+  1
+}

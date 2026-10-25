@@ -1,0 +1,7 @@
+use dsp
+use dsp.synth                                       //~ E0302
+use dsp.{synth}                                     //~ E0302
+
+pub fn voice() -> I32 {
+  dsp.h()
+}

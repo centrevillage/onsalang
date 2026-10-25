@@ -1,0 +1,5 @@
+use fx.one                                          //~ E0302
+
+pub fn run_whole() -> I32 {
+  1
+}

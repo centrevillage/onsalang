@@ -1,0 +1,5 @@
+use main.{k}
+
+pub fn g() -> I32 {
+  k() + 1
+}

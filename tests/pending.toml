@@ -205,13 +205,6 @@ note = "使われない束縛。fn の世界は W4-04、flow の世界は W7-04"
 
 [[pending]]
 kind = "diag-code"
-target = "E0310"
-reasons = ["R-39"]
-until = "W4-03"
-note = "モジュールの循環。依存は use だけで決まる（R-39）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0311"
 reasons = ["R-02", "S-91"]
 until = "W4-05"
@@ -1223,20 +1216,6 @@ target = "tests/spec/fixes/pkg_rename/util.onsa:1:8 E0320 fix1"
 reasons = ["S-82", "R-87"]
 until = "W4-04"
 note = "E0320 の候補が他のモジュールの使用を改名せず、main.onsa に E0302 が残る（clean）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/pkg_own_name"
-reasons = ["S-37"]
-until = "W4-03"
-note = "use の頭の自分のパッケージ名の E0302（候補はパッケージ名を外す形）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0302_use_path.onsa"
-reasons = ["S-37"]
-until = "W4-03"
-note = "use の頭が取り込んだ名前の E0302（候補は絶対経路）"
 
 [[pending]]
 kind = "test-case"

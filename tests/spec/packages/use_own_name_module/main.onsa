@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1"]
+
+// The package is `fx` and it has a module at the root with the same name (`fx.onsa`, with the child
+// module `fx/inner.onsa`). A `use` that starts with that name is not the own package name: it
+// names the module, so it is not E0302 (§15.1: "if there is a module at the root of the same name, the
+// name points to it", S-663). The package name is not a dependency name, so the module is not E0304.
+// Every test passes.
+use fx.{g}
+use fx.inner.{h}
+use fx
+
+test "an item of the module with the name of the package" {
+  assert g() == 4
+}
+
+test "a child module of that module" {
+  assert h() == 5
+}
+
+test "the module itself" {
+  assert fx.g() + fx.inner.h() == 9
+}

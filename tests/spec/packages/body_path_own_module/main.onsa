@@ -4,15 +4,14 @@
 // spec = ["§15.1"]
 
 // R-39: the name of a module is not visible in its own body without a `use` (the only names visible
-// without one are the items of the module, the prelude and the built-in types), and a module may take
-// itself: `use main` here (a `use` of the module itself is left out of the dependencies, so it is not
-// a cycle, E0310). Every test passes.
-use main
+// without one are the items of the module, the prelude and the built-in types), and a module does not
+// take itself (S-679: `use main` here is E0302, `tests/spec/packages/use_self_module`), so the module
+// names its items by their names alone. Every test passes.
 
 pub fn k() -> I32 {
   1
 }
 
-test "a module that took itself names its items through its own name" {
-  assert main.k() == 1
+test "a module names its items by their names alone" {
+  assert k() == 1
 }

@@ -1,0 +1,6 @@
+use one
+use two                                   //~ E0302
+
+pub fn run_list() -> I32 {
+  1
+}

@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// E0302: a module does not take itself with a `use` (§15.1, S-679): `use main` in `main.onsa` and
+// `use dsp.synth` and `use dsp.{synth}` in `dsp/synth.onsa`. There is no candidate; the note says that
+// the items of the module are named by their names alone. The parent (`use dsp` in `dsp/synth.onsa`)
+// and a child (`use main.inner`) are taken.
+use main                                            //~ E0302
+use main.inner
+
+pub fn k() -> I32 {
+  inner.g()
+}

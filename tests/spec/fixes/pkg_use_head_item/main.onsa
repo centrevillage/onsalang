@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// E0302 with no candidate: the head of a `use` is a function, the one that a `use` took (`double`) and
+// one of this module (`local`). The candidate would be the path of the binding in front of the rest
+// (`use util.double.{x}`), but a function is not a module, so that path is E0302 again and the
+// candidate is not safe (§18.1: a candidate that cannot be made safe is not given). The note of
+// §15.1 about the head is for the same reason.
+
+use util.{double}
+
+fn local() -> I32 {
+  1
+}
+
+use double.{x}                                      //~ E0302
+use local.{y}                                       //~ E0302
