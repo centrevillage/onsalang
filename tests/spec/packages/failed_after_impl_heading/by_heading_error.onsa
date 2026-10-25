@@ -1,0 +1,34 @@
+// A heading with a diagnostic of its own makes the `impl` one unit, and the members are not checked: the
+// `let a: I32 = true` in each member has no diagnostic.
+pub struct S[T] {
+  a: T,
+}
+
+impl Nope {                                         //~ E0302
+  pub fn m1(self) -> I32 {
+    let a: I32 = true
+    a
+  }
+}
+
+impl[T: Nope] S[T] {                                //~ E0200
+  pub fn m2(self) -> I32 {
+    let a: I32 = true
+    a
+  }
+}
+
+impl S[Nope] {                                      //~ E0302
+  pub fn m3(self) -> I32 {
+    let a: I32 = true
+    a
+  }
+}
+
+// The members of an `impl` whose heading is right are checked.
+impl[T] S[T] {
+  pub fn m4(self) -> I32 {
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+}

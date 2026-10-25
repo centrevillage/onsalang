@@ -1,0 +1,115 @@
+// A failed `use` name: `Gone` (a type) and `LEN` (a length) bind nothing.
+use std.math.{Gone, LEN}                            //~ E0302
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// A failed name in the arguments and the result of a signature. The unit goes on: the value of the
+// failed type is an error value (no diagnostic for `x + 1`), and the real error after it is reported.
+pub fn sig_arg(x: Gone) -> I32 {
+  let b = x + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn sig_ret() -> Gone {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn type_arg(o: Option[Gone]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn type_arg_ret() -> Option[Gone] {
+  let a: I32 = true                                 //~ E0401
+  None
+}
+
+pub fn fn_arg(f: fn(Gone) -> I32) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn fn_ret(f: fn(I32) -> Gone) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn array_len(xs: [I32; LEN]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn const_arg(r: Ring[F32, LEN]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub const K: Gone = 1 + true                        //~ E0401
+
+pub flow flow_in(x: Gone at sample) -> F32 at sample {
+  let a: I32 = true                                 //~ E0401
+  1.0
+}
+
+pub struct Fields {
+  f: Gone,
+  g: Nope,                                          //~ E0302
+}
+
+pub enum Variants {
+  A(Gone),
+  B(Nope),                                          //~ E0302
+}
+
+pub struct Holder {
+  f: Gone,
+}
+
+pub fn read_field(s: Holder) -> I32 {
+  let v: I32 = s.f
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+impl Gone {
+  pub fn m(self) -> I32 {
+    let b = self + 1
+    let a: I32 = true                               //~ E0401
+    a
+  }
+}
+
+pub fn local_ann() -> I32 {
+  let o: Gone = 1
+  let b = o + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn local_arg_ann() -> I32 {
+  let o: Option[Gone] = None
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn local_len_ann() -> I32 {
+  let xs: [I32; LEN] = [1, 2]
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn closure_arg() -> I32 {
+  let g = fn(x: Gone) -> I32 { 1 }
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+test "body type" {
+  let o: Gone = 1
+  let a: I32 = true                                 //~ E0401
+}

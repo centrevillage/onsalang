@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// S-692 (c), S-689 (1), S-690 (1): a name that failed in the names stage is no first error of its unit, so
+// the unit is checked on. The three modules take the three kinds of failed name: a `use` that failed
+// (`by_use`), an E0304 (`by_clash`) and a member that a syntax error cut off (`by_cut`). Every unit puts
+// the failed name in one place of the types and declarations (an argument or a result, a type argument, a
+// function type, an array length, a const argument, the type of a const, the input of a flow, a field, an
+// enumerator, the heading of an `impl`, an annotation of the body, an argument of a closure, a `test`),
+// uses the value of that type where it can, and ends in a real error (`let a: I32 = true`), which is
+// reported. The diagnostics that stay are the failed name, the real errors and the `Nope` in the fields.

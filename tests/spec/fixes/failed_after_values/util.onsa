@@ -1,0 +1,8 @@
+pub fn double(x: I32) -> I32 {
+  x * 2
+}
+
+pub enum Color {
+  Red,
+  Green,
+}

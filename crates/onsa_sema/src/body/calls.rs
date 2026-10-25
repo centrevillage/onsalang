@@ -52,16 +52,15 @@ impl<'a> Checker<'a> {
                 let path = Path { segments: c.iter().map(|(_, i)| i.clone()).collect(), span: self.expr(callee).span };
                 match self.a.resolve_path(self.m, &path) {
                     Ok(en) => Some(en),
-                    // A variant or an associated function of a struct or enum a
-                    // syntax error cut (S-260): not known, no diagnostic.
-                    Err(_) if self.a.through_partly_read(self.m, &path) => {
-                        self.failed = true;
-                        return Err(Stop);
-                    }
                     // `util.f()` with no `use util` (R-39): the error of the
-                    // whole path, with its candidate.
-                    // A name held as an error (§18.1): no diagnostic.
-                    Err(err @ (ResolveError::NeedsUse { .. } | ResolveError::Failed)) => {
+                    // whole path, with its candidate. What the check does not
+                    // read (a name held as an error, a variant or an associated
+                    // function of a def a syntax error cut, S-260, or of an
+                    // alias of the error type, R-271): no diagnostic.
+                    Err(err)
+                        if matches!(err, ResolveError::NeedsUse { .. })
+                            || self.a.unread_path(self.def, self.m, &path, &err) =>
+                    {
                         return Err(self.resolve_error(&path, err));
                     }
                     Err(_) => {
@@ -135,6 +134,10 @@ impl<'a> Checker<'a> {
         // 3. A function value.
         let ft = self.check_expr(callee, None)?;
         let ft = self.known(ft, self.expr(callee).span, "callee")?;
+        // A value of the error type: an unknown callee (§18.1, R-271).
+        if matches!(self.ty(ft), Ty::Error) {
+            return self.args_of_unknown_callee(args);
+        }
         let Ty::Fn(f) = self.ty(ft) else {
             let shown = self.display(ft);
             return Err(self.err(
@@ -314,8 +317,10 @@ impl<'a> Checker<'a> {
             }
         }
         let Some(sig) = builtin::method(&mut self.a.types, recv, &name.name) else {
-            if matches!(self.ty(recv), Ty::Error) {
-                return Ok(recv);
+            // A receiver of the error type, or of a type parameter with an
+            // unknown bound (§18.1, S-689, R-271): an unknown method.
+            if self.traits_unknown(recv) {
+                return self.args_of_unknown_callee(args);
             }
             let shown = self.display(recv);
             return Err(self.err(Code::E0413, name.span, format!("`{shown}` has no method `{}`", name.name)));

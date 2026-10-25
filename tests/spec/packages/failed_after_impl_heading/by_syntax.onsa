@@ -1,0 +1,33 @@
+pub struct S[T] {
+  a: T,
+}
+
+// A heading with a syntax error: the `impl` is one unit, and the members are not checked.
+impl {                                              //~ E0002
+  pub fn m1(self) -> I32 {
+    let a: I32 = true
+    a
+  }
+}
+
+impl 1 {                                            //~ E0002
+  pub fn m2(self) -> I32 {
+    let a: I32 = true
+    a
+  }
+}
+
+impl S[T] where T {                                 //~ E0002
+  pub fn m3(self) -> I32 {
+    let a: I32 = true
+    a
+  }
+}
+
+// The members of the `impl` after them are checked.
+impl[T] S[T] {
+  pub fn m4(self) -> I32 {
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+}

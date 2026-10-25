@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+// fixes = 1
+
+// S-692 (c), S-689, S-690, X-3: the units go on after a failed name in a type, so what they report is
+// the real errors. The candidate takes `fx.` off the `use`; `Color` is then a type, and the units that wrote
+// the failed name (and the units that take the value of such a unit) report what they could not report
+// before. They are units the failed name held back, which the candidate may change (X-3).
+use util.{Color, double}                         //~ E0302
+
+pub fn sig_arg(x: Color) -> I32 {
+  let b = x + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn sig_ret() -> Color {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn takes_sig_ret() -> I32 {
+  let o = sig_ret()
+  let b = o + 1
+  1
+}
+
+pub fn type_arg(o: Option[Color]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn fn_arg(f: fn(Color) -> I32) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub const K: Color = 1 + true                       //~ E0401
+
+pub fn takes_const() -> I32 {
+  K + 1
+}
+
+pub flow flow_in(x: Color at sample) -> F32 at sample {
+  let a: I32 = true                                 //~ E0401
+  1.0
+}
+
+pub struct Holder {
+  f: Color,
+}
+
+pub fn read_field(s: Holder) -> I32 {
+  let v: I32 = s.f
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn takes_field(s: Holder) -> I32 {
+  s.f + 1
+}
+
+impl Color {
+  pub fn m(self) -> I32 {
+    let a: I32 = true                               //~ E0401
+    a
+  }
+}
+
+pub fn local_ann() -> I32 {
+  let o: Color = 1
+  let b = o + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn closure_arg() -> I32 {
+  let g = fn(x: Color) -> I32 { 1 }
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn annotation_only() -> I32 {
+  let _: Color = sig_ret()
+  1
+}
+
+test "annotation in a test" {
+  let o: Color = 1
+  let a: I32 = true                                 //~ E0401
+}
+
+pub fn control() -> I32 {
+  double(2)
+}

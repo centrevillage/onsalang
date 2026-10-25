@@ -118,7 +118,10 @@ impl<'a> Checker<'a> {
                 // The element is copied N times: a kind constraint that a later
                 // statement may decide (§2.4, §4.7, S-235).
                 self.defer(span, et, DeferredKind::Require { bound: Bound::Dup, what: Required::RepeatElement });
-                Ok(self.a.types.intern(Ty::Array(et, n)))
+                Ok(match n {
+                    Some(n) => self.a.types.intern(Ty::Array(et, n)),
+                    None => self.a.types.error(),
+                })
             }
             ExprKind::Struct { type_args, .. } if !type_args.is_empty() => {
                 Err(self.type_args_unsupported(type_args[0].1.span))
@@ -236,7 +239,8 @@ impl<'a> Checker<'a> {
                         }
                     }
                     UnOp::Not => match self.ty(s) {
-                        Ty::Bool | Ty::Int(_) | Ty::Error => Ok(t),
+                        Ty::Bool | Ty::Int(_) => Ok(t),
+                        _ if self.traits_unknown(s) => Ok(t),
                         Ty::Var(_) if self.infer.lit_of(&self.a.types, s) == Some(LitKind::Int) => Ok(t),
                         Ty::Var(_) => Err(self.known(t, span, "operand of `!`").unwrap_err()),
                         _ => {
@@ -369,7 +373,8 @@ impl<'a> Checker<'a> {
     }
 
     /// `[e; N]` / array length in an expression (§4.5; the forms are read in `constarg.rs`).
-    pub(crate) fn const_len(&mut self, len: ExprId) -> R<Len> {
+    /// `None`: a length the check does not read (§18.1, S-690).
+    pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
         let generics = self.generics.clone();
         match crate::constarg::expr(self.a, self.m, self.ast, self.text, &generics, len) {
             Ok((value, constant)) => {
@@ -380,19 +385,32 @@ impl<'a> Checker<'a> {
                         if let Some(d) = constant {
                             self.info.targets.insert(len, Target::Const(d));
                         }
-                        Ok(Len::Const(v))
+                        Ok(Some(Len::Const(v)))
                     }
-                    crate::constarg::ConstU32::Param(i) => Ok(Len::Param(i)),
+                    crate::constarg::ConstU32::Param(i) => Ok(Some(Len::Param(i))),
                 }
             }
             Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => Err(self.diag(d)),
-            // A constant whose value was not read (S-59): the check of this
-            // body stops there without a diagnostic.
+            // A constant whose value was not read (S-59) or a name held as an
+            // error: no diagnostic, and the check goes on (§18.1, S-690).
             Err(crate::constarg::ConstErr::Unknown) => {
-                self.failed = true;
-                Err(Stop)
+                let u32 = self.u32();
+                self.record(len, u32);
+                self.a.read_held.insert(self.def);
+                Ok(None)
             }
         }
+    }
+
+    /// A struct literal whose struct is not known (an alias of the error
+    /// type, §18.1, R-271): each value is checked on its own, and the
+    /// literal is an error.
+    fn fields_of_unknown(&mut self, fields: &[(Ident, ExprId)]) -> R<TyId> {
+        let error = self.a.types.error();
+        for (_, value) in fields {
+            self.check_expr(*value, Some(error))?;
+        }
+        Ok(error)
     }
 
     fn check_struct_lit(
@@ -408,6 +426,10 @@ impl<'a> Checker<'a> {
         };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
+            // An alias of the error type (§18.1, R-271).
+            Entity::Def(d) if self.a.error_alias(d) => {
+                return self.fields_of_unknown(fields);
+            }
             _ => {
                 let name = self.src(path.span);
                 return Err(self.err(Code::E0401, path.span, format!("`{name}` is not a struct")));
@@ -534,8 +556,10 @@ impl<'a> Checker<'a> {
             r?;
         }
         // SPEC-GAP(S-260): the variants of an enum whose unit failed in the
-        // syntax stage are not all known; its `match` is not counted.
+        // syntax stage are not all known; its `match` is not counted. Nor is
+        // the `match` of a value of the error type (§18.1, R-271).
         if !self.mentions_failed(st)
+            && !matches!(self.ty(self.shallow(st)), Ty::Error)
             && let Some(missing) = self.missing_pattern(&rows, st)
         {
             return Err(self.diag(
@@ -726,7 +750,8 @@ impl<'a> Checker<'a> {
 
     fn require_int(&mut self, s: TyId, op: BinOp, span: Span) -> R<()> {
         match self.ty(s) {
-            Ty::Int(_) | Ty::Error => Ok(()),
+            Ty::Int(_) => Ok(()),
+            _ if self.traits_unknown(s) => Ok(()),
             Ty::Var(_) => match self.infer.lit_of(&self.a.types, s) {
                 Some(LitKind::Int) => Ok(()),
                 Some(LitKind::Float) => {

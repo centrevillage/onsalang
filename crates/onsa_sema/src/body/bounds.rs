@@ -6,15 +6,31 @@ use super::*;
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ bounds
 
+    /// Whether the traits a (resolved) type meets are not known: the error
+    /// type, or a type parameter with an unknown bound (§18.1, S-692 A1).
+    /// Every check of whether it meets a trait keeps quiet then: the
+    /// operators, the methods and the bounds of other functions.
+    pub(crate) fn traits_unknown(&self, t: TyId) -> bool {
+        match self.ty(t) {
+            Ty::Error => true,
+            Ty::Param(i) => {
+                self.generics.get(i as usize).is_some_and(|g| matches!(g.kind, GenericKind::Type { unknown: true, .. }))
+            }
+            _ => false,
+        }
+    }
+
     /// Whether a (resolved) type satisfies a builtin bound (§6.3).
     pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
+        if self.traits_unknown(t) {
+            return true;
+        }
         let ty = self.ty(t);
         match (&ty, b) {
-            (Ty::Error, _) => true,
             (Ty::Param(i), _) => {
                 let Some(g) = self.generics.get(*i as usize) else { return false };
                 match &g.kind {
-                    GenericKind::Type { bounds, dup } => {
+                    GenericKind::Type { bounds, dup, .. } => {
                         bounds.iter().any(|&have| implies(have, b)) || (b == Bound::Dup && *dup)
                     }
                     _ => false,

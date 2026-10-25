@@ -1,0 +1,192 @@
+// `Gone` is the name of a `use` that failed; `A` is an alias of it and `B` of `A`.
+use std.math.{Gone}                                 //~ E0302
+
+pub type A = Gone
+
+pub type B = A
+
+pub fn alias_none() -> A {
+  None
+}
+
+pub fn alias_empty() -> A {
+  []
+}
+
+pub fn alias_some() -> A {
+  Some(1)
+}
+
+pub fn alias_call(o: A) -> I32 {
+  o()
+}
+
+pub fn alias_call_args(o: A) -> I32 {
+  o(1, 2)
+}
+
+pub fn alias_match(x: A) -> I32 {
+  match x {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn alias_match_one_arm(x: A) -> I32 {
+  match x {
+    Some(v) => v,
+  }
+}
+
+pub fn alias_match_pair(x: A) -> I32 {
+  match x {
+    (p, q) => p,
+  }
+}
+
+pub fn alias_in_option(x: Option[A]) -> I32 {
+  match x {
+    Some(f) => f(),
+    None => 0,
+  }
+}
+
+pub fn alias_real_error(o: A) -> I32 {
+  let r = o()
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn chain_none() -> B {
+  None
+}
+
+pub fn chain_empty() -> B {
+  []
+}
+
+pub fn chain_some() -> B {
+  Some(1)
+}
+
+pub fn chain_call(o: B) -> I32 {
+  o()
+}
+
+pub fn chain_call_args(o: B) -> I32 {
+  o(1, 2)
+}
+
+pub fn chain_match(x: B) -> I32 {
+  match x {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn chain_match_one_arm(x: B) -> I32 {
+  match x {
+    Some(v) => v,
+  }
+}
+
+pub fn chain_match_pair(x: B) -> I32 {
+  match x {
+    (p, q) => p,
+  }
+}
+
+pub fn chain_in_option(x: Option[B]) -> I32 {
+  match x {
+    Some(f) => f(),
+    None => 0,
+  }
+}
+
+pub fn chain_real_error(o: B) -> I32 {
+  let r = o()
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn direct_none() -> Gone {
+  None
+}
+
+pub fn direct_empty() -> Gone {
+  []
+}
+
+pub fn direct_some() -> Gone {
+  Some(1)
+}
+
+pub fn direct_call(o: Gone) -> I32 {
+  o()
+}
+
+pub fn direct_call_args(o: Gone) -> I32 {
+  o(1, 2)
+}
+
+pub fn direct_match(x: Gone) -> I32 {
+  match x {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn direct_match_one_arm(x: Gone) -> I32 {
+  match x {
+    Some(v) => v,
+  }
+}
+
+pub fn direct_match_pair(x: Gone) -> I32 {
+  match x {
+    (p, q) => p,
+  }
+}
+
+pub fn direct_in_option(x: Option[Gone]) -> I32 {
+  match x {
+    Some(f) => f(),
+    None => 0,
+  }
+}
+
+pub fn direct_real_error(o: Gone) -> I32 {
+  let r = o()
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn alias_literal() -> I32 {
+  let s = A { a: 1 }
+  1
+}
+
+pub fn alias_path() -> I32 {
+  let p = A.V
+  1
+}
+
+pub fn alias_assoc() -> I32 {
+  let p = A.make()
+  1
+}
+
+pub fn chain_literal() -> I32 {
+  let s = B { a: 1 }
+  1
+}
+
+pub fn chain_path() -> I32 {
+  let p = B.V
+  1
+}
+
+pub fn chain_assoc() -> I32 {
+  let p = B.make()
+  1
+}

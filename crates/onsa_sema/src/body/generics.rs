@@ -102,7 +102,7 @@ impl<'a> Checker<'a> {
                 _ => format!("the type parameter `{}` of {owner}", g.name),
             };
             self.defer(span, arg, DeferredKind::Origin { what });
-            if let GenericKind::Type { bounds, dup } = &g.kind {
+            if let GenericKind::Type { bounds, dup, .. } = &g.kind {
                 let required = |param: &str| Required::Param { param: param.to_string(), owner: owner.clone() };
                 if *dup {
                     self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required(&g.name) });

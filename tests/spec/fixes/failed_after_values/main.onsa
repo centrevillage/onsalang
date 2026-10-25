@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+// fixes = 1
+
+// S-692 (b), X-3: a failed name written as a path in an expression or a pattern stops its unit, so the
+// units here have no diagnostic after it (the `let a: I32 = true` is silent). The candidate takes `fx.` off
+// the `use`; `double` and `Color` are then real, and the units that
+// wrote the failed name (and the units that take the value of such a unit) report what they could not
+// report before (the arguments of `double`, a `Color` that is not an integer, a `match` that misses an arm,
+// the `~` of a call of a function). They are units the failed name held back, which the candidate may
+// change (X-3).
+use fx.util.{Color, double}                         //~ E0302
+
+pub fn value_call() -> I32 {
+  let o = double(1, 2)
+  let b = o + 1
+  let a: I32 = true
+  a
+}
+
+pub fn takes_value_call() -> I32 {
+  let o = value_call_of_color()
+  let b = o + 1
+  1
+}
+
+pub fn value_call_of_color() -> Color {
+  Color.Red
+}
+
+pub fn value_path() -> I32 {
+  let o = Color.Red
+  let b = o + 1
+  let a: I32 = true
+  a
+}
+
+pub fn value_assoc() -> I32 {
+  let o = Color.make()
+  let b = o + 1
+  let a: I32 = true
+  a
+}
+
+pub fn pattern_of_value(x: Color) -> I32 {
+  let r = match x {
+    Color.Red => 1,
+  }
+  let a: I32 = true
+  a
+}
+
+pub fn pattern_of_call() -> I32 {
+  let o = double(1)
+  let r = match o {
+    Color.Red => 1,
+  }
+  let a: I32 = true
+  a
+}
+
+pub flow flow_tilde(x: F32 at sample) -> F32 at sample {
+  let y = double~(x)
+  let a: I32 = true
+  y
+}
+
+pub flow flow_plain(x: F32 at sample) -> F32 at sample {
+  let y = double(x)
+  let a: I32 = true
+  y
+}
+
+pub fn statement() -> I32 {
+  double(1, 2)
+  let a: I32 = true
+  a
+}

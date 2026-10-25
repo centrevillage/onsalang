@@ -36,6 +36,8 @@ impl<'a> Checker<'a> {
     /// the struct is resolved and unified with `ty`, each written field is
     /// checked and given to `sub`, in the order written, and the number of
     /// the declared fields is returned. The diagnostics are of `stage`.
+    /// `None`: the struct is not known (an alias of the error type, §18.1,
+    /// R-271), and each written field is given to `sub` with the error type.
     pub(crate) fn struct_pattern(
         &mut self,
         stage: Stage,
@@ -43,7 +45,7 @@ impl<'a> Checker<'a> {
         ty: TyId,
         written: Written<'_>,
         sub: SubPattern<'_, 'a>,
-    ) -> R<usize> {
+    ) -> R<Option<usize>> {
         let Written { path, fields, rest } = written;
         let entity = match self.a.resolve_path(self.m, path) {
             Ok(en) => en,
@@ -51,6 +53,13 @@ impl<'a> Checker<'a> {
         };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
+            Entity::Def(d) if self.a.error_alias(d) => {
+                let error = self.a.types.error();
+                for (_, fp) in fields {
+                    sub(self, *fp, error, None)?;
+                }
+                return Ok(None);
+            }
             _ => return Err(self.pattern_err(stage, Code::E0401, path.span, "a struct pattern needs a struct")),
         };
         let Some(sd) = self.a.def(d).as_struct() else {
@@ -85,7 +94,7 @@ impl<'a> Checker<'a> {
             sub(self, *fp, ft, Some(i))?;
         }
         if failed {
-            return Ok(defs.len());
+            return Ok(Some(defs.len()));
         }
         let missing: Vec<&crate::def::FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
         // A field has the visibility of its struct, narrowed only by `priv`
@@ -121,7 +130,7 @@ impl<'a> Checker<'a> {
                 }
                 Err(self.diag(d))
             }
-            _ => Ok(defs.len()),
+            _ => Ok(Some(defs.len())),
         }
     }
 

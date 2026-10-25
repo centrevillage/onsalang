@@ -22,7 +22,8 @@ impl Analysis {
     /// the check did not read: a def the unread reaches through its declared
     /// types ([`Analysis::reached`]), and a def whose body has an expression
     /// or a local of such a type, refers to such a def, or was not checked to
-    /// its end (`complete == false`).
+    /// its end (`complete == false`) or read what the check does not read
+    /// ([`BodyInfo::read_unread`]).
     pub fn unread_users(&self, files: &[FileId]) -> Vec<Span> {
         let reached = self.reached();
         let mut memo = self.held_alias_types();
@@ -32,7 +33,9 @@ impl Analysis {
             let body = self.bodies.get(&id).map(|b| (b, b.complete));
             let body = body.or_else(|| self.flows.get(&id).map(|f| (&f.body, f.complete && f.body.complete)));
             let uses = reached.contains(&id)
-                || body.is_some_and(|(b, complete)| !complete || self.body_reaches(b, &reached, &mut memo));
+                || body.is_some_and(|(b, complete)| {
+                    !complete || b.read_unread || self.body_reaches(b, &reached, &mut memo)
+                });
             if uses {
                 out.push(def.span);
             }
@@ -57,11 +60,13 @@ impl Analysis {
                     DefKind::Enum(e) => e.derives.is_none(),
                     _ => false,
                 };
-                // An rt function whose written body the check did not finish:
+                // An rt function whose written body the check did not finish
+                // or read what it does not read (a call on a value of the error
+                // type, `v.f()`, has no callee, even in a body checked to its end):
                 // its calls are no edges of the rt recursion (`rt::check_all`),
                 // so an E0903 through it was held back (X-3/U1c/b, F1).
                 let rt_unread = matches!(&self.def(id).kind, DefKind::Fn(f) if f.rt && f.body.is_some())
-                    && !self.bodies.get(&id).is_some_and(|b| b.complete);
+                    && !self.bodies.get(&id).is_some_and(|b| b.complete && !b.read_unread);
                 derives || rt_unread || self.partly_read(id) || self.read_held.contains(&id)
             })
             .collect();

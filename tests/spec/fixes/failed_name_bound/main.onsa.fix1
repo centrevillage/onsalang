@@ -3,11 +3,12 @@
 // spec = ["§18.1", "§6.3"]
 // fixes = 1
 
-// A failed name in a bound is silent, and the body is not checked (S-689, as now).
-// After the candidate, `util` is a module: the E0200 of the bound is of a def the failed name held back.
+// A failed name in a bound is a bound that is not known, and the body is checked (S-689 (1), S-692 (c)): the
+// real error after it is reported. After the candidate, `util` is a module: the E0200 of the bound is of a
+// def the failed name held back.
 use util                                       //~ E0302
 
 pub fn f[T: util](x: T) -> I32 {
-  let a: I32 = true
+  let a: I32 = true                                 //~ E0401
   a
 }

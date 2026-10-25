@@ -112,6 +112,13 @@ impl Checker<'_> {
         if tys.is_empty() {
             return if rows.is_empty() { Some(Vec::new()) } else { None };
         }
+        // A part of the error type matches anything (§18.1, S-692 A2).
+        if matches!(self.ty(self.shallow(tys[0])), Ty::Error) {
+            let rest = rows.iter().map(|r| r[1..].to_vec()).collect();
+            let mut w = self.witness(rest, &tys[1..])?;
+            w.insert(0, "_".into());
+            return Some(w);
+        }
         let rows = Self::expand(rows);
         let ctors = self.ctors(tys[0]);
         match ctors {

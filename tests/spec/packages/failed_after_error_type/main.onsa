@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// R-271, S-692: the error type that a failed name makes (here through an alias, an alias of an alias, and
+// written itself in the signature) is not a type that a use of it is checked against. `None`, `[]` and
+// `Some(1)` as its value have no E0406 (the type is not undecided), a call of its value has no E0401
+// (`_` is not a function), a `match` of its value has no E0501 (an arm that is missing), a struct
+// literal and a path through an alias have no E0401 (not a struct). The real error of the last unit of
+// each form is reported. The three modules take the three kinds of failed name: a `use` that failed
+// (`by_use`), an E0304 (`by_clash`) and a member cut off by a syntax error (`by_cut`).

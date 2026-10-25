@@ -199,9 +199,8 @@ pub(crate) fn named(
             }
         }
         Ok(_) => Ok(None),
-        // A name held as an error (§18.1, S-462, S-675): no diagnostic.
-        // SPEC-GAP(S-689): in a signature, the def is not held (its body is
-        // checked), unlike after one in a type (`Sema::hold_signature`).
+        // A name held as an error (§18.1, S-462, S-675): no diagnostic, and
+        // the check goes on (S-689).
         Err(ResolveError::Failed) => Err(ConstErr::Unknown),
         Err(err) => {
             // `I32.BITS`, `U32.MAX`: an associated constant of a scalar type.

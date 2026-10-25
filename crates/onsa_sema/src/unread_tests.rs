@@ -70,3 +70,20 @@ fn a_check_with_nothing_unread_has_no_users() {
     let a = check("#[derive(PartialEq)]\npub struct Pt {\n  x: I32,\n}\n");
     assert!(a.unread_users(&[FileId(1)]).is_empty());
 }
+
+#[test]
+fn the_callers_of_an_rt_function_whose_body_read_a_held_name_are_users() {
+    // `Gone` is a name of a failed `use`, held as an error (§18.1): `r1` reads it in a type place only, so its
+    // body is checked to its end, but the call `v.f()` on a value of the error type has no callee and makes no
+    // edge of the rt recursion. When the `use` is fixed to give the struct `S`, `f -> r1 -> f` is an E0903 at
+    // the call in `f`, the earliest of the cycle: `f` calls `r1`, so it is a user too (X-3/U1c/b, F1; W4-03 U3c).
+    let src = "use util.{Gone}\n\npub struct S {\n  a: I32,\n}\n\n\
+               impl S {\n  pub rt fn f(self) -> I32 {\n    r1()\n  }\n}\n\n\
+               pub rt fn r1() -> I32 {\n  let o: Option[Gone] = None\n  match o {\n    Some(v) => v.f(),\n    None => 0,\n  }\n}\n\n\
+               pub fn other() -> I32 {\n  2\n}\n";
+    let a = check(src);
+    let r1 = crate::DefId(a.defs.iter().position(|d| d.name == "r1").unwrap() as u32);
+    assert!(a.bodies[&r1].complete && a.bodies[&r1].read_unread, "{:?}", a.diagnostics);
+    let users = users(&a);
+    assert_eq!(users, ["f", "r1"], "{:?}", a.diagnostics);
+}

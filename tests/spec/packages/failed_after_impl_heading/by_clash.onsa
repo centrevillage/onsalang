@@ -1,0 +1,46 @@
+// A struct and an enum of one name are E0304 on the later one. The name is the type of an `impl`.
+pub struct D {
+  a: I32,
+}
+
+pub enum D {                                        //~ E0304
+  A(I32),
+  B,
+}
+
+pub struct S[T] {
+  a: T,
+}
+
+impl D {
+  pub fn m1(self) -> I32 {
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+
+  pub fn m2(self) -> I32 {
+    let b = self.foo()
+    let c = self + 1
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+
+  pub fn m3(self) -> I32 {
+    let b = self.a
+    b
+  }
+}
+
+impl S[D] {
+  pub fn m4(self) -> I32 {
+    let b = self.a + 1
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+
+  pub fn m5(self) -> I32 {
+    let b: I32 = self.a
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+}

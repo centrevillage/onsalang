@@ -262,7 +262,7 @@ impl Builder<'_> {
     fn generics(&self, gs: &[onsa_sema::def::GenericDef]) -> Vec<String> {
         gs.iter()
             .map(|g| match &g.kind {
-                GenericKind::Type { bounds, dup } => {
+                GenericKind::Type { bounds, dup, .. } => {
                     let mut s = g.name.clone();
                     let mut bs: Vec<String> = bounds.iter().map(|b| format!("{b:?}")).collect();
                     if !*dup {

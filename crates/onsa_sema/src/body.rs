@@ -147,6 +147,13 @@ pub struct BodyInfo {
     pub neg_literals: HashSet<ExprId>,
     /// `false` when checking stopped at the first error (tables are partial).
     pub complete: bool,
+    /// The body reads what the check does not read (§18.1, S-692: a name the
+    /// names stage holds as an error, a member of a def a syntax error cut):
+    /// the check went on, and a fix of the name can show an error it did not
+    /// report. Its signature is not changed, so its users are not affected,
+    /// except the callers of an rt function: a call on a value of the error
+    /// type makes no edge of the rt recursion (`Analysis::reached`).
+    pub read_unread: bool,
 }
 
 // ---------------------------------------------------------------- checker
@@ -247,6 +254,10 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         if a.failed.contains_key(&id) {
             continue;
         }
+        // What the body reads and the check does not goes to `read_held` as
+        // for a signature (`Analysis::unread_path`, `record_if_held`); it is
+        // moved to the body below.
+        let held = a.read_held.contains(&id);
         let mut ck = Checker {
             a,
             ast: &module.parsed.ast,
@@ -279,7 +290,10 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             ck.check_fn_body(body, ret);
         }
         let fcx = ck.flow.take();
-        let info = ck.finish();
+        let mut info = ck.finish();
+        if !held && a.read_held.remove(&id) {
+            info.read_unread = true;
+        }
         match fcx {
             Some(fcx) => crate::flow::finish_flow(a, module, id, info, fcx),
             None => {
@@ -313,13 +327,14 @@ impl<'a> Checker<'a> {
     }
 
     /// A path that does not resolve: its diagnostic, or none when the path
-    /// goes through a struct or enum whose unit failed in the syntax stage
-    /// (its fields and variants are not all known) or names what the names
-    /// stage holds as an error (§18.1, S-462, S-675): the check of this body
-    /// stops there without a diagnostic, and the body is not complete.
+    /// names what the check does not read (`Analysis::unread_path`: a member
+    /// of a struct or enum whose unit failed in the syntax stage, or a name
+    /// the names stage holds as an error, §18.1, S-462, S-675): in a value
+    /// place, the check of this body stops there without a diagnostic, and
+    /// the body is not complete (S-692).
     // SPEC-GAP(S-260): the members of a failed struct or enum get no diagnostic.
     pub(crate) fn resolve_error(&mut self, path: &onsa_syntax::ast::Path, err: ResolveError) -> Stop {
-        if err == ResolveError::Failed || self.a.through_partly_read(self.m, path) {
+        if self.a.unread_path(self.def, self.m, path, &err) {
             self.failed = true;
             return Stop;
         }
@@ -610,23 +625,9 @@ impl<'a> Checker<'a> {
         if let Some(d) = diags.into_iter().next() {
             return Err(self.diag(d));
         }
-        // An error with no diagnostic: a name held as an error (§18.1), or a
-        // member of a def a syntax error cut (S-260). The check stops there.
-        // SPEC-GAP(S-690): the rest of the body is not checked.
-        if self.holds_error(ty) {
-            self.failed = true;
-            return Err(Stop);
-        }
+        // An error with no diagnostic (a name held as an error, a member of a
+        // def a syntax error cut): the check goes on (§18.1, S-690).
         Ok(ty)
-    }
-
-    fn holds_error(&self, t: TyId) -> bool {
-        match self.ty(t) {
-            Ty::Error => true,
-            Ty::Named(_, ts) | Ty::Tuple(ts) | Ty::Builtin(_, ts) => ts.iter().any(|&a| self.holds_error(a)),
-            Ty::Array(e, _) => self.holds_error(e),
-            _ => false,
-        }
     }
 }
 

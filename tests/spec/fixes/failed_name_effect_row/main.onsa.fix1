@@ -3,7 +3,7 @@
 // spec = ["§18.1", "§8.1"]
 // fixes = 1
 
-// A failed name in an effect row is silent, and the body is checked (S-691, the reading (1) for now).
+// A failed name in an effect row is silent, and the body is checked (S-691 (1)).
 // After the candidate, `util` is a module: the E0200 of the row is of a def the failed name held back,
 // also in `g`, which had no diagnostic.
 use util                                       //~ E0302

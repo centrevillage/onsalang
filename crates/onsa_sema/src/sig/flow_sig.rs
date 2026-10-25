@@ -64,11 +64,16 @@ impl<'p> Sema<'p> {
             };
             // An input whose type or clock is in error stays, as the error
             // type, so that the body sees its name (no cascade in the unit, R-71).
-            let (Some(rate), false) = (rate, matches!(self.a.types.get(lowered), Ty::Error)) else {
+            // An input of the error type keeps its clock (§18.1, S-692).
+            let Some(rate) = rate else {
                 let error = self.a.types.error();
                 inputs.push(FlowInput { name, rate: Rate::Sig, ty: error, param: None, span: p.span });
                 continue;
             };
+            if matches!(self.a.types.get(lowered), Ty::Error) {
+                inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span });
+                continue;
+            }
             self.check_rate_value_type(&cx, id, lowered, tspan, rate == Rate::Sig);
             let param = self.lower_param_attr(&cx, id, &p.attrs, rate, lowered);
             inputs.push(FlowInput { name, rate, ty: lowered, param, span: p.span });
@@ -150,8 +155,10 @@ impl<'p> Sema<'p> {
     }
 
     /// The `process` outputs for an output value type (§11.6): `(name, elem, array len)`.
+    /// An element of the error type may be a scalar (§18.1, R-271).
     fn boundary_outputs(&self, ty: TyId) -> Option<Vec<(String, TyId, Option<Len>)>> {
-        let is_scalar = |t: TyId| matches!(self.a.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char);
+        let is_scalar =
+            |t: TyId| matches!(self.a.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Error);
         let one = |name: &str, t: TyId| -> Option<(String, TyId, Option<Len>)> {
             match self.a.types.get(t) {
                 Ty::Array(e, len) if is_scalar(*e) => Some((name.to_string(), *e, Some(*len))),

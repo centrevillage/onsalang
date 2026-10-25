@@ -153,10 +153,11 @@ impl Rater<'_> {
     }
 
     /// The omitted `init` of a delay (§11.4, S-29): `T.default()`, which this
-    /// representation holds for a number (`0`, `+0.0`) only (K-02).
+    /// representation holds for a number (`0`, `+0.0`) only (K-02). A value
+    /// of the error type is not known, so no diagnostic (§18.1, R-271).
     pub(super) fn default_init(&mut self, ty: TyId, span: Span) -> Result<InitArg, super::RStop> {
         match self.a.types.get(ty) {
-            Ty::Int(_) => Ok(InitArg::Const(ConstValue::Int(0))),
+            Ty::Int(_) | Ty::Error => Ok(InitArg::Const(ConstValue::Int(0))),
             Ty::Float(_) => Ok(InitArg::Const(ConstValue::Float(0.0))),
             _ => {
                 let shown = self.display(ty);

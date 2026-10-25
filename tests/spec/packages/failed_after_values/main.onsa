@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// S-692 (b): a failed name written as a path in an expression or a pattern (a call, an associated call, a
+// path, the arms of a `match`, the call of a flow, the length of a `delay~` and the range of a `par`) stops
+// its unit: nothing after it in the unit has a diagnostic (the real error `let a: I32 = true` at the end of
+// each unit is silent, and so are the `~` of the call and the arms that are missing). A real error before
+// it is the first error of the unit and is reported (`error_before`). The three modules take the three
+// kinds of failed name: a `use` that failed (`by_use`), an E0304 (`by_clash`) and a member cut off by a
+// syntax error (`by_cut`).

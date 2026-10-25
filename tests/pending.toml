@@ -387,13 +387,6 @@ note = "マニフェストの必須のキー"
 
 [[pending]]
 kind = "diag-code"
-target = "E0902"
-reasons = ["R-83"]
-until = "W6-03"
-note = "rt の効果行の Alloc。判定を効果の使用の記録の上に作り直す（R-83）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0903"
 reasons = ["R-83"]
 until = "W6-03"

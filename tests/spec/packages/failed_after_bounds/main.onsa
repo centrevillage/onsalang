@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-689 (1), S-692 (c): a failed name in a bound (`T: Gone`) is a bound that is not known. The operators and
+// the methods that need a bound of `T` (`x < x`, `x == x`, `x + x`, `x.foo()`) have no diagnostic, in a
+// function, a closure in it and the members of an `impl`, and the unit goes on, so the real errors of the
+// same body are reported. A name that nothing binds (`T: Nope`) is an E0200 as before, and a type parameter
+// with no bound or with a known one keeps the diagnostics. The modules take the failed name from a `use`
+// that failed (`by_use`) and from an E0304 (`by_clash`); `controls` has the forms that keep their diagnostic.

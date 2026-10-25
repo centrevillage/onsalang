@@ -1,0 +1,41 @@
+// An enum cut in the middle of a member: `E.Zed` was not read. It is the type of an `impl`.
+pub enum E {
+  A,
+  B(                                                //~ E0002
+
+pub struct S[T] {
+  a: T,
+}
+
+impl E.Zed {
+  pub fn m1(self) -> I32 {
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+
+  pub fn m2(self) -> I32 {
+    let b = self.foo()
+    let c = self + 1
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+
+  pub fn m3(self) -> I32 {
+    let b = self.a
+    b
+  }
+}
+
+impl S[E.Zed] {
+  pub fn m4(self) -> I32 {
+    let b = self.a + 1
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+
+  pub fn m5(self) -> I32 {
+    let b: I32 = self.a
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+}

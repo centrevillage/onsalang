@@ -1,0 +1,32 @@
+// The same forms with a bound that is known, or with none, keep their diagnostics.
+pub fn plain_cmp[T](x: T) -> Bool {
+  x < x                                             //~ E0401
+}
+
+pub fn plain_method[T](x: T) -> I32 {
+  x.foo()                                           //~ E0413
+}
+
+// A name that nothing binds is not a bound that is not known: it is an E0200 as before.
+pub fn unbound[T: Nope](x: T) -> Bool {             //~ E0200
+  x < x
+}
+
+pub struct P[T] {
+  a: T,
+}
+
+impl[T] P[T] {
+  pub fn lt(self) -> Bool {
+    self.a < self.a                                     //~ E0401
+  }
+
+  pub fn foo(self) -> I32 {
+    self.a.foo()                                        //~ E0413
+  }
+}
+
+pub fn unbound_with_body[T: Nope](x: T) -> I32 {    //~ E0200
+  let a: I32 = true
+  a
+}

@@ -10,7 +10,7 @@
 //! - a failed name binds nothing, so it makes no E0304 with a real `use` of the name (before or after
 //!   it) or with an item, and the name goes to the real one (§18.1);
 //! - a failed name where a name is read by its spelling (an effect row, a bound, a derive list) is silent
-//!   too, and the effects read next to it in a row stay (S-691, the reading (1) for now);
+//!   too, and the effects read next to it in a row stay (S-691 (1));
 //! - a `use` cut in the middle of its list (an element that is not a name) is a syntax error, and the
 //!   names it read before the cut are failed names too (R-180); an empty list takes no name, so it
 //!   silences nothing (§15.1: it is an E0002 whose candidate takes the whole `use` off).
@@ -160,8 +160,7 @@ fn a_failed_name_is_silent_where_it_is_read_by_its_spelling() {
 
 /// §18.1, §8.1, §10: a failed name in an effect row is silent where it is written, and only there: the
 /// effects read next to it stay. `f` needs `Alloc` whatever the place of `Gone`, so the rt `g` that calls it
-/// is an E0901 that names `Alloc`, and `h`, whose row has no `Alloc`, is an E0601 (S-691, the reading (1)
-/// it takes for now).
+/// is an E0901 that names `Alloc`, and `h`, whose row has no `Alloc`, is an E0601 (S-691 (1)).
 #[test]
 fn the_effects_read_next_to_a_failed_name_stay() {
     for (tag, row) in [("before", "Alloc, Gone"), ("after", "Gone, Alloc")] {
@@ -223,22 +222,495 @@ fn a_closure_reads_its_effect_row_as_a_signature_does() {
     assert_eq!(out.code, 0, "the row of the closure reads `e` as an effect variable: {doc}");
 }
 
-/// §18.1, §15.1: a failed name in a bound of the heading of an `impl` is an error of the heading, so the
-/// members are not checked: no E0401 for the `<` of a `T` that has no `PartialOrd`, no E0413 for its `foo`
-/// (S-689, the reading it takes for now). The `impl` with a bound nothing binds keeps its E0200.
+/// §18.1, S-689 (1): a failed name in a bound of the heading of an `impl` is a bound that is not known, so the
+/// members are checked: the `<` and the `.foo()` of a `T` with that bound have no diagnostic (no E0401, no
+/// E0413), and a real error of a member is reported. An `impl` whose bound is a name nothing binds has a
+/// diagnostic of its heading (E0200), so its members are not checked: the `bad` is silent there.
 #[test]
-fn the_members_of_an_impl_whose_bound_is_a_failed_name_are_not_checked() {
+fn the_members_of_an_impl_whose_bound_is_a_failed_name_are_checked() {
     let members = "pub struct S[T] {\n  a: T,\n}\n\n\
                    impl[T: Gone] S[T] {\n  pub fn m(self) -> Bool {\n    self.a < self.a\n  }\n\n  \
-                   pub fn n(self) -> I32 {\n    self.a.foo()\n  }\n}\n";
+                   pub fn n(self) -> I32 {\n    self.a.foo()\n  }\n\n  \
+                   pub fn bad(self) -> I32 {\n    let a: I32 = true\n    a\n  }\n}\n";
     let d = with_main("impl_bound_chain", &format!("use util.{{Gone}}\n\n{members}"));
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
-    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
-    assert_eq!(lines_of(&doc), vec![1], "{doc}");
-    let d = with_main("impl_bound_unbound", members);
+    assert_eq!(codes(&doc), set(&["E0302", "E0401"]), "{doc}");
+    assert_eq!(diagnostics(&doc).len(), 2, "the `use` and the `bad`: {doc}");
+    assert_eq!(lines_of(&doc), vec![1, 17], "{doc}");
+    // The bound nothing binds: an E0200 of the heading, the members are not checked.
+    let d = with_main("impl_bound_unbound", &members.replace("Gone", "Nope"));
     let (_, doc) = check_json(d.root(), &["."]);
-    assert!(codes(&doc).contains("E0200"), "a bound nothing binds is an E0200: {doc}");
+    assert_eq!(
+        codes(&doc),
+        set(&["E0200"]),
+        "a bound nothing binds is an E0200, and the members are not checked: {doc}"
+    );
+    assert_eq!(diagnostics(&doc).len(), 1, "{doc}");
+}
+
+// ---- the unit goes on after a failed name (S-692 (c), S-689, S-690, R-271) --------------------------------
+
+/// The text without its marks, and the (line, code) of each mark. A mark ` @@E0401` at the end of a line says
+/// that the line has a diagnostic of that code, as `//~ E0401` does in a case.
+fn marked(text: &str) -> (String, Vec<(u64, String)>) {
+    let mut out = String::new();
+    let mut marks = Vec::new();
+    for (i, l) in text.lines().enumerate() {
+        match l.split_once(" @@") {
+            Some((line, code)) => {
+                marks.push((i as u64 + 1, code.trim().to_string()));
+                out.push_str(line);
+            }
+            None => out.push_str(l),
+        }
+        out.push('\n');
+    }
+    (out, marks)
+}
+
+/// Check `text` as the `main.onsa` of a package: the diagnostics must be the marked ones, no more and no
+/// fewer, and the command must end by 0 or 1. The problem, if there is one.
+fn check_marked(tag: &str, text: &str) -> Option<String> {
+    let (src, mut want) = marked(text);
+    let d = with_main(tag, &src);
+    let (out, doc) = check_json(d.root(), &["."]);
+    let mut got: Vec<(u64, String)> =
+        diagnostics(&doc).iter().map(|x| (span_of(&x["span"]).line, str_of(x, "code").to_string())).collect();
+    got.sort();
+    want.sort();
+    let code = if want.is_empty() { 0 } else { 1 };
+    if out.code != code || got != want {
+        return Some(format!("{tag}: exit {} (want {code}); want {want:?}, got {got:?}\n{src}", out.code));
+    }
+    None
+}
+
+/// A kind of failed name: the text before the units, with the marks of its own diagnostics; the failed type
+/// and the failed length (none for the cut member, which is no const).
+struct Failed {
+    tag: &'static str,
+    head: &'static str,
+    ty: &'static str,
+    len: Option<&'static str>,
+}
+
+/// The three kinds: the names of a `use` that failed (§15.1), the names of an E0304 (two items of one name, the
+/// later one is reported), and a member that a syntax error cut off (S-260: `E.Zed` is not read).
+const FAILED: [Failed; 3] = [
+    Failed { tag: "use", head: "use util.{Gone, LEN} @@E0302\n\n", ty: "Gone", len: Some("LEN") },
+    Failed {
+        tag: "clash",
+        head: "pub struct D {\n  a: I32,\n}\n\npub enum D { @@E0304\n  A(I32),\n  B,\n}\n\n\
+               pub const N: U32 = 4\n\npub const N: U32 = 8 @@E0304\n\n",
+        ty: "D",
+        len: Some("N"),
+    },
+    Failed { tag: "cut", head: "pub enum E {\n  A,\n  B( @@E0002\n\n", ty: "E.Zed", len: None },
+];
+
+/// The head of a kind and a unit of a template, with the kind's names put in. `None` when the template needs
+/// a length and the kind has none.
+fn build(k: &Failed, template: &str) -> Option<String> {
+    let mut t = template.replace("{T}", k.ty);
+    if t.contains("{L}") {
+        t = t.replace("{L}", k.len?);
+    }
+    Some(format!("{}{t}", k.head))
+}
+
+const REAL: &str = "  let a: I32 = true @@E0401\n  a\n}\n";
+
+/// §18.1 (S-692 (c), S-689 (1), S-690 (1)): a failed name written in a place of the types and declarations is
+/// an error type and not a first error of the unit: the unit goes on, the value of that type has no
+/// diagnostic (`x + 1`), and the real error after it is reported. One program for each place and each
+/// kind of failed name; the diagnostics are the marked ones and nothing else.
+#[test]
+fn a_unit_goes_on_after_a_failed_name_in_a_type_place() {
+    let real = REAL;
+    let places: Vec<(&str, String)> = vec![
+        ("sig_arg", format!("pub fn u(x: {{T}}) -> I32 {{\n  let b = x + 1\n{real}")),
+        ("sig_ret", format!("pub fn u() -> {{T}} {{\n{real}")),
+        ("type_arg", format!("pub fn u(o: Option[{{T}}]) -> I32 {{\n{real}")),
+        ("type_arg_ret", "pub fn u() -> Option[{T}] {\n  let a: I32 = true @@E0401\n  None\n}\n".to_string()),
+        ("fn_arg", format!("pub fn u(f: fn({{T}}) -> I32) -> I32 {{\n{real}")),
+        ("fn_ret", format!("pub fn u(f: fn(I32) -> {{T}}) -> I32 {{\n{real}")),
+        ("array_len", format!("pub fn u(xs: [I32; {{L}}]) -> I32 {{\n{real}")),
+        (
+            "const_arg",
+            format!(
+                "pub struct Ring[T, const N: U32] {{\n  data: [T; N],\n  head: U32,\n}}\n\n\
+                 pub fn u(r: Ring[F32, {{L}}]) -> I32 {{\n{real}"
+            ),
+        ),
+        ("const_type", "pub const K: {T} = 1 + true @@E0401\n".to_string()),
+        ("flow_in", "pub flow u(x: {T} at sample) -> F32 at sample {\n  let a: I32 = true @@E0401\n  1.0\n}\n".to_string()),
+        ("field", "pub struct S {\n  f: {T},\n  g: Nope, @@E0302\n}\n".to_string()),
+        ("variant", "pub enum V {\n  A({T}),\n  B(Nope), @@E0302\n}\n".to_string()),
+        ("read_field", format!("pub struct H {{\n  f: {{T}},\n}}\n\npub fn u(s: H) -> I32 {{\n  let v: I32 = s.f\n{real}")),
+        (
+            "impl_heading",
+            "impl {T} {\n  pub fn m(self) -> I32 {\n    let b = self + 1\n    let a: I32 = true @@E0401\n    a\n  }\n}\n"
+                .to_string(),
+        ),
+        (
+            "impl_type_arg",
+            "pub struct S[T] {\n  a: T,\n}\n\nimpl S[{T}] {\n  pub fn m(self) -> I32 {\n    let b = self.a + 1\n    \
+             let a: I32 = true @@E0401\n    a\n  }\n}\n"
+                .to_string(),
+        ),
+        ("local_ann", format!("pub fn u() -> I32 {{\n  let o: {{T}} = 1\n  let b = o + 1\n{real}")),
+        ("local_arg_ann", format!("pub fn u() -> I32 {{\n  let o: Option[{{T}}] = None\n{real}")),
+        ("local_len_ann", format!("pub fn u() -> I32 {{\n  let xs: [I32; {{L}}] = [1, 2]\n{real}")),
+        ("closure_arg", format!("pub fn u() -> I32 {{\n  let g = fn(x: {{T}}) -> I32 {{ 1 }}\n{real}")),
+    ];
+    let mut problems = Vec::new();
+    let mut ran = 0;
+    for k in &FAILED {
+        for (label, template) in &places {
+            if let Some(text) = build(k, template) {
+                ran += 1;
+                problems.extend(check_marked(&format!("type_place_{}_{label}", k.tag), &text));
+            }
+        }
+    }
+    assert!(ran >= 3 * places.len() - 4, "only {ran} programs ran");
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// R-271, §18.1: the error type of a failed name, through an alias, an alias of an alias and written itself,
+/// has no use that is checked against it: `None`, `[]` and `Some(1)` as its value are not undecided (no
+/// E0406), a call of its value is no E0401, the `match` of its value misses no arm (no E0501), and a struct
+/// literal, a path and an associated call through an alias are no E0401. The programs have no mark of their
+/// own: the only diagnostics are the ones of the failed name.
+#[test]
+fn the_error_type_of_a_failed_name_has_no_use_that_is_checked_against_it() {
+    let uses: [(&str, &str, bool); 12] = [
+        ("none", "pub fn u() -> {X} {\n  None\n}\n", false),
+        ("empty", "pub fn u() -> {X} {\n  []\n}\n", false),
+        ("some", "pub fn u() -> {X} {\n  Some(1)\n}\n", false),
+        ("call", "pub fn u(o: {X}) -> I32 {\n  o()\n}\n", false),
+        ("call_args", "pub fn u(o: {X}) -> I32 {\n  o(1, 2)\n}\n", false),
+        ("match", "pub fn u(x: {X}) -> I32 {\n  match x {\n    Some(v) => v,\n    None => 0,\n  }\n}\n", false),
+        ("match_one_arm", "pub fn u(x: {X}) -> I32 {\n  match x {\n    Some(v) => v,\n  }\n}\n", false),
+        ("match_tuple", "pub fn u(x: {X}) -> I32 {\n  match x {\n    (p, q) => p,\n  }\n}\n", false),
+        (
+            "in_option",
+            "pub fn u(x: Option[{X}]) -> I32 {\n  match x {\n    Some(f) => f(),\n    None => 0,\n  }\n}\n",
+            false,
+        ),
+        ("literal", "pub fn u() -> I32 {\n  let s = {X} { a: 1 }\n  1\n}\n", true),
+        ("path", "pub fn u() -> I32 {\n  let p = {X}.V\n  1\n}\n", true),
+        ("assoc", "pub fn u() -> I32 {\n  let p = {X}.make()\n  1\n}\n", true),
+    ];
+    let mut problems = Vec::new();
+    let mut ran = 0;
+    for k in &FAILED {
+        for (label, template, alias_only) in uses {
+            for (form, x) in [("alias", "A"), ("chain", "B"), ("direct", k.ty)] {
+                if alias_only && form == "direct" {
+                    continue;
+                }
+                ran += 1;
+                let text =
+                    format!("{}pub type A = {}\n\npub type B = A\n\n{}", k.head, k.ty, template.replace("{X}", x));
+                problems.extend(check_marked(&format!("error_type_{}_{form}_{label}", k.tag), &text));
+            }
+        }
+    }
+    assert!(ran >= 3 * 12 - 6, "only {ran} programs ran");
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §18.1 (S-692 A2, R-271): a part of the error type matches anything in the exhaustiveness of a `match`, and
+/// the parts it does not cover elsewhere are reported (E0501); a scrutinee that is all of the error type is not
+/// counted. A flow reads a part of the error type as a value it does not know: an element or a field of the
+/// error type may cross the `sample` boundary, and the omitted `init` of a delay of it has no diagnostic; what
+/// is wrong whatever the type is (a nested array, a tuple) is reported (E0810).
+#[test]
+fn a_part_of_the_error_type_is_not_known_and_the_rest_is_checked() {
+    let units = [
+        ("none_only", "pub fn u(o: Option[{X}]) -> I32 {\n  match o { @@E0501\n    None => 1,\n  }\n}\n"),
+        ("some_only", "pub fn u(o: Option[{X}]) -> I32 {\n  match o { @@E0501\n    Some(v) => 1,\n  }\n}\n"),
+        ("tuple", "pub fn u(o: (Bool, {X})) -> I32 {\n  match o { @@E0501\n    (true, v) => 1,\n  }\n}\n"),
+        (
+            "result",
+            "pub fn u(o: Result[{X}, Bool]) -> I32 {\n  match o { @@E0501\n    Ok(1) => 1,\n    Err(true) => 2,\n  }\n}\n",
+        ),
+        ("covered_lit", "pub fn u(o: Option[{X}]) -> I32 {\n  match o {\n    Some(1) => 1,\n    None => 2,\n  }\n}\n"),
+        (
+            "covered_or",
+            "pub fn u(o: ({X}, Bool)) -> I32 {\n  match o {\n    (1 | 2, true) => 1,\n    (_, false) => 2,\n  }\n}\n",
+        ),
+        ("all_error", "pub fn u(o: {X}) -> I32 {\n  match o {\n    1 => 1,\n  }\n}\n"),
+        ("flow_in", "pub flow u(x: [{X}; 2] at sample) -> F32 at sample {\n  1.0\n}\n"),
+        ("flow_out", "pub flow u(x: F32 at sample) -> [{X}; 2] at sample {\n  [x, x]\n}\n"),
+        (
+            "flow_field",
+            "pub struct W {\n  a: {X},\n  b: F32,\n}\n\npub flow u(x: W at sample) -> F32 at sample {\n  1.0\n}\n",
+        ),
+        (
+            "flow_delay",
+            "pub flow u(x: {X} at sample) -> F32 at sample {\n  let p = prev~(x)\n  let q = delay~(x, 8)\n  1.0\n}\n",
+        ),
+        ("flow_nested", "pub flow u(x: [[{X}; 2]; 2] at sample) -> F32 at sample { @@E0810\n  1.0\n}\n"),
+        ("flow_tuple", "pub flow u(x: F32 at sample) -> (F32, {X}) at sample { @@E0810\n  (x, x)\n}\n"),
+    ];
+    let mut problems = Vec::new();
+    let mut ran = 0;
+    for (label, template) in units {
+        for (form, x) in [("alias", "A"), ("direct", "Gone")] {
+            ran += 1;
+            let text = format!("use util.{{Gone}} @@E0302\n\npub type A = Gone\n\n{}", template.replace("{X}", x));
+            problems.extend(check_marked(&format!("error_part_{form}_{label}"), &text));
+        }
+    }
+    assert_eq!(ran, 2 * units.len());
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §18.1, S-689 (1): a failed name in a bound of a type parameter is a bound that is not known: the operators
+/// and the methods that need a bound of that parameter have no diagnostic, in a function, a closure in it and
+/// the members of an `impl`, and the unit goes on. The other parameter of the same function, a parameter with
+/// no bound and the name nothing binds keep their diagnostics (the controls).
+#[test]
+fn a_bound_that_is_a_failed_name_is_not_known() {
+    // (tag, the head with its marks, the name of the bound)
+    let heads = [
+        ("use", "use util.{Gone} @@E0302\n\n", "Gone"),
+        ("clash", "pub struct Tr {\n  a: I32,\n}\n\npub enum Tr { @@E0304\n  A,\n}\n\n", "Tr"),
+    ];
+    let units = [
+        ("cmp", "pub fn u[T: {B}](x: T) -> Bool {\n  x < x\n}\n"),
+        ("eq", "pub fn u[T: {B}](x: T) -> Bool {\n  x == x\n}\n"),
+        ("add", "pub fn u[T: {B}](x: T) -> T {\n  x + x\n}\n"),
+        ("method", "pub fn u[T: {B}](x: T) -> I32 {\n  x.foo()\n}\n"),
+        ("with_copy", "pub fn u[T: Copy + {B}](x: T) -> Bool {\n  x < x\n}\n"),
+        ("copy_first", "pub fn u[T: {B} + Copy](x: T) -> I32 {\n  x.foo()\n}\n"),
+        (
+            "real_error",
+            "pub fn u[T: {B}](x: T) -> I32 {\n  let b = x < x\n  let m = x.foo()\n  let a: I32 = true @@E0401\n  a\n}\n",
+        ),
+        (
+            "closure",
+            "pub fn u[T: {B}](x: T) -> I32 {\n  let g = fn(y: T) -> Bool { y < y }\n  let a: I32 = true @@E0401\n  a\n}\n",
+        ),
+        ("other_param", "pub fn u[T: {B}, U](x: T, y: U) -> Bool {\n  let b = x < x\n  y < y @@E0401\n}\n"),
+        // S-692 A1: the operators of integers need a bound too.
+        (
+            "int_ops",
+            "pub fn u[T: {B}](x: T, n: U32) -> T {\n  let a = x & x\n  let b = x | x\n  let c = x ^ x\n  \
+             let d = x << n\n  let e = x >> n\n  let f = !x\n  let g: I32 = true @@E0401\n  x\n}\n",
+        ),
+        ("int_ops_num", "pub fn u[T: Num + {B}](x: T) -> T {\n  let a = x & x\n  !a\n}\n"),
+        ("struct", "pub struct W[T: {B}] {\n  a: T,\n}\n\npub enum V[T: {B}] {\n  A(T),\n}\n"),
+        (
+            "impl_members",
+            "pub struct W[T: {B}] {\n  a: T,\n}\n\nimpl[T: {B}] W[T] {\n  pub fn lt(self) -> Bool {\n    self.a < self.a\n  }\n\n  \
+             pub fn foo(self) -> I32 {\n    self.a.foo()\n  }\n\n  pub fn bad(self) -> I32 {\n    let b = self.a < self.a\n    \
+             let a: I32 = true @@E0401\n    a\n  }\n}\n",
+        ),
+    ];
+    let mut problems = Vec::new();
+    for (tag, head, name) in heads {
+        for (label, unit) in units {
+            let text = format!("{head}{}", unit.replace("{B}", name));
+            problems.extend(check_marked(&format!("bound_{tag}_{label}"), &text));
+        }
+    }
+    let controls = [
+        ("plain_cmp", "pub fn u[T](x: T) -> Bool {\n  x < x @@E0401\n}\n"),
+        ("plain_method", "pub fn u[T](x: T) -> I32 {\n  x.foo() @@E0413\n}\n"),
+        ("plain_int_op", "pub fn u[T: Num](x: T) -> T {\n  x & x @@E0401\n}\n"),
+        ("plain_not", "pub fn u[T: Num](x: T) -> T {\n  !x @@E0401\n}\n"),
+        ("unbound", "pub fn u[T: Nope](x: T) -> Bool { @@E0200\n  x < x\n}\n"),
+        ("unbound_body_not_checked", "pub fn u[T: Nope](x: T) -> I32 { @@E0200\n  let a: I32 = true\n  a\n}\n"),
+        (
+            "plain_impl",
+            "pub struct P[T] {\n  a: T,\n}\n\nimpl[T] P[T] {\n  pub fn lt(self) -> Bool {\n    self.a < self.a @@E0401\n  }\n\n  \
+             pub fn foo(self) -> I32 {\n    self.a.foo() @@E0413\n  }\n}\n",
+        ),
+    ];
+    for (label, unit) in controls {
+        problems.extend(check_marked(&format!("bound_control_{label}"), unit));
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §18.1 (the unit paragraph, S-689): an `impl` whose heading has a diagnostic of its own (an E0302 of the type
+/// or of a type argument, an E0200 of a bound, a syntax error) is one unit, and its members are not checked;
+/// an `impl` whose heading is right has its members checked. The failed name in a heading is no diagnostic of
+/// the heading (the test above and `a_unit_goes_on_after_a_failed_name_in_a_type_place`).
+#[test]
+fn an_impl_whose_heading_has_a_diagnostic_does_not_check_its_members() {
+    let s = "pub struct S[T] {\n  a: T,\n}\n\n";
+    let member = "  pub fn m(self) -> I32 {\n    let a: I32 = true\n    a\n  }\n}\n";
+    let mut problems = Vec::new();
+    for (tag, heading) in [
+        ("type", "impl Nope { @@E0302"),
+        ("type_arg", "impl S[Nope] { @@E0302"),
+        ("bound", "impl[T: Nope] S[T] { @@E0200"),
+        ("syntax_empty", "impl { @@E0002"),
+        ("syntax_number", "impl 1 { @@E0002"),
+        ("syntax_where", "impl S[T] where T { @@E0002"),
+    ] {
+        problems.extend(check_marked(&format!("heading_{tag}"), &format!("{s}{heading}\n{member}")));
+    }
+    let right = "impl[T] S[T] {\n  pub fn m(self) -> I32 {\n    let a: I32 = true @@E0401\n    a\n  }\n}\n";
+    problems.extend(check_marked("heading_right", &format!("{s}{right}")));
+    // after an `impl` whose heading cannot be read, the next items are read as always
+    problems.extend(check_marked("heading_then_right", &format!("{s}impl {{ @@E0002\n{member}\n{right}")));
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §18.1 (S-692 (b)): a failed name written as a path in an expression or a pattern stops its unit: a call, an
+/// associated call, a path, the arms of a `match` (and the arm that is missing), the `~` of a call in a flow,
+/// the length of a `delay~` and the range of a `par` have no diagnostic, and nothing after them in the unit
+/// has one (the `let a: I32 = true` is silent). A real error before the failed name is the first error of the
+/// unit and is reported. The diagnostics of the program are the marked ones and nothing else.
+#[test]
+fn a_failed_name_in_a_value_place_stops_the_unit() {
+    // (tag, the head with the marks of its own diagnostics, the call, the associated call, the path, the two
+    // arms of a `match`, the name of a function, the name of a length)
+    let kinds = [
+        (
+            "use",
+            "use util.{Gone, gone, LEN} @@E0302\n\n",
+            "gone(1)",
+            "Gone.make()",
+            "Gone.A",
+            ["Gone.A(v) => v", "Gone.B => 0"],
+            "gone",
+            "LEN",
+        ),
+        (
+            "clash",
+            "pub fn gone(x: I32) -> I32 {\n  x\n}\n\npub fn gone(x: I32) -> F32 { @@E0304\n  2.0\n}\n\n\
+             pub struct D {\n  a: I32,\n}\n\npub enum D { @@E0304\n  A(I32),\n  B,\n}\n\n\
+             pub const N: U32 = 4\n\npub const N: U32 = 8 @@E0304\n\n",
+            "gone(1)",
+            "D.make()",
+            "D.A",
+            ["D.A(v) => v", "D.B => 0"],
+            "gone",
+            "N",
+        ),
+    ];
+    let end = "  let a: I32 = true\n  a\n}\n";
+    let mut problems = Vec::new();
+    for (tag, head, call, assoc, path, arms, func, len) in kinds {
+        let units: Vec<(&str, String)> = vec![
+            ("call", format!("pub fn u() -> I32 {{\n  let o = {call}\n  let b = o + 1\n{end}")),
+            ("assoc", format!("pub fn u() -> I32 {{\n  let o = {assoc}\n{end}")),
+            ("path", format!("pub fn u() -> I32 {{\n  let o = {path}\n  let r: Bool = o\n{end}")),
+            (
+                "branch",
+                format!("pub fn u() -> I32 {{\n  let flag = true\n  let o = if flag {{ {call} }} else {{ 2 }}\n{end}"),
+            ),
+            (
+                "closure",
+                format!("pub fn u() -> I32 {{\n  let f = fn(x: I32) -> I32 {{ {call} }}\n  let o = f.(1)\n{end}"),
+            ),
+            (
+                "pattern",
+                format!(
+                    "pub fn u(x: I32) -> I32 {{\n  let r = match x {{\n    {},\n    {},\n  }}\n{end}",
+                    arms[0], arms[1]
+                ),
+            ),
+            ("flow_tilde", format!("pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = {func}~(x)\n{end}")),
+            ("flow_plain", format!("pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = {func}(x)\n{end}")),
+            (
+                "flow_delay",
+                format!("pub flow u(x: F32 at sample) -> F32 at sample {{\n  let y = delay~(x, {len})\n{end}"),
+            ),
+            (
+                "flow_par_range",
+                format!(
+                    "pub flow u(x: F32 at sample) -> F32 at sample {{\n  let ys = par i in 0 ..< {len} {{\n    x\n  }}\n{end}"
+                ),
+            ),
+            // a real error before the failed name is reported
+            ("error_before", format!("pub fn u() -> I32 {{\n  let a: I32 = true @@E0401\n  let o = {call}\n  a\n}}\n")),
+        ];
+        for (label, unit) in units {
+            problems.extend(check_marked(&format!("value_place_{tag}_{label}"), &format!("{head}{unit}")));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// X-3, §18.1: the candidate of the E0302 of a failed `use` (the own package name taken off) makes the name
+/// real, so the units that wrote it, and the units that take the values of those, report what they could not
+/// report before. They are the units the failed name held back. Everything else stays as it was: the
+/// command ends by 0 or 1 (no internal error), the `use` is no longer a diagnostic, and the unit that never
+/// wrote the name (`ctl_unit`) has no diagnostic.
+#[test]
+fn the_candidate_of_a_failed_use_leaves_the_units_that_did_not_read_it_clean() {
+    let uses = [
+        ("sig_arg", "pub fn held_u(x: Color) -> I32 {\n  let b = x + 1\n  let a: I32 = true\n  a\n}\n"),
+        (
+            "sig_ret",
+            "pub fn held_u() -> Color {\n  let a: I32 = true\n  a\n}\n\npub fn held_user() -> I32 {\n  let o = held_u()\n  let b = o + 1\n  1\n}\n",
+        ),
+        ("type_arg", "pub fn held_u(o: Option[Color]) -> I32 {\n  let a: I32 = true\n  a\n}\n"),
+        ("fn_arg", "pub fn held_u(f: fn(Color) -> I32) -> I32 {\n  let a: I32 = true\n  a\n}\n"),
+        ("const_type", "pub const HELD: Color = 1 + true\n\npub fn held_user() -> I32 {\n  HELD + 1\n}\n"),
+        ("flow_in", "pub flow held_u(x: Color at sample) -> F32 at sample {\n  let a: I32 = true\n  1.0\n}\n"),
+        ("field", "pub struct Holder {\n  f: Color,\n}\n\npub fn held_u(s: Holder) -> I32 {\n  s.f + 1\n}\n"),
+        ("impl_heading", "impl Color {\n  pub fn m(self) -> I32 {\n    let a: I32 = true\n    a\n  }\n}\n"),
+        ("local_ann", "pub fn held_u() -> I32 {\n  let o: Color = 1\n  let b = o + 1\n  let a: I32 = true\n  a\n}\n"),
+        (
+            "discarded_ann",
+            "pub fn held_u() -> I32 {\n  let _: Color = held_v()\n  1\n}\n\npub fn held_v() -> Color {\n  1\n}\n",
+        ),
+        ("closure_arg", "pub fn held_u() -> I32 {\n  let g = fn(x: Color) -> I32 { 1 }\n  let a: I32 = true\n  a\n}\n"),
+        ("bound", "pub fn held_u[T: Color](x: T) -> Bool {\n  x < x\n}\n"),
+        (
+            "value_call",
+            "pub fn held_u() -> I32 {\n  let o = double(1, 2)\n  let b = o + 1\n  let a: I32 = true\n  a\n}\n",
+        ),
+        ("value_path", "pub fn held_u() -> I32 {\n  let o = Color.Red\n  let b = o + 1\n  let a: I32 = true\n  a\n}\n"),
+        (
+            "pattern",
+            "pub fn held_u(x: Color) -> I32 {\n  let r = match x {\n    Color.Red => 1,\n  }\n  let a: I32 = true\n  a\n}\n",
+        ),
+        ("flow_call", "pub flow held_u(x: F32 at sample) -> F32 at sample {\n  let y = double~(x)\n  y\n}\n"),
+        (
+            "bound_impl",
+            "pub struct W[T: Color] {\n  a: T,\n}\n\nimpl[T: Color] W[T] {\n  pub fn lt(self) -> Bool {\n    self.a < self.a\n  }\n}\n",
+        ),
+    ];
+    let mut problems: Vec<String> = Vec::new();
+    for (label, unit) in uses {
+        let text = format!("use demo.util.{{Color, double}}\n\n{unit}\npub fn ctl_unit() -> I32 {{\n  1\n}}\n");
+        let d = with_main(&format!("candidate_{label}"), &text);
+        let (out, doc) = check_json(d.root(), &["."]);
+        let uses_diag: Vec<&Value> = diagnostics(&doc).iter().filter(|x| str_of(x, "code") == "E0302").collect();
+        if out.code != 1 || uses_diag.len() != 1 || fixes_of(uses_diag[0]).len() != 1 {
+            problems.push(format!("{label}: want one E0302 with one candidate: exit {}: {doc}", out.code));
+            continue;
+        }
+        apply(&d, &fixes_of(uses_diag[0])[0]);
+        let (out, doc) = check_json(d.root(), &["."]);
+        let ctl_line = std::fs::read_to_string(d.root().join("main.onsa"))
+            .unwrap()
+            .lines()
+            .position(|l| l.starts_with("pub fn ctl_unit"))
+            .unwrap() as u64
+            + 1;
+        let bad: Vec<&Value> = diagnostics(&doc)
+            .iter()
+            .filter(|x| str_of(x, "code") == "E0302" || span_of(&x["span"]).line >= ctl_line)
+            .collect();
+        if out.code > 1 || !bad.is_empty() {
+            problems.push(format!(
+                "{label}: after the candidate: exit {}, diagnostics of the `use` or of `ctl_unit`: {bad:?}",
+                out.code
+            ));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
 // ---- a failed `use` is one diagnostic, and its names are silent -------------------------------------

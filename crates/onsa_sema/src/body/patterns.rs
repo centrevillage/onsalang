@@ -83,7 +83,12 @@ impl<'a> Checker<'a> {
             PatKind::Tuple(elems) => {
                 let s = self.known(ty, span, "matched value")?;
                 let Ty::Tuple(ts) = self.ty(s) else {
+                    // A value of the error type: the elements are errors too,
+                    // and their names are bound (§18.1, R-271).
                     if matches!(self.ty(s), Ty::Error) {
+                        for &el in elems {
+                            self.bind_pat(el, s, irrefutable, borrow, kind)?;
+                        }
                         return Ok(P::Wild);
                     }
                     let shown = self.display(ty);
@@ -108,7 +113,7 @@ impl<'a> Checker<'a> {
             }
             PatKind::Struct { path, fields, rest } => {
                 let mut bound: Vec<(usize, P)> = Vec::new();
-                let count = self.struct_pattern(
+                let Some(count) = self.struct_pattern(
                     Stage::Types,
                     span,
                     ty,
@@ -118,7 +123,11 @@ impl<'a> Checker<'a> {
                         bound.extend(i.map(|i| (i, sub)));
                         Ok(())
                     },
-                )?;
+                )?
+                else {
+                    // A struct that is not known covers what it may (R-271).
+                    return Ok(P::Wild);
+                };
                 let mut subs = vec![P::Wild; count];
                 for (i, sub) in bound {
                     subs[i] = sub;

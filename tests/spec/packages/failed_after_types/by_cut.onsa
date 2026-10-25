@@ -1,0 +1,97 @@
+// An enum cut in the middle of a member: the member `Zed` is not read, so `E.Zed` is an error type.
+pub enum E {
+  A,
+  B(                                                //~ E0002
+
+
+// A failed name in the arguments and the result of a signature. The unit goes on: the value of the
+// failed type is an error value (no diagnostic for `x + 1`), and the real error after it is reported.
+pub fn sig_arg(x: E.Zed) -> I32 {
+  let b = x + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn sig_ret() -> E.Zed {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn type_arg(o: Option[E.Zed]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn type_arg_ret() -> Option[E.Zed] {
+  let a: I32 = true                                 //~ E0401
+  None
+}
+
+pub fn fn_arg(f: fn(E.Zed) -> I32) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn fn_ret(f: fn(I32) -> E.Zed) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub const K: E.Zed = 1 + true                       //~ E0401
+
+pub flow flow_in(x: E.Zed at sample) -> F32 at sample {
+  let a: I32 = true                                 //~ E0401
+  1.0
+}
+
+pub struct Fields {
+  f: E.Zed,
+  g: Nope,                                          //~ E0302
+}
+
+pub enum Variants {
+  A(E.Zed),
+  B(Nope),                                          //~ E0302
+}
+
+pub struct Holder {
+  f: E.Zed,
+}
+
+pub fn read_field(s: Holder) -> I32 {
+  let v: I32 = s.f
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+impl E.Zed {
+  pub fn m(self) -> I32 {
+    let b = self + 1
+    let a: I32 = true                               //~ E0401
+    a
+  }
+}
+
+pub fn local_ann() -> I32 {
+  let o: E.Zed = 1
+  let b = o + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn local_arg_ann() -> I32 {
+  let o: Option[E.Zed] = None
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn closure_arg() -> I32 {
+  let g = fn(x: E.Zed) -> I32 { 1 }
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+test "body type" {
+  let o: E.Zed = 1
+  let a: I32 = true                                 //~ E0401
+}

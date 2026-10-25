@@ -50,7 +50,9 @@ impl Bound {
 #[derive(Debug, Clone)]
 pub enum GenericKind {
     /// `T`, `T: Num`, `T: ?Dup` (`dup == false` lifts the implicit `Dup` bound, §4.5).
-    Type { bounds: Vec<Bound>, dup: bool },
+    /// `unknown`: a bound is a name the names stage holds as an error (§18.1,
+    /// S-689): `T` satisfies every bound, and its methods are not known.
+    Type { bounds: Vec<Bound>, dup: bool, unknown: bool },
     /// `const N: U32`
     Const(TyId),
     /// `e` (effect-row variable)

@@ -3,8 +3,8 @@
 // spec = ["§18.1", "§8.1"]
 // fixes = 1
 
-// A failed name in the effect row of a closure is silent, and the body goes on (S-691, the reading (1)
-// for now). After the candidate, `util` is a module: the E0200 of the row is of a def the failed name
+// A failed name in the effect row of a closure is silent, and the body goes on (S-691 (1)).
+// After the candidate, `util` is a module: the E0200 of the row is of a def the failed name
 // held back, also in `h`, which had no diagnostic.
 use fx.{util}                                       //~ E0302
 

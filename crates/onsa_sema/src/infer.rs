@@ -202,11 +202,8 @@ impl Infer {
         }
         let (ta, tb) = (types.get(a).clone(), types.get(b).clone());
         match (&ta, &tb) {
-            // A variable unified with the error type takes it, so that nothing
-            // waits for it to be decided (a literal's type, S-59, R-71).
-            (Ty::Var(i), Ty::Error) => self.bind(types, *i, b, cause),
-            (Ty::Error, Ty::Var(j)) => self.bind(types, *j, a, cause),
-            (Ty::Error, _) | (_, Ty::Error) => Ok(()),
+            (Ty::Error, _) => self.absorb(types, b, a, cause),
+            (_, Ty::Error) => self.absorb(types, a, b, cause),
             (Ty::Var(i), _) => self.bind(types, *i, b, cause),
             (_, Ty::Var(j)) => self.bind(types, *j, a, cause),
             (Ty::Array(e1, l1), Ty::Array(e2, l2)) => {
@@ -244,6 +241,38 @@ impl Infer {
             (Ty::ConstVal(n), Ty::ConstVal(m)) if n == m => Ok(()),
             _ => Err(Mismatch::Types),
         }
+    }
+
+    /// `ty` unified with the error type `err`: each variable of `ty` (of a
+    /// type and of a length) takes it, so that nothing waits for it to be
+    /// decided (a literal's type, `None`, `[]`; S-59, R-71, R-271). Goes down
+    /// the type once; the types form no cycle.
+    fn absorb(&mut self, types: &mut Types, ty: TyId, err: TyId, cause: &Cause) -> Result<(), Mismatch> {
+        let ty = self.shallow(types, ty);
+        match types.get(ty).clone() {
+            Ty::Var(i) => self.bind(types, i, err, cause),
+            Ty::Array(e, l) => {
+                if let Len::Var(i) = self.shallow_len(types, l)
+                    && matches!(self.vars[i as usize], VarState::Unbound(_))
+                {
+                    self.set_bound(i, err, cause);
+                }
+                self.absorb(types, e, err, cause)
+            }
+            Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => {
+                ts.iter().try_for_each(|&t| self.absorb(types, t, err, cause))
+            }
+            Ty::Fn(f) => {
+                f.params.iter().map(|p| p.1).chain([f.ret]).try_for_each(|t| self.absorb(types, t, err, cause))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// A length variable still open: unbound (one bound to the error type is
+    /// decided, `absorb`).
+    fn open_len(&self, types: &Types, len: Len) -> bool {
+        matches!(self.shallow_len(types, len), Len::Var(i) if matches!(self.vars[i as usize], VarState::Unbound(_)))
     }
 
     /// Substitute every bound variable, interning the result.
@@ -285,7 +314,7 @@ impl Infer {
         let ty = self.shallow(types, ty);
         match types.get(ty) {
             Ty::Var(_) => true,
-            Ty::Array(e, l) => self.has_vars(types, *e) || matches!(self.shallow_len(types, *l), Len::Var(_)),
+            Ty::Array(e, l) => self.has_vars(types, *e) || self.open_len(types, *l),
             Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => ts.iter().any(|&t| self.has_vars(types, t)),
             Ty::Fn(f) => f.params.iter().any(|(_, t)| self.has_vars(types, *t)) || self.has_vars(types, f.ret),
             _ => false,
@@ -298,7 +327,7 @@ impl Infer {
         let ty = self.shallow(types, ty);
         match types.get(ty) {
             Ty::Var(i) => matches!(self.vars[*i as usize], VarState::Unbound(None)),
-            Ty::Array(e, l) => self.has_open_vars(types, *e) || matches!(self.shallow_len(types, *l), Len::Var(_)),
+            Ty::Array(e, l) => self.has_open_vars(types, *e) || self.open_len(types, *l),
             Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => ts.iter().any(|&t| self.has_open_vars(types, t)),
             Ty::Fn(f) => {
                 f.params.iter().any(|(_, t)| self.has_open_vars(types, *t)) || self.has_open_vars(types, f.ret)

@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§10"]
+
+// S-691 (1), S-692 (c): a failed name in an effect row is a name that is not known, and the row is open; the
+// effects read next to it stay. The callers of such a function, and the `rt` rules, are judged on the
+// effects that were read: an `Alloc` that was read in the row of a function is an `Alloc` of its callers.
+// (The functions that have an E0601 are written on one line, so that the mark does not depend on whether the
+// diagnostic is at the heading or at the use, `tests/spec/fixes/e0601_alloc_row.onsa`.)
+use std.math.{Gone}                                 //~ E0302
+
+pub fn f() -> I32 uses {Alloc, Gone} {
+  1
+}
+
+pub fn f_after() -> I32 uses {Gone, Alloc} {
+  1
+}
+
+pub rt fn calls_from_rt() -> I32 {
+  let a = f()                                       //~ E0901
+  a
+}
+
+pub rt fn calls_after_from_rt() -> I32 {
+  let a = f_after()                                 //~ E0901
+  a
+}
+
+pub fn calls_without_row() -> I32 { f() }           //~ E0601
+
+pub fn calls_after_without_row() -> I32 { f_after() }   //~ E0601
+
+pub fn calls_with_row() -> I32 uses {Alloc} {
+  let a = f()
+  a
+}
+
+pub fn calls_with_both() -> I32 uses {Gone, Alloc} {
+  let a = f()
+  a
+}
+
+pub fn calls_a_function_value(g: fn() -> I32 uses {Alloc, Gone}) -> I32 { g() }   //~ E0601
+
+pub rt fn row_of_an_rt_function() -> I32 uses {Alloc, Gone} {   //~ E0902
+  1
+}
+
+pub fn only_the_failed_name() -> I32 uses {Gone} {
+  1
+}
+
+pub fn calls_only_the_failed_name() -> I32 {
+  let a = only_the_failed_name()
+  a
+}
+
+pub fn body_is_checked() -> I32 uses {Gone} {
+  let a: I32 = true                                 //~ E0401
+  a
+}

@@ -1,0 +1,126 @@
+// A struct and an enum of one name, and two consts of one name, are E0304 on the later one; the
+// name is an error where it is used.
+pub struct D {
+  a: I32,
+}
+
+pub enum D {                                        //~ E0304
+  A(I32),
+  B,
+}
+
+pub const N: U32 = 4
+pub const N: U32 = 8                                //~ E0304
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// A failed name in the arguments and the result of a signature. The unit goes on: the value of the
+// failed type is an error value (no diagnostic for `x + 1`), and the real error after it is reported.
+pub fn sig_arg(x: D) -> I32 {
+  let b = x + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn sig_ret() -> D {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn type_arg(o: Option[D]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn type_arg_ret() -> Option[D] {
+  let a: I32 = true                                 //~ E0401
+  None
+}
+
+pub fn fn_arg(f: fn(D) -> I32) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn fn_ret(f: fn(I32) -> D) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn array_len(xs: [I32; N]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn const_arg(r: Ring[F32, N]) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub const K: D = 1 + true                           //~ E0401
+
+pub flow flow_in(x: D at sample) -> F32 at sample {
+  let a: I32 = true                                 //~ E0401
+  1.0
+}
+
+pub struct Fields {
+  f: D,
+  g: Nope,                                          //~ E0302
+}
+
+pub enum Variants {
+  A(D),
+  B(Nope),                                          //~ E0302
+}
+
+pub struct Holder {
+  f: D,
+}
+
+pub fn read_field(s: Holder) -> I32 {
+  let v: I32 = s.f
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+impl D {
+  pub fn m(self) -> I32 {
+    let b = self + 1
+    let a: I32 = true                               //~ E0401
+    a
+  }
+}
+
+pub fn local_ann() -> I32 {
+  let o: D = 1
+  let b = o + 1
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn local_arg_ann() -> I32 {
+  let o: Option[D] = None
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn local_len_ann() -> I32 {
+  let xs: [I32; N] = [1, 2]
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn closure_arg() -> I32 {
+  let g = fn(x: D) -> I32 { 1 }
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+test "body type" {
+  let o: D = 1
+  let a: I32 = true                                 //~ E0401
+}

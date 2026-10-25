@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+// fixes = 1
+
+// S-689 (1), S-692 (c), X-3: a failed name in a bound is a bound that is not known, so the operators and the
+// methods that need a bound of `T` are not judged and the unit goes on. The candidate takes `fx.` off the
+// `use`; `Color` is then an enum, which is no bound (E0200), and the units that wrote it report what they
+// could not report before (the `<` and the `.foo()` of a `T` with no bound). They are units the failed name
+// held back, which the candidate may change (X-3).
+use fx.util.{Color, double}                         //~ E0302
+
+pub fn cmp[T: Color](x: T) -> Bool {
+  x < x
+}
+
+pub fn method[T: Color](x: T) -> I32 {
+  x.foo()
+}
+
+pub fn real_error[T: Color](x: T) -> I32 {
+  let b = x < x
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub struct W[T: Color] {
+  a: T,
+}
+
+impl[T: Color] W[T] {
+  pub fn lt(self) -> Bool {
+    self.a < self.a
+  }
+
+  pub fn foo(self) -> I32 {
+    self.a.foo()
+  }
+
+  pub fn bad(self) -> I32 {
+    let a: I32 = true                               //~ E0401
+    a
+  }
+}
+
+pub fn control() -> I32 {
+  double(2)
+}

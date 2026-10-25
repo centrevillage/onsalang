@@ -87,13 +87,9 @@ impl<'p> Sema<'p> {
                 }
                 let entity = match self.a.resolve_path(cx.m, path) {
                     Ok(e) => e,
-                    // A name held as an error (§18.1, S-462, S-675).
-                    Err(crate::resolve::ResolveError::Failed) => {
-                        self.hold_signature(cx.def);
-                        return self.a.types.error();
-                    }
-                    // A member of a def a syntax error cut (S-260): no diagnostic.
-                    Err(_) if self.a.through_partly_read(cx.m, path) => return self.a.types.error(),
+                    // What the check does not read (§18.1, S-689, S-690): the
+                    // error type, with no diagnostic.
+                    Err(e) if self.a.unread_path(cx.def, cx.m, path, &e) => return self.a.types.error(),
                     Err(e) => {
                         self.report(cx.def, e.into_diagnostic());
                         return self.a.types.error();

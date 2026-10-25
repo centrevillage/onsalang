@@ -1,0 +1,73 @@
+// `Gone` is the name of a `use` that failed: as a bound it is a bound that is not known.
+use std.math.{Gone}                                 //~ E0302
+
+// The operators and the methods that need a bound of `T` have no diagnostic.
+pub fn cmp[T: Gone](x: T) -> Bool {
+  x < x
+}
+
+pub fn eq[T: Gone](x: T) -> Bool {
+  x == x
+}
+
+pub fn add[T: Gone](x: T) -> T {
+  x + x
+}
+
+pub fn method[T: Gone](x: T) -> I32 {
+  x.foo()
+}
+
+pub fn with_copy[T: Copy + Gone](x: T) -> Bool {
+  x < x
+}
+
+pub fn copy_first[T: Gone + Copy](x: T) -> I32 {
+  x.foo()
+}
+
+// The unit goes on: the real error after them is reported.
+pub fn real_error[T: Gone](x: T) -> I32 {
+  let b = x < x
+  let m = x.foo()
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn closure_over[T: Gone](x: T) -> I32 {
+  let g = fn(y: T) -> Bool { y < y }
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+// Only the type parameter with the bound that is not known is silent.
+pub fn other_param[T: Gone, U](x: T, y: U) -> Bool {
+  let b = x < x
+  y < y                                             //~ E0401
+}
+
+pub struct W[T: Gone] {
+  a: T,
+}
+
+pub enum V[T: Gone] {
+  A(T),
+}
+
+// The members of an `impl` whose bound is not known are checked; the operator and the method on the
+// type parameter are not judged, a real error is reported.
+impl[T: Gone] W[T] {
+  pub fn lt(self) -> Bool {
+    self.a < self.a
+  }
+
+  pub fn foo(self) -> I32 {
+    self.a.foo()
+  }
+
+  pub fn bad(self) -> I32 {
+    let b = self.a < self.a
+    let a: I32 = true                                   //~ E0401
+    a
+  }
+}

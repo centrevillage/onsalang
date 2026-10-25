@@ -195,17 +195,16 @@ pub struct Analysis {
     pub flows: HashMap<DefId, FlowInfo>,
     /// The defs of failed items (`onsa_syntax::ast::Item::failed`, S-59):
     /// their bodies are not checked, and a use of what was not read gets no
-    /// diagnostic (R-71, S-260). `Failed::Unit` is also the mark of the names
-    /// stage on a def whose signature names what it holds as an error
-    /// (`Sema::hold_signature`): read whole, so [`Self::partly_read`], which
-    /// leaves `Unit` out, does not take it; a new reader of `Unit` keeps both.
-    /// [`Self::unread_users`] takes such a def through [`Self::read_held`].
+    /// diagnostic (R-71, S-260). A name the names stage holds as an error is
+    /// no error of its unit (§18.1, S-692): it leaves no mark here.
     pub failed: HashMap<DefId, onsa_syntax::ast::Failed>,
-    /// The defs that read a name the names stage holds as an error and get no
-    /// diagnostic for it: by its spelling (`Self::record_if_held`), or in a
-    /// signature the names stage holds (`Sema::hold_signature`, which also
-    /// puts the def here). Whether their check was held or went on, a fix of
-    /// the name can show an error they did not report.
+    /// The defs whose signature or declaration reads what the check does not
+    /// read and gets no diagnostic for it: a name the names stage holds as an
+    /// error, by its spelling (`Self::record_if_held`) or as a path
+    /// (`Self::unread_path`), or a member of a def a syntax error cut. Their
+    /// check goes on (§18.1, S-692), and a fix of the name can show an error
+    /// they did not report. A read in a body marks the body instead
+    /// ([`BodyInfo::read_unread`]).
     pub read_held: HashSet<DefId>,
     pub diagnostics: Vec<Diagnostic>,
     /// The diagnostics of the paths of the modules, outside every unit (the
@@ -255,6 +254,27 @@ impl Analysis {
         held
     }
 
+    /// Whether the path that did not resolve (`err`) names what the check
+    /// does not read (§18.1): a name the names stage holds as an error
+    /// (S-462, S-675) or a member of a def a syntax error cut or of an alias
+    /// of the error type ([`Self::through_partly_read`]). Such a path gets no
+    /// diagnostic: the error type in a type place, the end of the check of
+    /// the body in a value place (S-692). If it is one, records `def` in
+    /// [`Self::read_held`] (the side effect).
+    pub(crate) fn unread_path(
+        &mut self,
+        def: DefId,
+        from: ModId,
+        path: &onsa_syntax::ast::Path,
+        err: &ResolveError,
+    ) -> bool {
+        let unread = *err == ResolveError::Failed || self.through_partly_read(from, path);
+        if unread {
+            self.read_held.insert(def);
+        }
+        unread
+    }
+
     /// Fully qualified name of a def (`dsp.voice.State`), for diagnostics.
     pub fn qualified_name(&self, id: DefId) -> String {
         let def = self.def(id);
@@ -293,16 +313,23 @@ impl Analysis {
     }
 
     /// The longest prefix of `path` that names a def names a def a syntax
-    /// error cut (S-260): the rest of the path is not known, and a path that
-    /// does not resolve gets no diagnostic (R-71).
+    /// error cut (S-260) or an alias of the error type (§18.1, R-271): the
+    /// rest of the path is not known, and a path that does not resolve gets
+    /// no diagnostic (R-71).
     pub fn through_partly_read(&self, from: ModId, path: &onsa_syntax::ast::Path) -> bool {
         for k in (1..path.segments.len()).rev() {
             let prefix = onsa_syntax::ast::Path { segments: path.segments[..k].to_vec(), span: path.span };
             if let Ok(Entity::Def(d)) = self.resolve_path(from, &prefix) {
-                return self.partly_read(d);
+                return self.partly_read(d) || self.error_alias(d);
             }
         }
         false
+    }
+
+    /// The def is an alias of the error type (§18.1, R-271): a struct, a
+    /// variant or a member written through it is not known.
+    pub fn error_alias(&self, id: DefId) -> bool {
+        matches!(self.def(id).kind, DefKind::Alias(t) if matches!(self.types.get(t), Ty::Error))
     }
 
     pub fn kind_of(&self, ty: TyId) -> Option<Kind> {
