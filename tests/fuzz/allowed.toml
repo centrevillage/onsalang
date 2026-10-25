@@ -372,3 +372,10 @@ left = "U+#E (a bidirectional control) cannot be written, also in a comment or a
 input = "tests/fuzz/edef5780.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a doc comment after an attribute, and a bidirectional control (U+202E) in that comment, which the input has before the candidate and the candidate moves with the comment"
+
+[[allowed]]
+class = "fix|E0020|remove the `…`|E0002"
+left = "expected `…` or `…`, found `…`"
+input = "tests/fuzz/cc29ca46.onsa"
+reasons = ["S-384"]
+note = "an input cut short with two errors: a `;` between the arguments of an attribute, and a `}` where the `)` closes them, which the input has before the candidate"
