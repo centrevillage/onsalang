@@ -22,7 +22,7 @@
 //!   ([`parser_markers`]).
 //! - `[test] fixes = N`: the candidates of the check's diagnostics give the
 //!   files `<file>.fixK` ([`crate::fixes`]: compared token by token, ignoring
-//!   the whitespace tokens).
+//!   the whitespace tokens); a written `fixes = 0`: no diagnostic has a candidate.
 //! - `"check"` / `"test"`: every candidate of every diagnostic of the check,
 //!   applied alone and checked again, keeps the contract of §18.1 and the
 //!   promises of its `[[test.fix]]` entry ([`crate::fix_contract`], S-236,
@@ -471,10 +471,11 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     run.edits_compared = contract.edits_compared;
     run.clean_units = contract.clean_units;
     run.problems.extend(contract.problems);
-    if t.fixes > 0 {
+    // A written `fixes = 0` counts the candidates too: none is expected (X-15).
+    if let Some(n) = t.fixes {
         let files = disk_files(root, case, setup, &loaded);
         let guard = |old: &_, new: &_| crate::copy_guard::case(setup, &loaded, old, new);
-        let copies = crate::fixes::compare(&loaded.sources, &files, check, t.fixes, update, &guard);
+        let copies = crate::fixes::compare(&loaded.sources, &files, check, n, update, &guard);
         run.problems.extend(copies.problems);
         run.fix_copies = copies.copies;
         run.copies_guarded = copies.guarded;

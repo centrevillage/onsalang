@@ -1,7 +1,6 @@
 // onsa.toml
 // [test]
 // spec = ["§2.3", "§11.6", "§15.1"]
-// fixes = 0
 
 // R-261: the C name of an item is made of the names of its module path joined with `__`, so a `_` at
 // the start or the end of a name would make two items one name (`voice._f` and `voice_.f` are both

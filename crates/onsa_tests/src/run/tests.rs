@@ -217,6 +217,40 @@ fn fix_files() {
     assert!(!r.failures.iter().any(|f| f.contains("no copy")), "{:?}", r.failures);
 }
 
+/// A written `fixes = 0` counts the candidates (X-15): a diagnostic with one
+/// fails, one without passes. A case that does not write `fixes` does not
+/// count them, and `fixes = 1` compares its copy as before.
+#[test]
+fn written_fixes_zero_checks_that_no_candidate_is_given() {
+    let with = "// onsa.toml\n// [test]\n// fixes = 0\n\npub fn f() -> I32 {\n  let mut n = 0 //~ E0020\n  n\n}\n";
+    let without = "// onsa.toml\n// [test]\n// fixes = 0\n\npub const _1: I32 = 1 //~ E0320\n";
+    let unwritten = with.replace("// fixes = 0\n", "// spec = [\"§18.1\"]\n");
+    let one = with.replace("fixes = 0", "fixes = 1");
+    let one_copy = one.replace("let mut n = 0 ", "var n = 0 ");
+    let repo = Repo::new(
+        "fixes_zero",
+        &[
+            ("tests/with.onsa", with),
+            ("tests/without.onsa", without),
+            ("tests/unwritten.onsa", &unwritten),
+            ("tests/one.onsa", &one),
+            ("tests/one.onsa.fix1", &one_copy),
+        ],
+    );
+    let r = repo.run();
+    let failed = &case(&r, "tests/with.onsa").failures;
+    assert!(
+        failed
+            .iter()
+            .any(|f| f.contains("E0020 at tests/with.onsa:6:3 has 1 candidates, more than `fixes = 0` declares")),
+        "{failed:?}"
+    );
+    for passes in ["tests/without.onsa", "tests/unwritten.onsa", "tests/one.onsa"] {
+        assert!(case(&r, passes).failures.is_empty(), "{passes}: {:?}", case(&r, passes).failures);
+    }
+    assert_eq!(case(&r, "tests/one.onsa").run.fix_copies, 1, "the copy of `fixes = 1` is read");
+}
+
 /// The copies (Q-04, X-3) are a failure of their own: an entry of kind
 /// `fix-contract` does not silence them, and a case listed as a whole does
 /// not judge them (it passes when the copy alone differs). With no copy at

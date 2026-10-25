@@ -85,7 +85,7 @@ fn fix_sources(cases: &[Case]) -> Vec<(std::path::PathBuf, u32)> {
                 case::CaseKind::File => std::path::PathBuf::from(&c.path),
                 case::CaseKind::Package => Path::new(&c.path).join(&f.path),
             };
-            out.push((p, s.test.fixes));
+            out.push((p, s.test.fixes.unwrap_or(0)));
         }
     }
     out

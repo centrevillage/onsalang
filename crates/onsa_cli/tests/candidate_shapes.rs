@@ -1,8 +1,8 @@
 //! What the case files in `tests/spec/` cannot pin about the candidates of a diagnostic (X-6 V/t).
 //!
 //! The runner of the cases compares the text after a candidate only in the width of a space (a tab and
-//! a space are the same), and it does not tell a diagnostic that has no candidate from one that has
-//! (`fixes = 0` is not checked). These tests say both. They do not fix the words of a main message or
+//! a space are the same), and it tells a diagnostic that has no candidate from one that has only in a
+//! case that writes `fixes = 0` (X-15). These tests say both. They do not fix the words of a main message or
 //! of a note (the spec does not promise them, S-345).
 //!
 //! Every test uses only the binary (`onsa check --json`).

@@ -5,8 +5,9 @@
 
 // E0320 with no candidate (spec 2.3): when the name in the shape of its kind is not an identifier, there
 // is nothing to write, so the diagnostic has no candidate (`_0` without its `_` is `0`, `__` made one `_`
-// is `_`, the hole). The candidates of the other names are in fixes/e0320_leading_underscore. The runner
-// does not check that a diagnostic has no candidate; crates/onsa_cli/tests/naming_shapes.rs does. R-262.
+// is `_`, the hole). The candidates of the other names are in fixes/e0320_leading_underscore. The written
+// `fixes = 0` checks that no diagnostic has a candidate (X-15), and crates/onsa_cli/tests/naming_shapes.rs
+// does too. R-262.
 
 pub struct _0 { //~ E0320
   x: I32,
