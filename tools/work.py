@@ -571,7 +571,10 @@ def take(args):
 # ---------------------------------------------------------------- the cleaning up (X9-16, U5)
 
 LIVE_LOCK = "claude agent"  # the start of the reason of Claude Code's lock while its agent runs (seen 2026-10-18)
-META_TEXT = ("agentType", "worktreePath", "worktreeBranch")  # the fields of a record that are strings when there
+# The fields of a record that name the path of its worktree: its own, or that of the agent that spawned it in its
+# worktree (an agent of an agent, `spawnDepth` 2; seen 2026-10-25).
+TREE_PATHS = ("worktreePath", "inheritedWorktreePath")
+META_TEXT = ("agentType", *TREE_PATHS, "worktreeBranch")  # the fields of a record that are strings when there
 TAKEN_TEXT = {"patch": ("patch", "worktree", "branch", "tree"), "apply": ("patch", "to")}  # the rows `take` writes
 BUILD = "target/"  # the build output: its fuzzing inputs are copied, the rest of it goes with the worktree
 
@@ -604,11 +607,12 @@ class Verdict(NamedTuple):
 
 def agents_of(path, branch, session):
     """[(agent_type, agent_id, live)] of Claude Code's records `<RECORDS_ENV or handback.PROJECT>/<session>/
-    subagents/agent-<ID>.meta.json` whose `worktreePath` is `path` or `worktreeBranch` is `branch`; live when it
-    has no `finished`. With `session`, that session's alone (another session's agents cannot be called again:
-    finished), and none of them is unreadable (a wrong ID would make every agent finished); without, all of them.
+    subagents/agent-<ID>.meta.json` whose path (a field of TREE_PATHS) is `path` or `worktreeBranch` is `branch`;
+    live when it has no `finished`. With `session`, that session's alone (another session's agents cannot be
+    called again: finished), and none of them is unreadable (a wrong ID would make every agent finished); without,
+    all of them.
     The form is not in Claude Code's documents (checked on 2026-10-18): a record that cannot be read, a field of
-    META_TEXT not a string, `finished` not a boolean, or one spawned with a worktree that names neither its path nor
+    META_TEXT not a string, `finished` not a boolean, or one spawned with a worktree that names neither a path nor
     its branch raises Unreadable, and the worktree stays."""
     top = Path(os.environ.get(RECORDS_ENV) or handback.PROJECT)
     if not top.is_dir():
@@ -624,10 +628,10 @@ def agents_of(path, branch, session):
         if not isinstance(d, dict) or not isinstance(d.get("finished", False), bool) or any(
                 k in d and not isinstance(d[k], str) for k in META_TEXT):  # fmt: skip
             raise Unreadable(f"the record {meta} is not of the form known")
-        if d.get("spawnedWithWorktree") and not (d.get("worktreePath") or d.get("worktreeBranch")):
+        paths = [d[k] for k in TREE_PATHS if d.get(k)]
+        if d.get("spawnedWithWorktree") and not (paths or d.get("worktreeBranch")):
             raise Unreadable(f"the record {meta} names no worktree, though spawned with one")
-        if (path and d.get("worktreePath") and Path(d["worktreePath"]).resolve() == path) or (
-                branch and d.get("worktreeBranch") == branch):  # fmt: skip
+        if (path and any(Path(p).resolve() == path for p in paths)) or (branch and d.get("worktreeBranch") == branch):
             out.append((d.get("agentType"), meta.name[len("agent-"): -len(".meta.json")], not d.get("finished")))
     return out
 

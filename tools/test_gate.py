@@ -5215,6 +5215,9 @@ class Work(unittest.TestCase):
         for session, meta, says in (
                 ("nosuch", None, "no record of the session nosuch in "),
                 ("s1", {"agentType": "onsa-impl", "spawnedWithWorktree": True}, "names no worktree, though spawned"),
+                ("s1", {"spawnedWithWorktree": True, "inheritedWorktreePath": "", "finished": True},
+                 "names no worktree, though spawned"),
+                ("s1", {"inheritedWorktreePath": 5, "finished": True}, "is not of the form known"),
                 ("s1", {"agentType": "onsa-impl", "worktreePath": 5}, "is not of the form known"),
                 ("s1", {"worktreeBranch": ["x"], "finished": True}, "is not of the form known"),
                 ("s1", {"worktreePath": str(wt), "finished": "yes"}, "is not of the form known")):  # fmt: skip
@@ -5227,6 +5230,35 @@ class Work(unittest.TestCase):
                 self.assertTrue(wt.is_dir())
         (subagents / "agent-x.meta.json").unlink()
         self.assertEqual(self.clean("done", "k1", "--session", "s1")[0], 0)
+
+    def inherited(self, wt, agent, finished):
+        """The record of an agent an agent spawned in its worktree `wt` (seen 2026-10-25: no `worktreePath` nor
+        `worktreeBranch`)."""
+        meta = {"agentType": "general-purpose", "inheritedWorktreePath": str(wt), "spawnedWithWorktree": True,
+                "parentAgentId": wt.name, "spawnDepth": 2, **({"finished": True} if finished else {})}  # fmt: skip
+        (Path(self.tmp.name) / "records" / "s1" / "subagents" / f"agent-{agent}.meta.json").write_text(json.dumps(meta))
+
+    def test_done_an_agents_agent_in_the_worktree(self):
+        wt, other, live = work.new("a1", self.main), work.new("a2", self.main), work.new("a3", self.main)
+        for x in (wt, other, live):
+            self.record(x, finished=True)
+        self.inherited(wt, "a1x", finished=True)
+        self.inherited(live, "a3x", finished=False)
+        code, lines = self.clean("done", "a2", "--session", "s1")  # the records of the agents' agents: read
+        self.assertEqual((code, lines[0]), (0, "remove a2 (worktree-a2): no change (no commit after dev, the tree is "
+                                               "its HEAD's)"))  # fmt: skip
+        scratch = Path(self.tmp.name) / "scratch"
+        code, lines = self.clean("done", wt, "--session", "s1", "--scratchpad", scratch)
+        self.assertEqual(code, 0, lines)
+        self.assertEqual([x for x in lines if "reports:" in x],
+                         [f"  reports: none saved for {k} in {scratch}/handback/" for k in ("onsa-impl a1",
+                                                                                           "general-purpose a1x")])
+        self.assertTrue(self.gone(wt) and self.gone(other))
+        for argv in (["--session", "s1"], [], ["--session", "s1", "--discard"]):  # an agent's agent running in it
+            with self.subTest(argv=argv):
+                self.assertEqual(self.clean("done", "a3", *argv),
+                                 (1, ["keep a3 (worktree-a3): the agent is running (general-purpose a3x)"]))
+        self.assertTrue(live.is_dir())
 
     def test_done_ignored_files_and_a_change_after_the_verdict(self):
         (self.main / ".gitignore").write_text("*.log\ntarget/\n")
