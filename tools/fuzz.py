@@ -310,9 +310,10 @@ class Runner:
 
 def normalized(text):
     """A title or a message as a class names it: its quoted text `…`, its
-    numbers `#`, its blanks one space, the first 80 characters."""
+    numbers `#`, its blanks one space, the first 80 characters with no blank
+    at the end."""
     text = re.sub(r"`[^`]*`", "`…`", text)
-    return re.sub(r"\d+", "#", re.sub(r"\s+", " ", text)).strip()[:80]
+    return re.sub(r"\d+", "#", re.sub(r"\s+", " ", text)).strip()[:80].rstrip()
 
 
 def fix_signature(v):
