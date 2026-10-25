@@ -416,13 +416,15 @@ impl<'p> Sema<'p> {
     /// do not give (`process_inplace`, `params_default`) are not in its
     /// namespace, and a `use` of them fails ([`Sema::fail_ungenerated`]).
     fn flow_members(&mut self, cx: &Cx<'p>, flow: DefId, inputs: &[FlowInput], out: TyId) -> Vec<(String, DefId)> {
-        let name_span = self.a.def(flow).name_span;
+        let (name_span, vis) = (self.a.def(flow).name_span, self.a.def(flow).vis);
         let mk_struct = |s: &mut Self, fields: Vec<FieldDef>, flow_ty: FlowTy| -> DefId {
             let fields = if flow_ty == FlowTy::State { Fields::Opaque } else { Fields::Named(fields) };
             let def = StructDef { generics: Vec::new(), fields, derives: Some(Vec::new()), flow_ty: Some(flow_ty) };
             s.fill_generated(flow, Generated::Type(flow_ty), DefKind::Struct(def))
         };
-        let field = |name: &str, ty: TyId| FieldDef { name: name.to_string(), ty, vis: Vis::Pub, span: name_span };
+        // The fields of a generated struct have the visibility of the flow
+        // (§11.6, S-36).
+        let field = |name: &str, ty: TyId| FieldDef { name: name.to_string(), ty, vis, span: name_span };
 
         let state = mk_struct(self, Vec::new(), FlowTy::State);
         let config_fields = inputs.iter().filter(|i| i.rate == Rate::Init).map(|i| field(&i.name, i.ty)).collect();

@@ -1,0 +1,3 @@
+[package]
+name = "visibility_use_binding"
+edition = "2026"

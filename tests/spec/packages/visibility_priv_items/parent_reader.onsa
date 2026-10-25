@@ -1,0 +1,6 @@
+use a.b.{in_package_child}
+use a.b.{from_child}                                //~ E0303
+
+fn read() -> I32 {
+  in_package_child()
+}

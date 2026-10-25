@@ -15,8 +15,8 @@ fn helper_no_effect() {
 
 // `Gen` を生成器を通さずに作る。
 // 期待（S-97）: E0303（`Gen` のフィールドは `priv`。生成器は `gen.*` で作る）。
-// 今（2026-10-05）: `onsa check` を通る。`Gen[T]` は `pub struct` でフィールド `seed` が可視性を継ぐ（S-35）ので、
-//   誰でも `Gen { seed: 7 }` と書ける。仕様 §11.8 は `Gen` の中身を定めていない。
+// 今（2026-10-26、W4-03 U4a の後）: E0303「the field `seed` of `Gen` is not visible here: it is `priv`, seen in its
+//   module alone」。std の `Gen[T]` のフィールド `seed` を `priv` にした（S-36）。仕様 §11.8 は `Gen` の中身を定めていない。
 fn forged() -> Gen[F32] { Gen { seed: 7 } }
 
 // `test` の外で `assert_near` を使う。

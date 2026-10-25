@@ -1,0 +1,4 @@
+// The parent of dsp/osc.onsa: an item with no visibility word is seen by the child module and by main.
+fn parent_item(x: I32) -> I32 {
+  x + 10
+}

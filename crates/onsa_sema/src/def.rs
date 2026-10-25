@@ -108,6 +108,8 @@ pub enum FlowFn {
 pub struct FieldDef {
     pub name: String,
     pub ty: TyId,
+    /// The visibility the field has: `priv` when written so, else the
+    /// struct's (§15.1, S-35).
     pub vis: Vis,
     pub span: Span,
 }

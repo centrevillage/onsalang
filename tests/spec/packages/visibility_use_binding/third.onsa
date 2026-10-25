@@ -1,0 +1,5 @@
+use main.{double}                                   //~ E0302
+
+fn silent_after_the_failed_use() -> I32 {
+  double(1)
+}

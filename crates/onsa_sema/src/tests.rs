@@ -189,7 +189,7 @@ fn name_diagnostics() {
     assert_eq!(codes(&a), vec![Code::E0200]);
     let a = analyze(&pkg(&[("a", "use b.{g}\npub fn f() {}\n"), ("b", "use a.{f}\npub fn g() {}\n")]));
     assert_eq!(codes(&a), vec![Code::E0310]);
-    // Until W4-03, no visibility word is within the module, as `priv` (§15.1).
+    // A `priv` item is within its module (§15.1, S-36).
     let a =
         analyze(&pkg(&[("a", "priv fn hidden() {}\npub fn shown() {}\n"), ("b", "use a.{hidden}\nuse a.{shown}\n")]));
     assert_eq!(codes(&a), vec![Code::E0303]);

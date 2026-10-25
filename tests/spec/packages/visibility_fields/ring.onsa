@@ -1,0 +1,69 @@
+// The module that declares the structs: it reads, writes, builds and matches every field, `priv` ones included
+// (§15.1: a `priv` field reaches the whole module). The other modules of the package get the fields that have
+// no word (they take the visibility of their struct), and not the `priv` ones.
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  priv head: U32,
+}
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+struct Voice {
+  gain: F32,
+  priv phase: F32,
+}
+
+pub struct Box[T] {
+  value: T,
+  priv count: U32,
+}
+
+pub struct Wrap {
+  ring: Ring[F32, 4],
+  priv tag: U32,
+}
+
+pub fn new_ring() -> Ring[F32, 4] {
+  Ring { data: [0.0; 4], head: 0 }
+}
+
+pub fn advance(inout r: Ring[F32, 4]) {
+  r.head = r.head + 1
+}
+
+pub fn head_of(r: Ring[F32, 4]) -> U32 {
+  r.head
+}
+
+pub fn head_by_pattern(r: Ring[F32, 4]) -> U32 {
+  match r {
+    Ring { data: _, head: h } => h,
+  }
+}
+
+fn new_voice() -> Voice {
+  Voice { gain: 1.0, phase: 0.0 }
+}
+
+fn phase_of(v: Voice) -> F32 {
+  v.phase
+}
+
+pub fn new_box(x: F32) -> Box[F32] {
+  Box { value: x, count: 0 }
+}
+
+pub fn count_of(b: Box[F32]) -> U32 {
+  b.count
+}
+
+pub fn wrap(r: Ring[F32, 4]) -> Wrap {
+  Wrap { ring: r, tag: 1 }
+}
+
+pub fn deep(w: Wrap) -> U32 {
+  w.ring.head + w.tag
+}

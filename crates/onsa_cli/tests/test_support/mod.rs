@@ -8,6 +8,7 @@ pub mod sweep;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
 
@@ -18,7 +19,11 @@ pub struct Dir(pub PathBuf);
 
 impl Dir {
     pub fn bare(tag: &str) -> Dir {
-        let d = std::env::temp_dir().join(format!("onsa_test_cmd_{}_{tag}", std::process::id()));
+        // A running number in the name: two tests of one process with the same tag (or a tag that is
+        // the start of another) must not remove each other's directory.
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("onsa_test_cmd_{}_{n}_{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         Dir(d)

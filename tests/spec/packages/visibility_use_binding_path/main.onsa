@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// S-36 (§15.1): the name that a `use` binds is the module's alone. `main` takes `double` from `util`, and that
+// does not make `main.double` an item of `main`: in `other.onsa` a path through `main` to it is E0302. The
+// other forms of this rule (a bare name, a `use` of `main`) are in `visibility_use_binding`; this one is a case
+// of its own as it waits for R-254 (W4-04).
+use util.{double}
+
+pub fn k(x: I32) -> I32 {
+  double(x)
+}

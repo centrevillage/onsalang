@@ -9,8 +9,7 @@
 // E0302 (§18.1, S-435, S-459, S-464), and no E0303, because the visibility of a declaration that
 // was read on is the default, which is the package (§15.1: an unspecified visibility is
 // visible in the package). What was read is checked here: a call with too many arguments, a
-// field that is not there. A real error of this module is still reported. (That an unspecified
-// visibility is the package is W4-03, so this case holds until then.)
+// field that is not there. A real error of this module is still reported.
 
 use util.{from_crate, Pt, lp, constant, exported, both, narrower}
 

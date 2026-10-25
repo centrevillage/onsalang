@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1"]
+// fixes = 0
+
+// S-366, S-35 (§7, §15.1): a `..` in a struct pattern is E0020 whose candidate lists the rest of the fields,
+// and when a field that this module cannot see is left, the struct is not taken apart by a pattern here: the
+// error is E0303 at the name of the struct, with a note and no candidate (it would name the field).
+// `fixes = 0` checks that there is none.
+// Every form is in a function of its own, with one or more fields that `shapes` hides left out by the `..`.
+use shapes.{Ring, Mixed, Wrapped, new_ring}
+
+fn rest_after_a_visible_field(r: Ring) -> F32 {
+  match r {
+    Ring { data: d, .. } => d[0],                   //~ E0303
+  }
+}
+
+fn rest_with_nothing_else(r: Ring) -> U32 {
+  match r {
+    Ring { .. } => 0,                               //~ E0303
+  }
+}
+
+fn rest_after_two_hidden_fields(m: Mixed) -> F32 {
+  match m {
+    Mixed { a: x, .. } => x,                        //~ E0303
+  }
+}
+
+fn rest_in_a_generic_struct(w: Wrapped[F32]) -> F32 {
+  match w {
+    Wrapped { value: v, .. } => v,                  //~ E0303
+  }
+}
+
+fn rest_in_a_nested_pattern(o: Option[Ring]) -> F32 {
+  match o {
+    Some(Ring { data: d, .. }) => d[0],             //~ E0303
+    None => 0.0,
+  }
+}
+
+fn rest_in_a_binding(r: Ring) -> F32 {
+  let Ring { data: d, .. } = r                      //~ E0303
+  d[0]
+}

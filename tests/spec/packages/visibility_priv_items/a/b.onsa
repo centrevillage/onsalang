@@ -1,0 +1,10 @@
+use a.{in_package_parent}
+use a.{from_parent}                                 //~ E0303
+
+priv fn from_child() -> I32 {
+  3
+}
+
+fn in_package_child() -> I32 {
+  in_package_parent()
+}

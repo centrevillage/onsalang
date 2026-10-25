@@ -1,0 +1,7 @@
+// Two modules in one directory are two modules.
+use dsp.x.{shared_x}
+use dsp.x.{only_x}                                  //~ E0303
+
+fn read() -> I32 {
+  shared_x()
+}

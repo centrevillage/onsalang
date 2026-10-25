@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§11.6"]
+
+// S-36 (§15.1): an item with no visibility word is visible in the package, so another module takes it with
+// a `use` and uses it: a function, an `rt` function, a constant, a struct (its fields have no word either, so
+// they are the package's too), an enum, a type alias, a flow (and what the flow generates, §11.6), and the
+// members of an `impl` with no word. The modules are in a directory and below another module (`dsp.onsa` and
+// `dsp/osc.onsa`). No diagnostic, and every test passes.
+use util.{double, double_rt, LIMIT, Pair, Mode, Count, gain, exported}
+use util.gain.{State, Params}
+use dsp.{parent_item}
+use dsp.osc.{osc_step, osc_mode, osc_pair}
+
+fn count_of(n: U32) -> Count {
+  n + 1
+}
+
+fn make_pair() -> Pair {
+  Pair { a: 3, b: 4 }
+}
+
+fn read_fields(p: Pair) -> I32 {
+  p.a * 10 + p.b
+}
+
+fn set_field(inout p: Pair) {
+  p.a = 7
+}
+
+fn mode_value(m: Mode) -> I32 {
+  match m {
+    Mode.Fast => 1,
+    Mode.Slow(n) => n,
+  }
+}
+
+fn keep_state(move s: State) -> State {
+  s
+}
+
+fn default_params(g: F32) -> Params {
+  Params { g: g }
+}
+
+flow through(g: F32 at block, x: F32 at sample) -> F32 at sample {
+  gain~(g, x)
+}
+
+test "a function with no visibility word is seen in the package" {
+  assert double(4) == 8
+  assert double_rt(5) == 10
+  assert exported(1) == 2
+  assert parent_item(1) == 11
+}
+
+test "a constant and a type alias with no word" {
+  assert LIMIT == 8
+  assert count_of(1) == 2
+}
+
+test "a struct with no word and its fields" {
+  let p = make_pair()
+  assert read_fields(p) == 34
+  var q = Pair { a: 1, b: 2 }
+  set_field(inout q)
+  assert q.a == 7
+}
+
+test "the members of an impl with no word" {
+  assert make_pair().sum() == 7
+  assert Pair.of(5, 6).sum() == 11
+}
+
+test "an enum with no word" {
+  assert mode_value(Mode.Fast) == 1
+  assert mode_value(Mode.Slow(5)) == 5
+}
+
+test "a module below another one takes the items of the package" {
+  assert osc_step(2) == 14
+  assert osc_mode(Mode.Slow(9)) == 9
+  assert osc_pair(make_pair()) == -1
+}

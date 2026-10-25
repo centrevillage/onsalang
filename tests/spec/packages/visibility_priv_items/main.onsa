@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§11.6"]
+
+// S-36 (§15.1): a `priv` item is the module's alone, so another module of the package gets E0303 when it
+// takes the name with a `use` or writes it as a path through a module it took (`util.hidden()`), in a value
+// position, a type position or an enumerator. The `priv` flow and the namespace that it generates are `priv`
+// too (§11.6: the items generated for a flow take its visibility). The same names are fine in `util.onsa`
+// itself, and `shown` and `in_package` (which another module takes) are not `priv`. The error of one unit is
+// the only one of the unit (§18.1), so each form is a unit of its own.
+use util
+use util.{shown, in_package}
+use util.{hidden_rt}                                //~ E0303
+use util.{tone}                                     //~ E0303
+use util.tone.{State}                               //~ E0303
+
+fn path_fn() -> I32 {
+  util.hidden()                                     //~ E0303
+}
+
+fn path_rt_fn() -> I32 {
+  util.hidden_rt()                                  //~ E0303
+}
+
+fn path_const() -> I32 {
+  util.SECRET                                       //~ E0303
+}
+
+fn path_type(i: util.Inner) -> I32 {                //~ E0303
+  0
+}
+
+fn path_alias(s: util.Sample) -> F32 {              //~ E0303
+  s
+}
+
+fn path_enumerator() -> I32 {
+  let m = util.Mode.A                               //~ E0303
+  0
+}
+
+fn path_ok() -> I32 {
+  util.shown() + util.in_package() + shown() + in_package()
+}

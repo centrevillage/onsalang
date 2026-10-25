@@ -7,8 +7,10 @@
 // none written, so the whole package sees them (§15.1). The blocks (`main.onsa`, `ffi.onsa`) are E0200 in this
 // version, and their members are names that are read (§18.1), so the `use` of them in another module is no
 // error and the places that use them report nothing. The only diagnostics are the E0200 of the blocks. The
-// case is kept apart from `extern_block_members` because a `use` of a name with no visibility written, from
-// another module, is E0303 until the package sees such names (W4-03, U4).
+// case is kept apart from `extern_block_members` because the `use` is in another module (a name with no
+// visibility word written is seen by the package, S-36). `Handle` is written in the head of a function with
+// no word, which reaches the package like the type; a `pub` function with `Handle` in its head is another
+// rule and another case (`extern_block_members_pub_heading`).
 extern "C" lib "m" {                                //~ E0200
   fn c_abs(x: I32) -> I32
   type Handle

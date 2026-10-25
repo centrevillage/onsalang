@@ -347,22 +347,14 @@ fn remove_word(c: &Cursor, i: usize, title: &str) -> Fix {
     Fix::delete(title, c.file_span(c.span(i).start, end))
 }
 
-/// The rows [`field_visibility`] names ([`super::Matcher::many`]).
-pub(super) const FIELD_VISIBILITY_ROWS: &[RowId] = &[RowId::FieldPub, RowId::FieldPrivInPrivStruct];
-
-/// The visibility word of a field, read at `c.at` (§15.1): a field inherits
-/// the visibility of its struct, so `pub` on it, and `priv` on a field of a
-/// `priv struct`, are redundant and go.
-pub(super) fn field_visibility(c: &Cursor) -> Option<(RowId, Hit)> {
-    if c.top() != Some(NodeKind::Field) {
+/// The visibility word `pub` of a field, read at `c.at` (§15.1): a field
+/// inherits the visibility of its struct, so `pub` on it is redundant and
+/// goes. `priv` is written on a field of any struct (S-672).
+pub(super) fn field_pub(c: &Cursor) -> Option<Hit> {
+    if c.top() != Some(NodeKind::Field) || c.kind(c.at) != TokenKind::KwPub {
         return None;
     }
-    let row = match c.kind(c.at) {
-        TokenKind::KwPub => RowId::FieldPub,
-        TokenKind::KwPriv if struct_visibility(c) == Some(TokenKind::KwPriv) => RowId::FieldPrivInPrivStruct,
-        _ => return None,
-    };
-    found(row, c.span(c.at), vec![remove_word(c, c.at, "remove the visibility")])
+    hit(c.span(c.at), vec![remove_word(c, c.at, "remove the visibility")])
 }
 
 /// `priv use`, read at its `priv` (§15.1): the names a `use` brings in are
@@ -425,7 +417,7 @@ pub(super) const TUPLE_STRUCT_ROWS: &[RowId] = &[RowId::TupleStruct, RowId::Tupl
 /// more, the names of the fields are the writer's, and there is no candidate.
 /// The field is `priv`, as an element of a tuple struct is of its module
 /// (§4.1 `pub struct Q { priv value: F32 }`; S-494), but in a `priv struct`,
-/// where `priv` is redundant (§15.1).
+/// where both forms reach the same (§15.1, S-672).
 pub(super) fn tuple_struct(c: &Cursor) -> Option<(RowId, Hit)> {
     if c.kind(c.at) != TokenKind::LParen
         || c.top() != Some(NodeKind::FieldList)

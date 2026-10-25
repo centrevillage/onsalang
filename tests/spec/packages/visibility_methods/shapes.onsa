@@ -1,0 +1,78 @@
+// The members of an inherent `impl` have a visibility of their own (§15.1, S-491): a member with no word is the
+// package's, `priv` is the module's, and `pub` is out of the package. This module uses every one of them.
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+priv struct Hidden {
+  v: I32,
+}
+
+impl Point {
+  pub fn new(x: F32, y: F32) -> Point {
+    Point { x: x, y: y }
+  }
+
+  fn norm2(self) -> F32 {
+    self.x * self.x + self.y * self.y
+  }
+
+  priv fn secret(self) -> F32 {
+    self.x
+  }
+
+  fn zero() -> Point {
+    Point { x: 0.0, y: 0.0 }
+  }
+
+  priv fn origin() -> Point {
+    Point { x: 0.0, y: 0.0 }
+  }
+
+  const UNIT: F32 = 1.0
+
+  priv const LIMIT: F32 = 8.0
+}
+
+impl[T: Copy] Holder[T] {
+  pub fn make(v: T) -> Holder[T] {
+    Holder { v: v }
+  }
+
+  fn get(self) -> T {
+    self.v
+  }
+
+  priv fn peek(self) -> T {
+    self.v
+  }
+}
+
+// A type with `priv` has the members `fn` and `priv fn`, and both reach the module and no further.
+impl Hidden {
+  fn plain(self) -> I32 {
+    self.v
+  }
+
+  priv fn narrow(self) -> I32 {
+    self.v + 1
+  }
+
+  fn make() -> Hidden {
+    Hidden { v: 1 }
+  }
+}
+
+pub fn in_the_module(p: Point, h: Holder[F32]) -> F32 {
+  p.secret() + Point.origin().x + Point.LIMIT + p.norm2() + Point.zero().x + Point.UNIT + h.peek() + h.get()
+}
+
+priv fn in_the_module_hidden() -> I32 {
+  let h = Hidden.make()
+  h.plain() + h.narrow()
+}

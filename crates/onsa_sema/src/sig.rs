@@ -198,13 +198,16 @@ impl<'p> Sema<'p> {
                 let mut cx = cx;
                 cx.generics = self.lower_generics(&cx, &s.generics);
                 let derives = self.lower_derives(&cx, &s.derives);
+                // A field has the visibility of its struct, narrowed by
+                // `priv` alone (§15.1, S-35, S-672).
+                let inherited = self.a.def(id).vis;
                 let fields = Fields::Named(
                     s.fields
                         .iter()
                         .map(|f| FieldDef {
                             name: f.name.name.clone(),
                             ty: self.lower_type(&cx, f.ty),
-                            vis: f.vis,
+                            vis: if f.vis == Vis::Priv { Vis::Priv } else { inherited },
                             span: f.span,
                         })
                         .collect(),

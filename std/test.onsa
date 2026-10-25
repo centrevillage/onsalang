@@ -3,7 +3,7 @@
 
 /// A generator of values of `T` (`std.test.gen` builds them).
 pub struct Gen[T] {
-  seed: U64,
+  priv seed: U64,
 }
 
 /// Generate `cases` values from `g` and check `p` on each; the first

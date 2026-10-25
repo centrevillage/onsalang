@@ -57,8 +57,9 @@ impl<'a> Checker<'a> {
                     // read (a name held as an error, a variant or an associated
                     // function of a def a syntax error cut, S-260, or of an
                     // alias of the error type, R-271): no diagnostic.
+                    // A member not visible here (`Point.m()`, R-38): its E0303.
                     Err(err)
-                        if matches!(err, ResolveError::NeedsUse { .. })
+                        if matches!(err, ResolveError::NeedsUse { .. } | ResolveError::NotVisible { .. })
                             || self.a.unread_path(self.def, self.m, &path, &err) =>
                     {
                         return Err(self.resolve_error(&path, err));
@@ -276,6 +277,9 @@ impl<'a> Checker<'a> {
                     return self.args_of_unknown_callee(args);
                 }
                 let mdef = self.a.def(md).clone();
+                if let Err(err) = self.a.modules.member_reach(self.a.def(d), &mdef, name, self.m) {
+                    return Err(self.diag(err.into_diagnostic()));
+                }
                 let DefKind::Fn(f) = &mdef.kind else {
                     return Err(self.err(Code::E0413, name.span, format!("`{}` is not a method", name.name)));
                 };

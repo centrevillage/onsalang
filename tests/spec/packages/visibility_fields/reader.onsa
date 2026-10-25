@@ -1,0 +1,56 @@
+// Another module of the package, and only fields it can see: the fields that have no word follow the struct
+// (read, write, build, match), and the `priv` ones are reached through the functions of `ring`.
+use ring.{Ring, Point, Voice, Box, Wrap, new_ring, advance, head_of, new_voice, new_box, wrap}
+
+fn read_data(r: Ring[F32, 4]) -> F32 {
+  r.data[0]
+}
+
+fn write_data(inout r: Ring[F32, 4]) {
+  r.data[0] = 1.0
+}
+
+fn make_point() -> Point {
+  Point { x: 1.0, y: 2.0 }
+}
+
+fn read_point(p: Point) -> F32 {
+  p.x + p.y
+}
+
+fn move_point(inout p: Point) {
+  p.x = 3.0
+}
+
+fn match_point(p: Point) -> F32 {
+  match p {
+    Point { x: a, y: b } => a + b,
+  }
+}
+
+fn read_gain(v: Voice) -> F32 {
+  v.gain
+}
+
+fn set_gain(inout v: Voice) {
+  v.gain = 0.5
+}
+
+fn read_value(b: Box[F32]) -> F32 {
+  b.value
+}
+
+fn read_nested(w: Wrap) -> F32 {
+  w.ring.data[1]
+}
+
+fn through_functions() -> U32 {
+  var r = new_ring()
+  advance(inout r)
+  head_of(r)
+}
+
+fn through_a_wrapper() -> F32 {
+  let w = wrap(new_ring())
+  read_nested(w)
+}

@@ -1,0 +1,11 @@
+use main
+use main.{k}
+use util.{triple}
+
+fn through_the_item() -> I32 {
+  k(1) + main.k(2) + triple(3)
+}
+
+fn as_a_bare_name() -> I32 {
+  double(1)                                         //~ E0302
+}

@@ -1,0 +1,51 @@
+// The heads of these declarations have a mistake, and each is read on from the form (§18.1, S-482, S-593): the
+// declaration is recorded as the heading without the form, and its visibility is the one that was written when
+// one kind of word was written right (`pub` only or `priv` only, a doubled word is one), and none (the package)
+// otherwise. The names are then names of this module for the module that takes them.
+#[inline] pub fn kept_pub_attribute() -> I32 {      //~ E0002
+  1
+}
+
+#[inline] priv fn kept_priv_attribute() -> I32 {    //~ E0002
+  1
+}
+
+pub export fn kept_pub_word() -> I32 {              //~ E0002
+  1
+}
+
+priv export fn kept_priv_word() -> I32 {            //~ E0002
+  1
+}
+
+pub const fn kept_pub_const() -> I32 {              //~ E0020
+  1
+}
+
+pub pub fn kept_pub_twice() -> I32 {                //~ E0002
+  1
+}
+
+priv priv fn kept_priv_twice() -> I32 {             //~ E0002
+  1
+}
+
+pub(crate) fn package_crate() -> I32 {              //~ E0020
+  1
+}
+
+priv pub fn package_priv_pub() -> I32 {             //~ E0002
+  1
+}
+
+pub fn plain_pub() -> I32 {
+  1
+}
+
+priv fn plain_priv() -> I32 {
+  1
+}
+
+fn plain() -> I32 {
+  1
+}

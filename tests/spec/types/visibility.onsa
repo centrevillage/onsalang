@@ -6,7 +6,8 @@
 // (inside the package), `priv` (inside the module). They go in front of an item, the members of an `impl`, and
 // the fields of a struct (a field can have `priv` of its own, and takes the visibility of its struct otherwise).
 // Here is the syntax of them and that a name is found where it is visible; what each one lets another module
-// see (E0303) is in packages/visibility and is checked with W4-03. The words come before `rt` (`pub rt fn`).
+// see (E0303) is in packages/visibility and packages/visibility_* (S-36, S-35, R-38). The words come before
+// `rt` (`pub rt fn`).
 
 pub fn public_fn() -> I32 {
   1

@@ -255,8 +255,7 @@ pub enum Mode {
 /// The visibility of a declaration or a field (§15.1): three levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vis {
-    /// No word: within the package (§15.1). Until W4-03 gives it that
-    /// meaning, the names stage reads it as within the module, as `priv`.
+    /// No word: within the package (§15.1).
     Default,
     /// `priv`: within the module.
     Priv,

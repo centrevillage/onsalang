@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// S-36 (§15.1): the name that a `use` binds is the module's alone, whatever is written for it (a `use` has no
+// visibility to widen: `pub use` is E0200 in this version, S-596, and `priv use` is E0020). `double` and
+// `triple` have no visibility word in `util.onsa`, so the package sees them; `main` takes `double`, and that
+// does not make `main.double` an item of `main`. In `other.onsa` the name is E0302 as a bare name, and in
+// `third.onsa` in a `use` of `main` (the names of a failed `use` are silent, S-462). `main.k` is an item of
+// `main`, so it is found. A path through `main` to the name (`main.double(1)`) is the case
+// `visibility_use_binding_path`, which waits for W4-04 (R-254).
+use util.{double}
+
+fn in_main() -> I32 {
+  double(1)
+}
+
+pub fn k(x: I32) -> I32 {
+  double(x)
+}

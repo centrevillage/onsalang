@@ -171,10 +171,12 @@ pub enum ResolveError {
         name: String,
         span: Span,
     },
+    /// A name not visible here (E0303): `why` is from [`Modules::hidden_why`].
     NotVisible {
         name: String,
         span: Span,
         defined: Span,
+        why: String,
     },
     /// `use kp.Shape.{Circle}`: a variant or an associated item of the
     /// type `ty`, which a `use` does not take (§15.1, R-50).
@@ -213,14 +215,11 @@ impl ResolveError {
             ResolveError::NotFound { name, span } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, format!("cannot find `{name}`")).with_found(name)
             }
-            ResolveError::NotVisible { name, span, defined } => Diagnostic::new(
-                Stage::Names,
-                Code::E0303,
-                span,
-                format!("`{name}` is not visible here (it is not `pub`)"),
-            )
-            .with_found(name)
-            .with_note(defined, "defined here"),
+            ResolveError::NotVisible { name, span, defined, why } => {
+                Diagnostic::new(Stage::Names, Code::E0303, span, format!("`{name}` is not visible here: {why}"))
+                    .with_found(name)
+                    .with_note(defined, "defined here")
+            }
             ResolveError::OfAType { ty, name, span } => Diagnostic::new(
                 Stage::Names,
                 Code::E0302,
@@ -299,13 +298,32 @@ impl Modules {
         self.get(m).pkg
     }
 
-    /// Whether `vis` declared in `decl` is usable from `from`.
+    /// Whether `vis` declared in `decl` is usable from `from` (§15.1, S-36):
+    /// `pub` out of the package, no word within the package, `priv` within
+    /// the module. Every check of a visibility reads this one.
     pub fn visible(&self, vis: Vis, decl: ModId, from: ModId) -> bool {
         match vis {
             Vis::Pub => true,
-            // W4-03: no visibility word is within the package (§15.1); until
-            // then it is read as `priv`, within the module.
-            Vis::Default | Vis::Priv => decl == from,
+            Vis::Default => self.pkg_of(decl) == self.pkg_of(from),
+            Vis::Priv => decl == from,
+        }
+    }
+
+    /// Why a name of visibility `own` is not visible from `from` (§15.1,
+    /// S-36), for the message of its E0303: a member or a field whose type
+    /// (`owner`, of the kind named) is not visible there is hidden by the
+    /// type, else by its own visibility. Not visible, a name is `priv` out of
+    /// its module or has no word out of its package.
+    pub fn hidden_why(&self, own: Vis, owner: Option<(&str, &crate::def::Def)>, from: ModId) -> String {
+        let why = |vis: Vis| match vis {
+            Vis::Priv => "is `priv`, seen in its module alone",
+            Vis::Default | Vis::Pub => "is not `pub`, seen in its package alone",
+        };
+        match owner {
+            Some((kind, ty)) if !self.visible(ty.vis, ty.module, from) => {
+                format!("its {kind} `{}` {}", ty.name, why(ty.vis))
+            }
+            _ => format!("it {}", why(own)),
         }
     }
 

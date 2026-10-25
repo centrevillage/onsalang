@@ -386,8 +386,11 @@ impl<'a> Checker<'a> {
                         Some(d)
                     }
                     // A name held as an error (§18.1, S-675, S-680): neither a
-                    // flow nor not one.
-                    Err(err @ ResolveError::Failed) => return Err(self.resolve_error(&path, err)),
+                    // flow nor not one. A name not visible here (`lib.pf~(x)`
+                    // of a `priv` flow): its E0303 (§15.1).
+                    Err(err @ (ResolveError::Failed | ResolveError::NotVisible { .. })) => {
+                        return Err(self.resolve_error(&path, err));
+                    }
                     _ => None,
                 }
             }

@@ -1,0 +1,28 @@
+// S-36 (§11.6, §15.1): a `priv` flow is the module's alone, and so are its namespace and the items in it: the
+// flow, the namespace and every item of it are E0303 in another module. The error of a unit is the only
+// one of the unit (§18.1), so each form is a unit of its own. What the failed `use` would have taken is silent.
+use synth
+use synth.{hidden_voice}                            //~ E0303
+use synth.hidden_voice.{State}                      //~ E0303
+use synth.hidden_voice.{Params, reset}              //~ E0303
+
+fn silent_names(move s: State) -> State {
+  s
+}
+
+fn path_state(move s: synth.hidden_voice.State) -> synth.hidden_voice.State {   //~ E0303
+  s
+}
+
+fn path_params() -> I32 {
+  let p = synth.hidden_voice.Params { gain: 1.0 }   //~ E0303
+  0
+}
+
+flow make_hidden(x: F32 at sample) -> F32 at sample {
+  synth.hidden_voice~(1.0, x)                       //~ E0303
+}
+
+fn path_of_a_shown_flow(move s: synth.shown_voice.State) -> synth.shown_voice.State {
+  s
+}

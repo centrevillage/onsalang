@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§7", "§4.4"]
+
+// S-35, R-38 (§15.1): a `priv` field is the module's alone. In another module of the package, reading it,
+// writing it, naming it in a struct literal and naming it in a pattern are E0303 (the fields that have no word
+// are fine, in `reader.onsa`); a struct literal that leaves it out is E0303 too (the struct is not made by a
+// literal there, §15.1), and so is a pattern that leaves it out (the struct is not taken apart by a pattern
+// there, §15.1, §7). The error
+// of a unit is the only one of the unit (§18.1), so each form is a function of its own. The fields are reached
+// from a nested place (`w.ring.head`), from a closure, a branch, a `match` arm, a loop and a `par`, and a
+// generic struct has them too (`Ring[T, N]`).
+use ring.{Ring, Voice, Box, Wrap, new_ring, new_box, wrap}
+
+fn read_hidden(r: Ring[F32, 4]) -> U32 {
+  r.head                                            //~ E0303
+}
+
+fn write_hidden(inout r: Ring[F32, 4]) {
+  r.head = 3                                        //~ E0303
+}
+
+fn literal_hidden() -> Ring[F32, 4] {
+  Ring { data: [0.0; 4], head: 0 }                  //~ E0303
+}
+
+fn literal_leaving_out_hidden() -> Ring[F32, 4] {
+  Ring { data: [0.0; 4] }                           //~ E0303
+}
+
+fn pattern_hidden(r: Ring[F32, 4]) -> U32 {
+  match r {
+    Ring { data: _, head: h } => h,                 //~ E0303
+  }
+}
+
+// The field that is not visible comes before the other errors of the literal and the pattern (a field that
+// `Ring` does not have): the E0303 is of the names stage (§18.1).
+fn literal_hidden_before_unknown() -> Ring[F32, 4] {
+  Ring {
+    data: [0.0; 4],
+    zz: 2,
+    head: 0,                                        //~ E0303
+  }
+}
+
+fn pattern_hidden_before_unknown(r: Ring[F32, 4]) -> U32 {
+  match r {
+    Ring {
+      data: _,
+      zz: _,
+      head: h,                                      //~ E0303
+    } => h,
+  }
+}
+
+fn pattern_omitted(r: Ring[F32, 4]) -> F32 {
+  match r {
+    Ring { data: d } => d[0],                       //~ E0303
+  }
+}
+
+fn package_struct_hidden(v: Voice) -> F32 {
+  v.phase                                           //~ E0303
+}
+
+fn generic_hidden(b: Box[F32]) -> U32 {
+  b.count                                           //~ E0303
+}
+
+fn wrapper_hidden(w: Wrap) -> U32 {
+  w.tag                                             //~ E0303
+}
+
+fn nested_hidden(w: Wrap) -> U32 {
+  w.ring.head                                       //~ E0303
+}
+
+fn in_a_closure(r: Ring[F32, 4]) -> U32 {
+  let f = fn(x: Ring[F32, 4]) -> U32 { x.head }     //~ E0303
+  f.(r)
+}
+
+fn in_a_branch(c: Bool, r: Ring[F32, 4]) -> U32 {
+  if c {
+    r.head                                          //~ E0303
+  } else {
+    0
+  }
+}
+
+fn in_an_arm(o: Option[Ring[F32, 4]]) -> U32 {
+  match o {
+    Some(r) => r.head,                              //~ E0303
+    None => 0,
+  }
+}
+
+fn in_a_loop(r: Ring[F32, 4]) -> U32 {
+  var s: U32 = 0
+  for i in 0 ..< 4 {
+    s = s + r.head                                  //~ E0303
+  }
+  s
+}
+
+flow in_a_par(x: F32 at sample) -> [U32; 4] at sample {
+  let r = new_ring()
+  par i in 0 ..< 4 {
+    r.head                                          //~ E0303
+  }
+}
+
+fn visible_in_the_same_unit(r: Ring[F32, 4]) -> F32 {
+  r.data[0]
+}

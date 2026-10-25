@@ -1,0 +1,9 @@
+// The module `a` and its child module `a/b.onsa` are two modules: a child sees nothing of its parent's
+// `priv` items, nor the parent of its child's.
+priv fn from_parent() -> I32 {
+  1
+}
+
+fn in_package_parent() -> I32 {
+  2
+}

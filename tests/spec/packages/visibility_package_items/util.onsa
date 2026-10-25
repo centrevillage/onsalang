@@ -1,0 +1,41 @@
+// Items with no visibility word: every module of the package sees them (§15.1, S-36).
+fn double(x: I32) -> I32 {
+  x * 2
+}
+
+rt fn double_rt(x: I32) -> I32 {
+  x * 2
+}
+
+const LIMIT: I32 = 8
+
+struct Pair {
+  a: I32,
+  b: I32,
+}
+
+enum Mode {
+  Fast,
+  Slow(I32),
+}
+
+type Count = U32
+
+flow gain(g: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * g
+}
+
+impl Pair {
+  fn sum(self) -> I32 {
+    self.a + self.b
+  }
+
+  fn of(a: I32, b: I32) -> Pair {
+    Pair { a: a, b: b }
+  }
+}
+
+// A `pub` item is seen in the package too.
+pub fn exported(x: I32) -> I32 {
+  x + 1
+}

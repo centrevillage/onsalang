@@ -1,0 +1,42 @@
+// The items with `priv` are the module's alone (§15.1): the module uses all of them, and `shown` is the way
+// out for the rest of the package.
+priv fn hidden() -> I32 {
+  1
+}
+
+priv rt fn hidden_rt() -> I32 {
+  2
+}
+
+priv const SECRET: I32 = 3
+
+priv struct Inner {
+  x: I32,
+}
+
+priv enum Mode {
+  A,
+  B,
+}
+
+priv type Sample = F32
+
+priv flow tone(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+priv fn local(i: Inner, m: Mode, s: Sample) -> I32 {
+  let v = match m {
+    Mode.A => 1,
+    Mode.B => 2,
+  }
+  i.x + v + hidden() + hidden_rt() + SECRET
+}
+
+pub fn shown() -> I32 {
+  local(Inner { x: 1 }, Mode.B, 0.5)
+}
+
+fn in_package() -> I32 {
+  shown() + hidden()
+}

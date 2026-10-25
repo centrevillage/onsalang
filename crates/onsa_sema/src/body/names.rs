@@ -304,6 +304,7 @@ impl<'a> Checker<'a> {
                     && let Fields::Named(fs) = &s.fields
                     && let Some(f) = fs.iter().find(|f| f.name == name.name)
                 {
+                    self.field_reach(d, f, name.span)?;
                     return Ok(self.subst(f.ty, &args));
                 }
                 // SPEC-GAP(S-260): a field of a struct whose unit failed in the

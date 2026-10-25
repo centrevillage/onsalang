@@ -14,9 +14,16 @@ use onsa_syntax::ast::{Ident, PatId, Path, StructRest};
 use onsa_syntax::foreign::{self, RowId};
 
 use crate::body::{Checker, R, Stop};
-use crate::def::{DefKind, Fields};
+use crate::def::{DefId, DefKind, FieldDef, Fields};
 use crate::resolve::Entity;
 use crate::ty::{Ty, TyId};
+
+/// What names the fields of a struct (`Checker::whole_reach`).
+#[derive(Clone, Copy)]
+pub(crate) enum Whole {
+    Literal,
+    Pattern,
+}
 
 /// What the caller does with a written field: its pattern, the type it
 /// matches and its index in the declaration. A field that a struct whose
@@ -74,6 +81,8 @@ impl<'a> Checker<'a> {
         self.unify_at(span, named, ty)?;
         // SPEC-GAP(S-260): as for the fields of a struct literal.
         let failed = self.a.partly_read(d);
+        let written: Vec<&Ident> = fields.iter().map(|(f, _)| f).collect();
+        self.whole_reach(d, &defs, &written, path.span, Whole::Pattern)?;
         let mut seen: Vec<&str> = Vec::new();
         for (field, fp) in fields {
             let Some(i) = defs.iter().position(|f| f.name == field.name) else {
@@ -96,18 +105,13 @@ impl<'a> Checker<'a> {
         if failed {
             return Ok(Some(defs.len()));
         }
-        let missing: Vec<&crate::def::FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
-        // A field has the visibility of its struct, narrowed only by `priv`
-        // (§15.1). The parser reads no `priv` yet, and `FieldDef::vis` is
-        // the written one (none is `Private`), so every field is as visible
-        // as the struct, which this pattern names: no field is hidden here
-        // until the visibility of the fields is checked (reported by
-        // W3-21/i; the patterns, the literals and the accesses alike).
-        let hidden = false;
+        // The fields left are visible here: a field not visible that the
+        // pattern leaves out is the E0303 above (§15.1, §7, S-366).
+        let missing: Vec<&FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
         match rest {
             // `..`: the remaining fields with `_`, in the order of the
             // declaration; none left, the `, ..` goes (§7, S-109).
-            Some(rest) if !hidden => {
+            Some(rest) => {
                 let fix = if missing.is_empty() {
                     // A title is one line: the removal may hold newlines.
                     let title = if rest.removal.start < rest.span.start { "remove `, ..`" } else { "remove `..`" };
@@ -123,15 +127,75 @@ impl<'a> Checker<'a> {
             _ if !missing.is_empty() => {
                 let names = missing.iter().map(|f| format!("`{}`", f.name)).collect::<Vec<_>>().join(", ");
                 let msg = format!("struct patterns name every field; missing {names} (use `_`, §7)");
-                let mut d = Diagnostic::new(stage, Code::E0410, span, msg).with_found(self.src(span));
-                if rest.is_some() {
-                    // A field not visible here cannot be named (§15.1): no candidate.
-                    d = d.with_rule("there is no `..`: a struct pattern names every field, the unused ones `_` (§7)");
-                }
-                Err(self.diag(d))
+                Err(self.diag(Diagnostic::new(stage, Code::E0410, span, msg).with_found(self.src(span))))
             }
             _ => Ok(Some(defs.len())),
         }
+    }
+
+    /// Whether the field `field` of the struct `d` is visible in this module
+    /// (§15.1, S-35): its visibility (the struct's, or `priv`) from the
+    /// module of the struct.
+    pub(crate) fn field_visible(&self, d: DefId, field: &FieldDef) -> bool {
+        self.a.modules.visible(field.vis, self.a.def(d).module, self.m)
+    }
+
+    /// The field `field` of the struct `d` written at `at` (read, written, in
+    /// a struct literal or a pattern): an E0303, of the names stage, when it
+    /// is not visible here (§15.1, S-35).
+    pub(crate) fn field_reach(&mut self, d: DefId, field: &FieldDef, at: Span) -> R<()> {
+        if self.field_visible(d, field) {
+            return Ok(());
+        }
+        let def = self.a.def(d);
+        let why = self.a.modules.hidden_why(field.vis, Some(("struct", def)), self.m);
+        let msg = format!("the field `{}` of `{}` is not visible here: {why}", field.name, def.name);
+        let d = Diagnostic::new(Stage::Names, Code::E0303, at, msg)
+            .with_found(self.src(at))
+            .with_note(field.span, "defined here");
+        Err(self.diag(d))
+    }
+
+    /// The fields `written` of a struct literal or a struct pattern (`whole`)
+    /// of the struct `d` with the fields `defs`, at `path`: an E0303 when one
+    /// is not visible here, before the other errors of the literal or the
+    /// pattern, which are of a later stage (§18.1). The first written field
+    /// not visible is the E0303 of [`Self::field_reach`]; else one left out
+    /// is an E0303 at the name of the struct (§15.1, §7, S-35, S-366): here
+    /// the struct is made, and its fields read, by the functions of its
+    /// module.
+    pub(crate) fn whole_reach(
+        &mut self,
+        d: DefId,
+        defs: &[FieldDef],
+        written: &[&Ident],
+        path: Span,
+        whole: Whole,
+    ) -> R<()> {
+        for w in written {
+            if let Some(f) = defs.iter().find(|f| f.name == w.name && !self.field_visible(d, f)) {
+                return self.field_reach(d, f, w.span);
+            }
+        }
+        let left_out = |f: &&FieldDef| !written.iter().any(|w| w.name == f.name);
+        let Some(f) = defs.iter().filter(left_out).find(|f| !self.field_visible(d, f)) else {
+            return Ok(());
+        };
+        let def = self.a.def(d);
+        let why = self.a.modules.hidden_why(f.vis, Some(("struct", def)), self.m);
+        let (form, through) = match whole {
+            Whole::Literal => {
+                ("made by a struct literal", format!("`{}` is made by a function of its module", def.name))
+            }
+            Whole::Pattern => {
+                ("taken apart by a struct pattern", "its fields are read through the functions of its module".into())
+            }
+        };
+        let msg = format!("`{}` is not {form} here, as its field `{}` is not visible: {why}", def.name, f.name);
+        let note = format!("the field `{}`, not visible here: {through}", f.name);
+        let diag =
+            Diagnostic::new(Stage::Names, Code::E0303, path, msg).with_found(self.src(path)).with_note(f.span, note);
+        Err(self.diag(diag))
     }
 
     fn pattern_err(&mut self, stage: Stage, code: Code, span: Span, msg: impl Into<String>) -> Stop {

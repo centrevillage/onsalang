@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+
+// The case is apart from `extern_block_members_other_module`, whose heads all reach the package. `Handle` is a
+// member of an `extern` block with no visibility word, so the package sees it (§14.1, §15.1), and a `pub`
+// function that names it in its head is wider than the type: E0303 on the name (the rule of the types written in a
+// declaration, S-144, S-665; W4-03 U4b). The blocks are E0200 in this version, and their members are names that are
+// read (§18.1).
+extern "C" lib "m" {                                //~ E0200
+  fn c_abs(x: I32) -> I32
+  type Handle
+}

@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// S-672 (§15.1): the fields of a `priv struct` can be written with `priv` or with no word, and neither is E0020.
+// Both reach the module, and they differ when the struct is made wider (a `priv` field stays in the module, a field
+// with no word follows the struct), so a `priv` on a field of a `priv struct` marks it before that. This
+// module builds, reads, writes and matches the fields of every form.
+priv struct OnlyPriv {
+  priv b: I32,
+}
+
+priv struct Mixed {
+  a: I32,
+  priv b: I32,
+}
+
+priv struct NoWords {
+  a: I32,
+  b: I32,
+}
+
+priv struct Generic[T] {
+  v: T,
+  priv n: U32,
+}
+
+priv fn build() -> Mixed {
+  Mixed { a: 1, b: 2 }
+}
+
+priv fn read(m: Mixed) -> I32 {
+  m.a + m.b
+}
+
+priv fn write(inout m: Mixed) {
+  m.a = 3
+  m.b = 4
+}
+
+priv fn only_priv(o: OnlyPriv) -> I32 {
+  match o {
+    OnlyPriv { b: x } => x,
+  }
+}
+
+priv fn match_mixed(m: Mixed) -> I32 {
+  match m {
+    Mixed { a: x, b: y } => x + y,
+  }
+}
+
+priv fn no_words(n: NoWords) -> I32 {
+  n.a + n.b
+}
+
+priv fn generic(g: Generic[F32]) -> U32 {
+  g.n
+}
+
+pub fn run() -> I32 {
+  var m = build()
+  write(inout m)
+  read(m) + match_mixed(m)
+}

@@ -491,7 +491,6 @@ pub enum RowId {
     PubRestricted,
     FieldPubCrate,
     FieldPub,
-    FieldPrivInPrivStruct,
     PrivUse,
     ConstFn,
     ExternFn,

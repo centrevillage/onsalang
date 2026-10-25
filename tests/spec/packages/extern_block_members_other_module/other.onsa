@@ -5,6 +5,6 @@ pub fn other_module() -> I32 {
   c_abs(2) + c_labs(3)
 }
 
-pub fn other_module_type(h: Handle) -> I32 {
+fn other_module_type(h: Handle) -> I32 {
   4
 }

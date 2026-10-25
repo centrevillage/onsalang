@@ -177,13 +177,6 @@ note = "選択のパターンの枝の束縛の集合の違い。仕様の文と
 
 [[pending]]
 kind = "diag-code"
-target = "E0303"
-reasons = ["S-35", "S-36", "S-144", "S-165"]
-until = "W10-01"
-note = "可視性は W4-03（S-35、S-36、S-144）、pub でない項目の export は W10-01（S-165）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0307"
 reasons = ["S-70", "S-139", "R-104", "S-145", "S-91", "S-137"]
 until = "W5-04"
@@ -1854,24 +1847,10 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/continue_pkg_unspecified"
-reasons = ["S-435", "S-459", "S-464", "R-180"]
-until = "W4-03"
-note = "読み続けた宣言の可視性は無指定（パッケージ内）。今の実装は無指定の項目の取り込みを E0303 にする（§15.1 は無指定をパッケージ内に公開）。読み続けは W3-08、可視性は W4-03"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/continue_derive_methods.onsa"
 reasons = ["S-460"]
 until = "W5-06"
 note = "derive が作るメソッド（default・ordinal・from_ordinal）の未知を見る 2 か所は W5-06"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/visibility"
-reasons = ["S-36"]
-until = "W4-03"
-note = "priv の構文（W3-08）と無指定をパッケージ内にする意味（W4-03）（t1）"
 
 # --- W3-12/i U1b: 事例を足して変異が変わり、ファズが見つけた修正候補の型（2026-10-15。e6a8fa0 でも出る）
 
@@ -2293,10 +2272,17 @@ note = "取り込んだ子モジュールに無い名前の inner.g() が E0302 
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/extern_block_members_other_module"
-reasons = ["R-246", "S-36"]
+target = "tests/spec/packages/extern_block_members_pub_heading"
+reasons = ["S-144", "S-665"]
 until = "W4-03"
-note = "可視性の語の無い extern のメンバをパッケージの中に見せる意味は U4。今は他のモジュールの use が E0303"
+note = "無指定の extern のメンバ Handle を pub fn の見出しに書くと E0303（U4b）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/visibility_use_binding_path"
+reasons = ["R-254"]
+until = "W4-04"
+note = "use で取り込んだ名前を他のモジュールから経路で引く main.double(1) が E0302 でなく E0401「`main` is not a value」（R-254）"
 
 # --- W4-03 U3d: E0304 の名前の辺と並びの要素の読み続けの事例のうち、後の単位・作業で通るもの（2026-10-25）。
 [[pending]]

@@ -1,0 +1,9 @@
+use main
+
+fn through_the_item() -> I32 {
+  main.k(2)
+}
+
+fn through_a_path() -> I32 {
+  main.double(1)                                    //~ E0302
+}

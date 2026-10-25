@@ -461,6 +461,8 @@ impl<'a> Checker<'a> {
         // syntax stage are not all known: no diagnostic for an unknown or a
         // missing field.
         let failed = self.a.partly_read(d);
+        let written: Vec<&Ident> = fields.iter().map(|(n, _)| n).collect();
+        self.whole_reach(d, defs, &written, path.span, crate::structpat::Whole::Literal)?;
         let mut seen: Vec<&str> = Vec::new();
         for (name, value) in fields {
             if seen.contains(&name.name.as_str()) {

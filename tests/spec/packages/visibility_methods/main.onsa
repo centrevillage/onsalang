@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1"]
+
+// R-38 (§15.1): the members of an `impl` are checked whichever way they are called. A method called with `p.m()`
+// and an associated function or constant called with `Point.m()` are E0303 in another module of the package
+// when the member is `priv` (the associated function used to be E0401 "`Point` is not a value"). The member with
+// no word is the package's, and `pub` is out of the package, so these are fine here. A generic `impl` has
+// its `priv` members as well. The error of a unit is the only one of the unit (§18.1), so each form is a function of
+// its own.
+use shapes
+use shapes.{Point, Holder}
+
+fn pub_assoc() -> Point {
+  Point.new(1.0, 2.0)
+}
+
+fn package_method(p: Point) -> F32 {
+  p.norm2()
+}
+
+fn package_assoc() -> Point {
+  Point.zero()
+}
+
+fn package_const() -> F32 {
+  Point.UNIT
+}
+
+fn package_generic(h: Holder[F32]) -> F32 {
+  h.get()
+}
+
+fn pub_generic() -> Holder[F32] {
+  Holder.make(1.0)
+}
+
+fn priv_method(p: Point) -> F32 {
+  p.secret()                                        //~ E0303
+}
+
+fn priv_assoc() -> Point {
+  Point.origin()                                    //~ E0303
+}
+
+fn priv_const() -> F32 {
+  Point.LIMIT                                       //~ E0303
+}
+
+fn priv_method_on_a_result() -> F32 {
+  Point.new(1.0, 2.0).secret()                      //~ E0303
+}
+
+fn priv_method_by_path(p: shapes.Point) -> F32 {
+  p.secret()                                        //~ E0303
+}
+
+fn priv_assoc_by_path() -> shapes.Point {
+  shapes.Point.origin()                             //~ E0303
+}
+
+fn priv_generic(h: Holder[F32]) -> F32 {
+  h.peek()                                          //~ E0303
+}
+
+fn priv_in_a_closure(p: Point) -> F32 {
+  let f = fn(q: Point) -> F32 { q.secret() }        //~ E0303
+  f.(p)
+}
+
+fn priv_in_a_branch(c: Bool, p: Point) -> F32 {
+  if c {
+    p.secret()                                      //~ E0303
+  } else {
+    0.0
+  }
+}
+
+fn priv_in_an_arm(o: Option[Point]) -> F32 {
+  match o {
+    Some(p) => p.secret(),                          //~ E0303
+    None => 0.0,
+  }
+}

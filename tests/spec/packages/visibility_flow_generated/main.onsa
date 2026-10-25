@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+
+// S-36 (§11.6, §15.1): the namespace of a flow and the items generated in it have the visibility of the flow.
+// A flow with no word is seen in the package, so this module takes the flow, its namespace and the items in it
+// (`State`, `Params`, the functions) with a `use`, or writes them as a path. No diagnostic here; the `priv`
+// flow of `synth.onsa` is in `hidden.onsa`, with the flow made with the module in front
+// (`synth.hidden_voice~(...)`).
+use synth
+use synth.{voice, shown_voice}
+use synth.voice.{State, Params, init, reset, process, process_inplace, render}
+
+fn take_state(move s: State) -> State {
+  s
+}
+
+fn make_params(g: F32) -> Params {
+  Params { gain: g }
+}
+
+fn path_state(move s: synth.voice.State) -> synth.voice.State {
+  s
+}
+
+fn path_function(inout s: synth.voice.State) {
+  synth.voice.reset(inout s)
+}
+
+fn path_shown_state(move s: synth.shown_voice.State) -> synth.shown_voice.State {
+  s
+}
+
+flow use_the_flows(gain: F32 at block, x: F32 at sample) -> F32 at sample {
+  voice~(gain, x) + shown_voice~(gain, x)
+}

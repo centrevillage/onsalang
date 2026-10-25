@@ -238,9 +238,28 @@ impl Modules {
             if self.visible(adef.vis, adef.module, from) {
                 return Ok(Entity::Member(*a));
             }
-            return Err(ResolveError::NotVisible { name: name.name.clone(), span: name.span, defined: adef.name_span });
+            let why = self.hidden_why(adef.vis, None, from);
+            return Err(ResolveError::NotVisible {
+                name: name.name.clone(),
+                span: name.span,
+                defined: adef.name_span,
+                why,
+            });
         }
         Err(ResolveError::NotFound { name: name.name.clone(), span: name.span })
+    }
+
+    /// The member `member` of the type `ty` of the inherent `impl`, named at
+    /// `name` in `from`: an E0303 when it is not visible there. It reaches as
+    /// far as the narrower of its visibility and the type's (§15.1, R-38,
+    /// S-491), whether named through the type (`Point.m()`) or called on a
+    /// value (`p.m()`).
+    pub(crate) fn member_reach(&self, ty: &Def, member: &Def, name: &Ident, from: ModId) -> Result<(), ResolveError> {
+        if self.visible(member.vis, member.module, from) && self.visible(ty.vis, ty.module, from) {
+            return Ok(());
+        }
+        let why = self.hidden_why(member.vis, Some(("type", ty)), from);
+        Err(ResolveError::NotVisible { name: name.name.clone(), span: name.span, defined: member.name_span, why })
     }
 
     /// A member `name` of `entity`, as seen from `from`. Of a module, its
@@ -274,6 +293,7 @@ impl Modules {
                         name: name.name.clone(),
                         span: name.span,
                         defined: def.name_span,
+                        why: self.hidden_why(def.vis, None, from),
                     });
                 }
                 // SPEC-GAP(S-693): a name of a `pub use` of `m` is not found
@@ -303,16 +323,8 @@ impl Modules {
                     DefKind::Struct(_) => {}
                     _ => return Err(ResolveError::NotANamespace { name: def.name.clone(), span: name.span }),
                 }
-                if let Some(a) = self.assoc.get(&d).and_then(|m| m.get(&name.name)) {
-                    let adef = &defs[a.0 as usize];
-                    if self.visible(adef.vis, adef.module, from) {
-                        return Ok(Entity::Member(*a));
-                    }
-                    return Err(ResolveError::NotVisible {
-                        name: name.name.clone(),
-                        span: name.span,
-                        defined: adef.name_span,
-                    });
+                if let Some(&a) = self.assoc.get(&d).and_then(|m| m.get(&name.name)) {
+                    return self.member_reach(def, &defs[a.0 as usize], name, from).map(|()| Entity::Member(a));
                 }
                 Err(ResolveError::NotFound { name: format!("{}.{}", def.name, name.name), span: name.span })
             }

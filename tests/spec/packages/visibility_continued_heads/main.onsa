@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// S-482, S-593 (§18.1): another module takes the names of the declarations of `util.onsa` that were read on after
+// a mistake in the head. The visibility that was recorded decides: a name recorded `pub` or none (the
+// package) is taken and used without a diagnostic here (the names with a mistake in the head are names of
+// the module, so they are no E0302 either), and a name recorded `priv` is E0303 in the `use` (and its
+// uses are silent, as the names of a failed `use` are, S-462). The `use` of `plain_priv`, a declaration
+// without a mistake, is the control.
+use util.{kept_pub_attribute, kept_pub_word, kept_pub_const, kept_pub_twice}
+use util.{package_crate, package_priv_pub, plain_pub, plain}
+use util.{kept_priv_attribute}                      //~ E0303
+use util.{kept_priv_word}                           //~ E0303
+use util.{kept_priv_twice}                          //~ E0303
+use util.{plain_priv}                               //~ E0303
+
+fn recorded_pub() -> I32 {
+  kept_pub_attribute() + kept_pub_word() + kept_pub_const() + kept_pub_twice()
+}
+
+fn recorded_none() -> I32 {
+  package_crate() + package_priv_pub() + plain_pub() + plain()
+}
+
+fn silent_names() -> I32 {
+  kept_priv_attribute() + kept_priv_word() + kept_priv_twice() + plain_priv()
+}
+
+fn real_error_stays() -> I32 {
+  kept_pub_attribute() + zz                         //~ E0302
+}

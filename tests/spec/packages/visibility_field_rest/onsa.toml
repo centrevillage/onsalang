@@ -1,0 +1,3 @@
+[package]
+name = "visibility_field_rest"
+edition = "2026"

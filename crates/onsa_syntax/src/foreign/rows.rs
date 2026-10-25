@@ -6,7 +6,7 @@ use super::assign::{binary_minus_prefix_minus, compound_assignment, increment};
 use super::calls::callee_expression;
 use super::comments::block_comment;
 use super::decls::{
-    arm_return, const_fn, endless_loop, export_c, extern_fn, field_visibility, hash_attribute, let_mut, old_attribute,
+    arm_return, const_fn, endless_loop, export_c, extern_fn, field_pub, hash_attribute, let_mut, old_attribute,
     priv_use, proc, tuple_struct, visibility_form,
 };
 use super::faust::{faust_bit_not, faust_compose, faust_delay, faust_feedback};
@@ -733,15 +733,6 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Read,
     },
     Row {
-        id: RowId::FieldPrivInPrivStruct,
-        name: "field_priv_in_priv_struct",
-        phase: Phase::Syntax,
-        code: Code::E0020,
-        message: "the fields of a `priv struct` are `priv` already",
-        rule: FIELD_RULE,
-        detect: Detect::Read,
-    },
-    Row {
         id: RowId::PrivUse,
         name: "priv_use",
         phase: Phase::Syntax,
@@ -1056,6 +1047,6 @@ pub static MATCHERS: &[Matcher] = &[
 /// parser asks them where it read the form ([`super::at_read`]).
 pub static READS: &[Matcher] = &[
     Matcher::many(decls::OLD_ATTRIBUTE_ROWS, old_attribute),
-    Matcher::many(decls::FIELD_VISIBILITY_ROWS, field_visibility),
+    Matcher::one(&[RowId::FieldPub], field_pub),
     Matcher::one(&[RowId::PrivUse], priv_use),
 ];

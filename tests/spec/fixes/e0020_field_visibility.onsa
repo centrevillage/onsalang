@@ -4,12 +4,12 @@
 // fixes = 1
 
 // E0020 for a visibility that is already there, in the field of a struct and in a `use` (spec §15.1, S-35, S-36;
-// the rows `field_pub`, `field_priv_in_priv_struct` and `priv_use` of spec/foreign-forms.toml). A field takes the
-// visibility of its struct: there is no way to widen it, so `pub` on a field is a repeat; and the fields of
-// a `priv struct` are `priv` already, so `priv` on one is a repeat. The only visibility a field has of its own
-// is `priv`, in a struct that is `pub` or has none. A name that a `use` brings is for the module that has
-// the `use` alone, so `priv use` is a repeat as well. The candidate takes the word out; the main position is
-// the word. One error in each declaration unit (P-01).
+// the rows `field_pub` and `priv_use` of spec/foreign-forms.toml). A field takes the visibility of its struct:
+// there is no way to widen it, so `pub` on a field is a repeat. The only visibility a field has of its own is
+// `priv`, in a struct of any visibility (the fields of a `priv struct` take `priv` and no word alike, S-672:
+// types/visibility_priv_struct_fields). A name that a `use` brings is for the module that has the `use` alone,
+// so `priv use` is a repeat as well. The candidate takes the word out; the main position is the word. One error
+// in each declaration unit (P-01).
 
 pub struct PubField {
   pub x: I32,                                       //~ E0020
@@ -29,20 +29,11 @@ struct NoVisibilityPubField {
   pub a: I32,                                       //~ E0020
 }
 
-priv struct PrivField {
-  priv b: I32,                                      //~ E0020
-}
-
-priv struct PrivFieldSecond {
-  a: I32,
-  priv b: I32,                                      //~ E0020
-}
-
 priv use std.math                                   //~ E0020
 
 priv use std.math.{sqrt}                         //~ E0020
 
-// The fields that are right: the struct's own visibility, and `priv` in a struct that is `pub` or has none.
+// The fields that are right: the struct's own visibility, and `priv` in a struct of any visibility.
 pub struct Ring {
   data: [F32; 4],
   priv head: U32,

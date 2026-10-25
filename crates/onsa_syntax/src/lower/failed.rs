@@ -52,9 +52,10 @@ impl<'a> Lower<'a> {
                 }
             }
         }
-        // SPEC-GAP(S-482): the visibility written right is kept when the head
-        // was read on after another form; a visibility of another language,
-        // and `pub` with `priv`, are the default.
+        // The head read on after another form is recorded without that form
+        // (§18.1, S-593, S-482): a visibility written right, of one kind
+        // (`pub pub` is one), is kept; with a visibility of another language,
+        // or `pub` with `priv`, it is the default.
         if !vis_form
             && let Some(&(first, at)) = words.first()
             && words.iter().all(|&(w, _)| w == first)

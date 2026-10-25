@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§11.8", "§15.1"]
+
+// S-36, S-97 (§11.8, §15.1): the contents of `Gen[T]` are not public (`seed` is a `priv` field in std), so the
+// user's code reads it, writes it, builds a `Gen` with a struct literal and matches it with E0303; a `Gen` is
+// made by `gen.*`. The error of a unit is the only one of the unit (§18.1), so each form is a function of its
+// own. (The `Random` effect of `check` is not asked here.)
+use std.test.{check, gen, Gen}
+
+fn read_seed(g: Gen[F32]) -> U64 {
+  g.seed                                            //~ E0303
+}
+
+fn write_seed(inout g: Gen[F32]) {
+  g.seed = 1                                        //~ E0303
+}
+
+fn forged() -> Gen[F32] {
+  Gen { seed: 7 }                                   //~ E0303
+}
+
+fn match_seed(g: Gen[F32]) -> U64 {
+  match g {
+    Gen { seed: s } => s,                           //~ E0303
+  }
+}
+
+fn pair_seed(g: Gen[(F32, U32)]) -> U64 {
+  g.seed                                            //~ E0303
+}
+
+fn made_by_gen() -> Gen[F32] {
+  gen.f32(0.0, 1.0)
+}
+
+fn made_pair() -> Gen[(F32, U32)] {
+  gen.pair(gen.f32(0.0, 1.0), gen.u32(0, 9))
+}

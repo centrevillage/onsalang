@@ -1,0 +1,9 @@
+use main.{Handle}
+
+pub fn pub_head(h: Handle) -> I32 {                 //~ E0303
+  4
+}
+
+fn package_head(h: Handle) -> I32 {
+  5
+}

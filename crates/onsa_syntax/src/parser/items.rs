@@ -363,8 +363,8 @@ impl<'a> Parser<'a> {
                 let f = p.start(NodeKind::Field)?;
                 p.attach_docs(docs);
                 // A field inherits the visibility of its struct (§15.1):
-                // `pub` on it, and `priv` in a `priv struct`, are redundant
-                // (`field_pub`, `field_priv_in_priv_struct`).
+                // `pub` on it is redundant (`field_pub`); `priv` is written
+                // in any struct (S-672).
                 if let VisRead::Word(word) = p.parse_vis("a field name")? {
                     p.read_form(word, None, None);
                 }

@@ -1,0 +1,26 @@
+// Three flows, one for each visibility. What a flow generates (its namespace and the items in it) takes the
+// visibility of the flow (§11.6).
+flow voice(gain: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * gain
+}
+
+priv flow hidden_voice(gain: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * gain
+}
+
+pub flow shown_voice(gain: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * gain
+}
+
+// The module of the flows uses all of what they generate, `priv` included.
+flow mix(gain: F32 at block, x: F32 at sample) -> F32 at sample {
+  hidden_voice~(gain, x) + voice~(gain, x) + shown_voice~(gain, x)
+}
+
+priv fn keep_hidden(move s: hidden_voice.State) -> hidden_voice.State {
+  s
+}
+
+priv fn hidden_params(g: F32) -> hidden_voice.Params {
+  hidden_voice.Params { gain: g }
+}

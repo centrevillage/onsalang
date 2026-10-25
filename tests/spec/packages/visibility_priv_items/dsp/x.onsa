@@ -1,0 +1,7 @@
+priv fn only_x() -> I32 {
+  1
+}
+
+fn shared_x() -> I32 {
+  only_x()
+}
