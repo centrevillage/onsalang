@@ -1,9 +1,7 @@
 pub struct Point {
   x: F32,
-  priv y: F32,
 }
+
 impl Point {
   pub const N: U32 = 4
-  priv fn m() -> F32 { 1.0 }
-  pub fn make() -> Point { Point { x: 1.0, y: 2.0 } }
 }
