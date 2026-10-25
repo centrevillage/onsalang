@@ -13,3 +13,15 @@ pub fn g() -> A {
 pub fn h(o: A) -> I32 {
   o()
 }
+
+pub fn m(x: A) -> I32 {
+  match x {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+pub fn s() -> I32 {
+  let s = A { a: 1 }
+  1
+}
