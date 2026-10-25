@@ -9,7 +9,7 @@ use onsa_diag::{Edit, Fix, Span};
 use onsa_syntax::ast::{Ident, Path};
 
 use crate::def::{Def, DefKind, ModId};
-use crate::resolve::{Builtin, Entity, Modules, ResolveError, UseAt};
+use crate::resolve::{Builtin, DepTarget, Entity, Modules, ResolveError, UseAt, UseBinding};
 
 /// The tables a path outside a `use` reads after its head.
 type Names<'a> = (&'a HashMap<String, Builtin>, &'a [Def], &'a HashMap<BuiltinTy, TyId>);
@@ -28,24 +28,26 @@ impl Modules {
 
     /// Whether a `use` added to `from` would bind `name` free in its body: a
     /// name a `use` binds, of nothing of the prelude, the items or the `use`
-    /// of `from`. A `use` whose binding failed holds its name too: a candidate
-    /// binds no name the writer gave another `use` (§18.1).
+    /// of `from`. The name of a `use` that failed binds nothing, and is no
+    /// partner of an E0304 (§18.1, S-462): it is free.
     pub(crate) fn free_in_body(&self, from: ModId, name: &str, prelude: &HashMap<String, Builtin>) -> bool {
         let info = self.get(from);
         super::clash::unbindable(name).is_none()
             && !prelude.contains_key(name)
             && !info.items.contains_key(name)
-            && !info.uses.contains_key(name)
+            && !matches!(info.uses.get(name), Some(UseBinding::Bound { .. }))
     }
 
     /// The head `name` of a path in the body of `from` (§15.1): the prelude
-    /// and the builtin types, then the module's items, then the names its
-    /// `use` bound. Never another module or a package: they are named
-    /// through a `use` alone (R-39).
+    /// and the builtin types, the module's items, or the names its `use`
+    /// bound, which are apart but for an E0304 (`crate::names::clash`), whose
+    /// name is none of them (§18.1, S-675). Never another module or a
+    /// package: they are named through a `use` alone (R-39).
     pub fn lookup(&self, from: ModId, name: &str, prelude: &HashMap<String, Builtin>) -> Option<Entity> {
         let info = self.get(from);
-        // SPEC-GAP(S-675): of the names of an E0304, the one this order reads
-        // first stays (the prelude over an item, an item over a `use`).
+        if info.clashed.body.contains(name) {
+            return None;
+        }
         if let Some(&b) = prelude.get(name) {
             return Some(Entity::Builtin(b));
         }
@@ -53,6 +55,18 @@ impl Modules {
             return Some(Entity::Def(d));
         }
         info.uses.get(name).and_then(|u| u.entity())
+    }
+
+    /// The head `name` of a path in the body of `from` that [`Self::lookup`]
+    /// does not find is an error (§18.1): an E0304 or E0305, the name of a
+    /// `use` that failed (S-462), a head that is an E0304 (S-675), or any
+    /// name when a `use` was cut before its names (R-180).
+    pub(crate) fn held_as_error(&self, from: ModId, name: &str) -> bool {
+        let info = self.get(from);
+        info.clashed.body.contains(name)
+            || info.unread_use
+            || matches!(info.uses.get(name), Some(UseBinding::Failed { .. }))
+            || self.clashed_heads[self.pkg_of(from)].contains(name)
     }
 
     /// The head of `path` in the body of `from` that is not in its body:
@@ -80,33 +94,50 @@ impl Modules {
         let member =
             |k: usize| segs.get(k).and_then(|s| self.member(Entity::Module(from), s, from, names.1, names.2).ok());
         let root_child = || segs.get(1).and_then(|s| self.get(self.root_of(from)).children.get(&s.name).copied());
-        let fix = None
-            .or_else(|| {
-                own_path.then(|| self.body_fix(from, path, at + own.len(), member(at + own.len()), names)).flatten()
-            })
-            .or_else(|| {
-                let t = if own_pkg { root_child() } else { is_head }.filter(|&t| t != from)?;
-                self.body_fix(from, path, at, Some(Entity::Module(t)), names)
-            })
-            .or_else(|| own_name.then(|| self.body_fix(from, path, 1, member(1), names)).flatten());
+        let mut readings = Vec::new();
+        if own_path {
+            readings.push((at + own.len(), member(at + own.len())));
+        }
+        if let Some(t) = if own_pkg { root_child() } else { is_head }.filter(|&t| t != from) {
+            readings.push((at, Some(Entity::Module(t))));
+        }
+        if own_name {
+            readings.push((1, member(1)));
+        }
+        // The first reading given, and the first kept back as its `use`
+        // closes a cycle (S-682).
+        let (mut fix, mut cycle) = (None, None);
+        for (k, entity) in readings {
+            match self.body_fix(from, path, k, entity, names) {
+                Ok(f) => {
+                    fix = Some(f);
+                    break;
+                }
+                Err(c) => cycle = cycle.or(c),
+            }
+        }
         let names_own = own_pkg || own_path || (own_name && is_head.is_none());
-        let rule = match fix {
-            Some(_) => None,
-            None if own_pkg => Some(
+        let rule = match (&fix, cycle) {
+            (Some(_), _) => None,
+            (None, Some((form, with))) => Some(self.closes_cycle_rule(from, &form, with)),
+            _ if own_pkg => Some(
                 "this package is not named in its paths: take a module by its path from the root (`use util`, \
                  then `util.…`)"
                     .to_string(),
             ),
-            None if names_own => Some(match member(at + own.len()).filter(|_| own_path) {
+            _ if names_own => Some(match member(at + own.len()).filter(|_| own_path) {
                 Some(child @ Entity::Module(_)) => {
-                    let name = &segs[at + own.len()].name;
+                    let (name, own) = (&segs[at + own.len()].name, own.join("."));
                     match self.lookup(from, name, names.0) {
                         Some(e) if e == child => {
                             format!("a child module is named by the name its `use` binds (`{name}.…`)")
                         }
+                        _ if self.free_in_body(from, name, names.0) => format!(
+                            "a child module is named through a `use` of its path (`use {own}.{name}`, then `{name}.…`)"
+                        ),
                         _ => format!(
-                            "a child module is named through a `use` of its path (`use {}.{name}`, then `{name}.…`)",
-                            own.join(".")
+                            "`{name}` is bound here to another, so the child module of that name is named through \
+                             a `use` of what is used from it (`use {own}.{name}.{{…}}`)"
                         ),
                     }
                 }
@@ -114,7 +145,7 @@ impl Modules {
             }),
             // A builtin name of a flow, which no `use` binds (S-542); a
             // reserved word (`static`) has its rule from W5-11 (S-674).
-            None => {
+            _ => {
                 matches!(super::clash::unbindable(&head.name), Some(super::clash::Unbindable::FlowBuiltin)).then(|| {
                     let item = segs.get(1).map_or("f", |s| s.name.as_str());
                     format!(
@@ -134,18 +165,25 @@ impl Modules {
     /// `use` binds it and the `use` closes no cycle. Given only when the path
     /// is then read to a name that is no module (R-268, §18.1): a module alone
     /// at the place of a value or a type (`let x = util`) is not fixed by it.
-    fn body_fix(&self, from: ModId, path: &Path, k: usize, entity: Option<Entity>, names: Names<'_>) -> Option<Fix> {
+    /// When only the cycle keeps it back, the error has the path of the `use`
+    /// and the module of the cycle (S-682).
+    fn body_fix(
+        &self,
+        from: ModId,
+        path: &Path,
+        k: usize,
+        entity: Option<Entity>,
+        names: Names<'_>,
+    ) -> Result<Fix, Option<(String, DepTarget)>> {
         let (prelude, defs, builtin_key) = names;
         let segs = &path.segments;
-        let (entity, seg) = (entity?, segs.get(k)?);
+        let (Some(entity), Some(seg)) = (entity, segs.get(k)) else { return Err(None) };
         let add = match (self.lookup(from, &seg.name, prelude), entity) {
             (Some(e), _) if e == entity => None,
-            (_, Entity::Module(c))
-                if self.free_in_body(from, &seg.name, prelude) && !self.take_closes_cycle(from, entity, None) =>
-            {
-                Some(self.abs_path(from, c).join("."))
+            (_, Entity::Module(c)) if self.free_in_body(from, &seg.name, prelude) => {
+                Some((self.abs_path(from, c).join("."), self.take_cycle(from, entity, None)))
             }
-            _ => return None,
+            _ => return Err(None),
         };
         let mut cur = entity;
         for s in &segs[k + 1..] {
@@ -153,14 +191,18 @@ impl Modules {
                 Ok(e) => cur = e,
                 // A value: the rest is its fields and methods (the types).
                 Err(ResolveError::NotANamespace { .. }) => break,
-                Err(_) => return None,
+                Err(_) => return Err(None),
             }
         }
         if matches!(cur, Entity::Module(_)) {
-            return None;
+            return Err(None);
         }
+        let add = match add {
+            Some((added, Some(with))) => return Err(Some((added, with))),
+            add => add.map(|(added, _)| added),
+        };
         let info = self.get(from);
-        let file = info.file?;
+        let Some(file) = info.file else { return Err(None) };
         let (mut edits, mut title) = (Vec::new(), Vec::new());
         if k > 0 {
             let names: Vec<&str> = segs[..k].iter().map(|s| s.name.as_str()).collect();
@@ -169,12 +211,25 @@ impl Modules {
         }
         if let Some(added) = add {
             title.push(format!("add `use {added}`"));
-            edits.push(match info.use_at? {
+            edits.push(match info.use_at.ok_or(None)? {
                 UseAt::After(offset) => Edit::insert(file, offset, format!("\nuse {added}")),
                 UseAt::Before(offset) => Edit::insert(file, offset, format!("use {added}\n")),
             });
         }
-        Some(Fix::new(title.join(" and "), edits))
+        Ok(Fix::new(title.join(" and "), edits))
+    }
+
+    /// The rule of a candidate kept back as its `use` of `form`, a dependency
+    /// on `target`, would close a cycle (§15.1, S-682): the form, not given
+    /// as the one to write, and the modules of the cycle (as its E0310).
+    pub(crate) fn closes_cycle_rule(&self, from: ModId, form: &str, target: DepTarget) -> String {
+        let mut names: Vec<String> =
+            self.cycle_of(from, target).into_iter().map(|m| format!("`{}`", self.get(m).path)).collect();
+        names.sort();
+        format!(
+            "`use {form}` would make the modules {} import each other (E0310), so it is not the fix",
+            names.join(", ")
+        )
     }
 
     fn builtin_member(&self, key: TyId, name: &Ident, from: ModId, defs: &[Def]) -> Result<Entity, ResolveError> {
@@ -202,9 +257,11 @@ impl Modules {
     ) -> Result<Entity, ResolveError> {
         match entity {
             Entity::Module(m) => {
-                // SPEC-GAP(S-677): a child module before an item of its name,
-                // which is an E0304 (§15.1, `crate::names::clash`).
+                // Of an E0304 or E0305, neither (§18.1, S-675).
                 let info = self.get(m);
+                if info.clashed.namespace.contains(&name.name) {
+                    return Err(ResolveError::Failed);
+                }
                 if let Some(&c) = info.children.get(&name.name) {
                     return Ok(Entity::Module(c));
                 }
@@ -276,7 +333,11 @@ impl Modules {
     ) -> Result<Entity, ResolveError> {
         let first = &path.segments[0];
         let names = (prelude, defs, builtin_key);
-        let mut cur = self.lookup(from, &first.name, prelude).ok_or_else(|| self.not_in_body(from, path, names))?;
+        let mut cur = match self.lookup(from, &first.name, prelude) {
+            Some(e) => e,
+            None if self.held_as_error(from, &first.name) => return Err(ResolveError::Failed),
+            None => return Err(self.not_in_body(from, path, names)),
+        };
         for seg in &path.segments[1..] {
             cur = self.member(cur, seg, from, defs, builtin_key)?;
         }

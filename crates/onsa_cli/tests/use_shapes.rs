@@ -178,8 +178,9 @@ fn shapes(where_: &str, prefix: &str, tag: &str) {
         }
     }
     assert!(problems.is_empty(), "{} of {n} shapes:\n{}", problems.len(), problems.join("\n"));
-    // A sweep that applied no candidate would pass for nothing; 60 is under what each of the files gives.
-    assert!(applied >= 60, "only {applied} candidates were applied in {n} packages: the sweep lost its subject");
+    // A sweep that applied no candidate would pass for nothing; 50 is under what each of the files gives.
+    // A body path whose head is the name of a failed `use` is silent (S-462), so it gives no candidate.
+    assert!(applied >= 50, "only {applied} candidates were applied in {n} packages: the sweep lost its subject");
 }
 
 /// §15.1: the shapes of `use` in the file of the root, `main.onsa`.

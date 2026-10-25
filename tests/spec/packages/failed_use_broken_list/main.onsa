@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// R-180: a `use` cut in the middle of its list (an element that is not a name, §15.1) is a syntax error
+// of its own, and the names it had read before the cut are errors where they are used (§18.1), so
+// nothing more is reported for them. The names are not in `util`: read as they are, they would be
+// E0302 at the calls. (What the cut `use` makes of the names after the cut and of other names is not
+// fixed, so no function here uses them.)
+use util.{gone_a, 3, gone_b}                        //~ E0002
+use util.{gone_c gone_d}                            //~ E0002
+
+pub fn name_before_the_cut() -> I32 {
+  gone_a()
+}
+
+pub fn name_before_a_missing_comma() -> I32 {
+  gone_c()
+}

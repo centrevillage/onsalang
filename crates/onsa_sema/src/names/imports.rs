@@ -12,13 +12,14 @@ use onsa_syntax::ast::{Ident, Vis};
 
 use crate::Analysis;
 use crate::def::{DefKind, ModId};
-use crate::resolve::{Dep, Entity, Import, ResolveError, UseBinding};
+use crate::resolve::{Dep, DepTarget, Entity, Import, ResolveError, UseBinding};
 
 use super::lookup::OWN_ITEMS;
 use crate::sig::Sema;
 
 /// What the path of a `use` in a module reads: the failure before the names
-/// taken, the last module it names before them, and each name taken.
+/// taken, the last module it names before them, and each name taken (all
+/// of them `ResolveError::Failed` after a failure before them).
 struct Walk<'i> {
     prefix: Result<(), ResolveError>,
     last: Option<ModId>,
@@ -49,7 +50,10 @@ fn walk<'i>(a: &Analysis, m: ModId, segs: &'i [Ident], names: Option<&'i [Ident]
                 }
                 from = Some(e);
             }
-            Err(e) => return Walk { prefix: Err(e), last, names: Vec::new() },
+            Err(e) => {
+                let names = names.into_iter().map(|name| (name, Err(ResolveError::Failed))).collect();
+                return Walk { prefix: Err(e), last, names };
+            }
         }
     }
     let names = names
@@ -74,38 +78,39 @@ impl<'p> Sema<'p> {
         }
     }
 
+    /// The names a `use` takes are bound, or else failed (§18.1, S-462): of
+    /// its path, all of them, else the name. A name that failed makes no
+    /// dependency (S-678), and the diagnostics are of the unit of the `use`.
     fn resolve_import(&mut self, m: ModId, imp: &Import) {
         // A head that is no head of a `use` is reported after every `use`
-        // ([`Sema::report_use_heads`]), and makes no dependency.
-        // SPEC-GAP(S-678): a `use` whose head fails makes no dependency, and
-        // one whose path fails after the head one on the last module read.
+        // ([`Sema::report_use_heads`]).
         let w = walk(&self.a, m, &imp.path.segments, imp.names.as_deref());
         let head_fails = imp.path.segments.first().is_some_and(|h| self.a.modules.head(m, &h.name).is_none());
-        let dep = |s: &mut Self, taken: Option<Entity>, name: Span| {
-            if let Some(target) = s.a.modules.dep_of(m, taken, w.last) {
-                s.a.modules.get_mut(m).deps.push(Dep { target, name, span: imp.span });
+        let report = |s: &mut Self, e: &ResolveError| {
+            if let Some(d) = e.clone().diagnostic().filter(|_| !head_fails) {
+                s.report_mod(d);
             }
         };
-        if let Err(e) = w.prefix {
-            if !head_fails {
-                self.report_mod(e.into_diagnostic());
-            }
-            return dep(self, None, imp.path.span);
+        if let Err(e) = &w.prefix {
+            report(self, e);
         }
         for (name, entity) in &w.names {
             match *entity {
-                Ok(Entity::Module(c)) if c == m => self.report_mod(takes_itself(name)),
+                Ok(Entity::Module(c)) if c == m => {
+                    self.report_mod(takes_itself(name));
+                    self.fail(m, name);
+                }
                 // A module of a directory with no file of its own (`a` of
                 // `a/b/c.onsa` alone) is a module with no items (S-666).
                 Ok(e) => {
-                    dep(self, Some(e), name.span);
+                    if let Some(target) = self.a.modules.dep_of(m, Some(e), w.last) {
+                        self.a.modules.get_mut(m).deps.push(Dep { target, name: name.span, span: imp.span });
+                    }
                     self.bind(m, name, e);
                 }
                 Err(ref e) => {
-                    if !head_fails {
-                        self.report_mod(e.clone().into_diagnostic());
-                    }
-                    dep(self, None, name.span);
+                    report(self, e);
+                    self.fail(m, name);
                 }
             }
         }
@@ -117,7 +122,20 @@ impl<'p> Sema<'p> {
     fn bind(&mut self, m: ModId, name: &Ident, entity: Entity) {
         let info = self.a.modules.get_mut(m);
         info.bound.push((name.name.clone(), name.span));
-        info.uses.entry(name.name.clone()).or_insert(UseBinding::Bound { entity, span: name.span });
+        let binding = UseBinding::Bound { entity, span: name.span };
+        match info.uses.get(&name.name) {
+            Some(UseBinding::Bound { .. }) => {}
+            _ => {
+                info.uses.insert(name.name.clone(), binding);
+            }
+        }
+    }
+
+    /// `name` of a `use` of `m` that failed (S-462): no binding, and held
+    /// as an error when nothing else binds it.
+    pub(super) fn fail(&mut self, m: ModId, name: &Ident) {
+        let uses = &mut self.a.modules.get_mut(m).uses;
+        uses.entry(name.name.clone()).or_insert(UseBinding::Failed { span: name.span });
     }
 
     /// The E0302 of each `use` whose head is no head of a `use` (§15.1,
@@ -157,7 +175,8 @@ impl<'p> Sema<'p> {
         }
         if self.a.modules.names_own_package(m, &head.name) {
             let title = format!("take off `{}.`", head.name);
-            let fix = match (&segs[1..], &imp.names) {
+            // Each `use` the candidate writes, and whether it reads.
+            let written: Vec<(String, Result<(), Option<DepTarget>>)> = match (&segs[1..], &imp.names) {
                 ([], None) => {
                     let rule = format!(
                         "a `use` does not take its own package: take a module by its path from the root \
@@ -166,27 +185,47 @@ impl<'p> Sema<'p> {
                     );
                     return (None, Some(rule));
                 }
-                // One `use` per element of the list (S-663): `fx.{` and `}`
-                // taken off, and a `use` before each element after the first.
-                ([], Some(list)) => (distinct(list)
-                    && list.iter().all(|n| self.use_reads(m, std::slice::from_ref(n), None)))
-                .then(|| {
+                // One `use` per element of the list (S-663).
+                ([], Some(list)) if distinct(list) => {
+                    list.iter().map(|n| (n.name.clone(), self.use_reads(m, std::slice::from_ref(n), None))).collect()
+                }
+                ([], Some(_)) => return (None, None),
+                (rest, names) => {
+                    let mut form: Vec<&str> = rest.iter().map(|s| s.name.as_str()).collect();
+                    let list = names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>());
+                    let list = list.map(|l| format!("{{{}}}", l.join(", ")));
+                    form.extend(list.as_deref());
+                    vec![(form.join("."), self.use_reads(m, rest, names.as_deref()))]
+                }
+            };
+            if written.iter().any(|(_, r)| *r == Err(None)) {
+                return (None, None);
+            }
+            // Not given when it closes a cycle: the rule shows it (S-682).
+            if let Some((form, with)) = written.iter().find_map(|(f, r)| r.err().flatten().map(|w| (f, w))) {
+                return (None, Some(self.a.modules.closes_cycle_rule(m, form, with)));
+            }
+            let fix = match (&segs[1..], &imp.names) {
+                // `fx.{` and `}` taken off, and a `use` before each element
+                // after the first.
+                ([], Some(list)) => {
                     let kw = if imp.vis == Vis::Pub { "\npub use " } else { "\nuse " };
                     let (first, last) = (&list[0], &list[list.len() - 1]);
                     let mut edits = vec![Edit::delete(span(head.span.start, first.span.start))];
                     edits.extend(list.windows(2).map(|w| Edit::replace(span(w[0].span.end, w[1].span.start), kw)));
                     edits.push(Edit::delete(span(last.span.end, imp.span.end)));
                     Fix::new(title, edits)
-                }),
-                (rest, names) => self
-                    .use_reads(m, rest, names.as_deref())
-                    .then(|| Fix::delete(title, span(head.span.start, rest[0].span.start))),
+                }
+                (rest, _) => Fix::delete(title, span(head.span.start, rest[0].span.start)),
             };
-            return (fix, None);
+            return (Some(fix), None);
         }
         // The head a `use` of this module bound, or a flow of it: the path of
-        // what it names (S-37). Of a binding that failed, none.
+        // what it names (S-37). Of a binding that failed or an E0304, none.
         let info = self.a.modules.get(m);
+        if info.clashed.body.contains(&head.name) {
+            return (None, None);
+        }
         let named = match info.uses.get(&head.name) {
             Some(binding) => binding.entity(),
             None => info.items.get(&head.name).map(|&d| Entity::Def(d)),
@@ -209,7 +248,7 @@ impl<'p> Sema<'p> {
         // The binding is named as the last element of its path: the path
         // before it goes in front of the head.
         let before = format!("{}.", path[..path.len() - 1].join("."));
-        let fix = self.use_reads(m, &new, imp.names.as_deref()).then(|| {
+        let fix = self.use_reads(m, &new, imp.names.as_deref()).is_ok().then(|| {
             Fix::insert(format!("write the path `{}`", path.join(".")), head.span.file, head.span.start, before)
         });
         (fix, None)
@@ -219,19 +258,24 @@ impl<'p> Sema<'p> {
     /// no module `m` itself, binds names free in the body of `m` and apart
     /// from each other, and none of its dependencies closes a cycle: a
     /// candidate that writes it leaves no E0302, E0303, E0304 or E0310 (§18.1).
-    fn use_reads(&self, m: ModId, segs: &[Ident], names: Option<&[Ident]>) -> bool {
+    /// When only a cycle keeps it back, the error is the dependency that closes it.
+    fn use_reads(&self, m: ModId, segs: &[Ident], names: Option<&[Ident]>) -> Result<(), Option<DepTarget>> {
         if segs.first().is_none_or(|h| self.a.modules.head(m, &h.name).is_none()) || !names.is_none_or(distinct) {
-            return false;
+            return Err(None);
         }
         let w = walk(&self.a, m, segs, names);
         let modules = &self.a.modules;
-        w.prefix.is_ok()
-            && w.names.iter().all(|(n, e)| match *e {
-                _ if !modules.free_in_body(m, &n.name, &self.a.prelude) => false,
-                Ok(Entity::Module(c)) if c == m => false,
-                Ok(e) => !modules.take_closes_cycle(m, e, w.last),
-                Err(_) => false,
-            })
+        w.prefix.as_ref().map_err(|_| None)?;
+        let mut cycle = None;
+        for (n, e) in &w.names {
+            match *e {
+                _ if !modules.free_in_body(m, &n.name, &self.a.prelude) => return Err(None),
+                Ok(Entity::Module(c)) if c == m => return Err(None),
+                Ok(e) => cycle = cycle.or(modules.take_cycle(m, e, w.last)),
+                Err(_) => return Err(None),
+            }
+        }
+        cycle.map_or(Ok(()), |with| Err(Some(with)))
     }
 }
 
@@ -250,9 +294,11 @@ fn distinct(list: &[Ident]) -> bool {
 }
 
 /// The head of the path of a `use` in `m` (§15.1, S-37): a module under the
-/// package's root or a package `m`'s package depends on.
+/// package's root or a package `m`'s package depends on. Of an E0304, an
+/// error (§18.1, S-675).
 fn head_of(a: &Analysis, m: ModId, name: &Ident) -> Result<Entity, ResolveError> {
     match a.modules.head(m, &name.name) {
+        Some(_) if a.modules.clashed_heads[a.modules.pkg_of(m)].contains(&name.name) => Err(ResolveError::Failed),
         Some(h) => Ok(Entity::Module(h)),
         None => Err(ResolveError::NotFound { name: name.name.clone(), span: name.span }),
     }

@@ -314,11 +314,12 @@ impl<'a> Checker<'a> {
 
     /// A path that does not resolve: its diagnostic, or none when the path
     /// goes through a struct or enum whose unit failed in the syntax stage
-    /// (its fields and variants are not all known; the check of this body
-    /// stops there without a diagnostic).
+    /// (its fields and variants are not all known) or names what the names
+    /// stage holds as an error (§18.1, S-462, S-675): the check of this body
+    /// stops there without a diagnostic, and the body is not complete.
     // SPEC-GAP(S-260): the members of a failed struct or enum get no diagnostic.
     pub(crate) fn resolve_error(&mut self, path: &onsa_syntax::ast::Path, err: ResolveError) -> Stop {
-        if self.a.through_partly_read(self.m, path) {
+        if err == ResolveError::Failed || self.a.through_partly_read(self.m, path) {
             self.failed = true;
             return Stop;
         }
@@ -609,7 +610,23 @@ impl<'a> Checker<'a> {
         if let Some(d) = diags.into_iter().next() {
             return Err(self.diag(d));
         }
+        // An error with no diagnostic: a name held as an error (§18.1), or a
+        // member of a def a syntax error cut (S-260). The check stops there.
+        // SPEC-GAP(S-690): the rest of the body is not checked.
+        if self.holds_error(ty) {
+            self.failed = true;
+            return Err(Stop);
+        }
         Ok(ty)
+    }
+
+    fn holds_error(&self, t: TyId) -> bool {
+        match self.ty(t) {
+            Ty::Error => true,
+            Ty::Named(_, ts) | Ty::Tuple(ts) | Ty::Builtin(_, ts) => ts.iter().any(|&a| self.holds_error(a)),
+            Ty::Array(e, _) => self.holds_error(e),
+            _ => false,
+        }
     }
 }
 

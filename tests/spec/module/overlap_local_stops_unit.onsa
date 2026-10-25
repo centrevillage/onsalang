@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+
+// S-681: a local with the name of a binding that is visible (a name taken by a `use`, a module, an item) is
+// E0304 on the local (§5.1), and the unit stops there (§18.1: the first error of a unit), so what comes after
+// it in the same unit is not reported: the `Bool` of each `y` would be E0401. The E0304 is in W4-04.
+use std.math.{sin}
+use std.math
+
+pub fn double(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub fn local_and_use(x: F32) -> F32 {
+  let sin = x                                       //~ E0304
+  let y: Bool = sin
+  y
+}
+
+pub fn local_and_module(x: F32) -> F32 {
+  let math = x                                      //~ E0304
+  let y: Bool = math
+  y
+}
+
+pub fn local_and_item(x: F32) -> F32 {
+  let double = x                                    //~ E0304
+  let y: Bool = double
+  y
+}
+
+pub fn parameter_and_use(sin: F32) -> F32 {         //~ E0304
+  let y: Bool = sin
+  y
+}

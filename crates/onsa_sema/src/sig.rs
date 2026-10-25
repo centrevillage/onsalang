@@ -12,8 +12,8 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
-    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, ItemKind, Lit, Mode, Param, ParamName, TypeId,
-    TypeKind, UnOp, Vis,
+    Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, GenericParam, ItemKind, Lit, Mode, Param, ParamName, Path,
+    TypeId, TypeKind, UnOp, Vis,
 };
 use onsa_syntax::foreign::{self, RowId};
 
@@ -90,6 +90,20 @@ impl<'p> Sema<'p> {
     /// E0200 for `feature` (S-224), with the details its phrase takes.
     pub(crate) fn unsupported(&mut self, def: DefId, span: Span, feature: Feature, details: &[&str]) {
         self.report(def, feature.diagnostic(Stage::Names, span, details));
+    }
+
+    /// A name of the signature of `def` the names stage holds as an error
+    /// (§18.1, [`Analysis::record_if_held`]): no diagnostic, and the body of
+    /// `def` is not checked, as one with an error of the syntax stage. A def
+    /// held so is always in [`Analysis::read_held`] (its users are unread).
+    // SPEC-GAP(S-689): the body is not checked after a name held as an error
+    // in a type, a type argument or a bound, and checked after one in an
+    // effect row (S-691) or a constant (an array length, a const argument,
+    // `constarg::named`); the members of an `impl` are not checked after one
+    // in the generics of its heading, and checked after one in its type.
+    pub(crate) fn hold_signature(&mut self, def: DefId) {
+        self.a.failed.entry(def).or_insert(onsa_syntax::ast::Failed::Unit);
+        self.a.read_held.insert(def);
     }
 
     // ------------------------------------------------------------ collection
@@ -247,7 +261,12 @@ impl<'p> Sema<'p> {
                     return;
                 }
                 let mut cx = cx;
+                let held_before = self.a.failed.contains_key(&id);
                 cx.generics = self.lower_generics(&cx, &i.generics);
+                // A name held as an error in the generics of the heading (a
+                // bound): the members are not checked (§18.1, as an error of
+                // the heading).
+                let held_generics = !held_before && self.a.failed.contains_key(&id);
                 let self_ty = self.lower_type(&cx, i.self_ty);
                 let (fns, consts) = match &self.a.defs[id.0 as usize].kind {
                     DefKind::Impl(imp) => (imp.fns.clone(), imp.consts.clone()),
@@ -279,7 +298,13 @@ impl<'p> Sema<'p> {
                         ),
                     );
                 }
+                // SPEC-GAP(S-689): a name held as an error in the heading holds
+                // the `impl` (`hold_signature`); its members are held after one
+                // in the generics, and checked after one in the type.
                 for &sub in fns.iter().chain(&consts) {
+                    if held_generics {
+                        self.hold_signature(sub);
+                    }
                     let sub_item = self.a.defs[sub.0 as usize].item.unwrap();
                     let sub_cx =
                         Cx { generics: cx.generics.clone(), self_ty: Some(self_ty), def: sub, ..cx_clone(&cx) };
@@ -361,6 +386,7 @@ impl<'p> Sema<'p> {
                         match Bound::parse(&n.name) {
                             Some(Bound::Dup) if b.relaxed => dup = false,
                             Some(bound) => bs.push(bound),
+                            None if self.a.record_if_held(cx.def, cx.m, &b.path) => self.hold_signature(cx.def),
                             None => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                         }
                     }
@@ -393,14 +419,15 @@ impl<'p> Sema<'p> {
     /// (§4.6) and any other name, or a path of more than one name (S-488),
     /// E0416. The diagnostics of the names stage go before the E0416 of the
     /// types stage (§18.1), whatever the order of the list. `None` when the
-    /// list is not known (§18.1, S-460).
+    /// list is not known (§18.1, S-460), or holds a name the names stage
+    /// holds as an error.
     fn lower_derives(&mut self, cx: &Cx<'p>, derives: &Derives) -> Option<Vec<Derive>> {
         let Derives::Listed(paths) = derives else { return None };
         let mut out = Vec::new();
         let mut underivable = Vec::new();
         for (k, p) in paths.iter().enumerate() {
             let [n] = p.segments.as_slice() else {
-                underivable.push(p.span);
+                underivable.push(p);
                 continue;
             };
             match DERIVABLE.iter().find(|(name, _)| *name == n.name) {
@@ -414,10 +441,13 @@ impl<'p> Sema<'p> {
                         self.kind_heads.push((at, cx.def, n.name == foreign::DUP));
                     }
                 }
-                None => underivable.push(p.span),
+                None => underivable.push(p),
             }
         }
-        for span in underivable {
+        // A name held as an error: the list is not known (§18.1).
+        let (held, underivable): (Vec<&Path>, _) =
+            underivable.into_iter().partition(|p| self.a.record_if_held(cx.def, cx.m, p));
+        for span in underivable.into_iter().map(|p| p.span) {
             let name = src(cx, span);
             let list: Vec<String> = DERIVABLE.iter().map(|(name, _)| format!("`{name}`")).collect();
             self.report(
@@ -428,27 +458,19 @@ impl<'p> Sema<'p> {
                     .with_rule(format!("the traits a type derives are {}", list.join(", "))),
             );
         }
-        Some(out)
+        held.is_empty().then_some(out)
     }
 
+    /// The effects of a row of a signature or a function type
+    /// ([`read_effects`]): each other name is an E0200 of its own (but in
+    /// `std`), and the lowering goes on.
     fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
-        let mut set = EffectSet::default();
-        let Some(row) = row else { return set };
-        for p in &row.effects {
-            let n = p.segments.last().unwrap();
-            if p.segments.len() == 1 && n.name == "Alloc" {
-                set.alloc = true;
-            } else if p.segments.len() == 1
-                && let Some(i) =
-                    cx.generics.iter().position(|g| g.name == n.name && matches!(g.kind, GenericKind::Effect))
-            {
-                set.vars.push(i as u32);
-            } else {
-                if !cx.is_std {
-                    self.unsupported(cx.def, n.span, Feature::Effects, &[&n.name]);
-                }
-                set.other.push(n.name.clone());
+        let (mut set, others) = read_effects(&mut self.a, cx.def, cx.m, &cx.generics, row);
+        for n in others {
+            if !cx.is_std {
+                self.unsupported(cx.def, n.span, Feature::Effects, &[&n.name]);
             }
+            set.other.push(n.name.clone());
         }
         set
     }
@@ -591,4 +613,34 @@ fn drop_derive(cx: &Cx<'_>, paths: &[onsa_syntax::ast::Path], k: usize) -> Fix {
 
 fn src(cx: &Cx<'_>, span: Span) -> String {
     cx.text[span.start as usize..span.end as usize].to_string()
+}
+
+/// The one reading of an effect row (§8.1), of a signature, of a function
+/// type and of a closure, by the spelling of its names: a single name `Alloc`,
+/// a single name of an effect variable of `generics`, and a name the names
+/// stage holds as an error, left out with no diagnostic (§18.1; read by
+/// `def`, [`Analysis::record_if_held`]). The other names, E0200 in this version,
+/// go back to the caller, which reports them.
+// SPEC-GAP(S-691): the effects read stay when a name held as an error is
+// left out, and the def is not held (`Sema::hold_signature`).
+pub(crate) fn read_effects<'r>(
+    a: &mut Analysis,
+    def: DefId,
+    from: crate::ModId,
+    generics: &[GenericDef],
+    row: Option<&'r EffectRow>,
+) -> (EffectSet, Vec<&'r onsa_syntax::ast::Ident>) {
+    let mut set = EffectSet::default();
+    let mut others = Vec::new();
+    for p in row.map_or(&[][..], |r| &r.effects[..]) {
+        let n = p.segments.last().unwrap();
+        let var = generics.iter().position(|g| g.name == n.name && matches!(g.kind, GenericKind::Effect));
+        match (p.segments.len(), var) {
+            (1, _) if n.name == "Alloc" => set.alloc = true,
+            (1, Some(i)) => set.vars.push(i as u32),
+            _ if a.record_if_held(def, from, p) => {}
+            _ => others.push(n),
+        }
+    }
+    (set, others)
 }

@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-675: an E0304 name of another module (`dup` of `m`) is drawn by no path: not by `use m.{dup}`, nor by a
+// path from the name of the module (`m.dup()`). The other names of the module are as always (`fine`
+// returns `I32`, so a `Bool` is E0401).
+use m
+use m.{dup, fine}
+
+pub fn through_the_list() -> I32 {
+  let _: Bool = dup()
+  0
+}
+
+pub fn through_the_module() -> I32 {
+  let _: Bool = m.dup()
+  0
+}
+
+pub fn other_name_through_the_list() -> I32 {
+  let _: Bool = fine()                              //~ E0401
+  0
+}
+
+pub fn other_name_through_the_module() -> I32 {
+  let _: Bool = m.fine()                            //~ E0401
+  0
+}

@@ -1,0 +1,7 @@
+priv fn hidden() -> I32 {
+  1
+}
+
+pub fn shown() -> I32 {
+  2
+}

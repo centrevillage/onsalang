@@ -1,0 +1,3 @@
+pub struct Bool {                                   //~ E0304
+  v: I32,
+}

@@ -6,10 +6,11 @@
 //! of a module are an E0304 (E0305 with a flow) where they are declared
 //! (`super::collect`).
 //!
-//! The side reported stays in its table (§18.1), and the lookups read the
-//! tables in an order: in the body the prelude, the items, then the names a
-//! `use` bound; in a namespace the child modules, then the items; of the
-//! heads the packages. A `use` of the name of an item fails.
+//! The name of an E0304 is an error in its space (§18.1, S-675): a use of it
+//! reads neither side ([`crate::resolve::Clashed`], `Modules::clashed_heads`).
+//! The side reported (§15.1) is the declaration of the module against a name
+//! from outside the source, the `use` against an item, and the later of two
+//! of a kind; the side not reported is checked.
 
 use std::collections::HashMap;
 
@@ -17,7 +18,6 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::TokenKind;
 
 use crate::def::{DefId, ModId};
-use crate::resolve::UseBinding;
 use crate::sig::Sema;
 
 /// The reserved word the lexer does not read as one yet (W5-11).
@@ -46,14 +46,20 @@ pub(crate) fn unbindable(name: &str) -> Option<Unbindable> {
 }
 
 impl<'p> Sema<'p> {
-    /// Every E0304 of the three spaces, once every `use` is resolved.
-    pub(crate) fn check_clashes(&mut self) {
+    /// The E0304 of the items and of the heads, before any `use` is resolved
+    /// (a `use` reads the namespaces and the heads).
+    pub(crate) fn check_item_clashes(&mut self) {
         for i in 0..self.a.modules.mods.len() {
-            let m = ModId(i as u32);
-            self.item_clashes(m);
-            self.use_clashes(m);
+            self.item_clashes(ModId(i as u32));
         }
         self.head_clashes();
+    }
+
+    /// The E0304 of the names the `use` bound, once every `use` is resolved.
+    pub(crate) fn check_use_clashes(&mut self) {
+        for i in 0..self.a.modules.mods.len() {
+            self.use_clashes(ModId(i as u32));
+        }
     }
 
     /// The items of `m` of a name of the prelude or a builtin name of a
@@ -65,21 +71,28 @@ impl<'p> Sema<'p> {
         for d in items {
             let def = self.a.def(d);
             let (name, span) = (def.name.clone(), def.name_span);
-            let diag = match self.body_clash(&name, span, "an item") {
-                Some(diag) => diag,
-                None => match self.a.modules.get(m).children.get(&name) {
-                    Some(&c) => clash(span, &name, format!("`{name}` is also the name of a child module"))
-                        .with_note(self.module_head(c), "the child module"),
-                    None => continue,
-                },
-            };
-            self.report(d, diag);
+            let body = self.body_clash(&name, span, "an item");
+            let child = self.a.modules.get(m).children.get(&name).copied().map(|c| {
+                clash(span, &name, format!("`{name}` is also the name of a child module"))
+                    .with_note(self.module_head(c), "the child module")
+            });
+            let clashed = &mut self.a.modules.get_mut(m).clashed;
+            if body.is_some() {
+                clashed.body.insert(name.clone());
+            }
+            if child.is_some() {
+                clashed.namespace.insert(name);
+            }
+            if let Some(diag) = body.or(child) {
+                self.report(d, diag);
+            }
         }
     }
 
     /// The names the `use` of `m` bound, in the order written: of a name of
-    /// the prelude or a builtin name of a flow, of an item of `m` (the
-    /// binding fails), or of a name bound before.
+    /// the prelude or a builtin name of a flow, of an item of `m` (§15.1:
+    /// the `use`, whichever is written first, S-676), or of a name bound
+    /// before.
     fn use_clashes(&mut self, m: ModId) {
         let bound = self.a.modules.get(m).bound.clone();
         let mut first: HashMap<&str, Span> = HashMap::new();
@@ -88,11 +101,6 @@ impl<'p> Sema<'p> {
             let diag = if let Some(diag) = self.body_clash(name, *span, "a `use`") {
                 diag
             } else if let Some(d) = item {
-                // SPEC-GAP(S-676): the `use` of the name of an item is the side
-                // of the E0304, whichever is written first.
-                if let Some(u) = self.a.modules.get_mut(m).uses.get_mut(name) {
-                    *u = UseBinding::Failed { span: u.span() };
-                }
                 already(*span, name).with_note(self.a.def(d).name_span, "declared here")
             } else if let Some(&at) = first.get(name.as_str()) {
                 already(*span, name).with_note(at, "first bound here")
@@ -100,6 +108,7 @@ impl<'p> Sema<'p> {
                 first.insert(name, *span);
                 continue;
             };
+            self.a.modules.get_mut(m).clashed.body.insert(name.clone());
             self.report_mod(diag);
         }
     }
@@ -129,11 +138,12 @@ impl<'p> Sema<'p> {
     fn head_clashes(&mut self) {
         for (pkg, p) in self.flat.clone().into_iter().enumerate() {
             let root = self.a.modules.roots[pkg];
-            let mut names: Vec<(&String, ModId)> =
-                self.a.modules.get(root).children.iter().map(|(n, &c)| (n, c)).collect();
+            let mut names: Vec<(String, ModId)> =
+                self.a.modules.get(root).children.iter().map(|(n, &c)| (n.clone(), c)).collect();
             names.sort();
             for (name, c) in names {
-                if p.deps.iter().any(|d| &d.name == name) {
+                if p.deps.iter().any(|d| d.name == name) {
+                    self.a.modules.clashed_heads[pkg].insert(name.clone());
                     let msg = format!(
                         "the module `{name}` under the root has the name of the package `{name}` this package \
                          depends on (§15.1)"

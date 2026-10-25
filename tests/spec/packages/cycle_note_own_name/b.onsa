@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-682: `use fx.a.{f}` in the package `fx` is E0302 (the own package name at the head), and the
+// candidate that takes `fx.` off, `use a.{f}`, would close a cycle with `use b.{g}` of `a`, so it is not
+// given. The note says so: it shows the form that was left out and the module of the cycle (checked in
+// crates/onsa_cli/tests/use_cycles.rs). The failed `use` makes no dependency (S-678), so there is no
+// E0310 as it is written.
+use fx.a.{f}                                        //~ E0302
+
+pub fn g() -> I32 {
+  2
+}

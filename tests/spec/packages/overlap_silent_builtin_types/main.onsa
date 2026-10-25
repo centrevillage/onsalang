@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§5.1", "§18.1"]
+
+// S-675, S-611: an item or a `use` with the name of a built-in type (`F32`, `Bool`) is E0304, and the name
+// is drawn from neither the item nor the built-in type, so the uses have no diagnostic: `x * 0.5`
+// and the literal `F32 { v: 1 }` of the struct, and `true` and `a == 1` with the `Bool` of the `use`.
+pub struct F32 {                                    //~ E0304
+  v: I32,
+}
+
+pub fn half(x: F32) -> F32 {
+  x * 0.5
+}
+
+pub fn makes() -> F32 {
+  F32 { v: 1 }
+}
+
+pub fn typed_literal() -> I32 {
+  let _: F32 = 1.0
+  0
+}
+
+use util.{Bool}                                     //~ E0304
+
+pub fn takes_bool(b: Bool) -> Bool {
+  b
+}
+
+pub fn compares(a: I32) -> Bool {
+  a == 1
+}
+
+pub fn typed_bool() -> I32 {
+  let _: Bool = true
+  0
+}

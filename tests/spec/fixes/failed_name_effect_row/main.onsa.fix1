@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+// fixes = 1
+
+// A failed name in an effect row is silent, and the body is checked (S-691, the reading (1) for now).
+// After the candidate, `util` is a module: the E0200 of the row is of a def the failed name held back,
+// also in `g`, which had no diagnostic.
+use util                                       //~ E0302
+
+pub fn f() -> I32 uses {util} {
+  let a: I32 = true                                 //~ E0401
+  a
+}
+
+pub fn g() -> I32 uses {util} {
+  1
+}

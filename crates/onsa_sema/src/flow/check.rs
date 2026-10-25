@@ -3,6 +3,7 @@
 //! calls of instances, delays and `sample_rate()`.
 
 use super::*;
+use crate::ResolveError;
 
 impl<'a> Checker<'a> {
     pub(super) fn fcx(&mut self) -> &mut FlowCx {
@@ -343,6 +344,12 @@ impl<'a> Checker<'a> {
             && self.lookup_local(&p.segments[0].name).is_none()
         {
             let name = p.segments[0].name.clone();
+            // A builtin name that an item or a `use` of the module takes is an
+            // E0304 there, and an error in the whole body (§18.1, S-675).
+            if self.a.modules.get(self.m).clashed.body.contains(&name) {
+                let path = Path { segments: p.segments.clone(), span: p.span };
+                return Err(self.resolve_error(&path, ResolveError::Failed));
+            }
             return match (Delay::named(&name), kind) {
                 (Some(d), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
                 (Some(_), CallKind::Plain) => {
@@ -378,6 +385,9 @@ impl<'a> Checker<'a> {
                     Ok(Entity::Def(d)) | Ok(Entity::Member(d)) if matches!(self.a.def(d).kind, DefKind::Flow(_)) => {
                         Some(d)
                     }
+                    // A name held as an error (§18.1, S-675, S-680): neither a
+                    // flow nor not one.
+                    Err(err @ ResolveError::Failed) => return Err(self.resolve_error(&path, err)),
                     _ => None,
                 }
             }

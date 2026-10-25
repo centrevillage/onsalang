@@ -1,0 +1,3 @@
+[package]
+name = "failed_use_real_binding_wins"
+edition = "2026"

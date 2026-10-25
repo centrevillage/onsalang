@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.4"]
+// fixes = 1
+
+// A failed name in a derive list makes the list not known (S-460); the bodies are checked.
+// After the candidate, `util` is a module: the E0416 of the list is of a def the failed name held back.
+use util                                       //~ E0302
+
+pub struct S: util {
+  a: I32,
+}
+
+pub fn g(s: S) -> I32 {
+  let a: I32 = true                                 //~ E0401
+  a
+}

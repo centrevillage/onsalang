@@ -609,18 +609,14 @@ impl<'a> Checker<'a> {
             },
         };
         let effects = match effects {
-            Some(row) => {
-                let mut set = crate::ty::EffectSet::default();
-                for p in &row.effects {
-                    let n = p.segments.last().unwrap();
-                    if n.name == "Alloc" {
-                        set.alloc = true;
-                    } else {
-                        return Err(self.unsupported(n.span, Feature::Effects, &[&n.name]));
-                    }
+            // Read as the row of a signature; but another name is the first
+            // error of the body, whose check stops there (§18.1).
+            Some(row) => match crate::sig::read_effects(self.a, self.def, self.m, &self.generics, Some(row)) {
+                (_, others) if !others.is_empty() => {
+                    return Err(self.unsupported(others[0].span, Feature::Effects, &[&others[0].name]));
                 }
-                set
-            }
+                (set, _) => set,
+            },
             None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
         };
         let rt = exp_fn.as_ref().map(|f| f.rt).unwrap_or(false);

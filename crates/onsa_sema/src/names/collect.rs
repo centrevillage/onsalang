@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, Failed, Ident, ImplDecl, Item, ItemId, ItemKind, Lit, StrLit, UseDecl};
 
 use crate::def::*;
 use crate::resolve::{Import, ModInfo, UseAt};
@@ -49,6 +49,7 @@ impl<'p> Sema<'p> {
                 heads.insert(d.name.clone(), self.a.modules.roots[i]);
             }
             self.a.modules.heads.push(heads);
+            self.a.modules.clashed_heads.push(Default::default());
         }
     }
 
@@ -92,6 +93,9 @@ impl<'p> Sema<'p> {
                 let _scope = onsa_diag::internal::item_scope(item.span);
                 let mut at = Place { m, ast, id, item, error, unit, target: false };
                 match &item.kind {
+                    ItemKind::Use(u) if matches!(item.failed, Some(Failed::Body | Failed::Heading)) => {
+                        self.cut_use(m, u)
+                    }
                     ItemKind::Use(u) => self.a.modules.get_mut(m).imports.push(Import {
                         path: u.path.clone(),
                         names: u.names.clone(),
@@ -119,6 +123,19 @@ impl<'p> Sema<'p> {
                 }
             }
         }
+    }
+
+    /// A `use` cut before its names were all read is not resolved (§18.1,
+    /// R-180, S-462): the names of its list read whole are failed (with no
+    /// list, the last name of its path, `double` of `use util.double.`), and
+    /// every name not found in the body is an error. One read whole in a unit
+    /// with an error of the syntax stage is resolved (S-435).
+    fn cut_use(&mut self, m: ModId, u: &UseDecl) {
+        let read = if u.names.is_none() { u.path.segments.last() } else { None };
+        for name in u.names.iter().flatten().chain(read) {
+            self.fail(m, name);
+        }
+        self.a.modules.get_mut(m).unread_use = true;
     }
 
     /// The def of a `test`, whose name is one in its module (E0306, §11.8).
@@ -181,13 +198,16 @@ impl<'p> Sema<'p> {
 
     /// `name` in the items of `m` for the def `d`: E0304 when the module
     /// declares the name already, E0305 when one of the two is a flow, whose
-    /// namespace takes the name (§11.2); the first keeps it.
+    /// namespace takes the name (§11.2). The name is then an error in the body
+    /// and the namespace (§18.1, S-675, S-680).
     fn declare(&mut self, m: ModId, name: &Ident, d: DefId) {
-        let items = &mut self.a.modules.get_mut(m).items;
-        let Some(&prev) = items.get(&name.name) else {
-            items.insert(name.name.clone(), d);
+        let info = self.a.modules.get_mut(m);
+        let Some(&prev) = info.items.get(&name.name) else {
+            info.items.insert(name.name.clone(), d);
             return;
         };
+        info.clashed.body.insert(name.name.clone());
+        info.clashed.namespace.insert(name.name.clone());
         let first = self.a.def(prev).name_span;
         let is_flow = |x: DefId| self.a.def(x).as_flow().is_some();
         let (code, msg) = if is_flow(prev) || is_flow(d) {
@@ -301,6 +321,8 @@ fn new_module(path: String, pkg: usize, parent: Option<ModId>) -> ModInfo {
         bound: Vec::new(),
         imports: Vec::new(),
         deps: Vec::new(),
+        clashed: Default::default(),
+        unread_use: false,
         use_at: None,
     }
 }

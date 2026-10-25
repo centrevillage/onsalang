@@ -1,0 +1,7 @@
+pub fn quad() -> I32 {
+  4
+}
+
+pub fn sixth() -> I32 {
+  6
+}

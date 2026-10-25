@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-677: an item and a child module of one name (`a.onsa` has `b` and `a/b.onsa` is the module `a.b`;
+// `p.onsa` has `q` and the directory `p/q/` holds `p/q/r.onsa`) are E0304 on the item, and another module
+// reaches neither: `use a.{b}` and `b()` after it, `a.b()` after `use a`, `use a.b.{c}` and `c()` after
+// it have no diagnostic (`b` and `c` return `I32`, so a use that found them would be E0401 for the
+// `Bool`). In `a` itself the name `b` is the item (the space of the body has no clash), so
+// `b()` in `inside` is the `I32` of the item and `Bool` is E0401.
+use a
+use a.{b}
+use a.b.{c}
+use p.{q}
+use p.q.{s}
+
+pub fn item_by_the_list() -> I32 {
+  let _: Bool = b()
+  0
+}
+
+pub fn item_by_the_module() -> I32 {
+  let _: Bool = a.b()
+  0
+}
+
+pub fn name_below_the_clash() -> I32 {
+  let _: Bool = c()
+  0
+}
+
+pub fn directory_by_the_list() -> I32 {
+  let _: Bool = q()
+  0
+}
+
+pub fn name_below_the_directory() -> I32 {
+  let _: Bool = s()
+  0
+}

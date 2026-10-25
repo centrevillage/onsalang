@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-675: two `use` lines of one name are E0304 on the later `use` (the same item twice, two items, two
+// modules), and neither is drawn where the name is used. `double` is `I32` in `util` and `F32` in
+// `other`, so a use that went to either would be E0401 for one of `I32`, `F32`; none is reported.
+// `math.sqrt` and `math.nosuch` are paths from the name `math` of `use std.math` and `use kp.math`.
+use util.{double}
+use other.{double}                                  //~ E0304
+use util.{triple}
+use util.{triple}                                   //~ E0304
+use std.math
+use kp.math                                         //~ E0304
+
+pub fn uses_double() -> I32 {
+  let _: I32 = double(2)
+  let _: F32 = double(2)
+  let _: Bool = double(2)
+  0
+}
+
+pub fn uses_triple() -> I32 {
+  let _: Bool = triple(1)
+  0
+}
+
+pub fn uses_math() -> F32 {
+  let _: Bool = math.sqrt(1.0)
+  let _: Bool = math.nosuch(1.0)
+  0.0
+}

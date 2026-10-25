@@ -22,10 +22,14 @@
 //!   word) is E0302 or another error without a candidate that adds a `use` (the `use` would be an
 //!   error, and a candidate leaves none of the same stage, §18.1).
 //!
-//! Places that the spec leaves open, so only "one diagnostic, on one of the two lines" is checked:
-//! the pair of an item and a `use` (or a flow and a `use`) when the item is the later declaration.
+//! - an item and a `use` of one name are E0304 on the `use` whichever is written first, and the body of
+//!   the item is still checked (S-676);
+//! - the name of an E0304 or an E0305 is drawn from neither declaration, in the body of its module and by
+//!   the paths of the other modules: where it is used nothing is reported (S-675, S-677, S-680), and the
+//!   declaration that is not reported is a unit of its own and is checked (U3b1).
 //!
-//! Tests that the implementation does not pass yet carry `#[ignore = "W4-03"]`.
+//! Tests that the implementation does not pass yet carry `#[ignore = "W4-03"]` (or the unit that fixes
+//! the cause, `W4-03 U3b1: …`).
 
 mod test_support;
 
@@ -224,22 +228,24 @@ fn main_with(tag: &str, text: &str) -> (Out, Value, Dir) {
     (out, doc, d)
 }
 
-/// §15.1, §11.2: the pair of an item (a function or a flow) and a `use` that takes the same name is
-/// one E0304 and nothing else. With the `use` first and the item after it, the spec does not say which
-/// of the two gets it (the later declaration for two items), so the line is one of the two.
+/// §15.1 (S-676): the pair of an item (a function or a flow) and a `use` that takes the same name is
+/// one E0304 on the `use` even when the `use` is written first, with a note at the item, and the body
+/// of the item is checked as a unit of its own (the `true` of a function that returns `I32` is E0401).
 #[test]
-fn an_item_after_a_use_of_its_name_gives_one_e0304_on_one_of_the_two() {
+fn a_use_before_an_item_of_its_name_gets_the_e0304_and_the_item_is_checked() {
     let item_fn = "pub fn quad() -> I32 {\n  4\n}\n";
     let item_flow = "pub flow quad(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
     for (tag, item) in [("fn", item_fn), ("flow", item_flow)] {
         let (out, doc, _d) = main_with(&format!("use_item_{tag}"), &format!("use util.{{quad}}\n\n{item}"));
         assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
-        assert_eq!(diagnostics(&doc).len(), 1, "{tag}: {doc}");
-        let found = of_code(&doc, "E0304");
-        assert_eq!(found.len(), 1, "{tag}: {doc}");
-        let sp = span_of(&found[0]["span"]);
-        assert!(sp.file == "main.onsa" && (sp.line == 1 || sp.line == 3), "{tag}: {doc}");
+        assert_eq!(places(&doc), set(&[("E0304", "main.onsa", 1)]), "{tag}: {doc}");
+        let notes = notes_with_span(of_code(&doc, "E0304")[0]);
+        assert!(notes.iter().any(|s| s.file == "main.onsa" && s.line == 3), "{tag}: a note at the item: {doc}");
     }
+    let bad = "pub fn quad() -> I32 {\n  true\n}\n";
+    let (out, doc, _d) = main_with("use_item_checked", &format!("use util.{{quad}}\n\n{bad}"));
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(places(&doc), set(&[("E0304", "main.onsa", 1), ("E0401", "main.onsa", 4)]), "{doc}");
 }
 
 /// §15.1, §11.2: with the item written first, the later declaration is the `use` and gets the E0304
@@ -385,9 +391,10 @@ fn prelude_items_are_e0304(cases: &[(&str, &str)]) {
     }
 }
 
-/// §5.1, R-103 (`parent/r84_type.onsa`): the user's `struct F32` does not take over the `F32` of the
-/// function written after it: the one diagnostic is the E0304 of the struct, and `x * 0.5` has no
-/// error about a float literal.
+/// §5.1, R-103 (`parent/r84_type.onsa`), S-675: the user's `struct F32` does not take over the `F32` of
+/// the function written after it, and the built-in `F32` is not drawn either: the name is silent where it
+/// is used, so the diagnostics are the two E0304 of the struct and the enum, and `x * 0.5` has no error
+/// about a float literal.
 #[test]
 fn a_struct_named_like_a_built_in_type_does_not_make_other_diagnostics() {
     let d = Dir::pkg("f32_struct");
@@ -453,5 +460,142 @@ fn heads_have_no_use_candidate(tag: &str, heads: &[&str]) {
         for x in here {
             assert_eq!(fixes_of(x), 0, "{h}: a candidate on a head that a use cannot bind: {x}");
         }
+    }
+}
+
+// ---- the name of an E0304 or an E0305 is drawn from neither declaration (S-675, S-677, S-680) ---------
+
+/// A function that has a statement for each of `exprs`, each of which gives a `Bool` where the name
+/// would give an `I32` (so a use that found the name would be E0401, and a silent use is nothing).
+fn probe_fn(name: &str, exprs: &[&str]) -> String {
+    let mut s = format!("\npub fn {name}() -> I32 {{\n");
+    for e in exprs {
+        s.push_str(&format!("  let _: Bool = {e}\n"));
+    }
+    s.push_str("  0\n}\n");
+    s
+}
+
+/// §15.1 (S-675, A7): a root module or a root directory with the name of a dependency is E0304, and the
+/// name is silent as the head of a path: `use std.math.{sqrt}` is neither std's nor the user's, so the
+/// call `sqrt(x, x)` (two arguments, where `sqrt` of std takes one) has no diagnostic. The only one is the
+/// E0304 in the file of the user's module, and `check` of `main.onsa` alone is clean.
+#[test]
+fn a_dependency_name_that_a_root_module_takes_is_silent_as_the_head_of_a_path() {
+    let main = "use std.math.{sqrt}\n\npub fn r(x: F32) -> F32 {\n  sqrt(x, x)\n}\n";
+    for (tag, file) in [("file", "std.onsa"), ("dir", "std/math.onsa")] {
+        let d = Dir::pkg(&format!("root_std_silent_{tag}"));
+        d.write(file, ONE);
+        d.write("main.onsa", main);
+        let (out, doc) = check_json(d.root(), &["."]);
+        assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
+        assert_eq!(files(&doc), pairs(&[("E0304", file)]), "{tag}: {doc}");
+        let (out, doc) = check_json(d.root(), &["main.onsa"]);
+        assert_eq!(out.code, 0, "{tag}: {}{}", out.stdout, out.stderr);
+        assert!(diagnostics(&doc).is_empty(), "{tag}: {doc}");
+    }
+}
+
+/// §15.1 (S-675, S-677): another module reaches neither of two declarations of an E0304 name: not by
+/// `use m.{dup}`, nor by a path from the module (`m.dup()`), nor through the child module of the name
+/// (`use a.{b}`, `a.b()`, `use a.b.{c}`, and the same for a child that is only a directory). `check` of
+/// `main.onsa` alone is clean, and the E0304 is in the other file.
+#[test]
+fn the_paths_of_other_modules_draw_neither_declaration() {
+    let dup = "pub fn dup() -> I32 {\n  1\n}\n\npub fn dup() -> F32 {\n  2.0\n}\n";
+    let a = [("a.onsa", fn_item("b")), ("a/b.onsa", fn_item("c"))];
+    let p = [("p.onsa", fn_item("q")), ("p/q/r.onsa", fn_item("s"))];
+    // (tag, the files, the file that has the E0304, the expressions in main, the `use` lines of main)
+    #[allow(clippy::type_complexity)]
+    let shapes: Vec<(&str, Vec<(&str, String)>, &str, Vec<&str>, &str)> = vec![
+        ("list", vec![("m.onsa", dup.to_string())], "m.onsa", vec!["dup()"], "use m.{dup}\n"),
+        ("module", vec![("m.onsa", dup.to_string())], "m.onsa", vec!["m.dup()"], "use m\n"),
+        ("child_list", a.to_vec(), "a.onsa", vec!["b()"], "use a.{b}\n"),
+        ("child_module", a.to_vec(), "a.onsa", vec!["a.b()"], "use a\n"),
+        ("below_child", a.to_vec(), "a.onsa", vec!["c()"], "use a.b.{c}\n"),
+        ("directory_list", p.to_vec(), "p.onsa", vec!["q()"], "use p.{q}\n"),
+        ("below_directory", p.to_vec(), "p.onsa", vec!["s()"], "use p.q.{s}\n"),
+    ];
+    let mut problems: Vec<String> = Vec::new();
+    for (tag, files_of, owner, exprs, uses) in shapes {
+        let d = Dir::pkg(&format!("other_silent_{tag}"));
+        for (f, t) in &files_of {
+            d.write(f, t);
+        }
+        d.write("main.onsa", &format!("{uses}{}", probe_fn("probe", &exprs)));
+        let (_, whole) = check_json(d.root(), &["."]);
+        let (out, one) = check_json(d.root(), &["main.onsa"]);
+        let owner_only = files(&whole) == pairs(&[("E0304", owner)]);
+        if !owner_only || out.code != 0 || !diagnostics(&one).is_empty() {
+            problems.push(format!("{tag}: want E0304 only in {owner} and a clean main.onsa: {whole} / {one}"));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §11.2 (S-680): a function and a flow of one name are one E0305 on the later declaration, with no
+/// candidate, in either order, and the calls of the name have no diagnostic: not `lp~(x)` in a flow (an
+/// E0812 whose candidate would take the `~` off), nor `lp(x)` in a flow or in a function.
+#[test]
+fn a_flow_and_a_function_of_one_name_are_one_e0305_and_the_calls_are_silent() {
+    let func = "pub fn lp(x: F32) -> F32 {\n  x\n}\n";
+    let flow = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    let calls = "\npub flow a(x: F32 at sample) -> F32 at sample {\n  lp~(x)\n}\n\npub flow b(x: F32 at sample) -> F32 at sample {\n  lp(x)\n}\n\npub fn c(x: F32) -> F32 {\n  lp(x)\n}\n";
+    for (tag, first, second) in [("fn_first", func, flow), ("flow_first", flow, func)] {
+        let d = Dir::pkg(&format!("e0305_silent_{tag}"));
+        d.write("main.onsa", &format!("{first}\n{second}{calls}"));
+        let (out, doc) = check_json(d.root(), &["."]);
+        assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
+        assert_eq!(places(&doc), set(&[("E0305", "main.onsa", 5)]), "{tag}: {doc}");
+        assert_eq!(fixes_of(of_code(&doc, "E0305")[0]), 0, "{tag}: {doc}");
+    }
+}
+
+/// §2.2, §15.1 (S-675, A6): an item with the name of a built-in flow is E0304 and the name is silent in the
+/// whole body of the module, not only in a flow: the call `NAME()` in a function and in a flow has no
+/// diagnostic. (`rt fn`, so that a call in a flow is a call that a flow may have, §11.2.)
+#[test]
+fn a_built_in_flow_name_that_is_an_item_is_silent_in_every_body() {
+    let mut problems: Vec<String> = Vec::new();
+    for name in FLOW_NAMES {
+        let text = format!(
+            "pub rt fn {name}() -> F32 {{\n  1.0\n}}\n\npub fn in_a_function() -> F32 {{\n  {name}()\n}}\n\npub flow in_a_flow(x: F32 at sample) -> F32 at sample {{\n  let _ = {name}()\n  x\n}}\n"
+        );
+        let d = Dir::pkg(&format!("flow_name_silent_{name}"));
+        d.write("main.onsa", &text);
+        let (out, doc) = check_json(d.root(), &["."]);
+        if out.code != 1 || places(&doc) != set(&[("E0304", "main.onsa", 1)]) {
+            problems.push(format!("{name}: want one E0304 on line 1: {doc}"));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §15.1 (S-675): the declaration of a pair that is not reported is a unit of its own and is checked: a
+/// body error in either declaration of two items, of an item and a `use`, and of a flow and a function is
+/// reported (the reported side is a unit with a name error, and its body is not checked, §18.1).
+#[test]
+fn the_declaration_that_is_not_reported_is_checked() {
+    #[allow(clippy::type_complexity)]
+    let cases: [(&str, &str, &[(&str, u64)]); 3] = [
+        (
+            "items",
+            "pub fn twice() -> I32 {\n  true\n}\n\npub fn twice() -> I32 {\n  2\n}\n",
+            &[("E0401", 2), ("E0304", 5)],
+        ),
+        (
+            "flow_fn",
+            "pub fn lp(x: F32) -> F32 {\n  true\n}\n\npub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n",
+            &[("E0401", 2), ("E0305", 5)],
+        ),
+        ("use_item", "use util.{quad}\n\npub fn quad() -> I32 {\n  true\n}\n", &[("E0304", 1), ("E0401", 4)]),
+    ];
+    for (tag, text, want) in cases {
+        let (out, doc, _d) = main_with(&format!("checked_{tag}"), text);
+        assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
+        let got: BTreeSet<(String, u64)> =
+            diagnostics(&doc).iter().map(|x| (str_of(x, "code").to_string(), span_of(&x["span"]).line)).collect();
+        let want: BTreeSet<(String, u64)> = want.iter().map(|(c, l)| (c.to_string(), *l)).collect();
+        assert_eq!(got, want, "{tag}: {doc}");
     }
 }

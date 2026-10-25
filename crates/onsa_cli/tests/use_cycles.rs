@@ -26,8 +26,12 @@
 //! is taken off, the `use` of the new head added when it is not there, and the candidate is given only
 //! when the path is then read whole and the `use` closes no cycle.
 //!
+//! A `use` that failed in the names stage is no dependency (S-678), the note of a candidate that is left
+//! out for a cycle shows the form and the module of the cycle (S-682), and the note that narrows a `use`
+//! counts only the narrowings that can be written (S-683): the last three groups of tests (W4-03 U3b1).
+//!
 //! Not written here: the clash of the names (E0304 / E0305, U3a1), the names of the failed `use` that
-//! stay silent (U3b), the visibility (U4).
+//! stay silent (`failed_names.rs`), the visibility (U4).
 //!
 //! Tests that the implementation does not pass yet carry `#[ignore = "<work>"]` naming the work that
 //! fixes their cause.
@@ -841,4 +845,221 @@ fn a_head_that_a_use_cannot_bind_has_a_note() {
     assert_eq!(found.len(), 1, "{doc}");
     assert!(fixes_of(found[0]).is_empty(), "{doc}");
     assert!(!notes_of(found[0]).is_empty(), "{doc}");
+}
+
+// ---- a `use` that failed in the names stage is no dependency (S-678, W4-03 U3b1) ---------------------
+
+/// The text of a module that has `use_line` first and a function `f` (so that another module can take
+/// `f`), and the text of the module `b` that takes `f` of `a`.
+fn takes_f(use_line: &str) -> String {
+    format!("{use_line}\n\npub fn f() -> I32 {{\n  1\n}}\n")
+}
+
+const B_TAKES_A: &str = "use a.{f}\n\npub fn g() -> I32 {\n  f()\n}\n";
+const B_WITH_COLOR: &str = "use a.{f}\n\npub enum Color {\n  Red,\n}\n\npub fn g() -> I32 {\n  f()\n}\n";
+
+/// §15.1, §18.1 (S-678): a `use` that fails in the names stage is no dependency, so `a` and `b` that take
+/// each other are not a cycle while one of the two `use` lines fails: the diagnostic is the E0302 of the
+/// failed `use`, and E0310 comes only when the name is written right. The failed forms: the last name is
+/// not there, a step of the path is not there, an enumerator, the own package name at the head, a head
+/// that is nothing.
+#[test]
+fn a_failed_use_is_no_dependency_and_the_cycle_comes_when_the_name_is_right() {
+    // (tag, the package manifest name, the failed `use` of `a`)
+    let forms = [
+        ("last", "demo", "use b.{nosuch}"),
+        ("step", "demo", "use b.nosuch.{x}"),
+        ("variant", "demo", "use b.Color.{Red}"),
+        ("own_name", "fx", "use fx.b.{g}"),
+        ("head", "demo", "use missing.{g}"),
+    ];
+    let mut problems: Vec<String> = Vec::new();
+    for (tag, pkg_name, failed) in forms {
+        let d = Dir::bare(&format!("failed_edge_{tag}"));
+        d.write("onsa.toml", &format!("[package]\nname = \"{pkg_name}\"\nedition = \"2026\"\n"));
+        d.write("a.onsa", &takes_f(failed));
+        d.write("b.onsa", B_WITH_COLOR);
+        let (out, doc) = check_json(d.root(), &["."]);
+        if out.code != 1 || codes(&doc) != set(&["E0302"]) || diagnostics(&doc).len() != 1 {
+            problems.push(format!("{tag}: want only the E0302 of the failed `use`, no cycle: {doc}"));
+        }
+        d.write("a.onsa", &takes_f("use b.{g}"));
+        let (out, doc) = check_json(d.root(), &["."]);
+        if out.code != 1 || codes(&doc) != set(&["E0310"]) {
+            problems.push(format!("{tag}: with the name written right, want the cycle (E0310): {doc}"));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// §15.1 (S-678): the names of a list that are there are dependencies as always. `use b.{g, nosuch}` is a
+/// cycle with `use a.{f}` of `b`: E0310 is reported. (Whether the E0302 of `nosuch` is reported with it
+/// is not fixed, S-678 leaves it to the rule of the unit.)
+#[test]
+fn the_names_of_a_list_that_are_there_still_make_the_dependency() {
+    let d = pkg("failed_edge_list", &[("a.onsa", &takes_f("use b.{g, nosuch}")), ("b.onsa", B_TAKES_A)]);
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert!(codes(&doc).contains("E0310"), "{doc}");
+}
+
+/// §15.1 (S-678, S-679): a module does not take itself (`use main` is E0302), and the failed `use` makes no
+/// dependency on the modules below: `main.inner` takes an item of `main`, and there is no cycle.
+#[test]
+fn the_use_of_the_module_itself_makes_no_dependency_on_the_modules_below() {
+    let d = pkg(
+        "failed_edge_self",
+        &[
+            ("main.onsa", "use main\n\npub fn k() -> I32 {\n  1\n}\n"),
+            ("main/inner.onsa", "use main.{k}\n\npub fn g() -> I32 {\n  k()\n}\n"),
+        ],
+    );
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
+    assert_eq!(diagnostics(&doc).len(), 1, "{doc}");
+}
+
+// ---- the note of a candidate that is left out for a cycle (S-682) -------------------------------------
+
+/// The messages of the notes of `diagnostic`, joined.
+fn note_text(diagnostic: &Value) -> String {
+    notes_of(diagnostic).iter().filter_map(|n| n.get("message").and_then(Value::as_str)).collect::<Vec<_>>().join("\n")
+}
+
+/// §15.1 (S-682): the candidate that takes the package name off the head of a `use` is left out when the
+/// form would close a cycle, and the note shows the form that was left out and the module that closes the
+/// cycle. `use fx.a.{f}` of `b` would be `use a.{f}`, and `a` takes `b`: no candidate, and the note has
+/// `use a.{f}`. The control: when `a` does not take `b` the candidate is there.
+#[test]
+fn a_use_head_candidate_left_out_for_a_cycle_has_a_note_with_the_form() {
+    let d = fx(
+        "note_head",
+        &[("a.onsa", &takes_f("use b.{g}")), ("b.onsa", "use fx.a.{f}\n\npub fn g() -> I32 {\n  2\n}\n")],
+    );
+    let (out, doc) = check_json(d.root(), &["."]);
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
+    assert_eq!(diagnostics(&doc).len(), 1, "{doc}");
+    let e = &diagnostics(&doc)[0];
+    assert_eq!(span_of(&e["span"]).file, "b.onsa", "{doc}");
+    assert!(fixes_of(e).is_empty(), "the form would close a cycle: {e}");
+    let text = note_text(e);
+    assert!(text.contains("use a.{f}"), "the note shows the form that was left out: {text:?} in {e}");
+
+    let d = fx(
+        "note_head_control",
+        &[("a.onsa", &takes_f("")), ("b.onsa", "use fx.a.{f}\n\npub fn g() -> I32 {\n  2\n}\n")],
+    );
+    let (_, doc) = check_json(d.root(), &["."]);
+    assert_eq!(fixes_of(&diagnostics(&doc)[0]).len(), 1, "no cycle, so the candidate: {doc}");
+
+    // The list form: `use fx.{a}` is `use a`.
+    let d = fx(
+        "note_head_list",
+        &[("a.onsa", &takes_f("use b.{g}")), ("b.onsa", "use fx.{a}\n\npub fn g() -> I32 {\n  2\n}\n")],
+    );
+    let (_, doc) = check_json(d.root(), &["."]);
+    let e = &diagnostics(&doc)[0];
+    assert!(fixes_of(e).is_empty(), "{e}");
+    assert!(note_text(e).contains("use a"), "{e}");
+}
+
+/// §15.1 (S-682): the same for the candidates of a path in a body that start with the own package name or
+/// the name of the module itself: `fx.b.g()` in `a` would be `use b` and `b.g()`, and `b` takes `a`;
+/// `main.inner.g()` in `main` would be `use main.inner` and `inner.g()`, and `main.inner` takes `main`.
+/// There is no candidate, and a note shows the form and the module of the cycle. (That the note does not
+/// *recommend* the form that closes the cycle is not checked here, the spec fixes no wording.)
+#[test]
+fn a_body_candidate_left_out_for_a_cycle_has_a_note_with_the_form() {
+    let d = fx("note_body_own", &[("a.onsa", "pub fn f() -> I32 {\n  fx.b.g()\n}\n"), ("b.onsa", B_TAKES_A)]);
+    let (_, doc) = check_json(d.root(), &["."]);
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
+    let e = &diagnostics(&doc)[0];
+    assert!(fixes_of(e).is_empty(), "{e}");
+    assert!(note_text(e).contains("use b"), "the form that was left out: {e}");
+
+    let d = pkg(
+        "note_body_self",
+        &[
+            ("main.onsa", "pub fn j() -> I32 {\n  main.inner.g()\n}\n"),
+            ("main/inner.onsa", "use main\n\npub fn g() -> I32 {\n  1\n}\n"),
+        ],
+    );
+    let (_, doc) = check_json(d.root(), &["."]);
+    assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
+    let e = &diagnostics(&doc)[0];
+    assert!(fixes_of(e).is_empty(), "{e}");
+    assert!(note_text(e).contains("main.inner"), "the module of the cycle: {e}");
+}
+
+// ---- the note that narrows a `use` (S-683) ------------------------------------------------------------
+
+/// Whether the package is a cycle (E0310 alone, exit 1) whose every diagnostic has notes and none of
+/// them has a position (the rule note: narrowing does not cut), or, with `positioned`, whose every
+/// diagnostic has a note with a position (the note at the `use` to narrow). `None` when it is so, the
+/// reason when it is not.
+fn narrowing_problem(d: &Dir, positioned: bool) -> Option<String> {
+    let (out, doc) = check_json(d.root(), &["."]);
+    if out.code != 1 || codes(&doc) != set(&["E0310"]) {
+        return Some(format!("want the cycle alone: {doc}"));
+    }
+    for e in of_code(&doc, "E0310") {
+        let notes = notes_of(e);
+        let ok = if positioned {
+            notes.iter().any(|n| n.get("span").is_some())
+        } else {
+            !notes.is_empty() && notes.iter().all(|n| n.get("span").is_none())
+        };
+        if !ok {
+            return Some(format!("want {} note: {e}", if positioned { "a positioned" } else { "only the rule" }));
+        }
+    }
+    None
+}
+
+/// §15.1 (S-683): the note that narrows a `use` is given only when the `use` can be written narrower and
+/// that cuts the cycle. A module that has no file of its own, only a directory (`b/` with `b/c.onsa`),
+/// has no items, so `use b` cannot be narrowed to an item of `b`, and no narrowing helps: `use b` with the
+/// body `b.c.s()` and `b/c.onsa` taking `a.{f}` is a cycle whose note has no `use` to narrow. The control
+/// with a file `b.onsa` is the narrowing `use b.{g}`, which cuts it. When another `use` of the same cycle
+/// can be narrowed and this one cannot, the cycle stays, so there is no narrowing note.
+#[test]
+fn the_narrowing_note_is_given_only_for_a_use_that_can_be_written_narrower() {
+    let a_uses_b = "use b\n\npub fn f() -> I32 {\n  b.c.s()\n}\n";
+    let c_takes_a = "use a.{f}\n\npub fn s() -> I32 {\n  f()\n}\n";
+    let mut problems: Vec<String> = Vec::new();
+    let mut check = |tag: &str, d: Dir, positioned: bool| {
+        if let Some(p) = narrowing_problem(&d, positioned) {
+            problems.push(format!("{tag}: {p}"));
+        }
+    };
+    check("b is only a directory", pkg("narrow_dir_only", &[("a.onsa", a_uses_b), ("b/c.onsa", c_takes_a)]), false);
+    check(
+        "b is a directory above a directory",
+        pkg(
+            "narrow_dir_only_deep",
+            &[("a.onsa", "use b\n\npub fn f() -> I32 {\n  b.c.d.s()\n}\n"), ("b/c/d.onsa", c_takes_a)],
+        ),
+        false,
+    );
+    check(
+        "b has a file (the control)",
+        pkg("narrow_with_file", &[("a.onsa", a_uses_b), ("b.onsa", &f("g")), ("b/c.onsa", c_takes_a)]),
+        true,
+    );
+    check(
+        "one `use` can be narrowed and the other cannot",
+        pkg(
+            "narrow_one_of_two",
+            &[
+                ("a.onsa", "use b\nuse e\n\npub fn f() -> I32 {\n  b.c.s() + e.h()\n}\n"),
+                ("b/c.onsa", c_takes_a),
+                ("e.onsa", &f("h")),
+                ("e/inner.onsa", "use a.{f}\n\npub fn t() -> I32 {\n  f()\n}\n"),
+            ],
+        ),
+        false,
+    );
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
 }

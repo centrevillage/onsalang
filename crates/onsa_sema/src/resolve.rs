@@ -1,7 +1,7 @@
 //! Modules, their tables of names, imports and cycles (spec §15.1, S-11,
 //! S-17, S-20, S-611). The lookups of a path are in `crate::names::lookup`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, ItemId, Path, Vis};
@@ -48,8 +48,9 @@ pub enum UseBinding {
         entity: Entity,
         span: Span,
     },
-    /// A binding that failed (§18.1): the E0304 of a `use` of the name of an
-    /// item of the module (`crate::names::clash`).
+    /// A name of a `use` that failed (§18.1, S-462): in the names stage, or
+    /// in the syntax stage with the name read. No binding (no E0304 with
+    /// another), and an error where it is used when nothing else binds it.
     Failed {
         span: Span,
     },
@@ -139,12 +140,30 @@ pub struct ModInfo {
     pub imports: Vec<Import>,
     /// The dependencies its `use` make (§15.1, S-594), in the order written.
     pub deps: Vec<Dep>,
+    /// The names of its body and of its namespace that are an E0304 or an
+    /// E0305 (§15.1, §18.1, S-675): a use of them is an error, whatever
+    /// binds them.
+    pub clashed: Clashed,
+    /// A `use` of it was cut before its names were all read (R-180): a name
+    /// of its body that is not found is an error.
+    pub unread_use: bool,
     /// Where a candidate adds a `use`; `None` for a module with no file.
     pub use_at: Option<UseAt>,
 }
 
+/// The names of an E0304 or an E0305 in the spaces of a module (§15.1).
+#[derive(Debug, Clone, Default)]
+pub struct Clashed {
+    pub body: HashSet<String>,
+    pub namespace: HashSet<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveError {
+    /// A name the names stage holds as an error (§18.1, S-462, S-675): of a
+    /// `use` that failed or of an E0304 or E0305, reported where it is
+    /// bound. Its uses get no diagnostic.
+    Failed,
     NotFound {
         name: String,
         span: Span,
@@ -173,8 +192,14 @@ pub enum ResolveError {
 }
 
 impl ResolveError {
+    /// The diagnostic of the error; none of a name held as an error.
+    pub fn diagnostic(self) -> Option<Diagnostic> {
+        (self != ResolveError::Failed).then(|| self.into_diagnostic())
+    }
+
     pub fn into_diagnostic(self) -> Diagnostic {
         match self {
+            ResolveError::Failed => onsa_diag::internal::bug(None, "a diagnostic of a name held as an error"),
             ResolveError::NotFound { name, span } => {
                 Diagnostic::new(Stage::Names, Code::E0302, span, format!("cannot find `{name}`")).with_found(name)
             }
@@ -220,6 +245,10 @@ pub struct Modules {
     /// modules under the package's root and the roots of the packages it
     /// depends on, by name.
     pub heads: Vec<HashMap<String, ModId>>,
+    /// The heads of each package that are an E0304 (a module under the
+    /// root of the name of a package depended on, S-246): a path from them
+    /// is an error (§18.1, S-675).
+    pub clashed_heads: Vec<HashSet<String>>,
     /// Associated items of user types: `impl` methods and consts (§6.2, §6.6).
     pub assoc: HashMap<DefId, HashMap<String, DefId>>,
     /// Associated items of builtin types (`impl F32 { const PI }` in std),

@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§15.1", "§18.1"]
+
+// S-680: a function and a flow of one name are E0305 on the later declaration, and the name is drawn from
+// neither: the call `lp~(x)` in a flow is no E0812 (and so no candidate that takes the `~` off), the call
+// `lp(x)` is no E0811, and the same for `hp` with the flow first. The declaration that is not reported
+// is a unit of its own and is checked (the `true` in `lp`).
+pub fn lp(x: F32) -> F32 {
+  true                                              //~ E0401
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {    //~ E0305
+  x
+}
+
+pub flow uses_lp_as_flow(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}
+
+pub flow uses_lp_as_function(x: F32 at sample) -> F32 at sample {
+  lp(x)
+}
+
+pub fn uses_lp_in_a_function(x: F32) -> F32 {
+  lp(x)
+}
+
+pub flow hp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn hp(x: F32) -> F32 {                          //~ E0305
+  x
+}
+
+pub flow uses_hp_as_flow(x: F32 at sample) -> F32 at sample {
+  hp~(x)
+}
+
+pub flow uses_hp_as_function(x: F32 at sample) -> F32 at sample {
+  hp(x)
+}
+
+pub fn uses_hp_in_a_function(x: F32) -> F32 {
+  hp(x)
+}

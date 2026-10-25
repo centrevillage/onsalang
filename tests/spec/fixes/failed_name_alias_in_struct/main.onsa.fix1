@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+// fixes = 1
+
+// A failed name in the effect row of the function type of an alias is silent; the alias is the type of a
+// field, so the users of the struct are of defs the failed name held back.
+use util                                       //~ E0302
+
+pub type A = fn() -> I32 uses {util}
+
+pub struct S {
+  f: A,
+}
+
+pub fn p() -> I32 {
+  1
+}
+
+pub fn m() -> I32 {
+  let s = S { f: p }
+  1
+}

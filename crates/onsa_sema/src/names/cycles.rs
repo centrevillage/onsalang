@@ -47,16 +47,30 @@ struct Walks {
 impl ImportGraph {
     fn build(modules: &Modules) -> ImportGraph {
         let n = modules.mods.len();
-        let mut edges = vec![Vec::new(); 2 * n];
-        for (m, info) in modules.mods.iter().enumerate() {
-            edges[n + m].push(m);
-            edges[n + m].extend(info.children.values().map(|c| n + c.0 as usize));
-            edges[m].extend(info.deps.iter().map(|d| point(n, d.target)));
-        }
+        let edges = edges(modules, |t| t);
         let comp = components(&edges);
         let walks = Walks { answers: HashMap::new(), count: 0, seen: vec![[0; 2]; 2 * n] };
         ImportGraph { edges, comp, walks: RefCell::new(walks) }
     }
+}
+
+/// The edges of the graph, each dependency on what `target` makes of it.
+fn edges(modules: &Modules, target: impl Fn(DepTarget) -> DepTarget) -> Vec<Vec<usize>> {
+    let n = modules.mods.len();
+    let mut edges = vec![Vec::new(); 2 * n];
+    for (m, info) in modules.mods.iter().enumerate() {
+        edges[n + m].push(m);
+        edges[n + m].extend(info.children.values().map(|c| n + c.0 as usize));
+        edges[m].extend(info.deps.iter().map(|d| point(n, target(d.target))));
+    }
+    edges
+}
+
+/// A `use` of the module `t` can be narrowed to items of it (§15.1,
+/// S-683): `t` has a file of its own (a module of a directory alone has no
+/// items).
+fn narrows(modules: &Modules, t: DepTarget) -> bool {
+    matches!(t, DepTarget::Below(m) if modules.get(m).file.is_some())
 }
 
 fn point(n: usize, target: DepTarget) -> usize {
@@ -74,9 +88,7 @@ impl Modules {
     /// below that of `from` does not reach it, and is not walked. O(N + U)
     /// for a pair not asked before.
     pub(crate) fn closes_cycle(&self, from: ModId, target: DepTarget) -> bool {
-        let Some(graph) = &self.graph else {
-            onsa_diag::internal::bug(None, "a cycle asked for before the graph of the imports is made")
-        };
+        let graph = self.import_graph();
         let (n, from) = (self.mods.len(), from.0 as usize);
         let start = point(n, target);
         let Walks { answers, count, seen } = &mut *graph.walks.borrow_mut();
@@ -102,6 +114,25 @@ impl Modules {
         closes
     }
 
+    /// The modules of the cycle that a dependency on `target` added to
+    /// `from` closes (S-682): those of the component of `from` in the graph
+    /// with it, as the E0310 of that cycle names them. O(N + U); asked only
+    /// for a candidate kept back.
+    pub(crate) fn cycle_of(&self, from: ModId, target: DepTarget) -> Vec<ModId> {
+        let (n, at) = (self.mods.len(), from.0 as usize);
+        let mut edges = self.import_graph().edges.clone();
+        edges[at].push(point(n, target));
+        let comp = components(&edges);
+        (0..n).filter(|&m| comp[m] == comp[at]).map(|m| ModId(m as u32)).collect()
+    }
+
+    fn import_graph(&self) -> &ImportGraph {
+        match &self.graph {
+            Some(graph) => graph,
+            None => onsa_diag::internal::bug(None, "a cycle asked for before the graph of the imports is made"),
+        }
+    }
+
     /// The dependency of `m` on what a name of its `use` takes (§15.1,
     /// S-594): a module and what is below it, or else the last module of the
     /// path. None on `m` itself or on another package, which closes no cycle.
@@ -114,10 +145,10 @@ impl Modules {
         (t != m && self.pkg_of(t) == self.pkg_of(m)).then_some(target)
     }
 
-    /// A `use` of `m` that takes `taken` (after the module `last`) would close
-    /// a cycle.
-    pub(crate) fn take_closes_cycle(&self, m: ModId, taken: Entity, last: Option<ModId>) -> bool {
-        self.dep_of(m, Some(taken), last).is_some_and(|t| self.closes_cycle(m, t))
+    /// The dependency of a `use` of `m` that takes `taken` (after the module
+    /// `last`), when it would close a cycle.
+    pub(crate) fn take_cycle(&self, m: ModId, taken: Entity, last: Option<ModId>) -> Option<DepTarget> {
+        self.dep_of(m, Some(taken), last).filter(|&t| self.closes_cycle(m, t))
     }
 }
 
@@ -125,22 +156,20 @@ impl<'p> Sema<'p> {
     /// Makes the graph once every `use` is resolved, and reports one E0310
     /// per cycle, on the first `use` in the order of the diagnostics that
     /// has a dependency in it (the spec fixes neither the number nor the
-    /// place). When narrowing every `use` of a module to items (`At`) cuts
-    /// the cycle, those `use` are the notes; when not, the rule says so.
-    /// Whether it cuts reads the graph with every dependency at its module,
-    /// once: a cycle is cut when no two of its modules are then in one
-    /// component (a component of it is inside one of the graph).
+    /// place). When narrowing every `use` of a module with a file to items
+    /// (`At`, S-683) cuts the cycle, those `use` are the notes; when not, the
+    /// rule says so. Whether it cuts reads the graph with those dependencies
+    /// narrowed, once: a cycle is cut when no two of its modules are then in
+    /// one component (a component of it is inside one of the graph).
     pub(crate) fn check_cycles(&mut self) {
-        let graph = ImportGraph::build(&self.a.modules);
+        let modules = &self.a.modules;
+        let graph = ImportGraph::build(modules);
         let comp = graph.comp.clone();
+        let n = modules.mods.len();
+        let narrowed = components(&edges(modules, |t| if narrows(modules, t) { DepTarget::At(t.module()) } else { t }));
         self.a.modules.graph = Some(graph);
-        let n = self.a.modules.mods.len();
-        let narrowed: Vec<Vec<usize>> = (self.a.modules.mods.iter())
-            .map(|info| info.deps.iter().map(|d| d.target.module().0 as usize).collect())
-            .collect();
-        let narrowed = components(&narrowed);
-        let mut size = vec![0; n];
-        for &c in &narrowed {
+        let mut size = vec![0; 2 * n];
+        for &c in &narrowed[..n] {
             size[c] += 1;
         }
         let mut members: Vec<Vec<ModId>> = vec![Vec::new(); comp.iter().map(|&c| c + 1).max().unwrap_or(0)];
@@ -170,10 +199,15 @@ impl<'p> Sema<'p> {
         let msg = format!("the modules {} import each other (cyclic module import, §15.1)", names.join(", "));
         let mut d = Diagnostic::new(Stage::Names, Code::E0310, at.span, msg);
         if !cut {
-            return d.with_rule("no `use` of the cycle narrows to cut it: its modules take items of each other");
+            return d.with_rule(
+                "the cycle stays after each `use` of it that takes a module is narrowed to items of it: \
+                 its modules take items of each other",
+            );
         }
         for &(m, dep) in deps {
-            if let DepTarget::Below(t) = dep.target {
+            if let DepTarget::Below(t) = dep.target
+                && narrows(&self.a.modules, dep.target)
+            {
                 let path = self.a.modules.abs_path(m, t).join(".");
                 d = d.with_note(
                     dep.name,
@@ -258,6 +292,32 @@ mod tests {
         let c = components(&edges);
         assert!(c[0] == c[1] && c[1] == c[2]);
         assert!(c[3] != c[4] && c[3] != c[0] && c[5] != c[0]);
+    }
+
+    /// [`Modules::closes_cycle`] leaves out the points of a component of a
+    /// lower number than that of `from`: an edge never goes to a component
+    /// of a higher number than its own.
+    #[test]
+    fn an_edge_goes_to_a_component_of_its_number_or_a_lower_one() {
+        let mut seed = 7u64;
+        for _ in 0..200 {
+            let n = 12;
+            let edges: Vec<Vec<usize>> = (0..n)
+                .map(|_| {
+                    (0..3)
+                        .filter_map(|_| {
+                            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                            let v = (seed >> 33) as usize % (n + 4);
+                            (v < n).then_some(v)
+                        })
+                        .collect()
+                })
+                .collect();
+            let c = components(&edges);
+            for (u, out) in edges.iter().enumerate() {
+                assert!(out.iter().all(|&v| c[u] >= c[v]), "{edges:?}");
+            }
+        }
     }
 
     #[test]

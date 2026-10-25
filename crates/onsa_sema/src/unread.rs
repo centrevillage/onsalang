@@ -2,8 +2,10 @@
 //! check of those keeps quiet where it cannot know (§18.1: a use of what a
 //! syntax error cut gets no diagnostic, S-260; the derive list that was not
 //! read derives every trait, S-460; a type that failed to resolve,
-//! [`Ty::Error`], suppresses the errors after it). A fix of the cause can
-//! show an error they held back, so the contract of the fix candidates of the
+//! [`Ty::Error`], suppresses the errors after it; a name the names stage
+//! holds as an error, read by its spelling, gets no diagnostic, S-462,
+//! [`Analysis::read_held`]). A fix of the cause can show an error they held
+//! back, so the contract of the fix candidates of the
 //! tests (`onsa_tests::fix_contract`, X-3) does not count it against the
 //! candidate; the driver turns the defs into units
 //! (`onsa_driver::Analyzed::unread_units`).
@@ -23,7 +25,7 @@ impl Analysis {
     /// its end (`complete == false`).
     pub fn unread_users(&self, files: &[FileId]) -> Vec<Span> {
         let reached = self.reached();
-        let mut memo = HashMap::new();
+        let mut memo = self.held_alias_types();
         let mut out = Vec::new();
         for (i, def) in self.defs.iter().enumerate().filter(|(_, d)| files.contains(&d.span.file)) {
             let id = DefId(i as u32);
@@ -39,10 +41,13 @@ impl Analysis {
     }
 
     /// The defs the unread reaches: those read in part (S-260), whose
-    /// derive list is not known (S-460) or rt functions whose body the check
-    /// did not finish (its calls make no edges of the rt recursion), and those whose declared types hold
-    /// [`Ty::Error`] or a def it reaches. A fixed point: each round adds a
-    /// def or ends, so there are at most as many rounds as defs.
+    /// derive list is not known (S-460), that read a name held as an error
+    /// (whether their check was held or not, [`Analysis::read_held`]) or rt
+    /// functions whose body the check did not finish (its calls make no edges
+    /// of the rt recursion), and those whose declared types hold
+    /// [`Ty::Error`], the type of an alias that read a held name
+    /// ([`Self::held_alias_types`]) or a def it reaches. A fixed point: each
+    /// round adds a def or ends, so there are at most as many rounds as defs.
     fn reached(&self) -> HashSet<DefId> {
         let mut set: HashSet<DefId> = (0..self.defs.len() as u32)
             .map(DefId)
@@ -57,11 +62,11 @@ impl Analysis {
                 // so an E0903 through it was held back (X-3/U1c/b, F1).
                 let rt_unread = matches!(&self.def(id).kind, DefKind::Fn(f) if f.rt && f.body.is_some())
                     && !self.bodies.get(&id).is_some_and(|b| b.complete);
-                derives || rt_unread || self.partly_read(id)
+                derives || rt_unread || self.partly_read(id) || self.read_held.contains(&id)
             })
             .collect();
         loop {
-            let mut memo = HashMap::new();
+            let mut memo = self.held_alias_types();
             let more: Vec<DefId> = (0..self.defs.len() as u32)
                 .map(DefId)
                 .filter(|id| !set.contains(id))
@@ -91,6 +96,19 @@ impl Analysis {
             DefKind::Flow(f) => f.inputs.iter().map(|i| i.ty).chain([f.out]).collect(),
             DefKind::Test { .. } | DefKind::Unsupported => Vec::new(),
         }
+    }
+
+    /// The start of the memo of [`Self::ty_reaches`]: the type of each alias
+    /// of [`Analysis::read_held`] reaches. An alias is expanded where it is
+    /// written, so no def of its users names it; they write its type. The
+    /// same type written without the alias reaches too (the contract of the
+    /// fix candidates only gets a little looser there).
+    fn held_alias_types(&self) -> HashMap<TyId, bool> {
+        let alias = |d: &DefId| match &self.def(*d).kind {
+            DefKind::Alias(t) => Some((*t, true)),
+            _ => None,
+        };
+        self.read_held.iter().filter_map(alias).collect()
     }
 
     /// `ty` holds [`Ty::Error`] or a def of `set` (through the arguments,

@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// S-462: a `use` that fails in the names stage (a name or a step of the path is not there, the head is
+// not a module or a package, an enumerator cannot be taken) makes the names it would have bound errors,
+// and where those names are used (a call, a value, a type, a literal, a path, in a branch, a match arm,
+// an anonymous function, a generic function, a flow, a `par`) nothing more is reported (§18.1). The only
+// diagnostics here are the E0302 of the `use` lines. The spelling of a name is no candidate (`sqrtt`,
+// §15.1). A local with the name of a failed name is no clash either: a failed name is no binding.
+// `double` is a real binding, and its uses are checked as always.
+use util.{double}
+use util.{nosuch}                                   //~ E0302
+use util.{Gone}                                     //~ E0302
+use util.nomod                                      //~ E0302
+use util.nomod.{deep}                               //~ E0302
+use missing.{head_a, head_b}                        //~ E0302
+use util.Color.{Red}                                //~ E0302
+use std.math.{sqrtt}                                //~ E0302
+
+pub fn real_binding() -> I32 {
+  double(2)
+}
+
+pub fn call_of_missing_item() -> I32 {
+  nosuch(1, 2)
+}
+
+pub fn value_of_missing_item() -> I32 {
+  nosuch
+}
+
+pub fn type_of_missing_type(g: Gone) -> Gone {
+  g
+}
+
+pub fn literal_of_missing_type() -> Gone {
+  Gone { a: 1 }
+}
+
+pub fn path_of_missing_type() -> I32 {
+  Gone.make(1)
+}
+
+pub fn path_of_missing_module() -> I32 {
+  nomod.f(1)
+}
+
+pub fn name_behind_a_missing_step() -> I32 {
+  deep()
+}
+
+pub fn first_name_of_a_missing_head() -> I32 {
+  head_a(1)
+}
+
+pub fn second_name_of_a_missing_head() -> I32 {
+  head_b(1)
+}
+
+pub fn enumerator_that_cannot_be_taken() -> I32 {
+  Red
+}
+
+pub fn missing_name_of_std() -> F32 {
+  sqrtt(2.0)
+}
+
+pub fn in_a_branch(flag: Bool) -> I32 {
+  if flag {
+    nosuch(1)
+  } else {
+    2
+  }
+}
+
+pub fn in_a_match_arm(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => nosuch(v),
+    None => 0,
+  }
+}
+
+pub fn in_an_anonymous_function() -> I32 {
+  let f = fn(x: I32) -> I32 { nosuch(x) }
+  f.(1)
+}
+
+pub fn in_a_generic_function[T: Copy](x: T) -> T {
+  nosuch(x)
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  nosuch~(x)
+}
+
+pub flow plain_call_in_a_flow(x: F32 at sample) -> F32 at sample {
+  nosuch(x)
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 4 {
+    nosuch~(x)
+  }
+  ys[0]
+}
+
+pub fn local_with_the_name() -> I32 {
+  let nosuch = 1
+  nosuch
+}

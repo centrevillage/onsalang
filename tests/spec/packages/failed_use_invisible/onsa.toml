@@ -1,0 +1,3 @@
+[package]
+name = "failed_use_invisible"
+edition = "2026"

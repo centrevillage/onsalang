@@ -1,0 +1,6 @@
+// A failed `use` in a module below a directory that has no file of its own: the names are silent here.
+use util.{nosuch}                                   //~ E0302
+
+pub fn voice() -> I32 {
+  nosuch(1)
+}

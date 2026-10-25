@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// R-180, S-462: an empty list takes no name (§15.1: `use std.math.{}` is not `use std.math`), so it makes no
+// failed name and silences nothing: the call of `double` is the E0302 of a name that no `use` took.
+use util.{}                                         //~ E0002
+
+pub fn not_taken() -> I32 {
+  double(1)                                         //~ E0302
+}

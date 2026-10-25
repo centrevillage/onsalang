@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+// fixes = 1
+
+// A failed name in a bound is silent, and the body is not checked (S-689, as now).
+// After the candidate, `util` is a module: the E0200 of the bound is of a def the failed name held back.
+use util                                       //~ E0302
+
+pub fn f[T: util](x: T) -> I32 {
+  let a: I32 = true
+  a
+}

@@ -6,8 +6,8 @@
 // second binding of a name is E0304 (the same item twice, another item of the same name, a module
 // and a module of the same name) and so is a `use` that takes the name of an item written before it.
 // The `use` is the one that gets the diagnostic here, since it is the later declaration in every
-// case. The first binding of a name is the real one: `double` and `triple` below are called without
-// a diagnostic of their own.
+// case. The name is drawn from none of the bindings (S-675), so `double` and `triple` below are
+// called without a diagnostic of their own.
 use util.{double}
 use util.{triple}
 use std.math

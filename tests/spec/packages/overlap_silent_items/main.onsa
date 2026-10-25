@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-675: two items of one name are E0304 on the later declaration, and neither is drawn where the name is
+// used: the uses of `twice` below would be E0401 for one declaration or the other (`I32` for the first,
+// `F32` for the second), and they have no diagnostic. The declaration that is not reported is a unit
+// of its own and is checked (the `true` in the first `twice`). The same for a struct and an enum
+// (`Pt`) and a struct and a type alias (`Gain`).
+pub fn twice() -> I32 {
+  true                                              //~ E0401
+}
+
+pub fn twice() -> F32 {                             //~ E0304
+  2.0
+}
+
+pub fn uses_twice() -> I32 {
+  let _: I32 = twice()
+  let _: F32 = twice()
+  let _: Bool = twice()
+  0
+}
+
+pub struct Pt {
+  x: I32,
+}
+
+pub enum Pt {                                       //~ E0304
+  A,
+}
+
+pub fn makes_struct() -> Pt {
+  Pt { x: 1 }
+}
+
+pub fn makes_enum() -> Pt {
+  Pt.A
+}
+
+pub fn takes_pt(p: Pt) -> I32 {
+  p.x
+}
+
+pub struct Gain {
+  v: F32,
+}
+
+pub type Gain = F32                                 //~ E0304
+
+pub fn takes_gain(g: Gain) -> F32 {
+  g.v
+}
+
+pub fn makes_gain() -> Gain {
+  1.0
+}

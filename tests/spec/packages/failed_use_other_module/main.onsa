@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// S-462: the failed names are the names of the module whose `use` failed (`dsp/synth.onsa` here). In this
+// module `nosuch` is not bound by anything, so its call is the E0302 of a name that is not there; the
+// failed `use` of the other module silences nothing here.
+use dsp.synth
+
+pub fn through_the_module() -> I32 {
+  synth.voice()
+}
+
+pub fn not_taken_here() -> I32 {
+  nosuch(1)                                         //~ E0302
+}

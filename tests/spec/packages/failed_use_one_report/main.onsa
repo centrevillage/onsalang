@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// S-462: a `use` that loses two names or more is reported once (one diagnostic for the unit, which is the
+// `use`), and the names are silent where they are used. In the last `use` the name that is there
+// (`double`) is bound as always, and the one that is not (`n4`) is silent.
+use util.{n1, n2, n3}                               //~ E0302
+use missing.{m1, m2, m3}                            //~ E0302
+use util.{double, n4}                               //~ E0302
+
+pub fn lost_names() -> I32 {
+  n1() + n2() + n3() + m1() + m2() + m3() + n4()
+}
+
+pub fn bound_name() -> I32 {
+  let _: Bool = double(1)                           //~ E0401
+  0
+}

@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-678: a `use` that fails in the names stage makes no dependency (§15.1), so `a` and `b` do not take each
+// other here: `use b.{nosuch}` is the E0302 of the name that is not in `b`, and there is no E0310. With the
+// name written right (`use b.{g}`) it is the cycle of the case `cycle`.
+use b.{nosuch}                                      //~ E0302
+
+pub fn f() -> I32 {
+  1
+}

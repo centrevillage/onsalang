@@ -22,10 +22,6 @@ pub fn voice() -> F32 {         //~ E0305
   1.0
 }
 
-pub fn flow_as_type(s: voice) -> F32 {   //~ E0302
-  1.0
-}
-
 test "same" {
   assert 1 == 1
 }

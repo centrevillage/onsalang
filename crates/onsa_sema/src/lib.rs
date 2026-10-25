@@ -195,8 +195,18 @@ pub struct Analysis {
     pub flows: HashMap<DefId, FlowInfo>,
     /// The defs of failed items (`onsa_syntax::ast::Item::failed`, S-59):
     /// their bodies are not checked, and a use of what was not read gets no
-    /// diagnostic (R-71, S-260).
+    /// diagnostic (R-71, S-260). `Failed::Unit` is also the mark of the names
+    /// stage on a def whose signature names what it holds as an error
+    /// (`Sema::hold_signature`): read whole, so [`Self::partly_read`], which
+    /// leaves `Unit` out, does not take it; a new reader of `Unit` keeps both.
+    /// [`Self::unread_users`] takes such a def through [`Self::read_held`].
     pub failed: HashMap<DefId, onsa_syntax::ast::Failed>,
+    /// The defs that read a name the names stage holds as an error and get no
+    /// diagnostic for it: by its spelling (`Self::record_if_held`), or in a
+    /// signature the names stage holds (`Sema::hold_signature`, which also
+    /// puts the def here). Whether their check was held or went on, a fix of
+    /// the name can show an error they did not report.
+    pub read_held: HashSet<DefId>,
     pub diagnostics: Vec<Diagnostic>,
     /// The diagnostics of the paths of the modules, outside every unit (the
     /// E0304 of a module under the root of the name of a package, §15.1):
@@ -230,6 +240,19 @@ impl Analysis {
     /// Resolve a path from inside module `from`.
     pub fn resolve_path(&self, from: ModId, path: &onsa_syntax::ast::Path) -> Result<Entity, ResolveError> {
         self.modules.resolve_path(from, path, &self.prelude, &self.defs, &self.builtin_key)
+    }
+
+    /// Whether the path names what the names stage holds as an error (§18.1,
+    /// S-462, S-675), and if it does, records `def` in [`Self::read_held`]
+    /// (the side effect). The one test of the places of `def` that read a
+    /// name by its spelling and do not resolve it (an effect, a bound, a
+    /// derived trait): there, such a name gets no diagnostic either.
+    pub(crate) fn record_if_held(&mut self, def: DefId, from: ModId, path: &onsa_syntax::ast::Path) -> bool {
+        let held = matches!(self.resolve_path(from, path), Err(ResolveError::Failed));
+        if held {
+            self.read_held.insert(def);
+        }
+        held
     }
 
     /// Fully qualified name of a def (`dsp.voice.State`), for diagnostics.

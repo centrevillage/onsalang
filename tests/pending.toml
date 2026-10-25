@@ -1888,13 +1888,6 @@ until = "W5-06"
 note = "derive が作るメソッド（default・ordinal・from_ordinal）の未知を見る 2 か所は W5-06"
 
 [[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/continue_pkg_unspecified/main.onsa:22:3 E0812 fix1"
-reasons = ["S-435"]
-until = "W4-03"
-note = "今の dev の観測（t2）。読み続けが入れば消える"
-
-[[pending]]
 kind = "test-case"
 target = "tests/spec/packages/visibility"
 reasons = ["S-36"]
@@ -2264,20 +2257,6 @@ note = "E0320 の候補が宣言だけを改名し、使用箇所に誤りが残
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/module/use_binding_after_used.onsa"
-reasons = ["S-462", "R-50"]
-until = "W4-03"
-note = "失敗した use の名前 sin を使う所に偽の E0302 が出る（U3b）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/module/use_binding_before_used.onsa"
-reasons = ["S-37", "S-462", "R-50"]
-until = "W4-03"
-note = "use の頭の E0302 は U2a で出る。失敗した名前 sin を使う所の偽の E0302 を U3b が黙らせる"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/packages/body_path_member_missing"
 reasons = ["S-611", "R-254"]
 until = "W4-04"
@@ -2292,21 +2271,21 @@ note = "flow の生成項目（State、Params）を use で取り込めない（
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/use_path_order_after_used"
-reasons = ["R-250", "S-462"]
-until = "W4-03"
-note = "use の E0302 は U2a で出る。失敗した名前 g を使う所の偽の E0302 を U3b が黙らせる"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/use_path_order_before_used"
-reasons = ["R-250", "S-462"]
-until = "W4-03"
-note = "失敗した use の名前 g を使う所に偽の E0302 が出る（U3b）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow/generated_before_flow.onsa"
 reasons = ["R-50"]
 until = "W4-03"
 note = "flow より前に書いた const と fn の型の g.Params が E0302（生成項目を作る段。U3b か U5）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/module/overlap_local_stops_unit.onsa"
+reasons = ["S-681", "S-79"]
+until = "W4-04"
+note = "ローカルと見えている束縛の E0304（§5.1）は W4-04 の本体の歩き手で入る。今は通り、使う所の型の誤り E0401 が出る"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/packages/failed_use_empty_list"
+reasons = ["S-515"]
+until = "W5-11"
+note = "空の並び use util.{} の E0002（S-515）が出ない。何も取り込まず何も黙らせない部分は failed_names.rs の an_empty_list_takes_no_name_and_silences_nothing（U3b1）で通る"

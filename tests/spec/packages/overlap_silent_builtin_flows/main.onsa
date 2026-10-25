@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+
+// S-675: an item with the name of a built-in flow (`prev`, §2.2) is E0304, and the name is silent in the
+// whole body of the module, not only in a flow: the call `prev()` in a flow and in a function has no
+// diagnostic (it is neither the built-in, which would be called as `prev~(x)`, nor the item), and
+// `prev~(x)` does not either.
+pub rt fn prev() -> F32 {                           //~ E0304
+  1.0
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let _ = prev()
+  x
+}
+
+pub fn in_a_function() -> F32 {
+  prev()
+}
+
+pub flow delayed(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}

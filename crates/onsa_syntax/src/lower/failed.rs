@@ -8,7 +8,7 @@ impl<'a> Lower<'a> {
     /// parts of its heading that were read whole stay, so that the other
     /// units see it (R-71). The attributes and the visibility are kept when
     /// they were read whole. `None` when its name was not read, and for a
-    /// failed `impl` heading and `use` (R-180: W5-04 and W4-03).
+    /// failed `impl` heading (R-180: W5-04). A `use` cut keeps what it read.
     pub(super) fn failed_item(&mut self, n: NodeId) -> Option<ItemId> {
         let head = self.head(n);
         let (kind, failed) = self.failed_kind(head.decl?)?;
@@ -348,7 +348,20 @@ impl<'a> Lower<'a> {
                 };
                 ItemKind::Test { name, body }
             }
-            // `use` (R-180: W4-03) and what is not a declaration.
+            // A `use` cut before its names were all read (R-180): the path and
+            // the names of its list read so far.
+            NodeKind::Use => {
+                let tree = self.child(d, NodeKind::UseTree)?;
+                let segments =
+                    self.toks(tree).into_iter().filter(|&t| self.kind_of(t) != TokenKind::Dot).map(|t| self.ident(t));
+                let path = Path { segments: segments.collect(), span: self.span(tree) };
+                let names = self.child(tree, NodeKind::UseNames).map(|u| {
+                    let names = self.toks(u).into_iter().filter(|&t| self.kind_of(t) == TokenKind::Ident);
+                    names.map(|t| self.ident(t)).collect()
+                });
+                return Some((ItemKind::Use(UseDecl { path, names }), Failed::Heading));
+            }
+            // What is not a declaration.
             _ => return None,
         };
         Some((kind, if heading { Failed::Body } else { Failed::Heading }))

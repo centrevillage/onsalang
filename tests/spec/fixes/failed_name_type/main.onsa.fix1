@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 1
+
+// A failed name in a type of a signature is silent, and the body is not checked (S-689, as now).
+// After the candidate, `util` is a module, which is no type.
+use util                                       //~ E0302
+
+pub fn f(x: util) -> I32 {
+  let a: I32 = true
+  a
+}

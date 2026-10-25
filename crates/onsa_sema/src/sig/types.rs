@@ -87,6 +87,11 @@ impl<'p> Sema<'p> {
                 }
                 let entity = match self.a.resolve_path(cx.m, path) {
                     Ok(e) => e,
+                    // A name held as an error (§18.1, S-462, S-675).
+                    Err(crate::resolve::ResolveError::Failed) => {
+                        self.hold_signature(cx.def);
+                        return self.a.types.error();
+                    }
                     // A member of a def a syntax error cut (S-260): no diagnostic.
                     Err(_) if self.a.through_partly_read(cx.m, path) => return self.a.types.error(),
                     Err(e) => {

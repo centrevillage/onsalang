@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+
+// S-462: a failed `use` binds nothing, so it is no partner of an E0304: a failed `use` before a real one
+// of the name (`double`), after it (`triple`), and before an item of the name (`quad`) are each only
+// the E0302 of the failed `use`, and the name goes to the real binding or the item. The calls say which:
+// the real `double` and `triple` return `I32` and `quad` returns `F32`, so a `Bool` is not what they
+// give (E0401); a use that went to the failed name would give nothing.
+use nomod.{double}                                  //~ E0302
+use util.{double}
+use util.{triple}
+use nomod.{triple}                                  //~ E0302
+use nomod.{quad}                                    //~ E0302
+
+pub fn quad() -> F32 {
+  4.0
+}
+
+pub fn failed_use_first() -> I32 {
+  let _: Bool = double(1)                           //~ E0401
+  0
+}
+
+pub fn failed_use_last() -> I32 {
+  let _: Bool = triple(1)                           //~ E0401
+  0
+}
+
+pub fn failed_use_and_item() -> I32 {
+  let _: Bool = quad()                              //~ E0401
+  0
+}

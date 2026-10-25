@@ -381,39 +381,23 @@ fn resolve_use(t: &Tree, mid: usize, u: &Use) -> (Option<Why>, Vec<Bind>) {
 }
 
 /// The modules a `use` depends on (S-594): a module taken is the module and every module below it, an item
-/// taken is the module of the item; the module that writes the `use` and `std` are left out. A failed
-/// `use` has the edges of `failed_use_edges`.
+/// taken is the module of the item; the module that writes the `use` and `std` are left out. A `use` that
+/// failed in the names stage makes none (§15.1, S-678; the generator writes no list that fails in part).
 fn use_edges(t: &Tree, mid: usize, why: &Option<Why>, binds: &[Bind]) -> Vec<usize> {
     let mut out = Vec::new();
-    match why {
-        None => {
-            for b in binds {
-                match &b.ent {
-                    Ent::Mod(id) if !t.nodes[*id].ext => out.extend(t.below(*id).into_iter().filter(|&x| x != mid)),
-                    Ent::Item(m, _) if !t.nodes[*m].ext && *m != mid => out.push(*m),
-                    _ => {}
-                }
-            }
+    if why.is_some() {
+        return out;
+    }
+    for b in binds {
+        match &b.ent {
+            Ent::Mod(id) if !t.nodes[*id].ext => out.extend(t.below(*id).into_iter().filter(|&x| x != mid)),
+            Ent::Item(m, _) if !t.nodes[*m].ext && *m != mid => out.push(*m),
+            _ => {}
         }
-        Some(w) => out.extend(failed_use_edges(t, mid, w)),
     }
     out.sort();
     out.dedup();
     out
-}
-
-// SPEC-GAP(S-678): whether a `use` that failed in the names stage is a dependency. Today: a head that is
-// nothing, the own package name or a name a `use` took makes none, and a path that ends before its end
-// is a dependency on the module read last. The generator writes a failure of the second kind only as
-// `use m.zz` or `use m.{zz}` with `m` a module at the root that has no module below it, where the
-// readings (the module read last or the head, the module alone or with the modules below it) are the
-// same one, and the self-use only in a module that has none below it.
-/// The dependencies of a `use` that failed in the names stage (see the mark above).
-fn failed_use_edges(t: &Tree, mid: usize, why: &Why) -> Vec<usize> {
-    match why {
-        Why::Stopped(last) if !t.nodes[*last].ext && *last != mid => vec![*last],
-        _ => vec![],
-    }
 }
 
 struct UseEval {
@@ -505,21 +489,21 @@ fn named(p: &Prog, c: &BTreeSet<usize>) -> BTreeSet<String> {
     c.iter().map(|&i| p.tree.dotted(i)).collect()
 }
 
-// SPEC-GAP(S-683): the E0310 of a component has a note that shows how to narrow the path (it points at a
-// place) when narrowing every `use` to the module it names, an edge to that module alone, cuts the
-// component; otherwise the note is the rule alone. Today a module with no item counts as a module a `use`
-// can be narrowed to.
-/// Whether narrowing cuts the component (see the mark above).
+/// Whether narrowing cuts the component (§15.1, S-683): the E0310 of a component has a note that shows how
+/// to narrow the path (it points at a place) when narrowing every `use` that takes a module with a file to
+/// that module alone cuts the component; otherwise the note is the rule alone. A module with no file has
+/// no items, so a `use` of it is not narrowed: it stays the module and every module below it.
 fn narrowing_cuts(p: &Prog, comp: &BTreeSet<usize>) -> bool {
-    // Every `use` that took a module is read as an edge to that module alone.
+    let t = &p.tree;
     let mut edges: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
     for m in &p.mods {
         for e in scope(p, m.id).evals.iter().filter(|e| e.why.is_none()) {
             for b in &e.binds {
-                let target = match &b.ent {
-                    Ent::Mod(t) | Ent::Item(t, _) => *t,
+                let targets = match &b.ent {
+                    Ent::Mod(c) if !t.nodes[*c].file => t.below(*c),
+                    Ent::Mod(c) | Ent::Item(c, _) => vec![*c],
                 };
-                if !p.tree.nodes[target].ext && target != m.id {
+                for target in targets.into_iter().filter(|&x| !t.nodes[x].ext && x != m.id) {
                     edges.entry(m.id).or_default().insert(target);
                 }
             }
@@ -1222,30 +1206,27 @@ fn key_in(texts: &Texts, d: &Diag) -> String {
 }
 
 struct Expect {
-    /// The sites of an E0302, and whether the E0302 may be hidden by the E0310 of the same `use`.
-    e0302: BTreeMap<Site, bool>,
+    /// The sites of an E0302.
+    e0302: BTreeSet<Site>,
     comps: BTreeSet<BTreeSet<usize>>,
 }
 
 fn expect(p: &Prog) -> Expect {
     let cs = comps(p);
-    let mut e0302 = BTreeMap::new();
+    let mut e0302 = BTreeSet::new();
     for m in &p.mods {
         let sc = scope(p, m.id);
         for (i, ev) in sc.evals.iter().enumerate() {
-            if let Some(why) = &ev.why {
-                // SPEC-GAP(S-678): the provisional edge of a failed `use` that is on a cycle may carry the
-                // E0310, and then the unit reports that one.
-                let on_cycle = matches!(why, Why::Stopped(_))
-                    && cs.iter().any(|c| c.contains(&m.id) && ev.edges.iter().any(|x| c.contains(x)));
-                e0302.insert(Site::Use(m.id, i), on_cycle);
+            // A failed `use` makes no dependency (S-678), so no E0310 hides its E0302.
+            if ev.why.is_some() {
+                e0302.insert(Site::Use(m.id, i));
             }
         }
         for bi in 0..m.bodies.len() {
             let class = classify(p, m.id, &sc, &m.bodies[bi]);
             assert!(class != Class::Silent, "the generator wrote a path the model leaves out");
             if !matches!(class, Class::Ok) {
-                e0302.insert(Site::Body(m.id, bi), false);
+                e0302.insert(Site::Body(m.id, bi));
             }
         }
     }
@@ -1324,7 +1305,6 @@ struct Stats {
     cycles: usize,
     notes_checked: usize,
     notes_narrow: usize,
-    hidden: usize,
     /// The faults by kind and by what the model says of the candidate: `body OwnAbs given`.
     kinds: BTreeMap<String, usize>,
 }
@@ -1366,8 +1346,8 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
     let ex = expect(&p);
     st.packages += 1;
     st.with_cycles += !ex.comps.is_empty() as usize;
-    st.use_faults += ex.e0302.keys().filter(|s| matches!(s, Site::Use(..))).count();
-    st.body_faults += ex.e0302.keys().filter(|s| matches!(s, Site::Body(..))).count();
+    st.use_faults += ex.e0302.iter().filter(|s| matches!(s, Site::Use(..))).count();
+    st.body_faults += ex.e0302.iter().filter(|s| matches!(s, Site::Body(..))).count();
     let what = format!("seed {seed}");
     let mut problems = Vec::new();
     let d = package(&format!("model_{seed}"), "fx", &texts);
@@ -1377,18 +1357,14 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
     }
     let (sites, cycles) = observe(&texts, &c, &what, false, &mut problems);
     // E0302: the sites.
-    let expected: BTreeMap<String, bool> = ex.e0302.iter().map(|(s, opt)| (key_of(&p, s), *opt)).collect();
-    for (k, optional) in &expected {
+    let expected: BTreeSet<String> = ex.e0302.iter().map(|s| key_of(&p, s)).collect();
+    for k in &expected {
         if !sites.contains_key(k) {
-            if *optional {
-                st.hidden += 1;
-            } else {
-                problems.push(format!("{what}: no E0302 for {k}"));
-            }
+            problems.push(format!("{what}: no E0302 for {k}"));
         }
     }
     for k in sites.keys() {
-        if !expected.contains_key(k) {
+        if !expected.contains(k) {
             problems.push(format!("{what}: an E0302 for {k}, which the model reads whole"));
         }
     }
@@ -1404,14 +1380,10 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
             problems.push(format!("{what}: an E0310 with no note: {comp:?}"));
         }
         if let Some(ids) = ex.comps.iter().find(|c| named(&p, c) == comp) {
-            // SPEC-GAP(S-683): the note that points at a `use` is there when narrowing cuts the cycle.
-            let has_failed_edge =
-                ids.iter().any(|&m| scope(&p, m).evals.iter().any(|ev| ev.why.is_some() && !ev.edges.is_empty()));
-            if !has_failed_edge {
-                st.notes_checked += 1;
-                st.notes_narrow += (e.spanned_notes > 0) as usize;
-            }
-            if !has_failed_edge && (e.spanned_notes > 0) != narrowing_cuts(&p, ids) {
+            // The note that points at a `use` is there when narrowing cuts the cycle (S-683).
+            st.notes_checked += 1;
+            st.notes_narrow += (e.spanned_notes > 0) as usize;
+            if (e.spanned_notes > 0) != narrowing_cuts(&p, ids) {
                 problems.push(format!(
                     "{what}: the note of the E0310 {comp:?} has {} places, the cycle is cut by narrowing: {}",
                     e.spanned_notes,
@@ -1435,11 +1407,9 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
             problems.push(format!("{tag}: ended with code {}", rc.code));
         } else {
             let (rsites, rcycles) = observe(&rtexts, &rc, &tag, false, &mut problems);
-            let sure = |m: &BTreeMap<String, Diag>| -> BTreeSet<String> {
-                m.keys().filter(|k| expected.get(*k) != Some(&true)).cloned().collect()
-            };
-            if sure(&rsites) != sure(&sites) {
-                problems.push(format!("{tag}: the E0302 are {:?}, they were {:?}", sure(&rsites), sure(&sites)));
+            let keys = |m: &BTreeMap<String, Diag>| -> BTreeSet<String> { m.keys().cloned().collect() };
+            if keys(&rsites) != keys(&sites) {
+                problems.push(format!("{tag}: the E0302 are {:?}, they were {:?}", keys(&rsites), keys(&sites)));
             }
             if rcycles != cycles {
                 problems.push(format!("{tag}: the modules of the E0310 are {rcycles:?}, they were {cycles:?}"));
@@ -1448,7 +1418,7 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
         write_texts(&d, &texts);
     }
     // The candidates.
-    for site in ex.e0302.keys() {
+    for site in &ex.e0302 {
         let k = key_of(&p, site);
         let Some(diag) = sites.get(&k) else { continue };
         let verdict = cand_of(&p, site);
@@ -1495,9 +1465,7 @@ fn run_seed(seed: u64, st: &mut Stats) -> Vec<String> {
                 problems.push(format!("{tag}: the fault is still there"));
             }
             for a in sites_after.keys() {
-                // SPEC-GAP(S-678): the E0302 of a failed `use` on a cycle that the E0310 hid shows once the
-                // E0310 is on another `use` of the cycle.
-                if !sites.contains_key(a) && expected.get(a) != Some(&true) {
+                if !sites.contains_key(a) {
                     problems.push(format!("{tag}: a new E0302 for {a}"));
                 }
             }

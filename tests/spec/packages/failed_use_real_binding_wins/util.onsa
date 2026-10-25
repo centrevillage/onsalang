@@ -1,0 +1,7 @@
+pub fn double(x: I32) -> I32 {
+  x * 2
+}
+
+pub fn triple(x: I32) -> I32 {
+  x * 3
+}

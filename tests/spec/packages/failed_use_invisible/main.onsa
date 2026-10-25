@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// S-462: a `use` of a name that is not visible from here (`priv`, E0303) makes the name an error too, and
+// its uses are silent. (Visibility is W4-03 U4: this case waits for it.)
+use util.{hidden}                                   //~ E0303
+use util.{shown}
+
+pub fn calls_hidden() -> I32 {
+  hidden()
+}
+
+pub fn calls_shown() -> I32 {
+  shown()
+}

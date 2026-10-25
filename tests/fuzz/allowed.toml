@@ -311,6 +311,13 @@ reasons = ["S-384"]
 note = "an input with two errors: `delay` without its `~`, and a length of 0; the candidate adds the `~` and the E0808 of the length shows"
 
 [[allowed]]
+class = "fix|E0811|add `…`|E0412"
+left = "`…` takes # or # arguments (the last, `…`, may be omitted) but # were given"
+input = "tests/fuzz/f60db52d.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: `prev` without its `~`, and no argument; the candidate adds the `~` and the E0412 of the arguments shows"
+
+[[allowed]]
 class = "fix|E0020|remove the `…`|E0002"
 left = "expected newline after the declaration, found `…`"
 input = "tests/fuzz/556aa7db.onsa"

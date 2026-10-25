@@ -1,0 +1,11 @@
+pub fn dup() -> I32 {
+  1
+}
+
+pub fn dup() -> F32 {                               //~ E0304
+  2.0
+}
+
+pub fn fine() -> I32 {
+  3
+}

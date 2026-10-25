@@ -60,7 +60,10 @@ impl<'a> Checker<'a> {
                     }
                     // `util.f()` with no `use util` (R-39): the error of the
                     // whole path, with its candidate.
-                    Err(err @ ResolveError::NeedsUse { .. }) => return Err(self.resolve_error(&path, err)),
+                    // A name held as an error (§18.1): no diagnostic.
+                    Err(err @ (ResolveError::NeedsUse { .. } | ResolveError::Failed)) => {
+                        return Err(self.resolve_error(&path, err));
+                    }
                     Err(_) => {
                         // `Buf.zeroed`, `F32.from_bits`: builtin associated functions.
                         let prefix = Path {

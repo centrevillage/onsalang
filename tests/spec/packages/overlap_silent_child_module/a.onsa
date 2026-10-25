@@ -1,0 +1,8 @@
+pub fn b() -> I32 {                                 //~ E0304
+  1
+}
+
+pub fn inside() -> I32 {
+  let _: Bool = b()                                 //~ E0401
+  0
+}
