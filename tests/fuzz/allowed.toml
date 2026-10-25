@@ -344,3 +344,24 @@ left = "expected `…`, found `…`"
 input = "tests/fuzz/68d5e63c.onsa"
 reasons = ["R-244"]
 note = "a blank and a `.` after the name of a `let` with no `=` (`let y .0`): the E0020 of the blank around a member, whose candidate leaves the E0002 of the missing `=` at the same place"
+
+[[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/7cc2ccf1.onsa"
+reasons = ["S-384"]
+note = "an input cut short with two errors: a `{` after an element of the type arguments with no `,`, and that `{` never closed at the end of the file"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0001"
+left = "`…` (U+#A) cannot be written outside comments and strings: a name is written wit"
+input = "tests/fuzz/9fb368f9.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a line that starts with a `-`, and a letter that is not ASCII (`な`) right after it, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0001"
+left = "`…` (U+#B) cannot be written outside comments and strings: a name is written wit"
+input = "tests/fuzz/d08e458c.onsa"
+reasons = ["S-384"]
+note = "the same two errors as 9fb368f9 with `に` (the number of the code point differs)"
